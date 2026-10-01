@@ -42,6 +42,13 @@ end user → translation catalog.
   is staged.
 - The CI sanitisation scan must stay green; if a needed string trips it, change the
   placeholder, do not weaken the scan.
+- The scan runs `git grep`, which sees **tracked files only**. Running it before `git add`
+  therefore passes even when the working tree holds a violation — a false green that has already
+  hidden one broken `main`. Run both check scripts after staging, and re-run them on `main` before
+  merging; a subagent's "the checks pass" is not evidence on its own.
+- A test fixture needs a placeholder domain too: emails in fixtures must use `example.com`,
+  `example.org`, `example.net`, or `localhost`. A fixture that trips the scan is fixed by changing
+  the fixture, never by adding a host to `allowed-hosts.txt`.
 
 ### 2.3 Domain invariants (do not break these)
 
@@ -799,6 +806,15 @@ git worktree prune                         # drop stale entries
 - Single-writer hotspots — one writer at a time, other tasks wait for the next phase:
   `internal/store/models.go`, `internal/config/`, `internal/i18n/locales/`,
   `internal/web/views/`.
+- The locale catalogs are the one hotspot that can be shared, under a strict convention: each
+  writer **appends its own block at the end of the file**, using a prefix it owns (`stats.`,
+  `admin.audit.`), and never reorders or reformats an existing line. Measured over three rounds:
+  three lanes appending in parallel merged with no conflict at all, while the same files conflict
+  the moment two blocks land at the same position. Every dispatch that touches the catalogs must
+  state this convention, and the writer must keep the two catalogs' key sets identical.
+- Add a new route to `adminRoutes()` in the same change that registers it. That list is what the
+  "non-admin gets 403 on every /admin route" test walks, so a route missing from it is a route
+  that is never checked.
 - Generated artifacts are per worktree: run `templ generate` and the Tailwind build inside
   each worktree. The Go module cache and build cache are shared and safe for concurrent
   use. Never run repository maintenance commands (`git gc`, `git prune`, `git repack`)
