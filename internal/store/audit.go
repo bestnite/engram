@@ -22,6 +22,8 @@ const (
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
+	// M3-4 撤销评分。
+	ActionReviewUndo = "review.undo"
 )
 
 // AuditEntry 是一次审计写入的入参。
