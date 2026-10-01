@@ -183,7 +183,7 @@ Conventions:
   reports the effective value and its source (`env` or `db`).
   *Acceptance:* unit test asserts env-over-db precedence and that a missing required
   variable fails startup with an English error.
-- [ ] **M0-3 GORM models** — `internal/store/models.go`: every table from `DESIGN.md`
+- [x] **M0-3 GORM models** — `internal/store/models.go`: every table from `DESIGN.md`
   §2.2 with tags that work on both PostgreSQL and SQLite (no `jsonb`, no `serial`).
   *Acceptance:* AutoMigrate on both drivers creates all tables; a test asserts table
   count and the unique constraints on `notes (deck_id, external_ref)`,
