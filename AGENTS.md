@@ -237,7 +237,7 @@ Conventions:
   single static binary image; no private registry, host names, or deployment specifics.
   *Acceptance:* image builds locally and serves `/healthz`.
 
-- [ ] **M0-12 README (English primary, Chinese parallel)** — section 3 of this file lists
+- [x] **M0-12 README (English primary, Chinese parallel)** — section 3 of this file lists
   `README.md` and `README.zh.md` in the layout, and `DESIGN.md` §11 requires the backup and restore
   procedure for both databases to be documented there, but neither file exists. An open-source
   repository with no README has no front door: nobody can tell what the service is, how to run it
@@ -247,6 +247,15 @@ Conventions:
   PostgreSQL and SQLite backup and restore paths separately. Placeholders only — no real host,
   domain, or credential.
 
+- [ ] **M0-13 A clear failure when the SQLite parent directory is missing** — starting with a
+  `DB_DSN` whose parent directory does not exist fails with
+  `open database: unable to open database file: out of memory (14)`. Measured, not inferred: the
+  message names neither the path nor the directory, and `out of memory` is a SQLite errno artefact
+  that sends a first-time deployer looking in the wrong place. The README has to warn about
+  `mkdir -p data` precisely because the error does not explain itself.
+  *Acceptance:* a start with a missing parent directory either creates it for the SQLite driver or
+  fails with an English error that names the path and says the directory is missing. In neither case
+  may the message contain `out of memory`. A test covers the chosen behaviour.
 ### M1 — Identity and users
 
 - [x] **M1-1 User store and password hashing** — `internal/auth`: user CRUD, argon2id
@@ -751,7 +760,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/12 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 8/9
+  `M0 12/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 8/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
