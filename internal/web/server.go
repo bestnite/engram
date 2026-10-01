@@ -66,6 +66,9 @@ type Deps struct {
 	MCP *mcp.Server
 	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/:id 代理。
 	Media *media.Store
+	// Secrets 是敏感设置的 AES-GCM 编解码器（M6-10）；非空时管理面板可写入
+	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。
+	Secrets *store.SecretCodec
 }
 
 // Server 持有路由与监听地址。
@@ -97,6 +100,8 @@ type Server struct {
 	api            *api.API
 	mcp            *mcp.Server
 	media          *media.Store
+	// secrets 供管理面板写入敏感设置（M6-10）；为空时拒绝写入，只显示状态。
+	secrets *store.SecretCodec
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -150,6 +155,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		api:            deps.API,
 		mcp:            deps.MCP,
 		media:          deps.Media,
+		secrets:        deps.Secrets,
 	}
 	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
 	s.grants = deps.Grants
@@ -186,6 +192,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
+	s.registerAdminRoutes(router)
 
 	if s.api != nil {
 		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。

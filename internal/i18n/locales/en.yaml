@@ -512,3 +512,116 @@
   translation: "View content"
 - id: share.error_password
   translation: "Incorrect password."
+# M6-1 admin shell and M6-5 system settings.
+- id: nav.admin
+  translation: "Admin"
+- id: admin.title
+  translation: "Admin panel"
+- id: admin.nav.heading
+  translation: "Sections"
+- id: admin.nav.dashboard
+  translation: "Overview"
+- id: admin.nav.users
+  translation: "Users"
+- id: admin.nav.registration
+  translation: "Registration and invites"
+- id: admin.nav.oidc
+  translation: "Identity and OIDC"
+- id: admin.nav.settings
+  translation: "System settings"
+- id: admin.nav.jobs
+  translation: "Jobs"
+- id: admin.nav.audit
+  translation: "Audit log"
+- id: admin.nav.health
+  translation: "Health"
+- id: admin.nav.api_keys
+  translation: "API keys"
+- id: admin.nav.pending
+  translation: "not yet implemented"
+- id: admin.dashboard.heading
+  translation: "Admin panel"
+- id: admin.dashboard.intro
+  translation: "Administration is web-first: manage users, invites, identity, settings, jobs, audit and health from here."
+- id: admin.settings.title
+  translation: "System settings"
+- id: admin.settings.heading
+  translation: "System settings"
+- id: admin.settings.intro
+  translation: "Every change takes effect on the next request and needs no restart. The source column shows whether the effective value comes from the environment, the database, or the built-in default."
+- id: admin.column.setting
+  translation: "Setting"
+- id: admin.column.value
+  translation: "Effective value"
+- id: admin.column.source
+  translation: "Source"
+- id: admin.source.env
+  translation: "environment variable"
+- id: admin.source.db
+  translation: "database"
+- id: admin.source.default
+  translation: "built-in default"
+- id: admin.source.computed
+  translation: "computed"
+- id: admin.value.unset
+  translation: "(not set)"
+- id: admin.section.general
+  translation: "General"
+- id: admin.section.general.intro
+  translation: "Site identity and the language used when nothing else decides it."
+- id: admin.section.media
+  translation: "Media"
+- id: admin.section.media.intro
+  translation: "Upload limits and on-disk usage. These values also drive the media upload endpoint immediately."
+- id: admin.section.sensitive
+  translation: "Sensitive settings"
+- id: admin.section.sensitive.intro
+  translation: "Encrypted at rest. Only the configured state is shown; the plaintext is never displayed or returned."
+- id: admin.sensitive.configured
+  translation: "configured"
+- id: admin.sensitive.not_configured
+  translation: "not configured"
+- id: admin.sensitive.hint
+  translation: "Leave blank to keep the current value; a new value replaces it."
+- id: admin.setting.site_name
+  translation: "Site name"
+- id: admin.setting.site_name.hint
+  translation: "Shown as the brand in the page header; falls back to the application name."
+- id: admin.setting.site_default_locale
+  translation: "Default language"
+- id: admin.setting.site_default_locale.hint
+  translation: "Used only when neither the lang parameter, the user setting, nor Accept-Language decides the language. Accepted values are zh-CN and en."
+- id: admin.setting.media_max_bytes
+  translation: "Upload size limit (bytes)"
+- id: admin.setting.media_max_bytes.hint
+  translation: "Maximum size of a single uploaded file, in bytes; the built-in default is 10 MiB."
+- id: admin.setting.media_allowed_mimes
+  translation: "Allowed MIME types"
+- id: admin.setting.media_allowed_mimes.hint
+  translation: "Comma-separated list; uploads are also validated against magic bytes."
+- id: admin.setting.media_dir
+  translation: "Media directory"
+- id: admin.setting.media_dir.hint
+  translation: "Root directory for stored media, from MEDIA_DIR."
+- id: admin.setting.media_usage
+  translation: "Media directory usage"
+- id: admin.setting.media_usage.hint
+  translation: "Total size of the files currently on disk."
+- id: admin.action.save
+  translation: "Save settings"
+- id: admin.notice.saved
+  translation: "Settings saved."
+- id: admin.notice.invalid_locale
+  translation: "That language is not supported; the change was not saved."
+- id: admin.notice.invalid_number
+  translation: "The upload size limit must be a positive integer."
+- id: admin.notice.invalid_mime
+  translation: "The MIME list must contain at least one value."
+- id: admin.notice.save_failed
+  translation: "Could not save the settings. Please try again."
+- id: admin.export.heading
+  translation: "Backup"
+- id: admin.export.label
+  translation: "Export the full database (JSON)"
+- id: admin.export.hint
+  translation: "Downloads every table as JSON. Keep the file safe; it contains all account data."

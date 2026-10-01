@@ -511,3 +511,116 @@
   translation: "查看内容"
 - id: share.error_password
   translation: "口令不正确。"
+# M6-1 管理面板外壳与 M6-5 系统设置。
+- id: nav.admin
+  translation: "管理"
+- id: admin.title
+  translation: "管理面板"
+- id: admin.nav.heading
+  translation: "功能分区"
+- id: admin.nav.dashboard
+  translation: "总览"
+- id: admin.nav.users
+  translation: "用户管理"
+- id: admin.nav.registration
+  translation: "注册与邀请"
+- id: admin.nav.oidc
+  translation: "身份与 OIDC"
+- id: admin.nav.settings
+  translation: "系统设置"
+- id: admin.nav.jobs
+  translation: "作业"
+- id: admin.nav.audit
+  translation: "审计"
+- id: admin.nav.health
+  translation: "健康"
+- id: admin.nav.api_keys
+  translation: "API Key"
+- id: admin.nav.pending
+  translation: "未实现"
+- id: admin.dashboard.heading
+  translation: "管理面板"
+- id: admin.dashboard.intro
+  translation: "管理优先走网页：用户、邀请、身份、系统设置、作业、审计与健康都在这里完成。"
+- id: admin.settings.title
+  translation: "系统设置"
+- id: admin.settings.heading
+  translation: "系统设置"
+- id: admin.settings.intro
+  translation: "改动在下一次请求即生效，无需重启。来源一列说明生效值来自环境变量、数据库还是内置默认值。"
+- id: admin.column.setting
+  translation: "设置项"
+- id: admin.column.value
+  translation: "生效值"
+- id: admin.column.source
+  translation: "来源"
+- id: admin.source.env
+  translation: "环境变量"
+- id: admin.source.db
+  translation: "数据库"
+- id: admin.source.default
+  translation: "内置默认值"
+- id: admin.source.computed
+  translation: "实时计算"
+- id: admin.value.unset
+  translation: "（未设置）"
+- id: admin.section.general
+  translation: "通用"
+- id: admin.section.general.intro
+  translation: "站点标识，以及在没有其他依据时使用的默认语言。"
+- id: admin.section.media
+  translation: "媒体"
+- id: admin.section.media.intro
+  translation: "上传限制与磁盘占用；这些值同时立即作用于媒体上传接口。"
+- id: admin.section.sensitive
+  translation: "敏感配置"
+- id: admin.section.sensitive.intro
+  translation: "加密存储。页面只显示是否已配置，绝不回显或返回明文。"
+- id: admin.sensitive.configured
+  translation: "已配置"
+- id: admin.sensitive.not_configured
+  translation: "未配置"
+- id: admin.sensitive.hint
+  translation: "留空表示保持现值；填入新值即替换。"
+- id: admin.setting.site_name
+  translation: "站点名称"
+- id: admin.setting.site_name.hint
+  translation: "作为页头品牌名显示；未设置时回退到应用名称。"
+- id: admin.setting.site_default_locale
+  translation: "默认语言"
+- id: admin.setting.site_default_locale.hint
+  translation: "仅当 lang 参数、用户设置与 Accept-Language 都无法决定语言时生效。可选值：zh-CN、en。"
+- id: admin.setting.media_max_bytes
+  translation: "上传大小上限（字节）"
+- id: admin.setting.media_max_bytes.hint
+  translation: "单个上传文件的最大字节数；内置默认 10 MiB。"
+- id: admin.setting.media_allowed_mimes
+  translation: "允许的 MIME 类型"
+- id: admin.setting.media_allowed_mimes.hint
+  translation: "逗号分隔；上传时还会用 magic bytes 交叉校验。"
+- id: admin.setting.media_dir
+  translation: "媒体目录"
+- id: admin.setting.media_dir.hint
+  translation: "媒体文件的根目录，来自 MEDIA_DIR。"
+- id: admin.setting.media_usage
+  translation: "媒体目录占用"
+- id: admin.setting.media_usage.hint
+  translation: "当前磁盘上媒体文件的合计大小。"
+- id: admin.action.save
+  translation: "保存设置"
+- id: admin.notice.saved
+  translation: "设置已保存。"
+- id: admin.notice.invalid_locale
+  translation: "不支持该语言，改动未保存。"
+- id: admin.notice.invalid_number
+  translation: "上传大小上限必须是正整数。"
+- id: admin.notice.invalid_mime
+  translation: "MIME 列表至少要有一个值。"
+- id: admin.notice.save_failed
+  translation: "保存设置失败，请重试。"
+- id: admin.export.heading
+  translation: "备份"
+- id: admin.export.label
+  translation: "导出全库（JSON）"
+- id: admin.export.hint
+  translation: "把全部数据表导出为 JSON 下载；文件含全部账号数据，请妥善保存。"

@@ -9,6 +9,7 @@ import (
 
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
+	"example.com/flashcard/internal/store"
 	"example.com/flashcard/internal/web/views"
 )
 
@@ -27,7 +28,7 @@ func (s *Server) home(c *gin.Context) {
 		Layout: views.LayoutData{
 			Lang:       loc.Locale(),
 			Title:      loc.T("app.name"),
-			Brand:      loc.T("app.name"),
+			Brand:      s.siteName(c.Request.Context(), loc),
 			HomeURL:    "/",
 			Footer:     loc.T("footer.powered_by"),
 			CSSURL:     s.assets.URL("css/tailwind.css"),
@@ -49,7 +50,11 @@ func (s *Server) home(c *gin.Context) {
 		Languages:      s.languageOptions(loc),
 	}
 	// 页头右侧的会话入口由当前登录状态决定：已登录显示登出（POST + CSRF），否则显示登录链接。
-	if _, ok := auth.CurrentUser(c); ok {
+	if u, ok := auth.CurrentUser(c); ok {
+		// 管理员额外看到管理面板入口（M6-1）；普通用户看不到，避免点进去吃 403。
+		if u.Role == store.RoleAdmin {
+			data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.admin"), Href: "/admin"})
+		}
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true
