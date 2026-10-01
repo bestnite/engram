@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"example.com/flashcard/internal/cardtype"
 )
 
 // 调度参数的文档化默认值（DESIGN.md §2.2、§3.2、§3.5）。
@@ -148,10 +150,32 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 		"weights_json":          p.WeightsJSON,
 		"weights_optimized_at":  p.WeightsOptimizedAt,
 		"weights_review_count":  p.WeightsReviewCount,
+		"grade_mapping_json":    p.GradeMappingJSON,
 		"updated_at":            time.Now().UTC(),
 	}
 	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ?", p.ID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("update preset: %w", err)
 	}
+	return nil
+}
+
+// GradeMapping 解析该预设的「分数→评分档位」映射（DESIGN.md §6.2）。
+// GradeMappingJSON 为 NULL 时回退到 cardtype.DefaultGradeMapping（全对 Good / 部分对 Hard /
+// 全错 Again），因此未配置映射的 preset 也能直接判分。
+func (p *Preset) GradeMapping() (cardtype.GradeMapping, error) {
+	raw := ""
+	if p.GradeMappingJSON != nil {
+		raw = *p.GradeMappingJSON
+	}
+	return cardtype.ParseGradeMapping(raw)
+}
+
+// SetGradeMapping 校验并写入映射 JSON，供上层在保存 preset 时调用。
+func (p *Preset) SetGradeMapping(m cardtype.GradeMapping) error {
+	raw, err := cardtype.MarshalGradeMapping(m)
+	if err != nil {
+		return err
+	}
+	p.GradeMappingJSON = &raw
 	return nil
 }

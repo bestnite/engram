@@ -84,8 +84,12 @@ type Preset struct {
 	WeightsJSON         *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
 	WeightsOptimizedAt  *time.Time `json:"weights_optimized_at,omitempty"`
 	WeightsReviewCount  *int       `json:"weights_review_count,omitempty"`
-	CreatedAt           time.Time  `gorm:"not null" json:"created_at"`
-	UpdatedAt           time.Time  `gorm:"not null" json:"updated_at"`
+	// GradeMappingJSON 是机器判分的「分数→评分档位」映射（JSON，DESIGN.md §6.2）。
+	// NULL 表示用内置默认映射（全对 Good / 部分对 Hard / 全错 Again）。
+	// 可空 TEXT，不设数据库默认值：默认行为由 cardtype.DefaultGradeMapping 在 Go 侧给出。
+	GradeMappingJSON *string   `gorm:"column:grade_mapping_json" json:"grade_mapping_json,omitempty"`
+	CreatedAt        time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
 }
 
 func (Preset) TableName() string { return "presets" }

@@ -158,6 +158,7 @@ CREATE TABLE presets (
   weights_json        TEXT,                          -- NULL=DefaultWeights()；优化后写 21 维数组
   weights_optimized_at TEXT,
   weights_review_count INTEGER,
+  grade_mapping_json  TEXT,                          -- 机器判分「分数→评分档位」映射（JSON）；NULL=内置默认（全对 Good / 部分对 Hard / 全错 Again）
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL
 );
@@ -533,7 +534,7 @@ fields_json (Markdown + TeX)
 - **通用字段 `extra` / `source_url` 位于 note 层（与 `fields` 平级），不在 `fields` 内部**：它们描述"这一条笔记的附注与出处"，与题型无关。若调用方把它们塞进 `fields`，服务端**忽略而不报错**（宽容处理，避免与外部生成的请求体打架）；`extra` 复习时可折叠显示，`source_url` 指回外部原文。
 
 - **题型接口（设计要点）**：`Validate(fields)` / `Cards(note)` / `Render(card, side)` / `Grade(input) (rating, detail, ok)`（可选，作答类实现）/ `PromptContext(note)`（可选，未来 LLM 评分用）/ `Label()`（i18n 显示名）。可选方法用可选的窄接口断言（`if g, ok := t.(Grader); ok`），不为将来预留大接口。
-- 机器判分的分数 → FSRS 评分映射可配（默认：全对=Good、部分对=Hard、全错=Again；映射规则写在 preset 里，便于按题型调）。
+- 机器判分的分数 → FSRS 评分映射可配（默认：全对=Good、部分对=Hard、全错=Again；映射规则写在 preset 里，便于按题型调）。映射以 JSON 存 `presets.grade_mapping_json`（TEXT，NULL=内置默认）：`{version, full, partial, none, full_threshold?, none_threshold?}`，分数 >= `full_threshold` 取 `full`，<= `none_threshold` 取 `none`，其间取 `partial`（阈值缺省为 1.0 / 0.0）。
 - **数值/输入判分直接服务于"纯记忆映射"类内容**（如分数↔百分数互转），比纯自评更严格。
 - 不引入用户自定义模板（非目标）：排版差异靠内置样式变量，不开放模板语言。
 
