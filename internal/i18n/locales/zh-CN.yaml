@@ -40,6 +40,8 @@
   translation: "创建账号"
 - id: auth.register.intro
   translation: "注册后即可拥有独立的复习进度；共享卡组不会混入他人的排程。"
+- id: auth.register.invite_intro
+  translation: "你正在使用邀请链接注册；该邀请仅可使用一次。"
 - id: auth.register.submit
   translation: "注册"
 - id: auth.register.to_login
@@ -80,5 +82,11 @@
   translation: "该账号已被禁用。"
 - id: auth.error.registration_closed
   translation: "自助注册已关闭，请联系管理员开通账号。"
+- id: auth.error.email_domain_not_allowed
+  translation: "该邮箱域名不在允许注册的范围内，请联系管理员。"
+- id: auth.error.invite_required
+  translation: "注册需要邀请链接，请联系管理员获取。"
+- id: auth.error.invite_invalid
+  translation: "邀请链接无效、已过期或已被使用，请联系管理员重新获取。"
 - id: auth.error.create_failed
   translation: "创建账号失败，请稍后重试或更换用户名/邮箱。"

@@ -40,6 +40,8 @@
   translation: "Create your account"
 - id: auth.register.intro
   translation: "After registering you get your own review progress; sharing a deck never mixes in someone else's schedule."
+- id: auth.register.invite_intro
+  translation: "You are registering with an invite link; the invite can be used only once."
 - id: auth.register.submit
   translation: "Register"
 - id: auth.register.to_login
@@ -80,5 +82,11 @@
   translation: "This account has been disabled."
 - id: auth.error.registration_closed
   translation: "Self-service registration is closed; ask an administrator for an account."
+- id: auth.error.email_domain_not_allowed
+  translation: "That email domain is not allowed to register; ask an administrator."
+- id: auth.error.invite_required
+  translation: "Registration requires an invite link; ask an administrator for one."
+- id: auth.error.invite_invalid
+  translation: "The invite link is invalid, expired, or already used; ask an administrator for a new one."
 - id: auth.error.create_failed
   translation: "Could not create the account; try again or use a different username or email."

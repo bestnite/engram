@@ -17,6 +17,9 @@ templ AuthPage(data AuthFormData) {
 			if data.CSRF != "" {
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 			}
+			if data.InviteToken != "" {
+				<input type="hidden" name="invite" value={ data.InviteToken }/>
+			}
 			<label class="block">
 				<span class="text-sm font-medium text-slate-700">{ data.UsernameLabel }</span>
 				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="username" autocomplete="username" required/>

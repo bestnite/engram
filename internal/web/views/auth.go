@@ -31,6 +31,8 @@ type AuthFormData struct {
 	AltHref  string
 	// CSRF 是会话绑定的 CSRF token；为空时不渲染隐藏字段。
 	CSRF string
+	// InviteToken 是注册表单携带的邀请 token（M1-7）；为空时不渲染隐藏字段。
+	InviteToken string
 	// LangOptions 是语言切换入口。
 	LangOptions []LanguageOption
 }
