@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"regexp"
 	"testing"
-	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gorm.io/gorm"
 )
 
@@ -111,21 +109,13 @@ func TestExportPackageValidatesAgainstSchema(t *testing.T) {
 		t.Fatalf("ExportPackage: %v", err)
 	}
 	doc := pkg.Document()
-	// JSON 往返，让数字统一成 float64，与真实 JSON Schema 校验器的输入一致。
+	// JSON 往返统一数字类型，再交给真库（draft 2020-12）对照仓库 schema 校验。
 	encoded, _ := json.Marshal(doc)
 	var instance any
 	if err := json.Unmarshal(encoded, &instance); err != nil {
 		t.Fatalf("re-decode document: %v", err)
 	}
-	schemaRaw, err := os.ReadFile(filepath.Join("..", "..", "schema", "deck-package.schema.json"))
-	if err != nil {
-		t.Fatalf("read schema: %v", err)
-	}
-	var schema map[string]any
-	if err := json.Unmarshal(schemaRaw, &schema); err != nil {
-		t.Fatalf("decode schema: %v", err)
-	}
-	if err := validateAgainstSchema(instance, schema, schema, "$"); err != nil {
+	if err := validateAgainstSchema(t, instance, filepath.Join("..", "..", "schema", "deck-package.schema.json")); err != nil {
 		t.Fatalf("exported package does not validate against deck-package.schema.json: %v", err)
 	}
 }
@@ -235,247 +225,26 @@ func buildSymlinkZip(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// validateAgainstSchema 是测试用的 JSON Schema（draft 2020-12）子集校验器：
-// 覆盖 deck-package.schema.json 用到的关键字，直接读仓库里的 schema 文件校验导出文档。
-func validateAgainstSchema(inst any, schema map[string]any, root map[string]any, path string) error {
-	if ref, ok := schema["$ref"].(string); ok {
-		resolved, err := resolveLocalRef(root, ref)
-		if err != nil {
-			return fmt.Errorf("%s: %v", path, err)
-		}
-		return validateAgainstSchema(inst, resolved, root, path)
+// validateAgainstSchema 用真库（santhosh-tekuri/jsonschema v6，draft 2020-12）校验一份文档，
+// 对照仓库里的 schema 文件；M5-8 用它替换 M5-6 手写的子集校验器，关键字覆盖与规范一致。
+func validateAgainstSchema(t *testing.T, instance any, schemaPath string) error {
+	t.Helper()
+	raw, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return fmt.Errorf("read schema: %w", err)
 	}
-	if c, ok := schema["const"]; ok {
-		if !jsonEqual(inst, c) {
-			return fmt.Errorf("%s: const mismatch: got %v want %v", path, inst, c)
-		}
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return fmt.Errorf("decode schema: %w", err)
 	}
-	if enum, ok := schema["enum"].([]any); ok && !matchesAny(inst, enum) {
-		return fmt.Errorf("%s: %v not in enum %v", path, inst, enum)
+	c := jsonschema.NewCompiler()
+	// 用 schema 的 $id 作为资源 URL，$ref 才能解析到文件内部的定义。
+	if err := c.AddResource("https://example.com/schema/deck-package.schema.json", doc); err != nil {
+		return fmt.Errorf("add schema resource: %w", err)
 	}
-	if allOf, ok := schema["allOf"].([]any); ok {
-		for _, s := range allOf {
-			if err := validateAgainstSchema(inst, s.(map[string]any), root, path); err != nil {
-				return err
-			}
-		}
+	sch, err := c.Compile("https://example.com/schema/deck-package.schema.json")
+	if err != nil {
+		return fmt.Errorf("compile schema: %w", err)
 	}
-	if oneOf, ok := schema["oneOf"].([]any); ok {
-		matches := 0
-		var last error
-		for _, s := range oneOf {
-			if err := validateAgainstSchema(inst, s.(map[string]any), root, path); err == nil {
-				matches++
-			} else {
-				last = err
-			}
-		}
-		if matches != 1 {
-			return fmt.Errorf("%s: oneOf matched %d branches, want 1 (%v)", path, matches, last)
-		}
-	}
-	if t, ok := schema["type"]; ok && !typeMatches(inst, t) {
-		return fmt.Errorf("%s: type mismatch: got %T", path, inst)
-	}
-	if n, ok := asFloat(inst); ok {
-		if v, ok := asFloat(schema["minimum"]); ok && n < v {
-			return fmt.Errorf("%s: %v < minimum %v", path, n, v)
-		}
-		if v, ok := asFloat(schema["exclusiveMinimum"]); ok && n <= v {
-			return fmt.Errorf("%s: %v <= exclusiveMinimum %v", path, n, v)
-		}
-		if v, ok := asFloat(schema["exclusiveMaximum"]); ok && n >= v {
-			return fmt.Errorf("%s: %v >= exclusiveMaximum %v", path, n, v)
-		}
-	}
-	if s, ok := inst.(string); ok {
-		if v, ok := asFloat(schema["minLength"]); ok && len([]rune(s)) < int(v) {
-			return fmt.Errorf("%s: string shorter than minLength %v", path, v)
-		}
-		if v, ok := asFloat(schema["maxLength"]); ok && len([]rune(s)) > int(v) {
-			return fmt.Errorf("%s: string longer than maxLength %v", path, v)
-		}
-		if p, ok := schema["pattern"].(string); ok {
-			re, err := regexp.Compile(p)
-			if err != nil {
-				return fmt.Errorf("%s: bad pattern %q: %v", path, p, err)
-			}
-			if !re.MatchString(s) {
-				return fmt.Errorf("%s: %q does not match pattern %q", path, s, p)
-			}
-		}
-	}
-	if arr, ok := inst.([]any); ok {
-		if v, ok := asFloat(schema["minItems"]); ok && len(arr) < int(v) {
-			return fmt.Errorf("%s: array shorter than minItems %v", path, v)
-		}
-		if v, ok := asFloat(schema["maxItems"]); ok && len(arr) > int(v) {
-			return fmt.Errorf("%s: array longer than maxItems %v", path, v)
-		}
-		if u, _ := schema["uniqueItems"].(bool); u {
-			for i := 0; i < len(arr); i++ {
-				for j := i + 1; j < len(arr); j++ {
-					if reflect.DeepEqual(arr[i], arr[j]) {
-						return fmt.Errorf("%s[%d]: duplicate item with uniqueItems", path, j)
-					}
-				}
-			}
-		}
-		if items, ok := schema["items"].(map[string]any); ok {
-			for i, v := range arr {
-				if err := validateAgainstSchema(v, items, root, fmt.Sprintf("%s[%d]", path, i)); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if obj, ok := inst.(map[string]any); ok {
-		if req, ok := schema["required"].([]any); ok {
-			for _, r := range req {
-				if _, ok := obj[r.(string)]; !ok {
-					return fmt.Errorf("%s: missing required property %q", path, r)
-				}
-			}
-		}
-		if props, ok := schema["properties"].(map[string]any); ok {
-			for k, sub := range props {
-				if v, ok := obj[k]; ok {
-					if err := validateAgainstSchema(v, sub.(map[string]any), root, path+"."+k); err != nil {
-						return err
-					}
-				}
-			}
-		}
-		if pat, ok := schema["patternProperties"].(map[string]any); ok {
-			for p, sub := range pat {
-				re, err := regexp.Compile(p)
-				if err != nil {
-					return fmt.Errorf("%s: bad patternProperties %q: %v", path, p, err)
-				}
-				for k, v := range obj {
-					if re.MatchString(k) {
-						if err := validateAgainstSchema(v, sub.(map[string]any), root, path+"."+k); err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	}
-	return nil
+	return sch.Validate(instance)
 }
-
-func resolveLocalRef(root map[string]any, ref string) (map[string]any, error) {
-	const prefix = "#/"
-	if !hasPrefix(ref, prefix) {
-		return nil, fmt.Errorf("unsupported $ref %q", ref)
-	}
-	segments := splitSlash(ref[len(prefix):])
-	var cur any = root
-	for _, seg := range segments {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("$ref %q does not resolve", ref)
-		}
-		cur, ok = m[seg]
-		if !ok {
-			return nil, fmt.Errorf("$ref %q does not resolve", ref)
-		}
-	}
-	out, ok := cur.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("$ref %q is not an object", ref)
-	}
-	return out, nil
-}
-
-func hasPrefix(s, p string) bool { return len(s) >= len(p) && s[:len(p)] == p }
-
-func splitSlash(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '/' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	return append(out, s[start:])
-}
-
-func typeMatches(inst any, t any) bool {
-	switch tv := t.(type) {
-	case string:
-		return typeMatchesOne(inst, tv)
-	case []any:
-		for _, one := range tv {
-			if typeMatchesOne(inst, one.(string)) {
-				return true
-			}
-		}
-		return false
-	}
-	return true
-}
-
-func typeMatchesOne(inst any, t string) bool {
-	switch t {
-	case "null":
-		return inst == nil
-	case "object":
-		_, ok := inst.(map[string]any)
-		return ok
-	case "array":
-		_, ok := inst.([]any)
-		return ok
-	case "string":
-		_, ok := inst.(string)
-		return ok
-	case "boolean":
-		_, ok := inst.(bool)
-		return ok
-	case "integer":
-		n, ok := inst.(float64)
-		return ok && n == float64(int64(n))
-	case "number":
-		_, ok := inst.(float64)
-		return ok
-	}
-	return true
-}
-
-func asFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		f, err := n.Float64()
-		return f, err == nil
-	}
-	return 0, false
-}
-
-func matchesAny(inst any, values []any) bool {
-	for _, v := range values {
-		if jsonEqual(inst, v) {
-			return true
-		}
-	}
-	return false
-}
-
-func jsonEqual(a, b any) bool {
-	an, aok := asFloat(a)
-	bn, bok := asFloat(b)
-	if aok && bok {
-		return an == bn
-	}
-	return reflect.DeepEqual(a, b)
-}
-
-// 让测试文件显式引用 time，避免未来常量调整时误删导入。
-var _ = time.Now
