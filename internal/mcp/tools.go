@@ -29,10 +29,13 @@ type searchNotesIn struct {
 // getStatsIn 无参数。
 type getStatsIn struct{}
 
-// exportDeckIn 是 export_deck 的入参；deck_id 为 0 时导出全部卡组。
+// exportDeckIn 是 export_deck 的入参；它导出一个**卡组包**（DESIGN.md §7.6）。
 type exportDeckIn struct {
-	DeckID          uint64 `json:"deck_id,omitempty" jsonschema:"deck to export; 0 means all decks"`
+	DeckID          uint64 `json:"deck_id" jsonschema:"the deck to export as a package"`
 	IncludeProgress bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
+	// IncludeMedia 缺省为 true（DESIGN.md §7.6：媒体默认内联）。
+	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
+	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include review logs (requires include_progress)"`
 }
 
 // importNoteIn 是单个 note 的入参，字段名与 schema/note-import.schema.json 一致。
@@ -43,12 +46,26 @@ type importNoteIn struct {
 	Tags        []string       `json:"tags,omitempty" jsonschema:"note tags"`
 }
 
-// bulkNotesIn 是 create_notes / import_deck 的入参。
+// bulkNotesIn 是 create_notes 的入参（M4-3 批量建卡路径）。
 type bulkNotesIn struct {
 	DeckID     uint64         `json:"deck_id" jsonschema:"target deck"`
 	Notes      []importNoteIn `json:"notes" jsonschema:"notes to create or update (1..500)"`
 	DryRun     bool           `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
 	OnConflict string         `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
+}
+
+// importDeckIn 是 import_deck 的入参：接受一个卡组包（DESIGN.md §7.6）。
+type importDeckIn struct {
+	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .fdeck zip。
+	Package any `json:"package" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .fdeck archive"`
+	// Target 取值 new_deck（默认）、into_deck:<id>、replace_deck:<id>。
+	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<id> or replace_deck:<id>"`
+	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
+	OnConflict string `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
+	// SkipMissingMedia 缺失媒体时只计数并继续；默认 false（缺媒体即失败）。
+	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
+	// AllowOthersProgress 仅管理员可置位：允许导入包内他人的进度。
+	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
 }
 
 // updateNoteIn 是 update_note 的入参。
@@ -124,25 +141,38 @@ func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, 
 	return s.api.Stats(ctx, id.User)
 }
 
+// exportDeck 导出卡组包（M5-8）：与 REST `GET /decks/:id/package` 走同一 service 方法。
+// 返回包内逻辑内容的 JSON 文档形态，可直接对照 schema/deck-package.schema.json 校验。
 func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (any, error) {
-	deckIDs, err := s.api.ExportDeckIDs(ctx, id.User.ID, in.DeckID)
+	includeMedia := true
+	if in.IncludeMedia != nil {
+		includeMedia = *in.IncludeMedia
+	}
+	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, in.DeckID, in.IncludeProgress, includeMedia, in.IncludeReviews)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.api.CollectExportRows(ctx, id.User.ID, deckIDs, in.IncludeProgress)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"deck_ids": deckIDs, "cards": rows, "count": len(rows)}, nil
+	return pkg.Document(), nil
 }
 
 func (s *Server) createNotes(ctx context.Context, id Identity, in bulkNotesIn) (any, error) {
 	return s.api.ImportNotes(ctx, id.User.ID, in.DeckID, id.apiKeyID(), toImportRequest(in))
 }
 
-func (s *Server) importDeck(ctx context.Context, id Identity, in bulkNotesIn) (any, error) {
-	// 本轮 import_deck 与 create_notes 共用同一条 M4-3 批量路径；完整卡组包导入属 M5。
-	return s.api.ImportNotes(ctx, id.User.ID, in.DeckID, id.apiKeyID(), toImportRequest(in))
+// importDeck 导入卡组包（M5-8）：与 REST `POST /decks/import` 走同一 service 方法。
+// 包的权限判定、进度归属与审计都在 service 层（ImportDeckPackage）完成。
+func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
+	r, err := store.PackageReader(in.Package)
+	if err != nil {
+		return nil, err
+	}
+	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, store.PackageImportOptions{
+		Target:              in.Target,
+		DryRun:              in.DryRun,
+		OnConflict:          in.OnConflict,
+		SkipMissingMedia:    in.SkipMissingMedia,
+		AllowOthersProgress: in.AllowOthersProgress,
+	})
 }
 
 func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (any, error) {

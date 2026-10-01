@@ -48,10 +48,21 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("get_stats MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// export_deck
-	mcpOut, _, _ = callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID})
-	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%d&format=json", deck.ID), key, ""); !reflect.DeepEqual(mcpOut, restOut) {
-		t.Errorf("export_deck MCP=%v REST=%v", mcpOut, restOut)
+	// export_deck（M5-8）：返回卡组包文档，含 manifest/notes/cards/preset。
+	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID})
+	if isErr {
+		t.Fatalf("export_deck error: %s", text)
+	}
+	manifest, _ := mcpOut["manifest.json"].(map[string]any)
+	if manifest == nil {
+		t.Fatalf("export_deck did not return a package document: %v", mcpOut)
+	}
+	counts, _ := manifest["counts"].(map[string]any)
+	if got := counts["notes"]; got != float64(2) {
+		t.Errorf("package manifest counts.notes = %v, want 2", got)
+	}
+	if _, ok := mcpOut["notes.json"]; !ok {
+		t.Errorf("package document is missing notes.json: %v", mcpOut)
 	}
 
 	// create_notes / import_deck（dry_run，同一 deck 状态下产出相同计数）
@@ -62,9 +73,18 @@ func TestToolsMatchREST(t *testing.T) {
 	if _, restOut := rest(t, base, http.MethodPost, deckPath, key, `{"dry_run":true,"notes":[{"kind":"basic","fields":{"front":"x","back":"y"},"external_ref":"n:3"}]}`); !reflect.DeepEqual(mcpOut, restOut) {
 		t.Errorf("create_notes(dry_run) MCP=%v REST=%v", mcpOut, restOut)
 	}
-	mcpOut, _, _ = callTool(t, cs, "import_deck", dry)
-	if _, restOut := rest(t, base, http.MethodPost, deckPath, key, `{"dry_run":true,"notes":[{"kind":"basic","fields":{"front":"x","back":"y"},"external_ref":"n:3"}]}`); !reflect.DeepEqual(mcpOut, restOut) {
-		t.Errorf("import_deck(dry_run) MCP=%v REST=%v", mcpOut, restOut)
+
+	// import_deck（M5-8）：接受 export_deck 输出的文档，dry_run 预演不写入。
+	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID, "include_progress": true})
+	mcpOut, isErr, text = callTool(t, cs, "import_deck", map[string]any{"package": pkgDoc, "dry_run": true, "target": "new_deck"})
+	if isErr {
+		t.Fatalf("import_deck error: %s", text)
+	}
+	if mcpOut["dry_run"] != true || mcpOut["notes_created"] != float64(2) {
+		t.Errorf("import_deck(dry_run) report = %v, want dry_run=true notes_created=2", mcpOut)
+	}
+	if _, ok := mcpOut["errors"]; !ok {
+		t.Errorf("import_deck report is missing the errors field: %v", mcpOut)
 	}
 
 	// 取得 note id 以便 update/delete。
