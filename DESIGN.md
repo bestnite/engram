@@ -764,7 +764,7 @@ deck.fdeck                      # zip
 | 指标 | 口径 |
 |---|---|
 | 今日/近 7 日/近 30 日复习量 | 按 `review_day` 聚合 `count(*)` |
-| 到期预测 | 按 `card_states.due_at` 分桶（今日/明日/7 日内/30 日内/更远/新卡未到期） |
+| 到期预测 | 按 `card_states.due_at` 分桶，**各桶互斥**：今日（含已逾期）/< 明日 / < 7 日 / < 30 日 / 更远；另单独一桶「新卡（未排期）」= `state = 'new'` 且 `due_at IS NULL`。**不要把 `state='new'` 的行再计入日期桶**，否则同一张卡会被数两次 |
 | 留存率 | 按 `stability` 或 `interval` 分桶，统计"到期时首次评分不是 Again"的比例 |
 | 记忆强度分布 | 用 `Retrievability()` 现算每张卡当前概率，分 10 档直方图 |
 | 时间投入 | `reviews.elapsed_ms` 的日均/中位数 |

@@ -325,7 +325,7 @@ Conventions:
   mime plus magic-byte validation, admin-configured size limit.
   *Acceptance:* uploading the same file twice stores one blob; an oversized or
   wrong-magic file is rejected with a stable error code.
-- [ ] **M2-10 Card type labels in the catalogs** — `internal/cardtype` returns translation keys
+- [x] **M2-10 Card type labels in the catalogs** — `internal/cardtype` returns translation keys
   It now covers **all ten registered types** (`basic`, `basic_both`, `cloze`, `list`, `typed`,
   `numeric`, `choice_single`, `choice_multi`, `true_false`, `short_answer`), and the editor also
   needs the field labels for the graded types (`note.field.question`, `.answer`, `.accept`,
@@ -341,7 +341,7 @@ Conventions:
   CSRF and audit wiring, and link it from the home page.
   *Acceptance:* a logged-in user can create a deck in the browser and sees it listed; the new deck
   is selectable when creating notes; an anonymous request is redirected to login.
-- [ ] **M2-12 Create-note UI** — there is no way to create a note in the browser: the editor only
+- [x] **M2-12 Create-note UI** — there is no way to create a note in the browser: the editor only
   edits notes that already exist, so the deck page cannot be used to author cards at all (noted by a
   lane that tried to satisfy M2-11's "the new deck is selectable when creating notes"). Add a create
   form on the deck page: pick a card type, fill its fields (per `DESIGN.md` §6.2), preview through
@@ -401,7 +401,7 @@ Conventions:
   WHERE`).
   *Acceptance:* a test issuing two concurrent first submissions against PostgreSQL asserts exactly
   one review row and one state row survive, and the loser receives the conflict sentinel.
-- [ ] **M3-7 Schedule test suite** — state transitions, queue priority, version conflict,
+- [x] **M3-7 Schedule test suite** — state transitions, queue priority, version conflict,
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
   as its own named test.
@@ -421,11 +421,11 @@ Conventions:
   `dry_run`, idempotent bulk create by `external_ref`, and the documented error envelope.
   *Acceptance:* a repeated bulk import creates no duplicates and reports
   `created`/`updated`/`skipped` counts correctly.
-- [ ] **M4-4 Bulk import internals** — batching (200 rows per transaction), per-row error
+- [x] **M4-4 Bulk import internals** — batching (200 rows per transaction), per-row error
   reporting with indices, resumable on failure.
   *Acceptance:* a batch with one invalid row imports the valid rows and reports the index
   of the failing row.
-- [ ] **M4-5 Export** — JSON and CSV, optional progress columns, streamed for large decks.
+- [x] **M4-5 Export** — JSON and CSV, optional progress columns, streamed for large decks.
   *Acceptance:* export of 10k notes streams without buffering the whole set in memory
   (asserted by a peak-allocation check or a streaming test double).
 - [x] **M4-6 MCP server** — `modelcontextprotocol/go-sdk` over HTTP at `/mcp`, bearer key
@@ -524,7 +524,7 @@ Conventions:
 
 ### M7 — Statistics
 
-- [ ] **M7-1 Statistics queries** — review volume by period, due forecast buckets,
+- [x] **M7-1 Statistics queries** — review volume by period, due forecast buckets,
   retention by stability bucket, time spent, per-deck and per-tag breakdowns, and
   `grade_source` distribution.
   *Acceptance:* every number is asserted by an independent SQL computation over a seeded
@@ -660,7 +660,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 9/12 · M3 9/10 · M4 6/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 10/14 · M2 11/12 · M3 10/12 · M4 8/9 · M5 0/7 · M6 0/10 · M7 1/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
