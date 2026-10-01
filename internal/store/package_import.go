@@ -228,9 +228,15 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	}
 	report.MediaMissing = len(mediaMissing)
 
+	// writtenMedia 记录本次事务实际落盘的媒体文件；事务失败回滚时据此清理，
+	// 避免元数据行回滚而字节留在磁盘上形成孤儿文件（AGENTS.md M5-11）。
+	var writtenMedia []mediaWrite
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.importInTx(ctx, tx, actorUserID, username, pkg, targetKind, targetDeckID, opts, report)
+		return s.importInTx(ctx, tx, actorUserID, username, pkg, targetKind, targetDeckID, opts, report, &writtenMedia)
 	})
+	if err != nil {
+		s.cleanupMediaWrites(ctx, writtenMedia)
+	}
 	if err != nil && !errors.Is(err, ErrPackageDryRun) {
 		return nil, err
 	}
@@ -238,6 +244,32 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, ErrPackageDryRun
 	}
 	return report, nil
+}
+
+// mediaWrite 是本次导入新写入的一个媒体文件（sha + 绝对路径）。
+type mediaWrite struct {
+	sha string
+	abs string
+}
+
+// cleanupMediaWrites 删除本次导入已落盘、却因事务回滚而无元数据引用的媒体文件。
+//
+// 只删本进程本次写下的文件；若该 sha 已被（并发的）其它已提交事务引用了元数据行，
+// 则保留文件——它不再是孤儿。删除失败只忽略（文件已不在或权限问题都不影响正确性，
+// 最坏情况是退回修复前的行为）。
+func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite) {
+	if len(writes) == 0 {
+		return
+	}
+	store := NewMediaStore(s.db)
+	for _, w := range writes {
+		if row, err := store.BySha256(ctx, w.sha); err == nil && row != nil {
+			continue
+		}
+		if err := os.Remove(w.abs); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = err
+		}
+	}
 }
 
 // packageModel 是解析后的包内容。
@@ -319,7 +351,7 @@ func missingMediaRefs(pkg *packageModel) ([]string, error) {
 }
 
 // importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
-func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) error {
+func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
 	deckID, err := s.resolveTargetDeck(ctx, tx, actorUserID, pkg, targetKind, targetDeckID, opts)
 	if err != nil {
 		return err
@@ -438,7 +470,13 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if opts.DryRun {
 			continue
 		}
-		if _, err := mstore.SaveBytes(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID)); err != nil {
+		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID))
+		if abs != "" {
+			// 先登记路径再判错：SaveBytesTracked 可能在写文件成功、写元数据失败时同时
+			// 返回路径与错误，这种情况下文件同样需要被失败路径清理。
+			*writtenMedia = append(*writtenMedia, mediaWrite{sha: sha, abs: abs})
+		}
+		if err != nil {
 			return err
 		}
 	}
