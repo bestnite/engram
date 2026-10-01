@@ -91,15 +91,20 @@ type Preset struct {
 func (Preset) TableName() string { return "presets" }
 
 // Deck 是扁平卡组（不做卡组树，DESIGN.md §2.2）。
+// NewPerDay / ReviewsPerDay 是卡组级每日上限（DESIGN.md §3.3），0 表示不限。
+// 两列都是带数据库默认值的整型，零值由 GORM 省略、由数据库默认值补齐；
+// 显式把上限设为 0 请走 DeckStore.SetCaps（map 更新会写入 0）。
 type Deck struct {
-	ID          uint64     `gorm:"primaryKey" json:"id"`
-	OwnerUserID uint64     `gorm:"not null;index" json:"owner_user_id"`
-	Name        string     `gorm:"not null" json:"name"`
-	Description string     `gorm:"not null" json:"description"`
-	Visibility  string     `gorm:"not null" json:"visibility"` // private | unlisted | public
-	PresetID    uint64     `gorm:"not null;index" json:"preset_id"`
-	ArchivedAt  *time.Time `json:"archived_at,omitempty"`
-	CreatedAt   time.Time  `gorm:"not null" json:"created_at"`
+	ID            uint64     `gorm:"primaryKey" json:"id"`
+	OwnerUserID   uint64     `gorm:"not null;index" json:"owner_user_id"`
+	Name          string     `gorm:"not null" json:"name"`
+	Description   string     `gorm:"not null" json:"description"`
+	Visibility    string     `gorm:"not null" json:"visibility"` // private | unlisted | public
+	NewPerDay     int        `gorm:"not null;default:20" json:"new_per_day"`
+	ReviewsPerDay int        `gorm:"not null;default:200" json:"reviews_per_day"`
+	PresetID      uint64     `gorm:"not null;index" json:"preset_id"`
+	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
+	CreatedAt     time.Time  `gorm:"not null" json:"created_at"`
 }
 
 func (Deck) TableName() string { return "decks" }

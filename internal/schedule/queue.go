@@ -55,6 +55,12 @@ const (
 )
 
 // QueueOptions 是一次队列构建的入参。零值经 withDefaults 补齐为文档化默认值。
+//
+// 每日上限的取值优先级（DESIGN.md §3.3；本包从卡组读取，不再依赖硬编码默认）：
+//  1. NewPerDayOverride / ReviewsPerDayOverride 非 nil —— 显式覆盖，最高优先级；
+//  2. NewPerDay / ReviewsPerDay 为正 —— 调用方直接覆盖（保留的旧入口）；
+//  3. DeckID 非 0 —— 读该卡组的 new_per_day / reviews_per_day；
+//  4. 兜底 DefaultNewPerDay；ReviewsPerDay 为 0 表示不限。
 type QueueOptions struct {
 	// DeckID 为 0 时跨该用户的全部卡组取卡。
 	DeckID uint64
@@ -66,10 +72,15 @@ type QueueOptions struct {
 	Timezone string
 	// DayCutoffHour 是复习日切点（本地小时），默认 4。
 	DayCutoffHour int
-	// NewPerDay 是每日新卡上限。
+	// NewPerDay 是每日新卡上限的调用方覆盖；<= 0 时按上面的优先级回退到卡组值。
 	NewPerDay int
-	// ReviewsPerDay 是每日复习上限；0 表示不限。
+	// ReviewsPerDay 是每日复习上限的调用方覆盖；<= 0 时按上面的优先级回退到卡组值，
+	// 卡组值为 0 或 DeckID 为 0 时表示不限。
 	ReviewsPerDay int
+	// NewPerDayOverride / ReviewsPerDayOverride 是显式覆盖；非 nil 时优先于卡组设置。
+	// 用指针是因为整型零值无法区分"未设置"与"显式 0（不限）"。
+	NewPerDayOverride     *int
+	ReviewsPerDayOverride *int
 	// ReviewOrder 见 ReviewOrder。
 	ReviewOrder ReviewOrder
 	// NewOrder 见 NewOrder。
@@ -82,7 +93,10 @@ type QueueOptions struct {
 
 // DefaultQueueOptions 返回 DESIGN.md §3.3 的文档化默认值（新卡 20、复习 200、
 // 复习卡按 retrievability 升序、新卡随机）。零值 QueueOptions 不等价于本返回值：
-// 零值的 ReviewsPerDay 表示\"不限\"，因此显式默认值必须由调用方在此取得后再覆盖。
+// 零值的 ReviewsPerDay 表示"不限"，因此显式默认值必须由调用方在此取得后再覆盖。
+//
+// 注意：本函数把 NewPerDay/ReviewsPerDay 填成正值，按 QueueOptions 的取值优先级它们会
+// 覆盖卡组设置。要让队列读卡组上限，就把这两个字段留零（或用 Override 显式指定）。
 func DefaultQueueOptions() QueueOptions {
 	return QueueOptions{
 		Timezone:      DefaultQueueTimezone,
@@ -95,17 +109,15 @@ func DefaultQueueOptions() QueueOptions {
 	}
 }
 
-// withDefaults 把零值字段补齐为文档化默认值。整型零值无法区分\"未设置\"与\"显式 0\"，
-// 因此 ReviewsPerDay 只有 0（不限）一种含义，其余字段 0 均视为未设置。
+// withDefaults 把零值字段补齐为文档化默认值。整型零值无法区分"未设置"与"显式 0"，
+// 因此 ReviewsPerDay 只有 0（不限）一种含义；每日上限（NewPerDay/ReviewsPerDay）不在这里
+// 兜底 —— 它们要先经 resolveCaps 从卡组读取，最后由 Build 落定。
 func (o QueueOptions) withDefaults() QueueOptions {
 	if o.Timezone == "" {
 		o.Timezone = DefaultQueueTimezone
 	}
 	if o.DayCutoffHour == 0 {
 		o.DayCutoffHour = DefaultDayCutoffHour
-	}
-	if o.NewPerDay == 0 {
-		o.NewPerDay = DefaultNewPerDay
 	}
 	if o.BatchSize == 0 {
 		o.BatchSize = DefaultReviewBatch
@@ -176,6 +188,14 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	now := opts.now()
 	day := ReviewDay(now, loc, opts.DayCutoffHour)
 
+	// 每日上限从卡组读取（显式覆盖优先）；DESIGN.md §3.3 把这两项定义为卡组设置。
+	newPerDay, reviewsPerDay, err := b.resolveCaps(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	opts.NewPerDay = newPerDay
+	opts.ReviewsPerDay = reviewsPerDay
+
 	learning, err := b.learningDue(ctx, userID, now, opts.DeckID)
 	if err != nil {
 		return nil, err
@@ -223,6 +243,43 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	out = append(out, reviews...)
 	out = append(out, fresh...)
 	return out, nil
+}
+
+// resolveCaps 决定本次构建实际使用的每日上限（取值优先级见 QueueOptions 的文档注释）。
+// DeckID 非 0 时读该卡组的 new_per_day / reviews_per_day；卡组行不存在不报错 —— 此时
+// 队列本就为空，沿用文档化默认即可（0 仍表示不限）。
+func (b *QueueBuilder) resolveCaps(ctx context.Context, opts QueueOptions) (int, int, error) {
+	newPerDay, reviewsPerDay := opts.NewPerDay, opts.ReviewsPerDay
+	if opts.NewPerDayOverride != nil {
+		newPerDay = *opts.NewPerDayOverride
+	}
+	if opts.ReviewsPerDayOverride != nil {
+		reviewsPerDay = *opts.ReviewsPerDayOverride
+	}
+	if opts.DeckID != 0 {
+		var caps store.DeckCaps
+		err := b.db.WithContext(ctx).Table("decks").
+			Select("new_per_day", "reviews_per_day").
+			Where("id = ?", opts.DeckID).
+			Take(&caps).Error
+		switch {
+		case err == nil:
+			if opts.NewPerDayOverride == nil && opts.NewPerDay <= 0 {
+				newPerDay = caps.NewPerDay
+			}
+			if opts.ReviewsPerDayOverride == nil && opts.ReviewsPerDay <= 0 {
+				reviewsPerDay = caps.ReviewsPerDay
+			}
+		case store.IsNotFound(err):
+			// 卡组不存在：不引入新的失败模式，回退到文档化默认值。
+		default:
+			return 0, 0, fmt.Errorf("schedule: load deck caps: %w", err)
+		}
+	}
+	if newPerDay <= 0 {
+		newPerDay = DefaultNewPerDay
+	}
+	return newPerDay, reviewsPerDay, nil
 }
 
 // location 解析用户时区；未指定时按 Timezone 加载，加载失败退回 UTC（不阻塞复习）。
