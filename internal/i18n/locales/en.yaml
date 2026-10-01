@@ -415,3 +415,100 @@
   translation: "{{.name}} (copy)"
 - id: clone.submit
   translation: "Clone to my account"
+# M5-3 share links (block on the sharing page).
+- id: sharing.links.heading
+  translation: "Share links"
+- id: sharing.links.empty
+  translation: "No share links yet."
+- id: sharing.links.col_link
+  translation: "Link"
+- id: sharing.links.col_password
+  translation: "Password"
+- id: sharing.links.col_expires
+  translation: "Expires"
+- id: sharing.links.col_state
+  translation: "State"
+- id: sharing.links.password_yes
+  translation: "Password required"
+- id: sharing.links.password_no
+  translation: "No password"
+- id: sharing.links.no_expiry
+  translation: "Never expires"
+- id: sharing.links.state_active
+  translation: "Active"
+- id: sharing.links.state_revoked
+  translation: "Revoked"
+- id: sharing.links.state_expired
+  translation: "Expired"
+- id: sharing.links.password_label
+  translation: "Password (optional)"
+- id: sharing.links.password_hint
+  translation: "Leave empty so anyone with the link can browse."
+- id: sharing.links.expires_label
+  translation: "Expiry (optional)"
+- id: sharing.links.expires_hint
+  translation: "Leave empty for no expiry."
+- id: sharing.links.create_submit
+  translation: "Create share link"
+- id: sharing.links.created_notice
+  translation: "Link created. Copy it now: for security the plaintext is shown only once."
+- id: sharing.links.revoke_submit
+  translation: "Revoke"
+- id: sharing.links.revoke_all_submit
+  translation: "Revoke all"
+- id: sharing.links.error_password_too_long
+  translation: "The password is too long."
+- id: sharing.links.error_expiry_invalid
+  translation: "Invalid expiry date."
+- id: sharing.links.error_create_failed
+  translation: "Could not create the share link. Please try again."
+- id: sharing.links.error_link_required
+  translation: "No link selected to revoke."
+- id: sharing.links.error_revoke_failed
+  translation: "Could not revoke the share link. Please try again."
+# M5-5 visibility.
+- id: sharing.visibility.heading
+  translation: "Visibility"
+- id: sharing.visibility.label
+  translation: "Who can see it"
+- id: sharing.visibility.note
+  translation: "private is visible to grantees only; unlisted is reachable by link and never listed; public is visible to any signed-in user and can be copied."
+- id: sharing.visibility.submit
+  translation: "Save visibility"
+- id: sharing.visibility.private
+  translation: "private (grantees only)"
+- id: sharing.visibility.unlisted
+  translation: "unlisted (link only)"
+- id: sharing.visibility.public
+  translation: "public (any signed-in user)"
+- id: sharing.visibility.error_invalid
+  translation: "Invalid visibility value."
+- id: sharing.visibility.error_failed
+  translation: "Could not save the visibility. Please try again."
+# M5-3 public read-only browse page.
+- id: share.browse.title
+  translation: "Shared deck"
+- id: share.browse.heading
+  translation: "Shared deck"
+- id: share.browse.intro
+  translation: "This read-only page was opened through a share link."
+- id: share.browse.front
+  translation: "Front"
+- id: share.browse.back
+  translation: "Back"
+- id: share.browse.empty
+  translation: "This deck has no cards yet."
+- id: share.browse.review_prompt
+  translation: "Review progress is stored per account. Sign in to start reviewing."
+- id: share.browse.login
+  translation: "Sign in to start reviewing"
+- id: share.password.intro
+  translation: "This share link is password protected. Enter the password to continue."
+- id: share.password.label
+  translation: "Password"
+- id: share.password.placeholder
+  translation: "Enter the access password"
+- id: share.password.submit
+  translation: "View content"
+- id: share.error_password
+  translation: "Incorrect password."

@@ -39,6 +39,12 @@ const (
 	ActionDeckRevoke     = "deck.revoke"
 	// M5-4 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
 	ActionDeckClone = "deck.clone"
+	// M5-3 分享链接：创建 / 单个撤销 / 一次撤销全部。
+	ActionShareLinkCreate    = "share_link.create"
+	ActionShareLinkRevoke    = "share_link.revoke"
+	ActionShareLinkRevokeAll = "share_link.revoke_all"
+	// M5-5 卡组可见性变更（private / unlisted / public）。
+	ActionDeckVisibility = "deck.visibility_change"
 )
 
 // AuditEntry 是一次审计写入的入参。
