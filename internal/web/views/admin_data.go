@@ -187,6 +187,51 @@ type AdminPageData struct {
 	JobCancelConfirm string
 	// JobLogEmptyLabel 是作业没有日志尾巴时的占位。
 	JobLogEmptyLabel string
+
+	// ---- 审计检索页（M6-7）----
+	// AuditPage 为 true 时模板渲染审计检索页。
+	AuditPage bool
+	// AuditRows 是当前页的审计行。
+	AuditRows []AdminAuditRow
+	// 过滤表单的标签、当前值与动作下拉。
+	AuditFilterHeading string
+	AuditUserLabel     string
+	AuditUserValue     string
+	AuditActionLabel   string
+	AuditActions       []AdminOption
+	AuditTargetLabel   string
+	AuditTargetValue   string
+	AuditTargetIDLabel string
+	AuditTargetIDValue string
+	AuditFromLabel     string
+	AuditFromValue     string
+	AuditToLabel       string
+	AuditToValue       string
+	AuditFilterSubmit  string
+	AuditFilterClear   string
+	AuditRangeHint     string
+	AuditClearHref     string
+	// ColAudit* 是审计表表头。
+	ColAuditTime, ColAuditUser, ColAuditAction, ColAuditTarget, ColAuditDetail string
+	// AuditTotalLabel 是「共 N 条」的前缀标签。
+	AuditTotalLabel string
+}
+
+// AdminOption 是一个下拉/单选项。
+type AdminOption struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+// AdminAuditRow 是审计表里的一行（M6-7）。
+type AdminAuditRow struct {
+	// Time 已按当前管理员时区格式化。
+	Time   string
+	User   string
+	Action string
+	Target string
+	Detail string
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。

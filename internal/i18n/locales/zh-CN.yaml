@@ -1019,4 +1019,58 @@
   translation: "作业执行器不可用。"
 - id: admin.jobs.notice.failed
   translation: "取消作业失败。"
+- id: admin.audit.title
+  translation: "审计日志"
+- id: admin.audit.heading
+  translation: "审计日志"
+- id: admin.audit.intro
+  translation: "检索谁在什么时候改了什么。时间以 UTC 存储，按你的账号时区展示。"
+- id: admin.audit.filter.heading
+  translation: "过滤条件"
+- id: admin.audit.filter.user
+  translation: "用户"
+- id: admin.audit.filter.action
+  translation: "动作"
+- id: admin.audit.filter.any
+  translation: "全部动作"
+- id: admin.audit.filter.target_type
+  translation: "目标类型"
+- id: admin.audit.filter.target_id
+  translation: "目标编号"
+- id: admin.audit.filter.from
+  translation: "起始日期"
+- id: admin.audit.filter.to
+  translation: "结束日期"
+- id: admin.audit.filter.submit
+  translation: "检索"
+- id: admin.audit.filter.clear
+  translation: "清空条件"
+- id: admin.audit.filter.range_hint
+  translation: "日期按你的账号时区解释；起止日期两端都包含。"
+- id: admin.audit.col.time
+  translation: "时间"
+- id: admin.audit.col.user
+  translation: "用户"
+- id: admin.audit.col.action
+  translation: "动作"
+- id: admin.audit.col.target
+  translation: "目标"
+- id: admin.audit.col.detail
+  translation: "详情"
+- id: admin.audit.user_system
+  translation: "系统"
+- id: admin.audit.target_empty
+  translation: "—"
+- id: admin.audit.detail_empty
+  translation: "—"
+- id: admin.audit.empty
+  translation: "没有符合当前条件的审计记录。"
+- id: admin.audit.total_label
+  translation: "命中："
+- id: admin.audit.notice.user_not_found
+  translation: "没有匹配该用户名或编号的用户。"
+- id: admin.audit.notice.invalid_target
+  translation: "目标编号必须是数字。"
+- id: admin.audit.notice.invalid_date
+  translation: "日期必须使用 YYYY-MM-DD 格式。"
 

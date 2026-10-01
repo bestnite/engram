@@ -38,6 +38,8 @@ templ AdminPage(data AdminPageData) {
 					@adminRegistration(data)
 				} else if data.JobsPage {
 					@adminJobs(data)
+				} else if data.AuditPage {
+					@adminAudit(data)
 				} else {
 					if data.ShowForm {
 						<form method="post" action={ data.FormAction }>

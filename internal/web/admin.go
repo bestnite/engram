@@ -55,6 +55,7 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodGet, Path: "/admin/export"},
 		{Method: http.MethodGet, Path: "/admin/jobs"},
 		{Method: http.MethodPost, Path: "/admin/jobs/:id/cancel", Write: true},
+		{Method: http.MethodGet, Path: "/admin/audit"},
 	}
 }
 
@@ -109,6 +110,8 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			handlers = append(handlers, s.adminJobsPage)
 		case "/admin/jobs/:id/cancel":
 			handlers = append(handlers, s.adminJobCancel)
+		case "/admin/audit":
+			handlers = append(handlers, s.adminAuditPage)
 		default:
 			continue
 		}
@@ -155,7 +158,7 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 		{"oidc", "/admin/oidc", false},
 		{"settings", "/admin/settings", true},
 		{"jobs", "/admin/jobs", true},
-		{"audit", "/admin/audit", false},
+		{"audit", "/admin/audit", true},
 		{"health", "/admin/health", false},
 		{"api_keys", "/admin/api-keys", false},
 	}
