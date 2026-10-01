@@ -1,0 +1,16 @@
+# 构建上下文裁剪：只送源码，生成物与本地数据由镜像内构建步骤产出。
+.git
+.gitignore
+data/
+media/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+**/*_templ.go
+internal/web/static/css/tailwind.css
+bin/
+dist/
+*.log
+PROGRESS.local.md
