@@ -330,6 +330,13 @@ Conventions:
   `internal/i18n/locales/zh-CN.yaml` and `en.yaml` so the parity test passes and the labels render.
   *Acceptance:* both catalogs contain every registered type's key; a test enumerating `Registry.Kinds()`
   fails if any key is missing from either catalog.
+- [ ] **M2-11 Deck list and deck creation UI** — `DESIGN.md` §8.1 lists `/decks` as a page and the
+  store layer can create decks, but no route or template exists: a smoke run of the real binary
+  answers `GET /decks` with `404`, so a user cannot create a deck in the browser at all. Add the
+  deck list page and a creation form (name, description, preset selection), with the usual i18n,
+  CSRF and audit wiring, and link it from the home page.
+  *Acceptance:* a logged-in user can create a deck in the browser and sees it listed; the new deck
+  is selectable when creating notes; an anonymous request is redirected to login.
 - [ ] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
 
@@ -351,7 +358,7 @@ Conventions:
 - [x] **M3-4 Undo, suspend, bury** — rollback via the last review log, suspend a card,
   bury it for the current day.
   *Acceptance:* test asserts Undo restores the previous due date and interval exactly.
-- [ ] **M3-5 Review page** — templ plus htmx: show answer, rate, keyboard shortcuts
+- [x] **M3-5 Review page** — templ plus htmx: show answer, rate, keyboard shortcuts
   (`space`, `1`–`4`, `u`, `e`, `s`, `b`), swipe on touch devices, server-side next-card
   prefetch in the same response, remaining counters.
   *Acceptance:* an `httptest` walk of 20 cards completes with no extra round trip per
@@ -369,13 +376,13 @@ Conventions:
   `internal/store/models.go`, a single-writer hotspot: schedule it with an exclusive owner.
   *Acceptance:* the queue builder honours a deck whose caps differ from the defaults; existing
   schedule tests stay green; both databases migrate without a destructive change.
-- [ ] **M3-9 Snapshot the learning step before a rating** — Undo currently cannot restore
+- [x] **M3-9 Snapshot the learning step before a rating** — Undo currently cannot restore
   learning-step progress because `reviews` stores no pre-rating step snapshot; `Rollback` zeroes
   `step_index`. Add `reviews.step_index_before`, write it in the submit path, and rebuild the
   rollback input from it. Requires editing `internal/store/models.go`, a single-writer hotspot.
   *Acceptance:* a test rates a learning card two steps forward, undoes twice, and asserts
   `step_index` returns to its original value at each step.
-- [ ] **M3-10 Atomic first submission for a brand-new card** — the row lock does not cover a
+- [x] **M3-10 Atomic first submission for a brand-new card** — the row lock does not cover a
   `card_states` row that does not exist yet, so two concurrent first submissions of the same new
   card can both pass the version check on PostgreSQL (SQLite is serialised by its single write
   connection). Replace the read-check-write sequence with a conditional upsert
@@ -394,12 +401,12 @@ Conventions:
   display prefix, scopes, expiry, revoke, `last_used_at`.
   *Acceptance:* test asserts the plaintext is never persisted and that a revoked key
   fails authentication immediately.
-- [ ] **M4-2 Bearer authentication middleware** — accepts session cookie or bearer key,
+- [x] **M4-2 Bearer authentication middleware** — accepts session cookie or bearer key,
   resolves both to a user, enforces scopes, applies per-key rate limiting, writes audit
   rows with `api_key_id`.
   *Acceptance:* table-driven test covers missing scope, expired key, revoked key, and
   rate-limit exhaustion.
-- [ ] **M4-3 REST endpoints** — the `/api/v1` surface in `DESIGN.md` §7.3, including
+- [x] **M4-3 REST endpoints** — the `/api/v1` surface in `DESIGN.md` §7.3, including
   `dry_run`, idempotent bulk create by `external_ref`, and the documented error envelope.
   *Acceptance:* a repeated bulk import creates no duplicates and reports
   `created`/`updated`/`skipped` counts correctly.
@@ -609,6 +616,13 @@ completion percentage until they are moved into a release milestone.
 - [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
 - [ ] **B-9 Deployment notes outside the repository** — hosting-specific details stay
   private; only generic container instructions belong in the README.
+- [ ] **B-13 CSRF for pre-session forms** — `/setup`, `/login` and `/register` submit without a
+  CSRF token because there is no session to bind one to (documented in the handlers). The exposure
+  is narrow but real: a setup race on a fresh instance and login-CSRF on an existing one. Fix with
+  the double-submit cookie pattern (random token in a cookie, mirrored in the form, compared on
+  submit), which needs no session.
+  *Acceptance:* a pre-session form submitted without the mirrored cookie is rejected; the normal
+  browser flow is unaffected; the existing session-bound CSRF path is unchanged.
 - [ ] **B-12 Make invite acceptance transactional** — the current flow atomically claims the
   invite token, then creates the user, then releases the token if creation fails. Concurrency is
   safe (one invite yields one user) but a crash between the two steps can leave a token released
@@ -635,8 +649,8 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 7/10 · M3 5/10 · M4 2/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
-  · M10 0/5 (excluded) · backlog 0/12 (excluded)`.
+  `M0 11/11 · M1 10/14 · M2 7/11 · M3 8/10 · M4 4/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 

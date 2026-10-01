@@ -230,9 +230,9 @@ func stepMinutes(part string) (float64, error) {
 
 // cardFromState 把数据库行转成 go-fsrs 的 Card。
 //
-// 学习步骤游标：go-fsrs 的 RemainingSteps 是\"还剩几步\"的倒计时，card_states.step_index 语义为
-// \"已走的步数\"。两者方向相反，这里按 RemainingSteps = step_index 直传 —— 见包报告中的字段语义说明；
-// 在首次评分后由 FSRS 自己接管该字段，不会长期不一致。
+// 学习步骤游标：go-fsrs 的 RemainingSteps 是「还剩几步」的倒计时，card_states.step_index 的语义
+// 与之同向（DESIGN.md §3.3 已冻结为「剩余」步数）——不要读成「已走步数」，否则状态机会整体反着跑。
+// 首次评分之后由 FSRS 接管该字段。
 func cardFromState(st *store.CardState) (fsrs.Card, error) {
 	state, err := ParseState(st.State)
 	if err != nil {
