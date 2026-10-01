@@ -58,20 +58,34 @@ func (s *Store) Active(ctx context.Context) (*store.Job, error) {
 	return &job, nil
 }
 
-// RecoverStale 把上次进程遗留在 running 的作业一律标为 failed（M9-6）：写 finished_at 与
-// 失败原因，但不清空 log_tail，保留现场供诊断。返回被回收的行数。
-func (s *Store) RecoverStale(ctx context.Context, at time.Time, reason string) (int64, error) {
-	res := s.db.WithContext(ctx).Model(&store.Job{}).
-		Where("status = ?", StatusRunning).
-		Updates(map[string]any{
-			"status":      StatusFailed,
-			"error":       reason,
-			"finished_at": at.UTC(),
-		})
-	if res.Error != nil {
-		return 0, fmt.Errorf("recover stale jobs: %w", res.Error)
+// RecoverStale 把上次进程遗留的未完成作业一律标为 failed（M9-7 回收 running，M9-8 追加 queued）：
+// 写 finished_at 与对应失败原因，但不清空 log_tail，保留现场供诊断。返回被回收的总行数。
+//
+// 两类残留的原因不同，必须分开写：running 的子进程确实启动过（原因 = interrupted by restart），
+// 而 queued 的作业只进了随进程消失的内存队列、从未启动（原因 = job never started）。
+func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, queuedReason string) (int64, error) {
+	steps := []struct {
+		status string
+		reason string
+	}{
+		{status: StatusRunning, reason: runningReason},
+		{status: StatusQueued, reason: queuedReason},
 	}
-	return res.RowsAffected, nil
+	var total int64
+	for _, step := range steps {
+		res := s.db.WithContext(ctx).Model(&store.Job{}).
+			Where("status = ?", step.status).
+			Updates(map[string]any{
+				"status":      StatusFailed,
+				"error":       step.reason,
+				"finished_at": at.UTC(),
+			})
+		if res.Error != nil {
+			return total, fmt.Errorf("recover %s jobs: %w", step.status, res.Error)
+		}
+		total += res.RowsAffected
+	}
+	return total, nil
 }
 
 // MarkRunning 把作业置为 running 并记录 started_at。
