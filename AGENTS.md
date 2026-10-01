@@ -401,6 +401,16 @@ Conventions:
   WHERE`).
   *Acceptance:* a test issuing two concurrent first submissions against PostgreSQL asserts exactly
   one review row and one state row survive, and the loser receives the conflict sentinel.
+- [x] **M3-11 Register `short_answer`** — `DESIGN.md` §6.2 lists ten built-in types but
+  `internal/cardtype/builtin.go` registered only nine. Implemented as a self-graded free-text type
+  (`prompt` plus optional `reference`), deliberately without a `Grader`, so the review flow falls
+  back to the four buttons; the LLM grader stays in §14.
+- [x] **M3-12 Wire the graders into the review page** — `internal/web/review.go` had no `Grade` call,
+  so the five graded types were unreachable in the UI. The review page now renders a text, numeric
+  (text plus `inputmode=decimal`, so a unit suffix still parses), single-choice, multi-choice or
+  true/false widget per type, grades through the optional `Grader` interface, maps the score to a
+  rating with the preset mapping, and stores `grade_source='typed'` with the score in
+  `grade_detail_json`.
 - [x] **M3-7 Schedule test suite** — state transitions, queue priority, version conflict,
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
@@ -449,7 +459,7 @@ Conventions:
 
 ### M5 — Sharing and permissions
 
-- [ ] **M5-1 Grants and role checks** — `deck_grants` store plus one `requireRole` helper
+- [x] **M5-1 Grants and role checks** — `deck_grants` store plus one `requireRole` helper
   used by every handler that touches a deck.
   *Acceptance:* test asserts a `reader` cannot modify a note and an `editor` cannot change
   deck settings or grants.
@@ -529,7 +539,7 @@ Conventions:
   `grade_source` distribution.
   *Acceptance:* every number is asserted by an independent SQL computation over a seeded
   fixture.
-- [ ] **M7-2 Streak and learning curve** — consecutive review days and daily new-versus-review
+- [x] **M7-2 Streak and learning curve** — consecutive review days and daily new-versus-review
   counts.
   *Acceptance:* boundary test at the day cutoff asserts the streak only breaks when a
   whole review day is skipped.
@@ -660,7 +670,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 11/12 · M3 10/12 · M4 8/9 · M5 0/7 · M6 0/10 · M7 1/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 10/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 1/7 · M6 0/10 · M7 2/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
