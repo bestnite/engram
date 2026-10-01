@@ -299,6 +299,35 @@
   translation: "暂停"
 - id: review.bury
   translation: "埋藏"
+# M3-12 作答类题型判分。五种作答类题型渲染输入控件；其余题型仍走四档自评。
+- id: review.graded.submit
+  translation: "提交答案"
+- id: review.graded.placeholder
+  translation: "输入你的答案"
+- id: review.graded.placeholder_number
+  translation: "输入数值"
+- id: review.graded.true
+  translation: "对"
+- id: review.graded.false
+  translation: "错"
+- id: review.graded.correct
+  translation: "回答正确"
+- id: review.graded.partial
+  translation: "部分正确"
+- id: review.graded.incorrect
+  translation: "回答错误"
+- id: review.graded.score
+  translation: "得分"
+- id: review.graded.correct_answer
+  translation: "正确答案"
+- id: review.graded.given
+  translation: "你的作答"
+- id: review.graded.parsed
+  translation: "解析为"
+- id: review.graded.continue
+  translation: "继续"
+- id: review.graded.error_input
+  translation: "无法判分，请重新作答。"
 - id: home.decks_link
   translation: "管理卡组"
 - id: decks.list.title

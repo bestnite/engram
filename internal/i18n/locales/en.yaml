@@ -299,6 +299,36 @@
   translation: "Suspend"
 - id: review.bury
   translation: "Bury"
+# M3-12 graded answering. The controls are rendered for the five graded card
+# types; the four self-ratings stay for everything else.
+- id: review.graded.submit
+  translation: "Check answer"
+- id: review.graded.placeholder
+  translation: "Type your answer"
+- id: review.graded.placeholder_number
+  translation: "Type a number"
+- id: review.graded.true
+  translation: "True"
+- id: review.graded.false
+  translation: "False"
+- id: review.graded.correct
+  translation: "Correct"
+- id: review.graded.partial
+  translation: "Partly correct"
+- id: review.graded.incorrect
+  translation: "Incorrect"
+- id: review.graded.score
+  translation: "Score"
+- id: review.graded.correct_answer
+  translation: "Correct answer"
+- id: review.graded.given
+  translation: "Your answer"
+- id: review.graded.parsed
+  translation: "Parsed as"
+- id: review.graded.continue
+  translation: "Continue"
+- id: review.graded.error_input
+  translation: "That answer cannot be graded. Please answer again."
 - id: home.decks_link
   translation: "Manage decks"
 - id: decks.list.title
