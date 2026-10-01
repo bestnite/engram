@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/mail"
@@ -111,17 +112,34 @@ func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, er
 	})
 }
 
+// audit 是写审计的统一出口（M1-10）：所有变更都经这里落 audit_log。
+// 审计写失败只记英文日志、不回滚已发生的业务变更 —— 但绝不静默，否则审计会悄悄缺行。
+func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
+	if s.auditor == nil {
+		return
+	}
+	if err := s.auditor.Record(ctx, e); err != nil {
+		s.logger.Error("write audit log failed", "action", e.Action, "error", err)
+	}
+}
+
 // loginSubmit 校验凭据、建立服务端会话并重定向到首页；失败时回填错误提示而不是跳转。
 func (s *Server) loginSubmit(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
+	ctx := c.Request.Context()
 	username := strings.TrimSpace(c.PostForm("username"))
-	u, err := s.accounts.Authenticate(c.Request.Context(), username, c.PostForm("password"))
+	ip := c.ClientIP()
+	u, err := s.accounts.Authenticate(ctx, username, c.PostForm("password"))
 	if err != nil {
 		// 只记用户名与错误，绝不记录密码（AGENTS.md §2.1：日志英文）。
 		s.logger.Info("login failed", "username", username, "error", err)
+		s.audit(ctx, store.AuditEntry{
+			Action: store.ActionUserLoginFailed,
+			Detail: map[string]any{"username": username, "ip": ip, "reason": err.Error()},
+		})
 		key := "auth.error.invalid_credentials"
 		if errors.Is(err, auth.ErrUserDisabled) {
 			key = "auth.error.user_disabled"
@@ -129,11 +147,16 @@ func (s *Server) loginSubmit(c *gin.Context) {
 		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T(key))
 		return
 	}
-	if _, err := s.sessions.StartSession(c.Request.Context(), c, u.ID); err != nil {
+	if _, err := s.sessions.StartSession(ctx, c, u.ID); err != nil {
 		s.logger.Error("start session failed", "user_id", u.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	s.audit(ctx, store.AuditEntry{
+		UserID: store.Ptr(u.ID),
+		Action: store.ActionUserLoginSucceeded,
+		Detail: map[string]any{"ip": ip},
+	})
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
@@ -300,6 +323,13 @@ func (s *Server) registerSubmit(c *gin.Context) {
 			s.logger.Error("set invite used_by failed", "invite_id", invite.ID, "error", err)
 		}
 	}
+	s.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		Action:     store.ActionUserCreate,
+		TargetType: "user",
+		TargetID:   store.Ptr(u.ID),
+		Detail:     map[string]any{"username": u.Username, "email": u.Email, "role": u.Role},
+	})
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 
@@ -370,7 +400,7 @@ func (s *Server) setupSubmit(c *gin.Context) {
 		s.renderSetup(c, loc, http.StatusBadRequest, msg)
 		return
 	}
-	_, err := s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+	u, err := s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
 		Username:    username,
 		Email:       email,
 		DisplayName: display,
@@ -383,16 +413,29 @@ func (s *Server) setupSubmit(c *gin.Context) {
 		s.renderSetup(c, loc, http.StatusConflict, loc.T("auth.error.create_failed"))
 		return
 	}
+	s.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		Action:     store.ActionUserCreate,
+		TargetType: "user",
+		TargetID:   store.Ptr(u.ID),
+		Detail:     map[string]any{"username": u.Username, "email": u.Email, "role": u.Role, "bootstrap": true},
+	})
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 
 // logout 作废当前会话并清除 cookie，然后回到登录页。
 func (s *Server) logout(c *gin.Context) {
-	if err := s.sessions.Logout(c.Request.Context(), c); err != nil {
+	ctx := c.Request.Context()
+	var userID *uint64
+	if u, ok := auth.CurrentUser(c); ok {
+		userID = store.Ptr(u.ID)
+	}
+	if err := s.sessions.Logout(ctx, c); err != nil {
 		s.logger.Error("logout failed", "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	s.audit(ctx, store.AuditEntry{UserID: userID, Action: store.ActionUserLogout})
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 

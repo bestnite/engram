@@ -43,6 +43,10 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("NewSessionManager() error = %v", err)
 	}
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	if err != nil {
+		t.Fatalf("NewAuditor() error = %v", err)
+	}
 	srv, err := New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -51,6 +55,7 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 		Sessions:      mgr,
 		Users:         users,
 		Invites:       invites,
+		Auditor:       auditor,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

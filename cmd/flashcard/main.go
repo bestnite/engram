@@ -131,6 +131,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
+	// 审计（M1-10）在此显式装配；写操作统一经它留痕。
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	if err != nil {
+		return nil, err
+	}
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
@@ -140,6 +145,8 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Accounts: accounts,
 		Sessions: sessions,
 		Users:    users,
+		Invites:  store.NewInviteStore(db),
+		Auditor:  auditor,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 	})
