@@ -214,12 +214,13 @@ func New(addr string, deps Deps) (*Server, error) {
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
-	router.Use(requestLogger(logger), recovery(logger), s.localeMiddleware())
-	// 会话中间件挂在全局：home 用它展示登录/登出入口，登出路由再用它做 CSRF 校验（M1-2）。
-	// 未装配会话（M0 阶段的测试）时跳过，保证 New 仍可用。
+	router.Use(requestLogger(logger), recovery(logger))
+	// 会话中间件先于语言中间件：个人设置里的语言（M1-8）要参与 i18n 解析优先级，
+	// 而它只能从已解析的会话用户读取。会话解析本身不依赖语言，先后次序安全。
 	if s.sessions != nil {
 		router.Use(s.sessions.Middleware())
 	}
+	router.Use(s.localeMiddleware())
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
@@ -235,6 +236,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
+	s.registerSettingsRoutes(router)
+	s.registerStatsRoutes(router)(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
 

@@ -156,6 +156,18 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 
 // ChangePassword 校验旧密码、强度与"新旧不同"，写入新哈希并作废该用户全部会话（DESIGN.md §11）。
 func (s *AccountService) ChangePassword(ctx context.Context, userID uint64, oldPassword, newPassword string) error {
+	return s.changePassword(ctx, userID, oldPassword, newPassword, "")
+}
+
+// ChangePasswordKeepingSession 与 ChangePassword 相同，但保留 keepSessionID 这一个会话：
+// 本人在设置页改密码时，其它设备下线而当前窗口继续可用（否则用户刚改完就被登出）。
+// 写审计由调用方负责（它才知道请求来源）。
+func (s *AccountService) ChangePasswordKeepingSession(ctx context.Context, userID uint64, keepSessionID, oldPassword, newPassword string) error {
+	return s.changePassword(ctx, userID, oldPassword, newPassword, keepSessionID)
+}
+
+// changePassword 是两条改密路径的唯一实现；keepSessionID 为空表示作废全部会话。
+func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldPassword, newPassword, keepSessionID string) error {
 	u, err := s.users.ByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("load user: %w", err)
@@ -182,6 +194,9 @@ func (s *AccountService) ChangePassword(ctx context.Context, userID uint64, oldP
 	}
 	if err := s.users.SetPasswordHash(ctx, userID, hash); err != nil {
 		return err
+	}
+	if keepSessionID != "" {
+		return s.sessions.RevokeAllForUserExcept(ctx, userID, keepSessionID, s.now())
 	}
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
 }
