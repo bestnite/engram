@@ -18,6 +18,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
+	"example.com/flashcard/internal/jobs"
 	"example.com/flashcard/internal/mcp"
 	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
@@ -175,6 +176,13 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
+	// 参数优化作业执行器（M9-1）：单并发 worker + 子进程。Start 在 web 服务启动前调用，
+	// worker 随进程存活；启动时会回收上次进程遗留的未完成作业（M9-7/M9-8）。
+	jobRunner, err := jobs.New(jobs.Deps{DB: db, Logger: logger})
+	if err != nil {
+		return nil, err
+	}
+	jobRunner.Start(context.Background())
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
@@ -197,6 +205,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		API:                 apiSrv,
 		MCP:                 mcpSrv,
+		Jobs:                jobRunner,
 	})
 }
 

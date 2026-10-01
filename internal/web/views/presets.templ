@@ -1,0 +1,110 @@
+package views
+
+// PresetListPage 是调度预设页（DESIGN.md §8.1 的 /presets）：列出当前用户的预设，
+// 每个预设一张卡片，卡片内提供「开始优化」「回退默认权重」与优化状态/结果摘要（M9-4）。
+templ PresetListPage(data PresetListData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		<p class="mt-2 text-sm text-slate-600">{ data.Intro }</p>
+		if len(data.Cards) == 0 {
+			<p class="mt-6 text-slate-600">{ data.EmptyText }</p>
+		} else {
+			<div class="mt-6 space-y-6">
+				for _, card := range data.Cards {
+					@PresetCard(card)
+				}
+			</div>
+		}
+	}
+}
+
+// PresetCard 渲染单个预设卡片，同时作为优化轮询与回退操作的 htmx 局部片段。
+//
+// 轮询：根元素带 hx-get 指向状态端点、hx-trigger 由 PollTrigger 决定（作业在途时
+// "every 2s"，否则 "none" 永不触发），响应以 outerHTML 换回自身——因此状态、权重来源
+// 与结果每次都从数据库重读，不会与库里的真实值脱节（M9-4）。
+templ PresetCard(data PresetCardData) {
+	<div id={ "preset-" + data.ID } class="rounded-lg border border-slate-200 bg-white p-4" hx-get={ data.StatusURL } hx-trigger={ data.PollTrigger } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+		<h2 class="text-lg font-semibold text-slate-900">{ data.Name }</h2>
+		<dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-700">
+			<div>
+				<dt class="inline text-slate-500">{ data.RetentionLabel }</dt>
+				<dd class="inline">{ data.RetentionValue }</dd>
+			</div>
+			<div>
+				<dt class="inline text-slate-500">{ data.MaxIntervalLabel }</dt>
+				<dd class="inline">{ data.MaxIntervalValue }</dd>
+			</div>
+			<div>
+				<dt class="inline text-slate-500">{ data.FuzzLabel }</dt>
+				<dd class="inline">{ data.FuzzValue }</dd>
+			</div>
+		</dl>
+
+		<section class="mt-4 rounded border border-slate-100 bg-slate-50 p-3">
+			<h3 class="text-sm font-semibold text-slate-800">{ data.WeightsHeading }</h3>
+			<p class="mt-1 text-sm text-slate-800">{ data.WeightsSource }</p>
+			if data.WeightsOptimizedAt != "" {
+				<p class="text-xs text-slate-600">{ data.WeightsOptimizedAt }</p>
+			}
+			if data.WeightsReviewCount != "" {
+				<p class="text-xs text-slate-600">{ data.WeightsReviewCount }</p>
+			}
+			if data.WeightsRaw != "" {
+				<details class="mt-2">
+					<summary class="cursor-pointer text-xs text-slate-500">{ data.WeightsRawLabel }</summary>
+					<code class="mt-1 block break-all text-xs text-slate-700">{ data.WeightsRaw }</code>
+				</details>
+			}
+		</section>
+
+		<p class="mt-3 text-xs text-slate-500">{ data.ReviewsAvailable }</p>
+		<p class="text-xs text-slate-500">{ data.Threshold }</p>
+		<p class="mt-2 text-xs text-slate-500">{ data.RescheduleNote }</p>
+
+		if data.Shortfall != "" {
+			<p class="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{ data.Shortfall }</p>
+		}
+		if data.Conflict != "" {
+			<p class="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{ data.Conflict }</p>
+		}
+
+		<div class="mt-3 flex flex-wrap items-center gap-3">
+			<form method="post" action={ data.OptimizeAction } hx-post={ data.OptimizeAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">{ data.OptimizeLabel }</button>
+			</form>
+			<form method="post" action={ data.RevertAction } hx-post={ data.RevertAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" type="submit">{ data.RevertLabel }</button>
+			</form>
+		</div>
+		<p class="mt-1 text-xs text-slate-500">{ data.RevertNote }</p>
+
+		<section class="mt-4">
+			if data.StatusText != "" {
+				<p class="text-sm font-medium text-slate-800">{ data.StatusText }</p>
+			}
+			if data.StageText != "" {
+				<p class="text-xs text-slate-500">{ data.StageText }</p>
+			}
+			if data.ErrorText != "" {
+				<p class="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.ErrorText }</p>
+			}
+			if data.LogTail != "" {
+				<p class="mt-2 text-xs font-semibold text-slate-500">{ data.LogTailLabel }</p>
+				<pre class="mt-1 max-h-48 overflow-auto rounded bg-slate-900 p-2 text-xs text-slate-100">{ data.LogTail }</pre>
+			}
+		</section>
+
+		if data.ResultBefore != "" {
+			<section class="mt-3 rounded border border-slate-100 p-3">
+				<h3 class="text-sm font-semibold text-slate-800">{ data.ResultTitle }</h3>
+				<p class="mt-1 text-xs text-slate-600">{ data.ResultReviews }</p>
+				<p class="text-xs text-slate-600">{ data.ResultBefore }</p>
+				<p class="text-xs text-slate-600">{ data.ResultAfter }</p>
+				<p class="text-sm font-medium text-slate-800">{ data.ResultVerdict }</p>
+			</section>
+		}
+	</div>
+}

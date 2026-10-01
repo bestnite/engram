@@ -53,6 +53,9 @@ const (
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
 	// M5-5 卡组可见性变更（private / unlisted / public）。
 	ActionDeckVisibility = "deck.visibility_change"
+	// M9-4 预设参数优化：触发优化作业与一键回退默认权重。
+	ActionPresetOptimize       = "preset.optimize"
+	ActionPresetOptimizeRevert = "preset.optimize.revert"
 )
 
 // AuditEntry 是一次审计写入的入参。
