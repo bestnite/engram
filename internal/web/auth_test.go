@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -47,6 +48,12 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}
+	// 限流器注入空等待：测试断言的是延迟数值（见 internal/auth 的单测），这里不需要真的睡。
+	limiter := auth.NewLoginLimiter(auth.LimiterConfig{
+		BaseDelay: 5 * time.Millisecond,
+		MaxDelay:  50 * time.Millisecond,
+		Sleep:     func(context.Context, time.Duration) error { return nil },
+	})
 	srv, err := New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -56,6 +63,7 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 		Users:         users,
 		Invites:       invites,
 		Auditor:       auditor,
+		LoginLimiter:  limiter,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

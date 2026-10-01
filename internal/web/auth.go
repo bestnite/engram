@@ -132,8 +132,19 @@ func (s *Server) loginSubmit(c *gin.Context) {
 	ctx := c.Request.Context()
 	username := strings.TrimSpace(c.PostForm("username"))
 	ip := c.ClientIP()
+	// 认证前先按已累计的失败次数递增延迟（M1-9）：防爆破，也拉平暴力尝试的速率。
+	if s.loginLimiter != nil {
+		if _, err := s.loginLimiter.Wait(ctx, username, ip); err != nil {
+			s.logger.Info("login delay aborted", "error", err)
+			c.AbortWithStatus(http.StatusRequestTimeout)
+			return
+		}
+	}
 	u, err := s.accounts.Authenticate(ctx, username, c.PostForm("password"))
 	if err != nil {
+		if s.loginLimiter != nil {
+			s.loginLimiter.RecordFailure(username, ip)
+		}
 		// 只记用户名与错误，绝不记录密码（AGENTS.md §2.1：日志英文）。
 		s.logger.Info("login failed", "username", username, "error", err)
 		s.audit(ctx, store.AuditEntry{
@@ -146,6 +157,10 @@ func (s *Server) loginSubmit(c *gin.Context) {
 		}
 		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T(key))
 		return
+	}
+	// 成功后清零该账号与 IP 的失败计数（M1-9 验收点）。
+	if s.loginLimiter != nil {
+		s.loginLimiter.Reset(username, ip)
 	}
 	if _, err := s.sessions.StartSession(ctx, c, u.ID); err != nil {
 		s.logger.Error("start session failed", "user_id", u.ID, "error", err)
