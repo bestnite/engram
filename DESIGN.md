@@ -754,6 +754,7 @@ deck.fdeck                      # zip
 - **URL 方案（已冻结）**：`/static/v/<asset-hash>/<逻辑路径>`，例如 `/static/v/9f7d9432/css/tailwind.css`。
   `asset-hash` = 该资源内容的 sha256 前 4 字节十六进制；哈希不匹配一律 404（防止"旧页面 + 新资源"的错配被静默接受）；
   命中时返回 `Cache-Control: public, max-age=31536000, immutable` 与 `ETag`。模板侧提供生成该 URL 的辅助函数，不手拼字符串。
+- `manifest.webmanifest` 与 `/sw.js` 是**稳定 URL 的动态路由**（不进 `/static/v/<hash>/`）：service worker 的作用域由脚本路径决定，哈希化路径每次构建都变会阻断注册更新；manifest 的应用名/描述需在请求时读 `settings` 表（`site.name`/`site.description`，缺省回退语言包 `app.name`），无法预先静态生成。service worker 的缓存清单由当前构建的资源哈希生成、带版本号，并在 `activate` 时删除旧版本缓存；清单只含静态外壳（CSS/JS/MathJax/图标/manifest），不含任何 API 或答题数据。
 
 ---
 
