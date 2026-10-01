@@ -539,64 +539,6 @@ func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint6
 	return ids, nil
 }
 
-// ExportCards 取出卡片级导出数据；M4-5 会把它改成流式以支持超大卡组。
-func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) ([]ExportRow, error) {
-	if len(deckIDs) == 0 {
-		return []ExportRow{}, nil
-	}
-	type scanRow struct {
-		CardID      uint64
-		NoteID      uint64
-		DeckID      uint64
-		Kind        string
-		Template    string
-		FieldsJSON  string
-		TagsJSON    string
-		ExternalRef *string
-		State       *string
-		DueAt       *time.Time
-		Reps        *int
-		Lapses      *int
-	}
-	var raw []scanRow
-	// 进度列只在 include_progress 时选取；未选进度时不引用 card_states，
-	// 否则 SQL 会因缺少该 JOIN 而报 “no such column”。
-	selectCols := `cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id,
-	        notes.kind AS kind, cards.template AS template, notes.fields_json AS fields_json,
-	        notes.tags_json AS tags_json, notes.external_ref AS external_ref`
-	q := a.db.WithContext(ctx).Table("cards").
-		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
-		Where("cards.deleted_at IS NULL").
-		Where("notes.deck_id IN ?", deckIDs)
-	if includeProgress {
-		selectCols += `, card_states.state AS state, card_states.due_at AS due_at,
-		        card_states.reps AS reps, card_states.lapses AS lapses`
-		q = q.Joins("LEFT JOIN card_states ON card_states.card_id = cards.id AND card_states.user_id = ?", userID)
-	}
-	q = q.Select(selectCols)
-	if err := q.Scan(&raw).Error; err != nil {
-		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to export cards")
-	}
-	rows := make([]ExportRow, 0, len(raw))
-	for _, r := range raw {
-		fields, err := store.ParseFields(r.FieldsJSON)
-		if err != nil || fields == nil {
-			fields = map[string]any{}
-		}
-		tags, err := store.ParseTags(r.TagsJSON)
-		if err != nil || tags == nil {
-			tags = []string{}
-		}
-		rows = append(rows, ExportRow{
-			CardID: r.CardID, NoteID: r.NoteID, DeckID: r.DeckID,
-			Kind: r.Kind, Template: r.Template, Fields: fields, Tags: tags,
-			ExternalRef: r.ExternalRef,
-			State:       r.State, DueAt: r.DueAt, Reps: r.Reps, Lapses: r.Lapses,
-		})
-	}
-	return rows, nil
-}
-
 // ---- 复习 ----
 
 // DueCard 是到期卡的对外形态（含字段原文）。
