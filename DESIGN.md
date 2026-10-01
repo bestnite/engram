@@ -323,6 +323,7 @@ GORM 屏蔽了大部分差异，但以下几条必须人工守住：
 - 布尔用 Go `bool`（GORM 在两库分别落成 `boolean`/`numeric`，行为一致）。
 - **AutoMigrate 只做增量**（加列/加索引）；破坏性变更（改类型、删列、加非空约束）必须写一次性迁移函数并在启动时按 schema 版本执行。
 - 部分索引：SQLite 与 PG 语法都支持 `WHERE` 子句的索引，可用；但不要依赖 PG 特有的表达式索引。
+- **SQLite 的父目录**：启动时若 `DB_DSN` 的父目录不存在，`internal/store` 会幂等创建它（`os.MkdirAll`，**仅 sqlite**；postgres 的 DSN 是网络地址，绝不对其建目录）。目录创建失败会点名目录，打开失败会点名数据库路径，且错误里不再出现 SQLite 的误导性 `out of memory (14)`（AGENTS.md M0-13）。
 
 ---
 

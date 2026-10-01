@@ -31,6 +31,11 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch driver {
 	case "sqlite":
+		// sqlite 的父目录不存在时先幂等创建，避免 SQLite 给出误导性的 "out of memory (14)"
+		// （AGENTS.md §5 M0-13；理由见 dsn.go 顶部注释）。只对 sqlite 生效。
+		if err := prepareSQLiteDir(dsn); err != nil {
+			return nil, err
+		}
 		dialector = sqlite.Open(dsn)
 	case "postgres":
 		dialector = postgres.Open(dsn)
@@ -39,6 +44,9 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	}
 	db, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger()})
 	if err != nil {
+		if driver == "sqlite" {
+			return nil, sqliteOpenError(sqliteDBPath(dsn), err)
+		}
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	if driver == "sqlite" {
