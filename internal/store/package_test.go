@@ -10,24 +10,24 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gorm.io/gorm"
 )
 
 // ---- 测试夹具 ----
 
-// openPackageDB 打开一个全新的 SQLite 库并建表，模拟"导入空库"。
-func openPackageDB(t *testing.T) *gorm.DB {
+// packageDatabases 返回本机可用的、已建表的全新测试库：SQLite 临时库 + 门控的 PostgreSQL。
+// 卡组包用例在两种驱动上跑同一套断言——PG 侧经 internal/pgtest 每次拿独立 schema，
+// 与 SQLite 的临时库隔离程度等价（AGENTS.md M5-10 要求 PG 分支真正跑起来，而不是只在 SQLite 上过）。
+func packageDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "pkg.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+	out := testDatabases(t)
+	for driver, db := range out {
+		if err := db.AutoMigrate(AllModels()...); err != nil {
+			t.Fatalf("AutoMigrate %s: %v", driver, err)
+		}
 	}
-	if err := db.AutoMigrate(AllModels()...); err != nil {
-		t.Fatalf("AutoMigrate: %v", err)
-	}
-	return db
+	return out
 }
 
 // seedPackageDeck 建一个含多题型 note 的源卡组，并写入一条属于 owner 的进度。
@@ -98,88 +98,97 @@ func exportZip(t *testing.T, db *gorm.DB, owner, deckID uint64, opts PackageOpti
 
 // ---- M5-6 导出 ----
 
-// TestExportPackageValidatesAgainstSchema 断言导出包通过 schema/deck-package.schema.json。
+// TestExportPackageValidatesAgainstSchema 断言导出包通过 schema/deck-package.schema.json（SQLite + PG）。
 func TestExportPackageValidatesAgainstSchema(t *testing.T) {
-	db := openPackageDB(t)
-	owner := seedUsers(t, db, "pkg_schema_owner")[0]
-	deckID, _ := seedPackageDeck(t, db, owner)
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "pkg_schema_owner")[0]
+			deckID, _ := seedPackageDeck(t, db, owner)
 
-	pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeProgress: true, IncludeMedia: true})
-	if err != nil {
-		t.Fatalf("ExportPackage: %v", err)
-	}
-	doc := pkg.Document()
-	// JSON 往返统一数字类型，再交给真库（draft 2020-12）对照仓库 schema 校验。
-	encoded, _ := json.Marshal(doc)
-	var instance any
-	if err := json.Unmarshal(encoded, &instance); err != nil {
-		t.Fatalf("re-decode document: %v", err)
-	}
-	if err := validateAgainstSchema(t, instance, filepath.Join("..", "..", "schema", "deck-package.schema.json")); err != nil {
-		t.Fatalf("exported package does not validate against deck-package.schema.json: %v", err)
+			pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeProgress: true, IncludeMedia: true})
+			if err != nil {
+				t.Fatalf("ExportPackage: %v", err)
+			}
+			doc := pkg.Document()
+			// JSON 往返统一数字类型，再交给真库（draft 2020-12）对照仓库 schema 校验。
+			encoded, _ := json.Marshal(doc)
+			var instance any
+			if err := json.Unmarshal(encoded, &instance); err != nil {
+				t.Fatalf("re-decode document: %v", err)
+			}
+			if err := validateAgainstSchema(t, instance, filepath.Join("..", "..", "schema", "deck-package.schema.json")); err != nil {
+				t.Fatalf("exported package does not validate against deck-package.schema.json: %v", err)
+			}
+		})
 	}
 }
 
 // TestExportProgressIsolatedPerUser 断言包里绝不包含导出者以外任何人的进度（M5-6 验收）。
 func TestExportProgressIsolatedPerUser(t *testing.T) {
-	db := openPackageDB(t)
-	users := seedUsers(t, db, "pkg_iso_owner", "pkg_iso_reader")
-	owner, reader := users[0], users[1]
-	deckID, noteIDs := seedPackageDeck(t, db, owner)
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			users := seedUsers(t, db, "pkg_iso_owner", "pkg_iso_reader")
+			owner, reader := users[0], users[1]
+			deckID, noteIDs := seedPackageDeck(t, db, owner)
 
-	// reader 在同一卡组的首张卡上也有自己的进度。
-	cards, err := NewCardStore(db).ByNote(context.Background(), noteIDs[0])
-	if err != nil || len(cards) == 0 {
-		t.Fatalf("load cards: %v", err)
-	}
-	if err := db.Create(&CardState{CardID: cards[0].ID, UserID: reader, State: "learning", Reps: 99, Version: 7}).Error; err != nil {
-		t.Fatalf("seed reader state: %v", err)
-	}
+			// reader 在同一卡组的首张卡上也有自己的进度。
+			cards, err := NewCardStore(db).ByNote(context.Background(), noteIDs[0])
+			if err != nil || len(cards) == 0 {
+				t.Fatalf("load cards: %v", err)
+			}
+			if err := db.Create(&CardState{CardID: cards[0].ID, UserID: reader, State: "learning", Reps: 99, Version: 7}).Error; err != nil {
+				t.Fatalf("seed reader state: %v", err)
+			}
 
-	pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeProgress: true, IncludeMedia: false})
-	if err != nil {
-		t.Fatalf("ExportPackage: %v", err)
-	}
-	if pkg.Progress == nil || len(pkg.Progress.CardStates) != 1 {
-		t.Fatalf("progress card_states = %v, want exactly the owner's one row", pkg.Progress)
-	}
-	for _, st := range pkg.Progress.CardStates {
-		if st.Reps == 99 || st.State == "learning" {
-			t.Fatalf("package leaked another user's progress: %+v", st)
-		}
-	}
-	if pkg.Manifest.ExportedBy != "pkg_iso_owner" {
-		t.Fatalf("manifest.exported_by = %q, want owner username", pkg.Manifest.ExportedBy)
+			pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeProgress: true, IncludeMedia: false})
+			if err != nil {
+				t.Fatalf("ExportPackage: %v", err)
+			}
+			if pkg.Progress == nil || len(pkg.Progress.CardStates) != 1 {
+				t.Fatalf("progress card_states = %v, want exactly the owner's one row", pkg.Progress)
+			}
+			for _, st := range pkg.Progress.CardStates {
+				if st.Reps == 99 || st.State == "learning" {
+					t.Fatalf("package leaked another user's progress: %+v", st)
+				}
+			}
+			if pkg.Manifest.ExportedBy != "pkg_iso_owner" {
+				t.Fatalf("manifest.exported_by = %q, want owner username", pkg.Manifest.ExportedBy)
+			}
+		})
 	}
 }
 
 // TestExportMediaOffDeclaresHonestly 断言 include_media=0 时无媒体条目且 manifest 如实声明（M5-6 验收）。
 func TestExportMediaOffDeclaresHonestly(t *testing.T) {
-	db := openPackageDB(t)
-	owner := seedUsers(t, db, "pkg_media_owner")[0]
-	deckID := seedPresetDeck(t, db, owner)
-	// 一条引用媒体的 note，确保"关闭媒体"路径确实被走到。
-	n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
-	if _, err := NewNoteStore(db).Create(context.Background(), &n, map[string]any{
-		"front": "img?", "back": "media/0000000000000000000000000000000000000000000000000000000000000000.png",
-	}); err != nil {
-		t.Fatalf("create note: %v", err)
-	}
-	pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeMedia: false})
-	if err != nil {
-		t.Fatalf("ExportPackage: %v", err)
-	}
-	if pkg.Manifest.IncludeMedia {
-		t.Fatal("manifest.include_media = true, want false")
-	}
-	if len(pkg.Media) != 0 || len(pkg.MediaBytes) != 0 {
-		t.Fatalf("media not empty with include_media=0: %v", pkg.Media)
-	}
-	if pkg.Manifest.Counts.Media != 0 {
-		t.Fatalf("manifest.counts.media = %d, want 0", pkg.Manifest.Counts.Media)
-	}
-	if _, ok := pkg.Document()["media.json"]; ok {
-		t.Fatal("media.json present with include_media=0")
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "pkg_media_owner")[0]
+			deckID := seedPresetDeck(t, db, owner)
+			// 一条引用媒体的 note，确保"关闭媒体"路径确实被走到。
+			n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
+			if _, err := NewNoteStore(db).Create(context.Background(), &n, map[string]any{
+				"front": "img?", "back": "media/0000000000000000000000000000000000000000000000000000000000000000.png",
+			}); err != nil {
+				t.Fatalf("create note: %v", err)
+			}
+			pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, PackageOptions{IncludeMedia: false})
+			if err != nil {
+				t.Fatalf("ExportPackage: %v", err)
+			}
+			if pkg.Manifest.IncludeMedia {
+				t.Fatal("manifest.include_media = true, want false")
+			}
+			if len(pkg.Media) != 0 || len(pkg.MediaBytes) != 0 {
+				t.Fatalf("media not empty with include_media=0: %v", pkg.Media)
+			}
+			if pkg.Manifest.Counts.Media != 0 {
+				t.Fatalf("manifest.counts.media = %d, want 0", pkg.Manifest.Counts.Media)
+			}
+			if _, ok := pkg.Document()["media.json"]; ok {
+				t.Fatal("media.json present with include_media=0")
+			}
+		})
 	}
 }
 
