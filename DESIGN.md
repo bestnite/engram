@@ -453,7 +453,7 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
 - **撤销**：owner 随时可改角色或移除授权，**立即生效**（下一个请求即被拒）；已产生的个人进度保留在对方账号下（数据属其私有），但不再能访问该卡组。
 - **分享链接**（`share_links`）：免注册只读浏览，可设口令与过期，可即时撤销、可一次撤销全部。
 - **可见性**：`private`（仅授权者）/ `unlisted`（拿到链接可看）/ `public`（登录用户可见并可自取副本）。
-- **克隆（fork）**：读者可把可见卡组复制到自己账号下，进度从零开始 —— 绕开"改别人的卡组"这类权限纠缠。
+- **克隆（fork）**：读者可把可见卡组复制到自己账号下，进度从零开始 —— 绕开"改别人的卡组"这类权限纠缠。跨实例/离线传递用**卡组包**（§7.6），语义一致：内容复制、进度不跟随。
 - 所有授权/撤销/分享操作写 `audit_log`（多人共用后"谁改了我的权限"必然会被问）。
 
 ---
@@ -549,7 +549,9 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 | POST | `/review` | review | 提交评分（`card_id`,`rating`,`expected_version`,`elapsed_ms`） |
 | GET | `/stats/summary` | read | 到期量/复习量/留存概要 |
 | GET/POST/DELETE | `/keys[/:id]` | admin | API Key 管理 |
-| GET | `/export?deck=:id&format=json\|csv` | read | 导出（`include_progress=1` 时含进度） |
+| GET | `/export?deck=:id&format=json\|csv` | read | 卡片级导出（扁平，给外部工具用；`include_progress=1` 含进度） |
+| GET | `/decks/:id/package` | read | **导出卡组包**（§7.6；`include_progress` / `include_media` / `include_reviews`） |
+| POST | `/decks/import` | write | **导入卡组包**（§7.6；`dry_run`、`target`、`on_conflict`） |
 
 - 幂等键 `external_ref` **由调用方**决定命名空间（例如某笔记系统用 `<system>:<docId>:<blockId>`），服务不做解释，只保证 `(deck_id, external_ref)` 唯一 → 同一批数据重复提交不会产生重复卡，且能反过来查"哪些来源还没建过卡"。
 - 批量响应：`{created, updated, skipped, errors:[{index, reason}]}`；`dry_run=1` 只算不写。
@@ -563,8 +565,8 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 - **工具按 key 的 scope 决定暴露哪些**：握手时按当前 key 过滤 `tools/list`，并在每次 `tools/call` 复查 scope —— 客户端看到的工具列表就是它真能用的集合。
   | 工具 | 需要 scope |
   |---|---|
-  | `list_decks` / `search_notes` / `get_stats` / `export_deck` | read |
-  | `create_notes`（支持 `dry_run`）/ `update_note` / `delete_note` | write |
+  | `list_decks` / `search_notes` / `get_stats` / `export_deck`（导出卡组包，§7.6） | read |
+  | `create_notes`（支持 `dry_run`）/ `update_note` / `delete_note` / `import_deck`（导入卡组包，§7.6） | write |
   | `get_due_cards` / `submit_review` | review |
 - **边界写死**：MCP 工具不封装业务逻辑，只做参数校验 + 调用与 REST 相同的 service 方法。同一条规则只改一处。
 - 典型链路（完全在外部）：外部 Agent 读资料 → 生成问答对 → `create_notes(dry_run)` → 正式写入 → 人在网页上复习。服务只负责诚实记账。
@@ -574,6 +576,61 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 - `GET /api/v1/export?deck=:id&format=json|csv[&include_progress=1]`
 - 管理面板提供"全库导出"按钮（web 优先，不必用 CLI；CLI 仅作为自动化/运维的等价入口）。
 - 导出**不含** Anki 兼容格式（见 §1 非目标）。
+- 上面是**运维/备份级**与**卡片级**两种粒度；面向"把一个卡组完整带走"的粒度见 §7.6。
+
+### 7.6 卡组包（deck package）：导出与导入
+
+**用途**：把一个卡组变成**自包含文件**，用于备份、跨实例迁移、以及把卡组离线交给别人。与"克隆"的分工见本节末。
+
+**格式**：单个 zip，扩展名 `.fdeck`（不含媒体时也可用纯 JSON 的 `.fdeck.json`）。人类可读、可 diff、可进版本库。
+
+```
+deck.fdeck                      # zip
+├── manifest.json               # format_version、导出时间、应用版本、卡组元信息、条目计数
+├── notes.json                  # 卡片内容：kind + 字段 + 标签 + external_ref + 可选 source_url/extra
+├── cards.json                  # 每个 note 的呈现形式（template/ordinal）——保证导入后卡片集合一致
+├── preset.json                 # 调度参数（目标保留率、学习步骤、最大间隔、fuzz、权重）
+├── progress.json               # 可选：仅导出者本人的 card_states（+ 可选 reviews）
+├── media/                      # 可选：去重后的媒体文件，文件名 <sha256>.<ext>
+└── media.json                  # sha256 → 包内相对路径 + mime
+```
+
+**版本与兼容**
+
+- `manifest.format_version`（当前 1）：导入端**至少支持 N−1**。
+- 未知字段忽略；**未知题型 `kind` 必须报错并逐条列出** —— 静默丢弃会让用户以为导入成功却少了卡片。
+- `manifest.app_version` 只作提示，不参与兼容判断。
+
+**导出**
+
+- 入口：卡组详情页「导出卡组包」按钮、`GET /api/v1/decks/:id/package`、MCP `export_deck`、CLI `flashcard export --deck N --package out.fdeck`。
+- 三个开关：`include_progress`（默认 **off**，理由见 §13）、`include_media`（默认 on）、`include_reviews`（默认 off，依赖 `include_progress`）。
+- 权限：`read` 即可导出（"拿走自己的内容"是基本权利）；导出他人共享的卡组时，**绝不包含导出者以外任何人的进度**。
+- 排除项：授权关系、可见性、审计等**实例内状态**一律不导出（换实例无意义）；preset 随包走。
+- 体积：媒体默认内联；超过管理员配置的阈值时提示"改用不含媒体导出"，由接收端自行补图。
+
+**导入**
+
+- 入口：`/import` 页面上传、`POST /api/v1/decks/import`、MCP `import_deck`、CLI。
+- 目标三种：`new_deck`（默认，用包内卡组名，重名自动加后缀）、`into_deck:<id>`（合并进已有卡组）、`replace_deck:<id>`（破坏性，需二次确认并写审计）。
+- **幂等与去重**：优先用 note 的 `external_ref`；缺失时用**内容指纹**（`kind` + 规范化字段的 sha256）匹配 → 同一包重复导入不产生重复卡；报告里说明本次用了哪条匹配规则。
+- 冲突策略：`skip` / `update`（默认）/ `fail`（整包回滚）。
+- **ID 重映射**：notes/cards 一律新建 id；进度按 `(external_ref 或内容指纹, template)` 映射到新 card；映射不上的进度条目在报告里列为「未应用」。
+- **进度导入的边界**：只允许把进度导入到**自己的账号**。包里的 `progress.json` 属于导出者，导入者若不是同一人，默认**丢弃进度并在页面提示**；除非管理员开启"允许导入他人进度"（默认关）且每次操作写审计。
+- 媒体：按 sha256 落盘到 `data/media/`（已存在则跳过）；缺失媒体按策略处理，默认 `fail` 并列出缺失清单，可选 `skip`。
+- 预演：`dry_run=1` 返回 `{notes_created, notes_updated, notes_skipped, cards_created, media_new, media_missing, progress_applied, progress_skipped, errors[]}` —— **先预演、后写入**，报告形态与 §7.3 的批量导入一致。
+- 安全：所有字段走同一套校验与清洗（`cardtype.Validate` + bluemonday）；解压拒绝路径穿越与超限（单文件上限、总解压体积上限、条目数上限，防 zip bomb）；导入按用户限流；包内不允许脚本或模板。
+- 体积上限：与上传上限同一处配置（管理面板）。
+
+**Schema 文件**：`schema/deck-package.schema.json`，与 `schema/note-import.schema.json` 并列，供外部工具校验与生成。
+
+**与其它功能的关系**
+
+| 功能 | 粒度 | 场景 |
+|---|---|---|
+| 克隆（fork，§5） | 同实例、账号间复制 | 看到别人的公开卡组，想自己练 |
+| 卡组包（本节） | 跨实例、离线文件 | 备份、迁移、把卡组发给不同实例的人 |
+| 全库导出（§7.5） | 实例级 | 运维备份，含所有用户与授权 |
 
 ---
 
@@ -589,8 +646,8 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 | `/decks` `/decks/:id` | 卡组列表/详情 | 卡片表格（分页、搜索、标签过滤）、批量操作 |
 | `/decks/:id/notes/:nid` | 卡片编辑 | 字段编辑 + 实时预览（htmx 局部刷新 + MathJax 重渲染） |
 | `/review?deck=:id` | 复习 | 核心页（见 §8.2） |
-| `/import` | 批量导入 | 粘贴/上传 JSON、dry-run 报告、确认写入（与 API 等价，给不想用 curl 的人） |
-| `/export` | 导出 | 选卡组与格式 |
+| `/import` | 批量导入 | 粘贴/上传 JSON 或**卡组包**（§7.6）、dry-run 报告、确认写入（与 API 等价，给不想用 curl 的人） |
+| `/export` | 导出 | 选卡组与格式；卡组包导出入口（含 `include_progress` / `include_media` 开关） |
 | `/stats` | 统计 | 见 §9 |
 | `/settings` | 个人设置 | 语言、时区、复习日切点、密码、API Key 管理 |
 | `/presets` | 调度预设 | 目标保留率、学习步骤、最大间隔、fuzz、权重（含"优化"按钮与状态） |
@@ -773,7 +830,7 @@ flashcard/
 | **M2** | 卡组与卡片 | deck/note/card CRUD、题型注册表 + 记忆类题型（basic/basic_both/cloze/list）、渲染（Markdown + MathJax）与预览 | 网页上建一个卡组并手工录入公式卡，能正确渲染；新增一个题型只需加一个实现 + 注册（不碰核心） |
 | **M3** | 复习闭环 | 队列构建、go-fsrs 接入、评分提交（乐观锁）、Undo、暂停/埋藏、每日上限、作答类题型 + 判分（typed/numeric/choice/true_false） | 真实复习一轮：到期日随评分变化符合预期；重复提交同一评分被 409 挡；队列优先级正确（单测）；输入答案能判对判错并进 FSRS |
 | **M4** | 对外集成 | API Key 管理（个人设置页）、`/api/v1`（批量建卡含 dry-run 与幂等、取到期、提交复习、导出）、**内置 MCP server**（`/mcp`，按 scope 过滤工具） | 用 curl 与一个真实 MCP 客户端分别完成：建卡 → 取到期 → 提交复习 → 读统计；同批数据重复提交不产生重复卡；越权/过期 key 被拒（单测覆盖） |
-| **M5** | 共享与权限 | 三角色授权、分享链接、可见性、克隆、撤销即时生效 | 第二个用户在只读卡组里能复习但不能改卡；撤销后其访问立即失败；越权用例单测通过 |
+| **M5** | 共享与权限 | 三角色授权、分享链接、可见性、克隆、**卡组包导出/导入（§7.6）**、撤销即时生效 | 第二个用户在只读卡组里能复习但不能改卡；撤销后其访问立即失败；卡组包往返（导出→导入）= 卡片/字段/标签/公式一致且重复导入不产生重复卡；越权用例单测通过 |
 | **M6** | 管理面板与系统设置 | 用户管理、注册/邀请、OIDC 开关与测试连接、上传上限等系统设置、审计检索、健康页、全库导出 | 全程浏览器完成，不需要 CLI；设置改动即时生效且标明来源；OIDC 配置错误时页面上能看到原因 |
 | **M7** | 统计 | 到期预测、留存、时间投入、标签维度、判分来源分布、打卡 | 数字与手写 SQL 对拍一致 |
 | **M8** | 移动体验 + PWA + i18n 收口 | 手势、禁缩放/长按、预取、manifest + SW、语言包完成度检查 | 手机浏览器连刷 50 张无卡顿、无系统菜单误触；主屏图标启动为独立窗口；界面无硬编码文案 |
@@ -796,7 +853,8 @@ flashcard/
 | 4 | 邀请与找回密码是否走邮件（SMTP 配置项） | 纯链接（管理员转发）/ 集成 SMTP 自动发送 | 先纯链接（零依赖）；SMTP 作为后期可选项 |
 | 5 | 站点默认语言 | 中文 / 英文 / 跟随浏览器 | 站点默认 `zh-CN`，个人可覆盖，登录前按 `Accept-Language` |
 | 6 | 媒体目录是否需要"每用户配额" | 只要单文件上限 / 单文件 + 单用户总量 | 先只做单文件上限（管理面板可调），配额等有人滥用再加 |
-| 7 | 是否要"卡组导入/导出模板示例"（给外部 Agent 看的 JSON Schema） | 只要文档 / 提供 JSON Schema 文件 | 提供 `schema/note-import.schema.json`，外部工具可直接校验 —— 成本低、对 Agent 友好 |
+| 7 | 是否要"卡组导入/导出模板示例"（给外部 Agent 看的 JSON Schema） | 只要文档 / 提供 JSON Schema 文件 | 提供 `schema/note-import.schema.json` 与 `schema/deck-package.schema.json`，外部工具可直接校验 —— 成本低、对 Agent 友好 |
+| 8 | **卡组包是否默认含进度** | (a) 默认不含、导出时可选；(b) 默认含 | **默认不含**：卡组包的主要用途是"把内容给别人/搬到别的实例"，进度属于个人且跨实例后大概率要重排；想备份自己的人加一个勾选即可（`include_progress=1`） |
 
 ---
 
@@ -868,6 +926,7 @@ flashcard/
 | 多语言（中/英） | §8.3（go-i18n + YAML 语言包 + 无硬编码文案） |
 | 管理面板（用户/系统设置） | §8.4 |
 | 上传限制管理员可配、不压缩 | §6.3 + §8.4 |
+| 卡组级导出/导入（自包含卡组包） | §7.6（+ §13 #8 进度默认值） |
 | 不兼容 Anki 格式 | §1 非目标（含依据）、§7.5 |
 | 不做协作编辑 | §1 非目标、§5（只做共享 + 克隆） |
 | 扁平卡组（无树） | §2.2（`decks` 无父子关系）+ §5 |

@@ -371,8 +371,8 @@ Conventions:
   *Acceptance:* a client with only `read` sees no write tools in `tools/list` and gets a
   permission error when calling one by name.
 - [ ] **M4-7 MCP tools** — `list_decks`, `search_notes`, `get_stats`, `export_deck`
-  (read); `create_notes`, `update_note`, `delete_note` (write); `get_due_cards`,
-  `submit_review` (review).
+  (read); `create_notes`, `update_note`, `delete_note`, `import_deck` (write);
+  `get_due_cards`, `submit_review` (review).
   *Acceptance:* each tool has a test calling the same service method as its REST
   counterpart, and both paths produce identical results for the same input.
 - [ ] **M4-8 Import JSON Schema** — `schema/note-import.schema.json`, referenced by the
@@ -403,6 +403,22 @@ Conventions:
 - [ ] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
   *Acceptance:* test asserts `unlisted` decks never appear in any listing but resolve by
   direct id.
+- [ ] **M5-6 Deck package export** — the `.fdeck` zip described in `DESIGN.md` §7.6
+  (`manifest.json`, `notes.json`, `cards.json`, `preset.json`, optional `progress.json`,
+  optional `media/` with `media.json`), exposed through the deck page, `GET
+  /api/v1/decks/:id/package`, MCP `export_deck`, and the CLI.
+  *Acceptance:* an exported package validates against
+  `schema/deck-package.schema.json`; a test with two users on one deck proves the package
+  never contains the other user's progress; with `include_media=0` no media entries are
+  written and the manifest says so.
+- [ ] **M5-7 Deck package import** — upload, API, MCP and CLI entry points; the three
+  targets (`new_deck`, `into_deck:<id>`, `replace_deck:<id>`); `dry_run`; conflict policy;
+  id remapping; progress rules; media handling; archive safety.
+  *Acceptance:* a round trip (export then import into a fresh database) yields identical
+  note count, fields, tags, and formulas; importing the same package twice creates no
+  duplicate cards; an archive with a path-traversal entry or an oversized decompression is
+  rejected; an unknown `kind` fails with the offending entry listed; `progress.json` from
+  another user is discarded and reported unless the admin setting enables it.
 
 
 ### M6 — Admin panel and system settings
@@ -563,7 +579,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 0/11 · M1 0/13 · M2 0/9 · M3 0/7 · M4 0/9 · M5 0/5 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 0/11 · M1 0/13 · M2 0/9 · M3 0/7 · M4 0/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/10 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
