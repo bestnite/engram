@@ -18,6 +18,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
+	"example.com/flashcard/internal/mcp"
 	"example.com/flashcard/internal/store"
 	"example.com/flashcard/internal/web"
 )
@@ -153,6 +154,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
+	// 内置 MCP server（M4-6）复用同一 api 实例：工具直接调用与 REST 相同的 service 方法。
+	mcpSrv, err := mcp.New(mcp.Deps{API: apiSrv, Logger: logger})
+	if err != nil {
+		return nil, err
+	}
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
@@ -172,6 +178,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		API:                 apiSrv,
+		MCP:                 mcpSrv,
 	})
 }
 

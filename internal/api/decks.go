@@ -10,8 +10,8 @@ import (
 	"example.com/flashcard/internal/store"
 )
 
-// deckResponse 是卡组的对外形态（DESIGN.md §2.2）。
-type deckResponse struct {
+// DeckResponse 是卡组的对外形态（DESIGN.md §2.2）；REST 与 MCP 共用同一形态。
+type DeckResponse struct {
 	ID            uint64     `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
@@ -23,8 +23,12 @@ type deckResponse struct {
 	CreatedAt     time.Time  `json:"created_at"`
 }
 
-func toDeckResponse(d store.Deck) deckResponse {
-	return deckResponse{
+// deckResponse 保留旧名，供包内既有调用。
+type deckResponse = DeckResponse
+
+// ToDeckResponse 把 store.Deck 映射成对外形态；REST 与 MCP 共用。
+func ToDeckResponse(d store.Deck) DeckResponse {
+	return DeckResponse{
 		ID:            d.ID,
 		Name:          d.Name,
 		Description:   d.Description,
@@ -37,13 +41,15 @@ func toDeckResponse(d store.Deck) deckResponse {
 	}
 }
 
-// listDecks 返回当前用户拥有的卡组（按权限过滤；M5 会把授权卡组一并纳入）。
+// toDeckResponse 保留旧名，供包内既有调用。
+func toDeckResponse(d store.Deck) DeckResponse { return ToDeckResponse(d) }
+
+// listDecks 返回当前用户拥有的卡组（业务逻辑在 service 层 ListDecks，与 MCP 的 list_decks 同源）。
 func (a *API) listDecks(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	decks, err := a.decks.ListByOwner(c.Request.Context(), u.ID)
+	decks, err := a.ListDecks(c.Request.Context(), u.ID)
 	if err != nil {
-		a.logger.Error("list decks failed", "user_id", u.ID, "error", err)
-		abortError(c, http.StatusInternalServerError, CodeInternal, "failed to list decks")
+		writeServiceError(c, err)
 		return
 	}
 	out := make([]deckResponse, 0, len(decks))
