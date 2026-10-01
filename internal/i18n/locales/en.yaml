@@ -199,3 +199,44 @@
   translation: "Back"
 - id: notes.preview.invalid
   translation: "Cannot preview: "
+# M3-5 review page.
+- id: review.title
+  translation: "Review"
+- id: review.heading
+  translation: "Review"
+- id: review.remaining_label
+  translation: "Remaining today"
+- id: review.done_label
+  translation: "Reviewed this session"
+- id: review.front
+  translation: "Front"
+- id: review.back
+  translation: "Back"
+- id: review.show_answer
+  translation: "Show answer"
+- id: review.rating.again
+  translation: "Again"
+- id: review.rating.hard
+  translation: "Hard"
+- id: review.rating.good
+  translation: "Good"
+- id: review.rating.easy
+  translation: "Easy"
+- id: review.empty
+  translation: "No cards are due right now."
+- id: review.error_submit
+  translation: "Could not save your rating. The card is still here, try again."
+- id: review.error_network
+  translation: "Connection lost. Your last rating was not saved."
+- id: review.error_render
+  translation: "This card cannot be displayed."
+- id: review.shortcuts
+  translation: "Space: show answer · 1–4: rate · u: undo · e: edit · s: suspend · b: bury"
+- id: review.undo
+  translation: "Undo"
+- id: review.edit
+  translation: "Edit"
+- id: review.suspend
+  translation: "Suspend"
+- id: review.bury
+  translation: "Bury"

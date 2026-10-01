@@ -149,6 +149,8 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Invites:      store.NewInviteStore(db),
 		Decks:        store.NewDeckStore(db),
 		Notes:        store.NewNoteStore(db),
+		Cards:        store.NewCardStore(db),
+		Presets:      store.NewPresetStore(db),
 		Auditor:      auditor,
 		LoginLimiter: limiter,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。

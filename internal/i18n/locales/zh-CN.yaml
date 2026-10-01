@@ -199,3 +199,44 @@
   translation: "背面"
 - id: notes.preview.invalid
   translation: "无法预览："
+# M3-5 复习页。
+- id: review.title
+  translation: "复习"
+- id: review.heading
+  translation: "复习"
+- id: review.remaining_label
+  translation: "今日剩余"
+- id: review.done_label
+  translation: "本次已复习"
+- id: review.front
+  translation: "正面"
+- id: review.back
+  translation: "背面"
+- id: review.show_answer
+  translation: "显示答案"
+- id: review.rating.again
+  translation: "重来"
+- id: review.rating.hard
+  translation: "困难"
+- id: review.rating.good
+  translation: "良好"
+- id: review.rating.easy
+  translation: "简单"
+- id: review.empty
+  translation: "当前没有到期的卡片。"
+- id: review.error_submit
+  translation: "评分保存失败，卡片仍在，请重试。"
+- id: review.error_network
+  translation: "网络已断开，上次评分未保存。"
+- id: review.error_render
+  translation: "无法显示这张卡片。"
+- id: review.shortcuts
+  translation: "空格：显示答案 · 1–4：评分 · u：撤销 · e：编辑 · s：暂停 · b：埋藏"
+- id: review.undo
+  translation: "撤销"
+- id: review.edit
+  translation: "编辑"
+- id: review.suspend
+  translation: "暂停"
+- id: review.bury
+  translation: "埋藏"

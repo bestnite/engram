@@ -51,6 +51,8 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Users:         users,
 		Decks:         store.NewDeckStore(db),
 		Notes:         store.NewNoteStore(db),
+		Cards:         store.NewCardStore(db),
+		Presets:       store.NewPresetStore(db),
 		Auditor:       auditor,
 		LoginLimiter: auth.NewLoginLimiter(auth.LimiterConfig{
 			Sleep: func(context.Context, time.Duration) error { return nil },
