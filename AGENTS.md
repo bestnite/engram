@@ -274,7 +274,7 @@ Conventions:
   handler, and a "test connection" action that surfaces the failure reason.
   *Acceptance:* test against a stub provider asserts a successful login and that a wrong
   `state` is rejected; the test connection returns the provider error text.
-- [ ] **M1-12 Identity binding** — lookup by `(provider, subject)`, auto-link by verified
+- [x] **M1-12 Identity binding** — lookup by `(provider, subject)`, auto-link by verified
   email, policy-gated account creation, and unlink in the admin panel.
   *Acceptance:* table-driven test covers all three branches of `DESIGN.md` §4.5 plus the
   unlink path.
@@ -286,7 +286,7 @@ Conventions:
   *Acceptance:* a locally started server answers `GET /login` with `200` and renders the catalog text;
   `GET /setup` is reachable while no admin exists and `404` afterwards; `POST /login` with a wrong
   password returns the documented error code; existing tests stay green.
-- [ ] **M1-13 Auth test suite** — negative cases for CSRF, policy, binding, session
+- [x] **M1-13 Auth test suite** — negative cases for CSRF, policy, binding, session
   invalidation, and rate limiting in one place.
   *Acceptance:* `go test ./internal/auth/...` passes with every negative case present.
 
@@ -463,13 +463,13 @@ Conventions:
   used by every handler that touches a deck.
   *Acceptance:* test asserts a `reader` cannot modify a note and an `editor` cannot change
   deck settings or grants.
-- [ ] **M5-2 Sharing UI** — grant, revoke, and change a role, with the current grant list.
+- [x] **M5-2 Sharing UI** — grant, revoke, and change a role, with the current grant list.
   *Acceptance:* revoking a grant denies the next request from that user in the same test.
 - [ ] **M5-3 Share links** — create with optional password and expiry, revoke individually
   or all at once, public read-only view, and a prompt to log in when starting a review.
   *Acceptance:* test asserts a revoked or expired link returns `404` and that the password
   gate rejects a wrong password.
-- [ ] **M5-4 Deck clone** — copy notes and cards into the caller's account with no
+- [x] **M5-4 Deck clone** — copy notes and cards into the caller's account with no
   progress carried over.
   *Acceptance:* test asserts the clone has the same note count and zero `card_states`
   rows for the new owner.
@@ -575,7 +575,14 @@ Conventions:
 
 ### M9 — Parameter optimisation
 
-- [ ] **M9-1 Job runner** — single-flight worker, job store, subprocess launch, timeout,
+- [ ] **M9-6 Recover stale jobs at startup** — the runner has no recovery for jobs left in
+  `running` when the process dies (restart, crash, OOM): they stay `running` forever and keep
+  `Enqueue` returning `409`, so the feature looks permanently busy. On startup, mark every
+  `running` job as `failed` with a reason such as `interrupted by restart` (the subprocess is gone
+  by definition) and keep its log tail for diagnosis.
+  *Acceptance:* a test seeds a `running` row, constructs the runner, and asserts the row becomes
+  `failed` with the reason recorded and that a new enqueue then succeeds.
+- [x] **M9-1 Job runner** — single-flight worker, job store, subprocess launch, timeout,
   kill of the process group, log tail capture.
   *Acceptance:* a second request while a job runs returns `409`; a hung adapter is killed
   at the configured timeout and the job is marked failed.
@@ -670,7 +677,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 1/7 · M6 0/10 · M7 2/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 3/7 · M6 0/10 · M7 2/4 · M8 0/6 · M9 1/7
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
