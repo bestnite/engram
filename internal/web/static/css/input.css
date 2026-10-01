@@ -1,0 +1,7 @@
+/* Tailwind CSS v4 入口（standalone CLI，免 Node，见 DESIGN.md §8、§10.1）。
+   @import 引入框架本体；@source 显式声明要扫描的类名来源目录。
+   模板在 ../../views 下（*.templ），v4 会扫描该目录里的全部文本文件并提取 utility 类。
+   产物是 static/css/tailwind.css，已 gitignore，构建时重新生成。 */
+@import "tailwindcss";
+
+@source "../../views";

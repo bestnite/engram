@@ -1,0 +1,27 @@
+package views
+
+// Home 是 M0 的示例页，用来证明模板渲染、i18n 文案与哈希化静态资源三条链路都通。
+templ Home(data HomeData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		<p class="mt-2 text-slate-600">{ data.Intro }</p>
+		<div class="mt-6 flex items-center gap-3">
+			<a class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" href="/review">{ data.StartLabel }</a>
+		</div>
+		<p class="mt-6 text-slate-600">{ data.Formula }</p>
+		<section class="mt-8">
+			<h2 class="text-sm font-semibold text-slate-500">{ data.LanguagesLabel }</h2>
+			<ul class="mt-2 flex gap-3">
+				for _, l := range data.Languages {
+					<li>
+						if l.Active {
+							<span class="rounded border border-blue-600 px-2 py-1 text-sm text-blue-600">{ l.Label }</span>
+						} else {
+							<a class="rounded border border-slate-300 px-2 py-1 text-sm text-slate-600" href={ l.Href }>{ l.Label }</a>
+						}
+					</li>
+				}
+			</ul>
+		</section>
+	}
+}

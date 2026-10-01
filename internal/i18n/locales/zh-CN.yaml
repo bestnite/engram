@@ -1,0 +1,24 @@
+# 简体中文语言包。key 一律英文小写点分（DESIGN.md §10.4）。
+# 与 en.yaml 的 key 集合必须完全一致，由 TestCatalogsHaveIdenticalKeys 强制。
+- id: app.name
+  translation: "闪卡"
+- id: nav.today
+  translation: "今日"
+- id: nav.decks
+  translation: "卡组"
+- id: nav.stats
+  translation: "统计"
+- id: home.heading
+  translation: "今日复习"
+- id: home.intro
+  translation: "从任意卡组开始今天的复习；复习进度按账号独立保存，共享卡组也不会串进度。"
+- id: home.start_review
+  translation: "开始复习"
+- id: home.language_label
+  translation: "界面语言"
+- id: footer.powered_by
+  translation: "自托管服务 · 数据留在你自己的机器上"
+- id: language.zh-CN
+  translation: "中文"
+- id: language.en
+  translation: "English"
