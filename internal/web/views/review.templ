@@ -13,6 +13,10 @@ templ ReviewPage(data ReviewPageData) {
 
 // ReviewArea 是复习页主区域，也是评分/动作请求返回的片段（htmx outerHTML swap 目标）。
 // 计数器、当前卡片、评分与动作控件都自包含于这里，因此评分响应就是“下一张卡”。
+//
+// 作答类题型（M3-12）分两种状态：
+//   - 未作答：data.Graded 非空，渲染输入控件（文本/数值/单选/多选/正误）代替四档自评；
+//   - 已判分：data.Result 非空，展示正确答案与判分细节，点“继续”才换下一张卡。
 templ ReviewArea(data ReviewAreaData) {
 	<div id="review-area" class="touch-manipulation select-none" data-answer-url={ data.AnswerURL } data-action-url={ data.ActionURL } data-edit-href={ data.CardEditHref }>
 		<div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm">
@@ -40,35 +44,74 @@ templ ReviewArea(data ReviewAreaData) {
 					</div>
 				</div>
 			</article>
-			<button id="review-show-answer" type="button" class="mt-4 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.ShowAnswerLabel }</button>
-			<form id="review-form" class="mt-4" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<input type="hidden" name="card_id" value={ data.Card.CardID }/>
-				<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
-				<input type="hidden" name="deck" value={ data.DeckValue }/>
-				<input type="hidden" name="expected_version" value={ data.Card.ExpectedVersion }/>
-				<input type="hidden" name="done" value={ data.DoneValue }/>
-				<input id="review-elapsed" type="hidden" name={ data.ElapsedName } value=""/>
-				<div id="review-ratings" class="mt-1 hidden">
-					<div class="grid grid-cols-4 gap-2">
-						for _, r := range data.Ratings {
-							<button type="submit" name="rating" value={ ratingValue(r.Value) } data-rating={ ratingValue(r.Value) } class="min-h-11 rounded-lg border border-slate-300 px-2 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">{ r.Label }</button>
-						}
+			if data.Result != nil {
+				<div id="review-result" class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+					<p class="text-base font-semibold text-slate-900">{ data.Result.VerdictLabel }</p>
+					<p class="mt-1 text-sm text-slate-600">{ data.Result.ScoreLabel }: <span class="font-semibold text-slate-900">{ data.Result.Score }</span></p>
+					<p class="mt-3 text-xs font-medium uppercase text-slate-400">{ data.Result.AnswerLabel }</p>
+					<div class="mt-1 text-lg text-slate-800">
+						@rawHTML(data.Result.AnswerHTML)
 					</div>
+					for _, line := range data.Result.DetailLines {
+						<p class="mt-1 text-sm text-slate-600">{ line.Label }: <span class="text-slate-900">{ line.Value }</span></p>
+					}
+					<form class="mt-4" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<input type="hidden" name="card_id" value={ data.Card.CardID }/>
+						<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
+						<input type="hidden" name="deck" value={ data.DeckValue }/>
+						<input type="hidden" name="done" value={ data.DoneValue }/>
+						<input type="hidden" name="action" value="next"/>
+						<button id="review-continue" type="submit" class="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Result.ContinueLabel }</button>
+					</form>
 				</div>
-			</form>
-			<form id="review-actions" class="mt-3 flex flex-wrap gap-2" hx-post={ data.ActionURL } hx-target="#review-area" hx-swap="outerHTML">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<input type="hidden" name="card_id" value={ data.Card.CardID }/>
-				<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
-				<input type="hidden" name="deck" value={ data.DeckValue }/>
-				<input type="hidden" name="done" value={ data.DoneValue }/>
-				<button type="submit" name="action" value="undo" data-action="undo" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.UndoLabel }</button>
-				<button type="submit" name="action" value="suspend" data-action="suspend" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.SuspendLabel }</button>
-				<button type="submit" name="action" value="bury" data-action="bury" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.BuryLabel }</button>
-			</form>
-			<a href={ data.Card.EditHref } data-action="edit" class="mt-3 inline-block min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.EditLabel }</a>
-			<p class="mt-3 text-xs text-slate-400">{ data.ShortcutsHint }</p>
+			} else {
+				<button id="review-show-answer" type="button" class="mt-4 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.ShowAnswerLabel }</button>
+				<form id="review-form" class="mt-4" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<input type="hidden" name="card_id" value={ data.Card.CardID }/>
+					<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
+					<input type="hidden" name="deck" value={ data.DeckValue }/>
+					<input type="hidden" name="expected_version" value={ data.Card.ExpectedVersion }/>
+					<input type="hidden" name="done" value={ data.DoneValue }/>
+					<input id="review-elapsed" type="hidden" name={ data.ElapsedName } value=""/>
+					if data.Graded != nil {
+						<div id="review-graded" class="mt-1">
+							if data.Graded.TypeAttr == "radio" || data.Graded.TypeAttr == "checkbox" {
+								for _, opt := range data.Graded.Options {
+									<label class="mt-2 flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+										<input type={ data.Graded.TypeAttr } name="answer" value={ opt.Value }/>
+										<span>{ opt.Label }</span>
+									</label>
+								}
+							} else {
+								<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base text-slate-800" type={ data.Graded.TypeAttr } inputmode={ data.Graded.InputMode } name="answer" placeholder={ data.Graded.Placeholder } autocomplete="off"/>
+							}
+							<button id="review-submit" type="submit" class="mt-3 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Graded.SubmitLabel }</button>
+						</div>
+					} else {
+						<div id="review-ratings" class="mt-1 hidden">
+							<div class="grid grid-cols-4 gap-2">
+								for _, r := range data.Ratings {
+									<button type="submit" name="rating" value={ ratingValue(r.Value) } data-rating={ ratingValue(r.Value) } class="min-h-11 rounded-lg border border-slate-300 px-2 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">{ r.Label }</button>
+								}
+							</div>
+						</div>
+					}
+				</form>
+				<form id="review-actions" class="mt-3 flex flex-wrap gap-2" hx-post={ data.ActionURL } hx-target="#review-area" hx-swap="outerHTML">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<input type="hidden" name="card_id" value={ data.Card.CardID }/>
+					<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
+					<input type="hidden" name="deck" value={ data.DeckValue }/>
+					<input type="hidden" name="done" value={ data.DoneValue }/>
+					<button type="submit" name="action" value="undo" data-action="undo" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.UndoLabel }</button>
+					<button type="submit" name="action" value="suspend" data-action="suspend" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.SuspendLabel }</button>
+					<button type="submit" name="action" value="bury" data-action="bury" class="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.BuryLabel }</button>
+				</form>
+				<a href={ data.Card.EditHref } data-action="edit" class="mt-3 inline-block min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">{ data.EditLabel }</a>
+				<p class="mt-3 text-xs text-slate-400">{ data.ShortcutsHint }</p>
+			}
 		}
 	</div>
 }

@@ -2,8 +2,11 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +91,11 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// 作答类题型（M3-12）：题型实现 Grader 时走机器判分，不再依赖四档自评。
+	if _, graded := graderFor(note.Kind); graded {
+		s.reviewGradedAnswer(c, loc, user, card, note, deck)
+		return
+	}
 	rating, err := strconv.Atoi(strings.TrimSpace(c.PostForm("rating")))
 	if err != nil || !schedule.Rating(rating).Valid() {
 		area, aerr := s.reviewArea(c, loc, user, deck.ID, parseDone(c.PostForm("done")), loc.T("review.error_submit"))
@@ -163,6 +171,17 @@ func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *st
 		return
 	}
 	done := parseDone(c.PostForm("done"))
+	// “继续”只是换下一张卡：判分已经在提交那一步写入，无需再开事务（M3-12）。
+	if action == "next" {
+		area, err := s.reviewArea(c, loc, user, deck.ID, done, "")
+		if err != nil {
+			s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		renderReviewArea(c, area)
+		return
+	}
 	sched, err := s.schedulerFor(c.Request.Context(), user.ID, note.DeckID)
 	if err != nil {
 		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
@@ -291,6 +310,8 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 	data.Card = card
 	data.HasCard = true
 	data.CardEditHref = card.EditHref
+	// 作答类题型渲染输入控件代替四档自评（M3-12）。
+	data.Graded = s.gradedViewForCard(c.Request.Context(), loc, items[0])
 	return data, nil
 }
 
@@ -429,4 +450,343 @@ func parseElapsed(raw string) *int {
 		return nil
 	}
 	return &v
+}
+
+// graderFor 用可选窄接口断言判断题型是否支持机器判分（DESIGN.md §6.2、M3-12）。
+// 判分能力是可选能力，核心管线不依赖它：未实现 Grader 的题型返回 false，仍走四档自评。
+func graderFor(kind string) (cardtype.Grader, bool) {
+	t, ok := cardtype.Lookup(kind)
+	if !ok {
+		return nil, false
+	}
+	g, ok := t.(cardtype.Grader)
+	return g, ok
+}
+
+// gradeMappingFor 取卡组预设的「分数→评分档位」映射；缺失时返回 nil（判分器回退默认映射）。
+func (s *Server) gradeMappingFor(ctx context.Context, deckID uint64) *cardtype.GradeMapping {
+	if deckID == 0 {
+		return nil
+	}
+	deck, err := s.decks.ByID(ctx, deckID)
+	if err != nil || deck.PresetID == 0 {
+		return nil
+	}
+	p, err := s.presets.ByID(ctx, deck.PresetID)
+	if err != nil {
+		return nil
+	}
+	m, err := p.GradeMapping()
+	if err != nil {
+		return nil
+	}
+	return &m
+}
+
+// gradedViewForCard 判断队列头的卡是否为作答类题型，是则构造输入控件数据；否则返回 nil。
+func (s *Server) gradedViewForCard(ctx context.Context, loc *i18n.Localizer, item schedule.QueueItem) *views.ReviewGradedView {
+	card, err := s.cards.ByID(ctx, item.CardID)
+	if err != nil {
+		return nil
+	}
+	note, err := s.notes.ByID(ctx, card.NoteID)
+	if err != nil {
+		return nil
+	}
+	if _, ok := graderFor(note.Kind); !ok {
+		return nil
+	}
+	fields, err := store.ParseFields(note.FieldsJSON)
+	if err != nil {
+		return nil
+	}
+	return buildGradedView(loc, note.Kind, fields)
+}
+
+// buildGradedView 按题型把 note 字段转成前端控件描述；未知题型返回 nil（回退自评）。
+func buildGradedView(loc *i18n.Localizer, kind string, fields map[string]any) *views.ReviewGradedView {
+	v := &views.ReviewGradedView{SubmitLabel: loc.T("review.graded.submit")}
+	switch kind {
+	case "typed":
+		v.TypeAttr = "text"
+		v.Placeholder = loc.T("review.graded.placeholder")
+	case "numeric":
+		v.TypeAttr = "text"
+		v.InputMode = "decimal"
+		v.Placeholder = loc.T("review.graded.placeholder_number")
+	case "choice_single":
+		v.TypeAttr = "radio"
+		v.Options = optionViews(fields)
+	case "choice_multi":
+		v.TypeAttr = "checkbox"
+		v.Options = optionViews(fields)
+	case "true_false":
+		v.TypeAttr = "radio"
+		v.Options = []views.ReviewGradedOption{
+			{Value: "true", Label: loc.T("review.graded.true")},
+			{Value: "false", Label: loc.T("review.graded.false")},
+		}
+	default:
+		return nil
+	}
+	return v
+}
+
+// optionViews 把 note 的 options[] 转成带 0 基索引的选项控件（choice_* 专用）。
+func optionViews(fields map[string]any) []views.ReviewGradedOption {
+	opts := optionTexts(fields)
+	out := make([]views.ReviewGradedOption, 0, len(opts))
+	for i, text := range opts {
+		out = append(out, views.ReviewGradedOption{Value: strconv.Itoa(i), Label: text})
+	}
+	return out
+}
+
+// optionTexts 读取 options 字段，兼容 JSON 反序列化的 []any 与 Go 侧构造的 []string。
+func optionTexts(fields map[string]any) []string {
+	switch v := fields["options"].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// buildGradeInput 按题型构造判分器需要的输入结构。判分器各自断言自己的输入类型；
+// 只有 web 层知道表单字段如何映射到题型输入，因此映射集中在这里（不改核心管线）。
+func buildGradeInput(kind string, fields map[string]any, mapping *cardtype.GradeMapping, form url.Values) (any, error) {
+	gc := cardtype.GradeContext{Fields: fields, Mapping: mapping}
+	switch kind {
+	case "typed":
+		return cardtype.TypedInput{GradeContext: gc, Answer: form.Get("answer")}, nil
+	case "numeric":
+		return cardtype.NumericInput{GradeContext: gc, Answer: form.Get("answer")}, nil
+	case "choice_single":
+		idx, err := strconv.Atoi(strings.TrimSpace(form.Get("answer")))
+		if err != nil {
+			return nil, fmt.Errorf("choice_single answer is not an option index")
+		}
+		return cardtype.ChoiceSingleInput{GradeContext: gc, Selected: idx}, nil
+	case "choice_multi":
+		selected, err := parseSelectedIndices(form["answer"])
+		if err != nil {
+			return nil, err
+		}
+		return cardtype.ChoiceMultiInput{GradeContext: gc, Selected: selected}, nil
+	case "true_false":
+		answer, err := parseBoolAnswer(form.Get("answer"))
+		if err != nil {
+			return nil, err
+		}
+		return cardtype.TrueFalseInput{GradeContext: gc, Answer: &answer}, nil
+	default:
+		return nil, fmt.Errorf("card type %q has no grading input", kind)
+	}
+}
+
+// parseSelectedIndices 解析多选的 0 基索引集合；空选择是合法作答（记 0 分）。
+func parseSelectedIndices(raw []string) ([]int, error) {
+	out := make([]int, 0, len(raw))
+	for _, item := range raw {
+		idx, err := strconv.Atoi(strings.TrimSpace(item))
+		if err != nil {
+			return nil, fmt.Errorf("choice_multi answer is not an option index")
+		}
+		out = append(out, idx)
+	}
+	return out, nil
+}
+
+// parseBoolAnswer 解析判断题作答；模板提交 "true"/"false"。
+func parseBoolAnswer(raw string) (bool, error) {
+	b, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return false, fmt.Errorf("true_false answer is not a boolean")
+	}
+	return b, nil
+}
+
+// reviewGradedAnswer 处理一次作答类提交（M3-12）：构造判分输入、调判分器、按 preset
+// 映射得到档位，并在单事务里以 grade_source='typed' 写入 reviews（含 grade_detail_json）。
+// 判分后不直接换卡，而是返回结果面板（正确答案 + 判分细节），用户点“继续”才进入下一张。
+//
+// 输入无法判分（ok=false）或输入不合法时不写库：以局部化错误渲染当前卡，让用户重试。
+func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *store.User, card *store.Card, note *store.Note, deck *store.Deck) {
+	ctx := c.Request.Context()
+	done := parseDone(c.PostForm("done"))
+	g, graded := graderFor(note.Kind)
+	if !graded {
+		s.renderReviewError(c, loc, user, deck.ID, done, "graded submit for a card without a grader", nil)
+		return
+	}
+	fields, err := store.ParseFields(note.FieldsJSON)
+	if err != nil {
+		s.renderReviewError(c, loc, user, deck.ID, done, "parse note fields for grading failed", err)
+		return
+	}
+	input, err := buildGradeInput(note.Kind, fields, s.gradeMappingFor(ctx, note.DeckID), c.Request.PostForm)
+	if err != nil {
+		s.renderGradedInputError(c, loc, user, deck.ID, done)
+		return
+	}
+	rating, detail, ok := g.Grade(input)
+	if !ok {
+		s.renderGradedInputError(c, loc, user, deck.ID, done)
+		return
+	}
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		s.renderReviewError(c, loc, user, deck.ID, done, "marshal grade detail failed", err)
+		return
+	}
+	raw := string(detailJSON)
+
+	sched, err := s.schedulerFor(ctx, user.ID, note.DeckID)
+	if err != nil {
+		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		s.renderReviewError(c, loc, user, deck.ID, done, "begin review transaction failed", tx.Error)
+		return
+	}
+	if _, err := schedule.Submit(ctx, tx, schedule.SubmitInput{
+		CardID:          card.ID,
+		UserID:          user.ID,
+		Rating:          schedule.Rating(rating),
+		ExpectedVersion: parseDone(c.PostForm("expected_version")),
+		ElapsedMS:       parseElapsed(c.PostForm("elapsed_ms")),
+		GradeSource:     schedule.GradeSourceTyped,
+		GradeDetailJSON: &raw,
+		Scheduler:       sched,
+		Now:             time.Now().UTC(),
+	}); err != nil {
+		_ = tx.Rollback().Error
+		s.renderReviewError(c, loc, user, deck.ID, done, "submit graded review failed", err)
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		s.renderReviewError(c, loc, user, deck.ID, done, "commit graded review failed", err)
+		return
+	}
+
+	area, err := s.reviewArea(c, loc, user, deck.ID, done+1, "")
+	if err != nil {
+		s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	// 结果面板展示的是刚作答的这张卡（队列里已被重排），因此覆盖成当前卡视图。
+	cur, err := s.cardView(ctx, user, schedule.QueueItem{CardID: card.ID})
+	if err != nil {
+		s.logger.Error("render graded card failed", "card_id", card.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	area.Card = cur
+	area.HasCard = true
+	area.Empty = false
+	area.Graded = nil
+	area.Result = s.gradedResultView(loc, note.Kind, fields, cur, detail, s.gradeMappingFor(ctx, note.DeckID))
+	renderReviewArea(c, area)
+}
+
+// renderGradedInputError 以局部化提示重新渲染当前卡，且不写任何进度（输入无法判分）。
+func (s *Server) renderGradedInputError(c *gin.Context, loc *i18n.Localizer, user *store.User, deckID uint64, done int) {
+	area, err := s.reviewArea(c, loc, user, deckID, done, loc.T("review.graded.error_input"))
+	if err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	renderReviewArea(c, area)
+}
+
+// gradedResultView 组装判分结果面板：判定来自分数与映射阈值，细节按题型本地化。
+func (s *Server) gradedResultView(loc *i18n.Localizer, kind string, fields map[string]any, card *views.ReviewCardView, detail map[string]any, mapping *cardtype.GradeMapping) *views.ReviewResultView {
+	m := cardtype.DefaultGradeMapping()
+	if mapping != nil {
+		m = *mapping
+	}
+	score := 0.0
+	if v, ok := detail["score"].(float64); ok {
+		score = v
+	}
+	verdict := loc.T("review.graded.incorrect")
+	if score >= m.FullThreshold {
+		verdict = loc.T("review.graded.correct")
+	} else if score > m.NoneThreshold {
+		verdict = loc.T("review.graded.partial")
+	}
+	return &views.ReviewResultView{
+		VerdictLabel:  verdict,
+		ScoreLabel:    loc.T("review.graded.score"),
+		Score:         strconv.FormatFloat(score*100, 'f', 0, 64) + "%",
+		AnswerLabel:   loc.T("review.graded.correct_answer"),
+		AnswerHTML:    card.BackHTML,
+		DetailLines:   gradedDetailLines(loc, kind, fields, detail),
+		ContinueLabel: loc.T("review.graded.continue"),
+	}
+}
+
+// gradedDetailLines 把判分细节本地化成标签/值对，展示用户的作答与解析结果。
+func gradedDetailLines(loc *i18n.Localizer, kind string, fields map[string]any, detail map[string]any) []views.ReviewDetailLine {
+	givenLabel := loc.T("review.graded.given")
+	lines := make([]views.ReviewDetailLine, 0, 2)
+	switch kind {
+	case "typed", "numeric":
+		given, _ := detail["given"].(string)
+		lines = append(lines, views.ReviewDetailLine{Label: givenLabel, Value: given})
+		if parsed, ok := detail["parsed_answer"]; ok {
+			lines = append(lines, views.ReviewDetailLine{Label: loc.T("review.graded.parsed"), Value: numberText(parsed)})
+		}
+	case "choice_single":
+		opts := optionTexts(fields)
+		value := ""
+		if idx, ok := detail["selected"].(int); ok && idx >= 0 && idx < len(opts) {
+			value = opts[idx]
+		}
+		lines = append(lines, views.ReviewDetailLine{Label: givenLabel, Value: value})
+	case "choice_multi":
+		opts := optionTexts(fields)
+		picked := make([]string, 0, len(opts))
+		if idxs, ok := detail["selected"].([]int); ok {
+			for _, idx := range idxs {
+				if idx >= 0 && idx < len(opts) {
+					picked = append(picked, opts[idx])
+				}
+			}
+		}
+		lines = append(lines, views.ReviewDetailLine{Label: givenLabel, Value: strings.Join(picked, ", ")})
+	case "true_false":
+		value := loc.T("review.graded.false")
+		if b, ok := detail["selected"].(bool); ok && b {
+			value = loc.T("review.graded.true")
+		}
+		lines = append(lines, views.ReviewDetailLine{Label: givenLabel, Value: value})
+	}
+	return lines
+}
+
+// numberText 以最简形式输出数值（解析后的作答），避免 50 显示成 50.000000。
+func numberText(v any) string {
+	switch n := v.(type) {
+	case float64:
+		return strconv.FormatFloat(n, 'g', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(n), 'g', -1, 64)
+	case int:
+		return strconv.Itoa(n)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
