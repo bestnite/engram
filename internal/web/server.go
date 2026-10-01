@@ -14,7 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
+	"example.com/flashcard/internal/store"
 )
 
 // Deps 是显式装配的依赖（AGENTS.md §2.4：入口显式装配，不引入容器）。
@@ -29,6 +31,14 @@ type Deps struct {
 	Translator *i18n.Translator
 	// UserLocale 返回当前请求的用户语言设置（可为空串）。M0 尚无会话，M1 接入后提供。
 	UserLocale func(c *gin.Context) string
+	// Accounts 提供本地账号的创建与认证（M1-4）；与 Sessions、Users 一起接入认证路由。
+	Accounts *auth.AccountService
+	// Sessions 提供会话解析与 CSRF 两个中间件（M1-2、M1-3）；登录/登出流程基于它。
+	Sessions *auth.Manager
+	// Users 用于判断是否已存在管理员，决定 /setup 引导是否可达（M1-5）。
+	Users *store.UserStore
+	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
+	BootstrapAdminEmail string
 }
 
 // Server 持有路由与监听地址。
@@ -38,10 +48,14 @@ type Server struct {
 	router *gin.Engine
 	db     *gorm.DB
 	// schemaVersion 由 main 注入，避免 web 反向依赖 store 的具体实现。
-	schemaVersion func(ctx context.Context) (int, error)
-	assets        *Assets
-	i18n          *i18n.Translator
-	userLocale    func(c *gin.Context) string
+	schemaVersion  func(ctx context.Context) (int, error)
+	assets         *Assets
+	i18n           *i18n.Translator
+	userLocale     func(c *gin.Context) string
+	accounts       *auth.AccountService
+	sessions       *auth.Manager
+	users          *store.UserStore
+	bootstrapEmail string
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -74,22 +88,32 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 
 	s := &Server{
-		addr:          addr,
-		logger:        logger,
-		db:            deps.DB,
-		schemaVersion: deps.SchemaVersion,
-		assets:        assets,
-		i18n:          translator,
-		userLocale:    deps.UserLocale,
+		addr:           addr,
+		logger:         logger,
+		db:             deps.DB,
+		schemaVersion:  deps.SchemaVersion,
+		assets:         assets,
+		i18n:           translator,
+		userLocale:     deps.UserLocale,
+		accounts:       deps.Accounts,
+		sessions:       deps.Sessions,
+		users:          deps.Users,
+		bootstrapEmail: deps.BootstrapAdminEmail,
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(requestLogger(logger), recovery(logger), s.localeMiddleware())
+	// 会话中间件挂在全局：home 用它展示登录/登出入口，登出路由再用它做 CSRF 校验（M1-2）。
+	// 未装配会话（M0 阶段的测试）时跳过，保证 New 仍可用。
+	if s.sessions != nil {
+		router.Use(s.sessions.Middleware())
+	}
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
+	s.registerAuthRoutes(router)
 	s.router = router
 	return s, nil
 }

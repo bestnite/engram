@@ -27,6 +27,14 @@ type LayoutData struct {
 	MathJaxURL string
 	// Nav 是顶部导航项（标签已本地化）。
 	Nav []NavItem
+	// SessionLabel / SessionHref 是页头右侧的会话入口：未登录时指向 /login，已登录时是登出。
+	// 文案由 handler 从语言包取好传入，模板不自己判断登录状态。
+	SessionLabel string
+	SessionHref  string
+	// SessionForm 为 true 时用 POST 表单（登出）渲染 SessionLabel，否则渲染普通链接（登录）。
+	SessionForm bool
+	// CSRF 是登出 POST 表单需要的会话绑定 CSRF token（DESIGN.md §4.3）。
+	CSRF string
 }
 
 // NavItem 是一个导航链接。

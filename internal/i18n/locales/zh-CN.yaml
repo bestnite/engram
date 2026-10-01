@@ -8,6 +8,10 @@
   translation: "卡组"
 - id: nav.stats
   translation: "统计"
+- id: nav.login
+  translation: "登录"
+- id: nav.logout
+  translation: "登出"
 - id: home.heading
   translation: "今日复习"
 - id: home.intro
@@ -22,3 +26,59 @@
   translation: "中文"
 - id: language.en
   translation: "English"
+- id: auth.login.title
+  translation: "登录"
+- id: auth.login.heading
+  translation: "登录"
+- id: auth.login.submit
+  translation: "登录"
+- id: auth.login.to_register
+  translation: "没有账号？去注册"
+- id: auth.register.title
+  translation: "注册"
+- id: auth.register.heading
+  translation: "创建账号"
+- id: auth.register.intro
+  translation: "注册后即可拥有独立的复习进度；共享卡组不会混入他人的排程。"
+- id: auth.register.submit
+  translation: "注册"
+- id: auth.register.to_login
+  translation: "已有账号？去登录"
+- id: auth.setup.title
+  translation: "初始设置"
+- id: auth.setup.heading
+  translation: "创建首个管理员"
+- id: auth.setup.intro
+  translation: "这是首次启动。请创建第一个管理员账号；一旦存在管理员，本引导页将不再可用。"
+- id: auth.setup.submit
+  translation: "创建管理员"
+- id: auth.field.username
+  translation: "用户名"
+- id: auth.field.email
+  translation: "邮箱"
+- id: auth.field.password
+  translation: "密码"
+- id: auth.field.display_name
+  translation: "显示名"
+- id: auth.error.username_required
+  translation: "请输入用户名。"
+- id: auth.error.email_required
+  translation: "请输入邮箱。"
+- id: auth.error.email_invalid
+  translation: "邮箱格式不正确。"
+- id: auth.error.password_required
+  translation: "请输入密码。"
+- id: auth.error.password_too_short
+  translation: "密码至少需要 8 个字符。"
+- id: auth.error.password_too_long
+  translation: "密码不能超过 128 个字符。"
+- id: auth.error.password_too_common
+  translation: "密码过于常见，请更换更复杂的密码。"
+- id: auth.error.invalid_credentials
+  translation: "用户名或密码错误。"
+- id: auth.error.user_disabled
+  translation: "该账号已被禁用。"
+- id: auth.error.registration_closed
+  translation: "自助注册已关闭，请联系管理员开通账号。"
+- id: auth.error.create_failed
+  translation: "创建账号失败，请稍后重试或更换用户名/邮箱。"
