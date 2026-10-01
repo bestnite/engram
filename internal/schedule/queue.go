@@ -206,7 +206,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	if newCap < 0 {
 		newCap = 0
 	}
-	fresh, err := b.newCards(ctx, userID, opts.DeckID, newCap)
+	fresh, err := b.newCards(ctx, userID, opts.DeckID, newCap, now)
 	if err != nil {
 		return nil, err
 	}
@@ -311,9 +311,10 @@ func (b *QueueBuilder) reviewDue(ctx context.Context, userID uint64, now time.Ti
 	return items, nil
 }
 
-// newCards 取新卡。新卡的定义是\"状态为 new\"，包括尚无 card_states 行的卡（LEFT JOIN），
+// newCards 取新卡。新卡的定义是"状态为 new"，包括尚无 card_states 行的卡（LEFT JOIN），
 // 这样刚加到共享卡组、用户还没产生任何状态的行也能出现在队列里。
-func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limit int) ([]QueueItem, error) {
+// 已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求 due_at 未在未来。
+func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limit int, now time.Time) ([]QueueItem, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -325,6 +326,7 @@ func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limi
 		Joins("LEFT JOIN card_states AS cs ON cs.card_id = cards.id AND cs.user_id = ?", userID).
 		Where("cards.deleted_at IS NULL AND cards.suspended_at IS NULL").
 		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
+		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
 		Order("cards.created_at ASC, cards.id ASC").
 		Limit(limit)
 	if deckID != 0 {
@@ -334,7 +336,7 @@ func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limi
 	if err := q.Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("schedule: load new cards: %w", err)
 	}
-	return rowsToItems(rows, QueueNew, time.Now().UTC())
+	return rowsToItems(rows, QueueNew, now)
 }
 
 // rowsToItems 把查询结果转成队列项；now 用于补齐新卡缺失的到期时间。

@@ -18,6 +18,7 @@ const (
 	ActionUserLoginSucceeded = "user.login_succeeded"
 	ActionUserLoginFailed    = "user.login_failed"
 	ActionUserLogout         = "user.logout"
+	ActionReviewUndo         = "review.undo"
 )
 
 // AuditEntry 是一次审计写入的入参。
