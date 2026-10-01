@@ -225,8 +225,7 @@ CREATE TABLE reviews (
   elapsed_ms    INTEGER,
   duration_days REAL,
   state_before  INTEGER NOT NULL,                -- 0=New 1=Learning 2=Review 3=Relearning
-  -- 待补（M3-9）：评分前的剩余学习步骤数，用于 Undo 精确还原步骤进度
-  -- step_index_before INTEGER,
+  step_index_before INTEGER,                     -- 评分前的剩余学习步骤数（M3-9）：Undo 精确还原步骤进度；可空，兼容旧行
   interval_days REAL,
   stability     REAL,
   difficulty    REAL
@@ -382,7 +381,7 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
 ```
 
 - **新卡首次提交的并发竞态（已知缺口，待修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。修法写死为**带条件的原子 upsert**（`... ON CONFLICT ... WHERE version = ?`，由 GORM 的 `clause.OnConflict` + `Where` 表达），见 AGENTS.md 的 M3-10。
-- **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，并删除最后一条日志（同时写一条 `audit_log`）。**学习步骤进度目前无法还原**（`Rollback` 会把 `step_index` 归零），因为 `reviews` 未存评分前的步骤快照；补 `reviews.step_index_before` 后即可精确还原，见 AGENTS.md 的 M3-9。
+- **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，用 `reviews.step_index_before` 精确还原 `step_index`（该列为 NULL 的旧行退回归零行为），并删除最后一条日志（同时写一条 `audit_log`）。
 - `reviews` 只增不改。
 - `rating` 与 `state_before` 用**整数**（1–4 / 0–3），与 FSRS 生态的复习日志约定一致，将来接优化器零转换。
 - `reviews` 字段从第一天就写全 —— 它是参数优化的唯一燃料，缺字段永远补不回来。

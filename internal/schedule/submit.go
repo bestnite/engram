@@ -212,6 +212,12 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	difficulty := o.Difficulty
 	loc := queueLocation(in.Location, in.Timezone)
 	cutoff := normalizedCutoff(in.DayCutoffHour)
+	// 评分前的剩余学习步骤快照（M3-9）。全新卡没有状态行，base.StepIndex 为 0，
+	// 正是“评分前”的值；已有状态行则取它评分前的 step_index。
+	stepIndexBefore := 0
+	if base != nil {
+		stepIndexBefore = base.StepIndex
+	}
 	row := store.Review{
 		CardID:          in.CardID,
 		UserID:          in.UserID,
@@ -223,6 +229,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 		ElapsedMS:       in.ElapsedMS,
 		DurationDays:    durationDaysSince(base, now),
 		StateBefore:     int(stateBefore),
+		StepIndexBefore: &stepIndexBefore,
 		IntervalDays:    &interval,
 		Stability:       &stability,
 		Difficulty:      &difficulty,

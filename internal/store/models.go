@@ -173,9 +173,14 @@ type Review struct {
 	ElapsedMS       *int      `gorm:"column:elapsed_ms" json:"elapsed_ms,omitempty"`
 	DurationDays    *float64  `json:"duration_days,omitempty"`
 	StateBefore     int       `gorm:"not null" json:"state_before"` // 0=New 1=Learning 2=Review 3=Relearning
-	IntervalDays    *float64  `json:"interval_days,omitempty"`
-	Stability       *float64  `json:"stability,omitempty"`
-	Difficulty      *float64  `json:"difficulty,omitempty"`
+	// StepIndexBefore 是本次评分前 card_states.step_index 的快照（剩余学习步骤数）。
+	// 评分前的 FSRS 学习步骤游标没有别的来源，而 fsrs.Rollback 会把 step_index 归零；
+	// 存下它 Undo 才能精确还原步骤进度（DESIGN.md §3.4，M3-9）。
+	// 可空：旧行没有这个快照，Undo 遇到 NULL 时退回归零行为。整数不用带默认值的布尔（AGENTS.md §2.3 第 9 条）。
+	StepIndexBefore *int     `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
+	IntervalDays    *float64 `json:"interval_days,omitempty"`
+	Stability       *float64 `json:"stability,omitempty"`
+	Difficulty      *float64 `json:"difficulty,omitempty"`
 }
 
 func (Review) TableName() string { return "reviews" }
