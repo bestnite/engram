@@ -237,6 +237,16 @@ Conventions:
   single static binary image; no private registry, host names, or deployment specifics.
   *Acceptance:* image builds locally and serves `/healthz`.
 
+- [ ] **M0-12 README (English primary, Chinese parallel)** — section 3 of this file lists
+  `README.md` and `README.zh.md` in the layout, and `DESIGN.md` §11 requires the backup and restore
+  procedure for both databases to be documented there, but neither file exists. An open-source
+  repository with no README has no front door: nobody can tell what the service is, how to run it
+  locally, or how to deploy and back it up.
+  *Acceptance:* both files exist, the Chinese file is a parallel translation rather than a stub,
+  each carries a language switch line, every command in them runs as written, and both describe the
+  PostgreSQL and SQLite backup and restore paths separately. Placeholders only — no real host,
+  domain, or credential.
+
 ### M1 — Identity and users
 
 - [x] **M1-1 User store and password hashing** — `internal/auth`: user CRUD, argon2id
@@ -741,7 +751,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 13/15 · M2 11/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 7/9
+  `M0 11/12 · M1 13/15 · M2 11/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 7/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
