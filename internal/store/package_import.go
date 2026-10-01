@@ -417,16 +417,29 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	}
 
 	// 媒体：按 sha256 落盘（已存在则跳过）；dry_run 只计数。
+	//
+	// 必须走事务句柄 tx 而不是 s.db：s.db 是另一条连接，在 SQLite 上会被外层写事务的
+	// 文件锁挡在外面（SQLITE_BUSY: database is locked）——这正是带媒体的包导入在 SQLite
+	// 下必然失败的原因（PostgreSQL 因允许多连接并发写而侥幸通过，掩盖了缺陷）。
+	// 用 tx 后，媒体元数据与卡组内容在同一事务里原子可见；dry_run 则连文件都不落盘。
 	for sha, raw := range pkg.MediaRaw {
-		_ = raw
 		if opts.MediaRoot == "" {
 			continue
 		}
-		if existing, err := NewMediaStore(s.db).BySha256(ctx, sha); err == nil && existing == nil {
-			if _, err := NewMediaStore(s.db).SaveBytes(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID)); err != nil {
-				return err
-			}
-			report.MediaNew++
+		mstore := NewMediaStore(tx)
+		existing, err := mstore.BySha256(ctx, sha)
+		if err != nil {
+			return fmt.Errorf("import package: check media %s: %w", sha, err)
+		}
+		if existing != nil {
+			continue
+		}
+		report.MediaNew++
+		if opts.DryRun {
+			continue
+		}
+		if _, err := mstore.SaveBytes(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID)); err != nil {
+			return err
 		}
 	}
 
