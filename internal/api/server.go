@@ -112,12 +112,24 @@ func New(deps Deps) (*API, error) {
 	}, nil
 }
 
-// Register 把 /api/v1 挂到给定的 router 上。
-// M4-2 先落地鉴权管道；M4-3 在同一分组上补齐各端点（见后续提交）。
+// Register 把 /api/v1 挂到给定的 router 上；每条路由在其 scope 对应的中间件后执行（DESIGN.md §7.3）。
 func (a *API) Register(r gin.IRouter) {
 	v1 := r.Group("/api/v1")
 	v1.Use(a.authn.Auth())
-	_ = v1
+
+	v1.GET("/decks", a.authn.RequireScope(store.ScopeRead), a.listDecks)
+	v1.POST("/decks", a.authn.RequireScope(store.ScopeWrite), a.createDeck)
+	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
+	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
+	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)
+	v1.DELETE("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteNote)
+	v1.GET("/review/due", a.authn.RequireScope(store.ScopeReview), a.dueCards)
+	v1.POST("/review", a.authn.RequireScope(store.ScopeReview), a.submitReview)
+	v1.GET("/stats/summary", a.authn.RequireScope(store.ScopeRead), a.statsSummary)
+	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
+	v1.GET("/keys", a.authn.RequireScope(store.ScopeAdmin), a.listKeys)
+	v1.POST("/keys", a.authn.RequireScope(store.ScopeAdmin), a.createKey)
+	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeAdmin), a.deleteKey)
 }
 
 // audit 写一条审计（带当前 key 的 api_key_id）；写失败记英文日志但不回滚业务。
