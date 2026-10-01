@@ -226,6 +226,28 @@ type AdminPageData struct {
 	HealthPage bool
 	// HealthRows 是健康读数；Key 是稳定英文标识，供测试定位某个值。
 	HealthRows []AdminHealthRow
+
+	// ---- API Key 总览（M6-9）----
+	// APIKeysPage 为 true 时模板渲染全用户 key 元信息表。
+	APIKeysPage bool
+	// APIKeyRows 是当前页的 key 行；Page/Pages/Total 复用于分页导航。
+	APIKeyRows []AdminAPIKeyRow
+	// ColKey* 是 key 表表头。
+	ColKeyName, ColKeyOwner, ColKeyPrefix, ColKeyScopes, ColKeyLastUsed, ColKeyExpires, ColKeyState, ColKeyActions string
+	// KeyRevokeLabel 是撤销按钮文案。
+	KeyRevokeLabel string
+
+	// ---- 语言包完整度报告（M8-4）----
+	// I18nPage 为 true 时模板渲染各语言覆盖率表。
+	I18nPage bool
+	// I18nRows 是每种语言一行。
+	I18nRows []AdminI18nRow
+	// ColI18n* 是覆盖率表表头。
+	ColI18nLocale, ColI18nCoverage, ColI18nStatus, ColI18nMissing string
+	// I18nAllComplete 为 true 时页面顶部提示「全部语言包完整」。
+	I18nAllComplete bool
+	// I18nAllCompleteLabel 是上述提示文案。
+	I18nAllCompleteLabel string
 }
 
 // AdminOption 是一个下拉/单选项。
@@ -252,6 +274,43 @@ type AdminHealthRow struct {
 	Label string
 	Value string
 	Hint  string
+}
+
+// AdminAPIKeyRow 是 API Key 总览表里的一行（M6-9）。
+//
+// 只承载元信息：名称、前缀、scopes、最后使用、过期、状态。绝不携带 key_hash，
+// 也不可能有明文——库里根本没有明文列，这里也没有可放它的字段。
+type AdminAPIKeyRow struct {
+	// ID 是行内 data 属性用的字符串形式主键。
+	ID string
+	// Owner 是 key 归属者的用户名；查不到时回退 "#<id>"。
+	Owner      string
+	Name       string
+	Prefix     string
+	Scopes     string
+	LastUsed   string
+	Expires    string
+	State      string
+	StateLabel string
+	// CanRevoke 为 true 时该 key 仍可用，模板才渲染撤销入口。
+	CanRevoke bool
+	// RevokeHref 是撤销表单的提交地址，由 handler 拼好。
+	RevokeHref string
+}
+
+// AdminI18nRow 是语言包完整度报告里的一行（M8-4）。
+type AdminI18nRow struct {
+	// Code 是语言码，同时作为测试定位用的 data 属性。
+	Code string
+	// Percent 是已本地化的覆盖率文本（如 100%）。
+	Percent string
+	// Counts 是 "实际 / 基准" 的 key 数文本。
+	Counts string
+	// Complete 为 true 时 StatusLabel 显示「完整」，否则显示「缺失 N 条」。
+	Complete    bool
+	StatusLabel string
+	// MissingKeys 是缺失 key 的逗号分隔列表；完整时为空。
+	MissingKeys string
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。

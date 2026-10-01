@@ -91,17 +91,20 @@ type Server struct {
 	schemaVersion func(ctx context.Context) (int, error)
 	assets        *Assets
 	i18n          *i18n.Translator
-	userLocale    func(c *gin.Context) string
-	accounts      *auth.AccountService
-	sessions      *auth.Manager
-	users         *store.UserStore
-	invites       *store.InviteStore
-	decks         *store.DeckStore
-	notes         *store.NoteStore
-	cards         *store.CardStore
-	presets       *store.PresetStore
-	grants        *store.GrantStore
-	shareLinks    *store.ShareLinkStore
+	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证 M8-4 报告页会渲染
+	// <100% 并点名缺失的 key；生产为空，报告走 i18n.Coverage。
+	coverageOverride func() []i18n.LocaleCoverage
+	userLocale       func(c *gin.Context) string
+	accounts         *auth.AccountService
+	sessions         *auth.Manager
+	users            *store.UserStore
+	invites          *store.InviteStore
+	decks            *store.DeckStore
+	notes            *store.NoteStore
+	cards            *store.CardStore
+	presets          *store.PresetStore
+	grants           *store.GrantStore
+	shareLinks       *store.ShareLinkStore
 	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
 	access         *auth.DeckAccess
 	auditor        *auth.Auditor

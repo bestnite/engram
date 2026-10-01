@@ -1,0 +1,35 @@
+package views
+
+// adminI18n 渲染语言包完整度报告（M8-4）：每种语言的翻译覆盖率与缺失的 key。
+// 覆盖率与缺失列表由 handler 从语言包 key 集合算出后传入；模板不含硬编码文字。
+// 每行用 data-locale 标注、覆盖率用 data-coverage 标注，便于测试定位。
+templ adminI18n(data AdminPageData) {
+	if data.I18nAllComplete {
+		<p class="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{ data.I18nAllCompleteLabel }</p>
+	}
+	<table class="mt-4 w-full text-left text-sm">
+		<thead>
+			<tr class="border-b border-slate-200 text-xs text-slate-400">
+				<th class="py-2 pr-3 font-medium">{ data.ColI18nLocale }</th>
+				<th class="py-2 pr-3 font-medium">{ data.ColI18nCoverage }</th>
+				<th class="py-2 pr-3 font-medium">{ data.ColI18nStatus }</th>
+				<th class="py-2 font-medium">{ data.ColI18nMissing }</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, row := range data.I18nRows {
+				<tr class="border-b border-slate-100" data-locale={ row.Code }>
+					<td class="py-2 pr-3 font-mono text-slate-800">{ row.Code }</td>
+					<td class="py-2 pr-3 font-semibold text-slate-900" data-coverage={ row.Code }>{ row.Percent }</td>
+					<td class="py-2 pr-3 text-slate-600">{ row.Counts }</td>
+					<td class="py-2 text-slate-600">
+						{ row.StatusLabel }
+						if row.MissingKeys != "" {
+							<span class="ml-2 break-all font-mono text-xs text-slate-500">{ row.MissingKeys }</span>
+						}
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}

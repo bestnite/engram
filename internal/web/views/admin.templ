@@ -44,6 +44,10 @@ templ AdminPage(data AdminPageData) {
 					@adminAudit(data)
 				} else if data.HealthPage {
 					@adminHealth(data)
+				} else if data.APIKeysPage {
+					@adminAPIKeys(data)
+				} else if data.I18nPage {
+					@adminI18n(data)
 				} else {
 					if data.ShowForm {
 						<form method="post" action={ data.FormAction }>

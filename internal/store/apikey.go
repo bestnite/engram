@@ -286,3 +286,57 @@ func (s *APIKeyStore) Revoke(ctx context.Context, actorUserID, keyID uint64, at 
 	}
 	return nil
 }
+
+// API Key 的展示状态（M6-9）。取值英文、稳定：页面文案由语言包按状态映射。
+const (
+	APIKeyStateActive  = "active"
+	APIKeyStateRevoked = "revoked"
+	APIKeyStateExpired = "expired"
+)
+
+// APIKeyState 返回一把 key 的可用状态，供管理面板总览展示。
+// 判定顺序先撤销后过期：已撤销的 key 不再关心是否过期，状态必须唯一。
+func APIKeyState(k *APIKey, now time.Time) string {
+	switch {
+	case k == nil:
+		return ""
+	case k.RevokedAt != nil:
+		return APIKeyStateRevoked
+	case k.ExpiresAt != nil && !k.ExpiresAt.After(now):
+		return APIKeyStateExpired
+	default:
+		return APIKeyStateActive
+	}
+}
+
+// ListAll 分页列出全部用户的 key（含已撤销 / 已过期），按创建时间倒序，返回总行数。
+// 仅供管理面板总览使用；返回值是元信息，库里没有明文，也没有可回显的明文列。
+func (s *APIKeyStore) ListAll(ctx context.Context, limit, offset int) ([]APIKey, int64, error) {
+	var total int64
+	if err := s.db.WithContext(ctx).Model(&APIKey{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count api keys: %w", err)
+	}
+	var keys []APIKey
+	if err := s.db.WithContext(ctx).Order("created_at DESC, id DESC").
+		Limit(limit).Offset(offset).Find(&keys).Error; err != nil {
+		return nil, 0, fmt.Errorf("list api keys: %w", err)
+	}
+	return keys, total, nil
+}
+
+// RevokeByID 按主键撤销任意用户的 key，供管理面板总览使用（撤销他人 key 是管理员动作）。
+// 个人设置页用 Revoke（限定本人）；这里不校验归属，调用方负责鉴权。
+func (s *APIKeyStore) RevokeByID(ctx context.Context, keyID uint64, at time.Time) error {
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	res := s.db.WithContext(ctx).Model(&APIKey{}).Where("id = ?", keyID).
+		Update("revoked_at", at.UTC())
+	if res.Error != nil {
+		return fmt.Errorf("revoke api key %d: %w", keyID, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrAPIKeyNotFound
+	}
+	return nil
+}
