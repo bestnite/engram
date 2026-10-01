@@ -715,9 +715,10 @@ completion percentage until they are moved into a release milestone.
   the name is decided (blocked on a decision).
 - [ ] **B-2 LICENSE** — pick and add the licence file (blocked on a decision: permissive
   versus copyleft).
-- [ ] **B-3 README pair** — `README.md` in English and `README.zh.md` in Chinese, covering
+- [x] **B-3 README pair** — `README.md` in English and `README.zh.md` in Chinese, covering
   what it is, screenshots later, self-hosting, backup and restore for both databases, and
-  the API key plus MCP quick start.
+  the API key plus MCP quick start. *Done by M0-12; screenshots are still outstanding and are
+  tracked there rather than here.*
 - [ ] **B-4 CONTRIBUTING.md** — how to build, test, and submit changes, restating the rules
   in section 2.
 - [ ] **B-5 Commit author identity** — use a neutral author email for this public
