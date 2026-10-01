@@ -178,7 +178,7 @@ Conventions:
   `optimize`, `version`), `LICENSE` placeholder, `.env.example` kept in sync with
   `internal/config`.
   *Acceptance:* `go build ./...` succeeds; `flashcard version` prints a version string.
-- [ ] **M0-2 Config loader** — `internal/config`: parse the environment variables listed
+- [x] **M0-2 Config loader** — `internal/config`: parse the environment variables listed
   in `.env.example`; load the `settings` table overlay; expose a single accessor that
   reports the effective value and its source (`env` or `db`).
   *Acceptance:* unit test asserts env-over-db precedence and that a missing required
