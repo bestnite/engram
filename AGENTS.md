@@ -173,7 +173,7 @@ Conventions:
 
 ### M0 — Skeleton
 
-- [ ] **M0-1 Module bootstrap** — create `go.mod` (module `<module-path>`, Go 1.25+),
+- [x] **M0-1 Module bootstrap** — create `go.mod` (module `<module-path>`, Go 1.25+),
   `cmd/flashcard/main.go` with subcommand dispatch (`serve`, `schema sync`, `export`,
   `optimize`, `version`), `LICENSE` placeholder, `.env.example` kept in sync with
   `internal/config`.
