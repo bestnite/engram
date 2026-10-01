@@ -34,11 +34,11 @@ func testDatabases(t *testing.T) map[string]*gorm.DB {
 	return out
 }
 
-// expectedTables 是 DESIGN.md §2.2 的全部表加 M0-4 的 schema_version。
+// expectedTables 是 DESIGN.md §2.2 的全部表加 M0-4 的 schema_version，再加 M1-2 的 sessions。
 var expectedTables = []string{
 	"users", "identities", "invites", "settings", "presets", "decks", "notes", "cards",
 	"card_states", "reviews", "deck_grants", "share_links", "media", "api_keys", "jobs",
-	"audit_log", "schema_version",
+	"audit_log", "schema_version", "sessions",
 }
 
 func TestAutoMigrateCreatesAllTables(t *testing.T) {
@@ -52,7 +52,7 @@ func TestAutoMigrateCreatesAllTables(t *testing.T) {
 					t.Errorf("table %q missing after AutoMigrate", table)
 				}
 			}
-			if got, want := len(expectedTables), 17; got != want {
+			if got, want := len(expectedTables), 18; got != want {
 				t.Errorf("expected table list has %d entries, want %d", got, want)
 			}
 		})

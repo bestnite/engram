@@ -272,11 +272,34 @@ type SchemaVersion struct {
 
 func (SchemaVersion) TableName() string { return "schema_version" }
 
+// 用户与账号状态取值；字符串默认值由 store 层在 Go 侧显式给出（见包注释）。
+const (
+	RoleAdmin      = "admin"
+	RoleUser       = "user"
+	StatusActive   = "active"
+	StatusDisabled = "disabled"
+)
+
+// Session 是服务端会话记录：cookie 只持有不可读的会话 ID 与签名，作废以这里的行状态为准。
+// 把它放进库而非纯无状态 cookie，是为了让登出、改密码、禁用三种情况都能真正"服务端作废"
+// （DESIGN.md §4.3、§11）。csrf_token 绑定会话，供 CSRF 中间件校验。
+type Session struct {
+	ID         string     `gorm:"primaryKey;column:id" json:"id"`
+	UserID     uint64     `gorm:"not null;index" json:"user_id"`
+	CSRFToken  string     `gorm:"column:csrf_token;not null" json:"-"`
+	CreatedAt  time.Time  `gorm:"not null" json:"created_at"`
+	ExpiresAt  time.Time  `gorm:"not null;index" json:"expires_at"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+func (Session) TableName() string { return "sessions" }
+
 // AllModels 是 AutoMigrate 的唯一来源；新增表必须加在这里，否则测试的表清单断言会失败。
 func AllModels() []any {
 	return []any{
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
-		&AuditLog{}, &SchemaVersion{},
+		&AuditLog{}, &SchemaVersion{}, &Session{},
 	}
 }
