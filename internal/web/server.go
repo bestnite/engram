@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
 	"example.com/flashcard/internal/store"
@@ -49,6 +50,8 @@ type Deps struct {
 	LoginLimiter *auth.LoginLimiter
 	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
 	BootstrapAdminEmail string
+	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
+	API *api.API
 }
 
 // Server 持有路由与监听地址。
@@ -71,6 +74,7 @@ type Server struct {
 	auditor        *auth.Auditor
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
+	api            *api.API
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -119,6 +123,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		auditor:        deps.Auditor,
 		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
+		api:            deps.API,
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
@@ -135,6 +140,10 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	s.registerAuthRoutes(router)
 	s.registerNoteRoutes(router)
+	if s.api != nil {
+		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。
+		s.api.Register(router)
+	}
 	s.router = router
 	return s, nil
 }

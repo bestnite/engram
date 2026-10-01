@@ -15,6 +15,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
 	"example.com/flashcard/internal/store"
@@ -137,6 +138,21 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
+	// 对外 REST API（M4-2 鉴权 + M4-3 端点）：依赖齐备才挂载 /api/v1。
+	apiSrv, err := api.New(api.Deps{
+		DB:      db,
+		Logger:  logger,
+		Keys:    store.NewAPIKeyStore(db),
+		Users:   users,
+		Decks:   store.NewDeckStore(db),
+		Notes:   store.NewNoteStore(db),
+		Presets: store.NewPresetStore(db),
+		Cards:   store.NewCardStore(db),
+		Auditor: auditor,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
@@ -153,6 +169,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		LoginLimiter: limiter,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
+		API:                 apiSrv,
 	})
 }
 
