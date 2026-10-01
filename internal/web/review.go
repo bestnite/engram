@@ -507,7 +507,7 @@ func (s *Server) gradedViewForCard(ctx context.Context, loc *i18n.Localizer, ite
 
 // buildGradedView 按题型把 note 字段转成前端控件描述；未知题型返回 nil（回退自评）。
 func buildGradedView(loc *i18n.Localizer, kind string, fields map[string]any) *views.ReviewGradedView {
-	v := &views.ReviewGradedView{SubmitLabel: loc.T("review.graded.submit")}
+	v := &views.ReviewGradedView{SubmitLabel: loc.T("review.graded.submit"), AnswerLabel: loc.T("a11y.review.answer_input")}
 	switch kind {
 	case "typed":
 		v.TypeAttr = "text"
