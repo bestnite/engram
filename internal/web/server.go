@@ -39,6 +39,10 @@ type Deps struct {
 	Users *store.UserStore
 	// Invites 提供邀请的创建/列出/撤销/接受（M1-7）；策略为 invite 时注册流程依赖它。
 	Invites *store.InviteStore
+	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
+	Auditor *auth.Auditor
+	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
+	LoginLimiter *auth.LoginLimiter
 	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
 	BootstrapAdminEmail string
 }
@@ -58,6 +62,8 @@ type Server struct {
 	sessions       *auth.Manager
 	users          *store.UserStore
 	invites        *store.InviteStore
+	auditor        *auth.Auditor
+	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
 }
 
@@ -102,6 +108,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		sessions:       deps.Sessions,
 		users:          deps.Users,
 		invites:        deps.Invites,
+		auditor:        deps.Auditor,
+		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
 	}
 

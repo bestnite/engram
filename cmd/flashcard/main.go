@@ -131,15 +131,24 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
+	// 审计（M1-10）与登录限流（M1-9）在此显式装配；两者都是无状态/内存态，单实例直接复用。
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	if err != nil {
+		return nil, err
+	}
+	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
 		SchemaVersion: func(ctx context.Context) (int, error) {
 			return store.CurrentVersion(ctx, db)
 		},
-		Accounts: accounts,
-		Sessions: sessions,
-		Users:    users,
+		Accounts:     accounts,
+		Sessions:     sessions,
+		Users:        users,
+		Invites:      store.NewInviteStore(db),
+		Auditor:      auditor,
+		LoginLimiter: limiter,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 	})
