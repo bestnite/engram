@@ -76,13 +76,13 @@ func TestEnqueueRequiresKind(t *testing.T) {
 	}
 }
 
-// TestSingleFlightReturnsConflict 是 M9-1 的第一条验收：作业在跑时第二次入队应得到
-// 可识别为 409 的哨兵错误。
+// TestOptimiseSingleFlightReturnsConflict 是 M9-6「单并发」用例（M9-1 第一条验收）：
+// 作业在跑时第二次入队应得到可识别为 409 的哨兵错误。
 //
 // 用一个阻塞在 stdin 上的真实子进程（`sh -c 'cat'`）让第一个作业停在 running，
 // 此时第二个 Enqueue 必然撞上单并发门。stdin 由测试持有的管道提供：关闭写端 cat 即退出，
 // 因此不依赖 sleep 之类的固定等待。
-func TestSingleFlightReturnsConflict(t *testing.T) {
+func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -132,13 +132,43 @@ func TestSingleFlightReturnsConflict(t *testing.T) {
 	t.Logf("job %d status=%s stage=%v started=%v finished=%v", done.ID, done.Status, deref(done.Stage), done.StartedAt != nil, done.FinishedAt != nil)
 }
 
-// TestTimeoutKillsProcessGroupAndFailsJob 是 M9-1 的第二条验收：卡死的适配器在超时后
-// 被杀死（连同它派生的子进程），作业标记为 failed。
+// TestOptimiseTimeoutMarksJobFailed 是 M9-6「超时」用例（M9-1 第二条验收的前半）：
+// 卡死的适配器在配置超时后被取消，作业标记为 failed 且原因写明超时。命令自身要睡 30s，
+// 而测试在 5s 内就拿到 failed，说明是超时机制结束的作业，而不是命令自然退出。
+// 「连它派生的子进程一起杀掉」由下一条 TestOptimiseTimeoutKillsProcessGroup 单独覆盖。
+func TestOptimiseTimeoutMarksJobFailed(t *testing.T) {
+	const timeout = 200 * time.Millisecond
+	runner, st, _ := newTestRunner(t, timeout, func(context.Context, *store.Job, Reporter) (Command, error) {
+		return Command{Name: "/bin/sh", Args: []string{"-c", "sleep 30"}}, nil
+	})
+
+	start := time.Now()
+	job, err := runner.Enqueue(context.Background(), KindOptimize, nil)
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	failed := waitForStatus(t, st, job.ID, StatusFailed, 5*time.Second)
+	elapsed := time.Since(start)
+
+	if elapsed >= 5*time.Second {
+		t.Fatalf("job took %s; the timeout did not fire (sleep 30 should have been killed early)", elapsed)
+	}
+	if failed.Error == nil || !strings.Contains(*failed.Error, ErrTimedOut.Error()) {
+		t.Fatalf("failed job error = %v, want it to mention %q", failed.Error, ErrTimedOut.Error())
+	}
+	if failed.FinishedAt == nil {
+		t.Fatalf("failed job missing finished_at")
+	}
+	t.Logf("job %d status=%s elapsed=%s error=%q", failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error)
+}
+
+// TestOptimiseTimeoutKillsProcessGroup 是 M9-6「杀进程」用例（M9-1 第二条验收的后半）：
+// 超时必须杀掉整个进程组，而不只是直接子进程。
 //
 // 命令是 `sh -c 'sleep 30 & echo child=$!; cat'`：shell 与后台 sleep 同属一个进程组，
 // cat 阻塞在 stdin 上模拟挂死。超时设为 200ms，测试总耗时远小于 sleep 的 30s，
 // 说明确实是超时机制杀掉了进程组，而不是等命令自然结束。
-func TestTimeoutKillsProcessGroupAndFailsJob(t *testing.T) {
+func TestOptimiseTimeoutKillsProcessGroup(t *testing.T) {
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
