@@ -1,0 +1,87 @@
+package views
+
+// SharingPage 是卡组共享管理页（M5-2）：授权列表 + 授予/改角色/撤销。
+// 只有 owner 能打开与提交（handler 用 DeckAccess 判定）；模板不含任何硬编码用户文案。
+// 分享链接（M5-3）与可见性开关（M5-5）尚未实现，在页尾预留了区块注释，不写入口。
+templ SharingPage(data SharingData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.DeckName != "" {
+			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
+		}
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.ErrorMessage }</p>
+		}
+		if len(data.Rows) == 0 {
+			<p class="mt-4 text-slate-600">{ data.EmptyText }</p>
+		} else {
+			<table class="mt-4 w-full text-left text-sm">
+				<thead class="border-b border-slate-200 text-slate-500">
+					<tr>
+						<th class="py-2">{ data.ColUser }</th>
+						<th class="py-2">{ data.ColRole }</th>
+						<th class="py-2">{ data.ColActions }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range data.Rows {
+						<tr class="border-b border-slate-100 align-top">
+							<td class="py-2">{ row.Username }</td>
+							<td class="py-2">{ row.RoleLabel }</td>
+							<td class="py-2">
+								if row.Editable {
+									<form class="flex flex-wrap items-center gap-2" method="post" action={ row.RoleAction }>
+										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+										<input type="hidden" name="user_id" value={ row.UserValue }/>
+										<select class="rounded border border-slate-300 px-2 py-1" name="role">
+											for _, opt := range row.RoleOptions {
+												if opt.Selected {
+													<option value={ opt.Value } selected>{ opt.Label }</option>
+												} else {
+													<option value={ opt.Value }>{ opt.Label }</option>
+												}
+											}
+										</select>
+										<button class="rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ row.ChangeLabel }</button>
+									</form>
+									<form class="mt-1" method="post" action={ row.RevokeAction }>
+										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+										<input type="hidden" name="user_id" value={ row.UserValue }/>
+										<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ row.RevokeLabel }</button>
+									</form>
+								} else {
+									<p class="text-xs text-slate-500">{ data.OwnerNote }</p>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold text-slate-900">{ data.GrantHeading }</h2>
+			<form class="mt-4 space-y-3" method="post" action={ data.GrantAction }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.UsernameLabel }</span>
+					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="username" placeholder={ data.UsernamePlaceholder }/>
+				</label>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.RoleLabel }</span>
+					<select class="mt-1 w-full rounded border border-slate-300 px-2 py-1" name="role">
+						for _, opt := range data.RoleOptions {
+							if opt.Selected {
+								<option value={ opt.Value } selected>{ opt.Label }</option>
+							} else {
+								<option value={ opt.Value }>{ opt.Label }</option>
+							}
+						}
+					</select>
+				</label>
+				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.GrantSubmit }</button>
+			</form>
+		</section>
+		// TODO(M5-3): 分享链接区块（创建/撤销/口令/过期）在此预留位置，本轮不写入口。
+		// TODO(M5-5): 可见性开关（private/unlisted/public）在此预留位置，本轮不写入口。
+	}
+}

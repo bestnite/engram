@@ -1,0 +1,171 @@
+package web
+
+import (
+	"context"
+	"net/http"
+	"net/url"
+	"testing"
+
+	"gorm.io/gorm"
+
+	"example.com/flashcard/internal/auth"
+	"example.com/flashcard/internal/store"
+)
+
+// createUserAndLogin 在同一测试库上新建一个普通用户并登录，返回其 id、会话 cookie 与 CSRF token。
+func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string) (uint64, []*http.Cookie, string) {
+	t.Helper()
+	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db),
+		auth.NewPasswordHasher(auth.Params{Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}))
+	if err != nil {
+		t.Fatalf("NewAccountService() error = %v", err)
+	}
+	u, err := accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
+		Username: username, Email: username + "@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser(%q) error = %v", username, err)
+	}
+	login := postForm(t, srv, "/login", url.Values{
+		"username": {username}, "password": {"Sup3rSecret!"},
+	}, nil)
+	if login.Code != http.StatusSeeOther {
+		t.Fatalf("POST /login (%s) status = %d, want 303", username, login.Code)
+	}
+	var sess store.Session
+	if err := db.Where("user_id = ?", u.ID).Order("created_at desc, id desc").First(&sess).Error; err != nil {
+		t.Fatalf("load session row for %s: %v", username, err)
+	}
+	return u.ID, login.Result().Cookies(), sess.CSRFToken
+}
+
+// TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest 是 M5-2 的主验收：
+// owner 授权后对方马上能访问；撤销后对方下一次请求立即被拒；并各写一行审计。
+func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Shared deck")
+	deckPath := "/decks/" + u64str(deck.ID)
+	user2ID, u2Cookies, _ := createUserAndLogin(t, srv, db, "reader2")
+
+	// 授权前：无访问权，GET 列表页被拒 403。
+	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("before grant: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// owner 通过共享页授予 reader。
+	rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
+		"csrf_token": {ownerCSRF}, "username": {"reader2"}, "role": {store.RoleReader},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST grant status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// 授权后：对方下一个请求立即能访问。
+	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusOK {
+		t.Fatalf("after grant: GET notes status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// 改角色 reader -> editor：写 deck.role_change，对方仍可访问。
+	rec = postForm(t, srv, deckPath+"/sharing/grant", url.Values{
+		"csrf_token": {ownerCSRF}, "user_id": {u64str(user2ID)}, "role": {store.RoleEditor},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST role change status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	}
+	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusOK {
+		t.Fatalf("after role change: GET notes status = %d, want 200", rec.Code)
+	}
+
+	// 撤销：对方下一次请求立即被拒。
+	rec = postForm(t, srv, deckPath+"/sharing/revoke", url.Values{
+		"csrf_token": {ownerCSRF}, "user_id": {u64str(user2ID)},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST revoke status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	}
+	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("after revoke: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// 审计：授予 1、改角色 1、撤销 1。
+	audits := store.NewAuditStore(db)
+	for _, c := range []struct {
+		action string
+		want   int64
+	}{
+		{store.ActionDeckGrant, 1},
+		{store.ActionDeckRoleChange, 1},
+		{store.ActionDeckRevoke, 1},
+	} {
+		n, err := audits.CountByAction(context.Background(), c.action)
+		if err != nil {
+			t.Fatalf("count audit %s: %v", c.action, err)
+		}
+		if n != c.want {
+			t.Errorf("audit rows for %s = %d, want %d", c.action, n, c.want)
+		}
+	}
+}
+
+// TestSharingPageRejectsNonOwner 覆盖反面用例：非 owner 打不开共享页、提交表单也被拒且不落库。
+func TestSharingPageRejectsNonOwner(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Owner only")
+	deckPath := "/decks/" + u64str(deck.ID)
+	// 建一个普通用户并授予 editor：他仍不是 owner，不能管理授权。
+	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "editor2")
+	if rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
+		"csrf_token": {ownerCSRF}, "username": {"editor2"}, "role": {store.RoleEditor},
+	}, ownerCookies); rec.Code != http.StatusSeeOther {
+		t.Fatalf("owner grant editor status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// editor 打开共享页 -> 403。
+	if rec := getWithCookies(t, srv, deckPath+"/sharing", u2Cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("editor GET sharing status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+	// editor 提交授权 -> 403，且不新增授权行。
+	before, err := store.NewGrantStore(db).ListByDeck(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("list grants: %v", err)
+	}
+	if rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
+		"csrf_token": {u2CSRF}, "username": {"editor2"}, "role": {store.RoleReader},
+	}, u2Cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("editor POST grant status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+	after, err := store.NewGrantStore(db).ListByDeck(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("list grants: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("grant rows changed by non-owner: before=%d after=%d", len(before), len(after))
+	}
+	role, err := store.NewGrantStore(db).Role(context.Background(), deck.ID, user2ID)
+	if err != nil {
+		t.Fatalf("read editor role: %v", err)
+	}
+	if role != store.RoleEditor {
+		t.Errorf("editor role = %q, want %q (unchanged)", role, store.RoleEditor)
+	}
+}
+
+// TestSharingGrantRequiresCSRF 是必测负例：缺 CSRF token 的授权写请求被拒。
+func TestSharingGrantRequiresCSRF(t *testing.T) {
+	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "CSRF deck")
+	createUserAndLogin(t, srv, db, "csrf_target")
+	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
+		"username": {"csrf_target"}, "role": {store.RoleReader},
+	}, ownerCookies)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST grant without CSRF status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+	grants, err := store.NewGrantStore(db).ListByDeck(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("list grants: %v", err)
+	}
+	if len(grants) != 0 {
+		t.Errorf("grant created despite missing CSRF: %d row(s)", len(grants))
+	}
+}

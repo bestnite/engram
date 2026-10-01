@@ -363,3 +363,55 @@
   translation: "Could not create the deck."
 - id: decks.preset.default
   translation: "Default"
+# M5-2 deck sharing management page.
+- id: sharing.title
+  translation: "Sharing"
+- id: sharing.heading
+  translation: "Sharing"
+- id: sharing.col_user
+  translation: "User"
+- id: sharing.col_role
+  translation: "Role"
+- id: sharing.col_actions
+  translation: "Actions"
+- id: sharing.owner_note
+  translation: "The owner has full control and cannot be changed or revoked."
+- id: sharing.empty
+  translation: "No one else has access to this deck yet."
+- id: sharing.role.owner
+  translation: "Owner"
+- id: sharing.role.editor
+  translation: "Editor"
+- id: sharing.role.reader
+  translation: "Reader"
+- id: sharing.grant.heading
+  translation: "Grant access"
+- id: sharing.grant.username_label
+  translation: "Username"
+- id: sharing.grant.username_placeholder
+  translation: "Username to grant"
+- id: sharing.grant.role_label
+  translation: "Role"
+- id: sharing.grant.submit
+  translation: "Save grant"
+- id: sharing.change_submit
+  translation: "Change role"
+- id: sharing.revoke_submit
+  translation: "Revoke"
+- id: sharing.error.username_required
+  translation: "Enter a username."
+- id: sharing.error.user_not_found
+  translation: "User not found."
+- id: sharing.error.invalid_role
+  translation: "Invalid role."
+- id: sharing.error.owner_immutable
+  translation: "The owner's access cannot be changed or revoked."
+- id: sharing.error.grant_failed
+  translation: "Could not save the grant. Please try again."
+# M5-4 deck clone.
+- id: clone.name
+  translation: "{{.name}} (copy)"
+- id: clone.preset_name
+  translation: "{{.name}} (copy)"
+- id: clone.submit
+  translation: "Clone to my account"
