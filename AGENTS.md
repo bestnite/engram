@@ -492,7 +492,7 @@ Conventions:
   duplicate cards; an archive with a path-traversal entry or an oversized decompression is
   rejected; an unknown `kind` fails with the offending entry listed; `progress.json` from
   another user is discarded and reported unless the admin setting enables it.
-- [ ] **M5-8 Deck package entry points beyond REST** — M5-6/M5-7 shipped the store layer and
+- [x] **M5-8 Deck package entry points beyond REST** — M5-6/M5-7 shipped the store layer and
   `GET /api/v1/decks/:id/package` + `POST /api/v1/decks/import`, but the task text also named the
   deck page, the MCP tools, and the CLI, and none of those exist yet: `export_deck` /
   `import_deck` still go through the older bulk note-creation path, there is no CLI subcommand,
@@ -502,13 +502,20 @@ Conventions:
   subcommand round-trips a file; the web page uploads a package and reports the import summary.
   While doing this, replace the hand-rolled draft-2020-12 subset validator M5-6 wrote with a real
   JSON Schema library if the module proxy is reachable.
+- [ ] **M5-9 Deck package web page** — M5-8 did the MCP tools and the CLI but deliberately skipped
+  the browser path, because the locale catalog was owned by another lane that round. A browser-only
+  user still cannot move a deck in or out: the deck page has no export control and there is no
+  upload page.
+  *Acceptance:* the deck page offers an export control that downloads a `.fdeck`; `/import` accepts
+  an upload and reports the same summary the REST response returns; a malformed package produces a
+  readable error message rather than a 500.
 
 
 ### M6 — Admin panel and system settings
 
 - [x] **M6-1 Admin shell** — layout, navigation, and an access guard limited to `role = admin`.
   *Acceptance:* test asserts a non-admin gets `403` on every `/admin/*` route.
-- [ ] **M6-2 User management** — list and search, create, disable and enable, reset
+- [x] **M6-2 User management** — list and search, create, disable and enable, reset
   password, change role, force logout, delete, and per-user deck and usage counts.
   *Acceptance:* each action has a test; disable and delete both invalidate sessions.
 - [ ] **M6-3 Registration and invites UI** — switch the policy, edit the email-domain
@@ -556,7 +563,7 @@ Conventions:
 - [ ] **M7-3 Statistics page** — HTML and CSS bars first, self-hosted chart script optional.
   *Acceptance:* the page renders with no external network request; an integration test
   fails if any third-party host appears in the rendered HTML.
-- [ ] **M7-4 Retrospective check** — a script or test that recomputes the page numbers
+- [x] **M7-4 Retrospective check** — a script or test that recomputes the page numbers
   from raw tables, so drift is caught rather than argued about.
   *Acceptance:* deliberately corrupting one aggregate makes the check fail.
 
@@ -603,7 +610,7 @@ Conventions:
   revert to default weights.
   *Acceptance:* the page shows the same weights the database holds after completion, and
   revert restores `NULL`.
-- [ ] **M9-5 Threshold and fit report** — refuse below the configured review count with
+- [x] **M9-5 Threshold and fit report** — refuse below the configured review count with
   the remaining number shown; report the fit metric before and after.
   *Acceptance:* a preset with too few reviews is refused with the shortfall named; the
   metric is stored on the job row.
@@ -697,7 +704,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 7/8 · M6 2/10 · M7 2/4 · M8 2/6 · M9 4/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 8/9 · M6 3/10 · M7 3/4 · M8 2/6 · M9 5/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
