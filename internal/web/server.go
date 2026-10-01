@@ -17,6 +17,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
+	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
 )
 
@@ -56,6 +57,8 @@ type Deps struct {
 	BootstrapAdminEmail string
 	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
 	API *api.API
+	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/:id 代理。
+	Media *media.Store
 }
 
 // Server 持有路由与监听地址。
@@ -81,6 +84,7 @@ type Server struct {
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
 	api            *api.API
+	media          *media.Store
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -132,6 +136,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
 		api:            deps.API,
+		media:          deps.Media,
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
@@ -149,6 +154,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerAuthRoutes(router)
 	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)
+	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
 
 	if s.api != nil {

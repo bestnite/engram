@@ -1,6 +1,7 @@
 # ── 本地数据与运行时（绝不入库）──────────────────────────────
 data/
-media/
+# 只忽略仓库根/运行时的 media 目录；internal/media 是源码包，必须入库
+/media/
 *.db
 *.db-shm
 *.db-wal

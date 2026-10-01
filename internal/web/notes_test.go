@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"example.com/flashcard/internal/auth"
+	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
 )
 
@@ -42,6 +43,10 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}
+	mediaStore, err := media.New(filepath.Join(t.TempDir(), "media"), db)
+	if err != nil {
+		t.Fatalf("media.New() error = %v", err)
+	}
 	srv, err = New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -54,6 +59,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Cards:         store.NewCardStore(db),
 		Presets:       store.NewPresetStore(db),
 		Auditor:       auditor,
+		Media:         mediaStore,
 		LoginLimiter: auth.NewLoginLimiter(auth.LimiterConfig{
 			Sleep: func(context.Context, time.Duration) error { return nil },
 		}),

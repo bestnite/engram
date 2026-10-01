@@ -18,6 +18,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
+	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
 	"example.com/flashcard/internal/web"
 )
@@ -138,6 +139,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
+	// 媒体存储（M2-8）：本地目录 + media 元数据表；目录来自 MEDIA_DIR。
+	mediaStore, err := media.New(cfg.Get(config.KeyMediaDir).Value, db)
+	if err != nil {
+		return nil, err
+	}
 	// 对外 REST API（M4-2 鉴权 + M4-3 端点）：依赖齐备才挂载 /api/v1。
 	apiSrv, err := api.New(api.Deps{
 		DB:      db,
@@ -169,6 +175,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Presets:      store.NewPresetStore(db),
 		Auditor:      auditor,
 		LoginLimiter: limiter,
+		Media:        mediaStore,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		API:                 apiSrv,
