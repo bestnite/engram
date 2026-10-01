@@ -880,3 +880,80 @@
   translation: "The package contains an unsafe entry (path traversal or symlink)."
 - id: import.error.package_unknown_kind
   translation: "The package contains a card type this instance does not know."
+# M9-4 preset page and parameter optimisation
+- id: presets.title
+  translation: "Scheduling presets"
+- id: presets.heading
+  translation: "Scheduling presets and parameter optimisation"
+- id: presets.intro
+  translation: "The weights drive interval scheduling. Optimising them needs enough review history and must be computed by the optimiser adapter."
+- id: presets.empty
+  translation: "No scheduling preset yet. A default preset is created automatically when you create a deck."
+- id: presets.retention_label
+  translation: "Desired retention"
+- id: presets.max_interval_label
+  translation: "Maximum interval (days)"
+- id: presets.fuzz_label
+  translation: "Interval fuzz"
+- id: presets.fuzz_on
+  translation: "On"
+- id: presets.fuzz_off
+  translation: "Off"
+- id: presets.weights.heading
+  translation: "FSRS weights"
+- id: presets.weights.source_default
+  translation: "Default weights"
+- id: presets.weights.source_optimized
+  translation: "Optimised"
+- id: presets.weights.optimized_at
+  translation: "Optimised at: {{.time}}"
+- id: presets.weights.review_count
+  translation: "Reviews used: {{.count}}"
+- id: presets.weights.raw_label
+  translation: "Weights detail (matches the database)"
+- id: presets.reviews.available
+  translation: "Available reviews: {{.count}}"
+- id: presets.reviews.threshold
+  translation: "Optimise threshold: at least {{.min}}"
+- id: presets.optimize.button
+  translation: "Start optimisation"
+- id: presets.optimize.queued
+  translation: "Queued, waiting to run…"
+- id: presets.optimize.running
+  translation: "Optimising…"
+- id: presets.optimize.succeeded
+  translation: "Optimisation finished."
+- id: presets.optimize.failed
+  translation: "Optimisation failed"
+- id: presets.optimize.conflict
+  translation: "Another optimisation job is already running; wait for it to finish and try again."
+- id: presets.optimize.shortfall
+  translation: "Not enough reviews: {{.count}} more needed ({{.have}} now, threshold {{.min}}), cannot optimise yet."
+- id: presets.optimize.stage.read_logs
+  translation: "Stage: reading review logs"
+- id: presets.optimize.stage.training
+  translation: "Stage: training parameters"
+- id: presets.optimize.stage.writing
+  translation: "Stage: writing results"
+- id: presets.optimize.stage.unknown
+  translation: "Stage: unknown"
+- id: presets.optimize.log_tail
+  translation: "Log tail"
+- id: presets.optimize.result_title
+  translation: "Fit comparison (lower is better)"
+- id: presets.optimize.result_reviews
+  translation: "Reviews used for training: {{.count}}"
+- id: presets.optimize.result_before
+  translation: "Before: LogLoss {{.logloss}} / RMSE {{.rmse}}"
+- id: presets.optimize.result_after
+  translation: "After: LogLoss {{.logloss}} / RMSE {{.rmse}}"
+- id: presets.optimize.improved
+  translation: "fit improved"
+- id: presets.optimize.not_improved
+  translation: "fit did not improve"
+- id: presets.revert.button
+  translation: "Revert to default weights"
+- id: presets.revert.note
+  translation: "Reverting restores the default weights immediately (weights_json becomes NULL)."
+- id: presets.reschedule.note
+  translation: "Optimising or reverting only affects future intervals; due dates are not recomputed by default."

@@ -17,6 +17,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
+	"example.com/flashcard/internal/jobs"
 	"example.com/flashcard/internal/mcp"
 	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
@@ -69,6 +70,8 @@ type Deps struct {
 	// Secrets 是敏感设置的 AES-GCM 编解码器（M6-10）；非空时管理面板可写入
 	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。
 	Secrets *store.SecretCodec
+	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4）。
+	Jobs *jobs.Runner
 }
 
 // Server 持有路由与监听地址。
@@ -102,6 +105,9 @@ type Server struct {
 	media          *media.Store
 	// secrets 供管理面板写入敏感设置（M6-10）；为空时拒绝写入，只显示状态。
 	secrets *store.SecretCodec
+	// jobRunner 是优化作业入队入口（M9-4）；jobStore 用于轮询时按 id 读取作业状态。
+	jobRunner *jobs.Runner
+	jobStore  *jobs.Store
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -156,6 +162,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		mcp:            deps.MCP,
 		media:          deps.Media,
 		secrets:        deps.Secrets,
+		jobRunner:      deps.Jobs,
+		jobStore:       jobs.NewStore(deps.DB),
 	}
 	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
 	s.grants = deps.Grants
@@ -193,6 +201,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
+	s.registerPresetRoutes(router)
 	s.registerAdminRoutes(router)
 
 	if s.api != nil {

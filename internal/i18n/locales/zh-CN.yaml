@@ -879,3 +879,80 @@
   translation: "卡组包包含不安全的条目（路径穿越或软链）。"
 - id: import.error.package_unknown_kind
   translation: "卡组包包含本实例不认识的题型。"
+# M9-4 预设页与参数优化
+- id: presets.title
+  translation: "调度预设"
+- id: presets.heading
+  translation: "调度预设与参数优化"
+- id: presets.intro
+  translation: "权重决定复习间隔的排程；优化权重需要足够的复习记录，且必须由优化器适配器计算。"
+- id: presets.empty
+  translation: "还没有调度预设。新建卡组时会自动创建一个默认预设。"
+- id: presets.retention_label
+  translation: "目标保留率"
+- id: presets.max_interval_label
+  translation: "最大间隔（天）"
+- id: presets.fuzz_label
+  translation: "间隔抖动"
+- id: presets.fuzz_on
+  translation: "开启"
+- id: presets.fuzz_off
+  translation: "关闭"
+- id: presets.weights.heading
+  translation: "FSRS 权重"
+- id: presets.weights.source_default
+  translation: "默认权重"
+- id: presets.weights.source_optimized
+  translation: "已优化"
+- id: presets.weights.optimized_at
+  translation: "优化时间：{{.time}}"
+- id: presets.weights.review_count
+  translation: "使用复习记录：{{.count}} 条"
+- id: presets.weights.raw_label
+  translation: "权重明细（与数据库一致）"
+- id: presets.reviews.available
+  translation: "可用复习记录：{{.count}} 条"
+- id: presets.reviews.threshold
+  translation: "优化门槛：至少 {{.min}} 条"
+- id: presets.optimize.button
+  translation: "开始优化"
+- id: presets.optimize.queued
+  translation: "已入队，等待执行……"
+- id: presets.optimize.running
+  translation: "正在优化……"
+- id: presets.optimize.succeeded
+  translation: "优化完成。"
+- id: presets.optimize.failed
+  translation: "优化失败"
+- id: presets.optimize.conflict
+  translation: "已有优化任务正在运行，请等它结束后再试。"
+- id: presets.optimize.shortfall
+  translation: "复习记录不足：还差 {{.count}} 条（当前 {{.have}} 条，门槛 {{.min}} 条），暂不能优化。"
+- id: presets.optimize.stage.read_logs
+  translation: "阶段：读取复习日志"
+- id: presets.optimize.stage.training
+  translation: "阶段：训练参数"
+- id: presets.optimize.stage.writing
+  translation: "阶段：写回结果"
+- id: presets.optimize.stage.unknown
+  translation: "阶段：未知"
+- id: presets.optimize.log_tail
+  translation: "日志尾巴"
+- id: presets.optimize.result_title
+  translation: "拟合对比（越小越贴合）"
+- id: presets.optimize.result_reviews
+  translation: "训练使用复习记录：{{.count}} 条"
+- id: presets.optimize.result_before
+  translation: "优化前 LogLoss {{.logloss}} / RMSE {{.rmse}}"
+- id: presets.optimize.result_after
+  translation: "优化后 LogLoss {{.logloss}} / RMSE {{.rmse}}"
+- id: presets.optimize.improved
+  translation: "拟合改善"
+- id: presets.optimize.not_improved
+  translation: "拟合未改善"
+- id: presets.revert.button
+  translation: "回退默认权重"
+- id: presets.revert.note
+  translation: "回退后立即使用默认权重（weights_json 归 NULL）。"
+- id: presets.reschedule.note
+  translation: "优化与回退只影响未来的间隔；重算到期日默认不执行。"
