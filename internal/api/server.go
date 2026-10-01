@@ -30,6 +30,8 @@ type Deps struct {
 	Auditor *auth.Auditor
 	// Now 可注入时钟；为零时用系统 UTC 时间。
 	Now func() time.Time
+	// MediaRoot 是媒体字节的本地根目录；卡组包导出/导入内联媒体时使用（可为空）。
+	MediaRoot string
 	// ReadLimit / WriteLimit / RateWindow 透传给鉴权中间件的按 key 限流。
 	ReadLimit  int
 	WriteLimit int
@@ -52,6 +54,8 @@ type API struct {
 	auditor *auth.Auditor
 	now     func() time.Time
 	authn   *Authenticator
+	// mediaRoot 供卡组包内联媒体使用；为空时不落盘媒体。
+	mediaRoot string
 }
 
 // New 构造 API；M4-2 中间件与 M4-3 handler 的依赖必须齐备。
@@ -108,19 +112,20 @@ func New(deps Deps) (*API, error) {
 		return nil, err
 	}
 	return &API{
-		db:      deps.DB,
-		logger:  logger,
-		keys:    deps.Keys,
-		users:   deps.Users,
-		decks:   deps.Decks,
-		notes:   deps.Notes,
-		presets: deps.Presets,
-		cards:   deps.Cards,
-		grants:  grants,
-		access:  auth.NewDeckAccess(deps.Decks, grants),
-		auditor: deps.Auditor,
-		now:     now,
-		authn:   authn,
+		db:        deps.DB,
+		logger:    logger,
+		keys:      deps.Keys,
+		users:     deps.Users,
+		decks:     deps.Decks,
+		notes:     deps.Notes,
+		presets:   deps.Presets,
+		cards:     deps.Cards,
+		grants:    grants,
+		access:    auth.NewDeckAccess(deps.Decks, grants),
+		auditor:   deps.Auditor,
+		now:       now,
+		authn:     authn,
+		mediaRoot: deps.MediaRoot,
 	}, nil
 }
 
@@ -139,6 +144,8 @@ func (a *API) Register(r gin.IRouter) {
 	v1.POST("/review", a.authn.RequireScope(store.ScopeReview), a.submitReview)
 	v1.GET("/stats/summary", a.authn.RequireScope(store.ScopeRead), a.statsSummary)
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
+	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
+	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)
 	v1.GET("/keys", a.authn.RequireScope(store.ScopeAdmin), a.listKeys)
 	v1.POST("/keys", a.authn.RequireScope(store.ScopeAdmin), a.createKey)
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeAdmin), a.deleteKey)

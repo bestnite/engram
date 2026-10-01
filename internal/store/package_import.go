@@ -1,0 +1,715 @@
+package store
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
+	"example.com/flashcard/internal/cardtype"
+)
+
+// 卡组包导入（DESIGN.md §7.6、AGENTS.md M5-7）。
+//
+// 安全是重点：解压前拒绝路径穿越与软链、限制总解压体积与条目数（防 zip bomb）；
+// 业务写入全部在一个事务内完成（失败不留半成品）；重复导入靠 external_ref 或内容指纹去重。
+
+// 导入目标三种（DESIGN.md §7.6）。
+const (
+	// PackageTargetNewDeck 用包内卡组名新建卡组（重名自动加后缀）。
+	PackageTargetNewDeck = "new_deck"
+)
+
+// PackageLimits 是解压安全上限（DESIGN.md §7.6「安全」）。
+type PackageLimits struct {
+	MaxEntries    int
+	MaxFileBytes  int64
+	MaxTotalBytes int64
+}
+
+// DefaultPackageLimits 给出保守的默认上限，防 zip bomb。
+func DefaultPackageLimits() PackageLimits {
+	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
+}
+
+// PackageImportOptions 控制一次导入（DESIGN.md §7.6）。
+type PackageImportOptions struct {
+	// Target 取值 new_deck（默认）、into_deck:<id>、replace_deck:<id>。
+	Target string
+	DryRun bool
+	// OnConflict 取值 skip / update（默认）/ fail（整包回滚）。
+	OnConflict string
+	// AllowOthersProgress 是管理员开关（默认关）：允许把包内他人进度导入到自己账号。
+	AllowOthersProgress bool
+	// SkipMissingMedia=true 时缺失媒体只计数并继续；默认 false（缺媒体即失败并列出清单）。
+	SkipMissingMedia bool
+	// MediaRoot 是媒体字节落盘根目录；为空表示不落盘媒体（只在需要时）。
+	MediaRoot string
+	// NewDeckName 可选覆盖 new_deck 的卡组名。
+	NewDeckName string
+	// Now 可注入时钟；零值时用系统 UTC 时间。
+	Now func() time.Time
+}
+
+// PackageImportError 是逐条导入错误：Entry 指出出错的包内条目（如 notes[3]）。
+type PackageImportError struct {
+	Entry  string `json:"entry"`
+	Reason string `json:"reason"`
+}
+
+// PackageImportReport 是导入（含 dry_run）的报告，形态与 §7.3 批量导入一致。
+type PackageImportReport struct {
+	Target            string               `json:"target"`
+	DryRun            bool                 `json:"dry_run"`
+	DeckID            uint64               `json:"deck_id,omitempty"`
+	NotesCreated      int                  `json:"notes_created"`
+	NotesUpdated      int                  `json:"notes_updated"`
+	NotesSkipped      int                  `json:"notes_skipped"`
+	CardsCreated      int                  `json:"cards_created"`
+	MediaNew          int                  `json:"media_new"`
+	MediaMissing      int                  `json:"media_missing"`
+	ProgressApplied   int                  `json:"progress_applied"`
+	ProgressSkipped   int                  `json:"progress_skipped"`
+	ProgressDiscarded bool                 `json:"progress_discarded"`
+	MatchRule         string               `json:"match_rule,omitempty"`
+	Errors            []PackageImportError `json:"errors"`
+}
+
+// ErrPackageDryRun 是 dry_run 的内部哨兵：完成规划后用它回滚事务，不留任何写入。
+var ErrPackageDryRun = errors.New("deck package: dry run rollback")
+
+// ReadPackageArchive 安全地读出一个 zip：拒绝路径穿越、绝对路径、软链，
+// 并限制条目数与总解压体积（DESIGN.md §7.6「安全」）。
+func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, error) {
+	// 先整体读入内存（有总量上限），因为 zip.NewReader 需要 ReaderAt。
+	raw, err := io.ReadAll(io.LimitReader(r, limits.MaxTotalBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("%w: read archive: %v", &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive"}, err)
+	}
+	if int64(len(raw)) > limits.MaxTotalBytes {
+		return nil, &PackageError{Code: CodePackageTooLarge, Message: "archive exceeds the total size limit"}
+	}
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		return nil, &PackageError{Code: CodePackageBadFormat, Message: "not a valid zip archive"}
+	}
+	if len(zr.File) > limits.MaxEntries {
+		return nil, &PackageError{Code: CodePackageTooLarge, Message: fmt.Sprintf("archive has %d entries, limit is %d", len(zr.File), limits.MaxEntries)}
+	}
+	out := make(map[string][]byte, len(zr.File))
+	var total int64
+	for _, f := range zr.File {
+		name := f.Name
+		if strings.HasSuffix(name, "/") || f.FileInfo().IsDir() {
+			continue
+		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "symlink entries are not allowed", Entries: []string{name}}
+		}
+		if unsafeZipName(name) {
+			return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "unsafe entry path", Entries: []string{name}}
+		}
+		buf, err := readZipEntry(f, limits.MaxFileBytes)
+		if err != nil {
+			if errors.Is(err, ErrPackageTooLargeSentinel) {
+				return nil, &PackageError{Code: CodePackageTooLarge, Message: "entry exceeds the size limit", Entries: []string{name}}
+			}
+			return nil, &PackageError{Code: CodePackageBadFormat, Message: "cannot read entry", Entries: []string{name}}
+		}
+		total += int64(len(buf))
+		if total > limits.MaxTotalBytes {
+			return nil, &PackageError{Code: CodePackageTooLarge, Message: "archive exceeds the total decompressed size limit"}
+		}
+		out[name] = buf
+	}
+	return out, nil
+}
+
+// unsafeZipName 判断 zip 条目名是否危险：绝对路径、反斜杠、盘符、或含 ".." 段。
+func unsafeZipName(name string) bool {
+	if name == "" {
+		return true
+	}
+	if strings.Contains(name, "\\") {
+		return true
+	}
+	if strings.HasPrefix(name, "/") || filepath.IsAbs(name) || path.IsAbs(name) {
+		return true
+	}
+	if len(name) >= 2 && name[1] == ':' {
+		return true
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+// ParsePackageTarget 解析目标字符串；空串等同 new_deck。
+func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
+	target = strings.TrimSpace(target)
+	if target == "" || target == PackageTargetNewDeck {
+		return PackageTargetNewDeck, 0, nil
+	}
+	for _, prefix := range []string{"into_deck:", "replace_deck:"} {
+		if strings.HasPrefix(target, prefix) {
+			id, perr := strconv.ParseUint(strings.TrimPrefix(target, prefix), 10, 64)
+			if perr != nil || id == 0 {
+				return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck id must be a positive integer"}
+			}
+			return strings.TrimSuffix(prefix, ":"), id, nil
+		}
+	}
+	return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
+}
+
+// ImportPackage 导入一个卡组包（DESIGN.md §7.6、M5-7）。
+//
+// 调用方（API/Web/MCP/CLI）负责在调用前完成卡组级权限判定；本方法只做包级校验、
+// 去重、id 重映射、进度归属判定与事务化写入。
+func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.Reader, opts PackageImportOptions) (*PackageImportReport, error) {
+	if opts.Now == nil {
+		opts.Now = func() time.Time { return time.Now().UTC() }
+	}
+	if opts.OnConflict == "" {
+		opts.OnConflict = "update"
+	}
+	if opts.OnConflict != "skip" && opts.OnConflict != "update" && opts.OnConflict != "fail" {
+		return nil, &PackageError{Code: CodePackageBadFormat, Message: "on_conflict must be one of skip, update, fail"}
+	}
+	targetKind, targetDeckID, err := ParsePackageTarget(opts.Target)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := ReadPackageArchive(r, DefaultPackageLimits())
+	if err != nil {
+		return nil, err
+	}
+	pkg, err := parsePackage(entries)
+	if err != nil {
+		return nil, err
+	}
+
+	// 未知题型必须报错并逐条列出（静默丢弃会让用户以为导入成功却少了卡片）。
+	var unknown []string
+	for i := range pkg.Notes {
+		if _, ok := cardtype.Lookup(pkg.Notes[i].Kind); !ok {
+			unknown = append(unknown, fmt.Sprintf("notes[%d] kind=%s", i, pkg.Notes[i].Kind))
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, &PackageError{Code: CodePackageUnknownKind, Message: "unknown card type", Entries: unknown}
+	}
+
+	username, _ := s.lookupUsername(ctx, actorUserID)
+
+	report := &PackageImportReport{Target: targetKind, DryRun: opts.DryRun, Errors: []PackageImportError{}}
+	mediaMissing, err := missingMediaRefs(pkg)
+	if err != nil {
+		return nil, err
+	}
+	if len(mediaMissing) > 0 && !opts.SkipMissingMedia && !opts.DryRun {
+		return nil, &PackageError{Code: CodePackageBadFormat, Message: "package references media that is not included", Entries: mediaMissing}
+	}
+	report.MediaMissing = len(mediaMissing)
+
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return s.importInTx(ctx, tx, actorUserID, username, pkg, targetKind, targetDeckID, opts, report)
+	})
+	if err != nil && !errors.Is(err, ErrPackageDryRun) {
+		return nil, err
+	}
+	if err == nil && opts.DryRun {
+		return nil, ErrPackageDryRun
+	}
+	return report, nil
+}
+
+// packageModel 是解析后的包内容。
+type packageModel struct {
+	Manifest PackageManifest
+	Notes    []PackageNote
+	Cards    []PackageCard
+	Preset   PackagePreset
+	Progress *PackageProgress
+	Media    map[string]PackageMediaEntry
+	MediaRaw map[string][]byte
+}
+
+func parseJSONEntry(entries map[string][]byte, name string, out any) error {
+	raw, ok := entries[name]
+	if !ok {
+		return &PackageError{Code: CodePackageBadFormat, Message: "missing required entry", Entries: []string{name}}
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return &PackageError{Code: CodePackageBadFormat, Message: "invalid JSON", Entries: []string{name + ": " + err.Error()}}
+	}
+	return nil
+}
+
+func parsePackage(entries map[string][]byte) (*packageModel, error) {
+	pkg := &packageModel{Media: map[string]PackageMediaEntry{}, MediaRaw: map[string][]byte{}}
+	if err := parseJSONEntry(entries, "manifest.json", &pkg.Manifest); err != nil {
+		return nil, err
+	}
+	if pkg.Manifest.FormatVersion < 1 || pkg.Manifest.FormatVersion > PackageFormatVersion {
+		return nil, &PackageError{Code: CodePackageBadFormat, Message: fmt.Sprintf("unsupported format_version %d", pkg.Manifest.FormatVersion)}
+	}
+	if err := parseJSONEntry(entries, "notes.json", &pkg.Notes); err != nil {
+		return nil, err
+	}
+	if err := parseJSONEntry(entries, "cards.json", &pkg.Cards); err != nil {
+		return nil, err
+	}
+	if err := parseJSONEntry(entries, "preset.json", &pkg.Preset); err != nil {
+		return nil, err
+	}
+	if raw, ok := entries["progress.json"]; ok {
+		var p PackageProgress
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid JSON", Entries: []string{"progress.json: " + err.Error()}}
+		}
+		pkg.Progress = &p
+	}
+	if raw, ok := entries["media.json"]; ok {
+		if err := json.Unmarshal(raw, &pkg.Media); err != nil {
+			return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid JSON", Entries: []string{"media.json: " + err.Error()}}
+		}
+		for sha, entry := range pkg.Media {
+			// 只接受包内 media/ 前缀且文件名与 sha256 一致的条目，挡住 media.json 里的路径穿越。
+			if unsafeZipName(entry.Path) || !strings.HasPrefix(entry.Path, "media/") {
+				return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "media path is unsafe", Entries: []string{entry.Path}}
+			}
+			if raw, ok := entries[entry.Path]; ok {
+				pkg.MediaRaw[sha] = raw
+			}
+		}
+	}
+	return pkg, nil
+}
+
+// missingMediaRefs 找出 note 字段里引用、但包内没有字节的媒体。
+func missingMediaRefs(pkg *packageModel) ([]string, error) {
+	refs := map[string]bool{}
+	for i := range pkg.Notes {
+		collectMediaRefs(pkg.Notes[i].Fields, refs)
+	}
+	var missing []string
+	for sha := range refs {
+		if _, ok := pkg.MediaRaw[sha]; !ok {
+			missing = append(missing, "media/"+sha)
+		}
+	}
+	return missing, nil
+}
+
+// importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
+func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) error {
+	deckID, err := s.resolveTargetDeck(ctx, tx, actorUserID, pkg, targetKind, targetDeckID, opts)
+	if err != nil {
+		return err
+	}
+	report.DeckID = deckID
+
+	// replace_deck 是破坏性操作：先软删除目标卡组全部现有 note（进度保留在 card 上，不级联删行）。
+	if targetKind == "replace_deck" {
+		if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Delete(&Note{}).Error; err != nil {
+			return fmt.Errorf("replace deck: clear notes: %w", err)
+		}
+	}
+
+	// 现有内容索引：external_ref 优先，其次内容指纹（DESIGN.md §7.6 去重规则）。
+	byRef, byFingerprint, err := s.existingNoteIndex(ctx, tx, deckID)
+	if err != nil {
+		return err
+	}
+	if len(byRef) > 0 {
+		report.MatchRule = "external_ref"
+	} else {
+		report.MatchRule = "content_fingerprint"
+	}
+
+	notesStore := NewNoteStore(s.db)
+	noteIDByIndex := make([]uint64, len(pkg.Notes))
+	createdNote := make([]bool, len(pkg.Notes))
+
+	for i := range pkg.Notes {
+		pn := &pkg.Notes[i]
+		fp := fingerprintFromFields(pn.Kind, pn.Fields)
+		var existing *Note
+		if pn.ExternalRef != "" {
+			existing = byRef[pn.ExternalRef]
+		}
+		if existing == nil {
+			existing = byFingerprint[fp]
+		}
+
+		if existing != nil {
+			switch opts.OnConflict {
+			case "skip":
+				report.NotesSkipped++
+				noteIDByIndex[i] = existing.ID
+				continue
+			case "fail":
+				report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("notes[%d]", i), "a matching note already exists"})
+				continue
+			}
+			// update：保留 card 行与所有人进度，只改内容（NoteStore.UpdateInTx 保证 id 不变）。
+			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: tagsJSON(pn.Tags)}
+			if _, err := notesStore.UpdateInTx(ctx, tx, &n, pn.Fields); err != nil {
+				return fmt.Errorf("import note %d: %w", i, err)
+			}
+			report.NotesUpdated++
+			noteIDByIndex[i] = existing.ID
+			continue
+		}
+
+		n := Note{DeckID: deckID, Kind: pn.Kind, TagsJSON: tagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
+		if pn.ExternalRef != "" {
+			n.ExternalRef = Ptr(pn.ExternalRef)
+		}
+		cards, err := notesStore.CreateInTx(ctx, tx, &n, pn.Fields)
+		if err != nil {
+			return fmt.Errorf("import note %d: %w", i, err)
+		}
+		report.NotesCreated++
+		report.CardsCreated += len(cards)
+		noteIDByIndex[i] = n.ID
+		createdNote[i] = true
+	}
+
+	// cards.json 保证导入后卡片集合一致：核对包内声明的 template 是否都已生成。
+	cardIDByNote := map[uint64]map[string]uint64{}
+	for i := range pkg.Notes {
+		if noteIDByIndex[i] == 0 {
+			continue
+		}
+		m, err := cardTemplatesTx(ctx, tx, noteIDByIndex[i])
+		if err != nil {
+			return err
+		}
+		cardIDByNote[noteIDByIndex[i]] = m
+	}
+	for _, pc := range pkg.Cards {
+		if pc.NoteIndex < 0 || pc.NoteIndex >= len(pkg.Notes) {
+			report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("cards[%s]", pc.Template), "note_index out of range"})
+			continue
+		}
+		m := cardIDByNote[noteIDByIndex[pc.NoteIndex]]
+		if _, ok := m[pc.Template]; !ok {
+			report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("cards[%s]", pc.Template), "declared template was not produced"})
+		}
+	}
+
+	// 媒体：按 sha256 落盘（已存在则跳过）；dry_run 只计数。
+	for sha, raw := range pkg.MediaRaw {
+		_ = raw
+		if opts.MediaRoot == "" {
+			continue
+		}
+		if existing, err := NewMediaStore(s.db).BySha256(ctx, sha); err == nil && existing == nil {
+			if _, err := NewMediaStore(s.db).SaveBytes(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID)); err != nil {
+				return err
+			}
+			report.MediaNew++
+		}
+	}
+
+	// 进度规则：只允许导入到自己的账号；包内 exported_by 与当前用户不同则默认丢弃并告知。
+	if pkg.Progress != nil && len(pkg.Progress.CardStates) > 0 {
+		sameOwner := pkg.Manifest.ExportedBy == "" || pkg.Manifest.ExportedBy == username
+		if !sameOwner && !opts.AllowOthersProgress {
+			report.ProgressDiscarded = true
+			report.ProgressSkipped = len(pkg.Progress.CardStates)
+		} else {
+			if err := s.applyProgress(ctx, tx, actorUserID, pkg, noteIDByIndex, cardIDByNote, createdNote, report); err != nil {
+				return err
+			}
+		}
+	}
+
+	if opts.OnConflict == "fail" && len(report.Errors) > 0 {
+		return &PackageError{Code: CodePackageBadFormat, Message: "import aborted: one or more entries conflict or are invalid", Entries: errorEntries(report.Errors)}
+	}
+	if opts.DryRun {
+		return ErrPackageDryRun
+	}
+	return nil
+}
+
+// resolveTargetDeck 解析三种目标并返回目标卡组 id；new_deck 会用包内卡组名建卡组与预设。
+func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions) (uint64, error) {
+	switch targetKind {
+	case PackageTargetNewDeck:
+		name := opts.NewDeckName
+		if name == "" {
+			name = pkg.Manifest.Deck.Name
+		}
+		if name == "" {
+			name = "Imported deck"
+		}
+		name, err := uniqueDeckName(ctx, tx, actorUserID, name)
+		if err != nil {
+			return 0, err
+		}
+		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset)
+		if err != nil {
+			return 0, err
+		}
+		d := Deck{
+			OwnerUserID: actorUserID, Name: name, Description: pkg.Manifest.Deck.Description,
+			Visibility: DeckVisibilityPrivate, PresetID: presetID, CreatedAt: opts.Now().UTC(),
+		}
+		if err := tx.WithContext(ctx).Create(&d).Error; err != nil {
+			return 0, fmt.Errorf("import package: create deck: %w", err)
+		}
+		return d.ID, nil
+	case "into_deck", "replace_deck":
+		var d Deck
+		if err := tx.WithContext(ctx).First(&d, "id = ?", targetDeckID).Error; err != nil {
+			return 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck not found"}
+		}
+		return d.ID, nil
+	default:
+		return 0, &PackageError{Code: CodePackageBadFormat, Message: "unknown target"}
+	}
+}
+
+// uniqueDeckName 在重名时追加 (2)、(3)… 后缀（DESIGN.md §7.6）。
+func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string) (string, error) {
+	var names []string
+	if err := tx.WithContext(ctx).Model(&Deck{}).Where("owner_user_id = ?", owner).
+		Pluck("name", &names).Error; err != nil {
+		return "", fmt.Errorf("list deck names: %w", err)
+	}
+	taken := map[string]bool{}
+	for _, n := range names {
+		taken[n] = true
+	}
+	if !taken[name] {
+		return name, nil
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s (%d)", name, i)
+		if !taken[candidate] {
+			return candidate, nil
+		}
+	}
+}
+
+// createPresetFromPackage 用包内参数新建一个属于 actorUserID 的预设。
+func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset) (uint64, error) {
+	now := time.Now().UTC()
+	p := Preset{
+		OwnerUserID: owner, Name: pp.Name, DesiredRetention: pp.DesiredRetention,
+		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
+		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: pp.EnableFuzz,
+		WeightsReviewCount: pp.WeightsReviewCount, CreatedAt: now, UpdatedAt: now,
+	}
+	if p.Name == "" {
+		p.Name = "Imported"
+	}
+	if p.DesiredRetention <= 0 || p.DesiredRetention > 1 {
+		p.DesiredRetention = DefaultDesiredRetention
+	}
+	if p.MaximumIntervalDays <= 0 {
+		p.MaximumIntervalDays = DefaultMaximumIntervalDays
+	}
+	if pp.Weights != nil {
+		raw, err := json.Marshal(pp.Weights)
+		if err != nil {
+			return 0, err
+		}
+		s := string(raw)
+		p.WeightsJSON = &s
+	}
+	if pp.WeightsOptimizedAt != nil {
+		if t, err := time.Parse(time.RFC3339, *pp.WeightsOptimizedAt); err == nil {
+			p.WeightsOptimizedAt = &t
+		}
+	}
+	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
+		return 0, fmt.Errorf("import package: create preset: %w", err)
+	}
+	// enable_fuzz 带 default:true 标签，false 会被数据库默认值覆盖，显式补一次（同 PresetStore.Create）。
+	if !p.EnableFuzz {
+		if err := tx.WithContext(ctx).Model(&Preset{}).Where("id = ?", p.ID).Update("enable_fuzz", false).Error; err != nil {
+			return 0, fmt.Errorf("import package: disable fuzz: %w", err)
+		}
+	}
+	return p.ID, nil
+}
+
+// existingNoteIndex 建立目标卡组的现有 note 索引：external_ref → note，指纹 → note。
+func (s *DeckStore) existingNoteIndex(ctx context.Context, tx *gorm.DB, deckID uint64) (map[string]*Note, map[string]*Note, error) {
+	var notes []Note
+	if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Find(&notes).Error; err != nil {
+		return nil, nil, fmt.Errorf("load existing notes: %w", err)
+	}
+	byRef := map[string]*Note{}
+	byFP := map[string]*Note{}
+	for i := range notes {
+		n := &notes[i]
+		if n.ExternalRef != nil && *n.ExternalRef != "" {
+			byRef[*n.ExternalRef] = n
+		}
+		byFP[NoteFingerprint(n.Kind, n.FieldsJSON)] = n
+	}
+	return byRef, byFP, nil
+}
+
+// fingerprintFromFields 计算包内 note 的内容指纹（与 NoteFingerprint 同一算法）。
+func fingerprintFromFields(kind string, fields map[string]any) string {
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		raw = []byte("{}")
+	}
+	return NoteFingerprint(kind, string(raw))
+}
+
+// cardTemplatesTx 返回某 note 的 template → card id 映射（含软删除行）。
+func cardTemplatesTx(ctx context.Context, tx *gorm.DB, noteID uint64) (map[string]uint64, error) {
+	var cards []Card
+	if err := tx.WithContext(ctx).Unscoped().Where("note_id = ?", noteID).Find(&cards).Error; err != nil {
+		return nil, fmt.Errorf("list cards for note %d: %w", noteID, err)
+	}
+	m := make(map[string]uint64, len(cards))
+	for _, c := range cards {
+		m[c.Template] = c.ID
+	}
+	return m, nil
+}
+
+// applyProgress 把包内进度映射到新 card 上，只写入 actorUserID 自己的账号。
+func (s *DeckStore) applyProgress(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *packageModel, noteIDByIndex []uint64, cardIDByNote map[uint64]map[string]uint64, createdNote []bool, report *PackageImportReport) error {
+	// external_ref → note_index（进度也可以只用 external_ref 定位）。
+	refIndex := map[string]int{}
+	for i := range pkg.Notes {
+		if pkg.Notes[i].ExternalRef != "" {
+			refIndex[pkg.Notes[i].ExternalRef] = i
+		}
+	}
+	resolve := func(noteIndex *int, ref, template string) (uint64, bool) {
+		idx := -1
+		if noteIndex != nil {
+			idx = *noteIndex
+		} else if ref != "" {
+			if v, ok := refIndex[ref]; ok {
+				idx = v
+			}
+		}
+		if idx < 0 || idx >= len(noteIDByIndex) || noteIDByIndex[idx] == 0 {
+			return 0, false
+		}
+		m := cardIDByNote[noteIDByIndex[idx]]
+		if m == nil {
+			return 0, false
+		}
+		// template 缺省时取第一张卡（进度条目允许省略 template）。
+		if template == "" {
+			for _, id := range m {
+				return id, true
+			}
+			return 0, false
+		}
+		id, ok := m[template]
+		return id, ok
+	}
+
+	for _, ps := range pkg.Progress.CardStates {
+		cardID, ok := resolve(ps.NoteIndex, ps.ExternalRef, ps.Template)
+		if !ok {
+			report.ProgressSkipped++
+			continue
+		}
+		row := CardState{
+			CardID: cardID, UserID: actorUserID, State: ps.State,
+			StepIndex: ps.StepIndex, Stability: ps.Stability, Difficulty: ps.Difficulty,
+			Reps: ps.Reps, Lapses: ps.Lapses, ScheduledDays: ps.ScheduledDays,
+			ElapsedDays: ps.ElapsedDays, Version: ps.Version,
+		}
+		row.DueAt = parseTimePtr(ps.DueAt)
+		row.LastReviewAt = parseTimePtr(ps.LastReviewAt)
+		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "card_id"}, {Name: "user_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"state", "due_at", "step_index", "stability", "difficulty", "reps", "lapses", "scheduled_days", "elapsed_days", "last_review_at", "version"}),
+		}).Create(&row).Error; err != nil {
+			return fmt.Errorf("apply progress for card %d: %w", cardID, err)
+		}
+		report.ProgressApplied++
+	}
+
+	// 复习日志只随新建的 note 写入，避免同一包二次导入时重复插入 append-only 行。
+	for _, pr := range pkg.Progress.Reviews {
+		idx := -1
+		if pr.NoteIndex != nil {
+			idx = *pr.NoteIndex
+		} else if pr.ExternalRef != "" {
+			if v, ok := refIndex[pr.ExternalRef]; ok {
+				idx = v
+			}
+		}
+		if idx < 0 || idx >= len(pkg.Notes) || !createdNote[idx] {
+			continue
+		}
+		cardID, ok := resolve(&idx, "", pr.Template)
+		if !ok {
+			continue
+		}
+		reviewedAt, err := time.Parse(time.RFC3339, pr.ReviewedAt)
+		if err != nil {
+			continue
+		}
+		src := pr.GradeSource
+		if src == "" {
+			src = "self"
+		}
+		row := Review{
+			CardID: cardID, UserID: actorUserID, Rating: pr.Rating, GradeSource: src,
+			ReviewedAt: reviewedAt.UTC(), ReviewDay: pr.ReviewDay, ElapsedMS: pr.ElapsedMS,
+			DurationDays: pr.DurationDays, StateBefore: pr.StateBefore,
+			IntervalDays: pr.IntervalDays, Stability: pr.Stability, Difficulty: pr.Difficulty,
+		}
+		if row.ReviewDay == "" {
+			row.ReviewDay = reviewedAt.UTC().Format("2006-01-02")
+		}
+		if err := tx.WithContext(ctx).Create(&row).Error; err != nil {
+			return fmt.Errorf("apply review for card %d: %w", cardID, err)
+		}
+	}
+	return nil
+}
+
+func parseTimePtr(s *string) *time.Time {
+	if s == nil || *s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, *s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func errorEntries(errs []PackageImportError) []string {
+	out := make([]string, 0, len(errs))
+	for _, e := range errs {
+		out = append(out, e.Entry+": "+e.Reason)
+	}
+	return out
+}
