@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
@@ -249,7 +250,8 @@ func registrationDenialKey(err error) string {
 //  2. 携带有效邀请 token —— 一次性、可限定邮箱、可设过期；角色取自邀请；
 //  3. 否则读 settings 里的注册策略与邮箱域名白名单判定（open / invite / closed）。
 //
-// 邀请先原子抢占再建号：抢占失败说明 token 已被使用，必须放弃；建号失败则回滚抢占。
+// 邀请接受是单一事务（B-12）：占用 token 与建号在同一事务里提交或回滚，
+// 外界看不到“已使用→又变可用”的中间态；条件更新保证并发下一码一用。
 func (s *Server) registerSubmit(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
@@ -313,43 +315,40 @@ func (s *Server) registerSubmit(c *gin.Context) {
 		}
 	}
 
-	// 邀请一次性：先原子抢占，避免并发下用同一个 token 建出两个用户。
-	if invite != nil {
-		claimed, err := s.invites.MarkUsed(ctx, invite.Token, now)
-		if err != nil {
-			s.logger.Error("claim invite failed", "error", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		if !claimed {
-			s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T("auth.error.invite_invalid"))
-			return
-		}
-	}
-
-	u, err := s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+	input := auth.CreateUserInput{
 		Username:    username,
 		Email:       email,
 		DisplayName: display,
 		Password:    password,
 		Role:        role,
 		Locale:      loc.Locale(),
-	})
-	if err != nil {
-		if invite != nil {
-			// 建号失败不得吞掉邀请：回滚抢占，让管理员仍能再次使用该 token。
-			if rerr := s.invites.Release(ctx, invite.Token); rerr != nil {
-				s.logger.Error("release invite failed", "error", rerr)
-			}
-		}
-		s.logger.Error("create local user failed", "username", username, "error", err)
-		s.renderRegister(c, loc, http.StatusConflict, inviteToken, loc.T("auth.error.create_failed"))
-		return
 	}
+
+	var u *store.User
 	if invite != nil {
-		if err := s.invites.SetUsedBy(ctx, invite.Token, u.ID); err != nil {
-			s.logger.Error("set invite used_by failed", "invite_id", invite.ID, "error", err)
+		// 邀请接受事务化（B-12）：Accept 在一个事务里占用 token、建号并回填 used_by。
+		// 建号失败时整体回滚，token 保持可用；并发下条件更新保证只有一个请求能占用成功。
+		created, aerr := s.invites.Accept(ctx, invite.Token, now, func(tx *gorm.DB) (*store.User, error) {
+			return s.accounts.CreateLocalUserTx(ctx, tx, input)
+		})
+		if aerr != nil {
+			if errors.Is(aerr, store.ErrInviteUsed) {
+				s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T("auth.error.invite_invalid"))
+				return
+			}
+			s.logger.Error("create local user failed", "username", username, "error", aerr)
+			s.renderRegister(c, loc, http.StatusConflict, inviteToken, loc.T("auth.error.create_failed"))
+			return
 		}
+		u = created
+	} else {
+		created, cerr := s.accounts.CreateLocalUser(ctx, input)
+		if cerr != nil {
+			s.logger.Error("create local user failed", "username", username, "error", cerr)
+			s.renderRegister(c, loc, http.StatusConflict, inviteToken, loc.T("auth.error.create_failed"))
+			return
+		}
+		u = created
 	}
 	s.audit(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),

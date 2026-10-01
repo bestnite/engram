@@ -17,7 +17,12 @@ func NewUserStore(db *gorm.DB) *UserStore { return &UserStore{db: db} }
 
 // Create 写入一个新用户；唯一约束冲突由调用方翻译成稳定错误码。
 func (s *UserStore) Create(ctx context.Context, u *User) error {
-	if err := s.db.WithContext(ctx).Create(u).Error; err != nil {
+	return s.CreateTx(ctx, s.db, u)
+}
+
+// CreateTx 在调用方给定的事务里写入新用户（B-12）：邀请占用与建号因此能共享同一个事务边界。
+func (s *UserStore) CreateTx(ctx context.Context, tx *gorm.DB, u *User) error {
+	if err := tx.WithContext(ctx).Create(u).Error; err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}
 	return nil
