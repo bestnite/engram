@@ -26,7 +26,7 @@ config.local.*
 /dist/
 *.test
 *.out
-coverage.*
+/coverage.*
 *.prof
 # Rust 优化器适配器（tools/optimizer）的构建输出
 tools/optimizer/target/

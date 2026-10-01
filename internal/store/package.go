@@ -605,30 +605,42 @@ func (s *MediaStore) BySha256(ctx context.Context, sha string) (*Media, error) {
 
 // SaveBytes 以内容寻址落盘一份媒体并写元数据；已存在（同 sha256）时幂等返回已有行。
 func (s *MediaStore) SaveBytes(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, error) {
+	m, _, err := s.SaveBytesTracked(ctx, root, mime, raw, createdBy)
+	return m, err
+}
+
+// SaveBytesTracked 与 SaveBytes 相同，但额外返回本次调用**实际新写入**的文件绝对路径；
+// 命中已有元数据（去重）或未落盘时返回空串。
+//
+// 卡组包导入用它登记“这次写了哪些文件”，事务随后失败回滚时据此清理——否则元数据行
+// 回滚而字节留在磁盘上，形成无人引用的孤儿文件（AGENTS.md M5-11）。
+func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, string, error) {
 	sum := sha256.Sum256(raw)
 	sha := hex.EncodeToString(sum[:])
 	if existing, err := s.BySha256(ctx, sha); err != nil {
-		return nil, err
+		return nil, "", err
 	} else if existing != nil {
-		return existing, nil
+		return existing, "", nil
 	}
 	ext := mimeExt(mime)
 	rel := filepath.Join(sha[:2], sha+"."+ext)
 	abs := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return nil, fmt.Errorf("media: create shard dir: %w", err)
+		return nil, "", fmt.Errorf("media: create shard dir: %w", err)
 	}
 	if err := os.WriteFile(abs, raw, 0o644); err != nil {
-		return nil, fmt.Errorf("media: write file: %w", err)
+		return nil, "", fmt.Errorf("media: write file: %w", err)
 	}
 	row := &Media{Sha256: sha, RelPath: rel, Mime: mime, Bytes: int64(len(raw)), CreatedBy: createdBy, CreatedAt: time.Now().UTC()}
 	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 		if existing, rerr := s.BySha256(ctx, sha); rerr == nil && existing != nil {
-			return existing, nil
+			// 并发下另一请求已提交同一 sha：文件被它引用，不算本次新写。
+			return existing, "", nil
 		}
-		return nil, fmt.Errorf("media: record metadata: %w", err)
+		// 元数据写入失败：本次写下的文件没有行引用它，把路径交给调用方按失败路径清理。
+		return nil, abs, fmt.Errorf("media: record metadata: %w", err)
 	}
-	return row, nil
+	return row, abs, nil
 }
 
 // mimeExt 把白名单 mime 映射成扩展名；未知类型回退 bin。

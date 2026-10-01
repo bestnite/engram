@@ -1387,4 +1387,35 @@
   translation: "{{.present}} / {{.total}}"
 - id: admin.i18n.all_complete
   translation: "Every language pack is complete."
+# ---- 错误目录（M4-9）：稳定英文 code → 本地化 message（键名 error.<code>）----
+- id: error.unauthorized
+  translation: "Authentication is required."
+- id: error.invalid_api_key
+  translation: "The API key is invalid, expired, or revoked."
+- id: error.scope_required
+  translation: "This API key does not have the required scope."
+- id: error.rate_limited
+  translation: "Rate limit exceeded. Try again later."
+- id: error.invalid_request
+  translation: "The request is invalid."
+- id: error.not_found
+  translation: "The requested resource was not found."
+- id: error.forbidden
+  translation: "You do not have access to this resource."
+- id: error.insufficient_role
+  translation: "Your role on this deck is not sufficient for this action."
+- id: error.conflict
+  translation: "The request conflicts with the current state."
+- id: error.version_conflict
+  translation: "The resource was changed by someone else. Reload and try again."
+- id: error.internal_error
+  translation: "An internal error occurred."
+- id: error.package_unsafe_entry
+  translation: "The package contains an unsafe entry."
+- id: error.package_too_large
+  translation: "The package exceeds the allowed size."
+- id: error.package_bad_format
+  translation: "The package format is invalid."
+- id: error.package_unknown_kind
+  translation: "The package contains a card type this instance does not know."
 

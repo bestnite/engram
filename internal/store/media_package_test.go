@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -163,4 +164,100 @@ func entryContains(entries []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// TestImportPackageRollbackLeavesNoOrphanMedia 是 M5-11 的验收测试：媒体写入发生在
+// 事务提交之前，若事务随后失败回滚，写下的字节必须一并清理，不能留下无人引用的孤儿文件。
+//
+// 构造方式：目标卡组里预置一条与包内 note 同 external_ref 的记录，配合 on_conflict=fail
+// 让导入在“媒体已落盘、note 已判定冲突”之后整体失败。冲突判定发生在媒体写入之后
+// （见 importInTx 的顺序），因此这条路径确实会先写文件再回滚。
+//
+// 断言两侧：媒体分片目录存在（证明写盘路径真的执行过，测试没有空转）且文件已被清掉，
+// 同时元数据行不存在。
+func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
+	srcs := packageDatabases(t)
+	dsts := packageDatabases(t)
+	for driver, src := range srcs {
+		dst := dsts[driver]
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, src, "pkg_orphan_owner")[0]
+			srcDeck := seedPresetDeck(t, src, owner)
+			srcRoot := t.TempDir()
+
+			raw := append([]byte("\x89PNG\r\n\x1a\n"), []byte("orphan-media-payload")...)
+			sum := sha256.Sum256(raw)
+			sha := hex.EncodeToString(sum[:])
+			m, err := NewMediaStore(src).SaveBytes(ctx, srcRoot, "image/png", raw, Ptr(owner))
+			if err != nil {
+				t.Fatalf("SaveBytes: %v", err)
+			}
+			if m.Sha256 != sha {
+				t.Fatalf("seeded media sha = %s, want %s", m.Sha256, sha)
+			}
+			srcNote := Note{DeckID: srcDeck, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner), ExternalRef: Ptr("ext:conflict")}
+			if _, err := NewNoteStore(src).Create(ctx, &srcNote, map[string]any{
+				"front": "q?", "back": "media/" + sha + ".png",
+			}); err != nil {
+				t.Fatalf("create source note: %v", err)
+			}
+			rawZip := exportZip(t, src, owner, srcDeck, PackageOptions{IncludeMedia: true, MediaRoot: srcRoot})
+
+			importer := seedUsers(t, dst, "pkg_orphan_importer")[0]
+			dstDeck := seedPresetDeck(t, dst, importer)
+			// 预置同 external_ref 的 note，让包内 note 命中冲突（on_conflict=fail → 整包回滚）。
+			pre := Note{DeckID: dstDeck, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(importer), ExternalRef: Ptr("ext:conflict")}
+			if _, err := NewNoteStore(dst).Create(ctx, &pre, map[string]any{"front": "already here", "back": "x"}); err != nil {
+				t.Fatalf("create conflicting note: %v", err)
+			}
+
+			dstRoot := t.TempDir()
+			target := "into_deck:" + strconv.FormatUint(dstDeck, 10)
+			_, err = NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(rawZip), PackageImportOptions{
+				Target: target, OnConflict: "fail", MediaRoot: dstRoot,
+			})
+			if err == nil {
+				t.Fatal("ImportPackage succeeded, want a conflict failure after the media write")
+			}
+			var pe *PackageError
+			if !errors.As(err, &pe) {
+				t.Fatalf("error = %v, want *PackageError", err)
+			}
+
+			// 元数据行必须随事务回滚。
+			row, err := NewMediaStore(dst).BySha256(ctx, sha)
+			if err != nil {
+				t.Fatalf("load media metadata: %v", err)
+			}
+			if row != nil {
+				t.Fatalf("rolled-back import left media metadata %+v", row)
+			}
+			// 写盘路径确实执行过：分片目录是 MkdirAll 建的，清理只删文件不删目录。
+			shardDir := filepath.Join(dstRoot, sha[:2])
+			if fi, err := os.Stat(shardDir); err != nil || !fi.IsDir() {
+				t.Fatalf("shard dir %s missing (err=%v); the media write path did not run", shardDir, err)
+			}
+			// 关键断言：没有任何孤儿文件残留。
+			orphan := filepath.Join(shardDir, sha+".png")
+			if _, err := os.Stat(orphan); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("orphan media file %s survived the rollback (err=%v)", orphan, err)
+			}
+			var files int
+			if err := filepath.WalkDir(dstRoot, func(_ string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if !d.IsDir() {
+					files++
+				}
+				return nil
+			}); err != nil {
+				t.Fatalf("walk media root: %v", err)
+			}
+			if files != 0 {
+				t.Fatalf("media root %s still holds %d orphan file(s)", dstRoot, files)
+			}
+		})
+	}
 }

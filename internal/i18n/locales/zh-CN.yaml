@@ -1385,4 +1385,35 @@
   translation: "{{.present}} / {{.total}}"
 - id: admin.i18n.all_complete
   translation: "全部语言包完整。"
+# ---- 错误目录（M4-9）：稳定英文 code → 本地化 message（键名 error.<code>）----
+- id: error.unauthorized
+  translation: "需要先通过身份验证。"
+- id: error.invalid_api_key
+  translation: "API 密钥无效、已过期或已被撤销。"
+- id: error.scope_required
+  translation: "该 API 密钥缺少所需的权限范围。"
+- id: error.rate_limited
+  translation: "请求过于频繁，请稍后再试。"
+- id: error.invalid_request
+  translation: "请求不合法。"
+- id: error.not_found
+  translation: "未找到请求的资源。"
+- id: error.forbidden
+  translation: "你无权访问该资源。"
+- id: error.insufficient_role
+  translation: "你在该卡组中的角色不足以执行此操作。"
+- id: error.conflict
+  translation: "请求与当前状态冲突。"
+- id: error.version_conflict
+  translation: "该资源已被他人修改，请刷新后重试。"
+- id: error.internal_error
+  translation: "服务器内部错误。"
+- id: error.package_unsafe_entry
+  translation: "卡组包中包含不安全的条目。"
+- id: error.package_too_large
+  translation: "卡组包超出允许的大小。"
+- id: error.package_bad_format
+  translation: "卡组包格式不合法。"
+- id: error.package_unknown_kind
+  translation: "卡组包中包含本实例无法识别的题型。"
 

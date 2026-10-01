@@ -86,7 +86,7 @@ func (a *API) importNotes(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req ImportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "request body must be valid JSON")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	resp, err := a.ImportNotes(ctx, u.ID, deckID, CurrentAPIKeyID(c), req)
@@ -113,7 +113,7 @@ func (a *API) updateNote(c *gin.Context) {
 	}
 	var req updateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "request body must be valid JSON")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	updated, err := a.UpdateNote(c.Request.Context(), u.ID, noteID, CurrentAPIKeyID(c), UpdateNoteInput{

@@ -24,14 +24,14 @@ func (a *API) exportCards(c *gin.Context) {
 	if raw := c.Query("deck"); raw != "" {
 		id, err := strconv.ParseUint(raw, 10, 64)
 		if err != nil || id == 0 {
-			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "deck must be a positive integer")
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 			return
 		}
 		deckID = id
 	}
 	format := c.DefaultQuery("format", "json")
 	if format != "json" && format != "csv" {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "format must be json or csv")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	includeProgress := c.Query("include_progress") == "1"

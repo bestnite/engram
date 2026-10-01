@@ -96,7 +96,7 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		abortError(c, http.StatusUnauthorized, CodeUnauthorized, "authentication required")
+		abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
 	}
 }
 
@@ -116,7 +116,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	u, err := a.users.ByID(ctx, key.UserID)
 	if err != nil || u.Status != store.StatusActive {
 		// 用户被禁用或删除后，其 key 立即失效（权限边界与网页登录一致）。
-		abortError(c, http.StatusUnauthorized, CodeUnauthorized, "user is not active")
+		abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
 		return
 	}
 
@@ -126,7 +126,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	}
 	if !limiter.Allow(fmt.Sprintf("key:%d", key.ID)) {
 		c.Header("Retry-After", "60")
-		abortError(c, http.StatusTooManyRequests, CodeRateLimited, "rate limit exceeded")
+		abortError(c, http.StatusTooManyRequests, CodeRateLimited, "")
 		return
 	}
 
@@ -150,8 +150,7 @@ func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if key, ok := CurrentAPIKey(c); ok {
 			if !key.HasScope(scope) {
-				abortError(c, http.StatusForbidden, CodeScopeRequired,
-					"api key is missing the required scope: "+scope)
+				abortError(c, http.StatusForbidden, CodeScopeRequired, scope)
 				return
 			}
 			c.Next()
@@ -159,11 +158,11 @@ func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 		}
 		u, ok := CurrentUser(c)
 		if !ok {
-			abortError(c, http.StatusUnauthorized, CodeUnauthorized, "authentication required")
+			abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
 			return
 		}
 		if scope == store.ScopeAdmin && u.Role != store.RoleAdmin {
-			abortError(c, http.StatusForbidden, CodeScopeRequired, "administrator role is required")
+			abortError(c, http.StatusForbidden, CodeScopeRequired, "")
 			return
 		}
 		c.Next()

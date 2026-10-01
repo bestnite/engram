@@ -40,7 +40,7 @@ func (a *API) dueCards(c *gin.Context) {
 	if raw := c.Query("deck"); raw != "" {
 		id, err := strconv.ParseUint(raw, 10, 64)
 		if err != nil || id == 0 {
-			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "deck must be a positive integer")
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 			return
 		}
 		deckID = id
@@ -67,7 +67,7 @@ func (a *API) submitReview(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req submitReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "request body must be valid JSON")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	result, err := a.SubmitReview(c.Request.Context(), u, CurrentAPIKeyID(c), SubmitReviewInput{
