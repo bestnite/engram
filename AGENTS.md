@@ -589,7 +589,7 @@ Conventions:
   kill of the process group, log tail capture.
   *Acceptance:* a second request while a job runs returns `409`; a hung adapter is killed
   at the configured timeout and the job is marked failed.
-- [ ] **M9-2 Optimiser adapter** — a small Rust binary around the `fsrs-rs` optimiser with
+- [x] **M9-2 Optimiser adapter** — a small Rust binary around the `fsrs-rs` optimiser with
   a documented contract: reads the standard review-log format, writes the 21-element
   weight array as JSON.
   *Acceptance:* an adapter run on a fixed fixture produces the same weights on two
@@ -697,7 +697,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 7/8 · M6 2/10 · M7 2/4 · M8 2/6 · M9 3/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 7/8 · M6 2/10 · M7 2/4 · M8 2/6 · M9 4/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
