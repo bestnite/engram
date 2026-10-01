@@ -320,23 +320,34 @@ Conventions:
   bulk actions.
   *Acceptance:* page renders 100 notes with paging intact; preview updates over htmx
   without a full reload.
-- [ ] **M2-8 Media storage** — sha256 dedupe, `<sha256[:2]>/<sha256>.<ext>` layout,
+- [x] **M2-8 Media storage** — sha256 dedupe, `<sha256[:2]>/<sha256>.<ext>` layout,
   temp-file plus rename writes, `GET /media/:id` proxy with `ETag` and immutable caching,
   mime plus magic-byte validation, admin-configured size limit.
   *Acceptance:* uploading the same file twice stores one blob; an oversized or
   wrong-magic file is rejected with a stable error code.
 - [ ] **M2-10 Card type labels in the catalogs** — `internal/cardtype` returns translation keys
-  (`cardtype.basic`, `cardtype.basic_both`, `cardtype.cloze`, `cardtype.list`); add those keys to
-  `internal/i18n/locales/zh-CN.yaml` and `en.yaml` so the parity test passes and the labels render.
-  *Acceptance:* both catalogs contain every registered type's key; a test enumerating `Registry.Kinds()`
-  fails if any key is missing from either catalog.
-- [ ] **M2-11 Deck list and deck creation UI** — `DESIGN.md` §8.1 lists `/decks` as a page and the
+  It now covers **all ten registered types** (`basic`, `basic_both`, `cloze`, `list`, `typed`,
+  `numeric`, `choice_single`, `choice_multi`, `true_false`, `short_answer`), and the editor also
+  needs the field labels for the graded types (`note.field.question`, `.answer`, `.accept`,
+  `.options`, `.answers`, `.statement`, `.value`, `.unit`, `.tolerance_absolute`,
+  `.tolerance_relative`, `.ignore_case`, `.ignore_whitespace`, `.regex`). Add every key to
+  `internal/i18n/locales/zh-CN.yaml` and `en.yaml`.
+  *Acceptance:* a test enumerating `Registry.Kinds()` fails if any type label is missing from either
+  catalog, and the note editor renders a label (not a raw key) for every field of every type.
+- [x] **M2-11 Deck list and deck creation UI** — `DESIGN.md` §8.1 lists `/decks` as a page and the
   store layer can create decks, but no route or template exists: a smoke run of the real binary
   answers `GET /decks` with `404`, so a user cannot create a deck in the browser at all. Add the
   deck list page and a creation form (name, description, preset selection), with the usual i18n,
   CSRF and audit wiring, and link it from the home page.
   *Acceptance:* a logged-in user can create a deck in the browser and sees it listed; the new deck
   is selectable when creating notes; an anonymous request is redirected to login.
+- [ ] **M2-12 Create-note UI** — there is no way to create a note in the browser: the editor only
+  edits notes that already exist, so the deck page cannot be used to author cards at all (noted by a
+  lane that tried to satisfy M2-11's "the new deck is selectable when creating notes"). Add a create
+  form on the deck page: pick a card type, fill its fields (per `DESIGN.md` §6.2), preview through
+  `internal/render`, save through `NoteStore`. Card types come from `Registry.Kinds()`.
+  *Acceptance:* a logged-in user creates one note per card type in the browser and sees the expected
+  number of cards per note; the form rejects an invalid field set with a localised message.
 - [ ] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
 
@@ -363,7 +374,7 @@ Conventions:
   prefetch in the same response, remaining counters.
   *Acceptance:* an `httptest` walk of 20 cards completes with no extra round trip per
   rating and shows correct counters.
-- [ ] **M3-6 Graded types** — `typed`, `numeric`, `choice_single`, `choice_multi`,
+- [x] **M3-6 Graded types** — `typed`, `numeric`, `choice_single`, `choice_multi`,
   `true_false` with their graders, plus the configurable score-to-rating mapping stored
   in the preset.
   *Acceptance:* tolerance tests cover case, whitespace, multiple accepted answers,
@@ -417,12 +428,12 @@ Conventions:
 - [ ] **M4-5 Export** — JSON and CSV, optional progress columns, streamed for large decks.
   *Acceptance:* export of 10k notes streams without buffering the whole set in memory
   (asserted by a peak-allocation check or a streaming test double).
-- [ ] **M4-6 MCP server** — `modelcontextprotocol/go-sdk` over HTTP at `/mcp`, bearer key
+- [x] **M4-6 MCP server** — `modelcontextprotocol/go-sdk` over HTTP at `/mcp`, bearer key
   authentication, tool list filtered by the key's scopes at handshake, scope re-checked
   on every call.
   *Acceptance:* a client with only `read` sees no write tools in `tools/list` and gets a
   permission error when calling one by name.
-- [ ] **M4-7 MCP tools** — `list_decks`, `search_notes`, `get_stats`, `export_deck`
+- [x] **M4-7 MCP tools** — `list_decks`, `search_notes`, `get_stats`, `export_deck`
   (read); `create_notes`, `update_note`, `delete_note`, `import_deck` (write);
   `get_due_cards`, `submit_review` (review).
   *Acceptance:* each tool has a test calling the same service method as its REST
@@ -649,7 +660,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 7/11 · M3 8/10 · M4 4/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 10/14 · M2 9/12 · M3 9/10 · M4 6/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
