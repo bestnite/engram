@@ -476,6 +476,128 @@ func (s *StatsStore) GradeSourceDistribution(ctx context.Context, userID uint64)
 	return out, nil
 }
 
+// StreakStats 是连续打卡结果（DESIGN.md §9「连续打卡」）。
+type StreakStats struct {
+	// Current 是到「今天」为止仍未中断的连续复习天数；今天尚未复习不算断，
+	// 但整整一个复习日被跳过（今天与昨天都没有复习）则为 0。
+	Current int
+	// Longest 是历史最长连续复习天数。
+	Longest int
+}
+
+// Streak 计算连续复习天数。口径按 review_day（复习日字符串，已由调用方按切点算好）：
+// 相邻两个复习日都出现过复习才算连续。判定「今天」时用 now 与切点现算，因此凌晨
+// 03:59 的一次复习仍算前一天 —— 只有整整一个复习日被跳过，连续才会中断
+// （AGENTS.md M7-2 验收）。now/loc/cutoffHour 由调用方传入，函数不读挂钟。
+func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (StreakStats, error) {
+	if userID == 0 {
+		return StreakStats{}, fmt.Errorf("streak: user id is required")
+	}
+	today := reviewDayString(now, loc, cutoffHour)
+
+	var days []string
+	sql := `SELECT DISTINCT review_day FROM reviews WHERE user_id = ? AND review_day <= ? ORDER BY review_day ASC`
+	if err := s.db.WithContext(ctx).Raw(sql, userID, today).Scan(&days).Error; err != nil {
+		return StreakStats{}, fmt.Errorf("streak: %w", err)
+	}
+	if len(days) == 0 {
+		return StreakStats{}, nil
+	}
+
+	present := make(map[string]bool, len(days))
+	for _, d := range days {
+		present[d] = true
+	}
+
+	// 最长连续段：扫描升序日期，遇到不连续的日期就重开一段。
+	longest, run := 0, 0
+	for i, d := range days {
+		if i > 0 && d == nextReviewDay(days[i-1]) {
+			run++
+		} else {
+			run = 1
+		}
+		if run > longest {
+			longest = run
+		}
+	}
+
+	// 当前连续段：从最后一天往回数，但仅当最后一天是今天或昨天时才算「未中断」。
+	current := 0
+	last := days[len(days)-1]
+	if last == today || last == prevReviewDay(today) {
+		for d := last; present[d]; d = prevReviewDay(d) {
+			current++
+		}
+	}
+	return StreakStats{Current: current, Longest: longest}, nil
+}
+
+// LearningCurvePoint 是学习曲线上的一个复习日（DESIGN.md §9「学习曲线」）。
+type LearningCurvePoint struct {
+	Day string
+	// New 是当天「新引入」的卡数：state_before = New 的首次复习。
+	New int64
+	// Review 是当天对已见过卡（state_before != New）的复习次数。
+	Review int64
+}
+
+// LearningCurve 返回 [fromDay, toDay] 内每个有复习记录的复习日的「新引入 vs 复习量」，
+// 按日期升序。新引入口径是 state_before = New，其余算复习量，两者互斥、相加即当天总量。
+// fromDay/toDay 是 review_day 格式的闭区间，与 §9 其余指标一致。
+func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, toDay string) ([]LearningCurvePoint, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("learning curve: user id is required")
+	}
+	var rows []struct {
+		Day    string `gorm:"column:day"`
+		New    int64  `gorm:"column:new_count"`
+		Review int64  `gorm:"column:review_count"`
+	}
+	sql := `SELECT review_day AS day,
+		COALESCE(SUM(CASE WHEN state_before = ? THEN 1 ELSE 0 END), 0) AS new_count,
+		COALESCE(SUM(CASE WHEN state_before <> ? THEN 1 ELSE 0 END), 0) AS review_count
+		FROM reviews WHERE user_id = ? AND review_day >= ? AND review_day <= ?
+		GROUP BY review_day ORDER BY review_day ASC`
+	if err := s.db.WithContext(ctx).Raw(sql, reviewStateNew, reviewStateNew, userID, fromDay, toDay).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("learning curve: %w", err)
+	}
+	out := make([]LearningCurvePoint, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LearningCurvePoint{Day: r.Day, New: r.New, Review: r.Review})
+	}
+	return out, nil
+}
+
+// reviewStateNew 是 reviews.state_before 的 New 取值（DESIGN.md §2.2：0=New）。
+const reviewStateNew = 0
+
+// reviewDayString 返回 now 所在复习日（YYYY-MM-DD）；口径与 reviewDayStart 一致，
+// 即本地时间减切点小时取日期，默认切点 04:00。
+func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
+	return reviewDayStart(now, loc, cutoffHour).In(locOrUTC(loc)).Format("2006-01-02")
+}
+
+// prevReviewDay / nextReviewDay 是复习日字符串的相邻日运算。
+func prevReviewDay(day string) string { return shiftReviewDay(day, -1) }
+func nextReviewDay(day string) string { return shiftReviewDay(day, 1) }
+
+func shiftReviewDay(day string, delta int) string {
+	t, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return day
+	}
+	return t.AddDate(0, 0, delta).Format("2006-01-02")
+}
+
+// locOrUTC 归一化时区，避免 reviewDayStart 在 loc 为 nil 时回退 UTC、这里却用 nil。
+func locOrUTC(loc *time.Location) *time.Location {
+	if loc == nil {
+		return time.UTC
+	}
+	return loc
+}
+
 // reviewDayStart 返回 now 所在复习日的起点（本地日期 + 切点小时），转成 UTC。
 // 与 schedule.ReviewDay 的口径一致（本地时间减切点取日期）；store 不能 import schedule
 // （schedule 依赖 store，会成环），因此在这里保留一份最小实现。
