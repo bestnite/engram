@@ -1,13 +1,14 @@
 // 模块路径是占位符：项目正式名未定，定名后全局替换（见 DESIGN.md §13 #1、AGENTS.md B-1）。
 module example.com/flashcard
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/a-h/templ v0.3.1020
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
+	github.com/open-spaced-repetition/go-fsrs/v4 v4.0.0
 	golang.org/x/crypto v0.48.0
 	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
