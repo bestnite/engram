@@ -4,11 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
+
+// newGormLogger 让 GORM 的诊断也走标准库 log（英文）。
+// IgnoreRecordNotFoundError 是必需的：schema_version 首次读取、按条件查询无结果都属于正常流程，
+// 默认配置会把它们打成错误行，掩盖真正的故障。
+func newGormLogger() gormlogger.Interface {
+	return gormlogger.New(log.New(os.Stderr, "", log.LstdFlags), gormlogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  gormlogger.Warn,
+		IgnoreRecordNotFoundError: true,
+		Colorful:                  false,
+	})
+}
 
 // Open 按 DB_DRIVER 打开数据库连接；只支持两种驱动（DESIGN.md §10.1）。
 func Open(driver, dsn string) (*gorm.DB, error) {
@@ -21,7 +37,7 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	default:
 		return nil, fmt.Errorf("unsupported DB_DRIVER %q: use \"sqlite\" or \"postgres\"", driver)
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{})
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger()})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
