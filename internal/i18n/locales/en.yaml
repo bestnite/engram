@@ -1188,3 +1188,131 @@
   translation: "A valid issuer is required when OIDC is enabled."
 - id: admin.oidc.notice.failed
   translation: "The operation failed."
+# ---- M7-3 statistics page (/stats) ----
+# New sections use the stats. prefix and are appended at the end of the file so
+# parallel lanes can merge without reordering existing lines.
+- id: stats.title
+  translation: "Statistics"
+- id: stats.heading
+  translation: "Statistics and insights"
+- id: stats.intro
+  translation: "Every number is aggregated from the review log and card states; the definitions are in section 9 of the design document."
+- id: stats.empty
+  translation: "No data to chart yet. Start reviewing and the charts will appear here."
+- id: stats.volume.heading
+  translation: "Review volume"
+- id: stats.volume.today
+  translation: "Today"
+- id: stats.volume.last7
+  translation: "Last 7 days"
+- id: stats.volume.last30
+  translation: "Last 30 days"
+- id: stats.volume.value
+  translation: "{{.count}}"
+- id: stats.due.heading
+  translation: "Due forecast"
+- id: stats.due.today
+  translation: "Today (including overdue)"
+- id: stats.due.tomorrow
+  translation: "Tomorrow"
+- id: stats.due.within7
+  translation: "Within 7 days"
+- id: stats.due.within30
+  translation: "Within 30 days"
+- id: stats.due.later
+  translation: "Later"
+- id: stats.due.new_not_due
+  translation: "New cards (not scheduled)"
+- id: stats.due.value
+  translation: "{{.count}}"
+- id: stats.retention.heading
+  translation: "Retention"
+- id: stats.retention.intro
+  translation: "Share of due reviews not rated Again, bucketed by stability."
+- id: stats.retention.overall
+  translation: "Overall"
+- id: stats.retention.rate
+  translation: "{{.rate}}% ({{.passed}}/{{.total}})"
+- id: stats.retention.bucket.lt1
+  translation: "Under 1 day"
+- id: stats.retention.bucket.d1_7
+  translation: "1–7 days"
+- id: stats.retention.bucket.d7_30
+  translation: "7–30 days"
+- id: stats.retention.bucket.d30_90
+  translation: "30–90 days"
+- id: stats.retention.bucket.d90_180
+  translation: "90–180 days"
+- id: stats.retention.bucket.d180_365
+  translation: "180–365 days"
+- id: stats.retention.bucket.d365plus
+  translation: "365+ days"
+- id: stats.time.heading
+  translation: "Time spent"
+- id: stats.time.total
+  translation: "Total: {{.ms}} ms"
+- id: stats.time.avg
+  translation: "Average: {{.ms}} ms"
+- id: stats.time.median
+  translation: "Median: {{.ms}} ms"
+- id: stats.time.count
+  translation: "Timed reviews: {{.count}}"
+- id: stats.streak.heading
+  translation: "Streak"
+- id: stats.streak.current
+  translation: "Current streak: {{.days}} days"
+- id: stats.streak.longest
+  translation: "Longest streak: {{.days}} days"
+- id: stats.grade.heading
+  translation: "Grading source"
+- id: stats.grade.self
+  translation: "Self-rated"
+- id: stats.grade.typed
+  translation: "Machine graded"
+- id: stats.grade.llm
+  translation: "LLM graded"
+- id: stats.grade.other
+  translation: "Other"
+- id: stats.grade.value
+  translation: "{{.count}}"
+- id: stats.curve.heading
+  translation: "Learning curve"
+- id: stats.curve.intro
+  translation: "New cards introduced and reviews per day; new cards consistently outnumbering reviews means the introduction rate exceeds what you can absorb."
+- id: stats.curve.new
+  translation: "New"
+- id: stats.curve.review
+  translation: "Reviews"
+- id: stats.curve.empty
+  translation: "No reviews in this window yet."
+- id: stats.curve.value
+  translation: "{{.count}}"
+- id: stats.deck.heading
+  translation: "By deck"
+- id: stats.deck.empty
+  translation: "No deck data yet."
+- id: stats.deck.col.name
+  translation: "Deck"
+- id: stats.deck.col.due
+  translation: "Due"
+- id: stats.deck.col.reviews
+  translation: "Reviews"
+- id: stats.deck.col.retention
+  translation: "Retention"
+- id: stats.deck.col.elapsed
+  translation: "Time spent"
+- id: stats.tag.heading
+  translation: "By tag"
+- id: stats.tag.empty
+  translation: "No tagged reviews in this window yet."
+- id: stats.tag.col.tag
+  translation: "Tag"
+- id: stats.tag.col.reviews
+  translation: "Reviews"
+- id: stats.tag.col.retention
+  translation: "Retention"
+- id: stats.table.elapsed
+  translation: "{{.ms}} ms"
+- id: stats.table.rate
+  translation: "{{.rate}}%"
+

@@ -1187,3 +1187,130 @@
   translation: "启用 OIDC 时必须填写合法的 issuer。"
 - id: admin.oidc.notice.failed
   translation: "操作失败。"
+# ---- M7-3 统计页（/stats）----
+# 新增区块统一用 stats. 前缀，追加在文件末尾，避免与其它泳道重排冲突。
+- id: stats.title
+  translation: "统计"
+- id: stats.heading
+  translation: "统计与洞察"
+- id: stats.intro
+  translation: "全部数字由复习日志与卡片状态聚合而来，口径见设计文档第 9 节。"
+- id: stats.empty
+  translation: "还没有可统计的数据。开始复习后这里会出现图表。"
+- id: stats.volume.heading
+  translation: "复习量"
+- id: stats.volume.today
+  translation: "今日"
+- id: stats.volume.last7
+  translation: "近 7 日"
+- id: stats.volume.last30
+  translation: "近 30 日"
+- id: stats.volume.value
+  translation: "{{.count}} 次"
+- id: stats.due.heading
+  translation: "到期预测"
+- id: stats.due.today
+  translation: "今日（含逾期）"
+- id: stats.due.tomorrow
+  translation: "明日"
+- id: stats.due.within7
+  translation: "7 日内"
+- id: stats.due.within30
+  translation: "30 日内"
+- id: stats.due.later
+  translation: "更远"
+- id: stats.due.new_not_due
+  translation: "新卡（未排期）"
+- id: stats.due.value
+  translation: "{{.count}} 张"
+- id: stats.retention.heading
+  translation: "留存率"
+- id: stats.retention.intro
+  translation: "到期复习里评分不是 Again 的比例，按稳定性分桶。"
+- id: stats.retention.overall
+  translation: "总体"
+- id: stats.retention.rate
+  translation: "{{.rate}}%（{{.passed}}/{{.total}}）"
+- id: stats.retention.bucket.lt1
+  translation: "小于 1 天"
+- id: stats.retention.bucket.d1_7
+  translation: "1–7 天"
+- id: stats.retention.bucket.d7_30
+  translation: "7–30 天"
+- id: stats.retention.bucket.d30_90
+  translation: "30–90 天"
+- id: stats.retention.bucket.d90_180
+  translation: "90–180 天"
+- id: stats.retention.bucket.d180_365
+  translation: "180–365 天"
+- id: stats.retention.bucket.d365plus
+  translation: "365 天以上"
+- id: stats.time.heading
+  translation: "时间投入"
+- id: stats.time.total
+  translation: "累计：{{.ms}} 毫秒"
+- id: stats.time.avg
+  translation: "日均：{{.ms}} 毫秒"
+- id: stats.time.median
+  translation: "中位数：{{.ms}} 毫秒"
+- id: stats.time.count
+  translation: "计时样本：{{.count}} 次"
+- id: stats.streak.heading
+  translation: "连续打卡"
+- id: stats.streak.current
+  translation: "当前连续：{{.days}} 天"
+- id: stats.streak.longest
+  translation: "历史最长：{{.days}} 天"
+- id: stats.grade.heading
+  translation: "判分来源分布"
+- id: stats.grade.self
+  translation: "自评"
+- id: stats.grade.typed
+  translation: "机器判分"
+- id: stats.grade.llm
+  translation: "LLM 评分"
+- id: stats.grade.other
+  translation: "其它"
+- id: stats.grade.value
+  translation: "{{.count}} 次"
+- id: stats.curve.heading
+  translation: "学习曲线"
+- id: stats.curve.intro
+  translation: "每日新引入与复习量；新引入长期高于复习量说明新卡速率超过了消化能力。"
+- id: stats.curve.new
+  translation: "新引入"
+- id: stats.curve.review
+  translation: "复习"
+- id: stats.curve.empty
+  translation: "该区间内还没有复习记录。"
+- id: stats.curve.value
+  translation: "{{.count}}"
+- id: stats.deck.heading
+  translation: "卡组维度"
+- id: stats.deck.empty
+  translation: "还没有卡组数据。"
+- id: stats.deck.col.name
+  translation: "卡组"
+- id: stats.deck.col.due
+  translation: "到期"
+- id: stats.deck.col.reviews
+  translation: "复习量"
+- id: stats.deck.col.retention
+  translation: "留存率"
+- id: stats.deck.col.elapsed
+  translation: "累计耗时"
+- id: stats.tag.heading
+  translation: "标签维度"
+- id: stats.tag.empty
+  translation: "该区间内还没有带标签的复习记录。"
+- id: stats.tag.col.tag
+  translation: "标签"
+- id: stats.tag.col.reviews
+  translation: "复习量"
+- id: stats.tag.col.retention
+  translation: "留存率"
+- id: stats.table.elapsed
+  translation: "{{.ms}} 毫秒"
+- id: stats.table.rate
+  translation: "{{.rate}}%"
+

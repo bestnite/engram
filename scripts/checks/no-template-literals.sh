@@ -59,6 +59,38 @@ if [ -n "$attrs" ]; then
   fail=1
 fi
 
+# 3) 表达式内部的字面量（M8-3 加严）。前两步把 { ... } 整体剥掉，因此
+#    `{ "你好" }` 或 `{ "Hello world" }` 这种「写死在表达式里」的文案能溜过去。
+#    这里反过来只扫表达式内部：引号字面量里出现非 ASCII 字节（CJK 等），
+#    或出现「字母 + 空格 + 字母」的成句文本，即判为硬编码文案。
+#    纯标识符前缀（"preset-"、"field."）不含空格与非 ASCII，因此不会误报。
+expr_literals=$(awk '
+  {
+    line = $0
+    while (match(line, /\{[^{}]*\}/)) {
+      expr = substr(line, RSTART+1, RLENGTH-2)
+      line = substr(line, 1, RSTART-1) substr(line, RSTART+RLENGTH)
+      while (match(expr, /"[^"]*"/)) {
+        lit = substr(expr, RSTART+1, RLENGTH-2)
+        expr = substr(expr, 1, RSTART-1) substr(expr, RSTART+RLENGTH)
+        if (lit ~ /[^ -~]/) { printf "%s:%d: %s\n", FILENAME, FNR, lit; continue }
+        if (lit ~ /[A-Za-z][ \t]+[A-Za-z]/) { printf "%s:%d: %s\n", FILENAME, FNR, lit }
+      }
+    }
+  }
+' "${templates[@]}")
+expr_status=$?
+if [ "$expr_status" -ne 0 ]; then
+  printf '[template-literals] ERROR: expression scanner failed (awk exit %d).\n' "$expr_status" >&2
+  exit 2
+fi
+
+if [ -n "$expr_literals" ]; then
+  printf '\n[template-literals] hardcoded user-facing text inside a templ expression:\n'
+  printf '%s\n' "$expr_literals"
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   printf '\n[template-literals] FAILED: every user-facing string must come from internal/i18n/locales/*.yaml.\n' >&2
   exit 1

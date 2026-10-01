@@ -578,6 +578,12 @@ func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 	return reviewDayStart(now, loc, cutoffHour).In(locOrUTC(loc)).Format("2006-01-02")
 }
 
+// ReviewDayString 导出复习日计算，供统计页（M7-3）等调用方复用同一口径。
+// 页面必须用与聚合查询相同的日界，否则「今日复习量」会与库里的 review_day 对不上。
+func ReviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
+	return reviewDayString(now, loc, cutoffHour)
+}
+
 // prevReviewDay / nextReviewDay 是复习日字符串的相邻日运算。
 func prevReviewDay(day string) string { return shiftReviewDay(day, -1) }
 func nextReviewDay(day string) string { return shiftReviewDay(day, 1) }
