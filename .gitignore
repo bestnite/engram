@@ -1,0 +1,46 @@
+# ── 本地数据与运行时（绝不入库）──────────────────────────────
+data/
+media/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── 环境与凭据（仓库禁止提交任何真实配置）──────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+config.local.*
+*_local.yaml
+
+# ── 构建产物 ────────────────────────────────────────────────
+/flashcard
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+*.prof
+
+# ── 生成物（构建时重新生成，不入库）────────────────────────
+*_templ.go
+internal/web/static/css/tailwind.css
+node_modules/
+
+# ── 本地产物 / 测试夹具 ────────────────────────────────────
+/tmp/
+*.local.json
+testdata/local/
+*.log
+
+# ── 编辑器与系统 ───────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+.DS_Store
