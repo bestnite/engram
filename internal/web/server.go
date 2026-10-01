@@ -18,6 +18,7 @@ import (
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
 	"example.com/flashcard/internal/mcp"
+	"example.com/flashcard/internal/media"
 	"example.com/flashcard/internal/store"
 )
 
@@ -59,6 +60,8 @@ type Deps struct {
 	API *api.API
 	// MCP 是内置 MCP server（M4-6）；非空时在 /mcp 挂载 streamable HTTP。
 	MCP *mcp.Server
+	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/:id 代理。
+	Media *media.Store
 }
 
 // Server 持有路由与监听地址。
@@ -85,6 +88,7 @@ type Server struct {
 	bootstrapEmail string
 	api            *api.API
 	mcp            *mcp.Server
+	media          *media.Store
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -137,6 +141,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		bootstrapEmail: deps.BootstrapAdminEmail,
 		api:            deps.API,
 		mcp:            deps.MCP,
+		media:          deps.Media,
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
@@ -152,7 +157,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	s.registerAuthRoutes(router)
+	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)
+	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
 
 	if s.api != nil {

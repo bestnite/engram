@@ -240,3 +240,37 @@
   translation: "Suspend"
 - id: review.bury
   translation: "Bury"
+- id: home.decks_link
+  translation: "Manage decks"
+- id: decks.list.title
+  translation: "Decks"
+- id: decks.list.heading
+  translation: "My decks"
+- id: decks.list.col_name
+  translation: "Name"
+- id: decks.list.col_cards
+  translation: "Cards"
+- id: decks.list.col_due
+  translation: "Due"
+- id: decks.list.empty
+  translation: "No decks yet. Create your first one below."
+- id: decks.list.archived
+  translation: "Archived"
+- id: decks.list.new_heading
+  translation: "New deck"
+- id: decks.list.name_label
+  translation: "Name"
+- id: decks.list.desc_label
+  translation: "Description"
+- id: decks.list.preset_label
+  translation: "Scheduling preset"
+- id: decks.list.create_submit
+  translation: "Create deck"
+- id: decks.list.error_name_required
+  translation: "Deck name is required."
+- id: decks.list.error_preset_required
+  translation: "Please choose a scheduling preset."
+- id: decks.list.error_create_failed
+  translation: "Could not create the deck."
+- id: decks.preset.default
+  translation: "Default"

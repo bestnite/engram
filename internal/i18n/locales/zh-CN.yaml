@@ -240,3 +240,37 @@
   translation: "暂停"
 - id: review.bury
   translation: "埋藏"
+- id: home.decks_link
+  translation: "管理卡组"
+- id: decks.list.title
+  translation: "卡组"
+- id: decks.list.heading
+  translation: "我的卡组"
+- id: decks.list.col_name
+  translation: "名称"
+- id: decks.list.col_cards
+  translation: "卡片数"
+- id: decks.list.col_due
+  translation: "到期数"
+- id: decks.list.empty
+  translation: "还没有卡组，在下方创建第一个。"
+- id: decks.list.archived
+  translation: "已归档"
+- id: decks.list.new_heading
+  translation: "新建卡组"
+- id: decks.list.name_label
+  translation: "名称"
+- id: decks.list.desc_label
+  translation: "描述"
+- id: decks.list.preset_label
+  translation: "调度预设"
+- id: decks.list.create_submit
+  translation: "创建卡组"
+- id: decks.list.error_name_required
+  translation: "卡组名称不能为空。"
+- id: decks.list.error_preset_required
+  translation: "请选择一个调度预设。"
+- id: decks.list.error_create_failed
+  translation: "创建卡组失败。"
+- id: decks.preset.default
+  translation: "默认"

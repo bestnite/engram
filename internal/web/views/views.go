@@ -52,10 +52,13 @@ type LanguageOption struct {
 
 // HomeData 是示例首页的渲染数据。
 type HomeData struct {
-	Layout         LayoutData
-	Heading        string
-	Intro          string
-	StartLabel     string
+	Layout     LayoutData
+	Heading    string
+	Intro      string
+	StartLabel string
+	// DecksLabel / DecksHref 是首页进入卡组列表的入口（M2-11）。
+	DecksLabel     string
+	DecksHref      string
 	LanguagesLabel string
 	// Formula 是演示 MathJax 自托管渲染的数学表达式，不是用户可见自然语言文案。
 	Formula   string
