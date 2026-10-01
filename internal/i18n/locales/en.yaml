@@ -8,6 +8,10 @@
   translation: "Decks"
 - id: nav.stats
   translation: "Stats"
+- id: nav.login
+  translation: "Sign in"
+- id: nav.logout
+  translation: "Sign out"
 - id: home.heading
   translation: "Today's review"
 - id: home.intro
@@ -22,3 +26,59 @@
   translation: "中文"
 - id: language.en
   translation: "English"
+- id: auth.login.title
+  translation: "Sign in"
+- id: auth.login.heading
+  translation: "Sign in"
+- id: auth.login.submit
+  translation: "Sign in"
+- id: auth.login.to_register
+  translation: "No account yet? Register"
+- id: auth.register.title
+  translation: "Register"
+- id: auth.register.heading
+  translation: "Create your account"
+- id: auth.register.intro
+  translation: "After registering you get your own review progress; sharing a deck never mixes in someone else's schedule."
+- id: auth.register.submit
+  translation: "Register"
+- id: auth.register.to_login
+  translation: "Already have an account? Sign in"
+- id: auth.setup.title
+  translation: "Setup"
+- id: auth.setup.heading
+  translation: "Create the first administrator"
+- id: auth.setup.intro
+  translation: "This is the first start. Create the first administrator account; this page is unavailable once an administrator exists."
+- id: auth.setup.submit
+  translation: "Create administrator"
+- id: auth.field.username
+  translation: "Username"
+- id: auth.field.email
+  translation: "Email"
+- id: auth.field.password
+  translation: "Password"
+- id: auth.field.display_name
+  translation: "Display name"
+- id: auth.error.username_required
+  translation: "Please enter a username."
+- id: auth.error.email_required
+  translation: "Please enter an email address."
+- id: auth.error.email_invalid
+  translation: "That email address is not valid."
+- id: auth.error.password_required
+  translation: "Please enter a password."
+- id: auth.error.password_too_short
+  translation: "Password must be at least 8 characters."
+- id: auth.error.password_too_long
+  translation: "Password must be at most 128 characters."
+- id: auth.error.password_too_common
+  translation: "That password is too common; choose a stronger one."
+- id: auth.error.invalid_credentials
+  translation: "Incorrect username or password."
+- id: auth.error.user_disabled
+  translation: "This account has been disabled."
+- id: auth.error.registration_closed
+  translation: "Self-service registration is closed; ask an administrator for an account."
+- id: auth.error.create_failed
+  translation: "Could not create the account; try again or use a different username or email."

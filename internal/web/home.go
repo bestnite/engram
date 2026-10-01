@@ -7,6 +7,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/gin-gonic/gin"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
 	"example.com/flashcard/internal/web/views"
 )
@@ -44,6 +45,18 @@ func (s *Server) home(c *gin.Context) {
 		LanguagesLabel: loc.T("home.language_label"),
 		Formula:        mathFormula,
 		Languages:      s.languageOptions(loc),
+	}
+	// 页头右侧的会话入口由当前登录状态决定：已登录显示登出（POST + CSRF），否则显示登录链接。
+	if _, ok := auth.CurrentUser(c); ok {
+		data.Layout.SessionLabel = loc.T("nav.logout")
+		data.Layout.SessionHref = "/logout"
+		data.Layout.SessionForm = true
+		if sess, ok := auth.CurrentSession(c); ok {
+			data.Layout.CSRF = sess.CSRFToken
+		}
+	} else {
+		data.Layout.SessionLabel = loc.T("nav.login")
+		data.Layout.SessionHref = "/login"
 	}
 	renderHTML(c, views.Home(data))
 }

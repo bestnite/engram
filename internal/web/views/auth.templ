@@ -1,0 +1,63 @@
+package views
+
+// AuthPage 渲染登录、注册与首次管理员引导共用的表单页。
+// 页面上的每一个字符串都来自 AuthFormData，因此模板本身不含任何硬编码用户文案。
+templ AuthPage(data AuthFormData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.Intro != "" {
+			<p class="mt-2 text-slate-600">{ data.Intro }</p>
+		}
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+				{ data.ErrorMessage }
+			</p>
+		}
+		<form class="mt-6 space-y-4" method="post" action={ data.Action }>
+			if data.CSRF != "" {
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			}
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.UsernameLabel }</span>
+				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="username" autocomplete="username" required/>
+			</label>
+			if data.ShowEmail {
+				<label class="block">
+					<span class="text-sm font-medium text-slate-700">{ data.EmailLabel }</span>
+					<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="email" name="email" autocomplete="email" value={ data.EmailValue } required/>
+				</label>
+			}
+			if data.ShowDisplayName {
+				<label class="block">
+					<span class="text-sm font-medium text-slate-700">{ data.DisplayNameLabel }</span>
+					<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="display_name" autocomplete="name"/>
+				</label>
+			}
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.PasswordLabel }</span>
+				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="password" name="password" autocomplete={ data.PasswordAutocomplete } required/>
+			</label>
+			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">
+				{ data.SubmitLabel }
+			</button>
+		</form>
+		if data.AltHref != "" {
+			<p class="mt-4 text-sm">
+				<a class="text-blue-600 hover:text-blue-700" href={ data.AltHref }>{ data.AltLabel }</a>
+			</p>
+		}
+		<section class="mt-8">
+			<ul class="flex gap-3">
+				for _, l := range data.LangOptions {
+					<li>
+						if l.Active {
+							<span class="rounded border border-blue-600 px-2 py-1 text-sm text-blue-600">{ l.Label }</span>
+						} else {
+							<a class="rounded border border-slate-300 px-2 py-1 text-sm text-slate-600" href={ l.Href }>{ l.Label }</a>
+						}
+					</li>
+				}
+			</ul>
+		</section>
+	}
+}
