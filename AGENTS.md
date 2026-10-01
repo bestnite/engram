@@ -465,7 +465,7 @@ Conventions:
   deck settings or grants.
 - [x] **M5-2 Sharing UI** — grant, revoke, and change a role, with the current grant list.
   *Acceptance:* revoking a grant denies the next request from that user in the same test.
-- [ ] **M5-3 Share links** — create with optional password and expiry, revoke individually
+- [x] **M5-3 Share links** — create with optional password and expiry, revoke individually
   or all at once, public read-only view, and a prompt to log in when starting a review.
   *Acceptance:* test asserts a revoked or expired link returns `404` and that the password
   gate rejects a wrong password.
@@ -473,7 +473,7 @@ Conventions:
   progress carried over.
   *Acceptance:* test asserts the clone has the same note count and zero `card_states`
   rows for the new owner.
-- [ ] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
+- [x] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
   *Acceptance:* test asserts `unlisted` decks never appear in any listing but resolve by
   direct id.
 - [ ] **M5-6 Deck package export** — the `.fdeck` zip described in `DESIGN.md` §7.6
@@ -527,7 +527,7 @@ Conventions:
   plaintext never displayed.
   *Acceptance:* test asserts no handler or template can return a plaintext key value
   after creation.
-- [ ] **M6-10 Secret storage** — AES-GCM encryption for OIDC secrets and future provider
+- [x] **M6-10 Secret storage** — AES-GCM encryption for OIDC secrets and future provider
   keys, key from the environment, UI shows configured or not configured only.
   *Acceptance:* test asserts a stored secret round-trips and that a wrong master key
   fails decryption loudly instead of returning an empty value.
@@ -552,11 +552,11 @@ Conventions:
 
 ### M8 — Mobile experience, PWA, i18n completion
 
-- [ ] **M8-1 Touch interactions** — swipe to reveal and rate, disabled double-tap zoom and
+- [x] **M8-1 Touch interactions** — swipe to reveal and rate, disabled double-tap zoom and
   long-press selection, tap targets of at least 44 px.
   *Acceptance:* a scripted touch sequence rates a card without triggering a context menu
   (verified with a browser automation check or a documented manual checklist).
-- [ ] **M8-2 PWA shell** — manifest, icons, standalone display, service worker caching
+- [x] **M8-2 PWA shell** — manifest, icons, standalone display, service worker caching
   static assets only.
   *Acceptance:* the service worker cache contains no API response; a test asserts the
   cache list contains only static asset paths.
@@ -575,13 +575,6 @@ Conventions:
 
 ### M9 — Parameter optimisation
 
-- [ ] **M9-6 Recover stale jobs at startup** — the runner has no recovery for jobs left in
-  `running` when the process dies (restart, crash, OOM): they stay `running` forever and keep
-  `Enqueue` returning `409`, so the feature looks permanently busy. On startup, mark every
-  `running` job as `failed` with a reason such as `interrupted by restart` (the subprocess is gone
-  by definition) and keep its log tail for diagnosis.
-  *Acceptance:* a test seeds a `running` row, constructs the runner, and asserts the row becomes
-  `failed` with the reason recorded and that a new enqueue then succeeds.
 - [x] **M9-1 Job runner** — single-flight worker, job store, subprocess launch, timeout,
   kill of the process group, log tail capture.
   *Acceptance:* a second request while a job runs returns `409`; a hung adapter is killed
@@ -608,6 +601,23 @@ Conventions:
   threshold, revert.
   *Acceptance:* `go test ./internal/schedule/... -run Optimise` passes with each case
   present.
+
+- [x] **M9-7 Recover stale jobs at startup** — the runner has no recovery for jobs left in
+  `running` when the process dies (restart, crash, OOM): they stay `running` forever and keep
+  `Enqueue` returning `409`, so the feature looks permanently busy. On startup, mark every
+  `running` job as `failed` with a reason such as `interrupted by restart` (the subprocess is gone
+  by definition) and keep its log tail for diagnosis.
+  *Acceptance:* a test seeds a `running` row, constructs the runner, and asserts the row becomes
+  `failed` with the reason recorded and that a new enqueue then succeeds.
+  *Verified:* the runner recovers at startup; the WARN log names the count and the reason.
+
+- [ ] **M9-8 Recover queued jobs as well** — M9-7 rescues only `running` jobs, but `Store.Active`
+  treats `queued` as in-flight too (`status IN ('queued','running')`) while the queue itself lives
+  in memory. A crash between insert and start therefore leaves a `queued` row that nothing will
+  ever execute, while every later `Enqueue` keeps returning `409` — the same permanent-busy symptom
+  M9-7 set out to remove.
+  *Acceptance:* a test seeds a `queued` row, runs the startup recovery, and asserts it becomes
+  `failed` with a reason saying the job never started, and that a fresh enqueue then succeeds.
 
 ### M10 — Future work (not part of the current release)
 
@@ -677,7 +687,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 3/7 · M6 0/10 · M7 2/4 · M8 0/6 · M9 1/7
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 5/7 · M6 1/10 · M7 2/4 · M8 2/6 · M9 1/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
