@@ -34,6 +34,8 @@ templ AdminPage(data AdminPageData) {
 			<div class="min-w-0 flex-1">
 				if data.UsersPage {
 					@adminUsers(data)
+				} else if data.RegistrationPage {
+					@adminRegistration(data)
 				} else {
 					if data.ShowForm {
 						<form method="post" action={ data.FormAction }>

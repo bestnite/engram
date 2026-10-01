@@ -10,6 +10,8 @@ type DeckRow struct {
 	CardCount int64
 	DueCount  int64
 	Archived  bool
+	// ExportHref 指向该卡组的 .fdeck 导出下载（M5-9）。
+	ExportHref string
 }
 
 // DeckOption 是新建表单里的预设下拉项。
@@ -29,7 +31,10 @@ type DeckListData struct {
 	ColDue    string
 	EmptyText string
 	Archived  string
-	Rows      []DeckRow
+	// ColActions/ExportLabel 是导出控件的表头与文案（M5-9）。
+	ColActions  string
+	ExportLabel string
+	Rows        []DeckRow
 	// 新建表单。
 	NewHeading   string
 	NameLabel    string

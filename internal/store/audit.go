@@ -30,6 +30,11 @@ const (
 
 	// ActionSettingUpdate 是管理面板修改系统设置（M6-5）时写入的审计动作。
 	ActionSettingUpdate = "setting.update"
+
+	// ActionInviteCreate 是管理面板创建邀请码（M6-3）时写入的审计动作。
+	ActionInviteCreate = "invite.create"
+	// ActionInviteRevoke 是管理面板撤销邀请码（M6-3）时写入的审计动作。
+	ActionInviteRevoke = "invite.revoke"
 	// M3-4 撤销评分。
 	ActionReviewUndo = "review.undo"
 	// M5-1 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。

@@ -716,3 +716,167 @@
   translation: "Invalid role."
 - id: admin.users.notice.save_failed
   translation: "The action failed. Please try again."
+- id: admin.registration.title
+  translation: "Registration & invites"
+- id: admin.registration.heading
+  translation: "Registration & invites"
+- id: admin.registration.intro
+  translation: "Control who may register and manage one-time invite links. Changes take effect on the next registration attempt, no restart needed."
+- id: admin.registration.policy_heading
+  translation: "Registration policy"
+- id: admin.registration.policy_intro
+  translation: "Applied to self-service sign-ups that carry no invite. The first administrator bootstrap is always allowed."
+- id: admin.registration.policy_label
+  translation: "Who may register"
+- id: admin.registration.policy.open
+  translation: "Open — anyone may register"
+- id: admin.registration.policy.invite
+  translation: "Invite only — a valid invite is required"
+- id: admin.registration.policy.closed
+  translation: "Closed — refuse all self-service sign-ups"
+- id: admin.registration.allowlist_label
+  translation: "Email domain allowlist"
+- id: admin.registration.allowlist_hint
+  translation: "Comma-separated domains (e.g. example.com, example.org). Applies under the open policy; leave empty to allow any domain."
+- id: admin.registration.invites_heading
+  translation: "Invites"
+- id: admin.registration.invites_intro
+  translation: "Each invite works once. Revoking deletes the link immediately."
+- id: admin.registration.invites_empty
+  translation: "No invites yet."
+- id: admin.registration.col.token
+  translation: "Invite link"
+- id: admin.registration.col.email
+  translation: "Restricted email"
+- id: admin.registration.col.role
+  translation: "Role"
+- id: admin.registration.col.status
+  translation: "Status"
+- id: admin.registration.col.created
+  translation: "Created"
+- id: admin.registration.col.expires
+  translation: "Expires"
+- id: admin.registration.col.used_by
+  translation: "Used by"
+- id: admin.registration.col.actions
+  translation: "Actions"
+- id: admin.registration.status.active
+  translation: "Active"
+- id: admin.registration.status.used
+  translation: "Used"
+- id: admin.registration.status.expired
+  translation: "Expired"
+- id: admin.registration.invite_create_heading
+  translation: "Create an invite"
+- id: admin.registration.invite_email
+  translation: "Restrict to email (optional)"
+- id: admin.registration.invite_role
+  translation: "Role"
+- id: admin.registration.invite_expiry
+  translation: "Valid for days (optional)"
+- id: admin.registration.invite_expiry_hint
+  translation: "Leave empty or 0 for no expiry."
+- id: admin.registration.invite_create_submit
+  translation: "Create invite"
+- id: admin.registration.invite_revoke
+  translation: "Revoke"
+- id: admin.registration.notice.saved
+  translation: "Registration settings saved."
+- id: admin.registration.notice.invalid_policy
+  translation: "Invalid registration policy."
+- id: admin.registration.notice.save_failed
+  translation: "Could not save the registration settings."
+- id: admin.registration.notice.invite_created
+  translation: "Invite created."
+- id: admin.registration.notice.invite_revoked
+  translation: "Invite revoked."
+- id: admin.registration.notice.invite_invalid
+  translation: "Invite not found."
+- id: admin.registration.notice.invite_create_failed
+  translation: "Could not create the invite."
+- id: decks.list.col_actions
+  translation: "Actions"
+- id: decks.list.export
+  translation: "Export .fdeck"
+- id: import.title
+  translation: "Import a deck package"
+- id: import.heading
+  translation: "Import a deck package"
+- id: import.intro
+  translation: "Upload a .fdeck package to create a new deck or merge it into one of your decks."
+- id: import.file_label
+  translation: "Package file (.fdeck)"
+- id: import.target_label
+  translation: "Import as"
+- id: import.target.new_deck
+  translation: "New deck"
+- id: import.target.into_deck
+  translation: "Merge into an existing deck"
+- id: import.deck_id_label
+  translation: "Target deck id (for merge)"
+- id: import.dry_run_label
+  translation: "Preview only (dry run) — write nothing"
+- id: import.allow_others_label
+  translation: "Allow importing other users' progress (admin only)"
+- id: import.on_conflict_label
+  translation: "When a card already exists"
+- id: import.on_conflict.update
+  translation: "Update"
+- id: import.on_conflict.skip
+  translation: "Skip"
+- id: import.on_conflict.fail
+  translation: "Fail the whole package"
+- id: import.submit
+  translation: "Upload and import"
+- id: import.result_heading
+  translation: "Import summary"
+- id: import.field.target
+  translation: "Target"
+- id: import.field.dry_run
+  translation: "Dry run"
+- id: import.field.deck_id
+  translation: "Deck id"
+- id: import.field.notes_created
+  translation: "Notes created"
+- id: import.field.notes_updated
+  translation: "Notes updated"
+- id: import.field.notes_skipped
+  translation: "Notes skipped"
+- id: import.field.cards_created
+  translation: "Cards created"
+- id: import.field.media_new
+  translation: "Media added"
+- id: import.field.media_missing
+  translation: "Media missing"
+- id: import.field.progress_applied
+  translation: "Progress applied"
+- id: import.field.progress_skipped
+  translation: "Progress skipped"
+- id: import.field.progress_discarded
+  translation: "Others' progress discarded"
+- id: import.errors_heading
+  translation: "Per-entry errors"
+- id: import.no_errors
+  translation: "No errors."
+- id: import.col.entry
+  translation: "Entry"
+- id: import.col.reason
+  translation: "Reason"
+- id: import.value.yes
+  translation: "Yes"
+- id: import.value.no
+  translation: "No"
+- id: import.error.no_file
+  translation: "No package file was uploaded."
+- id: import.error.too_large
+  translation: "The uploaded package exceeds the configured upload size limit."
+- id: import.error.generic
+  translation: "The package could not be imported. Please check the file and try again."
+- id: import.error.package_bad_format
+  translation: "The package format is invalid."
+- id: import.error.package_too_large
+  translation: "The package is too large to import."
+- id: import.error.package_unsafe_entry
+  translation: "The package contains an unsafe entry (path traversal or symlink)."
+- id: import.error.package_unknown_kind
+  translation: "The package contains a card type this instance does not know."

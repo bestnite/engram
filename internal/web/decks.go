@@ -59,12 +59,13 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 	for i := range summaries {
 		sm := summaries[i]
 		rows = append(rows, views.DeckRow{
-			IDValue:   strconv.FormatUint(sm.Deck.ID, 10),
-			Name:      sm.Deck.Name,
-			Href:      fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
-			CardCount: sm.CardCount,
-			DueCount:  sm.DueCount,
-			Archived:  sm.Deck.ArchivedAt != nil,
+			IDValue:    strconv.FormatUint(sm.Deck.ID, 10),
+			Name:       sm.Deck.Name,
+			Href:       fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
+			CardCount:  sm.CardCount,
+			DueCount:   sm.DueCount,
+			Archived:   sm.Deck.ArchivedAt != nil,
+			ExportHref: fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
 		})
 	}
 	options := make([]views.DeckOption, 0, len(presets))
@@ -83,6 +84,8 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		ColDue:       loc.T("decks.list.col_due"),
 		EmptyText:    loc.T("decks.list.empty"),
 		Archived:     loc.T("decks.list.archived"),
+		ColActions:   loc.T("decks.list.col_actions"),
+		ExportLabel:  loc.T("decks.list.export"),
 		Rows:         rows,
 		NewHeading:   loc.T("decks.list.new_heading"),
 		NameLabel:    loc.T("decks.list.name_label"),
