@@ -70,6 +70,16 @@ func (s *IdentityStore) ListForUser(ctx context.Context, userID uint64) ([]Ident
 	return rows, nil
 }
 
+// ListAll 返回全部外部身份（含所属用户），供管理面板的「已绑定身份列表」展示（M6-4）。
+// 按用户、再按绑定时间排序，保证跨请求顺序稳定；调用方按 user_id 关联用户信息。
+func (s *IdentityStore) ListAll(ctx context.Context) ([]Identity, error) {
+	var rows []Identity
+	if err := s.db.WithContext(ctx).Order("user_id ASC, linked_at ASC, id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list identities: %w", err)
+	}
+	return rows, nil
+}
+
 // Delete 解绑一条外部身份（按主键）。行不存在时返回 ErrIdentityNotFound。
 //
 // 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI（AGENTS.md §5 M1-12）。

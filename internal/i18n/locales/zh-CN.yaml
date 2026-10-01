@@ -1031,3 +1031,73 @@
   translation: "无法连接 OIDC 提供商，请稍后再试。"
 - id: auth.error.oidc_link_denied
   translation: "该身份未绑定任何账号，请联系管理员绑定账号。"
+- id: admin.oidc.title
+  translation: "身份与 OIDC"
+- id: admin.oidc.heading
+  translation: "OIDC 配置"
+- id: admin.oidc.intro
+  translation: "可选的 OIDC 登录。保持关闭即只用内置账号登录。"
+- id: admin.oidc.enabled
+  translation: "启用 OIDC"
+- id: admin.oidc.enabled.hint
+  translation: "启用后登录页会出现 OIDC 登录入口。"
+- id: admin.oidc.issuer
+  translation: "Issuer"
+- id: admin.oidc.issuer.hint
+  translation: "提供商基础地址；发现文档从 <issuer>/.well-known/openid-configuration 拉取。"
+- id: admin.oidc.client_id
+  translation: "Client ID"
+- id: admin.oidc.client_secret
+  translation: "Client secret"
+- id: admin.oidc.client_secret.hint
+  translation: "加密存储；留空表示不修改。页面只显示已配置 / 未配置。"
+- id: admin.oidc.scopes
+  translation: "Scopes"
+- id: admin.oidc.scopes.hint
+  translation: "逗号或空格分隔；默认 openid, email, profile。"
+- id: admin.oidc.claims
+  translation: "Claim 映射"
+- id: admin.oidc.claim.subject
+  translation: "Subject claim"
+- id: admin.oidc.claim.email
+  translation: "Email claim"
+- id: admin.oidc.claim.name
+  translation: "Name claim"
+- id: admin.oidc.claim.email_verified
+  translation: "Email verified claim"
+- id: admin.oidc.test
+  translation: "测试连接"
+- id: admin.oidc.test.ok
+  translation: "连接成功：已成功拉取发现文档。"
+- id: admin.oidc.test.failed_prefix
+  translation: "连接失败："
+- id: admin.oidc.test.no_issuer
+  translation: "请先填写 issuer。"
+- id: admin.oidc.identities.heading
+  translation: "已绑定身份"
+- id: admin.oidc.identities.intro
+  translation: "已绑定到内部用户的外部身份。解绑后该身份不能再用于登录。"
+- id: admin.oidc.identities.empty
+  translation: "还没有绑定任何身份。"
+- id: admin.oidc.col.provider
+  translation: "提供商"
+- id: admin.oidc.col.subject
+  translation: "Subject"
+- id: admin.oidc.col.email
+  translation: "邮箱"
+- id: admin.oidc.col.user
+  translation: "用户"
+- id: admin.oidc.col.linked
+  translation: "绑定时间"
+- id: admin.oidc.col.actions
+  translation: "操作"
+- id: admin.oidc.unlink
+  translation: "解绑"
+- id: admin.oidc.notice.saved
+  translation: "OIDC 设置已保存。"
+- id: admin.oidc.notice.unlinked
+  translation: "已解绑该身份。"
+- id: admin.oidc.notice.invalid_issuer
+  translation: "启用 OIDC 时必须填写合法的 issuer。"
+- id: admin.oidc.notice.failed
+  translation: "操作失败。"

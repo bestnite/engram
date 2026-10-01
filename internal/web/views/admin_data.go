@@ -187,6 +187,12 @@ type AdminPageData struct {
 	JobCancelConfirm string
 	// JobLogEmptyLabel 是作业没有日志尾巴时的占位。
 	JobLogEmptyLabel string
+
+	// ---- OIDC 配置页（M6-4）----
+	// OIDCPage 为 true 时模板渲染 OIDC 配置区块而不是设置表。
+	OIDCPage bool
+	// OIDC 承载 OIDC 配置页的全部字段；仅 OIDCPage 为 true 时非空。
+	OIDC *OIDCPageData
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。
