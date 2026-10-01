@@ -1021,3 +1021,84 @@
 - id: admin.jobs.notice.failed
   translation: "Cancelling the job failed."
 
+
+- id: auth.oidc.button
+  translation: "Sign in with OIDC"
+- id: auth.error.oidc_state
+  translation: "The login state check failed. Please start again."
+- id: auth.error.oidc_failed
+  translation: "OIDC login failed. Please try again."
+- id: auth.error.oidc_unavailable
+  translation: "The OIDC provider is unreachable. Please try again later."
+- id: auth.error.oidc_link_denied
+  translation: "No account is linked to this identity. Please ask an administrator to link it."
+- id: admin.oidc.title
+  translation: "Identity & OIDC"
+- id: admin.oidc.heading
+  translation: "OIDC configuration"
+- id: admin.oidc.intro
+  translation: "Optional OIDC sign-in. Leave it disabled to use local accounts only."
+- id: admin.oidc.enabled
+  translation: "Enable OIDC"
+- id: admin.oidc.enabled.hint
+  translation: "When enabled, the login page shows an OIDC entry."
+- id: admin.oidc.issuer
+  translation: "Issuer"
+- id: admin.oidc.issuer.hint
+  translation: "Provider base URL; the discovery document is fetched from <issuer>/.well-known/openid-configuration."
+- id: admin.oidc.client_id
+  translation: "Client ID"
+- id: admin.oidc.client_secret
+  translation: "Client secret"
+- id: admin.oidc.client_secret.hint
+  translation: "Stored encrypted; leave empty to keep the current value. Only the configured state is shown."
+- id: admin.oidc.scopes
+  translation: "Scopes"
+- id: admin.oidc.scopes.hint
+  translation: "Comma or space separated; defaults to openid, email, profile."
+- id: admin.oidc.claims
+  translation: "Claim mapping"
+- id: admin.oidc.claim.subject
+  translation: "Subject claim"
+- id: admin.oidc.claim.email
+  translation: "Email claim"
+- id: admin.oidc.claim.name
+  translation: "Name claim"
+- id: admin.oidc.claim.email_verified
+  translation: "Email verified claim"
+- id: admin.oidc.test
+  translation: "Test connection"
+- id: admin.oidc.test.ok
+  translation: "Connection succeeded: the discovery document was fetched."
+- id: admin.oidc.test.failed_prefix
+  translation: "Connection failed:"
+- id: admin.oidc.test.no_issuer
+  translation: "Enter an issuer first."
+- id: admin.oidc.identities.heading
+  translation: "Bound identities"
+- id: admin.oidc.identities.intro
+  translation: "External identities linked to internal users. Unlinking stops that identity from signing in."
+- id: admin.oidc.identities.empty
+  translation: "No identity is bound yet."
+- id: admin.oidc.col.provider
+  translation: "Provider"
+- id: admin.oidc.col.subject
+  translation: "Subject"
+- id: admin.oidc.col.email
+  translation: "Email"
+- id: admin.oidc.col.user
+  translation: "User"
+- id: admin.oidc.col.linked
+  translation: "Linked at"
+- id: admin.oidc.col.actions
+  translation: "Actions"
+- id: admin.oidc.unlink
+  translation: "Unlink"
+- id: admin.oidc.notice.saved
+  translation: "OIDC settings saved."
+- id: admin.oidc.notice.unlinked
+  translation: "Identity unlinked."
+- id: admin.oidc.notice.invalid_issuer
+  translation: "A valid issuer is required when OIDC is enabled."
+- id: admin.oidc.notice.failed
+  translation: "The operation failed."

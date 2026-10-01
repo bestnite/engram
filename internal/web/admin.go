@@ -55,6 +55,10 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodGet, Path: "/admin/export"},
 		{Method: http.MethodGet, Path: "/admin/jobs"},
 		{Method: http.MethodPost, Path: "/admin/jobs/:id/cancel", Write: true},
+		{Method: http.MethodGet, Path: "/admin/oidc"},
+		{Method: http.MethodPost, Path: "/admin/oidc", Write: true},
+		{Method: http.MethodPost, Path: "/admin/oidc/test", Write: true},
+		{Method: http.MethodPost, Path: "/admin/oidc/identities/:id/unlink", Write: true},
 	}
 }
 
@@ -109,6 +113,16 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			handlers = append(handlers, s.adminJobsPage)
 		case "/admin/jobs/:id/cancel":
 			handlers = append(handlers, s.adminJobCancel)
+		case "/admin/oidc":
+			if r.Write {
+				handlers = append(handlers, s.adminOIDCSave)
+			} else {
+				handlers = append(handlers, s.adminOIDCPage)
+			}
+		case "/admin/oidc/test":
+			handlers = append(handlers, s.adminOIDCTest)
+		case "/admin/oidc/identities/:id/unlink":
+			handlers = append(handlers, s.adminOIDCUnlink)
 		default:
 			continue
 		}
@@ -152,7 +166,7 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 		{"dashboard", "/admin", true},
 		{"users", "/admin/users", true},
 		{"registration", "/admin/registration", true},
-		{"oidc", "/admin/oidc", false},
+		{"oidc", "/admin/oidc", true},
 		{"settings", "/admin/settings", true},
 		{"jobs", "/admin/jobs", true},
 		{"audit", "/admin/audit", false},

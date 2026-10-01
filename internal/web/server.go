@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -73,6 +74,10 @@ type Deps struct {
 	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4），
 	// 管理面板也可列出作业并取消（M6-6）；为空时作业页只渲染空列表。
 	Jobs *jobs.Runner
+	// Identities 提供外部身份（OIDC）的读取、绑定与解绑（M1-11、M6-4）；为空时由 New 从 DB 构造。
+	Identities *store.IdentityStore
+	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
+	BaseURL string
 }
 
 // Server 持有路由与监听地址。
@@ -110,6 +115,12 @@ type Server struct {
 	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
+	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走 §4.5 三分支。
+	identities   *store.IdentityStore
+	identityLink *auth.IdentityLinkService
+	// oidc 是协议客户端（发现文档缓存 + state 表）；baseURL 用于拼 redirect_uri。
+	oidc    *auth.OIDCClient
+	baseURL string
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -178,6 +189,22 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 	if deps.Decks != nil {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
+	}
+
+	// OIDC 装配（M1-11）：协议客户端常驻；绑定服务需要账号与用户存储齐备。
+	s.oidc = auth.NewOIDCClient(nil)
+	s.baseURL = strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/")
+	s.identities = deps.Identities
+	if s.identities == nil {
+		s.identities = store.NewIdentityStore(deps.DB)
+	}
+	if s.accounts != nil && s.users != nil {
+		link, err := auth.NewIdentityLinkService(
+			auth.NewStoreIdentityLinkStore(s.identities, s.users, s.accounts), s.auditor, logger)
+		if err != nil {
+			return nil, err
+		}
+		s.identityLink = link
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。

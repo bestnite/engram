@@ -41,6 +41,8 @@ const (
 	ActionPermissionDenied = "permission.denied"
 	// M1-12 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。
 	ActionIdentityLink = "identity.link"
+	// M6-4 管理面板解绑外部身份。
+	ActionIdentityUnlink = "identity.unlink"
 	// M5-2 授权变更（共享页面）：授予 / 改角色 / 撤销。
 	ActionDeckGrant      = "deck.grant"
 	ActionDeckRoleChange = "deck.role_change"
