@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"gorm.io/gorm"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
 	"example.com/flashcard/internal/store"
 	"example.com/flashcard/internal/web"
@@ -112,13 +114,7 @@ func runServe(ctx context.Context) error {
 		logger.Info("schema synchronized", "migrations_applied", applied)
 	}
 
-	srv, err := web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
-		DB:     db,
-		Logger: logger,
-		SchemaVersion: func(ctx context.Context) (int, error) {
-			return store.CurrentVersion(ctx, db)
-		},
-	})
+	srv, err := newWebServer(cfg, db, logger)
 	if err != nil {
 		return err
 	}
@@ -126,6 +122,52 @@ func runServe(ctx context.Context) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return srv.Run(ctx)
+}
+
+// newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps（M1-14）。
+// runServe 与集成测试共用这一条装配路径，避免测试用的依赖与生产漂移。
+func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
+	accounts, sessions, users, err := newAuthStack(cfg, db)
+	if err != nil {
+		return nil, err
+	}
+	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
+		DB:     db,
+		Logger: logger,
+		SchemaVersion: func(ctx context.Context) (int, error) {
+			return store.CurrentVersion(ctx, db)
+		},
+		Accounts: accounts,
+		Sessions: sessions,
+		Users:    users,
+		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
+		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
+	})
+}
+
+// newAuthStack 构造认证相关的存储与服务：user/session store、账号服务、会话管理器。
+//
+// 密钥由 internal/config 统一读取（SESSION_SECRET 传会话签名；ENCRYPTION_KEY 是必需项，
+// 由 config.Load 校验，M1 尚无消费方；BOOTSTRAP_ADMIN_EMAIL 交给 web.Deps）。
+// 必需密钥缺失在 config.Load 阶段就以英文错误拒绝启动，这里不重复校验。
+func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.Manager, *store.UserStore, error) {
+	users := store.NewUserStore(db)
+	sessions := store.NewSessionStore(db)
+
+	accounts, err := auth.NewAccountService(users, sessions, auth.DefaultPasswordHasher())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	manager, err := auth.NewSessionManager(users, sessions, auth.SessionConfig{
+		Secret: []byte(cfg.Get(config.KeySessionSecret).Value),
+		// 生产必须 Secure（DESIGN.md §4.3）；本地 http 开发由 BASE_URL 的 scheme 决定，
+		// 否则开发态浏览器/curl 不会回传 cookie，登录流程无法联调。
+		Secure: strings.HasPrefix(cfg.Get(config.KeyBaseURL).Value, "https://"),
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return accounts, manager, users, nil
 }
 
 func runSchema(ctx context.Context, args []string) error {
