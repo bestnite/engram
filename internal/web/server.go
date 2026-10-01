@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -106,6 +107,9 @@ type Server struct {
 	media          *media.Store
 	// secrets 供管理面板写入敏感设置（M6-10）；为空时拒绝写入，只显示状态。
 	secrets *store.SecretCodec
+	// mediaSizeMu/mediaSize 是健康页媒体占用的采样缓存（M6-8）：避免每次请求都全量递归扫描。
+	mediaSizeMu sync.Mutex
+	mediaSize   *mediaSizeSample
 	// jobRunner 是作业入口（M9-4 入队、M6-6 列表与取消）；jobStore 供轮询按 id 读状态。
 	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
 	jobRunner *jobs.Runner

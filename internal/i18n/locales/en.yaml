@@ -1074,4 +1074,36 @@
   translation: "Target id must be a number."
 - id: admin.audit.notice.invalid_date
   translation: "Dates must use the YYYY-MM-DD format."
+- id: admin.health.title
+  translation: "Health"
+- id: admin.health.heading
+  translation: "Health"
+- id: admin.health.intro
+  translation: "Current state of the database, the media directory and the review queue."
+- id: admin.health.database.label
+  translation: "Database"
+- id: admin.health.database.ok
+  translation: "connected"
+- id: admin.health.database.error
+  translation: "unreachable"
+- id: admin.health.database.hint
+  translation: "A live ping against the underlying connection."
+- id: admin.health.schema.label
+  translation: "Schema version"
+- id: admin.health.schema.unknown
+  translation: "unknown"
+- id: admin.health.schema.hint
+  translation: "Version of the applied destructive migrations."
+- id: admin.health.media.label
+  translation: "Media directory"
+- id: admin.health.media.hint
+  translation: "Bytes on disk under the media root; sampled with a size cap and a short cache."
+- id: admin.health.media.truncated
+  translation: "(at least; the scan hit its entry cap)"
+- id: admin.health.due.label
+  translation: "Due queue"
+- id: admin.health.due.unknown
+  translation: "unknown"
+- id: admin.health.due.hint
+  translation: "Scheduled cards whose due time has passed, across all users."
 

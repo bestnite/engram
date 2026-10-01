@@ -215,6 +215,12 @@ type AdminPageData struct {
 	ColAuditTime, ColAuditUser, ColAuditAction, ColAuditTarget, ColAuditDetail string
 	// AuditTotalLabel 是「共 N 条」的前缀标签。
 	AuditTotalLabel string
+
+	// ---- 健康页（M6-8）----
+	// HealthPage 为 true 时模板渲染健康读数表。
+	HealthPage bool
+	// HealthRows 是健康读数；Key 是稳定英文标识，供测试定位某个值。
+	HealthRows []AdminHealthRow
 }
 
 // AdminOption 是一个下拉/单选项。
@@ -232,6 +238,15 @@ type AdminAuditRow struct {
 	Action string
 	Target string
 	Detail string
+}
+
+// AdminHealthRow 是健康页的一个读数（M6-8）。
+type AdminHealthRow struct {
+	// Key 是稳定英文标识（database/schema/media/due），只用于测试定位，不展示。
+	Key   string
+	Label string
+	Value string
+	Hint  string
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。

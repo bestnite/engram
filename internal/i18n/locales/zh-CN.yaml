@@ -1073,4 +1073,36 @@
   translation: "目标编号必须是数字。"
 - id: admin.audit.notice.invalid_date
   translation: "日期必须使用 YYYY-MM-DD 格式。"
+- id: admin.health.title
+  translation: "健康"
+- id: admin.health.heading
+  translation: "健康"
+- id: admin.health.intro
+  translation: "数据库、媒体目录与复习队列的当前状态。"
+- id: admin.health.database.label
+  translation: "数据库"
+- id: admin.health.database.ok
+  translation: "已连通"
+- id: admin.health.database.error
+  translation: "无法连接"
+- id: admin.health.database.hint
+  translation: "对底层连接做一次实时 Ping。"
+- id: admin.health.schema.label
+  translation: "schema 版本"
+- id: admin.health.schema.unknown
+  translation: "未知"
+- id: admin.health.schema.hint
+  translation: "已应用的破坏性迁移版本号。"
+- id: admin.health.media.label
+  translation: "媒体目录占用"
+- id: admin.health.media.hint
+  translation: "媒体根目录下的磁盘字节数；带条目上限与短时缓存采样。"
+- id: admin.health.media.truncated
+  translation: "（至少这么多；扫描触达条目上限）"
+- id: admin.health.due.label
+  translation: "到期队列量"
+- id: admin.health.due.unknown
+  translation: "未知"
+- id: admin.health.due.hint
+  translation: "全实例中已排期且到期时间已过的卡片数。"
 
