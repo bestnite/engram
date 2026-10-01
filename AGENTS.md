@@ -502,13 +502,22 @@ Conventions:
   subcommand round-trips a file; the web page uploads a package and reports the import summary.
   While doing this, replace the hand-rolled draft-2020-12 subset validator M5-6 wrote with a real
   JSON Schema library if the module proxy is reachable.
-- [ ] **M5-9 Deck package web page** — M5-8 did the MCP tools and the CLI but deliberately skipped
+- [x] **M5-9 Deck package web page** — M5-8 did the MCP tools and the CLI but deliberately skipped
   the browser path, because the locale catalog was owned by another lane that round. A browser-only
   user still cannot move a deck in or out: the deck page has no export control and there is no
   upload page.
   *Acceptance:* the deck page offers an export control that downloads a `.fdeck`; `/import` accepts
   an upload and reports the same summary the REST response returns; a malformed package produces a
   readable error message rather than a 500.
+- [ ] **M5-10 Deck package and statistics test hardening** — the package work shipped with two
+  blind spots it reported about itself: nothing exercises the package export, import, round trip or
+  unsafe-archive rejection on PostgreSQL, and media handling has no round-trip test at all (only
+  `include_media=0` is asserted) — so the one path that writes files to disk is the least covered.
+  The retrospective check has the same gap: it only ever ran on SQLite.
+  *Acceptance:* the package and retrospective cases run on PostgreSQL through `internal/pgtest`;
+  a package with media imports into a fresh database with the files present and byte-identical,
+  with both values of `skip_missing_media` asserted; any real bug the new tests expose is fixed
+  rather than encoded into the expectation.
 
 
 ### M6 — Admin panel and system settings
@@ -518,7 +527,7 @@ Conventions:
 - [x] **M6-2 User management** — list and search, create, disable and enable, reset
   password, change role, force logout, delete, and per-user deck and usage counts.
   *Acceptance:* each action has a test; disable and delete both invalidate sessions.
-- [ ] **M6-3 Registration and invites UI** — switch the policy, edit the email-domain
+- [x] **M6-3 Registration and invites UI** — switch the policy, edit the email-domain
   allowlist, create and revoke invites, and show usage of each invite.
   *Acceptance:* changing the policy takes effect on the next registration attempt without
   a restart.
@@ -614,7 +623,7 @@ Conventions:
   the remaining number shown; report the fit metric before and after.
   *Acceptance:* a preset with too few reviews is refused with the shortfall named; the
   metric is stored on the job row.
-- [ ] **M9-6 Optimisation test suite** — single-flight, timeout, kill, weight round-trip,
+- [x] **M9-6 Optimisation test suite** — single-flight, timeout, kill, weight round-trip,
   threshold, revert.
   *Acceptance:* `go test ./internal/schedule/... -run Optimise` passes with each case
   present.
@@ -704,7 +713,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 8/9 · M6 3/10 · M7 3/4 · M8 2/6 · M9 5/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 9/10 · M6 4/10 · M7 3/4 · M8 2/6 · M9 6/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
