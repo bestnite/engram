@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -119,3 +121,41 @@ type OptimizeResult struct {
 
 // Improved 判断新权重的对数损失是否优于旧权重；相等视为未改善。
 func (r OptimizeResult) Improved() bool { return r.FitAfter.LogLoss < r.FitBefore.LogLoss }
+
+// ErrPresetWeightsIDRequired 表示回退默认权重时未给出预设主键。
+var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is required")
+
+// ResetPresetWeights 把预设的优化权重一键回退为默认权重（DESIGN.md §3.5「一键回退默认权重」、
+// §12 M9 验收「可一键回退」）：weights_json、weights_optimized_at、weights_review_count
+// 三列一并写回 NULL。
+//
+// 为什么三列必须一起清：调度器（schedule.NewScheduler）以 weights_json 是否为 NULL 决定用
+// DefaultWeights() 还是优化权重；只把 weights_json 清掉、却留下 weights_optimized_at 与
+// weights_review_count，会让页面显示「已优化 + 时间 + 条数」却没有实际权重，自相矛盾。
+// 一次性清三列后，读到的预设与从未优化过的新预设完全一致。
+//
+// 幂等：本来就是默认（三列为 NULL）的预设再调用一次也返回 nil——「已经是默认」不是错误，
+// UI 的按钮可能被重复点击。只有 owner 能回退，授权规则与 Update 一致（preset 不参与 M5-1 的授权表）。
+func (s *PresetStore) ResetPresetWeights(ctx context.Context, actorUserID, presetID uint64) error {
+	if presetID == 0 {
+		return ErrPresetWeightsIDRequired
+	}
+	existing, err := s.ByID(ctx, presetID)
+	if err != nil {
+		return err
+	}
+	if err := requirePresetOwner(existing, actorUserID); err != nil {
+		return err
+	}
+	// 用 map 显式写入 nil：GORM 对 map 更新不会跳过零值，因此这里确实是把列置为 NULL。
+	updates := map[string]any{
+		"weights_json":         nil,
+		"weights_optimized_at": nil,
+		"weights_review_count": nil,
+		"updated_at":           time.Now().UTC(),
+	}
+	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ?", presetID).Updates(updates).Error; err != nil {
+		return fmt.Errorf("reset preset weights: %w", err)
+	}
+	return nil
+}

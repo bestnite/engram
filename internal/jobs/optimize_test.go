@@ -39,9 +39,9 @@ func okBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 	return Command{Name: "/bin/sh", Args: []string{"-c", "exit 0"}}, nil
 }
 
-// TestEnqueueOptimizeRefusesBelowThreshold 是 M9-5 的验收之一：复习太少的预设被拒绝，
+// TestOptimiseThresholdRefusesBelowThreshold 是 M9-6「阈值」用例（M9-5 验收之一）：复习太少的预设被拒绝，
 // 且错误里指名差额（还差多少条）。默认门槛 500，这里只有 3 条，差额应为 497。
-func TestEnqueueOptimizeRefusesBelowThreshold(t *testing.T) {
+func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	seedOptimizeReviews(t, db, 1, 3)
 
@@ -66,9 +66,9 @@ func TestEnqueueOptimizeRefusesBelowThreshold(t *testing.T) {
 	t.Logf("below-threshold refusal: %v", err)
 }
 
-// TestOptimizeThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖：
+// TestOptimiseThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖：
 // 把门槛降到 2 后，3 条复习即可入队（不再被默认 500 拒绝）。
-func TestOptimizeThresholdReadsSettings(t *testing.T) {
+func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()
 	seedOptimizeReviews(t, db, 1, 3)
@@ -93,9 +93,9 @@ func TestOptimizeThresholdReadsSettings(t *testing.T) {
 	}
 }
 
-// TestFinishOptimizeStoresFitMetricsOnJobRow 是 M9-5 的另一条验收：拟合指标存在 job 行上。
+// TestOptimiseResultStoresFitMetricsOnJobRow 是 M9-5 的另一条验收：拟合指标存在 job 行上。
 // 适配器（M9-2）缺席时走 FinishOptimize 占位路径，断言 result_json 里 before/after 可解析。
-func TestFinishOptimizeStoresFitMetricsOnJobRow(t *testing.T) {
+func TestOptimiseResultStoresFitMetricsOnJobRow(t *testing.T) {
 	runner, st, _ := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()
 
