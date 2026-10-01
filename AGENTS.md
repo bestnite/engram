@@ -247,7 +247,7 @@ Conventions:
   PostgreSQL and SQLite backup and restore paths separately. Placeholders only — no real host,
   domain, or credential.
 
-- [ ] **M0-13 A clear failure when the SQLite parent directory is missing** — starting with a
+- [x] **M0-13 A clear failure when the SQLite parent directory is missing** — starting with a
   `DB_DSN` whose parent directory does not exist fails with
   `open database: unable to open database file: out of memory (14)`. Measured, not inferred: the
   message names neither the path nor the directory, and `out of memory` is a SQLite errno artefact
@@ -760,7 +760,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 12/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
+  `M0 13/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
