@@ -5,3 +5,13 @@
 @import "tailwindcss";
 
 @source "../../views";
+
+/* 可见焦点（M8-5）：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示。
+   用 :focus-visible 而不是 :focus，避免鼠标操作时出现多余的焦点框，
+   同时保证纯键盘流程（复习页评分、编辑器、设置页）始终看得到当前焦点。 */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+}

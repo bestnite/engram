@@ -1493,3 +1493,9 @@
 - id: media.upload.error.generic
   translation: "Upload failed. Try again."
 
+# ── Accessibility (M8-5) ─────────────────────────────────────
+- id: a11y.review.answer_input
+  translation: "Your answer"
+- id: a11y.notes.bulk_tag
+  translation: "Tag to apply to the selected cards"
+

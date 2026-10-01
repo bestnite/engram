@@ -32,6 +32,9 @@ type ReviewGradedView struct {
 	Options     []ReviewGradedOption
 	Placeholder string
 	SubmitLabel string
+	// AnswerLabel 是作答输入框的可访问名称（M8-5）：纯文本/数值输入没有可见标题，
+	// 用 <label> 关联，屏幕阅读器与键盘用户都能知道这个输入框是什么。
+	AnswerLabel string
 }
 
 // ReviewDetailLine 是一条判分细节（标签已本地化，值来自判分结果）。

@@ -1491,3 +1491,9 @@
 - id: media.upload.error.generic
   translation: "上传失败，请重试。"
 
+# ── 无障碍（M8-5）────────────────────────────────────────────
+- id: a11y.review.answer_input
+  translation: "你的答案"
+- id: a11y.notes.bulk_tag
+  translation: "要加到所选卡片上的标签"
+
