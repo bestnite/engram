@@ -1,15 +1,14 @@
 // 模块路径是占位符：项目正式名未定，定名后全局替换（见 DESIGN.md §13 #1、AGENTS.md B-1）。
 module example.com/flashcard
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/a-h/templ v0.3.1020
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
-	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
-	github.com/yuin/goldmark v1.8.6
+	github.com/open-spaced-repetition/go-fsrs/v4 v4.0.0
 	golang.org/x/crypto v0.48.0
 	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -18,7 +17,6 @@ require (
 )
 
 require (
-	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
@@ -33,7 +31,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/gorilla/css v1.0.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.10.0 // indirect
