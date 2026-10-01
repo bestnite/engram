@@ -285,7 +285,7 @@ Conventions:
   *Acceptance:* either the flow is rebuilt on `github.com/zitadel/oidc/v3` with the existing stub
   provider tests still passing, or `DESIGN.md` records the standard-library decision together
   with the reason it changed. Decide before release, not after.
-- [ ] **M1-8 Personal settings page** — locale, timezone, day cutoff, display name,
+- [x] **M1-8 Personal settings page** — locale, timezone, day cutoff, display name,
   password change.
   *Acceptance:* changing the locale switches the returned page language; changing the
   cutoff moves `review_day` boundaries in the next test run.
@@ -374,7 +374,7 @@ Conventions:
   `internal/render`, save through `NoteStore`. Card types come from `Registry.Kinds()`.
   *Acceptance:* a logged-in user creates one note per card type in the browser and sees the expected
   number of cards per note; the form rejects an invalid field set with a localised message.
-- [ ] **M2-9 Media surface in the editor** — upload and insert into a card field.
+- [x] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
 
 ### M3 — Review loop
@@ -677,7 +677,7 @@ Conventions:
   M9-7 set out to remove.
   *Acceptance:* a test seeds a `queued` row, runs the startup recovery, and asserts it becomes
   `failed` with a reason saying the job never started, and that a fresh enqueue then succeeds.
-- [ ] **M9-9 Link the preset page from the navigation** — M9-4 built `/presets` and it works, but
+- [x] **M9-9 Link the preset page from the navigation** — M9-4 built `/presets` and it works, but
   it was left out of the site navigation to avoid touching a template another lane was editing, so
   the page is reachable only by typing the URL. A feature nobody can find is not finished.
   *Acceptance:* the navigation offers the preset page to every signed-in user, and a test asserts
@@ -751,7 +751,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/12 · M1 13/15 · M2 11/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 7/9
+  `M0 11/12 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 8/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
