@@ -8,9 +8,15 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+
+	"gorm.io/gorm"
 
 	"example.com/flashcard/internal/config"
 	"example.com/flashcard/internal/store"
+	"example.com/flashcard/internal/web"
 )
 
 // version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 dev。
@@ -61,9 +67,65 @@ func newLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
+// loadConfig 读取环境变量；数据库可用时再叠加 settings 表覆盖值（DESIGN.md §8.4 的优先级）。
+func loadConfig(ctx context.Context, db *gorm.DB) (*config.Config, error) {
+	cfg, err := config.Load(os.LookupEnv, nil)
+	if err != nil {
+		return nil, err
+	}
+	// settings 表可能还不存在（首次启动尚未迁移），此时只用环境变量。
+	if db != nil && db.Migrator().HasTable(&store.Setting{}) {
+		settings, err := store.LoadSettings(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		cfg, err = config.Load(os.LookupEnv, settings)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
 func runServe(ctx context.Context) error {
-	_ = ctx
-	return errors.New("serve is not implemented yet: the HTTP skeleton lands in M0-5")
+	logger := newLogger()
+	slog.SetDefault(logger)
+
+	envCfg, err := config.Load(os.LookupEnv, nil)
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(envCfg.Get(config.KeyDBDriver).Value, envCfg.Get(config.KeyDBDSN).Value)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadConfig(ctx, db)
+	if err != nil {
+		return err
+	}
+
+	if parseBool(cfg.Get(config.KeyAutoMigrate).Value) {
+		applied, err := store.Sync(ctx, db, store.BuiltinMigrations)
+		if err != nil {
+			return err
+		}
+		logger.Info("schema synchronized", "migrations_applied", applied)
+	}
+
+	srv, err := web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
+		DB:     db,
+		Logger: logger,
+		SchemaVersion: func(ctx context.Context) (int, error) {
+			return store.CurrentVersion(ctx, db)
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return srv.Run(ctx)
 }
 
 func runSchema(ctx context.Context, args []string) error {
@@ -92,11 +154,20 @@ func runSchema(ctx context.Context, args []string) error {
 }
 
 func runExport(args []string) error {
-	_ = args
 	return errors.New("export is not implemented yet (planned for M4)")
 }
 
 func runOptimize(args []string) error {
-	_ = args
 	return errors.New("optimize is not implemented yet (planned for M9)")
+}
+
+// parseBool 接受 "1"/"true"/"yes" 之类的常见写法；无法解析时按 false 处理。
+func parseBool(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	if v, err := strconv.ParseBool(raw); err == nil {
+		return v
+	}
+	return false
 }

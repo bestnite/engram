@@ -192,7 +192,7 @@ Conventions:
   an ordered list of explicit migration functions for changes AutoMigrate cannot make.
   *Acceptance:* test that an unnamed destructive change is refused by `schema sync` and
   that a registered migration runs exactly once.
-- [ ] **M0-5 HTTP skeleton** — `internal/web`: gin router, request logging middleware
+- [x] **M0-5 HTTP skeleton** — `internal/web`: gin router, request logging middleware
   (English, `slog`), panic recovery, graceful shutdown, `GET /healthz` returning JSON
   with database connectivity and schema version.
   *Acceptance:* `curl /healthz` returns `200` with both fields; shutdown logs one English
