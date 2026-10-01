@@ -634,7 +634,7 @@ Conventions:
 - [x] **M8-4 Language pack completeness report** — admin view of translation coverage per
   locale.
   *Acceptance:* a catalog with a missing key reports less than 100% and names the key.
-- [ ] **M8-5 Accessibility pass** — keyboard-only flow for review and editing, visible
+- [x] **M8-5 Accessibility pass** — keyboard-only flow for review and editing, visible
   focus, labels on inputs.
   *Acceptance:* a documented checklist run against the review, deck, and settings pages.
 - [x] **M8-6 Mobile smoke checklist** — a written procedure covering review, editing,
@@ -760,7 +760,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 12/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 8/9
+  `M0 12/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
