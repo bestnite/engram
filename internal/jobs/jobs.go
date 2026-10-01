@@ -54,6 +54,10 @@ const (
 )
 
 const (
+	// StaleJobReason 是启动时回收残留 running 作业写入的失败原因（英文，AGENTS.md §2.1）。
+	// 语义：子进程随上次进程退出必然已消失，running 只是崩溃/重启遗留的假状态（M9-6）。
+	StaleJobReason = "interrupted by restart"
+
 	// DefaultTimeout 是子进程的默认超时；优化训练可能跑很久，但必须有上限（M9-1 验收）。
 	DefaultTimeout = 30 * time.Minute
 	// DefaultLogTailLines 是落库的日志尾巴行数上限。
@@ -176,6 +180,10 @@ func New(deps Deps) (*Runner, error) {
 
 // Start 启动唯一的 worker goroutine；重复调用是幂等的。ctx 取消时 worker 退出，
 // 正在执行的子进程会被杀掉（runProcess 监听 ctx.Done）。
+//
+// 启动前会先调用 RecoverStale 回收上次进程遗留的 running 作业（M9-6）：否则这些残留行
+// 会让 Store.Active 永远认为「有作业在跑」，后续 Enqueue 一直返回 409。恢复失败只记日志，
+// 不阻塞 worker 启动；回收逻辑本身是显式入口（RecoverStale），不是隐蔽副作用。
 func (r *Runner) Start(ctx context.Context) {
 	r.mu.Lock()
 	if r.started {
@@ -184,7 +192,24 @@ func (r *Runner) Start(ctx context.Context) {
 	}
 	r.started = true
 	r.mu.Unlock()
+	_, _ = r.RecoverStale(ctx)
 	go r.loop(ctx)
+}
+
+// RecoverStale 是 M9-6 的显式入口：把重启/崩溃前遗留在 running 的作业回收为 failed，
+// 原因写 StaleJobReason，并保留其 log_tail 供诊断。返回被回收的行数。
+// Start 会在启动 worker 前调用一次；调用方也可在需要时显式调用。
+func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
+	recovered, err := r.store.RecoverStale(ctx, r.now(), StaleJobReason)
+	if err != nil {
+		r.logger.Error("stale job recovery failed", "error", err)
+		return 0, err
+	}
+	if recovered > 0 {
+		r.logger.Warn("recovered jobs left running by a previous process",
+			"count", recovered, "reason", StaleJobReason)
+	}
+	return recovered, nil
 }
 
 // Enqueue 建一个 queued 作业并入队；已有未完成作业时返回 ErrAlreadyRunning（HTTP 409）。
