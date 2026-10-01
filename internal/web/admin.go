@@ -39,6 +39,13 @@ type adminRoute struct {
 func adminRoutes() []adminRoute {
 	return []adminRoute{
 		{Method: http.MethodGet, Path: "/admin"},
+		{Method: http.MethodGet, Path: "/admin/users"},
+		{Method: http.MethodPost, Path: "/admin/users", Write: true},
+		{Method: http.MethodPost, Path: "/admin/users/:id/status", Write: true},
+		{Method: http.MethodPost, Path: "/admin/users/:id/role", Write: true},
+		{Method: http.MethodPost, Path: "/admin/users/:id/password", Write: true},
+		{Method: http.MethodPost, Path: "/admin/users/:id/logout", Write: true},
+		{Method: http.MethodPost, Path: "/admin/users/:id/delete", Write: true},
 		{Method: http.MethodGet, Path: "/admin/settings"},
 		{Method: http.MethodPost, Path: "/admin/settings", Write: true},
 		{Method: http.MethodGet, Path: "/admin/export"},
@@ -58,6 +65,22 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		switch r.Path {
 		case "/admin":
 			handlers = append(handlers, s.adminDashboard)
+		case "/admin/users":
+			if r.Write {
+				handlers = append(handlers, s.adminUserCreate)
+			} else {
+				handlers = append(handlers, s.adminUsersPage)
+			}
+		case "/admin/users/:id/status":
+			handlers = append(handlers, s.adminUserStatus)
+		case "/admin/users/:id/role":
+			handlers = append(handlers, s.adminUserRole)
+		case "/admin/users/:id/password":
+			handlers = append(handlers, s.adminUserResetPassword)
+		case "/admin/users/:id/logout":
+			handlers = append(handlers, s.adminUserForceLogout)
+		case "/admin/users/:id/delete":
+			handlers = append(handlers, s.adminUserDelete)
 		case "/admin/settings":
 			if r.Write {
 				handlers = append(handlers, s.adminSettingsSave)
@@ -107,7 +130,7 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 		impl bool
 	}{
 		{"dashboard", "/admin", true},
-		{"users", "/admin/users", false},
+		{"users", "/admin/users", true},
 		{"registration", "/admin/registration", false},
 		{"oidc", "/admin/oidc", false},
 		{"settings", "/admin/settings", true},
