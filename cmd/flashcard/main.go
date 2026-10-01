@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+
+	"example.com/flashcard/internal/config"
+	"example.com/flashcard/internal/store"
 )
 
 // version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 dev。
@@ -64,11 +67,28 @@ func runServe(ctx context.Context) error {
 }
 
 func runSchema(ctx context.Context, args []string) error {
-	_ = ctx
 	if len(args) != 1 || args[0] != "sync" {
 		return errors.New("usage: flashcard schema sync")
 	}
-	return errors.New("schema sync is not implemented yet: schema versioning lands in M0-4")
+	logger := newLogger()
+	cfg, err := config.Load(os.LookupEnv, nil)
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(cfg.Get(config.KeyDBDriver).Value, cfg.Get(config.KeyDBDSN).Value)
+	if err != nil {
+		return err
+	}
+	applied, err := store.Sync(ctx, db, store.BuiltinMigrations)
+	if err != nil {
+		return err
+	}
+	version, err := store.CurrentVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	logger.Info("schema synchronized", "migrations_applied", applied, "schema_version", version)
+	return nil
 }
 
 func runExport(args []string) error {

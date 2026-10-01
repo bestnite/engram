@@ -188,7 +188,7 @@ Conventions:
   *Acceptance:* AutoMigrate on both drivers creates all tables; a test asserts table
   count and the unique constraints on `notes (deck_id, external_ref)`,
   `cards (note_id, template)`, `identities (provider, subject)`, `media (sha256)`.
-- [ ] **M0-4 Schema version and destructive migrations** — a `schema_version` row plus
+- [x] **M0-4 Schema version and destructive migrations** — a `schema_version` row plus
   an ordered list of explicit migration functions for changes AutoMigrate cannot make.
   *Acceptance:* test that an unnamed destructive change is refused by `schema sync` and
   that a registered migration runs exactly once.
