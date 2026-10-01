@@ -81,6 +81,9 @@ type NoteListData struct {
 	// NewNoteLabel/NewNoteHref 指向新建卡片页（M2-12）。
 	NewNoteLabel string
 	NewNoteHref  string
+	// CloneAction/CloneLabel 是把当前卡组克隆到自己账号的入口（M5-4，reader 及以上可用）。
+	CloneAction string
+	CloneLabel  string
 	// Redirect 是批量操作完成后要跳回的列表地址（含筛选与页码）。
 	Redirect string
 	CSRF     string

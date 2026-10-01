@@ -173,6 +173,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)
+	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
 

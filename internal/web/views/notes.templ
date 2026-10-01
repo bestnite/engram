@@ -11,6 +11,10 @@ templ NoteListPage(data NoteListData) {
 		<p class="mt-2">
 			<a class="text-sm text-blue-600 hover:text-blue-700" href={ data.NewNoteHref }>{ data.NewNoteLabel }</a>
 		</p>
+		<form class="mt-2" method="post" action={ data.CloneAction }>
+			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			<button class="text-sm text-blue-600 hover:text-blue-700" type="submit">{ data.CloneLabel }</button>
+		</form>
 		<form class="mt-4 flex flex-wrap items-end gap-3" method="get" action={ data.FilterAction }>
 			<label class="block">
 				<span class="text-sm font-medium text-slate-700">{ data.SearchLabel }</span>
