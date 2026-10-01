@@ -588,3 +588,75 @@ completion percentage until they are moved into a release milestone.
 - A subagent that discovers missing design information must report it instead of
   inventing behaviour; the parent then records the decision in `DESIGN.md`.
 - Keep one commit per task so progress can be audited with `git log`.
+
+### 6.4 Parallel development with git worktrees
+
+A branch alone isolates nothing: `HEAD`, the index, and the working tree are single per
+checkout, so two writers in one directory will overwrite each other. Every parallel writer
+therefore gets its own worktree. The rules below were verified on git 2.55.
+
+**Layout and naming**
+
+- The main checkout stays on `main` and is used only as the integration point. Do not
+  develop in it.
+- Worktrees live **outside** the repository directory, for example
+  `../flashcard-wt/<task-id>`, so the main checkout's `git status` stays clean.
+- Branch: `feat/<task-id>-<slug>` (for example `feat/m3-2-queue-builder`).
+  Directory: `flashcard-wt/<task-id>`. Both use the task IDs from section 5.
+
+```bash
+git worktree add -b feat/m3-2 ../flashcard-wt/m3-2 main
+# ... work and commit inside ../flashcard-wt/m3-2 ...
+git worktree remove ../flashcard-wt/m3-2   # or keep the worktree for review
+git worktree prune                         # drop stale entries
+```
+
+**Working rules**
+
+- One task = one worktree = one commit. The subagent works inside its worktree; the parent
+  performs the merge serially (rebase onto `main`, run the section 4 checks, then merge).
+  A subagent never merges or pushes.
+- Concurrency budget: at most three writers at once, and only when the two tasks touch
+  **disjoint file sets**. Parallelism is decided by file overlap, nothing else.
+- Single-writer hotspots — one writer at a time, other tasks wait for the next phase:
+  `internal/store/models.go`, `internal/config/`, `internal/i18n/locales/`,
+  `internal/web/views/`.
+- Generated artifacts are per worktree: run `templ generate` and the Tailwind build inside
+  each worktree. The Go module cache and build cache are shared and safe for concurrent
+  use. Never run repository maintenance commands (`git gc`, `git prune`, `git repack`)
+  from a worktree.
+- Subagents are session-scoped and are killed when the session ends. Require an early
+  commit, even a work-in-progress one, so the work lands in the shared object database
+  instead of an orphaned directory.
+
+**Pitfalls (each reproduced on git 2.55)**
+
+1. A branch can be checked out in only one worktree at a time, and `--force` does not
+   override this. This is what enforces one task per branch, and it also means two writers
+   can never share a branch.
+2. Deleting a worktree directory does not remove the worktree. Until `git worktree prune`
+   runs, the entry stays listed as `prunable` and the branch still counts as checked out,
+   which blocks creating another worktree for that branch.
+3. Hooks and scripts exist in a worktree only if they are committed. An untracked
+   `.githooks/` does not run and produces no error, so commits can silently lose their
+   signature.
+4. Repository configuration is shared from the main repository: `user.signingkey` and
+   `core.hooksPath` are visible inside every worktree, so signing needs no per-worktree
+   setup.
+
+**When to use separate clones instead**
+
+Use `git clone --local` only when a writer needs its own `.git/config`, its own ignore
+rules, or the freedom to run `git clean -xdf`. That is not the case in this repository;
+worktrees are the default.
+
+**Phase plan — which milestones may run in parallel**
+
+| Phase | Lanes | Constraint |
+|---|---|---|
+| A | M0 alone | Everything depends on it; run it serially |
+| B | M1 (auth) ∥ M2 (store, cardtype, web) | Disjoint packages |
+| C | M3 (schedule) ∥ M4 (api, mcp) | Freeze the shared store models; neither lane may change them |
+| D | M5 (grants) ∥ M7 (statistics) | Disjoint packages |
+| E | M6 (admin views) **or** M8 (mobile, i18n) | Both rewrite `internal/web/views/`; run them in sequence. If they must overlap, split M8 into "gestures and JS" and "view text", and keep the view-text half exclusive with M6 |
+| F | M9 last | Needs real review data produced by M3 |
