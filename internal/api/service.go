@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/cardtype"
 	"example.com/flashcard/internal/schedule"
 	"example.com/flashcard/internal/store"
@@ -54,25 +55,40 @@ func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error
 	return decks, nil
 }
 
-// OwnedDeck 取属于给定用户的卡组；不存在返回 404，非本人返回 403。
-func (a *API) OwnedDeck(ctx context.Context, userID, deckID uint64) (*store.Deck, error) {
-	d, err := a.decks.ByID(ctx, deckID)
-	if err != nil {
+// RequireDeckRole 校验用户在卡组上至少拥有 want 角色（M5-1）。
+//
+// 判定本体在 auth.DeckAccess（REST 与内置 MCP 共用同一实现）；这里把它翻译成带稳定
+// code 的 ServiceError 并写一条 permission.denied 审计。无访问权 -> forbidden，
+// 有角色但不够 -> insufficient_role，卡组不存在 -> not_found。
+func (a *API) RequireDeckRole(ctx context.Context, userID, deckID uint64, want string) (*store.Deck, error) {
+	deck, role, err := a.access.RequireRole(ctx, deckID, userID, want)
+	if err == nil {
+		return deck, nil
+	}
+	if errors.Is(err, auth.ErrDeckNotFound) {
 		return nil, newServiceError(http.StatusNotFound, CodeNotFound, "deck not found")
 	}
-	if d.OwnerUserID != userID {
-		return nil, newServiceError(http.StatusForbidden, CodeForbidden, "deck is not owned by the caller")
+	code := CodeForbidden
+	if role != "" {
+		code = CodeInsufficientRole
 	}
-	return d, nil
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(userID),
+		Action:     store.ActionPermissionDenied,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deckID),
+		Detail:     map[string]any{"required_role": want, "user_role": role, "code": code},
+	})
+	return nil, newServiceError(http.StatusForbidden, code, "insufficient role for this deck")
 }
 
-// OwnedNote 取属于给定用户的 note 及其卡组；不存在 404，非本人 403。
-func (a *API) OwnedNote(ctx context.Context, userID, noteID uint64) (*store.Note, *store.Deck, error) {
+// RequireNoteRole 取 note 及其卡组并要求至少 want 角色；note 不存在返回 404。
+func (a *API) RequireNoteRole(ctx context.Context, userID, noteID uint64, want string) (*store.Note, *store.Deck, error) {
 	n, err := a.notes.ByID(ctx, noteID)
 	if err != nil {
 		return nil, nil, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
 	}
-	d, err := a.OwnedDeck(ctx, userID, n.DeckID)
+	d, err := a.RequireDeckRole(ctx, userID, n.DeckID, want)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,7 +126,7 @@ func (a *API) findNoteByExternalRef(ctx context.Context, deckID uint64, ref stri
 
 // ListNotes 返回卡组下的卡片列表（分页、标签过滤、关键词搜索）。
 func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.NoteListOptions) ([]store.Note, int64, error) {
-	d, err := a.OwnedDeck(ctx, userID, deckID)
+	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -184,7 +200,7 @@ type importPlan struct {
 // 在报告里给出失败行的索引\"。dry_run 时停在第一遍，只返回计数；on_conflict=fail 时
 // 任何冲突或校验错误都会整批拒绝。
 func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
-	d, err := a.OwnedDeck(ctx, userID, deckID)
+	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
 		return ImportResponse{}, err
 	}
@@ -358,7 +374,7 @@ type UpdateNoteInput struct {
 
 // UpdateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
 func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64, in UpdateNoteInput) (*store.Note, error) {
-	existing, _, err := a.OwnedNote(ctx, userID, noteID)
+	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +415,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 
 // DeleteNote 软删除单卡（进度保留，误删可恢复）；返回被删除的 note id。
 func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64) (uint64, error) {
-	existing, _, err := a.OwnedNote(ctx, userID, noteID)
+	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
 		return 0, err
 	}
@@ -523,7 +539,7 @@ type ExportRow struct {
 // ExportDeckIDs 解析导出目标卡组集合：deckID=0 时导出调用者全部卡组，否则仅该卡组。
 func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint64, error) {
 	if deckID != 0 {
-		if _, err := a.OwnedDeck(ctx, userID, deckID); err != nil {
+		if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 			return nil, err
 		}
 		return []uint64{deckID}, nil
@@ -565,7 +581,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckID uint64, limit 
 	}
 	var deck *store.Deck
 	if deckID != 0 {
-		d, err := a.OwnedDeck(ctx, u.ID, deckID)
+		d, err := a.RequireDeckRole(ctx, u.ID, deckID, store.RoleReader)
 		if err != nil {
 			return nil, err
 		}
@@ -676,7 +692,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 	if err != nil {
 		return SubmitReviewResult{}, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
 	}
-	deck, err := a.OwnedDeck(ctx, u.ID, note.DeckID)
+	deck, err := a.RequireDeckRole(ctx, u.ID, note.DeckID, store.RoleReader)
 	if err != nil {
 		return SubmitReviewResult{}, err
 	}

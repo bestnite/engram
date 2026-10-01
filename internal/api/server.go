@@ -25,6 +25,8 @@ type Deps struct {
 	Notes   *store.NoteStore
 	Presets *store.PresetStore
 	Cards   *store.CardStore
+	// Grants 是卡组授权存储（M5-1）；为空时由 New 从 DB 构造。
+	Grants  *store.GrantStore
 	Auditor *auth.Auditor
 	// Now 可注入时钟；为零时用系统 UTC 时间。
 	Now func() time.Time
@@ -44,6 +46,9 @@ type API struct {
 	notes   *store.NoteStore
 	presets *store.PresetStore
 	cards   *store.CardStore
+	grants  *store.GrantStore
+	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
+	access  *auth.DeckAccess
 	auditor *auth.Auditor
 	now     func() time.Time
 	authn   *Authenticator
@@ -76,6 +81,11 @@ func New(deps Deps) (*API, error) {
 	if len(missing) > 0 {
 		return nil, errors.New("api: missing required dependencies: " + joinStrings(missing))
 	}
+	// 授权存储可按需从 DB 构造，避免每个调用方（含测试）都要显式装配（M5-1）。
+	grants := deps.Grants
+	if grants == nil {
+		grants = store.NewGrantStore(deps.DB)
+	}
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -106,6 +116,8 @@ func New(deps Deps) (*API, error) {
 		notes:   deps.Notes,
 		presets: deps.Presets,
 		cards:   deps.Cards,
+		grants:  grants,
+		access:  auth.NewDeckAccess(deps.Decks, grants),
 		auditor: deps.Auditor,
 		now:     now,
 		authn:   authn,
@@ -166,30 +178,46 @@ func queryInt(c *gin.Context, name string, def int) int {
 	return v
 }
 
-// ownedDeck 取属于当前用户的卡组；不存在返回 404，非本人返回 403。
-// M5 的卡组授权接入后，这里会扩展为 requireRole；当前只有 owner 能通过。
-func (a *API) ownedDeck(c *gin.Context, deckID uint64) (*store.Deck, bool) {
-	d, err := a.decks.ByID(c.Request.Context(), deckID)
-	if err != nil {
-		abortError(c, http.StatusNotFound, CodeNotFound, "deck not found")
-		return nil, false
-	}
+// requireDeckRole 取卡组并校验当前用户在卡组上至少拥有 want 角色（M5-1）。
+//
+// 判定本体在 auth.DeckAccess（与 Web 共用同一实现）；这里只负责把错误映射成 REST 的
+// 稳定 code、写一条 permission.denied 审计并中止请求。无访问权 -> 403 forbidden，
+// 有角色但不够 -> 403 insufficient_role，卡组不存在 -> 404 not_found。
+func (a *API) requireDeckRole(c *gin.Context, deckID uint64, want string) (*store.Deck, bool) {
 	u, _ := CurrentUser(c)
-	if d.OwnerUserID != u.ID {
-		abortError(c, http.StatusForbidden, CodeForbidden, "deck is not owned by the caller")
-		return nil, false
+	deck, role, err := a.access.RequireRole(c.Request.Context(), deckID, u.ID, want)
+	if err == nil {
+		return deck, true
 	}
-	return d, true
+	status, code := http.StatusForbidden, CodeForbidden
+	if errors.Is(err, auth.ErrDeckNotFound) {
+		status, code = http.StatusNotFound, CodeNotFound
+	} else if role != "" {
+		code = CodeInsufficientRole
+	}
+	if !errors.Is(err, auth.ErrDeckNotFound) {
+		a.audit(c.Request.Context(), store.AuditEntry{
+			UserID:     store.Ptr(u.ID),
+			APIKeyID:   CurrentAPIKeyID(c),
+			Action:     store.ActionPermissionDenied,
+			TargetType: "deck",
+			TargetID:   store.Ptr(deckID),
+			Detail:     map[string]any{"required_role": want, "user_role": role, "code": code},
+		})
+	}
+	abortError(c, status, code, "insufficient role for this deck")
+	return nil, false
 }
 
-// ownedNote 取属于当前用户的 note 及其卡组；不存在 404，非本人 403。
-func (a *API) ownedNote(c *gin.Context, noteID uint64) (*store.Note, *store.Deck, bool) {
+// requireNoteRole 取 note 及其卡组并要求至少 want 角色；note 不存在时 404，
+// 卡组权限不足时沿用 requireDeckRole 的结果（note 不泄露到无权限的卡组之外）。
+func (a *API) requireNoteRole(c *gin.Context, noteID uint64, want string) (*store.Note, *store.Deck, bool) {
 	n, err := a.notes.ByID(c.Request.Context(), noteID)
 	if err != nil {
 		abortError(c, http.StatusNotFound, CodeNotFound, "note not found")
 		return nil, nil, false
 	}
-	d, ok := a.ownedDeck(c, n.DeckID)
+	d, ok := a.requireDeckRole(c, n.DeckID, want)
 	if !ok {
 		return nil, nil, false
 	}

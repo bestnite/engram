@@ -49,7 +49,7 @@ func (s *Server) reviewPage(c *gin.Context) {
 	}
 	deckID := parseUintQuery(c.Query("deck"))
 	if deckID != 0 {
-		if _, ok := s.loadOwnedDeck(c, user, deckID); !ok {
+		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
 			return
 		}
 	}
