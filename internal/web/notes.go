@@ -367,6 +367,8 @@ func (s *Server) noteList(c *gin.Context) {
 		BulkSubmitLabel:    loc.T("notes.list.bulk_submit"),
 		NewNoteLabel:       loc.T("notes.list.new_note"),
 		NewNoteHref:        fmt.Sprintf("/decks/%d/new-note", deck.ID),
+		CloneAction:        fmt.Sprintf("/decks/%d/clone", deck.ID),
+		CloneLabel:         loc.T("clone.submit"),
 		Redirect:           noteListHref(deck.ID, page, q, tag, kind, status),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {

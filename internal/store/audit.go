@@ -35,6 +35,8 @@ const (
 	ActionDeckGrant      = "deck.grant"
 	ActionDeckRoleChange = "deck.role_change"
 	ActionDeckRevoke     = "deck.revoke"
+	// M5-4 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
+	ActionDeckClone = "deck.clone"
 )
 
 // AuditEntry 是一次审计写入的入参。
