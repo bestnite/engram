@@ -96,6 +96,18 @@ CREATE TABLE identities (
   UNIQUE (provider, subject)
 );
 
+-- 会话（服务端记录：cookie 只持有不可读的会话 ID 加签名，作废以本表行为准）
+CREATE TABLE sessions (
+  id            TEXT PRIMARY KEY,               -- 32 字节随机值的 URL 安全编码
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  csrf_token    TEXT NOT NULL,                  -- 绑定会话的 CSRF token（DESIGN.md §4.3）
+  created_at    TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  last_seen_at  TEXT,
+  revoked_at    TEXT                            -- 非空即已作废（登出 / 改密码 / 禁用）
+);
+CREATE INDEX idx_sessions_user ON sessions(user_id);
+
 -- 邀请（注册策略为 invite 时使用；token 一次性）
 CREATE TABLE invites (
   id            INTEGER PRIMARY KEY,
