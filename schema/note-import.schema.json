@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/note-import.schema.json",
+  "title": "Note import request",
+  "description": "Request body for POST /api/v1/decks/:id/notes, the bulk create or update endpoint. One request carries at most 500 notes. Each note is identified by its 'kind'; the structure of 'fields' is decided by that kind. The server remains the source of truth for validation, but this schema mirrors the same constraints so external tools and agents can validate and generate request bodies before sending them.",
+  "type": "object",
+  "required": ["notes"],
+  "properties": {
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the server counts created, updated and skipped notes and reports errors without writing anything."
+    },
+    "on_conflict": {
+      "type": "string",
+      "enum": ["skip", "update", "fail"],
+      "default": "update",
+      "description": "What to do when a note with the same external_ref already exists in the deck. 'skip' leaves the existing note untouched, 'update' replaces its content, 'fail' aborts the request and rolls back."
+    },
+    "notes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "description": "The notes to import. The array index is reported in the 'errors' entries of the response.",
+      "items": {
+        "$ref": "#/$defs/note"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "note": {
+      "title": "Note",
+      "description": "One note. The 'kind' discriminates between the per-kind shapes in the oneOf below; an unknown kind matches no branch and is therefore rejected.",
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Card type identifier. One of the registered types; an unknown kind is an error and is never silently dropped."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Field values of the note. The structure is decided by 'kind' (see the per-kind definitions)."
+        },
+        "external_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "Idempotency key chosen by the caller, for example '<system>:<docId>:<blockId>'. The server never interprets it; it only guarantees that (deck_id, external_ref) is unique, so resubmitting the same batch creates no duplicates."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "uniqueItems": true,
+          "description": "Tags attached to the note."
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form metadata kept as-is for the caller and round-tripped on export."
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "description": "Optional link back to the source the note was generated from."
+        }
+      },
+      "additionalProperties": true,
+      "discriminator": {
+        "propertyName": "kind"
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            { "$ref": "#/$defs/note_basic" },
+            { "$ref": "#/$defs/note_basic_both" },
+            { "$ref": "#/$defs/note_cloze" },
+            { "$ref": "#/$defs/note_list" },
+            { "$ref": "#/$defs/note_typed" },
+            { "$ref": "#/$defs/note_numeric" },
+            { "$ref": "#/$defs/note_choice_single" },
+            { "$ref": "#/$defs/note_choice_multi" },
+            { "$ref": "#/$defs/note_true_false" },
+            { "$ref": "#/$defs/note_short_answer" }
+          ]
+        }
+      ]
+    },
+    "fields_basic": {
+      "title": "Fields for kind 'basic' and 'basic_both'",
+      "type": "object",
+      "required": ["front", "back"],
+      "properties": {
+        "front": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Markdown/TeX text shown first."
+        },
+        "back": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Markdown/TeX text revealed after the front."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_cloze": {
+      "title": "Fields for kind 'cloze'",
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\{\\{c[0-9]+::",
+          "description": "Text containing at least one cloze deletion in the form {{cN::text}} or {{cN::text::hint}}, for example 'The {{c1::mitochondrion}} is the powerhouse of the cell.' Every distinct index N produces one card."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_list": {
+      "title": "Fields for kind 'list'",
+      "type": "object",
+      "required": ["prompt", "items"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question or instruction shown to the learner."
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The items to be recalled, revealed one by one."
+        },
+        "ordered": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the items must be recalled in their given order."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_typed": {
+      "title": "Fields for kind 'typed'",
+      "type": "object",
+      "required": ["prompt", "answer"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question shown to the learner."
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The canonical accepted answer."
+        },
+        "accept": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Additional accepted answers."
+        },
+        "ignore_case": {
+          "type": "boolean",
+          "default": true,
+          "description": "Compare case-insensitively."
+        },
+        "ignore_whitespace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Normalise surrounding and repeated whitespace before comparing."
+        },
+        "regex": {
+          "type": "string",
+          "minLength": 1,
+          "description": "When set, the answer is graded as a regular expression instead of a literal match."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_numeric": {
+      "title": "Fields for kind 'numeric'",
+      "type": "object",
+      "required": ["prompt", "value"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question shown to the learner."
+        },
+        "value": {
+          "type": "number",
+          "description": "The expected numeric value."
+        },
+        "tolerance_absolute": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Absolute tolerance. The answer is accepted when |answer - value| is at most this value."
+        },
+        "tolerance_relative": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Relative tolerance as a fraction of 'value' (0.01 means 1%)."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Optional unit shown with the value, for example 'kg'."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_choice_single": {
+      "title": "Fields for kind 'choice_single'",
+      "type": "object",
+      "required": ["question", "options", "answer"],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question shown to the learner."
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The answer options."
+        },
+        "answer": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based index of the correct option. JSON Schema cannot express that this index must be smaller than the number of options; the server enforces that."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_choice_multi": {
+      "title": "Fields for kind 'choice_multi'",
+      "type": "object",
+      "required": ["question", "options", "answers"],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question shown to the learner."
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The answer options."
+        },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Zero-based indices of all correct options. Every index must be smaller than the number of options; JSON Schema cannot express that, so the server enforces it."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_true_false": {
+      "title": "Fields for kind 'true_false'",
+      "type": "object",
+      "required": ["statement", "answer"],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The statement the learner judges as true or false."
+        },
+        "answer": {
+          "type": "boolean",
+          "description": "Whether the statement is true."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_short_answer": {
+      "title": "Fields for kind 'short_answer'",
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question shown to the learner."
+        },
+        "reference": {
+          "type": "string",
+          "description": "Optional reference answer. short_answer is self-graded for now."
+        }
+      },
+      "additionalProperties": true
+    },
+    "note_basic": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "basic" },
+        "fields": { "$ref": "#/$defs/fields_basic" }
+      }
+    },
+    "note_basic_both": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "basic_both" },
+        "fields": { "$ref": "#/$defs/fields_basic" }
+      }
+    },
+    "note_cloze": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "cloze" },
+        "fields": { "$ref": "#/$defs/fields_cloze" }
+      }
+    },
+    "note_list": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "list" },
+        "fields": { "$ref": "#/$defs/fields_list" }
+      }
+    },
+    "note_typed": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "typed" },
+        "fields": { "$ref": "#/$defs/fields_typed" }
+      }
+    },
+    "note_numeric": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "numeric" },
+        "fields": { "$ref": "#/$defs/fields_numeric" }
+      }
+    },
+    "note_choice_single": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "choice_single" },
+        "fields": { "$ref": "#/$defs/fields_choice_single" }
+      }
+    },
+    "note_choice_multi": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "choice_multi" },
+        "fields": { "$ref": "#/$defs/fields_choice_multi" }
+      }
+    },
+    "note_true_false": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "true_false" },
+        "fields": { "$ref": "#/$defs/fields_true_false" }
+      }
+    },
+    "note_short_answer": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "short_answer" },
+        "fields": { "$ref": "#/$defs/fields_short_answer" }
+      }
+    }
+  }
+}

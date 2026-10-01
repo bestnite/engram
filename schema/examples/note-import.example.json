@@ -1,0 +1,56 @@
+{
+  "dry_run": false,
+  "on_conflict": "update",
+  "notes": [
+    {
+      "external_ref": "example-system:doc-1:block-2",
+      "kind": "basic",
+      "fields": {
+        "front": "What is the capital of France?",
+        "back": "Paris."
+      },
+      "tags": ["geography", "europe"],
+      "source_url": "https://example.com/notes/geography#france"
+    },
+    {
+      "kind": "cloze",
+      "fields": {
+        "text": "The {{c1::mitochondrion}} is the powerhouse of the cell and carries its own {{c2::DNA::genetic material}}."
+      },
+      "tags": ["biology"]
+    },
+    {
+      "external_ref": "example-system:doc-2:block-7",
+      "kind": "numeric",
+      "fields": {
+        "prompt": "At 1 atm, what is the boiling point of water in degrees Celsius?",
+        "value": 100,
+        "tolerance_absolute": 0.5,
+        "unit": "C"
+      },
+      "tags": ["physics"],
+      "extra": {
+        "generated_by": "example-agent",
+        "revision": 3
+      }
+    },
+    {
+      "kind": "choice_multi",
+      "fields": {
+        "question": "Which of these numbers are prime?",
+        "options": ["4", "7", "9", "11"],
+        "answers": [1, 3]
+      },
+      "tags": ["math"]
+    },
+    {
+      "kind": "list",
+      "fields": {
+        "prompt": "Name the stages of the water cycle.",
+        "items": ["evaporation", "condensation", "precipitation", "collection"],
+        "ordered": false
+      },
+      "tags": ["earth-science"]
+    }
+  ]
+}
