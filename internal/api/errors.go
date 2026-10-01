@@ -10,16 +10,19 @@ import (
 // message 目前是英文原文；本地化消息由后续任务 M4-9 统一接入，届时 code 保持不变。
 // TODO(M4-9): resolve the message from the translation catalog by Accept-Language.
 const (
-	CodeUnauthorized    = "unauthorized"
-	CodeInvalidAPIKey   = "invalid_api_key"
-	CodeScopeRequired   = "scope_required"
-	CodeRateLimited     = "rate_limited"
-	CodeInvalidRequest  = "invalid_request"
-	CodeNotFound        = "not_found"
-	CodeForbidden       = "forbidden"
-	CodeConflict        = "conflict"
-	CodeVersionConflict = "version_conflict"
-	CodeInternal        = "internal_error"
+	CodeUnauthorized   = "unauthorized"
+	CodeInvalidAPIKey  = "invalid_api_key"
+	CodeScopeRequired  = "scope_required"
+	CodeRateLimited    = "rate_limited"
+	CodeInvalidRequest = "invalid_request"
+	CodeNotFound       = "not_found"
+	CodeForbidden      = "forbidden"
+	// CodeInsufficientRole 表示用户对卡组有访问权但角色不够（如 reader 试图改卡），
+	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断（M5-1）。
+	CodeInsufficientRole = "insufficient_role"
+	CodeConflict         = "conflict"
+	CodeVersionConflict  = "version_conflict"
+	CodeInternal         = "internal_error"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。

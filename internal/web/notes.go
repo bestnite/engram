@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -112,19 +113,41 @@ func deckIDParam(c *gin.Context) (uint64, bool) {
 	return id, true
 }
 
-// loadOwnedDeck 取卡组并校验当前用户是 owner；不存在或不属于本人时拒绝。
-// 非 owner 返回 403（M5-1 引入授权后会扩展为 owner/editor 可写、reader 可读）。
-func (s *Server) loadOwnedDeck(c *gin.Context, user *store.User, deckID uint64) (*store.Deck, bool) {
-	deck, err := s.decks.ByID(c.Request.Context(), deckID)
-	if err != nil {
+// loadDeckForRole 取卡组并校验当前用户至少拥有 want 角色（M5-1）。
+//
+// 判定本体在 auth.DeckAccess（与 REST/MCP 共用同一实现，不复制第二份）；这里只负责
+// 把错误映射成 HTML 响应：卡组不存在 -> 404，权限不足 -> 403，并写一条 permission.denied
+// 审计（谁在什么时候想对哪个卡组做什么被挡下）。
+func (s *Server) loadDeckForRole(c *gin.Context, user *store.User, deckID uint64, want string) (*store.Deck, bool) {
+	if s.access == nil {
+		// 装配缺失属于服务端配置问题，不能放行。
+		s.logger.Error("deck access checker is not wired", "deck_id", deckID)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return nil, false
+	}
+	deck, role, err := s.access.RequireRole(c.Request.Context(), deckID, user.ID, want)
+	if err == nil {
+		return deck, true
+	}
+	if errors.Is(err, auth.ErrDeckNotFound) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return nil, false
 	}
-	if deck.OwnerUserID != user.ID {
-		c.AbortWithStatus(http.StatusForbidden)
-		return nil, false
-	}
-	return deck, true
+	s.audit(c.Request.Context(), store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionPermissionDenied,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deckID),
+		Detail:     map[string]any{"required_role": want, "user_role": role},
+	})
+	c.AbortWithStatus(http.StatusForbidden)
+	return nil, false
+}
+
+// loadOwnedDeck 保留旧名，语义收敛为“至少能看”（reader 及以上）。
+// 涉及写入的 handler 必须改用 loadDeckForRole(..., store.RoleEditor)。
+func (s *Server) loadOwnedDeck(c *gin.Context, user *store.User, deckID uint64) (*store.Deck, bool) {
+	return s.loadDeckForRole(c, user, deckID, store.RoleReader)
 }
 
 // kindLabel 把 kind 映射成语言包里的显示名；未知 kind 回退成原始标识。
@@ -234,7 +257,7 @@ func (s *Server) noteList(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader)
 	if !ok {
 		return
 	}
@@ -398,7 +421,7 @@ func (s *Server) noteEdit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}
@@ -611,7 +634,7 @@ func (s *Server) notePreview(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}
@@ -650,7 +673,7 @@ func (s *Server) noteUpdate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}
@@ -698,7 +721,7 @@ func (s *Server) noteBulk(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}
@@ -833,7 +856,7 @@ func (s *Server) noteNew(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}
@@ -885,7 +908,7 @@ func (s *Server) noteFieldsFragment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, ok := s.loadOwnedDeck(c, user, deckID); !ok {
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
 	kind := resolveCreateKind(c.Query("kind"))
@@ -911,7 +934,7 @@ func (s *Server) noteCreatePreview(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, ok := s.loadOwnedDeck(c, user, deckID); !ok {
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
 	kind := resolveCreateKind(c.PostForm("kind"))
@@ -938,7 +961,7 @@ func (s *Server) noteCreate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor)
 	if !ok {
 		return
 	}

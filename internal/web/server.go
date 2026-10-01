@@ -50,6 +50,8 @@ type Deps struct {
 	Cards *store.CardStore
 	// Presets 提供调度预设的读取，供复习页构造 FSRS 调度器（M3-5）。
 	Presets *store.PresetStore
+	// Grants 是卡组授权存储（M5-1）；为空时由 New 从 DB 构造。
+	Grants *store.GrantStore
 	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
@@ -71,18 +73,21 @@ type Server struct {
 	router *gin.Engine
 	db     *gorm.DB
 	// schemaVersion 由 main 注入，避免 web 反向依赖 store 的具体实现。
-	schemaVersion  func(ctx context.Context) (int, error)
-	assets         *Assets
-	i18n           *i18n.Translator
-	userLocale     func(c *gin.Context) string
-	accounts       *auth.AccountService
-	sessions       *auth.Manager
-	users          *store.UserStore
-	invites        *store.InviteStore
-	decks          *store.DeckStore
-	notes          *store.NoteStore
-	cards          *store.CardStore
-	presets        *store.PresetStore
+	schemaVersion func(ctx context.Context) (int, error)
+	assets        *Assets
+	i18n          *i18n.Translator
+	userLocale    func(c *gin.Context) string
+	accounts      *auth.AccountService
+	sessions      *auth.Manager
+	users         *store.UserStore
+	invites       *store.InviteStore
+	decks         *store.DeckStore
+	notes         *store.NoteStore
+	cards         *store.CardStore
+	presets       *store.PresetStore
+	grants        *store.GrantStore
+	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
+	access         *auth.DeckAccess
 	auditor        *auth.Auditor
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
@@ -142,6 +147,14 @@ func New(addr string, deps Deps) (*Server, error) {
 		api:            deps.API,
 		mcp:            deps.MCP,
 		media:          deps.Media,
+	}
+	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
+	s.grants = deps.Grants
+	if s.grants == nil {
+		s.grants = store.NewGrantStore(deps.DB)
+	}
+	if deps.Decks != nil {
+		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。

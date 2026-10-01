@@ -29,6 +29,12 @@ const (
 	ActionMediaUpload = "media.upload"
 	// M3-4 撤销评分。
 	ActionReviewUndo = "review.undo"
+	// M5-1 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
+	ActionPermissionDenied = "permission.denied"
+	// M5-2 授权变更（共享页面）：授予 / 改角色 / 撤销。
+	ActionDeckGrant      = "deck.grant"
+	ActionDeckRoleChange = "deck.role_change"
+	ActionDeckRevoke     = "deck.revoke"
 )
 
 // AuditEntry 是一次审计写入的入参。
