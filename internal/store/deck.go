@@ -16,6 +16,13 @@ const (
 	DeckVisibilityPublic   = "public"
 )
 
+// 卡组级每日上限的文档化默认值（DESIGN.md §3.3）：新卡 20、复习 200，0 表示不限。
+// 与 decks 表的列默认值保持一致；改这里必须同步改 models.go 的 default 标签。
+const (
+	DefaultNewPerDay     = 20
+	DefaultReviewsPerDay = 200
+)
+
 var (
 	// ErrNotOwner 表示调用者不是资源的所有者，因此无权修改。
 	// 复用同一个哨兵值，让上层用 errors.Is 一致地翻译成 403。
@@ -26,7 +33,23 @@ var (
 	ErrDeckNameRequired = errors.New("deck name is required")
 	// ErrDeckPresetRequired 表示卡组未指定调度预设。
 	ErrDeckPresetRequired = errors.New("deck preset is required")
+	// ErrInvalidDeckCap 表示每日上限为负；0 是合法值（不限）。
+	ErrInvalidDeckCap = errors.New("deck daily cap must not be negative")
 )
+
+// DeckCaps 是卡组级的每日上限；NewPerDay 与 ReviewsPerDay 都为 0 时表示不限。
+type DeckCaps struct {
+	NewPerDay     int
+	ReviewsPerDay int
+}
+
+// validDeckCaps 校验上限非负。
+func validDeckCaps(c DeckCaps) error {
+	if c.NewPerDay < 0 || c.ReviewsPerDay < 0 {
+		return fmt.Errorf("%w: new_per_day=%d reviews_per_day=%d", ErrInvalidDeckCap, c.NewPerDay, c.ReviewsPerDay)
+	}
+	return nil
+}
 
 // validDeckVisibility 判断可见性取值是否合法。
 func validDeckVisibility(v string) bool {
@@ -161,6 +184,29 @@ func (s *DeckStore) Archive(ctx context.Context, actorUserID, deckID uint64, at 
 // Restore 清空归档时间；未归档时幂等返回 nil。
 func (s *DeckStore) Restore(ctx context.Context, actorUserID, deckID uint64) error {
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": nil})
+}
+
+// Caps 读取卡组的每日上限（DESIGN.md §3.3）；卡组不存在时返回底层错误。
+func (s *DeckStore) Caps(ctx context.Context, deckID uint64) (DeckCaps, error) {
+	var d Deck
+	if err := s.db.WithContext(ctx).Select("id", "new_per_day", "reviews_per_day").
+		First(&d, "id = ?", deckID).Error; err != nil {
+		return DeckCaps{}, err
+	}
+	return DeckCaps{NewPerDay: d.NewPerDay, ReviewsPerDay: d.ReviewsPerDay}, nil
+}
+
+// SetCaps 写卡组级每日上限；只有 owner 能改。
+// 用 map 更新而非模型整体 Save：0 在这里是合法值（不限），map 会显式写入 0，
+// 不受 GORM 对带默认值列的零值省略行为影响。
+func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, caps DeckCaps) error {
+	if err := validDeckCaps(caps); err != nil {
+		return err
+	}
+	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{
+		"new_per_day":     caps.NewPerDay,
+		"reviews_per_day": caps.ReviewsPerDay,
+	})
 }
 
 // mutateOwned 是带 owner 校验的单列/多列更新通道；所有修改型方法都经它落地。
