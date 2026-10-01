@@ -1313,4 +1313,60 @@
   translation: "{{.ms}} 毫秒"
 - id: stats.table.rate
   translation: "{{.rate}}%"
+- id: nav.presets
+  translation: "调度预设"
+- id: settings.title
+  translation: "个人设置"
+- id: settings.heading
+  translation: "个人设置"
+- id: settings.intro
+  translation: "这些设置只影响你自己的界面与复习日划分。"
+- id: settings.profile.heading
+  translation: "资料"
+- id: settings.profile.display_name_label
+  translation: "显示名"
+- id: settings.profile.locale_label
+  translation: "界面语言"
+- id: settings.profile.timezone_label
+  translation: "时区"
+- id: settings.profile.timezone_hint
+  translation: "使用 IANA 时区名，例如 Asia/Shanghai。"
+- id: settings.profile.cutoff_label
+  translation: "复习日切点（0–23 时）"
+- id: settings.profile.cutoff_hint
+  translation: "「新的一天」从本地时间的这个整点开始；只影响未来的复习日划分，不改动已有记录。"
+- id: settings.profile.submit
+  translation: "保存"
+- id: settings.password.heading
+  translation: "修改密码"
+- id: settings.password.old_label
+  translation: "当前密码"
+- id: settings.password.new_label
+  translation: "新密码"
+- id: settings.password.submit
+  translation: "修改密码"
+- id: settings.password.note
+  translation: "修改后，你在其它设备上的会话会立即失效，当前窗口保持登录。"
+- id: settings.password.oidc_only
+  translation: "此账号仅通过外部身份登录，没有可修改的密码。"
+- id: settings.error.display_name_required
+  translation: "显示名不能为空。"
+- id: settings.error.locale_invalid
+  translation: "不支持的语言。"
+- id: settings.error.timezone_invalid
+  translation: "无法识别的时区。"
+- id: settings.error.cutoff_invalid
+  translation: "复习日切点必须是 0 到 23 之间的整数。"
+- id: settings.error.old_password_required
+  translation: "请输入当前密码。"
+- id: settings.error.new_password_required
+  translation: "请输入新密码。"
+- id: settings.error.password_unavailable
+  translation: "此账号没有可修改的密码。"
+- id: settings.error.old_password_wrong
+  translation: "当前密码不正确。"
+- id: settings.error.password_unchanged
+  translation: "新密码不能与当前密码相同。"
+- id: settings.error.password_rejected
+  translation: "新密码不符合密码策略。"
 

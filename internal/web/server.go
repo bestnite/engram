@@ -237,7 +237,6 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
 	s.registerSettingsRoutes(router)
-	s.registerStatsRoutes(router)(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
 
