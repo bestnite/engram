@@ -22,6 +22,8 @@ const (
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
+	// M2-11 新建卡组。
+	ActionDeckCreate = "deck.create"
 	// M3-4 撤销评分。
 	ActionReviewUndo = "review.undo"
 )

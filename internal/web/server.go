@@ -147,6 +147,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	s.registerAuthRoutes(router)
+	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerReviewRoutes(router)
 

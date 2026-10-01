@@ -42,6 +42,8 @@ func (s *Server) home(c *gin.Context) {
 		Heading:        loc.T("home.heading"),
 		Intro:          loc.T("home.intro"),
 		StartLabel:     loc.T("home.start_review"),
+		DecksLabel:     loc.T("home.decks_link"),
+		DecksHref:      "/decks",
 		LanguagesLabel: loc.T("home.language_label"),
 		Formula:        mathFormula,
 		Languages:      s.languageOptions(loc),
