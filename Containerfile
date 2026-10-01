@@ -54,9 +54,11 @@ ENV HTTP_ADDR=0.0.0.0:8080 \
     DB_DSN=/data/flashcard.db \
     AUTO_MIGRATE=1 \
     MEDIA_DIR=/data/media \
-    BASE_URL=http://localhost:8080 \
-    SESSION_SECRET=CHANGE_ME \
-    ENCRYPTION_KEY=CHANGE_ME
+    BASE_URL=http://localhost:8080
+
+# SESSION_SECRET 与 ENCRYPTION_KEY 故意不提供默认值：镜像里烤一个已知密钥会让
+# "忘记覆盖"变成静默的弱密钥部署；运行时缺失会以英文错误快速失败（internal/config 已校验）。
+
 
 EXPOSE 8080
 
