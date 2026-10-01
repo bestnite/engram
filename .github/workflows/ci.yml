@@ -1,0 +1,108 @@
+# CI：构建、生成、静态检查与测试（AGENTS.md §4、§5 M0-10）。
+#
+# 顺序上有一条硬性原因：*_templ.go 与 internal/web/static/css/tailwind.css 都是
+# gitignore 的生成物，必须先 `go generate ./...` 再编译，否则模板包直接编译失败。
+#
+# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME，
+# 且由 scripts/checks/no-private-data.sh 自检。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# 最小权限：CI 只读仓库内容。
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: build, generate and test
+    runs-on: ubuntu-latest
+
+    # 真 PostgreSQL，让 internal/pgtest 门控的用例真正执行（每用例独立 schema）。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: flashcard
+          POSTGRES_PASSWORD: CHANGE_ME
+          POSTGRES_DB: flashcard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U flashcard"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # 与服务的账号一致；仅用于 CI 的一次性数据库，非真实凭据。
+      TEST_PG_DSN: postgres://flashcard:CHANGE_ME@localhost:5432/flashcard?sslmode=disable
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # 版本取 go.mod 声明的值（当前 1.25）：这是本仓库的兼容下限，也免去手工同步。
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install templ and the Tailwind standalone CLI
+        run: |
+          set -euo pipefail
+          go install github.com/a-h/templ/cmd/templ@v0.3.1020
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/tailwindcss" \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.3/tailwindcss-linux-x64
+          chmod +x "$HOME/.local/bin/tailwindcss"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Show tool versions
+        run: |
+          go version
+          templ version
+          tailwindcss --help | head -n 1
+
+      # 生成先于一切编译：模板与 CSS 是 gitignore 的产物。
+      - name: Generate templ code and Tailwind CSS
+        run: go generate ./...
+
+      - name: Check formatting (gofmt)
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "$fmt_out"
+            echo "gofmt: the files above are not formatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # 脱敏扫描：仓库内不得出现真实域名 / 主机名 / 内网地址 / 邮箱 / 凭据。
+      - name: Sanitisation scan
+        run: bash scripts/checks/no-private-data.sh
+
+      # 模板不得写死面向用户的文案（必须走语言包）。
+      - name: Template literal scan
+        run: bash scripts/checks/no-template-literals.sh
+
+      # 语言包完备性：中英 key 必须一一对应，缺一个即失败。
+      - name: i18n language-pack parity
+        run: go test ./internal/i18n/...
+
+      # 全量测试；TEST_PG_DSN 已设置，PostgreSQL 路径不会被跳过。
+      - name: Test
+        run: go test ./...

@@ -1,0 +1,32 @@
+# 允许出现在仓库里的公网主机（AGENTS.md §2.2）。
+# 匹配规则：主机名等于下表条目，或以 “.<条目>” 结尾（即允许任意子域）。
+# 只允许公开的占位域、文档域与代码托管/依赖域；任何内网、私有或真实业务域名
+# 都必须从这里消失，改用 example.com / localhost / CHANGE_ME。
+# 若某个真实公开依赖域被扫描拦住，把它加到这里（这是显式登记，不是放宽扫描）。
+example.com
+example.org
+example.net
+localhost
+127.0.0.1
+json-schema.org
+mathjax.org
+w3.org
+github.com
+githubusercontent.com
+githubassets.com
+go.dev
+golang.org
+gorm.io
+gopkg.in
+go.mongodb.org
+modernc.org
+google.golang.org
+googleapis.com
+dl.google.com
+proxy.golang.org
+sum.golang.org
+npmjs.com
+npmjs.org
+tailwindcss.com
+tailwindlabs.com
+templ.guide
