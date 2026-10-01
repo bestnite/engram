@@ -55,7 +55,8 @@ func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 	}
 }
 
-// TestAdminShellShowsFullNavigation 断言导航立住了后面所有子页的入口（未实现的置灰）。
+// TestAdminShellShowsFullNavigation 断言导航立住了所有子页的入口。
+// M6-9 / M8-4 落地后，导航里已没有任何置灰子页：每个入口都必须是可用链接。
 func TestAdminShellShowsFullNavigation(t *testing.T) {
 	srv, cookies, _ := newAdminServer(t)
 	rec := getWithCookies(t, srv, "/admin", cookies)
@@ -63,9 +64,13 @@ func TestAdminShellShowsFullNavigation(t *testing.T) {
 		t.Fatalf("GET /admin as admin = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	body := rec.Body.String()
-	for _, label := range []string{"用户管理", "注册与邀请", "身份与 OIDC", "系统设置", "作业", "审计", "健康", "API Key", "未实现"} {
+	for _, label := range []string{"用户管理", "注册与邀请", "身份与 OIDC", "系统设置", "作业", "审计", "健康", "API Key"} {
 		if !strings.Contains(body, label) {
 			t.Errorf("admin shell navigation is missing %q", label)
 		}
+	}
+	// 每个子页都已实现：导航里不应再出现「未实现」标记。
+	if strings.Contains(body, "未实现") {
+		t.Errorf("admin navigation still marks a subpage as pending; body = %s", snippet(body))
 	}
 }

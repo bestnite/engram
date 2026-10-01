@@ -1316,3 +1316,47 @@
 - id: stats.table.rate
   translation: "{{.rate}}%"
 
+# ---- M6-9 API key overview (admin.keys.*) ----
+- id: admin.keys.title
+  translation: "API keys"
+- id: admin.keys.heading
+  translation: "API keys"
+- id: admin.keys.intro
+  translation: "Every key across all users: name, owner, prefix, scopes, last use and state. The key value itself is shown only once at creation and is never stored, so it can never be displayed here."
+- id: admin.keys.notice.revoked
+  translation: "The key was revoked."
+- id: admin.keys.notice.revoke_failed
+  translation: "The key could not be revoked."
+- id: admin.keys.notice.invalid_key
+  translation: "That key does not exist."
+- id: admin.keys.col.name
+  translation: "Name"
+- id: admin.keys.col.owner
+  translation: "Owner"
+- id: admin.keys.col.prefix
+  translation: "Prefix"
+- id: admin.keys.col.scopes
+  translation: "Scopes"
+- id: admin.keys.col.last_used
+  translation: "Last used"
+- id: admin.keys.col.expires
+  translation: "Expires"
+- id: admin.keys.col.state
+  translation: "State"
+- id: admin.keys.col.actions
+  translation: "Actions"
+- id: admin.keys.state.active
+  translation: "Active"
+- id: admin.keys.state.revoked
+  translation: "Revoked"
+- id: admin.keys.state.expired
+  translation: "Expired"
+- id: admin.keys.last_used_never
+  translation: "Never used"
+- id: admin.keys.expires_never
+  translation: "Never"
+- id: admin.keys.revoke
+  translation: "Revoke"
+- id: admin.keys.empty
+  translation: "No API keys yet."
+

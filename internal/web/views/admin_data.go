@@ -226,6 +226,16 @@ type AdminPageData struct {
 	HealthPage bool
 	// HealthRows 是健康读数；Key 是稳定英文标识，供测试定位某个值。
 	HealthRows []AdminHealthRow
+
+	// ---- API Key 总览（M6-9）----
+	// APIKeysPage 为 true 时模板渲染全用户 key 元信息表。
+	APIKeysPage bool
+	// APIKeyRows 是当前页的 key 行；Page/Pages/Total 复用于分页导航。
+	APIKeyRows []AdminAPIKeyRow
+	// ColKey* 是 key 表表头。
+	ColKeyName, ColKeyOwner, ColKeyPrefix, ColKeyScopes, ColKeyLastUsed, ColKeyExpires, ColKeyState, ColKeyActions string
+	// KeyRevokeLabel 是撤销按钮文案。
+	KeyRevokeLabel string
 }
 
 // AdminOption 是一个下拉/单选项。
@@ -252,6 +262,28 @@ type AdminHealthRow struct {
 	Label string
 	Value string
 	Hint  string
+}
+
+// AdminAPIKeyRow 是 API Key 总览表里的一行（M6-9）。
+//
+// 只承载元信息：名称、前缀、scopes、最后使用、过期、状态。绝不携带 key_hash，
+// 也不可能有明文——库里根本没有明文列，这里也没有可放它的字段。
+type AdminAPIKeyRow struct {
+	// ID 是行内 data 属性用的字符串形式主键。
+	ID string
+	// Owner 是 key 归属者的用户名；查不到时回退 "#<id>"。
+	Owner      string
+	Name       string
+	Prefix     string
+	Scopes     string
+	LastUsed   string
+	Expires    string
+	State      string
+	StateLabel string
+	// CanRevoke 为 true 时该 key 仍可用，模板才渲染撤销入口。
+	CanRevoke bool
+	// RevokeHref 是撤销表单的提交地址，由 handler 拼好。
+	RevokeHref string
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。

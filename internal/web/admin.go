@@ -61,6 +61,8 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodPost, Path: "/admin/oidc/identities/:id/unlink", Write: true},
 		{Method: http.MethodGet, Path: "/admin/audit"},
 		{Method: http.MethodGet, Path: "/admin/health"},
+		{Method: http.MethodGet, Path: "/admin/api-keys"},
+		{Method: http.MethodPost, Path: "/admin/api-keys/:id/revoke", Write: true},
 	}
 }
 
@@ -129,6 +131,10 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			handlers = append(handlers, s.adminAuditPage)
 		case "/admin/health":
 			handlers = append(handlers, s.adminHealthPage)
+		case "/admin/api-keys":
+			handlers = append(handlers, s.adminAPIKeysPage)
+		case "/admin/api-keys/:id/revoke":
+			handlers = append(handlers, s.adminAPIKeyRevoke)
 		default:
 			continue
 		}
@@ -177,7 +183,7 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 		{"jobs", "/admin/jobs", true},
 		{"audit", "/admin/audit", true},
 		{"health", "/admin/health", true},
-		{"api_keys", "/admin/api-keys", false},
+		{"api_keys", "/admin/api-keys", true},
 	}
 	pending := loc.T("admin.nav.pending")
 	out := make([]views.AdminNavItem, 0, len(defs))

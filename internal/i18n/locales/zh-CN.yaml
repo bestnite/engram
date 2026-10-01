@@ -1314,3 +1314,47 @@
 - id: stats.table.rate
   translation: "{{.rate}}%"
 
+# ---- M6-9 API key overview (admin.keys.*) ----
+- id: admin.keys.title
+  translation: "API Key"
+- id: admin.keys.heading
+  translation: "API Key 总览"
+- id: admin.keys.intro
+  translation: "全部用户的每一把 key：名称、归属、前缀、scopes、最后使用与状态。明文只在创建时显示一次且从不落库，因此这里永远无法展示它。"
+- id: admin.keys.notice.revoked
+  translation: "该 key 已撤销。"
+- id: admin.keys.notice.revoke_failed
+  translation: "撤销 key 失败。"
+- id: admin.keys.notice.invalid_key
+  translation: "该 key 不存在。"
+- id: admin.keys.col.name
+  translation: "名称"
+- id: admin.keys.col.owner
+  translation: "归属"
+- id: admin.keys.col.prefix
+  translation: "前缀"
+- id: admin.keys.col.scopes
+  translation: "Scopes"
+- id: admin.keys.col.last_used
+  translation: "最后使用"
+- id: admin.keys.col.expires
+  translation: "过期时间"
+- id: admin.keys.col.state
+  translation: "状态"
+- id: admin.keys.col.actions
+  translation: "操作"
+- id: admin.keys.state.active
+  translation: "可用"
+- id: admin.keys.state.revoked
+  translation: "已撤销"
+- id: admin.keys.state.expired
+  translation: "已过期"
+- id: admin.keys.last_used_never
+  translation: "从未使用"
+- id: admin.keys.expires_never
+  translation: "不过期"
+- id: admin.keys.revoke
+  translation: "撤销"
+- id: admin.keys.empty
+  translation: "还没有任何 API Key。"
+
