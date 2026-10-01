@@ -1,0 +1,282 @@
+// Package store 持有 GORM 模型与数据访问。
+// 同一套模型同时服务业务、GORM 与 JSON/CSV 序列化，不做 DTO 映射层（AGENTS.md §2.4）。
+//
+// 双库兼容（DESIGN.md §2.3）：不使用任何 PG 专有类型（jsonb / serial / array），
+// JSON 一律存 TEXT；字符串型列级默认值（如 'user' / 'basic'）不写进 DDL —— 未加引号的
+// 默认值在 PostgreSQL 里可能被当成同名函数或关键字，两库行为不一致；这些默认值由 store
+// 层写入时在 Go 侧显式给出。数值与布尔默认值两库语义一致，可以写在 DDL 里。
+package store
+
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// User 是本地账号；内置账号为默认身份来源，外部身份见 Identity。
+type User struct {
+	ID              uint64     `gorm:"primaryKey" json:"id"`
+	Username        string     `gorm:"not null;uniqueIndex" json:"username"`
+	Email           string     `gorm:"not null;uniqueIndex" json:"email"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	// argon2id；纯 OIDC 账号可以为 NULL。
+	PasswordHash  *string    `gorm:"column:password_hash" json:"-"`
+	DisplayName   string     `gorm:"not null" json:"display_name"`
+	Role          string     `gorm:"not null" json:"role"`   // admin | user
+	Status        string     `gorm:"not null" json:"status"` // active | disabled
+	Locale        string     `gorm:"not null" json:"locale"`
+	Timezone      string     `gorm:"not null" json:"timezone"`
+	DayCutoffHour int        `gorm:"not null;default:4" json:"day_cutoff_hour"`
+	CreatedAt     time.Time  `gorm:"not null" json:"created_at"`
+	LastSeenAt    *time.Time `json:"last_seen_at,omitempty"`
+}
+
+// TableName 固定表名，避免复数化规则在不同 GORM 版本下漂移。
+func (User) TableName() string { return "users" }
+
+// Identity 是绑定的外部身份（provider + subject 唯一）。
+type Identity struct {
+	ID       uint64    `gorm:"primaryKey" json:"id"`
+	UserID   uint64    `gorm:"not null;index" json:"user_id"`
+	Provider string    `gorm:"not null;uniqueIndex:idx_identities_provider_subject" json:"provider"`
+	Subject  string    `gorm:"not null;uniqueIndex:idx_identities_provider_subject" json:"subject"`
+	Email    *string   `json:"email,omitempty"`
+	LinkedAt time.Time `gorm:"not null" json:"linked_at"`
+}
+
+func (Identity) TableName() string { return "identities" }
+
+// Invite 是一次性邀请（注册策略为 invite 时使用）。
+type Invite struct {
+	ID        uint64     `gorm:"primaryKey" json:"id"`
+	Token     string     `gorm:"not null;uniqueIndex" json:"token"`
+	Email     *string    `json:"email,omitempty"`
+	Role      string     `gorm:"not null" json:"role"`
+	CreatedBy *uint64    `json:"created_by,omitempty"`
+	CreatedAt time.Time  `gorm:"not null" json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	UsedAt    *time.Time `json:"used_at,omitempty"`
+	UsedBy    *uint64    `json:"used_by,omitempty"`
+}
+
+func (Invite) TableName() string { return "invites" }
+
+// Setting 是管理员可改的系统设置；value 是 JSON 编码文本。
+type Setting struct {
+	Key       string    `gorm:"primaryKey" json:"key"`
+	Value     string    `gorm:"not null" json:"value"`
+	UpdatedBy *uint64   `json:"updated_by,omitempty"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (Setting) TableName() string { return "settings" }
+
+// Preset 是一组调度参数，挂在 deck 上，多个 deck 可共用。
+type Preset struct {
+	ID                  uint64     `gorm:"primaryKey" json:"id"`
+	OwnerUserID         uint64     `gorm:"not null;index" json:"owner_user_id"`
+	Name                string     `gorm:"not null" json:"name"`
+	DesiredRetention    float64    `gorm:"not null;default:0.9" json:"desired_retention"`
+	LearningSteps       string     `gorm:"not null" json:"learning_steps"`
+	RelearningSteps     string     `gorm:"not null" json:"relearning_steps"`
+	MaximumIntervalDays int        `gorm:"not null;default:36500" json:"maximum_interval_days"`
+	EnableFuzz          bool       `gorm:"not null;default:true" json:"enable_fuzz"`
+	WeightsJSON         *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
+	WeightsOptimizedAt  *time.Time `json:"weights_optimized_at,omitempty"`
+	WeightsReviewCount  *int       `json:"weights_review_count,omitempty"`
+	CreatedAt           time.Time  `gorm:"not null" json:"created_at"`
+	UpdatedAt           time.Time  `gorm:"not null" json:"updated_at"`
+}
+
+func (Preset) TableName() string { return "presets" }
+
+// Deck 是扁平卡组（不做卡组树，DESIGN.md §2.2）。
+type Deck struct {
+	ID          uint64     `gorm:"primaryKey" json:"id"`
+	OwnerUserID uint64     `gorm:"not null;index" json:"owner_user_id"`
+	Name        string     `gorm:"not null" json:"name"`
+	Description string     `gorm:"not null" json:"description"`
+	Visibility  string     `gorm:"not null" json:"visibility"` // private | unlisted | public
+	PresetID    uint64     `gorm:"not null;index" json:"preset_id"`
+	ArchivedAt  *time.Time `json:"archived_at,omitempty"`
+	CreatedAt   time.Time  `gorm:"not null" json:"created_at"`
+}
+
+func (Deck) TableName() string { return "decks" }
+
+// Note 描述"一个事实"，只含内容不含任何用户进度。
+type Note struct {
+	ID         uint64 `gorm:"primaryKey" json:"id"`
+	DeckID     uint64 `gorm:"not null;uniqueIndex:idx_notes_deck_external_ref" json:"deck_id"`
+	Kind       string `gorm:"not null" json:"kind"`
+	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
+	TagsJSON   string `gorm:"column:tags_json;not null" json:"tags_json"`
+	// 由调用方定义的幂等键；NULL 不参与唯一性（两库都允许多个 NULL）。
+	ExternalRef   *string        `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
+	Source        *string        `json:"source,omitempty"` // manual | api | import
+	ReferenceRefs *string        `gorm:"column:reference_refs" json:"reference_refs,omitempty"`
+	CreatedBy     *uint64        `json:"created_by,omitempty"`
+	CreatedAt     time.Time      `gorm:"not null" json:"created_at"`
+	UpdatedAt     time.Time      `gorm:"not null" json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+func (Note) TableName() string { return "notes" }
+
+// Card 是 note 在某种呈现形式下的实例；调度作用于 card。
+type Card struct {
+	ID          uint64         `gorm:"primaryKey" json:"id"`
+	NoteID      uint64         `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
+	Template    string         `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
+	Ordinal     int            `gorm:"not null;default:0" json:"ordinal"`
+	SuspendedAt *time.Time     `json:"suspended_at,omitempty"`
+	CreatedAt   time.Time      `gorm:"not null" json:"created_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+func (Card) TableName() string { return "cards" }
+
+// CardState 是某个用户对某张 card 的 FSRS 状态；主键 (card_id, user_id) 是共享卡组的基石。
+type CardState struct {
+	CardID        uint64     `gorm:"primaryKey" json:"card_id"`
+	UserID        uint64     `gorm:"primaryKey;index:idx_states_user_due,priority:1" json:"user_id"`
+	State         string     `gorm:"not null" json:"state"` // new | learning | review | relearning
+	DueAt         *time.Time `gorm:"index:idx_states_user_due,priority:2" json:"due_at,omitempty"`
+	StepIndex     int        `gorm:"not null;default:0" json:"step_index"`
+	Stability     *float64   `json:"stability,omitempty"`
+	Difficulty    *float64   `json:"difficulty,omitempty"`
+	Reps          int        `gorm:"not null;default:0" json:"reps"`
+	Lapses        int        `gorm:"not null;default:0" json:"lapses"`
+	ScheduledDays int        `gorm:"not null;default:0" json:"scheduled_days"`
+	ElapsedDays   int        `gorm:"not null;default:0" json:"elapsed_days"`
+	LastReviewAt  *time.Time `json:"last_review_at,omitempty"`
+	Version       int        `gorm:"not null;default:0" json:"version"` // 乐观锁
+}
+
+func (CardState) TableName() string { return "card_states" }
+
+// Review 是 append-only 复习日志，参数优化的唯一燃料；每个字段从第一天就写全。
+type Review struct {
+	ID              uint64    `gorm:"primaryKey" json:"id"`
+	CardID          uint64    `gorm:"not null;index:idx_reviews_card,priority:1" json:"card_id"`
+	UserID          uint64    `gorm:"not null;index:idx_reviews_user_day,priority:1" json:"user_id"`
+	Rating          int       `gorm:"not null" json:"rating"`       // 1=Again 2=Hard 3=Good 4=Easy
+	GradeSource     string    `gorm:"not null" json:"grade_source"` // self | typed | llm
+	GradeDetailJSON *string   `gorm:"column:grade_detail_json" json:"grade_detail_json,omitempty"`
+	ReviewedAt      time.Time `gorm:"not null;index:idx_reviews_card,priority:2" json:"reviewed_at"`
+	ReviewDay       string    `gorm:"not null;index:idx_reviews_user_day,priority:2" json:"review_day"`
+	ElapsedMS       *int      `gorm:"column:elapsed_ms" json:"elapsed_ms,omitempty"`
+	DurationDays    *float64  `json:"duration_days,omitempty"`
+	StateBefore     int       `gorm:"not null" json:"state_before"` // 0=New 1=Learning 2=Review 3=Relearning
+	IntervalDays    *float64  `json:"interval_days,omitempty"`
+	Stability       *float64  `json:"stability,omitempty"`
+	Difficulty      *float64  `json:"difficulty,omitempty"`
+}
+
+func (Review) TableName() string { return "reviews" }
+
+// DeckGrant 是卡组授权；角色集合故意只有三个。
+type DeckGrant struct {
+	DeckID    uint64    `gorm:"primaryKey" json:"deck_id"`
+	UserID    uint64    `gorm:"primaryKey" json:"user_id"`
+	Role      string    `gorm:"not null" json:"role"` // owner | editor | reader
+	CreatedBy *uint64   `json:"created_by,omitempty"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (DeckGrant) TableName() string { return "deck_grants" }
+
+// ShareLink 是给免注册读者的只读分享链接。
+type ShareLink struct {
+	Token        string     `gorm:"primaryKey" json:"token"`
+	DeckID       uint64     `gorm:"not null;index" json:"deck_id"`
+	Role         string     `gorm:"not null" json:"role"`
+	PasswordHash *string    `gorm:"column:password_hash" json:"-"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	CreatedBy    uint64     `gorm:"not null" json:"created_by"`
+	CreatedAt    time.Time  `gorm:"not null" json:"created_at"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+}
+
+func (ShareLink) TableName() string { return "share_links" }
+
+// Media 只存元数据，字节在本地文件系统，路径由 sha256 决定。
+type Media struct {
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	Sha256    string    `gorm:"not null;uniqueIndex" json:"sha256"`
+	RelPath   string    `gorm:"not null" json:"rel_path"`
+	Mime      string    `gorm:"not null" json:"mime"`
+	Bytes     int64     `gorm:"not null" json:"bytes"`
+	Width     *int      `json:"width,omitempty"`
+	Height    *int      `json:"height,omitempty"`
+	CreatedBy *uint64   `json:"created_by,omitempty"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (Media) TableName() string { return "media" }
+
+// APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
+type APIKey struct {
+	ID         uint64     `gorm:"primaryKey;column:id" json:"id"`
+	UserID     uint64     `gorm:"not null;index" json:"user_id"`
+	Name       string     `gorm:"not null" json:"name"`
+	Prefix     string     `gorm:"not null" json:"prefix"`
+	KeyHash    string     `gorm:"column:key_hash;not null;uniqueIndex" json:"-"`
+	Scopes     string     `gorm:"not null" json:"scopes"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt  time.Time  `gorm:"not null" json:"created_at"`
+}
+
+func (APIKey) TableName() string { return "api_keys" }
+
+// Job 是后台长任务（当前只有参数优化）；web 触发、子进程执行、页面轮询。
+type Job struct {
+	ID         uint64     `gorm:"primaryKey" json:"id"`
+	Kind       string     `gorm:"not null" json:"kind"`
+	TargetID   *uint64    `json:"target_id,omitempty"`
+	Status     string     `gorm:"not null" json:"status"` // queued | running | succeeded | failed
+	Stage      *string    `json:"stage,omitempty"`
+	LogTail    *string    `gorm:"column:log_tail" json:"log_tail,omitempty"`
+	ResultJSON *string    `gorm:"column:result_json" json:"result_json,omitempty"`
+	Error      *string    `json:"error,omitempty"`
+	CreatedAt  time.Time  `gorm:"not null" json:"created_at"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+}
+
+func (Job) TableName() string { return "jobs" }
+
+// AuditLog 记录谁在什么时候改了什么。
+type AuditLog struct {
+	ID         uint64    `gorm:"primaryKey" json:"id"`
+	UserID     *uint64   `json:"user_id,omitempty"`
+	APIKeyID   *uint64   `gorm:"column:api_key_id" json:"api_key_id,omitempty"`
+	Action     string    `gorm:"not null" json:"action"`
+	TargetType *string   `gorm:"column:target_type" json:"target_type,omitempty"`
+	TargetID   *uint64   `gorm:"column:target_id" json:"target_id,omitempty"`
+	DetailJSON *string   `gorm:"column:detail_json" json:"detail_json,omitempty"`
+	CreatedAt  time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (AuditLog) TableName() string { return "audit_log" }
+
+// SchemaVersion 是单行表（id 恒为 1），记录已应用的破坏性迁移版本。
+// 表名用单数，与 AGENTS.md M0-4 的措辞一致。
+type SchemaVersion struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Version   int       `gorm:"not null" json:"version"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (SchemaVersion) TableName() string { return "schema_version" }
+
+// AllModels 是 AutoMigrate 的唯一来源；新增表必须加在这里，否则测试的表清单断言会失败。
+func AllModels() []any {
+	return []any{
+		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
+		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
+		&AuditLog{}, &SchemaVersion{},
+	}
+}

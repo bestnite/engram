@@ -173,26 +173,26 @@ Conventions:
 
 ### M0 — Skeleton
 
-- [ ] **M0-1 Module bootstrap** — create `go.mod` (module `<module-path>`, Go 1.25+),
+- [x] **M0-1 Module bootstrap** — create `go.mod` (module `<module-path>`, Go 1.25+),
   `cmd/flashcard/main.go` with subcommand dispatch (`serve`, `schema sync`, `export`,
   `optimize`, `version`), `LICENSE` placeholder, `.env.example` kept in sync with
   `internal/config`.
   *Acceptance:* `go build ./...` succeeds; `flashcard version` prints a version string.
-- [ ] **M0-2 Config loader** — `internal/config`: parse the environment variables listed
+- [x] **M0-2 Config loader** — `internal/config`: parse the environment variables listed
   in `.env.example`; load the `settings` table overlay; expose a single accessor that
   reports the effective value and its source (`env` or `db`).
   *Acceptance:* unit test asserts env-over-db precedence and that a missing required
   variable fails startup with an English error.
-- [ ] **M0-3 GORM models** — `internal/store/models.go`: every table from `DESIGN.md`
+- [x] **M0-3 GORM models** — `internal/store/models.go`: every table from `DESIGN.md`
   §2.2 with tags that work on both PostgreSQL and SQLite (no `jsonb`, no `serial`).
   *Acceptance:* AutoMigrate on both drivers creates all tables; a test asserts table
   count and the unique constraints on `notes (deck_id, external_ref)`,
   `cards (note_id, template)`, `identities (provider, subject)`, `media (sha256)`.
-- [ ] **M0-4 Schema version and destructive migrations** — a `schema_version` row plus
+- [x] **M0-4 Schema version and destructive migrations** — a `schema_version` row plus
   an ordered list of explicit migration functions for changes AutoMigrate cannot make.
   *Acceptance:* test that an unnamed destructive change is refused by `schema sync` and
   that a registered migration runs exactly once.
-- [ ] **M0-5 HTTP skeleton** — `internal/web`: gin router, request logging middleware
+- [x] **M0-5 HTTP skeleton** — `internal/web`: gin router, request logging middleware
   (English, `slog`), panic recovery, graceful shutdown, `GET /healthz` returning JSON
   with database connectivity and schema version.
   *Acceptance:* `curl /healthz` returns `200` with both fields; shutdown logs one English
