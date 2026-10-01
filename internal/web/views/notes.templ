@@ -137,6 +137,7 @@ templ NoteEditPage(data NoteEditData) {
 					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
 				</div>
 			</form>
+			@MediaUploadForm(data.Upload, data.CSRF)
 			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
 				@NotePreviewFragment(data.Preview)
 			</div>
@@ -193,6 +194,7 @@ templ NoteCreatePage(data NewNoteData) {
 					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
 				</div>
 			</form>
+			@MediaUploadForm(data.Upload, data.CSRF)
 			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
 				@NotePreviewFragment(data.Preview)
 			</div>
@@ -221,5 +223,24 @@ templ NoteFieldsFragment(fields []CreateField, previewURL string) {
 				<p class="mt-1 text-xs text-slate-400">{ field.Hint }</p>
 			}
 		</label>
+	}
+}
+
+// MediaUploadForm 是编辑器里的媒体上传控件（M2-9）：选择图片 → POST 到卡组上传端点 →
+// media.js 把 Markdown 图片引用插入当前聚焦字段并刷新预览。文案与失败提示全部来自数据。
+templ MediaUploadForm(data MediaUploadData, csrf string) {
+	if !data.Disabled {
+		<form class="mt-4 rounded-lg border border-dashed border-slate-300 p-3" method="post" action={ data.URL } enctype="multipart/form-data" data-media-upload data-msg-inserted={ data.Inserted } data-msg-too-large={ data.ErrTooLarge } data-msg-mime={ data.ErrMime } data-msg-magic={ data.ErrMagic } data-msg-generic={ data.ErrGeneric }>
+			<input type="hidden" name="csrf_token" value={ csrf }/>
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.Label }</span>
+				<input class="mt-1 block w-full text-sm" type="file" name="file" accept={ data.Accept }/>
+			</label>
+			<div class="mt-2 flex flex-wrap items-center gap-3">
+				<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ data.Button }</button>
+				<p class="text-xs text-slate-400">{ data.Hint }</p>
+			</div>
+			<p class="mt-2 text-sm" data-media-status></p>
+		</form>
 	}
 }

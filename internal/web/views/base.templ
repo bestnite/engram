@@ -19,6 +19,9 @@ templ Base(data LayoutData) {
 			if data.MathJaxURL != "" {
 				<script src={ data.MathJaxURL } defer></script>
 			}
+			if data.MediaJSURL != "" {
+				<script src={ data.MediaJSURL } defer></script>
+			}
 		</head>
 		<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
 			<header class="border-b border-slate-200 bg-white">

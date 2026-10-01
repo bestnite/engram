@@ -84,6 +84,7 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		CSSURL:     s.assets.URL("css/tailwind.css"),
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
+		MediaJSURL: s.assets.URL("js/media.js"),
 		Nav: []views.NavItem{
 			{Label: loc.T("nav.today"), Href: "/"},
 			{Label: loc.T("nav.decks"), Href: "/decks"},
@@ -101,6 +102,27 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		}
 	}
 	return layout
+}
+
+// mediaUploadData 构造编辑器里的媒体上传控件数据（M2-9）。存储未装配时返回 Disabled，
+// 模板据此不渲染控件。accept 取自当前生效的 mime 白名单，避免在模板里硬编码格式列表；
+// 失败文案按稳定英文 code（media_too_large 等）分档，由前端 media.js 选择。
+func (s *Server) mediaUploadData(c *gin.Context, loc *i18n.Localizer, deckID uint64) views.MediaUploadData {
+	if s.media == nil {
+		return views.MediaUploadData{Disabled: true}
+	}
+	return views.MediaUploadData{
+		URL:         fmt.Sprintf("/decks/%d/media", deckID),
+		Accept:      strings.Join(s.allowedMimes(c.Request.Context()), ","),
+		Label:       loc.T("media.upload.label"),
+		Button:      loc.T("media.upload.button"),
+		Hint:        loc.T("media.upload.hint"),
+		Inserted:    loc.T("media.upload.inserted"),
+		ErrTooLarge: loc.T("media.upload.error.too_large"),
+		ErrMime:     loc.T("media.upload.error.mime"),
+		ErrMagic:    loc.T("media.upload.error.missing_magic"),
+		ErrGeneric:  loc.T("media.upload.error.generic"),
+	}
 }
 
 // deckIDParam 解析 :id 路径参数；解析失败时返回 false 并写 404。
@@ -461,6 +483,7 @@ func (s *Server) renderNoteEdit(c *gin.Context, loc *i18n.Localizer, deck *store
 		Deleted:       note.DeletedAt.Valid,
 		DeletedNotice: loc.T("notes.edit.deleted_notice"),
 		Preview:       s.buildPreview(loc, note.Kind, fields),
+		Upload:        s.mediaUploadData(c, loc, deck.ID),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
@@ -885,6 +908,7 @@ func (s *Server) renderNoteNew(c *gin.Context, loc *i18n.Localizer, deck *store.
 		BackHref:     fmt.Sprintf("/decks/%d/notes", deck.ID),
 		ErrorMessage: errMsg,
 		Preview:      preview,
+		Upload:       s.mediaUploadData(c, loc, deck.ID),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
