@@ -58,6 +58,22 @@ func (s *Store) Active(ctx context.Context) (*store.Job, error) {
 	return &job, nil
 }
 
+// RecoverStale 把上次进程遗留在 running 的作业一律标为 failed（M9-6）：写 finished_at 与
+// 失败原因，但不清空 log_tail，保留现场供诊断。返回被回收的行数。
+func (s *Store) RecoverStale(ctx context.Context, at time.Time, reason string) (int64, error) {
+	res := s.db.WithContext(ctx).Model(&store.Job{}).
+		Where("status = ?", StatusRunning).
+		Updates(map[string]any{
+			"status":      StatusFailed,
+			"error":       reason,
+			"finished_at": at.UTC(),
+		})
+	if res.Error != nil {
+		return 0, fmt.Errorf("recover stale jobs: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
 // MarkRunning 把作业置为 running 并记录 started_at。
 func (s *Store) MarkRunning(ctx context.Context, id uint64, at time.Time) error {
 	return s.update(ctx, id, map[string]any{

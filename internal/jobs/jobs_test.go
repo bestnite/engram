@@ -239,3 +239,110 @@ func TestTailBufferAndLines(t *testing.T) {
 		t.Fatalf("tailLines(short) = %q, want %q", got, "only")
 	}
 }
+
+// TestRecoverStaleJobsAtStartup 是 M9-6 的验收：预置一行上次进程遗留的 running 作业，
+// 构造并启动 Runner 后它必须变为 failed、原因记录为 StaleJobReason、日志尾巴保留，
+// 且随后新入队不再被永久 409 阻塞。
+func TestRecoverStaleJobsAtStartup(t *testing.T) {
+	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := store.AutoMigrate(context.Background(), db); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	st := NewStore(db)
+	ctx := context.Background()
+
+	// 预置残留作业：queued -> running，并带上日志尾巴（模拟崩溃前正在训练）。
+	stale, err := st.CreateQueued(ctx, KindOptimize, nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("CreateQueued: %v", err)
+	}
+	if err := st.MarkRunning(ctx, stale.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRunning: %v", err)
+	}
+	const tail = "training started\nepoch 1\n"
+	if err := st.update(ctx, stale.ID, map[string]any{"log_tail": tail}); err != nil {
+		t.Fatalf("seed log tail: %v", err)
+	}
+
+	runner, err := New(Deps{
+		DB:      db,
+		Store:   st,
+		Timeout: 5 * time.Second,
+		Command: func(context.Context, *store.Job, Reporter) (Command, error) {
+			return Command{Name: "/bin/true"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// 恢复前：残留的 running 行让入队撞上单并发门（这正是 M9-6 要修的症状）。
+	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
+	}
+
+	// 构造并启动 Runner：启动钩子显式回收残留 running 作业。
+	startCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner.Start(startCtx)
+
+	recovered, err := st.ByID(ctx, stale.ID)
+	if err != nil {
+		t.Fatalf("ByID(stale): %v", err)
+	}
+	if recovered.Status != StatusFailed {
+		t.Fatalf("stale job status = %q, want %q", recovered.Status, StatusFailed)
+	}
+	if recovered.Error == nil || *recovered.Error != StaleJobReason {
+		t.Fatalf("stale job error = %v, want %q", recovered.Error, StaleJobReason)
+	}
+	if recovered.FinishedAt == nil {
+		t.Fatalf("stale job missing finished_at")
+	}
+	if recovered.LogTail == nil || *recovered.LogTail != tail {
+		t.Fatalf("stale job log_tail = %v, want preserved %q", recovered.LogTail, tail)
+	}
+	t.Logf("recovered stale job %d -> status=%s error=%q log_tail=%q",
+		recovered.ID, recovered.Status, *recovered.Error, *recovered.LogTail)
+
+	// 恢复后：新入队必须成功，不再被永久 409 阻塞。
+	fresh, err := runner.Enqueue(ctx, KindOptimize, nil)
+	if err != nil {
+		t.Fatalf("Enqueue after recovery: %v", err)
+	}
+	done := waitForStatus(t, st, fresh.ID, StatusSucceeded, 3*time.Second)
+	t.Logf("fresh enqueue after recovery -> job %d status=%s", done.ID, done.Status)
+}
+
+// TestRecoverStaleExplicitEntry 覆盖显式入口：RecoverStale 返回回收行数，且不清空日志尾巴。
+func TestRecoverStaleExplicitEntry(t *testing.T) {
+	runner, st, _ := newTestRunner(t, time.Second, func(context.Context, *store.Job, Reporter) (Command, error) {
+		return Command{Name: "/bin/true"}, nil
+	})
+	ctx := context.Background()
+
+	job, err := st.CreateQueued(ctx, KindOptimize, nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("CreateQueued: %v", err)
+	}
+	if err := st.MarkRunning(ctx, job.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkRunning: %v", err)
+	}
+	n, err := runner.RecoverStale(ctx)
+	if err != nil {
+		t.Fatalf("RecoverStale: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("RecoverStale returned %d, want 1", n)
+	}
+	got, err := st.ByID(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Status != StatusFailed || got.Error == nil || *got.Error != StaleJobReason {
+		t.Fatalf("recovered job = status %q error %v, want failed/%q", got.Status, got.Error, StaleJobReason)
+	}
+}
