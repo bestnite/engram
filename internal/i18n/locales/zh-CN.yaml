@@ -1358,3 +1358,31 @@
 - id: admin.keys.empty
   translation: "还没有任何 API Key。"
 
+# ---- M8-4 language pack completeness report (admin.i18n.*) ----
+- id: admin.nav.i18n
+  translation: "语言包"
+- id: admin.i18n.title
+  translation: "语言包"
+- id: admin.i18n.heading
+  translation: "语言包完整度"
+- id: admin.i18n.intro
+  translation: "每种语言相对全部语言包 key 并集的翻译覆盖率。低于 100% 的语言会逐条列出缺失的 key。"
+- id: admin.i18n.col.locale
+  translation: "语言"
+- id: admin.i18n.col.coverage
+  translation: "覆盖率"
+- id: admin.i18n.col.status
+  translation: "状态"
+- id: admin.i18n.col.missing
+  translation: "缺失的 key"
+- id: admin.i18n.status.complete
+  translation: "完整"
+- id: admin.i18n.status.incomplete
+  translation: "缺失 {{.count}} 条"
+- id: admin.i18n.percent
+  translation: "{{.percent}}%"
+- id: admin.i18n.counts
+  translation: "{{.present}} / {{.total}}"
+- id: admin.i18n.all_complete
+  translation: "全部语言包完整。"
+

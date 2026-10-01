@@ -64,7 +64,7 @@ func TestAdminShellShowsFullNavigation(t *testing.T) {
 		t.Fatalf("GET /admin as admin = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	body := rec.Body.String()
-	for _, label := range []string{"用户管理", "注册与邀请", "身份与 OIDC", "系统设置", "作业", "审计", "健康", "API Key"} {
+	for _, label := range []string{"用户管理", "注册与邀请", "身份与 OIDC", "系统设置", "作业", "审计", "健康", "API Key", "语言包"} {
 		if !strings.Contains(body, label) {
 			t.Errorf("admin shell navigation is missing %q", label)
 		}

@@ -1360,3 +1360,31 @@
 - id: admin.keys.empty
   translation: "No API keys yet."
 
+# ---- M8-4 language pack completeness report (admin.i18n.*) ----
+- id: admin.nav.i18n
+  translation: "Languages"
+- id: admin.i18n.title
+  translation: "Language packs"
+- id: admin.i18n.heading
+  translation: "Language pack completeness"
+- id: admin.i18n.intro
+  translation: "Translation coverage of every locale against the union of all catalog keys. A locale below 100% lists the missing keys."
+- id: admin.i18n.col.locale
+  translation: "Locale"
+- id: admin.i18n.col.coverage
+  translation: "Coverage"
+- id: admin.i18n.col.status
+  translation: "Status"
+- id: admin.i18n.col.missing
+  translation: "Missing keys"
+- id: admin.i18n.status.complete
+  translation: "Complete"
+- id: admin.i18n.status.incomplete
+  translation: "Missing {{.count}}"
+- id: admin.i18n.percent
+  translation: "{{.percent}}%"
+- id: admin.i18n.counts
+  translation: "{{.present}} / {{.total}}"
+- id: admin.i18n.all_complete
+  translation: "Every language pack is complete."
+
