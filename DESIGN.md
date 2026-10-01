@@ -544,6 +544,7 @@ fields_json (Markdown + TeX)
 - 读取：`GET /media/:id` 由服务代理，带 `ETag`（=sha256）与 `Cache-Control: immutable`；鉴权只需一处（有卡组访问权的登录用户）。
 - 上传：白名单 mime（png/jpeg/webp/gif/mp3/ogg/m4a）+ magic bytes 校验；落盘用临时文件 + `rename`，避免半截文件。
 - **上传上限由管理员在系统设置里配置**（单文件大小、允许的 mime 集合、可选单用户总量配额）；**不做服务端压缩/重编码**。
+- 编辑器里的媒体面（M2-9）：在卡片编辑/新建页选择图片上传，成功后把 Markdown 引用 `![](/media/:id)` 插入当前聚焦字段并刷新预览；字段里存的是引用而非 base64 内联，刷新后仍在。上传入口挂在卡组下（`POST /decks/:id/media`），要求 **editor** 及以上角色，读者无法往别人的卡组塞媒体；`POST /media` 保留为登录即可的通用入口。
 - 设置页显示媒体目录占用；磁盘接近阈值时在管理面板告警。
 
 ---

@@ -106,6 +106,22 @@ type CreateField struct {
 	Hint    string
 }
 
+// MediaUploadData 是编辑器里的媒体上传控件数据（M2-9）。所有用户可见文案都来自语言包；
+// 上传失败时前端按稳定英文 code 选择对应文案。Disabled 为 true 时（存储未装配）不渲染控件。
+type MediaUploadData struct {
+	Disabled    bool
+	URL         string
+	Accept      string
+	Label       string
+	Button      string
+	Hint        string
+	Inserted    string
+	ErrTooLarge string
+	ErrMime     string
+	ErrMagic    string
+	ErrGeneric  string
+}
+
 // NewNoteData 是新建卡片页（M2-12）的渲染数据。
 type NewNoteData struct {
 	Layout       LayoutData
@@ -122,6 +138,7 @@ type NewNoteData struct {
 	CSRF         string
 	ErrorMessage string
 	Preview      NotePreviewData
+	Upload       MediaUploadData
 }
 
 // NoteEditData 是卡片编辑页（M2-7）的渲染数据。
@@ -142,6 +159,7 @@ type NoteEditData struct {
 	Deleted       bool
 	DeletedNotice string
 	Preview       NotePreviewData
+	Upload        MediaUploadData
 }
 
 // PreviewCard 是一张卡渲染后的正反面 HTML 片段。

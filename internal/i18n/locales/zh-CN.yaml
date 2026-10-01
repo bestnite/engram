@@ -1473,3 +1473,21 @@
 - id: error.package_unknown_kind
   translation: "卡组包中包含本实例无法识别的题型。"
 
+# ── 编辑器媒体上传（M2-9）────────────────────────────────────
+- id: media.upload.label
+  translation: "图片"
+- id: media.upload.button
+  translation: "上传"
+- id: media.upload.hint
+  translation: "上传的图片会以 Markdown 形式插入当前聚焦的字段。"
+- id: media.upload.inserted
+  translation: "图片已插入字段。"
+- id: media.upload.error.too_large
+  translation: "文件超过上传大小上限。"
+- id: media.upload.error.mime
+  translation: "不支持该文件类型。"
+- id: media.upload.error.missing_magic
+  translation: "文件内容与声明类型不符。"
+- id: media.upload.error.generic
+  translation: "上传失败，请重试。"
+

@@ -1475,3 +1475,21 @@
 - id: error.package_unknown_kind
   translation: "The package contains a card type this instance does not know."
 
+# ── 编辑器媒体上传（M2-9）────────────────────────────────────
+- id: media.upload.label
+  translation: "Image"
+- id: media.upload.button
+  translation: "Upload"
+- id: media.upload.hint
+  translation: "Uploaded images are inserted into the focused field as Markdown."
+- id: media.upload.inserted
+  translation: "Image inserted into the field."
+- id: media.upload.error.too_large
+  translation: "The file is larger than the upload limit."
+- id: media.upload.error.mime
+  translation: "This file type is not allowed."
+- id: media.upload.error.missing_magic
+  translation: "The file content does not match its declared type."
+- id: media.upload.error.generic
+  translation: "Upload failed. Try again."
+

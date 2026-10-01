@@ -32,6 +32,28 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	// 上传是写操作，过 CSRF 中间件；读取只要求登录（M5 授权落地前的最小鉴权）。
 	router.POST("/media", s.sessions.CSRFMiddleware(), s.mediaUpload)
 	router.GET("/media/:id", s.mediaServe)
+	// M2-9：编辑器使用的卡组内上传入口。写入要求卡组的 editor 角色，读者无法把媒体
+	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（M5-1，单一实现）。
+	if s.access != nil {
+		router.POST("/decks/:id/media", s.sessions.CSRFMiddleware(), s.deckMediaUpload)
+	}
+}
+
+// deckMediaUpload 是编辑器（M2-9）使用的上传入口：先确认当前用户对卡组至少有 editor 角色，
+// 再走与 /media 相同的存储与校验逻辑。
+func (s *Server) deckMediaUpload(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
+		return
+	}
+	s.storeUpload(c, user)
 }
 
 // uploadLimit 解析生效的上传字节上限：环境变量 > settings 表 > 默认 10 MiB。
@@ -81,12 +103,18 @@ func splitMimeList(raw string) []string {
 	return out
 }
 
-// mediaUpload 处理 multipart 上传：保存到本地存储并返回元数据 JSON。
+// mediaUpload 是 M2-8 的通用上传入口：登录用户即可上传（授权落地前的行为，保持不变）。
 func (s *Server) mediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
+	s.storeUpload(c, user)
+}
+
+// storeUpload 读取 multipart 里的 file 字段、落盘并返回元数据 JSON；错误按稳定 code 映射。
+// /media 与 /decks/:id/media 两个入口共用本函数，保证校验逻辑只有一份。
+func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	ctx := c.Request.Context()
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
