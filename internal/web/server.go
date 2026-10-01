@@ -204,6 +204,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
+	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
 
 	if s.api != nil {
