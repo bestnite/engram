@@ -1020,3 +1020,14 @@
 - id: admin.jobs.notice.failed
   translation: "取消作业失败。"
 
+
+- id: auth.oidc.button
+  translation: "使用 OIDC 登录"
+- id: auth.error.oidc_state
+  translation: "登录状态校验失败，请重新发起登录。"
+- id: auth.error.oidc_failed
+  translation: "OIDC 登录失败，请重试。"
+- id: auth.error.oidc_unavailable
+  translation: "无法连接 OIDC 提供商，请稍后再试。"
+- id: auth.error.oidc_link_denied
+  translation: "该身份未绑定任何账号，请联系管理员绑定账号。"

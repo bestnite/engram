@@ -36,6 +36,10 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.POST("/setup", s.setupSubmit)
 	// 登出是登录后流程：会话已存在，必须携带会话绑定的 CSRF token（DESIGN.md §4.3）。
 	router.POST("/logout", s.sessions.CSRFMiddleware(), s.logout)
+	// OIDC 可选登录（M1-11）：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
+	// 与 /login 同属登录前流程，没有会话可绑 CSRF token，故不挂 CSRFMiddleware。
+	router.GET("/auth/oidc/start", s.oidcStart)
+	router.GET("/auth/oidc/callback", s.oidcCallback)
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。
@@ -97,7 +101,7 @@ func (s *Server) loginPage(c *gin.Context) {
 
 // renderLogin 渲染登录表单并带上一条已本地化的错误提示（可为空）。
 func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
-	s.renderAuth(c, status, views.AuthFormData{
+	data := views.AuthFormData{
 		Layout:               s.authLayout(loc, "auth.login.title"),
 		Heading:              loc.T("auth.login.heading"),
 		Action:               "/login",
@@ -109,7 +113,14 @@ func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, er
 		AltLabel:             loc.T("auth.login.to_register"),
 		AltHref:              "/register",
 		LangOptions:          s.languageOptionsFor(loc, c.Request.URL.Path),
-	})
+	}
+	// OIDC 默认关闭：只有配置完整可用时登录页才出现第二个登录入口（DESIGN.md §4.4）。
+	if cfg, err := s.oidcLoadConfig(c); err == nil && cfg.Usable() {
+		data.OIDCEnabled = true
+		data.OIDCLabel = loc.T("auth.oidc.button")
+		data.OIDCHref = "/auth/oidc/start"
+	}
+	s.renderAuth(c, status, data)
 }
 
 // audit 是写审计的统一出口（M1-10）：所有变更都经这里落 audit_log。

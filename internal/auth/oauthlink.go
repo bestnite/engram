@@ -32,6 +32,9 @@ type OAuthProfile struct {
 	Subject       string
 	Email         string
 	EmailVerified bool
+	// Name 是 IdP 返回的显示名（claim 名可配，DESIGN.md §4.4）。仅用于自动建号时的
+	// 展示名；绑定决策只看 Subject 与 Email（§4.5），所以它不影响任何分支判定。
+	Name string
 }
 
 // LinkDecisionKind 是 §4.5 的绑定分支标识，取值稳定用于审计与测试断言。
@@ -254,8 +257,11 @@ func oidcAccountEmail(profile OAuthProfile) string {
 	return oidcUsername(profile) + oidcPlaceholderEmailSuffix
 }
 
-// oidcDisplayName 生成显示名：优先邮箱 local part，其次登录名；不产出用户可见文案。
+// oidcDisplayName 生成显示名：优先 IdP 的 name claim，其次邮箱 local part，最后登录名；不产出用户可见文案。
 func oidcDisplayName(profile OAuthProfile) string {
+	if name := strings.TrimSpace(profile.Name); name != "" {
+		return name
+	}
 	if local := emailLocalPart(profile.Email); local != "" {
 		return local
 	}

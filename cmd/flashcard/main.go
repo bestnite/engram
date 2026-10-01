@@ -201,6 +201,9 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		LoginLimiter: limiter,
 		Media:        mediaStore,
 		Secrets:      secrets,
+		// OIDC（M1-11）：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
+		Identities: store.NewIdentityStore(db),
+		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		API:                 apiSrv,

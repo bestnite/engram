@@ -49,6 +49,11 @@ templ AuthPage(data AuthFormData) {
 				<a class="text-blue-600 hover:text-blue-700" href={ data.AltHref }>{ data.AltLabel }</a>
 			</p>
 		}
+		if data.OIDCEnabled {
+			<div class="mt-6 border-t border-slate-200 pt-4">
+				<a class="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" href={ data.OIDCHref }>{ data.OIDCLabel }</a>
+			</div>
+		}
 		<section class="mt-8">
 			<ul class="flex gap-3">
 				for _, l := range data.LangOptions {

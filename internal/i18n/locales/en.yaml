@@ -1021,3 +1021,14 @@
 - id: admin.jobs.notice.failed
   translation: "Cancelling the job failed."
 
+
+- id: auth.oidc.button
+  translation: "Sign in with OIDC"
+- id: auth.error.oidc_state
+  translation: "The login state check failed. Please start again."
+- id: auth.error.oidc_failed
+  translation: "OIDC login failed. Please try again."
+- id: auth.error.oidc_unavailable
+  translation: "The OIDC provider is unreachable. Please try again later."
+- id: auth.error.oidc_link_denied
+  translation: "No account is linked to this identity. Please ask an administrator to link it."
