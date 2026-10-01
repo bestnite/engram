@@ -6,8 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/language"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
 )
+
+// SessionUserLocale 是 Deps.UserLocale 的默认实现：从已解析的会话用户取界面语言。
+// 装配时把它交给 web.Deps（会话中间件必须先于语言中间件运行），
+// 个人设置里的语言（M1-8）才会真正参与 i18n 解析优先级。
+func SessionUserLocale(c *gin.Context) string {
+	if u, ok := auth.CurrentUser(c); ok {
+		return u.Locale
+	}
+	return ""
+}
 
 // localeMiddleware 按固定优先级解析请求语言，并把本地化器放进请求 context（M0-8）。
 // 优先级：?lang 显式覆盖 > 用户设置（Deps.UserLocale 提供；M0 无会话，M1 接入）
