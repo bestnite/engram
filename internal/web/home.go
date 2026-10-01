@@ -55,6 +55,8 @@ func (s *Server) home(c *gin.Context) {
 		if u.Role == store.RoleAdmin {
 			data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.admin"), Href: "/admin"})
 		}
+		// M9-9：预设页入口对每个已登录用户可见。
+		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true
