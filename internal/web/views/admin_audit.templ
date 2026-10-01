@@ -1,0 +1,80 @@
+package views
+
+// adminAudit 渲染审计检索页（M6-7）：过滤表单 + 结果表 + 分页。
+// 所有文案来自 AdminPageData；过滤表单是 GET，无需 CSRF。
+templ adminAudit(data AdminPageData) {
+	<form class="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-3" method="get" action="/admin/audit">
+		<h2 class="text-sm font-semibold text-slate-500 md:col-span-3">{ data.AuditFilterHeading }</h2>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditUserLabel }</span>
+			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="user" value={ data.AuditUserValue }/>
+		</label>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditActionLabel }</span>
+			<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="action">
+				for _, opt := range data.AuditActions {
+					<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditTargetLabel }</span>
+			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="target_type" value={ data.AuditTargetValue }/>
+		</label>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditTargetIDLabel }</span>
+			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="target_id" value={ data.AuditTargetIDValue }/>
+		</label>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditFromLabel }</span>
+			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="date" name="from" value={ data.AuditFromValue }/>
+		</label>
+		<label class="text-xs text-slate-500">
+			<span class="block">{ data.AuditToLabel }</span>
+			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="date" name="to" value={ data.AuditToValue }/>
+		</label>
+		<p class="text-xs text-slate-400 md:col-span-3">{ data.AuditRangeHint }</p>
+		<div class="flex items-center gap-3 md:col-span-3">
+			<button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">{ data.AuditFilterSubmit }</button>
+			<a class="text-sm text-slate-500 hover:underline" href={ data.AuditClearHref }>{ data.AuditFilterClear }</a>
+		</div>
+	</form>
+
+	<p class="mb-2 text-xs text-slate-400">{ data.AuditTotalLabel } { data.Total }</p>
+
+	if data.Total == 0 {
+		<p class="text-sm text-slate-500">{ data.EmptyLabel }</p>
+	} else {
+		<table class="w-full text-left text-sm">
+			<thead>
+				<tr class="border-b border-slate-200 text-xs text-slate-400">
+					<th class="py-2 pr-3 font-medium">{ data.ColAuditTime }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColAuditUser }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColAuditAction }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColAuditTarget }</th>
+					<th class="py-2 font-medium">{ data.ColAuditDetail }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range data.AuditRows {
+					<tr class="border-b border-slate-100 align-top">
+						<td class="py-2 pr-3 text-xs text-slate-500">{ row.Time }</td>
+						<td class="py-2 pr-3 text-slate-700">{ row.User }</td>
+						<td class="py-2 pr-3 font-mono text-xs text-slate-700">{ row.Action }</td>
+						<td class="py-2 pr-3 text-xs text-slate-500">{ row.Target }</td>
+						<td class="py-2"><pre class="max-h-32 max-w-md overflow-auto rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-600">{ row.Detail }</pre></td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+
+	<nav class="mt-4 flex items-center gap-4 text-sm text-slate-500">
+		if data.PrevHref != "" {
+			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.PrevHref }>{ data.PrevLabel }</a>
+		}
+		if data.NextHref != "" {
+			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.NextHref }>{ data.NextLabel }</a>
+		}
+	</nav>
+}

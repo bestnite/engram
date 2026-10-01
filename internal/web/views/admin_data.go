@@ -193,6 +193,65 @@ type AdminPageData struct {
 	OIDCPage bool
 	// OIDC 承载 OIDC 配置页的全部字段；仅 OIDCPage 为 true 时非空。
 	OIDC *OIDCPageData
+	// ---- 审计检索页（M6-7）----
+	// AuditPage 为 true 时模板渲染审计检索页。
+	AuditPage bool
+	// AuditRows 是当前页的审计行。
+	AuditRows []AdminAuditRow
+	// 过滤表单的标签、当前值与动作下拉。
+	AuditFilterHeading string
+	AuditUserLabel     string
+	AuditUserValue     string
+	AuditActionLabel   string
+	AuditActions       []AdminOption
+	AuditTargetLabel   string
+	AuditTargetValue   string
+	AuditTargetIDLabel string
+	AuditTargetIDValue string
+	AuditFromLabel     string
+	AuditFromValue     string
+	AuditToLabel       string
+	AuditToValue       string
+	AuditFilterSubmit  string
+	AuditFilterClear   string
+	AuditRangeHint     string
+	AuditClearHref     string
+	// ColAudit* 是审计表表头。
+	ColAuditTime, ColAuditUser, ColAuditAction, ColAuditTarget, ColAuditDetail string
+	// AuditTotalLabel 是「共 N 条」的前缀标签。
+	AuditTotalLabel string
+
+	// ---- 健康页（M6-8）----
+	// HealthPage 为 true 时模板渲染健康读数表。
+	HealthPage bool
+	// HealthRows 是健康读数；Key 是稳定英文标识，供测试定位某个值。
+	HealthRows []AdminHealthRow
+}
+
+// AdminOption 是一个下拉/单选项。
+type AdminOption struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+// AdminAuditRow 是审计表里的一行（M6-7）。
+type AdminAuditRow struct {
+	// Time 已按当前管理员时区格式化。
+	Time   string
+	User   string
+	Action string
+	Target string
+	Detail string
+}
+
+// AdminHealthRow 是健康页的一个读数（M6-8）。
+type AdminHealthRow struct {
+	// Key 是稳定英文标识（database/schema/media/due），只用于测试定位，不展示。
+	Key   string
+	Label string
+	Value string
+	Hint  string
 }
 
 // AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。

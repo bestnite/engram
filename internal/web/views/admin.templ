@@ -40,6 +40,10 @@ templ AdminPage(data AdminPageData) {
 					@adminJobs(data)
 				} else if data.OIDCPage {
 					@adminOIDC(data)
+				} else if data.AuditPage {
+					@adminAudit(data)
+				} else if data.HealthPage {
+					@adminHealth(data)
 				} else {
 					if data.ShowForm {
 						<form method="post" action={ data.FormAction }>

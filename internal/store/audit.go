@@ -137,5 +137,94 @@ func (s *AuditStore) CountByAction(ctx context.Context, action string) (int64, e
 	return n, nil
 }
 
+// AuditFilter 是审计检索（M6-7）的过滤条件；每个字段的零值都表示「不按该维度过滤」。
+//
+// 时间口径：created_at 一律以 UTC 存储；From 是下界（含），To 是上界（不含）。
+// 调用方负责把用户时区的自然日边界换算成这两个 UTC 瞬时值——store 层不猜时区。
+type AuditFilter struct {
+	// UserID 非零时只返回该用户的审计行；系统动作（user_id 为 NULL）不会被命中。
+	UserID uint64
+	// Action 非空时精确匹配动作名（取值来自本包的 Action* 常量）。
+	Action string
+	// TargetType 非空时精确匹配目标类型。
+	TargetType string
+	// TargetID 非零时精确匹配目标 ID。
+	TargetID uint64
+	// From 是时间下界（含）；零值表示不限。
+	From time.Time
+	// To 是时间上界（不含）；零值表示不限。
+	To time.Time
+	// Limit 是每页行数；<=0 时回退默认值，超过上限时截到上限。
+	Limit int
+	// Offset 是跳过的行数；负数按 0 处理。
+	Offset int
+}
+
+const (
+	// auditSearchDefaultLimit 是审计检索的默认每页行数。
+	auditSearchDefaultLimit = 50
+	// auditSearchMaxLimit 是审计检索的硬上限：审计表增长很快，任何调用方都不能一次拉全表。
+	auditSearchMaxLimit = 200
+)
+
+// auditQuery 按过滤条件构造查询；Count 与 Find 各调一次，避免复用同一 *gorm.DB 会话。
+func (s *AuditStore) auditQuery(ctx context.Context, f AuditFilter) *gorm.DB {
+	q := s.db.WithContext(ctx).Model(&AuditLog{})
+	if f.UserID != 0 {
+		q = q.Where("user_id = ?", f.UserID)
+	}
+	if f.Action != "" {
+		q = q.Where("action = ?", f.Action)
+	}
+	if f.TargetType != "" {
+		q = q.Where("target_type = ?", f.TargetType)
+	}
+	if f.TargetID != 0 {
+		q = q.Where("target_id = ?", f.TargetID)
+	}
+	if !f.From.IsZero() {
+		q = q.Where("created_at >= ?", f.From.UTC())
+	}
+	if !f.To.IsZero() {
+		q = q.Where("created_at < ?", f.To.UTC())
+	}
+	return q
+}
+
+// Search 按过滤条件分页返回审计行与命中总数，按 id 倒序（最新在前）。
+// 结果行数受 auditSearchMaxLimit 限制，分页用 LIMIT/OFFSET（DESIGN.md §2.3）。
+func (s *AuditStore) Search(ctx context.Context, f AuditFilter) ([]AuditLog, int64, error) {
+	var total int64
+	if err := s.auditQuery(ctx, f).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count audit log: %w", err)
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = auditSearchDefaultLimit
+	}
+	if limit > auditSearchMaxLimit {
+		limit = auditSearchMaxLimit
+	}
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	var rows []AuditLog
+	if err := s.auditQuery(ctx, f).Order("id DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("search audit log: %w", err)
+	}
+	return rows, total, nil
+}
+
+// DistinctActions 返回库中出现过的动作名（升序），供检索页的动作下拉使用。
+func (s *AuditStore) DistinctActions(ctx context.Context) ([]string, error) {
+	var actions []string
+	if err := s.db.WithContext(ctx).Model(&AuditLog{}).Distinct().Order("action ASC").
+		Pluck("action", &actions).Error; err != nil {
+		return nil, fmt.Errorf("list audit actions: %w", err)
+	}
+	return actions, nil
+}
+
 // Ptr 返回 v 的地址，用于填充可空字段（user_id / api_key_id / target_id）。
 func Ptr[T any](v T) *T { return &v }
