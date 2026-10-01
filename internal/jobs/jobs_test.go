@@ -346,3 +346,82 @@ func TestRecoverStaleExplicitEntry(t *testing.T) {
 		t.Fatalf("recovered job = status %q error %v, want failed/%q", got.Status, got.Error, StaleJobReason)
 	}
 }
+
+// TestRecoverQueuedJobsAtStartup 是 M9-8 的验收：预置一行上次进程在「insert 之后、启动之前」
+// 崩溃遗留的 queued 作业（内存队列随进程消失，它永远不会被执行），启动恢复后它必须变为
+// failed、原因是「作业从未启动」，且随后新入队不再被永久 409 阻塞。
+func TestRecoverQueuedJobsAtStartup(t *testing.T) {
+	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := store.AutoMigrate(context.Background(), db); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	st := NewStore(db)
+	ctx := context.Background()
+
+	// 只建一行 queued，不做 MarkRunning：这正是崩溃在「入队已写库、worker 还没取走」之间留下的残留。
+	stale, err := st.CreateQueued(ctx, KindOptimize, nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("CreateQueued: %v", err)
+	}
+	if stale.Status != StatusQueued {
+		t.Fatalf("seeded job status = %q, want %q", stale.Status, StatusQueued)
+	}
+
+	runner, err := New(Deps{
+		DB:      db,
+		Store:   st,
+		Timeout: 5 * time.Second,
+		Command: func(context.Context, *store.Job, Reporter) (Command, error) {
+			return Command{Name: "/bin/true"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// 恢复前：残留 queued 行让 Enqueue 永久 409，这正是 M9-8 要修的症状。
+	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
+	}
+
+	// 显式恢复入口必须同时回收 queued 行，并返回回收行数。
+	n, err := runner.RecoverStale(ctx)
+	if err != nil {
+		t.Fatalf("RecoverStale: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("RecoverStale returned %d, want 1", n)
+	}
+	recovered, err := st.ByID(ctx, stale.ID)
+	if err != nil {
+		t.Fatalf("ByID(stale): %v", err)
+	}
+	if recovered.Status != StatusFailed {
+		t.Fatalf("queued job status = %q, want %q", recovered.Status, StatusFailed)
+	}
+	if recovered.Error == nil || *recovered.Error != NeverStartedJobReason {
+		t.Fatalf("queued job error = %v, want %q", recovered.Error, NeverStartedJobReason)
+	}
+	if recovered.FinishedAt == nil {
+		t.Fatal("queued job missing finished_at")
+	}
+	if recovered.StartedAt != nil {
+		t.Errorf("queued job started_at = %v, want nil (it never started)", recovered.StartedAt)
+	}
+	t.Logf("recovered queued job %d -> status=%s error=%q finished=%v",
+		recovered.ID, recovered.Status, *recovered.Error, recovered.FinishedAt)
+
+	// 恢复后：启动 worker，新入队必须成功并被执行，不再被永久 409 阻塞。
+	startCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner.Start(startCtx)
+	fresh, err := runner.Enqueue(ctx, KindOptimize, nil)
+	if err != nil {
+		t.Fatalf("Enqueue after recovery: %v", err)
+	}
+	done := waitForStatus(t, st, fresh.ID, StatusSucceeded, 3*time.Second)
+	t.Logf("fresh enqueue after recovery -> job %d status=%s", done.ID, done.Status)
+}
