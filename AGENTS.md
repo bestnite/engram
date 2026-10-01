@@ -595,7 +595,7 @@ Conventions:
 - [ ] **M8-5 Accessibility pass** — keyboard-only flow for review and editing, visible
   focus, labels on inputs.
   *Acceptance:* a documented checklist run against the review, deck, and settings pages.
-- [ ] **M8-6 Mobile smoke checklist** — a written procedure covering review, editing,
+- [x] **M8-6 Mobile smoke checklist** — a written procedure covering review, editing,
   offline message, and home-screen launch.
   *Acceptance:* the checklist exists, is dated, and each item states the observed result.
 
@@ -713,7 +713,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 9/10 · M6 4/10 · M7 3/4 · M8 2/6 · M9 6/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 9/10 · M6 4/10 · M7 3/4 · M8 3/6 · M9 6/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
