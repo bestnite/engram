@@ -1,0 +1,49 @@
+package views
+
+// ShareBrowsePage 是免注册只读浏览页（M5-3）。
+// 匿名可见但不可复习：页面只渲染卡组内容与一个「登录后开始复习」的提示，不含任何进度。
+// 设了口令的链接在解锁前只渲染口令表单，不渲染任何内容。
+templ ShareBrowsePage(data ShareBrowseData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.DeckName != "" {
+			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
+		}
+		if data.PasswordRequired {
+			<p class="mt-4 text-slate-600">{ data.Intro }</p>
+			if data.PasswordError != "" {
+				<p class="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.PasswordError }</p>
+			}
+			<form class="mt-4 space-y-3" method="post" action={ data.UnlockAction }>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.PasswordLabel }</span>
+					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="password" name="password" autocomplete="off" placeholder={ data.PasswordPlaceholder }/>
+				</label>
+				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.UnlockSubmit }</button>
+			</form>
+		} else {
+			<div class="mt-4 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800">
+				<p>{ data.ReviewPrompt }</p>
+				<a class="mt-1 inline-block font-medium underline" href={ data.LoginHref }>{ data.LoginLabel }</a>
+			</div>
+			if len(data.Notes) == 0 {
+				<p class="mt-4 text-slate-600">{ data.EmptyText }</p>
+			} else {
+				<ul class="mt-4 space-y-4">
+					for _, note := range data.Notes {
+						<li class="rounded-lg border border-slate-200 bg-white p-4">
+							<div>
+								<p class="text-xs uppercase tracking-wide text-slate-400">{ data.FrontLabel }</p>
+								<div class="mt-1 text-slate-900">{ note.FrontHTML }</div>
+							</div>
+							<div class="mt-3 border-t border-slate-100 pt-3">
+								<p class="text-xs uppercase tracking-wide text-slate-400">{ data.BackLabel }</p>
+								<div class="mt-1 text-slate-700">{ note.BackHTML }</div>
+							</div>
+						</li>
+					}
+				</ul>
+			}
+		}
+	}
+}

@@ -38,7 +38,7 @@ func (s *Server) deckList(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	summaries, err := s.decks.Summaries(ctx, user.ID, user.ID, time.Now().UTC())
+	summaries, err := s.decks.SummariesVisible(ctx, user.ID, time.Now().UTC())
 	if err != nil {
 		s.logger.Error("list decks failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -153,7 +153,7 @@ func (s *Server) deckCreate(c *gin.Context) {
 
 // renderDeckCreateError 在创建失败时重新渲染列表页并带上本地化错误与回显值。
 func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, userID uint64, status int, errMsg, nameValue, descValue string) {
-	summaries, err := s.decks.Summaries(c.Request.Context(), userID, userID, time.Now().UTC())
+	summaries, err := s.decks.SummariesVisible(c.Request.Context(), userID, time.Now().UTC())
 	if err != nil {
 		s.logger.Error("list decks failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)

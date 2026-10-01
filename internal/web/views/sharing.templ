@@ -81,7 +81,86 @@ templ SharingPage(data SharingData) {
 				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.GrantSubmit }</button>
 			</form>
 		</section>
-		// TODO(M5-3): 分享链接区块（创建/撤销/口令/过期）在此预留位置，本轮不写入口。
-		// TODO(M5-5): 可见性开关（private/unlisted/public）在此预留位置，本轮不写入口。
+		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold text-slate-900">{ data.LinksHeading }</h2>
+			if data.NewLinkURL != "" {
+				<div class="mt-3 rounded bg-green-50 px-3 py-2 text-sm text-green-800">
+					<p>{ data.NewLinkNotice }</p>
+					<input class="mt-2 w-full rounded border border-green-300 bg-white px-2 py-1 font-mono text-xs" type="text" readonly value={ data.NewLinkURL }/>
+				</div>
+			}
+			if len(data.LinkRows) == 0 {
+				<p class="mt-3 text-slate-600">{ data.LinksEmpty }</p>
+			} else {
+				<table class="mt-4 w-full text-left text-sm">
+					<thead class="border-b border-slate-200 text-slate-500">
+						<tr>
+							<th class="py-2">{ data.ColLink }</th>
+							<th class="py-2">{ data.ColPassword }</th>
+							<th class="py-2">{ data.ColExpires }</th>
+							<th class="py-2">{ data.ColState }</th>
+							<th class="py-2">{ data.ColActions }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range data.LinkRows {
+							<tr class="border-b border-slate-100 align-top">
+								<td class="py-2 font-mono text-xs">{ row.Prefix }</td>
+								<td class="py-2">{ row.PasswordText }</td>
+								<td class="py-2">{ row.ExpiresText }</td>
+								<td class="py-2">{ row.StateText }</td>
+								<td class="py-2">
+									if row.Active {
+										<form method="post" action={ row.RevokeAction }>
+											<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+											<input type="hidden" name="link" value={ row.TokenValue }/>
+											<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ row.RevokeLabel }</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<form class="mt-3" method="post" action={ data.RevokeAllAction }>
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ data.RevokeAllLabel }</button>
+				</form>
+			}
+			<form class="mt-4 space-y-3" method="post" action={ data.CreateLinkAction }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.PasswordLabel }</span>
+					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="password" autocomplete="new-password"/>
+					<span class="mt-1 block text-xs text-slate-500">{ data.PasswordHint }</span>
+				</label>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.ExpiresLabel }</span>
+					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="date" name="expires_at"/>
+					<span class="mt-1 block text-xs text-slate-500">{ data.ExpiresHint }</span>
+				</label>
+				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.CreateLinkLabel }</button>
+			</form>
+		</section>
+		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold text-slate-900">{ data.VisibilityHeading }</h2>
+			<p class="mt-1 text-sm text-slate-500">{ data.VisibilityNote }</p>
+			<form class="mt-4 flex flex-wrap items-end gap-2" method="post" action={ data.VisibilityAction }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="block text-sm text-slate-700">
+					<span>{ data.VisibilityLabel }</span>
+					<select class="mt-1 rounded border border-slate-300 px-2 py-1" name="visibility">
+						for _, opt := range data.VisibilityOptions {
+							if opt.Selected {
+								<option value={ opt.Value } selected>{ opt.Label }</option>
+							} else {
+								<option value={ opt.Value }>{ opt.Label }</option>
+							}
+						}
+					</select>
+				</label>
+				<button class="rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ data.VisibilitySubmit }</button>
+			</form>
+		</section>
 	}
 }

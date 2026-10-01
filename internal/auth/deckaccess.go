@@ -54,9 +54,22 @@ func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, e
 		return "", err
 	}
 	if !store.ValidRole(role) {
-		return "", nil
+		return visibilityRole(deck), nil
 	}
 	return role, nil
+}
+
+// visibilityRole 把卡组可见性折算成“隐式只读”：public 与 unlisted 都允许任何登录用户
+// 以 reader 身份访问内容（DESIGN.md §5：public 登录用户可见，unlisted 拿到链接可看）。
+// 它只授 reader，因此看不到内容的人也无法借可见性获得写权限 —— 写入仍要求 editor/owner。
+// private（含空串，兼容 M2 建的老行）不授任何权限。
+func visibilityRole(deck *store.Deck) string {
+	switch deck.Visibility {
+	case store.DeckVisibilityPublic, store.DeckVisibilityUnlisted:
+		return store.RoleReader
+	default:
+		return ""
+	}
 }
 
 // RequireRole 要求用户在卡组上至少拥有 want 角色，返回命中的卡组与该用户的有效角色。
@@ -79,7 +92,11 @@ func (d *DeckAccess) RequireRole(ctx context.Context, deckID, userID uint64, wan
 		}
 		if store.ValidRole(granted) {
 			role = granted
+		} else {
+			role = visibilityRole(deck)
 		}
+	} else {
+		role = visibilityRole(deck)
 	}
 	if !store.RoleAllows(role, want) {
 		return nil, role, ErrForbidden

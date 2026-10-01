@@ -52,6 +52,8 @@ type Deps struct {
 	Presets *store.PresetStore
 	// Grants 是卡组授权存储（M5-1）；为空时由 New 从 DB 构造。
 	Grants *store.GrantStore
+	// ShareLinks 是分享链接存储（M5-3）；为空时由 New 从 DB 构造。
+	ShareLinks *store.ShareLinkStore
 	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
@@ -86,6 +88,7 @@ type Server struct {
 	cards         *store.CardStore
 	presets       *store.PresetStore
 	grants        *store.GrantStore
+	shareLinks    *store.ShareLinkStore
 	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
 	access         *auth.DeckAccess
 	auditor        *auth.Auditor
@@ -153,6 +156,10 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.grants == nil {
 		s.grants = store.NewGrantStore(deps.DB)
 	}
+	s.shareLinks = deps.ShareLinks
+	if s.shareLinks == nil {
+		s.shareLinks = store.NewShareLinkStore(deps.DB)
+	}
 	if deps.Decks != nil {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
 	}
@@ -173,6 +180,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)
+	s.registerShareBrowseRoutes(router)
 	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
