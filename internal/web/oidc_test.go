@@ -158,8 +158,11 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("callback with a wrong state = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
-	if len(bad.Result().Cookies()) != 0 {
-		t.Fatal("wrong state unexpectedly set a session cookie")
+	// 错误 state 必须被拒，且不下发会话 cookie（登录页会下发会话前的 CSRF cookie，不算会话）。
+	for _, ck := range bad.Result().Cookies() {
+		if ck.Name == srv.sessions.CookieName() {
+			t.Fatalf("wrong state unexpectedly set a session cookie")
+		}
 	}
 
 	// 正确 state：登录成功并下发会话。

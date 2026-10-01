@@ -25,15 +25,15 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	if s.accounts == nil || s.sessions == nil || s.users == nil {
 		return
 	}
-	// 登录/注册/引导是登录前流程：此时还没有服务端会话，会话绑定的 CSRF token 无从产生，
-	// 因此这三个 POST 只依赖全局的会话解析中间件，不挂 CSRFMiddleware。
-	// token 只能覆盖已有会话的请求（DESIGN.md §4.3）；SameSite=Lax 仍是同一层防护。
+	// 登录/注册/引导是登录前流程：此时还没有服务端会话，会话绑定的 CSRF token 无从产生。
+	// 这三条 POST 改用双提交 cookie（B-13）：GET 下发随机 token 的 cookie 并镜像进表单，
+	// 提交时中间件比对两者，缺镜像 cookie 一律 403。已有会话的写请求仍走会话绑定的 CSRF。
 	router.GET("/login", s.loginPage)
-	router.POST("/login", s.loginSubmit)
+	router.POST("/login", auth.DoubleSubmitMiddleware(), s.loginSubmit)
 	router.GET("/register", s.registerPage)
-	router.POST("/register", s.registerSubmit)
+	router.POST("/register", auth.DoubleSubmitMiddleware(), s.registerSubmit)
 	router.GET("/setup", s.setupPage)
-	router.POST("/setup", s.setupSubmit)
+	router.POST("/setup", auth.DoubleSubmitMiddleware(), s.setupSubmit)
 	// 登出是登录后流程：会话已存在，必须携带会话绑定的 CSRF token（DESIGN.md §4.3）。
 	router.POST("/logout", s.sessions.CSRFMiddleware(), s.logout)
 	// OIDC 可选登录（M1-11）：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
@@ -107,6 +107,7 @@ func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, er
 		Action:               "/login",
 		SubmitLabel:          loc.T("auth.login.submit"),
 		ErrorMessage:         errMsg,
+		CSRF:                 auth.EnsureDoubleSubmitToken(c),
 		UsernameLabel:        loc.T("auth.field.username"),
 		PasswordLabel:        loc.T("auth.field.password"),
 		PasswordAutocomplete: "current-password",
@@ -211,6 +212,7 @@ func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int,
 		Action:               action,
 		SubmitLabel:          loc.T("auth.register.submit"),
 		ErrorMessage:         errMsg,
+		CSRF:                 auth.EnsureDoubleSubmitToken(c),
 		UsernameLabel:        loc.T("auth.field.username"),
 		EmailLabel:           loc.T("auth.field.email"),
 		PasswordLabel:        loc.T("auth.field.password"),
@@ -391,6 +393,7 @@ func (s *Server) renderSetup(c *gin.Context, loc *i18n.Localizer, status int, er
 		Action:               "/setup",
 		SubmitLabel:          loc.T("auth.setup.submit"),
 		ErrorMessage:         errMsg,
+		CSRF:                 auth.EnsureDoubleSubmitToken(c),
 		UsernameLabel:        loc.T("auth.field.username"),
 		EmailLabel:           loc.T("auth.field.email"),
 		PasswordLabel:        loc.T("auth.field.password"),

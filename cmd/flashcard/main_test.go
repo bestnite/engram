@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/config"
 	"example.com/flashcard/internal/store"
 	"example.com/flashcard/internal/web"
@@ -23,6 +24,9 @@ const testSessionSecret = "integration-test-session-secret-0123456789"
 
 // testEncryptionKey 是集成测试用的主密钥：base64(32 字节)，仅用于测试，与生产无关。
 var testEncryptionKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+
+// testDoubleSubmitToken 是集成测试用的会话前 CSRF token；值只需满足长度下限。
+const testDoubleSubmitToken = "test-double-submit-token-0123456789"
 
 // newWiredServer 通过与 runServe 相同的装配路径构造服务，验证 M1-14 的接线的确把
 // /login、/setup 等认证路由注册进了进程，而不是只在 web 包的单元测试里成立。
@@ -63,10 +67,25 @@ func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecor
 }
 
 // doPostForm 以 x-www-form-urlencoded 发起 POST。
+//
+// 登录前表单（/login、/register、/setup）需要双提交 cookie（B-13）：这里自动补上 cookie 与
+// 镜像 token，让本测试继续验证接线本身。拒绝路径（缺镜像 cookie）由
+// internal/web 的 csrf_presession_test.go 用原始请求单独覆盖。
 func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	preSession := false
+	switch strings.SplitN(target, "?", 2)[0] {
+	case "/login", "/register", "/setup":
+		preSession = true
+	}
+	if preSession && values.Get(auth.CSRFFieldName) == "" {
+		values.Set(auth.CSRFFieldName, testDoubleSubmitToken)
+	}
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if preSession {
+		req.AddCookie(&http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
+	}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	return rec
