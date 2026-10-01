@@ -263,10 +263,10 @@ Conventions:
   password change.
   *Acceptance:* changing the locale switches the returned page language; changing the
   cutoff moves `review_day` boundaries in the next test run.
-- [ ] **M1-9 Login rate limiting and lockout** — per account and per IP, increasing delay,
+- [x] **M1-9 Login rate limiting and lockout** — per account and per IP, increasing delay,
   audit entries for failures.
   *Acceptance:* test asserts the delay grows and that a successful login resets it.
-- [ ] **M1-10 Audit helper** — one function used by every mutation, writing user, optional
+- [x] **M1-10 Audit helper** — one function used by every mutation, writing user, optional
   API key, action, target, and JSON detail.
   *Acceptance:* test asserts one row per mutation with the expected action string.
 - [ ] **M1-11 OIDC login** — configuration read from `settings`, discovery document fetch
@@ -312,7 +312,7 @@ Conventions:
 - [x] **M2-5 Note and card pipeline** — create a note, generate its cards, enforce
   `(note_id, template)` uniqueness, and support soft delete plus restore.
   *Acceptance:* test asserts updating a note's fields keeps existing cards and their ids.
-- [ ] **M2-6 Renderer** — goldmark to HTML, bluemonday allowlist, MathJax delimiters
+- [x] **M2-6 Renderer** — goldmark to HTML, bluemonday allowlist, MathJax delimiters
   `\(` … `\)` and `\[` … `\]`, self-hosted MathJax.
   *Acceptance:* test asserts `script`, event attributes, and `javascript:` URLs are
   stripped while tables, code blocks, and inline math survive.
@@ -335,11 +335,11 @@ Conventions:
 
 ### M3 — Review loop
 
-- [ ] **M3-1 FSRS wrapper** — `internal/schedule`: construct the scheduler from preset
+- [x] **M3-1 FSRS wrapper** — `internal/schedule`: construct the scheduler from preset
   weights or `DefaultWeights()`, preview four ratings, submit one rating.
   *Acceptance:* test asserts `Repeat` returns four options and `Next` advances the card
   state as documented in `DESIGN.md` §3.2.
-- [ ] **M3-2 Queue builder** — learning cards first, then due reviews ordered by
+- [x] **M3-2 Queue builder** — learning cards first, then due reviews ordered by
   retrievability (default) or due date, then new cards limited by the daily cap and
   counted from the `reviews` table.
   *Acceptance:* test asserts ordering and that the daily caps are respected across a
@@ -361,6 +361,14 @@ Conventions:
   in the preset.
   *Acceptance:* tolerance tests cover case, whitespace, multiple accepted answers,
   absolute and relative numeric tolerance, and partial-credit mapping to `Hard`.
+- [ ] **M3-8 Deck-level daily caps in the schema** — `DESIGN.md` §3.3 defines `new_per_day` and
+  `reviews_per_day` as deck settings and §2.2 now lists both columns, but the `decks` model does
+  not have them, so the schedule package currently receives them through `QueueOptions` with
+  hard-coded defaults. Add the columns (`INTEGER NOT NULL DEFAULT 20` / `200`), expose them in the
+  deck store, and make the queue builder read them from the deck. Requires editing
+  `internal/store/models.go`, a single-writer hotspot: schedule it with an exclusive owner.
+  *Acceptance:* the queue builder honours a deck whose caps differ from the defaults; existing
+  schedule tests stay green; both databases migrate without a destructive change.
 - [ ] **M3-7 Schedule test suite** — state transitions, queue priority, version conflict,
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
@@ -613,7 +621,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 8/14 · M2 5/10 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 10/14 · M2 6/10 · M3 2/8 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/12 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.

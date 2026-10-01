@@ -6,7 +6,7 @@
 # ---- 构建阶段：装 templ 与 Tailwind standalone CLI，先生成再编译 ----
 # 用 glibc 基底（bookworm）：Tailwind 官方预编译的 tailwindcss-linux-x64 是 glibc 二进制，
 # 在 musl 的 Alpine 里 exec 会报 “no such file or directory”（缺动态链接器）。
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 
 # templ 版本与 go.mod 的 github.com/a-h/templ 对齐；Tailwind 与本机 standalone 对齐。
 ARG TEMPL_VERSION=v0.3.1020

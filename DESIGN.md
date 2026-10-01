@@ -138,6 +138,8 @@ CREATE TABLE decks (
   name            TEXT NOT NULL,
   description     TEXT NOT NULL DEFAULT '',
   visibility      TEXT NOT NULL DEFAULT 'private',  -- private | unlisted | public
+  new_per_day     INTEGER NOT NULL DEFAULT 20,      -- 每日新卡上限（0=不限）
+  reviews_per_day INTEGER NOT NULL DEFAULT 200,     -- 每日复习上限（0=不限）
   preset_id       INTEGER NOT NULL REFERENCES presets(id),
   archived_at     TEXT,
   created_at      TEXT NOT NULL
@@ -355,7 +357,9 @@ new ──(首次评分)──> learning ──(走完 learning_steps 且非 Aga
    - `按 due_at 升序`（经典顺序）
 3. **新卡**：`state = new`，数量 = `min(每日新卡上限 − 今日已引入, 剩余)`；顺序默认 `随机`（避免永远只背开头几张），可选按创建顺序。
 
-卡组级配置：`new_per_day`（默认 20）、`reviews_per_day`（默认 200，0=不限）。
+卡组级配置：`new_per_day`（默认 20）、`reviews_per_day`（默认 200，0=不限）——这两项属于 `decks` 表字段（§2.2）。
+
+**`card_states.step_index` 的语义（已冻结）**：表示**剩余的学习/再学习步骤数**，与 go-fsrs 的 `RemainingSteps` 同向（0 = 这一步走完，可毕业到长间隔）。不要反向解释为"已走步数"，否则状态机会整体反着跑。
 
 **跨天与复习日**：`review_day` = 把"用户本地时间 − `day_cutoff_hour`"取日期（默认 04:00，凌晨刷的算前一天）。`due_at` 一律存 UTC。
 
@@ -773,7 +777,7 @@ deck.fdeck                      # zip
 
 | 层 | 选择 | 版本 | 理由 |
 |---|---|---|---|
-| 语言 | Go | 1.25+（开发机 1.27） | — |
+| 语言 | Go | **1.26+**（开发机 1.27） | go-fsrs v4.0.0 的 go.mod 声明 `go 1.26`，故本项目 go.mod 指令为 1.26，容器 builder 用 `golang:1.26-bookworm`（Tailwind CLI 是 glibc 二进制，不能用 alpine） |
 | HTTP | `github.com/gin-gonic/gin` | v1.12.0 | 需求指定；htmx 只需路由与表单绑定 |
 | 视图 | `github.com/a-h/templ` | v0.3.1020 | 需求指定；类型安全模板，编译产物可 embed |
 | 交互 | htmx（自托管 JS） | vendor | 免前端构建链，服务端渲染为主 |
