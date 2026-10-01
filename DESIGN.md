@@ -491,6 +491,23 @@ fields_json (Markdown + TeX)
 | 作答类 | `true_false` | statement, answer | 1 | **机器判分** |
 | 主观类（§14） | `short_answer` | prompt, reference（可选参考） | 1 | 先自评；未来 LLM 评分 + 反馈 |
 
+**字段名（已冻结，2026-10-02 —— 服务端 `cardtype.Validate`、`schema/note-import.schema.json`、`schema/deck-package.schema.json` 三者必须一致）**
+
+| kind | 必填字段 | 可选字段 |
+|---|---|---|
+| `basic` / `basic_both` | `front`, `back` | `extra`, `source_url` |
+| `cloze` | `text`（**必须至少含一个 `{{cN::…}}`**） | 同上 |
+| `list` | `prompt`, `items[]`（非空） | `ordered`（bool，整表有序；缺省 false） |
+| `typed` | `prompt`, `answer` | `accept[]`（其它可接受答案）, `ignore_case`, `ignore_whitespace`, `regex`（正则优先于字面比较） |
+| `numeric` | `prompt`, `value` | `tolerance_absolute`, `tolerance_relative`（0–1 的比例）, `unit` |
+| `choice_single` | `question`, `options[]`（≥2，去重）, `answer`（**0 基索引**） | `extra`, `source_url` |
+| `choice_multi` | `question`, `options[]`（≥2，去重）, `answers[]`（**0 基索引**，至少 1 个，去重） | 同上 |
+| `true_false` | `statement`, `answer`（bool） | 同上 |
+| `short_answer` | `prompt` | `reference`（参考答案，未来 LLM 评分用）, `extra`, `source_url` |
+
+- **JSON Schema 表达不了的部分由服务端保证**（并在错误里点名字段）：答案索引必须落在 `options` 范围内、`options` 去重、多选答案去重、cloze 序号完整性。schema 文件里会给这些规则加注释说明。
+- 通用字段 `extra` / `source_url` 对所有题型可用（`extra` 复习时可折叠显示，`source_url` 指回外部原文）。
+
 - **题型接口（设计要点）**：`Validate(fields)` / `Cards(note)` / `Render(card, side)` / `Grade(input) (rating, detail, ok)`（可选，作答类实现）/ `PromptContext(note)`（可选，未来 LLM 评分用）/ `Label()`（i18n 显示名）。可选方法用可选的窄接口断言（`if g, ok := t.(Grader); ok`），不为将来预留大接口。
 - 机器判分的分数 → FSRS 评分映射可配（默认：全对=Good、部分对=Hard、全错=Again；映射规则写在 preset 里，便于按题型调）。
 - **数值/输入判分直接服务于"纯记忆映射"类内容**（如分数↔百分数互转），比纯自评更严格。
@@ -542,7 +559,7 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 | GET | `/decks` | read | 我的卡组（按权限过滤） |
 | POST | `/decks` | write | 建卡组 |
 | GET | `/decks/:id/notes` | read | 卡片列表（分页、标签过滤、关键词搜索） |
-| POST | `/decks/:id/notes` | write | **批量新增/更新**（幂等 `external_ref`；支持 `dry_run`；单次 ≤ 500） |
+| POST | `/decks/:id/notes` | write | **批量新增/更新**（幂等 `external_ref`；请求体布尔字段 `dry_run`；`on_conflict` = `skip`/`update`(默认)/`fail`；单次 ≤ 500） |
 | PATCH | `/notes/:id` | write | 单卡更新 |
 | DELETE | `/notes/:id` | write | 软删除 |
 | GET | `/review/due?deck=:id&limit=n` | review | 取到期卡（含字段原文） |
@@ -556,6 +573,7 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 - 幂等键 `external_ref` **由调用方**决定命名空间（例如某笔记系统用 `<system>:<docId>:<blockId>`），服务不做解释，只保证 `(deck_id, external_ref)` 唯一 → 同一批数据重复提交不会产生重复卡，且能反过来查"哪些来源还没建过卡"。
 - 批量响应：`{created, updated, skipped, errors:[{index, reason}]}`；`dry_run=1` 只算不写。
 - 更新已存在卡片时**保留所有用户的复习进度**（进度挂在 card 上，不在内容上）。
+- **请求/响应体的权威 schema**：`schema/note-import.schema.json`（外部工具可直接校验）；`dry_run` 是**请求体字段**（不是查询串），`on_conflict` 亦然。
 
 ### 7.4 内置 MCP server（仅 HTTP，复用 API Key）
 
@@ -575,7 +593,7 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 
 - `GET /api/v1/export?deck=:id&format=json|csv[&include_progress=1]`
 - 管理面板提供"全库导出"按钮（web 优先，不必用 CLI；CLI 仅作为自动化/运维的等价入口）。
-- 导出**不含** Anki 兼容格式（见 §1 非目标）。
+- 导出**不含** Anki 兼容格式（见 §1 非目标）。批量导入与卡组包的请求/文件格式见 `schema/` 下的 JSON Schema。
 - 上面是**运维/备份级**与**卡片级**两种粒度；面向"把一个卡组完整带走"的粒度见 §7.6。
 
 ### 7.6 卡组包（deck package）：导出与导入
@@ -621,6 +639,17 @@ deck.fdeck                      # zip
 - 预演：`dry_run=1` 返回 `{notes_created, notes_updated, notes_skipped, cards_created, media_new, media_missing, progress_applied, progress_skipped, errors[]}` —— **先预演、后写入**，报告形态与 §7.3 的批量导入一致。
 - 安全：所有字段走同一套校验与清洗（`cardtype.Validate` + bluemonday）；解压拒绝路径穿越与超限（单文件上限、总解压体积上限、条目数上限，防 zip bomb）；导入按用户限流；包内不允许脚本或模板。
 - 体积上限：与上传上限同一处配置（管理面板）。
+
+**包内字段名（已冻结，2026-10-02）**
+
+- `manifest`：`format_version`(=1)、`exported_at`、`app_version`、`deck{name, description}`、`include_progress`、`include_media`、`include_reviews`、`counts{notes, cards, media}`、可选 `exported_by`（用于判断进度归属，见下）。
+- `notes.json`：`notes[]`，每条与 §7.3 的导入体一致（`kind` + `fields` + `tags` + 可选 `external_ref` / `source_url`）。
+- `cards.json`：`cards[]`，每条 `{note_index, template, ordinal}` —— 用 `note_index`（指向 `notes[]` 的下标）而不是 ID，避免导出/导入之间的 ID 语义纠缠。
+- `preset.json`：调度参数；**`weights` 为 21 个数字的数组或 `null`**（`null` = 用默认权重）。
+- `progress.json`：`states[]` 每条用 `{note_index, template}` 或 `{external_ref, template}` 定位卡片（两者至少给一个），加 `user_ref` 标识归属；不含用户身份明文。
+- 未知的 zip 条目与未知 JSON 字段**一律忽略**（保证 N−1 兼容）；**未知题型必须报错**。
+
+**进度归属判定**：导入时用 `manifest.exported_by`（若存在）与当前登录用户比对；不同人则默认丢弃进度并在报告里说明（详见上文"进度导入的边界"）。
 
 **Schema 文件**：`schema/deck-package.schema.json`，与 `schema/note-import.schema.json` 并列，供外部工具校验与生成。
 

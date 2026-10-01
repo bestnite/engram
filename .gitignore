@@ -44,3 +44,6 @@ testdata/local/
 .vscode/
 *.swp
 .DS_Store
+
+# ── 本地进度台账（不入库；AGENTS.md 的勾选在此暂存）──────────
+PROGRESS.local.md
