@@ -52,17 +52,46 @@ func NewAccountService(users *store.UserStore, sessions *store.SessionStore, has
 
 // CreateLocalUser 校验密码策略、哈希密码并写入用户；邮箱大小写归一化，登录名保持原样。
 func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
-	username := strings.TrimSpace(in.Username)
-	email := strings.ToLower(strings.TrimSpace(in.Email))
-	if username == "" || email == "" {
-		return nil, errors.New("username and email are required")
-	}
 	if err := ValidatePasswordPolicy(in.Password); err != nil {
 		return nil, err
 	}
 	hash, err := s.hasher.Hash(in.Password)
 	if err != nil {
 		return nil, err
+	}
+	u, err := newUserFromInput(in, &hash, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.users.Create(ctx, u); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return u, nil
+}
+
+// CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL，DESIGN.md §4.1）。
+//
+// 与 CreateLocalUser 的区别只有凭据：不做密码策略校验，也不派生哈希 —— OIDC 账号靠
+// 绑定的外部身份登录（M1-11 接入流程，M1-12 提供建号能力）。用户名与邮箱仍为必填，
+// 否则唯一约束与后续找回都会失去依据。
+func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
+	u, err := newUserFromInput(in, nil, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.users.Create(ctx, u); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return u, nil
+}
+
+// newUserFromInput 把入参归一化为待落库的用户；passwordHash 为 nil 表示无本地密码。
+// 默认值集中在这里，避免两条建号路径漂移（AGENTS.md §2.6：一个行为只有一处实现）。
+func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (*store.User, error) {
+	username := strings.TrimSpace(in.Username)
+	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if username == "" || email == "" {
+		return nil, errors.New("username and email are required")
 	}
 	role := in.Role
 	if role == "" {
@@ -84,22 +113,18 @@ func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput
 	if display == "" {
 		display = username
 	}
-	u := &store.User{
+	return &store.User{
 		Username:      username,
 		Email:         email,
-		PasswordHash:  &hash,
+		PasswordHash:  passwordHash,
 		DisplayName:   display,
 		Role:          role,
 		Status:        store.StatusActive,
 		Locale:        locale,
 		Timezone:      tz,
 		DayCutoffHour: cutoff,
-		CreatedAt:     s.now(),
-	}
-	if err := s.users.Create(ctx, u); err != nil {
-		return nil, fmt.Errorf("create user: %w", err)
-	}
-	return u, nil
+		CreatedAt:     now,
+	}, nil
 }
 
 // Authenticate 校验用户名/密码；禁用用户一律拒绝，不区分"密码错"与"账号禁用"之外的细节。
