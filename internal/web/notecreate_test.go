@@ -32,6 +32,7 @@ func TestCreateNoteForEveryKind(t *testing.T) {
 		{"choice_single", url.Values{"field.question": {"Capital of France?"}, "field.options": {"Paris\nLondon"}, "field.answer": {"0"}}, 1},
 		{"choice_multi", url.Values{"field.question": {"Pick even numbers"}, "field.options": {"2\n3\n4"}, "field.answers": {"0\n2"}}, 1},
 		{"true_false", url.Values{"field.statement": {"The sky is blue"}, "field.answer": {"true"}}, 1},
+		{"short_answer", url.Values{"field.prompt": {"Why is the sky blue?"}, "field.reference": {"Rayleigh scattering"}}, 1},
 	}
 
 	kinds := cardtype.Kinds()

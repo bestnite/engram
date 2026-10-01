@@ -329,3 +329,139 @@ func TestStatsTagBreakdown(t *testing.T) {
 		})
 	}
 }
+
+// seedStreakDays 建出只含指定复习日的最小数据集：每个 day 写一条复习日志，
+// 用于连续打卡的日期分布断言（不复用 seedStatsFixture，避免它的日期干扰）。
+func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
+	t.Helper()
+	if err := db.AutoMigrate(AllModels()...); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	p := NewPreset(1, "streak")
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset: %v", err)
+	}
+	d := Deck{OwnerUserID: 1, Name: "Streak deck", Visibility: DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: statsNow}
+	if err := db.Create(&d).Error; err != nil {
+		t.Fatalf("create deck: %v", err)
+	}
+	n := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	if err := db.Create(&n).Error; err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	cardID := createStatsCard(t, db, n.ID, "forward")
+	for _, day := range days {
+		seedReview(t, db, cardID, day, 3, 2, 5, 1000, "self", statsNow)
+	}
+}
+
+// TestStatsStreakBoundaryAtCutoff 是 M7-2 的验收边界：连续天数只在「整整一个复习日
+// 被跳过」时中断。同一个挂钟日期 2026-10-04，03:30 仍算复习日 10-03（连续未断），
+// 04:30 跨过 04:00 切点后 10-03 已被整天跳过（连续归零）。
+func TestStatsStreakBoundaryAtCutoff(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			seedStreakDays(t, db, "2026-10-01", "2026-10-02")
+			ctx := context.Background()
+
+			// 切点本身：03:59:59 属前一天，04:00:00 属当天。
+			if got := reviewDayString(time.Date(2026, 10, 3, 3, 59, 59, 0, time.UTC), time.UTC, 4); got != "2026-10-02" {
+				t.Errorf("reviewDayString(03:59:59) = %q, want 2026-10-02", got)
+			}
+			if got := reviewDayString(time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC), time.UTC, 4); got != "2026-10-03" {
+				t.Errorf("reviewDayString(04:00:00) = %q, want 2026-10-03", got)
+			}
+
+			before, err := NewStatsStore(db).Streak(ctx, 1, time.Date(2026, 10, 4, 3, 30, 0, 0, time.UTC), time.UTC, 4)
+			if err != nil {
+				t.Fatalf("Streak(before cutoff) error = %v", err)
+			}
+			if before.Current != 2 || before.Longest != 2 {
+				t.Errorf("Streak(before cutoff) = %+v, want current 2 longest 2 (today is still 10-03)", before)
+			}
+
+			after, err := NewStatsStore(db).Streak(ctx, 1, time.Date(2026, 10, 4, 4, 30, 0, 0, time.UTC), time.UTC, 4)
+			if err != nil {
+				t.Fatalf("Streak(after cutoff) error = %v", err)
+			}
+			if after.Current != 0 || after.Longest != 2 {
+				t.Errorf("Streak(after cutoff) = %+v, want current 0 longest 2 (a whole review day was skipped)", after)
+			}
+		})
+	}
+}
+
+// TestStatsStreakCurrentAndLongest 断言当前/最长连续段：最长段取历史最长，
+// 当前段允许「今天还没复习」而不算断（只有昨天整天被跳过才归零）。
+func TestStatsStreakCurrentAndLongest(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			seedStreakDays(t, db,
+				"2026-09-25", "2026-09-26", "2026-09-27",
+				"2026-10-01", "2026-10-02")
+			ctx := context.Background()
+			store := NewStatsStore(db)
+
+			cases := []struct {
+				now         time.Time
+				wantCurrent int
+				wantLongest int
+			}{
+				{time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC), 2, 3}, // 10-02,10-01
+				{time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC), 2, 3}, // 今天未复习，昨天 10-02 在，未断
+				{time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), 0, 3}, // 10-03 整天被跳过
+				{time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC), 3, 3}, // 09-25..27 正好当天
+			}
+			for _, tc := range cases {
+				got, err := store.Streak(ctx, 1, tc.now, time.UTC, 4)
+				if err != nil {
+					t.Fatalf("Streak(%s) error = %v", tc.now.Format("2006-01-02"), err)
+				}
+				if got.Current != tc.wantCurrent || got.Longest != tc.wantLongest {
+					t.Errorf("Streak(%s) = %+v, want current %d longest %d",
+						tc.now.Format("2006-01-02"), got, tc.wantCurrent, tc.wantLongest)
+				}
+			}
+		})
+	}
+}
+
+// TestStatsLearningCurveMatchesHandSQL 对拍学习曲线（DESIGN.md §9）：每日新引入
+// 是 state_before=New 的次数，其余算复习量。期望值全部硬编码，逐日断言两个数字。
+func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			fx := seedStatsFixture(t, db)
+			// 补两条「新引入」：10-02 一张、10-03 一张。
+			seedReview(t, db, fx.card1, "2026-10-02", 3, 0, 5, 1000, "self", statsNow)
+			seedReview(t, db, fx.card2, "2026-10-03", 3, 0, 5, 1000, "self", statsNow)
+
+			got, err := NewStatsStore(db).LearningCurve(context.Background(), 1, "2026-10-01", "2026-10-03")
+			if err != nil {
+				t.Fatalf("LearningCurve() error = %v", err)
+			}
+			want := []LearningCurvePoint{
+				{Day: "2026-10-01", New: 0, Review: 1},
+				{Day: "2026-10-02", New: 1, Review: 2},
+				{Day: "2026-10-03", New: 1, Review: 0},
+			}
+			if len(got) != len(want) {
+				t.Fatalf("LearningCurve() = %+v, want %d points %+v", got, len(want), want)
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Errorf("LearningCurve()[%d] = %+v, want %+v", i, got[i], want[i])
+				}
+				// 独立 SQL 对拍同一天的互斥分桶。
+				var handNew, handReview int64
+				db.Raw(`SELECT
+					COALESCE(SUM(CASE WHEN state_before = 0 THEN 1 ELSE 0 END), 0),
+					COALESCE(SUM(CASE WHEN state_before <> 0 THEN 1 ELSE 0 END), 0)
+					FROM reviews WHERE user_id = ? AND review_day = ?`, 1, want[i].Day).Row().Scan(&handNew, &handReview)
+				if got[i].New != handNew || got[i].Review != handReview {
+					t.Errorf("LearningCurve()[%d] = %+v, hand SQL = new %d review %d", i, got[i], handNew, handReview)
+				}
+			}
+		})
+	}
+}

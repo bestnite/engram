@@ -13,6 +13,8 @@ func init() {
 	mustRegister("choice_single", choiceSingleType{})
 	mustRegister("choice_multi", choiceMultiType{})
 	mustRegister("true_false", trueFalseType{})
+	// 主观类（M3-11）：自评的自由文本题型；LLM 判分留待 §14。
+	mustRegister("short_answer", shortAnswerType{})
 }
 
 // mustRegister 在注册失败时 panic：重复注册或空 kind 都是编程错误，启动即暴露。
