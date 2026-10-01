@@ -100,6 +100,10 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 	}
 }
 
+// AuthMiddleware 暴露与 /api/v1 完全相同的鉴权中间件，供内置 MCP 的 /mcp 端点复用
+// （DESIGN.md §7.4：MCP 复用用户级 API Key，不另写一套鉴权）。
+func (a *API) AuthMiddleware() gin.HandlerFunc { return a.authn.Auth() }
+
 // authenticateKey 校验 bearer key 并把用户与 key 写进上下文。
 func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	ctx := c.Request.Context()

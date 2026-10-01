@@ -1,0 +1,743 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+
+	"example.com/flashcard/internal/cardtype"
+	"example.com/flashcard/internal/schedule"
+	"example.com/flashcard/internal/store"
+)
+
+// 本文件是 REST 与内置 MCP 共用的 service 层（DESIGN.md §7.1、§7.4：两者只做参数
+// 校验与包装，真实业务规则必须只有一份实现）。REST handler 与 MCP 工具都调用这里的
+// 方法，保证同名操作产出完全一致。
+
+// ServiceError 携带稳定错误 code 与 HTTP 语义状态码，供 REST 包壳与 MCP 错误结果共用。
+type ServiceError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *ServiceError) Error() string { return e.Message }
+
+// newServiceError 构造一个 ServiceError。
+func newServiceError(status int, code, message string) *ServiceError {
+	return &ServiceError{Status: status, Code: code, Message: message}
+}
+
+// asServiceError 把任意 error 归一成 ServiceError；未识别错误按 500 internal 处理。
+func asServiceError(err error) *ServiceError {
+	var se *ServiceError
+	if errors.As(err, &se) {
+		return se
+	}
+	return newServiceError(http.StatusInternalServerError, CodeInternal, err.Error())
+}
+
+// ---- 卡组 ----
+
+// ListDecks 返回用户拥有的卡组（按权限过滤；M5 会把授权卡组一并纳入）。
+func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error) {
+	decks, err := a.decks.ListByOwner(ctx, userID)
+	if err != nil {
+		a.logger.Error("list decks failed", "user_id", userID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list decks")
+	}
+	return decks, nil
+}
+
+// OwnedDeck 取属于给定用户的卡组；不存在返回 404，非本人返回 403。
+func (a *API) OwnedDeck(ctx context.Context, userID, deckID uint64) (*store.Deck, error) {
+	d, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		return nil, newServiceError(http.StatusNotFound, CodeNotFound, "deck not found")
+	}
+	if d.OwnerUserID != userID {
+		return nil, newServiceError(http.StatusForbidden, CodeForbidden, "deck is not owned by the caller")
+	}
+	return d, nil
+}
+
+// OwnedNote 取属于给定用户的 note 及其卡组；不存在 404，非本人 403。
+func (a *API) OwnedNote(ctx context.Context, userID, noteID uint64) (*store.Note, *store.Deck, error) {
+	n, err := a.notes.ByID(ctx, noteID)
+	if err != nil {
+		return nil, nil, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
+	}
+	d, err := a.OwnedDeck(ctx, userID, n.DeckID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return n, d, nil
+}
+
+// countPlan 把一条规划计入 dry_run 的计数。
+func countPlan(resp *ImportResponse, action string) {
+	switch action {
+	case "create":
+		resp.Created++
+	case "update":
+		resp.Updated++
+	case "skip":
+		resp.Skipped++
+	}
+}
+
+// findNoteByExternalRef 按 (deck_id, external_ref) 查 note，包含已软删除的行
+// —— 唯一索引对软删除行同样生效，必须 Unscoped 查询，否则重复导入会撞唯一约束。
+func (a *API) findNoteByExternalRef(ctx context.Context, deckID uint64, ref string) (*store.Note, error) {
+	var n store.Note
+	err := a.db.WithContext(ctx).Unscoped().
+		Where("deck_id = ? AND external_ref = ?", deckID, ref).First(&n).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// ---- 卡片 ----
+
+// ListNotes 返回卡组下的卡片列表（分页、标签过滤、关键词搜索）。
+func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.NoteListOptions) ([]store.Note, int64, error) {
+	d, err := a.OwnedDeck(ctx, userID, deckID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage <= 0 {
+		opts.PerPage = store.DefaultNotePageSize
+	}
+	opts.DeckID = d.ID
+	notes, total, err := a.notes.List(ctx, opts)
+	if err != nil {
+		a.logger.Error("list notes failed", "deck_id", d.ID, "error", err)
+		return nil, 0, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list notes")
+	}
+	return notes, total, nil
+}
+
+// ImportNote 是批量导入的单个 note；字段名与 schema/note-import.schema.json 一致。
+type ImportNote struct {
+	Kind        string         `json:"kind"`
+	Fields      map[string]any `json:"fields"`
+	ExternalRef string         `json:"external_ref"`
+	Tags        []string       `json:"tags"`
+}
+
+// ImportRequest 是批量新增/更新请求体；dry_run 与 on_conflict 是请求体字段。
+type ImportRequest struct {
+	DryRun     bool         `json:"dry_run"`
+	OnConflict string       `json:"on_conflict"`
+	Notes      []ImportNote `json:"notes"`
+}
+
+// ImportError 是逐条导入错误：index 指向请求体 notes 数组的下标。
+type ImportError struct {
+	Index  int    `json:"index"`
+	Reason string `json:"reason"`
+}
+
+// ImportResponse 是批量导入的响应体（DESIGN.md §7.3）。
+type ImportResponse struct {
+	DryRun  bool          `json:"dry_run"`
+	Created int           `json:"created"`
+	Updated int           `json:"updated"`
+	Skipped int           `json:"skipped"`
+	Errors  []ImportError `json:"errors"`
+}
+
+// MaxImportNotes 是单次批量导入的上限（DESIGN.md §7.3：单次 ≤ 500）。
+const MaxImportNotes = 500
+
+// ImportNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等（DESIGN.md §7.3）。
+//
+// 采用两遍法：第一遍校验并规划每条的去向（create/update/skip），第二遍才写库。
+// dry_run 时停在第一遍，只返回计数；on_conflict=fail 时任何冲突或校验错误都会整批拒绝。
+func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
+	d, err := a.OwnedDeck(ctx, userID, deckID)
+	if err != nil {
+		return ImportResponse{}, err
+	}
+	if len(req.Notes) == 0 || len(req.Notes) > MaxImportNotes {
+		return ImportResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			fmt.Sprintf("notes must contain between 1 and %d items", MaxImportNotes))
+	}
+	onConflict := strings.TrimSpace(req.OnConflict)
+	if onConflict == "" {
+		onConflict = "update"
+	}
+	if onConflict != "skip" && onConflict != "update" && onConflict != "fail" {
+		return ImportResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "on_conflict must be one of skip, update, fail")
+	}
+
+	type plan struct {
+		index    int
+		action   string
+		existing *store.Note
+		note     store.Note
+		fields   map[string]any
+	}
+	plans := make([]plan, 0, len(req.Notes))
+	resp := ImportResponse{DryRun: req.DryRun, Errors: []ImportError{}}
+	hasFailure := false
+
+	for i, item := range req.Notes {
+		item.Kind = strings.TrimSpace(item.Kind)
+		if item.Kind == "" {
+			resp.Errors = append(resp.Errors, ImportError{i, "kind is required"})
+			hasFailure = true
+			continue
+		}
+		if len(item.Fields) == 0 {
+			resp.Errors = append(resp.Errors, ImportError{i, "fields are required"})
+			hasFailure = true
+			continue
+		}
+		if err := cardtype.Validate(item.Kind, item.Fields); err != nil {
+			resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+			hasFailure = true
+			continue
+		}
+
+		ref := strings.TrimSpace(item.ExternalRef)
+		var existing *store.Note
+		if ref != "" {
+			found, err := a.findNoteByExternalRef(ctx, d.ID, ref)
+			if err != nil {
+				a.logger.Error("lookup note by external_ref failed", "deck_id", d.ID, "error", err)
+				return ImportResponse{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load existing notes")
+			}
+			existing = found
+		}
+
+		n := store.Note{
+			DeckID:    d.ID,
+			Kind:      item.Kind,
+			TagsJSON:  tagsJSON(item.Tags),
+			CreatedBy: store.Ptr(userID),
+			Source:    store.Ptr("api"),
+		}
+		if ref != "" {
+			n.ExternalRef = store.Ptr(ref)
+		}
+
+		action := "create"
+		if existing != nil {
+			switch onConflict {
+			case "skip":
+				action = "skip"
+			case "fail":
+				resp.Errors = append(resp.Errors, ImportError{i, "a note with this external_ref already exists"})
+				hasFailure = true
+				continue
+			default:
+				action = "update"
+			}
+		}
+		plans = append(plans, plan{index: i, action: action, existing: existing, note: n, fields: item.Fields})
+	}
+
+	if onConflict == "fail" && hasFailure {
+		return ImportResponse{}, newServiceError(http.StatusConflict, CodeConflict, "import aborted: one or more notes are invalid or conflict")
+	}
+
+	if req.DryRun {
+		for _, p := range plans {
+			countPlan(&resp, p.action)
+		}
+		return resp, nil
+	}
+
+	for _, p := range plans {
+		if p.action == "skip" {
+			resp.Skipped++
+			continue
+		}
+		if p.action == "create" {
+			n := p.note
+			if _, err := a.notes.Create(ctx, &n, p.fields); err != nil {
+				resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
+				continue
+			}
+			resp.Created++
+			continue
+		}
+		// update：已软删除的 note 先恢复再更新，否则 Update 会把它当不存在。
+		if p.existing.DeletedAt.Valid {
+			if err := a.notes.Restore(ctx, p.existing.ID); err != nil {
+				resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
+				continue
+			}
+		}
+		n := p.note
+		n.ID = p.existing.ID
+		if _, err := a.notes.Update(ctx, &n, p.fields); err != nil {
+			resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
+			continue
+		}
+		resp.Updated++
+	}
+
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(userID),
+		APIKeyID:   apiKeyID,
+		Action:     "note.import",
+		TargetType: "deck",
+		TargetID:   store.Ptr(d.ID),
+		Detail: map[string]any{
+			"created": resp.Created, "updated": resp.Updated,
+			"skipped": resp.Skipped, "errors": len(resp.Errors), "dry_run": req.DryRun,
+		},
+	})
+	return resp, nil
+}
+
+// UpdateNoteInput 是单卡更新输入；Tags 用指针区分“未提供”与“清空”。
+type UpdateNoteInput struct {
+	Kind   string
+	Fields map[string]any
+	Tags   *[]string
+}
+
+// UpdateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
+func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64, in UpdateNoteInput) (*store.Note, error) {
+	existing, _, err := a.OwnedNote(ctx, userID, noteID)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Fields) == 0 {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "fields are required")
+	}
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = existing.Kind
+	}
+	// TODO(M4-9): error message localisation via Accept-Language.
+	if err := cardtype.Validate(kind, in.Fields); err != nil {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+	}
+	n := store.Note{ID: existing.ID, Kind: kind}
+	if in.Tags != nil {
+		n.TagsJSON = tagsJSON(*in.Tags)
+	} else {
+		n.TagsJSON = existing.TagsJSON
+	}
+	if _, err := a.notes.Update(ctx, &n, in.Fields); err != nil {
+		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+	}
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(userID),
+		APIKeyID:   apiKeyID,
+		Action:     store.ActionNoteUpdate,
+		TargetType: "note",
+		TargetID:   store.Ptr(existing.ID),
+	})
+	updated, err := a.notes.ByID(ctx, existing.ID)
+	if err != nil {
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to reload note")
+	}
+	return updated, nil
+}
+
+// DeleteNote 软删除单卡（进度保留，误删可恢复）；返回被删除的 note id。
+func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64) (uint64, error) {
+	existing, _, err := a.OwnedNote(ctx, userID, noteID)
+	if err != nil {
+		return 0, err
+	}
+	if err := a.notes.Delete(ctx, existing.ID); err != nil {
+		a.logger.Error("delete note failed", "note_id", existing.ID, "error", err)
+		return 0, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete note")
+	}
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(userID),
+		APIKeyID:   apiKeyID,
+		Action:     store.ActionNoteDelete,
+		TargetType: "note",
+		TargetID:   store.Ptr(existing.ID),
+	})
+	return existing.ID, nil
+}
+
+// ---- 统计与导出 ----
+
+// StatsSummary 是 /stats/summary 与 get_stats 工具的共同响应形态。
+type StatsSummary struct {
+	Decks        int     `json:"decks"`
+	Due          int64   `json:"due"`
+	ReviewsToday int64   `json:"reviews_today"`
+	ReviewsTotal int64   `json:"reviews_total"`
+	Retention    float64 `json:"retention"`
+	Notes        int64   `json:"notes"`
+	Cards        int64   `json:"cards"`
+}
+
+// Stats 汇总当前用户的到期量 / 复习量 / 留存概要；所有数字都由 reviews + card_states 聚合。
+func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
+	now := a.now()
+
+	decks, err := a.decks.ListByOwner(ctx, u.ID)
+	if err != nil {
+		a.logger.Error("load decks for stats failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+	resp := StatsSummary{Decks: len(decks)}
+	deckIDs := make([]uint64, 0, len(decks))
+	for _, d := range decks {
+		deckIDs = append(deckIDs, d.ID)
+	}
+	if len(deckIDs) == 0 {
+		return resp, nil
+	}
+
+	var due int64
+	if err := a.db.WithContext(ctx).Model(&store.CardState{}).
+		Joins("JOIN cards ON cards.id = card_states.card_id AND cards.deleted_at IS NULL").
+		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
+		Where("notes.deck_id IN ?", deckIDs).
+		Where("card_states.user_id = ? AND card_states.due_at IS NOT NULL AND card_states.due_at <= ?", u.ID, now).
+		Count(&due).Error; err != nil {
+		a.logger.Error("count due cards failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+
+	day := schedule.ReviewDay(now, userLocation(u.Timezone), u.DayCutoffHour)
+	var reviewsToday int64
+	if err := a.db.WithContext(ctx).Model(&store.Review{}).
+		Where("user_id = ? AND review_day = ?", u.ID, day).Count(&reviewsToday).Error; err != nil {
+		a.logger.Error("count reviews today failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+	var reviewsTotal int64
+	if err := a.db.WithContext(ctx).Model(&store.Review{}).
+		Where("user_id = ?", u.ID).Count(&reviewsTotal).Error; err != nil {
+		a.logger.Error("count reviews failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+	// 留存近似口径：非 Again 的比例（更精细的分桶留给 M7）。
+	nonAgain, err := countNonAgain(ctx, a, u.ID)
+	if err != nil {
+		a.logger.Error("count retention failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+
+	var notes, cards int64
+	if err := a.db.WithContext(ctx).Model(&store.Note{}).
+		Where("deck_id IN ?", deckIDs).Count(&notes).Error; err != nil {
+		a.logger.Error("count notes failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+	if err := a.db.WithContext(ctx).Model(&store.Card{}).
+		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
+		Where("notes.deck_id IN ?", deckIDs).Where("cards.deleted_at IS NULL").
+		Count(&cards).Error; err != nil {
+		a.logger.Error("count cards failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+
+	resp.Due = due
+	resp.ReviewsToday = reviewsToday
+	resp.ReviewsTotal = reviewsTotal
+	resp.Notes = notes
+	resp.Cards = cards
+	if reviewsTotal > 0 {
+		resp.Retention = float64(nonAgain) / float64(reviewsTotal)
+	}
+	return resp, nil
+}
+
+// ExportRow 是卡片级导出的扁平行（DESIGN.md §7.5：给外部工具用的粒度）。
+type ExportRow struct {
+	CardID      uint64         `json:"card_id"`
+	NoteID      uint64         `json:"note_id"`
+	DeckID      uint64         `json:"deck_id"`
+	Kind        string         `json:"kind"`
+	Template    string         `json:"template"`
+	Fields      map[string]any `json:"fields"`
+	Tags        []string       `json:"tags"`
+	ExternalRef *string        `json:"external_ref,omitempty"`
+	State       *string        `json:"state,omitempty"`
+	DueAt       *time.Time     `json:"due_at,omitempty"`
+	Reps        *int           `json:"reps,omitempty"`
+	Lapses      *int           `json:"lapses,omitempty"`
+}
+
+// ExportDeckIDs 解析导出目标卡组集合：deckID=0 时导出调用者全部卡组，否则仅该卡组。
+func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint64, error) {
+	if deckID != 0 {
+		if _, err := a.OwnedDeck(ctx, userID, deckID); err != nil {
+			return nil, err
+		}
+		return []uint64{deckID}, nil
+	}
+	decks, err := a.decks.ListByOwner(ctx, userID)
+	if err != nil {
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load decks")
+	}
+	ids := make([]uint64, 0, len(decks))
+	for _, d := range decks {
+		ids = append(ids, d.ID)
+	}
+	return ids, nil
+}
+
+// ExportCards 取出卡片级导出数据；M4-5 会把它改成流式以支持超大卡组。
+func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) ([]ExportRow, error) {
+	if len(deckIDs) == 0 {
+		return []ExportRow{}, nil
+	}
+	type scanRow struct {
+		CardID      uint64
+		NoteID      uint64
+		DeckID      uint64
+		Kind        string
+		Template    string
+		FieldsJSON  string
+		TagsJSON    string
+		ExternalRef *string
+		State       *string
+		DueAt       *time.Time
+		Reps        *int
+		Lapses      *int
+	}
+	var raw []scanRow
+	// 进度列只在 include_progress 时选取；未选进度时不引用 card_states，
+	// 否则 SQL 会因缺少该 JOIN 而报 “no such column”。
+	selectCols := `cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id,
+		        notes.kind AS kind, cards.template AS template, notes.fields_json AS fields_json,
+		        notes.tags_json AS tags_json, notes.external_ref AS external_ref`
+	q := a.db.WithContext(ctx).Table("cards").
+		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
+		Where("cards.deleted_at IS NULL").
+		Where("notes.deck_id IN ?", deckIDs)
+	if includeProgress {
+		selectCols += `, card_states.state AS state, card_states.due_at AS due_at,
+		        card_states.reps AS reps, card_states.lapses AS lapses`
+		q = q.Joins("LEFT JOIN card_states ON card_states.card_id = cards.id AND card_states.user_id = ?", userID)
+	}
+	q = q.Select(selectCols)
+	if err := q.Scan(&raw).Error; err != nil {
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to export cards")
+	}
+	rows := make([]ExportRow, 0, len(raw))
+	for _, r := range raw {
+		fields, err := store.ParseFields(r.FieldsJSON)
+		if err != nil || fields == nil {
+			fields = map[string]any{}
+		}
+		tags, err := store.ParseTags(r.TagsJSON)
+		if err != nil || tags == nil {
+			tags = []string{}
+		}
+		rows = append(rows, ExportRow{
+			CardID: r.CardID, NoteID: r.NoteID, DeckID: r.DeckID,
+			Kind: r.Kind, Template: r.Template, Fields: fields, Tags: tags,
+			ExternalRef: r.ExternalRef,
+			State:       r.State, DueAt: r.DueAt, Reps: r.Reps, Lapses: r.Lapses,
+		})
+	}
+	return rows, nil
+}
+
+// ---- 复习 ----
+
+// DueCard 是到期卡的对外形态（含字段原文）。
+type DueCard struct {
+	CardID         uint64         `json:"card_id"`
+	NoteID         uint64         `json:"note_id"`
+	DeckID         uint64         `json:"deck_id"`
+	State          string         `json:"state"`
+	DueAt          time.Time      `json:"due_at"`
+	Retrievability float64        `json:"retrievability"`
+	Kind           string         `json:"kind"`
+	Fields         map[string]any `json:"fields"`
+	Tags           []string       `json:"tags"`
+	Template       string         `json:"template,omitempty"`
+}
+
+// DueCards 返回到期卡（含字段原文）；deckID=0 表示全部卡组；limit 取 [1,500]。
+func (a *API) DueCards(ctx context.Context, u *store.User, deckID uint64, limit int) ([]DueCard, error) {
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	var deck *store.Deck
+	if deckID != 0 {
+		d, err := a.OwnedDeck(ctx, u.ID, deckID)
+		if err != nil {
+			return nil, err
+		}
+		deck = d
+	}
+
+	// 队列构建需要调度器（只为复习卡算 retrievability）；无卡组时用默认预设。
+	var sched *schedule.Scheduler
+	if deck != nil {
+		s, err := a.schedulerForDeck(ctx, deck)
+		if err != nil {
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
+		}
+		sched = s
+	} else {
+		presetID, err := a.ensureDefaultPreset(ctx, u.ID)
+		if err != nil {
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load default preset")
+		}
+		preset, err := a.presets.ByID(ctx, presetID)
+		if err != nil {
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load default preset")
+		}
+		s, err := schedule.NewScheduler(preset)
+		if err != nil {
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build scheduler")
+		}
+		sched = s
+	}
+
+	builder := schedule.NewQueueBuilder(a.db, sched)
+	opts := schedule.QueueOptions{
+		Now:           a.now(),
+		Timezone:      u.Timezone,
+		DayCutoffHour: u.DayCutoffHour,
+		ReviewOrder:   schedule.OrderByDueAt,
+		NewOrder:      schedule.NewOrderRandom,
+	}
+	if deck != nil {
+		opts.DeckID = deck.ID
+	}
+	items, err := builder.Build(ctx, u.ID, opts)
+	if err != nil {
+		a.logger.Error("build due queue failed", "user_id", u.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
+	}
+	if len(items) > limit {
+		items = items[:limit]
+	}
+
+	out := make([]DueCard, 0, len(items))
+	for _, it := range items {
+		note, err := a.notes.ByID(ctx, it.NoteID)
+		if err != nil {
+			continue
+		}
+		entry := DueCard{
+			CardID:         it.CardID,
+			NoteID:         it.NoteID,
+			DeckID:         it.DeckID,
+			State:          it.State.String(),
+			DueAt:          it.DueAt,
+			Retrievability: it.Retrievability,
+			Kind:           note.Kind,
+			Fields:         fieldsOrEmpty(note),
+			Tags:           tagsOrEmpty(note),
+		}
+		if card, err := a.cards.ByID(ctx, it.CardID); err == nil {
+			entry.Template = card.Template
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// SubmitReviewInput 是评分提交输入（DESIGN.md §3.4）。
+type SubmitReviewInput struct {
+	CardID          uint64
+	Rating          int
+	ExpectedVersion int
+	ElapsedMS       *int
+	GradeSource     string
+}
+
+// SubmitReviewResult 是评分提交的响应形态。
+type SubmitReviewResult struct {
+	CardID    uint64     `json:"card_id"`
+	ReviewID  uint64     `json:"review_id"`
+	State     string     `json:"state"`
+	DueAt     *time.Time `json:"due_at"`
+	Version   int        `json:"version"`
+	Stability *float64   `json:"stability"`
+}
+
+// SubmitReview 提交一次评分；乐观锁不匹配返回 409 version_conflict。
+func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64, in SubmitReviewInput) (SubmitReviewResult, error) {
+	if in.CardID == 0 {
+		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "card_id is required")
+	}
+	if !schedule.Rating(in.Rating).Valid() {
+		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
+	}
+	card, err := a.cards.ByID(ctx, in.CardID)
+	if err != nil {
+		return SubmitReviewResult{}, newServiceError(http.StatusNotFound, CodeNotFound, "card not found")
+	}
+	note, err := a.notes.ByID(ctx, card.NoteID)
+	if err != nil {
+		return SubmitReviewResult{}, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
+	}
+	deck, err := a.OwnedDeck(ctx, u.ID, note.DeckID)
+	if err != nil {
+		return SubmitReviewResult{}, err
+	}
+	sched, err := a.schedulerForDeck(ctx, deck)
+	if err != nil {
+		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
+	}
+
+	var result schedule.SubmitResult
+	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var inner error
+		result, inner = schedule.Submit(ctx, tx, schedule.SubmitInput{
+			CardID:          in.CardID,
+			UserID:          u.ID,
+			Rating:          schedule.Rating(in.Rating),
+			ExpectedVersion: in.ExpectedVersion,
+			ElapsedMS:       in.ElapsedMS,
+			GradeSource:     in.GradeSource,
+			Scheduler:       sched,
+			Now:             a.now(),
+			Location:        userLocation(u.Timezone),
+			Timezone:        u.Timezone,
+			DayCutoffHour:   u.DayCutoffHour,
+		})
+		return inner
+	})
+	if err != nil {
+		if errors.Is(err, schedule.ErrVersionConflict) {
+			return SubmitReviewResult{}, newServiceError(http.StatusConflict, CodeVersionConflict, "card state version conflict")
+		}
+		a.logger.Error("submit review failed", "card_id", in.CardID, "user_id", u.ID, "error", err)
+		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to submit review")
+	}
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		APIKeyID:   apiKeyID,
+		Action:     "review.submit",
+		TargetType: "card",
+		TargetID:   store.Ptr(in.CardID),
+		Detail:     map[string]any{"rating": in.Rating, "review_id": result.ReviewID},
+	})
+	return SubmitReviewResult{
+		CardID:    in.CardID,
+		ReviewID:  result.ReviewID,
+		State:     result.State.State,
+		DueAt:     result.State.DueAt,
+		Version:   result.State.Version,
+		Stability: result.State.Stability,
+	}, nil
+}

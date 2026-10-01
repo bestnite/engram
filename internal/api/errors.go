@@ -32,3 +32,10 @@ type errorBody struct {
 func abortError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": errorBody{Code: code, Message: message}})
 }
+
+// writeServiceError 把 service 层的 *ServiceError 映射成统一错误包壳；未识别错误按 500 处理。
+// REST handler 与 MCP 工具共用同一批 service 方法，这里是 REST 侧的出口。
+func writeServiceError(c *gin.Context, err error) {
+	se := asServiceError(err)
+	abortError(c, se.Status, se.Code, se.Message)
+}

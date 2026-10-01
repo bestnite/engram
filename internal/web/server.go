@@ -17,6 +17,7 @@ import (
 	"example.com/flashcard/internal/api"
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/i18n"
+	"example.com/flashcard/internal/mcp"
 	"example.com/flashcard/internal/store"
 )
 
@@ -56,6 +57,8 @@ type Deps struct {
 	BootstrapAdminEmail string
 	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
 	API *api.API
+	// MCP 是内置 MCP server（M4-6）；非空时在 /mcp 挂载 streamable HTTP。
+	MCP *mcp.Server
 }
 
 // Server 持有路由与监听地址。
@@ -81,6 +84,7 @@ type Server struct {
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
 	api            *api.API
+	mcp            *mcp.Server
 }
 
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
@@ -132,6 +136,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
 		api:            deps.API,
+		mcp:            deps.MCP,
 	}
 
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
@@ -153,6 +158,14 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.api != nil {
 		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。
 		s.api.Register(router)
+	}
+	if s.mcp != nil && s.api != nil {
+		// MCP 复用同一套鉴权（DESIGN.md §7.4）；鉴权后把身份注入请求上下文再交给 streamable handler。
+		g := router.Group("")
+		g.Use(s.api.AuthMiddleware())
+		g.POST("/mcp", s.mcpEndpoint)
+		g.GET("/mcp", s.mcpEndpoint)
+		g.DELETE("/mcp", s.mcpEndpoint)
 	}
 	s.router = router
 	return s, nil
@@ -222,6 +235,15 @@ func (s *Server) healthz(c *gin.Context) {
 	}
 
 	c.JSON(code, healthResponse{Status: status, Database: database, SchemaVersion: version})
+}
+
+// mcpEndpoint 把已鉴权的用户与 API key 注入请求上下文，再交给 MCP 的
+// streamable HTTP handler；scope 过滤与调用复查在 mcp 包内按该身份完成。
+func (s *Server) mcpEndpoint(c *gin.Context) {
+	u, _ := api.CurrentUser(c)
+	k, _ := api.CurrentAPIKey(c)
+	ctx := mcp.WithIdentity(c.Request.Context(), u, k)
+	s.mcp.ServeHTTP(c.Writer, c.Request.WithContext(ctx))
 }
 
 // requestLogger 用 slog 记录每个请求；日志一律英文（AGENTS.md §2.1）。
