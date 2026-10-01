@@ -225,6 +225,8 @@ CREATE TABLE reviews (
   elapsed_ms    INTEGER,
   duration_days REAL,
   state_before  INTEGER NOT NULL,                -- 0=New 1=Learning 2=Review 3=Relearning
+  -- 待补（M3-9）：评分前的剩余学习步骤数，用于 Undo 精确还原步骤进度
+  -- step_index_before INTEGER,
   interval_days REAL,
   stability     REAL,
   difficulty    REAL
@@ -359,6 +361,8 @@ new ──(首次评分)──> learning ──(走完 learning_steps 且非 Aga
 
 卡组级配置：`new_per_day`（默认 20）、`reviews_per_day`（默认 200，0=不限）——这两项属于 `decks` 表字段（§2.2）。
 
+**上限的读取优先级（已冻结，只有这一种读法）**：调用方显式覆盖（`QueueOptions` 的 override 字段）> `decks` 表的列 > 兜底默认（20 / 不限）。`0` 一律表示"不限"，而不是"回落到默认"。
+
 **`card_states.step_index` 的语义（已冻结）**：表示**剩余的学习/再学习步骤数**，与 go-fsrs 的 `RemainingSteps` 同向（0 = 这一步走完，可毕业到长间隔）。不要反向解释为"已走步数"，否则状态机会整体反着跑。
 
 **跨天与复习日**：`review_day` = 把"用户本地时间 − `day_cutoff_hour`"取日期（默认 04:00，凌晨刷的算前一天）。`due_at` 一律存 UTC。
@@ -377,7 +381,9 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
   → 返回：新状态 + 下一张卡（省一次往返）
 ```
 
-- `reviews` 只增不改。**撤销（Undo）**用 `Rollback(card, log)` 恢复状态，并删除最后一条日志（同时写一条 `audit_log` 说明）。
+- **新卡首次提交的并发竞态（已知缺口，待修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。修法写死为**带条件的原子 upsert**（`... ON CONFLICT ... WHERE version = ?`，由 GORM 的 `clause.OnConflict` + `Where` 表达），见 AGENTS.md 的 M3-10。
+- **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，并删除最后一条日志（同时写一条 `audit_log`）。**学习步骤进度目前无法还原**（`Rollback` 会把 `step_index` 归零），因为 `reviews` 未存评分前的步骤快照；补 `reviews.step_index_before` 后即可精确还原，见 AGENTS.md 的 M3-9。
+- `reviews` 只增不改。
 - `rating` 与 `state_before` 用**整数**（1–4 / 0–3），与 FSRS 生态的复习日志约定一致，将来接优化器零转换。
 - `reviews` 字段从第一天就写全 —— 它是参数优化的唯一燃料，缺字段永远补不回来。
 

@@ -316,7 +316,7 @@ Conventions:
   `\(` … `\)` and `\[` … `\]`, self-hosted MathJax.
   *Acceptance:* test asserts `script`, event attributes, and `javascript:` URLs are
   stripped while tables, code blocks, and inline math survive.
-- [ ] **M2-7 Card list and editor pages** — paging, search, tag filter, live preview,
+- [x] **M2-7 Card list and editor pages** — paging, search, tag filter, live preview,
   bulk actions.
   *Acceptance:* page renders 100 notes with paging intact; preview updates over htmx
   without a full reload.
@@ -344,11 +344,11 @@ Conventions:
   counted from the `reviews` table.
   *Acceptance:* test asserts ordering and that the daily caps are respected across a
   simulated day boundary at 03:59 and 04:00 local time.
-- [ ] **M3-3 Review submission** — single transaction writing the state update and the
+- [x] **M3-3 Review submission** — single transaction writing the state update and the
   review row, with the `expected_version` check returning `409` on mismatch.
   *Acceptance:* test asserts a duplicated submission changes nothing and returns `409`,
   and that a failing transaction leaves no review row.
-- [ ] **M3-4 Undo, suspend, bury** — rollback via the last review log, suspend a card,
+- [x] **M3-4 Undo, suspend, bury** — rollback via the last review log, suspend a card,
   bury it for the current day.
   *Acceptance:* test asserts Undo restores the previous due date and interval exactly.
 - [ ] **M3-5 Review page** — templ plus htmx: show answer, rate, keyboard shortcuts
@@ -361,7 +361,7 @@ Conventions:
   in the preset.
   *Acceptance:* tolerance tests cover case, whitespace, multiple accepted answers,
   absolute and relative numeric tolerance, and partial-credit mapping to `Hard`.
-- [ ] **M3-8 Deck-level daily caps in the schema** — `DESIGN.md` §3.3 defines `new_per_day` and
+- [x] **M3-8 Deck-level daily caps in the schema** — `DESIGN.md` §3.3 defines `new_per_day` and
   `reviews_per_day` as deck settings and §2.2 now lists both columns, but the `decks` model does
   not have them, so the schedule package currently receives them through `QueueOptions` with
   hard-coded defaults. Add the columns (`INTEGER NOT NULL DEFAULT 20` / `200`), expose them in the
@@ -369,6 +369,20 @@ Conventions:
   `internal/store/models.go`, a single-writer hotspot: schedule it with an exclusive owner.
   *Acceptance:* the queue builder honours a deck whose caps differ from the defaults; existing
   schedule tests stay green; both databases migrate without a destructive change.
+- [ ] **M3-9 Snapshot the learning step before a rating** — Undo currently cannot restore
+  learning-step progress because `reviews` stores no pre-rating step snapshot; `Rollback` zeroes
+  `step_index`. Add `reviews.step_index_before`, write it in the submit path, and rebuild the
+  rollback input from it. Requires editing `internal/store/models.go`, a single-writer hotspot.
+  *Acceptance:* a test rates a learning card two steps forward, undoes twice, and asserts
+  `step_index` returns to its original value at each step.
+- [ ] **M3-10 Atomic first submission for a brand-new card** — the row lock does not cover a
+  `card_states` row that does not exist yet, so two concurrent first submissions of the same new
+  card can both pass the version check on PostgreSQL (SQLite is serialised by its single write
+  connection). Replace the read-check-write sequence with a conditional upsert
+  (`clause.OnConflict` plus a `version = ?` guard, or an `INSERT ... ON CONFLICT DO UPDATE ...
+  WHERE`).
+  *Acceptance:* a test issuing two concurrent first submissions against PostgreSQL asserts exactly
+  one review row and one state row survive, and the loser receives the conflict sentinel.
 - [ ] **M3-7 Schedule test suite** — state transitions, queue priority, version conflict,
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
@@ -376,7 +390,7 @@ Conventions:
 
 ### M4 — External integration
 
-- [ ] **M4-1 API key store** — generation (`fcard_` prefix plus base64url), sha256 storage,
+- [x] **M4-1 API key store** — generation (`fcard_` prefix plus base64url), sha256 storage,
   display prefix, scopes, expiry, revoke, `last_used_at`.
   *Acceptance:* test asserts the plaintext is never persisted and that a revoked key
   fails authentication immediately.
@@ -621,7 +635,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 10/14 · M2 6/10 · M3 2/8 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 10/14 · M2 7/10 · M3 5/10 · M4 2/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/12 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
