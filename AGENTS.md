@@ -476,7 +476,7 @@ Conventions:
 - [x] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
   *Acceptance:* test asserts `unlisted` decks never appear in any listing but resolve by
   direct id.
-- [ ] **M5-6 Deck package export** — the `.fdeck` zip described in `DESIGN.md` §7.6
+- [x] **M5-6 Deck package export** — the `.fdeck` zip described in `DESIGN.md` §7.6
   (`manifest.json`, `notes.json`, `cards.json`, `preset.json`, optional `progress.json`,
   optional `media/` with `media.json`), exposed through the deck page, `GET
   /api/v1/decks/:id/package`, MCP `export_deck`, and the CLI.
@@ -484,7 +484,7 @@ Conventions:
   `schema/deck-package.schema.json`; a test with two users on one deck proves the package
   never contains the other user's progress; with `include_media=0` no media entries are
   written and the manifest says so.
-- [ ] **M5-7 Deck package import** — upload, API, MCP and CLI entry points; the three
+- [x] **M5-7 Deck package import** — upload, API, MCP and CLI entry points; the three
   targets (`new_deck`, `into_deck:<id>`, `replace_deck:<id>`); `dry_run`; conflict policy;
   id remapping; progress rules; media handling; archive safety.
   *Acceptance:* a round trip (export then import into a fresh database) yields identical
@@ -492,11 +492,21 @@ Conventions:
   duplicate cards; an archive with a path-traversal entry or an oversized decompression is
   rejected; an unknown `kind` fails with the offending entry listed; `progress.json` from
   another user is discarded and reported unless the admin setting enables it.
+- [ ] **M5-8 Deck package entry points beyond REST** — M5-6/M5-7 shipped the store layer and
+  `GET /api/v1/decks/:id/package` + `POST /api/v1/decks/import`, but the task text also named the
+  deck page, the MCP tools, and the CLI, and none of those exist yet: `export_deck` /
+  `import_deck` still go through the older bulk note-creation path, there is no CLI subcommand,
+  and there is no upload page. Their absence is invisible today because no UI links to them, so
+  it is exactly the kind of gap that only shows up after a release.
+  *Acceptance:* an MCP `export_deck` call returns a package and `import_deck` accepts one; a CLI
+  subcommand round-trips a file; the web page uploads a package and reports the import summary.
+  While doing this, replace the hand-rolled draft-2020-12 subset validator M5-6 wrote with a real
+  JSON Schema library if the module proxy is reachable.
 
 
 ### M6 — Admin panel and system settings
 
-- [ ] **M6-1 Admin shell** — layout, navigation, and an access guard limited to `role = admin`.
+- [x] **M6-1 Admin shell** — layout, navigation, and an access guard limited to `role = admin`.
   *Acceptance:* test asserts a non-admin gets `403` on every `/admin/*` route.
 - [ ] **M6-2 User management** — list and search, create, disable and enable, reset
   password, change role, force logout, delete, and per-user deck and usage counts.
@@ -510,7 +520,7 @@ Conventions:
   with unlink.
   *Acceptance:* a wrong issuer shows the discovery error on the page; a correct
   configuration completes a stub login.
-- [ ] **M6-5 System settings UI** — site name, default locale, upload size limit, allowed
+- [x] **M6-5 System settings UI** — site name, default locale, upload size limit, allowed
   mime list, media directory usage, full-database export button.
   *Acceptance:* each setting is applied without a restart and the page shows whether the
   effective value comes from the environment or the database.
@@ -584,7 +594,7 @@ Conventions:
   weight array as JSON.
   *Acceptance:* an adapter run on a fixed fixture produces the same weights on two
   consecutive runs.
-- [ ] **M9-3 Review-log export** — the standard schema (`card_id`, `review_time` in UTC
+- [x] **M9-3 Review-log export** — the standard schema (`card_id`, `review_time` in UTC
   milliseconds, `review_rating` 1–4, `review_state` 0–3, `review_duration`, `timezone`,
   `day_start`) written for the adapter.
   *Acceptance:* test asserts the exported file parses against the upstream documented
@@ -611,7 +621,7 @@ Conventions:
   `failed` with the reason recorded and that a new enqueue then succeeds.
   *Verified:* the runner recovers at startup; the WARN log names the count and the reason.
 
-- [ ] **M9-8 Recover queued jobs as well** — M9-7 rescues only `running` jobs, but `Store.Active`
+- [x] **M9-8 Recover queued jobs as well** — M9-7 rescues only `running` jobs, but `Store.Active`
   treats `queued` as in-flight too (`status IN ('queued','running')`) while the queue itself lives
   in memory. A crash between insert and start therefore leaves a `queued` row that nothing will
   ever execute, while every later `Enqueue` keeps returning `409` — the same permanent-busy symptom
@@ -687,7 +697,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 5/7 · M6 1/10 · M7 2/4 · M8 2/6 · M9 1/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 7/8 · M6 2/10 · M7 2/4 · M8 2/6 · M9 3/8
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
