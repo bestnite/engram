@@ -99,6 +99,19 @@
   translation: "Cloze"
 - id: cardtype.list
   translation: "List"
+# M2-10 remaining type labels (covers all ten built-in card types).
+- id: cardtype.typed
+  translation: "Typed answer"
+- id: cardtype.numeric
+  translation: "Numeric answer"
+- id: cardtype.choice_single
+  translation: "Single choice"
+- id: cardtype.choice_multi
+  translation: "Multiple choice"
+- id: cardtype.true_false
+  translation: "True / false"
+- id: cardtype.short_answer
+  translation: "Short answer"
 - id: note.field.front
   translation: "Front"
 - id: note.field.back
@@ -115,6 +128,35 @@
   translation: "Extra"
 - id: note.field.source_url
   translation: "Source URL"
+# M2-10 graded and short-answer field labels (frozen field table in DESIGN.md §6.2).
+- id: note.field.question
+  translation: "Question"
+- id: note.field.answer
+  translation: "Answer"
+- id: note.field.accept
+  translation: "Other accepted answers (JSON array)"
+- id: note.field.options
+  translation: "Options (JSON array)"
+- id: note.field.answers
+  translation: "Correct option indices (JSON array)"
+- id: note.field.statement
+  translation: "Statement"
+- id: note.field.value
+  translation: "Value"
+- id: note.field.unit
+  translation: "Unit"
+- id: note.field.tolerance_absolute
+  translation: "Absolute tolerance"
+- id: note.field.tolerance_relative
+  translation: "Relative tolerance (0–1)"
+- id: note.field.ignore_case
+  translation: "Ignore case (true/false)"
+- id: note.field.ignore_whitespace
+  translation: "Ignore whitespace (true/false)"
+- id: note.field.regex
+  translation: "Regular expression (true/false)"
+- id: note.field.reference
+  translation: "Reference answer"
 - id: notes.list.title
   translation: "Cards"
 - id: notes.list.heading
@@ -173,6 +215,23 @@
   translation: "Apply"
 - id: notes.list.bulk_hint
   translation: "Select cards to run a bulk action"
+- id: notes.list.new_note
+  translation: "New card"
+# M2-12 create-note form.
+- id: notes.create.title
+  translation: "New card"
+- id: notes.create.heading
+  translation: "New card"
+- id: notes.create.kind_label
+  translation: "Card type"
+- id: notes.create.save
+  translation: "Save card"
+- id: notes.create.error_invalid
+  translation: "Field validation failed: "
+- id: notes.create.lines_hint
+  translation: "One item per line (or paste a JSON array)"
+- id: notes.create.number_hint
+  translation: "Enter a number"
 - id: notes.edit.title
   translation: "Edit card"
 - id: notes.edit.heading
