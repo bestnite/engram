@@ -99,6 +99,19 @@
   translation: "挖空"
 - id: cardtype.list
   translation: "列表"
+# M2-10 剩余题型的显示名（十个内置题型全覆盖）。
+- id: cardtype.typed
+  translation: "输入作答"
+- id: cardtype.numeric
+  translation: "数值作答"
+- id: cardtype.choice_single
+  translation: "单选"
+- id: cardtype.choice_multi
+  translation: "多选"
+- id: cardtype.true_false
+  translation: "判断"
+- id: cardtype.short_answer
+  translation: "简答"
 - id: note.field.front
   translation: "正面"
 - id: note.field.back
@@ -115,6 +128,35 @@
   translation: "附注"
 - id: note.field.source_url
   translation: "来源链接"
+# M2-10 作答类与简答题的字段名（字段名冻结表见 DESIGN.md §6.2）。
+- id: note.field.question
+  translation: "问题"
+- id: note.field.answer
+  translation: "答案"
+- id: note.field.accept
+  translation: "其它可接受答案（JSON 数组）"
+- id: note.field.options
+  translation: "选项（JSON 数组）"
+- id: note.field.answers
+  translation: "正确选项索引（JSON 数组）"
+- id: note.field.statement
+  translation: "陈述"
+- id: note.field.value
+  translation: "数值"
+- id: note.field.unit
+  translation: "单位"
+- id: note.field.tolerance_absolute
+  translation: "绝对容差"
+- id: note.field.tolerance_relative
+  translation: "相对容差（0–1）"
+- id: note.field.ignore_case
+  translation: "忽略大小写（true/false）"
+- id: note.field.ignore_whitespace
+  translation: "忽略空白（true/false）"
+- id: note.field.regex
+  translation: "正则匹配（true/false）"
+- id: note.field.reference
+  translation: "参考答案"
 - id: notes.list.title
   translation: "卡片"
 - id: notes.list.heading
@@ -173,6 +215,23 @@
   translation: "应用"
 - id: notes.list.bulk_hint
   translation: "勾选若干卡片后可批量操作"
+- id: notes.list.new_note
+  translation: "新建卡片"
+# M2-12 新建卡片表单。
+- id: notes.create.title
+  translation: "新建卡片"
+- id: notes.create.heading
+  translation: "新建卡片"
+- id: notes.create.kind_label
+  translation: "题型"
+- id: notes.create.save
+  translation: "保存卡片"
+- id: notes.create.error_invalid
+  translation: "字段校验失败："
+- id: notes.create.lines_hint
+  translation: "每行一项（也可粘贴 JSON 数组）"
+- id: notes.create.number_hint
+  translation: "请填数字"
 - id: notes.edit.title
   translation: "编辑卡片"
 - id: notes.edit.heading

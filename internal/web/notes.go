@@ -23,11 +23,19 @@ import (
 var builtinFieldKeys = map[string]bool{
 	"front": true, "back": true, "text": true, "prompt": true,
 	"items": true, "ordered": true, "extra": true, "source_url": true,
+	// M2-10：作答类与简答题的字段名（DESIGN.md §6.2 冻结表）。
+	"question": true, "answer": true, "accept": true, "options": true, "answers": true,
+	"statement": true, "value": true, "unit": true,
+	"tolerance_absolute": true, "tolerance_relative": true,
+	"ignore_case": true, "ignore_whitespace": true, "regex": true, "reference": true,
 }
 
 // fieldOrder 决定编辑页字段输入框的展示顺序；不在其中的字段追加在后面。
 var fieldOrder = []string{
 	"front", "back", "text", "prompt", "items", "ordered", "extra", "source_url",
+	"question", "options", "answer", "answers", "accept",
+	"statement", "value", "unit", "tolerance_absolute", "tolerance_relative",
+	"ignore_case", "ignore_whitespace", "regex", "reference",
 }
 
 // summaryFieldOrder 是列表“正面摘要”的取值优先级，覆盖内置题型的题干字段。
@@ -43,9 +51,14 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	}
 	router.GET("/decks/:id/notes", s.noteList)
 	router.GET("/decks/:id/notes/:nid", s.noteEdit)
+	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
+	router.GET("/decks/:id/new-note", s.noteNew)
+	router.GET("/decks/:id/new-note/fields", s.noteFieldsFragment)
 	// GET 之外的写操作一律过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST("/decks/:id/notes/:nid", s.sessions.CSRFMiddleware(), s.noteUpdate)
+	router.POST("/decks/:id/notes", s.sessions.CSRFMiddleware(), s.noteCreate)
 	router.POST("/decks/:id/preview", s.sessions.CSRFMiddleware(), s.notePreview)
+	router.POST("/decks/:id/preview-new", s.sessions.CSRFMiddleware(), s.noteCreatePreview)
 	router.POST("/decks/:id/bulk", s.sessions.CSRFMiddleware(), s.noteBulk)
 }
 
@@ -329,6 +342,8 @@ func (s *Server) noteList(c *gin.Context) {
 		BulkTagLabel:       loc.T("notes.list.bulk_tag"),
 		BulkTagPlaceholder: loc.T("notes.list.bulk_tag_placeholder"),
 		BulkSubmitLabel:    loc.T("notes.list.bulk_submit"),
+		NewNoteLabel:       loc.T("notes.list.new_note"),
+		NewNoteHref:        fmt.Sprintf("/decks/%d/new-note", deck.ID),
 		Redirect:           noteListHref(deck.ID, page, q, tag, kind, status),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
@@ -765,4 +780,192 @@ func sortStrings(xs []string) {
 			xs[j], xs[j-1] = xs[j-1], xs[j]
 		}
 	}
+}
+
+// resolveCreateKind 把 UI 传来的 kind 收窄到已注册题型；非法或缺失时退回第一个内置题型。
+// 未知 kind 不在这里报错：表单页需要一个可用题型，真正的拒绝由 cardtype 在写入时报出。
+func resolveCreateKind(raw string) string {
+	kind := strings.TrimSpace(raw)
+	if _, ok := cardtype.Lookup(kind); ok {
+		return kind
+	}
+	if kinds := cardtype.Kinds(); len(kinds) > 0 {
+		return kinds[0]
+	}
+	return "basic"
+}
+
+// createKindOptions 生成新建表单的题型下拉（只列真实题型，不含筛选页的“全部”项）。
+func (s *Server) createKindOptions(loc *i18n.Localizer, current string) []views.KindOption {
+	kinds := cardtype.Kinds()
+	opts := make([]views.KindOption, 0, len(kinds))
+	for _, kind := range kinds {
+		opts = append(opts, views.KindOption{
+			Value:    kind,
+			Label:    s.kindLabel(loc, kind),
+			Selected: kind == current,
+		})
+	}
+	return opts
+}
+
+// emptyPreview 返回只有区域标签、没有卡片的预览数据；新建页初始状态用它，
+// 避免一进页面就显示"缺字段"错误（那时用户还没输入任何内容）。
+func emptyPreview(loc *i18n.Localizer) views.NotePreviewData {
+	return views.NotePreviewData{
+		Title:      loc.T("notes.preview.title"),
+		FrontLabel: loc.T("notes.preview.front"),
+		BackLabel:  loc.T("notes.preview.back"),
+	}
+}
+
+// noteNew 渲染新建卡片页（M2-12）；匿名跳登录、非 owner 403。
+func (s *Server) noteNew(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	if !ok {
+		return
+	}
+	s.renderNoteNew(c, loc, deck, resolveCreateKind(c.Query("kind")), nil, nil, http.StatusOK, "")
+}
+
+// renderNoteNew 渲染新建卡片页；raw 是失败时回显的原始表单值，fields 是已转换的字段（nil 表示初始状态）。
+func (s *Server) renderNoteNew(c *gin.Context, loc *i18n.Localizer, deck *store.Deck, kind string, raw map[string]string, fields map[string]any, status int, errMsg string) {
+	preview := emptyPreview(loc)
+	if fields != nil {
+		preview = s.buildPreview(loc, kind, fields)
+	}
+	data := views.NewNoteData{
+		Layout:       s.pageLayout(c, loc, "notes.create.title"),
+		Heading:      loc.T("notes.create.heading"),
+		KindLabel:    loc.T("notes.create.kind_label"),
+		Kinds:        s.createKindOptions(loc, kind),
+		Fields:       s.createFields(loc, kind, raw),
+		FieldsURL:    fmt.Sprintf("/decks/%d/new-note/fields", deck.ID),
+		PreviewURL:   fmt.Sprintf("/decks/%d/preview-new", deck.ID),
+		Action:       fmt.Sprintf("/decks/%d/notes", deck.ID),
+		SaveLabel:    loc.T("notes.create.save"),
+		BackLabel:    loc.T("notes.edit.back"),
+		BackHref:     fmt.Sprintf("/decks/%d/notes", deck.ID),
+		ErrorMessage: errMsg,
+		Preview:      preview,
+	}
+	if sess, ok := auth.CurrentSession(c); ok {
+		data.CSRF = sess.CSRFToken
+	}
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(status)
+	if err := views.NoteCreatePage(data).Render(c.Request.Context(), c.Writer); err != nil {
+		s.logger.Error("render template failed", "error", err, "path", c.Request.URL.Path)
+	}
+}
+
+// noteFieldsFragment 是 htmx 片段：按 ?kind= 返回该题型的字段输入区（M2-12 题型切换）。
+func (s *Server) noteFieldsFragment(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.loadOwnedDeck(c, user, deckID); !ok {
+		return
+	}
+	kind := resolveCreateKind(c.Query("kind"))
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(http.StatusOK)
+	if err := views.NoteFieldsFragment(s.createFields(loc, kind, nil), fmt.Sprintf("/decks/%d/preview-new", deckID)).
+		Render(c.Request.Context(), c.Writer); err != nil {
+		s.logger.Error("render fields fragment failed", "error", err)
+	}
+}
+
+// noteCreatePreview 是 htmx 片段：对尚未保存的新卡片渲染预览（不写库）。
+func (s *Server) noteCreatePreview(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.loadOwnedDeck(c, user, deckID); !ok {
+		return
+	}
+	kind := resolveCreateKind(c.PostForm("kind"))
+	fields := collectCreateFields(c, kind)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(http.StatusOK)
+	if err := views.NotePreviewFragment(s.buildPreview(loc, kind, fields)).Render(c.Request.Context(), c.Writer); err != nil {
+		s.logger.Error("render create preview fragment failed", "error", err)
+	}
+}
+
+// noteCreate 处理新建卡片表单：转换字段 → NoteStore.Create（题型校验 + 生成 cards）→ 写审计。
+// 校验失败时回显 400 与本地化错误，成功则回到卡片列表（新卡片已可见）。
+func (s *Server) noteCreate(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	deck, ok := s.loadOwnedDeck(c, user, deckID)
+	if !ok {
+		return
+	}
+	kind := resolveCreateKind(c.PostForm("kind"))
+	raw := rawCreateValues(c, kind)
+	fields := collectCreateFields(c, kind)
+
+	source := "manual"
+	note := &store.Note{
+		DeckID:    deck.ID,
+		Kind:      kind,
+		Source:    &source,
+		CreatedBy: store.Ptr(user.ID),
+	}
+	cards, err := s.notes.Create(c.Request.Context(), note, fields)
+	if err != nil {
+		s.logger.Info("create note rejected", "deck_id", deck.ID, "kind", kind, "error", err)
+		s.renderNoteNew(c, loc, deck, kind, raw, fields, http.StatusBadRequest,
+			loc.T("notes.create.error_invalid")+err.Error())
+		return
+	}
+	s.audit(c.Request.Context(), store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionNoteCreate,
+		TargetType: "note",
+		TargetID:   store.Ptr(note.ID),
+		Detail:     map[string]any{"deck_id": deck.ID, "kind": kind, "cards": len(cards)},
+	})
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%d/notes", deck.ID))
 }

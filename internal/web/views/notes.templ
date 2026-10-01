@@ -8,6 +8,9 @@ templ NoteListPage(data NoteListData) {
 		if data.DeckName != "" {
 			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
 		}
+		<p class="mt-2">
+			<a class="text-sm text-blue-600 hover:text-blue-700" href={ data.NewNoteHref }>{ data.NewNoteLabel }</a>
+		</p>
 		<form class="mt-4 flex flex-wrap items-end gap-3" method="get" action={ data.FilterAction }>
 			<label class="block">
 				<span class="text-sm font-medium text-slate-700">{ data.SearchLabel }</span>
@@ -157,4 +160,62 @@ templ NotePreviewFragment(data NotePreviewData) {
 			</div>
 		}
 	</div>
+}
+
+// NoteCreatePage 渲染新建卡片页（M2-12）：选题型 → 按题型填字段 → htmx 实时预览 → 保存。
+// 选择题型时用 htmx 拉取该题型的字段区，避免整页刷新。
+templ NoteCreatePage(data NewNoteData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
+		}
+		<div class="mt-6 grid gap-6 lg:grid-cols-2">
+			<form method="post" action={ data.Action }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="mt-3 block">
+					<span class="text-sm font-medium text-slate-700">{ data.KindLabel }</span>
+					<select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="kind" hx-get={ data.FieldsURL } hx-target="#new-note-fields" hx-include="closest form" hx-trigger="change">
+						for _, opt := range data.Kinds {
+							<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+						}
+					</select>
+				</label>
+				<div id="new-note-fields">
+					@NoteFieldsFragment(data.Fields, data.PreviewURL)
+				</div>
+				<div class="mt-4 flex items-center gap-3">
+					<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
+					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
+				</div>
+			</form>
+			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
+				@NotePreviewFragment(data.Preview)
+			</div>
+		</div>
+	}
+}
+
+// NoteFieldsFragment 是一个题型的字段输入区：新建页初始渲染，以及切换题型时的 htmx 片段。
+// 每个控件都带 hx-post 指向预览端点，输入后局部刷新右侧预览。
+templ NoteFieldsFragment(fields []CreateField, previewURL string) {
+	for _, field := range fields {
+		<label class="mt-3 block">
+			<span class="text-sm font-medium text-slate-700">{ field.Label }</span>
+			if field.Input == "checkbox" {
+				<input class="mt-1" type="checkbox" name={ "field." + field.Name } value="true" checked?={ field.Checked } hx-post={ previewURL } hx-trigger="change" hx-target="#note-preview" hx-include="closest form"/>
+			} else if field.Input == "number" {
+				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" step="any" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
+			} else if field.Input == "textarea" {
+				<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+			} else if field.Input == "lines" {
+				<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+			} else {
+				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
+			}
+			if field.Hint != "" {
+				<p class="mt-1 text-xs text-slate-400">{ field.Hint }</p>
+			}
+		</label>
+	}
 }
