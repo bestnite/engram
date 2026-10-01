@@ -56,6 +56,8 @@ const (
 	// M9-4 预设参数优化：触发优化作业与一键回退默认权重。
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
+	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
+	ActionJobCancel = "job.cancel"
 )
 
 // AuditEntry 是一次审计写入的入参。

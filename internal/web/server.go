@@ -70,7 +70,8 @@ type Deps struct {
 	// Secrets 是敏感设置的 AES-GCM 编解码器（M6-10）；非空时管理面板可写入
 	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。
 	Secrets *store.SecretCodec
-	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4）。
+	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4），
+	// 管理面板也可列出作业并取消（M6-6）；为空时作业页只渲染空列表。
 	Jobs *jobs.Runner
 }
 
@@ -105,7 +106,8 @@ type Server struct {
 	media          *media.Store
 	// secrets 供管理面板写入敏感设置（M6-10）；为空时拒绝写入，只显示状态。
 	secrets *store.SecretCodec
-	// jobRunner 是优化作业入队入口（M9-4）；jobStore 用于轮询时按 id 读取作业状态。
+	// jobRunner 是作业入口（M9-4 入队、M6-6 列表与取消）；jobStore 供轮询按 id 读状态。
+	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
 }

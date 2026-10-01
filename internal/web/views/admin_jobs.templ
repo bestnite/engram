@@ -1,0 +1,73 @@
+package views
+
+// adminJobs 渲染作业页（M6-6）：状态 / 阶段 / 日志尾巴 / 时间 + 取消动作。
+// 所有文案都来自 AdminPageData；日志尾巴用 <pre> 等宽展示（templ 对文本节点自动转义）。
+templ adminJobs(data AdminPageData) {
+	if data.Total == 0 {
+		<p class="text-sm text-slate-500">{ data.EmptyLabel }</p>
+	} else {
+		<table class="w-full text-left text-sm">
+			<thead>
+				<tr class="border-b border-slate-200 text-xs text-slate-400">
+					<th class="py-2 pr-3 font-medium">{ data.ColJobID }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColJobKind }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColJobStatus }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColJobStage }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColJobCreated }</th>
+					<th class="py-2 pr-3 font-medium">{ data.ColJobLog }</th>
+					<th class="py-2 font-medium">{ data.ColJobActions }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, job := range data.Jobs {
+					<tr class="border-b border-slate-100 align-top">
+						<td class="py-3 pr-3 text-slate-600">{ job.ID }</td>
+						<td class="py-3 pr-3 text-slate-600">{ job.KindLabel }</td>
+						<td class="py-3 pr-3">
+							<span class="text-slate-800">{ job.StatusLabel }</span>
+							if job.ErrorText != "" {
+								<div class="mt-0.5 text-xs text-red-600">{ job.ErrorText }</div>
+							}
+						</td>
+						<td class="py-3 pr-3 text-slate-600">{ job.StageLabel }</td>
+						<td class="py-3 pr-3 text-xs text-slate-500">
+							<div>{ job.CreatedAt }</div>
+							if job.FinishedAt != "" {
+								<div class="text-slate-400">{ job.FinishedAt }</div>
+							}
+						</td>
+						<td class="py-3 pr-3">
+							if job.LogTail == "" {
+								<span class="text-xs text-slate-400">{ data.JobLogEmptyLabel }</span>
+							} else {
+								<pre class="max-h-40 max-w-md overflow-auto rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-700">{ job.LogTail }</pre>
+							}
+						</td>
+						<td class="py-3 text-xs">
+							if job.CanCancel {
+								<details>
+									<summary class="cursor-pointer text-red-600">{ data.JobCancelLabel }</summary>
+									<form class="mt-1 space-y-1" method="post" action={ job.CancelHref }>
+										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+										<input type="hidden" name="confirm" value="1"/>
+										<p class="text-xs text-slate-400">{ data.JobCancelConfirm }</p>
+										<button class="rounded border border-red-300 px-2 py-1 text-red-700 hover:bg-red-50" type="submit">{ data.JobCancelLabel }</button>
+									</form>
+								</details>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+
+	<nav class="mt-4 flex items-center gap-4 text-sm text-slate-500">
+		if data.PrevHref != "" {
+			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.PrevHref }>{ data.PrevLabel }</a>
+		}
+		if data.NextHref != "" {
+			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.NextHref }>{ data.NextLabel }</a>
+		}
+	</nav>
+}

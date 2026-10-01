@@ -174,6 +174,39 @@ type AdminPageData struct {
 	InviteCreateSubmit  string
 	InviteRevokeLabel   string
 	InviteRoles         []AdminRoleOption
+
+	// ---- 作业页（M6-6）----
+	// JobsPage 为 true 时模板渲染作业表而不是设置区块。
+	JobsPage bool
+	// Jobs 是当前页的作业行；Page/Pages/Total 复用于分页导航。
+	Jobs []AdminJobRow
+	// ColJob* 是作业表表头。
+	ColJobID, ColJobKind, ColJobStatus, ColJobStage, ColJobCreated, ColJobLog, ColJobActions string
+	// JobCancel* 是取消动作的按钮与确认文案。
+	JobCancelLabel   string
+	JobCancelConfirm string
+	// JobLogEmptyLabel 是作业没有日志尾巴时的占位。
+	JobLogEmptyLabel string
+}
+
+// AdminJobRow 是作业表里的一行（M6-6）：状态、阶段、日志尾巴与取消入口。
+type AdminJobRow struct {
+	ID          uint64
+	KindLabel   string
+	Status      string
+	StatusLabel string
+	StageLabel  string
+	CreatedAt   string
+	StartedAt   string
+	FinishedAt  string
+	// LogTail 是作业子进程的日志尾巴；模板用 <pre> 等宽展示（templ 会自动转义）。
+	LogTail string
+	// ErrorText 是失败原因（成功时为空）。
+	ErrorText string
+	// CanCancel 为 true 时该作业仍可取消（queued 或 running）。
+	CanCancel bool
+	// CancelHref 是取消表单的提交地址，由 handler 拼好。
+	CancelHref string
 }
 
 // AdminUserRow 是用户管理表里的一行。

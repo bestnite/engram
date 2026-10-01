@@ -957,3 +957,67 @@
   translation: "Reverting restores the default weights immediately (weights_json becomes NULL)."
 - id: presets.reschedule.note
   translation: "Optimising or reverting only affects future intervals; due dates are not recomputed by default."
+
+# ---- 管理面板「作业」页（M6-6）----
+# 新增区块统一用 admin.jobs. 前缀，追加在文件末尾，避免与其它泳道重排冲突。
+- id: admin.jobs.title
+  translation: "Jobs"
+- id: admin.jobs.heading
+  translation: "Background jobs"
+- id: admin.jobs.intro
+  translation: "Optimizer and other background jobs: status, stage, log tail, and cancel."
+- id: admin.jobs.col.id
+  translation: "ID"
+- id: admin.jobs.col.kind
+  translation: "Kind"
+- id: admin.jobs.col.status
+  translation: "Status"
+- id: admin.jobs.col.stage
+  translation: "Stage"
+- id: admin.jobs.col.created
+  translation: "Created"
+- id: admin.jobs.col.log
+  translation: "Log tail"
+- id: admin.jobs.col.actions
+  translation: "Actions"
+- id: admin.jobs.status.queued
+  translation: "Queued"
+- id: admin.jobs.status.running
+  translation: "Running"
+- id: admin.jobs.status.succeeded
+  translation: "Succeeded"
+- id: admin.jobs.status.failed
+  translation: "Failed"
+- id: admin.jobs.stage.unknown
+  translation: "—"
+- id: admin.jobs.stage.read_logs
+  translation: "Reading logs"
+- id: admin.jobs.stage.training
+  translation: "Training"
+- id: admin.jobs.stage.writing
+  translation: "Writing results"
+- id: admin.jobs.kind.optimize
+  translation: "Parameter optimization"
+- id: admin.jobs.cancel
+  translation: "Cancel"
+- id: admin.jobs.confirm
+  translation: "The running process is killed and the job is marked failed."
+- id: admin.jobs.log_empty
+  translation: "No log output"
+- id: admin.jobs.empty
+  translation: "No jobs yet."
+- id: admin.jobs.prev
+  translation: "Previous"
+- id: admin.jobs.next
+  translation: "Next"
+- id: admin.jobs.notice.cancelled
+  translation: "Job cancelled."
+- id: admin.jobs.notice.not_running
+  translation: "That job is not running."
+- id: admin.jobs.notice.invalid_job
+  translation: "Invalid job id."
+- id: admin.jobs.notice.unavailable
+  translation: "Job runner is not available."
+- id: admin.jobs.notice.failed
+  translation: "Cancelling the job failed."
+

@@ -956,3 +956,67 @@
   translation: "回退后立即使用默认权重（weights_json 归 NULL）。"
 - id: presets.reschedule.note
   translation: "优化与回退只影响未来的间隔；重算到期日默认不执行。"
+
+# ---- 管理面板「作业」页（M6-6）----
+# 新增区块统一用 admin.jobs. 前缀，追加在文件末尾，避免与其它泳道重排冲突。
+- id: admin.jobs.title
+  translation: "作业"
+- id: admin.jobs.heading
+  translation: "后台作业"
+- id: admin.jobs.intro
+  translation: "优化器等后台作业：查看状态、阶段、日志尾巴，并可取消。"
+- id: admin.jobs.col.id
+  translation: "编号"
+- id: admin.jobs.col.kind
+  translation: "类型"
+- id: admin.jobs.col.status
+  translation: "状态"
+- id: admin.jobs.col.stage
+  translation: "阶段"
+- id: admin.jobs.col.created
+  translation: "创建时间"
+- id: admin.jobs.col.log
+  translation: "日志尾巴"
+- id: admin.jobs.col.actions
+  translation: "操作"
+- id: admin.jobs.status.queued
+  translation: "排队中"
+- id: admin.jobs.status.running
+  translation: "运行中"
+- id: admin.jobs.status.succeeded
+  translation: "已成功"
+- id: admin.jobs.status.failed
+  translation: "已失败"
+- id: admin.jobs.stage.unknown
+  translation: "—"
+- id: admin.jobs.stage.read_logs
+  translation: "读取日志"
+- id: admin.jobs.stage.training
+  translation: "训练中"
+- id: admin.jobs.stage.writing
+  translation: "写回结果"
+- id: admin.jobs.kind.optimize
+  translation: "参数优化"
+- id: admin.jobs.cancel
+  translation: "取消"
+- id: admin.jobs.confirm
+  translation: "将杀掉正在运行的进程，并把该作业标记为失败。"
+- id: admin.jobs.log_empty
+  translation: "暂无日志输出"
+- id: admin.jobs.empty
+  translation: "还没有作业。"
+- id: admin.jobs.prev
+  translation: "上一页"
+- id: admin.jobs.next
+  translation: "下一页"
+- id: admin.jobs.notice.cancelled
+  translation: "作业已取消。"
+- id: admin.jobs.notice.not_running
+  translation: "该作业当前未在运行。"
+- id: admin.jobs.notice.invalid_job
+  translation: "作业编号无效。"
+- id: admin.jobs.notice.unavailable
+  translation: "作业执行器不可用。"
+- id: admin.jobs.notice.failed
+  translation: "取消作业失败。"
+
