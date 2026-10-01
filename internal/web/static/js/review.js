@@ -111,8 +111,24 @@
   var startY = 0;
   var tracking = false;
 
+  // 落点在输入控件、按钮或链接上时不当作滑动，避免在作答输入框里误触发评分（M8-1）。
+  function interactiveTarget(target) {
+    if (!target || !target.tagName) {
+      return false;
+    }
+    var tag = target.tagName;
+    return (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      tag === "BUTTON" ||
+      tag === "A"
+    );
+  }
+
   function onTouchStart(e) {
-    if (!e.touches || e.touches.length !== 1) {
+    if (!e.touches || e.touches.length !== 1 || interactiveTarget(e.target)) {
+      tracking = false;
       return;
     }
     tracking = true;
@@ -160,6 +176,25 @@
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("touchstart", onTouchStart, { passive: true });
   document.addEventListener("touchend", onTouchEnd, { passive: true });
+
+  // 长按不弹上下文菜单、双击不缩放（M8-1、DESIGN.md §8.2）：连续点击是手机复习的
+  // 高频动作，系统菜单一旦弹出就打断节奏。touch-action / user-select 在模板里用
+  // touch-manipulation + select-none 生效，这里再挡掉 contextmenu 与 dblclick 的兜底。
+  function inReviewArea(target) {
+    return !!(target && target.closest && target.closest("#review-area"));
+  }
+
+  document.addEventListener("contextmenu", function (e) {
+    if (inReviewArea(e.target)) {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("dblclick", function (e) {
+    if (inReviewArea(e.target)) {
+      e.preventDefault();
+    }
+  });
 
   document.addEventListener("click", function (e) {
     var target = e.target;

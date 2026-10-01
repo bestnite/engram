@@ -62,11 +62,11 @@ templ ReviewArea(data ReviewAreaData) {
 						<input type="hidden" name="deck" value={ data.DeckValue }/>
 						<input type="hidden" name="done" value={ data.DoneValue }/>
 						<input type="hidden" name="action" value="next"/>
-						<button id="review-continue" type="submit" class="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Result.ContinueLabel }</button>
+						<button id="review-continue" type="submit" class="min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Result.ContinueLabel }</button>
 					</form>
 				</div>
 			} else {
-				<button id="review-show-answer" type="button" class="mt-4 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.ShowAnswerLabel }</button>
+				<button id="review-show-answer" type="button" class="mt-4 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.ShowAnswerLabel }</button>
 				<form id="review-form" class="mt-4" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<input type="hidden" name="card_id" value={ data.Card.CardID }/>
@@ -87,7 +87,7 @@ templ ReviewArea(data ReviewAreaData) {
 							} else {
 								<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base text-slate-800" type={ data.Graded.TypeAttr } inputmode={ data.Graded.InputMode } name="answer" placeholder={ data.Graded.Placeholder } autocomplete="off"/>
 							}
-							<button id="review-submit" type="submit" class="mt-3 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Graded.SubmitLabel }</button>
+							<button id="review-submit" type="submit" class="mt-3 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">{ data.Graded.SubmitLabel }</button>
 						</div>
 					} else {
 						<div id="review-ratings" class="mt-1 hidden">

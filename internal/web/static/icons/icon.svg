@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Flashcards">
+  <!-- 应用图标（M8-2）：纯 SVG，无外部引用、无文字，可作 maskable 使用。 -->
+  <rect width="512" height="512" fill="#2563eb"/>
+  <g transform="translate(96 132)">
+    <rect x="16" y="-28" width="304" height="200" rx="24" fill="#93c5fd"/>
+    <rect x="0" y="0" width="304" height="200" rx="24" fill="#ffffff"/>
+    <rect x="32" y="44" width="240" height="22" rx="11" fill="#1e3a8a"/>
+    <rect x="32" y="92" width="180" height="22" rx="11" fill="#93c5fd"/>
+    <rect x="32" y="140" width="120" height="22" rx="11" fill="#93c5fd"/>
+  </g>
+</svg>

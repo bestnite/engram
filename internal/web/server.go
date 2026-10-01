@@ -176,6 +176,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
+	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
+	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
 	s.registerDeckRoutes(router)
 	s.registerNoteRoutes(router)

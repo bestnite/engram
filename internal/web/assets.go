@@ -90,6 +90,15 @@ func (a *Assets) ContentHash(logical string) string {
 	return ""
 }
 
+// body 返回已嵌入资源的原始内容（UTF-8 文本）；未知资源返回空串。
+// 供稳定 URL 路由（如 /pwa.js）复用同一份嵌入内容。
+func (a *Assets) body(logical string) string {
+	if f, ok := a.files[logical]; ok {
+		return string(f.data)
+	}
+	return ""
+}
+
 // URL 返回逻辑路径对应的内容哈希 URL；资源不存在时返回空串，模板据此跳过引用。
 func (a *Assets) URL(logical string) string {
 	if f, ok := a.files[logical]; ok {
