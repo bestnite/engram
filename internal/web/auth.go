@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -135,22 +137,29 @@ func (s *Server) loginSubmit(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
-// registerPage 渲染自助注册表单。
+// registerPage 渲染自助注册表单；?invite=<token> 时把邀请 token 带进表单（M1-7）。
 func (s *Server) registerPage(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
-	s.renderRegister(c, loc, http.StatusOK, "")
+	s.renderRegister(c, loc, http.StatusOK, strings.TrimSpace(c.Query("invite")), "")
 }
 
 // renderRegister 渲染注册表单并带上一条已本地化的错误提示（可为空）。
-func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
+// inviteToken 非空时表单 action 与隐藏字段都携带它，提交后接受路径据此放行。
+func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int, inviteToken, errMsg string) {
+	action := "/register"
+	intro := loc.T("auth.register.intro")
+	if inviteToken != "" {
+		action = "/register?invite=" + url.QueryEscape(inviteToken)
+		intro = loc.T("auth.register.invite_intro")
+	}
 	s.renderAuth(c, status, views.AuthFormData{
 		Layout:               s.authLayout(loc, "auth.register.title"),
 		Heading:              loc.T("auth.register.heading"),
-		Intro:                loc.T("auth.register.intro"),
-		Action:               "/register",
+		Intro:                intro,
+		Action:               action,
 		SubmitLabel:          loc.T("auth.register.submit"),
 		ErrorMessage:         errMsg,
 		UsernameLabel:        loc.T("auth.field.username"),
@@ -162,53 +171,112 @@ func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int,
 		PasswordAutocomplete: "new-password",
 		AltLabel:             loc.T("auth.register.to_login"),
 		AltHref:              "/login",
+		InviteToken:          inviteToken,
 		LangOptions:          s.languageOptionsFor(loc, c.Request.URL.Path),
 	})
 }
 
-// registrationPermission 决定当前是否允许自助注册，以及新账号的角色。
-//
-// 完整的注册策略（settings 里的 open / invite / closed 加邮箱域名白名单）由 M1-6 接管；
-// 本轮按 DESIGN.md §4.2 默认 closed：只有"尚不存在管理员"时放行，且该账号成为管理员
-// —— 这正是 closed 策略下唯一的合法放行路径（首个管理员引导，DESIGN.md §4.1）。
-func (s *Server) registrationPermission(c *gin.Context) (allowed bool, role string, err error) {
-	n, err := s.users.CountActiveAdmins(c.Request.Context())
-	if err != nil {
-		return false, "", err
+// registrationDenialKey 把策略或邀请的拒绝原因翻译成语言包 key（M1-6、M1-7）。
+func registrationDenialKey(err error) string {
+	switch {
+	case errors.Is(err, auth.ErrEmailDomainNotAllowed):
+		return "auth.error.email_domain_not_allowed"
+	case errors.Is(err, auth.ErrInviteRequired):
+		return "auth.error.invite_required"
+	case errors.Is(err, store.ErrInviteNotFound), errors.Is(err, store.ErrInviteUsed),
+		errors.Is(err, store.ErrInviteExpired), errors.Is(err, store.ErrInviteEmailMismatch):
+		return "auth.error.invite_invalid"
+	default:
+		return "auth.error.registration_closed"
 	}
-	if n == 0 {
-		return true, store.RoleAdmin, nil
-	}
-	return false, "", nil
 }
 
-// registerSubmit 创建本地账号；失败时把校验错误渲染回表单。
+// registerSubmit 按注册策略创建本地账号（M1-6、M1-7）。
+//
+// 放行分支，优先级从高到低：
+//  1. 尚无活跃管理员 —— 首个管理员引导，closed 策略下唯一的合法入口（DESIGN.md §4.1）；
+//  2. 携带有效邀请 token —— 一次性、可限定邮箱、可设过期；角色取自邀请；
+//  3. 否则读 settings 里的注册策略与邮箱域名白名单判定（open / invite / closed）。
+//
+// 邀请先原子抢占再建号：抢占失败说明 token 已被使用，必须放弃；建号失败则回滚抢占。
 func (s *Server) registerSubmit(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
-	allowed, role, err := s.registrationPermission(c)
-	if err != nil {
-		s.logger.Error("count active admins", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		// M1-6 会按策略给出更具体的提示；当前统一提示"自助注册已关闭"。
-		s.renderRegister(c, loc, http.StatusForbidden, loc.T("auth.error.registration_closed"))
-		return
+	inviteToken := strings.TrimSpace(c.PostForm("invite"))
+	if inviteToken == "" {
+		inviteToken = strings.TrimSpace(c.Query("invite"))
 	}
 	username := strings.TrimSpace(c.PostForm("username"))
 	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
 	display := strings.TrimSpace(c.PostForm("display_name"))
 	password := c.PostForm("password")
 	if msg := validateRegisterInput(loc, username, email, password); msg != "" {
-		s.renderRegister(c, loc, http.StatusBadRequest, msg)
+		s.renderRegister(c, loc, http.StatusBadRequest, inviteToken, msg)
 		return
 	}
-	_, err = s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+
+	now := time.Now().UTC()
+	admins, err := s.users.CountActiveAdmins(ctx)
+	if err != nil {
+		s.logger.Error("count active admins", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	role := store.RoleUser
+	var invite *store.Invite
+	switch {
+	case admins == 0:
+		// 引导路径：无管理员时该账号成为管理员。
+		role = store.RoleAdmin
+	case inviteToken != "":
+		if s.invites == nil {
+			s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T("auth.error.invite_invalid"))
+			return
+		}
+		inv, verr := s.invites.Validate(ctx, inviteToken, email, now)
+		if verr != nil {
+			s.logger.Info("invite rejected", "error", verr)
+			s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T(registrationDenialKey(verr)))
+			return
+		}
+		invite = inv
+		if inv.Role != "" {
+			role = inv.Role
+		}
+	default:
+		settings, err := store.LoadSettings(ctx, s.db)
+		if err != nil {
+			s.logger.Error("load settings", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		policy := auth.ParseRegistrationPolicy(settings[auth.SettingKeyRegistrationPolicy])
+		allowlist := auth.ParseEmailAllowlist(settings[auth.SettingKeyEmailAllowlist])
+		if derr := auth.DecideRegistration(policy, email, allowlist); derr != nil {
+			s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T(registrationDenialKey(derr)))
+			return
+		}
+	}
+
+	// 邀请一次性：先原子抢占，避免并发下用同一个 token 建出两个用户。
+	if invite != nil {
+		claimed, err := s.invites.MarkUsed(ctx, invite.Token, now)
+		if err != nil {
+			s.logger.Error("claim invite failed", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		if !claimed {
+			s.renderRegister(c, loc, http.StatusForbidden, inviteToken, loc.T("auth.error.invite_invalid"))
+			return
+		}
+	}
+
+	u, err := s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
 		Username:    username,
 		Email:       email,
 		DisplayName: display,
@@ -217,9 +285,20 @@ func (s *Server) registerSubmit(c *gin.Context) {
 		Locale:      loc.Locale(),
 	})
 	if err != nil {
+		if invite != nil {
+			// 建号失败不得吞掉邀请：回滚抢占，让管理员仍能再次使用该 token。
+			if rerr := s.invites.Release(ctx, invite.Token); rerr != nil {
+				s.logger.Error("release invite failed", "error", rerr)
+			}
+		}
 		s.logger.Error("create local user failed", "username", username, "error", err)
-		s.renderRegister(c, loc, http.StatusConflict, loc.T("auth.error.create_failed"))
+		s.renderRegister(c, loc, http.StatusConflict, inviteToken, loc.T("auth.error.create_failed"))
 		return
+	}
+	if invite != nil {
+		if err := s.invites.SetUsedBy(ctx, invite.Token, u.ID); err != nil {
+			s.logger.Error("set invite used_by failed", "invite_id", invite.ID, "error", err)
+		}
 	}
 	c.Redirect(http.StatusSeeOther, "/login")
 }
