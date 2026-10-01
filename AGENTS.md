@@ -150,6 +150,11 @@ Run the code checks **and** the two generation steps before committing anything 
 touches templates or styles, because both outputs are gitignored and a stale build is
 invisible in `git status`.
 
+The Tailwind prebuilt CLI is a **glibc** binary: it cannot run inside a musl image, so the
+container builder stage must use a glibc base (`golang:1.25-bookworm`), not alpine. The
+Tailwind and templ versions are pinned in the Containerfile and the CI workflow; bump them
+together with `go.mod`.
+
 ### Definition of done
 
 A task is done only when all of the following hold:
@@ -217,11 +222,11 @@ Conventions:
 - [x] **M0-9 Static assets embedding** — content-hashed paths for CSS/JS plus self-hosted
   htmx and MathJax; a helper generates the hashed URLs for templates.
   *Acceptance:* page source references hashed paths; changing an asset changes its hash.
-- [ ] **M0-10 CI pipeline** — workflow running `go build`, `go vet`, `gofmt -l`, `go test`,
+- [x] **M0-10 CI pipeline** — workflow running `go build`, `go vet`, `gofmt -l`, `go test`,
   the sanitisation keyword scan, the i18n parity check, and a check that no user-facing
   literal appears in templates.
   *Acceptance:* the pipeline fails on a deliberately planted violation of each check.
-- [ ] **M0-11 Container build (optional)** — multi-stage `Containerfile` producing a
+- [x] **M0-11 Container build (optional)** — multi-stage `Containerfile` producing a
   single static binary image; no private registry, host names, or deployment specifics.
   *Acceptance:* image builds locally and serves `/healthz`.
 
@@ -239,11 +244,11 @@ Conventions:
   request via form field or `X-CSRF-Token`.
   *Acceptance:* test asserts a POST without a token returns `403` and with a valid token
   succeeds.
-- [ ] **M1-4 Register, login, logout pages** — templ pages plus handlers, all strings from
+- [x] **M1-4 Register, login, logout pages** — templ pages plus handlers, all strings from
   the catalog.
   *Acceptance:* a new user can register, log in, and log out through the browser flow
   exercised by `httptest`.
-- [ ] **M1-5 First-admin bootstrap** — `/setup` wizard available only while no admin
+- [x] **M1-5 First-admin bootstrap** — `/setup` wizard available only while no admin
   exists; `BOOTSTRAP_ADMIN_EMAIL` honoured as a fallback.
   *Acceptance:* test asserts `/setup` is reachable only before an admin exists and returns
   `404` afterwards.
@@ -273,6 +278,14 @@ Conventions:
   email, policy-gated account creation, and unlink in the admin panel.
   *Acceptance:* table-driven test covers all three branches of `DESIGN.md` §4.5 plus the
   unlink path.
+- [ ] **M1-14 Wire authentication into the binary** — `cmd/flashcard/main.go` currently starts the
+  web server without constructing the auth services, so `/login`, `/register` and `/setup` are not
+  registered at all (verified: a running container answers `GET /login` with `404`). Read
+  `SESSION_SECRET`, `ENCRYPTION_KEY` and `BOOTSTRAP_ADMIN_EMAIL` through `internal/config`, build the
+  user/session stores and the auth services, pass them into `web.Deps`, and keep `/healthz` working.
+  *Acceptance:* a locally started server answers `GET /login` with `200` and renders the catalog text;
+  `GET /setup` is reachable while no admin exists and `404` afterwards; `POST /login` with a wrong
+  password returns the documented error code; existing tests stay green.
 - [ ] **M1-13 Auth test suite** — negative cases for CSRF, policy, binding, session
   invalidation, and rate limiting in one place.
   *Acceptance:* `go test ./internal/auth/...` passes with every negative case present.
@@ -287,12 +300,12 @@ Conventions:
   (`desired_retention` 0.90, `learning_steps` `1m,10m`, `relearning_steps` `10m`,
   `enable_fuzz` on).
   *Acceptance:* test asserts defaults are applied and that values round-trip.
-- [ ] **M2-3 Card type registry** — `internal/cardtype`: `Validate`, `Cards`, `Render`,
+- [x] **M2-3 Card type registry** — `internal/cardtype`: `Validate`, `Cards`, `Render`,
   optional `Grade`, optional `PromptContext`, optional `ReferenceRefs`, `Label`; registry
   lookup by `kind`.
   *Acceptance:* test registers a fake type and asserts the core pipeline handles it
   without any change outside the new file.
-- [ ] **M2-4 Memory types** — `basic`, `basic_both`, `cloze`, `list`, including the cloze
+- [x] **M2-4 Memory types** — `basic`, `basic_both`, `cloze`, `list`, including the cloze
   parser for `{{cN::text}}` and `{{cN::text::hint}}`.
   *Acceptance:* cloze tests cover nested braces, escapes, repeated indices, and a note
   producing two cards from two indices.
@@ -312,6 +325,11 @@ Conventions:
   mime plus magic-byte validation, admin-configured size limit.
   *Acceptance:* uploading the same file twice stores one blob; an oversized or
   wrong-magic file is rejected with a stable error code.
+- [ ] **M2-10 Card type labels in the catalogs** — `internal/cardtype` returns translation keys
+  (`cardtype.basic`, `cardtype.basic_both`, `cardtype.cloze`, `cardtype.list`); add those keys to
+  `internal/i18n/locales/zh-CN.yaml` and `en.yaml` so the parity test passes and the labels render.
+  *Acceptance:* both catalogs contain every registered type's key; a test enumerating `Registry.Kinds()`
+  fails if any key is missing from either catalog.
 - [ ] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
 
@@ -590,7 +608,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 9/11 · M1 3/13 · M2 2/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 11/11 · M1 5/13 · M2 4/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/11 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.

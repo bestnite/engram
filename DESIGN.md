@@ -509,7 +509,7 @@ fields_json (Markdown + TeX)
 |---|---|---|
 | `basic` / `basic_both` | `front`, `back` | `extra`, `source_url` |
 | `cloze` | `text`（**必须至少含一个 `{{cN::…}}`**） | 同上 |
-| `list` | `prompt`, `items[]`（非空） | `ordered`（bool，整表有序；缺省 false） |
+| `list` | `prompt`, `items[]`（非空） | `ordered`（bool，整表有序；**缺省 false**，与 `schema/note-import.schema.json` 的 `default` 已对齐） |
 | `typed` | `prompt`, `answer` | `accept[]`（其它可接受答案）, `ignore_case`, `ignore_whitespace`, `regex`（正则优先于字面比较） |
 | `numeric` | `prompt`, `value` | `tolerance_absolute`, `tolerance_relative`（0–1 的比例）, `unit` |
 | `choice_single` | `question`, `options[]`（≥2，去重）, `answer`（**0 基索引**） | `extra`, `source_url` |
@@ -518,7 +518,7 @@ fields_json (Markdown + TeX)
 | `short_answer` | `prompt` | `reference`（参考答案，未来 LLM 评分用）, `extra`, `source_url` |
 
 - **JSON Schema 表达不了的部分由服务端保证**（并在错误里点名字段）：答案索引必须落在 `options` 范围内、`options` 去重、多选答案去重、cloze 序号完整性。schema 文件里会给这些规则加注释说明。
-- 通用字段 `extra` / `source_url` 对所有题型可用（`extra` 复习时可折叠显示，`source_url` 指回外部原文）。
+- **通用字段 `extra` / `source_url` 位于 note 层（与 `fields` 平级），不在 `fields` 内部**：它们描述"这一条笔记的附注与出处"，与题型无关。若调用方把它们塞进 `fields`，服务端**忽略而不报错**（宽容处理，避免与外部生成的请求体打架）；`extra` 复习时可折叠显示，`source_url` 指回外部原文。
 
 - **题型接口（设计要点）**：`Validate(fields)` / `Cards(note)` / `Render(card, side)` / `Grade(input) (rating, detail, ok)`（可选，作答类实现）/ `PromptContext(note)`（可选，未来 LLM 评分用）/ `Label()`（i18n 显示名）。可选方法用可选的窄接口断言（`if g, ok := t.(Grader); ok`），不为将来预留大接口。
 - 机器判分的分数 → FSRS 评分映射可配（默认：全对=Good、部分对=Hard、全错=Again；映射规则写在 preset 里，便于按题型调）。

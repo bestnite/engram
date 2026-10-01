@@ -145,7 +145,7 @@
         },
         "ordered": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Whether the items must be recalled in their given order."
         }
       },
