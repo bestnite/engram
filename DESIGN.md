@@ -225,8 +225,7 @@ CREATE TABLE reviews (
   elapsed_ms    INTEGER,
   duration_days REAL,
   state_before  INTEGER NOT NULL,                -- 0=New 1=Learning 2=Review 3=Relearning
-  -- 待补（M3-9）：评分前的剩余学习步骤数，用于 Undo 精确还原步骤进度
-  -- step_index_before INTEGER,
+  step_index_before INTEGER,                     -- 评分前的剩余学习步骤数（M3-9）：Undo 精确还原步骤进度；可空，兼容旧行
   interval_days REAL,
   stability     REAL,
   difficulty    REAL
@@ -376,13 +375,13 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
       2. 校验 state.version == expected_version，否则 409（客户端重放/双开窗口的安全网）
       3. 判分/自评来源记入 grade_source（self | typed | llm，见 §14）
       4. 调 s.Next(card, now, rating) 得新状态
-      5. UPSERT card_states（version + 1）
+      5. UPSERT card_states（version + 1）；条件 upsert 带 `version = ?` 守卫，守卫不匹配即 409 且不写 reviews
       6. INSERT reviews（rating 1–4、state_before 0–3、interval、stability、difficulty、elapsed_ms）
   → 返回：新状态 + 下一张卡（省一次往返）
 ```
 
-- **新卡首次提交的并发竞态（已知缺口，待修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。修法写死为**带条件的原子 upsert**（`... ON CONFLICT ... WHERE version = ?`，由 GORM 的 `clause.OnConflict` + `Where` 表达），见 AGENTS.md 的 M3-10。
-- **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，并删除最后一条日志（同时写一条 `audit_log`）。**学习步骤进度目前无法还原**（`Rollback` 会把 `step_index` 归零），因为 `reviews` 未存评分前的步骤快照；补 `reviews.step_index_before` 后即可精确还原，见 AGENTS.md 的 M3-9。
+- **新卡首次提交的并发竞态（已修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。现在状态写入一律走**带条件的原子 upsert**（GORM 的 `clause.OnConflict` + `Where`，生成 `... ON CONFLICT ... DO UPDATE ... WHERE card_states.version = ?`）：插入与更新由同一条 SQL 原子完成，守卫不匹配时受影响行数为 0，提交路径据此返回 409 冲突哨兵且不写 review 行。见 AGENTS.md 的 M3-10。
+- **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，用 `reviews.step_index_before` 精确还原 `step_index`（该列为 NULL 的旧行退回归零行为），并删除最后一条日志（同时写一条 `audit_log`）。
 - `reviews` 只增不改。
 - `rating` 与 `state_before` 用**整数**（1–4 / 0–3），与 FSRS 生态的复习日志约定一致，将来接优化器零转换。
 - `reviews` 字段从第一天就写全 —— 它是参数优化的唯一燃料，缺字段永远补不回来。

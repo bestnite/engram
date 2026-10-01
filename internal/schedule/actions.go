@@ -35,7 +35,8 @@ type UndoInput struct {
 // 为什么需要“上一条日志”：reviews 只记录评分后的调度结果（interval_days/stability/difficulty），
 // 评分前的 FSRS 快照没有独立列。上一条日志的评分后结果恰好就是本条的评分前快照，因此用它
 // 重建 ReviewLog 的评分前字段；由此 due_at 与 interval 能精确恢复到本次评分之前的值。
-// 已知缺口：step_index（剩余学习步骤）无日志列，只能随 Rollback 归零 —— 见报告。
+// step_index（剩余学习步骤）由被撤销日志的 step_index_before 精确还原（M3-9）；旧行该列为
+// NULL 时退回 fsrs.Rollback 的结果（会把 step_index 归零）。
 func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, error) {
 	if tx == nil {
 		return store.CardState{}, errors.New("schedule: undo: transaction is required")
@@ -85,7 +86,8 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, fmt.Errorf("schedule: undo: rollback card %d: %w", in.CardID, err)
 	}
 
-	// 组装恢复后的状态行。状态/stability/difficulty/reps/lapses 取 Rollback 的结果；
+	// 组装恢复后的状态行。状态/stability/difficulty/reps/lapses/step_index 取 Rollback 的结果
+	// （step_index 的快照已由 rebuildReviewLog 从 step_index_before 重建）；
 	// due/last_review/scheduled_days 用上一条日志重建，保证到期日与间隔精确还原。
 	next := store.CardState{
 		CardID:        in.CardID,
@@ -108,8 +110,14 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 	if next.LastReviewAt != nil {
 		next.ElapsedDays = elapsedDaysSince(next.LastReviewAt, nowOr(in.Now))
 	}
-	if err := upsertState(ctx, tx, &next); err != nil {
+	written, err := upsertState(ctx, tx, &next, cur.Version)
+	if err != nil {
 		return store.CardState{}, err
+	}
+	// 守卫失败说明状态行在本次读取之后被并发改过：不做部分恢复，返回冲突哨兵。
+	if !written {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while undoing",
+			ErrVersionConflict, in.CardID, in.UserID)
 	}
 
 	// reviews 只增不改的例外就是 Undo：删除被撤销的那一行，并写一条审计说明。
@@ -129,6 +137,11 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 		Rating: fsrs.Rating(last.Rating),
 		State:  fsrs.State(last.StateBefore),
 		Review: last.ReviewedAt.UTC(),
+	}
+	// 学习步骤游标：评分前的剩余步骤数只有 reviews.step_index_before 知道（M3-9）。
+	// 旧行该列为 NULL，保持 0 —— 即旧行为（Undo 后 step_index 归零）。
+	if last.StepIndexBefore != nil {
+		log.RemainingSteps = *last.StepIndexBefore
 	}
 	if prev == nil {
 		// 首次评分被撤销：恢复到全新卡（无到期日、无上次复习）。
@@ -270,8 +283,14 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 		version = cur.Version
 	}
 	row.Version = version + 1
-	if err := upsertState(ctx, tx, &row); err != nil {
+	written, err := upsertState(ctx, tx, &row, version)
+	if err != nil {
 		return store.CardState{}, err
+	}
+	// 守卫失败说明状态行在本次读取之后被并发改过（并发首评或另一次埋藏）。
+	if !written {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while burying",
+			ErrVersionConflict, in.CardID, in.UserID)
 	}
 	return row, nil
 }
