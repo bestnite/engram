@@ -719,7 +719,7 @@ completion percentage until they are moved into a release milestone.
   what it is, screenshots later, self-hosting, backup and restore for both databases, and
   the API key plus MCP quick start. *Done by M0-12; screenshots are still outstanding and are
   tracked there rather than here.*
-- [ ] **B-4 CONTRIBUTING.md** — how to build, test, and submit changes, restating the rules
+- [x] **B-4 CONTRIBUTING.md** — how to build, test, and submit changes, restating the rules
   in section 2.
 - [ ] **B-5 Commit author identity** — use a neutral author email for this public
   repository before publishing.
@@ -728,14 +728,14 @@ completion percentage until they are moved into a release milestone.
 - [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
 - [ ] **B-9 Deployment notes outside the repository** — hosting-specific details stay
   private; only generic container instructions belong in the README.
-- [ ] **B-13 CSRF for pre-session forms** — `/setup`, `/login` and `/register` submit without a
+- [x] **B-13 CSRF for pre-session forms** — `/setup`, `/login` and `/register` submit without a
   CSRF token because there is no session to bind one to (documented in the handlers). The exposure
   is narrow but real: a setup race on a fresh instance and login-CSRF on an existing one. Fix with
   the double-submit cookie pattern (random token in a cookie, mirrored in the form, compared on
   submit), which needs no session.
   *Acceptance:* a pre-session form submitted without the mirrored cookie is rejected; the normal
   browser flow is unaffected; the existing session-bound CSRF path is unchanged.
-- [ ] **B-12 Make invite acceptance transactional** — the current flow atomically claims the
+- [x] **B-12 Make invite acceptance transactional** — the current flow atomically claims the
   invite token, then creates the user, then releases the token if creation fails. Concurrency is
   safe (one invite yields one user) but a crash between the two steps can leave a token released
   with no user created. `AccountService` and `InviteStore` each hold their own `*gorm.DB`, so the
@@ -762,7 +762,7 @@ completion percentage until they are moved into a release milestone.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
   `M0 13/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
-  · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
+  · M10 0/5 (excluded) · backlog 4/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
