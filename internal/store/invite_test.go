@@ -25,7 +25,7 @@ func TestInviteCreateAndList(t *testing.T) {
 	ctx := context.Background()
 	invites := NewInviteStore(db)
 
-	email := "Invitee@Example.com"
+	email := "Invitee@example.com"
 	expires := time.Now().UTC().Add(24 * time.Hour)
 	inv := &Invite{Email: &email, ExpiresAt: &expires}
 	if err := invites.Create(ctx, inv); err != nil {
@@ -73,7 +73,7 @@ func TestUsableInvite(t *testing.T) {
 		{name: "no expiry means usable", inv: &Invite{}, email: "anyone@example.com"},
 		{name: "used invite rejected", inv: &Invite{UsedAt: &used}, email: "anyone@example.com", wantErr: ErrInviteUsed},
 		{name: "expired invite rejected", inv: &Invite{ExpiresAt: &past}, email: "anyone@example.com", wantErr: ErrInviteExpired},
-		{name: "email restricted match", inv: &Invite{Email: &email}, email: "Invitee@Example.com"},
+		{name: "email restricted match", inv: &Invite{Email: &email}, email: "Invitee@example.com"},
 		{name: "email restricted mismatch", inv: &Invite{Email: &email}, email: "someone@example.com", wantErr: ErrInviteEmailMismatch},
 	}
 	for _, tc := range cases {

@@ -252,10 +252,10 @@ Conventions:
   exists; `BOOTSTRAP_ADMIN_EMAIL` honoured as a fallback.
   *Acceptance:* test asserts `/setup` is reachable only before an admin exists and returns
   `404` afterwards.
-- [ ] **M1-6 Registration policy** — `settings` value `open` | `invite` | `closed` plus an
+- [x] **M1-6 Registration policy** — `settings` value `open` | `invite` | `closed` plus an
   optional email-domain allowlist, enforced at registration.
   *Acceptance:* table-driven test covers every policy and the allowlist denial case.
-- [ ] **M1-7 Invites** — create, list, revoke, accept; one-time token, optional email
+- [x] **M1-7 Invites** — create, list, revoke, accept; one-time token, optional email
   restriction, optional expiry.
   *Acceptance:* test asserts a used, expired, or revoked token is rejected and that an
   accepted invite creates exactly one user.
@@ -278,7 +278,7 @@ Conventions:
   email, policy-gated account creation, and unlink in the admin panel.
   *Acceptance:* table-driven test covers all three branches of `DESIGN.md` §4.5 plus the
   unlink path.
-- [ ] **M1-14 Wire authentication into the binary** — `cmd/flashcard/main.go` currently starts the
+- [x] **M1-14 Wire authentication into the binary** — `cmd/flashcard/main.go` currently starts the
   web server without constructing the auth services, so `/login`, `/register` and `/setup` are not
   registered at all (verified: a running container answers `GET /login` with `404`). Read
   `SESSION_SECRET`, `ENCRYPTION_KEY` and `BOOTSTRAP_ADMIN_EMAIL` through `internal/config`, build the
@@ -309,7 +309,7 @@ Conventions:
   parser for `{{cN::text}}` and `{{cN::text::hint}}`.
   *Acceptance:* cloze tests cover nested braces, escapes, repeated indices, and a note
   producing two cards from two indices.
-- [ ] **M2-5 Note and card pipeline** — create a note, generate its cards, enforce
+- [x] **M2-5 Note and card pipeline** — create a note, generate its cards, enforce
   `(note_id, template)` uniqueness, and support soft delete plus restore.
   *Acceptance:* test asserts updating a note's fields keeps existing cards and their ids.
 - [ ] **M2-6 Renderer** — goldmark to HTML, bluemonday allowlist, MathJax delimiters
@@ -587,6 +587,11 @@ completion percentage until they are moved into a release milestone.
 - [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
 - [ ] **B-9 Deployment notes outside the repository** — hosting-specific details stay
   private; only generic container instructions belong in the README.
+- [ ] **B-12 Make invite acceptance transactional** — the current flow atomically claims the
+  invite token, then creates the user, then releases the token if creation fails. Concurrency is
+  safe (one invite yields one user) but a crash between the two steps can leave a token released
+  with no user created. `AccountService` and `InviteStore` each hold their own `*gorm.DB`, so the
+  fix is a shared transaction boundary; do it when the service layer is next touched.
 - [ ] **B-11 `Preset.EnableFuzz` to `*bool`** — the model column carries `default:true`, so a
   zero-valued `false` is silently replaced by the database default; `PresetStore.Create`
   currently compensates with an explicit follow-up update. Convert the field (and any other
@@ -608,8 +613,8 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 5/13 · M2 4/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
-  · M10 0/5 (excluded) · backlog 0/11 (excluded)`.
+  `M0 11/11 · M1 8/14 · M2 5/10 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  · M10 0/5 (excluded) · backlog 0/12 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 

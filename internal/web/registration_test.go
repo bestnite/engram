@@ -37,7 +37,7 @@ func TestRegistrationPolicyMatrix(t *testing.T) {
 	}{
 		{
 			name: "open without allowlist allows anyone", policy: "open",
-			email: "alice@anywhere.example", wantStatus: http.StatusSeeOther,
+			email: "alice@example.org", wantStatus: http.StatusSeeOther,
 		},
 		{
 			name: "open with allowlist match", policy: "open", allowlist: `["example.com"]`,
@@ -45,7 +45,7 @@ func TestRegistrationPolicyMatrix(t *testing.T) {
 		},
 		{
 			name: "open with allowlist denial", policy: "open", allowlist: `["example.com"]`,
-			email: "alice@other.example", wantStatus: http.StatusForbidden, wantText: "该邮箱域名不在允许注册的范围内",
+			email: "alice@example.net", wantStatus: http.StatusForbidden, wantText: "该邮箱域名不在允许注册的范围内",
 		},
 		{
 			name: "invite requires a token", policy: "invite",

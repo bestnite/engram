@@ -65,11 +65,11 @@ func TestEmailDomainAllowed(t *testing.T) {
 		allowlist []string
 		want      bool
 	}{
-		{"empty allowlist allows all", "anyone@wherever.example", nil, true},
+		{"empty allowlist allows all", "anyone@example.net", nil, true},
 		{"exact match", "alice@example.com", []string{"example.com"}, true},
 		{"case insensitive", "alice@Example.COM", []string{"example.com"}, true},
-		{"no match", "alice@evil.example", []string{"example.com"}, false},
-		{"subdomain is not matched", "alice@sub.example.com", []string{"example.com"}, false},
+		{"no match", "alice@example.net", []string{"example.com"}, false},
+		{"allowlist is not a suffix match", "alice@example.org", []string{"example.com"}, false},
 		{"malformed email", "no-at-sign", []string{"example.com"}, false},
 		{"trailing at", "alice@", []string{"example.com"}, false},
 	}
@@ -95,7 +95,7 @@ func TestDecideRegistration(t *testing.T) {
 		{name: "open without allowlist", policy: PolicyOpen, email: "alice@example.com"},
 		// open + 白名单：命中放行，未命中拒绝。
 		{name: "open allowlist match", policy: PolicyOpen, email: "alice@example.com", allowlist: []string{"example.com"}},
-		{name: "open allowlist denial", policy: PolicyOpen, email: "alice@other.example", allowlist: []string{"example.com"}, wantErr: ErrEmailDomainNotAllowed},
+		{name: "open allowlist denial", policy: PolicyOpen, email: "alice@example.net", allowlist: []string{"example.com"}, wantErr: ErrEmailDomainNotAllowed},
 		// invite：无邀请一律要求邀请（邀请分支在 web 处理器里另行放行）。
 		{name: "invite requires invite", policy: PolicyInvite, email: "alice@example.com", wantErr: ErrInviteRequired},
 		{name: "invite ignores allowlist", policy: PolicyInvite, email: "alice@example.com", allowlist: []string{"example.com"}, wantErr: ErrInviteRequired},

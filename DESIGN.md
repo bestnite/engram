@@ -109,6 +109,8 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_user ON sessions(user_id);
 
 -- 邀请（注册策略为 invite 时使用；token 一次性）
+-- 撤销 = 删除整行（不保留 revoked_at 列）：被撤销的 token 与"不存在"同路返回 not-found；
+-- 撤销动作本身由 audit_log 记录（M1-10 统一接管）。
 CREATE TABLE invites (
   id            INTEGER PRIMARY KEY,
   token         TEXT NOT NULL UNIQUE,
@@ -174,7 +176,7 @@ CREATE TABLE notes (
   deleted_at    TEXT,                            -- 软删除（保留进度，误删可恢复）
   UNIQUE (deck_id, external_ref)
 );
-CREATE INDEX idx_notes_deck ON notes(deck_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_notes_deck ON notes(deck_id);  -- 实现取普通索引（GORM tag 不支持部分索引，两库行为一致即可）
 
 -- 卡片（note 的呈现形式，调度作用于它）
 CREATE TABLE cards (
@@ -418,7 +420,8 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
 
 ### 4.3 会话与 CSRF
 
-- 会话：服务端签名 cookie（HttpOnly + Secure + SameSite=Lax），签名密钥来自环境变量/密钥文件；登出即销毁。
+- 会话：**服务端记录**（`sessions` 表，cookie 只携带不可读的会话 ID + HMAC-SHA256 签名）——这样"登出 / 改密码 / 禁用用户"三条路径才能真正即时作废；签名密钥来自环境变量/密钥文件。
+- **`Secure` 标志由 `BASE_URL` 的 scheme 决定**：`https://` 时置位，本地 http 开发时不置位（否则浏览器/curl 会拒收 cookie）。这不算对 §4.3 生产要求的妥协：生产部署的 `BASE_URL` 必须是 https。
 - CSRF：所有非 GET 请求校验 token（表单注入 + `X-CSRF-Token` 头），与 SameSite 双保险。
 - 登录限流与锁定：按账号 + IP 限速，连续失败递增延迟（防爆破）；失败与锁定写 `audit_log`。
 - 密码策略：最小长度 + 常见弱密码拦截（内置小词表即可，不引外部服务）。

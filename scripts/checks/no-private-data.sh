@@ -2,7 +2,7 @@
 # 仓库脱敏关键词扫描（AGENTS.md §2.2、DESIGN.md §10.4；M0-10 验收项之一）。
 #
 # 目的：任何被提交的文件都不得出现真实域名、主机名、内网地址、个人邮箱或真实凭据。
-# 允许的占位值：example.com / example.org / example.net / localhost / CHANGE_ME。
+# 允许的占位值：example.com / example.org / example.net / localhost / CHANGE_ME（域名比较大小写不敏感）。
 #
 # 为什么只扫 git 跟踪的文件：未跟踪文件不属于提交内容，扫描它们会误伤本地草稿。
 # 为什么排除 mathjax / htmx：它们是上游压缩包里的第三方代码，不是本仓库的文字。
@@ -37,7 +37,8 @@ scan_i() { git grep -niE --color=never -e "$1" -- "${EXCLUDES[@]}" 2>/dev/null |
 
 # 1) 邮箱：只允许占位域。
 emails=$(scan '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
-emails=$(printf '%s\n' "$emails" | grep -vE '@(example\.(com|org|net)|localhost)\b' || true)
+# 大小写不敏感：域名在语义上大小写无关；只有三个占位域被豁免，真实域名照样会被抓出来。
+emails=$(printf '%s\n' "$emails" | grep -viE '@(example\.(com|org|net)|localhost)\b' || true)
 rule "邮箱地址不是占位域（允许 example.com/org/net、localhost）" "$emails"
 
 # 2) 内网 / 链路本地 IPv4（127.0.0.1 之外的回环与 0.0.0.0 不算内网）。
