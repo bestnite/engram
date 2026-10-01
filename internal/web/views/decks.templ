@@ -13,6 +13,7 @@ templ DeckListPage(data DeckListData) {
 						<th class="py-2">{ data.ColName }</th>
 						<th class="py-2">{ data.ColCards }</th>
 						<th class="py-2">{ data.ColDue }</th>
+						<th class="py-2">{ data.ColActions }</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -26,6 +27,9 @@ templ DeckListPage(data DeckListData) {
 							</td>
 							<td class="py-2">{ row.CardCount }</td>
 							<td class="py-2">{ row.DueCount }</td>
+							<td class="py-2">
+								<a class="text-blue-600 hover:underline" href={ row.ExportHref } download>{ data.ExportLabel }</a>
+							</td>
 						</tr>
 					}
 				</tbody>

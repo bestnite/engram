@@ -1,0 +1,87 @@
+package views
+
+// ImportPage 渲染卡组包上传页：上传表单 + 可选的导入摘要/错误（M5-9）。
+templ ImportPage(data ImportPageData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		<p class="mt-2 text-slate-600">{ data.Intro }</p>
+		if data.ErrorMessage != "" {
+			<div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{ data.ErrorMessage }</div>
+		}
+		<form class="mt-6 space-y-3 rounded-lg border border-slate-200 bg-white p-4" method="post" action={ data.FormAction } enctype="multipart/form-data">
+			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			<label class="block text-sm text-slate-700">
+				<span>{ data.FileLabel }</span>
+				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="file" name="file"/>
+			</label>
+			<label class="block text-sm text-slate-700">
+				<span>{ data.TargetLabel }</span>
+				<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="target">
+					for _, opt := range data.Targets {
+						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+					}
+				</select>
+			</label>
+			<label class="block text-sm text-slate-700">
+				<span>{ data.DeckIDLabel }</span>
+				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="deck_id" value=""/>
+			</label>
+			<label class="block text-sm text-slate-700">
+				<span>{ data.OnConflictLabel }</span>
+				<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="on_conflict">
+					for _, opt := range data.OnConflicts {
+						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+					}
+				</select>
+			</label>
+			<label class="flex items-center gap-2 text-sm text-slate-700">
+				<input type="checkbox" name="dry_run" value="1"/>
+				<span>{ data.DryRunLabel }</span>
+			</label>
+			if data.AllowOthersShow {
+				<label class="flex items-center gap-2 text-sm text-slate-700">
+					<input type="checkbox" name="allow_others_progress" value="1"/>
+					<span>{ data.AllowOthersLabel }</span>
+				</label>
+			}
+			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SubmitLabel }</button>
+		</form>
+
+		if data.Result != nil {
+			<section class="mt-8 border-t border-slate-200 pt-6">
+				<h2 class="text-lg font-semibold text-slate-900">{ data.Result.Heading }</h2>
+				<table class="mt-3 w-full text-left text-sm">
+					<tbody>
+						for _, row := range data.Result.Rows {
+							<tr class="border-b border-slate-100">
+								<td class="py-2 pr-3 text-slate-500">{ row.Label }</td>
+								<td class="py-2 font-medium text-slate-800">{ row.Value }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<h3 class="mt-6 text-sm font-semibold text-slate-500">{ data.Result.ErrorsHead }</h3>
+				if len(data.Result.Errors) == 0 {
+					<p class="mt-2 text-sm text-slate-500">{ data.Result.NoErrors }</p>
+				} else {
+					<table class="mt-2 w-full text-left text-sm">
+						<thead>
+							<tr class="border-b border-slate-200 text-xs text-slate-400">
+								<th class="py-2 pr-3 font-medium">{ data.Result.ColEntry }</th>
+								<th class="py-2 font-medium">{ data.Result.ColReason }</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, e := range data.Result.Errors {
+								<tr class="border-b border-slate-100 align-top">
+									<td class="py-2 pr-3 text-slate-700">{ e.Entry }</td>
+									<td class="py-2 text-slate-700">{ e.Reason }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</section>
+		}
+	}
+}
