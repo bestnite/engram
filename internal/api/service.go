@@ -162,10 +162,27 @@ type ImportResponse struct {
 // MaxImportNotes 是单次批量导入的上限（DESIGN.md §7.3：单次 ≤ 500）。
 const MaxImportNotes = 500
 
+// ImportBatchSize 是批量导入每个事务写入的行数（DESIGN.md §10.4：默认 200 条/事务）。
+// 分批提交把每行一次 fsync 降到每 200 行一次，同时让\"失败可续\"成立：进程在导入中途
+// 退出时，已提交的批次留在库里，重试同一请求会按 external_ref 幂等命中，不会重复建卡。
+const ImportBatchSize = 200
+
+// importPlan 是批量导入单行的处理计划：第一遍校验后得出该行是建、改还是跳过。
+type importPlan struct {
+	index    int
+	action   string
+	existing *store.Note
+	note     store.Note
+	fields   map[string]any
+}
+
 // ImportNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等（DESIGN.md §7.3）。
 //
 // 采用两遍法：第一遍校验并规划每条的去向（create/update/skip），第二遍才写库。
-// dry_run 时停在第一遍，只返回计数；on_conflict=fail 时任何冲突或校验错误都会整批拒绝。
+// 第二遍按 ImportBatchSize 分批，每批一个事务；批内单行写失败用保存点回滚该行并
+// 记录带下标的原因，合法行照常导入，因此\"一个含单行非法数据的批次会把合法行导入并
+// 在报告里给出失败行的索引\"。dry_run 时停在第一遍，只返回计数；on_conflict=fail 时
+// 任何冲突或校验错误都会整批拒绝。
 func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
 	d, err := a.OwnedDeck(ctx, userID, deckID)
 	if err != nil {
@@ -183,14 +200,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		return ImportResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "on_conflict must be one of skip, update, fail")
 	}
 
-	type plan struct {
-		index    int
-		action   string
-		existing *store.Note
-		note     store.Note
-		fields   map[string]any
-	}
-	plans := make([]plan, 0, len(req.Notes))
+	plans := make([]importPlan, 0, len(req.Notes))
 	resp := ImportResponse{DryRun: req.DryRun, Errors: []ImportError{}}
 	hasFailure := false
 
@@ -247,7 +257,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 				action = "update"
 			}
 		}
-		plans = append(plans, plan{index: i, action: action, existing: existing, note: n, fields: item.Fields})
+		plans = append(plans, importPlan{index: i, action: action, existing: existing, note: n, fields: item.Fields})
 	}
 
 	if onConflict == "fail" && hasFailure {
@@ -261,34 +271,21 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		return resp, nil
 	}
 
-	for _, p := range plans {
-		if p.action == "skip" {
-			resp.Skipped++
-			continue
+	// 第二遍：按批写入。每批一个事务；批内单行失败回滚到行保存点并记录下标，
+	// 同批其余合法行照常导入。批与批之间独立提交，因此失败可续。
+	for start := 0; start < len(plans); start += ImportBatchSize {
+		end := start + ImportBatchSize
+		if end > len(plans) {
+			end = len(plans)
 		}
-		if p.action == "create" {
-			n := p.note
-			if _, err := a.notes.Create(ctx, &n, p.fields); err != nil {
-				resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
-				continue
-			}
-			resp.Created++
-			continue
+		batch := plans[start:end]
+		batchErr := a.writeImportBatch(ctx, batch, &resp)
+		if batchErr != nil {
+			// 基础设施级失败（保存点/提交失败）：记录该批首行的下标并继续下一批，
+			// 已提交的批次不回滚；重试时 external_ref 幂等保证不重复建卡。
+			a.logger.Error("import batch failed", "deck_id", d.ID, "start_index", batch[0].index, "error", batchErr)
+			resp.Errors = append(resp.Errors, ImportError{batch[0].index, batchErr.Error()})
 		}
-		// update：已软删除的 note 先恢复再更新，否则 Update 会把它当不存在。
-		if p.existing.DeletedAt.Valid {
-			if err := a.notes.Restore(ctx, p.existing.ID); err != nil {
-				resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
-				continue
-			}
-		}
-		n := p.note
-		n.ID = p.existing.ID
-		if _, err := a.notes.Update(ctx, &n, p.fields); err != nil {
-			resp.Errors = append(resp.Errors, ImportError{p.index, err.Error()})
-			continue
-		}
-		resp.Updated++
 	}
 
 	a.audit(ctx, store.AuditEntry{
@@ -303,6 +300,53 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		},
 	})
 	return resp, nil
+}
+
+// writeImportBatch 在一个事务里写入一批导入计划；返回非 nil 表示批级失败（已回滚）。
+//
+// 逐行用 SAVEPOINT 包裹：PostgreSQL 在语句报错后会中止整个事务，必须 ROLLBACK TO SAVEPOINT
+// 才能继续处理同批的其它行；SQLite 同样支持该语法。单行错误写进 resp.Errors（带请求体下标）。
+func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *ImportResponse) error {
+	return a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, p := range batch {
+			if p.action == "skip" {
+				resp.Skipped++
+				continue
+			}
+			savepoint := fmt.Sprintf("import_row_%d", p.index)
+			if err := tx.SavePoint(savepoint).Error; err != nil {
+				return fmt.Errorf("open savepoint for row %d: %w", p.index, err)
+			}
+			var rowErr error
+			switch p.action {
+			case "create":
+				n := p.note
+				_, rowErr = a.notes.CreateInTx(ctx, tx, &n, p.fields)
+			default: // update
+				if p.existing.DeletedAt.Valid {
+					rowErr = a.notes.RestoreInTx(ctx, tx, p.existing.ID)
+				}
+				if rowErr == nil {
+					n := p.note
+					n.ID = p.existing.ID
+					_, rowErr = a.notes.UpdateInTx(ctx, tx, &n, p.fields)
+				}
+			}
+			if rowErr != nil {
+				if rbErr := tx.RollbackTo(savepoint).Error; rbErr != nil {
+					return fmt.Errorf("rollback savepoint for row %d: %w", p.index, rbErr)
+				}
+				resp.Errors = append(resp.Errors, ImportError{p.index, rowErr.Error()})
+				continue
+			}
+			if p.action == "create" {
+				resp.Created++
+			} else {
+				resp.Updated++
+			}
+		}
+		return nil
+	})
 }
 
 // UpdateNoteInput 是单卡更新输入；Tags 用指针区分“未提供”与“清空”。
@@ -518,8 +562,8 @@ func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, 
 	// 进度列只在 include_progress 时选取；未选进度时不引用 card_states，
 	// 否则 SQL 会因缺少该 JOIN 而报 “no such column”。
 	selectCols := `cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id,
-		        notes.kind AS kind, cards.template AS template, notes.fields_json AS fields_json,
-		        notes.tags_json AS tags_json, notes.external_ref AS external_ref`
+	        notes.kind AS kind, cards.template AS template, notes.fields_json AS fields_json,
+	        notes.tags_json AS tags_json, notes.external_ref AS external_ref`
 	q := a.db.WithContext(ctx).Table("cards").
 		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
 		Where("cards.deleted_at IS NULL").
