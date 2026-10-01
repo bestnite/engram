@@ -132,11 +132,11 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(srv, id, "list_decks", "List the caller's decks.", s.listDecks)
 	addTool(srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
-	addTool(srv, id, "export_deck", "Export card-level rows for one deck (or all decks) as JSON.", s.exportDeck)
+	addTool(srv, id, "export_deck", "Export one deck as a self-contained deck package (DESIGN.md §7.6): manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
 	addTool(srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
 	addTool(srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
 	addTool(srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
-	addTool(srv, id, "import_deck", "Import notes into a deck. This revision accepts the same M4-3 bulk structure as create_notes (deck_id + notes); full .fdeck package import is M5.", s.importDeck)
+	addTool(srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .fdeck archive.", s.importDeck)
 	addTool(srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
 	addTool(srv, id, "submit_review", "Submit a review rating for a card (1..4) with optimistic version check.", s.submitReview)
 
