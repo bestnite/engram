@@ -129,7 +129,7 @@ func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.api.ExportCards(ctx, id.User.ID, deckIDs, in.IncludeProgress)
+	rows, err := s.api.CollectExportRows(ctx, id.User.ID, deckIDs, in.IncludeProgress)
 	if err != nil {
 		return nil, err
 	}

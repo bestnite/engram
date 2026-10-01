@@ -89,6 +89,24 @@ func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtyp
 // Create 在同一事务内写入 note 并生成它的 cards。
 // 返回的 cards 已填充 NoteID 与自增 ID。任一步失败则整体回滚，不会留下\"有 note 无 card\"的半截状态。
 func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
+	var cards []Card
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		created, err := s.CreateInTx(ctx, tx, n, fields)
+		cards = created
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cards, nil
+}
+
+// CreateInTx 在调用方给定的事务里创建 note 并生成它的 cards（M4-4 批量导入按批提交用）。
+//
+// 与 Create 的唯一区别是复用外部事务：批量导入把 200 条 note 放进同一个事务，
+// 由调用方决定何时提交/回滚，从而减少每行一次提交的开销。校验与序列化仍在这里完成，
+// 保证\"业务模型只有一份实现\"。调用方必须保证 tx 尚未提交。
+func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.DeckID == 0 {
 		return nil, ErrNoteDeckRequired
 	}
@@ -106,28 +124,25 @@ func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) 
 	}
 	n.UpdatedAt = now
 
-	var cards []Card
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(n).Error; err != nil {
-			return fmt.Errorf("create note: %w", err)
-		}
-		created, err := syncCards(tx, n.ID, wanted, now)
-		if err != nil {
-			return err
-		}
-		cards = created
-		return nil
-	})
+	if err := tx.WithContext(ctx).Create(n).Error; err != nil {
+		return nil, fmt.Errorf("create note: %w", err)
+	}
+	created, err := syncCards(tx, n.ID, wanted, now)
 	if err != nil {
 		return nil, err
 	}
-	return cards, nil
+	return created, nil
 }
 
 // ByID 取一个未软删除的 note；已删除的 note 视为不存在（用 Restore 恢复）。
 func (s *NoteStore) ByID(ctx context.Context, id uint64) (*Note, error) {
+	return s.byIDTx(ctx, s.db, id)
+}
+
+// byIDTx 在给定事务/连接上取一个未软删除的 note；供 UpdateInTx 在同一事务内读取现有内容。
+func (s *NoteStore) byIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*Note, error) {
 	var n Note
-	if err := s.db.WithContext(ctx).First(&n, "id = ?", id).Error; err != nil {
+	if err := tx.WithContext(ctx).First(&n, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &n, nil
@@ -138,10 +153,25 @@ func (s *NoteStore) ByID(ctx context.Context, id uint64) (*Note, error) {
 // 验收关键：更新后已存在的 card 与其 id 保持不变。同步只复用旧 card（按 template 匹配，
 // id 不变）、补插新出现的 template，绝不删除已有行（见 syncCards）。
 func (s *NoteStore) Update(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
+	var cards []Card
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updated, err := s.UpdateInTx(ctx, tx, n, fields)
+		cards = updated
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cards, nil
+}
+
+// UpdateInTx 在调用方给定的事务里更新 note 与它的 cards（M4-4 批量导入按批提交用）。
+// 与 Update 语义一致，只是复用外部事务；现有 card 的 id 与用户进度保持不变。
+func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.ID == 0 {
 		return nil, errors.New("update note: id is required")
 	}
-	existing, err := s.ByID(ctx, n.ID)
+	existing, err := s.byIDTx(ctx, tx, n.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -158,28 +188,20 @@ func (s *NoteStore) Update(ctx context.Context, n *Note, fields map[string]any) 
 	now := time.Now().UTC()
 	n.UpdatedAt = now
 
-	var cards []Card
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		updates := map[string]any{
-			"kind":        n.Kind,
-			"fields_json": n.FieldsJSON,
-			"tags_json":   n.TagsJSON,
-			"updated_at":  now,
-		}
-		if err := tx.Model(&Note{}).Where("id = ?", n.ID).Updates(updates).Error; err != nil {
-			return fmt.Errorf("update note %d: %w", n.ID, err)
-		}
-		synced, err := syncCards(tx, n.ID, wanted, now)
-		if err != nil {
-			return err
-		}
-		cards = synced
-		return nil
-	})
+	updates := map[string]any{
+		"kind":        n.Kind,
+		"fields_json": n.FieldsJSON,
+		"tags_json":   n.TagsJSON,
+		"updated_at":  now,
+	}
+	if err := tx.WithContext(ctx).Model(&Note{}).Where("id = ?", n.ID).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("update note %d: %w", n.ID, err)
+	}
+	synced, err := syncCards(tx, n.ID, wanted, now)
 	if err != nil {
 		return nil, err
 	}
-	return cards, nil
+	return synced, nil
 }
 
 // Delete 软删除 note：只写 notes.deleted_at，不碰任何 cards 行。
@@ -199,7 +221,13 @@ func (s *NoteStore) Delete(ctx context.Context, id uint64) error {
 // Restore 清除 notes.deleted_at；card 行与 id 自始至终未变，故恢复后重新可见。
 // note 不存在时返回 gorm.ErrRecordNotFound。
 func (s *NoteStore) Restore(ctx context.Context, id uint64) error {
-	res := s.db.WithContext(ctx).Unscoped().Model(&Note{}).Where("id = ?", id).
+	return s.RestoreInTx(ctx, s.db, id)
+}
+
+// RestoreInTx 在调用方给定的事务里恢复软删除的 note（M4-4 批量导入按批提交用：
+// 命中已软删除的 external_ref 时先恢复，再 Update 才能生效）。
+func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) error {
+	res := tx.WithContext(ctx).Unscoped().Model(&Note{}).Where("id = ?", id).
 		Updates(map[string]any{"deleted_at": nil})
 	if res.Error != nil {
 		return fmt.Errorf("restore note %d: %w", id, res.Error)
