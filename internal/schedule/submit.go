@@ -127,10 +127,19 @@ func Submit(ctx context.Context, tx *gorm.DB, in SubmitInput) (SubmitResult, err
 		return SubmitResult{}, err
 	}
 
-	// 4. 写 card_states（version + 1）。UPSERT 兼顾“首次评分建行”与“已有行更新”。
+	// 4. 写 card_states（version + 1）。用带 version 守卫的条件 upsert：行锁锁不住
+	//    “还不存在的行”，两次并发首评会双双读到 version=0 并双双放行，因此把守卫
+	//    下推到 upsert 的 DO UPDATE 分支里，插入与更新由同一条 SQL 原子完成（M3-10）。
 	newState := stateFromOutcome(base, outcome, now, version+1)
-	if err := upsertState(ctx, tx, &newState); err != nil {
+	written, err := upsertState(ctx, tx, &newState, version)
+	if err != nil {
 		return SubmitResult{}, err
+	}
+	// 守卫拦下了这次写入：状态行的 version 已在本次读取之后被并发改过。
+	// 这正是并发首评里输家走到的分支 —— 一条 review 都不能写，返回冲突哨兵。
+	if !written {
+		return SubmitResult{}, fmt.Errorf("%w: card %d user %d: the state row changed concurrently, expected version %d",
+			ErrVersionConflict, in.CardID, in.UserID, in.ExpectedVersion)
 	}
 
 	// 5. 写 reviews。所有 §2.2 列出的字段都写全，它是参数优化的唯一燃料。
@@ -186,19 +195,29 @@ func stateFromOutcome(base *store.CardState, o Outcome, now time.Time, version i
 
 // upsertState 用 GORM 的 clause.OnConflict（双库各自生成正确的 SQL，DESIGN.md §2.3）
 // 写入状态行：首次评分建行，之后按 (card_id, user_id) 更新。
-func upsertState(ctx context.Context, tx *gorm.DB, st *store.CardState) error {
+//
+// expectedVersion 是本次写入前读到的 card_states.version，作为 DO UPDATE 分支的守卫：
+// 行锁锁不住“尚不存在的行”，两次并发首评会双双读到 version=0 并双双放行（M3-10）。
+// 加上 `WHERE card_states.version = expectedVersion` 后，后到的写入在冲突分支里因版本
+// 不匹配而影响 0 行 —— 写不进去就没有写入，也不需要第二次读。返回 written=false 表示
+// 守卫拦下了这次写入（并发冲突），插入新行时守卫不参与求值，永远算写入成功。
+func upsertState(ctx context.Context, tx *gorm.DB, st *store.CardState, expectedVersion int) (bool, error) {
 	cols := []string{
 		"state", "due_at", "step_index", "stability", "difficulty",
 		"reps", "lapses", "scheduled_days", "elapsed_days", "last_review_at", "version",
 	}
-	err := tx.WithContext(ctx).Clauses(clause.OnConflict{
+	res := tx.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "card_id"}, {Name: "user_id"}},
 		DoUpdates: clause.AssignmentColumns(cols),
-	}).Create(st).Error
-	if err != nil {
-		return fmt.Errorf("schedule: submit review: upsert card state (card %d, user %d): %w", st.CardID, st.UserID, err)
+		// 守卫列必须带表名：DO UPDATE 的 WHERE 引用的是已存在的目标行。
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Eq{Column: clause.Column{Table: "card_states", Name: "version"}, Value: expectedVersion},
+		}},
+	}).Create(st)
+	if res.Error != nil {
+		return false, fmt.Errorf("schedule: upsert card state (card %d, user %d): %w", st.CardID, st.UserID, res.Error)
 	}
-	return nil
+	return res.RowsAffected > 0, nil
 }
 
 // reviewFromOutcome 构造 append-only 的复习日志行。

@@ -110,8 +110,14 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 	if next.LastReviewAt != nil {
 		next.ElapsedDays = elapsedDaysSince(next.LastReviewAt, nowOr(in.Now))
 	}
-	if err := upsertState(ctx, tx, &next); err != nil {
+	written, err := upsertState(ctx, tx, &next, cur.Version)
+	if err != nil {
 		return store.CardState{}, err
+	}
+	// 守卫失败说明状态行在本次读取之后被并发改过：不做部分恢复，返回冲突哨兵。
+	if !written {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while undoing",
+			ErrVersionConflict, in.CardID, in.UserID)
 	}
 
 	// reviews 只增不改的例外就是 Undo：删除被撤销的那一行，并写一条审计说明。
@@ -277,8 +283,14 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 		version = cur.Version
 	}
 	row.Version = version + 1
-	if err := upsertState(ctx, tx, &row); err != nil {
+	written, err := upsertState(ctx, tx, &row, version)
+	if err != nil {
 		return store.CardState{}, err
+	}
+	// 守卫失败说明状态行在本次读取之后被并发改过（并发首评或另一次埋藏）。
+	if !written {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while burying",
+			ErrVersionConflict, in.CardID, in.UserID)
 	}
 	return row, nil
 }

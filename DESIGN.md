@@ -375,12 +375,12 @@ POST /api/v1/review  { card_id, rating, expected_version, elapsed_ms }
       2. 校验 state.version == expected_version，否则 409（客户端重放/双开窗口的安全网）
       3. 判分/自评来源记入 grade_source（self | typed | llm，见 §14）
       4. 调 s.Next(card, now, rating) 得新状态
-      5. UPSERT card_states（version + 1）
+      5. UPSERT card_states（version + 1）；条件 upsert 带 `version = ?` 守卫，守卫不匹配即 409 且不写 reviews
       6. INSERT reviews（rating 1–4、state_before 0–3、interval、stability、difficulty、elapsed_ms）
   → 返回：新状态 + 下一张卡（省一次往返）
 ```
 
-- **新卡首次提交的并发竞态（已知缺口，待修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。修法写死为**带条件的原子 upsert**（`... ON CONFLICT ... WHERE version = ?`，由 GORM 的 `clause.OnConflict` + `Where` 表达），见 AGENTS.md 的 M3-10。
+- **新卡首次提交的并发竞态（已修）**：行锁锁不住"还不存在的 `card_states` 行"，因此在 PostgreSQL 上两次并发提交同一张全新卡时，乐观锁可能被双双通过（SQLite 因单写连接天然串行，无此问题）。现在状态写入一律走**带条件的原子 upsert**（GORM 的 `clause.OnConflict` + `Where`，生成 `... ON CONFLICT ... DO UPDATE ... WHERE card_states.version = ?`）：插入与更新由同一条 SQL 原子完成，守卫不匹配时受影响行数为 0，提交路径据此返回 409 冲突哨兵且不写 review 行。见 AGENTS.md 的 M3-10。
 - **撤销（Undo）的精确程度（已冻结）**：用 `Rollback(card, log)` 恢复 `due_at` / `interval` / `stability` / `difficulty` / `reps` / `lapses` / `last_review_at`，用 `reviews.step_index_before` 精确还原 `step_index`（该列为 NULL 的旧行退回归零行为），并删除最后一条日志（同时写一条 `audit_log`）。
 - `reviews` 只增不改。
 - `rating` 与 `state_before` 用**整数**（1–4 / 0–3），与 FSRS 生态的复习日志约定一致，将来接优化器零转换。
