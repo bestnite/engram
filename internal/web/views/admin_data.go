@@ -47,6 +47,33 @@ type AdminSection struct {
 	Rows    []SettingRow
 }
 
+// AdminPolicyOption 是注册策略单选的一项。
+type AdminPolicyOption struct {
+	Value   string
+	Label   string
+	Checked bool
+}
+
+// AdminInviteRow 是注册与邀请页里的一条邀请。
+type AdminInviteRow struct {
+	ID    string
+	Token string
+	// Link 是可直接分享的注册链接（/register?invite=<token>）。
+	Link        string
+	Email       string
+	RoleLabel   string
+	StatusValue string
+	StatusLabel string
+	CreatedAt   string
+	ExpiresAt   string
+	UsedAt      string
+	UsedBy      string
+	// Active 为 true 时该邀请仍可用，模板才渲染「撤销」入口。
+	Active bool
+	// RevokeHref 是撤销表单的提交地址，由 handler 拼好。
+	RevokeHref string
+}
+
 // AdminPageData 是管理面板外壳（admin.templ）的渲染数据。
 type AdminPageData struct {
 	Layout     LayoutData
@@ -112,6 +139,41 @@ type AdminPageData struct {
 	PrevLabel, NextLabel string
 	// EmptyLabel 是搜索无结果时的提示。
 	EmptyLabel string
+
+	// ---- 注册与邀请页（M6-3）----
+	// RegistrationPage 为 true 时模板渲染注册策略、白名单与邀请表。
+	RegistrationPage bool
+	// 策略区块。
+	PolicyHeading         string
+	PolicyIntro           string
+	PolicyLabel           string
+	PolicyOptions         []AdminPolicyOption
+	AllowlistLabel        string
+	AllowlistHint         string
+	AllowlistValue        string
+	RegistrationSaveLabel string
+	// 邀请列表。
+	InvitesHeading   string
+	InvitesIntro     string
+	InvitesEmpty     string
+	ColInviteToken   string
+	ColInviteEmail   string
+	ColInviteRole    string
+	ColInviteStatus  string
+	ColInviteCreated string
+	ColInviteExpires string
+	ColInviteUsedBy  string
+	ColInviteActions string
+	Invites          []AdminInviteRow
+	// 邀请创建表单。
+	InviteCreateHeading string
+	InviteEmailLabel    string
+	InviteRoleLabel     string
+	InviteExpiryLabel   string
+	InviteExpiryHint    string
+	InviteCreateSubmit  string
+	InviteRevokeLabel   string
+	InviteRoles         []AdminRoleOption
 }
 
 // AdminUserRow 是用户管理表里的一行。

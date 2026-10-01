@@ -46,6 +46,10 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodPost, Path: "/admin/users/:id/password", Write: true},
 		{Method: http.MethodPost, Path: "/admin/users/:id/logout", Write: true},
 		{Method: http.MethodPost, Path: "/admin/users/:id/delete", Write: true},
+		{Method: http.MethodGet, Path: "/admin/registration"},
+		{Method: http.MethodPost, Path: "/admin/registration", Write: true},
+		{Method: http.MethodPost, Path: "/admin/invites", Write: true},
+		{Method: http.MethodPost, Path: "/admin/invites/:id/revoke", Write: true},
 		{Method: http.MethodGet, Path: "/admin/settings"},
 		{Method: http.MethodPost, Path: "/admin/settings", Write: true},
 		{Method: http.MethodGet, Path: "/admin/export"},
@@ -81,6 +85,16 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			handlers = append(handlers, s.adminUserForceLogout)
 		case "/admin/users/:id/delete":
 			handlers = append(handlers, s.adminUserDelete)
+		case "/admin/registration":
+			if r.Write {
+				handlers = append(handlers, s.adminRegistrationSave)
+			} else {
+				handlers = append(handlers, s.adminRegistrationPage)
+			}
+		case "/admin/invites":
+			handlers = append(handlers, s.adminInviteCreate)
+		case "/admin/invites/:id/revoke":
+			handlers = append(handlers, s.adminInviteRevoke)
 		case "/admin/settings":
 			if r.Write {
 				handlers = append(handlers, s.adminSettingsSave)
@@ -131,7 +145,7 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 	}{
 		{"dashboard", "/admin", true},
 		{"users", "/admin/users", true},
-		{"registration", "/admin/registration", false},
+		{"registration", "/admin/registration", true},
 		{"oidc", "/admin/oidc", false},
 		{"settings", "/admin/settings", true},
 		{"jobs", "/admin/jobs", false},
