@@ -709,6 +709,8 @@ deck.fdeck                      # zip
 ### 8.3 多语言（i18n）
 
 - **首发语言：中文（zh-CN）+ 英文（en）**；默认跟随浏览器 `Accept-Language`，用户可在个人设置里固定；管理员可设站点默认语言。
+- **解析优先级（已冻结）**：URL 参数 `?lang=<code>` > 已登录用户的个人设置 > `Accept-Language` > 站点默认语言。
+  `?lang=` 是显式覆盖，供页面上的语言切换器使用；未登录访客也能用它切换。
 - 实现：`github.com/nicksnyder/go-i18n/v2`（v2.6.1）+ YAML 语言包（`internal/i18n/locales/zh-CN.yaml`、`en.yaml`）；templ 模板从请求上下文取 translator；**所有用户可见文案（含错误提示、邮件/通知文本、题型显示名）都必须走语言包**，禁止硬编码字符串（加 lint 检查：模板里出现中文字面量就报错）。
 - **API 与 MCP 错误**：返回稳定的 `code` + 本地化 `message`（按 `Accept-Language`），便于脚本判断与人类阅读。
 - 日期/数字/相对时间用 `golang.org/x/text` 的本地化格式化。
@@ -736,6 +738,9 @@ deck.fdeck                      # zip
 - `manifest.webmanifest` + 图标 + `display: standalone`：手机可"添加到主屏幕"，像 App 一样启动。
 - Service Worker：**只缓存静态资源外壳**（CSS/JS/字体/MathJax），不缓存答题数据、不做离线队列（与 §1 非目标一致）。
 - 静态资源 `go:embed` 进二进制，带 hash 的 cache-busting 路径。
+- **URL 方案（已冻结）**：`/static/v/<asset-hash>/<逻辑路径>`，例如 `/static/v/9f7d9432/css/tailwind.css`。
+  `asset-hash` = 该资源内容的 sha256 前 4 字节十六进制；哈希不匹配一律 404（防止"旧页面 + 新资源"的错配被静默接受）；
+  命中时返回 `Cache-Control: public, max-age=31536000, immutable` 与 `ETag`。模板侧提供生成该 URL 的辅助函数，不手拼字符串。
 
 ---
 
