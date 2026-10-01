@@ -146,6 +146,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	// 对外 REST API（M4-2 鉴权 + M4-3 端点）：依赖齐备才挂载 /api/v1。
+	// 敏感设置的编解码器（M6-10）：主密钥来自 ENCRYPTION_KEY，格式非法直接拒绝启动。
+	secrets, err := store.NewSecretCodec(cfg.Get(config.KeyEncryptionKey).Value)
+	if err != nil {
+		return nil, err
+	}
 	apiSrv, err := api.New(api.Deps{
 		DB:      db,
 		Logger:  logger,
@@ -182,6 +187,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Auditor:      auditor,
 		LoginLimiter: limiter,
 		Media:        mediaStore,
+		Secrets:      secrets,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		API:                 apiSrv,

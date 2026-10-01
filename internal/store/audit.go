@@ -27,6 +27,9 @@ const (
 	ActionDeckCreate = "deck.create"
 	// M2-8 上传媒体。
 	ActionMediaUpload = "media.upload"
+
+	// ActionSettingUpdate 是管理面板修改系统设置（M6-5）时写入的审计动作。
+	ActionSettingUpdate = "setting.update"
 	// M3-4 撤销评分。
 	ActionReviewUndo = "review.undo"
 	// M5-1 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,9 @@ import (
 // testSessionSecret 是集成测试用的会话签名密钥；仅用于测试，与生产无关。
 const testSessionSecret = "integration-test-session-secret-0123456789"
 
+// testEncryptionKey 是集成测试用的主密钥：base64(32 字节)，仅用于测试，与生产无关。
+var testEncryptionKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+
 // newWiredServer 通过与 runServe 相同的装配路径构造服务，验证 M1-14 的接线的确把
 // /login、/setup 等认证路由注册进了进程，而不是只在 web 包的单元测试里成立。
 func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
@@ -27,7 +31,7 @@ func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
 	t.Setenv("DB_DRIVER", "sqlite")
 	t.Setenv("DB_DSN", filepath.Join(t.TempDir(), "wiring.db"))
 	t.Setenv("SESSION_SECRET", testSessionSecret)
-	t.Setenv("ENCRYPTION_KEY", "integration-test-encryption-key")
+	t.Setenv("ENCRYPTION_KEY", testEncryptionKey)
 	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "bootstrap@example.com")
 	t.Setenv("BASE_URL", "http://localhost:8080")
 

@@ -39,6 +39,9 @@ type adminRoute struct {
 func adminRoutes() []adminRoute {
 	return []adminRoute{
 		{Method: http.MethodGet, Path: "/admin"},
+		{Method: http.MethodGet, Path: "/admin/settings"},
+		{Method: http.MethodPost, Path: "/admin/settings", Write: true},
+		{Method: http.MethodGet, Path: "/admin/export"},
 	}
 }
 
@@ -55,6 +58,14 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		switch r.Path {
 		case "/admin":
 			handlers = append(handlers, s.adminDashboard)
+		case "/admin/settings":
+			if r.Write {
+				handlers = append(handlers, s.adminSettingsSave)
+			} else {
+				handlers = append(handlers, s.adminSettingsPage)
+			}
+		case "/admin/export":
+			handlers = append(handlers, s.adminExport)
 		default:
 			continue
 		}
