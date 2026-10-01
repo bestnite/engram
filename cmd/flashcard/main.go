@@ -156,6 +156,8 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Presets: store.NewPresetStore(db),
 		Cards:   store.NewCardStore(db),
 		Auditor: auditor,
+		// 卡组包内联媒体（M5-6/M5-7）：字节根目录与媒体存储同一个。
+		MediaRoot: mediaStore.Root(),
 	})
 	if err != nil {
 		return nil, err
