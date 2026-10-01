@@ -88,6 +88,27 @@ func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, q
 	return total, nil
 }
 
+// List 按 id 倒序返回一页作业与总数，供管理面板分页展示（M6-6）。
+// 必须限量：jobs 表会随每次优化持续增长，一次性全量渲染会拖垮页面。
+func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var total int64
+	if err := s.db.WithContext(ctx).Model(&store.Job{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count jobs: %w", err)
+	}
+	var jobs []store.Job
+	if err := s.db.WithContext(ctx).
+		Order("id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&jobs).Error; err != nil {
+		return nil, 0, fmt.Errorf("list jobs: %w", err)
+	}
+	return jobs, total, nil
+}
+
 // MarkRunning 把作业置为 running 并记录 started_at。
 func (s *Store) MarkRunning(ctx context.Context, id uint64, at time.Time) error {
 	return s.update(ctx, id, map[string]any{

@@ -86,7 +86,13 @@ var (
 	ErrTimedOut = errors.New("job timed out")
 	// ErrNoCommand 表示没有为作业配置可执行的命令。
 	ErrNoCommand = errors.New("no command configured for job")
+	// ErrNotRunning 表示要取消的作业既不在运行、也不是可取消的 queued 状态（M6-6）。
+	ErrNotRunning = errors.New("job is not running")
 )
+
+// CancelReason 是管理员取消作业时写入 jobs.error 的原因（英文，AGENTS.md §2.1）。
+// 它与超时/崩溃原因区分开，让管理面板能明确显示「是被人取消的」。
+const CancelReason = "cancelled by admin"
 
 // Command 描述一次子进程调用。字段由调用方注入，便于测试替换成短命令/自指二进制。
 type Command struct {
@@ -140,6 +146,13 @@ type Runner struct {
 	mu      sync.Mutex
 	started bool
 	queue   chan *store.Job
+
+	// 运行中作业的取消句柄（M6-6）。与 mu 分开，避免 Cancel 在 execute 运行期间
+	// 争用 Enqueue 的锁；currentDone 在 execute 返回前关闭，Cancel 借此等待落库完成。
+	runMu         sync.Mutex
+	currentID     uint64
+	currentCancel context.CancelFunc
+	currentDone   chan struct{}
 }
 
 // New 构造 Runner；不启动 worker，需再调用 Start。
@@ -220,6 +233,48 @@ func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
 	return recovered, nil
 }
 
+// List 返回一页作业（含状态/阶段/日志尾巴）与总数，供管理面板分页展示（M6-6）。
+func (r *Runner) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
+	return r.store.List(ctx, limit, offset)
+}
+
+// Cancel 取消一个作业（M6-6）：运行中的作业会被杀掉整个进程组，随后由 execute 把它
+// 落库为 failed 且 error = CancelReason；仍排队的作业则直接标记为 failed（execute 会
+// 跳过已处于终态的作业，所以它不会被真正执行）。
+//
+// 为什么要等 currentDone：验收要求「取消后不卡、新入队能成功」。单并发判定看的是
+// jobs 表里的未完成行；只有等 execute 写完 failed，再次 Enqueue 才不会再撞 409。
+func (r *Runner) Cancel(ctx context.Context, id uint64) error {
+	r.runMu.Lock()
+	if r.currentID == id && r.currentCancel != nil {
+		cancel := r.currentCancel
+		done := r.currentDone
+		r.runMu.Unlock()
+		cancel()
+		select {
+		case <-done:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	r.runMu.Unlock()
+
+	// 不在运行：可能仍在队列里排队。直接落库为 failed，worker 取到时按终态跳过。
+	job, err := r.store.ByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if job.Status == StatusFailed {
+		// 已终态（多半是刚被取消）：取消是幂等的，返回成功。
+		return nil
+	}
+	if job.Status != StatusQueued && job.Status != StatusRunning {
+		return ErrNotRunning
+	}
+	return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
+}
+
 // Enqueue 建一个 queued 作业并入队；已有未完成作业时返回 ErrAlreadyRunning（HTTP 409）。
 func (r *Runner) Enqueue(ctx context.Context, kind string, targetID *uint64) (*store.Job, error) {
 	if strings.TrimSpace(kind) == "" {
@@ -265,6 +320,20 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		}
 	}()
 
+	// 排队期间被取消（M6-6）：Cancel 已把该行标为 failed，这里直接跳过，不再启动子进程。
+	if current, err := r.store.ByID(ctx, job.ID); err == nil && current.Status == StatusFailed {
+		return
+	}
+
+	// 为本次运行建立可单独取消的上下文：管理员取消只影响这一个作业，不牵连 worker 的 ctx。
+	runCtx, cancelRun := context.WithCancel(ctx)
+	done := make(chan struct{})
+	r.registerRun(job.ID, cancelRun, done)
+	defer func() {
+		r.unregisterRun(job.ID)
+		close(done)
+	}()
+
 	startedAt := r.now()
 	if err := r.store.MarkRunning(ctx, job.ID, startedAt); err != nil {
 		r.logger.Error("mark job running failed", "job_id", job.ID, "error", err)
@@ -283,10 +352,15 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	}
 
 	r.setStage(ctx, job.ID, StageTraining)
-	out, runErr := runProcess(ctx, cmd, r.timeout, maxLogTailBytes)
+	out, runErr := runProcess(runCtx, cmd, r.timeout, maxLogTailBytes)
 	tail := tailLines(out, r.logTailLines)
 	if runErr != nil {
-		r.fail(ctx, job.ID, runErr.Error(), tail)
+		// 管理员取消与超时/正常失败要区分：前者写 CancelReason，方便面板一眼看出是谁干的。
+		msg := runErr.Error()
+		if !errors.Is(runErr, ErrTimedOut) && runCtx.Err() != nil && ctx.Err() == nil {
+			msg = CancelReason
+		}
+		r.fail(ctx, job.ID, msg, tail)
 		return
 	}
 
@@ -302,6 +376,27 @@ func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 	if err := r.store.FinishFailed(ctx, id, r.now(), msg, tail); err != nil {
 		r.logger.Error("finish job failed failed", "job_id", id, "error", err)
 	}
+}
+
+// registerRun 记录当前运行中作业的取消句柄；Cancel 通过它找到要杀的进程组。
+func (r *Runner) registerRun(id uint64, cancel context.CancelFunc, done chan struct{}) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	r.currentID = id
+	r.currentCancel = cancel
+	r.currentDone = done
+}
+
+// unregisterRun 清理取消句柄；只有当前记录仍属于该作业时才清，避免误删下一作业的状态。
+func (r *Runner) unregisterRun(id uint64) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	if r.currentID != id {
+		return
+	}
+	r.currentID = 0
+	r.currentCancel = nil
+	r.currentDone = nil
 }
 
 // setStage 更新阶段；失败只记日志，不因进度写失败而中断作业。
