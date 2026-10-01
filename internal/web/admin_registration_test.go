@@ -46,7 +46,7 @@ func TestAdminRegistrationPolicyTakesEffectWithoutRestart(t *testing.T) {
 		t.Fatalf("POST allowlist = %d, want 303", rec.Code)
 	}
 	denied := postForm(t, srv, "/register", url.Values{
-		"username": {"a3"}, "email": {"a3@not-listed.net"}, "password": {"Sup3rSecret!"},
+		"username": {"a3"}, "email": {"a3@example.net"}, "password": {"Sup3rSecret!"},
 	}, nil)
 	if denied.Code != http.StatusForbidden || !strings.Contains(denied.Body.String(), "该邮箱域名不在允许注册的范围内") {
 		t.Fatalf("allowlist denial = %d body %s, want 403 with localized notice", denied.Code, snippet(denied.Body.String()))

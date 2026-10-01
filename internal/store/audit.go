@@ -53,6 +53,8 @@ const (
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
 	// M5-5 卡组可见性变更（private / unlisted / public）。
 	ActionDeckVisibility = "deck.visibility_change"
+	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
+	ActionJobCancel = "job.cancel"
 )
 
 // AuditEntry 是一次审计写入的入参。
