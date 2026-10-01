@@ -1,0 +1,527 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/deck-package.schema.json",
+  "title": "Deck package (.fdeck)",
+  "description": "Logical content of a deck package. A package is a single zip archive with the extension .fdeck (a plain .fdeck.json file is also allowed when no media is included). Its entries are the top-level properties of this object: manifest.json, notes.json, cards.json, preset.json and the optional progress.json and media.json. Media binaries live under the media/ prefix and are described by media.json. Unknown additional entries and unknown fields are ignored so that a newer package can still be read; an unknown note 'kind' is an error.",
+  "type": "object",
+  "required": ["manifest.json", "notes.json", "cards.json", "preset.json"],
+  "properties": {
+    "manifest.json": { "$ref": "#/$defs/manifest" },
+    "notes.json": { "$ref": "#/$defs/notes" },
+    "cards.json": { "$ref": "#/$defs/cards" },
+    "preset.json": { "$ref": "#/$defs/preset" },
+    "progress.json": { "$ref": "#/$defs/progress" },
+    "media.json": { "$ref": "#/$defs/media" }
+  },
+  "patternProperties": {
+    "^media/": {
+      "description": "A media file named '<sha256>.<ext>'. In a real package this entry is the raw file; when a package is represented as one JSON document the bytes are base64-encoded.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "manifest": {
+      "title": "manifest.json",
+      "description": "Package metadata and entry counts.",
+      "type": "object",
+      "required": ["format_version", "exported_at", "deck", "include_progress", "include_media", "include_reviews", "counts"],
+      "properties": {
+        "format_version": {
+          "type": "integer",
+          "const": 1,
+          "description": "Package format version. The importer must support at least N-1; this schema describes version 1."
+        },
+        "exported_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Export time in RFC 3339 UTC."
+        },
+        "app_version": {
+          "type": "string",
+          "description": "Version of the exporting application. Informational only; never used for compatibility decisions."
+        },
+        "deck": {
+          "type": "object",
+          "required": ["name"],
+          "description": "Deck metadata that travels with the package.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "include_progress": {
+          "type": "boolean",
+          "description": "Whether progress.json is present. Defaults to false on export."
+        },
+        "include_media": {
+          "type": "boolean",
+          "description": "Whether media entries are present. When false no media/ entries and no media.json are written."
+        },
+        "include_reviews": {
+          "type": "boolean",
+          "description": "Whether the optional review log in progress.json is present. Requires include_progress."
+        },
+        "counts": {
+          "type": "object",
+          "required": ["notes", "cards"],
+          "properties": {
+            "notes": { "type": "integer", "minimum": 0 },
+            "cards": { "type": "integer", "minimum": 0 },
+            "media": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "exported_by": {
+          "type": "string",
+          "description": "Opaque identifier of the exporting user, present only when progress is included. It lets the importer decide whether the packaged progress belongs to the importer; it is not a database id."
+        }
+      },
+      "additionalProperties": true
+    },
+    "notes": {
+      "title": "notes.json",
+      "description": "Note content, in the order referenced by cards.json and progress.json.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/note" }
+    },
+    "note": {
+      "title": "Note",
+      "description": "One note. Same shape as the note objects of the note-import request; the 'kind' discriminates between the per-kind shapes in the oneOf below, and an unknown kind matches no branch.",
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "fields": { "type": "object" },
+        "external_ref": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "uniqueItems": true
+        },
+        "extra": { "type": "object" },
+        "source_url": { "type": "string", "format": "uri", "maxLength": 2048 }
+      },
+      "additionalProperties": true,
+      "discriminator": { "propertyName": "kind" },
+      "allOf": [
+        {
+          "oneOf": [
+            { "$ref": "#/$defs/note_basic" },
+            { "$ref": "#/$defs/note_basic_both" },
+            { "$ref": "#/$defs/note_cloze" },
+            { "$ref": "#/$defs/note_list" },
+            { "$ref": "#/$defs/note_typed" },
+            { "$ref": "#/$defs/note_numeric" },
+            { "$ref": "#/$defs/note_choice_single" },
+            { "$ref": "#/$defs/note_choice_multi" },
+            { "$ref": "#/$defs/note_true_false" },
+            { "$ref": "#/$defs/note_short_answer" }
+          ]
+        }
+      ]
+    },
+    "fields_basic": {
+      "type": "object",
+      "required": ["front", "back"],
+      "properties": {
+        "front": { "type": "string", "minLength": 1 },
+        "back": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "fields_cloze": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\{\\{c[0-9]+::",
+          "description": "Text with cloze deletions in the form {{cN::text}} or {{cN::text::hint}}."
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_list": {
+      "type": "object",
+      "required": ["prompt", "items"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "ordered": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": true
+    },
+    "fields_typed": {
+      "type": "object",
+      "required": ["prompt", "answer"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "answer": { "type": "string", "minLength": 1 },
+        "accept": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "ignore_case": { "type": "boolean", "default": true },
+        "ignore_whitespace": { "type": "boolean", "default": true },
+        "regex": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "fields_numeric": {
+      "type": "object",
+      "required": ["prompt", "value"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "value": { "type": "number" },
+        "tolerance_absolute": { "type": "number", "minimum": 0 },
+        "tolerance_relative": { "type": "number", "minimum": 0, "maximum": 1 },
+        "unit": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "fields_choice_single": {
+      "type": "object",
+      "required": ["question", "options", "answer"],
+      "properties": {
+        "question": { "type": "string", "minLength": 1 },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "answer": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "fields_choice_multi": {
+      "type": "object",
+      "required": ["question", "options", "answers"],
+      "properties": {
+        "question": { "type": "string", "minLength": 1 },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields_true_false": {
+      "type": "object",
+      "required": ["statement", "answer"],
+      "properties": {
+        "statement": { "type": "string", "minLength": 1 },
+        "answer": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "fields_short_answer": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "note_basic": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "basic" },
+        "fields": { "$ref": "#/$defs/fields_basic" }
+      }
+    },
+    "note_basic_both": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "basic_both" },
+        "fields": { "$ref": "#/$defs/fields_basic" }
+      }
+    },
+    "note_cloze": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "cloze" },
+        "fields": { "$ref": "#/$defs/fields_cloze" }
+      }
+    },
+    "note_list": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "list" },
+        "fields": { "$ref": "#/$defs/fields_list" }
+      }
+    },
+    "note_typed": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "typed" },
+        "fields": { "$ref": "#/$defs/fields_typed" }
+      }
+    },
+    "note_numeric": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "numeric" },
+        "fields": { "$ref": "#/$defs/fields_numeric" }
+      }
+    },
+    "note_choice_single": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "choice_single" },
+        "fields": { "$ref": "#/$defs/fields_choice_single" }
+      }
+    },
+    "note_choice_multi": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "choice_multi" },
+        "fields": { "$ref": "#/$defs/fields_choice_multi" }
+      }
+    },
+    "note_true_false": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "true_false" },
+        "fields": { "$ref": "#/$defs/fields_true_false" }
+      }
+    },
+    "note_short_answer": {
+      "type": "object",
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "short_answer" },
+        "fields": { "$ref": "#/$defs/fields_short_answer" }
+      }
+    },
+    "cards": {
+      "title": "cards.json",
+      "description": "The presentation form of every note, so that the card set is identical after import. Ids are always remapped; a card points at its note by position.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["note_index", "template"],
+        "properties": {
+          "note_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-based position of the note in notes.json."
+          },
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*(:[0-9a-z_]+)?$",
+            "examples": ["forward", "reverse", "cloze:1"],
+            "description": "Card template: 'forward', 'reverse', or 'cloze:<index>' for a cloze deletion. Other registered templates may extend this set."
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Order of the card within its note."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "preset": {
+      "title": "preset.json",
+      "description": "Scheduling parameters that travel with the package.",
+      "type": "object",
+      "required": ["desired_retention", "learning_steps", "relearning_steps", "maximum_interval_days", "enable_fuzz"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "desired_retention": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "default": 0.9,
+          "description": "Target retention rate, the most important FSRS knob. 0.90 is the default."
+        },
+        "learning_steps": {
+          "type": "string",
+          "default": "1m,10m",
+          "description": "Comma-separated learning steps, for example '1m,10m'."
+        },
+        "relearning_steps": {
+          "type": "string",
+          "default": "10m",
+          "description": "Comma-separated relearning steps, for example '10m'."
+        },
+        "maximum_interval_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 36500,
+          "description": "Upper bound on the interval in days."
+        },
+        "enable_fuzz": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether interval fuzz is enabled."
+        },
+        "weights": {
+          "type": ["array", "null"],
+          "items": { "type": "number" },
+          "minItems": 21,
+          "maxItems": 21,
+          "description": "FSRS weights, exactly 21 values. null means the library defaults are used."
+        },
+        "weights_optimized_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "When the weights were last optimised, or null."
+        },
+        "weights_review_count": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Number of reviews the weights were fitted on, or null."
+        }
+      },
+      "additionalProperties": true
+    },
+    "progress": {
+      "title": "progress.json",
+      "description": "Optional. Contains only the exporting user's own scheduling state and, optionally, their review log. An importer must discard it unless the package belongs to that same user.",
+      "type": "object",
+      "required": ["card_states"],
+      "properties": {
+        "card_states": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/card_state" }
+        },
+        "reviews": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/review" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "card_state": {
+      "title": "Card state",
+      "description": "One row of per-user scheduling state. The target card is found by (note_index or external_ref, template); entries that cannot be mapped are reported as not applied.",
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "note_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based position of the note in notes.json."
+        },
+        "external_ref": {
+          "type": "string",
+          "description": "Idempotency key of the note, used for matching when present."
+        },
+        "template": {
+          "type": "string",
+          "description": "Card template this state belongs to."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["new", "learning", "review", "relearning"]
+        },
+        "due_at": { "type": ["string", "null"], "format": "date-time" },
+        "step_index": { "type": "integer", "minimum": 0 },
+        "stability": { "type": ["number", "null"] },
+        "difficulty": { "type": ["number", "null"] },
+        "reps": { "type": "integer", "minimum": 0 },
+        "lapses": { "type": "integer", "minimum": 0 },
+        "scheduled_days": { "type": "integer", "minimum": 0 },
+        "elapsed_days": { "type": "integer", "minimum": 0 },
+        "last_review_at": { "type": ["string", "null"], "format": "date-time" },
+        "version": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "review": {
+      "title": "Review log entry",
+      "description": "One review of a card by the exporting user. Ratings and states are integers, matching the FSRS ecosystem log format.",
+      "type": "object",
+      "required": ["rating", "reviewed_at", "state_before"],
+      "properties": {
+        "rating": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "description": "1 = Again, 2 = Hard, 3 = Good, 4 = Easy."
+        },
+        "grade_source": {
+          "type": "string",
+          "enum": ["self", "typed", "llm"],
+          "default": "self"
+        },
+        "reviewed_at": { "type": "string", "format": "date-time" },
+        "review_day": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Local review day YYYY-MM-DD, computed with the user's day cutoff."
+        },
+        "elapsed_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "duration_days": { "type": ["number", "null"] },
+        "state_before": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "0 = New, 1 = Learning, 2 = Review, 3 = Relearning."
+        },
+        "interval_days": { "type": ["number", "null"] },
+        "stability": { "type": ["number", "null"] },
+        "difficulty": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "media": {
+      "title": "media.json",
+      "description": "Map from sha256 to the media file inside the package.",
+      "type": "object",
+      "patternProperties": {
+        "^[a-f0-9]{64}$": {
+          "type": "object",
+          "required": ["path", "mime"],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^media/[a-f0-9]{64}\\.[A-Za-z0-9]+$",
+              "description": "Path of the file inside the package."
+            },
+            "mime": { "type": "string", "minLength": 1 },
+            "bytes": { "type": "integer", "minimum": 0 },
+            "width": { "type": "integer", "minimum": 0 },
+            "height": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

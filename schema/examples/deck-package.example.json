@@ -1,0 +1,72 @@
+{
+  "manifest.json": {
+    "format_version": 1,
+    "exported_at": "2026-10-02T00:00:00Z",
+    "app_version": "0.1.0",
+    "deck": {
+      "name": "Example Geography and Biology Deck",
+      "description": "Sample deck used to document the .fdeck package format."
+    },
+    "include_progress": false,
+    "include_media": true,
+    "include_reviews": false,
+    "counts": {
+      "notes": 2,
+      "cards": 2,
+      "media": 1
+    }
+  },
+  "notes.json": [
+    {
+      "external_ref": "example-system:doc-1:block-2",
+      "kind": "basic",
+      "fields": {
+        "front": "What is the capital of France?",
+        "back": "Paris."
+      },
+      "tags": ["geography"],
+      "source_url": "https://example.com/notes/geography#france"
+    },
+    {
+      "kind": "cloze",
+      "fields": {
+        "text": "The {{c1::mitochondrion}} is the powerhouse of the cell.",
+        "image": "media/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "tags": ["biology"]
+    }
+  ],
+  "cards.json": [
+    {
+      "note_index": 0,
+      "template": "forward",
+      "ordinal": 0
+    },
+    {
+      "note_index": 1,
+      "template": "cloze:1",
+      "ordinal": 0
+    }
+  ],
+  "preset.json": {
+    "name": "Default",
+    "desired_retention": 0.9,
+    "learning_steps": "1m,10m",
+    "relearning_steps": "10m",
+    "maximum_interval_days": 36500,
+    "enable_fuzz": true,
+    "weights": null,
+    "weights_optimized_at": null,
+    "weights_review_count": null
+  },
+  "media.json": {
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad": {
+      "path": "media/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png",
+      "mime": "image/png",
+      "bytes": 68,
+      "width": 1,
+      "height": 1
+    }
+  },
+  "media/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+}
