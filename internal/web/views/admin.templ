@@ -32,14 +32,18 @@ templ AdminPage(data AdminPageData) {
 				</ul>
 			</nav>
 			<div class="min-w-0 flex-1">
-				if data.ShowForm {
-					<form method="post" action={ data.FormAction }>
-						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-						@adminSections(data)
-						<button class="mt-4 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
-					</form>
+				if data.UsersPage {
+					@adminUsers(data)
 				} else {
-					@adminSections(data)
+					if data.ShowForm {
+						<form method="post" action={ data.FormAction }>
+							<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+							@adminSections(data)
+							<button class="mt-4 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
+						</form>
+					} else {
+						@adminSections(data)
+					}
 				}
 				if data.ExportHref != "" {
 					<section class="mt-8 border-t border-slate-200 pt-6">

@@ -625,3 +625,94 @@
   translation: "Export the full database (JSON)"
 - id: admin.export.hint
   translation: "Downloads every table as JSON. Keep the file safe; it contains all account data."
+# M6-2 user management.
+- id: admin.users.title
+  translation: "User management"
+- id: admin.users.heading
+  translation: "User management"
+- id: admin.users.intro
+  translation: "Search, create, disable or enable, change role, reset password, force logout and delete accounts. Deck and usage counts are shown per user."
+- id: admin.users.search_label
+  translation: "Search"
+- id: admin.users.search_placeholder
+  translation: "Search username, email or display name"
+- id: admin.users.search_submit
+  translation: "Search"
+- id: admin.users.col.user
+  translation: "User"
+- id: admin.users.col.email
+  translation: "Email"
+- id: admin.users.col.role
+  translation: "Role"
+- id: admin.users.col.status
+  translation: "Status"
+- id: admin.users.col.decks
+  translation: "Decks"
+- id: admin.users.col.cards
+  translation: "Cards"
+- id: admin.users.col.reviews
+  translation: "Reviews"
+- id: admin.users.col.actions
+  translation: "Actions"
+- id: admin.users.create_heading
+  translation: "Create user"
+- id: admin.users.create_username
+  translation: "Username"
+- id: admin.users.create_email
+  translation: "Email"
+- id: admin.users.create_password
+  translation: "Password"
+- id: admin.users.create_role
+  translation: "Role"
+- id: admin.users.create_submit
+  translation: "Create user"
+- id: admin.users.role.admin
+  translation: "admin"
+- id: admin.users.role.user
+  translation: "user"
+- id: admin.users.status.active
+  translation: "active"
+- id: admin.users.status.disabled
+  translation: "disabled"
+- id: admin.users.enable
+  translation: "Enable"
+- id: admin.users.disable
+  translation: "Disable"
+- id: admin.users.change_role
+  translation: "Change role"
+- id: admin.users.reset_password
+  translation: "Reset password"
+- id: admin.users.force_logout
+  translation: "Force logout"
+- id: admin.users.delete
+  translation: "Delete"
+- id: admin.users.confirm_hint
+  translation: "This action cannot be undone; confirm to apply."
+- id: admin.users.temp_password_label
+  translation: "Temporary password (shown only once):"
+- id: admin.users.prev
+  translation: "Previous"
+- id: admin.users.next
+  translation: "Next"
+- id: admin.users.empty
+  translation: "No users match the search."
+- id: admin.users.notice.created
+  translation: "User created."
+- id: admin.users.notice.create_failed
+  translation: "Could not create the user. Check the fields or the uniqueness of username/email."
+- id: admin.users.notice.updated
+  translation: "Saved."
+- id: admin.users.notice.deleted
+  translation: "User deleted and their data removed."
+- id: admin.users.notice.last_admin
+  translation: "Refused: this would leave no active administrator."
+- id: admin.users.notice.self_forbidden
+  translation: "Refused: you cannot disable or delete your own account."
+- id: admin.users.notice.confirm_required
+  translation: "Confirmation required for this action."
+- id: admin.users.notice.invalid_user
+  translation: "User not found."
+- id: admin.users.notice.invalid_role
+  translation: "Invalid role."
+- id: admin.users.notice.save_failed
+  translation: "The action failed. Please try again."
