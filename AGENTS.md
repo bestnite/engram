@@ -87,8 +87,9 @@ end user → translation catalog.
   the database. Core coverage targets: `internal/schedule` and `internal/cardtype`.
 - Handler tests use `httptest`. Negative cases are required, not optional: permission
   denials, CSRF failures, expired keys, scope violations.
-- Commits are signed (`user.signingkey` is set per repository) and use Conventional
-  Commits prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
+- Commits are signed (`user.signingkey` is set per repository), use Conventional Commits
+  prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), and are written in
+  **English** — subject and body.
 - One logical change per commit; message body explains why, not what.
 
 ### 2.6 Writing requirements in this repository
@@ -375,7 +376,7 @@ Conventions:
   `get_due_cards`, `submit_review` (review).
   *Acceptance:* each tool has a test calling the same service method as its REST
   counterpart, and both paths produce identical results for the same input.
-- [ ] **M4-8 Import JSON Schema** — `schema/note-import.schema.json`, referenced by the
+- [x] **M4-8 Import JSON Schema** — `schema/note-import.schema.json`, referenced by the
   docs and validated on import.
   *Acceptance:* a note that violates the schema is rejected with the offending field
   named in the error.
@@ -579,7 +580,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 0/11 · M1 0/13 · M2 0/9 · M3 0/7 · M4 0/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  `M0 5/11 · M1 0/13 · M2 0/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
   · M10 0/5 (excluded) · backlog 0/10 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
@@ -594,6 +595,13 @@ completion percentage until they are moved into a release milestone.
   if the change is behavioural.
 
 ### 6.3 Dispatching tasks to subagents
+
+- **Subagents must never edit this file** (or any project-context file such as `CLAUDE.md` or
+  `.hermes.md`). Writing it requires user approval, which a leaf subagent cannot obtain: the
+  attempt is auto-denied or it interrupts the user mid-workflow. The parent records verified
+  progress in the gitignored `PROGRESS.local.md` and applies checkbox and counting updates to
+  this file in batches, with the user present.
+
 
 - One task per subagent. Pass the task's ID, its full text from this file, and the
   relevant `DESIGN.md` sections as context; subagents do not share this conversation.
