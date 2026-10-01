@@ -1,0 +1,138 @@
+package main
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"example.com/flashcard/internal/config"
+	"example.com/flashcard/internal/store"
+	"example.com/flashcard/internal/web"
+)
+
+// testSessionSecret 是集成测试用的会话签名密钥；仅用于测试，与生产无关。
+const testSessionSecret = "integration-test-session-secret-0123456789"
+
+// newWiredServer 通过与 runServe 相同的装配路径构造服务，验证 M1-14 的接线的确把
+// /login、/setup 等认证路由注册进了进程，而不是只在 web 包的单元测试里成立。
+func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
+	t.Helper()
+	t.Setenv("DB_DRIVER", "sqlite")
+	t.Setenv("DB_DSN", filepath.Join(t.TempDir(), "wiring.db"))
+	t.Setenv("SESSION_SECRET", testSessionSecret)
+	t.Setenv("ENCRYPTION_KEY", "integration-test-encryption-key")
+	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "bootstrap@example.com")
+	t.Setenv("BASE_URL", "http://localhost:8080")
+
+	cfg, err := config.Load(os.LookupEnv, nil)
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	db, err := store.Open(cfg.Get(config.KeyDBDriver).Value, cfg.Get(config.KeyDBDSN).Value)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	if err := store.AutoMigrate(context.Background(), db); err != nil {
+		t.Fatalf("store.AutoMigrate() error = %v", err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv, err := newWebServer(cfg, db, logger)
+	if err != nil {
+		t.Fatalf("newWebServer() error = %v", err)
+	}
+	return srv, store.NewUserStore(db)
+}
+
+// doGet 发起 GET 并返回 recorder。
+func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+	return rec
+}
+
+// doPostForm 以 x-www-form-urlencoded 发起 POST。
+func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// TestWiredServerExposesAuthRoutes 是 M1-14 的验收测试：真实装配路径下 /login、/setup、
+// /healthz 都可达，/setup 在首个管理员出现后按约定变为 404，密码错误按约定返回 401。
+func TestWiredServerExposesAuthRoutes(t *testing.T) {
+	srv, users := newWiredServer(t)
+
+	// /healthz 仍正常：接线不得破坏 M0 的健康检查。
+	if rec := doGet(t, srv, "/healthz"); rec.Code != http.StatusOK {
+		t.Fatalf("GET /healthz status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// 尚无管理员：引导页可达，并预填 BOOTSTRAP_ADMIN_EMAIL（走 config，而不是硬编码）。
+	setup := doGet(t, srv, "/setup")
+	if setup.Code != http.StatusOK {
+		t.Fatalf("GET /setup with no admin status = %d, want 200 (body %s)", setup.Code, setup.Body.String())
+	}
+	if !strings.Contains(setup.Body.String(), "创建首个管理员") {
+		t.Errorf("setup page is not localized (zh-CN): %s", snippet(setup.Body.String()))
+	}
+	if !strings.Contains(setup.Body.String(), "bootstrap@example.com") {
+		t.Errorf("setup page did not prefill BOOTSTRAP_ADMIN_EMAIL: %s", snippet(setup.Body.String()))
+	}
+
+	// /login 是这次修复的核心：接线前它是 404。
+	login := doGet(t, srv, "/login")
+	if login.Code != http.StatusOK {
+		t.Fatalf("GET /login status = %d, want 200 (body %s)", login.Code, login.Body.String())
+	}
+	if !strings.Contains(login.Body.String(), "登录") {
+		t.Errorf("login page did not render catalog text: %s", snippet(login.Body.String()))
+	}
+
+	// 密码错误：返回文档约定的 401，且不下发会话 cookie。
+	bad := doPostForm(t, srv, "/login", url.Values{
+		"username": {"nobody"},
+		"password": {"WrongPassword!"},
+	})
+	if bad.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /login with a wrong password status = %d, want 401", bad.Code)
+	}
+	if len(bad.Result().Cookies()) != 0 {
+		t.Errorf("failed login unexpectedly set a cookie: %v", bad.Result().Cookies())
+	}
+
+	// 创建首个管理员，随后引导页必须关闭（404）。
+	created := doPostForm(t, srv, "/setup", url.Values{
+		"username": {"root"},
+		"email":    {"root@example.com"},
+		"password": {"Sup3rSecret!"},
+	})
+	if created.Code != http.StatusSeeOther {
+		t.Fatalf("POST /setup status = %d, want 303 (body %s)", created.Code, snippet(created.Body.String()))
+	}
+	if n, err := users.CountActiveAdmins(context.Background()); err != nil || n != 1 {
+		t.Fatalf("CountActiveAdmins() = %d, %v; want 1, nil", n, err)
+	}
+	if rec := doGet(t, srv, "/setup"); rec.Code != http.StatusNotFound {
+		t.Errorf("GET /setup after an admin exists status = %d, want 404", rec.Code)
+	}
+}
+
+// snippet 截断响应体，避免失败输出过长。
+func snippet(body string) string {
+	const max = 300
+	if len(body) <= max {
+		return body
+	}
+	return body[:max] + "..."
+}
