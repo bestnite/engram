@@ -31,6 +31,8 @@ const (
 	ActionReviewUndo = "review.undo"
 	// M5-1 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
 	ActionPermissionDenied = "permission.denied"
+	// M1-12 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。
+	ActionIdentityLink = "identity.link"
 	// M5-2 授权变更（共享页面）：授予 / 改角色 / 撤销。
 	ActionDeckGrant      = "deck.grant"
 	ActionDeckRoleChange = "deck.role_change"
