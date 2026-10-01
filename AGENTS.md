@@ -259,6 +259,15 @@ Conventions:
   restriction, optional expiry.
   *Acceptance:* test asserts a used, expired, or revoked token is rejected and that an
   accepted invite creates exactly one user.
+- [ ] **M1-15 Align the OIDC client with the chosen library** — M1-11 shipped a working,
+  tested OIDC client built on the standard library. `DESIGN.md` names
+  `github.com/zitadel/oidc/v3` in three places, and that choice was made deliberately, so the
+  code and the specification disagree; one of them has to move. The library was never in
+  `go.mod` (nothing imported it), which is why the discrepancy stayed invisible until someone
+  implemented the flow.
+  *Acceptance:* either the flow is rebuilt on `github.com/zitadel/oidc/v3` with the existing stub
+  provider tests still passing, or `DESIGN.md` records the standard-library decision together
+  with the reason it changed. Decide before release, not after.
 - [ ] **M1-8 Personal settings page** — locale, timezone, day cutoff, display name,
   password change.
   *Acceptance:* changing the locale switches the returned page language; changing the
@@ -269,7 +278,7 @@ Conventions:
 - [x] **M1-10 Audit helper** — one function used by every mutation, writing user, optional
   API key, action, target, and JSON detail.
   *Acceptance:* test asserts one row per mutation with the expected action string.
-- [ ] **M1-11 OIDC login** — configuration read from `settings`, discovery document fetch
+- [x] **M1-11 OIDC login** — configuration read from `settings`, discovery document fetch
   with caching, Authorization Code + PKCE, `state` and `nonce` validation, callback
   handler, and a "test connection" action that surfaces the failure reason.
   *Acceptance:* test against a stub provider asserts a successful login and that a wrong
@@ -538,7 +547,7 @@ Conventions:
   allowlist, create and revoke invites, and show usage of each invite.
   *Acceptance:* changing the policy takes effect on the next registration attempt without
   a restart.
-- [ ] **M6-4 OIDC configuration UI** — enable switch, issuer, client id and secret, claim
+- [x] **M6-4 OIDC configuration UI** — enable switch, issuer, client id and secret, claim
   mapping, "test connection" that prints the provider's error text, bound identity list
   with unlink.
   *Acceptance:* a wrong issuer shows the discovery error on the page; a correct
@@ -550,10 +559,10 @@ Conventions:
 - [x] **M6-6 Jobs UI** — list jobs with status, stage, log tail, cancel action.
   *Acceptance:* a running job can be cancelled and its status becomes `failed` with a
   cancellation reason.
-- [ ] **M6-7 Audit search UI** — filter by user, action, target, and date range.
+- [x] **M6-7 Audit search UI** — filter by user, action, target, and date range.
   *Acceptance:* a query with each filter returns exactly the expected rows in a seeded
   fixture.
-- [ ] **M6-8 Health page** — database connectivity and schema version, disk usage of the
+- [x] **M6-8 Health page** — database connectivity and schema version, disk usage of the
   media directory, current due-queue size.
   *Acceptance:* each value matches an independently computed value in the test.
 - [ ] **M6-9 API key overview** — every key's name, prefix, scopes, last use, and state;
@@ -576,7 +585,7 @@ Conventions:
   counts.
   *Acceptance:* boundary test at the day cutoff asserts the streak only breaks when a
   whole review day is skipped.
-- [ ] **M7-3 Statistics page** — HTML and CSS bars first, self-hosted chart script optional.
+- [x] **M7-3 Statistics page** — HTML and CSS bars first, self-hosted chart script optional.
   *Acceptance:* the page renders with no external network request; an integration test
   fails if any third-party host appears in the rendered HTML.
 - [x] **M7-4 Retrospective check** — a script or test that recomputes the page numbers
@@ -593,7 +602,7 @@ Conventions:
   static assets only.
   *Acceptance:* the service worker cache contains no API response; a test asserts the
   cache list contains only static asset paths.
-- [ ] **M8-3 i18n completion** — every template string through the translator, key parity
+- [x] **M8-3 i18n completion** — every template string through the translator, key parity
   between catalogs, and a lint that fails on a user-facing literal in templates.
   *Acceptance:* planting a hardcoded Chinese or English string in a template fails CI.
 - [ ] **M8-4 Language pack completeness report** — admin view of translation coverage per
@@ -725,7 +734,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 10/11 · M6 5/10 · M7 3/4 · M8 3/6 · M9 7/9
+  `M0 11/11 · M1 13/15 · M2 11/12 · M3 12/12 · M4 8/9 · M5 10/11 · M6 8/10 · M7 4/4 · M8 4/6 · M9 7/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
