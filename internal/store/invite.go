@@ -115,6 +115,46 @@ func UsableInvite(inv *Invite, email string, now time.Time) error {
 	return nil
 }
 
+// Accept 在单个事务里消费邀请并执行建号回调（B-12）。
+//
+// 旧的“先 MarkUsed 占用、建号失败再 Release”会在两步之间留下可观测的中间态（先显示已使用、
+// 又变回可用）。这里把占用与建号放进同一个事务：要么都提交，要么都回滚，外界看不到半完成状态。
+// 占用仍是条件更新（used_at IS NULL），因此并发下同一个 token 只有一个事务能占用成功 —— 一码一用。
+//
+// create 在建号失败时返回错误即触发整体回滚，token 保持可用；成功时 used_by 与 used_at 一并落库。
+func (s *InviteStore) Accept(ctx context.Context, token string, now time.Time, create func(tx *gorm.DB) (*User, error)) (*User, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	var u *User
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&Invite{}).
+			Where("token = ? AND used_at IS NULL", token).
+			Update("used_at", now)
+		if res.Error != nil {
+			return fmt.Errorf("claim invite: %w", res.Error)
+		}
+		if res.RowsAffected != 1 {
+			// 并发下已被他人占用，或 token 本就不存在/已用。
+			return ErrInviteUsed
+		}
+		created, cerr := create(tx)
+		if cerr != nil {
+			return cerr
+		}
+		u = created
+		if err := tx.Model(&Invite{}).Where("token = ?", token).
+			Update("used_by", u.ID).Error; err != nil {
+			return fmt.Errorf("set invite used_by: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
 // MarkUsed 原子地把 token 标记为已用：只有 used_at 仍为 NULL 的行会被更新。
 // 返回 claimed=false 表示并发下已被他人抢先使用，调用方必须放弃建号 —— 这是
 // “一次邀请只创建一个用户”的强制点。

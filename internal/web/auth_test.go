@@ -71,9 +71,31 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 	return srv, db
 }
 
+// preSessionCSRFRoutes 是需要双提交 cookie 的登录前表单路由（B-13）。
+// 这些路由的 POST 由 auth.DoubleSubmitMiddleware 校验 cookie 与镜像 token 的一致性。
+var preSessionCSRFRoutes = map[string]bool{"/login": true, "/register": true, "/setup": true}
+
+// testDoubleSubmitToken 是测试里使用的固定会话前 CSRF token；值只需满足长度下限。
+const testDoubleSubmitToken = "test-double-submit-token-0123456789"
+
 // postForm 以 application/x-www-form-urlencoded 提交表单。
+//
+// 登录前表单（/login、/register、/setup）需要双提交 cookie：这里自动补上 cookie 与镜像
+// token，让既有测试继续专注各自的断言（策略、邀请、审计……）。拒绝路径（缺 cookie、
+// 值不匹配）由 csrf_presession_test.go 用不带该 cookie 的原始请求单独覆盖。
 func postForm(t *testing.T, srv *Server, target string, values url.Values, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
+	if preSessionCSRFRoutes[strings.SplitN(target, "?", 2)[0]] {
+		cp := url.Values{}
+		for k, v := range values {
+			cp[k] = v
+		}
+		if cp.Get(auth.CSRFFieldName) == "" {
+			cp.Set(auth.CSRFFieldName, testDoubleSubmitToken)
+			cookies = append(cookies, &http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
+		}
+		values = cp
+	}
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {

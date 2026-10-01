@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"example.com/flashcard/internal/store"
 )
 
@@ -52,14 +54,7 @@ func NewAccountService(users *store.UserStore, sessions *store.SessionStore, has
 
 // CreateLocalUser 校验密码策略、哈希密码并写入用户；邮箱大小写归一化，登录名保持原样。
 func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
-	if err := ValidatePasswordPolicy(in.Password); err != nil {
-		return nil, err
-	}
-	hash, err := s.hasher.Hash(in.Password)
-	if err != nil {
-		return nil, err
-	}
-	u, err := newUserFromInput(in, &hash, s.now())
+	u, err := s.prepareLocalUser(in)
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +62,31 @@ func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	return u, nil
+}
+
+// CreateLocalUserTx 在调用方给定的事务里创建本地账号（B-12）：邀请占用与建号因此共享同一事务。
+// 校验与哈希与 CreateLocalUser 走同一条准备路径，避免两条建号路径漂移。
+func (s *AccountService) CreateLocalUserTx(ctx context.Context, tx *gorm.DB, in CreateUserInput) (*store.User, error) {
+	u, err := s.prepareLocalUser(in)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.users.CreateTx(ctx, tx, u); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return u, nil
+}
+
+// prepareLocalUser 校验密码策略、哈希密码并归一化入参，得到待落库的用户；不触碰数据库。
+func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, error) {
+	if err := ValidatePasswordPolicy(in.Password); err != nil {
+		return nil, err
+	}
+	hash, err := s.hasher.Hash(in.Password)
+	if err != nil {
+		return nil, err
+	}
+	return newUserFromInput(in, &hash, s.now())
 }
 
 // CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL，DESIGN.md §4.1）。
