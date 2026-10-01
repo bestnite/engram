@@ -176,11 +176,13 @@ func addTool[In, Out any](s *sdkmcp.Server, id Identity, name, desc string, fn f
 	sdkmcp.AddTool[In, Out](s, tool, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in In) (*sdkmcp.CallToolResult, Out, error) {
 		var zero Out
 		if !hasScope(id, scope) {
-			return nil, zero, fmt.Errorf("scope_required: api key is missing the required scope: %s", scope)
+			// 与 REST 共用同一 code 与语言包文案（AGENTS.md M4-9）；scope 名作为细节附后。
+			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)
 		}
 		out, err := fn(ctx, id, in)
 		if err != nil {
-			return nil, zero, err
+			// MCP 没有 HTTP 错误包壳：用稳定 code + 本地化文案渲染，避免回显原始英文。
+			return nil, zero, errors.New(api.ErrorText(ctx, err))
 		}
 		return nil, out, nil
 	})

@@ -166,7 +166,7 @@ func pathID(c *gin.Context, name string) (uint64, bool) {
 	raw := c.Param(name)
 	id, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil || id == 0 {
-		abortError(c, http.StatusNotFound, CodeNotFound, "resource not found")
+		abortError(c, http.StatusNotFound, CodeNotFound, "")
 		return 0, false
 	}
 	return id, true
@@ -212,7 +212,7 @@ func (a *API) requireDeckRole(c *gin.Context, deckID uint64, want string) (*stor
 			Detail:     map[string]any{"required_role": want, "user_role": role, "code": code},
 		})
 	}
-	abortError(c, status, code, "insufficient role for this deck")
+	abortError(c, status, code, "")
 	return nil, false
 }
 
@@ -221,7 +221,7 @@ func (a *API) requireDeckRole(c *gin.Context, deckID uint64, want string) (*stor
 func (a *API) requireNoteRole(c *gin.Context, noteID uint64, want string) (*store.Note, *store.Deck, bool) {
 	n, err := a.notes.ByID(c.Request.Context(), noteID)
 	if err != nil {
-		abortError(c, http.StatusNotFound, CodeNotFound, "note not found")
+		abortError(c, http.StatusNotFound, CodeNotFound, "")
 		return nil, nil, false
 	}
 	d, ok := a.requireDeckRole(c, n.DeckID, want)

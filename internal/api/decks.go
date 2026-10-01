@@ -73,12 +73,12 @@ func (a *API) createDeck(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req createDeckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "request body must be valid JSON")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "name is required")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	visibility := strings.TrimSpace(req.Visibility)
@@ -90,7 +90,7 @@ func (a *API) createDeck(c *gin.Context) {
 		id, err := a.ensureDefaultPreset(ctx, u.ID)
 		if err != nil {
 			a.logger.Error("ensure default preset failed", "user_id", u.ID, "error", err)
-			abortError(c, http.StatusInternalServerError, CodeInternal, "failed to prepare default preset")
+			abortError(c, http.StatusInternalServerError, CodeInternal, "")
 			return
 		}
 		presetID = id

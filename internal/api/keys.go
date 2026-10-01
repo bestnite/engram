@@ -16,7 +16,7 @@ func (a *API) listKeys(c *gin.Context) {
 	keys, err := a.keys.ListByUser(c.Request.Context(), u.ID)
 	if err != nil {
 		a.logger.Error("list api keys failed", "user_id", u.ID, "error", err)
-		abortError(c, http.StatusInternalServerError, CodeInternal, "failed to list api keys")
+		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"keys": keys})
@@ -34,11 +34,11 @@ func (a *API) createKey(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req createKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "request body must be valid JSON")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "name is required")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	created, err := a.keys.Create(c.Request.Context(), store.CreateAPIKeyParams{
@@ -69,11 +69,11 @@ func (a *API) deleteKey(c *gin.Context) {
 	}
 	if err := a.keys.Revoke(c.Request.Context(), u.ID, keyID, a.now()); err != nil {
 		if err == store.ErrAPIKeyNotFound {
-			abortError(c, http.StatusNotFound, CodeNotFound, "api key not found")
+			abortError(c, http.StatusNotFound, CodeNotFound, "")
 			return
 		}
 		a.logger.Error("revoke api key failed", "key_id", keyID, "error", err)
-		abortError(c, http.StatusInternalServerError, CodeInternal, "failed to revoke api key")
+		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
 	a.audit(c.Request.Context(), store.AuditEntry{

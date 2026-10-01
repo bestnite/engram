@@ -142,7 +142,7 @@ func (a *API) handleExportPackage(c *gin.Context) {
 	var buf bytes.Buffer
 	if err := pkg.WriteZip(&buf); err != nil {
 		a.logger.Error("write deck package failed", "deck_id", deckID, "error", err)
-		abortError(c, http.StatusInternalServerError, CodeInternal, "failed to write package")
+		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
 	name := "deck-" + strconv.FormatUint(deckID, 10) + ".fdeck"
@@ -156,12 +156,12 @@ func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	fh, err := c.FormFile("file")
 	if err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "a package file is required in the 'file' field")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	f, err := fh.Open()
 	if err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "cannot open the uploaded file")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
 	defer f.Close()
