@@ -1,0 +1,19 @@
+[package]
+name = "optimizer"
+version = "0.1.0"
+edition = "2021"
+description = "FSRS parameter optimiser adapter for the flashcard service (AGENTS.md M9-2)"
+publish = false
+
+[[bin]]
+name = "optimizer"
+path = "src/main.rs"
+
+[dependencies]
+# 上游 crate 名是 fsrs（仓库名 fsrs-rs）；优化器入口 fsrs::compute_parameters 在此版本可用。
+# 精确钉版本：权重是持久化数据，靠相同版本的训练实现才能复现（README 记录了依据）。
+fsrs = "=6.6.2"
+chrono = "0.4"
+chrono-tz = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -16,6 +16,8 @@ githubusercontent.com
 githubassets.com
 go.dev
 golang.org
+crates.io
+docs.rs
 gorm.io
 gopkg.in
 go.mongodb.org
