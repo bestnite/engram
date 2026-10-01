@@ -1315,6 +1315,62 @@
   translation: "{{.ms}} ms"
 - id: stats.table.rate
   translation: "{{.rate}}%"
+- id: nav.presets
+  translation: "Presets"
+- id: settings.title
+  translation: "Personal settings"
+- id: settings.heading
+  translation: "Personal settings"
+- id: settings.intro
+  translation: "These settings only affect your own interface and how your review days are split."
+- id: settings.profile.heading
+  translation: "Profile"
+- id: settings.profile.display_name_label
+  translation: "Display name"
+- id: settings.profile.locale_label
+  translation: "Interface language"
+- id: settings.profile.timezone_label
+  translation: "Time zone"
+- id: settings.profile.timezone_hint
+  translation: "Use an IANA zone name, for example Asia/Shanghai."
+- id: settings.profile.cutoff_label
+  translation: "Review day cutoff (hour 0–23)"
+- id: settings.profile.cutoff_hint
+  translation: "A new day starts at this hour in your local time. It only affects future review days; existing records are unchanged."
+- id: settings.profile.submit
+  translation: "Save"
+- id: settings.password.heading
+  translation: "Change password"
+- id: settings.password.old_label
+  translation: "Current password"
+- id: settings.password.new_label
+  translation: "New password"
+- id: settings.password.submit
+  translation: "Change password"
+- id: settings.password.note
+  translation: "After changing it, your sessions on other devices are invalidated immediately; this window stays signed in."
+- id: settings.password.oidc_only
+  translation: "This account signs in through an external identity only and has no password to change."
+- id: settings.error.display_name_required
+  translation: "Display name cannot be empty."
+- id: settings.error.locale_invalid
+  translation: "Unsupported language."
+- id: settings.error.timezone_invalid
+  translation: "Unrecognised time zone."
+- id: settings.error.cutoff_invalid
+  translation: "The review day cutoff must be an integer between 0 and 23."
+- id: settings.error.old_password_required
+  translation: "Enter your current password."
+- id: settings.error.new_password_required
+  translation: "Enter a new password."
+- id: settings.error.password_unavailable
+  translation: "This account has no password to change."
+- id: settings.error.old_password_wrong
+  translation: "The current password is incorrect."
+- id: settings.error.password_unchanged
+  translation: "The new password must differ from the current one."
+- id: settings.error.password_rejected
+  translation: "The new password does not meet the password policy."
 
 # ---- M6-9 API key overview (admin.keys.*) ----
 - id: admin.keys.title

@@ -96,6 +96,8 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		layout.SessionLabel = loc.T("nav.logout")
 		layout.SessionHref = "/logout"
 		layout.SessionForm = true
+		// M9-9：预设页入口对每个已登录用户可见（未登录不显示，避免点进去被重定向）。
+		layout.Nav = append(layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
 		if sess, ok := auth.CurrentSession(c); ok {
 			layout.CSRF = sess.CSRFToken
 		}

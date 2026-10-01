@@ -1,0 +1,76 @@
+package views
+
+// SettingsPage 是个人设置页（M1-8）：显示名、界面语言、时区、复习日切点与改密码。
+// 所有文案与值都来自 SettingsData，模板内不写死任何面向用户的文字。
+templ SettingsPage(data SettingsData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-semibold">{ data.Heading }</h1>
+		<p class="mt-2 text-sm text-slate-600">{ data.Intro }</p>
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
+		}
+		if data.SavedMessage != "" {
+			<p class="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" role="status">{ data.SavedMessage }</p>
+		}
+
+		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold">{ data.ProfileHeading }</h2>
+			<form class="mt-4 space-y-4" method="post" action="/settings/profile">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<div>
+					<label class="block text-sm font-medium" for="settings-display-name">{ data.DisplayNameLabel }</label>
+					<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-display-name" name="display_name" value={ data.DisplayNameValue }/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium" for="settings-locale">{ data.LocaleLabel }</label>
+					<select class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-locale" name="locale">
+						for _, opt := range data.LocaleOptions {
+							if opt.Selected {
+								<option value={ opt.Value } selected>{ opt.Label }</option>
+							} else {
+								<option value={ opt.Value }>{ opt.Label }</option>
+							}
+						}
+					</select>
+				</div>
+				<div>
+					<label class="block text-sm font-medium" for="settings-timezone">{ data.TimezoneLabel }</label>
+					<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-timezone" name="timezone" value={ data.TimezoneValue } list="settings-timezone-options"/>
+					<datalist id="settings-timezone-options">
+						for _, zone := range data.TimezoneOptions {
+							<option value={ zone }></option>
+						}
+					</datalist>
+					<p class="mt-1 text-xs text-slate-500">{ data.TimezoneHint }</p>
+				</div>
+				<div>
+					<label class="block text-sm font-medium" for="settings-cutoff">{ data.CutoffLabel }</label>
+					<input class="mt-1 w-24 rounded border border-slate-300 px-3 py-2" id="settings-cutoff" name="day_cutoff_hour" type="number" min="0" max="23" value={ data.CutoffValue }/>
+					<p class="mt-1 text-xs text-slate-500">{ data.CutoffHint }</p>
+				</div>
+				<button class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" type="submit">{ data.ProfileSubmit }</button>
+			</form>
+		</section>
+
+		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold">{ data.PasswordHeading }</h2>
+			if data.PasswordAvailable {
+				<form class="mt-4 space-y-4" method="post" action="/settings/password">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<div>
+						<label class="block text-sm font-medium" for="settings-old-password">{ data.OldPasswordLabel }</label>
+						<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-old-password" name="old_password" type="password" autocomplete="current-password"/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium" for="settings-new-password">{ data.NewPasswordLabel }</label>
+						<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-new-password" name="new_password" type="password" autocomplete="new-password"/>
+					</div>
+					<p class="text-xs text-slate-500">{ data.PasswordNote }</p>
+					<button class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" type="submit">{ data.PasswordSubmit }</button>
+				</form>
+			} else {
+				<p class="mt-2 text-sm text-slate-600">{ data.PasswordUnavailable }</p>
+			}
+		</section>
+	}
+}

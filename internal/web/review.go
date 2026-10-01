@@ -129,6 +129,8 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		Rating:          schedule.Rating(rating),
 		ExpectedVersion: expectedVersion,
 		ElapsedMS:       elapsed,
+		Location:        userLocation(user),
+		DayCutoffHour:   user.DayCutoffHour,
 		Scheduler:       sched,
 		Now:             time.Now().UTC(),
 	}); err != nil {
@@ -668,6 +670,8 @@ func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *s
 		ElapsedMS:       parseElapsed(c.PostForm("elapsed_ms")),
 		GradeSource:     schedule.GradeSourceTyped,
 		GradeDetailJSON: &raw,
+		Location:        userLocation(user),
+		DayCutoffHour:   user.DayCutoffHour,
 		Scheduler:       sched,
 		Now:             time.Now().UTC(),
 	}); err != nil {

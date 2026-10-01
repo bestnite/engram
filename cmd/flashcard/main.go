@@ -192,6 +192,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Accounts:     accounts,
 		Sessions:     sessions,
 		Users:        users,
+		UserLocale:   web.SessionUserLocale,
 		Invites:      store.NewInviteStore(db),
 		Decks:        store.NewDeckStore(db),
 		Notes:        store.NewNoteStore(db),

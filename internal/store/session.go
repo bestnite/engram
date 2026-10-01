@@ -54,6 +54,17 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID uint64, at t
 	return nil
 }
 
+// RevokeAllForUserExcept 作废某用户除 keepID 外的全部有效会话。
+// 本人在设置页改密码时用它：其它设备立即下线，当前会话保留，用户不会改完密码就被踢出。
+func (s *SessionStore) RevokeAllForUserExcept(ctx context.Context, userID uint64, keepID string, at time.Time) error {
+	if err := s.db.WithContext(ctx).Model(&Session{}).
+		Where("user_id = ? AND revoked_at IS NULL AND id <> ?", userID, keepID).
+		Update("revoked_at", at).Error; err != nil {
+		return fmt.Errorf("revoke user sessions except current: %w", err)
+	}
+	return nil
+}
+
 // Touch 更新会话的最后活跃时间；best-effort，失败不应打断请求。
 func (s *SessionStore) Touch(ctx context.Context, id string, at time.Time) error {
 	return s.db.WithContext(ctx).Model(&Session{}).Where("id = ?", id).
