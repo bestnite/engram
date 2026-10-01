@@ -1,0 +1,24 @@
+# English catalog. Keys are lowercase dotted English (DESIGN.md §10.4).
+# The key set must match zh-CN.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+- id: app.name
+  translation: "Flashcards"
+- id: nav.today
+  translation: "Today"
+- id: nav.decks
+  translation: "Decks"
+- id: nav.stats
+  translation: "Stats"
+- id: home.heading
+  translation: "Today's review"
+- id: home.intro
+  translation: "Start today's review from any deck; progress is stored per account, so sharing a deck never mixes two users' schedules."
+- id: home.start_review
+  translation: "Start review"
+- id: home.language_label
+  translation: "Interface language"
+- id: footer.powered_by
+  translation: "Self-hosted · your data stays on your own machine"
+- id: language.zh-CN
+  translation: "中文"
+- id: language.en
+  translation: "English"
