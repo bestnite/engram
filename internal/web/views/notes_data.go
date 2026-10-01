@@ -78,6 +78,9 @@ type NoteListData struct {
 	BulkTagLabel       string
 	BulkTagPlaceholder string
 	BulkSubmitLabel    string
+	// NewNoteLabel/NewNoteHref 指向新建卡片页（M2-12）。
+	NewNoteLabel string
+	NewNoteHref  string
 	// Redirect 是批量操作完成后要跳回的列表地址（含筛选与页码）。
 	Redirect string
 	CSRF     string
@@ -88,6 +91,34 @@ type FieldInput struct {
 	Name  string
 	Label string
 	Value string
+}
+
+// CreateField 是新建卡片表单上的一个输入控件；Input 决定控件形态（text/textarea/number/checkbox/lines）。
+type CreateField struct {
+	Name    string
+	Label   string
+	Input   string
+	Value   string
+	Checked bool
+	Hint    string
+}
+
+// NewNoteData 是新建卡片页（M2-12）的渲染数据。
+type NewNoteData struct {
+	Layout       LayoutData
+	Heading      string
+	KindLabel    string
+	Kinds        []KindOption
+	Fields       []CreateField
+	FieldsURL    string
+	PreviewURL   string
+	Action       string
+	SaveLabel    string
+	BackLabel    string
+	BackHref     string
+	CSRF         string
+	ErrorMessage string
+	Preview      NotePreviewData
 }
 
 // NoteEditData 是卡片编辑页（M2-7）的渲染数据。
