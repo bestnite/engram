@@ -65,6 +65,10 @@ end user → translation catalog.
    registering it; core code must not change.
 8. **Review submission is idempotent.** Enforce the `expected_version` check and return
    `409` on mismatch; write the state update and the review row in one transaction.
+9. **A boolean column with a database default must be a pointer in the model.** GORM omits
+   a zero-valued field when the column carries a `default` tag, so the database default
+   silently overwrites an explicit `false` (measured on `presets.enable_fuzz`). Use `*bool`
+   for such columns; never work around it at the call site more than once.
 
 ### 2.4 Go style in this repo
 
@@ -198,19 +202,19 @@ Conventions:
   with database connectivity and schema version.
   *Acceptance:* `curl /healthz` returns `200` with both fields; shutdown logs one English
   line and exits within two seconds.
-- [ ] **M0-6 Templ toolchain** — `templ generate` wired into the build, `base.templ`
+- [x] **M0-6 Templ toolchain** — `templ generate` wired into the build, `base.templ`
   layout, one sample page, generated files gitignored.
   *Acceptance:* `templ generate && go build ./...` succeeds; the sample page renders.
-- [ ] **M0-7 Tailwind toolchain** — standalone CLI config plus `input.css`, output at
+- [x] **M0-7 Tailwind toolchain** — standalone CLI config plus `input.css`, output at
   `internal/web/static/css/tailwind.css` (gitignored), embedded via `go:embed`.
   *Acceptance:* the build produces a CSS bundle; the sample page uses at least one
   utility class that survives the build.
-- [ ] **M0-8 i18n loader** — `internal/i18n`: `go-i18n` with `locales/zh-CN.yaml` and
+- [x] **M0-8 i18n loader** — `internal/i18n`: `go-i18n` with `locales/zh-CN.yaml` and
   `locales/en.yaml`, locale detection from the user setting first and `Accept-Language`
   second, translator placed into the request context.
   *Acceptance:* unit test asserts detection order and that a missing key in one catalog
   fails the test build (parity check).
-- [ ] **M0-9 Static assets embedding** — content-hashed paths for CSS/JS plus self-hosted
+- [x] **M0-9 Static assets embedding** — content-hashed paths for CSS/JS plus self-hosted
   htmx and MathJax; a helper generates the hashed URLs for templates.
   *Acceptance:* page source references hashed paths; changing an asset changes its hash.
 - [ ] **M0-10 CI pipeline** — workflow running `go build`, `go vet`, `gofmt -l`, `go test`,
@@ -223,15 +227,15 @@ Conventions:
 
 ### M1 — Identity and users
 
-- [ ] **M1-1 User store and password hashing** — `internal/auth`: user CRUD, argon2id
+- [x] **M1-1 User store and password hashing** — `internal/auth`: user CRUD, argon2id
   hashing with parameters recorded per hash, password policy check.
   *Acceptance:* test asserts a correct password verifies, a wrong one does not, and that
   hash parameters are stored in a versioned format.
-- [ ] **M1-2 Session middleware** — signed HttpOnly cookie sessions, `Secure` and
+- [x] **M1-2 Session middleware** — signed HttpOnly cookie sessions, `Secure` and
   `SameSite=Lax`, server-side invalidation on logout, password change, and user disable.
   *Acceptance:* integration test asserts the disabled user's existing session is rejected
   on the next request.
-- [ ] **M1-3 CSRF middleware** — token issued per session, required on every non-GET
+- [x] **M1-3 CSRF middleware** — token issued per session, required on every non-GET
   request via form field or `X-CSRF-Token`.
   *Acceptance:* test asserts a POST without a token returns `403` and with a valid token
   succeeds.
@@ -275,11 +279,11 @@ Conventions:
 
 ### M2 — Decks, notes, cards
 
-- [ ] **M2-1 Deck store and CRUD** — create, read, update, archive, visibility, owner
+- [x] **M2-1 Deck store and CRUD** — create, read, update, archive, visibility, owner
   assignment.
   *Acceptance:* test asserts a non-owner cannot modify a deck before grants exist
   (foundation for `M5-1`).
-- [ ] **M2-2 Preset store and CRUD** — scheduling parameters with documented defaults
+- [x] **M2-2 Preset store and CRUD** — scheduling parameters with documented defaults
   (`desired_retention` 0.90, `learning_steps` `1m,10m`, `relearning_steps` `10m`,
   `enable_fuzz` on).
   *Acceptance:* test asserts defaults are applied and that values round-trip.
@@ -565,6 +569,12 @@ completion percentage until they are moved into a release milestone.
 - [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
 - [ ] **B-9 Deployment notes outside the repository** — hosting-specific details stay
   private; only generic container instructions belong in the README.
+- [ ] **B-11 `Preset.EnableFuzz` to `*bool`** — the model column carries `default:true`, so a
+  zero-valued `false` is silently replaced by the database default; `PresetStore.Create`
+  currently compensates with an explicit follow-up update. Convert the field (and any other
+  boolean with a database default) to `*bool` and delete the compensation. Requires editing
+  `internal/store/models.go`, which is a single-writer hotspot: schedule it with an exclusive
+  owner.
 - [ ] **B-10 English `DESIGN.md`** — the specification is currently Chinese only; for a
   public repository either translate it to English and keep the Chinese version as
   `DESIGN.zh.md`, or state explicitly that Chinese is the primary language of the
@@ -580,8 +590,8 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 5/11 · M1 0/13 · M2 0/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
-  · M10 0/5 (excluded) · backlog 0/10 (excluded)`.
+  `M0 9/11 · M1 3/13 · M2 2/9 · M3 0/7 · M4 1/9 · M5 0/7 · M6 0/10 · M7 0/4 · M8 0/6 · M9 0/6
+  · M10 0/5 (excluded) · backlog 0/11 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
