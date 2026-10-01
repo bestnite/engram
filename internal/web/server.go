@@ -43,6 +43,10 @@ type Deps struct {
 	Decks *store.DeckStore
 	// Notes 提供 note 的查询、更新与批量操作，供卡片列表/编辑页使用（M2-7）。
 	Notes *store.NoteStore
+	// Cards 提供 card 的读取，供复习页取卡与渲染（M3-5）。
+	Cards *store.CardStore
+	// Presets 提供调度预设的读取，供复习页构造 FSRS 调度器（M3-5）。
+	Presets *store.PresetStore
 	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
@@ -68,6 +72,8 @@ type Server struct {
 	invites        *store.InviteStore
 	decks          *store.DeckStore
 	notes          *store.NoteStore
+	cards          *store.CardStore
+	presets        *store.PresetStore
 	auditor        *auth.Auditor
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
@@ -116,6 +122,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		invites:        deps.Invites,
 		decks:          deps.Decks,
 		notes:          deps.Notes,
+		cards:          deps.Cards,
+		presets:        deps.Presets,
 		auditor:        deps.Auditor,
 		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
@@ -135,6 +143,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	s.registerAuthRoutes(router)
 	s.registerNoteRoutes(router)
+	s.registerReviewRoutes(router)
 	s.router = router
 	return s, nil
 }
