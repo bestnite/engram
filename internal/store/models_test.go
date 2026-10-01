@@ -2,18 +2,22 @@ package store
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"example.com/flashcard/internal/pgtest"
 )
 
 // testDatabases 返回本机可用的测试数据库。SQLite 必须真实跑通；
 // PostgreSQL 路径用 TEST_PG_DSN 门控（本机没有可用实例时自动跳过，见 AGENTS.md M0-3 约定）。
+//
+// PG 侧每次调用都拿到一个全新的临时 schema（见 internal/pgtest）：共享实例上的
+// 测试会互相污染、重跑必炸；SQLite 用 t.TempDir() 建全新库文件，所以这个缺陷
+// 只在 PG 下暴露。
 func testDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	out := make(map[string]*gorm.DB)
@@ -22,14 +26,8 @@ func testDatabases(t *testing.T) map[string]*gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	out["sqlite"] = sqliteDB
-	if dsn := os.Getenv("TEST_PG_DSN"); dsn != "" {
-		pg, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-		if err != nil {
-			t.Fatalf("open postgres: %v", err)
-		}
+	if pg, ok := pgtest.Open(t); ok {
 		out["postgres"] = pg
-	} else {
-		t.Log("TEST_PG_DSN not set: skipping the PostgreSQL path on this machine")
 	}
 	return out
 }

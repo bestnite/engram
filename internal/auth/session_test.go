@@ -160,11 +160,29 @@ func TestSessionRejectsTamperedCookie(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "bob")
 	value, _ := e.startSession(t, u.ID)
-	// 篡改签名后必须被当成匿名。
-	tampered := value[:len(value)-1] + "X"
+	// 篡改会话 ID 的首字符后必须被当成匿名。
+	//
+	// 不能用"改最后一个字符"来篡改：签名是 32 字节 HMAC，其 base64url 编码的最后
+	// 一位只承载 4 个有效位，剩下 2 位是填充；把末位换成"高 4 位相同"的字符（例如
+	// 原本是 'U' 时换成 'X'）解码出的签名字节完全一致，篡改等于没改，请求依旧 200。
+	// 该末位取值为 16 个合法字符之一，因此旧写法约有 1/16 的概率随机失败——这是
+	// 与数据库无关的用例缺陷。改 ID 一定让 HMAC 失配，结果确定。
+	tampered := tamperSessionCookie(value)
 	if rec := e.do(t, http.MethodGet, "/me", tampered, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("tampered cookie status = %d, want 401", rec.Code)
 	}
+}
+
+// tamperSessionCookie 把 cookie 值的首字符换成另一个 base64url 字符：
+// 首字符属于会话 ID，改动后 HMAC 必然对不上原签名，等价于一次确定的篡改。
+func tamperSessionCookie(value string) string {
+	if value == "" {
+		return "A"
+	}
+	if value[0] == 'A' {
+		return "B" + value[1:]
+	}
+	return "A" + value[1:]
 }
 
 func TestSessionProtectedRoute(t *testing.T) {
