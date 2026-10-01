@@ -18,6 +18,10 @@ const (
 	ActionUserLoginSucceeded = "user.login_succeeded"
 	ActionUserLoginFailed    = "user.login_failed"
 	ActionUserLogout         = "user.logout"
+	// M2-7 卡片列表/编辑页的写操作。
+	ActionNoteUpdate = "note.update"
+	ActionNoteDelete = "note.delete"
+	ActionNoteTagAdd = "note.tag_add"
 )
 
 // AuditEntry 是一次审计写入的入参。

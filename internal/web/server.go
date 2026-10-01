@@ -39,6 +39,10 @@ type Deps struct {
 	Users *store.UserStore
 	// Invites 提供邀请的创建/列出/撤销/接受（M1-7）；策略为 invite 时注册流程依赖它。
 	Invites *store.InviteStore
+	// Decks 提供卡组的读取与归属判断，供卡片列表/编辑页使用（M2-7）。
+	Decks *store.DeckStore
+	// Notes 提供 note 的查询、更新与批量操作，供卡片列表/编辑页使用（M2-7）。
+	Notes *store.NoteStore
 	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
@@ -62,6 +66,8 @@ type Server struct {
 	sessions       *auth.Manager
 	users          *store.UserStore
 	invites        *store.InviteStore
+	decks          *store.DeckStore
+	notes          *store.NoteStore
 	auditor        *auth.Auditor
 	loginLimiter   *auth.LoginLimiter
 	bootstrapEmail string
@@ -108,6 +114,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		sessions:       deps.Sessions,
 		users:          deps.Users,
 		invites:        deps.Invites,
+		decks:          deps.Decks,
+		notes:          deps.Notes,
 		auditor:        deps.Auditor,
 		loginLimiter:   deps.LoginLimiter,
 		bootstrapEmail: deps.BootstrapAdminEmail,
@@ -126,6 +134,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	s.registerAuthRoutes(router)
+	s.registerNoteRoutes(router)
 	s.router = router
 	return s, nil
 }
