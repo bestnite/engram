@@ -509,7 +509,7 @@ Conventions:
   *Acceptance:* the deck page offers an export control that downloads a `.fdeck`; `/import` accepts
   an upload and reports the same summary the REST response returns; a malformed package produces a
   readable error message rather than a 500.
-- [ ] **M5-10 Deck package and statistics test hardening** — the package work shipped with two
+- [x] **M5-10 Deck package and statistics test hardening** — the package work shipped with two
   blind spots it reported about itself: nothing exercises the package export, import, round trip or
   unsafe-archive rejection on PostgreSQL, and media handling has no round-trip test at all (only
   `include_media=0` is asserted) — so the one path that writes files to disk is the least covered.
@@ -518,6 +518,13 @@ Conventions:
   a package with media imports into a fresh database with the files present and byte-identical,
   with both values of `skip_missing_media` asserted; any real bug the new tests expose is fixed
   rather than encoded into the expectation.
+- [ ] **M5-11 Keep package media consistent with the import transaction** — the media fix in M5-10
+  made metadata and files share the import transaction, but the file writes themselves are not
+  transactional: if the transaction fails after `SaveBytes`, the metadata row rolls back while the
+  bytes stay on disk, leaving blobs nothing references. Imports that fail repeatedly can quietly
+  grow the media directory.
+  *Acceptance:* a test forces a failure after the media write and asserts no orphan file remains
+  (either the write is deferred until after commit, or the failure path removes what it wrote).
 
 
 ### M6 — Admin panel and system settings
@@ -540,7 +547,7 @@ Conventions:
   mime list, media directory usage, full-database export button.
   *Acceptance:* each setting is applied without a restart and the page shows whether the
   effective value comes from the environment or the database.
-- [ ] **M6-6 Jobs UI** — list jobs with status, stage, log tail, cancel action.
+- [x] **M6-6 Jobs UI** — list jobs with status, stage, log tail, cancel action.
   *Acceptance:* a running job can be cancelled and its status becomes `failed` with a
   cancellation reason.
 - [ ] **M6-7 Audit search UI** — filter by user, action, target, and date range.
@@ -615,7 +622,7 @@ Conventions:
   `day_start`) written for the adapter.
   *Acceptance:* test asserts the exported file parses against the upstream documented
   schema.
-- [ ] **M9-4 Optimise UI** — button on the preset page, polling status, result summary,
+- [x] **M9-4 Optimise UI** — button on the preset page, polling status, result summary,
   revert to default weights.
   *Acceptance:* the page shows the same weights the database holds after completion, and
   revert restores `NULL`.
@@ -644,6 +651,11 @@ Conventions:
   M9-7 set out to remove.
   *Acceptance:* a test seeds a `queued` row, runs the startup recovery, and asserts it becomes
   `failed` with a reason saying the job never started, and that a fresh enqueue then succeeds.
+- [ ] **M9-9 Link the preset page from the navigation** — M9-4 built `/presets` and it works, but
+  it was left out of the site navigation to avoid touching a template another lane was editing, so
+  the page is reachable only by typing the URL. A feature nobody can find is not finished.
+  *Acceptance:* the navigation offers the preset page to every signed-in user, and a test asserts
+  the link is present on a rendered page.
 
 ### M10 — Future work (not part of the current release)
 
@@ -713,7 +725,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 9/10 · M6 4/10 · M7 3/4 · M8 3/6 · M9 6/8
+  `M0 11/11 · M1 12/14 · M2 11/12 · M3 12/12 · M4 8/9 · M5 10/11 · M6 5/10 · M7 3/4 · M8 3/6 · M9 7/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
