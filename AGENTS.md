@@ -468,7 +468,7 @@ Conventions:
   docs and validated on import.
   *Acceptance:* a note that violates the schema is rejected with the offending field
   named in the error.
-- [ ] **M4-9 Error catalogue** — English `code` constants with a localised `message`
+- [x] **M4-9 Error catalogue** — English `code` constants with a localised `message`
   resolved per `Accept-Language` for both REST and MCP.
   *Acceptance:* test asserts the same `code` yields Chinese and English messages for the
   two `Accept-Language` values.
@@ -534,7 +534,7 @@ Conventions:
   a package with media imports into a fresh database with the files present and byte-identical,
   with both values of `skip_missing_media` asserted; any real bug the new tests expose is fixed
   rather than encoded into the expectation.
-- [ ] **M5-11 Keep package media consistent with the import transaction** — the media fix in M5-10
+- [x] **M5-11 Keep package media consistent with the import transaction** — the media fix in M5-10
   made metadata and files share the import transaction, but the file writes themselves are not
   transactional: if the transaction fails after `SaveBytes`, the metadata row rolls back while the
   bytes stay on disk, leaving blobs nothing references. Imports that fail repeatedly can quietly
@@ -572,7 +572,7 @@ Conventions:
 - [x] **M6-8 Health page** — database connectivity and schema version, disk usage of the
   media directory, current due-queue size.
   *Acceptance:* each value matches an independently computed value in the test.
-- [ ] **M6-9 API key overview** — every key's name, prefix, scopes, last use, and state;
+- [x] **M6-9 API key overview** — every key's name, prefix, scopes, last use, and state;
   plaintext never displayed.
   *Acceptance:* test asserts no handler or template can return a plaintext key value
   after creation.
@@ -612,7 +612,7 @@ Conventions:
 - [x] **M8-3 i18n completion** — every template string through the translator, key parity
   between catalogs, and a lint that fails on a user-facing literal in templates.
   *Acceptance:* planting a hardcoded Chinese or English string in a template fails CI.
-- [ ] **M8-4 Language pack completeness report** — admin view of translation coverage per
+- [x] **M8-4 Language pack completeness report** — admin view of translation coverage per
   locale.
   *Acceptance:* a catalog with a missing key reports less than 100% and names the key.
 - [ ] **M8-5 Accessibility pass** — keyboard-only flow for review and editing, visible
@@ -741,7 +741,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 11/11 · M1 13/15 · M2 11/12 · M3 12/12 · M4 8/9 · M5 10/11 · M6 8/10 · M7 4/4 · M8 4/6 · M9 7/9
+  `M0 11/11 · M1 13/15 · M2 11/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 5/6 · M9 7/9
   · M10 0/5 (excluded) · backlog 0/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
