@@ -90,3 +90,112 @@
   translation: "The invite link is invalid, expired, or already used; ask an administrator for a new one."
 - id: auth.error.create_failed
   translation: "Could not create the account; try again or use a different username or email."
+# M2-7 card list and editor pages.
+- id: cardtype.basic
+  translation: "Basic"
+- id: cardtype.basic_both
+  translation: "Basic (and reversed)"
+- id: cardtype.cloze
+  translation: "Cloze"
+- id: cardtype.list
+  translation: "List"
+- id: note.field.front
+  translation: "Front"
+- id: note.field.back
+  translation: "Back"
+- id: note.field.text
+  translation: "Text"
+- id: note.field.prompt
+  translation: "Prompt"
+- id: note.field.items
+  translation: "Items (JSON array)"
+- id: note.field.ordered
+  translation: "Ordered (true/false)"
+- id: note.field.extra
+  translation: "Extra"
+- id: note.field.source_url
+  translation: "Source URL"
+- id: notes.list.title
+  translation: "Cards"
+- id: notes.list.heading
+  translation: "Card list"
+- id: notes.list.search_label
+  translation: "Search"
+- id: notes.list.search_placeholder
+  translation: "Search front or back"
+- id: notes.list.tag_label
+  translation: "Tag"
+- id: notes.list.tag_placeholder
+  translation: "Tag name"
+- id: notes.list.kind_label
+  translation: "Card type"
+- id: notes.list.status_label
+  translation: "Status"
+- id: notes.list.filter_all
+  translation: "All"
+- id: notes.list.filter_submit
+  translation: "Filter"
+- id: notes.list.filter_reset
+  translation: "Reset"
+- id: notes.list.col_kind
+  translation: "Type"
+- id: notes.list.col_front
+  translation: "Front"
+- id: notes.list.col_tags
+  translation: "Tags"
+- id: notes.list.col_created
+  translation: "Created"
+- id: notes.list.col_status
+  translation: "Status"
+- id: notes.list.status_active
+  translation: "Active"
+- id: notes.list.status_deleted
+  translation: "Deleted"
+- id: notes.list.empty
+  translation: "No cards match the filter."
+- id: notes.list.edit
+  translation: "Edit"
+- id: notes.list.total
+  translation: "{{.count}} cards"
+- id: notes.list.page
+  translation: "Page {{.page}} of {{.pages}}"
+- id: notes.list.prev
+  translation: "Previous"
+- id: notes.list.next
+  translation: "Next"
+- id: notes.list.bulk_delete
+  translation: "Delete selected"
+- id: notes.list.bulk_tag
+  translation: "Add tag"
+- id: notes.list.bulk_tag_placeholder
+  translation: "Tag to add"
+- id: notes.list.bulk_submit
+  translation: "Apply"
+- id: notes.list.bulk_hint
+  translation: "Select cards to run a bulk action"
+- id: notes.edit.title
+  translation: "Edit card"
+- id: notes.edit.heading
+  translation: "Edit card"
+- id: notes.edit.preview
+  translation: "Preview"
+- id: notes.edit.save
+  translation: "Save"
+- id: notes.edit.back
+  translation: "Back to list"
+- id: notes.edit.deleted_notice
+  translation: "This card is soft-deleted."
+- id: notes.edit.not_found
+  translation: "The card does not exist."
+- id: notes.edit.forbidden
+  translation: "You do not have access to this deck."
+- id: notes.edit.invalid_fields
+  translation: "Field validation failed: "
+- id: notes.preview.title
+  translation: "Live preview"
+- id: notes.preview.front
+  translation: "Front"
+- id: notes.preview.back
+  translation: "Back"
+- id: notes.preview.invalid
+  translation: "Cannot preview: "

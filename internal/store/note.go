@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -17,7 +18,37 @@ var (
 	ErrNoteDeckRequired = errors.New("note deck is required")
 	// ErrNoteKindRequired 表示 note 未指定题型。
 	ErrNoteKindRequired = errors.New("note kind is required")
+	// ErrNoteTagRequired 表示批量加标签时未给出标签名。
+	ErrNoteTagRequired = errors.New("note tag is required")
 )
+
+// 列表状态取值（M2-7）：active 是默认（排除软删除），deleted 只看已软删除，
+// all 两者都看。用稳定英文常量，避免在 handler 里散落裸字符串。
+const (
+	NoteStatusActive  = "active"
+	NoteStatusDeleted = "deleted"
+	NoteStatusAll     = "all"
+)
+
+// DefaultNotePageSize 是卡片列表的每页条数；设计只要求分页可用，不暴露给用户配置。
+const DefaultNotePageSize = 50
+
+// NoteListOptions 是卡片列表的查询条件（M2-7 分页、搜索、标签与题型筛选）。
+type NoteListOptions struct {
+	DeckID uint64
+	// Page 从 1 起；小于 1 时按 1 处理。
+	Page int
+	// PerPage 为 0 时用 DefaultNotePageSize。
+	PerPage int
+	// Query 搜索 note 的字段内容（正面/背面等所有字段文本），大小写不敏感。
+	Query string
+	// Tag 按 tags_json 里的标签精确匹配（带引号边界，避免前缀误匹配）。
+	Tag string
+	// Kind 按题型过滤；空串表示不过滤。
+	Kind string
+	// Status 取值见上方常量；空串等同 NoteStatusActive。
+	Status string
+}
 
 // NoteStore 封装 notes 表，并实现\"由题型生成 cards\"的管线（DESIGN.md §2.1、§6.2）。
 //
@@ -177,4 +208,157 @@ func (s *NoteStore) Restore(ctx context.Context, id uint64) error {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// List 按条件分页列出卡组的 notes，返回当页行与符合条件的总数（M2-7）。
+//
+// 查询约定（DESIGN.md §2.3）：分页统一 LIMIT/OFFSET；模糊匹配用 LOWER(col) LIKE，
+// 不使用任何 PG 专有的 ILIKE 或表达式索引。搜索覆盖 fields_json 的全部字段文本，
+// 因此正面与背面都能命中；标签用带引号边界的 LIKE 精确匹配数组元素。
+func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = DefaultNotePageSize
+	}
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+
+	// 每次调用都重新构造查询，避免复用同一个 *gorm.DB 时把 Count 的语句状态带到 Find。
+	build := func() *gorm.DB {
+		q := s.db.WithContext(ctx).Model(&Note{})
+		switch opts.Status {
+		case NoteStatusDeleted:
+			q = q.Unscoped().Where("notes.deleted_at IS NOT NULL")
+		case NoteStatusAll:
+			q = q.Unscoped()
+		default:
+			// 默认由 GORM 的软删除作用域排除 deleted_at 非空的行。
+		}
+		q = q.Where("notes.deck_id = ?", opts.DeckID)
+		if v := strings.TrimSpace(opts.Kind); v != "" {
+			q = q.Where("notes.kind = ?", v)
+		}
+		if v := strings.TrimSpace(opts.Query); v != "" {
+			// LOWER 与 LIKE 两库语义一致；通配符转义后按字面匹配。
+			q = q.Where("LOWER(notes.fields_json) LIKE ? ESCAPE '\\'",
+				"%"+strings.ToLower(escapeLike(v))+"%")
+		}
+		if v := strings.TrimSpace(opts.Tag); v != "" {
+			q = q.Where("LOWER(notes.tags_json) LIKE ? ESCAPE '\\'",
+				"%\""+strings.ToLower(escapeLike(v))+"\"%")
+		}
+		return q
+	}
+
+	var total int64
+	if err := build().Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count notes for deck %d: %w", opts.DeckID, err)
+	}
+	var notes []Note
+	if err := build().Order("notes.created_at DESC, notes.id DESC").
+		Limit(perPage).Offset(offset).Find(&notes).Error; err != nil {
+		return nil, 0, fmt.Errorf("list notes for deck %d: %w", opts.DeckID, err)
+	}
+	return notes, total, nil
+}
+
+// DeleteMany 软删除一组 note（只写 notes.deleted_at，不碰 cards 行）。
+// 已删除或不存在的 id 不计入返回的条数；ids 为空时直接返回 (0, nil)。
+func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	res := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Note{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete notes %v: %w", ids, res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+// AddTags 给一组 note 追加同一个标签，跳过已含该标签的行（幂等）。
+// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+func (s *NoteStore) AddTags(ctx context.Context, ids []uint64, tag string) (int64, error) {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return 0, ErrNoteTagRequired
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	var notes []Note
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&notes).Error; err != nil {
+		return 0, fmt.Errorf("load notes for tagging: %w", err)
+	}
+	now := time.Now().UTC()
+	var changed int64
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i := range notes {
+			tags, err := ParseTags(notes[i].TagsJSON)
+			if err != nil {
+				return fmt.Errorf("note %d: %w", notes[i].ID, err)
+			}
+			if containsString(tags, tag) {
+				continue
+			}
+			raw, err := json.Marshal(append(tags, tag))
+			if err != nil {
+				return fmt.Errorf("encode tags for note %d: %w", notes[i].ID, err)
+			}
+			if err := tx.Model(&Note{}).Where("id = ?", notes[i].ID).
+				Updates(map[string]any{"tags_json": string(raw), "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("update tags for note %d: %w", notes[i].ID, err)
+			}
+			changed++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return changed, nil
+}
+
+// ParseTags 解码 tags_json；空串按空数组处理，坏数据返回可读英文错误。
+func ParseTags(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}, nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(raw), &tags); err != nil {
+		return nil, fmt.Errorf("decode tags_json: %w", err)
+	}
+	return tags, nil
+}
+
+// ParseFields 解码 fields_json 成字段映射，供列表摘要与编辑页回填使用。
+func ParseFields(raw string) (map[string]any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}, nil
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, fmt.Errorf("decode fields_json: %w", err)
+	}
+	return fields, nil
+}
+
+// escapeLike 转义 LIKE 模式里的通配符，让用户输入按字面匹配（配合 ESCAPE '\\'）。
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+// containsString 判断字符串切片是否含目标值。
+func containsString(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }

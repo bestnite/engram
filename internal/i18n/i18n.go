@@ -224,6 +224,17 @@ func (l *Localizer) T(msgID string) string {
 	return msg
 }
 
+// Tf 与 T 相同，但把 data 作为模板数据代入带占位符的译文（例如“共 {{.count}} 张”）。
+// 占位符语法由 go-i18n 的 text/template 决定；缺 key 的处理与 T 一致。
+func (l *Localizer) Tf(msgID string, data map[string]any) string {
+	msg, err := l.lc.Localize(&goi18n.LocalizeConfig{MessageID: msgID, TemplateData: data})
+	if err != nil {
+		slog.Error("i18n: missing message", "message_id", msgID, "locale", l.code)
+		return msgID
+	}
+	return msg
+}
+
 // localizerKey 是本包私有的 context key，避免与其他包冲突。
 type localizerKey struct{}
 

@@ -1,0 +1,160 @@
+package views
+
+// NoteListPage 渲染卡片列表：筛选表单、批量操作表单、卡片表格与分页（M2-7）。
+// 模板不含任何硬编码用户文案，所有字符串都来自 NoteListData。
+templ NoteListPage(data NoteListData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.DeckName != "" {
+			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
+		}
+		<form class="mt-4 flex flex-wrap items-end gap-3" method="get" action={ data.FilterAction }>
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.SearchLabel }</span>
+				<input class="mt-1 w-56 rounded-lg border border-slate-300 px-3 py-2" type="text" name="q" value={ data.SearchValue } placeholder={ data.SearchPlaceholder }/>
+			</label>
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.TagLabel }</span>
+				<input class="mt-1 w-40 rounded-lg border border-slate-300 px-3 py-2" type="text" name="tag" value={ data.TagValue } placeholder={ data.TagPlaceholder }/>
+			</label>
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.KindLabel }</span>
+				<select class="mt-1 rounded-lg border border-slate-300 px-3 py-2" name="kind">
+					for _, opt := range data.Kinds {
+						if opt.Selected {
+							<option value={ opt.Value } selected>{ opt.Label }</option>
+						} else {
+							<option value={ opt.Value }>{ opt.Label }</option>
+						}
+					}
+				</select>
+			</label>
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.StatusLabel }</span>
+				<select class="mt-1 rounded-lg border border-slate-300 px-3 py-2" name="status">
+					for _, opt := range data.Statuses {
+						if opt.Selected {
+							<option value={ opt.Value } selected>{ opt.Label }</option>
+						} else {
+							<option value={ opt.Value }>{ opt.Label }</option>
+						}
+					}
+				</select>
+			</label>
+			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.FilterSubmit }</button>
+			<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.ResetHref }>{ data.FilterReset }</a>
+		</form>
+		<form class="mt-6" method="post" action={ data.BulkAction }>
+			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			<input type="hidden" name="redirect" value={ data.Redirect }/>
+			<div class="flex flex-wrap items-center gap-3">
+				<p class="text-sm text-slate-500">{ data.BulkHint }</p>
+				<button class="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50" type="submit" name="action" value="delete">{ data.BulkDeleteLabel }</button>
+				<input class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm" type="text" name="tag" placeholder={ data.BulkTagPlaceholder }/>
+				<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" type="submit" name="action" value="tag">{ data.BulkTagLabel }</button>
+			</div>
+			<table class="mt-3 w-full border-collapse text-left text-sm">
+				<thead>
+					<tr class="border-b border-slate-200 text-slate-500">
+						<th class="px-2 py-2"></th>
+						<th class="px-2 py-2">{ data.ColKind }</th>
+						<th class="px-2 py-2">{ data.ColFront }</th>
+						<th class="px-2 py-2">{ data.ColTags }</th>
+						<th class="px-2 py-2">{ data.ColCreated }</th>
+						<th class="px-2 py-2">{ data.ColStatus }</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.Rows) == 0 {
+						<tr>
+							<td class="px-2 py-6 text-center text-slate-400" colspan="6">{ data.EmptyText }</td>
+						</tr>
+					}
+					for _, row := range data.Rows {
+						<tr class="border-b border-slate-100 align-top">
+							<td class="px-2 py-2">
+								<input type="checkbox" name="note_ids" value={ row.IDValue }/>
+							</td>
+							<td class="px-2 py-2 text-slate-600">{ row.KindLabel }</td>
+							<td class="px-2 py-2">
+								<a class="text-blue-600 hover:text-blue-700" href={ row.EditHref }>{ row.Front }</a>
+							</td>
+							<td class="px-2 py-2">
+								for _, tag := range row.Tags {
+									<span class="mr-1 inline-block rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{ tag }</span>
+								}
+							</td>
+							<td class="px-2 py-2 text-slate-500">{ row.Created }</td>
+							<td class="px-2 py-2 text-slate-500">{ row.StatusLabel }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</form>
+		<div class="mt-4 flex items-center gap-4 text-sm text-slate-600">
+			<span>{ data.TotalLabel }</span>
+			<span>{ data.PageLabel }</span>
+			if data.Pagination.PrevHref != "" {
+				<a class="text-blue-600 hover:text-blue-700" href={ data.Pagination.PrevHref }>{ data.Pagination.PrevLabel }</a>
+			}
+			if data.Pagination.NextHref != "" {
+				<a class="text-blue-600 hover:text-blue-700" href={ data.Pagination.NextHref }>{ data.Pagination.NextLabel }</a>
+			}
+		</div>
+	}
+}
+
+// NoteEditPage 渲染卡片编辑页：字段表单 + htmx 实时预览区（M2-7）。
+templ NoteEditPage(data NoteEditData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		<p class="mt-1 text-sm text-slate-500">{ data.KindLabel }</p>
+		if data.Deleted {
+			<p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">{ data.DeletedNotice }</p>
+		}
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
+		}
+		<div class="mt-6 grid gap-6 lg:grid-cols-2">
+			<form method="post" action={ data.Action }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<input type="hidden" name="note_id" value={ data.NoteID }/>
+				for _, field := range data.Fields {
+					<label class="mt-3 block">
+						<span class="text-sm font-medium text-slate-700">{ field.Label }</span>
+						<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ data.PreviewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+					</label>
+				}
+				<div class="mt-4 flex items-center gap-3">
+					<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
+					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
+				</div>
+			</form>
+			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
+				@NotePreviewFragment(data.Preview)
+			</div>
+		</div>
+	}
+}
+
+// NotePreviewFragment 是预览区：既作为编辑页初始内容，也作为 htmx 局部刷新的返回片段。
+templ NotePreviewFragment(data NotePreviewData) {
+	<div class="space-y-4">
+		<p class="text-sm font-semibold text-slate-500">{ data.Title }</p>
+		if data.Error != "" {
+			<p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.Error }</p>
+		}
+		for _, card := range data.Cards {
+			<div class="rounded-lg border border-slate-200 bg-white p-4">
+				<p class="mt-3 text-xs font-medium text-slate-400">{ data.FrontLabel }</p>
+				<div class="mt-1 text-slate-800">
+					@rawHTML(card.FrontHTML)
+				</div>
+				<p class="mt-3 text-xs font-medium text-slate-400">{ data.BackLabel }</p>
+				<div class="mt-1 text-slate-800">
+					@rawHTML(card.BackHTML)
+				</div>
+			</div>
+		}
+	</div>
+}
