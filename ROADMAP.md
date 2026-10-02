@@ -356,6 +356,22 @@ Conventions:
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
   as its own named test.
+- [ ] **M3-13 Multi-deck review scope** — the queue accepts one deck (`QueueOptions.DeckID`) or
+  every deck, so no entry point can review a chosen set of decks together; and the review POST
+  handlers ignore the `deck` form field entirely, rebuilding the queue from the answered card's
+  deck (`internal/web/review.go` passes `deck.ID` at 19 call sites), so even the all-decks queue
+  collapses to one deck after the first rating. Add `QueueOptions.DeckIDs` with an `IN (...)`
+  filter, thread a review scope through the web review flow (hidden fields on all three forms,
+  read back on POST), accept repeated `deck` parameters in `GET /api/v1/review/due`, add a
+  mutually exclusive `deck_ids` array to the MCP `get_due_cards` tool, and give `/decks` a
+  per-row checkbox with a "review selected" submit plus a per-row review link. Multi-deck
+  follows the all-decks rules for daily caps and preset (`DESIGN.md` §3.3).
+  *Acceptance:* `/review?deck=A&deck=B` serves cards from both decks, and after three
+  consecutive ratings the queue still holds cards from the other deck (this fails before the
+  change); `/review` with no parameter keeps serving the whole collection after the first
+  rating; a deck the user cannot read fails the whole request instead of being silently
+  filtered; REST and MCP return the same queue for the same two decks; `go build ./... && go
+  vet ./... && gofmt -l . && go test ./...` are clean.
 
 ### M4 — External integration
 
@@ -748,11 +764,11 @@ completion percentage until they are moved into a release milestone.
 
 
 - Count open and done tasks per milestone with:
-  `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
+  `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
-  · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 12/13 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
+  · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
