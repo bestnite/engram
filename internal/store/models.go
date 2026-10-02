@@ -327,6 +327,8 @@ func AllModels() []any {
 		&OutboxMessage{},
 		&EmailPref{},
 		&ReminderLog{},
+		// M1-23 每周学习摘要的发送台账：模型定义在 digest.go。
+		&DigestLog{},
 		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
 	}
 }

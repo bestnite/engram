@@ -1923,4 +1923,19 @@
   translation: "管理员通知"
 - id: mail.admin.status.ready
   translation: "已开启，将送达管理员"
+# M1-23 C 类每周学习摘要（mail.digest.*）：本块由该任务追加，键集合须与 en.yaml 一致。
+- id: mail.digest.subject
+  translation: "你的每周学习摘要"
+- id: mail.digest.reviewed
+  translation: "近 7 天复习：{{.count}} 次"
+- id: mail.digest.pass_rate
+  translation: "通过率：{{.rate}}%"
+- id: mail.digest.streak
+  translation: "当前连续打卡：{{.days}} 天"
+- id: mail.digest.new_cards
+  translation: "近 7 天新增卡片：{{.count}} 张"
+- id: mail.digest.due
+  translation: "当前到期卡片：{{.count}} 张"
+- id: mail.digest.link
+  translation: "查看完整统计：{{.url}}"
 

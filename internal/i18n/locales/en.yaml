@@ -1925,4 +1925,19 @@
   translation: "Admin notifications"
 - id: mail.admin.status.ready
   translation: "Enabled; delivered to admins"
+# M1-23 C-class weekly study digest (mail.digest.*): appended by that task; key set must match zh-CN.yaml.
+- id: mail.digest.subject
+  translation: "Your weekly study summary"
+- id: mail.digest.reviewed
+  translation: "Reviews in the last 7 days: {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "Pass rate: {{.rate}}%"
+- id: mail.digest.streak
+  translation: "Current streak: {{.days}} day(s)"
+- id: mail.digest.new_cards
+  translation: "New cards in the last 7 days: {{.count}}"
+- id: mail.digest.due
+  translation: "Cards due now: {{.count}}"
+- id: mail.digest.link
+  translation: "See your full statistics: {{.url}}"
 
