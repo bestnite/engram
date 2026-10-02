@@ -1749,4 +1749,9 @@
   translation: "邀请已创建，但邮件未能加入发送队列。"
 - id: mail.invite.notice.opted_out
   translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
+# ── 复习到期提醒（M1-21，C 类）────────────────────────────────
+- id: mail.reminder.subject
+  translation: "该复习了"
+- id: mail.reminder.body
+  translation: "你有 {{.count}} 张卡片到期了，现在开始复习吧：{{.url}}"
 

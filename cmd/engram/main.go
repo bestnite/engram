@@ -18,10 +18,12 @@ import (
 	"example.com/engram/internal/api"
 	"example.com/engram/internal/auth"
 	"example.com/engram/internal/config"
+	"example.com/engram/internal/i18n"
 	"example.com/engram/internal/jobs"
 	"example.com/engram/internal/mail"
 	"example.com/engram/internal/mcp"
 	"example.com/engram/internal/media"
+	"example.com/engram/internal/reminder"
 	"example.com/engram/internal/store"
 	"example.com/engram/internal/web"
 )
@@ -133,6 +135,24 @@ func runServe(ctx context.Context) error {
 	if mb := srv.Mail(); mb != nil {
 		mb.Start(ctx)
 		defer mb.Stop()
+		// 复习到期提醒 worker（M1-21，C 类）：独立的周期扫描，不复用优化器的单并发 jobs 体系。
+		// 文案走语言包，因此这里单独加载一份翻译器；SMTP 未配置时 worker 仍启动但只记日志。
+		translator, err := i18n.New()
+		if err != nil {
+			return err
+		}
+		reminderWorker, err := reminder.New(reminder.Deps{
+			DB:         db,
+			Outbox:     mb,
+			Translator: translator,
+			Logger:     logger,
+			BaseURL:    cfg.Get(config.KeyBaseURL).Value,
+		})
+		if err != nil {
+			return err
+		}
+		reminderWorker.Start(ctx)
+		defer reminderWorker.Stop()
 	}
 	return srv.Run(ctx)
 }

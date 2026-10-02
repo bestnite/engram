@@ -1751,4 +1751,9 @@
   translation: "Invite created, but the email could not be queued."
 - id: mail.invite.notice.opted_out
   translation: "Invite created; the recipient has this email type turned off, so nothing was sent."
+# ── Review reminder (M1-21, class C) ─────────────────────────
+- id: mail.reminder.subject
+  translation: "Time to review"
+- id: mail.reminder.body
+  translation: "You have {{.count}} cards due. Start reviewing: {{.url}}"
 
