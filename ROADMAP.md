@@ -177,6 +177,13 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* each trigger reaches the admin address; a mail failure never breaks the triggering
   operation.
+- [x] **M1-25 Send the home page to the setup wizard before the first admin** — a fresh install
+  rendered an empty home page, so a visitor had no way to learn the instance still needs its first
+  administrator. `GET /` now answers 303 to `/setup` while no active admin exists; the redirect lives
+  only in that window, because `/setup` itself 404s once an admin exists. A `?lang=` query on `/` is
+  not carried over — the setup page picks the language from `Accept-Language` and the cookie.
+  *Acceptance:* a test asserts 303 with `Location: /setup` on an instance with no admin, and 200 once
+  one exists.
 - [x] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
   OIDC client built on the standard library, because that module was never in `go.mod` (nothing
   imported it) and the gap stayed invisible until someone implemented the flow. `DESIGN.md` names
@@ -744,7 +751,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
   · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
