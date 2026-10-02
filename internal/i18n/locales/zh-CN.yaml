@@ -1728,4 +1728,25 @@
   translation: "媒体配额或磁盘告警"
 - id: mail.prefs.type.backup_failed
   translation: "备份失败"
+# ── 邀请邮件投递（M1-20）──────────────────────────────────────
+- id: mail.invite.subject
+  translation: "邀请你加入 {{.site}}"
+- id: mail.invite.greeting
+  translation: "你好，"
+- id: mail.invite.body
+  translation: "你受邀加入 {{.site}}。打开下面的链接即可创建账号。"
+- id: mail.invite.link_label
+  translation: "接受邀请："
+- id: mail.invite.expires
+  translation: "该邀请将于 {{.expires}} 过期。"
+- id: mail.invite.form_label
+  translation: "把邀请码寄到上面的邮箱"
+- id: mail.invite.form_note
+  translation: "把邀请链接发送到该邮箱；不勾选则自行拷贝链接。"
+- id: mail.invite.notice.queued
+  translation: "邀请已创建，邮件已加入发送队列。"
+- id: mail.invite.notice.failed
+  translation: "邀请已创建，但邮件未能加入发送队列。"
+- id: mail.invite.notice.opted_out
+  translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
 

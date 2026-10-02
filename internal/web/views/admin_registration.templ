@@ -50,6 +50,13 @@ templ adminRegistration(data AdminPageData) {
 				<input class="mt-1 block w-24 rounded border border-slate-300 px-2 py-1 text-sm" type="number" min="0" name="expires_days" value=""/>
 				<span class="mt-1 block text-xs text-slate-400">{ data.InviteExpiryHint }</span>
 			</label>
+			<label class="text-sm text-slate-700">
+				<span class="flex items-center gap-2">
+					<input type="checkbox" name="send_email" value="1"/>
+					<span>{ data.InviteMailLabel }</span>
+				</span>
+				<span class="mt-1 block text-xs text-slate-400">{ data.InviteMailNote }</span>
+			</label>
 			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.InviteCreateSubmit }</button>
 		</form>
 

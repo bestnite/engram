@@ -1730,4 +1730,25 @@
   translation: "Media quota or disk alert"
 - id: mail.prefs.type.backup_failed
   translation: "Backup failed"
+# ── Invite delivery by email (M1-20) ─────────────────────────
+- id: mail.invite.subject
+  translation: "Your invitation to {{.site}}"
+- id: mail.invite.greeting
+  translation: "Hello,"
+- id: mail.invite.body
+  translation: "You have been invited to join {{.site}}. Open the link below to create your account."
+- id: mail.invite.link_label
+  translation: "Accept the invitation:"
+- id: mail.invite.expires
+  translation: "This invitation expires on {{.expires}}."
+- id: mail.invite.form_label
+  translation: "Email this invite to the address above"
+- id: mail.invite.form_note
+  translation: "Sends the invite link to that address; leave unchecked to copy the link yourself."
+- id: mail.invite.notice.queued
+  translation: "Invite created and the email has been queued for delivery."
+- id: mail.invite.notice.failed
+  translation: "Invite created, but the email could not be queued."
+- id: mail.invite.notice.opted_out
+  translation: "Invite created; the recipient has this email type turned off, so nothing was sent."
 

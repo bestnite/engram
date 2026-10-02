@@ -174,6 +174,11 @@ type AdminPageData struct {
 	InviteCreateSubmit  string
 	InviteRevokeLabel   string
 	InviteRoles         []AdminRoleOption
+	// 邀请邮件入口（M1-20）。
+	// InviteMailAvailable 为 true 时 SMTP 已配置；false 时入口仍渲染，但 note 给出原因。
+	InviteMailAvailable bool
+	InviteMailLabel     string
+	InviteMailNote      string
 
 	// ---- 作业页（M6-6）----
 	// JobsPage 为 true 时模板渲染作业表而不是设置区块。
