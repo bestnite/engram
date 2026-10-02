@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -58,8 +60,9 @@ func openPackageCLI(ctx context.Context) (*api.API, *store.UserStore, *gorm.DB, 
 	return apiSrv, users, db, nil
 }
 
-// resolveCLIUser 决定 CLI 操作的 acting user：显式 --user 优先；未给出时导出回落到卡组
-// owner（只读拿自己的内容），导入回落到最早的管理员。
+// resolveCLIUser 决定导出（只读）操作的 acting user：显式 --user 优先，未给出时回落到卡组
+// owner（导出只读，拿走自己的内容）。导入不再走这里：导入会写入账号名下，必须显式写明身份
+// （DESIGN.md §7.6 的 CLI 身份裁定、AGENTS.md M5-12），见 resolveImportUser。
 func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, explicit uint64, deckID uint64) (*store.User, error) {
 	if explicit != 0 {
 		u, err := users.ByID(ctx, explicit)
@@ -84,6 +87,43 @@ func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, ex
 		return nil, fmt.Errorf("resolve default user: %w", err)
 	}
 	return &u, nil
+}
+
+// resolveImportUser 解析 `import --user` 的取值，接受数字 id 或用户名。
+//
+// 导入会把内容写进某个账号名下，身份必须由调用者写明：空值、指向不存在的用户、以及
+// 「数字既像 id 又像用户名且指向不同用户」的歧义取值都点名拒绝，绝不回落到任何默认账号
+// （DESIGN.md §7.6 的 CLI 身份裁定、AGENTS.md M5-12）。
+func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) (*store.User, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, errors.New("import: --user <id|username> is required: the import files the deck under one account, so the acting identity must be explicit (refusing to fall back to any default user)")
+	}
+	if id, err := strconv.ParseUint(ref, 10, 64); err == nil {
+		byID, idErr := users.ByID(ctx, id)
+		byName, nameErr := users.ByUsername(ctx, ref)
+		switch {
+		case idErr == nil && nameErr == nil && byID.ID != byName.ID:
+			// 同一个取值同时命中一个 id 和一个用户名，且指向不同用户 —— 猜错就等于把卡塞给别人。
+			return nil, fmt.Errorf("import: --user %q is ambiguous: it matches user id %d and the username %q (user id %d); pass a value that names exactly one account", ref, byID.ID, ref, byName.ID)
+		case idErr == nil:
+			return byID, nil
+		case nameErr == nil:
+			return byName, nil
+		case !errors.Is(idErr, gorm.ErrRecordNotFound):
+			return nil, fmt.Errorf("import: resolve --user %q: %w", ref, idErr)
+		default:
+			return nil, fmt.Errorf("import: --user %q: no user with that id or username exists", ref)
+		}
+	}
+	u, err := users.ByUsername(ctx, ref)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("import: --user %q: no user with that username exists", ref)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("import: resolve --user %q: %w", ref, err)
+	}
+	return u, nil
 }
 
 // runExport 处理 `flashcard export`：带 --package 时导出卡组包；否则保留全库导出的占位错误。
@@ -136,7 +176,7 @@ func runExport(args []string) error {
 func runImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	in := fs.String("package", "", "input .fdeck path")
-	userID := fs.Uint64("user", 0, "acting user id (default: the earliest active admin)")
+	userRef := fs.String("user", "", "acting user id or username (required: the import never guesses the owner)")
 	target := fs.String("target", "", "new_deck (default), into_deck:<id> or replace_deck:<id>")
 	dryRun := fs.Bool("dry-run", false, "validate and count without writing")
 	onConflict := fs.String("on-conflict", "", "conflict policy: skip, update (default) or fail")
@@ -147,12 +187,16 @@ func runImport(args []string) error {
 	if *in == "" {
 		return errors.New("import: --package <path> is required")
 	}
+	// 先校验身份再碰数据库：缺 --user 时直接非零退出，绝不打开包、更不会落任何卡组/笔记。
+	if strings.TrimSpace(*userRef) == "" {
+		return errors.New("import: --user <id|username> is required: the import files the deck under one account, so the acting identity must be explicit (refusing to fall back to the earliest admin)")
+	}
 	ctx := context.Background()
-	apiSrv, users, db, err := openPackageCLI(ctx)
+	apiSrv, users, _, err := openPackageCLI(ctx)
 	if err != nil {
 		return err
 	}
-	actor, err := resolveCLIUser(ctx, users, db, *userID, 0)
+	actor, err := resolveImportUser(ctx, users, *userRef)
 	if err != nil {
 		return err
 	}
