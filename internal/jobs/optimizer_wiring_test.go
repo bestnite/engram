@@ -60,7 +60,7 @@ func seedOptimizerUserAndPreset(t *testing.T, db *gorm.DB) (*store.User, *store.
 	}
 	p := &store.Preset{
 		OwnerUserID: u.ID, Name: "Default", DesiredRetention: 0.9,
-		LearningSteps: "1m 10m", RelearningSteps: "10m", MaximumIntervalDays: 36500,
+		LearningSteps: "1m,10m", RelearningSteps: "10m", MaximumIntervalDays: 36500,
 	}
 	if err := store.NewPresetStore(db).Create(ctx, p); err != nil {
 		t.Fatalf("create preset: %v", err)

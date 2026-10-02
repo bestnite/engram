@@ -125,20 +125,45 @@ type Scheduler struct {
 // 为 NULL 时用 fsrs.DefaultWeights()；学习/再学习步骤、目标保留率、最大间隔与 fuzz 均来自 preset
 // （DESIGN.md §3.2、§3.5）。
 func NewScheduler(preset *store.Preset) (*Scheduler, error) {
-	if preset == nil {
-		return nil, fmt.Errorf("schedule: preset is required")
-	}
-	weights, err := presetWeights(preset.WeightsJSON)
+	p, err := Parameters(preset)
 	if err != nil {
 		return nil, err
 	}
+	return &Scheduler{fsrs: fsrs.NewFSRS(p)}, nil
+}
+
+// Parameters 从 preset 装配 go-fsrs 参数，是「排程参数如何来」的唯一来源：
+// 权重（17/19/21 维自动迁移，NULL 用默认）、目标保留率、学习/再学习步骤、最大间隔与 fuzz。
+// NewScheduler 与拟合回放（ROADMAP.md M9-11）都走这里，避免两处各写一份装配而慢慢跑偏。
+func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
+	if preset == nil {
+		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")
+	}
+	weights, err := presetWeights(preset.WeightsJSON)
+	if err != nil {
+		return fsrs.Parameters{}, err
+	}
+	return parametersWithWeights(preset, weights)
+}
+
+// ParametersWithWeights 与 Parameters 相同，但用给定权重覆盖 preset 的权重。
+// 拟合对比要在「同一批复习、同一套其余参数」下分别评估旧/新权重，这个入口就是为此而生。
+func ParametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Parameters, error) {
+	if preset == nil {
+		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")
+	}
+	return parametersWithWeights(preset, weights)
+}
+
+// parametersWithWeights 是 Parameters / ParametersWithWeights 的公共实现。
+func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Parameters, error) {
 	learning, err := parseSteps(preset.LearningSteps)
 	if err != nil {
-		return nil, fmt.Errorf("schedule: parse learning steps: %w", err)
+		return fsrs.Parameters{}, fmt.Errorf("schedule: parse learning steps: %w", err)
 	}
 	relearning, err := parseSteps(preset.RelearningSteps)
 	if err != nil {
-		return nil, fmt.Errorf("schedule: parse relearning steps: %w", err)
+		return fsrs.Parameters{}, fmt.Errorf("schedule: parse relearning steps: %w", err)
 	}
 
 	p := fsrs.DefaultParam()
@@ -150,7 +175,7 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	p.RelearningSteps = relearning
 	// DefaultParam 保持 EnableShortTerm=true，与 DESIGN.md §3.2 的\"学习步骤 + 短期记忆\"一致。
 
-	return &Scheduler{fsrs: fsrs.NewFSRS(p)}, nil
+	return p, nil
 }
 
 // presetWeights 解析 preset.WeightsJSON。NULL / 空 / "null" 均视为使用默认权重。

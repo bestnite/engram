@@ -90,7 +90,7 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID uint64) (OptimizeGate
 // FitMetrics 是优化前后各测一次的拟合指标（DESIGN.md §3.5「优化前后拟合对比」，
 // 对应 Anki 手册的 "Check health" 思路：用历史复习反推参数对实际结果的贴合度）。
 //
-// 指标定义（由 M9-2 的适配器计算，Go 侧只承载与比较）：
+// 指标定义（由 internal/schedule 用 go-fsrs 回放复习日志算出，见 ROADMAP.md M9-11）：
 //   - LogLoss：每次到期复习的预测对数损失，predicted 是参数对「该次复习会回忆起来」
 //     给出的概率（0-1），observed 取 1（非 Again）或 0（Again）。越小越贴合；
 //     这是与 Anki 优化器输出 magnitude 同量纲、可跨参数集直接比较的标量。
@@ -121,6 +121,12 @@ type OptimizeResult struct {
 
 // Improved 判断新权重的对数损失是否优于旧权重；相等视为未改善。
 func (r OptimizeResult) Improved() bool { return r.FitAfter.LogLoss < r.FitBefore.LogLoss }
+
+// Available 报告这次拟合是否真的覆盖了至少一个可预测 item。
+// 没有任何可预测 item（例如复习日志全是每张卡的首条复习、或全部无法回放）时，
+// CompareFit 返回零值；预测概率被夹在开区间 (0,1) 内，LogLoss 恒为正，因此零值即「无指标」。
+// 预设页据此避免在无指标时给出「未改善」这种误导性结论（ROADMAP.md M9-11 验收 5）。
+func (m FitMetrics) Available() bool { return m.LogLoss > 0 }
 
 // ErrPresetWeightsIDRequired 表示回退默认权重时未给出预设主键。
 var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is required")
