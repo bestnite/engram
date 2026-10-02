@@ -37,6 +37,15 @@ func (s *Server) regNotice(loc *i18n.Localizer, code string) string {
 		return loc.T("admin.registration.notice.invite_invalid")
 	case "invite_create_failed":
 		return loc.T("admin.registration.notice.invite_create_failed")
+	case noticeInviteMailQueued:
+		return loc.T("mail.invite.notice.queued")
+	case noticeInviteMailUnconfigured:
+		// 说明原因而不是静默：邀请已创建，但本站未开邮件功能（DESIGN.md §4.7）。
+		return loc.T("admin.registration.notice.invite_created") + " " + loc.T("mail.not_configured")
+	case noticeInviteMailFailed:
+		return loc.T("mail.invite.notice.failed")
+	case noticeInviteMailOptedOut:
+		return loc.T("mail.invite.notice.opted_out")
 	default:
 		return ""
 	}
@@ -193,6 +202,12 @@ func (s *Server) adminRegistrationPage(c *gin.Context) {
 		InviteCreateSubmit:  loc.T("admin.registration.invite_create_submit"),
 		InviteRevokeLabel:   loc.T("admin.registration.invite_revoke"),
 		InviteRoles:         roleOptions(loc),
+
+		// 邀请邮件入口（M1-20）：SMTP 未配置时入口仍然渲染，但说明原因（mail.not_configured），
+		// 绝不静默隐藏（DESIGN.md §4.7）。
+		InviteMailAvailable: s.mail != nil && s.mail.Configured(),
+		InviteMailLabel:     loc.T("mail.invite.form_label"),
+		InviteMailNote:      inviteMailNote(loc, s.mail != nil && s.mail.Configured()),
 	}))
 }
 
@@ -278,7 +293,19 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 		// 审计不记录 token 明文（等价于凭据）。
 		Detail: map[string]any{"role": inv.Role, "has_email": inv.Email != nil, "expires": inv.ExpiresAt != nil},
 	})
-	s.redirectRegistration(c, "invite_created")
+	// 邀请已经创建成功；若管理员勾选了「寄到邮箱」，再决定是否入队（M1-20）。
+	// 发信的任何问题都不影响这里的创建结果——notice 只用来如实回显发生了什么。
+	notice := "invite_created"
+	if strings.TrimSpace(c.PostForm("send_email")) != "" {
+		loc, ok := s.localizer(c)
+		if !ok {
+			return
+		}
+		if code := s.sendInviteEmail(c, loc, inv); code != "" {
+			notice = code
+		}
+	}
+	s.redirectRegistration(c, notice)
 }
 
 // adminInviteRevoke 撤销一条邀请（删除整行，DESIGN.md §2.2），写审计。
