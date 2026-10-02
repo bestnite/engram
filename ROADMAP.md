@@ -373,7 +373,7 @@ Conventions:
   filtered; REST and MCP return the same queue for the same two decks; `go build ./... && go
   vet ./... && gofmt -l . && go test ./...` are clean.
 
-- [ ] **M3-14 Preset management** — `/presets` lists presets and drives optimisation, but has no
+- [x] **M3-14 Preset management** — `/presets` lists presets and drives optimisation, but has no
   create or edit route (`internal/web/presets.go` registers only `GET /presets` plus the three
   optimise endpoints), and the default preset is created lazily inside deck creation
   (`internal/web/decks.go:209`). A brand-new user therefore meets an empty preset dropdown on the
@@ -427,7 +427,7 @@ Conventions:
   *Acceptance:* test asserts the same `code` yields Chinese and English messages for the
   two `Accept-Language` values.
 
-- [ ] **M4-10 User-level API key management** — `DESIGN.md` §8.1 lists API key management under
+- [x] **M4-10 User-level API key management** — `DESIGN.md` §8.1 lists API key management under
   `/settings`, but no user-facing route exists: the only key surface is `/admin/api-keys`, an
   admin-wide overview that can revoke but not create (`internal/web/admin_keys.go`). A non-admin
   therefore cannot obtain a key at all, which makes the REST API and the MCP server unreachable for
@@ -808,7 +808,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/14 · M4 9/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/7 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 10/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/7 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
