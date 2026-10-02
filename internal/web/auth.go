@@ -368,6 +368,8 @@ func (s *Server) registerSubmit(c *gin.Context) {
 	})
 	// M1-19：注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（用户可稍后在设置页重发）。
 	s.sendEmailVerification(c, u)
+	// M1-24：新账号创建后通知管理员（D 类）。发信的任何问题都不影响注册结果。
+	s.NotifyRegistration(ctx, u)
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 

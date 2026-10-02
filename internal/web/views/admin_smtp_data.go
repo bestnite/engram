@@ -61,4 +61,9 @@ type SMTPPageData struct {
 	OutboxLastError        string
 	OutboxAttemptsLabel    string
 	OutboxAttempts         string
+
+	// AdminNotifyLabel / AdminNotifyStatus 是 D 类管理员通知的可用状态行（M1-24）。
+	// SMTP 未配置时状态渲染 mail.not_configured，绝不静默（DESIGN.md §4.7）。
+	AdminNotifyLabel  string
+	AdminNotifyStatus string
 }

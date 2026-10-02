@@ -119,6 +119,14 @@ type CommandBuilder func(ctx context.Context, job *store.Job, rep Reporter) (Com
 // 再交给 FinishOptimize 写回 job 行与 preset。返回错误则作业标记为 failed。
 type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail string) (store.OptimizeResult, error)
 
+// FailureFunc 在作业被标记为 failed 之后被调用（M1-24 的 D 类管理员通知挂点）。
+//
+// 它在状态已经落库之后运行，因此实现只能做副作用（例如把通知写进邮件 outbox），
+// 不得试图改写作业状态；它的返回值被忽略，且 panic 会被 Runner 兜住——
+// 通知失败绝不能让作业失败处理本身出错（DESIGN.md §4.1 附带的「发信失败不影响触发操作）
+// 同样适用于作业失败通知）；它同步运行在作业 worker 的 ctx 上。可为 nil。
+type FailureFunc func(ctx context.Context, job store.Job, reason string)
+
 // Deps 是 Runner 的显式依赖。
 type Deps struct {
 	// DB 是必填项。
@@ -133,6 +141,9 @@ type Deps struct {
 	Command CommandBuilder
 	// Complete 可选；命令成功退出后解析其副作用并产出优化结果。为空时只按退出码判成功。
 	Complete CompleteFunc
+	// OnFailure 可选；作业被标记为 failed 后调用（M1-24 的 D 类管理员通知挂点）。
+	// 为空时不做任何额外动作。见 FailureFunc 的契约。
+	OnFailure FailureFunc
 	// Now 可注入时钟；为空时用系统 UTC 时间。
 	Now func() time.Time
 	// LogTailLines 是日志尾巴行数上限；<=0 时用 DefaultLogTailLines。
@@ -151,6 +162,7 @@ type Runner struct {
 	timeout      time.Duration
 	command      CommandBuilder
 	complete     CompleteFunc
+	onFailure    FailureFunc
 	now          func() time.Time
 	logTailLines int
 
@@ -202,6 +214,7 @@ func New(deps Deps) (*Runner, error) {
 		timeout:      timeout,
 		command:      command,
 		complete:     deps.Complete,
+		onFailure:    deps.OnFailure,
 		now:          now,
 		logTailLines: tailLines,
 		queue:        make(chan *store.Job, queueDepth),
@@ -285,6 +298,14 @@ func (r *Runner) Cancel(ctx context.Context, id uint64) error {
 		return ErrNotRunning
 	}
 	return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
+}
+
+// SetOnFailure 设置作业失败钩子（M1-24）；须在 Start 之前调用，避免与 worker 竞态。
+// 生产装配在 cmd/engram 把它接到 web 层的管理员通知上。
+func (r *Runner) SetOnFailure(fn FailureFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onFailure = fn
 }
 
 // Enqueue 建一个 queued 作业并入队；已有未完成作业时返回 ErrAlreadyRunning（HTTP 409）。
@@ -397,10 +418,33 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 }
 
 // fail 把作业标记为 failed 并记录错误与日志尾巴；失败原因写英文（AGENTS.md §2.1）。
+// 状态落库成功后再调用 OnFailure 钩子（M1-24）：钩子只做副作用，且绝不改变本次结果。
 func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 	if err := r.store.FinishFailed(ctx, id, r.now(), msg, tail); err != nil {
 		r.logger.Error("finish job failed failed", "job_id", id, "error", err)
+		return
 	}
+	r.notifyFailure(ctx, id, msg)
+}
+
+// notifyFailure 在作业失败落库后调用 OnFailure 钩子；未配置钩子时直接返回。
+// 钩子 panic 会被兜住：通知失败绝不能反过来影响作业失败处理（M1-24 验收）。
+func (r *Runner) notifyFailure(ctx context.Context, id uint64, reason string) {
+	fn := r.onFailure
+	if fn == nil {
+		return
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.logger.Error("job failure hook panicked", "job_id", id, "panic", rec)
+		}
+	}()
+	job, err := r.store.ByID(ctx, id)
+	if err != nil {
+		r.logger.Error("load failed job for notification failed", "job_id", id, "error", err)
+		return
+	}
+	fn(ctx, *job, reason)
 }
 
 // registerRun 记录当前运行中作业的取消句柄；Cancel 通过它找到要杀的进程组。

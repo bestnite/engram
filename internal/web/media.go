@@ -230,6 +230,8 @@ func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, q
 		"user_id", user.ID, "code", media.CodeQuotaExceeded, "used", usage.Bytes, "quota", quota)
 	writeMediaError(c, http.StatusRequestEntityTooLarge, media.CodeQuotaExceeded,
 		s.mediaQuotaMessage(c, usage.Bytes, quota))
+	// M1-24：配额被触及时通知管理员（D 类）。发信失败绝不影响这次上传的错误响应。
+	s.NotifyMediaAlert(ctx, user, usage.Bytes, quota)
 	return false
 }
 

@@ -1885,3 +1885,23 @@
 - id: mail.notice.account.deleted
   translation: "删除"
 
+# M1-24 D 类管理员通知（mail.admin.*）：本块由该任务追加，键集合须与 en.yaml 一致。
+- id: mail.admin.greeting
+  translation: "你好，管理员："
+- id: mail.admin.registration.subject
+  translation: "新用户注册 - {{.site}}"
+- id: mail.admin.registration.body
+  translation: "{{.site}} 有一位新用户注册：{{.username}}（{{.email}}）。"
+- id: mail.admin.job_failed.subject
+  translation: "作业失败 #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.body
+  translation: "{{.site}} 的作业 #{{.job_id}}（{{.kind}}）失败，原因：{{.reason}}。"
+- id: mail.admin.media_alert.subject
+  translation: "媒体配额告警 - {{.site}}"
+- id: mail.admin.media_alert.body
+  translation: "{{.site}} 的用户 {{.username}} 触发媒体配额：已用 {{.used}}，限额 {{.limit}}。"
+- id: mail.admin.status.label
+  translation: "管理员通知"
+- id: mail.admin.status.ready
+  translation: "已开启，将送达管理员"
+

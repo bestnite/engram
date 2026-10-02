@@ -90,6 +90,10 @@ templ adminSMTP(data AdminPageData) {
 						<td class="py-2 pr-3 font-medium text-slate-800">{ data.SMTP.OutboxAttemptsLabel }</td>
 						<td class="py-2 text-slate-600">{ data.SMTP.OutboxAttempts }</td>
 					</tr>
+					<tr class="border-t border-slate-100 align-top">
+						<td class="py-2 pr-3 font-medium text-slate-800">{ data.SMTP.AdminNotifyLabel }</td>
+						<td class="py-2 text-slate-600">{ data.SMTP.AdminNotifyStatus }</td>
+					</tr>
 				</tbody>
 			</table>
 		</section>
