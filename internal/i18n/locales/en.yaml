@@ -1574,4 +1574,11 @@
   translation: "Two-factor authentication is disabled."
 - id: totp.saved.recovery
   translation: "New recovery codes were generated; the previous ones are no longer valid."
+# ── Per-user media quota (M2-13) ─────────────────────────────
+- id: media.quota.exceeded
+  translation: "Media quota exceeded: you have used {{.used}} of your {{.limit}} limit. Delete some media references to free space."
+- id: media.quota.setting.label
+  translation: "Per-user media quota (bytes)"
+- id: media.quota.setting.hint
+  translation: "Total media bytes one user may reference. 0 means unlimited (the default)."
 

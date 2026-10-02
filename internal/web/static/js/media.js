@@ -68,7 +68,13 @@
       });
     }).then(function (res) {
       if (!res.ok) {
-        showStatus(form, messageFor(form, (res.body.error || {}).code), true);
+        var err = res.body.error || {};
+        // 配额超限的文案要点名限额与已用量：具体数字只有服务端知道，直接采用它返回的
+        // 本地化 message，而不是走静态 data-* 映射。
+        var text = err.code === "media_quota_exceeded" && err.message
+          ? err.message
+          : messageFor(form, err.code);
+        showStatus(form, text, true);
         return;
       }
       insertRef(form, res.body.url);
