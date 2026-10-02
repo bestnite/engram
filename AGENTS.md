@@ -770,6 +770,25 @@ Conventions:
   *Acceptance:* the navigation offers the preset page to every signed-in user, and a test asserts
   the link is present on a rendered page.
 
+- [ ] **M9-10 Wire the optimiser adapter into the server** — every M9 part works on its own and
+  nothing connects them, so in production the feature always fails. `main.go` builds the runner
+  without a `Command`, so `jobs.New` falls back to `DefaultCommandBuilder()`, which re-executes
+  `engram optimize --job <id>`; that subcommand is a stub returning `optimize is not implemented
+  yet`, so the preset page's button queues a job that can never succeed. `ExportOptimizerLog` (M9-3)
+  has no caller either. Wire the chain: export the owner's review log with
+  `ReviewStore.ExportOptimizerLog`, run the adapter (`<bin> <log.jsonl> --out <weights.json>`, exit
+  code 2 on a usage error) as the job's command, parse the weights it writes, and hand the result to
+  `Runner.FinishOptimize` so the page's existing polling sees a real result. Make the adapter path
+  configurable with a default beside the server binary, falling back to the repository build path
+  `tools/optimizer/target/release/optimizer` that the adapter test uses; a missing or failing adapter
+  must fail the job with a message naming the path. The CLI's `optimize` subcommand and its help line
+  must stop advertising an unimplemented command: it becomes the real worker entry point or it is
+  removed.
+  *Acceptance:* an end-to-end test drives a preset with enough reviews through the runner and the
+  real adapter, asserting the job ends `succeeded` with 21 weights on the job row and in the preset;
+  a missing adapter fails the job naming the path; and no help text advertises a command that reports
+  itself unimplemented.
+
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are excluded from the
@@ -849,7 +868,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 20/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
+  `M0 13/13 · M1 20/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/10
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
