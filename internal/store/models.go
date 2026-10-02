@@ -313,10 +313,15 @@ type Session struct {
 func (Session) TableName() string { return "sessions" }
 
 // AllModels 是 AutoMigrate 的唯一来源；新增表必须加在这里，否则测试的表清单断言会失败。
+// AllModels 是**全部** GORM 模型的唯一清单，AutoMigrate 与全库导出都从它取。
+// 模型的定义文件可以分开（例如 TOTP 两表放在 totp.go），但**新增模型必须登记在这里**：
+// 漏登记的后果不是报错，而是全库导出静默漏表——备份能恢复出「TOTP 已启用但密钥不见了」的账号。
 func AllModels() []any {
 	return []any{
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
+		// M1-16 TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
+		&UserTOTP{}, &TOTPRecoveryCode{},
 	}
 }

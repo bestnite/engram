@@ -285,7 +285,7 @@ Conventions:
   restriction, optional expiry.
   *Acceptance:* test asserts a used, expired, or revoked token is rejected and that an
   accepted invite creates exactly one user.
-- [ ] **M1-16 TOTP two-factor authentication** — optional second factor for local accounts.
+- [x] **M1-16 TOTP two-factor authentication** — optional second factor for local accounts.
   Moved out of the backlog into the final state at the user's request (2026-10-02).
   *Do not start until the user says so.*
   *Acceptance:* a user with TOTP enabled cannot finish login with only a password; recovery codes are
@@ -343,7 +343,7 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* each trigger reaches the admin address; a mail failure never breaks the triggering
   operation.
-- [ ] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
+- [x] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
   OIDC client built on the standard library, because that module was never in `go.mod` (nothing
   imported it) and the gap stayed invisible until someone implemented the flow. `DESIGN.md` names
   `github.com/zitadel/oidc/v3` in three places and that choice was deliberate, so the user ruled the
@@ -445,7 +445,7 @@ Conventions:
 - [x] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
 
-- [ ] **M2-13 Per-user media quota** — alongside the single-file limit, a per-user total cap that
+- [x] **M2-13 Per-user media quota** — alongside the single-file limit, a per-user total cap that
   the admin panel can set. Moved out of the backlog into the final state at the user's request
   (2026-10-02). *Do not start until the user says so.*
   *Acceptance:* exceeding the cap is refused with a stable code and a localised message naming the
@@ -843,7 +843,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 14/24 · M2 12/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
+  `M0 13/13 · M1 16/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.

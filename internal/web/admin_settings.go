@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"gorm.io/gorm"
 	"io"
 	"io/fs"
 	"net/http"
@@ -407,22 +409,25 @@ func (s *Server) adminExport(c *gin.Context) {
 	if _, err := io.WriteString(w, `,"tables":{`); err != nil {
 		return
 	}
-	type tabler interface{ TableName() string }
+	// 用 Migrator 解析表名，而不是断言 TableName() 接口：后者会让"忘了写 TableName 的模型"
+	// 被静默跳过——那和漏登记模型是同一类 bug（备份少一张表却不报错）。
 	first := true
 	for _, model := range store.AllModels() {
-		t, ok := model.(tabler)
-		if !ok {
+		stmt := &gorm.Statement{DB: s.db}
+		if err := stmt.Parse(model); err != nil || stmt.Schema == nil || stmt.Schema.Table == "" {
+			s.logger.Error("admin: export cannot resolve table name", "model", fmt.Sprintf("%T", model), "error", err)
 			continue
 		}
+		table := stmt.Schema.Table
 		var rows []map[string]any
 		if err := s.db.WithContext(ctx).Model(model).Find(&rows).Error; err != nil {
-			s.logger.Error("admin: export table failed", "table", t.TableName(), "error", err)
+			s.logger.Error("admin: export table failed", "table", table, "error", err)
 			continue
 		}
-		nameJSON, _ := json.Marshal(t.TableName())
+		nameJSON, _ := json.Marshal(table)
 		rowsJSON, err := json.Marshal(rows)
 		if err != nil {
-			s.logger.Error("admin: encode export table failed", "table", t.TableName(), "error", err)
+			s.logger.Error("admin: encode export table failed", "table", table, "error", err)
 			continue
 		}
 		if !first {
