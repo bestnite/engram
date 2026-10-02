@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"mime"
 	"net"
 	"net/smtp"
 	"sort"
@@ -152,9 +153,10 @@ func (s SMTPSender) authenticate(client *smtp.Client, cfg SMTPConfig) error {
 // 附加头按名称排序输出，保证同样的输入产生同样的字节（便于测试断言）。
 func buildMessage(cfg SMTPConfig, m Message) []byte {
 	var b bytes.Buffer
-	writeHeader(&b, "From", cfg.From)
-	writeHeader(&b, "To", m.To)
-	writeHeader(&b, "Subject", m.Subject)
+	// 头部按 RFC 2047 编码：非 ASCII 的主题/显示名原样发出会被压成 "?"（见 encodeHeaderValue）。
+	writeHeader(&b, "From", encodeAddress(cfg.From))
+	writeHeader(&b, "To", encodeAddress(m.To))
+	writeHeader(&b, "Subject", encodeHeaderValue(m.Subject))
 	writeHeader(&b, "Date", time.Now().UTC().Format(time.RFC1123Z))
 	writeHeader(&b, "MIME-Version", "1.0")
 
@@ -165,7 +167,7 @@ func buildMessage(cfg SMTPConfig, m Message) []byte {
 		const boundary = "engram-mail-boundary"
 		writeHeader(&b, "Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 		for _, k := range sortedHeaderKeys(m.Headers) {
-			writeHeader(&b, k, m.Headers[k])
+			writeHeader(&b, k, encodeHeaderValue(m.Headers[k]))
 		}
 		b.WriteString("\r\n")
 		b.WriteString("--" + boundary + "\r\n")
@@ -182,19 +184,57 @@ func buildMessage(cfg SMTPConfig, m Message) []byte {
 	case hasHTML:
 		writeHeader(&b, "Content-Type", "text/html; charset=utf-8")
 		for _, k := range sortedHeaderKeys(m.Headers) {
-			writeHeader(&b, k, m.Headers[k])
+			writeHeader(&b, k, encodeHeaderValue(m.Headers[k]))
 		}
 		b.WriteString("\r\n")
 		b.WriteString(m.HTMLBody)
 	default:
 		writeHeader(&b, "Content-Type", "text/plain; charset=utf-8")
 		for _, k := range sortedHeaderKeys(m.Headers) {
-			writeHeader(&b, k, m.Headers[k])
+			writeHeader(&b, k, encodeHeaderValue(m.Headers[k]))
 		}
 		b.WriteString("\r\n")
 		b.WriteString(m.TextBody)
 	}
 	return b.Bytes()
+}
+
+// encodeHeaderValue 按 RFC 2047 编码需要编码的头部值。
+//
+// 头部按 RFC 5322 只能是 ASCII：中文主题直接写进 Subject 会被中继或客户端压成 "?"，
+// 收件人看到的就是一串问号（实测收到过 "?????? Engram ??????????????????"）。
+// mime.QEncoding.Encode 对纯 ASCII 原样返回，因此可以无脑对所有文本头调用。
+func encodeHeaderValue(value string) string {
+	if isASCII(value) {
+		return value
+	}
+	return mime.QEncoding.Encode("utf-8", value)
+}
+
+// encodeAddress 只对 "显示名 <地址>" 里的显示名做 MIME 编码。
+// 地址本身（addr-spec）必须是 ASCII，RFC 2047 的 encoded-word 不允许出现在那里；
+// 整串一起编码会让部分客户端解析不出收件人。纯地址原样返回。
+func encodeAddress(value string) string {
+	lt := strings.LastIndex(value, "<")
+	if lt < 0 {
+		return encodeHeaderValue(value)
+	}
+	name := strings.TrimSpace(value[:lt])
+	addr := value[lt:]
+	if name == "" {
+		return addr
+	}
+	return encodeHeaderValue(name) + " " + addr
+}
+
+// isASCII 报告 s 是否全是 ASCII；是则无需 MIME 编码。
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func writeHeader(b *bytes.Buffer, name, value string) {
