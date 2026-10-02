@@ -321,12 +321,12 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* each of the five is delivered on its trigger; a reset link works once and expires;
   links carry only digests in the database and never appear in logs.
-- [ ] **M1-20 Invite delivery by email (class B)** — the admin can have an invite mailed to its
+- [x] **M1-20 Invite delivery by email (class B)** — the admin can have an invite mailed to its
   address instead of copying the link by hand. This is the user's first requested type.
   *Held: do not start until the user says so.*
   *Acceptance:* an invite created for an address is delivered and can be accepted; a revoked or
   expired invite link is refused; the invite still works when copied manually.
-- [ ] **M1-21 Review reminder with quiet hours and a daily cap (class C)** — event-driven, computed
+- [x] **M1-21 Review reminder with quiet hours and a daily cap (class C)** — event-driven, computed
   from the user's timezone and day cutoff, never sent between 23:00 and 07:00 local, at most one per
   user per day. This is the user's second requested type.
   *Held: do not start until the user says so.*
@@ -849,7 +849,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 18/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
+  `M0 13/13 · M1 20/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
