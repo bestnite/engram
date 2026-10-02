@@ -1730,4 +1730,9 @@
   translation: "Media quota or disk alert"
 - id: mail.prefs.type.backup_failed
   translation: "Backup failed"
+# ── Review reminder (M1-21, class C) ─────────────────────────
+- id: mail.reminder.subject
+  translation: "Time to review"
+- id: mail.reminder.body
+  translation: "You have {{.count}} cards due. Start reviewing: {{.url}}"
 

@@ -1728,4 +1728,9 @@
   translation: "媒体配额或磁盘告警"
 - id: mail.prefs.type.backup_failed
   translation: "备份失败"
+# ── 复习到期提醒（M1-21，C 类）────────────────────────────────
+- id: mail.reminder.subject
+  translation: "该复习了"
+- id: mail.reminder.body
+  translation: "你有 {{.count}} 张卡片到期了，现在开始复习吧：{{.url}}"
 
