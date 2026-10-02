@@ -327,5 +327,6 @@ func AllModels() []any {
 		&OutboxMessage{},
 		&EmailPref{},
 		&ReminderLog{},
+		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
 	}
 }

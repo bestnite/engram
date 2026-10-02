@@ -305,6 +305,8 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			UserID: store.Ptr(actor.ID), Action: store.ActionUserDisable,
 			TargetType: "user", TargetID: store.Ptr(target.ID),
 		})
+		// M1-19：账号被禁用通知；发信失败不影响禁用本身。
+		s.notifyAccountStatus(ctx, target, "disabled")
 	} else {
 		if err := s.accounts.EnableUser(ctx, target.ID); err != nil {
 			s.logger.Error("admin: enable user failed", "user_id", target.ID, "error", err)
@@ -449,6 +451,9 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	// M1-19：删除前先发「账号被删除」通知；删除后 target 行已不存在，必须在删之前发。
+	// 发信失败不影响删除本身（通知函数不返回 error）。
+	s.notifyAccountStatus(ctx, target, "deleted")
 	// 删除前先作废会话，保证即便删除中途失败也不留下可用会话。
 	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
 		s.logger.Error("admin: revoke sessions before delete failed", "user_id", target.ID, "error", err)

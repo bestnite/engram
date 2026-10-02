@@ -1754,4 +1754,134 @@
   translation: "该复习了"
 - id: mail.reminder.body
   translation: "你有 {{.count}} 张卡片到期了，现在开始复习吧：{{.url}}"
+- id: mail.reset.title
+  translation: "重置密码"
+- id: mail.reset.heading
+  translation: "重置密码"
+- id: mail.reset.intro
+  translation: "输入你的账号邮箱，我们会发送重置链接。"
+- id: mail.reset.email_label
+  translation: "邮箱"
+- id: mail.reset.submit
+  translation: "发送重置链接"
+- id: mail.reset.back_login
+  translation: "返回登录"
+- id: mail.reset.sent
+  translation: "如果该邮箱属于某个账号，重置链接已在路上。"
+- id: mail.reset.form_title
+  translation: "设置新密码"
+- id: mail.reset.form_heading
+  translation: "设置新密码"
+- id: mail.reset.form_intro
+  translation: "为你的账号设置一个新密码。"
+- id: mail.reset.new_password_label
+  translation: "新密码"
+- id: mail.reset.form_submit
+  translation: "保存新密码"
+- id: mail.reset.done
+  translation: "密码已重置，现在可以登录了。"
+- id: mail.reset.error_invalid
+  translation: "该重置链接无效。"
+- id: mail.reset.error_used
+  translation: "该重置链接已被使用过。"
+- id: mail.reset.error_expired
+  translation: "该重置链接已过期。"
+- id: mail.reset.greeting
+  translation: "你好，"
+- id: mail.reset.body
+  translation: "有人为你的 {{.site}} 账号申请了密码重置。如果这是你本人，请打开下面的链接。"
+- id: mail.reset.link_label
+  translation: "重置链接："
+- id: mail.reset.expires
+  translation: "该链接将于 {{.expires}} 过期。"
+- id: mail.reset.subject
+  translation: "重置你的 {{.site}} 密码"
+- id: mail.verify.title
+  translation: "邮箱验证"
+- id: mail.verify.heading
+  translation: "邮箱验证"
+- id: mail.verify.done
+  translation: "你的邮箱已验证。"
+- id: mail.verify.back_login
+  translation: "返回登录"
+- id: mail.verify.back_settings
+  translation: "返回设置"
+- id: mail.verify.sent
+  translation: "验证链接已发送到你的邮箱。"
+- id: mail.verify.error_invalid
+  translation: "该验证链接无效。"
+- id: mail.verify.error_used
+  translation: "该验证链接已被使用过。"
+- id: mail.verify.error_expired
+  translation: "该验证链接已过期。"
+- id: mail.verify.greeting
+  translation: "你好，"
+- id: mail.verify.body
+  translation: "请打开下面的链接确认你的 {{.site}} 邮箱地址。"
+- id: mail.verify.link_label
+  translation: "验证链接："
+- id: mail.verify.expires
+  translation: "该链接将于 {{.expires}} 过期。"
+- id: mail.verify.subject
+  translation: "验证你的 {{.site}} 邮箱地址"
+- id: mail.verify.change_title
+  translation: "确认改邮箱"
+- id: mail.verify.change_heading
+  translation: "确认改邮箱"
+- id: mail.verify.change_intro
+  translation: "输入新邮箱地址，我们会向它发送确认链接。"
+- id: mail.verify.change_email_label
+  translation: "新邮箱"
+- id: mail.verify.change_submit
+  translation: "发送确认"
+- id: mail.verify.change_same_email
+  translation: "这已经是你的邮箱地址了。"
+- id: mail.verify.change_email_taken
+  translation: "该邮箱地址已被使用。"
+- id: mail.verify.change_sent
+  translation: "确认链接已发送到新邮箱地址。"
+- id: mail.verify.change_done
+  translation: "你的邮箱地址已更新。"
+- id: mail.verify.change_error_invalid
+  translation: "该确认链接无效。"
+- id: mail.verify.change_error_used
+  translation: "该确认链接已被使用过。"
+- id: mail.verify.change_error_expired
+  translation: "该确认链接已过期。"
+- id: mail.verify.change_greeting
+  translation: "你好，"
+- id: mail.verify.change_body
+  translation: "请打开下面的链接确认这个新的 {{.site}} 邮箱地址。"
+- id: mail.verify.change_link_label
+  translation: "确认链接："
+- id: mail.verify.change_expires
+  translation: "该链接将于 {{.expires}} 过期。"
+- id: mail.verify.change_subject
+  translation: "确认你的新 {{.site}} 邮箱地址"
+- id: mail.notice.greeting
+  translation: "你好，"
+- id: mail.notice.new_device.subject
+  translation: "你的 {{.site}} 账号有新登录"
+- id: mail.notice.new_device.body
+  translation: "你的 {{.site}} 账号刚刚从一个新设备或新 IP 登录。IP：{{.ip}}。时间：{{.time}}。如果不是你本人，请立即修改密码。"
+- id: mail.notice.credential.subject
+  translation: "你的 {{.site}} 凭据已变更"
+- id: mail.notice.credential.body
+  translation: "你的 {{.site}} 账号的以下安全设置被更改：{{.what}}。如果不是你本人，请立即保护账号。"
+- id: mail.notice.credential.password
+  translation: "密码"
+- id: mail.notice.credential.totp_enabled
+  translation: "已启用两步验证"
+- id: mail.notice.credential.totp_disabled
+  translation: "已关闭两步验证"
+- id: mail.notice.credential.recovery_codes
+  translation: "已重新生成恢复码"
+- id: mail.notice.account.subject
+  translation: "你的 {{.site}} 账号状态已变更"
+- id: mail.notice.account.body
+  translation: "你的 {{.site}} 账号已被{{.status}}。如果你认为这是误操作，请联系管理员。"
+- id: mail.notice.account.disabled
+  translation: "禁用"
+- id: mail.notice.account.deleted
+  translation: "删除"
 

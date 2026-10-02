@@ -93,7 +93,10 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 
 // preSessionCSRFRoutes 是需要双提交 cookie 的登录前表单路由（B-13）。
 // 这些路由的 POST 由 auth.DoubleSubmitMiddleware 校验 cookie 与镜像 token 的一致性。
-var preSessionCSRFRoutes = map[string]bool{"/login": true, "/register": true, "/setup": true, "/login/totp": true}
+var preSessionCSRFRoutes = map[string]bool{
+	"/login": true, "/register": true, "/setup": true, "/login/totp": true,
+	"/forgot-password": true, "/reset-password": true,
+}
 
 // testDoubleSubmitToken 是测试里使用的固定会话前 CSRF token；值只需满足长度下限。
 const testDoubleSubmitToken = "test-double-submit-token-0123456789"

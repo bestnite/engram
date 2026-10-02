@@ -136,6 +136,8 @@ func (s *Server) totpSubmit(c *gin.Context) {
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": c.ClientIP(), "second_factor": "totp"},
 	})
+	// M1-19：第二因素通过后的登录同样记录指纹并在新设备/新 IP 时提醒。
+	s.notifyNewDeviceLogin(c, u)
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
@@ -284,6 +286,8 @@ func (s *Server) totpConfirmSubmit(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
+	// M1-19：凭据变更通知（TOTP 启用）；发信失败不影响启用。
+	s.notifyCredentialChanged(ctx, user, "totp_enabled")
 	s.renderTOTPSettings(c, loc, user, http.StatusOK, "", loc.T("totp.saved.enabled"), codes)
 }
 
@@ -323,6 +327,8 @@ func (s *Server) totpDisableSubmit(c *gin.Context) {
 		TargetType: "user",
 		TargetID:   store.Ptr(user.ID),
 	})
+	// M1-19：凭据变更通知（TOTP 关闭）。
+	s.notifyCredentialChanged(ctx, fresh, "totp_disabled")
 	s.renderTOTPSettings(c, loc, fresh, http.StatusOK, "", loc.T("totp.saved.disabled"), nil)
 }
 
@@ -370,6 +376,8 @@ func (s *Server) totpRecoverySubmit(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
+	// M1-19：凭据变更通知（恢复码重新生成）。
+	s.notifyCredentialChanged(ctx, fresh, "recovery_codes")
 	s.renderTOTPSettings(c, loc, fresh, http.StatusOK, "", loc.T("totp.saved.recovery"), codes)
 }
 
