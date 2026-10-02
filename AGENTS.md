@@ -797,7 +797,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 14/17 · M2 12/13 · M3 12/12 · M4 9/9 · M5 11/12 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
+  `M0 13/13 · M1 14/17 · M2 12/13 · M3 12/12 · M4 9/9 · M5 11/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
