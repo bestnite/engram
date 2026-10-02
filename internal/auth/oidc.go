@@ -2,37 +2,35 @@ package auth
 
 import (
 	"context"
-	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/zitadel/oidc/v3/pkg/client/rp"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
+
 	"example.com/flashcard/internal/store"
 )
 
-// OIDC 客户端（DESIGN.md §4.4、§4.5；AGENTS.md §5 M1-11）。
+// OIDC 客户端（DESIGN.md §4.4、§4.5；AGENTS.md §5 M1-15）。
 //
-// 本文件只做标准 OIDC 协议交互：发现文档（带缓存）、Authorization Code + PKCE、
-// state / nonce 校验、ID Token 签名校验。身份绑定一律交给 IdentityLinkService（oauthlink.go），
-// 这里不重复实现任何绑定分支。
+// 协议交互全部交给 github.com/zitadel/oidc/v3：
+//   - 发现文档与端点解析：rp.NewRelyingPartyOIDC（本文件只在其上做一层带 TTL 的按 issuer 缓存，
+//     配置变更后由 Invalidate 失效）。
+//   - Authorization Code + PKCE：challenge 由 OIDC 库的 oidc.NewSHACodeChallenge 计算，
+//     授权 URL 与 token 交换由 rp.AuthURL / rp.CodeExchange 完成。
+//   - ID Token 校验：rp.CodeExchange 内部走 rp.IDTokenVerifier（签名对 JWKS、iss、aud、exp、iat）。
 //
-// 说明：项目设计选型是 github.com/zitadel/oidc/v3（DESIGN.md §10.1），但当前工作树
-// （feat/m1-oidc 基于 main）的 go.mod 里并没有这个依赖，模块缓存只有 v3.47.7。为了不在
-// 依赖树上引入未经验证的改动、也为了让 stub provider 测试完全自包含，这里用标准库实现
-// 了同一套流程。协议行为与选型无关，后续若接入 zitadel/oidc，只需替换本文件的实现。
+// 本文件只保留本项目必需、库不提供的部分：state/nonce 的一次性表、claim 名映射，
+// 以及把校验结果交给 IdentityLinkService（oauthlink.go）做身份绑定。绑定分支不在这里重复实现。
 
 // OIDC 设置的 settings 键（DESIGN.md §8.4）。client_secret 后缀是 `_secret`，
 // 因此 store.IsSensitiveSettingKey 会要求它走 AES-GCM 加密通道（store/secret.go）。
@@ -59,6 +57,10 @@ const (
 
 // ErrOIDCDisabled 表示 OIDC 未启用或配置不完整；transport 层据此把相关路由置为不可用。
 var ErrOIDCDisabled = errors.New("oidc is not configured")
+
+// oidcDiscoveryFallbackRedirectURI 只用于管理面板「测试连接」：
+// 该动作只校验发现文档，不发起登录，redirect 值不参与请求。
+const oidcDiscoveryFallbackRedirectURI = "http://localhost/auth/oidc/callback"
 
 // OIDCConfig 是 OIDC 的生效配置。ClientSecret 是解密后的明文，绝不写日志、绝不回显。
 type OIDCConfig struct {
@@ -138,20 +140,6 @@ func orDefault(raw, def string) string {
 	return def
 }
 
-// oidcDiscovery 是发现文档里本项目用到的字段。
-type oidcDiscovery struct {
-	Issuer                string `json:"issuer"`
-	AuthorizationEndpoint string `json:"authorization_endpoint"`
-	TokenEndpoint         string `json:"token_endpoint"`
-	JWKSURI               string `json:"jwks_uri"`
-}
-
-// discoveryCache 是带时间戳的发现文档缓存项。
-type discoveryCache struct {
-	doc       oidcDiscovery
-	fetchedAt time.Time
-}
-
 // PendingAuth 是一次登录发起时保存的临时状态，回调时按 state 取回。
 // Nonce / Verifier 是敏感值，只存在于内存，不落 cookie、不落库。
 type PendingAuth struct {
@@ -161,14 +149,22 @@ type PendingAuth struct {
 	ExpiresAt   time.Time
 }
 
-// OIDCClient 是并发安全的 OIDC 协议客户端：发现文档缓存 + 待完成登录的 state 表。
+// cachedRelyingParty 是带 TTL 的库客户端缓存项；issuer 用于按 issuer 失效。
+type cachedRelyingParty struct {
+	issuer    string
+	party     rp.RelyingParty
+	fetchedAt time.Time
+}
+
+// OIDCClient 是并发安全的 OIDC 客户端：库 RP 的缓存 + 待完成登录的 state 表。
+// 发现文档解析与 ID Token 校验都由 rp.RelyingParty 承担，这里只负责缓存与一次性 state。
 type OIDCClient struct {
 	http *http.Client
 	now  func() time.Time
 	ttl  time.Duration
 
 	mu      sync.Mutex
-	cache   map[string]discoveryCache
+	cache   map[string]cachedRelyingParty
 	pending map[string]PendingAuth
 }
 
@@ -181,65 +177,75 @@ func NewOIDCClient(httpClient *http.Client) *OIDCClient {
 		http:    httpClient,
 		now:     func() time.Time { return time.Now().UTC() },
 		ttl:     time.Hour,
-		cache:   make(map[string]discoveryCache),
+		cache:   make(map[string]cachedRelyingParty),
 		pending: make(map[string]PendingAuth),
 	}
 }
 
-// Discover 拉取并缓存 issuer 的发现文档。缓存过期或显式失效后重新拉取；
-// 失败时返回的错误包含 provider 的状态码与响应体片段，供管理面板「测试连接」原样显示。
-func (c *OIDCClient) Discover(ctx context.Context, issuer string) (*oidcDiscovery, error) {
-	return c.discover(ctx, issuer)
+// oidcCacheKey 把影响库 RP 构造的输入拼成缓存键。
+func oidcCacheKey(issuer, clientID, redirectURI string) string {
+	return issuer + "\x00" + clientID + "\x00" + redirectURI
 }
 
-// ---- 发现文档 ----
-
-func (c *OIDCClient) discover(ctx context.Context, issuer string) (*oidcDiscovery, error) {
-	key := strings.TrimRight(strings.TrimSpace(issuer), "/")
-	if key == "" {
+// Client 返回配置对应的库 RP（带 TTL 缓存）。redirectURI 必须与实际回调一致，
+// 因为它会被写进授权 URL 与 token 请求。配置变更后由 Invalidate 失效。
+func (c *OIDCClient) Client(ctx context.Context, cfg *OIDCConfig, redirectURI string) (rp.RelyingParty, error) {
+	if cfg == nil || strings.TrimSpace(cfg.Issuer) == "" {
 		return nil, errors.New("oidc: issuer is empty")
 	}
+	key := oidcCacheKey(cfg.Issuer, cfg.ClientID, redirectURI)
 	c.mu.Lock()
 	if entry, ok := c.cache[key]; ok && c.now().Sub(entry.fetchedAt) < c.ttl {
-		doc := entry.doc
+		party := entry.party
 		c.mu.Unlock()
-		return &doc, nil
+		return party, nil
 	}
 	c.mu.Unlock()
 
-	wellKnown := key + "/.well-known/openid-configuration"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
+	party, err := c.build(ctx, cfg, redirectURI)
 	if err != nil {
-		return nil, fmt.Errorf("oidc: build discovery request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: discovery request to %s failed: %w", wellKnown, err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oidc: discovery endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var doc oidcDiscovery
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, fmt.Errorf("oidc: discovery document is not valid JSON: %w (body: %s)", err, strings.TrimSpace(string(body)))
-	}
-	if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" || doc.JWKSURI == "" {
-		return nil, fmt.Errorf("oidc: discovery document is missing required endpoints")
+		return nil, err
 	}
 	c.mu.Lock()
-	c.cache[key] = discoveryCache{doc: doc, fetchedAt: c.now()}
+	c.cache[key] = cachedRelyingParty{issuer: cfg.Issuer, party: party, fetchedAt: c.now()}
 	c.mu.Unlock()
-	return &doc, nil
+	return party, nil
 }
 
-// Invalidate 丢弃某个 issuer 的发现文档缓存；配置变更后调用（DESIGN.md §4.4）。
+// Discover 只做发现文档校验，不缓存：管理面板「测试连接」每次都要真实访问 provider，
+// 失败时返回的错误包含 provider 的状态码与响应体片段，供页面原样显示（DESIGN.md §4.4）。
+func (c *OIDCClient) Discover(ctx context.Context, issuer string) (rp.RelyingParty, error) {
+	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
+	if issuer == "" {
+		return nil, errors.New("oidc: issuer is empty")
+	}
+	return c.build(ctx, &OIDCConfig{Issuer: issuer, Scopes: splitOIDCScopes("")}, oidcDiscoveryFallbackRedirectURI)
+}
+
+// build 用库构造一个 RP；发现文档在此拉取，端点与 JWKS 位置由库解析。
+func (c *OIDCClient) build(ctx context.Context, cfg *OIDCConfig, redirectURI string) (rp.RelyingParty, error) {
+	party, err := rp.NewRelyingPartyOIDC(
+		ctx, cfg.Issuer, cfg.ClientID, cfg.ClientSecret, redirectURI, cfg.Scopes,
+		rp.WithHTTPClient(c.http),
+		// nonce 是每次登录不同的值，无法在缓存的 RP 上固定；这里关闭库内置的 nonce 钩子，
+		// 由 ExchangeCode 在换取 token 后用 oidc.CheckNonce 校验本次登录的 nonce。
+		rp.WithVerifierOpts(rp.WithNonce(nil)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("oidc: discovery for issuer %s failed: %w", cfg.Issuer, err)
+	}
+	return party, nil
+}
+
+// Invalidate 丢弃某个 issuer 的所有库 RP 缓存；配置变更后调用（DESIGN.md §4.4）。
 func (c *OIDCClient) Invalidate(issuer string) {
-	key := strings.TrimRight(strings.TrimSpace(issuer), "/")
+	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	c.mu.Lock()
-	delete(c.cache, key)
+	for key, entry := range c.cache {
+		if entry.issuer == issuer {
+			delete(c.cache, key)
+		}
+	}
 	c.mu.Unlock()
 }
 
@@ -272,13 +278,13 @@ type PKCEChallenge struct {
 }
 
 // NewPKCE 生成 code_verifier 与 S256 code_challenge。
+// challenge 由 OIDC 库的 oidc.NewSHACodeChallenge 计算，不自行实现哈希编码。
 func NewPKCE() (PKCEChallenge, error) {
 	verifier, err := randomURLSafe(32)
 	if err != nil {
 		return PKCEChallenge{}, err
 	}
-	sum := sha256.Sum256([]byte(verifier))
-	return PKCEChallenge{Verifier: verifier, Challenge: base64.RawURLEncoding.EncodeToString(sum[:])}, nil
+	return PKCEChallenge{Verifier: verifier, Challenge: oidc.NewSHACodeChallenge(verifier)}, nil
 }
 
 // NewState 生成 state / nonce 用的随机串（32 字节 URL 安全编码）。
@@ -293,227 +299,36 @@ func randomURLSafe(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// BuildAuthURL 拼授权端点 URL：response_type=code、PKCE、state、nonce 全部带上。
-func BuildAuthURL(doc *oidcDiscovery, cfg *OIDCConfig, state, nonce, challenge, redirectURI string) (string, error) {
-	base, err := url.Parse(doc.AuthorizationEndpoint)
-	if err != nil {
-		return "", fmt.Errorf("oidc: invalid authorization endpoint: %w", err)
+// BuildAuthURL 用库拼授权 URL：response_type=code、PKCE、state、nonce 全部带上。
+func BuildAuthURL(party rp.RelyingParty, state, nonce, challenge string) string {
+	opts := []rp.AuthURLOpt{rp.WithCodeChallenge(challenge)}
+	if nonce != "" {
+		opts = append(opts, rp.AuthURLOpt(rp.WithURLParam("nonce", nonce)))
 	}
-	q := base.Query()
-	q.Set("response_type", "code")
-	q.Set("client_id", cfg.ClientID)
-	q.Set("redirect_uri", redirectURI)
-	q.Set("scope", strings.Join(cfg.Scopes, " "))
-	q.Set("state", state)
-	q.Set("nonce", nonce)
-	q.Set("code_challenge", challenge)
-	q.Set("code_challenge_method", "S256")
-	base.RawQuery = q.Encode()
-	return base.String(), nil
+	return rp.AuthURL(state, party, opts...)
 }
 
-// ExchangeCode 用授权码换取 token，返回 ID Token 原文。
-// 失败时把 provider 返回的 error / error_description 原样带进错误文本
-// （管理面板与日志都能看到真实原因，而不是笼统的「登录失败」）。
-func (c *OIDCClient) ExchangeCode(ctx context.Context, doc *oidcDiscovery, cfg *OIDCConfig, code, verifier, redirectURI string) (string, error) {
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("code", code)
-	form.Set("redirect_uri", redirectURI)
-	form.Set("client_id", cfg.ClientID)
-	form.Set("code_verifier", verifier)
-	if cfg.ClientSecret != "" {
-		form.Set("client_secret", cfg.ClientSecret)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, doc.TokenEndpoint, strings.NewReader(form.Encode()))
+// ExchangeCode 用授权码换 token 并由库校验 ID Token：
+// 签名（对 JWKS）、iss、aud、exp、iat 都在 rp.CodeExchange 内部完成。
+// 之后本项目再校验一次性 nonce 与 subject 非空；任何一项不通过都返回错误。
+func (c *OIDCClient) ExchangeCode(ctx context.Context, party rp.RelyingParty, code, verifier, expectedNonce string) (*oidc.IDTokenClaims, error) {
+	tokens, err := rp.CodeExchange[*oidc.IDTokenClaims](ctx, code, party, rp.WithCodeVerifier(verifier))
 	if err != nil {
-		return "", fmt.Errorf("oidc: build token request: %w", err)
+		return nil, fmt.Errorf("oidc: token exchange failed: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("oidc: token request failed: %w", err)
+	claims := tokens.IDTokenClaims
+	if claims == nil {
+		return nil, errors.New("oidc: token response has no id_token")
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	var tr struct {
-		IDToken          string `json:"id_token"`
-		Error            string `json:"error"`
-		ErrorDescription string `json:"error_description"`
+	if expectedNonce != "" {
+		if err := oidc.CheckNonce(claims, expectedNonce); err != nil {
+			return nil, fmt.Errorf("oidc: %w", err)
+		}
 	}
-	if err := json.Unmarshal(body, &tr); err != nil {
-		return "", fmt.Errorf("oidc: token response is not valid JSON (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	if tr.Error != "" {
-		return "", fmt.Errorf("oidc: token endpoint error %q: %s", tr.Error, tr.ErrorDescription)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("oidc: token endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	if tr.IDToken == "" {
-		return "", errors.New("oidc: token response has no id_token")
-	}
-	return tr.IDToken, nil
-}
-
-// IDTokenClaims 是校验通过后的 ID Token 声明：结构化字段 + 原始 map（供 claim 映射取任意 claim）。
-type IDTokenClaims struct {
-	Issuer    string
-	Subject   string
-	Audience  []string
-	ExpiresAt time.Time
-	Nonce     string
-	Raw       map[string]any
-}
-
-// VerifyIDToken 校验 ID Token：RS256 签名（对 JWKS）、iss、aud、exp 与 nonce。
-// 任何一项不通过都返回错误，绝不放行未校验的 token。
-func (c *OIDCClient) VerifyIDToken(ctx context.Context, doc *oidcDiscovery, cfg *OIDCConfig, idToken, expectedNonce string) (*IDTokenClaims, error) {
-	parts := strings.Split(idToken, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("oidc: id_token is not a compact JWS")
-	}
-	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, fmt.Errorf("oidc: decode id_token header: %w", err)
-	}
-	var header struct {
-		Alg string `json:"alg"`
-		Kid string `json:"kid"`
-	}
-	if err := json.Unmarshal(headerJSON, &header); err != nil {
-		return nil, fmt.Errorf("oidc: parse id_token header: %w", err)
-	}
-	// 只接受 RS256：拒绝 none / HS256（HS256 会用公钥当对称密钥，是经典混淆攻击）。
-	if header.Alg != "RS256" {
-		return nil, fmt.Errorf("oidc: unsupported id_token signing algorithm %q (only RS256 is accepted)", header.Alg)
-	}
-
-	keys, err := c.fetchJWKS(ctx, doc.JWKSURI)
-	if err != nil {
-		return nil, err
-	}
-	pub, err := selectRSAKey(keys, header.Kid)
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, fmt.Errorf("oidc: decode id_token signature: %w", err)
-	}
-	signed := []byte(parts[0] + "." + parts[1])
-	digest := sha256.Sum256(signed)
-	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], sig); err != nil {
-		return nil, fmt.Errorf("oidc: id_token signature verification failed: %w", err)
-	}
-
-	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("oidc: decode id_token payload: %w", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(payloadJSON, &raw); err != nil {
-		return nil, fmt.Errorf("oidc: parse id_token payload: %w", err)
-	}
-	claims := &IDTokenClaims{
-		Issuer:  stringClaimValue(raw, "iss"),
-		Subject: stringClaimValue(raw, "sub"),
-		Nonce:   stringClaimValue(raw, "nonce"),
-		Raw:     raw,
-	}
-	claims.Audience = audienceClaim(raw)
-	if exp, ok := numericClaimValue(raw, "exp"); ok {
-		claims.ExpiresAt = time.Unix(int64(exp), 0).UTC()
-	}
-
-	if claims.Issuer != doc.Issuer && claims.Issuer != cfg.Issuer {
-		return nil, fmt.Errorf("oidc: id_token issuer %q does not match %q", claims.Issuer, doc.Issuer)
-	}
-	if !audienceContains(claims.Audience, cfg.ClientID) {
-		return nil, fmt.Errorf("oidc: id_token audience %v does not include client_id", claims.Audience)
-	}
-	if claims.ExpiresAt.IsZero() || c.now().After(claims.ExpiresAt) {
-		return nil, errors.New("oidc: id_token is expired or has no exp")
-	}
-	if expectedNonce != "" && claims.Nonce != expectedNonce {
-		return nil, errors.New("oidc: id_token nonce does not match the login request")
-	}
-	if claims.Subject == "" {
+	if claims.GetSubject() == "" {
 		return nil, errors.New("oidc: id_token has no subject")
 	}
 	return claims, nil
-}
-
-// jwks / jwk 是 JSON Web Key Set 的解析结构（只处理 RSA 公钥）。
-type jwks struct {
-	Keys []jwk `json:"keys"`
-}
-
-type jwk struct {
-	Kty string `json:"kty"`
-	Kid string `json:"kid"`
-	N   string `json:"n"`
-	E   string `json:"e"`
-}
-
-func (c *OIDCClient) fetchJWKS(ctx context.Context, jwksURI string) (*jwks, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURI, nil)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: build jwks request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: jwks request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oidc: jwks endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var set jwks
-	if err := json.Unmarshal(body, &set); err != nil {
-		return nil, fmt.Errorf("oidc: jwks document is not valid JSON: %w", err)
-	}
-	return &set, nil
-}
-
-// selectRSAKey 按 kid 选公钥；kid 为空时退化为第一把 RSA 公钥。
-func selectRSAKey(set *jwks, kid string) (*rsa.PublicKey, error) {
-	var candidates []jwk
-	for _, k := range set.Keys {
-		if !strings.EqualFold(k.Kty, "RSA") {
-			continue
-		}
-		if kid == "" || k.Kid == kid {
-			candidates = append(candidates, k)
-		}
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("oidc: no matching RSA key in jwks (kid=%q)", kid)
-	}
-	return rsaKeyFromJWK(candidates[0])
-}
-
-func rsaKeyFromJWK(k jwk) (*rsa.PublicKey, error) {
-	nBytes, err := base64.RawURLEncoding.DecodeString(k.N)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: decode jwk modulus: %w", err)
-	}
-	eBytes, err := base64.RawURLEncoding.DecodeString(k.E)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: decode jwk exponent: %w", err)
-	}
-	e := 0
-	for _, b := range eBytes {
-		e = e<<8 | int(b)
-	}
-	if e == 0 {
-		return nil, errors.New("oidc: jwk exponent is zero")
-	}
-	return &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: e}, nil
 }
 
 // ProfileFromClaims 按配置的 claim 映射把 ID Token 声明转成绑定流程的输入。
@@ -546,40 +361,6 @@ func boolClaimValue(raw map[string]any, key string) bool {
 	if v, ok := raw[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
-		}
-	}
-	return false
-}
-
-func numericClaimValue(raw map[string]any, key string) (float64, bool) {
-	if v, ok := raw[key]; ok {
-		if f, ok := v.(float64); ok {
-			return f, true
-		}
-	}
-	return 0, false
-}
-
-func audienceClaim(raw map[string]any) []string {
-	switch v := raw["aud"].(type) {
-	case string:
-		return []string{v}
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
-}
-
-func audienceContains(aud []string, want string) bool {
-	for _, a := range aud {
-		if a == want {
-			return true
 		}
 	}
 	return false
