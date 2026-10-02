@@ -314,7 +314,7 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* a user's choice for an optional type survives a restart; refusing to disable a class A
   type; a type that is off is not sent even when its trigger fires.
-- [ ] **M1-19 Transactional security mail (class A)** — password reset, email verification and
+- [x] **M1-19 Transactional security mail (class A)** — password reset, email verification and
   email-change confirmation, new-device or new-IP sign-in notice, password or TOTP or recovery-code
   change notice, and account disabled or deleted notice. None of them is opt-out and none carries an
   unsubscribe header.
@@ -868,7 +868,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 20/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/10
+  `M0 13/13 · M1 21/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/10
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
