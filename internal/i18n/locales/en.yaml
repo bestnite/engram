@@ -1252,19 +1252,19 @@
 - id: stats.time.heading
   translation: "Time spent"
 - id: stats.time.total
-  translation: "Total: {{.ms}} ms"
+  translation: "{{.ms}} ms"
 - id: stats.time.avg
-  translation: "Average: {{.ms}} ms"
+  translation: "{{.ms}} ms"
 - id: stats.time.median
-  translation: "Median: {{.ms}} ms"
+  translation: "{{.ms}} ms"
 - id: stats.time.count
-  translation: "Timed reviews: {{.count}}"
+  translation: "{{.count}}"
 - id: stats.streak.heading
   translation: "Streak"
 - id: stats.streak.current
-  translation: "Current streak: {{.days}} days"
+  translation: "{{.days}} days"
 - id: stats.streak.longest
-  translation: "Longest streak: {{.days}} days"
+  translation: "{{.days}} days"
 - id: stats.grade.heading
   translation: "Grading source"
 - id: stats.grade.self
@@ -2090,3 +2090,17 @@
   translation: "Invalid learning steps; use comma-separated durations such as 1m,10m."
 - id: presets.form.error.save_failed
   translation: "Could not save the preset."
+
+# ── 统计页每行的纯标签（M-统计：时间投入与连续打卡）; label keys split out from the value templates, ──
+- id: stats.time.total_label
+  translation: "Total"
+- id: stats.time.avg_label
+  translation: "Average"
+- id: stats.time.median_label
+  translation: "Median"
+- id: stats.time.count_label
+  translation: "Timed reviews"
+- id: stats.streak.current_label
+  translation: "Current streak"
+- id: stats.streak.longest_label
+  translation: "Longest streak"

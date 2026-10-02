@@ -167,16 +167,16 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 
 	// 时间投入：总量、日均、中位数、样本数。
 	data.TimeRows = []views.StatsRow{
-		{Label: loc.T("stats.time.total"), Value: loc.Tf("stats.time.total", map[string]any{"ms": timeSpent.TotalMS})},
-		{Label: loc.T("stats.time.avg"), Value: loc.Tf("stats.time.avg", map[string]any{"ms": int64(timeSpent.AvgMS)})},
-		{Label: loc.T("stats.time.median"), Value: loc.Tf("stats.time.median", map[string]any{"ms": timeSpent.MedianMS})},
-		{Label: loc.T("stats.time.count"), Value: loc.Tf("stats.time.count", map[string]any{"count": timeSpent.Count})},
+		{Label: loc.T("stats.time.total_label"), Value: loc.Tf("stats.time.total", map[string]any{"ms": timeSpent.TotalMS})},
+		{Label: loc.T("stats.time.avg_label"), Value: loc.Tf("stats.time.avg", map[string]any{"ms": int64(timeSpent.AvgMS)})},
+		{Label: loc.T("stats.time.median_label"), Value: loc.Tf("stats.time.median", map[string]any{"ms": timeSpent.MedianMS})},
+		{Label: loc.T("stats.time.count_label"), Value: loc.Tf("stats.time.count", map[string]any{"count": timeSpent.Count})},
 	}
 
 	// 连续打卡。
 	data.StreakRows = []views.StatsRow{
-		{Label: loc.T("stats.streak.current"), Value: loc.Tf("stats.streak.current", map[string]any{"days": streak.Current})},
-		{Label: loc.T("stats.streak.longest"), Value: loc.Tf("stats.streak.longest", map[string]any{"days": streak.Longest})},
+		{Label: loc.T("stats.streak.current_label"), Value: loc.Tf("stats.streak.current", map[string]any{"days": streak.Current})},
+		{Label: loc.T("stats.streak.longest_label"), Value: loc.Tf("stats.streak.longest", map[string]any{"days": streak.Longest})},
 	}
 
 	// 判分来源分布。

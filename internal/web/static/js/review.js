@@ -159,11 +159,29 @@
     }
   }
 
-  function markElapsed() {
-    var elapsed = document.getElementById("review-elapsed");
-    if (elapsed) {
-      elapsed.value = String(Date.now() - startedAt);
+  // 评分请求发出前记录本张卡的耗时（DESIGN.md §9 的时间投入）。
+  // 必须挂在 htmx:configRequest，而不是 htmx:beforeRequest：htmx 2.x 里 configRequest 触发时
+  // 参数**已经收集完毕**，此时再去写隐藏字段已经晚了——请求体里带的仍是空值，服务端存 NULL，
+  // 统计里卡组耗时恒为 0（实测踩过）。这里直接改 detail.parameters，并同步回隐藏字段。
+  function markElapsed(evt) {
+    var field = document.getElementById("review-elapsed");
+    var params = evt && evt.detail && evt.detail.parameters;
+    if (!field || !field.name || !params) {
+      return;
     }
+    // 只给带该字段的评分表单补值；撤销/暂停/埋藏/继续这些动作表单不需要耗时。
+    var isFormData = typeof FormData !== "undefined" && params instanceof FormData;
+    var present = isFormData ? params.has(field.name) : field.name in params;
+    if (!present) {
+      return;
+    }
+    var ms = String(Date.now() - startedAt);
+    if (isFormData) {
+      params.set(field.name, ms);
+    } else {
+      params[field.name] = ms;
+    }
+    field.value = ms;
   }
 
   function showOffline() {
@@ -203,8 +221,8 @@
     }
   });
 
-  // 评分/动作请求发出前记录耗时；换卡后复位问答状态与计时。
-  document.addEventListener("htmx:beforeRequest", markElapsed);
+  // 评分/动作请求配置参数时记录耗时；换卡后复位问答状态与计时。
+  document.addEventListener("htmx:configRequest", markElapsed);
   document.addEventListener("htmx:afterSwap", function (e) {
     if (e.target && e.target.id === "review-area") {
       resetCardState();
