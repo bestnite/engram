@@ -5,6 +5,7 @@
 #
 # 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME，
 # 且由 scripts/checks/no-private-data.sh 自检。
+# （例外：service 容器名 `postgres` 是 act 建的网络上的服务名，不是真实主机名。）
 name: ci
 
 on:
@@ -32,8 +33,6 @@ jobs:
           POSTGRES_USER: engram
           POSTGRES_PASSWORD: CHANGE_ME
           POSTGRES_DB: engram
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U engram"
           --health-interval 10s
@@ -42,7 +41,8 @@ jobs:
 
     env:
       # 与服务的账号一致；仅用于 CI 的一次性数据库，非真实凭据。
-      TEST_PG_DSN: postgres://engram:CHANGE_ME@localhost:5432/engram?sslmode=disable
+      # 服务容器与 job 容器同在 act 为本次作业新建的网络上，服务名即主机名（不是 localhost）。
+      TEST_PG_DSN: postgres://engram:CHANGE_ME@postgres:5432/engram?sslmode=disable
 
     steps:
       - name: Check out
