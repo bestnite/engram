@@ -5,10 +5,10 @@ and restates the rules that external contributors are expected to follow. It is 
 short on the product itself: for what the service is and how to run it locally, read
 [`README.md`](README.md) first — this file does not repeat the quick start.
 
-Two documents are the project's authority, and both must be read before you change anything:
-
-- [`DESIGN.md`](DESIGN.md) — the specification of record for behaviour, data model, and scope.
-- [`DESIGN.md`](DESIGN.md) §2.3 — the database compatibility rules, referenced throughout below.
+This repository ships no in-tree specification document: the behaviour rules that matter to a
+contribution are restated below, and the rest live with the maintainers. When you find a gap or a
+contradiction, report it to the maintainers (an issue or a pull request comment) instead of
+inventing a decision in code.
 
 `AGENTS.md` is the maintainers' development guide (non-negotiable rules, definition of done,
 task backlog). You are welcome to read it. **Do not edit it** (see
@@ -27,16 +27,16 @@ subagents as much as to external contributors.
 - [Branch and pull request workflow](#branch-and-pull-request-workflow)
 - [Parallel development with git worktrees](#parallel-development-with-git-worktrees)
 - [Do not edit AGENTS.md](#do-not-edit-agentsmd)
-- [Placeholders: project name and licence](#placeholders-project-name-and-licence)
+- [Project name and licence](#project-name-and-licence)
 
 ## Before you start
 
 1. Read [`README.md`](README.md) and its quick start. Every command there runs as written.
-2. Read [`DESIGN.md`](DESIGN.md) for the area you want to change. If code and `DESIGN.md`
-   disagree, one of them is a bug: fix the code, or change `DESIGN.md` in the same commit —
-   never leave them inconsistent.
-3. Anything not decided in `DESIGN.md` (its §13 lists the open questions) must be raised
-   rather than invented in code. Open an issue or ask on the pull request.
+2. Read the code for the area you want to change. If it disagrees with the behaviour described
+   here, one of them is wrong: fix the code, or report the mismatch to the maintainers — never
+   leave the two inconsistent.
+3. Anything not settled in this document must be raised rather than invented in code. Open an
+   issue or ask on the pull request.
 
 ## Development environment
 
@@ -147,7 +147,7 @@ personal email address, token, password, or description of private infrastructur
 ### Both databases must work
 
 PostgreSQL (default deployment) and SQLite (single-node and development) are both first-class.
-Follow the compatibility rules in `DESIGN.md` §2.3:
+Follow these compatibility rules:
 
 - No PostgreSQL-only column types (`jsonb`, `serial`, `array`).
 - Store JSON as `TEXT`.
@@ -160,9 +160,8 @@ Follow the compatibility rules in `DESIGN.md` §2.3:
 1. **Content and progress are separate.** `notes`/`cards` hold content only; per-user
    scheduling lives in `card_states`, keyed `(card_id, user_id)`. Sharing a deck must never
    mix two users' progress.
-2. **`reviews` is append-only.** Every column listed in `DESIGN.md` §2.2 is written from the
-   first commit — it is the only fuel for parameter optimisation and cannot be reconstructed
-   later.
+2. **`reviews` is append-only.** Every column is written from the first commit — it is the only
+   fuel for parameter optimisation and cannot be reconstructed later.
 3. **Ratings and states are integers**: `rating` 1–4 (Again/Hard/Good/Easy), `state_before`
    0–3 (New/Learning/Review/Relearning). This matches the FSRS ecosystem log format.
 4. **One business layer, two transports.** REST handlers and MCP tools call the same service
@@ -183,8 +182,8 @@ replacement need, and define the minimal interface **at the consumer**. One mode
 business, GORM, and JSON/CSV — no entity/DTO mapping layers. Blocking operations take
 `context.Context` as the first parameter. Wrap errors with `%w`; API/MCP errors carry a stable
 English `code` plus a localised `message`. Do not add a dependency without a reason that
-survives the selection principle in `DESIGN.md` §10.1 (low complexity, prefer mature
-libraries over invented ones).
+survives the selection principle: low complexity, and prefer mature libraries over invented
+ones.
 
 ## Tests
 
@@ -195,7 +194,8 @@ libraries over invented ones).
 - **Negative cases are required, not optional.** Every new behaviour needs its failure path
   asserted: permission denials, CSRF failures, expired keys, scope violations, rejected
   input, and conflict paths. A test that only proves the happy path is incomplete.
-- If a change alters behaviour or a decision, update `DESIGN.md` in the same commit.
+- If a change alters behaviour or a decision, report it to the maintainers so the change can be
+  recorded.
 
 A task is complete only when its acceptance criteria pass with evidence (a command output or a
 captured response — not a claim) and the build/vet/format/test suite is clean.
@@ -288,13 +288,10 @@ the needed change to the parent instead.
 Maintainers record verified progress in the gitignored `PROGRESS.local.md` and apply checkbox
 and counting updates to `AGENTS.md` in batches, with the user present.
 
-## Placeholders: project name and licence
+## Project name and licence
 
-The **project name and module path are settled** (`Engram` / `example.com/engram`). The
-**licence is still a placeholder** and has not been decided:
+- **Project name:** `Engram`.
+- **Module path:** `example.com/engram`.
+- **Licence:** [AGPL-3.0](LICENSE). The full text is in [`LICENSE`](LICENSE).
 
-- Licence: not chosen yet (MIT / Apache-2.0 / AGPL-3.0); `LICENSE` currently holds a
-  placeholder (backlog B-2, `DESIGN.md` §13 #2).
-
-**Do not pick the licence in a contribution.** A change that replaces the placeholder licence
-will be rejected until the decision is made; open an issue to discuss it instead.
+A contribution does not change the licence.
