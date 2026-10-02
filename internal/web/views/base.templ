@@ -7,7 +7,7 @@ templ Base(data LayoutData) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<meta name="theme-color" content="#2563eb"/>
+			<meta name="theme-color" content="#18181b"/>
 			<link rel="manifest" href="/manifest.webmanifest"/>
 			<title>{ data.Title }</title>
 			if data.CSSURL != "" {
@@ -23,30 +23,52 @@ templ Base(data LayoutData) {
 				<script src={ data.MediaJSURL } defer></script>
 			}
 		</head>
-		<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
-			<header class="border-b border-slate-200 bg-white">
-				<nav class="mx-auto flex max-w-3xl items-center gap-4 px-4 py-3">
-					<a class="font-semibold text-blue-600" href={ data.HomeURL }>{ data.Brand }</a>
-					for _, item := range data.Nav {
-						<a class="text-sm text-slate-600 hover:text-slate-900" href={ item.Href }>{ item.Label }</a>
-					}
-					if data.SessionForm {
-						<form class="ml-auto" method="post" action={ data.SessionHref }>
-							if data.CSRF != "" {
-								<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-							}
-							<button class="text-sm text-slate-600 hover:text-slate-900" type="submit">{ data.SessionLabel }</button>
-						</form>
-					} else if data.SessionLabel != "" {
-						<a class="ml-auto text-sm text-slate-600 hover:text-slate-900" href={ data.SessionHref }>{ data.SessionLabel }</a>
-					}
+		<body class="min-h-screen flex flex-col bg-slate-50 text-zinc-900 antialiased selection:bg-zinc-200 selection:text-zinc-950">
+			<header class="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md">
+				<nav class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+					<div class="flex items-center gap-6">
+						<a class="flex items-center gap-2.5 font-bold tracking-tight text-zinc-950 hover:opacity-90 transition-opacity" href={ data.HomeURL }>
+							<span class="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 text-white shadow-2xs">
+								<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="m9 12 2 2 4-4"></path></svg>
+							</span>
+							<span class="text-base font-semibold">{ data.Brand }</span>
+						</a>
+						if len(data.Nav) > 0 {
+							<div class="hidden sm:flex items-center gap-1">
+								for _, item := range data.Nav {
+									<a class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 transition-colors" href={ item.Href }>{ item.Label }</a>
+								}
+							</div>
+						}
+					</div>
+					<div class="flex items-center gap-2">
+						if data.SessionForm {
+							<form method="post" action={ data.SessionHref }>
+								if data.CSRF != "" {
+									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+								}
+								<button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 transition-colors cursor-pointer" type="submit">{ data.SessionLabel }</button>
+							</form>
+						} else if data.SessionLabel != "" {
+							<a class="rounded-lg bg-zinc-950 px-3 py-1.5 text-xs sm:text-sm font-medium text-white shadow-2xs hover:bg-zinc-800 transition-colors" href={ data.SessionHref }>{ data.SessionLabel }</a>
+						}
+					</div>
 				</nav>
+				if len(data.Nav) > 0 {
+					<div class="flex sm:hidden overflow-x-auto border-t border-zinc-100 px-4 py-2 gap-1">
+						for _, item := range data.Nav {
+							<a class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 transition-colors" href={ item.Href }>{ item.Label }</a>
+						}
+					</div>
+				}
 			</header>
-			<main class="mx-auto max-w-3xl px-4 py-8">
+			<main class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
 				{ children... }
 			</main>
-			<footer class="mx-auto max-w-3xl px-4 pb-8 text-xs text-slate-400">
-				{ data.Footer }
+			<footer class="border-t border-zinc-200/60 bg-white">
+				<div class="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 py-6 sm:px-6 text-xs text-zinc-500 font-medium">
+					<p>{ data.Footer }</p>
+				</div>
 			</footer>
 			<script src="/pwa.js" defer></script>
 		</body>

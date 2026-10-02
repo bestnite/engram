@@ -6,12 +6,63 @@
 
 @source "../../views";
 
-/* 可见焦点（M8-5）：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示。
-   用 :focus-visible 而不是 :focus，避免鼠标操作时出现多余的焦点框，
-   同时保证纯键盘流程（复习页评分、编辑器、设置页）始终看得到当前焦点。 */
 @layer base {
+  /* 现代高质量排版基底：平滑字体、优化数字与连字 */
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+    letter-spacing: -0.011em;
+  }
+
+  /* 可见焦点（M8-5）：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示。
+     用 :focus-visible 而不是 :focus，避免鼠标操作时出现多余的焦点框，
+     同时保证纯键盘流程（复习页评分、编辑器、设置页）始终看得到当前焦点。 */
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-    outline: 2px solid #2563eb;
+    outline: 2px solid #18181b;
     outline-offset: 2px;
   }
+
+  /* 优化选中与滚动条 */
+  ::selection {
+    background-color: #e4e4e7;
+    color: #18181b;
+  }
+
+  /* 细化滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d4d4d8;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a1a1aa;
+  }
+}
+
+/* 按钮微动效与触觉反馈 */
+@utility btn-press {
+  transition: transform 100ms ease, box-shadow 100ms ease, background-color 150ms ease;
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+/* 极简玻璃卡片与边缘微光 */
+@utility card-elevated {
+  background-color: #ffffff;
+  border: 1px solid rgba(228, 228, 231, 0.85);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+}
+
+@utility card-subtle {
+  background-color: #fafafa;
+  border: 1px solid rgba(228, 228, 231, 0.6);
 }

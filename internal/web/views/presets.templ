@@ -4,17 +4,23 @@ package views
 // 每个预设一张卡片，卡片内提供「开始优化」「回退默认权重」与优化状态/结果摘要（M9-4）。
 templ PresetListPage(data PresetListData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		<p class="mt-2 text-sm text-slate-600">{ data.Intro }</p>
-		if len(data.Cards) == 0 {
-			<p class="mt-6 text-slate-600">{ data.EmptyText }</p>
-		} else {
-			<div class="mt-6 space-y-6">
-				for _, card := range data.Cards {
-					@PresetCard(card)
-				}
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">{ data.Heading }</h1>
+				<p class="mt-1 text-sm text-zinc-600 leading-relaxed">{ data.Intro }</p>
 			</div>
-		}
+			if len(data.Cards) == 0 {
+				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs">
+					<p class="text-sm font-medium text-zinc-500">{ data.EmptyText }</p>
+				</div>
+			} else {
+				<div class="space-y-6">
+					for _, card := range data.Cards {
+						@PresetCard(card)
+					}
+				</div>
+			}
+		</div>
 	}
 }
 
@@ -24,90 +30,115 @@ templ PresetListPage(data PresetListData) {
 // "every 2s"，否则 "none" 永不触发），响应以 outerHTML 换回自身——因此状态、权重来源
 // 与结果每次都从数据库重读，不会与库里的真实值脱节（M9-4）。
 templ PresetCard(data PresetCardData) {
-	<div id={ "preset-" + data.ID } class="rounded-lg border border-slate-200 bg-white p-4" hx-get={ data.StatusURL } hx-trigger={ data.PollTrigger } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
-		<h2 class="text-lg font-semibold text-slate-900">{ data.Name }</h2>
-		<dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-700">
+	<div id={ "preset-" + data.ID } class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-6" hx-get={ data.StatusURL } hx-trigger={ data.PollTrigger } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-100 pb-5">
 			<div>
-				<dt class="inline text-slate-500">{ data.RetentionLabel }</dt>
-				<dd class="inline">{ data.RetentionValue }</dd>
+				<h2 class="text-lg font-bold tracking-tight text-zinc-950">{ data.Name }</h2>
 			</div>
-			<div>
-				<dt class="inline text-slate-500">{ data.MaxIntervalLabel }</dt>
-				<dd class="inline">{ data.MaxIntervalValue }</dd>
+			<div class="flex flex-wrap items-center gap-2">
+				<form method="post" action={ data.OptimizeAction } hx-post={ data.OptimizeAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.OptimizeLabel }</button>
+				</form>
+				<form method="post" action={ data.RevertAction } hx-post={ data.RevertAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.RevertLabel }</button>
+				</form>
 			</div>
-			<div>
-				<dt class="inline text-slate-500">{ data.FuzzLabel }</dt>
-				<dd class="inline">{ data.FuzzValue }</dd>
+		</div>
+
+		<!-- 参数指标网格 -->
+		<dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+			<div class="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4">
+				<dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.RetentionLabel }</dt>
+				<dd class="mt-1 text-base font-bold font-mono text-zinc-950">{ data.RetentionValue }</dd>
+			</div>
+			<div class="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4">
+				<dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.MaxIntervalLabel }</dt>
+				<dd class="mt-1 text-base font-bold font-mono text-zinc-950">{ data.MaxIntervalValue }</dd>
+			</div>
+			<div class="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4">
+				<dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.FuzzLabel }</dt>
+				<dd class="mt-1 text-base font-bold font-mono text-zinc-950">{ data.FuzzValue }</dd>
 			</div>
 		</dl>
 
-		<section class="mt-4 rounded border border-slate-100 bg-slate-50 p-3">
-			<h3 class="text-sm font-semibold text-slate-800">{ data.WeightsHeading }</h3>
-			<p class="mt-1 text-sm text-slate-800">{ data.WeightsSource }</p>
-			if data.WeightsOptimizedAt != "" {
-				<p class="text-xs text-slate-600">{ data.WeightsOptimizedAt }</p>
-			}
-			if data.WeightsReviewCount != "" {
-				<p class="text-xs text-slate-600">{ data.WeightsReviewCount }</p>
-			}
+		<!-- 权重区域 -->
+		<section class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-5 space-y-3">
+			<div class="flex items-center justify-between">
+				<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.WeightsHeading }</h3>
+				<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">{ data.WeightsSource }</span>
+			</div>
+			<div class="flex flex-wrap gap-4 text-xs text-zinc-500">
+				if data.WeightsOptimizedAt != "" {
+					<span>{ data.WeightsOptimizedAt }</span>
+				}
+				if data.WeightsReviewCount != "" {
+					<span>{ data.WeightsReviewCount }</span>
+				}
+			</div>
 			if data.WeightsRaw != "" {
-				<details class="mt-2">
-					<summary class="cursor-pointer text-xs text-slate-500">{ data.WeightsRawLabel }</summary>
-					<code class="mt-1 block break-all text-xs text-slate-700">{ data.WeightsRaw }</code>
+				<details class="group mt-2">
+					<summary class="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700 group-open:text-zinc-500">{ data.WeightsRawLabel }</summary>
+					<code class="mt-2 block max-h-32 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 font-mono text-[11px] text-zinc-700 break-all">{ data.WeightsRaw }</code>
 				</details>
 			}
 		</section>
 
-		<p class="mt-3 text-xs text-slate-500">{ data.ReviewsAvailable }</p>
-		<p class="text-xs text-slate-500">{ data.Threshold }</p>
-		<p class="mt-2 text-xs text-slate-500">{ data.RescheduleNote }</p>
+		<!-- 提示与门槛 -->
+		<div class="space-y-1.5 text-xs text-zinc-500">
+			<p>{ data.ReviewsAvailable }</p>
+			<p>{ data.Threshold }</p>
+			<p>{ data.RescheduleNote }</p>
+			<p class="text-zinc-400">{ data.RevertNote }</p>
+		</div>
 
 		if data.Shortfall != "" {
-			<p class="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{ data.Shortfall }</p>
+			<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-800 shadow-2xs">
+				{ data.Shortfall }
+			</div>
 		}
 		if data.Conflict != "" {
-			<p class="mt-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{ data.Conflict }</p>
+			<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-800 shadow-2xs">
+				{ data.Conflict }
+			</div>
 		}
 
-		<div class="mt-3 flex flex-wrap items-center gap-3">
-			<form method="post" action={ data.OptimizeAction } hx-post={ data.OptimizeAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">{ data.OptimizeLabel }</button>
-			</form>
-			<form method="post" action={ data.RevertAction } hx-post={ data.RevertAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" type="submit">{ data.RevertLabel }</button>
-			</form>
-		</div>
-		<p class="mt-1 text-xs text-slate-500">{ data.RevertNote }</p>
+		<!-- 任务状态与执行日志 -->
+		if data.StatusText != "" || data.LogTail != "" || data.ErrorText != "" {
+			<section class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 sm:p-5 space-y-3">
+				if data.StatusText != "" {
+					<p class="text-sm font-semibold text-zinc-950">{ data.StatusText }</p>
+				}
+				if data.StageText != "" {
+					<p class="text-xs text-zinc-500">{ data.StageText }</p>
+				}
+				if data.ErrorText != "" {
+					<p class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ data.ErrorText }</p>
+				}
+				if data.LogTail != "" {
+					<div>
+						<p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">{ data.LogTailLabel }</p>
+						<pre class="mt-1.5 max-h-48 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-[11px] text-zinc-100">{ data.LogTail }</pre>
+					</div>
+				}
+			</section>
+		}
 
-		<section class="mt-4">
-			if data.StatusText != "" {
-				<p class="text-sm font-medium text-slate-800">{ data.StatusText }</p>
-			}
-			if data.StageText != "" {
-				<p class="text-xs text-slate-500">{ data.StageText }</p>
-			}
-			if data.ErrorText != "" {
-				<p class="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.ErrorText }</p>
-			}
-			if data.LogTail != "" {
-				<p class="mt-2 text-xs font-semibold text-slate-500">{ data.LogTailLabel }</p>
-				<pre class="mt-1 max-h-48 overflow-auto rounded bg-slate-900 p-2 text-xs text-slate-100">{ data.LogTail }</pre>
-			}
-		</section>
-
+		<!-- 优化对比结果 -->
 		if data.ResultBefore != "" || data.ResultSampleInsufficient != "" {
-			<section class="mt-3 rounded border border-slate-100 p-3">
-				<h3 class="text-sm font-semibold text-slate-800">{ data.ResultTitle }</h3>
-				<p class="mt-1 text-xs text-slate-600">{ data.ResultReviews }</p>
+			<section class="rounded-xl border border-zinc-200/80 bg-white p-5 space-y-2 shadow-2xs">
+				<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.ResultTitle }</h3>
+				<p class="text-xs text-zinc-500">{ data.ResultReviews }</p>
 				if data.ResultBefore != "" {
-					<p class="text-xs text-slate-600">{ data.ResultBefore }</p>
-					<p class="text-xs text-slate-600">{ data.ResultAfter }</p>
-					<p class="text-sm font-medium text-slate-800">{ data.ResultVerdict }</p>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+						<p class="rounded-lg bg-zinc-50 p-2 text-zinc-600">{ data.ResultBefore }</p>
+						<p class="rounded-lg bg-zinc-50 p-2 text-zinc-600">{ data.ResultAfter }</p>
+					</div>
+					<p class="text-sm font-semibold text-emerald-700">{ data.ResultVerdict }</p>
 				}
 				if data.ResultSampleInsufficient != "" {
-					<p class="text-sm font-medium text-slate-800">{ data.ResultSampleInsufficient }</p>
+					<p class="text-sm font-medium text-amber-700">{ data.ResultSampleInsufficient }</p>
 				}
 			</section>
 		}

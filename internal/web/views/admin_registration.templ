@@ -3,106 +3,123 @@ package views
 // adminRegistration 渲染注册策略、邮箱域名白名单与邀请列表（M6-3）。
 // 所有文案都来自 AdminPageData；邀请 token 与链接由 handler 拼好。
 templ adminRegistration(data AdminPageData) {
-	<section class="mt-6 first:mt-0">
-		<h2 class="text-sm font-semibold text-slate-500">{ data.PolicyHeading }</h2>
-		<p class="mt-1 text-xs text-slate-400">{ data.PolicyIntro }</p>
-		<form class="mt-3 space-y-3" method="post" action="/admin/registration">
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<fieldset>
-				<legend class="text-sm font-medium text-slate-700">{ data.PolicyLabel }</legend>
-				<div class="mt-2 space-y-1">
-					for _, opt := range data.PolicyOptions {
-						<label class="flex items-center gap-2 text-sm text-slate-700">
-							<input type="radio" name="registration_policy" value={ opt.Value } checked?={ opt.Checked }/>
-							<span>{ opt.Label }</span>
-						</label>
-					}
+	<div class="space-y-8">
+		<!-- 注册策略设置 -->
+		<section class="space-y-4">
+			<div>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.PolicyHeading }</h2>
+				<p class="mt-1 text-xs text-zinc-500">{ data.PolicyIntro }</p>
+			</div>
+			<form class="space-y-4" method="post" action="/admin/registration">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<fieldset class="space-y-2">
+					<legend class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.PolicyLabel }</legend>
+					<div class="space-y-2">
+						for _, opt := range data.PolicyOptions {
+							<label class="flex items-center gap-2.5 text-sm font-medium text-zinc-700 cursor-pointer">
+								<input type="radio" name="registration_policy" value={ opt.Value } checked?={ opt.Checked } class="h-4 w-4 text-zinc-950 focus:ring-zinc-900 border-zinc-300"/>
+								<span>{ opt.Label }</span>
+							</label>
+						}
+					</div>
+				</fieldset>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AllowlistLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="registration_email_domains" value={ data.AllowlistValue }/>
+					<span class="mt-1 block text-xs text-zinc-400">{ data.AllowlistHint }</span>
+				</label>
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.RegistrationSaveLabel }</button>
+			</form>
+		</section>
+
+		<!-- 邀请管理 -->
+		<section class="space-y-4 pt-6 border-t border-zinc-100">
+			<div>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.InvitesHeading }</h2>
+				<p class="mt-1 text-xs text-zinc-500">{ data.InvitesIntro }</p>
+			</div>
+			<form class="flex flex-wrap items-end gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 sm:p-5" method="post" action="/admin/invites">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="block flex-1 min-w-[200px]">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteEmailLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="email" value=""/>
+				</label>
+				<label class="block w-32 sm:w-40">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteRoleLabel }</span>
+					<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="role">
+						for _, r := range data.InviteRoles {
+							<option value={ r.Value } selected?={ r.Selected }>{ r.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="block w-28 sm:w-32">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteExpiryLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="number" min="0" name="expires_days" value=""/>
+				</label>
+				<div class="flex items-center gap-2 pb-2">
+					<label class="flex items-center gap-2 text-xs font-medium text-zinc-700 cursor-pointer">
+						<input type="checkbox" name="send_email" value="1" class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900"/>
+						<span>{ data.InviteMailLabel }</span>
+					</label>
 				</div>
-			</fieldset>
-			<label class="block text-sm text-slate-700">
-				<span>{ data.AllowlistLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="registration_email_domains" value={ data.AllowlistValue }/>
-				<span class="mt-1 block text-xs text-slate-400">{ data.AllowlistHint }</span>
-			</label>
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.RegistrationSaveLabel }</button>
-		</form>
-	</section>
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.InviteCreateSubmit }</button>
+			</form>
+			<p class="text-[11px] text-zinc-400">{ data.InviteMailNote }</p>
 
-	<section class="mt-8 border-t border-slate-200 pt-6">
-		<h2 class="text-sm font-semibold text-slate-500">{ data.InvitesHeading }</h2>
-		<p class="mt-1 text-xs text-slate-400">{ data.InvitesIntro }</p>
-		<form class="mt-3 flex flex-wrap items-end gap-3" method="post" action="/admin/invites">
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label class="text-sm text-slate-700">
-				<span>{ data.InviteEmailLabel }</span>
-				<input class="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="email" value=""/>
-			</label>
-			<label class="text-sm text-slate-700">
-				<span>{ data.InviteRoleLabel }</span>
-				<select class="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm" name="role">
-					for _, r := range data.InviteRoles {
-						<option value={ r.Value } selected?={ r.Selected }>{ r.Label }</option>
-					}
-				</select>
-			</label>
-			<label class="text-sm text-slate-700">
-				<span>{ data.InviteExpiryLabel }</span>
-				<input class="mt-1 block w-24 rounded border border-slate-300 px-2 py-1 text-sm" type="number" min="0" name="expires_days" value=""/>
-				<span class="mt-1 block text-xs text-slate-400">{ data.InviteExpiryHint }</span>
-			</label>
-			<label class="text-sm text-slate-700">
-				<span class="flex items-center gap-2">
-					<input type="checkbox" name="send_email" value="1"/>
-					<span>{ data.InviteMailLabel }</span>
-				</span>
-				<span class="mt-1 block text-xs text-slate-400">{ data.InviteMailNote }</span>
-			</label>
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.InviteCreateSubmit }</button>
-		</form>
-
-		if len(data.Invites) == 0 {
-			<p class="mt-4 text-sm text-slate-500">{ data.InvitesEmpty }</p>
-		} else {
-			<table class="mt-4 w-full text-left text-sm">
-				<thead>
-					<tr class="border-b border-slate-200 text-xs text-slate-400">
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteToken }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteEmail }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteRole }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteStatus }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteCreated }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteExpires }</th>
-						<th class="py-2 pr-3 font-medium">{ data.ColInviteUsedBy }</th>
-						<th class="py-2 font-medium">{ data.ColInviteActions }</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, inv := range data.Invites {
-						<tr class="border-b border-slate-100 align-top">
-							<td class="py-3 pr-3"><a class="break-all text-blue-600 hover:underline" href={ inv.Link }>{ inv.Token }</a></td>
-							<td class="py-3 pr-3">{ inv.Email }</td>
-							<td class="py-3 pr-3">{ inv.RoleLabel }</td>
-							<td class="py-3 pr-3">{ inv.StatusLabel }</td>
-							<td class="py-3 pr-3 text-xs text-slate-500">{ inv.CreatedAt }</td>
-							<td class="py-3 pr-3 text-xs text-slate-500">{ inv.ExpiresAt }</td>
-							<td class="py-3 pr-3">
-								if inv.UsedBy != "" {
-									<span class="text-slate-700">{ inv.UsedBy }</span>
-									<span class="block text-xs text-slate-400">{ inv.UsedAt }</span>
+			if len(data.Invites) == 0 {
+				<div class="p-8 text-center text-xs text-zinc-400">{ data.InvitesEmpty }</div>
+			} else {
+				<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xs">
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+								<tr>
+									<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColInviteToken }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteEmail }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteRole }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteStatus }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteCreated }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteExpires }</th>
+									<th class="px-4 py-3 font-semibold">{ data.ColInviteUsedBy }</th>
+									<th class="px-4 py-3 sm:px-5 font-semibold text-right">{ data.ColInviteActions }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100">
+								for _, inv := range data.Invites {
+									<tr class="hover:bg-zinc-50/60 transition-colors align-top">
+										<td class="px-4 py-3.5 sm:px-5 font-mono text-xs">
+											<a class="break-all font-semibold text-indigo-600 hover:text-indigo-700" href={ inv.Link }>{ inv.Token }</a>
+										</td>
+										<td class="px-4 py-3.5 text-xs text-zinc-600">{ inv.Email }</td>
+										<td class="px-4 py-3.5 text-xs">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">{ inv.RoleLabel }</span>
+										</td>
+										<td class="px-4 py-3.5 text-xs">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">{ inv.StatusLabel }</span>
+										</td>
+										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ inv.CreatedAt }</td>
+										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ inv.ExpiresAt }</td>
+										<td class="px-4 py-3.5 text-xs">
+											if inv.UsedBy != "" {
+												<span class="font-medium text-zinc-900">{ inv.UsedBy }</span>
+												<span class="block text-[11px] font-mono text-zinc-400">{ inv.UsedAt }</span>
+											}
+										</td>
+										<td class="px-4 py-3.5 sm:px-5 text-right">
+											if inv.Active {
+												<form method="post" action={ inv.RevokeHref }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ data.InviteRevokeLabel }</button>
+												</form>
+											}
+										</td>
+									</tr>
 								}
-							</td>
-							<td class="py-3">
-								if inv.Active {
-									<form method="post" action={ inv.RevokeHref }>
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<button class="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50" type="submit">{ data.InviteRevokeLabel }</button>
-									</form>
-								}
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		}
-	</section>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			}
+		</section>
+	</div>
 }

@@ -3,78 +3,86 @@ package views
 // adminAudit 渲染审计检索页（M6-7）：过滤表单 + 结果表 + 分页。
 // 所有文案来自 AdminPageData；过滤表单是 GET，无需 CSRF。
 templ adminAudit(data AdminPageData) {
-	<form class="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-3" method="get" action="/admin/audit">
-		<h2 class="text-sm font-semibold text-slate-500 md:col-span-3">{ data.AuditFilterHeading }</h2>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditUserLabel }</span>
-			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="user" value={ data.AuditUserValue }/>
-		</label>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditActionLabel }</span>
-			<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="action">
-				for _, opt := range data.AuditActions {
-					<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-				}
-			</select>
-		</label>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditTargetLabel }</span>
-			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="target_type" value={ data.AuditTargetValue }/>
-		</label>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditTargetIDLabel }</span>
-			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="target_id" value={ data.AuditTargetIDValue }/>
-		</label>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditFromLabel }</span>
-			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="date" name="from" value={ data.AuditFromValue }/>
-		</label>
-		<label class="text-xs text-slate-500">
-			<span class="block">{ data.AuditToLabel }</span>
-			<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="date" name="to" value={ data.AuditToValue }/>
-		</label>
-		<p class="text-xs text-slate-400 md:col-span-3">{ data.AuditRangeHint }</p>
-		<div class="flex items-center gap-3 md:col-span-3">
-			<button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">{ data.AuditFilterSubmit }</button>
-			<a class="text-sm text-slate-500 hover:underline" href={ data.AuditClearHref }>{ data.AuditFilterClear }</a>
-		</div>
-	</form>
+	<div class="space-y-6">
+		<form class="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 sm:p-5 grid grid-cols-1 gap-3 sm:grid-cols-3" method="get" action="/admin/audit">
+			<h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 sm:col-span-3">{ data.AuditFilterHeading }</h2>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditUserLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="user" value={ data.AuditUserValue }/>
+			</label>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditActionLabel }</span>
+				<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="action">
+					for _, opt := range data.AuditActions {
+						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+					}
+				</select>
+			</label>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditTargetLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="target_type" value={ data.AuditTargetValue }/>
+			</label>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditTargetIDLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="target_id" value={ data.AuditTargetIDValue }/>
+			</label>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditFromLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="date" name="from" value={ data.AuditFromValue }/>
+			</label>
+			<label class="block">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AuditToLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="date" name="to" value={ data.AuditToValue }/>
+			</label>
+			<p class="text-[11px] text-zinc-400 sm:col-span-3">{ data.AuditRangeHint }</p>
+			<div class="flex items-center gap-2 sm:col-span-3 pt-1">
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.AuditFilterSubmit }</button>
+				<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 transition-colors" href={ data.AuditClearHref }>{ data.AuditFilterClear }</a>
+			</div>
+		</form>
 
-	<p class="mb-2 text-xs text-slate-400">{ data.AuditTotalLabel } { data.Total }</p>
+		<p class="text-xs text-zinc-400 font-mono">{ data.AuditTotalLabel } { data.Total }</p>
 
-	if data.Total == 0 {
-		<p class="text-sm text-slate-500">{ data.EmptyLabel }</p>
-	} else {
-		<table class="w-full text-left text-sm">
-			<thead>
-				<tr class="border-b border-slate-200 text-xs text-slate-400">
-					<th class="py-2 pr-3 font-medium">{ data.ColAuditTime }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColAuditUser }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColAuditAction }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColAuditTarget }</th>
-					<th class="py-2 font-medium">{ data.ColAuditDetail }</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, row := range data.AuditRows {
-					<tr class="border-b border-slate-100 align-top">
-						<td class="py-2 pr-3 text-xs text-slate-500">{ row.Time }</td>
-						<td class="py-2 pr-3 text-slate-700">{ row.User }</td>
-						<td class="py-2 pr-3 font-mono text-xs text-slate-700">{ row.Action }</td>
-						<td class="py-2 pr-3 text-xs text-slate-500">{ row.Target }</td>
-						<td class="py-2"><pre class="max-h-32 max-w-md overflow-auto rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-600">{ row.Detail }</pre></td>
-					</tr>
-				}
-			</tbody>
-		</table>
-	}
-
-	<nav class="mt-4 flex items-center gap-4 text-sm text-slate-500">
-		if data.PrevHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.PrevHref }>{ data.PrevLabel }</a>
+		if data.Total == 0 {
+			<div class="p-8 text-center text-xs text-zinc-400">{ data.EmptyLabel }</div>
+		} else {
+			<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left text-sm">
+						<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+							<tr>
+								<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColAuditTime }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColAuditUser }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColAuditAction }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColAuditTarget }</th>
+								<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColAuditDetail }</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-100">
+							for _, row := range data.AuditRows {
+								<tr class="hover:bg-zinc-50/60 transition-colors align-top">
+									<td class="px-4 py-3.5 sm:px-5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ row.Time }</td>
+									<td class="px-4 py-3.5 text-xs font-semibold text-zinc-950">{ row.User }</td>
+									<td class="px-4 py-3.5 font-mono text-xs text-zinc-700">{ row.Action }</td>
+									<td class="px-4 py-3.5 text-xs text-zinc-500">{ row.Target }</td>
+									<td class="px-4 py-3.5 sm:px-5">
+										<pre class="max-h-28 max-w-sm overflow-auto rounded-lg bg-zinc-50 p-2 font-mono text-[11px] text-zinc-700">{ row.Detail }</pre>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
 		}
-		if data.NextHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.NextHref }>{ data.NextLabel }</a>
-		}
-	</nav>
+
+		<nav class="flex items-center gap-2 text-xs sm:text-sm">
+			if data.PrevHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 transition-colors" href={ data.PrevHref }>{ data.PrevLabel }</a>
+			}
+			if data.NextHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 transition-colors" href={ data.NextHref }>{ data.NextLabel }</a>
+			}
+		</nav>
+	</div>
 }

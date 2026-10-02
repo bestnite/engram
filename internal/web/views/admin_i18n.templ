@@ -4,32 +4,38 @@ package views
 // 覆盖率与缺失列表由 handler 从语言包 key 集合算出后传入；模板不含硬编码文字。
 // 每行用 data-locale 标注、覆盖率用 data-coverage 标注，便于测试定位。
 templ adminI18n(data AdminPageData) {
-	if data.I18nAllComplete {
-		<p class="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{ data.I18nAllCompleteLabel }</p>
-	}
-	<table class="mt-4 w-full text-left text-sm">
-		<thead>
-			<tr class="border-b border-slate-200 text-xs text-slate-400">
-				<th class="py-2 pr-3 font-medium">{ data.ColI18nLocale }</th>
-				<th class="py-2 pr-3 font-medium">{ data.ColI18nCoverage }</th>
-				<th class="py-2 pr-3 font-medium">{ data.ColI18nStatus }</th>
-				<th class="py-2 font-medium">{ data.ColI18nMissing }</th>
-			</tr>
-		</thead>
-		<tbody>
-			for _, row := range data.I18nRows {
-				<tr class="border-b border-slate-100" data-locale={ row.Code }>
-					<td class="py-2 pr-3 font-mono text-slate-800">{ row.Code }</td>
-					<td class="py-2 pr-3 font-semibold text-slate-900" data-coverage={ row.Code }>{ row.Percent }</td>
-					<td class="py-2 pr-3 text-slate-600">{ row.Counts }</td>
-					<td class="py-2 text-slate-600">
-						{ row.StatusLabel }
-						if row.MissingKeys != "" {
-							<span class="ml-2 break-all font-mono text-xs text-slate-500">{ row.MissingKeys }</span>
+	<div class="space-y-6">
+		if data.I18nAllComplete {
+			<div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-xs">{ data.I18nAllCompleteLabel }</div>
+		}
+		<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+			<div class="overflow-x-auto">
+				<table class="w-full text-left text-sm">
+					<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+						<tr>
+							<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColI18nLocale }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColI18nCoverage }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColI18nStatus }</th>
+							<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColI18nMissing }</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-zinc-100">
+						for _, row := range data.I18nRows {
+							<tr class="hover:bg-zinc-50/60 transition-colors align-top" data-locale={ row.Code }>
+								<td class="px-4 py-3.5 sm:px-5 font-mono text-sm font-semibold text-zinc-950">{ row.Code }</td>
+								<td class="px-4 py-3.5 font-mono text-sm font-bold text-zinc-900" data-coverage={ row.Code }>{ row.Percent }</td>
+								<td class="px-4 py-3.5 text-xs text-zinc-600">{ row.Counts }</td>
+								<td class="px-4 py-3.5 sm:px-5 text-xs text-zinc-600">
+									<span class="font-medium">{ row.StatusLabel }</span>
+									if row.MissingKeys != "" {
+										<span class="ml-2 block mt-1 break-all font-mono text-[11px] text-zinc-400">{ row.MissingKeys }</span>
+									}
+								</td>
+							</tr>
 						}
-					</td>
-				</tr>
-			}
-		</tbody>
-	</table>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
 }

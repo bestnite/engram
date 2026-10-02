@@ -5,42 +5,50 @@ package views
 // 每行用 data-key-id 标注，便于测试定位；可用的 key 提供撤销入口（写操作，带 CSRF）。
 templ adminAPIKeys(data AdminPageData) {
 	if len(data.APIKeyRows) == 0 {
-		<p class="mt-4 text-sm text-slate-500">{ data.EmptyLabel }</p>
+		<div class="p-8 text-center text-xs text-zinc-400">{ data.EmptyLabel }</div>
 	} else {
-		<table class="mt-4 w-full text-left text-sm">
-			<thead>
-				<tr class="border-b border-slate-200 text-xs text-slate-400">
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyName }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyOwner }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyPrefix }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyScopes }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyLastUsed }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyExpires }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColKeyState }</th>
-					<th class="py-2 font-medium">{ data.ColKeyActions }</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, row := range data.APIKeyRows {
-					<tr class="border-b border-slate-100" data-key-id={ row.ID }>
-						<td class="py-2 pr-3 text-slate-800">{ row.Name }</td>
-						<td class="py-2 pr-3 text-slate-600">{ row.Owner }</td>
-						<td class="py-2 pr-3 font-mono text-slate-600">{ row.Prefix }</td>
-						<td class="py-2 pr-3 text-slate-600">{ row.Scopes }</td>
-						<td class="py-2 pr-3 text-slate-600">{ row.LastUsed }</td>
-						<td class="py-2 pr-3 text-slate-600">{ row.Expires }</td>
-						<td class="py-2 pr-3 text-slate-600">{ row.StateLabel }</td>
-						<td class="py-2">
-							if row.CanRevoke {
-								<form method="post" action={ row.RevokeHref }>
-									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-									<button class="rounded border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100" type="submit">{ data.KeyRevokeLabel }</button>
-								</form>
-							}
-						</td>
-					</tr>
-				}
-			</tbody>
-		</table>
+		<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+			<div class="overflow-x-auto">
+				<table class="w-full text-left text-sm">
+					<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+						<tr>
+							<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColKeyName }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyOwner }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyPrefix }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyScopes }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyLastUsed }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyExpires }</th>
+							<th class="px-4 py-3 font-semibold">{ data.ColKeyState }</th>
+							<th class="px-4 py-3 sm:px-5 font-semibold text-right">{ data.ColKeyActions }</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-zinc-100">
+						for _, row := range data.APIKeyRows {
+							<tr class="hover:bg-zinc-50/60 transition-colors align-top" data-key-id={ row.ID }>
+								<td class="px-4 py-3.5 sm:px-5 font-semibold text-zinc-950">{ row.Name }</td>
+								<td class="px-4 py-3.5 text-xs text-zinc-600">{ row.Owner }</td>
+								<td class="px-4 py-3.5 font-mono text-xs text-zinc-600">{ row.Prefix }</td>
+								<td class="px-4 py-3.5 text-xs">
+									<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-zinc-700">{ row.Scopes }</span>
+								</td>
+								<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ row.LastUsed }</td>
+								<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ row.Expires }</td>
+								<td class="px-4 py-3.5 text-xs">
+									<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">{ row.StateLabel }</span>
+								</td>
+								<td class="px-4 py-3.5 sm:px-5 text-right">
+									if row.CanRevoke {
+										<form method="post" action={ row.RevokeHref }>
+											<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+											<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ data.KeyRevokeLabel }</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
 	}
 }

@@ -3,13 +3,17 @@ package views
 // adminHealth 渲染健康页（M6-8）：数据库连通、schema 版本、媒体目录占用、到期队列量。
 // 每个读数用 data-health=<key> 标注，便于测试按标识取出值与独立计算值对比。
 templ adminHealth(data AdminPageData) {
-	<dl class="divide-y divide-slate-100">
-		for _, row := range data.HealthRows {
-			<div class="flex flex-col gap-1 py-3 md:flex-row md:items-baseline md:gap-6">
-				<dt class="w-full text-sm font-medium text-slate-700 md:w-56">{ row.Label }</dt>
-				<dd class="text-lg font-semibold text-slate-900" data-health={ row.Key }>{ row.Value }</dd>
-				<dd class="text-xs text-slate-400">{ row.Hint }</dd>
-			</div>
-		}
-	</dl>
+	<div class="space-y-4">
+		<dl class="divide-y divide-zinc-100">
+			for _, row := range data.HealthRows {
+				<div class="flex flex-col gap-1 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-baseline sm:justify-between">
+					<div class="space-y-0.5">
+						<dt class="text-sm font-semibold text-zinc-950">{ row.Label }</dt>
+						<dd class="text-xs text-zinc-400">{ row.Hint }</dd>
+					</div>
+					<dd class="font-mono text-base font-bold text-zinc-900" data-health={ row.Key }>{ row.Value }</dd>
+				</div>
+			}
+		</dl>
+	</div>
 }

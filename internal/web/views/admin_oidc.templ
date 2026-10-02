@@ -4,108 +4,118 @@ package views
 // 测试连接按钮，以及已绑定身份列表与解绑入口。文案全部来自 AdminPageData.OIDC。
 templ adminOIDC(data AdminPageData) {
 	if data.OIDC != nil {
-		<form class="space-y-4" method="post" action={ data.OIDC.FormAction }>
-			<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
-			<label class="flex items-start gap-2">
-				<input class="mt-1" type="checkbox" name="oidc.enabled" checked?={ data.OIDC.Enabled }/>
-				<span>
-					<span class="block text-sm font-medium text-slate-800">{ data.OIDC.EnabledLabel }</span>
-					<span class="block text-xs text-slate-400">{ data.OIDC.EnabledHint }</span>
-				</span>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.OIDC.IssuerLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.issuer" value={ data.OIDC.IssuerValue }/>
-				<span class="mt-0.5 block text-xs text-slate-400">{ data.OIDC.IssuerHint }</span>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.OIDC.ClientIDLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.client_id" value={ data.OIDC.ClientIDValue }/>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.OIDC.SecretLabel }</span>
-				<span class="mt-1 block text-sm text-slate-600">{ data.OIDC.SecretStatus }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="password" name="oidc.client_secret" value="" autocomplete="new-password"/>
-				<span class="mt-0.5 block text-xs text-slate-400">{ data.OIDC.SecretHint }</span>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.OIDC.ScopesLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.scopes" value={ data.OIDC.ScopesValue }/>
-				<span class="mt-0.5 block text-xs text-slate-400">{ data.OIDC.ScopesHint }</span>
-			</label>
-			<fieldset class="rounded border border-slate-200 p-3">
-				<legend class="px-1 text-sm font-semibold text-slate-500">{ data.OIDC.ClaimHeading }</legend>
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<label class="block">
-						<span class="text-xs text-slate-600">{ data.OIDC.ClaimSubjectLabel }</span>
-						<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.claim.subject" value={ data.OIDC.ClaimSubjectValue }/>
-					</label>
-					<label class="block">
-						<span class="text-xs text-slate-600">{ data.OIDC.ClaimEmailLabel }</span>
-						<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.claim.email" value={ data.OIDC.ClaimEmailValue }/>
-					</label>
-					<label class="block">
-						<span class="text-xs text-slate-600">{ data.OIDC.ClaimNameLabel }</span>
-						<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.claim.name" value={ data.OIDC.ClaimNameValue }/>
-					</label>
-					<label class="block">
-						<span class="text-xs text-slate-600">{ data.OIDC.ClaimEmailVerifiedLabel }</span>
-						<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="oidc.claim.email_verified" value={ data.OIDC.ClaimEmailVerifiedValue }/>
-					</label>
+		<div class="space-y-8">
+			<form class="space-y-5" method="post" action={ data.OIDC.FormAction }>
+				<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
+				<label class="flex items-start gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 cursor-pointer">
+					<input class="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900" type="checkbox" name="oidc.enabled" checked?={ data.OIDC.Enabled }/>
+					<span class="space-y-0.5">
+						<span class="block text-sm font-semibold text-zinc-950">{ data.OIDC.EnabledLabel }</span>
+						<span class="block text-xs text-zinc-500">{ data.OIDC.EnabledHint }</span>
+					</span>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.OIDC.IssuerLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.issuer" value={ data.OIDC.IssuerValue }/>
+					<span class="mt-1 block text-xs text-zinc-400">{ data.OIDC.IssuerHint }</span>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.OIDC.ClientIDLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.client_id" value={ data.OIDC.ClientIDValue }/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.OIDC.SecretLabel }</span>
+					<span class="mt-1 block text-xs text-zinc-500 font-medium">{ data.OIDC.SecretStatus }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="password" name="oidc.client_secret" value="" autocomplete="new-password"/>
+					<span class="mt-1 block text-xs text-zinc-400">{ data.OIDC.SecretHint }</span>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.OIDC.ScopesLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.scopes" value={ data.OIDC.ScopesValue }/>
+					<span class="mt-1 block text-xs text-zinc-400">{ data.OIDC.ScopesHint }</span>
+				</label>
+				<fieldset class="rounded-2xl border border-zinc-200/80 bg-zinc-50/40 p-5 space-y-4">
+					<legend class="px-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.OIDC.ClaimHeading }</legend>
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<label class="block">
+							<span class="text-xs font-medium text-zinc-600">{ data.OIDC.ClaimSubjectLabel }</span>
+							<input class="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.claim.subject" value={ data.OIDC.ClaimSubjectValue }/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-medium text-zinc-600">{ data.OIDC.ClaimEmailLabel }</span>
+							<input class="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.claim.email" value={ data.OIDC.ClaimEmailValue }/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-medium text-zinc-600">{ data.OIDC.ClaimNameLabel }</span>
+							<input class="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.claim.name" value={ data.OIDC.ClaimNameValue }/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-medium text-zinc-600">{ data.OIDC.ClaimEmailVerifiedLabel }</span>
+							<input class="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="oidc.claim.email_verified" value={ data.OIDC.ClaimEmailVerifiedValue }/>
+						</label>
+					</div>
+				</fieldset>
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.OIDC.SaveLabel }</button>
+			</form>
+
+			<div class="pt-4 border-t border-zinc-100 space-y-3">
+				<form method="post" action={ data.OIDC.TestAction }>
+					<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
+					<input type="hidden" name="oidc.issuer" value={ data.OIDC.IssuerValue }/>
+					<input type="hidden" name="oidc.client_id" value={ data.OIDC.ClientIDValue }/>
+					<input type="hidden" name="oidc.scopes" value={ data.OIDC.ScopesValue }/>
+					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.OIDC.TestLabel }</button>
+				</form>
+				if data.OIDC.TestResult != "" {
+					if data.OIDC.TestOK {
+						<div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-xs">{ data.OIDC.TestResult }</div>
+					} else {
+						<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs">{ data.OIDC.TestResult }</div>
+					}
+				}
+			</div>
+
+			<section class="space-y-4 pt-6 border-t border-zinc-100">
+				<div>
+					<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.OIDC.IdentitiesHeading }</h2>
+					<p class="mt-1 text-xs text-zinc-500">{ data.OIDC.IdentitiesIntro }</p>
 				</div>
-			</fieldset>
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.OIDC.SaveLabel }</button>
-		</form>
-		<form class="mt-4" method="post" action={ data.OIDC.TestAction }>
-			<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
-			<input type="hidden" name="oidc.issuer" value={ data.OIDC.IssuerValue }/>
-			<input type="hidden" name="oidc.client_id" value={ data.OIDC.ClientIDValue }/>
-			<input type="hidden" name="oidc.scopes" value={ data.OIDC.ScopesValue }/>
-			<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" type="submit">{ data.OIDC.TestLabel }</button>
-		</form>
-		if data.OIDC.TestResult != "" {
-			if data.OIDC.TestOK {
-				<div class="mt-3 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{ data.OIDC.TestResult }</div>
-			} else {
-				<div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{ data.OIDC.TestResult }</div>
-			}
-		}
-		<section class="mt-8 border-t border-slate-200 pt-6">
-			<h2 class="text-sm font-semibold text-slate-500">{ data.OIDC.IdentitiesHeading }</h2>
-			<p class="mt-1 text-xs text-slate-400">{ data.OIDC.IdentitiesIntro }</p>
-			if len(data.OIDC.Identities) == 0 {
-				<p class="mt-3 text-sm text-slate-500">{ data.OIDC.IdentitiesEmpty }</p>
-			} else {
-				<table class="mt-3 w-full text-left text-sm">
-					<thead>
-						<tr class="border-b border-slate-200 text-xs text-slate-400">
-							<th class="py-2 pr-3 font-medium">{ data.OIDC.ColProvider }</th>
-							<th class="py-2 pr-3 font-medium">{ data.OIDC.ColSubject }</th>
-							<th class="py-2 pr-3 font-medium">{ data.OIDC.ColEmail }</th>
-							<th class="py-2 pr-3 font-medium">{ data.OIDC.ColUser }</th>
-							<th class="py-2 pr-3 font-medium">{ data.OIDC.ColLinked }</th>
-							<th class="py-2 font-medium">{ data.OIDC.ColActions }</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, row := range data.OIDC.Identities {
-							<tr class="border-b border-slate-100 align-top">
-								<td class="py-2 pr-3 break-all text-slate-700">{ row.Provider }</td>
-								<td class="py-2 pr-3 break-all text-slate-700">{ row.Subject }</td>
-								<td class="py-2 pr-3 break-all text-slate-700">{ row.Email }</td>
-								<td class="py-2 pr-3 text-slate-700">{ row.Username }</td>
-								<td class="py-2 pr-3 text-xs text-slate-500">{ row.LinkedAt }</td>
-								<td class="py-2">
-									<form method="post" action={ row.UnlinkHref }>
-										<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
-										<button class="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50" type="submit">{ data.OIDC.UnlinkLabel }</button>
-									</form>
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			}
-		</section>
+				if len(data.OIDC.Identities) == 0 {
+					<div class="p-8 text-center text-xs text-zinc-400">{ data.OIDC.IdentitiesEmpty }</div>
+				} else {
+					<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+						<table class="w-full text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+								<tr>
+									<th class="px-4 py-3 font-semibold">{ data.OIDC.ColProvider }</th>
+									<th class="px-4 py-3 font-semibold">{ data.OIDC.ColSubject }</th>
+									<th class="px-4 py-3 font-semibold">{ data.OIDC.ColEmail }</th>
+									<th class="px-4 py-3 font-semibold">{ data.OIDC.ColUser }</th>
+									<th class="px-4 py-3 font-semibold">{ data.OIDC.ColLinked }</th>
+									<th class="px-4 py-3 font-semibold text-right">{ data.OIDC.ColActions }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100">
+								for _, row := range data.OIDC.Identities {
+									<tr class="hover:bg-zinc-50/60 transition-colors align-top">
+										<td class="px-4 py-3 text-xs font-mono text-zinc-700 break-all">{ row.Provider }</td>
+										<td class="px-4 py-3 text-xs font-mono text-zinc-700 break-all">{ row.Subject }</td>
+										<td class="px-4 py-3 text-xs text-zinc-600">{ row.Email }</td>
+										<td class="px-4 py-3 text-xs font-semibold text-zinc-950">{ row.Username }</td>
+										<td class="px-4 py-3 text-xs font-mono text-zinc-400 whitespace-nowrap">{ row.LinkedAt }</td>
+										<td class="px-4 py-3 text-right">
+											<form method="post" action={ row.UnlinkHref }>
+												<input type="hidden" name="csrf_token" value={ data.OIDC.CSRF }/>
+												<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ data.OIDC.UnlinkLabel }</button>
+											</form>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</section>
+		</div>
 	}
 }

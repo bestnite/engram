@@ -5,45 +5,56 @@ package views
 // 设了口令的链接在解锁前只渲染口令表单，不渲染任何内容。
 templ ShareBrowsePage(data ShareBrowseData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if data.DeckName != "" {
-			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
-		}
-		if data.PasswordRequired {
-			<p class="mt-4 text-slate-600">{ data.Intro }</p>
-			if data.PasswordError != "" {
-				<p class="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.PasswordError }</p>
-			}
-			<form class="mt-4 space-y-3" method="post" action={ data.UnlockAction }>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.PasswordLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="password" name="password" autocomplete="off" placeholder={ data.PasswordPlaceholder }/>
-				</label>
-				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.UnlockSubmit }</button>
-			</form>
-		} else {
-			<div class="mt-4 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800">
-				<p>{ data.ReviewPrompt }</p>
-				<a class="mt-1 inline-block font-medium underline" href={ data.LoginHref }>{ data.LoginLabel }</a>
+		<div class="mx-auto max-w-3xl space-y-6">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">{ data.Heading }</h1>
+				if data.DeckName != "" {
+					<p class="mt-1 text-sm font-medium text-zinc-500">{ data.DeckName }</p>
+				}
 			</div>
-			if len(data.Notes) == 0 {
-				<p class="mt-4 text-slate-600">{ data.EmptyText }</p>
-			} else {
-				<ul class="mt-4 space-y-4">
-					for _, note := range data.Notes {
-						<li class="rounded-lg border border-slate-200 bg-white p-4">
-							<div>
-								<p class="text-xs uppercase tracking-wide text-slate-400">{ data.FrontLabel }</p>
-								<div class="mt-1 text-slate-900">{ note.FrontHTML }</div>
-							</div>
-							<div class="mt-3 border-t border-slate-100 pt-3">
-								<p class="text-xs uppercase tracking-wide text-slate-400">{ data.BackLabel }</p>
-								<div class="mt-1 text-slate-700">{ note.BackHTML }</div>
-							</div>
-						</li>
+
+			if data.PasswordRequired {
+				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-4">
+					<p class="text-sm text-zinc-600">{ data.Intro }</p>
+					if data.PasswordError != "" {
+						<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs" role="alert">
+							{ data.PasswordError }
+						</div>
 					}
-				</ul>
+					<form class="space-y-4" method="post" action={ data.UnlockAction }>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.PasswordLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="password" name="password" autocomplete="off" placeholder={ data.PasswordPlaceholder } required/>
+						</label>
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.UnlockSubmit }</button>
+					</form>
+				</div>
+			} else {
+				<div class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 text-sm text-indigo-950 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+					<p class="font-medium">{ data.ReviewPrompt }</p>
+					<a class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.98] transition-all shrink-0" href={ data.LoginHref }>{ data.LoginLabel }</a>
+				</div>
+				if len(data.Notes) == 0 {
+					<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs">
+						<p class="text-sm font-medium text-zinc-500">{ data.EmptyText }</p>
+					</div>
+				} else {
+					<ul class="space-y-4">
+						for _, note := range data.Notes {
+							<li class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs space-y-4">
+								<div>
+									<p class="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">{ data.FrontLabel }</p>
+									<div class="mt-2 text-base text-zinc-950 leading-relaxed">{ note.FrontHTML }</div>
+								</div>
+								<div class="border-t border-dashed border-zinc-200 pt-4">
+									<p class="text-[11px] font-semibold tracking-wider text-indigo-500 uppercase">{ data.BackLabel }</p>
+									<div class="mt-2 text-base text-zinc-700 leading-relaxed">{ note.BackHTML }</div>
+								</div>
+							</li>
+						}
+					</ul>
+				}
 			}
-		}
+		</div>
 	}
 }
