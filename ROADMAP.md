@@ -597,7 +597,7 @@ Conventions:
   *Acceptance:* the navigation offers the preset page to every signed-in user, and a test asserts
   the link is present on a rendered page.
 
-- [ ] **M9-10 Wire the optimiser adapter into the server** — every M9 part works on its own and
+- [x] **M9-10 Wire the optimiser adapter into the server** — every M9 part works on its own and
   nothing connects them, so in production the feature always fails. `main.go` builds the runner
   without a `Command`, so `jobs.New` falls back to `DefaultCommandBuilder()`, which re-executes
   `engram optimize --job <id>`; that subcommand is a stub returning `optimize is not implemented
@@ -711,7 +711,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 21/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/10
+  `M0 13/13 · M1 21/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 10/10
   · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
