@@ -345,9 +345,13 @@ func (s *Server) applyResultToCard(loc *i18n.Localizer, card *views.PresetCardDa
 	}
 	card.ResultTitle = loc.T("presets.optimize.result_title")
 	card.ResultReviews = loc.Tf("presets.optimize.result_reviews", map[string]any{"count": result.ReviewsUsed})
-	// 只有真的算出了指标（至少覆盖一个可预测 item）才渲染对比与「改善/未改善」结论：
-	// 否则零值会被 Improved() 判成「未改善」，等于在没有任何证据时告诉用户优化没用。
-	if result.FitBefore.Available() && result.FitAfter.Available() {
+	// 三态（ROADMAP.md M9-12）：
+	//   1. 两边都算出来且样本足够 -> 渲染两个数与「改善/未改善」结论；
+	//   2. 两边都算出来但样本太小（< MinFitItems 个 item）-> 只渲染「样本不足，无法判定」，
+	//      不渲染两个数、不给结论——一次本就没机会的优化不该被误报成「未改善」；
+	//   3. 没算出来（零值）-> 什么都不渲染，否则 Improved() 会把零值判成「未改善」。
+	switch {
+	case result.FitBefore.SampleSufficient() && result.FitAfter.SampleSufficient():
 		card.ResultBefore = fitText(loc, "presets.optimize.result_before", result.FitBefore)
 		card.ResultAfter = fitText(loc, "presets.optimize.result_after", result.FitAfter)
 		if result.Improved() {
@@ -355,6 +359,8 @@ func (s *Server) applyResultToCard(loc *i18n.Localizer, card *views.PresetCardDa
 		} else {
 			card.ResultVerdict = loc.T("presets.optimize.not_improved")
 		}
+	case result.FitBefore.Available() && result.FitAfter.Available():
+		card.ResultSampleInsufficient = loc.T("presets.optimize.sample_insufficient")
 	}
 }
 

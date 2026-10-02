@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/text/language"
+
+	"example.com/engram/internal/i18n"
 	"example.com/engram/internal/store"
 )
 
@@ -208,6 +211,85 @@ func missingExportTables(t *testing.T, db *gorm.DB, exported map[string][]map[st
 		}
 	}
 	return missing
+}
+
+// TestAdminOptimizeMinReviewsRejectsBelowFloor 是 M9-12 验收 2：门槛表单拒绝低于下限的
+// 提交，重定向回设置页并给出提示，且什么都没存——存量值原样保留、生效值不变。
+func TestAdminOptimizeMinReviewsRejectsBelowFloor(t *testing.T) {
+	srv, db, _, cookies, csrf := newNotesServer(t)
+	ctx := context.Background()
+
+	tr, err := i18n.New()
+	if err != nil {
+		t.Fatalf("i18n.New: %v", err)
+	}
+	loc := tr.Localizer(language.Chinese)
+
+	// 先放一个合法的存量值，验证被拒的提交不会把它改掉。
+	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, "400", nil, time.Now().UTC()); err != nil {
+		t.Fatalf("PutSetting: %v", err)
+	}
+
+	rec := postForm(t, srv, "/admin/settings", url.Values{
+		"csrf_token":                       {csrf},
+		store.SettingKeyOptimizeMinReviews: {"100"},
+	}, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST below-floor threshold = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "notice=optimize_min_reviews_too_low") {
+		t.Fatalf("redirect target %q does not carry the below-floor notice code", location)
+	}
+	t.Logf("below-floor POST -> %d %s", rec.Code, location)
+
+	// 库里的值必须没变，生效值也必须没变。
+	settings, err := store.LoadSettings(ctx, db)
+	if err != nil {
+		t.Fatalf("LoadSettings: %v", err)
+	}
+	if got := settings[store.SettingKeyOptimizeMinReviews]; got != "400" {
+		t.Fatalf("stored threshold = %q after a rejected post, want %q (nothing must be written)", got, "400")
+	}
+	effective, err := store.OptimizeMinReviews(ctx, db)
+	if err != nil {
+		t.Fatalf("OptimizeMinReviews: %v", err)
+	}
+	if effective != 400 {
+		t.Fatalf("effective threshold = %d after a rejected post, want 400", effective)
+	}
+	t.Logf("after rejected POST: stored=%q effective=%d", settings[store.SettingKeyOptimizeMinReviews], effective)
+
+	// 设置页确实列出了这个旋钮，并把提示文案渲染出来。
+	page := getWithCookies(t, srv, "/admin/settings?notice=optimize_min_reviews_too_low", cookies)
+	if page.Code != http.StatusOK {
+		t.Fatalf("GET settings with notice = %d, want 200", page.Code)
+	}
+	body := page.Body.String()
+	if !strings.Contains(body, loc.T("admin.setting.optimize_min_reviews")) {
+		t.Errorf("settings page does not list the optimizer threshold setting; body = %s", snippet(body))
+	}
+	if !strings.Contains(body, loc.T("admin.notice.optimize_min_reviews_too_low")) {
+		t.Errorf("settings page does not render the below-floor notice; body = %s", snippet(body))
+	}
+	t.Logf("notice rendered: %q", loc.T("admin.notice.optimize_min_reviews_too_low"))
+
+	// 反向守卫：一个合法值必须真的被写入，否则「全部拒绝」也会让上面通过。
+	okRec := postForm(t, srv, "/admin/settings", url.Values{
+		"csrf_token":                       {csrf},
+		store.SettingKeyOptimizeMinReviews: {"450"},
+	}, cookies)
+	if okRec.Code != http.StatusSeeOther || !strings.Contains(okRec.Header().Get("Location"), "notice=saved") {
+		t.Fatalf("POST valid threshold = %d %q, want 303 notice=saved", okRec.Code, okRec.Header().Get("Location"))
+	}
+	after, err := store.OptimizeMinReviews(ctx, db)
+	if err != nil {
+		t.Fatalf("OptimizeMinReviews after valid post: %v", err)
+	}
+	if after != 450 {
+		t.Fatalf("effective threshold = %d after posting 450, want 450", after)
+	}
+	t.Logf("valid POST 450 -> effective %d", after)
 }
 
 // TestExportCoverageGuardHasTeeth 证明上面的守卫不是空转：往库里塞一张导出根本不认识的表，

@@ -128,8 +128,9 @@ func setMinReviews(t *testing.T, db *gorm.DB, n int) {
 func TestPresetOptimizeEnqueueAndConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
-	setMinReviews(t, db, 1)
-	seedReviews(t, db, ownerID, 1)
+	// M9-12 门槛下限 300：入队成功需要真够 300 条复习。
+	setMinReviews(t, db, store.MinOptimizeMinReviews)
+	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
 
 	first := postForm(t, srv, "/presets/"+strconv.FormatUint(p.ID, 10)+"/optimize",
 		url.Values{"csrf_token": {csrf}}, cookies)
@@ -190,8 +191,9 @@ func TestPresetOptimizeShortfallNamesTheGap(t *testing.T) {
 func TestPresetOptimizeCompletionShowsDatabaseWeights(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, runner := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
-	setMinReviews(t, db, 1)
-	seedReviews(t, db, ownerID, 1)
+	// M9-12 门槛下限 300：入队成功需要真够 300 条复习。
+	setMinReviews(t, db, store.MinOptimizeMinReviews)
+	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
 
 	rec := postForm(t, srv, "/presets/"+strconv.FormatUint(p.ID, 10)+"/optimize",
 		url.Values{"csrf_token": {csrf}}, cookies)
@@ -224,8 +226,9 @@ func TestPresetOptimizeCompletionShowsDatabaseWeights(t *testing.T) {
 	result := store.OptimizeResult{
 		ReviewsUsed: 600,
 		Weights:     weights,
-		FitBefore:   store.FitMetrics{LogLoss: 0.51, RMSE: 0.42},
-		FitAfter:    store.FitMetrics{LogLoss: 0.44, RMSE: 0.38},
+		// Items 必须 >= store.MinFitItems（M9-12），否则页面改渲染「样本不足」而不给结论。
+		FitBefore:   store.FitMetrics{LogLoss: 0.51, RMSE: 0.42, Items: reviewCount},
+		FitAfter:    store.FitMetrics{LogLoss: 0.44, RMSE: 0.38, Items: reviewCount},
 		OptimizedAt: optimizedAt,
 	}
 	if err := runner.FinishOptimize(context.Background(), job.ID, result, "training done"); err != nil {

@@ -97,13 +97,18 @@ templ PresetCard(data PresetCardData) {
 			}
 		</section>
 
-		if data.ResultBefore != "" {
+		if data.ResultBefore != "" || data.ResultSampleInsufficient != "" {
 			<section class="mt-3 rounded border border-slate-100 p-3">
 				<h3 class="text-sm font-semibold text-slate-800">{ data.ResultTitle }</h3>
 				<p class="mt-1 text-xs text-slate-600">{ data.ResultReviews }</p>
-				<p class="text-xs text-slate-600">{ data.ResultBefore }</p>
-				<p class="text-xs text-slate-600">{ data.ResultAfter }</p>
-				<p class="text-sm font-medium text-slate-800">{ data.ResultVerdict }</p>
+				if data.ResultBefore != "" {
+					<p class="text-xs text-slate-600">{ data.ResultBefore }</p>
+					<p class="text-xs text-slate-600">{ data.ResultAfter }</p>
+					<p class="text-sm font-medium text-slate-800">{ data.ResultVerdict }</p>
+				}
+				if data.ResultSampleInsufficient != "" {
+					<p class="text-sm font-medium text-slate-800">{ data.ResultSampleInsufficient }</p>
+				}
 			</section>
 		}
 	</div>

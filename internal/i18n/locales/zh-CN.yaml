@@ -572,6 +572,10 @@
   translation: "媒体"
 - id: admin.section.media.intro
   translation: "上传限制与磁盘占用；这些值同时立即作用于媒体上传接口。"
+- id: admin.section.optimize
+  translation: "参数优化"
+- id: admin.section.optimize.intro
+  translation: "参数优化作业的准入条件。"
 - id: admin.section.sensitive
   translation: "敏感配置"
 - id: admin.section.sensitive.intro
@@ -606,6 +610,10 @@
   translation: "媒体目录占用"
 - id: admin.setting.media_usage.hint
   translation: "当前磁盘上媒体文件的合计大小。"
+- id: admin.setting.optimize_min_reviews
+  translation: "优化门槛（复习条数）"
+- id: admin.setting.optimize_min_reviews.hint
+  translation: "运行参数优化前要求的最少复习条数；下限 300，默认 500。存量低于下限时会按 300 生效。"
 - id: admin.action.save
   translation: "保存设置"
 - id: admin.notice.saved
@@ -616,6 +624,8 @@
   translation: "上传大小上限必须是正整数。"
 - id: admin.notice.invalid_mime
   translation: "MIME 列表至少要有一个值。"
+- id: admin.notice.optimize_min_reviews_too_low
+  translation: "优化门槛不得低于下限 300，改动未保存。"
 - id: admin.notice.save_failed
   translation: "保存设置失败，请重试。"
 - id: admin.export.heading
@@ -950,6 +960,8 @@
   translation: "拟合改善"
 - id: presets.optimize.not_improved
   translation: "拟合未改善"
+- id: presets.optimize.sample_insufficient
+  translation: "样本不足，无法判定"
 - id: presets.revert.button
   translation: "回退默认权重"
 - id: presets.revert.note

@@ -142,3 +142,56 @@ func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 		})
 	}
 }
+
+// TestOptimizeMinReviewsFloor 是 M9-12 验收 1：门槛读取路径对存量值的四种局面。
+// 存量值低于下限（如 100，可能来自直接写库或旧版本）被钳到 300，而不是退回默认 500；
+// 恰好等于下限的 300 与下限之上的 500 原样生效；未设置/空值/非数字/非正整数仍退回默认 500
+// （那是「值不可用」，与「值合法但太低」的钳制语义不同）。
+func TestOptimizeMinReviewsFloor(t *testing.T) {
+	// 下限必须低于默认值，否则「钳到下限」与「退回默认」不可区分，这个测试就没有意义。
+	if MinOptimizeMinReviews >= DefaultOptimizeMinReviews {
+		t.Fatalf("MinOptimizeMinReviews = %d, want < DefaultOptimizeMinReviews = %d", MinOptimizeMinReviews, DefaultOptimizeMinReviews)
+	}
+	cases := []struct {
+		name  string
+		value string
+		set   bool
+		want  int
+	}{
+		{"stale value below the floor clamps to the floor", "100", true, MinOptimizeMinReviews},
+		{"the floor itself passes through", "300", true, MinOptimizeMinReviews},
+		{"a value above the floor passes through", "500", true, 500},
+		{"unset setting falls back to the default", "", false, DefaultOptimizeMinReviews},
+		{"empty value falls back to the default", "", true, DefaultOptimizeMinReviews},
+		{"non-numeric value falls back to the default", "abc", true, DefaultOptimizeMinReviews},
+		{"zero falls back to the default", "0", true, DefaultOptimizeMinReviews},
+	}
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					if err := db.Where("key = ?", SettingKeyOptimizeMinReviews).Delete(&Setting{}).Error; err != nil {
+						t.Fatalf("clear setting: %v", err)
+					}
+					if tc.set {
+						if err := PutSetting(ctx, db, SettingKeyOptimizeMinReviews, tc.value, nil, time.Now().UTC()); err != nil {
+							t.Fatalf("PutSetting(%q): %v", tc.value, err)
+						}
+					}
+					got, err := OptimizeMinReviews(ctx, db)
+					if err != nil {
+						t.Fatalf("OptimizeMinReviews: %v", err)
+					}
+					if got != tc.want {
+						t.Errorf("OptimizeMinReviews() with stored %q (set=%v) = %d, want %d", tc.value, tc.set, got, tc.want)
+					}
+					t.Logf("stored %q -> effective %d (want %d)", tc.value, got, tc.want)
+				})
+			}
+		})
+	}
+}

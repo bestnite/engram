@@ -77,6 +77,19 @@ func mediaSettingSpecs() []settingSpec {
 	}
 }
 
+// optimizeSettingSpecs 是「参数优化」区块的设置项（ROADMAP.md M9-12）。
+// 门槛下限由 store.MinOptimizeMinReviews 强制，表单拒绝低于下限的值；存量的低于下限的值
+// 在读取路径会被钳到下限（store.OptimizeMinReviews），页面显示的是存量值，钳制不另做展示。
+func optimizeSettingSpecs() []settingSpec {
+	return []settingSpec{
+		{
+			key:      store.SettingKeyOptimizeMinReviews,
+			labelKey: "admin.setting.optimize_min_reviews", hintKey: "admin.setting.optimize_min_reviews.hint",
+			def: func(*i18n.Localizer) string { return strconv.Itoa(store.DefaultOptimizeMinReviews) },
+		},
+	}
+}
+
 // effectiveSetting 解析一个设置的生效值与其来源：环境变量 > settings 表 > 默认值。
 // 复用 internal/config 的 Source 常量与优先级语义；settings 表按请求现读，
 // 所以管理员改完下一次请求即生效（M6-5 验收）。
@@ -173,6 +186,10 @@ func (s *Server) adminSettingsPage(c *gin.Context) {
 	for _, spec := range mediaSettingSpecs() {
 		mediaRows = append(mediaRows, s.settingRow(ctx, loc, spec))
 	}
+	optimizeRows := make([]views.SettingRow, 0, 1)
+	for _, spec := range optimizeSettingSpecs() {
+		optimizeRows = append(optimizeRows, s.settingRow(ctx, loc, spec))
+	}
 	// 媒体目录与占用是只读读数：路径来自 MEDIA_DIR（环境变量或默认），占用现算。
 	dir := loc.T("admin.value.unset")
 	dirSrc := config.SourceDefault
@@ -204,6 +221,7 @@ func (s *Server) adminSettingsPage(c *gin.Context) {
 	sections := []views.AdminSection{
 		{Heading: loc.T("admin.section.general"), Intro: loc.T("admin.section.general.intro"), Rows: general},
 		{Heading: loc.T("admin.section.media"), Intro: loc.T("admin.section.media.intro"), Rows: mediaRows},
+		{Heading: loc.T("admin.section.optimize"), Intro: loc.T("admin.section.optimize.intro"), Rows: optimizeRows},
 	}
 	if sensitive := s.sensitiveSection(ctx, loc); len(sensitive.Rows) > 0 {
 		sections = append(sections, sensitive)
@@ -288,6 +306,8 @@ func (s *Server) settingNotice(loc *i18n.Localizer, code string) string {
 		return loc.T("admin.notice.invalid_number")
 	case "invalid_mime":
 		return loc.T("admin.notice.invalid_mime")
+	case "optimize_min_reviews_too_low":
+		return loc.T("admin.notice.optimize_min_reviews_too_low")
 	case "save_failed":
 		return loc.T("admin.notice.save_failed")
 	default:
@@ -307,7 +327,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 	now := time.Now().UTC()
 
 	// 通用与媒体设置：字段名即 settings 键。
-	specs := append(generalSettingSpecs(), mediaSettingSpecs()...)
+	specs := append(append(generalSettingSpecs(), mediaSettingSpecs()...), optimizeSettingSpecs()...)
 	changed := make([]string, 0, len(specs)+1)
 	for _, spec := range specs {
 		if !c.Request.PostForm.Has(spec.key) {
@@ -338,6 +358,12 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 			// 0 = 不限（默认），负数无意义；空值在上面已按“不修改”跳过。
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n < 0 {
 				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_number")
+				return
+			}
+		case store.SettingKeyOptimizeMinReviews:
+			// 解析失败或低于下限一律拒绝并重定向，**不写库**（ROADMAP.md M9-12 验收 2）。
+			if n, err := strconv.Atoi(raw); err != nil || n < store.MinOptimizeMinReviews {
+				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=optimize_min_reviews_too_low")
 				return
 			}
 		}

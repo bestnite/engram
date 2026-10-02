@@ -25,6 +25,12 @@ const (
 	// SettingKeyOptimizeMinReviews 是门槛覆盖值的设置键。值按 settings 表约定以 JSON
 	// 编码文本存储（见 PutSetting / LoadSettings），内容为十进制整数条数。
 	SettingKeyOptimizeMinReviews = "optimize.min_reviews"
+
+	// MinOptimizeMinReviews 是优化门槛的下限（ROADMAP.md M9-12）。
+	// 依据：250 卡 / 1969 条真日志的实测里，可用 item 少于约 184 时适配器学不动或落回
+	// 默认权重，优化前后指标相同，页面会对一次本就没机会的优化报「未改善」。184 item
+	// 约合 210 条复习，取 300 条留出余量。低于下限的门槛拦不住任何会产生误导结论的优化。
+	MinOptimizeMinReviews = 300
 )
 
 // OptimizeMinReviews 读取当前的优化门槛。未设置、空值或非法值时退回默认值：
@@ -42,6 +48,12 @@ func OptimizeMinReviews(ctx context.Context, db *gorm.DB) (int, error) {
 	if err != nil || n < 1 {
 		// 非正整数门槛没有意义（>=1 才可能拦住任何东西）；退回默认并让调用方照常放行。
 		return DefaultOptimizeMinReviews, nil
+	}
+	if n < MinOptimizeMinReviews {
+		// 读取路径也钳到下限：settings 行可能来自直接写库、旧版本或绕过表单的写入，
+		// 不能假设表单校验一定跑过。注意与上面的默认回退语义不同——这里是「值合法但太低」，
+		// 钳到下限而不是退回默认值。
+		return MinOptimizeMinReviews, nil
 	}
 	return n, nil
 }
@@ -102,7 +114,16 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID uint64) (OptimizeGate
 type FitMetrics struct {
 	LogLoss float64 `json:"log_loss"`
 	RMSE    float64 `json:"rmse"`
+	// Items 是本次评估实际覆盖的可预测 item 数（已排除每张卡的首条复习与不可预测点）。
+	// 加它是为了把「算出来了」与「算出来了但样本太小」区分开（ROADMAP.md M9-12）：
+	// 旧 result_json 没有这个字段，反序列化得到 0，向后兼容。
+	Items int `json:"items"`
 }
+
+// MinFitItems 是可信判定「改善/未改善」所需的最小 item 数（ROADMAP.md M9-12）。
+// 依据：可用 item 少于约 184 时适配器学不动或落回默认权重，优化前后指标相同，
+// 「未改善」是对一次本就没机会的优化的误导；取 200 留出余量，实测 184 item 起判定稳定。
+const MinFitItems = 200
 
 // OptimizeResult 是 optimize 作业 result_json 的结构（jobs.result_json，DESIGN.md §2.2）。
 // 落在 job 行而非 preset 行：报告属于「这一次优化」，preset 只保存最终生效的权重
@@ -127,6 +148,12 @@ func (r OptimizeResult) Improved() bool { return r.FitAfter.LogLoss < r.FitBefor
 // CompareFit 返回零值；预测概率被夹在开区间 (0,1) 内，LogLoss 恒为正，因此零值即「无指标」。
 // 预设页据此避免在无指标时给出「未改善」这种误导性结论（ROADMAP.md M9-11 验收 5）。
 func (m FitMetrics) Available() bool { return m.LogLoss > 0 }
+
+// SampleSufficient 报告这次拟合的样本是否足够支撑「改善/未改善」结论。
+// 与 Available() 语义不同：Available() 只说明「指标算出来了」（至少覆盖一个 item），
+// 本方法进一步要求覆盖的 item 数达到 MinFitItems。两者都为真时页面才渲染结论；
+// 只有 Available() 为真时页面渲染「样本不足，无法判定」。
+func (m FitMetrics) SampleSufficient() bool { return m.Available() && m.Items >= MinFitItems }
 
 // ErrPresetWeightsIDRequired 表示回退默认权重时未给出预设主键。
 var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is required")

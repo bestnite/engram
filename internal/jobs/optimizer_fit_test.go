@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -44,14 +45,17 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
 	u, p := seedOptimizerUserAndPreset(t, db)
-	const cards, days = 4, 10
+	// 8 张卡 × 40 天 = 320 条复习：既越过 300 条门槛下限（M9-12），也让可预测 item 数
+	// （320 - 每卡首条 = 312）稳稳超过 MinFitItems，端到端因此能给出真正的判定。
+	const cards, days = 8, 40
 	seedAdapterReviews(t, db, u.ID, cards, days)
 	// 给 preset 一套与适配器输出不同的旧权重：既证明「旧权重在写回之前读取」，
 	// 也让 after/before 的指标必须不同（不是同一次评估被复制到两边）。
 	if err := setPresetWeightsForTest(db, p.ID, degradedWeights()); err != nil {
 		t.Fatalf("seed stale preset weights: %v", err)
 	}
-	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, "2", nil, time.Now().UTC()); err != nil {
+	// 门槛设到下限：存量低于下限会被钳到 300，而默认 500 会挡住这 320 条复习。
+	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, strconv.Itoa(store.MinOptimizeMinReviews), nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)
 	}
 
@@ -83,6 +87,17 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 	if !result.FitBefore.Available() || !result.FitAfter.Available() {
 		t.Fatalf("metrics reported unavailable after a real run: before=%+v after=%+v", result.FitBefore, result.FitAfter)
 	}
+	// M9-12：item 数必须随指标一起落进 result_json（fitMetrics 此前只搬 LogLoss/RMSE），
+	// 且这批样本要大到足以判定「改善/未改善」。
+	if result.FitBefore.Items <= 0 || result.FitAfter.Items <= 0 {
+		t.Fatalf("fit metrics carried no item count after a real run: before=%+v after=%+v", result.FitBefore, result.FitAfter)
+	}
+	if result.FitBefore.Items != result.FitAfter.Items {
+		t.Errorf("before/after item counts differ: %d vs %d (they must score the same item set)", result.FitBefore.Items, result.FitAfter.Items)
+	}
+	if !result.FitBefore.SampleSufficient() || !result.FitAfter.SampleSufficient() {
+		t.Fatalf("real run produced fewer than %d items (before=%d after=%d); the sample gate would hide the verdict", store.MinFitItems, result.FitBefore.Items, result.FitAfter.Items)
+	}
 	if result.FitBefore == result.FitAfter {
 		// 旧权重（写回前）与新权重落在同一指标上，说明两边其实评估了同一套权重。
 		t.Fatalf("before/after metrics identical; the pre-optimization weights were not used: %+v", result.FitBefore)
@@ -106,7 +121,7 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 		}
 	}
 	t.Logf("job %d succeeded (reviews_used=%d, weights=%d)", done.ID, result.ReviewsUsed, len(result.Weights))
-	t.Logf("FitBefore (degraded old weights): LogLoss=%.6f RMSE=%.6f", result.FitBefore.LogLoss, result.FitBefore.RMSE)
-	t.Logf("FitAfter  (adapter new weights):  LogLoss=%.6f RMSE=%.6f", result.FitAfter.LogLoss, result.FitAfter.RMSE)
+	t.Logf("FitBefore (degraded old weights): LogLoss=%.6f RMSE=%.6f items=%d", result.FitBefore.LogLoss, result.FitBefore.RMSE, result.FitBefore.Items)
+	t.Logf("FitAfter  (adapter new weights):  LogLoss=%.6f RMSE=%.6f items=%d", result.FitAfter.LogLoss, result.FitAfter.RMSE, result.FitAfter.Items)
 	t.Logf("Improved()=%v", result.Improved())
 }

@@ -66,12 +66,13 @@ func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	t.Logf("below-threshold refusal: %v", err)
 }
 
-// TestOptimiseThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖：
-// 把门槛降到 2 后，3 条复习即可入队（不再被默认 500 拒绝）。
+// TestOptimiseThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖，且覆盖值受
+// M9-12 的 300 条下限约束：存量写成 2（绕过表单直接写库）会被读取路径钳到 300，
+// 于是刚好 300 条复习可以入队——若读取端仍按 2 放行，这个用例会因门槛形同虚设而失去意义。
 func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()
-	seedOptimizeReviews(t, db, 1, 3)
+	seedOptimizeReviews(t, db, 1, store.MinOptimizeMinReviews)
 
 	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, "2", nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)
@@ -80,13 +81,13 @@ func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OptimizeMinReviews: %v", err)
 	}
-	if min != 2 {
-		t.Fatalf("OptimizeMinReviews() = %d, want 2", min)
+	if min != store.MinOptimizeMinReviews {
+		t.Fatalf("OptimizeMinReviews() with stored 2 = %d, want the floor %d", min, store.MinOptimizeMinReviews)
 	}
 
 	job, err := runner.EnqueueOptimize(ctx, 1, 42)
 	if err != nil {
-		t.Fatalf("EnqueueOptimize() with lowered threshold: %v", err)
+		t.Fatalf("EnqueueOptimize() with the floor threshold: %v", err)
 	}
 	if job.TargetID == nil || *job.TargetID != 42 {
 		t.Errorf("job.TargetID = %v, want 42", job.TargetID)

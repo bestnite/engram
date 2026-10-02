@@ -573,6 +573,10 @@
   translation: "Media"
 - id: admin.section.media.intro
   translation: "Upload limits and on-disk usage. These values also drive the media upload endpoint immediately."
+- id: admin.section.optimize
+  translation: "Parameter optimization"
+- id: admin.section.optimize.intro
+  translation: "Admission conditions for the parameter optimization job."
 - id: admin.section.sensitive
   translation: "Sensitive settings"
 - id: admin.section.sensitive.intro
@@ -607,6 +611,10 @@
   translation: "Media directory usage"
 - id: admin.setting.media_usage.hint
   translation: "Total size of the files currently on disk."
+- id: admin.setting.optimize_min_reviews
+  translation: "Optimizer threshold (reviews)"
+- id: admin.setting.optimize_min_reviews.hint
+  translation: "Minimum reviews required before parameter optimization can run; the floor is 300 and the default is 500. Stored values below the floor take effect as 300."
 - id: admin.action.save
   translation: "Save settings"
 - id: admin.notice.saved
@@ -617,6 +625,8 @@
   translation: "The upload size limit must be a positive integer."
 - id: admin.notice.invalid_mime
   translation: "The MIME list must contain at least one value."
+- id: admin.notice.optimize_min_reviews_too_low
+  translation: "The optimizer threshold must be at least the floor of 300; the change was not saved."
 - id: admin.notice.save_failed
   translation: "Could not save the settings. Please try again."
 - id: admin.export.heading
@@ -951,6 +961,8 @@
   translation: "fit improved"
 - id: presets.optimize.not_improved
   translation: "fit did not improve"
+- id: presets.optimize.sample_insufficient
+  translation: "sample too small to judge"
 - id: presets.revert.button
   translation: "Revert to default weights"
 - id: presets.revert.note

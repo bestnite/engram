@@ -44,11 +44,51 @@ func TestPresetFitVerdictHiddenWhenNoItems(t *testing.T) {
 	if card.ResultVerdict == loc.T("presets.optimize.not_improved") {
 		t.Fatalf("verdict equals the \"not improved\" text even though no metric was available")
 	}
-	t.Logf("no-item job -> before=%q after=%q verdict=%q (section hidden)", card.ResultBefore, card.ResultAfter, card.ResultVerdict)
+	// 第三种状态（样本不足）也不能被误触发：没有任何指标时连「样本不足」都不该出现。
+	if card.ResultSampleInsufficient != "" {
+		t.Fatalf("sample-insufficient text rendered without any metric: %q", card.ResultSampleInsufficient)
+	}
+	t.Logf("no-item job -> before=%q after=%q verdict=%q insufficient=%q (section hidden)",
+		card.ResultBefore, card.ResultAfter, card.ResultVerdict, card.ResultSampleInsufficient)
 }
 
-// TestPresetFitVerdictRenderedWhenMetricsAvailable 证明有指标时页面照常给出结论：
-// after < before 显示「改善」，after > before 显示「未改善」。
+// TestPresetFitVerdictSampleInsufficient 是 M9-12 验收 3 的反面：两个指标都算出来了
+// （Available() 为真），但可用 item 数低于 MinFitItems 时，页面只渲染「样本不足，无法判定」，
+// 既不渲染 before/after 两行，也不渲染「改善/未改善」结论——一次本就没机会的优化
+// 不该被误报成「未改善」。
+func TestPresetFitVerdictSampleInsufficient(t *testing.T) {
+	tr, err := i18n.New()
+	if err != nil {
+		t.Fatalf("i18n.New: %v", err)
+	}
+	loc := tr.Localizer(language.English)
+	srv := &Server{logger: discardLogger()}
+
+	small := store.MinFitItems - 1
+	job := succeededJobWithResult(t, store.OptimizeResult{
+		ReviewsUsed: 210,
+		FitBefore:   store.FitMetrics{LogLoss: 0.50, RMSE: 0.40, Items: small},
+		FitAfter:    store.FitMetrics{LogLoss: 0.20, RMSE: 0.18, Items: small},
+	})
+	var card views.PresetCardData
+	srv.applyResultToCard(loc, &card, job)
+
+	if card.ResultSampleInsufficient != loc.T("presets.optimize.sample_insufficient") {
+		t.Fatalf("sample-insufficient text = %q, want %q", card.ResultSampleInsufficient, loc.T("presets.optimize.sample_insufficient"))
+	}
+	if card.ResultBefore != "" || card.ResultAfter != "" {
+		t.Errorf("before/after must stay hidden when the sample is too small: before=%q after=%q", card.ResultBefore, card.ResultAfter)
+	}
+	if card.ResultVerdict != "" {
+		t.Errorf("verdict = %q, want empty (a too-small sample must not be judged)", card.ResultVerdict)
+	}
+	t.Logf("small-sample job (%d items, both metrics non-zero) -> insufficient=%q before=%q after=%q verdict=%q",
+		small, card.ResultSampleInsufficient, card.ResultBefore, card.ResultAfter, card.ResultVerdict)
+}
+
+// TestPresetFitVerdictRenderedWhenMetricsAvailable 是 M9-12 验收 3 的正面：两个指标都算出来
+// 且 item 数达到 MinFitItems 时，页面照常给出结论——after < before 显示「改善」，
+// after > before 显示「未改善」。
 func TestPresetFitVerdictRenderedWhenMetricsAvailable(t *testing.T) {
 	tr, err := i18n.New()
 	if err != nil {
@@ -57,25 +97,29 @@ func TestPresetFitVerdictRenderedWhenMetricsAvailable(t *testing.T) {
 	loc := tr.Localizer(language.English)
 	srv := &Server{logger: discardLogger()}
 
+	const items = store.MinFitItems + 50
 	improved := succeededJobWithResult(t, store.OptimizeResult{
-		ReviewsUsed: 30,
-		FitBefore:   store.FitMetrics{LogLoss: 0.50, RMSE: 0.40},
-		FitAfter:    store.FitMetrics{LogLoss: 0.20, RMSE: 0.18},
+		ReviewsUsed: 260,
+		FitBefore:   store.FitMetrics{LogLoss: 0.50, RMSE: 0.40, Items: items},
+		FitAfter:    store.FitMetrics{LogLoss: 0.20, RMSE: 0.18, Items: items},
 	})
 	var card views.PresetCardData
 	srv.applyResultToCard(loc, &card, improved)
 	if card.ResultBefore == "" || card.ResultAfter == "" {
 		t.Fatalf("metrics available but not rendered: before=%q after=%q", card.ResultBefore, card.ResultAfter)
 	}
+	if card.ResultSampleInsufficient != "" {
+		t.Errorf("sample-insufficient text rendered despite %d items: %q", items, card.ResultSampleInsufficient)
+	}
 	if card.ResultVerdict != loc.T("presets.optimize.improved") {
 		t.Fatalf("verdict = %q, want improved", card.ResultVerdict)
 	}
-	t.Logf("improved job -> before=%q after=%q verdict=%q", card.ResultBefore, card.ResultAfter, card.ResultVerdict)
+	t.Logf("improved job (%d items) -> before=%q after=%q verdict=%q", items, card.ResultBefore, card.ResultAfter, card.ResultVerdict)
 
 	worse := succeededJobWithResult(t, store.OptimizeResult{
-		ReviewsUsed: 30,
-		FitBefore:   store.FitMetrics{LogLoss: 0.20, RMSE: 0.18},
-		FitAfter:    store.FitMetrics{LogLoss: 0.50, RMSE: 0.40},
+		ReviewsUsed: 260,
+		FitBefore:   store.FitMetrics{LogLoss: 0.20, RMSE: 0.18, Items: items},
+		FitAfter:    store.FitMetrics{LogLoss: 0.50, RMSE: 0.40, Items: items},
 	})
 	var card2 views.PresetCardData
 	srv.applyResultToCard(loc, &card2, worse)
