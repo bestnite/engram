@@ -380,7 +380,8 @@ Conventions:
   deck form and can never own more than that one implicit preset, so the "several decks share a
   preset" case in `DESIGN.md` §2.2 cannot actually happen. Add create and edit (name, desired
   retention, learning steps, relearning steps, maximum interval, fuzz) and create the default
-  preset when the account is created rather than on the first deck creation.
+  preset present whenever the deck form or the presets page renders (an idempotent ensure in the web
+  layer) instead of creating it implicitly on the first deck creation.
   *Acceptance:* a fresh account finds a populated preset dropdown on the deck form; a user creates
   a second preset, edits it, and selects it when creating a deck; an invalid value (retention
   outside (0,1), negative or unparsable steps) is rejected with a localised message and writes
