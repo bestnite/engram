@@ -44,7 +44,7 @@ func (s *Server) deckList(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	presets, err := s.presets.ListByOwner(ctx, user.ID)
+	presets, err := s.ensureDefaultPreset(ctx, loc, user.ID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -181,7 +181,7 @@ func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, user
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	presets, err := s.presets.ListByOwner(c.Request.Context(), userID)
+	presets, err := s.ensureDefaultPreset(c.Request.Context(), loc, userID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -190,10 +190,30 @@ func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, user
 	s.renderDeckList(c, loc, userID, summaries, presets, status, errMsg, nameValue, descValue)
 }
 
-// resolvePresetID 解析表单里的 preset_id：必须属于当前用户；缺省或非法时退回第一个预设；
-// 完全没有预设时创建一个本地化的默认预设，否则新用户无法建卡组（M2-2 尚无预设管理页）。
-func (s *Server) resolvePresetID(ctx context.Context, loc *i18n.Localizer, userID uint64, raw string) (uint64, error) {
+// ensureDefaultPreset 保证该用户至少有一个调度预设：没有就按文档化默认值建一个，幂等。
+//
+// 放在 web 渲染入口兜底，而不是改账号创建路径：本地注册、邀请注册、OIDC 首次登录等多条
+// 路径都会建账号，逐条修改容易漏；在渲染卡组列表/表单与预设页时补齐只需一处，
+// 且对已存在的历史账号同样生效（M3-14）。默认预设名走语言包，与卡组表单同源。
+func (s *Server) ensureDefaultPreset(ctx context.Context, loc *i18n.Localizer, userID uint64) ([]store.Preset, error) {
 	presets, err := s.presets.ListByOwner(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(presets) > 0 {
+		return presets, nil
+	}
+	p := store.NewPreset(userID, loc.T("decks.preset.default"))
+	if err := s.presets.Create(ctx, &p); err != nil {
+		return nil, err
+	}
+	return []store.Preset{p}, nil
+}
+
+// resolvePresetID 解析表单里的 preset_id：必须属于当前用户；缺省或非法时退回第一个预设。
+// 预设由 ensureDefaultPreset 保证至少有一个，因此不会出现「无预设可退回」的分支。
+func (s *Server) resolvePresetID(ctx context.Context, loc *i18n.Localizer, userID uint64, raw string) (uint64, error) {
+	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -203,12 +223,5 @@ func (s *Server) resolvePresetID(ctx context.Context, loc *i18n.Localizer, userI
 			return presets[i].ID, nil
 		}
 	}
-	if len(presets) > 0 {
-		return presets[0].ID, nil
-	}
-	preset := store.NewPreset(userID, loc.T("decks.preset.default"))
-	if err := s.presets.Create(ctx, &preset); err != nil {
-		return 0, err
-	}
-	return preset.ID, nil
+	return presets[0].ID, nil
 }

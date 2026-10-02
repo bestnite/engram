@@ -2050,3 +2050,43 @@
   translation: "Create and manage keys for API access."
 - id: settings.keys.link
   translation: "Manage API keys"
+# ── Preset create/edit (M3-14): forms on the /presets page ──
+# Appended by the M3-14 task; the key set must match zh-CN.yaml.
+- id: presets.new.button
+  translation: "New preset"
+- id: presets.new.heading
+  translation: "New preset"
+- id: presets.edit.button
+  translation: "Edit"
+- id: presets.edit.heading
+  translation: "Edit preset"
+- id: presets.form.name
+  translation: "Name"
+- id: presets.form.retention
+  translation: "Desired retention (between 0 and 1, e.g. 0.9)"
+- id: presets.form.learning_steps
+  translation: "Learning steps (comma-separated, e.g. 1m,10m; empty disables them)"
+- id: presets.form.relearning_steps
+  translation: "Relearning steps (comma-separated, e.g. 10m; empty disables them)"
+- id: presets.form.max_interval
+  translation: "Maximum interval (days)"
+- id: presets.form.fuzz
+  translation: "Enable fuzz"
+- id: presets.form.save
+  translation: "Save"
+- id: presets.form.cancel
+  translation: "Cancel"
+- id: presets.form.close
+  translation: "Close"
+- id: presets.form.edit_note
+  translation: "Editing a preset affects future scheduling only; decks that reference it and existing due dates are unchanged."
+- id: presets.form.error.name_required
+  translation: "Preset name is required."
+- id: presets.form.error.retention
+  translation: "Desired retention must be a number between 0 and 1 (exclusive)."
+- id: presets.form.error.max_interval
+  translation: "Maximum interval must be a positive whole number of days."
+- id: presets.form.error.steps
+  translation: "Invalid learning steps; use comma-separated durations such as 1m,10m."
+- id: presets.form.error.save_failed
+  translation: "Could not save the preset."

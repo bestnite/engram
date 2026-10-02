@@ -2048,3 +2048,43 @@
   translation: "创建与管理用于接口访问的密钥。"
 - id: settings.keys.link
   translation: "管理 API Key"
+# ── 预设新建/编辑（M3-14）：/presets 页的创建与编辑表单 ──────────────────
+# 本块由 M3-14 任务追加；键集合须与 en.yaml 一致。
+- id: presets.new.button
+  translation: "新建预设"
+- id: presets.new.heading
+  translation: "新建预设"
+- id: presets.edit.button
+  translation: "编辑"
+- id: presets.edit.heading
+  translation: "编辑预设"
+- id: presets.form.name
+  translation: "名称"
+- id: presets.form.retention
+  translation: "目标保留率（0–1 之间，如 0.9）"
+- id: presets.form.learning_steps
+  translation: "学习步骤（逗号分隔，如 1m,10m；留空表示不启用）"
+- id: presets.form.relearning_steps
+  translation: "再学习步骤（逗号分隔，如 10m；留空表示不启用）"
+- id: presets.form.max_interval
+  translation: "最大间隔（天）"
+- id: presets.form.fuzz
+  translation: "启用间隔抖动"
+- id: presets.form.save
+  translation: "保存"
+- id: presets.form.cancel
+  translation: "取消"
+- id: presets.form.close
+  translation: "关闭"
+- id: presets.form.edit_note
+  translation: "修改预设只影响未来的调度；引用它的卡组与已有到期日不变。"
+- id: presets.form.error.name_required
+  translation: "预设名称不能为空。"
+- id: presets.form.error.retention
+  translation: "目标保留率必须是 0 到 1 之间的数（不含 0 和 1）。"
+- id: presets.form.error.max_interval
+  translation: "最大间隔必须是正整数天数。"
+- id: presets.form.error.steps
+  translation: "学习步骤格式无效，请用逗号分隔的时长，如 1m,10m。"
+- id: presets.form.error.save_failed
+  translation: "保存预设失败。"

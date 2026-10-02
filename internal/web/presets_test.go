@@ -58,6 +58,7 @@ func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, c
 		Accounts:      accounts,
 		Sessions:      mgr,
 		Users:         users,
+		Decks:         store.NewDeckStore(db),
 		Presets:       store.NewPresetStore(db),
 		Auditor:       auditor,
 		Jobs:          runner,
@@ -361,4 +362,302 @@ func renderPresetCardFragment(t *testing.T) string {
 		t.Fatalf("render card: %v", err)
 	}
 	return sb.String()
+}
+
+// ---- M3-14 预设管理：新建、编辑与默认预设 ------------------------------------
+
+// TestPresetFreshAccountGetsDefaultPreset 是 M3-14 的主验收（上半）：全新账号首次访问
+// 卡组表单或预设页时自动获得一个默认预设，下拉因此非空；重复访问不会重复创建。
+func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
+	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
+
+	// 卡组表单：全新账号的下拉必须已有选项。
+	decks := getWithCookies(t, srv, "/decks", cookies)
+	if decks.Code != http.StatusOK {
+		t.Fatalf("GET /decks status = %d, want 200 (body %s)", decks.Code, snippet(decks.Body.String()))
+	}
+	if !strings.Contains(decks.Body.String(), `name="preset_id"`) {
+		t.Fatalf("deck form has no preset dropdown: %s", snippet(decks.Body.String()))
+	}
+	if !strings.Contains(decks.Body.String(), ">默认</option>") {
+		t.Errorf("fresh account's deck form has an empty preset dropdown: %s", snippet(decks.Body.String()))
+	}
+
+	// 预设页：同样能看到这个默认预设。
+	presets := getWithCookies(t, srv, "/presets", cookies)
+	if presets.Code != http.StatusOK {
+		t.Fatalf("GET /presets status = %d, want 200 (body %s)", presets.Code, snippet(presets.Body.String()))
+	}
+	if !strings.Contains(presets.Body.String(), ">默认</h2>") {
+		t.Errorf("fresh account's preset page does not show the default preset: %s", snippet(presets.Body.String()))
+	}
+
+	// 幂等：两次访问后仍只有一个预设。
+	var n int64
+	if err := db.Model(&store.Preset{}).Where("owner_user_id = ?", ownerID).Count(&n).Error; err != nil {
+		t.Fatalf("count presets: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("presets for a fresh account = %d after two page loads, want 1", n)
+	}
+}
+
+// TestPresetCreateAddsSecondPresetShownInDeckForm 覆盖「用户创建第二个预设并能在卡组表单里选到」。
+func TestPresetCreateAddsSecondPresetShownInDeckForm(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	seedPreset(t, db, ownerID)
+
+	rec := postForm(t, srv, "/presets", url.Values{
+		"csrf_token":            {csrf},
+		"name":                  {"Evening"},
+		"desired_retention":     {"0.85"},
+		"learning_steps":        {"2m,20m"},
+		"relearning_steps":      {"15m"},
+		"maximum_interval_days": {"1000"},
+		"enable_fuzz":           {"on"},
+	}, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /presets status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if loc := rec.Header().Get("Location"); loc != "/presets" {
+		t.Errorf("POST /presets Location = %q, want /presets", loc)
+	}
+
+	var got store.Preset
+	if err := db.Where("owner_user_id = ? AND name = ?", ownerID, "Evening").First(&got).Error; err != nil {
+		t.Fatalf("second preset was not persisted: %v", err)
+	}
+	if got.DesiredRetention != 0.85 || got.LearningSteps != "2m,20m" || got.RelearningSteps != "15m" ||
+		got.MaximumIntervalDays != 1000 || !got.FuzzEnabled() {
+		t.Errorf("created preset = %+v, want 0.85 / 2m,20m / 15m / 1000 / fuzz on", got)
+	}
+
+	decks := getWithCookies(t, srv, "/decks", cookies)
+	if !strings.Contains(decks.Body.String(), ">Evening</option>") {
+		t.Errorf("deck form does not offer the new preset: %s", snippet(decks.Body.String()))
+	}
+}
+
+// TestPresetCreateStoresFuzzOff 证明未勾选的 fuzz 复选框落库为 false（AGENTS.md §2.3 第 9 条）。
+func TestPresetCreateStoresFuzzOff(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	seedPreset(t, db, ownerID)
+
+	rec := postForm(t, srv, "/presets", url.Values{
+		"csrf_token":            {csrf},
+		"name":                  {"No fuzz"},
+		"desired_retention":     {"0.9"},
+		"learning_steps":        {""},
+		"relearning_steps":      {""},
+		"maximum_interval_days": {"365"},
+		// 不提交 enable_fuzz → 关闭
+	}, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /presets status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var got store.Preset
+	if err := db.Where("owner_user_id = ? AND name = ?", ownerID, "No fuzz").First(&got).Error; err != nil {
+		t.Fatalf("preset was not persisted: %v", err)
+	}
+	if got.FuzzEnabled() {
+		t.Errorf("preset fuzz = true, want false: an unchecked box must persist as false")
+	}
+	if got.LearningSteps != "" || got.RelearningSteps != "" {
+		t.Errorf("empty steps = (%q, %q), want both empty", got.LearningSteps, got.RelearningSteps)
+	}
+}
+
+// TestPresetUpdateChangesValuesAndRejectsInvalid 覆盖编辑主验收：合法编辑改值；
+// 保留率 0 / 1 / >1 与不可解析、负数步骤被拒（400 + 本地化消息）且不写库。
+func TestPresetUpdateChangesValuesAndRejectsInvalid(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	p := seedPreset(t, db, ownerID)
+	target := "/presets/" + strconv.FormatUint(p.ID, 10)
+	ctx := context.Background()
+
+	rec := postForm(t, srv, target, url.Values{
+		"csrf_token":            {csrf},
+		"name":                  {"Renamed"},
+		"desired_retention":     {"0.80"},
+		"learning_steps":        {"5m"},
+		"relearning_steps":      {""},
+		"maximum_interval_days": {"500"},
+		"enable_fuzz":           {"on"},
+	}, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /presets/:id status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	got, err := store.NewPresetStore(db).ByID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload preset: %v", err)
+	}
+	if got.Name != "Renamed" || got.DesiredRetention != 0.8 || got.LearningSteps != "5m" ||
+		got.RelearningSteps != "" || got.MaximumIntervalDays != 500 || !got.FuzzEnabled() {
+		t.Errorf("updated preset = %+v, want Renamed / 0.8 / 5m / empty / 500 / fuzz on", got)
+	}
+
+	cases := []struct {
+		name     string
+		override url.Values
+		wantMsg  string
+	}{
+		{"retention zero", url.Values{"desired_retention": {"0"}}, "目标保留率"},
+		{"retention one", url.Values{"desired_retention": {"1"}}, "目标保留率"},
+		{"retention above one", url.Values{"desired_retention": {"1.5"}}, "目标保留率"},
+		{"unparsable learning steps", url.Values{"learning_steps": {"abc"}}, "学习步骤"},
+		{"negative learning steps", url.Values{"learning_steps": {"-5m"}}, "学习步骤"},
+		{"unparsable relearning steps", url.Values{"relearning_steps": {"7x"}}, "学习步骤"},
+	}
+	for _, tc := range cases {
+		form := url.Values{
+			"csrf_token": {csrf}, "name": {"Renamed"}, "desired_retention": {"0.80"},
+			"learning_steps": {"5m"}, "relearning_steps": {""}, "maximum_interval_days": {"500"},
+			"enable_fuzz": {"on"},
+		}
+		for k, v := range tc.override {
+			form[k] = v
+		}
+		res := postForm(t, srv, target, form, cookies)
+		if res.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400 (body %s)", tc.name, res.Code, snippet(res.Body.String()))
+			continue
+		}
+		if !strings.Contains(res.Body.String(), tc.wantMsg) {
+			t.Errorf("%s: body lacks the localised message %q: %s", tc.name, tc.wantMsg, snippet(res.Body.String()))
+		}
+		after, err := store.NewPresetStore(db).ByID(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("reload preset after %s: %v", tc.name, err)
+		}
+		if after.Name != "Renamed" || after.DesiredRetention != 0.8 || after.LearningSteps != "5m" ||
+			after.MaximumIntervalDays != 500 {
+			t.Errorf("%s: preset changed despite rejection: %+v", tc.name, after)
+		}
+	}
+}
+
+// TestPresetCreateRejectsInvalidValues 覆盖新建的校验拒绝：非法值 400 + 本地化消息且不写库。
+func TestPresetCreateRejectsInvalidValues(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	seedPreset(t, db, ownerID)
+
+	cases := []struct {
+		name     string
+		override url.Values
+		wantMsg  string
+	}{
+		{"retention zero", url.Values{"desired_retention": {"0"}}, "目标保留率"},
+		{"retention one", url.Values{"desired_retention": {"1"}}, "目标保留率"},
+		{"retention above one", url.Values{"desired_retention": {"2"}}, "目标保留率"},
+		{"unparsable steps", url.Values{"learning_steps": {"1m,zzz"}}, "学习步骤"},
+	}
+	for _, tc := range cases {
+		form := url.Values{
+			"csrf_token": {csrf}, "name": {"Bad"}, "desired_retention": {"0.9"},
+			"learning_steps": {"1m"}, "relearning_steps": {"10m"}, "maximum_interval_days": {"100"},
+		}
+		for k, v := range tc.override {
+			form[k] = v
+		}
+		res := postForm(t, srv, "/presets", form, cookies)
+		if res.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400 (body %s)", tc.name, res.Code, snippet(res.Body.String()))
+			continue
+		}
+		if !strings.Contains(res.Body.String(), tc.wantMsg) {
+			t.Errorf("%s: body lacks the localised message %q: %s", tc.name, tc.wantMsg, snippet(res.Body.String()))
+		}
+	}
+	var n int64
+	if err := db.Model(&store.Preset{}).Where("owner_user_id = ?", ownerID).Count(&n).Error; err != nil {
+		t.Fatalf("count presets: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("invalid creates wrote presets: count = %d, want 1", n)
+	}
+}
+
+// TestPresetUpdateOtherUsersPresetIsNotFound 是必测负例：他人预设不可编辑，返回 404 而非 403，
+// 以免通过状态码泄露 id 是否存在。
+func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
+	srv, db, _, cookies, csrf, _ := newPresetsServer(t)
+	ctx := context.Background()
+	other := store.User{
+		Username: "intruder", Email: "intruder@example.com", DisplayName: "intruder",
+		Role: store.RoleUser, Status: store.StatusActive, Locale: "zh-CN",
+		Timezone: "Asia/Shanghai", CreatedAt: time.Now().UTC(),
+	}
+	if err := store.NewUserStore(db).Create(ctx, &other); err != nil {
+		t.Fatalf("create second user: %v", err)
+	}
+	foreign := store.NewPreset(other.ID, "foreign")
+	if err := store.NewPresetStore(db).Create(ctx, &foreign); err != nil {
+		t.Fatalf("create foreign preset: %v", err)
+	}
+
+	rec := postForm(t, srv, "/presets/"+strconv.FormatUint(foreign.ID, 10), url.Values{
+		"csrf_token": {csrf}, "name": {"hijack"}, "desired_retention": {"0.9"},
+		"learning_steps": {"1m"}, "relearning_steps": {"10m"}, "maximum_interval_days": {"100"},
+	}, cookies)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("POST another user's preset status = %d, want 404 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	after, err := store.NewPresetStore(db).ByID(ctx, foreign.ID)
+	if err != nil {
+		t.Fatalf("reload foreign preset: %v", err)
+	}
+	if after.Name != "foreign" {
+		t.Errorf("foreign preset was modified: name = %q, want unchanged", after.Name)
+	}
+}
+
+// TestPresetCreateAndUpdateRequireCSRF 是必测负例：两个写入口缺 CSRF token 都被拒且不落库。
+func TestPresetCreateAndUpdateRequireCSRF(t *testing.T) {
+	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
+	p := seedPreset(t, db, ownerID)
+	for _, target := range []string{"/presets", "/presets/" + strconv.FormatUint(p.ID, 10)} {
+		rec := postForm(t, srv, target, url.Values{"name": {"no csrf"}}, cookies)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s without CSRF status = %d, want 403 (body %s)", target, rec.Code, snippet(rec.Body.String()))
+		}
+	}
+	var n int64
+	if err := db.Model(&store.Preset{}).Count(&n).Error; err != nil {
+		t.Fatalf("count presets: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("preset count = %d after CSRF-less writes, want 1", n)
+	}
+}
+
+// TestPresetSelectedWhenCreatingDeck 覆盖「编辑后的第二个预设被选中用于新建卡组」。
+func TestPresetSelectedWhenCreatingDeck(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	seedPreset(t, db, ownerID)
+
+	rec := postForm(t, srv, "/presets", url.Values{
+		"csrf_token": {csrf}, "name": {"Second"}, "desired_retention": {"0.88"},
+		"learning_steps": {"1m,10m"}, "relearning_steps": {"10m"}, "maximum_interval_days": {"1000"},
+	}, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create second preset status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var second store.Preset
+	if err := db.Where("owner_user_id = ? AND name = ?", ownerID, "Second").First(&second).Error; err != nil {
+		t.Fatalf("second preset missing: %v", err)
+	}
+
+	deckRec := postForm(t, srv, "/decks", url.Values{
+		"csrf_token": {csrf}, "name": {"Deck with second"}, "preset_id": {strconv.FormatUint(second.ID, 10)},
+	}, cookies)
+	if deckRec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /decks status = %d, want 303 (body %s)", deckRec.Code, snippet(deckRec.Body.String()))
+	}
+	var deck store.Deck
+	if err := db.Where("owner_user_id = ? AND name = ?", ownerID, "Deck with second").First(&deck).Error; err != nil {
+		t.Fatalf("deck missing: %v", err)
+	}
+	if deck.PresetID != second.ID {
+		t.Errorf("deck preset = %d, want the selected second preset %d", deck.PresetID, second.ID)
+	}
 }

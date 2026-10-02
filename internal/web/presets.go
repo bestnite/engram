@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,9 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	}
 	router.GET("/presets", s.presetList)
 	// 写操作一律过 CSRF（DESIGN.md §4.3、§11）。
+	// 预设的新建与编辑（M3-14）：创建/编辑只改调度参数，卡组按 id 引用，无需迁移或重排。
+	router.POST("/presets", s.sessions.CSRFMiddleware(), s.presetCreate)
+	router.POST("/presets/:id", s.sessions.CSRFMiddleware(), s.presetUpdate)
 	router.POST("/presets/:id/optimize", s.sessions.CSRFMiddleware(), s.presetOptimize)
 	router.GET("/presets/:id/optimize/status", s.presetOptimizeStatus)
 	router.POST("/presets/:id/optimize/revert", s.sessions.CSRFMiddleware(), s.presetOptimizeRevert)
@@ -44,37 +48,299 @@ func (s *Server) presetList(c *gin.Context) {
 	if !ok {
 		return
 	}
+	s.renderPresetList(c, loc, user.ID, presetListRender{Status: http.StatusOK})
+}
+
+// presetListRender 是一次预设页渲染的差异部分：正常展示、创建校验失败或编辑校验失败。
+// 校验失败时把原始输入回填进对应对话框，用户不必重打；状态码由 Status 决定。
+type presetListRender struct {
+	Status     int
+	CreateErr  string
+	CreateForm presetForm
+	EditErrID  uint64
+	EditErr    string
+	EditForm   presetForm
+}
+
+// renderPresetList 是预设页唯一的渲染入口：确保默认预设存在、读取门槛与当前预设，
+// 组装新建对话框与每张卡片的编辑对话框，然后整页输出。
+func (s *Server) renderPresetList(c *gin.Context, loc *i18n.Localizer, userID uint64, r presetListRender) {
 	ctx := c.Request.Context()
-	presets, err := s.presets.ListByOwner(ctx, user.ID)
+	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
 	if err != nil {
-		s.logger.Error("list presets failed", "user_id", user.ID, "error", err)
+		s.logger.Error("list presets failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 	// 门槛按用户（复习日志归属者）判定一次，供所有卡片显示可用条数与门槛。
-	gate, err := store.GateOptimize(ctx, s.db, user.ID)
+	gate, err := store.GateOptimize(ctx, s.db, userID)
 	if err != nil {
-		s.logger.Error("evaluate optimize gate failed", "user_id", user.ID, "error", err)
+		s.logger.Error("evaluate optimize gate failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	csrf := ""
-	if sess, ok := auth.CurrentSession(c); ok {
-		csrf = sess.CSRFToken
-	}
+	csrf := sessionCSRF(c)
 	cards := make([]views.PresetCardData, 0, len(presets))
 	for i := range presets {
-		cards = append(cards, s.presetCard(ctx, loc, &presets[i], gate, nil, csrf))
+		card := s.presetCard(ctx, loc, &presets[i], gate, nil, csrf)
+		// 编辑校验失败时只让目标卡片的对话框展开并回填原始输入。
+		if r.EditErrID != 0 && presets[i].ID == r.EditErrID {
+			card.EditError = r.EditErr
+			card.EditValues = presetFormValues(r.EditForm)
+		}
+		cards = append(cards, card)
+	}
+	createForm := defaultPresetForm()
+	if r.CreateErr != "" {
+		createForm = r.CreateForm
 	}
 	data := views.PresetListData{
-		Layout:    s.pageLayout(c, loc, "presets.title"),
-		Heading:   loc.T("presets.heading"),
-		EmptyText: loc.T("presets.empty"),
-		Cards:     cards,
+		Layout:         s.pageLayout(c, loc, "presets.title"),
+		Heading:        loc.T("presets.heading"),
+		EmptyText:      loc.T("presets.empty"),
+		Cards:          cards,
+		NewButtonLabel: loc.T("presets.new.button"),
+		NewHeading:     loc.T("presets.new.heading"),
+		CreateAction:   "/presets",
+		Labels:         presetFormLabels(loc),
+		NewValues:      presetFormValues(createForm),
+		ErrorMessage:   r.CreateErr,
+		CSRF:           csrf,
 	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(r.Status)
 	if err := views.PresetListPage(data).Render(ctx, c.Writer); err != nil {
 		s.logger.Error("render template failed", "error", err, "path", c.Request.URL.Path)
+	}
+}
+
+// presetCreate 处理「新建预设」：校验表单、落库并回到列表页。
+// 校验失败时整页重渲染（400），把错误与原始输入放进新建对话框，不写库。
+func (s *Server) presetCreate(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	form, errKey := parsePresetForm(c)
+	if errKey != "" {
+		s.renderPresetList(c, loc, user.ID, presetListRender{
+			Status: http.StatusBadRequest, CreateErr: loc.T(errKey), CreateForm: form,
+		})
+		return
+	}
+	p := store.NewPreset(user.ID, form.Name)
+	applyPresetForm(&p, form)
+	if err := s.presets.Create(ctx, &p); err != nil {
+		s.logger.Info("create preset rejected", "user_id", user.ID, "error", err)
+		s.renderPresetList(c, loc, user.ID, presetListRender{
+			Status: http.StatusBadRequest, CreateErr: loc.T(presetStoreErrorKey(err)), CreateForm: form,
+		})
+		return
+	}
+	s.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionPresetCreate,
+		TargetType: "preset",
+		TargetID:   store.Ptr(p.ID),
+		Detail:     map[string]any{"name": p.Name, "desired_retention": p.DesiredRetention},
+	})
+	c.Redirect(http.StatusSeeOther, "/presets")
+}
+
+// presetUpdate 处理「编辑预设」：只有 owner 能改，他人/不存在的 id 一律 404（不泄露存在性）。
+// 编辑只改调度参数：卡组按 id 引用该预设，因此不需要数据迁移，也不重排任何到期日。
+func (s *Server) presetUpdate(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	p, ok := s.ownedPreset(c, user.ID)
+	if !ok {
+		return
+	}
+	form, errKey := parsePresetForm(c)
+	if errKey != "" {
+		s.renderPresetList(c, loc, user.ID, presetListRender{
+			Status: http.StatusBadRequest, EditErrID: p.ID, EditErr: loc.T(errKey), EditForm: form,
+		})
+		return
+	}
+	applyPresetForm(p, form)
+	if err := s.presets.Update(ctx, user.ID, p); err != nil {
+		s.logger.Info("update preset rejected", "user_id", user.ID, "preset_id", p.ID, "error", err)
+		s.renderPresetList(c, loc, user.ID, presetListRender{
+			Status: http.StatusBadRequest, EditErrID: p.ID, EditErr: loc.T(presetStoreErrorKey(err)), EditForm: form,
+		})
+		return
+	}
+	s.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionPresetUpdate,
+		TargetType: "preset",
+		TargetID:   store.Ptr(p.ID),
+		Detail:     map[string]any{"name": p.Name, "desired_retention": p.DesiredRetention},
+	})
+	c.Redirect(http.StatusSeeOther, "/presets")
+}
+
+// presetForm 是创建/编辑表单解析后的字段集合。
+type presetForm struct {
+	Name                string
+	DesiredRetention    float64
+	LearningSteps       string
+	RelearningSteps     string
+	MaximumIntervalDays int
+	Fuzz                bool
+}
+
+// defaultPresetForm 返回新建对话框的预填值：与 store 的文档化默认值一致。
+func defaultPresetForm() presetForm {
+	return presetForm{
+		DesiredRetention:    store.DefaultDesiredRetention,
+		LearningSteps:       store.DefaultLearningSteps,
+		RelearningSteps:     store.DefaultRelearningSteps,
+		MaximumIntervalDays: store.DefaultMaximumIntervalDays,
+		Fuzz:                store.DefaultEnableFuzz,
+	}
+}
+
+// parsePresetForm 解析并做格式校验；返回非空的本地化错误 key 表示拒绝。
+// 语义校验与 store 的 validatePresetForWrite 对齐，但目标保留率按验收要求收紧为 (0,1) 开区间
+// （store 允许到 1）：越界在写库前就被拦下，store 的校验仍是最后一道防线。
+func parsePresetForm(c *gin.Context) (presetForm, string) {
+	f := presetForm{
+		Name:            strings.TrimSpace(c.PostForm("name")),
+		LearningSteps:   strings.TrimSpace(c.PostForm("learning_steps")),
+		RelearningSteps: strings.TrimSpace(c.PostForm("relearning_steps")),
+		Fuzz:            c.PostForm("enable_fuzz") != "",
+	}
+	if f.Name == "" {
+		return f, "presets.form.error.name_required"
+	}
+	retention, err := strconv.ParseFloat(strings.TrimSpace(c.PostForm("desired_retention")), 64)
+	if err != nil || retention <= 0 || retention >= 1 {
+		return f, "presets.form.error.retention"
+	}
+	f.DesiredRetention = retention
+	days, err := strconv.Atoi(strings.TrimSpace(c.PostForm("maximum_interval_days")))
+	if err != nil || days <= 0 {
+		return f, "presets.form.error.max_interval"
+	}
+	f.MaximumIntervalDays = days
+	if !validStepSpec(f.LearningSteps) || !validStepSpec(f.RelearningSteps) {
+		return f, "presets.form.error.steps"
+	}
+	return f, ""
+}
+
+// applyPresetForm 把解析后的字段写进预设模型；EnableFuzz 是 *bool，显式取地址以保留 false。
+func applyPresetForm(p *store.Preset, f presetForm) {
+	p.Name = f.Name
+	p.DesiredRetention = f.DesiredRetention
+	p.LearningSteps = f.LearningSteps
+	p.RelearningSteps = f.RelearningSteps
+	p.MaximumIntervalDays = f.MaximumIntervalDays
+	fuzz := f.Fuzz
+	p.EnableFuzz = &fuzz
+}
+
+// validStepSpec 判断学习/再学习步骤串是否可解析；空串合法（关闭步骤）。
+// 文法与 internal/schedule 的 parseSteps 一致（逗号分隔、s/m/h/d 后缀、缺省分钟），
+// 但额外要求每个步骤为正：调度器会把 "-5m" 这类负数当合法输入，验收要求在此拒绝。
+// 这里只判断「可解析」，不复制调度逻辑——调度器读库时仍走自己的 parseSteps。
+func validStepSpec(spec string) bool {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return true
+	}
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		idx := len(part)
+		for idx > 0 {
+			ch := part[idx-1]
+			if (ch >= '0' && ch <= '9') || ch == '.' {
+				break
+			}
+			idx--
+		}
+		num, unit := part[:idx], strings.ToLower(part[idx:])
+		value, err := strconv.ParseFloat(num, 64)
+		if err != nil || value <= 0 {
+			return false
+		}
+		switch unit {
+		case "", "m", "min", "s", "sec", "h", "hr", "d":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// presetStoreErrorKey 把 store 的校验错误映射成语言包 key（AGENTS.md §2.1：用户可见文案走语言包）。
+func presetStoreErrorKey(err error) string {
+	switch {
+	case errors.Is(err, store.ErrPresetNameRequired):
+		return "presets.form.error.name_required"
+	case errors.Is(err, store.ErrInvalidDesiredRetention):
+		return "presets.form.error.retention"
+	case errors.Is(err, store.ErrInvalidMaximumInterval):
+		return "presets.form.error.max_interval"
+	default:
+		return "presets.form.error.save_failed"
+	}
+}
+
+// presetFormLabels 一次性取出新建/编辑对话框的全部标签。
+func presetFormLabels(loc *i18n.Localizer) views.PresetFormLabels {
+	return views.PresetFormLabels{
+		Name:            loc.T("presets.form.name"),
+		Retention:       loc.T("presets.form.retention"),
+		LearningSteps:   loc.T("presets.form.learning_steps"),
+		RelearningSteps: loc.T("presets.form.relearning_steps"),
+		MaxInterval:     loc.T("presets.form.max_interval"),
+		Fuzz:            loc.T("presets.form.fuzz"),
+		Save:            loc.T("presets.form.save"),
+		Cancel:          loc.T("presets.form.cancel"),
+		Close:           loc.T("presets.form.close"),
+		EditNote:        loc.T("presets.form.edit_note"),
+	}
+}
+
+// presetFormValues 把解析后的字段渲染成表单回显值。
+func presetFormValues(f presetForm) views.PresetFormValues {
+	return views.PresetFormValues{
+		Name:            f.Name,
+		Retention:       strconv.FormatFloat(f.DesiredRetention, 'f', 2, 64),
+		LearningSteps:   f.LearningSteps,
+		RelearningSteps: f.RelearningSteps,
+		MaxInterval:     strconv.Itoa(f.MaximumIntervalDays),
+		Fuzz:            f.Fuzz,
+	}
+}
+
+// presetValuesFrom 从库里的预设构造编辑表单回显值。
+func presetValuesFrom(p *store.Preset) views.PresetFormValues {
+	return views.PresetFormValues{
+		Name:            p.Name,
+		Retention:       strconv.FormatFloat(p.DesiredRetention, 'f', 2, 64),
+		LearningSteps:   p.LearningSteps,
+		RelearningSteps: p.RelearningSteps,
+		MaxInterval:     strconv.Itoa(p.MaximumIntervalDays),
+		Fuzz:            p.FuzzEnabled(),
 	}
 }
 
@@ -277,7 +543,13 @@ func (s *Server) presetCard(ctx context.Context, loc *i18n.Localizer, p *store.P
 		ReviewsAvailable: loc.Tf("presets.reviews.available", map[string]any{"count": gate.Reviews}),
 		Threshold:        loc.Tf("presets.reviews.threshold", map[string]any{"min": gate.MinReviews}),
 		LogTailLabel:     loc.T("presets.optimize.log_tail"),
-		CSRF:             csrf,
+		// 编辑入口与对话框（M3-14）。
+		EditLabel:   loc.T("presets.edit.button"),
+		EditHeading: loc.T("presets.edit.heading"),
+		EditAction:  fmt.Sprintf("/presets/%d", p.ID),
+		Labels:      presetFormLabels(loc),
+		EditValues:  presetValuesFrom(p),
+		CSRF:        csrf,
 	}
 	if p.FuzzEnabled() {
 		card.FuzzValue = loc.T("presets.fuzz_on")

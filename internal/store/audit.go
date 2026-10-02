@@ -58,6 +58,9 @@ const (
 	// M9-4 预设参数优化：触发优化作业与一键回退默认权重。
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
+	// ActionPresetCreate / ActionPresetUpdate 是预设页新建与编辑预设（M3-14）时写入的审计动作。
+	ActionPresetCreate = "preset.create"
+	ActionPresetUpdate = "preset.update"
 	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
 	ActionJobCancel = "job.cancel"
 

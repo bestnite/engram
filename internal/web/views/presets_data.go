@@ -4,12 +4,48 @@ package views
 // 所有面向用户的文字都由 handler 从语言包取好后放入这些字段，模板只做排版
 // （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
 
+// PresetFormLabels 是新建/编辑预设表单的本地化标签集合（M3-14）。
+// 列表页的新建对话框与每张卡片的编辑对话框共用同一组标签，避免两处文案漂移。
+type PresetFormLabels struct {
+	Name            string
+	Retention       string
+	LearningSteps   string
+	RelearningSteps string
+	MaxInterval     string
+	Fuzz            string
+	Save            string
+	Cancel          string
+	Close           string
+	EditNote        string
+}
+
+// PresetFormValues 是新建/编辑表单的回显值；提交被拒时原样回填，用户不必重打。
+type PresetFormValues struct {
+	Name            string
+	Retention       string
+	LearningSteps   string
+	RelearningSteps string
+	MaxInterval     string
+	Fuzz            bool
+}
+
 // PresetListData 是预设页整页的渲染数据。
 type PresetListData struct {
 	Layout    LayoutData
 	Heading   string
 	EmptyText string
 	Cards     []PresetCardData
+
+	// 新建预设入口与对话框（M3-14）。CreateAction 固定为 POST /presets。
+	NewButtonLabel string
+	NewHeading     string
+	CreateAction   string
+	Labels         PresetFormLabels
+	NewValues      PresetFormValues
+	// ErrorMessage 非空时新建对话框自动展开并显示本地化错误（校验失败回显）。
+	ErrorMessage string
+	// CSRF 是新建表单需要的会话绑定 token（DESIGN.md §4.3）。
+	CSRF string
 }
 
 // PresetCardData 是单个预设卡片的渲染数据，也是优化轮询时返回的局部片段。
@@ -69,6 +105,15 @@ type PresetCardData struct {
 	RevertAction   string
 	RevertNote     string
 	RescheduleNote string
+
+	// 编辑入口与对话框（M3-14）。EditAction 固定为 POST /presets/<id>。
+	EditLabel   string
+	EditHeading string
+	EditAction  string
+	Labels      PresetFormLabels
+	EditValues  PresetFormValues
+	// EditError 非空时该卡片的编辑对话框自动展开并显示本地化错误（校验失败回显）。
+	EditError string
 
 	CSRF string
 }

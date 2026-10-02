@@ -1,12 +1,16 @@
 package views
 
 // PresetListPage 是调度预设页（DESIGN.md §8.1 的 /presets）：列出当前用户的预设，
-// 每个预设一张卡片，卡片内提供「开始优化」「回退默认权重」与优化状态/结果摘要（M9-4）。
+// 每个预设一张卡片，卡片内提供「开始优化」「回退默认权重」与优化状态/结果摘要（M9-4）；
+// 页头提供「新建预设」，每张卡片提供「编辑」（M3-14）。
 templ PresetListPage(data PresetListData) {
 	@Base(data.Layout) {
 		<div class="space-y-6">
-			<div>
-				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				</div>
+				<button class="inline-flex items-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="button" data-dialog-open="new-preset-dialog">{ data.NewButtonLabel }</button>
 			</div>
 			if len(data.Cards) == 0 {
 				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
@@ -19,6 +23,7 @@ templ PresetListPage(data PresetListData) {
 					}
 				</div>
 			}
+			@presetFormDialog("new-preset-dialog", data.NewHeading, data.CreateAction, data.CSRF, data.Labels, data.NewValues, data.ErrorMessage, false)
 		</div>
 	}
 }
@@ -35,6 +40,7 @@ templ PresetCard(data PresetCardData) {
 				<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Name }</h2>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
+				<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="button" data-dialog-open={ "edit-preset-dialog-" + data.ID }>{ data.EditLabel }</button>
 				<form method="post" action={ data.OptimizeAction } hx-post={ data.OptimizeAction } hx-target={ "#preset-" + data.ID } hx-swap="outerHTML">
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.OptimizeLabel }</button>
@@ -141,5 +147,63 @@ templ PresetCard(data PresetCardData) {
 				}
 			</section>
 		}
+
+		@presetFormDialog("edit-preset-dialog-"+data.ID, data.EditHeading, data.EditAction, data.CSRF, data.Labels, data.EditValues, data.EditError, true)
 	</div>
+}
+
+// presetFormDialog 渲染新建/编辑预设的原生对话框（M3-14）。
+//
+// 复用 pwa.js 的共享 data-dialog-open / data-dialog-close 处理器：不新增脚本。
+// showEditNote 为真时在表单下补一行「修改不影响已有到期日」的说明（编辑场景）。
+templ presetFormDialog(id string, heading string, action string, csrf string, labels PresetFormLabels, values PresetFormValues, errMsg string, showEditNote bool) {
+	<dialog id={ id } open?={ errMsg != "" } class="m-auto max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-200/80 bg-white p-0 shadow-xl backdrop:bg-zinc-950/40 dark:border-zinc-800 dark:bg-zinc-900">
+		<div class="space-y-6 p-6 sm:p-8" data-dialog-panel>
+			<div class="flex items-start justify-between gap-4">
+				<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ heading }</h2>
+				<button class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors cursor-pointer" type="button" data-dialog-close aria-label={ labels.Close }>
+					<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+				</button>
+			</div>
+			if errMsg != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ errMsg }
+				</div>
+			}
+			<form class="space-y-4" method="post" action={ action }>
+				<input type="hidden" name="csrf_token" value={ csrf }/>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ labels.Name }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="name" value={ values.Name } required/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ labels.Retention }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" inputmode="decimal" name="desired_retention" value={ values.Retention } required/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ labels.LearningSteps }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="learning_steps" value={ values.LearningSteps }/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ labels.RelearningSteps }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="relearning_steps" value={ values.RelearningSteps }/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ labels.MaxInterval }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="number" min="1" name="maximum_interval_days" value={ values.MaxInterval } required/>
+				</label>
+				<label class="flex items-center gap-2">
+					<input class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700" type="checkbox" name="enable_fuzz" checked?={ values.Fuzz }/>
+					<span class="text-sm text-zinc-700 dark:text-zinc-300">{ labels.Fuzz }</span>
+				</label>
+				if showEditNote {
+					<p class="text-xs text-zinc-500 dark:text-zinc-400">{ labels.EditNote }</p>
+				}
+				<div class="pt-2 flex items-center gap-2">
+					<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ labels.Save }</button>
+					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="button" data-dialog-close>{ labels.Cancel }</button>
+				</div>
+			</form>
+		</div>
+	</dialog>
 }
