@@ -5,7 +5,11 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
+	"time"
+
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -175,4 +179,56 @@ func normalizeCards(m map[string]any) map[string]any {
 	})
 	m["cards"] = cards
 	return m
+}
+
+// ---- M3-13：多卡组复习范围 ----
+
+// seedDueCardMCP 建一个 note 与它的一张 card，不写 card_states：该卡是新卡，必然出现在队列里。
+func seedDueCardMCP(t *testing.T, db *gorm.DB, deckID uint64) {
+	t.Helper()
+	now := time.Now().UTC()
+	n := store.Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&n).Error; err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	c := store.Card{NoteID: n.ID, Template: "forward", Ordinal: 0, CreatedAt: now}
+	if err := db.Create(&c).Error; err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+}
+
+// TestGetDueCardsDeckIDsMatchesREST 断言 get_due_cards 的 deck_ids 与 REST 的重复 deck 参数
+// 是同一口径；deck_id 与 deck_ids 同时给出返回工具错误（isErr）。
+func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "multideck")
+	deckA := seedDeck(t, db, u.ID)
+	deckB := seedDeck(t, db, u.ID)
+	seedDueCardMCP(t, db, deckA.ID)
+	seedDueCardMCP(t, db, deckB.ID)
+	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeReview})
+	cs := connect(t, ts.URL, key)
+
+	mcpOut, isErr, text := callTool(t, cs, "get_due_cards", map[string]any{
+		"deck_ids": []any{deckA.ID, deckB.ID}, "limit": 50,
+	})
+	if isErr {
+		t.Fatalf("get_due_cards(deck_ids) error: %s", text)
+	}
+	_, restOut := rest(t, ts.URL, http.MethodGet,
+		fmt.Sprintf("/api/v1/review/due?deck=%d&deck=%d&limit=50", deckA.ID, deckB.ID), key, "")
+	if !reflect.DeepEqual(normalizeCards(mcpOut), normalizeCards(restOut)) {
+		t.Errorf("get_due_cards(deck_ids) MCP=%v REST=%v", normalizeCards(mcpOut), normalizeCards(restOut))
+	}
+
+	// 互斥：同时给出 deck_id 与 deck_ids 是参数错误，客户端必须看到 isErr。
+	_, isErr, text = callTool(t, cs, "get_due_cards", map[string]any{
+		"deck_id": deckA.ID, "deck_ids": []any{deckB.ID},
+	})
+	if !isErr {
+		t.Fatalf("get_due_cards with both deck_id and deck_ids must fail")
+	}
+	if !strings.Contains(text, "invalid_request") {
+		t.Errorf("mutual-exclusion error text = %q, want it to carry code invalid_request", text)
+	}
 }

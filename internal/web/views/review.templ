@@ -75,7 +75,9 @@ templ ReviewArea(data ReviewAreaData) {
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<input type="hidden" name="card_id" value={ data.Card.CardID }/>
 						<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
-						<input type="hidden" name="deck" value={ data.DeckValue }/>
+						for _, v := range data.DeckValues {
+							<input type="hidden" name="deck" value={ v }/>
+						}
 						<input type="hidden" name="done" value={ data.DoneValue }/>
 						<input type="hidden" name="action" value="next"/>
 						<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
@@ -87,7 +89,9 @@ templ ReviewArea(data ReviewAreaData) {
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<input type="hidden" name="card_id" value={ data.Card.CardID }/>
 					<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
-					<input type="hidden" name="deck" value={ data.DeckValue }/>
+					for _, v := range data.DeckValues {
+						<input type="hidden" name="deck" value={ v }/>
+					}
 					<input type="hidden" name="expected_version" value={ data.Card.ExpectedVersion }/>
 					<input type="hidden" name="done" value={ data.DoneValue }/>
 					<input id="review-elapsed" type="hidden" name={ data.ElapsedName } value=""/>
@@ -125,7 +129,9 @@ templ ReviewArea(data ReviewAreaData) {
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<input type="hidden" name="card_id" value={ data.Card.CardID }/>
 						<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
-						<input type="hidden" name="deck" value={ data.DeckValue }/>
+						for _, v := range data.DeckValues {
+							<input type="hidden" name="deck" value={ v }/>
+						}
 						<input type="hidden" name="done" value={ data.DoneValue }/>
 						<button type="submit" name="action" value="undo" data-action="undo" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer">{ data.UndoLabel }</button>
 						<button type="submit" name="action" value="suspend" data-action="suspend" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer">{ data.SuspendLabel }</button>

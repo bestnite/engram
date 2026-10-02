@@ -56,14 +56,22 @@ const (
 
 // QueueOptions 是一次队列构建的入参。零值经 withDefaults 补齐为文档化默认值。
 //
+// 卡组范围（三种口径，DESIGN.md §3.3）：DeckIDs 非空（去重后）→ 取集合内所有卡组；
+// DeckID 非 0 且 DeckIDs 为空 → 只取该卡组；两者都为空 → 跨该用户全部卡组。
+// DeckIDs 优先于 DeckID；多卡组是"全库队列加一个卡组过滤集合"，不是多个单卡组队列的拼接。
+//
 // 每日上限的取值优先级（DESIGN.md §3.3；本包从卡组读取，不再依赖硬编码默认）：
 //  1. NewPerDayOverride / ReviewsPerDayOverride 非 nil —— 显式覆盖，最高优先级；
 //  2. NewPerDay / ReviewsPerDay 为正 —— 调用方直接覆盖（保留的旧入口）；
-//  3. DeckID 非 0 —— 读该卡组的 new_per_day / reviews_per_day；
+//  3. 仅单卡组口径（DeckID != 0 且 DeckIDs 为空）读该卡组的 new_per_day / reviews_per_day；
 //  4. 兜底 DefaultNewPerDay；ReviewsPerDay 为 0 表示不限。
+//
+// 多卡组与全库一律不读任何被选中卡组的列：不求和、不取最严。
 type QueueOptions struct {
-	// DeckID 为 0 时跨该用户的全部卡组取卡。
+	// DeckID 为 0 时跨该用户的全部卡组取卡；DeckIDs 非空时本字段被忽略。
 	DeckID uint64
+	// DeckIDs 是要复习的卡组集合；非空时（去重后）优先于 DeckID，空切片表示不按集合过滤。
+	DeckIDs []uint64
 	// Now 为观测时刻；零值表示使用当前时间。到期判定与复习日都以它为准。
 	Now time.Time
 	// Location 是用户时区；为 nil 时按 Timezone 名称加载（失败则退回 UTC）。
@@ -196,11 +204,15 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	opts.NewPerDay = newPerDay
 	opts.ReviewsPerDay = reviewsPerDay
 
-	learning, err := b.learningDue(ctx, userID, now, opts.DeckID)
+	// 卡组范围一次性解析成集合：单卡组、多卡组与全库共用同一套过滤条件，
+	// 排序与打乱都在合并后的范围上统一进行（DESIGN.md §3.3）。
+	deckIDs := opts.scopeIDs()
+
+	learning, err := b.learningDue(ctx, userID, now, deckIDs)
 	if err != nil {
 		return nil, err
 	}
-	reviews, err := b.reviewDue(ctx, userID, now, opts.DeckID, opts)
+	reviews, err := b.reviewDue(ctx, userID, now, deckIDs, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +238,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	if newCap < 0 {
 		newCap = 0
 	}
-	fresh, err := b.newCards(ctx, userID, opts.DeckID, newCap, now)
+	fresh, err := b.newCards(ctx, userID, deckIDs, newCap, now)
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +258,9 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 }
 
 // resolveCaps 决定本次构建实际使用的每日上限（取值优先级见 QueueOptions 的文档注释）。
-// DeckID 非 0 时读该卡组的 new_per_day / reviews_per_day；卡组行不存在不报错 —— 此时
-// 队列本就为空，沿用文档化默认即可（0 仍表示不限）。
+// 只有单卡组口径（DeckID != 0 且 DeckIDs 为空）才读该卡组的 new_per_day / reviews_per_day；
+// 多卡组与全库不读任何卡组列，走调用方覆盖或文档化默认（DESIGN.md §3.3）。
+// 卡组行不存在不报错 —— 此时队列本就为空，沿用文档化默认即可（0 仍表示不限）。
 func (b *QueueBuilder) resolveCaps(ctx context.Context, opts QueueOptions) (int, int, error) {
 	newPerDay, reviewsPerDay := opts.NewPerDay, opts.ReviewsPerDay
 	if opts.NewPerDayOverride != nil {
@@ -256,7 +269,7 @@ func (b *QueueBuilder) resolveCaps(ctx context.Context, opts QueueOptions) (int,
 	if opts.ReviewsPerDayOverride != nil {
 		reviewsPerDay = *opts.ReviewsPerDayOverride
 	}
-	if opts.DeckID != 0 {
+	if opts.singleDeck() {
 		var caps store.DeckCaps
 		err := b.db.WithContext(ctx).Table("decks").
 			Select("new_per_day", "reviews_per_day").
@@ -282,6 +295,38 @@ func (b *QueueBuilder) resolveCaps(ctx context.Context, opts QueueOptions) (int,
 	return newPerDay, reviewsPerDay, nil
 }
 
+// scopeIDs 把三种卡组口径归一成一个去重后的 id 集合：DeckIDs 非空时优先（去重），
+// 否则 DeckID 非 0 时返回单元素，两者都空返回 nil（全库）。
+func (o QueueOptions) scopeIDs() []uint64 {
+	if len(o.DeckIDs) > 0 {
+		return dedupeIDs(o.DeckIDs)
+	}
+	if o.DeckID != 0 {
+		return []uint64{o.DeckID}
+	}
+	return nil
+}
+
+// singleDeck 报告本次构建是否处于单卡组口径：只有这一种口径才读 decks 表的列
+// 与卡组预设（DESIGN.md §3.3）。
+func (o QueueOptions) singleDeck() bool {
+	return len(o.DeckIDs) == 0 && o.DeckID != 0
+}
+
+// dedupeIDs 去掉重复的卡组 id，保持首次出现的顺序（调用方传入的集合可能是无序的）。
+func dedupeIDs(ids []uint64) []uint64 {
+	out := make([]uint64, 0, len(ids))
+	seen := make(map[uint64]bool, len(ids))
+	for _, id := range ids {
+		if id == 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
+}
+
 // location 解析用户时区；未指定时按 Timezone 加载，加载失败退回 UTC（不阻塞复习）。
 func (o QueueOptions) location() (*time.Location, error) {
 	if o.Location != nil {
@@ -304,7 +349,8 @@ func (o QueueOptions) now() time.Time {
 
 // baseStateQuery 是学习卡与复习卡共用的查询起点：只取未软删除且未暂停的卡，
 // 并 join 到未软删除的 note 上（与 CardStore 的可见性规则一致）。
-func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID, deckID uint64) *gorm.DB {
+// deckIDs 非空时按 notes.deck_id IN (...) 过滤；为空表示不按卡组过滤（全库）。
+func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckIDs []uint64) *gorm.DB {
 	q := b.db.WithContext(ctx).Table("card_states AS cs").
 		Select("cs.card_id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, "+
 			"cs.state AS state, cs.due_at AS due_at, cs.stability AS stability, "+
@@ -313,16 +359,16 @@ func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID, deckID uint64
 		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
 		Where("cs.user_id = ?", userID).
 		Where("cards.suspended_at IS NULL")
-	if deckID != 0 {
-		q = q.Where("notes.deck_id = ?", deckID)
+	if len(deckIDs) > 0 {
+		q = q.Where("notes.deck_id IN ?", deckIDs)
 	}
 	return q
 }
 
 // learningDue 取学习/再学习阶段且已到期的卡，按到期时间升序。
-func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.Time, deckID uint64) ([]QueueItem, error) {
+func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.Time, deckIDs []uint64) ([]QueueItem, error) {
 	var rows []stateRow
-	err := b.baseStateQuery(ctx, userID, deckID).
+	err := b.baseStateQuery(ctx, userID, deckIDs).
 		Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
 		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now).
 		Order("cs.due_at ASC, cs.card_id ASC").
@@ -335,9 +381,9 @@ func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.
 
 // reviewDue 取到期的复习卡。先按 due_at 升序取一批（BatchSize），
 // 再按请求的排序方式整理：retrievability 需要在内存算，故不能只靠 SQL。
-func (b *QueueBuilder) reviewDue(ctx context.Context, userID uint64, now time.Time, deckID uint64, opts QueueOptions) ([]QueueItem, error) {
+func (b *QueueBuilder) reviewDue(ctx context.Context, userID uint64, now time.Time, deckIDs []uint64, opts QueueOptions) ([]QueueItem, error) {
 	var rows []stateRow
-	err := b.baseStateQuery(ctx, userID, deckID).
+	err := b.baseStateQuery(ctx, userID, deckIDs).
 		Where("cs.state = ?", StateReview.String()).
 		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now).
 		Order("cs.due_at ASC, cs.card_id ASC").
@@ -371,7 +417,7 @@ func (b *QueueBuilder) reviewDue(ctx context.Context, userID uint64, now time.Ti
 // newCards 取新卡。新卡的定义是"状态为 new"，包括尚无 card_states 行的卡（LEFT JOIN），
 // 这样刚加到共享卡组、用户还没产生任何状态的行也能出现在队列里。
 // 已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求 due_at 未在未来。
-func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limit int, now time.Time) ([]QueueItem, error) {
+func (b *QueueBuilder) newCards(ctx context.Context, userID uint64, deckIDs []uint64, limit int, now time.Time) ([]QueueItem, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -386,8 +432,8 @@ func (b *QueueBuilder) newCards(ctx context.Context, userID, deckID uint64, limi
 		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
 		Order("cards.created_at ASC, cards.id ASC").
 		Limit(limit)
-	if deckID != 0 {
-		q = q.Where("notes.deck_id = ?", deckID)
+	if len(deckIDs) > 0 {
+		q = q.Where("notes.deck_id IN ?", deckIDs)
 	}
 	var rows []stateRow
 	if err := q.Scan(&rows).Error; err != nil {

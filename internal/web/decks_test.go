@@ -96,3 +96,33 @@ func TestDeckCreateRejectsEmptyName(t *testing.T) {
 		t.Errorf("deck count = %d, want 0", n)
 	}
 }
+
+// TestDeckListRendersReviewScopeControls 是 M3-13 的列表页验收：每行一个 name="deck" 的
+// 复选框与一个「复习」链接，页头是提交给 /review 的「复习所选」按钮（GET 表单，无 JS）。
+func TestDeckListRendersReviewScopeControls(t *testing.T) {
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	deckA := seedReviewDeck(t, db, ownerID, "Alpha deck")
+	deckB := seedReviewDeck(t, db, ownerID, "Beta deck")
+
+	rec := getWithCookies(t, srv, "/decks", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /decks status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `method="get"`) || !strings.Contains(body, `action="/review"`) {
+		t.Errorf("deck list has no GET form targeting /review: %s", snippet(body))
+	}
+	for _, id := range []uint64{deckA.ID, deckB.ID} {
+		if !strings.Contains(body, `name="deck" value="`+u64str(id)+`"`) {
+			t.Errorf("deck list is missing the review checkbox for deck %d: %s", id, snippet(body))
+		}
+		if !strings.Contains(body, `href="/review?deck=`+u64str(id)+`"`) {
+			t.Errorf("deck list is missing the per-row review link for deck %d: %s", id, snippet(body))
+		}
+	}
+	// 默认语言 zh-CN：页头「复习所选」提交按钮必须存在（文案来自语言包）。
+	if !strings.Contains(body, "复习所选") {
+		t.Errorf("deck list has no review-selected submit button: %s", snippet(body))
+	}
+}

@@ -106,10 +106,13 @@ type ReviewAreaData struct {
 	BuryLabel    string
 
 	// 表单目标与状态。
-	AnswerURL   string
-	ActionURL   string
-	CSRF        string
-	DeckValue   string
+	AnswerURL string
+	ActionURL string
+	CSRF      string
+	// DeckValues 是本次复习范围里的卡组 id（十进制字符串），每个渲染一个隐藏
+	// `deck` 字段；空切片表示全库范围（不渲染任何 deck 字段）。DESIGN.md §8.2 要求
+	// 每个评分/动作请求把同一范围原样带回，否则跨卡组复习会在首次评分后退化。
+	DeckValues  []string
 	DoneValue   string
 	ElapsedName string
 	// CardEditHref 是主区域 data-edit-href 的取值，供 e 键跳转；无卡片时为空串。

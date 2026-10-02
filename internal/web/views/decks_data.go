@@ -15,6 +15,8 @@ type DeckRow struct {
 	// SharingHref 指向该卡组的共享管理页（M5-2）；仅当当前用户是 owner 时非空，
 	// 共享给他人（非 owner）的行留空，模板据此不渲染入口，避免点进去吃 403。
 	SharingHref string
+	// ReviewHref 指向只复习该卡组的复习页（M3-13）。
+	ReviewHref string
 }
 
 // DeckOption 是新建表单里的预设下拉项。
@@ -37,6 +39,12 @@ type DeckListData struct {
 	// ColActions/ExportLabel 是导出控件的表头与文案（M5-9）。
 	ColActions  string
 	ExportLabel string
+	// ReviewLabel / ReviewSelectedLabel / SelectLabel / SelectHint 是多卡组复习
+	// 入口的文案（M3-13）：每行的「复习」、页头「复习所选」、复选框可访问名称与提示。
+	ReviewLabel         string
+	ReviewSelectedLabel string
+	SelectLabel         string
+	SelectHint          string
 	// SharingLabel 是 owner 行「共享」入口的文案（M5-2）。
 	SharingLabel string
 	// ImportLabel / ImportHref 是列表头部的卡组包导入入口（M5-9）。

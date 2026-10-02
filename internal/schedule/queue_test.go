@@ -275,3 +275,152 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 		t.Errorf("Build() = %+v, want only the visible card %d", items, visible)
 	}
 }
+
+// ---- M3-13：多卡组复习范围 ----
+
+// seedDeckCaps 建一个卡组并把每日上限写成给定值（DESIGN.md §3.3 的卡组级配置）。
+func seedDeckCaps(t *testing.T, db *gorm.DB, now time.Time, newPerDay, reviewsPerDay int) uint64 {
+	t.Helper()
+	deckID := seedDeck(t, db, now)
+	if err := db.Model(&store.Deck{}).Where("id = ?", deckID).
+		Updates(map[string]any{"new_per_day": newPerDay, "reviews_per_day": reviewsPerDay}).Error; err != nil {
+		t.Fatalf("set deck caps: %v", err)
+	}
+	return deckID
+}
+
+// countKind 统计队列里某一优先级的条目数。
+func countKind(items []QueueItem, kind QueueKind) int {
+	n := 0
+	for _, it := range items {
+		if it.Kind == kind {
+			n++
+		}
+	}
+	return n
+}
+
+// deckIDsOf 抽出队列项的去重卡组集合。
+func deckIDsOf(items []QueueItem) map[uint64]bool {
+	out := map[uint64]bool{}
+	for _, it := range items {
+		out[it.DeckID] = true
+	}
+	return out
+}
+
+// TestDeckIDsScopeSelectsExactSet 断言集合口径只取选中的卡组，且优先级高于 DeckID；
+// 空集合等价于 DeckID=0（全库）。
+func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	deckA := seedDeck(t, db, now)
+	deckB := seedDeck(t, db, now)
+	deckC := seedDeck(t, db, now)
+	seedCard(t, db, deckA, "forward", now)
+	seedCard(t, db, deckB, "forward", now)
+	seedCard(t, db, deckC, "forward", now)
+
+	s := mustScheduler(t, testPreset(t))
+	builder := NewQueueBuilder(db, s)
+	ctx := context.Background()
+	// 显式上限覆盖，避免卡组列干扰本用例。
+	base := QueueOptions{Now: now, Location: time.UTC, NewPerDay: 10, ReviewsPerDay: 200, NewOrder: NewOrderCreated}
+
+	set := base
+	set.DeckIDs = []uint64{deckA, deckB}
+	got, err := builder.Build(ctx, 1, set)
+	if err != nil {
+		t.Fatalf("Build(DeckIDs=[A,B]) error = %v", err)
+	}
+	if ids := deckIDsOf(got); len(got) != 2 || !ids[deckA] || !ids[deckB] || ids[deckC] {
+		t.Errorf("Build(DeckIDs=[A,B]) = %v, want exactly decks A and B", ids)
+	}
+
+	// 集合优先于单卡组：DeckID=B 但 DeckIDs=[A] → 只取 A。
+	both := base
+	both.DeckID = deckB
+	both.DeckIDs = []uint64{deckA}
+	got, err = builder.Build(ctx, 1, both)
+	if err != nil {
+		t.Fatalf("Build(DeckID=B,DeckIDs=[A]) error = %v", err)
+	}
+	if ids := deckIDsOf(got); len(got) != 1 || !ids[deckA] {
+		t.Errorf("Build(DeckID=B,DeckIDs=[A]) = %v, want only deck A (DeckIDs wins)", ids)
+	}
+
+	// 空集合 = 全库，与 DeckID=0 相同。
+	empty := base
+	empty.DeckIDs = []uint64{}
+	got, err = builder.Build(ctx, 1, empty)
+	if err != nil {
+		t.Fatalf("Build(DeckIDs=[]) error = %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("Build(DeckIDs=[]) returned %d cards, want 3 (whole collection)", len(got))
+	}
+	whole, err := builder.Build(ctx, 1, base)
+	if err != nil {
+		t.Fatalf("Build(DeckID=0) error = %v", err)
+	}
+	if len(whole) != len(got) {
+		t.Errorf("empty DeckIDs (%d cards) differs from DeckID=0 (%d cards)", len(got), len(whole))
+	}
+
+	// 集合去重：同一卡组写两次不改变结果。
+	dup := base
+	dup.DeckIDs = []uint64{deckA, deckA}
+	got, err = builder.Build(ctx, 1, dup)
+	if err != nil {
+		t.Fatalf("Build(DeckIDs=[A,A]) error = %v", err)
+	}
+	if ids := deckIDsOf(got); len(got) != 1 || !ids[deckA] {
+		t.Errorf("Build(DeckIDs=[A,A]) = %v, want exactly one card from deck A", ids)
+	}
+}
+
+// TestMultiDeckIgnoresDeckCaps 断言上限与预设只在单卡组口径读卡组列；集合口径（即使只含
+// 一个卡组）一律不读被选中卡组的列，走调用方覆盖或文档化默认（DESIGN.md §3.3）。
+func TestMultiDeckIgnoresDeckCaps(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	deckA := seedDeckCaps(t, db, now, 1, 1)
+
+	// 3 张新卡 + 3 张到期复习卡。
+	for i := 0; i < 3; i++ {
+		seedCard(t, db, deckA, string(rune('A'+i)), now.Add(time.Duration(i)*time.Minute))
+	}
+	last := now.Add(-24 * time.Hour)
+	for i := 0; i < 3; i++ {
+		id := seedCard(t, db, deckA, string(rune('R'+i)), now)
+		seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
+	}
+
+	s := mustScheduler(t, testPreset(t))
+	builder := NewQueueBuilder(db, s)
+	ctx := context.Background()
+
+	// 单卡组口径：读卡组列 → 新卡 1、复习 1。
+	single, err := builder.Build(ctx, 1, QueueOptions{DeckID: deckA, Now: now, Location: time.UTC})
+	if err != nil {
+		t.Fatalf("Build(DeckID) error = %v", err)
+	}
+	if n := countKind(single, QueueNew); n != 1 {
+		t.Errorf("single-deck new cards = %d, want 1 (deck cap)", n)
+	}
+	if n := countKind(single, QueueReview); n != 1 {
+		t.Errorf("single-deck review cards = %d, want 1 (deck cap)", n)
+	}
+
+	// 集合口径（只含 A）：忽略卡组列 → 新卡默认 20（3 张全出）、复习不限（3 张全出）。
+	multi, err := builder.Build(ctx, 1, QueueOptions{DeckIDs: []uint64{deckA}, Now: now, Location: time.UTC})
+	if err != nil {
+		t.Fatalf("Build(DeckIDs) error = %v", err)
+	}
+	if n := countKind(multi, QueueNew); n != 3 {
+		t.Errorf("multi-deck new cards = %d, want 3 (deck column ignored, default cap)", n)
+	}
+	if n := countKind(multi, QueueReview); n != 3 {
+		t.Errorf("multi-deck review cards = %d, want 3 (deck column ignored, unlimited)", n)
+	}
+}

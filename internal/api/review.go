@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,18 +35,23 @@ func userLocation(tz string) *time.Location {
 }
 
 // dueCards 返回到期卡（含字段原文），scope: review（业务逻辑在 service 层的 DueCards）。
+// deck 可重复：缺省＝全部卡组；任一值非数字或为 0 → 400（与既有行为一致）。
 func (a *API) dueCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	var deckID uint64
-	if raw := c.Query("deck"); raw != "" {
+	deckIDs := make([]uint64, 0, 4)
+	for _, raw := range c.QueryArray("deck") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
 		id, err := strconv.ParseUint(raw, 10, 64)
 		if err != nil || id == 0 {
 			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 			return
 		}
-		deckID = id
+		deckIDs = append(deckIDs, id)
 	}
-	cards, err := a.DueCards(c.Request.Context(), u, deckID, queryInt(c, "limit", 50))
+	cards, err := a.DueCards(c.Request.Context(), u, deckIDs, queryInt(c, "limit", 50))
 	if err != nil {
 		writeServiceError(c, err)
 		return

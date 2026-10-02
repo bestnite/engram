@@ -82,9 +82,11 @@ type deleteNoteIn struct {
 }
 
 // getDueCardsIn 是 get_due_cards 的入参。
+// deck_id 与 deck_ids 互斥：同时给出返回参数错误；两者都缺省＝全部卡组（DESIGN.md §7.4）。
 type getDueCardsIn struct {
-	DeckID uint64 `json:"deck_id,omitempty" jsonschema:"deck to scope the queue; 0 means all decks"`
-	Limit  int    `json:"limit,omitempty" jsonschema:"maximum cards to return (1..500)"`
+	DeckID  uint64   `json:"deck_id,omitempty" jsonschema:"single deck to scope the queue; 0 or absent means all decks; mutually exclusive with deck_ids"`
+	DeckIDs []uint64 `json:"deck_ids,omitempty" jsonschema:"set of decks to scope the queue; absent or empty means all decks; mutually exclusive with deck_id"`
+	Limit   int      `json:"limit,omitempty" jsonschema:"maximum cards to return (1..500)"`
 }
 
 // submitReviewIn 是 submit_review 的入参。
@@ -201,7 +203,18 @@ func (s *Server) deleteNote(ctx context.Context, id Identity, in deleteNoteIn) (
 }
 
 func (s *Server) getDueCards(ctx context.Context, id Identity, in getDueCardsIn) (any, error) {
-	cards, err := s.api.DueCards(ctx, id.User, in.DeckID, in.Limit)
+	// deck_id 与 deck_ids 互斥：同时给出是调用方的参数错误，经同一 MCP 错误出口返回
+	// （客户端看到 isErr 与稳定的 invalid_request code）。
+	if in.DeckID != 0 && len(in.DeckIDs) > 0 {
+		return nil, api.InvalidRequest("deck_id and deck_ids are mutually exclusive")
+	}
+	var deckIDs []uint64
+	if in.DeckID != 0 {
+		deckIDs = []uint64{in.DeckID}
+	} else if len(in.DeckIDs) > 0 {
+		deckIDs = in.DeckIDs
+	}
+	cards, err := s.api.DueCards(ctx, id.User, deckIDs, in.Limit)
 	if err != nil {
 		return nil, err
 	}

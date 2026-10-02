@@ -73,6 +73,8 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 			Archived:    sm.Deck.ArchivedAt != nil,
 			ExportHref:  fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
 			SharingHref: sharingHref,
+			// M3-13：只复习该卡组的入口，与列表页勾选后提交的 /review?deck=... 同一口径。
+			ReviewHref: fmt.Sprintf("/review?deck=%d", sm.Deck.ID),
 		})
 	}
 	options := make([]views.DeckOption, 0, len(presets))
@@ -93,6 +95,11 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		Archived:    loc.T("decks.list.archived"),
 		ColActions:  loc.T("decks.list.col_actions"),
 		ExportLabel: loc.T("decks.list.export"),
+		// M3-13：多卡组复习入口文案（每行「复习」、页头「复习所选」、复选框名称与提示）。
+		ReviewLabel:         loc.T("decks.list.review"),
+		ReviewSelectedLabel: loc.T("decks.list.review_selected"),
+		SelectLabel:         loc.T("decks.list.select_label"),
+		SelectHint:          loc.T("decks.list.select_hint"),
 		// M5-9：卡组包导入入口放在列表头部，不再往全局导航塞第六项。
 		ImportLabel: loc.T("decks.list.import"),
 		ImportHref:  "/import",

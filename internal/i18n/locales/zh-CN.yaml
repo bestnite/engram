@@ -1968,3 +1968,14 @@
 - id: settings.email.link
   translation: "更换邮箱"
 
+# ── 多卡组复习范围（M3-13）：卡组列表页的批量复习入口 ──────────────────
+# 本块由 M3-13 任务追加；键集合须与 en.yaml 一致。
+- id: decks.list.review
+  translation: "复习"
+- id: decks.list.review_selected
+  translation: "复习所选"
+- id: decks.list.select_label
+  translation: "选择该卡组"
+- id: decks.list.select_hint
+  translation: "勾选多个卡组后点「复习所选」，可一次复习这些卡组。"
+

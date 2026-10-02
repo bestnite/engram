@@ -34,6 +34,14 @@ func newServiceError(status int, code, message string) *ServiceError {
 	return &ServiceError{Status: status, Code: code, Message: message}
 }
 
+// InvalidRequest 构造一个 400 invalid_request 的 ServiceError。
+//
+// REST 之外的调用方（如 MCP 工具的参数互斥校验）需要与 REST 相同的错误形态与稳定 code，
+// 但不能各自发明错误结构；导出这一个构造器，让它们复用同一条错误出口（DESIGN.md §7.3）。
+func InvalidRequest(message string) *ServiceError {
+	return newServiceError(http.StatusBadRequest, CodeInvalidRequest, message)
+}
+
 // asServiceError 把任意 error 归一成 ServiceError；未识别错误按 500 internal 处理。
 func asServiceError(err error) *ServiceError {
 	var se *ServiceError
@@ -571,24 +579,30 @@ type DueCard struct {
 	Template       string         `json:"template,omitempty"`
 }
 
-// DueCards 返回到期卡（含字段原文）；deckID=0 表示全部卡组；limit 取 [1,500]。
-func (a *API) DueCards(ctx context.Context, u *store.User, deckID uint64, limit int) ([]DueCard, error) {
+// DueCards 返回到期卡（含字段原文）；deckIDs 为空表示全部卡组；limit 取 [1,500]。
+//
+// 每个卡组 id 都要求至少 reader 角色：任一个不可读或不存在即整次调用失败（不静默过滤）。
+// 只有恰好指定一个卡组时才用该卡组的预设构造调度器；多卡组与全库用默认预设（DESIGN.md §3.3）。
+func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, limit int) ([]DueCard, error) {
 	if limit < 1 {
 		limit = 1
 	}
 	if limit > 500 {
 		limit = 500
 	}
+	ids := dedupeDeckIDs(deckIDs)
 	var deck *store.Deck
-	if deckID != 0 {
-		d, err := a.RequireDeckRole(ctx, u.ID, deckID, store.RoleReader)
+	for _, id := range ids {
+		d, err := a.RequireDeckRole(ctx, u.ID, id, store.RoleReader)
 		if err != nil {
 			return nil, err
 		}
-		deck = d
+		if len(ids) == 1 {
+			deck = d
+		}
 	}
 
-	// 队列构建需要调度器（只为复习卡算 retrievability）；无卡组时用默认预设。
+	// 队列构建需要调度器（只为复习卡算 retrievability）；多卡组/无卡组时用默认预设。
 	var sched *schedule.Scheduler
 	if deck != nil {
 		s, err := a.schedulerForDeck(ctx, deck)
@@ -620,8 +634,13 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckID uint64, limit 
 		ReviewOrder:   schedule.OrderByDueAt,
 		NewOrder:      schedule.NewOrderRandom,
 	}
-	if deck != nil {
-		opts.DeckID = deck.ID
+	// 单卡组走 DeckID（保留卡组上限口径）；多卡组走 DeckIDs 集合。
+	switch len(ids) {
+	case 0:
+	case 1:
+		opts.DeckID = ids[0]
+	default:
+		opts.DeckIDs = ids
 	}
 	items, err := builder.Build(ctx, u.ID, opts)
 	if err != nil {
@@ -655,6 +674,20 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckID uint64, limit 
 		out = append(out, entry)
 	}
 	return out, nil
+}
+
+// dedupeDeckIDs 去掉重复的卡组 id，保持首次出现的顺序；0 不是合法卡组 id，一并丢弃。
+func dedupeDeckIDs(ids []uint64) []uint64 {
+	out := make([]uint64, 0, len(ids))
+	seen := make(map[uint64]bool, len(ids))
+	for _, id := range ids {
+		if id == 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // SubmitReviewInput 是评分提交输入（DESIGN.md §3.4）。

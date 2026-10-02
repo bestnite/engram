@@ -40,6 +40,50 @@ func (s *Server) registerReviewRoutes(router *gin.Engine) {
 	router.POST(reviewActionPath, s.sessions.CSRFMiddleware(), s.reviewAction)
 }
 
+// reviewScope 是一次复习请求的卡组范围：deckIDs 为空表示全库（不按卡组过滤）。
+// 范围由 URL 的可重复 deck 参数决定，并由每个评分/动作表单原样带回（DESIGN.md §8.2）。
+type reviewScope struct{ deckIDs []uint64 }
+
+// deckScopeFromValues 解析可重复的 deck 参数值：去重、跳过空串；任一值非数字或为 0
+// 即写 400 并返回 false。随后逐个校验 loadDeckForRole(..., RoleReader)：任何缺失或
+// 无权限的卡组都让整次请求失败（404/403，由该 helper 写出），绝不静默丢弃某个卡组。
+func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw []string) (reviewScope, bool) {
+	ids := make([]uint64, 0, len(raw))
+	seen := make(map[uint64]bool, len(raw))
+	for _, v := range raw {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		id, err := strconv.ParseUint(v, 10, 64)
+		if err != nil || id == 0 {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return reviewScope{}, false
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		if _, ok := s.loadDeckForRole(c, user, id, store.RoleReader); !ok {
+			return reviewScope{}, false
+		}
+	}
+	return reviewScope{deckIDs: ids}, true
+}
+
+// parseDeckScope 解析 GET 查询串里的可重复 deck 参数（复习页整页请求）。
+func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, bool) {
+	return s.deckScopeFromValues(c, user, c.QueryArray("deck"))
+}
+
+// parseDeckScopeForm 解析表单里的可重复 deck 参数（评分/动作请求原样带回的范围）。
+func (s *Server) parseDeckScopeForm(c *gin.Context, user *store.User) (reviewScope, bool) {
+	return s.deckScopeFromValues(c, user, c.PostFormArray("deck"))
+}
+
 // reviewPage 渲染整页：主区域（第一张卡）+ 键盘/滑动脚本。
 func (s *Server) reviewPage(c *gin.Context) {
 	loc, ok := s.localizer(c)
@@ -50,13 +94,11 @@ func (s *Server) reviewPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID := parseUintQuery(c.Query("deck"))
-	if deckID != 0 {
-		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
-			return
-		}
+	scope, ok := s.parseDeckScope(c, user)
+	if !ok {
+		return
 	}
-	area, err := s.reviewArea(c, loc, user, deckID, 0, "")
+	area, err := s.reviewArea(c, loc, user, scope, 0, "")
 	if err != nil {
 		s.logger.Error("build review area failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -81,24 +123,28 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	if !ok {
 		return
 	}
+	scope, ok := s.parseDeckScopeForm(c, user)
+	if !ok {
+		return
+	}
 	if action := strings.TrimSpace(c.PostForm("action")); action != "" {
-		s.reviewActionApply(c, loc, user, action)
+		s.reviewActionApply(c, loc, user, scope, action)
 		return
 	}
 
 	cardID := parseUintQuery(c.PostForm("card_id"))
-	card, note, deck, ok := s.loadReviewCard(c, user, cardID)
+	card, note, _, ok := s.loadReviewCard(c, user, cardID)
 	if !ok {
 		return
 	}
 	// 作答类题型（M3-12）：题型实现 Grader 时走机器判分，不再依赖四档自评。
 	if _, graded := graderFor(note.Kind); graded {
-		s.reviewGradedAnswer(c, loc, user, card, note, deck)
+		s.reviewGradedAnswer(c, loc, user, scope, card, note)
 		return
 	}
 	rating, err := strconv.Atoi(strings.TrimSpace(c.PostForm("rating")))
 	if err != nil || !schedule.Rating(rating).Valid() {
-		area, aerr := s.reviewArea(c, loc, user, deck.ID, parseDone(c.PostForm("done")), loc.T("review.error_submit"))
+		area, aerr := s.reviewArea(c, loc, user, scope, parseDone(c.PostForm("done")), loc.T("review.error_submit"))
 		if aerr != nil {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
@@ -110,7 +156,8 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	done := parseDone(c.PostForm("done"))
 	elapsed := parseElapsed(c.PostForm("elapsed_ms"))
 
-	sched, err := s.schedulerFor(c.Request.Context(), user.ID, note.DeckID)
+	// 提交始终用被评卡所属卡组的预设调度；范围只影响队列构建（DESIGN.md §3.3）。
+	sched, err := s.schedulerFor(c.Request.Context(), user.ID, []uint64{note.DeckID})
 	if err != nil {
 		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -120,7 +167,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "begin review transaction failed", tx.Error)
+		s.renderReviewError(c, loc, user, scope, done, "begin review transaction failed", tx.Error)
 		return
 	}
 	if _, err := schedule.Submit(ctx, tx, schedule.SubmitInput{
@@ -135,15 +182,15 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		Now:             time.Now().UTC(),
 	}); err != nil {
 		_ = tx.Rollback().Error
-		s.renderReviewError(c, loc, user, deck.ID, done, "submit review failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "submit review failed", err)
 		return
 	}
 	if err := tx.Commit().Error; err != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "commit review failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "commit review failed", err)
 		return
 	}
 
-	area, err := s.reviewArea(c, loc, user, deck.ID, done+1, "")
+	area, err := s.reviewArea(c, loc, user, scope, done+1, "")
 	if err != nil {
 		s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -162,20 +209,24 @@ func (s *Server) reviewAction(c *gin.Context) {
 	if !ok {
 		return
 	}
+	scope, ok := s.parseDeckScopeForm(c, user)
+	if !ok {
+		return
+	}
 	action := strings.TrimSpace(c.PostForm("action"))
-	s.reviewActionApply(c, loc, user, action)
+	s.reviewActionApply(c, loc, user, scope, action)
 }
 
 // reviewActionApply 是 u/s/b 的公共实现。
-func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *store.User, action string) {
-	card, note, deck, ok := s.loadReviewCard(c, user, parseUintQuery(c.PostForm("card_id")))
+func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, action string) {
+	card, note, _, ok := s.loadReviewCard(c, user, parseUintQuery(c.PostForm("card_id")))
 	if !ok {
 		return
 	}
 	done := parseDone(c.PostForm("done"))
 	// “继续”只是换下一张卡：判分已经在提交那一步写入，无需再开事务（M3-12）。
 	if action == "next" {
-		area, err := s.reviewArea(c, loc, user, deck.ID, done, "")
+		area, err := s.reviewArea(c, loc, user, scope, done, "")
 		if err != nil {
 			s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -184,7 +235,8 @@ func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *st
 		renderReviewArea(c, area)
 		return
 	}
-	sched, err := s.schedulerFor(c.Request.Context(), user.ID, note.DeckID)
+	// 动作始终用被操作卡所属卡组的预设调度；范围只影响队列构建（DESIGN.md §3.3）。
+	sched, err := s.schedulerFor(c.Request.Context(), user.ID, []uint64{note.DeckID})
 	if err != nil {
 		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -195,7 +247,7 @@ func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *st
 	now := time.Now().UTC()
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "begin review action transaction failed", tx.Error)
+		s.renderReviewError(c, loc, user, scope, done, "begin review action transaction failed", tx.Error)
 		return
 	}
 	switch action {
@@ -216,14 +268,14 @@ func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *st
 	}
 	if err != nil {
 		_ = tx.Rollback().Error
-		s.renderReviewError(c, loc, user, deck.ID, done, "review action failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "review action failed", err)
 		return
 	}
 	if err := tx.Commit().Error; err != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "commit review action failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "commit review action failed", err)
 		return
 	}
-	area, err := s.reviewArea(c, loc, user, deck.ID, done, "")
+	area, err := s.reviewArea(c, loc, user, scope, done, "")
 	if err != nil {
 		s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -233,9 +285,9 @@ func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *st
 }
 
 // renderReviewError 记录英文日志并回滚式地渲染当前卡 + 局部化错误提示，绝不静默。
-func (s *Server) renderReviewError(c *gin.Context, loc *i18n.Localizer, user *store.User, deckID uint64, done int, logMsg string, err error) {
+func (s *Server) renderReviewError(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, done int, logMsg string, err error) {
 	s.logger.Error(logMsg, "user_id", user.ID, "error", err)
-	area, aerr := s.reviewArea(c, loc, user, deckID, done, loc.T("review.error_submit"))
+	area, aerr := s.reviewArea(c, loc, user, scope, done, loc.T("review.error_submit"))
 	if aerr != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
@@ -254,12 +306,12 @@ func renderReviewArea(c *gin.Context, area views.ReviewAreaData) {
 
 // reviewArea 组装主区域：计数器、第一张待复习卡、评分与动作控件。
 // 队列为空时返回局部化的“无可复习卡”提示；单卡渲染失败时降级为错误提示而不是整页 500。
-func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.User, deckID uint64, done int, errText string) (views.ReviewAreaData, error) {
-	sched, err := s.schedulerFor(c.Request.Context(), user.ID, deckID)
+func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, done int, errText string) (views.ReviewAreaData, error) {
+	sched, err := s.schedulerFor(c.Request.Context(), user.ID, scope.deckIDs)
 	if err != nil {
 		return views.ReviewAreaData{}, err
 	}
-	items, err := s.buildQueue(c.Request.Context(), user.ID, deckID, sched)
+	items, err := s.buildQueue(c.Request.Context(), user.ID, scope, sched)
 	if err != nil {
 		return views.ReviewAreaData{}, err
 	}
@@ -291,8 +343,12 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 		DoneValue:     strconv.Itoa(done),
 		ElapsedName:   "elapsed_ms",
 	}
-	if deckID != 0 {
-		data.DeckValue = strconv.FormatUint(deckID, 10)
+	// 每个选中卡组渲染一个隐藏 deck 字段，评分/动作请求据此原样带回同一范围（DESIGN.md §8.2）。
+	if len(scope.deckIDs) > 0 {
+		data.DeckValues = make([]string, 0, len(scope.deckIDs))
+		for _, id := range scope.deckIDs {
+			data.DeckValues = append(data.DeckValues, strconv.FormatUint(id, 10))
+		}
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
@@ -318,17 +374,26 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 }
 
 // buildQueue 复用 internal/schedule 的队列构建（每日上限、复习日切点、优先级都在那里）。
-func (s *Server) buildQueue(ctx context.Context, userID, deckID uint64, sched *schedule.Scheduler) ([]schedule.QueueItem, error) {
+// 单卡组走 DeckID 以保留卡组上限口径；多卡组走 DeckIDs 集合（合并后统一排序/打乱）。
+func (s *Server) buildQueue(ctx context.Context, userID uint64, scope reviewScope, sched *schedule.Scheduler) ([]schedule.QueueItem, error) {
 	builder := schedule.NewQueueBuilder(s.db, sched)
-	// 零值 QueueOptions 让每日上限走卡组设置（DeckID 非 0 时），否则回退文档化默认。
-	return builder.Build(ctx, userID, schedule.QueueOptions{DeckID: deckID})
+	opts := schedule.QueueOptions{}
+	switch len(scope.deckIDs) {
+	case 0:
+	case 1:
+		opts.DeckID = scope.deckIDs[0]
+	default:
+		opts.DeckIDs = scope.deckIDs
+	}
+	return builder.Build(ctx, userID, opts)
 }
 
-// schedulerFor 取卡组预设构造调度器；无卡组/预设缺失时回退到文档化默认参数。
-func (s *Server) schedulerFor(ctx context.Context, userID, deckID uint64) (*schedule.Scheduler, error) {
+// schedulerFor 取卡组预设构造调度器；只有恰好指定一个卡组时才用它的预设，
+// 多卡组与全库回退到文档化默认参数（DESIGN.md §3.3）。无卡组/预设缺失同样回退默认。
+func (s *Server) schedulerFor(ctx context.Context, userID uint64, deckIDs []uint64) (*schedule.Scheduler, error) {
 	var preset *store.Preset
-	if deckID != 0 {
-		if deck, err := s.decks.ByID(ctx, deckID); err == nil && deck.PresetID != 0 {
+	if len(deckIDs) == 1 {
+		if deck, err := s.decks.ByID(ctx, deckIDs[0]); err == nil && deck.PresetID != 0 {
 			if p, err := s.presets.ByID(ctx, deck.PresetID); err == nil {
 				preset = p
 			}
@@ -621,37 +686,38 @@ func parseBoolAnswer(raw string) (bool, error) {
 // 判分后不直接换卡，而是返回结果面板（正确答案 + 判分细节），用户点“继续”才进入下一张。
 //
 // 输入无法判分（ok=false）或输入不合法时不写库：以局部化错误渲染当前卡，让用户重试。
-func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *store.User, card *store.Card, note *store.Note, deck *store.Deck) {
+func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, card *store.Card, note *store.Note) {
 	ctx := c.Request.Context()
 	done := parseDone(c.PostForm("done"))
 	g, graded := graderFor(note.Kind)
 	if !graded {
-		s.renderReviewError(c, loc, user, deck.ID, done, "graded submit for a card without a grader", nil)
+		s.renderReviewError(c, loc, user, scope, done, "graded submit for a card without a grader", nil)
 		return
 	}
 	fields, err := store.ParseFields(note.FieldsJSON)
 	if err != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "parse note fields for grading failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "parse note fields for grading failed", err)
 		return
 	}
 	input, err := buildGradeInput(note.Kind, fields, s.gradeMappingFor(ctx, note.DeckID), c.Request.PostForm)
 	if err != nil {
-		s.renderGradedInputError(c, loc, user, deck.ID, done)
+		s.renderGradedInputError(c, loc, user, scope, done)
 		return
 	}
 	rating, detail, ok := g.Grade(input)
 	if !ok {
-		s.renderGradedInputError(c, loc, user, deck.ID, done)
+		s.renderGradedInputError(c, loc, user, scope, done)
 		return
 	}
 	detailJSON, err := json.Marshal(detail)
 	if err != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "marshal grade detail failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "marshal grade detail failed", err)
 		return
 	}
 	raw := string(detailJSON)
 
-	sched, err := s.schedulerFor(ctx, user.ID, note.DeckID)
+	// 判分提交始终用被评卡所属卡组的预设调度；范围只影响队列构建（DESIGN.md §3.3）。
+	sched, err := s.schedulerFor(ctx, user.ID, []uint64{note.DeckID})
 	if err != nil {
 		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -659,7 +725,7 @@ func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *s
 	}
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "begin review transaction failed", tx.Error)
+		s.renderReviewError(c, loc, user, scope, done, "begin review transaction failed", tx.Error)
 		return
 	}
 	if _, err := schedule.Submit(ctx, tx, schedule.SubmitInput{
@@ -676,15 +742,15 @@ func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *s
 		Now:             time.Now().UTC(),
 	}); err != nil {
 		_ = tx.Rollback().Error
-		s.renderReviewError(c, loc, user, deck.ID, done, "submit graded review failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "submit graded review failed", err)
 		return
 	}
 	if err := tx.Commit().Error; err != nil {
-		s.renderReviewError(c, loc, user, deck.ID, done, "commit graded review failed", err)
+		s.renderReviewError(c, loc, user, scope, done, "commit graded review failed", err)
 		return
 	}
 
-	area, err := s.reviewArea(c, loc, user, deck.ID, done+1, "")
+	area, err := s.reviewArea(c, loc, user, scope, done+1, "")
 	if err != nil {
 		s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -706,8 +772,8 @@ func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *s
 }
 
 // renderGradedInputError 以局部化提示重新渲染当前卡，且不写任何进度（输入无法判分）。
-func (s *Server) renderGradedInputError(c *gin.Context, loc *i18n.Localizer, user *store.User, deckID uint64, done int) {
-	area, err := s.reviewArea(c, loc, user, deckID, done, loc.T("review.graded.error_input"))
+func (s *Server) renderGradedInputError(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, done int) {
+	area, err := s.reviewArea(c, loc, user, scope, done, loc.T("review.graded.error_input"))
 	if err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return

@@ -1970,3 +1970,14 @@
 - id: settings.email.link
   translation: "Change email"
 
+# ── Multi-deck review scope (M3-13): bulk review entry on the deck list ──
+# Appended by the M3-13 task; the key set must match zh-CN.yaml.
+- id: decks.list.review
+  translation: "Review"
+- id: decks.list.review_selected
+  translation: "Review selected"
+- id: decks.list.select_label
+  translation: "Select this deck"
+- id: decks.list.select_hint
+  translation: "Select several decks, then click \"Review selected\" to study them together."
+
