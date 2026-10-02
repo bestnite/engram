@@ -742,7 +742,7 @@ completion percentage until they are moved into a release milestone.
   safe (one invite yields one user) but a crash between the two steps can leave a token released
   with no user created. `AccountService` and `InviteStore` each hold their own `*gorm.DB`, so the
   fix is a shared transaction boundary; do it when the service layer is next touched.
-- [ ] **B-11 `Preset.EnableFuzz` to `*bool`** — the model column carries `default:true`, so a
+- [x] **B-11 `Preset.EnableFuzz` to `*bool`** — the model column carries `default:true`, so a
   zero-valued `false` is silently replaced by the database default; `PresetStore.Create`
   currently compensates with an explicit follow-up update. Convert the field (and any other
   boolean with a database default) to `*bool` and delete the compensation. Requires editing
@@ -764,7 +764,7 @@ completion percentage until they are moved into a release milestone.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
   `M0 13/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
-  · M10 0/5 (excluded) · backlog 5/13 (excluded)`.
+  · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
