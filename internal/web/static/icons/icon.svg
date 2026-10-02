@@ -1,11 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Engram">
-  <!-- 应用图标（M8-2）：纯 SVG，无外部引用、无文字，可作 maskable 使用。 -->
+  <!-- 应用图标（M8-2）：纯 SVG 矢量，无外部引用、无文字，同一份文件供 any 与 maskable 使用。
+       品牌蓝满幅打底（maskable 要求背景铺满整幅）；中置紧凑卡片 + 3/4 环重复箭头。
+       可见构图全部收在半径 205 的 maskable 安全圆内：最外点（箭头底角）半径约 190。 -->
   <rect width="512" height="512" fill="#2563eb"/>
-  <g transform="translate(96 132)">
-    <rect x="16" y="-28" width="304" height="200" rx="24" fill="#93c5fd"/>
-    <rect x="0" y="0" width="304" height="200" rx="24" fill="#ffffff"/>
-    <rect x="32" y="44" width="240" height="22" rx="11" fill="#1e3a8a"/>
-    <rect x="32" y="92" width="180" height="22" rx="11" fill="#93c5fd"/>
-    <rect x="32" y="140" width="120" height="22" rx="11" fill="#93c5fd"/>
+  <!-- 3/4 环重复箭头：半径 160 的 270° 顺时针圆弧，缺口留在右上，箭头沿切线朝右收口 -->
+  <path d="M416 256A160 160 0 1 1 256 96" fill="none" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+  <path d="M312 96 252 66 252 126Z" fill="#ffffff"/>
+  <!-- 中置卡片：实白圆角矩形 + 三条品牌蓝内容条，构成可辨识的“记忆条目”字形 -->
+  <rect x="176" y="191" width="160" height="130" rx="26" fill="#ffffff"/>
+  <g fill="#2563eb">
+    <rect x="202" y="217" width="108" height="16" rx="8"/>
+    <rect x="202" y="248" width="108" height="16" rx="8"/>
+    <rect x="202" y="279" width="64" height="16" rx="8"/>
   </g>
 </svg>
