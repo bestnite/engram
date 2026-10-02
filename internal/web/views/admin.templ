@@ -6,11 +6,11 @@ templ AdminPage(data AdminPageData) {
 	@Base(data.Layout) {
 		<div class="space-y-8">
 			<!-- 管理面板头部 -->
-			<div class="border-b border-zinc-200/80 pb-6">
-				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">{ data.Heading }</h1>
-				<p class="mt-1 text-sm text-zinc-600 leading-relaxed">{ data.Intro }</p>
+			<div class="border-b border-zinc-200/80 dark:border-zinc-800 pb-6">
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
 				if data.Notice != "" {
-					<div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-sm text-indigo-900 shadow-xs">
+					<div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/30 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200 shadow-xs">
 						{ data.Notice }
 					</div>
 				}
@@ -20,24 +20,24 @@ templ AdminPage(data AdminPageData) {
 			<div class="grid grid-cols-1 gap-8 lg:grid-cols-4 items-start">
 				<!-- 左侧导航 -->
 				<nav class="lg:col-span-1 space-y-2">
-					<h2 class="px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">{ data.NavHeading }</h2>
+					<h2 class="px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{ data.NavHeading }</h2>
 					<ul class="space-y-1">
 						for _, item := range data.Nav {
 							<li>
 								if item.Implemented {
 									if item.Active {
-										<a class="flex items-center justify-between rounded-xl bg-zinc-950 px-3.5 py-2.5 text-sm font-semibold text-white shadow-xs" href={ item.Href }>
+										<a class="flex items-center justify-between rounded-xl bg-zinc-950 px-3.5 py-2.5 text-sm font-semibold text-white shadow-xs dark:bg-zinc-100 dark:text-zinc-950" href={ item.Href }>
 											<span>{ item.Label }</span>
 										</a>
 									} else {
-										<a class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 transition-colors" href={ item.Href }>
+										<a class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>
 											<span>{ item.Label }</span>
 										</a>
 									}
 								} else {
-									<span class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm text-zinc-400">
+									<span class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm text-zinc-400 dark:text-zinc-600">
 										<span>{ item.Label }</span>
-										<em class="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] not-italic text-zinc-400">{ item.PendingLabel }</em>
+										<em class="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] not-italic text-zinc-400 dark:text-zinc-500">{ item.PendingLabel }</em>
 									</span>
 								}
 							</li>
@@ -47,7 +47,7 @@ templ AdminPage(data AdminPageData) {
 
 				<!-- 右侧内容区域 -->
 				<div class="lg:col-span-3 min-w-0 space-y-8">
-					<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs">
+					<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
 						if data.UsersPage {
 							@adminUsers(data)
 						} else if data.RegistrationPage {
@@ -71,8 +71,8 @@ templ AdminPage(data AdminPageData) {
 								<form class="space-y-6" method="post" action={ data.FormAction }>
 									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 									@adminSections(data)
-									<div class="pt-4 border-t border-zinc-100">
-										<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SaveLabel }</button>
+									<div class="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+										<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SaveLabel }</button>
 									</div>
 								</form>
 							} else {
@@ -82,12 +82,12 @@ templ AdminPage(data AdminPageData) {
 					</div>
 
 					if data.ExportHref != "" {
-						<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-4">
+						<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
 							<div>
-								<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.ExportHeading }</h2>
-								<p class="mt-1 text-xs text-zinc-500">{ data.ExportHint }</p>
+								<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.ExportHeading }</h2>
+								<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.ExportHint }</p>
 							</div>
-							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 transition-colors" href={ data.ExportHref }>{ data.ExportLabel }</a>
+							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.ExportHref }>{ data.ExportLabel }</a>
 						</section>
 					}
 				</div>
@@ -99,43 +99,43 @@ templ AdminPage(data AdminPageData) {
 // adminSections 渲染设置区块表；每一行标注生效值的来源。
 templ adminSections(data AdminPageData) {
 	for _, section := range data.Sections {
-		<section class="space-y-4 first:pt-0 pt-6 border-t border-zinc-100 first:border-0">
+		<section class="space-y-4 first:pt-0 pt-6 border-t border-zinc-100 dark:border-zinc-800 first:border-0">
 			<div>
-				<h2 class="text-base font-bold tracking-tight text-zinc-950">{ section.Heading }</h2>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ section.Heading }</h2>
 				if section.Intro != "" {
-					<p class="mt-1 text-xs text-zinc-500">{ section.Intro }</p>
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ section.Intro }</p>
 				}
 			</div>
-			<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+			<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
 				<table class="w-full text-left text-sm">
-					<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+					<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
 						<tr>
 							<th class="px-4 py-3 sm:px-5 font-semibold w-1/3">{ data.Columns.Setting }</th>
 							<th class="px-4 py-3 sm:px-5 font-semibold">{ data.Columns.Value }</th>
 							<th class="px-4 py-3 sm:px-5 font-semibold w-28">{ data.Columns.Source }</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-zinc-100">
+					<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
 						for _, row := range section.Rows {
-							<tr class="hover:bg-zinc-50/60 transition-colors align-top">
+							<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
 								<td class="px-4 py-3.5 sm:px-5">
-									<div class="font-semibold text-zinc-950">{ row.Label }</div>
+									<div class="font-semibold text-zinc-950 dark:text-zinc-100">{ row.Label }</div>
 									if row.Hint != "" {
-										<p class="mt-0.5 text-xs text-zinc-400">{ row.Hint }</p>
+										<p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{ row.Hint }</p>
 									}
 								</td>
 								<td class="px-4 py-3.5 sm:px-5">
 									if row.Sensitive {
-										<span class="block text-xs font-medium text-zinc-500">{ row.StatusText }</span>
-										<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="password" name={ row.Key } value="" autocomplete="new-password"/>
+										<span class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">{ row.StatusText }</span>
+										<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="password" name={ row.Key } value="" autocomplete="new-password"/>
 									} else if row.Editable {
-										<input class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name={ row.Key } value={ row.Value }/>
+										<input class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name={ row.Key } value={ row.Value }/>
 									} else {
-										<span class="font-mono text-xs sm:text-sm text-zinc-800 break-all">{ row.Value }</span>
+										<span class="font-mono text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 break-all">{ row.Value }</span>
 									}
 								</td>
-								<td class="px-4 py-3.5 sm:px-5 text-xs text-zinc-500 whitespace-nowrap">
-									<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-mono text-zinc-600">{ row.SourceLabel }</span>
+								<td class="px-4 py-3.5 sm:px-5 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+									<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-600 dark:text-zinc-300">{ row.SourceLabel }</span>
 								</td>
 							</tr>
 						}

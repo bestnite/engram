@@ -7,72 +7,72 @@ templ adminRegistration(data AdminPageData) {
 		<!-- 注册策略设置 -->
 		<section class="space-y-4">
 			<div>
-				<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.PolicyHeading }</h2>
-				<p class="mt-1 text-xs text-zinc-500">{ data.PolicyIntro }</p>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.PolicyHeading }</h2>
+				<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.PolicyIntro }</p>
 			</div>
 			<form class="space-y-4" method="post" action="/admin/registration">
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 				<fieldset class="space-y-2">
-					<legend class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.PolicyLabel }</legend>
+					<legend class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PolicyLabel }</legend>
 					<div class="space-y-2">
 						for _, opt := range data.PolicyOptions {
-							<label class="flex items-center gap-2.5 text-sm font-medium text-zinc-700 cursor-pointer">
-								<input type="radio" name="registration_policy" value={ opt.Value } checked?={ opt.Checked } class="h-4 w-4 text-zinc-950 focus:ring-zinc-900 border-zinc-300"/>
+							<label class="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer">
+								<input type="radio" name="registration_policy" value={ opt.Value } checked?={ opt.Checked } class="h-4 w-4 text-zinc-950 focus:ring-zinc-900 border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"/>
 								<span>{ opt.Label }</span>
 							</label>
 						}
 					</div>
 				</fieldset>
 				<label class="block">
-					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.AllowlistLabel }</span>
-					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="registration_email_domains" value={ data.AllowlistValue }/>
-					<span class="mt-1 block text-xs text-zinc-400">{ data.AllowlistHint }</span>
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.AllowlistLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="registration_email_domains" value={ data.AllowlistValue }/>
+					<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.AllowlistHint }</span>
 				</label>
-				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.RegistrationSaveLabel }</button>
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.RegistrationSaveLabel }</button>
 			</form>
 		</section>
 
 		<!-- 邀请管理 -->
-		<section class="space-y-4 pt-6 border-t border-zinc-100">
+		<section class="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-800">
 			<div>
-				<h2 class="text-base font-bold tracking-tight text-zinc-950">{ data.InvitesHeading }</h2>
-				<p class="mt-1 text-xs text-zinc-500">{ data.InvitesIntro }</p>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.InvitesHeading }</h2>
+				<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.InvitesIntro }</p>
 			</div>
-			<form class="flex flex-wrap items-end gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 sm:p-5" method="post" action="/admin/invites">
+			<form class="flex flex-wrap items-end gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-800/40 p-4 sm:p-5" method="post" action="/admin/invites">
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 				<label class="block flex-1 min-w-[200px]">
-					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteEmailLabel }</span>
-					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="email" value=""/>
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.InviteEmailLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="email" value=""/>
 				</label>
 				<label class="block w-32 sm:w-40">
-					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteRoleLabel }</span>
-					<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="role">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.InviteRoleLabel }</span>
+					<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
 						for _, r := range data.InviteRoles {
 							<option value={ r.Value } selected?={ r.Selected }>{ r.Label }</option>
 						}
 					</select>
 				</label>
 				<label class="block w-28 sm:w-32">
-					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.InviteExpiryLabel }</span>
-					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="number" min="0" name="expires_days" value=""/>
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.InviteExpiryLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="number" min="0" name="expires_days" value=""/>
 				</label>
 				<div class="flex items-center gap-2 pb-2">
-					<label class="flex items-center gap-2 text-xs font-medium text-zinc-700 cursor-pointer">
-						<input type="checkbox" name="send_email" value="1" class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900"/>
+					<label class="flex items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer">
+						<input type="checkbox" name="send_email" value="1" class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"/>
 						<span>{ data.InviteMailLabel }</span>
 					</label>
 				</div>
-				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.InviteCreateSubmit }</button>
+				<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.InviteCreateSubmit }</button>
 			</form>
-			<p class="text-[11px] text-zinc-400">{ data.InviteMailNote }</p>
+			<p class="text-[11px] text-zinc-400 dark:text-zinc-500">{ data.InviteMailNote }</p>
 
 			if len(data.Invites) == 0 {
-				<div class="p-8 text-center text-xs text-zinc-400">{ data.InvitesEmpty }</div>
+				<div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{ data.InvitesEmpty }</div>
 			} else {
-				<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xs">
+				<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-sm">
-							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
 								<tr>
 									<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColInviteToken }</th>
 									<th class="px-4 py-3 font-semibold">{ data.ColInviteEmail }</th>
@@ -84,32 +84,32 @@ templ adminRegistration(data AdminPageData) {
 									<th class="px-4 py-3 sm:px-5 font-semibold text-right">{ data.ColInviteActions }</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-zinc-100">
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
 								for _, inv := range data.Invites {
-									<tr class="hover:bg-zinc-50/60 transition-colors align-top">
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
 										<td class="px-4 py-3.5 sm:px-5 font-mono text-xs">
-											<a class="break-all font-semibold text-indigo-600 hover:text-indigo-700" href={ inv.Link }>{ inv.Token }</a>
+											<a class="break-all font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700" href={ inv.Link }>{ inv.Token }</a>
 										</td>
-										<td class="px-4 py-3.5 text-xs text-zinc-600">{ inv.Email }</td>
+										<td class="px-4 py-3.5 text-xs text-zinc-600 dark:text-zinc-400">{ inv.Email }</td>
 										<td class="px-4 py-3.5 text-xs">
-											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">{ inv.RoleLabel }</span>
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-medium text-zinc-700 dark:text-zinc-300">{ inv.RoleLabel }</span>
 										</td>
 										<td class="px-4 py-3.5 text-xs">
-											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">{ inv.StatusLabel }</span>
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-medium text-zinc-700 dark:text-zinc-300">{ inv.StatusLabel }</span>
 										</td>
-										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ inv.CreatedAt }</td>
-										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 whitespace-nowrap">{ inv.ExpiresAt }</td>
+										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 dark:text-zinc-500 whitespace-nowrap">{ inv.CreatedAt }</td>
+										<td class="px-4 py-3.5 font-mono text-xs text-zinc-400 dark:text-zinc-500 whitespace-nowrap">{ inv.ExpiresAt }</td>
 										<td class="px-4 py-3.5 text-xs">
 											if inv.UsedBy != "" {
-												<span class="font-medium text-zinc-900">{ inv.UsedBy }</span>
-												<span class="block text-[11px] font-mono text-zinc-400">{ inv.UsedAt }</span>
+												<span class="font-medium text-zinc-900 dark:text-zinc-100">{ inv.UsedBy }</span>
+												<span class="block text-[11px] font-mono text-zinc-400 dark:text-zinc-500">{ inv.UsedAt }</span>
 											}
 										</td>
 										<td class="px-4 py-3.5 sm:px-5 text-right">
 											if inv.Active {
 												<form method="post" action={ inv.RevokeHref }>
 													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ data.InviteRevokeLabel }</button>
+													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ data.InviteRevokeLabel }</button>
 												</form>
 											}
 										</td>

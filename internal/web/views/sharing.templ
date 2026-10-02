@@ -7,40 +7,40 @@ templ SharingPage(data SharingData) {
 	@Base(data.Layout) {
 		<div class="space-y-8">
 			<div>
-				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">{ data.Heading }</h1>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
 				if data.DeckName != "" {
-					<p class="mt-1 text-sm font-medium text-zinc-500">{ data.DeckName }</p>
+					<p class="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.DeckName }</p>
 				}
 			</div>
 
 			if data.ErrorMessage != "" {
-				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs" role="alert">
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
 					{ data.ErrorMessage }
 				</div>
 			}
 
 			<!-- 授权成员表格 -->
 			if len(data.Rows) == 0 {
-				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs">
-					<p class="text-sm font-medium text-zinc-500">{ data.EmptyText }</p>
+				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.EmptyText }</p>
 				</div>
 			} else {
-				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-xs">
+				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-sm">
-							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
 								<tr>
 									<th class="px-5 py-3.5 sm:px-6">{ data.ColUser }</th>
 									<th class="px-5 py-3.5 sm:px-6">{ data.ColRole }</th>
 									<th class="px-5 py-3.5 sm:px-6 text-right">{ data.ColActions }</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-zinc-100">
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
 								for _, row := range data.Rows {
-									<tr class="hover:bg-zinc-50/60 transition-colors align-top">
-										<td class="px-5 py-4 sm:px-6 font-semibold text-zinc-950">{ row.Username }</td>
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+										<td class="px-5 py-4 sm:px-6 font-semibold text-zinc-950 dark:text-zinc-100">{ row.Username }</td>
 										<td class="px-5 py-4 sm:px-6">
-											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700">{ row.RoleLabel }</span>
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">{ row.RoleLabel }</span>
 										</td>
 										<td class="px-5 py-4 sm:px-6 text-right">
 											if row.Editable {
@@ -48,7 +48,7 @@ templ SharingPage(data SharingData) {
 													<form class="flex items-center gap-2" method="post" action={ row.RoleAction }>
 														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 														<input type="hidden" name="user_id" value={ row.UserValue }/>
-														<select class="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="role">
+														<select class="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
 															for _, opt := range row.RoleOptions {
 																if opt.Selected {
 																	<option value={ opt.Value } selected>{ opt.Label }</option>
@@ -57,16 +57,16 @@ templ SharingPage(data SharingData) {
 																}
 															}
 														</select>
-														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 transition-colors cursor-pointer" type="submit">{ row.ChangeLabel }</button>
+														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ row.ChangeLabel }</button>
 													</form>
 													<form method="post" action={ row.RevokeAction }>
 														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 														<input type="hidden" name="user_id" value={ row.UserValue }/>
-														<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
+														<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
 													</form>
 												</div>
 											} else {
-												<p class="text-xs text-zinc-400">{ data.OwnerNote }</p>
+												<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.OwnerNote }</p>
 											}
 										</td>
 									</tr>
@@ -78,19 +78,19 @@ templ SharingPage(data SharingData) {
 			}
 
 			<!-- 添加授权卡片 -->
-			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-5">
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
 				<div>
-					<h2 class="text-lg font-bold tracking-tight text-zinc-950">{ data.GrantHeading }</h2>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.GrantHeading }</h2>
 				</div>
 				<form class="space-y-4" method="post" action={ data.GrantAction }>
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.UsernameLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="username" placeholder={ data.UsernamePlaceholder } required/>
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.UsernameLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="username" placeholder={ data.UsernamePlaceholder } required/>
 					</label>
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.RoleLabel }</span>
-						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="role">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.RoleLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
 							for _, opt := range data.RoleOptions {
 								if opt.Selected {
 									<option value={ opt.Value } selected>{ opt.Label }</option>
@@ -101,28 +101,28 @@ templ SharingPage(data SharingData) {
 						</select>
 					</label>
 					<div class="pt-2">
-						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.GrantSubmit }</button>
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.GrantSubmit }</button>
 					</div>
 				</form>
 			</section>
 
 			<!-- 分享链接管理 -->
-			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-5">
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
 				<div>
-					<h2 class="text-lg font-bold tracking-tight text-zinc-950">{ data.LinksHeading }</h2>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.LinksHeading }</h2>
 				</div>
 				if data.NewLinkURL != "" {
-					<div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900 shadow-2xs space-y-2">
+					<div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-2xs space-y-2">
 						<p class="font-medium">{ data.NewLinkNotice }</p>
-						<input class="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 font-mono text-xs text-zinc-800 select-all" type="text" readonly value={ data.NewLinkURL }/>
+						<input class="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 font-mono text-xs text-zinc-800 dark:border-emerald-700 dark:bg-zinc-900 dark:text-zinc-100 select-all" type="text" readonly value={ data.NewLinkURL }/>
 					</div>
 				}
 				if len(data.LinkRows) == 0 {
-					<p class="text-xs text-zinc-400">{ data.LinksEmpty }</p>
+					<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.LinksEmpty }</p>
 				} else {
-					<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+					<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
 						<table class="w-full text-left text-sm">
-							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
 								<tr>
 									<th class="px-4 py-3">{ data.ColLink }</th>
 									<th class="px-4 py-3">{ data.ColPassword }</th>
@@ -131,21 +131,21 @@ templ SharingPage(data SharingData) {
 									<th class="px-4 py-3 text-right">{ data.ColActions }</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-zinc-100">
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
 								for _, row := range data.LinkRows {
-									<tr class="hover:bg-zinc-50/60 transition-colors align-top">
-										<td class="px-4 py-3 font-mono text-xs font-medium text-zinc-900">{ row.Prefix }</td>
-										<td class="px-4 py-3 text-xs text-zinc-600">{ row.PasswordText }</td>
-										<td class="px-4 py-3 text-xs text-zinc-600 font-mono">{ row.ExpiresText }</td>
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+										<td class="px-4 py-3 font-mono text-xs font-medium text-zinc-900 dark:text-zinc-100">{ row.Prefix }</td>
+										<td class="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">{ row.PasswordText }</td>
+										<td class="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400 font-mono">{ row.ExpiresText }</td>
 										<td class="px-4 py-3">
-											<span class="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">{ row.StateText }</span>
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">{ row.StateText }</span>
 										</td>
 										<td class="px-4 py-3 text-right">
 											if row.Active {
 												<form method="post" action={ row.RevokeAction }>
 													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 													<input type="hidden" name="link" value={ row.TokenValue }/>
-													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
+													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
 												</form>
 											}
 										</td>
@@ -156,38 +156,38 @@ templ SharingPage(data SharingData) {
 					</div>
 					<form class="mt-3" method="post" action={ data.RevokeAllAction }>
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-						<button class="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer" type="submit">{ data.RevokeAllLabel }</button>
+						<button class="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ data.RevokeAllLabel }</button>
 					</form>
 				}
-				<form class="mt-4 space-y-4 pt-4 border-t border-zinc-100" method="post" action={ data.CreateLinkAction }>
+				<form class="mt-4 space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800" method="post" action={ data.CreateLinkAction }>
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.PasswordLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="password" autocomplete="new-password"/>
-						<span class="mt-1 block text-xs text-zinc-400">{ data.PasswordHint }</span>
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PasswordLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="password" autocomplete="new-password"/>
+						<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.PasswordHint }</span>
 					</label>
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.ExpiresLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="date" name="expires_at"/>
-						<span class="mt-1 block text-xs text-zinc-400">{ data.ExpiresHint }</span>
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.ExpiresLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="date" name="expires_at"/>
+						<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.ExpiresHint }</span>
 					</label>
 					<div class="pt-2">
-						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLinkLabel }</button>
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLinkLabel }</button>
 					</div>
 				</form>
 			</section>
 
 			<!-- 可见性管理 -->
-			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs space-y-4">
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
 				<div>
-					<h2 class="text-lg font-bold tracking-tight text-zinc-950">{ data.VisibilityHeading }</h2>
-					<p class="mt-1 text-xs text-zinc-500">{ data.VisibilityNote }</p>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.VisibilityHeading }</h2>
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.VisibilityNote }</p>
 				</div>
 				<form class="flex flex-wrap items-end gap-3" method="post" action={ data.VisibilityAction }>
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.VisibilityLabel }</span>
-						<select class="mt-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer" name="visibility">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.VisibilityLabel }</span>
+						<select class="mt-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="visibility">
 							for _, opt := range data.VisibilityOptions {
 								if opt.Selected {
 									<option value={ opt.Value } selected>{ opt.Label }</option>
@@ -197,7 +197,7 @@ templ SharingPage(data SharingData) {
 							}
 						</select>
 					</label>
-					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.VisibilitySubmit }</button>
+					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.VisibilitySubmit }</button>
 				</form>
 			</section>
 		</div>

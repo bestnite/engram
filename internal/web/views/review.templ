@@ -21,53 +21,53 @@ templ ReviewPage(data ReviewPageData) {
 //   - 已判分：data.Result 非空，展示正确答案与判分细节，点“继续”才换下一张卡。
 templ ReviewArea(data ReviewAreaData) {
 	<div id="review-area" class="touch-manipulation select-none" data-answer-url={ data.AnswerURL } data-action-url={ data.ActionURL } data-edit-href={ data.CardEditHref }>
-		<div class="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white px-5 py-3 text-sm shadow-xs">
-			<span class="inline-flex items-center gap-2 text-zinc-500 font-medium">
+		<div class="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white px-5 py-3 text-sm shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+			<span class="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-medium">
 				<span class="h-2 w-2 rounded-full bg-indigo-500"></span>
 				{ data.RemainingLabel } <span id="review-remaining" class="font-semibold text-slate-900">{ data.RemainingCount }</span>
 			</span>
-			<span class="inline-flex items-center gap-2 text-zinc-500 font-medium">
+			<span class="inline-flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-medium">
 				<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
 				{ data.DoneLabel } <span id="review-done" class="font-semibold text-slate-900">{ data.DoneCount }</span>
 			</span>
 		</div>
-		<p id="review-offline" class="mt-4 hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs" role="alert">{ data.NetworkErrorText }</p>
+		<p id="review-offline" class="mt-4 hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">{ data.NetworkErrorText }</p>
 		if data.ErrorText != "" {
-			<p id="review-error" class="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs" role="alert">{ data.ErrorText }</p>
+			<p id="review-error" class="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">{ data.ErrorText }</p>
 		}
 		if data.Empty {
-			<div class="mt-6 rounded-2xl border border-zinc-200/80 bg-white p-10 text-center shadow-xs">
-				<p class="text-base text-zinc-600 font-medium">{ data.EmptyText }</p>
+			<div class="mt-6 rounded-2xl border border-zinc-200/80 bg-white p-10 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+				<p class="text-base text-zinc-600 dark:text-zinc-400 font-medium">{ data.EmptyText }</p>
 			</div>
 		} else if data.Card != nil {
-			<article id="review-card" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-sm">
-				<p class="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{ data.FrontLabel }</p>
-				<div class="mt-3 text-xl sm:text-2xl font-medium text-zinc-900 leading-relaxed break-words">
+			<article id="review-card" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+				<p class="text-[11px] font-semibold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{ data.FrontLabel }</p>
+				<div class="mt-3 text-xl sm:text-2xl font-medium text-zinc-900 dark:text-zinc-100 leading-relaxed break-words">
 					@rawHTML(data.Card.FrontHTML)
 				</div>
-				<div id="review-answer" class="mt-6 hidden border-t border-dashed border-zinc-200 pt-6">
-					<p class="text-[11px] font-semibold tracking-wider text-indigo-600 uppercase">{ data.BackLabel }</p>
-					<div class="mt-3 text-xl sm:text-2xl font-medium text-zinc-900 leading-relaxed break-words">
+				<div id="review-answer" class="mt-6 hidden border-t border-dashed border-zinc-200 dark:border-zinc-800 pt-6">
+					<p class="text-[11px] font-semibold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">{ data.BackLabel }</p>
+					<div class="mt-3 text-xl sm:text-2xl font-medium text-zinc-900 dark:text-zinc-100 leading-relaxed break-words">
 						@rawHTML(data.Card.BackHTML)
 					</div>
 				</div>
 			</article>
 			if data.Result != nil {
-				<div id="review-result" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm space-y-4">
+				<div id="review-result" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
 					<div class="flex items-center justify-between">
-						<p class="text-lg font-bold text-zinc-950">{ data.Result.VerdictLabel }</p>
-						<span class="inline-flex items-center rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700">{ data.Result.ScoreLabel }: <span class="ml-1 text-zinc-950">{ data.Result.Score }</span></span>
+						<p class="text-lg font-bold text-zinc-950 dark:text-zinc-100">{ data.Result.VerdictLabel }</p>
+						<span class="inline-flex items-center rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">{ data.Result.ScoreLabel }: <span class="ml-1 text-zinc-950 dark:text-zinc-100">{ data.Result.Score }</span></span>
 					</div>
 					<div>
-						<p class="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">{ data.Result.AnswerLabel }</p>
-						<div class="mt-2 text-base text-zinc-800">
+						<p class="text-[11px] font-semibold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase">{ data.Result.AnswerLabel }</p>
+						<div class="mt-2 text-base text-zinc-800 dark:text-zinc-200">
 							@rawHTML(data.Result.AnswerHTML)
 						</div>
 					</div>
 					if len(data.Result.DetailLines) > 0 {
-						<div class="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 space-y-1.5">
+						<div class="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 p-3 space-y-1.5">
 							for _, line := range data.Result.DetailLines {
-								<p class="text-xs text-zinc-600 font-mono"><span class="font-medium text-zinc-500">{ line.Label }:</span> <span class="text-zinc-900">{ line.Value }</span></p>
+								<p class="text-xs text-zinc-600 dark:text-zinc-400 font-mono"><span class="font-medium text-zinc-500 dark:text-zinc-400">{ line.Label }:</span> <span class="text-zinc-900 dark:text-zinc-100">{ line.Value }</span></p>
 							}
 						</div>
 					}
@@ -78,7 +78,7 @@ templ ReviewArea(data ReviewAreaData) {
 						<input type="hidden" name="deck" value={ data.DeckValue }/>
 						<input type="hidden" name="done" value={ data.DoneValue }/>
 						<input type="hidden" name="action" value="next"/>
-						<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
+						<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
 					</form>
 				</div>
 			} else {
@@ -96,25 +96,25 @@ templ ReviewArea(data ReviewAreaData) {
 							if data.Graded.TypeAttr == "radio" || data.Graded.TypeAttr == "checkbox" {
 								<div class="space-y-2">
 									for _, opt := range data.Graded.Options {
-										<label class="flex min-h-11 items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 hover:border-zinc-300 cursor-pointer shadow-2xs transition-colors">
-											<input type={ data.Graded.TypeAttr } name="answer" value={ opt.Value } class="h-4 w-4 text-zinc-950 focus:ring-zinc-900 border-zinc-300"/>
+										<label class="flex min-h-11 items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 cursor-pointer shadow-2xs transition-colors">
+											<input type={ data.Graded.TypeAttr } name="answer" value={ opt.Value } class="h-4 w-4 text-zinc-950 focus:ring-zinc-900 border-zinc-300 dark:border-zinc-700"/>
 											<span>{ opt.Label }</span>
 										</label>
 									}
 								</div>
 							} else {
 								<label class="block" for="review-answer-input">
-									<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.Graded.AnswerLabel }</span>
-									<input id="review-answer-input" class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type={ data.Graded.TypeAttr } inputmode={ data.Graded.InputMode } name="answer" placeholder={ data.Graded.Placeholder } autocomplete="off"/>
+									<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.Graded.AnswerLabel }</span>
+									<input id="review-answer-input" class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type={ data.Graded.TypeAttr } inputmode={ data.Graded.InputMode } name="answer" placeholder={ data.Graded.Placeholder } autocomplete="off"/>
 								</label>
 							}
-							<button id="review-submit" type="submit" class="mt-3 min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.99] transition-all cursor-pointer">{ data.Graded.SubmitLabel }</button>
+							<button id="review-submit" type="submit" class="mt-3 min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Graded.SubmitLabel }</button>
 						</div>
 					} else {
 						<div id="review-ratings" class="mt-2 hidden">
 							<div class="grid grid-cols-4 gap-2 sm:gap-3">
 								for _, r := range data.Ratings {
-									<button type="submit" name="rating" value={ ratingValue(r.Value) } data-rating={ ratingValue(r.Value) } class="min-h-11 rounded-lg border border-slate-300 px-2 py-3 text-sm font-semibold shadow-2xs hover:bg-zinc-50 active:scale-[0.98] transition-all cursor-pointer flex flex-col items-center justify-center">{ r.Label }</button>
+									<button type="submit" name="rating" value={ ratingValue(r.Value) } data-rating={ ratingValue(r.Value) } class="min-h-11 rounded-lg border border-slate-300 px-2 py-3 text-sm font-semibold shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer flex flex-col items-center justify-center">{ r.Label }</button>
 								}
 							</div>
 						</div>
@@ -127,13 +127,13 @@ templ ReviewArea(data ReviewAreaData) {
 						<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
 						<input type="hidden" name="deck" value={ data.DeckValue }/>
 						<input type="hidden" name="done" value={ data.DoneValue }/>
-						<button type="submit" name="action" value="undo" data-action="undo" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer">{ data.UndoLabel }</button>
-						<button type="submit" name="action" value="suspend" data-action="suspend" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer">{ data.SuspendLabel }</button>
-						<button type="submit" name="action" value="bury" data-action="bury" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all cursor-pointer">{ data.BuryLabel }</button>
+						<button type="submit" name="action" value="undo" data-action="undo" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer">{ data.UndoLabel }</button>
+						<button type="submit" name="action" value="suspend" data-action="suspend" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer">{ data.SuspendLabel }</button>
+						<button type="submit" name="action" value="bury" data-action="bury" class="min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer">{ data.BuryLabel }</button>
 					</form>
-					<a href={ data.Card.EditHref } data-action="edit" class="inline-flex items-center min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 active:scale-[0.98] transition-all">{ data.EditLabel }</a>
+					<a href={ data.Card.EditHref } data-action="edit" class="inline-flex items-center min-h-11 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all">{ data.EditLabel }</a>
 				</div>
-				<p class="mt-4 text-center text-xs text-zinc-600 font-mono font-medium">{ data.ShortcutsHint }</p>
+				<p class="mt-4 text-center text-xs text-zinc-600 dark:text-zinc-400 font-mono font-medium">{ data.ShortcutsHint }</p>
 			}
 		}
 	</div>

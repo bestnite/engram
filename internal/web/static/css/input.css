@@ -4,6 +4,8 @@
    产物是 static/css/tailwind.css，已 gitignore，构建时重新生成。 */
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @source "../../views";
 
 @layer base {
@@ -16,6 +18,10 @@
     letter-spacing: -0.011em;
   }
 
+  html.dark {
+    color-scheme: dark;
+  }
+
   /* 可见焦点（M8-5）：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示。
      用 :focus-visible 而不是 :focus，避免鼠标操作时出现多余的焦点框，
      同时保证纯键盘流程（复习页评分、编辑器、设置页）始终看得到当前焦点。 */
@@ -24,10 +30,24 @@
     outline-offset: 2px;
   }
 
+  html.dark :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline-color: #f4f4f5;
+  }
+
+  html.dark #review-remaining,
+  html.dark #review-done {
+    color: #f4f4f5;
+  }
+
   /* 优化选中与滚动条 */
   ::selection {
     background-color: #e4e4e7;
     color: #18181b;
+  }
+
+  html.dark ::selection {
+    background-color: #3f3f46;
+    color: #fafafa;
   }
 
   /* 细化滚动条 */
@@ -45,6 +65,13 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #a1a1aa;
   }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    background: #52525b;
+  }
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: #71717a;
+  }
 }
 
 /* 按钮微动效与触觉反馈 */
@@ -55,7 +82,7 @@
   }
 }
 
-/* 极简玻璃卡片与边缘微光 */
+/* 极简卡片与边缘微光 */
 @utility card-elevated {
   background-color: #ffffff;
   border: 1px solid rgba(228, 228, 231, 0.85);

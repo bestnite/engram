@@ -5,19 +5,19 @@ package views
 templ TOTPChallengePage(data TOTPChallengeData) {
 	@Base(data.Layout) {
 		<div class="mx-auto max-w-md py-6 sm:py-10 space-y-6">
-			<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-sm space-y-6">
+			<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
 				<div class="space-y-2 text-center">
-					<div class="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-xs">
-						<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+					<div class="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-xs dark:bg-zinc-100 dark:text-zinc-950">
+						<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="m9 12 2 2 4-4"></path></svg>
 					</div>
-					<h1 class="text-xl sm:text-2xl font-bold tracking-tight text-zinc-950">{ data.Heading }</h1>
+					<h1 class="text-xl sm:text-2xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
 					if data.Intro != "" {
-						<p class="text-xs sm:text-sm text-zinc-500 leading-relaxed">{ data.Intro }</p>
+						<p class="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
 					}
 				</div>
 
 				if data.ErrorMessage != "" {
-					<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs" role="alert">
+					<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
 						{ data.ErrorMessage }
 					</div>
 				}
@@ -27,13 +27,13 @@ templ TOTPChallengePage(data TOTPChallengeData) {
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					}
 					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ data.CodeLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-center text-xl font-mono tracking-widest text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors" type="text" name="code" inputmode="text" autocomplete="one-time-code" required autofocus/>
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CodeLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-center text-xl font-mono tracking-widest text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="code" inputmode="text" autocomplete="one-time-code" required autofocus/>
 					</label>
 					if data.RecoveryHint != "" {
-						<p class="text-xs text-zinc-400">{ data.RecoveryHint }</p>
+						<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.RecoveryHint }</p>
 					}
-					<button class="inline-flex w-full items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-[0.98] transition-all cursor-pointer" type="submit">
+					<button class="inline-flex w-full items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">
 						{ data.SubmitLabel }
 					</button>
 				</form>
@@ -45,9 +45,9 @@ templ TOTPChallengePage(data TOTPChallengeData) {
 						for _, l := range data.LangOptions {
 							<li>
 								if l.Active {
-									<span class="inline-flex items-center rounded-lg bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs">{ l.Label }</span>
+									<span class="inline-flex items-center rounded-lg bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs dark:bg-zinc-100 dark:text-zinc-950">{ l.Label }</span>
 								} else {
-									<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 transition-colors" href={ l.Href }>{ l.Label }</a>
+									<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ l.Href }>{ l.Label }</a>
 								}
 							</li>
 						}
