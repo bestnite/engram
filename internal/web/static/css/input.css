@@ -34,11 +34,6 @@
     outline-color: #f4f4f5;
   }
 
-  html.dark #review-remaining,
-  html.dark #review-done {
-    color: #f4f4f5;
-  }
-
   /* 优化选中与滚动条 */
   ::selection {
     background-color: #e4e4e7;
@@ -72,6 +67,15 @@
   html.dark ::-webkit-scrollbar-thumb:hover {
     background: #71717a;
   }
+}
+
+/* 复习页计数器的深色配色（必须写在 @layer 之外）。
+   @layer base 里的规则永远输给 @layer utilities —— CSS 级联层里**层序优先于选择器权重**，
+   所以写在 base 里的 html.dark #review-remaining 会被模板上的 .text-slate-900 压住（曾因此
+   在深色模式下数字几乎看不见）。无层规则排在所有层之后，才真正生效。 */
+html.dark #review-remaining,
+html.dark #review-done {
+  color: #f4f4f5;
 }
 
 /* 按钮微动效与触觉反馈 */
