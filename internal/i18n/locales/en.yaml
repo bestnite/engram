@@ -1971,3 +1971,82 @@
 
 - id: common.close
   translation: "Close"
+
+# ── User-level API key management (M4-10, /settings/keys) ─────────────────
+# Appended by the M4-10 task; the key set must match zh-CN.yaml.
+- id: keys.title
+  translation: "My API keys"
+- id: keys.heading
+  translation: "My API keys"
+- id: keys.intro
+  translation: "Create and revoke your own keys for API access."
+- id: keys.new.notice
+  translation: "Copy it now and keep it safe. The plaintext is shown only once and cannot be retrieved later."
+- id: keys.col.name
+  translation: "Name"
+- id: keys.col.prefix
+  translation: "Prefix"
+- id: keys.col.scopes
+  translation: "Scopes"
+- id: keys.col.last_used
+  translation: "Last used"
+- id: keys.col.expires
+  translation: "Expires"
+- id: keys.col.state
+  translation: "State"
+- id: keys.col.actions
+  translation: "Actions"
+- id: keys.empty
+  translation: "No API keys yet."
+- id: keys.revoke
+  translation: "Revoke"
+- id: keys.last_used_never
+  translation: "Never used"
+- id: keys.expires_never
+  translation: "No expiry"
+- id: keys.state.active
+  translation: "Active"
+- id: keys.state.revoked
+  translation: "Revoked"
+- id: keys.state.expired
+  translation: "Expired"
+- id: keys.create.heading
+  translation: "Create an API key"
+- id: keys.create.name_label
+  translation: "Name"
+- id: keys.create.name_placeholder
+  translation: "e.g. script access"
+- id: keys.create.scopes_label
+  translation: "Scopes"
+- id: keys.create.scopes_hint
+  translation: "Select at least one; admin is equivalent to administrator rights."
+- id: keys.create.expires_label
+  translation: "Expiry date (optional)"
+- id: keys.create.expires_hint
+  translation: "Leave empty for no expiry."
+- id: keys.create.submit
+  translation: "Create"
+- id: keys.scope.read
+  translation: "read"
+- id: keys.scope.write
+  translation: "write"
+- id: keys.scope.review
+  translation: "review"
+- id: keys.scope.admin
+  translation: "admin"
+- id: keys.error.name_required
+  translation: "Enter a name."
+- id: keys.error.scopes_required
+  translation: "Select at least one scope."
+- id: keys.error.scopes_invalid
+  translation: "Invalid scope value."
+- id: keys.error.expiry_invalid
+  translation: "Invalid expiry date."
+- id: keys.error.create_failed
+  translation: "Could not create the key. Please try again."
+- id: settings.keys.heading
+  translation: "API keys"
+- id: settings.keys.hint
+  translation: "Create and manage keys for API access."
+- id: settings.keys.link
+  translation: "Manage API keys"

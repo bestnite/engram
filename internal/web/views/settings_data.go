@@ -65,5 +65,11 @@ type SettingsData struct {
 	EmailLinkLabel string
 	EmailHref      string
 
+	// 用户级 API Key 管理入口（M4-10）：指向 /settings/keys 的独立页面。
+	KeysHeading   string
+	KeysHint      string
+	KeysLinkLabel string
+	KeysHref      string
+
 	CSRF string
 }

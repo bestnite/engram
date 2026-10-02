@@ -27,6 +27,11 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 	router.GET("/settings", s.settingsPage)
 	router.POST("/settings/profile", s.sessions.CSRFMiddleware(), s.settingsProfileSubmit)
 	router.POST("/settings/password", s.sessions.CSRFMiddleware(), s.settingsPasswordSubmit)
+	// 用户级 API Key 管理（M4-10，DESIGN.md §8.1）：路由与 handler 在 keys.go。
+	// 创建与撤销都是写操作，一律过 CSRF（DESIGN.md §4.3）。
+	router.GET("/settings/keys", s.keysPage)
+	router.POST("/settings/keys", s.sessions.CSRFMiddleware(), s.keysCreate)
+	router.POST("/settings/keys/:id/revoke", s.sessions.CSRFMiddleware(), s.keysRevoke)
 	// 邮件类型偏好页（M1-18）：路由与 handler 在 mail_prefs.go，仍属个人设置体系。
 	s.registerMailPrefsRoutes(router)
 }
@@ -259,7 +264,12 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		EmailHint:      loc.T("settings.email.hint"),
 		EmailLinkLabel: loc.T("settings.email.link"),
 		EmailHref:      "/settings/email",
-		CSRF:           csrf,
+		// M4-10：用户级 API Key 管理入口，指向独立的 /settings/keys 页。
+		KeysHeading:   loc.T("settings.keys.heading"),
+		KeysHint:      loc.T("settings.keys.hint"),
+		KeysLinkLabel: loc.T("settings.keys.link"),
+		KeysHref:      "/settings/keys",
+		CSRF:          csrf,
 	}
 }
 

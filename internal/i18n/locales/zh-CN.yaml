@@ -1969,3 +1969,82 @@
 
 - id: common.close
   translation: "关闭"
+
+# ── 用户级 API Key 管理（M4-10，/settings/keys）────────────────────
+# 本块由 M4-10 任务追加；键集合须与 en.yaml 一致。
+- id: keys.title
+  translation: "我的 API Key"
+- id: keys.heading
+  translation: "我的 API Key"
+- id: keys.intro
+  translation: "创建与撤销本人用于接口访问的密钥。"
+- id: keys.new.notice
+  translation: "请立即复制并妥善保存。明文只显示这一次，之后无法再次查看。"
+- id: keys.col.name
+  translation: "名称"
+- id: keys.col.prefix
+  translation: "前缀"
+- id: keys.col.scopes
+  translation: "权限"
+- id: keys.col.last_used
+  translation: "最后使用"
+- id: keys.col.expires
+  translation: "过期"
+- id: keys.col.state
+  translation: "状态"
+- id: keys.col.actions
+  translation: "操作"
+- id: keys.empty
+  translation: "还没有 API Key。"
+- id: keys.revoke
+  translation: "撤销"
+- id: keys.last_used_never
+  translation: "从未使用"
+- id: keys.expires_never
+  translation: "不过期"
+- id: keys.state.active
+  translation: "有效"
+- id: keys.state.revoked
+  translation: "已撤销"
+- id: keys.state.expired
+  translation: "已过期"
+- id: keys.create.heading
+  translation: "创建 API Key"
+- id: keys.create.name_label
+  translation: "名称"
+- id: keys.create.name_placeholder
+  translation: "例如：脚本访问"
+- id: keys.create.scopes_label
+  translation: "权限"
+- id: keys.create.scopes_hint
+  translation: "至少选择一项；admin 等价于管理员权限。"
+- id: keys.create.expires_label
+  translation: "过期日期（可选）"
+- id: keys.create.expires_hint
+  translation: "留空表示不过期。"
+- id: keys.create.submit
+  translation: "创建"
+- id: keys.scope.read
+  translation: "read（读取）"
+- id: keys.scope.write
+  translation: "write（写入）"
+- id: keys.scope.review
+  translation: "review（复习）"
+- id: keys.scope.admin
+  translation: "admin（管理）"
+- id: keys.error.name_required
+  translation: "请填写名称。"
+- id: keys.error.scopes_required
+  translation: "请至少选择一项权限。"
+- id: keys.error.scopes_invalid
+  translation: "权限取值非法。"
+- id: keys.error.expiry_invalid
+  translation: "过期日期格式不正确。"
+- id: keys.error.create_failed
+  translation: "创建失败，请重试。"
+- id: settings.keys.heading
+  translation: "API Key"
+- id: settings.keys.hint
+  translation: "创建与管理用于接口访问的密钥。"
+- id: settings.keys.link
+  translation: "管理 API Key"
