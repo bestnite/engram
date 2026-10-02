@@ -3,63 +3,94 @@ package views
 // DeckListPage 是卡组列表与新建页（M2-11）：上半部分列出我的卡组，下半部分是新建表单。
 templ DeckListPage(data DeckListData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if len(data.Rows) == 0 {
-			<p class="mt-4 text-slate-600">{ data.EmptyText }</p>
-		} else {
-			<table class="mt-4 w-full text-left text-sm">
-				<thead class="border-b border-slate-200 text-slate-500">
-					<tr>
-						<th class="py-2">{ data.ColName }</th>
-						<th class="py-2">{ data.ColCards }</th>
-						<th class="py-2">{ data.ColDue }</th>
-						<th class="py-2">{ data.ColActions }</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range data.Rows {
-						<tr class="border-b border-slate-100">
-							<td class="py-2">
-								<a class="text-blue-600 hover:underline" href={ row.Href }>{ row.Name }</a>
-								if row.Archived {
-									<span class="ml-2 rounded bg-slate-200 px-1 text-xs text-slate-600">{ data.Archived }</span>
+		<div class="space-y-8">
+			<!-- 卡组列表头部 -->
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				</div>
+			</div>
+
+			<!-- 卡组表格/空状态 -->
+			if len(data.Rows) == 0 {
+				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.EmptyText }</p>
+				</div>
+			} else {
+				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+								<tr>
+									<th class="px-5 py-3.5 sm:px-6">{ data.ColName }</th>
+									<th class="px-5 py-3.5 sm:px-6">{ data.ColCards }</th>
+									<th class="px-5 py-3.5 sm:px-6">{ data.ColDue }</th>
+									<th class="px-5 py-3.5 sm:px-6 text-right">{ data.ColActions }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+								for _, row := range data.Rows {
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors">
+										<td class="px-5 py-4 sm:px-6">
+											<div class="flex items-center gap-2">
+												<a class="font-semibold text-zinc-950 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" href={ row.Href }>{ row.Name }</a>
+												if row.Archived {
+													<span class="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-normal text-zinc-500 dark:text-zinc-400">{ data.Archived }</span>
+												}
+											</div>
+										</td>
+										<td class="px-5 py-4 sm:px-6 font-mono text-zinc-600 dark:text-zinc-400">{ row.CardCount }</td>
+										<td class="px-5 py-4 sm:px-6">
+											if row.DueCount > 0 {
+												<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/20 font-mono dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-500/30">{ row.DueCount }</span>
+											} else {
+												<span class="font-mono text-zinc-400 dark:text-zinc-500">{ row.DueCount }</span>
+											}
+										</td>
+										<td class="px-5 py-4 sm:px-6 text-right">
+											<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ row.ExportHref } download>{ data.ExportLabel }</a>
+										</td>
+									</tr>
 								}
-							</td>
-							<td class="py-2">{ row.CardCount }</td>
-							<td class="py-2">{ row.DueCount }</td>
-							<td class="py-2">
-								<a class="text-blue-600 hover:underline" href={ row.ExportHref } download>{ data.ExportLabel }</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		}
-		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold text-slate-900">{ data.NewHeading }</h2>
-			if data.ErrorMessage != "" {
-				<p class="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.ErrorMessage }</p>
+							</tbody>
+						</table>
+					</div>
+				</div>
 			}
-			<form class="mt-4 space-y-3" method="post" action="/decks">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.NameLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="name" value={ data.NameValue }/>
-				</label>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.DescLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="description" value={ data.DescValue }/>
-				</label>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.PresetLabel }</span>
-					<select class="mt-1 w-full rounded border border-slate-300 px-2 py-1" name="preset_id">
-						for _, p := range data.Presets {
-							<option value={ p.Value } selected?={ p.Selected }>{ p.Label }</option>
-						}
-					</select>
-				</label>
-				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.CreateLabel }</button>
-			</form>
-		</section>
+
+			<!-- 新建卡组表单 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.NewHeading }</h2>
+				</div>
+				if data.ErrorMessage != "" {
+					<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+						{ data.ErrorMessage }
+					</div>
+				}
+				<form class="space-y-4" method="post" action="/decks">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.NameLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="name" value={ data.NameValue } required/>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DescLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="description" value={ data.DescValue }/>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PresetLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="preset_id">
+							for _, p := range data.Presets {
+								<option value={ p.Value } selected?={ p.Selected }>{ p.Label }</option>
+							}
+						</select>
+					</label>
+					<div class="pt-2">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLabel }</button>
+					</div>
+				</form>
+			</section>
+		</div>
 	}
 }

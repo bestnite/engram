@@ -3,143 +3,163 @@ package views
 // adminUsers 渲染用户管理页（M6-2）：搜索、新建、按用户的操作与用量计数。
 // 所有文案都来自 AdminPageData；危险动作包在 <details> 里，需要额外一次点击才展开表单。
 templ adminUsers(data AdminPageData) {
-	<form class="mb-6 flex flex-wrap items-end gap-3" method="get" action="/admin/users">
-		<label class="text-sm text-slate-600">
-			{ data.SearchLabel }
-			<input class="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="q" value={ data.SearchQuery }/>
-		</label>
-		<button class="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100" type="submit">{ data.SearchSubmit }</button>
-	</form>
-
-	if data.TempPassword != "" {
-		<div class="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-			<p class="font-medium">{ data.TempPasswordLabel }</p>
-			<code class="mt-1 block font-mono text-base">{ data.TempPassword }</code>
-		</div>
-	}
-
-	<section class="mb-8 border-b border-slate-200 pb-6">
-		<h2 class="text-sm font-semibold text-slate-500">{ data.CreateHeading }</h2>
-		<form class="mt-3 grid gap-3 sm:grid-cols-2" method="post" action="/admin/users">
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label class="text-sm text-slate-600">
-				{ data.CreateUsernameLabel }
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="username" value=""/>
+	<div class="space-y-6">
+		<form class="flex flex-wrap items-end gap-3" method="get" action="/admin/users">
+			<label class="block flex-1 min-w-[200px]">
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.SearchLabel }</span>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="q" value={ data.SearchQuery }/>
 			</label>
-			<label class="text-sm text-slate-600">
-				{ data.CreateEmailLabel }
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="email" name="email" value=""/>
-			</label>
-			<label class="text-sm text-slate-600">
-				{ data.CreatePasswordLabel }
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="password" name="password" value="" autocomplete="new-password"/>
-			</label>
-			<label class="text-sm text-slate-600">
-				{ data.CreateRoleLabel }
-				<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="role">
-					for _, opt := range data.Roles {
-						<option value={ opt.Value }>{ opt.Label }</option>
-					}
-				</select>
-			</label>
-			<div class="sm:col-span-2">
-				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.CreateSubmit }</button>
-			</div>
+			<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SearchSubmit }</button>
 		</form>
-	</section>
 
-	if data.Total == 0 {
-		<p class="text-sm text-slate-500">{ data.EmptyLabel }</p>
-	} else {
-		<table class="w-full text-left text-sm">
-			<thead>
-				<tr class="border-b border-slate-200 text-xs text-slate-400">
-					<th class="py-2 pr-3 font-medium">{ data.ColUser }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColEmail }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColRole }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColStatus }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColDecks }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColCards }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColReviews }</th>
-					<th class="py-2 font-medium">{ data.ColActions }</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, u := range data.Users {
-					<tr class="border-b border-slate-100 align-top">
-						<td class="py-3 pr-3">
-							<div class="font-medium text-slate-800">{ u.DisplayName }</div>
-							<div class="text-xs text-slate-400">{ u.Username }</div>
-						</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.Email }</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.RoleLabel }</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.StatusLabel }</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.Decks }</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.Cards }</td>
-						<td class="py-3 pr-3 text-slate-600">{ u.Reviews }</td>
-						<td class="py-3 space-y-2 text-xs">
-							if !u.IsSelf {
-								<form method="post" action={ u.HrefStatus }>
-									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-									if u.Status == "disabled" {
-										<input type="hidden" name="action" value="enable"/>
-										<button class="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-100" type="submit">{ data.EnableLabel }</button>
-									} else {
-										<input type="hidden" name="action" value="disable"/>
-										<button class="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-100" type="submit">{ data.DisableLabel }</button>
-									}
-								</form>
-							}
-							<form method="post" action={ u.HrefLogout }>
-								<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-								<button class="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-100" type="submit">{ data.ForceLogoutLabel }</button>
-							</form>
-							<details>
-								<summary class="cursor-pointer text-slate-600">{ data.ChangeRoleLabel }</summary>
-								<form class="mt-1 space-y-1" method="post" action={ u.HrefRole }>
-									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-									<input type="hidden" name="confirm" value="1"/>
-									<select class="block rounded border border-slate-300 px-2 py-1" name="role">
-										for _, opt := range data.Roles {
-											<option value={ opt.Value } selected?={ opt.Value == u.Role }>{ opt.Label }</option>
+		if data.TempPassword != "" {
+			<div class="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-200 shadow-xs space-y-1">
+				<p class="font-semibold">{ data.TempPasswordLabel }</p>
+				<code class="mt-1 block font-mono text-base font-bold select-all">{ data.TempPassword }</code>
+			</div>
+		}
+
+		<!-- 创建用户折叠/卡片 -->
+		<section class="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-800/40 p-5 space-y-4">
+			<h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CreateHeading }</h2>
+			<form class="grid gap-4 sm:grid-cols-2" method="post" action="/admin/users">
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CreateUsernameLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="username" value="" required/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CreateEmailLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="email" name="email" value="" required/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CreatePasswordLabel }</span>
+					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="password" name="password" value="" autocomplete="new-password" required/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CreateRoleLabel }</span>
+					<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
+						for _, opt := range data.Roles {
+							<option value={ opt.Value }>{ opt.Label }</option>
+						}
+					</select>
+				</label>
+				<div class="sm:col-span-2 pt-1">
+					<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateSubmit }</button>
+				</div>
+			</form>
+		</section>
+
+		<!-- 用户表格 -->
+		if data.Total == 0 {
+			<div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{ data.EmptyLabel }</div>
+		} else {
+			<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left text-sm">
+						<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+							<tr>
+								<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColUser }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColEmail }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColRole }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColStatus }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColDecks }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColCards }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColReviews }</th>
+								<th class="px-4 py-3 sm:px-5 font-semibold text-right">{ data.ColActions }</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+							for _, u := range data.Users {
+								<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+									<td class="px-4 py-3.5 sm:px-5">
+										<div class="font-semibold text-zinc-950 dark:text-zinc-100">{ u.DisplayName }</div>
+										<div class="text-xs text-zinc-400 font-mono">{ u.Username }</div>
+									</td>
+									<td class="px-4 py-3.5 text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm">{ u.Email }</td>
+									<td class="px-4 py-3.5 text-xs">
+										<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-medium text-zinc-700 dark:text-zinc-300">{ u.RoleLabel }</span>
+									</td>
+									<td class="px-4 py-3.5 text-xs">
+										if u.Status == "active" {
+											<span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-500/30">{ u.StatusLabel }</span>
+										} else {
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-medium text-zinc-500 dark:text-zinc-400">{ u.StatusLabel }</span>
 										}
-									</select>
-									<button class="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-100" type="submit">{ data.ChangeRoleLabel }</button>
-								</form>
-							</details>
-							<details>
-								<summary class="cursor-pointer text-slate-600">{ data.ResetPasswordLabel }</summary>
-								<form class="mt-1 space-y-1" method="post" action={ u.HrefPassword }>
-									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-									<input type="hidden" name="confirm" value="1"/>
-									<p class="text-xs text-slate-400">{ data.ConfirmHint }</p>
-									<button class="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-100" type="submit">{ data.ResetPasswordLabel }</button>
-								</form>
-							</details>
-							if !u.IsSelf {
-								<details>
-									<summary class="cursor-pointer text-red-600">{ data.DeleteLabel }</summary>
-									<form class="mt-1 space-y-1" method="post" action={ u.HrefDelete }>
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<input type="hidden" name="confirm" value="1"/>
-										<p class="text-xs text-slate-400">{ data.ConfirmHint }</p>
-										<button class="rounded border border-red-300 px-2 py-1 text-red-700 hover:bg-red-50" type="submit">{ data.DeleteLabel }</button>
-									</form>
-								</details>
+									</td>
+									<td class="px-4 py-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{ u.Decks }</td>
+									<td class="px-4 py-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{ u.Cards }</td>
+									<td class="px-4 py-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{ u.Reviews }</td>
+									<td class="px-4 py-3.5 sm:px-5 text-right space-y-1">
+										<div class="flex flex-wrap items-center justify-end gap-1.5">
+											if !u.IsSelf {
+												<form method="post" action={ u.HrefStatus }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													if u.Status == "disabled" {
+														<input type="hidden" name="action" value="enable"/>
+														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.EnableLabel }</button>
+													} else {
+														<input type="hidden" name="action" value="disable"/>
+														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.DisableLabel }</button>
+													}
+												</form>
+											}
+											<form method="post" action={ u.HrefLogout }>
+												<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+												<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.ForceLogoutLabel }</button>
+											</form>
+										</div>
+										<div class="flex flex-col items-end gap-1 pt-1 text-xs">
+											<details class="group">
+												<summary class="cursor-pointer font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700">{ data.ChangeRoleLabel }</summary>
+												<form class="mt-1 flex items-center gap-1" method="post" action={ u.HrefRole }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													<input type="hidden" name="confirm" value="1"/>
+													<select class="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" name="role">
+														for _, opt := range data.Roles {
+															<option value={ opt.Value } selected?={ opt.Value == u.Role }>{ opt.Label }</option>
+														}
+													</select>
+													<button class="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700" type="submit">{ data.ChangeRoleLabel }</button>
+												</form>
+											</details>
+											<details class="group">
+												<summary class="cursor-pointer font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100">{ data.ResetPasswordLabel }</summary>
+												<form class="mt-1 flex flex-col items-end gap-1" method="post" action={ u.HrefPassword }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													<input type="hidden" name="confirm" value="1"/>
+													<span class="text-[11px] text-zinc-400 dark:text-zinc-500">{ data.ConfirmHint }</span>
+													<button class="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700" type="submit">{ data.ResetPasswordLabel }</button>
+												</form>
+											</details>
+											if !u.IsSelf {
+												<details class="group">
+													<summary class="cursor-pointer font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700">{ data.DeleteLabel }</summary>
+													<form class="mt-1 flex flex-col items-end gap-1" method="post" action={ u.HrefDelete }>
+														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+														<input type="hidden" name="confirm" value="1"/>
+														<span class="text-[11px] text-zinc-400 dark:text-zinc-500">{ data.ConfirmHint }</span>
+														<button class="rounded-lg border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300" type="submit">{ data.DeleteLabel }</button>
+													</form>
+												</details>
+											}
+										</div>
+									</td>
+								</tr>
 							}
-						</td>
-					</tr>
-				}
-			</tbody>
-		</table>
-	}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		}
 
-	<nav class="mt-4 flex items-center gap-4 text-sm text-slate-500">
-		if data.PrevHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.PrevHref }>{ data.PrevLabel }</a>
-		}
-		if data.NextHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.NextHref }>{ data.NextLabel }</a>
-		}
-	</nav>
+		<nav class="flex items-center gap-2 text-xs sm:text-sm">
+			if data.PrevHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.PrevHref }>{ data.PrevLabel }</a>
+			}
+			if data.NextHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.NextHref }>{ data.NextLabel }</a>
+			}
+		</nav>
+	</div>
 }

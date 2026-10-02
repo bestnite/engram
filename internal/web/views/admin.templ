@@ -4,70 +4,93 @@ package views
 // 所有文案由 AdminPageData 传入，模板里没有硬编码文字。
 templ AdminPage(data AdminPageData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		<p class="mt-2 text-slate-600">{ data.Intro }</p>
-		if data.Notice != "" {
-			<div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">{ data.Notice }</div>
-		}
-		<div class="mt-6 flex flex-col gap-8 md:flex-row">
-			<nav class="w-full shrink-0 md:w-52">
-				<h2 class="text-sm font-semibold text-slate-500">{ data.NavHeading }</h2>
-				<ul class="mt-2 space-y-1">
-					for _, item := range data.Nav {
-						<li>
-							if item.Implemented {
-								if item.Active {
-									<a class="block rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" href={ item.Href }>{ item.Label }</a>
+		<div class="space-y-8">
+			<!-- 管理面板头部 -->
+			<div class="border-b border-zinc-200/80 dark:border-zinc-800 pb-6">
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+				if data.Notice != "" {
+					<div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/30 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200 shadow-xs">
+						{ data.Notice }
+					</div>
+				}
+			</div>
+
+			<!-- 主体布局：左侧导航 + 右侧内容 -->
+			<div class="grid grid-cols-1 gap-8 lg:grid-cols-4 items-start">
+				<!-- 左侧导航 -->
+				<nav class="lg:col-span-1 space-y-2">
+					<h2 class="px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{ data.NavHeading }</h2>
+					<ul class="space-y-1">
+						for _, item := range data.Nav {
+							<li>
+								if item.Implemented {
+									if item.Active {
+										<a class="flex items-center justify-between rounded-xl bg-zinc-950 px-3.5 py-2.5 text-sm font-semibold text-white shadow-xs dark:bg-zinc-100 dark:text-zinc-950" href={ item.Href }>
+											<span>{ item.Label }</span>
+										</a>
+									} else {
+										<a class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>
+											<span>{ item.Label }</span>
+										</a>
+									}
 								} else {
-									<a class="block rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" href={ item.Href }>{ item.Label }</a>
+									<span class="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm text-zinc-400 dark:text-zinc-600">
+										<span>{ item.Label }</span>
+										<em class="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] not-italic text-zinc-400 dark:text-zinc-500">{ item.PendingLabel }</em>
+									</span>
 								}
+							</li>
+						}
+					</ul>
+				</nav>
+
+				<!-- 右侧内容区域 -->
+				<div class="lg:col-span-3 min-w-0 space-y-8">
+					<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+						if data.UsersPage {
+							@adminUsers(data)
+						} else if data.RegistrationPage {
+							@adminRegistration(data)
+						} else if data.JobsPage {
+							@adminJobs(data)
+						} else if data.OIDCPage {
+							@adminOIDC(data)
+						} else if data.SMTPPage {
+							@adminSMTP(data)
+						} else if data.AuditPage {
+							@adminAudit(data)
+						} else if data.HealthPage {
+							@adminHealth(data)
+						} else if data.APIKeysPage {
+							@adminAPIKeys(data)
+						} else if data.I18nPage {
+							@adminI18n(data)
+						} else {
+							if data.ShowForm {
+								<form class="space-y-6" method="post" action={ data.FormAction }>
+									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+									@adminSections(data)
+									<div class="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+										<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SaveLabel }</button>
+									</div>
+								</form>
 							} else {
-								<span class="flex items-center gap-2 rounded px-3 py-1.5 text-sm text-slate-400">
-									{ item.Label }
-									<em class="rounded bg-slate-100 px-1.5 py-0.5 text-xs not-italic text-slate-400">{ item.PendingLabel }</em>
-								</span>
+								@adminSections(data)
 							}
-						</li>
+						}
+					</div>
+
+					if data.ExportHref != "" {
+						<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+							<div>
+								<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.ExportHeading }</h2>
+								<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.ExportHint }</p>
+							</div>
+							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.ExportHref }>{ data.ExportLabel }</a>
+						</section>
 					}
-				</ul>
-			</nav>
-			<div class="min-w-0 flex-1">
-				if data.UsersPage {
-					@adminUsers(data)
-				} else if data.RegistrationPage {
-					@adminRegistration(data)
-				} else if data.JobsPage {
-					@adminJobs(data)
-				} else if data.OIDCPage {
-					@adminOIDC(data)
-				} else if data.SMTPPage {
-					@adminSMTP(data)
-				} else if data.AuditPage {
-					@adminAudit(data)
-				} else if data.HealthPage {
-					@adminHealth(data)
-				} else if data.APIKeysPage {
-					@adminAPIKeys(data)
-				} else if data.I18nPage {
-					@adminI18n(data)
-				} else {
-					if data.ShowForm {
-						<form method="post" action={ data.FormAction }>
-							<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-							@adminSections(data)
-							<button class="mt-4 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
-						</form>
-					} else {
-						@adminSections(data)
-					}
-				}
-				if data.ExportHref != "" {
-					<section class="mt-8 border-t border-slate-200 pt-6">
-						<h2 class="text-sm font-semibold text-slate-500">{ data.ExportHeading }</h2>
-						<a class="mt-2 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" href={ data.ExportHref }>{ data.ExportLabel }</a>
-						<p class="mt-2 text-xs text-slate-400">{ data.ExportHint }</p>
-					</section>
-				}
+				</div>
 			</div>
 		</div>
 	}
@@ -76,43 +99,49 @@ templ AdminPage(data AdminPageData) {
 // adminSections 渲染设置区块表；每一行标注生效值的来源。
 templ adminSections(data AdminPageData) {
 	for _, section := range data.Sections {
-		<section class="mt-6 first:mt-0">
-			<h2 class="text-sm font-semibold text-slate-500">{ section.Heading }</h2>
-			if section.Intro != "" {
-				<p class="mt-1 text-xs text-slate-400">{ section.Intro }</p>
-			}
-			<table class="mt-3 w-full text-left text-sm">
-				<thead>
-					<tr class="border-b border-slate-200 text-xs text-slate-400">
-						<th class="py-2 pr-3 font-medium">{ data.Columns.Setting }</th>
-						<th class="py-2 pr-3 font-medium">{ data.Columns.Value }</th>
-						<th class="py-2 font-medium">{ data.Columns.Source }</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range section.Rows {
-						<tr class="border-b border-slate-100 align-top">
-							<td class="py-3 pr-3">
-								<div class="font-medium text-slate-800">{ row.Label }</div>
-								if row.Hint != "" {
-									<p class="mt-0.5 text-xs text-slate-400">{ row.Hint }</p>
-								}
-							</td>
-							<td class="py-3 pr-3">
-								if row.Sensitive {
-									<span class="text-slate-600">{ row.StatusText }</span>
-									<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="password" name={ row.Key } value="" autocomplete="new-password"/>
-								} else if row.Editable {
-									<input class="block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name={ row.Key } value={ row.Value }/>
-								} else {
-									<span class="break-all text-slate-600">{ row.Value }</span>
-								}
-							</td>
-							<td class="py-3 text-xs text-slate-500">{ row.SourceLabel }</td>
+		<section class="space-y-4 first:pt-0 pt-6 border-t border-zinc-100 dark:border-zinc-800 first:border-0">
+			<div>
+				<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ section.Heading }</h2>
+				if section.Intro != "" {
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ section.Intro }</p>
+				}
+			</div>
+			<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+				<table class="w-full text-left text-sm">
+					<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+						<tr>
+							<th class="px-4 py-3 sm:px-5 font-semibold w-1/3">{ data.Columns.Setting }</th>
+							<th class="px-4 py-3 sm:px-5 font-semibold">{ data.Columns.Value }</th>
+							<th class="px-4 py-3 sm:px-5 font-semibold w-28">{ data.Columns.Source }</th>
 						</tr>
-					}
-				</tbody>
-			</table>
+					</thead>
+					<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+						for _, row := range section.Rows {
+							<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+								<td class="px-4 py-3.5 sm:px-5">
+									<div class="font-semibold text-zinc-950 dark:text-zinc-100">{ row.Label }</div>
+									if row.Hint != "" {
+										<p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{ row.Hint }</p>
+									}
+								</td>
+								<td class="px-4 py-3.5 sm:px-5">
+									if row.Sensitive {
+										<span class="block text-xs font-medium text-zinc-500 dark:text-zinc-400">{ row.StatusText }</span>
+										<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="password" name={ row.Key } value="" autocomplete="new-password"/>
+									} else if row.Editable {
+										<input class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name={ row.Key } value={ row.Value }/>
+									} else {
+										<span class="font-mono text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 break-all">{ row.Value }</span>
+									}
+								</td>
+								<td class="px-4 py-3.5 sm:px-5 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+									<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-600 dark:text-zinc-300">{ row.SourceLabel }</span>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
 		</section>
 	}
 }

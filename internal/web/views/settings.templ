@@ -4,85 +4,110 @@ package views
 // 所有文案与值都来自 SettingsData，模板内不写死任何面向用户的文字。
 templ SettingsPage(data SettingsData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-semibold">{ data.Heading }</h1>
-		<p class="mt-2 text-sm text-slate-600">{ data.Intro }</p>
-		if data.ErrorMessage != "" {
-			<p class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
-		}
-		if data.SavedMessage != "" {
-			<p class="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" role="status">{ data.SavedMessage }</p>
-		}
+		<div class="mx-auto max-w-3xl space-y-8">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+			</div>
 
-		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold">{ data.ProfileHeading }</h2>
-			<form class="mt-4 space-y-4" method="post" action="/settings/profile">
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<div>
-					<label class="block text-sm font-medium" for="settings-display-name">{ data.DisplayNameLabel }</label>
-					<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-display-name" name="display_name" value={ data.DisplayNameValue }/>
+			if data.ErrorMessage != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ data.ErrorMessage }
 				</div>
-				<div>
-					<label class="block text-sm font-medium" for="settings-locale">{ data.LocaleLabel }</label>
-					<select class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-locale" name="locale">
-						for _, opt := range data.LocaleOptions {
-							if opt.Selected {
-								<option value={ opt.Value } selected>{ opt.Label }</option>
-							} else {
-								<option value={ opt.Value }>{ opt.Label }</option>
-							}
-						}
-					</select>
-				</div>
-				<div>
-					<label class="block text-sm font-medium" for="settings-timezone">{ data.TimezoneLabel }</label>
-					<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-timezone" name="timezone" value={ data.TimezoneValue } list="settings-timezone-options"/>
-					<datalist id="settings-timezone-options">
-						for _, zone := range data.TimezoneOptions {
-							<option value={ zone }></option>
-						}
-					</datalist>
-					<p class="mt-1 text-xs text-slate-500">{ data.TimezoneHint }</p>
-				</div>
-				<div>
-					<label class="block text-sm font-medium" for="settings-cutoff">{ data.CutoffLabel }</label>
-					<input class="mt-1 w-24 rounded border border-slate-300 px-3 py-2" id="settings-cutoff" name="day_cutoff_hour" type="number" min="0" max="23" value={ data.CutoffValue }/>
-					<p class="mt-1 text-xs text-slate-500">{ data.CutoffHint }</p>
-				</div>
-				<button class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" type="submit">{ data.ProfileSubmit }</button>
-			</form>
-		</section>
-
-		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold">{ data.PasswordHeading }</h2>
-			if data.PasswordAvailable {
-				<form class="mt-4 space-y-4" method="post" action="/settings/password">
-					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-					<div>
-						<label class="block text-sm font-medium" for="settings-old-password">{ data.OldPasswordLabel }</label>
-						<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-old-password" name="old_password" type="password" autocomplete="current-password"/>
-					</div>
-					<div>
-						<label class="block text-sm font-medium" for="settings-new-password">{ data.NewPasswordLabel }</label>
-						<input class="mt-1 w-full rounded border border-slate-300 px-3 py-2" id="settings-new-password" name="new_password" type="password" autocomplete="new-password"/>
-					</div>
-					<p class="text-xs text-slate-500">{ data.PasswordNote }</p>
-					<button class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" type="submit">{ data.PasswordSubmit }</button>
-				</form>
-			} else {
-				<p class="mt-2 text-sm text-slate-600">{ data.PasswordUnavailable }</p>
 			}
-		</section>
+			if data.SavedMessage != "" {
+				<div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-xs" role="status">
+					{ data.SavedMessage }
+				</div>
+			}
 
-		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold">{ data.TOTPHeading }</h2>
-			<p class="mt-2 text-sm text-slate-600">{ data.TOTPHint }</p>
-			<p class="mt-2 text-sm"><a class="text-blue-600 hover:text-blue-700" href={ data.TOTPHref }>{ data.TOTPLinkLabel }</a></p>
-		</section>
+			<!-- 个人档案设置卡片 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.ProfileHeading }</h2>
+				</div>
+				<form class="space-y-4" method="post" action="/settings/profile">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DisplayNameLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-display-name" name="display_name" value={ data.DisplayNameValue }/>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.LocaleLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" id="settings-locale" name="locale">
+							for _, opt := range data.LocaleOptions {
+								if opt.Selected {
+									<option value={ opt.Value } selected>{ opt.Label }</option>
+								} else {
+									<option value={ opt.Value }>{ opt.Label }</option>
+								}
+							}
+						</select>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.TimezoneLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-timezone" name="timezone" value={ data.TimezoneValue } list="settings-timezone-options"/>
+						<datalist id="settings-timezone-options">
+							for _, zone := range data.TimezoneOptions {
+								<option value={ zone }></option>
+							}
+						</datalist>
+						<p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{ data.TimezoneHint }</p>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CutoffLabel }</span>
+						<input class="mt-1.5 w-32 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-cutoff" name="day_cutoff_hour" type="number" min="0" max="23" value={ data.CutoffValue }/>
+						<p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{ data.CutoffHint }</p>
+					</label>
+					<div class="pt-2">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.ProfileSubmit }</button>
+					</div>
+				</form>
+			</section>
 
-		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold">{ data.MailPrefsHeading }</h2>
-			<p class="mt-2 text-sm text-slate-600">{ data.MailPrefsHint }</p>
-			<p class="mt-2 text-sm"><a class="text-blue-600 hover:text-blue-700" href={ data.MailPrefsHref }>{ data.MailPrefsLinkLabel }</a></p>
-		</section>
+			<!-- 密码修改卡片 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.PasswordHeading }</h2>
+				</div>
+				if data.PasswordAvailable {
+					<form class="space-y-4" method="post" action="/settings/password">
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.OldPasswordLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-old-password" name="old_password" type="password" autocomplete="current-password" required/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.NewPasswordLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-new-password" name="new_password" type="password" autocomplete="new-password" required/>
+						</label>
+						<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.PasswordNote }</p>
+						<div class="pt-2">
+							<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.PasswordSubmit }</button>
+						</div>
+					</form>
+				} else {
+					<p class="text-sm text-zinc-500 dark:text-zinc-400">{ data.PasswordUnavailable }</p>
+				}
+			</section>
+
+			<!-- 双因子验证卡片 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.TOTPHeading }</h2>
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.TOTPHint }</p>
+				</div>
+				<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0" href={ data.TOTPHref }>{ data.TOTPLinkLabel }</a>
+			</section>
+
+			<!-- 邮件偏好卡片 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.MailPrefsHeading }</h2>
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.MailPrefsHint }</p>
+				</div>
+				<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0" href={ data.MailPrefsHref }>{ data.MailPrefsLinkLabel }</a>
+			</section>
+		</div>
 	}
 }

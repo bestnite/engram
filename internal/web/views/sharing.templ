@@ -5,162 +5,201 @@ package views
 // 分享链接（M5-3）与可见性开关（M5-5）尚未实现，在页尾预留了区块注释，不写入口。
 templ SharingPage(data SharingData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if data.DeckName != "" {
-			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
-		}
-		if data.ErrorMessage != "" {
-			<p class="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{ data.ErrorMessage }</p>
-		}
-		if len(data.Rows) == 0 {
-			<p class="mt-4 text-slate-600">{ data.EmptyText }</p>
-		} else {
-			<table class="mt-4 w-full text-left text-sm">
-				<thead class="border-b border-slate-200 text-slate-500">
-					<tr>
-						<th class="py-2">{ data.ColUser }</th>
-						<th class="py-2">{ data.ColRole }</th>
-						<th class="py-2">{ data.ColActions }</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range data.Rows {
-						<tr class="border-b border-slate-100 align-top">
-							<td class="py-2">{ row.Username }</td>
-							<td class="py-2">{ row.RoleLabel }</td>
-							<td class="py-2">
-								if row.Editable {
-									<form class="flex flex-wrap items-center gap-2" method="post" action={ row.RoleAction }>
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<input type="hidden" name="user_id" value={ row.UserValue }/>
-										<select class="rounded border border-slate-300 px-2 py-1" name="role">
-											for _, opt := range row.RoleOptions {
-												if opt.Selected {
-													<option value={ opt.Value } selected>{ opt.Label }</option>
-												} else {
-													<option value={ opt.Value }>{ opt.Label }</option>
-												}
-											}
-										</select>
-										<button class="rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ row.ChangeLabel }</button>
-									</form>
-									<form class="mt-1" method="post" action={ row.RevokeAction }>
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<input type="hidden" name="user_id" value={ row.UserValue }/>
-										<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ row.RevokeLabel }</button>
-									</form>
-								} else {
-									<p class="text-xs text-slate-500">{ data.OwnerNote }</p>
-								}
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		}
-		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold text-slate-900">{ data.GrantHeading }</h2>
-			<form class="mt-4 space-y-3" method="post" action={ data.GrantAction }>
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.UsernameLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="username" placeholder={ data.UsernamePlaceholder }/>
-				</label>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.RoleLabel }</span>
-					<select class="mt-1 w-full rounded border border-slate-300 px-2 py-1" name="role">
-						for _, opt := range data.RoleOptions {
-							if opt.Selected {
-								<option value={ opt.Value } selected>{ opt.Label }</option>
-							} else {
-								<option value={ opt.Value }>{ opt.Label }</option>
-							}
-						}
-					</select>
-				</label>
-				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.GrantSubmit }</button>
-			</form>
-		</section>
-		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold text-slate-900">{ data.LinksHeading }</h2>
-			if data.NewLinkURL != "" {
-				<div class="mt-3 rounded bg-green-50 px-3 py-2 text-sm text-green-800">
-					<p>{ data.NewLinkNotice }</p>
-					<input class="mt-2 w-full rounded border border-green-300 bg-white px-2 py-1 font-mono text-xs" type="text" readonly value={ data.NewLinkURL }/>
+		<div class="space-y-8">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				if data.DeckName != "" {
+					<p class="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.DeckName }</p>
+				}
+			</div>
+
+			if data.ErrorMessage != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ data.ErrorMessage }
 				</div>
 			}
-			if len(data.LinkRows) == 0 {
-				<p class="mt-3 text-slate-600">{ data.LinksEmpty }</p>
+
+			<!-- 授权成员表格 -->
+			if len(data.Rows) == 0 {
+				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.EmptyText }</p>
+				</div>
 			} else {
-				<table class="mt-4 w-full text-left text-sm">
-					<thead class="border-b border-slate-200 text-slate-500">
-						<tr>
-							<th class="py-2">{ data.ColLink }</th>
-							<th class="py-2">{ data.ColPassword }</th>
-							<th class="py-2">{ data.ColExpires }</th>
-							<th class="py-2">{ data.ColState }</th>
-							<th class="py-2">{ data.ColActions }</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, row := range data.LinkRows {
-							<tr class="border-b border-slate-100 align-top">
-								<td class="py-2 font-mono text-xs">{ row.Prefix }</td>
-								<td class="py-2">{ row.PasswordText }</td>
-								<td class="py-2">{ row.ExpiresText }</td>
-								<td class="py-2">{ row.StateText }</td>
-								<td class="py-2">
-									if row.Active {
-										<form method="post" action={ row.RevokeAction }>
-											<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-											<input type="hidden" name="link" value={ row.TokenValue }/>
-											<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ row.RevokeLabel }</button>
-										</form>
-									}
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-				<form class="mt-3" method="post" action={ data.RevokeAllAction }>
-					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-					<button class="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">{ data.RevokeAllLabel }</button>
-				</form>
+				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+								<tr>
+									<th class="px-5 py-3.5 sm:px-6">{ data.ColUser }</th>
+									<th class="px-5 py-3.5 sm:px-6">{ data.ColRole }</th>
+									<th class="px-5 py-3.5 sm:px-6 text-right">{ data.ColActions }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+								for _, row := range data.Rows {
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+										<td class="px-5 py-4 sm:px-6 font-semibold text-zinc-950 dark:text-zinc-100">{ row.Username }</td>
+										<td class="px-5 py-4 sm:px-6">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">{ row.RoleLabel }</span>
+										</td>
+										<td class="px-5 py-4 sm:px-6 text-right">
+											if row.Editable {
+												<div class="flex flex-wrap items-center justify-end gap-2">
+													<form class="flex items-center gap-2" method="post" action={ row.RoleAction }>
+														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+														<input type="hidden" name="user_id" value={ row.UserValue }/>
+														<select class="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
+															for _, opt := range row.RoleOptions {
+																if opt.Selected {
+																	<option value={ opt.Value } selected>{ opt.Label }</option>
+																} else {
+																	<option value={ opt.Value }>{ opt.Label }</option>
+																}
+															}
+														</select>
+														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ row.ChangeLabel }</button>
+													</form>
+													<form method="post" action={ row.RevokeAction }>
+														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+														<input type="hidden" name="user_id" value={ row.UserValue }/>
+														<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
+													</form>
+												</div>
+											} else {
+												<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.OwnerNote }</p>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
 			}
-			<form class="mt-4 space-y-3" method="post" action={ data.CreateLinkAction }>
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.PasswordLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="text" name="password" autocomplete="new-password"/>
-					<span class="mt-1 block text-xs text-slate-500">{ data.PasswordHint }</span>
-				</label>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.ExpiresLabel }</span>
-					<input class="mt-1 w-full rounded border border-slate-300 px-2 py-1" type="date" name="expires_at"/>
-					<span class="mt-1 block text-xs text-slate-500">{ data.ExpiresHint }</span>
-				</label>
-				<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.CreateLinkLabel }</button>
-			</form>
-		</section>
-		<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
-			<h2 class="text-lg font-semibold text-slate-900">{ data.VisibilityHeading }</h2>
-			<p class="mt-1 text-sm text-slate-500">{ data.VisibilityNote }</p>
-			<form class="mt-4 flex flex-wrap items-end gap-2" method="post" action={ data.VisibilityAction }>
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label class="block text-sm text-slate-700">
-					<span>{ data.VisibilityLabel }</span>
-					<select class="mt-1 rounded border border-slate-300 px-2 py-1" name="visibility">
-						for _, opt := range data.VisibilityOptions {
-							if opt.Selected {
-								<option value={ opt.Value } selected>{ opt.Label }</option>
-							} else {
-								<option value={ opt.Value }>{ opt.Label }</option>
+
+			<!-- 添加授权卡片 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.GrantHeading }</h2>
+				</div>
+				<form class="space-y-4" method="post" action={ data.GrantAction }>
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.UsernameLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="username" placeholder={ data.UsernamePlaceholder } required/>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.RoleLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
+							for _, opt := range data.RoleOptions {
+								if opt.Selected {
+									<option value={ opt.Value } selected>{ opt.Label }</option>
+								} else {
+									<option value={ opt.Value }>{ opt.Label }</option>
+								}
 							}
-						}
-					</select>
-				</label>
-				<button class="rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ data.VisibilitySubmit }</button>
-			</form>
-		</section>
+						</select>
+					</label>
+					<div class="pt-2">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.GrantSubmit }</button>
+					</div>
+				</form>
+			</section>
+
+			<!-- 分享链接管理 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.LinksHeading }</h2>
+				</div>
+				if data.NewLinkURL != "" {
+					<div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-2xs space-y-2">
+						<p class="font-medium">{ data.NewLinkNotice }</p>
+						<input class="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 font-mono text-xs text-zinc-800 dark:border-emerald-700 dark:bg-zinc-900 dark:text-zinc-100 select-all" type="text" readonly value={ data.NewLinkURL }/>
+					</div>
+				}
+				if len(data.LinkRows) == 0 {
+					<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.LinksEmpty }</p>
+				} else {
+					<div class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+						<table class="w-full text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+								<tr>
+									<th class="px-4 py-3">{ data.ColLink }</th>
+									<th class="px-4 py-3">{ data.ColPassword }</th>
+									<th class="px-4 py-3">{ data.ColExpires }</th>
+									<th class="px-4 py-3">{ data.ColState }</th>
+									<th class="px-4 py-3 text-right">{ data.ColActions }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+								for _, row := range data.LinkRows {
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+										<td class="px-4 py-3 font-mono text-xs font-medium text-zinc-900 dark:text-zinc-100">{ row.Prefix }</td>
+										<td class="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">{ row.PasswordText }</td>
+										<td class="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400 font-mono">{ row.ExpiresText }</td>
+										<td class="px-4 py-3">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">{ row.StateText }</span>
+										</td>
+										<td class="px-4 py-3 text-right">
+											if row.Active {
+												<form method="post" action={ row.RevokeAction }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													<input type="hidden" name="link" value={ row.TokenValue }/>
+													<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ row.RevokeLabel }</button>
+												</form>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+					<form class="mt-3" method="post" action={ data.RevokeAllAction }>
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<button class="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit">{ data.RevokeAllLabel }</button>
+					</form>
+				}
+				<form class="mt-4 space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800" method="post" action={ data.CreateLinkAction }>
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PasswordLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="password" autocomplete="new-password"/>
+						<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.PasswordHint }</span>
+					</label>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.ExpiresLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="date" name="expires_at"/>
+						<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.ExpiresHint }</span>
+					</label>
+					<div class="pt-2">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLinkLabel }</button>
+					</div>
+				</form>
+			</section>
+
+			<!-- 可见性管理 -->
+			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+				<div>
+					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.VisibilityHeading }</h2>
+					<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.VisibilityNote }</p>
+				</div>
+				<form class="flex flex-wrap items-end gap-3" method="post" action={ data.VisibilityAction }>
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.VisibilityLabel }</span>
+						<select class="mt-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="visibility">
+							for _, opt := range data.VisibilityOptions {
+								if opt.Selected {
+									<option value={ opt.Value } selected>{ opt.Label }</option>
+								} else {
+									<option value={ opt.Value }>{ opt.Label }</option>
+								}
+							}
+						</select>
+					</label>
+					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.VisibilitySubmit }</button>
+				</form>
+			</section>
+		</div>
 	}
 }

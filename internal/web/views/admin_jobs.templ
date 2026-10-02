@@ -3,71 +3,77 @@ package views
 // adminJobs 渲染作业页（M6-6）：状态 / 阶段 / 日志尾巴 / 时间 + 取消动作。
 // 所有文案都来自 AdminPageData；日志尾巴用 <pre> 等宽展示（templ 对文本节点自动转义）。
 templ adminJobs(data AdminPageData) {
-	if data.Total == 0 {
-		<p class="text-sm text-slate-500">{ data.EmptyLabel }</p>
-	} else {
-		<table class="w-full text-left text-sm">
-			<thead>
-				<tr class="border-b border-slate-200 text-xs text-slate-400">
-					<th class="py-2 pr-3 font-medium">{ data.ColJobID }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColJobKind }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColJobStatus }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColJobStage }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColJobCreated }</th>
-					<th class="py-2 pr-3 font-medium">{ data.ColJobLog }</th>
-					<th class="py-2 font-medium">{ data.ColJobActions }</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, job := range data.Jobs {
-					<tr class="border-b border-slate-100 align-top">
-						<td class="py-3 pr-3 text-slate-600">{ job.ID }</td>
-						<td class="py-3 pr-3 text-slate-600">{ job.KindLabel }</td>
-						<td class="py-3 pr-3">
-							<span class="text-slate-800">{ job.StatusLabel }</span>
-							if job.ErrorText != "" {
-								<div class="mt-0.5 text-xs text-red-600">{ job.ErrorText }</div>
+	<div class="space-y-6">
+		if data.Total == 0 {
+			<div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{ data.EmptyLabel }</div>
+		} else {
+			<div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left text-sm">
+						<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+							<tr>
+								<th class="px-4 py-3 sm:px-5 font-semibold">{ data.ColJobID }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColJobKind }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColJobStatus }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColJobStage }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColJobCreated }</th>
+								<th class="px-4 py-3 font-semibold">{ data.ColJobLog }</th>
+								<th class="px-4 py-3 sm:px-5 font-semibold text-right">{ data.ColJobActions }</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+							for _, job := range data.Jobs {
+								<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+									<td class="px-4 py-3.5 sm:px-5 font-mono text-xs text-zinc-500 dark:text-zinc-400">{ job.ID }</td>
+									<td class="px-4 py-3.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">{ job.KindLabel }</td>
+									<td class="px-4 py-3.5 text-xs">
+										<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-medium text-zinc-700 dark:text-zinc-300">{ job.StatusLabel }</span>
+										if job.ErrorText != "" {
+											<div class="mt-1 text-[11px] text-rose-600 dark:text-rose-400 font-mono">{ job.ErrorText }</div>
+										}
+									</td>
+									<td class="px-4 py-3.5 text-xs font-mono text-zinc-600 dark:text-zinc-400">{ job.StageLabel }</td>
+									<td class="px-4 py-3.5 text-xs font-mono text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+										<div>{ job.CreatedAt }</div>
+										if job.FinishedAt != "" {
+											<div class="text-[11px] text-zinc-400 dark:text-zinc-500">{ job.FinishedAt }</div>
+										}
+									</td>
+									<td class="px-4 py-3.5">
+										if job.LogTail == "" {
+											<span class="text-xs text-zinc-400 dark:text-zinc-500">{ data.JobLogEmptyLabel }</span>
+										} else {
+											<pre class="max-h-36 max-w-sm overflow-auto rounded-lg bg-zinc-950 p-2 font-mono text-[11px] text-zinc-200">{ job.LogTail }</pre>
+										}
+									</td>
+									<td class="px-4 py-3.5 sm:px-5 text-right">
+										if job.CanCancel {
+											<details class="group">
+												<summary class="cursor-pointer text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700">{ data.JobCancelLabel }</summary>
+												<form class="mt-1 flex flex-col items-end gap-1" method="post" action={ job.CancelHref }>
+													<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+													<input type="hidden" name="confirm" value="1"/>
+													<span class="text-[11px] text-zinc-400 dark:text-zinc-500">{ data.JobCancelConfirm }</span>
+													<button class="rounded-lg border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-rose-700 shadow-2xs hover:bg-rose-50 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300" type="submit">{ data.JobCancelLabel }</button>
+												</form>
+											</details>
+										}
+									</td>
+								</tr>
 							}
-						</td>
-						<td class="py-3 pr-3 text-slate-600">{ job.StageLabel }</td>
-						<td class="py-3 pr-3 text-xs text-slate-500">
-							<div>{ job.CreatedAt }</div>
-							if job.FinishedAt != "" {
-								<div class="text-slate-400">{ job.FinishedAt }</div>
-							}
-						</td>
-						<td class="py-3 pr-3">
-							if job.LogTail == "" {
-								<span class="text-xs text-slate-400">{ data.JobLogEmptyLabel }</span>
-							} else {
-								<pre class="max-h-40 max-w-md overflow-auto rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-700">{ job.LogTail }</pre>
-							}
-						</td>
-						<td class="py-3 text-xs">
-							if job.CanCancel {
-								<details>
-									<summary class="cursor-pointer text-red-600">{ data.JobCancelLabel }</summary>
-									<form class="mt-1 space-y-1" method="post" action={ job.CancelHref }>
-										<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-										<input type="hidden" name="confirm" value="1"/>
-										<p class="text-xs text-slate-400">{ data.JobCancelConfirm }</p>
-										<button class="rounded border border-red-300 px-2 py-1 text-red-700 hover:bg-red-50" type="submit">{ data.JobCancelLabel }</button>
-									</form>
-								</details>
-							}
-						</td>
-					</tr>
-				}
-			</tbody>
-		</table>
-	}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		}
 
-	<nav class="mt-4 flex items-center gap-4 text-sm text-slate-500">
-		if data.PrevHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.PrevHref }>{ data.PrevLabel }</a>
-		}
-		if data.NextHref != "" {
-			<a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href={ data.NextHref }>{ data.NextLabel }</a>
-		}
-	</nav>
+		<nav class="flex items-center gap-2 text-xs sm:text-sm">
+			if data.PrevHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.PrevHref }>{ data.PrevLabel }</a>
+			}
+			if data.NextHref != "" {
+				<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.NextHref }>{ data.NextLabel }</a>
+			}
+		</nav>
+	</div>
 }

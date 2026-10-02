@@ -4,68 +4,88 @@ package views
 // 页面上的每一个字符串都来自 AuthFormData，因此模板本身不含任何硬编码用户文案。
 templ AuthPage(data AuthFormData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if data.Intro != "" {
-			<p class="mt-2 text-slate-600">{ data.Intro }</p>
-		}
-		if data.ErrorMessage != "" {
-			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-				{ data.ErrorMessage }
-			</p>
-		}
-		<form class="mt-6 space-y-4" method="post" action={ data.Action }>
-			if data.CSRF != "" {
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			}
-			if data.InviteToken != "" {
-				<input type="hidden" name="invite" value={ data.InviteToken }/>
-			}
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.UsernameLabel }</span>
-				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="username" autocomplete="username" required/>
-			</label>
-			if data.ShowEmail {
-				<label class="block">
-					<span class="text-sm font-medium text-slate-700">{ data.EmailLabel }</span>
-					<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="email" name="email" autocomplete="email" value={ data.EmailValue } required/>
-				</label>
-			}
-			if data.ShowDisplayName {
-				<label class="block">
-					<span class="text-sm font-medium text-slate-700">{ data.DisplayNameLabel }</span>
-					<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="display_name" autocomplete="name"/>
-				</label>
-			}
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.PasswordLabel }</span>
-				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="password" name="password" autocomplete={ data.PasswordAutocomplete } required/>
-			</label>
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">
-				{ data.SubmitLabel }
-			</button>
-		</form>
-		if data.AltHref != "" {
-			<p class="mt-4 text-sm">
-				<a class="text-blue-600 hover:text-blue-700" href={ data.AltHref }>{ data.AltLabel }</a>
-			</p>
-		}
-		if data.OIDCEnabled {
-			<div class="mt-6 border-t border-slate-200 pt-4">
-				<a class="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" href={ data.OIDCHref }>{ data.OIDCLabel }</a>
-			</div>
-		}
-		<section class="mt-8">
-			<ul class="flex gap-3">
-				for _, l := range data.LangOptions {
-					<li>
-						if l.Active {
-							<span class="rounded border border-blue-600 px-2 py-1 text-sm text-blue-600">{ l.Label }</span>
-						} else {
-							<a class="rounded border border-slate-300 px-2 py-1 text-sm text-slate-600" href={ l.Href }>{ l.Label }</a>
-						}
-					</li>
+		<div class="mx-auto max-w-md py-6 sm:py-10 space-y-6">
+			<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+				<div class="space-y-2 text-center">
+					<div class="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-xs dark:bg-zinc-100 dark:text-zinc-950">
+						<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="m9 12 2 2 4-4"></path></svg>
+					</div>
+					<h1 class="text-xl sm:text-2xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+					if data.Intro != "" {
+						<p class="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+					}
+				</div>
+
+				if data.ErrorMessage != "" {
+					<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+						{ data.ErrorMessage }
+					</div>
 				}
-			</ul>
-		</section>
+
+				<form class="space-y-4" method="post" action={ data.Action }>
+					if data.CSRF != "" {
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					}
+					if data.InviteToken != "" {
+						<input type="hidden" name="invite" value={ data.InviteToken }/>
+					}
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.UsernameLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="username" autocomplete="username" required/>
+					</label>
+					if data.ShowEmail {
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.EmailLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="email" name="email" autocomplete="email" value={ data.EmailValue } required/>
+						</label>
+					}
+					if data.ShowDisplayName {
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DisplayNameLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="display_name" autocomplete="name"/>
+						</label>
+					}
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PasswordLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="password" name="password" autocomplete={ data.PasswordAutocomplete } required/>
+					</label>
+					<button class="inline-flex w-full items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">
+						{ data.SubmitLabel }
+					</button>
+				</form>
+
+				if data.AltHref != "" {
+					<div class="text-center pt-2">
+						<a class="text-xs sm:text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors" href={ data.AltHref }>{ data.AltLabel }</a>
+					</div>
+				}
+
+				if data.OIDCEnabled {
+					<div class="border-t border-zinc-100 dark:border-zinc-800 pt-5">
+						<a class="inline-flex w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.OIDCHref }>
+							<svg class="mr-2 h-4 w-4 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+							{ data.OIDCLabel }
+						</a>
+					</div>
+				}
+			</div>
+
+			<!-- 页面底部语言选择 -->
+			if len(data.LangOptions) > 0 {
+				<div class="flex items-center justify-center">
+					<ul class="flex flex-wrap items-center justify-center gap-2">
+						for _, l := range data.LangOptions {
+							<li>
+								if l.Active {
+									<span class="inline-flex items-center rounded-lg bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs dark:bg-zinc-100 dark:text-zinc-950">{ l.Label }</span>
+								} else {
+									<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ l.Href }>{ l.Label }</a>
+								}
+							</li>
+						}
+					</ul>
+				</div>
+			}
+		</div>
 	}
 }

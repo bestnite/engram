@@ -7,7 +7,7 @@ templ Base(data LayoutData) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<meta name="theme-color" content="#2563eb"/>
+			<meta name="theme-color" content="#18181b"/>
 			<link rel="manifest" href="/manifest.webmanifest"/>
 			<title>{ data.Title }</title>
 			if data.CSSURL != "" {
@@ -22,33 +22,87 @@ templ Base(data LayoutData) {
 			if data.MediaJSURL != "" {
 				<script src={ data.MediaJSURL } defer></script>
 			}
+			<script src="/pwa.js"></script>
 		</head>
-		<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
-			<header class="border-b border-slate-200 bg-white">
-				<nav class="mx-auto flex max-w-3xl items-center gap-4 px-4 py-3">
-					<a class="font-semibold text-blue-600" href={ data.HomeURL }>{ data.Brand }</a>
-					for _, item := range data.Nav {
-						<a class="text-sm text-slate-600 hover:text-slate-900" href={ item.Href }>{ item.Label }</a>
+		<body class="min-h-screen flex flex-col bg-slate-50 text-zinc-900 antialiased selection:bg-zinc-200 selection:text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100 dark:selection:bg-zinc-800 dark:selection:text-zinc-100 transition-colors duration-150">
+			<header class="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/90 backdrop-blur-md">
+				<nav class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+					<div class="flex items-center gap-6">
+						<a class="flex items-center gap-2.5 font-bold tracking-tight text-zinc-950 dark:text-zinc-100 hover:opacity-90 transition-opacity" href={ data.HomeURL }>
+							<span class="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 shadow-2xs">
+								<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="m9 12 2 2 4-4"></path></svg>
+							</span>
+							<span class="text-base font-semibold">{ data.Brand }</span>
+						</a>
+						if len(data.Nav) > 0 {
+							<div class="hidden sm:flex items-center gap-1">
+								for _, item := range data.Nav {
+									<a class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+								}
+							</div>
+						}
+					</div>
+					<div class="flex items-center gap-2">
+						<!-- 主题切换按钮 -->
+						<button type="button" data-theme-toggle class="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-50 transition-colors cursor-pointer">
+							<svg class="theme-icon-sun hidden h-4 w-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+							<svg class="theme-icon-moon h-4 w-4 text-zinc-700 dark:text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+						</button>
+
+						<!-- 桌面端会话入口 -->
+						if data.SessionForm {
+							<form class="hidden sm:block" method="post" action={ data.SessionHref }>
+								if data.CSRF != "" {
+									<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+								}
+								<button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.SessionLabel }</button>
+							</form>
+						} else if data.SessionLabel != "" {
+							<a class="hidden sm:inline-flex rounded-lg bg-zinc-950 px-3 py-1.5 text-xs sm:text-sm font-medium text-white shadow-2xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors" href={ data.SessionHref }>{ data.SessionLabel }</a>
+						}
+
+						<!-- 移动端汉堡菜单触发按钮 -->
+						if len(data.Nav) > 0 || data.SessionLabel != "" {
+							<button id="mobile-nav-toggle" type="button" class="sm:hidden flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors cursor-pointer">
+								<svg id="mobile-nav-icon-bars" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"></line><line x1="4" x2="20" y1="6" y2="6"></line><line x1="4" x2="20" y1="18" y2="18"></line></svg>
+								<svg id="mobile-nav-icon-close" class="hidden h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+							</button>
+						}
+					</div>
+				</nav>
+
+				<!-- 移动端抽屉遮罩与下拉菜单 -->
+				<div id="mobile-nav-backdrop" class="fixed inset-0 z-40 bg-zinc-950/40 backdrop-blur-xs hidden sm:hidden"></div>
+				<div id="mobile-nav-menu" class="hidden sm:hidden relative z-50 border-t border-zinc-200/80 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/95 backdrop-blur-md p-4 space-y-3 shadow-lg">
+					if len(data.Nav) > 0 {
+						<div class="space-y-1">
+							for _, item := range data.Nav {
+								<a class="flex items-center min-h-11 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+							}
+						</div>
 					}
 					if data.SessionForm {
-						<form class="ml-auto" method="post" action={ data.SessionHref }>
+						<form class="pt-2 border-t border-zinc-100 dark:border-zinc-800" method="post" action={ data.SessionHref }>
 							if data.CSRF != "" {
 								<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 							}
-							<button class="text-sm text-slate-600 hover:text-slate-900" type="submit">{ data.SessionLabel }</button>
+							<button class="w-full flex items-center justify-center min-h-11 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.SessionLabel }</button>
 						</form>
 					} else if data.SessionLabel != "" {
-						<a class="ml-auto text-sm text-slate-600 hover:text-slate-900" href={ data.SessionHref }>{ data.SessionLabel }</a>
+						<div class="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+							<a class="w-full flex items-center justify-center min-h-11 rounded-xl bg-zinc-950 px-4 py-2.5 text-sm font-semibold text-white shadow-2xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors" href={ data.SessionHref }>{ data.SessionLabel }</a>
+						</div>
 					}
-				</nav>
+				</div>
 			</header>
-			<main class="mx-auto max-w-3xl px-4 py-8">
+			<main class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
 				{ children... }
 			</main>
-			<footer class="mx-auto max-w-3xl px-4 pb-8 text-xs text-slate-400">
-				{ data.Footer }
+			<footer class="border-t border-zinc-200/60 bg-white dark:border-zinc-800/80 dark:bg-zinc-900">
+				<div class="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 py-6 sm:px-6 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+					<p>{ data.Footer }</p>
+				</div>
 			</footer>
-			<script src="/pwa.js" defer></script>
 		</body>
 	</html>
 }

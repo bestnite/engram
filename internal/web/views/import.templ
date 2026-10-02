@@ -3,85 +3,112 @@ package views
 // ImportPage 渲染卡组包上传页：上传表单 + 可选的导入摘要/错误（M5-9）。
 templ ImportPage(data ImportPageData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		<p class="mt-2 text-slate-600">{ data.Intro }</p>
-		if data.ErrorMessage != "" {
-			<div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{ data.ErrorMessage }</div>
-		}
-		<form class="mt-6 space-y-3 rounded-lg border border-slate-200 bg-white p-4" method="post" action={ data.FormAction } enctype="multipart/form-data">
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label class="block text-sm text-slate-700">
-				<span>{ data.FileLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="file" name="file"/>
-			</label>
-			<label class="block text-sm text-slate-700">
-				<span>{ data.TargetLabel }</span>
-				<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="target">
-					for _, opt := range data.Targets {
-						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-					}
-				</select>
-			</label>
-			<label class="block text-sm text-slate-700">
-				<span>{ data.DeckIDLabel }</span>
-				<input class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" type="text" name="deck_id" value=""/>
-			</label>
-			<label class="block text-sm text-slate-700">
-				<span>{ data.OnConflictLabel }</span>
-				<select class="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm" name="on_conflict">
-					for _, opt := range data.OnConflicts {
-						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-					}
-				</select>
-			</label>
-			<label class="flex items-center gap-2 text-sm text-slate-700">
-				<input type="checkbox" name="dry_run" value="1"/>
-				<span>{ data.DryRunLabel }</span>
-			</label>
-			if data.AllowOthersShow {
-				<label class="flex items-center gap-2 text-sm text-slate-700">
-					<input type="checkbox" name="allow_others_progress" value="1"/>
-					<span>{ data.AllowOthersLabel }</span>
-				</label>
-			}
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SubmitLabel }</button>
-		</form>
+		<div class="mx-auto max-w-3xl space-y-8">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+			</div>
 
-		if data.Result != nil {
-			<section class="mt-8 border-t border-slate-200 pt-6">
-				<h2 class="text-lg font-semibold text-slate-900">{ data.Result.Heading }</h2>
-				<table class="mt-3 w-full text-left text-sm">
-					<tbody>
-						for _, row := range data.Result.Rows {
-							<tr class="border-b border-slate-100">
-								<td class="py-2 pr-3 text-slate-500">{ row.Label }</td>
-								<td class="py-2 font-medium text-slate-800">{ row.Value }</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-				<h3 class="mt-6 text-sm font-semibold text-slate-500">{ data.Result.ErrorsHead }</h3>
-				if len(data.Result.Errors) == 0 {
-					<p class="mt-2 text-sm text-slate-500">{ data.Result.NoErrors }</p>
-				} else {
-					<table class="mt-2 w-full text-left text-sm">
-						<thead>
-							<tr class="border-b border-slate-200 text-xs text-slate-400">
-								<th class="py-2 pr-3 font-medium">{ data.Result.ColEntry }</th>
-								<th class="py-2 font-medium">{ data.Result.ColReason }</th>
-							</tr>
-						</thead>
-						<tbody>
-							for _, e := range data.Result.Errors {
-								<tr class="border-b border-slate-100 align-top">
-									<td class="py-2 pr-3 text-slate-700">{ e.Entry }</td>
-									<td class="py-2 text-slate-700">{ e.Reason }</td>
-								</tr>
+			if data.ErrorMessage != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ data.ErrorMessage }
+				</div>
+			}
+
+			<!-- 上传表单卡片 -->
+			<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+				<form class="space-y-5" method="post" action={ data.FormAction } enctype="multipart/form-data">
+					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.FileLabel }</span>
+						<input class="mt-2 block w-full text-xs text-zinc-600 dark:text-zinc-300 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-950 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white file:shadow-2xs hover:file:bg-zinc-800 dark:file:bg-zinc-100 dark:file:text-zinc-950 dark:hover:file:bg-white file:cursor-pointer" type="file" name="file" required/>
+					</label>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.TargetLabel }</span>
+							<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="target">
+								for _, opt := range data.Targets {
+									<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+								}
+							</select>
+						</label>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DeckIDLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="deck_id" value=""/>
+						</label>
+					</div>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.OnConflictLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="on_conflict">
+							for _, opt := range data.OnConflicts {
+								<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
 							}
-						</tbody>
-					</table>
-				}
-			</section>
-		}
+						</select>
+					</label>
+					<div class="space-y-2 pt-1">
+						<label class="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer">
+							<input type="checkbox" name="dry_run" value="1" class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"/>
+							<span>{ data.DryRunLabel }</span>
+						</label>
+						if data.AllowOthersShow {
+							<label class="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer">
+								<input type="checkbox" name="allow_others_progress" value="1" class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"/>
+								<span>{ data.AllowOthersLabel }</span>
+							</label>
+						}
+					</div>
+					<div class="pt-3 border-t border-zinc-100 dark:border-zinc-800">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SubmitLabel }</button>
+					</div>
+				</form>
+			</div>
+
+			<!-- 导入结果摘要 -->
+			if data.Result != nil {
+				<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+					<div>
+						<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Result.Heading }</h2>
+					</div>
+					<div class="overflow-hidden rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50">
+						<table class="w-full text-left text-sm">
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+								for _, row := range data.Result.Rows {
+									<tr>
+										<td class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 w-1/3">{ row.Label }</td>
+										<td class="px-4 py-3 font-mono text-sm font-medium text-zinc-900 dark:text-zinc-100">{ row.Value }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+
+					<div class="space-y-3">
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.Result.ErrorsHead }</h3>
+						if len(data.Result.Errors) == 0 {
+							<p class="text-xs font-medium text-zinc-400 dark:text-zinc-500">{ data.Result.NoErrors }</p>
+						} else {
+							<div class="overflow-hidden rounded-xl border border-rose-100 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20">
+								<table class="w-full text-left text-sm">
+									<thead class="border-b border-rose-100 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/40 text-xs font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+										<tr>
+											<th class="px-4 py-3">{ data.Result.ColEntry }</th>
+											<th class="px-4 py-3">{ data.Result.ColReason }</th>
+										</tr>
+									</thead>
+									<tbody class="divide-y divide-rose-100 dark:divide-rose-900/40">
+										for _, e := range data.Result.Errors {
+											<tr class="align-top text-xs text-rose-900 dark:text-rose-200">
+												<td class="px-4 py-3 font-mono font-medium">{ e.Entry }</td>
+												<td class="px-4 py-3">{ e.Reason }</td>
+											</tr>
+										}
+									</tbody>
+								</table>
+							</div>
+						}
+					</div>
+				</section>
+			}
+		</div>
 	}
 }

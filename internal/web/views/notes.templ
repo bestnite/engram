@@ -4,109 +4,149 @@ package views
 // 模板不含任何硬编码用户文案，所有字符串都来自 NoteListData。
 templ NoteListPage(data NoteListData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if data.DeckName != "" {
-			<p class="mt-1 text-sm text-slate-500">{ data.DeckName }</p>
-		}
-		<p class="mt-2">
-			<a class="text-sm text-blue-600 hover:text-blue-700" href={ data.NewNoteHref }>{ data.NewNoteLabel }</a>
-		</p>
-		<form class="mt-2" method="post" action={ data.CloneAction }>
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<button class="text-sm text-blue-600 hover:text-blue-700" type="submit">{ data.CloneLabel }</button>
-		</form>
-		<form class="mt-4 flex flex-wrap items-end gap-3" method="get" action={ data.FilterAction }>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.SearchLabel }</span>
-				<input class="mt-1 w-56 rounded-lg border border-slate-300 px-3 py-2" type="text" name="q" value={ data.SearchValue } placeholder={ data.SearchPlaceholder }/>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.TagLabel }</span>
-				<input class="mt-1 w-40 rounded-lg border border-slate-300 px-3 py-2" type="text" name="tag" value={ data.TagValue } placeholder={ data.TagPlaceholder }/>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.KindLabel }</span>
-				<select class="mt-1 rounded-lg border border-slate-300 px-3 py-2" name="kind">
-					for _, opt := range data.Kinds {
-						if opt.Selected {
-							<option value={ opt.Value } selected>{ opt.Label }</option>
-						} else {
-							<option value={ opt.Value }>{ opt.Label }</option>
-						}
+		<div class="space-y-6">
+			<!-- 头部信息与快捷操作 -->
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div>
+					<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+					if data.DeckName != "" {
+						<p class="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">{ data.DeckName }</p>
 					}
-				</select>
-			</label>
-			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.StatusLabel }</span>
-				<select class="mt-1 rounded-lg border border-slate-300 px-3 py-2" name="status">
-					for _, opt := range data.Statuses {
-						if opt.Selected {
-							<option value={ opt.Value } selected>{ opt.Label }</option>
-						} else {
-							<option value={ opt.Value }>{ opt.Label }</option>
-						}
-					}
-				</select>
-			</label>
-			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.FilterSubmit }</button>
-			<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.ResetHref }>{ data.FilterReset }</a>
-		</form>
-		<form class="mt-6" method="post" action={ data.BulkAction }>
-			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<input type="hidden" name="redirect" value={ data.Redirect }/>
-			<div class="flex flex-wrap items-center gap-3">
-				<p class="text-sm text-slate-500">{ data.BulkHint }</p>
-				<button class="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50" type="submit" name="action" value="delete">{ data.BulkDeleteLabel }</button>
-				<input class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm" type="text" name="tag" aria-label={ data.BulkTagPlaceholder } placeholder={ data.BulkTagPlaceholder }/>
-				<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" type="submit" name="action" value="tag">{ data.BulkTagLabel }</button>
+				</div>
+				<div class="flex flex-wrap items-center gap-2.5">
+					<a class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all" href={ data.NewNoteHref }>
+						<svg class="mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+						{ data.NewNoteLabel }
+					</a>
+					<form method="post" action={ data.CloneAction }>
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="submit">
+							<svg class="mr-1.5 h-4 w-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+							{ data.CloneLabel }
+						</button>
+					</form>
+				</div>
 			</div>
-			<table class="mt-3 w-full border-collapse text-left text-sm">
-				<thead>
-					<tr class="border-b border-slate-200 text-slate-500">
-						<th class="px-2 py-2"></th>
-						<th class="px-2 py-2">{ data.ColKind }</th>
-						<th class="px-2 py-2">{ data.ColFront }</th>
-						<th class="px-2 py-2">{ data.ColTags }</th>
-						<th class="px-2 py-2">{ data.ColCreated }</th>
-						<th class="px-2 py-2">{ data.ColStatus }</th>
-					</tr>
-				</thead>
-				<tbody>
-					if len(data.Rows) == 0 {
-						<tr>
-							<td class="px-2 py-6 text-center text-slate-400" colspan="6">{ data.EmptyText }</td>
-						</tr>
-					}
-					for _, row := range data.Rows {
-						<tr class="border-b border-slate-100 align-top">
-							<td class="px-2 py-2">
-								<input type="checkbox" name="note_ids" value={ row.IDValue } aria-label={ row.Front }/>
-							</td>
-							<td class="px-2 py-2 text-slate-600">{ row.KindLabel }</td>
-							<td class="px-2 py-2">
-								<a class="text-blue-600 hover:text-blue-700" href={ row.EditHref }>{ row.Front }</a>
-							</td>
-							<td class="px-2 py-2">
-								for _, tag := range row.Tags {
-									<span class="mr-1 inline-block rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{ tag }</span>
+
+			<!-- 检索与筛选栏 -->
+			<div class="rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+				<form class="flex flex-wrap items-end gap-3" method="get" action={ data.FilterAction }>
+					<label class="block flex-1 min-w-[200px]">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.SearchLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="q" value={ data.SearchValue } placeholder={ data.SearchPlaceholder }/>
+					</label>
+					<label class="block w-36 sm:w-44">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.TagLabel }</span>
+						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="tag" value={ data.TagValue } placeholder={ data.TagPlaceholder }/>
+					</label>
+					<label class="block w-32 sm:w-36">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.KindLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="kind">
+							for _, opt := range data.Kinds {
+								if opt.Selected {
+									<option value={ opt.Value } selected>{ opt.Label }</option>
+								} else {
+									<option value={ opt.Value }>{ opt.Label }</option>
 								}
-							</td>
-							<td class="px-2 py-2 text-slate-500">{ row.Created }</td>
-							<td class="px-2 py-2 text-slate-500">{ row.StatusLabel }</td>
-						</tr>
+							}
+						</select>
+					</label>
+					<label class="block w-32 sm:w-36">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.StatusLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="status">
+							for _, opt := range data.Statuses {
+								if opt.Selected {
+									<option value={ opt.Value } selected>{ opt.Label }</option>
+								} else {
+									<option value={ opt.Value }>{ opt.Label }</option>
+								}
+							}
+						</select>
+					</label>
+					<div class="flex items-center gap-2">
+						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.FilterSubmit }</button>
+						<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ data.ResetHref }>{ data.FilterReset }</a>
+					</div>
+				</form>
+			</div>
+
+			<!-- 批量操作与表格表单 -->
+			<form class="space-y-4" method="post" action={ data.BulkAction }>
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+				<input type="hidden" name="redirect" value={ data.Redirect }/>
+				<div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/70 dark:border-zinc-800 dark:bg-zinc-800/50 px-4 py-2.5 text-sm">
+					<p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{ data.BulkHint }</p>
+					<div class="flex flex-wrap items-center gap-2">
+						<button class="inline-flex items-center rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors cursor-pointer" type="submit" name="action" value="delete">{ data.BulkDeleteLabel }</button>
+						<input class="w-32 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 transition-colors" type="text" name="tag" aria-label={ data.BulkTagPlaceholder } placeholder={ data.BulkTagPlaceholder }/>
+						<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit" name="action" value="tag">{ data.BulkTagLabel }</button>
+					</div>
+				</div>
+
+				<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+					<div class="overflow-x-auto">
+						<table class="w-full border-collapse text-left text-sm">
+							<thead class="border-b border-zinc-200/80 bg-zinc-50/70 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400">
+								<tr>
+									<th class="w-10 px-4 py-3.5 sm:px-5"></th>
+									<th class="px-4 py-3.5">{ data.ColKind }</th>
+									<th class="px-4 py-3.5">{ data.ColFront }</th>
+									<th class="px-4 py-3.5">{ data.ColTags }</th>
+									<th class="px-4 py-3.5">{ data.ColCreated }</th>
+									<th class="px-4 py-3.5 sm:px-5">{ data.ColStatus }</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+								if len(data.Rows) == 0 {
+									<tr>
+										<td class="px-4 py-12 text-center text-sm font-medium text-zinc-400 dark:text-zinc-500" colspan="6">{ data.EmptyText }</td>
+									</tr>
+								}
+								for _, row := range data.Rows {
+									<tr class="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors align-top">
+										<td class="px-4 py-3.5 sm:px-5">
+											<input type="checkbox" name="note_ids" value={ row.IDValue } aria-label={ row.Front } class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"/>
+										</td>
+										<td class="px-4 py-3.5">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">{ row.KindLabel }</span>
+										</td>
+										<td class="px-4 py-3.5">
+											<a class="font-medium text-zinc-950 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2" href={ row.EditHref }>{ row.Front }</a>
+										</td>
+										<td class="px-4 py-3.5">
+											<div class="flex flex-wrap gap-1">
+												for _, tag := range row.Tags {
+													<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-600 dark:text-zinc-400">{ tag }</span>
+												}
+											</div>
+										</td>
+										<td class="px-4 py-3.5 font-mono text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{ row.Created }</td>
+										<td class="px-4 py-3.5 sm:px-5 whitespace-nowrap">
+											<span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">{ row.StatusLabel }</span>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</form>
+
+			<!-- 分页信息 -->
+			<div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-200/80 bg-white px-4 py-3 text-xs sm:text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 shadow-xs">
+				<div class="flex items-center gap-3">
+					<span class="font-medium text-zinc-900 dark:text-zinc-100">{ data.TotalLabel }</span>
+					<span>{ data.PageLabel }</span>
+				</div>
+				<div class="flex items-center gap-2">
+					if data.Pagination.PrevHref != "" {
+						<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.Pagination.PrevHref }>{ data.Pagination.PrevLabel }</a>
 					}
-				</tbody>
-			</table>
-		</form>
-		<div class="mt-4 flex items-center gap-4 text-sm text-slate-600">
-			<span>{ data.TotalLabel }</span>
-			<span>{ data.PageLabel }</span>
-			if data.Pagination.PrevHref != "" {
-				<a class="text-blue-600 hover:text-blue-700" href={ data.Pagination.PrevHref }>{ data.Pagination.PrevLabel }</a>
-			}
-			if data.Pagination.NextHref != "" {
-				<a class="text-blue-600 hover:text-blue-700" href={ data.Pagination.NextHref }>{ data.Pagination.NextLabel }</a>
-			}
+					if data.Pagination.NextHref != "" {
+						<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.Pagination.NextHref }>{ data.Pagination.NextLabel }</a>
+					}
+				</div>
+			</div>
 		</div>
 	}
 }
@@ -114,32 +154,42 @@ templ NoteListPage(data NoteListData) {
 // NoteEditPage 渲染卡片编辑页：字段表单 + htmx 实时预览区（M2-7）。
 templ NoteEditPage(data NoteEditData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		<p class="mt-1 text-sm text-slate-500">{ data.KindLabel }</p>
-		if data.Deleted {
-			<p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">{ data.DeletedNotice }</p>
-		}
-		if data.ErrorMessage != "" {
-			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
-		}
-		<div class="mt-6 grid gap-6 lg:grid-cols-2">
-			<form method="post" action={ data.Action }>
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<input type="hidden" name="note_id" value={ data.NoteID }/>
-				for _, field := range data.Fields {
-					<label class="mt-3 block">
-						<span class="text-sm font-medium text-slate-700">{ field.Label }</span>
-						<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ data.PreviewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
-					</label>
-				}
-				<div class="mt-4 flex items-center gap-3">
-					<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
-					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+				<p class="mt-1 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{ data.KindLabel }</p>
+			</div>
+			if data.Deleted {
+				<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 shadow-xs">
+					{ data.DeletedNotice }
 				</div>
-			</form>
-			@MediaUploadForm(data.Upload, data.CSRF)
-			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
-				@NotePreviewFragment(data.Preview)
+			}
+			if data.ErrorMessage != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ data.ErrorMessage }
+				</div>
+			}
+			<div class="grid gap-8 lg:grid-cols-2">
+				<div class="space-y-6">
+					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action }>
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<input type="hidden" name="note_id" value={ data.NoteID }/>
+						for _, field := range data.Fields {
+							<label class="block">
+								<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ field.Label }</span>
+								<textarea class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 font-mono text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" name={ "field." + field.Name } rows="4" hx-post={ data.PreviewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+							</label>
+						}
+						<div class="flex items-center gap-3 pt-2">
+							<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SaveLabel }</button>
+							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ data.BackHref }>{ data.BackLabel }</a>
+						</div>
+					</form>
+					@MediaUploadForm(data.Upload, data.CSRF)
+				</div>
+				<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
+					@NotePreviewFragment(data.Preview)
+				</div>
 			</div>
 		</div>
 	}
@@ -148,19 +198,27 @@ templ NoteEditPage(data NoteEditData) {
 // NotePreviewFragment 是预览区：既作为编辑页初始内容，也作为 htmx 局部刷新的返回片段。
 templ NotePreviewFragment(data NotePreviewData) {
 	<div class="space-y-4">
-		<p class="text-sm font-semibold text-slate-500">{ data.Title }</p>
+		<div class="flex items-center justify-between">
+			<p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{ data.Title }</p>
+		</div>
 		if data.Error != "" {
-			<p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.Error }</p>
+			<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+				{ data.Error }
+			</div>
 		}
 		for _, card := range data.Cards {
-			<div class="rounded-lg border border-slate-200 bg-white p-4">
-				<p class="mt-3 text-xs font-medium text-slate-400">{ data.FrontLabel }</p>
-				<div class="mt-1 text-slate-800">
-					@rawHTML(card.FrontHTML)
+			<div class="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+				<div>
+					<p class="text-[11px] font-semibold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{ data.FrontLabel }</p>
+					<div class="mt-2 text-base text-zinc-900 dark:text-zinc-100 leading-relaxed">
+						@rawHTML(card.FrontHTML)
+					</div>
 				</div>
-				<p class="mt-3 text-xs font-medium text-slate-400">{ data.BackLabel }</p>
-				<div class="mt-1 text-slate-800">
-					@rawHTML(card.BackHTML)
+				<div class="border-t border-dashed border-zinc-200 dark:border-zinc-800 pt-4">
+					<p class="text-[11px] font-semibold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">{ data.BackLabel }</p>
+					<div class="mt-2 text-base text-zinc-900 dark:text-zinc-100 leading-relaxed">
+						@rawHTML(card.BackHTML)
+					</div>
 				</div>
 			</div>
 		}
@@ -171,32 +229,40 @@ templ NotePreviewFragment(data NotePreviewData) {
 // 选择题型时用 htmx 拉取该题型的字段区，避免整页刷新。
 templ NoteCreatePage(data NewNoteData) {
 	@Base(data.Layout) {
-		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
-		if data.ErrorMessage != "" {
-			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{ data.ErrorMessage }</p>
-		}
-		<div class="mt-6 grid gap-6 lg:grid-cols-2">
-			<form method="post" action={ data.Action }>
-				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label class="mt-3 block">
-					<span class="text-sm font-medium text-slate-700">{ data.KindLabel }</span>
-					<select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="kind" hx-get={ data.FieldsURL } hx-target="#new-note-fields" hx-include="closest form" hx-trigger="change">
-						for _, opt := range data.Kinds {
-							<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-						}
-					</select>
-				</label>
-				<div id="new-note-fields">
-					@NoteFieldsFragment(data.Fields, data.PreviewURL)
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
+			</div>
+			if data.ErrorMessage != "" {
+				<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+					{ data.ErrorMessage }
 				</div>
-				<div class="mt-4 flex items-center gap-3">
-					<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">{ data.SaveLabel }</button>
-					<a class="text-sm text-slate-600 hover:text-slate-900" href={ data.BackHref }>{ data.BackLabel }</a>
+			}
+			<div class="grid gap-8 lg:grid-cols-2">
+				<div class="space-y-6">
+					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action }>
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.KindLabel }</span>
+							<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="kind" hx-get={ data.FieldsURL } hx-target="#new-note-fields" hx-include="closest form" hx-trigger="change">
+								for _, opt := range data.Kinds {
+									<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+								}
+							</select>
+						</label>
+						<div id="new-note-fields">
+							@NoteFieldsFragment(data.Fields, data.PreviewURL)
+						</div>
+						<div class="flex items-center gap-3 pt-2">
+							<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SaveLabel }</button>
+							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ data.BackHref }>{ data.BackLabel }</a>
+						</div>
+					</form>
+					@MediaUploadForm(data.Upload, data.CSRF)
 				</div>
-			</form>
-			@MediaUploadForm(data.Upload, data.CSRF)
-			<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
-				@NotePreviewFragment(data.Preview)
+				<div id="note-preview" hx-on::after-swap="if(window.MathJax){window.MathJax.typesetPromise()}">
+					@NotePreviewFragment(data.Preview)
+				</div>
 			</div>
 		</div>
 	}
@@ -207,20 +273,22 @@ templ NoteCreatePage(data NewNoteData) {
 templ NoteFieldsFragment(fields []CreateField, previewURL string) {
 	for _, field := range fields {
 		<label class="mt-3 block">
-			<span class="text-sm font-medium text-slate-700">{ field.Label }</span>
+			<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ field.Label }</span>
 			if field.Input == "checkbox" {
-				<input class="mt-1" type="checkbox" name={ "field." + field.Name } value="true" checked?={ field.Checked } hx-post={ previewURL } hx-trigger="change" hx-target="#note-preview" hx-include="closest form"/>
+				<div class="mt-1.5 flex items-center">
+					<input class="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900" type="checkbox" name={ "field." + field.Name } value="true" checked?={ field.Checked } hx-post={ previewURL } hx-trigger="change" hx-target="#note-preview" hx-include="closest form"/>
+				</div>
 			} else if field.Input == "number" {
-				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" step="any" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="number" step="any" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
 			} else if field.Input == "textarea" {
-				<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+				<textarea class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 font-mono text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
 			} else if field.Input == "lines" {
-				<textarea class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
+				<textarea class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 font-mono text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" name={ "field." + field.Name } rows="4" hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form">{ field.Value }</textarea>
 			} else {
-				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
+				<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name={ "field." + field.Name } value={ field.Value } hx-post={ previewURL } hx-trigger="keyup changed delay:300ms, change" hx-target="#note-preview" hx-include="closest form"/>
 			}
 			if field.Hint != "" {
-				<p class="mt-1 text-xs text-slate-400">{ field.Hint }</p>
+				<p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{ field.Hint }</p>
 			}
 		</label>
 	}
@@ -230,17 +298,17 @@ templ NoteFieldsFragment(fields []CreateField, previewURL string) {
 // media.js 把 Markdown 图片引用插入当前聚焦字段并刷新预览。文案与失败提示全部来自数据。
 templ MediaUploadForm(data MediaUploadData, csrf string) {
 	if !data.Disabled {
-		<form class="mt-4 rounded-lg border border-dashed border-slate-300 p-3" method="post" action={ data.URL } enctype="multipart/form-data" data-media-upload data-msg-inserted={ data.Inserted } data-msg-too-large={ data.ErrTooLarge } data-msg-mime={ data.ErrMime } data-msg-magic={ data.ErrMagic } data-msg-generic={ data.ErrGeneric }>
+		<form class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/50 p-4 sm:p-5 shadow-2xs dark:border-zinc-700 dark:bg-zinc-900/50" method="post" action={ data.URL } enctype="multipart/form-data" data-media-upload data-msg-inserted={ data.Inserted } data-msg-too-large={ data.ErrTooLarge } data-msg-mime={ data.ErrMime } data-msg-magic={ data.ErrMagic } data-msg-generic={ data.ErrGeneric }>
 			<input type="hidden" name="csrf_token" value={ csrf }/>
 			<label class="block">
-				<span class="text-sm font-medium text-slate-700">{ data.Label }</span>
-				<input class="mt-1 block w-full text-sm" type="file" name="file" accept={ data.Accept }/>
+				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.Label }</span>
+				<input class="mt-2 block w-full text-xs text-zinc-600 dark:text-zinc-300 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-950 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white file:shadow-2xs hover:file:bg-zinc-800 dark:file:bg-zinc-100 dark:file:text-zinc-950 dark:hover:file:bg-white file:cursor-pointer" type="file" name="file" accept={ data.Accept }/>
 			</label>
-			<div class="mt-2 flex flex-wrap items-center gap-3">
-				<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" type="submit">{ data.Button }</button>
-				<p class="text-xs text-slate-400">{ data.Hint }</p>
+			<div class="mt-3 flex flex-wrap items-center gap-3">
+				<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ data.Button }</button>
+				<p class="text-xs text-zinc-400 dark:text-zinc-500">{ data.Hint }</p>
 			</div>
-			<p class="mt-2 text-sm" data-media-status></p>
+			<p class="mt-2 text-xs font-medium" data-media-status></p>
 		</form>
 	}
 }
