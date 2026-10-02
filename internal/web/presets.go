@@ -345,12 +345,16 @@ func (s *Server) applyResultToCard(loc *i18n.Localizer, card *views.PresetCardDa
 	}
 	card.ResultTitle = loc.T("presets.optimize.result_title")
 	card.ResultReviews = loc.Tf("presets.optimize.result_reviews", map[string]any{"count": result.ReviewsUsed})
-	card.ResultBefore = fitText(loc, "presets.optimize.result_before", result.FitBefore)
-	card.ResultAfter = fitText(loc, "presets.optimize.result_after", result.FitAfter)
-	if result.Improved() {
-		card.ResultVerdict = loc.T("presets.optimize.improved")
-	} else {
-		card.ResultVerdict = loc.T("presets.optimize.not_improved")
+	// 只有真的算出了指标（至少覆盖一个可预测 item）才渲染对比与「改善/未改善」结论：
+	// 否则零值会被 Improved() 判成「未改善」，等于在没有任何证据时告诉用户优化没用。
+	if result.FitBefore.Available() && result.FitAfter.Available() {
+		card.ResultBefore = fitText(loc, "presets.optimize.result_before", result.FitBefore)
+		card.ResultAfter = fitText(loc, "presets.optimize.result_after", result.FitAfter)
+		if result.Improved() {
+			card.ResultVerdict = loc.T("presets.optimize.improved")
+		} else {
+			card.ResultVerdict = loc.T("presets.optimize.not_improved")
+		}
 	}
 }
 

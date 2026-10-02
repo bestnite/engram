@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"example.com/engram/internal/schedule"
 	"example.com/engram/internal/store"
 )
 
@@ -167,11 +169,14 @@ func (o *Optimizer) CommandBuilder() CommandBuilder {
 	}
 }
 
-// Complete 解析适配器写出的权重文件，产出交给 FinishOptimize 的结果。
+// Complete 解析适配器写出的权重文件，算出优化前后的拟合指标，产出交给 FinishOptimize 的结果。
 //
-// 说明：M9-5 要求的 FitBefore/FitAfter 拟合指标目前在代码里没有任何计算实现，这里
-// 刻意留零值（零值即「未提供」），不臆造公式；补齐需要 DESIGN.md 决策。
-func (o *Optimizer) Complete(_ context.Context, job *store.Job, _ Command, _ string) (store.OptimizeResult, error) {
+// 拟合指标（ROADMAP.md M9-11）：用适配器训练所用的同一份复习日志，在 preset 当前权重（旧）与
+// 适配器产出的新权重下各回放一次，得到 FitBefore/FitAfter，页面据此给出真实的「改善/未改善」。
+// 旧权重必须在 FinishOptimize 写回之前从 preset 读出——本函数在写回前跑，正好读到旧值。
+// 指标算不出来（无目标预设、日志不可读、无任何可预测 item）时不失败：权重本身仍然有效，
+// 留零值表示「不可用」，页面会隐藏结论而不是污蔑成「未改善」。
+func (o *Optimizer) Complete(ctx context.Context, job *store.Job, _ Command, _ string) (store.OptimizeResult, error) {
 	dir := o.jobDir(job)
 	defer func() {
 		if err := os.RemoveAll(dir); err != nil {
@@ -195,11 +200,65 @@ func (o *Optimizer) Complete(_ context.Context, job *store.Job, _ Command, _ str
 	if err != nil {
 		return store.OptimizeResult{}, fmt.Errorf("count exported reviews: %w", err)
 	}
-	return store.OptimizeResult{
+	result := store.OptimizeResult{
 		ReviewsUsed: used,
 		Weights:     weights,
 		OptimizedAt: o.now(),
-	}, nil
+	}
+	before, after, fitErr := o.fitMetrics(ctx, job, weights)
+	if fitErr != nil {
+		// 指标是页面的锦上添花，不是作业成功的条件：记录原因，留零值让页面隐藏结论。
+		o.logger.Warn("compute optimizer fit metrics failed", "job_id", job.ID, "error", fitErr)
+	} else {
+		result.FitBefore = before
+		result.FitAfter = after
+	}
+	return result, nil
+}
+
+// fitMetrics 在适配器训练所用的复习日志上，用 preset 旧权重与新权重各评估一次拟合。
+// 日志与 preset 都在作业工作目录被删除前读取（Complete 的 defer 负责删除）。
+func (o *Optimizer) fitMetrics(ctx context.Context, job *store.Job, newWeights []float64) (store.FitMetrics, store.FitMetrics, error) {
+	if job.TargetID == nil || *job.TargetID == 0 {
+		return store.FitMetrics{}, store.FitMetrics{}, errors.New("optimize job has no target preset; cannot load the old weights")
+	}
+	// 旧权重来自 preset：FinishOptimize 会在本函数之后才写回新权重，所以这里读到的是优化前的值。
+	preset, err := store.NewPresetStore(o.db).ByID(ctx, *job.TargetID)
+	if err != nil {
+		return store.FitMetrics{}, store.FitMetrics{}, fmt.Errorf("load preset %d for fit metrics: %w", *job.TargetID, err)
+	}
+	logs, err := readOptimizerLog(filepath.Join(o.jobDir(job), "review-log.jsonl"))
+	if err != nil {
+		return store.FitMetrics{}, store.FitMetrics{}, err
+	}
+	before, after, err := schedule.CompareFit(preset, newWeights, logs)
+	if err != nil {
+		return store.FitMetrics{}, store.FitMetrics{}, fmt.Errorf("compare fit: %w", err)
+	}
+	return store.FitMetrics{LogLoss: before.LogLoss, RMSE: before.RMSE},
+		store.FitMetrics{LogLoss: after.LogLoss, RMSE: after.RMSE}, nil
+}
+
+// readOptimizerLog 读回作业目录里的 review-log.jsonl（适配器刚训练过的那一份）。
+func readOptimizerLog(path string) ([]store.OptimizerReviewLog, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open optimizer review log: %w", err)
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	var logs []store.OptimizerReviewLog
+	for {
+		var row store.OptimizerReviewLog
+		if err := dec.Decode(&row); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("decode optimizer review log: %w", err)
+		}
+		logs = append(logs, row)
+	}
+	return logs, nil
 }
 
 // ownerUserID 从作业目标预设反查复习日志的归属者（作业只带 preset_id，日志按用户统计）。
