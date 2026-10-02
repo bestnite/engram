@@ -65,6 +65,13 @@ func mediaSettingSpecs() []settingSpec {
 			labelKey: "admin.setting.media_allowed_mimes", hintKey: "admin.setting.media_allowed_mimes.hint",
 			def: func(*i18n.Localizer) string { return strings.Join(media.DefaultAllowedMimes(), ", ") },
 		},
+		{
+			// 每用户媒体总量配额（M2-13）：0 = 不限（默认）。0 沿用项目既有约定（每日上限也用 0 表示不限），
+			// 不是一个被自拟的具体数字；未配置时显示 0，管理员填入正数即启用。
+			key: settingKeyMediaUserQuotaBytes, envVar: envMediaUserQuotaBytes,
+			labelKey: "media.quota.setting.label", hintKey: "media.quota.setting.hint",
+			def: func(*i18n.Localizer) string { return "0" },
+		},
 	}
 }
 
@@ -323,6 +330,12 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		case settingKeyMediaAllowedMimes:
 			if len(splitMimeList(raw)) == 0 {
 				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_mime")
+				return
+			}
+		case settingKeyMediaUserQuotaBytes:
+			// 0 = 不限（默认），负数无意义；空值在上面已按“不修改”跳过。
+			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n < 0 {
+				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_number")
 				return
 			}
 		}

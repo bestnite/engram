@@ -1,8 +1,12 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -20,8 +24,11 @@ import (
 const (
 	settingKeyMediaMaxBytes     = "media_max_bytes"
 	settingKeyMediaAllowedMimes = "media_allowed_mimes"
-	envMediaMaxBytes            = "MEDIA_MAX_BYTES"
-	envMediaAllowedMimes        = "MEDIA_ALLOWED_MIMES"
+	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限（M2-13）。
+	settingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
+	envMediaMaxBytes              = "MEDIA_MAX_BYTES"
+	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
+	envMediaUserQuotaBytes        = "MEDIA_USER_QUOTA_BYTES"
 )
 
 // registerMediaRoutes 挂载媒体上传与读取（M2-8）。依赖未装配时跳过。
@@ -92,6 +99,26 @@ func (s *Server) allowedMimes(ctx context.Context) []string {
 	return media.DefaultAllowedMimes()
 }
 
+// userMediaQuota 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
+// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字（M2-13）。
+func (s *Server) userMediaQuota(ctx context.Context) int64 {
+	if raw := strings.TrimSpace(os.Getenv(envMediaUserQuotaBytes)); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	if s.db != nil {
+		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
+			if raw, ok := settings[settingKeyMediaUserQuotaBytes]; ok {
+				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return 0
+}
+
 // splitMimeList 把逗号分隔的 mime 串切成去空白、去空项的小写列表。
 func splitMimeList(raw string) []string {
 	out := make([]string, 0, 4)
@@ -127,8 +154,30 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	if header != nil {
 		declared = header.Header.Get("Content-Type")
 	}
-	saved, err := s.media.Save(ctx, file, media.SaveOptions{
-		Limit:        s.uploadLimit(ctx),
+	fileLimit := s.uploadLimit(ctx)
+	// 先校验再落盘（M2-13）：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
+	// 全部拒绝判断都在这之后进行，通过后才交给存储层写临时文件 + rename，避免"写了一半
+	// 才发现超限"。内存占用以单文件上限为界，不随上传并发之外的规模增长。
+	raw, err := io.ReadAll(io.LimitReader(file, fileLimit+1))
+	if err != nil {
+		s.logger.Info("media upload read failed", "user_id", user.ID, "error", err)
+		writeMediaError(c, http.StatusBadRequest, "media_read_failed", "could not read the uploaded file")
+		return
+	}
+	if int64(len(raw)) > fileLimit {
+		status, code, msg := mediaErrorResponse(media.ErrTooLarge)
+		s.logger.Info("media upload rejected", "user_id", user.ID, "code", code)
+		writeMediaError(c, status, code, msg)
+		return
+	}
+	// 每用户总量配额：只在配置了正数限额时检查；0/未配置 = 不限。
+	if quota := s.userMediaQuota(ctx); quota > 0 {
+		if !s.checkMediaQuota(c, user, raw, quota) {
+			return
+		}
+	}
+	saved, err := s.media.Save(ctx, bytes.NewReader(raw), media.SaveOptions{
+		Limit:        fileLimit,
 		AllowedMimes: s.allowedMimes(ctx),
 		DeclaredMime: declared,
 		CreatedBy:    store.Ptr(user.ID),
@@ -152,6 +201,48 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		"mime":   saved.Mime,
 		"bytes":  saved.Bytes,
 		"url":    "/media/" + strconv.FormatUint(saved.ID, 10),
+	})
+}
+
+// checkMediaQuota 在落盘前检查每用户总量配额：已用量 + 本次新增量 > 限额即拒绝，
+// 写稳定 code media_quota_exceeded 与点名限额/已用量的本地化文案，返回 false。
+//
+// 已用量按“该用户 note 引用到的媒体去重求和”计（口径见 internal/store.UserMediaUsage）。
+// 若本次文件与该用户已计费的某个 blob 同 sha256，则新增量为 0（去重不重复收费）。
+func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, quota int64) bool {
+	ctx := c.Request.Context()
+	usage, err := store.UserMediaUsage(ctx, s.db, user.ID)
+	if err != nil {
+		s.logger.Error("media quota usage lookup failed", "user_id", user.ID, "error", err)
+		writeMediaError(c, http.StatusInternalServerError, "media_internal_error", "could not store the file")
+		return false
+	}
+	sum := sha256.Sum256(raw)
+	sha := hex.EncodeToString(sum[:])
+	extra := int64(len(raw))
+	if usage.Sha256[sha] {
+		extra = 0
+	}
+	if usage.Bytes+extra <= quota {
+		return true
+	}
+	s.logger.Info("media upload rejected",
+		"user_id", user.ID, "code", media.CodeQuotaExceeded, "used", usage.Bytes, "quota", quota)
+	writeMediaError(c, http.StatusRequestEntityTooLarge, media.CodeQuotaExceeded,
+		s.mediaQuotaMessage(c, usage.Bytes, quota))
+	return false
+}
+
+// mediaQuotaMessage 组装点名限额与已用量的本地化文案（DESIGN.md §8.3：用户可见文案走语言包）。
+// 本地化器缺失时回退英文兜底，绝不把数字藏起来。
+func (s *Server) mediaQuotaMessage(c *gin.Context, used, quota int64) string {
+	loc, ok := s.localizer(c)
+	if !ok || loc == nil {
+		return "media quota exceeded"
+	}
+	return loc.Tf("media.quota.exceeded", map[string]any{
+		"used":  humanBytes(used),
+		"limit": humanBytes(quota),
 	})
 }
 

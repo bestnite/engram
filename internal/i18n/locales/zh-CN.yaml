@@ -1497,3 +1497,11 @@
 - id: a11y.notes.bulk_tag
   translation: "要加到所选卡片上的标签"
 
+# ── 每用户媒体配额（M2-13）────────────────────────────────────
+- id: media.quota.exceeded
+  translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。删除部分媒体引用即可释放配额。"
+- id: media.quota.setting.label
+  translation: "每用户媒体配额（字节）"
+- id: media.quota.setting.hint
+  translation: "单个用户可引用的媒体总字节数。0 表示不限（默认）。"
+
