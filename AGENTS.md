@@ -7,11 +7,16 @@ not obvious from the code, the definition of "done", and the task backlog with s
 
 ## 1. Source of truth
 
-- `DESIGN.md` is the single source of truth for behaviour, data model, and scope.
-- If code and `DESIGN.md` disagree, one of them is a bug. Fix the code, or change
-  `DESIGN.md` in the same commit — never leave them inconsistent.
+- `DESIGN.md` is the single source of truth for behaviour, data model, and scope. It is
+  **not part of this repository**: the maintainer keeps it in the local working tree and it is
+  not committed (see `.gitignore`). Read it there before making a change; when you start from a
+  fresh worktree, the maintainer copies it in.
+- If code and `DESIGN.md` disagree, one of them is a bug. Fix the code and report the
+  disagreement: `DESIGN.md` is owned by the maintainer, who updates it.
 - Anything not decided in `DESIGN.md` (section 13 holds the open questions) must be asked
   or added there, not invented in code.
+- Code comments cite `DESIGN.md` sections as the reason a rule exists. Those citations stay:
+  they remain accurate for the maintainer and stripping them would delete the rationale.
 
 ---
 
@@ -117,7 +122,7 @@ this file, commit messages, and `DESIGN.md`.
 ```
 engram/
 ├── AGENTS.md                 # this file
-├── DESIGN.md                 # specification of record
+├── DESIGN.md                 # specification of record (maintainer-local, untracked)
 ├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
 ├── LICENSE
 ├── go.mod                    # module example.com/engram
@@ -172,7 +177,8 @@ A task is done only when all of the following hold:
 3. New behaviour has tests, including the negative cases named in the task.
 4. Logs are English, comments are Chinese, user-facing strings come from the catalog.
 5. The change is committed with a signed, conventional commit; `git status` is clean.
-6. If the change alters behaviour or decisions, `DESIGN.md` is updated in the same commit.
+6. If the change alters behaviour or decisions, report it in your final message so the
+   maintainer can update `DESIGN.md`; you cannot commit that file because it is not tracked.
 
 ---
 

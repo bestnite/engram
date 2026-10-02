@@ -50,3 +50,6 @@ testdata/local/
 
 # ── 本地进度台账（不入库；AGENTS.md 的勾选在此暂存）──────────
 PROGRESS.local.md
+
+# ── 设计规范（不入库：规范由维护者本地持有，不进开源仓库）──────────
+DESIGN.md
