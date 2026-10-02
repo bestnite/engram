@@ -171,8 +171,9 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* exactly one send per week per user; switching it off stops it; the numbers match the
   statistics page for the same period.
-- [x] **M1-24 Admin notification mail (class D)** — registration awaiting approval, job failure,
-  media quota or disk warning, and backup failure, all addressed to the admins.
+- [x] **M1-24 Admin notification mail (class D)** — job failure, and media quota or disk warning,
+  addressed to the admins. This project has no approval queue and no backup feature, so neither is a
+  trigger; the notification types that named them are gone from the catalog.
   *Held: do not start until the user says so.*
   *Acceptance:* each trigger reaches the admin address; a mail failure never breaks the triggering
   operation.
