@@ -12,5 +12,7 @@ media/
 internal/web/static/css/tailwind.css
 bin/
 dist/
+# Rust 优化器的本机构建产物：镜像内自己编（optimizer 阶段），送进上下文只会多传 ~170M。
+tools/optimizer/target/
 *.log
 PROGRESS.local.md

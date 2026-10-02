@@ -1,7 +1,22 @@
-# M0-11：多阶段构建，产出「一个静态二进制」的镜像（DESIGN.md §10.2、ROADMAP.md M0-11）。
-# 构建物只有一个二进制 + 可选 SQLite 文件；模板、静态资源、语言包都已 go:embed。
+# M0-11：多阶段构建，产出「一个静态服务二进制 + 一个优化器适配器」的镜像（DESIGN.md §10.2、ROADMAP.md M0-11）。
+# 服务侧构建物只有一个二进制 + 可选 SQLite 文件；模板、静态资源、语言包都已 go:embed。
+# 另带 FSRS 优化器适配器（tools/optimizer，Rust）——§3.5 明确要求它「可执行文件与主程序一起分发」。
 # 本文件不含任何私有 registry、主机名或部署细节，只使用公开官方镜像。
 # syntax=docker/dockerfile:1
+
+# ---- 优化器阶段：FSRS 参数优化适配器（tools/optimizer，Rust）----
+# rust:alpine 自带 musl 工具链，cargo 产物静态链接、自包含，可直接放进 alpine 运行阶段；
+# 本机此前手工构建的是 glibc 动态链接版本，进 alpine 会因缺动态链接器起不来。
+FROM rust:1-alpine AS optimizer
+
+RUN apk add --no-cache gcc musl-dev
+
+WORKDIR /src/tools/optimizer
+COPY tools/optimizer/ ./
+# --locked 用仓库里的 Cargo.lock（权重是持久化数据，训练实现必须可复现）；
+# 构建期就跑一次 --version，证明产物在这套运行时里可执行，而不是等到作业触发才发现。
+RUN cargo build --release --locked \
+    && ./target/release/optimizer --version
 
 # ---- 构建阶段：装 templ 与 Tailwind standalone CLI，先生成再编译 ----
 # 用 glibc 基底（bookworm）：Tailwind 官方预编译的 tailwindcss-linux-x64 是 glibc 二进制，
@@ -43,6 +58,9 @@ RUN apk add --no-cache ca-certificates tzdata \
     && chown -R 10001:10001 /data
 
 COPY --from=builder /out/engram /usr/local/bin/engram
+# FSRS 优化器适配器：internal/jobs 默认在服务二进制旁解析 /usr/local/bin/optimizer，
+# 权威路径对上就不需要 OPTIMIZER_PATH；产物是 musl 静态链接，可直接跑。
+COPY --from=optimizer /src/tools/optimizer/target/release/optimizer /usr/local/bin/optimizer
 
 USER 10001:10001
 WORKDIR /app
