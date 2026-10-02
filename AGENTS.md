@@ -290,12 +290,59 @@ Conventions:
   *Do not start until the user says so.*
   *Acceptance:* a user with TOTP enabled cannot finish login with only a password; recovery codes are
   single-use; disabling it requires the password.
-- [ ] **M1-17 SMTP** — mail sending for invites and password reset, configured in the admin panel.
-  Moved out of the backlog into the final state at the user's request (2026-10-02).
-  *Do not start until the user says so.*
-  *Acceptance:* an invite can be mailed to its address and a password reset link arrives; the SMTP
-  password is stored as a secret (configured or not, never echoed); a wrong host fails with the
-  server's error text on the page.
+- [ ] **M1-17 SMTP transport and settings** — admin-panel SMTP configuration (host, port, username,
+  password through the existing `SecretCodec`, from address, TLS mode) plus a "test connection" that
+  shows the server's error text, and an outbox with a background worker that retries with backoff.
+  Mail is never sent in the request path, and a send failure must not fail the operation that
+  triggered it. When SMTP is not configured, every mail-dependent flow is **disabled and says so**,
+  rather than logging quietly.
+  *Held: do not start until the user says so.*
+  *Acceptance:* with no configuration the invite-mail and reset paths are unavailable and explain why;
+  a wrong host surfaces the server error; the password shows as configured or not configured; a
+  transient send failure is retried and the last error is visible in the admin panel.
+- [ ] **M1-18 Email type catalog and per-user preferences** — one catalog, one definition (see
+  `DESIGN.md` 4.7), shared by the preferences page and every sender so the two cannot disagree.
+  Class A cannot be switched off, class B defaults on, class C defaults off. Per-user preferences need
+  storage: decide between a JSON column and a table, remembering that `models.go` is a single-writer
+  hotspot.
+  *Held: do not start until the user says so.*
+  *Acceptance:* a user's choice for an optional type survives a restart; refusing to disable a class A
+  type; a type that is off is not sent even when its trigger fires.
+- [ ] **M1-19 Transactional security mail (class A)** — password reset, email verification and
+  email-change confirmation, new-device or new-IP sign-in notice, password or TOTP or recovery-code
+  change notice, and account disabled or deleted notice. None of them is opt-out and none carries an
+  unsubscribe header.
+  *Held: do not start until the user says so.*
+  *Acceptance:* each of the five is delivered on its trigger; a reset link works once and expires;
+  links carry only digests in the database and never appear in logs.
+- [ ] **M1-20 Invite delivery by email (class B)** — the admin can have an invite mailed to its
+  address instead of copying the link by hand. This is the user's first requested type.
+  *Held: do not start until the user says so.*
+  *Acceptance:* an invite created for an address is delivered and can be accepted; a revoked or
+  expired invite link is refused; the invite still works when copied manually.
+- [ ] **M1-21 Review reminder with quiet hours and a daily cap (class C)** — event-driven, computed
+  from the user's timezone and day cutoff, never sent between 23:00 and 07:00 local, at most one per
+  user per day. This is the user's second requested type.
+  *Held: do not start until the user says so.*
+  *Acceptance:* a reminder that would fall inside the quiet window is held until it opens and then sent
+  once; a second reminder the same day is not sent; opting out stops it immediately.
+- [ ] **M1-22 One-click unsubscribe (RFC 8058)** — `List-Unsubscribe` and `List-Unsubscribe-Post`
+  headers on optional types only, backed by a token that needs no login and disables only the type it
+  names.
+  *Held: do not start until the user says so.*
+  *Acceptance:* the one-click POST disables exactly that type; the token cannot be replayed against
+  another type or another user; class A mail carries no unsubscribe header.
+- [ ] **M1-23 Weekly study summary (class C)** — one message per week per user, in the user's
+  timezone, showing reviews done, pass rate, current streak and the new-versus-due trend. Weekly
+  rather than daily by default: a daily summary of a small personal collection is mostly noise.
+  *Held: do not start until the user says so.*
+  *Acceptance:* exactly one send per week per user; switching it off stops it; the numbers match the
+  statistics page for the same period.
+- [ ] **M1-24 Admin notification mail (class D)** — registration awaiting approval, job failure,
+  media quota or disk warning, and backup failure, all addressed to the admins.
+  *Held: do not start until the user says so.*
+  *Acceptance:* each trigger reaches the admin address; a mail failure never breaks the triggering
+  operation.
 - [ ] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
   OIDC client built on the standard library, because that module was never in `go.mod` (nothing
   imported it) and the gap stayed invisible until someone implemented the flow. `DESIGN.md` names
@@ -796,7 +843,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 14/17 · M2 12/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
+  `M0 13/13 · M1 14/24 · M2 12/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
