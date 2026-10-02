@@ -1957,3 +1957,16 @@
 - id: notfound.home_action
   translation: "Back to home"
 
+# ── UI orphan entry points: deck import/sharing and email-change entries ─────
+# Appended by the UI orphan-entrypoints task; the key set must match zh-CN.yaml.
+- id: decks.list.import
+  translation: "Import"
+- id: decks.list.sharing
+  translation: "Sharing"
+- id: settings.email.heading
+  translation: "Email address"
+- id: settings.email.hint
+  translation: "Change the email you sign in with; the change takes effect only after you confirm it from the new address."
+- id: settings.email.link
+  translation: "Change email"
+

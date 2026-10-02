@@ -1955,3 +1955,16 @@
 - id: notfound.home_action
   translation: "返回首页"
 
+# ── UI 孤立入口补链（orphan entry points）：卡组导入/共享与改邮箱入口 ──────────
+# 本块由 UI 孤立入口任务追加；键集合须与 en.yaml 一致。
+- id: decks.list.import
+  translation: "导入"
+- id: decks.list.sharing
+  translation: "共享"
+- id: settings.email.heading
+  translation: "邮箱地址"
+- id: settings.email.hint
+  translation: "更换登录邮箱；变更需通过新地址收到的确认链接才会生效。"
+- id: settings.email.link
+  translation: "更换邮箱"
+
