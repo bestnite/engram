@@ -285,15 +285,27 @@ Conventions:
   restriction, optional expiry.
   *Acceptance:* test asserts a used, expired, or revoked token is rejected and that an
   accepted invite creates exactly one user.
-- [ ] **M1-15 Align the OIDC client with the chosen library** — M1-11 shipped a working,
-  tested OIDC client built on the standard library. `DESIGN.md` names
-  `github.com/zitadel/oidc/v3` in three places, and that choice was made deliberately, so the
-  code and the specification disagree; one of them has to move. The library was never in
-  `go.mod` (nothing imported it), which is why the discrepancy stayed invisible until someone
-  implemented the flow.
-  *Acceptance:* either the flow is rebuilt on `github.com/zitadel/oidc/v3` with the existing stub
-  provider tests still passing, or `DESIGN.md` records the standard-library decision together
-  with the reason it changed. Decide before release, not after.
+- [ ] **M1-16 TOTP two-factor authentication** — optional second factor for local accounts.
+  Moved out of the backlog into the final state at the user's request (2026-10-02).
+  *Do not start until the user says so.*
+  *Acceptance:* a user with TOTP enabled cannot finish login with only a password; recovery codes are
+  single-use; disabling it requires the password.
+- [ ] **M1-17 SMTP** — mail sending for invites and password reset, configured in the admin panel.
+  Moved out of the backlog into the final state at the user's request (2026-10-02).
+  *Do not start until the user says so.*
+  *Acceptance:* an invite can be mailed to its address and a password reset link arrives; the SMTP
+  password is stored as a secret (configured or not, never echoed); a wrong host fails with the
+  server's error text on the page.
+- [ ] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
+  OIDC client built on the standard library, because that module was never in `go.mod` (nothing
+  imported it) and the gap stayed invisible until someone implemented the flow. `DESIGN.md` names
+  `github.com/zitadel/oidc/v3` in three places and that choice was deliberate, so the user ruled the
+  hand-rolled client a violation of the "prefer a mature library over inventing one" principle and
+  wants it rebuilt on the library.
+  *Do not start this until the user says so.* The standard-library implementation and its stub
+  provider tests stay in place until then, as the acceptance baseline for the rebuild.
+  *Acceptance:* the flow runs on `github.com/zitadel/oidc/v3` with the existing stub provider tests
+  still passing; no hand-rolled discovery, PKCE, or ID-token verification remains.
 - [x] **M1-8 Personal settings page** — locale, timezone, day cutoff, display name,
   password change.
   *Acceptance:* changing the locale switches the returned page language; changing the
@@ -385,6 +397,12 @@ Conventions:
   number of cards per note; the form rejects an invalid field set with a localised message.
 - [x] **M2-9 Media surface in the editor** — upload and insert into a card field.
   *Acceptance:* an uploaded image renders in the preview and survives a page reload.
+
+- [ ] **M2-13 Per-user media quota** — alongside the single-file limit, a per-user total cap that
+  the admin panel can set. Moved out of the backlog into the final state at the user's request
+  (2026-10-02). *Do not start until the user says so.*
+  *Acceptance:* exceeding the cap is refused with a stable code and a localised message naming the
+  limit; deleting media frees the quota again; the default is off rather than a number nobody chose.
 
 ### M3 — Review loop
 
@@ -562,6 +580,13 @@ Conventions:
   (either the write is deferred until after commit, or the failure path removes what it wrote).
 
 
+- [ ] **M5-12 Require `--user` for CLI import** — the CLI import currently falls back to the
+  earliest admin when `--user` is omitted, which can file a deck under somebody else's account. The
+  user ruled that identity must be explicit: the package feature exists for sharing between people,
+  and guessing the owner is the wrong default. Export keeps the optional flag because it only reads.
+  *Acceptance:* `flashcard import` without `--user` exits non-zero with a message that says how to
+  pass it, and no deck is created; with it, the import lands under the named account.
+
 ### M6 — Admin panel and system settings
 
 - [x] **M6-1 Admin shell** — layout, navigation, and an access guard limited to `role = admin`.
@@ -711,21 +736,30 @@ completion percentage until they are moved into a release milestone.
 
 ### Backlog (no milestone yet)
 
-- [ ] **B-1 Project name and module path** — replace the `<module-path>` placeholder once
-  the name is decided (blocked on a decision).
-- [ ] **B-2 LICENSE** — pick and add the licence file (blocked on a decision: permissive
-  versus copyleft).
+- [ ] **B-1 Project name and module path** — the name is being decided now (2026-10-02); shortlist
+  and collision checks live in the local ledger. Once chosen: replace the `<module-path>` placeholder
+  everywhere, rename the binary, and re-check the sanitisation scan.
+- [ ] **B-2 LICENSE** — the user's requirement (2026-10-02) is that nobody may take this and run it
+  as a paid SaaS. That still needs one choice, because the two answers are not the same thing:
+  **AGPL-3.0** keeps the repository open source and blocks a *closed* SaaS, but does **not** stop
+  someone from hosting it and charging; **PolyForm Noncommercial / BUSL 1.1** actually forbid
+  commercial hosting, at the price of no longer being open source (the README, `CONTRIBUTING.md` and
+  the CI wording would have to change). Recorded with the trade-off in `DESIGN.md` 13.
 - [x] **B-3 README pair** — `README.md` in English and `README.zh.md` in Chinese, covering
   what it is, screenshots later, self-hosting, backup and restore for both databases, and
   the API key plus MCP quick start. *Done by M0-12; screenshots are still outstanding and are
   tracked there rather than here.*
 - [x] **B-4 CONTRIBUTING.md** — how to build, test, and submit changes, restating the rules
   in section 2.
-- [ ] **B-5 Commit author identity** — use a neutral author email for this public
-  repository before publishing.
-- [ ] **B-6 TOTP two-factor authentication** — optional second factor for local accounts.
-- [ ] **B-7 SMTP** — optional mail sending for invites and password reset.
-- [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
+- [ ] **B-5 Commit author identity** — decided (2026-10-02): the author email becomes the address on
+  the user's own public domain. The literal address is deliberately **not** written here: it is a
+  real address on a real domain, and section 2.2 forbids those in committed files, so it lives in the
+  local ledger instead. Two consequences to weigh when the user asks to publish: the address becomes
+  visible in public commit metadata, and rewriting the existing 200+ commits invalidates every SSH
+  signature, so it has to be a deliberate one-time operation.
+- [x] **B-6 TOTP two-factor authentication** — *moved into the final state as M1-16 (2026-10-02).*
+- [x] **B-7 SMTP** — *moved into the final state as M1-17 (2026-10-02).*
+- [x] **B-8 Per-user media quota** — *moved into the final state as M2-13 (2026-10-02).*
 - [x] **B-9 Deployment notes outside the repository** — hosting-specific details stay
   private; only generic container instructions belong in the README. *Satisfied by construction:
   the README documents only generic PostgreSQL deployment, backup and restore, and hosting
@@ -763,7 +797,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
+  `M0 13/13 · M1 14/17 · M2 12/13 · M3 12/12 · M4 9/9 · M5 11/12 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
