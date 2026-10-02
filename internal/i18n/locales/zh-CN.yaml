@@ -1943,3 +1943,11 @@
 - id: mail.digest.link
   translation: "查看完整统计：{{.url}}"
 
+# ── 未知路径回退页（not-found fallback）────────────────────
+- id: notfound.title
+  translation: "页面未找到"
+- id: notfound.heading
+  translation: "页面未找到"
+- id: notfound.home_action
+  translation: "返回首页"
+

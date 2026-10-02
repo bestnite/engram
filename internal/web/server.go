@@ -274,6 +274,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerUnsubscribeRoutes(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
+	// 未知路径回退：所有未命中路由的请求落到设计过的 404 页面（not_found.go）。
+	s.registerNotFoundRoute(router)
 
 	if s.api != nil {
 		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。
