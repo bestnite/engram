@@ -28,6 +28,8 @@ built-in MCP server. Scheduling uses FSRS v6. The service never parses any exter
 - A PWA shell (add to home screen, standalone window, static assets cached only), deck packages
   (`.edeck`) for backup and migration, a REST API (`/api/v1`), a built-in MCP server, and an admin
   panel for users, registration policy, OIDC, upload limits, audit log, jobs, and health.
+- Parameter optimisation: retrain the FSRS parameters from your own review history, triggered from
+  the preset page, run in a background job, and revertible once finished.
 
 ## Screenshots
 <!-- Screenshots to be added. -->
