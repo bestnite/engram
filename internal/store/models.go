@@ -323,5 +323,7 @@ func AllModels() []any {
 		&AuditLog{}, &SchemaVersion{}, &Session{},
 		// M1-16 TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
 		&UserTOTP{}, &TOTPRecoveryCode{},
+		// M1-17 SMTP：outbox 队列表，模型定义在 outbox.go。
+		&OutboxMessage{},
 	}
 }

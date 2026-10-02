@@ -193,6 +193,11 @@ type AdminPageData struct {
 	OIDCPage bool
 	// OIDC 承载 OIDC 配置页的全部字段；仅 OIDCPage 为 true 时非空。
 	OIDC *OIDCPageData
+	// ---- SMTP 配置页（M1-17）----
+	// SMTPPage 为 true 时模板渲染 SMTP 配置区块而不是设置表。
+	SMTPPage bool
+	// SMTP 承载 SMTP 配置页的全部字段；仅 SMTPPage 为 true 时非空。
+	SMTP *SMTPPageData
 	// ---- 审计检索页（M6-7）----
 	// AuditPage 为 true 时模板渲染审计检索页。
 	AuditPage bool

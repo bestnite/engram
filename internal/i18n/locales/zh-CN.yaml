@@ -1580,3 +1580,78 @@
 - id: media.quota.setting.hint
   translation: "单个用户可引用的媒体总字节数。0 表示不限（默认）。"
 
+# ── SMTP 邮件（M1-17）────────────────────────────────────────
+- id: admin.setting.smtp.title
+  translation: "SMTP 邮件"
+- id: admin.setting.smtp.heading
+  translation: "SMTP 邮件投递"
+- id: admin.setting.smtp.intro
+  translation: "邮件是可选组件。未配置 SMTP 时，依赖邮件的流程（如邀请邮件、密码重置）会被禁用并说明原因。"
+- id: admin.setting.smtp.nav
+  translation: "邮件（SMTP）"
+- id: admin.setting.smtp.host
+  translation: "SMTP 服务器地址"
+- id: admin.setting.smtp.host.hint
+  translation: "邮件服务器的 host 或 IP；留空即视为未配置。"
+- id: admin.setting.smtp.port
+  translation: "端口"
+- id: admin.setting.smtp.port.hint
+  translation: "默认 587（STARTTLS）；465 用于隐式 TLS，25 用于明文。"
+- id: admin.setting.smtp.username
+  translation: "用户名"
+- id: admin.setting.smtp.username.hint
+  translation: "需要认证时填写；无认证中继可留空。"
+- id: admin.setting.smtp.password
+  translation: "密码"
+- id: admin.setting.smtp.password.hint
+  translation: "以 AES-GCM 加密存储，页面只显示已配置/未配置；留空表示不修改。"
+- id: admin.setting.smtp.from
+  translation: "发件地址"
+- id: admin.setting.smtp.from.hint
+  translation: "邮件 From 头使用的地址；留空即视为未配置。"
+- id: admin.setting.smtp.tls_mode
+  translation: "TLS 模式"
+- id: admin.setting.smtp.tls_mode.hint
+  translation: "starttls：先明文再升级（推荐）；implicit：连接即 TLS；none：明文。"
+- id: admin.setting.smtp.tls_mode.none
+  translation: "无（明文）"
+- id: admin.setting.smtp.tls_mode.starttls
+  translation: "STARTTLS"
+- id: admin.setting.smtp.tls_mode.implicit
+  translation: "隐式 TLS"
+- id: admin.setting.smtp.test
+  translation: "测试连接"
+- id: admin.setting.smtp.test.ok
+  translation: "连接成功。"
+- id: admin.setting.smtp.test.failed_prefix
+  translation: "连接失败："
+- id: admin.setting.smtp.test.no_host
+  translation: "请先填写 SMTP 服务器地址。"
+- id: admin.setting.smtp.notice.saved
+  translation: "SMTP 设置已保存。"
+- id: admin.setting.smtp.notice.failed
+  translation: "保存失败，请查看服务端日志。"
+- id: admin.setting.smtp.notice.invalid_port
+  translation: "端口必须是 1–65535 之间的整数。"
+- id: admin.setting.smtp.notice.invalid_tls_mode
+  translation: "TLS 模式取值非法。"
+- id: admin.setting.smtp.outbox.heading
+  translation: "投递队列"
+- id: admin.setting.smtp.outbox.intro
+  translation: "邮件绝不在请求路径同步发送：入站写队列表，由后台 worker 带退避重试投递。"
+- id: admin.setting.smtp.outbox.configured_label
+  translation: "SMTP 状态"
+- id: admin.setting.smtp.outbox.pending
+  translation: "待投递"
+- id: admin.setting.smtp.outbox.failed
+  translation: "永久失败"
+- id: admin.setting.smtp.outbox.last_error
+  translation: "最后一次错误"
+- id: admin.setting.smtp.outbox.no_error
+  translation: "暂无"
+- id: admin.setting.smtp.outbox.attempts
+  translation: "最后一次尝试次数"
+- id: admin.setting.smtp.outbox.none
+  translation: "—"
+- id: mail.not_configured
+  translation: "本站未开启邮件功能，请联系管理员。"
