@@ -5,11 +5,7 @@ package views
 // （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
 
 // SettingOption 是下拉框里的一个选项（语言、时区候选）。
-type SettingOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
+type SettingOption = SelectOption
 
 // SettingsData 是个人设置页的渲染数据。
 type SettingsData struct {

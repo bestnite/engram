@@ -97,3 +97,15 @@ html.dark #review-done {
   background-color: #fafafa;
   border: 1px solid rgba(228, 228, 231, 0.6);
 }
+
+/* 自定义下拉选项选中态 */
+.select-option-active {
+  background-color: #f4f4f5;
+  color: #09090b;
+  font-weight: 500;
+}
+
+:where(.dark, .dark *) .select-option-active {
+  background-color: #27272a;
+  color: #fafafa;
+}

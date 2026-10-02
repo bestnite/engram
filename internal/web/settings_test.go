@@ -96,6 +96,32 @@ func TestSettingsLocaleChangeSwitchesPageLanguage(t *testing.T) {
 	t.Logf("GET /settings after setting locale=en renders <html lang=\"en\"> (was zh-CN before)")
 }
 
+// TestSettingsRendersCustomSelectDropdown 断言个人设置页中的语言选项使用自定义下拉组件渲染，
+// 包含 data-custom-select 容器、隐藏字段以及可访问的触发按钮与菜单项。
+func TestSettingsRendersCustomSelectDropdown(t *testing.T) {
+	srv, _, _, cookies, _ := newNotesServer(t)
+	rec := getWithCookies(t, srv, "/settings", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /settings status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-custom-select") {
+		t.Errorf("settings page does not render data-custom-select container: %s", snippet(body))
+	}
+	if !strings.Contains(body, `name="locale"`) {
+		t.Errorf("settings page does not render hidden input with name=locale: %s", snippet(body))
+	}
+	if !strings.Contains(body, `id="settings-locale"`) {
+		t.Errorf("settings page does not render element with id=settings-locale: %s", snippet(body))
+	}
+	if !strings.Contains(body, "data-select-trigger") {
+		t.Errorf("settings page does not render data-select-trigger: %s", snippet(body))
+	}
+	if !strings.Contains(body, `role="listbox"`) {
+		t.Errorf("settings page does not render role=listbox: %s", snippet(body))
+	}
+}
+
 // TestSettingsProfileRejectsInvalidTimezoneAndCutoff 是必测负例：
 // 非法时区与越界切点都被拒绝并回填提示，绝不静默落库。
 func TestSettingsProfileRejectsInvalidTimezoneAndCutoff(t *testing.T) {

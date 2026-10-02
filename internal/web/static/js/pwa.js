@@ -123,9 +123,176 @@
     // 原生对话框（新建卡组等，M8-7）。
     setupDialogs();
 
+    // 自定义下拉菜单（全站通用组件）。
+    setupCustomSelects();
+
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         closeMobileNav();
+      }
+    });
+  }
+
+  // setupCustomSelects 实现自定义下拉框的展开/收起、选项高亮、表单/HTMX 联动与键盘无障碍。
+  function setupCustomSelects() {
+    function closeAllSelects(except) {
+      document.querySelectorAll("[data-custom-select]").forEach(function (container) {
+        if (container !== except) {
+          var menu = container.querySelector("[data-select-menu]");
+          var chevron = container.querySelector(".chevron");
+          var btn = container.querySelector("[data-select-trigger]");
+          if (menu) menu.classList.add("hidden");
+          if (chevron) chevron.classList.remove("rotate-180");
+          if (btn) btn.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    function selectOption(container, option) {
+      var val = option.getAttribute("data-value") || "";
+      var labelSpan = option.querySelector("span");
+      var label = labelSpan ? labelSpan.textContent.trim() : option.textContent.trim();
+
+      var input = container.querySelector('input[type="hidden"]');
+      var displaySpan = container.querySelector("[data-select-label]");
+      var menu = container.querySelector("[data-select-menu]");
+      var chevron = container.querySelector(".chevron");
+      var btn = container.querySelector("[data-select-trigger]");
+
+      if (input && input.value !== val) {
+        input.value = val;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (displaySpan) {
+        displaySpan.textContent = label;
+      }
+
+      container.querySelectorAll('[role="option"]').forEach(function (opt) {
+        var isSel = (opt === option);
+        opt.setAttribute("aria-selected", isSel ? "true" : "false");
+        var check = opt.querySelector(".check-icon");
+        opt.classList.toggle("select-option-active", isSel);
+        opt.classList.toggle("text-zinc-600", !isSel);
+        opt.classList.toggle("dark:text-zinc-400", !isSel);
+        if (check) check.classList.toggle("hidden", !isSel);
+      });
+
+      if (menu) menu.classList.add("hidden");
+      if (chevron) chevron.classList.remove("rotate-180");
+      if (btn) {
+        btn.setAttribute("aria-expanded", "false");
+        btn.focus();
+      }
+    }
+
+    document.addEventListener("click", function (e) {
+      var trigger = e.target.closest("[data-select-trigger]");
+      if (trigger) {
+        e.preventDefault();
+        var container = trigger.closest("[data-custom-select]");
+        if (!container) return;
+        var menu = container.querySelector("[data-select-menu]");
+        var chevron = container.querySelector(".chevron");
+        var isOpen = menu && !menu.classList.contains("hidden");
+
+        closeAllSelects(container);
+
+        if (menu) {
+          if (isOpen) {
+            menu.classList.add("hidden");
+            if (chevron) chevron.classList.remove("rotate-180");
+            trigger.setAttribute("aria-expanded", "false");
+          } else {
+            menu.classList.remove("hidden");
+            if (chevron) chevron.classList.add("rotate-180");
+            trigger.setAttribute("aria-expanded", "true");
+            var sel = container.querySelector('[role="option"][aria-selected="true"]');
+            if (sel) {
+              sel.scrollIntoView({ block: "nearest" });
+            }
+          }
+        }
+        return;
+      }
+
+      var option = e.target.closest('[role="option"]');
+      if (option) {
+        e.preventDefault();
+        var container = option.closest("[data-custom-select]");
+        if (container) {
+          selectOption(container, option);
+        }
+        return;
+      }
+
+      if (!e.target.closest("[data-custom-select]")) {
+        closeAllSelects();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        closeAllSelects();
+        return;
+      }
+
+      var target = e.target;
+      var container = target.closest ? target.closest("[data-custom-select]") : null;
+      if (!container) return;
+
+      var menu = container.querySelector("[data-select-menu]");
+      var trigger = container.querySelector("[data-select-trigger]");
+      var chevron = container.querySelector(".chevron");
+      var isOpen = menu && !menu.classList.contains("hidden");
+      var options = Array.prototype.slice.call(container.querySelectorAll('[role="option"]'));
+      if (options.length === 0) return;
+
+      var currentIndex = -1;
+      for (var i = 0; i < options.length; i++) {
+        if (options[i].getAttribute("aria-selected") === "true") {
+          currentIndex = i;
+          break;
+        }
+      }
+      if (currentIndex === -1) currentIndex = 0;
+
+      if (trigger && (trigger === target || trigger.contains(target))) {
+        if (!isOpen) {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            menu.classList.remove("hidden");
+            if (chevron) chevron.classList.add("rotate-180");
+            trigger.setAttribute("aria-expanded", "true");
+            if (options[currentIndex]) options[currentIndex].scrollIntoView({ block: "nearest" });
+            return;
+          }
+        } else {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            var nextIdx = (currentIndex + 1) % options.length;
+            selectOption(container, options[nextIdx]);
+            menu.classList.remove("hidden");
+            if (chevron) chevron.classList.add("rotate-180");
+            trigger.setAttribute("aria-expanded", "true");
+            options[nextIdx].scrollIntoView({ block: "nearest" });
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            var prevIdx = (currentIndex - 1 + options.length) % options.length;
+            selectOption(container, options[prevIdx]);
+            menu.classList.remove("hidden");
+            if (chevron) chevron.classList.add("rotate-180");
+            trigger.setAttribute("aria-expanded", "true");
+            options[prevIdx].scrollIntoView({ block: "nearest" });
+          } else if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            menu.classList.add("hidden");
+            if (chevron) chevron.classList.remove("rotate-180");
+            trigger.setAttribute("aria-expanded", "false");
+          } else if (e.key === "Tab") {
+            closeAllSelects();
+          }
+        }
       }
     });
   }
