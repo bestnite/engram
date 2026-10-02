@@ -33,6 +33,9 @@ const (
 	KeyAutoMigrate         Key = "auto_migrate"
 	KeyBootstrapAdminEmail Key = "bootstrap_admin_email"
 	KeyMediaDir            Key = "media_dir"
+	// KeyOptimizerPath 是 FSRS 优化器适配器二进制的路径（M9-10）。
+	// 留空时由 internal/jobs 解析：先找服务二进制旁的 optimizer，再回退到仓库构建产物。
+	KeyOptimizerPath Key = "optimizer_path"
 )
 
 // field 描述一个配置项在环境变量中的名字、是否必需、内置默认值。
@@ -53,6 +56,7 @@ var fields = map[Key]field{
 	KeyAutoMigrate:         {env: "AUTO_MIGRATE", def: "0"},
 	KeyBootstrapAdminEmail: {env: "BOOTSTRAP_ADMIN_EMAIL"},
 	KeyMediaDir:            {env: "MEDIA_DIR", def: "data/media"},
+	KeyOptimizerPath:       {env: "OPTIMIZER_PATH"},
 }
 
 // Value 是访问器的返回结果：生效值加来源。

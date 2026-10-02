@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"gorm.io/gorm"
+
 	"example.com/engram/internal/store"
 )
 
@@ -54,12 +56,59 @@ func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint
 	return r.Enqueue(ctx, KindOptimize, &target)
 }
 
-// FinishOptimize 把适配器产出的拟合报告写入 job 行的 result_json 并把作业置为 succeeded。
-// 这是 M9-5「指标存在 job 行上」的落点；适配器缺席时（例如本轮的测试与占位）也可显式调用。
+// FinishOptimize 把适配器产出的拟合报告写入 job 行的 result_json 并把作业置为 succeeded，
+// 同时把 21 维权重写回作业目标 preset（AGENTS.md M9-10：预设页轮询要看到真实结果）。
+// 适配器缺席时也可显式调用（例如测试的占位路径）。
+//
+// 写回顺序：先写 preset 再落 job 状态。若 preset 写回失败，本函数返回错误，调用方会把作业
+// 标为 failed——避免出现「作业成功但权重没生效」的半截状态。
 func (r *Runner) FinishOptimize(ctx context.Context, jobID uint64, result store.OptimizeResult, tail string) error {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("encode optimize result: %w", err)
 	}
+	if err := r.applyOptimizedWeights(ctx, jobID, result); err != nil {
+		return err
+	}
 	return r.store.FinishSucceeded(ctx, jobID, r.now(), string(raw), tail)
+}
+
+// applyOptimizedWeights 把优化后的权重写回作业目标 preset。作业没有目标预设、或目标预设
+// 已被删除时静默跳过（无处可写，重试也无意义）；只有真正的写失败才返回错误。
+func (r *Runner) applyOptimizedWeights(ctx context.Context, jobID uint64, result store.OptimizeResult) error {
+	job, err := r.store.ByID(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("load job %d: %w", jobID, err)
+	}
+	if job.Kind != KindOptimize || job.TargetID == nil || *job.TargetID == 0 {
+		return nil
+	}
+	presets := store.NewPresetStore(r.db)
+	preset, err := presets.ByID(ctx, *job.TargetID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			r.logger.Warn("optimize target preset no longer exists; skipping weight write-back",
+				"job_id", jobID, "preset_id", *job.TargetID)
+			return nil
+		}
+		return fmt.Errorf("load preset %d: %w", *job.TargetID, err)
+	}
+
+	weightsJSON, err := json.Marshal(result.Weights)
+	if err != nil {
+		return fmt.Errorf("encode optimized weights: %w", err)
+	}
+	encoded := string(weightsJSON)
+	optimizedAt := result.OptimizedAt
+	if optimizedAt.IsZero() {
+		optimizedAt = r.now()
+	}
+	reviewCount := int(result.ReviewsUsed)
+	preset.WeightsJSON = &encoded
+	preset.WeightsOptimizedAt = &optimizedAt
+	preset.WeightsReviewCount = &reviewCount
+	if err := presets.Update(ctx, preset.OwnerUserID, preset); err != nil {
+		return fmt.Errorf("store optimized weights on preset %d: %w", *job.TargetID, err)
+	}
+	return nil
 }
