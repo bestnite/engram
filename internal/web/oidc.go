@@ -62,7 +62,8 @@ func (s *Server) oidcStart(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	doc, err := s.oidc.Discover(ctx, cfg.Issuer)
+	redirectURI := s.oidcRedirectURI(c)
+	party, err := s.oidc.Client(ctx, cfg, redirectURI)
 	if err != nil {
 		s.logger.Error("oidc: discovery failed", "issuer", cfg.Issuer, "error", err)
 		s.renderLogin(c, loc, http.StatusBadGateway, loc.T("auth.error.oidc_unavailable"))
@@ -86,19 +87,13 @@ func (s *Server) oidcStart(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	redirectURI := s.oidcRedirectURI(c)
 	s.oidc.PutPending(state, auth.PendingAuth{
 		Nonce:       nonce,
 		Verifier:    pkce.Verifier,
 		RedirectURI: redirectURI,
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
 	})
-	authURL, err := auth.BuildAuthURL(doc, cfg, state, nonce, pkce.Challenge, redirectURI)
-	if err != nil {
-		s.logger.Error("oidc: build authorization url failed", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
+	authURL := auth.BuildAuthURL(party, state, nonce, pkce.Challenge)
 	c.Redirect(http.StatusFound, authURL)
 }
 
@@ -152,25 +147,20 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
-	doc, err := s.oidc.Discover(ctx, cfg.Issuer)
+	// 从 state 取回发起登录时保存的 redirect_uri / PKCE verifier / nonce。
+	party, err := s.oidc.Client(ctx, cfg, pending.RedirectURI)
 	if err != nil {
 		s.logger.Error("oidc: discovery failed during callback", "issuer", cfg.Issuer, "error", err)
 		s.renderLogin(c, loc, http.StatusBadGateway, loc.T("auth.error.oidc_unavailable"))
 		return
 	}
-	idToken, err := s.oidc.ExchangeCode(ctx, doc, cfg, code, pending.Verifier, pending.RedirectURI)
+	claims, err := s.oidc.ExchangeCode(ctx, party, code, pending.Verifier, pending.Nonce)
 	if err != nil {
-		s.logger.Error("oidc: token exchange failed", "error", err)
+		s.logger.Error("oidc: token exchange or id_token verification failed", "error", err)
 		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T("auth.error.oidc_failed"))
 		return
 	}
-	claims, err := s.oidc.VerifyIDToken(ctx, doc, cfg, idToken, pending.Nonce)
-	if err != nil {
-		s.logger.Error("oidc: id_token verification failed", "error", err)
-		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T("auth.error.oidc_failed"))
-		return
-	}
-	profile := cfg.ProfileFromClaims(doc.Issuer, claims.Raw)
+	profile := cfg.ProfileFromClaims(party.Issuer(), claims.Claims)
 
 	policy := auth.PolicyClosed
 	if settings, err := store.LoadSettings(ctx, s.db); err == nil {

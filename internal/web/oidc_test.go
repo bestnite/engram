@@ -75,7 +75,11 @@ func newStubOIDC(t *testing.T) *stubOIDC {
 			"email_verified": p.verified,
 			"name":           "Stub User",
 		}
-		writeJSON(w, map[string]any{"id_token": p.signIDToken(t, claims), "token_type": "Bearer"})
+		writeJSON(w, map[string]any{
+			"id_token":     p.signIDToken(t, claims),
+			"access_token": "stub-access-token",
+			"token_type":   "Bearer",
+		})
 	})
 	p.srv = httptest.NewServer(mux)
 	t.Cleanup(p.srv.Close)
