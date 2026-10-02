@@ -18,6 +18,7 @@ import (
 	"example.com/engram/internal/api"
 	"example.com/engram/internal/auth"
 	"example.com/engram/internal/config"
+	"example.com/engram/internal/digest"
 	"example.com/engram/internal/i18n"
 	"example.com/engram/internal/jobs"
 	"example.com/engram/internal/mail"
@@ -156,6 +157,21 @@ func runServe(ctx context.Context) error {
 		}
 		reminderWorker.Start(ctx)
 		defer reminderWorker.Stop()
+		// 每周学习摘要 worker（M1-23，C 类）：同为周期扫描，但节律是周、候选集是所有可收信
+		// 用户（不要求有到期卡），去重台账是独立的 digest_log，故不复用提醒 worker。
+		digestWorker, err := digest.New(digest.Deps{
+			DB:         db,
+			Outbox:     mb,
+			Translator: translator,
+			Logger:     logger,
+			BaseURL:    cfg.Get(config.KeyBaseURL).Value,
+			Tokens:     tokens,
+		})
+		if err != nil {
+			return err
+		}
+		digestWorker.Start(ctx)
+		defer digestWorker.Stop()
 	}
 	return srv.Run(ctx)
 }
