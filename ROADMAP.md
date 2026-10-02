@@ -356,7 +356,7 @@ Conventions:
   day boundary, undo fidelity, fuzz determinism.
   *Acceptance:* `go test ./internal/schedule/...` passes with each listed case present
   as its own named test.
-- [ ] **M3-13 Multi-deck review scope** — the queue accepts one deck (`QueueOptions.DeckID`) or
+- [x] **M3-13 Multi-deck review scope** — the queue accepts one deck (`QueueOptions.DeckID`) or
   every deck, so no entry point can review a chosen set of decks together; and the review POST
   handlers ignore the `deck` form field entirely, rebuilding the queue from the answered card's
   deck (`internal/web/review.go` passes `deck.ID` at 19 call sites), so even the all-decks queue
@@ -769,7 +769,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 12/13 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/13 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
