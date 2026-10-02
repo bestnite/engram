@@ -286,15 +286,13 @@
 - id: review.error_render
   translation: "This card cannot be displayed."
 - id: review.shortcuts
-  translation: "Space: show answer · 1–4: rate · u: undo · e: edit · s: suspend · b: bury"
-- id: review.undo
-  translation: "Undo"
+  translation: "Space: show answer · 1–4: rate · e: edit · b: bury"
 - id: review.edit
   translation: "Edit"
-- id: review.suspend
-  translation: "Suspend"
 - id: review.bury
   translation: "Bury"
+- id: review.bury_hint
+  translation: "Bury: hide this card until tomorrow; its progress is kept."
 # M3-12 graded answering. The controls are rendered for the five graded card
 # types; the four self-ratings stay for everything else.
 - id: review.graded.submit

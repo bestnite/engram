@@ -102,10 +102,9 @@ type ReviewAreaData struct {
 	Result *ReviewResultView
 
 	// 动作控件文案（u/e/s/b）。
-	UndoLabel    string
-	EditLabel    string
-	SuspendLabel string
-	BuryLabel    string
+	BuryHint  string
+	EditLabel string
+	BuryLabel string
 
 	// 表单目标与状态。
 	AnswerURL string

@@ -286,15 +286,13 @@
 - id: review.error_render
   translation: "无法显示这张卡片。"
 - id: review.shortcuts
-  translation: "空格：显示答案 · 1–4：评分 · u：撤销 · e：编辑 · s：暂停 · b：埋藏"
-- id: review.undo
-  translation: "撤销"
+  translation: "空格：显示答案 · 1–4：评分 · e：编辑 · b：埋藏"
 - id: review.edit
   translation: "编辑"
-- id: review.suspend
-  translation: "暂停"
 - id: review.bury
   translation: "埋藏"
+- id: review.bury_hint
+  translation: "埋藏：今天不再出现，明天回到队列，学习进度保留。"
 # M3-12 作答类题型判分。五种作答类题型渲染输入控件；其余题型仍走四档自评。
 - id: review.graded.submit
   translation: "提交答案"

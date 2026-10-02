@@ -118,12 +118,9 @@
       clickRating(e.key);
       return;
     }
+    // 只保留 b（埋藏）与 e（编辑）：撤销/暂停是调试能力，不在界面上暴露。
     var key = (e.key || "").toLowerCase();
-    if (key === "u") {
-      submitAction("undo");
-    } else if (key === "s") {
-      submitAction("suspend");
-    } else if (key === "b") {
+    if (key === "b") {
       submitAction("bury");
     } else if (key === "e") {
       gotoEdit();

@@ -222,8 +222,6 @@ func TestAccessibilityReviewKeyboardShortcuts(t *testing.T) {
 		"keydown listener": `addEventListener("keydown"`,
 		"space/enter":      `e.key === " " || e.key === "Enter"`,
 		"rating keys":      `e.key === "1"`,
-		"undo key":         `key === "u"`,
-		"suspend key":      `key === "s"`,
 		"bury key":         `key === "b"`,
 		"edit key":         `key === "e"`,
 	}
@@ -232,5 +230,11 @@ func TestAccessibilityReviewKeyboardShortcuts(t *testing.T) {
 			t.Errorf("review.js is missing the %s binding (%q)", name, want)
 		}
 	}
-	t.Logf("review.js: keydown handler covers space/Enter, 1–4, u/e/s/b")
+	// 撤销与暂停是调试能力，不该再出现在复习页的键盘绑定里（DESIGN.md §8.2）。
+	for _, gone := range []string{`submitAction("undo")`, `submitAction("suspend")`} {
+		if strings.Contains(js, gone) {
+			t.Errorf("review.js still binds the debug-only action %q", gone)
+		}
+	}
+	t.Logf("review.js: keydown handler covers space/Enter, 1–4, e, b")
 }
