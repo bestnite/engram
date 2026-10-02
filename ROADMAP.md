@@ -373,6 +373,19 @@ Conventions:
   filtered; REST and MCP return the same queue for the same two decks; `go build ./... && go
   vet ./... && gofmt -l . && go test ./...` are clean.
 
+- [ ] **M3-14 Preset management** — `/presets` lists presets and drives optimisation, but has no
+  create or edit route (`internal/web/presets.go` registers only `GET /presets` plus the three
+  optimise endpoints), and the default preset is created lazily inside deck creation
+  (`internal/web/decks.go:209`). A brand-new user therefore meets an empty preset dropdown on the
+  deck form and can never own more than that one implicit preset, so the "several decks share a
+  preset" case in `DESIGN.md` §2.2 cannot actually happen. Add create and edit (name, desired
+  retention, learning steps, relearning steps, maximum interval, fuzz) and create the default
+  preset when the account is created rather than on the first deck creation.
+  *Acceptance:* a fresh account finds a populated preset dropdown on the deck form; a user creates
+  a second preset, edits it, and selects it when creating a deck; an invalid value (retention
+  outside (0,1), negative or unparsable steps) is rejected with a localised message and writes
+  nothing.
+
 ### M4 — External integration
 
 - [x] **M4-1 API key store** — generation (`fcard_` prefix plus base64url), sha256 storage,
@@ -413,6 +426,17 @@ Conventions:
   resolved per `Accept-Language` for both REST and MCP.
   *Acceptance:* test asserts the same `code` yields Chinese and English messages for the
   two `Accept-Language` values.
+
+- [ ] **M4-10 User-level API key management** — `DESIGN.md` §8.1 lists API key management under
+  `/settings`, but no user-facing route exists: the only key surface is `/admin/api-keys`, an
+  admin-wide overview that can revoke but not create (`internal/web/admin_keys.go`). A non-admin
+  therefore cannot obtain a key at all, which makes the REST API and the MCP server unreachable for
+  ordinary users. Add `/settings/keys`: list the caller's own keys (name, prefix, scopes, last use,
+  state), create one with a scope selection, show the plaintext exactly once at creation, and
+  revoke.
+  *Acceptance:* a non-admin creates a key in the browser, uses it against `GET /api/v1/decks`,
+  finds it listed afterwards without the plaintext, and revokes it; a revoked key fails
+  authentication immediately; another user's key never appears in the list.
 
 ### M5 — Sharing and permissions
 
@@ -569,6 +593,21 @@ Conventions:
 - [x] **M8-6 Mobile smoke checklist** — a written procedure covering review, editing,
   offline message, and home-screen launch.
   *Acceptance:* the checklist exists, is dated, and each item states the observed result.
+
+- [ ] **M8-7 Interface polish pass** — a batch of user-reported defects: (a) `pwa.js` marks the
+  current page by href over `header nav a`, a selector that also matches the brand link, so on `/`
+  the brand picks up the selected-tab background; (b) the header navigation is assembled in four
+  places with different item sets (`pageLayout`, `home.go`, `adminLayout`, `not_found.go`), so the
+  admin entry shows on some pages only; (c) the footer carries a slogan instead of the project
+  name; (d) several user-visible strings explain internals (`stats.intro` even cites the design
+  document) and must be shortened or dropped; (e) the new-deck form is a full-width block at the
+  bottom of the deck list instead of a dialog; (f) no page declares an icon, so `/favicon.ico`
+  returns 404 and the app icon is reachable only through the manifest.
+  *Acceptance:* the brand never takes the active-tab background; every page renders the same
+  navigation; the footer shows the project name; the listed strings are gone from both catalogues;
+  creating a deck opens a dialog; `/` declares an icon and `/favicon.ico` no longer returns 404;
+  `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean, both check scripts are
+  green after `git add`, and a real instance is inspected at desktop and phone width.
 
 ### M9 — Parameter optimisation
 
@@ -769,7 +808,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/13 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/14 · M4 9/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/7 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
