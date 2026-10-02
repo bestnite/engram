@@ -132,7 +132,6 @@ func (s *Server) mailPrefsData(c *gin.Context, loc *i18n.Localizer, user *store.
 	for _, class := range classes {
 		group := views.MailPrefGroup{
 			Heading: loc.T("mail.prefs.class." + string(class) + ".heading"),
-			Note:    loc.T("mail.prefs.class." + string(class) + ".note"),
 		}
 		for _, def := range mail.Catalog() {
 			if def.Class != class {

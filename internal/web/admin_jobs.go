@@ -156,7 +156,6 @@ func (s *Server) adminJobsPage(c *gin.Context) {
 	renderHTML(c, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.jobs.title", "/admin/jobs"),
 		Heading:    loc.T("admin.jobs.heading"),
-		Intro:      loc.T("admin.jobs.intro"),
 		NavHeading: loc.T("admin.nav.heading"),
 		Nav:        s.adminNav(loc, "/admin/jobs"),
 		Notice:     s.jobsNotice(loc, c.Query("notice")),

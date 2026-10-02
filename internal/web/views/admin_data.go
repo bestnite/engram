@@ -75,6 +75,14 @@ type AdminInviteRow struct {
 }
 
 // AdminPageData 是管理面板外壳（admin.templ）的渲染数据。
+// AdminDashboardCard 是管理面板概览页的一张计数卡（DESIGN.md §8.4）：
+// 整张卡是一个链接，Value 已经由 handler 格式化好（数字或本地化过的组合串）。
+type AdminDashboardCard struct {
+	Label string
+	Value string
+	Href  string
+}
+
 type AdminPageData struct {
 	Layout     LayoutData
 	Heading    string
@@ -83,6 +91,11 @@ type AdminPageData struct {
 	Nav        []AdminNavItem
 	Columns    AdminColumns
 	Sections   []AdminSection
+	// ---- 概览页（DESIGN.md §8.4）----
+	// DashboardPage 为 true 时模板渲染计数卡网格，而不是设置区块或分区页。
+	DashboardPage  bool
+	DashboardCards []AdminDashboardCard
+
 	// Notice 是一条已本地化的操作结果提示；为空时不渲染。
 	Notice string
 	// ShowForm 为 true 时把设置区块包在写表单里（仅系统设置页）。

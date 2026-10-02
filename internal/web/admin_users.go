@@ -141,7 +141,6 @@ func (s *Server) renderUsersPage(c *gin.Context, loc *i18n.Localizer, notice, te
 	renderHTML(c, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.users.title", "/admin/users"),
 		Heading:    loc.T("admin.users.heading"),
-		Intro:      loc.T("admin.users.intro"),
 		NavHeading: loc.T("admin.nav.heading"),
 		Nav:        s.adminNav(loc, "/admin/users"),
 		UsersPage:  true,

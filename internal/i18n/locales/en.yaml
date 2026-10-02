@@ -535,14 +535,12 @@
   translation: "not yet implemented"
 - id: admin.dashboard.heading
   translation: "Admin panel"
-- id: admin.dashboard.intro
-  translation: "Administration is web-first: manage users, invites, identity, settings, jobs, audit and health from here."
 - id: admin.settings.title
   translation: "System settings"
 - id: admin.settings.heading
   translation: "System settings"
 - id: admin.settings.intro
-  translation: "Every change takes effect on the next request and needs no restart. The source column shows whether the effective value comes from the environment, the database, or the built-in default."
+  translation: "Changes take effect on the next request; no restart needed."
 - id: admin.column.setting
   translation: "Setting"
 - id: admin.column.value
@@ -561,16 +559,10 @@
   translation: "(not set)"
 - id: admin.section.general
   translation: "General"
-- id: admin.section.general.intro
-  translation: "Site identity and the language used when nothing else decides it."
 - id: admin.section.media
   translation: "Media"
-- id: admin.section.media.intro
-  translation: "Upload limits and on-disk usage. These values also drive the media upload endpoint immediately."
 - id: admin.section.optimize
   translation: "Parameter optimization"
-- id: admin.section.optimize.intro
-  translation: "Admission conditions for the parameter optimization job."
 - id: admin.section.sensitive
   translation: "Sensitive settings"
 - id: admin.section.sensitive.intro
@@ -603,8 +595,6 @@
   translation: "Root directory for stored media, from MEDIA_DIR."
 - id: admin.setting.media_usage
   translation: "Media directory usage"
-- id: admin.setting.media_usage.hint
-  translation: "Total size of the files currently on disk."
 - id: admin.setting.optimize_min_reviews
   translation: "Optimizer threshold (reviews)"
 - id: admin.setting.optimize_min_reviews.hint
@@ -634,8 +624,6 @@
   translation: "User management"
 - id: admin.users.heading
   translation: "User management"
-- id: admin.users.intro
-  translation: "Search, create, disable or enable, change role, reset password, force logout and delete accounts. Deck and usage counts are shown per user."
 - id: admin.users.search_label
   translation: "Search"
 - id: admin.users.search_placeholder
@@ -968,8 +956,6 @@
   translation: "Jobs"
 - id: admin.jobs.heading
   translation: "Background jobs"
-- id: admin.jobs.intro
-  translation: "Optimizer and other background jobs: status, stage, log tail, and cancel."
 - id: admin.jobs.col.id
   translation: "ID"
 - id: admin.jobs.col.kind
@@ -1029,7 +1015,7 @@
 - id: admin.audit.heading
   translation: "Audit log"
 - id: admin.audit.intro
-  translation: "Search who changed what. Timestamps are stored in UTC and shown in your account time zone."
+  translation: "Timestamps are stored in UTC and shown in your account time zone."
 - id: admin.audit.filter.heading
   translation: "Filters"
 - id: admin.audit.filter.user
@@ -1082,34 +1068,24 @@
   translation: "Health"
 - id: admin.health.heading
   translation: "Health"
-- id: admin.health.intro
-  translation: "Current state of the database, the media directory and the review queue."
 - id: admin.health.database.label
   translation: "Database"
 - id: admin.health.database.ok
   translation: "connected"
 - id: admin.health.database.error
   translation: "unreachable"
-- id: admin.health.database.hint
-  translation: "A live ping against the underlying connection."
 - id: admin.health.schema.label
   translation: "Schema version"
 - id: admin.health.schema.unknown
   translation: "unknown"
-- id: admin.health.schema.hint
-  translation: "Version of the applied destructive migrations."
 - id: admin.health.media.label
   translation: "Media directory"
-- id: admin.health.media.hint
-  translation: "Bytes on disk under the media root; sampled with a size cap and a short cache."
 - id: admin.health.media.truncated
   translation: "(at least; the scan hit its entry cap)"
 - id: admin.health.due.label
   translation: "Due queue"
 - id: admin.health.due.unknown
   translation: "unknown"
-- id: admin.health.due.hint
-  translation: "Scheduled cards whose due time has passed, across all users."
 
 
 - id: auth.oidc.button
@@ -1380,7 +1356,7 @@
 - id: admin.keys.heading
   translation: "API keys"
 - id: admin.keys.intro
-  translation: "Every key across all users: name, owner, prefix, scopes, last use and state. The key value itself is shown only once at creation and is never stored, so it can never be displayed here."
+  translation: "The plaintext is shown once at creation and never stored."
 - id: admin.keys.notice.revoked
   translation: "The key was revoked."
 - id: admin.keys.notice.revoke_failed
@@ -1425,8 +1401,6 @@
   translation: "Language packs"
 - id: admin.i18n.heading
   translation: "Language pack completeness"
-- id: admin.i18n.intro
-  translation: "Translation coverage of every locale against the union of all catalog keys. A locale below 100% lists the missing keys."
 - id: admin.i18n.col.locale
   translation: "Locale"
 - id: admin.i18n.col.coverage
@@ -1590,7 +1564,7 @@
 - id: admin.setting.smtp.heading
   translation: "SMTP mail delivery"
 - id: admin.setting.smtp.intro
-  translation: "Mail is optional. Until SMTP is configured, mail-dependent flows (invite email, password reset) stay disabled and say why."
+  translation: "Without SMTP, mail-dependent flows stay disabled and say why."
 - id: admin.setting.smtp.nav
   translation: "Mail (SMTP)"
 - id: admin.setting.smtp.host
@@ -1642,7 +1616,7 @@
 - id: admin.setting.smtp.outbox.heading
   translation: "Delivery queue"
 - id: admin.setting.smtp.outbox.intro
-  translation: "Mail is never sent in the request path: messages are queued and a background worker delivers them with backoff retries."
+  translation: "Delivery goes through the background queue, with backoff retries."
 - id: admin.setting.smtp.outbox.configured_label
   translation: "SMTP status"
 - id: admin.setting.smtp.outbox.pending
@@ -1683,21 +1657,13 @@
 - id: mail.prefs.error.class_locked
   translation: "\"{{.name}}\" is security and transactional mail and cannot be turned off."
 - id: mail.prefs.class.security.heading
-  translation: "A Security and transactional"
-- id: mail.prefs.class.security.note
-  translation: "Account security; always sent, cannot be turned off."
+  translation: "Security and transactional"
 - id: mail.prefs.class.collab.heading
-  translation: "B Collaboration and permissions"
-- id: mail.prefs.class.collab.note
-  translation: "Sharing, permissions and invites; on by default."
+  translation: "Collaboration and permissions"
 - id: mail.prefs.class.study.heading
-  translation: "C Study and operations"
-- id: mail.prefs.class.study.note
-  translation: "Reminders and digests; off by default, turn them on when you want them."
+  translation: "Study and operations"
 - id: mail.prefs.class.admin.heading
-  translation: "D Administrator notices"
-- id: mail.prefs.class.admin.note
-  translation: "Sent to administrators; on by default."
+  translation: "Administrator notices"
 - id: mail.prefs.type.password_reset
   translation: "Password reset"
 - id: mail.prefs.type.email_verification
@@ -2104,3 +2070,17 @@
   translation: "Current streak"
 - id: stats.streak.longest_label
   translation: "Longest streak"
+
+# ── Admin dashboard cards (DESIGN.md §8.4) ────────────────────────
+- id: admin.dashboard.decks
+  translation: "Decks"
+- id: admin.dashboard.notes_cards
+  translation: "Notes / cards"
+- id: admin.dashboard.due
+  translation: "Due queue"
+- id: admin.dashboard.users_value
+  translation: "{{.total}} accounts · {{.active}} active"
+- id: admin.dashboard.notes_cards_value
+  translation: "{{.notes}} / {{.cards}}"
+- id: admin.dashboard.jobs_value
+  translation: "{{.running}} running · {{.failed}} failed"

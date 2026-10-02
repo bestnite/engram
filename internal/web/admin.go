@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -276,17 +278,58 @@ func (s *Server) siteDefaultLocale(ctx context.Context) string {
 	return ""
 }
 
-// adminDashboard 渲染 /admin 首页：导航全貌 + 一句引导。
+// adminDashboard 渲染 /admin 首页：计数卡概览，每张卡链到它统计的分区（DESIGN.md §8.4）。
+// 计数取不到时返回 500 而不是显示 0——空实例和查询失败看起来不该一样。
 func (s *Server) adminDashboard(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
+	ctx := c.Request.Context()
+	stats, err := store.InstanceSummary(ctx, s.db, time.Now().UTC())
+	if err != nil {
+		s.logger.Error("admin dashboard: instance summary failed", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 	renderHTML(c, views.AdminPage(views.AdminPageData{
-		Layout:     s.adminLayout(c, loc, "admin.title", "/admin"),
-		Heading:    loc.T("admin.dashboard.heading"),
-		Intro:      loc.T("admin.dashboard.intro"),
-		NavHeading: loc.T("admin.nav.heading"),
-		Nav:        s.adminNav(loc, "/admin"),
+		Layout:        s.adminLayout(c, loc, "admin.title", "/admin"),
+		Heading:       loc.T("admin.dashboard.heading"),
+		NavHeading:    loc.T("admin.nav.heading"),
+		Nav:           s.adminNav(loc, "/admin"),
+		DashboardPage: true,
+		DashboardCards: []views.AdminDashboardCard{
+			{
+				Label: loc.T("admin.nav.users"),
+				Value: loc.Tf("admin.dashboard.users_value", map[string]any{
+					"total": stats.Users, "active": stats.ActiveUsers,
+				}),
+				Href: "/admin/users",
+			},
+			{
+				Label: loc.T("admin.dashboard.decks"),
+				Value: strconv.FormatInt(stats.Decks, 10),
+				Href:  "/decks",
+			},
+			{
+				Label: loc.T("admin.dashboard.notes_cards"),
+				Value: loc.Tf("admin.dashboard.notes_cards_value", map[string]any{
+					"notes": stats.Notes, "cards": stats.Cards,
+				}),
+				Href: "/decks",
+			},
+			{
+				Label: loc.T("admin.dashboard.due"),
+				Value: strconv.FormatInt(stats.DueNow, 10),
+				Href:  "/admin/health",
+			},
+			{
+				Label: loc.T("admin.nav.jobs"),
+				Value: loc.Tf("admin.dashboard.jobs_value", map[string]any{
+					"running": stats.JobsRunning, "failed": stats.JobsFailed,
+				}),
+				Href: "/admin/jobs",
+			},
+		},
 	}))
 }

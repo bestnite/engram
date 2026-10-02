@@ -20,8 +20,6 @@ type MailPrefsData struct {
 // MailPrefGroup 是一个大类的渲染分组。
 type MailPrefGroup struct {
 	Heading string
-	// Note 是该类的说明；A 类在这里说明「不可关闭」的原因。
-	Note string
 	// Types 是归入该类、在偏好页展示的类型。
 	Types []MailPrefType
 }

@@ -216,13 +216,13 @@ func (s *Server) adminSettingsPage(c *gin.Context) {
 	mediaRows = append(mediaRows,
 		views.SettingRow{
 			Label: loc.T("admin.setting.media_usage"), Value: humanBytes(size),
-			SourceLabel: loc.T("admin.source.computed"), Hint: loc.T("admin.setting.media_usage.hint"),
+			SourceLabel: loc.T("admin.source.computed"),
 		})
 
 	sections := []views.AdminSection{
-		{Heading: loc.T("admin.section.general"), Intro: loc.T("admin.section.general.intro"), Rows: general},
-		{Heading: loc.T("admin.section.media"), Intro: loc.T("admin.section.media.intro"), Rows: mediaRows},
-		{Heading: loc.T("admin.section.optimize"), Intro: loc.T("admin.section.optimize.intro"), Rows: optimizeRows},
+		{Heading: loc.T("admin.section.general"), Rows: general},
+		{Heading: loc.T("admin.section.media"), Rows: mediaRows},
+		{Heading: loc.T("admin.section.optimize"), Rows: optimizeRows},
 	}
 	if sensitive := s.sensitiveSection(ctx, loc); len(sensitive.Rows) > 0 {
 		sections = append(sections, sensitive)

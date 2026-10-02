@@ -91,8 +91,9 @@ func TestAdminSMTPPageShowsUnconfigured(t *testing.T) {
 		t.Fatalf("GET /admin/smtp = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "邮件是可选组件") {
-		t.Errorf("SMTP page does not explain mail is optional; body = %s", snippet(body))
+	// 精简后的说明只保留「未配置时哪些流程会被禁用」这一条有用信息（文案从简）。
+	if !strings.Contains(body, "未配置 SMTP 时") {
+		t.Errorf("SMTP page does not explain what stays disabled without SMTP; body = %s", snippet(body))
 	}
 	if !strings.Contains(body, "未配置") {
 		t.Errorf("SMTP page does not show the not-configured status; body = %s", snippet(body))

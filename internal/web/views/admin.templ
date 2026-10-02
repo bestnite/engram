@@ -8,7 +8,9 @@ templ AdminPage(data AdminPageData) {
 			<!-- 管理面板头部 -->
 			<div class="border-b border-zinc-200/80 dark:border-zinc-800 pb-6">
 				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
-				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+				if data.Intro != "" {
+					<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
+				}
 				if data.Notice != "" {
 					<div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/30 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200 shadow-xs">
 						{ data.Notice }
@@ -47,6 +49,10 @@ templ AdminPage(data AdminPageData) {
 
 				<!-- 右侧内容区域 -->
 				<div class="lg:col-span-3 min-w-0 space-y-8">
+					if data.DashboardPage {
+						// 概览页自带卡片网格，不再套外层卡片（卡中卡看着像模板化的后台）。
+						@adminDashboardCards(data)
+					} else {
 					<div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
 						if data.UsersPage {
 							@adminUsers(data)
@@ -80,6 +86,7 @@ templ AdminPage(data AdminPageData) {
 							}
 						}
 					</div>
+				}
 
 					if data.ExportHref != "" {
 						<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
@@ -144,4 +151,17 @@ templ adminSections(data AdminPageData) {
 			</div>
 		</section>
 	}
+}
+
+// adminDashboardCards 是概览页（DESIGN.md §8.4）的计数卡网格：每张卡整体是一个链接，
+// 指到它统计的那个分区。数值由 handler 从 store.InstanceSummary 取，模板不做任何计算。
+templ adminDashboardCards(data AdminPageData) {
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+		for _, card := range data.DashboardCards {
+			<a class="block rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-xs hover:border-zinc-300 hover:bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/50 transition-colors" href={ card.Href }>
+				<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ card.Label }</p>
+				<p class="mt-2 font-mono text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{ card.Value }</p>
+			</a>
+		}
+	</div>
 }

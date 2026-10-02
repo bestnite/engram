@@ -41,7 +41,7 @@ func (s *Server) adminHealthPage(c *gin.Context) {
 	}
 	rows = append(rows, views.AdminHealthRow{
 		Key: "database", Label: loc.T("admin.health.database.label"),
-		Value: dbValue, Hint: loc.T("admin.health.database.hint"),
+		Value: dbValue,
 	})
 
 	// 2) schema 版本。
@@ -53,7 +53,7 @@ func (s *Server) adminHealthPage(c *gin.Context) {
 	}
 	rows = append(rows, views.AdminHealthRow{
 		Key: "schema", Label: loc.T("admin.health.schema.label"),
-		Value: schemaValue, Hint: loc.T("admin.health.schema.hint"),
+		Value: schemaValue,
 	})
 
 	// 3) 媒体目录占用。
@@ -64,7 +64,7 @@ func (s *Server) adminHealthPage(c *gin.Context) {
 	}
 	rows = append(rows, views.AdminHealthRow{
 		Key: "media", Label: loc.T("admin.health.media.label"),
-		Value: mediaValue, Hint: loc.T("admin.health.media.hint"),
+		Value: mediaValue,
 	})
 
 	// 4) 当前到期队列量。
@@ -76,13 +76,12 @@ func (s *Server) adminHealthPage(c *gin.Context) {
 	}
 	rows = append(rows, views.AdminHealthRow{
 		Key: "due", Label: loc.T("admin.health.due.label"),
-		Value: dueValue, Hint: loc.T("admin.health.due.hint"),
+		Value: dueValue,
 	})
 
 	renderHTML(c, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.health.title", "/admin/health"),
 		Heading:    loc.T("admin.health.heading"),
-		Intro:      loc.T("admin.health.intro"),
 		NavHeading: loc.T("admin.nav.heading"),
 		Nav:        s.adminNav(loc, "/admin/health"),
 

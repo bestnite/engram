@@ -71,10 +71,10 @@ func TestMailPrefsPageShowsAllClassesAndLocksClassA(t *testing.T) {
 	body := page.Body.String()
 
 	for _, want := range []string{
-		"A Security and transactional",
-		"B Collaboration and permissions",
-		"C Study and operations",
-		"D Administrator notices",
+		"Security and transactional",
+		"Collaboration and permissions",
+		"Study and operations",
+		"Administrator notices",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("preferences page is missing class heading %q", want)
@@ -242,7 +242,8 @@ func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 		"mail.prefs.error.class_locked",
 	}
 	for _, class := range mail.ClassOrder() {
-		keys = append(keys, "mail.prefs.class."+string(class)+".heading", "mail.prefs.class."+string(class)+".note")
+		// 只断言标题键：分组说明（.note）已按「文案从简」移除，页面上不再有那几行。
+		keys = append(keys, "mail.prefs.class."+string(class)+".heading")
 	}
 	for _, def := range mail.Catalog() {
 		keys = append(keys, def.LabelKey)

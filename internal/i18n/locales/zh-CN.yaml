@@ -534,14 +534,12 @@
   translation: "未实现"
 - id: admin.dashboard.heading
   translation: "管理面板"
-- id: admin.dashboard.intro
-  translation: "管理优先走网页：用户、邀请、身份、系统设置、作业、审计与健康都在这里完成。"
 - id: admin.settings.title
   translation: "系统设置"
 - id: admin.settings.heading
   translation: "系统设置"
 - id: admin.settings.intro
-  translation: "改动在下一次请求即生效，无需重启。来源一列说明生效值来自环境变量、数据库还是内置默认值。"
+  translation: "改动在下一次请求即生效，无需重启。"
 - id: admin.column.setting
   translation: "设置项"
 - id: admin.column.value
@@ -560,16 +558,10 @@
   translation: "（未设置）"
 - id: admin.section.general
   translation: "通用"
-- id: admin.section.general.intro
-  translation: "站点标识，以及在没有其他依据时使用的默认语言。"
 - id: admin.section.media
   translation: "媒体"
-- id: admin.section.media.intro
-  translation: "上传限制与磁盘占用；这些值同时立即作用于媒体上传接口。"
 - id: admin.section.optimize
   translation: "参数优化"
-- id: admin.section.optimize.intro
-  translation: "参数优化作业的准入条件。"
 - id: admin.section.sensitive
   translation: "敏感配置"
 - id: admin.section.sensitive.intro
@@ -602,8 +594,6 @@
   translation: "媒体文件的根目录，来自 MEDIA_DIR。"
 - id: admin.setting.media_usage
   translation: "媒体目录占用"
-- id: admin.setting.media_usage.hint
-  translation: "当前磁盘上媒体文件的合计大小。"
 - id: admin.setting.optimize_min_reviews
   translation: "优化门槛（复习条数）"
 - id: admin.setting.optimize_min_reviews.hint
@@ -633,8 +623,6 @@
   translation: "用户管理"
 - id: admin.users.heading
   translation: "用户管理"
-- id: admin.users.intro
-  translation: "搜索、新建、禁用/启用、改角色、重置密码、强制登出与删除账号；每个用户列出其卡组与用量计数。"
 - id: admin.users.search_label
   translation: "搜索"
 - id: admin.users.search_placeholder
@@ -967,8 +955,6 @@
   translation: "作业"
 - id: admin.jobs.heading
   translation: "后台作业"
-- id: admin.jobs.intro
-  translation: "优化器等后台作业：查看状态、阶段、日志尾巴，并可取消。"
 - id: admin.jobs.col.id
   translation: "编号"
 - id: admin.jobs.col.kind
@@ -1028,7 +1014,7 @@
 - id: admin.audit.heading
   translation: "审计日志"
 - id: admin.audit.intro
-  translation: "检索谁在什么时候改了什么。时间以 UTC 存储，按你的账号时区展示。"
+  translation: "时间以 UTC 存储，按你的账号时区展示。"
 - id: admin.audit.filter.heading
   translation: "过滤条件"
 - id: admin.audit.filter.user
@@ -1081,34 +1067,24 @@
   translation: "健康"
 - id: admin.health.heading
   translation: "健康"
-- id: admin.health.intro
-  translation: "数据库、媒体目录与复习队列的当前状态。"
 - id: admin.health.database.label
   translation: "数据库"
 - id: admin.health.database.ok
   translation: "已连通"
 - id: admin.health.database.error
   translation: "无法连接"
-- id: admin.health.database.hint
-  translation: "对底层连接做一次实时 Ping。"
 - id: admin.health.schema.label
   translation: "schema 版本"
 - id: admin.health.schema.unknown
   translation: "未知"
-- id: admin.health.schema.hint
-  translation: "已应用的破坏性迁移版本号。"
 - id: admin.health.media.label
   translation: "媒体目录占用"
-- id: admin.health.media.hint
-  translation: "媒体根目录下的磁盘字节数；带条目上限与短时缓存采样。"
 - id: admin.health.media.truncated
   translation: "（至少这么多；扫描触达条目上限）"
 - id: admin.health.due.label
   translation: "到期队列量"
 - id: admin.health.due.unknown
   translation: "未知"
-- id: admin.health.due.hint
-  translation: "全实例中已排期且到期时间已过的卡片数。"
 
 
 - id: auth.oidc.button
@@ -1378,7 +1354,7 @@
 - id: admin.keys.heading
   translation: "API Key 总览"
 - id: admin.keys.intro
-  translation: "全部用户的每一把 key：名称、归属、前缀、scopes、最后使用与状态。明文只在创建时显示一次且从不落库，因此这里永远无法展示它。"
+  translation: "明文只在创建时显示一次且从不落库。"
 - id: admin.keys.notice.revoked
   translation: "该 key 已撤销。"
 - id: admin.keys.notice.revoke_failed
@@ -1423,8 +1399,6 @@
   translation: "语言包"
 - id: admin.i18n.heading
   translation: "语言包完整度"
-- id: admin.i18n.intro
-  translation: "每种语言相对全部语言包 key 并集的翻译覆盖率。低于 100% 的语言会逐条列出缺失的 key。"
 - id: admin.i18n.col.locale
   translation: "语言"
 - id: admin.i18n.col.coverage
@@ -1588,7 +1562,7 @@
 - id: admin.setting.smtp.heading
   translation: "SMTP 邮件投递"
 - id: admin.setting.smtp.intro
-  translation: "邮件是可选组件。未配置 SMTP 时，依赖邮件的流程（如邀请邮件、密码重置）会被禁用并说明原因。"
+  translation: "未配置 SMTP 时，依赖邮件的流程会被禁用并说明原因。"
 - id: admin.setting.smtp.nav
   translation: "邮件（SMTP）"
 - id: admin.setting.smtp.host
@@ -1640,7 +1614,7 @@
 - id: admin.setting.smtp.outbox.heading
   translation: "投递队列"
 - id: admin.setting.smtp.outbox.intro
-  translation: "邮件绝不在请求路径同步发送：入站写队列表，由后台 worker 带退避重试投递。"
+  translation: "投递走后台队列，失败会带退避重试。"
 - id: admin.setting.smtp.outbox.configured_label
   translation: "SMTP 状态"
 - id: admin.setting.smtp.outbox.pending
@@ -1681,21 +1655,13 @@
 - id: mail.prefs.error.class_locked
   translation: "「{{.name}}」属于安全与事务类邮件，不可关闭。"
 - id: mail.prefs.class.security.heading
-  translation: "A 安全与事务"
-- id: mail.prefs.class.security.note
-  translation: "账号安全相关，始终发送，不可关闭。"
+  translation: "安全与事务"
 - id: mail.prefs.class.collab.heading
-  translation: "B 协作与授权"
-- id: mail.prefs.class.collab.note
-  translation: "共享、授权与邀请相关，默认开启。"
+  translation: "协作与授权"
 - id: mail.prefs.class.study.heading
-  translation: "C 学习与运营"
-- id: mail.prefs.class.study.note
-  translation: "提醒与摘要类，默认关闭，需要时再打开。"
+  translation: "学习与运营"
 - id: mail.prefs.class.admin.heading
-  translation: "D 管理员通知"
-- id: mail.prefs.class.admin.note
-  translation: "发给管理员，默认开启。"
+  translation: "管理员通知"
 - id: mail.prefs.type.password_reset
   translation: "密码重置"
 - id: mail.prefs.type.email_verification
@@ -2102,3 +2068,17 @@
   translation: "当前连续"
 - id: stats.streak.longest_label
   translation: "历史最长"
+
+# ── 管理面板概览页（DESIGN.md §8.4）：计数卡 ──────────────────────
+- id: admin.dashboard.decks
+  translation: "卡组"
+- id: admin.dashboard.notes_cards
+  translation: "笔记 / 卡片"
+- id: admin.dashboard.due
+  translation: "到期队列"
+- id: admin.dashboard.users_value
+  translation: "{{.total}} 个账号 · {{.active}} 个启用"
+- id: admin.dashboard.notes_cards_value
+  translation: "{{.notes}} / {{.cards}}"
+- id: admin.dashboard.jobs_value
+  translation: "进行中 {{.running}} · 失败 {{.failed}}"
