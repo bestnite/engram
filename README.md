@@ -143,6 +143,24 @@ key and call the same service methods, so validation and scheduling rules cannot
 scopes (`read`, `write`, `review`, `admin`) and are managed under Settings. Schemas live in
 [`schema/`](schema/).
 
+## Roadmap
+
+Planned work, not implemented: none of it is part of the current release. The task-level
+breakdown, with acceptance criteria, lives in [`ROADMAP.md`](ROADMAP.md).
+
+- **LLM-assisted grading.** Point the service at an OpenAI-compatible provider (system-wide key
+  or bring your own, with a global off switch and a monthly call cap) and have free-text answers
+  graded automatically: the card, your answer, the reference answer and any linked reference
+  material are assembled into the prompt, and the model's verdict is mapped onto the usual 1-4
+  rating. Grading runs asynchronously, so a model call never blocks review submission.
+- **Reference material bound to cards.** Attach source documents to a note, or to a whole deck,
+  for grading to cite; keyword retrieval first, vector search later.
+- **Grading history.** A per-card record of machine grades next to your own ratings, so you can
+  see where the two disagree.
+- **No external optimiser binary.** Once `go-fsrs` ships its own parameter optimiser, the Rust
+  helper and its build step go away and optimisation runs in-process. The job, the weights it
+  writes back, and the error messages stay the same.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).

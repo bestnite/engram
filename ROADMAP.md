@@ -676,7 +676,9 @@ Conventions:
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are excluded from the
-completion percentage until they are moved into a release milestone.
+completion percentage until they are moved into a release milestone. A condensed, user-facing
+summary is kept in `README.md` and `README.zh.md`; keep the two in step when a task here moves
+into a release milestone.
 
 - [ ] **M10-1 LLM provider settings** — OpenAI-compatible base URL, model, encrypted key,
   system-wide or per-user (BYOK) credentials, global off switch, monthly call cap.
