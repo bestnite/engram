@@ -633,7 +633,7 @@ Conventions:
   excluded; an end-to-end run through the real adapter leaves both metrics non-zero on the job row;
   and when no item is predictable the page does not claim "not improved".
 
-- [ ] **M9-12 Floor the optimizer threshold and hide the fit verdict on a small sample** — the
+- [x] **M9-12 Floor the optimizer threshold and hide the fit verdict on a small sample** — the
   fit comparison can only be trusted on a large enough log: an experiment with a known
   ground-truth weight set measured that below roughly 184 predictable items the adapter either
   cannot learn or falls back to the defaults, so `before == after` and the page reports "not
@@ -745,7 +745,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 11/12
+  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 12/12
   · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
