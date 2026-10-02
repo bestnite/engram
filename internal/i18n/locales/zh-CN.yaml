@@ -1655,3 +1655,77 @@
   translation: "—"
 - id: mail.not_configured
   translation: "本站未开启邮件功能，请联系管理员。"
+# ── 邮件类型目录与偏好（M1-18）────────────────────────────────
+- id: settings.mail_prefs.heading
+  translation: "邮件通知偏好"
+- id: settings.mail_prefs.hint
+  translation: "选择要接收的可选邮件类型；安全与事务类邮件不可关闭。"
+- id: settings.mail_prefs.link
+  translation: "管理邮件通知偏好"
+- id: mail.prefs.title
+  translation: "邮件通知偏好"
+- id: mail.prefs.heading
+  translation: "邮件通知偏好"
+- id: mail.prefs.intro
+  translation: "以下开关决定本站可以给你发哪些邮件。安全与事务类邮件不可关闭；其余类型随时可以修改。"
+- id: mail.prefs.submit
+  translation: "保存偏好"
+- id: mail.prefs.saved
+  translation: "偏好已保存，立即生效。"
+- id: mail.prefs.locked
+  translation: "不可关闭：安全与事务类邮件关乎账号安全，关闭等于给账号留后门。"
+- id: mail.prefs.error.unknown_type
+  translation: "未知的邮件类型「{{.name}}」，偏好未保存。"
+- id: mail.prefs.error.class_locked
+  translation: "「{{.name}}」属于安全与事务类邮件，不可关闭。"
+- id: mail.prefs.class.security.heading
+  translation: "A 安全与事务"
+- id: mail.prefs.class.security.note
+  translation: "账号安全相关，始终发送，不可关闭。"
+- id: mail.prefs.class.collab.heading
+  translation: "B 协作与授权"
+- id: mail.prefs.class.collab.note
+  translation: "共享、授权与邀请相关，默认开启。"
+- id: mail.prefs.class.study.heading
+  translation: "C 学习与运营"
+- id: mail.prefs.class.study.note
+  translation: "提醒与摘要类，默认关闭，需要时再打开。"
+- id: mail.prefs.class.admin.heading
+  translation: "D 管理员通知"
+- id: mail.prefs.class.admin.note
+  translation: "发给管理员，默认开启。"
+- id: mail.prefs.type.password_reset
+  translation: "密码重置"
+- id: mail.prefs.type.email_verification
+  translation: "邮箱验证与改邮箱确认"
+- id: mail.prefs.type.new_device_login
+  translation: "新设备或新 IP 登录提醒"
+- id: mail.prefs.type.credential_changed
+  translation: "密码、两步验证或恢复码变更通知"
+- id: mail.prefs.type.account_status
+  translation: "账号被禁用或删除通知"
+- id: mail.prefs.type.deck_shared
+  translation: "卡组分享给你"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "卡组权限被变更或撤销"
+- id: mail.prefs.type.invite
+  translation: "邀请码发给被邀请人"
+- id: mail.prefs.type.review_reminder
+  translation: "复习到期提醒"
+- id: mail.prefs.type.streak_at_risk
+  translation: "连续打卡即将中断"
+- id: mail.prefs.type.study_digest
+  translation: "学习摘要"
+- id: mail.prefs.type.optimize_done
+  translation: "参数优化完成"
+- id: mail.prefs.type.import_export_done
+  translation: "导入导出完成"
+- id: mail.prefs.type.registration_pending
+  translation: "注册待审批"
+- id: mail.prefs.type.job_failed
+  translation: "作业失败"
+- id: mail.prefs.type.media_disk_alert
+  translation: "媒体配额或磁盘告警"
+- id: mail.prefs.type.backup_failed
+  translation: "备份失败"
+

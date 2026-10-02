@@ -50,5 +50,11 @@ type SettingsData struct {
 	TOTPLinkLabel string
 	TOTPHref      string
 
+	// 邮件类型偏好入口（M1-18）：指向 /settings/notifications 的独立页面。
+	MailPrefsHeading   string
+	MailPrefsHint      string
+	MailPrefsLinkLabel string
+	MailPrefsHref      string
+
 	CSRF string
 }
