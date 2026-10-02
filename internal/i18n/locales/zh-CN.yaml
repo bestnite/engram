@@ -1720,14 +1720,10 @@
   translation: "参数优化完成"
 - id: mail.prefs.type.import_export_done
   translation: "导入导出完成"
-- id: mail.prefs.type.registration_pending
-  translation: "注册待审批"
 - id: mail.prefs.type.job_failed
   translation: "作业失败"
 - id: mail.prefs.type.media_disk_alert
   translation: "媒体配额或磁盘告警"
-- id: mail.prefs.type.backup_failed
-  translation: "备份失败"
 # ── 邀请邮件投递（M1-20）──────────────────────────────────────
 - id: mail.invite.subject
   translation: "邀请你加入 {{.site}}"
@@ -1907,10 +1903,6 @@
 # M1-24 D 类管理员通知（mail.admin.*）：本块由该任务追加，键集合须与 en.yaml 一致。
 - id: mail.admin.greeting
   translation: "你好，管理员："
-- id: mail.admin.registration.subject
-  translation: "新用户注册 - {{.site}}"
-- id: mail.admin.registration.body
-  translation: "{{.site}} 有一位新用户注册：{{.username}}（{{.email}}）。"
 - id: mail.admin.job_failed.subject
   translation: "作业失败 #{{.job_id}} - {{.site}}"
 - id: mail.admin.job_failed.body

@@ -17,7 +17,7 @@ func TestCatalogClassesAndDefaults(t *testing.T) {
 		{ClassSecurity, 5, false, true},
 		{ClassCollab, 3, true, true},
 		{ClassStudy, 5, true, false},
-		{ClassAdmin, 4, true, true},
+		{ClassAdmin, 2, true, true},
 	}
 	counts := map[Class]int{}
 	for _, def := range Catalog() {
@@ -114,8 +114,8 @@ func TestResolveEnabledHonorsOptionalChoices(t *testing.T) {
 		{TypeReviewReminder, true, "C explicit on wins over default off"},
 		{TypeInvite, true, "B absent falls back to default on"},
 		{TypeStudyDigest, false, "C absent falls back to default off"},
-		{TypeRegistrationPending, true, "D absent falls back to default on"},
 		{TypeJobFailed, true, "D absent falls back to default on"},
+		{TypeMediaDiskAlert, true, "D absent falls back to default on"},
 	}
 	for _, tc := range cases {
 		if got := ResolveEnabled(choices, tc.typ); got != tc.want {

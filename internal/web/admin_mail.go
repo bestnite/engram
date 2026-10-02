@@ -11,12 +11,10 @@ import (
 
 // 本文件是 M1-24：D 类管理员通知邮件（DESIGN.md §4.7、ROADMAP.md M1-24）。
 //
-// 四个触发点里，本仓库真实存在的是三个：
-//   - 注册：internal/web/auth.go 的 registerSubmit（新账号创建成功后）；
+// 三个触发点里，本仓库真实存在的是两个：
 //   - 作业失败：internal/jobs/jobs.go 的 fail（Runner 通过 OnFailure 钩子回调本文件的
 //     NotifyJobFailed，装配在 cmd/engram/main.go）；
 //   - 媒体配额：internal/web/media.go 的 checkMediaQuota（用户上传被配额拦下时）。
-//   「备份失败」在本仓库没有备份代码，故不实现（报告里已说明）。
 //
 // 三条硬约束与 A/B 类邮件一致，逐条落实：
 //   - 绝不在请求路径同步发信：一律经 mail.AdminNotifier.Send → Outbox.Enqueue 入队；
@@ -68,17 +66,6 @@ func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *
 	return sent
 }
 
-// NotifyRegistration 在注册成功后通知管理员（D 类，registration_pending）。
-// 由 registerSubmit 调用；刻意不返回 error。
-func (s *Server) NotifyRegistration(ctx context.Context, u *store.User) {
-	if u == nil {
-		return
-	}
-	s.notifyAdmins(ctx, mail.TypeRegistrationPending, func(loc *i18n.Localizer) mail.Message {
-		return adminRegistrationMessage(loc, securitySiteName(loc), *u)
-	})
-}
-
 // NotifyJobFailed 在作业失败落库后通知管理员（D 类，job_failed）。
 // 签名与 jobs.FailureFunc 对齐；由 cmd/engram 把它接到 Runner.OnFailure 上。
 // 它运行在作业 worker 的上下文里，必须快速返回且绝不 panic（jobs 侧已包 recover 兜底）。
@@ -99,22 +86,7 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 	})
 }
 
-// ── 三类邮件的文案组装（正文只有纯文本；HTMLBody 留空）────────────────────────────
-
-// adminRegistrationMessage 组装「新用户注册」通知。
-func adminRegistrationMessage(loc *i18n.Localizer, site string, u store.User) mail.Message {
-	lines := []string{
-		loc.T("mail.admin.greeting"),
-		"",
-		loc.Tf("mail.admin.registration.body", map[string]any{
-			"site": site, "username": u.Username, "email": u.Email,
-		}),
-	}
-	return mail.Message{
-		Subject:  loc.Tf("mail.admin.registration.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
-}
+// ── 两类邮件的文案组装（正文只有纯文本；HTMLBody 留空）────────────────────────────
 
 // adminJobFailedMessage 组装「作业失败」通知；reason 是失败原因（英文，来自 jobs.error）。
 func adminJobFailedMessage(loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
