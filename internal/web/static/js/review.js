@@ -29,6 +29,30 @@
     if (show) {
       show.classList.add("hidden");
     }
+    lockGradedAnswer();
+  }
+
+  // lockGradedAnswer 落实「作答类题型揭示答案即放弃作答」（DESIGN.md §8.2）：
+  // 揭示后禁用输入框与提交按钮——否则看一眼答案再输入等于白拿 Good/Easy——
+  // 换成「记 0 分并继续」按钮，它提交 revealed=1，服务端按 Again 记账。
+  // 自评类题型没有 #review-graded，这里直接返回，行为不变。
+  function lockGradedAnswer() {
+    var graded = document.getElementById("review-graded");
+    if (!graded) {
+      return;
+    }
+    var inputs = graded.querySelectorAll("input[name=answer]");
+    for (var i = 0; i < inputs.length; i++) {
+      inputs[i].disabled = true;
+    }
+    var submit = document.getElementById("review-submit");
+    if (submit) {
+      submit.classList.add("hidden");
+    }
+    var zero = document.getElementById("review-zero");
+    if (zero) {
+      zero.classList.remove("hidden");
+    }
   }
 
   function resetCardState() {

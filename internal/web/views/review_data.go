@@ -91,8 +91,10 @@ type ReviewAreaData struct {
 	BackLabel  string
 
 	ShowAnswerLabel string
-	Ratings         []ReviewRating
-	ShortcutsHint   string
+	// ZeroScoreLabel 是作答类题型"已揭示答案、按 0 分继续"按钮的文案。
+	ZeroScoreLabel string
+	Ratings        []ReviewRating
+	ShortcutsHint  string
 
 	// Graded 非空时（作答类题型，M3-12）用输入控件代替四档自评按钮。
 	Graded *ReviewGradedView

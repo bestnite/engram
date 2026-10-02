@@ -217,7 +217,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		return nil, err
 	}
 	if opts.ReviewsPerDay > 0 {
-		used, err := b.countReviews(ctx, userID, day, false)
+		used, err := b.countReviews(ctx, userID, day, deckIDs, false)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		}
 	}
 
-	introduced, err := b.countReviews(ctx, userID, day, true)
+	introduced, err := b.countReviews(ctx, userID, day, deckIDs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -468,9 +468,19 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 
 // countReviews 按 (user_id, review_day) 从 reviews 聚合计数（DESIGN.md §2.2：不建计数表）。
 // newOnly=true 统计\"今日引入的新卡\"（state_before = 0），false 统计\"今日的复习量\"（state_before > 0）。
-func (b *QueueBuilder) countReviews(ctx context.Context, userID uint64, day string, newOnly bool) (int, error) {
+//
+// deckIDs 是本次队列的卡组范围：恰好一个卡组时只数该卡组的记录。DESIGN.md §3.3 把
+// new_per_day / reviews_per_day 定义为**卡组级**设置，若"今日已用"仍按全库统计，卡组级额度
+// 就形同虚设——实测过一个卡组刷满新卡额度会把另一个卡组的新卡一起挡住（M-额度口径）。
+// 多卡组与全库范围没有单一卡组可归属，沿用全库计数。
+func (b *QueueBuilder) countReviews(ctx context.Context, userID uint64, day string, deckIDs []uint64, newOnly bool) (int, error) {
 	q := b.db.WithContext(ctx).Model(&store.Review{}).
-		Where("user_id = ? AND review_day = ?", userID, day)
+		Where("reviews.user_id = ? AND reviews.review_day = ?", userID, day)
+	if len(deckIDs) == 1 {
+		q = q.Joins("JOIN cards AS cards ON cards.id = reviews.card_id").
+			Joins("JOIN notes AS notes ON notes.id = cards.note_id").
+			Where("notes.deck_id = ?", deckIDs[0])
+	}
 	if newOnly {
 		q = q.Where("state_before = ?", int(StateNew))
 	} else {

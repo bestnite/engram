@@ -267,6 +267,8 @@
   translation: "背面"
 - id: review.show_answer
   translation: "显示答案"
+- id: review.zero_score
+  translation: "已揭示答案，记 0 分并继续"
 - id: review.rating.again
   translation: "重来"
 - id: review.rating.hard

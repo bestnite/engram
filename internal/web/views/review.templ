@@ -113,6 +113,9 @@ templ ReviewArea(data ReviewAreaData) {
 								</label>
 							}
 							<button id="review-submit" type="submit" class="mt-3 min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Graded.SubmitLabel }</button>
+							// 揭示答案后的唯一出口：不判分、按 Again 记一条（DESIGN.md §8.2）。
+							// 平时隐藏，由 review.js 在揭示时显示，并禁用上面的输入框与提交按钮。
+							<button id="review-zero" type="submit" name="revealed" value="1" class="mt-3 hidden min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-5 py-3 font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer">{ data.ZeroScoreLabel }</button>
 						</div>
 					} else {
 						<div id="review-ratings" class="mt-2 hidden">

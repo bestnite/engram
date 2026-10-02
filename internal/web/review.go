@@ -139,6 +139,12 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	}
 	// 作答类题型（M3-12）：题型实现 Grader 时走机器判分，不再依赖四档自评。
 	if _, graded := graderFor(note.Kind); graded {
+		// 已揭示答案再作答等于抄答案：不再判分，直接记 Again（DESIGN.md §8.2）。
+		// 页面上揭示后输入框与提交按钮会被禁用，只留一个「记 0 分并继续」按钮带 revealed=1。
+		if c.PostForm("revealed") != "" {
+			s.reviewRevealedAnswer(c, loc, user, scope, card, note)
+			return
+		}
 		s.reviewGradedAnswer(c, loc, user, scope, card, note)
 		return
 	}
@@ -327,6 +333,7 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 		FrontLabel:       loc.T("review.front"),
 		BackLabel:        loc.T("review.back"),
 		ShowAnswerLabel:  loc.T("review.show_answer"),
+		ZeroScoreLabel:   loc.T("review.zero_score"),
 		Ratings: []views.ReviewRating{
 			{Value: int(schedule.Again), Label: loc.T("review.rating.again")},
 			{Value: int(schedule.Hard), Label: loc.T("review.rating.hard")},
@@ -686,6 +693,56 @@ func parseBoolAnswer(raw string) (bool, error) {
 // 判分后不直接换卡，而是返回结果面板（正确答案 + 判分细节），用户点“继续”才进入下一张。
 //
 // 输入无法判分（ok=false）或输入不合法时不写库：以局部化错误渲染当前卡，让用户重试。
+// reviewRevealedAnswer 处理"已揭示答案后继续"：不判分，按 Again 记一条自评日志。
+//
+// 为什么要单开一条路径而不是复用 reviewGradedAnswer：后者的评分来自判分器，而这里**必须**
+// 记 0 分（Again）——否则用户点开答案再输入就等于白拿 Good/Easy（DESIGN.md §8.2）。
+// grade_source 记 self：这次评分确实来自用户（揭示即放弃作答），没有任何机器判分发生。
+func (s *Server) reviewRevealedAnswer(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, card *store.Card, note *store.Note) {
+	ctx := c.Request.Context()
+	done := parseDone(c.PostForm("done"))
+	// 判分提交始终用被评卡所属卡组的预设调度；范围只影响队列构建（DESIGN.md §3.3）。
+	sched, err := s.schedulerFor(ctx, user.ID, []uint64{note.DeckID})
+	if err != nil {
+		s.logger.Error("load scheduler failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		s.renderReviewError(c, loc, user, scope, done, "begin review transaction failed", tx.Error)
+		return
+	}
+	if _, err := schedule.Submit(ctx, tx, schedule.SubmitInput{
+		CardID:          card.ID,
+		UserID:          user.ID,
+		Rating:          schedule.Again,
+		ExpectedVersion: parseDone(c.PostForm("expected_version")),
+		ElapsedMS:       parseElapsed(c.PostForm("elapsed_ms")),
+		GradeSource:     schedule.GradeSourceSelf,
+		Location:        userLocation(user),
+		DayCutoffHour:   user.DayCutoffHour,
+		Scheduler:       sched,
+		Now:             time.Now().UTC(),
+	}); err != nil {
+		_ = tx.Rollback().Error
+		s.renderReviewError(c, loc, user, scope, done, "submit revealed review failed", err)
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		s.renderReviewError(c, loc, user, scope, done, "commit revealed review failed", err)
+		return
+	}
+	// 直接换下一张：没有判分结果面板可看（答案已经揭示过了）。
+	area, err := s.reviewArea(c, loc, user, scope, done+1, "")
+	if err != nil {
+		s.logger.Error("build next card failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	renderReviewArea(c, area)
+}
+
 func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, card *store.Card, note *store.Note) {
 	ctx := c.Request.Context()
 	done := parseDone(c.PostForm("done"))

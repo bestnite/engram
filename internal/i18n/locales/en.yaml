@@ -267,6 +267,8 @@
   translation: "Back"
 - id: review.show_answer
   translation: "Show answer"
+- id: review.zero_score
+  translation: "Answer revealed - count as 0 and continue"
 - id: review.rating.again
   translation: "Again"
 - id: review.rating.hard
