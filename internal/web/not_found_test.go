@@ -33,9 +33,25 @@ func TestNotFoundRendersLocalizedPage(t *testing.T) {
 	if !strings.Contains(body, "返回首页") {
 		t.Errorf("page is missing the localized home action; body = %s", snippet(body))
 	}
+	if !strings.Contains(body, `href="https://git.nite07.com/nite/engram"`) {
+		t.Errorf("page is missing the repository footer link; body = %s", snippet(body))
+	}
+	if !strings.Contains(body, `href="/no-such-page-zz9?lang=en"`) {
+		t.Errorf("page is missing the language selector link for the current path; body = %s", snippet(body))
+	}
 }
 
-// TestNotFoundLocalizesByAcceptLanguage 断言同一路径按 Accept-Language 返回不同语言。
+func TestNotFoundAuthenticatedPageIncludesSettingsEntry(t *testing.T) {
+	srv, _, _, cookies, _ := newNotesServer(t)
+	rec := getWithCookies(t, srv, unknownPath, cookies)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET %s status = %d, want 404", unknownPath, rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `href="/settings"`) {
+		t.Errorf("authenticated 404 page does not link to personal settings: %s", snippet(rec.Body.String()))
+	}
+}
+
 func TestNotFoundLocalizesByAcceptLanguage(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
