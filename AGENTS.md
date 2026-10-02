@@ -726,8 +726,10 @@ completion percentage until they are moved into a release milestone.
 - [ ] **B-6 TOTP two-factor authentication** — optional second factor for local accounts.
 - [ ] **B-7 SMTP** — optional mail sending for invites and password reset.
 - [ ] **B-8 Per-user media quota** — only if media growth becomes a problem.
-- [ ] **B-9 Deployment notes outside the repository** — hosting-specific details stay
-  private; only generic container instructions belong in the README.
+- [x] **B-9 Deployment notes outside the repository** — hosting-specific details stay
+  private; only generic container instructions belong in the README. *Satisfied by construction:
+  the README documents only generic PostgreSQL deployment, backup and restore, and hosting
+  specifics live in private notes rather than the repository.*
 - [x] **B-13 CSRF for pre-session forms** — `/setup`, `/login` and `/register` submit without a
   CSRF token because there is no session to bind one to (documented in the handlers). The exposure
   is narrow but real: a setup race on a fresh instance and login-CSRF on an existing one. Fix with
@@ -762,7 +764,7 @@ completion percentage until they are moved into a release milestone.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
   `M0 13/13 · M1 14/15 · M2 12/12 · M3 12/12 · M4 9/9 · M5 11/11 · M6 9/10 · M7 4/4 · M8 6/6 · M9 8/9
-  · M10 0/5 (excluded) · backlog 4/13 (excluded)`.
+  · M10 0/5 (excluded) · backlog 5/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
