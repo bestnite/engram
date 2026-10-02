@@ -1,0 +1,45 @@
+package views
+
+// TOTPChallengePage 是登录第二步的页面（M1-16）：已启用 TOTP 的账号只凭密码不能完成登录。
+// 页面上的每一个字符串都来自 TOTPChallengeData，模板本身不含任何硬编码用户文案。
+templ TOTPChallengePage(data TOTPChallengeData) {
+	@Base(data.Layout) {
+		<h1 class="text-2xl font-bold text-slate-900">{ data.Heading }</h1>
+		if data.Intro != "" {
+			<p class="mt-2 text-slate-600">{ data.Intro }</p>
+		}
+		if data.ErrorMessage != "" {
+			<p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+				{ data.ErrorMessage }
+			</p>
+		}
+		<form class="mt-6 space-y-4" method="post" action="/login/totp">
+			if data.CSRF != "" {
+				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+			}
+			<label class="block">
+				<span class="text-sm font-medium text-slate-700">{ data.CodeLabel }</span>
+				<input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="text" name="code" inputmode="text" autocomplete="one-time-code" required/>
+			</label>
+			if data.RecoveryHint != "" {
+				<p class="text-sm text-slate-500">{ data.RecoveryHint }</p>
+			}
+			<button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700" type="submit">
+				{ data.SubmitLabel }
+			</button>
+		</form>
+		<section class="mt-8">
+			<ul class="flex gap-3">
+				for _, l := range data.LangOptions {
+					<li>
+						if l.Active {
+							<span class="rounded border border-blue-600 px-2 py-1 text-sm text-blue-600">{ l.Label }</span>
+						} else {
+							<a class="rounded border border-slate-300 px-2 py-1 text-sm text-slate-600" href={ l.Href }>{ l.Label }</a>
+						}
+					</li>
+				}
+			</ul>
+		</section>
+	}
+}

@@ -24,8 +24,11 @@ var BuiltinMigrations = []Migration{
 }
 
 // AutoMigrate 只做增量变更（加表/加列/加索引）。
+// M1-16 的 TOTP 表定义在 totp.go（新表放在独立文件里，避免改动 models.go 这个单写者热点），
+// 但 AutoMigrate 必须覆盖全部模型，故在这里做一次并集。
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
-	if err := db.WithContext(ctx).AutoMigrate(AllModels()...); err != nil {
+	models := append(AllModels(), TOTPModels()...)
+	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 	return nil

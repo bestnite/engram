@@ -72,5 +72,11 @@ templ SettingsPage(data SettingsData) {
 				<p class="mt-2 text-sm text-slate-600">{ data.PasswordUnavailable }</p>
 			}
 		</section>
+
+		<section class="mt-8 rounded border border-slate-200 bg-white p-4">
+			<h2 class="text-lg font-semibold">{ data.TOTPHeading }</h2>
+			<p class="mt-2 text-sm text-slate-600">{ data.TOTPHint }</p>
+			<p class="mt-2 text-sm"><a class="text-blue-600 hover:text-blue-700" href={ data.TOTPHref }>{ data.TOTPLinkLabel }</a></p>
+		</section>
 	}
 }

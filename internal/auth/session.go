@@ -91,31 +91,39 @@ func randomToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// sign 返回 "会话ID.签名"，签名是对 ID 的 HMAC-SHA256；cookie 因此不可伪造（"签名 cookie"）。
-func (m *Manager) sign(id string) string {
+// SignValue 返回 "载荷.HMAC-SHA256(载荷)"。会话 cookie 与 TOTP 第二步凭据共用这一处签名，
+// 因此两者的伪造难度一致，也不会出现第二套密钥。载荷不含 '.' 也能工作，但用 LastIndex
+// 定位分隔符，所以允许载荷自带 '.'（例如 "userID.expUnix"）。
+func (m *Manager) SignValue(payload string) string {
 	mac := hmac.New(sha256.New, m.secret)
-	mac.Write([]byte(id))
-	return id + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	mac.Write([]byte(payload))
+	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// verifyCookie 校验签名并取回会话 ID；任何解析/签名问题都视作匿名。
-func (m *Manager) verifyCookie(value string) (string, bool) {
+// VerifyValue 校验签名并取回载荷；任何解析/签名问题都返回 false。
+func (m *Manager) VerifyValue(value string) (string, bool) {
 	i := strings.LastIndexByte(value, '.')
 	if i <= 0 || i == len(value)-1 {
 		return "", false
 	}
-	id, rawSig := value[:i], value[i+1:]
+	payload, rawSig := value[:i], value[i+1:]
 	sig, err := base64.RawURLEncoding.DecodeString(rawSig)
 	if err != nil {
 		return "", false
 	}
 	mac := hmac.New(sha256.New, m.secret)
-	mac.Write([]byte(id))
+	mac.Write([]byte(payload))
 	if !hmac.Equal(mac.Sum(nil), sig) {
 		return "", false
 	}
-	return id, true
+	return payload, true
 }
+
+// sign 返回 "会话ID.签名"；会话 ID 本身不含 '.'，语义与 SignValue 相同。
+func (m *Manager) sign(id string) string { return m.SignValue(id) }
+
+// verifyCookie 校验签名并取回会话 ID；任何解析/签名问题都视作匿名。
+func (m *Manager) verifyCookie(value string) (string, bool) { return m.VerifyValue(value) }
 
 // StartSession 新建服务端会话、下发签名 cookie，并为该会话生成 CSRF token。
 func (m *Manager) StartSession(ctx context.Context, c *gin.Context, userID uint64) (*store.Session, error) {
