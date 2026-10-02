@@ -439,6 +439,20 @@ Conventions:
   finds it listed afterwards without the plaintext, and revokes it; a revoked key fails
   authentication immediately; another user's key never appears in the list.
 
+- [ ] **M4-11 MCP `create_deck` tool** — the MCP surface can list decks and import a deck package
+  but cannot create an empty deck, so an agent has no way to start one. The REST equivalent
+  (`POST /api/v1/decks`, `internal/api/decks.go`) keeps its logic inside the handler, so an MCP
+  tool cannot reuse it without duplicating validation, which `DESIGN.md` §7.4 forbids. Extract
+  `CreateDeck(ctx, user, CreateDeckInput)` into `internal/api/service.go` (name trimmed and
+  required, visibility defaulting to private, `preset_id` 0 meaning the ensured default preset,
+  audit row, the same error codes), have the REST handler call it, and register a `create_deck`
+  tool (scope write) taking `name`, `description`, `visibility` and `preset_id`, returning the
+  same `DeckResponse` the REST endpoint returns.
+  *Acceptance:* an MCP `create_deck` call and a REST `POST /api/v1/decks` with the same arguments
+  produce the same response shape and the same stored deck; a key without the write scope is
+  refused; an empty name and an invalid visibility are rejected with the shared error code; the
+  REST handler's existing tests still pass unchanged.
+
 ### M5 — Sharing and permissions
 
 - [x] **M5-1 Grants and role checks** — `deck_grants` store plus one `requireRole` helper
@@ -609,6 +623,21 @@ Conventions:
   creating a deck opens a dialog; `/` declares an icon and `/favicon.ico` no longer returns 404;
   `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean, both check scripts are
   green after `git add`, and a real instance is inspected at desktop and phone width.
+
+- [ ] **M8-8 No white flash when navigating in dark mode** — the theme is decided by
+  `internal/web/static/js/pwa.js`, which `<head>` pulls in as an external `<script src="/pwa.js">`
+  (`internal/web/views/base.templ`), so the browser can paint a white frame before that script
+  runs and flips `<html class="dark">`. The canvas colour and `color-scheme` arrive even later,
+  with `tailwind.css` (`input.css` declares `html.dark { color-scheme: dark }`, the body carries
+  `bg-slate-50 dark:bg-zinc-950`). Inline a small bootstrap in `<head>` **before** the stylesheet
+  link that reads the stored preference (falling back to `prefers-color-scheme`), toggles the
+  `dark` class, sets `documentElement.style.colorScheme` and the canvas background colour
+  (`#09090b` / `#f8fafc`), and syncs `<meta name="theme-color">`. pwa.js stays the owner of the
+  toggle and of the system-theme listener.
+  *Acceptance:* with the cache disabled, loading a page while the stored theme is dark shows no
+  white frame (verified from a screenshot sequence or the first paint); the toggle and the
+  system-theme change still work; both check scripts stay green and the inline script carries no
+  user-facing text.
 
 ### M9 — Parameter optimisation
 
@@ -809,7 +838,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 10/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/7 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 10/11 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/8 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
