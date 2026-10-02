@@ -73,17 +73,20 @@ func (Setting) TableName() string { return "settings" }
 
 // Preset 是一组调度参数，挂在 deck 上，多个 deck 可共用。
 type Preset struct {
-	ID                  uint64     `gorm:"primaryKey" json:"id"`
-	OwnerUserID         uint64     `gorm:"not null;index" json:"owner_user_id"`
-	Name                string     `gorm:"not null" json:"name"`
-	DesiredRetention    float64    `gorm:"not null;default:0.9" json:"desired_retention"`
-	LearningSteps       string     `gorm:"not null" json:"learning_steps"`
-	RelearningSteps     string     `gorm:"not null" json:"relearning_steps"`
-	MaximumIntervalDays int        `gorm:"not null;default:36500" json:"maximum_interval_days"`
-	EnableFuzz          bool       `gorm:"not null;default:true" json:"enable_fuzz"`
-	WeightsJSON         *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
-	WeightsOptimizedAt  *time.Time `json:"weights_optimized_at,omitempty"`
-	WeightsReviewCount  *int       `json:"weights_review_count,omitempty"`
+	ID                  uint64  `gorm:"primaryKey" json:"id"`
+	OwnerUserID         uint64  `gorm:"not null;index" json:"owner_user_id"`
+	Name                string  `gorm:"not null" json:"name"`
+	DesiredRetention    float64 `gorm:"not null;default:0.9" json:"desired_retention"`
+	LearningSteps       string  `gorm:"not null" json:"learning_steps"`
+	RelearningSteps     string  `gorm:"not null" json:"relearning_steps"`
+	MaximumIntervalDays int     `gorm:"not null;default:36500" json:"maximum_interval_days"`
+	// EnableFuzz 带数据库默认值 true，按 AGENTS.md §2.3 第 9 条用 *bool：
+	// nil 表示未指定（落库走数据库默认 true），非 nil 时显式写入——包括显式的 false。
+	// 读取有效值请用 FuzzEnabled()，不要直接解引用。
+	EnableFuzz         *bool      `gorm:"not null;default:true" json:"enable_fuzz"`
+	WeightsJSON        *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
+	WeightsOptimizedAt *time.Time `json:"weights_optimized_at,omitempty"`
+	WeightsReviewCount *int       `json:"weights_review_count,omitempty"`
 	// GradeMappingJSON 是机器判分的「分数→评分档位」映射（JSON，DESIGN.md §6.2）。
 	// NULL 表示用内置默认映射（全对 Good / 部分对 Hard / 全错 Again）。
 	// 可空 TEXT，不设数据库默认值：默认行为由 cardtype.DefaultGradeMapping 在 Go 侧给出。

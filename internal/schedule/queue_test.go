@@ -29,7 +29,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 	t.Helper()
 	p := store.NewPreset(1, "preset")
-	p.EnableFuzz = false
+	p.EnableFuzz = boolPtr(false)
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}

@@ -79,7 +79,7 @@ func seedFixture(t *testing.T, db *gorm.DB) fixture {
 	}
 	preset := Preset{OwnerUserID: userA.ID, Name: "default", DesiredRetention: 0.9,
 		LearningSteps: "1m,10m", RelearningSteps: "10m", MaximumIntervalDays: 36500,
-		EnableFuzz: true, CreatedAt: now, UpdatedAt: now}
+		EnableFuzz: boolPtr(true), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&preset).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}

@@ -144,7 +144,7 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	p := fsrs.DefaultParam()
 	p.RequestRetention = preset.DesiredRetention
 	p.MaximumInterval = float64(preset.MaximumIntervalDays)
-	p.EnableFuzz = preset.EnableFuzz
+	p.EnableFuzz = preset.FuzzEnabled()
 	p.W = weights
 	p.LearningSteps = learning
 	p.RelearningSteps = relearning

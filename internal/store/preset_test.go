@@ -42,7 +42,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 			if got.MaximumIntervalDays != DefaultMaximumIntervalDays {
 				t.Errorf("maximum_interval_days = %d, want %d", got.MaximumIntervalDays, DefaultMaximumIntervalDays)
 			}
-			if !got.EnableFuzz {
+			if !got.FuzzEnabled() {
 				t.Errorf("enable_fuzz = false, want true (default on)")
 			}
 			if got.WeightsJSON != nil {
@@ -54,7 +54,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 			got.LearningSteps = "2m,20m"
 			got.RelearningSteps = "15m"
 			got.MaximumIntervalDays = 100
-			got.EnableFuzz = false
+			got.EnableFuzz = boolPtr(false)
 			if err := presets.Update(ctx, owner, got); err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}
@@ -63,7 +63,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 				t.Fatalf("ByID() after update error = %v", err)
 			}
 			if again.DesiredRetention != 0.85 || again.LearningSteps != "2m,20m" ||
-				again.RelearningSteps != "15m" || again.MaximumIntervalDays != 100 || again.EnableFuzz {
+				again.RelearningSteps != "15m" || again.MaximumIntervalDays != 100 || again.FuzzEnabled() {
 				t.Errorf("round-trip mismatch: %+v", again)
 			}
 
