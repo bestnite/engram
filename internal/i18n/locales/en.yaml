@@ -1887,3 +1887,23 @@
 - id: mail.notice.account.deleted
   translation: "deleted"
 
+# ── M1-22 one-click unsubscribe (RFC 8058): no-login opt-out page for optional types ──
+- id: mail.unsub.title
+  translation: "Unsubscribe"
+- id: mail.unsub.heading
+  translation: "Unsubscribe from this type of email"
+- id: mail.unsub.intro
+  translation: "Click the button below to stop receiving this type of email. You can turn it back on any time in your email preferences."
+- id: mail.unsub.submit
+  translation: "Confirm unsubscribe"
+- id: mail.unsub.done
+  translation: "You have unsubscribed from \"{{.type}}\". You can turn it back on in your email preferences."
+- id: mail.unsub.back
+  translation: "Go to email preferences"
+- id: mail.unsub.error_invalid
+  translation: "This unsubscribe link is not valid."
+- id: mail.unsub.error_expired
+  translation: "This unsubscribe link has expired."
+- id: mail.unsub.error_used
+  translation: "This unsubscribe link has already been used."
+

@@ -30,6 +30,9 @@ const (
 	ActionTokenEmailVerify = "email_verification"
 	// ActionTokenEmailChange 是改邮箱确认令牌；Payload 保存待确认的新邮箱。
 	ActionTokenEmailChange = "email_change"
+	// ActionTokenUnsubscribe 是一键退订令牌（M1-22）；Payload 保存它指名的可选邮件类型，
+	// 因此一枚令牌只能关掉那一个类型，无法被改指到别的类型。
+	ActionTokenUnsubscribe = "unsubscribe"
 )
 
 // 令牌消费的稳定错误值；transport 层据此映射到稳定英文 code。

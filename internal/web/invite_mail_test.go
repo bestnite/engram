@@ -139,7 +139,7 @@ func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 		t.Errorf("delivered Type = %q, want %q", msg.Type, mail.TypeInvite)
 	}
 	if len(msg.Headers) != 0 {
-		t.Errorf("Headers = %v, want empty (unsubscribe is M1-22)", msg.Headers)
+		t.Errorf("Headers = %v, want empty for a non-user recipient (no preferences to unsubscribe from)", msg.Headers)
 	}
 	if !strings.Contains(msg.TextBody, token) {
 		t.Errorf("delivered body does not carry the invite token:\n%s", msg.TextBody)
