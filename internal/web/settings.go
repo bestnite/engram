@@ -238,6 +238,10 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		PasswordNote:        loc.T("settings.password.note"),
 		PasswordAvailable:   user.PasswordHash != nil,
 		PasswordUnavailable: loc.T("settings.password.oidc_only"),
+		TOTPHeading:         loc.T("totp.settings.heading"),
+		TOTPHint:            loc.T("totp.settings.intro"),
+		TOTPLinkLabel:       loc.T("totp.settings.link"),
+		TOTPHref:            "/settings/totp",
 		CSRF:                csrf,
 	}
 }

@@ -1497,3 +1497,79 @@
 - id: a11y.notes.bulk_tag
   translation: "要加到所选卡片上的标签"
 
+# ── TOTP 二次验证（M1-16）────────────────────────────────────
+- id: totp.login.title
+  translation: "两步验证"
+- id: totp.login.heading
+  translation: "两步验证"
+- id: totp.login.intro
+  translation: "该账号已启用两步验证，请输入认证器 App 中的验证码。"
+- id: totp.login.code_label
+  translation: "验证码或恢复码"
+- id: totp.login.recovery_hint
+  translation: "也可以使用一次性恢复码代替验证码。"
+- id: totp.login.submit
+  translation: "继续"
+- id: totp.error.invalid_code
+  translation: "验证码或恢复码不正确。"
+- id: totp.error.password_wrong
+  translation: "密码不正确。"
+- id: totp.error.password_required
+  translation: "请输入密码。"
+- id: totp.error.already_enabled
+  translation: "该账号已启用两步验证。"
+- id: totp.error.no_pending
+  translation: "没有待确认的绑定，请重新开始。"
+- id: totp.error.not_enabled
+  translation: "该账号未启用两步验证。"
+- id: totp.settings.title
+  translation: "两步验证"
+- id: totp.settings.heading
+  translation: "两步验证"
+- id: totp.settings.intro
+  translation: "启用后，登录时除密码外还需要认证器 App 的动态验证码。"
+- id: totp.settings.link
+  translation: "管理两步验证"
+- id: totp.status.enabled
+  translation: "状态：已启用"
+- id: totp.status.disabled
+  translation: "状态：未启用"
+- id: totp.begin.hint
+  translation: "点击开始生成密钥，然后把它添加到认证器 App（也可直接使用下方的 otpauth 链接或密钥）。"
+- id: totp.begin.submit
+  translation: "开始设置"
+- id: totp.pending.heading
+  translation: "确认绑定"
+- id: totp.pending.secret_label
+  translation: "密钥（仅显示这一次）"
+- id: totp.pending.otpauth_label
+  translation: "otpauth 链接"
+- id: totp.pending.confirm_hint
+  translation: "把密钥添加到认证器 App 后，输入 App 显示的一次验证码以完成绑定。"
+- id: totp.pending.confirm_submit
+  translation: "确认并启用"
+- id: totp.disable.heading
+  translation: "关闭两步验证"
+- id: totp.disable.hint
+  translation: "关闭需要确认密码；关闭后恢复码一并作废。"
+- id: totp.disable.password_label
+  translation: "密码（或恢复码）"
+- id: totp.disable.submit
+  translation: "关闭两步验证"
+- id: totp.recovery.heading
+  translation: "恢复码"
+- id: totp.recovery.remaining
+  translation: "剩余可用恢复码："
+- id: totp.recovery.warning
+  translation: "恢复码只在生成时显示一次，请立即离线保存；每个恢复码只能使用一次。"
+- id: totp.recovery.list_label
+  translation: "本次生成的新恢复码"
+- id: totp.recovery.regenerate_submit
+  translation: "重新生成恢复码"
+- id: totp.saved.enabled
+  translation: "两步验证已启用。"
+- id: totp.saved.disabled
+  translation: "两步验证已关闭。"
+- id: totp.saved.recovery
+  translation: "已生成新的恢复码，旧的恢复码立即失效。"
+

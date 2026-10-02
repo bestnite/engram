@@ -60,6 +60,15 @@ const (
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
 	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
 	ActionJobCancel = "job.cancel"
+
+	// M1-16 TOTP 二次验证：绑定开始 / 启用 / 关闭 / 重新生成恢复码 / 恢复码被消费 / 第二步失败。
+	// 恢复码明文永不入审计（detail 只记数量与来源 IP）。
+	ActionTOTPBegin              = "totp.begin"
+	ActionTOTPEnable             = "totp.enable"
+	ActionTOTPDisable            = "totp.disable"
+	ActionTOTPRecoveryRegenerate = "totp.recovery_regenerate"
+	ActionTOTPRecoveryUsed       = "totp.recovery_used"
+	ActionTOTPVerifyFailed       = "totp.verify_failed"
 )
 
 // AuditEntry 是一次审计写入的入参。

@@ -61,6 +61,8 @@ type Deps struct {
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
 	LoginLimiter *auth.LoginLimiter
+	// TOTP 是本地账号的可选二次因素（M1-16）；为空时登录只校验密码，不暴露 TOTP 相关路由。
+	TOTP *auth.TOTPService
 	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
 	BootstrapAdminEmail string
 	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
@@ -106,9 +108,11 @@ type Server struct {
 	grants           *store.GrantStore
 	shareLinks       *store.ShareLinkStore
 	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
-	access         *auth.DeckAccess
-	auditor        *auth.Auditor
-	loginLimiter   *auth.LoginLimiter
+	access       *auth.DeckAccess
+	auditor      *auth.Auditor
+	loginLimiter *auth.LoginLimiter
+	// totp 是本地账号的二次因素服务（M1-16）；为空时登录不含第二步。
+	totp           *auth.TOTPService
 	bootstrapEmail string
 	api            *api.API
 	mcp            *mcp.Server
@@ -177,6 +181,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		presets:        deps.Presets,
 		auditor:        deps.Auditor,
 		loginLimiter:   deps.LoginLimiter,
+		totp:           deps.TOTP,
 		bootstrapEmail: deps.BootstrapAdminEmail,
 		api:            deps.API,
 		mcp:            deps.MCP,

@@ -1499,3 +1499,79 @@
 - id: a11y.notes.bulk_tag
   translation: "Tag to apply to the selected cards"
 
+# ── TOTP two-factor authentication (M1-16)────────────────────
+- id: totp.login.title
+  translation: "Two-factor authentication"
+- id: totp.login.heading
+  translation: "Two-factor authentication"
+- id: totp.login.intro
+  translation: "This account has two-factor authentication enabled. Enter the code from your authenticator app."
+- id: totp.login.code_label
+  translation: "Code or recovery code"
+- id: totp.login.recovery_hint
+  translation: "A single-use recovery code works here instead of the code."
+- id: totp.login.submit
+  translation: "Continue"
+- id: totp.error.invalid_code
+  translation: "The code or recovery code is not valid."
+- id: totp.error.password_wrong
+  translation: "The password is not correct."
+- id: totp.error.password_required
+  translation: "Enter your password."
+- id: totp.error.already_enabled
+  translation: "Two-factor authentication is already enabled."
+- id: totp.error.no_pending
+  translation: "There is no pending setup; start again."
+- id: totp.error.not_enabled
+  translation: "Two-factor authentication is not enabled for this account."
+- id: totp.settings.title
+  translation: "Two-factor authentication"
+- id: totp.settings.heading
+  translation: "Two-factor authentication"
+- id: totp.settings.intro
+  translation: "When enabled, signing in also requires a time-based code from your authenticator app."
+- id: totp.settings.link
+  translation: "Manage two-factor authentication"
+- id: totp.status.enabled
+  translation: "Status: enabled"
+- id: totp.status.disabled
+  translation: "Status: disabled"
+- id: totp.begin.hint
+  translation: "Start to generate a secret, then add it to your authenticator app (or use the otpauth link or secret below)."
+- id: totp.begin.submit
+  translation: "Start setup"
+- id: totp.pending.heading
+  translation: "Confirm the binding"
+- id: totp.pending.secret_label
+  translation: "Secret (shown only once)"
+- id: totp.pending.otpauth_label
+  translation: "otpauth link"
+- id: totp.pending.confirm_hint
+  translation: "After adding the secret to your authenticator app, enter one code it shows to finish."
+- id: totp.pending.confirm_submit
+  translation: "Confirm and enable"
+- id: totp.disable.heading
+  translation: "Disable two-factor authentication"
+- id: totp.disable.hint
+  translation: "Disabling requires your password; recovery codes are discarded together."
+- id: totp.disable.password_label
+  translation: "Password (or recovery code)"
+- id: totp.disable.submit
+  translation: "Disable two-factor authentication"
+- id: totp.recovery.heading
+  translation: "Recovery codes"
+- id: totp.recovery.remaining
+  translation: "Remaining recovery codes:"
+- id: totp.recovery.warning
+  translation: "Recovery codes are shown only when generated; save them offline now. Each code can be used once."
+- id: totp.recovery.list_label
+  translation: "New recovery codes from this run"
+- id: totp.recovery.regenerate_submit
+  translation: "Regenerate recovery codes"
+- id: totp.saved.enabled
+  translation: "Two-factor authentication is enabled."
+- id: totp.saved.disabled
+  translation: "Two-factor authentication is disabled."
+- id: totp.saved.recovery
+  translation: "New recovery codes were generated; the previous ones are no longer valid."
+

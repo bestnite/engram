@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +17,15 @@ import (
 	"example.com/flashcard/internal/auth"
 	"example.com/flashcard/internal/store"
 )
+
+// testEncryptionKey 是测试用 AES-GCM 主密钥（base64 的 32 字节），与生产无关。
+func testEncryptionKey() string {
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = 0x2b
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
 
 // testSessionSecret 是测试用会话签名密钥；长度足够且与生产无关。
 var testSessionSecret = []byte("test-session-secret-0123456789abcdef")
@@ -54,6 +64,15 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 		MaxDelay:  50 * time.Millisecond,
 		Sleep:     func(context.Context, time.Duration) error { return nil },
 	})
+	// TOTP 二次验证（M1-16）：真实 SecretCodec + TOTPStore，登录第二步与设置页因此可用。
+	codec, err := store.NewSecretCodec(testEncryptionKey())
+	if err != nil {
+		t.Fatalf("NewSecretCodec() error = %v", err)
+	}
+	totpSvc, err := auth.NewTOTPService(store.NewTOTPStore(db), codec, auth.DefaultTOTPIssuer)
+	if err != nil {
+		t.Fatalf("NewTOTPService() error = %v", err)
+	}
 	srv, err := New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -64,6 +83,7 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 		Invites:       invites,
 		Auditor:       auditor,
 		LoginLimiter:  limiter,
+		TOTP:          totpSvc,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -73,7 +93,7 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 
 // preSessionCSRFRoutes 是需要双提交 cookie 的登录前表单路由（B-13）。
 // 这些路由的 POST 由 auth.DoubleSubmitMiddleware 校验 cookie 与镜像 token 的一致性。
-var preSessionCSRFRoutes = map[string]bool{"/login": true, "/register": true, "/setup": true}
+var preSessionCSRFRoutes = map[string]bool{"/login": true, "/register": true, "/setup": true, "/login/totp": true}
 
 // testDoubleSubmitToken 是测试里使用的固定会话前 CSRF token；值只需满足长度下限。
 const testDoubleSubmitToken = "test-double-submit-token-0123456789"

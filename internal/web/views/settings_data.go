@@ -44,5 +44,11 @@ type SettingsData struct {
 	PasswordAvailable   bool
 	PasswordUnavailable string
 
+	// TOTP 二次验证入口（M1-16）：指向 /settings/totp 的独立页面。
+	TOTPHeading   string
+	TOTPHint      string
+	TOTPLinkLabel string
+	TOTPHref      string
+
 	CSRF string
 }

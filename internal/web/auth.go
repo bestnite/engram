@@ -41,6 +41,8 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// 与 /login 同属登录前流程，没有会话可绑 CSRF token，故不挂 CSRFMiddleware。
 	router.GET("/auth/oidc/start", s.oidcStart)
 	router.GET("/auth/oidc/callback", s.oidcCallback)
+	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
+	s.registerTOTPRoutes(router)
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。
@@ -169,6 +171,11 @@ func (s *Server) loginSubmit(c *gin.Context) {
 			key = "auth.error.user_disabled"
 		}
 		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T(key))
+		return
+	}
+	// M1-16：启用了 TOTP 的账号，密码只是第一因素；这里不建立会话，改为进入第二步。
+	// 放在限速清零之前：只有第二因素也通过才算本次登录成功。
+	if s.beginTOTPChallengeIfEnabled(c, loc, u) {
 		return
 	}
 	// 成功后清零该账号与 IP 的失败计数（M1-9 验收点）。

@@ -155,6 +155,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
+	// TOTP 二次验证（M1-16）：secret 复用上面的 AES-GCM 编解码器加密存储。
+	totpService, err := auth.NewTOTPService(store.NewTOTPStore(db), secrets, "")
+	if err != nil {
+		return nil, err
+	}
 	apiSrv, err := api.New(api.Deps{
 		DB:      db,
 		Logger:  logger,
@@ -200,6 +205,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Presets:      store.NewPresetStore(db),
 		Auditor:      auditor,
 		LoginLimiter: limiter,
+		TOTP:         totpService,
 		Media:        mediaStore,
 		Secrets:      secrets,
 		// OIDC（M1-11）：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
