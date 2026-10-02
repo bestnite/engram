@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -67,53 +66,25 @@ type createDeckRequest struct {
 	PresetID    uint64 `json:"preset_id"`
 }
 
-// createDeck 建卡组（scope: write）。
+// createDeck 建卡组（scope: write）：只做 JSON 绑定与包壳，业务在 service 层 CreateDeck
+// （DESIGN.md §7.4：REST 与内置 MCP 共用同一实现，不得各自复制校验）。
 func (a *API) createDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	ctx := c.Request.Context()
 	var req createDeckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
-		return
-	}
-	visibility := strings.TrimSpace(req.Visibility)
-	if visibility == "" {
-		visibility = "private"
-	}
-	presetID := req.PresetID
-	if presetID == 0 {
-		id, err := a.ensureDefaultPreset(ctx, u.ID)
-		if err != nil {
-			a.logger.Error("ensure default preset failed", "user_id", u.ID, "error", err)
-			abortError(c, http.StatusInternalServerError, CodeInternal, "")
-			return
-		}
-		presetID = id
-	}
-	d := store.Deck{
-		OwnerUserID: u.ID,
+	d, err := a.CreateDeck(c.Request.Context(), u, CreateDeckInput{
 		Name:        req.Name,
 		Description: req.Description,
-		Visibility:  visibility,
-		PresetID:    presetID,
-		CreatedAt:   a.now(),
-	}
-	if err := a.decks.Create(ctx, &d); err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		Visibility:  req.Visibility,
+		PresetID:    req.PresetID,
+		APIKeyID:    CurrentAPIKeyID(c),
+	})
+	if err != nil {
+		writeServiceError(c, err)
 		return
 	}
-	a.audit(ctx, store.AuditEntry{
-		UserID:     store.Ptr(u.ID),
-		APIKeyID:   CurrentAPIKeyID(c),
-		Action:     "deck.create",
-		TargetType: "deck",
-		TargetID:   store.Ptr(d.ID),
-		Detail:     map[string]any{"name": d.Name, "visibility": d.Visibility},
-	})
-	c.JSON(http.StatusCreated, toDeckResponse(d))
+	c.JSON(http.StatusCreated, toDeckResponse(*d))
 }

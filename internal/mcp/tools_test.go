@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -230,5 +231,83 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 	}
 	if !strings.Contains(text, "invalid_request") {
 		t.Errorf("mutual-exclusion error text = %q, want it to carry code invalid_request", text)
+	}
+}
+
+// ---- M4-11：create_deck 与 REST 建卡组同源 ----
+
+// errorCode 取 REST 统一错误包壳里的稳定 code。
+func errorCode(m map[string]any) string {
+	e, _ := m["error"].(map[string]any)
+	c, _ := e["code"].(string)
+	return c
+}
+
+// TestCreateDeckMatchesREST 是 M4-11 的核心验收：create_deck 与 REST POST /decks 同参数同结果，
+// 空名字/非法 visibility 用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
+// scope 的 key 按名字硬调也被拒。
+func TestCreateDeckMatchesREST(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "deckmaker")
+	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite})
+	cs := connect(t, ts.URL, key)
+
+	// 同一参数：MCP 建一个、REST 建一个，去掉动态字段后应完全一致。
+	mcpOut, isErr, text := callTool(t, cs, "create_deck", map[string]any{
+		"name": "  Parity  ", "description": "same args", "visibility": "unlisted",
+	})
+	if isErr {
+		t.Fatalf("create_deck error: %s", text)
+	}
+	if mcpOut["name"] != "Parity" {
+		t.Errorf("create_deck name = %v, want trimmed %q", mcpOut["name"], "Parity")
+	}
+	st, restOut := rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key,
+		`{"name":"Parity","description":"same args","visibility":"unlisted"}`)
+	if st != http.StatusCreated {
+		t.Fatalf("REST create status = %d body %v", st, restOut)
+	}
+	if !reflect.DeepEqual(stripDynamic(mcpOut), stripDynamic(restOut)) {
+		t.Errorf("create_deck MCP=%v REST=%v", stripDynamic(mcpOut), stripDynamic(restOut))
+	}
+
+	// preset_id 为 0 时落在调用者的 Default 预设上（两侧都非 0 且相同）。
+	pid, ok := mcpOut["preset_id"].(float64)
+	if !ok || pid == 0 {
+		t.Fatalf("create_deck preset_id = %v, want the caller's Default preset id", mcpOut["preset_id"])
+	}
+	var defaultPreset store.Preset
+	if err := db.Where("owner_user_id = ? AND name = ?", u.ID, "Default").First(&defaultPreset).Error; err != nil {
+		t.Fatalf("load Default preset: %v", err)
+	}
+	if uint64(pid) != defaultPreset.ID {
+		t.Errorf("create_deck preset_id = %d, want Default preset %d", uint64(pid), defaultPreset.ID)
+	}
+
+	// 空名字：MCP 与 REST 都用共享的 invalid_request code 拒绝。
+	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "   "})
+	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
+		t.Errorf("create_deck(blank name) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
+	}
+	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key, `{"name":"   "}`)
+	if st != http.StatusBadRequest || errorCode(restOut) != api.CodeInvalidRequest {
+		t.Errorf("REST blank name status=%d code=%q, want 400 %s", st, errorCode(restOut), api.CodeInvalidRequest)
+	}
+
+	// 非法 visibility：同样由共享 code 拒绝。
+	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "x", "visibility": "bogus"})
+	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
+		t.Errorf("create_deck(bad visibility) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
+	}
+	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key, `{"name":"x","visibility":"bogus"}`)
+	if st != http.StatusBadRequest || errorCode(restOut) != api.CodeInvalidRequest {
+		t.Errorf("REST bad visibility status=%d code=%q, want 400 %s", st, errorCode(restOut), api.CodeInvalidRequest)
+	}
+
+	// 无 write scope 的 key 即使按名字硬调 create_deck 也被拒。
+	roCS := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeRead}))
+	_, isErr, text = callTool(t, roCS, "create_deck", map[string]any{"name": "nope"})
+	if !isErr || !strings.Contains(text, api.CodeScopeRequired) {
+		t.Errorf("create_deck with read-only key isErr=%v text=%q, want %s", isErr, text, api.CodeScopeRequired)
 	}
 }

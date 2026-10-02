@@ -110,6 +110,7 @@ var toolScopes = map[string]string{
 	"search_notes":  store.ScopeRead,
 	"get_stats":     store.ScopeRead,
 	"export_deck":   store.ScopeRead,
+	"create_deck":   store.ScopeWrite,
 	"create_notes":  store.ScopeWrite,
 	"update_note":   store.ScopeWrite,
 	"delete_note":   store.ScopeWrite,
@@ -130,6 +131,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	srv.AddReceivingMiddleware(s.filterTools(id))
 
 	addTool(srv, id, "list_decks", "List the caller's decks.", s.listDecks)
+	addTool(srv, id, "create_deck", "Create an empty deck (name required; visibility defaults to private; preset_id 0 uses the caller's Default preset).", s.createDeck)
 	addTool(srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
 	addTool(srv, id, "export_deck", "Export one deck as a self-contained deck package (DESIGN.md §7.6): manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)

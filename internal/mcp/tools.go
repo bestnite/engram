@@ -15,6 +15,14 @@ import (
 // listDecksIn 无参数。
 type listDecksIn struct{}
 
+// createDeckIn 是 create_deck 的入参；preset_id 为 0 时使用（或创建）调用者的 Default 预设。
+type createDeckIn struct {
+	Name        string `json:"name" jsonschema:"the deck name (required)"`
+	Description string `json:"description,omitempty" jsonschema:"optional deck description"`
+	Visibility  string `json:"visibility,omitempty" jsonschema:"visibility: private (default), unlisted or public"`
+	PresetID    uint64 `json:"preset_id,omitempty" jsonschema:"scheduling preset id; 0 uses the caller's Default preset"`
+}
+
 // searchNotesIn 是 search_notes 的入参；deck_id 必填。
 type searchNotesIn struct {
 	DeckID  uint64 `json:"deck_id" jsonschema:"the deck to search in"`
@@ -110,6 +118,22 @@ func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any
 		out = append(out, api.ToDeckResponse(d))
 	}
 	return map[string]any{"decks": out}, nil
+}
+
+// createDeck 建一个空卡组：与 REST `POST /decks` 走同一 service 方法（DESIGN.md §7.4）。
+// 返回与 REST 相同的 api.DeckResponse，保证两种传输的响应形态不会漂移。
+func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (any, error) {
+	d, err := s.api.CreateDeck(ctx, id.User, api.CreateDeckInput{
+		Name:        in.Name,
+		Description: in.Description,
+		Visibility:  in.Visibility,
+		PresetID:    in.PresetID,
+		APIKeyID:    id.apiKeyID(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return api.ToDeckResponse(*d), nil
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {

@@ -63,6 +63,61 @@ func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error
 	return decks, nil
 }
 
+// CreateDeckInput 是建卡组的输入（DESIGN.md §7.3）。
+// APIKeyID 仅用于审计条目，会话通道（网页登录）下为 nil。
+type CreateDeckInput struct {
+	Name        string
+	Description string
+	Visibility  string
+	PresetID    uint64
+	APIKeyID    *uint64
+}
+
+// CreateDeck 建一个空卡组（scope: write）；REST 与内置 MCP 共用这一份实现（DESIGN.md §7.4）。
+//
+// 行为与错误 code 与 REST handler 旧实现完全一致：name 去空白后必填，visibility 缺省
+// private，preset_id 为 0 时使用（或创建）调用者的 Default 预设；store 的任何拒绝都映射成
+// invalid_request（含非法 visibility），默认预设无法确保时映射成 internal_error。
+func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput) (*store.Deck, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
+	}
+	visibility := strings.TrimSpace(in.Visibility)
+	if visibility == "" {
+		visibility = "private"
+	}
+	presetID := in.PresetID
+	if presetID == 0 {
+		id, err := a.ensureDefaultPreset(ctx, u.ID)
+		if err != nil {
+			a.logger.Error("ensure default preset failed", "user_id", u.ID, "error", err)
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
+		}
+		presetID = id
+	}
+	d := store.Deck{
+		OwnerUserID: u.ID,
+		Name:        name,
+		Description: in.Description,
+		Visibility:  visibility,
+		PresetID:    presetID,
+		CreatedAt:   a.now(),
+	}
+	if err := a.decks.Create(ctx, &d); err != nil {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+	}
+	a.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		APIKeyID:   in.APIKeyID,
+		Action:     "deck.create",
+		TargetType: "deck",
+		TargetID:   store.Ptr(d.ID),
+		Detail:     map[string]any{"name": d.Name, "visibility": d.Visibility},
+	})
+	return &d, nil
+}
+
 // RequireDeckRole 校验用户在卡组上至少拥有 want 角色（M5-1）。
 //
 // 判定本体在 auth.DeckAccess（REST 与内置 MCP 共用同一实现）；这里把它翻译成带稳定
