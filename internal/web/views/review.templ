@@ -40,7 +40,7 @@ templ ReviewArea(data ReviewAreaData) {
 				<p class="text-base text-zinc-600 dark:text-zinc-400 font-medium">{ data.EmptyText }</p>
 			</div>
 		} else if data.Card != nil {
-			<article id="review-card" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+			<article id="review-card" class={ reviewCardClass(data.Result) }>
 				<p class="text-[11px] font-semibold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{ data.FrontLabel }</p>
 				<div class="mt-3 text-xl sm:text-2xl font-medium text-zinc-900 dark:text-zinc-100 leading-relaxed break-words">
 					@rawHTML(data.Card.FrontHTML)
@@ -53,25 +53,68 @@ templ ReviewArea(data ReviewAreaData) {
 				</div>
 			</article>
 			if data.Result != nil {
-				<div id="review-result" class="mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-					<div class="flex items-center justify-between">
-						<p class="text-lg font-bold text-zinc-950 dark:text-zinc-100">{ data.Result.VerdictLabel }</p>
-						<span class="inline-flex items-center rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">{ data.Result.ScoreLabel }: <span class="ml-1 text-zinc-950 dark:text-zinc-100">{ data.Result.Score }</span></span>
+				<div id="review-result" class={ reviewResultClass(data.Result.VerdictStatus) }>
+					<div class="flex items-center justify-between gap-3">
+						<div class="flex items-center gap-3">
+							if data.Result.VerdictStatus == "correct" {
+								<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-400 shadow-2xs">
+									<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+								</span>
+								<div>
+									<p class="text-xl font-bold tracking-tight text-emerald-950 dark:text-emerald-100">{ data.Result.VerdictLabel }</p>
+								</div>
+							} else if data.Result.VerdictStatus == "incorrect" {
+								<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/60 dark:text-rose-400 shadow-2xs">
+									<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+								</span>
+								<div>
+									<p class="text-xl font-bold tracking-tight text-rose-950 dark:text-rose-100">{ data.Result.VerdictLabel }</p>
+								</div>
+							} else {
+								<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/60 dark:text-amber-400 shadow-2xs">
+									<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+								</span>
+								<div>
+									<p class="text-xl font-bold tracking-tight text-amber-950 dark:text-amber-100">{ data.Result.VerdictLabel }</p>
+								</div>
+							}
+						</div>
+						if data.Result.VerdictStatus == "correct" {
+							<span class="inline-flex items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700/60 shadow-2xs">{ data.Result.ScoreLabel }: <span class="ml-1 font-mono text-sm">{ data.Result.Score }</span></span>
+						} else if data.Result.VerdictStatus == "incorrect" {
+							<span class="inline-flex items-center rounded-lg bg-rose-100 dark:bg-rose-900/50 px-3 py-1.5 text-xs font-bold text-rose-800 dark:text-rose-200 border border-rose-300/80 dark:border-rose-700/60 shadow-2xs">{ data.Result.ScoreLabel }: <span class="ml-1 font-mono text-sm">{ data.Result.Score }</span></span>
+						} else {
+							<span class="inline-flex items-center rounded-lg bg-amber-100 dark:bg-amber-900/50 px-3 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 border border-amber-300/80 dark:border-amber-700/60 shadow-2xs">{ data.Result.ScoreLabel }: <span class="ml-1 font-mono text-sm">{ data.Result.Score }</span></span>
+						}
 					</div>
-					<div>
-						<p class="text-[11px] font-semibold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase">{ data.Result.AnswerLabel }</p>
-						<div class="mt-2 text-base text-zinc-800 dark:text-zinc-200">
+					<div class="rounded-xl border border-emerald-200/80 bg-white dark:border-emerald-900/60 dark:bg-zinc-900 p-4 shadow-2xs">
+						<p class="text-[11px] font-bold tracking-wider text-emerald-700 dark:text-emerald-400 uppercase">{ data.Result.AnswerLabel }</p>
+						<div class="mt-2 text-base font-medium text-zinc-900 dark:text-zinc-100 leading-relaxed">
 							@rawHTML(data.Result.AnswerHTML)
 						</div>
 					</div>
 					if len(data.Result.DetailLines) > 0 {
-						<div class="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 p-3 space-y-1.5">
-							for _, line := range data.Result.DetailLines {
-								<p class="text-xs text-zinc-600 dark:text-zinc-400 font-mono"><span class="font-medium text-zinc-500 dark:text-zinc-400">{ line.Label }:</span> <span class="text-zinc-900 dark:text-zinc-100">{ line.Value }</span></p>
-							}
-						</div>
+						if data.Result.VerdictStatus == "incorrect" {
+							<div class="rounded-xl border border-rose-200/80 bg-rose-50/60 dark:border-rose-900/50 dark:bg-rose-950/30 p-3.5 space-y-1.5">
+								for _, line := range data.Result.DetailLines {
+									<p class="text-xs text-rose-900 dark:text-rose-200 font-mono"><span class="font-semibold text-rose-700 dark:text-rose-400">{ line.Label }:</span> <span class="text-rose-950 dark:text-rose-100">{ line.Value }</span></p>
+								}
+							</div>
+						} else if data.Result.VerdictStatus == "correct" {
+							<div class="rounded-xl border border-emerald-200/60 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-3.5 space-y-1.5">
+								for _, line := range data.Result.DetailLines {
+									<p class="text-xs text-emerald-900 dark:text-emerald-200 font-mono"><span class="font-semibold text-emerald-700 dark:text-emerald-400">{ line.Label }:</span> <span class="text-emerald-950 dark:text-emerald-100">{ line.Value }</span></p>
+								}
+							</div>
+						} else {
+							<div class="rounded-xl border border-amber-200/60 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20 p-3.5 space-y-1.5">
+								for _, line := range data.Result.DetailLines {
+									<p class="text-xs text-amber-900 dark:text-amber-200 font-mono"><span class="font-semibold text-amber-700 dark:text-amber-400">{ line.Label }:</span> <span class="text-amber-950 dark:text-amber-100">{ line.Value }</span></p>
+								}
+							</div>
+						}
 					}
-					<form class="mt-4" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
+					<form class="mt-2" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<input type="hidden" name="card_id" value={ data.Card.CardID }/>
 						<input type="hidden" name="note_id" value={ data.Card.NoteID }/>
@@ -80,7 +123,13 @@ templ ReviewArea(data ReviewAreaData) {
 						}
 						<input type="hidden" name="done" value={ data.DoneValue }/>
 						<input type="hidden" name="action" value="next"/>
-						<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
+						if data.Result.VerdictStatus == "correct" {
+							<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-xs hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
+						} else if data.Result.VerdictStatus == "partial" {
+							<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-amber-600 px-5 py-3 font-semibold text-white shadow-xs hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
+						} else {
+							<button id="review-continue" type="submit" class="min-h-11 w-full rounded-xl bg-zinc-950 px-5 py-3 font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.99] transition-all cursor-pointer">{ data.Result.ContinueLabel }</button>
+						}
 					</form>
 				</div>
 			} else {

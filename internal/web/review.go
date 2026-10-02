@@ -848,12 +848,16 @@ func (s *Server) gradedResultView(loc *i18n.Localizer, kind string, fields map[s
 		score = v
 	}
 	verdict := loc.T("review.graded.incorrect")
+	status := "incorrect"
 	if score >= m.FullThreshold {
 		verdict = loc.T("review.graded.correct")
+		status = "correct"
 	} else if score > m.NoneThreshold {
 		verdict = loc.T("review.graded.partial")
+		status = "partial"
 	}
 	return &views.ReviewResultView{
+		VerdictStatus: status,
 		VerdictLabel:  verdict,
 		ScoreLabel:    loc.T("review.graded.score"),
 		Score:         strconv.FormatFloat(score*100, 'f', 0, 64) + "%",

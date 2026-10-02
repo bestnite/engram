@@ -46,6 +46,7 @@ type ReviewDetailLine struct {
 // ReviewResultView 是判分后展示的结果面板：判定、得分、正确答案与细节，
 // 用户点“继续”才进入下一张卡（判分结果已在同一请求内写入 reviews）。
 type ReviewResultView struct {
+	VerdictStatus string // 判定状态："correct"（正确）、"incorrect"（错误）、"partial"（部分正确）
 	VerdictLabel  string
 	ScoreLabel    string
 	Score         string
@@ -53,6 +54,35 @@ type ReviewResultView struct {
 	AnswerHTML    string
 	DetailLines   []ReviewDetailLine
 	ContinueLabel string
+}
+
+// reviewCardClass 根据判分状态返回题目卡片边框类。
+func reviewCardClass(result *ReviewResultView) string {
+	if result == nil {
+		return "mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+	}
+	switch result.VerdictStatus {
+	case "correct":
+		return "mt-6 rounded-2xl border border-emerald-300/80 bg-white p-6 sm:p-8 shadow-sm dark:border-emerald-800/60 dark:bg-zinc-900 transition-colors"
+	case "incorrect":
+		return "mt-6 rounded-2xl border border-rose-300/80 bg-white p-6 sm:p-8 shadow-sm dark:border-rose-800/60 dark:bg-zinc-900 transition-colors"
+	case "partial":
+		return "mt-6 rounded-2xl border border-amber-300/80 bg-white p-6 sm:p-8 shadow-sm dark:border-amber-800/60 dark:bg-zinc-900 transition-colors"
+	default:
+		return "mt-6 rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+	}
+}
+
+// reviewResultClass 根据判分状态返回结果面板容器类。
+func reviewResultClass(status string) string {
+	switch status {
+	case "correct":
+		return "mt-6 rounded-2xl border border-emerald-300/80 bg-emerald-50/40 p-6 shadow-sm shadow-emerald-500/5 dark:border-emerald-800/80 dark:bg-emerald-950/20 space-y-5"
+	case "incorrect":
+		return "mt-6 rounded-2xl border border-rose-300/80 bg-rose-50/40 p-6 shadow-sm shadow-rose-500/5 dark:border-rose-800/80 dark:bg-rose-950/20 space-y-5"
+	default:
+		return "mt-6 rounded-2xl border border-amber-300/80 bg-amber-50/40 p-6 shadow-sm shadow-amber-500/5 dark:border-amber-800/80 dark:bg-amber-950/20 space-y-5"
+	}
 }
 
 // ReviewCardView 是当前卡片的两面渲染结果与标识。

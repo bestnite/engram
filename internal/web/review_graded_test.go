@@ -75,6 +75,15 @@ func TestReviewGradedNumericAcceptance(t *testing.T) {
 		if !strings.Contains(resultBody, `id="review-result"`) || !strings.Contains(resultBody, `id="review-continue"`) {
 			t.Fatalf("%s: graded response has no result panel / continue button: %s", tc.name, snippet(resultBody))
 		}
+		if tc.wantScore >= 1.0 {
+			if !strings.Contains(resultBody, "border-emerald-") {
+				t.Errorf("%s: correct answer missing emerald border styling: %s", tc.name, snippet(resultBody))
+			}
+		} else if tc.wantScore == 0.0 {
+			if !strings.Contains(resultBody, "border-rose-") {
+				t.Errorf("%s: wrong answer missing rose border styling: %s", tc.name, snippet(resultBody))
+			}
+		}
 
 		var rev store.Review
 		if err := db.Where("card_id = ?", cardID).First(&rev).Error; err != nil {
@@ -168,6 +177,20 @@ func TestReviewGradedOtherTypesAcceptance(t *testing.T) {
 		}, cookies)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s: POST status = %d, want 200 (body %s)", tc.name, rec.Code, snippet(rec.Body.String()))
+		}
+		resultBody := rec.Body.String()
+		if tc.wantRating == schedule.Good {
+			if !strings.Contains(resultBody, "border-emerald-") {
+				t.Errorf("%s: good rating missing emerald border styling: %s", tc.name, snippet(resultBody))
+			}
+		} else if tc.wantRating == schedule.Again {
+			if !strings.Contains(resultBody, "border-rose-") {
+				t.Errorf("%s: again rating missing rose border styling: %s", tc.name, snippet(resultBody))
+			}
+		} else if tc.wantRating == schedule.Hard {
+			if !strings.Contains(resultBody, "border-amber-") {
+				t.Errorf("%s: hard partial rating missing amber border styling: %s", tc.name, snippet(resultBody))
+			}
 		}
 		var rev store.Review
 		if err := db.Where("card_id = ?", cardID).First(&rev).Error; err != nil {
