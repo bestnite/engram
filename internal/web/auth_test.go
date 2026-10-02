@@ -269,6 +269,36 @@ func TestRegisterLoginLogoutFlow(t *testing.T) {
 	}
 }
 
+// TestHomeRedirectsToSetupUntilFirstAdmin 是 M1-25 的验收测试：
+// 安装完但还没 setup 时，GET / 303 到 /setup；首个管理员建立后首页正常渲染。
+func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
+	srv, _ := newAuthServer(t)
+
+	rec := get(t, srv, "/", nil)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET / before any admin = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/setup" {
+		t.Errorf("Location = %q, want /setup", loc)
+	}
+
+	if rec := postForm(t, srv, "/setup", url.Values{
+		"username": {"root"},
+		"email":    {"root@example.com"},
+		"password": {"Sup3rSecret!"},
+	}, nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /setup status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	after := get(t, srv, "/", nil)
+	if after.Code != http.StatusOK {
+		t.Fatalf("GET / after setup = %d, want 200", after.Code)
+	}
+	if body := after.Body.String(); !strings.Contains(body, "今日复习") {
+		t.Errorf("home page after setup is missing the heading; body = %s", snippet(body))
+	}
+}
+
 // TestSetupUnavailableAfterAdminExists 是 M1-5 的验收测试：有 admin 之前可达，之后 404。
 func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 	srv, _ := newAuthServer(t)

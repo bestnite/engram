@@ -18,6 +18,15 @@ const mathFormula = `\(a^2 + b^2 = c^2\)`
 
 // home 渲染示例首页：i18n 文案 + 哈希化静态资源引用，二者都从请求上下文/资源清单取。
 func (s *Server) home(c *gin.Context) {
+	// 首启窗口（M1-25）：还没有活跃管理员时首页没有任何可展示的内容，
+	// 把访客直接送去引导页，而不是渲染一个空壳。`/setup` 在管理员出现后自身 404
+	// （见 setupPage），所以这条重定向只在首启窗口内生效，不会变成常驻跳转。
+	// 不带 ?lang：语言由引导页按 Accept-Language 与 cookie 自行解析。
+	// Users 依赖缺失时不妄断（判定会 panic），退回原有渲染路径。
+	if s.users != nil && s.setupAvailable(c) {
+		c.Redirect(http.StatusSeeOther, "/setup")
+		return
+	}
 	loc := i18n.FromContext(c.Request.Context())
 	if loc == nil {
 		s.logger.Error("i18n: localizer missing from request context", "path", c.Request.URL.Path)
