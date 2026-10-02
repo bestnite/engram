@@ -108,6 +108,17 @@ templ SettingsPage(data SettingsData) {
 				</div>
 				<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0" href={ data.MailPrefsHref }>{ data.MailPrefsLinkLabel }</a>
 			</section>
+
+			<!-- 邮箱地址变更卡片（仅安全邮件栈启用时渲染） -->
+			if data.EmailAvailable {
+				<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+					<div>
+						<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.EmailHeading }</h2>
+						<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.EmailHint }</p>
+					</div>
+					<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0" href={ data.EmailHref }>{ data.EmailLinkLabel }</a>
+				</section>
+			}
 		</div>
 	}
 }

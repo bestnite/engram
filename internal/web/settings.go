@@ -251,7 +251,15 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		MailPrefsHint:      loc.T("settings.mail_prefs.hint"),
 		MailPrefsLinkLabel: loc.T("settings.mail_prefs.link"),
 		MailPrefsHref:      "/settings/notifications",
-		CSRF:               csrf,
+		// M1-19：邮箱地址变更入口，指向 /settings/email。仅当安全邮件栈可用
+		// （SMTP 已配置且 outbox 已装配）时才给出入口：邮件未配置时该页只会渲染
+		// mail.not_configured，隐藏入口比把用户送去死路更好。
+		EmailAvailable: s.securityMailReady(),
+		EmailHeading:   loc.T("settings.email.heading"),
+		EmailHint:      loc.T("settings.email.hint"),
+		EmailLinkLabel: loc.T("settings.email.link"),
+		EmailHref:      "/settings/email",
+		CSRF:           csrf,
 	}
 }
 

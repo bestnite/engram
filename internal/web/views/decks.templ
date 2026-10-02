@@ -9,6 +9,9 @@ templ DeckListPage(data DeckListData) {
 				<div>
 					<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
 				</div>
+				<div class="flex items-center gap-2">
+					<a class="inline-flex items-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.ImportHref }>{ data.ImportLabel }</a>
+				</div>
 			</div>
 
 			<!-- 卡组表格/空状态 -->
@@ -48,7 +51,12 @@ templ DeckListPage(data DeckListData) {
 											}
 										</td>
 										<td class="px-5 py-4 sm:px-6 text-right">
-											<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ row.ExportHref } download>{ data.ExportLabel }</a>
+											<div class="inline-flex items-center gap-2">
+												if row.SharingHref != "" {
+													<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ row.SharingHref }>{ data.SharingLabel }</a>
+												}
+												<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ row.ExportHref } download>{ data.ExportLabel }</a>
+											</div>
 										</td>
 									</tr>
 								}

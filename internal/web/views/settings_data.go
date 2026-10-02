@@ -56,5 +56,14 @@ type SettingsData struct {
 	MailPrefsLinkLabel string
 	MailPrefsHref      string
 
+	// 邮箱地址变更入口（M1-19）：指向 /settings/email 的独立页面。
+	// EmailAvailable 为 false 时（SMTP / 安全邮件栈未启用）整张卡片不渲染，
+	// 避免把用户送到一个只会显示「邮件未配置」的死路。
+	EmailAvailable bool
+	EmailHeading   string
+	EmailHint      string
+	EmailLinkLabel string
+	EmailHref      string
+
 	CSRF string
 }

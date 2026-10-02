@@ -58,14 +58,21 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 	rows := make([]views.DeckRow, 0, len(summaries))
 	for i := range summaries {
 		sm := summaries[i]
+		// 共享管理页仅对 owner 开放（sharingPage 走 DeckAccess 判 owner）：只有本人拥有的行
+		// 才给出入口，被共享给他人的行留空，避免非 owner 点进去吃 403（M5-2）。
+		sharingHref := ""
+		if sm.Deck.OwnerUserID == userID {
+			sharingHref = fmt.Sprintf("/decks/%d/sharing", sm.Deck.ID)
+		}
 		rows = append(rows, views.DeckRow{
-			IDValue:    strconv.FormatUint(sm.Deck.ID, 10),
-			Name:       sm.Deck.Name,
-			Href:       fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
-			CardCount:  sm.CardCount,
-			DueCount:   sm.DueCount,
-			Archived:   sm.Deck.ArchivedAt != nil,
-			ExportHref: fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
+			IDValue:     strconv.FormatUint(sm.Deck.ID, 10),
+			Name:        sm.Deck.Name,
+			Href:        fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
+			CardCount:   sm.CardCount,
+			DueCount:    sm.DueCount,
+			Archived:    sm.Deck.ArchivedAt != nil,
+			ExportHref:  fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
+			SharingHref: sharingHref,
 		})
 	}
 	options := make([]views.DeckOption, 0, len(presets))
@@ -77,15 +84,20 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		})
 	}
 	data := views.DeckListData{
-		Layout:       s.pageLayout(c, loc, "decks.list.title"),
-		Heading:      loc.T("decks.list.heading"),
-		ColName:      loc.T("decks.list.col_name"),
-		ColCards:     loc.T("decks.list.col_cards"),
-		ColDue:       loc.T("decks.list.col_due"),
-		EmptyText:    loc.T("decks.list.empty"),
-		Archived:     loc.T("decks.list.archived"),
-		ColActions:   loc.T("decks.list.col_actions"),
-		ExportLabel:  loc.T("decks.list.export"),
+		Layout:      s.pageLayout(c, loc, "decks.list.title"),
+		Heading:     loc.T("decks.list.heading"),
+		ColName:     loc.T("decks.list.col_name"),
+		ColCards:    loc.T("decks.list.col_cards"),
+		ColDue:      loc.T("decks.list.col_due"),
+		EmptyText:   loc.T("decks.list.empty"),
+		Archived:    loc.T("decks.list.archived"),
+		ColActions:  loc.T("decks.list.col_actions"),
+		ExportLabel: loc.T("decks.list.export"),
+		// M5-9：卡组包导入入口放在列表头部，不再往全局导航塞第六项。
+		ImportLabel: loc.T("decks.list.import"),
+		ImportHref:  "/import",
+		// M5-2：owner 行的共享入口文案；非 owner 行的 SharingHref 为空，模板不渲染。
+		SharingLabel: loc.T("decks.list.sharing"),
 		Rows:         rows,
 		NewHeading:   loc.T("decks.list.new_heading"),
 		NameLabel:    loc.T("decks.list.name_label"),
