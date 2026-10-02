@@ -66,8 +66,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: engram <command>")
 	fmt.Fprintln(os.Stderr, "  serve           start the HTTP server (default)")
 	fmt.Fprintln(os.Stderr, "  schema sync     run AutoMigrate and the registered destructive migrations")
-	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.fdeck [--user N]")
-	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.fdeck --user <id|username> [--target ...] [--dry-run]")
+	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.edeck [--user N]")
+	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.edeck --user <id|username> [--target ...] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "  optimize        run a parameter-optimisation job (implemented in M9)")
 	fmt.Fprintln(os.Stderr, "  version         print the version string")
 }

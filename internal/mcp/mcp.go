@@ -136,7 +136,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
 	addTool(srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
 	addTool(srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
-	addTool(srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .fdeck archive.", s.importDeck)
+	addTool(srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .edeck archive.", s.importDeck)
 	addTool(srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
 	addTool(srv, id, "submit_review", "Submit a review rating for a card (1..4) with optimistic version check.", s.submitReview)
 

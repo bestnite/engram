@@ -18,8 +18,8 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 卡组包（.fdeck）的浏览器路径（DESIGN.md §7.6；AGENTS.md §5 M5-9）：
-//   GET  /decks/:id/package  导出一个卡组为 .fdeck 下载（沿用 store 层导出，不重写）
+// 卡组包（.edeck）的浏览器路径（DESIGN.md §7.6；AGENTS.md §5 M5-9）：
+//   GET  /decks/:id/package  导出一个卡组为 .edeck 下载（沿用 store 层导出，不重写）
 //   GET  /import             上传页
 //   POST /import             导入并展示与 REST 同一份摘要字段
 // 业务逻辑全在 store 层；这里只做会话鉴权、体积限制与错误的可读化。
@@ -35,10 +35,10 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 	router.POST("/import", s.sessions.CSRFMiddleware(), s.importSubmit)
 }
 
-// packageExportMediaType 是 .fdeck 的 MIME（与 REST 导出保持一致）。
-const packageExportMediaType = "application/vnd.engram.fdeck"
+// packageExportMediaType 是 .edeck 的 MIME（与 REST 导出保持一致）。
+const packageExportMediaType = "application/vnd.engram.edeck"
 
-// deckPackageExport 把当前用户有权读取的卡组导出为 .fdeck 并下载。
+// deckPackageExport 把当前用户有权读取的卡组导出为 .edeck 并下载。
 // 权限与 REST 入口同规（reader 即可导出）；导出逻辑复用 store.ExportPackage。
 func (s *Server) deckPackageExport(c *gin.Context) {
 	user, ok := s.requireUser(c)
@@ -67,7 +67,7 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	name := fmt.Sprintf("deck-%d.fdeck", deckID)
+	name := fmt.Sprintf("deck-%d.edeck", deckID)
 	c.Header("Content-Type", packageExportMediaType)
 	c.Header("Content-Disposition", `attachment; filename="`+name+`"`)
 	c.Data(http.StatusOK, packageExportMediaType, buf.Bytes())
@@ -192,7 +192,7 @@ func uintString(v uint64) string {
 	return strconv.FormatUint(v, 10)
 }
 
-// importSubmit 接收上传的 .fdeck：限制体积（与管理员设置的上传上限一致）、
+// importSubmit 接收上传的 .edeck：限制体积（与管理员设置的上传上限一致）、
 // 复用 ReadPackageArchive 的归档安全防护（在 store.ImportPackage 内部），
 // 然后把与 REST 相同的摘要渲染到页面上；坏包给可读错误而不是 500。
 func (s *Server) importSubmit(c *gin.Context) {

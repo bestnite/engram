@@ -5,7 +5,7 @@
     "app_version": "0.1.0",
     "deck": {
       "name": "Example Geography and Biology Deck",
-      "description": "Sample deck used to document the .fdeck package format."
+      "description": "Sample deck used to document the .edeck package format."
     },
     "include_progress": false,
     "include_media": true,

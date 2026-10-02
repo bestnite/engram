@@ -655,10 +655,10 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 
 **用途**：把一个卡组变成**自包含文件**，用于备份、跨实例迁移、以及把卡组离线交给别人。与"克隆"的分工见本节末。
 
-**格式**：单个 zip，扩展名 `.fdeck`（不含媒体时也可用纯 JSON 的 `.fdeck.json`）。人类可读、可 diff、可进版本库。
+**格式**：单个 zip，扩展名 `.edeck`（不含媒体时也可用纯 JSON 的 `.edeck.json`）。人类可读、可 diff、可进版本库。
 
 ```
-deck.fdeck                      # zip
+deck.edeck                      # zip
 ├── manifest.json               # format_version、导出时间、应用版本、卡组元信息、条目计数
 ├── notes.json                  # 卡片内容：kind + 字段 + 标签 + external_ref + 可选 source_url/extra
 ├── cards.json                  # 每个 note 的呈现形式（template/ordinal）——保证导入后卡片集合一致
@@ -676,7 +676,7 @@ deck.fdeck                      # zip
 
 **导出**
 
-- 入口：卡组详情页「导出卡组包」按钮、`GET /api/v1/decks/:id/package`、MCP `export_deck`、CLI `engram export --deck N --package out.fdeck`。
+- 入口：卡组详情页「导出卡组包」按钮、`GET /api/v1/decks/:id/package`、MCP `export_deck`、CLI `engram export --deck N --package out.edeck`。
 - **CLI 身份（2026-10-02 裁定）**：`engram import` **必须显式提供 `--user <id|名>`**，取消“缺省回落最早管理员”这种隐式行为——导入会把内容写进某个账号名下，身份必须由调用者写明，猜错等于把卡片塞给了别人。导出侧保留可选 `--user`（缺省取卡组属主），因为导出只读。
 - 设计初衷（nite 原话）：**卡组包主要是给“用户之间分享”用的**；跨实例/离线搬运是同一机制的自然延伸。
 - 三个开关：`include_progress`（默认 **off**，理由见 §13）、`include_media`（默认 on）、`include_reviews`（默认 off，依赖 `include_progress`）。

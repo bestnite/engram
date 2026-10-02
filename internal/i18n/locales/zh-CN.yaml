@@ -796,15 +796,15 @@
 - id: decks.list.col_actions
   translation: "操作"
 - id: decks.list.export
-  translation: "导出 .fdeck"
+  translation: "导出 .edeck"
 - id: import.title
   translation: "导入卡组包"
 - id: import.heading
   translation: "导入卡组包"
 - id: import.intro
-  translation: "上传 .fdeck 卡组包，用它新建一个卡组，或合并进你的某个卡组。"
+  translation: "上传 .edeck 卡组包，用它新建一个卡组，或合并进你的某个卡组。"
 - id: import.file_label
-  translation: "卡组包文件（.fdeck）"
+  translation: "卡组包文件（.edeck）"
 - id: import.target_label
   translation: "导入方式"
 - id: import.target.new_deck

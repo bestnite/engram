@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/schema/deck-package.schema.json",
-  "title": "Deck package (.fdeck)",
-  "description": "Logical content of a deck package. A package is a single zip archive with the extension .fdeck (a plain .fdeck.json file is also allowed when no media is included). Its entries are the top-level properties of this object: manifest.json, notes.json, cards.json, preset.json and the optional progress.json and media.json. Media binaries live under the media/ prefix and are described by media.json. Unknown additional entries and unknown fields are ignored so that a newer package can still be read; an unknown note 'kind' is an error.",
+  "title": "Deck package (.edeck)",
+  "description": "Logical content of a deck package. A package is a single zip archive with the extension .edeck (a plain .edeck.json file is also allowed when no media is included). Its entries are the top-level properties of this object: manifest.json, notes.json, cards.json, preset.json and the optional progress.json and media.json. Media binaries live under the media/ prefix and are described by media.json. Unknown additional entries and unknown fields are ignored so that a newer package can still be read; an unknown note 'kind' is an error.",
   "type": "object",
   "required": ["manifest.json", "notes.json", "cards.json", "preset.json"],
   "properties": {

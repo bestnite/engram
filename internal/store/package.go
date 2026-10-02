@@ -21,7 +21,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包（.fdeck）导出/导入（DESIGN.md §7.6，AGENTS.md M5-6/M5-7）。
+// 卡组包（.edeck）导出/导入（DESIGN.md §7.6，AGENTS.md M5-6/M5-7）。
 //
 // 格式：单个 zip，含 manifest.json / notes.json / cards.json / preset.json，
 // 可选 progress.json 与 media/ + media.json。它把\"一个卡组\"变成自包含文件，
@@ -400,7 +400,7 @@ func (s *DeckStore) lookupUsername(ctx context.Context, userID uint64) (string, 
 	return u.Username, nil
 }
 
-// WriteZip 把包写成 .fdeck zip；entries 顺序固定，便于 diff 与校验。
+// WriteZip 把包写成 .edeck zip；entries 顺序固定，便于 diff 与校验。
 func (p *DeckPackage) WriteZip(w io.Writer) error {
 	zw := zip.NewWriter(w)
 	write := func(name string, v any) error {

@@ -15,7 +15,7 @@ import (
 
 // 卡组包浏览器路径（M5-9）的 HTTP 级验收：导出下载、上传导入摘要、坏包可读错误。
 
-// uploadPackage 以 multipart 提交一个 .fdeck 上传文件与若干表单字段。
+// uploadPackage 以 multipart 提交一个 .edeck 上传文件与若干表单字段。
 func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Cookie, csrf, filename string, body []byte, fields map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -58,7 +58,7 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 		t.Fatalf("GET /decks missing export control; code=%d body=%s", list.Code, snippet(list.Body.String()))
 	}
 
-	// 导出：得到 .fdeck 字节。
+	// 导出：得到 .edeck 字节。
 	exp := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/package", cookies)
 	if exp.Code != http.StatusOK {
 		t.Fatalf("GET export = %d, want 200 (body %s)", exp.Code, snippet(exp.Body.String()))
@@ -66,8 +66,8 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 	if ct := exp.Header().Get("Content-Type"); ct != packageExportMediaType {
 		t.Errorf("export content-type = %q, want %q", ct, packageExportMediaType)
 	}
-	if cd := exp.Header().Get("Content-Disposition"); !strings.Contains(cd, ".fdeck") {
-		t.Errorf("export content-disposition = %q, want a .fdeck download", cd)
+	if cd := exp.Header().Get("Content-Disposition"); !strings.Contains(cd, ".edeck") {
+		t.Errorf("export content-disposition = %q, want a .edeck download", cd)
 	}
 	pkg := exp.Body.Bytes()
 	if len(pkg) == 0 {
@@ -75,7 +75,7 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 	}
 
 	// 上传导入：页面展示摘要字段。
-	rec := uploadPackage(t, srv, "/import", cookies, csrf, "pack.fdeck", pkg, map[string]string{
+	rec := uploadPackage(t, srv, "/import", cookies, csrf, "pack.edeck", pkg, map[string]string{
 		"target": "new_deck", "on_conflict": "update",
 	})
 	if rec.Code != http.StatusOK {
@@ -95,7 +95,7 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 		t.Errorf("source deck notes = %d err %v, want >= 1", n, err)
 	}
 	// 坏包：不是 zip，给可读错误（4xx），不得 500。
-	bad := uploadPackage(t, srv, "/import", cookies, csrf, "bad.fdeck", []byte("this is not a zip"), map[string]string{
+	bad := uploadPackage(t, srv, "/import", cookies, csrf, "bad.edeck", []byte("this is not a zip"), map[string]string{
 		"target": "new_deck",
 	})
 	if bad.Code != http.StatusBadRequest {

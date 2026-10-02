@@ -29,7 +29,7 @@ Agent 通过用户级 API Key 或内置 MCP server 写入。排程使用 FSRS v6
 - Markdown + TeX 渲染（MathJax 3，自托管），HTML 走白名单清洗。
 - 界面中英双语，全部文案由语言包驱动。
 - PWA 外壳：可添加到主屏、独立窗口启动，只缓存静态资源。
-- 卡组包（`.fdeck`）：自包含的导出/导入格式，用于备份、迁移与离线转交。
+- 卡组包（`.edeck`）：自包含的导出/导入格式，用于备份、迁移与离线转交。
 - 参数优化由 web 触发、子进程执行。
 - 面向外部 Agent 的 REST API（`/api/v1`）与内置 MCP server（仅 HTTP）。
 - 浏览器里的管理面板：用户、注册策略、OIDC、上传上限、审计、任务、健康。
@@ -189,8 +189,8 @@ tar czf engram-media.tgz "$MEDIA_DIR"
 环境）：
 
 ```bash
-engram export --deck 1 --package deck-1.fdeck
-engram import --package deck-1.fdeck --dry-run
+engram export --deck 1 --package deck-1.edeck
+engram import --package deck-1.edeck --dry-run
 ```
 
 ## 对外集成（REST API 与 MCP）

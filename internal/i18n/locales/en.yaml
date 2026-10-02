@@ -797,15 +797,15 @@
 - id: decks.list.col_actions
   translation: "Actions"
 - id: decks.list.export
-  translation: "Export .fdeck"
+  translation: "Export .edeck"
 - id: import.title
   translation: "Import a deck package"
 - id: import.heading
   translation: "Import a deck package"
 - id: import.intro
-  translation: "Upload a .fdeck package to create a new deck or merge it into one of your decks."
+  translation: "Upload a .edeck package to create a new deck or merge it into one of your decks."
 - id: import.file_label
-  translation: "Package file (.fdeck)"
+  translation: "Package file (.edeck)"
 - id: import.target_label
   translation: "Import as"
 - id: import.target.new_deck

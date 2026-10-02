@@ -56,8 +56,8 @@ type bulkNotesIn struct {
 
 // importDeckIn 是 import_deck 的入参：接受一个卡组包（DESIGN.md §7.6）。
 type importDeckIn struct {
-	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .fdeck zip。
-	Package any `json:"package" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .fdeck archive"`
+	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .edeck zip。
+	Package any `json:"package" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive"`
 	// Target 取值 new_deck（默认）、into_deck:<id>、replace_deck:<id>。
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<id> or replace_deck:<id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`

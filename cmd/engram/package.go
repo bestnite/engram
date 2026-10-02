@@ -129,8 +129,8 @@ func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) 
 // runExport 处理 `engram export`：带 --package 时导出卡组包；否则保留全库导出的占位错误。
 func runExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	deckID := fs.Uint64("deck", 0, "deck id to export as a .fdeck card package")
-	out := fs.String("package", "", "output .fdeck path")
+	deckID := fs.Uint64("deck", 0, "deck id to export as a .edeck card package")
+	out := fs.String("package", "", "output .edeck path")
 	userID := fs.Uint64("user", 0, "acting user id (default: the deck owner)")
 	includeProgress := fs.Bool("include-progress", false, "include the caller's own review progress")
 	includeReviews := fs.Bool("include-reviews", false, "include review logs (requires --include-progress)")
@@ -175,7 +175,7 @@ func runExport(args []string) error {
 // runImport 处理 `engram import`：导入一个卡组包并打印与 REST 一致的报告 JSON。
 func runImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
-	in := fs.String("package", "", "input .fdeck path")
+	in := fs.String("package", "", "input .edeck path")
 	userRef := fs.String("user", "", "acting user id or username (required: the import never guesses the owner)")
 	target := fs.String("target", "", "new_deck (default), into_deck:<id> or replace_deck:<id>")
 	dryRun := fs.Bool("dry-run", false, "validate and count without writing")

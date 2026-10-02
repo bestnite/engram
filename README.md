@@ -35,7 +35,7 @@ note system.
 - Markdown plus TeX rendering (MathJax 3, self-hosted) with an HTML allowlist.
 - Interface in Chinese and English, driven entirely by translation catalogs.
 - PWA shell: add to home screen, standalone window, static assets cached only.
-- Deck packages (`.fdeck`): a self-contained export/import format for backup, migration, and
+- Deck packages (`.edeck`): a self-contained export/import format for backup, migration, and
   offline hand-off.
 - Parameter optimisation triggered from the web UI and executed in a subprocess.
 - REST API (`/api/v1`) and a built-in MCP server (HTTP only) for external agents.
@@ -205,8 +205,8 @@ For a per-deck backup that a non-admin can make from the browser, use a deck pac
 from the deck page, or from the CLI (which needs the same environment as the service):
 
 ```bash
-engram export --deck 1 --package deck-1.fdeck
-engram import --package deck-1.fdeck --dry-run
+engram export --deck 1 --package deck-1.edeck
+engram import --package deck-1.edeck --dry-run
 ```
 
 ## External integration (REST API and MCP)

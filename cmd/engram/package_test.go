@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// M5-8 CLI 验收：export 写出 .fdeck，import 从该文件往返导入并给出与 REST 一致的报告。
+// M5-8 CLI 验收：export 写出 .edeck，import 从该文件往返导入并给出与 REST 一致的报告。
 
 // seedCLIDeck 建一个 owner + 卡组 + 两张 basic note（各一张卡）。
 func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
@@ -75,7 +75,7 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 	userID, deckID := seedCLIDeck(t, db)
 	uid, did := strconv.FormatUint(userID, 10), strconv.FormatUint(deckID, 10)
 
-	pkgPath := filepath.Join(t.TempDir(), "deck.fdeck")
+	pkgPath := filepath.Join(t.TempDir(), "deck.edeck")
 	if out := captureCLI(t, func() error {
 		return runExport([]string{"--deck", did, "--package", pkgPath, "--user", uid})
 	}); out == "" {
@@ -147,7 +147,7 @@ func cliRun(fn func() error) (error, string) {
 	return fn(), buf.String()
 }
 
-// importFixture 建库、播种源卡组与一个导入目标账号，再导出一个可往返的 .fdeck。
+// importFixture 建库、播种源卡组与一个导入目标账号，再导出一个可往返的 .edeck。
 func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
@@ -169,7 +169,7 @@ func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string
 	if err := db.Create(&target).Error; err != nil {
 		t.Fatalf("create target user: %v", err)
 	}
-	pkgPath = filepath.Join(t.TempDir(), "deck.fdeck")
+	pkgPath = filepath.Join(t.TempDir(), "deck.edeck")
 	captureCLI(t, func() error {
 		return runExport([]string{"--deck", strconv.FormatUint(deckID, 10), "--package", pkgPath, "--user", strconv.FormatUint(userID, 10)})
 	})

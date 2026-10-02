@@ -10,7 +10,7 @@ type DeckRow struct {
 	CardCount int64
 	DueCount  int64
 	Archived  bool
-	// ExportHref 指向该卡组的 .fdeck 导出下载（M5-9）。
+	// ExportHref 指向该卡组的 .edeck 导出下载（M5-9）。
 	ExportHref string
 }
 
