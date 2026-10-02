@@ -27,6 +27,8 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 	router.GET("/settings", s.settingsPage)
 	router.POST("/settings/profile", s.sessions.CSRFMiddleware(), s.settingsProfileSubmit)
 	router.POST("/settings/password", s.sessions.CSRFMiddleware(), s.settingsPasswordSubmit)
+	// 邮件类型偏好页（M1-18）：路由与 handler 在 mail_prefs.go，仍属个人设置体系。
+	s.registerMailPrefsRoutes(router)
 }
 
 // settingsPage 渲染个人设置页；匿名访问被重定向到登录页。
@@ -242,7 +244,12 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		TOTPHint:            loc.T("totp.settings.intro"),
 		TOTPLinkLabel:       loc.T("totp.settings.link"),
 		TOTPHref:            "/settings/totp",
-		CSRF:                csrf,
+		// M1-18：邮件类型偏好入口，指向独立的 /settings/notifications 页。
+		MailPrefsHeading:   loc.T("settings.mail_prefs.heading"),
+		MailPrefsHint:      loc.T("settings.mail_prefs.hint"),
+		MailPrefsLinkLabel: loc.T("settings.mail_prefs.link"),
+		MailPrefsHref:      "/settings/notifications",
+		CSRF:               csrf,
 	}
 }
 

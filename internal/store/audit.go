@@ -69,6 +69,9 @@ const (
 	ActionTOTPRecoveryRegenerate = "totp.recovery_regenerate"
 	ActionTOTPRecoveryUsed       = "totp.recovery_used"
 	ActionTOTPVerifyFailed       = "totp.verify_failed"
+
+	// M1-18 邮件偏好：用户保存可选邮件类型的开关时留痕（detail 只记变更的类型与开关）。
+	ActionUserEmailPrefsUpdate = "user.email_prefs_update"
 )
 
 // AuditEntry 是一次审计写入的入参。

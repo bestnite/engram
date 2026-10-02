@@ -1582,3 +1582,77 @@
 - id: media.quota.setting.hint
   translation: "Total media bytes one user may reference. 0 means unlimited (the default)."
 
+# ── Email type catalog and preferences (M1-18) ────────────────
+- id: settings.mail_prefs.heading
+  translation: "Email notification preferences"
+- id: settings.mail_prefs.hint
+  translation: "Choose which optional email types you receive; security and transactional mail cannot be turned off."
+- id: settings.mail_prefs.link
+  translation: "Manage email notification preferences"
+- id: mail.prefs.title
+  translation: "Email notification preferences"
+- id: mail.prefs.heading
+  translation: "Email notification preferences"
+- id: mail.prefs.intro
+  translation: "These switches decide which emails this site may send you. Security and transactional mail cannot be turned off; every other type can be changed at any time."
+- id: mail.prefs.submit
+  translation: "Save preferences"
+- id: mail.prefs.saved
+  translation: "Preferences saved and effective immediately."
+- id: mail.prefs.locked
+  translation: "Always on: security and transactional mail protects your account, so turning it off would leave a back door."
+- id: mail.prefs.error.unknown_type
+  translation: "Unknown email type \"{{.name}}\"; nothing was saved."
+- id: mail.prefs.error.class_locked
+  translation: "\"{{.name}}\" is security and transactional mail and cannot be turned off."
+- id: mail.prefs.class.security.heading
+  translation: "A Security and transactional"
+- id: mail.prefs.class.security.note
+  translation: "Account security; always sent, cannot be turned off."
+- id: mail.prefs.class.collab.heading
+  translation: "B Collaboration and permissions"
+- id: mail.prefs.class.collab.note
+  translation: "Sharing, permissions and invites; on by default."
+- id: mail.prefs.class.study.heading
+  translation: "C Study and operations"
+- id: mail.prefs.class.study.note
+  translation: "Reminders and digests; off by default, turn them on when you want them."
+- id: mail.prefs.class.admin.heading
+  translation: "D Administrator notices"
+- id: mail.prefs.class.admin.note
+  translation: "Sent to administrators; on by default."
+- id: mail.prefs.type.password_reset
+  translation: "Password reset"
+- id: mail.prefs.type.email_verification
+  translation: "Email verification and email-change confirmation"
+- id: mail.prefs.type.new_device_login
+  translation: "New device or new IP sign-in notice"
+- id: mail.prefs.type.credential_changed
+  translation: "Password, two-factor or recovery-code change notice"
+- id: mail.prefs.type.account_status
+  translation: "Account disabled or deleted notice"
+- id: mail.prefs.type.deck_shared
+  translation: "A deck was shared with you"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "Deck permission changed or revoked"
+- id: mail.prefs.type.invite
+  translation: "Invite code sent to the invitee"
+- id: mail.prefs.type.review_reminder
+  translation: "Review due reminder"
+- id: mail.prefs.type.streak_at_risk
+  translation: "Streak about to break"
+- id: mail.prefs.type.study_digest
+  translation: "Study digest"
+- id: mail.prefs.type.optimize_done
+  translation: "Parameter optimisation finished"
+- id: mail.prefs.type.import_export_done
+  translation: "Import or export finished"
+- id: mail.prefs.type.registration_pending
+  translation: "Registration awaiting approval"
+- id: mail.prefs.type.job_failed
+  translation: "Job failed"
+- id: mail.prefs.type.media_disk_alert
+  translation: "Media quota or disk alert"
+- id: mail.prefs.type.backup_failed
+  translation: "Backup failed"
+
