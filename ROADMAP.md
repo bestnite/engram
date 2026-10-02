@@ -165,7 +165,7 @@ Conventions:
   *Held: do not start until the user says so.*
   *Acceptance:* the one-click POST disables exactly that type; the token cannot be replayed against
   another type or another user; class A mail carries no unsubscribe header.
-- [ ] **M1-23 Weekly study summary (class C)** — one message per week per user, in the user's
+- [x] **M1-23 Weekly study summary (class C)** — one message per week per user, in the user's
   timezone, showing reviews done, pass rate, current streak and the new-versus-due trend. Weekly
   rather than daily by default: a daily summary of a small personal collection is mostly noise.
   *Held: do not start until the user says so.*
@@ -728,7 +728,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 23/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 10/11
+  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 10/11
   · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
