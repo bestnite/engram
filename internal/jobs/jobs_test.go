@@ -231,16 +231,48 @@ func deref(s *string) string {
 	return *s
 }
 
-// processGone 轮询判断 PID 是否已消失（kill(pid, 0) 返回 ESRCH）。
+// processGone 轮询判断 PID 是否已退出。
+//
+// 为什么要同时看 /proc：kill(pid, 0) 只在进程消失时返回 ESRCH，僵尸进程（Z）同样
+// 返回成功。容器里 PID 1 常常不 reap 子进程（act 的 job 容器就是 tail -f /dev/null），
+// 被杀的孤儿会长期停在 Z，于是「进程组已杀掉」在容器里会被误判成「还活着」。
+// 僵尸已经不运行、不占 CPU，所以也算已退出。
 func processGone(pid int, limit time.Duration) bool {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
-		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		if processDead(pid) {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	return false
+}
+
+// processDead 判断 PID 是否已死：kill(pid, 0) 返回 ESRCH，或进程已是僵尸（Z）。
+func processDead(pid int) bool {
+	if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		return true
+	}
+	return procState(pid) == "Z"
+}
+
+// procState 读取 /proc/<pid>/stat 的状态字符；读不到（进程已消失或无 /proc）时返回空串。
+// stat 的第二列是 "(comm)"，进程名里可能含空格或括号，因此取最后一个 ')' 之后的字段。
+func procState(pid int) string {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return ""
+	}
+	s := string(b)
+	i := strings.LastIndex(s, ")")
+	if i < 0 {
+		return ""
+	}
+	fields := strings.Fields(s[i+1:])
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // TestTailBufferAndLines 覆盖日志尾巴的字节截断与行截断。
