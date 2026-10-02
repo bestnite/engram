@@ -212,6 +212,11 @@ func (s *Server) smtpAdminData(c *gin.Context, loc *i18n.Localizer, testResult s
 	if configured {
 		configuredStatus = loc.T("admin.sensitive.configured")
 	}
+	// D 类管理员通知的可用状态（M1-24）：未配置时渲染 mail.not_configured，绝不静默。
+	adminNotifyStatus := loc.T("mail.not_configured")
+	if configured {
+		adminNotifyStatus = loc.T("mail.admin.status.ready")
+	}
 
 	csrf := ""
 	if sess, ok := auth.CurrentSession(c); ok {
@@ -265,6 +270,9 @@ func (s *Server) smtpAdminData(c *gin.Context, loc *i18n.Localizer, testResult s
 		OutboxLastError:        lastError,
 		OutboxAttemptsLabel:    loc.T("admin.setting.smtp.outbox.attempts"),
 		OutboxAttempts:         attempts,
+		// D 类管理员通知状态（M1-24）。
+		AdminNotifyLabel:  loc.T("mail.admin.status.label"),
+		AdminNotifyStatus: adminNotifyStatus,
 	}
 	return views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.setting.smtp.title", "/admin/smtp"),

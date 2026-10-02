@@ -6,16 +6,6 @@ Engram is a web-first, multi-user, self-hosted spaced-repetition (SRS) service. 
 the browser, or an external script or agent pushes them in through a per-user API key or the
 built-in MCP server. Scheduling uses FSRS v6. The service never parses any external note system.
 
-## What it is not
-
-- **Not Anki-compatible.** It does not read or write `.apkg` / `.colpkg` packages, and there is no
-  importer for any note system.
-- **Not an offline app.** Reviewing needs a network connection; the PWA caches the static shell
-  only, and no answer data is stored on the device.
-- **Not a collaborative editor.** Decks can be shared (read-only, read-write, revocable), but two
-  people never edit the same deck content at the same time.
-- **Not a hosted service.** No third-party dependency, no telemetry, no public content market.
-
 ## What you get
 
 - Multi-user accounts with private per-user scheduling state; deck content is shared, with three
@@ -32,6 +22,7 @@ built-in MCP server. Scheduling uses FSRS v6. The service never parses any exter
   the preset page, run in a background job, and revertible once finished.
 
 ## Screenshots
+
 <!-- Screenshots to be added. -->
 
 ## Quick start
@@ -82,26 +73,26 @@ docker run -d --name engram -p 8080:8080 \
 
 Every variable the service reads at startup. This table mirrors `.env.example`.
 
-| Variable | Required | Default | Meaning |
-|---|---|---|---|
-| `HTTP_ADDR` | no | `127.0.0.1:8080` | Listen address. |
-| `BASE_URL` | no | `http://localhost:8080` | Public URL; its scheme sets the session cookie's `Secure` flag. |
-| `DB_DRIVER` | yes | — | `postgres` or `sqlite`. |
-| `DB_DSN` | yes | — | Connection string (PostgreSQL) or file path (SQLite). |
-| `SESSION_SECRET` | yes | — | Session-signing secret; `openssl rand -base64 32`. |
-| `ENCRYPTION_KEY` | yes | — | Master key for encrypted settings; base64 of exactly 32 bytes. |
-| `AUTO_MIGRATE` | no | `0` | Run migrations at startup (`1` / `true`). |
-| `BOOTSTRAP_ADMIN_EMAIL` | no | — | Pre-fills the first-admin setup form. |
-| `MEDIA_DIR` | no | `data/media` | Local media directory. |
-| `MEDIA_MAX_BYTES` | no | setting, else 10 MiB | Per-file upload limit override. |
-| `MEDIA_USER_QUOTA_BYTES` | no | setting, `0` = unlimited | Per-user media quota override. |
-| `MEDIA_ALLOWED_MIMES` | no | built-in list | Allowed upload MIME types override. |
-| `SMTP_HOST` | no | — | SMTP host; empty means unconfigured. |
-| `SMTP_PORT` | no | `587` | SMTP port. |
-| `SMTP_USERNAME` | no | — | SMTP username. |
-| `SMTP_PASSWORD` | no | — | SMTP password. |
-| `SMTP_FROM` | no | — | Sender address. |
-| `SMTP_TLS_MODE` | no | `starttls` | `none`, `starttls`, or `implicit`. |
+| Variable                 | Required | Default                  | Meaning                                                         |
+| ------------------------ | -------- | ------------------------ | --------------------------------------------------------------- |
+| `HTTP_ADDR`              | no       | `127.0.0.1:8080`         | Listen address.                                                 |
+| `BASE_URL`               | no       | `http://localhost:8080`  | Public URL; its scheme sets the session cookie's `Secure` flag. |
+| `DB_DRIVER`              | yes      | —                        | `postgres` or `sqlite`.                                         |
+| `DB_DSN`                 | yes      | —                        | Connection string (PostgreSQL) or file path (SQLite).           |
+| `SESSION_SECRET`         | yes      | —                        | Session-signing secret; `openssl rand -base64 32`.              |
+| `ENCRYPTION_KEY`         | yes      | —                        | Master key for encrypted settings; base64 of exactly 32 bytes.  |
+| `AUTO_MIGRATE`           | no       | `0`                      | Run migrations at startup (`1` / `true`).                       |
+| `BOOTSTRAP_ADMIN_EMAIL`  | no       | —                        | Pre-fills the first-admin setup form.                           |
+| `MEDIA_DIR`              | no       | `data/media`             | Local media directory.                                          |
+| `MEDIA_MAX_BYTES`        | no       | setting, else 10 MiB     | Per-file upload limit override.                                 |
+| `MEDIA_USER_QUOTA_BYTES` | no       | setting, `0` = unlimited | Per-user media quota override.                                  |
+| `MEDIA_ALLOWED_MIMES`    | no       | built-in list            | Allowed upload MIME types override.                             |
+| `SMTP_HOST`              | no       | —                        | SMTP host; empty means unconfigured.                            |
+| `SMTP_PORT`              | no       | `587`                    | SMTP port.                                                      |
+| `SMTP_USERNAME`          | no       | —                        | SMTP username.                                                  |
+| `SMTP_PASSWORD`          | no       | —                        | SMTP password.                                                  |
+| `SMTP_FROM`              | no       | —                        | Sender address.                                                 |
+| `SMTP_TLS_MODE`          | no       | `starttls`               | `none`, `starttls`, or `implicit`.                              |
 
 `MEDIA_*` and `SMTP_*` are normally configured in the admin panel and take effect immediately; the
 environment variables only override those values.

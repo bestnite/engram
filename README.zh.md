@@ -6,14 +6,6 @@ Engram 是一个网页优先、多用户、自托管的间隔重复（SRS）服�
 外部脚本或 Agent 通过用户级 API Key 或内置 MCP server 把卡片推入。排程使用 FSRS v6。服务本身不解析
 任何外部笔记系统。
 
-## 它不是什么
-
-- **不兼容 Anki。** 它不读也不写 `.apkg` / `.colpkg`，也没有任何笔记系统的导入器。
-- **不是离线应用。** 复习需要联网；PWA 只缓存静态外壳，设备上不保存任何答题数据。
-- **不是协作编辑器。** 卡组可以共享（只读、读写、可随时撤销），但不会出现两个人同时编辑同一份卡组
-  内容。
-- **不是托管服务。** 不依赖第三方，不做遥测，也没有公开题库市场。
-
 ## 你能得到什么
 
 - 多用户账号，排程状态各人私有；卡组内容共享，含 owner、editor、reader 三种角色、分享链接与克隆。
@@ -27,6 +19,7 @@ Engram 是一个网页优先、多用户、自托管的间隔重复（SRS）服�
 - 参数优化：用你自己的复习历史重新训练 FSRS 参数，在预设页触发、后台作业执行，完成后可回退。
 
 ## 截图
+
 <!-- 截图待补。 -->
 
 ## 快速开始
@@ -74,26 +67,26 @@ docker run -d --name engram -p 8080:8080 \
 
 服务启动时读取的全部变量。本表与 `.env.example` 一一对应。
 
-| 变量 | 必需 | 默认值 | 含义 |
-|---|---|---|---|
-| `HTTP_ADDR` | 否 | `127.0.0.1:8080` | 监听地址。 |
-| `BASE_URL` | 否 | `http://localhost:8080` | 对外 URL；其 scheme 决定会话 cookie 的 `Secure` 标志。 |
-| `DB_DRIVER` | 是 | — | `postgres` 或 `sqlite`。 |
-| `DB_DSN` | 是 | — | 连接串（PostgreSQL）或文件路径（SQLite）。 |
-| `SESSION_SECRET` | 是 | — | 会话签名密钥；用 `openssl rand -base64 32` 生成。 |
-| `ENCRYPTION_KEY` | 是 | — | 加密设置的主密钥；恰好 32 字节的 base64。 |
-| `AUTO_MIGRATE` | 否 | `0` | 启动时执行迁移（`1` / `true`）。 |
-| `BOOTSTRAP_ADMIN_EMAIL` | 否 | — | 预填首个管理员的引导页表单。 |
-| `MEDIA_DIR` | 否 | `data/media` | 本地媒体目录。 |
-| `MEDIA_MAX_BYTES` | 否 | 系统设置，再回退 10 MiB | 单文件上传上限的覆盖值。 |
-| `MEDIA_USER_QUOTA_BYTES` | 否 | 系统设置，`0` = 不限 | 每用户媒体配额的覆盖值。 |
-| `MEDIA_ALLOWED_MIMES` | 否 | 内置白名单 | 允许上传的 MIME 类型覆盖值。 |
-| `SMTP_HOST` | 否 | — | SMTP 主机；留空即未配置。 |
-| `SMTP_PORT` | 否 | `587` | SMTP 端口。 |
-| `SMTP_USERNAME` | 否 | — | SMTP 用户名。 |
-| `SMTP_PASSWORD` | 否 | — | SMTP 口令。 |
-| `SMTP_FROM` | 否 | — | 发件人地址。 |
-| `SMTP_TLS_MODE` | 否 | `starttls` | `none`、`starttls` 或 `implicit`。 |
+| 变量                     | 必需 | 默认值                  | 含义                                                   |
+| ------------------------ | ---- | ----------------------- | ------------------------------------------------------ |
+| `HTTP_ADDR`              | 否   | `127.0.0.1:8080`        | 监听地址。                                             |
+| `BASE_URL`               | 否   | `http://localhost:8080` | 对外 URL；其 scheme 决定会话 cookie 的 `Secure` 标志。 |
+| `DB_DRIVER`              | 是   | —                       | `postgres` 或 `sqlite`。                               |
+| `DB_DSN`                 | 是   | —                       | 连接串（PostgreSQL）或文件路径（SQLite）。             |
+| `SESSION_SECRET`         | 是   | —                       | 会话签名密钥；用 `openssl rand -base64 32` 生成。      |
+| `ENCRYPTION_KEY`         | 是   | —                       | 加密设置的主密钥；恰好 32 字节的 base64。              |
+| `AUTO_MIGRATE`           | 否   | `0`                     | 启动时执行迁移（`1` / `true`）。                       |
+| `BOOTSTRAP_ADMIN_EMAIL`  | 否   | —                       | 预填首个管理员的引导页表单。                           |
+| `MEDIA_DIR`              | 否   | `data/media`            | 本地媒体目录。                                         |
+| `MEDIA_MAX_BYTES`        | 否   | 系统设置，再回退 10 MiB | 单文件上传上限的覆盖值。                               |
+| `MEDIA_USER_QUOTA_BYTES` | 否   | 系统设置，`0` = 不限    | 每用户媒体配额的覆盖值。                               |
+| `MEDIA_ALLOWED_MIMES`    | 否   | 内置白名单              | 允许上传的 MIME 类型覆盖值。                           |
+| `SMTP_HOST`              | 否   | —                       | SMTP 主机；留空即未配置。                              |
+| `SMTP_PORT`              | 否   | `587`                   | SMTP 端口。                                            |
+| `SMTP_USERNAME`          | 否   | —                       | SMTP 用户名。                                          |
+| `SMTP_PASSWORD`          | 否   | —                       | SMTP 口令。                                            |
+| `SMTP_FROM`              | 否   | —                       | 发件人地址。                                           |
+| `SMTP_TLS_MODE`          | 否   | `starttls`              | `none`、`starttls` 或 `implicit`。                     |
 
 `MEDIA_*` 与 `SMTP_*` 通常直接在管理面板里配，改完即时生效；环境变量只是覆盖这些值。
 

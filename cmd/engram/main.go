@@ -234,8 +234,10 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Command:  optimizer.CommandBuilder(),
 		Complete: optimizer.Complete,
 	})
-	jobRunner.Start(context.Background())
-	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
+	if err != nil {
+		return nil, err
+	}
+	webSrv, err := web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
 		Logger: logger,
 		SchemaVersion: func(ctx context.Context) (int, error) {
@@ -266,6 +268,13 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		MCP:                 mcpSrv,
 		Jobs:                jobRunner,
 	})
+	if err != nil {
+		return nil, err
+	}
+	// M1-24：作业失败后通知管理员（D 类）。钩子在 Start 之前接好，避免与 worker 竞态。
+	jobRunner.SetOnFailure(webSrv.NotifyJobFailed)
+	jobRunner.Start(context.Background())
+	return webSrv, nil
 }
 
 // newAuthStack 构造认证相关的存储与服务：user/session store、账号服务、会话管理器。

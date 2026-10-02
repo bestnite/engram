@@ -1906,4 +1906,23 @@
   translation: "This unsubscribe link has expired."
 - id: mail.unsub.error_used
   translation: "This unsubscribe link has already been used."
+# M1-24 D-class admin notifications (mail.admin.*): appended by that task; key set must match zh-CN.yaml.
+- id: mail.admin.greeting
+  translation: "Hello, admin:"
+- id: mail.admin.registration.subject
+  translation: "New user registration - {{.site}}"
+- id: mail.admin.registration.body
+  translation: "A new user registered on {{.site}}: {{.username}} ({{.email}})."
+- id: mail.admin.job_failed.subject
+  translation: "Job failed #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.body
+  translation: "Job #{{.job_id}} ({{.kind}}) on {{.site}} failed: {{.reason}}."
+- id: mail.admin.media_alert.subject
+  translation: "Media quota alert - {{.site}}"
+- id: mail.admin.media_alert.body
+  translation: "User {{.username}} on {{.site}} hit the media quota: used {{.used}} of {{.limit}}."
+- id: mail.admin.status.label
+  translation: "Admin notifications"
+- id: mail.admin.status.ready
+  translation: "Enabled; delivered to admins"
 

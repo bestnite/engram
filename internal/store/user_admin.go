@@ -43,6 +43,21 @@ func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size i
 	return users, total, nil
 }
 
+// ListAdmins 返回所有仍可登录的管理员账号（role = admin 且 status = active），按 id 升序。
+//
+// D 类管理员通知（M1-24）据此解析收件地址：DESIGN.md §4.7 规定只用登录邮箱、不设单独收件
+// 邮箱，所以收件人就是这些账号的 Email。只取 active 的管理员：被禁用的账号收不到信也不该
+// 被当成投递目标。
+func (s *UserStore) ListAdmins(ctx context.Context) ([]User, error) {
+	var users []User
+	if err := s.db.WithContext(ctx).
+		Where("role = ? AND status = ?", RoleAdmin, StatusActive).
+		Order("id ASC").Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("list admins: %w", err)
+	}
+	return users, nil
+}
+
 // SetRole 只改角色一列，避免整行覆盖带来的并发丢写。
 func (s *UserStore) SetRole(ctx context.Context, id uint64, role string) error {
 	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
