@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,10 +104,11 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
 	u, p := seedOptimizerUserAndPreset(t, db)
-	const cards, days = 4, 10
+	// 8 张卡 × 40 天 = 320 条复习：越过 M9-12 的 300 条门槛下限，且够适配器训练。
+	const cards, days = 8, 40
 	seedAdapterReviews(t, db, u.ID, cards, days)
-	// 门槛降到 2，让「够训练」的条数不被默认 500 挡住。
-	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, "2", nil, time.Now().UTC()); err != nil {
+	// 门槛设到下限：默认 500 会挡住这 320 条复习。
+	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, strconv.Itoa(store.MinOptimizeMinReviews), nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)
 	}
 

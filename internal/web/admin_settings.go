@@ -83,7 +83,7 @@ func mediaSettingSpecs() []settingSpec {
 func optimizeSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
-			key: store.SettingKeyOptimizeMinReviews,
+			key:      store.SettingKeyOptimizeMinReviews,
 			labelKey: "admin.setting.optimize_min_reviews", hintKey: "admin.setting.optimize_min_reviews.hint",
 			def: func(*i18n.Localizer) string { return strconv.Itoa(store.DefaultOptimizeMinReviews) },
 		},
