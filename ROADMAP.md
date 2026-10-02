@@ -594,7 +594,7 @@ Conventions:
   offline message, and home-screen launch.
   *Acceptance:* the checklist exists, is dated, and each item states the observed result.
 
-- [ ] **M8-7 Interface polish pass** — a batch of user-reported defects: (a) `pwa.js` marks the
+- [x] **M8-7 Interface polish pass** — a batch of user-reported defects: (a) `pwa.js` marks the
   current page by href over `header nav a`, a selector that also matches the brand link, so on `/`
   the brand picks up the selected-tab background; (b) the header navigation is assembled in four
   places with different item sets (`pageLayout`, `home.go`, `adminLayout`, `not_found.go`), so the
@@ -808,7 +808,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/14 · M4 9/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/7 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 13/14 · M4 9/10 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/7 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
