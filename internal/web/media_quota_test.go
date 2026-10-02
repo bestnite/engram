@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/media"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/media"
+	"example.com/engram/internal/store"
 	"gorm.io/gorm"
 )
 

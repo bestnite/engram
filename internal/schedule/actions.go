@@ -11,7 +11,7 @@ import (
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // ErrNothingToUndo 表示该卡没有任何复习日志，Undo 无对象可回滚。

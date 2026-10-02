@@ -17,7 +17,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // OIDC 客户端（DESIGN.md §4.4、§4.5；AGENTS.md §5 M1-15）。

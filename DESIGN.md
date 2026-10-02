@@ -1,7 +1,7 @@
-# Flashcard 服务设计文档
+# Engram 服务设计文档
 
 > 状态：设计稿 v2（2026-10-01 依据评审意见修订）。
-> **项目名待定**，全文用 `flashcard` / `<module-path>` 作占位。
+> **项目名已定：Engram**（模块路径 `example.com/engram`）。
 > 本文件随代码开源，因此**不含任何个人或私有基础设施信息**（不写具体域名、主机名、内网地址、端口分配、个人使用场景）；示例一律用占位符。仓库内所有文件（配置、脚本、测试数据、文档）都必须遵守同一条脱敏要求。
 > 本文档描述**完整最终态**（含尚不实现的未来规划，见 §14），实现按 §12 的里程碑分阶段推进；设计上优先为将来留口子，避免推倒重来。
 
@@ -655,10 +655,10 @@ JSON in/out；错误体统一 `{"error":{"code":"...","message":"..."}}`（`code
 
 **用途**：把一个卡组变成**自包含文件**，用于备份、跨实例迁移、以及把卡组离线交给别人。与"克隆"的分工见本节末。
 
-**格式**：单个 zip，扩展名 `.fdeck`（不含媒体时也可用纯 JSON 的 `.fdeck.json`）。人类可读、可 diff、可进版本库。
+**格式**：单个 zip，扩展名 `.edeck`（不含媒体时也可用纯 JSON 的 `.edeck.json`）。人类可读、可 diff、可进版本库。
 
 ```
-deck.fdeck                      # zip
+deck.edeck                      # zip
 ├── manifest.json               # format_version、导出时间、应用版本、卡组元信息、条目计数
 ├── notes.json                  # 卡片内容：kind + 字段 + 标签 + external_ref + 可选 source_url/extra
 ├── cards.json                  # 每个 note 的呈现形式（template/ordinal）——保证导入后卡片集合一致
@@ -676,8 +676,8 @@ deck.fdeck                      # zip
 
 **导出**
 
-- 入口：卡组详情页「导出卡组包」按钮、`GET /api/v1/decks/:id/package`、MCP `export_deck`、CLI `flashcard export --deck N --package out.fdeck`。
-- **CLI 身份（2026-10-02 裁定）**：`flashcard import` **必须显式提供 `--user <id|名>`**，取消“缺省回落最早管理员”这种隐式行为——导入会把内容写进某个账号名下，身份必须由调用者写明，猜错等于把卡片塞给了别人。导出侧保留可选 `--user`（缺省取卡组属主），因为导出只读。
+- 入口：卡组详情页「导出卡组包」按钮、`GET /api/v1/decks/:id/package`、MCP `export_deck`、CLI `engram export --deck N --package out.edeck`。
+- **CLI 身份（2026-10-02 裁定）**：`engram import` **必须显式提供 `--user <id|名>`**，取消“缺省回落最早管理员”这种隐式行为——导入会把内容写进某个账号名下，身份必须由调用者写明，猜错等于把卡片塞给了别人。导出侧保留可选 `--user`（缺省取卡组属主），因为导出只读。
 - 设计初衷（nite 原话）：**卡组包主要是给“用户之间分享”用的**；跨实例/离线搬运是同一机制的自然延伸。
 - 三个开关：`include_progress`（默认 **off**，理由见 §13）、`include_media`（默认 on）、`include_reviews`（默认 off，依赖 `include_progress`）。
 - 权限：`read` 即可导出（"拿走自己的内容"是基本权利）；导出他人共享的卡组时，**绝不包含导出者以外任何人的进度**。
@@ -837,7 +837,7 @@ deck.fdeck                      # zip
 
 ### 10.2 进程形态与子命令
 
-- **单二进制**：`flashcard`，子命令：
+- **单二进制**：`engram`，子命令：
   - `serve`（HTTP 服务，默认；含 Web + REST + `/mcp`）
   - `schema sync`（显式跑 AutoMigrate；`AUTO_MIGRATE=1` 时启动也会跑）
   - `export --all --out backup.json`（备份/迁移；管理面板有等价按钮）
@@ -849,13 +849,13 @@ deck.fdeck                      # zip
 ### 10.3 目录结构（建议）
 
 ```
-flashcard/
+engram/
 ├── AGENTS.md                 # 开发指引（英文）：硬性约定、完成标准、任务清单与进度统计
 ├── DESIGN.md                 # 本文档
 ├── README.md / README.zh.md  # 英文为一级公民，中文版并列
 ├── LICENSE
-├── go.mod                    # module <module-path>
-├── cmd/flashcard/main.go     # 子命令入口
+├── go.mod                    # module example.com/engram
+├── cmd/engram/main.go     # 子命令入口
 ├── internal/
 │   ├── config/               # 环境变量 + settings 表读取与优先级
 │   ├── store/                # GORM 模型 + 各业务 Store（集中封装数据访问）
@@ -939,7 +939,7 @@ flashcard/
 
 | # | 问题 | 选项 | 建议 |
 |---|---|---|---|
-| 1 | **项目名 / 模块路径** | 待定（暂用 `flashcard` / `<module-path>` 占位） | 名字定下来后全局替换占位符即可 |
+| 1 | **项目名 / 模块路径** | **已定：Engram / `example.com/engram`**（2026-10-02） | 占位符已全局替换 |
 | 2 | **开源许可证** | **已定：AGPL-3.0（2026-10-02）** | 满足“不能被他人拿去做闭源 SaaS”这一诉求（AGPL 第 13 条：把修改版作为网络服务提供给他人时须提供源码）。⚠️ 需知：**AGPL 不禁止收费**，别人仍可托管收费，只是不能闭源；若日后要真正禁止商业托管，只能换非 OSI 许可（代价是不再自称开源） |
 | 3 | TOTP 二次验证 | **已定：做，列为最终态功能（2026-10-02）** | 本地账号的廉价安全加分项；**实现待 nite 下令开始**（对应 AGENTS.md M1-16） |
 | 4 | 邮件通知（SMTP） | **已定：做，拆成 M1-17 ~ M1-24（2026-10-02）**，设计见 **§4.7** | 已定：静默时段 23:00–07:00 + 每天最多一封；可选类带 RFC 8058 一键退订（token、免登录）；**未配置 SMTP 时相关流程直接禁用**；不设单独收件邮箱；摘要默认每周。**实现待 nite 下令开始** |
@@ -1035,7 +1035,7 @@ flashcard/
 | # | 决策 | 落点 |
 |---|---|---|
 | 1 | 前端多语言：首发中文 + 英文，语言包驱动、禁止硬编码文案 | §8.3 |
-| 2 | 项目正式名待定，全文用 `flashcard` / `<module-path>` 占位 | §13 #1 |
+| 2 | 项目正式名：**Engram**，模块路径 `example.com/engram` | §13 #1 |
 | 3 | 身份体系**通用化**：内置账号为默认，**OIDC 可选接入**、与内部用户绑定；OIDC 库用 Go 生态最成熟的 `zitadel/oidc`（不特化任何 IdP） | §4 |
 | 4 | 设计文档不含部署与运维章节（属私有信息，不进开源仓库） | 全文 |
 | 5 | 已在本地初始化 git 仓库（`main`，首个提交含 DESIGN.md / .gitignore / .env.example） | 仓库 |

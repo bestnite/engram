@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // 本文件是 M6-4 的验收测试：管理面板 OIDC 配置页的「测试连接」（显示 provider 错误文本）

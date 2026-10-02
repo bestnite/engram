@@ -29,7 +29,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 作业 kind：与 jobs.kind 列一致，取值英文且稳定（DESIGN.md §2.2）。

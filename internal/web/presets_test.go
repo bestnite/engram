@@ -13,10 +13,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/jobs"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // newPresetsServer 装配一个带作业执行器的测试服务并登录 owner。

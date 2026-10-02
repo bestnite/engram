@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // mustSubmit 在自建事务里提交一次评分并提交事务，返回结果。

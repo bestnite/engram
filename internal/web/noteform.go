@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/web/views"
 )
 
 // 本文件实现 M2-12 新建卡片表单的字段定义与表单值转换。

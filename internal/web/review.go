@@ -13,12 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/cardtype"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/schedule"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/cardtype"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/schedule"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // 复习页的三个端点（M3-5）。评分与动作都返回主区域片段（htmx outerHTML swap），

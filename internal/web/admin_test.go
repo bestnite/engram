@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // testSecretKey 是测试用的 ENCRYPTION_KEY：base64(32 字节)，与任何真实密钥无关。

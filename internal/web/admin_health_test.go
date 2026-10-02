@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // healthValueRE 从健康页取出 data-health=<key> 对应的值文本。

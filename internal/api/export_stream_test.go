@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // measurePeak 执行 fn，并返回执行期间堆分配（HeapAlloc）相对执行前基线增长的最大字节数。

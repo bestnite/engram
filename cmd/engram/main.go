@@ -1,4 +1,4 @@
-// Command flashcard 是服务唯一入口：单二进制 + 子命令（DESIGN.md §10.2）。
+// Command engram 是服务唯一入口：单二进制 + 子命令（DESIGN.md §10.2）。
 // 依赖在这里显式装配（AGENTS.md §2.4）。
 package main
 
@@ -15,14 +15,14 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/api"
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/config"
-	"example.com/flashcard/internal/jobs"
-	"example.com/flashcard/internal/mcp"
-	"example.com/flashcard/internal/media"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web"
+	"example.com/engram/internal/api"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/config"
+	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/mcp"
+	"example.com/engram/internal/media"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web"
 )
 
 // version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 dev。
@@ -63,11 +63,11 @@ func run(ctx context.Context, args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "usage: flashcard <command>")
+	fmt.Fprintln(os.Stderr, "usage: engram <command>")
 	fmt.Fprintln(os.Stderr, "  serve           start the HTTP server (default)")
 	fmt.Fprintln(os.Stderr, "  schema sync     run AutoMigrate and the registered destructive migrations")
-	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.fdeck [--user N]")
-	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.fdeck --user <id|username> [--target ...] [--dry-run]")
+	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.edeck [--user N]")
+	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.edeck --user <id|username> [--target ...] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "  optimize        run a parameter-optimisation job (implemented in M9)")
 	fmt.Fprintln(os.Stderr, "  version         print the version string")
 }
@@ -246,7 +246,7 @@ func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.
 
 func runSchema(ctx context.Context, args []string) error {
 	if len(args) != 1 || args[0] != "sync" {
-		return errors.New("usage: flashcard schema sync")
+		return errors.New("usage: engram schema sync")
 	}
 	logger := newLogger()
 	cfg, err := config.Load(os.LookupEnv, nil)

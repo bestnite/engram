@@ -8,7 +8,7 @@ server remains the source of truth for validation.
 | File | Describes | Design reference |
 |---|---|---|
 | `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes` | `DESIGN.md` §7.3 (endpoint), §6.2 (card types) |
-| `deck-package.schema.json` | Logical content of a `.fdeck` deck package (export and import) | `DESIGN.md` §7.6 |
+| `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) | `DESIGN.md` §7.6 |
 
 ## `note-import.schema.json`
 
@@ -47,8 +47,8 @@ What JSON Schema cannot express and the server enforces instead:
 
 ## `deck-package.schema.json`
 
-A deck package is one zip archive with the extension `.fdeck` (or a plain
-`.fdeck.json` when no media is included). The schema models the package as an object
+A deck package is one zip archive with the extension `.edeck` (or a plain
+`.edeck.json` when no media is included). The schema models the package as an object
 whose properties are the package's entry names, and defines each file under `$defs`:
 
 - `manifest.json` (required) — `format_version`, export time, application version,

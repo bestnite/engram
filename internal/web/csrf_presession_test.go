@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/auth"
+	"example.com/engram/internal/auth"
 )
 
 // csrfHiddenRe 从认证页 HTML 里取镜像进表单的 CSRF token（模板输出 <input ... value="...">）。

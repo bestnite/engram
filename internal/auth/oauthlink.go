@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 身份绑定决策的稳定错误值；transport 层据此映射到稳定英文 code 与本地化文案
@@ -294,7 +294,7 @@ func sanitizeUsername(s string) string {
 }
 
 // NewStoreIdentityLinkStore 把三个具体存储适配成 IdentityLinkStore：把“未找到”归一化成
-// (nil, nil)，让上面的决策函数不必理解 GORM 的哨兵错误。生产装配在 cmd/flashcard。
+// (nil, nil)，让上面的决策函数不必理解 GORM 的哨兵错误。生产装配在 cmd/engram。
 func NewStoreIdentityLinkStore(identities *store.IdentityStore, users *store.UserStore, accounts *AccountService) IdentityLinkStore {
 	return &storeIdentityLinkStore{identities: identities, users: users, accounts: accounts}
 }

@@ -1,7 +1,7 @@
 # English catalog. Keys are lowercase dotted English (DESIGN.md §10.4).
 # The key set must match zh-CN.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
 - id: app.name
-  translation: "Flashcards"
+  translation: "Engram"
 - id: nav.today
   translation: "Today"
 - id: nav.decks
@@ -797,15 +797,15 @@
 - id: decks.list.col_actions
   translation: "Actions"
 - id: decks.list.export
-  translation: "Export .fdeck"
+  translation: "Export .edeck"
 - id: import.title
   translation: "Import a deck package"
 - id: import.heading
   translation: "Import a deck package"
 - id: import.intro
-  translation: "Upload a .fdeck package to create a new deck or merge it into one of your decks."
+  translation: "Upload a .edeck package to create a new deck or merge it into one of your decks."
 - id: import.file_label
-  translation: "Package file (.fdeck)"
+  translation: "Package file (.edeck)"
 - id: import.target_label
   translation: "Import as"
 - id: import.target.new_deck

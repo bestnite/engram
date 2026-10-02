@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // ---- M4-7：工具与 REST 行为一致 ----

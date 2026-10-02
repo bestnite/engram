@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 本文件是 M1-13 要求的鉴权反面用例汇总：把 CSRF、注册策略、身份绑定、会话作废、

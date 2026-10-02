@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/config"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/config"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web"
 )
 
 // testSessionSecret 是集成测试用的会话签名密钥；仅用于测试，与生产无关。

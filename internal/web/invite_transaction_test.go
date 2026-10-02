@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"testing"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // TestInviteAcceptFailureKeepsTokenUsable 是 B-12 的 HTTP 级反面验收：

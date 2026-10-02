@@ -1,4 +1,4 @@
-# flashcard
+# Engram
 
 [English](README.md) | **中文**
 
@@ -6,8 +6,8 @@
 Agent 通过用户级 API Key 或内置 MCP server 写入。排程使用 FSRS v6。服务本身不解析任何外部笔记
 系统。
 
-> 项目名、模块路径与许可证仍是占位符（`flashcard`、`example.com/flashcard`）。见 `AGENTS.md`
-> 的 B-1、B-2，以及 `DESIGN.md` §13。
+> 项目名已定为 **Engram**，模块路径为 `example.com/engram`；许可证仍是占位符。见 `AGENTS.md`
+> 的 B-2 以及 `DESIGN.md` §13。
 
 ## 它不是什么
 
@@ -29,7 +29,7 @@ Agent 通过用户级 API Key 或内置 MCP server 写入。排程使用 FSRS v6
 - Markdown + TeX 渲染（MathJax 3，自托管），HTML 走白名单清洗。
 - 界面中英双语，全部文案由语言包驱动。
 - PWA 外壳：可添加到主屏、独立窗口启动，只缓存静态资源。
-- 卡组包（`.fdeck`）：自包含的导出/导入格式，用于备份、迁移与离线转交。
+- 卡组包（`.edeck`）：自包含的导出/导入格式，用于备份、迁移与离线转交。
 - 参数优化由 web 触发、子进程执行。
 - 面向外部 Agent 的 REST API（`/api/v1`）与内置 MCP server（仅 HTTP）。
 - 浏览器里的管理面板：用户、注册策略、OIDC、上传上限、审计、任务、健康。
@@ -50,13 +50,13 @@ mkdir -p data
 # 3. 配置环境。ENCRYPTION_KEY 必须是恰好 32 字节的 base64；
 #    给任何其它值都会让服务在启动时直接退出。
 export DB_DRIVER=sqlite
-export DB_DSN=data/flashcard.db
+export DB_DSN=data/engram.db
 export AUTO_MIGRATE=1
 export SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}"
 export ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
 
 # 4. 启动服务（默认子命令就是 serve）。
-go run ./cmd/flashcard serve
+go run ./cmd/engram serve
 ```
 
 然后打开 `http://localhost:8080/`。全新实例的首次访问会跳到 `/setup` 创建首个管理员账号。
@@ -68,7 +68,7 @@ go run ./cmd/flashcard serve
 curl -fsS http://localhost:8080/healthz
 # {"status":"ok","database":"ok","schema_version":0}
 
-go run ./cmd/flashcard version
+go run ./cmd/engram version
 # dev
 ```
 
@@ -102,22 +102,22 @@ PostgreSQL 是默认部署库。可以用 `Containerfile` 构建容器镜像，�
 容器镜像示例（`DB_DSN` 里的 `localhost` 是占位值，请指向你自己的数据库主机）：
 
 ```bash
-docker build -t flashcard:local .
+docker build -t engram:local .
 
 export SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}"
 export ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
 
-docker run -d --name flashcard \
+docker run -d --name engram \
   -p 8080:8080 \
   -e HTTP_ADDR=0.0.0.0:8080 \
-  -e BASE_URL=https://flashcard.example.com/ \
+  -e BASE_URL=https://engram.example.com/ \
   -e DB_DRIVER=postgres \
-  -e DB_DSN="postgres://flashcard:CHANGE_ME@localhost:5432/flashcard?sslmode=disable" \
+  -e DB_DSN="postgres://engram:CHANGE_ME@localhost:5432/engram?sslmode=disable" \
   -e SESSION_SECRET="${SESSION_SECRET}" \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
   -e AUTO_MIGRATE=0 \
-  -v flashcard-media:/data/media \
-  flashcard:local serve
+  -v engram-media:/data/media \
+  engram:local serve
 ```
 
 ### 启动时的迁移
@@ -128,11 +128,11 @@ docker run -d --name flashcard \
 生产环境建议保持 `AUTO_MIGRATE=0`，在启动或滚动发布新版本之前显式跑迁移：
 
 ```bash
-flashcard schema sync
+engram schema sync
 ```
 
 它执行同一套迁移并记录结果 schema 版本，这样迁移失败会表现为一条失败的命令，而不是一个半启动的服务。
-在容器里，用同样的环境把它当一次性任务运行（例如 `docker run --rm ... flashcard:local schema sync`）。
+在容器里，用同样的环境把它当一次性任务运行（例如 `docker run --rm ... engram:local schema sync`）。
 
 ## 备份与恢复
 
@@ -144,13 +144,13 @@ flashcard schema sync
 备份（custom 格式，已压缩）：
 
 ```bash
-pg_dump -Fc -f flashcard.dump "$DB_DSN"
+pg_dump -Fc -f engram.dump "$DB_DSN"
 ```
 
 恢复到全新或已有数据库：
 
 ```bash
-pg_restore --clean --if-exists -d "$DB_DSN" flashcard.dump
+pg_restore --clean --if-exists -d "$DB_DSN" engram.dump
 ```
 
 恢复期间请停掉服务。`DB_DSN` 就是服务使用的同一个连接串。
@@ -160,7 +160,7 @@ pg_restore --clean --if-exists -d "$DB_DSN" flashcard.dump
 用 SQLite 自带的在线备份，服务运行中也一致：
 
 ```bash
-sqlite3 "$DB_DSN" "VACUUM INTO 'flashcard-backup.db'"
+sqlite3 "$DB_DSN" "VACUUM INTO 'engram-backup.db'"
 ```
 
 恢复：
@@ -168,7 +168,7 @@ sqlite3 "$DB_DSN" "VACUUM INTO 'flashcard-backup.db'"
 ```bash
 # 1. 停掉服务。
 # 2. 替换数据库文件（服务必须不在运行）。
-cp flashcard-backup.db "$DB_DSN"
+cp engram-backup.db "$DB_DSN"
 # 3. 重新启动服务。
 ```
 
@@ -177,7 +177,7 @@ cp flashcard-backup.db "$DB_DSN"
 ### 媒体目录
 
 ```bash
-tar czf flashcard-media.tgz "$MEDIA_DIR"
+tar czf engram-media.tgz "$MEDIA_DIR"
 ```
 
 恢复时把归档解到数据库备份旁边即可。媒体按 sha256 内容寻址，所以用旧快照覆盖较新的目录只会补文件，
@@ -189,8 +189,8 @@ tar czf flashcard-media.tgz "$MEDIA_DIR"
 环境）：
 
 ```bash
-flashcard export --deck 1 --package deck-1.fdeck
-flashcard import --package deck-1.fdeck --dry-run
+engram export --deck 1 --package deck-1.edeck
+engram import --package deck-1.edeck --dry-run
 ```
 
 ## 对外集成（REST API 与 MCP）
@@ -209,7 +209,7 @@ key，明文只在创建时显示一次。
 服务只负责诚实记账。
 
 ```bash
-curl -fsS https://flashcard.example.com/api/v1/decks \
+curl -fsS https://engram.example.com/api/v1/decks \
   -H "Authorization: Bearer $FLCARD_KEY"
 ```
 
@@ -238,10 +238,10 @@ tailwindcss -i ./internal/web/static/css/input.css \
 
 ```bash
 mkdir -p data
-DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 \
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 \
 SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}" \
 ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
-go run ./cmd/flashcard serve
+go run ./cmd/engram serve
 ```
 
 仓库检查（要在 `git add` 之后跑，因为它们只扫已跟踪文件）：
@@ -255,8 +255,8 @@ Tailwind standalone CLI 是 glibc 二进制，所以容器构建阶段必须用 
 
 ## 许可证与项目名
 
-两者都还是占位符，都未拍板：
+项目名与模块路径已拍板；许可证仍是占位符：
 
-- 项目名与模块路径：`flashcard` / `example.com/flashcard`（AGENTS.md B-1）。
+- 项目名与模块路径：`Engram` / `example.com/engram`。
 - 许可证：尚未选定（MIT / Apache-2.0 / AGPL-3.0）。`LICENSE` 目前是占位内容
   （AGENTS.md B-2、DESIGN.md §13 #2）。

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // listKeys 列出当前用户自己的 API key 元信息（不含哈希与明文），scope: admin。

@@ -10,8 +10,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/schedule"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/schedule"
+	"example.com/engram/internal/store"
 )
 
 // seedGradedNote 建一张作答类 note（M3-12 验收用）。

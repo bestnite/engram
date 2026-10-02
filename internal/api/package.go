@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
-// 卡组包（.fdeck）的 REST 入口（DESIGN.md §7.6、M5-6/M5-7）：
+// 卡组包（.edeck）的 REST 入口（DESIGN.md §7.6、M5-6/M5-7）：
 //   GET  /api/v1/decks/:id/package  导出（read）
 //   POST /api/v1/decks/import       导入（write）
 // 业务逻辑全在 store 层；这里只做参数整形、权限判定与错误映射。
@@ -145,10 +145,10 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	name := "deck-" + strconv.FormatUint(deckID, 10) + ".fdeck"
-	c.Header("Content-Type", "application/vnd.flashcard.fdeck")
+	name := "deck-" + strconv.FormatUint(deckID, 10) + ".edeck"
+	c.Header("Content-Type", "application/vnd.engram.edeck")
 	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
-	c.Data(http.StatusOK, "application/vnd.flashcard.fdeck", buf.Bytes())
+	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())
 }
 
 // handleImportPackage 是 POST /api/v1/decks/import（multipart 上传文件）。

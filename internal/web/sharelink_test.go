@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // shareTokenPattern 从共享页 HTML 里抓出刚创建的分享链接明文（value="/s/<token>"）。

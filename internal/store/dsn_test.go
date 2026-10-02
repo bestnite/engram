@@ -14,11 +14,11 @@ func TestSQLiteDBPath(t *testing.T) {
 		dsn  string
 		want string
 	}{
-		{"plain relative", "data/flashcard.db", "data/flashcard.db"},
-		{"plain absolute", "/var/lib/flashcard/db.sqlite", "/var/lib/flashcard/db.sqlite"},
-		{"file uri", "file:data/flashcard.db", "data/flashcard.db"},
-		{"file uri with params", "file:data/flashcard.db?_pragma=busy_timeout(5000)", "data/flashcard.db"},
-		{"plain with params", "data/flashcard.db?cache=shared", "data/flashcard.db"},
+		{"plain relative", "data/engram.db", "data/engram.db"},
+		{"plain absolute", "/var/lib/engram/db.sqlite", "/var/lib/engram/db.sqlite"},
+		{"file uri", "file:data/engram.db", "data/engram.db"},
+		{"file uri with params", "file:data/engram.db?_pragma=busy_timeout(5000)", "data/engram.db"},
+		{"plain with params", "data/engram.db?cache=shared", "data/engram.db"},
 		{"memory colon", ":memory:", ""},
 		{"file memory", "file::memory:?cache=shared", ""},
 		{"mode memory", "file:memdb1?mode=memory&cache=shared", ""},
@@ -38,7 +38,7 @@ func TestSQLiteDBPath(t *testing.T) {
 func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 	base := t.TempDir()
 	// 故意多套一层不存在的目录，验证 MkdirAll 递归创建。
-	dbPath := filepath.Join(base, "nested", "deeper", "flashcard.db")
+	dbPath := filepath.Join(base, "nested", "deeper", "engram.db")
 
 	db, err := Open("sqlite", dbPath)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 // TestOpenSQLiteFileURICreatesMissingParentDir 覆盖带参数的 file: URI 形态。
 func TestOpenSQLiteFileURICreatesMissingParentDir(t *testing.T) {
 	base := t.TempDir()
-	dbPath := filepath.Join(base, "uri", "flashcard.db")
+	dbPath := filepath.Join(base, "uri", "engram.db")
 	dsn := "file:" + dbPath + "?_pragma=busy_timeout(5000)"
 
 	db, err := Open("sqlite", dsn)
@@ -99,7 +99,7 @@ func TestOpenSQLiteParentIsFileErrorIsClear(t *testing.T) {
 	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	dbPath := filepath.Join(notDir, "flashcard.db")
+	dbPath := filepath.Join(notDir, "engram.db")
 
 	_, err := Open("sqlite", dbPath)
 	if err == nil {

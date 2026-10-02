@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // Store 封装 jobs 表；模型复用 internal/store.Job，避免重复定义（AGENTS.md §2.4：

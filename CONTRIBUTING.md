@@ -252,13 +252,13 @@ one commit.**
 - The main checkout stays on `main` and is used only as the integration point. Do not develop
   in it.
 - Worktrees live **outside** the repository directory, for example
-  `../flashcard-wt/<task-id>`, so the main checkout's `git status` stays clean.
-- Branch `feat/<task-id>-<slug>`, directory `flashcard-wt/<task-id>`.
+  `../engram-wt/<task-id>`, so the main checkout's `git status` stays clean.
+- Branch `feat/<task-id>-<slug>`, directory `engram-wt/<task-id>`.
 
 ```bash
-git worktree add -b feat/m3-2 ../flashcard-wt/m3-2 main
-# ... work and commit inside ../flashcard-wt/m3-2 ...
-git worktree remove ../flashcard-wt/m3-2   # or keep the worktree for review
+git worktree add -b feat/m3-2 ../engram-wt/m3-2 main
+# ... work and commit inside ../engram-wt/m3-2 ...
+git worktree remove ../engram-wt/m3-2   # or keep the worktree for review
 git worktree prune                         # drop stale entries
 ```
 
@@ -290,13 +290,11 @@ and counting updates to `AGENTS.md` in batches, with the user present.
 
 ## Placeholders: project name and licence
 
-The **project name, module path, and licence are still placeholders** and have not been
-decided:
+The **project name and module path are settled** (`Engram` / `example.com/engram`). The
+**licence is still a placeholder** and has not been decided:
 
-- Project name and module path: `flashcard` / `example.com/flashcard` (backlog B-1).
 - Licence: not chosen yet (MIT / Apache-2.0 / AGPL-3.0); `LICENSE` currently holds a
   placeholder (backlog B-2, `DESIGN.md` §13 #2).
 
-**Do not pick one in a contribution.** A change that replaces the placeholder name, module
-path, or licence will be rejected until the decision is made; open an issue to discuss it
-instead.
+**Do not pick the licence in a contribution.** A change that replaces the placeholder licence
+will be rejected until the decision is made; open an issue to discuss it instead.

@@ -12,16 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // registerAuthRoutes 挂载认证路由（M1-4、M1-5）。
 //
 // 依赖未装配时（例如 M0 阶段的测试只构造了 DB/Logger）直接跳过，保证 New 仍可用；
-// 生产装配见 cmd/flashcard，需要显式提供 Accounts、Sessions、Users。
+// 生产装配见 cmd/engram，需要显式提供 Accounts、Sessions、Users。
 func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	if s.accounts == nil || s.sessions == nil || s.users == nil {
 		return

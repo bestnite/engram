@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 类型别名保留旧名，避免既有测试与调用处改名（真实定义在 service.go，REST 与 MCP 共用）。

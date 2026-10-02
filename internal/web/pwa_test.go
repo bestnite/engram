@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // swAssetList 从生成的 service worker 脚本里解析 STATIC_ASSETS 数组。
@@ -121,12 +121,12 @@ func TestManifestNamePrefersSettings(t *testing.T) {
 		t.Fatalf("default manifest name is empty")
 	}
 
-	row := store.Setting{Key: "site.name", Value: `"Custom Flashcards"`, UpdatedAt: time.Now()}
+	row := store.Setting{Key: "site.name", Value: `"Custom Engram"`, UpdatedAt: time.Now()}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed setting: %v", err)
 	}
-	if got := manifestName(t, srv); got != "Custom Flashcards" {
-		t.Errorf("manifest name = %q, want settings value %q", got, "Custom Flashcards")
+	if got := manifestName(t, srv); got != "Custom Engram" {
+		t.Errorf("manifest name = %q, want settings value %q", got, "Custom Engram")
 	}
 }
 

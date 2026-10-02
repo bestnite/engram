@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 权限判定的两个哨兵错误；调用方据此决定 HTTP 状态与稳定 code：

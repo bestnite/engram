@@ -14,10 +14,10 @@ import (
 // 卡组包的 JSON 文档形态与 zip 字节之间的互转（M5-8）。
 //
 // MCP/CLI 既可能拿到 `export_deck` 输出的 JSON 文档（键为 manifest.json 等，
-// 媒体条目为 base64 字符串），也可能拿到 base64 编码的 .fdeck zip。两条入口都归一到
+// 媒体条目为 base64 字符串），也可能拿到 base64 编码的 .edeck zip。两条入口都归一到
 // 存储层唯一的 zip 解析路径（ImportPackage -> ReadPackageArchive），避免第二套解析。
 
-// PackageDocumentToZip 把 DeckPackage.Document 形态的文档还原成 .fdeck zip 字节。
+// PackageDocumentToZip 把 DeckPackage.Document 形态的文档还原成 .edeck zip 字节。
 // 以 .json 结尾的条目按 JSON 序列化，其余条目（media/ 下的文件）视为 base64 字符串解码。
 func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 	var buf bytes.Buffer
@@ -57,7 +57,7 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 }
 
 // PackageReader 把 MCP/CLI 传入的包参数归一成 zip 读取器：
-//   - string：base64 编码的 .fdeck zip 字节；
+//   - string：base64 编码的 .edeck zip 字节；
 //   - map[string]any：export_deck 输出的 JSON 文档（内部转成 zip）；
 //   - []byte：原始 zip 字节。
 func PackageReader(pkg any) (io.Reader, error) {
@@ -77,6 +77,6 @@ func PackageReader(pkg any) (io.Reader, error) {
 		}
 		return bytes.NewReader(raw), nil
 	default:
-		return nil, fmt.Errorf("package must be a JSON document object or a base64-encoded .fdeck archive")
+		return nil, fmt.Errorf("package must be a JSON document object or a base64-encoded .edeck archive")
 	}
 }

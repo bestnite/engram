@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // TestAdminAPIKeysNeverLeakPlaintext 是 M6-9 的核心验收：创建一把 key 之后，

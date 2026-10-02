@@ -11,8 +11,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // seedAdminUser 建出一个活跃管理员，关闭“首个管理员引导”分支，让注册真正走策略路径。

@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 账号服务的稳定错误值；transport 层据此映射到稳定英文 code。

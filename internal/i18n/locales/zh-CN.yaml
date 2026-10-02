@@ -1,7 +1,7 @@
 # 简体中文语言包。key 一律英文小写点分（DESIGN.md §10.4）。
 # 与 en.yaml 的 key 集合必须完全一致，由 TestCatalogsHaveIdenticalKeys 强制。
 - id: app.name
-  translation: "闪卡"
+  translation: "Engram"
 - id: nav.today
   translation: "今日"
 - id: nav.decks
@@ -796,15 +796,15 @@
 - id: decks.list.col_actions
   translation: "操作"
 - id: decks.list.export
-  translation: "导出 .fdeck"
+  translation: "导出 .edeck"
 - id: import.title
   translation: "导入卡组包"
 - id: import.heading
   translation: "导入卡组包"
 - id: import.intro
-  translation: "上传 .fdeck 卡组包，用它新建一个卡组，或合并进你的某个卡组。"
+  translation: "上传 .edeck 卡组包，用它新建一个卡组，或合并进你的某个卡组。"
 - id: import.file_label
-  translation: "卡组包文件（.fdeck）"
+  translation: "卡组包文件（.edeck）"
 - id: import.target_label
   translation: "导入方式"
 - id: import.target.new_deck

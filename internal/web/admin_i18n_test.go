@@ -6,7 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"example.com/flashcard/internal/i18n"
+	"example.com/engram/internal/i18n"
 )
 
 // TestAdminI18nReportsIncompleteCatalog 是 M8-4 的核心验收：真的种一个缺 key 的语言包，

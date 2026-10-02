@@ -14,12 +14,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 会话默认值：cookie 名不用 __Host- 前缀，因为开发态可跑在 http（Secure=false）下。
 const (
-	DefaultSessionCookieName = "fc_session"
+	DefaultSessionCookieName = "engram_session"
 	DefaultSessionTTL        = 30 * 24 * time.Hour
 )
 

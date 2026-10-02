@@ -13,7 +13,7 @@ import (
 // 而 "out of memory" 只是 SQLite errno 的误导产物，会把首次部署者引向错误方向。
 //
 // 选择方案 (A)：对 sqlite 驱动自动创建父目录，而不是只把报错写清楚。理由：
-//   - SQLite 是本项目的单文件/自托管开发驱动（README 的 data/flashcard.db），父目录属于
+//   - SQLite 是本项目的单文件/自托管开发驱动（README 的 data/engram.db），父目录属于
 //     文件落点这一实现细节；os.MkdirAll 幂等，创建它没有副作用。
 //   - 它消除了 README 里 "mkdir -p data" 这一步手动操作，正是 M0-13 想解决的首跑体验问题。
 //   - 严格限定在 sqlite：postgres 的 DSN 是网络地址，绝不对其做任何目录操作。
@@ -24,7 +24,7 @@ import (
 // 误导性 errno 文案换成分名路径的清晰错误（见 sqliteOpenError）。
 
 // sqliteDBPath 从 SQLite DSN 里取出数据库文件路径；内存库或空 DSN 返回空串。
-// 需要处理的形态：裸路径 data/flashcard.db、file: URI（file:data/x.db?_pragma=...）、
+// 需要处理的形态：裸路径 data/engram.db、file: URI（file:data/x.db?_pragma=...）、
 // :memory:、以及带 mode=memory 的内存库。取不到路径时返回 ""，调用方跳过目录创建。
 func sqliteDBPath(dsn string) string {
 	s := strings.TrimSpace(dsn)

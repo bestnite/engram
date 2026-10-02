@@ -105,7 +105,7 @@ func schemaName(t *testing.T) string {
 	if len(cleaned) > 40 {
 		cleaned = cleaned[:40]
 	}
-	return fmt.Sprintf("fc_test_%s_%s", cleaned, hex.EncodeToString(b[:]))
+	return fmt.Sprintf("engram_test_%s_%s", cleaned, hex.EncodeToString(b[:]))
 }
 
 // closeGorm 关闭底层 sql.DB，避免测试进程里累积连接。

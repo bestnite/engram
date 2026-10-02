@@ -11,11 +11,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/jobs"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // registerPresetRoutes 挂载调度预设页与参数优化入口（M9-4，DESIGN.md §3.5、§8.1）。

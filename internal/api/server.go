@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // Deps 是 API 的显式依赖（AGENTS.md §2.4：入口显式装配）。

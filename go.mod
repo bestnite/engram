@@ -1,5 +1,5 @@
 // 模块路径是占位符：项目正式名未定，定名后全局替换（见 DESIGN.md §13 #1、AGENTS.md B-1）。
-module example.com/flashcard
+module example.com/engram
 
 go 1.26.0
 
