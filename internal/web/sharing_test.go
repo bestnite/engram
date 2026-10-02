@@ -8,8 +8,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // createUserAndLogin 在同一测试库上新建一个普通用户并登录，返回其 id、会话 cookie 与 CSRF token。

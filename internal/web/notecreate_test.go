@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/cardtype"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/cardtype"
+	"example.com/engram/internal/store"
 )
 
 // TestCreateNoteForEveryKind 是 M2-12 的验收测试：登录用户为每一种已注册题型都建一张 note，

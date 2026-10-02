@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/schedule"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/schedule"
+	"example.com/engram/internal/store"
 )
 
 // schedulerForDeck 取卡组的调度器（由卡组预设构造）。

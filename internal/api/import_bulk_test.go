@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // buildBulkBody 生成 n 条合法 basic note 的批量导入请求体，external_ref 用 b:<i>。

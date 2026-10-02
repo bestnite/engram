@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // pngBytes 是一段带 PNG 签名的字节，足以让 magic bytes 探测通过。

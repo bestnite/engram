@@ -16,13 +16,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/api"
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/jobs"
-	"example.com/flashcard/internal/mcp"
-	"example.com/flashcard/internal/media"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/api"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/mcp"
+	"example.com/engram/internal/media"
+	"example.com/engram/internal/store"
 )
 
 // Deps 是显式装配的依赖（AGENTS.md §2.4：入口显式装配，不引入容器）。

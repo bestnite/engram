@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 // CardStore 封装 cards 表的 GORM 访问。

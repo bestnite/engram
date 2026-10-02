@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // DeckResponse 是卡组的对外形态（DESIGN.md §2.2）；REST 与 MCP 共用同一形态。

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // auditTotalRE 从审计页里取出「命中： N」的 N；模板把标签与数字分两个文本节点渲染。

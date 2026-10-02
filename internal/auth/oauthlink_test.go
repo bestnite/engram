@@ -9,7 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // TestDecideIdentityLink 是 M1-12 的验收矩阵：表驱动覆盖 DESIGN.md §4.5 的三个分支，

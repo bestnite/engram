@@ -17,7 +17,7 @@
 
 | 项 | 要求 |
 |---|---|
-| 访问地址 | `http://localhost:8080`（本机开发）或 `https://flashcard.example.com`（部署，**必须 https**）。 |
+| 访问地址 | `http://localhost:8080`（本机开发）或 `https://engram.example.com`（部署，**必须 https**）。 |
 | 安全上下文 | Service Worker 只在**安全上下文**（`https://` 或 `localhost`）注册。用 `http://` 的局域网地址访问时 SW 不会注册，「从主屏启动」会退化为普通书签页 —— 真机冒烟**务必用 https 或 localhost**。 |
 | 账号 | 一个可登录的普通用户账号（`/review`、`/decks/:id/notes/:nid` 都需要登录，未登录会 302 到 `/login`）。 |
 | 数据 | 目标卡组里至少有 1 张 `basic` 卡的到期/新卡（否则复习页显示「当前没有到期的卡片。」）。 |
@@ -27,7 +27,7 @@
 服务端启动（开发用 SQLite 即可，摘自 `AGENTS.md` §4）：
 
 ```bash
-DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard serve
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 ```
 
 ---
@@ -87,8 +87,8 @@ DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard 
 | D1 | 手机打开 `http://localhost:8080/`（或 https 部署地址） | manifest 与 service worker 未登录即可取到 | **已核实**：`registerPWARoutes` 为公开路由，`TestManifestAndServiceWorkerAreReachableWithoutSession` 通过（匿名 GET `/manifest.webmanifest`、`/sw.js`、`/pwa.js` 均 200）。 |
 | D2 | 用浏览器菜单「添加到主屏幕 / 安装应用」 | 图标出现在主屏 | **待 nite 真机执行**。 |
 | D3 | 从主屏图标启动 | 以**独立窗口**（无浏览器地址栏）打开，`start_url` 为 `/` | **已核实（manifest 字段）**：`Display: "standalone"`、`StartURL: "/"`、`Scope: "/"`（`internal/web/pwa.go:81-90`）；`TestManifestIsStandaloneAndUsesHashedIcon` 通过。**实际启动外观待 nite 真机执行。** |
-| D4 | 观察启动后的应用名 | 取自 `settings` 表的 `site.name`；未设置时回退语言包 `app.name`（zh「闪卡」/ en「Flashcards」） | **已核实**：`pwaIdentity`（`pwa.go:108-127`）；`TestManifestNamePrefersSettings` 通过；语言包 `internal/i18n/locales/{zh-CN,en}.yaml:3-4`。 |
-| D5 | 观察图标 | 显示 Flashcards 图标 | **已核实（声明层面）**：manifest 只有 **1 个** 图标：`icons/icon.svg`，`sizes: "any"`，`type: "image/svg+xml"`，`purpose: "any maskable"`，src 为内容哈希路径 `/static/v/<hash>/icons/icon.svg`（`pwa.go:91-98`；`internal/web/static/icons/icon.svg` 为 512×512 viewBox 的纯 SVG）。**没有 192×192 / 512×512 的 PNG 图标** —— 见 §7 已知限制。真机安装后图标是否正常显示待 nite 执行。 |
+| D4 | 观察启动后的应用名 | 取自 `settings` 表的 `site.name`；未设置时回退语言包 `app.name`（zh/en 均为 `Engram`） | **已核实**：`pwaIdentity`（`pwa.go:108-127`）；`TestManifestNamePrefersSettings` 通过；语言包 `internal/i18n/locales/{zh-CN,en}.yaml:3-4`。 |
+| D5 | 观察图标 | 显示 Engram 图标 | **已核实（声明层面）**：manifest 只有 **1 个** 图标：`icons/icon.svg`，`sizes: "any"`，`type: "image/svg+xml"`，`purpose: "any maskable"`，src 为内容哈希路径 `/static/v/<hash>/icons/icon.svg`（`pwa.go:91-98`；`internal/web/static/icons/icon.svg` 为 512×512 viewBox 的纯 SVG）。**没有 192×192 / 512×512 的 PNG 图标** —— 见 §7 已知限制。真机安装后图标是否正常显示待 nite 执行。 |
 | D6 | 观察启动画面 / 状态栏颜色 | 背景 `#f8fafc`、主题色 `#2563eb` | **已核实（声明层面）**：`BackgroundColor "#f8fafc"`、`ThemeColor "#2563eb"`（`pwa.go:88-89`）；`base.templ:10` 亦有 `<meta name="theme-color" content="#2563eb"/>`。真机观感待 nite 执行。 |
 | D7 | 在主屏启动的应用里完成一次复习 | 功能与浏览器内一致 | **待 nite 真机执行**。 |
 | D8 | iOS（Safari）重复 D2–D3 | 从主屏独立启动 | **待 nite 真机执行**。注意：`base.templ` **没有** `apple-mobile-web-app-capable` / `apple-touch-icon` 等 iOS 专用标签，iOS 端主屏启动外观需重点确认（见 §7）。 |
@@ -108,7 +108,7 @@ DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard 
 
 ## 8. 本轮已核实的证据（命令输出）
 
-以下命令均在 worktree `/home/nite/dev/flashcard-wt/m8-checklist` 内、于 **2026-10-02** 执行。
+以下命令均在 worktree `/home/nite/dev/engram-wt/m8-checklist` 内、于 **2026-10-02** 执行。
 
 **脚本化触屏序列（M8-1）**：用零依赖 DOM 替身在 Node 里回放「滑动揭示 → 左滑 Again → 长按无菜单 → 双击无缩放 → 输入框内滑动被忽略」：
 
@@ -139,7 +139,7 @@ $ go test ./internal/web/ -run 'TestManifestIsStandaloneAndUsesHashedIcon|TestSe
 --- PASS: TestReviewTouchSequenceRatesCard (0.03s)
 --- PASS: TestReviewPageTouchTargets (0.25s)
 PASS
-ok  	example.com/flashcard/internal/web	1.271s
+ok  	example.com/engram/internal/web	1.271s
 ```
 
 **脱敏与模板文案检查**（本轮提交前门槛）：

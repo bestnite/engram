@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // Auditor 是 store.AuditStore 的薄封装：业务代码（web handler、后续 API/MCP）只依赖它写审计，

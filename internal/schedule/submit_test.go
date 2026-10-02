@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // TestSubmitWritesStateAndReviewInOneTransaction 断言一次提交同时写出 card_states 与

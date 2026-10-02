@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 	"gorm.io/gorm"
 )
 

@@ -18,9 +18,9 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	gorm "gorm.io/gorm"
 
-	"example.com/flashcard/internal/api"
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/api"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // ---- 测试装配 ----

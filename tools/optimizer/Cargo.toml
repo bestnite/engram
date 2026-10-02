@@ -2,7 +2,7 @@
 name = "optimizer"
 version = "0.1.0"
 edition = "2021"
-description = "FSRS parameter optimiser adapter for the flashcard service (AGENTS.md M9-2)"
+description = "FSRS parameter optimiser adapter for the engram service (AGENTS.md M9-2)"
 publish = false
 
 [[bin]]

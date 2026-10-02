@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 // 卡组包导入（DESIGN.md §7.6、AGENTS.md M5-7）。

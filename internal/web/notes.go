@@ -11,12 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/cardtype"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/render"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/cardtype"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/render"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // builtinFieldKeys 是有语言包条目的字段名；其它字段名直接显示原始键名，

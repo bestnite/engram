@@ -21,7 +21,7 @@ config.local.*
 *_local.yaml
 
 # ── 构建产物 ────────────────────────────────────────────────
-/flashcard
+/engram
 /bin/
 /dist/
 *.test

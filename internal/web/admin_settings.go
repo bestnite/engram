@@ -17,12 +17,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/config"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/media"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/config"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/media"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // 系统设置页与全库导出（DESIGN.md §8.4；AGENTS.md §5 M6-5）。
@@ -394,7 +394,7 @@ func (s *Server) isSupportedLocale(code string) bool {
 // adminExport 把全库导出成 JSON 下载：遍历 store.AllModels，逐表流式写出，避免整库驻留内存。
 func (s *Server) adminExport(c *gin.Context) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.Header("Content-Disposition", `attachment; filename="flashcard-export.json"`)
+	c.Header("Content-Disposition", `attachment; filename="engram-export.json"`)
 	c.Status(http.StatusOK)
 	w := c.Writer
 	ctx := c.Request.Context()

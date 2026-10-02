@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 // seedDeck 建一个归属给定用户的卡组（连同它引用的预设），返回卡组主键。

@@ -12,7 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 func discardLogger() *slog.Logger {

@@ -19,7 +19,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 稳定的错误码（AGENTS.md §2.1：标识符英文）。上传端点把它们映射成 HTTP 状态码，

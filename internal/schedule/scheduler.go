@@ -17,7 +17,7 @@ import (
 
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // Rating 是四档自评分；取值 1–4，与 reviews.rating 一致。

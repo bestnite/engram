@@ -11,9 +11,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/media"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/media"
+	"example.com/engram/internal/store"
 )
 
 // newNotesServer 装配一个具备账号、会话、卡组与笔记存储的测试服务，并登录一个 owner。

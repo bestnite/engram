@@ -19,7 +19,7 @@ func envStub(values map[string]string) func(string) (string, bool) {
 func requiredEnv() map[string]string {
 	return map[string]string{
 		"DB_DRIVER":      "sqlite",
-		"DB_DSN":         "data/flashcard.db",
+		"DB_DSN":         "data/engram.db",
 		"SESSION_SECRET": "CHANGE_ME_BASE64_32_BYTES",
 		"ENCRYPTION_KEY": "CHANGE_ME_BASE64_32_BYTES",
 	}

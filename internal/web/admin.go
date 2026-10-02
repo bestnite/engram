@@ -7,10 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // 管理面板外壳（DESIGN.md §8.4；AGENTS.md §5 M6-1）。

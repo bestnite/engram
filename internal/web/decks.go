@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // registerDeckRoutes 挂载卡组列表与新建页（M2-11）。

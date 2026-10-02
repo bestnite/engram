@@ -12,10 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // 卡组包（.fdeck）的浏览器路径（DESIGN.md §7.6；AGENTS.md §5 M5-9）：
@@ -36,7 +36,7 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 }
 
 // packageExportMediaType 是 .fdeck 的 MIME（与 REST 导出保持一致）。
-const packageExportMediaType = "application/vnd.flashcard.fdeck"
+const packageExportMediaType = "application/vnd.engram.fdeck"
 
 // deckPackageExport 把当前用户有权读取的卡组导出为 .fdeck 并下载。
 // 权限与 REST 入口同规（reader 即可导出）；导出逻辑复用 store.ExportPackage。

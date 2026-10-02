@@ -12,8 +12,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/store"
 )
 
 // newStatsServer 装配一个带会话的测试服务，登录一个 owner，并种入最小统计夹具。

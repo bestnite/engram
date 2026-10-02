@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 var (

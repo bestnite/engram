@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
+	"example.com/engram/internal/web/views"
 )
 
 // 本文件是 M1-16 的 Web 层：登录第二步、启用/关闭/恢复码的设置页。
@@ -23,7 +23,7 @@ import (
 
 const (
 	// totpPendingCookieName 是「密码已通过、等待第二因素」的短期凭据 cookie 名。
-	totpPendingCookieName = "fc_totp_pending"
+	totpPendingCookieName = "engram_totp_pending"
 	// totpPendingTTL 是第二步凭据的有效期：密码已验证，窗口必须短。
 	totpPendingTTL = 5 * time.Minute
 )

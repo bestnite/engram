@@ -1,7 +1,7 @@
 # 简体中文语言包。key 一律英文小写点分（DESIGN.md §10.4）。
 # 与 en.yaml 的 key 集合必须完全一致，由 TestCatalogsHaveIdenticalKeys 强制。
 - id: app.name
-  translation: "闪卡"
+  translation: "Engram"
 - id: nav.today
   translation: "今日"
 - id: nav.decks

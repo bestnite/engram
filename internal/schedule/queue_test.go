@@ -9,7 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // newTestDB 建一个临时 SQLite 库并跑全部模型迁移（AGENTS.md §2.5：不 mock 数据库）。

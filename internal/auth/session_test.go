@@ -12,7 +12,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // testEnv 把真实 SQLite、真实 store 与真实中间件串起来；不 mock 数据库（AGENTS.md §2.5）。

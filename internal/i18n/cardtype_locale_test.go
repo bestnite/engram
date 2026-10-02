@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 // documentedKinds 是 DESIGN.md §6.2 冻结的十个内置题型。

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // boolPtr 供测试给 store.Preset 的 *bool 字段显式赋值。

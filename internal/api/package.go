@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 卡组包（.fdeck）的 REST 入口（DESIGN.md §7.6、M5-6/M5-7）：
@@ -146,9 +146,9 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		return
 	}
 	name := "deck-" + strconv.FormatUint(deckID, 10) + ".fdeck"
-	c.Header("Content-Type", "application/vnd.flashcard.fdeck")
+	c.Header("Content-Type", "application/vnd.engram.fdeck")
 	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
-	c.Data(http.StatusOK, "application/vnd.flashcard.fdeck", buf.Bytes())
+	c.Data(http.StatusOK, "application/vnd.engram.fdeck", buf.Bytes())
 }
 
 // handleImportPackage 是 POST /api/v1/decks/import（multipart 上传文件）。

@@ -27,7 +27,7 @@
 服务端启动（开发用 SQLite 即可，摘自 `AGENTS.md` §4）：
 
 ```bash
-DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard serve
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 ```
 
 ---
@@ -81,7 +81,7 @@ DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard 
 
 ## 6. 本轮已核实的证据（命令输出）
 
-以下命令均在 worktree `/home/nite/dev/flashcard-wt/m8-a11y` 内、于 **2026-10-02** 执行。
+以下命令均在 worktree `/home/nite/dev/engram-wt/m8-a11y` 内、于 **2026-10-02** 执行。
 
 **无障碍断言测试（M8-5 的代码侧验收）**：
 
@@ -108,7 +108,7 @@ $ go test ./internal/web/ -run 'TestAccessibility|TestUnlabelled' -count=1 -v
     a11y_test.go:235: review.js: keydown handler covers space/Enter, 1–4, u/e/s/b
 --- PASS: TestAccessibilityReviewKeyboardShortcuts (0.00s)
 PASS
-ok  	example.com/flashcard/internal/web	1.273s
+ok  	example.com/engram/internal/web	1.273s
 ```
 
 **脱敏与模板文案检查（提交前门槛，`git add` 之后运行）**：

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
 )
 
 // registerCloneRoutes 挂载卡组克隆（M5-4）。克隆对「自己可读」的卡组开放（reader 及以上），

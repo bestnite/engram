@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
 )
 
 // PWA 外壳（M8-2，DESIGN.md §8.5）。
@@ -181,12 +181,12 @@ func shellVersion(urls []string) string {
 // 该函数不接收、也不可能写入 API 或答题端点（M8-2 的负面验收在测试里断言）。
 func serviceWorkerJS(version string, urls []string) string {
 	var b strings.Builder
-	b.WriteString("// Flashcard service worker (M8-2)：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
+	b.WriteString("// Engram service worker (M8-2)：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
 	b.WriteString("// 版本号由静态资源内容派生；激活时清理所有旧版本缓存。\n")
 	b.WriteString("var SW_VERSION = \"")
 	b.WriteString(version)
 	b.WriteString("\";\n")
-	b.WriteString("var STATIC_CACHE = \"flashcard-static-\" + SW_VERSION;\n")
+	b.WriteString("var STATIC_CACHE = \"engram-static-\" + SW_VERSION;\n")
 	b.WriteString("var STATIC_ASSETS = [\n")
 	for _, u := range urls {
 		b.WriteString("  \"")
@@ -215,7 +215,7 @@ self.addEventListener("activate", function (event) {
       return Promise.all(
         names
           .filter(function (name) {
-            return name.indexOf("flashcard-static-") === 0 && name !== STATIC_CACHE;
+            return name.indexOf("engram-static-") === 0 && name !== STATIC_CACHE;
           })
           .map(function (name) {
             return caches.delete(name);

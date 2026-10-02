@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // TestFuzzIsDeterministicForSameSeed 断言 EnableFuzz 下同一张卡、同一 now 的两次评分产出

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 本文件覆盖 M2-9：编辑器里的媒体面——上传图片并插入到卡片字段。

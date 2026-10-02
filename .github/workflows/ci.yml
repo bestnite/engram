@@ -29,20 +29,20 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: flashcard
+          POSTGRES_USER: engram
           POSTGRES_PASSWORD: CHANGE_ME
-          POSTGRES_DB: flashcard
+          POSTGRES_DB: engram
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U flashcard"
+          --health-cmd "pg_isready -U engram"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
       # 与服务的账号一致；仅用于 CI 的一次性数据库，非真实凭据。
-      TEST_PG_DSN: postgres://flashcard:CHANGE_ME@localhost:5432/flashcard?sslmode=disable
+      TEST_PG_DSN: postgres://engram:CHANGE_ME@localhost:5432/engram?sslmode=disable
 
     steps:
       - name: Check out

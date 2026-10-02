@@ -14,8 +14,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/jobs"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/store"
 )
 
 // jobFileSize 返回文件当前字节数；不存在时返回 0。

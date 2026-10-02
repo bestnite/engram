@@ -31,7 +31,7 @@ COPY . .
 RUN go generate ./... \
     && CGO_ENABLED=0 go build -trimpath \
          -ldflags "-s -w -X main.version=${VERSION}" \
-         -o /out/flashcard ./cmd/flashcard
+         -o /out/engram ./cmd/engram
 
 # ---- 运行阶段：alpine + tzdata，非 root，最小可运行面 ----
 FROM alpine:3.22
@@ -42,7 +42,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && mkdir -p /data/media \
     && chown -R 10001:10001 /data
 
-COPY --from=builder /out/flashcard /usr/local/bin/flashcard
+COPY --from=builder /out/engram /usr/local/bin/engram
 
 USER 10001:10001
 WORKDIR /app
@@ -51,7 +51,7 @@ WORKDIR /app
 # 真实部署必须通过环境变量覆盖，镜像内不承载任何真实凭据。
 ENV HTTP_ADDR=0.0.0.0:8080 \
     DB_DRIVER=sqlite \
-    DB_DSN=/data/flashcard.db \
+    DB_DSN=/data/engram.db \
     AUTO_MIGRATE=1 \
     MEDIA_DIR=/data/media \
     BASE_URL=http://localhost:8080
@@ -62,5 +62,5 @@ ENV HTTP_ADDR=0.0.0.0:8080 \
 
 EXPOSE 8080
 
-ENTRYPOINT ["/usr/local/bin/flashcard"]
+ENTRYPOINT ["/usr/local/bin/engram"]
 CMD ["serve"]

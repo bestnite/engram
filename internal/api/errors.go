@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/store"
 )
 
 // 稳定的错误 code（英文常量，供调用方程序化判断，DESIGN.md §7.3）。

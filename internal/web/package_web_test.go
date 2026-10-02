@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 卡组包浏览器路径（M5-9）的 HTTP 级验收：导出下载、上传导入摘要、坏包可读错误。

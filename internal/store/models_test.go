@@ -9,7 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/pgtest"
+	"example.com/engram/internal/pgtest"
 )
 
 // testDatabases 返回本机可用的测试数据库。SQLite 必须真实跑通；

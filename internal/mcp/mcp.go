@@ -14,8 +14,8 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"example.com/flashcard/internal/api"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/api"
+	"example.com/engram/internal/store"
 )
 
 // version 由构建注入；未注入时为 dev，仅用于 MCP 实现信息。
@@ -118,13 +118,13 @@ var toolScopes = map[string]string{
 	"submit_review": store.ScopeReview,
 }
 
-const instructions = "Flashcard library and scheduler. Tools mirror the REST /api/v1 surface " +
+const instructions = "Engram library and scheduler. Tools mirror the REST /api/v1 surface " +
 	"and are filtered by the API key's scopes (read/write/review)."
 
 // build 为一次请求构建工具集：注册全部工具（供“按名字硬调”返回权限错误），
 // 并在 tools/list 上按身份过滤，保证客户端看到的列表就是它真能用的集合。
 func (s *Server) build(id Identity) *sdkmcp.Server {
-	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "flashcard", Version: version}, &sdkmcp.ServerOptions{
+	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "engram", Version: version}, &sdkmcp.ServerOptions{
 		Instructions: instructions,
 	})
 	srv.AddReceivingMiddleware(s.filterTools(id))

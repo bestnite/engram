@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // TestDeckCloneCopiesContentWithoutProgress 是 M5-4 的主验收：

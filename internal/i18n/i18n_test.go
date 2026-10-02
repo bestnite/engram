@@ -77,8 +77,8 @@ func TestCatalogsHaveIdenticalKeys(t *testing.T) {
 // 构造失败，而不是等到页面上出现未翻译文案。
 func TestNewFromFSRejectsCatalogMissingAKey(t *testing.T) {
 	fsys := fstest.MapFS{
-		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"闪卡\"\n- id: nav.today\n  translation: \"今日\"\n")},
-		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Flashcards\"\n")},
+		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n- id: nav.today\n  translation: \"今日\"\n")},
+		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n")},
 	}
 	if _, err := NewFromFS(fsys, "locales"); err == nil {
 		t.Fatal("NewFromFS() accepted a catalog missing a key, want an error")
@@ -89,8 +89,8 @@ func TestNewFromFSRejectsCatalogMissingAKey(t *testing.T) {
 
 func TestNewFromFSRejectsUnknownExtraKey(t *testing.T) {
 	fsys := fstest.MapFS{
-		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"闪卡\"\n")},
-		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Flashcards\"\n- id: only.in.en\n  translation: \"extra\"\n")},
+		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n")},
+		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n- id: only.in.en\n  translation: \"extra\"\n")},
 	}
 	if _, err := NewFromFS(fsys, "locales"); err == nil {
 		t.Fatal("NewFromFS() accepted a key only present in one catalog, want an error")

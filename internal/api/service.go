@@ -10,10 +10,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/auth"
-	"example.com/flashcard/internal/cardtype"
-	"example.com/flashcard/internal/schedule"
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/auth"
+	"example.com/engram/internal/cardtype"
+	"example.com/engram/internal/schedule"
+	"example.com/engram/internal/store"
 )
 
 // 本文件是 REST 与内置 MCP 共用的 service 层（DESIGN.md §7.1、§7.4：两者只做参数

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // fileSize 返回文件当前字节数；不存在时返回 0。

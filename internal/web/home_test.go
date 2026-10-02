@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。

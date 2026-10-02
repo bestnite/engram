@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/flashcard/internal/i18n"
-	"example.com/flashcard/internal/web/views"
+	"example.com/engram/internal/i18n"
+	"example.com/engram/internal/web/views"
 )
 
 // 管理面板的语言包完整度报告（DESIGN.md §8.3；AGENTS.md §5 M8-4）。

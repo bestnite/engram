@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/flashcard/internal/cardtype"
+	"example.com/engram/internal/cardtype"
 )
 
 // TestCardStoreByNoteScopesToNote 覆盖 ByNote 只返回目标 note 的卡片，并按 ordinal 升序。

@@ -1,4 +1,4 @@
-# flashcard
+# Engram
 
 **English** | [中文](README.zh.md)
 
@@ -7,9 +7,8 @@ hand in the browser, or pushed in by an external system or agent through a per-u
 the built-in MCP server. Scheduling uses FSRS v6. The service itself does not parse any external
 note system.
 
-> The project name, the module path, and the licence are still placeholders
-> (`flashcard`, `example.com/flashcard`). See `AGENTS.md` backlog B-1 and B-2, and
-> `DESIGN.md` §13.
+> The project name is **Engram** and the module path is `example.com/engram`; the licence is
+> still a placeholder. See `AGENTS.md` backlog B-2 and `DESIGN.md` §13.
 
 ## What it is not
 
@@ -59,13 +58,13 @@ mkdir -p data
 # 3. Configure the environment. ENCRYPTION_KEY must be base64 of exactly 32 bytes;
 #    any other value makes the server exit at startup.
 export DB_DRIVER=sqlite
-export DB_DSN=data/flashcard.db
+export DB_DSN=data/engram.db
 export AUTO_MIGRATE=1
 export SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}"
 export ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
 
 # 4. Start the server (the default subcommand is serve).
-go run ./cmd/flashcard serve
+go run ./cmd/engram serve
 ```
 
 Then open `http://localhost:8080/`. On a fresh instance the first visit goes to `/setup` to
@@ -78,7 +77,7 @@ Check that it is up, and print the version:
 curl -fsS http://localhost:8080/healthz
 # {"status":"ok","database":"ok","schema_version":0}
 
-go run ./cmd/flashcard version
+go run ./cmd/engram version
 # dev
 ```
 
@@ -114,22 +113,22 @@ Example with the container image (`localhost` in `DB_DSN` is a placeholder — p
 database host):
 
 ```bash
-docker build -t flashcard:local .
+docker build -t engram:local .
 
 export SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}"
 export ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
 
-docker run -d --name flashcard \
+docker run -d --name engram \
   -p 8080:8080 \
   -e HTTP_ADDR=0.0.0.0:8080 \
-  -e BASE_URL=https://flashcard.example.com/ \
+  -e BASE_URL=https://engram.example.com/ \
   -e DB_DRIVER=postgres \
-  -e DB_DSN="postgres://flashcard:CHANGE_ME@localhost:5432/flashcard?sslmode=disable" \
+  -e DB_DSN="postgres://engram:CHANGE_ME@localhost:5432/engram?sslmode=disable" \
   -e SESSION_SECRET="${SESSION_SECRET}" \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
   -e AUTO_MIGRATE=0 \
-  -v flashcard-media:/data/media \
-  flashcard:local serve
+  -v engram-media:/data/media \
+  engram:local serve
 ```
 
 ### Migrations at startup
@@ -141,12 +140,12 @@ For production, leave `AUTO_MIGRATE=0` and run migrations explicitly, before sta
 out the new version:
 
 ```bash
-flashcard schema sync
+engram schema sync
 ```
 
 This applies the same migrations and logs the resulting schema version, so a failed migration is
 visible as a failed command instead of a half-started server. Inside a container, run it as a
-one-off with the same environment (for example `docker run --rm ... flashcard:local schema sync`).
+one-off with the same environment (for example `docker run --rm ... engram:local schema sync`).
 
 ## Backup and restore
 
@@ -159,13 +158,13 @@ their paths and hashes.
 Backup (custom format, compressed):
 
 ```bash
-pg_dump -Fc -f flashcard.dump "$DB_DSN"
+pg_dump -Fc -f engram.dump "$DB_DSN"
 ```
 
 Restore into a fresh or existing database:
 
 ```bash
-pg_restore --clean --if-exists -d "$DB_DSN" flashcard.dump
+pg_restore --clean --if-exists -d "$DB_DSN" engram.dump
 ```
 
 Stop the service during the restore. `DB_DSN` is the same connection string the service uses.
@@ -175,7 +174,7 @@ Stop the service during the restore. `DB_DSN` is the same connection string the 
 Use SQLite's own online backup, which is consistent even while the service is running:
 
 ```bash
-sqlite3 "$DB_DSN" "VACUUM INTO 'flashcard-backup.db'"
+sqlite3 "$DB_DSN" "VACUUM INTO 'engram-backup.db'"
 ```
 
 Restore:
@@ -183,7 +182,7 @@ Restore:
 ```bash
 # 1. Stop the service.
 # 2. Replace the database file (the service must not be running).
-cp flashcard-backup.db "$DB_DSN"
+cp engram-backup.db "$DB_DSN"
 # 3. Start the service again.
 ```
 
@@ -193,7 +192,7 @@ option when it is running.
 ### Media
 
 ```bash
-tar czf flashcard-media.tgz "$MEDIA_DIR"
+tar czf engram-media.tgz "$MEDIA_DIR"
 ```
 
 Restore by extracting the archive next to the database backup. Media is content-addressed by
@@ -206,8 +205,8 @@ For a per-deck backup that a non-admin can make from the browser, use a deck pac
 from the deck page, or from the CLI (which needs the same environment as the service):
 
 ```bash
-flashcard export --deck 1 --package deck-1.fdeck
-flashcard import --package deck-1.fdeck --dry-run
+engram export --deck 1 --package deck-1.fdeck
+engram import --package deck-1.fdeck --dry-run
 ```
 
 ## External integration (REST API and MCP)
@@ -230,7 +229,7 @@ question/answer pairs, previews them with `dry_run`, writes them, and a human re
 browser. The service only keeps the books.
 
 ```bash
-curl -fsS https://flashcard.example.com/api/v1/decks \
+curl -fsS https://engram.example.com/api/v1/decks \
   -H "Authorization: Bearer $FLCARD_KEY"
 ```
 
@@ -259,10 +258,10 @@ Run locally with SQLite:
 
 ```bash
 mkdir -p data
-DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 \
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 \
 SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}" \
 ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
-go run ./cmd/flashcard serve
+go run ./cmd/engram serve
 ```
 
 Repository checks (run them after `git add`, because they scan tracked files only):
@@ -277,8 +276,8 @@ image, not Alpine.
 
 ## License and project name
 
-Both are placeholders and neither has been decided:
+The project name and module path are settled; the licence is still a placeholder:
 
-- Project name and module path: `flashcard` / `example.com/flashcard` (AGENTS.md B-1).
+- Project name and module path: `Engram` / `example.com/engram`.
 - Licence: not chosen yet (MIT / Apache-2.0 / AGPL-3.0). `LICENSE` currently holds a placeholder
   (AGENTS.md B-2, DESIGN.md §13 #2).

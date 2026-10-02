@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"example.com/flashcard/internal/store"
+	"example.com/engram/internal/store"
 )
 
 // 本文件是参数优化在本包的服务端门槛与结果写回（AGENTS.md §5 M9-5）。
