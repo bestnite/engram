@@ -80,7 +80,7 @@ end user → translation catalog.
 ### 2.4 Go style in this repo
 
 - Plain monolith, organised by business package; concrete types over interfaces;
-  dependencies wired explicitly in `cmd/flashcard`.
+  dependencies wired explicitly in `cmd/engram`.
 - **One model serves business, GORM, and JSON/CSV.** No entity/DTO mapping layers.
 - Introduce an interface only when there are multiple implementations or a concrete
   replacement need; define the minimal interface **at the consumer**.
@@ -115,13 +115,13 @@ this file, commit messages, and `DESIGN.md`.
 ## 3. Layout
 
 ```
-flashcard/
+engram/
 ├── AGENTS.md                 # this file
 ├── DESIGN.md                 # specification of record
 ├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
 ├── LICENSE
-├── go.mod                    # module <module-path>
-├── cmd/flashcard/main.go     # subcommand entry point
+├── go.mod                    # module example.com/engram
+├── cmd/engram/main.go     # subcommand entry point
 ├── internal/
 │   ├── config/               # env vars + settings-table overlay and precedence
 │   ├── store/                # GORM models and business stores
@@ -150,7 +150,7 @@ tailwindcss -i ./internal/web/static/css/input.css \
             -o ./internal/web/static/css/tailwind.css --minify
 
 # run locally (SQLite is fine for development)
-DB_DRIVER=sqlite DB_DSN=data/flashcard.db AUTO_MIGRATE=1 go run ./cmd/flashcard serve
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 ```
 
 Run the code checks **and** the two generation steps before committing anything that
@@ -190,11 +190,11 @@ Conventions:
 
 ### M0 — Skeleton
 
-- [x] **M0-1 Module bootstrap** — create `go.mod` (module `<module-path>`, Go 1.25+),
-  `cmd/flashcard/main.go` with subcommand dispatch (`serve`, `schema sync`, `export`,
+- [x] **M0-1 Module bootstrap** — create `go.mod` (module `example.com/engram`, Go 1.25+),
+  `cmd/engram/main.go` with subcommand dispatch (`serve`, `schema sync`, `export`,
   `optimize`, `version`), `LICENSE` placeholder, `.env.example` kept in sync with
   `internal/config`.
-  *Acceptance:* `go build ./...` succeeds; `flashcard version` prints a version string.
+  *Acceptance:* `go build ./...` succeeds; `engram version` prints a version string.
 - [x] **M0-2 Config loader** — `internal/config`: parse the environment variables listed
   in `.env.example`; load the `settings` table overlay; expose a single accessor that
   reports the effective value and its source (`env` or `db`).
@@ -372,7 +372,7 @@ Conventions:
   email, policy-gated account creation, and unlink in the admin panel.
   *Acceptance:* table-driven test covers all three branches of `DESIGN.md` §4.5 plus the
   unlink path.
-- [x] **M1-14 Wire authentication into the binary** — `cmd/flashcard/main.go` currently starts the
+- [x] **M1-14 Wire authentication into the binary** — `cmd/engram/main.go` currently starts the
   web server without constructing the auth services, so `/login`, `/register` and `/setup` are not
   registered at all (verified: a running container answers `GET /login` with `404`). Read
   `SESSION_SECRET`, `ENCRYPTION_KEY` and `BOOTSTRAP_ADMIN_EMAIL` through `internal/config`, build the
@@ -576,7 +576,7 @@ Conventions:
 - [x] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
   *Acceptance:* test asserts `unlisted` decks never appear in any listing but resolve by
   direct id.
-- [x] **M5-6 Deck package export** — the `.fdeck` zip described in `DESIGN.md` §7.6
+- [x] **M5-6 Deck package export** — the `.edeck` zip described in `DESIGN.md` §7.6
   (`manifest.json`, `notes.json`, `cards.json`, `preset.json`, optional `progress.json`,
   optional `media/` with `media.json`), exposed through the deck page, `GET
   /api/v1/decks/:id/package`, MCP `export_deck`, and the CLI.
@@ -606,7 +606,7 @@ Conventions:
   the browser path, because the locale catalog was owned by another lane that round. A browser-only
   user still cannot move a deck in or out: the deck page has no export control and there is no
   upload page.
-  *Acceptance:* the deck page offers an export control that downloads a `.fdeck`; `/import` accepts
+  *Acceptance:* the deck page offers an export control that downloads a `.edeck`; `/import` accepts
   an upload and reports the same summary the REST response returns; a malformed package produces a
   readable error message rather than a 500.
 - [x] **M5-10 Deck package and statistics test hardening** — the package work shipped with two
@@ -631,7 +631,7 @@ Conventions:
   earliest admin when `--user` is omitted, which can file a deck under somebody else's account. The
   user ruled that identity must be explicit: the package feature exists for sharing between people,
   and guessing the owner is the wrong default. Export keeps the optional flag because it only reads.
-  *Acceptance:* `flashcard import` without `--user` exits non-zero with a message that says how to
+  *Acceptance:* `engram import` without `--user` exits non-zero with a message that says how to
   pass it, and no deck is created; with it, the import lands under the named account.
 
 ### M6 — Admin panel and system settings
@@ -887,14 +887,14 @@ therefore gets its own worktree. The rules below were verified on git 2.55.
 - The main checkout stays on `main` and is used only as the integration point. Do not
   develop in it.
 - Worktrees live **outside** the repository directory, for example
-  `../flashcard-wt/<task-id>`, so the main checkout's `git status` stays clean.
+  `../engram-wt/<task-id>`, so the main checkout's `git status` stays clean.
 - Branch: `feat/<task-id>-<slug>` (for example `feat/m3-2-queue-builder`).
-  Directory: `flashcard-wt/<task-id>`. Both use the task IDs from section 5.
+  Directory: `engram-wt/<task-id>`. Both use the task IDs from section 5.
 
 ```bash
-git worktree add -b feat/m3-2 ../flashcard-wt/m3-2 main
-# ... work and commit inside ../flashcard-wt/m3-2 ...
-git worktree remove ../flashcard-wt/m3-2   # or keep the worktree for review
+git worktree add -b feat/m3-2 ../engram-wt/m3-2 main
+# ... work and commit inside ../engram-wt/m3-2 ...
+git worktree remove ../engram-wt/m3-2   # or keep the worktree for review
 git worktree prune                         # drop stale entries
 ```
 
