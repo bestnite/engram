@@ -1949,3 +1949,11 @@
 - id: nav.settings
   translation: "Settings"
 
+# ── 未知路径回退页（not-found fallback）────────────────────
+- id: notfound.title
+  translation: "Page not found"
+- id: notfound.heading
+  translation: "Page not found"
+- id: notfound.home_action
+  translation: "Back to home"
+
