@@ -138,12 +138,18 @@ func runServe(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// 退订令牌服务（M1-22）：提醒是可选类型，带上免登录的一键退订头。
+		tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(db))
+		if err != nil {
+			return err
+		}
 		reminderWorker, err := reminder.New(reminder.Deps{
 			DB:         db,
 			Outbox:     mb,
 			Translator: translator,
 			Logger:     logger,
 			BaseURL:    cfg.Get(config.KeyBaseURL).Value,
+			Tokens:     tokens,
 		})
 		if err != nil {
 			return err

@@ -28,6 +28,10 @@ const (
 	EmailVerifyTTL = 24 * time.Hour
 	// EmailChangeTTL 是改邮箱确认链接的有效期。
 	EmailChangeTTL = 24 * time.Hour
+	// UnsubscribeTTL 是一键退订链接的有效期（M1-22）。
+	// 退订链接会长期留在历史邮件里，用户可能几个月后才想起来点，因此给足有效期；
+	// 但它仍是「一次性 + 有有效期」的令牌（复用 action_tokens 的消费语义）。
+	UnsubscribeTTL = 90 * 24 * time.Hour
 )
 
 // ActionTokenService 签发与消费一次性动作令牌。

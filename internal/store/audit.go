@@ -72,6 +72,9 @@ const (
 
 	// M1-18 邮件偏好：用户保存可选邮件类型的开关时留痕（detail 只记变更的类型与开关）。
 	ActionUserEmailPrefsUpdate = "user.email_prefs_update"
+
+	// M1-22 一键退订：用户凭免登录令牌关掉某个可选邮件类型时留痕。
+	ActionUserEmailUnsubscribe = "user.email_unsubscribe"
 )
 
 // AuditEntry 是一次审计写入的入参。

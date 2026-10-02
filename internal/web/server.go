@@ -270,6 +270,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerSettingsRoutes(router)
 	// M1-19 A 类事务安全邮件：密码重置、邮箱验证与改邮箱确认的页面与触发点。
 	s.registerSecurityMailRoutes(router)
+	// M1-22 一键退订（RFC 8058）：免登录的一键退订端点（可选类型专用）。
+	s.registerUnsubscribeRoutes(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
 

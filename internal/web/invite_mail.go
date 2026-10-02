@@ -83,6 +83,12 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 	link := s.inviteAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
 	msg := inviteMessage(recipientLoc, to, link, s.siteName(ctx, recipientLoc), inv.ExpiresAt)
 
+	// 收件人是本站用户时，这封 B 类（可选类型）邮件带 RFC 8058 一键退订头（M1-22）：
+	// 令牌指名 invite 这一个类型，用户不登录即可关掉它。非本站用户没有偏好可关，故不带。
+	if recipient != nil {
+		msg.Headers = s.optionalUnsubscribeHeaders(c, recipient.ID, mail.TypeInvite)
+	}
+
 	if err := s.mail.Enqueue(ctx, msg); err != nil {
 		if errors.Is(err, mail.ErrNotConfigured) {
 			return noticeInviteMailUnconfigured

@@ -19,12 +19,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"gorm.io/gorm"
 
+	"example.com/engram/internal/auth"
 	"example.com/engram/internal/i18n"
 	"example.com/engram/internal/mail"
 	"example.com/engram/internal/schedule"
@@ -72,6 +74,8 @@ type Deps struct {
 	BaseURL string
 	// ReviewPath 覆盖复习页路径；为空时用 DefaultReviewPath。
 	ReviewPath string
+	// Tokens 签发一键退订令牌（M1-22）；为空时提醒邮件不带退订头（可选类型才需要）。
+	Tokens *auth.ActionTokenService
 }
 
 // Reminder 持有后台 worker 与配置。
@@ -84,6 +88,8 @@ type Reminder struct {
 	interval   time.Duration
 	baseURL    string
 	reviewPath string
+	// tokens 签发退订令牌（M1-22）；为空时不加退订头。
+	tokens *auth.ActionTokenService
 
 	mu      sync.Mutex
 	started bool
@@ -127,6 +133,7 @@ func New(deps Deps) (*Reminder, error) {
 		interval:   interval,
 		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		reviewPath: path,
+		tokens:     deps.Tokens,
 	}, nil
 }
 
@@ -248,7 +255,7 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 		return nil
 	}
 
-	if err := r.outbox.Enqueue(ctx, r.message(c)); err != nil {
+	if err := r.outbox.Enqueue(ctx, r.message(ctx, c)); err != nil {
 		return err
 	}
 	if err := store.RecordReminderSent(ctx, r.db, c.ID, day, now); err != nil {
@@ -258,20 +265,38 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	return nil
 }
 
-// message 按用户语言组装提醒邮件。
-func (r *Reminder) message(c store.ReminderCandidate) mail.Message {
+// message 按用户语言组装提醒邮件。提醒是 C 类可选邮件，故带 RFC 8058 一键退订头（M1-22）：
+// 令牌指名 review_reminder 这一个类型，收件人（必为本站用户）不登录即可关掉它。
+// 令牌签发失败只记日志并照常发信：退订入口缺失不该让提醒发不出去。
+func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.Message {
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
 	subject := lc.T("mail.reminder.subject")
 	body := lc.Tf("mail.reminder.body", map[string]any{
 		"count": c.DueCount,
 		"url":   r.reviewURL(),
 	})
-	return mail.Message{
+	msg := mail.Message{
 		To:       c.Email,
 		Type:     string(mail.TypeReviewReminder),
 		Subject:  subject,
 		TextBody: body,
 	}
+	msg.Headers = r.unsubscribeHeaders(ctx, c.ID)
+	return msg
+}
+
+// unsubscribeHeaders 为 review_reminder 签发退订令牌并返回 RFC 8058 头；不可用时返回 nil。
+func (r *Reminder) unsubscribeHeaders(ctx context.Context, userID uint64) map[string]string {
+	if r.tokens == nil {
+		return nil
+	}
+	token, err := r.tokens.Issue(ctx, userID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	if err != nil {
+		r.logger.Error("review reminder: issue unsubscribe token failed", "user_id", userID, "error", err)
+		return nil
+	}
+	link := r.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
+	return mail.UnsubscribeHeaders(mail.TypeReviewReminder, link)
 }
 
 // reviewURL 拼复习页链接；未配置 BaseURL 时退化成相对路径。

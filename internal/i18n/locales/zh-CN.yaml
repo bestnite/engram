@@ -1885,3 +1885,23 @@
 - id: mail.notice.account.deleted
   translation: "删除"
 
+# ── M1-22 一键退订（RFC 8058）：可选类型邮件专用的免登录退订页 ──
+- id: mail.unsub.title
+  translation: "退订邮件"
+- id: mail.unsub.heading
+  translation: "退订这一类邮件"
+- id: mail.unsub.intro
+  translation: "点击下面的按钮，即可停止接收这一类邮件。你随时可以在个人设置的邮件偏好里重新打开。"
+- id: mail.unsub.submit
+  translation: "确认退订"
+- id: mail.unsub.done
+  translation: "已退订「{{.type}}」这一类邮件。你仍可在个人设置的邮件偏好里重新打开。"
+- id: mail.unsub.back
+  translation: "前往邮件偏好设置"
+- id: mail.unsub.error_invalid
+  translation: "这个退订链接无效。"
+- id: mail.unsub.error_expired
+  translation: "这个退订链接已过期。"
+- id: mail.unsub.error_used
+  translation: "这个退订链接已被使用过。"
+
