@@ -1722,14 +1722,10 @@
   translation: "Parameter optimisation finished"
 - id: mail.prefs.type.import_export_done
   translation: "Import or export finished"
-- id: mail.prefs.type.registration_pending
-  translation: "Registration awaiting approval"
 - id: mail.prefs.type.job_failed
   translation: "Job failed"
 - id: mail.prefs.type.media_disk_alert
   translation: "Media quota or disk alert"
-- id: mail.prefs.type.backup_failed
-  translation: "Backup failed"
 # ── Invite delivery by email (M1-20) ─────────────────────────
 - id: mail.invite.subject
   translation: "Your invitation to {{.site}}"
@@ -1909,10 +1905,6 @@
 # M1-24 D-class admin notifications (mail.admin.*): appended by that task; key set must match zh-CN.yaml.
 - id: mail.admin.greeting
   translation: "Hello, admin:"
-- id: mail.admin.registration.subject
-  translation: "New user registration - {{.site}}"
-- id: mail.admin.registration.body
-  translation: "A new user registered on {{.site}}: {{.username}} ({{.email}})."
 - id: mail.admin.job_failed.subject
   translation: "Job failed #{{.job_id}} - {{.site}}"
 - id: mail.admin.job_failed.body

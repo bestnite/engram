@@ -50,10 +50,8 @@ const (
 	TypeImportExportDone Type = "import_export_done" // 导入导出完成
 
 	// D 管理员通知：默认开、可关闭，发给管理员。
-	TypeRegistrationPending Type = "registration_pending" // 注册待审批
-	TypeJobFailed           Type = "job_failed"           // 作业失败
-	TypeMediaDiskAlert      Type = "media_disk_alert"     // 媒体配额/磁盘告警
-	TypeBackupFailed        Type = "backup_failed"        // 备份失败
+	TypeJobFailed      Type = "job_failed"       // 作业失败
+	TypeMediaDiskAlert Type = "media_disk_alert" // 媒体配额/磁盘告警
 )
 
 // Definition 描述一种邮件类型：它属于哪一类，以及偏好页展示它时用的语言包键。
@@ -94,10 +92,8 @@ var catalog = []Definition{
 	{Type: TypeImportExportDone, Class: ClassStudy, LabelKey: "mail.prefs.type.import_export_done"},
 
 	// D 管理员通知
-	{Type: TypeRegistrationPending, Class: ClassAdmin, LabelKey: "mail.prefs.type.registration_pending"},
 	{Type: TypeJobFailed, Class: ClassAdmin, LabelKey: "mail.prefs.type.job_failed"},
 	{Type: TypeMediaDiskAlert, Class: ClassAdmin, LabelKey: "mail.prefs.type.media_disk_alert"},
-	{Type: TypeBackupFailed, Class: ClassAdmin, LabelKey: "mail.prefs.type.backup_failed"},
 }
 
 // byType 是 catalog 的查找索引，在包初始化时一次性建立。
