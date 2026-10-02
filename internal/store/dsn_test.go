@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestSQLiteDBPath 覆盖从 DSN 里取路径的各种形态（AGENTS.md §5 M0-13）。
+// TestSQLiteDBPath 覆盖从 DSN 里取路径的各种形态（ROADMAP.md M0-13）。
 func TestSQLiteDBPath(t *testing.T) {
 	cases := []struct {
 		name string

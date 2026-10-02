@@ -13,7 +13,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板外壳（DESIGN.md §8.4；AGENTS.md §5 M6-1）。
+// 管理面板外壳（DESIGN.md §8.4；ROADMAP.md M6-1）。
 //
 // 硬约束：只有 role = admin 能进；其余一律 403。导航立起全部子页入口，
 // 尚未注册路由的子页置灰，避免点进去 404 跳出面板。

@@ -1,9 +1,9 @@
 # 无障碍清单（Accessibility checklist）
 
-> 任务：AGENTS.md §5 **M8-5**（keyboard-only flow for review and editing, visible focus, labels on inputs）。
+> 任务：ROADMAP.md **M8-5**（keyboard-only flow for review and editing, visible focus, labels on inputs）。
 > 覆盖页面：**复习页、卡组页、设置页**（外加卡片列表页，因为它是「编辑」流程的入口）。
 > 日期：**2026-10-02**（本清单的编写与代码侧核实日期；真人手测后请在文末「手动执行记录」补日期）。
-> 规范来源：`DESIGN.md` §8.2（复习页交互与快捷键）、§8.3（页面清单）、§8.4（管理面板）；`AGENTS.md` §4（Definition of done）、§5 M8-5。
+> 规范来源：`DESIGN.md` §8.2（复习页交互与快捷键）、§8.3（页面清单）、§8.4（管理面板）；`AGENTS.md` §4（Definition of done）、`ROADMAP.md` M8-5。
 >
 > **诚实边界（先读）**
 > 本清单没有真机、也没有真人参与，因此「实际观察」列只有两种取值，含义严格区分：

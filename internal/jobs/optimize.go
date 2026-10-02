@@ -9,7 +9,7 @@ import (
 	"example.com/engram/internal/store"
 )
 
-// 本文件是参数优化在本包的服务端门槛与结果写回（AGENTS.md §5 M9-5）。
+// 本文件是参数优化在本包的服务端门槛与结果写回（ROADMAP.md M9-5）。
 // 权重拟合本身属于 M9-2 的 Rust 适配器；这里只负责「先判够不够，再建作业」与
 // 「把适配器产出的拟合报告写进 job 行的 result_json」。
 

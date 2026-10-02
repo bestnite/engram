@@ -12,7 +12,7 @@ import (
 	"example.com/engram/internal/store"
 )
 
-// OIDC 登录流程（DESIGN.md §4.4、§4.5；AGENTS.md §5 M1-11）。
+// OIDC 登录流程（DESIGN.md §4.4、§4.5；ROADMAP.md M1-11）。
 //
 // 只实现协议交互与路由，身份绑定全部交给 auth.IdentityLinkService（oauthlink.go）：
 //   GET /auth/oidc/start     生成 state / nonce / PKCE，跳转到 provider 授权端点

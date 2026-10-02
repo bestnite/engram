@@ -15,7 +15,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// OIDC 配置页与已绑定身份管理（DESIGN.md §8.4；AGENTS.md §5 M6-4）。
+// OIDC 配置页与已绑定身份管理（DESIGN.md §8.4；ROADMAP.md M6-4）。
 //
 // 页面展示：启用开关、issuer、client id、client secret（只显示已配置/未配置）、claim 映射、
 // 「测试连接」按钮（把 provider 的错误文本显示在页面上），以及已绑定身份列表与解绑。

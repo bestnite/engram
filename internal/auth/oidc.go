@@ -20,7 +20,7 @@ import (
 	"example.com/engram/internal/store"
 )
 
-// OIDC 客户端（DESIGN.md §4.4、§4.5；AGENTS.md §5 M1-15）。
+// OIDC 客户端（DESIGN.md §4.4、§4.5；ROADMAP.md M1-15）。
 //
 // 协议交互全部交给 github.com/zitadel/oidc/v3：
 //   - 发现文档与端点解析：rp.NewRelyingPartyOIDC（本文件只在其上做一层带 TTL 的按 issuer 缓存，

@@ -16,7 +16,7 @@ import (
 )
 
 // 媒体是卡组包里唯一会往磁盘写文件的路径，却是覆盖最少的：M5-10 要求导出→导入新库后
-// 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值（AGENTS.md §5 M5-10）。
+// 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值（ROADMAP.md M5-10）。
 
 // seedMediaNote 把 raw 按内容寻址写进 srcRoot 与媒体元数据表，并在卡组里放一条引用它的 note；
 // 返回 sha256。媒体引用形如 media/<sha256>.<ext>（DESIGN.md §7.6）。

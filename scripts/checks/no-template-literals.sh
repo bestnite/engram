@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 模板硬编码文案检查（AGENTS.md §2.1、§5 M0-10、M8-3 的 lint 项）。
+# 模板硬编码文案检查（AGENTS.md §2.1、ROADMAP.md M0-10、M8-3 的 lint 项）。
 #
 # 规则：*.templ 模板里所有面向用户的文字都必须由 handler 从语言包取出后经数据传入，
 # 模板中不得出现字面文本节点，也不得在 placeholder/title/alt/aria-* 这些可见属性里

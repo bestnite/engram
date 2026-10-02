@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// 本文件解决 AGENTS.md §5 M0-13：DB_DSN 的父目录不存在时，SQLite 会给出
+// 本文件解决 ROADMAP.md M0-13：DB_DSN 的父目录不存在时，SQLite 会给出
 // "unable to open database file: out of memory (14)"——既没点名路径，也没提目录，
 // 而 "out of memory" 只是 SQLite errno 的误导产物，会把首次部署者引向错误方向。
 //

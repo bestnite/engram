@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// 登录限流的默认参数。延迟按 基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（AGENTS.md §5 M1-9、
+// 登录限流的默认参数。延迟按 基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（ROADMAP.md M1-9、
 // DESIGN.md §4.3、§11）。
 const (
 	DefaultRateLimitBaseDelay = 200 * time.Millisecond

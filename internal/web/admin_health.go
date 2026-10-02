@@ -10,7 +10,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板的健康页（DESIGN.md §8.4；AGENTS.md §5 M6-8）。
+// 管理面板的健康页（DESIGN.md §8.4；ROADMAP.md M6-8）。
 //
 // 四个读数，全部现算或走缓存采样：
 //   - 数据库连通：拿底层 sql.DB 做一次 Ping。

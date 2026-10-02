@@ -1,5 +1,5 @@
 // Package api 提供 /api/v1 的 REST handler 与鉴权、限流中间件
-// （DESIGN.md §7.2、§7.3；AGENTS.md §5 M4-2、M4-3）。
+// （DESIGN.md §7.2、§7.3；ROADMAP.md M4-2、M4-3）。
 package api
 
 import (

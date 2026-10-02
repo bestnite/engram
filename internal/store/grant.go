@@ -46,7 +46,7 @@ func RoleAllows(have, want string) bool {
 // ErrGrantNotFound 表示该 (deck, user) 没有任何授权行；调用方据此区分“显式 reader”与“无授权”。
 var ErrGrantNotFound = errors.New("deck grant not found")
 
-// GrantStore 封装 deck_grants 表：授予、改角色、撤销、查询（AGENTS.md §5 M5-1）。
+// GrantStore 封装 deck_grants 表：授予、改角色、撤销、查询（ROADMAP.md M5-1）。
 //
 // 撤销采用“删除整行”而不是写 revoked 标记：§5 要求撤销立即生效，删除让下一次
 // requireRole 查不到任何行，天然即时，且无需在读取路径上再加一层过滤。

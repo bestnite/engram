@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 敏感配置的加密通道（DESIGN.md §8.4、§11；AGENTS.md §5 M6-10）。
+// 敏感配置的加密通道（DESIGN.md §8.4、§11；ROADMAP.md M6-10）。
 //
 // 约定：
 //   - 主密钥来自环境变量 ENCRYPTION_KEY（internal/config 的 KeyEncryptionKey），

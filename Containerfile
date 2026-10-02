@@ -1,4 +1,4 @@
-# M0-11：多阶段构建，产出「一个静态二进制」的镜像（DESIGN.md §10.2、AGENTS.md §5 M0-11）。
+# M0-11：多阶段构建，产出「一个静态二进制」的镜像（DESIGN.md §10.2、ROADMAP.md M0-11）。
 # 构建物只有一个二进制 + 可选 SQLite 文件；模板、静态资源、语言包都已 go:embed。
 # 本文件不含任何私有 registry、主机名或部署细节，只使用公开官方镜像。
 # syntax=docker/dockerfile:1

@@ -18,7 +18,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 卡组包（.edeck）的浏览器路径（DESIGN.md §7.6；AGENTS.md §5 M5-9）：
+// 卡组包（.edeck）的浏览器路径（DESIGN.md §7.6；ROADMAP.md M5-9）：
 //   GET  /decks/:id/package  导出一个卡组为 .edeck 下载（沿用 store 层导出，不重写）
 //   GET  /import             上传页
 //   POST /import             导入并展示与 REST 同一份摘要字段

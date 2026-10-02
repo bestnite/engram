@@ -9,7 +9,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板的语言包完整度报告（DESIGN.md §8.3；AGENTS.md §5 M8-4）。
+// 管理面板的语言包完整度报告（DESIGN.md §8.3；ROADMAP.md M8-4）。
 //
 // 口径：基准 key 集合 = 各语言包 key 集合的并集（见 i18n.Coverage 的注释）。覆盖率 < 100%
 // 时逐条列出缺失的 key，让「哪个语言少了哪条」一眼可见。报告页本身也走语言包。

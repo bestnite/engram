@@ -25,7 +25,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 系统设置页与全库导出（DESIGN.md §8.4；AGENTS.md §5 M6-5）。
+// 系统设置页与全库导出（DESIGN.md §8.4；ROADMAP.md M6-5）。
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
 // settings 表按请求现读，因此管理员改完下一次请求即生效，无需重启。每一行都标出来源。

@@ -16,7 +16,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板的审计检索页（DESIGN.md §8.4；AGENTS.md §5 M6-7）。
+// 管理面板的审计检索页（DESIGN.md §8.4；ROADMAP.md M6-7）。
 //
 // 安全与规模底线：
 //   - 路由在 adminRoutes() 清单里，非 admin 一律 403（守卫先于 handler）。

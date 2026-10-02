@@ -1,4 +1,4 @@
-//! FSRS 参数优化器适配器（AGENTS.md §5 M9-2；DESIGN.md §3.5）。
+//! FSRS 参数优化器适配器（ROADMAP.md M9-2；DESIGN.md §3.5）。
 //!
 //! 职责单一：读标准 review-log（JSONL）-> 调 `fsrs` crate 的优化器 -> 写出 21 元权重 JSON。
 //! 算法实现全部来自上游 `fsrs`，本项目不重写任何 FSRS 逻辑（DESIGN.md §3.5 的硬约束：

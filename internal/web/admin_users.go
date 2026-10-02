@@ -14,7 +14,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板的用户管理（DESIGN.md §8.4；AGENTS.md §5 M6-2）。
+// 管理面板的用户管理（DESIGN.md §8.4；ROADMAP.md M6-2）。
 //
 // 安全底线：
 //   - 所有路由都在 adminRoutes() 清单里，非 admin 一律 403（守卫先于 handler）。

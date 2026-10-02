@@ -1,4 +1,4 @@
-# CI：构建、生成、静态检查与测试（AGENTS.md §4、§5 M0-10）。
+# CI：构建、生成、静态检查与测试（AGENTS.md §4、ROADMAP.md M0-10）。
 #
 # 顺序上有一条硬性原因：*_templ.go 与 internal/web/static/css/tailwind.css 都是
 # gitignore 的生成物，必须先 `go generate ./...` 再编译，否则模板包直接编译失败。

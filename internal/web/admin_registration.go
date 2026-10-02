@@ -14,7 +14,7 @@ import (
 	"example.com/engram/internal/web/views"
 )
 
-// 管理面板的注册与邀请（DESIGN.md §4.2、§8.4；AGENTS.md §5 M6-3）。
+// 管理面板的注册与邀请（DESIGN.md §4.2、§8.4；ROADMAP.md M6-3）。
 //
 // 免重启生效的关键：settings 表按请求现读（registerSubmit 每次注册都 LoadSettings），
 // 所以这里写库后，下一次注册尝试立即按新策略判定，不需要重启进程。

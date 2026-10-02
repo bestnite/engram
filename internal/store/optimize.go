@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是参数优化（DESIGN.md §3.5、AGENTS.md §5 M9-5）在 store 层的部分：
+// 本文件是参数优化（DESIGN.md §3.5、ROADMAP.md M9-5）在 store 层的部分：
 // 服务端门槛（复习条数不足直接拒绝并给出差额）与拟合报告的数据形态。
 //
 // 分工边界：权重拟合算法属于 M9-2 的 Rust 适配器，永不进 Go 代码；这里只定义

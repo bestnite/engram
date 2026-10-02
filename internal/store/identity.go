@@ -82,7 +82,7 @@ func (s *IdentityStore) ListAll(ctx context.Context) ([]Identity, error) {
 
 // Delete 解绑一条外部身份（按主键）。行不存在时返回 ErrIdentityNotFound。
 //
-// 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI（AGENTS.md §5 M1-12）。
+// 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI（ROADMAP.md M1-12）。
 // 删除整行而非软删除，是因为 identities 表没有 revoked_at 列（DESIGN.md §2.2），
 // 擅自加列属于 models.go 单写者的活。
 func (s *IdentityStore) Delete(ctx context.Context, id uint64) error {

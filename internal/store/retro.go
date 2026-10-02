@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件实现 AGENTS.md §5 M7-4「回溯校验」：把统计页展示的数字与直接从原始表
+// 本文件实现 ROADMAP.md M7-4「回溯校验」：把统计页展示的数字与直接从原始表
 // （reviews / card_states / cards / notes）重算出来的数字逐一对照，任何漂移都被
 // 指名道姓地报出来，而不是靠嘴争论。
 //

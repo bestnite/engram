@@ -43,7 +43,7 @@ func TestDeckCreateAppearsInList(t *testing.T) {
 		t.Errorf("GET /decks body does not list the created deck: %s", page.Body.String())
 	}
 
-	// 写操作必须落一行审计（AGENTS.md §5 M2-11）。
+	// 写操作必须落一行审计（ROADMAP.md M2-11）。
 	n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckCreate)
 	if err != nil {
 		t.Fatalf("count audit: %v", err)

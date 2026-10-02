@@ -19,7 +19,7 @@ type ReviewStore struct {
 func NewReviewStore(db *gorm.DB) *ReviewStore { return &ReviewStore{db: db} }
 
 // OptimizerReviewLog 是一行标准的优化器复习日志，字段名与上游 `review_logs` schema 完全一致，
-// 可直接喂给 M9-2 的 Rust 适配器（DESIGN.md §3.5、AGENTS.md §5 M9-3）。
+// 可直接喂给 M9-2 的 Rust 适配器（DESIGN.md §3.5、ROADMAP.md M9-3）。
 //
 // 依据的上游文档（字段与取值范围）：
 // https://github.com/open-spaced-repetition/fsrs-optimizer#review-logs-schema
