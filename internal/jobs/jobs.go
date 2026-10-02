@@ -7,8 +7,12 @@
 //     ErrAlreadyRunning，由 REST 层映射成 409（DESIGN.md §3.5「已有任务则 409」）。
 //   - 子进程执行：训练是 CPU 密集且可能崩溃/挂死，放到独立进程里既能隔离，也能超时取消；
 //     优化器算法本身不是 Go 库（M9-2 的 Rust 适配器），只能走子进程。
-//   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用自指二进制
-//     （`optimize --job <id>`），测试注入 `/bin/sh -c ...`，从而不依赖真实优化器。
+//   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用 M9-10 的优化器
+//     适配器（internal/jobs/optimizer.go，返回直接调用 Rust 适配器的 Command），测试注入
+//     `/bin/sh -c ...`，从而不依赖真实优化器。
+//   - 结果可注入：Complete 可选，命令成功退出后，由 Complete 解析命令的副作用（例如适配器
+//     写出的 21 维权重文件），产出 OptimizeResult 交给 FinishOptimize 落库；未配置时走
+//     通用的「退出码 0 即成功」路径。
 package jobs
 
 import (
@@ -18,10 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -111,6 +112,13 @@ type Reporter interface {
 // CommandBuilder 为一个作业构造要执行的命令；返回错误则作业直接标记为 failed。
 type CommandBuilder func(ctx context.Context, job *store.Job, rep Reporter) (Command, error)
 
+// CompleteFunc 把命令成功退出后的副作用解析成优化结果。
+//
+// 命令本身只负责执行（进程退出码语义），像「适配器把权重写到哪个文件」这类知识属于
+// 生产装配（M9-10 的 Optimizer）；Runner 在命令成功后调用它拿到 OptimizeResult，
+// 再交给 FinishOptimize 写回 job 行与 preset。返回错误则作业标记为 failed。
+type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail string) (store.OptimizeResult, error)
+
 // Deps 是 Runner 的显式依赖。
 type Deps struct {
 	// DB 是必填项。
@@ -121,8 +129,10 @@ type Deps struct {
 	Logger *slog.Logger
 	// Timeout 是子进程超时；<=0 时用 DefaultTimeout。
 	Timeout time.Duration
-	// Command 为作业构造命令；为空时用 DefaultCommandBuilder（自指二进制）。
+	// Command 为作业构造命令；为空时作业会以 ErrNoCommand 失败（生产由 Optimizer 提供）。
 	Command CommandBuilder
+	// Complete 可选；命令成功退出后解析其副作用并产出优化结果。为空时只按退出码判成功。
+	Complete CompleteFunc
 	// Now 可注入时钟；为空时用系统 UTC 时间。
 	Now func() time.Time
 	// LogTailLines 是日志尾巴行数上限；<=0 时用 DefaultLogTailLines。
@@ -140,6 +150,7 @@ type Runner struct {
 	logger       *slog.Logger
 	timeout      time.Duration
 	command      CommandBuilder
+	complete     CompleteFunc
 	now          func() time.Time
 	logTailLines int
 
@@ -174,7 +185,7 @@ func New(deps Deps) (*Runner, error) {
 	}
 	command := deps.Command
 	if command == nil {
-		command = DefaultCommandBuilder()
+		command = noCommandBuilder
 	}
 	now := deps.Now
 	if now == nil {
@@ -190,6 +201,7 @@ func New(deps Deps) (*Runner, error) {
 		logger:       logger,
 		timeout:      timeout,
 		command:      command,
+		complete:     deps.Complete,
 		now:          now,
 		logTailLines: tailLines,
 		queue:        make(chan *store.Job, queueDepth),
@@ -364,8 +376,21 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		return
 	}
 
-	// 命令成功返回即进入写回阶段（真正写回由 M9-2/M9-5 在适配器与阈值逻辑里完成）。
+	// 命令成功返回即进入写回阶段：配了 Complete 的作业（M9-10 的优化作业）由它解析
+	// 适配器写出的权重并交给 FinishOptimize；其余作业仍按「退出码 0 即成功」处理。
 	r.setStage(ctx, job.ID, StageWriting)
+	if r.complete != nil {
+		result, err := r.complete(runCtx, job, cmd, tail)
+		if err != nil {
+			r.fail(ctx, job.ID, fmt.Sprintf("parse job output: %v", err), tail)
+			return
+		}
+		if err := r.FinishOptimize(ctx, job.ID, result, tail); err != nil {
+			r.logger.Error("finish optimize failed", "job_id", job.ID, "error", err)
+			r.fail(ctx, job.ID, fmt.Sprintf("finish optimize: %v", err), tail)
+		}
+		return
+	}
 	if err := r.store.FinishSucceeded(ctx, job.ID, r.now(), "", tail); err != nil {
 		r.logger.Error("finish job succeeded failed", "job_id", job.ID, "error", err)
 	}
@@ -415,21 +440,13 @@ type jobReporter struct {
 
 func (j jobReporter) SetStage(stage string) { j.runner.setStage(j.ctx, j.id, stage) }
 
-// DefaultCommandBuilder 返回优化作业的默认命令：重新 exec 自身二进制并带
-// `optimize --job <id>`（DESIGN.md §3.5：由 web 侧建 job 后 fork 出来执行）。
-// M9-2 提供 Rust 适配器后，把它换成一个直接调用适配器的 CommandBuilder 即可。
-func DefaultCommandBuilder() CommandBuilder {
-	return func(_ context.Context, job *store.Job, _ Reporter) (Command, error) {
-		self, err := os.Executable()
-		if err != nil {
-			return Command{}, fmt.Errorf("locate own executable: %w", err)
-		}
-		return Command{
-			Name: self,
-			Args: []string{"optimize", "--job", strconv.FormatUint(job.ID, 10)},
-			Dir:  filepath.Dir(self),
-		}, nil
-	}
+// noCommandBuilder 是未配置 CommandBuilder 时的回退：直接以 ErrNoCommand 让作业失败。
+//
+// 刻意不再「重新 exec 自身并带 optimize --job」：那条自指路径依赖一个已删除的 CLI 子命令，
+// 会让作业在生产里以「命令未实现」收场。生产装配必须显式传入 Optimizer.CommandBuilder()，
+// 与 M9-10 的真实适配器对接；这里只负责在装配缺失时大声失败。
+func noCommandBuilder(context.Context, *store.Job, Reporter) (Command, error) {
+	return Command{}, ErrNoCommand
 }
 
 // HTTPStatus 把 jobs 包的哨兵错误映射成 HTTP 状态码：重复入队 -> 409，其余 -> 500。

@@ -52,8 +52,6 @@ func run(ctx context.Context, args []string) error {
 		return runExport(args[1:])
 	case "import":
 		return runImport(args[1:])
-	case "optimize":
-		return runOptimize(args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -61,7 +59,7 @@ func run(ctx context.Context, args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown subcommand %q: valid values are serve, schema sync, export, import, optimize, version", args[0])
+		return fmt.Errorf("unknown subcommand %q: valid values are serve, schema sync, export, import, version", args[0])
 	}
 }
 
@@ -71,7 +69,6 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  schema sync     run AutoMigrate and the registered destructive migrations")
 	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.edeck [--user N]")
 	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.edeck --user <id|username> [--target ...] [--dry-run]")
-	fmt.Fprintln(os.Stderr, "  optimize        run a parameter-optimisation job (implemented in M9)")
 	fmt.Fprintln(os.Stderr, "  version         print the version string")
 }
 
@@ -212,10 +209,25 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	}
 	// 参数优化作业执行器（M9-1）：单并发 worker + 子进程。Start 在 web 服务启动前调用，
 	// worker 随进程存活；启动时会回收上次进程遗留的未完成作业（M9-7/M9-8）。
-	jobRunner, err := jobs.New(jobs.Deps{DB: db, Logger: logger})
+	//
+	// M9-10 生产接线：Command 直接调用 Rust 适配器（先导出复习日志再 exec），Complete 解析
+	// 适配器写出的 21 维权重并交给 FinishOptimize 写回 job 与 preset。适配器路径可配置
+	// （OPTIMIZER_PATH），缺省按「服务二进制旁 -> 仓库构建产物」解析。
+	optimizer, err := jobs.NewOptimizer(jobs.OptimizerDeps{
+		DB:     db,
+		Logger: logger,
+		Binary: cfg.Get(config.KeyOptimizerPath).Value,
+	})
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("optimizer adapter configured", "path", optimizer.Binary())
+	jobRunner, err := jobs.New(jobs.Deps{
+		DB:       db,
+		Logger:   logger,
+		Command:  optimizer.CommandBuilder(),
+		Complete: optimizer.Complete,
+	})
 	jobRunner.Start(context.Background())
 	return web.New(cfg.Get(config.KeyHTTPAddr).Value, web.Deps{
 		DB:     db,
@@ -298,10 +310,6 @@ func runSchema(ctx context.Context, args []string) error {
 	}
 	logger.Info("schema synchronized", "migrations_applied", applied, "schema_version", version)
 	return nil
-}
-
-func runOptimize(args []string) error {
-	return errors.New("optimize is not implemented yet (planned for M9)")
 }
 
 // parseBool 接受 "1"/"true"/"yes" 之类的常见写法；无法解析时按 false 处理。
