@@ -296,7 +296,7 @@ Conventions:
   *Do not start until the user says so.*
   *Acceptance:* a user with TOTP enabled cannot finish login with only a password; recovery codes are
   single-use; disabling it requires the password.
-- [ ] **M1-17 SMTP transport and settings** — admin-panel SMTP configuration (host, port, username,
+- [x] **M1-17 SMTP transport and settings** — admin-panel SMTP configuration (host, port, username,
   password through the existing `SecretCodec`, from address, TLS mode) plus a "test connection" that
   shows the server's error text, and an outbox with a background worker that retries with backoff.
   Mail is never sent in the request path, and a send failure must not fail the operation that
@@ -306,7 +306,7 @@ Conventions:
   *Acceptance:* with no configuration the invite-mail and reset paths are unavailable and explain why;
   a wrong host surfaces the server error; the password shows as configured or not configured; a
   transient send failure is retried and the last error is visible in the admin panel.
-- [ ] **M1-18 Email type catalog and per-user preferences** — one catalog, one definition (see
+- [x] **M1-18 Email type catalog and per-user preferences** — one catalog, one definition (see
   `DESIGN.md` 4.7), shared by the preferences page and every sender so the two cannot disagree.
   Class A cannot be switched off, class B defaults on, class C defaults off. Per-user preferences need
   storage: decide between a JSON column and a table, remembering that `models.go` is a single-writer
@@ -849,7 +849,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' AGENTS.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 16/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
+  `M0 13/13 · M1 18/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 9/9
   · M10 0/5 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
