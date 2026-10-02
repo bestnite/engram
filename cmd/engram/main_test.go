@@ -159,3 +159,21 @@ func snippet(body string) string {
 	}
 	return body[:max] + "..."
 }
+
+// TestWiredServerStartsWithMailOutbox 验证 M1-17 的接线：真实装配路径下 Server 暴露了
+// 邮件 outbox，且默认未配置 SMTP（Configured()=false），worker 可启动并优雅停止。
+func TestWiredServerStartsWithMailOutbox(t *testing.T) {
+	srv, _ := newWiredServer(t)
+	ob := srv.Mail()
+	if ob == nil {
+		t.Fatal("wired server has no mail outbox; the SMTP worker would never run")
+	}
+	if ob.Configured() {
+		t.Error("mail outbox reports configured with no SMTP settings, want false")
+	}
+	// 启动/停止必须幂等且不挂死。
+	ctx, cancel := context.WithCancel(context.Background())
+	ob.Start(ctx)
+	ob.Stop()
+	cancel()
+}

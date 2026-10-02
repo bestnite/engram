@@ -59,6 +59,9 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodPost, Path: "/admin/oidc", Write: true},
 		{Method: http.MethodPost, Path: "/admin/oidc/test", Write: true},
 		{Method: http.MethodPost, Path: "/admin/oidc/identities/:id/unlink", Write: true},
+		{Method: http.MethodGet, Path: "/admin/smtp"},
+		{Method: http.MethodPost, Path: "/admin/smtp", Write: true},
+		{Method: http.MethodPost, Path: "/admin/smtp/test", Write: true},
 		{Method: http.MethodGet, Path: "/admin/audit"},
 		{Method: http.MethodGet, Path: "/admin/health"},
 		{Method: http.MethodGet, Path: "/admin/api-keys"},
@@ -128,6 +131,14 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			handlers = append(handlers, s.adminOIDCTest)
 		case "/admin/oidc/identities/:id/unlink":
 			handlers = append(handlers, s.adminOIDCUnlink)
+		case "/admin/smtp":
+			if r.Write {
+				handlers = append(handlers, s.adminSMTPSave)
+			} else {
+				handlers = append(handlers, s.adminSMTPPage)
+			}
+		case "/admin/smtp/test":
+			handlers = append(handlers, s.adminSMTPTest)
 		case "/admin/audit":
 			handlers = append(handlers, s.adminAuditPage)
 		case "/admin/health":
@@ -177,23 +188,30 @@ func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavIt
 		key  string
 		href string
 		impl bool
+		// labelKey 为空时用 "admin.nav." + key；SMTP 页的标签键在自己的前缀块下。
+		labelKey string
 	}{
-		{"dashboard", "/admin", true},
-		{"users", "/admin/users", true},
-		{"registration", "/admin/registration", true},
-		{"oidc", "/admin/oidc", true},
-		{"settings", "/admin/settings", true},
-		{"jobs", "/admin/jobs", true},
-		{"audit", "/admin/audit", true},
-		{"health", "/admin/health", true},
-		{"api_keys", "/admin/api-keys", true},
-		{"i18n", "/admin/i18n", true},
+		{"dashboard", "/admin", true, ""},
+		{"users", "/admin/users", true, ""},
+		{"registration", "/admin/registration", true, ""},
+		{"oidc", "/admin/oidc", true, ""},
+		{"smtp", "/admin/smtp", true, "admin.setting.smtp.nav"},
+		{"settings", "/admin/settings", true, ""},
+		{"jobs", "/admin/jobs", true, ""},
+		{"audit", "/admin/audit", true, ""},
+		{"health", "/admin/health", true, ""},
+		{"api_keys", "/admin/api-keys", true, ""},
+		{"i18n", "/admin/i18n", true, ""},
 	}
 	pending := loc.T("admin.nav.pending")
 	out := make([]views.AdminNavItem, 0, len(defs))
 	for _, d := range defs {
+		labelKey := d.labelKey
+		if labelKey == "" {
+			labelKey = "admin.nav." + d.key
+		}
 		out = append(out, views.AdminNavItem{
-			Label:        loc.T("admin.nav." + d.key),
+			Label:        loc.T(labelKey),
 			Href:         d.href,
 			Active:       d.href == active,
 			Implemented:  d.impl,

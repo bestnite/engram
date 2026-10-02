@@ -20,6 +20,7 @@ import (
 	"example.com/engram/internal/auth"
 	"example.com/engram/internal/i18n"
 	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/mail"
 	"example.com/engram/internal/mcp"
 	"example.com/engram/internal/media"
 	"example.com/engram/internal/store"
@@ -77,6 +78,9 @@ type Deps struct {
 	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4），
 	// 管理面板也可列出作业并取消（M6-6）；为空时作业页只渲染空列表。
 	Jobs *jobs.Runner
+	// Mail 是邮件 outbox 与后台 worker（M1-17）；非空时 SMTP 配置页可用，管理面板可
+	// 读到投递状态；为空时相关能力只显示"未配置"。
+	Mail *mail.Outbox
 	// Identities 提供外部身份（OIDC）的读取、绑定与解绑（M1-11、M6-4）；为空时由 New 从 DB 构造。
 	Identities *store.IdentityStore
 	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
@@ -126,6 +130,8 @@ type Server struct {
 	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
+	// mail 是邮件 outbox（M1-17）；由 cmd/engram 启动/停止其 worker。
+	mail *mail.Outbox
 	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走 §4.5 三分支。
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
@@ -189,6 +195,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		secrets:        deps.Secrets,
 		jobRunner:      deps.Jobs,
 		jobStore:       jobs.NewStore(deps.DB),
+		mail:           deps.Mail,
 	}
 	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
 	s.grants = deps.Grants
@@ -266,6 +273,10 @@ func New(addr string, deps Deps) (*Server, error) {
 
 // Handler 返回底层 handler，便于测试直接注入请求。
 func (s *Server) Handler() http.Handler { return s.router }
+
+// Mail 返回邮件 outbox（M1-17）；cmd/engram 借此启动与优雅停止其后台 worker。
+// 未装配时为 nil。
+func (s *Server) Mail() *mail.Outbox { return s.mail }
 
 // Run 启动 HTTP 服务并在 ctx 取消时优雅关闭：停止接收新请求，最多等 2 秒。
 func (s *Server) Run(ctx context.Context) error {

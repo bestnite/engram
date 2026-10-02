@@ -40,6 +40,8 @@ templ AdminPage(data AdminPageData) {
 					@adminJobs(data)
 				} else if data.OIDCPage {
 					@adminOIDC(data)
+				} else if data.SMTPPage {
+					@adminSMTP(data)
 				} else if data.AuditPage {
 					@adminAudit(data)
 				} else if data.HealthPage {

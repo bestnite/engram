@@ -1582,3 +1582,78 @@
 - id: media.quota.setting.hint
   translation: "Total media bytes one user may reference. 0 means unlimited (the default)."
 
+# ── SMTP mail (M1-17) ────────────────────────────────────────
+- id: admin.setting.smtp.title
+  translation: "SMTP mail"
+- id: admin.setting.smtp.heading
+  translation: "SMTP mail delivery"
+- id: admin.setting.smtp.intro
+  translation: "Mail is optional. Until SMTP is configured, mail-dependent flows (invite email, password reset) stay disabled and say why."
+- id: admin.setting.smtp.nav
+  translation: "Mail (SMTP)"
+- id: admin.setting.smtp.host
+  translation: "SMTP server host"
+- id: admin.setting.smtp.host.hint
+  translation: "Hostname or IP of the mail server; empty means not configured."
+- id: admin.setting.smtp.port
+  translation: "Port"
+- id: admin.setting.smtp.port.hint
+  translation: "Default 587 (STARTTLS); 465 for implicit TLS, 25 for plaintext."
+- id: admin.setting.smtp.username
+  translation: "Username"
+- id: admin.setting.smtp.username.hint
+  translation: "Required only when the server needs authentication; leave empty for an open relay."
+- id: admin.setting.smtp.password
+  translation: "Password"
+- id: admin.setting.smtp.password.hint
+  translation: "Stored with AES-GCM; the page only shows configured or not. Leave empty to keep the current value."
+- id: admin.setting.smtp.from
+  translation: "From address"
+- id: admin.setting.smtp.from.hint
+  translation: "Address used in the From header; empty means not configured."
+- id: admin.setting.smtp.tls_mode
+  translation: "TLS mode"
+- id: admin.setting.smtp.tls_mode.hint
+  translation: "starttls: plaintext then upgrade (recommended); implicit: TLS from the start; none: plaintext."
+- id: admin.setting.smtp.tls_mode.none
+  translation: "None (plaintext)"
+- id: admin.setting.smtp.tls_mode.starttls
+  translation: "STARTTLS"
+- id: admin.setting.smtp.tls_mode.implicit
+  translation: "Implicit TLS"
+- id: admin.setting.smtp.test
+  translation: "Test connection"
+- id: admin.setting.smtp.test.ok
+  translation: "Connection succeeded."
+- id: admin.setting.smtp.test.failed_prefix
+  translation: "Connection failed:"
+- id: admin.setting.smtp.test.no_host
+  translation: "Enter the SMTP server host first."
+- id: admin.setting.smtp.notice.saved
+  translation: "SMTP settings saved."
+- id: admin.setting.smtp.notice.failed
+  translation: "Saving failed; check the server logs."
+- id: admin.setting.smtp.notice.invalid_port
+  translation: "Port must be an integer between 1 and 65535."
+- id: admin.setting.smtp.notice.invalid_tls_mode
+  translation: "Invalid TLS mode."
+- id: admin.setting.smtp.outbox.heading
+  translation: "Delivery queue"
+- id: admin.setting.smtp.outbox.intro
+  translation: "Mail is never sent in the request path: messages are queued and a background worker delivers them with backoff retries."
+- id: admin.setting.smtp.outbox.configured_label
+  translation: "SMTP status"
+- id: admin.setting.smtp.outbox.pending
+  translation: "Pending"
+- id: admin.setting.smtp.outbox.failed
+  translation: "Permanently failed"
+- id: admin.setting.smtp.outbox.last_error
+  translation: "Last error"
+- id: admin.setting.smtp.outbox.no_error
+  translation: "None"
+- id: admin.setting.smtp.outbox.attempts
+  translation: "Attempts for last error"
+- id: admin.setting.smtp.outbox.none
+  translation: "—"
+- id: mail.not_configured
+  translation: "Mail is not enabled on this site; contact an administrator."

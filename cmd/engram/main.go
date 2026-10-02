@@ -19,6 +19,7 @@ import (
 	"example.com/engram/internal/auth"
 	"example.com/engram/internal/config"
 	"example.com/engram/internal/jobs"
+	"example.com/engram/internal/mail"
 	"example.com/engram/internal/mcp"
 	"example.com/engram/internal/media"
 	"example.com/engram/internal/store"
@@ -128,6 +129,11 @@ func runServe(ctx context.Context) error {
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// 邮件 outbox worker（M1-17）：随 serve 启动、随信号优雅停止；未装配时跳过。
+	if mb := srv.Mail(); mb != nil {
+		mb.Start(ctx)
+		defer mb.Stop()
+	}
 	return srv.Run(ctx)
 }
 
@@ -152,6 +158,12 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	// 对外 REST API（M4-2 鉴权 + M4-3 端点）：依赖齐备才挂载 /api/v1。
 	// 敏感设置的编解码器（M6-10）：主密钥来自 ENCRYPTION_KEY，格式非法直接拒绝启动。
 	secrets, err := store.NewSecretCodec(cfg.Get(config.KeyEncryptionKey).Value)
+	if err != nil {
+		return nil, err
+	}
+	// 邮件 outbox（M1-17）：SMTP 配置走 settings 表（口令复用上面的 AES-GCM 编解码器），
+	// worker 由 runServe 启动与优雅停止。未配置 SMTP 时 Enqueue 返回 ErrNotConfigured。
+	mailOutbox, err := mail.NewOutbox(mail.Deps{DB: db, Secrets: secrets, Logger: logger})
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +220,8 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		TOTP:         totpService,
 		Media:        mediaStore,
 		Secrets:      secrets,
+		// 邮件 outbox（M1-17）：管理面板读投递状态、SMTP 配置页与测试连接都基于它。
+		Mail: mailOutbox,
 		// OIDC（M1-11）：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
 		Identities: store.NewIdentityStore(db),
 		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
