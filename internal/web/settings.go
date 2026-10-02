@@ -172,6 +172,8 @@ func (s *Server) settingsPasswordSubmit(c *gin.Context) {
 		TargetType: "user",
 		TargetID:   store.Ptr(user.ID),
 	})
+	// M1-19：凭据变更通知（密码）；发信失败不影响改密成功。
+	s.notifyCredentialChanged(ctx, fresh, "password")
 	c.Redirect(http.StatusSeeOther, "/settings")
 }
 

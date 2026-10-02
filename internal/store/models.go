@@ -326,5 +326,6 @@ func AllModels() []any {
 		// M1-17 SMTP：outbox 队列表，模型定义在 outbox.go。
 		&OutboxMessage{},
 		&EmailPref{},
+		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
 	}
 }

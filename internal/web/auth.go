@@ -192,6 +192,8 @@ func (s *Server) loginSubmit(c *gin.Context) {
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": ip},
 	})
+	// M1-19：记录登录指纹，新设备/新 IP 时投递提醒；发信失败不影响登录。
+	s.notifyNewDeviceLogin(c, u)
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
@@ -364,6 +366,8 @@ func (s *Server) registerSubmit(c *gin.Context) {
 		TargetID:   store.Ptr(u.ID),
 		Detail:     map[string]any{"username": u.Username, "email": u.Email, "role": u.Role},
 	})
+	// M1-19：注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（用户可稍后在设置页重发）。
+	s.sendEmailVerification(c, u)
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 

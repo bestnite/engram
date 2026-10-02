@@ -1730,4 +1730,134 @@
   translation: "Media quota or disk alert"
 - id: mail.prefs.type.backup_failed
   translation: "Backup failed"
+- id: mail.reset.title
+  translation: "Reset your password"
+- id: mail.reset.heading
+  translation: "Reset your password"
+- id: mail.reset.intro
+  translation: "Enter your account email and we will send you a reset link."
+- id: mail.reset.email_label
+  translation: "Email"
+- id: mail.reset.submit
+  translation: "Send reset link"
+- id: mail.reset.back_login
+  translation: "Back to sign in"
+- id: mail.reset.sent
+  translation: "If that email belongs to an account, a reset link is on its way."
+- id: mail.reset.form_title
+  translation: "Set a new password"
+- id: mail.reset.form_heading
+  translation: "Set a new password"
+- id: mail.reset.form_intro
+  translation: "Choose a new password for your account."
+- id: mail.reset.new_password_label
+  translation: "New password"
+- id: mail.reset.form_submit
+  translation: "Save new password"
+- id: mail.reset.done
+  translation: "Your password has been reset. You can now sign in."
+- id: mail.reset.error_invalid
+  translation: "This reset link is not valid."
+- id: mail.reset.error_used
+  translation: "This reset link has already been used."
+- id: mail.reset.error_expired
+  translation: "This reset link has expired."
+- id: mail.reset.greeting
+  translation: "Hello,"
+- id: mail.reset.body
+  translation: "Someone requested a password reset for your {{.site}} account. If this was you, open the link below."
+- id: mail.reset.link_label
+  translation: "Reset link:"
+- id: mail.reset.expires
+  translation: "This link expires at {{.expires}}."
+- id: mail.reset.subject
+  translation: "Reset your {{.site}} password"
+- id: mail.verify.title
+  translation: "Email verification"
+- id: mail.verify.heading
+  translation: "Email verification"
+- id: mail.verify.done
+  translation: "Your email address is verified."
+- id: mail.verify.back_login
+  translation: "Back to sign in"
+- id: mail.verify.back_settings
+  translation: "Back to settings"
+- id: mail.verify.sent
+  translation: "A verification link has been sent to your email address."
+- id: mail.verify.error_invalid
+  translation: "This verification link is not valid."
+- id: mail.verify.error_used
+  translation: "This verification link has already been used."
+- id: mail.verify.error_expired
+  translation: "This verification link has expired."
+- id: mail.verify.greeting
+  translation: "Hello,"
+- id: mail.verify.body
+  translation: "Please confirm your email address for {{.site}} by opening the link below."
+- id: mail.verify.link_label
+  translation: "Verification link:"
+- id: mail.verify.expires
+  translation: "This link expires at {{.expires}}."
+- id: mail.verify.subject
+  translation: "Verify your {{.site}} email address"
+- id: mail.verify.change_title
+  translation: "Confirm email change"
+- id: mail.verify.change_heading
+  translation: "Confirm email change"
+- id: mail.verify.change_intro
+  translation: "Enter a new email address; we will send a confirmation link to it."
+- id: mail.verify.change_email_label
+  translation: "New email"
+- id: mail.verify.change_submit
+  translation: "Send confirmation"
+- id: mail.verify.change_same_email
+  translation: "That is already your email address."
+- id: mail.verify.change_email_taken
+  translation: "That email address is already in use."
+- id: mail.verify.change_sent
+  translation: "A confirmation link has been sent to the new email address."
+- id: mail.verify.change_done
+  translation: "Your email address has been updated."
+- id: mail.verify.change_error_invalid
+  translation: "This confirmation link is not valid."
+- id: mail.verify.change_error_used
+  translation: "This confirmation link has already been used."
+- id: mail.verify.change_error_expired
+  translation: "This confirmation link has expired."
+- id: mail.verify.change_greeting
+  translation: "Hello,"
+- id: mail.verify.change_body
+  translation: "Confirm this new email address for {{.site}} by opening the link below."
+- id: mail.verify.change_link_label
+  translation: "Confirmation link:"
+- id: mail.verify.change_expires
+  translation: "This link expires at {{.expires}}."
+- id: mail.verify.change_subject
+  translation: "Confirm your new {{.site}} email address"
+- id: mail.notice.greeting
+  translation: "Hello,"
+- id: mail.notice.new_device.subject
+  translation: "New sign-in to your {{.site}} account"
+- id: mail.notice.new_device.body
+  translation: "Your {{.site}} account was just signed in from a new device or IP. IP: {{.ip}}. Time: {{.time}}. If this was not you, change your password immediately."
+- id: mail.notice.credential.subject
+  translation: "Your {{.site}} credentials changed"
+- id: mail.notice.credential.body
+  translation: "The following security setting on your {{.site}} account was changed: {{.what}}. If this was not you, secure your account immediately."
+- id: mail.notice.credential.password
+  translation: "password"
+- id: mail.notice.credential.totp_enabled
+  translation: "two-factor authentication enabled"
+- id: mail.notice.credential.totp_disabled
+  translation: "two-factor authentication disabled"
+- id: mail.notice.credential.recovery_codes
+  translation: "recovery codes regenerated"
+- id: mail.notice.account.subject
+  translation: "Your {{.site}} account status changed"
+- id: mail.notice.account.body
+  translation: "Your {{.site}} account has been {{.status}}. If you believe this is a mistake, contact the administrator."
+- id: mail.notice.account.disabled
+  translation: "disabled"
+- id: mail.notice.account.deleted
+  translation: "deleted"
 

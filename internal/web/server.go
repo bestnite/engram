@@ -132,6 +132,12 @@ type Server struct {
 	jobStore  *jobs.Store
 	// mail 是邮件 outbox（M1-17）；由 cmd/engram 启动/停止其 worker。
 	mail *mail.Outbox
+	// securityMail 是 A 类事务安全邮件的入站投递助手（M1-19）。
+	securityMail *mail.SecurityNotifier
+	// tokens 签发/消费一次性动作令牌（M1-19）：密码重置、邮箱验证、改邮箱确认。
+	tokens *auth.ActionTokenService
+	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」（M1-19）。
+	fingerprints *store.LoginFingerprintStore
 	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走 §4.5 三分支。
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
@@ -197,6 +203,16 @@ func New(addr string, deps Deps) (*Server, error) {
 		jobStore:       jobs.NewStore(deps.DB),
 		mail:           deps.Mail,
 	}
+	// A 类事务安全邮件（M1-19）：outbox 装配时才构造投递助手；令牌与指纹存储总是可用。
+	tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(deps.DB))
+	if err != nil {
+		return nil, err
+	}
+	s.tokens = tokens
+	s.fingerprints = store.NewLoginFingerprintStore(deps.DB)
+	if deps.Mail != nil {
+		s.securityMail = mail.NewSecurityNotifier(deps.Mail, store.NewEmailPrefStore(deps.DB), logger)
+	}
 	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
 	s.grants = deps.Grants
 	if s.grants == nil {
@@ -252,6 +268,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
 	s.registerSettingsRoutes(router)
+	// M1-19 A 类事务安全邮件：密码重置、邮箱验证与改邮箱确认的页面与触发点。
+	s.registerSecurityMailRoutes(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
 
