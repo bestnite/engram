@@ -439,7 +439,7 @@ Conventions:
   finds it listed afterwards without the plaintext, and revokes it; a revoked key fails
   authentication immediately; another user's key never appears in the list.
 
-- [ ] **M4-11 MCP `create_deck` tool** — the MCP surface can list decks and import a deck package
+- [x] **M4-11 MCP `create_deck` tool** — the MCP surface can list decks and import a deck package
   but cannot create an empty deck, so an agent has no way to start one. The REST equivalent
   (`POST /api/v1/decks`, `internal/api/decks.go`) keeps its logic inside the handler, so an MCP
   tool cannot reuse it without duplicating validation, which `DESIGN.md` §7.4 forbids. Extract
@@ -624,7 +624,7 @@ Conventions:
   `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean, both check scripts are
   green after `git add`, and a real instance is inspected at desktop and phone width.
 
-- [ ] **M8-8 No white flash when navigating in dark mode** — the theme is decided by
+- [x] **M8-8 No white flash when navigating in dark mode** — the theme is decided by
   `internal/web/static/js/pwa.js`, which `<head>` pulls in as an external `<script src="/pwa.js">`
   (`internal/web/views/base.templ`), so the browser can paint a white frame before that script
   runs and flips `<html class="dark">`. The canvas colour and `color-scheme` arrive even later,
@@ -838,7 +838,7 @@ into a release milestone.
   `grep -c '^- \[ \]' ROADMAP.md` and `grep -c '^- \[x\]' ROADMAP.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 10/11 · M5 12/12 · M6 10/10 · M7 4/4 · M8 7/8 · M9 12/12
+  `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 11/11 · M5 12/12 · M6 10/10 · M7 4/4 · M8 8/8 · M9 12/12
   · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
