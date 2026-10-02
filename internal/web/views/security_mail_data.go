@@ -31,6 +31,4 @@ type SecurityFormData struct {
 	// AltLabel / AltHref 是表单下方的返回入口；AltHref 为空时不渲染。
 	AltLabel string
 	AltHref  string
-	// LangOptions 是语言切换入口。
-	LangOptions []LanguageOption
 }

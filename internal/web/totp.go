@@ -198,7 +198,7 @@ func (s *Server) pendingTOTPUser(c *gin.Context) (uint64, bool) {
 // renderTOTPChallenge 写出登录第二步页面；status 用于把校验失败渲染成 4xx。
 func (s *Server) renderTOTPChallenge(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
 	data := views.TOTPChallengeData{
-		Layout:       s.authLayout(loc, "totp.login.title"),
+		Layout:       s.authLayout(c, loc, "totp.login.title"),
 		Heading:      loc.T("totp.login.heading"),
 		Intro:        loc.T("totp.login.intro"),
 		CodeLabel:    loc.T("totp.login.code_label"),
@@ -206,7 +206,6 @@ func (s *Server) renderTOTPChallenge(c *gin.Context, loc *i18n.Localizer, status
 		SubmitLabel:  loc.T("totp.login.submit"),
 		ErrorMessage: errMsg,
 		CSRF:         auth.EnsureDoubleSubmitToken(c),
-		LangOptions:  s.languageOptionsFor(loc, c.Request.URL.Path),
 	}
 	renderHTMLStatus(c, status, views.TOTPChallengePage(data))
 }

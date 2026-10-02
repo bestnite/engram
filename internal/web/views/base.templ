@@ -43,6 +43,25 @@ templ Base(data LayoutData) {
 						}
 					</div>
 					<div class="flex items-center gap-2">
+						<!-- 语言切换下拉（所有页面外壳共用，覆盖 lang 并保留当前路径与查询参数） -->
+						if len(data.LangOptions) > 0 {
+							<details class="relative">
+								<summary aria-label={ data.LanguageLabel } class="flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-50 transition-colors cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+									<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
+									<span class="hidden text-xs font-medium sm:inline">{ data.CurrentLanguage }</span>
+								</summary>
+								<div class="absolute right-0 z-50 mt-1 min-w-36 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+									for _, l := range data.LangOptions {
+										if l.Active {
+											<span class="flex items-center px-3.5 py-2 text-xs font-semibold text-zinc-950 dark:text-zinc-50">{ l.Label }</span>
+										} else {
+											<a class="flex items-center px-3.5 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-50 transition-colors" href={ l.Href }>{ l.Label }</a>
+										}
+									}
+								</div>
+							</details>
+						}
+
 						<!-- 主题切换按钮 -->
 						<button type="button" data-theme-toggle class="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-50 transition-colors cursor-pointer">
 							<svg class="theme-icon-sun hidden h-4 w-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
@@ -99,8 +118,8 @@ templ Base(data LayoutData) {
 				{ children... }
 			</main>
 			<footer class="border-t border-zinc-200/60 bg-white dark:border-zinc-800/80 dark:bg-zinc-900">
-				<div class="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-3 px-4 py-6 sm:px-6 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-					<p>{ data.Footer }</p>
+				<div class="mx-auto flex max-w-6xl items-center justify-center px-4 py-6 sm:px-6 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+					<a class="hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors" href={ data.RepoURL }>{ data.Footer }</a>
 				</div>
 			</footer>
 		</body>

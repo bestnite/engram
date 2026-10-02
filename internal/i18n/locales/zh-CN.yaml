@@ -1942,4 +1942,8 @@
   translation: "当前到期卡片：{{.count}} 张"
 - id: mail.digest.link
   translation: "查看完整统计：{{.url}}"
+# ---- UI request：全局导航与共享页面外壳（nav.settings）----
+# 本块由 UI request 任务追加；键集合须与 en.yaml 一致。
+- id: nav.settings
+  translation: "设置"
 

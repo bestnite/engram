@@ -38,22 +38,6 @@ templ TOTPChallengePage(data TOTPChallengeData) {
 					</button>
 				</form>
 			</div>
-
-			if len(data.LangOptions) > 0 {
-				<div class="flex items-center justify-center">
-					<ul class="flex flex-wrap items-center justify-center gap-2">
-						for _, l := range data.LangOptions {
-							<li>
-								if l.Active {
-									<span class="inline-flex items-center rounded-lg bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs dark:bg-zinc-100 dark:text-zinc-950">{ l.Label }</span>
-								} else {
-									<a class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 shadow-2xs hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 transition-colors" href={ l.Href }>{ l.Label }</a>
-								}
-							</li>
-						}
-					</ul>
-				</div>
-			}
 		</div>
 	}
 }

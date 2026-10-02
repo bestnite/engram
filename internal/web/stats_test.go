@@ -195,7 +195,7 @@ func TestThirdPartyHostsDetectsPlantedHost(t *testing.T) {
 		`<script src="https://cdn.example.org/chart.js"></script>`,
 		`<link rel="stylesheet" href="https://fonts.example.net/css"/>`,
 		`<img src="//tracker.example.com/pixel.gif"/>`,
-		`<a href="http://example.com/x">x</a>`,
+		`<iframe src="https://ads.example.com/frame"></iframe>`,
 	}
 	for _, html := range planted {
 		if hosts := thirdPartyHosts(html); len(hosts) == 0 {
@@ -205,25 +205,35 @@ func TestThirdPartyHostsDetectsPlantedHost(t *testing.T) {
 	if hosts := thirdPartyHosts(`<link rel="stylesheet" href="/static/v/abc/css/tailwind.css"/>`); len(hosts) != 0 {
 		t.Errorf("thirdPartyHosts() flagged a relative path as external: %v", hosts)
 	}
+	// 普通导航链接（如页脚源码仓库）不触发渲染期请求，必须放行。
+	if hosts := thirdPartyHosts(`<a href="https://git.nite07.com/nite/engram">source</a>`); len(hosts) != 0 {
+		t.Errorf("thirdPartyHosts() flagged a plain navigation link as an external request: %v", hosts)
+	}
 }
 
-// thirdPartyHosts 返回 HTML 里出现的第三方主机名。
-//
-// 判据有两条：绝对 URL（http/https）与协议相对 URL（src/href/action="//host"）。
-// 本站资源全部是根相对路径（/static/v/<hash>/...），因此任何一条命中都是外部请求。
-// 返回空切片表示零外部网络请求。
+// thirdPartyHosts 返回 HTML 里会导致外部网络请求的第三方主机。
+// 只统计会触发加载的属性（script/link/img/iframe/source/video/audio/embed/object/track
+// 的 src/href/data）以及 CSS 的 url(...)。<a href> 是用户点击后才发生的导航，
+// 不是渲染期的外部请求，因此不计入——页脚的源码仓库链接正属于这一类。
 func thirdPartyHosts(html string) []string {
 	var hosts []string
-	for _, m := range absoluteURLRe.FindAllStringSubmatch(html, -1) {
+	for _, m := range resourceHostRe.FindAllStringSubmatch(html, -1) {
 		hosts = append(hosts, m[1])
 	}
-	for _, m := range protocolRelativeRe.FindAllStringSubmatch(html, -1) {
+	for _, m := range resourceRelativeHostRe.FindAllStringSubmatch(html, -1) {
+		hosts = append(hosts, m[1])
+	}
+	for _, m := range cssURLHostRe.FindAllStringSubmatch(html, -1) {
 		hosts = append(hosts, m[1])
 	}
 	return hosts
 }
 
 var (
-	absoluteURLRe      = regexp.MustCompile(`(?i)https?://([A-Za-z0-9._-]+)`)
-	protocolRelativeRe = regexp.MustCompile(`(?i)(?:src|href|action)\s*=\s*"(//[A-Za-z0-9._-]+)`)
+	// 资源加载标签的属性里出现绝对 URL：会在渲染期发起外部请求。
+	resourceHostRe = regexp.MustCompile(`(?i)<(?:script|link|img|iframe|source|video|audio|embed|object|track)\b[^>]*\b(?:src|href|data)\s*=\s*"https?://([A-Za-z0-9._-]+)`)
+	// 同上，但为协议相对形式（//host/...）。
+	resourceRelativeHostRe = regexp.MustCompile(`(?i)<(?:script|link|img|iframe|source|video|audio|embed|object|track)\b[^>]*\b(?:src|href|data)\s*=\s*"//([A-Za-z0-9._-]+)`)
+	// CSS 的 url(...) 指向的外部主机。
+	cssURLHostRe = regexp.MustCompile(`(?i)url\(\s*["']?https?://([A-Za-z0-9._-]+)`)
 )
