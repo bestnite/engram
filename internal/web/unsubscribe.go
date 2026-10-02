@@ -119,7 +119,7 @@ func (s *Server) unsubscribePage(c *gin.Context) {
 		return
 	}
 	data := views.SecurityFormData{
-		Layout:      s.authLayout(loc, "mail.unsub.title"),
+		Layout:      s.authLayout(c, loc, "mail.unsub.title"),
 		Heading:     loc.T("mail.unsub.heading"),
 		Intro:       loc.T("mail.unsub.intro"),
 		ShowForm:    true,
@@ -134,7 +134,7 @@ func (s *Server) unsubscribePage(c *gin.Context) {
 // renderUnsubscribeResult 渲染退订流程的结果页（无表单）：notice 为成功提示，errMsg 为失败提示。
 func (s *Server) renderUnsubscribeResult(c *gin.Context, loc *i18n.Localizer, status int, notice, errMsg string) {
 	data := views.SecurityFormData{
-		Layout:   s.authLayout(loc, "mail.unsub.title"),
+		Layout:   s.authLayout(c, loc, "mail.unsub.title"),
 		Heading:  loc.T("mail.unsub.heading"),
 		AltLabel: loc.T("mail.unsub.back"),
 		AltHref:  "/settings/notifications",

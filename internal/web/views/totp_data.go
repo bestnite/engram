@@ -13,8 +13,7 @@ type TOTPChallengeData struct {
 	SubmitLabel  string
 	ErrorMessage string
 	// CSRF 是双提交 cookie 的镜像 token（登录前流程没有会话绑定的 token）。
-	CSRF        string
-	LangOptions []LanguageOption
+	CSRF string
 }
 
 // TOTPSettingsData 是个人设置页里的 TOTP 区块（/settings/totp）的渲染数据。

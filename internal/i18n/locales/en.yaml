@@ -1944,4 +1944,8 @@
   translation: "Cards due now: {{.count}}"
 - id: mail.digest.link
   translation: "See your full statistics: {{.url}}"
+# ---- UI request: global navigation and shared page shell (nav.settings) ----
+# This block is appended by the UI request task; the key set must match zh-CN.yaml.
+- id: nav.settings
+  translation: "Settings"
 

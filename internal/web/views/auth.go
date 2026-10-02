@@ -33,8 +33,6 @@ type AuthFormData struct {
 	CSRF string
 	// InviteToken 是注册表单携带的邀请 token（M1-7）；为空时不渲染隐藏字段。
 	InviteToken string
-	// LangOptions 是语言切换入口。
-	LangOptions []LanguageOption
 	// OIDCEnabled 为 true 时登录表单下方渲染可选的 OIDC 登录入口（DESIGN.md §4.4）。
 	OIDCEnabled bool
 	// OIDCLabel / OIDCHref 是 OIDC 入口的文案与跳转地址；OIDCEnabled 为 false 时忽略。

@@ -57,31 +57,19 @@ func (s *Server) localizer(c *gin.Context) (*i18n.Localizer, bool) {
 }
 
 // authLayout 构造认证页外壳数据；标题文案由调用方给定语言包 key。
-func (s *Server) authLayout(loc *i18n.Localizer, titleKey string) views.LayoutData {
-	return views.LayoutData{
+// 页头的语言切换下拉与页脚仓库链接由 decorateLayout 统一补齐。
+func (s *Server) authLayout(c *gin.Context, loc *i18n.Localizer, titleKey string) views.LayoutData {
+	layout := views.LayoutData{
 		Lang:       loc.Locale(),
 		Title:      loc.T(titleKey),
 		Brand:      loc.T("app.name"),
 		HomeURL:    "/",
-		Footer:     loc.T("footer.powered_by"),
 		CSSURL:     s.assets.URL("css/tailwind.css"),
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
 	}
-}
-
-// languageOptionsFor 生成指向当前路径的语言切换入口；认证页不能复用首页的 "/?lang=" 逻辑。
-func (s *Server) languageOptionsFor(loc *i18n.Localizer, path string) []views.LanguageOption {
-	codes := s.i18n.SupportedCodes()
-	out := make([]views.LanguageOption, 0, len(codes))
-	for _, code := range codes {
-		out = append(out, views.LanguageOption{
-			Label:  loc.T("language." + code),
-			Href:   path + "?lang=" + code,
-			Active: loc.Locale() == code,
-		})
-	}
-	return out
+	s.decorateLayout(c, loc, &layout)
+	return layout
 }
 
 // renderAuth 写出认证页；status 用于把校验失败渲染成 4xx 而不是一律 200。
@@ -105,7 +93,7 @@ func (s *Server) loginPage(c *gin.Context) {
 // renderLogin 渲染登录表单并带上一条已本地化的错误提示（可为空）。
 func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
 	data := views.AuthFormData{
-		Layout:               s.authLayout(loc, "auth.login.title"),
+		Layout:               s.authLayout(c, loc, "auth.login.title"),
 		Heading:              loc.T("auth.login.heading"),
 		Action:               "/login",
 		SubmitLabel:          loc.T("auth.login.submit"),
@@ -116,7 +104,6 @@ func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, er
 		PasswordAutocomplete: "current-password",
 		AltLabel:             loc.T("auth.login.to_register"),
 		AltHref:              "/register",
-		LangOptions:          s.languageOptionsFor(loc, c.Request.URL.Path),
 	}
 	// OIDC 默认关闭：只有配置完整可用时登录页才出现第二个登录入口（DESIGN.md §4.4）。
 	if cfg, err := s.oidcLoadConfig(c); err == nil && cfg.Usable() {
@@ -216,7 +203,7 @@ func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int,
 		intro = loc.T("auth.register.invite_intro")
 	}
 	s.renderAuth(c, status, views.AuthFormData{
-		Layout:               s.authLayout(loc, "auth.register.title"),
+		Layout:               s.authLayout(c, loc, "auth.register.title"),
 		Heading:              loc.T("auth.register.heading"),
 		Intro:                intro,
 		Action:               action,
@@ -233,7 +220,6 @@ func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int,
 		AltLabel:             loc.T("auth.register.to_login"),
 		AltHref:              "/login",
 		InviteToken:          inviteToken,
-		LangOptions:          s.languageOptionsFor(loc, c.Request.URL.Path),
 	})
 }
 
@@ -397,7 +383,7 @@ func (s *Server) setupAvailable(c *gin.Context) bool {
 // renderSetup 渲染引导页；BOOTSTRAP_ADMIN_EMAIL 作为邮箱兜底预填（DESIGN.md §4.1）。
 func (s *Server) renderSetup(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
 	s.renderAuth(c, status, views.AuthFormData{
-		Layout:               s.authLayout(loc, "auth.setup.title"),
+		Layout:               s.authLayout(c, loc, "auth.setup.title"),
 		Heading:              loc.T("auth.setup.heading"),
 		Intro:                loc.T("auth.setup.intro"),
 		Action:               "/setup",
@@ -412,7 +398,6 @@ func (s *Server) renderSetup(c *gin.Context, loc *i18n.Localizer, status int, er
 		ShowDisplayName:      true,
 		EmailValue:           s.bootstrapEmail,
 		PasswordAutocomplete: "new-password",
-		LangOptions:          s.languageOptionsFor(loc, c.Request.URL.Path),
 	})
 }
 

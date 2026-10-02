@@ -80,7 +80,6 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		Title:      loc.T(titleKey),
 		Brand:      loc.T("app.name"),
 		HomeURL:    "/",
-		Footer:     loc.T("footer.powered_by"),
 		CSSURL:     s.assets.URL("css/tailwind.css"),
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
@@ -91,6 +90,8 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 			{Label: loc.T("nav.stats"), Href: "/stats"},
 		},
 	}
+	// 语言切换下拉与页脚仓库链接对所有页面外壳一致。
+	s.decorateLayout(c, loc, &layout)
 	layout.SessionLabel = loc.T("nav.login")
 	layout.SessionHref = "/login"
 	if _, ok := auth.CurrentUser(c); ok {
@@ -99,6 +100,8 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		layout.SessionForm = true
 		// M9-9：预设页入口对每个已登录用户可见（未登录不显示，避免点进去被重定向）。
 		layout.Nav = append(layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
+		// 个人设置页入口对每个已登录用户可见。
+		layout.Nav = append(layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
 		if sess, ok := auth.CurrentSession(c); ok {
 			layout.CSRF = sess.CSRFToken
 		}

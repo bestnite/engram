@@ -18,8 +18,16 @@ type LayoutData struct {
 	Brand string
 	// HomeURL 是品牌链接指向的地址。
 	HomeURL string
-	// Footer 是页脚文本（已本地化）。
+	// Footer 是页脚链接文本（已本地化）。
 	Footer string
+	// RepoURL 是页脚链接指向的源码仓库地址。
+	RepoURL string
+	// LangOptions 是页头语言切换下拉的选项（标签已本地化）。
+	LangOptions []LanguageOption
+	// LanguageLabel 是语言切换控件的无障碍标签（已本地化）。
+	LanguageLabel string
+	// CurrentLanguage 是当前语言的显示名（已本地化），用作下拉折叠时的摘要。
+	CurrentLanguage string
 	// CSSURL / HTMXURL / MathJaxURL 是内容哈希化后的静态资源路径；缺资源时为空串，
 	// 模板据此跳过引用（M0-9）。
 	CSSURL     string
@@ -59,10 +67,6 @@ type HomeData struct {
 	Intro      string
 	StartLabel string
 	// DecksLabel / DecksHref 是首页进入卡组列表的入口（M2-11）。
-	DecksLabel     string
-	DecksHref      string
-	LanguagesLabel string
-	// Formula 是演示 MathJax 自托管渲染的数学表达式，不是用户可见自然语言文案。
-	Formula   string
-	Languages []LanguageOption
+	DecksLabel string
+	DecksHref  string
 }

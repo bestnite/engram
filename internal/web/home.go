@@ -13,9 +13,6 @@ import (
 	"git.nite07.com/nite/engram/internal/web/views"
 )
 
-// mathFormula 演示自托管 MathJax 的 TeX 定界符（DESIGN.md §8.2 用 \( \) 与 \[ \]）。
-const mathFormula = `\(a^2 + b^2 = c^2\)`
-
 // home 渲染示例首页：i18n 文案 + 哈希化静态资源引用，二者都从请求上下文/资源清单取。
 func (s *Server) home(c *gin.Context) {
 	// 首启窗口（M1-25）：还没有活跃管理员时首页没有任何可展示的内容，
@@ -33,30 +30,29 @@ func (s *Server) home(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	data := views.HomeData{
-		Layout: views.LayoutData{
-			Lang:       loc.Locale(),
-			Title:      loc.T("app.name"),
-			Brand:      s.siteName(c.Request.Context(), loc),
-			HomeURL:    "/",
-			Footer:     loc.T("footer.powered_by"),
-			CSSURL:     s.assets.URL("css/tailwind.css"),
-			HTMXURL:    s.assets.URL("js/htmx.min.js"),
-			MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-			Nav: []views.NavItem{
-				{Label: loc.T("nav.today"), Href: "/"},
-				{Label: loc.T("nav.decks"), Href: "/decks"},
-				{Label: loc.T("nav.stats"), Href: "/stats"},
-			},
+	layout := views.LayoutData{
+		Lang:       loc.Locale(),
+		Title:      loc.T("app.name"),
+		Brand:      s.siteName(c.Request.Context(), loc),
+		HomeURL:    "/",
+		CSSURL:     s.assets.URL("css/tailwind.css"),
+		HTMXURL:    s.assets.URL("js/htmx.min.js"),
+		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
+		Nav: []views.NavItem{
+			{Label: loc.T("nav.today"), Href: "/"},
+			{Label: loc.T("nav.decks"), Href: "/decks"},
+			{Label: loc.T("nav.stats"), Href: "/stats"},
 		},
-		Heading:        loc.T("home.heading"),
-		Intro:          loc.T("home.intro"),
-		StartLabel:     loc.T("home.start_review"),
-		DecksLabel:     loc.T("home.decks_link"),
-		DecksHref:      "/decks",
-		LanguagesLabel: loc.T("home.language_label"),
-		Formula:        mathFormula,
-		Languages:      s.languageOptions(loc),
+	}
+	// 语言切换下拉与页脚仓库链接对所有页面外壳一致，这里补齐。
+	s.decorateLayout(c, loc, &layout)
+	data := views.HomeData{
+		Layout:     layout,
+		Heading:    loc.T("home.heading"),
+		Intro:      loc.T("home.intro"),
+		StartLabel: loc.T("home.start_review"),
+		DecksLabel: loc.T("home.decks_link"),
+		DecksHref:  "/decks",
 	}
 	// 页头右侧的会话入口由当前登录状态决定：已登录显示登出（POST + CSRF），否则显示登录链接。
 	if u, ok := auth.CurrentUser(c); ok {
@@ -66,6 +62,8 @@ func (s *Server) home(c *gin.Context) {
 		}
 		// M9-9：预设页入口对每个已登录用户可见。
 		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
+		// 个人设置页入口对每个已登录用户可见。
+		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true
@@ -77,20 +75,6 @@ func (s *Server) home(c *gin.Context) {
 		data.Layout.SessionHref = "/login"
 	}
 	renderHTML(c, views.Home(data))
-}
-
-// languageOptions 生成语言切换入口；语言名同样取自语言包，避免硬编码用户可见文案。
-func (s *Server) languageOptions(loc *i18n.Localizer) []views.LanguageOption {
-	codes := s.i18n.SupportedCodes()
-	out := make([]views.LanguageOption, 0, len(codes))
-	for _, code := range codes {
-		out = append(out, views.LanguageOption{
-			Label:  loc.T("language." + code),
-			Href:   "/?lang=" + code,
-			Active: loc.Locale() == code,
-		})
-	}
-	return out
 }
 
 // renderHTML 统一写出 HTML 响应。渲染失败时响应头可能已发出，只能记一条英文日志

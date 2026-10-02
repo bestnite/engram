@@ -47,7 +47,6 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 
 // renderSecurityForm 写出安全/事务页面；文案全部来自语言包。
 func (s *Server) renderSecurityForm(c *gin.Context, loc *i18n.Localizer, status int, data views.SecurityFormData) {
-	data.LangOptions = s.languageOptionsFor(loc, c.Request.URL.Path)
 	renderHTMLStatus(c, status, views.SecurityPage(data))
 }
 
@@ -58,7 +57,7 @@ func (s *Server) forgotPasswordPage(c *gin.Context) {
 		return
 	}
 	data := views.SecurityFormData{
-		Layout:      s.authLayout(loc, "mail.reset.title"),
+		Layout:      s.authLayout(c, loc, "mail.reset.title"),
 		Heading:     loc.T("mail.reset.heading"),
 		Intro:       loc.T("mail.reset.intro"),
 		Action:      "/forgot-password",
@@ -134,7 +133,7 @@ func (s *Server) resetPasswordPage(c *gin.Context) {
 	}
 	// 令牌放进表单 action 的查询串，避免额外隐藏字段，也保证 POST 时原样带回。
 	s.renderSecurityForm(c, loc, http.StatusOK, views.SecurityFormData{
-		Layout:        s.authLayout(loc, "mail.reset.form_title"),
+		Layout:        s.authLayout(c, loc, "mail.reset.form_title"),
 		Heading:       loc.T("mail.reset.form_heading"),
 		Intro:         loc.T("mail.reset.form_intro"),
 		ShowForm:      true,
@@ -188,7 +187,7 @@ func (s *Server) resetPasswordSubmit(c *gin.Context) {
 // renderResetResult 渲染重置流程的结果页（无表单）。
 func (s *Server) renderResetResult(c *gin.Context, loc *i18n.Localizer, status int, notice string) {
 	data := views.SecurityFormData{
-		Layout:   s.authLayout(loc, "mail.reset.title"),
+		Layout:   s.authLayout(c, loc, "mail.reset.title"),
 		Heading:  loc.T("mail.reset.heading"),
 		AltLabel: loc.T("mail.reset.back_login"),
 		AltHref:  "/login",
