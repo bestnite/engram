@@ -15,9 +15,20 @@ import (
 // 已登记在 scripts/checks/allowed-hosts.txt；绝不写进模板，因为模板禁止硬编码可见文案。
 const repositoryURL = "https://git.nite07.com/nite/engram"
 
+// themeBootstrap 在 <head> 内联执行主题引导（M8-8）。它必须内联且早于样式表：外链的
+// pwa.js 是独立网络请求，浏览器可能在它执行前就先画出白底一帧；暗色下这就是可见的白闪。
+// 这里只做「首帧之前必须成立」的最小集合——暗色类、color-scheme、画布底色与 theme-color，
+// 用内联 style 设底色，任何样式表都抢不到这个竞态。颜色值与 pwa.js 的 applyTheme 保持一致。
+// 常量自带 <script> 标签、由模板 @rawHTML 原样输出：templ 把 <script> 当纯文本元素，
+// 写在其内部的 @rawHTML(...) 会被当成字面文本；同时模板内联 JS 也会被 no-template-literals
+// 误判为硬编码用户文案（decks.templ 的 noscriptDialogStyle 同理）。
+const themeBootstrap = `<script>(function(){var s;try{s=localStorage.getItem("engram-theme")}catch(e){}var d=s==="dark"||(s!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";r.style.backgroundColor=d?"#09090b":"#f8fafc";var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",d?"#09090b":"#ffffff")}})();</script>`
+
 // decorateLayout 补齐所有页面外壳共有的字段：页脚项目名与仓库链接、页头语言切换下拉、
 // 以及哈希化图标路径（M8-7）。每个 LayoutData 构造完后调用一次，避免多个外壳各自重复。
 func (s *Server) decorateLayout(c *gin.Context, loc *i18n.Localizer, layout *views.LayoutData) {
+	// 主题引导对每个页面都一样，集中在这里赋值，避免五处 LayoutData 构造点各写一遍。
+	layout.ThemeBootstrap = themeBootstrap
 	// 页脚固定显示项目名 Engram（不取站点名覆盖）：页脚表达的是项目身份而非站点配置（M8-7）。
 	layout.Footer = loc.T("app.name")
 	layout.RepoURL = repositoryURL

@@ -49,6 +49,9 @@ type LayoutData struct {
 	SessionForm bool
 	// CSRF 是登出 POST 表单需要的会话绑定 CSRF token（DESIGN.md §4.3）。
 	CSRF string
+	// ThemeBootstrap 是内联在 <head>、早于样式表执行的主题引导脚本（M8-8）。它是非空
+	// 常量，模板原样输出（templ.Raw），不转义。
+	ThemeBootstrap string
 }
 
 // NavItem 是一个导航链接。Active 为 true 时它是当前页对应的项（服务端渲染高亮，

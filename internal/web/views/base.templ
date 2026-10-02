@@ -8,6 +8,10 @@ templ Base(data LayoutData) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="theme-color" content="#18181b"/>
+			// 主题引导（M8-8）：必须内联且早于样式表，否则暗色下会先画一帧白底。
+			// 放在 theme-color 之后，因为它会同步该 meta；内容来自 Go 常量 themeBootstrap
+			//（常量自带 <script> 标签，模板里不写 JS 字面量）。
+			@rawHTML(data.ThemeBootstrap)
 			<link rel="manifest" href="/manifest.webmanifest"/>
 			if data.IconURL != "" {
 				<link rel="icon" type="image/svg+xml" href={ data.IconURL }/>
