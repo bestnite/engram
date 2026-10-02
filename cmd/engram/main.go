@@ -163,10 +163,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	}
 	// 邮件 outbox（M1-17）：SMTP 配置走 settings 表（口令复用上面的 AES-GCM 编解码器），
 	// worker 由 runServe 启动与优雅停止。未配置 SMTP 时 Enqueue 返回 ErrNotConfigured。
-	mailOutbox, err := mail.NewOutbox(mail.Deps{DB: db, Secrets: secrets, Logger: logger})
-	if err != nil {
-		return nil, err
-	}
+	mailOutbox := mail.NewOutbox(mail.Deps{DB: db, Secrets: secrets, Logger: logger})
 	// TOTP 二次验证（M1-16）：secret 复用上面的 AES-GCM 编解码器加密存储。
 	totpService, err := auth.NewTOTPService(store.NewTOTPStore(db), secrets, "")
 	if err != nil {

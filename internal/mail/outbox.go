@@ -106,10 +106,9 @@ type Outbox struct {
 }
 
 // NewOutbox 构造 Outbox；不启动 worker，需再调用 Start。
-func NewOutbox(deps Deps) (*Outbox, error) {
-	if deps.DB == nil {
-		return nil, errors.New("mail: Deps.DB is required")
-	}
+// 签名按接口契约固定为 *Outbox（不返回 error）：依赖由 cmd/engram 在装配期保证齐备，
+// DB 缺失由 Enqueue/Start 在运行时显式报错，而不是让构造函数多一条调用方都要处理的分支。
+func NewOutbox(deps Deps) *Outbox {
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -150,7 +149,7 @@ func NewOutbox(deps Deps) (*Outbox, error) {
 		poll:     poll,
 		batch:    batch,
 		wake:     make(chan struct{}, 1),
-	}, nil
+	}
 }
 
 // Configured 报告 SMTP 是否已配置。未配置时依赖邮件的流程必须禁用并说明原因。
@@ -169,6 +168,9 @@ func (o *Outbox) Configured() bool {
 // 只写队列表，不在请求路径发信：投递由 worker 完成，失败不回传给调用方。
 // SMTP 未配置时返回 ErrNotConfigured（不静默丢弃）。
 func (o *Outbox) Enqueue(ctx context.Context, m Message) error {
+	if o.db == nil {
+		return errors.New("mail: outbox database is required")
+	}
 	if strings.TrimSpace(m.To) == "" {
 		return errors.New("mail: message recipient is required")
 	}
@@ -209,7 +211,12 @@ func (o *Outbox) notify() {
 }
 
 // Start 启动唯一的 worker goroutine；重复调用是幂等的。ctx 取消时 worker 退出。
+// 没有数据库时直接返回：没有队列表可投递，启动 worker 只会在轮询里反复报错。
 func (o *Outbox) Start(ctx context.Context) {
+	if o.db == nil {
+		o.logger.Error("mail: outbox has no database; worker not started")
+		return
+	}
 	o.mu.Lock()
 	if o.started {
 		o.mu.Unlock()

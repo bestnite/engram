@@ -14,10 +14,7 @@ import (
 func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 	db := testDB(t)
 	sender := &recordingSender{block: make(chan struct{})}
-	ob, err := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
+	ob := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
 	configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
 
 	if err := ob.Enqueue(context.Background(), Message{To: "a@example.com", Subject: "queued"}); err != nil {
@@ -42,12 +39,9 @@ func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 func TestWorkerDeliversQueuedMessage(t *testing.T) {
 	db := testDB(t)
 	f := newFakeSMTP(t)
-	ob, err := NewOutbox(Deps{
+	ob := NewOutbox(Deps{
 		DB: db, Sender: SMTPSender{}, Retry: fastRetry(3), PollInterval: 10 * time.Millisecond,
 	})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
 	configuredSettings(t, db, f.addr, "no-reply@example.com")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,10 +85,7 @@ func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 		errors.New("421 4.3.0 temporary local problem"),
 		errors.New("421 4.3.0 temporary local problem"),
 	}} // 第三次成功
-	ob, err := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(5), PollInterval: 5 * time.Millisecond})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
+	ob := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(5), PollInterval: 5 * time.Millisecond})
 	configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,10 +131,7 @@ func TestPermanentFailureStopsAfterMaxAttempts(t *testing.T) {
 	sender := &recordingSender{errs: []error{
 		errors.New("451 temp A"), errors.New("451 temp B"), errors.New("451 temp C"),
 	}}
-	ob, err := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
+	ob := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
 	configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -191,10 +179,7 @@ func TestUnconfiguredWorkerLeavesQueueIntact(t *testing.T) {
 	}, time.Now().UTC()); err != nil {
 		t.Fatalf("EnqueueOutboxMessage: %v", err)
 	}
-	ob, err := NewOutbox(Deps{DB: db, Sender: &recordingSender{}, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
+	ob := NewOutbox(Deps{DB: db, Sender: &recordingSender{}, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ob.Start(ctx)

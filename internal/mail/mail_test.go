@@ -14,14 +14,11 @@ import (
 // Configured() 为 false，Enqueue 返回 ErrNotConfigured（不静默丢弃），且不写任何行。
 func TestUnconfiguredReturnsErrNotConfigured(t *testing.T) {
 	db := testDB(t)
-	ob, err := NewOutbox(Deps{DB: db})
-	if err != nil {
-		t.Fatalf("NewOutbox: %v", err)
-	}
+	ob := NewOutbox(Deps{DB: db})
 	if ob.Configured() {
 		t.Fatal("Configured() = true without any SMTP settings, want false")
 	}
-	err = ob.Enqueue(context.Background(), Message{To: "a@example.com", Subject: "hi"})
+	err := ob.Enqueue(context.Background(), Message{To: "a@example.com", Subject: "hi"})
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("Enqueue() error = %v, want ErrNotConfigured", err)
 	}
@@ -54,10 +51,7 @@ func TestConfiguredRequiresHostAndFrom(t *testing.T) {
 			if tc.kv != nil {
 				setSettings(t, db, tc.kv)
 			}
-			ob, err := NewOutbox(Deps{DB: db})
-			if err != nil {
-				t.Fatalf("NewOutbox: %v", err)
-			}
+			ob := NewOutbox(Deps{DB: db})
 			if got := ob.Configured(); got != tc.want {
 				t.Errorf("Configured() = %v, want %v", got, tc.want)
 			}
