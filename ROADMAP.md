@@ -617,7 +617,7 @@ Conventions:
   a missing adapter fails the job naming the path; and no help text advertises a command that reports
   itself unimplemented.
 
-- [ ] **M9-11 Compute the fit metrics in Go** — M9-5 asks the job row to carry a before/after fit
+- [x] **M9-11 Compute the fit metrics in Go** — M9-5 asks the job row to carry a before/after fit
   comparison and the preset page renders it, but nothing computes it: `FitBefore`/`FitAfter` stay
   zero, so `Improved()` (`after < before`) is false on every run and the page tells the user "not
   improved" even when the weights did improve. Compute both metrics in Go from the same review log
@@ -728,7 +728,7 @@ completion percentage until they are moved into a release milestone.
   `grep -c '^- \[ \]' AGENTS.md` and `grep -c '^- \[x\]' AGENTS.md`.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
-  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 10/11
+  `M0 13/13 · M1 24/24 · M2 13/13 · M3 12/12 · M4 9/9 · M5 12/12 · M6 10/10 · M7 4/4 · M8 6/6 · M9 11/11
   · M10 0/6 (excluded) · backlog 6/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
