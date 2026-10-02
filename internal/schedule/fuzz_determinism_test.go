@@ -15,7 +15,7 @@ import (
 // 序列相同、扰动相同。若实现里引入了挂钟或全局随机源，本用例会失败。
 func TestFuzzIsDeterministicForSameSeed(t *testing.T) {
 	preset := testPreset(t)
-	preset.EnableFuzz = true
+	preset.EnableFuzz = boolPtr(true)
 	s := mustScheduler(t, preset)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
@@ -44,7 +44,7 @@ func TestFuzzIsDeterministicForSameSeed(t *testing.T) {
 // 单次调用相等还不够 —— 状态机若累积了挂钟或全局随机，序列重放会分叉。
 func TestFuzzSequenceReplayIsIdentical(t *testing.T) {
 	preset := testPreset(t)
-	preset.EnableFuzz = true
+	preset.EnableFuzz = boolPtr(true)
 	s := mustScheduler(t, preset)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	ratings := []Rating{Good, Good, Again, Good, Easy}
@@ -81,9 +81,9 @@ func TestFuzzSequenceReplayIsIdentical(t *testing.T) {
 // 输入固定（now 固定、卡固定），因此该断言本身也是确定性的。
 func TestFuzzActuallyPerturbsInterval(t *testing.T) {
 	off := testPreset(t)
-	off.EnableFuzz = false
+	off.EnableFuzz = boolPtr(false)
 	on := testPreset(t)
-	on.EnableFuzz = true
+	on.EnableFuzz = boolPtr(true)
 	sOff := mustScheduler(t, off)
 	sOn := mustScheduler(t, on)
 

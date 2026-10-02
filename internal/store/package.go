@@ -501,7 +501,7 @@ func presetToPackage(p *Preset) PackagePreset {
 		LearningSteps:       p.LearningSteps,
 		RelearningSteps:     p.RelearningSteps,
 		MaximumIntervalDays: p.MaximumIntervalDays,
-		EnableFuzz:          p.EnableFuzz,
+		EnableFuzz:          p.FuzzEnabled(),
 		WeightsReviewCount:  p.WeightsReviewCount,
 	}
 	if p.WeightsJSON != nil {

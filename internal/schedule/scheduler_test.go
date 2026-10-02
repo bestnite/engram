@@ -7,11 +7,14 @@ import (
 	"example.com/flashcard/internal/store"
 )
 
+// boolPtr 供测试给 store.Preset 的 *bool 字段显式赋值。
+func boolPtr(b bool) *bool { return &b }
+
 // testPreset 返回一个关闭 fuzz 的默认预设：fuzz 会随机化间隔，测试需要确定性。
 func testPreset(t *testing.T) *store.Preset {
 	t.Helper()
 	p := store.NewPreset(1, "test")
-	p.EnableFuzz = false
+	p.EnableFuzz = boolPtr(false)
 	return &p
 }
 

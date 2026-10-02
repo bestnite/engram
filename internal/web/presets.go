@@ -280,7 +280,7 @@ func (s *Server) presetCard(ctx context.Context, loc *i18n.Localizer, p *store.P
 		LogTailLabel:     loc.T("presets.optimize.log_tail"),
 		CSRF:             csrf,
 	}
-	if p.EnableFuzz {
+	if p.FuzzEnabled() {
 		card.FuzzValue = loc.T("presets.fuzz_on")
 	}
 	// 权重来源：weights_json 是否为空是唯一的判据，与调度器（schedule.NewScheduler）一致。

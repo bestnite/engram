@@ -569,7 +569,7 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	p := Preset{
 		OwnerUserID: owner, Name: pp.Name, DesiredRetention: pp.DesiredRetention,
 		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
-		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: pp.EnableFuzz,
+		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: boolPtr(pp.EnableFuzz),
 		WeightsReviewCount: pp.WeightsReviewCount, CreatedAt: now, UpdatedAt: now,
 	}
 	if p.Name == "" {
@@ -596,12 +596,6 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	}
 	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
 		return 0, fmt.Errorf("import package: create preset: %w", err)
-	}
-	// enable_fuzz 带 default:true 标签，false 会被数据库默认值覆盖，显式补一次（同 PresetStore.Create）。
-	if !p.EnableFuzz {
-		if err := tx.WithContext(ctx).Model(&Preset{}).Where("id = ?", p.ID).Update("enable_fuzz", false).Error; err != nil {
-			return 0, fmt.Errorf("import package: disable fuzz: %w", err)
-		}
 	}
 	return p.ID, nil
 }

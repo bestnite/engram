@@ -16,7 +16,7 @@ func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
 	p := store.NewPreset(1, "preset")
-	p.EnableFuzz = false
+	p.EnableFuzz = boolPtr(false)
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestQueueCapsExplicitOverrideBeatsDeck(t *testing.T) {
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
 	p := store.NewPreset(1, "preset")
-	p.EnableFuzz = false
+	p.EnableFuzz = boolPtr(false)
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}

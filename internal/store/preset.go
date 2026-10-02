@@ -31,6 +31,9 @@ var (
 	ErrInvalidMaximumInterval = errors.New("maximum interval days must be positive")
 )
 
+// boolPtr 返回布尔字面量的指针，供 *bool 字段显式赋值（AGENTS.md §2.3 第 9 条）。
+func boolPtr(v bool) *bool { return &v }
+
 // NewPreset 返回一个带文档化默认值的调度预设；归属与名字由调用方给出。
 // 这是获得默认值的唯一入口：直接构造 Preset 会得到零值，Create 会以校验失败拒绝，
 // 避免把 desired_retention=0 这类非法值静默写库。
@@ -42,9 +45,13 @@ func NewPreset(ownerUserID uint64, name string) Preset {
 		LearningSteps:       DefaultLearningSteps,
 		RelearningSteps:     DefaultRelearningSteps,
 		MaximumIntervalDays: DefaultMaximumIntervalDays,
-		EnableFuzz:          DefaultEnableFuzz,
+		EnableFuzz:          boolPtr(DefaultEnableFuzz),
 	}
 }
+
+// FuzzEnabled 返回 enable_fuzz 的有效值：NULL 视为默认 true（AGENTS.md §2.3 第 9 条）。
+// 所有读取方都走这里，避免各处重复处理 nil。
+func (p *Preset) FuzzEnabled() bool { return p.EnableFuzz == nil || *p.EnableFuzz }
 
 // requirePresetOwner 与卡组共用 ErrNotOwner：预设仍属创建者，M5-1 的授权表不涉及 preset。
 func requirePresetOwner(p *Preset, actorUserID uint64) error {
@@ -81,8 +88,8 @@ func NewPresetStore(db *gorm.DB) *PresetStore { return &PresetStore{db: db} }
 
 // Create 写入一个预设。
 //
-// EnableFuzz 带 `default:true` 标签：GORM 会在字段为零值时省略该列、由数据库填默认值，
-// 于是\"关闭 fuzz\"（false）会被静默改回 true。显式补一次列更新来修掉这个零值陷阱。
+// EnableFuzz 是 *bool：nil 时 GORM 省略该列、由数据库默认值 true 补齐，非 nil 时显式写入
+// （含 false）。补偿写入已按 AGENTS.md §2.3 第 9 条删除——语义由字段类型本身保证。
 func (s *PresetStore) Create(ctx context.Context, p *Preset) error {
 	if err := validatePresetForWrite(p, true); err != nil {
 		return err
@@ -96,12 +103,6 @@ func (s *PresetStore) Create(ctx context.Context, p *Preset) error {
 	}
 	if err := s.db.WithContext(ctx).Create(p).Error; err != nil {
 		return fmt.Errorf("create preset: %w", err)
-	}
-	if !p.EnableFuzz {
-		if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ?", p.ID).
-			Update("enable_fuzz", false).Error; err != nil {
-			return fmt.Errorf("create preset: disable fuzz: %w", err)
-		}
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 		"learning_steps":        p.LearningSteps,
 		"relearning_steps":      p.RelearningSteps,
 		"maximum_interval_days": p.MaximumIntervalDays,
-		"enable_fuzz":           p.EnableFuzz,
+		"enable_fuzz":           p.FuzzEnabled(),
 		"weights_json":          p.WeightsJSON,
 		"weights_optimized_at":  p.WeightsOptimizedAt,
 		"weights_review_count":  p.WeightsReviewCount,
