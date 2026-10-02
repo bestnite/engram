@@ -8,7 +8,6 @@ package views
 type PresetListData struct {
 	Layout    LayoutData
 	Heading   string
-	Intro     string
 	EmptyText string
 	Cards     []PresetCardData
 }

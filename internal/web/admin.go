@@ -232,9 +232,10 @@ func (s *Server) adminLayout(c *gin.Context, loc *i18n.Localizer, titleKey, acti
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
 	}
-	// 语言切换下拉与页脚仓库链接对所有页面外壳一致；管理页额外给一个个人设置入口。
+	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致。
 	s.decorateLayout(c, loc, &layout)
-	layout.Nav = []views.NavItem{{Label: loc.T("nav.settings"), Href: "/settings"}}
+	// 顶部导航走全站唯一构造器（M8-7）：管理面板的每个子页都把「管理」标为当前项。
+	layout.Nav = s.mainNav(c, loc, "/admin")
 	layout.SessionLabel = loc.T("nav.logout")
 	layout.SessionHref = "/logout"
 	layout.SessionForm = true

@@ -99,7 +99,6 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		ReviewLabel:         loc.T("decks.list.review"),
 		ReviewSelectedLabel: loc.T("decks.list.review_selected"),
 		SelectLabel:         loc.T("decks.list.select_label"),
-		SelectHint:          loc.T("decks.list.select_hint"),
 		// M5-9：卡组包导入入口放在列表头部，不再往全局导航塞第六项。
 		ImportLabel: loc.T("decks.list.import"),
 		ImportHref:  "/import",
@@ -107,6 +106,7 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		SharingLabel: loc.T("decks.list.sharing"),
 		Rows:         rows,
 		NewHeading:   loc.T("decks.list.new_heading"),
+		CloseLabel:   loc.T("common.close"),
 		NameLabel:    loc.T("decks.list.name_label"),
 		NameValue:    nameValue,
 		DescLabel:    loc.T("decks.list.desc_label"),

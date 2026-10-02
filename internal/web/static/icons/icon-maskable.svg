@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Engram">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g>
+    <rect x="184" y="140" width="192" height="140" rx="26" fill="#93c5fd"/>
+    <rect x="160" y="178" width="192" height="140" rx="26" fill="#60a5fa"/>
+    <rect x="136" y="216" width="192" height="140" rx="26" fill="#2563eb"/>
+  </g>
+</svg>

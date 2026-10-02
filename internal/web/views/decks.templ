@@ -10,13 +10,11 @@ templ DeckListPage(data DeckListData) {
 				<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 					<div>
 						<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
-						if len(data.Rows) > 0 {
-							<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{ data.SelectHint }</p>
-						}
 					</div>
-					<div class="flex items-center gap-2">
+					<div class="flex flex-wrap items-center gap-2">
+						<button class="inline-flex items-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="button" data-dialog-open="new-deck-dialog">{ data.NewHeading }</button>
 						if len(data.Rows) > 0 {
-							<button class="inline-flex items-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.ReviewSelectedLabel }</button>
+							<button class="inline-flex items-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.ReviewSelectedLabel }</button>
 						}
 						<a class="inline-flex items-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.ImportHref }>{ data.ImportLabel }</a>
 					</div>
@@ -80,39 +78,47 @@ templ DeckListPage(data DeckListData) {
 				}
 			</form>
 
-			<!-- 新建卡组表单 -->
-			<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-				<div>
-					<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.NewHeading }</h2>
+			<!-- 新建卡组对话框（M8-7）：原生 dialog 元素，按钮由 JS 打开；无 JS 时 noscript 样式让表单静态可见。 -->
+			<dialog id="new-deck-dialog" open?={ data.ErrorMessage != "" } class="m-auto max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-200/80 bg-white p-0 shadow-xl backdrop:bg-zinc-950/40 dark:border-zinc-800 dark:bg-zinc-900">
+				<div class="space-y-6 p-6 sm:p-8" data-dialog-panel>
+					<div class="flex items-start justify-between gap-4">
+						<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.NewHeading }</h2>
+						<button class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors cursor-pointer" type="button" data-dialog-close aria-label={ data.CloseLabel }>
+							<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+						</button>
+					</div>
+					if data.ErrorMessage != "" {
+						<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
+							{ data.ErrorMessage }
+						</div>
+					}
+					<form class="space-y-4" method="post" action="/decks">
+						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.NameLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="name" value={ data.NameValue } required/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DescLabel }</span>
+							<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="description" value={ data.DescValue }/>
+						</label>
+						<label class="block">
+							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PresetLabel }</span>
+							<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="preset_id">
+								for _, p := range data.Presets {
+									<option value={ p.Value } selected?={ p.Selected }>{ p.Label }</option>
+								}
+							</select>
+						</label>
+						<div class="pt-2">
+							<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLabel }</button>
+						</div>
+					</form>
 				</div>
-				if data.ErrorMessage != "" {
-					<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs" role="alert">
-						{ data.ErrorMessage }
-					</div>
-				}
-				<form class="space-y-4" method="post" action="/decks">
-					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.NameLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="name" value={ data.NameValue } required/>
-					</label>
-					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DescLabel }</span>
-						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="description" value={ data.DescValue }/>
-					</label>
-					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PresetLabel }</span>
-						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="preset_id">
-							for _, p := range data.Presets {
-								<option value={ p.Value } selected?={ p.Selected }>{ p.Label }</option>
-							}
-						</select>
-					</label>
-					<div class="pt-2">
-						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLabel }</button>
-					</div>
-				</form>
-			</section>
+				<noscript>
+					@rawHTML(noscriptDialogStyle)
+				</noscript>
+			</dialog>
 		</div>
 	}
 }

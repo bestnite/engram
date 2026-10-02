@@ -74,6 +74,7 @@ func (s *Server) requireUser(c *gin.Context) (*store.User, bool) {
 }
 
 // pageLayout 构造普通页面（列表/编辑）的外壳数据；文案全部取自语言包。
+// 顶部导航走全站唯一构造器 mainNav（M8-7），active 取当前请求路径。
 func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string) views.LayoutData {
 	layout := views.LayoutData{
 		Lang:       loc.Locale(),
@@ -84,24 +85,16 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
 		MediaJSURL: s.assets.URL("js/media.js"),
-		Nav: []views.NavItem{
-			{Label: loc.T("nav.today"), Href: "/"},
-			{Label: loc.T("nav.decks"), Href: "/decks"},
-			{Label: loc.T("nav.stats"), Href: "/stats"},
-		},
 	}
-	// 语言切换下拉与页脚仓库链接对所有页面外壳一致。
+	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致。
 	s.decorateLayout(c, loc, &layout)
+	layout.Nav = s.mainNav(c, loc, c.Request.URL.Path)
 	layout.SessionLabel = loc.T("nav.login")
 	layout.SessionHref = "/login"
 	if _, ok := auth.CurrentUser(c); ok {
 		layout.SessionLabel = loc.T("nav.logout")
 		layout.SessionHref = "/logout"
 		layout.SessionForm = true
-		// M9-9：预设页入口对每个已登录用户可见（未登录不显示，避免点进去被重定向）。
-		layout.Nav = append(layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
-		// 个人设置页入口对每个已登录用户可见。
-		layout.Nav = append(layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
 		if sess, ok := auth.CurrentSession(c); ok {
 			layout.CSRF = sess.CSRFToken
 		}

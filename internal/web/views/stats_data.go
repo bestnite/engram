@@ -32,7 +32,6 @@ type StatsCurveRow struct {
 type StatsData struct {
 	Layout  LayoutData
 	Heading string
-	Intro   string
 	// Empty 非空时页面只显示这句话（还没有任何可统计的数据）。
 	Empty string
 

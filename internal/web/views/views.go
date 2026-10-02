@@ -33,6 +33,10 @@ type LayoutData struct {
 	CSSURL     string
 	HTMXURL    string
 	MathJaxURL string
+	// IconURL / AppleTouchIconURL 是内容哈希化的图标路径（M8-7）：SVG favicon 与
+	// iOS 主屏图标（180×180 PNG）。为空串时模板跳过引用。
+	IconURL           string
+	AppleTouchIconURL string
 	// MediaJSURL 是编辑器媒体上传脚本的内容哈希 URL（M2-9）；为空串时模板跳过引用。
 	MediaJSURL string
 	// Nav 是顶部导航项（标签已本地化）。
@@ -47,10 +51,12 @@ type LayoutData struct {
 	CSRF string
 }
 
-// NavItem 是一个导航链接。
+// NavItem 是一个导航链接。Active 为 true 时它是当前页对应的项（服务端渲染高亮，
+// 不再由前端按 href 猜测；M8-7）。
 type NavItem struct {
-	Label string
-	Href  string
+	Label  string
+	Href   string
+	Active bool
 }
 
 // LanguageOption 是示例页上的一枚语言切换入口。
@@ -64,7 +70,6 @@ type LanguageOption struct {
 type HomeData struct {
 	Layout     LayoutData
 	Heading    string
-	Intro      string
 	StartLabel string
 	// DecksLabel / DecksHref 是首页进入卡组列表的入口（M2-11）。
 	DecksLabel string

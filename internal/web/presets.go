@@ -69,7 +69,6 @@ func (s *Server) presetList(c *gin.Context) {
 	data := views.PresetListData{
 		Layout:    s.pageLayout(c, loc, "presets.title"),
 		Heading:   loc.T("presets.heading"),
-		Intro:     loc.T("presets.intro"),
 		EmptyText: loc.T("presets.empty"),
 		Cards:     cards,
 	}

@@ -14,14 +14,10 @@
   translation: "Sign out"
 - id: home.heading
   translation: "Today's review"
-- id: home.intro
-  translation: "Start today's review from any deck; progress is stored per account, so sharing a deck never mixes two users' schedules."
 - id: home.start_review
   translation: "Start review"
 - id: home.language_label
   translation: "Interface language"
-- id: footer.powered_by
-  translation: "Self-hosted · your data stays on your own machine"
 - id: language.zh-CN
   translation: "中文"
 - id: language.en
@@ -38,8 +34,6 @@
   translation: "Register"
 - id: auth.register.heading
   translation: "Create your account"
-- id: auth.register.intro
-  translation: "After registering you get your own review progress; sharing a deck never mixes in someone else's schedule."
 - id: auth.register.invite_intro
   translation: "You are registering with an invite link; the invite can be used only once."
 - id: auth.register.submit
@@ -51,7 +45,7 @@
 - id: auth.setup.heading
   translation: "Create the first administrator"
 - id: auth.setup.intro
-  translation: "This is the first start. Create the first administrator account; this page is unavailable once an administrator exists."
+  translation: "Create the first admin account."
 - id: auth.setup.submit
   translation: "Create administrator"
 - id: auth.field.username
@@ -472,7 +466,7 @@
 - id: sharing.visibility.label
   translation: "Who can see it"
 - id: sharing.visibility.note
-  translation: "private is visible to grantees only; unlisted is reachable by link and never listed; public is visible to any signed-in user and can be copied."
+  translation: "private: grantees only · unlisted: link only · public: any signed-in user"
 - id: sharing.visibility.submit
   translation: "Save visibility"
 - id: sharing.visibility.private
@@ -895,8 +889,6 @@
   translation: "Scheduling presets"
 - id: presets.heading
   translation: "Scheduling presets and parameter optimisation"
-- id: presets.intro
-  translation: "The weights drive interval scheduling. Optimising them needs enough review history and must be computed by the optimiser adapter."
 - id: presets.empty
   translation: "No scheduling preset yet. A default preset is created automatically when you create a deck."
 - id: presets.retention_label
@@ -1207,8 +1199,6 @@
   translation: "Statistics"
 - id: stats.heading
   translation: "Statistics and insights"
-- id: stats.intro
-  translation: "Every number is aggregated from the review log and card states; the definitions are in section 9 of the design document."
 - id: stats.empty
   translation: "No data to chart yet. Start reviewing and the charts will appear here."
 - id: stats.volume.heading
@@ -1978,6 +1968,6 @@
   translation: "Review selected"
 - id: decks.list.select_label
   translation: "Select this deck"
-- id: decks.list.select_hint
-  translation: "Select several decks, then click \"Review selected\" to study them together."
 
+- id: common.close
+  translation: "Close"

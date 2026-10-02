@@ -110,25 +110,63 @@
       backdrop.onclick = closeMobileNav;
     }
 
-    // 导航项高亮
-    var path = window.location.pathname;
-    var links = document.querySelectorAll("header nav a, #mobile-nav-menu a");
-    links.forEach(function (link) {
-      var href = link.getAttribute("href");
-      if (href) {
-        if (href === path || (href !== "/" && path.indexOf(href) === 0)) {
-          link.classList.add("bg-zinc-100", "dark:bg-zinc-800", "text-zinc-950", "dark:text-zinc-100", "font-semibold");
-          link.classList.remove("text-zinc-600", "dark:text-zinc-400");
-        }
-        link.addEventListener("click", function () {
-          closeMobileNav();
-        });
-      }
+    // 导航项高亮由服务端渲染（M8-7）：不再按 href 猜测当前页——旧做法用
+    // `header nav a` 选择器，会把品牌链接也算进去，于是 "/" 上品牌被选中。
+    // 这里只保留“点任意导航链接后收起移动抽屉”。
+    var navLinks = document.querySelectorAll("header nav a, #mobile-nav-menu a");
+    navLinks.forEach(function (link) {
+      link.addEventListener("click", function () {
+        closeMobileNav();
+      });
     });
+
+    // 原生对话框（新建卡组等，M8-7）。
+    setupDialogs();
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         closeMobileNav();
+      }
+    });
+  }
+
+  // setupDialogs 把带 data-dialog-open 的按钮接到对应 <dialog>，并处理关闭与点击遮罩。
+  // 这里不含任何用户文案：可访问名称来自模板（语言包）。模板在错误回显时给对话框加
+  // open 属性（非模态），这里摘掉属性再以模态打开，保证遮罩与居中一致。
+  function setupDialogs() {
+    document.querySelectorAll("[data-dialog-open]").forEach(function (trigger) {
+      trigger.addEventListener("click", function (e) {
+        e.preventDefault();
+        var dialog = document.getElementById(trigger.getAttribute("data-dialog-open"));
+        if (dialog && typeof dialog.showModal === "function") {
+          dialog.showModal();
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-dialog-close]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        var dialog = btn.closest("dialog");
+        if (dialog) {
+          dialog.close();
+        }
+      });
+    });
+
+    document.querySelectorAll("dialog").forEach(function (dialog) {
+      // 点击对话框自身（内层面板之外）即视为点击遮罩，关闭。
+      dialog.addEventListener("click", function (e) {
+        if (e.target === dialog) {
+          dialog.close();
+        }
+      });
+      // 错误回显：模板已带 open 属性，升级为模态（Escape 与遮罩随之生效）。
+      if (dialog.hasAttribute("open")) {
+        dialog.removeAttribute("open");
+        if (typeof dialog.showModal === "function") {
+          dialog.showModal();
+        }
       }
     });
   }

@@ -102,7 +102,6 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 	data := views.StatsData{
 		Layout:           s.pageLayout(c, loc, "stats.title"),
 		Heading:          loc.T("stats.heading"),
-		Intro:            loc.T("stats.intro"),
 		VolumeHeading:    loc.T("stats.volume.heading"),
 		DueHeading:       loc.T("stats.due.heading"),
 		RetentionHeading: loc.T("stats.retention.heading"),

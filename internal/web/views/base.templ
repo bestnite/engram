@@ -9,6 +9,12 @@ templ Base(data LayoutData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="theme-color" content="#18181b"/>
 			<link rel="manifest" href="/manifest.webmanifest"/>
+			if data.IconURL != "" {
+				<link rel="icon" type="image/svg+xml" href={ data.IconURL }/>
+			}
+			if data.AppleTouchIconURL != "" {
+				<link rel="apple-touch-icon" href={ data.AppleTouchIconURL }/>
+			}
 			<title>{ data.Title }</title>
 			if data.CSSURL != "" {
 				<link rel="stylesheet" href={ data.CSSURL }/>
@@ -37,7 +43,11 @@ templ Base(data LayoutData) {
 						if len(data.Nav) > 0 {
 							<div class="hidden sm:flex items-center gap-1">
 								for _, item := range data.Nav {
-									<a class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+									if item.Active {
+										<a aria-current="page" class="rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors bg-zinc-100 dark:bg-zinc-800 text-zinc-950 dark:text-zinc-100 font-semibold" href={ item.Href }>{ item.Label }</a>
+									} else {
+										<a class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+									}
 								}
 							</div>
 						}
@@ -96,7 +106,11 @@ templ Base(data LayoutData) {
 					if len(data.Nav) > 0 {
 						<div class="space-y-1">
 							for _, item := range data.Nav {
-								<a class="flex items-center min-h-11 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+								if item.Active {
+									<a aria-current="page" class="flex items-center min-h-11 rounded-xl px-3.5 py-2.5 text-sm font-medium hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors bg-zinc-100 dark:bg-zinc-800 text-zinc-950 dark:text-zinc-100 font-semibold" href={ item.Href }>{ item.Label }</a>
+								} else {
+									<a class="flex items-center min-h-11 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors" href={ item.Href }>{ item.Label }</a>
+								}
 							}
 						</div>
 					}

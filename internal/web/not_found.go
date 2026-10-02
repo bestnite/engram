@@ -9,7 +9,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
 
@@ -60,15 +59,9 @@ func (s *Server) renderNotFoundPage(c *gin.Context) {
 			Title:      loc.T("notfound.title"),
 			Brand:      s.siteName(c.Request.Context(), loc),
 			HomeURL:    "/",
-			Footer:     loc.T("footer.powered_by"),
 			CSSURL:     s.assets.URL("css/tailwind.css"),
 			HTMXURL:    s.assets.URL("js/htmx.min.js"),
 			MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-			Nav: []views.NavItem{
-				{Label: loc.T("nav.today"), Href: "/"},
-				{Label: loc.T("nav.decks"), Href: "/decks"},
-				{Label: loc.T("nav.stats"), Href: "/stats"},
-			},
 		},
 		Code:      strconv.Itoa(http.StatusNotFound),
 		Heading:   loc.T("notfound.heading"),
@@ -77,13 +70,10 @@ func (s *Server) renderNotFoundPage(c *gin.Context) {
 		HomeHref:  "/",
 	}
 	s.decorateLayout(c, loc, &data.Layout)
+	// 顶部导航与其它页面完全一致（M8-7）；404 页不命中任何导航项。
+	data.Layout.Nav = s.mainNav(c, loc, c.Request.URL.Path)
 	// 页头会话入口沿用通用外壳的规则：已登录显示登出（POST + CSRF），否则显示登录链接。
-	if u, ok := auth.CurrentUser(c); ok {
-		if u.Role == store.RoleAdmin {
-			data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.admin"), Href: "/admin"})
-		}
-		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
-		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
+	if _, ok := auth.CurrentUser(c); ok {
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true

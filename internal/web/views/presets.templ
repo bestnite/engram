@@ -7,7 +7,6 @@ templ PresetListPage(data PresetListData) {
 		<div class="space-y-6">
 			<div>
 				<h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.Heading }</h1>
-				<p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{ data.Intro }</p>
 			</div>
 			if len(data.Cards) == 0 {
 				<div class="rounded-2xl border border-zinc-200/80 bg-white p-12 text-center shadow-xs dark:border-zinc-800 dark:bg-zinc-900">

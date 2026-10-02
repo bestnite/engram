@@ -9,7 +9,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
-	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
 
@@ -38,32 +37,20 @@ func (s *Server) home(c *gin.Context) {
 		CSSURL:     s.assets.URL("css/tailwind.css"),
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-		Nav: []views.NavItem{
-			{Label: loc.T("nav.today"), Href: "/"},
-			{Label: loc.T("nav.decks"), Href: "/decks"},
-			{Label: loc.T("nav.stats"), Href: "/stats"},
-		},
 	}
-	// 语言切换下拉与页脚仓库链接对所有页面外壳一致，这里补齐。
+	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致，这里补齐。
 	s.decorateLayout(c, loc, &layout)
+	// 顶部导航走全站唯一构造器（M8-7）；当前页是首页，高亮「今日」。
+	layout.Nav = s.mainNav(c, loc, "/")
 	data := views.HomeData{
 		Layout:     layout,
 		Heading:    loc.T("home.heading"),
-		Intro:      loc.T("home.intro"),
 		StartLabel: loc.T("home.start_review"),
 		DecksLabel: loc.T("home.decks_link"),
 		DecksHref:  "/decks",
 	}
 	// 页头右侧的会话入口由当前登录状态决定：已登录显示登出（POST + CSRF），否则显示登录链接。
-	if u, ok := auth.CurrentUser(c); ok {
-		// 管理员额外看到管理面板入口（M6-1）；普通用户看不到，避免点进去吃 403。
-		if u.Role == store.RoleAdmin {
-			data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.admin"), Href: "/admin"})
-		}
-		// M9-9：预设页入口对每个已登录用户可见。
-		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
-		// 个人设置页入口对每个已登录用户可见。
-		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
+	if _, ok := auth.CurrentUser(c); ok {
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true

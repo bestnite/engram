@@ -197,7 +197,7 @@ func (s *Server) registerPage(c *gin.Context) {
 // inviteToken 非空时表单 action 与隐藏字段都携带它，提交后接受路径据此放行。
 func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int, inviteToken, errMsg string) {
 	action := "/register"
-	intro := loc.T("auth.register.intro")
+	intro := ""
 	if inviteToken != "" {
 		action = "/register?invite=" + url.QueryEscape(inviteToken)
 		intro = loc.T("auth.register.invite_intro")

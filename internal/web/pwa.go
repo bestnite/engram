@@ -37,6 +37,8 @@ var pwaShellAssets = []string{
 	"js/review.js",
 	"js/mathjax/tex-svg.js",
 	"icons/icon.svg",
+	"icons/icon-maskable.svg",
+	"icons/apple-touch-icon.png",
 }
 
 // registerPWARoutes 挂载 PWA 外壳路由。这些路由是公开的：manifest 与 service worker
@@ -45,6 +47,20 @@ func (s *Server) registerPWARoutes(router *gin.Engine) {
 	router.GET(manifestPath, s.webManifest)
 	router.GET(serviceWorkerPath, s.serviceWorker)
 	router.GET(pwaScriptPath, s.servePWAScript)
+	// /favicon.ico 不能 404（DESIGN.md §8.5）：浏览器对根路径 favicon 的探测是惯例，
+	// 重定向到哈希化的 SVG 图标即可；保持公开 GET、无鉴权。
+	router.GET("/favicon.ico", s.favicon)
+}
+
+// favicon 把 /favicon.ico 重定向到内容哈希化的 SVG 图标（M8-7）。
+// 图标未嵌入时回 404，与其它静态资源一致，而不是给出一个空响应。
+func (s *Server) favicon(c *gin.Context) {
+	icon := s.assets.URL("icons/icon.svg")
+	if icon == "" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusFound, icon)
 }
 
 // manifestIcon 是 manifest 里的一项图标声明。
@@ -89,12 +105,21 @@ func (s *Server) webManifest(c *gin.Context) {
 		ThemeColor:      "#2563eb",
 	}
 	if icon := s.assets.URL("icons/icon.svg"); icon != "" {
-		body.Icons = []manifestIcon{{
+		body.Icons = append(body.Icons, manifestIcon{
 			Src:     icon,
 			Sizes:   "any",
 			Type:    "image/svg+xml",
-			Purpose: "any maskable",
-		}}
+			Purpose: "any",
+		})
+	}
+	// maskable 必须白底满幅（透明会被平台裁掉或补黑边）；自适应蓝白切换只给 any 图标。
+	if maskable := s.assets.URL("icons/icon-maskable.svg"); maskable != "" {
+		body.Icons = append(body.Icons, manifestIcon{
+			Src:     maskable,
+			Sizes:   "512x512",
+			Type:    "image/svg+xml",
+			Purpose: "maskable",
+		})
 	}
 
 	c.Header("Content-Type", "application/manifest+json; charset=utf-8")
