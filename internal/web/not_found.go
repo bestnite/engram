@@ -76,12 +76,14 @@ func (s *Server) renderNotFoundPage(c *gin.Context) {
 		HomeLabel: loc.T("notfound.home_action"),
 		HomeHref:  "/",
 	}
+	s.decorateLayout(c, loc, &data.Layout)
 	// 页头会话入口沿用通用外壳的规则：已登录显示登出（POST + CSRF），否则显示登录链接。
 	if u, ok := auth.CurrentUser(c); ok {
 		if u.Role == store.RoleAdmin {
 			data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.admin"), Href: "/admin"})
 		}
 		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.presets"), Href: "/presets"})
+		data.Layout.Nav = append(data.Layout.Nav, views.NavItem{Label: loc.T("nav.settings"), Href: "/settings"})
 		data.Layout.SessionLabel = loc.T("nav.logout")
 		data.Layout.SessionHref = "/logout"
 		data.Layout.SessionForm = true
