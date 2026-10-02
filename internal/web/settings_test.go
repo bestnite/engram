@@ -12,8 +12,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // postProfile 提交个人设置页的资料表单（M1-8）。所有字段都给全，避免用零值掩盖校验路径。

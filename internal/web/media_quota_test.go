@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/media"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/store"
 	"gorm.io/gorm"
 )
 

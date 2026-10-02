@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // testEnv 是 API 测试的装配：真实 SQLite + 全部 store + 可注入时钟。

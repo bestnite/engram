@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // OIDC 登录流程（DESIGN.md §4.4、§4.5；ROADMAP.md M1-11）。

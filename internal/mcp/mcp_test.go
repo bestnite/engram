@@ -18,9 +18,9 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	gorm "gorm.io/gorm"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // ---- 测试装配 ----

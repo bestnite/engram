@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 权限判定的两个哨兵错误；调用方据此决定 HTTP 状态与稳定 code：

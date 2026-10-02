@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestAdminAPIKeysNeverLeakPlaintext 是 M6-9 的核心验收：创建一把 key 之后，

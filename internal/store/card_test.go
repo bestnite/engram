@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // TestCardStoreByNoteScopesToNote 覆盖 ByNote 只返回目标 note 的卡片，并按 ordinal 升序。

@@ -16,8 +16,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M9-10 的生产接线：把 M9-2 的 Rust 适配器（tools/optimizer）接进作业链路。

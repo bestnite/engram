@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestUnconfiguredReturnsErrNotConfigured 是 M1-17 的门禁核心：未配置 SMTP 时

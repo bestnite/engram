@@ -11,7 +11,7 @@ import (
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // degradedWeights 把初始稳定性权重压到下限，造出一套与适配器输出明显不同的旧权重，

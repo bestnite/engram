@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // CardStore 封装 cards 表的 GORM 访问。

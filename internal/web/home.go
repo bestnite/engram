@@ -7,10 +7,10 @@ import (
 	"github.com/a-h/templ"
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // mathFormula 演示自托管 MathJax 的 TeX 定界符（DESIGN.md §8.2 用 \( \) 与 \[ \]）。

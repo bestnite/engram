@@ -13,10 +13,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // cliOut 是 CLI 的诊断/报告输出目标；测试替换它来捕获输出（默认 stdout）。

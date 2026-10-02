@@ -8,7 +8,7 @@ import (
 
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // allRecalledLog 造一份固定的复习日志：cards 张卡各 days 条复习（连续天数、全部 Good），

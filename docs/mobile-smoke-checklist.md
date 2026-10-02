@@ -139,7 +139,7 @@ $ go test ./internal/web/ -run 'TestManifestIsStandaloneAndUsesHashedIcon|TestSe
 --- PASS: TestReviewTouchSequenceRatesCard (0.03s)
 --- PASS: TestReviewPageTouchTargets (0.25s)
 PASS
-ok  	example.com/engram/internal/web	1.271s
+ok  	git.nite07.com/nite/engram/internal/web	1.271s
 ```
 
 **脱敏与模板文案检查**（本轮提交前门槛）：

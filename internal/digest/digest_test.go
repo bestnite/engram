@@ -10,12 +10,12 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/pgtest"
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/pgtest"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // fakeEnqueuer 记录入队的邮件，避免依赖真实 SMTP 或 outbox worker；

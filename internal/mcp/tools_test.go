@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // ---- M4-7：工具与 REST 行为一致 ----

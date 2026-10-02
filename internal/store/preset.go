@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // 调度参数的文档化默认值（DESIGN.md §2.2、§3.2、§3.5）。

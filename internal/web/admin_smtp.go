@@ -8,11 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // SMTP 配置页（DESIGN.md §4.7；AGENTS.md M1-17）。

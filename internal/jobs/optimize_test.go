@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // seedOptimizeReviews 直接写入 n 条复习日志，作为优化门槛的燃料。

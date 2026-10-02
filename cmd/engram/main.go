@@ -15,18 +15,18 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/digest"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/jobs"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/mcp"
-	"example.com/engram/internal/media"
-	"example.com/engram/internal/reminder"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/digest"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/jobs"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/mcp"
+	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/reminder"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web"
 )
 
 // version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 dev。

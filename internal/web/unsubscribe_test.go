@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-22（RFC 8058 一键退订）的 HTTP 级验收。覆盖三条验收：

@@ -12,9 +12,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-20 的 HTTP 级验收：邀请码可由管理员直接寄到被邀请人邮箱（B 类）。

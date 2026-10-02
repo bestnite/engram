@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 卡组包（.edeck）的 REST 入口（DESIGN.md §7.6、M5-6/M5-7）：

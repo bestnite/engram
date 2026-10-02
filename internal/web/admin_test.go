@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"gorm.io/gorm"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"golang.org/x/text/language"
 
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // testSecretKey 是测试用的 ENCRYPTION_KEY：base64(32 字节)，与任何真实密钥无关。

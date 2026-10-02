@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gorm.io/gorm"
 	"io"
 	"io/fs"
 	"net/http"
@@ -15,14 +14,16 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/media"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 系统设置页与全库导出（DESIGN.md §8.4；ROADMAP.md M6-5）。

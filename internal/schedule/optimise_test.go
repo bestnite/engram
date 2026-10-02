@@ -10,7 +10,7 @@ import (
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // optimiseDB 打开临时 SQLite 并迁移全部表，供本文件的「落库 → 调度器」用例使用。

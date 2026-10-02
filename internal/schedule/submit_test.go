@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestSubmitWritesStateAndReviewInOneTransaction 断言一次提交同时写出 card_states 与

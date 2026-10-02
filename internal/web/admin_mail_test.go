@@ -10,9 +10,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/jobs"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/jobs"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-24（D 类管理员通知邮件）的验收测试。

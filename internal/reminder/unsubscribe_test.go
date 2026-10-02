@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestReminderCarriesUnsubscribeHeaders 是 M1-22 在 C 类发信方一侧的证据：

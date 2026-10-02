@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 管理面板注册与邀请（M6-3）的 HTTP 级验收。

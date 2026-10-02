@@ -6,10 +6,10 @@ import (
 
 	"golang.org/x/text/language"
 
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/jobs"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/jobs"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // succeededJobWithResult 造一个 succeeded 的作业行，result_json 为给定结果。

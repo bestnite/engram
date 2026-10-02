@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-19（A 类事务安全邮件）的一次性令牌服务：签发与消费。

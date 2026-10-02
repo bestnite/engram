@@ -12,7 +12,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-16 三条验收的端到端证据（httptest 走真实路由 + 真实 SQLite）：

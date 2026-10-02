@@ -13,12 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/cardtype"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 复习页的三个端点（M3-5）。评分与动作都返回主区域片段（htmx outerHTML swap），

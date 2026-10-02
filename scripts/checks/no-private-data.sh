@@ -54,7 +54,7 @@ rule "内网专用主机后缀（.internal/.corp/.lan/.intranet/.localdomain）"
 #    源码里的 `password: "..."` 是测试夹具或字段名，不是提交的凭据，故不在此列。
 creds=$(git grep -niE --color=never \
   -e '(password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|encryption[_-]?key|master[_-]?key)[[:space:]]*[:=][[:space:]]*[^[:space:]]+' \
-  -- "${EXCLUDES[@]}" '*.md' '*.yaml' '*.yml' '*.json' '*.toml' '*.ini' '*.conf' '*.properties' '*.sh' '*.env*' '.env.example' 'Containerfile' 2>/dev/null || true)
+  -- "${EXCLUDES[@]}" '*.md' '*.yaml' '*.yml' '*.json' '*.toml' '*.ini' '*.conf' '*.properties' '*.sh' '*.env*' '.env.example' 'Dockerfile' 2>/dev/null || true)
 creds=$(printf '%s\n' "$creds" | grep -viE '[=:][[:space:]]*["'"'"']?(CHANGE_ME|example|REDACTED|REDACT|placeholder|xxxx|\*\*\*|<[A-Za-z_]+>|\$\{[A-Za-z_]|%s)' || true)
 rule "疑似真实凭据赋值（非占位值）" "$creds"
 

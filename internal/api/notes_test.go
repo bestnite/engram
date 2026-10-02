@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // doJSON 发一个带 bearer key 的 JSON 请求并返回状态码与响应体。

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestAuthenticatorNegativeCases 覆盖 M4-2 的四种反面用例：

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // schedulerForDeck 取卡组的调度器（由卡组预设构造）。

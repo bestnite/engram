@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"example.com/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // TestPresetGradeMappingRoundTrip 是 M3-6 的存储验收：分数→评分档位映射存进 preset

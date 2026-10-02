@@ -17,7 +17,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // newTestRunner 打开临时 SQLite 库、迁移表、构造并启动 Runner；ctx 在清理时取消。

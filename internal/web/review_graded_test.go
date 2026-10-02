@@ -10,8 +10,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/schedule"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // seedGradedNote 建一张作答类 note（M3-12 验收用）。

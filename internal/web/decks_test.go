@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestDeckCreateAppearsInList 是 M2-11 的主验收：登录用户在 /decks 建卡组后能在列表中看到它。

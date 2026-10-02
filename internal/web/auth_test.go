@@ -14,8 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // testEncryptionKey 是测试用 AES-GCM 主密钥（base64 的 32 字节），与生产无关。

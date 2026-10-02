@@ -14,8 +14,8 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // version 由构建注入；未注入时为 dev，仅用于 MCP 实现信息。

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // startFakeSMTP 在测试进程内起一个最小 SMTP 服务，只应答投递所需命令。

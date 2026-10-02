@@ -3,8 +3,8 @@ package mcp
 import (
 	"context"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件定义九个 MCP 工具的入参类型与处理器；每个处理器只做参数整形，

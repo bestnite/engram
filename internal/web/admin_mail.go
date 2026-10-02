@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-24：D 类管理员通知邮件（DESIGN.md §4.7、ROADMAP.md M1-24）。

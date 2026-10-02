@@ -13,10 +13,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/jobs"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/jobs"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // newPresetsServer 装配一个带作业执行器的测试服务并登录 owner。

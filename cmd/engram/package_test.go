@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 	"gorm.io/gorm"
 )
 

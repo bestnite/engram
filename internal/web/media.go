@@ -14,8 +14,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/media"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 媒体相关的系统设置键与对应的环境变量覆盖名（DESIGN.md §6.3、§8.4）。

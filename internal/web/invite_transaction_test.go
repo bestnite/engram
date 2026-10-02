@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"testing"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestInviteAcceptFailureKeepsTokenUsable 是 B-12 的 HTTP 级反面验收：

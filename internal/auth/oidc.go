@@ -17,7 +17,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // OIDC 客户端（DESIGN.md §4.4、§4.5；ROADMAP.md M1-15）。

@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // testDB 开一个临时 SQLite 库并迁移全部模型（含 mail_outbox）。

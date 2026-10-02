@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // newDeckWithNote 建一个卡组与一张 basic note，返回两者。

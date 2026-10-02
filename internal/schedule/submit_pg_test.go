@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/pgtest"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/pgtest"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestSubmitConcurrentFirstReviewIsAtomic 是 M3-10 的验收用例：在真实 PostgreSQL 上

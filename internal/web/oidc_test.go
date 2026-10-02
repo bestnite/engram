@@ -18,8 +18,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-11 / M6-4 的验收测试：用一个自写的 stub OIDC provider（httptest + 测试内生成的

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // uploadMedia 以 multipart 提交一个名为 file 的上传；declared 作为该part的 Content-Type。

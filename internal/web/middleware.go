@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/language"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
 )
 
 // SessionUserLocale 是 Deps.UserLocale 的默认实现：从已解析的会话用户取界面语言。

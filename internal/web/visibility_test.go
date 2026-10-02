@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // setVisibility 通过共享管理页的可见性表单修改卡组可见性。

@@ -12,7 +12,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // newWiringDB 打开临时 SQLite 库并迁移，供 M9-10 接线用例复用。

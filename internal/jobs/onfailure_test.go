@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-24 的作业侧验收：作业失败落库后，OnFailure 钩子被调用一次，

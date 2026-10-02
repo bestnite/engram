@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-19（A 类事务安全邮件）的入站投递助手。

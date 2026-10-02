@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // PWA 外壳（M8-2，DESIGN.md §8.5）。

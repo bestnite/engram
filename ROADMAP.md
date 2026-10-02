@@ -23,7 +23,7 @@ Conventions:
 
 ### M0 — Skeleton
 
-- [x] **M0-1 Module bootstrap** — create `go.mod` (module `example.com/engram`, Go 1.25+),
+- [x] **M0-1 Module bootstrap** — create `go.mod` (module `git.nite07.com/nite/engram`, Go 1.26+),
   `cmd/engram/main.go` with subcommand dispatch (`serve`, `schema sync`, `export`,
   `optimize`, `version`), `LICENSE` placeholder, `.env.example` kept in sync with
   `internal/config`.
@@ -66,7 +66,7 @@ Conventions:
   the sanitisation keyword scan, the i18n parity check, and a check that no user-facing
   literal appears in templates.
   *Acceptance:* the pipeline fails on a deliberately planted violation of each check.
-- [x] **M0-11 Container build (optional)** — multi-stage `Containerfile` producing a
+- [x] **M0-11 Container build (optional)** — multi-stage `Dockerfile` producing a
   single static binary image; no private registry, host names, or deployment specifics.
   *Acceptance:* image builds locally and serves `/healthz`.
 
@@ -681,12 +681,11 @@ completion percentage until they are moved into a release milestone.
 
 ### Backlog (no milestone yet)
 
-- [ ] **B-1 Module path** — the project name is decided (2026-10-02): **Engram**. The module path
-  still needs one fact before it can be replaced: where the repository will be published, because the
-  path is `github.com/<account>/engram` or a self-hosted equivalent. Do **not** use a private domain in
-  the path — `AGENTS.md` §2.2 forbids real domains in committed files and the sanitiser will catch it.
-  Renaming is a single exclusive lane: it rewrites every import, the binary name, the Containerfile,
-  CI, scripts and all documentation, so nothing else may be in flight while it runs.
+- [x] **B-1 Module path** — decided (2026-10-02): **`git.nite07.com/nite/engram`** — the project's self-hosted
+  Gitea instance, chosen over a `github.com/<account>/engram` path. The rename ran as a single
+  exclusive lane: every import, the binary name, the container build file, CI, scripts and all
+  documentation. The module path is the one documented exception to the sanitisation rule
+  (`AGENTS.md` §2.2); its host is registered in `scripts/checks/allowed-hosts.txt`.
 - [x] **B-2 LICENSE** — decided (2026-10-02): **AGPL-3.0**. It matches the requirement that nobody may
   offer this as a *closed-source* SaaS while keeping the project open source. Recorded with the
   caveat that AGPL does not forbid charging: a competitor may still host it commercially, they simply

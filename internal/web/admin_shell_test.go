@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // newAdminServer 复用 newNotesServer：它创建的 owner 就是管理员，同时提供 admin 会话与 CSRF。

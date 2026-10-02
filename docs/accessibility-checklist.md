@@ -108,7 +108,7 @@ $ go test ./internal/web/ -run 'TestAccessibility|TestUnlabelled' -count=1 -v
     a11y_test.go:235: review.js: keydown handler covers space/Enter, 1–4, u/e/s/b
 --- PASS: TestAccessibilityReviewKeyboardShortcuts (0.00s)
 PASS
-ok  	example.com/engram/internal/web	1.273s
+ok  	git.nite07.com/nite/engram/internal/web	1.273s
 ```
 
 **脱敏与模板文案检查（提交前门槛，`git add` 之后运行）**：

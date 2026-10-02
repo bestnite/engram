@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestEnqueueDoesNotSendInRequestPath 是 M1-17 的核心约束之一：Enqueue 只写队列表。

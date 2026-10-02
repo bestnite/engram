@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestQueueHonoursDeckDailyCaps 是 M3-8 的验收用例：每日上限必须来自卡组列，

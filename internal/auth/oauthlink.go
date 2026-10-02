@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 身份绑定决策的稳定错误值；transport 层据此映射到稳定英文 code 与本地化文案

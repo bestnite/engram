@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/store"
-	"example.com/engram/internal/web"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/web"
 )
 
 // testSessionSecret 是集成测试用的会话签名密钥；仅用于测试，与生产无关。

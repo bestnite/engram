@@ -47,7 +47,7 @@ docker run -d --name engram -p 8080:8080 \
 
 ## 用 PostgreSQL 部署
 
-PostgreSQL 是默认部署库。用 `Containerfile` 构建容器镜像，或直接运行二进制，环境变量相同。
+PostgreSQL 是默认部署库。用 `Dockerfile` 构建容器镜像，或直接运行二进制，环境变量相同。
 
 ```bash
 docker run -d --name engram -p 8080:8080 \

@@ -36,3 +36,7 @@ templ.guide
 # 登记理由：LICENSE 是许可证正文，属于“不该为了过扫描而修改”的文件（AGENTS.md §2.2）。
 gnu.org
 fsf.org
+
+# Go 模块路径的发布地址（项目自己的代码托管）：AGENTS.md §2.2 的显式例外。
+# 它是项目发布地址而非私有基建，允许出现在 go get 说明与克隆地址里。
+git.nite07.com

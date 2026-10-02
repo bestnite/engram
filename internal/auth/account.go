@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 账号服务的稳定错误值；transport 层据此映射到稳定英文 code。

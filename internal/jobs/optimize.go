@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是参数优化在本包的服务端门槛与结果写回（ROADMAP.md M9-5）。

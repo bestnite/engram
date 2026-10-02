@@ -48,7 +48,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      # 版本取 go.mod 声明的值（当前 1.25）：这是本仓库的兼容下限，也免去手工同步。
+      # 版本取 go.mod 声明的值（当前 1.26）：这是本仓库的兼容下限，也免去手工同步。
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

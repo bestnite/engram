@@ -52,7 +52,7 @@ Open `http://localhost:8080/`; the first visit goes to `/setup` to create the fi
 
 ## Deploying with PostgreSQL
 
-PostgreSQL is the default deployment database. Build the container image from `Containerfile`, or
+PostgreSQL is the default deployment database. Build the container image from `Dockerfile`, or
 run the binary with the same environment.
 
 ```bash

@@ -8,7 +8,7 @@ import (
 
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件实现 ROADMAP.md M9-11：在 Go 里用 go-fsrs 重放复习日志，算出「优化前/后」的拟合指标。

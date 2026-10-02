@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"testing"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestMutationsWriteExactlyOneAuditRow 是 M1-10 的接线验收：注册、登录、登出各写一行，

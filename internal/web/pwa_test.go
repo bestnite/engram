@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // swAssetList 从生成的 service worker 脚本里解析 STATIC_ASSETS 数组。

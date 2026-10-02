@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // documentedKinds 是 DESIGN.md §6.2 冻结的十个内置题型。

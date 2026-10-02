@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 流式导出（M4-5）。放在独立文件里，与批量导入（M4-4）的内部实现分开，

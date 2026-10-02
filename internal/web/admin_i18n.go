@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/web/views"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 管理面板的语言包完整度报告（DESIGN.md §8.3；ROADMAP.md M8-4）。

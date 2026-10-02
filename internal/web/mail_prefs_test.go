@@ -11,8 +11,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // setOwnerLocale 直接把 owner 的界面语言写成 code，让偏好页以可断言的文案渲染。

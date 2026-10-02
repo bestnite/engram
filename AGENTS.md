@@ -43,7 +43,10 @@ end user → translation catalog.
   passwords, or descriptions of private infrastructure in **any** committed file —
   including examples, fixtures, comments, and documentation.
 - Use placeholders: `example.com`, `localhost`, `CHANGE_ME`.
-- Local data, credentials, generated files, and build output stay out of git
+- The Go module path is the one deliberate exception: it is the project's publication
+  address rather than private infrastructure, so it carries the real code-host domain in
+  `go.mod`, in imports, and in any documented `go get` command. That host is registered in
+  `scripts/checks/allowed-hosts.txt`. Every other real domain stays out of the repository.
   (see `.gitignore`). Run `git status` before every commit and check nothing unintended
   is staged.
 - The CI sanitisation scan must stay green; if a needed string trips it, change the
@@ -127,7 +130,7 @@ engram/
 ├── DESIGN.md                 # specification of record (maintainer-local, untracked)
 ├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
 ├── LICENSE
-├── go.mod                    # module example.com/engram
+├── go.mod                    # module git.nite07.com/nite/engram
 ├── cmd/engram/main.go     # subcommand entry point
 ├── internal/
 │   ├── config/               # env vars + settings-table overlay and precedence
@@ -165,8 +168,8 @@ touches templates or styles, because both outputs are gitignored and a stale bui
 invisible in `git status`.
 
 The Tailwind prebuilt CLI is a **glibc** binary: it cannot run inside a musl image, so the
-container builder stage must use a glibc base (`golang:1.25-bookworm`), not alpine. The
-Tailwind and templ versions are pinned in the Containerfile and the CI workflow; bump them
+container builder stage must use a glibc base (`golang:1.26-bookworm`), not alpine. The
+Tailwind and templ versions are pinned in the Dockerfile and the CI workflow; bump them
 together with `go.mod`.
 
 ### Definition of done

@@ -11,7 +11,7 @@ import (
 
 	"github.com/pquerna/otp/totp"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // newTOTPFixture 构造真实 SQLite + TOTP 存储 + 服务的环境；不 mock 数据库（AGENTS.md §2.5）。

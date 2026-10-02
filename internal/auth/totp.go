@@ -15,7 +15,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-16 的 TOTP 业务层：生成 secret、加密落库、校验验证码、一次性恢复码、关闭。

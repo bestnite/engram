@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件是 M1-24（D 类管理员通知邮件）的入站投递助手，与 security.go 的 SecurityNotifier

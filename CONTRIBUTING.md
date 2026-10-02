@@ -43,7 +43,7 @@ subagents as much as to external contributors.
 - **Go 1.26 or newer** (the module declares `go 1.26`; the development machines run 1.27).
 - A C toolchain is not required for development: SQLite works through a pure-Go driver.
 - `templ` and the standalone `tailwindcss` CLI are needed for the generated code and CSS
-  bundle. Their versions are pinned in the `Containerfile` and the CI workflow; bump them
+  bundle. Their versions are pinned in the `Dockerfile` and the CI workflow; bump them
   together with `go.mod`.
 - The Tailwind standalone CLI is a **glibc** binary. It cannot run inside a musl (Alpine)
   image, so any container builder stage must use a glibc base image
@@ -291,7 +291,7 @@ and counting updates to `AGENTS.md` in batches, with the user present.
 ## Project name and licence
 
 - **Project name:** `Engram`.
-- **Module path:** `example.com/engram`.
+- **Module path:** `git.nite07.com/nite/engram`.
 - **Licence:** [AGPL-3.0](LICENSE). The full text is in [`LICENSE`](LICENSE).
 
 A contribution does not change the licence.

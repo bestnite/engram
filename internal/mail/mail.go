@@ -18,8 +18,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/config"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/config"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // ErrNotConfigured 表示 SMTP 未配置，依赖邮件的流程必须禁用并说明原因。

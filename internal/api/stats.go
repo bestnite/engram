@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // statsSummary 返回到期量 / 复习量 / 留存概要，scope: read（业务逻辑在 service 层的 Stats）。

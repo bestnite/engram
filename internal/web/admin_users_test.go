@@ -10,8 +10,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // M6-2 用户管理的验收测试：每个动作一条，重点覆盖会话作废与最后管理员保护。

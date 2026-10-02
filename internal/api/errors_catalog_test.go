@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 
-	"example.com/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/i18n"
 )
 
 // TestErrorCatalogueCoversEveryCode 是 M4-9 的验收测试，与 M2-10 枚举题型标签同构：

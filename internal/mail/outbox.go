@@ -12,7 +12,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // Outbox 是邮件队列与后台 worker（DESIGN.md §4.7）。

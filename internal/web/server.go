@@ -16,14 +16,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/api"
-	"example.com/engram/internal/auth"
-	"example.com/engram/internal/i18n"
-	"example.com/engram/internal/jobs"
-	"example.com/engram/internal/mail"
-	"example.com/engram/internal/mcp"
-	"example.com/engram/internal/media"
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/jobs"
+	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/mcp"
+	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // Deps 是显式装配的依赖（AGENTS.md §2.4：入口显式装配，不引入容器）。

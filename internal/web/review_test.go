@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"example.com/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // seedReviewDeck 建一个使用合法调度预设的卡组（M3-5 复习测试专用）。
