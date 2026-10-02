@@ -62,6 +62,8 @@ type PresetCardData struct {
 	ResultBefore  string
 	ResultAfter   string
 	ResultVerdict string
+	// ResultSampleInsufficient 非空时渲染「样本不足，无法判定」，且不渲染 before/after 与结论。
+	ResultSampleInsufficient string
 
 	// 回退默认权重与「不重算到期日」的说明。
 	RevertLabel    string

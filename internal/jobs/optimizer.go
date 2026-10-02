@@ -235,8 +235,8 @@ func (o *Optimizer) fitMetrics(ctx context.Context, job *store.Job, newWeights [
 	if err != nil {
 		return store.FitMetrics{}, store.FitMetrics{}, fmt.Errorf("compare fit: %w", err)
 	}
-	return store.FitMetrics{LogLoss: before.LogLoss, RMSE: before.RMSE},
-		store.FitMetrics{LogLoss: after.LogLoss, RMSE: after.RMSE}, nil
+	return store.FitMetrics{LogLoss: before.LogLoss, RMSE: before.RMSE, Items: before.Items},
+		store.FitMetrics{LogLoss: after.LogLoss, RMSE: after.RMSE, Items: after.Items}, nil
 }
 
 // readOptimizerLog 读回作业目录里的 review-log.jsonl（适配器刚训练过的那一份）。
