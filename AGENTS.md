@@ -736,27 +736,26 @@ completion percentage until they are moved into a release milestone.
 
 ### Backlog (no milestone yet)
 
-- [ ] **B-1 Project name and module path** — the name is being decided now (2026-10-02); shortlist
-  and collision checks live in the local ledger. Once chosen: replace the `<module-path>` placeholder
-  everywhere, rename the binary, and re-check the sanitisation scan.
-- [ ] **B-2 LICENSE** — the user's requirement (2026-10-02) is that nobody may take this and run it
-  as a paid SaaS. That still needs one choice, because the two answers are not the same thing:
-  **AGPL-3.0** keeps the repository open source and blocks a *closed* SaaS, but does **not** stop
-  someone from hosting it and charging; **PolyForm Noncommercial / BUSL 1.1** actually forbid
-  commercial hosting, at the price of no longer being open source (the README, `CONTRIBUTING.md` and
-  the CI wording would have to change). Recorded with the trade-off in `DESIGN.md` 13.
+- [ ] **B-1 Module path** — the project name is decided (2026-10-02): **Engram**. The module path
+  still needs one fact before it can be replaced: where the repository will be published, because the
+  path is `github.com/<account>/engram` or a self-hosted equivalent. Do **not** use a private domain in
+  the path — section 2.2 forbids real domains in committed files and the sanitiser will catch it.
+  Renaming is a single exclusive lane: it rewrites every import, the binary name, the Containerfile,
+  CI, scripts and all documentation, so nothing else may be in flight while it runs.
+- [x] **B-2 LICENSE** — decided (2026-10-02): **AGPL-3.0**. It matches the requirement that nobody may
+  offer this as a *closed-source* SaaS while keeping the project open source. Recorded with the
+  caveat that AGPL does not forbid charging: a competitor may still host it commercially, they simply
+  cannot keep their changes closed. Replacing the placeholder licence file is the remaining step.
 - [x] **B-3 README pair** — `README.md` in English and `README.zh.md` in Chinese, covering
   what it is, screenshots later, self-hosting, backup and restore for both databases, and
   the API key plus MCP quick start. *Done by M0-12; screenshots are still outstanding and are
   tracked there rather than here.*
 - [x] **B-4 CONTRIBUTING.md** — how to build, test, and submit changes, restating the rules
   in section 2.
-- [ ] **B-5 Commit author identity** — decided (2026-10-02): the author email becomes the address on
-  the user's own public domain. The literal address is deliberately **not** written here: it is a
-  real address on a real domain, and section 2.2 forbids those in committed files, so it lives in the
-  local ledger instead. Two consequences to weigh when the user asks to publish: the address becomes
-  visible in public commit metadata, and rewriting the existing 200+ commits invalidates every SSH
-  signature, so it has to be a deliberate one-time operation.
+- [x] **B-5 Commit author identity** — decided (2026-10-02): **leave the author email as it is**.
+  Rewriting 200+ commits would invalidate every SSH signature, and the user judged that a worse trade
+  than the address being visible. The literal address stays out of this file because it is a real
+  address on a real domain (section 2.2); it is recorded in the local ledger.
 - [x] **B-6 TOTP two-factor authentication** — *moved into the final state as M1-16 (2026-10-02).*
 - [x] **B-7 SMTP** — *moved into the final state as M1-17 (2026-10-02).*
 - [x] **B-8 Per-user media quota** — *moved into the final state as M2-13 (2026-10-02).*

@@ -32,3 +32,7 @@ npmjs.org
 tailwindcss.com
 tailwindlabs.com
 templ.guide
+# 以下是许可证原文里出现的公开文档域：AGPL-3.0 全文必须逐字引用，不得改写。
+# 登记理由：LICENSE 是许可证正文，属于“不该为了过扫描而修改”的文件（AGENTS.md §2.2）。
+gnu.org
+fsf.org
