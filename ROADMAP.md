@@ -292,6 +292,18 @@ Conventions:
   *Acceptance:* exceeding the cap is refused with a stable code and a localised message naming the
   limit; deleting media frees the quota again; the default is off rather than a number nobody chose.
 
+- [x] **M2-14 Per-deck daily caps in the UI** — `new_per_day` / `reviews_per_day` are deck columns
+  (DESIGN.md §3.3) but had no reference anywhere in `internal/web`: the only way to change how many
+  cards a deck serves per day was to edit the database, so a deck list showing "new 0" gave the user
+  no way to see why or to change it. An owner-only `GET/POST /decks/:id/settings` now reads and
+  writes both caps (`0` = unlimited, written verbatim), shows today's used and remaining per deck
+  from `schedule.DeckBudgets` (the same budget rule the queue runs on, so the page cannot drift from
+  what the review page serves), and audits each accepted change as `deck.caps_change`. Rejected input
+  (non-numeric, negative, empty) renders a localised error and writes nothing.
+  *Acceptance:* the page shows the stored caps and today's used/remaining; a change takes effect on
+  the next queue build without a restart; the deck list's two numbers follow it; non-owner GET/POST
+  is refused and leaves the columns untouched; a rejected or CSRF-less POST writes no audit row.
+
 ### M3 — Review loop
 
 - [x] **M3-1 FSRS wrapper** — `internal/schedule`: construct the scheduler from preset
