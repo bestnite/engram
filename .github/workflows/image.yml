@@ -5,10 +5,13 @@
 # 一个明确的版本点上产出。推一个 v* 标签即发布该版本并同步 :latest；要补发、重发或
 # 试发时用 workflow_dispatch，可指定版本号，留空则发 :edge。
 #
-# 构建方式有一条硬性原因：本仓库的 runner 是 act，job 容器里挂的是宿主的 rootless podman
-# socket，而 podman 的兼容 API 不提供 BuildKit —— 默认的 buildx 会把结果只留在 build
-# cache 里（构建日志里的 "No output specified with docker-container driver"），本地镜像库
-# 里什么都不落，随后的 push 无从推起。因此必须 DOCKER_BUILDKIT=0 走经典构建器。
+# 构建方式有一条实测出来的原因：本仓库的 runner 是 act，job 容器经宿主的 rootless podman
+# socket 使用 buildx 的 docker-container 驱动（实测 buildkitd v0.33.1，声明的平台只有
+# amd64 系列与 386）。该驱动默认把构建结果只留在 build cache 里——构建日志末尾那句
+# "No output specified with docker-container driver" 就是这个意思——本地镜像库里什么都不落，
+# 随后的 push 无从推起，要落地必须显式 --load（本地）或 --push（直接推仓库）。这里改用
+# DOCKER_BUILDKIT=0 的经典构建器：它把镜像直接 tag 进本地镜像库，与下面的 docker push
+# 配合最直白。改用 buildx 时别忘补 --push。
 # Dockerfile 自带的 VERSION 参数用来写入二进制版本，这里传发布版本号。
 #
 # 需要的仓库 secret：DOCKERHUB_USERNAME、DOCKERHUB_TOKEN（仓库 Settings → Actions → Secrets）。
