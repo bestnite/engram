@@ -735,6 +735,14 @@ func (s *Server) noteUpdate(c *gin.Context) {
 //
 // 只接受属于当前卡组的 note id，避免把其它卡组/用户的卡片一并改动（越权防线）。
 // 每个批量动作写一行审计（M1-10 的统一出口）。
+//
+// 这里调 store 的批量原语（DeleteMany/AddTags），而不是 api.BulkNotes：网页是「针对当前卡组」
+// 的批量表单 —— 先 loadDeckForRole 判权、再用 allowedNoteIDs 把 id 收窄到本卡组、审计记
+// target_type=deck；service 层那套则是「按 note 逐行判权 + 行级 skipped + 整批一行
+// target_type=notes」（POST /notes/bulk）。两者的语义与取证口径不同，不是同一段逻辑的两份实现；
+// 真正共用的部分（四个 store 原语）本来就是同一份代码。**不要只把这一处改成走 service**：
+// internal/web 整体是 store 层视图（decks.go/review.go/clone.go 等 20 余处同理），单独改这一处
+// 会让网页层出现唯一的例外，并顺手改掉它的审计形态。
 func (s *Server) noteBulk(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
