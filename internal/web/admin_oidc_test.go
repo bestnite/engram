@@ -114,3 +114,36 @@ func TestOIDCAdminSaveAndUnlink(t *testing.T) {
 		t.Errorf("denial page does not show the localized hint; body = %s", snippet(denied.Body.String()))
 	}
 }
+
+// TestOIDCAdminPageShowsRedirectURI 守卫 OIDC 配置页上的「回调地址」：管理员得能从页面上抄到
+// 一串本服务**真的会发送**的 redirect_uri。它与登录流程共用 oidcRedirectURI()，所以这里把
+// 两种来源都钉住——设了 BASE_URL 就用它，没设则按当前请求推导。任一错位，管理员填进提供商
+// 白名单的地址就与实际发出的不符，表现为"登录时被 provider 拒绝"，而本服务侧的日志看不出原因。
+func TestOIDCAdminPageShowsRedirectURI(t *testing.T) {
+	srv, _, _, cookies, _ := newNotesServer(t)
+
+	// 未设 BASE_URL：按请求推导（httptest.NewRequest 给 path-only target 时 Host 是 example.com）。
+	rec := getWithCookies(t, srv, "/admin/oidc", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/oidc = %d, want 200 (%s)", rec.Code, snippet(rec.Body.String()))
+	}
+	derived := "http://example.com/auth/oidc/callback"
+	if body := rec.Body.String(); !strings.Contains(body, derived) {
+		t.Errorf("OIDC page does not show the derived redirect URI %q; body = %s", derived, snippet(body))
+	}
+
+	// 设了 BASE_URL：用它拼，尾部斜杠被吃掉。
+	srv.baseURL = "https://cards.example.com/"
+	rec = getWithCookies(t, srv, "/admin/oidc", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/oidc with BASE_URL = %d, want 200 (%s)", rec.Code, snippet(rec.Body.String()))
+	}
+	configured := "https://cards.example.com/auth/oidc/callback"
+	body := rec.Body.String()
+	if !strings.Contains(body, configured) {
+		t.Errorf("OIDC page does not show the BASE_URL redirect URI %q; body = %s", configured, snippet(body))
+	}
+	if strings.Contains(body, derived) {
+		t.Errorf("OIDC page still shows the request-derived URI while BASE_URL is set; body = %s", snippet(body))
+	}
+}

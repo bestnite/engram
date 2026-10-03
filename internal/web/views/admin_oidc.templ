@@ -29,6 +29,13 @@ templ adminOIDC(data AdminPageData) {
 					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="password" name="oidc.client_secret" value="" autocomplete="new-password"/>
 					<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.OIDC.SecretHint }</span>
 				</label>
+				// 回调地址只读展示：值与登录流程共用 oidcRedirectURI()，所以页面上看到的
+				// 就是实际会发出去的 redirect_uri。select-all 让一次点击选中整串便于复制。
+				<div class="block">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.OIDC.RedirectURILabel }</span>
+					<code class="mt-1.5 block w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-xs font-mono text-zinc-800 break-all select-all dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">{ data.OIDC.RedirectURI }</code>
+					<span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{ data.OIDC.RedirectURIHint }</span>
+				</div>
 				<label class="block">
 					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.OIDC.ScopesLabel }</span>
 					<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" type="text" name="oidc.scopes" value={ data.OIDC.ScopesValue }/>

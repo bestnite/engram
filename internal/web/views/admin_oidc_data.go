@@ -24,6 +24,12 @@ type OIDCPageData struct {
 	SecretHint   string
 	SecretStatus string
 
+	// RedirectURILabel / RedirectURIHint 是回调地址那一行的文案；RedirectURI 是本服务
+	// 实际会发出的 redirect_uri（与登录流程共用同一个计算函数），管理员照抄进提供商。
+	RedirectURILabel string
+	RedirectURIHint  string
+	RedirectURI      string
+
 	ScopesLabel string
 	ScopesHint  string
 	ScopesValue string

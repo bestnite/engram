@@ -1133,6 +1133,10 @@
   translation: "Client secret"
 - id: admin.oidc.client_secret.hint
   translation: "加密存储；留空表示不修改。页面只显示已配置 / 未配置。"
+- id: admin.oidc.redirect_uri
+  translation: "回调地址"
+- id: admin.oidc.redirect_uri.hint
+  translation: "填进提供商应用的回调白名单；未设 BASE_URL 时按当前请求推导。"
 - id: admin.oidc.scopes
   translation: "Scopes"
 - id: admin.oidc.scopes.hint

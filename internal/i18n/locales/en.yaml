@@ -1134,6 +1134,10 @@
   translation: "Client secret"
 - id: admin.oidc.client_secret.hint
   translation: "Stored encrypted; leave empty to keep the current value. Only the configured state is shown."
+- id: admin.oidc.redirect_uri
+  translation: "Redirect URI"
+- id: admin.oidc.redirect_uri.hint
+  translation: "Paste this into the provider's allowed callback list; without BASE_URL it is derived from the current request."
 - id: admin.oidc.scopes
   translation: "Scopes"
 - id: admin.oidc.scopes.hint
