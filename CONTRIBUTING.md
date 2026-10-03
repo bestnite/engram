@@ -50,6 +50,9 @@ subagents as much as to external contributors.
   (`golang:1.26-bookworm`), not Alpine.
 - PostgreSQL is the default deployment database; SQLite is fine for local development.
   Both must keep working (see [Both databases must work](#both-databases-must-work)).
+- Tests run on SQLite only — neither a local run nor CI starts a database service. The
+  PostgreSQL cases gated by `internal/pgtest` skip themselves; set `TEST_PG_DSN` to run
+  them by hand when you touch driver-sensitive code.
 
 ## Build, test, and generate
 
@@ -147,6 +150,8 @@ personal email address, token, password, or description of private infrastructur
 ### Both databases must work
 
 PostgreSQL (default deployment) and SQLite (single-node and development) are both first-class.
+The test suite covers SQLite only; the PostgreSQL path is gated by `TEST_PG_DSN` and must be
+run by hand when you change driver-sensitive code (see [Development environment](#development-environment)).
 Follow these compatibility rules:
 
 - No PostgreSQL-only column types (`jsonb`, `serial`, `array`).

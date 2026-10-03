@@ -23,6 +23,11 @@ import (
 )
 
 // EnvDSN 是启用 PostgreSQL 路径的环境变量；未设置时调用方应跳过 PG 路径。
+//
+// 默认不设：本机与 CI 都只跑 SQLite、不起数据库服务（AGENTS.md §2.5）。要覆盖生产用的
+// PG 驱动时，指一个可用的实例手动跑，例如
+//
+//	TEST_PG_DSN='postgres://user:CHANGE_ME@127.0.0.1:5432/db?sslmode=disable' go test ./internal/store/ ./internal/schedule/ ./internal/digest/
 const EnvDSN = "TEST_PG_DSN"
 
 // Open 在 TEST_PG_DSN 未设置时返回 (nil, false)，让调用方跳过 PG 路径；

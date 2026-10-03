@@ -3,9 +3,11 @@
 # 顺序上有一条硬性原因：*_templ.go 与 internal/web/static/css/tailwind.css 都是
 # gitignore 的生成物，必须先 `go generate ./...` 再编译，否则模板包直接编译失败。
 #
+# 测试只跑 SQLite（AGENTS.md §2.5）：CI 不起任何数据库服务，internal/pgtest 门控的
+# PostgreSQL 用例在这里自己跳过并打印原因。需要覆盖生产用的 PG 驱动时，在本机设置
+# TEST_PG_DSN 手动跑那三个包。
 # 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME，
 # 且由 scripts/checks/no-private-data.sh 自检。
-# （例外：service 容器名 `postgres` 是 act 建的网络上的服务名，不是真实主机名。）
 name: ci
 
 on:
@@ -24,25 +26,6 @@ jobs:
   verify:
     name: build, generate and test
     runs-on: ubuntu-latest
-
-    # 真 PostgreSQL，让 internal/pgtest 门控的用例真正执行（每用例独立 schema）。
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: engram
-          POSTGRES_PASSWORD: CHANGE_ME
-          POSTGRES_DB: engram
-        options: >-
-          --health-cmd "pg_isready -U engram"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      # 与服务的账号一致；仅用于 CI 的一次性数据库，非真实凭据。
-      # 服务容器与 job 容器同在 act 为本次作业新建的网络上，服务名即主机名（不是 localhost）。
-      TEST_PG_DSN: postgres://engram:CHANGE_ME@postgres:5432/engram?sslmode=disable
 
     steps:
       - name: Check out
@@ -103,6 +86,6 @@ jobs:
       - name: i18n language-pack parity
         run: go test ./internal/i18n/...
 
-      # 全量测试；TEST_PG_DSN 已设置，PostgreSQL 路径不会被跳过。
+      # 全量测试；不设 TEST_PG_DSN，PostgreSQL 用例自行跳过（见文件头）。
       - name: Test
         run: go test ./...

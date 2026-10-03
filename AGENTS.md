@@ -105,6 +105,11 @@ end user → translation catalog.
 
 - Table-driven tests; use a real SQLite database (in-memory or temp file) — do not mock
   the database. Core coverage targets: `internal/schedule` and `internal/cardtype`.
+- **The default test database is SQLite, locally and in CI.** Neither runs a database
+  service: `go test ./...` without `TEST_PG_DSN` makes the PostgreSQL cases gated by
+  `internal/pgtest` skip themselves. Set `TEST_PG_DSN` to run them, and do that by hand
+  whenever you touch driver-sensitive code (transactions, `clause.OnConflict` upserts,
+  concurrency on `card_states`).
 - Handler tests use `httptest`. Negative cases are required, not optional: permission
   denials, CSRF failures, expired keys, scope violations.
 - Commits are signed (`user.signingkey` is set per repository), use Conventional Commits
