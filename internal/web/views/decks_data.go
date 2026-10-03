@@ -8,13 +8,18 @@ type DeckRow struct {
 	// Href 指向该卡组的卡片列表页。
 	Href      string
 	CardCount int64
-	DueCount  int64
-	Archived  bool
+	// NewCount / ReviewCount 是该卡组单卡组口径下今日可刷的新卡数与可复习数
+	//（schedule.DeckCounts，与点进 /review 的条数一致）。两者相加＝实际能刷的张数。
+	NewCount    int64
+	ReviewCount int64
+	Archived    bool
 	// ExportHref 指向该卡组的 .edeck 导出下载（M5-9）。
 	ExportHref string
 	// SharingHref 指向该卡组的共享管理页（M5-2）；仅当当前用户是 owner 时非空，
 	// 共享给他人（非 owner）的行留空，模板据此不渲染入口，避免点进去吃 403。
 	SharingHref string
+	// SettingsHref 指向该卡组的设置页；仅 owner 非空，非 owner 留空不渲染。
+	SettingsHref string
 	// ReviewHref 指向只复习该卡组的复习页（M3-13）。
 	ReviewHref string
 }
@@ -27,11 +32,14 @@ type DeckListData struct {
 	Layout  LayoutData
 	Heading string
 	// 列表。
-	ColName   string
-	ColCards  string
-	ColDue    string
-	EmptyText string
-	Archived  string
+	ColName  string
+	ColCards string
+	ColDue   string
+	// NewCardsLabel / ReviewCardsLabel 是「今日」列里两个数字的标签（新 X · 复习 Y）。
+	NewCardsLabel    string
+	ReviewCardsLabel string
+	EmptyText        string
+	Archived         string
 	// ColActions/ExportLabel 是导出控件的表头与文案（M5-9）。
 	ColActions  string
 	ExportLabel string
@@ -42,6 +50,8 @@ type DeckListData struct {
 	SelectLabel         string
 	// SharingLabel 是 owner 行「共享」入口的文案（M5-2）。
 	SharingLabel string
+	// SettingsLabel 是 owner 行「设置」入口的文案。
+	SettingsLabel string
 	// ImportLabel / ImportHref 是列表头部的卡组包导入入口（M5-9）。
 	ImportLabel string
 	ImportHref  string

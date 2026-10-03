@@ -874,7 +874,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		sched = s
 	}
 
-	builder := schedule.NewQueueBuilder(a.db, sched)
+	builder := schedule.NewQueueBuilder(a.db, a.decks, sched)
 	opts := schedule.QueueOptions{
 		Now:           a.now(),
 		Timezone:      u.Timezone,

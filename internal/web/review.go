@@ -428,7 +428,7 @@ func (s *Server) cardStateForPreview(ctx context.Context, userID uint64, item sc
 // buildQueue 复用 internal/schedule 的队列构建（每日上限、复习日切点、优先级都在那里）。
 // 单卡组走 DeckID 以保留卡组上限口径；多卡组走 DeckIDs 集合（合并后统一排序/打乱）。
 func (s *Server) buildQueue(ctx context.Context, userID uint64, scope reviewScope, sched *schedule.Scheduler) ([]schedule.QueueItem, error) {
-	builder := schedule.NewQueueBuilder(s.db, sched)
+	builder := schedule.NewQueueBuilder(s.db, s.decks, sched)
 	opts := schedule.QueueOptions{}
 	switch len(scope.deckIDs) {
 	case 0:

@@ -350,7 +350,7 @@
 - id: decks.list.col_cards
   translation: "Cards"
 - id: decks.list.col_due
-  translation: "Due"
+  translation: "Today"
 - id: decks.list.empty
   translation: "No decks yet. Create your first one below."
 - id: decks.list.archived
@@ -2106,3 +2106,11 @@
   translation: "{{.notes}} / {{.cards}}"
 - id: admin.dashboard.jobs_value
   translation: "{{.running}} running · {{.failed}} failed"
+
+# ── Deck list: today's two counts and the owner-only settings entry ──
+- id: decks.list.new_cards
+  translation: "New"
+- id: decks.list.review_cards
+  translation: "Review"
+- id: decks.list.settings
+  translation: "Settings"
