@@ -4,27 +4,46 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"gorm.io/gorm"
 )
 
-// ListVisible 返回某用户“在列表里应该看到”的卡组（M5-5 列表语义）：
+// visibleDecksQuery 是「某用户可见卡组」的唯一谓词来源：自有 ∪ 被 deck_grants 授权 ∪ 其他用户的 public。
 //
-//  1. 自己拥有的（不论可见性）；
-//  2. 被显式授权访问的（deck_grants 有行）；
-//  3. 其他用户的 public 卡组（DESIGN.md §5：登录用户可见并可自取副本）。
+// 列表页（ListVisible）与队列的全库口径（VisibleIDs）必须看到同一批卡组，所以谓词只写这一处：
+// 各写一份会慢慢漂移。之前队列的全库口径完全没有卡组过滤，把别的用户 private 卡组的新卡
+// 也算进了当前用户的队列（越权）。
 //
-// 明确排除其他用户的 unlisted 与 private 卡组：
-//   - unlisted 的语义是“拿到链接可看”，它只能通过直接 id 命中（DeckAccess 负责），
-//     出现在任何列表里都会把“不公开”变成“半公开”；
-//   - private 只对授权者可见，而授权者已由第 2 条覆盖。
-func (s *DeckStore) ListVisible(ctx context.Context, userID uint64) ([]Deck, error) {
+// 明确排除其他用户的 unlisted 与 private：
+//   - unlisted 的语义是「拿到链接可看」，只能通过直接 id 命中（DeckAccess 负责），
+//     出现在任何列表里都会把「不公开」变成「半公开」；
+//   - private 只对授权者可见，而授权者已由 deck_grants 分支覆盖。
+func (s *DeckStore) visibleDecksQuery(ctx context.Context, userID uint64) *gorm.DB {
 	granted := s.db.Model(&DeckGrant{}).Select("deck_id").Where("user_id = ?", userID)
+	return s.db.WithContext(ctx).Model(&Deck{}).
+		Where("owner_user_id = ? OR visibility = ? OR id IN (?)", userID, DeckVisibilityPublic, granted)
+}
+
+// ListVisible 返回某用户“在列表里应该看到”的卡组（M5-5 列表语义），按创建时间倒序。
+func (s *DeckStore) ListVisible(ctx context.Context, userID uint64) ([]Deck, error) {
 	var decks []Deck
-	if err := s.db.WithContext(ctx).
-		Where("owner_user_id = ? OR visibility = ? OR id IN (?)", userID, DeckVisibilityPublic, granted).
+	if err := s.visibleDecksQuery(ctx, userID).
 		Order("created_at DESC, id DESC").Find(&decks).Error; err != nil {
 		return nil, fmt.Errorf("list visible decks: %w", err)
 	}
 	return decks, nil
+}
+
+// VisibleIDs 返回该用户可见卡组的 id 集合，与 ListVisible 共用同一谓词（见 visibleDecksQuery）。
+//
+// 队列的「全库」口径（DeckID=0 且 DeckIDs 为空）用它解析范围：只要列表页看得到的卡组就能进队列，
+// 别人的 private / unlisted 卡组一张都进不来。空集合表示该用户没有可见卡组，队列据此为空（不报错）。
+func (s *DeckStore) VisibleIDs(ctx context.Context, userID uint64) ([]uint64, error) {
+	var ids []uint64
+	if err := s.visibleDecksQuery(ctx, userID).Order("id ASC").Pluck("id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("list visible deck ids: %w", err)
+	}
+	return ids, nil
 }
 
 // SummariesVisible 是列表页用的聚合版：可见卡组各带卡片数与当前用户的到期数。
