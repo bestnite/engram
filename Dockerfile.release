@@ -1,0 +1,48 @@
+# 发布镜像的 Dockerfile，由 GoReleaser 的 dockers_v2 构建（配置见 .goreleaser.yaml）。
+#
+# 与从源码编译的 Dockerfile 的关键差别：构建上下文是 goreleaser 生成的临时目录，不是仓库根。
+# 该目录里只有构建产物——Go 二进制按 <os>/<arch>/<名字> 摆放，extra_files 保持原相对路径，
+# 仓库源码与 .dockerignore 都不在里面。
+#
+# 需要多平台构建（buildx）才有 $TARGETPLATFORM / $TARGETARCH 这两个预定义参数；
+# goreleaser v2 的 dockers_v2 走的正是 buildx。两者都不给默认值是刻意的：一旦退化成不带
+# 平台的构建，参数为空会让 COPY 从错误的位置取文件并立刻失败，而不是把一个架构的二进制
+# 静默塞进另一个架构的镜像里。
+ARG TARGETPLATFORM
+ARG TARGETARCH
+
+# ---- 运行阶段：alpine + tzdata，非 root，与 Dockerfile 的运行阶段保持一致 ----
+FROM alpine:3.22
+
+# tzdata 供用户时区/复习日切点使用（DESIGN.md §10.4）；ca-certificates 供将来 OIDC 出站。
+RUN apk add --no-cache ca-certificates tzdata \
+    && adduser -D -u 10001 -h /app app \
+    && mkdir -p /data/media \
+    && chown -R 10001:10001 /data
+
+ARG TARGETPLATFORM
+ARG TARGETARCH
+COPY ${TARGETPLATFORM}/engram /usr/local/bin/engram
+# FSRS 优化器适配器：internal/jobs 默认在服务二进制旁解析 /usr/local/bin/optimizer，
+# 权威路径对上就不需要 OPTIMIZER_PATH；产物是 musl 静态链接，可直接跑。
+COPY tools/optimizer/dist/linux/${TARGETARCH}/optimizer /usr/local/bin/optimizer
+
+USER 10001:10001
+WORKDIR /app
+
+# 默认单机形态：SQLite + 启动自动迁移（DESIGN.md §10.2）。密钥是占位值，
+# 真实部署必须通过环境变量覆盖，镜像内不承载任何真实凭据。
+ENV HTTP_ADDR=0.0.0.0:8080 \
+    DB_DRIVER=sqlite \
+    DB_DSN=/data/engram.db \
+    AUTO_MIGRATE=1 \
+    MEDIA_DIR=/data/media \
+    BASE_URL=http://localhost:8080
+
+# SESSION_SECRET 与 ENCRYPTION_KEY 故意不提供默认值：镜像里烤一个已知密钥会让
+# "忘记覆盖"变成静默的弱密钥部署；运行时缺失会以英文错误快速失败（internal/config 已校验）。
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/engram"]
+CMD ["serve"]

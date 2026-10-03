@@ -1,0 +1,131 @@
+# GoReleaser 配置：推 v* 标签时把二进制、Rust 优化器适配器与容器镜像一起发布到
+# bestnite/engram（ROADMAP.md M0-14），由 .github/workflows/release.yml 调用。
+#
+# 两处背景必须先知道，否则会误改：
+#   1. Rust 优化器适配器不是 Go 构建产物，本文件用 archives.files 与 dockers_v2.extra_files
+#      把它挂进制品。文件由 release.yml 的 optimizer 作业在各目标平台上原生编译后，按
+#      tools/optimizer/dist/<os>/<arch>/optimizer[.exe] 摆好（约定见该 workflow 的注释）。
+#      不走 builds 的 builder: prebuilt —— 那是 GoReleaser Pro 专属，OSS 版连该字段都没有。
+#   2. dockers_v2 交给 docker 的是一份临时上下文，不是仓库根：Go 二进制按 <os>/<arch>/<名字>
+#      摆放（所以 Dockerfile.release 用 $TARGETPLATFORM 取），extra_files 原样落在它的相对
+#      路径上。因此发布镜像的 Dockerfile 是 Dockerfile.release，而不是从源码编译的 Dockerfile。
+#
+# 需要的仓库 secret：DOCKERHUB_USERNAME、DOCKERHUB_TOKEN（推 Docker Hub 用；ghcr.io 用
+# workflow 自带的 GITHUB_TOKEN）。两者都配在 GitHub 的 bestnite/engram 上——发布跑在
+# GitHub Actions，Gitea 侧的自建 runner 没有多架构能力（理由见 release.yml）。
+#
+# 仓库脱敏（AGENTS.md §2.2）：本文件出现的主机名只有已登记的 github.com，以及镜像引用
+# ghcr.io（不带 scheme，扫描只查 http(s):// 形式的 URL）。
+version: 2
+
+project_name: engram
+
+# *_templ.go 与 tailwind.css 都是 gitignore 的生成物，必须先补齐再编译（AGENTS.md §4）。
+before:
+  hooks:
+    - go generate ./...
+
+builds:
+  - id: engram
+    main: ./cmd/engram
+    binary: engram
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # 与 Dockerfile 的 VERSION 传参保持一致：注入带 v 前缀的原始标签，而不是 .Version
+    # （后者会被 goreleaser 去掉前缀，两条构建路径的 `engram version` 就会不一致）。
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # windows/arm64 不发布：适配器没有该目标的可信构建路径（release.yml 在 windows runner
+    # 上只原生编 amd64），发了就会得到「有主程序、没有适配器」的归档。
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    ids:
+      - engram
+    formats:
+      - tar.gz
+    # windows 收 zip：解开就能双击运行，不必先有 tar。
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - README.zh.md
+      # 适配器与主程序同装一包，解出来就是「一个服务二进制 + 一个适配器」；适配器必须躺在
+      # 主程序旁边（internal/jobs 默认在服务二进制所在目录找 optimizer），归档内两者同在根层。
+      # strip_parent 是关键：源路径按平台目录摆放（<os>/<arch>/optimizer[.exe]），不加这一项
+      # 归档里就会保留 tools/optimizer/dist/<os>/<arch>/ 这些中间目录，解包后适配器不在
+      # 二进制旁边；strip_parent 只取 base name，windows 的 .exe 由文件名自身带过来。
+      - src: tools/optimizer/dist/{{ .Os }}/{{ .Arch }}/optimizer{{ if eq .Os "windows" }}.exe{{ end }}
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+
+dockers_v2:
+  - id: engram
+    ids:
+      - engram
+    images:
+      - ghcr.io/bestnite/engram
+      - nite07/engram
+    tags:
+      - "{{ .Tag }}"
+      # 预发布（v0.1.0-rc1 这类）不动 :latest，避免把候选版本顶成默认版本。
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.release
+    # 适配器不进 builds（它是 Rust 产物），靠 extra_files 进上下文；两条路径在上下文里保持
+    # 原样，Dockerfile.release 用 $TARGETPLATFORM 选中对应那一份。
+    extra_files:
+      - tools/optimizer/dist/linux/amd64/optimizer
+      - tools/optimizer/dist/linux/arm64/optimizer
+    labels:
+      org.opencontainers.image.title: engram
+      org.opencontainers.image.description: Self-hosted spaced-repetition service
+      org.opencontainers.image.source: https://github.com/bestnite/engram
+      org.opencontainers.image.licenses: AGPL-3.0-only
+
+changelog:
+  sort: asc
+  filters:
+    # 只有用户能感知的改动值得进发布说明；仓库内务（文档、测试、CI）留在 git log 里。
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+release:
+  github:
+    # 显式写出归属：Gitea 侧是 nite/engram，发布目标是 GitHub 的 bestnite/engram。
+    owner: bestnite
+    name: engram
+  draft: false
+  prerelease: auto
+  footer: |
+    ### Container images
+
+    - `ghcr.io/bestnite/engram:{{ .Tag }}`
+    - `nite07/engram:{{ .Tag }}`
+
+    Both carry the server binary and the Rust optimiser adapter, for
+    `linux/amd64` and `linux/arm64`. A manual install needs no more than the
+    archive: unpack it, keep `optimizer` next to the `engram` binary, run
+    `./engram serve`.

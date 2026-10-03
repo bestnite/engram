@@ -89,6 +89,29 @@ Conventions:
   *Acceptance:* a start with a missing parent directory either creates it for the SQLite driver or
   fails with an English error that names the path and says the directory is missing. In neither case
   may the message contain `out of memory`. A test covers the chosen behaviour.
+
+- [x] **M0-14 Release pipeline, including a Windows build** — `internal/jobs` held the only
+  platform-specific system call (`syscall.Kill` on a process group), which compiles on Unix only,
+  so `GOOS=windows` could not build the service at all and the project had no Windows artifact.
+  Fixed by moving the process-group helpers into `process_unix.go` and `process_windows.go` behind
+  two package-internal functions, and by restricting the package's tests (they need `/bin/sh` and
+  `/proc/<pid>/stat`) to `//go:build unix` while the guard that rejects a non-positive pid moved to
+  a cross-platform test. Releases come from `.goreleaser.yaml` — Go binaries for linux, darwin and
+  windows, the Rust optimizer adapter, `checksums.txt`, and multi-arch container images for
+  `ghcr.io/bestnite/engram` and Docker Hub — with `Dockerfile.release` as the image recipe and
+  `.github/workflows/release.yml` as the driver on `v*` tags. The workflow compiles the adapter
+  natively on five runners (linux amd64/arm64, darwin amd64/arm64, windows amd64), because
+  GoReleaser's `prebuilt` option is a Pro feature and a Go build cannot produce a Rust binary.
+  `.github/workflows/image.yml` is removed: binaries and images now ship from one run, so a tag can
+  no longer publish a binary and an image built from different revisions. The sanitisation scan's
+  placeholder list gains the `${{ ... }}` form, the only shape a workflow may use to reference a
+  repository secret.
+  *Acceptance:* for both `GOARCH=amd64` and `GOARCH=arm64`,
+  `GOOS=windows CGO_ENABLED=0 go build ./cmd/engram` and `GOOS=windows go vet ./...` pass;
+  `goreleaser check` accepts the config; `goreleaser release --snapshot` completes and every archive
+  holds `optimizer` (`optimizer.exe` on Windows) next to the service binary. The container-image leg
+  needs a buildx daemon and is therefore exercised by the first `v*` tag, not by the snapshot.
+
 ### M1 — Identity and users
 
 - [x] **M1-1 User store and password hashing** — `internal/auth`: user CRUD, argon2id

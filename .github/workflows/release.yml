@@ -1,0 +1,150 @@
+# 发布流水线：推 v* 标签时，由 GoReleaser 产出 GitHub Release —— 二进制、Rust 优化器
+# 适配器与多架构容器镜像（配置见 .goreleaser.yaml，ROADMAP.md M0-14）。
+#
+# 为什么跑在 GitHub Actions 而不是 Gitea 侧的自建 runner：镜像要 linux/amd64 与
+# linux/arm64 两份，需要真正的 buildx + QEMU；自建 runner 上没有这套多架构构建能力。
+# GitHub 托管 runner 自带，且可以在这个仓库上用内置的 GITHUB_TOKEN 直接发布，
+# 不必为此新增一个 token 类 secret。
+#
+# 需要的仓库 secret（配在 GitHub 的 bestnite/engram 上）：
+#   DOCKERHUB_USERNAME / DOCKERHUB_TOKEN —— 推 Docker Hub 的 nite07/engram 用。
+# 推 ghcr.io/bestnite/engram 走内置 GITHUB_TOKEN，无需配置。
+#
+# 发布目标是 GitHub 的 bestnite/engram；.goreleaser.yaml 里显式写了 owner/name，
+# 不受本仓库的 origin 影响。
+#
+# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME。
+name: release
+
+# 只认标签：一条流水线对应一个发布版本。历史运行可以用 GitHub 的 Re-run（沿用原 ref）重跑，
+# 因此不提供 workflow_dispatch —— 手动触发的 ref 往往不是标签，GORELEASER_CURRENT_TAG 会落到
+# 一个非发布版本上，反而制造出难以辨别的制品。
+on:
+  push:
+    tags:
+      - "v*"
+
+# contents: 写 Release；packages: 推 ghcr.io。
+permissions:
+  contents: write
+  packages: write
+
+# 同一版本的发布不允许并发：两次 goreleaser 同时写 Release 会互相覆盖。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # 适配器是 Rust 产物，不是 Go 构建产物，GoReleaser 编不出来，所以先在各目标平台上原生编译。
+  # 原生编译而不是交叉编译：Rust 交叉到 musl 虽然不需要 C 交叉工具链，但要在构建机上再装一个
+  # target（见 DESIGN.md 的分发约定），而托管 runner 直接就有对应架构的原生工具链
+  # ——windows/arm64 因此没有产物，.goreleaser.yaml 也把该目标排除了。
+  optimizer:
+    name: optimizer (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: ""
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            ext: ""
+          - runner: macos-13
+            goos: darwin
+            goarch: amd64
+            ext: ""
+          - runner: macos-14
+            goos: darwin
+            goarch: arm64
+            ext: ""
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: .exe
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build the optimizer adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --manifest-path tools/optimizer/Cargo.toml
+          out="tools/optimizer/dist/${{ matrix.goos }}/${{ matrix.goarch }}"
+          mkdir -p "$out"
+          cp "tools/optimizer/target/release/optimizer${{ matrix.ext }}" "$out/"
+
+      # 以 tools/optimizer/dist 为根部上传：制品内的路径就是 <os>/<arch>/optimizer[.exe]，
+      # release 作业用 merge-multiple 下载后自动还原成 .goreleaser.yaml 约定的目录结构。
+      - name: Upload the adapter
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimizer-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: tools/optimizer/dist
+          if-no-files-found: error
+
+  release:
+    name: goreleaser
+    needs: optimizer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # 变更日志由提交历史生成，浅克隆会得到空的 release notes。
+          fetch-depth: 0
+
+      # 版本取 go.mod 声明的值，与 ci.yml 同一口径（本仓库的兼容下限）。
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # .goreleaser.yaml 的 before 钩子会跑 go generate ./...，所以 templ 与 Tailwind
+      # 必须先就位，否则构建在编译模板包时失败（生成物是 gitignore 的）。
+      - name: Install templ and the Tailwind standalone CLI
+        run: |
+          set -euo pipefail
+          go install github.com/a-h/templ/cmd/templ@v0.3.1020
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/tailwindcss" \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.3/tailwindcss-linux-x64
+          chmod +x "$HOME/.local/bin/tailwindcss"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch the optimizer adapters
+        uses: actions/download-artifact@v4
+        with:
+          pattern: optimizer-*
+          merge-multiple: true
+          path: tools/optimizer/dist
+
+      # 多架构镜像要 QEMU 跑 arm64 的 RUN 步骤，要 buildx 才能出 manifest list；
+      # 托管 runner 的默认 builder 只支持单平台。两者都必须在 goreleaser 之前就位。
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          # 与 Dockerfile / ci.yml 里的工具版本同一原则：钉死版本，升级时一起动。
+          version: v2.18.2
+          args: release --clean
+        env:
+          # 值全部来自仓库 secret（脱敏扫描把 ${{ ... }} 视作占位写法）。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

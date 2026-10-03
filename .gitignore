@@ -30,6 +30,9 @@ config.local.*
 *.prof
 # Rust 优化器适配器（tools/optimizer）的构建输出
 tools/optimizer/target/
+# 适配器的分平台产物：发布流水线按 tools/optimizer/dist/<os>/<arch>/optimizer[.exe] 摆放，
+# 由 .goreleaser.yaml 打包进归档与镜像（见 .github/workflows/release.yml）。
+tools/optimizer/dist/
 
 # ── 生成物（构建时重新生成，不入库）────────────────────────
 *_templ.go
