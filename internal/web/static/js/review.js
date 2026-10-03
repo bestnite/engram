@@ -244,9 +244,22 @@
 
   // 评分/动作请求配置参数时记录耗时；换卡后复位问答状态与计时。
   document.addEventListener("htmx:configRequest", markElapsed);
+
+  // 换卡后重新排版公式：MathJax 只在页面加载时扫描一次 DOM，而 htmx 用 outerHTML
+  // 替换了整个 #review-area，新卡片里的 \(…\) 会原样留在正文中——表现为第一张卡正常、
+  // 之后的卡片不再渲染（实测）。这里把新节点交给 MathJax 补排一次。
+  // 注意不能用模板上的 hx-on::after-swap：元素是换卡时新建的，htmx 挂监听发生在
+  // settle 阶段（htmx:afterSwap 之后），新元素永远等不到自己那次 swap。
+  function typesetMath(node) {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise([node])["catch"](function () {});
+    }
+  }
+
   document.addEventListener("htmx:afterSwap", function (e) {
     if (e.target && e.target.id === "review-area") {
       resetCardState();
+      typesetMath(e.target);
     }
   });
   // 断网/请求无法送达时明确提示，不静默（DESIGN.md §8.2）。
