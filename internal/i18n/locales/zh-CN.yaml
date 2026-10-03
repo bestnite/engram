@@ -299,6 +299,10 @@
   translation: "无法显示这张卡片。"
 - id: review.shortcuts
   translation: "空格：显示答案 · 1–4：评分 · e：编辑 · b：埋藏"
+- id: review.shortcuts_graded
+  translation: "空格：显示答案 · e：编辑 · b：埋藏"
+- id: review.shortcuts_result
+  translation: "回车：继续 · e：编辑"
 - id: review.edit
   translation: "编辑"
 - id: review.bury

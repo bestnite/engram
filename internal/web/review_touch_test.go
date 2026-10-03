@@ -10,8 +10,10 @@ import (
 //  1. 模板契约（本文件）：复习区域带 touch-manipulation + select-none，按钮点击区 ≥ 44px。
 //  2. 脚本契约（本文件）：review.js 绑定 touchstart/touchend/contextmenu/dblclick 并阻止
 //     默认行为，且忽略落在输入控件上的滑动。
-//  3. 脚本化触屏序列（testdata/review_touch_sim.mjs）：用零依赖 DOM 替身在 Node 里回放
-//     “滑动揭示 → 左滑 Again → 长按无菜单”，有 node 时执行，无 node 时跳过。
+//  3. 脚本化触屏与键盘序列（testdata/review_touch_sim.mjs）：用零依赖 DOM 替身在 Node 里
+//     回放“滑动揭示 → 左滑 Again → 长按无菜单”，以及判分卡（M3-12）的三种状态按键
+//     （待作答时 1–4 不评分也不揭示、已揭示时输入被锁、结果面板上回车/1–4 都点继续）
+//     与换卡后作答控件获得焦点；有 node 时执行，无 node 时跳过。
 //
 // 仍需真机/浏览器手动确认的部分（无法在 CI 断言）：iOS Safari 与 Android Chrome 上
 // 双击缩放与长按选中确实被系统抑制。手测清单：

@@ -132,6 +132,9 @@ templ ReviewArea(data ReviewAreaData) {
 						}
 					</form>
 				</div>
+				// 结果面板是"已作答、只差继续"的状态：这里也放一行快捷键提示，串由服务端按
+				// 状态给（review.shortcuts_result）——此时 b（埋藏）的按钮并未渲染，不能宣传它。
+				<p class="mt-3 text-center text-xs text-zinc-600 dark:text-zinc-400 font-mono font-medium">{ data.ShortcutsHint }</p>
 			} else {
 				<button id="review-show-answer" type="button" class="mt-6 min-h-11 w-full rounded-lg bg-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-xs hover:bg-blue-700 active:scale-[0.99] transition-all cursor-pointer">{ data.ShowAnswerLabel }</button>
 				<form id="review-form" class="mt-6" hx-post={ data.AnswerURL } hx-target="#review-area" hx-swap="outerHTML">

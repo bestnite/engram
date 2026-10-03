@@ -374,6 +374,9 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 	// 学习步骤以分钟计，不显示的话"刚答完几分钟后又冒出来"只能靠猜。
 	if data.Graded == nil {
 		data.Ratings = s.reviewRatings(c.Request.Context(), loc, sched, user, items[0], time.Now().UTC())
+	} else {
+		// 判分卡没有 1–4 档位，提示串不能继续宣传"1–4：评分"——那几个键在这里不响。
+		data.ShortcutsHint = loc.T("review.shortcuts_graded")
 	}
 	return data, nil
 }
@@ -867,6 +870,8 @@ func (s *Server) reviewGradedAnswer(c *gin.Context, loc *i18n.Localizer, user *s
 	area.Empty = false
 	area.Graded = nil
 	area.Result = s.gradedResultView(loc, note.Kind, fields, cur, detail, s.gradeMappingFor(ctx, note.DeckID))
+	// 结果面板是"已作答、只差继续"的状态：回车/空格/1–4 都走继续，提示串也得跟着换。
+	area.ShortcutsHint = loc.T("review.shortcuts_result")
 	renderReviewArea(c, area)
 }
 

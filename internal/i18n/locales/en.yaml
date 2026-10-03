@@ -299,6 +299,10 @@
   translation: "This card cannot be displayed."
 - id: review.shortcuts
   translation: "Space: show answer · 1–4: rate · e: edit · b: bury"
+- id: review.shortcuts_graded
+  translation: "Space: show answer · e: edit · b: bury"
+- id: review.shortcuts_result
+  translation: "Enter: continue · e: edit"
 - id: review.edit
   translation: "Edit"
 - id: review.bury

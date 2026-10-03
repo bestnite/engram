@@ -111,6 +111,13 @@
     }
   }
 
+  // 判分题型（M3-12）待作答时渲染的是作答控件而不是四档按钮，1–4 在这里必须完全失效：
+  // 若落进"显示答案"分支，就等于一次误触把卡弃掉（输入框被禁用、只剩"记 0 分并继续"，
+  // 实测按 1 即失卡）。显示答案仍由空格/回车负责。
+  function gradedInputOpen() {
+    return !!document.getElementById("review-graded");
+  }
+
   function onKeyDown(e) {
     var tag = e.target && e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
@@ -131,6 +138,10 @@
       if (resultOpen()) {
         e.preventDefault();
         clickContinue();
+        return;
+      }
+      if (gradedInputOpen()) {
+        e.preventDefault();
         return;
       }
       if (!revealed()) {
@@ -279,12 +290,30 @@
     }
   }
 
+  // 作答控件换进来后自动获得焦点（M3-12）：用户刚点完「继续」或提交，手还在键盘上，
+  // 还要再点一次输入框才输得进去等于白等一步。取判分块里第一个控件，文本框/数字/单选/
+  // 多选都覆盖；自评类题型没有作答控件，这里什么也不做。
+  function focusAnswerInput() {
+    var root = area();
+    if (!root || !root.querySelector) {
+      return;
+    }
+    var input = root.querySelector("#review-graded input");
+    if (input) {
+      input.focus();
+    }
+  }
+
   document.addEventListener("htmx:afterSwap", function (e) {
     if (e.target && e.target.id === "review-area") {
       resetCardState();
       typesetMath(e.target);
+      focusAnswerInput();
     }
   });
   // 断网/请求无法送达时明确提示，不静默（DESIGN.md §8.2）。
   document.addEventListener("htmx:sendError", showOffline);
+
+  // 首屏同样要聚焦：脚本是 defer 加载，执行时 DOM 已就绪。
+  focusAnswerInput();
 })();
