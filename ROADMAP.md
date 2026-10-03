@@ -488,7 +488,7 @@ Conventions:
   carrying both `note_id` and `external_ref` are each reported as a row error with the others still
   applied; the schema accepts the new field and still rejects an unknown kind.
 
-- [ ] **M4-13 MCP `bulk_notes` tool and `create_notes` by id** — M4-12 gives REST the bulk write
+- [x] **M4-13 MCP `bulk_notes` tool and `create_notes` by id** — M4-12 gives REST the bulk write
   surface but the MCP tools still cannot delete or retag a set of notes and cannot address an
   existing note by id, so the two transports disagree. Register `bulk_notes` (scope write) in
   `internal/mcp/tools.go` and `internal/mcp/mcp.go` with the same `{action, note_ids, tags, dry_run}`
