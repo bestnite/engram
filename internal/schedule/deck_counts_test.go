@@ -142,22 +142,23 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		t.Errorf("DeckCounts returned %d decks, want %d", len(counts), len(visible))
 	}
 
-	// 属性：逐卡组与 Build(DeckID=d) 的条数相等。
+	// 属性：逐卡组与 Build(DeckID=d) 的张数相等 —— 列表上的「新」＝QueueNew，
+	// 「复习」＝学习/再学习卡 + 到期复习卡，两者相加就是点进去能刷的张数。
 	for _, id := range visible {
 		items, err := builder.Build(ctx, 1, QueueOptions{DeckID: id, Now: now, Location: time.UTC})
 		if err != nil {
 			t.Fatalf("Build(DeckID=%d) error = %v", id, err)
 		}
 		newN := countKind(items, QueueNew)
-		reviewN := countKind(items, QueueReview)
+		reviewN := countKind(items, QueueReview) + countKind(items, QueueLearning)
 		if got := counts[id]; got.New != newN || got.Review != reviewN {
-			t.Errorf("deck %d: DeckCounts = %+v, Build(DeckID) New=%d Review=%d", id, got, newN, reviewN)
+			t.Errorf("deck %d: DeckCounts = %+v, Build(DeckID) New=%d Review(learning+due)=%d", id, got, newN, reviewN)
 		}
 	}
 
-	// (a) 额度用尽：新 0、复习 1；学习卡仍出队。
-	if got := counts[quota]; got.New != 0 || got.Review != 1 {
-		t.Errorf("quota deck counts = %+v, want New=0 Review=1", got)
+	// (a) 额度用尽：新 0；复习 2 = 1 张到期的学习卡 + 1 张到期的复习卡。
+	if got := counts[quota]; got.New != 0 || got.Review != 2 {
+		t.Errorf("quota deck counts = %+v, want New=0 Review=2 (1 learning + 1 due review)", got)
 	}
 	qitems, err := builder.Build(ctx, 1, QueueOptions{DeckID: quota, Now: now, Location: time.UTC})
 	if err != nil {

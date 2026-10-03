@@ -175,7 +175,7 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 	stability, difficulty := 5.0, 5.0
 	last := now.Add(-48 * time.Hour)
 
-	// 卡组 A：3 张新卡 + 2 张到期复习卡 → 新 3、复习 2。
+	// 卡组 A：3 张新卡 + 2 张到期复习卡 + 1 张到期的学习卡 → 新 3、复习 3。
 	deckA := seedReviewDeck(t, db, ownerID, "Counts deck")
 	for i := 0; i < 3; i++ {
 		seedCardRow(t, db, deckA.ID, "new", now.Add(time.Duration(i)*time.Minute))
@@ -187,6 +187,13 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 			DueAt: &due, Stability: &stability, Difficulty: &difficulty, LastReviewAt: &last}).Error; err != nil {
 			t.Fatalf("create card state: %v", err)
 		}
+	}
+	// 一张到期的学习卡：不占复习额度，但排在队列最前面，因此必须计入「复习」数。
+	learning := seedCardRow(t, db, deckA.ID, "learning", now)
+	learnDue := now.Add(-time.Minute)
+	if err := db.Create(&store.CardState{CardID: learning, UserID: ownerID, State: "learning",
+		DueAt: &learnDue}).Error; err != nil {
+		t.Fatalf("create learning card state: %v", err)
 	}
 
 	// 卡组 B：new_per_day=1，今日已引入 1 张、另有 2 张新卡 → 新 0（额度用尽）。
@@ -225,7 +232,8 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 			switch it.Kind {
 			case schedule.QueueNew:
 				newN++
-			case schedule.QueueReview:
+			case schedule.QueueReview, schedule.QueueLearning:
+				// 「复习」数含学习/再学习到期卡：它们排在队列最前面，也是点进去能刷的一部分。
 				reviewN++
 			}
 		}
@@ -233,8 +241,8 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 	}
 	wantANew, wantAReview := counts(deckA.ID)
 	wantBNew, wantBReview := counts(deckB.ID)
-	if wantANew != 3 || wantAReview != 2 {
-		t.Fatalf("deck A build counts = %d/%d, want 3/2", wantANew, wantAReview)
+	if wantANew != 3 || wantAReview != 3 {
+		t.Fatalf("deck A build counts = %d/%d, want 3/3 (2 due reviews + 1 due learning card)", wantANew, wantAReview)
 	}
 	if wantBNew != 0 || wantBReview != 0 {
 		t.Fatalf("deck B build counts = %d/%d, want 0/0 (new quota used up)", wantBNew, wantBReview)
@@ -253,10 +261,9 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 	if rowA == "" {
 		t.Fatalf("no row for deck A: %s", snippet(body))
 	}
-	for _, want := range []string{">3</span>", ">2</span>"} {
-		if !strings.Contains(rowA, want) {
-			t.Errorf("deck A row missing %q: %s", want, rowA)
-		}
+	// 两个数都是 3（3 张新卡、3 张到期卡）；逐个数一遍，确保渲染的是两个独立的数。
+	if n := strings.Count(rowA, ">3</span>"); n != 2 {
+		t.Errorf("deck A row should show 3 in both numbers, got %d occurrence(s): %s", n, rowA)
 	}
 	// 卡组 B：新 0、复习 0；两张新卡不得被算进「新」（额度已用尽）。
 	rowB := deckRowHTML(body, deckB.ID)

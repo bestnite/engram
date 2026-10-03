@@ -146,7 +146,9 @@ type QueueItem struct {
 	Kind           QueueKind
 }
 
-// DeckQueueCounts 是单个卡组口径下队列的构成：今日可引入的新卡数与可复习的到期卡数。
+// DeckQueueCounts 是单个卡组口径下队列的构成：New 是今日还能引入的新卡数，
+// Review 是今日可刷的到期卡数（学习/再学习到期卡 + 受 reviews_per_day 限制的复习卡）。
+// 两个数相加＝点进该卡组实际能刷的张数，列表页那两个数的语义就是它。
 type DeckQueueCounts struct{ New, Review int }
 
 // QueueBuilder 负责从 card_states / reviews 构造复习队列。
@@ -257,7 +259,8 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	return out, nil
 }
 
-// DeckCounts 返回每个卡组单卡组口径下的队列构成；与 Build(DeckID=d) 的 New/Review 条数逐一相等。
+// DeckCounts 返回每个卡组单卡组口径下的队列构成；与 Build(DeckID=d) 出队的张数逐一相等
+// （New = QueueNew，Review = 学习/再学习卡 + 到期复习卡）。
 //
 // 它与 Build 共用同一条取卡路径（collect）与同一条额度公式（deckBudget），因此列表页上的数字
 // 就是点进去能刷的张数，不会再出现「列表显示有到期、点进去说没有」。deckIDs 为空时按全库口径
@@ -276,13 +279,19 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 	if err != nil {
 		return nil, err
 	}
+	// 学习/再学习到期卡不占额度，但必须计入「复习」数：它们排在队列最前面，
+	// 少算就会让列表上的两个数小于点进去能刷的张数（正是本次要修的现象之一）。
+	learningByDeck := make(map[uint64]int, len(col.order))
+	for _, it := range col.learning {
+		learningByDeck[it.DeckID]++
+	}
 	out := make(map[uint64]DeckQueueCounts, len(col.order))
 	for _, id := range col.order {
 		review := len(col.reviews[id])
 		if review > opts.BatchSize {
 			review = opts.BatchSize
 		}
-		out[id] = DeckQueueCounts{New: len(col.fresh[id]), Review: review}
+		out[id] = DeckQueueCounts{New: len(col.fresh[id]), Review: learningByDeck[id] + review}
 	}
 	return out, nil
 }
