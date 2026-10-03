@@ -97,6 +97,20 @@
     }
   }
 
+  // 判分结果面板（M3-12）是「已作答、只差继续」的状态：回车/空格（以及数字键）都必须走
+  // #review-continue 换下一张。结果面板本身已经给出正确答案，再揭示一次背面只是
+  // 同义重复——实测回车不改卡、只把隐藏的背面翻出来。
+  function resultOpen() {
+    return !!document.getElementById("review-result");
+  }
+
+  function clickContinue() {
+    var btn = document.getElementById("review-continue");
+    if (btn) {
+      btn.click();
+    }
+  }
+
   function onKeyDown(e) {
     var tag = e.target && e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
@@ -104,12 +118,21 @@
     }
     if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
+      if (resultOpen()) {
+        clickContinue();
+        return;
+      }
       if (!revealed()) {
         revealAnswer();
       }
       return;
     }
     if (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4") {
+      if (resultOpen()) {
+        e.preventDefault();
+        clickContinue();
+        return;
+      }
       if (!revealed()) {
         revealAnswer();
         return;
