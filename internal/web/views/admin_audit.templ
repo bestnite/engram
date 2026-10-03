@@ -12,11 +12,7 @@ templ adminAudit(data AdminPageData) {
 			</label>
 			<label class="block">
 				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.AuditActionLabel }</span>
-				<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="action">
-					for _, opt := range data.AuditActions {
-						<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-					}
-				</select>
+				@Select(SelectProps{Name: "action", Options: data.AuditActions})
 			</label>
 			<label class="block">
 				<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.AuditTargetLabel }</span>

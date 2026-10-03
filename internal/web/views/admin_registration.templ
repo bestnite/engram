@@ -46,11 +46,7 @@ templ adminRegistration(data AdminPageData) {
 				</label>
 				<label class="block w-32 sm:w-40">
 					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.InviteRoleLabel }</span>
-					<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
-						for _, r := range data.InviteRoles {
-							<option value={ r.Value } selected?={ r.Selected }>{ r.Label }</option>
-						}
-					</select>
+					@Select(SelectProps{Name: "role", Options: data.InviteRoles})
 				</label>
 				<label class="block w-28 sm:w-32">
 					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.InviteExpiryLabel }</span>

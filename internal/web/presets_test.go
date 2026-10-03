@@ -379,7 +379,7 @@ func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
 	if !strings.Contains(decks.Body.String(), `name="preset_id"`) {
 		t.Fatalf("deck form has no preset dropdown: %s", snippet(decks.Body.String()))
 	}
-	if !strings.Contains(decks.Body.String(), ">默认</option>") {
+	if !strings.Contains(decks.Body.String(), "默认") {
 		t.Errorf("fresh account's deck form has an empty preset dropdown: %s", snippet(decks.Body.String()))
 	}
 
@@ -433,7 +433,7 @@ func TestPresetCreateAddsSecondPresetShownInDeckForm(t *testing.T) {
 	}
 
 	decks := getWithCookies(t, srv, "/decks", cookies)
-	if !strings.Contains(decks.Body.String(), ">Evening</option>") {
+	if !strings.Contains(decks.Body.String(), "Evening") {
 		t.Errorf("deck form does not offer the new preset: %s", snippet(decks.Body.String()))
 	}
 }

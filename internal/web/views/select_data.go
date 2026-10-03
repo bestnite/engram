@@ -1,6 +1,10 @@
 package views
 
-import "github.com/a-h/templ"
+import (
+	"strings"
+
+	"github.com/a-h/templ"
+)
 
 // SelectOption 是自定义下拉菜单中的通用选项。
 type SelectOption struct {
@@ -48,9 +52,15 @@ func selectDisplayLabel(props SelectProps) string {
 }
 
 // selectWrapperClass 合并基础包装类与调用方传入的自定义 class。
+// 若调用方显式指定了宽度（如 w-32、w-auto 等），则不再附加默认的 w-full，避免样式冲突。
 func selectWrapperClass(extra string) string {
 	if extra == "" {
 		return "relative inline-block w-full"
+	}
+	for _, part := range strings.Fields(extra) {
+		if strings.HasPrefix(part, "w-") {
+			return "relative inline-block " + extra
+		}
 	}
 	return "relative inline-block w-full " + extra
 }

@@ -104,11 +104,7 @@ templ DeckListPage(data DeckListData) {
 						</label>
 						<label class="block">
 							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.PresetLabel }</span>
-							<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="preset_id">
-								for _, p := range data.Presets {
-									<option value={ p.Value } selected?={ p.Selected }>{ p.Label }</option>
-								}
-							</select>
+							@Select(SelectProps{Name: "preset_id", Options: data.Presets})
 						</label>
 						<div class="pt-2">
 							<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.CreateLabel }</button>
