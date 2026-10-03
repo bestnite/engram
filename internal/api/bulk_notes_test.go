@@ -236,16 +236,27 @@ func TestBulkNotesIsIdempotentAndAuditsOnce(t *testing.T) {
 }
 
 // TestBulkNotesDryRunChangesNothing 断言 dry_run 只计数：不改任何行、不写审计。
+// 请求里故意混入一个本用户无权编辑的 id：dry_run 必须连 permission.denied 也不留
+// （逐行静默判权），但照样在 skipped 里如实报出该行的 code。
 func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
+	ctx := context.Background()
 	user := seedUser(t, env.db, "bulk_dry", store.RoleUser)
+	other := seedUser(t, env.db, "bulk_dry_other", store.RoleUser)
 	deck := seedDeck(t, env.db, user.ID)
 	a := seedBasicNote(t, env, deck.ID, "q1", "a1", nil)
 	b := seedBasicNote(t, env, deck.ID, "q2", "a2", nil)
+	// 另一个人的卡组，user 只被授予 reader：可读不可改。
+	otherDeck := seedDeck(t, env.db, other.ID)
+	readonly := seedBasicNote(t, env, otherDeck.ID, "q3", "a3", nil)
+	if err := store.NewGrantStore(env.db).Grant(ctx, otherDeck.ID, other.ID, store.RoleReader, store.Ptr(other.ID)); err != nil {
+		t.Fatalf("grant reader: %v", err)
+	}
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 
-	body := fmt.Sprintf(`{"action":"add_tags","dry_run":true,"note_ids":[%d,%d],"tags":["gamma"]}`, a.ID, b.ID)
+	body := fmt.Sprintf(`{"action":"add_tags","dry_run":true,"note_ids":[%d,%d,%d],"tags":["gamma"]}`,
+		a.ID, b.ID, readonly.ID)
 	status, raw := doJSON(t, router, http.MethodPost, "/api/v1/notes/bulk", k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", status, raw)
@@ -254,10 +265,13 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	if !resp.DryRun || resp.Affected != 2 {
 		t.Errorf("dry_run response = (dry_run=%v affected=%d), want (true, 2)", resp.DryRun, resp.Affected)
 	}
+	if len(resp.Skipped) != 1 || resp.Skipped[0].NoteID != readonly.ID || resp.Skipped[0].Code != CodeInsufficientRole {
+		t.Errorf("dry_run skipped = %+v, want exactly (%d, %q)", resp.Skipped, readonly.ID, CodeInsufficientRole)
+	}
 
 	noteStore := store.NewNoteStore(env.db)
-	for _, id := range []uint64{a.ID, b.ID} {
-		n, err := noteStore.ByID(context.Background(), id)
+	for _, id := range []uint64{a.ID, b.ID, readonly.ID} {
+		n, err := noteStore.ByID(ctx, id)
 		if err != nil {
 			t.Fatalf("reload note %d: %v", id, err)
 		}
@@ -265,10 +279,11 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 			t.Errorf("note %d tags = %v, want unchanged (dry_run must not write)", id, got)
 		}
 	}
-	// dry_run 不写任何批量动作审计行（认证中间件为请求本身写的那一行不算）。
+	// dry_run 不写任何批量动作审计行（认证中间件为请求本身写的那一行不算），
+	// 逐行判权失败也不得留下 permission.denied —— 那正是「dry_run 零副作用」的一部分。
 	audit := store.NewAuditStore(env.db)
-	for _, action := range []string{store.ActionNoteDelete, store.ActionNoteTagAdd, store.ActionNoteTagRemove, store.ActionNoteTagSet} {
-		if n, err := audit.CountByAction(context.Background(), action); err != nil || n != 0 {
+	for _, action := range []string{store.ActionNoteDelete, store.ActionNoteTagAdd, store.ActionNoteTagRemove, store.ActionNoteTagSet, store.ActionPermissionDenied} {
+		if n, err := audit.CountByAction(ctx, action); err != nil || n != 0 {
 			t.Errorf("dry_run audit rows for %q = (%d, %v), want (0, nil)", action, n, err)
 		}
 	}

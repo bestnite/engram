@@ -592,15 +592,10 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 	resp := BulkNotesResponse{DryRun: in.DryRun, Skipped: []BulkNotesSkipped{}}
 	permitted := make([]uint64, 0, len(ids))
 	for _, id := range ids {
-		if _, _, err := a.RequireNoteRole(ctx, userID, id, store.RoleEditor); err != nil {
+		if code := a.bulkRowCode(ctx, userID, id, !in.DryRun); code != "" {
 			// 单行判权失败不使整批失败：not_found 与 insufficient_role 各记一条 skipped，
-			// 其余 id 继续处理。RequireNoteRole 对软删 note 也走 not_found（ByID 不返回软删行）。
-			code := asServiceError(err).Code
-			skipCode := "insufficient_role"
-			if code == CodeNotFound {
-				skipCode = "not_found"
-			}
-			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: id, Code: skipCode})
+			// 其余 id 继续处理。
+			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: id, Code: code})
 			continue
 		}
 		permitted = append(permitted, id)
@@ -635,6 +630,35 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 		})
 	}
 	return resp, nil
+}
+
+// bulkRowCode 判定调用者能否编辑该 note：可编辑返回空串，否则返回该行 skipped 里的稳定 code
+// （与错误 code 同一套取值：not_found / insufficient_role）。
+//
+// audit 为 true 时走共享的 RequireNoteRole —— 它会在角色不足时写一条 permission.denied 审计，
+// 与 REST 其它写操作的取证口径一致（谁在什么时候试图改什么被挡下）。dry_run 传 false，逐行
+// 静默判定：一次 dry run 若有 500 个 id 都无权限，不该抖出 500 条审计行（§7.3：dry_run 不写
+// 任何行、不写审计行、零副作用）。两条路径对同一情形必须给出同一个 code。
+func (a *API) bulkRowCode(ctx context.Context, userID, noteID uint64, audit bool) string {
+	var err error
+	if audit {
+		_, _, err = a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
+	} else {
+		var n *store.Note
+		if n, err = a.notes.ByID(ctx, noteID); err == nil {
+			// 与 RequireNoteRole 同一条判定链，只是不写 permission.denied（见上）。
+			_, _, err = a.access.RequireRole(ctx, n.DeckID, userID, store.RoleEditor)
+		}
+	}
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, auth.ErrDeckNotFound) ||
+		asServiceError(err).Code == CodeNotFound {
+		// 不存在、已软删（ByID 不返回软删行），或卡组已消失：一律 not_found。
+		return CodeNotFound
+	}
+	return CodeInsufficientRole
 }
 
 // bulkAuditAction 把批量动作映射到稳定的审计动作名（constants 定义在 store/audit.go）。
