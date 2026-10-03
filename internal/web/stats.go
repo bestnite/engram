@@ -165,11 +165,11 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 		})
 	}
 
-	// 时间投入：总量、日均、中位数、样本数。
+	// 时间投入：累计/平均/中位/样本数。耗时单位随量级走（elapsedLabel，DESIGN.md §9）。
 	data.TimeRows = []views.StatsRow{
-		{Label: loc.T("stats.time.total_label"), Value: loc.Tf("stats.time.total", map[string]any{"ms": timeSpent.TotalMS})},
-		{Label: loc.T("stats.time.avg_label"), Value: loc.Tf("stats.time.avg", map[string]any{"ms": int64(timeSpent.AvgMS)})},
-		{Label: loc.T("stats.time.median_label"), Value: loc.Tf("stats.time.median", map[string]any{"ms": timeSpent.MedianMS})},
+		{Label: loc.T("stats.time.total_label"), Value: elapsedLabel(loc, timeSpent.TotalMS)},
+		{Label: loc.T("stats.time.avg_label"), Value: elapsedLabel(loc, int64(timeSpent.AvgMS))},
+		{Label: loc.T("stats.time.median_label"), Value: elapsedLabel(loc, timeSpent.MedianMS)},
 		{Label: loc.T("stats.time.count_label"), Value: loc.Tf("stats.time.count", map[string]any{"count": timeSpent.Count})},
 	}
 
@@ -221,7 +221,7 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 			loc.Tf("stats.due.value", map[string]any{"count": d.DueCount}),
 			loc.Tf("stats.volume.value", map[string]any{"count": d.Reviews}),
 			loc.Tf("stats.table.rate", map[string]any{"rate": formatPercent(d.Retention)}),
-			loc.Tf("stats.table.elapsed", map[string]any{"ms": d.ElapsedMS}),
+			elapsedLabel(loc, d.ElapsedMS),
 		})
 	}
 	for _, t := range tags {

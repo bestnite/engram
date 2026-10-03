@@ -1243,14 +1243,18 @@
   translation: "365+ days"
 - id: stats.time.heading
   translation: "Time spent"
-- id: stats.time.total
-  translation: "{{.ms}} ms"
-- id: stats.time.avg
-  translation: "{{.ms}} ms"
-- id: stats.time.median
-  translation: "{{.ms}} ms"
 - id: stats.time.count
   translation: "{{.count}}"
+- id: stats.duration.milliseconds
+  translation: "{{.value}} ms"
+- id: stats.duration.seconds
+  translation: "{{.value}} s"
+- id: stats.duration.minutes
+  translation: "{{.value}} min"
+- id: stats.duration.hours
+  translation: "{{.hours}} h"
+- id: stats.duration.hours_minutes
+  translation: "{{.hours}} h {{.minutes}} min"
 - id: stats.streak.heading
   translation: "Streak"
 - id: stats.streak.current
@@ -1305,8 +1309,6 @@
   translation: "Reviews"
 - id: stats.tag.col.retention
   translation: "Retention"
-- id: stats.table.elapsed
-  translation: "{{.ms}} ms"
 - id: stats.table.rate
   translation: "{{.rate}}%"
 - id: nav.presets
