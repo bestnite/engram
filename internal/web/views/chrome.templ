@@ -2,6 +2,16 @@ package views
 
 // Header 渲染页头外壳：品牌、桌面/移动端导航、语言下拉、主题按钮与会话入口（含移动端抽屉）。
 // 由 Base 调用，拆成独立组件便于单独断言与复用（DESIGN.md §8）。
+//
+// 移动端抽屉有两条必须保持的不变量（回归测试见 internal/web/mobile_nav_test.go）：
+//  1. 抽屉必须脱离文档流（absolute + top-full）。它若参与文档流，展开后会撑高页头、把 main
+//     整体挤到页面下方——抽屉是悬浮层，不是页面内容。
+//  2. 遮罩必须位于 header 元素之外。页头带 backdrop-blur-md，而 backdrop-filter 会让元素成为
+//     fixed/absolute 后代的包含块：遮罩放在页头内部时 fixed inset-0 只覆盖页头那一条，
+//     于是点击页面空白处关不掉抽屉，也没有压暗效果。
+//
+// 层叠顺序由 z 值给出：遮罩 z-20 在页头 z-30 之下，抽屉 z-50 在页头的层叠上下文内因而也在遮罩之上。
+// 抽屉以 sticky 的页头为包含块，因此锚在页头下沿，且不随滚动跑偏。
 templ Header(data LayoutData) {
 		<header class="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/90 backdrop-blur-md">
 			<nav class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
@@ -56,9 +66,8 @@ templ Header(data LayoutData) {
 				</div>
 			</nav>
 
-			<!-- 移动端抽屉遮罩与下拉菜单 -->
-			<div id="mobile-nav-backdrop" class="fixed inset-0 z-40 bg-zinc-950/40 backdrop-blur-xs hidden sm:hidden"></div>
-			<div id="mobile-nav-menu" class="hidden sm:hidden relative z-50 border-t border-zinc-200/80 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/95 backdrop-blur-md p-4 space-y-3 shadow-lg">
+			<!-- 移动端抽屉：脱离文档流，锚在页头下沿（不变量见 Header 的注释）。 -->
+			<div id="mobile-nav-menu" class="hidden sm:hidden absolute inset-x-0 top-full z-50 border-t border-zinc-200/80 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/95 backdrop-blur-md p-4 space-y-3 shadow-lg">
 				if len(data.Nav) > 0 {
 					<div class="space-y-1">
 						for _, item := range data.Nav {
@@ -84,6 +93,9 @@ templ Header(data LayoutData) {
 				}
 			</div>
 		</header>
+
+		<!-- 遮罩必须留在页头元素之外，否则 fixed inset-0 只覆盖页头那一条（不变量见 Header 的注释）。 -->
+		<div id="mobile-nav-backdrop" class="fixed inset-0 z-20 bg-zinc-950/40 backdrop-blur-xs hidden sm:hidden"></div>
 }
 
 // Footer 渲染页脚外壳：指向源码仓库的项目名链接。
