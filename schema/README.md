@@ -1,14 +1,43 @@
 # JSON Schemas
 
-Two JSON Schema (draft 2020-12) documents that describe the data exchanged with the
+Three JSON Schema (draft 2020-12) documents that describe the data exchanged with the
 HTTP API, so external tools and agents can validate and generate payloads without
-reading the server code. Both are the machine-readable companion of `DESIGN.md`; the
+reading the server code. All of them are the machine-readable companion of `DESIGN.md`; the
 server remains the source of truth for validation.
 
 | File | Describes | Design reference |
 |---|---|---|
 | `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes` | `DESIGN.md` §7.3 (endpoint), §6.2 (card types) |
+| `note-bulk.schema.json` | Request body of the notes bulk action endpoint `POST /api/v1/notes/bulk` | `DESIGN.md` §7.3 (endpoint) |
 | `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) | `DESIGN.md` §7.6 |
+
+## `note-bulk.schema.json`
+
+The request carries one `action` applied to every note in `note_ids`:
+
+| `action` | `tags` | Effect |
+|---|---|---|
+| `delete` | not allowed | soft-deletes the notes; their cards and all users' progress are kept |
+| `add_tags` | required | adds the given tags |
+| `remove_tags` | required | removes the given tags |
+| `set_tags` | required | replaces the whole tag list |
+
+`note_ids` holds 1 to 500 entries and `tags` 1 to 20. Two kinds of failure are
+deliberately different, which the schema states as far as JSON Schema can:
+
+- **Request-level failure** — an unknown action, `note_ids` empty or over the bound, a tag
+  action without tags, or `delete` carrying tags: the whole request is refused with the
+  `invalid_request` code and nothing is written. The schema rejects these bodies.
+- **Per-note outcome** — an id that does not exist, is soft-deleted, or belongs to a deck the
+  caller may not edit: reported in the response's `skipped` array as `not_found` or
+  `insufficient_role`, while the remaining notes are still processed. The schema cannot know
+  which ids those are, so it accepts them.
+
+The response is `{dry_run, affected, skipped:[{note_id, code}]}`. `affected` counts only the
+notes whose stored state actually changed, so resending the same request reports
+`affected: 0` — the action is idempotent. `tags` counts apply to the arrays as written while
+the server applies them after trimming and deduplicating, so the schema is the stricter of
+the two for bodies carrying repeated or blank entries.
 
 ## `note-import.schema.json`
 

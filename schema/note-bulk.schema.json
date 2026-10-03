@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/note-bulk.schema.json",
+  "title": "Notes bulk action request",
+  "description": "Request body for POST /api/v1/notes/bulk, which applies one action to a set of notes. A request that fails any rule stated here is rejected as a whole with the 'invalid_request' error code and writes nothing; a note that the action cannot reach (unknown id, soft-deleted id, or an id the caller may not edit) is not a request error: it is reported in the response's 'skipped' array while the remaining notes are still processed. The server remains the source of truth for validation; this schema states the same constraints so external tools and agents can validate and generate request bodies before sending them. The counts below apply to the arrays as written, while the server applies them after trimming and deduplicating: the schema is therefore the stricter of the two for a request carrying repeated or blank entries, and it never accepts a body the server would reject.",
+  "type": "object",
+  "required": ["action", "note_ids"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["delete", "add_tags", "remove_tags", "set_tags"],
+      "description": "'delete' soft-deletes the notes (their cards and every user's review progress are kept). 'add_tags' adds the given tags, 'remove_tags' removes them, 'set_tags' replaces the whole tag list. One request carries one action for all notes."
+    },
+    "note_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "description": "The notes to act on, 1 to 500 entries. The notes need not belong to the same deck: the caller's role is checked per note, and an id it may not edit is reported in 'skipped'. Repeating an id is harmless (the server acts on it once) and an already-applied action reports 'affected': 0, so resending a request is idempotent."
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Tags for the tag actions, 1 to 20 entries. Required by 'add_tags', 'remove_tags' and 'set_tags'; not allowed by 'delete'."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true the server counts the rows that would change and reports them in 'affected' without writing any row, writing any audit row, or creating any other side effect."
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "enum": ["add_tags", "remove_tags", "set_tags"]
+          }
+        }
+      },
+      "then": {
+        "required": ["tags"]
+      }
+    },
+    {
+      "if": {
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "const": "delete"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "tags": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

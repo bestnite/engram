@@ -1,0 +1,6 @@
+{
+  "action": "add_tags",
+  "note_ids": [12, 34, 56],
+  "tags": ["chapter-1", "needs-review"],
+  "dry_run": false
+}
