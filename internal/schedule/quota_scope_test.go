@@ -14,8 +14,8 @@ import (
 // **卡组级**设置，所以单卡组范围内"今日已引入"只能数该卡组的记录。
 //
 // 修复前它按全库统计：一个卡组刷满新卡额度会把另一个卡组的新卡一起挡住，用户实测到的症状
-// 是"卡组列表显示 6 张到期，点进去却说当前没有到期的卡片"。全库（多卡组）范围没有单一卡组
-// 可归属，仍按全局计数。
+// 是"卡组列表显示 6 张到期，点进去却说当前没有到期的卡片"。现在全库/多卡组范围也按各卡组
+// 自己的额度求和（DESIGN.md §3.3 把 new_per_day 定义在卡组上）。
 func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -39,7 +39,7 @@ func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 		opts.Now = now
 		opts.Location = time.UTC
 		opts.NewOrder = NewOrderCreated
-		items, err := NewQueueBuilder(db, s).Build(context.Background(), 1, opts)
+		items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(context.Background(), 1, opts)
 		if err != nil {
 			t.Fatalf("Build(%+v) error = %v", opts, err)
 		}
@@ -54,9 +54,9 @@ func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 	if got := build(QueueOptions{DeckID: deckA}); len(got) != 0 {
 		t.Errorf("deck A queue = %+v, want empty (its own daily new-card cap is used up)", got)
 	}
-	// 全库范围：额度走文档化默认（20），仍按全局计数 —— 两张新卡都在。
-	if got := build(QueueOptions{}); len(got) != 2 {
-		t.Errorf("all-decks queue = %+v, want both new cards (global counting for the whole collection)", got)
+	// 全库范围：按各卡组自己的额度求和 —— B 出 1 张、A 额度已用尽出 0 张。
+	if got := build(QueueOptions{}); len(got) != 1 || got[0].DeckID != deckB {
+		t.Errorf("all-decks queue = %+v, want only deck B's 1 new card (per-deck budgets summed)", got)
 	}
 }
 

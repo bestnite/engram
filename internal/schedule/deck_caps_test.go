@@ -40,7 +40,7 @@ func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, s).Build(context.Background(), 1, QueueOptions{
+	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(context.Background(), 1, QueueOptions{
 		DeckID: deck.ID, Now: now, Location: time.UTC, NewOrder: NewOrderCreated,
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestQueueCapsExplicitOverrideBeatsDeck(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, s).Build(context.Background(), 1, QueueOptions{
+	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(context.Background(), 1, QueueOptions{
 		DeckID: deck.ID, Now: now, Location: time.UTC, NewOrder: NewOrderCreated,
 		NewPerDay: 5,
 	})

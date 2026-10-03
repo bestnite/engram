@@ -181,7 +181,7 @@ func TestSuspendRemovesCardFromQueue(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, s).Build(ctx, 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC})
+	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(ctx, 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -215,7 +215,7 @@ func TestBuryDefersCardToNextReviewDay(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, s).Build(ctx, 1, QueueOptions{
+	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(ctx, 1, QueueOptions{
 		DeckID: deckID, Now: now, Location: time.UTC, NewPerDay: 50, ReviewsPerDay: 200,
 	})
 	if err != nil {

@@ -111,7 +111,7 @@ func TestBuildOrdering(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	builder := NewQueueBuilder(db, s)
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	base := QueueOptions{
 		DeckID: deckID, Now: now, Location: time.UTC,
 		NewPerDay: 10, ReviewsPerDay: 200, NewOrder: NewOrderCreated,
@@ -186,7 +186,7 @@ func TestDailyNewCapAcrossDayBoundary(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	builder := NewQueueBuilder(db, s)
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	newCount := func(now time.Time) int {
 		t.Helper()
 		items, err := builder.Build(context.Background(), 1, QueueOptions{
@@ -224,7 +224,7 @@ func TestReviewsPerDayCap(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	builder := NewQueueBuilder(db, s)
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	ctx := context.Background()
 
 	capped, err := builder.Build(ctx, 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC, ReviewsPerDay: 1})
@@ -267,7 +267,7 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, s).Build(context.Background(), 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC})
+	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(context.Background(), 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -322,7 +322,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 	seedCard(t, db, deckC, "forward", now)
 
 	s := mustScheduler(t, testPreset(t))
-	builder := NewQueueBuilder(db, s)
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	ctx := context.Background()
 	// 显式上限覆盖，避免卡组列干扰本用例。
 	base := QueueOptions{Now: now, Location: time.UTC, NewPerDay: 10, ReviewsPerDay: 200, NewOrder: NewOrderCreated}
@@ -379,48 +379,49 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 	}
 }
 
-// TestMultiDeckIgnoresDeckCaps 断言上限与预设只在单卡组口径读卡组列；集合口径（即使只含
-// 一个卡组）一律不读被选中卡组的列，走调用方覆盖或文档化默认（DESIGN.md §3.3）。
-func TestMultiDeckIgnoresDeckCaps(t *testing.T) {
+// TestScopeHonoursPerDeckCaps 断言集合口径（含多个卡组）也按**各卡组自己的**额度算：
+// A 卡组 1/1、B 卡组 3/3，各 3 张新卡 + 3 张到期复习卡 → 合计新卡 1+3、复习 1+3。
+// 这是「多卡组＝各卡组额度之和」的直接验收（DESIGN.md §3.3）。
+func TestScopeHonoursPerDeckCaps(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	deckA := seedDeckCaps(t, db, now, 1, 1)
+	deckB := seedDeckCaps(t, db, now, 3, 3)
 
-	// 3 张新卡 + 3 张到期复习卡。
-	for i := 0; i < 3; i++ {
-		seedCard(t, db, deckA, string(rune('A'+i)), now.Add(time.Duration(i)*time.Minute))
-	}
-	last := now.Add(-24 * time.Hour)
-	for i := 0; i < 3; i++ {
-		id := seedCard(t, db, deckA, string(rune('R'+i)), now)
-		seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
+	for _, deckID := range []uint64{deckA, deckB} {
+		for i := 0; i < 3; i++ {
+			seedCard(t, db, deckID, string(rune('A'+i)), now.Add(time.Duration(i)*time.Minute))
+		}
+		last := now.Add(-24 * time.Hour)
+		for i := 0; i < 3; i++ {
+			id := seedCard(t, db, deckID, string(rune('R'+i)), now)
+			seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
+		}
 	}
 
 	s := mustScheduler(t, testPreset(t))
-	builder := NewQueueBuilder(db, s)
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	ctx := context.Background()
 
-	// 单卡组口径：读卡组列 → 新卡 1、复习 1。
 	single, err := builder.Build(ctx, 1, QueueOptions{DeckID: deckA, Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("Build(DeckID) error = %v", err)
 	}
 	if n := countKind(single, QueueNew); n != 1 {
-		t.Errorf("single-deck new cards = %d, want 1 (deck cap)", n)
+		t.Errorf("single-deck new cards = %d, want 1 (deck A new_per_day)", n)
 	}
 	if n := countKind(single, QueueReview); n != 1 {
-		t.Errorf("single-deck review cards = %d, want 1 (deck cap)", n)
+		t.Errorf("single-deck review cards = %d, want 1 (deck A reviews_per_day)", n)
 	}
 
-	// 集合口径（只含 A）：忽略卡组列 → 新卡默认 20（3 张全出）、复习不限（3 张全出）。
-	multi, err := builder.Build(ctx, 1, QueueOptions{DeckIDs: []uint64{deckA}, Now: now, Location: time.UTC})
+	multi, err := builder.Build(ctx, 1, QueueOptions{DeckIDs: []uint64{deckA, deckB}, Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("Build(DeckIDs) error = %v", err)
 	}
-	if n := countKind(multi, QueueNew); n != 3 {
-		t.Errorf("multi-deck new cards = %d, want 3 (deck column ignored, default cap)", n)
+	if n := countKind(multi, QueueNew); n != 4 {
+		t.Errorf("multi-deck new cards = %d, want 4 (A 1 + B 3)", n)
 	}
-	if n := countKind(multi, QueueReview); n != 3 {
-		t.Errorf("multi-deck review cards = %d, want 3 (deck column ignored, unlimited)", n)
+	if n := countKind(multi, QueueReview); n != 4 {
+		t.Errorf("multi-deck review cards = %d, want 4 (A 1 + B 3)", n)
 	}
 }
