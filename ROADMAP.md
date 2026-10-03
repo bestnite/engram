@@ -500,7 +500,7 @@ Conventions:
   `bulk_notes` call and the equivalent REST request produce identical results for the same input, and
   so do `create_notes` calls carrying `note_id`.
 
-- [ ] **M4-14 Bulk action JSON Schema** — `POST /api/v1/notes/bulk` has no machine-readable
+- [x] **M4-14 Bulk action JSON Schema** — `POST /api/v1/notes/bulk` has no machine-readable
   contract while its sibling `POST /decks/:id/notes` has had one since M4-8, so an external tool
   or agent cannot validate a bulk action body before sending it. Add
   `schema/note-bulk.schema.json` (draft 2020-12, same shape as the sibling schema) stating the
