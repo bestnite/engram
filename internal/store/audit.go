@@ -59,6 +59,9 @@ const (
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
 	// M5-5 卡组可见性变更（private / unlisted / public）。
 	ActionDeckVisibility = "deck.visibility_change"
+	// M2-14 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
+	// 张出来」，与其他卡组变更一样要留痕。
+	ActionDeckCaps = "deck.caps_change"
 	// M9-4 预设参数优化：触发优化作业与一键回退默认权重。
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
