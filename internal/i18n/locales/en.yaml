@@ -801,7 +801,7 @@
 - id: decks.list.col_actions
   translation: "Actions"
 - id: decks.list.export
-  translation: "Export .edeck"
+  translation: "Export"
 - id: import.title
   translation: "Import a deck package"
 - id: import.heading

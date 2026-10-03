@@ -800,7 +800,7 @@
 - id: decks.list.col_actions
   translation: "操作"
 - id: decks.list.export
-  translation: "导出 .edeck"
+  translation: "导出"
 - id: import.title
   translation: "导入卡组包"
 - id: import.heading
