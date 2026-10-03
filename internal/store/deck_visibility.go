@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -46,9 +45,12 @@ func (s *DeckStore) VisibleIDs(ctx context.Context, userID uint64) ([]uint64, er
 	return ids, nil
 }
 
-// SummariesVisible 是列表页用的聚合版：可见卡组各带卡片数与当前用户的到期数。
-// 与 Summaries 的差别只在“哪些卡组入选”——计数逻辑完全复用，避免两套口径漂移。
-func (s *DeckStore) SummariesVisible(ctx context.Context, userID uint64, now time.Time) ([]DeckSummary, error) {
+// SummariesVisible 是列表页用的聚合版：可见卡组各带卡片数。
+// 可见性与 ListVisible 同源，计数逻辑集中在 countCardsByDeck，避免两套口径漂移。
+//
+// 「今日可刷多少张」不在这里算：它必须先过队列的每日额度（schedule.DeckCounts），
+// 由调用方按同一套取卡路径取得，列表数字才会等于点进去能刷的张数。
+func (s *DeckStore) SummariesVisible(ctx context.Context, userID uint64) ([]DeckSummary, error) {
 	decks, err := s.ListVisible(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -65,15 +67,10 @@ func (s *DeckStore) SummariesVisible(ctx context.Context, userID uint64, now tim
 	if err != nil {
 		return nil, err
 	}
-	dueCounts, err := s.countDueByDeck(ctx, ids, userID, now)
-	if err != nil {
-		return nil, err
-	}
 	for i := range decks {
 		out = append(out, DeckSummary{
 			Deck:      decks[i],
 			CardCount: cardCounts[decks[i].ID],
-			DueCount:  dueCounts[decks[i].ID],
 		})
 	}
 	return out, nil

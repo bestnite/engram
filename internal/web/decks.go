@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
@@ -38,9 +38,15 @@ func (s *Server) deckList(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	summaries, err := s.decks.SummariesVisible(ctx, user.ID, time.Now().UTC())
+	summaries, err := s.decks.SummariesVisible(ctx, user.ID)
 	if err != nil {
 		s.logger.Error("list decks failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	counts, err := s.deckQueueCounts(ctx, user.ID, summaries)
+	if err != nil {
+		s.logger.Error("count deck queue failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -50,29 +56,50 @@ func (s *Server) deckList(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	s.renderDeckList(c, loc, user.ID, summaries, presets, http.StatusOK, "", "", "")
+	s.renderDeckList(c, loc, user.ID, summaries, counts, presets, http.StatusOK, "", "", "")
 }
 
-// renderDeckList 渲染卡组列表页（含创建失败的回显分支）。
-func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint64, summaries []store.DeckSummary, presets []store.Preset, status int, errMsg, nameValue, descValue string) {
+// deckQueueCounts 取列表页每个卡组「今日可刷」的构成（新 / 复习两个数），走 schedule.DeckCounts：
+// 它与 /review 的取卡路径同源，因此两个数相加＝点进去实际能刷的张数。
+// sched 用默认预设（schedulerFor 传 nil）——数量统计不算 retrievability，预设不影响结果。
+func (s *Server) deckQueueCounts(ctx context.Context, userID uint64, summaries []store.DeckSummary) (map[uint64]schedule.DeckQueueCounts, error) {
+	ids := make([]uint64, 0, len(summaries))
+	for i := range summaries {
+		ids = append(ids, summaries[i].Deck.ID)
+	}
+	sched, err := s.schedulerFor(ctx, userID, nil)
+	if err != nil {
+		return nil, err
+	}
+	return schedule.NewQueueBuilder(s.db, s.decks, sched).DeckCounts(ctx, userID, ids)
+}
+
+// renderDeckList 渲染卡组列表页（含创建失败的回显分支）。counts 是各卡组今日可刷的构成。
+func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint64, summaries []store.DeckSummary, counts map[uint64]schedule.DeckQueueCounts, presets []store.Preset, status int, errMsg, nameValue, descValue string) {
 	rows := make([]views.DeckRow, 0, len(summaries))
 	for i := range summaries {
 		sm := summaries[i]
-		// 共享管理页仅对 owner 开放（sharingPage 走 DeckAccess 判 owner）：只有本人拥有的行
-		// 才给出入口，被共享给他人的行留空，避免非 owner 点进去吃 403（M5-2）。
+		// 共享/设置管理页仅对 owner 开放：只有本人拥有的行才给出入口，被共享给他人的行留空，
+		// 避免非 owner 点进去吃 403（M5-2）。
 		sharingHref := ""
+		settingsHref := ""
 		if sm.Deck.OwnerUserID == userID {
 			sharingHref = fmt.Sprintf("/decks/%d/sharing", sm.Deck.ID)
+			settingsHref = fmt.Sprintf("/decks/%d/settings", sm.Deck.ID)
 		}
+		// 今日可刷的两个数来自 schedule.DeckCounts，与 /review 同源——两者相加＝点进去能刷的张数。
+		queue := counts[sm.Deck.ID]
 		rows = append(rows, views.DeckRow{
-			IDValue:     strconv.FormatUint(sm.Deck.ID, 10),
-			Name:        sm.Deck.Name,
-			Href:        fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
-			CardCount:   sm.CardCount,
-			DueCount:    sm.DueCount,
-			Archived:    sm.Deck.ArchivedAt != nil,
-			ExportHref:  fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
-			SharingHref: sharingHref,
+			IDValue:      strconv.FormatUint(sm.Deck.ID, 10),
+			Name:         sm.Deck.Name,
+			Href:         fmt.Sprintf("/decks/%d/notes", sm.Deck.ID),
+			CardCount:    sm.CardCount,
+			NewCount:     int64(queue.New),
+			ReviewCount:  int64(queue.Review),
+			Archived:     sm.Deck.ArchivedAt != nil,
+			ExportHref:   fmt.Sprintf("/decks/%d/package", sm.Deck.ID),
+			SharingHref:  sharingHref,
+			SettingsHref: settingsHref,
 			// M3-13：只复习该卡组的入口，与列表页勾选后提交的 /review?deck=... 同一口径。
 			ReviewHref: fmt.Sprintf("/review?deck=%d", sm.Deck.ID),
 		})
@@ -86,15 +113,18 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		})
 	}
 	data := views.DeckListData{
-		Layout:      s.pageLayout(c, loc, "decks.list.title"),
-		Heading:     loc.T("decks.list.heading"),
-		ColName:     loc.T("decks.list.col_name"),
-		ColCards:    loc.T("decks.list.col_cards"),
-		ColDue:      loc.T("decks.list.col_due"),
-		EmptyText:   loc.T("decks.list.empty"),
-		Archived:    loc.T("decks.list.archived"),
-		ColActions:  loc.T("decks.list.col_actions"),
-		ExportLabel: loc.T("decks.list.export"),
+		Layout:   s.pageLayout(c, loc, "decks.list.title"),
+		Heading:  loc.T("decks.list.heading"),
+		ColName:  loc.T("decks.list.col_name"),
+		ColCards: loc.T("decks.list.col_cards"),
+		ColDue:   loc.T("decks.list.col_due"),
+		// 今日列的两个数字的标签（新 X · 复习 Y）。
+		NewCardsLabel:    loc.T("decks.list.new_cards"),
+		ReviewCardsLabel: loc.T("decks.list.review_cards"),
+		EmptyText:        loc.T("decks.list.empty"),
+		Archived:         loc.T("decks.list.archived"),
+		ColActions:       loc.T("decks.list.col_actions"),
+		ExportLabel:      loc.T("decks.list.export"),
 		// M3-13：多卡组复习入口文案（每行「复习」、页头「复习所选」、复选框名称与提示）。
 		ReviewLabel:         loc.T("decks.list.review"),
 		ReviewSelectedLabel: loc.T("decks.list.review_selected"),
@@ -104,17 +134,19 @@ func (s *Server) renderDeckList(c *gin.Context, loc *i18n.Localizer, userID uint
 		ImportHref:  "/import",
 		// M5-2：owner 行的共享入口文案；非 owner 行的 SharingHref 为空，模板不渲染。
 		SharingLabel: loc.T("decks.list.sharing"),
-		Rows:         rows,
-		NewHeading:   loc.T("decks.list.new_heading"),
-		CloseLabel:   loc.T("common.close"),
-		NameLabel:    loc.T("decks.list.name_label"),
-		NameValue:    nameValue,
-		DescLabel:    loc.T("decks.list.desc_label"),
-		DescValue:    descValue,
-		PresetLabel:  loc.T("decks.list.preset_label"),
-		Presets:      options,
-		CreateLabel:  loc.T("decks.list.create_submit"),
-		ErrorMessage: errMsg,
+		// owner 行的设置入口文案；非 owner 行的 SettingsHref 为空，模板不渲染。
+		SettingsLabel: loc.T("decks.list.settings"),
+		Rows:          rows,
+		NewHeading:    loc.T("decks.list.new_heading"),
+		CloseLabel:    loc.T("common.close"),
+		NameLabel:     loc.T("decks.list.name_label"),
+		NameValue:     nameValue,
+		DescLabel:     loc.T("decks.list.desc_label"),
+		DescValue:     descValue,
+		PresetLabel:   loc.T("decks.list.preset_label"),
+		Presets:       options,
+		CreateLabel:   loc.T("decks.list.create_submit"),
+		ErrorMessage:  errMsg,
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
@@ -175,19 +207,26 @@ func (s *Server) deckCreate(c *gin.Context) {
 
 // renderDeckCreateError 在创建失败时重新渲染列表页并带上本地化错误与回显值。
 func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, userID uint64, status int, errMsg, nameValue, descValue string) {
-	summaries, err := s.decks.SummariesVisible(c.Request.Context(), userID, time.Now().UTC())
+	ctx := c.Request.Context()
+	summaries, err := s.decks.SummariesVisible(ctx, userID)
 	if err != nil {
 		s.logger.Error("list decks failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	presets, err := s.ensureDefaultPreset(c.Request.Context(), loc, userID)
+	counts, err := s.deckQueueCounts(ctx, userID, summaries)
+	if err != nil {
+		s.logger.Error("count deck queue failed", "user_id", userID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	s.renderDeckList(c, loc, userID, summaries, presets, status, errMsg, nameValue, descValue)
+	s.renderDeckList(c, loc, userID, summaries, counts, presets, status, errMsg, nameValue, descValue)
 }
 
 // ensureDefaultPreset 保证该用户至少有一个调度预设：没有就按文档化默认值建一个，幂等。

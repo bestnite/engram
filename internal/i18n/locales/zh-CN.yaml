@@ -349,7 +349,7 @@
 - id: decks.list.col_cards
   translation: "卡片数"
 - id: decks.list.col_due
-  translation: "到期数"
+  translation: "今日"
 - id: decks.list.empty
   translation: "还没有卡组，在下方创建第一个。"
 - id: decks.list.archived
@@ -2104,3 +2104,11 @@
   translation: "{{.notes}} / {{.cards}}"
 - id: admin.dashboard.jobs_value
   translation: "进行中 {{.running}} · 失败 {{.failed}}"
+
+# ── 卡组列表「今日」列的两个数字与 owner 行的设置入口 ──────────────────
+- id: decks.list.new_cards
+  translation: "新"
+- id: decks.list.review_cards
+  translation: "复习"
+- id: decks.list.settings
+  translation: "设置"
