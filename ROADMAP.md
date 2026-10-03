@@ -453,7 +453,7 @@ Conventions:
   refused; an empty name and an invalid visibility are rejected with the shared error code; the
   REST handler's existing tests still pass unchanged.
 
-- [ ] **M4-12 Notes bulk write surface** — notes can be created in bulk and rewritten one at a time,
+- [x] **M4-12 Notes bulk write surface** — notes can be created in bulk and rewritten one at a time,
   but a set of them cannot be deleted or retagged through the API, and an agent holding note ids
   cannot rewrite their content: the only bulk entry point is the web form
   (`POST /decks/:id/bulk`, `internal/web/notes.go`), which REST and MCP do not have. Two changes,
