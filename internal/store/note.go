@@ -295,22 +295,66 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 
 // DeleteMany 软删除一组 note（只写 notes.deleted_at，不碰 cards 行）。
 // 已删除或不存在的 id 不计入返回的条数；ids 为空时直接返回 (0, nil)。
-func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64) (int64, error) {
+// dryRun 只统计「会被删除的行数」，不执行任何写操作（M4-12）。
+func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&Note{})
-	if res.Error != nil {
-		return 0, fmt.Errorf("delete notes %v: %w", ids, res.Error)
+	if dryRun {
+		var n int64
+		if err := s.db.WithContext(ctx).Model(&Note{}).Where("id IN ?", ids).Count(&n).Error; err != nil {
+			return 0, fmt.Errorf("count notes to delete: %w", err)
+		}
+		return n, nil
 	}
-	return res.RowsAffected, nil
+	var affected int64
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("id IN ?", ids).Delete(&Note{})
+		if res.Error != nil {
+			return fmt.Errorf("delete notes %v: %w", ids, res.Error)
+		}
+		affected = res.RowsAffected
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
 }
 
-// AddTags 给一组 note 追加同一个标签，跳过已含该标签的行（幂等）。
+// tagOp 选择标签原语的合并方式；三个原语都收敛到 applyTags 一处实现。
+type tagOp int
+
+const (
+	tagOpAdd tagOp = iota
+	tagOpRemove
+	tagOpSet
+)
+
+// AddTags 给一组 note 追加标签（并集），跳过结果与旧值相同的行（幂等）。
 // 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
-func (s *NoteStore) AddTags(ctx context.Context, ids []uint64, tag string) (int64, error) {
-	tag = strings.TrimSpace(tag)
-	if tag == "" {
+func (s *NoteStore) AddTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
+	return s.applyTags(ctx, ids, tags, tagOpAdd, dryRun)
+}
+
+// RemoveTags 从一组 note 移除给定标签（差集，保持原有顺序）。
+// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+func (s *NoteStore) RemoveTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
+	return s.applyTags(ctx, ids, tags, tagOpRemove, dryRun)
+}
+
+// SetTags 用给定列表整体替换一组 note 的标签（保持列表顺序）。
+// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+func (s *NoteStore) SetTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
+	return s.applyTags(ctx, ids, tags, tagOpSet, dryRun)
+}
+
+// applyTags 是三个标签原语的唯一实现。先把 tags 规范化（见 NormalizeTags），
+// 再逐行算出新值：与旧值相同则跳过（不写库、不计入返回值），不同才写 tags_json + updated_at。
+// 所有写操作在同一个事务里，任一行失败整体回滚；dryRun 时只计数、不执行任何 UPDATE。
+func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, op tagOp, dryRun bool) (int64, error) {
+	clean := NormalizeTags(tags)
+	if len(clean) == 0 {
 		return 0, ErrNoteTagRequired
 	}
 	if len(ids) == 0 {
@@ -320,33 +364,101 @@ func (s *NoteStore) AddTags(ctx context.Context, ids []uint64, tag string) (int6
 	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&notes).Error; err != nil {
 		return 0, fmt.Errorf("load notes for tagging: %w", err)
 	}
+	type tagChange struct {
+		id  uint64
+		raw string
+	}
+	changes := make([]tagChange, 0, len(notes))
+	for i := range notes {
+		old, err := ParseTags(notes[i].TagsJSON)
+		if err != nil {
+			return 0, fmt.Errorf("note %d: %w", notes[i].ID, err)
+		}
+		var next []string
+		switch op {
+		case tagOpAdd:
+			next = addTags(old, clean)
+		case tagOpRemove:
+			next = removeTags(old, clean)
+		default:
+			next = append([]string{}, clean...)
+		}
+		if equalTags(old, next) {
+			continue
+		}
+		raw, err := json.Marshal(next)
+		if err != nil {
+			return 0, fmt.Errorf("encode tags for note %d: %w", notes[i].ID, err)
+		}
+		changes = append(changes, tagChange{id: notes[i].ID, raw: string(raw)})
+	}
+	if dryRun {
+		return int64(len(changes)), nil
+	}
 	now := time.Now().UTC()
-	var changed int64
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for i := range notes {
-			tags, err := ParseTags(notes[i].TagsJSON)
-			if err != nil {
-				return fmt.Errorf("note %d: %w", notes[i].ID, err)
+		for _, ch := range changes {
+			if err := tx.Model(&Note{}).Where("id = ?", ch.id).
+				Updates(map[string]any{"tags_json": ch.raw, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("update tags for note %d: %w", ch.id, err)
 			}
-			if containsString(tags, tag) {
-				continue
-			}
-			raw, err := json.Marshal(append(tags, tag))
-			if err != nil {
-				return fmt.Errorf("encode tags for note %d: %w", notes[i].ID, err)
-			}
-			if err := tx.Model(&Note{}).Where("id = ?", notes[i].ID).
-				Updates(map[string]any{"tags_json": string(raw), "updated_at": now}).Error; err != nil {
-				return fmt.Errorf("update tags for note %d: %w", notes[i].ID, err)
-			}
-			changed++
 		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	return changed, nil
+	return int64(len(changes)), nil
+}
+
+// NormalizeTags 规范化标签列表：去掉首尾空白、丢弃空串、按首次出现去重并保持顺序。
+// store 的三个标签原语与 REST/MCP 的批量服务共用它，保证「加/减/设」与请求校验对同一
+// 标签的判定完全一致（同一条规则只改一处）。
+func NormalizeTags(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" || containsString(out, t) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// addTags 返回 old 与 add 的并集：保留 old 的顺序，再按 add 的顺序追加未见过的标签。
+func addTags(old, add []string) []string {
+	out := append([]string{}, old...)
+	for _, t := range add {
+		if !containsString(out, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// removeTags 返回 old 去掉 remove 中标签后的结果，保持 old 的顺序。
+func removeTags(old, remove []string) []string {
+	out := make([]string, 0, len(old))
+	for _, t := range old {
+		if !containsString(remove, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// equalTags 判断两个标签列表是否完全相同（顺序敏感）；nil 与空列表视为相等。
+func equalTags(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // ParseTags 解码 tags_json；空串按空数组处理，坏数据返回可读英文错误。

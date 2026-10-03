@@ -201,7 +201,7 @@ func TestNoteListSearchAndFilters(t *testing.T) {
 		t.Errorf("kind filter did not apply: %s", snippet(body))
 	}
 	// 软删除状态筛选：删掉 Q030 后，默认列表看不到，deleted 列表能看到。
-	if _, err := store.NewNoteStore(db).DeleteMany(context.Background(), []uint64{third.ID}); err != nil {
+	if _, err := store.NewNoteStore(db).DeleteMany(context.Background(), []uint64{third.ID}, false); err != nil {
 		t.Fatalf("DeleteMany() error = %v", err)
 	}
 	body = getWithCookies(t, srv, base, cookies).Body.String()

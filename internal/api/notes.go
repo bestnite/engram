@@ -143,6 +143,23 @@ func (a *API) deleteNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "id": deleted})
 }
 
+// bulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags（M4-12）。
+// 请求体形态与 BulkNotes 输入一致；错误走统一包壳，成功 200 返回 BulkNotesResponse。
+func (a *API) bulkNotes(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	var req BulkNotesInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
+	resp, err := a.BulkNotes(c.Request.Context(), u.ID, CurrentAPIKeyID(c), req)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // tagsJSON 把标签编码进 notes.tags_json；nil 也落成 "[]"，避免列里出现空串。
 func tagsJSON(tags []string) string {
 	if tags == nil {

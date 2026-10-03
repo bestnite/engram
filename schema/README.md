@@ -34,7 +34,18 @@ built-in kinds and their required fields are:
 | `short_answer` | `prompt` | optional `reference`; self-graded for now |
 
 Every note may also carry `external_ref` (the caller-defined idempotency key),
-`tags`, `extra` and `source_url`.
+`note_id`, `tags`, `extra` and `source_url`.
+
+`note_id` addresses an existing note of the deck in the path by primary key, so a
+single request can rewrite several existing notes in place; their cards and every
+user's review progress are preserved. It is mutually exclusive with `external_ref`,
+which names a note by its idempotency key: a note object that carries both is rejected
+with a per-row error. The schema states this with an `allOf` branch whose `not` /
+`required` combination forbids the two keys from appearing together. The server remains
+the source of truth for everything the schema cannot express: a `note_id` that is
+unknown, soft-deleted or owned by another deck is reported as a row error (the two
+cases are not distinguished, so the server never leaks whether an id exists in another
+deck), and the note is only rewritten when it belongs to the deck in the path.
 
 What JSON Schema cannot express and the server enforces instead:
 

@@ -758,7 +758,7 @@ func (s *Server) noteBulk(c *gin.Context) {
 
 	switch action {
 	case "delete":
-		n, err := s.notes.DeleteMany(c.Request.Context(), ids)
+		n, err := s.notes.DeleteMany(c.Request.Context(), ids, false)
 		if err != nil {
 			s.logger.Error("bulk delete notes failed", "deck_id", deck.ID, "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -773,7 +773,7 @@ func (s *Server) noteBulk(c *gin.Context) {
 		})
 	case "tag":
 		tag := strings.TrimSpace(c.PostForm("tag"))
-		n, err := s.notes.AddTags(c.Request.Context(), ids, tag)
+		n, err := s.notes.AddTags(c.Request.Context(), ids, []string{tag}, false)
 		if err != nil {
 			// 空标签是用户输入问题：回列表并记日志，不 500。
 			s.logger.Info("bulk add tag rejected", "deck_id", deck.ID, "error", err)

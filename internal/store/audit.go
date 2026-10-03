@@ -23,6 +23,10 @@ const (
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
+	// M4-12 批量标签动作：移除与整体设置标签。与 ActionNoteTagAdd 并列，
+	// 三条动作名各自稳定，便于按动作聚合历史审计。
+	ActionNoteTagRemove = "note.tag_remove"
+	ActionNoteTagSet    = "note.tag_set"
 	// M2-11 新建卡组。
 	ActionDeckCreate = "deck.create"
 	// M2-8 上传媒体。
