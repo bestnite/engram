@@ -334,20 +334,14 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 		BackLabel:        loc.T("review.back"),
 		ShowAnswerLabel:  loc.T("review.show_answer"),
 		ZeroScoreLabel:   loc.T("review.zero_score"),
-		Ratings: []views.ReviewRating{
-			{Value: int(schedule.Again), Label: loc.T("review.rating.again")},
-			{Value: int(schedule.Hard), Label: loc.T("review.rating.hard")},
-			{Value: int(schedule.Good), Label: loc.T("review.rating.good")},
-			{Value: int(schedule.Easy), Label: loc.T("review.rating.easy")},
-		},
-		ShortcutsHint: loc.T("review.shortcuts"),
-		BuryHint:      loc.T("review.bury_hint"),
-		EditLabel:     loc.T("review.edit"),
-		BuryLabel:     loc.T("review.bury"),
-		AnswerURL:     reviewAnswerPath,
-		ActionURL:     reviewActionPath,
-		DoneValue:     strconv.Itoa(done),
-		ElapsedName:   "elapsed_ms",
+		ShortcutsHint:    loc.T("review.shortcuts"),
+		BuryHint:         loc.T("review.bury_hint"),
+		EditLabel:        loc.T("review.edit"),
+		BuryLabel:        loc.T("review.bury"),
+		AnswerURL:        reviewAnswerPath,
+		ActionURL:        reviewActionPath,
+		DoneValue:        strconv.Itoa(done),
+		ElapsedName:      "elapsed_ms",
 	}
 	// 每个选中卡组渲染一个隐藏 deck 字段，评分/动作请求据此原样带回同一范围（DESIGN.md §8.2）。
 	if len(scope.deckIDs) > 0 {
@@ -376,7 +370,56 @@ func (s *Server) reviewArea(c *gin.Context, loc *i18n.Localizer, user *store.Use
 	data.CardEditHref = card.EditHref
 	// 作答类题型渲染输入控件代替四档自评（M3-12）。
 	data.Graded = s.gradedViewForCard(c.Request.Context(), loc, items[0])
+	// 自评类题型才有四档按钮。每档附上"这张卡下次什么时候回来"（DESIGN.md §8.2）：
+	// 学习步骤以分钟计，不显示的话"刚答完几分钟后又冒出来"只能靠猜。
+	if data.Graded == nil {
+		data.Ratings = s.reviewRatings(c.Request.Context(), loc, sched, user, items[0], time.Now().UTC())
+	}
 	return data, nil
+}
+
+// reviewRatings 构造四档评分按钮，并用调度器预览给每档附上一句等待时长。
+// 预览失败（坏数据、未知状态）只丢弃时长，绝不能因此让复习页打不开。
+func (s *Server) reviewRatings(ctx context.Context, loc *i18n.Localizer, sched *schedule.Scheduler, user *store.User, item schedule.QueueItem, now time.Time) []views.ReviewRating {
+	ratings := []views.ReviewRating{
+		{Value: int(schedule.Again), Label: loc.T("review.rating.again")},
+		{Value: int(schedule.Hard), Label: loc.T("review.rating.hard")},
+		{Value: int(schedule.Good), Label: loc.T("review.rating.good")},
+		{Value: int(schedule.Easy), Label: loc.T("review.rating.easy")},
+	}
+	st, err := s.cardStateForPreview(ctx, user.ID, item)
+	if err != nil {
+		s.logger.Error("load card state for preview failed", "card_id", item.CardID, "error", err)
+		return ratings
+	}
+	outcomes, err := sched.Preview(st, now)
+	if err != nil {
+		s.logger.Error("preview ratings failed", "card_id", item.CardID, "error", err)
+		return ratings
+	}
+	// Preview 的返回顺序固定为 Again/Hard/Good/Easy，与上面构造顺序一致。
+	for i := range outcomes {
+		if i >= len(ratings) {
+			break
+		}
+		ratings[i].Interval = intervalLabel(loc, outcomes[i].Due.Sub(now))
+	}
+	return ratings
+}
+
+// cardStateForPreview 取当前卡的调度状态行；全新卡没有状态行，按 new 合成一行供预览用
+// （首次评分的预览正是用户最容易困惑的那次——答完 1 分钟就回来）。
+func (s *Server) cardStateForPreview(ctx context.Context, userID uint64, item schedule.QueueItem) (*store.CardState, error) {
+	var st store.CardState
+	err := s.db.WithContext(ctx).Where("card_id = ? AND user_id = ?", item.CardID, userID).First(&st).Error
+	switch {
+	case err == nil:
+		return &st, nil
+	case store.IsNotFound(err):
+		return &store.CardState{CardID: item.CardID, UserID: userID, State: item.State.String()}, nil
+	default:
+		return nil, fmt.Errorf("load card state for card %d user %d: %w", item.CardID, userID, err)
+	}
 }
 
 // buildQueue 复用 internal/schedule 的队列构建（每日上限、复习日切点、优先级都在那里）。

@@ -271,6 +271,18 @@
   translation: "已揭示答案，记 0 分并继续"
 - id: review.rating.again
   translation: "重来"
+- id: review.interval.under_minute
+  translation: "<1 分钟"
+- id: review.interval.minutes
+  translation: "{{.count}} 分钟"
+- id: review.interval.hours
+  translation: "{{.count}} 小时"
+- id: review.interval.days
+  translation: "{{.count}} 天"
+- id: review.interval.months
+  translation: "{{.count}} 个月"
+- id: review.interval.years
+  translation: "{{.count}} 年"
 - id: review.rating.hard
   translation: "困难"
 - id: review.rating.good

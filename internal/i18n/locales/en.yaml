@@ -271,6 +271,18 @@
   translation: "Answer revealed - count as 0 and continue"
 - id: review.rating.again
   translation: "Again"
+- id: review.interval.under_minute
+  translation: "<1 min"
+- id: review.interval.minutes
+  translation: "{{.count}} min"
+- id: review.interval.hours
+  translation: "{{.count}} h"
+- id: review.interval.days
+  translation: "{{.count}} d"
+- id: review.interval.months
+  translation: "{{.count}} mo"
+- id: review.interval.years
+  translation: "{{.count}} y"
 - id: review.rating.hard
   translation: "Hard"
 - id: review.rating.good

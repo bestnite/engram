@@ -12,6 +12,9 @@ type ReviewPageData struct {
 type ReviewRating struct {
 	Value int
 	Label string
+	// Interval 是这一档评分产生的等待时长文案（"10 分钟"、"3 天"）；由调度器预览算出。
+	// 为空表示预览失败，模板就不渲染这一行。
+	Interval string
 }
 
 // ReviewGradedOption 是一个选项控件：Value 是提交用的 0 基索引字符串，Label 已本地化
