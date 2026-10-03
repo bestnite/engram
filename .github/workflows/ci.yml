@@ -6,13 +6,18 @@
 # 测试只跑 SQLite（AGENTS.md §2.5）：CI 不起任何数据库服务，internal/pgtest 门控的
 # PostgreSQL 用例在这里自己跳过并打印原因。需要覆盖生产用的 PG 驱动时，在本机设置
 # TEST_PG_DSN 手动跑那三个包。
+#
+# 触发器只有 pull_request 与 workflow_dispatch，**不含 push**：main 由维护者直推，
+# 推之前本地已经跑完 §4 的全套检查，每次 push 再跑一遍只是重复。需要一次独立复核时
+# （碰了模板、go.mod / go.sum，或发版前）用 workflow_dispatch 手动触发对应 ref。
+#
 # 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME，
 # 且由 scripts/checks/no-private-data.sh 自检。
 name: ci
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 # 最小权限：CI 只读仓库内容。
 permissions:
