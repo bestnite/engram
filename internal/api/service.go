@@ -213,7 +213,9 @@ type ImportNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
-	Tags        []string       `json:"tags"`
+	// NoteID 按主键寻址已有 note（M4-12）；与 ExternalRef 互斥。
+	NoteID uint64   `json:"note_id"`
+	Tags   []string `json:"tags"`
 }
 
 // ImportRequest 是批量新增/更新请求体；dry_run 与 on_conflict 是请求体字段。
@@ -301,9 +303,27 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			continue
 		}
 
+		if item.NoteID != 0 && strings.TrimSpace(item.ExternalRef) != "" {
+			// 两种寻址方式互斥：同时给出无法判定按哪个定位，直接判该行非法（M4-12）。
+			resp.Errors = append(resp.Errors, ImportError{i, "note_id and external_ref are mutually exclusive"})
+			hasFailure = true
+			continue
+		}
+
 		ref := strings.TrimSpace(item.ExternalRef)
+		byID := item.NoteID != 0
 		var existing *store.Note
-		if ref != "" {
+		if byID {
+			// 按主键寻址：只认属于本卡组的、未软删的 note。取不到与跨卡组用同一句
+			// 「note not found in deck」，不泄露另一个卡组是否存在该 id（M4-12）。
+			found, err := a.notes.ByID(ctx, item.NoteID)
+			if err != nil || found.DeckID != d.ID {
+				resp.Errors = append(resp.Errors, ImportError{i, "note not found in deck"})
+				hasFailure = true
+				continue
+			}
+			existing = found
+		} else if ref != "" {
 			found, err := a.findNoteByExternalRef(ctx, d.ID, ref)
 			if err != nil {
 				a.logger.Error("lookup note by external_ref failed", "deck_id", d.ID, "error", err)
@@ -325,15 +345,21 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 
 		action := "create"
 		if existing != nil {
-			switch onConflict {
-			case "skip":
-				action = "skip"
-			case "fail":
-				resp.Errors = append(resp.Errors, ImportError{i, "a note with this external_ref already exists"})
-				hasFailure = true
-				continue
-			default:
+			if byID {
+				// note_id 行按定义一定已存在，on_conflict 对它不适用：一律走更新，
+				// 也不因它触发 on_conflict=fail 的整批拒绝（M4-12）。
 				action = "update"
+			} else {
+				switch onConflict {
+				case "skip":
+					action = "skip"
+				case "fail":
+					resp.Errors = append(resp.Errors, ImportError{i, "a note with this external_ref already exists"})
+					hasFailure = true
+					continue
+				default:
+					action = "update"
+				}
 			}
 		}
 		plans = append(plans, importPlan{index: i, action: action, existing: existing, note: n, fields: item.Fields})
@@ -494,6 +520,149 @@ func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		TargetID:   store.Ptr(existing.ID),
 	})
 	return existing.ID, nil
+}
+
+// ---- 批量卡片动作（M4-12）----
+
+// 批量动作的稳定英文取值（REST 请求体 action 字段、审计 detail.action 共用）。
+const (
+	bulkActionDelete     = "delete"
+	bulkActionAddTags    = "add_tags"
+	bulkActionRemoveTags = "remove_tags"
+	bulkActionSetTags    = "set_tags"
+)
+
+// bulkMaxTags 是单个标签动作允许的标签数上限（去重后）。
+const bulkMaxTags = 20
+
+// BulkNotesInput 是批量卡片动作的输入（REST 与内置 MCP 共用，DESIGN.md §2.4 一个模型服务业务与 JSON）。
+type BulkNotesInput struct {
+	Action  string   `json:"action"`
+	NoteIDs []uint64 `json:"note_ids"`
+	Tags    []string `json:"tags"`
+	DryRun  bool     `json:"dry_run"`
+}
+
+// BulkNotesSkipped 是被逐行拒绝的 note：code 取值 not_found / insufficient_role。
+type BulkNotesSkipped struct {
+	NoteID uint64 `json:"note_id"`
+	Code   string `json:"code"`
+}
+
+// BulkNotesResponse 是批量动作的响应体（DESIGN.md §7.3）。Affected 只计真正改动的行，
+// 因此重复提交同一请求第二次返回 affected=0。
+type BulkNotesResponse struct {
+	DryRun   bool               `json:"dry_run"`
+	Affected int64              `json:"affected"`
+	Skipped  []BulkNotesSkipped `json:"skipped"`
+}
+
+// BulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags（M4-12）。
+//
+// 请求级校验（未知 action、note_ids 越界、tag 动作缺 tags、delete 带 tags）返回 400
+// invalid_request 且一行都不写。通过校验后逐行判权：缺失或已软删的 id 记为 not_found，
+// 无权限或角色不够的 id 记为 insufficient_role，其余行照常处理 —— 单行被拒不回滚整批。
+// 审计只在非 dry_run 时整批一行；dry_run 只计数不写库、不写审计。
+func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in BulkNotesInput) (BulkNotesResponse, error) {
+	action := strings.TrimSpace(in.Action)
+	switch action {
+	case bulkActionDelete, bulkActionAddTags, bulkActionRemoveTags, bulkActionSetTags:
+	default:
+		return BulkNotesResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			"action must be one of delete, add_tags, remove_tags, set_tags")
+	}
+
+	ids := uniqueIDs(in.NoteIDs)
+	if len(ids) == 0 || len(ids) > MaxImportNotes {
+		return BulkNotesResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			fmt.Sprintf("note_ids must contain between 1 and %d entries", MaxImportNotes))
+	}
+
+	tags := store.NormalizeTags(in.Tags)
+	if action == bulkActionDelete {
+		if len(in.Tags) > 0 {
+			return BulkNotesResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+				"tags are not allowed for action delete")
+		}
+	} else if len(tags) == 0 || len(tags) > bulkMaxTags {
+		return BulkNotesResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			fmt.Sprintf("tags must contain between 1 and %d entries", bulkMaxTags))
+	}
+
+	resp := BulkNotesResponse{DryRun: in.DryRun, Skipped: []BulkNotesSkipped{}}
+	permitted := make([]uint64, 0, len(ids))
+	for _, id := range ids {
+		if _, _, err := a.RequireNoteRole(ctx, userID, id, store.RoleEditor); err != nil {
+			// 单行判权失败不使整批失败：not_found 与 insufficient_role 各记一条 skipped，
+			// 其余 id 继续处理。RequireNoteRole 对软删 note 也走 not_found（ByID 不返回软删行）。
+			code := asServiceError(err).Code
+			skipCode := "insufficient_role"
+			if code == CodeNotFound {
+				skipCode = "not_found"
+			}
+			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: id, Code: skipCode})
+			continue
+		}
+		permitted = append(permitted, id)
+	}
+
+	var affected int64
+	var err error
+	switch action {
+	case bulkActionDelete:
+		affected, err = a.notes.DeleteMany(ctx, permitted, in.DryRun)
+	case bulkActionAddTags:
+		affected, err = a.notes.AddTags(ctx, permitted, tags, in.DryRun)
+	case bulkActionRemoveTags:
+		affected, err = a.notes.RemoveTags(ctx, permitted, tags, in.DryRun)
+	case bulkActionSetTags:
+		affected, err = a.notes.SetTags(ctx, permitted, tags, in.DryRun)
+	}
+	if err != nil {
+		a.logger.Error("bulk note action failed", "action", action, "error", err)
+		return BulkNotesResponse{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to apply bulk note action")
+	}
+	resp.Affected = affected
+
+	if !in.DryRun {
+		// 与网页批量表单对齐：整批一行审计，detail 里带动作、请求的 id 列表与变更行数。
+		a.audit(ctx, store.AuditEntry{
+			UserID:     store.Ptr(userID),
+			APIKeyID:   apiKeyID,
+			Action:     bulkAuditAction(action),
+			TargetType: "notes",
+			Detail:     map[string]any{"action": action, "ids": ids, "affected": affected},
+		})
+	}
+	return resp, nil
+}
+
+// bulkAuditAction 把批量动作映射到稳定的审计动作名（constants 定义在 store/audit.go）。
+func bulkAuditAction(action string) string {
+	switch action {
+	case bulkActionDelete:
+		return store.ActionNoteDelete
+	case bulkActionAddTags:
+		return store.ActionNoteTagAdd
+	case bulkActionRemoveTags:
+		return store.ActionNoteTagRemove
+	default:
+		return store.ActionNoteTagSet
+	}
+}
+
+// uniqueIDs 按首次出现去重并保持请求顺序；批量动作的响应与审计都依赖这个顺序。
+func uniqueIDs(ids []uint64) []uint64 {
+	seen := make(map[uint64]struct{}, len(ids))
+	out := make([]uint64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // ---- 统计与导出 ----

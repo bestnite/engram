@@ -48,7 +48,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 255,
-          "description": "Idempotency key chosen by the caller, for example '<system>:<docId>:<blockId>'. The server never interprets it; it only guarantees that (deck_id, external_ref) is unique, so resubmitting the same batch creates no duplicates."
+          "description": "Idempotency key chosen by the caller, for example '<system>:<docId>:<blockId>'. The server never interprets it; it only guarantees that (deck_id, external_ref) is unique, so resubmitting the same batch creates no duplicates. Mutually exclusive with 'note_id'."
+        },
+        "note_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Primary key of an existing note in the deck addressed by the endpoint. The note is rewritten in place and its cards and every user's review progress are kept. Mutually exclusive with 'external_ref'; the note must belong to the deck in the path, and an unknown or deleted id is reported as a per-row error."
         },
         "tags": {
           "type": "array",
@@ -89,6 +94,12 @@
             { "$ref": "#/$defs/note_true_false" },
             { "$ref": "#/$defs/note_short_answer" }
           ]
+        },
+        {
+          "not": {
+            "required": ["note_id", "external_ref"]
+          },
+          "description": "'note_id' and 'external_ref' address a note in two different ways and are mutually exclusive; a note carrying both is rejected by the server."
         }
       ]
     },
