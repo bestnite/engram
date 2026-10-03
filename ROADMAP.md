@@ -453,6 +453,53 @@ Conventions:
   refused; an empty name and an invalid visibility are rejected with the shared error code; the
   REST handler's existing tests still pass unchanged.
 
+- [ ] **M4-12 Notes bulk write surface** — notes can be created in bulk and rewritten one at a time,
+  but a set of them cannot be deleted or retagged through the API, and an agent holding note ids
+  cannot rewrite their content: the only bulk entry point is the web form
+  (`POST /decks/:id/bulk`, `internal/web/notes.go`), which REST and MCP do not have. Two changes,
+  both specified in `DESIGN.md` §7.3:
+  *Part 1 — `POST /api/v1/notes/bulk` (scope write).* Body `{action, note_ids, tags, dry_run}` where
+  `action` is `delete`, `add_tags`, `remove_tags` or `set_tags`; `note_ids` deduplicated and 1..500
+  long; `tags` required only for the tag actions, 1..20 entries after trimming. A request-level
+  failure (unknown action, empty or oversized `note_ids`, tag action without tags, tags on a
+  non-tag action) returns `400 invalid_request` and writes nothing. Per-row failures do not roll
+  back the batch: an id that is missing or soft-deleted becomes a `skipped` entry with code
+  `not_found`, an id the caller may not edit becomes `insufficient_role`, and the remaining rows are
+  still processed. Response `{dry_run, affected, skipped:[{note_id, code}]}`, where `affected` counts
+  only rows whose stored state changed, so repeating the same request is idempotent. Write in chunks
+  of `ImportBatchSize` with one `UPDATE ... WHERE id IN (...)` per chunk (both drivers work). Audit
+  one row per batch with the id list in `detail`, as the web form does; `dry_run` writes no audit
+  row. Extend the `NoteStore` tag helpers from a single tag to `[]string` (`AddTags`, plus new
+  `RemoveTags` and `SetTags`) and let the existing web form call the shared service method.
+  *Part 2 — `POST /decks/:id/notes` addressed by `note_id`.* Accept an optional `note_id` on each
+  item of that request (`ImportNote`, `internal/api/service.go`), mutually exclusive with
+  `external_ref`; the note must belong to the deck in the path, and an id that is missing or
+  soft-deleted is reported as a row error. `on_conflict` does not apply to `note_id` items. Reuse the
+  two-pass validation, batched transactions, `dry_run` and the
+  `{created, updated, skipped, errors:[{index, reason}]}` report; existing card ids and every user's
+  review progress stay untouched. Update `schema/note-import.schema.json` and `schema/README.md` so
+  external tools can validate the field.
+  *Acceptance:* a mixed bulk batch applies edits only to the permitted, existing rows and reports
+  `affected` plus one `skipped` code per rejected id; repeating the request leaves `affected` at 0; a
+  reader on the deck is refused per row instead of failing the whole batch; the four rejected request
+  shapes return `invalid_request` with nothing written; `dry_run` changes no row and writes no audit
+  row; one import call rewrites fields and tags for several notes addressed by id and keeps every
+  card id and its review state, while an id from another deck, an already-deleted id and an item
+  carrying both `note_id` and `external_ref` are each reported as a row error with the others still
+  applied; the schema accepts the new field and still rejects an unknown kind.
+
+- [ ] **M4-13 MCP `bulk_notes` tool and `create_notes` by id** — M4-12 gives REST the bulk write
+  surface but the MCP tools still cannot delete or retag a set of notes and cannot address an
+  existing note by id, so the two transports disagree. Register `bulk_notes` (scope write) in
+  `internal/mcp/tools.go` and `internal/mcp/mcp.go` with the same `{action, note_ids, tags, dry_run}`
+  arguments as `POST /api/v1/notes/bulk`; add the optional `note_id` to the `create_notes` item and
+  forward it into the shared import service. The scope filter at handshake and the re-check on every
+  call stay as they are — no MCP-side validation beyond argument shaping (`DESIGN.md` §7.4).
+  *Acceptance:* `tools/list` for a write key contains `bulk_notes` and the full write set matches the
+  documented tools; a read key neither sees it nor can call it by name (`scope_required`); a
+  `bulk_notes` call and the equivalent REST request produce identical results for the same input, and
+  so do `create_notes` calls carrying `note_id`.
+
 ### M5 — Sharing and permissions
 
 - [x] **M5-1 Grants and role checks** — `deck_grants` store plus one `requireRole` helper
