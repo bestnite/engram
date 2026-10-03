@@ -19,12 +19,8 @@ type DeckRow struct {
 	ReviewHref string
 }
 
-// DeckOption 是新建表单里的预设下拉项。
-type DeckOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
+// DeckOption 是新建表单里的预设下拉项（类型别名兼容 views.SelectOption）。
+type DeckOption = SelectOption
 
 // DeckListData 是卡组列表与新建页（M2-11）的全部渲染数据；所有用户可见字符串已本地化。
 type DeckListData struct {

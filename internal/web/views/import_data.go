@@ -3,12 +3,8 @@ package views
 // 卡组包导入页（M5-9）的渲染数据。
 // 与其它页面一致：所有用户可见文案由 handler 从语言包取好后传入，模板不含硬编码文字。
 
-// ImportOption 是导入表单下拉的一项。
-type ImportOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
+// ImportOption 是导入表单下拉的一项（类型别名兼容 views.SelectOption）。
+type ImportOption = SelectOption
 
 // ImportRow 是导入摘要里的一行标签/值。
 type ImportRow struct {

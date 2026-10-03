@@ -273,11 +273,20 @@ type AdminPageData struct {
 	I18nAllCompleteLabel string
 }
 
-// AdminOption 是一个下拉/单选项。
-type AdminOption struct {
-	Value    string
-	Label    string
-	Selected bool
+// AdminOption 是一个下拉/单选项（类型别名兼容 views.SelectOption）。
+type AdminOption = SelectOption
+
+// AdminUserRoleOptions 为指定用户的角色下拉列表生成带有正确选中项的配置。
+func AdminUserRoleOptions(roles []AdminRoleOption, currentRole string) []SelectOption {
+	opts := make([]SelectOption, len(roles))
+	for i, r := range roles {
+		opts[i] = SelectOption{
+			Value:    r.Value,
+			Label:    r.Label,
+			Selected: r.Value == currentRole,
+		}
+	}
+	return opts
 }
 
 // AdminAuditRow 是审计表里的一行（M6-7）。
@@ -375,10 +384,5 @@ type AdminUserRow struct {
 	HrefStatus, HrefRole, HrefPassword, HrefLogout, HrefDelete string
 }
 
-// AdminRoleOption 是角色下拉的一项。
-type AdminRoleOption struct {
-	Value string
-	Label string
-	// Selected 为 true 时选中（预留给将来可能的编辑页）。
-	Selected bool
-}
+// AdminRoleOption 是角色下拉的一项（类型别名兼容 views.SelectOption）。
+type AdminRoleOption = SelectOption

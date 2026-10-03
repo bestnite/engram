@@ -7,11 +7,17 @@ import "github.com/a-h/templ"
 // 跳过模板默认转义；把它包成组件是为了让模板只需写 @rawHTML(...)，不引入额外导入。
 func rawHTML(s string) templ.Component { return templ.Raw(s) }
 
-// KindOption 是题型/状态筛选下拉里的一项；Selected 决定是否带 selected 属性。
-type KindOption struct {
-	Value    string
-	Label    string
-	Selected bool
+// KindOption 是题型/状态筛选下拉里的一项（类型别名兼容 views.SelectOption）。
+type KindOption = SelectOption
+
+// NoteKindAttrs 返回新建卡片页面中题型下拉联动所需的 htmx 属性。
+func NoteKindAttrs(fieldsURL string) templ.Attributes {
+	return templ.Attributes{
+		"hx-get":     fieldsURL,
+		"hx-target":  "#new-note-fields",
+		"hx-include": "closest form",
+		"hx-trigger": "change",
+	}
 }
 
 // NoteRow 是卡片列表的一行。

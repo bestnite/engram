@@ -1,12 +1,8 @@
 package views
 
-// RoleOption 是角色下拉里的一项；Selected 决定是否带 selected 属性。
+// RoleOption 是角色下拉里的一项（类型别名兼容 views.SelectOption）。
 // 可见性下拉（M5-5）复用同一结构：Value 是 visibility 取值，Label 是本地化显示名。
-type RoleOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
+type RoleOption = SelectOption
 
 // SharingRow 是共享管理页里的一行授权。
 // Editable 为 false 时（目前只有 owner 行）只展示角色、不渲染改角色/撤销表单。

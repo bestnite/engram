@@ -41,27 +41,11 @@ templ NoteListPage(data NoteListData) {
 					</label>
 					<label class="block w-32 sm:w-36">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.KindLabel }</span>
-						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="kind">
-							for _, opt := range data.Kinds {
-								if opt.Selected {
-									<option value={ opt.Value } selected>{ opt.Label }</option>
-								} else {
-									<option value={ opt.Value }>{ opt.Label }</option>
-								}
-							}
-						</select>
+						@Select(SelectProps{Name: "kind", Options: data.Kinds})
 					</label>
 					<label class="block w-32 sm:w-36">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.StatusLabel }</span>
-						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="status">
-							for _, opt := range data.Statuses {
-								if opt.Selected {
-									<option value={ opt.Value } selected>{ opt.Label }</option>
-								} else {
-									<option value={ opt.Value }>{ opt.Label }</option>
-								}
-							}
-						</select>
+						@Select(SelectProps{Name: "status", Options: data.Statuses})
 					</label>
 					<div class="flex items-center gap-2">
 						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.FilterSubmit }</button>
@@ -244,11 +228,7 @@ templ NoteCreatePage(data NewNoteData) {
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<label class="block">
 							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.KindLabel }</span>
-							<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="kind" hx-get={ data.FieldsURL } hx-target="#new-note-fields" hx-include="closest form" hx-trigger="change">
-								for _, opt := range data.Kinds {
-									<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
-								}
-							</select>
+							@Select(SelectProps{Name: "kind", Options: data.Kinds, Attrs: NoteKindAttrs(data.FieldsURL)})
 						</label>
 						<div id="new-note-fields">
 							@NoteFieldsFragment(data.Fields, data.PreviewURL)

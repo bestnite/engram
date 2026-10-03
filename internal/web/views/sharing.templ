@@ -48,15 +48,7 @@ templ SharingPage(data SharingData) {
 													<form class="flex items-center gap-2" method="post" action={ row.RoleAction }>
 														<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 														<input type="hidden" name="user_id" value={ row.UserValue }/>
-														<select class="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
-															for _, opt := range row.RoleOptions {
-																if opt.Selected {
-																	<option value={ opt.Value } selected>{ opt.Label }</option>
-																} else {
-																	<option value={ opt.Value }>{ opt.Label }</option>
-																}
-															}
-														</select>
+														@Select(SelectProps{Name: "role", Options: row.RoleOptions, Small: true, Class: "w-28", Attrs: templ.Attributes{"aria-label": row.ChangeLabel}})
 														<button class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer" type="submit">{ row.ChangeLabel }</button>
 													</form>
 													<form method="post" action={ row.RevokeAction }>
@@ -90,15 +82,7 @@ templ SharingPage(data SharingData) {
 					</label>
 					<label class="block">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.RoleLabel }</span>
-						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="role">
-							for _, opt := range data.RoleOptions {
-								if opt.Selected {
-									<option value={ opt.Value } selected>{ opt.Label }</option>
-								} else {
-									<option value={ opt.Value }>{ opt.Label }</option>
-								}
-							}
-						</select>
+						@Select(SelectProps{Name: "role", Options: data.RoleOptions})
 					</label>
 					<div class="pt-2">
 						<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.GrantSubmit }</button>
@@ -187,15 +171,7 @@ templ SharingPage(data SharingData) {
 					<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 					<label class="block">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.VisibilityLabel }</span>
-						<select class="mt-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer" name="visibility">
-							for _, opt := range data.VisibilityOptions {
-								if opt.Selected {
-									<option value={ opt.Value } selected>{ opt.Label }</option>
-								} else {
-									<option value={ opt.Value }>{ opt.Label }</option>
-								}
-							}
-						</select>
+						@Select(SelectProps{Name: "visibility", Options: data.VisibilityOptions, Class: "w-40"})
 					</label>
 					<button class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.VisibilitySubmit }</button>
 				</form>
