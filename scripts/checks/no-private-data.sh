@@ -52,10 +52,14 @@ rule "内网专用主机后缀（.internal/.corp/.lan/.intranet/.localdomain）"
 
 # 4) 配置/文档里的凭据赋值：只扫非源码文件，且放行占位值。
 #    源码里的 `password: "..."` 是测试夹具或字段名，不是提交的凭据，故不在此列。
+#    放行清单里的 `\$\{\{?[[:space:]]*[A-Za-z_]` 覆盖两类引用：shell 式 `${VAR}`，以及
+#    GitHub Actions 的 `${{ secrets.X }}` / `${{ github.token }}`。工作流里 goreleaser、
+#    action 的入参必须写成 `KEY: ${{ secrets.X }}`，没有别的合法写法，而它引用的仍是仓库
+#    secret，仓库里不存在字面量——故此处按占位值处理，而不是放宽成「含 $ 即放行」。
 creds=$(git grep -niE --color=never \
   -e '(password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|encryption[_-]?key|master[_-]?key)[[:space:]]*[:=][[:space:]]*[^[:space:]]+' \
   -- "${EXCLUDES[@]}" '*.md' '*.yaml' '*.yml' '*.json' '*.toml' '*.ini' '*.conf' '*.properties' '*.sh' '*.env*' '.env.example' 'Dockerfile' 2>/dev/null || true)
-creds=$(printf '%s\n' "$creds" | grep -viE '[=:][[:space:]]*["'"'"']?(CHANGE_ME|example|REDACTED|REDACT|placeholder|xxxx|\*\*\*|<[A-Za-z_]+>|\$\{[A-Za-z_]|%s)' || true)
+creds=$(printf '%s\n' "$creds" | grep -viE '[=:][[:space:]]*["'"'"']?(CHANGE_ME|example|REDACTED|REDACT|placeholder|xxxx|\*\*\*|<[A-Za-z_]+>|\$\{\{?[[:space:]]*[A-Za-z_]|%s)' || true)
 rule "疑似真实凭据赋值（非占位值）" "$creds"
 
 # 5) 已知密钥前缀。

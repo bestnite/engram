@@ -79,6 +79,17 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # 平台相关代码只有交叉编译才暴露：runner 是 Linux，internal/jobs 的 process_windows.go
+      # 在原生构建里根本不参与编译，写错了也一直是绿的（M0-14）。vet 连测试文件一起类型检查，
+      # 所以 unix-only 的测试文件会不会漏到别的平台上也在这里兜住。
+      - name: Cross-compile and vet for Windows
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            GOOS=windows GOARCH="$arch" CGO_ENABLED=0 go build -o /dev/null ./cmd/engram
+            GOOS=windows GOARCH="$arch" go vet ./...
+          done
+
       # 脱敏扫描：仓库内不得出现真实域名 / 主机名 / 内网地址 / 邮箱 / 凭据。
       - name: Sanitisation scan
         run: bash scripts/checks/no-private-data.sh
