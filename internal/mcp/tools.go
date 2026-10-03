@@ -51,7 +51,9 @@ type importNoteIn struct {
 	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze)"`
 	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
-	Tags        []string       `json:"tags,omitempty" jsonschema:"note tags"`
+	// NoteID 按主键寻址已有 note 就地改写；与 external_ref 互斥（DESIGN.md §7.3、M4-12）。
+	NoteID uint64   `json:"note_id,omitempty" jsonschema:"address an existing note by primary key to rewrite in place; mutually exclusive with external_ref"`
+	Tags   []string `json:"tags,omitempty" jsonschema:"note tags"`
 }
 
 // bulkNotesIn 是 create_notes 的入参（M4-3 批量建卡路径）。
@@ -60,6 +62,15 @@ type bulkNotesIn struct {
 	Notes      []importNoteIn `json:"notes" jsonschema:"notes to create or update (1..500)"`
 	DryRun     bool           `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
 	OnConflict string         `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
+}
+
+// bulkActionIn 是 bulk_notes 的入参，与 REST 的 POST /notes/bulk 请求体同形
+// （DESIGN.md §7.3、§7.4：MCP 只做参数整形，语义与校验都在 service 层）。
+type bulkActionIn struct {
+	Action  string   `json:"action" jsonschema:"bulk action: delete, add_tags, remove_tags or set_tags"`
+	NoteIDs []uint64 `json:"note_ids" jsonschema:"notes to act on, deduplicated to 1..500 entries"`
+	Tags    []string `json:"tags,omitempty" jsonschema:"tags for the tag actions, 1..20 entries; not allowed for delete"`
+	DryRun  bool     `json:"dry_run,omitempty" jsonschema:"count without writing or auditing"`
 }
 
 // importDeckIn 是 import_deck 的入参：接受一个卡组包（DESIGN.md §7.6）。
@@ -185,6 +196,16 @@ func (s *Server) createNotes(ctx context.Context, id Identity, in bulkNotesIn) (
 	return s.api.ImportNotes(ctx, id.User.ID, in.DeckID, id.apiKeyID(), toImportRequest(in))
 }
 
+// bulkNotes 对一组 note 执行批量动作（M4-13）：与 REST `POST /notes/bulk` 走同一 service 方法。
+func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (any, error) {
+	return s.api.BulkNotes(ctx, id.User.ID, id.apiKeyID(), api.BulkNotesInput{
+		Action:  in.Action,
+		NoteIDs: in.NoteIDs,
+		Tags:    in.Tags,
+		DryRun:  in.DryRun,
+	})
+}
+
 // importDeck 导入卡组包（M5-8）：与 REST `POST /decks/import` 走同一 service 方法。
 // 包的权限判定、进度归属与审计都在 service 层（ImportDeckPackage）完成。
 func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
@@ -263,6 +284,7 @@ func toImportRequest(in bulkNotesIn) api.ImportRequest {
 			Kind:        n.Kind,
 			Fields:      n.Fields,
 			ExternalRef: n.ExternalRef,
+			NoteID:      n.NoteID,
 			Tags:        n.Tags,
 		})
 	}
