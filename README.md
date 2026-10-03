@@ -160,6 +160,9 @@ breakdown, with acceptance criteria, lives in [`ROADMAP.md`](ROADMAP.md).
 - **No external optimiser binary.** Once `go-fsrs` ships its own parameter optimiser, the Rust
   helper and its build step go away and optimisation runs in-process. The job, the weights it
   writes back, and the error messages stay the same.
+- **Multiple OIDC providers.** Configure more than one provider — a company IdP next to a
+  personal one — and pick between them on the login page. Today the configuration holds a
+  single provider.
 
 ## Contributing
 

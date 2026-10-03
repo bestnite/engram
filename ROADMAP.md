@@ -772,6 +772,19 @@ into a release milestone.
   using a tolerance written into the test. The adapter, its build step, and `OPTIMIZER_PATH` are
   gone.
   *Do not start until a released `go-fsrs` version contains the optimiser.*
+- [ ] **M10-7 Multiple OIDC providers** — configure more than one provider (say a company IdP
+  next to a personal one) and list them all on the login page. The schema is already ready:
+  `identities` is keyed `(provider, subject)` and the provider is recorded on every binding.
+  What blocks it is the singular configuration: the settings keys are `oidc.issuer` /
+  `oidc.client_id` / …, `auth.LoadOIDCConfig` returns one config, the admin page is a single
+  form, and the callback path is fixed at `/auth/oidc/callback`. Deciding the callback shape
+  comes first: either per-provider paths (`/auth/oidc/<slug>/callback`) or one callback that
+  resolves the provider from the `state` row.
+  *Acceptance:* two providers configured in the admin panel; the login page offers both; an
+  identity bound through one is stored with that provider and does not affect the other;
+  unlinking one leaves the other intact; a single-provider setup keeps working, its existing
+  settings read as the first row.
+  *Do not start until the callback shape is decided.*
 
 ### Backlog (no milestone yet)
 
@@ -839,7 +852,7 @@ into a release milestone.
 - Milestone-level counts: `grep -c '^- \[ \] \*\*M3-' ROADMAP.md` (replace the prefix).
 - Report progress as one line per milestone, for example
   `M0 13/13 · M1 25/25 · M2 13/13 · M3 14/14 · M4 11/11 · M5 12/12 · M6 10/10 · M7 4/4 · M8 8/8 · M9 12/12
-  · M10 0/6 (excluded) · backlog 12/13 (excluded)`.
+  · M10 0/7 (excluded) · backlog 12/13 (excluded)`.
 - Completion percentage covers milestones `M0`–`M9` only. `M10` and the backlog are
   reported separately and never inflate the number.
 
