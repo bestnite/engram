@@ -1,3 +1,10 @@
+//go:build unix
+
+// 本文件整体只在 Unix 上编译：测试注入的假命令是 `/bin/sh -c ...`，断言进程是否真的
+// 退出要看 /proc/<pid>/stat 的僵尸态（processGone），两者在 Windows 上都不存在。
+// Windows 的杀树实现在 process_windows.go，靠 taskkill，无法在 Linux CI 上执行；它只有
+// pid <= 0 守卫被 process_test.go 跨平台覆盖。
+
 package jobs
 
 import (

@@ -1,3 +1,8 @@
+//go:build unix
+
+// 只在 Unix 上编译：依赖 jobs_test.go 里 unix-only 的测试脚手架（newTestRunner 等），
+// 或直接以 `/bin/sh` 作为假命令。
+
 package jobs
 
 import (

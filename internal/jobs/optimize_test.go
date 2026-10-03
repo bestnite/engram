@@ -1,3 +1,7 @@
+//go:build unix
+
+// 只在 Unix 上编译：假命令走 `/bin/sh -c ...`（理由同 jobs_test.go 的文件头说明）。
+
 package jobs
 
 import (

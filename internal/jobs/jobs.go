@@ -25,7 +25,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"gorm.io/gorm"
@@ -504,15 +503,16 @@ func HTTPStatus(err error) int {
 
 // runProcess 启动子进程并等待完成。
 //
-// 子进程用 Setpgid 单独成组，超时或 ctx 取消时向整个进程组发 SIGKILL：只杀直接子进程
-// 会留下它派生的进程（例如 shell 下的后台训练进程），它们会继续占 CPU 并让作业「看似
-// 结束实则仍在跑」——这正是 M9-1 要求「杀整个进程组」的原因。
+// 子进程被放进独立进程组（setProcessGroup），超时或 ctx 取消时杀掉整棵树
+// （killProcessGroup）：只杀直接子进程会留下它派生的进程（例如 shell 下的后台训练
+// 进程），它们会继续占 CPU 并让作业「看似结束实则仍在跑」——这正是 M9-1 要求
+// 「杀整个进程组」的原因。两个动作的平台实现分别在 process_unix.go、process_windows.go。
 func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes int) (string, error) {
 	cmd := exec.Command(c.Name, c.Args...)
 	cmd.Dir = c.Dir
 	cmd.Env = c.Env
 	cmd.Stdin = c.Stdin
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 
 	tail := newTailBuffer(maxBytes)
 	cmd.Stdout = tail
@@ -530,19 +530,14 @@ func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes 
 	case err := <-done:
 		return tail.String(), err
 	case <-timer.C:
-		killGroup(cmd.Process.Pid)
+		killProcessGroup(cmd.Process.Pid)
 		<-done
 		return tail.String(), fmt.Errorf("%w after %s", ErrTimedOut, timeout)
 	case <-ctx.Done():
-		killGroup(cmd.Process.Pid)
+		killProcessGroup(cmd.Process.Pid)
 		<-done
 		return tail.String(), fmt.Errorf("job canceled: %w", ctx.Err())
 	}
-}
-
-// killGroup 向进程组发送 SIGKILL；Setpgid 让子进程 PID 成为组长，故负 PID 即整组。
-func killGroup(pid int) {
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 // tailBuffer 是一个只保留末尾 max 字节的 io.Writer；并发写（stdout/stderr）用 mu 保护。
