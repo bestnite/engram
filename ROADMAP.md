@@ -500,6 +500,22 @@ Conventions:
   `bulk_notes` call and the equivalent REST request produce identical results for the same input, and
   so do `create_notes` calls carrying `note_id`.
 
+- [ ] **M4-14 Bulk action JSON Schema** — `POST /api/v1/notes/bulk` has no machine-readable
+  contract while its sibling `POST /decks/:id/notes` has had one since M4-8, so an external tool
+  or agent cannot validate a bulk action body before sending it. Add
+  `schema/note-bulk.schema.json` (draft 2020-12, same shape as the sibling schema) stating the
+  `action` enum, the `note_ids` bound, the `tags` bound, the tag-action / `delete` requirements
+  expressed with `allOf` + `if`/`then`, and the fact that a per-note outcome is answered in
+  `skipped` rather than rejected; add `schema/examples/note-bulk.example.json`, a row and a
+  section in `schema/README.md`. Guard the contract against drift: a test asserts the schema's
+  `action` enum equals the service's action constants (so adding an action without updating the
+  schema fails), that the shipped example validates against the shipped schema, and that the four
+  request-level rejections the service performs are also rejected by the schema.
+  *Acceptance:* `uvx check-jsonschema --schemafile schema/note-bulk.schema.json
+  schema/examples/note-bulk.example.json` passes; the new test fails if the enum, the example or
+  the `tags`/`note_ids` rules drift away from the service's behaviour; the README lists all three
+  schema files.
+
 ### M5 — Sharing and permissions
 
 - [x] **M5-1 Grants and role checks** — `deck_grants` store plus one `requireRole` helper
