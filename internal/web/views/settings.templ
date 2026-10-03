@@ -32,10 +32,7 @@ templ SettingsPage(data SettingsData) {
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.DisplayNameLabel }</span>
 						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-display-name" name="display_name" value={ data.DisplayNameValue }/>
 					</label>
-					<label class="block">
-						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.LocaleLabel }</span>
-						@Select(SelectProps{ID: "settings-locale", Name: "locale", Options: data.LocaleOptions})
-					</label>
+					@SettingsLocaleControl(data.LocaleLabel, data.LocaleOptions, templ.Attributes{})
 					<label class="block">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.TimezoneLabel }</span>
 						<input class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-timezone" name="timezone" value={ data.TimezoneValue } list="settings-timezone-options"/>
@@ -122,4 +119,14 @@ templ SettingsPage(data SettingsData) {
 			</section>
 		</div>
 	}
+}
+
+// SettingsLocaleControl 是设置页的语言控件：外层 label 带固定 id，作为 htmx 带外交换
+// 的锚点（views.SettingsLocaleControlID）。attrs 用于把 hx-swap-oob 透传到该 label 上，
+// 页面内使用时传空值即可。
+templ SettingsLocaleControl(label string, options []SelectOption, attrs templ.Attributes) {
+	<label id="settings-locale-control" class="block" { attrs... }>
+		<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ label }</span>
+		@Select(SelectProps{ID: "settings-locale", Name: "locale", Options: options})
+	</label>
 }

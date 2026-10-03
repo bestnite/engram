@@ -15,6 +15,11 @@ import (
 // 已登记在 scripts/checks/allowed-hosts.txt；绝不写进模板，因为模板禁止硬编码可见文案。
 const repositoryURL = "https://git.nite07.com/nite/engram"
 
+// languageRoute 是已登录用户提交页头语言切换的端点。切换语言要写 users.locale，
+// 因此不能走 GET 的 ?lang=（DESIGN.md §8.3）；它与数据模型 users.locale、表单字段
+// 名以及个人设置页的语言取值保持同一个词，便于检索。
+const languageRoute = "/settings/locale"
+
 // themeBootstrap 在 <head> 内联执行主题引导（M8-8）。它必须内联且早于样式表：外链的
 // pwa.js 是独立网络请求，浏览器可能在它执行前就先画出白底一帧；暗色下这就是可见的白闪。
 // 这里只做「首帧之前必须成立」的最小集合——暗色类、color-scheme、画布底色与 theme-color，
@@ -38,6 +43,15 @@ func (s *Server) decorateLayout(c *gin.Context, loc *i18n.Localizer, layout *vie
 	layout.LangOptions = s.languageOptions(c, loc)
 	layout.LanguageLabel = loc.T("home.language_label")
 	layout.CurrentLanguage = loc.T("language." + loc.Locale())
+	// 已登录用户切换语言必须落库：用带 CSRF 的 POST 表单，否则下一次不带 ?lang 的
+	// 请求（点任一导航链接或刷新）就会回退。访客没有资料可存，继续用 ?lang= 链接。
+	if csrf := sessionCSRF(c); csrf != "" {
+		layout.LangForm = &views.LanguageForm{
+			Action: languageRoute,
+			CSRF:   csrf,
+			Next:   langNextURL(c.Request.URL),
+		}
+	}
 }
 
 // mainNav 构造顶部导航项，是全站唯一的导航来源（M8-7）。
@@ -68,17 +82,24 @@ func (s *Server) mainNav(c *gin.Context, loc *i18n.Localizer, active string) []v
 	return items
 }
 
-// languageOptions 生成指向当前页面的语言切换入口：覆盖 lang 参数，保留路径与其余查询参数。
-// 不直接拼接原始 query，否则在 /decks?page=2 这类页面上切换语言会丢掉参数。
+// languageOptions 生成页头语言切换的入口：已登录用户带提交用的语言码（由布局里的
+// LangForm 决定渲染成 POST 表单），访客带指向当前页面的链接（覆盖 lang 参数）。
+// 链接不直接拼接原始 query，否则在 /decks?page=2 这类页面上切换语言会丢掉参数。
 func (s *Server) languageOptions(c *gin.Context, loc *i18n.Localizer) []views.LanguageOption {
 	codes := s.i18n.SupportedCodes()
+	loggedIn := sessionCSRF(c) != ""
 	out := make([]views.LanguageOption, 0, len(codes))
 	for _, code := range codes {
-		out = append(out, views.LanguageOption{
+		opt := views.LanguageOption{
 			Label:  loc.T("language." + code),
-			Href:   localeURL(c.Request.URL, code),
 			Active: loc.Locale() == code,
-		})
+		}
+		if loggedIn {
+			opt.Code = code
+		} else {
+			opt.Href = localeURL(c.Request.URL, code)
+		}
+		out = append(out, opt)
 	}
 	return out
 }
@@ -92,4 +113,20 @@ func localeURL(u *url.URL, code string) string {
 	q := u.Query()
 	q.Set("lang", code)
 	return path + "?" + q.Encode()
+}
+
+// langNextURL 生成语言切换落库后回跳的地址：保留当前路径与查询参数，但去掉 lang 参数。
+// 切换已写进 users.locale，语言由存储值决定；留着旧的 lang 会继续覆盖它，
+// 用户会觉得"切了没生效"——那正是本次要修的缺陷。
+func langNextURL(u *url.URL) string {
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+	q := u.Query()
+	q.Del("lang")
+	if enc := q.Encode(); enc != "" {
+		return path + "?" + enc
+	}
+	return path
 }

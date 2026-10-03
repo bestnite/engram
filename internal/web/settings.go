@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,9 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 	}
 	router.GET("/settings", s.settingsPage)
 	router.POST("/settings/profile", s.sessions.CSRFMiddleware(), s.settingsProfileSubmit)
+	// 页头语言切换（M1-8 语言切换落库）：只改 users.locale 一个字段，因此单独一个端点。
+	// 它仍然是写操作，一律过 CSRF（DESIGN.md §4.3）。
+	router.POST(languageRoute, s.sessions.CSRFMiddleware(), s.settingsLocaleSubmit)
 	router.POST("/settings/password", s.sessions.CSRFMiddleware(), s.settingsPasswordSubmit)
 	// 用户级 API Key 管理（M4-10，DESIGN.md §8.1）：路由与 handler 在 keys.go。
 	// 创建与撤销都是写操作，一律过 CSRF（DESIGN.md §4.3）。
@@ -125,6 +129,122 @@ func (s *Server) settingsProfileSubmit(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/settings")
 }
 
+// settingsLocaleSubmit 保存页头语言切换（M1-8）。
+//
+// 页头的语言下拉对已登录用户提交到这里。切换语言必须落进 users.locale：只靠 ?lang
+// 覆盖本次请求的话，下一次不带该参数的请求（点任一导航链接或刷新）就会回退到旧值，
+// 这正是本端点要修的缺陷（DESIGN.md §8.3）。因此这里不做整套资料校验，只校验语言码，
+// 校验通过后用 303 回到提交时携带的站内地址。
+func (s *Server) settingsLocaleSubmit(c *gin.Context) {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+
+	code := strings.TrimSpace(c.PostForm("lang"))
+	next := safeNextPath(c.PostForm("next"))
+	// 提交里带 oob 标记说明这一页还有别的语言控件（个人设置页），响应要一并刷新它。
+	includeLocaleControl := c.PostForm("oob") == views.SettingsLocaleControlID
+	htmx := c.GetHeader("HX-Request") == "true"
+
+	fresh, err := s.users.ByID(ctx, user.ID)
+	if err != nil {
+		s.logger.Error("load user for locale change failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	// 非法语言码一律拒绝并回填本地化提示，绝不静默落库；与 /settings/profile 同一条文案。
+	if !s.supportedLocale(code) {
+		if htmx {
+			// htmx 的响应只会换进页头下拉，塞不下设置页的错误提示；直接 400 让 htmx
+			// 不做任何替换（htmx 默认不交换 4xx），页面保持原样。下拉只提交受支持的语言码，
+			// 所以这条只有伪造请求能走到。
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+		s.renderSettingsError(c, loc, fresh, loc.T("settings.error.locale_invalid"))
+		return
+	}
+	if fresh.Locale != code {
+		fresh.Locale = code
+		if err := s.users.Update(ctx, fresh); err != nil {
+			s.logger.Error("update user locale failed", "user_id", user.ID, "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		s.audit(ctx, store.AuditEntry{
+			UserID:     store.Ptr(user.ID),
+			Action:     store.ActionUserProfileUpdate,
+			TargetType: "user",
+			TargetID:   store.Ptr(user.ID),
+			Detail: map[string]any{
+				"locale": code,
+				"via":    "header",
+			},
+		})
+	}
+	if htmx {
+		s.renderLocaleSwitchFragment(c, code, next, includeLocaleControl)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, next)
+}
+
+// renderLocaleSwitchFragment 就地刷新页头语言下拉（htmx 路径）：主交换是新语言下的下拉组件，
+// 来自设置页的请求再带外（out-of-band）交换设置页的语言控件，两处因此立即一致。
+//
+// 必须用新语言重建本地化器：请求进来时的本地化器按切换前的用户设置解析，直接复用会渲染出旧语言。
+func (s *Server) renderLocaleSwitchFragment(c *gin.Context, code, next string, includeLocaleControl bool) {
+	loc := s.i18n.Localizer(s.i18n.Pick(code, "", ""))
+	layout := s.pageLayout(c, loc, "settings.title")
+	if layout.LangForm != nil {
+		// 当前请求的 URL 是 POST 目标（/settings/locale），不是用户所在的页面；
+		// 回跳地址与 oob 标记必须沿用提交时带回的值，否则第二次切换会丢状态。
+		layout.LangForm.Next = next
+		layout.LangForm.OOBLocaleControl = includeLocaleControl
+	}
+	data := views.LanguageSwitchData{
+		Layout:               layout,
+		IncludeLocaleControl: includeLocaleControl,
+		LocaleLabel:          loc.T("settings.profile.locale_label"),
+		LocaleOptions:        s.localeOptions(loc, code),
+	}
+	renderHTML(c, views.LanguageSwitchResponse(data))
+}
+
+// localeOptions 构造语言下拉的选项；selected 决定哪一项处于选中态。
+func (s *Server) localeOptions(loc *i18n.Localizer, selected string) []views.SettingOption {
+	codes := s.i18n.SupportedCodes()
+	out := make([]views.SettingOption, 0, len(codes))
+	for _, code := range codes {
+		out = append(out, views.SettingOption{
+			Value:    code,
+			Label:    loc.T("language." + code),
+			Selected: code == selected,
+		})
+	}
+	return out
+}
+
+// safeNextPath 只接受站内绝对路径，其余一律回落到首页，避免开放重定向。
+// 拒掉的形态：不以单个 "/" 开头、以 "//" 开头（浏览器按协议相对 URL 跳到外站）、
+// 含反斜杠（部分浏览器把它归一化成 "/"）、以及 url.Parse 后仍带主机或 scheme 的值。
+func safeNextPath(raw string) string {
+	next := strings.TrimSpace(raw)
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.Contains(next, "\\") {
+		return "/"
+	}
+	if u, err := url.Parse(next); err != nil || u.IsAbs() || u.Host != "" {
+		return "/"
+	}
+	return next
+}
+
 // settingsPasswordSubmit 改密码：校验旧密码、argon2id 重哈希，并作废本人其它会话。
 //
 // 当前会话通过 ChangePasswordKeepingSession 保留，用户改完密码不会被踢回登录页；
@@ -209,20 +329,17 @@ func (s *Server) renderSettingsError(c *gin.Context, loc *i18n.Localizer, user *
 // user 是用于回填表单的用户快照：正常进入时来自会话，校验失败时是用户刚提交的候选值。
 func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.User, errMsg, savedMsg string) views.SettingsData {
 	csrf := sessionCSRF(c)
-	locales := make([]views.SettingOption, 0, 2)
-	for _, code := range s.i18n.SupportedCodes() {
-		locales = append(locales, views.SettingOption{
-			Value:    code,
-			Label:    loc.T("language." + code),
-			Selected: code == user.Locale,
-		})
+	// 设置页上除页头下拉外还有一个语言控件：页头切换要带外刷新它，故此处标记。
+	layout := s.pageLayout(c, loc, "settings.title")
+	if layout.LangForm != nil {
+		layout.LangForm.OOBLocaleControl = true
 	}
 	zones := make([]string, 0, len(commonTimezones))
 	for _, z := range commonTimezones {
 		zones = append(zones, z)
 	}
 	return views.SettingsData{
-		Layout:              s.pageLayout(c, loc, "settings.title"),
+		Layout:              layout,
 		Heading:             loc.T("settings.heading"),
 		Intro:               loc.T("settings.intro"),
 		ErrorMessage:        errMsg,
@@ -231,7 +348,7 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		DisplayNameLabel:    loc.T("settings.profile.display_name_label"),
 		DisplayNameValue:    user.DisplayName,
 		LocaleLabel:         loc.T("settings.profile.locale_label"),
-		LocaleOptions:       locales,
+		LocaleOptions:       s.localeOptions(loc, user.Locale),
 		TimezoneLabel:       loc.T("settings.profile.timezone_label"),
 		TimezoneValue:       user.Timezone,
 		TimezoneHint:        loc.T("settings.profile.timezone_hint"),

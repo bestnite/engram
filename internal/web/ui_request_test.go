@@ -54,13 +54,18 @@ func TestLocaleURLPreservesPathAndQuery(t *testing.T) {
 	}
 }
 
-// TestLanguageSelectorOnPlainPage 断言普通页面外壳也渲染页头语言下拉（不只是首页）。
-// 当前语言渲染为不可点的摘要，另一种语言渲染为指向当前路径的链接。
+// TestLanguageSelectorOnPlainPage 断言普通页面外壳也渲染页头语言下拉（不只是首页），
+// 且两种登录态渲染成两种形态：已登录是写库的 POST 表单，匿名是指向当前路径的 ?lang= 链接。
 func TestLanguageSelectorOnPlainPage(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 	body := getWithCookies(t, srv, "/settings", cookies).Body.String()
-	if !strings.Contains(body, `href="/settings?lang=en"`) {
-		t.Errorf("settings page header does not render the language dropdown: %s", snippet(body))
+	if !strings.Contains(body, `action="/settings/locale"`) || !strings.Contains(body, `name="lang" value="en"`) {
+		t.Errorf("signed-in settings page does not render the language form: %s", snippet(body))
+	}
+
+	anon := get(t, newRenderServer(t, nil), "/", nil).Body.String()
+	if !strings.Contains(anon, `href="/?lang=en"`) {
+		t.Errorf("anonymous home page does not render the ?lang= link: %s", snippet(anon))
 	}
 }
 

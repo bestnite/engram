@@ -24,6 +24,9 @@ type LayoutData struct {
 	RepoURL string
 	// LangOptions 是页头语言切换下拉的选项（标签已本地化）。
 	LangOptions []LanguageOption
+	// LangForm 非 nil 表示当前请求已登录：语言切换以带 CSRF 的 POST 提交（写 users.locale）。
+	// 为 nil（访客）时选项渲染为 ?lang= 链接，切完只作用于本次请求（DESIGN.md §8.3）。
+	LangForm *LanguageForm
 	// LanguageLabel 是语言切换控件的无障碍标签（已本地化）。
 	LanguageLabel string
 	// CurrentLanguage 是当前语言的显示名（已本地化），用作下拉折叠时的摘要。
@@ -62,10 +65,43 @@ type NavItem struct {
 	Active bool
 }
 
-// LanguageOption 是示例页上的一枚语言切换入口。
+// LanguageForm 是页头语言切换下拉的表单参数。切换语言要落进 users.locale，
+// 因此它是一个带 CSRF 的 POST（DESIGN.md §4.3、§8.3）。
+type LanguageForm struct {
+	// Action 是表单提交地址（/settings/locale）。
+	Action string
+	// CSRF 是会话绑定的 CSRF token。
+	CSRF string
+	// Next 是写库后回跳的站内地址（已去掉 lang 参数）。
+	Next string
+	// OOBLocaleControl 为 true 时，本次提交还要带外刷新同页面的语言控件
+	// （个人设置页）。否则设置页表单里残留的还是旧语言，用户再点保存会把语言改回去。
+	OOBLocaleControl bool
+}
+
+// SettingsLocaleControlID 是设置页语言控件的元素 id。它既是带外交换的目标，
+// 也是提交时标记"本页有该控件"的值（模板与 handler 共用同一个常量，避免写两遍字符串）。
+const SettingsLocaleControlID = "settings-locale-control"
+
+// LanguageSwitchData 是页头语言切换的 htmx 响应片段（就地刷新，不重新加载整页）。
+//
+// 主交换是 Layout 里的页头下拉；IncludeLocaleControl 为 true 时再带外交换
+// 设置页的语言控件，让两处同时反映新语言。
+type LanguageSwitchData struct {
+	Layout               LayoutData
+	IncludeLocaleControl bool
+	LocaleLabel          string
+	LocaleOptions        []SettingOption
+}
+
+// LanguageOption 是页头语言切换下拉里的一枚入口。
+//
+// 已登录用户走 POST 表单（切换要写 users.locale），此时 Code 是提交的语言码；
+// 未登录访客走普通链接，此时 Href 覆盖当前 URL 的 lang 参数。两者互斥。
 type LanguageOption struct {
 	Label  string
 	Href   string
+	Code   string
 	Active bool
 }
 
