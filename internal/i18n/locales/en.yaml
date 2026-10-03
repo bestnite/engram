@@ -1222,7 +1222,7 @@
 - id: stats.retention.heading
   translation: "Retention"
 - id: stats.retention.intro
-  translation: "Share of due reviews not rated Again, bucketed by stability."
+  translation: "Share still remembered when due, grouped by memory strength (days)."
 - id: stats.retention.overall
   translation: "Overall"
 - id: stats.retention.rate
@@ -1272,7 +1272,7 @@
 - id: stats.curve.heading
   translation: "Learning curve"
 - id: stats.curve.intro
-  translation: "New cards introduced and reviews per day; new cards consistently outnumbering reviews means the introduction rate exceeds what you can absorb."
+  translation: "New cards and reviews per day; new cards persistently outnumbering reviews means a growing backlog."
 - id: stats.curve.new
   translation: "New"
 - id: stats.curve.review

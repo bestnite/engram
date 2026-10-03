@@ -1220,7 +1220,7 @@
 - id: stats.retention.heading
   translation: "留存率"
 - id: stats.retention.intro
-  translation: "到期复习里评分不是 Again 的比例，按稳定性分桶。"
+  translation: "到期时还记得的比例，按记忆强度（天）分组。"
 - id: stats.retention.overall
   translation: "总体"
 - id: stats.retention.rate
@@ -1270,7 +1270,7 @@
 - id: stats.curve.heading
   translation: "学习曲线"
 - id: stats.curve.intro
-  translation: "每日新引入与复习量；新引入长期高于复习量说明新卡速率超过了消化能力。"
+  translation: "每日新引入与复习量；新引入长期高于复习量说明积压在累积。"
 - id: stats.curve.new
   translation: "新引入"
 - id: stats.curve.review
