@@ -198,6 +198,13 @@ func TestDeckSettingsUpdateTakesEffectImmediately(t *testing.T) {
 		t.Errorf("after update queue = %d new / %d review, want 2/1 (effective immediately)", n, r)
 	}
 
+	// 改额度与其他卡组变更同口径：留一条审计（谁在什么时候把额度改成了什么）。
+	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckCaps); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	} else if n != 1 {
+		t.Errorf("audit rows for %s = %d, want 1", store.ActionDeckCaps, n)
+	}
+
 	// 再打开设置页：输入框显示新值，且带成功提示。
 	page := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/settings?notice=saved", cookies)
 	if page.Code != http.StatusOK {
@@ -348,6 +355,12 @@ func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 			}
 			if caps := deckCapsFromDB(t, db, deck.ID); caps.NewPerDay != 6 || caps.ReviewsPerDay != 6 {
 				t.Errorf("caps changed on invalid input: got %d/%d, want 6/6", caps.NewPerDay, caps.ReviewsPerDay)
+			}
+			// 被拒的请求零副作用：连审计都不该写。
+			if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckCaps); err != nil {
+				t.Fatalf("count audit rows: %v", err)
+			} else if n != 0 {
+				t.Errorf("audit rows for %s = %d, want 0 on a rejected update", store.ActionDeckCaps, n)
 			}
 		})
 	}

@@ -94,6 +94,15 @@ func (s *Server) deckSettingsUpdate(c *gin.Context) {
 		s.renderDeckSettings(c, loc, user, deck, http.StatusInternalServerError, loc.T("decks.settings.error.save_failed"), "")
 		return
 	}
+	// 与其他卡组变更（创建/克隆/授权/可见性）同一口径：改额度也要留痕，
+	// 它决定了这个卡组每天向所有使用者放多少张卡出来（DESIGN.md §11）。
+	s.audit(c.Request.Context(), store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionDeckCaps,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deck.ID),
+		Detail:     map[string]any{"new_per_day": caps.NewPerDay, "reviews_per_day": caps.ReviewsPerDay},
+	})
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%d/settings?notice=saved", deck.ID))
 }
 
