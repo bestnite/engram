@@ -2114,3 +2114,37 @@
   translation: "Review"
 - id: decks.list.settings
   translation: "Settings"
+
+# ── Deck settings page (owner only): daily new/review caps and today's usage ──
+- id: decks.settings.title
+  translation: "Deck settings"
+- id: decks.settings.heading
+  translation: "Deck settings"
+- id: decks.settings.back
+  translation: "Back to decks"
+- id: decks.settings.new_per_day_label
+  translation: "Daily new-card limit"
+- id: decks.settings.reviews_per_day_label
+  translation: "Daily review limit"
+- id: decks.settings.unlimited_hint
+  translation: "Enter 0 for unlimited."
+- id: decks.settings.usage_heading
+  translation: "Today's quota"
+- id: decks.settings.new_used_label
+  translation: "New used"
+- id: decks.settings.new_left_label
+  translation: "New left"
+- id: decks.settings.review_used_label
+  translation: "Reviews used"
+- id: decks.settings.review_left_label
+  translation: "Reviews left"
+- id: decks.settings.unlimited_value
+  translation: "Unlimited"
+- id: decks.settings.submit
+  translation: "Save"
+- id: decks.settings.notice.saved
+  translation: "Saved."
+- id: decks.settings.error.invalid_number
+  translation: "Each limit must be an integer of 0 or greater; 0 means unlimited."
+- id: decks.settings.error.save_failed
+  translation: "Could not save the deck settings."

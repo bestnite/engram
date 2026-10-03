@@ -2112,3 +2112,37 @@
   translation: "复习"
 - id: decks.list.settings
   translation: "设置"
+
+# ── 卡组设置页（仅 owner）：每日新卡 / 复习上限与今日已用、剩余 ──────────
+- id: decks.settings.title
+  translation: "卡组设置"
+- id: decks.settings.heading
+  translation: "卡组设置"
+- id: decks.settings.back
+  translation: "返回卡组列表"
+- id: decks.settings.new_per_day_label
+  translation: "每日新卡上限"
+- id: decks.settings.reviews_per_day_label
+  translation: "每日复习上限"
+- id: decks.settings.unlimited_hint
+  translation: "填 0 表示不限。"
+- id: decks.settings.usage_heading
+  translation: "今日额度"
+- id: decks.settings.new_used_label
+  translation: "新卡已用"
+- id: decks.settings.new_left_label
+  translation: "新卡剩余"
+- id: decks.settings.review_used_label
+  translation: "复习已用"
+- id: decks.settings.review_left_label
+  translation: "复习剩余"
+- id: decks.settings.unlimited_value
+  translation: "不限"
+- id: decks.settings.submit
+  translation: "保存"
+- id: decks.settings.notice.saved
+  translation: "已保存。"
+- id: decks.settings.error.invalid_number
+  translation: "每日上限必须是不小于 0 的整数；0 表示不限。"
+- id: decks.settings.error.save_failed
+  translation: "保存卡组设置失败。"
