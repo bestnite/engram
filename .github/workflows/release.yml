@@ -133,6 +133,24 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # goreleaser 的 dockers_v2 只执行 docker buildx build --push，自身不登录任何 registry
+      # （上游 internal/pipe/docker/v2/docker.go 已核对），凭据必须由本 workflow 先注入。
+      # 缺了这一步 buildx 会以匿名身份推 ghcr，token 端点对匿名 push 一律 403 Forbidden，
+      # 而且 goreleaser 把 "failed to fetch" 判为可重试，会白烧 10 次退避重试（约 25 分钟）。
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Docker Hub 的凭据来自仓库 secret（见文件头）。两个 registry 都必须在 Release 之前登录。
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Release
         uses: goreleaser/goreleaser-action@v6
         with:
