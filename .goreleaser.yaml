@@ -49,6 +49,8 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+      - goos: darwin
+        goarch: amd64
 
 archives:
   - id: default
@@ -119,13 +121,3 @@ release:
     name: engram
   draft: false
   prerelease: auto
-  footer: |
-    ### Container images
-
-    - `ghcr.io/bestnite/engram:{{ .Tag }}`
-    - `nite07/engram:{{ .Tag }}`
-
-    Both carry the server binary and the Rust optimiser adapter, for
-    `linux/amd64` and `linux/arm64`. A manual install needs no more than the
-    archive: unpack it, keep `optimizer` next to the `engram` binary, run
-    `./engram serve`.
