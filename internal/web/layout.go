@@ -20,14 +20,19 @@ const repositoryURL = "https://git.nite07.com/nite/engram"
 // 名以及个人设置页的语言取值保持同一个词，便于检索。
 const languageRoute = "/settings/locale"
 
-// themeBootstrap 在 <head> 内联执行主题引导（M8-8）。它必须内联且早于样式表：外链的
-// pwa.js 是独立网络请求，浏览器可能在它执行前就先画出白底一帧；暗色下这就是可见的白闪。
-// 这里只做「首帧之前必须成立」的最小集合——暗色类、color-scheme、画布底色与 theme-color，
-// 用内联 style 设底色，任何样式表都抢不到这个竞态。颜色值与 pwa.js 的 applyTheme 保持一致。
-// 常量自带 <script> 标签、由模板 @rawHTML 原样输出：templ 把 <script> 当纯文本元素，
-// 写在其内部的 @rawHTML(...) 会被当成字面文本；模板里也不放内联 JS，所以这段引导脚本作为
-// 常量经 @rawHTML 输出（decks.templ 的 noscriptDialogStyle 同理）。
-const themeBootstrap = `<script>(function(){var s;try{s=localStorage.getItem("engram-theme")}catch(e){}var d=s==="dark"||(s!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";r.style.backgroundColor=d?"#09090b":"#f8fafc";var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",d?"#09090b":"#ffffff")}})();</script>`
+// themeBootstrapJS 是主题引导脚本的正文（不含 <script> 标签）。单独成一个常量是为了对它取
+// SHA-256 交给 CSP 白名单（F26）：内联脚本不能用 'self' 覆盖，它是编译期常量，用 hash 比
+// 把 per-request nonce 穿透到每个渲染调用更省事，模板也不用改。
+const themeBootstrapJS = `(function(){var s;try{s=localStorage.getItem("engram-theme")}catch(e){}var d=s==="dark"||(s!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";r.style.backgroundColor=d?"#09090b":"#f8fafc";var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",d?"#09090b":"#ffffff")}})();`
+
+// themeBootstrap 是内联在 <head>、早于样式表执行的完整脚本标签（M8-8）。它必须内联且早于
+// 样式表：外链的 pwa.js 是独立网络请求，浏览器可能在它执行前就先画出白底一帧；暗色下这就是
+// 可见的白闪。这里只做「首帧之前必须成立」的最小集合——暗色类、color-scheme、画布底色与
+// theme-color，用内联 style 设底色，任何样式表都抢不到这个竞态。颜色值与 pwa.js 的
+// applyTheme 保持一致。常量自带 <script> 标签、由模板 @rawHTML 原样输出：templ 把
+// <script> 当纯文本元素，写在其内部的 @rawHTML(...) 会被当成字面文本；模板里也不放内联
+// JS，所以这段引导脚本作为常量经 @rawHTML 输出（decks.templ 的 noscriptDialogStyle 同理）。
+const themeBootstrap = "<script>" + themeBootstrapJS + "</script>"
 
 // decorateLayout 补齐所有页面外壳共有的字段：页脚项目名与仓库链接、页头语言切换下拉、
 // 以及哈希化图标路径（M8-7）。每个 LayoutData 构造完后调用一次，避免多个外壳各自重复。
