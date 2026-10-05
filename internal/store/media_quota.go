@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -13,7 +12,7 @@ import (
 //
 // 计量：一个用户的「已用媒体量」= 该用户拥有的 note（notes.created_by = 该用户，且
 // 未被软删除）所引用到的媒体，按 sha256 去重后求字节数之和。note 字段里的引用可能是
-// 编辑器写入的 Markdown 图片 URL `/media/<id>`，也可能是卡组包里的 `media/<sha>.<ext>`；
+// 编辑器写入的 Markdown 图片 URL `/media/<sha256>`，也可能是卡组包里的 `media/<sha256>.<ext>`；
 // 两种形态都识别。
 //
 // 为什么按「引用」而不是按 media.created_by（上传者）计费：
@@ -36,8 +35,9 @@ type MediaUsage struct {
 	Sha256 map[string]bool
 }
 
-// mediaRefByIDRE 匹配编辑器写入的媒体 URL `/media/<id>`（同一字段里可能出现多次）。
-var mediaRefByIDRE = regexp.MustCompile(`/media/(\d+)`)
+// mediaRefByURLRE 匹配编辑器写入的媒体 URL `/media/<sha256>`（同一字段里可能出现多次）。
+// 左右用非十六进制字符界定，避免把更长的十六进制串截成 64 位而误配。
+var mediaRefByURLRE = regexp.MustCompile(`(?:^|[^0-9a-f])/media/([0-9a-f]{64})(?:[^0-9a-f]|$)`)
 
 // mediaRefByShaRE 匹配卡组包形态的 `media/<sha256>.<ext>`；左右用非十六进制字符界定，
 // 避免把更长的串误当 sha256。
@@ -54,7 +54,6 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 	if err := db.WithContext(ctx).Where("created_by = ?", userID).Find(&notes).Error; err != nil {
 		return usage, fmt.Errorf("store: list user notes for media usage: %w", err)
 	}
-	ids := map[uint64]bool{}
 	shas := map[string]bool{}
 	for i := range notes {
 		fields, err := ParseFields(notes[i].FieldsJSON)
@@ -62,24 +61,11 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 			// 坏字段不阻塞配额计算：跳过该 note，由调用方在别处报告内容问题。
 			continue
 		}
-		scanMediaRefs(fields, ids, shas)
+		scanMediaRefs(fields, shas)
 	}
 
 	// 去重后一次性取回媒体行；同一 sha256 无论被几张 note 引用都只累加一次。
 	bySha := map[string]Media{}
-	if len(ids) > 0 {
-		list := make([]uint64, 0, len(ids))
-		for id := range ids {
-			list = append(list, id)
-		}
-		var rows []Media
-		if err := db.WithContext(ctx).Where("id IN ?", list).Find(&rows).Error; err != nil {
-			return usage, fmt.Errorf("store: load media by id for usage: %w", err)
-		}
-		for _, m := range rows {
-			bySha[m.Sha256] = m
-		}
-	}
 	if len(shas) > 0 {
 		list := make([]string, 0, len(shas))
 		for sha := range shas {
@@ -100,25 +86,23 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 	return usage, nil
 }
 
-// scanMediaRefs 递归扫描 note 字段，收集其中的媒体 id 与 sha256 引用。
-func scanMediaRefs(v any, ids map[uint64]bool, shas map[string]bool) {
+// scanMediaRefs 递归扫描 note 字段，收集其中的媒体 sha256 引用（URL 形态与包内形态都识别）。
+func scanMediaRefs(v any, shas map[string]bool) {
 	switch x := v.(type) {
 	case string:
-		for _, m := range mediaRefByIDRE.FindAllStringSubmatch(x, -1) {
-			if id, err := strconv.ParseUint(m[1], 10, 64); err == nil && id > 0 {
-				ids[id] = true
-			}
+		for _, m := range mediaRefByURLRE.FindAllStringSubmatch(x, -1) {
+			shas[m[1]] = true
 		}
 		for _, m := range mediaRefByShaRE.FindAllStringSubmatch(x, -1) {
 			shas[m[1]] = true
 		}
 	case map[string]any:
 		for _, child := range x {
-			scanMediaRefs(child, ids, shas)
+			scanMediaRefs(child, shas)
 		}
 	case []any:
 		for _, child := range x {
-			scanMediaRefs(child, ids, shas)
+			scanMediaRefs(child, shas)
 		}
 	}
 }

@@ -36,11 +36,11 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("create media 2: %v", err)
 	}
 
-	// u1 的 note：同时以 /media/<id> 引用 m1（出现两次）与 m2。
+	// u1 的 note：同时以 /media/<sha> 引用 m1（出现两次）与 m2。
 	noteU1 := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%d) /media/%d","back":"![](/media/%d)"}`,
-			m1.ID, m1.ID, m2.ID),
+		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s) /media/%s","back":"![](/media/%s)"}`,
+			sha1, sha1, sha2),
 		CreatedBy: &u1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&noteU1).Error; err != nil {
@@ -49,7 +49,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	// u2 的 note：只引用 m1（跨用户重复引用，不应影响 u1 的用量）。
 	noteU2 := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%d)"}`, m1.ID),
+		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)"}`, sha1),
 		CreatedBy:  &u2, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&noteU2).Error; err != nil {
@@ -108,5 +108,43 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	}
 	if usage2.Bytes != 1000 {
 		t.Fatalf("u2 usage after u1 delete = %d, want 1000 (unchanged)", usage2.Bytes)
+	}
+}
+
+// TestScanMediaRefsForms 钉死引用识别的两种形态，并证明二者不互相误配、旧的数字 id 形态不再识别。
+func TestScanMediaRefsForms(t *testing.T) {
+	shaA := strings.Repeat("a", 64)
+	shaB := strings.Repeat("b", 64)
+	cases := []struct {
+		name  string
+		text  string
+		want  []string
+		avoid []string // 必须不被收集的串
+	}{
+		{name: "url form", text: "![](" + "/media/" + shaA + ")", want: []string{shaA}},
+		{name: "package form", text: "![](media/" + shaB + ".png)", want: []string{shaB}},
+		{name: "both forms in one field", text: "/media/" + shaA + " and media/" + shaB + ".jpg",
+			want: []string{shaA, shaB}},
+		{name: "old numeric id ignored", text: "![](/media/123)", want: nil, avoid: []string{"123"}},
+		// 65 位十六进制不得被截成 64 位而误配：记录 64 位前缀，但整串是 65 位。
+		{name: "65 hex not a ref", text: "/media/" + shaA + "f", avoid: []string{shaA}},
+		// URL 形态的 64 位 sha 后紧跟扩展名（不是包内形态，因为带了前导斜杠）仍只取同一 sha。
+		{name: "url form with extension", text: "/media/" + shaB + ".png", want: []string{shaB}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := map[string]bool{}
+			scanMediaRefs(tc.text, got)
+			for _, w := range tc.want {
+				if !got[w] {
+					t.Errorf("scanMediaRefs(%q) missed %q; got %v", tc.text, w, got)
+				}
+			}
+			for _, a := range tc.avoid {
+				if got[a] {
+					t.Errorf("scanMediaRefs(%q) wrongly collected %q; got %v", tc.text, a, got)
+				}
+			}
+		})
 	}
 }

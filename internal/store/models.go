@@ -218,9 +218,9 @@ type ShareLink struct {
 func (ShareLink) TableName() string { return "share_links" }
 
 // Media 只存元数据，字节在本地文件系统，路径由 sha256 决定。
+// 主键 = 内容 sha256（DESIGN.md §2.2、§6.3）：对外标识就是哈希，不再有自增 id。
 type Media struct {
-	ID        uint64    `gorm:"primaryKey" json:"id"`
-	Sha256    string    `gorm:"not null;uniqueIndex" json:"sha256"`
+	Sha256    string    `gorm:"primaryKey" json:"sha256"`
 	RelPath   string    `gorm:"not null" json:"rel_path"`
 	Mime      string    `gorm:"not null" json:"mime"`
 	Bytes     int64     `gorm:"not null" json:"bytes"`

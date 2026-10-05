@@ -73,7 +73,7 @@ type Deps struct {
 	API *api.API
 	// MCP 是内置 MCP server（M4-6）；非空时在 /mcp 挂载 streamable HTTP。
 	MCP *mcp.Server
-	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/:id 代理。
+	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/<sha256> 代理。
 	Media *media.Store
 	// Secrets 是敏感设置的 AES-GCM 编解码器（M6-10）；非空时管理面板可写入
 	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。

@@ -94,7 +94,7 @@ func TestAdminMailMediaQuotaReachesAdmin(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
 	// 再传 1000：1500+1000 > 2048 → 413，并触发管理员告警。
 	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
@@ -136,7 +136,7 @@ func TestAdminMailHonorsAdminPreference(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
 	// 触发配额：管理员已关闭该类型 → 上传仍被拒（413），但不发信。
 	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
@@ -180,7 +180,7 @@ func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 	if rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000)); rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("over-quota upload with a broken mailer = %d, want 413", rec.Code)
 	}

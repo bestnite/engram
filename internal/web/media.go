@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -38,7 +38,7 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	}
 	// 上传是写操作，过 CSRF 中间件；读取只要求登录（M5 授权落地前的最小鉴权）。
 	router.POST("/media", s.sessions.CSRFMiddleware(), s.mediaUpload)
-	router.GET("/media/:id", s.mediaServe)
+	router.GET("/media/:sha", s.mediaServe)
 	// M2-9：编辑器使用的卡组内上传入口。写入要求卡组的 editor 角色，读者无法把媒体
 	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（M5-1，单一实现）。
 	if s.access != nil {
@@ -166,15 +166,14 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionMediaUpload,
 		TargetType: "media",
-		TargetID:   store.Ptr(saved.ID),
 		Detail:     map[string]any{"sha256": saved.Sha256, "mime": saved.Mime, "bytes": saved.Bytes},
 	})
+	// 对外标识就是 sha256（DESIGN.md §6.3）：响应不再有自增 id，url 直接由哈希拼成。
 	c.JSON(http.StatusCreated, gin.H{
-		"id":     saved.ID,
 		"sha256": saved.Sha256,
 		"mime":   saved.Mime,
 		"bytes":  saved.Bytes,
-		"url":    "/media/" + strconv.FormatUint(saved.ID, 10),
+		"url":    "/media/" + saved.Sha256,
 	})
 }
 
@@ -244,6 +243,10 @@ func writeMediaError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
+// mediaShaParamRE 是 GET /media/:sha 的路径参数形状：恰好 64 位小写十六进制。
+// 不合形的参数直接 404，且在此之前不查库——避免拿任意字符串去命中 media 表。
+var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
 // mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存（DESIGN.md §6.3）。
 //
 // 鉴权（F2）：登录之外还要「有卡组访问权」——可见卡组内未软删的 note 精确引用了它，
@@ -254,29 +257,30 @@ func (s *Server) mediaServe(c *gin.Context) {
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	sha := c.Param("sha")
+	// 形状校验先于任何查询：短于 64 位、含非十六进制字符、或旧的数字 id 一律 404。
+	if !mediaShaParamRE.MatchString(sha) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, id)
+	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, sha)
 	if err != nil {
-		s.logger.Error("media access check failed", "media_id", id, "user_id", user.ID, "error", err)
+		s.logger.Error("media access check failed", "media_sha", sha, "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 	if !allowed {
-		// 与「媒体不存在」同一个 404：不向无权限者泄露某个 id 是否存在。
+		// 与「媒体不存在」同一个 404：不向无权限者泄露某个 sha 是否存在。
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	m, f, err := s.media.Open(c.Request.Context(), id)
+	m, f, err := s.media.Open(c.Request.Context(), sha)
 	if err != nil {
 		if errors.Is(err, media.ErrNotFound) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		s.logger.Error("open media failed", "media_id", id, "error", err)
+		s.logger.Error("open media failed", "media_sha", sha, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}

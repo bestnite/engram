@@ -280,13 +280,13 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	return row, nil
 }
 
-// Open 按 id 取元数据并打开文件；不存在时返回 ErrNotFound。
-func (s *Store) Open(ctx context.Context, id uint64) (*store.Media, *os.File, error) {
+// Open 按 sha256 取元数据并打开文件；不存在时返回 ErrNotFound。
+func (s *Store) Open(ctx context.Context, sha string) (*store.Media, *os.File, error) {
 	if s.db == nil {
 		return nil, nil, ErrNotFound
 	}
 	var m store.Media
-	if err := s.db.WithContext(ctx).First(&m, "id = ?", id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&m, "sha256 = ?", sha).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, ErrNotFound
 		}
