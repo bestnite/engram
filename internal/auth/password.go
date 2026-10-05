@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -34,6 +35,17 @@ func DefaultParams() Params {
 type PasswordHasher struct {
 	params Params
 	rand   func([]byte) error
+
+	// dummyOnce 保证 dummy 哈希只生成一次并冻结。若每次请求都重建它，
+	// 该分支会额外多出一次完整 argon2id 成本，反倒成了放大面（见 VerifyDummy）。
+	dummyOnce sync.Once
+	dummyHash string
+	dummyErr  error
+
+	// onVerify 在每次经本哈希器的 argon2id 校验完成后触发，默认 nil。
+	// 它是“两条登录路径都没跳过密码校验”的可观测代理：测试据此断言调用次数，
+	// 从而不必写出“毫秒必须相等”这类在共享 CI 上必然抖动的脆弱断言。
+	onVerify func()
 }
 
 // NewPasswordHasher 用给定参数构造哈希器；参数为零值时回落到 DefaultParams。
@@ -62,6 +74,36 @@ func (h *PasswordHasher) Hash(password string) (string, error) {
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2IDVersion, h.params.Memory, h.params.Time, h.params.Threads,
 		enc.EncodeToString(salt), enc.EncodeToString(key)), nil
+}
+
+// dummyPlaintext 是 dummy 哈希对应的明文；它从不与真实口令比较成功，
+// 只用来让“用户不存在 / 无本地密码”分支付出与真实校验相同的 argon2id 代价。
+const dummyPlaintext = "engram-dummy-password-for-timing-equalisation"
+
+// verify 是哈希器执行 argon2id 校验的唯一入口，负责在计算完成后触发 onVerify 观测钩子。
+func (h *PasswordHasher) verify(encoded, password string) (bool, error) {
+	ok, err := Verify(encoded, password)
+	if h.onVerify != nil {
+		h.onVerify()
+	}
+	return ok, err
+}
+
+// VerifyDummy 用与真实哈希完全相同的参数执行一次被丢弃的 argon2id 校验，
+// 使“用户不存在 / 无本地密码”分支的耗时与“存在用户 + 密码错误”不可区分（DESIGN.md §11）。
+//
+// dummy 哈希在首次调用时生成一次并冻结：每次请求重新生成会引入第二个 argon2id 成本，
+// 把该分支变成更重的放大面，比原本的时序差更糟。参数取自本哈希器，
+// 因此它与同一哈希器产出的真实哈希代价一致。
+func (h *PasswordHasher) VerifyDummy(password string) {
+	h.dummyOnce.Do(func() {
+		h.dummyHash, h.dummyErr = h.Hash(dummyPlaintext)
+	})
+	if h.dummyErr != nil {
+		// 生成失败时保持原语义：结果仍被丢弃，调用方返回统一错误；只是失去时序拉平。
+		return
+	}
+	_, _ = h.verify(h.dummyHash, password)
 }
 
 // Verify 校验明文密码与已编码哈希是否匹配；参数从哈希本身解析，因此旧强度哈希无需迁移即可验证。
