@@ -13,6 +13,7 @@ import (
 	"golang.org/x/text/language"
 
 	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -55,7 +56,7 @@ func TestAdminSettingsChangeAppliesWithoutRestart(t *testing.T) {
 	}
 
 	// 上传接口共用的解析函数也要立即读到新值（环境变量未设置时）。
-	if os.Getenv(envMediaMaxBytes) == "" {
+	if os.Getenv(media.EnvMediaMaxBytes) == "" {
 		if got := srv.uploadLimit(context.Background()); got != 2048 {
 			t.Errorf("uploadLimit() = %d, want 2048 without restart", got)
 		}
@@ -95,7 +96,7 @@ func TestAdminSettingsRejectInvalidValues(t *testing.T) {
 	if _, ok := settings["site.default_locale"]; ok {
 		t.Error("invalid locale was persisted")
 	}
-	if _, ok := settings[settingKeyMediaMaxBytes]; ok {
+	if _, ok := settings[media.SettingKeyMediaMaxBytes]; ok {
 		t.Error("invalid upload limit was persisted")
 	}
 }

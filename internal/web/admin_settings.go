@@ -54,7 +54,7 @@ func generalSettingSpecs() []settingSpec {
 func mediaSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
-			key: settingKeyMediaMaxBytes, envVar: envMediaMaxBytes,
+			key: media.SettingKeyMediaMaxBytes, envVar: media.EnvMediaMaxBytes,
 			labelKey: "admin.setting.media_max_bytes", hintKey: "admin.setting.media_max_bytes.hint",
 			def: func(*i18n.Localizer) string { return strconv.FormatInt(media.DefaultMaxBytes(), 10) },
 		},
@@ -336,7 +336,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_locale")
 				return
 			}
-		case settingKeyMediaMaxBytes:
+		case media.SettingKeyMediaMaxBytes:
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n <= 0 {
 				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_number")
 				return

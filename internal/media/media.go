@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,34 @@ const defaultMaxBytes = 10 * 1024 * 1024
 
 // DefaultMaxBytes 暴露默认上限，供路由层在系统设置缺失时回退。
 func DefaultMaxBytes() int64 { return defaultMaxBytes }
+
+// 上传上限（DESIGN.md §6.3）的 settings 键与环境变量覆盖名。Web 上传与 REST 卡组包导入
+// 共用下面这一份解析，避免两条入口各写一套常量、口径漂移。
+const (
+	SettingKeyMediaMaxBytes = "media_max_bytes"
+	EnvMediaMaxBytes        = "MEDIA_MAX_BYTES"
+)
+
+// ResolveMaxBytes 解析生效的上传字节上限：环境变量 > settings 表 > 默认 10 MiB。
+// 优先级与环境变量语义与 internal/config 一致；settings 表按请求现读，改完即生效。
+// Web 上传与 REST 导入都必须走这里，保证「体积上限与上传上限同一处配置」（DESIGN.md §7.6）。
+func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
+	if raw := strings.TrimSpace(os.Getenv(EnvMediaMaxBytes)); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	if db != nil {
+		if settings, err := store.LoadSettings(ctx, db); err == nil {
+			if raw, ok := settings[SettingKeyMediaMaxBytes]; ok {
+				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return defaultMaxBytes
+}
 
 // DefaultAllowedMimes 是 DESIGN.md §6.3 的默认白名单；判定实现已抽到叶子包 mediatype，
 // 这里保留同名入口，避免改动大量调用点（F9）。

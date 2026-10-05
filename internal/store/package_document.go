@@ -37,7 +37,8 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 			if !ok {
 				return nil, fmt.Errorf("package entry %s must be a base64 string", name)
 			}
-			raw, err = base64.StdEncoding.DecodeString(s)
+			// 单条媒体同样先按上限校验再解码，避免一条超大 base64 先被整体解进内存（F14）。
+			raw, err = decodeBase64Bounded(s, DefaultPackageLimits().MaxFileBytes)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("encode package entry %s: %w", name, err)
@@ -61,11 +62,17 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 //   - map[string]any：export_deck 输出的 JSON 文档（内部转成 zip）；
 //   - []byte：原始 zip 字节。
 func PackageReader(pkg any) (io.Reader, error) {
+	return packageReader(pkg, DefaultPackageLimits())
+}
+
+// packageReader 是 PackageReader 的可注入上限版本：上限由调用方给出，测试用小上限验证
+// 「解码前先判长度」而不必构造 100 MiB 级的串。
+func packageReader(pkg any, limits PackageLimits) (io.Reader, error) {
 	switch v := pkg.(type) {
 	case string:
-		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+		raw, err := decodeBase64Bounded(strings.TrimSpace(v), limits.MaxTotalBytes)
 		if err != nil {
-			return nil, fmt.Errorf("package is not a valid base64 archive: %w", err)
+			return nil, err
 		}
 		return bytes.NewReader(raw), nil
 	case []byte:
@@ -79,4 +86,18 @@ func PackageReader(pkg any) (io.Reader, error) {
 	default:
 		return nil, fmt.Errorf("package must be a JSON document object or a base64-encoded .edeck archive")
 	}
+}
+
+// decodeBase64Bounded 解码一段 base64：先按 maxBytes 对应的 base64 展开上界拒绝超限输入，
+// 超限时根本不进入解码，避免把超过归档上限的字节先整体解进内存（DESIGN.md §7.6「解压拒绝超限」）。
+// 错误沿用既有的 package_too_large code，与 ReadPackageArchive 的上限同一口径，不新造 code。
+func decodeBase64Bounded(s string, maxBytes int64) ([]byte, error) {
+	if maxBytes > 0 && int64(len(s)) > int64(base64.StdEncoding.EncodedLen(int(maxBytes))) {
+		return nil, &PackageError{Code: CodePackageTooLarge, Message: "encoded archive exceeds the size limit"}
+	}
+	raw, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("package is not a valid base64 archive: %w", err)
+	}
+	return raw, nil
 }
