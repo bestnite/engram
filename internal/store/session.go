@@ -46,7 +46,13 @@ func (s *SessionStore) Revoke(ctx context.Context, id string, at time.Time) erro
 
 // RevokeAllForUser 作废某用户的全部有效会话（改密码、禁用、强制下线）。
 func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID uint64, at time.Time) error {
-	if err := s.db.WithContext(ctx).Model(&Session{}).
+	return s.RevokeAllForUserTx(ctx, s.db, userID, at)
+}
+
+// RevokeAllForUserTx 在调用方给定的事务里批量作废某用户的全部有效会话。
+// 口令重置需要它与密码写入、API Key 吊销共享同一事务，失败时不留下半作废（DESIGN.md §11）。
+func (s *SessionStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
+	if err := tx.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions: %w", err)

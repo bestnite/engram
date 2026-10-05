@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
@@ -170,7 +171,10 @@ func (s *Server) resetPasswordSubmit(c *gin.Context) {
 		s.renderResetResult(c, loc, http.StatusBadRequest, msg)
 		return
 	}
-	if err := s.accounts.SetPasswordFromReset(ctx, tok.UserID, newPassword); err != nil {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return s.accounts.SetPasswordFromResetTx(ctx, tx, tok.UserID, newPassword)
+	})
+	if err != nil {
 		s.logger.Error("security mail: set password from reset failed", "user_id", tok.UserID, "error", err)
 		s.renderResetResult(c, loc, http.StatusBadRequest, loc.T("mail.reset.error_invalid"))
 		return

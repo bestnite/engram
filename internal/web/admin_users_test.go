@@ -19,7 +19,7 @@ import (
 // createRoleUser 直接建一个指定角色的本地用户（管理员用例需要造第二个管理员）。
 func createRoleUser(t *testing.T, db *gorm.DB, username, role string) uint64 {
 	t.Helper()
-	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db),
+	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db), store.NewAPIKeyStore(db),
 		auth.NewPasswordHasher(auth.Params{Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}))
 	if err != nil {
 		t.Fatalf("NewAccountService() error = %v", err)

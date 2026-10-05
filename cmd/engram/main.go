@@ -302,7 +302,7 @@ func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
 
-	accounts, err := auth.NewAccountService(users, sessions, auth.DefaultPasswordHasher())
+	accounts, err := auth.NewAccountService(users, sessions, store.NewAPIKeyStore(db), auth.DefaultPasswordHasher())
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
@@ -383,7 +384,14 @@ func (s *Server) adminUserResetPassword(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	temp, err := s.accounts.ResetPassword(ctx, target.ID)
+	// 生成临时口令、写哈希、作废会话与 API Key 在同一事务内完成（DESIGN.md §11）：
+	// 任一步失败都整体回滚，不会留下半作废。明文只在成功时通过 temp 带出展示一次。
+	var temp string
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var txErr error
+		temp, txErr = s.accounts.ResetPasswordTx(ctx, tx, target.ID)
+		return txErr
+	})
 	if err != nil {
 		s.logger.Error("admin: reset password failed", "user_id", target.ID, "error", err)
 		s.renderUsersPage(c, loc, s.usersNotice(loc, "save_failed"), "", strings.TrimSpace(c.Query("q")), 1)

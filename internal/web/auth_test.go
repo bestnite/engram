@@ -43,7 +43,7 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
 	invites := store.NewInviteStore(db)
-	accounts, err := auth.NewAccountService(users, sessions, auth.NewPasswordHasher(auth.Params{
+	accounts, err := auth.NewAccountService(users, sessions, store.NewAPIKeyStore(db), auth.NewPasswordHasher(auth.Params{
 		// 测试用弱参数，避免每次哈希耗时过长。
 		Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32,
 	}))
