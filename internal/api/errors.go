@@ -61,6 +61,7 @@ var errorMessages = map[string]string{
 	store.CodePackageTooLarge:    "The package exceeds the allowed size.",
 	store.CodePackageBadFormat:   "The package format is invalid.",
 	store.CodePackageUnknownKind: "The package contains a card type this instance does not know.",
+	store.CodePackageUnsafeMedia: "The package contains media of a disallowed type.",
 }
 
 // errorMessageKey 返回 code 对应的语言包键名。

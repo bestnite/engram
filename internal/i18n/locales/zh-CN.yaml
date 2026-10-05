@@ -2149,3 +2149,5 @@
 # F9: 卡组包导入媒体校验
 - id: import.error.package_unsafe_media
   translation: "卡组包包含不允许的媒体类型。"
+- id: error.package_unsafe_media
+  translation: "卡组包包含不允许的媒体类型。"
