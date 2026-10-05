@@ -272,12 +272,28 @@ func writeMediaError(c *gin.Context, status int, code, message string) {
 }
 
 // mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存（DESIGN.md §6.3）。
+//
+// 鉴权（F2）：登录之外还要「有卡组访问权」——可见卡组内未软删的 note 精确引用了它，
+// 或该 media 的 created_by = 当前用户（上传者预览）。谓词与列表/队列/统计同源
+// （store.MediaAccessibleToUser → visibleDeckIDsQuery），无权限与不存在统一 404。
 func (s *Server) mediaServe(c *gin.Context) {
-	if _, ok := s.requireUser(c); !ok {
+	user, ok := s.requireUser(c)
+	if !ok {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, id)
+	if err != nil {
+		s.logger.Error("media access check failed", "media_id", id, "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	if !allowed {
+		// 与「媒体不存在」同一个 404：不向无权限者泄露某个 id 是否存在。
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}

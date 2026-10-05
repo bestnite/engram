@@ -21,7 +21,7 @@ import (
 // TestMediaServeNeutralisesPollutedMime 直接造一行 mime=text/html 的 media 记录与磁盘字节，
 // 断言读取响应的 Content-Type 不是可执行类型、强制下载、并带 X-Content-Type-Options: nosniff。
 func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
-	srv, db, _, cookies, _ := newNotesServer(t)
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	root := srv.media.Root()
 
 	body := []byte("<html><body><script>alert(document.domain)</script></body></html>")
@@ -35,7 +35,8 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 	if err := os.WriteFile(abs, body, 0o644); err != nil {
 		t.Fatalf("write media file: %v", err)
 	}
-	row := store.Media{Sha256: sha, RelPath: rel, Mime: "text/html", Bytes: int64(len(body)), CreatedAt: time.Now().UTC()}
+	// created_by 指向当前登录用户：本用例只关心 mime 兜底，读取鉴权（F2）由 owner 分支放行。
+	row := store.Media{Sha256: sha, RelPath: rel, Mime: "text/html", Bytes: int64(len(body)), CreatedBy: store.Ptr(ownerID), CreatedAt: time.Now().UTC()}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed polluted media row: %v", err)
 	}
