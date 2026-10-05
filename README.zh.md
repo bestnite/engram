@@ -5,7 +5,7 @@
 Engram 是一个自托管的间隔重复（SRS）服务，多用户，网页优先。卡片在浏览器里手写，也可以让脚本或
 Agent 通过 API 或内置 MCP server 推入；排程用 FSRS v6。
 
-线上 demo：<https://engram.nite07.com/>
+线上 demo：<https://engram.nite07.com/>（注册已关闭，用测试账号 `test` / `testdemo` 登录）
 
 ## 截图
 

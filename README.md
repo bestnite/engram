@@ -6,7 +6,8 @@ Engram is a self-hosted, multi-user, web-first spaced-repetition (SRS) service. 
 browser, or let a script or agent push them in through the API or the built-in MCP server.
 Scheduling uses FSRS v6.
 
-Live demo: <https://engram.nite07.com/>
+Live demo: <https://engram.nite07.com/> (registration is closed; sign in with the test account
+`test` / `testdemo`)
 
 ## Screenshots
 
