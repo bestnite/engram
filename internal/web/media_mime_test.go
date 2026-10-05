@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -34,10 +35,14 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 	if err := os.WriteFile(abs, body, 0o644); err != nil {
 		t.Fatalf("write media file: %v", err)
 	}
-	// created_by 指向当前登录用户：本用例只关心 mime 兜底，读取鉴权（F2）由 owner 分支放行。
+	// owner 提供过这份字节：登记 media_uploaders（读取鉴权靠归属，不再看 media.created_by）。
+	// 本用例只关心 mime 兜底，读取鉴权（F2）由此放行。
 	row := store.Media{Sha256: sha, RelPath: rel, Mime: "text/html", Bytes: int64(len(body)), CreatedBy: store.Ptr(ownerID), CreatedAt: time.Now().UTC()}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed polluted media row: %v", err)
+	}
+	if err := store.RecordMediaUploader(context.Background(), db, sha, ownerID); err != nil {
+		t.Fatalf("record media uploader: %v", err)
 	}
 
 	get := getWithCookies(t, srv, "/media/"+row.Sha256, cookies)

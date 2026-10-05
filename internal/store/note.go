@@ -86,12 +86,33 @@ func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtyp
 	return wanted, nil
 }
 
-// Create 在同一事务内写入 note 并生成它的 cards。
-// 返回的 cards 已填充 NoteID 与自增 ID。任一步失败则整体回滚，不会留下\"有 note 无 card\"的半截状态。
-func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
+// actorKey 是 note 写入校验用的 context 键：本次写入的执行者用户 id。
+type actorKey struct{}
+
+// WithActor 标注本次 note 写入的执行者，供写前校验判定「新引入的引用是否我可读」（DESIGN.md §6.3）。
+//
+// 为什么不把 actor 做成写入方法的显式参数：note 写入被 web / REST / MCP / 包导入 / 克隆 / CLI
+// 以多种形态调用，actor 走 context 能保持写入方法签名不变，同时让「写前校验」与「映射重建」这对
+// 规则只有一处实现。**所有对外写入入口都必须先 WithActor**——否则校验会被静默跳过（逐入口的
+// 越权注入用例正是守着这一点）。actor 为 0（未标注）表示服务端自身写入，跳过校验。
+func WithActor(ctx context.Context, userID uint64) context.Context {
+	return context.WithValue(ctx, actorKey{}, userID)
+}
+
+// actorFromContext 取本次写入的执行者；未标注时返回 0（服务端自身写入）。
+func actorFromContext(ctx context.Context) uint64 {
+	v, _ := ctx.Value(actorKey{}).(uint64)
+	return v
+}
+
+// Save 是 note 写入的唯一入口：在同一事务内完成写前校验、写入（新建或更新）与映射重建。
+//
+// n.ID == 0 表示新建，否则表示更新。写前校验与 media_notes 重建都收敛在这里，因此
+// web 编辑器 / REST / MCP / 包导入 / 克隆 / CLI 只要调用它（或它的 InTx 形态），规则就不会漂移。
+func (s *NoteStore) Save(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
 	var cards []Card
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		created, err := s.CreateInTx(ctx, tx, n, fields)
+		created, err := s.SaveInTx(ctx, tx, n, fields)
 		cards = created
 		return err
 	})
@@ -101,17 +122,41 @@ func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) 
 	return cards, nil
 }
 
-// CreateInTx 在调用方给定的事务里创建 note 并生成它的 cards（M4-4 批量导入按批提交用）。
-//
-// 与 Create 的唯一区别是复用外部事务：批量导入把 200 条 note 放进同一个事务，
-// 由调用方决定何时提交/回滚，从而减少每行一次提交的开销。校验与序列化仍在这里完成，
-// 保证\"业务模型只有一份实现\"。调用方必须保证 tx 尚未提交。
+// SaveInTx 在调用方给定的事务里执行 note 写入（新建或更新），复用外部事务。
+// 与 Save 的差别只是事务归属：批量导入把多条 note 放进同一事务，由调用方决定何时提交/回滚。
+func (s *NoteStore) SaveInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
+	if n == nil {
+		return nil, errors.New("save note: note is required")
+	}
+	if n.ID == 0 {
+		return s.createInTx(ctx, tx, n, fields)
+	}
+	return s.updateInTx(ctx, tx, n, fields)
+}
+
+// Create 新建一条 note；等价于 Save（n.ID 为 0）。保留它是为了让「建 note」的调用点读起来明确。
+func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
+	return s.Save(ctx, n, fields)
+}
+
+// CreateInTx 在调用方给定的事务里新建一条 note（M4-4 批量导入按批提交用）；等价于 SaveInTx。
 func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
+	return s.SaveInTx(ctx, tx, n, fields)
+}
+
+// createInTx 在一个事务里写入一条新 note：先做写前校验（本次新引入的引用必须可读），
+// 写入 note 与 cards，最后重建它的 media_notes 映射（DESIGN.md §6.3）。
+// 任一步失败则整体回滚，不会留下「有 note 无 card」或「映射与字段不一致」的半截状态。
+func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.DeckID == 0 {
 		return nil, ErrNoteDeckRequired
 	}
 	wanted, err := s.prepareNoteFields(n, fields)
 	if err != nil {
+		return nil, err
+	}
+	// 写前校验：对写入之前的状态求值（新建时旧引用集为空）。
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), nil, fields); err != nil {
 		return nil, err
 	}
 	if n.TagsJSON == "" {
@@ -129,6 +174,9 @@ func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	}
 	created, err := syncCards(tx, n.ID, wanted, now)
 	if err != nil {
+		return nil, err
+	}
+	if err := rebuildMediaNotes(ctx, tx, n.ID, fields); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -153,21 +201,18 @@ func (s *NoteStore) byIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*Note, 
 // 验收关键：更新后已存在的 card 与其 id 保持不变。同步只复用旧 card（按 template 匹配，
 // id 不变）、补插新出现的 template，绝不删除已有行（见 syncCards）。
 func (s *NoteStore) Update(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
-	var cards []Card
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		updated, err := s.UpdateInTx(ctx, tx, n, fields)
-		cards = updated
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return cards, nil
+	return s.Save(ctx, n, fields)
 }
 
 // UpdateInTx 在调用方给定的事务里更新 note 与它的 cards（M4-4 批量导入按批提交用）。
 // 与 Update 语义一致，只是复用外部事务；现有 card 的 id 与用户进度保持不变。
 func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
+	return s.SaveInTx(ctx, tx, n, fields)
+}
+
+// updateInTx 在一个事务里更新 note：先读旧内容算「旧引用集」，对写入之前的状态做写前校验
+// （本次新引入的引用必须可读），写入 note 与 cards，最后**重建**它的 media_notes 映射。
+func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.ID == 0 {
 		return nil, errors.New("update note: id is required")
 	}
@@ -180,6 +225,15 @@ func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	}
 	wanted, err := s.prepareNoteFields(n, fields)
 	if err != nil {
+		return nil, err
+	}
+	// 写前校验：对写入之前的状态求值——旧引用集来自库里现有的字段，校验通过才写库。
+	oldFields, perr := ParseFields(existing.FieldsJSON)
+	if perr != nil {
+		// 坏字段按空集处理：不因此放行新引用，也不因既有脏数据阻断编辑。
+		oldFields = nil
+	}
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), oldFields, fields); err != nil {
 		return nil, err
 	}
 	if n.TagsJSON == "" {
@@ -199,6 +253,9 @@ func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	}
 	synced, err := syncCards(tx, n.ID, wanted, now)
 	if err != nil {
+		return nil, err
+	}
+	if err := rebuildMediaNotes(ctx, tx, n.ID, fields); err != nil {
 		return nil, err
 	}
 	return synced, nil

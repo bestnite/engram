@@ -239,6 +239,11 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if existing, err := s.bySha256(ctx, sum); err != nil {
 		return nil, err
 	} else if existing != nil {
+		// 去重命中也登记归属（DESIGN.md §6.3）：否则「B 上传与 C 相同字节」时 B 拿不到
+		// media_uploaders 记录，撤销共享后读不到自己提供的文件。
+		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
+			return nil, err
+		}
 		return existing, nil
 	}
 
@@ -272,12 +277,28 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 			// 并发下可能撞唯一索引：回读已有行，视为去重成功。
 			if existing, rerr := s.bySha256(ctx, sum); rerr == nil && existing != nil {
+				if uerr := s.recordUploader(ctx, sum, opts.CreatedBy); uerr != nil {
+					return nil, uerr
+				}
 				return existing, nil
 			}
 			return nil, fmt.Errorf("media: record metadata: %w", err)
 		}
+		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
+			return nil, err
+		}
 	}
 	return row, nil
+}
+
+// recordUploader 把本次上传者登记到 media_uploaders（幂等；见 store.RecordMediaUploader）。
+// 未配置数据库或没有具名上传者时是空操作。失败向上返回：上传者归属是「撤销共享后仍可读」
+// 的唯一依据，静默丢失会变成用户可见的权限回归。
+func (s *Store) recordUploader(ctx context.Context, sha string, createdBy *uint64) error {
+	if s.db == nil || createdBy == nil {
+		return nil
+	}
+	return store.RecordMediaUploader(ctx, s.db, sha, *createdBy)
 }
 
 // Open 按 sha256 取元数据并打开文件；不存在时返回 ErrNotFound。

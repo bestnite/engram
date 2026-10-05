@@ -32,6 +32,10 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	if presetID == 0 {
 		return nil, ErrDeckPresetRequired
 	}
+	// 克隆者 = 目标用户：副本里的 note 引用必须对它可读（DESIGN.md §6.3 写前校验）。
+	// 克隆者能看见源卡组时，源 note 的映射即构成可读性，因此合法克隆不会被误挡；
+	// 克隆后副本映射指向新 note，读者不再依赖源卡组仍可见。
+	ctx = WithActor(ctx, targetUserID)
 
 	var out Deck
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -70,7 +74,7 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 				ReferenceRefs: original.ReferenceRefs,
 				CreatedBy:     Ptr(targetUserID),
 			}
-			if _, err := notesStore.CreateInTx(ctx, tx, note, fields); err != nil {
+			if _, err := notesStore.SaveInTx(ctx, tx, note, fields); err != nil {
 				return fmt.Errorf("clone note %d: %w", original.ID, err)
 			}
 		}

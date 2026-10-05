@@ -249,9 +249,10 @@ var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存（DESIGN.md §6.3）。
 //
-// 鉴权（F2）：登录之外还要「有卡组访问权」——可见卡组内未软删的 note 精确引用了它，
-// 或该 media 的 created_by = 当前用户（上传者预览）。谓词与列表/队列/统计同源
-// （store.MediaAccessibleToUser → visibleDeckIDsQuery），无权限与不存在统一 404。
+// 鉴权（F2）：登录之外还要「有卡组访问权」——判定二选一：① media_uploaders 里存在指向我的
+// 记录（我提供过这份字节，去重命中也算）；② media_notes 映射里存在指向我可见卡组内、未软删的
+// note。谓词与列表/队列/统计同源（store.MediaAccessibleToUser → mediaReadableByUser），
+// 无权限与不存在统一 404。
 func (s *Server) mediaServe(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {

@@ -263,6 +263,9 @@ func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
 // 调用方（API/Web/MCP/CLI）负责在调用前完成卡组级权限判定；本方法只做包级校验、
 // 去重、id 重映射、进度归属判定与事务化写入。
 func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.Reader, opts PackageImportOptions) (*PackageImportReport, error) {
+	// 本次导入的执行者：note 写入的写前校验据此判断「新引入的引用是否导入者可读」
+	// （DESIGN.md §6.3）。包内提供的媒体字节会先登记到 media_uploaders，再校验。
+	ctx = WithActor(ctx, actorUserID)
 	if opts.Now == nil {
 		opts.Now = func() time.Time { return time.Now().UTC() }
 	}
@@ -541,6 +544,16 @@ func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64,
 
 // importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
 func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
+	// 包内的媒体字节视为「本次由导入者提供」：先登记到 media_uploaders，再做 note 写入的
+	// 写前校验（DESIGN.md §6.3：先把本次提供的 sha 写入 media_uploaders 再校验）。否则
+	// 「导入自己刚提供的字节」会被写前校验误判成越权引用。dry_run 不落任何行。
+	if !opts.DryRun && opts.MediaRoot != "" {
+		for sha := range pkg.MediaRaw {
+			if err := RecordMediaUploader(ctx, tx, sha, actorUserID); err != nil {
+				return fmt.Errorf("import package: record media uploader: %w", err)
+			}
+		}
+	}
 	deckID, err := s.resolveTargetDeck(ctx, tx, actorUserID, pkg, targetKind, targetDeckID, opts)
 	if err != nil {
 		return err
@@ -590,10 +603,10 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 				report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("notes[%d]", i), "a matching note already exists"})
 				continue
 			}
-			// update：保留 card 行与所有人进度，只改内容（NoteStore.UpdateInTx 保证 id 不变）。
+			// update：保留 card 行与所有人进度，只改内容（NoteStore.SaveInTx 保证 id 不变）。
 			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: tagsJSON(pn.Tags)}
-			if _, err := notesStore.UpdateInTx(ctx, tx, &n, pn.Fields); err != nil {
-				return fmt.Errorf("import note %d: %w", i, err)
+			if _, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields); err != nil {
+				return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 			}
 			report.NotesUpdated++
 			noteIDByIndex[i] = existing.ID
@@ -604,9 +617,9 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if pn.ExternalRef != "" {
 			n.ExternalRef = Ptr(pn.ExternalRef)
 		}
-		cards, err := notesStore.CreateInTx(ctx, tx, &n, pn.Fields)
+		cards, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields)
 		if err != nil {
-			return fmt.Errorf("import note %d: %w", i, err)
+			return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 		}
 		report.NotesCreated++
 		report.CardsCreated += len(cards)
@@ -956,4 +969,19 @@ func errorEntries(errs []PackageImportError) []string {
 		out = append(out, e.Entry+": "+e.Reason)
 	}
 	return out
+}
+
+// asPackageMediaForbidden 把 note 写入的 *MediaWriteError（写前校验拒绝）翻译成
+// *PackageError，让包导入的消费者（REST/MCP/Web/CLI）用已有的 PackageError 分支映射
+// 稳定 code 与逐条原因；其它错误原样返回（保持既有语义）。
+func asPackageMediaForbidden(err error) error {
+	var mwe *MediaWriteError
+	if errors.As(err, &mwe) {
+		return &PackageError{
+			Code:    CodePackageMediaForbidden,
+			Message: "the package references media you cannot read",
+			Entries: mwe.Entries,
+		}
+	}
+	return err
 }

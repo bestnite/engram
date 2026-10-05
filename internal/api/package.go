@@ -103,6 +103,9 @@ func mapPackageError(err error) error {
 			status, code = http.StatusBadRequest, pe.Code
 		case store.CodePackageDeckMetaInvalid:
 			status, code = http.StatusBadRequest, pe.Code
+		case store.CodePackageMediaForbidden:
+			// 与单卡写入的 media_not_readable 同一语义：引用了自己读不到的媒体，按 403 拒绝。
+			status, code = http.StatusForbidden, pe.Code
 		}
 		msg := pe.Message
 		if len(pe.Entries) > 0 {
