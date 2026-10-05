@@ -179,6 +179,12 @@ func runServe(ctx context.Context) error {
 // newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps（M1-14）。
 // runServe 与集成测试共用这一条装配路径，避免测试用的依赖与生产漂移。
 func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
+	// 可信代理列表（DESIGN.md §4.3、§11）：在启动期解析并校验，非法项直接拒绝启动。
+	// 缺省为空 = 不信任任何代理，ClientIP() 回落到 RemoteAddr。
+	trustedProxies, err := cfg.TrustedProxies()
+	if err != nil {
+		return nil, err
+	}
 	accounts, sessions, users, err := newAuthStack(cfg, db)
 	if err != nil {
 		return nil, err
@@ -280,9 +286,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
-		API:                 apiSrv,
-		MCP:                 mcpSrv,
-		Jobs:                jobRunner,
+		// TRUSTED_PROXIES 决定哪些代理可以改写 ClientIP()（DESIGN.md §4.3、§11）。
+		TrustedProxies: trustedProxies,
+		API:            apiSrv,
+		MCP:            mcpSrv,
+		Jobs:           jobRunner,
 	})
 	if err != nil {
 		return nil, err
