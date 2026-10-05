@@ -2158,3 +2158,8 @@
   translation: "The deck name or description in the package is invalid."
 - id: import.error.package_deck_meta_invalid
   translation: "The deck name or description in the package is invalid."
+# F15: deck package import media quota
+- id: error.media_quota_exceeded
+  translation: "The imported media would exceed your media quota."
+- id: import.error.media_quota_exceeded
+  translation: "The imported media would exceed your media quota."

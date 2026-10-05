@@ -2156,3 +2156,8 @@
   translation: "卡组包中的卡组名称或描述不合法。"
 - id: import.error.package_deck_meta_invalid
   translation: "卡组包中的卡组名称或描述不合法。"
+# F15: 卡组包导入媒体配额
+- id: error.media_quota_exceeded
+  translation: "导入的媒体将超出你的媒体配额。"
+- id: import.error.media_quota_exceeded
+  translation: "导入的媒体将超出你的媒体配额。"

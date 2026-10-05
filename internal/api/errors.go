@@ -67,6 +67,7 @@ var errorMessages = map[string]string{
 	store.CodePackageUnknownKind:     "The package contains a card type this instance does not know.",
 	store.CodePackageUnsafeMedia:     "The package contains media of a disallowed type.",
 	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
+	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
 }
 
 // errorMessageKey 返回 code 对应的语言包键名。

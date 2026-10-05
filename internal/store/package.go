@@ -42,6 +42,9 @@ const (
 	// CodePackageDeckMetaInvalid 表示 manifest 的卡组名/描述越过界限（长度、控制字符或非法 UTF-8）；
 	// 逐条列出出错的字段与原因（F27）。
 	CodePackageDeckMetaInvalid = "package_deck_meta_invalid"
+	// CodePackageQuotaExceeded 表示导入新增媒体会超出导入者配额；沿用上传链的稳定 code
+	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。
+	CodePackageQuotaExceeded = "media_quota_exceeded"
 )
 
 // PackageError 是带稳定 code 的卡组包错误。
