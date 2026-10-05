@@ -102,6 +102,11 @@ whose properties are the package's entry names, and defines each file under `$de
 - `media.json` (optional) — a map from `sha256` to `path`, `mime` and dimensions.
 - `media/<sha256>.<ext>` entries — the media binaries themselves.
 
+Field limits: `manifest.deck.name` is at most 200 Unicode characters (counted as runes,
+not bytes) and `manifest.deck.description` at most 2000; the importer rejects a package
+that exceeds either bound. The name bound is shared with the deck create/rename paths,
+so a name that can be created can always be exported and imported unchanged.
+
 ## Version policy
 
 - `manifest.json` carries `format_version`, currently `1`. An importer must support at

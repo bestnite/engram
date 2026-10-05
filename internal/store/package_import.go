@@ -49,14 +49,11 @@ func DefaultPackageLimits() PackageLimits {
 	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
 }
 
-// 卡组名与描述的长度界限（F27，2026-10-06 由用户拍板）。
-//
-// 按 Unicode 字符（rune）计数，不按字节：一个汉字或 emoji 算一个字符。若按字节，
-// 中文卡组名会被腰斩到 66 个字，而 200 个 emoji 只能留下 50 个——字号与用户认知的
-// “几个字”直接冲突。
+// 卡组名与描述的长度界限由 deck.go 统一持有（创建/改名与卡组包导入共用同一来源）。
+// 这里保留 F27 的旧名，避免已经散落的引用漂移。
 const (
-	maxPackageDeckNameChars        = 200
-	maxPackageDeckDescriptionChars = 2000
+	maxPackageDeckNameChars        = maxDeckNameChars
+	maxPackageDeckDescriptionChars = maxDeckDescriptionChars
 )
 
 // deckMetaErrors 校验 manifest 的卡组名与描述，返回条目级原因（英文，与既有条目措辞一致）。

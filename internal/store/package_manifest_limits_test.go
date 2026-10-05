@@ -11,11 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// ---- F27：manifest 卡组名/描述界限 ----
+// F27：manifest 卡组名/描述界限
 //
 // 界限（用户拍板，2026-10-06）：卡组名 ≤ 200 字符、描述 ≤ 2000 字符，按 Unicode 字符
 // （rune）而非字节计数；拒一切 C0 控制字符（U+0000–U+001F，含 \n \t \r，不开口子）；
 // 拒非法 UTF-8。超限或含法外字符一律拒绝整包，并报条目级错误。
+// 卡组名的同一套规则现在也约束 store 层的创建/改名（见 deck.go 的 validateDeckName），
+// 保证导出端能产出的名字导入端一定收得下。
 
 // jsonQuote 把字符串编码成 JSON 字符串字面量（控制字符会转义成 \u00XX，仍是合法 JSON）。
 func jsonQuote(t *testing.T, s string) string {

@@ -109,6 +109,11 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		CreatedAt:   a.now(),
 	}
 	if err := a.decks.Create(ctx, &d); err != nil {
+		// 卡组名不满足与卡组包 manifest 同源的规则时给出专属 code，其余 store 拒绝
+		// （含非法 visibility）仍按 invalid_request，行为与既有 REST/MCP 一致。
+		if errors.Is(err, store.ErrDeckNameInvalid) {
+			return nil, newServiceError(http.StatusBadRequest, CodeDeckNameInvalid, "")
+		}
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
 	a.audit(ctx, store.AuditEntry{

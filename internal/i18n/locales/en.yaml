@@ -2163,3 +2163,8 @@
   translation: "The imported media would exceed your media quota."
 - id: import.error.media_quota_exceeded
   translation: "The imported media would exceed your media quota."
+# F27b: deck name limit on create/rename (shared with the package manifest rule)
+- id: error.deck_name_invalid
+  translation: "The deck name is invalid."
+- id: decks.list.error_name_invalid
+  translation: "Deck name is too long or contains invalid characters."
