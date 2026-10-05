@@ -131,6 +131,78 @@ func assertASCIIEnglish(t *testing.T, msg string) {
 	}
 }
 
+// TestTrustedProxiesDefaultsToNoTrust 断言缺省即「不信任任何代理」：
+// 未设 TRUSTED_PROXIES 时返回空列表且不报错（DESIGN.md §4.3、§11）。
+func TestTrustedProxiesDefaultsToNoTrust(t *testing.T) {
+	cfg, err := Load(envStub(requiredEnv()), nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	got, err := cfg.TrustedProxies()
+	if err != nil {
+		t.Fatalf("TrustedProxies() error = %v, want nil", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("TrustedProxies() = %v, want empty (no proxy trusted by default)", got)
+	}
+}
+
+// TestTrustedProxiesParsesCommaSeparatedList 断言逗号分隔的 IP/CIDR 逐项保留：
+// 去掉首尾空白、丢弃空项、保持书写顺序。
+func TestTrustedProxiesParsesCommaSeparatedList(t *testing.T) {
+	env := requiredEnv()
+	env["TRUSTED_PROXIES"] = " 127.0.0.1/32 , 192.0.2.0/24,::1 ,, "
+	cfg, err := Load(envStub(env), nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	got, err := cfg.TrustedProxies()
+	if err != nil {
+		t.Fatalf("TrustedProxies() error = %v, want nil", err)
+	}
+	want := []string{"127.0.0.1/32", "192.0.2.0/24", "::1"}
+	if len(got) != len(want) {
+		t.Fatalf("TrustedProxies() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("TrustedProxies()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestTrustedProxiesRejectsInvalidEntry 断言非法项让启动期校验失败并点名该项，
+// 绝不静默丢弃（AGENTS.md §2.6：错误只有一种读法）。
+func TestTrustedProxiesRejectsInvalidEntry(t *testing.T) {
+	cases := []struct {
+		name     string
+		value    string
+		wantItem string
+	}{
+		{name: "CIDR mask out of range", value: "203.0.113.0/33", wantItem: "203.0.113.0/33"},
+		{name: "not an IP", value: "not-an-ip", wantItem: "not-an-ip"},
+		{name: "valid entry followed by invalid", value: "127.0.0.1/32, 999.1.1.1", wantItem: "999.1.1.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := requiredEnv()
+			env["TRUSTED_PROXIES"] = tc.value
+			cfg, err := Load(envStub(env), nil)
+			if err != nil {
+				t.Fatalf("Load() error = %v, want nil (validation is TrustedProxies()' job)", err)
+			}
+			got, err := cfg.TrustedProxies()
+			if err == nil {
+				t.Fatalf("TrustedProxies(%q) = %v, want a refusal naming the invalid entry", tc.value, got)
+			}
+			if !strings.Contains(err.Error(), tc.wantItem) {
+				t.Errorf("TrustedProxies(%q) error = %q, want it to name %q", tc.value, err.Error(), tc.wantItem)
+			}
+			assertASCIIEnglish(t, err.Error())
+		})
+	}
+}
+
 // TestEnvExampleListsEveryVariable 保证 .env.example 与 internal/config 同步（AGENTS.md M0-1）。
 func TestEnvExampleListsEveryVariable(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", ".env.example"))

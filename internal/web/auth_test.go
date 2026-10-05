@@ -31,7 +31,15 @@ func testEncryptionKey() string {
 var testSessionSecret = []byte("test-session-secret-0123456789abcdef")
 
 // newAuthServer 构造一个装配了账号、会话与用户存储的测试服务，并返回底层 DB。
+// 不信任任何代理（默认），请求 IP 一律取 RemoteAddr。
 func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
+	t.Helper()
+	return newAuthServerWithProxies(t, nil)
+}
+
+// newAuthServerWithProxies 与 newAuthServer 相同，但显式注入可信代理列表，
+// 用于验证 X-Forwarded-For 只在来自可信代理时才被采信。
+func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *gorm.DB) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
 	if err != nil {
@@ -84,6 +92,8 @@ func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 		Auditor:       auditor,
 		LoginLimiter:  limiter,
 		TOTP:          totpSvc,
+
+		TrustedProxies: trustedProxies,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

@@ -85,6 +85,9 @@ type Deps struct {
 	Identities *store.IdentityStore
 	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
 	BaseURL string
+	// TrustedProxies 是允许改写 ClientIP() 的代理地址（IP 或 CIDR），来自启动配置 TRUSTED_PROXIES。
+	// 为空 = 不信任任何代理，ClientIP() 回落到 RemoteAddr（DESIGN.md §4.3、§11）。
+	TrustedProxies []string
 }
 
 // Server 持有路由与监听地址。
@@ -252,6 +255,13 @@ func New(addr string, deps Deps) (*Server, error) {
 	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
+	// gin 默认信任所有代理（trustedProxies = 0.0.0.0/0、::/0），会无条件采信 X-Forwarded-For /
+	// X-Real-IP。那会让登录限流键、审计 IP 与新设备提醒被请求头伪造，因此显式收敛到配置的可信
+	// 代理列表：空列表即完全不信任，ClientIP() 回落到 RemoteAddr（DESIGN.md §4.3、§11）。
+	// 非法项在此也会让构造失败，绝不静默忽略。
+	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("web: set trusted proxies: %w", err)
+	}
 	router.Use(requestLogger(logger), recovery(logger))
 	// 会话中间件先于语言中间件：个人设置里的语言（M1-8）要参与 i18n 解析优先级，
 	// 而它只能从已解析的会话用户读取。会话解析本身不依赖语言，先后次序安全。
