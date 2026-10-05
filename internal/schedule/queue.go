@@ -78,6 +78,14 @@ type QueueOptions struct {
 	// DeckID 为 0 时跨该用户可见的全部卡组取卡；DeckIDs 非空时本字段被忽略。
 	DeckID uint64
 	// DeckIDs 是要复习的卡组集合；非空时（去重后）优先于 DeckID，空切片表示全库口径。
+	//
+	// 入参契约：**调用方必须先对每个 id 逐一判权**（每个 id 至少 reader 角色），任一 id 不可读
+	// 即让整个请求失败。本构建器不校验权限、也不过无权限 id：这里的每个 id 都被当作可读卡组
+	// 直接展开取卡。
+	//
+	// 为什么不把判权搬进 builder：判权下沉到 builder 后只剩「静默丢弃该卡组、返回其余卡片」
+	// 这一种可表达的行为，会把「无权限卡组＝整次请求失败」退化成部分成功，与 DESIGN.md §3.3
+	// 的口径相悖（该口径由 REST 的 API.DueCards 与 web 的 loadDeckForRole 逐 id 兑现）。
 	DeckIDs []uint64
 	// Now 为观测时刻；零值表示使用当前时间。到期判定与复习日都以它为准。
 	Now time.Time
