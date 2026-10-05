@@ -63,7 +63,19 @@ func RenderMarkdown(src string) (string, error) {
 
 	// 清洗之后再还原公式：公式是纯文本，还原时只转义会破坏 HTML 的三个字符，
 	// 反斜杠与花括号保持不变，MathJax 才能读到原始 TeX。
-	return restoreMath(string(clean), spans), nil
+	restored := restoreMath(string(clean), spans)
+
+	// F8：还原必须再过一次同一白名单。
+	//
+	// 占位符是在清洗之前插入的，goldmark 可能把它放进属性值位置（链接目标、
+	// 图片 alt、raw HTML 的 class/href）。第一遍 bluemonday 校验的是纯字母数字的
+	// 占位符本身，而不是还原后的公式原文；公式里的引号会闭合属性并注入白名单
+	// 从未见过的新属性——事件处理属性（onmouseover/onerror），或一个 javascript:
+	// 的 src/href（还原后的属性值从未被 URL 校验过）。因此把还原后的 HTML 重新
+	// 交给同一策略解析清洗一次，让属性名、事件属性与 URL scheme 都在“还原后的
+	// 真实内容”上重新校验。公式文本节点里的 < > & 已被 restoreMath 转义，
+	// 二次清洗不会改动 MathJax 需要的反斜杠与花括号。
+	return string(policy.SanitizeBytes([]byte(restored))), nil
 }
 
 // buildPolicy 构造卡面白名单。允许的元素与 DESIGN.md §6.1 的清洗约定一致。
