@@ -61,11 +61,12 @@ var errorMessages = map[string]string{
 	CodeInternal:          "An internal error occurred.",
 
 	// 卡组包导入的稳定 code（DESIGN.md §7.6；store.PackageError.Code）。
-	store.CodePackageUnsafeEntry: "The package contains an unsafe entry.",
-	store.CodePackageTooLarge:    "The package exceeds the allowed size.",
-	store.CodePackageBadFormat:   "The package format is invalid.",
-	store.CodePackageUnknownKind: "The package contains a card type this instance does not know.",
-	store.CodePackageUnsafeMedia: "The package contains media of a disallowed type.",
+	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",
+	store.CodePackageTooLarge:        "The package exceeds the allowed size.",
+	store.CodePackageBadFormat:       "The package format is invalid.",
+	store.CodePackageUnknownKind:     "The package contains a card type this instance does not know.",
+	store.CodePackageUnsafeMedia:     "The package contains media of a disallowed type.",
+	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
 }
 
 // errorMessageKey 返回 code 对应的语言包键名。
