@@ -76,7 +76,11 @@ type DueForecast struct {
 	NewNotDue int64
 }
 
-// DueForecast 按 card_states.due_at 分桶。deckID 为 0 时统计该用户全部卡组。
+// DueForecast 按 card_states.due_at 分桶。deckID 为 0 时统计该用户可见的全部卡组。
+//
+// 卡组范围一律收在该用户「可见」的卡组内（自有 ∪ 被 deck_grants 授权 ∪ 他人 public，
+// 与卡组列表页、队列的全库口径同一集合）。缺少这道过滤时，别人 private 卡组里的卡对当前
+// 用户没有 card_states 行（cs.card_id IS NULL），会被整体算成「新卡未到期」——本仓真实缺陷。
 func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now time.Time, loc *time.Location, cutoffHour int) (DueForecast, error) {
 	if userID == 0 {
 		return DueForecast{}, fmt.Errorf("due forecast: user id is required")
@@ -90,8 +94,8 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	visible := `card_states AS cs
 		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL`
-	where := "cs.user_id = ?"
-	args := []any{userID}
+	where := "cs.user_id = ? AND n.deck_id IN (?)"
+	args := []any{userID, visibleDeckIDsQuery(s.db, userID)}
 	if deckID != 0 {
 		where += " AND n.deck_id = ?"
 		args = append(args, deckID)
@@ -117,12 +121,15 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	}
 
 	// 新卡未到期：以 cards 为起点 LEFT JOIN，才能包含还没有 card_states 行的新卡。
+	// 必须带可见卡组范围：不加的话别人 private 卡组里的卡（对当前用户没有状态行）会被
+	// 全部数成「新卡未到期」。
 	newSQL := fmt.Sprintf(`SELECT COALESCE(COUNT(c.id), 0) AS n FROM cards AS c
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
 		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`)
-	newArgs := []any{userID, now.UTC()}
+	newArgs := []any{userID, visibleDeckIDsQuery(s.db, userID), now.UTC()}
 	if deckID != 0 {
 		newSQL += " AND n.deck_id = ?"
 		newArgs = append(newArgs, deckID)
@@ -293,12 +300,15 @@ type DeckStat struct {
 }
 
 // DeckBreakdown 返回该用户每个有关联数据的卡组的到期量、留存率与累计投入。
-// 卡组范围取「该用户在此卡组里有 card_states 行或 reviews 行」的集合，因此共享卡组
-// 也会出现，而与该用户无关的卡组不会。now 决定到期判定。
+//
+// 卡组范围取「该用户可见的卡组」中有关联数据的那些（可见性谓词与卡组列表页、队列同一份：
+// 自有 ∪ 被 deck_grants 授权 ∪ 他人 public），因此共享卡组会出现，而与该用户无关的卡组
+// （含别人的 private）不会。now 决定到期判定。
 func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.Time) ([]DeckStat, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("deck breakdown: user id is required")
 	}
+	deckScope := visibleDeckIDsQuery(s.db, userID)
 	stats := map[uint64]*DeckStat{}
 	get := func(id uint64) *DeckStat {
 		if row, ok := stats[id]; ok {
@@ -310,6 +320,9 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	}
 
 	// 到期量：新卡（无状态行或 state=new）与 due_at 已过的卡；暂停卡排除。
+	// 必须带可见卡组范围：别人 private 卡组里的卡对当前用户没有 card_states 行
+	// （cs.card_id IS NULL），不过滤就会被整体算成「到期」并按 deck_id 分组，
+	// 卡组维度于是冒出别人的卡组（本仓真实缺陷）。
 	var dueRows []struct {
 		DeckID uint64 `gorm:"column:deck_id"`
 		N      int64  `gorm:"column:n"`
@@ -318,16 +331,18 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
 		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)
 		GROUP BY n.deck_id`
-	if err := s.db.WithContext(ctx).Raw(dueSQL, userID, now.UTC()).Scan(&dueRows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Raw(dueSQL, userID, deckScope, now.UTC()).Scan(&dueRows).Error; err != nil {
 		return nil, fmt.Errorf("deck breakdown: due: %w", err)
 	}
 	for _, r := range dueRows {
 		get(r.DeckID).DueCount = r.N
 	}
 
-	// 复习量、留存率、累计投入：按卡组分组聚合 reviews。
+	// 复习量、留存率、累计投入：按卡组分组聚合 reviews。同样收在可见卡组内：
+	// 授权被撤销后，那些卡组的复习不应再出现在统计页的卡组维度里。
 	var revRows []struct {
 		DeckID    uint64 `gorm:"column:deck_id"`
 		Reviews   int64  `gorm:"column:reviews"`
@@ -340,8 +355,8 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 		FROM reviews AS r
 		JOIN cards AS c ON c.id = r.card_id AND c.deleted_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
-		WHERE r.user_id = ? GROUP BY n.deck_id`
-	if err := s.db.WithContext(ctx).Raw(revSQL, userID).Scan(&revRows).Error; err != nil {
+		WHERE r.user_id = ? AND n.deck_id IN (?) GROUP BY n.deck_id`
+	if err := s.db.WithContext(ctx).Raw(revSQL, userID, deckScope).Scan(&revRows).Error; err != nil {
 		return nil, fmt.Errorf("deck breakdown: reviews: %w", err)
 	}
 	for _, r := range revRows {

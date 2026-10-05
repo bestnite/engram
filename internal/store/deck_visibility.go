@@ -7,20 +7,26 @@ import (
 	"gorm.io/gorm"
 )
 
-// visibleDecksQuery 是「某用户可见卡组」的唯一谓词来源：自有 ∪ 被 deck_grants 授权 ∪ 其他用户的 public。
+// visibleDeckIDsQuery 返回「某用户可见卡组 id」的子查询，是可见性谓词的唯一来源。
 //
-// 列表页（ListVisible）与队列的全库口径（VisibleIDs）必须看到同一批卡组，所以谓词只写这一处：
-// 各写一份会慢慢漂移。之前队列的全库口径完全没有卡组过滤，把别的用户 private 卡组的新卡
-// 也算进了当前用户的队列（越权）。
+// 列表页（ListVisible）、队列的全库口径（VisibleIDs）与统计页的聚合查询（StatsStore）
+// 都拿它当范围条件：各写一份必然漂移。之前队列的全库口径完全没有卡组过滤，把别的用户
+// private 卡组的新卡也算进了当前用户的队列（越权）；统计页的卡组维度与到期预测犯过同一个错
+// （以 cards 为起点、只按 user_id 左连接 card_states，别人卡组里的卡没有状态行，于是被整体
+// 算成「到期」并按其 deck_id 分组，卡组维度就冒出了别人的私有卡组）。
 //
 // 明确排除其他用户的 unlisted 与 private：
 //   - unlisted 的语义是「拿到链接可看」，只能通过直接 id 命中（DeckAccess 负责），
 //     出现在任何列表里都会把「不公开」变成「半公开」；
 //   - private 只对授权者可见，而授权者已由 deck_grants 分支覆盖。
-func (s *DeckStore) visibleDecksQuery(ctx context.Context, userID uint64) *gorm.DB {
-	granted := s.db.Model(&DeckGrant{}).Select("deck_id").Where("user_id = ?", userID)
-	return s.db.WithContext(ctx).Model(&Deck{}).
+func visibleDeckIDsQuery(db *gorm.DB, userID uint64) *gorm.DB {
+	granted := db.Model(&DeckGrant{}).Select("deck_id").Where("user_id = ?", userID)
+	return db.Model(&Deck{}).Select("id").
 		Where("owner_user_id = ? OR visibility = ? OR id IN (?)", userID, DeckVisibilityPublic, granted)
+}
+
+func (s *DeckStore) visibleDecksQuery(ctx context.Context, userID uint64) *gorm.DB {
+	return s.db.WithContext(ctx).Model(&Deck{}).Where("id IN (?)", visibleDeckIDsQuery(s.db, userID))
 }
 
 // ListVisible 返回某用户“在列表里应该看到”的卡组（M5-5 列表语义），按创建时间倒序。

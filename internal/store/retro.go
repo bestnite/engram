@@ -133,11 +133,14 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	}
 
 	// 到期与新增：日边界与 §3.3 一致（复习日起点 04:00，本地）。
+	// 两条都以「可见卡组」为范围，与 StatsStore.DueForecast 同一谓词（visibleDeckIDsQuery）；
+	// 少了它，别人 private 卡组里没有状态行的卡会被算成「新卡未到期」。
 	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
 		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
-		WHERE cs.user_id = ? AND cs.due_at IS NOT NULL AND cs.due_at <= ?`, userID, e1).
+		WHERE cs.user_id = ? AND n.deck_id IN (?) AND cs.due_at IS NOT NULL AND cs.due_at <= ?`,
+		userID, visibleDeckIDsQuery(db, userID), e1).
 		Row().Scan(&p.DueToday); err != nil {
 		return p, fmt.Errorf("retro check: due today: %w", err)
 	}
@@ -145,7 +148,9 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
 		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
-		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`, userID, now.UTC()).
+		  AND n.deck_id IN (?)
+		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`,
+		userID, visibleDeckIDsQuery(db, userID), now.UTC()).
 		Row().Scan(&p.DueNewNotDue); err != nil {
 		return p, fmt.Errorf("retro check: new not due: %w", err)
 	}
@@ -177,12 +182,14 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: learning curve: %w", err)
 	}
 
-	// 卡组维度合计。
+	// 卡组维度合计。两条同样以可见卡组为范围（与 StatsStore.DeckBreakdown 一致）。
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(c.id) FROM cards c
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
 		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
-		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`, userID, now.UTC()).
+		  AND n.deck_id IN (?)
+		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
+		userID, visibleDeckIDsQuery(db, userID), now.UTC()).
 		Row().Scan(&p.DeckDue); err != nil {
 		return p, fmt.Errorf("retro check: deck due: %w", err)
 	}
@@ -190,7 +197,8 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		FROM reviews r
 		JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
-		WHERE r.user_id = ?`, userID).
+		WHERE r.user_id = ? AND n.deck_id IN (?)`,
+		userID, visibleDeckIDsQuery(db, userID)).
 		Row().Scan(&p.DeckReviews, &p.DeckElapsedMS); err != nil {
 		return p, fmt.Errorf("retro check: deck reviews: %w", err)
 	}

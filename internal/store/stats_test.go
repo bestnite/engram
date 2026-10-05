@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -288,8 +289,20 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 				t.Fatalf("DeckBreakdown() = %+v, want one row for deck %d", got, fx.deckID)
 			}
 			var wantReviews, wantPassed, wantDue, wantElapsed int64
-			db.Raw("SELECT COUNT(*), COALESCE(SUM(CASE WHEN rating <> 1 THEN 1 ELSE 0 END), 0), COALESCE(SUM(elapsed_ms), 0) FROM reviews WHERE user_id = ?", 1).Row().Scan(&wantReviews, &wantPassed, &wantElapsed)
-			db.Raw(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`, 1, statsNow).Scan(&wantDue)
+			db.Raw(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN r.rating <> 1 THEN 1 ELSE 0 END), 0), COALESCE(SUM(r.elapsed_ms), 0)
+				FROM reviews r
+				JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
+				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
+				WHERE r.user_id = ?
+				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR visibility = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))`,
+				1, 1, DeckVisibilityPublic, 1).Row().Scan(&wantReviews, &wantPassed, &wantElapsed)
+			db.Raw(`SELECT COUNT(*) FROM cards c
+				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
+				LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
+				WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR visibility = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))
+				  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
+				1, 1, DeckVisibilityPublic, 1, statsNow).Scan(&wantDue)
 			row := got[0]
 			if row.Reviews != wantReviews || row.Passed != wantPassed || row.ElapsedMS != wantElapsed || row.DueCount != wantDue {
 				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d passed %d elapsed %d due %d", row, wantReviews, wantPassed, wantElapsed, wantDue)
@@ -461,6 +474,108 @@ func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 				if got[i].New != handNew || got[i].Review != handReview {
 					t.Errorf("LearningCurve()[%d] = %+v, hand SQL = new %d review %d", i, got[i], handNew, handReview)
 				}
+			}
+		})
+	}
+}
+
+// seedForeignDeck 建一个属于 owner 的卡组，含 cards 张没有 card_states 行的新卡，
+// 用来构造「别人的卡组」（对当前用户而言这些卡看起来就是没复习过的新卡）。
+func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility string, cards int) uint64 {
+	t.Helper()
+	p := NewPreset(owner, name)
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset %s: %v", name, err)
+	}
+	d := Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: p.ID, CreatedAt: statsNow}
+	if err := db.Create(&d).Error; err != nil {
+		t.Fatalf("create deck %s: %v", name, err)
+	}
+	n := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	if err := db.Create(&n).Error; err != nil {
+		t.Fatalf("create note in %s: %v", name, err)
+	}
+	for i := 0; i < cards; i++ {
+		createStatsCard(t, db, n.ID, "t"+strconv.Itoa(i))
+	}
+	return d.ID
+}
+
+// TestStatsScopesToVisibleDecks 是卡组越权的回归用例（DESIGN.md §9 卡组维度与到期预测）。
+//
+// 缺陷形态：DeckBreakdown 的到期量与 DueForecast 的新卡计数都以 cards 为起点、只按
+// user_id 左连接 card_states，没有任何卡组范围过滤——别人卡组里的卡对当前用户没有
+// card_states 行（cs.card_id IS NULL），于是被整体算成「到期 / 新卡未到期」，再按
+// deck_id 分组，别人的私有卡组连名字一起出现在我的统计页上。
+//
+// 口径＝该用户「可见」的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public，与卡组列表页、
+// 全库队列同一集合）：他人 public 出现，他人 private 与「曾授权、现已撤销」的卡组都不出现。
+func TestStatsScopesToVisibleDecks(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			fx := seedStatsFixture(t, db)
+			ctx := context.Background()
+
+			foreignPrivate := seedForeignDeck(t, db, 2, "Other private", DeckVisibilityPrivate, 2)
+			foreignPublic := seedForeignDeck(t, db, 2, "Other public", DeckVisibilityPublic, 3)
+			revoked := seedForeignDeck(t, db, 2, "Revoked grant", DeckVisibilityPrivate, 2)
+
+			// 用户 1 曾在 revoked 卡组里复习过（有状态行与复习日志），随后授权被撤销：
+			// 该卡组当前不可见，统计页不该再出现它，也不该把它的卡算进到期预测。
+			if err := db.Create(&DeckGrant{DeckID: revoked, UserID: 1, Role: "reader", CreatedAt: statsNow}).Error; err != nil {
+				t.Fatalf("create grant: %v", err)
+			}
+			var revokedCards []Card
+			if err := db.Where("note_id IN (SELECT id FROM notes WHERE deck_id = ?)", revoked).Find(&revokedCards).Error; err != nil {
+				t.Fatalf("load revoked cards: %v", err)
+			}
+			if len(revokedCards) != 2 {
+				t.Fatalf("revoked deck has %d cards, want 2", len(revokedCards))
+			}
+			for _, c := range revokedCards {
+				setState(t, db, c.ID, "review", statsNow.Add(-time.Hour), 5)
+				seedReview(t, db, c.ID, "2026-10-02", 3, 2, 5, 1000, "self", statsNow)
+			}
+			if err := db.Where("deck_id = ? AND user_id = ?", revoked, 1).Delete(&DeckGrant{}).Error; err != nil {
+				t.Fatalf("delete grant: %v", err)
+			}
+
+			// 卡组维度：只有自己的卡组与他人 public 卡组，且到期量各自正确。
+			got, err := NewStatsStore(db).DeckBreakdown(ctx, 1, statsNow)
+			if err != nil {
+				t.Fatalf("DeckBreakdown() error = %v", err)
+			}
+			wantDue := map[uint64]int64{fx.deckID: 2, foreignPublic: 3}
+			if len(got) != len(wantDue) {
+				t.Fatalf("DeckBreakdown() returned %d decks (%+v), want %d (own + other user's public)", len(got), got, len(wantDue))
+			}
+			for _, row := range got {
+				want, ok := wantDue[row.DeckID]
+				if !ok {
+					t.Errorf("DeckBreakdown() leaked deck %d (%q): not visible to the user", row.DeckID, row.Name)
+					continue
+				}
+				if row.DueCount != want {
+					t.Errorf("DeckBreakdown() deck %d due = %d, want %d", row.DeckID, row.DueCount, want)
+				}
+			}
+			// 显式点名：别人的私有卡组一张都不能出现（缺陷的直接症状）。
+			for _, row := range got {
+				if row.DeckID == foreignPrivate {
+					t.Errorf("DeckBreakdown() leaked another user's private deck %d (%q)", row.DeckID, row.Name)
+				}
+			}
+			// 到期预测：新卡未到期只数可见卡组（夹具 1 张 + 他人 public 3 张）。
+			due, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
+			if err != nil {
+				t.Fatalf("DueForecast() error = %v", err)
+			}
+			if due.NewNotDue != 4 {
+				t.Errorf("DueForecast().NewNotDue = %d, want 4 (1 own + 3 other user's public)", due.NewNotDue)
+			}
+			// 撤销授权的卡组里用户 1 有两张已到期的状态行：不过滤时这里会变成 3。
+			if due.Today != 1 {
+				t.Errorf("DueForecast().Today = %d, want 1 (revoked-grant deck must not count)", due.Today)
 			}
 		})
 	}
