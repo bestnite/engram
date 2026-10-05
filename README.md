@@ -2,28 +2,56 @@
 
 **English** | [中文](README.zh.md)
 
-Engram is a web-first, multi-user, self-hosted spaced-repetition (SRS) service. You write cards in
-the browser, or an external script or agent pushes them in through a per-user API key or the
-built-in MCP server. Scheduling uses FSRS v6. The service never parses any external note system.
-
-## What you get
-
-- Multi-user accounts with private per-user scheduling state; deck content is shared, with three
-  roles (owner, editor, reader), share links, and clone.
-- Ten built-in card types (cloze, typed, numeric, single- and multiple-choice, true/false, and
-  more), managed by a registry, scheduled with FSRS v6 (configurable desired retention — default
-  0.90 — learning steps, maximum interval, and fuzz).
-- Markdown and TeX rendering (self-hosted MathJax 3) behind an HTML allowlist, and a Chinese and
-  English interface driven by translation catalogs.
-- A PWA shell (add to home screen, standalone window, static assets cached only), deck packages
-  (`.edeck`) for backup and migration, a REST API (`/api/v1`), a built-in MCP server, and an admin
-  panel for users, registration policy, OIDC, upload limits, audit log, jobs, and health.
-- Parameter optimisation: retrain the FSRS parameters from your own review history, triggered from
-  the preset page, run in a background job, and revertible once finished.
+Engram is a self-hosted, multi-user, web-first spaced-repetition (SRS) service. Write cards in the
+browser, or let a script or agent push them in through the API or the built-in MCP server.
+Scheduling uses FSRS v6.
 
 ## Screenshots
 
-<!-- Screenshots to be added. -->
+|                        |                        |
+| ---------------------- | ---------------------- |
+| ![](screenshots/1.png) | ![](screenshots/2.png) |
+| ![](screenshots/3.png) | ![](screenshots/4.png) |
+| ![](screenshots/5.png) | ![](screenshots/6.png) |
+
+## Features
+
+### Scheduling and review
+
+Scheduling uses FSRS v6. Desired retention defaults to 0.90; learning steps, maximum interval and
+fuzz are all adjustable. Once you have some review history, you can retrain the parameters from it:
+trigger it on the preset page, it runs as a background job, and you can revert if you don't like
+the result.
+
+### Cards and card types
+
+Ten card types are built in: cloze, typed, numeric, single- and multiple-choice, true/false, and
+more. Card bodies support Markdown and TeX (self-hosted MathJax 3), and HTML goes through an
+allowlist. Uploaded images are content-addressed.
+
+### Multi-user
+
+Everyone gets their own account and their own scheduling state; deck content is shared. Decks have
+three roles — owner, editor, reader — and you can hand out share links or clone a deck to your own
+account. A single deck exports to an `.edeck` package for backup, migration or offline handover.
+
+### API and MCP
+
+The REST API lives under `/api/v1`, the built-in MCP server at `POST /mcp` (HTTP only, no stdio).
+The two are equivalent: both authenticate with a per-user API key and call the same service
+methods, so validation and scheduling rules cannot diverge. Keys carry scopes (`read`, `write`,
+`review`, `admin`) and are managed under Settings in the browser; request and response schemas live
+in [`schema/`](schema/).
+
+### Interface
+
+Chinese and English, with copy driven by translation catalogs. The PWA shell can be added to the
+home screen and opened in its own window; only static assets are cached.
+
+### Admin panel
+
+Users, registration policy, OIDC, upload limits, audit log, background jobs and health checks all
+live here.
 
 ## Quick start
 
@@ -40,20 +68,21 @@ docker run -d --name engram -p 8080:8080 \
   engram:local
 ```
 
-Open `http://localhost:8080/`; the first visit goes to `/setup` to create the first admin account.
+Open `http://localhost:8080/`; the first visit on a fresh instance goes to `/setup` to create the
+admin account.
 
 ## First steps
 
-1. **Create the admin.** The first visit lands on `/setup`; enter an email and password there.
-2. **Create a deck.** From the deck list, add a deck to hold the cards.
-3. **Add cards.** Write them by hand in the editor, or push them in through the API or MCP server.
-4. **Start reviewing.** Open the review queue and grade each card; the schedule adapts to your
+1. **Create the admin.** The first visit lands on `/setup`; enter an email and password.
+2. **Create a deck.** Add one from the deck list to hold your cards.
+3. **Add cards.** Write them in the editor, or push them in through the API or MCP server.
+4. **Start reviewing.** Open the review queue and grade each card; the schedule follows your
    answers.
 
 ## Deploying with PostgreSQL
 
-PostgreSQL is the default deployment database. Build the container image from `Dockerfile`, or
-run the binary with the same environment.
+PostgreSQL is the default deployment database. Build the image from `Dockerfile`, or run the binary
+directly with the same environment.
 
 ```bash
 docker run -d --name engram -p 8080:8080 \
@@ -69,9 +98,13 @@ docker run -d --name engram -p 8080:8080 \
 
 `BASE_URL` must use `https://` in production: its scheme decides the session cookie's `Secure` flag.
 
-### Environment variables
+Four variables are required at startup: `DB_DRIVER`, `DB_DSN`, `SESSION_SECRET` and
+`ENCRYPTION_KEY`. `ENCRYPTION_KEY` must be base64 of exactly 32 bytes, or the server exits.
+Registration policy, OIDC, upload limits and email are changed in the admin panel and take effect
+on the next request, with no restart.
 
-Every variable the service reads at startup. This table mirrors `.env.example`.
+<details>
+<summary>Environment variables (every variable the service reads at startup; mirrors <code>.env.example</code>)</summary>
 
 | Variable                 | Required | Default                  | Meaning                                                         |
 | ------------------------ | -------- | ------------------------ | --------------------------------------------------------------- |
@@ -81,7 +114,7 @@ Every variable the service reads at startup. This table mirrors `.env.example`.
 | `DB_DSN`                 | yes      | —                        | Connection string (PostgreSQL) or file path (SQLite).           |
 | `SESSION_SECRET`         | yes      | —                        | Session-signing secret; `openssl rand -base64 32`.              |
 | `ENCRYPTION_KEY`         | yes      | —                        | Master key for encrypted settings; base64 of exactly 32 bytes.  |
-| `AUTO_MIGRATE`           | no       | `0`                      | Run migrations at startup (`1` / `true`).                       |
+| `AUTO_MIGRATE`           | no       | `1`                      | Run migrations at startup (`1` / `true`).                       |
 | `BOOTSTRAP_ADMIN_EMAIL`  | no       | —                        | Pre-fills the first-admin setup form.                           |
 | `MEDIA_DIR`              | no       | `data/media`             | Local media directory.                                          |
 | `MEDIA_MAX_BYTES`        | no       | setting, else 10 MiB     | Per-file upload limit override.                                 |
@@ -97,51 +130,7 @@ Every variable the service reads at startup. This table mirrors `.env.example`.
 `MEDIA_*` and `SMTP_*` are normally configured in the admin panel and take effect immediately; the
 environment variables only override those values.
 
-## Configuration
-
-- Four variables are required at startup: `DB_DRIVER`, `DB_DSN`, `SESSION_SECRET`, and
-  `ENCRYPTION_KEY`; `ENCRYPTION_KEY` must be base64 of exactly 32 bytes, or the server exits.
-- Registration policy, OIDC, upload limits, and email are changed in the admin panel, and take
-  effect on the next request with no restart.
-
-## Upgrading
-
-Run migrations explicitly before starting or rolling out a new version:
-
-```bash
-engram schema sync
-```
-
-In production, leave `AUTO_MIGRATE=0` so a failed migration surfaces as a failed command instead of
-a half-started server. In a container, run it as a one-off with the same environment
-(`docker run --rm ... engram:local schema sync`).
-
-## Backup and restore
-
-Also back up the media directory (`MEDIA_DIR`), which holds the uploaded bytes; the database stores
-only their paths and hashes.
-
-**PostgreSQL** — `pg_dump -Fc -f engram.dump "$DB_DSN"`; restore with
-`pg_restore --clean --if-exists -d "$DB_DSN" engram.dump` (stop the service first).
-
-**SQLite** — `sqlite3 "$DB_DSN" "VACUUM INTO 'engram-backup.db'"` is consistent while the service
-runs; to restore, stop the service and replace the file (a plain copy works only while stopped).
-
-**Media** — `tar czf engram-media.tgz "$MEDIA_DIR"`; extract it next to the database backup. Media
-is content-addressed by sha256, so an older snapshot never corrupts newer files.
-
-**Deck packages** — a per-deck backup any user can make from the deck page, or from the CLI
-(`engram export --deck 1 --package deck-1.edeck`, then
-`engram import --package deck-1.edeck --user admin --dry-run`).
-
-## API and MCP
-
-The service is a card store, a scheduler, and an API. Cards are produced from source material
-outside it and reach it through two equivalent transports: a **REST API** under `/api/v1`, and a
-**built-in MCP server** at `POST /mcp` (HTTP only, no stdio). Both authenticate with a per-user API
-key and call the same service methods, so validation and scheduling rules cannot drift. Keys carry
-scopes (`read`, `write`, `review`, `admin`) and are managed under Settings. Schemas live in
-[`schema/`](schema/).
+</details>
 
 ## Roadmap
 
