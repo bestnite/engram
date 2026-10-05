@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -38,11 +40,27 @@ type Server struct {
 	logger  *slog.Logger
 	handler *sdkmcp.StreamableHTTPHandler
 
-	// mu 保护 sessions。sessions 记录每个会话握手（initialize）时的用户，供后续请求
-	// 校验会话属主（规则 2）。SDK 自己持有会话对象，这张表只额外记属主。
+	// mu 保护 sessions。sessions 记录每个会话握手（initialize）时的用户与登记时刻，
+	// 供后续请求校验会话属主（规则 2）。SDK 自己持有会话对象，这张表只额外记属主。
+	// 表有容量上限（mcpSessionCap），超出时按登记时刻淘汰最旧条目，避免长期运行无界增长。
 	mu       sync.Mutex
-	sessions map[string]uint64
+	sessions map[string]sessionEntry
+
+	// clock 取当前时间；生产为 time.Now，测试可注入以获得确定的登记时刻。
+	clock func() time.Time
 }
+
+// sessionEntry 是属主表里的一条会话记录：握手用户 + 登记时刻（seenAt 用于容量淘汰）。
+type sessionEntry struct {
+	userID uint64
+	seenAt time.Time
+}
+
+// mcpSessionCap 是属主表的容量上限。客户端每开一个会话就登记一条，正常关闭（DELETE 2xx）
+// 或会话已被 SDK 遗忘（404）时清理；上限是兜底，防止客户端从不发 DELETE 的路径把表撑到无界。
+// 采用「淘汰最旧 seenAt」而非「整批丢弃」：新会话比旧会话更可能仍在使用，逐条按时间淘汰
+// 保留的总是最近的一批活跃会话。
+const mcpSessionCap = 4096
 
 // New 构造 MCP server；API 必填（业务逻辑全部复用 api 的 service 层）。
 func New(deps Deps) (*Server, error) {
@@ -53,7 +71,7 @@ func New(deps Deps) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{api: deps.API, logger: logger, sessions: map[string]uint64{}}
+	s := &Server{api: deps.API, logger: logger, sessions: map[string]sessionEntry{}, clock: time.Now}
 	// getServer 只在建立会话时被调用一次：从握手请求的上下文取身份，按当时 scope 构建
 	// 工具集。会话内后续请求复用这个 Server，因此它闭包里的身份只作为属主与用户来源；
 	// 工具可见性与调用权限每次请求另按本次 key 重算（见 requestIdentity）。
@@ -110,6 +128,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if newSID := rec.Header().Get(mcpSessionHeader); newSID != "" {
 			s.rememberSession(newSID, id.User.ID)
 		}
+	case r.Method == http.MethodDelete && rec.status >= http.StatusOK && rec.status < http.StatusMultipleChoices:
+		// 规则 4：客户端用 DELETE /mcp 正常关闭会话（2xx）时也要清掉属主记录。
+		// 漏掉这条路径，会话条目只会在 404 时被清，长期运行无界增长（F10c）。
+		s.forgetSession(sid)
 	case rec.status == http.StatusNotFound:
 		// 会话已不存在（过期或已被 DELETE）：顺手清掉属主记录，避免这张表无界增长。
 		s.forgetSession(sid)
@@ -121,14 +143,47 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) sessionOwnerMismatch(sid string, userID uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	owner, known := s.sessions[sid]
-	return known && owner != userID
+	entry, known := s.sessions[sid]
+	return known && entry.userID != userID
+}
+
+// now 返回当前时刻；clock 未注入时退回 time.Now（正常装配都经 New 注入真实时钟）。
+func (s *Server) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
 }
 
 func (s *Server) rememberSession(sid string, userID uint64) {
 	s.mu.Lock()
-	s.sessions[sid] = userID
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.sessions[sid] = sessionEntry{userID: userID, seenAt: s.now()}
+	if len(s.sessions) > mcpSessionCap {
+		s.evictOldestLocked(len(s.sessions) - mcpSessionCap)
+	}
+}
+
+// evictOldestLocked 按 seenAt 从旧到新删掉 n 条；调用方必须已持有 s.mu。
+func (s *Server) evictOldestLocked(n int) {
+	if n <= 0 {
+		return
+	}
+	type timedSID struct {
+		sid string
+		at  time.Time
+	}
+	entries := make([]timedSID, 0, len(s.sessions))
+	for sid, e := range s.sessions {
+		entries = append(entries, timedSID{sid, e.seenAt})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	if n > len(entries) {
+		n = len(entries)
+	}
+	for _, e := range entries[:n] {
+		delete(s.sessions, e.sid)
+	}
 }
 
 func (s *Server) forgetSession(sid string) {
