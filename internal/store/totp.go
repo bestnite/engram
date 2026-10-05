@@ -20,7 +20,9 @@ import (
 //   - TOTP secret 只以密文落库（SecretCodec，AES-GCM），明文绝不出现在任何列里；
 //   - 恢复码只存 sha256 摘要，明文只在生成时返回一次；
 //   - 恢复码一次性由「条件更新 + used_at IS NULL」保证（见 ConsumeRecoveryCode），
-//     不依赖读-判断-再写，因此并发下也不会被用两次。
+//     不依赖读-判断-再写，因此并发下也不会被用两次；
+//   - 6 位验证码的防重放由「条件更新 + last_used_step < step」保证（见 AcceptStep），
+//     同一手法：并发下同一个（或更早的）时间步只可能被接受一次。
 
 // ErrTOTPRecordNotFound 表示该用户没有 TOTP 记录（或尚未确认）。
 var ErrTOTPRecordNotFound = errors.New("totp record not found")
@@ -32,8 +34,12 @@ type UserTOTP struct {
 	// SecretCiphertext 是 SecretCodec 加密后的 secret，带 `v1:` 版本前缀。
 	SecretCiphertext string     `gorm:"not null;column:secret_ciphertext" json:"-"`
 	ConfirmedAt      *time.Time `json:"confirmed_at,omitempty"`
-	CreatedAt        time.Time  `gorm:"not null" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"not null" json:"updated_at"`
+	// LastUsedStep 是已接受的最大 TOTP 时间步（unix 秒 / period）；NULL 表示尚未接受过任何验证码。
+	// 用可空列而非 NOT NULL 默认值：AutoMigrate 只允许加列（AGENTS.md §2.3 第 5 条），
+	// 而既有行在加列后必须是「未用过」语义，NULL 正是这个语义，且不会给旧行带来约束。
+	LastUsedStep *int64    `gorm:"column:last_used_step" json:"last_used_step,omitempty"`
+	CreatedAt    time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
 }
 
 func (UserTOTP) TableName() string { return "user_totp" }
@@ -82,6 +88,8 @@ func (s *TOTPStore) Enabled(ctx context.Context, userID uint64) (bool, error) {
 
 // UpsertPending 写入（或覆盖）一个未确认的 secret 密文；confirmed_at 一律清空，
 // 因此重新开始绑定会把上一次未完成的绑定顶掉。
+// last_used_step 也一并清空：换 secret 即换了一套验证码，旧 secret 接受过的最大步
+// 不得约束新绑定（否则新 secret 在旧步覆盖的时间窗内会莫名被拒）。
 func (s *TOTPStore) UpsertPending(ctx context.Context, userID uint64, ciphertext string, at time.Time) error {
 	row := UserTOTP{UserID: userID, SecretCiphertext: ciphertext, CreatedAt: at.UTC(), UpdatedAt: at.UTC()}
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -89,12 +97,29 @@ func (s *TOTPStore) UpsertPending(ctx context.Context, userID uint64, ciphertext
 		DoUpdates: clause.Assignments(map[string]any{
 			"secret_ciphertext": ciphertext,
 			"confirmed_at":      nil,
+			"last_used_step":    nil,
 			"updated_at":        at.UTC(),
 		}),
 	}).Create(&row).Error; err != nil {
 		return fmt.Errorf("upsert totp secret: %w", err)
 	}
 	return nil
+}
+
+// AcceptStep 尝试把「已接受的最大时间步」前移到 step：只有当 step 严格大于已记录的步
+// （或此前从未记录，即 NULL）时才写入成功。
+//
+// 防重放与并发一次性由这条条件更新保证：并发调用时只有一个请求能把 RowsAffected 变成 1，
+// 其余拿到 0 —— 与 ConsumeRecoveryCode 同一手法，不需要行锁或读-判断-写。
+// updated_at 由 GORM 的 Update 回调按约定自动带上，这里不再显式赋值。
+func (s *TOTPStore) AcceptStep(ctx context.Context, userID uint64, step int64) (bool, error) {
+	res := s.db.WithContext(ctx).Model(&UserTOTP{}).
+		Where("user_id = ? AND (last_used_step IS NULL OR last_used_step < ?)", userID, step).
+		Update("last_used_step", step)
+	if res.Error != nil {
+		return false, fmt.Errorf("accept totp step: %w", res.Error)
+	}
+	return res.RowsAffected > 0, nil
 }
 
 // Confirm 把已存在的待确认行标记为已确认；没有待确认行时返回 ErrTOTPRecordNotFound。

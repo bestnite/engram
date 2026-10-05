@@ -123,6 +123,8 @@ func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName st
 
 // Confirm 用一次验证码确认待确认的绑定；成功后启用并生成一批一次性恢复码。
 // 返回的恢复码明文只在此刻返回一次。
+// 确认时接受的验证码同样登记时间步：确认后二次验证立即生效，若不登记，
+// 被观测到的确认码在其窗口内还能再通过一次登录（F19 要堵的就是这条重放路径）。
 func (s *TOTPService) Confirm(ctx context.Context, userID uint64, code string) (recoveryCodes []string, err error) {
 	row, err := s.store.Get(ctx, userID)
 	if err != nil {
@@ -138,7 +140,11 @@ func (s *TOTPService) Confirm(ctx context.Context, userID uint64, code string) (
 	if err != nil {
 		return nil, fmt.Errorf("decrypt pending totp secret: %w", err)
 	}
-	if !s.validateCode(plain, code) {
+	ok, err := s.acceptCode(ctx, userID, plain, code)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, ErrTOTPInvalidCode
 	}
 	if err := s.store.Confirm(ctx, userID, s.now()); err != nil {
@@ -169,8 +175,14 @@ func (s *TOTPService) VerifySecondFactor(ctx context.Context, userID uint64, cod
 	if err != nil {
 		return false, false, fmt.Errorf("decrypt totp secret: %w", err)
 	}
-	if isSixDigits(entry) && s.validateCode(plain, entry) {
-		return false, true, nil
+	if isSixDigits(entry) {
+		accepted, err := s.acceptCode(ctx, userID, plain, entry)
+		if err != nil {
+			return false, false, err
+		}
+		if accepted {
+			return false, true, nil
+		}
 	}
 	consumed, err := s.store.ConsumeRecoveryCode(ctx, userID, hashRecoveryCode(entry), s.now())
 	if err != nil {
@@ -208,15 +220,40 @@ func (s *TOTPService) Disable(ctx context.Context, userID uint64) error {
 	return s.store.Delete(ctx, userID)
 }
 
-// validateCode 用库校验 6 位验证码，允许前后各一步时钟漂移。
-func (s *TOTPService) validateCode(secret, code string) bool {
-	ok, err := totp.ValidateCustom(strings.TrimSpace(code), secret, s.now(), totp.ValidateOpts{
-		Period:    totpPeriod,
-		Skew:      totpSkew,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	return err == nil && ok
+// acceptCode 校验 6 位验证码并登记其时间步（F19：窗口内同一码不得二次通过）。
+//
+// 返回 ok=false 有两种情况，对外不区分：① 码不在 ±totpSkew 窗口内；
+// ② 该步不晚于已接受的最大步（重放，或比已接受步更早的旧码）。
+// 记录本身是原子条件更新（store.AcceptStep），因此并发下同一码只有一个请求能拿到 ok=true。
+func (s *TOTPService) acceptCode(ctx context.Context, userID uint64, secret, code string) (bool, error) {
+	step, ok := s.matchStep(secret, code, s.now())
+	if !ok {
+		return false, nil
+	}
+	return s.store.AcceptStep(ctx, userID, step)
+}
+
+// matchStep 在 ±totpSkew 时钟窗口内找出产出 code 的时间步；不在窗口内返回 (0, false)。
+// 由高步往低步找：若极端情况下两个相邻步产出同一个码，取高步，
+// 让已接受的最大步尽量前移（宁可多拒一次，也不放过重放）。
+func (s *TOTPService) matchStep(secret, code string, now time.Time) (int64, bool) {
+	entry := strings.TrimSpace(code)
+	base := now.Unix() / totpPeriod
+	for offset := int64(totpSkew); offset >= -int64(totpSkew); offset-- {
+		step := base + offset
+		candidate, err := totp.GenerateCodeCustom(secret, time.Unix(step*totpPeriod, 0), totp.ValidateOpts{
+			Period:    totpPeriod,
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err != nil {
+			return 0, false
+		}
+		if candidate == entry {
+			return step, true
+		}
+	}
+	return 0, false
 }
 
 // otpauthURL 拼装 otpauth:// 链接（Google Authenticator Key URI 格式）。

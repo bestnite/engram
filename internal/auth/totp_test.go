@@ -100,7 +100,7 @@ func TestTOTPConfirmEnablesAndVerifies(t *testing.T) {
 	if _, ok, _ := svc.VerifySecondFactor(ctx, u.ID, "000000"); ok {
 		t.Error("VerifySecondFactor(fixed wrong code) = true, want false")
 	}
-	used, ok, err := svc.VerifySecondFactor(ctx, u.ID, mustCode(t, secret))
+	used, ok, err := svc.VerifySecondFactor(ctx, u.ID, mustNextCode(t, secret))
 	if err != nil || !ok || used {
 		t.Fatalf("VerifySecondFactor(valid code) = (usedRecovery=%v, ok=%v, err=%v), want (false, true, nil)", used, ok, err)
 	}
@@ -199,6 +199,18 @@ func mustCode(t *testing.T, secret string) string {
 	code, err := totp.GenerateCode(secret, time.Now())
 	if err != nil {
 		t.Fatalf("GenerateCode() error = %v", err)
+	}
+	return code
+}
+
+// mustNextCode 生成下一个时间步的验证码。
+// F19 之后「已被接受的时间步」不再允许第二次通过，而本用例的确认码恰好用掉了当前步，
+// 因此登录验收要用一个更晚、且仍在 ±1 窗口内的新步。
+func mustNextCode(t *testing.T, secret string) string {
+	t.Helper()
+	code, err := totp.GenerateCode(secret, time.Now().Add(totpPeriod*time.Second))
+	if err != nil {
+		t.Fatalf("GenerateCode(next step) error = %v", err)
 	}
 	return code
 }
