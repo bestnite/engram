@@ -34,6 +34,9 @@ const (
 	CodeConflict          = "conflict"
 	CodeVersionConflict   = "version_conflict"
 	CodeInternal          = "internal_error"
+	// CodeDeckNameInvalid 表示建卡组/改名时卡组名不满足长度或字符规则
+	// （与卡组包 manifest 同源；store 层 ErrDeckNameInvalid）。
+	CodeDeckNameInvalid = "deck_name_invalid"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -68,6 +71,9 @@ var errorMessages = map[string]string{
 	store.CodePackageUnsafeMedia:     "The package contains media of a disallowed type.",
 	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
+
+	// 建卡组/改名的稳定 code（store.ErrDeckNameInvalid）。
+	CodeDeckNameInvalid: "The deck name is invalid.",
 }
 
 // errorMessageKey 返回 code 对应的语言包键名。

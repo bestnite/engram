@@ -48,10 +48,14 @@
           "properties": {
             "name": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Deck name, at most 200 Unicode characters (counted as runes). The create and rename paths enforce the same bound."
             },
             "description": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 2000,
+              "description": "Deck description, at most 2000 Unicode characters (counted as runes)."
             }
           },
           "additionalProperties": true

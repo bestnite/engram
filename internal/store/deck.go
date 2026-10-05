@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 )
@@ -23,6 +24,19 @@ const (
 	DefaultReviewsPerDay = 200
 )
 
+// 卡组名与描述的长度界限（F27，2026-10-06 由用户拍板）。
+//
+// 按 Unicode 字符（rune）计数，不按字节：一个汉字或 emoji 算一个字符。若按字节，
+// 中文卡组名会被腰斩到 66 个字，而 200 个 emoji 只能留下 50 个——字号与用户认知的
+// “几个字”直接冲突。
+//
+// 这是唯一来源：卡组包 manifest 的导入校验（package_import.go）与网页/API 的创建、
+// 改名共用这一组常量，数值只在此处书写一次；package_import.go 保留旧名别名。
+const (
+	maxDeckNameChars        = 200
+	maxDeckDescriptionChars = 2000
+)
+
 var (
 	// ErrNotOwner 表示调用者不是资源的所有者，因此无权修改。
 	// 复用同一个哨兵值，让上层用 errors.Is 一致地翻译成 403。
@@ -31,6 +45,10 @@ var (
 	ErrInvalidVisibility = errors.New("invalid deck visibility")
 	// ErrDeckNameRequired 表示卡组名为空。
 	ErrDeckNameRequired = errors.New("deck name is required")
+	// ErrDeckNameInvalid 表示卡组名不满足与卡组包 manifest 共用的规则：超过
+	// maxDeckNameChars 个字符（按 rune 计）、含 C0 控制字符、或不是合法 UTF-8。
+	// 空名单独由 ErrDeckNameRequired 表示，不并入这个哨兵。
+	ErrDeckNameInvalid = errors.New("deck name is invalid")
 	// ErrDeckPresetRequired 表示卡组未指定调度预设。
 	ErrDeckPresetRequired = errors.New("deck preset is required")
 	// ErrInvalidDeckCap 表示每日上限为负；0 是合法值（不限）。
@@ -81,10 +99,31 @@ type DeckStore struct {
 // NewDeckStore 构造卡组存储。
 func NewDeckStore(db *gorm.DB) *DeckStore { return &DeckStore{db: db} }
 
+// validateDeckName 校验卡组名，规则与 F27 卡组包 manifest 完全一致：非空、合法 UTF-8、
+// 不含 C0 控制字符（U+0000–U+001F）、长度不超过 maxDeckNameChars（按 rune 计）。
+//
+// 空名保持既有语义返回 ErrDeckNameRequired，不并入 ErrDeckNameInvalid——调用方对
+// “没填名字”与“名字不合法”要给不同提示。
+func validateDeckName(name string) error {
+	if name == "" {
+		return ErrDeckNameRequired
+	}
+	if !utf8.ValidString(name) {
+		return fmt.Errorf("%w: invalid UTF-8", ErrDeckNameInvalid)
+	}
+	if r, ok := firstControlRune(name); ok {
+		return fmt.Errorf("%w: contains a control character U+%04X", ErrDeckNameInvalid, r)
+	}
+	if n := utf8.RuneCountInString(name); n > maxDeckNameChars {
+		return fmt.Errorf("%w: %d characters, limit is %d", ErrDeckNameInvalid, n, maxDeckNameChars)
+	}
+	return nil
+}
+
 // validateDeckForWrite 校验可写字段；create 时额外要求 owner 与 preset 已给定。
 func validateDeckForWrite(d *Deck, create bool) error {
-	if d.Name == "" {
-		return ErrDeckNameRequired
+	if err := validateDeckName(d.Name); err != nil {
+		return err
 	}
 	if d.Visibility == "" {
 		// 字符串型默认值由 store 层在 Go 侧给出（models.go 包注释）；DESIGN.md §2.2 默认 private。

@@ -2161,3 +2161,8 @@
   translation: "导入的媒体将超出你的媒体配额。"
 - id: import.error.media_quota_exceeded
   translation: "导入的媒体将超出你的媒体配额。"
+# F27b: 创建/改名时的卡组名界限（与卡组包 manifest 规则同源）
+- id: error.deck_name_invalid
+  translation: "卡组名称不合法。"
+- id: decks.list.error_name_invalid
+  translation: "卡组名称过长或含非法字符。"
