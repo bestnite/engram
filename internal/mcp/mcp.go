@@ -3,6 +3,9 @@
 //
 // 只提供 HTTP，不提供 stdio（多用户服务没有“进程即身份”的语义）。
 // 工具不封装业务逻辑，只做参数校验并调用与 REST 完全相同的方法。
+//
+// /mcp 只接受 API key 通道：会话 cookie 是浏览器通道，与机器接口的撤销和作用域语义
+// 不同，因此没有 key 的请求一律拒绝。每个请求都按它本次携带的 key 重算身份。
 package mcp
 
 import (
@@ -11,6 +14,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"sync"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -27,11 +32,16 @@ type Deps struct {
 	Logger *slog.Logger
 }
 
-// Server 持有 streamable HTTP handler；每个请求按其身份构建工具子集。
+// Server 持有 streamable HTTP handler；每个请求按其自身携带的 API key 重算身份与工具子集。
 type Server struct {
 	api     *api.API
 	logger  *slog.Logger
 	handler *sdkmcp.StreamableHTTPHandler
+
+	// mu 保护 sessions。sessions 记录每个会话握手（initialize）时的用户，供后续请求
+	// 校验会话属主（规则 2）。SDK 自己持有会话对象，这张表只额外记属主。
+	mu       sync.Mutex
+	sessions map[string]uint64
 }
 
 // New 构造 MCP server；API 必填（业务逻辑全部复用 api 的 service 层）。
@@ -43,9 +53,10 @@ func New(deps Deps) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	s := &Server{api: deps.API, logger: logger}
-	// getServer 每个 HTTP 请求调用一次：从请求上下文取身份，按 scope 构建工具集。
-	// 这样 tools/list 在握手时即按 key 过滤，且 tools/call 的处理器闭包持有同一身份复查。
+	s := &Server{api: deps.API, logger: logger, sessions: map[string]uint64{}}
+	// getServer 只在建立会话时被调用一次：从握手请求的上下文取身份，按当时 scope 构建
+	// 工具集。会话内后续请求复用这个 Server，因此它闭包里的身份只作为属主与用户来源；
+	// 工具可见性与调用权限每次请求另按本次 key 重算（见 requestIdentity）。
 	s.handler = sdkmcp.NewStreamableHTTPHandler(func(r *http.Request) *sdkmcp.Server {
 		id, _ := IdentityFrom(r.Context())
 		return s.build(id)
@@ -53,26 +64,114 @@ func New(deps Deps) (*Server, error) {
 	return s, nil
 }
 
+// mcpSessionHeader 是 streamable HTTP 规范里传递会话号的请求/响应头。
+const mcpSessionHeader = "Mcp-Session-Id"
+
+// 下面两个头是本项目内部约定：ServeHTTP 每次请求按当前 key 写入，处理器据此重算身份。
+// SDK 把当前 HTTP 请求的头随请求交给处理器（RequestExtra.Header），这是把“本次请求
+// 实际携带的 key”送到处理器的通道。ServeHTTP 总是覆盖同名头，客户端无法伪造。
+const (
+	requestKeyIDHeader  = "X-Engram-Mcp-Api-Key-Id"
+	requestScopesHeader = "X-Engram-Mcp-Scopes"
+)
+
 // ServeHTTP 实现 http.Handler；调用方必须先完成鉴权并把身份写入请求上下文
 // （见 WithIdentity），复用与 REST 相同的 API Key 校验、限流与审计。
+//
+// 它额外强制两条规则（DESIGN.md §7.4）：
+//  1. /mcp 只接受 API Key：没有 key 的身份（会话 cookie 通道）一律 401。
+//  2. 会话内每个请求的 key 属主必须等于握手用户：会话号只证明“同一个客户端”，
+//     不证明“同一个用户”，否则 B 用自己的 key 加 A 的会话号就能借用 A 的身份。
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.handler.ServeHTTP(w, r)
+	id, ok := IdentityFrom(r.Context())
+	if !ok || id.KeyID == 0 {
+		s.logger.Warn("mcp request rejected: an api key is required", "remote", r.RemoteAddr)
+		http.Error(w, "api key required", http.StatusUnauthorized)
+		return
+	}
+	sid := r.Header.Get(mcpSessionHeader)
+	if sid != "" && s.sessionOwnerMismatch(sid, id.User.ID) {
+		s.logger.Warn("mcp session owner mismatch",
+			"session_id", sid, "key_id", id.KeyID, "user_id", id.User.ID)
+		http.Error(w, "session user mismatch", http.StatusForbidden)
+		return
+	}
+	// 规则 3：把本次请求的 key 身份带上。工具可见性与权限按本次 key 计算，而不是用
+	// 握手时固化那份——同一用户换一把低 scope key 复用高 scope 会话时不会提权。
+	r.Header.Set(requestKeyIDHeader, strconv.FormatUint(id.KeyID, 10))
+	r.Header.Set(requestScopesHeader, id.Scopes)
+
+	rec := &statusWriter{ResponseWriter: w}
+	s.handler.ServeHTTP(rec, r)
+
+	switch {
+	case sid == "":
+		// 新会话：握手成功的响应会带 Mcp-Session-Id，记下它的属主供后续请求校验。
+		if newSID := rec.Header().Get(mcpSessionHeader); newSID != "" {
+			s.rememberSession(newSID, id.User.ID)
+		}
+	case rec.status == http.StatusNotFound:
+		// 会话已不存在（过期或已被 DELETE）：顺手清掉属主记录，避免这张表无界增长。
+		s.forgetSession(sid)
+	}
 }
+
+// sessionOwnerMismatch 报告会话是否已登记且属主不是 userID。未登记的会话返回 false，
+// 交给 SDK 按它原有的“会话不存在”行为处理。
+func (s *Server) sessionOwnerMismatch(sid string, userID uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	owner, known := s.sessions[sid]
+	return known && owner != userID
+}
+
+func (s *Server) rememberSession(sid string, userID uint64) {
+	s.mu.Lock()
+	s.sessions[sid] = userID
+	s.mu.Unlock()
+}
+
+func (s *Server) forgetSession(sid string) {
+	s.mu.Lock()
+	delete(s.sessions, sid)
+	s.mu.Unlock()
+}
+
+// statusWriter 记录响应状态码，供 ServeHTTP 判断握手是否成功、会话是否已消失。
+// Unwrap 让 http.NewResponseController(w).Flush() 仍能穿透到真实 ResponseWriter，
+// 保证 SSE 流式响应不被破坏。
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // ---- 身份上下文 ----
 
 type identityKey struct{}
 
-// Identity 是一次 MCP 请求的已认证身份：用户与（可空的）API key。
-// 会话 cookie 通道下 Key 为 nil，权限边界与网页登录一致。
+// Identity 是一次 MCP 请求的已认证身份：用户与该请求携带的 API key 的授权信息。
+// MCP 只接受 API Key 通道（见 ServeHTTP 规则 1），因此 KeyID 非 0 才是可用身份。
 type Identity struct {
-	User *store.User
-	Key  *store.APIKey
+	User   *store.User
+	KeyID  uint64 // 本次请求携带的 API key 主键；0 表示没有 key
+	Scopes string // 该 key 的归一化 scopes 字符串
 }
 
 // WithIdentity 把已认证身份注入请求上下文；由 web 装配层在鉴权中间件之后调用。
+// k 为 nil 表示会话 cookie 通道（此时没有 key 身份，MCP 会拒绝）。
 func WithIdentity(ctx context.Context, u *store.User, k *store.APIKey) context.Context {
-	return context.WithValue(ctx, identityKey{}, Identity{User: u, Key: k})
+	id := Identity{User: u}
+	if k != nil {
+		id.KeyID, id.Scopes = k.ID, k.Scopes
+	}
+	return context.WithValue(ctx, identityKey{}, id)
 }
 
 // IdentityFrom 取回身份；缺失时 ok=false。
@@ -81,27 +180,39 @@ func IdentityFrom(ctx context.Context) (Identity, bool) {
 	return id, ok && id.User != nil
 }
 
-// apiKeyID 返回当前 key 的 id；会话通道为 nil。
-func (id Identity) apiKeyID() *uint64 {
-	if id.Key != nil {
-		return store.Ptr(id.Key.ID)
+// requestIdentity 返回本次请求实际使用的身份。
+//
+// SDK 只在建立会话时构建一次 Server，之后同一会话的所有请求都复用那个 Server 与它闭包
+// 里的握手身份。因此工具处理器不能拿握手身份判断 scope，必须读本次请求带上来的 key
+// （见 ServeHTTP 写入的请求头）。key 的属主已由 ServeHTTP 确认与握手用户一致，所以用户
+// 直接沿用握手那份。请求头缺失或畸形时退回握手身份。
+func (s *Server) requestIdentity(handshake Identity, req sdkmcp.Request) Identity {
+	extra := req.GetExtra()
+	if extra == nil || extra.Header == nil {
+		return handshake
 	}
-	return nil
+	keyID, err := strconv.ParseUint(extra.Header.Get(requestKeyIDHeader), 10, 64)
+	if err != nil || keyID == 0 {
+		return handshake
+	}
+	return Identity{User: handshake.User, KeyID: keyID, Scopes: extra.Header.Get(requestScopesHeader)}
 }
 
-// hasScope 判断身份是否覆盖 scope：key 通道用 key.HasScope（admin 蕴含其余三档）；
-// 会话通道与网页登录一致（登录用户可读可写可复习，admin 另需管理员角色）。
-func hasScope(id Identity, scope string) bool {
-	if id.Key != nil {
-		return id.Key.HasScope(scope)
+// apiKeyID 返回本次请求 key 的 id；无 key 时为 nil。
+func (id Identity) apiKeyID() *uint64 {
+	if id.KeyID == 0 {
+		return nil
 	}
-	if id.User == nil {
+	return store.Ptr(id.KeyID)
+}
+
+// hasScope 判断身份是否覆盖 scope：MCP 只有 key 通道，按 key 的 scopes 判断
+// （admin 蕴含其余三档）。
+func hasScope(id Identity, scope string) bool {
+	if id.KeyID == 0 {
 		return false
 	}
-	if scope == store.ScopeAdmin {
-		return id.User.Role == store.RoleAdmin
-	}
-	return true
+	return store.HasScope(id.Scopes, scope)
 }
 
 // toolScopes 是工具名到所需 scope 的映射；握手过滤与调用复查共用，保证同一份规则。
@@ -131,24 +242,24 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	})
 	srv.AddReceivingMiddleware(s.filterTools(id))
 
-	addTool(srv, id, "list_decks", "List the decks visible to the caller (owned, granted, or public).", s.listDecks)
-	addTool(srv, id, "create_deck", "Create an empty deck (name required; visibility defaults to private; preset_id 0 uses the caller's Default preset).", s.createDeck)
-	addTool(srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
-	addTool(srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
-	addTool(srv, id, "export_deck", "Export one deck as a self-contained deck package (DESIGN.md §7.6): manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
-	addTool(srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
-	addTool(srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
-	addTool(srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
-	addTool(srv, id, "bulk_notes", "Apply one bulk action (delete, add_tags, remove_tags, set_tags) to a set of notes; dry_run counts without writing. Mirrors REST POST /notes/bulk.", s.bulkNotes)
-	addTool(srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .edeck archive.", s.importDeck)
-	addTool(srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
-	addTool(srv, id, "submit_review", "Submit a review rating for a card (1..4) with optimistic version check.", s.submitReview)
+	addTool(s, srv, id, "list_decks", "List the decks visible to the caller (owned, granted, or public).", s.listDecks)
+	addTool(s, srv, id, "create_deck", "Create an empty deck (name required; visibility defaults to private; preset_id 0 uses the caller's Default preset).", s.createDeck)
+	addTool(s, srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
+	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
+	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package (DESIGN.md §7.6): manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
+	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
+	addTool(s, srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
+	addTool(s, srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
+	addTool(s, srv, id, "bulk_notes", "Apply one bulk action (delete, add_tags, remove_tags, set_tags) to a set of notes; dry_run counts without writing. Mirrors REST POST /notes/bulk.", s.bulkNotes)
+	addTool(s, srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .edeck archive.", s.importDeck)
+	addTool(s, srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
+	addTool(s, srv, id, "submit_review", "Submit a review rating for a card (1..4) with optimistic version check.", s.submitReview)
 
 	return srv
 }
 
-// filterTools 在 tools/list 结果上按身份过滤工具；每次请求独立，不会泄漏越权工具。
-func (s *Server) filterTools(id Identity) sdkmcp.Middleware {
+// filterTools 在 tools/list 结果上按“本次请求”的身份过滤工具；每次请求独立，不会泄漏越权工具。
+func (s *Server) filterTools(handshake Identity) sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
 			res, err := next(ctx, method, req)
@@ -159,6 +270,7 @@ func (s *Server) filterTools(id Identity) sdkmcp.Middleware {
 			if !ok {
 				return res, err
 			}
+			id := s.requestIdentity(handshake, req)
 			kept := make([]*sdkmcp.Tool, 0, len(lt.Tools))
 			for _, t := range lt.Tools {
 				scope, known := toolScopes[t.Name]
@@ -172,13 +284,14 @@ func (s *Server) filterTools(id Identity) sdkmcp.Middleware {
 	}
 }
 
-// addTool 注册一个工具：调用前必须复查身份是否仍持有该工具所需的 scope。
+// addTool 注册一个工具：调用前必须按本次请求的身份复查该工具所需的 scope。
 // 缺 scope 时返回 tool error（置 IsError），而不是把工具从注册表里摘掉 —— 按名字硬调也能得到权限错误。
-func addTool[In, Out any](s *sdkmcp.Server, id Identity, name, desc string, fn func(context.Context, Identity, In) (Out, error)) {
+func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, name, desc string, fn func(context.Context, Identity, In) (Out, error)) {
 	scope := toolScopes[name]
 	tool := &sdkmcp.Tool{Name: name, Description: desc}
-	sdkmcp.AddTool[In, Out](s, tool, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in In) (*sdkmcp.CallToolResult, Out, error) {
+	sdkmcp.AddTool[In, Out](srv, tool, func(ctx context.Context, req *sdkmcp.CallToolRequest, in In) (*sdkmcp.CallToolResult, Out, error) {
 		var zero Out
+		id := s.requestIdentity(handshake, req)
 		if !hasScope(id, scope) {
 			// 与 REST 共用同一 code 与语言包文案（AGENTS.md M4-9）；scope 名作为细节附后。
 			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)
