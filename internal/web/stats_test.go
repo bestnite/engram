@@ -32,7 +32,7 @@ func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	}
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
-	accounts, err := auth.NewAccountService(users, sessions, auth.NewPasswordHasher(auth.Params{
+	accounts, err := auth.NewAccountService(users, sessions, store.NewAPIKeyStore(db), auth.NewPasswordHasher(auth.Params{
 		Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32,
 	}))
 	if err != nil {

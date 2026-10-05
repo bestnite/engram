@@ -344,3 +344,24 @@ func (s *APIKeyStore) RevokeByID(ctx context.Context, keyID uint64, at time.Time
 	}
 	return nil
 }
+
+// RevokeAllForUser 作废某用户的全部有效 key（口令重置时调用，DESIGN.md §11）。
+// 用户主动改密不走这里：key 有独立于口令的生命周期。
+func (s *APIKeyStore) RevokeAllForUser(ctx context.Context, userID uint64, at time.Time) error {
+	return s.RevokeAllForUserTx(ctx, s.db, userID, at)
+}
+
+// RevokeAllForUserTx 在调用方给定的事务里批量吊销某用户的全部有效 key（DESIGN.md §11）。
+// 只命中 revoked_at IS NULL 的行，重复调用幂等（与 sessions 的批量作废同构）；
+// 必须与密码写入共享同一事务句柄，否则失败会半吊销。
+func (s *APIKeyStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	if err := tx.WithContext(ctx).Model(&APIKey{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", at.UTC()).Error; err != nil {
+		return fmt.Errorf("revoke user api keys: %w", err)
+	}
+	return nil
+}

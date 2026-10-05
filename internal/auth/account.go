@@ -32,23 +32,25 @@ type CreateUserInput struct {
 }
 
 // AccountService 负责本地账号的核心流程：创建、认证、改密、禁用。
-// 它持有 UserStore 与 SessionStore，因此能在改密/禁用时同步作废会话（DESIGN.md §11）。
+// 它持有 UserStore、SessionStore 与 APIKeyStore，因此能在口令重置时于同一事务里
+// 同步作废会话与 API Key（DESIGN.md §11）；用户主动改密只作废会话，不动 key。
 type AccountService struct {
 	users    *store.UserStore
 	sessions *store.SessionStore
+	keys     *store.APIKeyStore
 	hasher   *PasswordHasher
 	now      func() time.Time
 }
 
 // NewAccountService 构造账号服务；依赖缺一不可。
-func NewAccountService(users *store.UserStore, sessions *store.SessionStore, hasher *PasswordHasher) (*AccountService, error) {
-	if users == nil || sessions == nil {
-		return nil, errors.New("auth: user store and session store are required")
+func NewAccountService(users *store.UserStore, sessions *store.SessionStore, keys *store.APIKeyStore, hasher *PasswordHasher) (*AccountService, error) {
+	if users == nil || sessions == nil || keys == nil {
+		return nil, errors.New("auth: user store, session store and api key store are required")
 	}
 	if hasher == nil {
 		hasher = DefaultPasswordHasher()
 	}
-	return &AccountService{users: users, sessions: sessions, hasher: hasher,
+	return &AccountService{users: users, sessions: sessions, keys: keys, hasher: hasher,
 		now: func() time.Time { return time.Now().UTC() }}, nil
 }
 

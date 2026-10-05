@@ -147,7 +147,7 @@ func newLinkEnv(t *testing.T) *linkEnv {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	users := store.NewUserStore(db)
-	accounts, err := NewAccountService(users, store.NewSessionStore(db), NewPasswordHasher(fastParams()))
+	accounts, err := NewAccountService(users, store.NewSessionStore(db), store.NewAPIKeyStore(db), NewPasswordHasher(fastParams()))
 	if err != nil {
 		t.Fatalf("NewAccountService() error = %v", err)
 	}

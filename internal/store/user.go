@@ -65,11 +65,26 @@ func (s *UserStore) Update(ctx context.Context, u *User) error {
 
 // SetPasswordHash 只改密码哈希一列，避免整行覆盖带来的并发丢写。
 func (s *UserStore) SetPasswordHash(ctx context.Context, id uint64, hash string) error {
-	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
+	return s.SetPasswordHashTx(ctx, s.db, id, hash)
+}
+
+// SetPasswordHashTx 在调用方给定的事务里改密码哈希一列。
+// 口令重置需要它：密码写入必须与同一事务里的会话/API Key 吊销要么全成、要么全不生效（DESIGN.md §11）。
+func (s *UserStore) SetPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint64, hash string) error {
+	if err := tx.WithContext(ctx).Model(&User{}).Where("id = ?", id).
 		Update("password_hash", hash).Error; err != nil {
 		return fmt.Errorf("set password hash: %w", err)
 	}
 	return nil
+}
+
+// ByIDTx 在调用方给定的事务里按主键取用户；口令重置在事务内做存在性校验，避免另开连接。
+func (s *UserStore) ByIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*User, error) {
+	var u User
+	if err := tx.WithContext(ctx).First(&u, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // SetStatus 只改账号状态一列（active | disabled）。

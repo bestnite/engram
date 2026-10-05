@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+
+	"gorm.io/gorm"
 )
 
 // 管理面板的用户管理所需的账号操作（ROADMAP.md M6-2）。
@@ -29,10 +31,14 @@ func GenerateTempPassword() (string, error) {
 	return string(out), nil
 }
 
-// ResetPassword 由管理员为指定用户生成临时口令：写入新哈希并作废其全部会话（DESIGN.md §11）。
+// ResetPasswordTx 由管理员为指定用户生成临时口令：在调用方给定的事务里写入新哈希，
+// 并在同一事务里作废其全部会话与全部 API Key（DESIGN.md §11）。
 // 返回的明文只在此刻交给调用方展示一次，绝不写日志或落库。
-func (s *AccountService) ResetPassword(ctx context.Context, userID uint64) (string, error) {
-	if _, err := s.users.ByID(ctx, userID); err != nil {
+//
+// 必须使用调用方的事务句柄：存在性校验与三条写入都要走 tx，否则在 SQLite 上另开连接会锁冲突，
+// 且任一写入失败时会留下半作废。
+func (s *AccountService) ResetPasswordTx(ctx context.Context, tx *gorm.DB, userID uint64) (string, error) {
+	if _, err := s.users.ByIDTx(ctx, tx, userID); err != nil {
 		return "", fmt.Errorf("load user: %w", err)
 	}
 	temp, err := GenerateTempPassword()
@@ -47,10 +53,13 @@ func (s *AccountService) ResetPassword(ctx context.Context, userID uint64) (stri
 	if err != nil {
 		return "", err
 	}
-	if err := s.users.SetPasswordHash(ctx, userID, hash); err != nil {
+	if err := s.users.SetPasswordHashTx(ctx, tx, userID, hash); err != nil {
 		return "", err
 	}
-	if err := s.sessions.RevokeAllForUser(ctx, userID, s.now()); err != nil {
+	if err := s.sessions.RevokeAllForUserTx(ctx, tx, userID, s.now()); err != nil {
+		return temp, err
+	}
+	if err := s.keys.RevokeAllForUserTx(ctx, tx, userID, s.now()); err != nil {
 		return temp, err
 	}
 	return temp, nil

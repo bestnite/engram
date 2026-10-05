@@ -37,7 +37,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
-	accounts, err := NewAccountService(users, sessions, NewPasswordHasher(fastParams()))
+	accounts, err := NewAccountService(users, sessions, store.NewAPIKeyStore(db), NewPasswordHasher(fastParams()))
 	if err != nil {
 		t.Fatalf("NewAccountService() error = %v", err)
 	}

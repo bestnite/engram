@@ -15,7 +15,7 @@ import (
 // createUserAndLogin 在同一测试库上新建一个普通用户并登录，返回其 id、会话 cookie 与 CSRF token。
 func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string) (uint64, []*http.Cookie, string) {
 	t.Helper()
-	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db),
+	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db), store.NewAPIKeyStore(db),
 		auth.NewPasswordHasher(auth.Params{Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}))
 	if err != nil {
 		t.Fatalf("NewAccountService() error = %v", err)
