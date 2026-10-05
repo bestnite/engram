@@ -91,7 +91,7 @@ func mapPackageError(err error) error {
 			status, code = http.StatusBadRequest, pe.Code
 		case store.CodePackageBadFormat:
 			status, code = http.StatusBadRequest, CodeInvalidRequest
-		case store.CodePackageUnknownKind:
+		case store.CodePackageUnknownKind, store.CodePackageUnsafeMedia:
 			status, code = http.StatusBadRequest, pe.Code
 		}
 		msg := pe.Message

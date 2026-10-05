@@ -2148,3 +2148,6 @@
   translation: "Each limit must be an integer of 0 or greater; 0 means unlimited."
 - id: decks.settings.error.save_failed
   translation: "Could not save the deck settings."
+# F9: deck package import media validation
+- id: import.error.package_unsafe_media
+  translation: "The package contains media of a disallowed type."

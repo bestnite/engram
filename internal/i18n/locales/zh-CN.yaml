@@ -2146,3 +2146,6 @@
   translation: "每日上限必须是不小于 0 的整数；0 表示不限。"
 - id: decks.settings.error.save_failed
   translation: "保存卡组设置失败。"
+# F9: 卡组包导入媒体校验
+- id: import.error.package_unsafe_media
+  translation: "卡组包包含不允许的媒体类型。"

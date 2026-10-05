@@ -19,6 +19,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -59,13 +60,9 @@ const defaultMaxBytes = 10 * 1024 * 1024
 // DefaultMaxBytes 暴露默认上限，供路由层在系统设置缺失时回退。
 func DefaultMaxBytes() int64 { return defaultMaxBytes }
 
-// DefaultAllowedMimes 是 DESIGN.md §6.3 的默认白名单。
-func DefaultAllowedMimes() []string {
-	return []string{
-		"image/png", "image/jpeg", "image/webp", "image/gif",
-		"audio/mpeg", "audio/ogg", "audio/mp4",
-	}
-}
+// DefaultAllowedMimes 是 DESIGN.md §6.3 的默认白名单；判定实现已抽到叶子包 mediatype，
+// 这里保留同名入口，避免改动大量调用点（F9）。
+func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
 // Store 是本地媒体存储：root 是目录根，db 记录元数据。
 type Store struct {
@@ -159,20 +156,20 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("media: seek temp file: %w", err)
 	}
-	head := make([]byte, 512)
+	head := make([]byte, mediatype.HeadBytes)
 	n, err := io.ReadFull(tmp, head)
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("media: read temp head: %w", err)
 	}
-	detected, ext, ok := detectMime(head[:n])
+	detected, ext, ok := mediatype.Detect(head[:n])
 	if !ok {
 		return nil, ErrMagicMismatch
 	}
-	if !mimeAllowed(detected, allowed) {
+	if !mediatype.Allowed(detected, allowed) {
 		return nil, ErrMimeNotAllowed
 	}
 	// 客户端声明了类型时必须与魔数一致，否则是伪装文件。
-	if declared := normalizeMime(opts.DeclaredMime); declared != "" && declared != detected {
+	if declared := mediatype.Normalize(opts.DeclaredMime); declared != "" && declared != detected {
 		return nil, ErrMagicMismatch
 	}
 
@@ -264,28 +261,4 @@ func (s *Store) bySha256(ctx context.Context, sum string) (*store.Media, error) 
 		return nil, nil
 	}
 	return nil, fmt.Errorf("media: lookup sha256: %w", err)
-}
-
-// normalizeMime 归一化常见的等价写法，便于与探测结果比较。
-func normalizeMime(raw string) string {
-	m := strings.ToLower(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]))
-	switch m {
-	case "image/jpg":
-		return "image/jpeg"
-	case "audio/m4a", "audio/x-m4a":
-		return "audio/mp4"
-	case "audio/mp3":
-		return "audio/mpeg"
-	}
-	return m
-}
-
-// mimeAllowed 判断探测到的 mime 是否在白名单内。
-func mimeAllowed(mime string, allowed []string) bool {
-	for _, a := range allowed {
-		if normalizeMime(a) == mime {
-			return true
-		}
-	}
-	return false
 }
