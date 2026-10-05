@@ -39,8 +39,10 @@ func validDoubleSubmitToken(v string) bool {
 // 否则生成新 token 并写入 cookie。
 //
 // cookie 设为 HttpOnly：表单由服务端渲染时把同一 token 写进隐藏字段，前端脚本无需读取它。
-// SameSite=Lax 与 Secure（仅 TLS）按会话 cookie 的同一套策略设置。
-func EnsureDoubleSubmitToken(c *gin.Context) string {
+// SameSite=Lax 与 Secure 按会话 cookie 的同一套策略设置：Secure 由调用方依据 BASE_URL 的
+// scheme 传入（secure），不能看请求自身的 TLS——生产是反代终止 TLS，应用只收到明文 http，
+// 按请求判断会让线上表单 cookie 丢掉 Secure（DESIGN.md §4.3）。
+func EnsureDoubleSubmitToken(c *gin.Context, secure bool) string {
 	if v, err := c.Cookie(CSRFDoubleSubmitCookieName); err == nil && validDoubleSubmitToken(v) {
 		return v
 	}
@@ -54,7 +56,7 @@ func EnsureDoubleSubmitToken(c *gin.Context) string {
 		Value:    tok,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   c.Request.TLS != nil,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   24 * 60 * 60,
 	})
