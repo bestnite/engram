@@ -279,8 +279,11 @@ Conventions:
   *Acceptance:* page renders 100 notes with paging intact; preview updates over htmx
   without a full reload.
 - [x] **M2-8 Media storage** — sha256 dedupe, `<sha256[:2]>/<sha256>.<ext>` layout,
-  temp-file plus rename writes, `GET /media/:id` proxy with `ETag` and immutable caching,
-  mime plus magic-byte validation, admin-configured size limit.
+  temp-file plus rename writes, `GET /media/<sha256>` proxy with `ETag` and immutable caching,
+  mime plus magic-byte validation, admin-configured size limit. *The proxy path and the media
+  primary key switched from the auto-increment id to the content hash in the 2026-10-06 security
+  pass (see below); the numeric form is gone and existing notes that referenced it show no image,
+  by decision rather than by oversight.*
   *Acceptance:* uploading the same file twice stores one blob; an oversized or
   wrong-magic file is rejected with a stable error code.
 - [x] **M2-10 Card type labels in the catalogs** — `internal/cardtype` returns translation keys
@@ -934,6 +937,46 @@ into a release milestone.
   public repository either translate it to English and keep the Chinese version as
   `DESIGN.zh.md`, or state explicitly that Chinese is the primary language of the
   specification (blocked on a decision).
+
+---
+
+### Security pass (2026-10-05/06)
+
+One-off repository-wide audit and remediation, run outside the milestone plan and therefore
+**not counted** in section 2.1. Recorded here because the working ledger is not committed.
+
+**Method.** `gosec` plus `govulncheck` for the tool layer, then five human audit lanes
+(scope/authz, auth, injection, frontend, admin). 43 findings were consolidated into 27 fix
+tasks; every fix landed as a signed commit with a fail-first test, a directed green run and a
+negative control (behaviour reverted, test must go red, behaviour restored).
+
+**Fixed.**
+
+| Area | What changed |
+|---|---|
+| Authorization | Package import now enforces the target deck role (`into_deck` = editor, `replace_deck` = owner); review submission is graded per action (rating/undo/bury/next = reader, suspend = owner); statistics, tag breakdown, due forecast and the retro recompute are all scoped to the caller's visible decks; admin-scope API keys are role-bound and a non-admin cannot mint one; MCP is API-key only and every request must be made with a key owned by the handshake user; the full-database and admin export paths were deleted outright; the MCP session map is dropped on `DELETE` and bounded |
+| Input limits | REST package import caps the request body with the configured media limit before multipart parsing; base64 archives are length-checked before decoding; deck package manifests bound name/description (200/2000 characters, rune-counted, control characters and invalid UTF-8 rejected) on import *and* on deck create/rename; archives with duplicate entries or a declared sha that disagrees with the bytes are rejected; imported media counts against the importer's quota on all four entry points |
+| Resource use | `/register` and `/forgot-password` are rate-limited by IP *and* target email (5 per 15 minutes); the OIDC pending table is capped at 1000 entries with expired-entry eviction; a job whose `MarkRunning` fails is marked failed instead of blocking the queue, and adapter weights reads are bounded |
+| Hardening | Formula-rendering XSS in `internal/render`; media MIME sniffing moved to a leaf package with magic-byte checks; pre-session CSRF cookie `Secure` derives from `BASE_URL`; password reset (self-service and admin) revokes every API key of that user; TOTP rejects a replayed time step; admin actions write audit rows; the share page renders the same sanitized HTML as the review page; `govulncheck` runs in CI; report-only CSP plus `nosniff`, `Referrer-Policy`, `X-Frame-Options` and `Permissions-Policy` are set on every response |
+
+**Media model (breaking).** Media is now identified by its content hash: the primary key and
+the URL are the sha256, and `/media/<numeric id>` no longer exists. Read authorization is
+derived from an explicit `media_notes` mapping plus deck visibility, instead of scanning note
+fields; a write that introduces a reference the writer cannot already read is rejected; all
+note-writing entry points route through one method that rebuilds the mapping. A second table,
+`media_uploaders`, records everyone who ever supplied those bytes, so a deduplicated upload
+still grants its uploader read access after a share is revoked. Share links now require a
+logged-in account. Existing note references to the old numeric form were **not** migrated.
+
+**Open items.**
+
+- The deck **description** has no 2000-character bound on create/rename, while the importer
+  and the package schema have one — a deck can still be built that its own importer refuses.
+- CSP is report-only; `script-src` keeps `'unsafe-eval'` because htmx compiles `hx-on`
+  handlers with `new Function`.
+- The PostgreSQL branch of the media primary-key migration has never been executed: local and
+  CI testing is SQLite only.
+- `gosec` is not wired into CI by decision; only `govulncheck` runs there.
 
 ---
 
