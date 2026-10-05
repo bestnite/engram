@@ -28,9 +28,12 @@ const (
 	// CodeInsufficientRole 表示用户对卡组有访问权但角色不够（如 reader 试图改卡），
 	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断（M5-1）。
 	CodeInsufficientRole = "insufficient_role"
-	CodeConflict         = "conflict"
-	CodeVersionConflict  = "version_conflict"
-	CodeInternal         = "internal_error"
+	// CodeScopeNotGrantable 表示请求要创建的 key 含只有管理员才能持有的 scope
+	// （当前只有 admin）：DESIGN.md §7.2「admin 只能发给管理员账号」。
+	CodeScopeNotGrantable = "scope_not_grantable"
+	CodeConflict          = "conflict"
+	CodeVersionConflict   = "version_conflict"
+	CodeInternal          = "internal_error"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -44,17 +47,18 @@ type errorBody struct {
 // 它是 “code → 英文文案” 的唯一登记处：REST 与 MCP 的错误出口都经 errorMessage 取值。
 // 这里同时覆盖 store 层卡组包导入会透出的 code（mapPackageError 会原样返回它们）。
 var errorMessages = map[string]string{
-	CodeUnauthorized:     "Authentication is required.",
-	CodeInvalidAPIKey:    "The API key is invalid, expired, or revoked.",
-	CodeScopeRequired:    "This API key does not have the required scope.",
-	CodeRateLimited:      "Rate limit exceeded. Try again later.",
-	CodeInvalidRequest:   "The request is invalid.",
-	CodeNotFound:         "The requested resource was not found.",
-	CodeForbidden:        "You do not have access to this resource.",
-	CodeInsufficientRole: "Your role on this deck is not sufficient for this action.",
-	CodeConflict:         "The request conflicts with the current state.",
-	CodeVersionConflict:  "The resource was changed by someone else. Reload and try again.",
-	CodeInternal:         "An internal error occurred.",
+	CodeUnauthorized:      "Authentication is required.",
+	CodeInvalidAPIKey:     "The API key is invalid, expired, or revoked.",
+	CodeScopeRequired:     "This API key does not have the required scope.",
+	CodeRateLimited:       "Rate limit exceeded. Try again later.",
+	CodeInvalidRequest:    "The request is invalid.",
+	CodeNotFound:          "The requested resource was not found.",
+	CodeForbidden:         "You do not have access to this resource.",
+	CodeInsufficientRole:  "Your role on this deck is not sufficient for this action.",
+	CodeScopeNotGrantable: "Only administrator accounts can be granted the admin scope.",
+	CodeConflict:          "The request conflicts with the current state.",
+	CodeVersionConflict:   "The resource was changed by someone else. Reload and try again.",
+	CodeInternal:          "An internal error occurred.",
 
 	// 卡组包导入的稳定 code（DESIGN.md §7.6；store.PackageError.Code）。
 	store.CodePackageUnsafeEntry: "The package contains an unsafe entry.",

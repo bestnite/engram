@@ -14,13 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// API Key 的四档 scope（DESIGN.md §7.2）；本项目的权限模型就是这四档，不再往细里做。
+// API Key 的五档 scope（DESIGN.md §7.2）；本项目的权限模型就是这五档，不再往细里做。
 // 取值用英文常量：scope 字符串会写进 api_keys.scopes 并被 REST/MCP 复用，必须稳定。
 const (
 	ScopeRead   = "read"   // 读卡组、卡片、统计
 	ScopeWrite  = "write"  // 建/改/删卡片与卡组
 	ScopeReview = "review" // 取到期卡、提交评分
-	ScopeAdmin  = "admin"  // 管理 API Key、系统设置、用户
+	// ScopeKeys 管理自己的 API Key（列出/新建/撤销）；网页端自管理不受它约束。
+	// 它只覆盖“自己的”key——管理他人 key 属于 admin。
+	ScopeKeys  = "keys"
+	ScopeAdmin = "admin" // 管理全部 API Key、系统设置、用户；蕴含其余四档
 )
 
 const (
@@ -35,7 +38,7 @@ const (
 )
 
 // apiKeyScopeOrder 是 scope 的规范顺序；归一化时按它排序，让同一组 scope 只有一种存储形式。
-var apiKeyScopeOrder = []string{ScopeRead, ScopeWrite, ScopeReview, ScopeAdmin}
+var apiKeyScopeOrder = []string{ScopeRead, ScopeWrite, ScopeReview, ScopeKeys, ScopeAdmin}
 
 var (
 	// ErrAPIKeyNameRequired 表示创建 key 时 name 为空。
@@ -54,7 +57,7 @@ var (
 	ErrAPIKeyPlaintextRequired = errors.New("api key plaintext is required")
 )
 
-// IsValidScope 判断取值是否是四档之一。
+// IsValidScope 判断取值是否是五档之一。
 func IsValidScope(scope string) bool {
 	for _, s := range apiKeyScopeOrder {
 		if s == scope {
@@ -77,7 +80,7 @@ func ParseScopes(raw string) []string {
 }
 
 // NormalizeScopes 校验并归一化一组 scope：去重、按规范顺序排序、逗号连接。
-// 空输入落到默认的 read（DESIGN.md §7.2）；出现四档之外的取值返回 ErrAPIKeyInvalidScope。
+// 空输入落到默认的 read（DESIGN.md §7.2）；出现五档之外的取值返回 ErrAPIKeyInvalidScope。
 func NormalizeScopes(scopes []string) (string, error) {
 	if len(scopes) == 0 {
 		return defaultAPIKeyScope, nil
@@ -100,7 +103,8 @@ func NormalizeScopes(scopes []string) (string, error) {
 }
 
 // HasScope 判断 scopes 字符串是否覆盖 want。
-// admin 等价于管理员权限（DESIGN.md §7.2），因此它蕴含其余三档；反向不成立。
+// admin 等价于管理员权限（DESIGN.md §7.2），因此它蕴含其余四档（含 keys）；反向不成立，
+// 其余各档之间互不蕴含。
 func HasScope(scopes, want string) bool {
 	for _, s := range ParseScopes(scopes) {
 		if s == want || s == ScopeAdmin {

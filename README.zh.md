@@ -36,7 +36,7 @@ MathJax 3），HTML 走白名单清洗。上传的图片按内容寻址存放。
 
 REST API 挂在 `/api/v1`，内置 MCP server 挂在 `POST /mcp`（只有 HTTP，没有 stdio）。两条通道等价：
 都用用户级 API Key 认证，都调用同一套 service 方法，所以校验和排程规则不会两边不一致。Key 带
-scope（`read`、`write`、`review`、`admin`），在浏览器的「设置」里管理；请求与响应的 schema 见
+scope（`read`、`write`、`review`、`keys`、`admin`），在浏览器的「设置」里管理；请求与响应的 schema 见
 [`schema/`](schema/)。
 
 ### 界面

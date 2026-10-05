@@ -1456,6 +1456,8 @@
   translation: "你无权访问该资源。"
 - id: error.insufficient_role
   translation: "你在该卡组中的角色不足以执行此操作。"
+- id: error.scope_not_grantable
+  translation: "只有管理员账号可以获得 admin 权限范围。"
 - id: error.conflict
   translation: "请求与当前状态冲突。"
 - id: error.version_conflict
@@ -2018,6 +2020,8 @@
   translation: "write（写入）"
 - id: keys.scope.review
   translation: "review（复习）"
+- id: keys.scope.keys
+  translation: "keys（管理密钥）"
 - id: keys.scope.admin
   translation: "admin（管理）"
 - id: keys.error.name_required
@@ -2030,6 +2034,8 @@
   translation: "过期日期格式不正确。"
 - id: keys.error.create_failed
   translation: "创建失败，请重试。"
+- id: keys.error.admin_forbidden
+  translation: "只有管理员可以创建带 admin 权限的密钥。"
 - id: settings.keys.heading
   translation: "API Key"
 - id: settings.keys.hint

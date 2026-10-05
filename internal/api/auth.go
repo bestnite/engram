@@ -144,14 +144,23 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 
 // RequireScope 在 Auth 之后强制 scope。
 //
-// bearer 通道按 key 的 scopes 判断；会话通道与网页登录权限一致（登录用户可读可写可复习，
-// admin scope 另需管理员角色）。
+// bearer 通道按 key 的 scopes 判断，并对 admin 追加账号角色复查；会话通道与网页登录权限
+// 一致（登录用户可读可写可复习，admin scope 另需管理员角色）。
 func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if key, ok := CurrentAPIKey(c); ok {
 			if !key.HasScope(scope) {
 				abortError(c, http.StatusForbidden, CodeScopeRequired, scope)
 				return
+			}
+			// admin 只能发给管理员账号（DESIGN.md §7.2）：key 的 scopes 不脱离账号角色，
+			// 账号被降级后，遗留的 admin-scope key 立即失去 admin 面。角色每请求现查，
+			// 不缓存，因此降级即时生效。
+			if scope == store.ScopeAdmin {
+				if u, ok := CurrentUser(c); !ok || u.Role != store.RoleAdmin {
+					abortError(c, http.StatusForbidden, CodeScopeRequired, "")
+					return
+				}
 			}
 			c.Next()
 			return
