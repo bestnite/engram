@@ -255,7 +255,9 @@ func (s *Server) importSubmit(c *gin.Context) {
 		OnConflict: strings.TrimSpace(c.PostForm("on_conflict")),
 		// 允许导入他人进度仅管理员可勾选（与 REST 同规）。
 		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && user.Role == store.RoleAdmin,
-		Now:                 func() time.Time { return time.Now().UTC() },
+		// F15：导入者当前生效的媒体配额，交给 store 层统一计入并整包拒绝超限（与 REST/MCP/CLI 同规）。
+		MediaQuotaBytes: s.userMediaQuota(ctx),
+		Now:             func() time.Time { return time.Now().UTC() },
 	}
 	// LimitReader 兜底：即便 multipart 边界处理有出入，也不会无限解压。
 	report, err := s.decks.ImportPackage(ctx, user.ID, io.LimitReader(f, limit), opts)
@@ -281,7 +283,7 @@ func importErrorMessage(loc *i18n.Localizer, err error) (int, string) {
 	var pe *store.PackageError
 	if errors.As(err, &pe) {
 		status := http.StatusBadRequest
-		if pe.Code == store.CodePackageTooLarge {
+		if pe.Code == store.CodePackageTooLarge || pe.Code == store.CodePackageQuotaExceeded {
 			status = http.StatusRequestEntityTooLarge
 		}
 		msg := loc.T("import.error." + pe.Code)

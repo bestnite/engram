@@ -39,6 +39,9 @@ const (
 	CodePackageUnknownKind = "package_unknown_kind"
 	// CodePackageUnsafeMedia 表示包内媒体的真实字节不在白名单内，或与 media.json 的声明不符；逐条列出。
 	CodePackageUnsafeMedia = "package_unsafe_media"
+	// CodePackageQuotaExceeded 表示导入新增媒体会超出导入者配额；沿用上传链的稳定 code
+	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。
+	CodePackageQuotaExceeded = "media_quota_exceeded"
 )
 
 // PackageError 是带稳定 code 的卡组包错误。

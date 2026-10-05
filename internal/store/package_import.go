@@ -57,6 +57,12 @@ type PackageImportOptions struct {
 	AllowOthersProgress bool
 	// SkipMissingMedia=true 时缺失媒体只计数并继续；默认 false（缺媒体即失败并列出清单）。
 	SkipMissingMedia bool
+	// MediaQuotaBytes 是导入者当前生效的每用户媒体总量配额（字节）；0 表示不限。
+	//
+	// 包内新增媒体字节（按 sha256 去重、扣除导入者已计费的 sha）计入**导入者**配额，
+	// 超限整包失败、不留部分媒体（F15）。取值由调用方从 media.ResolveUserQuotaBytes 解析后传入，
+	// 保证 web / REST / MCP / CLI 四条入口只有一处口径。
+	MediaQuotaBytes int64
 	// MediaRoot 是媒体字节落盘根目录；为空表示不落盘媒体（只在需要时）。
 	MediaRoot string
 	// NewDeckName 可选覆盖 new_deck 的卡组名。
@@ -221,6 +227,12 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	// 媒体以真实字节为准做白名单与声明交叉校验；放在事务之前，dry_run 与真实导入同样被拒，
 	// 且任何文件都还没落盘（F9）。
 	if err := validatePackageMedia(pkg); err != nil {
+		return nil, err
+	}
+
+	// F15：导入新增的媒体字节计入**导入者**配额，超限整包失败。检查同样放在事务与任何
+	// 写盘之前，因此被拒时库里没有卡组/卡/媒体行，磁盘上也没有字节。
+	if err := checkImportMediaQuota(ctx, s.db, actorUserID, pkg, opts.MediaQuotaBytes); err != nil {
 		return nil, err
 	}
 
@@ -400,6 +412,36 @@ func validatePackageMedia(pkg *packageModel) error {
 	// 逐条按字典序，保证同一包每次报错顺序一致。
 	sort.Strings(entries)
 	return &PackageError{Code: CodePackageUnsafeMedia, Message: "package media failed validation", Entries: entries}
+}
+
+// checkImportMediaQuota 在写任何文件与数据库行之前，检查导入新增媒体是否超出导入者配额。
+//
+// 计量口径与上传链（internal/store.UserMediaUsage）一致：
+//   - 已用量 = 该用户 note 引用到的媒体按 sha256 去重求和；
+//   - 本次新增 = 包内媒体里该用户**尚未计费**的 sha 的字节之和（同一 blob 已计费则不重复收费，
+//     与上传端「同 sha 新增量为 0」同规）。
+//
+// quota<=0 表示不限，直接放行。超限返回 CodePackageQuotaExceeded，调用方在事务之前返回，
+// 因此不会留下任何卡组/卡/媒体行或磁盘文件。
+func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, pkg *packageModel, quota int64) error {
+	if quota <= 0 {
+		return nil
+	}
+	usage, err := UserMediaUsage(ctx, db, actorUserID)
+	if err != nil {
+		return fmt.Errorf("import package: media usage: %w", err)
+	}
+	var extra int64
+	for sha, raw := range pkg.MediaRaw {
+		if usage.Sha256[sha] {
+			continue
+		}
+		extra += int64(len(raw))
+	}
+	if usage.Bytes+extra <= quota {
+		return nil
+	}
+	return &PackageError{Code: CodePackageQuotaExceeded, Message: "package media would exceed this user's media quota"}
 }
 
 // importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。

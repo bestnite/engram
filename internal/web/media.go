@@ -25,9 +25,10 @@ import (
 const (
 	settingKeyMediaAllowedMimes = "media_allowed_mimes"
 	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限（M2-13）。
-	settingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
+	// 与 envMediaUserQuotaBytes 一起指向 internal/media 的同一份解析（上传链与导入链共用）。
+	settingKeyMediaUserQuotaBytes = media.SettingKeyMediaUserQuotaBytes
 	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
-	envMediaUserQuotaBytes        = "MEDIA_USER_QUOTA_BYTES"
+	envMediaUserQuotaBytes        = media.EnvMediaUserQuotaBytes
 )
 
 // registerMediaRoutes 挂载媒体上传与读取（M2-8）。依赖未装配时跳过。
@@ -87,22 +88,9 @@ func (s *Server) allowedMimes(ctx context.Context) []string {
 
 // userMediaQuota 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
 // 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字（M2-13）。
+// 解析实现与卡组包导入链共用 internal/media.ResolveUserQuotaBytes，避免两处口径漂移。
 func (s *Server) userMediaQuota(ctx context.Context) int64 {
-	if raw := strings.TrimSpace(os.Getenv(envMediaUserQuotaBytes)); raw != "" {
-		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
-			return n
-		}
-	}
-	if s.db != nil {
-		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
-			if raw, ok := settings[settingKeyMediaUserQuotaBytes]; ok {
-				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
-					return n
-				}
-			}
-		}
-	}
-	return 0
+	return media.ResolveUserQuotaBytes(ctx, s.db)
 }
 
 // splitMimeList 把逗号分隔的 mime 串切成去空白、去空项的小写列表。

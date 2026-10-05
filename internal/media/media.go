@@ -93,6 +93,36 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 // 这里保留同名入口，避免改动大量调用点（F9）。
 func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
+// 每用户媒体总量配额（DESIGN.md §6.3、M2-13）的 settings 键与环境变量覆盖名。
+// Web 上传、REST/MCP/CLI 导入与 Web 导入共用下面这一份解析，四条入口只有一处口径。
+const (
+	SettingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
+	EnvMediaUserQuotaBytes        = "MEDIA_USER_QUOTA_BYTES"
+)
+
+// ResolveUserQuotaBytes 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
+// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字（M2-13）。
+//
+// 上传链（internal/web 的 checkMediaQuota）与卡组包导入链（store.ImportPackage 的
+// MediaQuotaBytes）都从这里取值，保证“新增媒体字节计入导入者配额”在所有入口一致。
+func ResolveUserQuotaBytes(ctx context.Context, db *gorm.DB) int64 {
+	if raw := strings.TrimSpace(os.Getenv(EnvMediaUserQuotaBytes)); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	if db != nil {
+		if settings, err := store.LoadSettings(ctx, db); err == nil {
+			if raw, ok := settings[SettingKeyMediaUserQuotaBytes]; ok {
+				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return 0
+}
+
 // Store 是本地媒体存储：root 是目录根，db 记录元数据。
 type Store struct {
 	root string

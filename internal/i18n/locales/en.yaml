@@ -2153,3 +2153,8 @@
   translation: "The package contains media of a disallowed type."
 - id: error.package_unsafe_media
   translation: "The package contains media of a disallowed type."
+# F15: deck package import media quota
+- id: error.media_quota_exceeded
+  translation: "The imported media would exceed your media quota."
+- id: import.error.media_quota_exceeded
+  translation: "The imported media would exceed your media quota."
