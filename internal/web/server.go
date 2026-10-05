@@ -269,6 +269,9 @@ func New(addr string, deps Deps) (*Server, error) {
 		return nil, fmt.Errorf("web: set trusted proxies: %w", err)
 	}
 	router.Use(requestLogger(logger), recovery(logger))
+	// 安全响应头（F26）挂在全局，覆盖静态资源、/media、/api/v1、/mcp 与 404 回退；
+	// 放在 session/locale 之前，保证任何提前中止的响应也带齐这组头。CSP 只上报不阻断。
+	router.Use(securityHeaders())
 	// 会话中间件先于语言中间件：个人设置里的语言（M1-8）要参与 i18n 解析优先级，
 	// 而它只能从已解析的会话用户读取。会话解析本身不依赖语言，先后次序安全。
 	if s.sessions != nil {
