@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -218,5 +219,36 @@ func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 	}
 	if code := getWithCookies(t, srv, "/auth/oidc/callback?code=x&state=y", nil).Code; code != http.StatusNotFound {
 		t.Errorf("GET /auth/oidc/callback while disabled = %d, want 404", code)
+	}
+}
+
+// TestOIDCStartRejectsWhenPendingTableFull 是 F17 的验收：未完成的 state 表达到上限后，
+// 新的 OIDC 发起必须被拒绝（429 + 本地化提示），而不是继续往表里堆（内存 DoS）。
+func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
+	srv, db, _, _, _ := newNotesServer(t)
+	p := newStubOIDC(t)
+	seedOIDC(t, srv, db, p, auth.PolicyOpen)
+
+	// 预置一批**未过期**的待完成登录，把内存表填满（远超上限）。
+	for i := 0; i < 5000; i++ {
+		srv.oidc.PutPending(fmt.Sprintf("pre-seeded-%d", i), auth.PendingAuth{
+			Nonce:       "nonce",
+			Verifier:    "verifier",
+			RedirectURI: "http://example.com/auth/oidc/callback",
+			ExpiresAt:   time.Now().UTC().Add(time.Hour),
+		})
+	}
+
+	rec := getWithCookies(t, srv, "/auth/oidc/start", nil)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("GET /auth/oidc/start with a full pending table = %d, want 429 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), "请求过于频繁") {
+		t.Errorf("rejection page does not show the localized rate-limit message; body = %s", snippet(rec.Body.String()))
+	}
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == srv.sessions.CookieName() {
+			t.Fatal("rejected OIDC start unexpectedly set a session cookie")
+		}
 	}
 }
