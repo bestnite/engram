@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,6 +124,11 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 		name := f.Name
 		if strings.HasSuffix(name, "/") || f.FileInfo().IsDir() {
 			continue
+		}
+		// F22：同名条目（重复路径）必须拒绝。zip 允许同一名字出现多次，而这里按名字存入
+		// map——若不拦，后一个条目会静默覆盖前一个，包因此能藏一个与索引不符的覆盖层。
+		if _, dup := out[name]; dup {
+			return nil, &PackageError{Code: CodePackageBadFormat, Message: "archive contains a duplicate entry", Entries: []string{name}}
 		}
 		if f.Mode()&os.ModeSymlink != 0 {
 			return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "symlink entries are not allowed", Entries: []string{name}}
@@ -347,9 +354,22 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 			if unsafeZipName(entry.Path) || !strings.HasPrefix(entry.Path, "media/") {
 				return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "media path is unsafe", Entries: []string{entry.Path}}
 			}
-			if raw, ok := entries[entry.Path]; ok {
-				pkg.MediaRaw[sha] = raw
+			// F22：文件名必须是 `<sha256>.<ext>`，否则声明的 sha 与条目名对不上（索引与内容脱钩）。
+			base := path.Base(entry.Path)
+			if !strings.HasPrefix(base, sha+".") || len(base) <= len(sha)+1 {
+				return nil, &PackageError{Code: CodePackageBadFormat, Message: "media entry name does not match the declared sha256", Entries: []string{entry.Path}}
 			}
+			raw, ok := entries[entry.Path]
+			if !ok {
+				continue
+			}
+			// F22：声明的 sha256 必须等于字节的真实 sha256，挡住"假 sha"（声明与内容不符）。
+			// 这一校验在任何落盘/写库之前完成，因此被拒的包零副作用。
+			sum := sha256.Sum256(raw)
+			if hex.EncodeToString(sum[:]) != sha {
+				return nil, &PackageError{Code: CodePackageBadFormat, Message: "media bytes do not match the declared sha256", Entries: []string{entry.Path}}
+			}
+			pkg.MediaRaw[sha] = raw
 		}
 	}
 	return pkg, nil
