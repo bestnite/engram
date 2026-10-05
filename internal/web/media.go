@@ -23,11 +23,9 @@ import (
 // 环境变量 > settings 表 > 内置默认，与 internal/config 的优先级一致；这里直接读
 // settings 表以便管理员改完立即生效，无需重启。
 const (
-	settingKeyMediaMaxBytes     = "media_max_bytes"
 	settingKeyMediaAllowedMimes = "media_allowed_mimes"
 	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限（M2-13）。
 	settingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
-	envMediaMaxBytes              = "MEDIA_MAX_BYTES"
 	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
 	envMediaUserQuotaBytes        = "MEDIA_USER_QUOTA_BYTES"
 )
@@ -64,23 +62,10 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// uploadLimit 解析生效的上传字节上限：环境变量 > settings 表 > 默认 10 MiB。
+// uploadLimit 解析生效的上传字节上限：与 REST 卡组包导入共用 internal/media 的同一实现
+// （环境变量 > settings 表 > 默认 10 MiB），保证两条入口只有一处口径。
 func (s *Server) uploadLimit(ctx context.Context) int64 {
-	if raw := strings.TrimSpace(os.Getenv(envMediaMaxBytes)); raw != "" {
-		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
-			return n
-		}
-	}
-	if s.db != nil {
-		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
-			if raw, ok := settings[settingKeyMediaMaxBytes]; ok {
-				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
-					return n
-				}
-			}
-		}
-	}
-	return media.DefaultMaxBytes()
+	return media.ResolveMaxBytes(ctx, s.db)
 }
 
 // allowedMimes 解析生效的 mime 白名单：环境变量 > settings 表 > 默认白名单。
