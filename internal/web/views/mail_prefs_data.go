@@ -2,7 +2,7 @@ package views
 
 // 本文件是 M1-18 邮件偏好页（/settings/notifications）的渲染数据。
 // 所有面向用户的文字都由 handler 从语言包取好后放入这些字段，模板只做排版
-// （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
+// （AGENTS.md §2.1）。
 
 // MailPrefsData 是邮件偏好页的渲染数据。
 type MailPrefsData struct {

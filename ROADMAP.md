@@ -890,7 +890,7 @@ into a release milestone.
   Gitea instance, chosen over a `github.com/<account>/engram` path. The rename ran as a single
   exclusive lane: every import, the binary name, the container build file, CI, scripts and all
   documentation. The module path is the one documented exception to the sanitisation rule
-  (`AGENTS.md` §2.2); its host is registered in `scripts/checks/allowed-hosts.txt`.
+  (`AGENTS.md` §2.2).
 - [x] **B-2 LICENSE** — decided (2026-10-02): **AGPL-3.0**. It matches the requirement that nobody may
   offer this as a *closed-source* SaaS while keeping the project open source. Recorded with the
   caveat that AGPL does not forbid charging: a competitor may still host it commercially, they simply

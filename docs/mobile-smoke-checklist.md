@@ -142,16 +142,6 @@ PASS
 ok  	git.nite07.com/nite/engram/internal/web	1.271s
 ```
 
-**脱敏与模板文案检查**（本轮提交前门槛）：
-
-```
-$ bash scripts/checks/no-private-data.sh
-[sanitize] OK: no real domains, host names, private addresses, emails or credentials found.
-
-$ bash scripts/checks/no-template-literals.sh
-[template-literals] OK: no hardcoded user-facing text in N template(s).
-```
-
 > 说明：上述三项证明的是**代码/脚本层**的行为。真机项（A2–A7、A9、B4–B6、C2–C4、D2–D8）**不在**这些证据的覆盖范围内，必须由 nite 在真机上执行后填写。
 
 ---

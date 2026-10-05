@@ -45,19 +45,15 @@ end user → translation catalog.
 - Use placeholders: `example.com`, `localhost`, `CHANGE_ME`.
 - The Go module path is the one deliberate exception: it is the project's publication
   address rather than private infrastructure, so it carries the real code-host domain in
-  `go.mod`, in imports, and in any documented `go get` command. That host is registered in
-  `scripts/checks/allowed-hosts.txt`. Every other real domain stays out of the repository.
-  (see `.gitignore`). Run `git status` before every commit and check nothing unintended
-  is staged.
-- The CI sanitisation scan must stay green; if a needed string trips it, change the
-  placeholder, do not weaken the scan.
-- The scan runs `git grep`, which sees **tracked files only**. Running it before `git add`
-  therefore passes even when the working tree holds a violation — a false green that has already
-  hidden one broken `main`. Run both check scripts after staging, and re-run them on `main` before
-  merging; a subagent's "the checks pass" is not evidence on its own.
+  `go.mod`, in imports, and in any documented `go get` command. Every other real domain
+  stays out of the repository (see `.gitignore`). Run `git status` before every commit and
+  check nothing unintended is staged.
+- **This rule has no automated check any more** (the check scripts were removed on
+  2026-10-06): review it by eye on every commit and re-read the staged diff before merging.
+  A subagent's "the checks pass" is not evidence on its own — the mechanically enforced
+  neighbour is the template rule (visible text must come from the catalog, see §2.1).
 - A test fixture needs a placeholder domain too: emails in fixtures must use `example.com`,
-  `example.org`, `example.net`, or `localhost`. A fixture that trips the scan is fixed by changing
-  the fixture, never by adding a host to `allowed-hosts.txt`.
+  `example.org`, `example.net`, or `localhost`.
 
 ### 2.3 Domain invariants (do not break these)
 

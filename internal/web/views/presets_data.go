@@ -2,7 +2,7 @@ package views
 
 // 本文件是 M9-4 预设页（/presets）与参数优化卡片的渲染数据。
 // 所有面向用户的文字都由 handler 从语言包取好后放入这些字段，模板只做排版
-// （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
+// （AGENTS.md §2.1）。
 
 // PresetFormLabels 是新建/编辑预设表单的本地化标签集合（M3-14）。
 // 列表页的新建对话框与每张卡片的编辑对话框共用同一组标签，避免两处文案漂移。

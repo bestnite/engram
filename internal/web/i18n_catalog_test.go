@@ -13,7 +13,7 @@ import (
 
 // 本文件把 i18n 门禁加严到 Go 侧（M8-3）。
 //
-// scripts/checks/no-template-literals.sh 只管模板里的硬编码文案；它看不见 handler 里
+// 模板层只能保证模板里没有硬编码文案；它看不见 handler 里
 // `loc.T("...")` 引用的 key 是否真的存在。go-i18n 缺 key 时只在运行期记一条日志并回退成
 // key 本身，页面上会出现裸 key —— 只有真的点到那个页面才会发现。这个测试在编译期就拦住：
 // 把 internal/web 里所有静态书写的翻译 key 与两份语言包逐一对照，缺一个即失败。

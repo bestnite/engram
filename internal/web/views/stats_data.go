@@ -8,7 +8,7 @@ package views
 // （AGENTS.md §2.1、DESIGN.md §9）。
 //
 // 所有面向用户的文字都由 handler 从语言包取好；模板里没有硬编码文案
-// （scripts/checks/no-template-literals.sh 会强制这一点）。
+// （AGENTS.md §2.1）。
 
 // StatsRow 是「标签 + 数值 + 可选柱状条」的一行，用于复习量、到期预测、留存、耗时、
 // 打卡、判分来源这些标量指标。

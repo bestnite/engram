@@ -21,7 +21,7 @@ var (
 )
 
 // oidcPlaceholderEmailSuffix 是无 email claim 时给 OIDC 账号合成的占位邮箱后缀。
-// localhost 是仓库允许的占位值（scripts/checks/no-private-data.sh），不会误报为真实域名；
+// localhost 是仓库允许的占位值，绝不写真实域名；
 // 合成邮箱保证 users.email 的 NOT NULL + UNIQUE 约束成立，且不暴露任何外部主机名。
 const oidcPlaceholderEmailSuffix = "@localhost"
 

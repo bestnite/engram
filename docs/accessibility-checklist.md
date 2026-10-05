@@ -111,15 +111,6 @@ PASS
 ok  	git.nite07.com/nite/engram/internal/web	1.273s
 ```
 
-**脱敏与模板文案检查（提交前门槛，`git add` 之后运行）**：
-
-```
-$ bash scripts/checks/no-template-literals.sh
-[template-literals] OK: no hardcoded user-facing text in 21 template(s).
-$ bash scripts/checks/no-private-data.sh
-[sanitize] OK: no real domains, host names, private addresses, emails or credentials found.
-```
-
 > 说明：上述证据证明的是**代码 / 渲染 HTML / 静态资源**层的结论。人工项（R1、R2/R3/R8 的手感、R7/R9 的可见度与读屏、D1/D2、S1/S3/S4、E2 的读屏）**不在**证据覆盖范围内，必须由 nite 手动执行后填写。
 
 ---

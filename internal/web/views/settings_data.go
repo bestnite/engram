@@ -2,7 +2,7 @@ package views
 
 // 本文件是 M1-8 个人设置页（/settings）的渲染数据。
 // 所有面向用户的文字都由 handler 从语言包取好后放入这些字段，模板只做排版
-// （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
+// （AGENTS.md §2.1）。
 
 // SettingOption 是下拉框里的一个选项（语言、时区候选）。
 type SettingOption = SelectOption

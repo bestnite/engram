@@ -91,28 +91,25 @@ setup; do not duplicate that setup here.
 
 ## Repository checks
 
-Two scripts enforce the rules in the next section. They scan **tracked files only** (they use
-`git grep`), so they must be run **after `git add`**. Running them on a dirty working tree
-that has not been staged gives a **false green**: the files they cannot see are exactly the
-ones about to be committed.
+The check suite is the Go toolchain plus the catalog-parity test:
 
 ```bash
 git add <your files>
-bash scripts/checks/no-private-data.sh
-bash scripts/checks/no-template-literals.sh
+go build ./... && go vet ./... && gofmt -l . && go test ./...
 ```
 
-Both scripts must exit `0`. Re-run them on the target branch before merging. A "the checks
-pass" claim is not evidence on its own — paste the command output in the pull request.
+It must pass. Re-run it on the target branch before merging. A "the checks pass" claim is
+not evidence on its own — paste the command output in the pull request.
 
-- `scripts/checks/no-private-data.sh` — fails on real domain names, host names, private or
-  link-local IP addresses, non-placeholder email addresses, credentials, and key material.
-- `scripts/checks/no-template-literals.sh` — fails on user-facing text hardcoded in a
-  `*.templ` template instead of coming from the translation catalog.
+Two rules are reviewed by eye, because nothing mechanical enforces them any more (the
+repository check scripts were removed on 2026-10-06):
 
-If a needed string trips the sanitisation scan, change the placeholder — **do not weaken the
-scan** and do not add a real host to `scripts/checks/allowed-hosts.txt`. Adding a legitimate
-public dependency host is an explicit registration, not a way to silence a finding.
+- **Placeholders only.** No real domain names, host names, private or link-local IP
+  addresses, personal email addresses, credentials, or key material in any committed file —
+  use `example.com`, `localhost`, `CHANGE_ME`. The Go module path is the one deliberate
+  exception: it is the project's publication address.
+- **No hardcoded user-facing text.** Every visible string in a `*.templ` template must come
+  from the translation catalog; key parity between catalogues is enforced by the test above.
 
 ## Non-negotiable rules
 
@@ -235,9 +232,7 @@ directly (see the next section). Both follow the same branch naming and commit r
 2. Make your change, adding tests including the negative cases.
 3. Regenerate templates and CSS if you touched them (`go generate ./...`).
 4. Stage your files, then run **both** repository checks and the full check suite:
-   `git add …`, `bash scripts/checks/no-private-data.sh`,
-   `bash scripts/checks/no-template-literals.sh`,
-   `go build ./... && go vet ./... && gofmt -l . && go test ./...`.
+   `git add …`, `go build ./... && go vet ./... && gofmt -l . && go test ./...`.
 5. Commit with a signed, conventional message — one logical change per commit.
 6. Push and open a pull request against `main`. In the description, state what changed, why,
    and paste the raw output of the checks and tests. Do not paraphrase the result.

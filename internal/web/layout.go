@@ -12,7 +12,7 @@ import (
 )
 
 // repositoryURL 是页脚源码仓库链接。它是公开托管地址，属模块路径例外（AGENTS.md §2.2），
-// 已登记在 scripts/checks/allowed-hosts.txt；绝不写进模板，因为模板禁止硬编码可见文案。
+// 已登记在 AGENTS.md §2.2 的模块路径例外里；绝不写进模板，因为模板禁止硬编码可见文案。
 const repositoryURL = "https://git.nite07.com/nite/engram"
 
 // languageRoute 是已登录用户提交页头语言切换的端点。切换语言要写 users.locale，
@@ -25,8 +25,8 @@ const languageRoute = "/settings/locale"
 // 这里只做「首帧之前必须成立」的最小集合——暗色类、color-scheme、画布底色与 theme-color，
 // 用内联 style 设底色，任何样式表都抢不到这个竞态。颜色值与 pwa.js 的 applyTheme 保持一致。
 // 常量自带 <script> 标签、由模板 @rawHTML 原样输出：templ 把 <script> 当纯文本元素，
-// 写在其内部的 @rawHTML(...) 会被当成字面文本；同时模板内联 JS 也会被 no-template-literals
-// 误判为硬编码用户文案（decks.templ 的 noscriptDialogStyle 同理）。
+// 写在其内部的 @rawHTML(...) 会被当成字面文本；模板里也不放内联 JS，所以这段引导脚本作为
+// 常量经 @rawHTML 输出（decks.templ 的 noscriptDialogStyle 同理）。
 const themeBootstrap = `<script>(function(){var s;try{s=localStorage.getItem("engram-theme")}catch(e){}var d=s==="dark"||(s!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";r.style.backgroundColor=d?"#09090b":"#f8fafc";var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",d?"#09090b":"#ffffff")}})();</script>`
 
 // decorateLayout 补齐所有页面外壳共有的字段：页脚项目名与仓库链接、页头语言切换下拉、

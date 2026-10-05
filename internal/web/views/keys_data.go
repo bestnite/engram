@@ -2,7 +2,7 @@ package views
 
 // 本文件是 M4-10「我的 API Key」页（/settings/keys）的渲染数据。
 // 所有面向用户的文字都由 handler 从语言包取好后放入这些字段，模板只做排版
-// （AGENTS.md §2.1；scripts/checks/no-template-literals.sh 会强制这一点）。
+// （AGENTS.md §2.1）。
 
 // ScopeOption 是创建表单里的一个 scope 复选框。
 type ScopeOption struct {

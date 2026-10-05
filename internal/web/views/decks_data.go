@@ -73,6 +73,6 @@ type DeckListData struct {
 }
 
 // noscriptDialogStyle 让新建卡组对话框在禁用 JavaScript 时静态展开、可直接填写（M8-7）。
-// 之所以放在 Go 常量而非模板内联 <style>：no-template-literals 检查把模板里任何非空字母串
-// 都当作硬编码用户文案，CSS 选择器会被误判；渲染产物仍是对话框内的 <style>。
+// 之所以放在 Go 常量而非模板内联 <style>：模板只做排版、不内联样式块，CSS 选择器与模板文案
+// 规则混在一起也难维护；渲染产物仍是对话框内的 <style>。
 const noscriptDialogStyle = `<style>#new-deck-dialog{display:block;position:static;width:auto;max-width:none;margin:0;padding:0;border:0;background:transparent}#new-deck-dialog [data-dialog-close]{display:none}</style>`

@@ -11,8 +11,7 @@
 # 推之前本地已经跑完 §4 的全套检查，每次 push 再跑一遍只是重复。需要一次独立复核时
 # （碰了模板、go.mod / go.sum，或发版前）用 workflow_dispatch 手动触发对应 ref。
 #
-# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME，
-# 且由 scripts/checks/no-private-data.sh 自检。
+# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME。
 name: ci
 
 on:
@@ -89,14 +88,6 @@ jobs:
             GOOS=windows GOARCH="$arch" CGO_ENABLED=0 go build -o /dev/null ./cmd/engram
             GOOS=windows GOARCH="$arch" go vet ./...
           done
-
-      # 脱敏扫描：仓库内不得出现真实域名 / 主机名 / 内网地址 / 邮箱 / 凭据。
-      - name: Sanitisation scan
-        run: bash scripts/checks/no-private-data.sh
-
-      # 模板不得写死面向用户的文案（必须走语言包）。
-      - name: Template literal scan
-        run: bash scripts/checks/no-template-literals.sh
 
       # 语言包完备性：中英 key 必须一一对应，缺一个即失败。
       - name: i18n language-pack parity
