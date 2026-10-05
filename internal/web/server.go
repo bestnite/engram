@@ -62,6 +62,9 @@ type Deps struct {
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
 	LoginLimiter *auth.LoginLimiter
+	// AnonLimiter 对 /register 与 /forgot-password 这类匿名入口按 IP 与目标邮箱做固定
+	// 窗口限流（5 次 / 15 分钟）；为空时这两个入口不做限流。
+	AnonLimiter *auth.AnonymousLimiter
 	// TOTP 是本地账号的可选二次因素（M1-16）；为空时登录只校验密码，不暴露 TOTP 相关路由。
 	TOTP *auth.TOTPService
 	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
@@ -118,6 +121,8 @@ type Server struct {
 	access       *auth.DeckAccess
 	auditor      *auth.Auditor
 	loginLimiter *auth.LoginLimiter
+	// anonLimiter 限流 /register 与 /forgot-password 的匿名请求（IP + 目标邮箱双维度）。
+	anonLimiter *auth.AnonymousLimiter
 	// totp 是本地账号的二次因素服务（M1-16）；为空时登录不含第二步。
 	totp           *auth.TOTPService
 	bootstrapEmail string
@@ -203,6 +208,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		presets:        deps.Presets,
 		auditor:        deps.Auditor,
 		loginLimiter:   deps.LoginLimiter,
+		anonLimiter:    deps.AnonLimiter,
 		totp:           deps.TOTP,
 		bootstrapEmail: deps.BootstrapAdminEmail,
 		api:            deps.API,

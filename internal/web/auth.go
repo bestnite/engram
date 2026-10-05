@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -184,6 +185,20 @@ func (s *Server) loginSubmit(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
+// anonRateLimited 报告一次匿名入口请求是否应被限流拒绝，并在拒绝时补 Retry-After 响应头。
+// /register 与 /forgot-password 共用同一套 "IP + 目标邮箱 各 5 次 / 15 分钟" 的双维度计数
+// （DESIGN.md §4.3）。未装配限流器时一律放行，与 loginLimiter 的装配约定一致。
+func (s *Server) anonRateLimited(c *gin.Context, email string) bool {
+	if s.anonLimiter == nil {
+		return false
+	}
+	if s.anonLimiter.Allow(c.ClientIP(), email) {
+		return false
+	}
+	c.Header("Retry-After", strconv.Itoa(int(auth.DefaultAnonRateWindow.Seconds())))
+	return true
+}
+
 // registerPage 渲染自助注册表单；?invite=<token> 时把邀请 token 带进表单（M1-7）。
 func (s *Server) registerPage(c *gin.Context) {
 	loc, ok := s.localizer(c)
@@ -261,6 +276,13 @@ func (s *Server) registerSubmit(c *gin.Context) {
 	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
 	display := strings.TrimSpace(c.PostForm("display_name"))
 	password := c.PostForm("password")
+	// 匿名入口限流（DESIGN.md §4.3）：与 /forgot-password 共用同一套 IP + 目标邮箱双维度固定
+	// 窗口计数（各 5 次 / 15 分钟），任一超限即拒。放在表单校验与任何 DB 动作之前：被拒的请求
+	// 不建号、不写审计、不发验证邮件；对外统一返回 429 + error.rate_limited。
+	if s.anonRateLimited(c, email) {
+		s.renderRegister(c, loc, http.StatusTooManyRequests, inviteToken, loc.T("error.rate_limited"))
+		return
+	}
 	if msg := validateRegisterInput(loc, username, email, password); msg != "" {
 		s.renderRegister(c, loc, http.StatusBadRequest, inviteToken, msg)
 		return

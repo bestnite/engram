@@ -178,3 +178,80 @@ func (l *LoginLimiter) Reset(username, ip string) {
 	delete(l.buckets, accountKey(username))
 	delete(l.buckets, ipKey(ip))
 }
+
+// 匿名入口限流的默认参数（DESIGN.md §4.3）：/forgot-password 与 /register 这类登录前入口
+// 会被匿名轰炸式触发发信，按 IP 与目标邮箱双维度做固定窗口限流。阈值由 nite 拍板：
+// 每个维度 5 次 / 15 分钟。
+const (
+	DefaultAnonRateLimit  = 5
+	DefaultAnonRateWindow = 15 * time.Minute
+)
+
+// anonBucket 是固定窗口内一个键（IP 或邮箱）的请求计数。
+type anonBucket struct {
+	count int
+	start time.Time
+}
+
+// AnonymousLimiter 对匿名入口按「请求方 IP」与「目标邮箱」双维度做固定窗口计数，
+// 任一维度在一个窗口内超过上限即拒绝。
+//
+// 与 LoginLimiter 同属一类形态：状态放内存（单实例部署，DESIGN.md §11），时钟可注入以便
+// 测试断言窗口过期而不真实等待。区别在于这里不看结果对不对，只按请求次数封顶——因为
+// 注册与找回密码是合法请求也可能高频的入口，无法用「失败一次记一次」来衡量滥用。
+type AnonymousLimiter struct {
+	mu      sync.Mutex
+	buckets map[string]*anonBucket
+	limit   int
+	window  time.Duration
+	now     func() time.Time
+}
+
+// NewAnonymousLimiter 构造限流器并补默认值；now 可注入，nil 时用 UTC 挂钟。
+func NewAnonymousLimiter(limit int, window time.Duration, now func() time.Time) *AnonymousLimiter {
+	l := &AnonymousLimiter{
+		buckets: make(map[string]*anonBucket),
+		limit:   limit,
+		window:  window,
+		now:     now,
+	}
+	if l.limit <= 0 {
+		l.limit = DefaultAnonRateLimit
+	}
+	if l.window <= 0 {
+		l.window = DefaultAnonRateWindow
+	}
+	if l.now == nil {
+		l.now = func() time.Time { return time.Now().UTC() }
+	}
+	return l
+}
+
+// allowLocked 记一次某维度的请求并报告是否仍在配额内（调用方持锁）。
+// 空值不建桶：没有区分度的键只会互相污染（与 RecordFailure 的空键处理一致）。
+func (l *AnonymousLimiter) allowLocked(prefix, value string, now time.Time) bool {
+	if value == "" {
+		return true
+	}
+	key := prefix + value
+	b, ok := l.buckets[key]
+	if !ok || now.Sub(b.start) >= l.window {
+		l.buckets[key] = &anonBucket{count: 1, start: now}
+		return true
+	}
+	b.count++
+	return b.count <= l.limit
+}
+
+// Allow 记一次匿名入口请求并报告是否放行：IP 与目标邮箱任一超限都拒绝。
+//
+// 两个维度都会计数（与固定窗口限流器的惯例一致）：一旦某个维度进入超限状态，在窗口过期
+// 前它都会继续被拒。邮箱先按小写去空白归一，避免大小写差异绕过邮箱维度的计数。
+func (l *AnonymousLimiter) Allow(ip, email string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	okIP := l.allowLocked("ip:", strings.TrimSpace(ip), now)
+	okEmail := l.allowLocked("email:", strings.ToLower(strings.TrimSpace(email)), now)
+	return okIP && okEmail
+}

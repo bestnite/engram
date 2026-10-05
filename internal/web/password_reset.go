@@ -57,18 +57,7 @@ func (s *Server) forgotPasswordPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data := views.SecurityFormData{
-		Layout:      s.authLayout(c, loc, "mail.reset.title"),
-		Heading:     loc.T("mail.reset.heading"),
-		Intro:       loc.T("mail.reset.intro"),
-		Action:      "/forgot-password",
-		CSRF:        auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
-		ShowEmail:   true,
-		EmailLabel:  loc.T("mail.reset.email_label"),
-		SubmitLabel: loc.T("mail.reset.submit"),
-		AltLabel:    loc.T("mail.reset.back_login"),
-		AltHref:     "/login",
-	}
+	data := s.forgotPasswordForm(c, loc)
 	switch {
 	case !s.securityMailReady():
 		// 未配置：明确说明原因，不给出一个按了也没反应的按钮（DESIGN.md §4.7）。
@@ -82,10 +71,38 @@ func (s *Server) forgotPasswordPage(c *gin.Context) {
 	s.renderSecurityForm(c, loc, http.StatusOK, data)
 }
 
+// forgotPasswordForm 构造找回密码表单的公共字段；Notice / ErrorMessage / ShowForm 由调用方补。
+// 页面与限流拒绝页共用它，避免两处字段漂移。
+func (s *Server) forgotPasswordForm(c *gin.Context, loc *i18n.Localizer) views.SecurityFormData {
+	return views.SecurityFormData{
+		Layout:      s.authLayout(c, loc, "mail.reset.title"),
+		Heading:     loc.T("mail.reset.heading"),
+		Intro:       loc.T("mail.reset.intro"),
+		Action:      "/forgot-password",
+		CSRF:        auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
+		ShowEmail:   true,
+		EmailLabel:  loc.T("mail.reset.email_label"),
+		SubmitLabel: loc.T("mail.reset.submit"),
+		AltLabel:    loc.T("mail.reset.back_login"),
+		AltHref:     "/login",
+	}
+}
+
 // forgotPasswordSubmit 处理重置请求：找到账号就签发一次性令牌并发信，
 // 但无论账号是否存在都回到同一页（sent），避免账号枚举。
 func (s *Server) forgotPasswordSubmit(c *gin.Context) {
-	if _, ok := s.localizer(c); !ok {
+	loc, ok := s.localizer(c)
+	if !ok {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
+	// 匿名入口限流（DESIGN.md §4.3）：按 IP 与目标邮箱双维度固定窗口（各 5 次 / 15 分钟），
+	// 任一超限即拒。检查在任何业务动作之前：被拒的请求不入 outbox、不写业务表。对外统一返回
+	// 429 + error.rate_limited，且响应不因目标邮箱是否存在而不同，不引入账号枚举旁路。
+	if s.anonRateLimited(c, email) {
+		data := s.forgotPasswordForm(c, loc)
+		data.ErrorMessage = loc.T("error.rate_limited")
+		s.renderSecurityForm(c, loc, http.StatusTooManyRequests, data)
 		return
 	}
 	if !s.securityMailReady() {
@@ -94,7 +111,6 @@ func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
 	if email != "" {
 		if u, err := s.users.ByEmail(ctx, email); err == nil {
 			s.issuePasswordReset(c, u)
