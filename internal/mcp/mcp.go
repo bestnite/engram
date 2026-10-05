@@ -131,7 +131,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	})
 	srv.AddReceivingMiddleware(s.filterTools(id))
 
-	addTool(srv, id, "list_decks", "List the caller's decks.", s.listDecks)
+	addTool(srv, id, "list_decks", "List the decks visible to the caller (owned, granted, or public).", s.listDecks)
 	addTool(srv, id, "create_deck", "Create an empty deck (name required; visibility defaults to private; preset_id 0 uses the caller's Default preset).", s.createDeck)
 	addTool(srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
