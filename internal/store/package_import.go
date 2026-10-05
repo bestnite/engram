@@ -531,6 +531,8 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		return d.ID, nil
 	case "into_deck", "replace_deck":
+		// 调用方（REST/MCP/Web/CLI）必须已对目标卡组完成判权：合并需 editor，
+		// 替换是破坏性操作需 owner。store 层不重复判权，也无 actor 角色可判。
 		var d Deck
 		if err := tx.WithContext(ctx).First(&d, "id = ?", targetDeckID).Error; err != nil {
 			return 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck not found"}
