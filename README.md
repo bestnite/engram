@@ -59,13 +59,11 @@ The container image defaults to SQLite, runs migrations at startup, and stores e
 `/data`.
 
 ```bash
-docker build -t engram:local .
-
 docker run -d --name engram -p 8080:8080 \
   -e SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}" \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
   -v engram-data:/data \
-  engram:local
+  docker.io/nite07/engram:latest
 ```
 
 Open `http://localhost:8080/`; the first visit on a fresh instance goes to `/setup` to create the
@@ -81,8 +79,8 @@ admin account.
 
 ## Deploying with PostgreSQL
 
-PostgreSQL is the default deployment database. Build the image from `Dockerfile`, or run the binary
-directly with the same environment.
+PostgreSQL is the default deployment database. The published image works as-is; build from
+`Dockerfile` or run the binary directly if you prefer, with the same environment.
 
 ```bash
 docker run -d --name engram -p 8080:8080 \
@@ -93,7 +91,7 @@ docker run -d --name engram -p 8080:8080 \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
   -e AUTO_MIGRATE=0 \
   -v engram-media:/data/media \
-  engram:local
+  docker.io/nite07/engram:latest
 ```
 
 `BASE_URL` must use `https://` in production: its scheme decides the session cookie's `Secure` flag.

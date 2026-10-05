@@ -50,13 +50,11 @@ scope（`read`、`write`、`review`、`admin`），在浏览器的「设置」�
 容器镜像默认用 SQLite，启动时自动迁移，所有数据放在 `/data` 下。
 
 ```bash
-docker build -t engram:local .
-
 docker run -d --name engram -p 8080:8080 \
   -e SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -base64 32)}" \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
   -v engram-data:/data \
-  engram:local
+  docker.io/nite07/engram:latest
 ```
 
 打开 `http://localhost:8080/`。全新实例的首次访问会跳到 `/setup` 创建管理员账号。
@@ -70,7 +68,7 @@ docker run -d --name engram -p 8080:8080 \
 
 ## 用 PostgreSQL 部署
 
-PostgreSQL 是默认部署库。用 `Dockerfile` 构建镜像，或者直接跑二进制，环境变量一样。
+PostgreSQL 是默认部署库。发布镜像直接可用，也可以自己构建或直接跑二进制，环境变量一样。
 
 ```bash
 docker run -d --name engram -p 8080:8080 \
@@ -81,7 +79,7 @@ docker run -d --name engram -p 8080:8080 \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}" \
   -e AUTO_MIGRATE=0 \
   -v engram-media:/data/media \
-  engram:local
+  docker.io/nite07/engram:latest
 ```
 
 生产环境 `BASE_URL` 必须用 `https://`：它的 scheme 决定会话 cookie 的 `Secure` 标志。
