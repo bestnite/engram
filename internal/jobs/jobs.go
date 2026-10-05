@@ -368,7 +368,11 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 
 	startedAt := r.now()
 	if err := r.store.MarkRunning(ctx, job.ID, startedAt); err != nil {
+		// 标 running 失败也必须落终态：留在 queued 会被 Store.Active 当作在途作业，
+		// 让后续 Enqueue 永久返回 409，直到进程重启才被 RecoverStale 回收（M9-8 同源症状）。
+		// 错误文本点名失败的步骤，方便从 jobs.error 一眼定位。
 		r.logger.Error("mark job running failed", "job_id", job.ID, "error", err)
+		r.fail(ctx, job.ID, fmt.Sprintf("mark job running: %v", err), "")
 		return
 	}
 	r.setStage(ctx, job.ID, StageReadLogs)
