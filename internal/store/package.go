@@ -37,6 +37,8 @@ const (
 	CodePackageBadFormat   = "package_bad_format"
 	// CodePackageUnknownKind 表示包里有本实例不认识（或未注册）的题型；必须报错并逐条列出。
 	CodePackageUnknownKind = "package_unknown_kind"
+	// CodePackageUnsafeMedia 表示包内媒体的真实字节不在白名单内，或与 media.json 的声明不符；逐条列出。
+	CodePackageUnsafeMedia = "package_unsafe_media"
 )
 
 // PackageError 是带稳定 code 的卡组包错误。

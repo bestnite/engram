@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/mediatype"
 )
 
 // 卡组包导入（DESIGN.md §7.6、AGENTS.md M5-7）。
@@ -216,6 +218,12 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, &PackageError{Code: CodePackageUnknownKind, Message: "unknown card type", Entries: unknown}
 	}
 
+	// 媒体以真实字节为准做白名单与声明交叉校验；放在事务之前，dry_run 与真实导入同样被拒，
+	// 且任何文件都还没落盘（F9）。
+	if err := validatePackageMedia(pkg); err != nil {
+		return nil, err
+	}
+
 	username, _ := s.lookupUsername(ctx, actorUserID)
 
 	report := &PackageImportReport{Target: targetKind, DryRun: opts.DryRun, Errors: []PackageImportError{}}
@@ -350,6 +358,50 @@ func missingMediaRefs(pkg *packageModel) ([]string, error) {
 	return missing, nil
 }
 
+// headBytes 取文件头，最多 mediatype.HeadBytes 字节；判定所需长度以内有多少给多少。
+func headBytes(raw []byte) []byte {
+	if len(raw) > mediatype.HeadBytes {
+		return raw[:mediatype.HeadBytes]
+	}
+	return raw
+}
+
+// validatePackageMedia 在写任何文件之前，用真实字节判定包内每份媒体的类型：
+// 不在白名单内即拒，且与 media.json 的声明交叉校验——声明与字节不符即拒。
+//
+// 为什么放在 store 层而不是复用 internal/media.Save：media 包已 import store，
+// 反向依赖会成环；Save 还用自己那条数据库连接，绕开导入事务，在 SQLite 上会造成
+// SQLITE_BUSY。判定逻辑本身在叶子包 mediatype 里与上传链共用，这里只做包级编排。
+//
+// 声明缺字节的条目交给 missingMediaRefs 报告，这里跳过，避免同一问题报两次。
+func validatePackageMedia(pkg *packageModel) error {
+	var entries []string
+	for sha, entry := range pkg.Media {
+		raw, ok := pkg.MediaRaw[sha]
+		if !ok {
+			continue
+		}
+		detected, _, ok := mediatype.Detect(headBytes(raw))
+		if !ok {
+			entries = append(entries, fmt.Sprintf("media/%s: unrecognised media bytes", sha))
+			continue
+		}
+		if !mediatype.Allowed(detected, mediatype.DefaultAllowedMimes()) {
+			entries = append(entries, fmt.Sprintf("media/%s: detected %s is not an allowed media type", sha, detected))
+			continue
+		}
+		if declared := mediatype.Normalize(entry.Mime); declared != "" && declared != detected {
+			entries = append(entries, fmt.Sprintf("media/%s: declared %s does not match detected %s", sha, declared, detected))
+		}
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	// 逐条按字典序，保证同一包每次报错顺序一致。
+	sort.Strings(entries)
+	return &PackageError{Code: CodePackageUnsafeMedia, Message: "package media failed validation", Entries: entries}
+}
+
 // importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
 func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
 	deckID, err := s.resolveTargetDeck(ctx, tx, actorUserID, pkg, targetKind, targetDeckID, opts)
@@ -470,7 +522,10 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if opts.DryRun {
 			continue
 		}
-		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, pkg.Media[sha].Mime, raw, Ptr(actorUserID))
+		// 落库的 mime 以字节判定为准（validatePackageMedia 已确认它是白名单类型）；
+		// media.json 的声明只作交叉校验，绝不当真写进 media 表（F9）。
+		detected, _, _ := mediatype.Detect(headBytes(raw))
+		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, detected, raw, Ptr(actorUserID))
 		if abs != "" {
 			// 先登记路径再判错：SaveBytesTracked 可能在写文件成功、写元数据失败时同时
 			// 返回路径与错误，这种情况下文件同样需要被失败路径清理。

@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -295,7 +296,17 @@ func (s *Server) mediaServe(c *gin.Context) {
 	etag := `"` + m.Sha256 + `"`
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "private, max-age=31536000, immutable")
-	c.Header("Content-Type", m.Mime)
+	// 读侧兼容库里可能存在的历史污染行（F9）：只有字节判定白名单内的类型才按声明内联，
+	// 其余（如被旧导入链写入的 text/html、image/svg+xml）一律降级为下载，避免同源存储型 XSS。
+	contentType := m.Mime
+	if !mediatype.Allowed(m.Mime, mediatype.DefaultAllowedMimes()) {
+		contentType = "application/octet-stream"
+		c.Header("Content-Disposition", "attachment")
+	}
+	// 纵深防御：显式 Content-Type 不会被 http.ServeContent 覆盖，但 nosniff 仍能挡住
+	// 把响应体当脚本执行的旧浏览器/代理——修前这里完全没有该头。
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Type", contentType)
 	// 命中 ETag 直接 304，不重读文件体。
 	if c.GetHeader("If-None-Match") == etag {
 		c.Status(http.StatusNotModified)
