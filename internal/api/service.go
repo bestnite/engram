@@ -53,9 +53,13 @@ func asServiceError(err error) *ServiceError {
 
 // ---- 卡组 ----
 
-// ListDecks 返回用户拥有的卡组（按权限过滤；M5 会把授权卡组一并纳入）。
+// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public）。
+//
+// 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
+// 完全一致，谓词只有 store.visibleDeckIDsQuery 一份（DESIGN.md §5、§7.3）。REST 与内置 MCP
+// 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组（F5）。
 func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error) {
-	decks, err := a.decks.ListByOwner(ctx, userID)
+	decks, err := a.decks.ListVisible(ctx, userID)
 	if err != nil {
 		a.logger.Error("list decks failed", "user_id", userID, "error", err)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list decks")
@@ -703,22 +707,21 @@ type StatsSummary struct {
 }
 
 // Stats 汇总当前用户的到期量 / 复习量 / 留存概要；所有数字都由 reviews + card_states 聚合。
+//
+// 口径刻意不对称（DESIGN.md §9 的 2026-10-06 决定）：decks/due/notes/cards 只算当前可见
+// 卡组（与 list_decks、网页列表页、复习队列同一个 store 谓词），卡组集合为空时它们为 0；
+// reviews_today / reviews_total / retention 按 user_id 保留全史——复习是本人的记录，
+// 撤销授权不追溯。因此即便一个可见卡组都没有，也必须继续聚合 reviews，不能提前返回把
+// 历史数字静默清零（F6）。
 func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	now := a.now()
 
-	decks, err := a.decks.ListByOwner(ctx, u.ID)
+	deckIDs, err := a.decks.VisibleIDs(ctx, u.ID)
 	if err != nil {
-		a.logger.Error("load decks for stats failed", "user_id", u.ID, "error", err)
+		a.logger.Error("load visible decks for stats failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
-	resp := StatsSummary{Decks: len(decks)}
-	deckIDs := make([]uint64, 0, len(decks))
-	for _, d := range decks {
-		deckIDs = append(deckIDs, d.ID)
-	}
-	if len(deckIDs) == 0 {
-		return resp, nil
-	}
+	resp := StatsSummary{Decks: len(deckIDs)}
 
 	var due int64
 	if err := a.db.WithContext(ctx).Model(&store.CardState{}).
@@ -792,7 +795,10 @@ type ExportRow struct {
 	Lapses      *int           `json:"lapses,omitempty"`
 }
 
-// ExportDeckIDs 解析导出目标卡组集合：deckID=0 时导出调用者全部卡组，否则仅该卡组。
+// ExportDeckIDs 解析导出目标卡组集合：deckID=0 时导出调用者可见的卡组，否则仅该卡组。
+//
+// 「全部导出」与 list_decks 同口径（自有 ∪ 被授权 ∪ 他人 public，DESIGN.md §7.5 的
+// 2026-10-06 决定），不得静默扩大成库内全部卡组；可见性谓词只有 store 一份（F5）。
 func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint64, error) {
 	if deckID != 0 {
 		if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
@@ -800,13 +806,9 @@ func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint6
 		}
 		return []uint64{deckID}, nil
 	}
-	decks, err := a.decks.ListByOwner(ctx, userID)
+	ids, err := a.decks.VisibleIDs(ctx, userID)
 	if err != nil {
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load decks")
-	}
-	ids := make([]uint64, 0, len(decks))
-	for _, d := range decks {
-		ids = append(ids, d.ID)
 	}
 	return ids, nil
 }
