@@ -5,6 +5,8 @@
 Engram 是一个自托管的间隔重复（SRS）服务，多用户，网页优先。卡片在浏览器里手写，也可以让脚本或
 Agent 通过 API 或内置 MCP server 推入；排程用 FSRS v6。
 
+线上 demo：<https://engram.nite07.com/>
+
 ## 截图
 
 |                        |                        |
@@ -134,6 +136,24 @@ docker run -d --name engram -p 8080:8080 \
 ## 参与开发
 
 见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+
+## 感谢
+
+Engram 站在这些项目上面：
+
+- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) —— FSRS v6 排程与参数优化。
+- [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) —— 优化器适配器用的训练实现。
+- [Gin](https://github.com/gin-gonic/gin) 与 [GORM](https://gorm.io) —— HTTP 与数据库层。
+- [templ](https://github.com/a-h/templ) —— 类型安全的 HTML 模板。
+- [goldmark](https://github.com/yuin/goldmark) 与
+  [bluemonday](https://github.com/microcosm-cc/bluemonday) —— Markdown 渲染与 HTML 白名单清洗。
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) —— MCP server。
+- [zitadel/oidc](https://github.com/zitadel/oidc) 与
+  [go-i18n](https://github.com/nicksnyder/go-i18n) —— OIDC 登录与语言包。
+- [MathJax](https://www.mathjax.org/) 与 [htmx](https://htmx.org/) —— 公式渲染与页面交互。
+- [Tailwind CSS](https://tailwindcss.com/) —— 样式。
+
+友情链接：[LINUX DO](https://linux.do)。
 
 ## 许可证
 

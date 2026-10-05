@@ -6,6 +6,8 @@ Engram is a self-hosted, multi-user, web-first spaced-repetition (SRS) service. 
 browser, or let a script or agent push them in through the API or the built-in MCP server.
 Scheduling uses FSRS v6.
 
+Live demo: <https://engram.nite07.com/>
+
 ## Screenshots
 
 |                        |                        |
@@ -154,6 +156,28 @@ breakdown, with acceptance criteria, lives in [`ROADMAP.md`](ROADMAP.md).
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Acknowledgements
+
+Engram builds on these projects:
+
+- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) — FSRS v6 scheduling and parameter
+  optimisation.
+- [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) — the training implementation behind
+  the optimiser adapter.
+- [Gin](https://github.com/gin-gonic/gin) and [GORM](https://gorm.io) — HTTP and database layers.
+- [templ](https://github.com/a-h/templ) — type-safe HTML templates.
+- [goldmark](https://github.com/yuin/goldmark) and
+  [bluemonday](https://github.com/microcosm-cc/bluemonday) — Markdown rendering and HTML
+  allowlisting.
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — the MCP server.
+- [zitadel/oidc](https://github.com/zitadel/oidc) and
+  [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC sign-in and translation catalogs.
+- [MathJax](https://www.mathjax.org/) and [htmx](https://htmx.org/) — formula rendering and page
+  interaction.
+- [Tailwind CSS](https://tailwindcss.com/) — styling.
+
+Friend link: [LINUX DO](https://linux.do) — a Chinese-language tech community.
 
 ## License
 
