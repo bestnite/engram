@@ -133,7 +133,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	}
 
 	cardID := parseUintQuery(c.PostForm("card_id"))
-	card, note, _, ok := s.loadReviewCard(c, user, cardID)
+	card, note, _, ok := s.loadReviewCard(c, user, cardID, store.RoleReader)
 	if !ok {
 		return
 	}
@@ -225,7 +225,14 @@ func (s *Server) reviewAction(c *gin.Context) {
 
 // reviewActionApply 是 u/s/b 的公共实现。
 func (s *Server) reviewActionApply(c *gin.Context, loc *i18n.Localizer, user *store.User, scope reviewScope, action string) {
-	card, note, _, ok := s.loadReviewCard(c, user, parseUintQuery(c.PostForm("card_id")))
+	// suspend 写的是 cards.suspended_at —— 卡片级、对所有使用者生效的状态（DESIGN.md §3.4），
+	// 必须 owner-only；其余动作只影响本人数据（undo 删自己的 reviews 行、bury 写自己的
+	// card_states），共享卡组的 reader 即可（DESIGN.md §5“reader 只能自己复习”）。
+	want := store.RoleReader
+	if action == "suspend" {
+		want = store.RoleOwner
+	}
+	card, note, _, ok := s.loadReviewCard(c, user, parseUintQuery(c.PostForm("card_id")), want)
 	if !ok {
 		return
 	}
@@ -515,8 +522,11 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	return st.Version
 }
 
-// loadReviewCard 取卡并校验它属于当前用户拥有的卡组；失败时写 404 并返回 false。
-func (s *Server) loadReviewCard(c *gin.Context, user *store.User, cardID uint64) (*store.Card, *store.Note, *store.Deck, bool) {
+// loadReviewCard 取卡并校验当前用户对卡所属卡组至少拥有 want 角色；失败时写 403/404 并返回 false。
+// 判权委托给 loadDeckForRole（与 REST/MCP 共用 auth.DeckAccess，不复制第二份判定）。
+// 复习的进度键是 (card_id, user_id)，写的是本人数据，因此评分/undo/bury/next 传 store.RoleReader，
+// 共享卡组的读者也能复习；suspend 例外（见 reviewActionApply），调用方必须传 store.RoleOwner。
+func (s *Server) loadReviewCard(c *gin.Context, user *store.User, cardID uint64, want string) (*store.Card, *store.Note, *store.Deck, bool) {
 	if cardID == 0 {
 		c.AbortWithStatus(http.StatusNotFound)
 		return nil, nil, nil, false
@@ -532,9 +542,8 @@ func (s *Server) loadReviewCard(c *gin.Context, user *store.User, cardID uint64)
 		c.AbortWithStatus(http.StatusNotFound)
 		return nil, nil, nil, false
 	}
-	deck, err := s.decks.ByID(ctx, note.DeckID)
-	if err != nil || deck.OwnerUserID != user.ID {
-		c.AbortWithStatus(http.StatusNotFound)
+	deck, ok := s.loadDeckForRole(c, user, note.DeckID, want)
+	if !ok {
 		return nil, nil, nil, false
 	}
 	return card, note, deck, true
