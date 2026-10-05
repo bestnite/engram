@@ -87,12 +87,18 @@ func (s *Server) oidcStart(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	s.oidc.PutPending(state, auth.PendingAuth{
+	if !s.oidc.PutPending(state, auth.PendingAuth{
 		Nonce:       nonce,
 		Verifier:    pkce.Verifier,
 		RedirectURI: redirectURI,
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
-	})
+	}) {
+		// 待完成登录表已满：拒绝新发起，避免匿名请求把内存表堆大（F17；DESIGN.md §4.4）。
+		// 只记英文日志与通用提示，不回显 state / nonce。
+		s.logger.Warn("oidc: pending state table is full, rejecting a new login start")
+		s.renderLogin(c, loc, http.StatusTooManyRequests, loc.T("error.rate_limited"))
+		return
+	}
 	authURL := auth.BuildAuthURL(party, state, nonce, pkce.Challenge)
 	c.Redirect(http.StatusFound, authURL)
 }

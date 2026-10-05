@@ -58,6 +58,18 @@ const (
 // ErrOIDCDisabled 表示 OIDC 未启用或配置不完整；transport 层据此把相关路由置为不可用。
 var ErrOIDCDisabled = errors.New("oidc is not configured")
 
+// OIDC 待完成登录表（pending）的内存上限与过期淘汰（F17；DESIGN.md §4.4）。
+//
+// 匿名者可以反复 GET /auth/oidc/start，而只有携带正确 state 的回调才会删除对应项：
+// 没有上限与淘汰时这个 map 会被堆大，是一条内存 DoS 路径。
+const (
+	// maxPendingAuth 是未完成登录的最大条数；达到上限且没有可淘汰的过期项时，拒绝新发起。
+	maxPendingAuth = 1000
+	// pendingEvictEvery 是过期项清理的最小间隔：每次发起都全量扫表代价高，按此间隔节流；
+	// 表满时则强制立即清理一次，使有界性不依赖节流是否到期。
+	pendingEvictEvery = 5 * time.Minute
+)
+
 // oidcDiscoveryFallbackRedirectURI 只用于管理面板「测试连接」：
 // 该动作只校验发现文档，不发起登录，redirect 值不参与请求。
 const oidcDiscoveryFallbackRedirectURI = "http://localhost/auth/oidc/callback"
@@ -166,6 +178,8 @@ type OIDCClient struct {
 	mu      sync.Mutex
 	cache   map[string]cachedRelyingParty
 	pending map[string]PendingAuth
+	// lastPendingEvict 是上一次淘汰过期项的时刻（与 pending 同受 mu 保护），用于节流扫描。
+	lastPendingEvict time.Time
 }
 
 // NewOIDCClient 构造客户端；httpClient 为空时用带超时的默认客户端（发现文档拉取不能无限等待）。
@@ -249,11 +263,31 @@ func (c *OIDCClient) Invalidate(issuer string) {
 	c.mu.Unlock()
 }
 
-// PutPending 保存一次登录发起时的临时状态，按 state 索引。
-func (c *OIDCClient) PutPending(state string, p PendingAuth) {
+// PutPending 保存一次登录发起时的临时状态，按 state 索引，并在超限时拒绝新发起。
+// 返回 false 表示 state 表已满且没有可淘汰的过期项，调用方必须中止本次发起（DESIGN.md §4.4）。
+func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.now()
+	// 表满时先强制淘汰过期项（无论节流是否到期），否则按节流间隔偶尔清理一次。
+	if len(c.pending) >= maxPendingAuth || now.Sub(c.lastPendingEvict) >= pendingEvictEvery {
+		c.evictExpiredPendingLocked(now)
+	}
+	if len(c.pending) >= maxPendingAuth {
+		return false
+	}
 	c.pending[state] = p
-	c.mu.Unlock()
+	return true
+}
+
+// evictExpiredPendingLocked 删除所有已过期的待完成登录；调用方必须持有 c.mu。
+func (c *OIDCClient) evictExpiredPendingLocked(now time.Time) {
+	for state, p := range c.pending {
+		if now.After(p.ExpiresAt) {
+			delete(c.pending, state)
+		}
+	}
+	c.lastPendingEvict = now
 }
 
 // TakePending 取出并删除 state 对应的临时状态；未知或已过期返回 ok=false。
