@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +40,7 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 		t.Fatalf("seed polluted media row: %v", err)
 	}
 
-	get := getWithCookies(t, srv, "/media/"+strconv.FormatUint(row.ID, 10), cookies)
+	get := getWithCookies(t, srv, "/media/"+row.Sha256, cookies)
 	if get.Code != http.StatusOK {
 		t.Fatalf("GET polluted media status = %d, want 200 (body %s)", get.Code, get.Body.String())
 	}

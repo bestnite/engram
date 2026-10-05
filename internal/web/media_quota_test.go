@@ -68,7 +68,7 @@ func TestMediaQuotaExceededRejectedLocalized(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
 	// 再传 1000 字节：1500+1000 > 2048 → 拒绝。
 	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
@@ -120,7 +120,7 @@ func TestMediaQuotaFreesAfterDeleteReference(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	note := referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	note := referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
 	if rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000)); rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("over-quota status = %d, want 413", rec.Code)
@@ -161,7 +161,7 @@ func TestMediaQuotaDedupeDoesNotChargeTwice(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
 	}
-	referenceMedia(t, db, deck.ID, ownerID, saved.ID)
+	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
 	// 1500 已计费；同 sha 再来一次若按 1500+1500=3000 计会超限，但去重后新增量为 0。
 	again := uploadMedia(t, srv, cookies, csrf, "m1-copy.png", "image/png", body)
@@ -170,13 +170,13 @@ func TestMediaQuotaDedupeDoesNotChargeTwice(t *testing.T) {
 	}
 }
 
-// referenceMedia 让 owner 建一条引用指定媒体 id 的 note（模拟编辑器把 /media/<id> 插入字段）。
-func referenceMedia(t *testing.T, db *gorm.DB, deckID, ownerID, mediaID uint64) *store.Note {
+// referenceMedia 让 owner 建一条引用指定媒体 sha256 的 note（模拟编辑器把 /media/<sha256> 插入字段）。
+func referenceMedia(t *testing.T, db *gorm.DB, deckID, ownerID uint64, mediaSha string) *store.Note {
 	t.Helper()
 	now := time.Now().UTC()
 	note := &store.Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%d)","back":"x"}`, mediaID),
+		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)","back":"x"}`, mediaSha),
 		CreatedBy:  &ownerID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(note).Error; err != nil {

@@ -46,10 +46,22 @@ func uploadMediaTo(t *testing.T, srv *Server, cookie []*http.Cookie, target, csr
 
 // mediaUploadResp 是上传成功返回的元数据。
 type mediaUploadResp struct {
-	ID     uint64 `json:"id"`
 	Sha256 string `json:"sha256"`
 	Mime   string `json:"mime"`
 	URL    string `json:"url"`
+}
+
+// mediaShaOK 校验上传/URL 里的 sha256 形状：恰好 64 位小写十六进制。
+func mediaShaOK(sha string) bool {
+	if len(sha) != 64 {
+		return false
+	}
+	for _, r := range sha {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // TestEditorMediaUploadInsertsAndSurvivesReload 是 M2-9 的主验收：从编辑器使用的卡组上传
@@ -70,11 +82,11 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	if err := json.Unmarshal(up.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode upload response: %v", err)
 	}
-	if saved.ID == 0 || saved.URL != "/media/"+u64str(saved.ID) {
-		t.Fatalf("upload returned url %q id %d, want /media/<id>", saved.URL, saved.ID)
+	if !mediaShaOK(saved.Sha256) || saved.URL != "/media/"+saved.Sha256 {
+		t.Fatalf("upload returned url %q sha %q, want /media/<sha256>", saved.URL, saved.Sha256)
 	}
 
-	// 2) 代理能取回该图片（走已有的 /media/:id，而非另写一套存储）。
+	// 2) 代理能取回该图片（走已有的 /media/<sha256>，而非另写一套存储）。
 	img := getWithCookies(t, srv, saved.URL, cookies)
 	if img.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d, want 200", saved.URL, img.Code)

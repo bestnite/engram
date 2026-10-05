@@ -49,8 +49,8 @@ func TestSaveDeduplicatesBySha256(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Save() error = %v", err)
 	}
-	if first.ID != second.ID || first.Sha256 != second.Sha256 {
-		t.Fatalf("dedupe failed: first=%d/%s second=%d/%s", first.ID, first.Sha256, second.ID, second.Sha256)
+	if first.Sha256 != second.Sha256 {
+		t.Fatalf("dedupe failed: first=%s second=%s", first.Sha256, second.Sha256)
 	}
 
 	var rows int64
@@ -114,7 +114,7 @@ func TestOpenReturnsStoredBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	m, f, err := s.Open(ctx, saved.ID)
+	m, f, err := s.Open(ctx, saved.Sha256)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

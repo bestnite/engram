@@ -21,6 +21,80 @@ type Migration struct {
 // 新增迁移只能追加到末尾，永远不要修改或重排已发布的条目。
 var BuiltinMigrations = []Migration{
 	// M0 阶段还没有破坏性变更；第一个真实迁移从这里往后追加。
+	{
+		// 媒体主键从自增 id 换成内容 sha256（DESIGN.md §6.3）：删列不在 AutoMigrate
+		// 的加法范围内，必须显式迁移。这里只改主键，不迁移旧引用。
+		Name: "0001_media_primary_key_sha256",
+		Up:   mediaPrimaryKeySha256,
+	},
+}
+
+// mediaPrimaryKeySha256 把 media 的主键从自增 id 换成内容 sha256。
+//
+// 两库写法不同：SQLite 不允许对主键列 DROP COLUMN，只能重建表；PostgreSQL 直接
+// DROP COLUMN（会连带删掉旧主键约束）再补主键。已经是目标形状的新库（AutoMigrate
+// 直接建出 sha 主键，没有 id 列）在此直接跳过。
+func mediaPrimaryKeySha256(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("media") {
+		return nil
+	}
+	// 没有 id 列说明表已经是 sha 主键形状，无需处理。
+	if !m.HasColumn("media", "id") {
+		return nil
+	}
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		return rebuildMediaForShaPrimaryKey(tx)
+	case "postgres":
+		return alterMediaForShaPrimaryKey(tx)
+	default:
+		return fmt.Errorf("media primary key migration: unsupported dialect %q", tx.Dialector.Name())
+	}
+}
+
+// rebuildMediaForShaPrimaryKey 用「建新表 → 搬数据 → 换名」重建 media，绕开 SQLite
+// 不能删主键列的限制。列定义与 GORM 为该模型生成的形状对齐（尤其 created_at 是 datetime：
+// 写成 TEXT 会让驱动无法把它扫回 time.Time）。列清单与 DESIGN.md §2.2 的 media 表一致。
+func rebuildMediaForShaPrimaryKey(tx *gorm.DB) error {
+	stmts := []string{
+		`CREATE TABLE media_sha_pk (
+			sha256     text PRIMARY KEY,
+			rel_path   text NOT NULL,
+			mime       text NOT NULL,
+			bytes      integer NOT NULL,
+			width      integer,
+			height     integer,
+			created_by integer,
+			created_at datetime NOT NULL
+		)`,
+		`INSERT INTO media_sha_pk (sha256, rel_path, mime, bytes, width, height, created_by, created_at)
+			SELECT sha256, rel_path, mime, bytes, width, height, created_by, created_at FROM media`,
+		`DROP TABLE media`,
+		`ALTER TABLE media_sha_pk RENAME TO media`,
+	}
+	for _, stmt := range stmts {
+		if err := tx.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// alterMediaForShaPrimaryKey 在 PostgreSQL 上原地改主键：删 id 列（其上的旧主键约束
+// 随列一起被 PG 删除）、删掉 AutoMigrate 建的 sha256 唯一索引、再把 sha256 设为主键。
+func alterMediaForShaPrimaryKey(tx *gorm.DB) error {
+	stmts := []string{
+		`ALTER TABLE media DROP COLUMN IF EXISTS id`,
+		`DROP INDEX IF EXISTS idx_media_sha256`,
+		`ALTER TABLE media ADD PRIMARY KEY (sha256)`,
+	}
+	for _, stmt := range stmts {
+		if err := tx.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AutoMigrate 只做增量变更（加表/加列/加索引）。
