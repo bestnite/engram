@@ -152,16 +152,20 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 	u, err := s.users.ByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {
 		if store.IsNotFound(err) {
-			// 用户不存在与密码错误返回同一个错误，避免账号枚举。
+			// 用户不存在与密码错误返回同一个错误；这里额外跑一次同参数的 argon2id，
+			// 使两条路径的响应时间不可区分，堵住按耗时枚举用户名的旁路（DESIGN.md §11）。
+			// 结果必须丢弃：错误语义保持不变。
+			s.hasher.VerifyDummy(password)
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("load user: %w", err)
 	}
 	if u.PasswordHash == nil {
-		// 纯 OIDC 账号不能用密码登录。
+		// 纯 OIDC 账号不能用密码登录；若不拉平代价，该分支因快速返回同样可被枚举。
+		s.hasher.VerifyDummy(password)
 		return nil, ErrInvalidCredentials
 	}
-	ok, err := Verify(*u.PasswordHash, password)
+	ok, err := s.hasher.verify(*u.PasswordHash, password)
 	if err != nil {
 		return nil, fmt.Errorf("verify password: %w", err)
 	}
@@ -195,7 +199,7 @@ func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldP
 	if u.PasswordHash == nil {
 		return ErrInvalidCredentials
 	}
-	ok, err := Verify(*u.PasswordHash, oldPassword)
+	ok, err := s.hasher.verify(*u.PasswordHash, oldPassword)
 	if err != nil {
 		return fmt.Errorf("verify password: %w", err)
 	}
