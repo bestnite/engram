@@ -420,11 +420,23 @@ func (s *Server) isSupportedLocale(code string) bool {
 
 // adminExport 把全库导出成 JSON 下载：遍历 store.AllModels，逐表流式写出，避免整库驻留内存。
 func (s *Server) adminExport(c *gin.Context) {
+	u, ok := auth.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.Header("Content-Disposition", `attachment; filename="engram-export.json"`)
 	c.Status(http.StatusOK)
 	w := c.Writer
 	ctx := c.Request.Context()
+
+	// 导出在流式写出之前留痕：动作一开始就把整库交给浏览器，响应开始后无法再补写。
+	// 只记动作与 actor，不记备份内容（DESIGN.md §11）。
+	s.audit(ctx, store.AuditEntry{
+		UserID: store.Ptr(u.ID), Action: store.ActionAdminExport,
+		TargetType: "database",
+	})
 
 	// 手工拼 JSON 顶层对象，保证每张表算完即写、不缓冲整库。
 	if _, err := io.WriteString(w, `{"exported_at":`); err != nil {

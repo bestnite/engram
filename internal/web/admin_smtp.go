@@ -44,6 +44,11 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 	if !ok {
 		return
 	}
+	u, uok := auth.CurrentUser(c)
+	if !uok {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
 	ctx := c.Request.Context()
 	resolver := mail.NewResolver(s.db, s.secrets)
 	cfg, _, err := resolver.Config(ctx)
@@ -86,6 +91,13 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 		result = loc.T("admin.setting.smtp.test.ok")
 		testOK = true
 	}
+	// 「测试连接」会发起管理员指定的出站连接：成功与失败都留痕，只记 host 与结果，
+	// 绝不记口令或邮件内容（DESIGN.md §11）。
+	s.audit(ctx, store.AuditEntry{
+		UserID: store.Ptr(u.ID), Action: store.ActionAdminSMTPTest,
+		TargetType: "smtp",
+		Detail:     map[string]any{"host": cfg.Host, "ok": testOK},
+	})
 	data, derr := s.smtpAdminData(c, loc, result, testOK)
 	if derr != nil {
 		s.logger.Error("admin: build smtp page data failed", "error", derr)
