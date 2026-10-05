@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -171,15 +170,12 @@ func TestMediaQuotaDedupeDoesNotChargeTwice(t *testing.T) {
 }
 
 // referenceMedia 让 owner 建一条引用指定媒体 sha256 的 note（模拟编辑器把 /media/<sha256> 插入字段）。
+// 夹具经 note 写入方法构造：media_notes 映射由写入路径建立，测试因此走的是生产路径（L2）。
 func referenceMedia(t *testing.T, db *gorm.DB, deckID, ownerID uint64, mediaSha string) *store.Note {
 	t.Helper()
-	now := time.Now().UTC()
-	note := &store.Note{
-		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)","back":"x"}`, mediaSha),
-		CreatedBy:  &ownerID, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := db.Create(note).Error; err != nil {
+	note := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: &ownerID}
+	if _, err := store.NewNoteStore(db).Create(context.Background(), note,
+		map[string]any{"front": "![](/media/" + mediaSha + ")", "back": "x"}); err != nil {
 		t.Fatalf("create referencing note: %v", err)
 	}
 	return note

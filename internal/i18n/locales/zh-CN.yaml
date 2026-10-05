@@ -2166,3 +2166,12 @@
   translation: "卡组名称不合法。"
 - id: decks.list.error_name_invalid
   translation: "卡组名称过长或含非法字符。"
+# L2: 媒体引用写前校验（media_notes 映射 + media_uploaders 归属）
+- id: error.media_not_readable
+  translation: "这条卡片引用了你无法读取的媒体；请先上传它，或先获得它所在卡组的访问权。"
+- id: notes.edit.media_not_readable
+  translation: "这条卡片引用了你无法读取的媒体，未保存。"
+- id: error.package_media_forbidden
+  translation: "卡组包引用了你无法读取的媒体。"
+- id: import.error.package_media_forbidden
+  translation: "卡组包引用了你无法读取的媒体。"

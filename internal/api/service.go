@@ -274,6 +274,8 @@ type importPlan struct {
 // 在报告里给出失败行的索引\"。dry_run 时停在第一遍，只返回计数；on_conflict=fail 时
 // 任何冲突或校验错误都会整批拒绝。
 func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
+	// 每条 note 的写前校验据此判断「本次新引入的引用是否调用者可读」（DESIGN.md §6.3）。
+	ctx = store.WithActor(ctx, userID)
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
 		return ImportResponse{}, err
@@ -472,6 +474,8 @@ type UpdateNoteInput struct {
 
 // UpdateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
 func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64, in UpdateNoteInput) (*store.Note, error) {
+	// 写前校验据此判断「本次新引入的引用是否调用者可读」（DESIGN.md §6.3）。
+	ctx = store.WithActor(ctx, userID)
 	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
 		return nil, err
@@ -494,6 +498,11 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		n.TagsJSON = existing.TagsJSON
 	}
 	if _, err := a.notes.Update(ctx, &n, in.Fields); err != nil {
+		var mwe *store.MediaWriteError
+		if errors.As(err, &mwe) {
+			// 写前校验拒绝：引用了调用者读不到的媒体，条目级 stable code（DESIGN.md §6.3）。
+			return nil, newServiceError(http.StatusForbidden, CodeMediaNotReadable, strings.Join(mwe.Entries, ", "))
+		}
 		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}

@@ -37,6 +37,9 @@ const (
 	// CodeDeckNameInvalid 表示建卡组/改名时卡组名不满足长度或字符规则
 	// （与卡组包 manifest 同源；store 层 ErrDeckNameInvalid）。
 	CodeDeckNameInvalid = "deck_name_invalid"
+	// CodeMediaNotReadable 表示 note 写入引用了写入者无法读取的媒体，写入被拒（写前校验）。
+	// 与 store.CodeMediaNotReadable 同值（DESIGN.md §6.3）。
+	CodeMediaNotReadable = "media_not_readable"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -71,6 +74,10 @@ var errorMessages = map[string]string{
 	store.CodePackageUnsafeMedia:     "The package contains media of a disallowed type.",
 	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
+	store.CodePackageMediaForbidden:  "The package references media you cannot read.",
+
+	// 写前媒体可读性校验的稳定 code（DESIGN.md §6.3；store.MediaWriteError.Code）。
+	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
 
 	// 建卡组/改名的稳定 code（store.ErrDeckNameInvalid）。
 	CodeDeckNameInvalid: "The deck name is invalid.",

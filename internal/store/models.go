@@ -232,6 +232,39 @@ type Media struct {
 
 func (Media) TableName() string { return "media" }
 
+// MediaNote 是 media ↔ note 的显式引用映射（DESIGN.md §2.2、§6.3，2026-10-06 定）。
+//
+// 它是**派生索引**：内容的唯一来源始终是 notes.fields_json，映射由 note 写入路径在每次
+// 写入后**重建**（删旧建新，见 NoteStore）。读取鉴权据此判定「这份媒体是否被我的可读卡组里的
+// 未软删 note 引用」，不再扫描 fields_json。
+//
+// 为什么不带「谁建立的引用」列：越权引用改由写侧单点校验（写入前对写入前状态求值）拦住，
+// 前提是所有 note 写入路径收敛到同一个方法（DESIGN.md §6.3）。
+type MediaNote struct {
+	MediaSha string `gorm:"column:media_sha;not null;uniqueIndex:idx_media_notes_media_note,priority:1" json:"media_sha"`
+	NoteID   uint64 `gorm:"column:note_id;not null;uniqueIndex:idx_media_notes_media_note,priority:2" json:"note_id"`
+	// CreatedAt 是这条映射建立的时间；重建时整行替换，故它等于最近一次写入的时间。
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (MediaNote) TableName() string { return "media_notes" }
+
+// MediaUploader 记录「谁提供过这份字节」（DESIGN.md §2.2、§6.3，2026-10-06 定）。
+//
+// 为什么不是 media.created_by 一列：字节按 sha256 去重，同一份字节全库只有一行，一列只能记
+// 第一个上传者；于是「B 上传的字节恰好与 C 已有的相同（去重命中）」时 B 拿不到归属——A 撤销
+// 共享后 B 读不到自己提供的文件。多对多记全部提供者，才让「能提供字节 ⇒ 可读」在去重下也成立。
+//
+// 上传与导入（凡本次提供字节的路径）按 (media_sha, user_id) **幂等**写入（clause.OnConflict
+// 忽略重复）。**写入后不可撤销**：删了「提供过」就不再成立（DESIGN.md §6.3）。
+type MediaUploader struct {
+	MediaSha  string    `gorm:"primaryKey;column:media_sha" json:"media_sha"`
+	UserID    uint64    `gorm:"primaryKey;column:user_id" json:"user_id"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (MediaUploader) TableName() string { return "media_uploaders" }
+
 // APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
 type APIKey struct {
 	ID         uint64     `gorm:"primaryKey;column:id" json:"id"`
@@ -319,6 +352,7 @@ func AllModels() []any {
 	return []any{
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
+		&MediaNote{}, &MediaUploader{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
 		// M1-16 TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
 		&UserTOTP{}, &TOTPRecoveryCode{},

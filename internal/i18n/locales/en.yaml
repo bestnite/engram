@@ -2168,3 +2168,12 @@
   translation: "The deck name is invalid."
 - id: decks.list.error_name_invalid
   translation: "Deck name is too long or contains invalid characters."
+# L2: note write-time media reference validation (media_notes mapping + media_uploaders ownership)
+- id: error.media_not_readable
+  translation: "You referenced media you cannot read; upload it first or obtain access."
+- id: notes.edit.media_not_readable
+  translation: "This note references media you cannot read, so it was not saved."
+- id: error.package_media_forbidden
+  translation: "The package references media you cannot read."
+- id: import.error.package_media_forbidden
+  translation: "The package references media you cannot read."

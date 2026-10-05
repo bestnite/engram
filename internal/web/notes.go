@@ -211,6 +211,13 @@ func truncateRunes(s string, limit int) string {
 	return string(runes[:limit]) + "…"
 }
 
+// isMediaNotReadable 判断写入失败是否由写前媒体校验引起（store.MediaWriteError），
+// 供 handler 选择与「字段非法」不同的本地化文案。
+func isMediaNotReadable(err error) bool {
+	var mwe *store.MediaWriteError
+	return errors.As(err, &mwe)
+}
+
 // parsePage 解析 ?page=；非法或缺失时按第 1 页处理。
 func parsePage(raw string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -715,10 +722,15 @@ func (s *Server) noteUpdate(c *gin.Context) {
 	}
 	merged := mergePostedFields(c, fields)
 
-	if _, err := s.notes.Update(c.Request.Context(), note, merged); err != nil {
+	// 写前校验的执行者：据此判断本次新引入的引用是否编辑者可读（DESIGN.md §6.3）。
+	ctx := store.WithActor(c.Request.Context(), user.ID)
+	if _, err := s.notes.Update(ctx, note, merged); err != nil {
 		s.logger.Info("update note rejected", "note_id", note.ID, "error", err)
-		s.renderNoteEdit(c, loc, deck, note, merged, http.StatusBadRequest,
-			loc.T("notes.edit.invalid_fields")+err.Error())
+		msg := loc.T("notes.edit.invalid_fields") + err.Error()
+		if isMediaNotReadable(err) {
+			msg = loc.T("notes.edit.media_not_readable")
+		}
+		s.renderNoteEdit(c, loc, deck, note, merged, http.StatusBadRequest, msg)
 		return
 	}
 	s.audit(c.Request.Context(), store.AuditEntry{
@@ -1008,11 +1020,16 @@ func (s *Server) noteCreate(c *gin.Context) {
 		Source:    &source,
 		CreatedBy: store.Ptr(user.ID),
 	}
-	cards, err := s.notes.Create(c.Request.Context(), note, fields)
+	// 写前校验的执行者：据此判断本次新引入的引用是否作者可读（DESIGN.md §6.3）。
+	ctx := store.WithActor(c.Request.Context(), user.ID)
+	cards, err := s.notes.Create(ctx, note, fields)
 	if err != nil {
 		s.logger.Info("create note rejected", "deck_id", deck.ID, "kind", kind, "error", err)
-		s.renderNoteNew(c, loc, deck, kind, raw, fields, http.StatusBadRequest,
-			loc.T("notes.create.error_invalid")+err.Error())
+		msg := loc.T("notes.create.error_invalid") + err.Error()
+		if isMediaNotReadable(err) {
+			msg = loc.T("notes.edit.media_not_readable")
+		}
+		s.renderNoteNew(c, loc, deck, kind, raw, fields, http.StatusBadRequest, msg)
 		return
 	}
 	s.audit(c.Request.Context(), store.AuditEntry{

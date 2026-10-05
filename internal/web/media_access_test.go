@@ -1,30 +1,33 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
 
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 F2/F2b：GET /media/<sha256> 的读取鉴权。
+// 本文件覆盖 F2/F2c：GET /media/<sha256> 的读取鉴权，以及 note 写入的写前媒体校验。
 //
-// 口径（DESIGN.md §6.3「鉴权只需一处（有卡组访问权的登录用户）」）：一个登录用户能读到某 media
-// 的充要条件是——「当前用户可见卡组内、未软删、且**不是当前用户自己写的** note 精确引用了它
-// （/media/<sha256> 字符串）」或「该 media 的 created_by = 当前用户」（覆盖刚上传、尚未插入任何卡片
-// 的编辑器预览；字节按 sha256 去重，不构成额外泄露）。无权限与不存在统一 404，不泄露存在性。
+// 读取口径（DESIGN.md §6.3「鉴权只需一处（有卡组访问权的登录用户）」）：一个登录用户能读到某
+// media 的充要条件是——① media_uploaders 里存在指向他的记录（他提供过这份字节，去重命中也算，
+// 永久有效），或② media_notes 映射里存在一条指向「他可见卡组内、未软删的 note」的记录。
+// 无权限与不存在统一 404，不泄露存在性。
 //
-// F2b 收紧的来源是：note 字段由用户自己可写，若「自己写的引用」也算授权，攻击者只要在自己卡组
-// 写 ![](/media/<目标 sha>)，就能按 sha 逐个枚举他人媒体。因此引用来源必须是「别人/系统写的 note」。
-// created_by IS NULL 视为「不是我写的」，可作授权来源（服务端生成的行不由攻击者控制）。
+// F2c（已修复，2026-10-06）：共享卡组的 editor 曾能把他人媒体引用注入别人写的 note，令映射一
+// 建立即自我满足、从而读到该媒体（旧的 TestMediaAccessResidualEditorInjectionStillGrants）。
+// 现在 note 写入前会对**写入之前的状态**校验本次新引入的引用是否写入者可读，越权引用在写入时即
+// 被拒，映射不会被建立。本文件逐入口（web 编辑器新建/编辑）钉死这一点，并覆盖不误伤、撤销共享
+// 后仍可读自己上传的媒体、去重命中登记全部上传者等用例。
 //
-// 这些用例在真实 SQLite + 真实路由上把该口径钉死，重点是「修前是 200 的越权读取」。
+// 夹具一律经 note 写入方法构造（NoteStore 的写入方法），不直接 GORM 插 note——否则映射不会建立，
+// 测的就不是生产路径。
 
 // uploadAndSha 上传一份字节并解出返回的 media sha256。字节内容决定 sha256，调用方据此控制是否去重。
 func uploadAndSha(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, body []byte) string {
@@ -43,49 +46,110 @@ func uploadAndSha(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string
 	return saved.Sha256
 }
 
+// uploadToDeckAndSha 从卡组内上传入口（要求 editor）上传一份字节并解出 sha256。
+func uploadToDeckAndSha(t *testing.T, srv *Server, deckID uint64, cookies []*http.Cookie, csrf string, body []byte) string {
+	t.Helper()
+	rec := uploadMediaTo(t, srv, cookies, "/decks/"+u64str(deckID)+"/media", csrf, "pic.png", "image/png", body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("deck upload status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+	var saved mediaUploadResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+	if !mediaShaOK(saved.Sha256) {
+		t.Fatalf("deck upload returned sha %q, want 64-hex sha256", saved.Sha256)
+	}
+	return saved.Sha256
+}
+
+// noteBy 经 note 写入方法建一条指定作者与字段的 note；author 为 nil 时 created_by IS NULL。
+// 走写入路径是必须的：media_notes 映射由写入方法建立，直接插 note 会绕过被测逻辑。
+func noteBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, fields map[string]any) *store.Note {
+	t.Helper()
+	note := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: author}
+	if _, err := store.NewNoteStore(db).Create(context.Background(), note, fields); err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	return note
+}
+
+// referenceMediaBy 是 noteBy 的媒体引用特化：字段里精确引用 mediaSha，作者由 author 指定。
+func referenceMediaBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, mediaSha string) *store.Note {
+	t.Helper()
+	return noteBy(t, db, deckID, author, map[string]any{
+		"front": fmt.Sprintf("![](/media/%s)", mediaSha),
+		"back":  "x",
+	})
+}
+
+// grantRole 让 owner 把卡组的指定角色授予 userID。
+func grantRole(t *testing.T, srv *Server, deckID, userID uint64, role string, ownerCookies []*http.Cookie, ownerCSRF string) {
+	t.Helper()
+	rec := postForm(t, srv, "/decks/"+u64str(deckID)+"/sharing/grant", url.Values{
+		"csrf_token": {ownerCSRF}, "user_id": {u64str(userID)}, "role": {role},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("grant %s status = %d, want 303 (body %s)", role, rec.Code, snippet(rec.Body.String()))
+	}
+}
+
+// revokeGrant 让 owner 撤销 userID 在该卡组上的授权。
+func revokeGrant(t *testing.T, srv *Server, deckID, userID uint64, ownerCookies []*http.Cookie, ownerCSRF string) {
+	t.Helper()
+	rec := postForm(t, srv, "/decks/"+u64str(deckID)+"/sharing/revoke", url.Values{
+		"csrf_token": {ownerCSRF}, "user_id": {u64str(userID)},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("revoke status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+}
+
+// mediaNoteRows 返回 (media_sha, note_id) 的映射行数，用来断言「写被拒时库里没有脏数据」。
+func mediaNoteRows(t *testing.T, db *gorm.DB, sha string, noteID uint64) int64 {
+	t.Helper()
+	var n int64
+	if err := db.Model(&store.MediaNote{}).
+		Where("media_sha = ? AND note_id = ?", sha, noteID).Count(&n).Error; err != nil {
+		t.Fatalf("count media_notes: %v", err)
+	}
+	return n
+}
+
 // TestMediaAccessFollowsVisibleDeckGrantAndRevoke 是 F2 的主验收：
 // private 卡组里被 note 引用的 media，对无授权用户 404；授权为 reader 后 200；撤销后立即 404。
 func TestMediaAccessFollowsVisibleDeckGrantAndRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "private media deck")
 	mediaSha := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	referenceMedia(t, db, deck.ID, ownerID, mediaSha)
+	referenceMediaBy(t, db, deck.ID, &ownerID, mediaSha)
 	target := "/media/" + mediaSha
 
 	readerID, readerCookies, _ := createUserAndLogin(t, srv, db, "media-outsider")
 
-	// 1) 无授权：卡组是 private 且未授权 → 即使被引用也不放行（修前这里是 200）。
+	// 1) 无授权：卡组是 private 且未授权 → 即使被引用也不放行。
 	if rec := getWithCookies(t, srv, target, readerCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("ungranted reader GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
 
-	// 2) 授权 reader → 下一个请求即可读。
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(readerID)}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("grant status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
+	// 2) 授权 reader → 下一个请求即可读（映射走可见卡组谓词）。
+	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
 	if rec := getWithCookies(t, srv, target, readerCookies); rec.Code != http.StatusOK {
 		t.Fatalf("granted reader GET %s = %d, want 200 (body %s)", target, rec.Code, rec.Body.String())
 	}
 
 	// 3) 撤销 → 立即生效（不允许无失效策略的权限缓存）。
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/revoke", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(readerID)},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("revoke status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
+	revokeGrant(t, srv, deck.ID, readerID, ownerCookies, ownerCSRF)
 	if rec := getWithCookies(t, srv, target, readerCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("after revoke reader GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
 }
 
-// TestMediaAccessLapsesWhenReferencingNoteSoftDeleted 覆盖「删除引用即失去读取权」：
-// 访问者不是上传者也不是引用 note 的作者，唯一来源是可见卡组里别人写的引用；软删该 note 后
-// 读取变 404。三者（上传者 / note 作者 / 访问者）刻意分开，确保放行只可能来自「引用」这一支。
+// TestMediaAccessLapsesWhenReferencingNoteSoftDeleted 覆盖「软删 note 不再授权」：
+// 访问者不是上传者也不是 map 之外的行；唯一来源是可见卡组里一条 note 的引用；软删该 note 后读取变 404。
 func TestMediaAccessLapsesWhenReferencingNoteSoftDeleted(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
-	// note 作者取上传者：F2b 后「自己写的引用」不再授权，访问者（owner）必须不是作者。
+	// note 作者取上传者，访问者（owner）刻意不是上传者，确保放行只可能来自「映射」这一支。
 	uploaderID, uploaderCookies, uploaderCSRF := createUserAndLogin(t, srv, db, "media-uploader")
 	deck := seedDeck(t, db, ownerID, "private media deck")
 	mediaSha := uploadAndSha(t, srv, uploaderCookies, uploaderCSRF, pngBody())
@@ -103,8 +167,8 @@ func TestMediaAccessLapsesWhenReferencingNoteSoftDeleted(t *testing.T) {
 	}
 }
 
-// TestMediaAccessUploaderPreviewWithoutReference 覆盖口径第二支：上传者刚上传、
-// 尚未被任何卡片引用的 media 仍可读（编辑器预览）。
+// TestMediaAccessUploaderPreviewWithoutReference 覆盖口径①：上传者刚上传、尚未被任何卡片引用的
+// media 仍可读（编辑器预览）——靠 media_uploaders。
 func TestMediaAccessUploaderPreviewWithoutReference(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 	mediaSha := uploadAndSha(t, srv, cookies, csrf, pngBody())
@@ -115,14 +179,13 @@ func TestMediaAccessUploaderPreviewWithoutReference(t *testing.T) {
 }
 
 // TestMediaAccessExactShaBoundary 覆盖精确匹配：库里同时存在两个 sha，note 只引用其中一个。
-// 未被引用的那个（由别人上传、owner 不可见）必须 404——引用识别只认完整 64 位 sha，不做前缀匹配。
+// 未被引用的那个（由别人上传、owner 不可见）必须 404——映射按完整 64 位 sha 匹配，不做前缀匹配。
 func TestMediaAccessExactShaBoundary(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
 	_, otherCookies, otherCSRF := createUserAndLogin(t, srv, db, "media-boundary-other")
 	deck := seedDeck(t, db, ownerID, "boundary deck")
 
-	// 别人上传两份不同字节的媒体；只有第二份被 owner 可见卡组里的 note 引用（作者取 NULL，
-	// 即服务端写的引用，不是 owner 自己写的——F2b 只放行「别人/系统写的引用」）。
+	// 别人上传两份不同字节的媒体；只有第二份被 owner 可见卡组里的 note 引用。
 	unreferenced := uploadAndSha(t, srv, otherCookies, otherCSRF, pngBody())
 	referenced := uploadAndSha(t, srv, otherCookies, otherCSRF, append(pngBody(), 'x'))
 	referenceMediaBy(t, db, deck.ID, nil, referenced)
@@ -130,70 +193,15 @@ func TestMediaAccessExactShaBoundary(t *testing.T) {
 	if rec := getWithCookies(t, srv, "/media/"+referenced, ownerCookies); rec.Code != http.StatusOK {
 		t.Fatalf("owner GET referenced sha = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	// 未被引用的 sha 存在（created_by 是别人），没有任何可见卡组的 note 引用它 → 404。
+	// 未被引用的 sha 存在（上传者是别人），没有任何可见卡组的 note 引用它 → 404。
 	if rec := getWithCookies(t, srv, "/media/"+unreferenced, ownerCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("owner GET unreferenced sha = %d, want 404 (must not match any other sha) (body %s)",
 			rec.Code, rec.Body.String())
 	}
 }
 
-// noteBy 直接建一条指定作者与字段 JSON 的 note；author 为 nil 时写入 created_by IS NULL。
-// 它把「这条引用是谁写的」变成可显式构造的输入——正是 F2b 鉴权要看的那一维。
-func noteBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, fieldsJSON string) *store.Note {
-	t.Helper()
-	now := time.Now().UTC()
-	note := &store.Note{
-		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fieldsJSON, CreatedBy: author, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := db.Create(note).Error; err != nil {
-		t.Fatalf("create note: %v", err)
-	}
-	return note
-}
-
-// referenceMediaBy 是 noteBy 的媒体引用特化：字段里精确引用 mediaSha，作者由 author 指定
-// （nil 表示服务端写的 created_by IS NULL 行）。
-func referenceMediaBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, mediaSha string) *store.Note {
-	t.Helper()
-	return noteBy(t, db, deckID, author, fmt.Sprintf(`{"front":"![](/media/%s)","back":"x"}`, mediaSha))
-}
-
-// TestMediaAccessSelfAuthoredReferenceDoesNotGrant 是 F2b 的核心负例：引用来源是用户自己可写的
-// note 字段，若「自己写的引用」也算授权，攻击者只要在自己卡组写 ![](/media/<目标 sha>) 就能按 sha
-// 逐个枚举他人媒体。此用例把该路径钉死为 404（修前是 200），并确认不误伤「自己上传的文件」。
-func TestMediaAccessSelfAuthoredReferenceDoesNotGrant(t *testing.T) {
-	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-
-	// A（owner）上传两份不同字节的媒体作为攻击目标；A 从没把它们共享给任何人。
-	mediaA1 := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	mediaA2 := uploadAndSha(t, srv, ownerCookies, ownerCSRF, append(pngBody(), 'a'))
-	targetA1 := "/media/" + mediaA1
-	targetA2 := "/media/" + mediaA2
-
-	// 不误伤：A 自己的卡组里 A 自己写的引用，因 media.created_by=A 走口径①，仍 200。
-	deckA := seedDeck(t, db, ownerID, "A self deck")
-	referenceMediaBy(t, db, deckA.ID, &ownerID, mediaA1)
-	if rec := getWithCookies(t, srv, targetA1, ownerCookies); rec.Code != http.StatusOK {
-		t.Fatalf("A GET own uploaded media = %d, want 200 (body %s)", rec.Code, rec.Body.String())
-	}
-
-	// B 在自己卡组里写一条卡，字段同时引用 A 的两份媒体（一张卡写多个 sha，模拟枚举）。
-	bID, bCookies, _ := createUserAndLogin(t, srv, db, "media-selfref")
-	deckB := seedDeck(t, db, bID, "B self deck")
-	noteBy(t, db, deckB.ID, &bID, fmt.Sprintf(
-		`{"front":"![](/media/%s) ![](/media/%s)","back":"x"}`, mediaA1, mediaA2))
-
-	for _, target := range []string{targetA1, targetA2} {
-		if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
-			t.Fatalf("self-authored reference: B GET %s = %d, want 404 (body %s)",
-				target, rec.Code, rec.Body.String())
-		}
-	}
-}
-
-// TestMediaAccessSharedDeckReferenceByOtherAuthorGrants 保证新条件不误伤「别人写的引用」：
-// A 把卡组共享给 B（reader），引用 A 的 media 的 note 也是 A 写的 → B 仍能读（作者 A ≠ B）。
+// TestMediaAccessSharedDeckReferenceByOtherAuthorGrants 保证不误伤「别人写的引用」：
+// A 把卡组共享给 B（reader），引用 A 的 media 的 note 也是 A 写的 → B 仍能读。
 func TestMediaAccessSharedDeckReferenceByOtherAuthorGrants(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "shared media deck")
@@ -202,15 +210,10 @@ func TestMediaAccessSharedDeckReferenceByOtherAuthorGrants(t *testing.T) {
 	target := "/media/" + mediaSha
 
 	bID, bCookies, _ := createUserAndLogin(t, srv, db, "media-shared-reader")
-	// 未授权前 404；授权 reader 后 200。
 	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("ungranted reader GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(bID)}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("grant status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
+	grantRole(t, srv, deck.ID, bID, store.RoleReader, ownerCookies, ownerCSRF)
 	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusOK {
 		t.Fatalf("reader GET media referenced by another author's note = %d, want 200 (body %s)",
 			rec.Code, rec.Body.String())
@@ -218,7 +221,7 @@ func TestMediaAccessSharedDeckReferenceByOtherAuthorGrants(t *testing.T) {
 }
 
 // TestMediaAccessOwnUploadWithSelfReferenceGrants 覆盖口径①：B 在自己卡组上传的 media
-// （created_by=B）即使也被 B 自己的 note 引用，B 仍可读——F2b 收紧的是「引用来源」，不是上传者。
+// 即使也被 B 自己的 note 引用，B 仍可读（走 media_uploaders）。
 func TestMediaAccessOwnUploadWithSelfReferenceGrants(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-selfupload")
@@ -231,12 +234,11 @@ func TestMediaAccessOwnUploadWithSelfReferenceGrants(t *testing.T) {
 	}
 }
 
-// TestMediaAccessNullAuthorReferenceGrants 钉死 NULL 的处理：created_by IS NULL 视为
-// 「不是我写的」，可作授权来源（服务端导入/系统生成的行不由攻击者控制），不得被新条件误挡。
+// TestMediaAccessNullAuthorReferenceGrants 钉死 NULL 的处理：created_by IS NULL 的 note
+// （服务端导入/系统生成）在读者可见卡组里引用媒体时，读者仍可读（映射不看作者）。
 func TestMediaAccessNullAuthorReferenceGrants(t *testing.T) {
 	srv, db, _, ownerCookies, ownerCSRF := newNotesServer(t)
 	mediaSha := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	// 这条 note 不是任何用户写的（created_by IS NULL），放在 B 自己可见的卡组里。
 	bID, bCookies, _ := createUserAndLogin(t, srv, db, "media-null-author")
 	deckB := seedDeck(t, db, bID, "B null deck")
 	referenceMediaBy(t, db, deckB.ID, nil, mediaSha)
@@ -247,51 +249,215 @@ func TestMediaAccessNullAuthorReferenceGrants(t *testing.T) {
 	}
 }
 
-// TestMediaAccessResidualEditorInjectionStillGrants 记录一个 F2b 修不到的残留（有意不修）：
-// 共享卡组的 editor 能编辑别人写的 note，而 NoteStore.Update 不改 note.created_by。于是 B（editor）
-// 把 /media/<A 的 sha> 注入 A 写的 note 后，这条引用「不是 B 写的」，B 仍读到 A 的媒体。
-//
-// 本用例把残留钉成「成立」（断言 200）。残留一旦被堵上，这里会变 404，测试即失败并提醒反转断言。
-func TestMediaAccessResidualEditorInjectionStillGrants(t *testing.T) {
+// TestMediaAccessResidualEditorInjectionIsDenied 是反转后的 F2c 用例（旧名 …StillGrants）：
+// 共享卡组的 editor B 编辑 A 写的 note、把 A 的 media 引用注入进去——写前校验对**写入之前的状态**
+// 求值，B 读不到 A 的 media，故整次写入被拒（400），字段与映射均不变，B 也读不到 A 的媒体。
+func TestMediaAccessResidualEditorInjectionIsDenied(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "residual deck")
 	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
 	target := "/media/" + mediaA
 	// A 写一条不含任何媒体引用的普通 note（created_by=A）。
-	note := noteBy(t, db, deck.ID, &ownerID, `{"front":"plain","back":"x"}`)
+	note := noteBy(t, db, deck.ID, &ownerID, map[string]any{"front": "plain", "back": "x"})
 
 	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-attacker")
 	// 基线：B 此时读不到 A 的 media。
 	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("pre-grant B GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
-	// 授予 B editor：可编辑卡组内任意 note，包括别人写的。
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(bID)}, "role": {store.RoleEditor},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("grant editor status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
-	// B 编辑 A 写的 note，把 A 的 media 引用注入进去。
+	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
+
+	// B 编辑 A 写的 note，把 A 的 media 引用注入进去：必须被拒。
 	save := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
 		"csrf_token":  {bCSRF},
 		"note_id":     {u64str(note.ID)},
-		"field.front": {"![](" + target + ")"},
+		"field.front": {fmt.Sprintf("![](%s)", target)},
 		"field.back":  {"x"},
 	}, bCookies)
-	if save.Code != http.StatusSeeOther {
-		t.Fatalf("editor note update status = %d, want 303 (body %s)", save.Code, save.Body.String())
+	if save.Code != http.StatusBadRequest {
+		t.Fatalf("editor injection status = %d, want 400 (rejected) (body %s)", save.Code, snippet(save.Body.String()))
 	}
-	// note.created_by 未被 Update 改写，仍是 A。
+
+	// 库里没有脏数据：note 字段未变（仍无引用），且没有为它建立 media_notes 映射。
 	var reloaded store.Note
 	if err := db.First(&reloaded, note.ID).Error; err != nil {
 		t.Fatalf("reload note: %v", err)
 	}
-	if reloaded.CreatedBy == nil || *reloaded.CreatedBy != ownerID {
-		t.Fatalf("note.created_by after editor update = %v, want %d", reloaded.CreatedBy, ownerID)
+	if reloaded.FieldsJSON != note.FieldsJSON {
+		t.Errorf("note fields changed on a rejected write: got %s want %s", reloaded.FieldsJSON, note.FieldsJSON)
 	}
-	// 残留成立：注入的引用作者是 A（不是 B），B 因此通过鉴权读到 A 的媒体。
-	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusOK {
-		t.Fatalf("residual: editor-injected reference did not grant B access: GET %s = %d, want 200 (body %s)",
-			target, rec.Code, rec.Body.String())
+	if n := mediaNoteRows(t, db, mediaA, note.ID); n != 0 {
+		t.Errorf("rejected injection created %d media_notes rows, want 0", n)
+	}
+	// 注入未生效：B 仍读不到 A 的媒体。
+	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
+		t.Fatalf("after rejected injection B GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
+	}
+}
+
+// TestMediaAccessEditorInjectionOnCreateIsDenied 覆盖新建入口：共享卡组的 editor B 新建一条
+// 引用 A 的 media 的卡片——写前校验拒绝，且库里没有留下任何 note / 映射行。
+func TestMediaAccessEditorInjectionOnCreateIsDenied(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "create injection deck")
+	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-creator")
+	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
+
+	before, _, err := store.NewNoteStore(db).List(context.Background(), store.NoteListOptions{DeckID: deck.ID})
+	if err != nil {
+		t.Fatalf("list notes: %v", err)
+	}
+
+	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes", url.Values{
+		"csrf_token":  {bCSRF},
+		"kind":        {"basic"},
+		"field.front": {"![](/media/" + mediaA + ")"},
+		"field.back":  {"x"},
+	}, bCookies)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("editor create injection status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	after, _, err := store.NewNoteStore(db).List(context.Background(), store.NoteListOptions{DeckID: deck.ID})
+	if err != nil {
+		t.Fatalf("list notes: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("rejected create left %d notes, want %d", len(after), len(before))
+	}
+	var mapping int64
+	if err := db.Model(&store.MediaNote{}).Where("media_sha = ?", mediaA).Count(&mapping).Error; err != nil {
+		t.Fatalf("count media_notes: %v", err)
+	}
+	if mapping != 0 {
+		t.Errorf("rejected create left %d media_notes rows, want 0", mapping)
+	}
+}
+
+// TestMediaAccessEditorKeepsExistingReferenceAndAddsOwnUpload 覆盖「不误伤」：
+// B 是 A 卡组的 editor，保存 A 的卡（字段含 A 的图）被允许；B 再往这张卡里插入自己刚上传的图也被允许。
+func TestMediaAccessEditorKeepsExistingReferenceAndAddsOwnUpload(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "no false positive deck")
+	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
+	note := referenceMediaBy(t, db, deck.ID, &ownerID, mediaA)
+
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-keeping")
+	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
+
+	// 1) 原样保存 A 的卡（保留 A 的图）：旧引用不是本次新引入的，允许。
+	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
+		"csrf_token":  {bCSRF},
+		"note_id":     {u64str(note.ID)},
+		"field.front": {"![](/media/" + mediaA + ")"},
+		"field.back":  {"edited by editor"},
+	}, bCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("editor save with existing reference status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	// 2) B 上传自己的图（editor 可向卡组塞媒体），再插入到同一张卡：新引用对 B 可读（uploaders），允许。
+	mediaB := uploadToDeckAndSha(t, srv, deck.ID, bCookies, bCSRF, append(pngBody(), 'b'))
+	rec = postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
+		"csrf_token":  {bCSRF},
+		"note_id":     {u64str(note.ID)},
+		"field.front": {"![](/media/" + mediaA + ") ![](/media/" + mediaB + ")"},
+		"field.back":  {"edited by editor"},
+	}, bCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("editor adding own upload status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if r := getWithCookies(t, srv, "/media/"+mediaB, bCookies); r.Code != http.StatusOK {
+		t.Fatalf("B GET own uploaded media = %d, want 200 (body %s)", r.Code, r.Body.String())
+	}
+	if r := getWithCookies(t, srv, "/media/"+mediaA, bCookies); r.Code != http.StatusOK {
+		t.Fatalf("B GET A's media referenced by shared note = %d, want 200 (body %s)", r.Code, r.Body.String())
+	}
+}
+
+// TestMediaAccessUploaderKeepsAccessAfterGrantRevoked 覆盖「A 撤销共享后 B 仍可读自己上传的媒体」：
+// B 在共享期间上传的字节经 media_uploaders 获得永久归属，撤销授权不影响。
+func TestMediaAccessUploaderKeepsAccessAfterGrantRevoked(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "revoke uploader deck")
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-revoked-uploader")
+	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
+	mediaB := uploadToDeckAndSha(t, srv, deck.ID, bCookies, bCSRF, pngBody())
+
+	revokeGrant(t, srv, deck.ID, bID, ownerCookies, ownerCSRF)
+	if rec := getWithCookies(t, srv, "/media/"+mediaB, bCookies); rec.Code != http.StatusOK {
+		t.Fatalf("after revoke B GET own upload = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestMediaAccessDedupeHitRegistersEveryUploader 覆盖去重命中：B 上传与 C 已有字节完全相同的媒体，
+// B 也拿到 media_uploaders 记录（幂等、不建重复行）。这正是「A 撤销共享后 B 仍可读自己上传的媒体」
+// 在去重下成立的前提。
+func TestMediaAccessDedupeHitRegistersEveryUploader(t *testing.T) {
+	srv, db, _, _, _ := newNotesServer(t)
+	cID, cCookies, cCSRF := createUserAndLogin(t, srv, db, "media-dedupe-c")
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-dedupe-b")
+
+	body := pngBody()
+	shaC := uploadAndSha(t, srv, cCookies, cCSRF, body)
+	shaB := uploadAndSha(t, srv, bCookies, bCSRF, body)
+	if shaC != shaB {
+		t.Fatalf("dedupe failed: shas %s and %s differ", shaC, shaB)
+	}
+
+	var rows int64
+	if err := db.Model(&store.MediaUploader{}).Where("media_sha = ?", shaB).Count(&rows).Error; err != nil {
+		t.Fatalf("count media_uploaders: %v", err)
+	}
+	if rows != 2 {
+		t.Fatalf("media_uploaders rows for deduped sha = %d, want 2 (both uploaders)", rows)
+	}
+	for _, uid := range []uint64{bID, cID} {
+		var n int64
+		if err := db.Model(&store.MediaUploader{}).
+			Where("media_sha = ? AND user_id = ?", shaB, uid).Count(&n).Error; err != nil {
+			t.Fatalf("count uploader %d: %v", uid, err)
+		}
+		if n != 1 {
+			t.Errorf("uploader %d has %d rows for sha %s, want exactly 1", uid, n, shaB)
+		}
+	}
+	// 上传者能读自己上传的（去重命中）字节，即使它最早由别人上传。
+	if rec := getWithCookies(t, srv, "/media/"+shaB, bCookies); rec.Code != http.StatusOK {
+		t.Fatalf("dedupe uploader B GET = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestMediaAccessReferenceRemovalLapsesAccess 证明映射是「重建」而非「追加」：
+// A 删掉 note 里的媒体引用后再保存，映射旧行必须被清掉，读者随即失去读取权。
+func TestMediaAccessReferenceRemovalLapsesAccess(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "reference removal deck")
+	mediaSha := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
+	note := referenceMediaBy(t, db, deck.ID, &ownerID, mediaSha)
+	target := "/media/" + mediaSha
+
+	readerID, readerCookies, _ := createUserAndLogin(t, srv, db, "media-ref-removed-reader")
+	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
+	if rec := getWithCookies(t, srv, target, readerCookies); rec.Code != http.StatusOK {
+		t.Fatalf("reader GET before removal = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// A 去掉引用并保存（同一写入方法 → 重建映射）。
+	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
+		"csrf_token":  {ownerCSRF},
+		"note_id":     {u64str(note.ID)},
+		"field.front": {"no media any more"},
+		"field.back":  {"x"},
+	}, ownerCookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("save after removing reference status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	if n := mediaNoteRows(t, db, mediaSha, note.ID); n != 0 {
+		t.Errorf("stale media_notes row survived reference removal: %d rows", n)
+	}
+	if rec := getWithCookies(t, srv, target, readerCookies); rec.Code != http.StatusNotFound {
+		t.Fatalf("reader GET after reference removal = %d, want 404 (body %s)", rec.Code, rec.Body.String())
 	}
 }

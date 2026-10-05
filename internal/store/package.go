@@ -45,6 +45,10 @@ const (
 	// CodePackageQuotaExceeded 表示导入新增媒体会超出导入者配额；沿用上传链的稳定 code
 	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。
 	CodePackageQuotaExceeded = "media_quota_exceeded"
+	// CodePackageMediaForbidden 表示包内 note 引用了导入者无法读取的媒体（写前校验拒绝）；
+	// 逐条列出被拒的引用（DESIGN.md §6.3）。它与单卡写入的 media_not_readable 是同一规则在
+	// 包导入链上的稳定 code。
+	CodePackageMediaForbidden = "package_media_forbidden"
 )
 
 // PackageError 是带稳定 code 的卡组包错误。
@@ -628,6 +632,13 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 	if existing, err := s.BySha256(ctx, sha); err != nil {
 		return nil, "", err
 	} else if existing != nil {
+		// 去重命中：字节已在库里，但「本次提供者」仍需登记归属（否则 B 上传与 C 相同的字节时
+		// B 拿不到 media_uploaders 记录，A 撤销共享后 B 读不到自己提供的文件，DESIGN.md §6.3）。
+		if createdBy != nil {
+			if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
+				return nil, "", err
+			}
+		}
 		return existing, "", nil
 	}
 	ext := mimeExt(mime)
@@ -642,11 +653,21 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 	row := &Media{Sha256: sha, RelPath: rel, Mime: mime, Bytes: int64(len(raw)), CreatedBy: createdBy, CreatedAt: time.Now().UTC()}
 	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 		if existing, rerr := s.BySha256(ctx, sha); rerr == nil && existing != nil {
-			// 并发下另一请求已提交同一 sha：文件被它引用，不算本次新写。
+			// 并发下另一请求已提交同一 sha：文件被它引用，不算本次新写。归属照记。
+			if createdBy != nil {
+				if rerr2 := RecordMediaUploader(ctx, s.db, sha, *createdBy); rerr2 != nil {
+					return nil, "", rerr2
+				}
+			}
 			return existing, "", nil
 		}
 		// 元数据写入失败：本次写下的文件没有行引用它，把路径交给调用方按失败路径清理。
 		return nil, abs, fmt.Errorf("media: record metadata: %w", err)
+	}
+	if createdBy != nil {
+		if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
+			return nil, abs, err
+		}
 	}
 	return row, abs, nil
 }
