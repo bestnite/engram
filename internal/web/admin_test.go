@@ -3,15 +3,12 @@ package web
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
-
-	"gorm.io/gorm"
 
 	"golang.org/x/text/language"
 
@@ -165,55 +162,6 @@ func TestAdminSensitiveSettingNeverRevealsPlaintext(t *testing.T) {
 	}
 }
 
-// TestAdminExportStreamsAllTables 验证全库导出按钮：返回 JSON，含各数据表。
-func TestAdminExportStreamsAllTables(t *testing.T) {
-	srv, cookies, _ := newAdminServer(t)
-	rec := getWithCookies(t, srv, "/admin/export", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /admin/export = %d, want 200", rec.Code)
-	}
-	var payload struct {
-		Tables map[string][]map[string]any `json:"tables"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("export body is not JSON: %v (body %s)", err, snippet(rec.Body.String()))
-	}
-	for _, want := range []string{"users", "settings", "decks", "reviews"} {
-		if _, ok := payload.Tables[want]; !ok {
-			t.Errorf("export is missing table %q", want)
-		}
-	}
-
-	// 关键守卫：导出必须覆盖**数据库里实际存在的每一张表**（见 missingExportTables）。
-	if missing := missingExportTables(t, srv.db, payload.Tables); len(missing) > 0 {
-		t.Errorf("export is missing tables that exist in the database: %v", missing)
-	}
-}
-
-// missingExportTables 返回「数据库里存在、但导出里没有」的表，跳过 SQLite 的内部记账表。
-// 比对的是数据库现实而不是 AllModels()：备份漏表时不报错，只会在恢复时表现为
-// 「TOTP 已启用但密钥不见了」这类静默降级，所以必须拿现实去比。
-func missingExportTables(t *testing.T, db *gorm.DB, exported map[string][]map[string]any) []string {
-	t.Helper()
-	tables, err := db.Migrator().GetTables()
-	if err != nil {
-		t.Fatalf("list tables: %v", err)
-	}
-	if len(tables) == 0 {
-		t.Fatal("database reports no tables; this guard would pass vacuously")
-	}
-	var missing []string
-	for _, name := range tables {
-		if strings.HasPrefix(name, "sqlite_") {
-			continue
-		}
-		if _, ok := exported[name]; !ok {
-			missing = append(missing, name)
-		}
-	}
-	return missing
-}
-
 // TestAdminOptimizeMinReviewsRejectsBelowFloor 是 M9-12 验收 2：门槛表单拒绝低于下限的
 // 提交，重定向回设置页并给出提示，且什么都没存——存量值原样保留、生效值不变。
 func TestAdminOptimizeMinReviewsRejectsBelowFloor(t *testing.T) {
@@ -291,29 +239,4 @@ func TestAdminOptimizeMinReviewsRejectsBelowFloor(t *testing.T) {
 		t.Fatalf("effective threshold = %d after posting 450, want 450", after)
 	}
 	t.Logf("valid POST 450 -> effective %d", after)
-}
-
-// TestExportCoverageGuardHasTeeth 证明上面的守卫不是空转：往库里塞一张导出根本不认识的表，
-// 守卫必须点名它。没有这一条，"守卫恒返回空"与"导出确实齐全"无法区分。
-func TestExportCoverageGuardHasTeeth(t *testing.T) {
-	srv, cookies, _ := newAdminServer(t)
-	if err := srv.db.Exec("CREATE TABLE probe_not_exported (id integer primary key)").Error; err != nil {
-		t.Fatalf("create probe table: %v", err)
-	}
-	rec := getWithCookies(t, srv, "/admin/export", cookies)
-	var payload struct {
-		Tables map[string][]map[string]any `json:"tables"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("export body is not JSON: %v", err)
-	}
-	found := false
-	for _, name := range missingExportTables(t, srv.db, payload.Tables) {
-		if name == "probe_not_exported" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("the coverage guard did not report a table that the export cannot possibly know about")
-	}
 }

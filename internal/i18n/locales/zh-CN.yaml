@@ -628,12 +628,6 @@
   translation: "优化门槛不得低于下限 300，改动未保存。"
 - id: admin.notice.save_failed
   translation: "保存设置失败，请重试。"
-- id: admin.export.heading
-  translation: "备份"
-- id: admin.export.label
-  translation: "导出全库（JSON）"
-- id: admin.export.hint
-  translation: "把全部数据表导出为 JSON 下载；文件含全部账号数据，请妥善保存。"
 # M6-2 用户管理。
 - id: admin.users.title
   translation: "用户管理"

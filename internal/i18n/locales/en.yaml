@@ -629,12 +629,6 @@
   translation: "The optimizer threshold must be at least the floor of 300; the change was not saved."
 - id: admin.notice.save_failed
   translation: "Could not save the settings. Please try again."
-- id: admin.export.heading
-  translation: "Backup"
-- id: admin.export.label
-  translation: "Export the full database (JSON)"
-- id: admin.export.hint
-  translation: "Downloads every table as JSON. Keep the file safe; it contains all account data."
 # M6-2 user management.
 - id: admin.users.title
   translation: "User management"

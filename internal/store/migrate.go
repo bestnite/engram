@@ -24,8 +24,8 @@ var BuiltinMigrations = []Migration{
 }
 
 // AutoMigrate 只做增量变更（加表/加列/加索引）。
-// 模型清单只有一处：AllModels()。原先这里曾把 TOTP 两表单独并进来，结果 AutoMigrate 建了表、
-// 而遍历 AllModels 的全库导出漏了表——两处清单必然分叉，所以并回一处。
+// 模型清单只有一处：AllModels()。原先这里曾把 TOTP 两表单独并进来，结果两处清单必然分叉，
+// 所以并回一处。
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	models := AllModels()
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {

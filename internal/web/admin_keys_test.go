@@ -52,9 +52,7 @@ func TestAdminAPIKeysNeverLeakPlaintext(t *testing.T) {
 		t.Errorf("overview is missing name or scopes; body = %s", snippet(body))
 	}
 
-	// 全量 GET 管理路由：明文绝不得出现在任何响应里。
-	// key_hash 只要求不出现在「页面」上；/admin/export 是全库备份（M6-5），按设计导出
-	// 整表（含 api_keys.key_hash，恢复所必需），sha256 不是明文，故对导出不做哈希断言。
+	// 全量 GET 管理路由：明文绝不得出现在任何响应里，key_hash 也不得出现在「页面」上。
 	checked := 0
 	for _, r := range adminRoutes() {
 		if r.Method != http.MethodGet {
@@ -66,7 +64,7 @@ func TestAdminAPIKeysNeverLeakPlaintext(t *testing.T) {
 		if strings.Contains(got, plaintext) {
 			t.Errorf("GET %s leaked the plaintext key", r.Path)
 		}
-		if r.Path != "/admin/export" && strings.Contains(got, keyHash) {
+		if strings.Contains(got, keyHash) {
 			t.Errorf("GET %s leaked the stored key hash", r.Path)
 		}
 	}

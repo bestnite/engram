@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 F20 的验收测试：管理面板里三个高影响动作——全库导出、OIDC「测试连接」、
+// 本文件是 F20 的验收测试：管理面板里两个高影响动作——OIDC「测试连接」、
 // SMTP「测试连接」——必须写审计行，且成功与失败都要留痕。审计行不得包含
 // 口令 / secret / token 等敏感值（只记动作、actor 与目标元信息）。
 
@@ -70,41 +70,6 @@ func assertNoAuditLeak(t *testing.T, db *gorm.DB, canaries ...string) {
 		if strings.Contains(dump, c) {
 			t.Errorf("audit rows leak sensitive value %q; dump =\n%s", c, dump)
 		}
-	}
-}
-
-// TestAdminExportWritesAuditRow 验证全库导出留痕：成功导出后恰好多一行 admin.export，
-// actor 是发起导出的管理员。
-func TestAdminExportWritesAuditRow(t *testing.T) {
-	srv, db, adminID, cookies, _ := newNotesServer(t)
-	ctx := context.Background()
-	audit := store.NewAuditStore(db)
-
-	before, err := audit.CountByAction(ctx, store.ActionAdminExport)
-	if err != nil {
-		t.Fatalf("count admin.export audits: %v", err)
-	}
-	rec := getWithCookies(t, srv, "/admin/export", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /admin/export = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	after, err := audit.CountByAction(ctx, store.ActionAdminExport)
-	if err != nil {
-		t.Fatalf("count admin.export audits: %v", err)
-	}
-	if after != before+1 {
-		t.Fatalf("admin.export audit rows = %d, want %d", after, before+1)
-	}
-
-	rows := auditRowsFor(t, db, store.ActionAdminExport)
-	if len(rows) != 1 {
-		t.Fatalf("admin.export rows = %d, want 1", len(rows))
-	}
-	if rows[0].UserID == nil || *rows[0].UserID != adminID {
-		t.Errorf("admin.export actor = %v, want user %d", rows[0].UserID, adminID)
-	}
-	if tt := auditStr(rows[0].TargetType); tt != "database" {
-		t.Errorf("admin.export target_type = %q, want \"database\"", tt)
 	}
 }
 

@@ -126,7 +126,7 @@ func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) 
 	return u, nil
 }
 
-// runExport 处理 `engram export`：带 --package 时导出卡组包；否则保留全库导出的占位错误。
+// runExport 处理 `engram export`：导出一个卡组包（--deck + --package）。
 func runExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	deckID := fs.Uint64("deck", 0, "deck id to export as a .edeck card package")
@@ -139,7 +139,7 @@ func runExport(args []string) error {
 		return err
 	}
 	if *out == "" {
-		return errors.New("export: --package <path> is required to export a deck package; full-database export is not implemented yet")
+		return errors.New("export: --package <path> is required to export a deck package")
 	}
 	if *deckID == 0 {
 		return errors.New("export: --deck <id> is required")
