@@ -53,7 +53,7 @@ var fields = map[Key]field{
 	KeyDBDSN:               {env: "DB_DSN", required: true},
 	KeySessionSecret:       {env: "SESSION_SECRET", required: true},
 	KeyEncryptionKey:       {env: "ENCRYPTION_KEY", required: true},
-	KeyAutoMigrate:         {env: "AUTO_MIGRATE", def: "0"},
+	KeyAutoMigrate:         {env: "AUTO_MIGRATE", def: "1"},
 	KeyBootstrapAdminEmail: {env: "BOOTSTRAP_ADMIN_EMAIL"},
 	KeyMediaDir:            {env: "MEDIA_DIR", def: "data/media"},
 	KeyOptimizerPath:       {env: "OPTIMIZER_PATH"},
