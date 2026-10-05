@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
@@ -249,9 +250,10 @@ var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存（DESIGN.md §6.3）。
 //
-// 鉴权（F2）：登录之外还要「有卡组访问权」——判定二选一：① media_uploaders 里存在指向我的
+// 鉴权（F2）：登录之外还要「有卡组访问权」——判定三选一：① media_uploaders 里存在指向我的
 // 记录（我提供过这份字节，去重命中也算）；② media_notes 映射里存在指向我可见卡组内、未软删的
-// note。谓词与列表/队列/统计同源（store.MediaAccessibleToUser → mediaReadableByUser），
+// note；③（L3）映射指向我当前会话经分享链接打开过、且授权未过期的卡组内、未软删的 note。
+// 谓词与列表/队列/统计同源（store.MediaAccessibleToUser → mediaReadableByUser），
 // 无权限与不存在统一 404。
 func (s *Server) mediaServe(c *gin.Context) {
 	user, ok := s.requireUser(c)
@@ -264,7 +266,13 @@ func (s *Server) mediaServe(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, sha)
+	// 分享授权挂在服务端会话上（L3，DESIGN.md §5）：把当前会话 id 显式交给 store 层，
+	// 让「本会话通过分享链接打开过的卡组」也计入可读范围。未登录到不了这里（requireUser 已拦截）。
+	sessionID := ""
+	if sess, ok := auth.CurrentSession(c); ok {
+		sessionID = sess.ID
+	}
+	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, sessionID, sha)
 	if err != nil {
 		s.logger.Error("media access check failed", "media_sha", sha, "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)

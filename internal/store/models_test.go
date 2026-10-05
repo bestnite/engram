@@ -39,6 +39,8 @@ var expectedTables = []string{
 	"card_states", "reviews", "deck_grants", "share_links", "media", "media_notes", "media_uploaders",
 	"api_keys", "jobs",
 	"audit_log", "schema_version", "sessions", "user_totp", "totp_recovery_codes", "mail_outbox",
+	// L3 分享会话授权表（share_session.go）。
+	"share_session_decks",
 }
 
 func TestAutoMigrateCreatesAllTables(t *testing.T) {
@@ -52,7 +54,7 @@ func TestAutoMigrateCreatesAllTables(t *testing.T) {
 					t.Errorf("table %q missing after AutoMigrate", table)
 				}
 			}
-			if got, want := len(expectedTables), 23; got != want {
+			if got, want := len(expectedTables), 24; got != want {
 				t.Errorf("expected table list has %d entries, want %d", got, want)
 			}
 		})

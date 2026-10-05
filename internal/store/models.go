@@ -265,6 +265,16 @@ type MediaUploader struct {
 
 func (MediaUploader) TableName() string { return "media_uploaders" }
 
+// ShareSessionDeck 记录「某个服务端会话通过分享链接打开过某个卡组」（L3，DESIGN.md §5）。
+// 业务存取与过期规则在同文件的 ShareSessionStore，登记在 AllModels() 里。
+type ShareSessionDeck struct {
+	SessionID string    `gorm:"primaryKey;column:session_id" json:"session_id"`
+	DeckID    uint64    `gorm:"primaryKey;column:deck_id" json:"deck_id"`
+	ExpiresAt time.Time `gorm:"not null;index" json:"expires_at"`
+}
+
+func (ShareSessionDeck) TableName() string { return "share_session_decks" }
+
 // APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
 type APIKey struct {
 	ID         uint64     `gorm:"primaryKey;column:id" json:"id"`
@@ -353,6 +363,8 @@ func AllModels() []any {
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
 		&MediaNote{}, &MediaUploader{},
+		// L3 分享会话授权：模型定义在 models.go，存取在 share_session.go。
+		&ShareSessionDeck{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
 		// M1-16 TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
 		&UserTOTP{}, &TOTPRecoveryCode{},

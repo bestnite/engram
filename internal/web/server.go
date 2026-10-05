@@ -58,6 +58,8 @@ type Deps struct {
 	Grants *store.GrantStore
 	// ShareLinks 是分享链接存储（M5-3）；为空时由 New 从 DB 构造。
 	ShareLinks *store.ShareLinkStore
+	// ShareSessions 是分享链接打开的卡组的会话级授权（L3）；为空时由 New 从 DB 构造。
+	ShareSessions *store.ShareSessionStore
 	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
 	Auditor *auth.Auditor
 	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
@@ -117,6 +119,8 @@ type Server struct {
 	presets          *store.PresetStore
 	grants           *store.GrantStore
 	shareLinks       *store.ShareLinkStore
+	// shareSessions 记录「本会话通过分享链接打开过哪些卡组」（L3）；媒体读取据此放行。
+	shareSessions *store.ShareSessionStore
 	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
 	access       *auth.DeckAccess
 	auditor      *auth.Auditor
@@ -237,6 +241,11 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.shareLinks = deps.ShareLinks
 	if s.shareLinks == nil {
 		s.shareLinks = store.NewShareLinkStore(deps.DB)
+	}
+	// L3：分享链接打开的卡组计入会话可见集合，媒体读取据此放行。同样允许从 DB 构造。
+	s.shareSessions = deps.ShareSessions
+	if s.shareSessions == nil {
+		s.shareSessions = store.NewShareSessionStore(deps.DB)
 	}
 	if deps.Decks != nil {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
