@@ -44,11 +44,11 @@ templ ShareBrowsePage(data ShareBrowseData) {
 							<li class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
 								<div>
 									<p class="text-[11px] font-semibold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{ data.FrontLabel }</p>
-									<div class="mt-2 text-base text-zinc-950 dark:text-zinc-100 leading-relaxed">{ note.FrontHTML }</div>
+									<div class="mt-2 text-base text-zinc-950 dark:text-zinc-100 leading-relaxed">@rawHTML(note.FrontHTML)</div>
 								</div>
 								<div class="border-t border-dashed border-zinc-200 dark:border-zinc-800 pt-4">
 									<p class="text-[11px] font-semibold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">{ data.BackLabel }</p>
-									<div class="mt-2 text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">{ note.BackHTML }</div>
+									<div class="mt-2 text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">@rawHTML(note.BackHTML)</div>
 								</div>
 							</li>
 						}
