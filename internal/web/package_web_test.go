@@ -121,6 +121,131 @@ func TestImportPageRequiresLogin(t *testing.T) {
 	}
 }
 
+// exportPackageBytes 通过浏览器导出端点取一个卡组包的字节，作为导入用例的合法载荷。
+// 用真实导出的包（而不是手搓字节）保证负例失败的原因是判权，而不是坏包。
+func exportPackageBytes(t *testing.T, srv *Server, deckID uint64, cookies []*http.Cookie) []byte {
+	t.Helper()
+	rec := getWithCookies(t, srv, "/decks/"+u64str(deckID)+"/package", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export deck %d = %d, want 200 (body %s)", deckID, rec.Code, snippet(rec.Body.String()))
+	}
+	body := rec.Body.Bytes()
+	if len(body) == 0 {
+		t.Fatalf("export deck %d produced an empty package", deckID)
+	}
+	return body
+}
+
+// TestImportIntoDeckDeniedForNonMember 是 M5-9 的越权负例：非成员 B 把包导入 A 的私有卡组必须
+// 被拒（403），且 A 卡组的 note 数量一条都不变。
+func TestImportIntoDeckDeniedForNonMember(t *testing.T) {
+	srv, db, ownerID, _, _ := newNotesServer(t)
+	deckA := seedDeck(t, db, ownerID, "A private")
+	seedBasic(t, db, deckA.ID, "A-Q1", "A-A1")
+
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "attacker_into")
+	srcDeck := seedDeck(t, db, bID, "attacker src")
+	seedBasic(t, db, srcDeck.ID, "INTRUDER", "x")
+	pkg := exportPackageBytes(t, srv, srcDeck.ID, bCookies)
+
+	before, err := countDeckNotes(db, deckA.ID)
+	if err != nil {
+		t.Fatalf("count A notes before: %v", err)
+	}
+	rec := uploadPackage(t, srv, "/import", bCookies, bCSRF, "evil.edeck", pkg, map[string]string{
+		"target": "into_deck", "deck_id": u64str(deckA.ID), "on_conflict": "update",
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /import into foreign deck = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	after, err := countDeckNotes(db, deckA.ID)
+	if err != nil {
+		t.Fatalf("count A notes after: %v", err)
+	}
+	if after != before {
+		t.Errorf("A deck notes changed by unauthorised into_deck import: before=%d after=%d", before, after)
+	}
+}
+
+// TestImportReplaceDeckDeniedForNonMember 覆盖更具破坏性的 replace_deck：非成员 B 不得用替换
+// 目标把 A 私有卡组的 note 软删掉；被拒后 A 原 note 的 deleted_at 仍为空，存活行数不变。
+func TestImportReplaceDeckDeniedForNonMember(t *testing.T) {
+	srv, db, ownerID, _, _ := newNotesServer(t)
+	deckA := seedDeck(t, db, ownerID, "A replace target")
+	orig := seedBasic(t, db, deckA.ID, "A-Q1", "A-A1")
+
+	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "attacker_replace")
+	srcDeck := seedDeck(t, db, bID, "attacker replace src")
+	seedBasic(t, db, srcDeck.ID, "INTRUDER", "x")
+	pkg := exportPackageBytes(t, srv, srcDeck.ID, bCookies)
+
+	rec := uploadPackage(t, srv, "/import", bCookies, bCSRF, "evil.edeck", pkg, map[string]string{
+		"target": "replace_deck:" + u64str(deckA.ID), "on_conflict": "update",
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /import replace foreign deck = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	// 原 note 不得被软删（replace_deck 会先软删目标卡组全部 note）。
+	var after store.Note
+	if err := db.Unscoped().First(&after, orig.ID).Error; err != nil {
+		t.Fatalf("reload A note %d: %v", orig.ID, err)
+	}
+	if after.DeletedAt.Valid {
+		t.Errorf("A note %d was soft-deleted by unauthorised replace_deck", orig.ID)
+	}
+	if n, err := countDeckNotes(db, deckA.ID); err != nil || n != 1 {
+		t.Errorf("A deck live notes = %d err %v, want 1", n, err)
+	}
+}
+
+// TestImportRequiresCSRF 是必测负例：缺 CSRF token 的导入写请求被拒且不落库。
+func TestImportRequiresCSRF(t *testing.T) {
+	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "CSRF deck")
+	seedBasic(t, db, deck.ID, "Q1", "A1")
+	src := seedDeck(t, db, ownerID, "CSRF src")
+	seedBasic(t, db, src.ID, "NEW", "x")
+	pkg := exportPackageBytes(t, srv, src.ID, ownerCookies)
+
+	rec := uploadPackage(t, srv, "/import", ownerCookies, "", "pack.edeck", pkg, map[string]string{
+		"target": "into_deck", "deck_id": u64str(deck.ID),
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /import without CSRF = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if n, err := countDeckNotes(db, deck.ID); err != nil || n != 1 {
+		t.Errorf("deck notes = %d err %v, want 1 (no write without CSRF)", n, err)
+	}
+}
+
+// TestImportIntoOwnDeckSucceeds 是正向对照：卡组 owner 自己 into_deck 成功，且确实写入新笔记。
+func TestImportIntoOwnDeckSucceeds(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Own deck")
+	seedBasic(t, db, deck.ID, "Q1", "A1")
+	src := seedDeck(t, db, ownerID, "Own src")
+	seedBasic(t, db, src.ID, "NEW", "x")
+	pkg := exportPackageBytes(t, srv, src.ID, ownerCookies)
+
+	rec := uploadPackage(t, srv, "/import", ownerCookies, ownerCSRF, "pack.edeck", pkg, map[string]string{
+		"target": "into_deck", "deck_id": u64str(deck.ID), "on_conflict": "update",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("owner POST /import into own deck = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if n, err := countDeckNotes(db, deck.ID); err != nil || n != 2 {
+		t.Errorf("owner import notes = %d err %v, want 2", n, err)
+	}
+	// 断言确实写入：目标卡组里出现了包内的新笔记内容。
+	var found int64
+	if err := db.Model(&store.Note{}).Where("deck_id = ? AND fields_json LIKE ?", deck.ID, "%NEW%").Count(&found).Error; err != nil {
+		t.Fatalf("count imported note: %v", err)
+	}
+	if found != 1 {
+		t.Errorf("imported note count = %d, want 1", found)
+	}
+}
+
 // countDeckNotes 数一个卡组下的笔记条数，用于往返校验。
 func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 	var n int64

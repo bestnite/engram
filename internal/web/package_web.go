@@ -235,6 +235,20 @@ func (s *Server) importSubmit(c *gin.Context) {
 		id := strings.TrimSpace(c.PostForm("deck_id"))
 		target = "into_deck:" + id
 	}
+	// 目标卡组判权（DESIGN.md §7.6）：合并进已有卡组需要 editor，替换是破坏性操作
+	// （ImportPackage 会先软删目标卡组全部 note）只允许 owner。判权与 REST 入口同规
+	// （internal/api/package.go），且必须在 ImportPackage 之前完成 —— store 层不做判权，
+	// 少了这一步，任何登录用户都能向他人私有卡组写入或清空（M5-9）。
+	// 失败由 loadDeckForRole 写出 403/404 并记 permission.denied 审计，与其它 handler 一致。
+	if kind, deckID, err := store.ParsePackageTarget(target); err == nil && kind != store.PackageTargetNewDeck {
+		want := store.RoleEditor
+		if kind == "replace_deck" {
+			want = store.RoleOwner
+		}
+		if _, ok := s.loadDeckForRole(c, user, deckID, want); !ok {
+			return
+		}
+	}
 	opts := store.PackageImportOptions{
 		Target:     target,
 		DryRun:     c.PostForm("dry_run") == "1",
