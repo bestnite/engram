@@ -146,6 +146,13 @@ type Server struct {
 	baseURL string
 }
 
+// secureCookies 报告站点是否经 https 提供，依据 BASE_URL 的 scheme（DESIGN.md §4.3、§4.4）。
+// 生产是「Caddy 终止 TLS → 应用只收到明文 http」，所以绝不能看请求自身的 TLS 状态，
+// 否则线上 cookie 会丢掉 Secure。
+func (s *Server) secureCookies() bool {
+	return strings.HasPrefix(s.baseURL, "https://")
+}
+
 // New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
 func New(addr string, deps Deps) (*Server, error) {
 	if deps.DB == nil {

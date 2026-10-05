@@ -11,11 +11,12 @@ import (
 
 // doubleSubmitRouter 是不依赖会话的一套路由：GET /form 下发双提交 cookie 并回显镜像 token，
 // POST /submit 只由 DoubleSubmitMiddleware 校验。用它可以证明会话前 CSRF 不依赖服务端会话。
-func doubleSubmitRouter() *gin.Engine {
+// secure 是调用方判定「站点是否 https」后传入的值（这里由测试直接给定）。
+func doubleSubmitRouter(secure bool) *gin.Engine {
 	router := gin.New()
 	router.Use(DoubleSubmitMiddleware())
 	router.GET("/form", func(c *gin.Context) {
-		c.String(http.StatusOK, EnsureDoubleSubmitToken(c))
+		c.String(http.StatusOK, EnsureDoubleSubmitToken(c, secure))
 	})
 	router.POST("/submit", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -27,7 +28,7 @@ func doubleSubmitRouter() *gin.Engine {
 func TestDoubleSubmitIssuesCookieAndMirroredToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
-	doubleSubmitRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/form", nil))
+	doubleSubmitRouter(false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/form", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /form status = %d, want 200", rec.Code)
 	}
@@ -75,7 +76,7 @@ func TestDoubleSubmitRejections(t *testing.T) {
 				req.Header.Set(CSRFHeaderName, tc.token)
 			}
 			rec := httptest.NewRecorder()
-			doubleSubmitRouter().ServeHTTP(rec, req)
+			doubleSubmitRouter(false).ServeHTTP(rec, req)
 			if rec.Code != http.StatusForbidden {
 				t.Errorf("%s: status = %d, want 403", tc.name, rec.Code)
 			}
@@ -95,7 +96,7 @@ func TestDoubleSubmitAcceptsMatchingPair(t *testing.T) {
 		}
 		req.AddCookie(&http.Cookie{Name: CSRFDoubleSubmitCookieName, Value: tok})
 		rec := httptest.NewRecorder()
-		doubleSubmitRouter().ServeHTTP(rec, req)
+		doubleSubmitRouter(false).ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("form=%v: status = %d, want 200 (body %s)", form, rec.Code, rec.Body.String())
 		}

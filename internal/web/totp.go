@@ -152,7 +152,7 @@ func (s *Server) setTOTPPendingCookie(c *gin.Context, userID uint64) {
 		Path:     "/",
 		MaxAge:   int(totpPendingTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   strings.HasPrefix(s.baseURL, "https://"),
+		Secure:   s.secureCookies(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -165,7 +165,7 @@ func (s *Server) clearTOTPPendingCookie(c *gin.Context) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   strings.HasPrefix(s.baseURL, "https://"),
+		Secure:   s.secureCookies(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -205,7 +205,7 @@ func (s *Server) renderTOTPChallenge(c *gin.Context, loc *i18n.Localizer, status
 		RecoveryHint: loc.T("totp.login.recovery_hint"),
 		SubmitLabel:  loc.T("totp.login.submit"),
 		ErrorMessage: errMsg,
-		CSRF:         auth.EnsureDoubleSubmitToken(c),
+		CSRF:         auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
 	}
 	renderHTMLStatus(c, status, views.TOTPChallengePage(data))
 }
