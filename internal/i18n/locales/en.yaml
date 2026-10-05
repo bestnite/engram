@@ -2153,3 +2153,8 @@
   translation: "The package contains media of a disallowed type."
 - id: error.package_unsafe_media
   translation: "The package contains media of a disallowed type."
+# F27: deck package manifest deck name/description limits
+- id: error.package_deck_meta_invalid
+  translation: "The deck name or description in the package is invalid."
+- id: import.error.package_deck_meta_invalid
+  translation: "The deck name or description in the package is invalid."

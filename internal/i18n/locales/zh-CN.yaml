@@ -2151,3 +2151,8 @@
   translation: "卡组包包含不允许的媒体类型。"
 - id: error.package_unsafe_media
   translation: "卡组包包含不允许的媒体类型。"
+# F27: 卡组包 manifest 卡组名/描述界限
+- id: error.package_deck_meta_invalid
+  translation: "卡组包中的卡组名称或描述不合法。"
+- id: import.error.package_deck_meta_invalid
+  translation: "卡组包中的卡组名称或描述不合法。"

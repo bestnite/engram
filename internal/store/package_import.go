@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -44,6 +45,74 @@ type PackageLimits struct {
 // DefaultPackageLimits 给出保守的默认上限，防 zip bomb。
 func DefaultPackageLimits() PackageLimits {
 	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
+}
+
+// 卡组名与描述的长度界限（F27，2026-10-06 由用户拍板）。
+//
+// 按 Unicode 字符（rune）计数，不按字节：一个汉字或 emoji 算一个字符。若按字节，
+// 中文卡组名会被腰斩到 66 个字，而 200 个 emoji 只能留下 50 个——字号与用户认知的
+// “几个字”直接冲突。
+const (
+	maxPackageDeckNameChars        = 200
+	maxPackageDeckDescriptionChars = 2000
+)
+
+// deckMetaErrors 校验 manifest 的卡组名与描述，返回条目级原因（英文，与既有条目措辞一致）。
+//
+// 规则：
+//   - 长度按 rune 计：卡组名 ≤ 200、描述 ≤ 2000；
+//   - 拒一切 C0 控制字符（U+0000–U+001F），包括 \n、	、\r，不为例外开口子：
+//     卡组名/描述没有需要换行的场景，而这些字符会撑坏页面与日志，并干扰 uniqueDeckName 的展示；
+//   - 拒非法 UTF-8：后面的 rune 计数与落库都假定输入是合法 UTF-8。
+//
+// 空值不校验：空卡组名是既有语义（由调用方回退成 Imported deck）。
+func deckMetaErrors(name, description string) []string {
+	var entries []string
+	if name != "" {
+		entries = append(entries, textFieldErrors("deck.name", name, maxPackageDeckNameChars)...)
+	}
+	if description != "" {
+		entries = append(entries, textFieldErrors("deck.description", description, maxPackageDeckDescriptionChars)...)
+	}
+	return entries
+}
+
+// textFieldErrors 校验单个文本字段的长度、控制字符与 UTF-8 合法性。
+func textFieldErrors(field, value string, maxChars int) []string {
+	if !utf8.ValidString(value) {
+		// 非法 UTF-8 下 rune 计数没有意义，只报这一条。
+		return []string{field + ": invalid UTF-8"}
+	}
+	var entries []string
+	if n := utf8.RuneCountInString(value); n > maxChars {
+		entries = append(entries, fmt.Sprintf("%s: exceeds %d characters (got %d)", field, maxChars, n))
+	}
+	if r, ok := firstControlRune(value); ok {
+		entries = append(entries, fmt.Sprintf("%s: contains a control character U+%04X", field, r))
+	}
+	return entries
+}
+
+// firstControlRune 返回值里第一个 C0 控制字符（U+0000–U+001F）。
+func firstControlRune(s string) (rune, bool) {
+	for _, r := range s {
+		if r <= 0x1f {
+			return r, true
+		}
+	}
+	return 0, false
+}
+
+// packageDeckMetaError 把条目级原因包成稳定的 PackageError；没有原因时返回 nil。
+func packageDeckMetaError(entries []string) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	return &PackageError{
+		Code:    CodePackageDeckMetaInvalid,
+		Message: "the deck name or description in the package is invalid",
+		Entries: entries,
+	}
 }
 
 // PackageImportOptions 控制一次导入（DESIGN.md §7.6）。
@@ -304,7 +373,16 @@ func parseJSONEntry(entries map[string][]byte, name string, out any) error {
 
 func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	pkg := &packageModel{Media: map[string]PackageMediaEntry{}, MediaRaw: map[string][]byte{}}
+	// manifest.json 的原始字节必须是合法 UTF-8：encoding/json 会把非法字节静默替换成
+	// U+FFFD（按文档“不是错误”），只看解码后的字符串就永远抓不到它，只能在原始字节上把关（F27）。
+	if raw, ok := entries["manifest.json"]; ok && !utf8.Valid(raw) {
+		return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid UTF-8 in manifest", Entries: []string{"manifest.json: invalid UTF-8"}}
+	}
 	if err := parseJSONEntry(entries, "manifest.json", &pkg.Manifest); err != nil {
+		return nil, err
+	}
+	// 卡组名/描述的长度与字符界限（F27）：在解析出 manifest 后立即校验，事务开始前拒绝整包。
+	if err := packageDeckMetaError(deckMetaErrors(pkg.Manifest.Deck.Name, pkg.Manifest.Deck.Description)); err != nil {
 		return nil, err
 	}
 	if pkg.Manifest.FormatVersion < 1 || pkg.Manifest.FormatVersion > PackageFormatVersion {
@@ -568,6 +646,11 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		if name == "" {
 			name = "Imported deck"
+		}
+		// 覆盖值（opts.NewDeckName）可能与 manifest 不同：界限对最终写进 decks.name 的那个值同样生效，
+		// 否则调用方能用覆盖绕开 manifest 校验（F27）。
+		if err := packageDeckMetaError(textFieldErrors("deck.name", name, maxPackageDeckNameChars)); err != nil {
+			return 0, err
 		}
 		name, err := uniqueDeckName(ctx, tx, actorUserID, name)
 		if err != nil {
