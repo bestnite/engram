@@ -35,13 +35,14 @@ func (s *SessionStore) ByID(ctx context.Context, id string) (*Session, error) {
 }
 
 // Revoke 作废单个会话（登出）。已作废的再次调用幂等。
+// 会话一旦作废，它登记过的分享授权（L3）也必须消失：授权只服务于该会话的浏览，留着只是垃圾。
 func (s *SessionStore) Revoke(ctx context.Context, id string, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&Session{}).
 		Where("id = ? AND revoked_at IS NULL", id).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
-	return nil
+	return removeShareGrantsForSessionTx(ctx, s.db, id)
 }
 
 // RevokeAllForUser 作废某用户的全部有效会话（改密码、禁用、强制下线）。
@@ -51,24 +52,26 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID uint64, at t
 
 // RevokeAllForUserTx 在调用方给定的事务里批量作废某用户的全部有效会话。
 // 口令重置需要它与密码写入、API Key 吊销共享同一事务，失败时不留下半作废（DESIGN.md §11）。
+// 该用户全部会话的分享授权（L3）在同一事务里一并删除。
 func (s *SessionStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
 	if err := tx.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions: %w", err)
 	}
-	return nil
+	return removeShareGrantsForUserTx(ctx, tx, userID, "")
 }
 
 // RevokeAllForUserExcept 作废某用户除 keepID 外的全部有效会话。
 // 本人在设置页改密码时用它：其它设备立即下线，当前会话保留，用户不会改完密码就被踢出。
+// 被踢下线的会话的分享授权（L3）随之删除；当前会话保留自己的（用户还在浏览）。
 func (s *SessionStore) RevokeAllForUserExcept(ctx context.Context, userID uint64, keepID string, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL AND id <> ?", userID, keepID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions except current: %w", err)
 	}
-	return nil
+	return removeShareGrantsForUserTx(ctx, s.db, userID, keepID)
 }
 
 // Touch 更新会话的最后活跃时间；best-effort，失败不应打断请求。

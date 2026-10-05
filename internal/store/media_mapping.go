@@ -67,14 +67,19 @@ func mediaRefsIn(fields map[string]any) map[string]bool {
 	return refs
 }
 
-// mediaReadableByUser 判定 sha 的媒体是否可被 userID 读取（DESIGN.md §6.3 的两支）。
+// mediaReadableByUser 判定 sha 的媒体是否可被 userID 读取（DESIGN.md §6.3 的两支 + L3 的分享支）。
 //
-// 允许读取的充要条件，二选一：
+// 允许读取的充要条件，三选一：
 //  1. media_uploaders 里存在指向 userID 的记录（他提供过这份字节，去重命中也算，且不可撤销）；
-//  2. media_notes 映射里存在一条指向「userID 可见卡组内、未软删的 note」的记录。
+//  2. media_notes 映射里存在一条指向「userID 可见卡组内、未软删的 note」的记录；
+//  3. shareSessionID 非空、且 media_notes 映射里存在一条指向「该**服务端会话**通过分享链接打开过、
+//     且该授权未过期」的卡组内、未软删的 note（L3，DESIGN.md §5）。
+//
+// 第 3 支只对读取路径开放：写入前校验（checkNewMediaRefs）传空 sessionID。分享链接的访客是 reader，
+// 本就不能写 note；把分享授权也算进「可读」，会让写前校验引用一个语义上不该有的来源。
 //
 // 它与读取端点 MediaAccessibleToUser 共用同一判定，也与写前校验共用——「可读」只有这一处定义。
-func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaSha string) (bool, error) {
+func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaSha, shareSessionID string) (bool, error) {
 	if db == nil || userID == 0 || mediaSha == "" {
 		return false, nil
 	}
@@ -96,7 +101,24 @@ func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaS
 		Count(&refs).Error; err != nil {
 		return false, fmt.Errorf("store: count media note refs: %w", err)
 	}
-	return refs > 0, nil
+	if refs > 0 {
+		return true, nil
+	}
+	// 第三支：本会话通过分享链接打开过的卡组（过期 / 已撤销链接由子查询排除，见 share_session.go）。
+	if shareSessionID != "" {
+		var shared int64
+		if err := db.WithContext(ctx).Model(&MediaNote{}).
+			Joins("JOIN notes ON notes.id = media_notes.note_id AND notes.deleted_at IS NULL").
+			Where("media_notes.media_sha = ?", mediaSha).
+			Where("notes.deck_id IN (?)", shareSessionDeckIDsQuery(db, shareSessionID, time.Now().UTC())).
+			Count(&shared).Error; err != nil {
+			return false, fmt.Errorf("store: count media share session refs: %w", err)
+		}
+		if shared > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // checkNewMediaRefs 在写入之前校验「本次新引入的引用」是否都是写入者（actor）可读的。
@@ -132,7 +154,7 @@ func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor uint64, oldFields
 		if err != nil {
 			return fmt.Errorf("store: check media ref %s: %w", sha, err)
 		}
-		ok, err := mediaReadableByUser(ctx, db, actor, sha)
+		ok, err := mediaReadableByUser(ctx, db, actor, sha, "")
 		if err != nil {
 			return err
 		}

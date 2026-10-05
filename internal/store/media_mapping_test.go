@@ -214,7 +214,7 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("rebuild"))
 			id := saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
 
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || !ok {
 				t.Fatalf("reader before removal: readable=%v err=%v, want true", ok, err)
 			}
 
@@ -230,7 +230,7 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 			if rows != 0 {
 				t.Errorf("stale media_notes rows after reference removal = %d, want 0 (rebuild must delete old rows)", rows)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || ok {
 				t.Fatalf("reader after removal: readable=%v err=%v, want false", ok, err)
 			}
 		})
@@ -255,13 +255,13 @@ func TestMediaMappingSoftDeletedNoteDoesNotAuthorize(t *testing.T) {
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("softdel"))
 			id := saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
 
-			if ok, _ := MediaAccessibleToUser(ctx, db, reader, sha); !ok {
+			if ok, _ := MediaAccessibleToUser(ctx, db, reader, "", sha); !ok {
 				t.Fatal("reader should read the media before the note is soft deleted")
 			}
 			if err := NewNoteStore(db).Delete(ctx, id); err != nil {
 				t.Fatalf("soft delete note: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || ok {
 				t.Fatalf("reader after note soft delete: readable=%v err=%v, want false", ok, err)
 			}
 		})
@@ -408,7 +408,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Clone: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, cloner, sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media: readable=%v err=%v, want true", ok, err)
 			}
 			// 源卡组改为 private、并把源 note 软删：副本不再依赖源卡组仍可见。
@@ -423,7 +423,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if _, err := NewNoteStore(db).DeleteMany(ctx, mustNoteIDs(t, db, src.ID), false); err != nil {
 				t.Fatalf("soft delete source notes: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, cloner, sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media after source hidden: readable=%v err=%v, want true", ok, err)
 			}
 			// 副本里确实有一条引用该 sha 的 note（映射归属副本，而不是源）。
