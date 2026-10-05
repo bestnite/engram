@@ -148,9 +148,9 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
 	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
 	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)
-	v1.GET("/keys", a.authn.RequireScope(store.ScopeAdmin), a.listKeys)
-	v1.POST("/keys", a.authn.RequireScope(store.ScopeAdmin), a.createKey)
-	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeAdmin), a.deleteKey)
+	v1.GET("/keys", a.authn.RequireScope(store.ScopeKeys), a.listKeys)
+	v1.POST("/keys", a.authn.RequireScope(store.ScopeKeys), a.createKey)
+	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
 }
 
 // audit 写一条审计（带当前 key 的 api_key_id）；写失败记英文日志但不回滚业务。

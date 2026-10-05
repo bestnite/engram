@@ -1458,6 +1458,8 @@
   translation: "You do not have access to this resource."
 - id: error.insufficient_role
   translation: "Your role on this deck is not sufficient for this action."
+- id: error.scope_not_grantable
+  translation: "Only administrator accounts can be granted the admin scope."
 - id: error.conflict
   translation: "The request conflicts with the current state."
 - id: error.version_conflict
@@ -2020,6 +2022,8 @@
   translation: "write"
 - id: keys.scope.review
   translation: "review"
+- id: keys.scope.keys
+  translation: "keys"
 - id: keys.scope.admin
   translation: "admin"
 - id: keys.error.name_required
@@ -2032,6 +2036,8 @@
   translation: "Invalid expiry date."
 - id: keys.error.create_failed
   translation: "Could not create the key. Please try again."
+- id: keys.error.admin_forbidden
+  translation: "Only administrators can create keys with the admin scope."
 - id: settings.keys.heading
   translation: "API keys"
 - id: settings.keys.hint

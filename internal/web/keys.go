@@ -24,9 +24,27 @@ import (
 //   - 明文只在创建成功的那次响应里渲染一次，绝不落库、绝不在后续 GET 出现。
 //   - 创建与撤销都是写操作，过 CSRF 中间件（DESIGN.md §4.3），并各写一条审计。
 
-// keyScopes 是创建表单里可勾选的四档 scope，顺序与 store 的规范顺序一致（DESIGN.md §7.2）。
-// 展示名走语言包 keys.scope.<value>，不在代码里写死文案。
-var keyScopes = []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview, store.ScopeAdmin}
+// keyScopesFor 返回该角色在创建表单里可勾选的 scope 档位，顺序与 store 的规范顺序一致
+// （DESIGN.md §7.2）。普通用户看不到 admin：这只是辅助防线，服务端拒绝才是真正的边界
+// （见 keysCreate）。展示名走语言包 keys.scope.<value>，不在代码里写死文案。
+func keyScopesFor(user *store.User) []string {
+	scopes := []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview, store.ScopeKeys}
+	if user != nil && user.Role == store.RoleAdmin {
+		scopes = append(scopes, store.ScopeAdmin)
+	}
+	return scopes
+}
+
+// scopesIncludeAdmin 判断表单提交的 scope 里是否含 admin（按原值匹配，未归一化）。
+// 取值合法性由 store.NormalizeScopes 负责，这里只关心“是否试图授予 admin”。
+func scopesIncludeAdmin(scopes []string) bool {
+	for _, s := range scopes {
+		if strings.TrimSpace(s) == store.ScopeAdmin {
+			return true
+		}
+	}
+	return false
+}
 
 // keysPage 渲染「我的 API Key」页；匿名访问被重定向到登录页（requireUser）。
 func (s *Server) keysPage(c *gin.Context) {
@@ -72,6 +90,13 @@ func (s *Server) keysCreate(c *gin.Context) {
 	normalized, err := store.NormalizeScopes(selected)
 	if err != nil {
 		s.renderKeys(c, loc, user, http.StatusBadRequest, loc.T("keys.error.scopes_invalid"), "")
+		return
+	}
+	// admin scope 只能发给管理员账号：非管理员经任何路径提交一律拒绝，且不落库（DESIGN.md
+	// §7.2）。表单隐藏 admin 选项只是辅助，服务端不信任任何提交上来的表单。钤制放在这里
+	// 是因为只有传输层知道 actor 的角色。
+	if scopesIncludeAdmin(selected) && user.Role != store.RoleAdmin {
+		s.renderKeys(c, loc, user, http.StatusForbidden, loc.T("keys.error.admin_forbidden"), "")
 		return
 	}
 
@@ -182,8 +207,8 @@ func (s *Server) renderKeys(c *gin.Context, loc *i18n.Localizer, user *store.Use
 		})
 	}
 
-	scopeOptions := make([]views.ScopeOption, 0, len(keyScopes))
-	for _, sc := range keyScopes {
+	scopeOptions := make([]views.ScopeOption, 0, len(keyScopesFor(user)))
+	for _, sc := range keyScopesFor(user) {
 		scopeOptions = append(scopeOptions, views.ScopeOption{
 			Value: sc,
 			Label: loc.T("keys.scope." + sc),

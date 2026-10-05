@@ -43,7 +43,7 @@ account. A single deck exports to an `.edeck` package for backup, migration or o
 The REST API lives under `/api/v1`, the built-in MCP server at `POST /mcp` (HTTP only, no stdio).
 The two are equivalent: both authenticate with a per-user API key and call the same service
 methods, so validation and scheduling rules cannot diverge. Keys carry scopes (`read`, `write`,
-`review`, `admin`) and are managed under Settings in the browser; request and response schemas live
+`review`, `keys`, `admin`) and are managed under Settings in the browser; request and response schemas live
 in [`schema/`](schema/).
 
 ### Interface
