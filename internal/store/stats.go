@@ -404,6 +404,12 @@ type TagStat struct {
 }
 
 // TagBreakdown 按 notes.tags_json 聚合复习量、留存率与「遗忘」（rating=Again）次数。
+//
+// tags_json 是 note 级内容元数据：reviews.user_id 只保证日志行属于本人，挡不住「本人曾
+// 复习过、现已不可见」的卡组把标签透出来。缺这道谓词时，A 撤销对 B 的授权后，B 的统计页
+// 仍会列出原卡组的标签与复习量（本仓真实缺陷）。因此与 DeckBreakdown 同源，只聚合
+// 「该用户当前可见卡组」的标签：自有 ∪ 被 deck_grants 授权 ∪ 他人 public。
+//
 // tags_json 是 TEXT（双库兼容约定禁止 jsonb/array），SQL 无法跨库解析 JSON，
 // 因此在 Go 侧解码后聚合；数据量是单个用户的复习日志，可接受。
 func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, toDay string) ([]TagStat, error) {
@@ -417,8 +423,8 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 	sql := `SELECT r.rating AS rating, n.tags_json AS tags_json FROM reviews AS r
 		JOIN cards AS c ON c.id = r.card_id AND c.deleted_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
-		WHERE r.user_id = ? AND r.review_day >= ? AND r.review_day <= ?`
-	if err := s.db.WithContext(ctx).Raw(sql, userID, fromDay, toDay).Scan(&rows).Error; err != nil {
+		WHERE r.user_id = ? AND n.deck_id IN (?) AND r.review_day >= ? AND r.review_day <= ?`
+	if err := s.db.WithContext(ctx).Raw(sql, userID, visibleDeckIDsQuery(s.db, userID), fromDay, toDay).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("tag breakdown: %w", err)
 	}
 	acc := map[string]*TagStat{}

@@ -580,3 +580,115 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 		})
 	}
 }
+
+// seedTaggedDeck 建一个属于 owner 的卡组，含一张带单个标签的笔记与 cards 张卡，
+// 供标签维度的可见性用例构造「他人 public / 他人 private / 已撤销授权」三种卡组。
+func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility, tag string, cards int) uint64 {
+	t.Helper()
+	p := NewPreset(owner, name)
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset %s: %v", name, err)
+	}
+	d := Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: p.ID, CreatedAt: statsNow}
+	if err := db.Create(&d).Error; err != nil {
+		t.Fatalf("create deck %s: %v", name, err)
+	}
+	n := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `["` + tag + `"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	if err := db.Create(&n).Error; err != nil {
+		t.Fatalf("create note in %s: %v", name, err)
+	}
+	for i := 0; i < cards; i++ {
+		createStatsCard(t, db, n.ID, "t"+strconv.Itoa(i))
+	}
+	return d.ID
+}
+
+// addUser1Reviews 在指定卡组内的每张卡上补一条用户 1 的复习（状态行 + 2026-10-02 的日志），
+// 用来构造「撤销授权后仍有历史复习」的越权场景；want 是预期的卡数，卡数不符即夹具漂移。
+func addUser1Reviews(t *testing.T, db *gorm.DB, deckID uint64, want int) {
+	t.Helper()
+	var cards []Card
+	if err := db.Where("note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Find(&cards).Error; err != nil {
+		t.Fatalf("load cards of deck %d: %v", deckID, err)
+	}
+	if len(cards) != want {
+		t.Fatalf("deck %d has %d cards, want %d", deckID, len(cards), want)
+	}
+	for _, c := range cards {
+		setState(t, db, c.ID, "review", statsNow.Add(-time.Hour), 5)
+		seedReview(t, db, c.ID, "2026-10-02", 3, 2, 5, 1000, "self", statsNow)
+	}
+}
+
+// TestStatsTagBreakdownScopesToVisibleDecks 是标签维度越权的回归用例（DESIGN.md §9 标签维度）。
+//
+// 缺陷形态：TagBreakdown 以 reviews 为起点、JOIN notes 取 tags_json 在 Go 侧聚合。
+// 标签是 note 级内容元数据，reviews.user_id 这道行级安全挡不住它：A 撤销对 B 的授权后，
+// B 的统计页仍会列出原卡组的标签及其复习量/留存率（本仓真实缺陷）。
+//
+// 口径：标签维度与卡组维度同源，只聚合「当前可见卡组」的标签；其余 reviews 纯聚合
+// （ReviewVolume 等）按 DESIGN.md §9 的刻意不对称保持全史。本用例在同一个夹具里
+// 用正向对照把这两条口径一起钉死，防止实现顺手给别的聚合也加上谓词。
+func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			seedStatsFixture(t, db)
+			ctx := context.Background()
+
+			// 他人 public 卡组：可见，标签应照常出现。
+			publicDeck := seedTaggedDeck(t, db, 2, "Other public", DeckVisibilityPublic, "shared", 1)
+			// 他人 private 卡组：不可见，标签不得出现（即使存在用户 1 的历史复习）。
+			privateDeck := seedTaggedDeck(t, db, 2, "Other private", DeckVisibilityPrivate, "leaked-private", 2)
+			// 曾授权给用户 1、现已撤销的卡组：不可见，标签不得出现——缺陷的直接症状。
+			revokedDeck := seedTaggedDeck(t, db, 2, "Revoked grant", DeckVisibilityPrivate, "leaked-revoked", 2)
+			if err := db.Create(&DeckGrant{DeckID: revokedDeck, UserID: 1, Role: "reader", CreatedAt: statsNow}).Error; err != nil {
+				t.Fatalf("create grant: %v", err)
+			}
+
+			addUser1Reviews(t, db, publicDeck, 1)
+			addUser1Reviews(t, db, privateDeck, 2)
+			addUser1Reviews(t, db, revokedDeck, 2)
+
+			if err := db.Where("deck_id = ? AND user_id = ?", revokedDeck, 1).Delete(&DeckGrant{}).Error; err != nil {
+				t.Fatalf("delete grant: %v", err)
+			}
+
+			got, err := NewStatsStore(db).TagBreakdown(ctx, 1, "2026-01-01", "2026-12-31")
+			if err != nil {
+				t.Fatalf("TagBreakdown() error = %v", err)
+			}
+			// 只应出现可见卡组的标签：自有（go、fsrs）与他人 public（shared）。
+			want := map[string]int64{"go": 5, "fsrs": 3, "shared": 1}
+			gotTags := make(map[string]int64, len(got))
+			for _, row := range got {
+				gotTags[row.Tag] = row.Reviews
+			}
+			if len(gotTags) != len(want) {
+				t.Fatalf("TagBreakdown() returned %d tags %+v, want %d (%v)", len(gotTags), got, len(want), want)
+			}
+			for tag, reviews := range want {
+				if gotTags[tag] != reviews {
+					t.Errorf("tag %q reviews = %d, want %d", tag, gotTags[tag], reviews)
+				}
+			}
+			// 显式点名两个越权标签，失败信息直接指认缺陷。
+			for _, leak := range []string{"leaked-private", "leaked-revoked"} {
+				if _, ok := gotTags[leak]; ok {
+					t.Errorf("TagBreakdown() leaked tag %q from a deck not visible to the user", leak)
+				}
+			}
+
+			// 正向对照：ReviewVolume 是纯聚合，保持全史，撤销授权不得让它减少。
+			// 夹具自有 10-02 两条 + 追加的 public 1、private 2、已撤销 2 = 今日 7；
+			// 近 7 日加 10-01 一条 = 8；近 30 日再加 09-20 一条 = 9。
+			// 若实现顺手给 ReviewVolume 也加了可见卡组谓词，这里会掉到 3/4/5。
+			vol, err := NewStatsStore(db).ReviewVolume(ctx, 1, "2026-10-02")
+			if err != nil {
+				t.Fatalf("ReviewVolume() error = %v", err)
+			}
+			if vol.Today != 7 || vol.Last7Days != 8 || vol.Last30Days != 9 {
+				t.Errorf("ReviewVolume() = %+v, want {Today:7 Last7Days:8 Last30Days:9} (pure aggregation stays full history)", vol)
+			}
+		})
+	}
+}
