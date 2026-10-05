@@ -645,7 +645,7 @@ Conventions:
   *Acceptance:* a wrong issuer shows the discovery error on the page; a correct
   configuration completes a stub login.
 - [x] **M6-5 System settings UI** — site name, default locale, upload size limit, allowed
-  mime list, media directory usage, full-database export button.
+  mime list, media directory usage.
   *Acceptance:* each setting is applied without a restart and the page shows whether the
   effective value comes from the environment or the database.
 - [x] **M6-6 Jobs UI** — list jobs with status, stage, log tail, cancel action.
