@@ -2,9 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -13,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 
@@ -26,7 +21,7 @@ import (
 	"git.nite07.com/nite/engram/internal/web/views"
 )
 
-// 系统设置页与全库导出（DESIGN.md §8.4；ROADMAP.md M6-5）。
+// 系统设置页（DESIGN.md §8.4；ROADMAP.md M6-5）。
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
 // settings 表按请求现读，因此管理员改完下一次请求即生效，无需重启。每一行都标出来源。
@@ -243,16 +238,12 @@ func (s *Server) adminSettingsPage(c *gin.Context) {
 			Value:   loc.T("admin.column.value"),
 			Source:  loc.T("admin.column.source"),
 		},
-		Sections:      sections,
-		Notice:        s.settingNotice(loc, c.Query("notice")),
-		ShowForm:      true,
-		FormAction:    "/admin/settings",
-		CSRF:          csrf,
-		SaveLabel:     loc.T("admin.action.save"),
-		ExportHeading: loc.T("admin.export.heading"),
-		ExportLabel:   loc.T("admin.export.label"),
-		ExportHref:    "/admin/export",
-		ExportHint:    loc.T("admin.export.hint"),
+		Sections:   sections,
+		Notice:     s.settingNotice(loc, c.Query("notice")),
+		ShowForm:   true,
+		FormAction: "/admin/settings",
+		CSRF:       csrf,
+		SaveLabel:  loc.T("admin.action.save"),
 	}
 	renderHTML(c, views.AdminPage(data))
 }
@@ -416,66 +407,4 @@ func (s *Server) isSupportedLocale(code string) bool {
 		}
 	}
 	return false
-}
-
-// adminExport 把全库导出成 JSON 下载：遍历 store.AllModels，逐表流式写出，避免整库驻留内存。
-func (s *Server) adminExport(c *gin.Context) {
-	u, ok := auth.CurrentUser(c)
-	if !ok {
-		c.AbortWithStatus(http.StatusForbidden)
-		return
-	}
-	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.Header("Content-Disposition", `attachment; filename="engram-export.json"`)
-	c.Status(http.StatusOK)
-	w := c.Writer
-	ctx := c.Request.Context()
-
-	// 导出在流式写出之前留痕：动作一开始就把整库交给浏览器，响应开始后无法再补写。
-	// 只记动作与 actor，不记备份内容（DESIGN.md §11）。
-	s.audit(ctx, store.AuditEntry{
-		UserID: store.Ptr(u.ID), Action: store.ActionAdminExport,
-		TargetType: "database",
-	})
-
-	// 手工拼 JSON 顶层对象，保证每张表算完即写、不缓冲整库。
-	if _, err := io.WriteString(w, `{"exported_at":`); err != nil {
-		return
-	}
-	if b, err := json.Marshal(time.Now().UTC().Format(time.RFC3339)); err == nil {
-		_, _ = w.Write(b)
-	}
-	if _, err := io.WriteString(w, `,"tables":{`); err != nil {
-		return
-	}
-	// 用 Migrator 解析表名，而不是断言 TableName() 接口：后者会让"忘了写 TableName 的模型"
-	// 被静默跳过——那和漏登记模型是同一类 bug（备份少一张表却不报错）。
-	first := true
-	for _, model := range store.AllModels() {
-		stmt := &gorm.Statement{DB: s.db}
-		if err := stmt.Parse(model); err != nil || stmt.Schema == nil || stmt.Schema.Table == "" {
-			s.logger.Error("admin: export cannot resolve table name", "model", fmt.Sprintf("%T", model), "error", err)
-			continue
-		}
-		table := stmt.Schema.Table
-		var rows []map[string]any
-		if err := s.db.WithContext(ctx).Model(model).Find(&rows).Error; err != nil {
-			s.logger.Error("admin: export table failed", "table", table, "error", err)
-			continue
-		}
-		nameJSON, _ := json.Marshal(table)
-		rowsJSON, err := json.Marshal(rows)
-		if err != nil {
-			s.logger.Error("admin: encode export table failed", "table", table, "error", err)
-			continue
-		}
-		if !first {
-			_, _ = io.WriteString(w, ",")
-		}
-		first = false
-		_, _ = w.Write(nameJSON)
-		_, _ = io.WriteString(w, ":")
-		_, _ = w.Write(rowsJSON)
-	}
-	_, _ = io.WriteString(w, "}}")
 }

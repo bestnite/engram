@@ -113,12 +113,12 @@ func TestOutboxSummaryReportsCountsAndLastError(t *testing.T) {
 	}
 }
 
-// TestOutboxTableNameIsStable 固定表名，避免复数化规则漂移（导出/迁移两侧都依赖它）。
+// TestOutboxTableNameIsStable 固定表名，避免复数化规则漂移（AutoMigrate 依赖它）。
 func TestOutboxTableNameIsStable(t *testing.T) {
 	if got := (OutboxMessage{}).TableName(); got != "mail_outbox" {
 		t.Errorf("OutboxMessage.TableName() = %q, want mail_outbox", got)
 	}
-	// 必须登记进 AllModels，否则全库导出会静默漏表。
+	// 必须登记进 AllModels，否则 AutoMigrate 会静默缺表。
 	found := false
 	for _, m := range AllModels() {
 		if _, ok := m.(*OutboxMessage); ok {
@@ -126,6 +126,6 @@ func TestOutboxTableNameIsStable(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("OutboxMessage is not registered in AllModels(); backups would silently skip it")
+		t.Error("OutboxMessage is not registered in AllModels(); migrations would silently skip it")
 	}
 }

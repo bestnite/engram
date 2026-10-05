@@ -54,7 +54,6 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodPost, Path: "/admin/invites/:id/revoke", Write: true},
 		{Method: http.MethodGet, Path: "/admin/settings"},
 		{Method: http.MethodPost, Path: "/admin/settings", Write: true},
-		{Method: http.MethodGet, Path: "/admin/export"},
 		{Method: http.MethodGet, Path: "/admin/jobs"},
 		{Method: http.MethodPost, Path: "/admin/jobs/:id/cancel", Write: true},
 		{Method: http.MethodGet, Path: "/admin/oidc"},
@@ -117,8 +116,6 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			} else {
 				handlers = append(handlers, s.adminSettingsPage)
 			}
-		case "/admin/export":
-			handlers = append(handlers, s.adminExport)
 		case "/admin/jobs":
 			handlers = append(handlers, s.adminJobsPage)
 		case "/admin/jobs/:id/cancel":

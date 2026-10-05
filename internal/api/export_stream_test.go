@@ -235,3 +235,23 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Error("include_progress=2 must behave like off (no state column)")
 	}
 }
+
+// TestExportRequiresExplicitDeck 断言 GET /api/v1/export 必须显式指定卡组：deck 缺省或为 0
+// 一律 400。全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个显式卡组。
+func TestExportRequiresExplicitDeck(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "exp_nodeck", store.RoleUser)
+	seedDeck(t, env.db, user.ID)
+	k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
+
+	for _, target := range []string{
+		"/api/v1/export",
+		"/api/v1/export?format=json",
+		"/api/v1/export?deck=0",
+	} {
+		status, raw := doJSON(t, env.router(), http.MethodGet, target, k.Plaintext, "")
+		if status != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400 (body %s)", target, status, raw)
+		}
+	}
+}

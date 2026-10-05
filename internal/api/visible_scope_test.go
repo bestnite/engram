@@ -108,56 +108,6 @@ func TestListDecksUsesVisibleScope(t *testing.T) {
 	}
 }
 
-// TestExportAllUsesVisibleScope 是 F5 的导出面验收：deck=0（全库导出）与 list_decks
-// 同一可见集合，且可见性即时生效；REST /export 出口同样受该集合约束。
-func TestExportAllUsesVisibleScope(t *testing.T) {
-	f := newVisibleFixture(t)
-	ctx := context.Background()
-
-	assertExportIDs := func(ids []uint64, want map[uint64]bool) {
-		t.Helper()
-		got := make(map[uint64]bool, len(ids))
-		for _, id := range ids {
-			got[id] = true
-		}
-		if len(got) != len(want) {
-			t.Fatalf("ExportDeckIDs = %v, want %v", ids, want)
-		}
-		for id := range want {
-			if !got[id] {
-				t.Fatalf("ExportDeckIDs = %v, want %v", ids, want)
-			}
-		}
-	}
-
-	ids, err := f.env.api.ExportDeckIDs(ctx, f.viewer.ID, 0)
-	if err != nil {
-		t.Fatalf("ExportDeckIDs: %v", err)
-	}
-	assertExportIDs(ids, map[uint64]bool{f.granted.ID: true, f.public.ID: true})
-
-	// 可见性即时生效。
-	setDeckVisibility(t, f.env, f.public.ID, store.DeckVisibilityPrivate)
-	ids, err = f.env.api.ExportDeckIDs(ctx, f.viewer.ID, 0)
-	if err != nil {
-		t.Fatalf("ExportDeckIDs after flip: %v", err)
-	}
-	assertExportIDs(ids, map[uint64]bool{f.granted.ID: true})
-
-	// REST GET /api/v1/export?format=json 的 deck_ids 必须与上面同集合。
-	status, raw := doJSON(t, f.env.router(), http.MethodGet, "/api/v1/export?format=json", f.key.Plaintext, "")
-	if status != http.StatusOK {
-		t.Fatalf("GET /export status = %d, want 200 (body %s)", status, raw)
-	}
-	var body struct {
-		DeckIDs []uint64 `json:"deck_ids"`
-	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		t.Fatalf("decode export: %v (%s)", err, raw)
-	}
-	assertExportIDs(body.DeckIDs, map[uint64]bool{f.granted.ID: true})
-}
-
 // TestStatsVisibleContentButFullReviewHistory 是 F6 的验收：
 //   - notes/cards/due/decks 只算可见集合（被授权卡组计入，撤销后不再计入）；
 //   - reviews_today / reviews_total / retention 按本人历史返回，撤销授权不追溯；

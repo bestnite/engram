@@ -9,25 +9,26 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"git.nite07.com/nite/engram/internal/store"
 )
 
-// exportCards 以 json 或 csv 导出卡片级内容；include_progress=1 时附带调用者本人的进度。
+// exportCards 以 json 或 csv 导出单个卡组的卡片级内容；include_progress=1 时附带调用者本人的进度。
 // 导出他人共享的卡组时绝不包含他人进度（DESIGN.md §7.6 的同一条边界）。
 //
 // M4-5：两种格式都边查边写（流式），大卡组不把整组读进内存。查询本身用 Rows() 游标
 // 逐行推进，这里只负责把每行直接写进 http.ResponseWriter。
+//
+// deck 必须显式给出：全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个卡组。
 func (a *API) exportCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
 
-	var deckID uint64
-	if raw := c.Query("deck"); raw != "" {
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil || id == 0 {
-			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
-			return
-		}
-		deckID = id
+	raw := c.Query("deck")
+	id, err := strconv.ParseUint(raw, 10, 64)
+	if raw == "" || err != nil || id == 0 {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
 	}
 	format := c.DefaultQuery("format", "json")
 	if format != "json" && format != "csv" {
@@ -37,11 +38,11 @@ func (a *API) exportCards(c *gin.Context) {
 	includeProgress := c.Query("include_progress") == "1"
 
 	// 权限与卡组存在性必须在写任何响应字节之前确定，否则无法回 404/403。
-	deckIDs, err := a.ExportDeckIDs(ctx, u.ID, deckID)
-	if err != nil {
+	if _, err := a.RequireDeckRole(ctx, u.ID, id, store.RoleReader); err != nil {
 		writeServiceError(c, err)
 		return
 	}
+	deckIDs := []uint64{id}
 
 	if format == "csv" {
 		a.streamCSV(c, ctx, u.ID, deckIDs, includeProgress)

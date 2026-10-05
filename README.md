@@ -54,7 +54,8 @@ home screen and opened in its own window; only static assets are cached.
 ### Admin panel
 
 Users, registration policy, OIDC, upload limits, audit log, background jobs and health checks all
-live here.
+live here. Backup is not a panel feature: the instance operator is responsible for it — dump the
+database and copy the media directory.
 
 ## Quick start
 

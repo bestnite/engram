@@ -795,24 +795,6 @@ type ExportRow struct {
 	Lapses      *int           `json:"lapses,omitempty"`
 }
 
-// ExportDeckIDs 解析导出目标卡组集合：deckID=0 时导出调用者可见的卡组，否则仅该卡组。
-//
-// 「全部导出」与 list_decks 同口径（自有 ∪ 被授权 ∪ 他人 public，DESIGN.md §7.5 的
-// 2026-10-06 决定），不得静默扩大成库内全部卡组；可见性谓词只有 store 一份（F5）。
-func (a *API) ExportDeckIDs(ctx context.Context, userID, deckID uint64) ([]uint64, error) {
-	if deckID != 0 {
-		if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
-			return nil, err
-		}
-		return []uint64{deckID}, nil
-	}
-	ids, err := a.decks.VisibleIDs(ctx, userID)
-	if err != nil {
-		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load decks")
-	}
-	return ids, nil
-}
-
 // ---- 复习 ----
 
 // DueCard 是到期卡的对外形态（含字段原文）。

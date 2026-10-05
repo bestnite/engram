@@ -87,16 +87,6 @@ templ AdminPage(data AdminPageData) {
 						}
 					</div>
 				}
-
-					if data.ExportHref != "" {
-						<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-							<div>
-								<h2 class="text-base font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.ExportHeading }</h2>
-								<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{ data.ExportHint }</p>
-							</div>
-							<a class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors" href={ data.ExportHref }>{ data.ExportLabel }</a>
-						</section>
-					}
 				</div>
 			</div>
 		</div>

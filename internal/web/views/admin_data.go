@@ -103,11 +103,6 @@ type AdminPageData struct {
 	FormAction string
 	CSRF       string
 	SaveLabel  string
-	// 全库导出入口（GET，无需 CSRF）。
-	ExportHeading string
-	ExportLabel   string
-	ExportHref    string
-	ExportHint    string
 
 	// ---- 用户管理页（M6-2）----
 	// UsersPage 为 true 时模板渲染用户表而不是设置区块。

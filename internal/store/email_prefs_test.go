@@ -111,9 +111,9 @@ func TestEmailPrefsSetChoicesReplaces(t *testing.T) {
 	}
 }
 
-// TestEmailPrefsTableRegisteredForExport 断言 email_prefs 进了 AllModels()：
-// 全库导出遍历 AllModels，漏登记会让备份静默少一张表（AGENTS.md §6.4、M1-18 守卫测试）。
-func TestEmailPrefsTableRegisteredForExport(t *testing.T) {
+// TestEmailPrefsTableRegisteredForMigration 断言 email_prefs 进了 AllModels()：
+// AutoMigrate 从 AllModels 取，漏登记会让建表静默少一张（AGENTS.md §6.4、M1-18 守卫测试）。
+func TestEmailPrefsTableRegisteredForMigration(t *testing.T) {
 	found := false
 	for _, model := range AllModels() {
 		if _, ok := model.(*EmailPref); ok {
@@ -121,6 +121,6 @@ func TestEmailPrefsTableRegisteredForExport(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("EmailPref is not registered in AllModels(); the admin export would silently skip email_prefs")
+		t.Fatal("EmailPref is not registered in AllModels(); AutoMigrate would silently skip email_prefs")
 	}
 }
