@@ -28,6 +28,14 @@ import (
 // newEnv 装配真实 SQLite + REST + MCP 的同进程 HTTP 服务，复刻 main 的挂载方式。
 func newEnv(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *httptest.Server) {
 	t.Helper()
+	a, db, keys, _, ts := newEnvWithServer(t)
+	return a, db, keys, ts
+}
+
+// newEnvWithServer 同 newEnv，另外返回 MCP server 本体，供需要检查内部状态的用例
+// （如会话属主表）使用。
+func newEnvWithServer(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *Server, *httptest.Server) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "mcp.db"))
 	if err != nil {
@@ -69,7 +77,7 @@ func newEnv(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *httptest.Ser
 	g.DELETE("/mcp", endpoint)
 	ts := httptest.NewServer(router)
 	t.Cleanup(ts.Close)
-	return apiSrv, db, keys, ts
+	return apiSrv, db, keys, mcpSrv, ts
 }
 
 func seedUser(t *testing.T, db *gorm.DB, name string) *store.User {

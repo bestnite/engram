@@ -234,6 +234,34 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 	}
 }
 
+// TestGetDueCardsRejectsMixedUnreadableDeckIDs 覆盖混合集合负例：deck_ids 里一个自己可读的
+// 卡组和一个他人的私有卡组混在一起时整次调用失败，不得只返回可读卡组的卡片。
+// MCP 复用 api.DueCards 的逐 id 判权，与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck
+// 同一口径（DESIGN.md §3.3）。
+func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	owner := seedUser(t, db, "mixed-owner")
+	stranger := seedUser(t, db, "mixed-stranger")
+	readable := seedDeck(t, db, owner.ID)
+	foreign := seedDeck(t, db, stranger.ID)
+	seedDueCardMCP(t, db, readable.ID)
+	seedDueCardMCP(t, db, foreign.ID)
+	key := newKey(t, keys, owner.ID, []string{store.ScopeRead, store.ScopeReview})
+	cs := connect(t, ts.URL, key)
+
+	_, isErr, text := callTool(t, cs, "get_due_cards", map[string]any{
+		"deck_ids": []any{readable.ID, foreign.ID}, "limit": 50,
+	})
+	if !isErr {
+		t.Fatalf("get_due_cards with a readable+foreign deck_ids must fail the whole call")
+	}
+	// 失败必须是无权限/不存在，而不是参数错误——否则这个用例没有覆盖「整请求失败」的原因。
+	if !strings.Contains(text, api.CodeForbidden) && !strings.Contains(text, api.CodeNotFound) {
+		t.Errorf("mixed deck_ids error text = %q, want code %s or %s",
+			text, api.CodeForbidden, api.CodeNotFound)
+	}
+}
+
 // ---- M4-11：create_deck 与 REST 建卡组同源 ----
 
 // errorCode 取 REST 统一错误包壳里的稳定 code。

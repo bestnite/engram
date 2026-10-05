@@ -78,6 +78,15 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # 漏洞门禁（F25）：只把「可达」漏洞作为失败条件。govulncheck 默认只报告调用路径
+      # 可达的漏洞，命中时退出码为 3；依赖里存在但代码并未调用的漏洞不阻断构建，避免
+      # 误报噪声。版本固定，避免 CI 结论随工具版本漂移（本机以 v1.8.0 验证）。
+      - name: Vulnerability check (govulncheck, reachable only)
+        run: |
+          set -euo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck ./...
+
       # 平台相关代码只有交叉编译才暴露：runner 是 Linux，internal/jobs 的 process_windows.go
       # 在原生构建里根本不参与编译，写错了也一直是绿的（M0-14）。vet 连测试文件一起类型检查，
       # 所以 unix-only 的测试文件会不会漏到别的平台上也在这里兜住。

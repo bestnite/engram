@@ -141,3 +141,20 @@ func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
 			rec.Code, snippet(rec.Body.String()))
 	}
 }
+
+// TestReviewScopeRejectsMixedUnreadableDeck 覆盖混合集合负例：一个自己可读的卡组和一个他人的
+// 私有卡组同时出现时，整次请求失败，不得静默丢弃无权限的那个、只渲染可读卡组的卡片。
+// 与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck 是同一口径（DESIGN.md §3.3）。
+func TestReviewScopeRejectsMixedUnreadableDeck(t *testing.T) {
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	readable := seedReviewDeck(t, db, ownerID, "Mine")
+	foreign := seedReviewDeck(t, db, ownerID+1, "Foreign deck")
+	seedBasic(t, db, readable.ID, "Front", "Back")
+
+	rec := getWithCookies(t, srv,
+		"/review?deck="+u64str(readable.ID)+"&deck="+u64str(foreign.ID), cookies)
+	if rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /review with a readable+foreign deck status = %d, want 403 or 404 (body %s)",
+			rec.Code, snippet(rec.Body.String()))
+	}
+}
