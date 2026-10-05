@@ -85,6 +85,15 @@ const (
 
 	// M1-22 一键退订：用户凭免登录令牌关掉某个可选邮件类型时留痕。
 	ActionUserEmailUnsubscribe = "user.email_unsubscribe"
+
+	// M6-5 全库导出（/admin/export）、M6-4 OIDC「测试连接」、M1-17 SMTP「测试连接」。
+	// 三者都是高影响动作：导出把整库交给浏览器，两次「测试连接」会发起管理员指定的出站连接。
+	// 成功与失败都要有行——失败同样留下「谁在何时试图连到哪里」的取证线索。
+	// 审计行只记动作与目标元信息（导出无目标；测试连接记 host / issuer），
+	// 绝不记凭据、口令、token、邮件正文或整备份内容（DESIGN.md §11）。
+	ActionAdminExport   = "admin.export"
+	ActionAdminOIDCTest = "admin.oidc_test"
+	ActionAdminSMTPTest = "admin.smtp_test"
 )
 
 // AuditEntry 是一次审计写入的入参。

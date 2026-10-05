@@ -49,6 +49,11 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 	if !ok {
 		return
 	}
+	u, uok := auth.CurrentUser(c)
+	if !uok {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
@@ -72,6 +77,13 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 		result = loc.T("admin.oidc.test.ok")
 		ok = true
 	}
+	// 「测试连接」会发起管理员指定的出站连接：成功与失败都留痕，只记 issuer 与结果，
+	// 绝不记 client secret（DESIGN.md §11）。
+	s.audit(ctx, store.AuditEntry{
+		UserID: store.Ptr(u.ID), Action: store.ActionAdminOIDCTest,
+		TargetType: "oidc",
+		Detail:     map[string]any{"issuer": issuer, "ok": ok},
+	})
 	data, derr := s.oidcAdminData(c, loc, cfg, result, ok)
 	if derr != nil {
 		s.logger.Error("admin: build oidc page data failed", "error", derr)
