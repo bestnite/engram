@@ -128,7 +128,8 @@ func TestAcceptance1_PasswordAloneCannotFinishLogin(t *testing.T) {
 	}
 
 	// 正确验证码：完成登录，拿到会话。
-	code, err := totp.GenerateCode(secret, time.Now())
+	// 用下一个时间步的码：绑定确认已用掉当前步，F19 之后同一时间步不可二次通过。
+	code, err := totp.GenerateCode(secret, time.Now().Add(30*time.Second))
 	if err != nil {
 		t.Fatalf("GenerateCode() error = %v", err)
 	}
