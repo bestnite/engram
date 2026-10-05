@@ -10,6 +10,11 @@ import (
 // 到达前先画出一帧白底；内联引导把暗色类、color-scheme、画布底色提前到首帧之前。
 func TestThemeBootstrapRunsBeforeStylesheet(t *testing.T) {
 	srv := newRenderServer(t, nil)
+	if !srv.assets.Has("css/tailwind.css") {
+		// tailwind.css 是 CI/构建期生成的（AGENTS.md §4）；未生成时跳过而不是误报失败
+		// ——与 home_test.go 的 hashed-asset 用例同一口径。
+		t.Skip("css/tailwind.css not generated; run the Tailwind CLI step from AGENTS.md §4")
+	}
 	body := get(t, srv, "/", nil).Body.String()
 
 	head := strings.Index(body, "<head>")
