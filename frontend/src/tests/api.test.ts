@@ -353,6 +353,170 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(keyUnknown).toBe('error.unknown');
       expect(formatMessage('zh-CN', keyUnknown)).toBe('操作失败，请稍后重试');
       expect(formatMessage('en', keyUnknown)).toBe('Operation failed, please try again');
+
+      const errCsrfFailed = new ApiClientError('HTTP 403', {
+        status: 403,
+        code: 'csrf_failed',
+      });
+      const keyCsrfFailed = getApiErrorMessageKey(errCsrfFailed);
+      expect(keyCsrfFailed).toBe('error.csrf_failed');
+      expect(formatMessage('zh-CN', keyCsrfFailed)).toBe('安全校验令牌失效，请刷新页面后重试');
+      expect(formatMessage('en', keyCsrfFailed)).toBe('Security validation token expired, please refresh the page');
+    });
+  });
+
+  describe('CSRF token awareness on mutating requests (DESIGN.md §4.3)', () => {
+    it('manages CSRF token state', () => {
+      expect(client.getCsrfToken()).toBeNull();
+      client.setCsrfToken('test-csrf-token-123');
+      expect(client.getCsrfToken()).toBe('test-csrf-token-123');
+      client.setCsrfToken(null);
+      expect(client.getCsrfToken()).toBeNull();
+    });
+
+    it('attaches X-CSRF-Token header to mutating requests (PATCH, POST) when token is configured', async () => {
+      client.setCsrfToken('csrf-token-xyz');
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            profile: {
+              display_name: 'Updated Name',
+              locale: 'en',
+              timezone: 'UTC',
+              day_cutoff_hour: 4,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await client.updateProfile({
+        display_name: 'Updated Name',
+        locale: 'en',
+        timezone: 'UTC',
+        day_cutoff_hour: 4,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/profile');
+      expect(init?.method).toBe('PATCH');
+      expect(init?.credentials).toBe('same-origin');
+
+      const headers = new Headers(init?.headers);
+      expect(headers.get('X-CSRF-Token')).toBe('csrf-token-xyz');
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(headers.get('Accept')).toBe('application/json');
+    });
+
+    it('does not attach X-CSRF-Token on GET requests even if token is configured', async () => {
+      client.setCsrfToken('csrf-token-xyz');
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ decks: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      await client.getDecks();
+      const [, init] = mockFetch.mock.calls[0]!;
+      const headers = new Headers(init?.headers);
+      expect(headers.has('X-CSRF-Token')).toBe(false);
+    });
+
+    it('allows overriding CSRF token via options on updateProfile and updateLocale', async () => {
+      client.setCsrfToken('global-token');
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ locale: 'zh-CN' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      await client.updateLocale('zh-CN', { csrfToken: 'explicit-token' });
+      const [, init] = mockFetch.mock.calls[0]!;
+      const headers = new Headers(init?.headers);
+      expect(headers.get('X-CSRF-Token')).toBe('explicit-token');
+    });
+  });
+
+  describe('User profile and locale API methods (DESIGN.md §4.1、§8.3)', () => {
+    it('getProfile fetches and unwraps user profile payload', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            profile: {
+              id: 1,
+              username: 'alice',
+              display_name: 'Alice',
+              locale: 'zh-CN',
+              timezone: 'Asia/Shanghai',
+              day_cutoff_hour: 4,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      const profile = await client.getProfile();
+      expect(profile.display_name).toBe('Alice');
+      expect(profile.locale).toBe('zh-CN');
+      expect(profile.timezone).toBe('Asia/Shanghai');
+      expect(profile.day_cutoff_hour).toBe(4);
+    });
+
+    it('getProfile raises ApiClientError with not_found on 404 (detects API gap)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'not_found',
+              message: 'Route not found',
+            },
+          }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getProfile()).rejects.toSatisfy((err: unknown) => {
+        return err instanceof ApiClientError && err.isNotFound && err.status === 404;
+      });
+    });
+
+    it('updateProfile throws ApiClientError on invalid response format', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response('<html>502 Bad Gateway</html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        })
+      );
+
+      await expect(
+        client.updateProfile({
+          display_name: 'Bob',
+          locale: 'en',
+          timezone: 'UTC',
+        })
+      ).rejects.toSatisfy((err: unknown) => {
+        return err instanceof ApiClientError && err.status === 502 && err.code === 'internal_error';
+      });
+    });
+
+    it('updateLocale issues PATCH request with locale payload', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ locale: 'en' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const res = await client.updateLocale('en');
+      expect(res.locale).toBe('en');
+
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/settings/locale');
+      expect(init?.method).toBe('PATCH');
+      expect(JSON.parse(init?.body as string)).toEqual({ locale: 'en' });
     });
   });
 });

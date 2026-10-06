@@ -148,3 +148,59 @@ export class ApiClientError extends Error {
     return this.code === 'network_error';
   }
 }
+
+/**
+ * 用户基础资料与设置结构（DESIGN.md §4.1、§8.3，Go: internal/store/models.go:User）
+ */
+export interface UserProfile {
+  id?: number;
+  username?: string;
+  email?: string;
+  display_name: string;
+  locale: string;
+  timezone: string;
+  day_cutoff_hour: number | null;
+}
+
+/**
+ * 更新个人资料请求体结构
+ */
+export interface UpdateProfileRequest {
+  display_name: string;
+  locale: string;
+  timezone: string;
+  day_cutoff_hour?: number | null;
+}
+
+/**
+ * 切换语言请求体结构（DESIGN.md §8.3）
+ */
+export interface UpdateLocaleRequest {
+  locale: string;
+}
+
+/**
+ * 个人资料响应体结构
+ */
+export interface ProfileResponse {
+  profile: UserProfile;
+}
+
+/**
+ * 客户端表单校验结果结构
+ */
+export interface ProfileValidationResult {
+  valid: boolean;
+  errors: Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour', string>>;
+  data?: UpdateProfileRequest;
+}
+
+/**
+ * 会话与 CSRF 信息包结构
+ */
+export interface SessionInfo {
+  authenticated: boolean;
+  user?: UserProfile;
+  csrf_token?: string;
+}
+

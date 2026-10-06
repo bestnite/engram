@@ -5,6 +5,9 @@ import {
   type NotesResponse,
   type NoteListParams,
   type ApiErrorEnvelope,
+  type UserProfile,
+  type UpdateProfileRequest,
+  type ProfileResponse,
 } from './types';
 
 /**
@@ -51,12 +54,27 @@ function inferErrorCodeFromStatus(status: number): string {
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
+  private csrfToken: string | null = null;
 
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = config.baseUrl || '';
     this.fetchFn =
       config.fetch ||
       (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : (null as unknown as typeof fetch));
+  }
+
+  /**
+   * 配置或更新客户端绑定的 CSRF Token（DESIGN.md §4.3）
+   */
+  setCsrfToken(token: string | null): void {
+    this.csrfToken = token;
+  }
+
+  /**
+   * 读取当前已绑定的 CSRF Token
+   */
+  getCsrfToken(): string | null {
+    return this.csrfToken;
   }
 
   /**
@@ -68,6 +86,16 @@ export class ApiClient {
 
     if (!headers.has('Accept')) {
       headers.set('Accept', 'application/json');
+    }
+
+    const method = (init?.method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      if (this.csrfToken && !headers.has('X-CSRF-Token')) {
+        headers.set('X-CSRF-Token', this.csrfToken);
+      }
+      if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
     }
 
     let res: Response;
@@ -189,6 +217,63 @@ export class ApiClient {
     const res = await this.getDecks();
     const idNum = Number(deckId);
     return res.decks.find((d) => d.id === idNum) || null;
+  }
+
+  /**
+   * 获取当前用户基础资料（GET /api/v1/profile）
+   * DESIGN.md §4.1、§8.3
+   */
+  async getProfile(): Promise<UserProfile> {
+    const res = await this.request<ProfileResponse | UserProfile>('/api/v1/profile');
+    if (res && typeof res === 'object' && 'profile' in res && res.profile) {
+      return res.profile;
+    }
+    return res as UserProfile;
+  }
+
+  /**
+   * 更新当前用户资料（PATCH /api/v1/profile）
+   * DESIGN.md §4.1、§8.3
+   * 严格使用同源凭据与 CSRF 标头
+   */
+  async updateProfile(
+    data: UpdateProfileRequest,
+    options?: { csrfToken?: string }
+  ): Promise<UserProfile> {
+    const headers = new Headers();
+    const token = options?.csrfToken || this.csrfToken;
+    if (token) {
+      headers.set('X-CSRF-Token', token);
+    }
+    const res = await this.request<ProfileResponse | UserProfile>('/api/v1/profile', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(data),
+    });
+    if (res && typeof res === 'object' && 'profile' in res && res.profile) {
+      return res.profile;
+    }
+    return res as UserProfile;
+  }
+
+  /**
+   * 仅切换用户界面语言偏好（PATCH /api/v1/settings/locale）
+   * DESIGN.md §8.3
+   */
+  async updateLocale(
+    locale: string,
+    options?: { csrfToken?: string }
+  ): Promise<{ locale: string }> {
+    const headers = new Headers();
+    const token = options?.csrfToken || this.csrfToken;
+    if (token) {
+      headers.set('X-CSRF-Token', token);
+    }
+    return this.request<{ locale: string }>('/api/v1/settings/locale', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ locale }),
+    });
   }
 }
 

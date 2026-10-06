@@ -7,6 +7,9 @@ import { ApiClientError } from './types';
  */
 export function getApiErrorMessageKey(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.code === 'csrf_failed' || error.code === 'csrf_no_session') {
+      return 'error.csrf_failed';
+    }
     if (error.isUnauthorized) {
       return 'error.unauthorized';
     }
