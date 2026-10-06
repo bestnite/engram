@@ -89,6 +89,7 @@ export interface DueCard {
   fields: Record<string, unknown>;
   tags: string[];
   template?: string;
+  version: number;
 }
 
 /**
@@ -97,6 +98,25 @@ export interface DueCard {
  */
 export interface DueCardsResponse {
   cards: DueCard[];
+}
+
+export interface SubmitSelfReviewRequest {
+  card_id: number;
+  rating: number;
+  expected_version: number;
+  elapsed_ms?: number;
+  deck?: number[];
+}
+
+export interface SubmitReviewResult {
+  card_id: number;
+  review_id: number;
+  state: string;
+  due_at: string | null;
+  version: number;
+  stability: number | null;
+  cards: DueCard[];
+  remaining: number;
 }
 
 /**

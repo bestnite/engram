@@ -337,6 +337,10 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.api != nil {
 		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。
 		s.api.Register(router)
+		// SPA 答题只接受会话 cookie，并在 API 组之外显式校验会话绑定的 CSRF。
+		if s.sessions != nil {
+			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.spaReviewAnswer)
+		}
 	}
 	if s.mcp != nil && s.api != nil {
 		// MCP 复用同一套鉴权（DESIGN.md §7.4）；鉴权后把身份注入请求上下文再交给 streamable handler。

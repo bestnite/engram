@@ -5,6 +5,7 @@ import DeckDetailView from '../views/DeckDetailView.svelte';
 import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 import LoginView from '../views/LoginView.svelte';
+import ReviewView from '../views/ReviewView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -29,6 +30,11 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/notes',
     name: 'deck-notes',
     component: DeckDetailView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/review',
+    name: 'review',
+    component: ReviewView as unknown as RouteDefinition['component'],
   },
   {
     path: '/stats',
