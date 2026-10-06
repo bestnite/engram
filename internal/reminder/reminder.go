@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -37,6 +36,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 const (
@@ -45,7 +45,7 @@ const (
 	// 选 10 分钟的理由：提醒是「催一下」而不是准点事件，用户感知不到分钟级差异；
 	// 发送时刻以小时为粒度、每日上限以复习日为粒度，10 分钟足够在用户选定的小时到达后很快
 	// 补发，又把每轮的 DB 开销压到「一条候选查询 + 每用户一两次小查询」的量级。
-	DefaultInterval = 10 * time.Minute
+	DefaultInterval = worker.DefaultInterval
 	// DefaultSendHour 是未设置每用户发送小时时的全局默认（本地 19:00）。
 	//
 	// 选 19:00：提醒是「今天还有卡没复习」的催促，傍晚是大多数人一天里能坐下来复习的时段，
@@ -53,6 +53,9 @@ const (
 	DefaultSendHour = 19
 	// DefaultReviewPath 是复习页路径（提醒正文里的链接）。
 	DefaultReviewPath = "/review"
+	// runFailedLog 是单轮失败时的英文日志消息，注入共享骨架 worker.Config.FailMessage；
+	// 文案与重构前逐字一致。
+	runFailedLog = "review reminder run failed"
 )
 
 // Enqueuer 是提醒 worker 依赖的发信入口；生产由 *mail.Outbox 满足，测试注入替身。
@@ -86,22 +89,21 @@ type Deps struct {
 }
 
 // Reminder 持有后台 worker 与配置。
+//
+// 起停与 tick 循环来自内嵌的共享骨架 *worker.Lifecycle（internal/worker）：Start/Stop
+// 由它提升，签名与重构前一致，cmd/engram 的调用不变。
 type Reminder struct {
+	*worker.Lifecycle
+
 	db         *gorm.DB
 	outbox     Enqueuer
 	translator *i18n.Translator
 	logger     *slog.Logger
 	now        func() time.Time
-	interval   time.Duration
 	baseURL    string
 	reviewPath string
 	// tokens 签发退订令牌（M1-22）；为空时不加退订头。
 	tokens *auth.ActionTokenService
-
-	mu      sync.Mutex
-	started bool
-	cancel  context.CancelFunc
-	done    chan struct{}
 }
 
 // New 构造 Reminder；不启动 worker，需再调用 Start。
@@ -123,85 +125,32 @@ func New(deps Deps) (*Reminder, error) {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	interval := deps.Interval
-	if interval <= 0 {
-		interval = DefaultInterval
-	}
 	path := strings.TrimSpace(deps.ReviewPath)
 	if path == "" {
 		path = DefaultReviewPath
 	}
-	return &Reminder{
+	r := &Reminder{
 		db:         deps.DB,
 		outbox:     deps.Outbox,
 		translator: deps.Translator,
 		logger:     logger,
 		now:        now,
-		interval:   interval,
 		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		reviewPath: path,
 		tokens:     deps.Tokens,
-	}, nil
-}
-
-// Start 启动唯一的 worker goroutine；重复调用幂等。ctx 取消时 worker 退出。
-func (r *Reminder) Start(ctx context.Context) {
-	r.mu.Lock()
-	if r.started {
-		r.mu.Unlock()
-		return
 	}
-	r.started = true
-	runCtx, cancel := context.WithCancel(ctx)
-	r.cancel = cancel
-	done := make(chan struct{})
-	r.done = done
-	r.mu.Unlock()
-	go func() {
-		defer close(done)
-		r.loop(runCtx)
-	}()
-}
-
-// Stop 优雅停止 worker：取消上下文并等待当前轮结束。可重复调用。
-func (r *Reminder) Stop() {
-	r.mu.Lock()
-	if !r.started {
-		r.mu.Unlock()
-		return
+	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
+	lifecycle, err := worker.New(worker.Config{
+		RunOnce:     r.RunOnce,
+		Logger:      logger,
+		FailMessage: runFailedLog,
+		Interval:    deps.Interval,
+	})
+	if err != nil {
+		return nil, err
 	}
-	r.started = false
-	cancel := r.cancel
-	done := r.done
-	r.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		<-done
-	}
-}
-
-// loop 是 worker 主循环：启动即跑一轮（补上进程停机期间错过的窗口），随后定时轮询。
-func (r *Reminder) loop(ctx context.Context) {
-	ticker := time.NewTicker(r.interval)
-	defer ticker.Stop()
-	r.runAndLog(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			r.runAndLog(ctx)
-		}
-	}
-}
-
-// runAndLog 跑一轮并把查询级错误记成英文日志（worker 不能因单轮失败而退出）。
-func (r *Reminder) runAndLog(ctx context.Context) {
-	if err := r.RunOnce(ctx); err != nil {
-		r.logger.Error("review reminder run failed", "error", err)
-	}
+	r.Lifecycle = lifecycle
+	return r, nil
 }
 
 // RunOnce 执行一轮到期扫描：对每个有到期卡的活跃用户判定是否应发提醒。
