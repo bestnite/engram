@@ -178,9 +178,18 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 //  3. 偏好门禁：C 类默认关，用户关掉后立即生效（每轮现读偏好，不缓存）。
 //
 // 台账只在 Enqueue 成功后才写，避免入队失败却把本周额度用掉。
+// MinDigestInterval 只拦周界的小时级碰撞，不充当一周冷却期，避免误伤宕机几天后的补发。
+const MinDigestInterval = 20 * time.Hour
+
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
 	loc := store.LoadLocation(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
+		return nil
+	}
+	// 被间隔门挡住时不写周账本，时间达到后仍可补发。
+	if last, ok, err := store.LastDigestSentAt(ctx, w.db, c.ID); err != nil {
+		return err
+	} else if ok && now.Sub(last) < MinDigestInterval {
 		return nil
 	}
 	cutoff := store.NormalizedCutoff(c.DayCutoffHour)
