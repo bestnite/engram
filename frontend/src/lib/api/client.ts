@@ -14,6 +14,8 @@ import {
   type UserProfile,
   type UpdateProfileRequest,
   type ProfileResponse,
+  type APIKeyRecord,
+  type APIKeysResponse,
   type SessionResponse,
   type LoginRequest,
   type LoginResponse,
@@ -341,6 +343,24 @@ export class ApiClient {
     return this.request<SubmitReviewResult>('/api/v1/review/answer', {
       method: 'POST',
       body: JSON.stringify({ ...review, deck }),
+    });
+  }
+
+  /** 管理当前账号的 API keys；写操作沿用 request 自动注入的内存 CSRF token。 */
+  async getAPIKeys(): Promise<APIKeysResponse> {
+    return this.request<APIKeysResponse>('/api/v1/keys');
+  }
+
+  async createAPIKey(input: { name: string; scopes: string[] }): Promise<{ key: APIKeyRecord; plaintext: string }> {
+    return this.request<{ key: APIKeyRecord; plaintext: string }>('/api/v1/keys', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteAPIKey(id: number): Promise<{ revoked: boolean; id: number }> {
+    return this.request<{ revoked: boolean; id: number }>(`/api/v1/keys/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
     });
   }
 

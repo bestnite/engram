@@ -4,6 +4,7 @@ import DecksView from '../views/DecksView.svelte';
 import DeckDetailView from '../views/DeckDetailView.svelte';
 import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
+import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
 
@@ -45,6 +46,11 @@ export const routes: RouteDefinition[] = [
     path: '/settings',
     name: 'settings',
     component: SettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/settings/keys',
+    name: 'settings-keys',
+    component: APIKeysView as unknown as RouteDefinition['component'],
   },
   {
     path: '/login',

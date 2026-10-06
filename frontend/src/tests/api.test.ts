@@ -16,6 +16,25 @@ describe('Centralized typed same-origin REST API client', () => {
     client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
   });
 
+  describe('API key management requests', () => {
+    it('uses CSRF for create/revoke and keeps keys scope payload explicit', async () => {
+      client.setCsrfToken('csrf-test');
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify({ key: { id: 1, name: 'cli', prefix: 'fcard_ab', scopes: 'read', created_at: '' }, plaintext: 'secret-once' }), { status: 201 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: true, id: 1 }), { status: 200 }));
+      const created = await client.createAPIKey({ name: 'cli', scopes: ['read'] });
+      expect(created.plaintext).toBe('secret-once');
+      const createCall = mockFetch.mock.calls[0]!;
+      const createInit = createCall[1] as RequestInit;
+      expect(new Headers(createInit.headers).get('X-CSRF-Token')).toBe('csrf-test');
+      expect(JSON.parse(createInit.body as string)).toEqual({ name: 'cli', scopes: ['read'] });
+      await client.deleteAPIKey(1);
+      const deleteCall = mockFetch.mock.calls[1]!;
+      expect(deleteCall[0]).toBe('/api/v1/keys/1');
+      expect(new Headers((deleteCall[1] as RequestInit).headers).get('X-CSRF-Token')).toBe('csrf-test');
+    });
+  });
+
   describe('Request boundary and same-origin credentials', () => {
     it('always sends credentials: same-origin and Accept: application/json', async () => {
       const mockResponse: DecksResponse = {
