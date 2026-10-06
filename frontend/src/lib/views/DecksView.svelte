@@ -93,9 +93,13 @@
           <div class="card-subtle p-5 rounded-lg flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
             <div>
               <div class="flex items-start justify-between gap-2 mb-2">
-                <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                <a
+                  href="/decks/{deck.id}"
+                  data-testid="deck-name-link-{deck.id}"
+                  class="text-base font-semibold text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+                >
                   {deck.name}
-                </h2>
+                </a>
                 {#if deck.visibility}
                   <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
                     {deck.visibility}
@@ -110,7 +114,13 @@
             </div>
             <div class="pt-3 border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
               <span>{deck.new_per_day} / {deck.reviews_per_day}</span>
-              <span>ID: {deck.id}</span>
+              <a
+                href="/decks/{deck.id}"
+                data-testid="deck-notes-link-{deck.id}"
+                class="font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:underline transition-colors"
+              >
+                {$t('decks.view_notes')} &rarr;
+              </a>
             </div>
           </div>
         {/each}

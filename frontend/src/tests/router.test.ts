@@ -39,4 +39,16 @@ describe('SPA router matching and query parsing', () => {
     expect(notFoundMatch.route).toBeNull();
     expect(notFoundMatch.path).toBe('/unknown/route');
   });
+
+  it('matches actual production deck routes correctly', async () => {
+    const { routes: prodRoutes } = await import('../lib/router/routes');
+
+    const detailMatch = matchRoute('/decks/123', prodRoutes);
+    expect(detailMatch.route?.name).toBe('deck-detail');
+    expect(detailMatch.params).toEqual({ id: '123' });
+
+    const notesMatch = matchRoute('/decks/456/notes', prodRoutes);
+    expect(notesMatch.route?.name).toBe('deck-notes');
+    expect(notesMatch.params).toEqual({ id: '456' });
+  });
 });

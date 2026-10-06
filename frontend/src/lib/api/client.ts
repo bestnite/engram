@@ -1,6 +1,9 @@
 import {
   ApiClientError,
+  type Deck,
   type DecksResponse,
+  type NotesResponse,
+  type NoteListParams,
   type ApiErrorEnvelope,
 } from './types';
 
@@ -129,6 +132,63 @@ export class ApiClient {
    */
   async getDecks(): Promise<DecksResponse> {
     return this.request<DecksResponse>('/api/v1/decks');
+  }
+
+  /**
+   * 获取卡组下的卡片列表（GET /api/v1/decks/:id/notes）
+   * DESIGN.md §7.3、§8.1
+   */
+  async getDeckNotes(
+    deckId: number | string,
+    params?: NoteListParams
+  ): Promise<NotesResponse> {
+    const encodedId = encodeURIComponent(String(deckId));
+    let qs = '';
+    if (params) {
+      const searchParams = new URLSearchParams();
+      if (params.page !== undefined) {
+        searchParams.set('page', String(params.page));
+      }
+      if (params.per_page !== undefined) {
+        searchParams.set('per_page', String(params.per_page));
+      }
+      if (params.q !== undefined && params.q !== '') {
+        searchParams.set('q', params.q);
+      }
+      if (params.tag !== undefined && params.tag !== '') {
+        searchParams.set('tag', params.tag);
+      }
+      if (params.kind !== undefined && params.kind !== '') {
+        searchParams.set('kind', params.kind);
+      }
+      if (params.status !== undefined && params.status !== '') {
+        searchParams.set('status', params.status);
+      }
+      const qsStr = searchParams.toString();
+      if (qsStr) {
+        qs = `?${qsStr}`;
+      }
+    }
+    return this.request<NotesResponse>(`/api/v1/decks/${encodedId}/notes${qs}`);
+  }
+
+  /**
+   * 获取卡组卡片列表（getDeckNotes 别名）
+   */
+  async getNotes(
+    deckId: number | string,
+    params?: NoteListParams
+  ): Promise<NotesResponse> {
+    return this.getDeckNotes(deckId, params);
+  }
+
+  /**
+   * 通过卡组列表查找单个卡组元数据
+   */
+  async getDeck(deckId: number | string): Promise<Deck | null> {
+    const res = await this.getDecks();
+    const idNum = Number(deckId);
+    return res.decks.find((d) => d.id === idNum) || null;
   }
 }
 
