@@ -56,8 +56,8 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 		}
 	}
 	opts.MediaRoot = a.mediaRoot
-	// F15：把导入者当前生效的媒体配额交给 store 层；四条入口（REST/MCP/CLI 都走本方法，
-	// Web 走自己的 handler）因此共用一处解析，不会有人绕过配额检查。
+	// F15：把导入者当前生效的媒体配额交给 store 层；四条入口（REST/MCP/CLI/Web）都走本方法，
+	// 因此共用一处解析，不会有人绕过配额检查。
 	opts.MediaQuotaBytes = media.ResolveUserQuotaBytes(ctx, a.db)
 	if opts.Now == nil {
 		opts.Now = a.now

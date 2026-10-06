@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/media"
@@ -23,7 +24,8 @@ import (
 //   GET  /decks/:id/package  导出一个卡组为 .edeck 下载（沿用 store 层导出，不重写）
 //   GET  /import             上传页
 //   POST /import             导入并展示与 REST 同一份摘要字段
-// 业务逻辑全在 store 层；这里只做会话鉴权、体积限制与错误的可读化。
+// 导入决策（判权、进度归属、媒体配额、审计）走 api.ImportDeckPackage 这一 service 入口，与
+// REST/MCP/CLI 同源；web 只做会话鉴权、体积限制、表单到 PackageImportOptions 的映射与错误可读化。
 
 // registerPackageWebRoutes 挂载卡组包的浏览器入口。与其余卡组路由同一批依赖。
 func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
@@ -205,6 +207,12 @@ func (s *Server) importSubmit(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// 导入由 api service 决策；未装配 API 时不能退回到绕过 service 的写路径，宁可直接 500。
+	if s.api == nil {
+		s.logger.Error("import: api service not wired", "user_id", user.ID)
+		s.renderImportPage(c, loc, http.StatusInternalServerError, nil, loc.T("import.error.generic"))
+		return
+	}
 	ctx := c.Request.Context()
 	limit := media.ResolveMaxBytes(ctx, s.db)
 	// 先限制请求体，再解析 multipart：避免超限文件被读进内存/磁盘。
@@ -236,63 +244,53 @@ func (s *Server) importSubmit(c *gin.Context) {
 		id := strings.TrimSpace(c.PostForm("deck_id"))
 		target = "into_deck:" + id
 	}
-	// 目标卡组判权（DESIGN.md §7.6）：合并进已有卡组需要 editor，替换是破坏性操作
-	// （ImportPackage 会先软删目标卡组全部 note）只允许 owner。判权与 REST 入口同规
-	// （internal/api/package.go），且必须在 ImportPackage 之前完成 —— store 层不做判权，
-	// 少了这一步，任何登录用户都能向他人私有卡组写入或清空（M5-9）。
-	// 失败由 loadDeckForRole 写出 403/404 并记 permission.denied 审计，与其它 handler 一致。
-	if kind, deckID, err := store.ParsePackageTarget(target); err == nil && kind != store.PackageTargetNewDeck {
-		want := store.RoleEditor
-		if kind == "replace_deck" {
-			want = store.RoleOwner
-		}
-		if _, ok := s.loadDeckForRole(c, user, deckID, want); !ok {
-			return
-		}
-	}
-	opts := store.PackageImportOptions{
-		Target:     target,
-		DryRun:     c.PostForm("dry_run") == "1",
-		OnConflict: strings.TrimSpace(c.PostForm("on_conflict")),
-		// 允许导入他人进度仅管理员可勾选（与 REST 同规）。
-		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && user.Role == store.RoleAdmin,
-		// F15：导入者当前生效的媒体配额，交给 store 层统一计入并整包拒绝超限（与 REST/MCP/CLI 同规）。
-		MediaQuotaBytes: s.userMediaQuota(ctx),
-		Now:             func() time.Time { return time.Now().UTC() },
-	}
-	// LimitReader 兜底：即便 multipart 边界处理有出入，也不会无限解压。
-	report, err := s.decks.ImportPackage(ctx, user.ID, io.LimitReader(f, limit), opts)
+	// 判权、进度归属、媒体配额与审计全部交给 api.ImportDeckPackage —— 与 REST/MCP/CLI 同一
+	// service 入口（DESIGN.md §7.6、M5-9）：合并进已有卡组要求 editor、替换要求 owner，非管理员
+	// 不得导入他人进度，包内新增媒体计入导入者配额，成功写 deck.package_import 审计。
+	// web 只把表单映射成 PackageImportOptions，不再自己判权/计配额/写审计，四类决定只有一处实现。
+	report, err := s.api.ImportDeckPackage(ctx, user, nil, io.LimitReader(f, limit), store.PackageImportOptions{
+		Target:              target,
+		DryRun:              c.PostForm("dry_run") == "1",
+		OnConflict:          strings.TrimSpace(c.PostForm("on_conflict")),
+		AllowOthersProgress: c.PostForm("allow_others_progress") == "1",
+	})
 	if err != nil {
 		status, msg := importErrorMessage(loc, err)
 		s.logger.Info("import package rejected", "user_id", user.ID, "error", err)
 		s.renderImportPage(c, loc, status, nil, msg)
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
-		UserID: store.Ptr(user.ID), Action: "deck.package_import",
-		TargetType: "deck", TargetID: store.Ptr(report.DeckID),
-		Detail: map[string]any{
-			"target": report.Target, "dry_run": report.DryRun,
-			"notes_created": report.NotesCreated, "notes_updated": report.NotesUpdated,
-		},
-	})
 	s.renderImportPage(c, loc, http.StatusOK, report, "")
 }
 
-// importErrorMessage 把卡组包错误翻成可读文案与状态码（坏包 → 4xx，绝不 500）。
+// importErrorMessage 把导入错误翻成可读文案与状态码（坏包 → 4xx，绝不 500）。
+//
+// web 经 api.ImportDeckPackage 导入，错误是 *api.ServiceError：状态码取它的 Status，文案复用与
+// REST/MCP 同一份 error.<code> 语言包（web 不再维护第二套 import.error.* 文案，同一错误在页面与
+// API 上措辞一致）。绝不把语言包键名透给用户。
 func importErrorMessage(loc *i18n.Localizer, err error) (int, string) {
-	var pe *store.PackageError
-	if errors.As(err, &pe) {
-		status := http.StatusBadRequest
-		if pe.Code == store.CodePackageTooLarge || pe.Code == store.CodePackageQuotaExceeded {
+	var se *api.ServiceError
+	if errors.As(err, &se) {
+		status := se.Status
+		if status == 0 {
+			status = http.StatusBadRequest
+		}
+		// 与上传链一致：包体超限/配额不足统一按 413 呈现，保持 web 入口既有语义。
+		switch se.Code {
+		case store.CodePackageTooLarge, store.CodePackageQuotaExceeded:
 			status = http.StatusRequestEntityTooLarge
 		}
-		msg := loc.T("import.error." + pe.Code)
-		// 逐条列出出错条目，便于用户定位（未知题型会列出 note 下标）。
-		if len(pe.Entries) > 0 {
-			msg = msg + " (" + strings.Join(pe.Entries, ", ") + ")"
-		}
-		return status, msg
+		return status, importErrorMessageFor(loc, se.Code)
 	}
 	return http.StatusBadRequest, loc.T("import.error.generic")
+}
+
+// importErrorMessageFor 按稳定 code 取本地化文案：用与 REST/MCP 共用的 error.<code>；
+// api 的错误目录测试保证每个稳定 code 都有该键，缺译文（不应发生）时回退通用文案。
+// Localizer.T 缺 key 时会回退成键名本身，据此判断「没有译文」。
+func importErrorMessageFor(loc *i18n.Localizer, code string) string {
+	if msg := loc.T("error." + code); msg != "error."+code && msg != "" {
+		return msg
+	}
+	return loc.T("import.error.generic")
 }

@@ -871,14 +871,6 @@
   translation: "上传的卡组包超过了配置的上传大小上限。"
 - id: import.error.generic
   translation: "卡组包导入失败，请检查文件后重试。"
-- id: import.error.package_bad_format
-  translation: "卡组包格式无效。"
-- id: import.error.package_too_large
-  translation: "卡组包过大，无法导入。"
-- id: import.error.package_unsafe_entry
-  translation: "卡组包包含不安全的条目（路径穿越或软链）。"
-- id: import.error.package_unknown_kind
-  translation: "卡组包包含本实例不认识的题型。"
 # M9-4 预设页与参数优化
 - id: presets.title
   translation: "调度预设"
@@ -2145,19 +2137,13 @@
 - id: decks.settings.error.save_failed
   translation: "保存卡组设置失败。"
 # F9: 卡组包导入媒体校验
-- id: import.error.package_unsafe_media
-  translation: "卡组包包含不允许的媒体类型。"
 - id: error.package_unsafe_media
   translation: "卡组包包含不允许的媒体类型。"
 # F27: 卡组包 manifest 卡组名/描述界限
 - id: error.package_deck_meta_invalid
   translation: "卡组包中的卡组名称或描述不合法。"
-- id: import.error.package_deck_meta_invalid
-  translation: "卡组包中的卡组名称或描述不合法。"
 # F15: 卡组包导入媒体配额
 - id: error.media_quota_exceeded
-  translation: "导入的媒体将超出你的媒体配额。"
-- id: import.error.media_quota_exceeded
   translation: "导入的媒体将超出你的媒体配额。"
 # F27b: 创建/改名时的卡组名界限（与卡组包 manifest 规则同源）
 - id: error.deck_name_invalid
@@ -2170,6 +2156,4 @@
 - id: notes.edit.media_not_readable
   translation: "这条卡片引用了你无法读取的媒体，未保存。"
 - id: error.package_media_forbidden
-  translation: "卡组包引用了你无法读取的媒体。"
-- id: import.error.package_media_forbidden
   translation: "卡组包引用了你无法读取的媒体。"
