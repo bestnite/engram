@@ -105,7 +105,7 @@ func (s *Server) adminAuditPage(c *gin.Context) {
 	actor, _ := auth.CurrentUser(c)
 	userLoc := auditLocation(actor)
 
-	page := pageParam(c.Query("page"))
+	page := parsePage(c.Query("page"))
 	userRaw := strings.TrimSpace(c.Query("user"))
 	action := strings.TrimSpace(c.Query("action"))
 	targetType := strings.TrimSpace(c.Query("target_type"))
@@ -229,7 +229,7 @@ func (s *Server) adminAuditPage(c *gin.Context) {
 		nextHref = s.auditPageHref(c, page+1)
 	}
 
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.audit.title", "/admin/audit"),
 		Heading:    loc.T("admin.audit.heading"),
 		Intro:      loc.T("admin.audit.intro"),

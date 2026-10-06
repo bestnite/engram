@@ -31,7 +31,7 @@ func seedPresetRow(t *testing.T, db *gorm.DB, ownerID uint64) uint64 {
 	now := time.Now().UTC()
 	p := Preset{OwnerUserID: ownerID, Name: "default", DesiredRetention: 0.9,
 		LearningSteps: "1m,10m", RelearningSteps: "10m", MaximumIntervalDays: 36500,
-		EnableFuzz: boolPtr(true), CreatedAt: now, UpdatedAt: now}
+		EnableFuzz: Ptr(true), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}

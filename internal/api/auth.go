@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -133,7 +132,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	c.Set(string(ctxUserKey), u)
 	c.Set(string(ctxKeyKey), key)
 	// 每次 key 调用写审计并带 api_key_id（DESIGN.md §7.2）；写失败不阻断请求。
-	a.record(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: store.Ptr(key.ID),
 		Action:   "api.request",
@@ -204,16 +203,6 @@ func CurrentAPIKeyID(c *gin.Context) *uint64 {
 		return store.Ptr(k.ID)
 	}
 	return nil
-}
-
-// record 是审计的统一出口：写失败记英文日志但不阻断业务。
-func (a *Authenticator) record(ctx context.Context, e store.AuditEntry) {
-	if a.auditor == nil {
-		return
-	}
-	if err := a.auditor.Record(ctx, e); err != nil {
-		a.logger.Error("write audit log failed", "action", e.Action, "error", err)
-	}
 }
 
 // bearerToken 从 Authorization 头解析 Bearer token；缺失或形态不对返回 false。

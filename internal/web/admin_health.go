@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http"
 	"strconv"
 	"time"
 
@@ -79,7 +80,7 @@ func (s *Server) adminHealthPage(c *gin.Context) {
 		Value: dueValue,
 	})
 
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.health.title", "/admin/health"),
 		Heading:    loc.T("admin.health.heading"),
 		NavHeading: loc.T("admin.nav.heading"),

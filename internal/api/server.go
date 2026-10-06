@@ -153,13 +153,14 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
 }
 
-// audit 写一条审计（带当前 key 的 api_key_id）；写失败记英文日志但不回滚业务。
-func (a *API) audit(ctx context.Context, e store.AuditEntry) {
-	if a.auditor == nil {
+// recordAudit 写一条审计；写失败只记英文日志，不回滚业务（AGENTS.md §2.1：日志恒英文）。
+// *API 与 *Authenticator 两个接收者共用这一实现，避免同一守卫各写一遍。
+func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger, e store.AuditEntry) {
+	if auditor == nil {
 		return
 	}
-	if err := a.auditor.Record(ctx, e); err != nil {
-		a.logger.Error("write audit log failed", "action", e.Action, "error", err)
+	if err := auditor.Record(ctx, e); err != nil {
+		logger.Error("write audit log failed", "action", e.Action, "error", err)
 	}
 }
 
@@ -185,52 +186,6 @@ func queryInt(c *gin.Context, name string, def int) int {
 		return def
 	}
 	return v
-}
-
-// requireDeckRole 取卡组并校验当前用户在卡组上至少拥有 want 角色（M5-1）。
-//
-// 判定本体在 auth.DeckAccess（与 Web 共用同一实现）；这里只负责把错误映射成 REST 的
-// 稳定 code、写一条 permission.denied 审计并中止请求。无访问权 -> 403 forbidden，
-// 有角色但不够 -> 403 insufficient_role，卡组不存在 -> 404 not_found。
-func (a *API) requireDeckRole(c *gin.Context, deckID uint64, want string) (*store.Deck, bool) {
-	u, _ := CurrentUser(c)
-	deck, role, err := a.access.RequireRole(c.Request.Context(), deckID, u.ID, want)
-	if err == nil {
-		return deck, true
-	}
-	status, code := http.StatusForbidden, CodeForbidden
-	if errors.Is(err, auth.ErrDeckNotFound) {
-		status, code = http.StatusNotFound, CodeNotFound
-	} else if role != "" {
-		code = CodeInsufficientRole
-	}
-	if !errors.Is(err, auth.ErrDeckNotFound) {
-		a.audit(c.Request.Context(), store.AuditEntry{
-			UserID:     store.Ptr(u.ID),
-			APIKeyID:   CurrentAPIKeyID(c),
-			Action:     store.ActionPermissionDenied,
-			TargetType: "deck",
-			TargetID:   store.Ptr(deckID),
-			Detail:     map[string]any{"required_role": want, "user_role": role, "code": code},
-		})
-	}
-	abortError(c, status, code, "")
-	return nil, false
-}
-
-// requireNoteRole 取 note 及其卡组并要求至少 want 角色；note 不存在时 404，
-// 卡组权限不足时沿用 requireDeckRole 的结果（note 不泄露到无权限的卡组之外）。
-func (a *API) requireNoteRole(c *gin.Context, noteID uint64, want string) (*store.Note, *store.Deck, bool) {
-	n, err := a.notes.ByID(c.Request.Context(), noteID)
-	if err != nil {
-		abortError(c, http.StatusNotFound, CodeNotFound, "")
-		return nil, nil, false
-	}
-	d, ok := a.requireDeckRole(c, n.DeckID, want)
-	if !ok {
-		return nil, nil, false
-	}
-	return n, d, true
 }
 
 // ensureDefaultPreset 返回该用户名为 Default 的预设 id；不存在则创建。

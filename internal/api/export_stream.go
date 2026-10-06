@@ -68,7 +68,7 @@ func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, 
 		if err := emit(ExportRow{
 			CardID: r.CardID, NoteID: r.NoteID, DeckID: r.DeckID,
 			Kind: r.Kind, Template: r.Template,
-			Fields: exportFields(r.FieldsJSON), Tags: exportTags(r.TagsJSON),
+			Fields: store.FieldsOrEmpty(r.FieldsJSON), Tags: store.TagsOrEmpty(r.TagsJSON),
 			ExternalRef: r.ExternalRef,
 			State:       r.State, DueAt: r.DueAt, Reps: r.Reps, Lapses: r.Lapses,
 		}); err != nil {
@@ -93,22 +93,4 @@ func (a *API) CollectExportRows(ctx context.Context, userID uint64, deckIDs []ui
 		return nil, err
 	}
 	return rows, nil
-}
-
-// exportFields 解码 fields_json；坏数据按空对象处理，导出不因单行坏数据整体失败。
-func exportFields(raw string) map[string]any {
-	fields, err := store.ParseFields(raw)
-	if err != nil || fields == nil {
-		return map[string]any{}
-	}
-	return fields
-}
-
-// exportTags 解码 tags_json；坏数据按空数组处理。
-func exportTags(raw string) []string {
-	tags, err := store.ParseTags(raw)
-	if err != nil || tags == nil {
-		return []string{}
-	}
-	return tags
 }

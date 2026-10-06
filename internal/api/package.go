@@ -70,7 +70,7 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	if err != nil {
 		return nil, mapPackageError(err)
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     "deck.package_import",
@@ -164,12 +164,6 @@ func (a *API) handleExportPackage(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())
 }
 
-// uploadLimit 解析生效的上传字节上限：与 Web 上传共用 internal/media 的同一实现，
-// 两条导入入口因此只有一处上限来源（DESIGN.md §7.6「体积上限与上传上限同一处配置」）。
-func (a *API) uploadLimit(ctx context.Context) int64 {
-	return media.ResolveMaxBytes(ctx, a.db)
-}
-
 // isRequestBodyTooLarge 判断 multipart 解析失败是否由 http.MaxBytesReader 触发。
 // gin 会把 MaxBytesError 包在解析错误里，errors.As 能透过包装找到它。
 func isRequestBodyTooLarge(err error) bool {
@@ -186,7 +180,7 @@ func (a *API) handleImportPackage(c *gin.Context) {
 	// 先按管理员配置的上传上限限制请求体，再解析 multipart：gin 会按 MaxMultipartMemory 把
 	// 超出内存的 part 落到临时盘，不先设上限就给了内存/磁盘放大（DESIGN.md §6.3、§7.6）。
 	// 超限稳定 413，code 沿用卡组包既有的 package_too_large。
-	limit := a.uploadLimit(c.Request.Context())
+	limit := media.ResolveMaxBytes(c.Request.Context(), a.db)
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	fh, err := c.FormFile("file")
 	if err != nil {

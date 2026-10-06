@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -64,7 +63,7 @@ func (s *Server) unsubscribeSubmit(c *gin.Context) {
 	}
 	tok, err := s.tokens.Consume(ctx, store.ActionTokenUnsubscribe, token)
 	if err != nil {
-		s.renderUnsubscribeResult(c, loc, http.StatusBadRequest, "", loc.T(unsubscribeTokenErrorKey(err)))
+		s.renderUnsubscribeResult(c, loc, http.StatusBadRequest, "", loc.T(actionTokenErrorKey("mail.unsub.error_", err)))
 		return
 	}
 	typ := mail.Type(strings.TrimSpace(tok.Payload))
@@ -172,18 +171,6 @@ func (s *Server) optionalUnsubscribeHeaders(c *gin.Context, userID uint64, typ m
 		s.logger.Error("unsubscribe: issue token failed", "user_id", userID, "type", string(typ), "error", err)
 		return nil
 	}
-	link := s.inviteAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
+	link := s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 	return mail.UnsubscribeHeaders(typ, link)
-}
-
-// unsubscribeTokenErrorKey 把令牌消费错误映射到稳定语言包 key。
-func unsubscribeTokenErrorKey(err error) string {
-	switch {
-	case errors.Is(err, store.ErrActionTokenExpired):
-		return "mail.unsub.error_expired"
-	case errors.Is(err, store.ErrActionTokenUsed):
-		return "mail.unsub.error_used"
-	default:
-		return "mail.unsub.error_invalid"
-	}
 }

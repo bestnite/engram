@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -54,7 +55,7 @@ func (s *Server) adminI18nPage(c *gin.Context) {
 		})
 	}
 
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.i18n.title", "/admin/i18n"),
 		Heading:    loc.T("admin.i18n.heading"),
 		NavHeading: loc.T("admin.nav.heading"),

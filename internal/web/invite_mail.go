@@ -80,7 +80,7 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 		}
 	}
 
-	link := s.inviteAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
+	link := s.securityAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
 	msg := inviteMessage(recipientLoc, to, link, s.siteName(ctx, recipientLoc), inv.ExpiresAt)
 
 	// 收件人是本站用户时，这封 B 类（可选类型）邮件带 RFC 8058 一键退订头（M1-22）：
@@ -111,22 +111,6 @@ func (s *Server) inviteRecipient(ctx context.Context, email string) *store.User 
 		return nil
 	}
 	return u
-}
-
-// inviteAbsoluteURL 拼出邮件里可点击的绝对地址：配置了 BASE_URL 就用它，
-// 否则按当前请求推导（本地开发与 httptest 依赖后者）。
-func (s *Server) inviteAbsoluteURL(c *gin.Context, path string) string {
-	if base := strings.TrimRight(strings.TrimSpace(s.baseURL), "/"); base != "" {
-		return base + path
-	}
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	}
-	return scheme + "://" + c.Request.Host + path
 }
 
 // inviteMailNote 返回邀请页「寄到邮箱」入口旁的说明：可用时说明行为，不可用时

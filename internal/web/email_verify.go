@@ -34,7 +34,7 @@ func (s *Server) verifyEmail(c *gin.Context) {
 	if err != nil {
 		s.renderSecurityResult(c, loc, http.StatusBadRequest,
 			"mail.verify.title", "mail.verify.heading", "mail.verify.back_login",
-			loc.T(verifyTokenErrorKey("mail.verify.error_", err)), false)
+			loc.T(actionTokenErrorKey("mail.verify.error_", err)), false)
 		return
 	}
 	now := time.Now().UTC()
@@ -68,7 +68,7 @@ func (s *Server) confirmEmailChange(c *gin.Context) {
 	if err != nil {
 		s.renderSecurityResult(c, loc, http.StatusBadRequest,
 			"mail.verify.change_title", "mail.verify.change_heading", "mail.verify.back_login",
-			loc.T(verifyTokenErrorKey("mail.verify.change_error_", err)), false)
+			loc.T(actionTokenErrorKey("mail.verify.change_error_", err)), false)
 		return
 	}
 	newEmail := strings.ToLower(strings.TrimSpace(tok.Payload))
@@ -246,8 +246,9 @@ func (s *Server) renderSecurityResult(c *gin.Context, loc *i18n.Localizer, statu
 	s.renderSecurityForm(c, loc, status, data)
 }
 
-// verifyTokenErrorKey 把令牌消费错误映射到带前缀的稳定语言包 key。
-func verifyTokenErrorKey(prefix string, err error) string {
+// actionTokenErrorKey 把令牌消费错误映射到带前缀的稳定语言包 key。
+// 这是唯一的映射实现：verify / reset / unsubscribe 三条流程都传各自的前缀调用它。
+func actionTokenErrorKey(prefix string, err error) string {
 	switch {
 	case errors.Is(err, store.ErrActionTokenExpired):
 		return prefix + "expired"

@@ -402,7 +402,7 @@ func (s *Server) noteList(c *gin.Context) {
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
 	}
-	renderHTML(c, views.NoteListPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.NoteListPage(data))
 }
 
 // kindOptions 生成题型筛选下拉；首项是“全部”（值为空串）。

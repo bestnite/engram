@@ -89,21 +89,3 @@ func (a *API) submitReview(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, result)
 }
-
-// fieldsOrEmpty 解码 note.fields_json；解析失败返回空对象，避免响应里出现 null。
-func fieldsOrEmpty(n *store.Note) map[string]any {
-	fields, err := store.ParseFields(n.FieldsJSON)
-	if err != nil || fields == nil {
-		return map[string]any{}
-	}
-	return fields
-}
-
-// tagsOrEmpty 解码 note.tags_json；解析失败返回空数组。
-func tagsOrEmpty(n *store.Note) []string {
-	tags, err := store.ParseTags(n.TagsJSON)
-	if err != nil || tags == nil {
-		return []string{}
-	}
-	return tags
-}

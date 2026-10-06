@@ -35,17 +35,6 @@ func keyScopesFor(user *store.User) []string {
 	return scopes
 }
 
-// scopesIncludeAdmin 判断表单提交的 scope 里是否含 admin（按原值匹配，未归一化）。
-// 取值合法性由 store.NormalizeScopes 负责，这里只关心“是否试图授予 admin”。
-func scopesIncludeAdmin(scopes []string) bool {
-	for _, s := range scopes {
-		if strings.TrimSpace(s) == store.ScopeAdmin {
-			return true
-		}
-	}
-	return false
-}
-
 // keysPage 渲染「我的 API Key」页；匿名访问被重定向到登录页（requireUser）。
 func (s *Server) keysPage(c *gin.Context) {
 	loc, ok := s.localizer(c)
@@ -95,7 +84,7 @@ func (s *Server) keysCreate(c *gin.Context) {
 	// admin scope 只能发给管理员账号：非管理员经任何路径提交一律拒绝，且不落库（DESIGN.md
 	// §7.2）。表单隐藏 admin 选项只是辅助，服务端不信任任何提交上来的表单。钤制放在这里
 	// 是因为只有传输层知道 actor 的角色。
-	if scopesIncludeAdmin(selected) && user.Role != store.RoleAdmin {
+	if store.ScopesIncludeAdmin(selected) && user.Role != store.RoleAdmin {
 		s.renderKeys(c, loc, user, http.StatusForbidden, loc.T("keys.error.admin_forbidden"), "")
 		return
 	}

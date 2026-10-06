@@ -53,7 +53,7 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 		{"typed", map[string]any{"prompt": "spell", "answer": "ok"}, "", []string{"lang"}},
 	}
 	for _, s := range seeds {
-		n := Note{DeckID: d.ID, Kind: s.kind, TagsJSON: tagsJSON(s.tags), CreatedBy: Ptr(owner), Source: Ptr("manual")}
+		n := Note{DeckID: d.ID, Kind: s.kind, TagsJSON: TagsJSON(s.tags), CreatedBy: Ptr(owner), Source: Ptr("manual")}
 		if s.ref != "" {
 			n.ExternalRef = Ptr(s.ref)
 		}

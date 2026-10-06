@@ -75,22 +75,13 @@ func roleOptions(loc *i18n.Localizer) []views.AdminRoleOption {
 	}
 }
 
-// pageParam 解析 page 查询参数，非法或越界回落到第 1 页。
-func pageParam(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n < 1 {
-		return 1
-	}
-	return n
-}
-
 // adminUsersPage 渲染用户列表：搜索、分页、每用户用量计数。
 func (s *Server) adminUsersPage(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
-	s.renderUsersPage(c, loc, s.usersNotice(loc, c.Query("notice")), "", strings.TrimSpace(c.Query("q")), pageParam(c.Query("page")))
+	s.renderUsersPage(c, loc, s.usersNotice(loc, c.Query("notice")), "", strings.TrimSpace(c.Query("q")), parsePage(c.Query("page")))
 }
 
 // renderUsersPage 构造并渲染用户管理页；tempPassword 非空时在页面上一次性展示（重置密码后）。
@@ -139,7 +130,7 @@ func (s *Server) renderUsersPage(c *gin.Context, loc *i18n.Localizer, notice, te
 	if sess, ok := auth.CurrentSession(c); ok {
 		csrf = sess.CSRFToken
 	}
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.users.title", "/admin/users"),
 		Heading:    loc.T("admin.users.heading"),
 		NavHeading: loc.T("admin.nav.heading"),

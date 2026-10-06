@@ -47,7 +47,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 
 			// 2) 显式传 false：必须原样落库为 false，不能被数据库默认值改回 true。
 			off := NewPreset(owner, "Off")
-			off.EnableFuzz = boolPtr(false)
+			off.EnableFuzz = Ptr(false)
 			if err := presets.Create(ctx, &off); err != nil {
 				t.Fatalf("Create(off) error = %v", err)
 			}
