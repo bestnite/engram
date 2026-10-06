@@ -1,102 +1,176 @@
-# SPA migration gap audit
+# SPA migration gap audit (refreshed on 2026-10-06)
 
-**Scope:** read-only audit of the current worktree at `feat/spa-audit-current` (base `7694fe4`). This records code behavior, not intended behavior. `DESIGN.md` §8 describes the target as a pure Svelte SPA replacing templ/htmx; server authorization remains authoritative. Existing Go page handlers are classified as active unless the inspected route/reference evidence shows otherwise.
+> This report reflects merged main through commit `1614f28`. Note creation, editing, password change, and sanitized preview contracts are now merged. It records current behavior, not completion; browser E2E and Docker/GoReleaser acceptance remain outstanding.
+
+## Current SPA coverage
+
+- Routes: `/`, `/decks`, `/decks/:id`, `/decks/:id/notes`, `/decks/:id/notes/:noteId/edit`, `/decks/:id/notes/new`, `/spa/review`, `/stats`, `/settings`, `/settings/keys`, `/login`.
+- Deck listing and creation use `GET/POST /api/v1/decks`. Note creation supports the `basic` type; editing uses `PATCH /api/v1/notes/:id`. The edit screen edits JSON fields/tags and displays plain text, not Markdown-rendered card sides.
+- Profile/locale and password are session-only APIs protected by CSRF. API-key self-management uses existing REST key routes; key plaintext is shown once only.
+- SPA review remains a partial self-assessment prototype at `/spa/review`; the broader legacy review flow remains at `/review`.
+- A sanitized server-rendered note preview contract is available at `POST /api/v1/decks/:id/notes/preview` for editor-role users with session CSRF. The SPA editor has not yet been wired to it or to MathJax.
+
+## Remaining migration areas
+
+| Area | Current state | Legacy removal |
+|---|---|---|
+| Setup, registration, invites, OIDC | SSR only; no SPA-equivalent views/flows | Keep |
+| Deck settings and daily caps | SSR only; no REST cap endpoint or SPA view | Keep |
+| Note edit | SPA JSON editor is merged; sanitized preview exists but is not wired into SPA | Keep until preview/render parity |
+| Note delete, bulk, restore | REST covers some mutations; SPA controls incomplete | Keep |
+| Media upload/library/picker | SSR upload/picker; REST listing only | Keep |
+| Sharing, visibility, links, clone | SSR only; no REST equivalent | Keep |
+| Package import/export | REST exists; no SPA workflow | Keep |
+| Review | SPA self-assessment only; graded types, MathJax, edit and bury remain legacy | Keep |
+| Statistics | SPA summary only; detailed forecasts/distributions remain SSR | Keep |
+| Account security | Password change now uses CSRF-protected SPA API; email, notifications and TOTP remain SSR | Keep |
+| API keys | SPA self-service page is merged; admin key overview remains SSR | Keep admin routes |
+| Presets/jobs and admin | SSR only; no SPA admin REST namespace | Keep |
+| Service worker | Caches legacy assets plus Vite JS/CSS; HTML/API/review data stay network-only | Keep active PWA route |
+
+## Build and verification
+
+- Frontend production assets are embedded by Go. Docker, CI and GoReleaser build chains are configured.
+- Local frontend check/tests/build, generated Go build/vet/format checks, full Go suite, and targeted preview/API-key/password tests have passed on recent main.
+- Full Docker image build, GoReleaser snapshot archive inspection, browser E2E, and release workflow have not been completed.
+
+## Cutover gates
+
+1. Wire the sanitized preview endpoint into SPA editing, load self-hosted MathJax in the SPA under the enforcing CSP, and add browser XSS/TeX checks.
+2. Complete remaining note actions, media workflows, sharing/clone, packages, graded review, detailed statistics, presets/jobs, onboarding, account settings and admin pages with server-side auth/CSRF.
+3. Run browser E2E over every migrated workflow and deep-link refresh.
+4. Remove SSR/templ/htmx only after the replacement is reachable and verified; then rebuild and run all tests.
+5. Build Docker, inspect GoReleaser snapshot contents, verify embedded SPA/optimizer binaries, and run release checks.
+
+No currently active SSR route/template is proven dead; do not remove one based only on the SPA fallback existing.
+
+
+> Implementation evidence is based on current `main`, including SPA profile persistence, CSRF-protected review flow, review route cutover, and MCP cookie rejection. SPA note editing, API-key UI and server-side Markdown preview are still separate in-progress branches and are not counted as merged functionality.
+
+## Current merged SPA inventory
+
+- Routes with real SPA views: `/`, `/decks`, `/decks/:id`, `/decks/:id/notes`, `/spa/review`, `/stats`, `/settings`, `/settings/keys`, `/login`.
+- Deck listing and create use `GET/POST /api/v1/decks`; profile and locale persist through session-only `GET/PATCH /api/v1/profile` and `PATCH /api/v1/settings/locale`.
+- API key self-management is merged at `/settings/keys`, backed by existing REST key routes. Plaintext is only shown once in component memory.
+- SPA review is still partial and deliberately uses `/spa/review`; legacy SSR `/review` remains active. The SPA supports self-assessed cards only, plain text content, no graded cards, edit/bury, Markdown or MathJax.
+- The note editor is not yet merged. Current deck detail remains mostly read-only.
+
+## Remaining migration areas
+
+| Area | Current state | Removal decision |
+|---|---|---|
+| Onboarding, registration, invites and OIDC | SSR only; no SPA views or equivalent JSON flows | Keep SSR |
+| Deck settings and daily caps | SSR only; no REST cap endpoint or SPA view | Keep SSR |
+| Note create, edit, delete, bulk, restore, preview | REST supports some mutations; UI/preview/restore parity incomplete | Keep SSR |
+| Media upload/library/picker | SSR upload/picker; REST supports listing only; no SPA upload | Keep SSR |
+| Sharing, visibility, links and clone | SSR only; no REST equivalent | Keep SSR |
+| Package import/export | REST exists; no SPA flow | Keep SSR |
+| Review | `/spa/review` self-assessment prototype; `/review` SSR has broader functionality | Keep SSR |
+| Statistics | SPA summary only; detailed distributions/forecasts remain SSR | Keep SSR |
+| Password, email, notifications, TOTP | SSR flows remain; profile/locale only migrated | Keep SSR |
+| Presets and optimizer jobs | SSR only; no SPA REST endpoints | Keep SSR |
+| Admin users, settings, audit, jobs, health | SSR only; no SPA admin API | Keep SSR |
+| PWA service worker | SPA JS/CSS precache update is merged; HTML, API and review data remain network-only | Keep active shared PWA routes |
+| MathJax/CSP | CSP is enforcing and self-hosted MathJax remains available to SSR; SPA has no MathJax integration | Keep MathJax and CSP support |
+
+## Build and verification status
+
+- Vite production assets are embedded by Go; Docker/CI/GoReleaser build chains are configured.
+- Recent local validation includes frontend check/test/build, targeted Go web/API tests, and full Go gate after the review/MCP fixes. Full Docker image and GoReleaser snapshot/publish acceptance remains outstanding.
+- No legacy SSR/templ code is proven dead. Explicit server routes and active forms still handle substantial product functionality; do not remove them until each replacement workflow is implemented and verified.
+
+## Cutover gates
+
+1. Finish missing SPA pages and actions with session/CSRF protection, server authorization, and bilingual UI.
+2. Complete safe server-rendered Markdown/TeX contract and SPA MathJax loading under current CSP.
+3. Run browser E2E for authentication, notes, review, media, sharing/import, stats/settings/admin, and deep-link refresh.
+4. Only then remove explicit SSR routes, templates, htmx scripts and unused assets; rebuild and rerun all tests.
+5. Verify Docker build, GoReleaser snapshot archive contents, and release workflow artifacts.
+
+
+
+**Scope:** source audit of `main` at `77f1ce0` (the checked-out `feat/spa-audit-refresh` worktree is based on that commit). This records current code behavior, not intended behavior. `DESIGN.md` §8 describes a pure Svelte SPA replacing templ/htmx; server authorization remains authoritative. This report is an audit, not a claim of complete cutover.
 
 ## Executive findings
 
-- SPA entry and a small set of views exist: `/`, `/decks`, `/decks/:id`, `/decks/:id/notes`, `/stats`, `/settings`, `/login`. Actual API calls are limited to list decks, list notes, profile/settings locale, summary stats, due-card fetch, session/login/logout. `DeckDetailView` is read-only and displays plain text, not rendered card HTML/MathJax.
-- The Go web router still registers templ pages and POST form actions for notes, review, settings, sharing, presets, import/export, admin, OIDC, etc. `NoRoute` serves SPA HTML only for unmatched GET pages; explicit Go routes take precedence. Therefore this is a parallel shell/prototype, not a completed route cutover. Legacy handlers are still active and **not safe to remove** on current evidence.
-- REST provides a broad API (including notes write, bulk actions, review, export/package, import, stats, keys, media); there are no registered REST handlers for browser admin, sharing/grants, preset/job management, deck caps, preview, clone, or page-side media upload. Profile and locale endpoints are web-registered separately from `internal/api.API.Register`.
-- Authentication is not interchangeable: SPA uses same-origin HttpOnly session cookies and in-memory CSRF token; REST business endpoints use bearer API keys with scopes (not SPA cookies). SPA mutating profile/locale and SPA auth writes use explicit CSRF protection. Legacy form writes use session CSRF or pre-session double-submit as appropriate. No SPA route guard was found; protected reads fail at the server/API.
-- Security headers are currently **enforced** as `Content-Security-Policy`, not Report-Only. `script-src` has self + the theme bootstrap SHA-256 and omits `unsafe-eval`; `style-src` still permits inline styles. MathJax is self-hosted in embedded legacy static resources, but the SPA bundle has no MathJax integration or component-level loading configured.
-- PWA service worker is a legacy-shell cache, not a SPA shell cache: its explicit pre-cache list contains hashed legacy CSS/JS/MathJax/icons/manifest. It does not cache `/assets/*` SPA bundles or `index.html`; fetch handler only caches `/static/` and manifest.
+- The SPA routes are `/`, `/decks`, `/decks/:id`, `/decks/:id/notes`, `/spa/review`, `/stats`, `/settings`, and `/login`. Current views cover home/deck listing and detail, a self-assessment review flow, summary stats, basic profile settings, and login. The profile API exists now: session-cookie `GET/PATCH /api/v1/profile` and `PATCH /api/v1/settings/locale` are registered by the web server, not `internal/api.API.Register`.
+- Review migration is partial and deliberately separate from legacy `/review`: SPA review is at `/spa/review`; legacy SSR remains at `/review`. SPA review supports only self-assessment cards. Graded cards are omitted from the SPA queue display; card text is plain text, with no rendered Markdown or MathJax. SPA review also lacks edit and bury actions. Browser E2E has not been run.
+- Explicit Go routes continue to win over the SPA fallback. The router still registers SSR pages and form actions for notes, review, settings, sharing, presets, import/export, admin, OIDC, and other features. This is a parallel shell/prototype, not a completed route cutover; no legacy handler/view is safe to remove on this evidence.
+- REST provides many business endpoints, including notes writes, review due/submission, import/export/package, stats, keys, and media listing. There are still no corresponding SPA-facing endpoints/UI for several SSR capabilities, including deck caps, note preview, media upload, sharing/cloning, preset/job management, and admin CRUD/settings/audit/health. The review SPA's session-cookie/CSRF endpoint is a web route outside the REST API registration.
+- Authentication remains transport-specific. SPA calls use same-origin session cookies and in-memory CSRF tokens; business REST routes use bearer API keys/scopes. Profile updates, SPA review submission, and SPA auth writes use explicit session CSRF protection. This is not a UI security boundary; the server validates access.
+- CSP is enforced globally. It allows the theme bootstrap hash and inline styles, and excludes `unsafe-eval`. MathJax remains embedded for legacy pages; the SPA has no MathJax integration.
+- The service worker still caches only legacy static resources (CSS, htmx/review JS, MathJax, icons, manifest). It does not cache Vite `/assets/*` or SPA HTML. Its fetch handler only considers `/static/` and the manifest; API, review, and HTML responses are network-only.
 
 ## Route-by-route inventory
 
-“REST” refers to concrete registrations in `internal/api/server.go`, or the auth/profile routes registered by `internal/web/server.go` and `internal/web/auth.go`. “Auth/CSRF” states the actual visible boundary; it does not imply the UI is a security boundary.
+“REST” means concrete registrations in `internal/api/server.go`, plus SPA-specific profile/review routes registered from `internal/web/server.go`. “State” describes current SPA coverage, not whether the server-side feature exists.
 
-| Feature / URL | SSR route, handler, template | SPA route / view | Existing REST and observed coverage | Auth / CSRF | State | Legacy safe to remove? |
-|---|---|---|---|---|---|---|
-| Home `/` | `GET /` → `home` (`internal/web/home.go`) → `views.Home`; redirects to setup when bootstrap required | `/` → `HomeView.svelte` | `GET /api/v1/decks`, `GET /api/v1/stats/summary`; SPA view consumes those and computes summary display | Legacy home can render anonymous; protected data endpoints enforce server auth. REST uses API key; SPA client session cookie | Partial: SPA home exists, but design home needs per-deck counts/streak; SPA source explicitly notes summary API lacks per-deck queue counts/streak | No: exact `/` is an explicit Go route; `HomeView` does not replace its response |
-| Login `/login`, logout | GET/POST in `auth.go` → `loginPage/loginSubmit` → `views.AuthPage`; POST `/logout` → `logout` | `/login` → `LoginView.svelte`; `NavHeader` invokes SPA logout | `GET /api/v1/auth/session` (also alias `/api/v1/session`), `POST /api/v1/auth/login`, `POST /api/v1/auth/logout` in `auth.go` | Pre-session form login uses double-submit CSRF. Logout requires session CSRF. JSON login uses double-submit; logout uses session CSRF. SPA sends cookie credentials and CSRF from session response | Partial: SPA login/logout/session implemented; no evidence all auth page flows migrated | No: explicit routes remain active and support non-SPA flows |
-| Setup, registration, invites `/setup`, `/register`, `/invite/:token` | Setup/register GET+POST in `auth.go`; invite acceptance route/logic there; templ auth page | No setup/register/invite route/view (router has only `/login`) | SPA auth endpoints only; no REST registration/setup/invite endpoints | Setup/register/login POST use double-submit CSRF. Invite is pre-auth flow and implemented in web handler. | Not started for SPA; backend page flows exist | No: no SPA route parity, Go routes are the working onboarding path |
-| OIDC `/auth/oidc/start`, `/auth/oidc/callback` | `auth.go` → OIDC handlers; templ auth pages where applicable | None | None in `/api/v1`; OIDC remains web flow | OIDC state/nonce/PKCE implementation in auth package; start/callback are GET protocol routes | Not started for SPA; remains live server-rendered auth flow | No |
-| Deck list `/decks` | `decks.go` GET → `deckList` → `views.Decks` | `/decks` → `DecksView.svelte` | `GET /api/v1/decks`; SPA calls it. `POST /api/v1/decks` exists but SPA has no create operation | REST bearer `read`/`write` scopes. Web create uses session + CSRF | Partial: listing exists; create/search/select-to-review and other design interactions are not implemented in SPA view | No: exact Go route remains registered |
-| Deck detail and note list `/decks/:id`, `/decks/:id/notes` | `/decks/:id` has no explicit Go handler and reaches `notFound` SPA fallback; `/decks/:id/notes` → `noteList` (`internal/web/notes.go`) → `views.Notes` | `/decks/:id` and `/decks/:id/notes` → `DeckDetailView.svelte` | `GET /api/v1/decks` and `GET /api/v1/decks/:id/notes`; SPA uses both. List API handler supports pagination, q/tag/kind/status filtering; component uses page/per_page/q/tag/kind. No singular GET deck route; component looks up deck by listing all decks | REST bearer `read`; Go note page requires session and deck read authorization; detail SPA data fetch uses server-side REST authorization | Partial: detail route is SPA-backed, but note list collision still serves SSR. View is list-only; fields display as escaped plain text, with no edit link/action, rendered Markdown, MathJax, or bulk actions | No: `/decks/:id/notes` remains an explicit Go route; detail route depends on SPA fallback |
-| Deck CRUD / daily caps / settings `/decks`, `/decks/:id/settings` | `decks.go`, `deck_settings.go`; `views.Decks`, `views.DeckSettings` | No settings route/view; deck list lacks CRUD UI | REST `POST /api/v1/decks` creation. No REST update/delete deck or caps endpoints | Web creation/changes require session CSRF and server role checks. REST creation requires bearer `write` | Partial backend; SPA not migrated | No: forms/routes implement settings/caps not present in SPA |
-| Note create/update/delete/bulk `/decks/:id/new-note`, `/decks/:id/notes/:nid`, `/decks/:id/notes`, `/decks/:id/bulk` | `notes.go` GET/POST → note handlers and `views.Notes`; `new-note` and field fragments included | No note editor route/view; detail page only reads | `POST /api/v1/decks/:id/notes` batch create/update; `PATCH /api/v1/notes/:id`; `DELETE /api/v1/notes/:id` (soft delete); `POST /api/v1/notes/bulk`. These REST handlers are registered, but SPA has no calls for them | REST bearer `write`; web mutations require session CSRF and deck editor role | Backend complete surface, SPA not started | No |
-| Preview and note rendering `/decks/:id/preview`, `/preview-new` | `notes.go` POST → `notePreview` / `noteCreatePreview`; templ fragments; MathJax re-typeset via `notes.js` | None; SPA detail intentionally avoids HTML injection | No preview REST route in `internal/api/server.go` | Web preview requires session CSRF and server role/access check | Not started for SPA | No |
-| Restore and permanent/delete actions | SSR note routes shown above include update/create/bulk; no explicit restore or permanent-delete page route found in inspected registration list | None | `DELETE /api/v1/notes/:id` is soft delete. `internal/api/service.go` also contains `RestoreInTx` in a package-import flow, but there is no dedicated registered restore endpoint. No permanent-delete route was found | REST bearer `write`; page writes use session CSRF | Partial backend; no SPA; restore service behavior is not a standalone API capability | No. Search exact route registration and references before any removal |
-| Media upload / library / picker / serve | `media.go`, `media_picker.go`: POST `/media`, POST `/decks/:id/media`, GET `/media/:sha`, GET `/decks/:id/media/picker`; media templates/JS | No SPA view/client methods | `GET /api/v1/media` list; REST route list has no upload endpoint. Note package import/export may carry media; direct SPA upload absent | Web uploads are session + CSRF; deck upload requires editor access; media reads check media access. REST list bearer `read` | Backend partial; SPA not started | No |
-| Sharing, visibility, links, clone `/decks/:id/sharing`, `/s/:token`, clone | `sharing.go`, `publicshare.go`, `clone.go`; `views.Sharing`, `views.ShareBrowse`; POST clone | No SPA routes/views | No REST sharing/grant/link/clone endpoints in `internal/api/server.go` | Session authenticated; mutations session CSRF; deck roles enforced. Share browsing requires login per service checks; clone access checked server-side | Not started for SPA | No |
-| Package import/export `/import`, `/decks/:id/package`, `/export` | `package_web.go` → package export/import forms/templates | None | `GET /api/v1/decks/:id/package`, `POST /api/v1/decks/import`, plus `GET /api/v1/export` | REST bearer `read` export / `write` import; web import requires session CSRF, export access checks | Backend feature complete surface; SPA not started | No |
-| Review queue/answer/actions `/review` | `review.go` → `reviewPage`, `reviewAnswer`, `reviewAction`; `views.Review`; `review.js` handles swaps, shortcuts, MathJax | None; router has no `/review` definition (falls through to Go route) | `GET /api/v1/review/due`, `POST /api/v1/review` with expected version; handlers include grading and state update; REST route list has no web-specific bury/edit/answer preview endpoints | REST bearer `review`; legacy review requires session, CSRF on POST; handler access policy distinguishes reader vs owner for shared card-wide suspend | REST review primitives exist; browser SPA review not started | No: primary review route and templates remain active |
-| Stats `/stats` | `stats.go` → `statsPage` → `views.Stats` | `/stats` → `StatsView.svelte` | `GET /api/v1/stats/summary`; SPA summary only | REST bearer `read`; page requires authenticated user | Partial: SPA summary counters only; design has due forecasts, retention distribution, duration, tags, deck breakdown and learning curves not exposed by summary route | No: explicit `/stats` remains active |
-| Presets and optimization `/presets`, `/presets/:id/optimize*` | `presets.go` → list/create/update/optimize/status/revert; `views.Presets` | None | No preset/job REST routes in `internal/api/server.go` | Web session; mutations use CSRF; preset ownership and job checks at handler/service | Not started for SPA | No |
-| Personal settings/profile `/settings`, locale | `settings.go` → profile/password/locale forms and `views.Settings`; notification/email/TOTP routes separate | `/settings` → `SettingsView.svelte` | `/api/v1/profile` GET/PATCH and `/api/v1/settings/locale` PATCH registered in `web/server.go`, conditional on sessions/users dependencies; SPA calls GET/PATCH profile and locale | Cookie session required; mutating profile/locale require session CSRF | Partial: profile fields exist; password, email, notification preferences, TOTP, API key management are absent in SPA | No: explicit SSR routes and functions remain active |
-| API keys `/settings/keys`, `/admin/api-keys` | `settings.go` personal key pages; `admin.go` admin list/revoke | No SPA route/view | `GET/POST/DELETE /api/v1/keys[/:id]` | REST bearer `keys` scope; browser self-management uses session + CSRF; admin page requires admin role + CSRF for writes | Not started for SPA | No |
-| Admin users, registration, settings, OIDC, SMTP, audit, health, jobs, i18n `/admin/*` | `admin.go` route table + `admin_users.go`, `admin_registration.go`, `admin_settings.go`, `admin_oidc.go`, `admin_smtp.go`, `admin_audit.go`, `admin_health.go`, `admin_jobs.go`, `admin_i18n.go`; corresponding `internal/web/views/admin*.templ` | None; no `/admin` routes or views | No admin REST namespace/routes in `internal/api/server.go` | `adminRoutes()` maps each route through `requireAdmin`; all writes also get session CSRF; non-admin receives 403 and audit entry | Not started for SPA; fully active server-rendered section | No |
-| Health `/healthz` | JSON handler `server.go:301`, not a page | None | Not under API group; `/healthz` is standalone | Public GET; reports DB/schema health | Backend only; not an SPA migration target as currently specified | Not applicable |
-| SPA shell/static assets | `spa.go` serves embedded Vite `/assets/*`; `not_found.go` serves SPA index only for unmatched page GETs. Explicit Go routes still win. `spa.ServeIndex` is only referenced from `notFound` | Entry `frontend/src/main.ts` / `App.svelte`; routes in `frontend/src/lib/router/routes.ts` | SPA app calls current read/auth/profile endpoints listed above | SPA shell public; data/API handlers determine access | Partial; fallback exists but all explicitly routed legacy paths still hit legacy handlers | No: indexed assets and fallback actively serve SPA, while SSR paths are still active |
-| Service worker / PWA | `/sw.js`, `/manifest.webmanifest`, `/pwa.js`, `/favicon.ico` via `pwa.go`; base templ pages register PWA script | SPA `index.html` integration was not inspected as static generated output; app entry route does not register a worker itself | N/A | Public GET; CSP applies | Partial: existing SW precache is legacy shell (`pwaShellAssets`), misses Vite `/assets/*` and SPA HTML; no offline data | No: active registered routes and shared asset functionality |
+| Feature / URL | SSR route / active handler | SPA route / current view | Existing API and current SPA coverage | Legacy safe to remove? |
+|---|---|---|---|---|
+| Home `/` | Explicit Go `GET /` renders home | `/` → `HomeView` | Uses decks and summary stats; missing per-deck queue counts/streak details from the target | No; exact Go route remains active |
+| Login/logout `/login`, `/logout` | Explicit SSR login/logout handlers | `/login` → `LoginView`; SPA navigation invokes logout | Session/auth JSON endpoints; SPA session-cookie + CSRF flow implemented | No; explicit legacy routes and flows remain |
+| Setup, registration, invites, OIDC | SSR auth routes remain registered | No corresponding SPA views/routes | No SPA API coverage for setup/register/invite/OIDC flows | No; onboarding and protocol flows are not migrated |
+| Deck list `/decks` | Explicit SSR deck listing and actions | `/decks` → `DecksView` | `GET /api/v1/decks` used; create exists via REST but is not implemented in this view | No; explicit SSR route remains and SPA lacks parity |
+| Deck detail/note list `/decks/:id`, `/decks/:id/notes` | `/decks/:id` can reach SPA fallback; `/decks/:id/notes` is explicit SSR | Both map to `DeckDetailView` | Deck and notes list APIs are used. View is read-only; no rendered Markdown/MathJax, editor, or bulk actions | No; note-list path is an explicit Go route |
+| Deck CRUD, caps, settings | SSR deck and deck-settings handlers | No SPA settings/CRUD view | Deck creation API exists; no deck update/delete/cap endpoints | No; server-side settings/actions are not covered |
+| Note create/update/delete/bulk | SSR note handlers and forms | No SPA editor/actions | REST batch create/update, patch, soft-delete, and bulk actions exist; SPA does not call them | No |
+| Note preview/render `/decks/:id/preview` | SSR preview endpoints and fragments | None | No preview REST endpoint; SPA displays field values as text | No |
+| Restore/permanent delete | No dedicated SSR route identified for restore/permanent delete | None | REST delete is soft-delete; restore code occurs within package import, not a standalone route | No; no SPA parity and no standalone restore endpoint |
+| Media upload/library/picker | SSR upload, picker, and proxy routes | No SPA upload/library view | REST media listing exists; direct upload is SSR-only | No |
+| Sharing, visibility, links, clone | SSR sharing/browse/clone handlers | None | No REST sharing/grant/link/clone routes | No |
+| Package import/export `/import`, `/export`, package | SSR package pages/forms | None | REST package import/export and card export exist | No |
+| Review `/spa/review` and `/review` | Explicit legacy `GET /review`; legacy answer/action POST routes remain | `/spa/review` → `ReviewView` | Due-card fetch plus session-CSRF `POST /api/v1/review/answer`. SPA only displays self-assessment cards; graded cards are omitted. Plain text only; no Markdown/MathJax, edit, or bury action. Legacy SSR supports graded answers and additional actions | No; `/review` stays the legacy SSR route and has broader coverage |
+| Stats `/stats` | Explicit SSR stats page | `/stats` → `StatsView` | Summary endpoint and aggregate metrics only; detailed forecasts, distributions, tags, and trends are not full SPA parity | No; explicit SSR route remains |
+| Profile/locale `/settings` | SSR profile/password and related settings routes | `/settings` → `SettingsView` | `GET/PATCH /api/v1/profile` and `PATCH /api/v1/settings/locale`, registered by web server. SPA supports basic display name, locale, timezone, and cutoff profile fields; password, email, notification, TOTP, and key management remain absent | No; SSR paths remain active and settings coverage is partial |
+| API keys `/settings/keys`, `/admin/api-keys` | SSR personal and admin key pages | None | REST key endpoints exist; not consumed by a SPA view | No |
+| Presets/optimization | SSR preset and job handlers | None | No corresponding REST endpoints in `internal/api/server.go` | No |
+| Admin `/admin/*` | SSR admin route table and pages remain active | None | No admin REST namespace/routes | No |
+| Health `/healthz` | Standalone JSON handler | Not a migration target | Public health endpoint | Not applicable |
+| SPA shell/assets and fallback | `/assets/*` serves embedded Vite assets; fallback serves SPA index on unmatched page GETs | Svelte app routes listed above | Explicit Go routes take precedence over fallback | No; the fallback is only a partial page route mechanism |
+| Service worker/PWA | `/sw.js`, `/manifest.webmanifest`, `/pwa.js`, favicon routes | SPA asset integration is not a replacement for SW coverage | Precache list remains legacy `/static/` CSS/JS/MathJax/icons/manifest; no Vite assets or HTML | No; cache manifest and fetch policy remain legacy-only |
 
-## Auth, CSRF, and API boundary details
+## Auth, CSRF, and rendering evidence
 
-- `frontend/src/lib/api/client.ts`: `credentials: 'same-origin'`, deletes any `Authorization` header, stores CSRF only in memory, adds `X-CSRF-Token` to non-safe requests. This matches session-backed same-origin UI but means the UI client cannot use bearer REST authentication.
-- `internal/api/server.go:Register`: every `/api/v1` REST endpoint uses authenticator middleware, then endpoint scope middleware. This is API-key authentication; `/api/v1/profile`, locale, and auth session/login/logout are additional web routes, not part of the listed `API.Register` business routes.
-- `internal/web/server.go`: the SPA profile PATCH/locale PATCH are explicitly wrapped in session CSRF middleware. `internal/web/auth.go` auth JSON routes distinguish pre-session double-submit login from session-CSRF logout. Templ form writes are similarly guarded by CSRF middleware, except OIDC protocol GET callback.
-- `internal/web/server.go` applies `securityHeaders()` globally before session/locale handlers, so API, MCP, static, media, fallback, and explicit page routes inherit headers.
+- `frontend/src/lib/api/client.ts` uses `credentials: 'same-origin'`, removes `Authorization`, stores CSRF in memory, and adds `X-CSRF-Token` on unsafe requests. The client therefore uses session auth, not bearer REST credentials.
+- `internal/web/server.go` registers the profile/locale routes under `/api/v1` when sessions and users are configured. Profile PATCH and locale PATCH use session CSRF middleware. `POST /api/v1/review/answer` is separately registered with session CSRF middleware when API and sessions are available.
+- `spaReviewAnswer` rejects graded cards and submits self-assessment using the shared API service. `ReviewView.svelte` displays text values directly and provides reveal/rating controls only; it contains no MathJax or Markdown rendering integration and no edit/bury actions.
+- `internal/web/review.go` registers legacy GET `/review` and legacy answer/action POST routes. The source comment explicitly says to keep the old page while SPA review is incomplete and use `/spa/review` temporarily.
+- `internal/web/pwa.go` lists `css/tailwind.css`, `js/htmx.min.js`, `js/review.js`, MathJax and icons in `pwaShellAssets`; its service worker caches only `/static/` and the manifest. It does not include `/assets/` or cache HTML.
+- The global CSP is enforced in `internal/web/security_headers.go`; its `script-src` excludes `unsafe-eval`. Legacy templates and JS still link/use self-hosted MathJax; the SPA source does not.
 
-## MathJax and CSP status
+## Build, tests, and evidence limits
 
-- `internal/web/security_headers.go:55-64` sends enforced policy: `default-src 'self'; script-src 'self' <theme SHA-256>; style-src 'self' 'unsafe-inline'; img-src 'self' https:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`.
-- `internal/web/server.go:294` installs it globally. `security_headers_test.go` asserts forced CSP and checks templates/JS for policy compatibility; `spa_test.go` checks CSP header on SPA assets.
-- Self-hosted MathJax is `internal/web/static/js/mathjax/tex-svg.js`, embedded by `internal/web/assets.go`, linked by templ `base.templ`, and used by legacy `notes.js`/`review.js`. `internal/render` preserves TeX delimiters while sanitizing HTML. The SPA `DeckDetailView` renders field values as text and does not call `MathJax.typesetPromise`; the SPA source does not configure MathJax.
-- **Policy-comment drift:** `internal/web/static/js/media.js` comment says CSP `unsafe-eval` is retained, but actual enforced `script-src` in `security_headers.go` excludes it, and the test suite explicitly rejects `unsafe-eval`. This appears to be stale commentary, not evidence the active CSP allows eval. No edit made.
+The earlier audit recorded source/config inspection and explicitly did **not** run generated frontend or broad Go tests. For this refresh, the following commands were actually run:
 
-## Build, embedding, and release evidence
+```text
+cd frontend && npm ci && npm run check && npm test && npm run build
+npm ci: success; 0 vulnerabilities (npm printed an esbuild install-script approval warning)
+svelte-check: 0 errors, 0 warnings
+Vitest: 11 files passed; 93 tests passed
+Vite build: success; emitted index HTML, CSS, and JS bundles
 
-- `frontend/package.json` defines `npm run check`, `npm test`, `npm run build`; lockfile use is configured.
-- Source Dockerfile uses a Node 22 frontend stage (`npm ci`, `npm run check`, `npm run build`), copies `frontend/dist` into the Go builder, then `go generate ./...` and compiles the embedded binary. Builder is glibc bookworm for Tailwind.
-- `.goreleaser.yaml` `before.hooks` runs `npm --prefix frontend ci`, `npm --prefix frontend run build`, then `go generate ./...` before cross-compiling Go binaries. `release.yml` was inspected: it builds Rust optimizer artifacts for linux/amd64, linux/arm64, darwin/arm64, and windows/amd64; the release job downloads them, installs templ/Tailwind, configures QEMU/buildx and registry login, then runs GoReleaser. No local release invocation or publish occurred.
-- `.github/workflows/ci.yml` runs frontend `npm ci`, check, tests, build before `go generate ./...`, formatting, Go build/vet/tests; workflow triggers are pull request and workflow_dispatch, not push.
-- `Dockerfile.release` consumes GoReleaser artifacts and does not build frontend itself; it depends on the prior GoReleaser build embedding the SPA. Release acceptance requires the full workflow stages and configured registry secrets, not only Dockerfile inspection.
-- `frontend/dist` and generated `internal/web/static/css/tailwind.css` / `*_templ.go` are ignored/generated outputs. Current repository status was clean at audit start; no generated frontend build/test or broad Go suite was run because this task is read-only audit/report and explicitly bounded against broad tests.
+go test ./internal/web -run 'Test(SPA|SPAFallbackDeepLinks|SPAProfile|SPASelf|.*Review)'
+initial attempt: blocked because frontend/dist did not exist
 
-## Safe-removal decision and next cutover gates
+go generate ./...
+success; Tailwind and templ generation completed
 
-No SSR route/view/HTMX asset is classified dead. Reference evidence includes active route registration in `internal/web/server.go` calling each `register*Routes`, `adminRoutes()` dynamic registration, active template rendering in handlers, SPA fallback only from `notFound`, direct asset embedding, and PWA legacy static asset manifest. A source-level reference search can establish dead code only after routes are cut over and templates/assets cease serving active paths.
-
-Before removal, implement and verify SPA route/view parity for the current web route inventory, including onboarding/OIDC and protected admin surfaces, plus endpoint coverage for deck caps, note preview/restore, media upload, sharing/cloning, package import/export, review actions/answer workflow, presets/jobs, and admin CRUD/settings/audit/health. Reconcile session-cookie SPA access with REST bearer-only middleware without weakening auth/scope boundaries. Update the SPA PWA asset manifest and shell caching policy to include Vite hashed assets and HTML revalidation behavior. Add browser-level acceptance for MathJax in SPA-rendered content and actual CSP violations. Only then search references and mark old templ/htmx handlers, templates, scripts, MathJax bundle, and static assets removable.
-
-**Run from repository root.** The following exact commands were run during this audit, in addition to direct file reads of the named source files:
-
-```sh
-python3 -c "from pathlib import Path; p=Path('.'); print('\\n'.join(str(x) for x in p.glob('frontend/src/**') if x.is_file())); print('---GO---'); print('\\n'.join(str(x) for x in p.glob('internal/web/**') if x.is_file()))"
-python3 - <<'PY'
-from pathlib import Path
-for base in ['internal/web','internal/api']:
- print('##',base)
- for p in sorted(Path(base).glob('*.go')):
-  if p.name.endswith('_test.go'): continue
-  lines=p.read_text(errors='ignore').splitlines()
-  regs=[(i+1,l.strip()) for i,l in enumerate(lines) if any(x in l for x in ['router.','.GET(','.POST(','.PUT(','.PATCH(','.DELETE('])]
-  if regs: print('\\n'+str(p)+'\\n'+'\\n'.join(f'{n}: {l}' for n,l in regs))
-PY
-grep -RInE '(/api/v1/|async |function )' frontend/src/lib --include='*.ts' --include='*.svelte' | head -120
-grep -RInE 'MathJax|mathjax|unsafe-eval|Content-Security-Policy' internal/render internal/web frontend/src --exclude='*.map' | head -80
-grep -RInE 'restore|Restore|undelete|preview' internal/api --include='*.go' --exclude='*_test.go'
-grep -RInE 'registerServiceWorker|serviceWorker|sw.js|MathJax' frontend/src
-git status --short --branch
-git diff -- .gitignore
+go test ./internal/web -run 'Test(SPA|SPAFallbackDeepLinks|SPAProfile|SPASelf|.*Review)'
+ok  git.nite07.com/nite/engram/internal/web  13.900s
 ```
 
-The route enumeration command printed each non-test Go web/API source registration found by its literal method-call pattern. SPA method/reference searches show the concrete frontend API call inventory. `grep` for `restore|Restore|undelete|preview` found `internal/api/service.go:441` (`RestoreInTx` in package import) and no direct REST route registration. `grep` of frontend sources found no service-worker registration or MathJax integration. Build/release config evidence comes from direct reads of `Dockerfile`, `Dockerfile.release`, `.goreleaser.yaml`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`.
-
-**Audit limitations:** report is a source audit, not browser E2E or full acceptance. The dynamically generated/built `frontend/dist` contents were not separately rebuilt in this bounded task. REST route existence is not treated as proof of business semantics; claims about soft-delete, permission, CSRF, and payload behavior are grounded in corresponding handler/middleware source and tests where cited above.
+The Go test attempt required `go generate ./...` because generated assets/views were absent in the worktree. That generation changed only ignored outputs; no generated output is part of this report's intended change. No full Go suite, browser E2E, or release build was run. Frontend tests and the selected Go tests verify specific client/server contracts; they do not establish browser behavior or complete cutover parity.
 
 ## Focused implementation update: SPA deck creation
 
 The SPA now submits deck creation through the existing `POST /api/v1/decks` endpoint. The API client obtains a session CSRF token when it has none, then uses its same-origin cookie and `X-CSRF-Token` request behavior. The form defaults visibility to private and sends `preset_id: 0` to use the service default; successful creation inserts the returned deck into the list. Stable server validation codes for invalid deck name, invalid description, and invalid request receive localized UI messages. English and Simplified Chinese catalog keys were appended in parity.
 
 Focused API tests cover session token bootstrap, the create payload/response, and preservation of the server validation code. Verification: `npm run check` passed with 0 errors/warnings; `npm test -- --run` passed (11 files, 95 tests); `npm run build` passed; `git diff --check` passed. No Go backend files changed.
+
+## Audit limitations
+
+This is a source audit, not browser E2E or full acceptance. The dynamic `frontend/dist` bundle was not independently audited. Route existence alone does not establish business semantics; authorization and payload conclusions are based on handler/middleware source and corresponding tests.
+
+## Cutover decision and remaining gates
+
+Legacy cleanup is blocked until SPA parity exists and is verified route by route. Remaining work includes onboarding/OIDC; deck settings and caps; note creation, deletion, bulk operations and restore; media upload/library; sharing and clone; package import/export; graded review, Markdown/MathJax, edit and bury; detailed stats; full account security settings; presets/jobs; and all admin surfaces. Update the service-worker cache policy for Vite assets while keeping HTML, API and review data uncached. Add browser E2E for authentication, routing, review, rendered card content, and CSP behavior. Only after those gates pass should active route references, templates, HTMX scripts, MathJax assets, and legacy cache entries be considered for removal.
