@@ -61,6 +61,55 @@ export interface NoteListParams {
 }
 
 /**
+ * 学习统计概要（与 Go 后端 internal/api/service.go:StatsSummary 对齐）
+ * DESIGN.md §7.3、§9
+ */
+export interface StatsSummary {
+  decks: number;
+  due: number;
+  reviews_today: number;
+  reviews_total: number;
+  retention: number;
+  notes: number;
+  cards: number;
+}
+
+/**
+ * 到期卡片对外形态（与 Go 后端 internal/api/service.go:DueCard 对齐）
+ * DESIGN.md §3.3、§7.3
+ */
+export interface DueCard {
+  card_id: number;
+  note_id: number;
+  deck_id: number;
+  state: string;
+  due_at: string;
+  retrievability: number;
+  kind: string;
+  fields: Record<string, unknown>;
+  tags: string[];
+  template?: string;
+}
+
+/**
+ * GET /api/v1/review/due 响应体结构
+ * DESIGN.md §3.3、§7.3
+ */
+export interface DueCardsResponse {
+  cards: DueCard[];
+}
+
+/**
+ * GET /api/v1/review/due 查询参数
+ * DESIGN.md §3.3、§7.3:
+ * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
+ */
+export interface DueCardsQuery {
+  deck?: number | number[];
+  limit?: number;
+}
+
+/**
  * Go 后端错误体内层结构（internal/api/errors.go:errorBody）
  */
 export interface ApiErrorDetail {

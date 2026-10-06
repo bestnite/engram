@@ -4,7 +4,7 @@ import {
   ApiClientError,
   getApiErrorMessageKey,
 } from '../lib/api';
-import type { DecksResponse } from '../lib/api';
+import type { DecksResponse, StatsSummary, DueCardsResponse } from '../lib/api';
 import { formatMessage } from '../lib/i18n';
 
 describe('Centralized typed same-origin REST API client', () => {
@@ -517,6 +517,233 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(url).toBe('/api/v1/settings/locale');
       expect(init?.method).toBe('PATCH');
       expect(JSON.parse(init?.body as string)).toEqual({ locale: 'en' });
+    });
+  });
+
+  describe('GET /api/v1/stats/summary data wiring and contract fixtures', () => {
+    it('requests GET /api/v1/stats/summary with same-origin credentials and parses Go fixture', async () => {
+      // 捕获自 Go 测试 visible_scope_test.go:TestStatsVisibleContentButFullReviewHistory 的真实响应形态
+      const goFixture: StatsSummary = {
+        decks: 1,
+        notes: 1,
+        cards: 1,
+        due: 1,
+        reviews_today: 2,
+        reviews_total: 2,
+        retention: 0.5,
+      };
+
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify(goFixture), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getStatsSummary();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/stats/summary');
+      expect(init?.credentials).toBe('same-origin');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('Accept')).toBe('application/json');
+      expect(headers.has('Authorization')).toBe(false);
+
+      expect(result).toEqual(goFixture);
+      expect(result.decks).toBe(1);
+      expect(result.due).toBe(1);
+      expect(result.reviews_today).toBe(2);
+      expect(result.reviews_total).toBe(2);
+      expect(result.retention).toBe(0.5);
+    });
+
+    it('correctly handles empty/revoked stats fixture without fabricating values', async () => {
+      const revokedFixture: StatsSummary = {
+        decks: 0,
+        notes: 0,
+        cards: 0,
+        due: 0,
+        reviews_today: 0,
+        reviews_total: 0,
+        retention: 0,
+      };
+
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify(revokedFixture), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getStatsSummary();
+      expect(result).toEqual(revokedFixture);
+      expect(result.decks).toBe(0);
+      expect(result.due).toBe(0);
+      expect(result.retention).toBe(0);
+    });
+
+    it('handles 401 Unauthorized for stats/summary', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'unauthorized', message: 'Authentication required' },
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getStatsSummary()).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(401);
+        expect(apiErr.code).toBe('unauthorized');
+        expect(apiErr.isUnauthorized).toBe(true);
+        return true;
+      });
+    });
+
+    it('handles 403 Forbidden / insufficient scope for stats/summary', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'insufficient_role', message: 'Scope required' },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getStatsSummary()).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.isForbidden).toBe(true);
+        return true;
+      });
+    });
+  });
+
+  describe('GET /api/v1/review/due query semantics and contract fixtures', () => {
+    it('requests GET /api/v1/review/due with no query params when query is omitted', async () => {
+      const fixture: DueCardsResponse = { cards: [] };
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify(fixture), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getDueCards();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/review/due');
+      expect(init?.credentials).toBe('same-origin');
+      expect(result.cards).toEqual([]);
+    });
+
+    it('appends repeated deck query params matching Go Gin c.QueryArray("deck") semantics', async () => {
+      // 对应 Go 测试 review_scope_test.go:TestDueCardsAcceptsRepeatedDeckParams
+      const goFixture: DueCardsResponse = {
+        cards: [
+          {
+            card_id: 101,
+            note_id: 201,
+            deck_id: 1,
+            state: 'review',
+            due_at: '2026-10-06T00:00:00Z',
+            retrievability: 0.88,
+            kind: 'basic',
+            fields: { front: 'question 1', back: 'answer 1' },
+            tags: ['biology'],
+            template: 'forward',
+          },
+          {
+            card_id: 102,
+            note_id: 202,
+            deck_id: 2,
+            state: 'new',
+            due_at: '2026-10-06T00:00:00Z',
+            retrievability: 0,
+            kind: 'basic',
+            fields: { front: 'question 2', back: 'answer 2' },
+            tags: ['chemistry'],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify(goFixture), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getDueCards({ deck: [1, 2], limit: 50 });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/review/due?deck=1&deck=2&limit=50');
+      expect(init?.credentials).toBe('same-origin');
+      expect(result.cards).toHaveLength(2);
+      expect(result.cards[0]?.card_id).toBe(101);
+      expect(result.cards[0]?.deck_id).toBe(1);
+      expect(result.cards[0]?.fields).toEqual({ front: 'question 1', back: 'answer 1' });
+      expect(result.cards[1]?.card_id).toBe(102);
+      expect(result.cards[1]?.deck_id).toBe(2);
+    });
+
+    it('handles single deck param correctly', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ cards: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      await client.getDueCards({ deck: 42 });
+
+      const [url] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/review/due?deck=42');
+    });
+
+    it('handles 400 Bad Request when deck param is invalid (reproducing TestDueCardsRejectsBadDeckParam)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'invalid_request', message: 'Invalid deck ID' },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getDueCards({ deck: 0 })).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(400);
+        expect(apiErr.code).toBe('invalid_request');
+        return true;
+      });
+    });
+
+    it('handles 403 Forbidden when deck is unreadable (reproducing TestDueCardsFailsWholeRequestForUnreadableDeck)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'forbidden', message: 'You do not have access to this deck' },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getDueCards({ deck: 999 })).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.code).toBe('forbidden');
+        expect(apiErr.isForbidden).toBe(true);
+        return true;
+      });
     });
   });
 });
