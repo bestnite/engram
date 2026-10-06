@@ -26,6 +26,30 @@ export interface DeckQueueCountsResponse {
   decks: Array<{ deck_id: number; new_count: number; review_count: number }>;
 }
 
+/**
+ * GET/PATCH /api/v1/decks/:id/settings（DESIGN.md §8.1、§3.3，Go: internal/web/spa_deck_settings.go）。
+ * new_per_day / reviews_per_day 为 0 表示不限；new_unlimited / review_unlimited 显式表达
+ * 「不限」，因为 0 与「今日剩余 0 张」在整数上同形。今日已用/剩余与复习队列同源。
+ */
+export interface DeckSettings {
+  deck_id: number;
+  deck_name: string;
+  new_per_day: number;
+  reviews_per_day: number;
+  new_used: number;
+  review_used: number;
+  new_left: number;
+  review_left: number;
+  new_unlimited: boolean;
+  review_unlimited: boolean;
+}
+
+/** PATCH /api/v1/decks/:id/settings 请求体；两个字段都必填，0 合法（不限）。 */
+export interface UpdateDeckSettingsRequest {
+  new_per_day: number;
+  reviews_per_day: number;
+}
+
 /** POST /api/v1/decks 请求体与响应体。preset_id=0 使用服务端默认预设。 */
 export interface CreateDeckRequest {
   name: string;
