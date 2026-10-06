@@ -96,6 +96,24 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 				}
 			}
 
+			// 单页取全量（limit 足够大）：并集必须去重，同一份字节两路命中只出现一次。
+			// 这条断言不能只靠分页覆盖——keyset 的严格小于会把「同排序键的重复行」挡在下一页之外，
+			// 所以只有一页装得下全部行时才真正验证 UNION 的去重。
+			single, singleNext, err := ListReadableMedia(ctx, db, owner, 10, "")
+			if err != nil {
+				t.Fatalf("single page error = %v", err)
+			}
+			if singleNext != "" {
+				t.Fatalf("single page returned a cursor %q while the whole set fits", singleNext)
+			}
+			if len(single) != len(want) {
+				shas := make([]string, 0, len(single))
+				for _, m := range single {
+					shas = append(shas, m.Sha256)
+				}
+				t.Fatalf("single page has %d rows, want %d deduped (got %v)", len(single), len(want), shas)
+			}
+
 			// 同一游标重复请求必须给出同一页（keyset 稳定），不重不漏。
 			first, nextCursor, err := ListReadableMedia(ctx, db, owner, 2, "")
 			if err != nil {

@@ -88,6 +88,11 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 	secret := seedMedia(t, env, other.ID, "secret-media")
 	seedRefNote(t, env, privateDeck.ID, other.ID, secret)
 
+	// owner 自己的一张卡引用了 owned[0]：这份字节两路命中（上传 + 被可见卡引用），
+	// 列表必须去重成一份。
+	ownerDeck := seedDeck(t, env.db, owner.ID)
+	seedRefNote(t, env, ownerDeck.ID, owner.ID, owned[0])
+
 	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
 
 	// 第一页 limit=2：形状与游标。
@@ -128,6 +133,29 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 	}
 	if seen[secret] != 0 {
 		t.Errorf("list leaked another user's private media %s: %v", secret, got)
+	}
+
+	// 单页取全量（limit 足够大）：并集去重后每份字节只出现一次（keyset 的严格比较只在跨页时
+	// 挡住同排序键的重复行，一页装得下时才真正验证 UNION 去重）。
+	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/media?limit=100", key.Plaintext, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /media?limit=100 = %d, want 200 (body %s)", code, raw)
+	}
+	var full mediaPageBody
+	if err := json.Unmarshal(raw, &full); err != nil {
+		t.Fatalf("decode full page: %v (%s)", err, raw)
+	}
+	if len(full.Items) != len(owned) || full.NextCursor != "" {
+		t.Fatalf("full page has %d items (cursor %q), want %d and empty cursor", len(full.Items), full.NextCursor, len(owned))
+	}
+	fullSeen := map[string]int{}
+	for _, it := range full.Items {
+		fullSeen[it.Sha256]++
+	}
+	for sha, n := range fullSeen {
+		if n != 1 {
+			t.Errorf("deduped page shows media %s %d times, want once", sha, n)
+		}
 	}
 
 	// 末页 next_cursor 必须为空串。
