@@ -74,7 +74,7 @@ func (s *Server) clonePreset(ctx context.Context, loc *i18n.Localizer, ownerID u
 	srcPreset, err := s.presets.ByID(ctx, src.PresetID)
 	if err != nil {
 		// 源预设缺失（数据异常）时不让克隆整体失败：退回调用者的默认预设。
-		return s.resolvePresetID(ctx, loc, ownerID, "")
+		return s.resolvePresetID(ctx, ownerID, "")
 	}
 	p := *srcPreset
 	p.ID = 0

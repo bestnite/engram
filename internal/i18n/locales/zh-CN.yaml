@@ -370,8 +370,6 @@
   translation: "请选择一个调度预设。"
 - id: decks.list.error_create_failed
   translation: "创建卡组失败。"
-- id: decks.preset.default
-  translation: "默认"
 # M5-2 卡组共享管理页。
 - id: sharing.title
   translation: "共享管理"

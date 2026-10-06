@@ -4,12 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
+
+// DefaultPresetName 是默认预设的稳定标识与创建名。
+//
+// 它是**存储数据而不是 UI 文案**：把它本地化正是「同一用户攒出两个默认预设」这一缺陷的根源
+// （M3-14）。web 建组用本地化名、REST 建组用字面量时，两条入口对同一条逻辑预设给出不同名字，
+// 谁都找不到对方建的那条。这里定义唯一字面量，所有入口共用，语言包不再参与预设名。
+const DefaultPresetName = "Default"
+
+// ErrNoDefaultPreset 表示 EnsureDefaultPreset 之后仍未找到默认预设；出现即 store 契约被破坏。
+var ErrNoDefaultPreset = errors.New("default preset missing after ensure")
 
 // 调度参数的文档化默认值（DESIGN.md §2.2、§3.2、§3.5）。
 // 这些数值同时是 decks 新建时的预填值；learning_steps 允许为空串表示关闭学习步骤，
@@ -82,6 +93,67 @@ type PresetStore struct {
 
 // NewPresetStore 构造预设存储。
 func NewPresetStore(db *gorm.DB) *PresetStore { return &PresetStore{db: db} }
+
+// ensurePresetMu 串行化进程内的默认预设补齐。
+//
+// presets 表只有 owner_user_id 索引，没有 (owner_user_id, name) 唯一约束（已核实 AutoMigrate
+// 的模型标签）。补唯一索引属于结构变更，要先按 AGENTS.md §2.3.5 走显式、版本化迁移并先给历史
+// 数据去重，因此这里不退而求其次地用 clause.OnConflict。进程内用互斥串行化：两个请求同时为
+// 同一用户补齐时，后到的那个在锁内再查，命中第一条即返回，不会建出两条，也不会报错。
+// 跨进程并发（多实例部署）仍可能各建一条，属已知残余；真正根治需要上面的唯一索引迁移。
+var ensurePresetMu sync.Mutex
+
+// EnsureDefaultPreset 是该用户默认预设的唯一保障入口：保证 ownerUserID 名下至少有一条名为
+// DefaultPresetName 的预设，并返回其全部预设（按创建时间倒序）。
+//
+// web 与 REST/MCP 都经这里补齐默认预设，预设名不再本地化，因此同一用户不会再因入口不同而攒出
+// 两条「默认」预设（M3-14）。
+func EnsureDefaultPreset(ctx context.Context, db *gorm.DB, ownerUserID uint64) ([]Preset, error) {
+	presets, err := NewPresetStore(db).ListByOwner(ctx, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if DefaultPreset(presets) != nil {
+		return presets, nil
+	}
+
+	ensurePresetMu.Lock()
+	defer ensurePresetMu.Unlock()
+
+	// 事务内再查：拿到锁之前可能已有其它请求补上，避免重复创建。
+	var out []Preset
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		s := NewPresetStore(tx)
+		list, err := s.ListByOwner(ctx, ownerUserID)
+		if err != nil {
+			return err
+		}
+		if DefaultPreset(list) != nil {
+			out = list
+			return nil
+		}
+		p := NewPreset(ownerUserID, DefaultPresetName)
+		if err := s.Create(ctx, &p); err != nil {
+			return err
+		}
+		out = append([]Preset{p}, list...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DefaultPreset 返回列表中名为 DefaultPresetName 的预设；没有则返回 nil。
+func DefaultPreset(presets []Preset) *Preset {
+	for i := range presets {
+		if presets[i].Name == DefaultPresetName {
+			return &presets[i]
+		}
+	}
+	return nil
+}
 
 // Create 写入一个预设。
 //

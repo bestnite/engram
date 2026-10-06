@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
@@ -47,6 +48,23 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("media.New() error = %v", err)
 	}
+	// 导入等写操作走 api service（REST/MCP/CLI/web 同一入口），因此测试服务也要装配 API；
+	// MediaRoot 与媒体存储同一个，保证 web 导入的媒体落盘路径与生产一致。
+	apiSrv, err := api.New(api.Deps{
+		DB:        db,
+		Logger:    discardLogger(),
+		Keys:      store.NewAPIKeyStore(db),
+		Users:     users,
+		Decks:     store.NewDeckStore(db),
+		Notes:     store.NewNoteStore(db),
+		Presets:   store.NewPresetStore(db),
+		Cards:     store.NewCardStore(db),
+		Auditor:   auditor,
+		MediaRoot: mediaStore.Root(),
+	})
+	if err != nil {
+		t.Fatalf("api.New() error = %v", err)
+	}
 	srv, err = New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -62,6 +80,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Presets:    store.NewPresetStore(db),
 		Auditor:    auditor,
 		Media:      mediaStore,
+		API:        apiSrv,
 		LoginLimiter: auth.NewLoginLimiter(auth.LimiterConfig{
 			Sleep: func(context.Context, time.Duration) error { return nil },
 		}),

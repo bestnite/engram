@@ -66,7 +66,7 @@ type presetListRender struct {
 // 组装新建对话框与每张卡片的编辑对话框，然后整页输出。
 func (s *Server) renderPresetList(c *gin.Context, loc *i18n.Localizer, userID uint64, r presetListRender) {
 	ctx := c.Request.Context()
-	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
+	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)

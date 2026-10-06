@@ -3,7 +3,10 @@ package store
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+
+	"gorm.io/gorm"
 )
 
 // TestPresetDefaultsAppliedAndRoundTrip 是 M2-2 的验收用例：
@@ -159,4 +162,79 @@ func TestPresetValidationRejectsZeroValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEnsureDefaultPresetIdempotentAndConcurrent 是 M3-14 默认预设补齐的验收：
+// 重复调用与并发调用都只能得到一条默认预设，且都不报错。
+//
+// 并发部分覆盖「两个请求同时为同一用户补齐」：presets 表没有 (owner_user_id, name) 唯一约束，
+// EnsureDefaultPreset 用进程内互斥 + 事务内再查保证只落一条（见 store/preset.go 的说明）。
+func TestEnsureDefaultPresetIdempotentAndConcurrent(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "preset_ensure_owner")[0]
+
+			// 顺序重复：第二次必须复用第一条，不新增。
+			first, err := EnsureDefaultPreset(ctx, db, owner)
+			if err != nil {
+				t.Fatalf("EnsureDefaultPreset() error = %v", err)
+			}
+			if len(first) != 1 || first[0].Name != DefaultPresetName {
+				t.Fatalf("first ensure = %v, want exactly one %q", presetNames(first), DefaultPresetName)
+			}
+			second, err := EnsureDefaultPreset(ctx, db, owner)
+			if err != nil {
+				t.Fatalf("EnsureDefaultPreset() second call error = %v", err)
+			}
+			if len(second) != 1 || second[0].ID != first[0].ID {
+				t.Fatalf("second ensure = %v, want the same single preset id %d", presetNames(second), first[0].ID)
+			}
+
+			// 并发：同一用户的 N 个补齐同时进行，不得报错也不得建出两条。
+			other := seedUsers(t, db, "preset_ensure_concurrent")[0]
+			const n = 8
+			errs := make([]error, n)
+			var wg sync.WaitGroup
+			for i := 0; i < n; i++ {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					_, errs[i] = EnsureDefaultPreset(ctx, db, other)
+				}(i)
+			}
+			wg.Wait()
+			for i, err := range errs {
+				if err != nil {
+					t.Errorf("concurrent EnsureDefaultPreset #%d error = %v", i, err)
+				}
+			}
+			got := mustListPresets(t, db, other)
+			if len(got) != 1 {
+				t.Fatalf("concurrent ensure produced %d presets (%v), want 1", len(got), presetNames(got))
+			}
+		})
+	}
+}
+
+// mustListPresets 读某用户的全部预设，失败即 Fatal。
+func mustListPresets(t *testing.T, db *gorm.DB, ownerID uint64) []Preset {
+	t.Helper()
+	presets, err := NewPresetStore(db).ListByOwner(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("ListByOwner() error = %v", err)
+	}
+	return presets
+}
+
+// presetNames 取预设名列表，仅用于失败信息。
+func presetNames(presets []Preset) []string {
+	names := make([]string, 0, len(presets))
+	for i := range presets {
+		names = append(names, presets[i].Name)
+	}
+	return names
 }

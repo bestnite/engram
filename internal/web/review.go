@@ -459,7 +459,7 @@ func (s *Server) schedulerFor(ctx context.Context, userID uint64, deckIDs []uint
 		}
 	}
 	if preset == nil {
-		def := store.NewPreset(userID, "default")
+		def := store.NewPreset(userID, store.DefaultPresetName)
 		preset = &def
 	}
 	return schedule.NewScheduler(preset)

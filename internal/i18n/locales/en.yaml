@@ -371,8 +371,6 @@
   translation: "Please choose a scheduling preset."
 - id: decks.list.error_create_failed
   translation: "Could not create the deck."
-- id: decks.preset.default
-  translation: "Default"
 # M5-2 deck sharing management page.
 - id: sharing.title
   translation: "Sharing"
