@@ -344,6 +344,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		// SPA 答题只接受会话 cookie，并在 API 组之外显式校验会话绑定的 CSRF。
 		if s.sessions != nil {
 			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.spaReviewAnswer)
+			// 作答类题型走判分入口：服务端判分并写 grade_source=typed（DESIGN.md §6.2、§8.2）。
+			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.spaReviewGrade)
 		}
 	}
 	if s.mcp != nil && s.api != nil {

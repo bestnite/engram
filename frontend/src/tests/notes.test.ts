@@ -272,6 +272,15 @@ describe('Deck and notes list API client and view contracts', () => {
           expect(content).toContain('{@html card.back_html}');
           expect(content).not.toContain('{@html fields');
           expect(content).not.toContain('{@html fieldsText');
+        } else if (file === 'ReviewView.svelte') {
+          // 判分正确答案是服务端清洗后的 HTML（判分反馈 feedback.answer_html 与 reveal 响应），
+          // 是 ReviewView 仅有的两个 HTML 汇；note 字段原文绝不得喂进 {@html}。
+          expect(content).toContain('{@html feedback.answer_html}');
+          expect(content).toContain('{@html revealedAnswerHTML}');
+          expect(content).not.toContain('{@html fields');
+          expect(content).not.toContain('{@html gradedPrompt');
+          expect(content).not.toContain('{@html answerText');
+          expect(content.match(/\{@html/g) ?? []).toHaveLength(2);
         } else {
           expect(content, `File ${file} must not contain {@html} expressions`).not.toContain('{@html');
         }

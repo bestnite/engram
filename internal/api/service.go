@@ -946,6 +946,9 @@ type SubmitReviewInput struct {
 	ExpectedVersion int
 	ElapsedMS       *int
 	GradeSource     string
+	// GradeDetailJSON 是判分细节原文（作答类题型写入 reviews.grade_detail_json）；
+	// 自评路径为 nil。REST/MCP 的自评请求不带它，只有服务端判分后的 SPA 入口填。
+	GradeDetailJSON *string
 }
 
 // SubmitReviewResult 是评分提交的响应形态。
@@ -993,6 +996,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 			ExpectedVersion: in.ExpectedVersion,
 			ElapsedMS:       in.ElapsedMS,
 			GradeSource:     in.GradeSource,
+			GradeDetailJSON: in.GradeDetailJSON,
 			Scheduler:       sched,
 			Now:             a.now(),
 			Location:        userLocation(u.Timezone),
