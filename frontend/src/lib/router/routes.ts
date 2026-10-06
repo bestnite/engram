@@ -12,6 +12,7 @@ import NoteCreateView from '../views/NoteCreateView.svelte';
 import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
+import TOTPView from '../views/TOTPView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -83,6 +84,13 @@ export const routes: RouteDefinition[] = [
     path: '/settings/keys',
     name: 'settings-keys',
     component: APIKeysView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 两步验证管理。刻意走 /spa 前缀：SSR 仍占用 /settings/totp，
+    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
+    path: '/spa/settings/totp',
+    name: 'totp-settings',
+    component: TOTPView as unknown as RouteDefinition['component'],
   },
   {
     path: '/login',

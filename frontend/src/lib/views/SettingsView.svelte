@@ -210,7 +210,7 @@
         </div>
       {/if}
 
-      <!-- 个人基础资料设置区块（仅限 basic profile 与 locale 切片，严禁在此渲染密码/邮件/通知/TOTP/admin） -->
+      <!-- 个人基础资料区块：只放 profile 与 locale 字段（密码、两步验证等各有独立区块） -->
       <section class="card-subtle p-6 rounded-xl space-y-6">
         <div>
           <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -334,6 +334,12 @@
           <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="w-full rounded-xl border px-3.5 py-2.5 text-sm" /></label>
           <button type="submit" disabled={passwordSaving} class="rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</button>
         </form>
+      </section>
+      <!-- 两步验证入口：指向独立的 /spa/settings/totp（SSR 的 /settings/totp 在端到端验证前不遮蔽） -->
+      <section class="card-subtle p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
+        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.heading')}</h2>
+        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
+        <a href="/spa/settings/totp" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.totp.entry')}</a>
       </section>
     {/if}
   </div>
