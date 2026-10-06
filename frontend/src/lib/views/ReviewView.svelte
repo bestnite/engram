@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, DueCard, GradedAnswer, GradedFeedback } from '../api';
+  import { typeset } from '../mathjax';
 
   interface Props {
     client?: ApiClient;
@@ -52,6 +53,10 @@
   // svelte-ignore state_referenced_locally
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
+  // 服务端清洗后返回的 HTML 容器（判分反馈答案 / 揭示答案）：只对它们排版公式，
+  // 绝不整页排版，也绝不把字段原文送进 HTML sink（DESIGN.md §6.1、§11）。
+  let feedbackSection = $state<HTMLElement | null>(null);
+  let revealedSection = $state<HTMLElement | null>(null);
 
   const current = $derived(cards[0] || null);
   const selfAssessable = $derived(current !== null && SELF_ASSESSABLE.includes(current.kind));
@@ -201,6 +206,9 @@
       remaining = response.remaining;
       feedback = response.feedback ?? null;
       done += 1;
+      // 等结果面板挂上 DOM，再只对它排版服务端返回的答案 HTML。
+      await tick();
+      await typeset([feedbackSection]);
     } catch (cause) {
       error = cause;
     } finally {
@@ -220,6 +228,9 @@
       });
       revealedAnswerHTML = response.answer_html;
       gradedRevealed = true;
+      // 揭示面板挂上 DOM 后再排版揭示出的答案 HTML。
+      await tick();
+      await typeset([revealedSection]);
     } catch (cause) {
       error = cause;
     } finally {
@@ -348,7 +359,7 @@
           {/if}
         {:else if gradedKind}
           {#if feedback}
-            <div class="space-y-5" data-testid="review-graded-result">
+            <div bind:this={feedbackSection} class="space-y-5" data-testid="review-graded-result">
               <div class="flex items-center justify-between">
                 <span class={verdictClass(feedback.verdict)} data-testid="review-graded-verdict">{$t(`review.spa.graded.${feedback.verdict}`)}</span>
                 <span class="text-sm text-zinc-500" data-testid="review-graded-score">{$t('review.spa.graded.score')} · {Math.round(feedback.score * 100)}%</span>
@@ -367,7 +378,7 @@
               <button type="button" class="w-full min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-medium" onclick={continueNext} data-testid="review-graded-continue">{$t('review.spa.graded.continue')}</button>
             </div>
           {:else if gradedRevealed}
-            <div class="space-y-5" data-testid="review-graded-revealed">
+            <div bind:this={revealedSection} class="space-y-5" data-testid="review-graded-revealed">
               <div class="border-t border-zinc-200 dark:border-zinc-700 pt-5">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.spa.graded.answer')}</div>
                 <div class="text-lg whitespace-pre-wrap break-words" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>

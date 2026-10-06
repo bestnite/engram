@@ -122,3 +122,71 @@ func TestNewSPAErrorsOnEmptyOrMissingIndex(t *testing.T) {
 		t.Errorf("NewSPA(emptyFS) error = nil, want error")
 	}
 }
+
+// TestSPAIndexInjectsSelfHostedMathJaxURL 断言 SPA 入口把自托管 MathJax 的内容哈希 URL
+// 以 <meta name="engram-mathjax"> 注入 <head>：前端据此用同源外链脚本加载 MathJax，
+// 无需内联脚本，也就无需放宽 CSP（DESIGN.md §6.1、§8.5、§11）。
+func TestSPAIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
+	srv := newRenderServer(t, nil)
+	want := srv.assets.URL("js/mathjax/tex-svg.js")
+	if want == "" {
+		t.Fatal("mathjax asset is not embedded")
+	}
+	if !strings.HasPrefix(want, staticPathPrefix) {
+		t.Fatalf("mathjax URL = %q, want content-hashed %q prefix", want, staticPathPrefix)
+	}
+
+	rec := get(t, srv, "/spa/review", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /spa/review status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	meta := `<meta name="engram-mathjax" content="` + want + `" />`
+	if !strings.Contains(body, meta) {
+		t.Errorf("SPA index is missing injected MathJax meta %q", meta)
+	}
+	// 自托管：入口不得出现任何外部 URL（无 CDN）。
+	if strings.Contains(body, "http://") || strings.Contains(body, "https://") {
+		t.Errorf("SPA index references an external URL; MathJax must stay self-hosted")
+	}
+
+	// 入口内容已变，ETag 必须随注入后的内容重算，否则旧引用会被浏览器缓存（DESIGN.md §8.5）。
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("SPA index ETag is missing")
+	}
+	cond := get(t, srv, "/spa/review", map[string]string{"If-None-Match": etag})
+	if cond.Code != http.StatusNotModified {
+		t.Errorf("conditional GET /spa/review status = %d, want 304", cond.Code)
+	}
+}
+
+// TestSPAIndexMathJaxMetaFollowsSetURL 断言注入是 SetMathJaxURL 驱动的：默认不带 meta，
+// 传入 URL 后出现在 </head> 之前，再传空串则移除（资源缺失时与 SSR 一样不引用 MathJax）。
+func TestSPAIndexMathJaxMetaFollowsSetURL(t *testing.T) {
+	spa, err := NewSPA(fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<html><head></head><body><div id=\"app\"></div></body></html>")},
+	})
+	if err != nil {
+		t.Fatalf("NewSPA() error = %v", err)
+	}
+	if strings.Contains(string(spa.IndexHTML()), "engram-mathjax") {
+		t.Errorf("fresh SPA index should not carry a MathJax meta")
+	}
+
+	url := "/static/v/abcd1234/js/mathjax/tex-svg.js"
+	spa.SetMathJaxURL(url)
+	got := string(spa.IndexHTML())
+	meta := `<meta name="engram-mathjax" content="` + url + `" />`
+	if !strings.Contains(got, meta) {
+		t.Errorf("SetMathJaxURL did not inject %q into the index", meta)
+	}
+	if strings.Index(got, meta) > strings.Index(got, "</head>") {
+		t.Errorf("MathJax meta must be injected inside <head>, before </head>")
+	}
+
+	spa.SetMathJaxURL("")
+	if strings.Contains(string(spa.IndexHTML()), "engram-mathjax") {
+		t.Errorf("SetMathJaxURL(\"\") should remove the MathJax meta")
+	}
+}

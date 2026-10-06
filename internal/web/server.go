@@ -196,6 +196,10 @@ func New(addr string, deps Deps) (*Server, error) {
 			return nil, err
 		}
 	}
+	// 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口，供前端加载器按同源外链引入
+	// （CSP script-src 'self' 已放行，无需内联脚本；DESIGN.md §6.1、§8.5）。资源缺失时
+	// URL 为空，不注入，前端加载器随之跳过加载。
+	spa.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
 	translator := deps.Translator
 	if translator == nil {
 		var err error
