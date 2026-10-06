@@ -13,6 +13,7 @@ import {
   type NotePreviewResponse,
   type MediaPickerPage,
   type StatsSummary,
+  type StatsDetail,
   type DueCardsResponse,
   type DueCardsQuery,
   type SubmitSelfReviewRequest,
@@ -458,6 +459,14 @@ export class ApiClient {
    */
   async getStatsSummary(): Promise<StatsSummary> {
     return this.request<StatsSummary>('/api/v1/stats/summary');
+  }
+
+  /**
+   * 获取当前用户统计明细（GET /api/v1/stats/detail）
+   * DESIGN.md §8.1、§9：与 SSR 统计页同源，返回 §9 全部指标的原始数值。
+   */
+  async getStatsDetail(): Promise<StatsDetail> {
+    return this.request<StatsDetail>('/api/v1/stats/detail');
   }
 
   /**

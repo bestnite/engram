@@ -56,6 +56,9 @@ func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	}
 	owner, err := accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
 		Username: "owner", Email: "owner@example.com", Password: "Sup3rSecret!", Role: store.RoleAdmin,
+		// 与 seedStatsFixture 的复习日口径对齐（UTC、午夜切点），否则「今日」会随
+		// 默认时区 Asia/Shanghai + 04:00 切点在一天中的时段不同而错位。
+		Timezone: "UTC", DayCutoffHour: store.Ptr(0),
 	})
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
