@@ -3,12 +3,14 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -186,6 +188,170 @@ func (s *Server) apiLogin(c *gin.Context) {
 func (s *Server) spaLoginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
+}
+
+// spaRegisterShell 是 SPA 注册入口（GET /spa/register）。
+//
+// 与 SSR 的 GET /register 并存，不遮蔽它：后者仍是被链接、且无脚本也能提交的注册页。
+// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；注册协议走
+// POST /api/v1/auth/register（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
+// ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
+// 不建号、不建立会话、不返回任何凭据。
+func (s *Server) spaRegisterShell(c *gin.Context) {
+	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
+	s.spa.ServeIndex(c)
+}
+
+// spaSetupShell 是 SPA 引导入口（GET /spa/setup）。
+//
+// 可达性与 SSR 的 GET /setup 完全一致：已存在活跃管理员时返回 404（一次性管理员门，
+// 避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳，
+// 引导协议走 POST /api/v1/auth/setup。这里只下发 cookie 并返回应用壳，不建号、不建会话。
+func (s *Server) spaSetupShell(c *gin.Context) {
+	if !s.setupAvailable(c) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
+	s.spa.ServeIndex(c)
+}
+
+// apiRegisterRequest 是 POST /api/v1/auth/register 的请求体。
+// Invite 可为空：为空时按注册策略判定；非空时走邀请接受路径。
+type apiRegisterRequest struct {
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+	Invite      string `json:"invite"`
+}
+
+// apiSetupRequest 是 POST /api/v1/auth/setup 的请求体。
+// Email 可为空：为空且配置了 BOOTSTRAP_ADMIN_EMAIL 时采用环境变量兜底（与 SSR 一致）。
+type apiSetupRequest struct {
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+}
+
+// apiRegister 是 SPA 自助注册端点（POST /api/v1/auth/register）。
+//
+// 挂载 auth.DoubleSubmitMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
+// 全部判定（匿名限流、校验、首个管理员引导、邀请事务、注册策略/白名单）复用
+// attemptRegistration，与 SSR 的 registerSubmit 是同一份逻辑，因此策略语义不可能漂移。
+// 成功不建立会话（与 SSR 注册后跳转登录一致），只返回 created=true。
+func (s *Server) apiRegister(c *gin.Context) {
+	var req apiRegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
+		return
+	}
+	ctx := c.Request.Context()
+	outcome := s.attemptRegistration(ctx, c.ClientIP(),
+		strings.TrimSpace(req.Username),
+		strings.ToLower(strings.TrimSpace(req.Email)),
+		strings.TrimSpace(req.DisplayName),
+		req.Password,
+		strings.TrimSpace(req.Invite),
+		s.requestLocale(c))
+	if outcome.Code != "" {
+		s.writeRegistrationError(c, outcome)
+		return
+	}
+	// M1-19：注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（与 SSR 一致）。
+	s.sendEmailVerification(c, outcome.User)
+	c.JSON(http.StatusOK, gin.H{"created": true})
+}
+
+// apiSetup 是 SPA 首个管理员引导端点（POST /api/v1/auth/setup）。
+//
+// 与 SSR 的 setupSubmit 同一可达性规则：没有活跃管理员时才可达，否则 404（一次性管理员门）。
+// 建号与审计复用 attemptSetup，挂载 DoubleSubmitMiddleware。成功不建立会话。
+func (s *Server) apiSetup(c *gin.Context) {
+	if !s.setupAvailable(c) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var req apiSetupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
+		return
+	}
+	ctx := c.Request.Context()
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" && s.bootstrapEmail != "" {
+		// 容器化部署用 BOOTSTRAP_ADMIN_EMAIL 兜底：请求未填邮箱时采用环境变量值。
+		email = strings.ToLower(strings.TrimSpace(s.bootstrapEmail))
+	}
+	outcome := s.attemptSetup(ctx,
+		strings.TrimSpace(req.Username), email,
+		strings.TrimSpace(req.DisplayName), req.Password, s.requestLocale(c))
+	if outcome.Code != "" {
+		apiAuthError(c, outcome.Status, outcome.Code, registrationErrorMessage(outcome.Code))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"created": true})
+}
+
+// writeRegistrationError 把注册失败结果写成 JSON 错误包壳。
+// rate_limited 补 Retry-After；internal_error 归一到 api.CodeInternal；其余按 outcome.Status。
+func (s *Server) writeRegistrationError(c *gin.Context, outcome registrationOutcome) {
+	if outcome.Code == "rate_limited" {
+		c.Header("Retry-After", strconv.Itoa(int(auth.DefaultAnonRateWindow.Seconds())))
+	}
+	if outcome.Code == "internal_error" {
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	apiAuthError(c, outcome.Status, outcome.Code, registrationErrorMessage(outcome.Code))
+}
+
+// registrationErrorMessage 返回注册失败 code 对应的稳定英文兜底文案。
+// 前端按 code 映射本地化提示，绝不解析这条 message（DESIGN.md §8.3）。
+func registrationErrorMessage(code string) string {
+	switch code {
+	case "username_required":
+		return "Enter a username."
+	case "email_required":
+		return "Enter an email address."
+	case "email_invalid":
+		return "Enter a valid email address."
+	case "password_required":
+		return "Enter a password."
+	case "password_too_short":
+		return "The password is too short."
+	case "password_too_long":
+		return "The password is too long."
+	case "password_too_common":
+		return "The password is too common."
+	case "email_domain_not_allowed":
+		return "This email domain is not allowed to register."
+	case "invite_required":
+		return "Registration requires an invite link."
+	case "invite_invalid":
+		return "The invite link is invalid."
+	case "registration_closed":
+		return "Self-service registration is closed."
+	case "create_failed":
+		return "The account could not be created."
+	default:
+		return "The request is invalid."
+	}
+}
+
+// requestLocale 返回请求解析出的界面语言码，供新建用户写入 locale；本地化器缺失时返回空串。
+func (s *Server) requestLocale(c *gin.Context) string {
+	if loc := i18n.FromContext(c.Request.Context()); loc != nil {
+		return loc.Locale()
+	}
+	return ""
+}
+
+// apiAuthError 写出认证类 SPA 接口的错误包壳（与 spaTOTPError 同形）。
+// code 稳定且英文，message 为英文兜底文案，前端按 code 映射本地化提示。
+func apiAuthError(c *gin.Context, status int, code, message string) {
+	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
 // apiLogout 作废当前会话并清除 cookie（DESIGN.md §4.3、§11）。

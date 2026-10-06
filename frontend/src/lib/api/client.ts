@@ -35,6 +35,10 @@ import {
   type LoginRequest,
   type LoginResponse,
   type LogoutResponse,
+  type RegisterRequest,
+  type RegisterResponse,
+  type SetupRequest,
+  type SetupResponse,
   type PackageImportReport,
   type TOTPStatus,
   type TOTPBeginResponse,
@@ -700,6 +704,35 @@ export class ApiClient {
       this.csrfToken = null;
     }
     return res;
+  }
+
+  /**
+   * SPA 同源自助注册（POST /api/v1/auth/register）。
+   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
+   * 成功不建立会话（服务端不签发会话 cookie），调用方随后跳转登录页。
+   */
+  async register(input: RegisterRequest): Promise<RegisterResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<RegisterResponse>('/api/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
+   * SPA 同源首个管理员引导（POST /api/v1/auth/setup）。
+   * 仅在没有活跃管理员时可达，否则服务端返回 404。成功不建立会话。
+   */
+  async setup(input: SetupRequest): Promise<SetupResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<SetupResponse>('/api/v1/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   }
 }
 

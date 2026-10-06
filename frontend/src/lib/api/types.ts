@@ -448,6 +448,39 @@ export interface LogoutResponse {
 }
 
 /**
+ * POST /api/v1/auth/register 请求体（DESIGN.md §4.2、§8.1）。
+ * invite 为空时按站点注册策略判定；非空时走一次性邀请接受路径。
+ */
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  display_name?: string;
+  password: string;
+  invite?: string;
+}
+
+/** POST /api/v1/auth/register 响应体；注册成功不建立会话，前端随后跳转登录。 */
+export interface RegisterResponse {
+  created: boolean;
+}
+
+/**
+ * POST /api/v1/auth/setup 请求体（DESIGN.md §4.1）。
+ * email 为空且配置了 BOOTSTRAP_ADMIN_EMAIL 时由服务端兜底。
+ */
+export interface SetupRequest {
+  username: string;
+  email?: string;
+  display_name?: string;
+  password: string;
+}
+
+/** POST /api/v1/auth/setup 响应体；引导成功不建立会话。 */
+export interface SetupResponse {
+  created: boolean;
+}
+
+/**
  * Go 后端错误体内层结构（internal/api/errors.go:errorBody）
  */
 export interface ApiErrorDetail {

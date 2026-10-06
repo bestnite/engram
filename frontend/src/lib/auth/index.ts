@@ -1,6 +1,15 @@
 import { writable } from 'svelte/store';
 import { apiClient } from '../api';
-import type { User, SessionResponse, LoginResponse, LogoutResponse } from '../api';
+import type {
+  User,
+  SessionResponse,
+  LoginResponse,
+  LogoutResponse,
+  RegisterRequest,
+  RegisterResponse,
+  SetupRequest,
+  SetupResponse,
+} from '../api';
 import { setLocale, isSupportedLocale } from '../i18n';
 
 export interface AuthState {
@@ -107,4 +116,19 @@ export async function logout(): Promise<LogoutResponse> {
     }));
     throw err;
   }
+}
+
+/**
+ * SPA 自助注册：注册成功后服务端不签发会话（与 SSR 一致），因此不改动 authStore，
+ * 由调用方跳转到登录页。CSRF token 由 apiClient 在需要时自动补齐。
+ */
+export async function register(input: RegisterRequest): Promise<RegisterResponse> {
+  return apiClient.register(input);
+}
+
+/**
+ * SPA 首个管理员引导：同样不建立会话，成功后跳转登录页。
+ */
+export async function setup(input: SetupRequest): Promise<SetupResponse> {
+  return apiClient.setup(input);
 }
