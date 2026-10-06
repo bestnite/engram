@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -91,6 +92,14 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 			return
 		}
 		if u, ok := auth.CurrentUser(c); ok && u.Status == store.StatusActive {
+			if isMutating(c.Request.Method) {
+				sess, hasSession := auth.CurrentSession(c)
+				token := c.GetHeader(auth.CSRFHeaderName)
+				if !hasSession || token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(sess.CSRFToken)) != 1 {
+					abortError(c, http.StatusForbidden, CodeCSRFFailed, "")
+					return
+				}
+			}
 			c.Set(string(ctxUserKey), u)
 			c.Next()
 			return

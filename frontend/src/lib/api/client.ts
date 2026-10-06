@@ -7,6 +7,8 @@ import {
   type StatsSummary,
   type DueCardsResponse,
   type DueCardsQuery,
+  type SubmitSelfReviewRequest,
+  type SubmitReviewResult,
   type ApiErrorEnvelope,
   type UserProfile,
   type UpdateProfileRequest,
@@ -319,6 +321,15 @@ export class ApiClient {
     const queryString = params.toString();
     const path = queryString ? `/api/v1/review/due?${queryString}` : '/api/v1/review/due';
     return this.request<DueCardsResponse>(path);
+  }
+
+  /** 通过 Web 专用 CSRF 端点提交自评，并由服务端重建同范围队列。 */
+  async submitSelfReview(input: SubmitSelfReviewRequest): Promise<SubmitReviewResult> {
+    const { deck, ...review } = input;
+    return this.request<SubmitReviewResult>('/api/v1/review/answer', {
+      method: 'POST',
+      body: JSON.stringify({ ...review, deck }),
+    });
   }
 
   /**

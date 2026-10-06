@@ -821,6 +821,7 @@ type DueCard struct {
 	Fields         map[string]any `json:"fields"`
 	Tags           []string       `json:"tags"`
 	Template       string         `json:"template,omitempty"`
+	Version        int            `json:"version"`
 }
 
 // DueCards 返回到期卡（含字段原文）；deckIDs 为空表示全部卡组；limit 取 [1,500]。
@@ -901,6 +902,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		if err != nil {
 			continue
 		}
+		var state store.CardState
 		entry := DueCard{
 			CardID:         it.CardID,
 			NoteID:         it.NoteID,
@@ -911,6 +913,9 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 			Kind:           note.Kind,
 			Fields:         store.FieldsOrEmpty(note.FieldsJSON),
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
+		}
+		if err := a.db.WithContext(ctx).Where("card_id = ? AND user_id = ?", it.CardID, u.ID).Take(&state).Error; err == nil {
+			entry.Version = state.Version
 		}
 		if card, err := a.cards.ByID(ctx, it.CardID); err == nil {
 			entry.Template = card.Template
