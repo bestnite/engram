@@ -22,6 +22,55 @@ export interface DecksResponse {
 }
 
 /**
+ * 用户信息结构（与 Go 后端 internal/web/spa_auth.go 对齐）
+ * DESIGN.md §4.1、§8.3
+ */
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  display_name?: string;
+  role: string;
+  locale: string;
+}
+
+/**
+ * GET /api/v1/auth/session 响应体结构
+ * DESIGN.md §4.3、§8.3
+ */
+export interface SessionResponse {
+  authenticated: boolean;
+  user: User | null;
+  csrf_token: string;
+}
+
+/**
+ * POST /api/v1/auth/login 请求体结构
+ */
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+/**
+ * POST /api/v1/auth/login 响应体结构
+ */
+export interface LoginResponse {
+  authenticated?: boolean;
+  user?: User | null;
+  csrf_token?: string;
+  requires_totp?: boolean;
+}
+
+/**
+ * POST /api/v1/auth/logout 响应体结构
+ */
+export interface LogoutResponse {
+  authenticated: boolean;
+  csrf_token?: string;
+}
+
+/**
  * Go 后端错误体内层结构（internal/api/errors.go:errorBody）
  */
 export interface ApiErrorDetail {
@@ -107,5 +156,33 @@ export class ApiClientError extends Error {
    */
   get isNetworkError(): boolean {
     return this.code === 'network_error';
+  }
+
+  /**
+   * 是否为 CSRF 校验失败
+   */
+  get isCsrfError(): boolean {
+    return this.code === 'csrf_failed' || this.code === 'csrf_no_session';
+  }
+
+  /**
+   * 是否为账号凭据错误
+   */
+  get isInvalidCredentials(): boolean {
+    return this.code === 'invalid_credentials';
+  }
+
+  /**
+   * 是否为账号被禁用
+   */
+  get isUserDisabled(): boolean {
+    return this.code === 'user_disabled';
+  }
+
+  /**
+   * 是否需要两步验证
+   */
+  get isTotpRequired(): boolean {
+    return this.code === 'totp_required';
   }
 }

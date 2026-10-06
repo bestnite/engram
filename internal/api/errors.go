@@ -41,6 +41,16 @@ const (
 	// CodeMediaNotReadable 表示 note 写入引用了写入者无法读取的媒体，写入被拒（写前校验）。
 	// 与 store.CodeMediaNotReadable 同值（DESIGN.md §6.3）。
 	CodeMediaNotReadable = "media_not_readable"
+	// CodeCSRFFailed 表示 CSRF token 缺失或校验失败（DESIGN.md §4.3、§11）。
+	CodeCSRFFailed = "csrf_failed"
+	// CodeCSRFNoSession 表示无活跃会话进行 CSRF 校验。
+	CodeCSRFNoSession = "csrf_no_session"
+	// CodeInvalidCredentials 表示登录凭据错误。
+	CodeInvalidCredentials = "invalid_credentials"
+	// CodeUserDisabled 表示账号已被禁用。
+	CodeUserDisabled = "user_disabled"
+	// CodeTOTPRequired 表示需要进行 TOTP 二次验证。
+	CodeTOTPRequired = "totp_required"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -54,18 +64,23 @@ type errorBody struct {
 // 它是 “code → 英文文案” 的唯一登记处：REST 与 MCP 的错误出口都经 ErrorMessage / formatErrorMessage 取值。
 // 这里同时覆盖 store 层卡组包导入会透出的 code（mapPackageError 会原样返回它们）。
 var errorMessages = map[string]string{
-	CodeUnauthorized:      "Authentication is required.",
-	CodeInvalidAPIKey:     "The API key is invalid, expired, or revoked.",
-	CodeScopeRequired:     "This API key does not have the required scope.",
-	CodeRateLimited:       "Rate limit exceeded. Try again later.",
-	CodeInvalidRequest:    "The request is invalid.",
-	CodeNotFound:          "The requested resource was not found.",
-	CodeForbidden:         "You do not have access to this resource.",
-	CodeInsufficientRole:  "Your role on this deck is not sufficient for this action.",
-	CodeScopeNotGrantable: "Only administrator accounts can be granted the admin scope.",
-	CodeConflict:          "The request conflicts with the current state.",
-	CodeVersionConflict:   "The resource was changed by someone else. Reload and try again.",
-	CodeInternal:          "An internal error occurred.",
+	CodeUnauthorized:       "Authentication is required.",
+	CodeInvalidAPIKey:      "The API key is invalid, expired, or revoked.",
+	CodeScopeRequired:      "This API key does not have the required scope.",
+	CodeRateLimited:        "Rate limit exceeded. Try again later.",
+	CodeInvalidRequest:     "The request is invalid.",
+	CodeNotFound:           "The requested resource was not found.",
+	CodeForbidden:          "You do not have access to this resource.",
+	CodeInsufficientRole:   "Your role on this deck is not sufficient for this action.",
+	CodeScopeNotGrantable:  "Only administrator accounts can be granted the admin scope.",
+	CodeConflict:           "The request conflicts with the current state.",
+	CodeVersionConflict:    "The resource was changed by someone else. Reload and try again.",
+	CodeInternal:           "An internal error occurred.",
+	CodeCSRFFailed:         "Invalid or missing CSRF token.",
+	CodeCSRFNoSession:      "No active session for CSRF validation.",
+	CodeInvalidCredentials: "Invalid username or password.",
+	CodeUserDisabled:       "This account has been disabled.",
+	CodeTOTPRequired:       "Two-factor authentication required.",
 
 	// 卡组包导入的稳定 code（DESIGN.md §7.6；store.PackageError.Code）。
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",

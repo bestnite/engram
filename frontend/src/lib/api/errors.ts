@@ -7,6 +7,18 @@ import { ApiClientError } from './types';
  */
 export function getApiErrorMessageKey(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.isCsrfError) {
+      return 'error.csrf_failed';
+    }
+    if (error.isInvalidCredentials) {
+      return 'error.invalid_credentials';
+    }
+    if (error.isUserDisabled) {
+      return 'error.user_disabled';
+    }
+    if (error.isTotpRequired) {
+      return 'error.totp_required';
+    }
     if (error.isUnauthorized) {
       return 'error.unauthorized';
     }
