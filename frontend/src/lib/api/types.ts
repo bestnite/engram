@@ -75,6 +75,25 @@ export interface NoteListParams {
   status?: string;
 }
 
+/** 对齐 DESIGN.md §7.3 的批量写入契约；此界面只允许提交 basic 字段。 */
+export interface CreateNotesRequest {
+  notes: Array<{
+    kind: 'basic';
+    fields: { front: string; back: string };
+    tags: string[];
+  }>;
+  dry_run?: boolean;
+  on_conflict?: 'skip' | 'update' | 'fail';
+}
+
+export interface CreateNotesResponse {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ index: number; reason: string }>;
+  dry_run: boolean;
+}
+
 /**
  * 学习统计概要（与 Go 后端 internal/api/service.go:StatsSummary 对齐）
  * DESIGN.md §7.3、§9

@@ -16,6 +16,33 @@ describe('Centralized typed same-origin REST API client', () => {
     client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
   });
 
+  describe('basic note batch creation', () => {
+    it('loads a session CSRF token and posts a typed basic note batch', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'new-csrf' }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ created: 1, updated: 0, skipped: 0, errors: [], dry_run: false }), { status: 200 }));
+
+      const payload = { notes: [{ kind: 'basic' as const, fields: { front: 'Q', back: 'A' }, tags: ['topic'] }] };
+      await expect(client.createNotes('deck /1', payload)).resolves.toMatchObject({ created: 1 });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
+      const [url, init] = mockFetch.mock.calls[1]!;
+      expect(url).toBe('/api/v1/decks/deck%20%2F1/notes');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      expect(JSON.parse(init?.body as string)).toEqual(payload);
+      expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('new-csrf');
+      expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
+    });
+
+    it('preserves server validation errors', async () => {
+      client.setCsrfToken('csrf');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'invalid_request', message: 'Invalid note.' } }), { status: 400 }));
+      await expect(client.createNotes(8, { notes: [{ kind: 'basic', fields: { front: '', back: 'A' }, tags: [] }] }))
+        .rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'invalid_request');
+    });
+  });
+
   describe('API key management requests', () => {
     it('uses CSRF for create/revoke and keeps keys scope payload explicit', async () => {
       client.setCsrfToken('csrf-test');

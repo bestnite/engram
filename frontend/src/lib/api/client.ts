@@ -7,6 +7,8 @@ import {
   type Note,
   type NoteListParams,
   type UpdateNoteRequest,
+  type CreateNotesRequest,
+  type CreateNotesResponse,
   type StatsSummary,
   type DueCardsResponse,
   type DueCardsQuery,
@@ -246,6 +248,18 @@ export class ApiClient {
     const id = encodeURIComponent(String(noteId));
     return this.request<Note>(`/api/v1/notes/${id}`, {
       method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 使用同源会话与内存 CSRF token 调用安全批量端点创建一条基础笔记。 */
+  async createNotes(deckId: number | string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encodedId = encodeURIComponent(String(deckId));
+    return this.request<CreateNotesResponse>(`/api/v1/decks/${encodedId}/notes`, {
+      method: 'POST',
       body: JSON.stringify(input),
     });
   }
