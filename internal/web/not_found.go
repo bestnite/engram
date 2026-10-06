@@ -38,7 +38,7 @@ func (s *Server) notFound(c *gin.Context) {
 }
 
 // apiNotFound 给未知的 /api 子路径回统一错误包壳，字段形态与 internal/api 的 abortError
-// 一致（{"error":{"code","message"}}，DESIGN.md §7）；message 走同一份本地化出口。
+// 一致（{"error":{"code","message"}}，DESIGN.md §7）；message 走同一份稳定英文出口。
 func (s *Server) apiNotFound(c *gin.Context) {
 	code := api.CodeNotFound
 	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": gin.H{

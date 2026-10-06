@@ -485,7 +485,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if kind == "" {
 		kind = existing.Kind
 	}
-	// TODO(M4-9): error message localisation via Accept-Language.
+	// REST/MCP 错误统一返回稳定英文文案（DESIGN.md §8.3、§10.4），不随 Accept-Language 改变。
 	if err := cardtype.Validate(kind, in.Fields); err != nil {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}

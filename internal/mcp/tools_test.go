@@ -271,6 +271,13 @@ func errorCode(m map[string]any) string {
 	return c
 }
 
+// errorMessage 取 REST 统一错误包壳里的稳定 message。
+func errorMessage(m map[string]any) string {
+	e, _ := m["error"].(map[string]any)
+	c, _ := e["message"].(string)
+	return c
+}
+
 // TestCreateDeckMatchesREST 是 M4-11 的核心验收：create_deck 与 REST POST /decks 同参数同结果，
 // 空名字/非法 visibility 用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
 // scope 的 key 按名字硬调也被拒。
@@ -312,7 +319,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("create_deck preset_id = %d, want Default preset %d", uint64(pid), defaultPreset.ID)
 	}
 
-	// 空名字：MCP 与 REST 都用共享的 invalid_request code 拒绝。
+	// 空名字：MCP 与 REST 都用共享的 invalid_request code 拒绝，且英文文案严格对齐。
 	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "   "})
 	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
 		t.Errorf("create_deck(blank name) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
@@ -321,8 +328,11 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 	if st != http.StatusBadRequest || errorCode(restOut) != api.CodeInvalidRequest {
 		t.Errorf("REST blank name status=%d code=%q, want 400 %s", st, errorCode(restOut), api.CodeInvalidRequest)
 	}
+	if wantText := api.CodeInvalidRequest + ": " + errorMessage(restOut); text != wantText {
+		t.Errorf("MCP blank name error text = %q, want %q", text, wantText)
+	}
 
-	// 非法 visibility：同样由共享 code 拒绝。
+	// 非法 visibility：同样由共享 code 拒绝，且英文文案严格对齐。
 	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "x", "visibility": "bogus"})
 	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
 		t.Errorf("create_deck(bad visibility) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
@@ -331,11 +341,22 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 	if st != http.StatusBadRequest || errorCode(restOut) != api.CodeInvalidRequest {
 		t.Errorf("REST bad visibility status=%d code=%q, want 400 %s", st, errorCode(restOut), api.CodeInvalidRequest)
 	}
+	if wantText := api.CodeInvalidRequest + ": " + errorMessage(restOut); text != wantText {
+		t.Errorf("MCP bad visibility error text = %q, want %q", text, wantText)
+	}
 
-	// 无 write scope 的 key 即使按名字硬调 create_deck 也被拒。
-	roCS := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeRead}))
+	// 无 write scope 的 key 即使按名字硬调 create_deck 也被拒，错误文案与 REST 严格一致。
+	roKey := newKey(t, keys, u.ID, []string{store.ScopeRead})
+	roCS := connect(t, ts.URL, roKey)
 	_, isErr, text = callTool(t, roCS, "create_deck", map[string]any{"name": "nope"})
 	if !isErr || !strings.Contains(text, api.CodeScopeRequired) {
 		t.Errorf("create_deck with read-only key isErr=%v text=%q, want %s", isErr, text, api.CodeScopeRequired)
+	}
+	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", roKey, `{"name":"nope"}`)
+	if st != http.StatusForbidden || errorCode(restOut) != api.CodeScopeRequired {
+		t.Errorf("REST scope_required status=%d code=%q, want 403 %s", st, errorCode(restOut), api.CodeScopeRequired)
+	}
+	if wantText := api.CodeScopeRequired + ": " + errorMessage(restOut); text != wantText {
+		t.Errorf("MCP scope error text = %q, want %q", text, wantText)
 	}
 }
