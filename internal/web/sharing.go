@@ -24,7 +24,33 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.grants == nil || s.users == nil {
 		return
 	}
-	router.GET("/decks/:id/sharing", s.sharingPage)
+	if s.spa == nil {
+		router.GET("/decks/:id/sharing", s.sharingPage)
+	} else {
+		router.GET("/decks/:id/sharing", func(c *gin.Context) {
+			user, ok := s.requireUser(c)
+			if !ok {
+				return
+			}
+			id, ok := deckIDParam(c)
+			if !ok {
+				return
+			}
+			if _, ok := s.loadDeckForRole(c, user, id, store.RoleOwner); !ok {
+				return
+			}
+			s.spa.ServeIndex(c)
+		})
+	}
+	router.GET("/api/v1/decks/:id/sharing", s.spaSharingGet)
+	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
+	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
+	router.DELETE("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingRevoke)
+	router.PATCH("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.spaSharingVisibility)
+	router.POST("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.spaSharingVisibility)
+	router.POST("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.spaSharingLinkCreate)
+	router.DELETE("/api/v1/decks/:id/sharing/links/revoke/:digest", s.sessions.CSRFMiddleware(), s.spaSharingLinkRevoke)
+	router.DELETE("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.spaSharingLinkRevokeAll)
 	router.POST("/decks/:id/sharing/grant", s.sessions.CSRFMiddleware(), s.sharingGrant)
 	router.POST("/decks/:id/sharing/revoke", s.sessions.CSRFMiddleware(), s.sharingRevoke)
 	// M5-3 分享链接与 M5-5 可见性：同样是 owner 专属的写操作，一律过 CSRF 中间件。
