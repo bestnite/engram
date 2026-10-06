@@ -35,10 +35,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 适配器是 Rust 产物，不是 Go 构建产物，GoReleaser 编不出来，所以先在各目标平台上原生编译。
-  # 原生编译而不是交叉编译：Rust 交叉到 musl 虽然不需要 C 交叉工具链，但要在构建机上再装一个
-  # target（见 DESIGN.md 的分发约定），而托管 runner 直接就有对应架构的原生工具链
-  # ——windows/arm64 因此没有产物，.goreleaser.yaml 也把该目标排除了。
+  # 适配器是 Rust 产物，不是 Go 构建产物，GoReleaser 编不出来，所以先在各目标平台上编译。
+  # Linux 目标用 musl 静态链接（见下方 Build 步骤与 Dockerfile.release 的运行阶段）：发布镜像基于
+  # alpine（musl），glibc 动态产物进不去；归档也要能在 musl 主机上直接跑。仍按目标架构原生编译
+  # （runner 架构与产物架构一致），只是在 Linux runner 上多装一个 musl target、用 rust-lld 自链，
+  # 不需要 C 交叉工具链。macOS/windows 保持原生编译，windows/arm64 因此没有产物，
+  # .goreleaser.yaml 也把该目标排除了。
   optimizer:
     name: optimizer (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ${{ matrix.runner }}
@@ -47,22 +49,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # rust_target 非空 = 该目标产出静态 musl 二进制（仅 Linux）。macOS/windows 留空，走原生编译。
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
             ext: ""
+            rust_target: x86_64-unknown-linux-musl
           - runner: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
             ext: ""
+            rust_target: aarch64-unknown-linux-musl
           - runner: macos-14
             goos: darwin
             goarch: arm64
             ext: ""
+            rust_target: ""
           - runner: windows-latest
             goos: windows
             goarch: amd64
             ext: .exe
+            rust_target: ""
 
     steps:
       - name: Check out
@@ -72,10 +79,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --release --manifest-path tools/optimizer/Cargo.toml
+          # Linux 目标（rust_target 非空）必须产出静态 musl 二进制：发布镜像的运行阶段是 alpine
+          # （musl），归档也要能在 musl 主机上直接跑。glibc 动态链接产物进 alpine 会因缺动态链接器
+          # 报 "No such file or directory"（Dockerfile 的 optimizer 阶段同理，那里用 rust:1-alpine）。
+          # rust-lld 是 rustc 自带的自包含链接器，不需要 C 交叉工具链：依赖树里没有需要 cc 编译的
+          # C 代码（iana-time-zone-haiku 只用于 Haiku 目标）。
+          rust_target="${{ matrix.rust_target }}"
+          if [ -n "$rust_target" ]; then
+            rustup target add "$rust_target"
+            RUSTFLAGS="-C linker=rust-lld" \
+              cargo build --release --manifest-path tools/optimizer/Cargo.toml --target "$rust_target"
+            bin="tools/optimizer/target/$rust_target/release/optimizer"
+            # 静态链接断言：动态产物进 alpine 会缺 loader（本次修复的缺陷），必须静态。
+            # musl + crt-static 的 file 输出是 "static-pie linked" 或 "statically linked"。
+            file "$bin" | grep -Eq 'statically linked|static-pie linked' \
+              || { echo "error: $bin is not statically linked" >&2; exit 1; }
+            # 构建期自证：产物在 Linux 构建机上必须能启动（与 Dockerfile 构建期的 --version 同一用意）。
+            "$bin" --version
+          else
+            cargo build --release --manifest-path tools/optimizer/Cargo.toml
+            bin="tools/optimizer/target/release/optimizer${{ matrix.ext }}"
+          fi
           out="tools/optimizer/dist/${{ matrix.goos }}/${{ matrix.goarch }}"
           mkdir -p "$out"
-          cp "tools/optimizer/target/release/optimizer${{ matrix.ext }}" "$out/"
+          cp "$bin" "$out/"
 
       # 以 tools/optimizer/dist 为根部上传：制品内的路径就是 <os>/<arch>/optimizer[.exe]，
       # release 作业用 merge-multiple 下载后自动还原成 .goreleaser.yaml 约定的目录结构。
