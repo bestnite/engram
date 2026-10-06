@@ -16,6 +16,7 @@ import {
   type BulkNotesResponse,
   type NotePreviewResponse,
   type MediaPickerPage,
+  type MediaUploadResult,
   type StatsSummary,
   type StatsDetail,
   type DueCardsResponse,
@@ -439,6 +440,30 @@ export class ApiClient {
       nextCursor = url.searchParams.get('cursor') || '';
     }
     return { items, next_cursor: nextCursor };
+  }
+
+  /**
+   * 通过卡组内编辑器上传入口（POST /decks/:id/media）上传一个媒体文件。
+   * 端点要求 editor 及以上角色，由服务端判定，前端不隐藏失败；multipart 边界交由浏览器生成，
+   * 因此 request 不会替 FormData 设置 Content-Type（仅字符串 body 才强制 application/json）。
+   * 成功响应必须满足 /media/<sha256> 的哈希契约，否则按无效响应拒绝，避免把不受约束的
+   * 字符串插入字段（DESIGN.md §6.3）。
+   */
+  async uploadDeckMedia(deckId: number | string, file: File): Promise<MediaUploadResult> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encodedId = encodeURIComponent(String(deckId));
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const result = await this.request<MediaUploadResult>(`/decks/${encodedId}/media`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!/^[0-9a-f]{64}$/.test(result.sha256) || result.url !== `/media/${result.sha256}`) {
+      throw new ApiClientError('Invalid media upload response', { status: 201, code: 'invalid_response' });
+    }
+    return result;
   }
 
   /**
