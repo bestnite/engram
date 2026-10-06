@@ -118,12 +118,12 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 	}
 }
 
-// TestImportPageRequiresLogin 断言匿名访问 /import 被重定向到登录页。
-func TestImportPageRequiresLogin(t *testing.T) {
+// TestImportPageServesSPAShell 断言 /import 返回 SPA 外壳，路由鉴权由 API 会话端点负责。
+func TestImportPageServesSPAShell(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/import", nil)
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("anonymous GET /import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("anonymous GET /import = %d (%q), want SPA HTML shell", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
 

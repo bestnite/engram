@@ -58,5 +58,6 @@ describe('SPA router matching and query parsing', () => {
     expect(createMatch.route?.name).toBe('note-create');
     expect(createMatch.params).toEqual({ id: '456' });
     expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
+    expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
   });
 });

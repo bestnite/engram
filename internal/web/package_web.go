@@ -33,7 +33,12 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 		return
 	}
 	router.GET("/decks/:id/package", s.deckPackageExport)
-	router.GET("/import", s.importPage)
+	// SPA 存在时由其路由器承接 /import；SSR POST 仍保留作旧表单入口并继续受 CSRF 保护。
+	if s.spa == nil {
+		router.GET("/import", s.importPage)
+	} else {
+		router.GET("/import", s.spa.ServeIndex)
+	}
 	// 上传是写操作，过 CSRF 中间件。
 	router.POST("/import", s.sessions.CSRFMiddleware(), s.importSubmit)
 }
