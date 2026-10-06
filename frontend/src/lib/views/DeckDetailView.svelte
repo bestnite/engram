@@ -3,7 +3,7 @@
   import { routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Deck, Note } from '../api';
+  import type { Deck, Note, BulkNotesResponse } from '../api';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -31,14 +31,29 @@
   let queryInput = $state('');
   let tagInput = $state('');
   let kindSelect = $state('');
+  // 状态筛选只有 active / deleted 两项：列表 JSON 不携带逐条删除标记，若暴露 all，
+  // 视图无法区分其中哪些是已删除行，编辑/删除/批量入口就会指向不可执行的行。
+  let statusSelect = $state<'active' | 'deleted'>('active');
 
   // 已经应用的筛选条件
   let appliedQ = $state('');
   let appliedTag = $state('');
   let appliedKind = $state('');
+  let appliedStatus = $state<'active' | 'deleted'>('active');
+
+  // 批量动作（仅 active 视图可用；服务端逐行判权，客户端不做乐观假设）
+  let selectedIds = $state<number[]>([]);
+  let bulkTagInput = $state('');
+  let bulkBusy = $state(false);
+  let bulkError = $state('');
+  let confirmingBulkDelete = $state(false);
+  let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
+  // 状态不是 active 也算一次筛选：空结果要显示「没有符合条件」而不是「卡组暂无卡片」。
+  const hasFilter = $derived(Boolean(appliedQ || appliedTag || appliedKind) || appliedStatus !== 'active');
+  const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
 
   /**
    * 加载卡组卡片数据及卡组元数据
@@ -49,6 +64,9 @@
     loading = true;
     error = null;
     page = targetPage;
+    // 换页或换筛选后清空选择：选择只对当前可见列表有意义，残留会指向已不在列表里的 note。
+    selectedIds = [];
+    confirmingBulkDelete = false;
 
     try {
       // 若卡组元数据尚未加载，尝试拉取
@@ -66,6 +84,7 @@
         q: appliedQ || undefined,
         tag: appliedTag || undefined,
         kind: appliedKind || undefined,
+        status: appliedStatus,
       });
 
       notes = res.notes;
@@ -83,6 +102,7 @@
     appliedQ = queryInput.trim();
     appliedTag = tagInput.trim();
     appliedKind = kindSelect;
+    appliedStatus = statusSelect;
     loadData(1);
   }
 
@@ -90,9 +110,11 @@
     queryInput = '';
     tagInput = '';
     kindSelect = '';
+    statusSelect = 'active';
     appliedQ = '';
     appliedTag = '';
     appliedKind = '';
+    appliedStatus = 'active';
     loadData(1);
   }
 
@@ -105,6 +127,62 @@
   function handleNextPage(): void {
     if (page < totalPages) {
       loadData(page + 1);
+    }
+  }
+
+  function isSelected(id: number): boolean {
+    return selectedIds.includes(id);
+  }
+
+  function toggleSelect(id: number): void {
+    selectedIds = isSelected(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id];
+  }
+
+  function toggleSelectAll(): void {
+    selectedIds = allSelected ? [] : notes.map((n) => n.id);
+  }
+
+  /** 把逗号分隔的标签输入解析成去空白、去空的数组；去重与限长仍由服务端判定。 */
+  function parseTags(raw: string): string[] {
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s !== '');
+  }
+
+  /** 只统计服务端逐行返回的 skipped 原因；affected 是真实改动行数，不做乐观假设。 */
+  function summarizeBulk(res: BulkNotesResponse): { affected: number; notFound: number; insufficientRole: number } {
+    let notFound = 0;
+    let insufficientRole = 0;
+    for (const item of res.skipped) {
+      if (item.code === 'not_found') notFound += 1;
+      else if (item.code === 'insufficient_role') insufficientRole += 1;
+    }
+    return { affected: res.affected, notFound, insufficientRole };
+  }
+
+  async function runBulk(action: 'delete' | 'add_tags' | 'remove_tags' | 'set_tags'): Promise<void> {
+    if (bulkBusy || selectedIds.length === 0) return;
+    const tags = action === 'delete' ? [] : parseTags(bulkTagInput);
+    // 标签动作缺标签必然 400：在客户端先拦一次，服务端仍是权威校验。
+    if (action !== 'delete' && tags.length === 0) {
+      bulkError = 'notes.bulk_failed';
+      return;
+    }
+    bulkBusy = true;
+    bulkError = '';
+    bulkResult = null;
+    confirmingBulkDelete = false;
+    try {
+      const res = await apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false });
+      bulkResult = summarizeBulk(res);
+      bulkTagInput = '';
+      // 重新取数：删除会移出列表，标签动作要显示新标签；loadData 同时清空选择。
+      await loadData(1);
+    } catch (err) {
+      bulkError = err instanceof ApiClientError && err.isForbidden ? 'error.forbidden' : 'notes.bulk_failed';
+    } finally {
+      bulkBusy = false;
     }
   }
 
@@ -294,6 +372,14 @@
         <option value="true_false">true_false</option>
         <option value="short_answer">short_answer</option>
       </select>
+      <select
+        data-testid="filter-status-select"
+        bind:value={statusSelect}
+        class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-zinc-500"
+      >
+        <option value="active">{$t('notes.status_active')}</option>
+        <option value="deleted">{$t('notes.status_deleted')}</option>
+      </select>
       <button
         type="submit"
         data-testid="filter-apply-btn"
@@ -301,7 +387,7 @@
       >
         {$t('notes.filter_apply')}
       </button>
-      {#if appliedQ || appliedTag || appliedKind}
+      {#if hasFilter}
         <button
           type="button"
           data-testid="filter-reset-btn"
@@ -319,6 +405,60 @@
 
   <!-- 卡片列表主体内容 -->
   <div class="card-elevated p-8 rounded-xl">
+    {#if appliedStatus === 'deleted'}
+      <p role="note" data-testid="notes-deleted-notice" class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{$t('notes.deleted_readonly')}</p>
+    {/if}
+
+    {#if appliedStatus === 'active'}
+      {#if !loading && !error && notes.length > 0}
+        <div
+          data-testid="notes-bulk-toolbar"
+          class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2"
+        >
+          <label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+            <input type="checkbox" data-testid="bulk-select-all" checked={allSelected} onchange={toggleSelectAll} />
+            {$t('notes.select_all')}
+          </label>
+          <span data-testid="bulk-selected-count" class="text-xs text-zinc-500 dark:text-zinc-400">
+            {$t('notes.selected_count', { count: selectedIds.length })}
+          </span>
+          <input
+            type="text"
+            data-testid="bulk-tag-input"
+            placeholder={$t('notes.bulk_tag_placeholder')}
+            bind:value={bulkTagInput}
+            class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 w-full sm:w-40"
+          />
+          <button type="button" data-testid="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_add_tags')}</button>
+          <button type="button" data-testid="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_remove_tags')}</button>
+          <button type="button" data-testid="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_set_tags')}</button>
+          {#if confirmingBulkDelete}
+            <span class="text-xs text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
+            <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-xs text-rose-700 underline disabled:opacity-40 cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
+            <button type="button" data-testid="bulk-cancel-delete" class="text-xs underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
+          {:else}
+            <button type="button" data-testid="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} class="text-xs px-2.5 py-1 rounded-md border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }}>{$t('notes.bulk_delete')}</button>
+          {/if}
+          {#if bulkBusy}<span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_applying')}</span>{/if}
+        </div>
+      {/if}
+
+      {#if bulkError}
+        <p role="alert" data-testid="notes-bulk-error" class="mb-4 text-sm text-rose-700 dark:text-rose-400">{$t(bulkError)}</p>
+      {/if}
+      {#if bulkResult}
+        <div role="status" data-testid="notes-bulk-result" class="mb-4 text-sm text-zinc-700 dark:text-zinc-300">
+          <p>{$t('notes.bulk_result', { affected: bulkResult.affected, skipped: bulkResult.notFound + bulkResult.insufficientRole })}</p>
+          {#if bulkResult.notFound > 0}
+            <p data-testid="notes-bulk-skipped-not-found" class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_skipped_not_found', { count: bulkResult.notFound })}</p>
+          {/if}
+          {#if bulkResult.insufficientRole > 0}
+            <p data-testid="notes-bulk-skipped-forbidden" class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_skipped_forbidden', { count: bulkResult.insufficientRole })}</p>
+          {/if}
+        </div>
+      {/if}
+    {/if}
+
     {#if deleteSuccess}
       <p role="status" data-testid="note-delete-success" class="mb-4 text-sm text-emerald-700 dark:text-emerald-400">{$t('notes.delete_success')}</p>
     {/if}
@@ -371,9 +511,9 @@
     {:else if notes.length === 0}
       <div data-testid="notes-empty" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
         <p class="text-base font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-          {appliedQ || appliedTag || appliedKind ? $t('notes.empty_filter') : $t('notes.empty')}
+          {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
         </p>
-        {#if appliedQ || appliedTag || appliedKind}
+        {#if hasFilter}
           <button
             type="button"
             class="mt-3 text-xs px-3 py-1.5 rounded-md font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 transition-colors cursor-pointer"
@@ -389,6 +529,15 @@
           <div data-testid="note-card-{note.id}" class="card-subtle p-5 rounded-lg border border-zinc-200/60 dark:border-zinc-800/60 flex flex-col gap-3">
             <div class="flex items-center justify-between gap-2 pb-2 border-b border-zinc-200/40 dark:border-zinc-800/40 text-xs">
               <div class="flex items-center gap-2">
+                {#if appliedStatus === 'active'}
+                  <input
+                    type="checkbox"
+                    data-testid="select-note-{note.id}"
+                    checked={isSelected(note.id)}
+                    onchange={() => toggleSelect(note.id)}
+                    aria-label={$t('notes.select_all')}
+                  />
+                {/if}
                 <span class="font-mono font-medium text-zinc-700 dark:text-zinc-300">#{note.id}</span>
                 <span class="px-2 py-0.5 rounded font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
                   {note.kind}
@@ -403,13 +552,17 @@
                 <span class="text-zinc-400 dark:text-zinc-500">
                   {note.created_at ? note.created_at.slice(0, 10) : ''}
                 </span>
-                <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-xs underline">{$t('note_edit.action')}</a>
-                {#if confirmingDeleteId === note.id}
-                  <span class="text-xs">{$t('notes.delete_confirm')}</span>
-                  <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-xs text-rose-700 underline disabled:opacity-50" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
-                  <button type="button" class="text-xs underline" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
+                {#if appliedStatus === 'active'}
+                  <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-xs underline">{$t('note_edit.action')}</a>
+                  {#if confirmingDeleteId === note.id}
+                    <span class="text-xs">{$t('notes.delete_confirm')}</span>
+                    <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-xs text-rose-700 underline disabled:opacity-50" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
+                    <button type="button" class="text-xs underline" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
+                  {:else}
+                    <button data-testid="delete-note-{note.id}" type="button" class="text-xs text-rose-700 underline" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                  {/if}
                 {:else}
-                  <button data-testid="delete-note-{note.id}" type="button" class="text-xs text-rose-700 underline" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                  <span data-testid="note-deleted-badge-{note.id}" class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400">{$t('notes.deleted_badge')}</span>
                 {/if}
               </div>
             </div>

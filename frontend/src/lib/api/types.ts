@@ -140,6 +140,34 @@ export interface CreateNotesResponse {
   dry_run: boolean;
 }
 
+/**
+ * POST /api/v1/notes/bulk 请求体（DESIGN.md §7.3；权威 schema 是 schema/note-bulk.schema.json）。
+ * action 的取值集合与 Go 侧 bulkAction* 常量逐项一致；note_ids 去重后 1..500；
+ * tags 仅标签动作需要（1..20），delete 不得带 tags。
+ */
+export interface BulkNotesRequest {
+  action: 'delete' | 'add_tags' | 'remove_tags' | 'set_tags';
+  note_ids: number[];
+  tags?: string[];
+  dry_run?: boolean;
+}
+
+/** 批量动作里被逐行拒绝的 note；code 取值 not_found / insufficient_role。 */
+export interface BulkNotesSkipped {
+  note_id: number;
+  code: string;
+}
+
+/**
+ * POST /api/v1/notes/bulk 响应体。affected 只计库中状态确实变化的行，
+ * 因此同一请求重复提交时第二次 affected=0；skipped 逐行给出拒绝原因，整批不回滚。
+ */
+export interface BulkNotesResponse {
+  dry_run: boolean;
+  affected: number;
+  skipped: BulkNotesSkipped[];
+}
+
 /** POST /api/v1/decks/import report. */
 export interface PackageImportReport {
   target: string;
