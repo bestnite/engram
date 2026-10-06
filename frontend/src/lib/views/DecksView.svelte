@@ -8,6 +8,7 @@
   let loading = $state(true);
   let error = $state<ApiClientError | Error | null>(null);
   let decks = $state<Deck[]>([]);
+  let queueCounts = $state<Record<number, { new_count: number; review_count: number }>>({});
   let name = $state('');
   let description = $state('');
   let creating = $state(false);
@@ -24,6 +25,8 @@
     try {
       const res = await apiClient.getDecks();
       decks = res.decks;
+      const counts = await apiClient.getDeckQueueCounts();
+      queueCounts = Object.fromEntries(counts.decks.map((count) => [count.deck_id, count]));
     } catch (err) {
       error = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -39,6 +42,7 @@
     try {
       const deck = await apiClient.createDeck({ name, description, visibility: 'private', preset_id: 0 });
       decks = [deck, ...decks];
+      queueCounts = { ...queueCounts, [deck.id]: { new_count: 0, review_count: 0 } };
       name = '';
       description = '';
       created = true;
@@ -166,6 +170,9 @@
             </div>
             <div class="pt-3 border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
               <span>{deck.new_per_day} / {deck.reviews_per_day}</span>
+              <span data-testid="deck-queue-count-{deck.id}" class="font-medium text-zinc-600 dark:text-zinc-300">
+                {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
+              </span>
               <a
                 href="/decks/{deck.id}"
                 data-testid="deck-notes-link-{deck.id}"

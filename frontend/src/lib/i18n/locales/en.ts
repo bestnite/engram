@@ -33,6 +33,7 @@ export const en: LocaleCatalog = {
   'decks.unauthorized': 'Please sign in to view decks',
   'decks.retry': 'Retry',
   'decks.view_notes': 'View Notes',
+  'decks.queue_counts': 'New {new} · Review {review}',
   'notes.title': 'Notes',
   'notes.deck_title': 'Deck #{id} Notes',
   'notes.back_to_decks': 'Back to Decks',

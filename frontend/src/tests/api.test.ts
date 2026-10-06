@@ -80,6 +80,14 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
+  it('loads the explicit per-visible-deck queue count contract', async () => {
+    const response = { decks: [{ deck_id: 7, new_count: 2, review_count: 4 }] };
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200 }));
+    await expect(client.getDeckQueueCounts()).resolves.toEqual(response);
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/queue-counts');
+    expect(mockFetch.mock.calls[0]?.[1]).toMatchObject({ credentials: 'same-origin' });
+  });
+
   describe('Request boundary and same-origin credentials', () => {
     it('always sends credentials: same-origin and Accept: application/json', async () => {
       const mockResponse: DecksResponse = {
