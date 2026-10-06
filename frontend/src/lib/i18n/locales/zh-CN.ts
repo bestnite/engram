@@ -33,6 +33,7 @@ export const zhCN: LocaleCatalog = {
   'decks.unauthorized': '请先登录以查看卡组',
   'decks.retry': '重试',
   'decks.view_notes': '查看卡片',
+  'decks.queue_counts': '新 {new} · 复习 {review}',
   'notes.title': '卡片列表',
   'notes.deck_title': '卡组 #{id} 卡片',
   'notes.back_to_decks': '返回卡组列表',

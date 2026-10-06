@@ -17,6 +17,14 @@ import (
 	"git.nite07.com/nite/engram/internal/web/views"
 )
 
+func (s *Server) registerSPADeckQueueCountRoute(router *gin.Engine) {
+	if s.sessions == nil || s.decks == nil {
+		return
+	}
+	// SPA 卡组计数只接受当前会话，避免将 session-only 的可见范围暴露给 API Key。
+	router.GET("/api/v1/decks/queue-counts", s.deckQueueCountsAPI)
+}
+
 // registerDeckRoutes 挂载卡组列表与新建页（M2-11）。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerDeckRoutes(router *gin.Engine) {
@@ -26,6 +34,50 @@ func (s *Server) registerDeckRoutes(router *gin.Engine) {
 	router.GET("/decks", s.deckList)
 	// 写操作过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST("/decks", s.sessions.CSRFMiddleware(), s.deckCreate)
+}
+
+type deckQueueCountsResponse struct {
+	Decks []deckQueueCount `json:"decks"`
+}
+
+type deckQueueCount struct {
+	DeckID      uint64 `json:"deck_id"`
+	NewCount    int    `json:"new_count"`
+	ReviewCount int    `json:"review_count"`
+}
+
+// deckQueueCountsAPI 返回当前会话可见卡组的队列数，直接复用共享队列构建器。
+func (s *Server) deckQueueCountsAPI(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	if _, ok := auth.CurrentSession(c); !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	ctx := c.Request.Context()
+	summaries, err := s.decks.SummariesVisible(ctx, user.ID)
+	if err != nil {
+		s.logger.Error("list decks for queue counts failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	counts, err := s.deckQueueCounts(ctx, user.ID, summaries)
+	if err != nil {
+		s.logger.Error("count deck queue failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	response := deckQueueCountsResponse{Decks: make([]deckQueueCount, 0, len(summaries))}
+	for _, summary := range summaries {
+		count := counts[summary.Deck.ID]
+		response.Decks = append(response.Decks, deckQueueCount{
+			DeckID: summary.Deck.ID, NewCount: count.New, ReviewCount: count.Review,
+		})
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // deckList 渲染当前用户的卡组列表与新建表单；匿名访问被重定向到登录页。

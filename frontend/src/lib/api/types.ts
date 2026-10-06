@@ -21,6 +21,11 @@ export interface DecksResponse {
   decks: Deck[];
 }
 
+/** GET /api/v1/decks/queue-counts response; counts are produced by the shared queue builder. */
+export interface DeckQueueCountsResponse {
+  decks: Array<{ deck_id: number; new_count: number; review_count: number }>;
+}
+
 /** POST /api/v1/decks 请求体与响应体。preset_id=0 使用服务端默认预设。 */
 export interface CreateDeckRequest {
   name: string;
