@@ -77,7 +77,7 @@ func TestLanguageSelectorOnPlainPage(t *testing.T) {
 // （UI request 第 4 项）。它只加一个指向既有 /settings 的导航链接，不新增页面。
 func TestSettingsNavVisibleToSignedInUsers(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
-// 断言 SSR 页头导航里的 /settings 链接，显式走 SPA 缺失的回退分支。
+	// 断言 SSR 页头导航里的 /settings 链接，显式走 SPA 缺失的回退分支。
 	srv.spa = nil
 	for _, path := range []string{"/", "/settings"} {
 		body := getWithCookies(t, srv, path, cookies).Body.String()

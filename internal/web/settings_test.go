@@ -292,7 +292,7 @@ func TestSettingsPasswordChangeRevokesOtherSessions(t *testing.T) {
 // 已登录用户的页面上能找到 /presets 链接；匿名页面不暴露它。
 func TestPresetsNavLinkVisibleToSignedInUsers(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
-// 断言 SSR 页头导航里的 /presets 链接，显式走 SPA 缺失的回退分支。
+	// 断言 SSR 页头导航里的 /presets 链接，显式走 SPA 缺失的回退分支。
 	srv.spa = nil
 
 	for _, path := range []string{"/", "/settings"} {
