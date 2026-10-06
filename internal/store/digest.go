@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -72,6 +73,19 @@ func HasDigestBeenSent(ctx context.Context, db *gorm.DB, userID uint64, weekStar
 		return false, fmt.Errorf("check digest log: %w", err)
 	}
 	return n > 0, nil
+}
+
+// LastDigestSentAt 跨周取最近入队时间；空账本不是查询故障。
+func LastDigestSentAt(ctx context.Context, db *gorm.DB, userID uint64) (time.Time, bool, error) {
+	var row DigestLog
+	err := db.WithContext(ctx).Select("sent_at").Where("user_id = ?", userID).Order("sent_at DESC").Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("load last digest sent time: %w", err)
+	}
+	return row.SentAt, true, nil
 }
 
 // RecordDigestSent 记录一封已入队的摘要。主键冲突时静默跳过（DoNothing）：
