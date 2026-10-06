@@ -28,7 +28,6 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -39,14 +38,18 @@ import (
 	"git.nite07.com/nite/engram/internal/reminder"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 const (
 	// DefaultInterval 是默认轮询间隔。摘要是周粒度，10 分钟一轮只是为了让「新的一周开始」
 	// 与「静默窗口结束」能在分钟级内被补上，DB 开销退化成一条候选查询。
-	DefaultInterval = 10 * time.Minute
+	DefaultInterval = worker.DefaultInterval
 	// DefaultStatsPath 是统计页路径（摘要正文里的回顾链接）。
 	DefaultStatsPath = "/stats"
+	// runFailedLog 是单轮失败时的英文日志消息，注入共享骨架 worker.Config.FailMessage；
+	// 文案与重构前逐字一致。
+	runFailedLog = "weekly digest run failed"
 )
 
 // Enqueuer 是摘要 worker 依赖的发信入口；生产由 *mail.Outbox 满足，测试注入替身。
@@ -80,21 +83,20 @@ type Deps struct {
 }
 
 // Worker 持有后台 worker 与配置。
+//
+// 起停与 tick 循环来自内嵌的共享骨架 *worker.Lifecycle（internal/worker）：Start/Stop
+// 由它提升，签名与重构前一致，cmd/engram 的调用不变。
 type Worker struct {
+	*worker.Lifecycle
+
 	db         *gorm.DB
 	outbox     Enqueuer
 	translator *i18n.Translator
 	logger     *slog.Logger
 	now        func() time.Time
-	interval   time.Duration
 	baseURL    string
 	statsPath  string
 	tokens     *auth.ActionTokenService
-
-	mu      sync.Mutex
-	started bool
-	cancel  context.CancelFunc
-	done    chan struct{}
 }
 
 // New 构造 Worker；不启动 worker，需再调用 Start。
@@ -116,85 +118,32 @@ func New(deps Deps) (*Worker, error) {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	interval := deps.Interval
-	if interval <= 0 {
-		interval = DefaultInterval
-	}
 	path := strings.TrimSpace(deps.StatsPath)
 	if path == "" {
 		path = DefaultStatsPath
 	}
-	return &Worker{
+	w := &Worker{
 		db:         deps.DB,
 		outbox:     deps.Outbox,
 		translator: deps.Translator,
 		logger:     logger,
 		now:        now,
-		interval:   interval,
 		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		statsPath:  path,
 		tokens:     deps.Tokens,
-	}, nil
-}
-
-// Start 启动唯一的 worker goroutine；重复调用幂等。ctx 取消时 worker 退出。
-func (w *Worker) Start(ctx context.Context) {
-	w.mu.Lock()
-	if w.started {
-		w.mu.Unlock()
-		return
 	}
-	w.started = true
-	runCtx, cancel := context.WithCancel(ctx)
-	w.cancel = cancel
-	done := make(chan struct{})
-	w.done = done
-	w.mu.Unlock()
-	go func() {
-		defer close(done)
-		w.loop(runCtx)
-	}()
-}
-
-// Stop 优雅停止 worker：取消上下文并等待当前轮结束。可重复调用。
-func (w *Worker) Stop() {
-	w.mu.Lock()
-	if !w.started {
-		w.mu.Unlock()
-		return
+	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
+	lifecycle, err := worker.New(worker.Config{
+		RunOnce:     w.RunOnce,
+		Logger:      logger,
+		FailMessage: runFailedLog,
+		Interval:    deps.Interval,
+	})
+	if err != nil {
+		return nil, err
 	}
-	w.started = false
-	cancel := w.cancel
-	done := w.done
-	w.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		<-done
-	}
-}
-
-// loop 是 worker 主循环：启动即跑一轮，随后定时轮询。
-func (w *Worker) loop(ctx context.Context) {
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-	w.runAndLog(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			w.runAndLog(ctx)
-		}
-	}
-}
-
-// runAndLog 跑一轮并把查询级错误记成英文日志（worker 不能因单轮失败而退出）。
-func (w *Worker) runAndLog(ctx context.Context) {
-	if err := w.RunOnce(ctx); err != nil {
-		w.logger.Error("weekly digest run failed", "error", err)
-	}
+	w.Lifecycle = lifecycle
+	return w, nil
 }
 
 // RunOnce 执行一轮扫描：对每个可收信的活跃用户判定是否应发本周摘要。
