@@ -304,6 +304,13 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.spa != nil {
 		router.GET("/assets/*filepath", s.spa.ServeAsset)
 	}
+	if deps.Sessions != nil && deps.Users != nil {
+		// SPA 个人资料 API 仅在会话依赖齐备时注册，写请求继续由会话 CSRF 中间件保护。
+		profile := router.Group("/api/v1")
+		profile.GET("/profile", s.spaProfileGet)
+		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.spaProfilePatch)
+		profile.PATCH("/settings/locale", deps.Sessions.CSRFMiddleware(), s.spaLocalePatch)
+	}
 	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
 	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
