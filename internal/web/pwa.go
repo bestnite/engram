@@ -188,6 +188,9 @@ func (s *Server) pwaShellURLs() []string {
 			urls = append(urls, url)
 		}
 	}
+	if s.spa != nil {
+		urls = append(urls, s.spa.StaticShellURLs()...)
+	}
 	urls = append(urls, manifestPath)
 	return urls
 }
@@ -254,7 +257,10 @@ self.addEventListener("activate", function (event) {
 
 // 只有静态外壳命中缓存；/api/、/review 与 HTML 文档都不在此列。
 function isStaticShell(url) {
-  return url.pathname.indexOf("/static/") === 0 || url.pathname === "/manifest.webmanifest";
+  var path = url.pathname;
+  var isViteAsset = path.indexOf("/assets/") === 0 &&
+    (path.endsWith(".js") || path.endsWith(".mjs") || path.endsWith(".css"));
+  return path.indexOf("/static/") === 0 || isViteAsset || path === "/manifest.webmanifest";
 }
 
 self.addEventListener("fetch", function (event) {

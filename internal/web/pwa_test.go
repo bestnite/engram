@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -41,7 +42,7 @@ func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 	body := rec.Body.String()
 
 	for _, asset := range swAssetList(t, body) {
-		if asset != manifestPath && !strings.HasPrefix(asset, staticPathPrefix) {
+		if asset != manifestPath && !strings.HasPrefix(asset, staticPathPrefix) && !strings.HasPrefix(asset, "/assets/") {
 			t.Errorf("cache list entry %q is not a static asset path", asset)
 		}
 		if strings.HasPrefix(asset, "/api/") {
@@ -64,6 +65,57 @@ func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 	if !strings.Contains(body, `if (req.method !== "GET")`) {
 		t.Errorf("service worker must ignore non-GET requests (no caching of POSTs)")
 	}
+	for _, path := range []string{"/", "/review", "/spa/review", "/api/v1/reviews"} {
+		if strings.Contains(strings.Join(swAssetList(t, body), "\n"), `"`+path+`"`) {
+			t.Errorf("cache list must not contain document or data route %q", path)
+		}
+	}
+	if !strings.Contains(body, `path.indexOf("/assets/") === 0`) {
+		t.Errorf("fetch strategy must allow Vite assets under /assets/")
+	}
+	if !strings.Contains(body, `path.endsWith(".css")`) || !strings.Contains(body, `path.endsWith(".js")`) {
+		t.Errorf("fetch strategy must restrict Vite caching to JS and CSS")
+	}
+	if strings.Contains(body, `url.pathname.indexOf("/review")`) || strings.Contains(body, `url.pathname.indexOf("/api/")`) {
+		t.Errorf("fetch strategy must not allow review or API routes")
+	}
+}
+
+func TestServiceWorkerIncludesEmbeddedViteAssets(t *testing.T) {
+	srv, _, _, _, _ := newNotesServer(t)
+	spa, err := NewSPA(fstest.MapFS{
+		"index.html":                 &fstest.MapFile{Data: []byte("<html>shell</html>")},
+		"assets/index-abc123.js":     &fstest.MapFile{Data: []byte("console.log('app')")},
+		"assets/index-def456.css":    &fstest.MapFile{Data: []byte("body { color: red }")},
+		"assets/data-ghi789.json":    &fstest.MapFile{Data: []byte(`{"not":"static shell code"}`)},
+		"assets/nested/chunk-jkl.js": &fstest.MapFile{Data: []byte("export {}")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.spa = spa
+
+	body := getWithCookies(t, srv, serviceWorkerPath, nil).Body.String()
+	assets := swAssetList(t, body)
+	for _, want := range []string{"/assets/index-abc123.js", "/assets/index-def456.css", "/assets/nested/chunk-jkl.js"} {
+		if !containsString(assets, want) {
+			t.Errorf("STATIC_ASSETS does not include embedded Vite asset %q: %v", want, assets)
+		}
+	}
+	for _, forbidden := range []string{"/assets/data-ghi789.json", "/index.html", "/review", "/api/v1/reviews"} {
+		if containsString(assets, forbidden) {
+			t.Errorf("STATIC_ASSETS contains non-shell path %q", forbidden)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // TestServiceWorkerVersionTracksAssetContent 断言版本号随缓存内容变化，保证旧缓存被清理。
