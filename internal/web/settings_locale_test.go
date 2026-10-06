@@ -264,6 +264,8 @@ func TestHeaderLocaleSwitchHtmxRefreshesSwitcher(t *testing.T) {
 // 标记决定 htmx 响应是否为设置页的语言控件生成带外交换。
 func TestSettingsPageMarksLocaleControlForOOB(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	settings := getWithCookies(t, srv, "/settings", cookies)
 	if settings.Code != http.StatusOK {

@@ -120,6 +120,8 @@ func TestUnlabelledControlsDetectsBareInput(t *testing.T) {
 // 卡组页、设置页、卡片列表页渲染出的每个可见表单控件都能被关联到标签。
 func TestAccessibilityFormControlsHaveLabels(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	basicDeck := seedReviewDeck(t, db, ownerID, "A11y basic deck")
 	seedBasic(t, db, basicDeck.ID, "Q1", "A1")

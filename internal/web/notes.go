@@ -50,7 +50,9 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	router.GET("/decks/:id/notes", s.noteList)
+	// GET /decks/:id/notes 已切到 SPA 规范路径：noteListRoute 返回应用壳，由客户端路由渲染
+	// 卡片列表（DESIGN.md §8.1、§8.5）。卡片编辑（/notes/:nid）与新建仍是 SSR 页面。
+	router.GET("/decks/:id/notes", s.noteListRoute)
 	router.GET("/decks/:id/notes/:nid", s.noteEdit)
 	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
 	router.GET("/decks/:id/new-note", s.noteNew)
@@ -270,6 +272,31 @@ func noteListHref(deckID uint64, page int, q, tag, kind, status string) string {
 func urlEncode(s string) string {
 	r := strings.NewReplacer(" ", "%20", "&", "%26", "?", "%3F", "#", "%23", "+", "%2B", "=", "%3D", "%", "%25")
 	return r.Replace(s)
+}
+
+// noteListRoute 提供 GET /decks/:id/notes：SPA 已加载时返回应用壳（DESIGN.md §8.5），由客户端
+// 路由渲染卡片列表，数据仍走既有 JSON 端点（DESIGN.md §8.1）。
+//
+// 鉴权与迁移前的 SSR 列表页逐项一致：先要求已登录会话（匿名重定向登录页），再按 reader 角色
+// 判定卡组可读性——无权读的卡组仍回 403，不因切壳而放行。SPA 缺失（降级）时回退 SSR 列表页。
+// 卡片编辑（/decks/:id/notes/:nid）与新建（/decks/:id/new-note）本轮不动，仍是 SSR 页面。
+func (s *Server) noteListRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	if s.spa != nil {
+		deckID, ok := deckIDParam(c)
+		if !ok {
+			return
+		}
+		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
+			return
+		}
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.noteList(c)
 }
 
 // noteList 渲染卡片列表：分页、搜索、按标签与题型筛选（M2-7）。

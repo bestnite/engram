@@ -25,6 +25,8 @@ func setVisibility(t *testing.T, srv *Server, deckID uint64, visibility string, 
 // unlisted 永不出现在任何列表里，但能按直接 id 访问。
 func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Unlisted deck")
 	seedBasic(t, db, deck.ID, "unlisted front", "unlisted back")
 
@@ -49,6 +51,8 @@ func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 // TestPublicDeckVisibleInListingToSignedInUser 覆盖 public：登录用户的列表里出现，且能直接访问。
 func TestPublicDeckVisibleInListingToSignedInUser(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Public deck")
 	seedBasic(t, db, deck.ID, "public front", "public back")
 
@@ -71,6 +75,8 @@ func TestPublicDeckVisibleInListingToSignedInUser(t *testing.T) {
 // TestPrivateDeckStaysHidden 覆盖 private：既不在列表里，也不能按 id 访问。
 func TestPrivateDeckStaysHidden(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Private deck")
 	seedBasic(t, db, deck.ID, "private front", "private back")
 

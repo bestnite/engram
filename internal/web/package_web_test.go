@@ -52,6 +52,8 @@ func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Coo
 // 页面展示与 REST 相同的摘要字段；坏包给出可读错误而不是 500。
 func TestDeckPackageWebRoundTrip(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Pack Deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 
