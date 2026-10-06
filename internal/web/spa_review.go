@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -42,6 +43,13 @@ type spaGradeRequest struct {
 	Deck            []uint64        `json:"deck"`
 	Action          string          `json:"action"`
 	Answer          json.RawMessage `json:"answer"`
+}
+
+// spaReviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
+// 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列（DESIGN.md §8.2）。
+type spaReviewCardRequest struct {
+	CardID uint64   `json:"card_id"`
+	Deck   []uint64 `json:"deck"`
 }
 
 // spaReviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
@@ -195,6 +203,80 @@ func (s *Server) spaGradeGiveUp(c *gin.Context, user *store.User, req spaGradeRe
 	s.writeSPAReviewResult(c, user, req.Deck, result, gin.H{"gave_up": true})
 }
 
+// spaReviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
+// 复习日），调度逻辑仍在 internal/schedule（schedule.Bury），transport 只做参数校验与事务边界
+// （AGENTS.md §2.3.6：一种业务逻辑、两条传输）。埋藏只需 reader——它写的是 (card_id, user_id)
+// 的本人进度，共享卡组的读者可自行复习（DESIGN.md §5、§8.2）。响应带同范围重建后的队列。
+func (s *Server) spaReviewBury(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		return
+	}
+	var req spaReviewCardRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		return
+	}
+	card, _, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		s.logger.Error("begin spa bury transaction failed", "user_id", user.ID, "error", tx.Error)
+		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	if _, err := schedule.Bury(ctx, tx, schedule.BuryInput{
+		CardID: card.ID, UserID: user.ID, Now: time.Now().UTC(),
+	}); err != nil {
+		_ = tx.Rollback().Error
+		s.logger.Error("bury review card failed", "user_id", user.ID, "card_id", card.ID, "error", err)
+		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		s.logger.Error("commit spa bury failed", "user_id", user.ID, "error", err)
+		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	s.writeSPAQueue(c, user, req.Deck)
+}
+
+// spaReviewRender 返回一张卡正反面的服务端清洗 HTML（DESIGN.md §6.1）：SPA 只把这里返回的
+// HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
+// 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。
+func (s *Server) spaReviewRender(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		return
+	}
+	var req spaReviewCardRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		return
+	}
+	card, _, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	if !ok {
+		return
+	}
+	view, err := s.cardView(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID})
+	if err != nil {
+		s.logger.Error("render spa review card failed", "card_id", card.ID, "error", err)
+		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"card_id":    card.ID,
+		"front_html": view.FrontHTML,
+		"back_html":  view.BackHTML,
+		"edit_href":  view.EditHref,
+	})
+}
+
 // spaReviewCard 校验 SPA 请求的卡组范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
 // 不静默丢弃），目标卡必须存在且落在范围内。失败时已写出响应并返回 false。
 func (s *Server) spaReviewCard(c *gin.Context, user *store.User, deckIDs []uint64, cardID uint64) (*store.Card, *store.Note, bool) {
@@ -251,6 +333,18 @@ func (s *Server) writeSPAReviewResult(c *gin.Context, user *store.User, deckIDs 
 		}
 	}
 	c.JSON(http.StatusOK, body)
+}
+
+// writeSPAQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
+// 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组（DESIGN.md §8.2）。
+func (s *Server) writeSPAQueue(c *gin.Context, user *store.User, deckIDs []uint64) {
+	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
+	if err != nil {
+		se := apiError(err)
+		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cards": cards, "remaining": len(cards)})
 }
 
 // spaGradeFeedback 组装判分反馈：判定来自分数与映射阈值，正确答案用服务端清洗后的 HTML，

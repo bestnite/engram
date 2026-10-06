@@ -29,6 +29,8 @@ func seedGradedNote(t *testing.T, db *gorm.DB, deckID uint64, kind string, field
 // 且判分细节写入 grade_detail_json。容差边界（恰好等于容差）算对，超出则算错。
 func TestReviewGradedNumericAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Numeric deck")
 
 	cases := []struct {
@@ -137,6 +139,8 @@ func TestReviewGradedNumericAcceptance(t *testing.T) {
 // 正确与错误各一例，断言 grade_source 与档位（多选部分对映射为 Hard）。
 func TestReviewGradedOtherTypesAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Graded deck")
 
 	type answerCase struct {

@@ -86,6 +86,8 @@ func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 // 这里只证明分享页与复习页确实把内容送进了同一条管线，且两页渲染出的正文 HTML 完全一致。
 func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Unsafe deck")
 	front := strings.Join([]string{
 		`<script>alert(1)</script>`,

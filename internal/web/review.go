@@ -29,17 +29,40 @@ const (
 	reviewActionPath = "/review/action"
 )
 
-// registerReviewRoutes 挂载复习页。依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// registerReviewRoutes 挂载复习页。
+// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerReviewRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.cards == nil || s.presets == nil {
 		return
 	}
-	// SPA 复习尚未完成，保留旧 GET 页面以兼容现有入口；新 SPA 暂用 /spa/review。
-	router.GET(reviewPagePath, s.reviewPage)
+	// GET /review 已切到 SPA 规范路径：reviewPageRoute 先按 SSR 页原有的会话与卡组范围判定
+	// 鉴权，再返回应用壳，由客户端路由渲染复习页（DESIGN.md §8.1、§8.2、§8.5）；SPA 缺失
+	// （降级）时回退 SSR 复习页，旧 handler、模板与脚本全部保留。写路径（/review/answer、
+	// /review/action）不变。
+	router.GET(reviewPagePath, s.reviewPageRoute)
 	// 传统评分端点独立保留 CSRF 保护。
 	// 写操作一律过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST(reviewAnswerPath, s.sessions.CSRFMiddleware(), s.reviewAnswer)
 	router.POST(reviewActionPath, s.sessions.CSRFMiddleware(), s.reviewAction)
+}
+
+// reviewPageRoute 提供 GET /review：SPA 已加载时返回应用壳，由客户端路由渲染复习页，
+// 数据仍走既有 JSON 端点（DESIGN.md §8.1、§8.2）。会话与卡组范围判定先于切壳执行——
+// 非法 deck 参数 400、范围里出现读不到的卡组 403/404，不因返回应用壳而放行（DESIGN.md §8.2）。
+// SPA 缺失（降级）时回退 SSR 复习页 reviewPage。
+func (s *Server) reviewPageRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.parseDeckScope(c, user); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.reviewPage(c)
 }
 
 // reviewScope 是一次复习请求的卡组范围：deckIDs 为空表示全库（不按卡组过滤）。

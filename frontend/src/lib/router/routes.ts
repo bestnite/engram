@@ -83,8 +83,16 @@ export const routes: RouteDefinition[] = [
     component: NoteCreateView as unknown as RouteDefinition['component'],
   },
   {
-    path: '/spa/review',
+    // 复习页的规范路由（DESIGN.md §8.1）。服务端 GET /review 已切到 SPA 应用壳，
+    // 客户端必须能处理这个精确 URL，否则首页「开始复习」链接与刷新会落到 404 视图。
+    path: '/review',
     name: 'review',
+    component: ReviewView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 迁移期的旧 SPA 复习地址，保留以兼容既有深链；新入口统一走 /review。
+    path: '/spa/review',
+    name: 'review-spa',
     component: ReviewView as unknown as RouteDefinition['component'],
   },
   {

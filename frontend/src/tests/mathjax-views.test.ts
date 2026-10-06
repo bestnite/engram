@@ -30,10 +30,20 @@ describe('SPA MathJax wiring stays inside server-sanitized HTML sinks', () => {
 
   it('ReviewView sinks only server-returned answer HTML and typesets those containers', () => {
     const src = viewSource('ReviewView.svelte');
-    // 判分反馈答案与揭示答案都来自服务端清洗后的 HTML；字段原文一律走纯文本。
-    expect(htmlSinks(src)).toEqual(['feedback.answer_html', 'revealedAnswerHTML']);
+    // 复习页的 HTML 汇全部来自服务端：卡面 front/back（render 端点清洗）与判分/揭示答案；
+    // 字段原文一律走纯文本，绝不进 {@html}。
+    expect(htmlSinks(src)).toEqual([
+      'frontHTML',
+      'backHTML',
+      'feedback.answer_html',
+      'revealedAnswerHTML',
+      'frontHTML',
+    ]);
     expect(src).toContain("import { typeset } from '../mathjax'");
     expect(src).toContain('await typeset([feedbackSection]);');
     expect(src).toContain('await typeset([revealedSection]);');
+    // 卡面与翻面答案的容器也各自排版（只对容器，不整页）。
+    expect(src).toContain('await typeset([frontSection, answerSection]);');
+    expect(src).toContain('await typeset([answerSection]);');
   });
 });

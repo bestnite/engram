@@ -54,4 +54,39 @@ describe('review submission API', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ card_id: 11, deck: [2, 7], action: 'reveal' });
     expect(result.answer_html).toBe('<b>x</b>');
   });
+
+  it('renders one card through the sanitized render endpoint with session CSRF', async () => {
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
+      card_id: 11, front_html: '<p>F</p>', back_html: '<p>B</p>', edit_href: '/decks/2/notes/7',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const result = await client.renderReviewCard({ card_id: 11, deck: [2, 7] });
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe('/api/v1/review/render');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('X-CSRF-Token')).toBe('session-token');
+    expect(headers.has('Authorization')).toBe(false);
+    expect(JSON.parse(init?.body as string)).toEqual({ card_id: 11, deck: [2, 7] });
+    expect(result.front_html).toBe('<p>F</p>');
+    expect(result.edit_href).toBe('/decks/2/notes/7');
+  });
+
+  it('buries the current card through the session-CSRF bury endpoint', async () => {
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ cards: [], remaining: 0 }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+
+    const result = await client.buryReview({ card_id: 11, deck: [2, 7] });
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe('/api/v1/review/bury');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('X-CSRF-Token')).toBe('session-token');
+    expect(headers.has('Authorization')).toBe(false);
+    expect(JSON.parse(init?.body as string)).toEqual({ card_id: 11, deck: [2, 7] });
+    expect(result.remaining).toBe(0);
+  });
 });

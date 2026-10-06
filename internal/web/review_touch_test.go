@@ -66,6 +66,8 @@ func TestReviewTouchSequenceRatesCard(t *testing.T) {
 // TestReviewPageTouchTargets 断言复习页的触屏类与点击区尺寸（M8-1）。
 func TestReviewPageTouchTargets(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Touch deck")
 	seedBasic(t, db, deck.ID, "Front", "Back")
 

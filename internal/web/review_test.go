@@ -49,6 +49,8 @@ func attrValue(body, name string) string {
 // 计数器在每步都正确，且没有额外交互往返。
 func TestReviewWalkTwentyCardsWithServerReturnedNext(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Walk deck")
 	const total = 20
 	for i := 1; i <= total; i++ {
@@ -149,6 +151,8 @@ func TestReviewWalkTwentyCardsWithServerReturnedNext(t *testing.T) {
 // 也不能改动任何进度；响应仍是主区域片段并带明确的错误提示。
 func TestReviewAnswerRejectsStaleVersionWithoutSilence(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Conflict deck")
 	seedBasic(t, db, deck.ID, "Front001", "Back001")
 
@@ -183,6 +187,8 @@ func TestReviewAnswerRejectsStaleVersionWithoutSilence(t *testing.T) {
 // TestReviewPageEmptyQueueShowsLocalizedHint 断言无卡可复习时给出提示而不是空白主区域。
 func TestReviewPageEmptyQueueShowsLocalizedHint(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Empty deck")
 
 	rec := getWithCookies(t, srv, "/review?deck="+u64str(deck.ID), cookies)

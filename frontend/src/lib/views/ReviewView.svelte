@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, DueCard, GradedAnswer, GradedFeedback } from '../api';
   import { typeset } from '../mathjax';
+  import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
 
   interface Props {
     client?: ApiClient;
@@ -12,6 +13,13 @@
     initialError?: ApiClientError | Error | null;
     initialFeedback?: GradedFeedback | null;
     initialRevealedAnswerHTML?: string;
+    // 服务端清洗后的卡面 HTML 与编辑地址。生产路径由 $effect 从 render 端点取；这里保留
+    // 初值是为了让无 DOM 的服务端渲染测试能钉住「只有清洗后的 HTML 进 HTML 汇」。
+    initialFrontHTML?: string;
+    initialBackHTML?: string;
+    initialEditHref?: string;
+    /** 自评卡是否已翻面（生产路径由 reveal() 翻转，测试用初值覆盖）。 */
+    initialRevealed?: boolean;
   }
 
   let {
@@ -21,6 +29,10 @@
     initialError = null,
     initialFeedback = null,
     initialRevealedAnswerHTML = '',
+    initialFrontHTML = '',
+    initialBackHTML = '',
+    initialEditHref = '',
+    initialRevealed = false,
   }: Props = $props();
 
   // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分（DESIGN.md §8.2）。
@@ -33,7 +45,8 @@
   let loading = $state(initialLoading);
   // svelte-ignore state_referenced_locally
   let error = $state<unknown>(initialError);
-  let revealed = $state(false);
+  // svelte-ignore state_referenced_locally
+  let revealed = $state(initialRevealed);
   let submitting = $state(false);
   let done = $state(0);
   // svelte-ignore state_referenced_locally
@@ -53,8 +66,20 @@
   // svelte-ignore state_referenced_locally
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
-  // 服务端清洗后返回的 HTML 容器（判分反馈答案 / 揭示答案）：只对它们排版公式，
-  // 绝不整页排版，也绝不把字段原文送进 HTML sink（DESIGN.md §6.1、§11）。
+
+  // 服务端清洗后的卡面 HTML（复习页唯一的 HTML 汇，DESIGN.md §6.1）。空串表示尚未取到，
+  // 此时回退纯文本；绝不把 fields 原文当 Markdown 送进 HTML 汇。
+  // svelte-ignore state_referenced_locally
+  let frontHTML = $state(initialFrontHTML);
+  // svelte-ignore state_referenced_locally
+  let backHTML = $state(initialBackHTML);
+  // svelte-ignore state_referenced_locally
+  let editHref = $state(initialEditHref);
+  let renderToken = 0;
+
+  // 服务端清洗后返回的 HTML 容器：只对它们排版公式，绝不整页排版（DESIGN.md §6.1、§11）。
+  let frontSection = $state<HTMLElement | null>(null);
+  let answerSection = $state<HTMLElement | null>(null);
   let feedbackSection = $state<HTMLElement | null>(null);
   let revealedSection = $state<HTMLElement | null>(null);
 
@@ -63,6 +88,8 @@
   const gradedKind = $derived(current !== null && GRADED_KINDS.includes(current.kind));
   const front = $derived(current ? cardSide(current, false) : []);
   const answer = $derived(current ? cardSide(current, true) : []);
+  // 编辑入口：优先用服务端 render 返回的 edit_href；未取到时按规范路径拼接（DESIGN.md §8.1）。
+  const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
   function cardSide(card: DueCard, back: boolean): [string, string][] {
     const fields = card.fields || {};
@@ -136,6 +163,37 @@
     return values.length ? values : undefined;
   }
 
+  /**
+   * 取当前卡的服务端清洗 HTML（DESIGN.md §6.1）。token 防止换卡后旧请求覆盖新卡内容；
+   * 失败只丢弃富文本并回退纯文本，绝不打断复习流程。
+   */
+  async function loadRender(card: DueCard, token: number): Promise<void> {
+    try {
+      const response = await client.renderReviewCard({ card_id: card.card_id, deck: selectedDecks() });
+      if (token !== renderToken) return;
+      frontHTML = response.front_html;
+      backHTML = response.back_html;
+      editHref = response.edit_href;
+      await tick();
+      await typeset([frontSection, answerSection]);
+    } catch {
+      if (token !== renderToken) return;
+      frontHTML = '';
+      backHTML = '';
+      editHref = '';
+    }
+  }
+
+  // 换卡即重取清洗 HTML；清空旧卡内容，避免在响应到达前显示上一张的富文本。
+  $effect(() => {
+    const card = current;
+    const token = ++renderToken;
+    frontHTML = '';
+    backHTML = '';
+    editHref = '';
+    if (card) void loadRender(card, token);
+  });
+
   async function loadQueue(): Promise<void> {
     loading = true;
     error = null;
@@ -181,6 +239,13 @@
     } finally {
       submitting = false;
     }
+  }
+
+  /** 揭示自评卡的背面：先挂上 DOM 再只对背面容器排版公式。 */
+  async function reveal(): Promise<void> {
+    revealed = true;
+    await tick();
+    await typeset([answerSection]);
   }
 
   /** 提交原始作答，由服务端判分；结果面板保留已作答的卡片，用户点「继续」才换卡。 */
@@ -265,6 +330,38 @@
     }
   }
 
+  /**
+   * 埋藏当前卡（DESIGN.md §8.2）：只写本人进度，不产生 reviews 行；响应带同范围重建后的队列。
+   * 服务端按 reader 判定，共享卡组读者可自行复习。
+   */
+  async function bury(): Promise<void> {
+    if (!current || submitting) return;
+    submitting = true;
+    error = null;
+    try {
+      const response = await client.buryReview({ card_id: current.card_id, deck: selectedDecks() });
+      cards = response.cards.slice(0, 1);
+      remaining = response.remaining;
+      revealed = false;
+      feedback = null;
+      pendingCards = [];
+      gradedRevealed = false;
+      revealedAnswerHTML = '';
+      resetAnswerState();
+      startedAt = Date.now();
+    } catch (cause) {
+      error = cause;
+    } finally {
+      submitting = false;
+    }
+  }
+
+  /** 编辑入口：跳到服务端返回的 edit_href（缺省按规范路径拼接）。 */
+  function gotoEdit(): void {
+    const href = editHref || fallbackEditHref;
+    if (href) window.location.assign(href);
+  }
+
   /** 结果面板的「继续」：换到判分响应里预取的下一张卡，不产生额外写请求。 */
   function continueNext(): void {
     cards = pendingCards.slice(0, 1);
@@ -287,30 +384,103 @@
     }
   }
 
+  function isTypingTarget(target: EventTarget | null): boolean {
+    return (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
+    );
+  }
+
+  /** 空格/回车与滑动的共同动作：判分卡请求揭示答案，自评卡翻面。 */
+  function applyReveal(): void {
+    if (gradedKind) {
+      if (!gradedRevealed) void revealGraded();
+      return;
+    }
+    if (!revealed) void reveal();
+  }
+
   function onKeydown(event: KeyboardEvent): void {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-    // 结果面板：回车/空格/1–4 都走「继续」。
-    if (feedback) {
-      if (event.key === ' ' || event.key === 'Enter' || /^[1-4]$/.test(event.key)) {
+    // 键位映射是纯函数（review-shortcuts.ts），这里只把决策映射成副作用。
+    const action = reviewShortcut(
+      event.key,
+      { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },
+      {
+        typing: isTypingTarget(event.target),
+        feedback: feedback !== null,
+        gradedKind,
+        gradedRevealed,
+        revealed,
+      },
+    );
+    switch (action.kind) {
+      case 'ignore':
+        return;
+      case 'swallow':
+        // 判分卡待作答时 1–4 失效，但仍吞掉按键，避免浏览器把数字当热键。
+        event.preventDefault();
+        return;
+      case 'continue':
         event.preventDefault();
         continueNext();
-      }
-      return;
-    }
-    // 判分卡待作答：1–4 完全失效（不评分、不揭示），显示答案仍由空格/回车承担。
-    if (gradedKind) {
-      if (event.key === ' ' || event.key === 'Enter') {
+        return;
+      case 'reveal':
         event.preventDefault();
-        if (!gradedRevealed) void revealGraded();
-      }
+        applyReveal();
+        return;
+      case 'rate':
+        event.preventDefault();
+        void rate(action.rating);
+        return;
+      case 'bury':
+        event.preventDefault();
+        void bury();
+        return;
+      case 'edit':
+        event.preventDefault();
+        gotoEdit();
+        return;
+    }
+  }
+
+  // 手机滑动：落点在输入控件/按钮/链接上时不当作滑动（DESIGN.md §8.2）。
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let tracking = false;
+
+  function interactiveTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A';
+  }
+
+  function onTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (event.touches.length !== 1 || !touch || interactiveTarget(event.target)) {
+      tracking = false;
       return;
     }
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      if (!revealed) revealed = true;
+    tracking = true;
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+  }
+
+  function onTouchEnd(event: TouchEvent): void {
+    const touch = event.changedTouches[0];
+    if (!tracking || event.changedTouches.length !== 1 || !touch) {
+      tracking = false;
       return;
     }
-    if (revealed && /^[1-4]$/.test(event.key)) void rate(Number(event.key));
+    tracking = false;
+    const action = reviewSwipe(touch.clientX - touchStartX, touch.clientY - touchStartY, {
+      feedback: feedback !== null,
+      gradedKind,
+      gradedRevealed,
+      revealed,
+    });
+    if (action.kind === 'reveal') applyReveal();
+    else if (action.kind === 'rate') void rate(action.rating);
   }
 
   onMount(() => {
@@ -326,13 +496,19 @@
     <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{$t('review.spa.title')}</h1>
     <div aria-live="polite"><span>{remaining}</span> · {$t('review.spa.done', { count: done })}</div>
   </div>
-  <div class="card-elevated min-h-72 p-6 sm:p-10 rounded-2xl flex flex-col justify-center">
+  <div
+    class="card-elevated min-h-72 p-6 sm:p-10 rounded-2xl flex flex-col justify-center touch-manipulation select-none"
+    role="group"
+    aria-label={$t('review.spa.title')}
+    ontouchstart={onTouchStart}
+    ontouchend={onTouchEnd}
+  >
     {#if loading}
       <p class="text-center text-zinc-500" data-testid="review-loading">{$t('review.spa.loading')}</p>
     {:else if error}
       <div class="text-center space-y-4" data-testid="review-error">
         <p class="text-rose-700 dark:text-rose-300">{error instanceof ApiClientError ? $t('error.' + (error.isConflict ? 'conflict' : error.isUnauthorized ? 'unauthorized' : error.isForbidden ? 'forbidden' : error.isNetworkError ? 'network' : 'unknown')) : $t('review.spa.failed')}</p>
-        <button class="px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700" onclick={() => void loadQueue()}>{$t('common.retry')}</button>
+        <button class="px-4 py-2 min-h-12 rounded-lg border border-zinc-300 dark:border-zinc-700" onclick={() => void loadQueue()}>{$t('common.retry')}</button>
       </div>
     {:else if !current}
       <div class="text-center" data-testid="review-empty"><p class="text-lg font-medium">{$t('review.spa.empty')}</p><a class="inline-block mt-4 underline" href="/">{$t('review.spa.home')}</a></div>
@@ -340,12 +516,20 @@
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-8">
         <div class="text-xs uppercase tracking-wide text-zinc-500">{current.kind}</div>
         {#if selfAssessable}
-          <div class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words" data-testid="review-front">
-            {#each front as [label, value] (label)}<div><span class="sr-only">{label}</span>{value}</div>{/each}
+          <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words" data-testid="review-front">
+            {#if frontHTML}
+              {@html frontHTML}
+            {:else}
+              {#each front as [label, value] (label)}<div><span class="sr-only">{label}</span>{value}</div>{/each}
+            {/if}
           </div>
           {#if revealed}
-            <div class="border-t border-zinc-200 dark:border-zinc-700 pt-6 text-lg whitespace-pre-wrap break-words" data-testid="review-answer">
-              {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+            <div bind:this={answerSection} class="border-t border-zinc-200 dark:border-zinc-700 pt-6 text-lg whitespace-pre-wrap break-words" data-testid="review-answer">
+              {#if backHTML}
+                {@html backHTML}
+              {:else}
+                {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+              {/if}
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label={$t('review.spa.ratings')}>
               {#each [1, 2, 3, 4] as rating}
@@ -355,7 +539,7 @@
               {/each}
             </div>
           {:else}
-            <button type="button" class="w-full min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 font-medium" onclick={() => revealed = true}>{$t('review.spa.show_answer')}</button>
+            <button type="button" class="w-full min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 font-medium" onclick={() => void reveal()}>{$t('review.spa.show_answer')}</button>
           {/if}
         {:else if gradedKind}
           {#if feedback}
@@ -387,7 +571,9 @@
             </div>
           {:else}
             <div class="space-y-5">
-              <div class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words" data-testid="review-graded-prompt">{gradedPrompt(current)}</div>
+              <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words" data-testid="review-graded-prompt">
+                {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt(current)}{/if}
+              </div>
               {#if current.kind === 'typed' || current.kind === 'numeric'}
                 <input
                   type="text"
@@ -437,6 +623,15 @@
               </div>
             </div>
           {/if}
+        {/if}
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="button" onclick={gotoEdit} class="flex-1 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 font-medium" data-testid="review-edit">e · {$t('review.spa.edit')}</button>
+          {#if !feedback}
+            <button type="button" disabled={submitting} onclick={() => void bury()} class="flex-1 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 font-medium disabled:opacity-50" data-testid="review-bury">b · {$t('review.spa.bury')}</button>
+          {/if}
+        </div>
+        {#if !feedback}
+          <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="review-bury-hint">{$t('review.spa.bury_hint')}</p>
         {/if}
       </article>
     {/if}
