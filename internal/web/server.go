@@ -321,6 +321,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerSPADeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
 	s.registerSPADeckSettingsRoutes(router)
+	// SPA 的 TOTP 管理接口（M1-16 的 JSON 版本，DESIGN.md §4.3）：SSR 的 /settings/totp* 不动。
+	s.registerSPATOTPRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)

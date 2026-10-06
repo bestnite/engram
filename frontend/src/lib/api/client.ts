@@ -36,6 +36,11 @@ import {
   type LoginResponse,
   type LogoutResponse,
   type PackageImportReport,
+  type TOTPStatus,
+  type TOTPBeginResponse,
+  type TOTPConfirmResponse,
+  type TOTPDisableResponse,
+  type TOTPRecoveryResponse,
 } from './types';
 
 /**
@@ -588,6 +593,55 @@ export class ApiClient {
    */
   async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
     await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  /** 读取当前用户的 TOTP 状态（GET /api/v1/settings/totp，仅会话）；不返回 secret。 */
+  async getTOTPStatus(): Promise<TOTPStatus> {
+    return this.request<TOTPStatus>('/api/v1/settings/totp');
+  }
+
+  /** 生成待确认的 secret（POST /api/v1/settings/totp/begin）；secret 只在此响应出现一次。 */
+  async beginTOTP(): Promise<TOTPBeginResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<TOTPBeginResponse>('/api/v1/settings/totp/begin', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  /** 用一次验证码确认绑定（POST /api/v1/settings/totp/confirm）；启用成功时一次性返回恢复码。 */
+  async confirmTOTP(code: string): Promise<TOTPConfirmResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<TOTPConfirmResponse>('/api/v1/settings/totp/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  /** 关闭 TOTP（POST /api/v1/settings/totp/disable，需要密码）。 */
+  async disableTOTP(password: string): Promise<TOTPDisableResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<TOTPDisableResponse>('/api/v1/settings/totp/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  }
+
+  /** 重新生成恢复码（POST /api/v1/settings/totp/recovery，需要密码）；旧码立即作废。 */
+  async regenerateTOTPRecovery(password: string): Promise<TOTPRecoveryResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<TOTPRecoveryResponse>('/api/v1/settings/totp/recovery', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   }
 
   async getSession(): Promise<SessionResponse> {

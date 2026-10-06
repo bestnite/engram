@@ -634,3 +634,40 @@ export interface SessionInfo {
   csrf_token?: string;
 }
 
+/**
+ * TOTP 管理接口（DESIGN.md §4.3、§8.1，Go: internal/web/spa_totp.go）。
+ *
+ * GET 只报告状态，绝不返回 secret 或 otpauth；secret 只在 begin 响应里出现一次，
+ * 恢复码明文只在 confirm / recovery 响应里出现一次。
+ */
+export interface TOTPStatus {
+  enabled: boolean;
+  pending: boolean;
+  recovery_remaining: number;
+}
+
+/** POST /api/v1/settings/totp/begin 响应；secret 与 otpauth 链接只在此出现一次。 */
+export interface TOTPBeginResponse {
+  secret: string;
+  otpauth_url: string;
+  pending: boolean;
+}
+
+/** POST /api/v1/settings/totp/confirm 响应；启用成功时一次性返回恢复码。 */
+export interface TOTPConfirmResponse {
+  enabled: boolean;
+  recovery_codes: string[];
+  recovery_remaining: number;
+}
+
+/** POST /api/v1/settings/totp/disable 响应。 */
+export interface TOTPDisableResponse {
+  enabled: boolean;
+}
+
+/** POST /api/v1/settings/totp/recovery 响应；一次性返回新一批恢复码。 */
+export interface TOTPRecoveryResponse {
+  recovery_codes: string[];
+  recovery_remaining: number;
+}
+
