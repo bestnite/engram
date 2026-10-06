@@ -366,6 +366,50 @@ describe('Centralized typed same-origin REST API client', () => {
   });
 
   describe('CSRF token awareness on mutating requests (DESIGN.md §4.3)', () => {
+    it('fetches a session token before creating a deck and posts the typed payload', async () => {
+      const deck = {
+        id: 12,
+        name: 'Biology',
+        description: 'Cells',
+        visibility: 'private',
+        new_per_day: 20,
+        reviews_per_day: 200,
+        preset_id: 4,
+        created_at: '2026-10-06T00:00:00Z',
+      };
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'fresh-token' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(deck), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }));
+
+      const input = { name: 'Biology', description: 'Cells', visibility: 'private' as const, preset_id: 0 };
+      await expect(client.createDeck(input)).resolves.toEqual(deck);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
+      const [url, init] = mockFetch.mock.calls[1]!;
+      expect(url).toBe('/api/v1/decks');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      expect(JSON.parse(init?.body as string)).toEqual(input);
+      expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('fresh-token');
+    });
+
+    it('preserves stable server validation codes when deck creation fails', async () => {
+      client.setCsrfToken('csrf');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 'deck_name_invalid', message: 'Invalid deck name.' },
+      }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+
+      await expect(client.createDeck({
+        name: '', description: '', visibility: 'private', preset_id: 0,
+      })).rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'deck_name_invalid');
+    });
+
     it('manages CSRF token state', () => {
       expect(client.getCsrfToken()).toBeNull();
       client.setCsrfToken('test-csrf-token-123');

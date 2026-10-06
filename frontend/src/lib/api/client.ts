@@ -2,6 +2,7 @@ import {
   ApiClientError,
   type Deck,
   type DecksResponse,
+  type CreateDeckRequest,
   type NotesResponse,
   type NoteListParams,
   type StatsSummary,
@@ -175,6 +176,17 @@ export class ApiClient {
    */
   async getDecks(): Promise<DecksResponse> {
     return this.request<DecksResponse>('/api/v1/decks');
+  }
+
+  /** 创建卡组；缺少会话令牌时先获取新 CSRF token。 */
+  async createDeck(input: CreateDeckRequest): Promise<Deck> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<Deck>('/api/v1/decks', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   }
 
   /**

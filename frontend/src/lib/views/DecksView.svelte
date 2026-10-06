@@ -8,6 +8,11 @@
   let loading = $state(true);
   let error = $state<ApiClientError | Error | null>(null);
   let decks = $state<Deck[]>([]);
+  let name = $state('');
+  let description = $state('');
+  let creating = $state(false);
+  let createError = $state<string | null>(null);
+  let created = $state(false);
 
   /**
    * 请求后端卡组列表（GET /api/v1/decks）
@@ -26,6 +31,32 @@
     }
   }
 
+  async function createDeck(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    creating = true;
+    createError = null;
+    created = false;
+    try {
+      const deck = await apiClient.createDeck({ name, description, visibility: 'private', preset_id: 0 });
+      decks = [deck, ...decks];
+      name = '';
+      description = '';
+      created = true;
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'deck_name_invalid') {
+        createError = 'decks.spa_create.name_invalid';
+      } else if (err instanceof ApiClientError && err.code === 'deck_description_invalid') {
+        createError = 'decks.spa_create.description_invalid';
+      } else if (err instanceof ApiClientError && err.code === 'invalid_request') {
+        createError = 'decks.spa_create.invalid_request';
+      } else {
+        createError = 'decks.spa_create.failed';
+      }
+    } finally {
+      creating = false;
+    }
+  }
+
   onMount(() => {
     fetchDecks();
   });
@@ -33,6 +64,27 @@
 
 <div class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl">
+    <form class="mb-8 rounded-lg border border-zinc-200 dark:border-zinc-800 p-5" onsubmit={createDeck}>
+      <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">{$t('decks.spa_create.heading')}</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          {$t('decks.spa_create.name')}
+          <input data-testid="deck-create-name" bind:value={name} required maxlength="200" class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" />
+        </label>
+        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          {$t('decks.spa_create.description')}
+          <textarea data-testid="deck-create-description" bind:value={description} maxlength="2000" rows="2" class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"></textarea>
+        </label>
+      </div>
+      <div class="mt-4 flex items-center gap-3">
+        <button data-testid="deck-create-submit" type="submit" disabled={creating} class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 cursor-pointer">
+          {creating ? $t('decks.spa_create.submitting') : $t('decks.spa_create.submit')}
+        </button>
+        {#if created}<p role="status" class="text-sm text-green-700 dark:text-green-400">{$t('decks.spa_create.success')}</p>{/if}
+        {#if createError}<p role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t(createError)}</p>{/if}
+      </div>
+    </form>
+
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
         {$t('decks.title')}
