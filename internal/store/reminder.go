@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -89,4 +90,25 @@ func RecordReminderSent(ctx context.Context, db *gorm.DB, userID uint64, day str
 		return fmt.Errorf("record reminder sent: %w", err)
 	}
 	return nil
+}
+
+// LastReminderSentAt 返回该用户最近一次成功入队提醒的时刻（跨复习日取最大 SentAt）。
+//
+// 供发送方的最小间隔门使用：间隔判定要的是「距上次发送多久」，只有 SentAt 这个时间戳能给；
+// Day 是 YYYY-MM-DD 字符串，不含时刻，用它无法分辨「今天中间隔了几小时」，所以这里读的是
+// SentAt 列（复用既有列，不新增列）。ok=false 表示该用户从未发过提醒。
+func LastReminderSentAt(ctx context.Context, db *gorm.DB, userID uint64) (time.Time, bool, error) {
+	var row ReminderLog
+	err := db.WithContext(ctx).Model(&ReminderLog{}).
+		Where("user_id = ?", userID).
+		Order("sent_at desc").
+		Limit(1).
+		Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("load last reminder sent: %w", err)
+	}
+	return row.SentAt.UTC(), true, nil
 }
