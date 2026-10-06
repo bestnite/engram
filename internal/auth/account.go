@@ -28,7 +28,7 @@ type CreateUserInput struct {
 	Role          string
 	Locale        string
 	Timezone      string
-	DayCutoffHour int
+	DayCutoffHour *int
 }
 
 // AccountService 负责本地账号的核心流程：创建、认证、改密、禁用。
@@ -128,8 +128,8 @@ func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (
 		tz = "Asia/Shanghai"
 	}
 	cutoff := in.DayCutoffHour
-	if cutoff == 0 {
-		cutoff = 4
+	if cutoff != nil && (*cutoff < 0 || *cutoff > 23) {
+		return nil, errors.New("day cutoff hour must be between 0 and 23")
 	}
 	display := strings.TrimSpace(in.DisplayName)
 	if display == "" {

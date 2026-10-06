@@ -67,7 +67,7 @@ func loginMember(t *testing.T, srv *Server, db *gorm.DB, username string) (uint6
 	u := store.User{
 		Username: username, Email: username + "@example.com", DisplayName: username,
 		PasswordHash: &hash, Role: store.RoleUser, Status: store.StatusActive,
-		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create member: %v", err)
@@ -194,7 +194,7 @@ func TestSettingsKeysIsolation(t *testing.T) {
 	other := store.User{
 		Username: "other", Email: "other@example.com", DisplayName: "other",
 		Role: store.RoleUser, Status: store.StatusActive,
-		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&other).Error; err != nil {
 		t.Fatalf("create other user: %v", err)

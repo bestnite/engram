@@ -14,7 +14,7 @@ func seedReminderUser(t *testing.T, db *gorm.DB, name, email string, dueAt time.
 	t.Helper()
 	now := time.Now().UTC()
 	user := User{Username: name, Email: email, DisplayName: name, Role: RoleUser,
-		Status: StatusActive, Locale: "en", Timezone: "UTC", DayCutoffHour: 4, CreatedAt: now}
+		Status: StatusActive, Locale: "en", Timezone: "UTC", DayCutoffHour: Ptr(4), CreatedAt: now}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 			if got[0].DueCount != 1 {
 				t.Errorf("candidate due_count = %d, want 1", got[0].DueCount)
 			}
-			if got[0].DayCutoffHour != 4 {
+			if got[0].DayCutoffHour == nil || *got[0].DayCutoffHour != 4 {
 				t.Errorf("candidate day_cutoff_hour = %d, want 4", got[0].DayCutoffHour)
 			}
 		})

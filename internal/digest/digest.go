@@ -192,7 +192,7 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	} else if ok && now.Sub(last) < MinDigestInterval {
 		return nil
 	}
-	cutoff := store.NormalizedCutoff(c.DayCutoffHour)
+	cutoff := store.ResolveCutoff(c.DayCutoffHour)
 	day := schedule.ReviewDay(now, loc, cutoff)
 	weekStart := weekStartOf(day)
 

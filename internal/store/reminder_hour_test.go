@@ -26,7 +26,7 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 				u := &User{
 					Username: name, Email: name + "@example.com", DisplayName: name,
 					Role: RoleUser, Status: StatusActive, Locale: "en", Timezone: "UTC",
-					DayCutoffHour: 4, CreatedAt: now, ReminderHour: hour,
+					DayCutoffHour: Ptr(4), CreatedAt: now, ReminderHour: hour,
 				}
 				if err := users.Create(ctx, u); err != nil {
 					t.Fatalf("create user %s: %v", name, err)

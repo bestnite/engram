@@ -11,11 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 待办第 1 项：日切点表单只接受 1–23。
-//
-// 0 在内部处处表示「未设置」（users.day_cutoff_hour 的零值、NormalizedCutoff 的回退
-// 分支），把用户提交的 0 当作合法的「午夜」会让这些地方集体改义。因此表单改为拒 0、
-// 只接受 1–23，且被拒的提交绝不落库；库里已有的 0 旧数据读取时仍回退 04:00。
+// 日切点 0 是午夜；空配置才是默认 04:00，表单与存储不得混淆二者。
 
 // cutoffInputValue 从设置页 HTML 里取出切点输入框当前的 value。
 // 断言的是渲染出来的控件本身，而不是 handler 的中间变量，避免「显示对、控件错」漏网。
@@ -42,14 +38,14 @@ func postRawCutoff(t *testing.T, srv *Server, cookies []*http.Cookie, csrf, raw 
 	}, cookies)
 }
 
-func TestSettingsCutoffRangeRejectsZeroAndOutOfRange(t *testing.T) {
+func TestSettingsCutoffRangeRejectsOutOfRange(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	users := store.NewUserStore(db)
 
 	rejected := []struct{ name, raw string }{
-		{"zero", "0"},
 		{"above range", "24"},
 		{"negative", "-1"},
+		{"not a number", "invalid"},
 	}
 	for _, tc := range rejected {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -65,8 +61,8 @@ func TestSettingsCutoffRangeRejectsZeroAndOutOfRange(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reload user: %v", err)
 			}
-			if u.DayCutoffHour != 4 {
-				t.Fatalf("rejected cutoff=%q changed stored cutoff to %d, want 4", tc.raw, u.DayCutoffHour)
+			if u.DayCutoffHour == nil || *u.DayCutoffHour != 4 {
+				t.Fatalf("rejected cutoff=%q changed stored cutoff to %d, want 4", tc.raw, store.ResolveCutoff(u.DayCutoffHour))
 			}
 		})
 	}
@@ -81,6 +77,7 @@ func TestSettingsCutoffRangeAcceptsBoundaries(t *testing.T) {
 		raw  string
 		want int
 	}{
+		{"midnight", "0", 0},
 		{"lower boundary", "1", 1},
 		{"upper boundary", "23", 23},
 	}
@@ -94,31 +91,31 @@ func TestSettingsCutoffRangeAcceptsBoundaries(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reload user: %v", err)
 			}
-			if u.DayCutoffHour != tc.want {
-				t.Fatalf("stored cutoff = %d, want %d", u.DayCutoffHour, tc.want)
+			if u.DayCutoffHour == nil || *u.DayCutoffHour != tc.want {
+				t.Fatalf("stored cutoff = %d, want %d", store.ResolveCutoff(u.DayCutoffHour), tc.want)
 			}
 		})
 	}
 }
 
-// TestSettingsLegacyZeroCutoffShowsEffectiveDefault 钉住旧数据的行为：库里已经是 0 的
-// 用户，读取路径照旧回退 04:00（显示出来的也就是这个生效值），不因表单收紧而改变。
-func TestSettingsLegacyZeroCutoffShowsEffectiveDefault(t *testing.T) {
+// TestSettingsLegacyZeroCutoffShowsMidnight 钉住旧数据的行为：库里已经是 0 的
+// 用户现在按午夜读取，且页面不能再显示默认 04:00。
+func TestSettingsLegacyZeroCutoffShowsMidnight(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 
 	// 模拟修复前落库的旧数据：day_cutoff_hour = 0。
 	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("day_cutoff_hour", 0).Error; err != nil {
 		t.Fatalf("seed legacy cutoff: %v", err)
 	}
-	if got := store.NormalizedCutoff(0); got != store.DefaultDayCutoffHour {
-		t.Fatalf("read-path rule changed: NormalizedCutoff(0) = %d, want %d", got, store.DefaultDayCutoffHour)
+	if got := store.NormalizedCutoff(0); got != 0 {
+		t.Fatalf("read-path rule changed: NormalizedCutoff(0) = %d, want %d", got, 0)
 	}
 
 	rec := getWithCookies(t, srv, "/settings", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /settings status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if got := cutoffInputValue(t, rec.Body.String()); got != strconv.Itoa(store.DefaultDayCutoffHour) {
-		t.Fatalf("form shows cutoff %q for stored 0, want %q (the effective 04:00)", got, strconv.Itoa(store.DefaultDayCutoffHour))
+	if got := cutoffInputValue(t, rec.Body.String()); got != strconv.Itoa(0) {
+		t.Fatalf("form shows cutoff %q for stored 0, want 0 (midnight)", got)
 	}
 }

@@ -1026,9 +1026,14 @@ that already had a localised default preset may end up with one extra row.
 - Deck creation and updates enforce the shared 2000-character description limit, valid
   UTF-8 and absence of C0 controls. Empty descriptions are allowed. Invalid descriptions
   return `deck_description_invalid`; rejected writes do not persist.
-- The day-cutoff form accepts only 1–23. Stored zero values still mean the default 04:00;
-  the form displays that effective value without migrating existing data. The separate
-  mail send-hour setting continues to accept midnight.
+- **Revised:** the day-cutoff form accepts 0–23; zero is midnight. An unset (`NULL`)
+  configuration uses 04:00, and clearing the input restores that default. User and
+  scheduler inputs distinguish unset from zero; queue quotas, submissions, burying,
+  statistics, notifications and optimizer exports use the same resolution rule.
+  Migration `0002_nullable_day_cutoff` relaxes the column without rewriting stored values,
+  review-day history or existing due times. Existing zero values now mean midnight.
+  The migration is exercised on SQLite, including index/trigger preservation; its
+  PostgreSQL branch is not locally executed.
 - Review reminders and weekly summaries each have an independent 20-hour minimum interval,
   using their existing `sent_at` ledger column. Skipped ticks do not consume a day/week
   entry. This prevents the four-hour day/week-boundary collision without blocking a weekly

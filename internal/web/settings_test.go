@@ -140,7 +140,7 @@ func TestSettingsProfileRejectsInvalidTimezoneAndCutoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload user: %v", err)
 	}
-	if u.Timezone == "Not/AZone" || u.DayCutoffHour == 99 {
+	if u.Timezone == "Not/AZone" || (u.DayCutoffHour != nil && *u.DayCutoffHour == 99) {
 		t.Errorf("invalid values were persisted: timezone=%q cutoff=%d", u.Timezone, u.DayCutoffHour)
 	}
 }
@@ -180,7 +180,7 @@ func TestSettingsCutoffMovesReviewDayBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload user: %v", err)
 	}
-	if u.DayCutoffHour != 13 || u.Timezone != zone {
+	if (u.DayCutoffHour == nil || *u.DayCutoffHour != 13) || u.Timezone != zone {
 		t.Fatalf("stored settings = (cutoff %d, tz %q), want (13, %q)", u.DayCutoffHour, u.Timezone, zone)
 	}
 

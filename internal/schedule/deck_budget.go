@@ -60,7 +60,7 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 	if err != nil {
 		return nil, err
 	}
-	day := ReviewDay(opts.now(), loc, opts.DayCutoffHour)
+	day := ReviewDay(opts.now(), loc, store.ResolveCutoff(opts.DayCutoffHour))
 	usage, err := b.countUsage(ctx, userID, day, ids)
 	if err != nil {
 		return nil, err

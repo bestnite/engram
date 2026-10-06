@@ -220,7 +220,7 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	} else if ok && now.Sub(last) < MinSendInterval {
 		return nil
 	}
-	cutoff := store.NormalizedCutoff(c.DayCutoffHour)
+	cutoff := store.ResolveCutoff(c.DayCutoffHour)
 	day := schedule.ReviewDay(now, loc, cutoff)
 
 	sent, err := store.HasReminderBeenSent(ctx, r.db, c.ID, day)

@@ -100,11 +100,15 @@ func (s *Server) settingsProfileSubmit(c *gin.Context) {
 		s.renderSettingsError(c, loc, &candidate, loc.T("settings.error.timezone_invalid"))
 		return
 	}
-	cutoff, err := strconv.Atoi(rawCutoff)
-	// 0 是内部未配置哨兵；表单只允许实际生效的小时，避免保存午夜却静默回退 04:00。
-	if err != nil || cutoff < 1 || cutoff > 23 {
-		s.renderSettingsError(c, loc, &candidate, loc.T("settings.error.cutoff_invalid"))
-		return
+	// 留空明确使用默认值；0 是午夜，二者不得混用。范围外的提交拒绝且不落库。
+	var cutoff *int
+	if rawCutoff != "" {
+		hour, err := strconv.Atoi(rawCutoff)
+		if err != nil || hour < 0 || hour > 23 {
+			s.renderSettingsError(c, loc, &candidate, loc.T("settings.error.cutoff_invalid"))
+			return
+		}
+		cutoff = store.Ptr(hour)
 	}
 
 	fresh.DisplayName = display
@@ -355,7 +359,7 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		TimezoneHint:        loc.T("settings.profile.timezone_hint"),
 		TimezoneOptions:     zones,
 		CutoffLabel:         loc.T("settings.profile.cutoff_label"),
-		CutoffValue:         strconv.Itoa(store.NormalizedCutoff(user.DayCutoffHour)),
+		CutoffValue:         strconv.Itoa(store.ResolveCutoff(user.DayCutoffHour)),
 		CutoffHint:          loc.T("settings.profile.cutoff_hint"),
 		ProfileSubmit:       loc.T("settings.profile.submit"),
 		PasswordHeading:     loc.T("settings.password.heading"),

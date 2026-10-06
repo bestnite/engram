@@ -20,13 +20,14 @@ type User struct {
 	Email           string     `gorm:"not null;uniqueIndex" json:"email"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	// argon2id；纯 OIDC 账号可以为 NULL。
-	PasswordHash  *string `gorm:"column:password_hash" json:"-"`
-	DisplayName   string  `gorm:"not null" json:"display_name"`
-	Role          string  `gorm:"not null" json:"role"`   // admin | user
-	Status        string  `gorm:"not null" json:"status"` // active | disabled
-	Locale        string  `gorm:"not null" json:"locale"`
-	Timezone      string  `gorm:"not null" json:"timezone"`
-	DayCutoffHour int     `gorm:"not null;default:4" json:"day_cutoff_hour"`
+	PasswordHash *string `gorm:"column:password_hash" json:"-"`
+	DisplayName  string  `gorm:"not null" json:"display_name"`
+	Role         string  `gorm:"not null" json:"role"`   // admin | user
+	Status       string  `gorm:"not null" json:"status"` // active | disabled
+	Locale       string  `gorm:"not null" json:"locale"`
+	Timezone     string  `gorm:"not null" json:"timezone"`
+	// NULL 使用默认 04:00；指针保留显式午夜 0，且不让数据库默认覆盖它。
+	DayCutoffHour *int `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
 	// ReminderHour 是用户选择的本地发送小时（0–23，复习提醒与周报共用）；NULL 表示未设置，
 	// 回落到全局默认 reminder.DefaultSendHour。必须是可空指针：0 是合法值（午夜），用普通
 	// int 加默认值会分不清「未设置」与「午夜」，且 GORM 会把零值当成未提供（AGENTS.md §2.3 第 9 条

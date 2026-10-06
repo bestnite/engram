@@ -41,7 +41,7 @@ type ReminderCandidate struct {
 	Email         string `gorm:"column:email" json:"email"`
 	Locale        string `gorm:"column:locale" json:"locale"`
 	Timezone      string `gorm:"column:timezone" json:"timezone"`
-	DayCutoffHour int    `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
+	DayCutoffHour *int   `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
 	// ReminderHour 是用户选择的本地发送小时；NULL 表示未设置（用全局默认）。
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
 	// DueCount 是该用户当前到期的 card_states 行数（同一张卡对同一用户只计一次）。

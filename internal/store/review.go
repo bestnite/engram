@@ -103,11 +103,8 @@ func (s *ReviewStore) ExportOptimizerLog(ctx context.Context, userID uint64, w i
 		// 列是 NOT NULL，空值只可能来自异常数据；上游要求 IANA 时区字符串，回退 UTC 保证文件合法。
 		tz = "UTC"
 	}
-	dayStart := user.DayCutoffHour
-	if dayStart < 0 || dayStart > 23 {
-		// 上游 day_start 范围是 0-23；越界值会让优化器按错误的日界切分，回退 0。
-		dayStart = 0
-	}
+	// 导出必须与评分、队列及统计使用同一切点：NULL 为 4，显式 0 为午夜。
+	dayStart := ResolveCutoff(user.DayCutoffHour)
 
 	enc := json.NewEncoder(w)
 	return s.StreamByUser(ctx, userID, func(r *Review) error {

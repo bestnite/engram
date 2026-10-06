@@ -58,7 +58,7 @@ func seedOptimizerUserAndPreset(t *testing.T, db *gorm.DB) (*store.User, *store.
 	ctx := context.Background()
 	u := &store.User{
 		Username: "opt-user", Email: "opt-user@example.com", DisplayName: "Opt User",
-		Role: "user", Status: "active", Locale: "en", Timezone: "UTC", DayCutoffHour: 0,
+		Role: "user", Status: "active", Locale: "en", Timezone: "UTC", DayCutoffHour: store.Ptr(0),
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := store.NewUserStore(db).Create(ctx, u); err != nil {

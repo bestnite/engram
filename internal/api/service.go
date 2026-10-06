@@ -746,7 +746,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 
-	day := schedule.ReviewDay(now, userLocation(u.Timezone), u.DayCutoffHour)
+	day := schedule.ReviewDay(now, userLocation(u.Timezone), store.ResolveCutoff(u.DayCutoffHour))
 	var reviewsToday int64
 	if err := a.db.WithContext(ctx).Model(&store.Review{}).
 		Where("user_id = ? AND review_day = ?", u.ID, day).Count(&reviewsToday).Error; err != nil {

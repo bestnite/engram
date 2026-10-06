@@ -26,7 +26,7 @@ func loginAs(t *testing.T, srv *Server, db *gorm.DB, username, role string) (uin
 	u := store.User{
 		Username: username, Email: username + "@example.com", DisplayName: username,
 		PasswordHash: &hash, Role: role, Status: store.StatusActive,
-		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Locale: "zh-CN", Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create user: %v", err)

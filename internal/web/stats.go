@@ -55,7 +55,7 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 	ctx := c.Request.Context()
 	now := time.Now()
 	locTZ := userLocation(user)
-	cutoff := user.DayCutoffHour
+	cutoff := store.ResolveCutoff(user.DayCutoffHour)
 	today := store.ReviewDayString(now, locTZ, cutoff)
 	from30 := store.ShiftReviewDay(today, -29)
 

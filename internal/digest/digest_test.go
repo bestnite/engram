@@ -76,7 +76,7 @@ func seedUser(t *testing.T, db *gorm.DB, name, email, locale, tz string, cutoff 
 	user := store.User{
 		Username: name, Email: email, DisplayName: name, Role: store.RoleUser,
 		Status: store.StatusActive, Locale: locale, Timezone: tz,
-		DayCutoffHour: cutoff, CreatedAt: now,
+		DayCutoffHour: store.Ptr(cutoff), CreatedAt: now,
 	}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)

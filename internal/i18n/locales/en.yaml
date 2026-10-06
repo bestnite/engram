@@ -1320,7 +1320,7 @@
 - id: settings.profile.cutoff_label
   translation: "Review day cutoff (hour 0–23)"
 - id: settings.profile.cutoff_hint
-  translation: "A new day starts at this hour in your local time. It only affects future review days; existing records are unchanged."
+  translation: "A new day starts at this hour in your local time. 0 means midnight; leave blank to use 04:00. It only affects future review days; existing records are unchanged."
 - id: settings.profile.submit
   translation: "Save"
 - id: settings.password.heading
@@ -1342,7 +1342,7 @@
 - id: settings.error.timezone_invalid
   translation: "Unrecognised time zone."
 - id: settings.error.cutoff_invalid
-  translation: "The review day cutoff must be an integer between 1 and 23."
+  translation: "The review day cutoff must be an integer between 0 and 23."
 - id: settings.error.old_password_required
   translation: "Enter your current password."
 - id: settings.error.new_password_required

@@ -74,7 +74,7 @@ func seedExportUser(t *testing.T, db *gorm.DB, id uint64, tz string, cutoff int)
 	u := User{
 		ID: id, Username: "exporter", Email: "exporter@example.com",
 		DisplayName: "Exporter", Role: RoleUser, Status: StatusActive,
-		Locale: "en", Timezone: tz, DayCutoffHour: cutoff, CreatedAt: time.Now().UTC(),
+		Locale: "en", Timezone: tz, DayCutoffHour: Ptr(cutoff), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("seed user: %v", err)

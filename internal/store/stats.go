@@ -599,19 +599,20 @@ const reviewStateNew = 0
 // 归一化规则必须能被这几层共享，且 schedule 依赖 store（反向会成导入环）。
 const DefaultDayCutoffHour = 4
 
-// NormalizedCutoff 归一化日切点：0 表示「未设置」（users.day_cutoff_hour 的零值），
-// 越界值是脏数据，二者都回退到文档化默认 4；其余 1–23 原样返回。
-//
-// 为何以这一份规则为准：复习日（reviews.review_day）只认一种切点口径，写入口是
-// schedule 的复习提交/队列构建（它们本就按「0=未设置」处理）。读侧（统计、连续天数、
-// 提醒、摘要）必须与写入口同口径，否则同一个用户在写侧存成 4 点换日、读侧却按 0 点换日，
-// 「今日复习量」「连续天数」会与库里的 review_day 对不上。store 无法 import schedule
-// （schedule 依赖 store），所以规则的唯一实现落在 store，读侧写侧都调用它。
+// NormalizedCutoff 只为越界的已给定小时兜底；0 是合法的午夜，不能再充当未设置哨兵。
 func NormalizedCutoff(hour int) int {
-	if hour < 0 || hour > 23 || hour == 0 {
+	if hour < 0 || hour > 23 {
 		return DefaultDayCutoffHour
 	}
 	return hour
+}
+
+// ResolveCutoff 在所有消费者的边界解析可空配置，避免队列、统计与优化器各自解释零值。
+func ResolveCutoff(hour *int) int {
+	if hour == nil {
+		return DefaultDayCutoffHour
+	}
+	return NormalizedCutoff(*hour)
 }
 
 // LoadLocation 解析 IANA 时区名；空串或非法名一律回退 UTC，绝不因脏数据阻塞调用方

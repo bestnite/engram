@@ -45,7 +45,7 @@ templ SettingsPage(data SettingsData) {
 					</label>
 					<label class="block">
 						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.CutoffLabel }</span>
-						<input class="mt-1.5 w-32 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-cutoff" name="day_cutoff_hour" type="number" min="1" max="23" value={ data.CutoffValue }/>
+						<input class="mt-1.5 w-32 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="settings-cutoff" name="day_cutoff_hour" type="number" min="0" max="23" value={ data.CutoffValue }/>
 						<p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{ data.CutoffHint }</p>
 					</label>
 					<div class="pt-2">

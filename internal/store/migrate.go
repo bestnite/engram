@@ -27,6 +27,10 @@ var BuiltinMigrations = []Migration{
 		Name: "0001_media_primary_key_sha256",
 		Up:   mediaPrimaryKeySha256,
 	},
+	{
+		Name: "0002_nullable_day_cutoff",
+		Up:   nullableDayCutoff,
+	},
 }
 
 // mediaPrimaryKeySha256 把 media 的主键从自增 id 换成内容 sha256。
@@ -97,13 +101,71 @@ func alterMediaForShaPrimaryKey(tx *gorm.DB) error {
 	return nil
 }
 
+// dayCutoffColumn 只供显式 DDL 使用；业务仍使用 User 同一模型。
+// 增量 DDL 专用形状屏蔽此列，避免 AutoMigrate 在版本化迁移前移除 NOT NULL/default。
+type dayCutoffColumn struct {
+	DayCutoffHour *int `gorm:"column:day_cutoff_hour"`
+}
+
+func (dayCutoffColumn) TableName() string { return "users" }
+
+// 仅在增量 DDL 使用，不作为业务模型：其余用户字段仍直接嵌入唯一的 User 定义。
+type additiveUserSchema struct {
+	User
+	DayCutoffHour *int `gorm:"column:day_cutoff_hour;-:migration"`
+}
+
+func (additiveUserSchema) TableName() string { return "users" }
+
+// nullableDayCutoff 只放宽列约束，不转换既有数值：旧 0 现在明确代表午夜，旧 4 保持不变。
+func nullableDayCutoff(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable("users") || !tx.Migrator().HasColumn("users", "day_cutoff_hour") {
+		return nil
+	}
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		// 驱动重建表时不保留外置索引/触发器，先保存并在同一事务内恢复，避免唯一约束丢失。
+		var objects []struct{ SQL string }
+		if err := tx.Raw("SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL", "users").Scan(&objects).Error; err != nil {
+			return err
+		}
+		if err := tx.Migrator().AlterColumn(&dayCutoffColumn{}, "DayCutoffHour"); err != nil {
+			return err
+		}
+		for _, object := range objects {
+			if err := tx.Exec(object.SQL).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	case "postgres":
+		if err := tx.Exec("ALTER TABLE users ALTER COLUMN day_cutoff_hour DROP NOT NULL").Error; err != nil {
+			return err
+		}
+		return tx.Exec("ALTER TABLE users ALTER COLUMN day_cutoff_hour DROP DEFAULT").Error
+	default:
+		return fmt.Errorf("day cutoff migration: unsupported dialect %q", tx.Dialector.Name())
+	}
+}
+
 // AutoMigrate 只做增量变更（加表/加列/加索引）。
 // 模型清单只有一处：AllModels()。原先这里曾把 TOTP 两表单独并进来，结果两处清单必然分叉，
 // 所以并回一处。
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	models := AllModels()
+	for i, model := range models {
+		if _, ok := model.(*User); ok {
+			models[i] = &additiveUserSchema{}
+		}
+	}
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
+	}
+	// 新库补可空列是加法；旧列的约束只能交给 0002 显式迁移。
+	if !db.Migrator().HasColumn("users", "day_cutoff_hour") {
+		if err := db.WithContext(ctx).Migrator().AddColumn(&dayCutoffColumn{}, "DayCutoffHour"); err != nil {
+			return fmt.Errorf("add nullable day cutoff: %w", err)
+		}
 	}
 	return nil
 }

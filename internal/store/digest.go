@@ -44,7 +44,7 @@ type DigestCandidate struct {
 	Email         string `gorm:"column:email" json:"email"`
 	Locale        string `gorm:"column:locale" json:"locale"`
 	Timezone      string `gorm:"column:timezone" json:"timezone"`
-	DayCutoffHour int    `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
+	DayCutoffHour *int   `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
 	// ReminderHour 是用户选择的本地发送小时；NULL 表示未设置（用全局默认）。周报与复习提醒
 	// 共用同一小时，因此读的是同一列。
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`

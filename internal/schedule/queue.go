@@ -94,8 +94,8 @@ type QueueOptions struct {
 	Location *time.Location
 	// Timezone 是 IANA 时区名，仅在 Location 为 nil 时使用。
 	Timezone string
-	// DayCutoffHour 是复习日切点（本地小时），默认 4。
-	DayCutoffHour int
+	// DayCutoffHour 是复习日切点（本地小时）；nil 默认 4，显式 0 是午夜。
+	DayCutoffHour *int
 	// NewPerDay 是每日新卡上限的调用方覆盖；<= 0 时改读卡组值。
 	NewPerDay int
 	// ReviewsPerDay 是每日复习上限的调用方覆盖；<= 0 时改读卡组值（卡组值为 0 表示不限）。
@@ -120,7 +120,7 @@ type QueueOptions struct {
 func DefaultQueueOptions() QueueOptions {
 	return QueueOptions{
 		Timezone:      DefaultQueueTimezone,
-		DayCutoffHour: DefaultDayCutoffHour,
+		DayCutoffHour: store.Ptr(DefaultDayCutoffHour),
 		NewPerDay:     DefaultNewPerDay,
 		ReviewsPerDay: DefaultReviewsPerDay,
 		ReviewOrder:   OrderByRetrievability,
@@ -135,9 +135,7 @@ func (o QueueOptions) withDefaults() QueueOptions {
 	if o.Timezone == "" {
 		o.Timezone = DefaultQueueTimezone
 	}
-	if o.DayCutoffHour == 0 {
-		o.DayCutoffHour = DefaultDayCutoffHour
-	}
+
 	if o.BatchSize == 0 {
 		o.BatchSize = DefaultReviewBatch
 	}
@@ -436,7 +434,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 	if err != nil {
 		return nil, err
 	}
-	day := ReviewDay(now, loc, opts.DayCutoffHour)
+	day := ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour))
 	usage, err := b.countUsage(ctx, userID, day, ids)
 	if err != nil {
 		return nil, err
@@ -701,10 +699,9 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 // ReviewDay 按用户本地时间与切点计算复习日（YYYY-MM-DD）：本地时间减去 day_cutoff_hour 后取日期，
 // 因此切点之前的凌晨时刻算作前一天（DESIGN.md §3.3）。
 //
-// 切点先经 store.NormalizedCutoff 归一化（0/越界 → 默认 4），与 store.ReviewDayString 同口径：
+// 已解析切点只对越界回退默认 4，午夜 0 保留，与 store.ReviewDayString 同口径：
 // 复习日的写入（本包提交/埋藏）与读取（统计/连续天数/提醒/摘要）必须落在同一天，否则同一个
-// 用户在两侧会看到不同的「今天」。归一化在这里兜底，因此即便调用方直接传原始的
-// users.day_cutoff_hour（如 api/service.go），也自动得到同一口径。
+// 用户在两侧会看到不同的「今天」。可空用户配置先经 ResolveCutoff 解析，计算函数只收有效小时。
 func ReviewDay(now time.Time, loc *time.Location, cutoffHour int) string {
 	if loc == nil {
 		loc = time.UTC

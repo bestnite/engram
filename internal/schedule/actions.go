@@ -246,7 +246,7 @@ type BuryInput struct {
 	// Location/Timezone/DayCutoffHour 决定“明天”的边界。
 	Location      *time.Location
 	Timezone      string
-	DayCutoffHour int
+	DayCutoffHour *int
 }
 
 // Bury 把一张卡埋藏到下一个复习日开始：把它（该用户）的 due_at 推后到下一个切点，
@@ -263,7 +263,7 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 	}
 	now := nowOr(in.Now)
 	loc := queueLocation(in.Location, in.Timezone)
-	due := nextReviewDayStart(now, loc, store.NormalizedCutoff(in.DayCutoffHour))
+	due := nextReviewDayStart(now, loc, store.ResolveCutoff(in.DayCutoffHour))
 
 	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
 	if err != nil {

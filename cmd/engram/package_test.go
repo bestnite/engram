@@ -24,7 +24,7 @@ func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 	u := store.User{
 		Username: "cli_user", Email: "cli_user@example.com", DisplayName: "cli",
 		Role: store.RoleUser, Status: store.StatusActive, Locale: "en",
-		Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create user: %v", err)
@@ -164,7 +164,7 @@ func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string
 	target = store.User{
 		Username: "importer", Email: "importer@example.com", DisplayName: "importer",
 		Role: store.RoleUser, Status: store.StatusActive, Locale: "en",
-		Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&target).Error; err != nil {
 		t.Fatalf("create target user: %v", err)
@@ -249,7 +249,7 @@ func TestCLIImportRejectsAmbiguousUserRef(t *testing.T) {
 	clash := store.User{
 		Username: strconv.FormatUint(existing.ID, 10), Email: "clash@example.com",
 		Role: store.RoleUser, Status: store.StatusActive, Locale: "en",
-		Timezone: "UTC", DayCutoffHour: 4, CreatedAt: time.Now().UTC(),
+		Timezone: "UTC", DayCutoffHour: store.Ptr(4), CreatedAt: time.Now().UTC(),
 	}
 	if err := db.Create(&clash).Error; err != nil {
 		t.Fatalf("create clashing user: %v", err)

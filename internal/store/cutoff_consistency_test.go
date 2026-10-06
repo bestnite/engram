@@ -11,13 +11,11 @@ import (
 // TestReviewDayCutoffNormalizationConsistent 是“口径不一致”的回归用例。
 //
 // store.ReviewDayString 是库内复习日（review_day）口径，schedule.ReviewDay 是调度侧
-// 复习日口径：对同一个 cutoffHour，两边必须算出同一天。0 表示未设置、越界值是脏数据，
-// 两边都必须回退到 schedule.DefaultDayCutoffHour（=4）——这是本仓库既有的“切点 0 = 未设置”
-// 约定（queue.withDefaults）。收敛前该用例对 0 / 25 / -1 三种输入为红。
+// 复习日口径：对同一个 cutoffHour，两边必须算出同一天。0 是午夜，
+// 越界值才回退到默认 4；未配置的 nil 在调用计算之前由 ResolveCutoff 解析。
 func TestReviewDayCutoffNormalizationConsistent(t *testing.T) {
 	loc := time.FixedZone("UTC+8", 8*3600)
-	// 本地 00:30：位于“默认切点 4 点”之前的边界窗口，0 / 25 / -1 三种取值都会算出
-	// 与默认切点不同的复习日，从而能把“未归一化”的每一侧都照出来。
+	// 本地 00:30 能区分午夜与默认 4；越界输入则必须与默认值一致。
 	now := time.Date(2026, 10, 2, 0, 30, 0, 0, loc)
 	defaultDay := schedule.ReviewDay(now, loc, schedule.DefaultDayCutoffHour)
 
@@ -26,7 +24,7 @@ func TestReviewDayCutoffNormalizationConsistent(t *testing.T) {
 		cutoff int
 		want   string
 	}{
-		{"zero means unset -> default", 0, defaultDay},
+		{"zero means midnight", 0, "2026-10-02"},
 		{"over range -> default", 25, defaultDay},
 		{"negative -> default", -1, defaultDay},
 		{"in-range cutoff is kept", 13, schedule.ReviewDay(now, loc, 13)},

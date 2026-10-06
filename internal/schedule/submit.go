@@ -48,7 +48,7 @@ type SubmitInput struct {
 	// Location/Timezone/DayCutoffHour 决定 review_day 的切分（DESIGN.md §3.3）。
 	Location      *time.Location
 	Timezone      string
-	DayCutoffHour int
+	DayCutoffHour *int
 }
 
 // SubmitResult 返回提交后的结果：新状态行、写入的 review id，以及调度结果。
@@ -230,7 +230,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	stability := o.Stability
 	difficulty := o.Difficulty
 	loc := queueLocation(in.Location, in.Timezone)
-	cutoff := store.NormalizedCutoff(in.DayCutoffHour)
+	cutoff := store.ResolveCutoff(in.DayCutoffHour)
 	// 评分前的剩余学习步骤快照（M3-9）。全新卡没有状态行，base.StepIndex 为 0，
 	// 正是“评分前”的值；已有状态行则取它评分前的 step_index。
 	stepIndexBefore := 0
