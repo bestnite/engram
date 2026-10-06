@@ -50,6 +50,12 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.GET("/api/v1/session", s.apiSession)
 	router.POST("/api/v1/auth/login", auth.DoubleSubmitMiddleware(), s.apiLogin)
 	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
+
+	// SPA 登录入口（迁移目标路径 /spa/login）：SSR 的 GET/POST /login 保持原样、不被遮蔽。
+	// 只返回应用壳并初始化会话前双提交 cookie，登录协议仍是上面的 JSON 端点。
+	if s.spa != nil {
+		router.GET("/spa/login", s.spaLoginShell)
+	}
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。

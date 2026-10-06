@@ -60,4 +60,17 @@ describe('SPA router matching and query parsing', () => {
     expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
   });
+
+  it('exposes the SPA login entry at /spa/login without removing SSR /login', async () => {
+    const { routes: prodRoutes } = await import('../lib/router/routes');
+
+    // SPA 迁移目标路径：服务端 GET /spa/login 返回应用壳并初始化双提交 cookie。
+    const spaLogin = matchRoute('/spa/login', prodRoutes);
+    expect(spaLogin.route?.name).toBe('spa-login');
+    expect(spaLogin.params).toEqual({});
+
+    // SSR /login 仍保留在同一前端路由表内（客户端导航用），不被遮蔽。
+    const ssrLogin = matchRoute('/login', prodRoutes);
+    expect(ssrLogin.route?.name).toBe('login');
+  });
 });
