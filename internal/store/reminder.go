@@ -41,6 +41,8 @@ type ReminderCandidate struct {
 	Locale        string `gorm:"column:locale" json:"locale"`
 	Timezone      string `gorm:"column:timezone" json:"timezone"`
 	DayCutoffHour int    `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
+	// ReminderHour 是用户选择的本地发送小时；NULL 表示未设置（用全局默认）。
+	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
 	// DueCount 是该用户当前到期的 card_states 行数（同一张卡对同一用户只计一次）。
 	DueCount int64 `gorm:"column:due_count" json:"due_count"`
 }
@@ -54,12 +56,12 @@ func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]Remi
 	var out []ReminderCandidate
 	err := db.WithContext(ctx).Table("users AS u").
 		Select("u.id AS id, u.email AS email, u.locale AS locale, u.timezone AS timezone, "+
-			"u.day_cutoff_hour AS day_cutoff_hour, COUNT(cs.card_id) AS due_count").
+			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour, COUNT(cs.card_id) AS due_count").
 		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.due_at IS NOT NULL AND cs.due_at <= ?", now.UTC()).
 		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL").
 		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
 		Where("u.status = ? AND u.email <> ''", StatusActive).
-		Group("u.id, u.email, u.locale, u.timezone, u.day_cutoff_hour").
+		Group("u.id, u.email, u.locale, u.timezone, u.day_cutoff_hour, u.reminder_hour").
 		Order("u.id asc").
 		Scan(&out).Error
 	if err != nil {

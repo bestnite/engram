@@ -2177,3 +2177,15 @@
   translation: "The package references media you cannot read."
 - id: import.error.package_media_forbidden
   translation: "The package references media you cannot read."
+# Per-user reminder & digest send hour (mail.prefs.reminder_time.*): the review reminder and the
+# weekly digest share one local hour; empty selection means the site default. Appended by this task.
+- id: mail.prefs.reminder_time.heading
+  translation: "Reminder and weekly report time"
+- id: mail.prefs.reminder_time.label
+  translation: "Send at (your local time)"
+- id: mail.prefs.reminder_time.hint
+  translation: "Uses your timezone ({{.tz}}). The review reminder and the weekly report are sent at the first check after this hour."
+- id: mail.prefs.reminder_time.default
+  translation: "Site default ({{.hour}}:00)"
+- id: mail.prefs.error.reminder_hour_invalid
+  translation: "Send time must be a whole hour from 0 to 23, or left as the site default."

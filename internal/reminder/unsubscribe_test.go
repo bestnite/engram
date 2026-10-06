@@ -23,7 +23,7 @@ func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	translator, err := i18n.New()
 	if err != nil {
 		t.Fatalf("i18n.New: %v", err)
@@ -77,7 +77,7 @@ func TestReminderWithoutTokenServiceHasNoUnsubscribeHeader(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	if err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)

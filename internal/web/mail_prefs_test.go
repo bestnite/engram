@@ -222,6 +222,88 @@ func TestMailPrefsRejectsMissingCSRF(t *testing.T) {
 	}
 }
 
+// TestMailPrefsReminderTimeRoundTrips 验收「发送时间」控件的读写：
+//   - 页面渲染出 name="reminder_hour" 的下拉与本地化的「站点默认（19:00）」选项；
+//   - 保存 7 点后 users.reminder_hour = 7，页面该选项被选中；
+//   - 保存 0 点后存的是 0（午夜），绝不是 NULL；
+//   - 选回「站点默认」（空串）后列被清成 NULL；
+//   - 非法值（99）以 400 拒绝且不改动已存的值。
+func TestMailPrefsReminderTimeRoundTrips(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	setOwnerLocale(t, db, ownerID, "en")
+	users := store.NewUserStore(db)
+
+	page := getWithCookies(t, srv, "/settings/notifications", cookies)
+	if page.Code != http.StatusOK {
+		t.Fatalf("GET /settings/notifications status = %d, want 200", page.Code)
+	}
+	body := page.Body.String()
+	if !strings.Contains(body, `name="reminder_hour"`) {
+		t.Fatalf("preferences page has no reminder_hour select (body %s)", snippet(body))
+	}
+	if !strings.Contains(body, "Site default (19:00)") {
+		t.Errorf("preferences page is missing the localized site-default option")
+	}
+
+	save := func(value string) *httptest.ResponseRecorder {
+		t.Helper()
+		return postForm(t, srv, "/settings/notifications", url.Values{
+			"csrf_token":    {csrf},
+			"reminder_hour": {value},
+		}, cookies)
+	}
+	load := func() *store.User {
+		t.Helper()
+		u, err := users.ByID(context.Background(), ownerID)
+		if err != nil {
+			t.Fatalf("load owner: %v", err)
+		}
+		return u
+	}
+
+	// 保存 7 点。
+	if rec := save("7"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("saving hour 7 status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if u := load(); u.ReminderHour == nil || *u.ReminderHour != 7 {
+		t.Fatalf("stored reminder_hour = %v, want 7", u.ReminderHour)
+	}
+	afterSeven := getWithCookies(t, srv, "/settings/notifications", cookies).Body.String()
+	if !strings.Contains(afterSeven, `value="7" selected`) {
+		t.Errorf("hour 7 option is not rendered as selected after saving")
+	}
+
+	// 保存 0 点：午夜必须存成 0，绝不能和「未设置」混在一起。
+	if rec := save("0"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("saving hour 0 status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if u := load(); u.ReminderHour == nil {
+		t.Fatal("explicit 0 was stored as NULL: midnight and unset are conflated")
+	} else if *u.ReminderHour != 0 {
+		t.Fatalf("stored reminder_hour = %d, want 0", *u.ReminderHour)
+	}
+
+	// 选回「站点默认」（空串）：列清成 NULL。
+	if rec := save(""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("saving the site default status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if u := load(); u.ReminderHour != nil {
+		t.Fatalf("after choosing the site default reminder_hour = %d, want NULL", *u.ReminderHour)
+	}
+
+	// 非法值：400，且不写入。
+	rec := save("99")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("saving hour 99 status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), "0 to 23") {
+		t.Errorf("rejection page does not explain the valid range: %s", snippet(rec.Body.String()))
+	}
+	if u := load(); u.ReminderHour != nil {
+		t.Fatalf("a rejected reminder_hour wrote %d, want no change (NULL)", *u.ReminderHour)
+	}
+}
+
 // TestMailPrefsCatalogKeysExistInBothCatalogs 断言目录与页面引用的每个语言包键在中英两套里都存在：
 // 目录标签是动态拼接的（loc.T(def.LabelKey)），静态 key 扫描器看不见它们，必须在这里兜底。
 func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
@@ -240,6 +322,11 @@ func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 		"mail.prefs.locked",
 		"mail.prefs.error.unknown_type",
 		"mail.prefs.error.class_locked",
+		"mail.prefs.reminder_time.heading",
+		"mail.prefs.reminder_time.label",
+		"mail.prefs.reminder_time.hint",
+		"mail.prefs.reminder_time.default",
+		"mail.prefs.error.reminder_hour_invalid",
 	}
 	for _, class := range mail.ClassOrder() {
 		// 只断言标题键：分组说明（.note）已按「文案从简」移除，页面上不再有那几行。

@@ -44,13 +44,16 @@ type DigestCandidate struct {
 	Locale        string `gorm:"column:locale" json:"locale"`
 	Timezone      string `gorm:"column:timezone" json:"timezone"`
 	DayCutoffHour int    `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
+	// ReminderHour 是用户选择的本地发送小时；NULL 表示未设置（用全局默认）。周报与复习提醒
+	// 共用同一小时，因此读的是同一列。
+	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
 }
 
 // DigestCandidates 返回所有可收信的活跃用户（有邮箱）。按 id 升序，保证每轮顺序稳定。
 func DigestCandidates(ctx context.Context, db *gorm.DB) ([]DigestCandidate, error) {
 	var out []DigestCandidate
 	err := db.WithContext(ctx).Table("users").
-		Select("id AS id, email AS email, locale AS locale, timezone AS timezone, day_cutoff_hour AS day_cutoff_hour").
+		Select("id AS id, email AS email, locale AS locale, timezone AS timezone, day_cutoff_hour AS day_cutoff_hour, reminder_hour AS reminder_hour").
 		Where("status = ? AND email <> ''", StatusActive).
 		Order("id asc").
 		Scan(&out).Error
