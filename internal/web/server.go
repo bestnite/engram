@@ -310,6 +310,9 @@ func New(addr string, deps Deps) (*Server, error) {
 		profile.GET("/profile", s.spaProfileGet)
 		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.spaProfilePatch)
 		profile.PATCH("/settings/locale", deps.Sessions.CSRFMiddleware(), s.spaLocalePatch)
+		if deps.Accounts != nil {
+			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.spaPasswordPatch)
+		}
 	}
 	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
 	s.registerPWARoutes(router)

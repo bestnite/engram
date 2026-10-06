@@ -16,6 +16,11 @@
   let serverApiAvailable = $state<boolean | null>(null);
   let savedNotice = $state<string | null>(null);
   let generalError = $state<string | null>(null);
+  let passwordError = $state<string | null>(null);
+  let passwordNotice = $state<string | null>(null);
+  let passwordSaving = $state(false);
+  let oldPassword = $state('');
+  let newPassword = $state('');
   let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour', string>>>({});
 
   // 表单字段绑定
@@ -142,6 +147,15 @@
     } finally {
       saving = false;
     }
+  }
+
+  async function handlePasswordSubmit(event: Event): Promise<void> {
+    event.preventDefault(); passwordError = null; passwordNotice = null; passwordSaving = true;
+    try { await apiClient.changePassword({ old_password: oldPassword, new_password: newPassword }); oldPassword = ''; newPassword = ''; passwordNotice = 'settings.password.changed'; }
+    catch (err) {
+      const code = err instanceof ApiClientError ? err.code : '';
+      passwordError = ({ invalid_current_password: 'settings.password.current_wrong', password_rejected: 'settings.password.rejected', password_unchanged: 'settings.password.unchanged', password_unavailable: 'settings.password.unavailable', invalid_request: 'settings.password.invalid' } as Record<string, string>)[code] || getApiErrorMessageKey(err);
+    } finally { passwordSaving = false; }
   }
 
   onMount(() => {
@@ -309,6 +323,16 @@
               {$t(saving ? 'settings.profile.saving' : 'settings.profile.submit')}
             </button>
           </div>
+        </form>
+      </section>
+      <section class="card-subtle p-6 rounded-xl space-y-5 mt-6" data-testid="settings-password">
+        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.password.heading')}</h2>
+        {#if passwordError}<p role="alert">{$t(passwordError)}</p>{/if}
+        {#if passwordNotice}<p role="status">{$t(passwordNotice)}</p>{/if}
+        <form onsubmit={handlePasswordSubmit} class="space-y-4">
+          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.old_label')}</span><input type="password" autocomplete="current-password" bind:value={oldPassword} required class="w-full rounded-xl border px-3.5 py-2.5 text-sm" /></label>
+          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="w-full rounded-xl border px-3.5 py-2.5 text-sm" /></label>
+          <button type="submit" disabled={passwordSaving} class="rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</button>
         </form>
       </section>
     {/if}
