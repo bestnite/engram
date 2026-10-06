@@ -144,8 +144,11 @@ engram/
 │   ├── mcp/                  # MCP server: tool definitions that call the services
 │   ├── i18n/                 # locales/{zh-CN,en}.yaml plus loader and translator
 │   └── web/                  # gin routes, handlers, templ views, static assets
-└── test/                     # integration tests
 ```
+
+There is no top-level `test/` directory: integration coverage lives beside the code as
+`internal/<package>/*_test.go`, using `httptest` for handlers and a real SQLite database (file
+or in-memory) for storage.
 
 ---
 
