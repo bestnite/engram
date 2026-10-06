@@ -155,7 +155,7 @@ templ NoteEditPage(data NoteEditData) {
 			}
 			<div class="grid gap-8 lg:grid-cols-2">
 				<div class="space-y-6">
-					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action }>
+					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action } data-note-form>
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<input type="hidden" name="note_id" value={ data.NoteID }/>
 						for _, field := range data.Fields {
@@ -170,6 +170,7 @@ templ NoteEditPage(data NoteEditData) {
 						</div>
 					</form>
 					@MediaUploadForm(data.Upload, data.CSRF)
+					@MediaPickerPanel(data.Picker)
 				</div>
 				<div id="note-preview">
 					@NotePreviewFragment(data.Preview)
@@ -224,7 +225,7 @@ templ NoteCreatePage(data NewNoteData) {
 			}
 			<div class="grid gap-8 lg:grid-cols-2">
 				<div class="space-y-6">
-					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action }>
+					<form class="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4" method="post" action={ data.Action } data-note-form>
 						<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 						<label class="block">
 							<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.KindLabel }</span>
@@ -239,6 +240,7 @@ templ NoteCreatePage(data NewNoteData) {
 						</div>
 					</form>
 					@MediaUploadForm(data.Upload, data.CSRF)
+					@MediaPickerPanel(data.Picker)
 				</div>
 				<div id="note-preview">
 					@NotePreviewFragment(data.Preview)

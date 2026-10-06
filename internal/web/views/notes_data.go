@@ -145,6 +145,7 @@ type NewNoteData struct {
 	ErrorMessage string
 	Preview      NotePreviewData
 	Upload       MediaUploadData
+	Picker       MediaPickerData
 }
 
 // NoteEditData 是卡片编辑页（M2-7）的渲染数据。
@@ -166,9 +167,37 @@ type NoteEditData struct {
 	DeletedNotice string
 	Preview       NotePreviewData
 	Upload        MediaUploadData
+	Picker        MediaPickerData
 }
 
-// PreviewCard 是一张卡渲染后的正反面 HTML 片段。
+// MediaPickerData 是编辑页上「从媒体库选择」入口的数据（选择器面板）。
+// Disabled 为 true 时（媒体存储或 service 未装配）不渲染入口。
+type MediaPickerData struct {
+	Disabled  bool
+	OpenLabel string
+	URL       string
+}
+
+// MediaPickerListID 是选择器片段的根元素 id：入口与翻页都以此为目标做 htmx 局部替换。
+const MediaPickerListID = "media-picker-list"
+
+// MediaPickerItem 是选择器里的一项：缩略预览走原图（不生成缩略图，DESIGN.md §6.3 原则），
+// 由 CSS 限尺寸 + loading="lazy" 承担；点击把 InsertURL 以 Markdown 图片语法插入聚焦字段。
+type MediaPickerItem struct {
+	Sha256    string
+	Src       string
+	InsertURL string
+}
+
+// MediaPickerFragmentData 是选择器片段（htmx 返回，不含整页外壳）的渲染数据。
+type MediaPickerFragmentData struct {
+	Heading   string
+	Empty     string
+	NextLabel string
+	NextURL   string
+	Items     []MediaPickerItem
+}
+
 type PreviewCard struct {
 	TemplateLabel string
 	FrontHTML     string

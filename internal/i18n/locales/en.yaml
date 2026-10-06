@@ -2189,3 +2189,12 @@
   translation: "Site default ({{.hour}}:00)"
 - id: mail.prefs.error.reminder_hour_invalid
   translation: "Send time must be a whole hour from 0 to 23, or left as the site default."
+# media picker (edit-page "choose from library" launcher and fragment)
+- id: media.picker.open
+  translation: "Choose from library"
+- id: media.picker.heading
+  translation: "Media library"
+- id: media.picker.empty
+  translation: "Your media library is empty; upload an image first."
+- id: media.picker.next
+  translation: "Next"
