@@ -87,6 +87,13 @@ func NewAuthenticator(cfg AuthConfig) (*Authenticator, error) {
 // bearer 通道在这里完成校验、刷 last_used_at、按 key 限流并写带 api_key_id 的审计。
 func (a *Authenticator) Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// MCP 只接受 API key；先拒绝 cookie 通道，避免普通 REST 的 CSRF 规则覆盖 401（DESIGN.md §7.4、§11）。
+		if c.Request.URL.Path == "/mcp" {
+			if _, ok := bearerToken(c.Request); !ok {
+				abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
+				return
+			}
+		}
 		if token, ok := bearerToken(c.Request); ok {
 			a.authenticateKey(c, token)
 			return
