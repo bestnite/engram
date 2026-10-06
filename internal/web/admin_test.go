@@ -105,6 +105,8 @@ func TestAdminSettingsRejectInvalidValues(t *testing.T) {
 // 且只在没有 ?lang / 用户设置 / Accept-Language 时作为最后一级回退。
 func TestAdminDefaultLocaleAppliesWithoutRestart(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
+	// 断言站点默认语言作用在 SSR 首页的 <html lang>，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	if rec := postForm(t, srv, "/admin/settings", url.Values{
 		"csrf_token": {csrf}, "site.default_locale": {"en"},
 	}, cookies); rec.Code != http.StatusSeeOther {

@@ -8,7 +8,7 @@ import (
 
 // TestHomeNoMathFormula 断言首页不再渲染演示公式（UI request 第 2 项：移除首页数学公式）。
 func TestHomeNoMathFormula(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	body := get(t, srv, "/", nil).Body.String()
 	if strings.Contains(body, "a^2 + b^2") {
 		t.Errorf("home page still renders the demo math formula: %s", snippet(body))
@@ -20,7 +20,7 @@ func TestHomeNoMathFormula(t *testing.T) {
 func TestFooterLinksToRepository(t *testing.T) {
 	const want = `href="https://git.nite07.com/nite/engram"`
 
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	if body := get(t, srv, "/", nil).Body.String(); !strings.Contains(body, want) {
 		t.Errorf("home footer does not link to the repository: %s", snippet(body))
 	}
@@ -63,7 +63,7 @@ func TestLanguageSelectorOnPlainPage(t *testing.T) {
 		t.Errorf("signed-in settings page does not render the language form: %s", snippet(body))
 	}
 
-	anon := get(t, newRenderServer(t, nil), "/", nil).Body.String()
+	anon := get(t, newSSRServer(t, nil), "/", nil).Body.String()
 	if !strings.Contains(anon, `href="/?lang=en"`) {
 		t.Errorf("anonymous home page does not render the ?lang= link: %s", snippet(anon))
 	}
@@ -73,6 +73,8 @@ func TestLanguageSelectorOnPlainPage(t *testing.T) {
 // （UI request 第 4 项）。它只加一个指向既有 /settings 的导航链接，不新增页面。
 func TestSettingsNavVisibleToSignedInUsers(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// 断言 SSR 页头导航里的 /settings 链接，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	for _, path := range []string{"/", "/settings"} {
 		body := getWithCookies(t, srv, path, cookies).Body.String()
 		if !strings.Contains(body, `href="/settings"`) {
@@ -80,7 +82,7 @@ func TestSettingsNavVisibleToSignedInUsers(t *testing.T) {
 		}
 	}
 
-	anon := get(t, newRenderServer(t, nil), "/", nil).Body.String()
+	anon := get(t, newSSRServer(t, nil), "/", nil).Body.String()
 	if strings.Contains(anon, `href="/settings"`) {
 		t.Errorf("anonymous home page advertises /settings: %s", snippet(anon))
 	}

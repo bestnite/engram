@@ -16,10 +16,21 @@ import (
 
 // newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。
 // M1-25 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
+// 注意：它同时被 SPA 资源/回退用例复用，因此这里不置空 spa；需要断言 SSR 首页的用例
+// 自行设置 srv.spa = nil 走 homeRoute 的 SSR 回退分支。
 func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
 	t.Helper()
 	srv := newFreshServer(t, userLocale)
 	seedActiveAdmin(t, srv)
+	return srv
+}
+
+// newSSRServer 构造一个强制走 SSR 回退分支的测试服务：在 newRenderServer 之上置空 spa，
+// 使 GET / 落到 homeRoute 的 SSR 首页分支（模板文案、本地化、哈希资源引用都在这里断言）。
+func newSSRServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
+	t.Helper()
+	srv := newRenderServer(t, userLocale)
+	srv.spa = nil
 	return srv
 }
 
@@ -72,7 +83,7 @@ func get(t *testing.T, srv *Server, target string, headers map[string]string) *h
 
 // TestHomeRendersHashedStaticAssets 断言页面源码引用的是哈希化路径（M0-9 验收点）。
 func TestHomeRendersHashedStaticAssets(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	assets := srv.assets
 
 	rec := get(t, srv, "/", nil)
@@ -110,7 +121,7 @@ func TestHomeRendersHashedStaticAssets(t *testing.T) {
 
 // TestStaticRouteServesEmbeddedAsset 断言 /static/v/<hash>/... 路由已接入并返回内容。
 func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	url := srv.assets.URL("js/htmx.min.js")
 	if url == "" {
 		t.Fatal("htmx asset is not embedded")
@@ -126,7 +137,7 @@ func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 
 // TestHomeLocalizesByAcceptLanguage 断言相同路径按 Accept-Language 返回不同语言。
 func TestHomeLocalizesByAcceptLanguage(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 
 	zh := get(t, srv, "/", nil).Body.String()
 	if !strings.Contains(zh, "今日复习") {
@@ -147,7 +158,7 @@ func TestHomeLocalizesByAcceptLanguage(t *testing.T) {
 
 // TestHomeExplicitLangBeatsHeader 断言 ?lang 是最高优先级的显式覆盖。
 func TestHomeExplicitLangBeatsHeader(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	body := get(t, srv, "/?lang=en", map[string]string{"Accept-Language": "zh-CN,zh;q=0.9"}).Body.String()
 	if !strings.Contains(body, "Today") {
 		t.Errorf("?lang=en did not override Accept-Language; body = %s", snippet(body))
@@ -156,7 +167,7 @@ func TestHomeExplicitLangBeatsHeader(t *testing.T) {
 
 // TestUserLocaleSettingBeatsAcceptLanguage 断言用户设置优先于 Accept-Language（M0-8 验收点）。
 func TestUserLocaleSettingBeatsAcceptLanguage(t *testing.T) {
-	srv := newRenderServer(t, func(c *gin.Context) string { return "zh-CN" })
+	srv := newSSRServer(t, func(c *gin.Context) string { return "zh-CN" })
 	body := get(t, srv, "/", map[string]string{"Accept-Language": "en-US,en;q=0.9"}).Body.String()
 	if !strings.Contains(body, "今日复习") {
 		t.Errorf("user locale setting did not beat Accept-Language; body = %s", snippet(body))
@@ -202,6 +213,8 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := newFreshServer(t, nil)
+			// 断言 SSR 首页内容（重定向窗口与管理员已存在时的 200 正文），显式走回退分支。
+			srv.spa = nil
 			if tc.seed != nil {
 				tc.seed.CreatedAt = time.Now().UTC()
 				if err := srv.users.Create(context.Background(), tc.seed); err != nil {
