@@ -671,3 +671,35 @@ export interface TOTPRecoveryResponse {
   recovery_remaining: number;
 }
 
+/**
+ * 邮件通知偏好接口（DESIGN.md §4.7、§8.1，Go: internal/web/spa_mail_prefs.go）。
+ *
+ * 分组与开关由服务端从 internal/mail 目录推导；前端只按稳定标识查自己的语言包，
+ * 不另列一份类型清单。reminder_hour 为 null 表示站点默认，0–23 是显式小时（0 是合法午夜）。
+ */
+export interface NotificationPrefType {
+  type: string;
+  enabled: boolean;
+  locked: boolean;
+}
+
+export interface NotificationPrefGroup {
+  class: string;
+  types: NotificationPrefType[];
+}
+
+/** GET /api/v1/settings/notifications 响应。 */
+export interface NotificationPrefsResponse {
+  groups: NotificationPrefGroup[];
+  reminder_hour: number | null;
+  default_reminder_hour: number;
+  timezone: string;
+}
+
+/** PATCH /api/v1/settings/notifications 请求；choices 缺席的键按关闭处理（与复选框缺席一致）。 */
+export interface UpdateNotificationPrefsRequest {
+  choices: Record<string, boolean>;
+  reminder_hour: number | null;
+}
+
+

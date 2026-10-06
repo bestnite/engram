@@ -41,6 +41,8 @@ import {
   type TOTPConfirmResponse,
   type TOTPDisableResponse,
   type TOTPRecoveryResponse,
+  type NotificationPrefsResponse,
+  type UpdateNotificationPrefsRequest,
 } from './types';
 
 /**
@@ -641,6 +643,22 @@ export class ApiClient {
     return this.request<TOTPRecoveryResponse>('/api/v1/settings/totp/recovery', {
       method: 'POST',
       body: JSON.stringify({ password }),
+    });
+  }
+
+  /** 读取邮件通知偏好（GET /api/v1/settings/notifications，仅会话）；开关由服务端按目录推导。 */
+  async getNotificationPrefs(): Promise<NotificationPrefsResponse> {
+    return this.request<NotificationPrefsResponse>('/api/v1/settings/notifications');
+  }
+
+  /** 保存邮件通知偏好（PATCH /api/v1/settings/notifications）；写操作需要会话 CSRF。 */
+  async updateNotificationPrefs(data: UpdateNotificationPrefsRequest): Promise<NotificationPrefsResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<NotificationPrefsResponse>('/api/v1/settings/notifications', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     });
   }
 
