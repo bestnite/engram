@@ -4,7 +4,7 @@ import {
   ApiClientError,
   getApiErrorMessageKey,
 } from '../lib/api';
-import type { DecksResponse, StatsSummary, DueCardsResponse } from '../lib/api';
+import type { DecksResponse, StatsSummary, StatsDetail, DueCardsResponse } from '../lib/api';
 import { formatMessage } from '../lib/i18n';
 
 describe('Centralized typed same-origin REST API client', () => {
@@ -845,6 +845,76 @@ describe('Centralized typed same-origin REST API client', () => {
         const apiErr = err as ApiClientError;
         expect(apiErr.status).toBe(403);
         expect(apiErr.isForbidden).toBe(true);
+        return true;
+      });
+    });
+  });
+
+  describe('GET /api/v1/stats/detail data wiring and contract fixtures', () => {
+    it('requests GET /api/v1/stats/detail with same-origin credentials and parses the raw measures', async () => {
+      // 与 Go 测试 internal/web/spa_stats_test.go:TestSPAStatsDetailMatchesStoreMeasures 同源。
+      const goFixture: StatsDetail = {
+        generated_at: '2026-10-06T12:00:00Z',
+        empty: false,
+        volume: { today: 2, last_7_days: 3, last_30_days: 3 },
+        due: { today: 1, tomorrow: 0, within_7_days: 0, within_30_days: 0, later: 0, new_not_due: 0 },
+        retention: {
+          total: 2,
+          passed: 2,
+          rate: 1,
+          buckets: [{ label: '1-7d', total: 2, passed: 2, rate: 1 }],
+        },
+        time_spent: { total_ms: 3000, count: 2, avg_ms: 1500, median_ms: 1500 },
+        streak: { current: 2, longest: 2 },
+        curve: [{ day: '2026-10-06', new: 0, review: 2 }],
+        decks: [
+          { deck_id: 1, name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
+        ],
+        tags: [{ tag: 'algebra', reviews: 3, retention: 2 / 3 }],
+        grades: [
+          { source: 'self', count: 2 },
+          { source: 'typed', count: 1 },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify(goFixture), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getStatsDetail();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/stats/detail');
+      expect(init?.credentials).toBe('same-origin');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('Accept')).toBe('application/json');
+      expect(headers.has('Authorization')).toBe(false);
+
+      expect(result).toEqual(goFixture);
+      expect(result.volume.today).toBe(2);
+      expect(result.due.today).toBe(1);
+      expect(result.decks[0]?.name).toBe('Stats deck');
+    });
+
+    it('handles 401 Unauthorized for stats/detail', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'unauthorized', message: 'Authentication required' },
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+      await expect(client.getStatsDetail()).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(401);
+        expect(apiErr.isUnauthorized).toBe(true);
         return true;
       });
     });

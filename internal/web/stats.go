@@ -23,6 +23,9 @@ func (s *Server) registerStatsRoutes(router *gin.Engine) {
 		return
 	}
 	router.GET("/stats", s.statsPage)
+	// SPA 统计明细接口：只读、只接受浏览器会话（不走 /api/v1 的 API Key 组），
+	// 与 /stats 共用同一批 store 聚合，口径不会分叉（DESIGN.md §8.1、§9）。
+	router.GET("/api/v1/stats/detail", s.spaStatsDetail)
 }
 
 // statsPage 渲染统计页；匿名访问被重定向到登录页。
@@ -49,54 +52,16 @@ func (s *Server) statsPage(c *gin.Context) {
 
 // statsData 调用 StatsStore 的聚合查询并把结果排版成渲染数据。
 //
-// now 只取一次：所有指标共用同一个时刻与同一个复习日窗口，页面内部不会自相矛盾。
-// 日期窗口是 review_day 格式的闭区间：近 30 日 = [today-29, today]（DESIGN.md §9）。
+// 取数交给 collectStatsMeasures：now 只取一次，所有指标共用同一个时刻与同一个复习日窗口，
+// 页面内部不会自相矛盾。日期窗口是 review_day 格式的闭区间：近 30 日 = [today-29, today]
+// （DESIGN.md §9）。SPA 明细接口复用同一份编排，两个界面的口径因此逐项一致。
 func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User) (views.StatsData, error) {
-	ctx := c.Request.Context()
-	now := time.Now()
-	locTZ := userLocation(user)
-	cutoff := store.ResolveCutoff(user.DayCutoffHour)
-	today := store.ReviewDayString(now, locTZ, cutoff)
-	from30 := store.ShiftReviewDay(today, -29)
-
-	stats := store.NewStatsStore(s.db)
-
-	volume, err := stats.ReviewVolume(ctx, user.ID, today)
+	m, err := s.collectStatsMeasures(c.Request.Context(), user)
 	if err != nil {
 		return views.StatsData{}, err
 	}
-	due, err := stats.DueForecast(ctx, user.ID, 0, now, locTZ, cutoff)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	retention, err := stats.RetentionByStability(ctx, user.ID, 0)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	timeSpent, err := stats.TimeSpent(ctx, user.ID, from30, today)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	streak, err := stats.Streak(ctx, user.ID, now, locTZ, cutoff)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	curve, err := stats.LearningCurve(ctx, user.ID, from30, today)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	decks, err := stats.DeckBreakdown(ctx, user.ID, now)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	tags, err := stats.TagBreakdown(ctx, user.ID, from30, today)
-	if err != nil {
-		return views.StatsData{}, err
-	}
-	grades, err := stats.GradeSourceDistribution(ctx, user.ID)
-	if err != nil {
-		return views.StatsData{}, err
-	}
+	volume, due, retention, timeSpent := m.Volume, m.Due, m.Retention, m.TimeSpent
+	streak, curve, decks, tags, grades := m.Streak, m.Curve, m.Decks, m.Tags, m.Grades
 
 	data := views.StatsData{
 		Layout:           s.pageLayout(c, loc, "stats.title"),

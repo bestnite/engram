@@ -149,6 +149,91 @@ export interface StatsSummary {
 }
 
 /**
+ * 统计明细（与 Go 后端 internal/web/spa_stats.go 的 spaStatsDetail 对齐）
+ * DESIGN.md §9：与 SSR 统计页同源，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
+ */
+export interface StatsVolume {
+  today: number;
+  last_7_days: number;
+  last_30_days: number;
+}
+
+export interface StatsDue {
+  today: number;
+  tomorrow: number;
+  within_7_days: number;
+  within_30_days: number;
+  later: number;
+  new_not_due: number;
+}
+
+export interface StatsRetentionBucket {
+  label: string;
+  total: number;
+  passed: number;
+  rate: number;
+}
+
+export interface StatsRetention {
+  total: number;
+  passed: number;
+  rate: number;
+  buckets: StatsRetentionBucket[];
+}
+
+export interface StatsTimeSpent {
+  total_ms: number;
+  count: number;
+  avg_ms: number;
+  median_ms: number;
+}
+
+export interface StatsStreak {
+  current: number;
+  longest: number;
+}
+
+export interface StatsCurvePoint {
+  day: string;
+  new: number;
+  review: number;
+}
+
+export interface StatsDeck {
+  deck_id: number;
+  name: string;
+  due_count: number;
+  reviews: number;
+  retention: number;
+  elapsed_ms: number;
+}
+
+export interface StatsTag {
+  tag: string;
+  reviews: number;
+  retention: number;
+}
+
+export interface StatsGradeSource {
+  source: string;
+  count: number;
+}
+
+export interface StatsDetail {
+  generated_at: string;
+  empty: boolean;
+  volume: StatsVolume;
+  due: StatsDue;
+  retention: StatsRetention;
+  time_spent: StatsTimeSpent;
+  streak: StatsStreak;
+  curve: StatsCurvePoint[];
+  decks: StatsDeck[];
+  tags: StatsTag[];
+  grades: StatsGradeSource[];
+}
+
+/**
  * 到期卡片对外形态（与 Go 后端 internal/api/service.go:DueCard 对齐）
  * DESIGN.md §3.3、§7.3
  */
