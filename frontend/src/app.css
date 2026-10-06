@@ -1,0 +1,102 @@
+/* Tailwind CSS v4 样式入口（DESIGN.md §8、§10.1）
+   保留现有 Tailwind v4 设计体系与样式令牌，接入 Vite 构建。 */
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  /* 现代高质量排版基底：平滑字体、优化数字与连字 */
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+    letter-spacing: -0.011em;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /* 可见焦点：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示 */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid #18181b;
+    outline-offset: 2px;
+  }
+
+  html.dark :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline-color: #f4f4f5;
+  }
+
+  /* 优化选中与滚动条 */
+  ::selection {
+    background-color: #e4e4e7;
+    color: #18181b;
+  }
+
+  html.dark ::selection {
+    background-color: #3f3f46;
+    color: #fafafa;
+  }
+
+  /* 细化滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d4d4d8;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a1a1aa;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    background: #52525b;
+  }
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: #71717a;
+  }
+}
+
+/* 复习计数器深色配色 */
+html.dark #review-remaining,
+html.dark #review-done {
+  color: #f4f4f5;
+}
+
+/* 按钮微动效与触觉反馈 */
+@utility btn-press {
+  transition: transform 100ms ease, box-shadow 100ms ease, background-color 150ms ease;
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+/* 极简卡片与边缘微光 */
+@utility card-elevated {
+  background-color: #ffffff;
+  border: 1px solid rgba(228, 228, 231, 0.85);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+}
+
+@utility card-subtle {
+  background-color: #fafafa;
+  border: 1px solid rgba(228, 228, 231, 0.6);
+}
+
+/* 自定义下拉选项选中态 */
+.select-option-active {
+  background-color: #f4f4f5;
+  color: #09090b;
+  font-weight: 500;
+}
+
+:where(.dark, .dark *) .select-option-active {
+  background-color: #27272a;
+  color: #fafafa;
+}

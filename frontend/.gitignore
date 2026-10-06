@@ -1,0 +1,9 @@
+# Node dependencies
+node_modules/
+
+# Build artifacts
+dist/
+
+# Local env and cache
+.vite/
+*.local
