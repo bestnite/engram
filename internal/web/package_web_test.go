@@ -98,16 +98,17 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 		t.Errorf("source deck notes = %d err %v, want >= 1", n, err)
 	}
 	// 坏包：不是 zip，给可读错误（4xx），不得 500。
-	// 经 api.ImportDeckPackage 后，坏包映射为稳定的 invalid_request（mapPackageError 的既有口径），
-	// 页面按与 REST/MCP 同一份 error.<code> 语言包渲染。
+	// 经 api.ImportDeckPackage 后，坏包产出它自己的稳定 code package_bad_format（mapPackageError
+	// 逐码透出，不再折叠成 invalid_request），页面按与 REST/MCP 同一份 error.<code> 语言包渲染，
+	// 因此 zh-CN 下显示“卡组包格式不合法”，而不是笼统的“请求不合法”。
 	bad := uploadPackage(t, srv, "/import", cookies, csrf, "bad.edeck", []byte("this is not a zip"), map[string]string{
 		"target": "new_deck",
 	})
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("bad package status = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
-	if !strings.Contains(bad.Body.String(), "请求不合法") {
-		t.Errorf("bad package did not produce a readable error; body = %s", snippet(bad.Body.String()))
+	if !strings.Contains(bad.Body.String(), "卡组包格式不合法") {
+		t.Errorf("bad package did not produce the specific format error; body = %s", snippet(bad.Body.String()))
 	}
 
 	// 未登录不能导出。

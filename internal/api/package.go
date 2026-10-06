@@ -86,26 +86,27 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 }
 
 // mapPackageError 把 store 层的卡组包错误映射成带稳定 code 的 ServiceError。
+//
+// 每个包错误都产出它自己的稳定 code（原样透出 store.PackageError.Code），不再把
+// package_bad_format 折叠成笼统的 invalid_request——否则 error.package_* 这批语言包键
+// 永无产出，用户也分不清“格式无效”/“题型不支持”/“媒体类型不允许”（DESIGN.md §7.3、§7.6）。
+// HTTP 状态保持既有语义不变：配额不足 413、引用不可读媒体 403，其余包错误 400。
 func mapPackageError(err error) error {
 	var pe *store.PackageError
 	if asPackageError(err, &pe) {
 		status := http.StatusBadRequest
-		code := CodeInvalidRequest
 		switch pe.Code {
-		case store.CodePackageUnsafeEntry, store.CodePackageTooLarge:
-			status, code = http.StatusBadRequest, pe.Code
 		case store.CodePackageQuotaExceeded:
 			// 与上传链的 media_quota_exceeded 同一 HTTP 语义：配额不足按 413 返回。
-			status, code = http.StatusRequestEntityTooLarge, pe.Code
-		case store.CodePackageBadFormat:
-			status, code = http.StatusBadRequest, CodeInvalidRequest
-		case store.CodePackageUnknownKind, store.CodePackageUnsafeMedia:
-			status, code = http.StatusBadRequest, pe.Code
-		case store.CodePackageDeckMetaInvalid:
-			status, code = http.StatusBadRequest, pe.Code
+			status = http.StatusRequestEntityTooLarge
 		case store.CodePackageMediaForbidden:
 			// 与单卡写入的 media_not_readable 同一语义：引用了自己读不到的媒体，按 403 拒绝。
-			status, code = http.StatusForbidden, pe.Code
+			status = http.StatusForbidden
+		}
+		code := pe.Code
+		if code == "" {
+			// 兜底：未带 code 的包错误保持既有 invalid_request 口径。
+			code = CodeInvalidRequest
 		}
 		msg := pe.Message
 		if len(pe.Entries) > 0 {
