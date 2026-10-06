@@ -1,6 +1,25 @@
 import { ApiClientError } from './types';
 
 /**
+ * 注册/引导接口的稳定错误 code 集合（与 Go 侧 internal/web/spa_auth.go 的 registrationErrorMessage 一一对应）。
+ * 它们统一映射到 auth.error.<code> 语言包键，与 SSR 认证页共用同一批文案。
+ */
+const authErrorCodes = new Set([
+  'username_required',
+  'email_required',
+  'email_invalid',
+  'password_required',
+  'password_too_short',
+  'password_too_long',
+  'password_too_common',
+  'email_domain_not_allowed',
+  'invite_required',
+  'invite_invalid',
+  'registration_closed',
+  'create_failed',
+]);
+
+/**
  * 将 API 错误转换为前端语言包 key（DESIGN.md §8.3）
  * 后端 REST 错误只返回英文 code 与英文 message，前端根据稳定 code 映射本地化文案，
  * 绝不直接把后端的英文 message 暴露在界面上。
@@ -21,6 +40,9 @@ export function getApiErrorMessageKey(error: unknown): string {
     }
     if (error.isTotpRequired) {
       return 'error.totp_required';
+    }
+    if (authErrorCodes.has(error.code)) {
+      return `auth.error.${error.code}`;
     }
     if (error.isUnauthorized) {
       return 'error.unauthorized';

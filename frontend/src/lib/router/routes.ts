@@ -6,6 +6,8 @@ import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
+import RegisterView from '../views/RegisterView.svelte';
+import SetupView from '../views/SetupView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
 import NoteEditView from '../views/NoteEditView.svelte';
 import NoteCreateView from '../views/NoteCreateView.svelte';
@@ -113,5 +115,21 @@ export const routes: RouteDefinition[] = [
     path: '/spa/login',
     name: 'spa-login',
     component: LoginView as unknown as RouteDefinition['component'],
+  },
+  {
+    // SPA 注册入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /register。
+    // 服务端 GET /spa/register 返回应用壳并初始化会话前双提交 cookie；
+    // 注册协议走 POST /api/v1/auth/register，?invite= 由视图从 URL 读取。
+    path: '/spa/register',
+    name: 'spa-register',
+    component: RegisterView as unknown as RouteDefinition['component'],
+  },
+  {
+    // SPA 首个管理员引导入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /setup。
+    // 服务端 GET /spa/setup 仅在没有活跃管理员时返回应用壳（否则 404）；
+    // 引导协议走 POST /api/v1/auth/setup。
+    path: '/spa/setup',
+    name: 'spa-setup',
+    component: SetupView as unknown as RouteDefinition['component'],
   },
 ];
