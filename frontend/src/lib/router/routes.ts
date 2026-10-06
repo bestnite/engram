@@ -10,6 +10,7 @@ import ReviewView from '../views/ReviewView.svelte';
 import NoteEditView from '../views/NoteEditView.svelte';
 import NoteCreateView from '../views/NoteCreateView.svelte';
 import ImportView from '../views/ImportView.svelte';
+import DeckSharingView from '../views/DeckSharingView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -29,6 +30,11 @@ export const routes: RouteDefinition[] = [
     path: '/decks',
     name: 'decks',
     component: DecksView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/decks/:id/sharing',
+    name: 'deck-sharing',
+    component: DeckSharingView as unknown as RouteDefinition['component'],
   },
   {
     path: '/decks/:id',

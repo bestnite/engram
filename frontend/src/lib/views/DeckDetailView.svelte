@@ -18,6 +18,8 @@
   let deleteSuccess = $state(false);
   let exporting = $state(false);
   let exportError = $state(false);
+  let cloneSubmitting = $state(false);
+  let cloneError = $state(false);
   let includeMedia = $state(true);
   let includeProgress = $state(false);
   let includeReviews = $state(false);
@@ -140,6 +142,19 @@
     }
   }
 
+  async function cloneDeck(): Promise<void> {
+    cloneSubmitting = true;
+    cloneError = false;
+    try {
+      const id = encodeURIComponent(String(deckId));
+      await apiClient.request<{ id: number; name: string }>(`/api/v1/decks/${id}/clone`, { method: 'POST', body: '{}', headers: { Accept: 'application/json' } });
+    } catch {
+      cloneError = true;
+    } finally {
+      cloneSubmitting = false;
+    }
+  }
+
   /**
    * 将任意字段值安全转换为纯文本字符串
    * 绝不使用原始 HTML 注入，天然防止 XSS
@@ -207,6 +222,13 @@
       >
         {$t('notes.create')}
       </a>
+      <a
+        href="/decks/{encodeURIComponent(deckId)}/sharing"
+        data-testid="deck-sharing-link"
+        class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
+      >{$t('deck.sharing.title')}</a>
+      {#if cloneError}<span role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t('deck.clone.failed')}</span>{/if}
+      <button type="button" data-testid="deck-clone" disabled={cloneSubmitting || !deck} onclick={cloneDeck} class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium disabled:opacity-50">{$t(cloneSubmitting ? 'deck.clone.submitting' : 'deck.clone.action')}</button>
       <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeMedia} />{$t('package.export.include_media')}</label>
       <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeProgress} onchange={() => { if (!includeProgress) includeReviews = false; }} />{$t('package.export.include_progress')}</label>
       {#if includeProgress}<label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeReviews} />{$t('package.export.include_reviews')}</label>{/if}

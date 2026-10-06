@@ -19,6 +19,7 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 		return
 	}
 	router.POST("/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
+	router.POST("/api/v1/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
 }
 
 // deckClone 把一个「自己可读」的卡组复制到当前账号下（M5-4）。
@@ -65,6 +66,10 @@ func (s *Server) deckClone(c *gin.Context) {
 		TargetID:   store.Ptr(cloned.ID),
 		Detail:     map[string]any{"source_deck_id": src.ID, "preset_id": cloned.PresetID},
 	})
+	if c.GetHeader("Accept") == "application/json" {
+		c.JSON(http.StatusCreated, gin.H{"id": cloned.ID, "name": cloned.Name})
+		return
+	}
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%d/notes", cloned.ID))
 }
 
