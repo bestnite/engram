@@ -1012,10 +1012,33 @@ preset was created under three different names (literal, localised, lower-case) 
 could accumulate several "defaults", and the store's review-day start disagreed with the
 scheduler's about out-of-range cutoffs.
 
-**Still open.** The PostgreSQL branch of the media primary-key migration has never been
-executed (local and CI testing is SQLite only). The deck description still lacks the
-2000-character bound the importer and the package schema enforce. `AGENTS.md` section 3
-lists a top-level `test/` directory that does not exist in the repository.
+**Behaviour changes worth knowing.** Routing the web import through the shared service
+(so all four entry points make the same decisions) changed two visible things: a corrupt
+package now renders the same generic `invalid_request` message REST returns instead of the
+web-only "package format is invalid" text, and web imports now write media through the same
+media root as the other entry points. The web page still returns 400 rather than REST's 413
+for an oversized body — a pre-existing difference, deliberately left alone. The default
+preset is now identified by a stable literal name rather than a localised one, so an account
+that already had a localised default preset may end up with one extra row.
+
+**Still open / awaiting a decision.**
+
+- The **PostgreSQL branch of the media primary-key migration** has never been executed
+  (local and CI testing is SQLite only).
+- The **deck description** still lacks the 2000-character bound that the importer and the
+  package schema enforce, so a deck can be built that its own importer refuses.
+- **Day cutoff `0`**: normalisation treats `0` as "unset" and falls back to 04:00, but the
+  settings form still accepts `0` (`settings.go:104`), so choosing midnight silently yields
+  04:00. Either reject `0` in the form (1–23) or honour midnight — the latter changes the
+  review-day boundary for accounts that already store `0`.
+- **Two reminders in one calendar day** are possible when the chosen send hour is earlier
+  than the day cutoff (e.g. hour 0 with a 04:00 cutoff): 00:00 belongs to the previous
+  review day, 04:00 to the new one. A minimum gap between reminders would close it.
+- The catalog still carries `error.package_*` codes that the REST error mapper folds into a
+  generic `invalid_request`, so the specific messages are unreachable from REST. Fixing it
+  changes REST responses, hence the decision.
+- `AGENTS.md` section 3 lists a top-level `test/` directory that does not exist in the
+  repository.
 
 ## 2. Progress tracking
 
