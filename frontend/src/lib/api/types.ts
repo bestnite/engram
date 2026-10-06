@@ -340,6 +340,21 @@ export interface ProfileResponse {
   profile: UserProfile;
 }
 
+export interface APIKeyRecord {
+  id: number;
+  name: string;
+  prefix: string;
+  scopes: string;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  created_at: string;
+}
+
+export interface APIKeysResponse {
+  keys: APIKeyRecord[];
+}
+
 /**
  * 客户端表单校验结果结构
  */

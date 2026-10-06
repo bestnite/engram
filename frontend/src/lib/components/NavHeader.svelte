@@ -56,8 +56,14 @@
           {$t('nav.stats')}
         </a>
         <a
+          href="/settings/keys"
+          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/settings/keys') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+        >
+          {$t('nav.api_keys')}
+        </a>
+        <a
           href="/settings"
-          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/settings') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/settings') && !$routeStore.path.startsWith('/settings/keys') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
         >
           {$t('nav.settings')}
         </a>
