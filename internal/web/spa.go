@@ -1,9 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -28,10 +30,13 @@ type spaAsset struct {
 // SPA 管理嵌入的 Svelte SPA 生产构建产物（DESIGN.md §8.5、§10.2）。
 type SPA struct {
 	fs        fs.FS
+	rawIndex  []byte
 	indexHTML []byte
 	indexHash string
 	indexETag string
-	assets    map[string]*spaAsset
+	// mathjaxURL 是自托管 MathJax 的内容哈希 URL；为空表示未注入（资源缺失或未调用 SetMathJaxURL）。
+	mathjaxURL string
+	assets     map[string]*spaAsset
 }
 
 // LoadSPA 从 frontend 嵌入文件系统加载生产构建产物。
@@ -59,6 +64,7 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 
 	spa := &SPA{
 		fs:        subFS,
+		rawIndex:  indexData,
 		indexHTML: indexData,
 		indexHash: indexHash,
 		indexETag: indexETag,
@@ -125,6 +131,47 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 	}
 
 	return spa, nil
+}
+
+// mathjaxMetaName 是 SPA 入口 <head> 里承载自托管 MathJax 内容哈希 URL 的 meta 名。
+// 前端加载器按它读取 URL，再用动态 <script src> 引入同源脚本——CSP 的 script-src 'self'
+// 已放行同源外链脚本，无需内联脚本、nonce 或 'unsafe-inline'（DESIGN.md §6.1、§8.5、§11）。
+const mathjaxMetaName = "engram-mathjax"
+
+// SetMathJaxURL 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口的 <head>。
+//
+// 传空串或资源未嵌入时不注入，前端加载器读到空 URL 会跳过加载（与 SSR 缺资源时跳过引用
+// 一致）。注入后入口内容变化，ETag 必须重算，否则浏览器会拿旧引用配新资源（DESIGN.md §8.5）。
+func (s *SPA) SetMathJaxURL(url string) {
+	if url == s.mathjaxURL {
+		return
+	}
+	s.mathjaxURL = url
+	if url == "" {
+		s.indexHTML = s.rawIndex
+	} else {
+		s.indexHTML = injectMathJaxMeta(s.rawIndex, url)
+	}
+	sum := sha256.Sum256(s.indexHTML)
+	s.indexHash = hex.EncodeToString(sum[:8])
+	s.indexETag = `"` + s.indexHash + `"`
+}
+
+// injectMathJaxMeta 在 </head> 之前插入一行 meta；找不到 </head> 时退化为追加到文末，
+// 保证 meta 一定出现在文档里——前端加载器全靠它发现 MathJax。
+func injectMathJaxMeta(index []byte, url string) []byte {
+	meta := []byte(`<meta name="` + mathjaxMetaName + `" content="` + html.EscapeString(url) + `" />`)
+	head := bytes.Index(index, []byte("</head>"))
+	if head < 0 {
+		out := make([]byte, 0, len(index)+len(meta))
+		out = append(out, index...)
+		return append(out, meta...)
+	}
+	out := make([]byte, 0, len(index)+len(meta))
+	out = append(out, index[:head]...)
+	out = append(out, meta...)
+	out = append(out, index[head:]...)
+	return out
 }
 
 // HasAsset 报告指定逻辑路径的静态资源是否存在。

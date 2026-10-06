@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { routeStore, navigate } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
+  import { typeset } from '../mathjax';
 
   let note = $state<Note | null>(null);
   let fieldsText = $state('');
@@ -16,6 +17,8 @@
   let previewLoading = $state(false);
   let previewError = $state(false);
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
+  // 预览结果容器：只对它调用 MathJax 排版，绝不整页排版编辑器原始 Markdown。
+  let previewSection = $state<HTMLElement | null>(null);
   let mediaItems = $state<Array<{ sha256: string; src: string; insert_url: string }>>([]);
   let mediaCursor = $state('');
   let mediaOpen = $state(false);
@@ -102,6 +105,9 @@
     try {
       const response = await apiClient.previewNote(deckId, note.kind, fields);
       previewCards = response.cards;
+      // 等 Svelte 把服务端清洗后的 HTML 挂上 DOM，再只对这一容器排版公式。
+      await tick();
+      await typeset([previewSection]);
     } catch {
       previewError = true;
     } finally {
@@ -190,7 +196,7 @@
       <button data-testid="note-preview" type="button" onclick={preview} disabled={previewLoading} class="rounded-md border px-4 py-2 disabled:opacity-50">{previewLoading ? $t('note_preview.spa.loading') : $t('note_preview.spa.action')}</button>
       {#if previewError}<p role="alert" data-testid="note-preview-error">{$t('note_preview.spa.failed')}</p>{/if}
       {#if previewCards}
-        <section data-testid="note-preview-result" class="space-y-3">
+        <section bind:this={previewSection} data-testid="note-preview-result" class="space-y-3">
           <h2 class="text-lg font-semibold">{$t('note_preview.spa.title')}</h2>
           <p class="text-sm text-zinc-500">{$t('note_preview.spa.math_notice')}</p>
           {#each previewCards as card, index}
