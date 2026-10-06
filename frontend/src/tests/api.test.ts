@@ -120,6 +120,28 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
+  describe('Note updates', () => {
+    it('sends a typed PATCH payload with the session CSRF token and maps the response', async () => {
+      client.setCsrfToken('session-csrf');
+      const updated = { id: 7, deck_id: 3, kind: 'basic', fields: { front: '<img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }));
+      const result = await client.updateNote(7, { kind: 'basic', fields: updated.fields, tags: ['safe'] });
+      expect(result).toEqual(updated);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/notes/7');
+      expect(init?.method).toBe('PATCH');
+      expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('session-csrf');
+      expect(JSON.parse(String(init?.body))).toEqual({ kind: 'basic', fields: updated.fields, tags: ['safe'] });
+    });
+
+    it('surfaces server validation and permission errors', async () => {
+      for (const [status, code] of [[400, 'invalid_request'], [403, 'insufficient_role']] as const) {
+        mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code, message: 'no' } }), { status }));
+        await expect(client.updateNote(1, { fields: {} })).rejects.toMatchObject({ status, code });
+      }
+    });
+  });
+
   describe('HTTP error code handling with Go error envelope', () => {
     it('handles 401 Unauthorized safely and parses error code', async () => {
       mockFetch.mockResolvedValueOnce(

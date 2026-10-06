@@ -4,7 +4,9 @@ import {
   type DecksResponse,
   type CreateDeckRequest,
   type NotesResponse,
+  type Note,
   type NoteListParams,
+  type UpdateNoteRequest,
   type StatsSummary,
   type DueCardsResponse,
   type DueCardsQuery,
@@ -237,6 +239,15 @@ export class ApiClient {
     params?: NoteListParams
   ): Promise<NotesResponse> {
     return this.getDeckNotes(deckId, params);
+  }
+
+  /** Update one existing note through the authenticated, CSRF-protected REST API. */
+  async updateNote(noteId: number | string, input: UpdateNoteRequest): Promise<Note> {
+    const id = encodeURIComponent(String(noteId));
+    return this.request<Note>(`/api/v1/notes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
   }
 
   /**
