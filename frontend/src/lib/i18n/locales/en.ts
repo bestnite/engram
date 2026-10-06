@@ -213,4 +213,8 @@ export const en: LocaleCatalog = {
   'note_preview.spa.front': 'Front',
   'note_preview.spa.back': 'Back',
   'note_preview.spa.math_notice': 'TeX delimiters are shown as text for now; math rendering is not loaded.',
+  'notes.delete': 'Delete',
+  'notes.delete_confirm': 'Delete this note?',
+  'notes.deleting': 'Deleting...',
+  'notes.delete_success': 'Note deleted.',
 };

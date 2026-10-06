@@ -12,6 +12,10 @@
   let notes = $state<Note[]>([]);
   let total = $state(0);
   let page = $state(1);
+  let confirmingDeleteId = $state<number | null>(null);
+  let deletingNoteId = $state<number | null>(null);
+  let deleteError = $state('');
+  let deleteSuccess = $state(false);
   const perPage = 50;
 
   // 筛选与搜索输入
@@ -92,6 +96,24 @@
   function handleNextPage(): void {
     if (page < totalPages) {
       loadData(page + 1);
+    }
+  }
+
+  async function deleteNote(note: Note): Promise<void> {
+    deletingNoteId = note.id;
+    deleteError = '';
+    try {
+      await apiClient.deleteNote(note.id);
+      notes = notes.filter((item) => item.id !== note.id);
+      total = Math.max(0, total - 1);
+      confirmingDeleteId = null;
+      deleteSuccess = true;
+    } catch (err) {
+      deleteError = err instanceof ApiClientError
+        ? err.code === 'insufficient_role' ? 'error.forbidden' : err.code === 'not_found' ? 'error.not_found' : 'error.unknown'
+        : 'error.unknown';
+    } finally {
+      deletingNoteId = null;
     }
   }
 
@@ -226,6 +248,12 @@
 
   <!-- 卡片列表主体内容 -->
   <div class="card-elevated p-8 rounded-xl">
+    {#if deleteSuccess}
+      <p role="status" data-testid="note-delete-success" class="mb-4 text-sm text-emerald-700 dark:text-emerald-400">{$t('notes.delete_success')}</p>
+    {/if}
+    {#if deleteError}
+      <p role="alert" data-testid="note-delete-error" class="mb-4 text-sm text-rose-700 dark:text-rose-400">{$t(deleteError)}</p>
+    {/if}
     {#if loading}
       <div data-testid="notes-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
         <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
@@ -305,6 +333,13 @@
                   {note.created_at ? note.created_at.slice(0, 10) : ''}
                 </span>
                 <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-xs underline">{$t('note_edit.action')}</a>
+                {#if confirmingDeleteId === note.id}
+                  <span class="text-xs">{$t('notes.delete_confirm')}</span>
+                  <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-xs text-rose-700 underline disabled:opacity-50" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
+                  <button type="button" class="text-xs underline" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
+                {:else}
+                  <button data-testid="delete-note-{note.id}" type="button" class="text-xs text-rose-700 underline" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                {/if}
               </div>
             </div>
 
