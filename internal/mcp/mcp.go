@@ -348,12 +348,12 @@ func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, nam
 		var zero Out
 		id := s.requestIdentity(handshake, req)
 		if !hasScope(id, scope) {
-			// 与 REST 共用同一 code 与语言包文案（AGENTS.md M4-9）；scope 名作为细节附后。
+			// 与 REST 共用同一 code 与英文文案（DESIGN.md §8.3、§10.4）；scope 名作为细节附后。
 			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)
 		}
 		out, err := fn(ctx, id, in)
 		if err != nil {
-			// MCP 没有 HTTP 错误包壳：用稳定 code + 本地化文案渲染，避免回显原始英文。
+			// MCP 没有 HTTP 错误包壳：用稳定 code + 英文文案渲染，与 REST 保持一致。
 			return nil, zero, errors.New(api.ErrorText(ctx, err))
 		}
 		return nil, out, nil
