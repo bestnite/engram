@@ -194,6 +194,64 @@ export interface SubmitReviewResult {
 }
 
 /**
+ * 作答类题型提交的原始作答（DESIGN.md §6.2、§8.2）。
+ * 评分由服务端判分器产生，客户端绝不提交档位。
+ */
+export type GradedAnswer = string | number | boolean | number[];
+
+/**
+ * POST /api/v1/review/grade 请求体。
+ * action 省略时正常判分；'reveal' 只取清洗后的正确答案（不写库）；
+ * 'give_up' 表示已揭示答案后放弃作答，按 Again 记一条自评。
+ */
+export interface SubmitGradedReviewRequest {
+  card_id: number;
+  expected_version?: number;
+  elapsed_ms?: number;
+  deck?: number[];
+  action?: 'reveal' | 'give_up';
+  answer?: GradedAnswer;
+}
+
+/**
+ * 判分反馈：verdict 是判定，answer_html 是服务端清洗后的正确答案（唯一 HTML 汇）。
+ */
+export interface GradedFeedback {
+  verdict: 'correct' | 'partial' | 'incorrect';
+  score: number;
+  rating: number;
+  answer_html: string;
+  given: string;
+  parsed?: string;
+}
+
+/**
+ * POST /api/v1/review/grade 响应体（与 Go 后端 internal/web/spa_review.go 对齐）。
+ * 判分与放弃两条路径都返回新状态与同范围队列；reveal 走 RevealAnswerResponse。
+ */
+export interface GradedReviewResult {
+  card_id: number;
+  review_id: number;
+  state: string;
+  due_at: string | null;
+  version: number;
+  stability: number | null;
+  cards: DueCard[];
+  remaining: number;
+  feedback?: GradedFeedback;
+  gave_up?: boolean;
+}
+
+/**
+ * POST /api/v1/review/grade（action=reveal）响应体：只返回清洗后的正确答案。
+ */
+export interface RevealAnswerResponse {
+  revealed: boolean;
+  card_id: number;
+  answer_html: string;
+}
+
+/**
  * GET /api/v1/review/due 查询参数
  * DESIGN.md §3.3、§7.3:
  * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]

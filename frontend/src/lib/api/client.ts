@@ -17,6 +17,9 @@ import {
   type DueCardsQuery,
   type SubmitSelfReviewRequest,
   type SubmitReviewResult,
+  type SubmitGradedReviewRequest,
+  type GradedReviewResult,
+  type RevealAnswerResponse,
   type ApiErrorEnvelope,
   type UserProfile,
   type UpdateProfileRequest,
@@ -487,6 +490,25 @@ export class ApiClient {
     return this.request<SubmitReviewResult>('/api/v1/review/answer', {
       method: 'POST',
       body: JSON.stringify({ ...review, deck }),
+    });
+  }
+
+  /**
+   * 提交作答类题型的原始作答，由服务端判分并写入 reviews（DESIGN.md §6.2、§8.2）。
+   * 客户端不提交档位；判分档位来自服务端 graderFor 与 preset 映射。
+   */
+  async submitGradedReview(input: SubmitGradedReviewRequest): Promise<GradedReviewResult> {
+    return this.request<GradedReviewResult>('/api/v1/review/grade', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 请求揭示作答类题型的正确答案（只读预览，不写进度）。 */
+  async revealGradedAnswer(input: SubmitGradedReviewRequest): Promise<RevealAnswerResponse> {
+    return this.request<RevealAnswerResponse>('/api/v1/review/grade', {
+      method: 'POST',
+      body: JSON.stringify({ ...input, action: 'reveal' }),
     });
   }
 
