@@ -2,11 +2,17 @@
 //
 // 行为约束（DESIGN.md §4.7）：
 //   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
-//   - 静默窗口按**用户本地时间** 23:00–07:00：落在窗口内的提醒**推迟**到窗口开启后的
-//     下一次轮询再发（不是丢弃）；推迟后仍受「每天最多一封」约束。
+//   - 发送时间按**用户本地时间**：每个用户可选自己的整点小时（users.reminder_hour，0–23），
+//     未设置时用全局默认 DefaultSendHour（19:00）。到达该小时后的首轮轮询即发；小时按用户
+//     时区解释（见 SendHour / reachedSendHour）。
 //   - 每天最多一封：按用户本地复习日（与 reviews.review_day 同一时区/切点口径）判定，
 //     台账见 store.ReminderLog。
 //   - SMTP 未配置时不发也不报错，只记一条英文日志（C 类是可选运营邮件，没有页面要禁用）。
+//
+// 为什么删掉旧的静默窗口（本地 23:00–07:00）：那条启发式的唯一目的是把「过了日切点就发」
+// 的提醒挪开深夜，而它正是「大家一律在早上 7 点被催」的根因。现在发送时刻由用户显式选择
+// （默认 19:00，本就在窗外），静默窗既无用途，又会反过来压制用户明确选的深夜时段——用户
+// 显式选择优先，因此整条启发式连同 InQuietHours 一并删除，其用例也随之移除。
 //
 // 为什么是周期 worker 而不是 job 表：优化器的单并发约束不适用于邮件（DESIGN.md §4.7），
 // 把提醒塞进 jobs 会与参数优化互相阻塞。提醒本身不是长任务，只是一个周期性的「到期扫描」，
@@ -37,13 +43,14 @@ const (
 	// DefaultInterval 是默认轮询间隔。
 	//
 	// 选 10 分钟的理由：提醒是「催一下」而不是准点事件，用户感知不到分钟级差异；
-	// 静默窗口以小时为粒度、每日上限以复习日为粒度，10 分钟足够在窗口开启后很快补发，
-	// 又把每轮的 DB 开销压到「一条候选查询 + 每用户一两次小查询」的量级。
+	// 发送时刻以小时为粒度、每日上限以复习日为粒度，10 分钟足够在用户选定的小时到达后很快
+	// 补发，又把每轮的 DB 开销压到「一条候选查询 + 每用户一两次小查询」的量级。
 	DefaultInterval = 10 * time.Minute
-	// QuietStartHour 是静默窗口起点（本地小时，含）。23:00 起算。
-	QuietStartHour = 23
-	// QuietEndHour 是静默窗口终点（本地小时，不含）。07:00 结束，07:00 整可发。
-	QuietEndHour = 7
+	// DefaultSendHour 是未设置每用户发送小时时的全局默认（本地 19:00）。
+	//
+	// 选 19:00：提醒是「今天还有卡没复习」的催促，傍晚是大多数人一天里能坐下来复习的时段，
+	// 又在旧的静默窗（23:00–07:00）之外。周报复用同一小时，两个 C 类邮件的到达时刻因此一致。
+	DefaultSendHour = 19
 	// DefaultReviewPath 是复习页路径（提醒正文里的链接）。
 	DefaultReviewPath = "/review"
 )
@@ -225,15 +232,20 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 // maybeSend 判定并（在满足条件时）入队一封提醒。
 //
 // 判定顺序（每一道都必须在入队前通过）：
-//  1. 静默窗口：落在用户本地 23:00–07:00 就整轮跳过，**不记录台账**——这样窗口开启后的
-//     下一次轮询会重新评估并补发，即「推迟到窗口开启再发」。
+//  1. 发送时刻：用户本地时间还未到其选定的小时（默认 19:00）就整轮跳过，**不记录台账**——
+//     到达该小时后的下一轮会重新评估并发出，即「到点再发」。
 //  2. 每日上限：用户本地复习日已发过就不再发。
 //  3. 偏好门禁：C 类默认关，用户关掉后立即生效（每轮现读偏好，不缓存）。
 //
 // 台账只在 Enqueue 成功后才写，避免入队失败却把当天额度用掉。
+//
+// 小时与复习日的边界：发送时刻按用户本地整点比较（local.Hour() >= 选定小时），复习日仍按
+// day_cutoff_hour 切分。若用户选的整点早于其日切点（例如选 0 点、切点 4），该时刻仍属于
+// 前一个复习日，因此可能在同一自然日的 0 点与 4 点各发出一封——这是「每个复习日至多一封」
+// 的定义所致，与既有日切点口径一致，不另作特判。
 func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) error {
 	loc := loadLocation(c.Timezone)
-	if InQuietHours(now.In(loc)) {
+	if !ReachedSendHour(now.In(loc), SendHour(c.ReminderHour)) {
 		return nil
 	}
 	cutoff := normalizedCutoff(c.DayCutoffHour)
@@ -304,11 +316,26 @@ func (r *Reminder) reviewURL() string {
 	return r.baseURL + r.reviewPath
 }
 
-// InQuietHours 报告本地时间是否落在静默窗口 [23:00, 07:00) 内。
-// 边界：23:00 与 06:59 属于窗口；07:00 整已可发。
-func InQuietHours(local time.Time) bool {
-	h := local.Hour()
-	return h >= QuietStartHour || h < QuietEndHour
+// SendHour 把用户选择的发送小时解析成实际使用的整点：nil（未设置）或越界值回落到
+// DefaultSendHour。返回 int 而不是指针，调用方无需再判空。
+//
+// 0 是合法值（午夜）：绝不能把 0 和「未设置」混为一谈——这正是列取可空指针、而不是
+// 「普通 int + 默认值」的原因（见 store.User.ReminderHour 的注释）。
+func SendHour(userHour *int) int {
+	if userHour == nil || *userHour < 0 || *userHour > 23 {
+		return DefaultSendHour
+	}
+	return *userHour
+}
+
+// ReachedSendHour 报告本地时间是否已到（或已过）选定的整点小时。
+//
+// 用「大于等于」而不是「等于」，是为了在 worker 停机、轮询错过整点后仍能补发：
+// 到达选定小时后的首轮轮询即满足条件，之后的轮询由「每个复习日一封」的台账兜住，不会重复。
+//
+// 导出供周报 worker 复用：两个 C 类邮件共用同一小时，判定必须是同一份实现。
+func ReachedSendHour(local time.Time, hour int) bool {
+	return local.Hour() >= hour
 }
 
 // loadLocation 解析 IANA 时区；为空或解析失败时退回 UTC（与 schedule 的口径一致，

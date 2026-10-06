@@ -158,91 +158,7 @@ func shanghaiAt(t *testing.T, hour, min int) time.Time {
 	return time.Date(2026, 6, 1, hour, min, 0, 0, loc).UTC()
 }
 
-// TestInQuietHoursBoundaries 固定静默窗口的边界：23:00 与 06:59 属于窗口，07:00 整不属于。
-func TestInQuietHoursBoundaries(t *testing.T) {
-	cases := []struct {
-		hour, min int
-		want      bool
-	}{
-		{22, 59, false},
-		{23, 0, true},
-		{23, 30, true},
-		{0, 0, true},
-		{6, 59, true},
-		{7, 0, false},
-		{12, 0, false},
-	}
-	for _, tc := range cases {
-		local := time.Date(2026, 6, 1, tc.hour, tc.min, 0, 0, time.UTC)
-		if got := InQuietHours(local); got != tc.want {
-			t.Errorf("InQuietHours(%02d:%02d) = %v, want %v", tc.hour, tc.min, got, tc.want)
-		}
-	}
-}
-
-// TestQuietWindowHoldsUntilItOpensThenSendsOnce 是 M1-21 的核心验收：
-// 落在 23:00–07:00 的提醒被推迟到窗口开启后，并且只发一次。
-func TestQuietWindowHoldsUntilItOpensThenSendsOnce(t *testing.T) {
-	db := newTestDB(t)
-	// 上海时区、默认切点 4；到期的卡早已到期。
-	userID := seedUserWithDueCard(t, db, "alice", "alice@example.com", "zh-CN", "Asia/Shanghai", 4,
-		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	enableReminder(t, db, userID)
-
-	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 23, 30)
-	r := newReminder(t, db, enq, func() time.Time { return clock })
-	ctx := context.Background()
-
-	// 23:30：静默窗口内，绝不发送。
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 23:30: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("23:30 in quiet window: enqueued %d, want 0", got)
-	}
-
-	// 次日 06:00：仍在窗口内，仍然不发（推迟而非丢弃）。
-	clock = shanghaiAt(t, 6, 0).Add(24 * time.Hour)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 06:00: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("06:00 in quiet window: enqueued %d, want 0", got)
-	}
-
-	// 07:00：窗口开启，补发一次。
-	clock = shanghaiAt(t, 7, 0).Add(24 * time.Hour)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 07:00: %v", err)
-	}
-	if got := enq.count(); got != 1 {
-		t.Fatalf("07:00 window open: enqueued %d, want 1", got)
-	}
-
-	// 07:30 同一天：每日上限生效，第二封不发。
-	clock = shanghaiAt(t, 7, 30).Add(24 * time.Hour)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 07:30: %v", err)
-	}
-	if got := enq.count(); got != 1 {
-		t.Fatalf("07:30 same review day: enqueued %d, want 1 (daily cap)", got)
-	}
-
-	// 发出的邮件类型与收件人都正确。
-	msg := enq.last()
-	if msg.Type != string(mail.TypeReviewReminder) {
-		t.Errorf("message type = %q, want %q", msg.Type, mail.TypeReviewReminder)
-	}
-	if msg.To != "alice@example.com" {
-		t.Errorf("message to = %q, want alice@example.com", msg.To)
-	}
-	if msg.Subject == "" || msg.TextBody == "" {
-		t.Errorf("message subject/body must be localized, got subject=%q body=%q", msg.Subject, msg.TextBody)
-	}
-}
-
-// TestSecondReminderSameDayNotSent 验证同一天的第二封不发（与静默窗口无关的纯每日上限）。
+// TestSecondReminderSameDayNotSent 验证同一天的第二封不发（与发送时刻无关的纯每日上限）。
 func TestSecondReminderSameDayNotSent(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "bob", "bob@example.com", "en", "Asia/Shanghai", 4,
@@ -250,7 +166,8 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	// 默认发送小时是 19:00：第一次轮询取 19:05，已在到点之后。
+	clock := shanghaiAt(t, 19, 5)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
@@ -261,7 +178,7 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 		t.Fatalf("first run enqueued %d, want 1", got)
 	}
 	// 同一天稍晚再跑一轮：台账已存在，不发第二封。
-	clock = shanghaiAt(t, 15, 0)
+	clock = shanghaiAt(t, 23, 30)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("second RunOnce: %v", err)
 	}
@@ -278,7 +195,8 @@ func TestOptOutStopsImmediately(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	// 默认发送小时是 19:00：取 19:05，已在到点之后。
+	clock := shanghaiAt(t, 19, 5)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
@@ -292,7 +210,7 @@ func TestOptOutStopsImmediately(t *testing.T) {
 
 	// 关掉偏好，并在**新的一天**再跑：新一天不受每日上限约束，能不发只因偏好关。
 	disableReminder(t, db, userID)
-	clock = shanghaiAt(t, 10, 0).Add(24 * time.Hour)
+	clock = shanghaiAt(t, 19, 5).Add(24 * time.Hour)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("disabled RunOnce: %v", err)
 	}
@@ -308,7 +226,7 @@ func TestDefaultOffWhenNoPreference(t *testing.T) {
 		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
 	if err := r.RunOnce(context.Background()); err != nil {
@@ -327,7 +245,7 @@ func TestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: false}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
 	if err := r.RunOnce(context.Background()); err != nil {
@@ -347,7 +265,7 @@ func TestNoDueCardsNoReminder(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
 	if err := r.RunOnce(context.Background()); err != nil {

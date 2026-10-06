@@ -14,6 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/pgtest"
+	"git.nite07.com/nite/engram/internal/reminder"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -193,7 +194,7 @@ func TestDigestSendsExactlyOncePerWeek(t *testing.T) {
 	setDigestPref(t, db, userID, true)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0) // 2026-06-01 星期一
+	clock := shanghaiAt(t, 20, 0) // 2026-06-01 星期一
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
@@ -207,7 +208,7 @@ func TestDigestSendsExactlyOncePerWeek(t *testing.T) {
 
 	// 同一天稍晚 + 本周其余每一天反复跑：都不再发。
 	for _, offset := range []time.Duration{8 * time.Hour, 24 * time.Hour, 3 * 24 * time.Hour, 6 * 24 * time.Hour} {
-		clock = shanghaiAt(t, 10, 0).Add(offset)
+		clock = shanghaiAt(t, 20, 0).Add(offset)
 		if err := w.RunOnce(ctx); err != nil {
 			t.Fatalf("RunOnce at +%v: %v", offset, err)
 		}
@@ -217,7 +218,7 @@ func TestDigestSendsExactlyOncePerWeek(t *testing.T) {
 	}
 
 	// 下周一：新的一周，发第二封。
-	clock = shanghaiAt(t, 10, 0).Add(7 * 24 * time.Hour)
+	clock = shanghaiAt(t, 20, 0).Add(7 * 24 * time.Hour)
 	if err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce next week: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	setDigestPref(t, db, userID, true)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
@@ -259,7 +260,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	// 关掉偏好，并在**下一周**再跑：新的一周不受本周台账约束，
 	// 不发只可能是偏好门禁生效，而不是去重台账挡住的。
 	setDigestPref(t, db, userID, false)
-	clock = shanghaiAt(t, 10, 0).Add(7 * 24 * time.Hour)
+	clock = shanghaiAt(t, 20, 0).Add(7 * 24 * time.Hour)
 	if err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("disabled RunOnce: %v", err)
 	}
@@ -270,7 +271,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	// 重新打开后，同一周内也不补发（她已在本周关过一次；开启发生在指针移动之前需再等下一周）。
 	// 这里只断言：重新打开 + 再下一周会恢复发送，证明「关掉」不是不可逆的。
 	setDigestPref(t, db, userID, true)
-	clock = shanghaiAt(t, 10, 0).Add(14 * 24 * time.Hour)
+	clock = shanghaiAt(t, 20, 0).Add(14 * 24 * time.Hour)
 	if err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("re-enabled RunOnce: %v", err)
 	}
@@ -297,7 +298,7 @@ func TestDigestNumbersMatchStatsPage(t *testing.T) {
 	seedReview(t, db, userID, cardID, "2026-05-01", 3, 2, 20.0) // 窗口外（影响留存率与连续打卡）
 	seedDueCard(t, db, userID, cardID, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC))
 
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatalf("LoadLocation: %v", err)
@@ -388,7 +389,7 @@ func TestDigestDefaultOffWhenNoPreference(t *testing.T) {
 	seedUser(t, db, "dave", "dave@example.com", "en", "Asia/Shanghai", 4)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
 	if err := w.RunOnce(context.Background()); err != nil {
@@ -406,7 +407,7 @@ func TestDigestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	setDigestPref(t, db, userID, true)
 
 	enq := &fakeEnqueuer{configured: false}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
 	if err := w.RunOnce(context.Background()); err != nil {
@@ -425,7 +426,7 @@ func TestDigestUnsubscribeHeaders(t *testing.T) {
 	setDigestPref(t, db, userID, true)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 10, 0)
+	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
 	if err := w.RunOnce(context.Background()); err != nil {
@@ -446,31 +447,51 @@ func TestDigestUnsubscribeHeaders(t *testing.T) {
 	}
 }
 
-// TestDigestQuietWindowHoldsUntilItOpens 验证落在本地静默窗口（23:00–07:00）时不发，
-// 窗口开启后的下一轮补发且只发一次。
-func TestDigestQuietWindowHoldsUntilItOpens(t *testing.T) {
+// setUserSendHour 直接改库里的 users.reminder_hour；nil 表示未设置（回落到全局默认）。
+func setUserSendHour(t *testing.T, db *gorm.DB, userID uint64, hour *int) {
+	t.Helper()
+	users := store.NewUserStore(db)
+	u, err := users.ByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("load user %d: %v", userID, err)
+	}
+	u.ReminderHour = hour
+	if err := users.Update(context.Background(), u); err != nil {
+		t.Fatalf("update user %d: %v", userID, err)
+	}
+}
+
+// TestDigestUsesUserSendHour 验收：周报复用复习提醒的发送小时（不单独设）——未到点不发，
+// 到用户选定的小时后的首轮才发。
+func TestDigestUsesUserSendHour(t *testing.T) {
+	if reminder.DefaultSendHour != 19 {
+		t.Fatalf("reminder.DefaultSendHour = %d, want 19", reminder.DefaultSendHour)
+	}
 	db := newTestDB(t)
 	userID := seedUser(t, db, "grace", "grace@example.com", "en", "Asia/Shanghai", 4)
 	seedCard(t, db, userID)
 	setDigestPref(t, db, userID, true)
+	// 显式设为 21 点：默认的 19 点那轮不应发，21 点那轮才发。
+	hour := 21
+	setUserSendHour(t, db, userID, &hour)
 
 	enq := &fakeEnqueuer{configured: true}
-	clock := shanghaiAt(t, 0, 30) // 周一 00:30，静默窗口内
+	clock := shanghaiAt(t, 19, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
 	if err := w.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 00:30: %v", err)
+		t.Fatalf("RunOnce at 19:00: %v", err)
 	}
 	if got := enq.count(); got != 0 {
-		t.Fatalf("00:30 in quiet window: enqueued %d, want 0", got)
+		t.Fatalf("digest at local 19:00 before the chosen hour 21: enqueued %d, want 0", got)
 	}
 
-	clock = shanghaiAt(t, 7, 0) // 窗口开启
+	clock = shanghaiAt(t, 21, 0)
 	if err := w.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 07:00: %v", err)
+		t.Fatalf("RunOnce at 21:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {
-		t.Fatalf("07:00 window open: enqueued %d, want 1", got)
+		t.Fatalf("digest at local 21:00 at the chosen hour: enqueued %d, want 1", got)
 	}
 }

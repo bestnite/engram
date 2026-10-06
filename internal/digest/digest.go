@@ -5,9 +5,13 @@
 //   - 每人每周**恰好一封**：台账见 store.DigestLog，主键 (user_id, week_start) 是跨进程重启
 //     仍成立最后防线——进程内计数器一重启就归零，重启后当周会再发一封。
 //   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
-//   - 落在静默窗口（本地 23:00–07:00）时整轮跳过、不记台账，窗口开启后的下一轮再发。
+//   - 发送时间与复习提醒共用同一小时（users.reminder_hour，未设置时用 reminder.DefaultSendHour）：
+//     到达该小时后的首轮轮询即发，小时按用户时区解释。
 //   - SMTP 未配置时不发也不报错，只记一条英文日志。
 //   - 摘要是可选类型，带 RFC 8058 一键退订头（M1-22）。
+//
+// 静默窗口（旧 23:00–07:00）随复习提醒一并删除：发送时刻现在由用户显式选择（默认 19:00），
+// 静默窗既无用途又会压制用户明确选的深夜时段，详情见 internal/reminder 的包注释。
 //
 // 数字口径：摘要展示的每个数字都直接来自 internal/store 的 StatsStore 聚合方法（与统计页
 // M7-3 是同一批调用），handler 与 worker 都不写统计 SQL。窗口与统计页的「近 7 日」一致：
@@ -220,14 +224,15 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 // maybeSend 判定并（在满足条件时）入队一封摘要。
 //
 // 判定顺序（每一道都必须在入队前通过）：
-//  1. 静默窗口：落在用户本地 23:00–07:00 就整轮跳过，**不记录台账**——窗口开启后的下一轮会重新评估并补发。
+//  1. 发送时刻：用户本地时间还未到其选定的小时（默认 19:00，与复习提醒共用）就整轮跳过，
+//     **不记录台账**——到达该小时后的下一轮会重新评估并发出。
 //  2. 每周上限：用户本地周起始日（周一）已发过就不再发。
 //  3. 偏好门禁：C 类默认关，用户关掉后立即生效（每轮现读偏好，不缓存）。
 //
 // 台账只在 Enqueue 成功后才写，避免入队失败却把本周额度用掉。
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
 	loc := loadLocation(c.Timezone)
-	if reminder.InQuietHours(now.In(loc)) {
+	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
 		return nil
 	}
 	cutoff := normalizedCutoff(c.DayCutoffHour)
