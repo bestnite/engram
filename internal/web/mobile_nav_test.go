@@ -76,6 +76,8 @@ func mobileNavScrimInsideHeaderProblem(html string) string {
 // 抽屉必须脱离文档流、锚在页头下沿，遮罩必须在页头之外并覆盖整个视口。
 func TestMobileNavDrawerFloatsAndScrimCoversViewport(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// 断言的是 SSR 页头渲染出的移动端抽屉标记，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET / status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))

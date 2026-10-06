@@ -9,7 +9,7 @@ import (
 // 且早于样式表链接出现。外链的 pwa.js 与 tailwind.css 都是独立请求，浏览器可能在它们
 // 到达前先画出一帧白底；内联引导把暗色类、color-scheme、画布底色提前到首帧之前。
 func TestThemeBootstrapRunsBeforeStylesheet(t *testing.T) {
-	srv := newRenderServer(t, nil)
+	srv := newSSRServer(t, nil)
 	if !srv.assets.Has("css/tailwind.css") {
 		// tailwind.css 是 CI/构建期生成的（AGENTS.md §4）；未生成时跳过而不是误报失败
 		// ——与 home_test.go 的 hashed-asset 用例同一口径。

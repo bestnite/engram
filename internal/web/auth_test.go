@@ -154,6 +154,8 @@ func getWithCookies(t *testing.T, srv *Server, target string, cookies []*http.Co
 // TestRegisterLoginLogoutFlow 是 M1-4 的验收测试：一条 httptest 请求链走通注册→登录→登出。
 func TestRegisterLoginLogoutFlow(t *testing.T) {
 	srv, db := newAuthServer(t)
+	// 断言首页页头的登录/登出入口随会话变化，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 
 	// 尚无管理员：引导页可达，表单标题来自语言包（默认 zh-CN）。
 	setup := get(t, srv, "/setup", nil)
@@ -283,6 +285,8 @@ func TestRegisterLoginLogoutFlow(t *testing.T) {
 // 安装完但还没 setup 时，GET / 303 到 /setup；首个管理员建立后首页正常渲染。
 func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	srv, _ := newAuthServer(t)
+	// 断言首启窗口与引导完成后 SSR 首页的正文，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 
 	rec := get(t, srv, "/", nil)
 	if rec.Code != http.StatusSeeOther {

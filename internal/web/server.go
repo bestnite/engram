@@ -303,7 +303,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 	router.Use(s.localeMiddleware())
 	router.GET("/healthz", s.healthz)
-	router.GET("/", s.home)
+	router.GET("/", s.homeRoute)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	if s.spa != nil {
 		router.GET("/assets/*filepath", s.spa.ServeAsset)
