@@ -253,6 +253,14 @@ export class ApiClient {
     });
   }
 
+  /** Soft-delete one note through the authenticated, CSRF-protected REST API. */
+  async deleteNote(noteId: number | string): Promise<{ deleted: boolean; id: number }> {
+    const id = encodeURIComponent(String(noteId));
+    return this.request<{ deleted: boolean; id: number }>(`/api/v1/notes/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   /** 使用同源会话与内存 CSRF token 调用安全批量端点创建一条基础笔记。 */
   async createNotes(deckId: number | string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
     if (!this.csrfToken) {

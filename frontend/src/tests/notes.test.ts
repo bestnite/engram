@@ -20,6 +20,16 @@ describe('Deck and notes list API client and view contracts', () => {
     client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
   });
 
+  it('exposes a per-note delete control, confirmation, and localized result affordances', () => {
+    const view = fs.readFileSync(fileURLToPath(new URL('../lib/views/DeckDetailView.svelte', import.meta.url)), 'utf-8');
+    expect(view).toContain('data-testid="delete-note-{note.id}"');
+    expect(view).toContain('data-testid="confirm-delete-note-{note.id}"');
+    expect(view).toContain('data-testid="note-delete-success"');
+    expect(view).toContain('data-testid="note-delete-error"');
+    expect(view).toContain('await apiClient.deleteNote(note.id)');
+    expect(view).not.toContain('restoreNote');
+  });
+
   describe('GET /api/v1/decks/:id/notes query and path encoding', () => {
     it('correctly constructs path for numeric deckId with default params', async () => {
       const mockResponse: NotesResponse = {

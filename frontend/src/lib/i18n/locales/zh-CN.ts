@@ -213,4 +213,8 @@ export const zhCN: LocaleCatalog = {
   'note_preview.spa.front': '正面',
   'note_preview.spa.back': '背面',
   'note_preview.spa.math_notice': '目前仅显示 TeX 定界符，尚未加载公式渲染。',
+  'notes.delete': '删除',
+  'notes.delete_confirm': '确定删除这条笔记？',
+  'notes.deleting': '正在删除...',
+  'notes.delete_success': '笔记已删除。',
 };

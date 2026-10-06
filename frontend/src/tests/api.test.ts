@@ -185,6 +185,19 @@ describe('Centralized typed same-origin REST API client', () => {
         await expect(client.updateNote(1, { fields: {} })).rejects.toMatchObject({ status, code });
       }
     });
+
+    it('uses DELETE with session CSRF and preserves REST permission errors', async () => {
+      client.setCsrfToken('delete-csrf');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true, id: 7 }), { status: 200 }));
+      await expect(client.deleteNote(7)).resolves.toEqual({ deleted: true, id: 7 });
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/notes/7');
+      expect(init?.method).toBe('DELETE');
+      expect(init?.credentials).toBe('same-origin');
+      expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('delete-csrf');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'insufficient_role', message: 'denied' } }), { status: 403 }));
+      await expect(client.deleteNote(7)).rejects.toMatchObject({ status: 403, code: 'insufficient_role' });
+    });
   });
 
   describe('HTTP error code handling with Go error envelope', () => {
