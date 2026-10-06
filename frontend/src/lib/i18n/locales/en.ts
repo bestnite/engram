@@ -218,4 +218,12 @@ export const en: LocaleCatalog = {
   'notes.delete_confirm': 'Delete this note?',
   'notes.deleting': 'Deleting...',
   'notes.delete_success': 'Note deleted.',
+  'media.spa.open': 'Choose from library',
+  'media.spa.heading': 'Media library',
+  'media.spa.field': 'Insert into field',
+  'media.spa.loading': 'Loading media...',
+  'media.spa.failed': 'Could not load the media library.',
+  'media.spa.retry': 'Retry',
+  'media.spa.empty': 'No readable media found.',
+  'media.spa.next': 'Load more',
 };
