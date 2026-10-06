@@ -42,6 +42,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Node.js 环境与缓存：锁定 package-lock.json，为 SPA 构建提供支持
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install templ and the Tailwind standalone CLI
         run: |
           set -euo pipefail
@@ -56,8 +64,20 @@ jobs:
       - name: Show tool versions
         run: |
           go version
+          node --version
+          npm --version
           templ version
           tailwindcss --help | head -n 1
+
+      # 前端构建先于 Go 编译：产物进入 frontend/dist，由 go:embed all:dist 嵌入二进制
+      - name: Frontend check, test, and build
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm run check
+          npm test -- --run
+          npm run build
 
       # 生成先于一切编译：模板与 CSS 是 gitignore 的产物。
       - name: Generate templ code and Tailwind CSS

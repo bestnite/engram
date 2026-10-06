@@ -21,10 +21,11 @@ func (s *Server) registerNotFoundRoute(router *gin.Engine) {
 
 // notFound 是未命中任何路由的 catchall 回退（gin NoRoute 语义保证它不会遮蔽已注册路由）。
 //
-// 分三种出口，避免形态漂移：
+// 分四种出口，避免形态漂移（DESIGN.md §8.5、ROADMAP Task B2）：
 //   - /api 子路径：回 internal/api 的统一 JSON 错误包壳，脚本客户端永远拿到 JSON；
 //   - /mcp 子路径与非 GET 请求：只回朴素的 404 状态，不塞 HTML；
-//   - 其余 GET（真正的页面路径）：渲染设计过的本地化 404 页面。
+//   - 静态/媒体资源未命中路径（/assets/、/static/、/media/ 等）：只回 404 状态，严禁回退 HTML；
+//   - 其余未知的页面型 GET 路径：回退 SPA 应用壳（index.html），由客户端路由接管。若 SPA 未加载则回退本地化 404 页面。
 func (s *Server) notFound(c *gin.Context) {
 	path := c.Request.URL.Path
 	switch {
@@ -32,7 +33,13 @@ func (s *Server) notFound(c *gin.Context) {
 		s.apiNotFound(c)
 	case c.Request.Method != http.MethodGet || isMCPPath(path):
 		c.AbortWithStatus(http.StatusNotFound)
+	case isStaticOrMediaPath(path):
+		c.AbortWithStatus(http.StatusNotFound)
 	default:
+		if s.spa != nil {
+			s.spa.ServeIndex(c)
+			return
+		}
 		s.renderNotFoundPage(c)
 	}
 }
@@ -101,4 +108,12 @@ func isAPIPath(path string) bool {
 // isMCPPath 判断路径是否属于内置 MCP 端点。
 func isMCPPath(path string) bool {
 	return path == "/mcp" || strings.HasPrefix(path, "/mcp/")
+}
+
+// isStaticOrMediaPath 判断路径是否属于静态资源或媒体资源请求。
+func isStaticOrMediaPath(path string) bool {
+	return strings.HasPrefix(path, "/static/") ||
+		strings.HasPrefix(path, "/assets/") ||
+		strings.HasPrefix(path, "/media/") ||
+		path == "/favicon.ico"
 }

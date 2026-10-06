@@ -34,6 +34,8 @@ type Deps struct {
 	SchemaVersion func(ctx context.Context) (int, error)
 	// Assets 是已嵌入的静态资源清单；为空时由 New 从 embed 加载。
 	Assets *Assets
+	// SPA 是已嵌入的 SPA 静态资源及入口清单；为空时由 New 从 frontend.FS() 加载。
+	SPA *SPA
 	// Translator 是 i18n 本地化器工厂；为空时由 New 从嵌入语言包加载。
 	Translator *i18n.Translator
 	// UserLocale 返回当前请求的用户语言设置（可为空串）。M0 尚无会话，M1 接入后提供。
@@ -104,6 +106,7 @@ type Server struct {
 	// schemaVersion 由 main 注入，避免 web 反向依赖 store 的具体实现。
 	schemaVersion func(ctx context.Context) (int, error)
 	assets        *Assets
+	spa           *SPA
 	i18n          *i18n.Translator
 	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证 M8-4 报告页会渲染
 	// <100% 并点名缺失的 key；生产为空，报告走 i18n.Coverage。
@@ -186,6 +189,13 @@ func New(addr string, deps Deps) (*Server, error) {
 			return nil, err
 		}
 	}
+	spa := deps.SPA
+	if spa == nil {
+		var err error
+		if spa, err = LoadSPA(); err != nil {
+			return nil, err
+		}
+	}
 	translator := deps.Translator
 	if translator == nil {
 		var err error
@@ -200,6 +210,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		db:             deps.DB,
 		schemaVersion:  deps.SchemaVersion,
 		assets:         assets,
+		spa:            spa,
 		i18n:           translator,
 		userLocale:     deps.UserLocale,
 		accounts:       deps.Accounts,
@@ -290,6 +301,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.home)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
+	if s.spa != nil {
+		router.GET("/assets/*filepath", s.spa.ServeAsset)
+	}
 	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
 	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
