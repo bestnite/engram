@@ -11,6 +11,7 @@ import {
   type CreateNotesRequest,
   type CreateNotesResponse,
   type NotePreviewResponse,
+  type MediaPickerPage,
   type StatsSummary,
   type DueCardsResponse,
   type DueCardsQuery,
@@ -289,6 +290,50 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify({ kind, fields }),
     });
+  }
+
+  /** 复用已有的编辑器权限媒体片段；权限与可读媒体集合仍由服务端判定。 */
+  async getMediaPickerPage(deckId: number | string, cursor = ''): Promise<MediaPickerPage> {
+    const expectedPath = `/decks/${encodeURIComponent(String(deckId))}/media/picker`;
+    const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    const headers = new Headers({ Accept: 'text/html' });
+    headers.delete('Authorization');
+    let response: Response;
+    try {
+      response = await this.fetchFn(`${expectedPath}${suffix}`, {
+        method: 'GET', headers, credentials: 'same-origin',
+      });
+    } catch (err) {
+      throw new ApiClientError('Network request failed', { status: 0, code: 'network_error', details: err });
+    }
+    if (!response.ok) {
+      throw new ApiClientError(`HTTP ${response.status}`, {
+        status: response.status, code: inferErrorCodeFromStatus(response.status),
+      });
+    }
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const root = doc.querySelector('#media-picker-list');
+    if (!root) throw new ApiClientError('Invalid media picker response', { status: response.status, code: 'invalid_response' });
+    const items = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-media-insert]')).map((button) => {
+      const sha256 = button.title;
+      const path = button.getAttribute('data-media-insert');
+      const image = button.querySelector('img');
+      if (!/^[0-9a-f]{64}$/.test(sha256) || path !== `/media/${sha256}` || image?.getAttribute('src') !== path) {
+        throw new ApiClientError('Invalid media picker item', { status: response.status, code: 'invalid_response' });
+      }
+      return { sha256, src: path, insert_url: path };
+    });
+    const next = root.querySelector<HTMLButtonElement>('button[hx-get]')?.getAttribute('hx-get') || '';
+    let nextCursor = '';
+    if (next) {
+      const url = new URL(next, window.location.origin);
+      if (url.origin !== window.location.origin || url.pathname !== expectedPath) {
+        throw new ApiClientError('Invalid media picker pagination response', { status: response.status, code: 'invalid_response' });
+      }
+      nextCursor = url.searchParams.get('cursor') || '';
+    }
+    return { items, next_cursor: nextCursor };
   }
 
   /**

@@ -72,6 +72,18 @@ export interface NotePreviewResponse {
   cards: Array<{ front_html: string; back_html: string }>;
 }
 
+/** A media item parsed from the existing editor-authorized server picker fragment. */
+export interface MediaPickerItem {
+  sha256: string;
+  src: string;
+  insert_url: string;
+}
+
+export interface MediaPickerPage {
+  items: MediaPickerItem[];
+  next_cursor: string;
+}
+
 /**
  * GET /api/v1/decks/:id/notes 查询参数
  * internal/store/note.go:NoteListOptions

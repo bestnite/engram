@@ -34,6 +34,35 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
+  describe('SPA media picker', () => {
+    it('loads the existing editor-gated picker with same-origin cookies and no bearer token', async () => {
+      const sha = 'a'.repeat(64);
+      const button = {
+        title: sha,
+        getAttribute: (name: string) => name === 'data-media-insert' ? `/media/${sha}` : null,
+        querySelector: () => ({ getAttribute: () => `/media/${sha}` }),
+      };
+      const root = { querySelectorAll: () => [button], querySelector: () => null };
+      vi.stubGlobal('window', { location: { origin: 'http://localhost' } });
+      vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelector: () => root }; } });
+      mockFetch.mockResolvedValueOnce(new Response('<div id="media-picker-list"></div>', { status: 200 }));
+      await expect(client.getMediaPickerPage(12)).resolves.toEqual({
+        items: [{ sha256: sha, src: `/media/${sha}`, insert_url: `/media/${sha}` }], next_cursor: '',
+      });
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/decks/12/media/picker');
+      expect(init?.credentials).toBe('same-origin');
+      expect(new Headers(init?.headers).get('Accept')).toBe('text/html');
+      expect(new Headers(init?.headers).has('Authorization')).toBe(false);
+      vi.unstubAllGlobals();
+    });
+
+    it('preserves the server editor authorization failure', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('', { status: 403 }));
+      await expect(client.getMediaPickerPage(12)).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
   describe('basic note batch creation', () => {
     it('loads a session CSRF token and posts a typed basic note batch', async () => {
       mockFetch
@@ -176,7 +205,7 @@ describe('Centralized typed same-origin REST API client', () => {
   describe('Note updates', () => {
     it('sends a typed PATCH payload with the session CSRF token and maps the response', async () => {
       client.setCsrfToken('session-csrf');
-      const updated = { id: 7, deck_id: 3, kind: 'basic', fields: { front: '<img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
+      const updated = { id: 7, deck_id: 3, kind: 'basic', fields: { front: '<' + 'img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }));
       const result = await client.updateNote(7, { kind: 'basic', fields: updated.fields, tags: ['safe'] });
       expect(result).toEqual(updated);

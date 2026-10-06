@@ -16,6 +16,13 @@
   let previewLoading = $state(false);
   let previewError = $state(false);
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
+  let mediaItems = $state<Array<{ sha256: string; src: string; insert_url: string }>>([]);
+  let mediaCursor = $state('');
+  let mediaOpen = $state(false);
+  let mediaLoading = $state(false);
+  let mediaError = $state(false);
+  let mediaHasMore = $state(false);
+  let selectedField = $state('');
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
 
@@ -25,16 +32,55 @@
     try {
       // 列表返回字段保持纯文本；编辑器不把 Markdown 当 HTML 渲染。
       const result = await apiClient.getDeckNotes(deckId, { page: 1, per_page: 100 });
-      note = result.notes.find((item) => String(item.id) === noteId) || null;
-      if (note) {
-        fieldsText = JSON.stringify(note.fields, null, 2);
-        tagsText = note.tags.join(', ');
+      const loadedNote = result.notes.find((item) => String(item.id) === noteId) || null;
+      note = loadedNote;
+      if (loadedNote) {
+        fieldsText = JSON.stringify(loadedNote.fields, null, 2);
+        tagsText = loadedNote.tags.join(', ');
+        selectedField = Object.keys(loadedNote.fields).find((key) => typeof loadedNote.fields[key] === 'string') || '';
       } else error = true;
     } catch {
       error = true;
     } finally {
       loading = false;
     }
+  }
+
+  async function loadMedia(reset = false): Promise<void> {
+    mediaLoading = true;
+    mediaError = false;
+    try {
+      const page = await apiClient.getMediaPickerPage(deckId, reset ? '' : mediaCursor);
+      mediaItems = reset ? page.items : [...mediaItems, ...page.items];
+      mediaCursor = page.next_cursor;
+      mediaHasMore = Boolean(page.next_cursor);
+    } catch {
+      mediaError = true;
+    } finally {
+      mediaLoading = false;
+    }
+  }
+
+  async function toggleMedia(): Promise<void> {
+    mediaOpen = !mediaOpen;
+    if (mediaOpen && mediaItems.length === 0 && !mediaLoading) await loadMedia(true);
+  }
+
+  function insertMedia(url: string): void {
+    let fields: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(fieldsText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('fields');
+      fields = parsed as Record<string, unknown>;
+    } catch {
+      invalid = true;
+      return;
+    }
+    const current = fields[selectedField];
+    if (typeof current !== 'string') return;
+    fields[selectedField] = `${current}${current && !current.endsWith('\n') ? '\n' : ''}![](${url})`;
+    fieldsText = JSON.stringify(fields, null, 2);
+    saved = false;
   }
 
   async function preview(): Promise<void> {
@@ -111,6 +157,36 @@
       <label class="block text-sm font-medium">{$t('note_edit.fields')}
         <textarea data-testid="note-fields-editor" bind:value={fieldsText} rows="14" spellcheck="false" class="mt-2 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3 font-mono text-sm"></textarea>
       </label>
+      <!-- 选择器只引用原图；延迟加载与限高遵循 DESIGN.md §6.3。 -->
+      <div class="space-y-3">
+        <label class="block text-sm font-medium">{$t('media.spa.field')}
+          <select data-testid="spa-media-field" bind:value={selectedField} class="ml-2 rounded-md border px-3 py-2">
+            {#each Object.entries(note.fields).filter(([, value]) => typeof value === 'string') as [key]}
+              <option value={key}>{key}</option>
+            {/each}
+          </select>
+        </label>
+        <button data-testid="spa-media-picker-toggle" type="button" onclick={toggleMedia} class="rounded-md border px-4 py-2">{$t('media.spa.open')}</button>
+        {#if mediaOpen}
+          <section data-testid="spa-media-picker" class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
+            <h2 class="text-lg font-semibold">{$t('media.spa.heading')}</h2>
+            {#if mediaLoading}<p role="status">{$t('media.spa.loading')}</p>{/if}
+            {#if mediaError}<p role="alert">{$t('media.spa.failed')}</p><button type="button" onclick={() => loadMedia(!mediaCursor)}>{$t('media.spa.retry')}</button>{/if}
+            {#if !mediaLoading && !mediaError && mediaItems.length === 0}<p>{$t('media.spa.empty')}</p>{/if}
+            {#if mediaItems.length > 0}
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {#each mediaItems as item (item.sha256)}
+                  <button data-testid="spa-media-item-{item.sha256}" type="button" onclick={() => insertMedia(item.insert_url)} class="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2">
+                    <img src={item.src} alt={item.sha256} loading="lazy" class="h-24 w-full object-contain" />
+                    <span class="block truncate px-2 py-1 text-xs">{item.sha256}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            {#if mediaHasMore}<button data-testid="spa-media-next" type="button" disabled={mediaLoading} onclick={() => loadMedia(false)} class="mt-3 rounded-md border px-4 py-2 disabled:opacity-50">{$t('media.spa.next')}</button>{/if}
+          </section>
+        {/if}
+      </div>
       <button data-testid="note-preview" type="button" onclick={preview} disabled={previewLoading} class="rounded-md border px-4 py-2 disabled:opacity-50">{previewLoading ? $t('note_preview.spa.loading') : $t('note_preview.spa.action')}</button>
       {#if previewError}<p role="alert" data-testid="note-preview-error">{$t('note_preview.spa.failed')}</p>{/if}
       {#if previewCards}

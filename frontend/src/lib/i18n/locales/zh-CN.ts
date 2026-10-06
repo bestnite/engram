@@ -218,4 +218,12 @@ export const zhCN: LocaleCatalog = {
   'notes.delete_confirm': '确定删除这条笔记？',
   'notes.deleting': '正在删除...',
   'notes.delete_success': '笔记已删除。',
+  'media.spa.open': '从媒体库选择',
+  'media.spa.heading': '媒体库',
+  'media.spa.field': '插入到字段',
+  'media.spa.loading': '正在加载媒体...',
+  'media.spa.failed': '无法加载媒体库。',
+  'media.spa.retry': '重试',
+  'media.spa.empty': '没有可读取的媒体。',
+  'media.spa.next': '加载更多',
 };
