@@ -44,6 +44,12 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.GET("/auth/oidc/callback", s.oidcCallback)
 	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
+
+	// SPA / 同源 JSON 会话与认证端点（DESIGN.md §4.3、§8.3）
+	router.GET("/api/v1/auth/session", s.apiSession)
+	router.GET("/api/v1/session", s.apiSession)
+	router.POST("/api/v1/auth/login", auth.DoubleSubmitMiddleware(), s.apiLogin)
+	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。

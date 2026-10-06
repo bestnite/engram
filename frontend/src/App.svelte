@@ -2,11 +2,13 @@
   import { onMount } from 'svelte';
   import { routeStore, initRouter } from './lib/router';
   import { localeStore, t } from './lib/i18n';
+  import { initAuth } from './lib/auth';
   import NavHeader from './lib/components/NavHeader.svelte';
   import NotFoundView from './lib/views/NotFoundView.svelte';
 
-  // 挂载时初始化浏览器路由监听（popstate 与链接代理）
+  // 挂载时初始化认证会话与浏览器路由监听（popstate 与链接代理）
   onMount(() => {
+    initAuth();
     const cleanup = initRouter();
     return cleanup;
   });

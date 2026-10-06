@@ -360,8 +360,8 @@ describe('Centralized typed same-origin REST API client', () => {
       });
       const keyCsrfFailed = getApiErrorMessageKey(errCsrfFailed);
       expect(keyCsrfFailed).toBe('error.csrf_failed');
-      expect(formatMessage('zh-CN', keyCsrfFailed)).toBe('安全校验令牌失效，请刷新页面后重试');
-      expect(formatMessage('en', keyCsrfFailed)).toBe('Security validation token expired, please refresh the page');
+      expect(formatMessage('zh-CN', keyCsrfFailed)).toBe('CSRF 校验失败，请刷新页面后重试');
+      expect(formatMessage('en', keyCsrfFailed)).toBe('CSRF validation failed, please refresh and try again');
     });
   });
 

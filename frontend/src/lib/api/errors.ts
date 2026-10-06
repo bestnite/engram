@@ -10,6 +10,18 @@ export function getApiErrorMessageKey(error: unknown): string {
     if (error.code === 'csrf_failed' || error.code === 'csrf_no_session') {
       return 'error.csrf_failed';
     }
+    if (error.isCsrfError) {
+      return 'error.csrf_failed';
+    }
+    if (error.isInvalidCredentials) {
+      return 'error.invalid_credentials';
+    }
+    if (error.isUserDisabled) {
+      return 'error.user_disabled';
+    }
+    if (error.isTotpRequired) {
+      return 'error.totp_required';
+    }
     if (error.isUnauthorized) {
       return 'error.unauthorized';
     }
