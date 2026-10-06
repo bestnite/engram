@@ -43,10 +43,16 @@ export const routes: RouteDefinition[] = [
     component: DeckSharingView as unknown as RouteDefinition['component'],
   },
   {
-    // 卡组每日上限设置。刻意走 /spa 前缀：SSR 仍占用 /decks/:id/settings，
-    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
-    path: '/spa/decks/:id/settings',
+    // 卡组每日上限设置（DESIGN.md §8.1 的规范路径）。服务端 GET /decks/:id/settings 已切到
+    // 应用壳（owner 门禁仍在服务端），读写走 /api/v1/decks/:id/settings。
+    path: '/decks/:id/settings',
     name: 'deck-settings',
+    component: DeckSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /decks/:id/settings。
+    path: '/spa/decks/:id/settings',
+    name: 'deck-settings-spa',
     component: DeckSettingsView as unknown as RouteDefinition['component'],
   },
   {
@@ -112,17 +118,29 @@ export const routes: RouteDefinition[] = [
     component: APIKeysView as unknown as RouteDefinition['component'],
   },
   {
-    // 两步验证管理。刻意走 /spa 前缀：SSR 仍占用 /settings/totp，
-    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
-    path: '/spa/settings/totp',
+    // 两步验证管理（DESIGN.md §8.1 的规范路径）。服务端 GET /settings/totp 已切到应用壳，
+    // 读写走 /api/v1/settings/totp*。
+    path: '/settings/totp',
     name: 'totp-settings',
     component: TOTPView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮件通知偏好。同样走 /spa 前缀：SSR 仍占用 /settings/notifications，
-    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
-    path: '/spa/settings/notifications',
+    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /settings/totp。
+    path: '/spa/settings/totp',
+    name: 'totp-settings-spa',
+    component: TOTPView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 邮件通知偏好（DESIGN.md §8.1 的规范路径）。服务端 GET /settings/notifications 已切到
+    // 应用壳，读写走 /api/v1/settings/notifications。
+    path: '/settings/notifications',
     name: 'notification-settings',
+    component: NotificationPrefsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /settings/notifications。
+    path: '/spa/settings/notifications',
+    name: 'notification-settings-spa',
     component: NotificationPrefsView as unknown as RouteDefinition['component'],
   },
   {

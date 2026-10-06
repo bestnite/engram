@@ -106,6 +106,8 @@ func deckCapsFromDB(t *testing.T, db *gorm.DB, deckID uint64) store.DeckCaps {
 // 当前值（含 0），今日已用/剩余来自 schedule.DeckBudgets（与队列同源），表单字段名固定。
 func TestDeckSettingsPageShowsCapsAndTodayUsage(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// 本用例断言 SSR 设置页的渲染结果，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Settings deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
 		store.DeckCaps{NewPerDay: 5, ReviewsPerDay: 10}); err != nil {
@@ -155,6 +157,8 @@ func TestDeckSettingsPageShowsCapsAndTodayUsage(t *testing.T) {
 // 该卡组今天能刷的新卡 / 复习卡立刻变少，且库里的两列就是提交值。
 func TestDeckSettingsUpdateTakesEffectImmediately(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// 本用例回读 SSR 设置页的渲染结果，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Capped deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
 		store.DeckCaps{NewPerDay: 5, ReviewsPerDay: 5}); err != nil {
@@ -222,6 +226,8 @@ func TestDeckSettingsUpdateTakesEffectImmediately(t *testing.T) {
 // 页面的「剩余」显示不限文案而不是 0。
 func TestDeckSettingsZeroMeansUnlimited(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// 本用例断言 SSR 设置页的渲染结果，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Unlimited deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
 		store.DeckCaps{NewPerDay: 1, ReviewsPerDay: 1}); err != nil {

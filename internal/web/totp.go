@@ -40,7 +40,7 @@ func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	// 凭据，POST 提交验证码并签发会话。与上面的 SSR 表单共用同一份服务逻辑与限速器。
 	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
 	router.POST("/api/v1/auth/totp", auth.DoubleSubmitMiddleware(), s.apiTOTPSubmit)
-	router.GET("/settings/totp", s.totpSettingsPage)
+	router.GET("/settings/totp", s.totpSettingsRoute)
 	router.POST("/settings/totp/begin", s.sessions.CSRFMiddleware(), s.totpBeginSubmit)
 	router.POST("/settings/totp/confirm", s.sessions.CSRFMiddleware(), s.totpConfirmSubmit)
 	router.POST("/settings/totp/disable", s.sessions.CSRFMiddleware(), s.totpDisableSubmit)
@@ -470,4 +470,19 @@ func passwordConfirmErrorKey(err error) string {
 		return "totp.error.password_wrong"
 	}
 	return "totp.error.password_required"
+}
+
+// totpSettingsRoute 提供 GET /settings/totp：SPA 已加载时返回应用壳（DESIGN.md §8.1、§8.5），
+// 由客户端路由渲染两步验证管理页；读写仍走 /api/v1/settings/totp*（同一份服务逻辑与审计），
+// 因此页面迁移不新增任何写路径。授权判定与迁移前一致：未登录一律重定向登录页。
+// SPA 缺失（降级构建）时回退 SSR 设置页 totpSettingsPage。
+func (s *Server) totpSettingsRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.totpSettingsPage(c)
 }

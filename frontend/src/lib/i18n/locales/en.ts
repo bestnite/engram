@@ -419,7 +419,7 @@ export const en: LocaleCatalog = {
   'stats.tag.col.reviews': 'Reviews',
   'stats.tag.col.retention': 'Retention',
   'stats.table.rate': '{rate}%',
-  // ---- Deck daily-cap settings (/spa/decks/:id/settings), DESIGN.md §8.1、§3.3 ----
+  // ---- Deck daily-cap settings (/decks/:id/settings), DESIGN.md §8.1、§3.3 ----
   'deck.settings.entry': 'Settings',
   'deck.settings.title': 'Deck settings',
   'deck.settings.back': 'Back to deck',
@@ -440,7 +440,7 @@ export const en: LocaleCatalog = {
   'deck.settings.error.failed': 'Could not save the limits. Please try again.',
   'deck.settings.error.forbidden': 'Only the deck owner can change these limits.',
   'deck.settings.failed': 'Could not load the deck limits.',
-  // ---- TOTP two-factor management (/spa/settings/totp), DESIGN.md §4.3、§8.1 ----
+  // ---- TOTP two-factor management (/settings/totp), DESIGN.md §4.3、§8.1 ----
   // secret is shown only once (from begin); recovery codes only when generated.
   'settings.totp.heading': 'Two-factor authentication',
   'settings.totp.intro': 'When enabled, signing in also requires a time-based code from your authenticator app.',
@@ -477,7 +477,7 @@ export const en: LocaleCatalog = {
   'settings.totp.error.invalid_request': 'Enter the required value.',
   'settings.totp.error.failed': 'The operation failed. Please try again.',
   'settings.totp.failed': 'Could not load the two-factor settings.',
-  // ---- Notification/email preferences (/spa/settings/notifications), DESIGN.md §4.7、§8.1 ----
+  // ---- Notification/email preferences (/settings/notifications), DESIGN.md §4.7、§8.1 ----
   // Type and class identifiers come from the server catalog; the text is localised by stable id,
   // so the frontend never keeps a second type list of its own.
   'settings.notifications.heading': 'Email notification preferences',

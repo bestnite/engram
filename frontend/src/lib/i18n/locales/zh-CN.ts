@@ -419,7 +419,7 @@ export const zhCN: LocaleCatalog = {
   'stats.tag.col.reviews': '复习量',
   'stats.tag.col.retention': '留存率',
   'stats.table.rate': '{rate}%',
-  // ---- 卡组每日上限设置（/spa/decks/:id/settings），DESIGN.md §8.1、§3.3 ----
+  // ---- 卡组每日上限设置（/decks/:id/settings），DESIGN.md §8.1、§3.3 ----
   'deck.settings.entry': '设置',
   'deck.settings.title': '卡组设置',
   'deck.settings.back': '返回卡组',
@@ -440,7 +440,7 @@ export const zhCN: LocaleCatalog = {
   'deck.settings.error.failed': '保存失败，请重试。',
   'deck.settings.error.forbidden': '只有卡组所有者能修改这些上限。',
   'deck.settings.failed': '无法加载卡组上限。',
-  // ---- 两步验证管理（/spa/settings/totp），DESIGN.md §4.3、§8.1 ----
+  // ---- 两步验证管理（/settings/totp），DESIGN.md §4.3、§8.1 ----
   // secret 只在 begin 时显示一次；恢复码只在生成时显示。
   'settings.totp.heading': '两步验证',
   'settings.totp.intro': '启用后，登录还需要认证器 App 生成的动态验证码。',
@@ -477,7 +477,7 @@ export const zhCN: LocaleCatalog = {
   'settings.totp.error.invalid_request': '请填写必填项。',
   'settings.totp.error.failed': '操作失败，请重试。',
   'settings.totp.failed': '无法加载两步验证设置。',
-  // ---- 邮件通知偏好（/spa/settings/notifications），DESIGN.md §4.7、§8.1 ----
+  // ---- 邮件通知偏好（/settings/notifications），DESIGN.md §4.7、§8.1 ----
   // 类型与大类标识来自服务端目录；文案按稳定标识本地化，前端不另列类型清单。
   'settings.notifications.heading': '邮件通知偏好',
   'settings.notifications.intro': '选择本站可以给你发送哪些可选邮件；安全与事务类邮件不可关闭。',

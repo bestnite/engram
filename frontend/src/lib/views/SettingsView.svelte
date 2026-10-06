@@ -335,17 +335,17 @@
           <button type="submit" disabled={passwordSaving} class="rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</button>
         </form>
       </section>
-      <!-- 两步验证入口：指向独立的 /spa/settings/totp（SSR 的 /settings/totp 在端到端验证前不遮蔽） -->
+      <!-- 两步验证入口：服务端 GET /settings/totp 已切到应用壳，走规范路径 -->
       <section class="card-subtle p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
-        <a href="/spa/settings/totp" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.totp.entry')}</a>
+        <a href="/settings/totp" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.totp.entry')}</a>
       </section>
-      <!-- 邮件通知偏好入口：指向独立的 /spa/settings/notifications（SSR 的 /settings/notifications 在端到端验证前不遮蔽） -->
+      <!-- 邮件通知偏好入口：服务端 GET /settings/notifications 已切到应用壳，走规范路径 -->
       <section class="card-subtle p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
-        <a href="/spa/settings/notifications" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.notifications.entry')}</a>
+        <a href="/settings/notifications" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.notifications.entry')}</a>
       </section>
     {/if}
   </div>

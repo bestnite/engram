@@ -105,11 +105,14 @@ describe('deck settings API client', () => {
   });
 });
 
-describe('deck settings SPA route does not shadow the SSR path', () => {
-  it('resolves /spa/decks/:id/settings and leaves /decks/:id/settings to SSR', () => {
-    const match = matchRoute('/spa/decks/42/settings', routes);
+describe('deck settings SPA route owns the canonical path', () => {
+  it('resolves /decks/:id/settings and keeps the /spa alias', () => {
+    const match = matchRoute('/decks/42/settings', routes);
     expect(match.route?.name).toBe('deck-settings');
     expect(match.params).toEqual({ id: '42' });
-    expect(matchRoute('/decks/42/settings', routes).route).toBeNull();
+    // 迁移期的旧地址保留为别名，既有深链不失效。
+    expect(matchRoute('/spa/decks/42/settings', routes).route?.name).toBe('deck-settings-spa');
+    // 卡组详情本身不能被设置页的路径吃掉。
+    expect(matchRoute('/decks/42', routes).route?.name).toBe('deck-detail');
   });
 });

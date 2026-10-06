@@ -138,9 +138,10 @@ describe('Notification preferences API client uses session-only, CSRF-protected 
   });
 });
 
-describe('Notification SPA route does not shadow the SSR path', () => {
-  it('resolves /spa/settings/notifications and leaves /settings/notifications to SSR', () => {
-    expect(matchRoute('/spa/settings/notifications', routes).route?.name).toBe('notification-settings');
-    expect(matchRoute('/settings/notifications', routes).route).toBeNull();
+describe('Notification SPA route owns the canonical path', () => {
+  it('resolves /settings/notifications and keeps the /spa alias', () => {
+    expect(matchRoute('/settings/notifications', routes).route?.name).toBe('notification-settings');
+    expect(matchRoute('/spa/settings/notifications', routes).route?.name).toBe('notification-settings-spa');
+    expect(matchRoute('/settings', routes).route?.name).toBe('settings');
   });
 });

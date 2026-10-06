@@ -36,7 +36,7 @@ func (s *Server) registerMailPrefsRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil {
 		return
 	}
-	router.GET("/settings/notifications", s.mailPrefsPage)
+	router.GET("/settings/notifications", s.mailPrefsRoute)
 	router.POST("/settings/notifications", s.sessions.CSRFMiddleware(), s.mailPrefsSubmit)
 }
 
@@ -242,4 +242,19 @@ func reminderHourOptions(loc *i18n.Localizer, selected *int) []views.SelectOptio
 // hourLabel 把 0–23 的整点格式化成 "HH:00"；纯数字，不含需要本地化的词。
 func hourLabel(hour int) string {
 	return strconv.Itoa(hour) + ":00"
+}
+
+// mailPrefsRoute 提供 GET /settings/notifications：SPA 已加载时返回应用壳（DESIGN.md §8.1、§8.5），
+// 由客户端路由渲染邮件通知偏好页；读取与写入走 /api/v1/settings/notifications（同一份服务逻辑）。
+// 授权判定与迁移前一致：未登录一律重定向登录页，页面迁移不新增写路径。
+// SPA 缺失（降级构建）时回退 SSR 偏好页 mailPrefsPage。
+func (s *Server) mailPrefsRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.mailPrefsPage(c)
 }

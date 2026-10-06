@@ -25,7 +25,7 @@ func (s *Server) registerDeckSettingsRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {
 		return
 	}
-	router.GET("/decks/:id/settings", s.deckSettingsPage)
+	router.GET("/decks/:id/settings", s.deckSettingsRoute)
 	router.POST("/decks/:id/settings", s.sessions.CSRFMiddleware(), s.deckSettingsUpdate)
 }
 
@@ -188,4 +188,28 @@ func deckLeftText(left int, unlimited bool, unlimitedText string) string {
 		return unlimitedText
 	}
 	return strconv.Itoa(left)
+}
+
+// deckSettingsRoute 提供 GET /decks/:id/settings：SPA 已加载时返回应用壳（DESIGN.md §8.1、§8.5），
+// 由客户端路由渲染卡组每日上限页；读写走 /api/v1/decks/:id/settings（同一份服务逻辑与审计）。
+//
+// owner 门禁留在服务端：非 owner 与不存在的卡组在返回应用壳之前就以 403 / 404 结束，
+// 与迁移前的 SSR 页面完全一致（否则会让无权用户拿到页面外壳）。SPA 缺失时回退 SSR 页面。
+func (s *Server) deckSettingsRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	deckID, ok := deckIDParam(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.deckSettingsPage(c)
 }

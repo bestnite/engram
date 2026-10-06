@@ -62,6 +62,8 @@ func checkboxState(body, name string) (found, checked bool) {
 // 四类都在页面上；A 类渲染成禁用复选框且没有可提交的输入名；B 默认勾选、C 默认不勾选。
 func TestMailPrefsPageShowsAllClassesAndLocksClassA(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// 本用例断言 SSR 偏好页的渲染结果，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	setOwnerLocale(t, db, ownerID, "en")
 
 	page := getWithCookies(t, srv, "/settings/notifications", cookies)
@@ -109,6 +111,8 @@ func TestMailPrefsPageShowsAllClassesAndLocksClassA(t *testing.T) {
 // 真正的「关闭数据库再打开」在 store 层 TestEmailPrefsPersistAcrossReopen 里验证。
 func TestMailPrefsOptionalChoiceRoundTrips(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// 回读断言 SSR 偏好页的勾选状态，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	setOwnerLocale(t, db, ownerID, "en")
 
 	rec := postMailPrefs(t, srv, cookies, csrf, map[mail.Type]bool{
@@ -230,6 +234,8 @@ func TestMailPrefsRejectsMissingCSRF(t *testing.T) {
 //   - 非法值（99）以 400 拒绝且不改动已存的值。
 func TestMailPrefsReminderTimeRoundTrips(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// 回读断言 SSR 偏好页的下拉渲染，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	setOwnerLocale(t, db, ownerID, "en")
 	users := store.NewUserStore(db)
 

@@ -325,7 +325,7 @@
       >{$t('deck.sharing.title')}</a>
       {#if isOwner}
         <a
-          href="/spa/decks/{encodeURIComponent(deckId)}/settings"
+          href="/decks/{encodeURIComponent(deckId)}/settings"
           data-testid="deck-settings-link"
           class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
         >{$t('deck.settings.entry')}</a>

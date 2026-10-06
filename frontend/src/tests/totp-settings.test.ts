@@ -164,9 +164,11 @@ describe('TOTP API client uses session-only, CSRF-protected endpoints', () => {
   });
 });
 
-describe('TOTP SPA route does not shadow the SSR path', () => {
-  it('resolves /spa/settings/totp and leaves /settings/totp to SSR', () => {
-    expect(matchRoute('/spa/settings/totp', routes).route?.name).toBe('totp-settings');
-    expect(matchRoute('/settings/totp', routes).route).toBeNull();
+describe('TOTP SPA route owns the canonical path', () => {
+  it('resolves /settings/totp and keeps the /spa alias', () => {
+    expect(matchRoute('/settings/totp', routes).route?.name).toBe('totp-settings');
+    expect(matchRoute('/spa/settings/totp', routes).route?.name).toBe('totp-settings-spa');
+    // 个人设置页本身不能被两步验证子页的路径吃掉。
+    expect(matchRoute('/settings', routes).route?.name).toBe('settings');
   });
 });
