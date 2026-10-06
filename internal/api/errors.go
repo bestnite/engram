@@ -37,6 +37,8 @@ const (
 	// CodeDeckNameInvalid 表示建卡组/改名时卡组名不满足长度或字符规则
 	// （与卡组包 manifest 同源；store 层 ErrDeckNameInvalid）。
 	CodeDeckNameInvalid = "deck_name_invalid"
+	// CodeDeckDescriptionInvalid 表示描述超长或含非法字符。
+	CodeDeckDescriptionInvalid = "deck_description_invalid"
 	// CodeMediaNotReadable 表示 note 写入引用了写入者无法读取的媒体，写入被拒（写前校验）。
 	// 与 store.CodeMediaNotReadable 同值（DESIGN.md §6.3）。
 	CodeMediaNotReadable = "media_not_readable"
@@ -80,7 +82,8 @@ var errorMessages = map[string]string{
 	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
 
 	// 建卡组/改名的稳定 code（store.ErrDeckNameInvalid）。
-	CodeDeckNameInvalid: "The deck name is invalid.",
+	CodeDeckNameInvalid:        "The deck name is invalid.",
+	CodeDeckDescriptionInvalid: "The deck description is invalid.",
 }
 
 // errorMessageKey 返回 code 对应的语言包键名。

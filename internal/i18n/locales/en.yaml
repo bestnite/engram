@@ -1998,6 +1998,9 @@
   translation: "Expiry date (optional)"
 - id: keys.create.expires_hint
   translation: "Leave empty for no expiry."
+
+- id: error.deck_description_invalid
+  translation: "The deck description is invalid."
 - id: keys.create.submit
   translation: "Create"
 - id: keys.scope.read

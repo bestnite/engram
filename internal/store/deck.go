@@ -49,6 +49,8 @@ var (
 	// maxDeckNameChars 个字符（按 rune 计）、含 C0 控制字符、或不是合法 UTF-8。
 	// 空名单独由 ErrDeckNameRequired 表示，不并入这个哨兵。
 	ErrDeckNameInvalid = errors.New("deck name is invalid")
+	// ErrDeckDescriptionInvalid 将描述拒绝与卡组名拒绝区分，便于传输层定位字段。
+	ErrDeckDescriptionInvalid = errors.New("deck description is invalid")
 	// ErrDeckPresetRequired 表示卡组未指定调度预设。
 	ErrDeckPresetRequired = errors.New("deck preset is required")
 	// ErrInvalidDeckCap 表示每日上限为负；0 是合法值（不限）。
@@ -124,6 +126,10 @@ func validateDeckName(name string) error {
 func validateDeckForWrite(d *Deck, create bool) error {
 	if err := validateDeckName(d.Name); err != nil {
 		return err
+	}
+	// 与包导入复用同一文本规则，避免创建端产出导入端拒绝的描述。空描述合法。
+	if entries := textFieldErrors("deck.description", d.Description, maxDeckDescriptionChars); len(entries) > 0 {
+		return fmt.Errorf("%w: %s", ErrDeckDescriptionInvalid, entries[0])
 	}
 	if d.Visibility == "" {
 		// 字符串型默认值由 store 层在 Go 侧给出（models.go 包注释）；DESIGN.md §2.2 默认 private。

@@ -1998,6 +1998,9 @@
   translation: "留空表示不过期。"
 - id: keys.create.submit
   translation: "创建"
+
+- id: error.deck_description_invalid
+  translation: "卡组描述不合法：最多 2000 个字符，且不能包含控制字符。"
 - id: keys.scope.read
   translation: "read（读取）"
 - id: keys.scope.write
