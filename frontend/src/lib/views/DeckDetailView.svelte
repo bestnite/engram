@@ -154,6 +154,16 @@
       {/if}
     </div>
 
+    <div class="mb-4">
+      <a
+        href="/decks/{encodeURIComponent(deckId)}/notes/new"
+        data-testid="create-note-link"
+        class="inline-flex items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      >
+        {$t('notes.create')}
+      </a>
+    </div>
+
     <!-- 搜索与筛选表单 -->
     <form
       onsubmit={handleFilterSubmit}

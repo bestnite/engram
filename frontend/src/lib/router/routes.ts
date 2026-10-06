@@ -7,7 +7,11 @@ import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
+<<<<<<< HEAD
 import NoteEditView from '../views/NoteEditView.svelte';
+=======
+import NoteCreateView from '../views/NoteCreateView.svelte';
+>>>>>>> 4f21850 (feat: add SPA basic note creation)
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -37,6 +41,11 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/notes/:noteId/edit',
     name: 'note-edit',
     component: NoteEditView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/decks/:id/notes/new',
+    name: 'note-create',
+    component: NoteCreateView as unknown as RouteDefinition['component'],
   },
   {
     path: '/spa/review',
