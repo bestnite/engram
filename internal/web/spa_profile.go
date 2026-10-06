@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -32,6 +33,57 @@ type spaProfileRequest struct {
 
 type spaLocaleRequest struct {
 	Locale string `json:"locale"`
+}
+
+type spaPasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+func (s *Server) spaPasswordPatch(c *gin.Context) {
+	u, ok := s.spaProfileSessionOnly(c)
+	if !ok {
+		return
+	}
+	var req spaPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.OldPassword == "" || req.NewPassword == "" {
+		spaPasswordError(c, http.StatusBadRequest, "invalid_request", "The password request is invalid.")
+		return
+	}
+	fresh, err := s.users.ByID(c.Request.Context(), u.ID)
+	if err != nil {
+		s.logger.Error("load user for SPA password change failed", "user_id", u.ID, "error", err)
+		spaPasswordError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
+		return
+	}
+	if fresh.PasswordHash == nil {
+		spaPasswordError(c, http.StatusConflict, "password_unavailable", "Password change is unavailable for this account.")
+		return
+	}
+	sess, _ := auth.CurrentSession(c)
+	keep := ""
+	if sess != nil {
+		keep = sess.ID
+	}
+	err = s.accounts.ChangePasswordKeepingSession(c.Request.Context(), u.ID, keep, req.OldPassword, req.NewPassword)
+	if err != nil {
+		code, status, message := "password_rejected", http.StatusBadRequest, "The new password does not meet the password policy."
+		switch {
+		case errors.Is(err, auth.ErrInvalidCredentials):
+			code, status, message = "invalid_current_password", http.StatusUnauthorized, "The current password is incorrect."
+		case errors.Is(err, auth.ErrPasswordUnchanged):
+			code, status, message = "password_unchanged", http.StatusBadRequest, "The new password must differ from the current password."
+		}
+		spaPasswordError(c, status, code, message)
+		return
+	}
+	s.audit(c.Request.Context(), store.AuditEntry{UserID: store.Ptr(u.ID), Action: store.ActionUserPasswordChange, TargetType: "user", TargetID: store.Ptr(u.ID)})
+	s.notifyCredentialChanged(c.Request.Context(), fresh, "password")
+	c.Status(http.StatusNoContent)
+}
+
+func spaPasswordError(c *gin.Context, status int, code, message string) {
+	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
 func spaUserPayload(u *store.User) spaProfilePayload {

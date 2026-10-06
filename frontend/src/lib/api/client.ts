@@ -379,6 +379,10 @@ export class ApiClient {
    * 获取会话状态与安全 CSRF Token（GET /api/v1/auth/session）
    * DESIGN.md §4.3、§8.3
    */
+  async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
+    await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
   async getSession(): Promise<SessionResponse> {
     const res = await this.request<SessionResponse>('/api/v1/auth/session');
     if (res?.csrf_token) {
