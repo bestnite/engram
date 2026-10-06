@@ -48,18 +48,19 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("media.New() error = %v", err)
 	}
-	// M2-9 扩展：网页选择器片段端点复用 service 层（api.API.ListReadableMedia），
-	// 因此测试服务也要装配 API，否则 /decks/:id/media/picker 不会挂载。
-	apiInstance, err := api.New(api.Deps{
-		DB:      db,
-		Logger:  discardLogger(),
-		Keys:    store.NewAPIKeyStore(db),
-		Users:   users,
-		Decks:   store.NewDeckStore(db),
-		Notes:   store.NewNoteStore(db),
-		Presets: store.NewPresetStore(db),
-		Cards:   store.NewCardStore(db),
-		Auditor: auditor,
+	// 导入等写操作走 api service（REST/MCP/CLI/web 同一入口），因此测试服务也要装配 API；
+	// MediaRoot 与媒体存储同一个，保证 web 导入的媒体落盘路径与生产一致。
+	apiSrv, err := api.New(api.Deps{
+		DB:        db,
+		Logger:    discardLogger(),
+		Keys:      store.NewAPIKeyStore(db),
+		Users:     users,
+		Decks:     store.NewDeckStore(db),
+		Notes:     store.NewNoteStore(db),
+		Presets:   store.NewPresetStore(db),
+		Cards:     store.NewCardStore(db),
+		Auditor:   auditor,
+		MediaRoot: mediaStore.Root(),
 	})
 	if err != nil {
 		t.Fatalf("api.New() error = %v", err)
@@ -79,7 +80,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Presets:    store.NewPresetStore(db),
 		Auditor:    auditor,
 		Media:      mediaStore,
-		API:        apiInstance,
+		API:        apiSrv,
 		LoginLimiter: auth.NewLoginLimiter(auth.LimiterConfig{
 			Sleep: func(context.Context, time.Duration) error { return nil },
 		}),

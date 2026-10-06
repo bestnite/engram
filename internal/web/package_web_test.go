@@ -2,14 +2,17 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -95,13 +98,15 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 		t.Errorf("source deck notes = %d err %v, want >= 1", n, err)
 	}
 	// 坏包：不是 zip，给可读错误（4xx），不得 500。
+	// 经 api.ImportDeckPackage 后，坏包映射为稳定的 invalid_request（mapPackageError 的既有口径），
+	// 页面按与 REST/MCP 同一份 error.<code> 语言包渲染。
 	bad := uploadPackage(t, srv, "/import", cookies, csrf, "bad.edeck", []byte("this is not a zip"), map[string]string{
 		"target": "new_deck",
 	})
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("bad package status = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
-	if !strings.Contains(bad.Body.String(), "卡组包格式无效") {
+	if !strings.Contains(bad.Body.String(), "请求不合法") {
 		t.Errorf("bad package did not produce a readable error; body = %s", snippet(bad.Body.String()))
 	}
 
@@ -253,4 +258,76 @@ func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// TestImportSubmitWritesAudit 是 F20 的 web 回归：经浏览器 /import 成功导入后必须写一条
+// deck.package_import 审计，且归属发起导入的用户。改走 api.ImportDeckPackage 后审计仍由 service
+// 单点记录，web 不再自己写（同一条决定不能两处实现）。
+func TestImportSubmitWritesAudit(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	src := seedDeck(t, db, ownerID, "Audit src")
+	seedBasic(t, db, src.ID, "Q1", "A1")
+	pkg := exportPackageBytes(t, srv, src.ID, cookies)
+
+	rec := uploadPackage(t, srv, "/import", cookies, csrf, "pack.edeck", pkg, map[string]string{
+		"target": "new_deck", "on_conflict": "update",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /import = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	entries, err := store.NewAuditStore(db).List(context.Background(), 50)
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	var found int
+	for i := range entries {
+		if entries[i].Action != "deck.package_import" {
+			continue
+		}
+		found++
+		if entries[i].UserID == nil || *entries[i].UserID != ownerID {
+			t.Errorf("audit deck.package_import user_id = %v, want %d", entries[i].UserID, ownerID)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("deck.package_import audit rows = %d, want 1", found)
+	}
+}
+
+// TestImportRejectsOversizedRequestBodyWeb 是 F14 的 web 回归：请求体超过管理员配置的上传上限
+// （media_max_bytes）时，上传在解析 multipart 阶段就被拒（4xx，绝不 500），且库中不留任何写入。
+func TestImportRejectsOversizedRequestBodyWeb(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	src := seedDeck(t, db, ownerID, "F14 src")
+	seedBasic(t, db, src.ID, "Q1", "A1")
+	pkg := exportPackageBytes(t, srv, src.ID, cookies)
+	if len(pkg) <= 256 {
+		t.Fatalf("exported package is %d bytes, need > 256 to exceed the test limit", len(pkg))
+	}
+	// 关掉环境变量覆盖，让上限取 settings 表里的值。
+	t.Setenv(media.EnvMediaMaxBytes, "")
+	if err := store.PutSetting(context.Background(), db, media.SettingKeyMediaMaxBytes, "256", nil, time.Now().UTC()); err != nil {
+		t.Fatalf("PutSetting media_max_bytes: %v", err)
+	}
+
+	var before int64
+	if err := db.Model(&store.Deck{}).Count(&before).Error; err != nil {
+		t.Fatalf("count decks before: %v", err)
+	}
+	rec := uploadPackage(t, srv, "/import", cookies, csrf, "big.edeck", pkg, map[string]string{
+		"target": "new_deck",
+	})
+	if rec.Code < 400 || rec.Code >= 500 {
+		t.Fatalf("oversized import = %d, want 4xx (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if strings.Contains(rec.Body.String(), "import.error.") {
+		t.Errorf("oversized import leaked a raw catalog key:\n%s", snippet(rec.Body.String()))
+	}
+	var after int64
+	if err := db.Model(&store.Deck{}).Count(&after).Error; err != nil {
+		t.Fatalf("count decks after: %v", err)
+	}
+	if after != before {
+		t.Errorf("oversized import wrote %d new deck(s), want 0", after-before)
+	}
 }

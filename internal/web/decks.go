@@ -51,7 +51,7 @@ func (s *Server) deckList(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	presets, err := s.ensureDefaultPreset(ctx, loc, user.ID)
+	presets, err := store.EnsureDefaultPreset(ctx, s.db, user.ID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -177,7 +177,7 @@ func (s *Server) deckCreate(c *gin.Context) {
 		return
 	}
 
-	presetID, err := s.resolvePresetID(ctx, loc, user.ID, c.PostForm("preset_id"))
+	presetID, err := s.resolvePresetID(ctx, user.ID, c.PostForm("preset_id"))
 	if err != nil {
 		s.logger.Error("resolve preset for new deck failed", "user_id", user.ID, "error", err)
 		s.renderDeckCreateError(c, loc, user.ID, http.StatusInternalServerError, loc.T("decks.list.error_create_failed"), name, description)
@@ -226,7 +226,7 @@ func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, user
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
+	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
 	if err != nil {
 		s.logger.Error("list presets failed", "user_id", userID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -235,30 +235,10 @@ func (s *Server) renderDeckCreateError(c *gin.Context, loc *i18n.Localizer, user
 	s.renderDeckList(c, loc, userID, summaries, counts, presets, status, errMsg, nameValue, descValue)
 }
 
-// ensureDefaultPreset 保证该用户至少有一个调度预设：没有就按文档化默认值建一个，幂等。
-//
-// 放在 web 渲染入口兜底，而不是改账号创建路径：本地注册、邀请注册、OIDC 首次登录等多条
-// 路径都会建账号，逐条修改容易漏；在渲染卡组列表/表单与预设页时补齐只需一处，
-// 且对已存在的历史账号同样生效（M3-14）。默认预设名走语言包，与卡组表单同源。
-func (s *Server) ensureDefaultPreset(ctx context.Context, loc *i18n.Localizer, userID uint64) ([]store.Preset, error) {
-	presets, err := s.presets.ListByOwner(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if len(presets) > 0 {
-		return presets, nil
-	}
-	p := store.NewPreset(userID, loc.T("decks.preset.default"))
-	if err := s.presets.Create(ctx, &p); err != nil {
-		return nil, err
-	}
-	return []store.Preset{p}, nil
-}
-
 // resolvePresetID 解析表单里的 preset_id：必须属于当前用户；缺省或非法时退回第一个预设。
-// 预设由 ensureDefaultPreset 保证至少有一个，因此不会出现「无预设可退回」的分支。
-func (s *Server) resolvePresetID(ctx context.Context, loc *i18n.Localizer, userID uint64, raw string) (uint64, error) {
-	presets, err := s.ensureDefaultPreset(ctx, loc, userID)
+// 预设由 store.EnsureDefaultPreset 保证至少有一个，因此不会出现「无预设可退回」的分支。
+func (s *Server) resolvePresetID(ctx context.Context, userID uint64, raw string) (uint64, error) {
+	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
 	if err != nil {
 		return 0, err
 	}

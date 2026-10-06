@@ -189,21 +189,17 @@ func queryInt(c *gin.Context, name string, def int) int {
 	return v
 }
 
-// ensureDefaultPreset 返回该用户名为 Default 的预设 id；不存在则创建。
+// ensureDefaultPreset 返回该用户默认预设的 id：不存在则由 store.EnsureDefaultPreset 补齐。
 // 外部调用方建卡组时通常不关心预设，服务端给出一个可用的默认预设（DESIGN.md §3.5）。
+// 预设名是稳定字面量（store.DefaultPresetName），与 web 入口共用同一补齐逻辑（M3-14）。
 func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, error) {
-	list, err := a.presets.ListByOwner(ctx, userID)
+	list, err := store.EnsureDefaultPreset(ctx, a.db, userID)
 	if err != nil {
 		return 0, err
 	}
-	for i := range list {
-		if list[i].Name == "Default" {
-			return list[i].ID, nil
-		}
-	}
-	p := store.NewPreset(userID, "Default")
-	if err := a.presets.Create(ctx, &p); err != nil {
-		return 0, err
+	p := store.DefaultPreset(list)
+	if p == nil {
+		return 0, store.ErrNoDefaultPreset
 	}
 	return p.ID, nil
 }

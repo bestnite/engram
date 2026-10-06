@@ -371,8 +371,6 @@
   translation: "Please choose a scheduling preset."
 - id: decks.list.error_create_failed
   translation: "Could not create the deck."
-- id: decks.preset.default
-  translation: "Default"
 # M5-2 deck sharing management page.
 - id: sharing.title
   translation: "Sharing"
@@ -874,14 +872,6 @@
   translation: "The uploaded package exceeds the configured upload size limit."
 - id: import.error.generic
   translation: "The package could not be imported. Please check the file and try again."
-- id: import.error.package_bad_format
-  translation: "The package format is invalid."
-- id: import.error.package_too_large
-  translation: "The package is too large to import."
-- id: import.error.package_unsafe_entry
-  translation: "The package contains an unsafe entry (path traversal or symlink)."
-- id: import.error.package_unknown_kind
-  translation: "The package contains a card type this instance does not know."
 # M9-4 preset page and parameter optimisation
 - id: presets.title
   translation: "Scheduling presets"
@@ -2149,19 +2139,13 @@
 - id: decks.settings.error.save_failed
   translation: "Could not save the deck settings."
 # F9: deck package import media validation
-- id: import.error.package_unsafe_media
-  translation: "The package contains media of a disallowed type."
 - id: error.package_unsafe_media
   translation: "The package contains media of a disallowed type."
 # F27: deck package manifest deck name/description limits
 - id: error.package_deck_meta_invalid
   translation: "The deck name or description in the package is invalid."
-- id: import.error.package_deck_meta_invalid
-  translation: "The deck name or description in the package is invalid."
 # F15: deck package import media quota
 - id: error.media_quota_exceeded
-  translation: "The imported media would exceed your media quota."
-- id: import.error.media_quota_exceeded
   translation: "The imported media would exceed your media quota."
 # F27b: deck name limit on create/rename (shared with the package manifest rule)
 - id: error.deck_name_invalid
@@ -2174,8 +2158,6 @@
 - id: notes.edit.media_not_readable
   translation: "This note references media you cannot read, so it was not saved."
 - id: error.package_media_forbidden
-  translation: "The package references media you cannot read."
-- id: import.error.package_media_forbidden
   translation: "The package references media you cannot read."
 # Per-user reminder & digest send hour (mail.prefs.reminder_time.*): the review reminder and the
 # weekly digest share one local hour; empty selection means the site default. Appended by this task.

@@ -85,10 +85,11 @@ func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, c
 	return srv, db, owner.ID, login.Result().Cookies(), sess.CSRFToken, runner
 }
 
-// seedPreset 建一个属于 owner 的预设。
+// seedPreset 建一个属于 owner 的**默认**预设：名用稳定字面量 store.DefaultPresetName，
+// 这样页面渲染时的 store.EnsureDefaultPreset 会认它、不再补一条（M3-14）。
 func seedPreset(t *testing.T, db *gorm.DB, ownerID uint64) *store.Preset {
 	t.Helper()
-	p := store.NewPreset(ownerID, "Test preset")
+	p := store.NewPreset(ownerID, store.DefaultPresetName)
 	if err := store.NewPresetStore(db).Create(context.Background(), &p); err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
@@ -379,7 +380,8 @@ func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
 	if !strings.Contains(decks.Body.String(), `name="preset_id"`) {
 		t.Fatalf("deck form has no preset dropdown: %s", snippet(decks.Body.String()))
 	}
-	if !strings.Contains(decks.Body.String(), "默认") {
+	// 默认预设名是稳定字面量（store.DefaultPresetName），不再随语言变化（M3-14）。
+	if !strings.Contains(decks.Body.String(), store.DefaultPresetName) {
 		t.Errorf("fresh account's deck form has an empty preset dropdown: %s", snippet(decks.Body.String()))
 	}
 
@@ -388,7 +390,7 @@ func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
 	if presets.Code != http.StatusOK {
 		t.Fatalf("GET /presets status = %d, want 200 (body %s)", presets.Code, snippet(presets.Body.String()))
 	}
-	if !strings.Contains(presets.Body.String(), ">默认</h2>") {
+	if !strings.Contains(presets.Body.String(), ">"+store.DefaultPresetName+"</h2>") {
 		t.Errorf("fresh account's preset page does not show the default preset: %s", snippet(presets.Body.String()))
 	}
 
