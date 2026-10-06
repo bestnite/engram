@@ -51,12 +51,25 @@ describe('SPA router matching and query parsing', () => {
     expect(editMatch.route?.name).toBe('note-edit');
     expect(editMatch.params).toEqual({ id: '42', noteId: '99' });
 
+    // 旧 SSR 编辑地址的别名：服务端 GET /decks/:id/notes/:nid 返回应用壳，客户端处理该精确 URL。
+    const legacyEditMatch = matchRoute('/decks/42/notes/99', prodRoutes);
+    expect(legacyEditMatch.route?.name).toBe('note-edit-nid');
+    expect(legacyEditMatch.params).toEqual({ id: '42', noteId: '99' });
+
     const notesMatch = matchRoute('/decks/456/notes', prodRoutes);
     expect(notesMatch.route?.name).toBe('deck-notes');
     expect(notesMatch.params).toEqual({ id: '456' });
     const createMatch = matchRoute('/decks/456/notes/new', prodRoutes);
     expect(createMatch.route?.name).toBe('note-create');
     expect(createMatch.params).toEqual({ id: '456' });
+
+    // 旧 SSR 新建地址的别名：服务端 GET /decks/:id/new-note 返回应用壳。
+    const legacyCreateMatch = matchRoute('/decks/456/new-note', prodRoutes);
+    expect(legacyCreateMatch.route?.name).toBe('note-create-legacy');
+    expect(legacyCreateMatch.params).toEqual({ id: '456' });
+
+    // 字面量 new 必须先于 :noteId 命中，不能被编辑别名吞掉。
+    expect(matchRoute('/decks/456/notes/new', prodRoutes).route?.name).toBe('note-create');
     expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
   });

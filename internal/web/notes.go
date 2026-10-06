@@ -50,12 +50,13 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	// GET /decks/:id/notes 已切到 SPA 规范路径：noteListRoute 返回应用壳，由客户端路由渲染
-	// 卡片列表（DESIGN.md §8.1、§8.5）。卡片编辑（/notes/:nid）与新建仍是 SSR 页面。
+	// 卡片列表、编辑与新建三个 GET 页都已切到 SPA 规范路径：三个 *Route 处理器先按各自 SSR
+	// 页原有的会话与角色判定鉴权，再返回应用壳（DESIGN.md §8.1、§8.5）。SPA 缺失（降级）时
+	// 各自回退到对应的 SSR 页面（noteList / noteEdit / noteNew），旧页面与模板全部保留。
 	router.GET("/decks/:id/notes", s.noteListRoute)
-	router.GET("/decks/:id/notes/:nid", s.noteEdit)
+	router.GET("/decks/:id/notes/:nid", s.noteEditRoute)
 	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
-	router.GET("/decks/:id/new-note", s.noteNew)
+	router.GET("/decks/:id/new-note", s.noteNewRoute)
 	router.GET("/decks/:id/new-note/fields", s.noteFieldsFragment)
 	// GET 之外的写操作一律过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST("/decks/:id/notes/:nid", s.sessions.CSRFMiddleware(), s.noteUpdate)
@@ -279,7 +280,8 @@ func urlEncode(s string) string {
 //
 // 鉴权与迁移前的 SSR 列表页逐项一致：先要求已登录会话（匿名重定向登录页），再按 reader 角色
 // 判定卡组可读性——无权读的卡组仍回 403，不因切壳而放行。SPA 缺失（降级）时回退 SSR 列表页。
-// 卡片编辑（/decks/:id/notes/:nid）与新建（/decks/:id/new-note）本轮不动，仍是 SSR 页面。
+// 卡片编辑（/decks/:id/notes/:nid）与新建（/decks/:id/new-note）同样已切壳，见 noteEditRoute
+// 与 noteNewRoute。
 func (s *Server) noteListRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -297,6 +299,56 @@ func (s *Server) noteListRoute(c *gin.Context) {
 		return
 	}
 	s.noteList(c)
+}
+
+// noteEditRoute 提供 GET /decks/:id/notes/:nid：SPA 已加载时返回应用壳（DESIGN.md §8.5），由
+// 客户端路由渲染卡片编辑页，数据仍走既有 JSON 端点（GET 列表 + PATCH /api/v1/notes/:id，
+// DESIGN.md §8.1）。编辑页的写入在 SPA 里走 REST，但读页面的判权仍由服务端负责。
+//
+// 鉴权与迁移前的 SSR 编辑页逐项一致：先要求已登录会话（匿名重定向登录页），再按 editor 角色
+// 判定卡组可写性——非 editor 仍回 403，不因切壳而把编辑壳交给无权用户。SPA 缺失（降级）时
+// 回退 SSR 编辑页 noteEdit。
+func (s *Server) noteEditRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	if s.spa != nil {
+		deckID, ok := deckIDParam(c)
+		if !ok {
+			return
+		}
+		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
+			return
+		}
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.noteEdit(c)
+}
+
+// noteNewRoute 提供 GET /decks/:id/new-note：SPA 已加载时返回应用壳，由客户端路由渲染新建卡片页，
+// 提交仍走 POST /api/v1/decks/:id/notes（DESIGN.md §8.1、§8.5）。
+//
+// 鉴权与迁移前的 SSR 新建页逐项一致：匿名重定向登录页，非 editor 回 403。SPA 缺失（降级）时
+// 回退 SSR 新建页 noteNew。
+func (s *Server) noteNewRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	if s.spa != nil {
+		deckID, ok := deckIDParam(c)
+		if !ok {
+			return
+		}
+		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
+			return
+		}
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.noteNew(c)
 }
 
 // noteList 渲染卡片列表：分页、搜索、按标签与题型筛选（M2-7）。
