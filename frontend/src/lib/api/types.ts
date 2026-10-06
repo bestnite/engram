@@ -21,6 +21,14 @@ export interface DecksResponse {
   decks: Deck[];
 }
 
+/** POST /api/v1/decks 请求体与响应体。preset_id=0 使用服务端默认预设。 */
+export interface CreateDeckRequest {
+  name: string;
+  description: string;
+  visibility: 'private' | 'unlisted' | 'public';
+  preset_id: number;
+}
+
 /**
  * 笔记数据结构（与 Go 后端 internal/api/notes.go:NoteJSON 对齐）
  * DESIGN.md §2.2、§6.2、§7.3
