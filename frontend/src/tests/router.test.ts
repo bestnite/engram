@@ -70,8 +70,30 @@ describe('SPA router matching and query parsing', () => {
 
     // 字面量 new 必须先于 :noteId 命中，不能被编辑别名吞掉。
     expect(matchRoute('/decks/456/notes/new', prodRoutes).route?.name).toBe('note-create');
-    expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
+    // 旧 SPA 复习地址仍在路由表内（兼容既有深链），但规范入口是 /review。
+    expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review-spa');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
+  });
+
+  // 回归：服务端 GET /review 已返回应用壳（5a3b489 切流），客户端路由必须能处理这个精确
+  // URL，否则首页「开始复习」链接与直接访问/刷新都会落到 NotFoundView（实测 404）。
+  it('serves the canonical review route at /review and keeps the /spa alias', async () => {
+    const { routes: prodRoutes } = await import('../lib/router/routes');
+
+    const canonical = matchRoute('/review', prodRoutes);
+    expect(canonical.route?.name).toBe('review');
+    expect(canonical.params).toEqual({});
+    // 卡组范围参数不影响匹配，只进 query。
+    const scoped = matchRoute('/review?deck=7&deck=9', prodRoutes);
+    expect(scoped.route?.name).toBe('review');
+    expect(scoped.query).toEqual({ deck: '9' });
+
+    // 迁移期旧地址仍可用，但不得遮蔽规范路由。
+    const alias = matchRoute('/spa/review', prodRoutes);
+    expect(alias.route?.name).toBe('review-spa');
+
+    // 未匹配路径仍是 404 视图。
+    expect(matchRoute('/review/unknown', prodRoutes).route).toBeNull();
   });
 
   it('exposes the SPA login entry at /spa/login without removing SSR /login', async () => {

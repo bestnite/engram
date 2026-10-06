@@ -26,6 +26,8 @@ import {
   type SubmitGradedReviewRequest,
   type GradedReviewResult,
   type RevealAnswerResponse,
+  type ReviewRenderResponse,
+  type ReviewQueueResponse,
   type ApiErrorEnvelope,
   type UserProfile,
   type UpdateProfileRequest,
@@ -614,6 +616,34 @@ export class ApiClient {
     return this.request<RevealAnswerResponse>('/api/v1/review/grade', {
       method: 'POST',
       body: JSON.stringify({ ...input, action: 'reveal' }),
+    });
+  }
+
+  /**
+   * 取一张卡正反面的服务端清洗 HTML 与编辑地址（POST /api/v1/review/render）。
+   * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染（DESIGN.md §6.1）。
+   */
+  async renderReviewCard(input: { card_id: number; deck?: number[] }): Promise<ReviewRenderResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ReviewRenderResponse>('/api/v1/review/render', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
+   * 埋藏当前卡（POST /api/v1/review/bury）：只写本人进度，不产生 reviews 行。
+   * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组（DESIGN.md §8.2）。
+   */
+  async buryReview(input: { card_id: number; deck?: number[] }): Promise<ReviewQueueResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ReviewQueueResponse>('/api/v1/review/bury', {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
   }
 

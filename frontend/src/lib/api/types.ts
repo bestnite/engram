@@ -400,6 +400,27 @@ export interface RevealAnswerResponse {
 }
 
 /**
+ * POST /api/v1/review/render 响应体（Go: internal/web/spa_review.go）。
+ * front_html / back_html 已由服务端 goldmark + bluemonday 清洗，是复习页唯一的 HTML 汇
+ * （DESIGN.md §6.1）；edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
+ */
+export interface ReviewRenderResponse {
+  card_id: number;
+  front_html: string;
+  back_html: string;
+  edit_href: string;
+}
+
+/**
+ * POST /api/v1/review/bury 响应体：埋藏只写本人进度，不产生 reviews 行；
+ * cards / remaining 是同一范围重建后的队列（DESIGN.md §8.2）。
+ */
+export interface ReviewQueueResponse {
+  cards: DueCard[];
+  remaining: number;
+}
+
+/**
  * GET /api/v1/review/due 查询参数
  * DESIGN.md §3.3、§7.3:
  * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]

@@ -116,3 +116,91 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('显示答案 · 空格 / 回车');
   });
 });
+
+describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
+  beforeEach(() => {
+    setLocale('zh-CN');
+  });
+
+  it('renders the render-endpoint front/back HTML instead of the raw field text', () => {
+    const basic = gradedCard('basic', { front: 'RAW-FRONT-TEXT', back: 'RAW-BACK-TEXT' });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [basic],
+        initialRevealed: true,
+        initialFrontHTML: '<p><strong>Sanitized</strong> front</p>',
+        initialBackHTML: '<p><em>Sanitized</em> back</p>',
+        initialEditHref: '/decks/5/notes/21',
+      },
+    });
+    // 卡面是 render 端点清洗后的 HTML，字段原文不再出现。
+    expect(html).toContain('<strong>Sanitized</strong> front');
+    expect(html).toContain('<em>Sanitized</em> back');
+    expect(html).not.toContain('RAW-FRONT-TEXT');
+    expect(html).not.toContain('RAW-BACK-TEXT');
+    // 翻面后四档自评仍在。
+    expect(html).toContain('data-rating="1"');
+    expect(html).toContain('data-rating="4"');
+  });
+
+  it('falls back to plain-text fields when the render HTML is empty', () => {
+    const basic = gradedCard('basic', { front: 'Plain front', back: 'Plain back' });
+    const { html } = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [basic], initialRevealed: true },
+    });
+    expect(html).toContain('Plain front');
+    expect(html).toContain('Plain back');
+  });
+
+  it('renders the sanitized front HTML for a graded prompt', () => {
+    const typed = gradedCard('typed', { prompt: 'RAW-PROMPT', answer: 'Paris' });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [typed],
+        initialFrontHTML: '<p>Sanitized <code>prompt</code></p>',
+      },
+    });
+    expect(html).toContain('data-testid="review-graded-prompt"');
+    expect(html).toContain('<code>prompt</code>');
+    expect(html).not.toContain('RAW-PROMPT');
+    // 输入控件与提交按钮仍在。
+    expect(html).toContain('data-testid="review-graded-input"');
+    expect(html).toContain('data-testid="review-graded-submit"');
+  });
+
+  it('shows the edit and bury controls with catalog labels for an active card', () => {
+    const basic = gradedCard('basic', { front: 'Q', back: 'A' });
+    const { html } = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [basic] },
+    });
+    expect(html).toContain('data-testid="review-edit"');
+    expect(html).toContain('data-testid="review-bury"');
+    expect(html).toContain('data-testid="review-bury-hint"');
+    // 文案来自语言包，不是裸 key。
+    expect(html).toContain('编辑');
+    expect(html).toContain('埋藏');
+    expect(html).not.toContain('review.spa.edit');
+    expect(html).not.toContain('review.spa.bury');
+  });
+
+  it('drops the bury control on the graded result panel but keeps edit', () => {
+    const feedback: GradedFeedback = {
+      verdict: 'correct',
+      score: 1,
+      rating: 3,
+      answer_html: '<strong>Paris</strong>',
+      given: 'paris',
+    };
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [gradedCard('typed', { prompt: 'Q', answer: 'Paris' })],
+        initialFeedback: feedback,
+      },
+    });
+    expect(html).toContain('data-testid="review-edit"');
+    expect(html).not.toContain('data-testid="review-bury"');
+  });
+});
