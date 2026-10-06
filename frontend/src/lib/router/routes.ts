@@ -7,6 +7,7 @@ import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
+import NoteEditView from '../views/NoteEditView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -31,6 +32,11 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/notes',
     name: 'deck-notes',
     component: DeckDetailView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/decks/:id/notes/:noteId/edit',
+    name: 'note-edit',
+    component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
     path: '/spa/review',

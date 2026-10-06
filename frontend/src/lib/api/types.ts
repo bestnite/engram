@@ -55,6 +55,13 @@ export interface NotesResponse {
   per_page: number;
 }
 
+/** PATCH /api/v1/notes/:id request body. Fields are replaced as a complete object. */
+export interface UpdateNoteRequest {
+  kind?: string;
+  fields: Record<string, unknown>;
+  tags?: string[];
+}
+
 /**
  * GET /api/v1/decks/:id/notes 查询参数
  * internal/store/note.go:NoteListOptions

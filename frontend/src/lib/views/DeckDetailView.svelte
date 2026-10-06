@@ -290,9 +290,12 @@
                   </span>
                 {/if}
               </div>
-              <span class="text-zinc-400 dark:text-zinc-500">
-                {note.created_at ? note.created_at.slice(0, 10) : ''}
-              </span>
+              <div class="flex items-center gap-3">
+                <span class="text-zinc-400 dark:text-zinc-500">
+                  {note.created_at ? note.created_at.slice(0, 10) : ''}
+                </span>
+                <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-xs underline">{$t('note_edit.action')}</a>
+              </div>
             </div>
 
             <!-- 内容字段展示（纯文本转义呈现，严禁 HTML 解析） -->
