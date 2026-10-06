@@ -27,7 +27,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -231,11 +230,11 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 //
 // 台账只在 Enqueue 成功后才写，避免入队失败却把本周额度用掉。
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
-	loc := loadLocation(c.Timezone)
+	loc := store.LoadLocation(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
 		return nil
 	}
-	cutoff := normalizedCutoff(c.DayCutoffHour)
+	cutoff := store.NormalizedCutoff(c.DayCutoffHour)
 	day := schedule.ReviewDay(now, loc, cutoff)
 	weekStart := weekStartOf(day)
 
@@ -290,7 +289,7 @@ type DigestStats struct {
 // 同一批 StatsStore 方法、同一复习日窗口，因此两边不会分歧（验收③）。
 func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (DigestStats, error) {
 	today := schedule.ReviewDay(now, loc, cutoffHour)
-	from := shiftDay(today, -6)
+	from := store.ShiftReviewDay(today, -6)
 
 	stats := store.NewStatsStore(db)
 	volume, err := stats.ReviewVolume(ctx, userID, today)
@@ -335,7 +334,7 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
 	lines := []string{
 		lc.Tf("mail.digest.reviewed", map[string]any{"count": s.Reviewed}),
-		lc.Tf("mail.digest.pass_rate", map[string]any{"rate": formatPercent(s.PassRate)}),
+		lc.Tf("mail.digest.pass_rate", map[string]any{"rate": store.FormatPercent(s.PassRate)}),
 		lc.Tf("mail.digest.streak", map[string]any{"days": s.StreakCurrent}),
 		lc.Tf("mail.digest.new_cards", map[string]any{"count": s.NewCards}),
 		lc.Tf("mail.digest.due", map[string]any{"count": s.DueNow}),
@@ -379,38 +378,6 @@ func weekStartOf(day string) string {
 	}
 	offset := (int(t.Weekday()) + 6) % 7
 	return t.AddDate(0, 0, -offset).Format("2006-01-02")
-}
-
-// shiftDay 把 review_day 字符串（YYYY-MM-DD）平移 delta 天；解析失败时原样返回。
-func shiftDay(day string, delta int) string {
-	t, err := time.Parse("2006-01-02", day)
-	if err != nil {
-		return day
-	}
-	return t.AddDate(0, 0, delta).Format("2006-01-02")
-}
-
-// formatPercent 把 0–1 的比例格式化成一位小数的百分数（不含 % 号），与统计页同格式。
-func formatPercent(rate float64) string {
-	return strconv.FormatFloat(rate*100, 'f', 1, 64)
-}
-
-// loadLocation 解析 IANA 时区；为空或解析失败时退回 UTC（与 schedule 的口径一致）。
-func loadLocation(tz string) *time.Location {
-	if strings.TrimSpace(tz) != "" {
-		if loaded, err := time.LoadLocation(tz); err == nil {
-			return loaded
-		}
-	}
-	return time.UTC
-}
-
-// normalizedCutoff 与 schedule 的默认规则一致：0 或越界视为未设置，用默认 4。
-func normalizedCutoff(hour int) int {
-	if hour < 0 || hour > 23 || hour == 0 {
-		return schedule.DefaultDayCutoffHour
-	}
-	return hour
 }
 
 // 让编译期确认 *mail.Outbox 满足 Enqueuer（契约漂移时在这里报错，而不是在装配处）。

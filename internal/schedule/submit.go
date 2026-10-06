@@ -230,7 +230,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	stability := o.Stability
 	difficulty := o.Difficulty
 	loc := queueLocation(in.Location, in.Timezone)
-	cutoff := normalizedCutoff(in.DayCutoffHour)
+	cutoff := store.NormalizedCutoff(in.DayCutoffHour)
 	// 评分前的剩余学习步骤快照（M3-9）。全新卡没有状态行，base.StepIndex 为 0，
 	// 正是“评分前”的值；已有状态行则取它评分前的 step_index。
 	stepIndexBefore := 0
@@ -254,17 +254,6 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 		Difficulty:      &difficulty,
 	}
 	return row
-}
-
-// normalizedCutoff 与队列构建的默认规则保持一致：0 视为未设置，用文档化默认 4。
-func normalizedCutoff(hour int) int {
-	if hour < 0 || hour > 23 {
-		return DefaultDayCutoffHour
-	}
-	if hour == 0 {
-		return DefaultDayCutoffHour
-	}
-	return hour
 }
 
 // durationDaysSince 返回距上次复习的天数（可为小数）；无上次复习时返回 nil，

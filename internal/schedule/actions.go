@@ -263,7 +263,7 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 	}
 	now := nowOr(in.Now)
 	loc := queueLocation(in.Location, in.Timezone)
-	due := nextReviewDayStart(now, loc, normalizedCutoff(in.DayCutoffHour))
+	due := nextReviewDayStart(now, loc, store.NormalizedCutoff(in.DayCutoffHour))
 
 	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
 	if err != nil {

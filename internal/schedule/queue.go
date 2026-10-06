@@ -13,9 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 队列构建的文档化默认值（DESIGN.md §3.3）。
+// 队列构建的文档化默认值（DESIGN.md §3.3）。日切点默认值以 store 为唯一来源，
+// 因为归一化规则（0/越界 → 默认）必须被 store/schedule/web/reminder/digest 共享。
 const (
-	DefaultDayCutoffHour = 4
+	DefaultDayCutoffHour = store.DefaultDayCutoffHour
 	DefaultNewPerDay     = 20
 	DefaultReviewsPerDay = 200
 	DefaultReviewBatch   = 200
@@ -699,9 +700,15 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 
 // ReviewDay 按用户本地时间与切点计算复习日（YYYY-MM-DD）：本地时间减去 day_cutoff_hour 后取日期，
 // 因此切点之前的凌晨时刻算作前一天（DESIGN.md §3.3）。
+//
+// 切点先经 store.NormalizedCutoff 归一化（0/越界 → 默认 4），与 store.ReviewDayString 同口径：
+// 复习日的写入（本包提交/埋藏）与读取（统计/连续天数/提醒/摘要）必须落在同一天，否则同一个
+// 用户在两侧会看到不同的「今天」。归一化在这里兜底，因此即便调用方直接传原始的
+// users.day_cutoff_hour（如 api/service.go），也自动得到同一口径。
 func ReviewDay(now time.Time, loc *time.Location, cutoffHour int) string {
 	if loc == nil {
 		loc = time.UTC
 	}
+	cutoffHour = store.NormalizedCutoff(cutoffHour)
 	return now.In(loc).Add(-time.Duration(cutoffHour) * time.Hour).Format("2006-01-02")
 }

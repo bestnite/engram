@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -593,6 +594,49 @@ func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, 
 // reviewStateNew 是 reviews.state_before 的 New 取值（DESIGN.md §2.2：0=New）。
 const reviewStateNew = 0
 
+// DefaultDayCutoffHour 是文档化默认日切点小时（DESIGN.md §3.3：本地 04:00 换日）。
+// 放在 store 而不是 schedule：store 是 schedule/web/reminder/digest 都能依赖的最底层，
+// 归一化规则必须能被这几层共享，且 schedule 依赖 store（反向会成导入环）。
+const DefaultDayCutoffHour = 4
+
+// NormalizedCutoff 归一化日切点：0 表示「未设置」（users.day_cutoff_hour 的零值），
+// 越界值是脏数据，二者都回退到文档化默认 4；其余 1–23 原样返回。
+//
+// 为何以这一份规则为准：复习日（reviews.review_day）只认一种切点口径，写入口是
+// schedule 的复习提交/队列构建（它们本就按「0=未设置」处理）。读侧（统计、连续天数、
+// 提醒、摘要）必须与写入口同口径，否则同一个用户在写侧存成 4 点换日、读侧却按 0 点换日，
+// 「今日复习量」「连续天数」会与库里的 review_day 对不上。store 无法 import schedule
+// （schedule 依赖 store），所以规则的唯一实现落在 store，读侧写侧都调用它。
+func NormalizedCutoff(hour int) int {
+	if hour < 0 || hour > 23 || hour == 0 {
+		return DefaultDayCutoffHour
+	}
+	return hour
+}
+
+// LoadLocation 解析 IANA 时区名；空串或非法名一律回退 UTC，绝不因脏数据阻塞调用方
+// （页面 500、提醒不发出）。
+//
+// 这是全库唯一的时区解析入口：schedule、web、api、reminder、digest 都调用它，
+// 从而「回退到 UTC」只有一种行为。入参在写入侧已被 strings.TrimSpace 规范化
+// （web 设置页、CLI），因此这里不再重复裁剪空白。
+func LoadLocation(tz string) *time.Location {
+	if tz == "" {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}
+
+// FormatPercent 把 0–1 的比例格式化成一位小数的百分数（不含 % 号）。
+// 统计页与每周摘要展示同一批数字，格式必须一致，因此只保留这一份实现。
+func FormatPercent(rate float64) string {
+	return strconv.FormatFloat(rate*100, 'f', 1, 64)
+}
+
 // reviewDayString 返回 now 所在复习日（YYYY-MM-DD）；口径与 reviewDayStart 一致，
 // 即本地时间减切点小时取日期，默认切点 04:00。
 func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
@@ -606,10 +650,12 @@ func ReviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 }
 
 // prevReviewDay / nextReviewDay 是复习日字符串的相邻日运算。
-func prevReviewDay(day string) string { return shiftReviewDay(day, -1) }
-func nextReviewDay(day string) string { return shiftReviewDay(day, 1) }
+func prevReviewDay(day string) string { return ShiftReviewDay(day, -1) }
+func nextReviewDay(day string) string { return ShiftReviewDay(day, 1) }
 
-func shiftReviewDay(day string, delta int) string {
+// ShiftReviewDay 把 review_day 字符串（YYYY-MM-DD）平移 delta 天；解析失败时原样返回。
+// 统计页与每周摘要都要做相邻日运算，只保留这一份实现，避免两处对同一字符串口径不一致。
+func ShiftReviewDay(day string, delta int) string {
 	t, err := time.Parse("2006-01-02", day)
 	if err != nil {
 		return day
@@ -626,15 +672,13 @@ func locOrUTC(loc *time.Location) *time.Location {
 }
 
 // reviewDayStart 返回 now 所在复习日的起点（本地日期 + 切点小时），转成 UTC。
-// 与 schedule.ReviewDay 的口径一致（本地时间减切点取日期）；store 不能 import schedule
-// （schedule 依赖 store，会成环），因此在这里保留一份最小实现。
+// 切点先经 NormalizedCutoff 归一化，与 schedule 侧的复习日口径完全一致（0/越界 → 默认 4）；
+// store 不能 import schedule（schedule 依赖 store，会成环），因此共用 store.NormalizedCutoff。
 func reviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
 	if loc == nil {
 		loc = time.UTC
 	}
-	if cutoffHour < 0 || cutoffHour > 23 {
-		cutoffHour = 4
-	}
+	cutoffHour = NormalizedCutoff(cutoffHour)
 	local := now.In(loc)
 	day := local.Add(-time.Duration(cutoffHour) * time.Hour)
 	return time.Date(day.Year(), day.Month(), day.Day(), cutoffHour, 0, 0, 0, loc).UTC()
