@@ -206,4 +206,11 @@ export const en: LocaleCatalog = {
   'note_create.saved': 'Note created.',
   'note_create.invalid': 'Check the note fields and try again.',
   'note_create.failed': 'Could not create the note. Please try again.',
+  'note_preview.spa.action': 'Preview',
+  'note_preview.spa.loading': 'Preparing preview...',
+  'note_preview.spa.failed': 'Could not load the preview. Please try again.',
+  'note_preview.spa.title': 'Preview',
+  'note_preview.spa.front': 'Front',
+  'note_preview.spa.back': 'Back',
+  'note_preview.spa.math_notice': 'TeX delimiters are shown as text for now; math rendering is not loaded.',
 };

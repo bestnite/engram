@@ -248,23 +248,23 @@ describe('Deck and notes list API client and view contracts', () => {
     });
   });
 
-  describe('Strict security: text-only rendering and NO {@html} in views', () => {
-    it('verifies that no Svelte views contain {@html} expressions', () => {
+  describe('Strict security: sanitized preview is the only HTML sink', () => {
+    it('allows HTML only from the note preview API response', () => {
       const viewsDir = fileURLToPath(new URL('../lib/views', import.meta.url));
       const viewFiles = fs.readdirSync(viewsDir).filter((f) => f.endsWith('.svelte'));
 
       expect(viewFiles.length).toBeGreaterThan(0);
 
       for (const file of viewFiles) {
-        const filePath = path.join(viewsDir, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-
-        // 严格断言：任何 Svelte 视图文件严禁包含 {@html
-        // 保证卡片内容、标签与任何字段都作为转义文本呈现，杜绝客户端 HTML/XSS 注入
-        expect(
-          content.includes('{@html'),
-          `File ${file} must not contain {@html} expressions`
-        ).toBe(false);
+        const content = fs.readFileSync(path.join(viewsDir, file), 'utf-8');
+        if (file === 'NoteEditView.svelte') {
+          expect(content).toContain('{@html card.front_html}');
+          expect(content).toContain('{@html card.back_html}');
+          expect(content).not.toContain('{@html fields');
+          expect(content).not.toContain('{@html fieldsText');
+        } else {
+          expect(content, `File ${file} must not contain {@html} expressions`).not.toContain('{@html');
+        }
       }
     });
 

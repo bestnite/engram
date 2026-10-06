@@ -206,4 +206,11 @@ export const zhCN: LocaleCatalog = {
   'note_create.saved': '笔记已创建。',
   'note_create.invalid': '请检查笔记内容后重试。',
   'note_create.failed': '无法创建笔记，请重试。',
+  'note_preview.spa.action': '预览',
+  'note_preview.spa.loading': '正在生成预览...',
+  'note_preview.spa.failed': '无法加载预览，请重试。',
+  'note_preview.spa.title': '预览',
+  'note_preview.spa.front': '正面',
+  'note_preview.spa.back': '背面',
+  'note_preview.spa.math_notice': '目前仅显示 TeX 定界符，尚未加载公式渲染。',
 };
