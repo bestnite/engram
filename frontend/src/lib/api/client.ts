@@ -27,6 +27,7 @@ import {
   type LoginRequest,
   type LoginResponse,
   type LogoutResponse,
+  type PackageImportReport,
 } from './types';
 
 /**
@@ -177,6 +178,52 @@ export class ApiClient {
         details: parseErr,
       });
     }
+  }
+
+  /** 使用同源会话下载现有的卡组包附件。 */
+  async downloadDeckPackage(deckId: number | string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
+    if (options.includeReviews && !options.includeProgress) {
+      throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
+    }
+    const params = new URLSearchParams();
+    if (options.includeProgress) params.set('include_progress', '1');
+    if (options.includeMedia === false) params.set('include_media', '0');
+    if (options.includeReviews) params.set('include_reviews', '1');
+    if (!params.has('include_media')) params.set('include_media', '1');
+    const query = params.toString();
+    const path = `/api/v1/decks/${encodeURIComponent(String(deckId))}/package${query ? `?${query}` : ''}`;
+    const headers = new Headers({ Accept: 'application/vnd.engram.edeck' });
+    let response: Response;
+    try {
+      response = await this.fetchFn(this.baseUrl ? `${this.baseUrl}${path}` : path, {
+        method: 'GET', headers, credentials: 'same-origin',
+      });
+    } catch (err) {
+      throw new ApiClientError('Network request failed', { status: 0, code: 'network_error', details: err });
+    }
+    if (!response.ok) {
+      let envelope: ApiErrorEnvelope | null = null;
+      try { envelope = await response.json() as ApiErrorEnvelope; } catch { /* Non-JSON errors use status fallback. */ }
+      const code = envelope?.error?.code || inferErrorCodeFromStatus(response.status);
+      throw new ApiClientError(`HTTP ${response.status}: ${code}`, { status: response.status, code, details: envelope ?? undefined });
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const filename = match?.[1] ? decodeURIComponent(match[1]) : (match?.[2] || `deck-${deckId}.edeck`);
+    return { blob: await response.blob(), filename };
+  }
+
+  /** 通过同源会话 multipart 路由导入卡组包。 */
+  async importDeckPackage(file: File, options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean }): Promise<PackageImportReport> {
+    if (!this.csrfToken) await this.getSession();
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('target', options.target);
+    form.append('dry_run', options.dryRun ? '1' : '0');
+    form.append('on_conflict', options.onConflict || 'update');
+    form.append('allow_others_progress', options.allowOthersProgress ? '1' : '0');
+    form.append('skip_missing_media', options.skipMissingMedia ? '1' : '0');
+    return this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form });
   }
 
   /**

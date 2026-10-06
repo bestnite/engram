@@ -116,6 +116,24 @@ export interface CreateNotesResponse {
   dry_run: boolean;
 }
 
+/** POST /api/v1/decks/import report. */
+export interface PackageImportReport {
+  target: string;
+  dry_run: boolean;
+  deck_id?: number;
+  notes_created: number;
+  notes_updated: number;
+  notes_skipped: number;
+  cards_created: number;
+  media_new: number;
+  media_missing: number;
+  progress_applied: number;
+  progress_skipped: number;
+  progress_discarded: boolean;
+  match_rule?: string;
+  errors: Array<{ entry: string; reason: string }>;
+}
+
 /**
  * 学习统计概要（与 Go 后端 internal/api/service.go:StatsSummary 对齐）
  * DESIGN.md §7.3、§9

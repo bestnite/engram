@@ -16,6 +16,11 @@
   let deletingNoteId = $state<number | null>(null);
   let deleteError = $state('');
   let deleteSuccess = $state(false);
+  let exporting = $state(false);
+  let exportError = $state(false);
+  let includeMedia = $state(true);
+  let includeProgress = $state(false);
+  let includeReviews = $state(false);
   const perPage = 50;
 
   // 筛选与搜索输入
@@ -117,6 +122,24 @@
     }
   }
 
+  async function exportPackage(): Promise<void> {
+    exporting = true;
+    exportError = false;
+    try {
+      const { blob, filename } = await apiClient.downloadDeckPackage(deckId, { includeMedia, includeProgress, includeReviews });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      exportError = true;
+    } finally {
+      exporting = false;
+    }
+  }
+
   /**
    * 将任意字段值安全转换为纯文本字符串
    * 绝不使用原始 HTML 注入，天然防止 XSS
@@ -176,7 +199,7 @@
       {/if}
     </div>
 
-    <div class="mb-4">
+    <div class="mb-4 flex flex-wrap items-center gap-3">
       <a
         href="/decks/{encodeURIComponent(deckId)}/notes/new"
         data-testid="create-note-link"
@@ -184,6 +207,11 @@
       >
         {$t('notes.create')}
       </a>
+      <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeMedia} />{$t('package.export.include_media')}</label>
+      <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeProgress} onchange={() => { if (!includeProgress) includeReviews = false; }} />{$t('package.export.include_progress')}</label>
+      {#if includeProgress}<label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeReviews} />{$t('package.export.include_reviews')}</label>{/if}
+      <button type="button" data-testid="deck-package-export" disabled={exporting || !deck} onclick={exportPackage} class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium disabled:opacity-50">{$t(exporting ? 'package.export.exporting' : 'package.export.action')}</button>
+      {#if exportError}<span role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t('package.export.failed')}</span>{/if}
     </div>
 
     <!-- 搜索与筛选表单 -->
