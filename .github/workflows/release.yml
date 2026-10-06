@@ -105,6 +105,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Node.js 环境与缓存：供 .goreleaser.yaml before hook 执行前端生产构建
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       # .goreleaser.yaml 的 before 钩子会跑 go generate ./...，所以 templ 与 Tailwind
       # 必须先就位，否则构建在编译模板包时失败（生成物是 gitignore 的）。
       - name: Install templ and the Tailwind standalone CLI

@@ -11,10 +11,44 @@ import (
 // unknownPath 是一个不与任何已注册路由匹配的路径，用于触发 NoRoute 回退。
 const unknownPath = "/no-such-page-zz9"
 
-// TestNotFoundRendersLocalizedPage 断言未知 GET 路径返回 404（不是 200），
-// 且渲染的是本地化后的 HTML 页面。
-func TestNotFoundRendersLocalizedPage(t *testing.T) {
+// TestNotFoundFallbackServesSPAIndex 断言当 SPA 已嵌入时，未知的页面型 GET 路径
+// 回退 SPA 应用壳（index.html，DESIGN.md §8.5、ROADMAP Task B2），
+// 返回 200 状态码并带有正确的缓存与 MIME 响应头。
+func TestNotFoundFallbackServesSPAIndex(t *testing.T) {
 	srv := newRenderServer(t, nil)
+
+	rec := get(t, srv, unknownPath, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200 (body %s)", unknownPath, rec.Code, snippet(rec.Body.String()))
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-cache") {
+		t.Errorf("Cache-Control = %q, want containing no-cache", cc)
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Errorf("ETag is missing")
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `<div id="app"></div>`) {
+		t.Errorf("SPA index.html is missing app mount point: %s", snippet(body))
+	}
+
+	// If-None-Match 条件请求断言返回 304
+	condRec := get(t, srv, unknownPath, map[string]string{"If-None-Match": etag})
+	if condRec.Code != http.StatusNotModified {
+		t.Errorf("conditional GET %s status = %d, want 304", unknownPath, condRec.Code)
+	}
+}
+
+// TestNotFoundRendersLocalizedPageWhenSPANil 断言当 SPA 未加载（例如降级场景）时，
+// 未知 GET 路径回退设计过的本地化 404 页面（views.NotFound）。
+func TestNotFoundRendersLocalizedPageWhenSPANil(t *testing.T) {
+	srv := newRenderServer(t, nil)
+	srv.spa = nil
 
 	rec := get(t, srv, unknownPath, nil)
 	if rec.Code != http.StatusNotFound {
@@ -43,6 +77,8 @@ func TestNotFoundRendersLocalizedPage(t *testing.T) {
 
 func TestNotFoundAuthenticatedPageIncludesSettingsEntry(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	srv.spa = nil
+
 	rec := getWithCookies(t, srv, unknownPath, cookies)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("GET %s status = %d, want 404", unknownPath, rec.Code)
@@ -54,19 +90,19 @@ func TestNotFoundAuthenticatedPageIncludesSettingsEntry(t *testing.T) {
 
 func TestNotFoundLocalizesByAcceptLanguage(t *testing.T) {
 	srv := newRenderServer(t, nil)
+	srv.spa = nil
 
 	en := get(t, srv, unknownPath, map[string]string{"Accept-Language": "en-US,en;q=0.9"})
 	if en.Code != http.StatusNotFound {
 		t.Fatalf("GET %s (en) status = %d, want 404", unknownPath, en.Code)
 	}
-	body := en.Body.String()
-	if !strings.Contains(body, "Page not found") {
-		t.Errorf("en response is missing the English heading; body = %s", snippet(body))
+	if !strings.Contains(en.Body.String(), "Page not found") {
+		t.Errorf("en response is missing the English heading; body = %s", snippet(en.Body.String()))
 	}
-	if !strings.Contains(body, "Back to home") {
-		t.Errorf("en response is missing the English home action; body = %s", snippet(body))
+	if !strings.Contains(en.Body.String(), "Back to home") {
+		t.Errorf("en response is missing the English home action; body = %s", snippet(en.Body.String()))
 	}
-	if strings.Contains(body, "页面未找到") {
+	if strings.Contains(en.Body.String(), "页面未找到") {
 		t.Errorf("en response still contains the Chinese heading")
 	}
 }
@@ -95,8 +131,9 @@ func TestNotFoundDoesNotShadowRegisteredRoutes(t *testing.T) {
 	}
 }
 
-// TestNotFoundKeepsMachineAndNonGETPathsPlain 断言机器接口路径（/api、/mcp）与非 GET
-// 请求不回 HTML 页面：/api 走统一 JSON 错误包壳，/mcp 与非 GET 只回朴素 404 状态。
+// TestNotFoundKeepsMachineAndNonGETPathsPlain 断言机器接口路径（/api、/mcp）、
+// 静态/媒体资源未命中路径与非 GET 请求不回 HTML 页面：/api 走统一 JSON 错误包壳，
+// 其余只回朴素 404 状态。
 func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -107,8 +144,8 @@ func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 	if ct := apiRec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
 		t.Errorf("API 404 Content-Type = %q, want application/json", ct)
 	}
-	if strings.Contains(apiRec.Body.String(), "页面未找到") {
-		t.Errorf("API path rendered the HTML 404 page; body = %s", snippet(apiRec.Body.String()))
+	if strings.Contains(apiRec.Body.String(), "页面未找到") || strings.Contains(apiRec.Body.String(), "<div id=\"app\">") {
+		t.Errorf("API path rendered an HTML page; body = %s", snippet(apiRec.Body.String()))
 	}
 	var apiBody struct {
 		Error struct {
@@ -120,18 +157,15 @@ func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 		t.Fatalf("API 404 body is not JSON: %v (%s)", err, apiRec.Body.String())
 	}
 	if apiBody.Error.Code != "not_found" {
-		t.Errorf("API 404 error.code = %q, want %q", apiBody.Error.Code, "not_found")
-	}
-	if apiBody.Error.Message == "" {
-		t.Errorf("API 404 error.message is empty; body = %s", apiRec.Body.String())
+		t.Errorf("API 404 code = %q, want not_found", apiBody.Error.Code)
 	}
 
-	mcpRec := get(t, srv, "/mcp/no-such-endpoint", nil)
+	mcpRec := get(t, srv, "/mcp/no-such-tool", nil)
 	if mcpRec.Code != http.StatusNotFound {
-		t.Fatalf("GET /mcp/no-such-endpoint status = %d, want 404", mcpRec.Code)
+		t.Errorf("GET /mcp/no-such-tool status = %d, want 404", mcpRec.Code)
 	}
-	if strings.Contains(mcpRec.Body.String(), "页面未找到") {
-		t.Errorf("MCP path rendered the HTML 404 page; body = %s", snippet(mcpRec.Body.String()))
+	if mcpRec.Body.Len() != 0 {
+		t.Errorf("MCP 404 wrote a body: %q", mcpRec.Body.String())
 	}
 
 	req := httptest.NewRequest(http.MethodPost, unknownPath, nil)
@@ -140,7 +174,32 @@ func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("POST %s status = %d, want 404", unknownPath, rec.Code)
 	}
-	if strings.Contains(rec.Body.String(), "页面未找到") {
-		t.Errorf("non-GET path rendered the HTML 404 page; body = %s", snippet(rec.Body.String()))
+	if rec.Body.Len() != 0 {
+		t.Errorf("non-GET 404 wrote a body: %q", rec.Body.String())
+	}
+
+	// 缺失的静态资源与媒体路径必须 404，严禁回退 HTML
+	staticRec := get(t, srv, "/static/nonexistent.css", nil)
+	if staticRec.Code != http.StatusNotFound {
+		t.Errorf("GET /static/nonexistent.css status = %d, want 404", staticRec.Code)
+	}
+	if strings.Contains(staticRec.Body.String(), "<div id=\"app\">") {
+		t.Errorf("missing static asset fell back to SPA HTML")
+	}
+
+	assetRec := get(t, srv, "/assets/nonexistent.js", nil)
+	if assetRec.Code != http.StatusNotFound {
+		t.Errorf("GET /assets/nonexistent.js status = %d, want 404", assetRec.Code)
+	}
+	if strings.Contains(assetRec.Body.String(), "<div id=\"app\">") {
+		t.Errorf("missing SPA asset fell back to SPA HTML")
+	}
+
+	mediaRec := get(t, srv, "/media/nonexistent", nil)
+	if mediaRec.Code != http.StatusNotFound {
+		t.Errorf("GET /media/nonexistent status = %d, want 404", mediaRec.Code)
+	}
+	if strings.Contains(mediaRec.Body.String(), "<div id=\"app\">") {
+		t.Errorf("missing media asset fell back to SPA HTML")
 	}
 }

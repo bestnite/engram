@@ -18,7 +18,20 @@ COPY tools/optimizer/ ./
 RUN cargo build --release --locked \
     && ./target/release/optimizer --version
 
-# ---- 构建阶段：装 templ 与 Tailwind standalone CLI，先生成再编译 ----
+# ---- 前端阶段：Svelte 5 SPA 生产构建（Node glibc，锁定 package-lock.json）----
+FROM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /src/frontend
+# 先只拷贝依赖清单，最大化层缓存
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# 拷贝前端源码并执行类型检查与生产构建
+COPY frontend/ ./
+RUN npm run check \
+    && npm run build
+
+# ---- 构建阶段：装 templ 与 Tailwind standalone CLI，嵌入前端产物后编译 ----
 # 用 glibc 基底（bookworm）：Tailwind 官方预编译的 tailwindcss-linux-x64 是 glibc 二进制，
 # 在 musl 的 Alpine 里 exec 会报 “no such file or directory”（缺动态链接器）。
 FROM golang:1.26-bookworm AS builder
@@ -41,6 +54,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+
+# 复制前端生产构建产物（frontend/dist）供 go:embed 嵌入
+COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
 
 # *_templ.go 与 tailwind.css 是 gitignore 的产物，必须在编译前生成。
 RUN go generate ./... \
@@ -76,7 +92,6 @@ ENV HTTP_ADDR=0.0.0.0:8080 \
 
 # SESSION_SECRET 与 ENCRYPTION_KEY 故意不提供默认值：镜像里烤一个已知密钥会让
 # "忘记覆盖"变成静默的弱密钥部署；运行时缺失会以英文错误快速失败（internal/config 已校验）。
-
 
 EXPOSE 8080
 
