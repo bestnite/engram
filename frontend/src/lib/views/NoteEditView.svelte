@@ -13,6 +13,9 @@
   let error = $state(false);
   let invalid = $state(false);
   let saved = $state(false);
+  let previewLoading = $state(false);
+  let previewError = $state(false);
+  let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
 
@@ -31,6 +34,32 @@
       error = true;
     } finally {
       loading = false;
+    }
+  }
+
+  async function preview(): Promise<void> {
+    invalid = false;
+    previewError = false;
+    let fields: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(fieldsText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('fields');
+      fields = parsed as Record<string, unknown>;
+    } catch {
+      invalid = true;
+      previewCards = null;
+      return;
+    }
+    if (!note) return;
+    previewLoading = true;
+    previewCards = null;
+    try {
+      const response = await apiClient.previewNote(deckId, note.kind, fields);
+      previewCards = response.cards;
+    } catch {
+      previewError = true;
+    } finally {
+      previewLoading = false;
     }
   }
 
@@ -82,6 +111,28 @@
       <label class="block text-sm font-medium">{$t('note_edit.fields')}
         <textarea data-testid="note-fields-editor" bind:value={fieldsText} rows="14" spellcheck="false" class="mt-2 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3 font-mono text-sm"></textarea>
       </label>
+      <button data-testid="note-preview" type="button" onclick={preview} disabled={previewLoading} class="rounded-md border px-4 py-2 disabled:opacity-50">{previewLoading ? $t('note_preview.spa.loading') : $t('note_preview.spa.action')}</button>
+      {#if previewError}<p role="alert" data-testid="note-preview-error">{$t('note_preview.spa.failed')}</p>{/if}
+      {#if previewCards}
+        <section data-testid="note-preview-result" class="space-y-3">
+          <h2 class="text-lg font-semibold">{$t('note_preview.spa.title')}</h2>
+          <p class="text-sm text-zinc-500">{$t('note_preview.spa.math_notice')}</p>
+          {#each previewCards as card, index}
+            <article class="rounded-md border p-4 space-y-3">
+              <div data-testid="note-preview-front-{index}">
+                <h3 class="text-sm font-medium">{$t('note_preview.spa.front')}</h3>
+                <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                <div class="prose dark:prose-invert">{@html card.front_html}</div>
+              </div>
+              <div data-testid="note-preview-back-{index}">
+                <h3 class="text-sm font-medium">{$t('note_preview.spa.back')}</h3>
+                <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                <div class="prose dark:prose-invert">{@html card.back_html}</div>
+              </div>
+            </article>
+          {/each}
+        </section>
+      {/if}
       <label class="block text-sm font-medium">{$t('note_edit.tags')}
         <input data-testid="note-tags-editor" bind:value={tagsText} class="mt-2 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2" />
       </label>

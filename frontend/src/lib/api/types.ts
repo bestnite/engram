@@ -62,6 +62,11 @@ export interface UpdateNoteRequest {
   tags?: string[];
 }
 
+/** POST /api/v1/decks/:id/notes/preview 响应；HTML 已由服务端清理。 */
+export interface NotePreviewResponse {
+  cards: Array<{ front_html: string; back_html: string }>;
+}
+
 /**
  * GET /api/v1/decks/:id/notes 查询参数
  * internal/store/note.go:NoteListOptions

@@ -9,6 +9,7 @@ import {
   type UpdateNoteRequest,
   type CreateNotesRequest,
   type CreateNotesResponse,
+  type NotePreviewResponse,
   type StatsSummary,
   type DueCardsResponse,
   type DueCardsQuery,
@@ -261,6 +262,18 @@ export class ApiClient {
     return this.request<CreateNotesResponse>(`/api/v1/decks/${encodedId}/notes`, {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  }
+
+  /** Preview fields using the authenticated session-only sanitized preview endpoint. */
+  async previewNote(deckId: number | string, kind: string, fields: Record<string, unknown>): Promise<NotePreviewResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encodedId = encodeURIComponent(String(deckId));
+    return this.request<NotePreviewResponse>(`/api/v1/decks/${encodedId}/notes/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, fields }),
     });
   }
 
