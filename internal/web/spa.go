@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -131,6 +132,22 @@ func (s *SPA) HasAsset(logical string) bool {
 	clean := strings.TrimPrefix(logical, "/")
 	_, ok := s.assets[clean]
 	return ok
+}
+
+// StaticShellURLs 返回嵌入构建中可安全预缓存的 Vite 脚本与样式表。
+func (s *SPA) StaticShellURLs() []string {
+	urls := make([]string, 0, len(s.assets))
+	for key, asset := range s.assets {
+		if key != asset.path || !strings.HasPrefix(asset.path, "assets/") {
+			continue
+		}
+		switch path.Ext(asset.path) {
+		case ".js", ".mjs", ".css":
+			urls = append(urls, "/"+asset.path)
+		}
+	}
+	sort.Strings(urls)
+	return urls
 }
 
 // IndexHTML 返回 index.html 的原始内容。
