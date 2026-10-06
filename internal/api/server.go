@@ -153,13 +153,14 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
 }
 
-// audit 写一条审计（带当前 key 的 api_key_id）；写失败记英文日志但不回滚业务。
-func (a *API) audit(ctx context.Context, e store.AuditEntry) {
-	if a.auditor == nil {
+// recordAudit 写一条审计；写失败只记英文日志，不回滚业务（AGENTS.md §2.1：日志恒英文）。
+// *API 与 *Authenticator 两个接收者共用这一实现，避免同一守卫各写一遍。
+func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger, e store.AuditEntry) {
+	if auditor == nil {
 		return
 	}
-	if err := a.auditor.Record(ctx, e); err != nil {
-		a.logger.Error("write audit log failed", "action", e.Action, "error", err)
+	if err := auditor.Record(ctx, e); err != nil {
+		logger.Error("write audit log failed", "action", e.Action, "error", err)
 	}
 }
 

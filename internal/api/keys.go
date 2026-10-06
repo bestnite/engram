@@ -29,17 +29,6 @@ type createKeyRequest struct {
 	ExpiresAt *time.Time `json:"expires_at"`
 }
 
-// scopesIncludeAdmin 判断待创建的 scope 里是否含 admin（按请求原值匹配，未归一化）。
-// 合法性由 store.NormalizeScopes 负责，这里只关心“是否试图授予 admin”。
-func scopesIncludeAdmin(scopes []string) bool {
-	for _, s := range scopes {
-		if strings.TrimSpace(s) == store.ScopeAdmin {
-			return true
-		}
-	}
-	return false
-}
-
 // createKey 新建一个 key；明文只在这次响应里出现一次（DESIGN.md §7.2）。
 func (a *API) createKey(c *gin.Context) {
 	u, ok := CurrentUser(c)
@@ -59,7 +48,7 @@ func (a *API) createKey(c *gin.Context) {
 	// admin scope 只能发给管理员账号：非管理员（含持有 keys 或遗留 admin-scope key 的
 	// 普通用户）经任何路径提交 admin 都拒绝，且不落库（DESIGN.md §7.2）。钤制必须在知道
 	// actor 角色的传输层做，store 层看不到调用者身份。
-	if scopesIncludeAdmin(req.Scopes) && u.Role != store.RoleAdmin {
+	if store.ScopesIncludeAdmin(req.Scopes) && u.Role != store.RoleAdmin {
 		abortError(c, http.StatusForbidden, CodeScopeNotGrantable, "")
 		return
 	}
@@ -73,7 +62,7 @@ func (a *API) createKey(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		return
 	}
-	a.audit(c.Request.Context(), store.AuditEntry{
+	recordAudit(c.Request.Context(), a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
 		Action:   "api_key.create",
@@ -98,7 +87,7 @@ func (a *API) deleteKey(c *gin.Context) {
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	a.audit(c.Request.Context(), store.AuditEntry{
+	recordAudit(c.Request.Context(), a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
 		Action:   "api_key.revoke",

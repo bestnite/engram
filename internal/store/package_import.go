@@ -604,7 +604,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 				continue
 			}
 			// update：保留 card 行与所有人进度，只改内容（NoteStore.SaveInTx 保证 id 不变）。
-			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: tagsJSON(pn.Tags)}
+			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: TagsJSON(pn.Tags)}
 			if _, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields); err != nil {
 				return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 			}
@@ -613,7 +613,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 			continue
 		}
 
-		n := Note{DeckID: deckID, Kind: pn.Kind, TagsJSON: tagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
+		n := Note{DeckID: deckID, Kind: pn.Kind, TagsJSON: TagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
 		if pn.ExternalRef != "" {
 			n.ExternalRef = Ptr(pn.ExternalRef)
 		}
@@ -781,7 +781,7 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	p := Preset{
 		OwnerUserID: owner, Name: pp.Name, DesiredRetention: pp.DesiredRetention,
 		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
-		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: boolPtr(pp.EnableFuzz),
+		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: Ptr(pp.EnableFuzz),
 		WeightsReviewCount: pp.WeightsReviewCount, CreatedAt: now, UpdatedAt: now,
 	}
 	if p.Name == "" {

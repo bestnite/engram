@@ -493,18 +493,6 @@ func (p *DeckPackage) Document() map[string]any {
 	return doc
 }
 
-// tagsJSON 把标签切片序列化成 tags_json；nil 时写空数组（字符串默认值在 Go 侧显式给出）。
-func tagsJSON(tags []string) string {
-	if tags == nil {
-		return "[]"
-	}
-	raw, err := json.Marshal(tags)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
-}
-
 // presetToPackage 把 store.Preset 转成包内 preset（weights_json → []float64 或 null）。
 func presetToPackage(p *Preset) PackagePreset {
 	out := PackagePreset{

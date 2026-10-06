@@ -16,7 +16,7 @@ import (
 // 夹具走真实的生成管线，保证批量动作测试面对的是真实落库的 note 与 card。
 func seedBasicNote(t *testing.T, env *testEnv, deckID uint64, front, back string, tags []string) *store.Note {
 	t.Helper()
-	n := &store.Note{DeckID: deckID, Kind: "basic", TagsJSON: tagsJSON(tags), CreatedAt: time.Now().UTC()}
+	n := &store.Note{DeckID: deckID, Kind: "basic", TagsJSON: store.TagsJSON(tags), CreatedAt: time.Now().UTC()}
 	if _, err := store.NewNoteStore(env.db).Create(context.Background(), n, map[string]any{"front": front, "back": back}); err != nil {
 		t.Fatalf("create note: %v", err)
 	}

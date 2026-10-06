@@ -64,12 +64,6 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// uploadLimit 解析生效的上传字节上限：与 REST 卡组包导入共用 internal/media 的同一实现
-// （环境变量 > settings 表 > 默认 10 MiB），保证两条入口只有一处口径。
-func (s *Server) uploadLimit(ctx context.Context) int64 {
-	return media.ResolveMaxBytes(ctx, s.db)
-}
-
 // allowedMimes 解析生效的 mime 白名单：环境变量 > settings 表 > 默认白名单。
 func (s *Server) allowedMimes(ctx context.Context) []string {
 	if raw := strings.TrimSpace(os.Getenv(envMediaAllowedMimes)); raw != "" {
@@ -129,7 +123,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	if header != nil {
 		declared = header.Header.Get("Content-Type")
 	}
-	fileLimit := s.uploadLimit(ctx)
+	fileLimit := media.ResolveMaxBytes(ctx, s.db)
 	// 先校验再落盘（M2-13）：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
 	// 全部拒绝判断都在这之后进行，通过后才交给存储层写临时文件 + rename，避免"写了一半
 	// 才发现超限"。内存占用以单文件上限为界，不随上传并发之外的规模增长。

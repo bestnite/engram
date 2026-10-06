@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,14 +23,14 @@ func (a *API) listNotes(c *gin.Context) {
 	if !ok {
 		return
 	}
-	opts := store.NoteListOptions{
+	opts := store.NormalizeNoteListOptions(store.NoteListOptions{
 		Page:    queryInt(c, "page", 1),
 		PerPage: queryInt(c, "per_page", store.DefaultNotePageSize),
 		Query:   c.Query("q"),
 		Tag:     c.Query("tag"),
 		Kind:    c.Query("kind"),
 		Status:  c.Query("status"),
-	}
+	})
 	notes, total, err := a.ListNotes(c.Request.Context(), u.ID, deckID, opts)
 	if err != nil {
 		writeServiceError(c, err)
@@ -41,26 +40,15 @@ func (a *API) listNotes(c *gin.Context) {
 	for i := range notes {
 		out = append(out, NoteJSON(&notes[i]))
 	}
-	if opts.Page < 1 {
-		opts.Page = 1
-	}
-	if opts.PerPage <= 0 {
-		opts.PerPage = store.DefaultNotePageSize
-	}
+	// 回显的生效值就是 NormalizeNoteListOptions 的结果，不再在本处重复夹一次。
 	c.JSON(http.StatusOK, gin.H{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage})
 }
 
 // NoteJSON 把 note 转成对外形态：fields 与 tags 解码成结构化值，避免调用方二次解析。
 // REST（list_notes/update_note）与 MCP 同名工具共用，保证同一 note 产出同一 JSON。
 func NoteJSON(n *store.Note) map[string]any {
-	fields, _ := store.ParseFields(n.FieldsJSON)
-	if fields == nil {
-		fields = map[string]any{}
-	}
-	tags, _ := store.ParseTags(n.TagsJSON)
-	if tags == nil {
-		tags = []string{}
-	}
+	fields := store.FieldsOrEmpty(n.FieldsJSON)
+	tags := store.TagsOrEmpty(n.TagsJSON)
 	return map[string]any{
 		"id":           n.ID,
 		"deck_id":      n.DeckID,
@@ -158,16 +146,4 @@ func (a *API) bulkNotes(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
-}
-
-// tagsJSON 把标签编码进 notes.tags_json；nil 也落成 "[]"，避免列里出现空串。
-func tagsJSON(tags []string) string {
-	if tags == nil {
-		tags = []string{}
-	}
-	raw, err := json.Marshal(tags)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
 }

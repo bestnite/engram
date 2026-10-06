@@ -14,6 +14,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
@@ -205,7 +206,7 @@ func (s *Server) importSubmit(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	limit := s.uploadLimit(ctx)
+	limit := media.ResolveMaxBytes(ctx, s.db)
 	// 先限制请求体，再解析 multipart：避免超限文件被读进内存/磁盘。
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 

@@ -116,7 +116,7 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		}
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   in.APIKeyID,
 		Action:     "deck.create",
@@ -144,7 +144,7 @@ func (a *API) RequireDeckRole(ctx context.Context, userID, deckID uint64, want s
 	if role != "" {
 		code = CodeInsufficientRole
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		Action:     store.ActionPermissionDenied,
 		TargetType: "deck",
@@ -202,12 +202,7 @@ func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.N
 	if err != nil {
 		return nil, 0, err
 	}
-	if opts.Page < 1 {
-		opts.Page = 1
-	}
-	if opts.PerPage <= 0 {
-		opts.PerPage = store.DefaultNotePageSize
-	}
+	opts = store.NormalizeNoteListOptions(opts)
 	opts.DeckID = d.ID
 	notes, total, err := a.notes.List(ctx, opts)
 	if err != nil {
@@ -346,7 +341,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		n := store.Note{
 			DeckID:    d.ID,
 			Kind:      item.Kind,
-			TagsJSON:  tagsJSON(item.Tags),
+			TagsJSON:  store.TagsJSON(item.Tags),
 			CreatedBy: store.Ptr(userID),
 			Source:    store.Ptr("api"),
 		}
@@ -404,7 +399,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 	}
 
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     "note.import",
@@ -493,7 +488,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	}
 	n := store.Note{ID: existing.ID, Kind: kind}
 	if in.Tags != nil {
-		n.TagsJSON = tagsJSON(*in.Tags)
+		n.TagsJSON = store.TagsJSON(*in.Tags)
 	} else {
 		n.TagsJSON = existing.TagsJSON
 	}
@@ -506,7 +501,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionNoteUpdate,
@@ -530,7 +525,7 @@ func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		a.logger.Error("delete note failed", "note_id", existing.ID, "error", err)
 		return 0, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete note")
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionNoteDelete,
@@ -639,7 +634,7 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 
 	if !in.DryRun {
 		// 与网页批量表单对齐：整批一行审计，detail 里带动作、请求的 id 列表与变更行数。
-		a.audit(ctx, store.AuditEntry{
+		recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 			UserID:     store.Ptr(userID),
 			APIKeyID:   apiKeyID,
 			Action:     bulkAuditAction(action),
@@ -911,8 +906,8 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 			DueAt:          it.DueAt,
 			Retrievability: it.Retrievability,
 			Kind:           note.Kind,
-			Fields:         fieldsOrEmpty(note),
-			Tags:           tagsOrEmpty(note),
+			Fields:         store.FieldsOrEmpty(note.FieldsJSON),
+			Tags:           store.TagsOrEmpty(note.TagsJSON),
 		}
 		if card, err := a.cards.ByID(ctx, it.CardID); err == nil {
 			entry.Template = card.Template
@@ -1005,7 +1000,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		a.logger.Error("submit review failed", "card_id", in.CardID, "user_id", u.ID, "error", err)
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to submit review")
 	}
-	a.audit(ctx, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     "review.submit",

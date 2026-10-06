@@ -148,22 +148,15 @@ func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {
-	page := in.Page
-	if page < 1 {
-		page = 1
-	}
-	perPage := in.PerPage
-	if perPage <= 0 {
-		perPage = store.DefaultNotePageSize
-	}
-	notes, total, err := s.api.ListNotes(ctx, id.User.ID, in.DeckID, store.NoteListOptions{
-		Page:    page,
-		PerPage: perPage,
+	opts := store.NormalizeNoteListOptions(store.NoteListOptions{
+		Page:    in.Page,
+		PerPage: in.PerPage,
 		Query:   in.Query,
 		Tag:     in.Tag,
 		Kind:    in.Kind,
 		Status:  in.Status,
 	})
+	notes, total, err := s.api.ListNotes(ctx, id.User.ID, in.DeckID, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +164,7 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 	for i := range notes {
 		out = append(out, api.NoteJSON(&notes[i]))
 	}
-	return map[string]any{"notes": out, "total": total, "page": page, "per_page": perPage}, nil
+	return map[string]any{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage}, nil
 }
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {

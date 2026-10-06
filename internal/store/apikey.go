@@ -102,6 +102,18 @@ func NormalizeScopes(scopes []string) (string, error) {
 	return strings.Join(ordered, ","), nil
 }
 
+// ScopesIncludeAdmin 判断一组 scope 是否试图授予 admin（按请求原值匹配，未归一化）。
+// 取值合法性由 NormalizeScopes 负责，这里只回答「有没有 admin」。Web 表单与 REST
+// 建 key 两条入口共用同一判定（DESIGN.md §7.2：admin scope 只能发给管理员账号）。
+func ScopesIncludeAdmin(scopes []string) bool {
+	for _, s := range scopes {
+		if strings.TrimSpace(s) == ScopeAdmin {
+			return true
+		}
+	}
+	return false
+}
+
 // HasScope 判断 scopes 字符串是否覆盖 want。
 // admin 等价于管理员权限（DESIGN.md §7.2），因此它蕴含其余四档（含 keys）；反向不成立，
 // 其余各档之间互不蕴含。

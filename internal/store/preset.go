@@ -31,9 +31,6 @@ var (
 	ErrInvalidMaximumInterval = errors.New("maximum interval days must be positive")
 )
 
-// boolPtr 返回布尔字面量的指针，供 *bool 字段显式赋值（AGENTS.md §2.3 第 9 条）。
-func boolPtr(v bool) *bool { return &v }
-
 // NewPreset 返回一个带文档化默认值的调度预设；归属与名字由调用方给出。
 // 这是获得默认值的唯一入口：直接构造 Preset 会得到零值，Create 会以校验失败拒绝，
 // 避免把 desired_retention=0 这类非法值静默写库。
@@ -45,7 +42,7 @@ func NewPreset(ownerUserID uint64, name string) Preset {
 		LearningSteps:       DefaultLearningSteps,
 		RelearningSteps:     DefaultRelearningSteps,
 		MaximumIntervalDays: DefaultMaximumIntervalDays,
-		EnableFuzz:          boolPtr(DefaultEnableFuzz),
+		EnableFuzz:          Ptr(DefaultEnableFuzz),
 	}
 }
 

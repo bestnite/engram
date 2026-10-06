@@ -54,7 +54,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 			got.LearningSteps = "2m,20m"
 			got.RelearningSteps = "15m"
 			got.MaximumIntervalDays = 100
-			got.EnableFuzz = boolPtr(false)
+			got.EnableFuzz = Ptr(false)
 			if err := presets.Update(ctx, owner, got); err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}

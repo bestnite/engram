@@ -50,6 +50,19 @@ type NoteListOptions struct {
 	Status string
 }
 
+// NormalizeNoteListOptions 把分页默认值与下界收敛成一处：Page 小于 1 按 1，
+// PerPage 非正按 DefaultNotePageSize。REST handler、MCP 工具、service 与 store.List
+// 四条入口都先过这里，避免同一规则在多处各写一遍（写多了必然漂移）。
+func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage <= 0 {
+		opts.PerPage = DefaultNotePageSize
+	}
+	return opts
+}
+
 // NoteStore 封装 notes 表，并实现\"由题型生成 cards\"的管线（DESIGN.md §2.1、§6.2）。
 //
 // 内容与进度分离是本项目最重要的一条设计原则：note/card 只描述内容，
@@ -301,14 +314,9 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 // 不使用任何 PG 专有的 ILIKE 或表达式索引。搜索覆盖 fields_json 的全部字段文本，
 // 因此正面与背面都能命中；标签用带引号边界的 LIKE 精确匹配数组元素。
 func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {
+	opts = NormalizeNoteListOptions(opts)
 	perPage := opts.PerPage
-	if perPage <= 0 {
-		perPage = DefaultNotePageSize
-	}
 	page := opts.Page
-	if page < 1 {
-		page = 1
-	}
 	offset := (page - 1) * perPage
 
 	// 每次调用都重新构造查询，避免复用同一个 *gorm.DB 时把 Count 的语句状态带到 Find。
@@ -542,6 +550,38 @@ func ParseFields(raw string) (map[string]any, error) {
 		return nil, fmt.Errorf("decode fields_json: %w", err)
 	}
 	return fields, nil
+}
+
+// TagsJSON 把标签切片序列化成 notes.tags_json；nil 落成 "[]"，避免列里出现空串。
+// 这是唯一的序列化入口，卡组包导出与 REST 写入共用（输出与逐处手写一致）。
+func TagsJSON(tags []string) string {
+	if tags == nil {
+		tags = []string{}
+	}
+	raw, err := json.Marshal(tags)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// FieldsOrEmpty 解码 fields_json；坏数据或 null 收敛成空对象，避免响应里出现 null。
+// 列表、到期卡与导出三条读取路径共用，保证同一行在不同出口产出同一形态。
+func FieldsOrEmpty(raw string) map[string]any {
+	fields, err := ParseFields(raw)
+	if err != nil || fields == nil {
+		return map[string]any{}
+	}
+	return fields
+}
+
+// TagsOrEmpty 解码 tags_json；坏数据或 null 收敛成空数组。
+func TagsOrEmpty(raw string) []string {
+	tags, err := ParseTags(raw)
+	if err != nil || tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 // escapeLike 转义 LIKE 模式里的通配符，让用户输入按字面匹配（配合 ESCAPE '\\'）。

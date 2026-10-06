@@ -57,7 +57,7 @@ func TestAdminSettingsChangeAppliesWithoutRestart(t *testing.T) {
 
 	// 上传接口共用的解析函数也要立即读到新值（环境变量未设置时）。
 	if os.Getenv(media.EnvMediaMaxBytes) == "" {
-		if got := srv.uploadLimit(context.Background()); got != 2048 {
+		if got := media.ResolveMaxBytes(context.Background(), db); got != 2048 {
 			t.Errorf("uploadLimit() = %d, want 2048 without restart", got)
 		}
 	}
