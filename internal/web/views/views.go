@@ -42,6 +42,10 @@ type LayoutData struct {
 	AppleTouchIconURL string
 	// MediaJSURL 是编辑器媒体上传脚本的内容哈希 URL（M2-9）；为空串时模板跳过引用。
 	MediaJSURL string
+	// NotesJSURL 是笔记编辑页预览区脚本（htmx:afterSwap 后重排公式）的内容哈希 URL。
+	// 它取代了模板上的 hx-on::after-swap，让 CSP 的 script-src 不必再带 'unsafe-eval'
+	// （DESIGN.md §11）。为空串时模板跳过引用。
+	NotesJSURL string
 	// Nav 是顶部导航项（标签已本地化）。
 	Nav []NavItem
 	// SessionLabel / SessionHref 是页头右侧的会话入口：未登录时指向 /login，已登录时是登出。

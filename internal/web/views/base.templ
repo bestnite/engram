@@ -77,6 +77,9 @@ templ Base(data LayoutData) {
 			if data.MediaJSURL != "" {
 				<script src={ data.MediaJSURL } defer></script>
 			}
+			if data.NotesJSURL != "" {
+				<script src={ data.NotesJSURL } defer></script>
+			}
 			<script src="/pwa.js"></script>
 		</head>
 		<body class="min-h-screen flex flex-col bg-slate-50 text-zinc-900 antialiased selection:bg-zinc-200 selection:text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100 dark:selection:bg-zinc-800 dark:selection:text-zinc-100 transition-colors duration-150">

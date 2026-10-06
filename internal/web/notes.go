@@ -85,6 +85,7 @@ func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string
 		HTMXURL:    s.assets.URL("js/htmx.min.js"),
 		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
 		MediaJSURL: s.assets.URL("js/media.js"),
+		NotesJSURL: s.assets.URL("js/notes.js"),
 	}
 	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致。
 	s.decorateLayout(c, loc, &layout)
