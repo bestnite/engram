@@ -97,4 +97,13 @@ export const routes: RouteDefinition[] = [
     name: 'login',
     component: LoginView as unknown as RouteDefinition['component'],
   },
+  {
+    // SPA 登录入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /login，
+    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
+    // 服务端 GET /spa/login 返回应用壳并初始化会话前双提交 cookie；
+    // 登录协议仍走 /api/v1/auth/session + /api/v1/auth/login。
+    path: '/spa/login',
+    name: 'spa-login',
+    component: LoginView as unknown as RouteDefinition['component'],
+  },
 ];

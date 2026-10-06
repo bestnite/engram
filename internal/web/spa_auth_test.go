@@ -468,3 +468,99 @@ func TestSPALogout_Flow(t *testing.T) {
 		t.Errorf("revoked session should be unauthenticated, got %s", recheckRec.Body.String())
 	}
 }
+
+// TestSPALoginShellServesAppAndInitializesDoubleSubmitCookie 断言 SPA 登录入口
+// GET /spa/login 返回应用壳，并像 SSR 的 GET /login 一样先下发会话前双提交 cookie，
+// 使 SPA 挂载后的 POST /api/v1/auth/login 具备可校验的镜像 token。
+// 它只读：不建立会话、不返回任何凭据，也不渲染 SSR 表单。
+func TestSPALoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
+	srv, _ := newAuthServer(t)
+
+	rec := get(t, srv, "/spa/login", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /spa/login status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("GET /spa/login Content-Type = %q, want text/html", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<div id="app"></div>`) {
+		t.Errorf("GET /spa/login did not serve the SPA shell: %s", snippet(body))
+	}
+	// 应用壳不是登录表单：不得出现密码字段或 SSR 表单 action。
+	if strings.Contains(body, `name="password"`) || strings.Contains(body, `action="/login"`) {
+		t.Errorf("GET /spa/login must not render the SSR login form: %s", snippet(body))
+	}
+
+	c := findCookie(rec, auth.CSRFDoubleSubmitCookieName)
+	if c == nil {
+		t.Fatalf("GET /spa/login did not set %s", auth.CSRFDoubleSubmitCookieName)
+	}
+	if !c.HttpOnly {
+		t.Errorf("csrf_double cookie must be HttpOnly")
+	}
+	if c.SameSite != http.SameSiteLaxMode {
+		t.Errorf("csrf_double cookie SameSite = %v, want Lax", c.SameSite)
+	}
+	if len(c.Value) < 16 {
+		t.Errorf("csrf_double cookie value too short: %q", c.Value)
+	}
+	// 登录入口绝不提早签发会话 cookie。
+	if findCookie(rec, srv.sessions.CookieName()) != nil {
+		t.Errorf("GET /spa/login must not issue a session cookie")
+	}
+}
+
+// TestSPALoginShellCookieMatchesSessionToken 断言入口下发的双提交 cookie 与
+// GET /api/v1/auth/session 返回的 csrf_token 是同一个值：SPA 因此能用响应里的 token
+// 通过 POST /api/v1/auth/login 的镜像校验，无需读取 HttpOnly cookie。
+// 该链路正是未登录用户经 SPA 登录成功的完整路径。
+func TestSPALoginShellCookieMatchesSessionToken(t *testing.T) {
+	srv, _ := newAuthServer(t)
+	createTestUser(t, srv, "shelluser", "Password123!", store.RoleUser, true)
+
+	shell := get(t, srv, "/spa/login", nil)
+	cookie := findCookie(shell, auth.CSRFDoubleSubmitCookieName)
+	if cookie == nil {
+		t.Fatalf("GET /spa/login did not set %s", auth.CSRFDoubleSubmitCookieName)
+	}
+
+	sess := getWithCookies(t, srv, "/api/v1/auth/session", []*http.Cookie{cookie})
+	if sess.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/auth/session status = %d, want 200", sess.Code)
+	}
+	var res struct {
+		Authenticated bool   `json:"authenticated"`
+		CSRFToken     string `json:"csrf_token"`
+	}
+	if err := json.Unmarshal(sess.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal session response: %v", err)
+	}
+	if res.Authenticated {
+		t.Fatalf("fresh session must be unauthenticated")
+	}
+	if res.CSRFToken != cookie.Value {
+		t.Fatalf("session csrf_token %q != shell cookie %q", res.CSRFToken, cookie.Value)
+	}
+
+	// 用入口下发的 cookie 与镜像 token 登录成功，且响应签发 HttpOnly 会话 cookie。
+	ok := postJSON(srv, "/api/v1/auth/login", map[string]string{
+		"username": "shelluser", "password": "Password123!",
+	}, []*http.Cookie{cookie}, map[string]string{auth.CSRFHeaderName: res.CSRFToken})
+	if ok.Code != http.StatusOK {
+		t.Fatalf("login via shell-issued token status = %d, want 200 (body %s)", ok.Code, ok.Body.String())
+	}
+	var loginRes struct {
+		Authenticated bool `json:"authenticated"`
+	}
+	if err := json.Unmarshal(ok.Body.Bytes(), &loginRes); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+	if !loginRes.Authenticated {
+		t.Errorf("expected authenticated=true after login")
+	}
+	sessionCookie := findCookie(ok, srv.sessions.CookieName())
+	if sessionCookie == nil || !sessionCookie.HttpOnly {
+		t.Errorf("login must issue an HttpOnly session cookie, got %+v", sessionCookie)
+	}
+}

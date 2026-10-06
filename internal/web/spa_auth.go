@@ -173,6 +173,21 @@ func (s *Server) apiLogin(c *gin.Context) {
 	})
 }
 
+// spaLoginShell 是 SPA 登录入口（GET /spa/login）。
+//
+// 与 SSR 的 GET /login 并存，不遮蔽它：后者仍是当前被链接、且无脚本也能提交的登录页，
+// SPA 在浏览器端到端验证前走独立的 /spa 迁移目标路径（与 /spa/review、/spa/settings/totp
+// 同一约定，DESIGN.md §8.1）。
+//
+// 像 SSR 的 GET /login 一样先初始化会话前双提交 cookie：SPA 挂载后从
+// GET /api/v1/auth/session 取回同一 token 放进 X-CSRF-Token，POST /api/v1/auth/login
+// 的 DoubleSubmitMiddleware 据此比对 cookie 与镜像值。这里只下发 cookie 并返回应用壳，
+// 不渲染表单、不建立会话、不返回任何凭据（会话 cookie 始终由服务端在登录成功后签发）。
+func (s *Server) spaLoginShell(c *gin.Context) {
+	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
+	s.spa.ServeIndex(c)
+}
+
 // apiLogout 作废当前会话并清除 cookie（DESIGN.md §4.3、§11）。
 //
 // 挂载 s.sessions.CSRFMiddleware 强制要求会话绑定的 CSRF token。
