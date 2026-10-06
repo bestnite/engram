@@ -77,7 +77,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	today := store.ReviewDayString(now, time.UTC, 0)
-	yesterday := shiftReviewDay(today, -1)
+	yesterday := store.ShiftReviewDay(today, -1)
 	dueSoon := now.Add(-1 * time.Hour)
 
 	preset := store.NewPreset(userID, "Stats preset")

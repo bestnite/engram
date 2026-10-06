@@ -244,11 +244,11 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 // 前一个复习日，因此可能在同一自然日的 0 点与 4 点各发出一封——这是「每个复习日至多一封」
 // 的定义所致，与既有日切点口径一致，不另作特判。
 func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) error {
-	loc := loadLocation(c.Timezone)
+	loc := store.LoadLocation(c.Timezone)
 	if !ReachedSendHour(now.In(loc), SendHour(c.ReminderHour)) {
 		return nil
 	}
-	cutoff := normalizedCutoff(c.DayCutoffHour)
+	cutoff := store.NormalizedCutoff(c.DayCutoffHour)
 	day := schedule.ReviewDay(now, loc, cutoff)
 
 	sent, err := store.HasReminderBeenSent(ctx, r.db, c.ID, day)
@@ -336,25 +336,6 @@ func SendHour(userHour *int) int {
 // 导出供周报 worker 复用：两个 C 类邮件共用同一小时，判定必须是同一份实现。
 func ReachedSendHour(local time.Time, hour int) bool {
 	return local.Hour() >= hour
-}
-
-// loadLocation 解析 IANA 时区；为空或解析失败时退回 UTC（与 schedule 的口径一致，
-// 不因一个坏时区名阻塞提醒）。复习日的计算仍复用 schedule.ReviewDay。
-func loadLocation(tz string) *time.Location {
-	if strings.TrimSpace(tz) != "" {
-		if loaded, err := time.LoadLocation(tz); err == nil {
-			return loaded
-		}
-	}
-	return time.UTC
-}
-
-// normalizedCutoff 与 schedule 的默认规则一致：0 或越界视为未设置，用默认 4。
-func normalizedCutoff(hour int) int {
-	if hour < 0 || hour > 23 || hour == 0 {
-		return schedule.DefaultDayCutoffHour
-	}
-	return hour
 }
 
 // 让编译期确认 *mail.Outbox 满足 Enqueuer（契约漂移时在这里报错，而不是在装配处）。

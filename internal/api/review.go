@@ -22,16 +22,9 @@ func (a *API) schedulerForDeck(ctx context.Context, deck *store.Deck) (*schedule
 	return schedule.NewScheduler(preset)
 }
 
-// userLocation 按用户时区加载 Location；名字非法时退回 UTC（不阻断复习）。
+// userLocation 按用户时区加载 Location；回退规则见 store.LoadLocation（空/非法名 → UTC）。
 func userLocation(tz string) *time.Location {
-	if tz == "" {
-		return time.UTC
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		return time.UTC
-	}
-	return loc
+	return store.LoadLocation(tz)
 }
 
 // dueCards 返回到期卡（含字段原文），scope: review（业务逻辑在 service 层的 DueCards）。

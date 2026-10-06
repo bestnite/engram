@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +57,7 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 	locTZ := userLocation(user)
 	cutoff := user.DayCutoffHour
 	today := store.ReviewDayString(now, locTZ, cutoff)
-	from30 := shiftReviewDay(today, -29)
+	from30 := store.ShiftReviewDay(today, -29)
 
 	stats := store.NewStatsStore(s.db)
 
@@ -220,7 +219,7 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 			d.Name,
 			loc.Tf("stats.due.value", map[string]any{"count": d.DueCount}),
 			loc.Tf("stats.volume.value", map[string]any{"count": d.Reviews}),
-			loc.Tf("stats.table.rate", map[string]any{"rate": formatPercent(d.Retention)}),
+			loc.Tf("stats.table.rate", map[string]any{"rate": store.FormatPercent(d.Retention)}),
 			elapsedLabel(loc, d.ElapsedMS),
 		})
 	}
@@ -228,7 +227,7 @@ func (s *Server) statsData(c *gin.Context, loc *i18n.Localizer, user *store.User
 		data.TagRows = append(data.TagRows, []string{
 			t.Tag,
 			loc.Tf("stats.volume.value", map[string]any{"count": t.Reviews}),
-			loc.Tf("stats.table.rate", map[string]any{"rate": formatPercent(t.Retention)}),
+			loc.Tf("stats.table.rate", map[string]any{"rate": store.FormatPercent(t.Retention)}),
 		})
 	}
 
@@ -255,7 +254,7 @@ func retentionRateData(passed, total int64) map[string]any {
 	if total > 0 {
 		rate = float64(passed) / float64(total)
 	}
-	return map[string]any{"rate": formatPercent(rate), "passed": passed, "total": total}
+	return map[string]any{"rate": store.FormatPercent(rate), "passed": passed, "total": total}
 }
 
 // retentionBucketKey 把 store 的稳定性桶标签映射到语言包 key。
@@ -295,25 +294,10 @@ func gradeSourceKey(source string) string {
 	}
 }
 
-// userLocation 解析用户时区；IANA 名无效或为空时回退 UTC，页面不会因脏数据 500。
+// userLocation 解析用户时区；回退规则见 store.LoadLocation（空/非法名 → UTC），
+// 页面不会因脏数据 500。
 func userLocation(user *store.User) *time.Location {
-	if user.Timezone == "" {
-		return time.UTC
-	}
-	loc, err := time.LoadLocation(user.Timezone)
-	if err != nil {
-		return time.UTC
-	}
-	return loc
-}
-
-// shiftReviewDay 把 review_day 字符串（YYYY-MM-DD）平移 delta 天。
-func shiftReviewDay(day string, delta int) string {
-	t, err := time.Parse("2006-01-02", day)
-	if err != nil {
-		return day
-	}
-	return t.AddDate(0, 0, delta).Format("2006-01-02")
+	return store.LoadLocation(user.Timezone)
 }
 
 // barWidth 返回柱状条宽度声明；value 非正或 max 非正时返回空串（该行不画柱）。
@@ -323,7 +307,7 @@ func barWidth(value, max int64) string {
 	if value <= 0 || max <= 0 {
 		return ""
 	}
-	return "width:" + formatPercent(float64(value)/float64(max)) + "%;"
+	return "width:" + store.FormatPercent(float64(value)/float64(max)) + "%;"
 }
 
 // percentWidth 把 0–1 的比例转成柱宽声明；0 时返回空串。
@@ -331,12 +315,7 @@ func percentWidth(rate float64) string {
 	if rate <= 0 {
 		return ""
 	}
-	return "width:" + formatPercent(rate) + "%;"
-}
-
-// formatPercent 把 0–1 的比例格式化成一位小数的百分数（不含 % 号）。
-func formatPercent(rate float64) string {
-	return strconv.FormatFloat(rate*100, 'f', 1, 64)
+	return "width:" + store.FormatPercent(rate) + "%;"
 }
 
 // maxInt64 返回一组整数里的最大值；无参数时返回 0。

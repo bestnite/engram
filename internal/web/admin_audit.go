@@ -30,14 +30,12 @@ import (
 // adminAuditPageSize 是审计列表每页行数。
 const adminAuditPageSize = 50
 
-// auditLocation 返回当前管理员用于展示与日期换算的时区；未设置或无法加载时回退 UTC。
+// auditLocation 返回当前管理员用于展示与日期换算的时区；回退规则见 store.LoadLocation。
 func auditLocation(u *store.User) *time.Location {
-	if u != nil && u.Timezone != "" {
-		if loc, err := time.LoadLocation(u.Timezone); err == nil {
-			return loc
-		}
+	if u == nil {
+		return time.UTC
 	}
-	return time.UTC
+	return store.LoadLocation(u.Timezone)
 }
 
 // parseAuditDay 把 YYYY-MM-DD 按给定时区解析成该日零点；格式非法时 ok=false。
