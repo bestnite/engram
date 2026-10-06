@@ -12,6 +12,8 @@ import {
   type UpdateNoteRequest,
   type CreateNotesRequest,
   type CreateNotesResponse,
+  type BulkNotesRequest,
+  type BulkNotesResponse,
   type NotePreviewResponse,
   type MediaPickerPage,
   type StatsSummary,
@@ -352,6 +354,21 @@ export class ApiClient {
     }
     const encodedId = encodeURIComponent(String(deckId));
     return this.request<CreateNotesResponse>(`/api/v1/decks/${encodedId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
+   * 批量删除/改标签（POST /api/v1/notes/bulk，DESIGN.md §7.3）。
+   * 行级失败不回滚整批：响应 skipped 逐行给出 not_found / insufficient_role，
+   * 调用方据 affected 与 skipped 报告真实结果，不做乐观假设。
+   */
+  async bulkNotes(input: BulkNotesRequest): Promise<BulkNotesResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<BulkNotesResponse>('/api/v1/notes/bulk', {
       method: 'POST',
       body: JSON.stringify(input),
     });

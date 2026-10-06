@@ -331,6 +331,24 @@ describe('Deck and notes list API client and view contracts', () => {
         'notes.col_tags',
         'notes.col_created',
         'notes.no_tags',
+        'notes.status_filter',
+        'notes.status_active',
+        'notes.status_deleted',
+        'notes.deleted_badge',
+        'notes.deleted_readonly',
+        'notes.select_all',
+        'notes.selected_count',
+        'notes.bulk_tag_placeholder',
+        'notes.bulk_add_tags',
+        'notes.bulk_remove_tags',
+        'notes.bulk_set_tags',
+        'notes.bulk_delete',
+        'notes.bulk_confirm_delete',
+        'notes.bulk_applying',
+        'notes.bulk_result',
+        'notes.bulk_skipped_not_found',
+        'notes.bulk_skipped_forbidden',
+        'notes.bulk_failed',
       ];
 
       for (const key of noteKeys) {
@@ -340,5 +358,139 @@ describe('Deck and notes list API client and view contracts', () => {
         expect(typeof en[key]).toBe('string');
       }
     });
+  });
+});
+
+describe('Deck notes deleted-status query and bulk note actions', () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let client: ApiClient;
+
+  beforeEach(() => {
+    mockFetch = vi.fn();
+    client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
+  });
+
+  it('requests the deleted notes listing via status=deleted', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ notes: [], total: 0, page: 1, per_page: 50 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await client.getDeckNotes(7, { status: 'deleted' });
+
+    const [url] = mockFetch.mock.calls[0]!;
+    expect(url).toBe('/api/v1/decks/7/notes?status=deleted');
+  });
+
+  it('POSTs delete with note_ids and no tags, carrying the session CSRF token', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ authenticated: true, csrf_token: 'bulk-csrf' }), { status: 200 })
+    );
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ dry_run: false, affected: 2, skipped: [] }), { status: 200 })
+    );
+
+    const res = await client.bulkNotes({ action: 'delete', note_ids: [1, 2], dry_run: false });
+
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
+    const [url, init] = mockFetch.mock.calls[1]!;
+    expect(url).toBe('/api/v1/notes/bulk');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    expect(JSON.parse(String(init?.body))).toEqual({ action: 'delete', note_ids: [1, 2], dry_run: false });
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('bulk-csrf');
+    expect(res.affected).toBe(2);
+    expect(res.skipped).toEqual([]);
+  });
+
+  it('sends tags for tag actions and surfaces mixed skipped codes verbatim', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ authenticated: true, csrf_token: 'bulk-csrf' }), { status: 200 })
+    );
+    mockFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          dry_run: false,
+          affected: 1,
+          skipped: [
+            { note_id: 9, code: 'not_found' },
+            { note_id: 10, code: 'insufficient_role' },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const res = await client.bulkNotes({ action: 'add_tags', note_ids: [1, 9, 10], tags: ['math', 'cs'] });
+
+    const [, init] = mockFetch.mock.calls[1]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      action: 'add_tags',
+      note_ids: [1, 9, 10],
+      tags: ['math', 'cs'],
+    });
+    expect(res.affected).toBe(1);
+    expect(res.skipped).toEqual([
+      { note_id: 9, code: 'not_found' },
+      { note_id: 10, code: 'insufficient_role' },
+    ]);
+  });
+
+  it('surfaces a request-level rejection as the stable invalid_request code', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ authenticated: true, csrf_token: 'bulk-csrf' }), { status: 200 })
+    );
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: 'invalid_request', message: 'note_ids must not be empty' } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await expect(client.bulkNotes({ action: 'delete', note_ids: [] })).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+  });
+});
+
+describe('DeckDetailView deleted listing and bulk selection wiring', () => {
+  const view = fs.readFileSync(
+    fileURLToPath(new URL('../lib/views/DeckDetailView.svelte', import.meta.url)),
+    'utf-8'
+  );
+
+  it('exposes a status filter that drives the status query parameter', () => {
+    expect(view).toContain('data-testid="filter-status-select"');
+    expect(view).toContain('<option value="active">');
+    expect(view).toContain('<option value="deleted">');
+    expect(view).toContain('status: appliedStatus,');
+  });
+
+  it('renders the deleted listing read-only and offers no restore control', () => {
+    expect(view).toContain('data-testid="notes-deleted-notice"');
+    expect(view).toContain('data-testid="note-deleted-badge-{note.id}"');
+    // 没有恢复 API：界面不得出现任何 restore 入口或字样，否则等于承诺一个不存在的动作。
+    expect(view).not.toContain('restore');
+  });
+
+  it('wires selection to the existing bulk endpoint with the exact payload', () => {
+    expect(view).toContain('data-testid="notes-bulk-toolbar"');
+    expect(view).toContain('data-testid="bulk-select-all"');
+    expect(view).toContain('data-testid="select-note-{note.id}"');
+    expect(view).toContain('apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false })');
+    expect(view).toContain("runBulk('add_tags')");
+    expect(view).toContain("runBulk('remove_tags')");
+    expect(view).toContain("runBulk('set_tags')");
+    expect(view).toContain("runBulk('delete')");
+  });
+
+  it('reports per-row skipped reasons instead of claiming every row changed', () => {
+    expect(view).toContain("item.code === 'not_found'");
+    expect(view).toContain("item.code === 'insufficient_role'");
+    expect(view).toContain('data-testid="notes-bulk-result"');
+    expect(view).toContain('data-testid="notes-bulk-skipped-not-found"');
+    expect(view).toContain('data-testid="notes-bulk-skipped-forbidden"');
   });
 });
