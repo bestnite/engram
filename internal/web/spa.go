@@ -10,12 +10,14 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/frontend"
+	"git.nite07.com/nite/engram/internal/i18n"
 )
 
 // spaAsset 是一个已嵌入的 SPA 静态资源元数据（DESIGN.md §8.5）。
@@ -32,10 +34,11 @@ type SPA struct {
 	fs        fs.FS
 	rawIndex  []byte
 	indexHTML []byte
-	indexHash string
-	indexETag string
 	// mathjaxURL 是自托管 MathJax 的内容哈希 URL；为空表示未注入（资源缺失或未调用 SetMathJaxURL）。
 	mathjaxURL string
+	// shellBlock 是注入入口 <head> 的 PWA 外壳标记（manifest/theme-color/图标/pwa.js/主题引导）。
+	// 它是装配期设定的一次性内容；之后每个请求只重写 <html> 的 lang 属性，不改动这块标记。
+	shellBlock []byte
 	assets     map[string]*spaAsset
 }
 
@@ -58,16 +61,10 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 		return nil, fmt.Errorf("web: spa index.html is empty")
 	}
 
-	indexSum := sha256.Sum256(indexData)
-	indexHash := hex.EncodeToString(indexSum[:8])
-	indexETag := `"` + indexHash + `"`
-
 	spa := &SPA{
 		fs:        subFS,
 		rawIndex:  indexData,
 		indexHTML: indexData,
-		indexHash: indexHash,
-		indexETag: indexETag,
 		assets:    make(map[string]*spaAsset),
 	}
 
@@ -141,37 +138,155 @@ const mathjaxMetaName = "engram-mathjax"
 // SetMathJaxURL 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口的 <head>。
 //
 // 传空串或资源未嵌入时不注入，前端加载器读到空 URL 会跳过加载（与 SSR 缺资源时跳过引用
-// 一致）。注入后入口内容变化，ETag 必须重算，否则浏览器会拿旧引用配新资源（DESIGN.md §8.5）。
+// 一致）。入口内容随注入变化，重建后 ServeIndex 按实际写出的内容重算 ETag，浏览器不会
+// 拿旧引用配新资源（DESIGN.md §8.5）。
 func (s *SPA) SetMathJaxURL(url string) {
 	if url == s.mathjaxURL {
 		return
 	}
 	s.mathjaxURL = url
-	if url == "" {
-		s.indexHTML = s.rawIndex
-	} else {
-		s.indexHTML = injectMathJaxMeta(s.rawIndex, url)
+	s.rebuild()
+}
+
+// SPAShell 是注入 SPA 入口 <head> 的 PWA 外壳元素（DESIGN.md §8.5）。
+//
+// 这些值在装配期解析：manifest 与 /pwa.js 是稳定 URL，图标走内容哈希 URL，主题引导是
+// 与 SSR 共用的同一常量。任何字段为空即跳过对应标记——资源缺失时与 SSR 一样不引用，
+// 而不是给出一条空 href。此处不含用户文案：manifest 的应用名由 /manifest.webmanifest
+// 端点按 settings 渲染，这里只负责引用它。
+type SPAShell struct {
+	// ManifestURL 是 manifest 的稳定路径（/manifest.webmanifest）。
+	ManifestURL string
+	// ThemeColor 是初始 theme-color 内容；主题引导会随后按明暗同步它。
+	ThemeColor string
+	// IconURL 是内容哈希的 SVG 图标（/static/v/<hash>/icons/icon.svg）。
+	IconURL string
+	// AppleTouchIconURL 是内容哈希的 apple-touch-icon。
+	AppleTouchIconURL string
+	// ScriptURL 是稳定 URL 的 service worker 注册脚本（/pwa.js）。
+	ScriptURL string
+	// ThemeBootstrap 是内联主题引导（自带 <script> 标签）。它必须与 SSR 完全同源：CSP 的
+	// script-src hash 白名单按同一个编译期常量计算，复用即无需放宽策略。
+	ThemeBootstrap string
+}
+
+// SetShell 注入 PWA 外壳标记：manifest、theme-color、图标、注册脚本与主题引导。
+// 与 SetMathJaxURL 一样，注入会重建入口内容（DESIGN.md §8.5）。
+func (s *SPA) SetShell(shell SPAShell) {
+	block := buildShellBlock(shell)
+	if bytes.Equal(block, s.shellBlock) {
+		return
 	}
-	sum := sha256.Sum256(s.indexHTML)
-	s.indexHash = hex.EncodeToString(sum[:8])
-	s.indexETag = `"` + s.indexHash + `"`
+	s.shellBlock = block
+	s.rebuild()
+}
+
+// buildShellBlock 拼出注入 <head> 的外壳标记。属性值一律转义：图标/脚本 URL 来自装配期
+// 解析，将来若含引号也不会破坏文档结构。顺序与 base.templ 一致——theme-color 早于主题
+// 引导，因为引导会同步该 meta 的内容。
+func buildShellBlock(shell SPAShell) []byte {
+	var b strings.Builder
+	if shell.ThemeColor != "" {
+		b.WriteString(`<meta name="theme-color" content="` + html.EscapeString(shell.ThemeColor) + `"/>`)
+	}
+	if shell.ThemeBootstrap != "" {
+		b.WriteString(shell.ThemeBootstrap)
+	}
+	if shell.ManifestURL != "" {
+		b.WriteString(`<link rel="manifest" href="` + html.EscapeString(shell.ManifestURL) + `"/>`)
+	}
+	if shell.IconURL != "" {
+		b.WriteString(`<link rel="icon" type="image/svg+xml" href="` + html.EscapeString(shell.IconURL) + `"/>`)
+	}
+	if shell.AppleTouchIconURL != "" {
+		b.WriteString(`<link rel="apple-touch-icon" href="` + html.EscapeString(shell.AppleTouchIconURL) + `"/>`)
+	}
+	if shell.ScriptURL != "" {
+		b.WriteString(`<script src="` + html.EscapeString(shell.ScriptURL) + `"></script>`)
+	}
+	return []byte(b.String())
+}
+
+// rebuild 依据当前注入项（MathJax meta 与 PWA 外壳块）重建入口内容。
+// 两个注入点都从这里出发，避免各自基于 rawIndex 组装而丢掉对方的注入。ETag 不在这里算：
+// ServeIndex 按每次实际写出的内容（含请求语言）现算。
+func (s *SPA) rebuild() {
+	index := s.rawIndex
+	if s.mathjaxURL != "" {
+		index = injectMathJaxMeta(index, s.mathjaxURL)
+	}
+	if len(s.shellBlock) > 0 {
+		index = injectBeforeHeadEnd(index, s.shellBlock)
+	}
+	s.indexHTML = index
+}
+
+// indexHashOf 取内容 SHA-256 的前 8 字节十六进制，作为入口 ETag 的强校验值。
+func indexHashOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }
 
 // injectMathJaxMeta 在 </head> 之前插入一行 meta；找不到 </head> 时退化为追加到文末，
 // 保证 meta 一定出现在文档里——前端加载器全靠它发现 MathJax。
 func injectMathJaxMeta(index []byte, url string) []byte {
 	meta := []byte(`<meta name="` + mathjaxMetaName + `" content="` + html.EscapeString(url) + `" />`)
+	return injectBeforeHeadEnd(index, meta)
+}
+
+// injectBeforeHeadEnd 把一段标记插到 </head> 之前；找不到 </head> 时追加到文末，保证标记
+// 一定出现在文档里。
+func injectBeforeHeadEnd(index, snippet []byte) []byte {
 	head := bytes.Index(index, []byte("</head>"))
 	if head < 0 {
-		out := make([]byte, 0, len(index)+len(meta))
+		out := make([]byte, 0, len(index)+len(snippet))
 		out = append(out, index...)
-		return append(out, meta...)
+		return append(out, snippet...)
 	}
-	out := make([]byte, 0, len(index)+len(meta))
+	out := make([]byte, 0, len(index)+len(snippet))
 	out = append(out, index[:head]...)
-	out = append(out, meta...)
+	out = append(out, snippet...)
 	out = append(out, index[head:]...)
 	return out
+}
+
+var (
+	// htmlOpenTagRe 匹配入口的 <html ...> 起始标签（属性里不含 >）。
+	htmlOpenTagRe = regexp.MustCompile(`(?i)<html(\s[^>]*)?>`)
+	// htmlLangAttrRe 匹配起始标签里的 lang 属性（值用双引号，与构建产物一致）。
+	htmlLangAttrRe = regexp.MustCompile(`(?i)\slang\s*=\s*"[^"]*"`)
+)
+
+// setHTMLLang 把入口 <html> 起始标签的 lang 改成给定语言码；没有该属性时补上。语言码由
+// 本地化器给出（zh-CN/en 等 ASCII 值），仍走 html.EscapeString 转义，避免将来语言码含引号
+// 时破坏属性。找不到 <html> 标签时原样返回。
+func setHTMLLang(index []byte, lang string) []byte {
+	loc := htmlOpenTagRe.FindIndex(index)
+	if loc == nil {
+		return index
+	}
+	tag := string(index[loc[0]:loc[1]])
+	attr := ` lang="` + html.EscapeString(lang) + `"`
+	if htmlLangAttrRe.MatchString(tag) {
+		tag = htmlLangAttrRe.ReplaceAllString(tag, attr)
+	} else {
+		tag = strings.TrimSuffix(tag, ">") + attr + ">"
+	}
+	out := make([]byte, 0, len(index)+len(attr))
+	out = append(out, index[:loc[0]]...)
+	out = append(out, tag...)
+	out = append(out, index[loc[1]:]...)
+	return out
+}
+
+// requestLocale 取请求已解析的语言码，用于入口 <html lang>：与 SSR 外壳同源，遵循
+// ?lang > 用户设置 > Accept-Language > 站点默认 的优先级（DESIGN.md §8.3）。本地化器
+// 缺失时（未挂语言中间件的测试）回退到站点默认语言。
+func requestLocale(c *gin.Context) string {
+	if loc := i18n.FromContext(c.Request.Context()); loc != nil {
+		return loc.Locale()
+	}
+	return i18n.DefaultLocaleCode
 }
 
 // HasAsset 报告指定逻辑路径的静态资源是否存在。
@@ -226,14 +341,23 @@ func (s *SPA) ServeAsset(c *gin.Context) {
 }
 
 // ServeIndex 提供 SPA HTML 入口，使用 revalidation/no-cache 避免长期缓存旧引用（DESIGN.md §8.5）。
+//
+// 每个请求按已解析语言重写入口的 <html lang>，与 SSR 外壳同源（DESIGN.md §8.3）。因为
+// 响应体随语言变化，ETag 也按实际写出的内容计算——否则换语言后会命中旧的 304 缓存。
 func (s *SPA) ServeIndex(c *gin.Context) {
-	if c.GetHeader("If-None-Match") == s.indexETag {
+	body := s.indexHTML
+	if lang := requestLocale(c); lang != "" {
+		body = setHTMLLang(body, lang)
+	}
+	etag := `"` + indexHashOf(body) + `"`
+
+	if c.GetHeader("If-None-Match") == etag {
 		c.Status(http.StatusNotModified)
 		return
 	}
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Header("Cache-Control", "no-cache, must-revalidate")
-	c.Header("ETag", s.indexETag)
-	c.Data(http.StatusOK, "text/html; charset=utf-8", s.indexHTML)
+	c.Header("ETag", etag)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", body)
 }
