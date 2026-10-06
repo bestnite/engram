@@ -132,6 +132,8 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 // 今日复习量、卡组名、标签与留存率都出现在渲染结果里。
 func TestStatsPageRendersStoreNumbers(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
+	// GET /stats 已切到 SPA 应用壳；本用例验证 SPA 缺失时的 SSR 回退页（DESIGN.md §8.5）。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/stats", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /stats status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -160,6 +162,8 @@ func TestStatsPageRendersStoreNumbers(t *testing.T) {
 // TestStatsPageLocalizes 断言整页文案走语言包：?lang=en 返回英文，不残留中文。
 func TestStatsPageLocalizes(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
+	// 同上：SSR 回退页的本地化（?lang=en）。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/stats?lang=en", cookies).Body.String()
 	if !strings.Contains(body, "Statistics and insights") {
 		t.Errorf("?lang=en did not localize the stats page: %s", snippet(body))
@@ -173,13 +177,16 @@ func TestStatsPageLocalizes(t *testing.T) {
 // 第三方主机就失败。图表用 HTML + CSS 柱状条，因此页面渲染时零外部网络请求。
 func TestStatsPageHasNoExternalRequests(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
+	// SSR 回退页必须零外部请求。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/stats", cookies).Body.String()
 	if hosts := thirdPartyHosts(body); len(hosts) > 0 {
 		t.Fatalf("stats page references third-party hosts %v; the page must render with zero external network requests", hosts)
 	}
 }
 
-// TestStatsPageRedirectsAnonymous 是负例：匿名访问被重定向到登录页。
+// TestStatsPageRedirectsAnonymous 是负例：匿名访问 /stats 仍被重定向到登录页
+// （页面迁移到 SPA 外壳不改动授权判定，statsRoute 先过 requireUser）。
 func TestStatsPageRedirectsAnonymous(t *testing.T) {
 	srv, _, _, _ := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/stats", nil)
@@ -188,6 +195,59 @@ func TestStatsPageRedirectsAnonymous(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/login" {
 		t.Fatalf("GET /stats (anonymous) Location = %q, want /login", loc)
+	}
+}
+
+// TestStatsRouteServesSPAShell 是页面迁移的验收点：GET /stats 返回 SPA 应用壳
+// （index.html），由客户端路由渲染统计页，而不再渲染 SSR 页面。
+//
+// 深链（?lang=）随请求原样带过；外壳用 revalidation/no-cache 与 ETag，避免长期缓存
+// 旧资源引用（DESIGN.md §8.5）。数据仍在客户端经 GET /api/v1/stats/detail 取得。
+func TestStatsRouteServesSPAShell(t *testing.T) {
+	srv, _, _, cookies := newStatsServer(t)
+
+	rec := getWithCookies(t, srv, "/stats?lang=en", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /stats status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-cache") {
+		t.Errorf("Cache-Control = %q, want containing no-cache", cc)
+	}
+	if etag := rec.Header().Get("ETag"); etag == "" {
+		t.Errorf("ETag is missing")
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<div id="app"></div>`) {
+		t.Errorf("GET /stats did not return the SPA shell: %s", snippet(body))
+	}
+	// SSR 统计页的文案必须消失：页面已由客户端视图接管。
+	if strings.Contains(body, "统计与洞察") {
+		t.Errorf("GET /stats still renders the SSR stats page: %s", snippet(body))
+	}
+}
+
+// TestStatsDetailAPIStillRequiresSession 断言页面切到 SPA 外壳不改动数据接口的鉴权：
+// 匿名访问 GET /api/v1/stats/detail 仍返回 401 JSON，已登录会话返回 200 JSON。
+func TestStatsDetailAPIStillRequiresSession(t *testing.T) {
+	srv, _, _, cookies := newStatsServer(t)
+
+	anon := getWithCookies(t, srv, "/api/v1/stats/detail", nil)
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous GET /api/v1/stats/detail status = %d, want 401", anon.Code)
+	}
+	if ct := anon.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("anonymous 401 Content-Type = %q, want application/json", ct)
+	}
+
+	authed := getWithCookies(t, srv, "/api/v1/stats/detail", cookies)
+	if authed.Code != http.StatusOK {
+		t.Fatalf("authenticated GET /api/v1/stats/detail status = %d, want 200 (body %s)", authed.Code, snippet(authed.Body.String()))
+	}
+	if !strings.Contains(authed.Body.String(), `"volume"`) {
+		t.Errorf("authenticated stats detail body is missing the volume metric: %s", snippet(authed.Body.String()))
 	}
 }
 

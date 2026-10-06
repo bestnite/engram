@@ -63,6 +63,9 @@ func activeNavHref(t *testing.T, body string) string {
 func TestTopNavigationIsIdenticalAcrossPages(t *testing.T) {
 	notesSrv, _, _, cookies, _ := newNotesServer(t)
 	presetsSrv, _, _, presetsCookies, _, _ := newPresetsServer(t)
+	// GET /stats 已切到 SPA 应用壳，不再是 SSR 页面；禁用 SPA 让本用例继续覆盖
+	// SSR 回退页（降级路径）的顶部导航，与其余 SSR 页面逐项一致。
+	notesSrv.spa = nil
 
 	pages := []struct {
 		name    string
@@ -116,6 +119,8 @@ func activeNavAnchor(t *testing.T, body string) string {
 // 当前页对应的导航项带 aria-current="page"（服务端渲染，不再由 JS 按 href 猜测）。
 func TestBrandNeverActiveAndCurrentItemMarked(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// /stats 已切到 SPA；禁用 SPA 以覆盖 SSR 回退页的导航高亮（降级路径）。
+	srv.spa = nil
 
 	brandRe := regexp.MustCompile(`<a class="([^"]*font-bold tracking-tight[^"]*)" href="/">`)
 	for _, tc := range []struct{ path, wantActive string }{

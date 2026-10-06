@@ -22,10 +22,28 @@ func (s *Server) registerStatsRoutes(router *gin.Engine) {
 	if s.sessions == nil {
 		return
 	}
-	router.GET("/stats", s.statsPage)
+	// GET /stats 已切到 SPA 规范路径：statsRoute 返回应用壳，由客户端路由渲染统计页。
+	// 统计页没有任何写操作，因此这里只动这一个 GET 路由，其余路由（含 SPA 明细接口）不变。
+	router.GET("/stats", s.statsRoute)
 	// SPA 统计明细接口：只读、只接受浏览器会话（不走 /api/v1 的 API Key 组），
 	// 与 /stats 共用同一批 store 聚合，口径不会分叉（DESIGN.md §8.1、§9）。
 	router.GET("/api/v1/stats/detail", s.spaStatsDetail)
+}
+
+// statsRoute 提供 GET /stats：SPA 已加载时返回应用壳（DESIGN.md §8.5），由客户端路由
+// 渲染统计页，数据仍走同一批 store 聚合的 GET /api/v1/stats/detail（DESIGN.md §8.1、§9）。
+//
+// 两条路径都先要求已登录会话，与迁移前的 SSR 页面一致：未登录一律重定向到登录页，
+// 页面迁移不改动授权判定，也不新增任何写路径。SPA 缺失（降级）时回退 SSR 统计页。
+func (s *Server) statsRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.statsPage(c)
 }
 
 // statsPage 渲染统计页；匿名访问被重定向到登录页。
