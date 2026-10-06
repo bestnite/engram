@@ -17,6 +17,8 @@ import (
 // 「记 0 分并继续」——它提交 revealed=1，也就是这个测试模拟的请求。
 func TestReviewRevealedGradedCardCountsAsAgain(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Graded deck")
 	// typed 题型：正确答案是 Paris，走判分器会拿 Good；揭示后必须记 Again。
 	seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "法国首都？", "answer": "Paris"})

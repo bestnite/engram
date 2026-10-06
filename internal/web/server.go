@@ -355,6 +355,10 @@ func New(addr string, deps Deps) (*Server, error) {
 			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.spaReviewAnswer)
 			// 作答类题型走判分入口：服务端判分并写 grade_source=typed（DESIGN.md §6.2、§8.2）。
 			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.spaReviewGrade)
+			// 埋藏与卡面渲染：只写本人进度 / 只读清洗后 HTML，仍是会话 + CSRF 保护的 web 端点
+			// （DESIGN.md §6.1、§8.2）。埋藏的调度逻辑复用 internal/schedule。
+			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.spaReviewBury)
+			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.spaReviewRender)
 		}
 	}
 	if s.mcp != nil && s.api != nil {

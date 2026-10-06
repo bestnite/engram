@@ -45,6 +45,8 @@ func TestIntervalLabelPicksSensibleUnit(t *testing.T) {
 // 又冒出来"这件事，现在在答题之前就能看到。
 func TestReviewPageShowsNextIntervalOnRatingButtons(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "Interval deck")
 	seedBasic(t, db, deck.ID, "Front", "Back")
 

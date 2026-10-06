@@ -169,6 +169,8 @@ func TestAccessibilityFormControlsHaveLabels(t *testing.T) {
 // 而不是只有图标：每个 data-rating 按钮的内部文本非空，且四个档位齐全。
 func TestAccessibilityRatingButtonsHaveReadableNames(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "A11y rating deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 

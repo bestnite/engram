@@ -32,6 +32,8 @@ func postProfile(t *testing.T, srv *Server, cookies []*http.Cookie, csrf, displa
 // 它复用页面上的隐藏字段，不手拼 expected_version，因此与真实浏览器路径一致。
 func rateNextCard(t *testing.T, srv *Server, db *gorm.DB, cookies []*http.Cookie, csrf string, deckID uint64) store.Review {
 	t.Helper()
+	// GET /review 已切到 SPA 应用壳；本 helper 复用 SSR 复习页的隐藏字段，故禁用 SPA。
+	srv.spa = nil
 	page := getWithCookies(t, srv, "/review?deck="+u64str(deckID), cookies)
 	if page.Code != http.StatusOK {
 		t.Fatalf("GET /review status = %d, want 200 (body %s)", page.Code, snippet(page.Body.String()))

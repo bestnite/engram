@@ -57,6 +57,8 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 // 健康检查、/api/v1 与 /mcp 前缀和 404 回退。中间件挂全局，这几条出口都不能漏。
 func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "CSP deck")
 	seedBasic(t, db, deck.ID, "FrontCSP", "BackCSP")
 
@@ -91,6 +93,8 @@ func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 // 登录页与复习页仍是 200 与各自的真实内容。
 func TestSecurityHeadersDoNotAlterResponseBody(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "CSP body deck")
 	seedBasic(t, db, deck.ID, "FrontCSP", "BackCSP")
 

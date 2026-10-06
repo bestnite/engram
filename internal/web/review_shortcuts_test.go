@@ -30,6 +30,8 @@ func shortcutHint(body string) string {
 // 1–4 那段独有的特征——判分卡与结果面板的提示里一个数字都没有。
 func TestReviewShortcutHintFollowsCardState(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	loc := srv.i18n.Localizer(srv.i18n.Pick("", "", ""))
 	selfHint := loc.T("review.shortcuts")
 	gradedHint := loc.T("review.shortcuts_graded")

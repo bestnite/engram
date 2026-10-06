@@ -25,6 +25,8 @@ func cardIDOfNote(t *testing.T, db *gorm.DB, noteID uint64) uint64 {
 // deck 字段（评分/动作请求据此原样带回范围，DESIGN.md §8.2）。
 func TestReviewPageCarriesAllDeckHiddenFields(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deckA := seedReviewDeck(t, db, ownerID, "Deck A")
 	deckB := seedReviewDeck(t, db, ownerID, "Deck B")
 	seedBasic(t, db, deckA.ID, "Front A", "Back A")
@@ -50,6 +52,8 @@ func TestReviewPageCarriesAllDeckHiddenFields(t *testing.T) {
 // 所属卡组重建队列，队列会在第一次评分后塌缩成单卡组（B 的卡消失）。
 func TestReviewAnswerKeepsMultiDeckScope(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deckA := seedReviewDeck(t, db, ownerID, "Deck A")
 	deckB := seedReviewDeck(t, db, ownerID, "Deck B")
 	noteA := seedBasic(t, db, deckA.ID, "Front A", "Back A")
@@ -91,6 +95,8 @@ func TestReviewAnswerKeepsMultiDeckScope(t *testing.T) {
 // 不会退化成被评卡所属卡组；表单也不携带任何 deck 隐藏字段。
 func TestReviewAnswerWithoutDeckKeepsWholeCollection(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deckA := seedReviewDeck(t, db, ownerID, "Deck A")
 	deckB := seedReviewDeck(t, db, ownerID, "Deck B")
 	noteA := seedBasic(t, db, deckA.ID, "Front A", "Back A")
@@ -132,6 +138,8 @@ func TestReviewAnswerWithoutDeckKeepsWholeCollection(t *testing.T) {
 // 不得静默丢弃该卡组后继续（由 loadDeckForRole 写出 403/404）。
 func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	// 属于另一个用户的私有卡组；当前登录用户既非 owner 也无授权。
 	foreign := seedReviewDeck(t, db, ownerID+1, "Foreign deck")
 
@@ -147,6 +155,8 @@ func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
 // 与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck 是同一口径（DESIGN.md §3.3）。
 func TestReviewScopeRejectsMixedUnreadableDeck(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
+	srv.spa = nil
 	readable := seedReviewDeck(t, db, ownerID, "Mine")
 	foreign := seedReviewDeck(t, db, ownerID+1, "Foreign deck")
 	seedBasic(t, db, readable.ID, "Front", "Back")
