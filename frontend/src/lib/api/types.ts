@@ -702,4 +702,3 @@ export interface UpdateNotificationPrefsRequest {
   reminder_hour: number | null;
 }
 
-
