@@ -15,6 +15,14 @@ type MailPrefsData struct {
 	// Groups 是四个大类（A/B/C/D）及其下的类型，顺序由目录固定。
 	Groups []MailPrefGroup
 	CSRF   string
+	// ReminderTime* 是「发送时间」区块（复习提醒与周报共用同一小时，见 store.User.ReminderHour）。
+	ReminderTimeHeading string
+	ReminderTimeLabel   string
+	ReminderTimeHint    string
+	// ReminderTimeSelectName 是小时下拉的 name。
+	ReminderTimeSelectName string
+	// ReminderTimeOptions 是下拉选项；第一项 value="" 表示「未设置，用站点默认」。
+	ReminderTimeOptions []SelectOption
 }
 
 // MailPrefGroup 是一个大类的渲染分组。

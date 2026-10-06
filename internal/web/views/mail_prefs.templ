@@ -43,6 +43,20 @@ templ MailPrefsPage(data MailPrefsData) {
 						</ul>
 					</section>
 				}
+				<section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+					<div>
+						<h2 class="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{ data.ReminderTimeHeading }</h2>
+					</div>
+					<label class="block">
+						<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ data.ReminderTimeLabel }</span>
+						<select class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors" id="mail-prefs-reminder-time" name={ data.ReminderTimeSelectName }>
+							for _, opt := range data.ReminderTimeOptions {
+								<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+							}
+						</select>
+						<p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{ data.ReminderTimeHint }</p>
+					</label>
+				</section>
 				<div class="pt-2">
 					<button class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer" type="submit">{ data.SubmitLabel }</button>
 				</div>

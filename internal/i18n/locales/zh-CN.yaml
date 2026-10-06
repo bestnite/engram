@@ -2175,3 +2175,15 @@
   translation: "卡组包引用了你无法读取的媒体。"
 - id: import.error.package_media_forbidden
   translation: "卡组包引用了你无法读取的媒体。"
+# 每用户的提醒/周报发送时间（mail.prefs.reminder_time.*）：复习提醒与每周摘要共用同一本地小时；
+# 留空表示使用站点默认。本任务追加。
+- id: mail.prefs.reminder_time.heading
+  translation: "复习提醒与周报发送时间"
+- id: mail.prefs.reminder_time.label
+  translation: "发送时间（按你的本地时区）"
+- id: mail.prefs.reminder_time.hint
+  translation: "按你的时区（{{.tz}}）。复习提醒与每周摘要在该小时之后的首次检查时发送。"
+- id: mail.prefs.reminder_time.default
+  translation: "站点默认（{{.hour}}:00）"
+- id: mail.prefs.error.reminder_hour_invalid
+  translation: "发送时间必须是 0 到 23 的整点，或留空使用站点默认。"

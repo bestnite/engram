@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
+	"git.nite07.com/nite/engram/internal/reminder"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
@@ -24,6 +26,9 @@ import (
 // mailPrefInputPrefix 是可选类型复选框的名字前缀，形如 mail_pref.review_reminder。
 // A 类（不可关闭）从不渲染输入，因此提交里出现该前缀且指向 A 类只可能是伪造请求。
 const mailPrefInputPrefix = "mail_pref."
+
+// reminderHourInputName 是「发送时间」下拉的 name（复习提醒与周报共用同一小时）。
+const reminderHourInputName = "reminder_hour"
 
 // registerMailPrefsRoutes 挂载邮件偏好页路由（M1-18）。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
@@ -87,6 +92,14 @@ func (s *Server) mailPrefsSubmit(c *gin.Context) {
 		}
 	}
 
+	// 发送小时同样先校验后写：空串 = 未设置（用站点默认），否则必须是 0–23 的整数。
+	// 0 是合法值（午夜），因此「未设置」只用空串表示，绝不用 0 顶替（AGENTS.md §2.3 第 9 条）。
+	reminderHour, ok := parseReminderHour(c.PostForm(reminderHourInputName))
+	if !ok {
+		s.renderMailPrefs(c, loc, user, http.StatusBadRequest, loc.T("mail.prefs.error.reminder_hour_invalid"), "")
+		return
+	}
+
 	// 复选框缺席表示关闭；为每个可关闭类型都写出显式选择，不依赖存储里的旧值。
 	choices := make(map[string]bool, len(mail.Catalog()))
 	for _, def := range mail.Catalog() {
@@ -100,14 +113,45 @@ func (s *Server) mailPrefsSubmit(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+
+	// 发送小时存在 users 行上，与偏好分开更新；先重读再改，避免覆盖并发写入。
+	fresh, err := s.users.ByID(ctx, user.ID)
+	if err != nil {
+		s.logger.Error("load user for email preferences failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	fresh.ReminderHour = reminderHour
+	if err := s.users.Update(ctx, fresh); err != nil {
+		s.logger.Error("save reminder send hour failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 	s.audit(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionUserEmailPrefsUpdate,
 		TargetType: "user",
 		TargetID:   store.Ptr(user.ID),
-		Detail:     map[string]any{"choices": choices},
+		Detail:     map[string]any{"choices": choices, "reminder_hour": reminderHour},
 	})
 	c.Redirect(http.StatusSeeOther, "/settings/notifications?saved=1")
+}
+
+// parseReminderHour 解析发送时间下拉的值：空串表示未设置，返回 nil 指针（用站点默认）；
+// 0–23 的十进制整数返回其指针；其余返回 ok=false。
+//
+// 用可空指针而不是整数：0 是合法值（午夜），「未设置」与「午夜」必须能区分开
+// （见 store.User.ReminderHour 的注释）。
+func parseReminderHour(raw string) (hour *int, ok bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 || n > 23 {
+		return nil, false
+	}
+	return store.Ptr(n), true
 }
 
 // renderMailPrefs 组装并写出邮件偏好页；status 用于把校验失败渲染成 4xx。
@@ -124,6 +168,11 @@ func (s *Server) renderMailPrefs(c *gin.Context, loc *i18n.Localizer, user *stor
 // mailPrefsData 组装偏好页数据；文案全部取自语言包，开关一律由目录推导。
 func (s *Server) mailPrefsData(c *gin.Context, loc *i18n.Localizer, user *store.User, errMsg, savedMsg string) (views.MailPrefsData, error) {
 	choices, err := store.NewEmailPrefStore(s.db).Choices(c.Request.Context(), user.ID)
+	if err != nil {
+		return views.MailPrefsData{}, err
+	}
+	// 发送小时存在 users 行上；会话缓存里可能是旧快照，重读一次保证下拉反映最新值。
+	fresh, err := s.users.ByID(c.Request.Context(), user.ID)
 	if err != nil {
 		return views.MailPrefsData{}, err
 	}
@@ -159,5 +208,38 @@ func (s *Server) mailPrefsData(c *gin.Context, loc *i18n.Localizer, user *store.
 		SubmitLabel:  loc.T("mail.prefs.submit"),
 		Groups:       groups,
 		CSRF:         sessionCSRF(c),
+
+		ReminderTimeHeading:    loc.T("mail.prefs.reminder_time.heading"),
+		ReminderTimeLabel:      loc.T("mail.prefs.reminder_time.label"),
+		ReminderTimeHint:       loc.Tf("mail.prefs.reminder_time.hint", map[string]any{"tz": fresh.Timezone}),
+		ReminderTimeSelectName: reminderHourInputName,
+		ReminderTimeOptions:    reminderHourOptions(loc, fresh.ReminderHour),
 	}, nil
+}
+
+// reminderHourOptions 构造发送时间下拉的选项：第一项是「用站点默认」（value="", 对应 NULL），
+// 其后是 0–23 每个整点，当前值所在的项被选中。
+//
+// 选项标签里的整点由代码格式化成 "HH:00"，不含需要本地化的词；只有「用站点默认」那一项
+// 走语言包，并把全局默认小时（reminder.DefaultSendHour）作为占位符传进去。
+func reminderHourOptions(loc *i18n.Localizer, selected *int) []views.SelectOption {
+	options := make([]views.SelectOption, 0, 25)
+	options = append(options, views.SelectOption{
+		Value:    "",
+		Label:    loc.Tf("mail.prefs.reminder_time.default", map[string]any{"hour": reminder.DefaultSendHour}),
+		Selected: selected == nil,
+	})
+	for hour := 0; hour <= 23; hour++ {
+		options = append(options, views.SelectOption{
+			Value:    strconv.Itoa(hour),
+			Label:    hourLabel(hour),
+			Selected: selected != nil && *selected == hour,
+		})
+	}
+	return options
+}
+
+// hourLabel 把 0–23 的整点格式化成 "HH:00"；纯数字，不含需要本地化的词。
+func hourLabel(hour int) string {
+	return strconv.Itoa(hour) + ":00"
 }
