@@ -69,6 +69,20 @@ export const routes: RouteDefinition[] = [
     component: NoteCreateView as unknown as RouteDefinition['component'],
   },
   {
+    // 旧 SSR 编辑地址（DESIGN.md §8.1 的规范路由）：服务端 GET /decks/:id/notes/:nid 现在返回
+    // 应用壳，客户端必须能处理这个精确 URL，否则旧链接与刷新会落到 404 视图。
+    // 参数名用 noteId，与 NoteEditView 读取的 $routeStore.params.noteId 保持一致。
+    path: '/decks/:id/notes/:noteId',
+    name: 'note-edit-nid',
+    component: NoteEditView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 旧 SSR 新建地址：服务端 GET /decks/:id/new-note 返回应用壳，客户端处理该精确 URL。
+    path: '/decks/:id/new-note',
+    name: 'note-create-legacy',
+    component: NoteCreateView as unknown as RouteDefinition['component'],
+  },
+  {
     path: '/spa/review',
     name: 'review',
     component: ReviewView as unknown as RouteDefinition['component'],

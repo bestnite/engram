@@ -13,6 +13,8 @@ import (
 // 本文件覆盖 GET /decks 与 GET /decks/:id/notes 的 SPA 规范路径切流（DESIGN.md §8.1、§8.5）：
 // SPA 已加载时返回应用壳（index.html），由客户端路由渲染页面；SPA 缺失（降级）时回退 SSR 页面。
 // 两条路径都先要求已登录会话，卡片列表还保留与 SSR 相同的 reader 角色判定。
+// 卡片编辑/新建两条 GET 路径的切流断言在 spa_notes_cutover_test.go；本文件末尾的编辑路径用例
+// 只覆盖 SSR 降级回退。
 // SSR handler、模板与全部写路径（POST）保持不变。
 
 // assertSPAShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
@@ -149,19 +151,21 @@ func TestNoteListRouteEnforcesDeckRole(t *testing.T) {
 	}
 }
 
-// TestNoteListEditPathStaysSSR 断言卡片编辑（GET /decks/:id/notes/:nid）仍是 SSR 页面：
-// 返回编辑表单而不是应用壳。该路径存在同形的 SSR 路由，本轮不切。
+// TestNoteListEditPathStaysSSR 断言卡片编辑（GET /decks/:id/notes/:nid）的 SSR 回退仍可渲染：
+// 该路径已切到 SPA 应用壳（切流断言见 spa_notes_cutover_test.go）；这里在 SPA 缺失（降级）时
+// 断言旧编辑表单仍被返回，模板与 handler 全部保留。
 func TestNoteListEditPathStaysSSR(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Edit path deck")
 	note := seedBasic(t, db, deck.ID, "EditQ", "EditA")
+	srv.spa = nil
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET editor status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("editor route returned the SPA shell; the SSR editor must be preserved")
+		t.Errorf("editor route returned the SPA shell; the SSR fallback editor must be preserved")
 	}
 	if !strings.Contains(rec.Body.String(), `name="field.front"`) {
 		t.Errorf("editor route is missing the SSR field inputs: %s", snippet(rec.Body.String()))

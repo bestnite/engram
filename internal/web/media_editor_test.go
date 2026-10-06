@@ -69,6 +69,8 @@ func mediaShaOK(sha string) bool {
 // 有该引用、预览里仍有 <img>（且不是 base64 内联）。
 func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /decks/:id/notes/:nid 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退编辑页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Media deck")
 	note := seedBasic(t, db, deck.ID, "front", "back")
 	deckPath := "/decks/" + u64str(deck.ID)
