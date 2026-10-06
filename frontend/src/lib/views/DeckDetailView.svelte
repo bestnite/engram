@@ -23,6 +23,8 @@
   let includeMedia = $state(true);
   let includeProgress = $state(false);
   let includeReviews = $state(false);
+  // owner 才显示卡组设置入口：以服务端是否返回卡组设置为准（非 owner 会 403/404），不靠客户端猜测。
+  let isOwner = $state(false);
   const perPage = 50;
 
   // 筛选与搜索输入
@@ -173,7 +175,19 @@
 
   onMount(() => {
     loadData(1);
+    loadOwnerFlag();
   });
+
+  /** 探测 owner 身份：只有 owner 能读到 GET /api/v1/decks/:id/settings，其余一律隐藏设置入口。 */
+  async function loadOwnerFlag(): Promise<void> {
+    if (!deckId) return;
+    try {
+      await apiClient.getDeckSettings(deckId);
+      isOwner = true;
+    } catch {
+      isOwner = false;
+    }
+  }
 </script>
 
 <div class="py-10 max-w-5xl mx-auto px-4">
@@ -227,6 +241,13 @@
         data-testid="deck-sharing-link"
         class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
       >{$t('deck.sharing.title')}</a>
+      {#if isOwner}
+        <a
+          href="/spa/decks/{encodeURIComponent(deckId)}/settings"
+          data-testid="deck-settings-link"
+          class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
+        >{$t('deck.settings.entry')}</a>
+      {/if}
       {#if cloneError}<span role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t('deck.clone.failed')}</span>{/if}
       <button type="button" data-testid="deck-clone" disabled={cloneSubmitting || !deck} onclick={cloneDeck} class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium disabled:opacity-50">{$t(cloneSubmitting ? 'deck.clone.submitting' : 'deck.clone.action')}</button>
       <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeMedia} />{$t('package.export.include_media')}</label>

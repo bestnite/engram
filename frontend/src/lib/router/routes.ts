@@ -11,6 +11,7 @@ import NoteEditView from '../views/NoteEditView.svelte';
 import NoteCreateView from '../views/NoteCreateView.svelte';
 import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
+import DeckSettingsView from '../views/DeckSettingsView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -35,6 +36,13 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/sharing',
     name: 'deck-sharing',
     component: DeckSharingView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 卡组每日上限设置。刻意走 /spa 前缀：SSR 仍占用 /decks/:id/settings，
+    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
+    path: '/spa/decks/:id/settings',
+    name: 'deck-settings',
+    component: DeckSettingsView as unknown as RouteDefinition['component'],
   },
   {
     path: '/decks/:id',

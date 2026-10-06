@@ -320,6 +320,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerDeckRoutes(router)
 	s.registerSPADeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
+	s.registerSPADeckSettingsRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)
