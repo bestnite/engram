@@ -970,8 +970,8 @@ logged-in account. Existing note references to the old numeric form were **not**
 
 **Open items.**
 
-- The deck **description** has no 2000-character bound on create/rename, while the importer
-  and the package schema have one — a deck can still be built that its own importer refuses.
+- **Closed:** deck descriptions now share the 2000-character bound across creation,
+  updates and package import.
 - ~~CSP is report-only; `script-src` keeps `'unsafe-eval'` because htmx compiles `hx-on`~~ — **closed 2026-10-06**: CSP enforces, `'unsafe-eval'` is gone, the two `hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`), and a source-level guard test fails if a template ever needs what the policy lacks
   handlers with `new Function`.
 - The PostgreSQL branch of the media primary-key migration has never been executed: local and
@@ -1014,31 +1014,32 @@ scheduler's about out-of-range cutoffs.
 
 **Behaviour changes worth knowing.** Routing the web import through the shared service
 (so all four entry points make the same decisions) changed two visible things: a corrupt
-package now renders the same generic `invalid_request` message REST returns instead of the
-web-only "package format is invalid" text, and web imports now write media through the same
+package originally rendered the generic `invalid_request` message REST returned. The
+follow-up below restores specific package codes on every transport. Web imports write media through the same
 media root as the other entry points. The web page still returns 400 rather than REST's 413
 for an oversized body — a pre-existing difference, deliberately left alone. The default
 preset is now identified by a stable literal name rather than a localised one, so an account
 that already had a localised default preset may end up with one extra row.
 
-**Still open / awaiting a decision.**
+**Follow-up fixes completed.**
 
-- The **PostgreSQL branch of the media primary-key migration** has never been executed
-  (local and CI testing is SQLite only).
-- The **deck description** still lacks the 2000-character bound that the importer and the
-  package schema enforce, so a deck can be built that its own importer refuses.
-- **Day cutoff `0`**: normalisation treats `0` as "unset" and falls back to 04:00, but the
-  settings form still accepts `0` (`settings.go:104`), so choosing midnight silently yields
-  04:00. Either reject `0` in the form (1–23) or honour midnight — the latter changes the
-  review-day boundary for accounts that already store `0`.
-- **Two reminders in one calendar day** are possible when the chosen send hour is earlier
-  than the day cutoff (e.g. hour 0 with a 04:00 cutoff): 00:00 belongs to the previous
-  review day, 04:00 to the new one. A minimum gap between reminders would close it.
-- The catalog still carries `error.package_*` codes that the REST error mapper folds into a
-  generic `invalid_request`, so the specific messages are unreachable from REST. Fixing it
-  changes REST responses, hence the decision.
-- `AGENTS.md` section 3 lists a top-level `test/` directory that does not exist in the
-  repository.
+- Deck creation and updates enforce the shared 2000-character description limit, valid
+  UTF-8 and absence of C0 controls. Empty descriptions are allowed. Invalid descriptions
+  return `deck_description_invalid`; rejected writes do not persist.
+- The day-cutoff form accepts only 1–23. Stored zero values still mean the default 04:00;
+  the form displays that effective value without migrating existing data. The separate
+  mail send-hour setting continues to accept midnight.
+- Review reminders and weekly summaries each have an independent 20-hour minimum interval,
+  using their existing `sent_at` ledger column. Skipped ticks do not consume a day/week
+  entry. This prevents the four-hour day/week-boundary collision without blocking a weekly
+  summary after four days of downtime. It is not a calendar-day cap.
+- Package errors preserve their specific codes across REST, MCP and web, including
+  `package_bad_format`; the existing HTTP status semantics are unchanged.
+- `AGENTS.md` now states that integration tests live beside their packages instead of
+  listing a nonexistent top-level `test/` directory.
+
+**Unverified.** The PostgreSQL branch of the media primary-key migration has not been
+executed locally. Local and CI tests use SQLite; PostgreSQL testing remains out of scope.
 
 ## 2. Progress tracking
 
