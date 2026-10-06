@@ -104,7 +104,7 @@ func (s *Server) adminJobsPage(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	page := pageParam(c.Query("page"))
+	page := parsePage(c.Query("page"))
 	rows := make([]views.AdminJobRow, 0)
 	var total int64
 	pages := 1
@@ -153,7 +153,7 @@ func (s *Server) adminJobsPage(c *gin.Context) {
 	if sess, ok := auth.CurrentSession(c); ok {
 		csrf = sess.CSRFToken
 	}
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.jobs.title", "/admin/jobs"),
 		Heading:    loc.T("admin.jobs.heading"),
 		NavHeading: loc.T("admin.nav.heading"),

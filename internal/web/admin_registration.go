@@ -162,7 +162,7 @@ func (s *Server) adminRegistrationPage(c *gin.Context) {
 	if sess, ok := auth.CurrentSession(c); ok {
 		csrf = sess.CSRFToken
 	}
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:           s.adminLayout(c, loc, "admin.registration.title", "/admin/registration"),
 		Heading:          loc.T("admin.registration.heading"),
 		Intro:            loc.T("admin.registration.intro"),

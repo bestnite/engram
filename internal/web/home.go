@@ -1,10 +1,8 @@
 package web
 
 import (
-	"log/slog"
 	"net/http"
 
-	"github.com/a-h/templ"
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
@@ -61,15 +59,5 @@ func (s *Server) home(c *gin.Context) {
 		data.Layout.SessionLabel = loc.T("nav.login")
 		data.Layout.SessionHref = "/login"
 	}
-	renderHTML(c, views.Home(data))
-}
-
-// renderHTML 统一写出 HTML 响应。渲染失败时响应头可能已发出，只能记一条英文日志
-// （AGENTS.md §2.1：日志恒为英文）。
-func renderHTML(c *gin.Context, comp templ.Component) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Status(http.StatusOK)
-	if err := comp.Render(c.Request.Context(), c.Writer); err != nil {
-		slog.Error("render template failed", "error", err, "path", c.Request.URL.Path)
-	}
+	renderHTMLStatus(c, http.StatusOK, views.Home(data))
 }

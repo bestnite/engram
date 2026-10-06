@@ -289,7 +289,7 @@ func (s *Server) adminDashboard(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:        s.adminLayout(c, loc, "admin.title", "/admin"),
 		Heading:       loc.T("admin.dashboard.heading"),
 		NavHeading:    loc.T("admin.nav.heading"),

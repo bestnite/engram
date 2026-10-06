@@ -34,7 +34,7 @@ func (s *Server) adminSMTPPage(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	renderHTML(c, views.AdminPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
 }
 
 // adminSMTPTest 执行「测试连接」：用表单里的值（缺省回落到已保存值）做一次连接与认证握手，
@@ -104,7 +104,7 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	renderHTML(c, views.AdminPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
 }
 
 // adminSMTPSave 保存 SMTP 配置：非敏感值走 PutSetting，口令走 PutSecret（加密）。

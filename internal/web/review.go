@@ -109,7 +109,7 @@ func (s *Server) reviewPage(c *gin.Context) {
 		JSURL:  s.assets.URL("js/review.js"),
 		Area:   area,
 	}
-	renderHTML(c, views.ReviewPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.ReviewPage(data))
 }
 
 // reviewAnswer 处理一次自评：单事务提交（schedule.Submit），随后在同一响应里返回下一张卡。

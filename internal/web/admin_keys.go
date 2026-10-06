@@ -62,7 +62,7 @@ func (s *Server) adminAPIKeysPage(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)
 	userLoc := auditLocation(actor)
-	page := pageParam(c.Query("page"))
+	page := parsePage(c.Query("page"))
 
 	keys, total, err := store.NewAPIKeyStore(s.db).ListAll(ctx, adminKeysPageSize, (page-1)*adminKeysPageSize)
 	if err != nil {
@@ -133,7 +133,7 @@ func (s *Server) adminAPIKeysPage(c *gin.Context) {
 		csrf = sess.CSRFToken
 	}
 
-	renderHTML(c, views.AdminPage(views.AdminPageData{
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
 		Layout:     s.adminLayout(c, loc, "admin.keys.title", "/admin/api-keys"),
 		Heading:    loc.T("admin.keys.heading"),
 		Intro:      loc.T("admin.keys.intro"),

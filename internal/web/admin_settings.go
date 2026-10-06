@@ -245,7 +245,7 @@ func (s *Server) adminSettingsPage(c *gin.Context) {
 		CSRF:       csrf,
 		SaveLabel:  loc.T("admin.action.save"),
 	}
-	renderHTML(c, views.AdminPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
 }
 
 // sensitiveSection 列出 settings 表里所有敏感键，只显示「已配置/未配置」，绝不回显明文（M6-10）。
@@ -332,7 +332,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		}
 		switch spec.key {
 		case settingKeySiteDefaultLocale:
-			if !s.isSupportedLocale(raw) {
+			if !s.supportedLocale(raw) {
 				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_locale")
 				return
 			}
@@ -397,14 +397,4 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		})
 	}
 	c.Redirect(http.StatusSeeOther, "/admin/settings?notice=saved")
-}
-
-// isSupportedLocale 报告 code 是否在语言包支持的语言里。
-func (s *Server) isSupportedLocale(code string) bool {
-	for _, c := range s.i18n.SupportedCodes() {
-		if c == code {
-			return true
-		}
-	}
-	return false
 }

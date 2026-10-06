@@ -1,7 +1,6 @@
 package web
 
 import (
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -177,7 +176,7 @@ func (s *Server) resetPasswordSubmit(c *gin.Context) {
 	}
 	tok, err := s.tokens.Consume(ctx, store.ActionTokenPasswordReset, token)
 	if err != nil {
-		s.renderResetResult(c, loc, http.StatusBadRequest, loc.T(resetTokenErrorKey(err)))
+		s.renderResetResult(c, loc, http.StatusBadRequest, loc.T(actionTokenErrorKey("mail.reset.error_", err)))
 		return
 	}
 	newPassword := c.PostForm("password")
@@ -218,18 +217,6 @@ func (s *Server) renderResetResult(c *gin.Context, loc *i18n.Localizer, status i
 		data.ErrorMessage = notice
 	}
 	s.renderSecurityForm(c, loc, status, data)
-}
-
-// resetTokenErrorKey 把令牌消费错误映射到稳定语言包 key。
-func resetTokenErrorKey(err error) string {
-	switch {
-	case errors.Is(err, store.ErrActionTokenExpired):
-		return "mail.reset.error_expired"
-	case errors.Is(err, store.ErrActionTokenUsed):
-		return "mail.reset.error_used"
-	default:
-		return "mail.reset.error_invalid"
-	}
 }
 
 // validateNewPassword 校验新密码强度并返回已本地化提示；通过时返回空串。

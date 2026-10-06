@@ -84,7 +84,8 @@ func (s *Server) renderNotFoundPage(c *gin.Context) {
 		data.Layout.SessionLabel = loc.T("nav.login")
 		data.Layout.SessionHref = "/login"
 	}
-	// 不能复用 renderHTML：它写死 200。404 必须在写出 body 之前定下状态码。
+	// 不复用 renderHTMLStatus：NotFound 页单独记自己的英文日志（render not found page
+	// failed），与通用模板渲染日志区分。状态码必须在写出 body 之前定下。
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Status(http.StatusNotFound)
 	if err := views.NotFound(data).Render(c.Request.Context(), c.Writer); err != nil {

@@ -39,7 +39,7 @@ func (s *Server) adminOIDCPage(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	renderHTML(c, views.AdminPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
 }
 
 // adminOIDCTest 执行「测试连接」：对表单里的 issuer（缺省用已保存值）拉取发现文档，
@@ -90,7 +90,7 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	renderHTML(c, views.AdminPage(data))
+	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
 }
 
 // adminOIDCSave 保存 OIDC 配置：非敏感值走 PutSetting，client secret 走 PutSecret（加密）。

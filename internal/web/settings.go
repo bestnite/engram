@@ -50,7 +50,7 @@ func (s *Server) settingsPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	renderHTML(c, views.SettingsPage(s.settingsData(c, loc, user, "", "")))
+	renderHTMLStatus(c, http.StatusOK, views.SettingsPage(s.settingsData(c, loc, user, "", "")))
 }
 
 // settingsProfileSubmit 保存显示名 / 语言 / 时区 / 复习日切点。
@@ -214,7 +214,7 @@ func (s *Server) renderLocaleSwitchFragment(c *gin.Context, code, next string, i
 		LocaleLabel:          loc.T("settings.profile.locale_label"),
 		LocaleOptions:        s.localeOptions(loc, code),
 	}
-	renderHTML(c, views.LanguageSwitchResponse(data))
+	renderHTMLStatus(c, http.StatusOK, views.LanguageSwitchResponse(data))
 }
 
 // localeOptions 构造语言下拉的选项；selected 决定哪一项处于选中态。
