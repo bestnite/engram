@@ -88,6 +88,7 @@ func TestSPAFallbackDeepLinks(t *testing.T) {
 
 	deepLinks := []string{
 		"/decks/42/details",
+		"/spa/review",
 		"/stats/history",
 		"/settings/profile",
 	}

@@ -44,8 +44,8 @@
           {$t('nav.decks')}
         </a>
         <a
-          href="/review"
-          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/review') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+          href="/spa/review"
+          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/spa/review') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
         >
           {$t('nav.review')}
         </a>

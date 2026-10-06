@@ -34,7 +34,9 @@ func (s *Server) registerReviewRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.cards == nil || s.presets == nil {
 		return
 	}
-	// SPA 路由由前端入口接管；传统评分端点仍独立保留 CSRF 保护。
+	// SPA 复习尚未完成，保留旧 GET 页面以兼容现有入口；新 SPA 暂用 /spa/review。
+	router.GET(reviewPagePath, s.reviewPage)
+	// 传统评分端点独立保留 CSRF 保护。
 	// 写操作一律过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST(reviewAnswerPath, s.sessions.CSRFMiddleware(), s.reviewAnswer)
 	router.POST(reviewActionPath, s.sessions.CSRFMiddleware(), s.reviewAction)
