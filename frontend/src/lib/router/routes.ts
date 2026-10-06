@@ -1,6 +1,7 @@
 import type { RouteDefinition } from './types';
 import HomeView from '../views/HomeView.svelte';
 import DecksView from '../views/DecksView.svelte';
+import DeckDetailView from '../views/DeckDetailView.svelte';
 import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 
@@ -17,6 +18,16 @@ export const routes: RouteDefinition[] = [
     path: '/decks',
     name: 'decks',
     component: DecksView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/decks/:id',
+    name: 'deck-detail',
+    component: DeckDetailView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/decks/:id/notes',
+    name: 'deck-notes',
+    component: DeckDetailView as unknown as RouteDefinition['component'],
   },
   {
     path: '/stats',

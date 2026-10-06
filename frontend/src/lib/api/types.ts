@@ -22,6 +22,45 @@ export interface DecksResponse {
 }
 
 /**
+ * 笔记数据结构（与 Go 后端 internal/api/notes.go:NoteJSON 对齐）
+ * DESIGN.md §2.2、§6.2、§7.3
+ */
+export interface Note {
+  id: number;
+  deck_id: number;
+  kind: string;
+  fields: Record<string, unknown>;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  external_ref: string;
+}
+
+/**
+ * GET /api/v1/decks/:id/notes 响应体结构
+ * internal/api/notes.go:listNotes
+ */
+export interface NotesResponse {
+  notes: Note[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/**
+ * GET /api/v1/decks/:id/notes 查询参数
+ * internal/store/note.go:NoteListOptions
+ */
+export interface NoteListParams {
+  page?: number;
+  per_page?: number;
+  q?: string;
+  tag?: string;
+  kind?: string;
+  status?: string;
+}
+
+/**
  * Go 后端错误体内层结构（internal/api/errors.go:errorBody）
  */
 export interface ApiErrorDetail {
