@@ -84,24 +84,12 @@ func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaS
 		return false, nil
 	}
 	var uploads int64
-	if err := db.WithContext(ctx).Model(&MediaUploader{}).
-		Where("media_sha = ? AND user_id = ?", mediaSha, userID).
+	if err := db.WithContext(ctx).Table("(?) AS m", readableMediaUnionQuery(db, userID)).
+		Where("m.sha256 = ?", mediaSha).
 		Count(&uploads).Error; err != nil {
-		return false, fmt.Errorf("store: count media uploaders: %w", err)
+		return false, fmt.Errorf("store: count readable media: %w", err)
 	}
 	if uploads > 0 {
-		return true, nil
-	}
-	// 软删的 note 不再授权：原生 JOIN 不带 GORM 的软删除作用域，这里显式过滤 notes.deleted_at。
-	var refs int64
-	if err := db.WithContext(ctx).Model(&MediaNote{}).
-		Joins("JOIN notes ON notes.id = media_notes.note_id AND notes.deleted_at IS NULL").
-		Where("media_notes.media_sha = ?", mediaSha).
-		Where("notes.deck_id IN (?)", visibleDeckIDsQuery(db, userID)).
-		Count(&refs).Error; err != nil {
-		return false, fmt.Errorf("store: count media note refs: %w", err)
-	}
-	if refs > 0 {
 		return true, nil
 	}
 	// 第三支：本会话通过分享链接打开过的卡组（过期 / 已撤销链接由子查询排除，见 share_session.go）。
