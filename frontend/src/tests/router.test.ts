@@ -50,6 +50,6 @@ describe('SPA router matching and query parsing', () => {
     const notesMatch = matchRoute('/decks/456/notes', prodRoutes);
     expect(notesMatch.route?.name).toBe('deck-notes');
     expect(notesMatch.params).toEqual({ id: '456' });
-    expect(matchRoute('/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
+    expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review');
   });
 });

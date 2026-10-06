@@ -32,7 +32,7 @@ export const routes: RouteDefinition[] = [
     component: DeckDetailView as unknown as RouteDefinition['component'],
   },
   {
-    path: '/review',
+    path: '/spa/review',
     name: 'review',
     component: ReviewView as unknown as RouteDefinition['component'],
   },
