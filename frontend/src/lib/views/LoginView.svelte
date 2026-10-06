@@ -8,7 +8,6 @@
   let password = $state('');
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
-  let requiresTotp = $state(false);
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
@@ -17,12 +16,13 @@
     }
     loading = true;
     errorKey = null;
-    requiresTotp = false;
 
     try {
       const res = await login(username.trim(), password);
       if (res.requires_totp) {
-        requiresTotp = true;
+        // 第一因素通过、需要第二因素：进入 SPA 第二步（协议 GET/POST /api/v1/auth/totp）。
+        // 第二步凭据是服务端在本次响应里下发的 HttpOnly cookie，因此必须立刻导航过去。
+        navigate('/login/totp');
       } else if (res.authenticated) {
         navigate('/');
       }
@@ -45,23 +45,6 @@
         {$t('auth.login.heading')}
       </h1>
     </div>
-
-    {#if requiresTotp}
-      <div
-        data-testid="login-totp-notice"
-        class="mb-6 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-sm"
-      >
-        <p class="font-medium mb-1">{$t('auth.login.totp_required')}</p>
-        <div class="mt-3">
-          <a
-            href="/login"
-            class="inline-block text-xs font-semibold px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors cursor-pointer"
-          >
-            {$t('auth.login.submit')}
-          </a>
-        </div>
-      </div>
-    {/if}
 
     {#if errorKey}
       <div

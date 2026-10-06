@@ -36,6 +36,10 @@ func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	}
 	// 第二步与 /login 同属登录前流程：没有会话可绑 CSRF token，用双提交 cookie（B-13）。
 	router.POST("/login/totp", auth.DoubleSubmitMiddleware(), s.totpSubmit)
+	// SPA 登录第二步的同源 JSON 协议（DESIGN.md §4.3、§8.1）：GET 报告是否持有有效的第二步
+	// 凭据，POST 提交验证码并签发会话。与上面的 SSR 表单共用同一份服务逻辑与限速器。
+	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
+	router.POST("/api/v1/auth/totp", auth.DoubleSubmitMiddleware(), s.apiTOTPSubmit)
 	router.GET("/settings/totp", s.totpSettingsPage)
 	router.POST("/settings/totp/begin", s.sessions.CSRFMiddleware(), s.totpBeginSubmit)
 	router.POST("/settings/totp/confirm", s.sessions.CSRFMiddleware(), s.totpConfirmSubmit)

@@ -6,6 +6,7 @@ import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
+import TOTPLoginView from '../views/TOTPLoginView.svelte';
 import RegisterView from '../views/RegisterView.svelte';
 import SetupView from '../views/SetupView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
@@ -137,6 +138,20 @@ export const routes: RouteDefinition[] = [
     path: '/spa/login',
     name: 'spa-login',
     component: LoginView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 登录第二步（TOTP）。服务端只注册 POST /login/totp（挑战页由第一步响应直接渲染），
+    // 没有可遮蔽的 GET 页面，因此规范路径 /login/totp 由 NoRoute 回退到应用壳。
+    // 协议是 GET /api/v1/auth/totp（查询凭据状态）与 POST /api/v1/auth/totp（提交验证码）。
+    path: '/login/totp',
+    name: 'totp-login',
+    component: TOTPLoginView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 迁移期的旧 SPA 第二步地址，保留以兼容既有深链；新入口统一走 /login/totp。
+    path: '/spa/login/totp',
+    name: 'totp-login-spa',
+    component: TOTPLoginView as unknown as RouteDefinition['component'],
   },
   {
     // SPA 注册入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /register。

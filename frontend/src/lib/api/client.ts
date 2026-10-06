@@ -37,6 +37,8 @@ import {
   type SessionResponse,
   type LoginRequest,
   type LoginResponse,
+  type TOTPPendingResponse,
+  type TOTPLoginResponse,
   type LogoutResponse,
   type RegisterRequest,
   type RegisterResponse,
@@ -756,6 +758,33 @@ export class ApiClient {
     const res = await this.request<LoginResponse>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
+    });
+    if (res?.csrf_token) {
+      this.csrfToken = res.csrf_token;
+    }
+    return res;
+  }
+
+  /**
+   * 查询登录第二步（TOTP）是否可提交（GET /api/v1/auth/totp）。
+   * 只读：不刷新凭据有效期，也不建立会话。
+   */
+  async getTOTPPending(): Promise<TOTPPendingResponse> {
+    return this.request<TOTPPendingResponse>('/api/v1/auth/totp');
+  }
+
+  /**
+   * 提交登录第二步的验证码或一次性恢复码（POST /api/v1/auth/totp）。
+   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
+   * 通过后才由服务端签发会话 cookie，返回体与登录成功同形。
+   */
+  async submitTOTP(code: string): Promise<TOTPLoginResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const res = await this.request<TOTPLoginResponse>('/api/v1/auth/totp', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
     });
     if (res?.csrf_token) {
       this.csrfToken = res.csrf_token;

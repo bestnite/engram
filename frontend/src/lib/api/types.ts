@@ -472,6 +472,23 @@ export interface LoginResponse {
 }
 
 /**
+ * GET /api/v1/auth/totp 响应体结构：当前请求是否持有有效的登录第二步凭据。
+ * 凭据只在第一因素（密码）通过后下发，因此 pending=true 不泄露任何账号是否启用 TOTP。
+ */
+export interface TOTPPendingResponse {
+  pending: boolean;
+}
+
+/**
+ * POST /api/v1/auth/totp 响应体结构：与登录成功同形（通过第二因素后才签发会话）。
+ */
+export interface TOTPLoginResponse {
+  authenticated: boolean;
+  user: User | null;
+  csrf_token?: string;
+}
+
+/**
  * POST /api/v1/auth/logout 响应体结构
  */
 export interface LogoutResponse {

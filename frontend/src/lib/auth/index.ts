@@ -4,6 +4,7 @@ import type {
   User,
   SessionResponse,
   LoginResponse,
+  TOTPLoginResponse,
   LogoutResponse,
   RegisterRequest,
   RegisterResponse,
@@ -68,6 +69,39 @@ export async function login(username: string, password: string): Promise<LoginRe
   authStore.update((s) => ({ ...s, loading: true, error: null }));
   try {
     const res = await apiClient.login({ username, password });
+    if (res.authenticated && res.user) {
+      authStore.set({
+        initialized: true,
+        loading: false,
+        authenticated: true,
+        user: res.user,
+        error: null,
+      });
+      if (res.user.locale && isSupportedLocale(res.user.locale)) {
+        setLocale(res.user.locale);
+      }
+    } else {
+      authStore.update((s) => ({ ...s, loading: false }));
+    }
+    return res;
+  } catch (err) {
+    authStore.update((s) => ({
+      ...s,
+      loading: false,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+    throw err;
+  }
+}
+
+/**
+ * SPA 登录第二步（TOTP）：提交动态验证码或一次性恢复码，通过后建立认证状态。
+ * 第二步凭据由服务端在密码通过后下发（HttpOnly cookie），这里只负责提交与状态同步。
+ */
+export async function completeTOTP(code: string): Promise<TOTPLoginResponse> {
+  authStore.update((s) => ({ ...s, loading: true, error: null }));
+  try {
+    const res = await apiClient.submitTOTP(code);
     if (res.authenticated && res.user) {
       authStore.set({
         initialized: true,

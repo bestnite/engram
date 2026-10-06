@@ -17,6 +17,10 @@ const authErrorCodes = new Set([
   'invite_invalid',
   'registration_closed',
   'create_failed',
+  // 登录第二步（TOTP）的稳定 code（Go 侧 internal/api/errors.go）：
+  // 验证码无效、第二步凭据缺失或过期。
+  'totp_invalid',
+  'totp_challenge_expired',
 ]);
 
 /**

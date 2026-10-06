@@ -61,6 +61,9 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 		router.GET("/spa/login", s.spaLoginShell)
 		router.GET("/spa/register", s.spaRegisterShell)
 		router.GET("/spa/setup", s.spaSetupShell)
+		// 登录第二步（TOTP）的 SPA 入口。SSR 只注册 POST /login/totp，没有可遮蔽的 GET 页面；
+		// 仍按迁移期约定走 /spa 前缀。协议是 GET/POST /api/v1/auth/totp。
+		router.GET("/spa/login/totp", s.spaTOTPLoginShell)
 	}
 }
 
