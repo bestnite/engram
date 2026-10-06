@@ -44,6 +44,11 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（M5-1，单一实现）。
 	if s.access != nil {
 		router.POST("/decks/:id/media", s.sessions.CSRFMiddleware(), s.deckMediaUpload)
+		// M2-9 扩展：编辑页的「从媒体库选择」片段端点。逻辑在 service 层
+		// （api.API.ListReadableMedia），网页层只判定 editor 角色与渲染片段。
+		if s.api != nil {
+			router.GET("/decks/:id/media/picker", s.deckMediaPicker)
+		}
 	}
 }
 

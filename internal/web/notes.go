@@ -490,6 +490,7 @@ func (s *Server) renderNoteEdit(c *gin.Context, loc *i18n.Localizer, deck *store
 		DeletedNotice: loc.T("notes.edit.deleted_notice"),
 		Preview:       s.buildPreview(loc, note.Kind, fields),
 		Upload:        s.mediaUploadData(c, loc, deck.ID),
+		Picker:        s.mediaPickerData(loc, deck.ID),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken
@@ -928,6 +929,7 @@ func (s *Server) renderNoteNew(c *gin.Context, loc *i18n.Localizer, deck *store.
 		ErrorMessage: errMsg,
 		Preview:      preview,
 		Upload:       s.mediaUploadData(c, loc, deck.ID),
+		Picker:       s.mediaPickerData(loc, deck.ID),
 	}
 	if sess, ok := auth.CurrentSession(c); ok {
 		data.CSRF = sess.CSRFToken

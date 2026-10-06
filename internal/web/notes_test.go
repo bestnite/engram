@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
@@ -47,6 +48,22 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("media.New() error = %v", err)
 	}
+	// M2-9 扩展：网页选择器片段端点复用 service 层（api.API.ListReadableMedia），
+	// 因此测试服务也要装配 API，否则 /decks/:id/media/picker 不会挂载。
+	apiInstance, err := api.New(api.Deps{
+		DB:      db,
+		Logger:  discardLogger(),
+		Keys:    store.NewAPIKeyStore(db),
+		Users:   users,
+		Decks:   store.NewDeckStore(db),
+		Notes:   store.NewNoteStore(db),
+		Presets: store.NewPresetStore(db),
+		Cards:   store.NewCardStore(db),
+		Auditor: auditor,
+	})
+	if err != nil {
+		t.Fatalf("api.New() error = %v", err)
+	}
 	srv, err = New("127.0.0.1:0", Deps{
 		DB:            db,
 		Logger:        discardLogger(),
@@ -62,6 +79,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Presets:    store.NewPresetStore(db),
 		Auditor:    auditor,
 		Media:      mediaStore,
+		API:        apiInstance,
 		LoginLimiter: auth.NewLoginLimiter(auth.LimiterConfig{
 			Sleep: func(context.Context, time.Duration) error { return nil },
 		}),

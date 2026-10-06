@@ -1,8 +1,14 @@
-// 编辑器媒体上传（M2-9）：把上传成功返回的 /media/<sha256> 以 Markdown 图片语法插入当前
-// 聚焦的字段，并触发一次预览刷新。所有用户可见文案由模板经 data-* 传入，本文件不含文案。
+// 编辑器媒体面（M2-9 及扩展）：把 /media/<sha256> 以 Markdown 图片语法插入当前聚焦的字段，
+// 并触发一次预览刷新。两条来源共用同一段插入逻辑：
+//   1. 上传控件（[data-media-upload]）上传成功后插入返回的 url；
+//   2. 媒体选择器（[data-media-insert] 按钮）点击后用按钮上的 url 插入。
+// 所有用户可见文案由模板经 data-* 传入，本文件不含文案。
 //
-// 为什么不用 htmx 直接换 DOM：上传成功要把引用插进 textarea 的光标处，纯 htmx 换片段
-// 做不到；这里保留 htmx 负责预览刷新（派发 change 事件即可），上传本身走 fetch。
+// 为什么不用 htmx 直接换 DOM：插入要落在 textarea 的光标处，纯 htmx 换片段做不到；这里保留
+// htmx 负责预览刷新（派发 change 事件即可）、选择器片段的拉取与翻页，插入本身走原生 DOM。
+//
+// 为什么用事件委托而不是 hx-on：hx-on 由 htmx 在运行时用 new Function 编译，会迫使 CSP 的
+// script-src 长期保留 'unsafe-eval'（DESIGN.md §11）。委托监听不需要任何 eval。
 (function () {
   "use strict";
 
@@ -13,9 +19,37 @@
     media_magic_mismatch: "msgMagic"
   };
 
-  function activeField(form) {
-    var el = document.activeElement;
+  // lastField 记住最近一次聚焦的字段输入框：点击上传按钮或选择器按钮会把焦点从 textarea
+  // 移走，若不记住就只剩「第一个字段」这个兜底，用户会看到引用插错位置。
+  var lastField = null;
+  document.addEventListener("focusin", function (e) {
+    var el = e.target;
     if (el && el.matches && el.matches('[name^="field."]')) {
+      lastField = el;
+    }
+  });
+
+  // noteFormFor 找到引用应插入的卡片表单：字段输入框在卡片表单里，而上传控件/选择器是它的
+  // 兄弟节点（不是子节点），所以要显式找 [data-note-form]。
+  function noteFormFor(form) {
+    if (form && form.closest) {
+      var owner = form.closest("[data-note-form]");
+      if (owner) {
+        return owner;
+      }
+    }
+    return document.querySelector("[data-note-form]") || form;
+  }
+
+  function activeField(form) {
+    if (!form) {
+      return null;
+    }
+    if (lastField && form.contains(lastField)) {
+      return lastField;
+    }
+    var el = document.activeElement;
+    if (el && el.matches && el.matches('[name^="field."]') && form.contains(el)) {
       return el;
     }
     return form.querySelector('[name^="field."]');
@@ -77,7 +111,7 @@
         showStatus(form, text, true);
         return;
       }
-      insertRef(form, res.body.url);
+      insertRef(noteFormFor(form), res.body.url);
       showStatus(form, form.dataset.msgInserted || "", false);
       input.value = "";
     }).catch(function () {
@@ -92,5 +126,20 @@
     }
     e.preventDefault();
     submit(form);
+  });
+
+  // 媒体选择器：点击片段里的一项，把它携带的 /media/<sha256> 插入当前聚焦字段。
+  // 与上传路径调用同一个 insertRef，不另写一套插入逻辑。
+  document.addEventListener("click", function (e) {
+    var target = e.target;
+    if (!target || !target.closest) {
+      return;
+    }
+    var item = target.closest("[data-media-insert]");
+    if (!item) {
+      return;
+    }
+    e.preventDefault();
+    insertRef(noteFormFor(item), item.getAttribute("data-media-insert"));
   });
 })();

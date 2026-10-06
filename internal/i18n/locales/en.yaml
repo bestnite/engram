@@ -2177,3 +2177,12 @@
   translation: "The package references media you cannot read."
 - id: import.error.package_media_forbidden
   translation: "The package references media you cannot read."
+# media picker (edit-page "choose from library" launcher and fragment)
+- id: media.picker.open
+  translation: "Choose from library"
+- id: media.picker.heading
+  translation: "Media library"
+- id: media.picker.empty
+  translation: "Your media library is empty; upload an image first."
+- id: media.picker.next
+  translation: "Next"

@@ -2175,3 +2175,12 @@
   translation: "卡组包引用了你无法读取的媒体。"
 - id: import.error.package_media_forbidden
   translation: "卡组包引用了你无法读取的媒体。"
+# media picker（编辑页「从媒体库选择」入口与片段）
+- id: media.picker.open
+  translation: "从媒体库选择"
+- id: media.picker.heading
+  translation: "媒体库"
+- id: media.picker.empty
+  translation: "媒体库还是空的；先上传一张图片。"
+- id: media.picker.next
+  translation: "下一页"
