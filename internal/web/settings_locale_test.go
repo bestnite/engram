@@ -45,6 +45,8 @@ func postFormHeader(t *testing.T, srv *Server, target string, values url.Values,
 // 修复前这条会失败：页头下拉只是 ?lang= 链接，库里仍是旧值，刷新即回退。
 func TestHeaderLocaleSwitchPersistsAndSurvivesReload(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	before := userLocale(t, db, ownerID)
 	if before == "en" {

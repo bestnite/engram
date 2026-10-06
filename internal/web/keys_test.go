@@ -100,6 +100,8 @@ func keyCount(t *testing.T, db *gorm.DB, userID uint64) int {
 // 列表页后续不再显示明文 → 撤销后同一 key 立即鉴权失败。
 func TestSettingsKeysLifecycle(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
+	// GET /settings/keys 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退页（DESIGN.md §8.5）。
+	srv.spa = nil
 	memberID, cookies, csrf := loginMember(t, srv, db, "member")
 
 	// 页面可达，且带创建入口。
@@ -188,6 +190,8 @@ func TestSettingsKeysLifecycle(t *testing.T) {
 // TestSettingsKeysIsolation 断言他人的 key 既不列出也不可撤销（撤销映射成 404，不泄露存在性）。
 func TestSettingsKeysIsolation(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /settings/keys 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退页（DESIGN.md §8.5）。
+	srv.spa = nil
 	ctx := context.Background()
 
 	// 另一个用户（非 owner）的一把 key。

@@ -25,7 +25,11 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil || s.accounts == nil {
 		return
 	}
-	router.GET("/settings", s.settingsPage)
+	// GET /settings 已切到 SPA 规范路径：settingsRoute 返回应用壳，由客户端路由渲染个人设置页，
+	// 资料/密码/语言的读写走 /api/v1/profile 与 /api/v1/settings/* 的 JSON 端点（DESIGN.md §8.1、
+	// §8.3、§8.5）。只注册这一条 GET：SPA 是否存在在请求时判断，SPA 缺失时回退 SSR 设置页——
+	// 若在注册期按 s.spa 是否为空二选一，SPA 加载失败就没有可回退的处理器。写路径 POST 全部保留。
+	router.GET("/settings", s.settingsRoute)
 	router.POST("/settings/profile", s.sessions.CSRFMiddleware(), s.settingsProfileSubmit)
 	// 页头语言切换（M1-8 语言切换落库）：只改 users.locale 一个字段，因此单独一个端点。
 	// 它仍然是写操作，一律过 CSRF（DESIGN.md §4.3）。
@@ -33,11 +37,31 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 	router.POST("/settings/password", s.sessions.CSRFMiddleware(), s.settingsPasswordSubmit)
 	// 用户级 API Key 管理（M4-10，DESIGN.md §8.1）：路由与 handler 在 keys.go。
 	// 创建与撤销都是写操作，一律过 CSRF（DESIGN.md §4.3）。
-	router.GET("/settings/keys", s.keysPage)
+	// GET /settings/keys 已切到 SPA 规范路径：keysRoute 返回应用壳，由客户端路由渲染「我的
+	// API Key」页，列表/创建/撤销走 /api/v1/keys 的 JSON 端点（DESIGN.md §7.2、§8.1）。
+	router.GET("/settings/keys", s.keysRoute)
 	router.POST("/settings/keys", s.sessions.CSRFMiddleware(), s.keysCreate)
 	router.POST("/settings/keys/:id/revoke", s.sessions.CSRFMiddleware(), s.keysRevoke)
 	// 邮件类型偏好页（M1-18）：路由与 handler 在 mail_prefs.go，仍属个人设置体系。
 	s.registerMailPrefsRoutes(router)
+}
+
+// settingsRoute 提供 GET /settings：SPA 已加载时返回应用壳（DESIGN.md §8.5），由客户端路由
+// 渲染个人设置页，资料/密码/语言的读写走 /api/v1/profile、/api/v1/settings/locale 与
+// /api/v1/settings/password 的 JSON 端点（DESIGN.md §8.1、§8.3）。
+//
+// 判权与迁移前的 SSR 设置页逐项一致：这是登录用户自己的页面，只要求已登录会话，未登录一律
+// 重定向到登录页；页面本身不区分角色，因此不做额外角色判定，也不因切壳而放开。SPA 缺失（降级）
+// 时回退 SSR 设置页 settingsPage，模板与全部写路径（POST）保持不变。
+func (s *Server) settingsRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.settingsPage(c)
 }
 
 // settingsPage 渲染个人设置页；匿名访问被重定向到登录页。
