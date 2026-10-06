@@ -1,6 +1,9 @@
 import {
   ApiClientError,
   type DecksResponse,
+  type StatsSummary,
+  type DueCardsResponse,
+  type DueCardsQuery,
   type ApiErrorEnvelope,
 } from './types';
 
@@ -129,6 +132,38 @@ export class ApiClient {
    */
   async getDecks(): Promise<DecksResponse> {
     return this.request<DecksResponse>('/api/v1/decks');
+  }
+
+  /**
+   * 获取当前用户学习统计概要（GET /api/v1/stats/summary）
+   * DESIGN.md §7.3、§9
+   */
+  async getStatsSummary(): Promise<StatsSummary> {
+    return this.request<StatsSummary>('/api/v1/stats/summary');
+  }
+
+  /**
+   * 获取到期卡片列表（GET /api/v1/review/due）
+   * DESIGN.md §3.3、§7.3:
+   * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
+   */
+  async getDueCards(query?: DueCardsQuery): Promise<DueCardsResponse> {
+    const params = new URLSearchParams();
+    if (query?.deck !== undefined) {
+      if (Array.isArray(query.deck)) {
+        for (const d of query.deck) {
+          params.append('deck', String(d));
+        }
+      } else {
+        params.append('deck', String(query.deck));
+      }
+    }
+    if (query?.limit !== undefined) {
+      params.set('limit', String(query.limit));
+    }
+    const queryString = params.toString();
+    const path = queryString ? `/api/v1/review/due?${queryString}` : '/api/v1/review/due';
+    return this.request<DueCardsResponse>(path);
   }
 }
 
