@@ -60,6 +60,7 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	router.POST("/decks/:id/notes", s.sessions.CSRFMiddleware(), s.noteCreate)
 	router.POST("/decks/:id/preview", s.sessions.CSRFMiddleware(), s.notePreview)
 	router.POST("/decks/:id/preview-new", s.sessions.CSRFMiddleware(), s.noteCreatePreview)
+	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.spaNotePreview)
 	router.POST("/decks/:id/bulk", s.sessions.CSRFMiddleware(), s.noteBulk)
 }
 
