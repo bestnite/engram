@@ -1,5 +1,50 @@
 # SPA migration gap audit (refreshed on 2026-10-06)
 
+> This report reflects merged main through commit `1614f28`. Note creation, editing, password change, and sanitized preview contracts are now merged. It records current behavior, not completion; browser E2E and Docker/GoReleaser acceptance remain outstanding.
+
+## Current SPA coverage
+
+- Routes: `/`, `/decks`, `/decks/:id`, `/decks/:id/notes`, `/decks/:id/notes/:noteId/edit`, `/decks/:id/notes/new`, `/spa/review`, `/stats`, `/settings`, `/settings/keys`, `/login`.
+- Deck listing and creation use `GET/POST /api/v1/decks`. Note creation supports the `basic` type; editing uses `PATCH /api/v1/notes/:id`. The edit screen edits JSON fields/tags and displays plain text, not Markdown-rendered card sides.
+- Profile/locale and password are session-only APIs protected by CSRF. API-key self-management uses existing REST key routes; key plaintext is shown once only.
+- SPA review remains a partial self-assessment prototype at `/spa/review`; the broader legacy review flow remains at `/review`.
+- A sanitized server-rendered note preview contract is available at `POST /api/v1/decks/:id/notes/preview` for editor-role users with session CSRF. The SPA editor has not yet been wired to it or to MathJax.
+
+## Remaining migration areas
+
+| Area | Current state | Legacy removal |
+|---|---|---|
+| Setup, registration, invites, OIDC | SSR only; no SPA-equivalent views/flows | Keep |
+| Deck settings and daily caps | SSR only; no REST cap endpoint or SPA view | Keep |
+| Note edit | SPA JSON editor is merged; sanitized preview exists but is not wired into SPA | Keep until preview/render parity |
+| Note delete, bulk, restore | REST covers some mutations; SPA controls incomplete | Keep |
+| Media upload/library/picker | SSR upload/picker; REST listing only | Keep |
+| Sharing, visibility, links, clone | SSR only; no REST equivalent | Keep |
+| Package import/export | REST exists; no SPA workflow | Keep |
+| Review | SPA self-assessment only; graded types, MathJax, edit and bury remain legacy | Keep |
+| Statistics | SPA summary only; detailed forecasts/distributions remain SSR | Keep |
+| Account security | Password change now uses CSRF-protected SPA API; email, notifications and TOTP remain SSR | Keep |
+| API keys | SPA self-service page is merged; admin key overview remains SSR | Keep admin routes |
+| Presets/jobs and admin | SSR only; no SPA admin REST namespace | Keep |
+| Service worker | Caches legacy assets plus Vite JS/CSS; HTML/API/review data stay network-only | Keep active PWA route |
+
+## Build and verification
+
+- Frontend production assets are embedded by Go. Docker, CI and GoReleaser build chains are configured.
+- Local frontend check/tests/build, generated Go build/vet/format checks, full Go suite, and targeted preview/API-key/password tests have passed on recent main.
+- Full Docker image build, GoReleaser snapshot archive inspection, browser E2E, and release workflow have not been completed.
+
+## Cutover gates
+
+1. Wire the sanitized preview endpoint into SPA editing, load self-hosted MathJax in the SPA under the enforcing CSP, and add browser XSS/TeX checks.
+2. Complete remaining note actions, media workflows, sharing/clone, packages, graded review, detailed statistics, presets/jobs, onboarding, account settings and admin pages with server-side auth/CSRF.
+3. Run browser E2E over every migrated workflow and deep-link refresh.
+4. Remove SSR/templ/htmx only after the replacement is reachable and verified; then rebuild and run all tests.
+5. Build Docker, inspect GoReleaser snapshot contents, verify embedded SPA/optimizer binaries, and run release checks.
+
+No currently active SSR route/template is proven dead; do not remove one based only on the SPA fallback existing.
+
+
 > Implementation evidence is based on current `main`, including SPA profile persistence, CSRF-protected review flow, review route cutover, and MCP cookie rejection. SPA note editing, API-key UI and server-side Markdown preview are still separate in-progress branches and are not counted as merged functionality.
 
 ## Current merged SPA inventory
