@@ -110,6 +110,42 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
+  describe('SPA editor media upload', () => {
+    it('posts multipart to the deck upload route with session CSRF and no JSON content type', async () => {
+      client.setCsrfToken('upload-csrf');
+      const sha = 'b'.repeat(64);
+      const result = { sha256: sha, mime: 'image/png', bytes: 12, url: `/media/${sha}` };
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(result), { status: 201 }));
+      const file = new File(['png-bytes'], 'pic.png', { type: 'image/png' });
+      await expect(client.uploadDeckMedia('deck /1', file)).resolves.toEqual(result);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/decks/deck%20%2F1/media');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('X-CSRF-Token')).toBe('upload-csrf');
+      // multipart 边界由浏览器生成：不得把 body 当成字符串而强加 application/json。
+      expect(headers.has('Content-Type')).toBe(false);
+      const form = init?.body as FormData;
+      expect(form.get('file')).toBeInstanceOf(File);
+      expect((form.get('file') as File).name).toBe('pic.png');
+    });
+
+    it('fetches a CSRF session token before upload and keeps stable server error codes', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'fresh-upload-csrf' }), { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'media_mime_not_allowed', message: 'no' } }), { status: 415 }));
+      await expect(client.uploadDeckMedia(3, new File(['x'], 'a.txt'))).rejects.toMatchObject({ status: 415, code: 'media_mime_not_allowed' });
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
+      expect(new Headers(mockFetch.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe('fresh-upload-csrf');
+    });
+
+    it('rejects a response that breaks the /media/<sha256> contract', async () => {
+      client.setCsrfToken('upload-csrf');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sha256: 'not-a-hash', mime: 'image/png', bytes: 1, url: 'javascript:alert(1)' }), { status: 201 }));
+      await expect(client.uploadDeckMedia(3, new File(['x'], 'a.png'))).rejects.toMatchObject({ code: 'invalid_response' });
+    });
+  });
+
   describe('basic note batch creation', () => {
     it('loads a session CSRF token and posts a typed basic note batch', async () => {
       mockFetch

@@ -109,6 +109,17 @@ export interface MediaPickerPage {
 }
 
 /**
+ * 编辑器上传成功响应（与 Go 后端 internal/web/media.go:storeUpload 对齐）。
+ * 对外标识是 sha256，url 直接由哈希拼成 /media/<sha256>（DESIGN.md §6.3）。
+ */
+export interface MediaUploadResult {
+  sha256: string;
+  mime: string;
+  bytes: number;
+  url: string;
+}
+
+/**
  * GET /api/v1/decks/:id/notes 查询参数
  * internal/store/note.go:NoteListOptions
  */

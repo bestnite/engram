@@ -26,6 +26,11 @@
   let mediaError = $state(false);
   let mediaHasMore = $state(false);
   let selectedField = $state('');
+  // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（DESIGN.md §6.3 编辑器媒体面）。
+  let uploadInput = $state<HTMLInputElement | null>(null);
+  let uploading = $state(false);
+  let uploadErrorKey = $state('');
+  let uploaded = $state(false);
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
 
@@ -69,7 +74,9 @@
     if (mediaOpen && mediaItems.length === 0 && !mediaLoading) await loadMedia(true);
   }
 
-  function insertMedia(url: string): void {
+  // insertMedia 把 Markdown 图片引用追加到当前选中字段；上传与选择器共用同一段逻辑。
+  // 只做字符串拼接，绝不把 url 当 HTML 渲染；返回是否真的插入了（字段非法时不动内容）。
+  function insertMedia(url: string): boolean {
     let fields: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(fieldsText);
@@ -77,13 +84,49 @@
       fields = parsed as Record<string, unknown>;
     } catch {
       invalid = true;
-      return;
+      return false;
     }
     const current = fields[selectedField];
-    if (typeof current !== 'string') return;
+    if (typeof current !== 'string') return false;
     fields[selectedField] = `${current}${current && !current.endsWith('\n') ? '\n' : ''}![](${url})`;
     fieldsText = JSON.stringify(fields, null, 2);
     saved = false;
+    return true;
+  }
+
+  // uploadErrorKeyFor 把服务端稳定错误 code 映射到本地化 key；未知 code 回落到通用失败提示。
+  // 前端不解析后端英文 message（DESIGN.md §8.3）。
+  function uploadErrorKeyFor(err: unknown): string {
+    const code = err instanceof ApiClientError ? err.code : '';
+    const map: Record<string, string> = {
+      media_too_large: 'media.spa.upload.too_large',
+      media_mime_not_allowed: 'media.spa.upload.mime_not_allowed',
+      media_magic_mismatch: 'media.spa.upload.magic_mismatch',
+      media_quota_exceeded: 'media.spa.upload.quota_exceeded',
+      media_missing_file: 'media.spa.upload.file_required',
+    };
+    return map[code] || 'media.spa.upload.failed';
+  }
+
+  async function uploadMedia(): Promise<void> {
+    uploaded = false;
+    uploadErrorKey = '';
+    const input = uploadInput;
+    const file = input?.files?.[0];
+    if (!file) {
+      uploadErrorKey = 'media.spa.upload.file_required';
+      return;
+    }
+    uploading = true;
+    try {
+      const result = await apiClient.uploadDeckMedia(deckId, file);
+      uploaded = insertMedia(result.url);
+      if (input) input.value = '';
+    } catch (err) {
+      uploadErrorKey = uploadErrorKeyFor(err);
+    } finally {
+      uploading = false;
+    }
   }
 
   async function preview(): Promise<void> {
@@ -172,6 +215,15 @@
             {/each}
           </select>
         </label>
+        <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
+          <label class="block text-sm font-medium">{$t('media.spa.upload.label')}
+            <input data-testid="spa-media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
+          </label>
+          <button data-testid="spa-media-upload-submit" type="button" onclick={uploadMedia} disabled={uploading} class="rounded-md border px-4 py-2 disabled:opacity-50">{uploading ? $t('media.spa.upload.uploading') : $t('media.spa.upload.button')}</button>
+          {#if uploaded}<p role="status" data-testid="spa-media-upload-status" class="text-emerald-700">{$t('media.spa.upload.inserted')}</p>{/if}
+          {#if uploadErrorKey}<p role="alert" data-testid="spa-media-upload-error" class="text-rose-600">{$t(uploadErrorKey)}</p>{/if}
+        </div>
         <button data-testid="spa-media-picker-toggle" type="button" onclick={toggleMedia} class="rounded-md border px-4 py-2">{$t('media.spa.open')}</button>
         {#if mediaOpen}
           <section data-testid="spa-media-picker" class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
