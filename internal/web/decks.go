@@ -194,6 +194,10 @@ func (s *Server) deckCreate(c *gin.Context) {
 	if err := s.decks.Create(ctx, deck); err != nil {
 		s.logger.Info("create deck rejected", "user_id", user.ID, "error", err)
 		// 卡组名不满足与卡组包 manifest 同源的规则时给专属提示，其余失败仍是通用文案。
+		if errors.Is(err, store.ErrDeckDescriptionInvalid) {
+			s.renderDeckCreateError(c, loc, user.ID, http.StatusBadRequest, loc.T("error.deck_description_invalid"), name, description)
+			return
+		}
 		if errors.Is(err, store.ErrDeckNameInvalid) {
 			s.renderDeckCreateError(c, loc, user.ID, http.StatusBadRequest, loc.T("decks.list.error_name_invalid"), name, description)
 			return

@@ -1340,7 +1340,7 @@
 - id: settings.error.timezone_invalid
   translation: "无法识别的时区。"
 - id: settings.error.cutoff_invalid
-  translation: "复习日切点必须是 0 到 23 之间的整数。"
+  translation: "复习日切点必须是 1 到 23 之间的整数。"
 - id: settings.error.old_password_required
   translation: "请输入当前密码。"
 - id: settings.error.new_password_required
@@ -1998,6 +1998,9 @@
   translation: "留空表示不过期。"
 - id: keys.create.submit
   translation: "创建"
+
+- id: error.deck_description_invalid
+  translation: "卡组描述不合法：最多 2000 个字符，且不能包含控制字符。"
 - id: keys.scope.read
   translation: "read（读取）"
 - id: keys.scope.write

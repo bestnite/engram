@@ -101,7 +101,8 @@ func (s *Server) settingsProfileSubmit(c *gin.Context) {
 		return
 	}
 	cutoff, err := strconv.Atoi(rawCutoff)
-	if err != nil || cutoff < 0 || cutoff > 23 {
+	// 0 是内部未配置哨兵；表单只允许实际生效的小时，避免保存午夜却静默回退 04:00。
+	if err != nil || cutoff < 1 || cutoff > 23 {
 		s.renderSettingsError(c, loc, &candidate, loc.T("settings.error.cutoff_invalid"))
 		return
 	}
@@ -354,7 +355,7 @@ func (s *Server) settingsData(c *gin.Context, loc *i18n.Localizer, user *store.U
 		TimezoneHint:        loc.T("settings.profile.timezone_hint"),
 		TimezoneOptions:     zones,
 		CutoffLabel:         loc.T("settings.profile.cutoff_label"),
-		CutoffValue:         strconv.Itoa(user.DayCutoffHour),
+		CutoffValue:         strconv.Itoa(store.NormalizedCutoff(user.DayCutoffHour)),
 		CutoffHint:          loc.T("settings.profile.cutoff_hint"),
 		ProfileSubmit:       loc.T("settings.profile.submit"),
 		PasswordHeading:     loc.T("settings.password.heading"),
