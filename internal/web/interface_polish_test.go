@@ -182,6 +182,8 @@ func TestPWAScriptDoesNotHighlightByHref(t *testing.T) {
 // TestFooterShowsProjectName 是 M8-7 (c) 的验收：页脚文本是项目名 Engram，而不是口号。
 func TestFooterShowsProjectName(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/decks", cookies).Body.String()
 	if !strings.Contains(body, `>Engram</a>`) {
 		t.Errorf("footer does not render the project name: %s", snippet(body))
@@ -195,6 +197,8 @@ func TestFooterShowsProjectName(t *testing.T) {
 // 表单内容与错误回显都在对话框内，且带无 JS 时的 noscript 兜底。
 func TestDeckListUsesNewDeckDialog(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/decks", cookies).Body.String()
 
 	for _, want := range []string{
@@ -240,6 +244,8 @@ func TestFaviconRedirectsToHashedIcon(t *testing.T) {
 // 两者都走内容哈希路径（M8-7 (f)）。
 func TestPagesDeclareIconLinks(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	icon := srv.assets.URL("icons/icon.svg")
 	apple := srv.assets.URL("icons/apple-touch-icon.png")
 	if icon == "" || apple == "" {

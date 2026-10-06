@@ -17,6 +17,8 @@ import (
 // TestDeckCreateAppearsInList 是 M2-11 的主验收：登录用户在 /decks 建卡组后能在列表中看到它。
 func TestDeckCreateAppearsInList(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	// 无预设时，创建卡组应自动补一个默认预设，保证新用户也能建组。
 	rec := postForm(t, srv, "/decks", url.Values{
@@ -105,6 +107,8 @@ func TestDeckCreateRejectsEmptyName(t *testing.T) {
 // 复选框与一个「复习」链接，页头是提交给 /review 的「复习所选」按钮（GET 表单，无 JS）。
 func TestDeckListRendersReviewScopeControls(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deckA := seedReviewDeck(t, db, ownerID, "Alpha deck")
 	deckB := seedReviewDeck(t, db, ownerID, "Beta deck")
 
@@ -169,6 +173,8 @@ func deckRowHTML(body string, deckID uint64) string {
 // 含"新卡额度用尽 → 新 0"的夹具，直接对应线上「到期数不为 0、点进去却说没有可复习」的症状。
 func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	ctx := context.Background()
 	now := time.Now().UTC()
 	day := schedule.ReviewDay(now, time.UTC, schedule.DefaultDayCutoffHour)
@@ -282,6 +288,8 @@ func TestDeckListShowsPerDeckTodayCounts(t *testing.T) {
 // 非 owner 行（别人的 public 卡组）不渲染。
 func TestDeckListSettingsLinkIsOwnerOnly(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	ctx := context.Background()
 	now := time.Now().UTC()
 

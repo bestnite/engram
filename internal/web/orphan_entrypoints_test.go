@@ -21,6 +21,8 @@ import (
 // /decks/:id/sharing 暴露为可点入口，同时非 owner 的共享卡组行不出现共享入口。
 func TestDeckListImportAndOwnerSharingEntryPoints(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Owned deck")
 	sharingHref := `href="/decks/` + u64str(deck.ID) + `/sharing"`
 

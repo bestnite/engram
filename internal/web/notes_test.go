@@ -151,6 +151,8 @@ func jsonMarshalStrings(xs []string) (string, error) {
 // TestNoteListRenders100NotesWithPaging 是 M2-7 的分页验收：100 条笔记分两页，页内容不重叠。
 func TestNoteListRenders100NotesWithPaging(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks/:id/notes 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Paging deck")
 	for i := 1; i <= 100; i++ {
 		seedBasic(t, db, deck.ID, front(i), back(i))
@@ -187,6 +189,8 @@ func TestNoteListRenders100NotesWithPaging(t *testing.T) {
 // TestNoteListSearchAndFilters 断言 ?q=、?tag=、?kind= 与 ?status= 各自生效。
 func TestNoteListSearchAndFilters(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /decks/:id/notes 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Filter deck")
 	seedBasic(t, db, deck.ID, "Q010", "answer one", "alpha")
 	seedBasic(t, db, deck.ID, "Q020", "answer two", "alpha")

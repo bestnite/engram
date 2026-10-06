@@ -31,9 +31,27 @@ func (s *Server) registerDeckRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {
 		return
 	}
-	router.GET("/decks", s.deckList)
+	// GET /decks 已切到 SPA 规范路径：deckListRoute 返回应用壳，由客户端路由渲染卡组列表，
+	// 数据仍走既有 JSON 端点（DESIGN.md §8.1、§8.5）。写路径 POST /decks 不变。
+	router.GET("/decks", s.deckListRoute)
 	// 写操作过 CSRF 中间件（DESIGN.md §4.3、§11）。
 	router.POST("/decks", s.sessions.CSRFMiddleware(), s.deckCreate)
+}
+
+// deckListRoute 提供 GET /decks：SPA 已加载时返回应用壳（DESIGN.md §8.5），由客户端路由
+// 渲染卡组列表，数据仍走 GET /api/v1/decks 与 GET /api/v1/decks/queue-counts（DESIGN.md §8.1）。
+//
+// 与迁移前的 SSR 列表页一样先要求已登录会话：匿名一律重定向登录页，页面迁移不改动授权判定，
+// 也不新增写路径。SPA 缺失（降级）时回退 SSR 列表页 deckList。
+func (s *Server) deckListRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.deckList(c)
 }
 
 type deckQueueCountsResponse struct {

@@ -371,6 +371,8 @@ func renderPresetCardFragment(t *testing.T) string {
 // 卡组表单或预设页时自动获得一个默认预设，下拉因此非空；重复访问不会重复创建。
 func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
 	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	// 卡组表单：全新账号的下拉必须已有选项。
 	decks := getWithCookies(t, srv, "/decks", cookies)
@@ -407,6 +409,8 @@ func TestPresetFreshAccountGetsDefaultPreset(t *testing.T) {
 // TestPresetCreateAddsSecondPresetShownInDeckForm 覆盖「用户创建第二个预设并能在卡组表单里选到」。
 func TestPresetCreateAddsSecondPresetShownInDeckForm(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	srv.spa = nil
 	seedPreset(t, db, ownerID)
 
 	rec := postForm(t, srv, "/presets", url.Values{
