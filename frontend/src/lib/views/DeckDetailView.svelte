@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { routeStore } from '../router';
+  import { routeStore, navigate } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, Note, BulkNotesResponse } from '../api';
@@ -222,15 +222,19 @@
     }
   }
 
+  /**
+   * 克隆当前卡组到自己的账号下（reader 及以上可克隆，服务端判权与审计）。
+   * 成功后跳到新卡组的卡片列表，与 SSR 克隆表单 303 的目标一致；失败显示本地化错误。
+   */
   async function cloneDeck(): Promise<void> {
     cloneSubmitting = true;
     cloneError = false;
     try {
-      const id = encodeURIComponent(String(deckId));
-      await apiClient.request<{ id: number; name: string }>(`/api/v1/decks/${id}/clone`, { method: 'POST', body: '{}', headers: { Accept: 'application/json' } });
+      const cloned = await apiClient.cloneDeck(deckId);
+      cloneSubmitting = false;
+      navigate(`/decks/${encodeURIComponent(String(cloned.id))}/notes`);
     } catch {
       cloneError = true;
-    } finally {
       cloneSubmitting = false;
     }
   }

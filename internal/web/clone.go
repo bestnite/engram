@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,11 +67,28 @@ func (s *Server) deckClone(c *gin.Context) {
 		TargetID:   store.Ptr(cloned.ID),
 		Detail:     map[string]any{"source_deck_id": src.ID, "preset_id": cloned.PresetID},
 	})
-	if c.GetHeader("Accept") == "application/json" {
+	if acceptsJSON(c) {
 		c.JSON(http.StatusCreated, gin.H{"id": cloned.ID, "name": cloned.Name})
 		return
 	}
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%d/notes", cloned.ID))
+}
+
+// acceptsJSON 报告请求是否要求 JSON 响应（SPA 的 fetch 调用）。
+//
+// 只看 Accept 头里的 application/json 媒体类型，并允许它带参数或出现在候选列表里
+// （如 "application/json; charset=utf-8" 或 "application/json, text/plain, */*"）：
+// 用整串精确比较时，客户端一旦附上 charset 就会把 JSON 调用误判成表单提交，于是
+// fetch 跟随 303 拿到 HTML，再按 JSON 解析失败。浏览器表单提交的 Accept 不含
+// application/json，因此仍走 303 重定向。
+func acceptsJSON(c *gin.Context) bool {
+	for _, part := range strings.Split(c.GetHeader("Accept"), ",") {
+		media := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+		if strings.EqualFold(media, "application/json") {
+			return true
+		}
+	}
+	return false
 }
 
 // clonePreset 复制一份源卡组的预设到调用者名下；源预设缺失时退回调用者的默认预设。

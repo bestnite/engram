@@ -295,6 +295,23 @@ export class ApiClient {
   }
 
   /**
+   * 克隆一个自己可读的卡组（POST /api/v1/decks/:id/clone，DESIGN.md §5）。
+   * reader 及以上都能克隆；服务端判权与审计，返回新卡组的 {id, name}（进度不跟随）。
+   * 显式声明 Accept: application/json，服务端据此返回 JSON 而不是 303 重定向。
+   */
+  async cloneDeck(deckId: number | string): Promise<{ id: number; name: string }> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const id = encodeURIComponent(String(deckId));
+    return this.request<{ id: number; name: string }>(`/api/v1/decks/${id}/clone`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body: JSON.stringify({}),
+    });
+  }
+
+  /**
    * 获取卡组下的卡片列表（GET /api/v1/decks/:id/notes）
    * DESIGN.md §7.3、§8.1
    */

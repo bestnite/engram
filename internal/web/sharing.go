@@ -24,24 +24,11 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.grants == nil || s.users == nil {
 		return
 	}
-	if s.spa == nil {
-		router.GET("/decks/:id/sharing", s.sharingPage)
-	} else {
-		router.GET("/decks/:id/sharing", func(c *gin.Context) {
-			user, ok := s.requireUser(c)
-			if !ok {
-				return
-			}
-			id, ok := deckIDParam(c)
-			if !ok {
-				return
-			}
-			if _, ok := s.loadDeckForRole(c, user, id, store.RoleOwner); !ok {
-				return
-			}
-			s.spa.ServeIndex(c)
-		})
-	}
+	// GET /decks/:id/sharing 已切到 SPA 规范路径：sharingPageRoute 返回应用壳，由客户端路由
+	// 渲染共享管理页，数据仍走 /api/v1/decks/:id/sharing 下的 JSON 端点（DESIGN.md §8.1、§8.5）。
+	// 只注册这一条 GET：SPA 是否存在在请求时判断，SPA 缺失时回退 SSR 共享页——若在注册期按
+	// s.spa 是否为空二选一，SPA 加载失败就没有可回退的处理器。写路径 POST 全部保留。
+	router.GET("/decks/:id/sharing", s.sharingPageRoute)
 	router.GET("/api/v1/decks/:id/sharing", s.spaSharingGet)
 	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
 	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
@@ -58,6 +45,31 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	router.POST("/decks/:id/sharing/links/revoke", s.sessions.CSRFMiddleware(), s.sharingLinkRevoke)
 	router.POST("/decks/:id/sharing/links/revoke-all", s.sessions.CSRFMiddleware(), s.sharingLinkRevokeAll)
 	router.POST("/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.sharingVisibility)
+}
+
+// sharingPageRoute 提供 GET /decks/:id/sharing：SPA 已加载时返回应用壳（DESIGN.md §8.5），
+// 由客户端路由渲染共享管理页，数据仍走既有 JSON 端点（DESIGN.md §8.1）。
+//
+// 判权与迁移前的 SSR 共享页逐项一致：先要求已登录会话（匿名重定向登录页），再按 owner 角色
+// 判定卡组归属——editor/reader 与陌生用户仍回 403，不因切壳而把共享壳交给无权用户。
+// SPA 缺失（降级）时回退 SSR 共享页 sharingPage，模板与写路径全部保留。
+func (s *Server) sharingPageRoute(c *gin.Context) {
+	user, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	if s.spa != nil {
+		deckID, ok := deckIDParam(c)
+		if !ok {
+			return
+		}
+		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner); !ok {
+			return
+		}
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.sharingPage(c)
 }
 
 // roleOptions 生成可授予的角色下拉：owner 不可授予（归属只能由 owner_user_id 决定）。
