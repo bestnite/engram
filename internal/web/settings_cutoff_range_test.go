@@ -102,6 +102,8 @@ func TestSettingsCutoffRangeAcceptsBoundaries(t *testing.T) {
 // 用户现在按午夜读取，且页面不能再显示默认 04:00。
 func TestSettingsLegacyZeroCutoffShowsMidnight(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	// 模拟修复前落库的旧数据：day_cutoff_hour = 0。
 	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("day_cutoff_hour", 0).Error; err != nil {

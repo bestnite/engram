@@ -88,6 +88,8 @@ func TestDeckListImportHiddenFromAnonymous(t *testing.T) {
 func TestSettingsEmailChangeEntryPointConditionalOnMailStack(t *testing.T) {
 	// 未装配邮件：设置页不应出现 /settings/email 入口。
 	plainSrv, _, _, plainCookies, _ := newNotesServer(t)
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	plainSrv.spa = nil
 	plain := getWithCookies(t, plainSrv, "/settings", plainCookies)
 	if plain.Code != http.StatusOK {
 		t.Fatalf("GET /settings (no mail) status = %d, want 200 (body %s)", plain.Code, snippet(plain.Body.String()))
@@ -98,6 +100,7 @@ func TestSettingsEmailChangeEntryPointConditionalOnMailStack(t *testing.T) {
 
 	// 未装配邮件的安全测试服务：同样不应出现入口（第二条独立路径）。
 	noMail := newSecurityServer(t, false)
+	noMail.srv.spa = nil
 	noMailPage := getWithCookies(t, noMail.srv, "/settings", noMail.cookies)
 	if noMailPage.Code != http.StatusOK {
 		t.Fatalf("GET /settings (security server, no mail) status = %d, want 200", noMailPage.Code)
@@ -108,6 +111,7 @@ func TestSettingsEmailChangeEntryPointConditionalOnMailStack(t *testing.T) {
 
 	// 装配邮件（smtp_host + smtp_from 已设）：入口出现，且指向真实页面。
 	withMail := newSecurityServer(t, true)
+	withMail.srv.spa = nil
 	page := getWithCookies(t, withMail.srv, "/settings", withMail.cookies)
 	if page.Code != http.StatusOK {
 		t.Fatalf("GET /settings (mail configured) status = %d, want 200 (body %s)", page.Code, snippet(page.Body.String()))

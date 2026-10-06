@@ -116,6 +116,8 @@ func TestSettingsKeysAllowsAdminScopeForAdmins(t *testing.T) {
 // read/write/review/keys 四档，admin 选项仅对管理员出现（辅助防线，非唯一防线）。
 func TestSettingsKeysFormHidesAdminOptionForMembers(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
+	// GET /settings/keys 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	_, memberCookies, _ := loginAs(t, srv, db, "form_member", store.RoleUser)
 	memberBody := getWithCookies(t, srv, "/settings/keys", memberCookies).Body.String()

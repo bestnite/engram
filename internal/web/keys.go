@@ -35,6 +35,23 @@ func keyScopesFor(user *store.User) []string {
 	return scopes
 }
 
+// keysRoute 提供 GET /settings/keys：SPA 已加载时返回应用壳（DESIGN.md §8.5），由客户端路由
+// 渲染「我的 API Key」页，列表/创建/撤销走 /api/v1/keys 的 JSON 端点（DESIGN.md §7.2、§8.1）。
+//
+// 判权与迁移前的 SSR 页逐项一致：先要求已登录会话（匿名重定向登录页），key 一律按当前会话
+// 用户的 id 取，不因切壳而放开。SPA 缺失（降级）时回退 SSR 的 keysPage，模板与全部写路径
+// （POST /settings/keys、POST /settings/keys/:id/revoke）保持不变。
+func (s *Server) keysRoute(c *gin.Context) {
+	if _, ok := s.requireUser(c); !ok {
+		return
+	}
+	if s.spa != nil {
+		s.spa.ServeIndex(c)
+		return
+	}
+	s.keysPage(c)
+}
+
 // keysPage 渲染「我的 API Key」页；匿名访问被重定向到登录页（requireUser）。
 func (s *Server) keysPage(c *gin.Context) {
 	loc, ok := s.localizer(c)

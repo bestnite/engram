@@ -66,6 +66,8 @@ func rateNextCard(t *testing.T, srv *Server, db *gorm.DB, cookies []*http.Cookie
 // 把界面语言从 zh-CN 改成 en 后，返回的设置页本身用英文渲染（<html lang="en">）。
 func TestSettingsLocaleChangeSwitchesPageLanguage(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	srv.spa = nil
 
 	// 先固定成中文，证明「改之前」确实是中文页面。
 	if rec := postProfile(t, srv, cookies, csrf, "Owner", "zh-CN", "UTC", 4); rec.Code != http.StatusSeeOther {
@@ -100,6 +102,8 @@ func TestSettingsLocaleChangeSwitchesPageLanguage(t *testing.T) {
 // 包含 data-custom-select 容器、隐藏字段以及可访问的触发按钮与菜单项。
 func TestSettingsRendersCustomSelectDropdown(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/settings", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /settings status = %d, want 200", rec.Code)
@@ -286,7 +290,7 @@ func TestSettingsPasswordChangeRevokesOtherSessions(t *testing.T) {
 // 已登录用户的页面上能找到 /presets 链接；匿名页面不暴露它。
 func TestPresetsNavLinkVisibleToSignedInUsers(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
-	// 断言 SSR 页头导航里的 /presets 链接，显式走 SPA 缺失的回退分支。
+// 断言 SSR 页头导航里的 /presets 链接，显式走 SPA 缺失的回退分支。
 	srv.spa = nil
 
 	for _, path := range []string{"/", "/settings"} {
