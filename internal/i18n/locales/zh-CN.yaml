@@ -1340,7 +1340,7 @@
 - id: settings.error.timezone_invalid
   translation: "无法识别的时区。"
 - id: settings.error.cutoff_invalid
-  translation: "复习日切点必须是 0 到 23 之间的整数。"
+  translation: "复习日切点必须是 1 到 23 之间的整数。"
 - id: settings.error.old_password_required
   translation: "请输入当前密码。"
 - id: settings.error.new_password_required

@@ -1342,7 +1342,7 @@
 - id: settings.error.timezone_invalid
   translation: "Unrecognised time zone."
 - id: settings.error.cutoff_invalid
-  translation: "The review day cutoff must be an integer between 0 and 23."
+  translation: "The review day cutoff must be an integer between 1 and 23."
 - id: settings.error.old_password_required
   translation: "Enter your current password."
 - id: settings.error.new_password_required
