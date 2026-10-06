@@ -983,6 +983,40 @@ logged-in account. Existing note references to the old numeric form were **not**
 
 ---
 
+### After the 0.1.0 release (2026-10-06)
+
+Not milestone tasks and deliberately not checkboxes, so the counting rules in section 2.1
+stay intact.
+
+**Hardening completed.** The CSP is now **enforcing** (no `'unsafe-eval'`): the two
+`hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`),
+and a source-level guard test fails if a template ever needs what the policy lacks.
+Verified in a real browser: the note-editor preview still re-typesets MathJax after an htmx
+swap, the review page still renders formulas, and the route set produces zero CSP
+violations. The card-body attribute whitelist now has explicit regression tests for
+`hx-*`, `data-hx-*`, `on*`, `style`, `javascript:` and `srcdoc`.
+
+**Features added.** A paginated, read-scoped media library: `GET /api/v1/media` (keyset,
+`limit` 1–100, default 24) and the editor's "choose from library" picker
+(`GET /decks/:id/media/picker`, editor role), which inserts `![](/media/<sha256>)` into the
+focused field and previews the originals with CSS sizing plus `loading="lazy"` — no
+thumbnails, no re-encoding. Each user can now choose the local hour at which review
+reminders and the weekly digest are sent (default 19:00, `users.reminder_hour`, nullable
+because midnight is a legitimate value); the old 23:00–07:00 quiet-window heuristic is gone.
+
+**Duplication converged** (from a file-by-file census rather than guesswork). Removed the
+dead HTTP-layer deck/note role guards, collapsed duplicated audit/scope/token-error/
+pagination/decode helpers into single owners, and unified the timezone, day-cutoff and
+review-day-shift helpers. The census also exposed two real defects, both fixed: the default
+preset was created under three different names (literal, localised, lower-case) so one user
+could accumulate several "defaults", and the store's review-day start disagreed with the
+scheduler's about out-of-range cutoffs.
+
+**Still open.** The PostgreSQL branch of the media primary-key migration has never been
+executed (local and CI testing is SQLite only). The deck description still lacks the
+2000-character bound the importer and the package schema enforce. `AGENTS.md` section 3
+lists a top-level `test/` directory that does not exist in the repository.
+
 ## 2. Progress tracking
 
 ### 2.1 Counting
