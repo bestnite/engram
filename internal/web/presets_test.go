@@ -333,6 +333,8 @@ func TestPresetListRedirectsAnonymous(t *testing.T) {
 // TestPresetListShowsDefaultWeights 证明未优化的预设显示「默认权重」，且不显示权重明细。
 func TestPresetListShowsDefaultWeights(t *testing.T) {
 	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
+	// GET /presets 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退页（DESIGN.md §8.5）。
+	srv.spa = nil
 	seedPreset(t, db, ownerID)
 	page := getWithCookies(t, srv, "/presets", cookies)
 	if page.Code != http.StatusOK {

@@ -784,3 +784,86 @@ export interface UpdateNotificationPrefsRequest {
   reminder_hour: number | null;
 }
 
+/**
+ * 调度预设接口（DESIGN.md §3.5、§8.1，Go: internal/web/spa_presets.go）。
+ *
+ * 与 SSR 预设页同源：默认预设补齐、门槛、单并发入队、状态与回退全部复用同一批
+ * store/jobs 方法。verdict 是服务端算出的三态枚举，前端据此查语言包，不复制判据。
+ */
+export interface PresetFitMetrics {
+  log_loss: number;
+  rmse: number;
+  items: number;
+}
+
+/** 优化前后拟合结论的稳定枚举（M9-12）。 */
+export type PresetOptimizeVerdict =
+  | 'improved'
+  | 'not_improved'
+  | 'insufficient_sample'
+  | 'unavailable';
+
+export interface PresetOptimizeResult {
+  reviews_used: number;
+  weights: number[] | null;
+  fit_before: PresetFitMetrics;
+  fit_after: PresetFitMetrics;
+  optimized_at: string | null;
+  verdict: PresetOptimizeVerdict | string;
+}
+
+/** 优化作业状态；result 只在 succeeded 且报告可解析时非 null。 */
+export interface PresetJob {
+  id: number;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | string;
+  stage: string | null;
+  log_tail: string | null;
+  error: string | null;
+  result: PresetOptimizeResult | null;
+}
+
+/** 优化门槛：shortfall 只在 eligible 为 false 时有意义。 */
+export interface OptimizeGate {
+  reviews: number;
+  min: number;
+  shortfall: number;
+  eligible: boolean;
+}
+
+export interface PresetRecord {
+  id: number;
+  name: string;
+  desired_retention: number;
+  learning_steps: string;
+  relearning_steps: string;
+  maximum_interval_days: number;
+  enable_fuzz: boolean;
+  weights_optimized: boolean;
+  weights_optimized_at: string | null;
+  weights_review_count: number | null;
+  weights_raw: string | null;
+  job: PresetJob | null;
+}
+
+/** GET /api/v1/presets 与创建/编辑/回退共用的响应体。 */
+export interface PresetsResponse {
+  presets: PresetRecord[];
+  gate: OptimizeGate;
+}
+
+/** 触发优化与轮询状态共用的响应体。 */
+export interface PresetOptimizeResponse {
+  job: PresetJob | null;
+  gate: OptimizeGate;
+}
+
+/** 创建/编辑预设的请求体；enable_fuzz 必须显式给出，缺字段服务端拒绝。 */
+export interface PresetWriteRequest {
+  name: string;
+  desired_retention: number;
+  learning_steps: string;
+  relearning_steps: string;
+  maximum_interval_days: number;
+  enable_fuzz: boolean;
+}
+

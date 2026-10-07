@@ -28,7 +28,7 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {
 		return
 	}
-	router.GET("/presets", s.presetList)
+	router.GET("/presets", s.presetRoute)
 	// 写操作一律过 CSRF（DESIGN.md §4.3、§11）。
 	// 预设的新建与编辑（M3-14）：创建/编辑只改调度参数，卡组按 id 引用，无需迁移或重排。
 	router.POST("/presets", s.sessions.CSRFMiddleware(), s.presetCreate)
@@ -36,6 +36,8 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	router.POST("/presets/:id/optimize", s.sessions.CSRFMiddleware(), s.presetOptimize)
 	router.GET("/presets/:id/optimize/status", s.presetOptimizeStatus)
 	router.POST("/presets/:id/optimize/revert", s.sessions.CSRFMiddleware(), s.presetOptimizeRevert)
+	// SPA 预设接口（DESIGN.md §8.1）：同源 JSON 读写走 /api/v1/presets*，SSR 表单路由全部保留。
+	s.registerSPAPresetRoutes(router)
 }
 
 // presetList 渲染当前用户的预设列表；匿名访问被重定向到登录页。
