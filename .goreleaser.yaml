@@ -20,13 +20,12 @@ version: 2
 
 project_name: engram
 
-# *_templ.go 与 tailwind.css 都是 gitignore 的生成物，必须先补齐再编译（AGENTS.md §4）。
-# Svelte SPA 前端产物也必须在多平台交叉编译前构建一次，供 go:embed 嵌入。
+# 前端产物（frontend/dist）是 gitignore 的生成物，必须在多平台交叉编译前构建一次供
+# go:embed 嵌入；缺了它 Go 编译直接失败（AGENTS.md §4）。
 before:
   hooks:
     - npm --prefix frontend ci
     - npm --prefix frontend run build
-    - go generate ./...
 
 builds:
   - id: engram

@@ -1,5 +1,5 @@
 # M0-11：多阶段构建，产出「一个静态服务二进制 + 一个优化器适配器」的镜像（ROADMAP.md M0-11）。
-# 服务侧构建物只有一个二进制 + 可选 SQLite 文件；模板、静态资源、语言包都已 go:embed。
+# 服务侧构建物只有一个二进制 + 可选 SQLite 文件；静态资源、语言包与前端产物都已 go:embed。
 # 另带 FSRS 优化器适配器（tools/optimizer，Rust），可执行文件与主程序一起分发。
 # 本文件不含任何私有 registry、主机名或部署细节，只使用公开官方镜像。
 # syntax=docker/dockerfile:1
@@ -31,23 +31,16 @@ COPY frontend/ ./
 RUN npm run check \
     && npm run build
 
-# ---- 构建阶段：装 templ 与 Tailwind standalone CLI，嵌入前端产物后编译 ----
-# 用 glibc 基底（bookworm）：Tailwind 官方预编译的 tailwindcss-linux-x64 是 glibc 二进制，
-# 在 musl 的 Alpine 里 exec 会报 “no such file or directory”（缺动态链接器）。
+# ---- 构建阶段：嵌入前端产物后编译 Go 二进制 ----
 FROM golang:1.26-bookworm AS builder
 
-# templ 版本与 go.mod 的 github.com/a-h/templ 对齐；Tailwind 与本机 standalone 对齐。
-ARG TEMPL_VERSION=v0.3.1020
-ARG TAILWIND_VERSION=v4.3.3
 ARG VERSION=dev
 
+# ca-certificates 供 go mod download 走 HTTPS；样式由前端阶段的 Vite 产出，这里不需要
+# 任何模板引擎或独立 CSS 工具链。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-RUN go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
-RUN wget -q -O /usr/local/bin/tailwindcss \
-      https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-x64 \
-    && chmod +x /usr/local/bin/tailwindcss
 
 WORKDIR /src
 # 先只拷贝依赖清单，最大化层缓存。
@@ -58,9 +51,7 @@ COPY . .
 # 复制前端生产构建产物（frontend/dist）供 go:embed 嵌入
 COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
 
-# *_templ.go 与 tailwind.css 是 gitignore 的产物，必须在编译前生成。
-RUN go generate ./... \
-    && CGO_ENABLED=0 go build -trimpath \
+RUN CGO_ENABLED=0 go build -trimpath \
          -ldflags "-s -w -X main.version=${VERSION}" \
          -o /out/engram ./cmd/engram
 

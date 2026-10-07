@@ -1,7 +1,7 @@
 # CI：构建、生成、静态检查与测试（AGENTS.md §4、ROADMAP.md M0-10）。
 #
-# 顺序上有一条硬性原因：*_templ.go 与 internal/web/static/css/tailwind.css 都是
-# gitignore 的生成物，必须先 `go generate ./...` 再编译，否则模板包直接编译失败。
+# 顺序上有一条硬性原因：前端产物（frontend/dist）是 go:embed 的输入，必须先
+# `npm run build` 再编译 Go，否则嵌入时直接失败。
 #
 # 测试只跑 SQLite（AGENTS.md §2.5）：CI 不起任何数据库服务，internal/pgtest 门控的
 # PostgreSQL 用例在这里自己跳过并打印原因。需要覆盖生产用的 PG 驱动时，在本机设置
@@ -9,7 +9,7 @@
 #
 # 触发器只有 pull_request 与 workflow_dispatch，**不含 push**：main 由维护者直推，
 # 推之前本地已经跑完 §4 的全套检查，每次 push 再跑一遍只是重复。需要一次独立复核时
-# （碰了模板、go.mod / go.sum，或发版前）用 workflow_dispatch 手动触发对应 ref。
+# （碰了前端产物、go.mod / go.sum，或发版前）用 workflow_dispatch 手动触发对应 ref。
 #
 # 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME。
 name: ci
@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   verify:
-    name: build, generate and test
+    name: build and test
     runs-on: ubuntu-latest
 
     steps:
@@ -50,24 +50,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install templ and the Tailwind standalone CLI
-        run: |
-          set -euo pipefail
-          go install github.com/a-h/templ/cmd/templ@v0.3.1020
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/tailwindcss" \
-            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.3/tailwindcss-linux-x64
-          chmod +x "$HOME/.local/bin/tailwindcss"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
       - name: Show tool versions
         run: |
           go version
           node --version
           npm --version
-          templ version
-          tailwindcss --help | head -n 1
 
       # 前端构建先于 Go 编译：产物进入 frontend/dist，由 go:embed all:dist 嵌入二进制
       - name: Frontend check, test, and build
@@ -78,10 +65,6 @@ jobs:
           npm run check
           npm test -- --run
           npm run build
-
-      # 生成先于一切编译：模板与 CSS 是 gitignore 的产物。
-      - name: Generate templ code and Tailwind CSS
-        run: go generate ./...
 
       - name: Check formatting (gofmt)
         run: |
