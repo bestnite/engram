@@ -56,7 +56,7 @@
   onMount(loadShare);
 </script>
 
-<div class="py-8 max-w-3xl mx-auto px-4">
+<div class="py-10 max-w-4xl mx-auto px-4">
   <div class="mb-6">
     <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
       {$t('share.browse.heading')}

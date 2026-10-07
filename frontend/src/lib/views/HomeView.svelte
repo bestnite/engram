@@ -143,25 +143,25 @@
 
         <!-- 聚合指标卡片 -->
         <div data-testid="home-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div class="card-subtle p-4 rounded-lg">
+          <div class="card-elevated p-4 rounded-lg">
             <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.due_count')}</div>
             <div data-testid="home-due-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
               {formatNumber(summary.due)}
             </div>
           </div>
-          <div class="card-subtle p-4 rounded-lg">
+          <div class="card-elevated p-4 rounded-lg">
             <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.reviews_today')}</div>
             <div data-testid="home-reviews-today" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
               {formatNumber(summary.reviews_today)}
             </div>
           </div>
-          <div class="card-subtle p-4 rounded-lg">
+          <div class="card-elevated p-4 rounded-lg">
             <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.retention')}</div>
             <div data-testid="home-retention" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
               {summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}
             </div>
           </div>
-          <div class="card-subtle p-4 rounded-lg">
+          <div class="card-elevated p-4 rounded-lg">
             <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('stats.metric_decks')}</div>
             <div data-testid="home-decks-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
               {formatNumber(summary.decks)}
@@ -179,18 +179,18 @@
               href="/decks"
               class="text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
             >
-              {$t('home.view_all_decks')} &rarr;
+              {$t('home.view_all_decks')}
             </a>
           </div>
 
           {#if decks.length === 0}
-            <div data-testid="home-empty-decks" class="card-subtle py-8 text-center text-zinc-500 dark:text-zinc-400 rounded-lg">
+            <div data-testid="home-empty-decks" class="card-elevated py-8 text-center text-zinc-500 dark:text-zinc-400 rounded-lg">
               <p class="text-sm">{$t('home.no_decks')}</p>
             </div>
           {:else}
             <div data-testid="home-decks-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {#each decks as deck (deck.id)}
-                <div class="card-subtle p-4 rounded-lg flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+                <div class="card-elevated p-4 rounded-lg flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
                   <div>
                     <div class="flex items-start justify-between gap-2 mb-1">
                       <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">

@@ -211,7 +211,7 @@
       {/if}
 
       <!-- 个人基础资料区块：只放 profile 与 locale 字段（密码、两步验证等各有独立区块） -->
-      <section class="card-subtle p-6 rounded-xl space-y-6">
+      <section class="card-elevated p-6 rounded-xl space-y-6">
         <div>
           <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             {$t('settings.profile.heading')}
@@ -325,7 +325,7 @@
           </div>
         </form>
       </section>
-      <section class="card-subtle p-6 rounded-xl space-y-5 mt-6" data-testid="settings-password">
+      <section class="card-elevated p-6 rounded-xl space-y-5 mt-6" data-testid="settings-password">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.password.heading')}</h2>
         {#if passwordError}<p role="alert">{$t(passwordError)}</p>{/if}
         {#if passwordNotice}<p role="status">{$t(passwordNotice)}</p>{/if}
@@ -336,13 +336,13 @@
         </form>
       </section>
       <!-- 两步验证入口：服务端 GET /settings/totp 已切到应用壳，走规范路径 -->
-      <section class="card-subtle p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
+      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
         <a href="/settings/totp" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.totp.entry')}</a>
       </section>
       <!-- 邮件通知偏好入口：服务端 GET /settings/notifications 已切到应用壳，走规范路径 -->
-      <section class="card-subtle p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
+      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
         <a href="/settings/notifications" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.notifications.entry')}</a>

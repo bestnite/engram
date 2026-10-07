@@ -62,7 +62,7 @@
   }
 </script>
 
-<div class="py-10 max-w-3xl mx-auto px-4">
+<div class="py-10 max-w-4xl mx-auto px-4">
   <section class="card-elevated p-6 sm:p-8 rounded-xl">
     <h1 class="text-2xl font-bold tracking-tight">{$t('package.import.title')}</h1>
     <p class="mt-2 mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('package.import.intro')}</p>

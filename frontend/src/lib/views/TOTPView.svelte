@@ -168,13 +168,13 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-10" data-testid="totp-view">
+<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="totp-view">
   <a
     href="/settings"
     data-testid="totp-back"
     class="inline-block text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
   >
-    &larr; {$t('nav.settings')}
+    {$t('nav.settings')}
   </a>
 
   {#if loading}

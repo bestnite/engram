@@ -169,8 +169,11 @@
   onMount(load);
 </script>
 
-<section class="py-10 max-w-3xl mx-auto px-4">
-  <a href="/decks/{deckId}" class="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">← {$t('note_edit.back')}</a>
+<section class="py-10 max-w-4xl mx-auto px-4">
+  <a href="/decks/{deckId}" title={$t('note_edit.back')} class="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors">
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+    <span>{$t('note_edit.back')}</span>
+  </a>
   <h1 class="text-2xl font-bold my-5">{$t('note_edit.title', { id: noteId })}</h1>
   {#if loading}
     <p>{$t('note_edit.loading')}</p>

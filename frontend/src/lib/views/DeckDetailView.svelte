@@ -247,7 +247,7 @@
   });
 </script>
 
-<div class="py-8 max-w-5xl mx-auto px-4 space-y-6">
+<div class="py-10 max-w-4xl mx-auto px-4 space-y-6">
   <!-- 顶栏精炼导航与卡组信息 -->
   <div class="card-elevated p-6 sm:p-8 rounded-2xl">
     <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
@@ -334,9 +334,9 @@
 
   <!-- Tab 内容区域 -->
   {#if activeTab === 'sharing'}
-    <DeckSharingView />
+    <DeckSharingView embedded />
   {:else if activeTab === 'settings'}
-    <DeckSettingsView />
+    <DeckSettingsView embedded />
   {:else}
     <!-- 卡片管理 Tab -->
     <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-5">
@@ -600,7 +600,7 @@
               class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
               onclick={handlePrevPage}
             >
-              &larr; {$t('notes.prev_page')}
+              {$t('notes.prev_page')}
             </button>
             <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
               {$t('notes.page_info', { page, totalPages })}
@@ -612,7 +612,7 @@
               class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
               onclick={handleNextPage}
             >
-              {$t('notes.next_page')} &rarr;
+              {$t('notes.next_page')}
             </button>
           </div>
         {/if}

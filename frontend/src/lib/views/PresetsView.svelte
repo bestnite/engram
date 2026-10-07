@@ -400,7 +400,7 @@
   onDestroy(stopPolling);
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-10" data-testid="presets-view">
+<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="presets-view">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="presets-heading">
       {$t('presets.heading')}

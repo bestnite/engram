@@ -224,6 +224,8 @@ export const en: LocaleCatalog = {
   'keys.creating': 'Creating...',
   'keys.empty': 'No API keys.',
   'keys.revoke': 'Revoke',
+  'keys.revoking': 'Revoking...',
+  'keys.revoked': 'Revoked',
   'keys.confirm_revoke': 'Revoke {name}? This cannot be undone.',
   'note_edit.action': 'Edit',
   'note_edit.title': 'Edit note #{id}',

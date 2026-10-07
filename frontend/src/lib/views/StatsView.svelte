@@ -244,7 +244,7 @@
       <div data-testid="stats-data" class="space-y-8">
         <!-- 复习量 + 到期预测 -->
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <section data-testid="stats-volume" class="card-subtle p-5 rounded-lg space-y-4">
+          <section data-testid="stats-volume" class="card-elevated p-5 rounded-lg space-y-4">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.volume.heading')}
             </h2>
@@ -271,7 +271,7 @@
             </ul>
           </section>
 
-          <section data-testid="stats-due" class="card-subtle p-5 rounded-lg space-y-4">
+          <section data-testid="stats-due" class="card-elevated p-5 rounded-lg space-y-4">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.due.heading')}
             </h2>
@@ -303,7 +303,7 @@
         </div>
 
         <!-- 留存率：总体 + 每个稳定性桶 -->
-        <section data-testid="stats-retention" class="card-subtle p-5 rounded-lg space-y-4">
+        <section data-testid="stats-retention" class="card-elevated p-5 rounded-lg space-y-4">
           <div>
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.retention.heading')}
@@ -352,7 +352,7 @@
 
         <!-- 时间投入 / 连续打卡 / 判分来源 -->
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <section data-testid="stats-time" class="card-subtle p-5 rounded-lg space-y-4">
+          <section data-testid="stats-time" class="card-elevated p-5 rounded-lg space-y-4">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.time.heading')}
             </h2>
@@ -371,7 +371,7 @@
             </ul>
           </section>
 
-          <section data-testid="stats-streak" class="card-subtle p-5 rounded-lg space-y-4">
+          <section data-testid="stats-streak" class="card-elevated p-5 rounded-lg space-y-4">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.streak.heading')}
             </h2>
@@ -391,7 +391,7 @@
             </ul>
           </section>
 
-          <section data-testid="stats-grade" class="card-subtle p-5 rounded-lg space-y-4">
+          <section data-testid="stats-grade" class="card-elevated p-5 rounded-lg space-y-4">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.grade.heading')}
             </h2>
@@ -416,7 +416,7 @@
         </div>
 
         <!-- 学习曲线 -->
-        <section data-testid="stats-curve" class="card-subtle p-5 rounded-lg space-y-4">
+        <section data-testid="stats-curve" class="card-elevated p-5 rounded-lg space-y-4">
           <div>
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {$t('stats.curve.heading')}
@@ -456,7 +456,7 @@
 
         <!-- 卡组维度 / 标签维度 -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section data-testid="stats-deck" class="card-subtle rounded-lg overflow-hidden">
+          <section data-testid="stats-deck" class="card-elevated rounded-lg overflow-hidden">
             <div class="border-b border-zinc-100 dark:border-zinc-800 p-5">
               <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 {$t('stats.deck.heading')}
@@ -492,7 +492,7 @@
             {/if}
           </section>
 
-          <section data-testid="stats-tag" class="card-subtle rounded-lg overflow-hidden">
+          <section data-testid="stats-tag" class="card-elevated rounded-lg overflow-hidden">
             <div class="border-b border-zinc-100 dark:border-zinc-800 p-5">
               <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 {$t('stats.tag.heading')}

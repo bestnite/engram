@@ -224,6 +224,8 @@ export const zhCN: LocaleCatalog = {
   'keys.creating': '正在创建...',
   'keys.empty': '暂无 API 密钥。',
   'keys.revoke': '撤销',
+  'keys.revoking': '正在撤销...',
+  'keys.revoked': '已撤销',
   'keys.confirm_revoke': '确定撤销 {name}？此操作无法撤销。',
   'note_edit.action': '编辑',
   'note_edit.title': '编辑卡片 #{id}',

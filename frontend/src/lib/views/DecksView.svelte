@@ -175,7 +175,7 @@
   });
 </script>
 
-<div class="py-10 max-w-5xl mx-auto px-4">
+<div class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-6 sm:p-8 rounded-2xl">
     <!-- 顶栏标题与操作 -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-zinc-100 dark:border-zinc-800">
@@ -325,7 +325,7 @@
             role="button"
             tabindex="0"
             data-testid={`deck-card-${deck.id}`}
-            class="card-subtle p-5 rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 hover:border-blue-500/50 dark:hover:border-blue-400/50 hover:shadow-sm transition-all duration-150 flex flex-col justify-between cursor-pointer group text-left select-none relative"
+            class="card-elevated p-5 rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 hover:border-blue-500/50 dark:hover:border-blue-400/50 hover:shadow-sm transition-all duration-150 flex flex-col justify-between cursor-pointer group text-left select-none relative"
             onclick={(e) => handleCardClick(e, deck.id)}
             onkeydown={(e) => { if (e.key === 'Enter') navigate(`/decks/${deck.id}`); }}
           >

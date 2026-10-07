@@ -516,7 +516,7 @@
 </script>
 
 <svelte:head><title>{$t('review.spa.title')} · {$t('app.name')}</title></svelte:head>
-<section class="max-w-3xl mx-auto px-4 py-8 sm:py-12">
+<section class="max-w-4xl mx-auto px-4 py-10">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
     <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('review.spa.title')}</h1>
     <div

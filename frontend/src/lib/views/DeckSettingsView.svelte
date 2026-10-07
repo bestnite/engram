@@ -9,12 +9,15 @@
     initialLoading?: boolean;
     initialError?: ApiClientError | Error | null;
     initialSettings?: DeckSettings | null;
+    /** 嵌在卡组详情「设置」Tab 内时为真：不渲染页面级外壳与返回链接。 */
+    embedded?: boolean;
   }
 
   let {
     initialLoading = true,
     initialError = null,
     initialSettings = null,
+    embedded = false,
   }: Props = $props();
 
   // svelte-ignore state_referenced_locally
@@ -105,14 +108,17 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-10" data-testid="deck-settings-view">
-  <a
-    href="/decks/{encodeURIComponent(deckId)}"
-    data-testid="deck-settings-back"
-    class="inline-block text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-  >
-    &larr; {$t('deck.settings.back')}
-  </a>
+<div class={embedded ? 'space-y-5' : 'mx-auto max-w-4xl space-y-6 px-4 py-10'} data-testid="deck-settings-view">
+  {#if !embedded}
+    <a
+      href="/decks/{encodeURIComponent(deckId)}"
+      data-testid="deck-settings-back"
+      class="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+    >
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>{$t('deck.settings.back')}</span>
+    </a>
+  {/if}
 
   {#if loading}
     <div data-testid="deck-settings-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
@@ -135,11 +141,13 @@
       </button>
     </div>
   {:else if settings}
-    <header>
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-title">
-        {$t('deck.settings.title')}: {settings.deck_name}
-      </h1>
-    </header>
+    {#if !embedded}
+      <header>
+        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-title">
+          {$t('deck.settings.title')}: {settings.deck_name}
+        </h1>
+      </header>
+    {/if}
 
     <section class="card-elevated p-6 rounded-xl">
       <form onsubmit={save} data-testid="deck-settings-form" class="space-y-4">
