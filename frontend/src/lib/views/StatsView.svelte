@@ -497,6 +497,9 @@
               <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 {$t('stats.tag.heading')}
               </h2>
+              <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
+                   在重复卡组维度（没复习过的大标签一个都不出现）。 -->
+              <p data-testid="stats-tag-scope" class="mt-2 text-xs leading-relaxed text-zinc-400 dark:text-zinc-500">{$t('stats.tag.scope')}</p>
             </div>
             {#if detail.tags.length === 0}
               <div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.tag.empty')}</div>

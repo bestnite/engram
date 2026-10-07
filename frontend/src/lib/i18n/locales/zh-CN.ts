@@ -477,6 +477,7 @@ export const zhCN: LocaleCatalog = {
   'stats.deck.col.retention': '留存率',
   'stats.deck.col.elapsed': '累计耗时',
   'stats.tag.heading': '标签维度',
+  'stats.tag.scope': '只统计所选区间内已复习卡片上的标签：留存率需要复习记录才算得出来，所以还没复习过的标签不会出现在这里。',
   'stats.tag.empty': '该区间内还没有带标签的复习记录。',
   'stats.tag.col.tag': '标签',
   'stats.tag.col.reviews': '复习量',

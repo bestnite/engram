@@ -477,6 +477,7 @@ export const en: LocaleCatalog = {
   'stats.deck.col.retention': 'Retention',
   'stats.deck.col.elapsed': 'Time spent',
   'stats.tag.heading': 'By tag',
+  'stats.tag.scope': 'Only tags on cards reviewed in the selected range appear here: a retention rate needs review records, so a tag whose cards have not been reviewed yet cannot be listed.',
   'stats.tag.empty': 'No tagged reviews in this window yet.',
   'stats.tag.col.tag': 'Tag',
   'stats.tag.col.reviews': 'Reviews',

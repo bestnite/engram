@@ -692,3 +692,48 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 		})
 	}
 }
+
+// TestStatsTagBreakdownCountsOnlyReviewedNotes 把标签维度的口径钉死（DESIGN.md §9）：
+// 这个维度回答的是「哪块内容弱」，留存率要由复习记录算出来，所以它只统计**已复习卡片上**
+// 的标签。同一个卡组里没有复习记录的标签不会出现——这是刻意口径，不是漏算；页面上也写了
+// 这行说明，否则它会看起来像在重复卡组维度。
+func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate: %v", err)
+			}
+			p := NewPreset(1, "tag scope")
+			if err := db.Create(&p).Error; err != nil {
+				t.Fatalf("create preset: %v", err)
+			}
+			d := Deck{OwnerUserID: 1, Name: "Tag scope deck", Visibility: DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: statsNow}
+			if err := db.Create(&d).Error; err != nil {
+				t.Fatalf("create deck: %v", err)
+			}
+			reviewed := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`,
+				TagsJSON: `["studied"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+			untouched := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q2","back":"a2"}`,
+				TagsJSON: `["never-reviewed"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+			if err := db.Create(&reviewed).Error; err != nil {
+				t.Fatalf("create reviewed note: %v", err)
+			}
+			if err := db.Create(&untouched).Error; err != nil {
+				t.Fatalf("create untouched note: %v", err)
+			}
+			cardID := createStatsCard(t, db, reviewed.ID, "forward")
+			seedReview(t, db, cardID, "2026-10-02", 3, 2, 5, 1000, "self", statsNow)
+
+			got, err := NewStatsStore(db).TagBreakdown(context.Background(), 1, "2026-01-01", "2026-12-31")
+			if err != nil {
+				t.Fatalf("TagBreakdown() error = %v", err)
+			}
+			if len(got) != 1 || got[0].Tag != "studied" {
+				t.Fatalf("TagBreakdown() = %+v, want only the tag on the reviewed note", got)
+			}
+			if got[0].Reviews != 1 || got[0].Passed != 1 {
+				t.Errorf("tag row = %+v, want 1 review passed (hand-computable)", got[0])
+			}
+		})
+	}
+}

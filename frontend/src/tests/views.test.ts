@@ -248,6 +248,10 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('Stats deck');
     expect(html).toContain('66.7%');
     expect(html).toContain('algebra');
+    // 标签维度的口径必须写在页面上：它只数「已复习卡片上的标签」，不写清楚时看起来像在
+    // 重复卡组维度（没复习过的大标签一个都不出现，用户会以为统计只认卡组名）。
+    expect(html).toContain('data-testid="stats-tag-scope"');
+    expect(html).toContain('留存率需要复习记录才算得出来');
 
     // 判分来源分布。
     expect(html).toContain('自评');
@@ -280,6 +284,7 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('Review volume');
     expect(html).toContain('Due forecast');
     expect(html).toContain('Grading source');
+    expect(html).toContain('retention rate needs review records');
     expect(html).not.toContain('复习量');
   });
 });
