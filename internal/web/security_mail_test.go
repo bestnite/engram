@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -274,14 +273,11 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 	}
 	assertNoUnsubscribeHeader(t, verifyRows)
 
-	// 4) 凭据变更通知（改密码）——该端点仍由 SSR 表单承担，不在本次删除范围内。
-	change := postForm(t, ts.srv, "/settings/password", url.Values{
-		auth.CSRFFieldName: {ts.csrf},
-		"old_password":     {"Sup3rSecret!"},
-		"new_password":     {"N3wSup3rSecret!"},
-	}, ts.cookies)
-	if change.Code != http.StatusSeeOther {
-		t.Fatalf("POST /settings/password status = %d, want 303 (body %s)", change.Code, snippet(change.Body.String()))
+	// 4) 凭据变更通知（改密码）—— SSR 表单已随页面层删除，改走 SPA 使用的 JSON 端点。
+	change := jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
+		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, ts.cookies, ts.csrf)
+	if change.Code != http.StatusNoContent {
+		t.Fatalf("PATCH /api/v1/settings/password status = %d, want 204 (body %s)", change.Code, snippet(change.Body.String()))
 	}
 	credRows := outboxByType(t, ts.db, mail.TypeCredentialChanged)
 	if len(credRows) != 1 {
@@ -291,12 +287,10 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 
 	// 5) 账号被禁用通知（管理员禁用另一个账号）。
 	targetID := createTargetUser(t, ts)
-	disable := postForm(t, ts.srv, "/admin/users/"+strconv.FormatUint(targetID, 10)+"/status", url.Values{
-		auth.CSRFFieldName: {ts.csrf},
-		"action":           {"disable"},
-	}, ts.cookies)
-	if disable.Code != http.StatusSeeOther {
-		t.Fatalf("POST /admin/users/:id/status status = %d, want 303 (body %s)", disable.Code, snippet(disable.Body.String()))
+	disable := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/status",
+		`{"action":"disable"}`, ts.cookies, ts.csrf)
+	if disable.Code != http.StatusNoContent {
+		t.Fatalf("POST /api/v1/admin/users/:id/status status = %d, want 204 (body %s)", disable.Code, snippet(disable.Body.String()))
 	}
 	statusRows := outboxByType(t, ts.db, mail.TypeAccountStatus)
 	if len(statusRows) != 1 {
@@ -394,13 +388,11 @@ func TestSecurityMailClassAHasNoUnsubscribeHeader(t *testing.T) {
 	// 触发全部五类。
 	_, _ = issueResetToken(t, ts)
 	resendVerificationJSON(t, ts)
-	postForm(t, ts.srv, "/settings/password", url.Values{
-		auth.CSRFFieldName: {ts.csrf}, "old_password": {"Sup3rSecret!"}, "new_password": {"N3wSup3rSecret!"},
-	}, ts.cookies)
+	jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
+		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, ts.cookies, ts.csrf)
 	targetID := createTargetUser(t, ts)
-	postForm(t, ts.srv, "/admin/users/"+strconv.FormatUint(targetID, 10)+"/status", url.Values{
-		auth.CSRFFieldName: {ts.csrf}, "action": {"disable"},
-	}, ts.cookies)
+	jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/status",
+		`{"action":"disable"}`, ts.cookies, ts.csrf)
 
 	for _, typ := range []mail.Type{
 		mail.TypePasswordReset, mail.TypeEmailVerification, mail.TypeNewDeviceLogin,
