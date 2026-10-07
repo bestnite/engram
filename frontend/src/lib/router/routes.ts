@@ -23,6 +23,9 @@ import AdminAuditView from '../views/admin/AdminAuditView.svelte';
 import AdminUsersView from '../views/admin/AdminUsersView.svelte';
 import AdminRegistrationView from '../views/admin/AdminRegistrationView.svelte';
 import AdminAPIKeysView from '../views/admin/AdminAPIKeysView.svelte';
+import AdminSettingsView from '../views/admin/AdminSettingsView.svelte';
+import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
+import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -229,5 +232,23 @@ export const routes: RouteDefinition[] = [
     path: '/admin/api-keys',
     name: 'admin-api-keys',
     component: AdminAPIKeysView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 系统设置。服务端 GET /admin/settings 已切到应用壳，读写走 /api/v1/admin/settings。
+    path: '/admin/settings',
+    name: 'admin-settings',
+    component: AdminSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 邮件（SMTP）。服务端 GET /admin/smtp 已切到应用壳，读写与测试走 /api/v1/admin/smtp*。
+    path: '/admin/smtp',
+    name: 'admin-smtp',
+    component: AdminSMTPView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 身份与 OIDC。服务端 GET /admin/oidc 已切到应用壳，读写、测试与解绑走 /api/v1/admin/oidc*。
+    path: '/admin/oidc',
+    name: 'admin-oidc',
+    component: AdminOIDCView as unknown as RouteDefinition['component'],
   },
 ];

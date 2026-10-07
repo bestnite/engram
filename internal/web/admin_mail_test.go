@@ -191,6 +191,8 @@ func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 // 绝不静默。
 func TestAdminMailUnconfiguredExplainedOnSMTPPage(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 未配置说明渲染。
+	srv.spa = nil
 	// 不调用 attachAdminMail：srv.mail 保持为空（未配置）。
 
 	page := getWithCookies(t, srv, "/admin/smtp", cookies)

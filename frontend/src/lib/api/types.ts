@@ -952,3 +952,108 @@ export interface AdminAPIKeysResponse {
   total: number;
 }
 
+/** 系统设置 / SMTP / OIDC（Go: internal/web/spa_admin_{settings,smtp,oidc}.go）。 */
+
+/** 设置表格里的一行；unit 非空时值按单位解释（当前只有 "bytes"）。 */
+export interface AdminSettingRow {
+  key: string;
+  value: string;
+  source: string;
+  editable: boolean;
+  sensitive: boolean;
+  configured: boolean;
+  unit?: string;
+}
+
+/** 一个设置分区（general / media / optimize / sensitive）。 */
+export interface AdminSettingsSection {
+  name: string;
+  rows: AdminSettingRow[];
+}
+
+/** GET /api/v1/admin/settings 响应。 */
+export interface AdminSettingsResponse {
+  sections: AdminSettingsSection[];
+}
+
+/** outbox 读数。 */
+export interface AdminOutbox {
+  pending: number;
+  failed: number;
+  last_error: string;
+  last_attempts: number;
+}
+
+/** GET /api/v1/admin/smtp 响应。 */
+export interface AdminSMTPResponse {
+  host: string;
+  host_source: string;
+  port: string;
+  port_source: string;
+  username: string;
+  username_source: string;
+  from: string;
+  from_source: string;
+  tls_mode: string;
+  password_configured: boolean;
+  password_source: string;
+  configured: boolean;
+  outbox: AdminOutbox;
+  admin_notify_ready: boolean;
+}
+
+/** POST /api/v1/admin/smtp(/test) 请求；空字段表示沿用已保存值。 */
+export interface AdminSMTPRequest {
+  host?: string;
+  port?: string;
+  username?: string;
+  from?: string;
+  tls_mode?: string;
+  password?: string;
+}
+
+/** 测试连接的响应；ok 为 true 时忽略 message。 */
+export interface AdminTestResult {
+  ok: boolean;
+  code: string;
+  message: string;
+}
+
+/** 一条已绑定身份。 */
+export interface AdminOIDCIdentity {
+  id: number;
+  provider: string;
+  subject: string;
+  email: string;
+  username: string;
+  linked_at: string;
+}
+
+/** GET /api/v1/admin/oidc 响应。 */
+export interface AdminOIDCResponse {
+  enabled: boolean;
+  issuer: string;
+  client_id: string;
+  secret_configured: boolean;
+  redirect_uri: string;
+  scopes: string;
+  claim_subject: string;
+  claim_email: string;
+  claim_name: string;
+  claim_email_verified: string;
+  identities: AdminOIDCIdentity[];
+}
+
+/** POST /api/v1/admin/oidc(/test) 请求；空字符串字段表示不修改。 */
+export interface AdminOIDCRequest {
+  enabled: boolean;
+  issuer?: string;
+  client_id?: string;
+  scopes?: string;
+  claim_subject?: string;
+  claim_email?: string;
+  claim_name?: string;
+  claim_email_verified?: string;
+  client_secret?: string;
+}
+

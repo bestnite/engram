@@ -126,4 +126,19 @@ func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	// API Key 总览（读 + 撤销）。
 	g.GET("/api-keys", s.spaAdminAPIKeys)
 	g.POST("/api-keys/:id/revoke", s.sessions.CSRFMiddleware(), s.spaAdminAPIKeyRevoke)
+
+	// 系统设置（读 + 写；敏感键经加密落库）。
+	g.GET("/settings", s.spaAdminSettings)
+	g.POST("/settings", s.sessions.CSRFMiddleware(), s.spaAdminSettingsSave)
+
+	// 邮件（SMTP）配置与测试连接。
+	g.GET("/smtp", s.spaAdminSMTP)
+	g.POST("/smtp", s.sessions.CSRFMiddleware(), s.spaAdminSMTPSave)
+	g.POST("/smtp/test", s.sessions.CSRFMiddleware(), s.spaAdminSMTPTest)
+
+	// 身份与 OIDC 配置、测试连接与解绑。
+	g.GET("/oidc", s.spaAdminOIDC)
+	g.POST("/oidc", s.sessions.CSRFMiddleware(), s.spaAdminOIDCSave)
+	g.POST("/oidc/test", s.sessions.CSRFMiddleware(), s.spaAdminOIDCTest)
+	g.POST("/oidc/identities/:id/unlink", s.sessions.CSRFMiddleware(), s.spaAdminOIDCUnlink)
 }

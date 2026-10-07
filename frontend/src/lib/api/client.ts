@@ -960,6 +960,63 @@ export class ApiClient {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/api-keys/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
   }
+
+  /** 读取系统设置分区（GET /api/v1/admin/settings）。 */
+  async getAdminSettings(): Promise<import('./types').AdminSettingsResponse> {
+    return this.request<import('./types').AdminSettingsResponse>('/api/v1/admin/settings');
+  }
+
+  /** 保存系统设置（POST /api/v1/admin/settings）；只提交非空值，空串由服务端按「不修改」处理。 */
+  async saveAdminSettings(values: Record<string, string>): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>('/api/v1/admin/settings', { method: 'POST', body: JSON.stringify({ values }) });
+  }
+
+  /** 读取 SMTP 配置与 outbox 读数（GET /api/v1/admin/smtp）。 */
+  async getAdminSMTP(): Promise<import('./types').AdminSMTPResponse> {
+    return this.request<import('./types').AdminSMTPResponse>('/api/v1/admin/smtp');
+  }
+
+  /** 保存 SMTP 配置（POST /api/v1/admin/smtp）；空字段表示不修改。 */
+  async saveAdminSMTP(input: import('./types').AdminSMTPRequest): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>('/api/v1/admin/smtp', { method: 'POST', body: JSON.stringify(input) });
+  }
+
+  /** 测试 SMTP 连接（POST /api/v1/admin/smtp/test）；失败时 message 是服务端原始错误文本。 */
+  async testAdminSMTP(input: import('./types').AdminSMTPRequest): Promise<import('./types').AdminTestResult> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<import('./types').AdminTestResult>('/api/v1/admin/smtp/test', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 读取 OIDC 配置与已绑定身份（GET /api/v1/admin/oidc）。 */
+  async getAdminOIDC(): Promise<import('./types').AdminOIDCResponse> {
+    return this.request<import('./types').AdminOIDCResponse>('/api/v1/admin/oidc');
+  }
+
+  /** 保存 OIDC 配置（POST /api/v1/admin/oidc）；空字符串字段表示不修改。 */
+  async saveAdminOIDC(input: import('./types').AdminOIDCRequest): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>('/api/v1/admin/oidc', { method: 'POST', body: JSON.stringify(input) });
+  }
+
+  /** 测试 OIDC 发现文档（POST /api/v1/admin/oidc/test）；失败时 message 是 provider 原始错误。 */
+  async testAdminOIDC(input: import('./types').AdminOIDCRequest): Promise<import('./types').AdminTestResult> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<import('./types').AdminTestResult>('/api/v1/admin/oidc/test', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 解绑一条外部身份（POST /api/v1/admin/oidc/identities/:id/unlink）。 */
+  async unlinkAdminOIDCIdentity(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/oidc/identities/${encodeURIComponent(String(id))}/unlink`, { method: 'POST', body: '{}' });
+  }
 }
 
 /**

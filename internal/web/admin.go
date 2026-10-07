@@ -114,7 +114,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminSettingsSave)
 			} else {
-				handlers = append(handlers, s.adminSettingsPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminSettingsPage))
 			}
 		case "/admin/jobs":
 			handlers = append(handlers, s.adminJobsPage)
@@ -124,7 +124,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminOIDCSave)
 			} else {
-				handlers = append(handlers, s.adminOIDCPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminOIDCPage))
 			}
 		case "/admin/oidc/test":
 			handlers = append(handlers, s.adminOIDCTest)
@@ -134,7 +134,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminSMTPSave)
 			} else {
-				handlers = append(handlers, s.adminSMTPPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminSMTPPage))
 			}
 		case "/admin/smtp/test":
 			handlers = append(handlers, s.adminSMTPTest)

@@ -24,6 +24,8 @@ var testSecretKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef01
 // 不重启即生效，且页面标出来源。这里同时验证上传上限的生效值跟上（上传接口共用的解析函数）。
 func TestAdminSettingsChangeAppliesWithoutRestart(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 设置页与来源标注。
+	srv.spa = nil
 
 	before := getWithCookies(t, srv, "/admin/settings", cookies)
 	if before.Code != http.StatusOK {
@@ -125,6 +127,8 @@ func TestAdminDefaultLocaleAppliesWithoutRestart(t *testing.T) {
 // 敏感项只显示「已配置/未配置」，页面上绝不出现明文，库里存的是密文。
 func TestAdminSensitiveSettingNeverRevealsPlaintext(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 敏感项的「已配置」渲染。
+	srv.spa = nil
 	codec, err := store.NewSecretCodec(testSecretKey)
 	if err != nil {
 		t.Fatalf("NewSecretCodec() error = %v", err)
@@ -169,6 +173,8 @@ func TestAdminSensitiveSettingNeverRevealsPlaintext(t *testing.T) {
 // 提交，重定向回设置页并给出提示，且什么都没存——存量值原样保留、生效值不变。
 func TestAdminOptimizeMinReviewsRejectsBelowFloor(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 设置页的旋钮与提示渲染。
+	srv.spa = nil
 	ctx := context.Background()
 
 	tr, err := i18n.New()

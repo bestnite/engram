@@ -85,6 +85,8 @@ func deadAddr(t *testing.T) string {
 func TestAdminSMTPPageShowsUnconfigured(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 	srv.secrets = mustCodec(t)
+	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 未配置态渲染。
+	srv.spa = nil
 
 	rec := getWithCookies(t, srv, "/admin/smtp", cookies)
 	if rec.Code != http.StatusOK {
@@ -105,6 +107,8 @@ func TestAdminSMTPPageShowsUnconfigured(t *testing.T) {
 func TestAdminSMTPSaveAndShowConfigured(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
+	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 配置回显。
+	srv.spa = nil
 
 	const pw = "smtp-test-plaintext-pw"
 	rec := postForm(t, srv, "/admin/smtp", url.Values{
