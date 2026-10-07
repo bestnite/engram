@@ -47,7 +47,7 @@ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 | A3 | 未揭示答案时，在卡片正文上横向滑动 | 任一横向滑动 = 显示答案 | **待 nite 真机执行**。脚本侧行为已核实（`review.js` `onTouchEnd`：`\|dx\| ≥ 45` 且 `\|dx\| ≥ \|dy\|` 才触发）。 |
 | A4 | 已揭示后左滑 / 右滑 | 左滑 = 重来（Again），右滑 = 良好（Good） | **待 nite 真机执行**。脚本侧已核实（`clickRating("1")` / `clickRating("3")`）。 |
 | A5 | 在作答输入框（`typed`/`numeric` 题型）内横向拖动 | 不触发评分，输入不受影响 | **待 nite 真机执行**。脚本侧已核实：落点在 `INPUT/TEXTAREA/SELECT/BUTTON/A` 上的滑动被忽略（`review.js` `interactiveTarget`）。 |
-| A6 | 连续快速点两次评分按钮 | 页面**不缩放** | **待 nite 真机执行**（iOS Safari / Android Chrome 的系统双击缩放是否被抑制，无法在 CI 断言；`review_touch_test.go:16-22` 明确把这条列为手测项）。 |
+| A6 | 连续快速点两次评分按钮 | 页面**不缩放** | **待 nite 真机执行**（iOS Safari / Android Chrome 的系统双击缩放是否被抑制，无法在 CI 断言；SSR 的 `review.js` 与其 Node 模拟器已随 SSR 页面层删除，SPA 侧的滑动/键盘决策由 `frontend/src/lib/review-shortcuts.ts` 的单测覆盖，本条仍需真机手测）。 |
 | A7 | 在卡片正文上长按约 1 秒 | 不弹「拷贝 / 查询」菜单，不选中文字 | **待 nite 真机执行**。 |
 | A8 | 观察评分按钮的点击区高度 | 每档按钮点击区 ≥ 44px | **已核实**：评分按钮 class 含 `min-h-11`（`review.templ:96`），Tailwind 默认 `min-h-11` = 2.75rem = **44px**（根字号 16px 时）；「显示答案」按钮同为 `min-h-11`（`review.templ:69`）。复习区域带 `touch-manipulation select-none`（`review.templ:21`）。 |
 | A9 | 连刷 50 张卡 | 无卡顿、无系统菜单误触（`DESIGN.md` §12 M8 验收） | **待 nite 真机执行**。 |
@@ -113,7 +113,8 @@ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 **脚本化触屏序列（M8-1）**：用零依赖 DOM 替身在 Node 里回放「滑动揭示 → 左滑 Again → 长按无菜单 → 双击无缩放 → 输入框内滑动被忽略」：
 
 ```
-$ node internal/web/testdata/review_touch_sim.mjs internal/web/static/js/review.js
+# 无对应命令：SSR 复习脚本与 testdata/review_touch_sim.mjs 已随 SSR 页面层删除；
+# SPA 的等价决策在 frontend/src/lib/review-shortcuts.ts，由 npm test 覆盖。
 ok   - swipe while hidden reveals the answer
 ok   - swipe while hidden shows the ratings
 ok   - swipe while hidden hides the show-answer button
