@@ -56,3 +56,4 @@ PROGRESS.local.md
 
 # ── 设计规范（不入库：规范由维护者本地持有，不进开源仓库）──────────
 DESIGN.md
+.hermes/
