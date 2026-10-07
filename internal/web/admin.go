@@ -46,6 +46,7 @@ func adminRoutes() []adminRoute {
 		{Method: http.MethodGet, Path: "/admin/health"},
 		{Method: http.MethodGet, Path: "/admin/api-keys"},
 		{Method: http.MethodGet, Path: "/admin/i18n"},
+		{Method: http.MethodGet, Path: "/admin/mail-templates"},
 	}
 }
 

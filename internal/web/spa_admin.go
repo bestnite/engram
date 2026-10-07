@@ -110,6 +110,13 @@ func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	g.POST("/users/:id/logout", s.sessions.CSRFMiddleware(), s.spaAdminUserForceLogout)
 	g.POST("/users/:id/delete", s.sessions.CSRFMiddleware(), s.spaAdminUserDelete)
 
+	// 邮件模板（DESIGN.md §4.7）：列表读 + 保存 / 删除 / 预览 / 测试发信（写操作过 CSRF）。
+	g.GET("/mail-templates", s.spaAdminMailTemplates)
+	g.PUT("/mail-templates/:type/:locale", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplateSave)
+	g.DELETE("/mail-templates/:type/:locale", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplateDelete)
+	g.POST("/mail-templates/preview", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplatePreview)
+	g.POST("/mail-templates/test", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplateTest)
+
 	// 注册与邀请。
 	g.GET("/registration", s.spaAdminRegistration)
 	g.POST("/registration", s.sessions.CSRFMiddleware(), s.spaAdminRegistrationSave)

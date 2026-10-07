@@ -1637,6 +1637,12 @@
   translation: "最后一次尝试次数"
 - id: admin.setting.smtp.outbox.none
   translation: "—"
+- id: admin.mail.test.subject
+  translation: "测试邮件：{site} 邮件模板预览"
+- id: admin.mail.test.body
+  translation: "这是一封测试邮件：你正在管理面板里预览邮件模板。
+
+它用样例变量渲染；真正的收件人会看到他们的真实数据。"
 - id: mail.footer.note
   translation: "你收到这封邮件，因为你开启了此类通知；可以随时在设置里关闭。"
 - id: mail.footer.unsubscribe

@@ -34,6 +34,9 @@ const (
 
 	// ActionSettingUpdate 是管理面板修改系统设置（M6-5）时写入的审计动作。
 	ActionSettingUpdate = "setting.update"
+	// ActionMailTemplateUpdate 是管理面板保存或删除邮件模板（DESIGN.md §4.7）时写入的
+	// 审计动作。模板决定所有用户收到的邮件长什么样，与系统设置同级。
+	ActionMailTemplateUpdate = "mail.template_update"
 
 	// ActionInviteCreate 是管理面板创建邀请码（M6-3）时写入的审计动作。
 	ActionInviteCreate = "invite.create"

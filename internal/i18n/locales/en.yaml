@@ -1639,6 +1639,12 @@
   translation: "Attempts for last error"
 - id: admin.setting.smtp.outbox.none
   translation: "—"
+- id: admin.mail.test.subject
+  translation: "Test mail: {{site}} template preview"
+- id: admin.mail.test.body
+  translation: "This is a test mail: you are previewing an email template in the admin panel.
+
+It renders with sample variables; real recipients see their own data."
 - id: mail.footer.note
   translation: "You are receiving this because you turned this notification on. You can turn it off at any time in settings."
 - id: mail.footer.unsubscribe
