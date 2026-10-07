@@ -29,6 +29,7 @@ import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
 import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
 import AdminJobsView from '../views/admin/AdminJobsView.svelte';
 import AdminI18nView from '../views/admin/AdminI18nView.svelte';
+import AdminMailTemplatesView from '../views/admin/AdminMailTemplatesView.svelte';
 import ForgotPasswordView from '../views/ForgotPasswordView.svelte';
 import ResetPasswordView from '../views/ResetPasswordView.svelte';
 import EmailSettingsView from '../views/EmailSettingsView.svelte';
@@ -292,6 +293,13 @@ export const routes: RouteDefinition[] = [
     path: '/admin/i18n',
     name: 'admin-i18n',
     component: AdminI18nView as unknown as RouteDefinition['component'],
+  },
+{
+    // 邮件模板（DESIGN.md §4.7）。服务端 GET /admin/mail-templates 已切到应用壳，
+    // 读写走 /api/v1/admin/mail-templates*。
+    path: '/admin/mail-templates',
+    name: 'admin-mail-templates',
+    component: AdminMailTemplatesView as unknown as RouteDefinition['component'],
   },
   {
     // 请求密码重置（DESIGN.md §8.1）。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。

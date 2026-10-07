@@ -6,6 +6,8 @@ import {
   type DeckSettings,
   type UpdateDeckSettingsRequest,
   type CreateDeckRequest,
+  type AdminMailTemplatesResponse,
+  type AdminMailTemplatePreview,
   type NotesResponse,
   type Note,
   type NoteListParams,
@@ -980,6 +982,69 @@ export class ApiClient {
   }
 
   /** 删除预设（DELETE /api/v1/presets/:id）；成功后返回整份最新预设列表。 */
+  /** 管理面板：邮件模板清单（类型 + 变量表 + 已保存的模板）。 */
+  async getAdminMailTemplates(): Promise<AdminMailTemplatesResponse> {
+    return this.request<AdminMailTemplatesResponse>('/api/v1/admin/mail-templates');
+  }
+
+  /** 管理面板：保存一份邮件模板（整份替换，主题与正文必须来自同一次编辑）。 */
+  async saveAdminMailTemplate(
+    type: string,
+    locale: string,
+    input: { subject: string; body_md: string }
+  ): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request<{ saved: boolean }>(
+      `/api/v1/admin/mail-templates/${encodeURIComponent(type)}/${encodeURIComponent(locale)}`,
+      { method: 'PUT', body: JSON.stringify(input) }
+    );
+  }
+
+  /** 管理面板：删掉自定义模板，回到内置正文。 */
+  async deleteAdminMailTemplate(type: string, locale: string): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request<{ deleted: boolean }>(
+      `/api/v1/admin/mail-templates/${encodeURIComponent(type)}/${encodeURIComponent(locale)}`,
+      { method: 'DELETE' }
+    );
+  }
+
+  /** 管理面板：用样例值渲染草稿，不写库、不发信。 */
+  async previewAdminMailTemplate(input: {
+    type: string;
+    locale: string;
+    subject: string;
+    body_md: string;
+  }): Promise<AdminMailTemplatePreview> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<AdminMailTemplatePreview>('/api/v1/admin/mail-templates/preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 管理面板：把渲染结果以样例值发给自己。 */
+  async testAdminMailTemplate(input: {
+    type: string;
+    locale: string;
+    subject: string;
+    body_md: string;
+  }): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request<{ queued: boolean }>('/api/v1/admin/mail-templates/test', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
   async deletePreset(id: number | string): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();

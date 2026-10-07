@@ -1284,3 +1284,40 @@ export interface UnsubscribeConfirmResponse {
   type: string;
 }
 
+/** 邮件模板（DESIGN.md §4.7）：每个邮件类型每种语言一份，缺失即回退内置正文。 */
+export interface AdminMailTemplateVar {
+  name: string;
+  required: boolean;
+  /** 变量用途的语言包键；界面按它本地化，不硬编码说明文字。 */
+  note_key: string;
+}
+
+export interface AdminMailTemplateType {
+  type: string;
+  class: string;
+  label_key: string;
+  vars: AdminMailTemplateVar[];
+}
+
+export interface AdminMailTemplateRow {
+  type: string;
+  locale: string;
+  subject: string;
+  body_md: string;
+  updated_at: string;
+}
+
+export interface AdminMailTemplatesResponse {
+  locales: string[];
+  /** 回退链第二级：没有自定义模板时按它取，界面据此说明。 */
+  site_default_locale: string;
+  types: AdminMailTemplateType[];
+  rows: AdminMailTemplateRow[];
+}
+
+export interface AdminMailTemplatePreview {
+  subject: string;
+  text: string;
+  html: string;
+  variables: Record<string, string>;
+}
