@@ -5,6 +5,7 @@
   import type { ApiClient, StatsSummary, Deck } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { deckVisibilityLabel as visibilityLabel } from '../labels';
 
   interface Props {
     client?: ApiClient;
@@ -186,9 +187,9 @@
                       <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {deck.name}
                       </h3>
-                      {#if deck.visibility}
-                        <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
-                          {deck.visibility}
+                      {#if visibilityLabel(deck.visibility, $t)}
+                        <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">
+                          {visibilityLabel(deck.visibility, $t)}
                         </span>
                       {/if}
                     </div>

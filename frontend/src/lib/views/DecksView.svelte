@@ -9,6 +9,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import { deckVisibilityLabel as visibilityLabel } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -452,9 +453,9 @@
                 </div>
 
                 <div class="flex items-center gap-1.5 shrink-0">
-                  {#if deck.visibility}
-                    <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-mono">
-                      {deck.visibility}
+                  {#if visibilityLabel(deck.visibility, $t)}
+                    <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-medium">
+                      {visibilityLabel(deck.visibility, $t)}
                     </span>
                   {/if}
                   <button

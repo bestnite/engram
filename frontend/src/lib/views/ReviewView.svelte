@@ -10,6 +10,7 @@
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { noteKindLabel as kindLabel } from '../labels';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -563,8 +564,8 @@
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
-          <span class="text-xs font-mono uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded">
-            {current.kind}
+          <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded">
+            {kindLabel(current.kind, $t)}
           </span>
           <button
             type="button"

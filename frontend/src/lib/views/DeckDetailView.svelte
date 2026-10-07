@@ -11,6 +11,8 @@
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { deckVisibilityLabel as visibilityLabel, noteKindLabel as kindLabel } from '../labels';
+  import { CARD_KIND_FIELDS } from '../card-fields';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -56,22 +58,8 @@
 
   // 题型清单的后端标识与展示名分开：标识符进查询串，展示名一律走语言包
   // （此前下拉里直接渲染 kind 字面量，中文界面下会露出 basic/cloze 这类内部标识）。
-  const CARD_KINDS = [
-    'basic',
-    'basic_both',
-    'cloze',
-    'list',
-    'typed',
-    'numeric',
-    'choice_single',
-    'choice_multi',
-    'true_false',
-    'short_answer',
-  ] as const;
-
-  function cardKindLabel(kind: string): string {
-    return $t(`notes.kind.${kind}` as never);
-  }
+  // 清单本身取自字段表——同一份题型清单在别处再写一遍，迟早会漂移。
+  const CARD_KINDS = Object.keys(CARD_KIND_FIELDS);
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
@@ -286,9 +274,9 @@
           <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
             {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
           </h1>
-          {#if deck?.visibility}
-            <span class="px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
-              {deck.visibility}
+          {#if visibilityLabel(deck?.visibility, $t)}
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
+              {visibilityLabel(deck?.visibility, $t)}
             </span>
           {/if}
         </div>
@@ -382,7 +370,7 @@
           testId="filter-kind-select"
           options={[
             { value: '', label: $t('notes.all_kinds') },
-            ...CARD_KINDS.map((kind) => ({ value: kind, label: cardKindLabel(kind) })),
+            ...CARD_KINDS.map((kind) => ({ value: kind, label: kindLabel(kind, $t) })),
           ]}
         />
         {#if hasFilter}
@@ -500,8 +488,8 @@
                     label={$t('notes.select_one')}
                   />
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
-                  <span class="px-2 py-0.5 rounded font-mono text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
-                    {note.kind}
+                  <span class="px-2 py-0.5 rounded text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
+                    {kindLabel(note.kind, $t)}
                   </span>
                   {#if note.external_ref}
                     <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
