@@ -42,7 +42,7 @@ describe('SPA media picker editor integration', () => {
     expect(view).toContain('apiClient.uploadDeckMedia(deckId, file)');
     expect(view).toContain('insertMedia(result.url)');
     expect(view).toContain('data-testid="spa-media-upload-input"');
-    expect(view).toContain('data-testid="spa-media-upload-submit"');
+    expect(view).toContain('testId="spa-media-upload-submit"');
     expect(view).toContain('data-testid="spa-media-upload-status"');
     expect(view).toContain('data-testid="spa-media-upload-error"');
     expect(view).toContain("{$t('media.spa.upload.label')}");
