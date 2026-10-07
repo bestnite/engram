@@ -1,6 +1,8 @@
 import { writable, get } from 'svelte/store';
 import type { RouteDefinition, RouteMatch } from './types';
 import { routes } from './routes';
+import { authStore } from '../auth';
+import { LANGUAGE_PARAM, readLanguageFromURL } from '../i18n/url';
 
 /**
  * 解析查询参数字符串为键值对象
@@ -102,16 +104,41 @@ export const routeStore = writable<RouteMatch>(matchRoute(getInitialPath()));
 
 /**
  * 客户端路由跳转
+ *
+ * 跳转要带上未登录访客的语言覆盖参数（见 withLanguage）：站内链接统一走这里，
+ * 而 pushState/replaceState 会把整个 URL 换掉，不带过去就等于把语言选择丢掉。
  */
 export function navigate(to: string, replace = false): void {
+  const target = withLanguage(to);
   if (typeof window !== 'undefined') {
     if (replace) {
-      window.history.replaceState({}, '', to);
+      window.history.replaceState({}, '', target);
     } else {
-      window.history.pushState({}, '', to);
+      window.history.pushState({}, '', target);
     }
   }
-  routeStore.set(matchRoute(to));
+  routeStore.set(matchRoute(target));
+}
+
+/**
+ * 未登录访客的语言选择只存在于地址上（?lang=<code>），把当前地址上的它并到跳转目标上——
+ * 不带过去的话，跳一次页面再刷新就退回浏览器语言。
+ *
+ * 已登录用户不保留：他的语言在 /settings 里落库，让 URL 长期压过账号设置只会让
+ * 「页头与设置页不一致」这个已修过的缺陷换个形态回来。登录成功后 navigate('/')
+ * 会把查询串整体换掉，所以匿名期留下的 ?lang 不会跟着进登录态。
+ */
+function withLanguage(to: string): string {
+  if (typeof window === 'undefined' || get(authStore).authenticated) return to;
+  const lang = readLanguageFromURL();
+  if (lang === null) return to;
+
+  const [path = '', rest = ''] = to.split('?');
+  const [search = '', hash = ''] = rest.split('#');
+  const params = new URLSearchParams(search);
+  if (params.has(LANGUAGE_PARAM)) return to;
+  params.set(LANGUAGE_PARAM, lang);
+  return `${path}?${params.toString()}${hash ? `#${hash}` : ''}`;
 }
 
 /**

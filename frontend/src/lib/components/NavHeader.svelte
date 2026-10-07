@@ -131,7 +131,11 @@
         {/if}
       </button>
 
-      <LanguageSwitcher />
+      {#if !$authStore.authenticated}
+        <!-- 语言入口只给未登录访客：匿名没有账号可落库，选择写进地址的 ?lang；登录用户的
+             语言入口在 /settings（随资料表单落库），两处并存会让「切了又回退」重现。 -->
+        <LanguageSwitcher />
+      {/if}
 
       {#if $authStore.authenticated && $authStore.user}
         <div class="flex items-center space-x-2 text-sm">
