@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:18-alpine
+    # Debian build, not alpine: the alpine PostgreSQL image fails initdb with
+    # "no usable system locales were found".
+    image: postgres:18
     restart: unless-stopped
     environment:
       POSTGRES_USER: engram
