@@ -1,4 +1,4 @@
-// Package auth 实现内置账号、密码哈希、会话与 CSRF（DESIGN.md §4、§11）。
+// Package auth 实现内置账号、密码哈希、会话与 CSRF。
 // 内部日志与错误文案一律英文；代码注释用中文解释"为什么"（AGENTS.md §2.1、§2.4）。
 package auth
 
@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// argon2id 参数与哈希一起入库，且格式带版本号，便于将来提升强度而不作废旧哈希（DESIGN.md §4.6）。
+// argon2id 参数与哈希一起入库，且格式带版本号，便于将来提升强度而不作废旧哈希。
 const argon2IDVersion = 19
 
 // Params 描述一次 argon2id 计算的强度参数。
@@ -90,7 +90,7 @@ func (h *PasswordHasher) verify(encoded, password string) (bool, error) {
 }
 
 // VerifyDummy 用与真实哈希完全相同的参数执行一次被丢弃的 argon2id 校验，
-// 使“用户不存在 / 无本地密码”分支的耗时与“存在用户 + 密码错误”不可区分（DESIGN.md §11）。
+// 使“用户不存在 / 无本地密码”分支的耗时与“存在用户 + 密码错误”不可区分。
 //
 // dummy 哈希在首次调用时生成一次并冻结：每次请求重新生成会引入第二个 argon2id 成本，
 // 把该分支变成更重的放大面，比原本的时序差更糟。参数取自本哈希器，
@@ -145,7 +145,7 @@ func decodeHash(encoded string) (Params, []byte, []byte, error) {
 	return p, salt, key, nil
 }
 
-// 密码策略（DESIGN.md §4.3）：最小长度 + 常见弱密码小词表，不引外部服务。
+// 密码策略：最小长度 + 常见弱密码小词表，不引外部服务。
 const (
 	MinPasswordLength = 8
 	MaxPasswordLength = 128

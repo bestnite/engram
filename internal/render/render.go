@@ -1,10 +1,10 @@
-// Package render 实现卡面内容的渲染管线（DESIGN.md §6.1）：
+// Package render 实现卡面内容的渲染管线：
 // Markdown + TeX 原文 → goldmark 转 HTML → bluemonday 白名单清洗 → 输出可安全嵌入页面的 HTML。
 //
 // 为什么独立成包：渲染既被 web 页面使用，也会被将来的卡组包导出复用；
 // 放在 internal/web 里会让导出路径反向依赖 HTTP 层（AGENTS.md §2.4）。
 //
-// 为什么必须经过 bluemonday：卡面允许一个 HTML 子集（DESIGN.md §6.1 末条），
+// 为什么必须经过 bluemonday：卡面允许一个 HTML 子集（末条），
 // 所以 goldmark 以 WithUnsafe 放行原始 HTML，安全性完全由本包的白名单清洗保证。
 package render
 
@@ -78,7 +78,7 @@ func RenderMarkdown(src string) (string, error) {
 	return string(policy.SanitizeBytes([]byte(restored))), nil
 }
 
-// buildPolicy 构造卡面白名单。允许的元素与 DESIGN.md §6.1 的清洗约定一致。
+// buildPolicy 构造卡面白名单：允许 img/a/code/pre/table/span[class]，绝不允许脚本。
 func buildPolicy() *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
 

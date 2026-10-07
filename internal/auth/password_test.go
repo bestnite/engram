@@ -46,7 +46,7 @@ func TestHashStoresParametersWithVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash() error = %v", err)
 	}
-	// 带版本的编码格式是"参数随哈希入库"的验收点（DESIGN.md §4.6）。
+	// 带版本的编码格式是"参数随哈希入库"的验收点。
 	if !strings.HasPrefix(encoded, "$argon2id$v=19$") {
 		t.Fatalf("hash %q does not start with the versioned argon2id prefix", encoded)
 	}

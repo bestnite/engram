@@ -8,7 +8,7 @@ import (
 )
 
 // 登录限流的默认参数。延迟按 基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（ROADMAP.md M1-9、
-// DESIGN.md §4.3、§11）。
+// 会话与安全约定）。
 const (
 	DefaultRateLimitBaseDelay = 200 * time.Millisecond
 	DefaultRateLimitMaxDelay  = 5 * time.Second
@@ -35,7 +35,7 @@ type failureBucket struct {
 
 // LoginLimiter 按账号与 IP 双维度记录登录失败，并对后续尝试施加递增延迟。
 //
-// 状态放在内存里：本服务单实例部署（DESIGN.md §11），不引 Redis；失败计数是短时防爆破数据，
+// 状态放在内存里：本服务单实例部署，不引 Redis；失败计数是短时防爆破数据，
 // 进程重启即清零是可接受的权衡。
 type LoginLimiter struct {
 	mu      sync.Mutex
@@ -179,7 +179,7 @@ func (l *LoginLimiter) Reset(username, ip string) {
 	delete(l.buckets, ipKey(ip))
 }
 
-// 匿名入口限流的默认参数（DESIGN.md §4.3）：/forgot-password 与 /register 这类登录前入口
+// 匿名入口限流的默认参数：/forgot-password 与 /register 这类登录前入口
 // 会被匿名轰炸式触发发信，按 IP 与目标邮箱双维度做固定窗口限流。阈值由 nite 拍板：
 // 每个维度 5 次 / 15 分钟。
 const (
@@ -196,7 +196,7 @@ type anonBucket struct {
 // AnonymousLimiter 对匿名入口按「请求方 IP」与「目标邮箱」双维度做固定窗口计数，
 // 任一维度在一个窗口内超过上限即拒绝。
 //
-// 与 LoginLimiter 同属一类形态：状态放内存（单实例部署，DESIGN.md §11），时钟可注入以便
+// 与 LoginLimiter 同属一类形态：状态放内存（单实例部署），时钟可注入以便
 // 测试断言窗口过期而不真实等待。区别在于这里不看结果对不对，只按请求次数封顶——因为
 // 注册与找回密码是合法请求也可能高频的入口，无法用「失败一次记一次」来衡量滥用。
 type AnonymousLimiter struct {

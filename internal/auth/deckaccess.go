@@ -17,7 +17,7 @@ var (
 	ErrForbidden = errors.New("forbidden")
 )
 
-// DeckAccess 是 Web 与 REST/MCP 共用的卡组权限判定助手（单一实现，DESIGN.md §5、§11）。
+// DeckAccess 是 Web 与 REST/MCP 共用的卡组权限判定助手（单一实现）。
 //
 // 有效角色解析顺序：
 //  1. deck_grants 里的显式授权行；
@@ -60,7 +60,7 @@ func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, e
 }
 
 // visibilityRole 把卡组可见性折算成“隐式只读”：public 与 unlisted 都允许任何登录用户
-// 以 reader 身份访问内容（DESIGN.md §5：public 登录用户可见，unlisted 拿到链接可看）。
+// 以 reader 身份访问内容（public 登录用户可见，unlisted 拿到链接可看）。
 // 它只授 reader，因此看不到内容的人也无法借可见性获得写权限 —— 写入仍要求 editor/owner。
 // private（含空串，兼容 M2 建的老行）不授任何权限。
 func visibilityRole(deck *store.Deck) string {

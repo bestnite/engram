@@ -132,7 +132,7 @@ func assertASCIIEnglish(t *testing.T, msg string) {
 }
 
 // TestTrustedProxiesDefaultsToNoTrust 断言缺省即「不信任任何代理」：
-// 未设 TRUSTED_PROXIES 时返回空列表且不报错（DESIGN.md §4.3、§11）。
+// 未设 TRUSTED_PROXIES 时返回空列表且不报错。
 func TestTrustedProxiesDefaultsToNoTrust(t *testing.T) {
 	cfg, err := Load(envStub(requiredEnv()), nil)
 	if err != nil {

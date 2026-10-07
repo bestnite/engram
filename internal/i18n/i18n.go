@@ -1,6 +1,6 @@
 // Package i18n 加载 YAML 语言包、按请求解析语言，并把本地化器放进请求 context。
 //
-// 边界（DESIGN.md §8.3、§10.4）：本包只负责"面向最终用户"的文案。日志恒为英文，
+// 边界：本包只负责"面向最终用户"的文案。日志恒为英文，
 // 不从这里取值；错误 code 用英文常量，也不在这里定义。
 package i18n
 
@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// localesFS 把语言包打进二进制（DESIGN.md §10.2：语言包随二进制分发）。
+// localesFS 把语言包打进二进制（语言包随二进制分发）。
 //
 //go:embed locales/*.yaml
 var localesFS embed.FS
@@ -26,11 +26,11 @@ var localesFS embed.FS
 // localesDir 是嵌入FS里语言包所在的目录名。
 const localesDir = "locales"
 
-// DefaultLocaleCode 是站点默认语言；语言解析全部失败时用它（DESIGN.md §8.3）。
+// DefaultLocaleCode 是站点默认语言；语言解析全部失败时用它。
 const DefaultLocaleCode = "zh-CN"
 
 // supportedCodes 是首发语言，顺序即"语言切换器"的展示顺序。
-// 新增语言 = 加一个 locales/<code>.yaml 并把 code 追加到这里（DESIGN.md §8.3）。
+// 新增语言 = 加一个 locales/<code>.yaml 并把 code 追加到这里。
 var supportedCodes = []string{"zh-CN", "en"}
 
 // Translator 持有已加载的语言包和受支持语言的匹配信息。

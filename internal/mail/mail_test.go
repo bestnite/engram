@@ -59,7 +59,7 @@ func TestConfiguredRequiresHostAndFrom(t *testing.T) {
 	}
 }
 
-// TestResolutionOrderEnvBeatsDBBeatsDefault 覆盖取值优先级与来源标注（DESIGN.md §8.4）。
+// TestResolutionOrderEnvBeatsDBBeatsDefault 覆盖取值优先级与来源标注。
 func TestResolutionOrderEnvBeatsDBBeatsDefault(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()

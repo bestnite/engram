@@ -1,6 +1,6 @@
-// Package reminder 实现 C 类「复习到期提醒」的周期后台 worker（DESIGN.md §4.7；AGENTS.md M1-21）。
+// Package reminder 实现 C 类「复习到期提醒」的周期后台 worker（AGENTS.md M1-21）。
 //
-// 行为约束（DESIGN.md §4.7）：
+// 行为约束：
 //   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
 //   - 发送时间按**用户本地时间**：每个用户可选自己的整点小时（users.reminder_hour，0–23），
 //     未设置时用全局默认 DefaultSendHour（19:00）。到达该小时后的首轮轮询即发；小时按用户
@@ -14,7 +14,7 @@
 // （默认 19:00，本就在窗外），静默窗既无用途，又会反过来压制用户明确选的深夜时段——用户
 // 显式选择优先，因此整条启发式连同 InQuietHours 一并删除，其用例也随之移除。
 //
-// 为什么是周期 worker 而不是 job 表：优化器的单并发约束不适用于邮件（DESIGN.md §4.7），
+// 为什么是周期 worker 而不是 job 表：优化器的单并发约束不适用于邮件，
 // 把提醒塞进 jobs 会与参数优化互相阻塞。提醒本身不是长任务，只是一个周期性的「到期扫描」，
 // 因此独立起一个轻量 worker，随 serve 启动、随信号优雅停止。
 //
@@ -102,7 +102,7 @@ type Deps struct {
 	ReviewPath string
 	// Tokens 签发一键退订令牌（M1-22）；为空时提醒邮件不带退订头（可选类型才需要）。
 	Tokens *auth.ActionTokenService
-	// Templates 取管理员自定义的邮件模板（DESIGN.md §4.7）；为空表示只用内置正文。
+	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
 	Templates mail.LookupFunc
 	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
 	SiteDefaultLocale func() string
@@ -124,7 +124,7 @@ type Reminder struct {
 	reviewPath string
 	// tokens 签发退订令牌（M1-22）；为空时不加退订头。
 	tokens *auth.ActionTokenService
-	// templates 取自定义邮件模板；缺失即用内置正文（DESIGN.md §4.7）。
+	// templates 取自定义邮件模板；缺失即用内置正文。
 	templates mail.LookupFunc
 	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
 	siteLocale func() string

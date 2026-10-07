@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Outbox 是邮件队列与后台 worker（DESIGN.md §4.7）。
+// Outbox 是邮件队列与后台 worker。
 //
 // 契约（M1-17）：
 //   - Enqueue 只写 outbox 队列表并唤醒 worker，绝不在请求路径里同步发信。
@@ -23,7 +23,7 @@ import (
 //   - 投递失败由 worker 带退避重试，最后一次错误与尝试次数可从管理面板读到。
 //
 // 并发模型：单个 worker goroutine 串行消费；没有"单并发"的语义约束——优化器的单并发
-// 不适用于邮件，否则一次参数优化会把所有邮件堵在后面（DESIGN.md §4.7）。
+// 不适用于邮件，否则一次参数优化会把所有邮件堵在后面。
 
 // RetryPolicy 控制退避重试：第 n 次失败后等待 BaseDelay*2^(n-1)，上限 MaxDelay；
 // 尝试次数达到 MaxAttempts 后标记为永久失败。

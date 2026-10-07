@@ -13,7 +13,7 @@ import (
 
 // 本文件是 M1-19（A 类事务安全邮件）的一次性令牌服务：签发与消费。
 //
-// 安全约束（DESIGN.md §4.7、§4.6）：
+// 安全约束：
 //   - 明文随机、URL 安全，只出现在邮件链接里，绝不入库、绝不进日志；
 //   - 库里只存 sha256 摘要（store.HashActionToken）；
 //   - 一次性：消费走条件更新 `WHERE used_at IS NULL`（store.ActionTokenStore.Consume）；

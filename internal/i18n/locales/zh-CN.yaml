@@ -1,4 +1,4 @@
-# 简体中文语言包。key 一律英文小写点分（DESIGN.md §10.4）。
+# 简体中文语言包。key 一律英文小写点分。
 # 与 en.yaml 的 key 集合必须完全一致，由 TestCatalogsHaveIdenticalKeys 强制。
 - id: app.name
   translation: "Engram"
@@ -122,7 +122,7 @@
   translation: "附注"
 - id: note.field.source_url
   translation: "来源链接"
-# M2-10 作答类与简答题的字段名（字段名冻结表见 DESIGN.md §6.2）。
+# M2-10 作答类与简答题的字段名（字段名冻结表）。
 - id: note.field.question
   translation: "问题"
 - id: note.field.answer
@@ -2120,7 +2120,7 @@
 - id: stats.streak.longest_label
   translation: "历史最长"
 
-# ── 管理面板概览页（DESIGN.md §8.4）：计数卡 ──────────────────────
+# ── 管理面板概览页：计数卡 ──────────────────────
 - id: admin.dashboard.decks
   translation: "卡组"
 - id: admin.dashboard.notes_cards

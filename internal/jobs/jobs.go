@@ -1,10 +1,10 @@
 // Package jobs 提供单并发的后台作业框架：jobs 表持久化、子进程执行（命令可注入）、
 // 超时后杀掉整个进程组、阶段级进度与日志尾巴捕获
-// （DESIGN.md §3.5、§2.2 的 jobs 表；ROADMAP.md M9-1）。
+// （jobs 表；ROADMAP.md M9-1）。
 //
 // 设计要点与理由：
 //   - 单并发：进程内只有一个 worker 消费队列；入队时若已有未完成作业，返回
-//     ErrAlreadyRunning，由 REST 层映射成 409（DESIGN.md §3.5「已有任务则 409」）。
+//     ErrAlreadyRunning，由 REST 层映射成 409（「已有任务则 409」）。
 //   - 子进程执行：训练是 CPU 密集且可能崩溃/挂死，放到独立进程里既能隔离，也能超时取消；
 //     优化器算法本身不是 Go 库（M9-2 的 Rust 适配器），只能走子进程。
 //   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用 M9-10 的优化器
@@ -32,13 +32,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 作业 kind：与 jobs.kind 列一致，取值英文且稳定（DESIGN.md §2.2）。
+// 作业 kind：与 jobs.kind 列一致，取值英文且稳定。
 const (
-	// KindOptimize 是参数优化作业（当前唯一类型，DESIGN.md §3.5）。
+	// KindOptimize 是参数优化作业（当前唯一类型）。
 	KindOptimize = "optimize"
 )
 
-// 作业状态机：queued -> running -> succeeded | failed（DESIGN.md §2.2）。
+// 作业状态机：queued -> running -> succeeded | failed。
 const (
 	StatusQueued    = "queued"
 	StatusRunning   = "running"
@@ -46,7 +46,7 @@ const (
 	StatusFailed    = "failed"
 )
 
-// 阶段名：只做阶段级进度，不编造百分比（DESIGN.md §3.5）。取值与 jobs.stage 列一致。
+// 阶段名：只做阶段级进度，不编造百分比。取值与 jobs.stage 列一致。
 const (
 	StageReadLogs = "read_logs"
 	StageTraining = "training"
@@ -128,7 +128,7 @@ type SuccessFunc func(ctx context.Context, job store.Job)
 //
 // 它在状态已经落库之后运行，因此实现只能做副作用（例如把通知写进邮件 outbox），
 // 不得试图改写作业状态；它的返回值被忽略，且 panic 会被 Runner 兜住——
-// 通知失败绝不能让作业失败处理本身出错（DESIGN.md §4.1 附带的「发信失败不影响触发操作）
+// 通知失败绝不能让作业失败处理本身出错（附带的「发信失败不影响触发操作）
 // 同样适用于作业失败通知）；它同步运行在作业 worker 的 ctx 上。可为 nil。
 type FailureFunc func(ctx context.Context, job store.Job, reason string)
 

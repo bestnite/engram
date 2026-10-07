@@ -1,6 +1,6 @@
 package mail
 
-// 本文件是邮件类型目录（M1-18，DESIGN.md §4.7）：**一处定义**，偏好页与每个发信方共用它。
+// 本文件是邮件类型目录（M1-18）：**一处定义**，偏好页与每个发信方共用它。
 //
 // 分类依据是**能不能被用户关掉**，不是邮件内容——允许关掉安全邮件等于给人留后门。
 // 因此「默认开关」「可否关闭」都由 Class 推导，而不是每个类型各自标注：
@@ -130,12 +130,12 @@ func ClassOrder() []Class {
 }
 
 // CanDisable 报告某一大类能否被用户关闭。
-// 只有 A 安全/事务类不可关闭：允许关掉安全邮件等于给人留后门（DESIGN.md §4.7）。
+// 只有 A 安全/事务类不可关闭：允许关掉安全邮件等于给人留后门。
 func CanDisable(c Class) bool {
 	return c != ClassSecurity
 }
 
-// DefaultEnabled 报告某一大类的默认开关：A/B/D 默认开，C 默认关（DESIGN.md §4.7）。
+// DefaultEnabled 报告某一大类的默认开关：A/B/D 默认开，C 默认关。
 func DefaultEnabled(c Class) bool {
 	return c != ClassStudy
 }

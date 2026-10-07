@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 客户端（DESIGN.md §4.4、§4.5；ROADMAP.md M1-15）。
+// OIDC 客户端（ROADMAP.md M1-15）。
 //
 // 协议交互全部交给 github.com/zitadel/oidc/v3：
 //   - 发现文档与端点解析：rp.NewRelyingPartyOIDC（本文件只在其上做一层带 TTL 的按 issuer 缓存，
@@ -32,7 +32,7 @@ import (
 // 本文件只保留本项目必需、库不提供的部分：state/nonce 的一次性表、claim 名映射，
 // 以及把校验结果交给 IdentityLinkService（oauthlink.go）做身份绑定。绑定分支不在这里重复实现。
 
-// OIDC 设置的 settings 键（DESIGN.md §8.4）。client_secret 后缀是 `_secret`，
+// OIDC 设置的 settings 键。client_secret 后缀是 `_secret`，
 // 因此 store.IsSensitiveSettingKey 会要求它走 AES-GCM 加密通道（store/secret.go）。
 const (
 	SettingKeyOIDCEnabled            = "oidc.enabled"
@@ -46,7 +46,7 @@ const (
 	SettingKeyOIDCClaimEmailVerified = "oidc.claim.email_verified"
 )
 
-// 默认值：scope 与 claim 映射（DESIGN.md §4.4 的 claim 名可配）。
+// 默认值：scope 与 claim 映射（claim 名可配）。
 const (
 	defaultOIDCScopes         = "openid,email,profile"
 	defaultClaimSubject       = "sub"
@@ -58,7 +58,7 @@ const (
 // ErrOIDCDisabled 表示 OIDC 未启用或配置不完整；transport 层据此把相关路由置为不可用。
 var ErrOIDCDisabled = errors.New("oidc is not configured")
 
-// OIDC 待完成登录表（pending）的内存上限与过期淘汰（F17；DESIGN.md §4.4）。
+// OIDC 待完成登录表（pending）的内存上限与过期淘汰（F17）。
 //
 // 匿名者可以反复 GET /auth/oidc/start，而只有携带正确 state 的回调才会删除对应项：
 // 没有上限与淘汰时这个 map 会被堆大，是一条内存 DoS 路径。
@@ -227,7 +227,7 @@ func (c *OIDCClient) Client(ctx context.Context, cfg *OIDCConfig, redirectURI st
 }
 
 // Discover 只做发现文档校验，不缓存：管理面板「测试连接」每次都要真实访问 provider，
-// 失败时返回的错误包含 provider 的状态码与响应体片段，供页面原样显示（DESIGN.md §4.4）。
+// 失败时返回的错误包含 provider 的状态码与响应体片段，供页面原样显示。
 func (c *OIDCClient) Discover(ctx context.Context, issuer string) (rp.RelyingParty, error) {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	if issuer == "" {
@@ -251,7 +251,7 @@ func (c *OIDCClient) build(ctx context.Context, cfg *OIDCConfig, redirectURI str
 	return party, nil
 }
 
-// Invalidate 丢弃某个 issuer 的所有库 RP 缓存；配置变更后调用（DESIGN.md §4.4）。
+// Invalidate 丢弃某个 issuer 的所有库 RP 缓存；配置变更后调用。
 func (c *OIDCClient) Invalidate(issuer string) {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	c.mu.Lock()
@@ -264,7 +264,7 @@ func (c *OIDCClient) Invalidate(issuer string) {
 }
 
 // PutPending 保存一次登录发起时的临时状态，按 state 索引，并在超限时拒绝新发起。
-// 返回 false 表示 state 表已满且没有可淘汰的过期项，调用方必须中止本次发起（DESIGN.md §4.4）。
+// 返回 false 表示 state 表已满且没有可淘汰的过期项，调用方必须中止本次发起。
 func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

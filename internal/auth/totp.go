@@ -20,12 +20,12 @@ import (
 
 // 本文件是 M1-16 的 TOTP 业务层：生成 secret、加密落库、校验验证码、一次性恢复码、关闭。
 //
-// 依赖选择（AGENTS.md §2.4、DESIGN.md §10.1）：TOTP 算法用事实标准库
+// 依赖选择（AGENTS.md §2.4）：TOTP 算法用事实标准库
 // github.com/pquerna/otp，不自己写 HMAC。库负责 secret 生成与验证码校验；
 // otpauth:// 链接的拼装只是格式转写，用同一个 helper 保证生成与展示一致。
 
 const (
-	// DefaultTOTPIssuer 是认证器 App 里显示的发行方名（项目正式名，DESIGN.md 附二）。
+	// DefaultTOTPIssuer 是认证器 App 里显示的发行方名（项目正式名）。
 	DefaultTOTPIssuer = "Engram"
 	// totpPeriod 与 totpSkew：30 秒一步，允许前后各一步漂移（客户端时钟偏差）。
 	totpPeriod = 30

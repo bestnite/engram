@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// 注册策略取值（DESIGN.md §4.2）；标识符一律英文（AGENTS.md §2.1）。
+// 注册策略取值；标识符一律英文（AGENTS.md §2.1）。
 const (
 	PolicyOpen   = "open"
 	PolicyInvite = "invite"
@@ -33,7 +33,7 @@ var (
 )
 
 // ParseRegistrationPolicy 把 settings 里的原始值归一化。
-// 空值或未知取值一律回落到 closed —— 自托管场景下最安全的默认（DESIGN.md §4.2）。
+// 空值或未知取值一律回落到 closed —— 自托管场景下最安全的默认。
 func ParseRegistrationPolicy(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case PolicyOpen:
@@ -101,7 +101,7 @@ func EmailDomainAllowed(email string, allowlist []string) bool {
 // DecideRegistration 判定一次没有邀请的自助注册是否放行，并说明拒绝原因。
 //
 // invite 策略下无邀请一律拒绝（ErrInviteRequired）；open 策略下再叠加白名单；
-// closed 策略拒绝一切。首个管理员引导不经过这里（DESIGN.md §4.1）。
+// closed 策略拒绝一切。首个管理员引导不经过这里。
 func DecideRegistration(policy, email string, allowlist []string) error {
 	switch ParseRegistrationPolicy(policy) {
 	case PolicyOpen:

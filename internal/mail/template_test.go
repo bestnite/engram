@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// 这些用例锁的是渲染顺序（DESIGN.md §4.7）：先渲染清洗、后替换变量。顺序反过来就是
+// 这些用例锁的是渲染顺序：先渲染清洗、后替换变量。顺序反过来就是
 // 存储型注入——变量值是用户可控数据。
 
 func renderOne(t *testing.T, in RenderInput) Rendered {

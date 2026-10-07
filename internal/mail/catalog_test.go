@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestCatalogClassesAndDefaults 锁定 DESIGN.md §4.7 的四类与默认值：
+// TestCatalogClassesAndDefaults 锁定邮件目录的四类与默认值：
 // A 不可关闭、默认开；B 默认开、可关；C 默认关、可关；D 默认开、可关。
 func TestCatalogClassesAndDefaults(t *testing.T) {
 	cases := []struct {

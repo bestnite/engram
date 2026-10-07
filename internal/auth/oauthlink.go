@@ -32,22 +32,22 @@ type OAuthProfile struct {
 	Subject       string
 	Email         string
 	EmailVerified bool
-	// Name 是 IdP 返回的显示名（claim 名可配，DESIGN.md §4.4）。仅用于自动建号时的
-	// 展示名；绑定决策只看 Subject 与 Email（§4.5），所以它不影响任何分支判定。
+	// Name 是 IdP 返回的显示名（claim 名可配）。仅用于自动建号时的
+	// 展示名；绑定决策只看 Subject 与 Email，所以它不影响任何分支判定。
 	Name string
 }
 
-// LinkDecisionKind 是 §4.5 的绑定分支标识，取值稳定用于审计与测试断言。
+// LinkDecisionKind 是身份绑定分支的标识，取值稳定用于审计与测试断言。
 type LinkDecisionKind string
 
 const (
-	// LinkDecisionExisting 命中 §4.5.1：(provider, subject) 已有绑定，直接登录对应内部用户。
+	// LinkDecisionExisting 命中绑定情形 1：(provider, subject) 已有绑定，直接登录对应内部用户。
 	LinkDecisionExisting LinkDecisionKind = "existing"
-	// LinkDecisionAutoLink 命中 §4.5.2：邮箱已验证且与某个内部用户相同，自动绑定。
+	// LinkDecisionAutoLink 命中绑定情形 2：邮箱已验证且与某个内部用户相同，自动绑定。
 	LinkDecisionAutoLink LinkDecisionKind = "auto_link"
-	// LinkDecisionCreateUser 命中 §4.5.3：open / invite 策略下自动建号并绑定。
+	// LinkDecisionCreateUser 命中绑定情形 3：open / invite 策略下自动建号并绑定。
 	LinkDecisionCreateUser LinkDecisionKind = "create_user"
-	// LinkDecisionDeny 命中 §4.5.3：closed 策略下拒绝登录，等待管理员绑定。
+	// LinkDecisionDeny 命中绑定情形 3：closed 策略下拒绝登录，等待管理员绑定。
 	LinkDecisionDeny LinkDecisionKind = "deny"
 )
 
@@ -59,7 +59,7 @@ type LinkDecision struct {
 	Err error
 }
 
-// DecideIdentityLink 是 DESIGN.md §4.5 三个分支的纯决策函数：不触库、不依赖 OIDC 协议。
+// DecideIdentityLink 是身份自动绑定三个分支的纯决策函数：不触库、不依赖 OIDC 协议。
 //
 // 输入覆盖四种情形（existing = sub 已存在，matched = 邮箱命中的内部用户）：
 //  1. existing 非空 → 直接登录，忽略邮箱；（sub 已存在）
@@ -109,7 +109,7 @@ type IdentityLinkStore interface {
 	CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error)
 }
 
-// IdentityLinkService 串联 §4.5 的完整绑定流程：查绑定 → 自动绑定 → 按策略建号。
+// IdentityLinkService 串联身份绑定的完整流程：查绑定 → 自动绑定 → 按策略建号。
 // 它不实现 OIDC 协议交互（M1-11）；调用方只需把规范化后的 OAuthProfile 交给 Resolve。
 type IdentityLinkService struct {
 	store  IdentityLinkStore

@@ -157,7 +157,7 @@ func (s *Store) update(ctx context.Context, id uint64, updates map[string]any) e
 	return nil
 }
 
-// nullableString 把空串转成 nil，让可空 TEXT 列存 NULL 而不是空字符串（DESIGN.md §2.2）。
+// nullableString 把空串转成 nil，让可空 TEXT 列存 NULL 而不是空字符串。
 func nullableString(s string) *string {
 	if s == "" {
 		return nil

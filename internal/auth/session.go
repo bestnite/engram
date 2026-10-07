@@ -27,7 +27,7 @@ const (
 type SessionConfig struct {
 	Secret     []byte
 	CookieName string
-	// Secure 在生产必须为 true（DESIGN.md §4.3、§11）；测试用 TLS httptest 时保持 true。
+	// Secure 在生产必须为 true；测试用 TLS httptest 时保持 true。
 	Secure bool
 	TTL    time.Duration
 	// Now 可注入时钟，便于测试过期。
@@ -161,7 +161,7 @@ func (m *Manager) Logout(ctx context.Context, c *gin.Context) error {
 	return nil
 }
 
-// RevokeAllForUser 作废某用户的全部会话：改密码、禁用、强制下线走这里（DESIGN.md §11）。
+// RevokeAllForUser 作废某用户的全部会话：改密码、禁用、强制下线走这里。
 func (m *Manager) RevokeAllForUser(ctx context.Context, userID uint64) error {
 	return m.sessions.RevokeAllForUser(ctx, userID, m.now())
 }
@@ -219,7 +219,7 @@ func (m *Manager) Middleware() gin.HandlerFunc {
 		}
 		u, err := m.users.ByID(ctx, sess.UserID)
 		if err != nil || u.Status != store.StatusActive {
-			// 用户被禁用或已删除：即便 cookie 仍有效也立即作废服务端会话（DESIGN.md §11）。
+			// 用户被禁用或已删除：即便 cookie 仍有效也立即作废服务端会话。
 			_ = m.sessions.Revoke(ctx, sess.ID, m.now())
 			m.clearCookie(c)
 			c.Next()

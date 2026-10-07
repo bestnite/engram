@@ -1,4 +1,4 @@
-# English catalog. Keys are lowercase dotted English (DESIGN.md §10.4).
+# English catalog. Keys are lowercase dotted English.
 # The key set must match zh-CN.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
 - id: app.name
   translation: "Engram"
@@ -122,7 +122,7 @@
   translation: "Extra"
 - id: note.field.source_url
   translation: "Source URL"
-# M2-10 graded and short-answer field labels (frozen field table in DESIGN.md §6.2).
+# M2-10 graded and short-answer field labels (frozen field table in).
 - id: note.field.question
   translation: "Question"
 - id: note.field.answer
@@ -2122,7 +2122,7 @@ It renders with sample variables; real recipients see their own data."
 - id: stats.streak.longest_label
   translation: "Longest streak"
 
-# ── Admin dashboard cards (DESIGN.md §8.4) ────────────────────────
+# ── Admin dashboard cards ────────────────────────
 - id: admin.dashboard.decks
   translation: "Decks"
 - id: admin.dashboard.notes_cards

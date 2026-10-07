@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// SMTP 传输实现（DESIGN.md §4.7；AGENTS.md M1-17）。
+// SMTP 传输实现（AGENTS.md M1-17）。
 //
 // 用标准库 net/smtp：它覆盖 EHLO / STARTTLS / AUTH / DATA 的完整握手，且没有额外依赖
 // （AGENTS.md 的选型原则：轮子已存在且维护良好就用它）。隐式 TLS（465）需要先建

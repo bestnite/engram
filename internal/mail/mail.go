@@ -1,4 +1,4 @@
-// Package mail 提供可选的邮件投递层（DESIGN.md §4.7；AGENTS.md M1-17）。
+// Package mail 提供可选的邮件投递层（AGENTS.md M1-17）。
 //
 // 三条不变量：
 //   - 邮件是可选组件。SMTP 未配置时，Enqueue 返回 ErrNotConfigured，绝不静默丢弃；
@@ -58,7 +58,7 @@ const (
 	SettingKeySMTPTLSMode  = "smtp_tls_mode"
 )
 
-// 环境变量覆盖名。优先级：环境变量 > settings 表 > 默认值（DESIGN.md §8.4）。
+// 环境变量覆盖名。优先级：环境变量 > settings 表 > 默认值。
 const (
 	EnvSMTPHost     = "SMTP_HOST"
 	EnvSMTPPort     = "SMTP_PORT"

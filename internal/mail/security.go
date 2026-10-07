@@ -58,7 +58,7 @@ func (n *SecurityNotifier) Send(ctx context.Context, userID uint64, to string, t
 			return false
 		}
 	}
-	// Headers 留空：A 类邮件不带退订头（DESIGN.md §4.7）。
+	// Headers 留空：A 类邮件不带退订头。
 	if err := n.outbox.Enqueue(ctx, Message{
 		To:       to,
 		Type:     string(t),

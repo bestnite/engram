@@ -33,7 +33,7 @@ type CreateUserInput struct {
 
 // AccountService 负责本地账号的核心流程：创建、认证、改密、禁用。
 // 它持有 UserStore、SessionStore 与 APIKeyStore，因此能在口令重置时于同一事务里
-// 同步作废会话与 API Key（DESIGN.md §11）；用户主动改密只作废会话，不动 key。
+// 同步作废会话与 API Key；用户主动改密只作废会话，不动 key。
 type AccountService struct {
 	users    *store.UserStore
 	sessions *store.SessionStore
@@ -91,7 +91,7 @@ func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, erro
 	return newUserFromInput(in, &hash, s.now())
 }
 
-// CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL，DESIGN.md §4.1）。
+// CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL）。
 //
 // 与 CreateLocalUser 的区别只有凭据：不做密码策略校验，也不派生哈希 —— OIDC 账号靠
 // 绑定的外部身份登录（M1-11 接入流程，M1-12 提供建号能力）。用户名与邮箱仍为必填，
@@ -155,7 +155,7 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 	if err != nil {
 		if store.IsNotFound(err) {
 			// 用户不存在与密码错误返回同一个错误；这里额外跑一次同参数的 argon2id，
-			// 使两条路径的响应时间不可区分，堵住按耗时枚举用户名的旁路（DESIGN.md §11）。
+			// 使两条路径的响应时间不可区分，堵住按耗时枚举用户名的旁路。
 			// 结果必须丢弃：错误语义保持不变。
 			s.hasher.VerifyDummy(password)
 			return nil, ErrInvalidCredentials
@@ -180,7 +180,7 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 	return u, nil
 }
 
-// ChangePassword 校验旧密码、强度与"新旧不同"，写入新哈希并作废该用户全部会话（DESIGN.md §11）。
+// ChangePassword 校验旧密码、强度与"新旧不同"，写入新哈希并作废该用户全部会话。
 func (s *AccountService) ChangePassword(ctx context.Context, userID uint64, oldPassword, newPassword string) error {
 	return s.changePassword(ctx, userID, oldPassword, newPassword, "")
 }

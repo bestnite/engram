@@ -32,7 +32,7 @@ func GenerateTempPassword() (string, error) {
 }
 
 // ResetPasswordTx 由管理员为指定用户生成临时口令：在调用方给定的事务里写入新哈希，
-// 并在同一事务里作废其全部会话与全部 API Key（DESIGN.md §11）。
+// 并在同一事务里作废其全部会话与全部 API Key。
 // 返回的明文只在此刻交给调用方展示一次，绝不写日志或落库。
 //
 // 必须使用调用方的事务句柄：存在性校验与三条写入都要走 tx，否则在 SQLite 上另开连接会锁冲突，

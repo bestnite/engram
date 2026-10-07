@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestRenderMarkdownLocksAttributeWhitelist 锁定卡面的属性白名单（buildPolicy，DESIGN.md §6.1）。
+// TestRenderMarkdownLocksAttributeWhitelist 锁定卡面的属性白名单（buildPolicy）。
 //
 // 为什么必须有这组用例：卡面上方用 @rawHTML 直接输出本包清洗后的 HTML，而站点加载了
 // htmx——htmx 会把真实存在的 hx-* / data-hx-* 属性交给 new Function 编译执行。

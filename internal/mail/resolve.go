@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// 本文件实现模板的**回退链**与「渲染失败退回内置正文」这条保险（DESIGN.md §4.7）。
+// 本文件实现模板的**回退链**与「渲染失败退回内置正文」这条保险。
 
 // ResolvedTemplate 是回退链前两级的结果；两者都为空表示没有自定义模板，用内置正文。
 type ResolvedTemplate struct {
@@ -41,7 +41,7 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 
 // RenderOrFallback 渲染模板；**渲染失败或必填变量缺失时退回内置正文**。
 //
-// 这条路径兑现 DESIGN.md §4.7 的承诺「模板坏了也不会让邮件发不出去」：管理员把模板写进
+// 这条路径兑现「模板坏了也不会让邮件发不出去」的承诺：管理员把模板写进
 // 一段渲染不出来的内容（或发信方漏传了必填变量）时，收件人拿到的仍是内置正文，而不是
 // 一封空邮件或一个 500。失败一定记日志——静默降级会让模板问题永远没人发现。
 func RenderOrFallback(in RenderInput) Rendered {

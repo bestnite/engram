@@ -16,7 +16,7 @@ import (
 // 「把适配器产出的拟合报告写进 job 行的 result_json」。
 
 // ErrInsufficientReviews 是复习条数不足门槛的哨兵错误；调用方可用 errors.Is 判别，
-// 并配合 ThresholdError 拿到具体差额用于页面提示（DESIGN.md §3.5：不足时显示「还差 N 条」）。
+// 并配合 ThresholdError 拿到具体差额用于页面提示（不足时显示「还差 N 条」）。
 var ErrInsufficientReviews = errors.New("not enough reviews to optimize")
 
 // ThresholdError 是门槛拒绝的详细结果：指名预设、已有条数、门槛与差额。

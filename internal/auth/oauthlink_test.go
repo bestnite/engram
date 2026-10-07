@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDecideIdentityLink 是 M1-12 的验收矩阵：表驱动覆盖 DESIGN.md §4.5 的三个分支，
+// TestDecideIdentityLink 是 M1-12 的验收矩阵：表驱动覆盖身份自动绑定的三个分支，
 // 并显式覆盖四种输入（sub 已存在 / 已验邮箱 / 未验邮箱 / 无邮箱）。
 func TestDecideIdentityLink(t *testing.T) {
 	matched := &store.User{ID: 11, Email: "alice@example.com"}
@@ -28,7 +28,7 @@ func TestDecideIdentityLink(t *testing.T) {
 		wantUserID uint64
 		wantErr    bool
 	}{
-		// §4.5.1：(provider, subject) 已存在 → 直接登录，忽略邮箱是否验证。
+		// 绑定情形 1：(provider, subject) 已存在 → 直接登录，忽略邮箱是否验证。
 		{
 			name:       "sub already bound returns bound user",
 			profile:    OAuthProfile{Provider: "issuer.example.com", Subject: "sub-bound", Email: "other@example.com", EmailVerified: true},
@@ -38,7 +38,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind:   LinkDecisionExisting,
 			wantUserID: 7,
 		},
-		// §4.5.2：已验邮箱命中内部用户 → 自动绑定（大小写不敏感）。
+		// 绑定情形 2：已验邮箱命中内部用户 → 自动绑定（大小写不敏感）。
 		{
 			name:       "verified matching email auto links",
 			profile:    OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "Alice@Example.com", EmailVerified: true},
@@ -47,7 +47,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind:   LinkDecisionAutoLink,
 			wantUserID: 11,
 		},
-		// §4.5.3：已验邮箱但无同名账号 → 按策略建号。
+		// 绑定情形 3：已验邮箱但无同名账号 → 按策略建号。
 		{
 			name:     "verified email without match creates under open",
 			profile:  OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "nobody@example.com", EmailVerified: true},
@@ -128,7 +128,7 @@ func TestDecideIdentityLink(t *testing.T) {
 	}
 }
 
-// linkEnv 把真实 SQLite、真实 store 与真实服务串起来验证 §4.5 全流程（不 mock 数据库）。
+// linkEnv 把真实 SQLite、真实 store 与真实服务串起来验证身份绑定全流程（不 mock 数据库）。
 type linkEnv struct {
 	svc        *IdentityLinkService
 	users      *store.UserStore
@@ -175,7 +175,7 @@ func (e *linkEnv) seedLocalUser(t *testing.T, username string, reasonEmail strin
 	return u
 }
 
-// TestIdentityLinkServiceResolve 覆盖 §4.5 三个分支的执行路径，并验证解绑后端能力。
+// TestIdentityLinkServiceResolve 覆盖身份绑定三个分支的执行路径，并验证解绑后端能力。
 func TestIdentityLinkServiceResolve(t *testing.T) {
 	ctx := context.Background()
 	e := newLinkEnv(t)

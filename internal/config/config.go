@@ -1,6 +1,6 @@
 // Package config 负责读取启动配置。
 // 优先级固定为：环境变量 > settings 表 > 内置默认值；访问器必须能报告生效值的来源，
-// 否则管理面板无法回答"改了为什么没生效"（DESIGN.md §8.4）。
+// 否则管理面板无法回答"改了为什么没生效"。
 package config
 
 import (
@@ -35,7 +35,7 @@ const (
 	KeyBootstrapAdminEmail Key = "bootstrap_admin_email"
 	KeyMediaDir            Key = "media_dir"
 	// KeyTrustedProxies 是允许改写 ClientIP() 的代理地址列表（逗号分隔的 IP 或 CIDR）。
-	// 缺省为空 = 不信任任何代理（DESIGN.md §4.3、§11）。
+	// 缺省为空 = 不信任任何代理。
 	KeyTrustedProxies Key = "trusted_proxies"
 	// KeyOptimizerPath 是 FSRS 优化器适配器二进制的路径（M9-10）。
 	// 留空时由 internal/jobs 解析：先找服务二进制旁的 optimizer，再回退到仓库构建产物。
@@ -143,7 +143,7 @@ func (c *Config) All() []Value {
 //
 // 缺省为空 = 不信任任何代理：gin 不再采信 X-Forwarded-For / X-Real-IP，ClientIP() 回落到
 // RemoteAddr，登录限流键、审计 IP 与新设备/新 IP 提醒都不再被请求头左右。只有列出的地址
-// 发来的请求才被容许改写这些结果（DESIGN.md §4.3、§11）。
+// 发来的请求才被容许改写这些结果。
 //
 // 任一非法项都返回英文错误并点名该项，调用方据此拒绝启动；绝不静默丢弃（AGENTS.md §2.6）。
 // 刻意只认 IP/CIDR：不把 X-Forwarded-Proto 之类的头当作信任依据（TLS 终止信息由 BASE_URL 决定）。

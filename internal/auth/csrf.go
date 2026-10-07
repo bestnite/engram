@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CSRFFieldName 是表单里承载 token 的字段名；头部用 X-CSRF-Token（DESIGN.md §4.3、§11）。
+// CSRFFieldName 是表单里承载 token 的字段名；头部用 X-CSRF-Token。
 const CSRFFieldName = "csrf_token"
 
 // CSRFHeaderName 是非表单请求（htmx / fetch）携带 token 的头部。

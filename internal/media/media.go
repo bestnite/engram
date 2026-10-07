@@ -1,4 +1,4 @@
-// Package media 实现本地文件系统的媒体存储（DESIGN.md §6.3）。
+// Package media 实现本地文件系统的媒体存储。
 //
 // 内容寻址：文件按 <sha256[:2]>/<sha256>.<ext> 存放，同一份字节天然只存一份；
 // 落盘用临时文件 + rename，避免读者看到半截文件；不接任何对象存储，也不做服务端压缩。
@@ -54,14 +54,14 @@ var (
 	ErrNotFound = &Error{Code: "media_not_found", Msg: "media not found"}
 )
 
-// defaultMaxBytes 是上传上限的默认值（10 MiB）；DESIGN.md §6.3 要求由管理员配置，
+// defaultMaxBytes 是上传上限的默认值（10 MiB） 要求由管理员配置，
 // 路由层会先用系统设置覆盖它。
 const defaultMaxBytes = 10 * 1024 * 1024
 
 // DefaultMaxBytes 暴露默认上限，供路由层在系统设置缺失时回退。
 func DefaultMaxBytes() int64 { return defaultMaxBytes }
 
-// 上传上限（DESIGN.md §6.3）的 settings 键与环境变量覆盖名。Web 上传与 REST 卡组包导入
+// 上传上限的 settings 键与环境变量覆盖名。Web 上传与 REST 卡组包导入
 // 共用下面这一份解析，避免两条入口各写一套常量、口径漂移。
 const (
 	SettingKeyMediaMaxBytes = "media_max_bytes"
@@ -70,7 +70,7 @@ const (
 
 // ResolveMaxBytes 解析生效的上传字节上限：环境变量 > settings 表 > 默认 10 MiB。
 // 优先级与环境变量语义与 internal/config 一致；settings 表按请求现读，改完即生效。
-// Web 上传与 REST 导入都必须走这里，保证「体积上限与上传上限同一处配置」（DESIGN.md §7.6）。
+// Web 上传与 REST 导入都必须走这里，保证「体积上限与上传上限同一处配置」。
 func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	if raw := strings.TrimSpace(os.Getenv(EnvMediaMaxBytes)); raw != "" {
 		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
@@ -89,11 +89,11 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	return defaultMaxBytes
 }
 
-// DefaultAllowedMimes 是 DESIGN.md §6.3 的默认白名单；判定实现已抽到叶子包 mediatype，
+// DefaultAllowedMimes 是默认白名单；判定实现已抽到叶子包 mediatype，
 // 这里保留同名入口，避免改动大量调用点（F9）。
 func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
-// 每用户媒体总量配额（DESIGN.md §6.3、M2-13）的 settings 键与环境变量覆盖名。
+// 每用户媒体总量配额（M2-13）的 settings 键与环境变量覆盖名。
 // Web 上传、REST/MCP/CLI 导入与 Web 导入共用下面这一份解析，四条入口只有一处口径。
 const (
 	SettingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
@@ -239,7 +239,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if existing, err := s.bySha256(ctx, sum); err != nil {
 		return nil, err
 	} else if existing != nil {
-		// 去重命中也登记归属（DESIGN.md §6.3）：否则「B 上传与 C 相同字节」时 B 拿不到
+		// 去重命中也登记归属：否则「B 上传与 C 相同字节」时 B 拿不到
 		// media_uploaders 记录，撤销共享后读不到自己提供的文件。
 		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
 			return nil, err

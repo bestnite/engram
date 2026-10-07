@@ -15,7 +15,7 @@ import (
 // 它同时是对外契约：两条链都按这个长度取文件头，保证判定结果一致。
 const HeadBytes = 512
 
-// DefaultAllowedMimes 是 DESIGN.md §6.3 的默认白名单。
+// DefaultAllowedMimes 是媒体白名单的默认值。
 func DefaultAllowedMimes() []string {
 	return []string{
 		"image/png", "image/jpeg", "image/webp", "image/gif",

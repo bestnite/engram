@@ -12,7 +12,7 @@ import (
 // CSRFDoubleSubmitCookieName 是会话前表单（/setup、/login、/register）双提交 cookie 的名字。
 // 这些表单提交时还没有服务端会话，会话绑定的 CSRF token 无从产生，因此改用
 // 双提交 cookie：GET 时下发一个随机 token 的 cookie，同时把同一 token 镜像进表单隐藏字段，
-// 提交时比较两者（DESIGN.md §4.3、§11；B-13）。
+// 提交时比较两者（B-13）。
 const CSRFDoubleSubmitCookieName = "csrf_double"
 
 // doubleSubmitMinLen 是接受一个 cookie token 所需的最小长度；短于它的值一律视为非法并重新生成。
@@ -41,7 +41,7 @@ func validDoubleSubmitToken(v string) bool {
 // cookie 设为 HttpOnly：表单由服务端渲染时把同一 token 写进隐藏字段，前端脚本无需读取它。
 // SameSite=Lax 与 Secure 按会话 cookie 的同一套策略设置：Secure 由调用方依据 BASE_URL 的
 // scheme 传入（secure），不能看请求自身的 TLS——生产是反代终止 TLS，应用只收到明文 http，
-// 按请求判断会让线上表单 cookie 丢掉 Secure（DESIGN.md §4.3）。
+// 按请求判断会让线上表单 cookie 丢掉 Secure。
 func EnsureDoubleSubmitToken(c *gin.Context, secure bool) string {
 	if v, err := c.Cookie(CSRFDoubleSubmitCookieName); err == nil && validDoubleSubmitToken(v) {
 		return v

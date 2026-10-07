@@ -7,16 +7,16 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// documentedKinds 是 DESIGN.md §6.2 冻结的十个内置题型。
+// documentedKinds 是冻结的十个内置题型。
 //
-// 注册表当前可能尚未全部注册（short_answer 属未来规划 §14 的口子），但语言包仍应
+// 注册表当前可能尚未全部注册（short_answer 属未来规划的口子），但语言包仍应
 // 预先覆盖，这样将来题型一注册就立刻有显示名，不需要同时补语言包。
 var documentedKinds = []string{
 	"basic", "basic_both", "cloze", "list",
 	"typed", "numeric", "choice_single", "choice_multi", "true_false", "short_answer",
 }
 
-// gradedFieldKeys 是作答类与简答题的字段名（DESIGN.md §6.2 字段名冻结表）。
+// gradedFieldKeys 是作答类与简答题的字段名（字段名冻结表）。
 // 编辑页/新建页对每个字段都必须渲染出标签而不是原始 key。
 var gradedFieldKeys = []string{
 	"question", "answer", "accept", "options", "answers", "statement",

@@ -1,6 +1,6 @@
-// Package digest 实现 C 类「每周学习摘要」的周期后台 worker（ROADMAP.md M1-23；DESIGN.md §4.7）。
+// Package digest 实现 C 类「每周学习摘要」的周期后台 worker（ROADMAP.md M1-23）。
 //
-// 行为约束（DESIGN.md §4.7）：
+// 行为约束：
 //   - 摘要默认**每周**一次（不是每日），按用户本地时区成周；可关闭（C 类默认关）。
 //   - 每人每周**恰好一封**：台账见 store.DigestLog，主键 (user_id, week_start) 是跨进程重启
 //     仍成立最后防线——进程内计数器一重启就归零，重启后当周会再发一封。
@@ -81,7 +81,7 @@ type Deps struct {
 	StatsPath string
 	// Tokens 签发一键退订令牌（M1-22）；为空时邮件不带退订头。
 	Tokens *auth.ActionTokenService
-	// Templates 取管理员自定义的邮件模板（DESIGN.md §4.7）；为空表示只用内置正文。
+	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
 	Templates mail.LookupFunc
 	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
 	SiteDefaultLocale func() string
@@ -102,7 +102,7 @@ type Worker struct {
 	baseURL    string
 	statsPath  string
 	tokens     *auth.ActionTokenService
-	// templates 取自定义邮件模板；缺失即用内置正文（DESIGN.md §4.7）。
+	// templates 取自定义邮件模板；缺失即用内置正文。
 	templates mail.LookupFunc
 	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
 	siteLocale func() string
