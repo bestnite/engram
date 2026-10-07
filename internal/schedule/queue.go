@@ -2,8 +2,10 @@ package schedule
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math/rand"
 	"sort"
 	"time"
@@ -110,7 +112,8 @@ type QueueOptions struct {
 	NewOrder NewOrder
 	// BatchSize 是复习卡一次取出的批大小（retrievability 需在内存排序）。
 	BatchSize int
-	// Rand 是可选随机源；仅影响 NewOrderRandom。为 nil 时按当前时间播种。
+	// Rand 是可选随机源；仅影响 NewOrderRandom。为 nil 时按 (用户, 复习日) 派生固定种子，
+	// 因此同一天内反复构建得到同一排列（见 queueShuffleSeed）。
 	Rand *rand.Rand
 }
 
@@ -252,7 +255,11 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	if opts.NewOrder == NewOrderRandom && len(fresh) > 1 {
 		rng := opts.Rand
 		if rng == nil {
-			rng = rand.New(rand.NewSource(now.UnixNano()))
+			loc, err := opts.location()
+			if err != nil {
+				return nil, err
+			}
+			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour)))))
 		}
 		rng.Shuffle(len(fresh), func(i, j int) { fresh[i], fresh[j] = fresh[j], fresh[i] })
 	}
@@ -264,6 +271,24 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	}
 	out = append(out, fresh...)
 	return out, nil
+}
+
+// queueShuffleSeed 从 (用户, 复习日) 派生新卡乱序的种子。
+//
+// 为什么不用「构建时刻」播种：那个值每次请求都不同，于是同一天里刷新页面、取下一批新卡都会
+// 换一个排列——学习者看到的顺序不稳定，报告问题时也无从复现。改用 (用户, 复习日) 之后，
+// 同一天内顺序固定（同一批次的顺序可复现），隔天自动轮换，仍满足「避免永远只背开头几张」
+// 这一初衷（DESIGN.md §3.3）；不同用户同一天也不共享排列。
+//
+// 复习日必须用本包唯一的 ReviewDay 定义（含用户时区与切点），否则轮换时点会与配额、连击、
+// 提醒等一切按复习日计数的功能错开一天。
+func queueShuffleSeed(userID uint64, day string) int64 {
+	h := fnv.New64a()
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], userID)
+	h.Write(buf[:])
+	h.Write([]byte(day))
+	return int64(h.Sum64())
 }
 
 // DeckCounts 返回每个卡组单卡组口径下的队列构成；与 Build(DeckID=d) 出队的张数逐一相等
