@@ -21,6 +21,8 @@ import (
 // 所有管理页面上，而不是只看总览页一处。
 func TestAdminAPIKeysNeverLeakPlaintext(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /admin/api-keys 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 总览页的元信息渲染。
+	srv.spa = nil
 	created, err := store.NewAPIKeyStore(db).Create(context.Background(), store.CreateAPIKeyParams{
 		UserID: ownerID, Name: "ci key", Scopes: []string{store.ScopeRead, store.ScopeWrite},
 	})
@@ -75,6 +77,8 @@ func TestAdminAPIKeysNeverLeakPlaintext(t *testing.T) {
 // TestAdminAPIKeyRevoke 覆盖写路径：撤销后 key 立即变为「已撤销」，并写一条审计。
 func TestAdminAPIKeyRevoke(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// GET /admin/api-keys 已切到 SPA 应用壳；禁用 SPA 以覆盖撤销后的 SSR 状态渲染。
+	srv.spa = nil
 	ctx := context.Background()
 	created, err := store.NewAPIKeyStore(db).Create(ctx, store.CreateAPIKeyParams{
 		UserID: ownerID, Name: "to revoke",

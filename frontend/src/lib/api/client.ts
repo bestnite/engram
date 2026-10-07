@@ -862,6 +862,104 @@ export class ApiClient {
     const qs = params.toString();
     return this.request<import('./types').AdminAuditResponse>(`/api/v1/admin/audit${qs ? `?${qs}` : ''}`);
   }
+
+  /** 用户管理列表（GET /api/v1/admin/users）。 */
+  async getAdminUsers(params?: { q?: string; page?: number }): Promise<import('./types').AdminUsersResponse> {
+    const search = new URLSearchParams();
+    if (params?.q) search.set('q', params.q);
+    if (params?.page !== undefined) search.set('page', String(params.page));
+    const qs = search.toString();
+    return this.request<import('./types').AdminUsersResponse>(`/api/v1/admin/users${qs ? `?${qs}` : ''}`);
+  }
+
+  /** 新建本地账号（POST /api/v1/admin/users）；校验失败返回稳定 code。 */
+  async createAdminUser(input: import('./types').AdminUserCreateRequest): Promise<import('./types').AdminUser> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<import('./types').AdminUser>('/api/v1/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 启用 / 禁用账号（POST /api/v1/admin/users/:id/status）。 */
+  async setAdminUserStatus(id: number, action: 'enable' | 'disable'): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+  }
+
+  /** 改角色（POST /api/v1/admin/users/:id/role）；危险动作，服务端要求 confirm。 */
+  async setAdminUserRole(id: number, role: string): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role, confirm: true }),
+    });
+  }
+
+  /** 重置密码（POST /api/v1/admin/users/:id/password）；一次性返回临时口令。 */
+  async resetAdminUserPassword(id: number): Promise<{ temp_password: string }> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<{ temp_password: string }>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true }),
+    });
+  }
+
+  /** 强制下线（POST /api/v1/admin/users/:id/logout）。 */
+  async forceLogoutAdminUser(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/logout`, { method: 'POST', body: '{}' });
+  }
+
+  /** 删除用户（POST /api/v1/admin/users/:id/delete）；危险动作，服务端要求 confirm。 */
+  async deleteAdminUser(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true }),
+    });
+  }
+
+  /** 读取注册策略、白名单与邀请列表（GET /api/v1/admin/registration）。 */
+  async getAdminRegistration(): Promise<import('./types').AdminRegistrationResponse> {
+    return this.request<import('./types').AdminRegistrationResponse>('/api/v1/admin/registration');
+  }
+
+  /** 保存注册策略与邮箱域名白名单（POST /api/v1/admin/registration）。 */
+  async saveAdminRegistration(input: import('./types').AdminRegistrationRequest): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>('/api/v1/admin/registration', { method: 'POST', body: JSON.stringify(input) });
+  }
+
+  /** 创建邀请（POST /api/v1/admin/invites）；回带发信结果码。 */
+  async createAdminInvite(input: import('./types').AdminInviteCreateRequest): Promise<import('./types').AdminInviteCreateResponse> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<import('./types').AdminInviteCreateResponse>('/api/v1/admin/invites', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 撤销邀请（POST /api/v1/admin/invites/:id/revoke）。 */
+  async revokeAdminInvite(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/invites/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
+  }
+
+  /** 全用户 API Key 总览（GET /api/v1/admin/api-keys）。 */
+  async getAdminAPIKeys(params?: { page?: number }): Promise<import('./types').AdminAPIKeysResponse> {
+    const qs = params?.page !== undefined ? `?page=${params.page}` : '';
+    return this.request<import('./types').AdminAPIKeysResponse>(`/api/v1/admin/api-keys${qs}`);
+  }
+
+  /** 撤销任意用户的一把 key（POST /api/v1/admin/api-keys/:id/revoke）。 */
+  async revokeAdminAPIKey(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/api-keys/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
+  }
 }
 
 /**

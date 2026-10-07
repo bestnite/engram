@@ -852,3 +852,103 @@ export interface AdminAuditQuery {
   page?: number;
 }
 
+/** 用户管理（DESIGN.md §8.4，Go: internal/web/spa_admin_users.go）。 */
+
+/** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  display_name: string;
+  role: string;
+  status: string;
+  decks: number;
+  cards: number;
+  reviews: number;
+  is_self: boolean;
+}
+
+/** GET /api/v1/admin/users 响应。 */
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  page: number;
+  pages: number;
+  total: number;
+  query: string;
+}
+
+/** POST /api/v1/admin/users 请求。 */
+export interface AdminUserCreateRequest {
+  username: string;
+  email: string;
+  display_name: string;
+  password: string;
+  role: string;
+}
+
+/** 注册与邀请（Go: internal/web/spa_admin_registration.go）。 */
+
+/** 一条邀请；role/status 是存储取值，link 供管理员复制。 */
+export interface AdminInvite {
+  id: number;
+  token: string;
+  link: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string;
+  used_by: string;
+}
+
+/** GET /api/v1/admin/registration 响应。 */
+export interface AdminRegistrationResponse {
+  policy: string;
+  email_domains: string;
+  invites: AdminInvite[];
+}
+
+/** POST /api/v1/admin/registration 请求。 */
+export interface AdminRegistrationRequest {
+  policy: string;
+  email_domains: string;
+}
+
+/** POST /api/v1/admin/invites 请求；expires_days 为 null 或 0 表示不过期。 */
+export interface AdminInviteCreateRequest {
+  email: string;
+  role: string;
+  expires_days: number | null;
+  send_email: boolean;
+}
+
+/** POST /api/v1/admin/invites 响应；mail_notice 是稳定英文码（空串表示未请求发信）。 */
+export interface AdminInviteCreateResponse {
+  invite: AdminInvite;
+  mail_notice: string;
+}
+
+/** API Key 总览（Go: internal/web/spa_admin_keys.go）。 */
+
+/** 一把 key 的元信息；时间已按管理员时区格式化，null 表示未设置。 */
+export interface AdminAPIKey {
+  id: number;
+  user_id: number;
+  owner: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  expires_at: string | null;
+  state: string;
+}
+
+/** GET /api/v1/admin/api-keys 响应。 */
+export interface AdminAPIKeysResponse {
+  keys: AdminAPIKey[];
+  page: number;
+  pages: number;
+  total: number;
+}
+

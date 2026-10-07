@@ -1,7 +1,9 @@
 package web
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -81,6 +83,15 @@ func (s *Server) spaAdminGuard() gin.HandlerFunc {
 	}
 }
 
+// parseUintParam 解析路径里的十进制 id；0 与非法输入一律返回错误（id 从 1 起）。
+func parseUintParam(raw string) (uint64, error) {
+	id, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+	if err != nil || id == 0 {
+		return 0, errors.New("invalid id")
+	}
+	return id, nil
+}
+
 // registerSPAAdminRoutes 挂载管理面板的 JSON 端点（读 + 写）。
 //
 // 依赖未装配时整体跳过，保证 M0 阶段与未启用会话的测试仍能构造 Server。写操作一律过会话
@@ -96,4 +107,23 @@ func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	g.GET("/summary", s.spaAdminSummary)
 	g.GET("/health", s.spaAdminHealth)
 	g.GET("/audit", s.spaAdminAudit)
+
+	// 用户管理（列表读 + 危险动作写；写操作过会话 CSRF）。
+	g.GET("/users", s.spaAdminUsers)
+	g.POST("/users", s.sessions.CSRFMiddleware(), s.spaAdminUserCreate)
+	g.POST("/users/:id/status", s.sessions.CSRFMiddleware(), s.spaAdminUserStatus)
+	g.POST("/users/:id/role", s.sessions.CSRFMiddleware(), s.spaAdminUserRole)
+	g.POST("/users/:id/password", s.sessions.CSRFMiddleware(), s.spaAdminUserResetPassword)
+	g.POST("/users/:id/logout", s.sessions.CSRFMiddleware(), s.spaAdminUserForceLogout)
+	g.POST("/users/:id/delete", s.sessions.CSRFMiddleware(), s.spaAdminUserDelete)
+
+	// 注册与邀请。
+	g.GET("/registration", s.spaAdminRegistration)
+	g.POST("/registration", s.sessions.CSRFMiddleware(), s.spaAdminRegistrationSave)
+	g.POST("/invites", s.sessions.CSRFMiddleware(), s.spaAdminInviteCreate)
+	g.POST("/invites/:id/revoke", s.sessions.CSRFMiddleware(), s.spaAdminInviteRevoke)
+
+	// API Key 总览（读 + 撤销）。
+	g.GET("/api-keys", s.spaAdminAPIKeys)
+	g.POST("/api-keys/:id/revoke", s.sessions.CSRFMiddleware(), s.spaAdminAPIKeyRevoke)
 }

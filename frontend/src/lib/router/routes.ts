@@ -20,6 +20,9 @@ import NotificationPrefsView from '../views/NotificationPrefsView.svelte';
 import AdminDashboardView from '../views/admin/AdminDashboardView.svelte';
 import AdminHealthView from '../views/admin/AdminHealthView.svelte';
 import AdminAuditView from '../views/admin/AdminAuditView.svelte';
+import AdminUsersView from '../views/admin/AdminUsersView.svelte';
+import AdminRegistrationView from '../views/admin/AdminRegistrationView.svelte';
+import AdminAPIKeysView from '../views/admin/AdminAPIKeysView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -208,5 +211,23 @@ export const routes: RouteDefinition[] = [
     path: '/admin/audit',
     name: 'admin-audit',
     component: AdminAuditView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 用户管理。服务端 GET /admin/users 已切到应用壳，读写走 /api/v1/admin/users*。
+    path: '/admin/users',
+    name: 'admin-users',
+    component: AdminUsersView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 注册与邀请。服务端 GET /admin/registration 已切到应用壳，读写走 /api/v1/admin/(registration|invites)。
+    path: '/admin/registration',
+    name: 'admin-registration',
+    component: AdminRegistrationView as unknown as RouteDefinition['component'],
+  },
+  {
+    // API Key 总览。服务端 GET /admin/api-keys 已切到应用壳，读写走 /api/v1/admin/api-keys*。
+    path: '/admin/api-keys',
+    name: 'admin-api-keys',
+    component: AdminAPIKeysView as unknown as RouteDefinition['component'],
   },
 ];

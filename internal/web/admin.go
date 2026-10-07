@@ -88,7 +88,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminUserCreate)
 			} else {
-				handlers = append(handlers, s.adminUsersPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminUsersPage))
 			}
 		case "/admin/users/:id/status":
 			handlers = append(handlers, s.adminUserStatus)
@@ -104,7 +104,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminRegistrationSave)
 			} else {
-				handlers = append(handlers, s.adminRegistrationPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminRegistrationPage))
 			}
 		case "/admin/invites":
 			handlers = append(handlers, s.adminInviteCreate)
@@ -143,7 +143,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		case "/admin/health":
 			handlers = append(handlers, s.spaAdminPage(s.adminHealthPage))
 		case "/admin/api-keys":
-			handlers = append(handlers, s.adminAPIKeysPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminAPIKeysPage))
 		case "/admin/api-keys/:id/revoke":
 			handlers = append(handlers, s.adminAPIKeyRevoke)
 		case "/admin/i18n":
