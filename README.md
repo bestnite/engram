@@ -168,15 +168,14 @@ Engram builds on these projects:
 - [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) — the training implementation behind
   the optimiser adapter.
 - [Gin](https://github.com/gin-gonic/gin) and [GORM](https://gorm.io) — HTTP and database layers.
-- [templ](https://github.com/a-h/templ) — type-safe HTML templates.
+- [Svelte](https://svelte.dev/) — the single-page front end.
 - [goldmark](https://github.com/yuin/goldmark) and
   [bluemonday](https://github.com/microcosm-cc/bluemonday) — Markdown rendering and HTML
   allowlisting.
 - [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — the MCP server.
 - [zitadel/oidc](https://github.com/zitadel/oidc) and
   [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC sign-in and translation catalogs.
-- [MathJax](https://www.mathjax.org/) and [htmx](https://htmx.org/) — formula rendering and page
-  interaction.
+- [MathJax](https://www.mathjax.org/) — formula rendering.
 - [Tailwind CSS](https://tailwindcss.com/) — styling.
 
 Friend link: [LINUX DO](https://linux.do) — a Chinese-language tech community.
