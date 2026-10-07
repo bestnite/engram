@@ -1688,14 +1688,10 @@
   translation: "邀请码发给被邀请人"
 - id: mail.prefs.type.review_reminder
   translation: "复习到期提醒"
-- id: mail.prefs.type.streak_at_risk
-  translation: "连续打卡即将中断"
 - id: mail.prefs.type.study_digest
   translation: "学习摘要"
 - id: mail.prefs.type.optimize_done
   translation: "参数优化完成"
-- id: mail.prefs.type.import_export_done
-  translation: "导入导出完成"
 - id: mail.prefs.type.job_failed
   translation: "作业失败"
 - id: mail.prefs.type.media_disk_alert

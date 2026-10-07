@@ -9,7 +9,7 @@ func TestUnsubscribeHeadersOnlyForOptionalTypes(t *testing.T) {
 
 	for _, typ := range []Type{
 		TypeInvite, TypeDeckShared, TypeDeckPermissionChanged, // B
-		TypeReviewReminder, TypeStudyDigest, TypeStreakAtRisk, // C
+		TypeReviewReminder, TypeStudyDigest, // C
 		TypeJobFailed, TypeMediaDiskAlert, // D
 	} {
 		if !CanUnsubscribe(typ) {

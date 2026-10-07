@@ -1690,14 +1690,10 @@
   translation: "Invite code sent to the invitee"
 - id: mail.prefs.type.review_reminder
   translation: "Review due reminder"
-- id: mail.prefs.type.streak_at_risk
-  translation: "Streak about to break"
 - id: mail.prefs.type.study_digest
   translation: "Study digest"
 - id: mail.prefs.type.optimize_done
   translation: "Parameter optimisation finished"
-- id: mail.prefs.type.import_export_done
-  translation: "Import or export finished"
 - id: mail.prefs.type.job_failed
   translation: "Job failed"
 - id: mail.prefs.type.media_disk_alert

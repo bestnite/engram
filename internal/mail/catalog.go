@@ -43,11 +43,15 @@ const (
 	TypeInvite                Type = "invite"                  // 邀请码发给被邀请人
 
 	// C 学习/运营：默认关、可关闭。
-	TypeReviewReminder   Type = "review_reminder"    // 复习到期提醒
-	TypeStreakAtRisk     Type = "streak_at_risk"     // 连续打卡即将中断
-	TypeStudyDigest      Type = "study_digest"       // 学习摘要
-	TypeOptimizeDone     Type = "optimize_done"      // 参数优化完成
-	TypeImportExportDone Type = "import_export_done" // 导入导出完成
+	TypeReviewReminder Type = "review_reminder" // 复习到期提醒
+	TypeStudyDigest    Type = "study_digest"    // 学习摘要
+	TypeOptimizeDone   Type = "optimize_done"   // 参数优化完成
+
+	// 曾有两种 C 类类型在 2026-10-07 被删除：连续打卡即将中断（streak_at_risk）与导入导出完成
+	// （import_export_done）。删掉的理由不是「暂时没做」，而是**它们没有触发点**：前者没有
+	// 「即将中断」的判定规则，后者没有异步导入/导出作业（同步完成时用户正看着结果页，发信
+	// 没有意义，这个类型当初就是为将来的异步大文件流程预留的）。目录里的每个类型都必须有
+	// 发信方，否则偏好页会长出一个永远不会发的开关。要恢复它们，先把触发点做出来。
 
 	// D 管理员通知：默认开、可关闭，发给管理员。
 	TypeJobFailed      Type = "job_failed"       // 作业失败
@@ -86,10 +90,8 @@ var catalog = []Definition{
 
 	// C 学习/运营
 	{Type: TypeReviewReminder, Class: ClassStudy, LabelKey: "mail.prefs.type.review_reminder"},
-	{Type: TypeStreakAtRisk, Class: ClassStudy, LabelKey: "mail.prefs.type.streak_at_risk"},
 	{Type: TypeStudyDigest, Class: ClassStudy, LabelKey: "mail.prefs.type.study_digest"},
 	{Type: TypeOptimizeDone, Class: ClassStudy, LabelKey: "mail.prefs.type.optimize_done"},
-	{Type: TypeImportExportDone, Class: ClassStudy, LabelKey: "mail.prefs.type.import_export_done"},
 
 	// D 管理员通知
 	{Type: TypeJobFailed, Class: ClassAdmin, LabelKey: "mail.prefs.type.job_failed"},

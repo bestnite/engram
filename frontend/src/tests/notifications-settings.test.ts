@@ -14,7 +14,7 @@ import { routes } from '../lib/router/routes';
 const catalog = {
   security: ['password_reset', 'email_verification', 'new_device_login', 'credential_changed', 'account_status'],
   collab: ['deck_shared', 'deck_permission_changed', 'invite'],
-  study: ['review_reminder', 'streak_at_risk', 'study_digest', 'optimize_done', 'import_export_done'],
+  study: ['review_reminder', 'study_digest', 'optimize_done'],
   admin: ['job_failed', 'media_disk_alert'],
 } as const;
 

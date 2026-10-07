@@ -16,7 +16,9 @@ func TestCatalogClassesAndDefaults(t *testing.T) {
 	}{
 		{ClassSecurity, 5, false, true},
 		{ClassCollab, 3, true, true},
-		{ClassStudy, 5, true, false},
+		// C 类 2026-10-07 从 5 种降到 3 种：连续打卡即将中断与导入导出完成因没有触发点被移出
+		// 目录（理由见 catalog.go 的注释）。这个数字随目录变动，改目录时同步改这里。
+		{ClassStudy, 3, true, false},
 		{ClassAdmin, 2, true, true},
 	}
 	counts := map[Class]int{}
