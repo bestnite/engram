@@ -161,13 +161,31 @@ func runServe(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// 邮件模板（DESIGN.md §4.7）：周期 worker 与 web 层共用同一份查找实现，
+		// 否则会出现「网页发的信有模板、提醒发的没有」这种很难察觉的不一致。
+		templates := mail.StoreLookup(store.NewMailTemplateStore(db), logger)
+		siteLocale := func() string {
+			settings, err := store.LoadSettings(context.Background(), db)
+			if err != nil {
+				return ""
+			}
+			raw := strings.TrimSpace(settings["site.default_locale"])
+			for _, code := range translator.SupportedCodes() {
+				if code == raw {
+					return code
+				}
+			}
+			return ""
+		}
 		reminderWorker, err := reminder.New(reminder.Deps{
-			DB:         db,
-			Outbox:     mb,
-			Translator: translator,
-			Logger:     logger,
-			BaseURL:    cfg.Get(config.KeyBaseURL).Value,
-			Tokens:     tokens,
+			DB:                db,
+			Outbox:            mb,
+			Translator:        translator,
+			Logger:            logger,
+			BaseURL:           cfg.Get(config.KeyBaseURL).Value,
+			Tokens:            tokens,
+			Templates:         templates,
+			SiteDefaultLocale: siteLocale,
 		})
 		if err != nil {
 			return err
@@ -177,12 +195,14 @@ func runServe(ctx context.Context) error {
 		// 每周学习摘要 worker（M1-23，C 类）：同为周期扫描，但节律是周、候选集是所有可收信
 		// 用户（不要求有到期卡），去重台账是独立的 digest_log，故不复用提醒 worker。
 		digestWorker, err := digest.New(digest.Deps{
-			DB:         db,
-			Outbox:     mb,
-			Translator: translator,
-			Logger:     logger,
-			BaseURL:    cfg.Get(config.KeyBaseURL).Value,
-			Tokens:     tokens,
+			DB:                db,
+			Outbox:            mb,
+			Translator:        translator,
+			Logger:            logger,
+			BaseURL:           cfg.Get(config.KeyBaseURL).Value,
+			Tokens:            tokens,
+			Templates:         templates,
+			SiteDefaultLocale: siteLocale,
 		})
 		if err != nil {
 			return err

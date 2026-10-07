@@ -39,6 +39,7 @@ import (
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
+	"strconv"
 )
 
 const (
@@ -80,6 +81,10 @@ type Deps struct {
 	StatsPath string
 	// Tokens 签发一键退订令牌（M1-22）；为空时邮件不带退订头。
 	Tokens *auth.ActionTokenService
+	// Templates 取管理员自定义的邮件模板（DESIGN.md §4.7）；为空表示只用内置正文。
+	Templates mail.LookupFunc
+	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
+	SiteDefaultLocale func() string
 }
 
 // Worker 持有后台 worker 与配置。
@@ -97,6 +102,10 @@ type Worker struct {
 	baseURL    string
 	statsPath  string
 	tokens     *auth.ActionTokenService
+	// templates 取自定义邮件模板；缺失即用内置正文（DESIGN.md §4.7）。
+	templates mail.LookupFunc
+	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
+	siteLocale func() string
 }
 
 // New 构造 Worker；不启动 worker，需再调用 Start。
@@ -131,6 +140,8 @@ func New(deps Deps) (*Worker, error) {
 		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		statsPath:  path,
 		tokens:     deps.Tokens,
+		templates:  deps.Templates,
+		siteLocale: deps.SiteDefaultLocale,
 	}
 	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
 	lifecycle, err := worker.New(worker.Config{
@@ -290,36 +301,78 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 // 令牌指名 study_digest 这一个类型，收件人不登录即可关掉它。令牌签发失败只记日志并照常发信。
 func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestStats) mail.Message {
 	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
+	site := lc.T("app.name")
+	statsURL := w.statsURL()
+	unsubURL := w.unsubscribeLink(ctx, c.ID)
 	lines := []string{
 		lc.Tf("mail.digest.reviewed", map[string]any{"count": s.Reviewed}),
 		lc.Tf("mail.digest.pass_rate", map[string]any{"rate": store.FormatPercent(s.PassRate)}),
 		lc.Tf("mail.digest.streak", map[string]any{"days": s.StreakCurrent}),
 		lc.Tf("mail.digest.new_cards", map[string]any{"count": s.NewCards}),
 		lc.Tf("mail.digest.due", map[string]any{"count": s.DueNow}),
-		lc.Tf("mail.digest.link", map[string]any{"url": w.statsURL()}),
+		lc.Tf("mail.digest.link", map[string]any{"url": statsURL}),
 	}
+	vars := mail.Vars{
+		"site":  site,
+		"count": strconv.FormatInt(s.Reviewed, 10),
+		"rate":  store.FormatPercent(s.PassRate),
+		"days":  strconv.Itoa(s.StreakCurrent),
+		"url":   statsURL,
+	}
+	if unsubURL != "" {
+		vars["unsubscribe_url"] = unsubURL
+	}
+	footerNote, unsubLabel := "", ""
+	if unsubURL != "" {
+		footerNote = lc.T("mail.footer.note")
+		unsubLabel = lc.T("mail.footer.unsubscribe")
+	}
+	tpl := mail.Resolve(w.templates, mail.TypeStudyDigest, lc.Locale(), w.siteDefaultLocale())
+	out := mail.RenderOrFallback(mail.RenderInput{
+		Type:             mail.TypeStudyDigest,
+		Site:             site,
+		Vars:             vars,
+		Subject:          tpl.Subject,
+		BodyMD:           tpl.Body,
+		FallbackSubject:  lc.T("mail.digest.subject"),
+		FallbackText:     strings.Join(lines, "\n"),
+		UnsubscribeURL:   unsubURL,
+		FooterNote:       footerNote,
+		UnsubscribeLabel: unsubLabel,
+	})
 	msg := mail.Message{
 		To:       c.Email,
 		Type:     string(mail.TypeStudyDigest),
-		Subject:  lc.T("mail.digest.subject"),
-		TextBody: strings.Join(lines, "\n"),
+		Subject:  out.Subject,
+		TextBody: out.Text,
+		HTMLBody: out.HTML,
 	}
-	msg.Headers = w.unsubscribeHeaders(ctx, c.ID)
+	msg.Headers = mail.UnsubscribeHeaders(mail.TypeStudyDigest, unsubURL)
 	return msg
 }
 
+// siteDefaultLocale 返回站点默认语言（模板回退链第二级）；未注入时返回空串。
+func (w *Worker) siteDefaultLocale() string {
+	if w.siteLocale == nil {
+		return ""
+	}
+	return strings.TrimSpace(w.siteLocale())
+}
+
 // unsubscribeHeaders 为 study_digest 签发退订令牌并返回 RFC 8058 头；不可用时返回 nil。
-func (w *Worker) unsubscribeHeaders(ctx context.Context, userID uint64) map[string]string {
+// unsubscribeLink 为 study_digest 签发退订令牌并返回退订链接；不可用时返回空串。
+//
+// 返回链接而不是头：正文页脚与纯文本段也要有它（头只有邮件客户端看得到）。
+func (w *Worker) unsubscribeLink(ctx context.Context, userID uint64) string {
 	if w.tokens == nil {
-		return nil
+		return ""
 	}
 	token, err := w.tokens.Issue(ctx, userID, store.ActionTokenUnsubscribe, string(mail.TypeStudyDigest), auth.UnsubscribeTTL)
 	if err != nil {
 		w.logger.Error("weekly digest: issue unsubscribe token failed", "user_id", userID, "error", err)
-		return nil
+		return ""
 	}
-	link := w.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
-	return mail.UnsubscribeHeaders(mail.TypeStudyDigest, link)
+	return w.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
 }
 
 // statsURL 拼统计页链接；未配置 BaseURL 时退化成相对路径。

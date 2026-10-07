@@ -183,29 +183,31 @@ func TestRenderSubjectStaysSingleLine(t *testing.T) {
 	}
 }
 
-// TestValidateBody 锁定保存时的校验：认识的变量可选、不认识的必拒、必填的必写。
-func TestValidateBody(t *testing.T) {
+// TestValidate 锁定保存时的校验：认识的变量可选、不认识的必拒、必填的必写。
+func TestValidate(t *testing.T) {
 	cases := []struct {
 		name    string
 		body    string
 		wantErr string
 	}{
 		{"ok", "Reset: {{url}} (expires {{expires}})", ""},
-		{"missing required", "Reset: {{url}}", "expires"},
+		// 必填只收「缺了就没用」的变量：过期时间这类展示性细节不再必填，
+		// 所以「只写了 expires」才是缺 url 的那种失败。
+		{"missing required", "Reset here, expires {{expires}}", "url"},
 		{"unknown var", "Reset: {{url}} {{expires}} {{pasword}}", "pasword"},
 		{"no placeholders at all", "Reset here", "url"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateBody(TypePasswordReset, tc.body)
+			err := Validate(TypePasswordReset, "", tc.body)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("ValidateBody() error = %v, want nil", err)
+					t.Fatalf("Validate() error = %v, want nil", err)
 				}
 				return
 			}
 			if err == nil {
-				t.Fatal("ValidateBody() error = nil, want an error")
+				t.Fatal("Validate() error = nil, want an error")
 			}
 			if !strings.Contains(err.Error(), tc.wantErr) {
 				t.Errorf("error = %v, want it to mention %q", err, tc.wantErr)
@@ -215,9 +217,9 @@ func TestValidateBody(t *testing.T) {
 }
 
 // TestValidateBodyRejectsUnknownType 断言没接入发信方的类型不接受模板。
-func TestValidateBodyRejectsUnknownType(t *testing.T) {
-	if err := ValidateBody(Type("no_such_type"), "{{anything}}"); err == nil {
-		t.Fatal("ValidateBody() error = nil, want an error for a type without senders")
+func TestValidateRejectsUnknownType(t *testing.T) {
+	if err := Validate(Type("no_such_type"), "", "{{anything}}"); err == nil {
+		t.Fatal("Validate() error = nil, want an error for a type without senders")
 	}
 }
 

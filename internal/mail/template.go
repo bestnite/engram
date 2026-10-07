@@ -71,11 +71,6 @@ func Render(in RenderInput) (Rendered, error) {
 	if strings.TrimSpace(in.BodyMD) == "" {
 		return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}, nil
 	}
-	// 模板内容也在这里校验一次，而不是只在管理页保存时校验：行可能被直写库、或由旧版本
-	// 写进来，而「丢掉了重置链接的模板」必须退到内置正文，不能发出一封没用的信。
-	if err := ValidateBody(in.Type, in.BodyMD); err != nil {
-		return Rendered{}, fmt.Errorf("mail template is invalid: %w", err)
-	}
 	if err := checkRequiredVars(in.Type, in.Vars); err != nil {
 		return Rendered{}, err
 	}
@@ -115,10 +110,10 @@ func Placeholders(body string) []string {
 	return out
 }
 
-// ValidateBody 校验自定义正文：必填变量必须出现，且不得引用该类型不认识的变量。
-// 「认识但没写」不算错（模板可以只用一部分），「写了却不认识」一定是打错了字，两种都
-// 挡在保存这一步，而不是等邮件发出去才发现链接是空的。
-func ValidateBody(t Type, body string) error {
+// Validate 校验自定义模板：正文必须含该类型的必填变量，且主题与正文都不得引用不认识的
+// 变量。「认识但没写」不算错（模板可以只用一部分），「写了却不认识」一定是打错了字——
+// 主题里的错字会渲染成空串（收件人看到空主题），所以主题一起查。
+func Validate(t Type, subject, body string) error {
 	specs, ok := VarSpecs(t)
 	if !ok {
 		return fmt.Errorf("mail type %q does not support templates", t)
@@ -128,6 +123,9 @@ func ValidateBody(t Type, body string) error {
 		known[s.Name] = true
 	}
 	used := Placeholders(body)
+	for _, name := range Placeholders(subject) {
+		used = append(used, name)
+	}
 	for _, name := range used {
 		if !known[name] {
 			return fmt.Errorf("unknown variable {{%s}}", name)

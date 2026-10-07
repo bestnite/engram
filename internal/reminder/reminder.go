@@ -37,6 +37,7 @@ import (
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
+	"strconv"
 )
 
 const (
@@ -101,6 +102,10 @@ type Deps struct {
 	ReviewPath string
 	// Tokens 签发一键退订令牌（M1-22）；为空时提醒邮件不带退订头（可选类型才需要）。
 	Tokens *auth.ActionTokenService
+	// Templates 取管理员自定义的邮件模板（DESIGN.md §4.7）；为空表示只用内置正文。
+	Templates mail.LookupFunc
+	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
+	SiteDefaultLocale func() string
 }
 
 // Reminder 持有后台 worker 与配置。
@@ -119,6 +124,10 @@ type Reminder struct {
 	reviewPath string
 	// tokens 签发退订令牌（M1-22）；为空时不加退订头。
 	tokens *auth.ActionTokenService
+	// templates 取自定义邮件模板；缺失即用内置正文（DESIGN.md §4.7）。
+	templates mail.LookupFunc
+	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
+	siteLocale func() string
 }
 
 // New 构造 Reminder；不启动 worker，需再调用 Start。
@@ -153,6 +162,8 @@ func New(deps Deps) (*Reminder, error) {
 		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		reviewPath: path,
 		tokens:     deps.Tokens,
+		templates:  deps.Templates,
+		siteLocale: deps.SiteDefaultLocale,
 	}
 	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
 	lifecycle, err := worker.New(worker.Config{
@@ -254,33 +265,65 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 // 令牌签发失败只记日志并照常发信：退订入口缺失不该让提醒发不出去。
 func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.Message {
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
-	subject := lc.T("mail.reminder.subject")
-	body := lc.Tf("mail.reminder.body", map[string]any{
-		"count": c.DueCount,
-		"url":   r.reviewURL(),
+	site := lc.T("app.name")
+	reviewURL := r.reviewURL()
+	unsubURL := r.unsubscribeLink(ctx, c.ID)
+
+	vars := mail.Vars{"site": site, "count": strconv.FormatInt(c.DueCount, 10), "url": reviewURL}
+	if unsubURL != "" {
+		vars["unsubscribe_url"] = unsubURL
+	}
+	footerNote, unsubLabel := "", ""
+	if unsubURL != "" {
+		footerNote = lc.T("mail.footer.note")
+		unsubLabel = lc.T("mail.footer.unsubscribe")
+	}
+	tpl := mail.Resolve(r.templates, mail.TypeReviewReminder, lc.Locale(), r.siteDefaultLocale())
+	out := mail.RenderOrFallback(mail.RenderInput{
+		Type:             mail.TypeReviewReminder,
+		Site:             site,
+		Vars:             vars,
+		Subject:          tpl.Subject,
+		BodyMD:           tpl.Body,
+		FallbackSubject:  lc.T("mail.reminder.subject"),
+		FallbackText:     lc.Tf("mail.reminder.body", map[string]any{"count": c.DueCount, "url": reviewURL}),
+		UnsubscribeURL:   unsubURL,
+		FooterNote:       footerNote,
+		UnsubscribeLabel: unsubLabel,
 	})
 	msg := mail.Message{
 		To:       c.Email,
 		Type:     string(mail.TypeReviewReminder),
-		Subject:  subject,
-		TextBody: body,
+		Subject:  out.Subject,
+		TextBody: out.Text,
+		HTMLBody: out.HTML,
 	}
-	msg.Headers = r.unsubscribeHeaders(ctx, c.ID)
+	msg.Headers = mail.UnsubscribeHeaders(mail.TypeReviewReminder, unsubURL)
 	return msg
 }
 
+// siteDefaultLocale 返回站点默认语言（模板回退链第二级）；未注入时返回空串。
+func (r *Reminder) siteDefaultLocale() string {
+	if r.siteLocale == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.siteLocale())
+}
+
 // unsubscribeHeaders 为 review_reminder 签发退订令牌并返回 RFC 8058 头；不可用时返回 nil。
-func (r *Reminder) unsubscribeHeaders(ctx context.Context, userID uint64) map[string]string {
+// unsubscribeLink 为 review_reminder 签发退订令牌并返回退订链接；不可用时返回空串。
+//
+// 返回链接而不是头：正文页脚与纯文本段也要有它（头只有邮件客户端看得到）。
+func (r *Reminder) unsubscribeLink(ctx context.Context, userID uint64) string {
 	if r.tokens == nil {
-		return nil
+		return ""
 	}
 	token, err := r.tokens.Issue(ctx, userID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
 	if err != nil {
 		r.logger.Error("review reminder: issue unsubscribe token failed", "user_id", userID, "error", err)
-		return nil
+		return ""
 	}
-	link := r.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
-	return mail.UnsubscribeHeaders(mail.TypeReviewReminder, link)
+	return r.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
 }
 
 // reviewURL 拼复习页链接；未配置 BaseURL 时退化成相对路径。

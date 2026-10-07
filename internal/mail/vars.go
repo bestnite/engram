@@ -11,9 +11,13 @@ package mail
 type VarSpec struct {
 	// Name 是模板里书写的名字：`{{url}}` 写的就是它。
 	Name string
-	// Required 为真时，自定义模板缺了它就被拒绝保存。**必填的判据是「缺了这封信就没用
-	// 或没法收场」**：重置链接、验证链接、退订链接都属于这一类（没有退订链接的营销类
-	// 邮件是违规的，而没有重置链接的密码邮件是废纸）。
+	// Required 为真时，自定义模板缺了它就被拒绝保存、发送时也会退回内置正文。
+	//
+	// **判据是「缺了这封信就没用或没法收场」，据此刻意只收两类**：① 收件人必须点的链接
+	// （重置、验证、邀请、复习、统计、卡组页、退订）——没有链接的密码邮件是废纸，没有退订
+	// 入口的营销类邮件是违规；② deck_shared 的 deck 与 inviter（缺了它这封信不知在说什么）。
+	// **展示性细节一律不必填**：到期时间、待复习张数、通过率这类少了只是信息少一点，
+	// 标成必填只会让管理员在保存时撞见莫名其妙的失败。
 	Required bool
 	// NoteKey 是管理页展示该变量用途的语言包键。
 	NoteKey string
@@ -26,12 +30,12 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
 		{Name: "username", Required: false, NoteKey: "admin.mail.var.username"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.reset_url"},
-		{Name: "expires", Required: true, NoteKey: "admin.mail.var.expires"},
+		{Name: "expires", Required: false, NoteKey: "admin.mail.var.expires"},
 	},
 	TypeEmailVerification: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.verify_url"},
-		{Name: "expires", Required: true, NoteKey: "admin.mail.var.expires"},
+		{Name: "expires", Required: false, NoteKey: "admin.mail.var.expires"},
 	},
 	TypeNewDeviceLogin: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -57,7 +61,7 @@ var mailVars = map[Type][]VarSpec{
 	},
 	TypeReviewReminder: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
-		{Name: "count", Required: true, NoteKey: "admin.mail.var.due_count"},
+		{Name: "count", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.review_url"},
 		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},

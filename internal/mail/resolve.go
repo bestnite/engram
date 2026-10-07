@@ -2,6 +2,7 @@ package mail
 
 import (
 	"log/slog"
+	"strings"
 )
 
 // 本文件实现模板的**回退链**与「渲染失败退回内置正文」这条保险（DESIGN.md §4.7）。
@@ -44,6 +45,16 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 // 一段渲染不出来的内容（或发信方漏传了必填变量）时，收件人拿到的仍是内置正文，而不是
 // 一封空邮件或一个 500。失败一定记日志——静默降级会让模板问题永远没人发现。
 func RenderOrFallback(in RenderInput) Rendered {
+	// 模板内容先于渲染校验：行可能被直写库进来，或早于某个变量变成必填，而「丢掉了重置
+	// 链接的模板」必须退到内置正文，不能发出一封没用的信。校验放在这一层而不是 Render 里：
+	// Render 是纯渲染（只回答「这段 Markdown 渲染成什么」），策略归调用发信的那一层。
+	if strings.TrimSpace(in.BodyMD) != "" {
+		if err := Validate(in.Type, in.Subject, in.BodyMD); err != nil {
+			slog.Error("mail template is invalid, falling back to the built-in body",
+				"mail_type", string(in.Type), "error", err)
+			return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}
+		}
+	}
 	out, err := Render(in)
 	if err == nil {
 		return out
