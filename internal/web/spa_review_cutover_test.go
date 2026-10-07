@@ -14,13 +14,13 @@ import (
 //
 //   - GET /review 在 SPA 已加载时返回应用壳，由客户端路由渲染复习页；会话与卡组范围判定
 //     先于切壳执行——匿名 303 登录页、非法 deck 参数 400、范围里读不到的卡组 403，都不因
-//     返回应用壳而放行。SPA 缺失（降级）时回退 SSR 复习页，旧 handler、模板与脚本全部保留。
+//     返回应用壳而放行。
 //   - POST /api/v1/review/bury：埋藏只写本人进度（reader 即可），会话 + CSRF 保护，响应带
 //     同范围重建后的队列。
 //   - POST /api/v1/review/render：只返回服务端清洗后的卡面 HTML（唯一 HTML 汇），会话 + CSRF
 //     保护；SPA 绝不把 fields 原文送进 {@html}。
 //
-// SSR 的评分/动作写路径（/review/answer、/review/action）未改动，仍由各自既有测试覆盖。
+// 评分与动作写路径是 /api/v1/review/answer、/grade、/bury、/render，各自有既有测试覆盖。
 
 // spaQueueBody 是复习队列响应的对外形态（埋藏与渲染入口共用的最小字段）。
 type spaQueueBody struct {

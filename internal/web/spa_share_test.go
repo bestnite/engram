@@ -9,7 +9,7 @@ import (
 
 // 本文件是公开只读分享浏览 SPA 化的验收（internal/web/spa_share.go）。
 //
-// 覆盖：GET /s/:token 的切壳与 SSR 回退、撤销/未知链接仍 404、JSON 内容复用服务端清洗渲染、
+// 覆盖：GET /s/:token 的切壳、撤销/未知链接仍 404、JSON 内容复用服务端清洗渲染、
 // 口令门禁（解锁前不返回正文）、以及打开成功时经 JSON 登记会话级媒体授权。走真实路由与 SQLite。
 
 // shareResponse 是 GET /api/v1/share/:token 的响应形态（测试解码用）。
@@ -32,7 +32,7 @@ func decodeShareResponse(t *testing.T, rec *httptest.ResponseRecorder) shareResp
 	return body
 }
 
-// TestSPAShareBrowseCutover 覆盖 GET /s/:token 的切壳、撤销/未知链接的 404，以及 SSR 回退。
+// TestSPAShareBrowseCutover 覆盖 GET /s/:token 的切壳与撤销/未知链接的 404。
 func TestSPAShareBrowseCutover(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Cutover share deck")

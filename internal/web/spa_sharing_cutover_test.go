@@ -14,14 +14,13 @@ import (
 //
 // 共享管理页（owner 专属）在 SPA 已加载时返回应用壳，由客户端路由渲染，数据走
 // /api/v1/decks/:id/sharing 下的 JSON 端点；判权与迁移前的 SSR 页逐项一致（先要求已登录会话，
-// 再按 owner 角色判定），SPA 缺失（降级）时回退 SSR 共享页。
+// 再按 owner 角色判定）。
 //
 // 克隆是「自己可读即可克隆」的独立工作流（reader 及以上），SPA 卡组详情页通过
 // POST /api/v1/decks/:id/clone 调用；本文件钉住 owner/editor/reader 三种体验、非读者与缺 CSRF
 // 的拒绝，以及 Accept 决定返回 JSON 还是 303 重定向。
 //
-// 公开分享浏览 /s/:token 仍是 SSR（未随本切流迁移），本文件用一条测试把这条边界钉死。
-// SSR handler、模板与全部写路径（POST）保持不变。
+// 公开分享浏览 /s/:token 的切流断言在 spa_share_test.go；本文件只覆盖共享管理页与克隆入口。
 
 // ssrSharingMarker 是 SSR 共享页特有的表单标记：SPA 应用壳里不会出现。
 func ssrSharingMarker(deckID uint64) string {

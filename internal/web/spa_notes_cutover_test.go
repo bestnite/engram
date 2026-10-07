@@ -9,13 +9,12 @@ import (
 )
 
 // 本文件覆盖 GET /decks/:id/notes/:nid（卡片编辑）与 GET /decks/:id/new-note（新建卡片）两条
-// 页面的 SPA 规范路径切流：SPA 已加载时返回应用壳（index.html），由客户端
-// 路由渲染页面；SPA 缺失（降级）时回退对应的 SSR 页面。
+// 页面的 SPA 规范路径切流：返回应用壳（index.html），由客户端路由渲染页面。
 //
-// 两条路径都保留迁移前 SSR 页面的判权：先要求已登录会话（匿名重定向登录页），再按 editor 角色
+// 两条路径的判权与迁移前一致：先要求已登录会话（匿名重定向登录页），再按 editor 角色
 // 判定卡组可写性——reader 与陌生用户仍被拒（403），不因返回应用壳而放行。
-// 写路径（POST 表单）全部保留，未随页面切壳移除。
-// 角色授予复用 media_access_test.go 里的 grantRole，走真实 SSR 共享入口。
+// 写路径全部走同源 JSON 端点。
+// 角色授予复用 media_access_test.go 里的 grantRole，直接写 store 的授权表。
 
 // TestNoteEditRouteServesSPAShell 断言 GET /decks/:id/notes/:nid 对 owner 返回 SPA 应用壳，
 // 由客户端路由渲染编辑页，不再渲染 SSR 编辑表单。

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -96,18 +95,6 @@ func waitForMail(t *testing.T, sender *recordingMailSender, n int) []mail.Messag
 	}
 	t.Fatalf("timed out waiting for %d delivered messages, got %d", n, len(sender.messages()))
 	return nil
-}
-
-// noticeFrom 从 303 重定向的 Location 里取出 notice 码。
-// 邀请相关用例已改读 JSON 的 mail_notice；本助手保留给仍走 SSR 重定向的退订流（unsubscribe_test.go）复用。
-func noticeFrom(t *testing.T, rec *httptest.ResponseRecorder) string {
-	t.Helper()
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("parse Location %q: %v", loc, err)
-	}
-	return u.Query().Get("notice")
 }
 
 // inviteCreateResponse 是创建邀请的 JSON 回包：新邀请 + 发信结果码。

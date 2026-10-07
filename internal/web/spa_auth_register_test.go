@@ -342,7 +342,7 @@ func TestSPASetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 }
 
 // TestSPASetupAPI_BootstrapEmailFallback 断言请求未填邮箱时采用 BOOTSTRAP_ADMIN_EMAIL，
-// 与 SSR setupSubmit 的兜底规则一致。
+// 兜底行为与引导页的应用壳入口一致。
 func TestSPASetupAPI_BootstrapEmailFallback(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	srv.bootstrapEmail = "boot@example.com"
