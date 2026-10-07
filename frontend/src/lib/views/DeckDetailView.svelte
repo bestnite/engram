@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -37,17 +37,12 @@
   let isOwner = $state(false);
   const perPage = 50;
 
-  // 筛选与搜索输入
+  // 筛选条件：输入即生效（没有「应用」按钮），文本输入 300ms 防抖。
+  // 已删除的卡片不再提供筛选入口（DESIGN.md §8.1：列表只呈现未删除内容）。
   let queryInput = $state('');
   let tagInput = $state('');
   let kindSelect = $state('');
-  let statusSelect = $state<'active' | 'deleted'>('active');
-
-  // 已经应用的筛选条件
-  let appliedQ = $state('');
-  let appliedTag = $state('');
-  let appliedKind = $state('');
-  let appliedStatus = $state<'active' | 'deleted'>('active');
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 批量动作
   let selectedIds = $state<number[]>([]);
@@ -78,7 +73,7 @@
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
-  const hasFilter = $derived(Boolean(appliedQ || appliedTag || appliedKind) || appliedStatus !== 'active');
+  const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim() || kindSelect));
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
 
   /**
@@ -102,10 +97,9 @@
       const res = await apiClient.getDeckNotes(deckId, {
         page: targetPage,
         per_page: perPage,
-        q: appliedQ || undefined,
-        tag: appliedTag || undefined,
-        kind: appliedKind || undefined,
-        status: appliedStatus,
+        q: queryInput.trim() || undefined,
+        tag: tagInput.trim() || undefined,
+        kind: kindSelect || undefined,
       });
 
       notes = res.notes;
@@ -118,24 +112,23 @@
     }
   }
 
-  function handleFilterSubmit(e?: Event): void {
-    if (e) e.preventDefault();
-    appliedQ = queryInput.trim();
-    appliedTag = tagInput.trim();
-    appliedKind = kindSelect;
-    appliedStatus = statusSelect;
+  /** 文本输入：防抖后重新取数，避免每敲一个字都打一次接口。 */
+  function scheduleFilterReload(): void {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadData(1), 300);
+  }
+
+  /** 下拉选择：立即生效（选择本身就是一次明确的决定，不需要防抖）。 */
+  function applyFilterNow(): void {
+    if (debounceTimer) clearTimeout(debounceTimer);
     loadData(1);
   }
 
   function handleFilterReset(): void {
+    if (debounceTimer) clearTimeout(debounceTimer);
     queryInput = '';
     tagInput = '';
     kindSelect = '';
-    statusSelect = 'active';
-    appliedQ = '';
-    appliedTag = '';
-    appliedKind = '';
-    appliedStatus = 'active';
     loadData(1);
   }
 
@@ -267,6 +260,10 @@
     loadData(1);
     loadOwnerFlag();
   });
+
+  onDestroy(() => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+  });
 </script>
 
 <div class="py-10 max-w-4xl mx-auto px-4 space-y-6">
@@ -364,7 +361,7 @@
     <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-5">
       <!-- 紧凑搜索与筛选栏 -->
       <form
-        onsubmit={handleFilterSubmit}
+        onsubmit={(event) => event.preventDefault()}
         class="flex flex-wrap gap-2 items-center pb-4 border-b border-zinc-100 dark:border-zinc-800/80"
         data-testid="notes-filter-form"
       >
@@ -373,6 +370,7 @@
           data-testid="filter-query-input"
           placeholder={$t('notes.search_placeholder')}
           bind:value={queryInput}
+          oninput={scheduleFilterReload}
           class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-44"
         />
         <input
@@ -380,31 +378,19 @@
           data-testid="filter-tag-input"
           placeholder={$t('notes.tag_placeholder')}
           bind:value={tagInput}
+          oninput={scheduleFilterReload}
           class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-32"
         />
         <Select
           class="w-40"
-          bind:value={kindSelect}
+          value={kindSelect}
+          onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}
           testId="filter-kind-select"
           options={[
             { value: '', label: $t('notes.all_kinds') },
             ...CARD_KINDS.map((kind) => ({ value: kind, label: cardKindLabel(kind) })),
           ]}
         />
-        <Select
-          class="w-28"
-          value={statusSelect}
-          onValueChange={(value) => (statusSelect = value as typeof statusSelect)}
-          testId="filter-status-select"
-          options={[{ value: 'active', label: $t('notes.status_active') }, { value: 'deleted', label: $t('notes.status_deleted') }]}
-        />
-        <button
-          type="submit"
-          data-testid="filter-apply-btn"
-          class="text-xs px-3 py-1.5 rounded-xl font-medium bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
-        >
-          {$t('notes.filter_apply')}
-        </button>
         {#if hasFilter}
           <button
             type="button"
@@ -417,14 +403,8 @@
         {/if}
       </form>
 
-      {#if appliedStatus === 'deleted'}
-        <p role="note" data-testid="notes-deleted-notice" class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800/80">
-          {$t('notes.deleted_readonly')}
-        </p>
-      {/if}
-
       <!-- 批量操作工具条 -->
-      {#if appliedStatus === 'active' && !loading && !error && notes.length > 0}
+      {#if !loading && !error && notes.length > 0}
         <div
           data-testid="notes-bulk-toolbar"
           class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
@@ -535,14 +515,12 @@
             <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors space-y-2.5">
               <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
                 <div class="flex items-center gap-2">
-                  {#if appliedStatus === 'active'}
-                    <Checkbox
-                      testId="select-note-{note.id}"
-                      checked={isSelected(note.id)}
-                      onCheckedChange={() => toggleSelect(note.id)}
-                      label={$t('notes.select_one')}
-                    />
-                  {/if}
+                  <Checkbox
+                    testId="select-note-{note.id}"
+                    checked={isSelected(note.id)}
+                    onCheckedChange={() => toggleSelect(note.id)}
+                    label={$t('notes.select_one')}
+                  />
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
                   <span class="px-2 py-0.5 rounded font-mono text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
                     {note.kind}
@@ -558,17 +536,13 @@
                   <span class="text-zinc-400 text-xs">
                     {note.created_at ? note.created_at.slice(0, 10) : ''}
                   </span>
-                  {#if appliedStatus === 'active'}
-                    <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
-                    {#if confirmingDeleteId === note.id}
-                      <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
-                      <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
-                      <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
-                    {:else}
-                      <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
-                    {/if}
+                  <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
+                  {#if confirmingDeleteId === note.id}
+                    <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
+                    <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
+                    <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
                   {:else}
-                    <span data-testid="note-deleted-badge-{note.id}" class="px-2 py-0.5 rounded text-xs bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400">{$t('notes.deleted_badge')}</span>
+                    <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
                   {/if}
                 </div>
               </div>

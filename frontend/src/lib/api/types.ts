@@ -34,6 +34,7 @@ export interface DeckQueueCountsResponse {
 export interface DeckSettings {
   deck_id: number;
   deck_name: string;
+  preset_id: number;
   new_per_day: number;
   reviews_per_day: number;
   new_used: number;
@@ -44,10 +45,14 @@ export interface DeckSettings {
   review_unlimited: boolean;
 }
 
-/** PATCH /api/v1/decks/:id/settings 请求体；两个字段都必填，0 合法（不限）。 */
+/**
+ * PATCH /api/v1/decks/:id/settings 请求体；两个额度字段都必填，0 合法（不限）。
+ * preset_id 可选：省略即不动预设（旧的只改额度调用保持原行为）。
+ */
 export interface UpdateDeckSettingsRequest {
   new_per_day: number;
   reviews_per_day: number;
+  preset_id?: number;
 }
 
 /** POST /api/v1/decks 请求体与响应体。preset_id=0 使用服务端默认预设。 */

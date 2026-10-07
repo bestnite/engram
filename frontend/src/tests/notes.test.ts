@@ -470,19 +470,23 @@ describe('DeckDetailView deleted listing and bulk selection wiring', () => {
     'utf-8'
   );
 
-  it('exposes a status filter that drives the status query parameter', () => {
-    // 下拉已换成组件库实现：选项以 options 数据传入（弹层由 bits-ui 渲染，不在首屏 HTML 里），
-    // 所以断言落在 testId 与选项数据上，而不是原生 <option> 标记。
-    expect(view).toContain('testId="filter-status-select"');
-    expect(view).toContain("{ value: 'active', label: $t('notes.status_active') }");
-    expect(view).toContain("{ value: 'deleted', label: $t('notes.status_deleted') }");
-    expect(view).toContain('status: appliedStatus,');
+  it('applies filters as the user types instead of behind an apply button', () => {
+    // 输入即生效：文本防抖、下拉立即；没有独立的「应用」按钮，也没有「待应用」的影子状态。
+    expect(view).toContain('oninput={scheduleFilterReload}');
+    expect(view).toContain('onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}');
+    expect(view).not.toContain('filter-apply-btn');
+    expect(view).not.toContain('appliedKind');
+    expect(view).toContain('testId="filter-kind-select"');
+    expect(view).toContain('data-testid="filter-reset-btn"');
   });
 
-  it('renders the deleted listing read-only and offers no restore control', () => {
-    expect(view).toContain('data-testid="notes-deleted-notice"');
-    expect(view).toContain('data-testid="note-deleted-badge-{note.id}"');
-    // 没有恢复 API：界面不得出现任何 restore 入口或字样，否则等于承诺一个不存在的动作。
+  it('drops the deleted-notes listing entirely', () => {
+    // 界面只呈现未删除的卡片：没有状态筛选、没有已删除徽章，也不承诺恢复
+    //（没有恢复 API，出现任何 restore 入口都等于承诺一个不存在的动作）。
+    expect(view).not.toContain('filter-status-select');
+    expect(view).not.toContain('notes-deleted-notice');
+    expect(view).not.toContain('note-deleted-badge-');
+    expect(view).not.toContain('appliedStatus');
     expect(view).not.toContain('restore');
   });
 

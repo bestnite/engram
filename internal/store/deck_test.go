@@ -241,3 +241,51 @@ func TestDeckCreateValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestDeckSetPresetRequiresOwnership 是「卡组切换调度」的验收：owner 可以在自己名下的预设
+// 之间切换，但换成别人的预设必须被拒——卡组可读就意味着它的排程参数可读（DESIGN.md §8.1）。
+func TestDeckSetPresetRequiresOwnership(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := seedUsers(t, db, "preset_owner", "preset_intruder")
+			owner, intruder := users[0], users[1]
+			first := seedPresetRow(t, db, owner)
+			second := seedPresetRow(t, db, owner)
+			foreign := seedPresetRow(t, db, intruder)
+			decks := NewDeckStore(db)
+			d := &Deck{OwnerUserID: owner, Name: "Switchable", PresetID: first}
+			if err := decks.Create(ctx, d); err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+
+			// 自己名下的另一个预设：切换成功并落库。
+			if err := decks.SetPreset(ctx, owner, d.ID, second); err != nil {
+				t.Fatalf("SetPreset(own preset) error = %v", err)
+			}
+			if got, err := decks.ByID(ctx, d.ID); err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			} else if got.PresetID != second {
+				t.Errorf("preset_id = %d, want %d", got.PresetID, second)
+			}
+
+			// 别人的预设：拒绝。
+			if err := decks.SetPreset(ctx, owner, d.ID, foreign); !errors.Is(err, ErrDeckPresetInvalid) {
+				t.Errorf("SetPreset(foreign preset) error = %v, want ErrDeckPresetInvalid", err)
+			}
+			// 非 owner：拒绝。
+			if err := decks.SetPreset(ctx, intruder, d.ID, foreign); !errors.Is(err, ErrNotOwner) {
+				t.Errorf("SetPreset(non-owner) error = %v, want ErrNotOwner", err)
+			}
+			// 两次被拒都不得留下痕迹。
+			if got, err := decks.ByID(ctx, d.ID); err != nil {
+				t.Fatalf("ByID() after rejected writes error = %v", err)
+			} else if got.PresetID != second {
+				t.Errorf("preset_id after rejected writes = %d, want %d (unchanged)", got.PresetID, second)
+			}
+		})
+	}
+}

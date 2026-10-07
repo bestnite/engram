@@ -71,6 +71,9 @@ const (
 	// 卡组与预设删除。
 	ActionDeckDelete   = "deck.delete"
 	ActionPresetDelete = "preset.delete"
+	// ActionDeckPreset 是卡组切换调度预设时写入的审计动作：它决定这个卡组按哪套
+	// FSRS 参数排程，与每日额度同级，必须留痕。
+	ActionDeckPreset = "deck.preset_change"
 	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
 	ActionJobCancel = "job.cancel"
 

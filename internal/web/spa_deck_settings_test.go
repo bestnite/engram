@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -263,5 +264,84 @@ func TestSPADeckSettingsRequiresSession(t *testing.T) {
 	}
 	if body.Error.Code != "unauthorized" {
 		t.Errorf("anonymous error code = %q, want unauthorized", body.Error.Code)
+	}
+}
+
+// TestSPADeckSettingsSwitchesPreset 是卡组切换调度的写验收：PATCH 带 preset_id 时卡组改按
+// 新预设排程，响应回显新值，并且留下一条 deck.preset_change 审计。
+func TestSPADeckSettingsSwitchesPreset(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA switchable deck")
+	second := store.NewPreset(ownerID, "second preset")
+	if err := store.NewPresetStore(db).Create(context.Background(), &second); err != nil {
+		t.Fatalf("create second preset: %v", err)
+	}
+
+	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, second.ID), cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	body := decodeSPADeckSettings(t, rec.Body.Bytes())
+	if body.PresetID != second.ID {
+		t.Errorf("response preset_id = %d, want %d", body.PresetID, second.ID)
+	}
+	stored, err := store.NewDeckStore(db).ByID(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("read deck: %v", err)
+	}
+	if stored.PresetID != second.ID {
+		t.Errorf("stored preset_id = %d, want %d", stored.PresetID, second.ID)
+	}
+	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckPreset); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	} else if n != 1 {
+		t.Errorf("audit rows for %s = %d, want 1", store.ActionDeckPreset, n)
+	}
+}
+
+// TestSPADeckSettingsRejectsForeignPreset 是必测负例：挂别人的预设会连带把他人调好的
+// 排程参数读出来，必须 400 拒绝，且卡组的 preset_id 一个字节都不动、不写审计。
+func TestSPADeckSettingsRejectsForeignPreset(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA foreign preset deck")
+	intruder := store.User{Username: "preset_intruder", Email: "preset_intruder@example.com",
+		DisplayName: "intruder", Role: store.RoleUser, Status: store.StatusActive,
+		Locale: "zh-CN", Timezone: "Asia/Shanghai", CreatedAt: time.Now().UTC()}
+	if err := db.Create(&intruder).Error; err != nil {
+		t.Fatalf("create intruder: %v", err)
+	}
+	foreign := store.NewPreset(intruder.ID, "foreign preset")
+	if err := store.NewPresetStore(db).Create(context.Background(), &foreign); err != nil {
+		t.Fatalf("create foreign preset: %v", err)
+	}
+
+	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, foreign.ID), cookies, csrf)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH foreign preset = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if envelope.Error.Code != "invalid_request" {
+		t.Errorf("error code = %q, want invalid_request", envelope.Error.Code)
+	}
+	stored, err := store.NewDeckStore(db).ByID(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("read deck: %v", err)
+	}
+	if stored.PresetID != deck.PresetID {
+		t.Errorf("stored preset_id = %d, want %d (unchanged after rejection)", stored.PresetID, deck.PresetID)
+	}
+	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckPreset); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	} else if n != 0 {
+		t.Errorf("audit rows for %s = %d, want 0 (no write happened)", store.ActionDeckPreset, n)
 	}
 }

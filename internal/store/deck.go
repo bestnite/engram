@@ -55,6 +55,9 @@ var (
 	ErrDeckPresetRequired = errors.New("deck preset is required")
 	// ErrInvalidDeckCap 表示每日上限为负；0 是合法值（不限）。
 	ErrInvalidDeckCap = errors.New("deck daily cap must not be negative")
+	// ErrDeckPresetInvalid 表示目标预设不属于该卡组的属主。挂别人的预设会把他人
+	// 的调度参数暴露给自己（卡组可读 ⇒ 预设可读）。
+	ErrDeckPresetInvalid = errors.New("deck preset must belong to the deck owner")
 )
 
 // DeckCaps 是卡组级的每日上限；NewPerDay 与 ReviewsPerDay 都为 0 时表示不限。
@@ -252,6 +255,21 @@ func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, cap
 		"new_per_day":     caps.NewPerDay,
 		"reviews_per_day": caps.ReviewsPerDay,
 	})
+}
+
+// SetPreset 改卡组的调度预设（DESIGN.md §8.1）；只有 owner 能改，
+// 且目标预设必须属于同一个用户——否则可以把别人的预设挂到自己的卡组上，
+// 借由「卡组读得到」把他人预设参数暴露出去。
+func (s *DeckStore) SetPreset(ctx context.Context, actorUserID, deckID, presetID uint64) error {
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&Preset{}).
+		Where("id = ? AND owner_user_id = ?", presetID, actorUserID).Count(&count).Error; err != nil {
+		return fmt.Errorf("check preset ownership: %w", err)
+	}
+	if count == 0 {
+		return ErrDeckPresetInvalid
+	}
+	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"preset_id": presetID})
 }
 
 // mutateOwned 是带 owner 校验的单列/多列更新通道；所有修改型方法都经它落地。

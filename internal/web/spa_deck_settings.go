@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,7 @@ func spaDeckSettingsPayload(deck *store.Deck, budget schedule.DeckBudget) spaDec
 	return spaDeckSettingsResponse{
 		DeckID:          deck.ID,
 		DeckName:        deck.Name,
+		PresetID:        deck.PresetID,
 		NewPerDay:       budget.NewPerDay,
 		ReviewsPerDay:   budget.ReviewsPerDay,
 		NewUsed:         budget.NewUsed,
@@ -33,6 +35,7 @@ func spaDeckSettingsPayload(deck *store.Deck, budget schedule.DeckBudget) spaDec
 type spaDeckSettingsResponse struct {
 	DeckID          uint64 `json:"deck_id"`
 	DeckName        string `json:"deck_name"`
+	PresetID        uint64 `json:"preset_id"`
 	NewPerDay       int    `json:"new_per_day"`
 	ReviewsPerDay   int    `json:"reviews_per_day"`
 	NewUsed         int    `json:"new_used"`
@@ -46,8 +49,9 @@ type spaDeckSettingsResponse struct {
 // spaDeckSettingsRequest 是 PATCH 的请求体；用指针区分「未提供」与「提供了 0」。
 // 0 是合法值（不限），因此不能靠零值判断字段是否出现。
 type spaDeckSettingsRequest struct {
-	NewPerDay     *int `json:"new_per_day"`
-	ReviewsPerDay *int `json:"reviews_per_day"`
+	NewPerDay     *int    `json:"new_per_day"`
+	ReviewsPerDay *int    `json:"reviews_per_day"`
+	PresetID      *uint64 `json:"preset_id"`
 }
 
 // registerSPADeckSettingsRoutes 挂载 SPA 的卡组每日上限读写接口（仅 owner，写操作过 CSRF）。
@@ -113,6 +117,25 @@ func (s *Server) spaDeckSettingsPatch(c *gin.Context) {
 		spaShareError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	// 预设是可选项：只改额度的老请求不带它，行为保持不变。
+	if req.PresetID != nil {
+		if err := s.decks.SetPreset(c.Request.Context(), user.ID, deck.ID, *req.PresetID); err != nil {
+			if errors.Is(err, store.ErrDeckPresetInvalid) {
+				spaShareError(c, http.StatusBadRequest, "invalid_request")
+				return
+			}
+			s.logger.Error("set deck preset for SPA failed", "deck_id", deck.ID, "error", err)
+			spaShareError(c, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		s.audit(c.Request.Context(), store.AuditEntry{
+			UserID:     store.Ptr(user.ID),
+			Action:     store.ActionDeckPreset,
+			TargetType: "deck",
+			TargetID:   store.Ptr(deck.ID),
+			Detail:     map[string]any{"preset_id": *req.PresetID},
+		})
+	}
 	caps := store.DeckCaps{NewPerDay: *req.NewPerDay, ReviewsPerDay: *req.ReviewsPerDay}
 	if err := s.decks.SetCaps(c.Request.Context(), user.ID, deck.ID, caps); err != nil {
 		s.logger.Error("set deck caps for SPA failed", "deck_id", deck.ID, "error", err)
@@ -133,5 +156,13 @@ func (s *Server) spaDeckSettingsPatch(c *gin.Context) {
 		spaShareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, spaDeckSettingsPayload(deck, budget))
+	// 回读一次再组响应：上面的写入都发生在库上，用写入前读到的 deck 会回显旧的 preset_id，
+	// 让「改了但没生效」这种最贵的故障从响应里看不出来。
+	updated, err := s.decks.ByID(c.Request.Context(), deck.ID)
+	if err != nil {
+		s.logger.Error("reload deck after SPA settings change failed", "deck_id", deck.ID, "error", err)
+		spaShareError(c, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	c.JSON(http.StatusOK, spaDeckSettingsPayload(updated, budget))
 }

@@ -4,6 +4,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { DeckSettings } from '../api';
+  import Select from '../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -30,6 +31,11 @@
   let newPerDay = $state(initialSettings ? String(initialSettings.new_per_day) : '');
   // svelte-ignore state_referenced_locally
   let reviewsPerDay = $state(initialSettings ? String(initialSettings.reviews_per_day) : '');
+  // 预设列表：卡组按哪套 FSRS 参数排程由它决定，所以和每日额度并列在同一个表单里。
+  let presets = $state<Array<{ value: string; label: string }>>([]);
+  // svelte-ignore state_referenced_locally
+  let presetId = $state(initialSettings ? String(initialSettings.preset_id) : '');
+  let presetsError = $state(false);
   let saving = $state(false);
   let saveError = $state('');
   let saved = $state(false);
@@ -37,8 +43,20 @@
   const deckId = $derived($routeStore.params.id || '');
 
   /** 读取上限与今日额度；非 owner 由服务端 403/404 决定，前端不猜测权限。 */
+  /** 预设列表只读一次；失败时保留当前值（保存也不会带上 preset_id），不静默改成别的预设。 */
+  async function loadPresets(): Promise<void> {
+    try {
+      const response = await apiClient.listPresets();
+      presets = response.presets.map((item) => ({ value: String(item.id), label: item.name }));
+      presetsError = false;
+    } catch {
+      presetsError = true;
+    }
+  }
+
   async function load(): Promise<void> {
     if (!deckId) return;
+    void loadPresets();
     loading = true;
     loadError = null;
     try {
@@ -46,6 +64,7 @@
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
+      presetId = String(data.preset_id);
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -73,7 +92,13 @@
     }
     saving = true;
     try {
-      const data = await apiClient.updateDeckSettings(deckId, { new_per_day: n, reviews_per_day: r });
+      // preset_id 只在选中了一个真实预设时提交：空值提交会被服务端当成 0 而拒绝，
+      // 不能拿它冒充「默认」。
+      const data = await apiClient.updateDeckSettings(deckId, {
+        new_per_day: n,
+        reviews_per_day: r,
+        ...(presetId ? { preset_id: Number(presetId) } : {}),
+      });
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
@@ -152,6 +177,21 @@
     <section class="card-elevated p-6 rounded-xl">
       <form onsubmit={save} data-testid="deck-settings-form" class="space-y-4">
         <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('deck.settings.heading')}</h2>
+        <div>
+          <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('deck.settings.preset')}</span>
+          {#if presets.length > 0}
+            <Select
+              class="mt-1 max-w-md"
+              testId="deck-settings-preset"
+              value={presetId}
+              onValueChange={(value) => (presetId = value)}
+              options={presets}
+            />
+          {/if}
+          <p class="mt-1 text-xs" class:text-rose-600={presetsError} class:dark:text-rose-400={presetsError} class:text-zinc-400={!presetsError} class:dark:text-zinc-500={!presetsError}>
+            {presetsError ? $t('deck.settings.preset_load_failed') : $t('deck.settings.preset_hint')}
+          </p>
+        </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {$t('deck.settings.new_per_day')}

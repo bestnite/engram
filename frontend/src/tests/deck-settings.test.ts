@@ -6,10 +6,13 @@ import type { DeckSettings } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const settings: DeckSettings = {
   deck_id: 7,
   deck_name: 'Biology',
+  preset_id: 3,
   new_per_day: 5,
   reviews_per_day: 10,
   new_used: 2,
@@ -114,5 +117,23 @@ describe('deck settings SPA route owns the canonical path', () => {
     expect(matchRoute('/spa/decks/42/settings', routes).route?.name).toBe('deck-settings-spa');
     // 卡组详情本身不能被设置页的路径吃掉。
     expect(matchRoute('/decks/42', routes).route?.name).toBe('deck-detail');
+  });
+});
+
+describe('deck scheduling preset switching', () => {
+  const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+
+  it('offers the owner presets in the settings tab and submits the chosen one', () => {
+    const view = read('../lib/views/DeckSettingsView.svelte');
+    expect(view).toContain('testId="deck-settings-preset"');
+    expect(view).toContain('listPresets()');
+    // 空值不提交：preset_id 在服务端是「属于本人」的引用，把 '' 当 0 提交会被拒。
+    expect(view).toContain('...(presetId ? { preset_id: Number(presetId) } : {})');
+  });
+
+  it('lets a new deck pick a preset instead of hardcoding the default', () => {
+    const view = read('../lib/views/DecksView.svelte');
+    expect(view).toContain('testId="deck-create-preset"');
+    expect(view).toContain('preset_id: createPresetId ? Number(createPresetId) : 0');
   });
 });

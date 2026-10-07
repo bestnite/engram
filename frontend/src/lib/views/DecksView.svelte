@@ -6,6 +6,7 @@
   import type { Deck } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
 
   // 视图响应式状态定义（Svelte 5 runes）
@@ -18,6 +19,9 @@
   let showCreateModal = $state(false);
   let name = $state('');
   let description = $state('');
+  // 新建卡组时可选调度预设；空值表示交给服务端的默认预设（请求体 preset_id: 0）。
+  let createPresets = $state<Array<{ value: string; label: string }>>([]);
+  let createPresetId = $state('');
   let creating = $state(false);
   let createError = $state<string | null>(null);
 
@@ -62,16 +66,37 @@
     }
   }
 
+  /** 打开弹窗时才拉预设列表：多数用户不开这个弹窗，没必要每次都取。 */
+  $effect(() => {
+    if (showCreateModal && createPresets.length === 0) {
+      apiClient
+        .listPresets()
+        .then((response) => {
+          createPresets = response.presets.map((item) => ({ value: String(item.id), label: item.name }));
+        })
+        .catch(() => {
+          // 预设列表拿不到不影响建卡组：仍走服务端默认预设。
+          createPresets = [];
+        });
+    }
+  });
+
   async function createDeck(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     creating = true;
     createError = null;
     try {
-      const deck = await apiClient.createDeck({ name, description, visibility: 'private', preset_id: 0 });
+      const deck = await apiClient.createDeck({
+        name,
+        description,
+        visibility: 'private',
+        preset_id: createPresetId ? Number(createPresetId) : 0,
+      });
       decks = [deck, ...decks];
       queueCounts = { ...queueCounts, [deck.id]: { new_count: 0, review_count: 0 } };
       name = '';
       description = '';
+      createPresetId = '';
       showCreateModal = false;
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'deck_name_invalid') {
@@ -425,6 +450,18 @@
             placeholder="可选填写卡组简介"
             class="block w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100"
           ></textarea>
+          <div>
+            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" for="deck-create-preset">
+              {$t('decks.spa_create.preset')}
+            </label>
+            <Select
+              class="w-full"
+              testId="deck-create-preset"
+              value={createPresetId}
+              onValueChange={(value: string) => (createPresetId = value)}
+              options={[{ value: '', label: $t('decks.preset_default') }, ...createPresets]}
+            />
+          </div>
         </div>
 
         {#if createError}
