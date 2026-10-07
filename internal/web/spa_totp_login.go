@@ -27,7 +27,7 @@ import (
 // 「某账号是否启用 TOTP」。凭据缺失或过期时 POST 一律返回同一个错误 code，不区分原因。
 
 // apiTOTPSubmitRequest 是 POST /api/v1/auth/totp 的请求体。
-// Code 同时接受 6 位动态验证码与一次性恢复码，与 SSR 表单的单一输入框一致。
+// Code 同时接受 6 位动态验证码与一次性恢复码。
 type apiTOTPSubmitRequest struct {
 	Code string `json:"code"`
 }
@@ -48,8 +48,8 @@ func (s *Server) apiTOTPPending(c *gin.Context) {
 
 // apiTOTPSubmit 校验第二因素并建立会话（POST /api/v1/auth/totp）。
 //
-// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头
-// （与 SSR 的 POST /login/totp 同一中间件）。失败复用登录限速（M1-9）：与第一步共用同一
+// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
+// 失败复用登录限速（M1-9）：与第一步共用同一
 // 账号/IP 维度，第二步不能成为绕过限速的缺口。
 func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	if s.totp == nil {

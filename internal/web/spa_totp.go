@@ -13,7 +13,7 @@ import (
 
 // 本文件是 SPA 的 TOTP 管理接口：M1-16的 JSON 版本。
 //
-// 安全约定与 SSR 设置页（internal/web/totp.go）完全一致，只换传输形态：
+// 安全约定与登录第二步完全一致（同一份 auth.TOTPService 与审计/通知语义），只换传输形态：
 //   - secret 与 otpauth 链接只在 begin 的响应里出现一次（与恢复码只在生成时出现一次同一约定）；
 //   - GET 只报告状态（是否启用 / 是否有待确认绑定 / 剩余恢复码），绝不返回 secret、
 //     otpauth 或任何恢复码明文；
@@ -21,7 +21,7 @@ import (
 //   - 关闭与重新生成恢复码都要求重新输入密码。
 //
 // 全部写操作挂会话 CSRF，复用 auth.TOTPService 与既有审计/通知语义，不新增业务规则。
-// SSR 的 GET/POST /settings/totp* 保持原样，SPA 因此走独立的 /spa/settings/totp 前端路径。
+// 管理页的 GET /settings/totp 由应用壳应答（totpSettingsRoute），读写走 /api/v1/settings/totp*。
 
 // spaTOTPStatusResponse 是 GET /api/v1/settings/totp 的响应体；不含任何秘密材料。
 type spaTOTPStatusResponse struct {

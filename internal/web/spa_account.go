@@ -96,7 +96,7 @@ type apiForgotPasswordRequest struct {
 
 // spaForgotPasswordSubmit 处理 SPA 的重置请求（POST /api/v1/auth/forgot-password）。
 //
-// 与 SSR 的 forgotPasswordSubmit 同一份判定：匿名限流（IP + 目标邮箱各 5 次 / 15 分钟）在查库与
+// 匿名限流（IP + 目标邮箱各 5 次 / 15 分钟）在查库与
 // 入 outbox 之前；无论邮箱是否存在都返回同形响应，避免账号枚举。响应里的 mail_ready 只反映站点
 // 级的「邮件是否配置」，与账号存在性无关，前端据此在未配置时渲染 mail.not_configured 而不是
 // 谎报「已发送」。这里不返回令牌、不回显邮箱。
@@ -270,7 +270,7 @@ type apiEmailChangeRequest struct {
 
 // spaEmailChangeSubmit 提交改邮箱请求（POST /api/v1/settings/email）：向新地址发确认信，确认前不改库。
 //
-// 与 SSR 的 emailChangeSubmit 逐项同判定：SMTP 未配置、格式非法、与原邮箱相同、已被占用都拒绝且
+// SMTP 未配置、格式非法、与原邮箱相同、已被占用都拒绝且
 // 不写库；成功只入队确认信并写审计（ActionUserEmailChangeRequest），库中的邮箱在点击确认链接前不变。
 func (s *Server) spaEmailChangeSubmit(c *gin.Context) {
 	user, ok := s.spaProfileSessionOnly(c)
@@ -340,7 +340,7 @@ func (s *Server) spaResendVerificationSubmit(c *gin.Context) {
 
 // ── 共享判定（JSON 传输专用）────────────────────────────────────────────────
 
-// actionTokenErrorCode 把令牌消费错误映射到稳定英文 code（与 SSR 的 actionTokenErrorKey 同源规则）。
+// actionTokenErrorCode 把令牌消费错误映射到稳定英文 code。
 // 前端按 code 映射本地化文案，绝不解析英文 message。
 func actionTokenErrorCode(err error) string {
 	switch {
@@ -354,8 +354,8 @@ func actionTokenErrorCode(err error) string {
 }
 
 // passwordPolicyErrorCode 校验新密码强度并返回稳定英文 code；通过时返回空串。
-// 判定规则与 SSR 的 validateNewPassword 一致（同一批 auth 常量），只是把本地化文案换成 code，
-// 供 JSON 传输使用；两处都以 auth.MinPasswordLength / MaxPasswordLength / ValidatePasswordPolicy 为准。
+// 判定以 auth 常量为准（auth.MinPasswordLength / MaxPasswordLength / ValidatePasswordPolicy），
+// 只是把本地化文案换成稳定 code 供 JSON 传输使用。
 func passwordPolicyErrorCode(password string) string {
 	if password == "" {
 		return "password_required"

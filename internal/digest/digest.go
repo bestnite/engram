@@ -254,8 +254,8 @@ type DigestStats struct {
 	DueNow int64
 }
 
-// ComputeStats 用统计服务算出摘要数字。这是摘要数字的唯一来源：它与统计页 statsData 调用
-// 同一批 StatsStore 方法、同一复习日窗口，因此两边不会分歧（验收③）。
+// ComputeStats 用统计服务算出摘要数字。这是摘要数字的唯一来源：它与统计 JSON 端点调用
+// 同一批 StatsStore 方法、同一复习日窗口，因此两边不会分歧。
 func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (DigestStats, error) {
 	today := schedule.ReviewDay(now, loc, cutoffHour)
 	from := store.ShiftReviewDay(today, -6)

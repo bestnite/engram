@@ -14,10 +14,9 @@ import (
 
 // 本文件实现 SPA 统计明细接口（GET /api/v1/stats/detail）。
 //
-// 它与 SSR 统计页（internal/web/stats.go 的 statsData）共用 collectStatsMeasures：
-// 复习日、时区、日切点、可见卡组范围与每个聚合函数都与页面逐项相同，因此「迁移到 SPA」
-// 不会改变任何统计定义。差别只在呈现：SSR 直接拼好语言包文案与 CSS 柱宽，这里返回原始
-// 计数、比例与毫秒，本地化与柱宽交给前端。
+// 统计口径只有一份实现（collectStatsMeasures）：复习日、时区、日切点、可见卡组范围与每个
+// 聚合函数都集中在它里面，handler 不写任何统计 SQL，所以前端展示与服务端口径不会分歧。
+// 这里返回原始计数、比例与毫秒，本地化与柱宽交给前端。
 //
 // 字段名与数值口径一经发布即稳定，供 SPA 与后续客户端复用；不返回任何语言包文案。
 
@@ -227,7 +226,7 @@ func (s *Server) buildSPAStatsDetail(ctx context.Context, user *store.User) (spa
 	}
 	detail := spaStatsDetail{
 		GeneratedAt: m.Now.UTC().Format(time.RFC3339),
-		// 与 statsData 完全相同的空态判据：没有任何复习量、没有今日到期、没有卡组数据。
+		// 空态判据：没有任何复习量、没有今日到期、没有卡组数据。
 		Empty: m.Volume.Today == 0 && m.Volume.Last30Days == 0 &&
 			m.Due.Today == 0 && m.Due.NewNotDue == 0 && len(m.Decks) == 0,
 		Volume: spaStatsVolume{

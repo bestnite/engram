@@ -232,9 +232,9 @@ type apiSetupRequest struct {
 // apiRegister 是 SPA 自助注册端点（POST /api/v1/auth/register）。
 //
 // 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
-// 全部判定（匿名限流、校验、首个管理员引导、邀请事务、注册策略/白名单）复用
-// attemptRegistration，与 SSR 的 registerSubmit 是同一份逻辑，因此策略语义不可能漂移。
-// 成功不建立会话（与 SSR 注册后跳转登录一致），只返回 created=true。
+// 全部判定（匿名限流、校验、首个管理员引导、邀请事务、注册策略/白名单）都走
+// attemptRegistration：邀请接受与页面引导共用同一份实现，因此策略语义不可能漂移。
+// 成功不建立会话，只返回 created=true。
 func (s *Server) apiRegister(c *gin.Context) {
 	var req apiRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -260,7 +260,7 @@ func (s *Server) apiRegister(c *gin.Context) {
 
 // apiSetup 是 SPA 首个管理员引导端点（POST /api/v1/auth/setup）。
 //
-// 与 SSR 的 setupSubmit 同一可达性规则：没有活跃管理员时才可达，否则 404（一次性管理员门）。
+// 可达性规则与 GET /setup 的应用壳一致：没有活跃管理员时才可达，否则 404（一次性管理员门）。
 // 建号与审计复用 attemptSetup，挂载 PreSessionCSRFMiddleware。成功不建立会话。
 func (s *Server) apiSetup(c *gin.Context) {
 	if !s.setupAvailable(c) {

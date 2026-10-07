@@ -14,12 +14,12 @@ import (
 //
 // 安全边界与迁移前逐项一致，绝不因切壳放宽或收紧：
 //   - 撤销、过期或不存在一律 404，不区分三者（不泄漏 token 历史）；
-//   - 有口令的链接在解锁前不返回任何卡片内容，只给「需要口令 + 卡组名」（与 SSR 的口令页一致）；
+//   - 有口令的链接在解锁前不返回任何卡片内容，只给「需要口令 + 卡组名」；
 //   - 卡片正反面一律复用服务端清洗渲染管线（shareNoteView → renderSide），客户端只把清洗后的
 //     HTML 交给 {@html}，绝不把 fields 原文当可信 Markdown 渲染；
 //   - 打开成功时登记会话级媒体读取授权（recordShareGrant），媒体可读性仍由 /media 的登录门禁决定。
 //
-// 匿名访问的现状不变：分享链接本身仍是凭据，SSR 的 GET /s/:token 从不要求登录，这里也不要求。
+// 匿名访问的现状不变：分享链接本身仍是凭据，GET /s/:token 从不要求登录，这里也不要求。
 
 // apiShareNote 是一条共享卡片的正反面清洗后 HTML。
 type apiShareNote struct {
@@ -77,8 +77,8 @@ func (s *Server) spaShareGet(c *gin.Context) {
 
 // spaShareUnlock 校验口令并返回内容（POST /api/v1/share/:token/unlock）。
 //
-// 与 SSR 的 shareUnlock 同语义：无口令链接等价于直接浏览（幂等）；口令错误返回 401 与稳定 code。
-// 这里刻意不消费任何令牌、不建立解锁状态——每次请求都重新校验，与 SSR 一样无状态。
+// 无口令链接等价于直接浏览（幂等）；口令错误返回 401 与稳定 code。
+// 这里刻意不消费任何令牌、不建立解锁状态——每次请求都重新校验，因此无状态。
 func (s *Server) spaShareUnlock(c *gin.Context) {
 	var req struct {
 		Password string `json:"password"`
@@ -110,7 +110,7 @@ func (s *Server) spaShareUnlock(c *gin.Context) {
 }
 
 // spaShareContent 组装只读内容的 JSON：登记会话级媒体授权后列出卡片并清洗渲染。
-// 与 SSR 的 renderShareContent 同源：单张坏卡跳过并记英文日志，不阻断其余内容的展示。
+// 单张坏卡跳过并记英文日志，不阻断其余内容的展示。
 func (s *Server) spaShareContent(c *gin.Context, deck *store.Deck, link *store.ShareLink) {
 	ctx := c.Request.Context()
 	// 访问已经成功（无口令，或口令校验通过）→ 登记「本会话打开过这个卡组」，
