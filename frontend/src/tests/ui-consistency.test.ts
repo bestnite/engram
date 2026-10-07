@@ -325,5 +325,21 @@ describe('form field skin', () => {
     const users = sources.filter((s) => s.src.includes('field-input')).length;
     expect(users).toBeGreaterThanOrEqual(25);
   });
+
+  it('keeps hand-written filled button styles out of the views', () => {
+    // 填充型按钮一律走 ui/Button。带 {…} 的类名是调用点算出来的激活态（tab / 导航），
+    // 那不属于「两套实现」，跳过。
+    const offenders: string[] = [];
+    for (const { file, src } of sources) {
+      for (const tag of scanTags(src, ['button', 'a'])) {
+        const cls = classOf(tag);
+        if (!cls || cls.includes('{') || cls.includes('}')) continue;
+        const tokens = cls.split(/\s+/);
+        const filled = tokens.some((t) => /^bg-(zinc-9\d\d|blue-600|rose-600|emerald-600)$/.test(t));
+        if (filled && tokens.some((t) => /^px-/.test(t))) offenders.push(`${file}: ${cls.slice(0, 60)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });
 });
