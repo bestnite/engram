@@ -8,11 +8,11 @@ import (
 )
 
 // 本文件是三个「个人/卡组设置页」切流到 SPA 的验收：GET /settings/totp、
-// GET /settings/notifications、GET /decks/:id/settings 在 SPA 已加载时返回应用壳，
-// 在 SPA 缺失（降级构建）时回退各自原有的 SSR 页面。
+// GET /settings/notifications、GET /decks/:id/settings 一律返回应用壳（SSR 页面层已删除，
+// 不再有降级回退）。
 //
-// 页面迁移不改动授权判定，也不新增写路径：未登录一律重定向登录页，卡组设置页的 owner
-// 门禁仍在返回应用壳之前生效，写操作全部留在原有的 SSRF 表单 / PATCH JSON 端点上。
+// 页面迁移不改动授权判定：未登录一律重定向登录页，卡组设置页的 owner 门禁仍在返回应用壳
+// 之前生效，写操作全部走 JSON 端点。
 
 // assertServesSPAShell 断言响应是 SPA 应用壳（入口脚本引用），而不是 SSR 页面。
 func assertServesSPAShell(t *testing.T, rec *httptest.ResponseRecorder, what string) {
@@ -32,7 +32,7 @@ func assertServesSPAShell(t *testing.T, rec *httptest.ResponseRecorder, what str
 	}
 }
 
-// TestSPATOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流与回退。
+// TestSPATOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流。
 func TestSPATOTPSettingsRouteCutover(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
@@ -46,19 +46,9 @@ func TestSPATOTPSettingsRouteCutover(t *testing.T) {
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Errorf("anonymous GET /settings/totp = %d %q, want 303 /login", anon.Code, anon.Header().Get("Location"))
 	}
-
-	// SPA 缺失时回退 SSR 设置页。
-	srv.spa = nil
-	ssr := getWithCookies(t, srv, "/settings/totp", cookies)
-	if ssr.Code != http.StatusOK {
-		t.Fatalf("SSR fallback GET /settings/totp = %d, want 200", ssr.Code)
-	}
-	if !strings.Contains(ssr.Body.String(), `name="csrf_token"`) {
-		t.Errorf("SSR fallback did not render the settings page: %s", snippet(ssr.Body.String()))
-	}
 }
 
-// TestSPANotificationPrefsRouteCutover 覆盖 GET /settings/notifications 的切流与回退。
+// TestSPANotificationPrefsRouteCutover 覆盖 GET /settings/notifications 的切流。
 func TestSPANotificationPrefsRouteCutover(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
@@ -68,15 +58,6 @@ func TestSPANotificationPrefsRouteCutover(t *testing.T) {
 	anon := get(t, srv, "/settings/notifications", nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Errorf("anonymous GET = %d %q, want 303 /login", anon.Code, anon.Header().Get("Location"))
-	}
-
-	srv.spa = nil
-	ssr := getWithCookies(t, srv, "/settings/notifications", cookies)
-	if ssr.Code != http.StatusOK {
-		t.Fatalf("SSR fallback = %d, want 200", ssr.Code)
-	}
-	if !strings.Contains(ssr.Body.String(), "reminder_hour") {
-		t.Errorf("SSR fallback did not render the prefs page: %s", snippet(ssr.Body.String()))
 	}
 }
 
@@ -103,15 +84,5 @@ func TestSPADeckSettingsRouteCutover(t *testing.T) {
 	}
 	if strings.Contains(denied.Body.String(), `id="app"`) {
 		t.Error("a non-owner must not receive the SPA shell")
-	}
-
-	// SPA 缺失时回退 SSR 页面（仅 owner 可达）。
-	srv.spa = nil
-	ssr := getWithCookies(t, srv, path, cookies)
-	if ssr.Code != http.StatusOK {
-		t.Fatalf("SSR fallback GET %s = %d, want 200", path, ssr.Code)
-	}
-	if !strings.Contains(ssr.Body.String(), `action="`+path+`"`) {
-		t.Errorf("SSR fallback did not render the deck settings form: %s", snippet(ssr.Body.String()))
 	}
 }

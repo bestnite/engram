@@ -16,10 +16,9 @@ import (
 
 // 本文件是 SPA 的调度预设接口（DESIGN.md §3.5、§8.1）的 JSON 版本。
 //
-// 语义与 SSR 预设页（internal/web/presets.go）逐项一致，只换传输形态：默认预设的补齐、
-// 优化门槛、单并发入队、状态与回退全部调用同一批 store/jobs 方法，这里不复制调度、门槛
-// 或作业编排逻辑。SSR 的 GET/POST /presets* 路由与模板全部保留，SPA 因此只在同源 JSON
-// 端点上新增能力，不遮蔽任何既有写路径。
+// 默认预设的补齐、优化门槛、单并发入队、状态与回退全部调用同一批 store/jobs 方法，
+// 这里不复制调度、门槛或作业编排逻辑。SSR 预设页删除后，
+// 这批 JSON 端点就是预设功能唯一的读写路径。
 //
 // 所有端点只接受浏览器会话（spaProfileSessionOnly 拒绝 bearer 与 API Key）：预设是个人数据，
 // 与卡组设置、统计明细同一安全边界。写操作一律过会话 CSRF。
@@ -121,7 +120,7 @@ var spaPresetErrorMessages = map[string]string{
 }
 
 // registerSPAPresetRoutes 挂载 SPA 的调度预设接口；写操作过会话 CSRF。
-// 只注册 /api/v1/presets* 这批 JSON 端点，绝不动 SSR 的 /presets* 表单路由。
+// 只注册 /api/v1/presets* 这批 JSON 端点（/presets 只发应用壳，见 spa_presets_cutover.go）。
 // 依赖未装配时跳过，保证 M0 阶段与未装作业执行器的测试仍能构造 Server。
 func (s *Server) registerSPAPresetRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {
@@ -320,8 +319,8 @@ func (s *Server) spaPresetOptimizeRevert(c *gin.Context) {
 }
 
 // spaPresetListPayload 组装列表响应：确保默认预设存在、读取门槛、按在途作业标注卡片。
-// 与 SSR renderPresetList 取同一批数据（store.EnsureDefaultPreset + store.GateOptimize），
-// 因此两边对同一用户给出同一份预设与同一个门槛。
+// 取数与门槛判定收敛在这一个方法：store.EnsureDefaultPreset + store.GateOptimize，
+// 同一用户的预设列表与门槛只有这一份来源。
 func (s *Server) spaPresetListPayload(c *gin.Context, userID uint64) (spaPresetListResponse, error) {
 	ctx := c.Request.Context()
 	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
@@ -392,7 +391,7 @@ func (s *Server) spaOwnedPreset(c *gin.Context, userID uint64) (*store.Preset, b
 	return p, true
 }
 
-// spaPresetPayload 把一条预设投影成 JSON；权重判据与 SSR presetCard 完全一致。
+// spaPresetPayload 把一条预设投影成 JSON；权重判据以 weights_json 是否为空为唯一依据。
 func spaPresetPayload(p *store.Preset) spaPreset {
 	item := spaPreset{
 		ID:                  p.ID,
@@ -472,7 +471,7 @@ func spaFitMetricsPayload(m store.FitMetrics) spaFitMetrics {
 	return spaFitMetrics{LogLoss: m.LogLoss, RMSE: m.RMSE, Items: m.Items}
 }
 
-// spaOptimizeVerdict 复刻 applyResultToCard 的三态判据：
+// spaOptimizeVerdict 是拟合对比的三态判据（M9-12）：
 //   - 两边都算出来且样本足够 -> improved / not_improved；
 //   - 两边都算出来但样本太小 -> insufficient_sample；
 //   - 没算出来 -> unavailable（前端不渲染结论）。
@@ -491,7 +490,7 @@ func spaOptimizeVerdict(r *store.OptimizeResult) string {
 }
 
 // parseSPAPresetRequest 解析 JSON 并做格式校验；返回非空的 code 表示拒绝。
-// 语义与 SSR parsePresetForm 对齐：保留率取开区间 (0,1)、最大间隔为正整数、
+// 校验语义：保留率取开区间 (0,1)、最大间隔为正整数、
 // 步骤按语法校验且不接受非正值——store 的校验仍是最后一道防线。
 func parseSPAPresetRequest(c *gin.Context) (spaPresetRequest, string) {
 	var req spaPresetRequest

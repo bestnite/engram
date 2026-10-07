@@ -1,0 +1,13 @@
+package views
+
+// SettingsLocaleControl 是设置页语言控件片段：页头切换器在同一响应里带外刷新它，
+// 让页头下拉与设置页表单的语言选择保持一致（DESIGN.md §8.3）。
+//
+// 它原先住在 settings.templ 里；SSR 设置页删除后，base.templ 的语言切换路径仍引用它，
+// 因此单独保留这个组件。
+templ SettingsLocaleControl(label string, options []SelectOption, attrs templ.Attributes) {
+	<label id="settings-locale-control" class="block" { attrs... }>
+		<span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{ label }</span>
+		@Select(SelectProps{ID: "settings-locale", Name: "locale", Options: options})
+	</label>
+}
