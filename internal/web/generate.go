@@ -1,7 +1,5 @@
-// 本文件只承载 go:generate 指令，把前端产物的生成步骤挂到 `go generate ./...` 上
-// （AGENTS.md §4 的构建步骤）。生成物 tailwind.css 与 *_templ.go 同样已 gitignore。
-package web
-
-// 用 Tailwind CSS v4 的 standalone CLI，免 Node（DESIGN.md §8、§10.1）。
+// 本文件承载 go:generate 指令（AGENTS.md §4 的构建步骤）。
 //
-//go:generate tailwindcss -i ./static/css/input.css -o ./static/css/tailwind.css --minify
+// SPA 迁移完成后，服务端不再渲染页面：SSR 模板（templ）与它们使用的 Tailwind 样式表都已删除，
+// 因此这里不再有生成步骤——前端产物由 `npm --prefix frontend run build` 产出并 go:embed 进二进制。
+package web

@@ -189,12 +189,17 @@ func New(addr string, deps Deps) (*Server, error) {
 			return nil, err
 		}
 	}
+	// SPA 是唯一的页面渲染层（SSR 页面层已删除）：嵌入资源缺失时启动即失败，
+	// 不再有「降级回退到服务端渲染页面」这条路径。
 	spa := deps.SPA
 	if spa == nil {
 		var err error
 		if spa, err = LoadSPA(); err != nil {
 			return nil, err
 		}
+	}
+	if spa == nil {
+		return nil, errors.New("web: the embedded SPA is required")
 	}
 	// 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口，供前端加载器按同源外链引入
 	// （CSP script-src 'self' 已放行，无需内联脚本；DESIGN.md §6.1、§8.5）。资源缺失时
@@ -317,9 +322,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.homeRoute)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
-	if s.spa != nil {
-		router.GET("/assets/*filepath", s.spa.ServeAsset)
-	}
+	router.GET("/assets/*filepath", s.spa.ServeAsset)
 	if deps.Sessions != nil && deps.Users != nil {
 		// SPA 个人资料 API 仅在会话依赖齐备时注册，写请求继续由会话 CSRF 中间件保护。
 		profile := router.Group("/api/v1")

@@ -29,12 +29,10 @@ const (
 	pwaScriptPath     = "/pwa.js"
 )
 
-// pwaShellAssets 是“应用外壳”的逻辑路径：CSS、交互脚本、数学渲染与图标。
+// pwaShellAssets 是“应用外壳”的逻辑路径：数学渲染与图标（SPA 自己的 JS/CSS 走 Vite 产物，
+// 由 StaticShellURLs 追加）。
 // 只包含静态资源，不含任何答题数据或 API 端点（M8-2 验收：缓存里没有 API 响应）。
 var pwaShellAssets = []string{
-	"css/tailwind.css",
-	"js/htmx.min.js",
-	"js/review.js",
 	"js/mathjax/tex-svg.js",
 	"icons/icon.svg",
 	"icons/icon-maskable.svg",
@@ -188,9 +186,7 @@ func (s *Server) pwaShellURLs() []string {
 			urls = append(urls, url)
 		}
 	}
-	if s.spa != nil {
-		urls = append(urls, s.spa.StaticShellURLs()...)
-	}
+	urls = append(urls, s.spa.StaticShellURLs()...)
 	urls = append(urls, manifestPath)
 	return urls
 }
