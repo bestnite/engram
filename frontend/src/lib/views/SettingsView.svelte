@@ -11,6 +11,7 @@
   } from '../api';
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   // 视图响应式状态（Svelte 5 runes）
   let loading = $state(true);
@@ -308,14 +309,9 @@
 
           <!-- 保存按钮 -->
           <div class="pt-2">
-            <button
-              data-testid="settings-submit"
-              type="submit"
-              disabled={saving}
-              class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button testId="settings-submit" type="submit" disabled={saving} variant="primary" size="lg">
               {$t(saving ? 'settings.profile.saving' : 'settings.profile.submit')}
-            </button>
+            </Button>
           </div>
         </form>
       </section>
@@ -326,20 +322,20 @@
         <form onsubmit={handlePasswordSubmit} class="space-y-4">
           <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.old_label')}</span><input type="password" autocomplete="current-password" bind:value={oldPassword} required class="field-input text-sm w-full" /></label>
           <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input text-sm w-full" /></label>
-          <button type="submit" disabled={passwordSaving} class="rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</button>
+          <Button type="submit" disabled={passwordSaving} variant="primary" size="lg">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</Button>
         </form>
       </section>
       <!-- 两步验证入口：服务端 GET /settings/totp 已切到应用壳，走规范路径 -->
       <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
-        <a href="/settings/totp" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.totp.entry')}</a>
+        <Button href="/settings/totp" variant="primary" size="lg" class="mt-4">{$t('settings.totp.entry')}</Button>
       </section>
       <!-- 邮件通知偏好入口：服务端 GET /settings/notifications 已切到应用壳，走规范路径 -->
       <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
-        <a href="/settings/notifications" class="mt-4 inline-block rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white transition-colors">{$t('settings.notifications.entry')}</a>
+        <Button href="/settings/notifications" variant="primary" size="lg" class="mt-4">{$t('settings.notifications.entry')}</Button>
       </section>
     {/if}
   </div>

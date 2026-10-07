@@ -5,6 +5,7 @@
   import type { AdminSettingsResponse } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -166,7 +167,7 @@
   {:else if loadError}
     <div data-testid="admin-settings-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-settings-retry" onclick={() => load()} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('common.retry')}</button>
+      <Button type="button" testId="admin-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     <form onsubmit={save} class="space-y-6" data-testid="admin-settings-form">
@@ -205,9 +206,9 @@
           </div>
         </section>
       {/each}
-      <button type="submit" data-testid="admin-settings-submit" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+      <Button type="submit" testId="admin-settings-submit" disabled={saving} variant="primary" size="lg">
         {$t('admin.settings.save')}
-      </button>
+      </Button>
     </form>
   {/if}
 </div>

@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { TOTPStatus } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -183,14 +184,9 @@
   {:else if loadError}
     <div data-testid="totp-failed" class="card-elevated p-8 rounded-xl text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button
-        type="button"
-        data-testid="totp-retry"
-        class="mt-4 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
-        onclick={() => load()}
-      >
+      <Button type="button" testId="totp-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
-      </button>
+      </Button>
     </div>
   {:else if status}
     <header class="space-y-1">
@@ -220,15 +216,9 @@
         {#if status.pending && !secret}
           <p data-testid="totp-pending-hint" class="text-xs text-amber-700 dark:text-amber-400">{$t('settings.totp.begin.restart_hint')}</p>
         {/if}
-        <button
-          type="button"
-          data-testid="totp-begin"
-          disabled={beginning}
-          onclick={() => begin()}
-          class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <Button type="button" testId="totp-begin" disabled={beginning} onclick={() => begin()} variant="primary" size="lg">
           {$t(beginning ? 'common.loading' : 'settings.totp.begin.submit')}
-        </button>
+        </Button>
       </section>
     {/if}
 
@@ -259,14 +249,9 @@
               class="field-input text-sm mt-1.5 w-full font-mono transition-colors"
             />
           </label>
-          <button
-            type="submit"
-            data-testid="totp-confirm-submit"
-            disabled={confirming}
-            class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="submit" testId="totp-confirm-submit" disabled={confirming} variant="primary" size="lg">
             {$t(confirming ? 'common.loading' : 'settings.totp.pending.confirm_submit')}
-          </button>
+          </Button>
         </form>
       </section>
     {/if}
@@ -289,14 +274,9 @@
               class="field-input text-sm mt-1.5 w-full transition-colors"
             />
           </label>
-          <button
-            type="submit"
-            data-testid="totp-disable-submit"
-            disabled={disabling}
-            class="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="submit" testId="totp-disable-submit" disabled={disabling} variant="danger-outline" size="lg">
             {$t(disabling ? 'common.loading' : 'settings.totp.disable.submit')}
-          </button>
+          </Button>
         </form>
       </section>
 

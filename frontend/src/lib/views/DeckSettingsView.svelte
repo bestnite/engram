@@ -6,6 +6,7 @@
   import type { DeckSettings } from '../api';
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -154,14 +155,9 @@
       class="card-elevated p-8 rounded-xl text-center"
     >
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button
-        type="button"
-        data-testid="deck-settings-retry"
-        class="mt-4 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
-        onclick={() => load()}
-      >
+      <Button type="button" testId="deck-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
-      </button>
+      </Button>
     </div>
   {:else if settings}
     {#if !embedded}
@@ -216,14 +212,9 @@
         </div>
         <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('deck.settings.unlimited_hint')}</p>
         <div class="flex items-center gap-3">
-          <button
-            type="submit"
-            data-testid="deck-settings-submit"
-            disabled={saving}
-            class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
-          >
+          <Button type="submit" testId="deck-settings-submit" disabled={saving} variant="primary" size="lg">
             {saving ? $t('deck.settings.saving') : $t('deck.settings.save')}
-          </button>
+          </Button>
           {#if saved}<p role="status" data-testid="deck-settings-saved" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('deck.settings.saved')}</p>{/if}
           {#if saveError}<p role="alert" data-testid="deck-settings-save-error" class="text-sm text-rose-700 dark:text-rose-400">{$t(saveError)}</p>{/if}
         </div>

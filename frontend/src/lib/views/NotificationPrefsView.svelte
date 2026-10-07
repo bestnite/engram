@@ -6,6 +6,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -132,14 +133,9 @@
   {:else if loadError}
     <div data-testid="notifications-failed" class="card-elevated p-8 rounded-xl text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button
-        type="button"
-        data-testid="notifications-retry"
-        class="mt-4 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
-        onclick={() => load()}
-      >
+      <Button type="button" testId="notifications-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
-      </button>
+      </Button>
     </div>
   {:else if data}
     <header class="space-y-1">
@@ -220,14 +216,9 @@
       </section>
 
       <div class="pt-2">
-        <button
-          type="submit"
-          data-testid="notifications-submit"
-          disabled={saving}
-          class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <Button type="submit" testId="notifications-submit" disabled={saving} variant="primary" size="lg">
           {$t(saving ? 'settings.notifications.saving' : 'settings.notifications.submit')}
-        </button>
+        </Button>
       </div>
     </form>
   {/if}
