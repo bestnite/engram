@@ -9,6 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -114,7 +115,14 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 // 绝不吊销自己的 key（DESIGN.md §11）。缩小范围的顺手改动会让这条变红。
 func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
-	memberID, cookies, csrf := loginMember(t, ts.srv, ts.db, "member")
+	member, err := ts.srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
+		Username: "member", Email: "member@example.com", Password: "Sup3rSecret!", Role: store.RoleUser, Locale: "en",
+	})
+	if err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	memberID := member.ID
+	cookies, csrf := loginJSON(t, ts.srv, ts.db, "member", "Sup3rSecret!")
 	rest := newKeysAPI(t, ts.db)
 	k1 := seedAPIKey(t, ts.db, memberID, "cli")
 
