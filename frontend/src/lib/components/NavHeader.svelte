@@ -61,6 +61,24 @@
         >
           {$t('nav.api_keys')}
         </a>
+        {#if $authStore.authenticated}
+          <!-- 管理入口只给管理员（与 SSR mainNav 同一判据），避免普通用户点进去吃 403 -->
+          {#if $authStore.user?.role === 'admin'}
+            <a
+              href="/admin"
+              class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/admin') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+            >
+              {$t('nav.admin')}
+            </a>
+          {/if}
+          <!-- 预设与个人设置对每个已登录用户可见（与 SSR mainNav 同序） -->
+          <a
+            href="/presets"
+            class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/presets') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+          >
+            {$t('nav.presets')}
+          </a>
+        {/if}
         <a
           href="/settings"
           class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {$routeStore.path.startsWith('/settings') && !$routeStore.path.startsWith('/settings/keys') ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-900 font-semibold' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"

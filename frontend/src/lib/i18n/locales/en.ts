@@ -1012,4 +1012,7 @@ export const en: LocaleCatalog = {
   'share.error_not_found': 'This share link is invalid, revoked or expired.',
   // ---- OIDC sign-in entry (probed by the SPA login view), DESIGN.md 4.4, 8.1 ----
   'account.oidc.button': 'Sign in with OIDC',
+  // ---- parent-owned navigation entries (mirrors the SSR mainNav labels) ----
+  'nav.presets': 'Presets',
+  'nav.admin': 'Admin',
 };

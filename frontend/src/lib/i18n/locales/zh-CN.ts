@@ -1008,4 +1008,7 @@ export const zhCN: LocaleCatalog = {
   'share.error_not_found': '分享链接无效、已撤销或已过期。',
   // ---- OIDC 登录入口（由 SPA 登录视图探测后渲染），DESIGN.md 4.4、8.1 ----
   'account.oidc.button': '使用 OIDC 登录',
+  // ---- 父级补充的导航项（与 SSR mainNav 文案一致）----
+  'nav.presets': '调度预设',
+  'nav.admin': '管理',
 };

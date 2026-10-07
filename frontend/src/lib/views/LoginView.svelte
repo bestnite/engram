@@ -3,6 +3,7 @@
   import { navigate } from '../router';
   import { login } from '../auth';
   import { getApiErrorMessageKey, ApiClientError } from '../api';
+  import OIDCLoginEntry from '../components/OIDCLoginEntry.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -106,5 +107,8 @@
         </button>
       </div>
     </form>
+
+    <!-- OIDC 可选登录：组件挂载时探测服务端配置，仅在 enabled 时渲染入口 -->
+    <OIDCLoginEntry />
   </div>
 </div>
