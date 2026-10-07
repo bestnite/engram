@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, StatsSummary, Deck } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -97,14 +98,9 @@
           {/if}
         </p>
         <div class="mt-4">
-          <button
-            data-testid="home-retry"
-            type="button"
-            class="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
-            onclick={loadHomeData}
-          >
+          <Button testId="home-retry" type="button" onclick={loadHomeData} variant="primary" size="lg">
             {$t('home.retry')}
-          </button>
+          </Button>
         </div>
       </div>
     {:else if summary}
@@ -121,16 +117,12 @@
           </div>
           <div class="flex items-center gap-3 shrink-0">
             {#if summary.due > 0}
-              <a
-                href="/review"
-                data-testid="home-start-review"
-                class="inline-flex items-center justify-center rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white active:scale-[0.98] transition-all btn-press"
-              >
+              <Button href="/review" testId="home-start-review" variant="primary" size="lg">
                 <svg class="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
                 {$t('home.start_review')} ({formatNumber(summary.due)})
-              </a>
+              </Button>
             {:else}
               <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                 {$t('home.all_caught_up')}
@@ -210,12 +202,9 @@
                     <span class="text-zinc-400 dark:text-zinc-500" title={$t('home.deck_limits')}>
                       {deck.new_per_day} / {deck.reviews_per_day}
                     </span>
-                    <a
-                      href="/review?deck={deck.id}"
-                      class="px-2.5 py-1 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press"
-                    >
+                    <Button href="/review?deck={deck.id}" variant="primary" size="xs">
                       {$t('home.deck_review')}
-                    </a>
+                    </Button>
                   </div>
                 </div>
               {/each}

@@ -418,17 +418,13 @@
             bind:value={bulkTagInput}
             class="field-input text-sm w-36"
           />
-          <button type="button" data-testid="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_add_tags')}</button>
-          <button type="button" data-testid="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_remove_tags')}</button>
-          <button type="button" data-testid="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_set_tags')}</button>
-
+          <Button type="button" testId="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} variant="outline" size="xs">{$t('notes.bulk_add_tags')}</Button>          <Button type="button" testId="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} variant="outline" size="xs">{$t('notes.bulk_remove_tags')}</Button>          <Button type="button" testId="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} variant="outline" size="xs">{$t('notes.bulk_set_tags')}</Button>
           {#if confirmingBulkDelete}
             <span class="text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
             <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
             <button type="button" data-testid="bulk-cancel-delete" class="underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
           {:else}
-            <button type="button" data-testid="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} class="px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 disabled:opacity-40 cursor-pointer" onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }}>{$t('notes.bulk_delete')}</button>
-          {/if}
+            <Button type="button" testId="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }} variant="danger-outline" size="xs">{$t('notes.bulk_delete')}</Button>          {/if}
           {#if bulkBusy}<span class="text-zinc-400">{$t('notes.bulk_applying')}</span>{/if}
         </div>
       {/if}
@@ -479,15 +475,10 @@
               {$t('notes.failed')}
             {/if}
           </p>
-          <button
-            data-testid="notes-retry"
-            type="button"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
-            onclick={() => loadData(page)}
-          >
+          <Button testId="notes-retry" type="button" onclick={() => loadData(page)} variant="primary" size="sm">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
             <span>{$t('notes.retry')}</span>
-          </button>
+          </Button>
         </div>
       {:else if notes.length === 0}
         <div data-testid="notes-empty" class="py-16 text-center text-zinc-500 dark:text-zinc-400">
@@ -565,28 +556,14 @@
         <!-- 分页栏 -->
         {#if totalPages > 1}
           <div data-testid="notes-pagination" class="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
-            <button
-              data-testid="notes-prev-page"
-              type="button"
-              disabled={page <= 1}
-              class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
-              onclick={handlePrevPage}
-            >
+            <Button testId="notes-prev-page" type="button" disabled={page <= 1} onclick={handlePrevPage} variant="outline" size="sm">
               {$t('notes.prev_page')}
-            </button>
-            <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
+            </Button>            <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
               {$t('notes.page_info', { page, totalPages })}
             </span>
-            <button
-              data-testid="notes-next-page"
-              type="button"
-              disabled={page >= totalPages}
-              class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
-              onclick={handleNextPage}
-            >
+            <Button testId="notes-next-page" type="button" disabled={page >= totalPages} onclick={handleNextPage} variant="outline" size="sm">
               {$t('notes.next_page')}
-            </button>
-          </div>
+            </Button>          </div>
         {/if}
       {/if}
     </div>
@@ -626,15 +603,9 @@
         <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer">
           {$t('note_edit.cancel')}
         </button>
-        <button
-          type="button"
-          data-testid="deck-package-export"
-          disabled={exporting}
-          onclick={exportPackage}
-          class="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer"
-        >
+        <Button type="button" testId="deck-package-export" disabled={exporting} onclick={exportPackage} variant="primary" size="sm">
           {exporting ? $t('package.export.exporting') : $t('package.export.action')}
-        </button>
+        </Button>
       </div>
   </Dialog>
 {/if}

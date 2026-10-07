@@ -409,14 +409,9 @@
     <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="presets-heading">
       {$t('presets.heading')}
     </h1>
-    <button
-      type="button"
-      data-testid="presets-new"
-      onclick={openCreate}
-      class="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white transition-colors cursor-pointer"
-    >
+    <Button type="button" testId="presets-new" onclick={openCreate} variant="primary" size="lg">
       {$t('presets.new.button')}
-    </button>
+    </Button>
   </div>
 
   {#if loading}
@@ -424,17 +419,12 @@
   {:else if loadError}
     <div data-testid="presets-failed" class="card-elevated p-8 rounded-xl text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button
-        type="button"
-        data-testid="presets-retry"
-        onclick={load}
-        class="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
-      >
+      <Button type="button" testId="presets-retry" onclick={load} variant="primary" size="lg" class="mt-4">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
         </svg>
         <span>{$t('common.retry')}</span>
-      </button>
+      </Button>
     </div>
   {:else if data && presets.length === 0}
     <div data-testid="presets-empty" class="card-elevated p-12 rounded-xl text-center">
@@ -473,16 +463,9 @@
               >
                 {$t('presets.edit.button')}
               </button>
-              <button
-                type="button"
-                data-testid={`preset-${p.id}-optimize`}
-                disabled={busyId === p.id || (gate !== null && !gate.eligible)}
-                title={gate && !gate.eligible ? $t('presets.optimize.gate_shortfall', { count: gate.shortfall }) : ''}
-                onclick={() => runOptimize(p)}
-                class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
+              <Button type="button" testId={`preset-${p.id}-optimize`} disabled={busyId === p.id || (gate !== null && !gate.eligible)} title={gate && !gate.eligible ? $t('presets.optimize.gate_shortfall', { count: gate.shortfall }) : ''} onclick={() => runOptimize(p)} variant="primary" size="sm">
                 {$t('presets.optimize.button')}
-              </button>
+              </Button>
               <button
                 type="button"
                 data-testid={`preset-${p.id}-revert`}
@@ -493,16 +476,9 @@
                 {$t('presets.revert.button')}
               </button>
               {#if p.name !== 'Default'}
-                <button
-                  type="button"
-                  data-testid={`preset-${p.id}-delete`}
-                  disabled={busyId === p.id || getPresetDecks(p.id).length > 0}
-                  title={getPresetDecks(p.id).length > 0 ? $t('presets.delete.in_use') : $t('presets.delete.action')}
-                  onclick={() => promptDeletePreset(p)}
-                  class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
+                <Button type="button" testId={`preset-${p.id}-delete`} disabled={busyId === p.id || getPresetDecks(p.id).length > 0} title={getPresetDecks(p.id).length > 0 ? $t('presets.delete.in_use') : $t('presets.delete.action')} onclick={() => promptDeletePreset(p)} variant="danger-outline" size="sm">
                   {$t('presets.delete.action')}
-                </button>
+                </Button>
               {/if}
             </div>
           </div>
