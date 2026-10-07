@@ -16,8 +16,12 @@ not obvious from the code and the definition of "done". The task backlog with st
   disagreement: `DESIGN.md` is owned by the maintainer, who updates it.
 - Anything not decided in `DESIGN.md` (section 13 holds the open questions) must be asked
   or added there, not invented in code.
-- Code comments cite `DESIGN.md` sections as the reason a rule exists. Those citations stay:
-  they remain accurate for the maintainer and stripping them would delete the rationale.
+- **Code comments must be self-contained.** A comment states the rule and its reason in its
+  own words. It never cites `DESIGN.md`, any other document that is not committed, or a bare
+  section number such as `§4.5`: a public reader has neither the file nor the numbering, so a
+  citation there is a dangling pointer that carries no reason. The rule content stays, the
+  pointer goes. References to committed files (`AGENTS.md`, `ROADMAP.md`, `schema/*.json`,
+  RFCs) remain allowed, because those resolve for every reader.
 
 ---
 
@@ -60,7 +64,7 @@ end user → translation catalog.
 1. **Content and progress are separate.** `notes`/`cards` hold content only; per-user
    scheduling lives in `card_states`, keyed `(card_id, user_id)`. Sharing a deck must
    never mix two users' progress.
-2. **`reviews` is append-only.** Every column listed in `DESIGN.md` §2.2 is written from
+2. **`reviews` is append-only.** Every column of the review log is written from
    the first commit — it is the only fuel for parameter optimisation and cannot be
    reconstructed later.
 3. **Ratings and states are integers**: `rating` 1–4 (Again/Hard/Good/Easy),
@@ -68,7 +72,7 @@ end user → translation catalog.
    log format and keeps optimiser export trivial.
 4. **Both databases must work**: PostgreSQL (default deployment) and SQLite (single-node
    and development). No PG-only types (`jsonb`, `serial`, `array`), JSON stored as `TEXT`,
-   `clause.OnConflict` for upserts, `LIMIT/OFFSET` for paging. See `DESIGN.md` §2.3.
+   `clause.OnConflict` for upserts, `LIMIT/OFFSET` for paging.
 5. **AutoMigrate is additive only.** Column type changes, drops, and new non-null
    constraints require an explicit, versioned migration function.
 6. **One business layer, two transports.** REST handlers and MCP tools call the same
@@ -94,8 +98,8 @@ end user → translation catalog.
 - Blocking operations take `context.Context` as the first parameter.
 - Errors: wrap with `%w`; API/MCP errors carry a stable English `code` plus a localised
   `message`.
-- No new dependency without a reason that survives the selection principle in
-  `DESIGN.md` §10.1 (low complexity, prefer mature libraries over invented ones).
+- No new dependency without a reason that survives the selection principle (low complexity,
+  prefer mature libraries over invented ones).
 
 ### 2.5 Tests and commits
 
@@ -188,6 +192,9 @@ A task is done only when all of the following hold:
 5. The change is committed with a signed, conventional commit; `git status` is clean.
 6. If the change alters behaviour or decisions, report it in your final message so the
    maintainer can update `DESIGN.md`; you cannot commit that file because it is not tracked.
+7. No comment, document or commit message cites a file that is not in the repository.
+   Every reference resolves for a public reader: `AGENTS.md`, `ROADMAP.md`, `README*`,
+   `schema/*.json`, RFCs, or code paths inside the repository.
 
 ---
 
