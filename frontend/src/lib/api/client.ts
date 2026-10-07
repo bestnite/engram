@@ -15,7 +15,7 @@ import {
   type BulkNotesRequest,
   type BulkNotesResponse,
   type NotePreviewResponse,
-  type MediaPickerPage,
+  type MediaListResponse,
   type MediaUploadResult,
   type StatsSummary,
   type StatsDetail,
@@ -434,48 +434,16 @@ export class ApiClient {
     });
   }
 
-  /** 复用已有的编辑器权限媒体片段；权限与可读媒体集合仍由服务端判定。 */
-  async getMediaPickerPage(deckId: number | string, cursor = ''): Promise<MediaPickerPage> {
-    const expectedPath = `/decks/${encodeURIComponent(String(deckId))}/media/picker`;
-    const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-    const headers = new Headers({ Accept: 'text/html' });
-    headers.delete('Authorization');
-    let response: Response;
-    try {
-      response = await this.fetchFn(`${expectedPath}${suffix}`, {
-        method: 'GET', headers, credentials: 'same-origin',
-      });
-    } catch (err) {
-      throw new ApiClientError('Network request failed', { status: 0, code: 'network_error', details: err });
-    }
-    if (!response.ok) {
-      throw new ApiClientError(`HTTP ${response.status}`, {
-        status: response.status, code: inferErrorCodeFromStatus(response.status),
-      });
-    }
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const root = doc.querySelector('#media-picker-list');
-    if (!root) throw new ApiClientError('Invalid media picker response', { status: response.status, code: 'invalid_response' });
-    const items = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-media-insert]')).map((button) => {
-      const sha256 = button.title;
-      const path = button.getAttribute('data-media-insert');
-      const image = button.querySelector('img');
-      if (!/^[0-9a-f]{64}$/.test(sha256) || path !== `/media/${sha256}` || image?.getAttribute('src') !== path) {
-        throw new ApiClientError('Invalid media picker item', { status: response.status, code: 'invalid_response' });
-      }
-      return { sha256, src: path, insert_url: path };
-    });
-    const next = root.querySelector<HTMLButtonElement>('button[hx-get]')?.getAttribute('hx-get') || '';
-    let nextCursor = '';
-    if (next) {
-      const url = new URL(next, window.location.origin);
-      if (url.origin !== window.location.origin || url.pathname !== expectedPath) {
-        throw new ApiClientError('Invalid media picker pagination response', { status: response.status, code: 'invalid_response' });
-      }
-      nextCursor = url.searchParams.get('cursor') || '';
-    }
-    return { items, next_cursor: nextCursor };
+  /**
+   * 列出当前用户可读的媒体库一页（GET /api/v1/media，DESIGN.md §6.3、§7.3）。
+   * 取代已删除的 SSR 片段端点：返回的 JSON 每项含 sha256 与可直接引用的 url（/media/<sha256>），
+   * 前端不再解析 HTML。参数缺省时服务端给默认页大小；游标非法/超限由服务端回 400。
+   */
+  async listMedia(cursor = ''): Promise<MediaListResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    const query = params.toString();
+    return this.request<MediaListResponse>(`/api/v1/media${query ? `?${query}` : ''}`);
   }
 
   /**

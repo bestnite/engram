@@ -5,6 +5,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
   import { typeset } from '../mathjax';
+  import MediaPicker from '../components/MediaPicker.svelte';
 
   let note = $state<Note | null>(null);
   let fieldsText = $state('');
@@ -19,12 +20,6 @@
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
   // 预览结果容器：只对它调用 MathJax 排版，绝不整页排版编辑器原始 Markdown。
   let previewSection = $state<HTMLElement | null>(null);
-  let mediaItems = $state<Array<{ sha256: string; src: string; insert_url: string }>>([]);
-  let mediaCursor = $state('');
-  let mediaOpen = $state(false);
-  let mediaLoading = $state(false);
-  let mediaError = $state(false);
-  let mediaHasMore = $state(false);
   let selectedField = $state('');
   // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（DESIGN.md §6.3 编辑器媒体面）。
   let uploadInput = $state<HTMLInputElement | null>(null);
@@ -52,26 +47,6 @@
     } finally {
       loading = false;
     }
-  }
-
-  async function loadMedia(reset = false): Promise<void> {
-    mediaLoading = true;
-    mediaError = false;
-    try {
-      const page = await apiClient.getMediaPickerPage(deckId, reset ? '' : mediaCursor);
-      mediaItems = reset ? page.items : [...mediaItems, ...page.items];
-      mediaCursor = page.next_cursor;
-      mediaHasMore = Boolean(page.next_cursor);
-    } catch {
-      mediaError = true;
-    } finally {
-      mediaLoading = false;
-    }
-  }
-
-  async function toggleMedia(): Promise<void> {
-    mediaOpen = !mediaOpen;
-    if (mediaOpen && mediaItems.length === 0 && !mediaLoading) await loadMedia(true);
   }
 
   // insertMedia 把 Markdown 图片引用追加到当前选中字段；上传与选择器共用同一段逻辑。
@@ -224,26 +199,8 @@
           {#if uploaded}<p role="status" data-testid="spa-media-upload-status" class="text-emerald-700">{$t('media.spa.upload.inserted')}</p>{/if}
           {#if uploadErrorKey}<p role="alert" data-testid="spa-media-upload-error" class="text-rose-600">{$t(uploadErrorKey)}</p>{/if}
         </div>
-        <button data-testid="spa-media-picker-toggle" type="button" onclick={toggleMedia} class="rounded-md border px-4 py-2">{$t('media.spa.open')}</button>
-        {#if mediaOpen}
-          <section data-testid="spa-media-picker" class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
-            <h2 class="text-lg font-semibold">{$t('media.spa.heading')}</h2>
-            {#if mediaLoading}<p role="status">{$t('media.spa.loading')}</p>{/if}
-            {#if mediaError}<p role="alert">{$t('media.spa.failed')}</p><button type="button" onclick={() => loadMedia(!mediaCursor)}>{$t('media.spa.retry')}</button>{/if}
-            {#if !mediaLoading && !mediaError && mediaItems.length === 0}<p>{$t('media.spa.empty')}</p>{/if}
-            {#if mediaItems.length > 0}
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {#each mediaItems as item (item.sha256)}
-                  <button data-testid="spa-media-item-{item.sha256}" type="button" onclick={() => insertMedia(item.insert_url)} class="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2">
-                    <img src={item.src} alt={item.sha256} loading="lazy" class="h-24 w-full object-contain" />
-                    <span class="block truncate px-2 py-1 text-xs">{item.sha256}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-            {#if mediaHasMore}<button data-testid="spa-media-next" type="button" disabled={mediaLoading} onclick={() => loadMedia(false)} class="mt-3 rounded-md border px-4 py-2 disabled:opacity-50">{$t('media.spa.next')}</button>{/if}
-          </section>
-        {/if}
+        <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
+        <MediaPicker onselect={insertMedia} />
       </div>
       <button data-testid="note-preview" type="button" onclick={preview} disabled={previewLoading} class="rounded-md border px-4 py-2 disabled:opacity-50">{previewLoading ? $t('note_preview.spa.loading') : $t('note_preview.spa.action')}</button>
       {#if previewError}<p role="alert" data-testid="note-preview-error">{$t('note_preview.spa.failed')}</p>{/if}
