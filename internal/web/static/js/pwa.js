@@ -1,5 +1,9 @@
 // PWA 外壳注册（M8-2）、暗色模式（Dark Mode）与移动端导航交互。
 // 零依赖、无构建链；不触碰任何答题数据（DESIGN.md §8.5）。
+//
+// 暗色模式分工：**切换按钮在 SPA 侧**（`frontend/src/lib/theme.ts` + NavHeader），因为
+// SPA 是客户端渲染的，而本文件的绑定只在加载期跑一次、拿不到之后才挂载的按钮。本文件只负责
+// 「加载期应用一次 + 用户未做选择时跟随系统偏好变化」。
 (function () {
   "use strict";
 
@@ -12,41 +16,20 @@
   }
 
   function applyTheme(isDark) {
+    var root = document.documentElement;
     if (isDark) {
-      document.documentElement.classList.add("dark");
+      root.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
+      root.classList.remove("dark");
     }
+    // color-scheme 与画布底色必须与首帧的内联引导（internal/web/theme.go）逐字一致：
+    // 只切类名会让原生控件配色与画布底色停留在切换前的状态。
+    root.style.colorScheme = isDark ? "dark" : "light";
+    root.style.backgroundColor = isDark ? "#09090b" : "#f8fafc";
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
       meta.setAttribute("content", isDark ? "#09090b" : "#ffffff");
     }
-    updateToggleIcons(isDark);
-  }
-
-  function updateToggleIcons(isDark) {
-    var sunIcons = document.querySelectorAll(".theme-icon-sun");
-    var moonIcons = document.querySelectorAll(".theme-icon-moon");
-    sunIcons.forEach(function (el) {
-      if (isDark) {
-        el.classList.remove("hidden");
-      } else {
-        el.classList.add("hidden");
-      }
-    });
-    moonIcons.forEach(function (el) {
-      if (isDark) {
-        el.classList.add("hidden");
-      } else {
-        el.classList.remove("hidden");
-      }
-    });
-  }
-
-  function toggleTheme() {
-    var nextDark = !document.documentElement.classList.contains("dark");
-    localStorage.setItem("engram-theme", nextDark ? "dark" : "light");
-    applyTheme(nextDark);
   }
 
   // 立即根据偏好应用，避免闪烁
@@ -63,15 +46,6 @@
   // ── 移动端导航与页面就绪增强 ────────────────────────────────────
   function setupPageInteractions() {
     applyTheme(isDarkTheme());
-
-    // 绑定主题切换按钮
-    var toggles = document.querySelectorAll("[data-theme-toggle]");
-    toggles.forEach(function (btn) {
-      btn.onclick = function (e) {
-        e.preventDefault();
-        toggleTheme();
-      };
-    });
 
     // 移动端折叠导航抽屉
     var navToggle = document.getElementById("mobile-nav-toggle");
