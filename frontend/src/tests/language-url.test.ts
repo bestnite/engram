@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { navigate, routeStore } from '../lib/router';
 import { authStore, type AuthState } from '../lib/auth';
-import { readLanguageFromURL, setLanguageInURL } from '../lib/i18n/url';
+import { readLanguageFromURL, setLanguageInURL, clearLanguageInURL } from '../lib/i18n/url';
 
 /**
  * 匿名访客的语言覆盖参数住在地址上（服务端对每个请求都按「?lang 优先」解析），
@@ -49,5 +49,19 @@ describe('anonymous language override in the URL', () => {
     authStore.set({ ...signedOut, authenticated: true });
     navigate('/decks');
     expect(currentURL()).toBe('/decks');
+  });
+
+  it('clears a stale override once the language lives on the account', () => {
+    // 登录用户在页头切换时写的是账号设置，地址上残留的 ?lang 优先级最高，留着会压过刚写好的值。
+    setLanguageInURL('en');
+    expect(readLanguageFromURL()).toBe('en');
+    clearLanguageInURL();
+    expect(currentURL()).toBe('/login');
+    expect(readLanguageFromURL()).toBeNull();
+
+    // 没有该参数时是空操作，不动其它查询串。
+    window.history.replaceState({}, '', '/decks?page=2');
+    clearLanguageInURL();
+    expect(currentURL()).toBe('/decks?page=2');
   });
 });

@@ -32,3 +32,17 @@ export function setLanguageInURL(code: string): void {
   url.searchParams.set(LANGUAGE_PARAM, code);
   window.history.replaceState({}, '', url);
 }
+
+/**
+ * 从地址上移除语言覆盖参数（没有该参数时什么都不做）。
+ *
+ * 登录用户的语言以账号设置为准（切换时走 PATCH /api/v1/settings/locale 落库），而地址上残留的
+ * `?lang=` 在服务端解析里是最高优先级——页头切换成功后要把它清掉，否则 URL 会与账号设置打架。
+ */
+export function clearLanguageInURL(): void {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(LANGUAGE_PARAM)) return;
+  url.searchParams.delete(LANGUAGE_PARAM);
+  window.history.replaceState({}, '', url);
+}

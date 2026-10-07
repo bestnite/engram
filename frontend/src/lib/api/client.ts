@@ -588,6 +588,28 @@ export class ApiClient {
   }
 
   /**
+   * 只改界面语言偏好（PATCH /api/v1/settings/locale）。
+   *
+   * 页头的语言切换器用它即时落库；/settings 的语言字段随资料表单（PATCH /api/v1/profile）提交，
+   * 两条路径写的是同一列，界面上以 store 为准。
+   */
+  async updateLocale(
+    locale: string,
+    options?: { csrfToken?: string }
+  ): Promise<{ locale: string }> {
+    const headers = new Headers();
+    const token = options?.csrfToken || this.csrfToken;
+    if (token) {
+      headers.set('X-CSRF-Token', token);
+    }
+    return this.request<{ locale: string }>('/api/v1/settings/locale', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ locale }),
+    });
+  }
+
+  /**
    * 获取当前用户学习统计概要（GET /api/v1/stats/summary）
    */
   async getStatsSummary(): Promise<StatsSummary> {

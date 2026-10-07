@@ -131,11 +131,10 @@
         {/if}
       </button>
 
-      {#if !$authStore.authenticated}
-        <!-- 语言入口只给未登录访客：匿名没有账号可落库，选择写进地址的 ?lang；登录用户的
-             语言入口在 /settings（随资料表单落库），两处并存会让「切了又回退」重现。 -->
-        <LanguageSwitcher />
-      {/if}
+      <!-- 语言入口对所有人生效：未登录时把选择写进地址的 ?lang（没有账号可落库），
+           已登录时走 PATCH /api/v1/settings/locale 写 users.locale，与 /settings 的语言字段同一列。
+           两处共用同一份 locale store，因此界面永远只有一种语言。 -->
+      <LanguageSwitcher />
 
       {#if $authStore.authenticated && $authStore.user}
         <div class="flex items-center space-x-2 text-sm">

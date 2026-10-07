@@ -50,16 +50,29 @@ describe('settings profile controls', () => {
 });
 
 describe('header language entry', () => {
-  it('renders the switcher only for signed-out visitors', () => {
-    // 页头切换器此前对已登录用户也可见，切完只改本地 store、刷新即回退，
-    // 与 /settings 落库的那一份打架（用户报障的形态）。
-    const header = read('../lib/components/NavHeader.svelte');
-    expect(header).toContain('{#if !$authStore.authenticated}');
+  const header = read('../lib/components/NavHeader.svelte');
+  const switcher = read('../lib/components/LanguageSwitcher.svelte');
+
+  it('renders the switcher for every visitor', () => {
+    // 曾经按登录态隐藏（匿名写 ?lang、登录只留在 /settings）；用户要求两处都生效，别再按登录态藏它。
     expect(header).toContain('<LanguageSwitcher />');
+    expect(header).not.toContain('{#if !$authStore.authenticated}');
   });
 
   it('writes the anonymous choice into the address instead of only the local store', () => {
-    const switcher = read('../lib/components/LanguageSwitcher.svelte');
     expect(switcher).toContain('setLanguageInURL(value)');
+  });
+
+  it('persists the signed-in choice to the account and rolls the UI back when it fails', () => {
+    // 已登录时与 /settings 的语言字段写同一列；失败要把界面回滚，不能留下「界面变了、库里没变」。
+    expect(switcher).toContain('await apiClient.updateLocale(value)');
+    expect(switcher).toContain('clearLanguageInURL()');
+    expect(switcher).toContain('setLocale(previous)');
+    expect(switcher).toContain('failed = true');
+  });
+
+  it('has the save-failure notice in both catalogs', () => {
+    expect(zhCN['language.save_failed']).toBeTruthy();
+    expect(en['language.save_failed']).toBeTruthy();
   });
 });

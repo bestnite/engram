@@ -16,6 +16,7 @@ export const zhCN: LocaleCatalog = {
   'language.label': '界面语言',
   'language.zh-CN': '中文',
   'language.en': 'English',
+  'language.save_failed': '语言未能保存，请重试。',
   'shell.welcome': '欢迎使用 Engram',
   'shell.subtitle': '基于 FSRS 间隔重复算法的知识卡片系统',
   'common.loading': '加载中...',

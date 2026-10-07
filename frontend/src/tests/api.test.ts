@@ -719,6 +719,23 @@ describe('Centralized typed same-origin REST API client', () => {
   });
 
   describe('User profile and locale API methods', () => {
+    it('updateLocale issues a PATCH with the locale payload', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ locale: 'en' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const res = await client.updateLocale('en');
+      expect(res.locale).toBe('en');
+
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/settings/locale');
+      expect(init?.method).toBe('PATCH');
+      expect(JSON.parse(init?.body as string)).toEqual({ locale: 'en' });
+    });
+
     it('getProfile fetches and unwraps user profile payload', async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(

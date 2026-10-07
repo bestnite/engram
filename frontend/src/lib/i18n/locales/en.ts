@@ -16,6 +16,7 @@ export const en: LocaleCatalog = {
   'language.label': 'Language',
   'language.zh-CN': '中文',
   'language.en': 'English',
+  'language.save_failed': 'Could not save the language. Please try again.',
   'shell.welcome': 'Welcome to Engram',
   'shell.subtitle': 'Spaced repetition flashcard system powered by FSRS',
   'common.loading': 'Loading...',
