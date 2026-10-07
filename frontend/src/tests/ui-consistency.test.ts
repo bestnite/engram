@@ -181,4 +181,13 @@ describe('loading states and the admin tab bar', () => {
   it('keeps the pulse placeholder in a single implementation', () => {
     const owners = sources.filter((s) => s.src.includes('skeleton-block')).map((s) => s.file);
     expect(owners).toEqual(['components/ui/Skeleton.svelte']);
+  });
+  it('lays the admin tabs out on a fixed grid so switching pages cannot reflow them', () => {
+    // 各 tab 文字长短不同：按内容宽度排（flex-wrap）时换行点在窄容器里会变，
+    // 切页时 tab 位置就跟着跳动（用户报障形态）。等宽网格让每个 tab 宽度固定。
+    const nav = sources.find((s) => s.file === 'views/admin/AdminNav.svelte')?.src ?? '';
+    expect(nav).toContain('grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4');
+    expect(nav).not.toContain('flex-wrap');
+    expect(nav).toContain('block rounded-lg px-3 py-1.5 text-center');
+  });
 });
