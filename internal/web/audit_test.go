@@ -3,12 +3,20 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
+	"net/http/httptest"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+// registerJSON 走 SPA 的同源 JSON 注册（POST /api/v1/auth/register），提交一对会话前双提交
+// cookie 与镜像 token。页面层已删除，注册的唯一传输是 JSON。
+func registerJSON(t *testing.T, srv *Server, body map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	cookie, headers := preSessionPair(t, srv, "/register")
+	return postJSON(srv, "/api/v1/auth/register", body, []*http.Cookie{cookie}, headers)
+}
 
 // TestMutationsWriteExactlyOneAuditRow 是 M1-10 的接线验收：注册、登录、登出各写一行，
 // action 字符串与 store 中的常量一致。
@@ -16,30 +24,20 @@ func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 	srv, db := newAuthServer(t)
 	ctx := context.Background()
 
-	if code := postForm(t, srv, "/register", url.Values{
-		"username": {"admin"},
-		"email":    {"admin@example.com"},
-		"password": {"Sup3rSecret!"},
-	}, nil).Code; code != http.StatusSeeOther {
-		t.Fatalf("POST /register status = %d, want 303", code)
+	reg := registerJSON(t, srv, map[string]string{
+		"username": "admin",
+		"email":    "admin@example.com",
+		"password": "Sup3rSecret!",
+	})
+	if reg.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/register status = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 
-	ok := postForm(t, srv, "/login", url.Values{
-		"username": {"admin"},
-		"password": {"Sup3rSecret!"},
-	}, nil)
-	if ok.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303", ok.Code)
-	}
-	// 从服务端取会话绑定的 CSRF token（页面之外的通道）。
-	var sess store.Session
-	if err := db.Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row: %v", err)
-	}
-	logout := postForm(t, srv, "/logout",
-		url.Values{auth.CSRFFieldName: {sess.CSRFToken}}, ok.Result().Cookies())
-	if logout.Code != http.StatusSeeOther {
-		t.Fatalf("POST /logout status = %d, want 303", logout.Code)
+	// 登录走 JSON：顺便拿到会话绑定的 CSRF token（页面之外的通道）。
+	cookies, csrf := loginJSON(t, srv, db, "admin", "Sup3rSecret!")
+	logout := postJSON(srv, "/api/v1/auth/logout", nil, cookies, map[string]string{auth.CSRFHeaderName: csrf})
+	if logout.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/logout status = %d, want 200", logout.Code)
 	}
 
 	audit := store.NewAuditStore(db)
@@ -72,19 +70,21 @@ func TestLoginFailureIsAuditedAndLimiterResets(t *testing.T) {
 	srv, db := newAuthServer(t)
 	ctx := context.Background()
 
-	if code := postForm(t, srv, "/register", url.Values{
-		"username": {"admin"},
-		"email":    {"admin@example.com"},
-		"password": {"Sup3rSecret!"},
-	}, nil).Code; code != http.StatusSeeOther {
-		t.Fatalf("POST /register status = %d, want 303", code)
+	reg := registerJSON(t, srv, map[string]string{
+		"username": "admin",
+		"email":    "admin@example.com",
+		"password": "Sup3rSecret!",
+	})
+	if reg.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/register status = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 
 	for i := 0; i < 3; i++ {
-		rec := postForm(t, srv, "/login", url.Values{
-			"username": {"admin"},
-			"password": {"WrongPassword!"},
-		}, nil)
+		cookie, headers := preSessionPair(t, srv, "/login")
+		rec := postJSON(srv, "/api/v1/auth/login", map[string]string{
+			"username": "admin",
+			"password": "WrongPassword!",
+		}, []*http.Cookie{cookie}, headers)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("failed login #%d status = %d, want 401", i+1, rec.Code)
 		}
@@ -99,13 +99,8 @@ func TestLoginFailureIsAuditedAndLimiterResets(t *testing.T) {
 		t.Fatalf("limiter delay before a successful login = (%v, %v), want > 0", d, err)
 	}
 
-	ok := postForm(t, srv, "/login", url.Values{
-		"username": {"admin"},
-		"password": {"Sup3rSecret!"},
-	}, nil)
-	if ok.Code != http.StatusSeeOther {
-		t.Fatalf("successful POST /login status = %d, want 303", ok.Code)
-	}
+	// 成功登录（失败即 Fatal），限流随之重置。
+	loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 	if d, err := srv.loginLimiter.Wait(ctx, "admin", ""); err != nil || d != 0 {
 		t.Fatalf("limiter delay after a successful login = (%v, %v), want (0, nil)", d, err)
 	}

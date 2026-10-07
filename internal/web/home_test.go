@@ -73,9 +73,9 @@ func get(t *testing.T, srv *Server, target string, headers map[string]string) *h
 // TestStaticRouteServesEmbeddedAsset 断言 /static/v/<hash>/... 路由已接入并返回内容。
 func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 	srv := newRenderServer(t, nil)
-	url := srv.assets.URL("js/htmx.min.js")
+	url := srv.assets.URL("js/pwa.js")
 	if url == "" {
-		t.Fatal("htmx asset is not embedded")
+		t.Fatal("pwa asset is not embedded")
 	}
 	rec := get(t, srv, url, nil)
 	if rec.Code != http.StatusOK {

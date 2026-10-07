@@ -1,36 +1,26 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"regexp"
 	"testing"
 )
 
-// 日切点 0 是午夜；空配置才是默认 04:00，表单与存储不得混淆二者。
+// 日切点 0 是午夜；空配置（NULL）才是默认 04:00，写入与存储不得混淆二者。
+// SSR 的 /settings/profile 表单已删除，资料写入改走 SPA 的 PATCH /api/v1/profile。
 
-// cutoffInputValue 从设置页 HTML 里取出切点输入框当前的 value。
-// 断言的是渲染出来的控件本身，而不是 handler 的中间变量，避免「显示对、控件错」漏网。
-func cutoffInputValue(t *testing.T, body string) string {
+// patchProfileCutoff 以 JSON PATCH 提交个人资料；hour 为 nil 表示清空切点（存 NULL）。
+func patchProfileCutoff(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, hour *int) *httptest.ResponseRecorder {
 	t.Helper()
-	re := regexp.MustCompile(`id="settings-cutoff"[^>]*value="([^"]*)"`)
-	m := re.FindStringSubmatch(body)
-	if m == nil {
-		t.Fatalf("settings page has no cutoff input: %s", snippet(body))
+	raw, err := json.Marshal(map[string]any{
+		"display_name":    "Owner",
+		"locale":          "zh-CN",
+		"timezone":        "UTC",
+		"day_cutoff_hour": hour,
+	})
+	if err != nil {
+		t.Fatalf("marshal profile patch: %v", err)
 	}
-	return m[1]
-}
-
-// postRawCutoff 提交原始字符串形式的切点，覆盖 "-1" 这类 strconv.Atoi 能解析但越界的值，
-// 以及 "" 这类解析失败的值。
-func postRawCutoff(t *testing.T, srv *Server, cookies []*http.Cookie, csrf, raw string) *httptest.ResponseRecorder {
-	t.Helper()
-	return postForm(t, srv, "/settings/profile", url.Values{
-		"csrf_token":      {csrf},
-		"display_name":    {"Owner"},
-		"locale":          {"zh-CN"},
-		"timezone":        {"UTC"},
-		"day_cutoff_hour": {raw},
-	}, cookies)
+	return jsonRequest(t, srv, http.MethodPatch, "/api/v1/profile", string(raw), cookies, csrf)
 }

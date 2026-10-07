@@ -23,8 +23,9 @@ import (
 //  1. 为某邮箱建的邀请能投递并被接受；
 //  2. 被撤销 / 过期的邀请链接被拒；
 //  3. 手工拷链接的原有路径仍然能用；
-//  4. SMTP 未配置时入口渲染 mail.not_configured 说明，且不静默。
+//  4. SMTP 未配置时创建仍成功且如实回显 mail_notice（绝不静默）。
 //
+// 管理端邀请的创建/撤销与注册全部走 SPA 的同源 JSON 端点（SSR 表单端点已删除）。
 // 投递用进程内替身（recordingMailSender）完成，不依赖外网或真实 SMTP。
 
 // recordingMailSender 是 mail.Sender 的替身：只记录被投递的邮件，不碰网络。
@@ -98,6 +99,7 @@ func waitForMail(t *testing.T, sender *recordingMailSender, n int) []mail.Messag
 }
 
 // noticeFrom 从 303 重定向的 Location 里取出 notice 码。
+// 邀请相关用例已改读 JSON 的 mail_notice；本助手保留给仍走 SSR 重定向的退订流（unsubscribe_test.go）复用。
 func noticeFrom(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	loc := rec.Header().Get("Location")
@@ -108,6 +110,36 @@ func noticeFrom(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return u.Query().Get("notice")
 }
 
+// inviteCreateResponse 是创建邀请的 JSON 回包：新邀请 + 发信结果码。
+type inviteCreateResponse struct {
+	Invite struct {
+		ID    uint64 `json:"id"`
+		Token string `json:"token"`
+	} `json:"invite"`
+	MailNotice string `json:"mail_notice"`
+}
+
+// createInviteJSON 通过管理 JSON 端点创建一条邀请，返回响应与解出的回包。
+func createInviteJSON(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, body map[string]any) (*httptest.ResponseRecorder, inviteCreateResponse) {
+	t.Helper()
+	rec := postJSONWithSession(srv, "/api/v1/admin/invites", body, cookies, csrf)
+	var resp inviteCreateResponse
+	if rec.Code == http.StatusCreated {
+		decodeJSON(t, rec, &resp)
+	}
+	return rec, resp
+}
+
+// registerWithInviteJSON 用邀请 token 走 SPA 的 JSON 注册（会话前双提交 CSRF）。
+func registerWithInviteJSON(t *testing.T, srv *Server, username, email, invite string) *httptest.ResponseRecorder {
+	t.Helper()
+	cookie, headers := preSessionPair(t, srv, "/register")
+	return postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": username, "email": email,
+		"password": "Sup3rSecret!", "invite": invite,
+	}, []*http.Cookie{cookie}, headers)
+}
+
 // TestInviteEmailDeliveredAndAccepted 是 M1-20 的核心验收：
 // 为某邮箱建的邀请被投递（邮件里带可用的接受链接），并且该链接能被接受。
 func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
@@ -115,13 +147,13 @@ func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 	srv.invites = store.NewInviteStore(db)
 	sender := startInviteMail(t, srv, db)
 
-	created := postForm(t, srv, "/admin/invites", url.Values{
-		"csrf_token": {csrf}, "role": {"user"}, "expires_days": {"7"},
-		"email": {"invitee@example.com"}, "send_email": {"1"},
-	}, cookies)
-	if created.Code != http.StatusSeeOther || noticeFrom(t, created) != noticeInviteMailQueued {
-		t.Fatalf("POST /admin/invites = %d notice %q, want 303 %q",
-			created.Code, noticeFrom(t, created), noticeInviteMailQueued)
+	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{
+		"role": "user", "expires_days": 7,
+		"email": "invitee@example.com", "send_email": true,
+	})
+	if created.Code != http.StatusCreated || resp.MailNotice != noticeInviteMailQueued {
+		t.Fatalf("POST /api/v1/admin/invites = %d mail_notice %q, want 201 %q",
+			created.Code, resp.MailNotice, noticeInviteMailQueued)
 	}
 
 	invites, err := srv.invites.List(context.Background())
@@ -146,12 +178,9 @@ func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 	}
 
 	// 用邮件里的链接接受邀请：放行一次。
-	reg := postForm(t, srv, "/register", url.Values{
-		"username": {"invitee"}, "email": {"invitee@example.com"},
-		"password": {"Sup3rSecret!"}, "invite": {token},
-	}, nil)
-	if reg.Code != http.StatusSeeOther {
-		t.Fatalf("register with mailed invite = %d, want 303 (body %s)", reg.Code, snippet(reg.Body.String()))
+	reg := registerWithInviteJSON(t, srv, "invitee", "invitee@example.com", token)
+	if reg.Code != http.StatusOK {
+		t.Fatalf("register with mailed invite = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 	after, _ := srv.invites.ByToken(context.Background(), token)
 	if after.UsedAt == nil {
@@ -165,23 +194,18 @@ func TestInviteLinkCopiedManuallyStillWorks(t *testing.T) {
 	srv.invites = store.NewInviteStore(db)
 	startInviteMail(t, srv, db)
 
-	created := postForm(t, srv, "/admin/invites", url.Values{
-		"csrf_token": {csrf}, "role": {"user"},
-	}, cookies)
-	if created.Code != http.StatusSeeOther || noticeFrom(t, created) != "invite_created" {
-		t.Fatalf("POST /admin/invites = %d notice %q, want 303 invite_created",
-			created.Code, noticeFrom(t, created))
+	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{"role": "user"})
+	if created.Code != http.StatusCreated || resp.MailNotice != "" {
+		t.Fatalf("POST /api/v1/admin/invites = %d mail_notice %q, want 201 (no mail)",
+			created.Code, resp.MailNotice)
 	}
 	invites, _ := srv.invites.List(context.Background())
 	if len(invites) != 1 {
 		t.Fatalf("invites = %d, want 1", len(invites))
 	}
-	reg := postForm(t, srv, "/register", url.Values{
-		"username": {"manual"}, "email": {"manual@example.com"},
-		"password": {"Sup3rSecret!"}, "invite": {invites[0].Token},
-	}, nil)
-	if reg.Code != http.StatusSeeOther {
-		t.Fatalf("register with copied invite = %d, want 303 (body %s)", reg.Code, snippet(reg.Body.String()))
+	reg := registerWithInviteJSON(t, srv, "manual", "manual@example.com", invites[0].Token)
+	if reg.Code != http.StatusOK {
+		t.Fatalf("register with copied invite = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 }
 
@@ -191,27 +215,21 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 	srv.invites = store.NewInviteStore(db)
 
 	// 撤销：创建 → 撤销 → 用原 token 注册被拒。
-	if rec := postForm(t, srv, "/admin/invites", url.Values{
-		"csrf_token": {csrf}, "role": {"user"},
-	}, cookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("create invite = %d, want 303", rec.Code)
+	if rec, _ := createInviteJSON(t, srv, cookies, csrf, map[string]any{"role": "user"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create invite = %d, want 201", rec.Code)
 	}
 	invites, _ := srv.invites.List(context.Background())
 	if len(invites) != 1 {
 		t.Fatalf("invites = %d, want 1", len(invites))
 	}
 	revoked := invites[0]
-	rev := postForm(t, srv, "/admin/invites/"+u64str(revoked.ID)+"/revoke",
-		url.Values{"csrf_token": {csrf}}, cookies)
-	if rev.Code != http.StatusSeeOther {
-		t.Fatalf("revoke = %d, want 303", rev.Code)
+	rev := postJSONWithSession(srv, "/api/v1/admin/invites/"+u64str(revoked.ID)+"/revoke", nil, cookies, csrf)
+	if rev.Code != http.StatusNoContent {
+		t.Fatalf("revoke = %d, want 204", rev.Code)
 	}
-	denied := postForm(t, srv, "/register", url.Values{
-		"username": {"late"}, "email": {"late@example.com"},
-		"password": {"Sup3rSecret!"}, "invite": {revoked.Token},
-	}, nil)
-	if denied.Code != http.StatusForbidden {
-		t.Errorf("register with revoked invite = %d, want 403", denied.Code)
+	denied := registerWithInviteJSON(t, srv, "late", "late@example.com", revoked.Token)
+	if denied.Code != http.StatusForbidden || apiErrorCode(t, denied) != "invite_invalid" {
+		t.Errorf("register with revoked invite = %d %s, want 403 invite_invalid", denied.Code, apiErrorCode(t, denied))
 	}
 
 	// 过期：直接写入一条已过期的邀请 → 注册被拒。
@@ -221,44 +239,25 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 	if err := srv.invites.Create(context.Background(), expired); err != nil {
 		t.Fatalf("create expired invite: %v", err)
 	}
-	deniedExp := postForm(t, srv, "/register", url.Values{
-		"username": {"stale"}, "email": {"stale@example.com"},
-		"password": {"Sup3rSecret!"}, "invite": {expired.Token},
-	}, nil)
-	if deniedExp.Code != http.StatusForbidden {
-		t.Errorf("register with expired invite = %d, want 403", deniedExp.Code)
+	deniedExp := registerWithInviteJSON(t, srv, "stale", "stale@example.com", expired.Token)
+	if deniedExp.Code != http.StatusForbidden || apiErrorCode(t, deniedExp) != "invite_invalid" {
+		t.Errorf("register with expired invite = %d %s, want 403 invite_invalid", deniedExp.Code, apiErrorCode(t, deniedExp))
 	}
 }
 
-// TestInviteMailEntryUnconfiguredExplains 覆盖 SMTP 未配置：入口渲染说明、提交也得到说明，
-// 且邀请仍然创建成功（绝不静默，也不因邮件未配置而阻断创建）。
-func TestInviteMailEntryUnconfiguredExplains(t *testing.T) {
+// TestInviteMailUnconfiguredStillCreatesInvite 覆盖 SMTP 未配置：请求寄信时回包如实说明
+// mail_notice=invite_mail_unconfigured，但邀请仍然创建成功（绝不静默，也不因邮件未配置而阻断创建）。
+func TestInviteMailUnconfiguredStillCreatesInvite(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
-	// GET /admin/registration 已切到 SPA 应用壳；禁用 SPA 以覆盖未配置邮件的 SSR 说明渲染。
-	srv.spa = nil
 	srv.invites = store.NewInviteStore(db)
 	srv.mail = nil // 未装配邮件
 
-	page := getWithCookies(t, srv, "/admin/registration", cookies)
-	if page.Code != http.StatusOK {
-		t.Fatalf("GET /admin/registration = %d, want 200", page.Code)
-	}
-	if !strings.Contains(page.Body.String(), "本站未开启邮件功能") {
-		t.Errorf("invite page does not explain the unconfigured mail state; body = %s", snippet(page.Body.String()))
-	}
-
-	created := postForm(t, srv, "/admin/invites", url.Values{
-		"csrf_token": {csrf}, "role": {"user"},
-		"email": {"invitee@example.com"}, "send_email": {"1"},
-	}, cookies)
-	if created.Code != http.StatusSeeOther || noticeFrom(t, created) != noticeInviteMailUnconfigured {
-		t.Fatalf("POST with send_email while unconfigured = %d notice %q, want 303 %q",
-			created.Code, noticeFrom(t, created), noticeInviteMailUnconfigured)
-	}
-	// 回显页面上有 mail.not_configured 的说明文案。
-	after := getWithCookies(t, srv, "/admin/registration?notice="+noticeInviteMailUnconfigured, cookies)
-	if !strings.Contains(after.Body.String(), "本站未开启邮件功能") {
-		t.Errorf("notice page lacks the mail.not_configured explanation; body = %s", snippet(after.Body.String()))
+	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{
+		"role": "user", "email": "invitee@example.com", "send_email": true,
+	})
+	if created.Code != http.StatusCreated || resp.MailNotice != noticeInviteMailUnconfigured {
+		t.Fatalf("POST with send_email while unconfigured = %d mail_notice %q, want 201 %q",
+			created.Code, resp.MailNotice, noticeInviteMailUnconfigured)
 	}
 	// 邀请本身仍然创建成功。
 	if n, _ := srv.invites.List(context.Background()); len(n) != 1 {
@@ -284,13 +283,12 @@ func TestInviteMailHonorsRecipientPreference(t *testing.T) {
 		t.Fatalf("SetChoices: %v", err)
 	}
 
-	created := postForm(t, srv, "/admin/invites", url.Values{
-		"csrf_token": {csrf}, "role": {"user"},
-		"email": {"pref-user@example.com"}, "send_email": {"1"},
-	}, cookies)
-	if created.Code != http.StatusSeeOther || noticeFrom(t, created) != noticeInviteMailOptedOut {
-		t.Fatalf("POST opted-out recipient = %d notice %q, want 303 %q",
-			created.Code, noticeFrom(t, created), noticeInviteMailOptedOut)
+	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{
+		"role": "user", "email": "pref-user@example.com", "send_email": true,
+	})
+	if created.Code != http.StatusCreated || resp.MailNotice != noticeInviteMailOptedOut {
+		t.Fatalf("POST opted-out recipient = %d mail_notice %q, want 201 %q",
+			created.Code, resp.MailNotice, noticeInviteMailOptedOut)
 	}
 	time.Sleep(50 * time.Millisecond)
 	if got := len(sender.messages()); got != 0 {

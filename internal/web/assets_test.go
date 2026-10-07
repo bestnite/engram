@@ -16,7 +16,7 @@ func TestLoadAssetsBuildsContentHashedURLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAssets() error = %v", err)
 	}
-	for _, logical := range []string{"js/htmx.min.js", "js/mathjax/tex-svg.js", "css/input.css"} {
+	for _, logical := range []string{"js/mathjax/tex-svg.js", "js/pwa.js", "icons/icon.svg"} {
 		if !assets.Has(logical) {
 			t.Fatalf("asset %q is not embedded", logical)
 		}
@@ -61,12 +61,12 @@ func TestServeRejectsWrongHashAndUnknownFile(t *testing.T) {
 	router := gin.New()
 	router.GET(staticPathPrefix+":hash/*filepath", assets.Serve)
 
-	validHash := assets.ContentHash("js/htmx.min.js")
+	validHash := assets.ContentHash("js/pwa.js")
 	cases := []struct {
 		name string
 		path string
 	}{
-		{"wrong hash", staticPathPrefix + "deadbeef/js/htmx.min.js"},
+		{"wrong hash", staticPathPrefix + "deadbeef/js/pwa.js"},
 		{"unknown file with valid hash", staticPathPrefix + validHash + "/js/nope.js"},
 		{"no file part", staticPathPrefix + validHash + "/"},
 	}
@@ -91,12 +91,12 @@ func TestServeReturnsAssetWithImmutableCaching(t *testing.T) {
 	router := gin.New()
 	router.GET(staticPathPrefix+":hash/*filepath", assets.Serve)
 
-	want, err := staticFS.ReadFile("static/js/htmx.min.js")
+	want, err := staticFS.ReadFile("static/js/pwa.js")
 	if err != nil {
-		t.Fatalf("read embedded htmx: %v", err)
+		t.Fatalf("read embedded pwa script: %v", err)
 	}
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, assets.URL("js/htmx.min.js"), nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, assets.URL("js/pwa.js"), nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)

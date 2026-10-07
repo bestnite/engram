@@ -1,15 +1,16 @@
 package web
 
 import (
-	"os"
 	"regexp"
-	"strings"
 	"testing"
 )
 
-// 本文件是 M8-5（无障碍过一遍）里仍可从静态资源断言的事实：键盘快捷键绑定、可见焦点样式，
-// 以及审计逻辑自身的负例。逐页的表单控件标签审计曾经针对 SSR 页面渲染的 HTML；页面层已切到
-// SPA 应用壳（表单在客户端渲染），这部分由前端测试覆盖。
+// 本文件保留无障碍审计逻辑本身的可测部分：表单控件的可访问名称检查。
+//
+// 逐页的表单控件标签审计曾经针对 SSR 页面渲染的 HTML；页面层已切到 SPA 应用壳（表单在客户端
+// 渲染），页面级断言由前端测试覆盖。可见焦点样式（static/css/input.css）与复习快捷键
+// （static/js/review.js）随 SSR 静态资源一并删除，对应的静态断言随之删除。
+// 这里只保留纯函数审计及其负例。
 
 var (
 	// reLabel 匹配一个 <label ...>...</label> 块（含包裹式标签）。模板里的 label 不嵌套。
@@ -98,51 +99,4 @@ func TestUnlabelledControlsDetectsBareInput(t *testing.T) {
 		}
 	}
 	t.Logf("audit self-check: bare input flagged; wrapped/for=/aria-label/hidden controls pass")
-}
-
-// TestAccessibilityFocusVisibleStyle 断言键盘可见焦点的样式来源存在（M8-5 的「可见的焦点」）。
-// Tailwind 产物是构建时生成且被 gitignore，因此这里断言的是提交进仓库的入口样式。
-func TestAccessibilityFocusVisibleStyle(t *testing.T) {
-	raw, err := os.ReadFile("static/css/input.css")
-	if err != nil {
-		t.Fatalf("read input.css: %v", err)
-	}
-	css := string(raw)
-	if !strings.Contains(css, ":focus-visible") {
-		t.Errorf("input.css has no :focus-visible rule; keyboard focus would be invisible")
-	}
-	if !strings.Contains(css, "outline") {
-		t.Errorf("input.css :focus-visible rule does not set an outline")
-	}
-	t.Logf("input.css: :focus-visible rule with outline present (keyboard focus is visible)")
-}
-
-// TestAccessibilityReviewKeyboardShortcuts 断言复习快捷键绑定仍存在于脚本里，
-// 覆盖 DESIGN.md §8.2 列出的空格/Enter、1–4、u/e/s/b。
-func TestAccessibilityReviewKeyboardShortcuts(t *testing.T) {
-	raw, err := os.ReadFile("static/js/review.js")
-	if err != nil {
-		t.Fatalf("read review.js: %v", err)
-	}
-	js := string(raw)
-
-	mustContain := map[string]string{
-		"keydown listener": `addEventListener("keydown"`,
-		"space/enter":      `e.key === " " || e.key === "Enter"`,
-		"rating keys":      `e.key === "1"`,
-		"bury key":         `key === "b"`,
-		"edit key":         `key === "e"`,
-	}
-	for name, want := range mustContain {
-		if !strings.Contains(js, want) {
-			t.Errorf("review.js is missing the %s binding (%q)", name, want)
-		}
-	}
-	// 撤销与暂停是调试能力，不该再出现在复习页的键盘绑定里（DESIGN.md §8.2）。
-	for _, gone := range []string{`submitAction("undo")`, `submitAction("suspend")`} {
-		if strings.Contains(js, gone) {
-			t.Errorf("review.js still binds the debug-only action %q", gone)
-		}
-	}
-	t.Logf("review.js: keydown handler covers space/Enter, 1–4, e, b")
 }

@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/api"
@@ -22,14 +21,13 @@ func TestDefaultPresetSingleAcrossWebAndREST(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 
-	// 经 web 建组：走 /decks 表单 handler。
-	rec := postForm(t, srv, "/decks", url.Values{
-		"csrf_token":  {csrf},
-		"name":        {"web deck"},
-		"description": {""},
-	}, cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("web create deck = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	// 经 web 建组：走 SPA 的同源 JSON 卡组端点（SSR 的 POST /decks 表单已删除）。
+	rec := postJSONWithSession(srv, "/api/v1/decks", map[string]any{
+		"name":        "web deck",
+		"description": "",
+	}, cookies, csrf)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("web create deck = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
 	// 经 REST 建组：复用同一 api 实例。
