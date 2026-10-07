@@ -50,6 +50,8 @@ func TestOIDCAdminTestConnectionShowsProviderError(t *testing.T) {
 // TestOIDCAdminSaveAndUnlink 覆盖 M6-4 的保存与解绑：保存后 issuer 生效；解绑后该身份不能再登录。
 func TestOIDCAdminSaveAndUnlink(t *testing.T) {
 	srv, db, _, adminCookies, csrf := newNotesServer(t)
+	// GET /admin/oidc 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 配置回显与身份列表。
+	srv.spa = nil
 	p := newStubOIDC(t)
 	p.verified = false // 不自动匹配邮箱，才能观察解绑后的拒绝
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
@@ -121,6 +123,8 @@ func TestOIDCAdminSaveAndUnlink(t *testing.T) {
 // 白名单的地址就与实际发出的不符，表现为"登录时被 provider 拒绝"，而本服务侧的日志看不出原因。
 func TestOIDCAdminPageShowsRedirectURI(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /admin/oidc 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回调地址渲染。
+	srv.spa = nil
 
 	// 未设 BASE_URL：按请求推导（httptest.NewRequest 给 path-only target 时 Host 是 example.com）。
 	rec := getWithCookies(t, srv, "/admin/oidc", cookies)

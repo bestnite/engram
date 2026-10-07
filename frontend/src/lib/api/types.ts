@@ -867,3 +867,316 @@ export interface PresetWriteRequest {
   enable_fuzz: boolean;
 }
 
+/**
+ * 管理面板接口（DESIGN.md §8.4，Go: internal/web/spa_admin_read.go）。
+ * 响应只带原始值与稳定英文标识，任何本地化文案都由前端语言包按标识映射。
+ */
+
+/** GET /api/v1/admin/summary：实例级计数。 */
+export interface AdminSummary {
+  users_total: number;
+  users_active: number;
+  decks: number;
+  notes: number;
+  cards: number;
+  due: number;
+  jobs_running: number;
+  jobs_failed: number;
+}
+
+/** GET /api/v1/admin/health：健康页读数。schema_version / due 为 null 表示读不出来。 */
+export interface AdminHealth {
+  database: 'ok' | 'error';
+  schema_version: number | null;
+  media_bytes: number;
+  media_truncated: boolean;
+  due: number | null;
+}
+
+/** 审计行的操作者；null 表示系统动作（无 UserID）。 */
+export interface AdminAuditActor {
+  user_id: number | null;
+  username: string;
+}
+
+/** 审计行的目标对象；null 表示无目标。 */
+export interface AdminAuditTarget {
+  type: string;
+  id: number | null;
+}
+
+/** 一行审计记录；time 已按当前管理员时区格式化，detail 为原始 JSON 串（空串表示无详情）。 */
+export interface AdminAuditRow {
+  time: string;
+  actor: AdminAuditActor | null;
+  action: string;
+  target: AdminAuditTarget | null;
+  detail: string;
+}
+
+/** GET /api/v1/admin/audit 响应；notice 是稳定英文码（空串表示无提示）。 */
+export interface AdminAuditResponse {
+  rows: AdminAuditRow[];
+  actions: string[];
+  page: number;
+  pages: number;
+  total: number;
+  notice: string;
+}
+
+/** 审计检索的过滤条件；空串/缺省表示不过滤该项。 */
+export interface AdminAuditQuery {
+  user?: string;
+  action?: string;
+  target_type?: string;
+  target_id?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+}
+
+/** 用户管理（DESIGN.md §8.4，Go: internal/web/spa_admin_users.go）。 */
+
+/** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  display_name: string;
+  role: string;
+  status: string;
+  decks: number;
+  cards: number;
+  reviews: number;
+  is_self: boolean;
+}
+
+/** GET /api/v1/admin/users 响应。 */
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  page: number;
+  pages: number;
+  total: number;
+  query: string;
+}
+
+/** POST /api/v1/admin/users 请求。 */
+export interface AdminUserCreateRequest {
+  username: string;
+  email: string;
+  display_name: string;
+  password: string;
+  role: string;
+}
+
+/** 注册与邀请（Go: internal/web/spa_admin_registration.go）。 */
+
+/** 一条邀请；role/status 是存储取值，link 供管理员复制。 */
+export interface AdminInvite {
+  id: number;
+  token: string;
+  link: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string;
+  used_by: string;
+}
+
+/** GET /api/v1/admin/registration 响应。 */
+export interface AdminRegistrationResponse {
+  policy: string;
+  email_domains: string;
+  invites: AdminInvite[];
+}
+
+/** POST /api/v1/admin/registration 请求。 */
+export interface AdminRegistrationRequest {
+  policy: string;
+  email_domains: string;
+}
+
+/** POST /api/v1/admin/invites 请求；expires_days 为 null 或 0 表示不过期。 */
+export interface AdminInviteCreateRequest {
+  email: string;
+  role: string;
+  expires_days: number | null;
+  send_email: boolean;
+}
+
+/** POST /api/v1/admin/invites 响应；mail_notice 是稳定英文码（空串表示未请求发信）。 */
+export interface AdminInviteCreateResponse {
+  invite: AdminInvite;
+  mail_notice: string;
+}
+
+/** API Key 总览（Go: internal/web/spa_admin_keys.go）。 */
+
+/** 一把 key 的元信息；时间已按管理员时区格式化，null 表示未设置。 */
+export interface AdminAPIKey {
+  id: number;
+  user_id: number;
+  owner: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  expires_at: string | null;
+  state: string;
+}
+
+/** GET /api/v1/admin/api-keys 响应。 */
+export interface AdminAPIKeysResponse {
+  keys: AdminAPIKey[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+/** 系统设置 / SMTP / OIDC（Go: internal/web/spa_admin_{settings,smtp,oidc}.go）。 */
+
+/** 设置表格里的一行；unit 非空时值按单位解释（当前只有 "bytes"）。 */
+export interface AdminSettingRow {
+  key: string;
+  value: string;
+  source: string;
+  editable: boolean;
+  sensitive: boolean;
+  configured: boolean;
+  unit?: string;
+}
+
+/** 一个设置分区（general / media / optimize / sensitive）。 */
+export interface AdminSettingsSection {
+  name: string;
+  rows: AdminSettingRow[];
+}
+
+/** GET /api/v1/admin/settings 响应。 */
+export interface AdminSettingsResponse {
+  sections: AdminSettingsSection[];
+}
+
+/** outbox 读数。 */
+export interface AdminOutbox {
+  pending: number;
+  failed: number;
+  last_error: string;
+  last_attempts: number;
+}
+
+/** GET /api/v1/admin/smtp 响应。 */
+export interface AdminSMTPResponse {
+  host: string;
+  host_source: string;
+  port: string;
+  port_source: string;
+  username: string;
+  username_source: string;
+  from: string;
+  from_source: string;
+  tls_mode: string;
+  password_configured: boolean;
+  password_source: string;
+  configured: boolean;
+  outbox: AdminOutbox;
+  admin_notify_ready: boolean;
+}
+
+/** POST /api/v1/admin/smtp(/test) 请求；空字段表示沿用已保存值。 */
+export interface AdminSMTPRequest {
+  host?: string;
+  port?: string;
+  username?: string;
+  from?: string;
+  tls_mode?: string;
+  password?: string;
+}
+
+/** 测试连接的响应；ok 为 true 时忽略 message。 */
+export interface AdminTestResult {
+  ok: boolean;
+  code: string;
+  message: string;
+}
+
+/** 一条已绑定身份。 */
+export interface AdminOIDCIdentity {
+  id: number;
+  provider: string;
+  subject: string;
+  email: string;
+  username: string;
+  linked_at: string;
+}
+
+/** GET /api/v1/admin/oidc 响应。 */
+export interface AdminOIDCResponse {
+  enabled: boolean;
+  issuer: string;
+  client_id: string;
+  secret_configured: boolean;
+  redirect_uri: string;
+  scopes: string;
+  claim_subject: string;
+  claim_email: string;
+  claim_name: string;
+  claim_email_verified: string;
+  identities: AdminOIDCIdentity[];
+}
+
+/** POST /api/v1/admin/oidc(/test) 请求；空字符串字段表示不修改。 */
+export interface AdminOIDCRequest {
+  enabled: boolean;
+  issuer?: string;
+  client_id?: string;
+  scopes?: string;
+  claim_subject?: string;
+  claim_email?: string;
+  claim_name?: string;
+  claim_email_verified?: string;
+  client_secret?: string;
+}
+
+/** 作业与语言包报告（Go: internal/web/spa_admin_{jobs,i18n}.go）。 */
+
+/** 一个作业的元信息；stage 为 null 表示尚未进入训练阶段。 */
+export interface AdminJob {
+  id: number;
+  kind: string;
+  status: string;
+  stage: string | null;
+  created_at: string;
+  started_at: string;
+  finished_at: string;
+  log_tail: string;
+  error: string;
+  can_cancel: boolean;
+}
+
+/** GET /api/v1/admin/jobs 响应。 */
+export interface AdminJobsResponse {
+  jobs: AdminJob[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+/** 一种语言的覆盖率。 */
+export interface AdminLocaleCoverage {
+  code: string;
+  percent: number;
+  present: number;
+  total: number;
+  complete: boolean;
+  missing: string[];
+}
+
+/** GET /api/v1/admin/i18n 响应。 */
+export interface AdminI18nResponse {
+  locales: AdminLocaleCoverage[];
+  all_complete: boolean;
+}
+

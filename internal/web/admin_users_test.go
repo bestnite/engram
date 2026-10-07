@@ -68,6 +68,8 @@ func auditCount(t *testing.T, db *gorm.DB, action string) int64 {
 // TestAdminUsersListSearchAndUsageCounts 覆盖列表、搜索与每用户用量计数。
 func TestAdminUsersListSearchAndUsageCounts(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /admin/users 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 用户列表的搜索与用量渲染。
+	srv.spa = nil
 	aliceID, _, _ := createUserAndLogin(t, srv, db, "alice")
 	deck := seedDeck(t, db, aliceID, "Alice deck")
 	seedBasic(t, db, deck.ID, "front", "back")

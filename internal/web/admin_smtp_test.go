@@ -85,6 +85,8 @@ func deadAddr(t *testing.T) string {
 func TestAdminSMTPPageShowsUnconfigured(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 	srv.secrets = mustCodec(t)
+	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 未配置态渲染。
+	srv.spa = nil
 
 	rec := getWithCookies(t, srv, "/admin/smtp", cookies)
 	if rec.Code != http.StatusOK {
@@ -105,6 +107,8 @@ func TestAdminSMTPPageShowsUnconfigured(t *testing.T) {
 func TestAdminSMTPSaveAndShowConfigured(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
+	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 配置回显。
+	srv.spa = nil
 
 	const pw = "smtp-test-plaintext-pw"
 	rec := postForm(t, srv, "/admin/smtp", url.Values{
@@ -246,6 +250,8 @@ func TestAdminSMTPConfigWritesAudit(t *testing.T) {
 // TestAdminNavHasSMTPEntry 证明导航里有 SMTP 入口且不是置灰项。
 func TestAdminNavHasSMTPEntry(t *testing.T) {
 	srv, cookies, _ := newAdminServer(t)
+	// GET /admin 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 外壳的导航断言。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/admin", cookies).Body.String()
 	if !strings.Contains(body, "邮件（SMTP）") {
 		t.Errorf("admin nav is missing the SMTP entry; body = %s", snippet(body))

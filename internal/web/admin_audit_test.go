@@ -36,6 +36,8 @@ func auditTotal(t *testing.T, srv *Server, target string, cookies []*http.Cookie
 // （用户 / 动作 / 目标 / 日期范围）各自返回精确预期的行数。fixture 的时间戳显式给定。
 func TestAdminAuditFiltersReturnExactRows(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /admin/audit 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 审计检索页的过滤与提示渲染。
+	srv.spa = nil
 	aliceID := createRoleUser(t, db, "alice", store.RoleUser)
 
 	// 清掉登录等已有审计行，让 fixture 的计数精确可控。

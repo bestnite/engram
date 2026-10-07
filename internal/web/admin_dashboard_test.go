@@ -17,6 +17,8 @@ func TestAdminDashboardShowsInstanceCounts(t *testing.T) {
 	seedBasic(t, db, deck.ID, "q", "a")
 	createUserAndLogin(t, srv, db, "seconduser")
 
+	// GET /admin 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 概览页的计数卡渲染。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/admin", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /admin = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))

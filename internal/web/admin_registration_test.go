@@ -77,6 +77,8 @@ func TestAdminRegistrationPolicyTakesEffectWithoutRestart(t *testing.T) {
 // TestAdminInviteCreateRevokeAndUsage 覆盖邀请创建 / 使用 / 撤销与用量展示。
 func TestAdminInviteCreateRevokeAndUsage(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/registration 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 邀请列表的渲染。
+	srv.spa = nil
 	srv.invites = store.NewInviteStore(db)
 
 	// 创建一条邀请（7 天有效）。

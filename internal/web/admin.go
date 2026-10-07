@@ -83,12 +83,12 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		}
 		switch r.Path {
 		case "/admin":
-			handlers = append(handlers, s.adminDashboard)
+			handlers = append(handlers, s.spaAdminPage(s.adminDashboard))
 		case "/admin/users":
 			if r.Write {
 				handlers = append(handlers, s.adminUserCreate)
 			} else {
-				handlers = append(handlers, s.adminUsersPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminUsersPage))
 			}
 		case "/admin/users/:id/status":
 			handlers = append(handlers, s.adminUserStatus)
@@ -104,7 +104,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminRegistrationSave)
 			} else {
-				handlers = append(handlers, s.adminRegistrationPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminRegistrationPage))
 			}
 		case "/admin/invites":
 			handlers = append(handlers, s.adminInviteCreate)
@@ -114,17 +114,17 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminSettingsSave)
 			} else {
-				handlers = append(handlers, s.adminSettingsPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminSettingsPage))
 			}
 		case "/admin/jobs":
-			handlers = append(handlers, s.adminJobsPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminJobsPage))
 		case "/admin/jobs/:id/cancel":
 			handlers = append(handlers, s.adminJobCancel)
 		case "/admin/oidc":
 			if r.Write {
 				handlers = append(handlers, s.adminOIDCSave)
 			} else {
-				handlers = append(handlers, s.adminOIDCPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminOIDCPage))
 			}
 		case "/admin/oidc/test":
 			handlers = append(handlers, s.adminOIDCTest)
@@ -134,25 +134,27 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 			if r.Write {
 				handlers = append(handlers, s.adminSMTPSave)
 			} else {
-				handlers = append(handlers, s.adminSMTPPage)
+				handlers = append(handlers, s.spaAdminPage(s.adminSMTPPage))
 			}
 		case "/admin/smtp/test":
 			handlers = append(handlers, s.adminSMTPTest)
 		case "/admin/audit":
-			handlers = append(handlers, s.adminAuditPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminAuditPage))
 		case "/admin/health":
-			handlers = append(handlers, s.adminHealthPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminHealthPage))
 		case "/admin/api-keys":
-			handlers = append(handlers, s.adminAPIKeysPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminAPIKeysPage))
 		case "/admin/api-keys/:id/revoke":
 			handlers = append(handlers, s.adminAPIKeyRevoke)
 		case "/admin/i18n":
-			handlers = append(handlers, s.adminI18nPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminI18nPage))
 		default:
 			continue
 		}
 		router.Handle(r.Method, r.Path, handlers...)
 	}
+	// SPA 的 JSON 端点（/api/v1/admin/*）：与 SSR 表单端点并存，判权在 spaAdminGuard。
+	s.registerSPAAdminRoutes(router)
 }
 
 // requireAdmin 是管理面板的唯一入口守卫：未登录回登录页，非 admin 一律 403。

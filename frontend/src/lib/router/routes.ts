@@ -18,6 +18,17 @@ import DeckSettingsView from '../views/DeckSettingsView.svelte';
 import TOTPView from '../views/TOTPView.svelte';
 import NotificationPrefsView from '../views/NotificationPrefsView.svelte';
 import PresetsView from '../views/PresetsView.svelte';
+import AdminDashboardView from '../views/admin/AdminDashboardView.svelte';
+import AdminHealthView from '../views/admin/AdminHealthView.svelte';
+import AdminAuditView from '../views/admin/AdminAuditView.svelte';
+import AdminUsersView from '../views/admin/AdminUsersView.svelte';
+import AdminRegistrationView from '../views/admin/AdminRegistrationView.svelte';
+import AdminAPIKeysView from '../views/admin/AdminAPIKeysView.svelte';
+import AdminSettingsView from '../views/admin/AdminSettingsView.svelte';
+import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
+import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
+import AdminJobsView from '../views/admin/AdminJobsView.svelte';
+import AdminI18nView from '../views/admin/AdminI18nView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -207,5 +218,72 @@ export const routes: RouteDefinition[] = [
     path: '/presets',
     name: 'presets',
     component: PresetsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板概览（DESIGN.md §8.1、§8.4）。服务端 GET /admin 已切到应用壳（requireAdmin 先于
+    // 外壳），计数走 /api/v1/admin/summary。
+    path: '/admin',
+    name: 'admin-dashboard',
+    component: AdminDashboardView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板健康页。服务端 GET /admin/health 已切到应用壳，读数走 /api/v1/admin/health。
+    path: '/admin/health',
+    name: 'admin-health',
+    component: AdminHealthView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板审计检索。服务端 GET /admin/audit 已切到应用壳，检索走 /api/v1/admin/audit。
+    path: '/admin/audit',
+    name: 'admin-audit',
+    component: AdminAuditView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 用户管理。服务端 GET /admin/users 已切到应用壳，读写走 /api/v1/admin/users*。
+    path: '/admin/users',
+    name: 'admin-users',
+    component: AdminUsersView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 注册与邀请。服务端 GET /admin/registration 已切到应用壳，读写走 /api/v1/admin/(registration|invites)。
+    path: '/admin/registration',
+    name: 'admin-registration',
+    component: AdminRegistrationView as unknown as RouteDefinition['component'],
+  },
+  {
+    // API Key 总览。服务端 GET /admin/api-keys 已切到应用壳，读写走 /api/v1/admin/api-keys*。
+    path: '/admin/api-keys',
+    name: 'admin-api-keys',
+    component: AdminAPIKeysView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 系统设置。服务端 GET /admin/settings 已切到应用壳，读写走 /api/v1/admin/settings。
+    path: '/admin/settings',
+    name: 'admin-settings',
+    component: AdminSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 邮件（SMTP）。服务端 GET /admin/smtp 已切到应用壳，读写与测试走 /api/v1/admin/smtp*。
+    path: '/admin/smtp',
+    name: 'admin-smtp',
+    component: AdminSMTPView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 身份与 OIDC。服务端 GET /admin/oidc 已切到应用壳，读写、测试与解绑走 /api/v1/admin/oidc*。
+    path: '/admin/oidc',
+    name: 'admin-oidc',
+    component: AdminOIDCView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 作业。服务端 GET /admin/jobs 已切到应用壳，列表与取消走 /api/v1/admin/jobs*。
+    path: '/admin/jobs',
+    name: 'admin-jobs',
+    component: AdminJobsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 语言包完整度。服务端 GET /admin/i18n 已切到应用壳，报告走 /api/v1/admin/i18n。
+    path: '/admin/i18n',
+    name: 'admin-i18n',
+    component: AdminI18nView as unknown as RouteDefinition['component'],
   },
 ];

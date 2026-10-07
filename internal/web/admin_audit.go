@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web/views"
 )
@@ -45,6 +46,80 @@ func parseAuditDay(raw string, loc *time.Location) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return t, true
+}
+
+// auditFilterFromQuery 把审计检索的查询参数解析成 store.AuditFilter。
+// 与 adminAuditPage / SPA JSON 端点共用同一份解析逻辑（DESIGN.md §8.4）：
+//   - user 支持用户名（非纯数字）或 id；查不到的用户命中空集而不是退化成「不过滤」。
+//   - target_id 非数字、日期格式非法时返回 notice 码（稳定英文），由调用方本地化。
+//
+// 返回的第二个值是原样的 user 查询串（供 SSR 表单回填），第三个值是 notice 码（空串表示无提示）。
+func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, page int) (store.AuditFilter, string, string) {
+	ctx := c.Request.Context()
+	userRaw := strings.TrimSpace(c.Query("user"))
+	filter := store.AuditFilter{
+		Action:     strings.TrimSpace(c.Query("action")),
+		TargetType: strings.TrimSpace(c.Query("target_type")),
+		Limit:      adminAuditPageSize,
+		Offset:     (page - 1) * adminAuditPageSize,
+	}
+	notice := ""
+	if userRaw != "" {
+		switch {
+		case s.users != nil && !isNumeric(userRaw):
+			if u, err := s.users.ByUsername(ctx, userRaw); err == nil {
+				filter.UserID = u.ID
+			} else {
+				// 用户不存在：不能静默退化成「不过滤」（那会把「查无此人」误报成全量结果）。
+				// 用一个不可能存在的 id（int64 上界）命中空集，避免绑定 uint64 最高位。
+				filter.UserID = uint64(math.MaxInt64)
+				notice = "user_not_found"
+			}
+		default:
+			if id, err := strconv.ParseUint(userRaw, 10, 64); err == nil {
+				filter.UserID = id
+			} else {
+				notice = "user_not_found"
+			}
+		}
+	}
+	if targetIDRaw := strings.TrimSpace(c.Query("target_id")); targetIDRaw != "" {
+		if id, err := strconv.ParseUint(targetIDRaw, 10, 64); err == nil {
+			filter.TargetID = id
+		} else {
+			notice = "invalid_target"
+		}
+	}
+	if fromRaw := strings.TrimSpace(c.Query("from")); fromRaw != "" {
+		if t, ok := parseAuditDay(fromRaw, userLoc); ok {
+			filter.From = t
+		} else {
+			notice = "invalid_date"
+		}
+	}
+	if toRaw := strings.TrimSpace(c.Query("to")); toRaw != "" {
+		if t, ok := parseAuditDay(toRaw, userLoc); ok {
+			// to 是「含当日」的上界，换算成次日零点（不含），保证整日都在范围内。
+			filter.To = t.AddDate(0, 0, 1)
+		} else {
+			notice = "invalid_date"
+		}
+	}
+	return filter, userRaw, notice
+}
+
+// auditNoticeLabel 把审计 notice 码翻成文案；未知码不显示。
+func (s *Server) auditNoticeLabel(loc *i18n.Localizer, code string) string {
+	switch code {
+	case "user_not_found":
+		return loc.T("admin.audit.notice.user_not_found")
+	case "invalid_target":
+		return loc.T("admin.audit.notice.invalid_target")
+	case "invalid_date":
+		return loc.T("admin.audit.notice.invalid_date")
+	default:
+		return ""
+	}
 }
 
 // isNumeric 判断字符串是否为纯数字（区分「按 id」与「按用户名」两种输入）。
@@ -104,63 +179,12 @@ func (s *Server) adminAuditPage(c *gin.Context) {
 	userLoc := auditLocation(actor)
 
 	page := parsePage(c.Query("page"))
-	userRaw := strings.TrimSpace(c.Query("user"))
-	action := strings.TrimSpace(c.Query("action"))
+	auditStore := store.NewAuditStore(s.db)
+	filter, userRaw, noticeCode := s.auditFilterFromQuery(c, userLoc, page)
 	targetType := strings.TrimSpace(c.Query("target_type"))
 	targetIDRaw := strings.TrimSpace(c.Query("target_id"))
 	fromRaw := strings.TrimSpace(c.Query("from"))
 	toRaw := strings.TrimSpace(c.Query("to"))
-
-	auditStore := store.NewAuditStore(s.db)
-	filter := store.AuditFilter{
-		Action:     action,
-		TargetType: targetType,
-		Limit:      adminAuditPageSize,
-		Offset:     (page - 1) * adminAuditPageSize,
-	}
-
-	notice := ""
-	if userRaw != "" {
-		switch {
-		case s.users != nil && !isNumeric(userRaw):
-			if u, err := s.users.ByUsername(ctx, userRaw); err == nil {
-				filter.UserID = u.ID
-			} else {
-				// 用户不存在：不能静默退化成「不过滤」（那会把「查无此人」误报成全量结果）。
-				// 用一个不可能存在的 id（int64 上界）命中空集，避免绑定 uint64 最高位。
-				filter.UserID = uint64(math.MaxInt64)
-				notice = loc.T("admin.audit.notice.user_not_found")
-			}
-		default:
-			if id, err := strconv.ParseUint(userRaw, 10, 64); err == nil {
-				filter.UserID = id
-			} else {
-				notice = loc.T("admin.audit.notice.user_not_found")
-			}
-		}
-	}
-	if targetIDRaw != "" {
-		if id, err := strconv.ParseUint(targetIDRaw, 10, 64); err == nil {
-			filter.TargetID = id
-		} else {
-			notice = loc.T("admin.audit.notice.invalid_target")
-		}
-	}
-	if fromRaw != "" {
-		if t, ok := parseAuditDay(fromRaw, userLoc); ok {
-			filter.From = t
-		} else {
-			notice = loc.T("admin.audit.notice.invalid_date")
-		}
-	}
-	if toRaw != "" {
-		if t, ok := parseAuditDay(toRaw, userLoc); ok {
-			// to 是「含当日」的上界，换算成次日零点（不含），保证整日都在范围内。
-			filter.To = t.AddDate(0, 0, 1)
-		} else {
-			notice = loc.T("admin.audit.notice.invalid_date")
-		}
-	}
 
 	list, total, err := auditStore.Search(ctx, filter)
 	if err != nil {
@@ -209,6 +233,7 @@ func (s *Server) adminAuditPage(c *gin.Context) {
 	}
 
 	// 动作下拉：库中实际出现过的动作 + 一个「全部」项。
+	action := strings.TrimSpace(c.Query("action"))
 	actionOptions := make([]views.AdminOption, 0, 1)
 	actionOptions = append(actionOptions, views.AdminOption{Label: loc.T("admin.audit.filter.any")})
 	if actions, err := auditStore.DistinctActions(ctx); err == nil {
@@ -233,7 +258,7 @@ func (s *Server) adminAuditPage(c *gin.Context) {
 		Intro:      loc.T("admin.audit.intro"),
 		NavHeading: loc.T("admin.nav.heading"),
 		Nav:        s.adminNav(loc, "/admin/audit"),
-		Notice:     notice,
+		Notice:     s.auditNoticeLabel(loc, noticeCode),
 
 		AuditPage: true,
 		AuditRows: rows,

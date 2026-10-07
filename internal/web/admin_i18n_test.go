@@ -17,6 +17,8 @@ import (
 // 断言 zh-CN 行显示 66%、状态「缺失 1 条」、并列出缺的那条 key；en 行仍是 100%。
 func TestAdminI18nReportsIncompleteCatalog(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /admin/i18n 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 覆盖度报告渲染。
+	srv.spa = nil
 
 	sets, err := i18n.CatalogSets(fstest.MapFS{
 		"locales/en.yaml": &fstest.MapFile{Data: []byte(
@@ -60,6 +62,8 @@ func TestAdminI18nReportsIncompleteCatalog(t *testing.T) {
 // 覆盖率必须为 100%，并显示「全部语言包完整」。
 func TestAdminI18nRealCatalogsAreComplete(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
+	// GET /admin/i18n 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 报告页渲染。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/admin/i18n", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /admin/i18n = %d, want 200", rec.Code)

@@ -60,6 +60,8 @@ func waitJobStatus(t *testing.T, db *gorm.DB, id uint64, want string, limit time
 // 而不是只改了状态字段。
 func TestAdminJobsCancelRunningJob(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/jobs 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 作业列表渲染。
+	srv.spa = nil
 
 	marker := filepath.Join(t.TempDir(), "ticks")
 	var calls int32

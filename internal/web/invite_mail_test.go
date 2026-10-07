@@ -234,6 +234,8 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 // 且邀请仍然创建成功（绝不静默，也不因邮件未配置而阻断创建）。
 func TestInviteMailEntryUnconfiguredExplains(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
+	// GET /admin/registration 已切到 SPA 应用壳；禁用 SPA 以覆盖未配置邮件的 SSR 说明渲染。
+	srv.spa = nil
 	srv.invites = store.NewInviteStore(db)
 	srv.mail = nil // 未装配邮件
 
