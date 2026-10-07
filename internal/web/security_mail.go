@@ -85,38 +85,18 @@ func loginFingerprint(c *gin.Context) string {
 // passwordResetMessage 组装密码重置邮件。链接明文只出现在这里，绝不入库、绝不进日志。
 func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
-	lines := []string{
-		loc.T("mail.reset.greeting"),
-		"",
-		loc.Tf("mail.reset.body", map[string]any{"site": site}),
-		"",
-		loc.T("mail.reset.link_label"),
-		link,
-		"",
-		loc.Tf("mail.reset.expires", map[string]any{"expires": expiresAt}),
-	}
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypePasswordReset, vars,
-		loc.Tf("mail.reset.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypePasswordReset, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypePasswordReset, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypePasswordReset), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // emailVerificationMessage 组装邮箱验证邮件。
 func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
-	lines := []string{
-		loc.T("mail.verify.greeting"),
-		"",
-		loc.Tf("mail.verify.body", map[string]any{"site": site}),
-		"",
-		loc.T("mail.verify.link_label"),
-		link,
-		"",
-		loc.Tf("mail.verify.expires", map[string]any{"expires": expiresAt}),
-	}
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars,
-		loc.Tf("mail.verify.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
@@ -126,59 +106,34 @@ func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localiz
 // 配的模板对两类信都生效，变量集也是同一套（site/url/expires）。
 func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
-	lines := []string{
-		loc.T("mail.verify.change_greeting"),
-		"",
-		loc.Tf("mail.verify.change_body", map[string]any{"site": site}),
-		"",
-		loc.T("mail.verify.change_link_label"),
-		link,
-		"",
-		loc.Tf("mail.verify.change_expires", map[string]any{"expires": expiresAt}),
-	}
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars,
-		loc.Tf("mail.verify.change_subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantEmailChange, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // newDeviceLoginMessage 组装新设备/新 IP 登录提醒。
 func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
 	atText := at.UTC().Format("2006-01-02 15:04 UTC")
-	lines := []string{
-		loc.T("mail.notice.greeting"),
-		"",
-		loc.Tf("mail.notice.new_device.body", map[string]any{"site": site, "ip": ip, "time": atText}),
-	}
 	vars := mail.Vars{"site": site, "ip": ip, "time": atText}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeNewDeviceLogin, vars,
-		loc.Tf("mail.notice.new_device.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeNewDeviceLogin, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeNewDeviceLogin, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypeNewDeviceLogin), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // credentialChangedMessage 组装凭据变更通知；what 是已本地化的「改了什么」短语。
 func (s *Server) credentialChangedMessage(ctx context.Context, loc *i18n.Localizer, to, site, what string) mail.Message {
-	lines := []string{
-		loc.T("mail.notice.greeting"),
-		"",
-		loc.Tf("mail.notice.credential.body", map[string]any{"site": site, "what": what}),
-	}
 	vars := mail.Vars{"site": site, "what": what}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeCredentialChanged, vars,
-		loc.Tf("mail.notice.credential.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeCredentialChanged, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeCredentialChanged, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypeCredentialChanged), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // accountStatusMessage 组装账号状态变更通知；status 是已本地化的状态短语。
 func (s *Server) accountStatusMessage(ctx context.Context, loc *i18n.Localizer, to, site, status string) mail.Message {
-	lines := []string{
-		loc.T("mail.notice.greeting"),
-		"",
-		loc.Tf("mail.notice.account.body", map[string]any{"site": site, "status": status}),
-	}
 	vars := mail.Vars{"site": site, "status": status}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeAccountStatus, vars,
-		loc.Tf("mail.notice.account.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeAccountStatus, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeAccountStatus, vars, fbSubject, fbText, "")
 	return mail.Message{To: to, Type: string(mail.TypeAccountStatus), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 

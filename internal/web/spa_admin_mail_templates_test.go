@@ -25,6 +25,71 @@ func TestSPAAdminMailTemplatePagesCutover(t *testing.T) {
 	}
 }
 
+// TestSPAAdminMailTemplatesShipTheBuiltinDefaults 断言列表响应带回每个类型 × 每种语言的
+// **内置正文**，且它就是编辑框预填的那一份（DESIGN.md §4.7）。
+//
+// 这条链之所以要端到端钉住：管理页显示的「默认」如果和发信方兜底不是同一份文本，管理员会
+// 以为自己改的是默认，实际改的是另一个东西——而页面上看不出任何异常。
+func TestSPAAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
+	srv, _, _, cookies, csrf := newNotesServer(t)
+
+	rec := getJSON(t, srv, "/api/v1/admin/mail-templates", cookies, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	list := decodeMailTemplates(t, rec.Body.Bytes())
+	if len(list.Defaults) == 0 {
+		t.Fatal("defaults is empty, want one entry per type and locale")
+	}
+	byKey := map[string]spaMailTemplateDefault{}
+	for _, d := range list.Defaults {
+		byKey[d.Type+"|"+d.Locale] = d
+	}
+	// 每个类型 × 每种语言都要有一份，且能原样通过保存校验（管理员最常见的动作是「不改就存」）。
+	for _, item := range list.Types {
+		for _, code := range list.Locales {
+			d, ok := byKey[item.Type+"|"+code]
+			if !ok {
+				t.Errorf("no built-in default for %s/%s", item.Type, code)
+				continue
+			}
+			if strings.TrimSpace(d.Subject) == "" || strings.TrimSpace(d.BodyMD) == "" {
+				t.Errorf("%s/%s: default is empty", item.Type, code)
+			}
+			if err := mail.Validate(mail.Type(item.Type), d.Subject, d.BodyMD); err != nil {
+				t.Errorf("%s/%s: the shipped default does not pass Validate: %v", item.Type, code, err)
+			}
+			// 预填的是模板写法（占位符），不是已渲染的邮件——否则管理员编辑的是一封具体的信。
+			if !strings.Contains(d.BodyMD, "{{") {
+				t.Errorf("%s/%s: default body has no placeholder:\n%s", item.Type, code, d.BodyMD)
+			}
+		}
+	}
+	// 两种语言必须是两份不同的文本（否则等于没做本地化）。
+	zh, okZH := byKey["password_reset|zh-CN"]
+	en, okEN := byKey["password_reset|en"]
+	if okZH && okEN && zh.BodyMD == en.BodyMD {
+		t.Errorf("zh-CN and en defaults are identical:\n%s", zh.BodyMD)
+	}
+	// 自定义一份之后默认必须仍在响应里，且与保存前逐字节相同——「恢复默认」按钮靠它回到原件。
+	body := `{"subject":"自定义主题","body_md":"点这里重置：{{url}}"}`
+	if rec := jsonRequest(t, srv, http.MethodPut,
+		"/api/v1/admin/mail-templates/"+string(mail.TypePasswordReset)+"/zh-CN", body, cookies, csrf); rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	after := decodeMailTemplates(t, getJSON(t, srv, "/api/v1/admin/mail-templates", cookies, nil).Body.Bytes())
+	var again spaMailTemplateDefault
+	for _, d := range after.Defaults {
+		if d.Type == "password_reset" && d.Locale == "zh-CN" {
+			again = d
+		}
+	}
+	if again.BodyMD != zh.BodyMD || again.Subject != zh.Subject {
+		t.Errorf("default changed after saving a custom template:\n before = %q / %q\n after  = %q / %q",
+			zh.Subject, zh.BodyMD, again.Subject, again.BodyMD)
+	}
+}
+
 // decodeMailTemplates 解析列表响应。
 func decodeMailTemplates(t *testing.T, body []byte) spaMailTemplatesResponse {
 	t.Helper()

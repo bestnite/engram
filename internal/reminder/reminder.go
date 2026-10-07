@@ -278,6 +278,7 @@ func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.
 		footerNote = lc.T("mail.footer.note")
 		unsubLabel = lc.T("mail.footer.unsubscribe")
 	}
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeReviewReminder, mail.VariantDefault, lc.Tf, vars)
 	tpl := mail.Resolve(r.templates, mail.TypeReviewReminder, lc.Locale(), r.siteDefaultLocale())
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeReviewReminder,
@@ -285,8 +286,8 @@ func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
-		FallbackSubject:  lc.T("mail.reminder.subject"),
-		FallbackText:     lc.Tf("mail.reminder.body", map[string]any{"count": c.DueCount, "url": reviewURL}),
+		FallbackSubject:  fbSubject,
+		FallbackText:     fbText,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

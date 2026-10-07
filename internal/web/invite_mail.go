@@ -127,21 +127,12 @@ func inviteMailNote(loc *i18n.Localizer, available bool) string {
 // inviteMessage 组装邀请邮件。unsubURL 非空时把它渲染进正文页脚与纯文本段末尾——
 // RFC 8058 头只有邮件客户端看得到，正文里也要有一个可点的退订入口。
 func (s *Server) inviteMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expiresAt *time.Time, unsubURL string) mail.Message {
-	lines := []string{
-		loc.T("mail.invite.greeting"),
-		"",
-		loc.Tf("mail.invite.body", map[string]any{"site": site}),
-		"",
-		loc.T("mail.invite.link_label"),
-		link,
-	}
 	vars := mail.Vars{"site": site, "url": link}
 	if expiresAt != nil {
-		expiresAtText := expiresAt.UTC().Format("2006-01-02 15:04 UTC")
-		lines = append(lines, "", loc.Tf("mail.invite.expires", map[string]any{"expires": expiresAtText}))
-		vars["expires"] = expiresAtText
+		vars["expires"] = expiresAt.UTC().Format("2006-01-02 15:04 UTC")
 	}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars,
-		loc.Tf("mail.invite.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), unsubURL)
+	// 有效期是可选变量：没有那一行就不出现（函数按变量判定，不另设参数）。
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeInvite, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars, fbSubject, fbText, unsubURL)
 	return mail.Message{To: to, Type: string(mail.TypeInvite), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

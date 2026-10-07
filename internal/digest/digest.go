@@ -304,20 +304,16 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 	site := lc.T("app.name")
 	statsURL := w.statsURL()
 	unsubURL := w.unsubscribeLink(ctx, c.ID)
-	lines := []string{
-		lc.Tf("mail.digest.reviewed", map[string]any{"count": s.Reviewed}),
-		lc.Tf("mail.digest.pass_rate", map[string]any{"rate": store.FormatPercent(s.PassRate)}),
-		lc.Tf("mail.digest.streak", map[string]any{"days": s.StreakCurrent}),
-		lc.Tf("mail.digest.new_cards", map[string]any{"count": s.NewCards}),
-		lc.Tf("mail.digest.due", map[string]any{"count": s.DueNow}),
-		lc.Tf("mail.digest.link", map[string]any{"url": statsURL}),
-	}
+	// 六个统计行都在内置正文里（mail.DefaultTemplate），所以新增/到期两个数字必须进
+	// 变量表——只传给渲染函数不留变量，管理页就看不到它们，模板也用不了。
 	vars := mail.Vars{
-		"site":  site,
-		"count": strconv.FormatInt(s.Reviewed, 10),
-		"rate":  store.FormatPercent(s.PassRate),
-		"days":  strconv.Itoa(s.StreakCurrent),
-		"url":   statsURL,
+		"site":      site,
+		"count":     strconv.FormatInt(s.Reviewed, 10),
+		"rate":      store.FormatPercent(s.PassRate),
+		"days":      strconv.Itoa(s.StreakCurrent),
+		"new_cards": strconv.FormatInt(s.NewCards, 10),
+		"due":       strconv.FormatInt(s.DueNow, 10),
+		"url":       statsURL,
 	}
 	if unsubURL != "" {
 		vars["unsubscribe_url"] = unsubURL
@@ -327,6 +323,7 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 		footerNote = lc.T("mail.footer.note")
 		unsubLabel = lc.T("mail.footer.unsubscribe")
 	}
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeStudyDigest, mail.VariantDefault, lc.Tf, vars)
 	tpl := mail.Resolve(w.templates, mail.TypeStudyDigest, lc.Locale(), w.siteDefaultLocale())
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeStudyDigest,
@@ -334,8 +331,8 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
-		FallbackSubject:  lc.T("mail.digest.subject"),
-		FallbackText:     strings.Join(lines, "\n"),
+		FallbackSubject:  fbSubject,
+		FallbackText:     fbText,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

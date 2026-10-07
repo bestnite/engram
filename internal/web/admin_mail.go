@@ -91,33 +91,19 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 
 // adminJobFailedMessage 组装「作业失败」通知；reason 是失败原因（英文，来自 jobs.error）。
 func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
-	lines := []string{
-		loc.T("mail.admin.greeting"),
-		"",
-		loc.Tf("mail.admin.job_failed.body", map[string]any{
-			"site": site, "job_id": job.ID, "kind": job.Kind, "reason": reason,
-		}),
-	}
 	vars := mail.Vars{
 		"site": site, "job_id": strconv.FormatUint(job.ID, 10), "kind": job.Kind, "reason": reason,
 	}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars,
-		loc.Tf("mail.admin.job_failed.subject", map[string]any{"site": site, "job_id": job.ID}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeJobFailed, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars, fbSubject, fbText, "")
 	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // adminMediaAlertMessage 组装「媒体配额」告警；used/quota 是字节数（展示时人类可读）。
 func (s *Server) adminMediaAlertMessage(ctx context.Context, loc *i18n.Localizer, site string, u store.User, used, quota int64) mail.Message {
 	usedText, limitText := humanBytes(used), humanBytes(quota)
-	lines := []string{
-		loc.T("mail.admin.greeting"),
-		"",
-		loc.Tf("mail.admin.media_alert.body", map[string]any{
-			"site": site, "username": u.Username, "used": usedText, "limit": limitText,
-		}),
-	}
 	vars := mail.Vars{"site": site, "username": u.Username, "used": usedText, "limit": limitText}
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeMediaDiskAlert, vars,
-		loc.Tf("mail.admin.media_alert.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeMediaDiskAlert, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeMediaDiskAlert, vars, fbSubject, fbText, "")
 	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

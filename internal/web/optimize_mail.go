@@ -94,14 +94,7 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 		footerNote = loc.T("mail.footer.note")
 		unsubLabel = loc.T("mail.footer.unsubscribe")
 	}
-	fallbackText := strings.Join([]string{
-		loc.T("mail.optimize.greeting"),
-		"",
-		loc.Tf("mail.optimize.body", map[string]any{"preset": preset.Name, "count": reviewCount}),
-		"",
-		loc.T("mail.optimize.link_label"),
-		link,
-	}, "\n")
+	fallbackSubject, fallbackText, _ := mail.DefaultTemplate(mail.TypeOptimizeDone, mail.VariantDefault, loc.Tf, vars)
 	tpl := mail.Resolve(s.mailTemplateLookup(), mail.TypeOptimizeDone, loc.Locale(), s.siteDefaultLocale(ctx))
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeOptimizeDone,
@@ -109,7 +102,7 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
-		FallbackSubject:  loc.Tf("mail.optimize.subject", map[string]any{"site": site}),
+		FallbackSubject:  fallbackSubject,
 		FallbackText:     fallbackText,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,

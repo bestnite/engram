@@ -42,6 +42,17 @@ type spaMailTemplateRow struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+// spaMailTemplateDefault 是某类型在某语言下的**内置正文**（DESIGN.md §4.7）。
+//
+// 它与发信方兜底用的是同一段代码（mail.DefaultTemplate），只是代入的是占位符而不是真实值，
+// 所以「编辑框里看到的默认」与「实际发出去的默认」不可能不一样——编辑框预填的就是它。
+type spaMailTemplateDefault struct {
+	Type    string `json:"type"`
+	Locale  string `json:"locale"`
+	Subject string `json:"subject"`
+	BodyMD  string `json:"body_md"`
+}
+
 // spaMailTemplatesResponse 是列表响应。
 type spaMailTemplatesResponse struct {
 	Locales []string `json:"locales"`
@@ -49,6 +60,8 @@ type spaMailTemplatesResponse struct {
 	SiteDefaultLocale string                `json:"site_default_locale"`
 	Types             []spaMailTemplateType `json:"types"`
 	Rows              []spaMailTemplateRow  `json:"rows"`
+	// Defaults 是每个类型 × 每种语言的内置正文，供编辑框预填与「恢复默认」对照。
+	Defaults []spaMailTemplateDefault `json:"defaults"`
 }
 
 // spaMailTemplateSaveRequest 是保存请求：主题与正文都是 Markdown 原文。
@@ -147,6 +160,21 @@ func (s *Server) spaAdminMailTemplates(c *gin.Context) {
 			item.Vars = append(item.Vars, spaMailTemplateVar{Name: spec.Name, Required: spec.Required, NoteKey: spec.NoteKey})
 		}
 		resp.Types = append(resp.Types, item)
+	}
+	// 内置正文：类型 × 语言逐个算一遍（数量小，没必要缓存，也避免缓存与语言包漂移）。
+	locales := resp.Locales
+	for _, def := range resp.Types {
+		typ := mail.Type(def.Type)
+		for _, code := range locales {
+			loc := s.i18n.Localizer(s.i18n.Pick(code, "", ""))
+			subject, body, ok := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, mail.PlaceholderVars(typ))
+			if !ok {
+				continue
+			}
+			resp.Defaults = append(resp.Defaults, spaMailTemplateDefault{
+				Type: def.Type, Locale: code, Subject: subject, BodyMD: body,
+			})
+		}
 	}
 	rows, err := s.mailTemplates.List(ctx)
 	if err != nil {

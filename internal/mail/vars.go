@@ -70,6 +70,10 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "count", Required: false, NoteKey: "admin.mail.var.reviewed_count"},
 		{Name: "rate", Required: false, NoteKey: "admin.mail.var.pass_rate"},
 		{Name: "days", Required: false, NoteKey: "admin.mail.var.streak_days"},
+		// 摘要有六个统计行，内置正文用到的变量必须都在这里——「用了却没登记」会被
+		// Validate 判成打错字，预填的默认也就存不回去。
+		{Name: "new_cards", Required: false, NoteKey: "admin.mail.var.new_cards"},
+		{Name: "due", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.stats_url"},
 		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},

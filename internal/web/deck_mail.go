@@ -69,8 +69,8 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 	inviter, deck, role, link, unsubURL string) mail.Message {
 	site := securitySiteName(loc)
 	roleLabel := roleLabelFor(loc, role)
-	// 撤销时 role 为空：邮件要说「被取消了访问」，而不是「权限改成了空」。
-	revoked := strings.TrimSpace(role) == ""
+	// 撤销时 role 为空：邮件要说「被取消了访问」，而不是「权限改成了空」。该判定现在
+	// 住在 mail.DefaultTemplate 里（它按变量 role 判定），所以这里不再自己算一遍。
 
 	vars := mail.Vars{
 		"site": site, "inviter": inviter, "actor": inviter,
@@ -80,32 +80,9 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 		vars["unsubscribe_url"] = unsubURL
 	}
 
-	fallbackSubject, fallbackText := "", ""
-	if typ == mail.TypeDeckShared {
-		fallbackSubject = loc.Tf("mail.deck_shared.subject", map[string]any{"inviter": inviter, "site": site})
-		fallbackText = strings.Join([]string{
-			loc.T("mail.deck_shared.greeting"),
-			"",
-			loc.Tf("mail.deck_shared.body", map[string]any{"inviter": inviter, "deck": deck, "role": roleLabel}),
-			"",
-			loc.T("mail.deck_shared.link_label"),
-			link,
-		}, "\n")
-	} else {
-		fallbackSubject = loc.Tf("mail.deck_permission.subject", map[string]any{"site": site})
-		line := loc.Tf("mail.deck_permission.granted", map[string]any{"actor": inviter, "deck": deck, "role": roleLabel})
-		if revoked {
-			line = loc.Tf("mail.deck_permission.revoked", map[string]any{"actor": inviter, "deck": deck})
-		}
-		fallbackText = strings.Join([]string{
-			loc.T("mail.deck_permission.greeting"),
-			"",
-			line,
-			"",
-			loc.T("mail.deck_permission.link_label"),
-			link,
-		}, "\n")
-	}
+	// 内置正文取自 mail.DefaultTemplate：管理页预填的「默认」与这里发出去的是同一份文本。
+	// 撤销时 roleLabel 为空，那一支由函数按变量自行判定（不另设参数）。
+	fallbackSubject, fallbackText, _ := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, vars)
 
 	footerNote, unsubLabel := "", ""
 	if unsubURL != "" {
