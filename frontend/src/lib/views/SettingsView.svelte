@@ -13,7 +13,6 @@
   import { timezoneOptions } from '../timezones';
   import Select from '../components/ui/Select.svelte';
   import Combobox from '../components/ui/Combobox.svelte';
-  import RadioGroup from '../components/ui/RadioGroup.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
 
@@ -407,12 +406,15 @@
           <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.share_policy.intro')}</p>
         </div>
 
-        <RadioGroup
+        <!-- 三档接收策略走与同页其余设置项同款的下拉（界面语言、复习日切点、时区），
+             不再渲染成竖排三个带边框的单选项：同一页里只有这一处是那种形态。 -->
+        <Select
           bind:value={sharePolicy}
-          name="share-policy"
           testId="share-policy-options"
-          itemTestIdPrefix="share-policy-"
+          allowDeselect={false}
+          ariaLabel={$t('settings.share_policy.heading')}
           disabled={shareSaving}
+          class="py-2.5"
           options={[
             { value: 'anyone', label: $t('settings.share_policy.anyone') },
             { value: 'whitelist', label: $t('settings.share_policy.whitelist') },

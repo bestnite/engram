@@ -147,6 +147,15 @@ describe('the settings page owns the receive policy', () => {
     expect(settings).toContain('data-testid="share-policy-allow-input"');
   });
 
+  it('renders the three policies as the shared select, not as a stack of radio buttons', () => {
+    // 同一页其余设置项（界面语言、复习日切点、时区）都是下拉；这一块曾是竖排三个带边框的
+    // 单选项，是页面上唯一一处那种形态。控件换成下拉后，别再退回 RadioGroup。
+    expect(settings).toContain('components/ui/Select.svelte');
+    expect(settings).toContain('testId="share-policy-options"');
+    expect(settings).toContain('allowDeselect={false}');
+    expect(settings).not.toContain('RadioGroup');
+  });
+
   it('explains that the policy is checked before the invitation is sent', () => {
     expect(settings).toContain("$t('settings.share_policy.intro')");
   });
