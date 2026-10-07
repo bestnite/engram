@@ -103,11 +103,7 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Readable deck")
 	seedBasic(t, db, deck.ID, "Q", "A")
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "cloner2")
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "username": {"cloner2"}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("owner grant reader status = %d, want 303", rec.Code)
-	}
+	grantRole(t, srv, deck.ID, user2ID, store.RoleReader, ownerCookies, ownerCSRF)
 
 	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/clone", url.Values{"csrf_token": {u2CSRF}}, u2Cookies)
 	if rec.Code != http.StatusSeeOther {

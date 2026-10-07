@@ -45,13 +45,6 @@ func TestSPAShareBrowseCutover(t *testing.T) {
 	if rec := get(t, srv, "/s/does-not-exist-token-1234567890", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("GET /s/<unknown> = %d, want 404", rec.Code)
 	}
-
-	// SPA 缺失（降级构建）时回退 SSR 浏览页并渲染清洗后的卡片内容。
-	srv.spa = nil
-	ssr := get(t, srv, "/s/"+token, nil)
-	if ssr.Code != http.StatusOK || !strings.Contains(ssr.Body.String(), "正面") {
-		t.Fatalf("SSR fallback GET /s/<token> = %d, body %s", ssr.Code, snippet(ssr.Body.String()))
-	}
 }
 
 // TestSPAShareJSONContent 断言 JSON 内容端点返回服务端清洗后的正反面 HTML，且未知链接 404。

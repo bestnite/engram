@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -13,16 +12,13 @@ import (
 
 // 本文件覆盖 L3（DESIGN.md §5）：「登录用户通过分享链接打开的卡组计入其可见集合，媒体读取据此放行」。
 //
-// 背景：分享页（shareBrowse/shareUnlock）直接按 deck 取 note，所以正文一直可见；但浏览器对图片发起的
-// GET /media/<sha256> 命中 store.MediaAccessibleToUser → mediaReadableByUser，其可见集是
-// own ∪ granted ∪ others' public，没有「本会话通过分享链接打开过」这条路，于是分享页图片全部 404。
-//
-// 新语义（本文件钉死）：
-//   - 已登录但无授权的访客，未打开过分享页 → 该卡组的媒体 404；
+// 打开动作走 /api/v1/share/:token（GET 或 POST .../unlock），它登记会话级媒体授权并返回清洗后的内容；
+// 浏览器随后对图片发起的 GET /media/<sha256> 才放行。语义（本文件钉死）：
+//   - 已登录但无授权的访客，未打开过分享链接 → 该卡组的媒体 404；
 //   - 打开成功（无口令链接，或口令正确）之后 → 该卡组被引用的媒体 200；
 //   - 口令错的链接不登记授权；被撤销 / 已过期的链接即使之前打开过，也不得再拿到媒体；
 //   - 只覆盖被分享的那个卡组：别的卡组的媒体、没有任何 note 引用的媒体仍 404；
-//   - 授权挂在**服务端会话**上：另一个会话即使同属一个用户也拿不到。
+//   - 授权挂在**服务端会话**上：另一个（同属一个用户）的会话也拿不到。
 //
 // 夹具一律经真实写入路径构造（NoteStore 写 note、HTTP 上传媒体），保证测的是生产链路。
 
@@ -57,52 +53,38 @@ func seedReferencedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uin
 	return deck, sha
 }
 
-// createShareLinkForDeck 经 web 表单建一条分享链接并取回明文 token；password 为空 = 无口令。
+// createShareLinkForDeck 建一条分享链接并取回明文 token；password 为空 = 无口令。
+// 兼容既有测试的调用形态，内部走 SPA 的 JSON 端点。
 func createShareLinkForDeck(t *testing.T, srv *Server, deckID uint64, ownerCookies []*http.Cookie, ownerCSRF, password string) string {
 	t.Helper()
-	values := url.Values{"csrf_token": {ownerCSRF}}
-	if password != "" {
-		values.Set("password", password)
-	}
-	rec := postForm(t, srv, shareLinksPath(deckID), values, ownerCookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("create share link status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	return extractShareToken(t, rec.Body.String())
+	return createShareLinkJSON(t, srv, deckID, ownerCookies, ownerCSRF, password)
 }
 
-// revokeShareLink 经 web 表单撤销一条分享链接（按库里存的摘要定位）。
-func revokeShareLink(t *testing.T, srv *Server, deckID uint64, ownerCookies []*http.Cookie, ownerCSRF, digest string) {
+// openShareLink 以访客身份打开一条无口令分享链接（GET /api/v1/share/:token），登记媒体授权。
+func openShareLink(t *testing.T, srv *Server, token string, cookies []*http.Cookie) {
 	t.Helper()
-	rec := postForm(t, srv, shareLinksPath(deckID)+"/revoke", url.Values{
-		"csrf_token": {ownerCSRF}, "link": {digest},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("revoke share link status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	rec := getWithCookies(t, srv, "/api/v1/share/"+token, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/share/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 }
 
 // TestShareLinkMediaReadableAfterBrowse 是 L3 的主验收（无口令链接）：
-// 未打开过分享页的登录访客读不到私有卡组的媒体；打开分享页后同一会话即可读到。
+// 未打开过分享链接的登录访客读不到私有卡组的媒体；打开成功后同一会话即可读到。
 func TestShareLinkMediaReadableAfterBrowse(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 open deck", 'a')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-open")
 	target := "/media/" + sha
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	// 1) 未打开过分享页：无授权 → 404（现状缺陷：修前这里之后仍是 404）。
+	// 1) 未打开过分享链接：无授权 → 404。
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("before browse: visitor GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
 
-	// 2) 打开无口令分享页成功 → 200。
-	browse := getWithCookies(t, srv, "/s/"+token, visitorCookies)
-	if browse.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200 (body %s)", browse.Code, snippet(browse.Body.String()))
-	}
+	// 2) 打开无口令分享链接成功 → 授权登记。
+	openShareLink(t, srv, token, visitorCookies)
 
 	// 3) 授权登记在访客自己的会话上，媒体即可读。
 	sessionID := visitorSessionID(t, db, visitorID)
@@ -117,8 +99,6 @@ func TestShareLinkMediaReadableAfterBrowse(t *testing.T) {
 // TestShareLinkMediaGrantExpiryIsMinOfLinkAndSession 断言授权行的过期时刻取「链接过期」与「会话过期」较早者。
 func TestShareLinkMediaGrantExpiryIsMinOfLinkAndSession(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deck, _ := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 expiry deck", 'b')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-expiry")
 
@@ -129,9 +109,7 @@ func TestShareLinkMediaGrantExpiryIsMinOfLinkAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed share link: %v", err)
 	}
-	if rec := getWithCookies(t, srv, "/s/"+plaintext, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
+	openShareLink(t, srv, plaintext, visitorCookies)
 
 	var row struct {
 		ExpiresAt time.Time
@@ -153,19 +131,16 @@ func TestShareLinkPasswordGateForMedia(t *testing.T) {
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 locked deck", 'c')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-locked")
 	target := "/media/" + sha
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "letmein99")
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "letmein99")
 	sessionID := visitorSessionID(t, db, visitorID)
 
-	// 1) 只看到口令表单、未授权 → 404。
-	if rec := getWithCookies(t, srv, "/s/"+token, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("GET password form = %d, want 200", rec.Code)
-	}
+	// 1) 未解锁、未授权 → 404。
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("before unlock: visitor GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
 	}
 
 	// 2) 口令错误 → 401，且不登记授权 → 404。
-	bad := postForm(t, srv, "/s/"+token+"/unlock", url.Values{"password": {"wrong-pass"}}, visitorCookies)
+	bad := jsonRequest(t, srv, http.MethodPost, "/api/v1/share/"+token+"/unlock", `{"password":"wrong-pass"}`, visitorCookies, "")
 	if bad.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong password status = %d, want 401 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
@@ -177,7 +152,7 @@ func TestShareLinkPasswordGateForMedia(t *testing.T) {
 	}
 
 	// 3) 口令正确 → 200，授权随之登记。
-	good := postForm(t, srv, "/s/"+token+"/unlock", url.Values{"password": {"letmein99"}}, visitorCookies)
+	good := jsonRequest(t, srv, http.MethodPost, "/api/v1/share/"+token+"/unlock", `{"password":"letmein99"}`, visitorCookies, "")
 	if good.Code != http.StatusOK {
 		t.Fatalf("correct password status = %d, want 200 (body %s)", good.Code, snippet(good.Body.String()))
 	}
@@ -189,16 +164,12 @@ func TestShareLinkPasswordGateForMedia(t *testing.T) {
 // TestShareLinkMediaLapsesAfterRevoke 覆盖撤销：之前打开过（已登记授权）的会话，链接被撤销后媒体必须立即 404。
 func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 revoke deck", 'd')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-revoke")
 	target := "/media/" + sha
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	if rec := getWithCookies(t, srv, "/s/"+token, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200", rec.Code)
-	}
+	openShareLink(t, srv, token, visitorCookies)
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
 		t.Fatalf("visitor GET %s before revoke = %d, want 200 (body %s)", target, rec.Code, rec.Body.String())
 	}
@@ -207,7 +178,10 @@ func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 	if err := db.Where("deck_id = ?", deck.ID).First(&link).Error; err != nil {
 		t.Fatalf("load share link: %v", err)
 	}
-	revokeShareLink(t, srv, deck.ID, ownerCookies, ownerCSRF, link.Token)
+	if rec := jsonRequest(t, srv, http.MethodDelete,
+		shareLinkJSONPath(deck.ID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+		t.Fatalf("revoke share link status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
 
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("after revoke: visitor GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
@@ -217,8 +191,6 @@ func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 // TestShareLinkMediaLapsesAfterLinkExpiry 覆盖过期：链接在打开时有效、之后过期，已登记的授权不得再放行。
 func TestShareLinkMediaLapsesAfterLinkExpiry(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 expiry lapse deck", 'e')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-lapse")
 	target := "/media/" + sha
@@ -230,9 +202,7 @@ func TestShareLinkMediaLapsesAfterLinkExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed share link: %v", err)
 	}
-	if rec := getWithCookies(t, srv, "/s/"+plaintext, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
+	openShareLink(t, srv, plaintext, visitorCookies)
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
 		t.Fatalf("visitor GET %s before expiry = %d, want 200 (body %s)", target, rec.Code, rec.Body.String())
 	}
@@ -248,21 +218,17 @@ func TestShareLinkMediaLapsesAfterLinkExpiry(t *testing.T) {
 }
 
 // TestShareLinkMediaCoversOnlyTheSharedDeck 覆盖范围：授权只覆盖被分享的卡组里的引用。
-// 访客打开 A 的分享页后，B 卡组的媒体（同属 owner）与没有任何 note 引用的媒体都必须 404。
+// 访客打开 A 的分享链接后，B 卡组的媒体（同属 owner）与没有任何 note 引用的媒体都必须 404。
 func TestShareLinkMediaCoversOnlyTheSharedDeck(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deckA, shaA := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 scope A", 'f')
 	_, shaB := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 scope B", 'g')
 	// 一份没有任何 note 引用的媒体（owner 上传、无人引用）。
 	unreferenced := uploadAndSha(t, srv, ownerCookies, ownerCSRF, append(pngBody(), 'h'))
 
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-scope")
-	token := createShareLinkForDeck(t, srv, deckA.ID, ownerCookies, ownerCSRF, "")
-	if rec := getWithCookies(t, srv, "/s/"+token, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200", rec.Code)
-	}
+	token := createShareLinkJSON(t, srv, deckA.ID, ownerCookies, ownerCSRF, "")
+	openShareLink(t, srv, token, visitorCookies)
 
 	if rec := getWithCookies(t, srv, "/media/"+shaA, visitorCookies); rec.Code != http.StatusOK {
 		t.Fatalf("shared deck media = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -275,25 +241,21 @@ func TestShareLinkMediaCoversOnlyTheSharedDeck(t *testing.T) {
 	}
 }
 
-// TestShareLinkMediaGrantIsSessionScoped 覆盖会话隔离：授权挂在打开分享页的那个会话上，
-// 另一个（同属一个用户、未打开过分享页）的会话拿不到媒体。
+// TestShareLinkMediaGrantIsSessionScoped 覆盖会话隔离：授权挂在打开分享链接的那个会话上，
+// 另一个（同属一个用户、未打开过）的会话拿不到媒体。
 func TestShareLinkMediaGrantIsSessionScoped(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
-	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 session scope", 'i')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-session")
 	target := "/media/" + sha
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	if rec := getWithCookies(t, srv, "/s/"+token, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("visitor GET /s/<token> = %d, want 200", rec.Code)
-	}
+	openShareLink(t, srv, token, visitorCookies)
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
 		t.Fatalf("opening session GET %s = %d, want 200 (body %s)", target, rec.Code, rec.Body.String())
 	}
 
-	// 另一个账号的会话（从未打开分享页）仍 404。
+	// 另一个账号的会话（从未打开分享链接）仍 404。
 	_, otherCookies, _ := createUserAndLogin(t, srv, db, "l3-other-session")
 	if rec := getWithCookies(t, srv, target, otherCookies); rec.Code != http.StatusNotFound {
 		t.Fatalf("unrelated session GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
@@ -302,7 +264,7 @@ func TestShareLinkMediaGrantIsSessionScoped(t *testing.T) {
 
 // TestPublicDeckMediaReadUnchangedByShareGrants 是「未破坏现有行为」的对照：
 // public 卡组的媒体对任意登录用户可直接读（走可见集 own ∪ granted ∪ others' public），
-// 与是否打开过分享页无关；分享授权的引入不得改动这条路径。
+// 与是否打开过分享链接无关；分享授权的引入不得改动这条路径。
 func TestPublicDeckMediaReadUnchangedByShareGrants(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 public deck", 'j')
@@ -316,8 +278,8 @@ func TestPublicDeckMediaReadUnchangedByShareGrants(t *testing.T) {
 	if rec := getWithCookies(t, srv, "/media/"+sha, visitorCookies); rec.Code != http.StatusOK {
 		t.Fatalf("public deck media without any share link = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	// 公开卡组的分享页行为也不变：匿名可浏览。
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	// 公开卡组的分享链接对匿名可浏览：GET /s/:token 与应用壳对外仍可达。
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 	if rec := get(t, srv, "/s/"+token, nil); rec.Code != http.StatusOK {
 		t.Fatalf("anonymous GET /s/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}

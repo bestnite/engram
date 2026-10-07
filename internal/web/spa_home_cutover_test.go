@@ -48,24 +48,6 @@ func TestHomeRouteServesSPAShellForAnonymousWithActiveAdmin(t *testing.T) {
 	}
 }
 
-// TestHomeRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET / 回退 SSR 首页：模板与逻辑全部保留，
-// 不是应用壳。
-func TestHomeRouteFallsBackToSSR(t *testing.T) {
-	srv, _, _, cookies, _ := newNotesServer(t)
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / fallback status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("fallback returned the SPA shell; the SSR home must be preserved")
-	}
-	if !strings.Contains(rec.Body.String(), ssrHomeHeading) {
-		t.Errorf("fallback is missing the SSR home heading: %s", snippet(rec.Body.String()))
-	}
-}
-
 // TestHomeRouteRedirectsToSetupBeforeSPA 断言首启窗口优先级最高：还没有活跃管理员时，即使 SPA
 // 已加载，GET / 仍 303 到 /setup，且响应体不是应用壳。这条覆盖「无管理员 → /setup 不变」。
 func TestHomeRouteRedirectsToSetupBeforeSPA(t *testing.T) {

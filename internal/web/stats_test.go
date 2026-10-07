@@ -128,63 +128,6 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	}
 }
 
-// TestStatsPageRendersStoreNumbers 断言页面展示的数字来自既有聚合查询：
-// 今日复习量、卡组名、标签与留存率都出现在渲染结果里。
-func TestStatsPageRendersStoreNumbers(t *testing.T) {
-	srv, _, _, cookies := newStatsServer(t)
-	// GET /stats 已切到 SPA 应用壳；本用例验证 SPA 缺失时的 SSR 回退页（DESIGN.md §8.5）。
-	srv.spa = nil
-	rec := getWithCookies(t, srv, "/stats", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /stats status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	body := rec.Body.String()
-	for _, want := range []string{
-		"统计与洞察",      // 页标题（语言包）
-		"复习量",        // 复习量区块
-		"到期预测",       // 到期预测区块
-		"留存率",        // 留存率区块
-		"Stats deck", // 卡组维度来自 store.DeckBreakdown
-		"algebra",    // 标签维度来自 store.TagBreakdown
-		"自评",         // 判分来源分布
-		"机器判分",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("GET /stats body is missing %q: %s", want, snippet(body))
-		}
-	}
-	// 柱状条是纯 CSS：宽度由 handler 算好后写进 style 属性。
-	if !strings.Contains(body, `style="width:`) {
-		t.Errorf("GET /stats body has no inline CSS bar widths: %s", snippet(body))
-	}
-}
-
-// TestStatsPageLocalizes 断言整页文案走语言包：?lang=en 返回英文，不残留中文。
-func TestStatsPageLocalizes(t *testing.T) {
-	srv, _, _, cookies := newStatsServer(t)
-	// 同上：SSR 回退页的本地化（?lang=en）。
-	srv.spa = nil
-	body := getWithCookies(t, srv, "/stats?lang=en", cookies).Body.String()
-	if !strings.Contains(body, "Statistics and insights") {
-		t.Errorf("?lang=en did not localize the stats page: %s", snippet(body))
-	}
-	if strings.Contains(body, "统计与洞察") {
-		t.Errorf("en page still contains the Chinese heading: %s", snippet(body))
-	}
-}
-
-// TestStatsPageHasNoExternalRequests 是 M7-3 的核心验收：渲染出的 HTML 里出现任何
-// 第三方主机就失败。图表用 HTML + CSS 柱状条，因此页面渲染时零外部网络请求。
-func TestStatsPageHasNoExternalRequests(t *testing.T) {
-	srv, _, _, cookies := newStatsServer(t)
-	// SSR 回退页必须零外部请求。
-	srv.spa = nil
-	body := getWithCookies(t, srv, "/stats", cookies).Body.String()
-	if hosts := thirdPartyHosts(body); len(hosts) > 0 {
-		t.Fatalf("stats page references third-party hosts %v; the page must render with zero external network requests", hosts)
-	}
-}
-
 // TestStatsPageRedirectsAnonymous 是负例：匿名访问 /stats 仍被重定向到登录页
 // （页面迁移到 SPA 外壳不改动授权判定，statsRoute 先过 requireUser）。
 func TestStatsPageRedirectsAnonymous(t *testing.T) {

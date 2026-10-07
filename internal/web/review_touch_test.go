@@ -63,30 +63,4 @@ func TestReviewTouchSequenceRatesCard(t *testing.T) {
 	}
 }
 
-// TestReviewPageTouchTargets 断言复习页的触屏类与点击区尺寸（M8-1）。
-func TestReviewPageTouchTargets(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
-	srv.spa = nil
-	deck := seedReviewDeck(t, db, ownerID, "Touch deck")
-	seedBasic(t, db, deck.ID, "Front", "Back")
-
-	rec := getWithCookies(t, srv, "/review?deck="+u64str(deck.ID), cookies)
-	if rec.Code != 200 {
-		t.Fatalf("GET /review status = %d, want 200 (%s)", rec.Code, snippet(rec.Body.String()))
-	}
-	body := rec.Body.String()
-
-	if !strings.Contains(body, `id="review-area" class="touch-manipulation select-none"`) {
-		t.Errorf("review area must disable double-tap zoom and long-press selection")
-	}
-	if !strings.Contains(body, `min-h-11 rounded-lg border border-slate-300 px-2 py-3`) {
-		t.Errorf("rating buttons must be at least 44px tall (min-h-11)")
-	}
-	if !strings.Contains(body, `id="review-show-answer"`) || !strings.Contains(body, `min-h-11 w-full rounded-lg bg-blue-600`) {
-		t.Errorf("show-answer button must be at least 44px tall (min-h-11)")
-	}
-	if !strings.Contains(body, "/manifest.webmanifest") {
-		t.Errorf("base layout must link the PWA manifest (M8-2)")
-	}
-}
+// TestReviewTouchSequenceRatesCard 运行脚本化触屏序列（需要 node）。

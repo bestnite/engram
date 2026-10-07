@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -184,7 +185,7 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 	case "visibility":
 		v := strings.TrimSpace(req.Visibility)
 		if err := s.decks.SetVisibility(ctx, user.ID, deck.ID, v); err != nil {
-			if err == store.ErrInvalidVisibility {
+			if errors.Is(err, store.ErrInvalidVisibility) {
 				bad()
 			} else {
 				s.logger.Error("set SPA deck visibility failed", "deck_id", deck.ID, "error", err)

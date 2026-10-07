@@ -2,23 +2,21 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包浏览器路径（M5-9）的 HTTP 级验收：导出下载、上传导入摘要、坏包可读错误。
+// 卡组包浏览器路径（M5-9）仍留在 web 层的部分：导出下载。导入本身已切到 REST
+// `POST /api/v1/decks/import`（SPA 的 client.ts 用它），因此 web 只保留导出与 /import 外壳。
 
-// uploadPackage 以 multipart 提交一个 .edeck 上传文件与若干表单字段。
+// uploadPackage 以 multipart 拼一个 .edeck 上传请求；供仍按 REST 导入端点的测试复用。
 func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Cookie, csrf, filename string, body []byte, fields map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -48,22 +46,13 @@ func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Coo
 	return rec
 }
 
-// TestDeckPackageWebRoundTrip 是 M5-9 的核心验收：卡组页导出下载，再经 /import 上传，
-// 页面展示与 REST 相同的摘要字段；坏包给出可读错误而不是 500。
-func TestDeckPackageWebRoundTrip(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
-	srv.spa = nil
+// TestDeckPackageExportServesAttachment 断言导出端点的应答形态与鉴权：登录用户下载得到
+// .edeck 附件（与 REST 导出同一 MIME），匿名访问被重定向登录页。
+func TestDeckPackageExportServesAttachment(t *testing.T) {
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Pack Deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 
-	// 卡组列表页提供导出控件。
-	list := getWithCookies(t, srv, "/decks", cookies)
-	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "/decks/"+u64str(deck.ID)+"/package") {
-		t.Fatalf("GET /decks missing export control; code=%d body=%s", list.Code, snippet(list.Body.String()))
-	}
-
-	// 导出：得到 .edeck 字节。
 	exp := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/package", cookies)
 	if exp.Code != http.StatusOK {
 		t.Fatalf("GET export = %d, want 200 (body %s)", exp.Code, snippet(exp.Body.String()))
@@ -74,46 +63,10 @@ func TestDeckPackageWebRoundTrip(t *testing.T) {
 	if cd := exp.Header().Get("Content-Disposition"); !strings.Contains(cd, ".edeck") {
 		t.Errorf("export content-disposition = %q, want a .edeck download", cd)
 	}
-	pkg := exp.Body.Bytes()
-	if len(pkg) == 0 {
-		t.Fatal("exported package is empty")
+	if exp.Body.Len() == 0 {
+		t.Error("exported package is empty")
 	}
 
-	// 上传导入：页面展示摘要字段。
-	rec := uploadPackage(t, srv, "/import", cookies, csrf, "pack.edeck", pkg, map[string]string{
-		"target": "new_deck", "on_conflict": "update",
-	})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /import = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	body := rec.Body.String()
-	for _, want := range []string{"导入结果", "新建笔记", "更新笔记", "新建卡片", "目标"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("import summary missing field %q; body = %s", want, snippet(body))
-		}
-	}
-	// 往返至少创建了那条笔记与卡片。
-	if !strings.Contains(body, "<td class=\"py-2 font-medium text-slate-800\">1</td>") {
-		t.Logf("note: could not match an exact count cell; body = %s", snippet(body))
-	}
-	if n, err := countDeckNotes(db, deck.ID); err != nil || n < 1 {
-		t.Errorf("source deck notes = %d err %v, want >= 1", n, err)
-	}
-	// 坏包：不是 zip，给可读错误（4xx），不得 500。
-	// 经 api.ImportDeckPackage 后，坏包产出它自己的稳定 code package_bad_format（mapPackageError
-	// 逐码透出，不再折叠成 invalid_request），页面按与 REST/MCP 同一份 error.<code> 语言包渲染，
-	// 因此 zh-CN 下显示“卡组包格式不合法”，而不是笼统的“请求不合法”。
-	bad := uploadPackage(t, srv, "/import", cookies, csrf, "bad.edeck", []byte("this is not a zip"), map[string]string{
-		"target": "new_deck",
-	})
-	if bad.Code != http.StatusBadRequest {
-		t.Fatalf("bad package status = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
-	}
-	if !strings.Contains(bad.Body.String(), "卡组包格式不合法") {
-		t.Errorf("bad package did not produce the specific format error; body = %s", snippet(bad.Body.String()))
-	}
-
-	// 未登录不能导出。
 	anon := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/package", nil)
 	if anon.Code != http.StatusSeeOther {
 		t.Errorf("anonymous export = %d, want 303 redirect to login", anon.Code)
@@ -144,116 +97,6 @@ func exportPackageBytes(t *testing.T, srv *Server, deckID uint64, cookies []*htt
 	return body
 }
 
-// TestImportIntoDeckDeniedForNonMember 是 M5-9 的越权负例：非成员 B 把包导入 A 的私有卡组必须
-// 被拒（403），且 A 卡组的 note 数量一条都不变。
-func TestImportIntoDeckDeniedForNonMember(t *testing.T) {
-	srv, db, ownerID, _, _ := newNotesServer(t)
-	deckA := seedDeck(t, db, ownerID, "A private")
-	seedBasic(t, db, deckA.ID, "A-Q1", "A-A1")
-
-	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "attacker_into")
-	srcDeck := seedDeck(t, db, bID, "attacker src")
-	seedBasic(t, db, srcDeck.ID, "INTRUDER", "x")
-	pkg := exportPackageBytes(t, srv, srcDeck.ID, bCookies)
-
-	before, err := countDeckNotes(db, deckA.ID)
-	if err != nil {
-		t.Fatalf("count A notes before: %v", err)
-	}
-	rec := uploadPackage(t, srv, "/import", bCookies, bCSRF, "evil.edeck", pkg, map[string]string{
-		"target": "into_deck", "deck_id": u64str(deckA.ID), "on_conflict": "update",
-	})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("POST /import into foreign deck = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	after, err := countDeckNotes(db, deckA.ID)
-	if err != nil {
-		t.Fatalf("count A notes after: %v", err)
-	}
-	if after != before {
-		t.Errorf("A deck notes changed by unauthorised into_deck import: before=%d after=%d", before, after)
-	}
-}
-
-// TestImportReplaceDeckDeniedForNonMember 覆盖更具破坏性的 replace_deck：非成员 B 不得用替换
-// 目标把 A 私有卡组的 note 软删掉；被拒后 A 原 note 的 deleted_at 仍为空，存活行数不变。
-func TestImportReplaceDeckDeniedForNonMember(t *testing.T) {
-	srv, db, ownerID, _, _ := newNotesServer(t)
-	deckA := seedDeck(t, db, ownerID, "A replace target")
-	orig := seedBasic(t, db, deckA.ID, "A-Q1", "A-A1")
-
-	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "attacker_replace")
-	srcDeck := seedDeck(t, db, bID, "attacker replace src")
-	seedBasic(t, db, srcDeck.ID, "INTRUDER", "x")
-	pkg := exportPackageBytes(t, srv, srcDeck.ID, bCookies)
-
-	rec := uploadPackage(t, srv, "/import", bCookies, bCSRF, "evil.edeck", pkg, map[string]string{
-		"target": "replace_deck:" + u64str(deckA.ID), "on_conflict": "update",
-	})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("POST /import replace foreign deck = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	// 原 note 不得被软删（replace_deck 会先软删目标卡组全部 note）。
-	var after store.Note
-	if err := db.Unscoped().First(&after, orig.ID).Error; err != nil {
-		t.Fatalf("reload A note %d: %v", orig.ID, err)
-	}
-	if after.DeletedAt.Valid {
-		t.Errorf("A note %d was soft-deleted by unauthorised replace_deck", orig.ID)
-	}
-	if n, err := countDeckNotes(db, deckA.ID); err != nil || n != 1 {
-		t.Errorf("A deck live notes = %d err %v, want 1", n, err)
-	}
-}
-
-// TestImportRequiresCSRF 是必测负例：缺 CSRF token 的导入写请求被拒且不落库。
-func TestImportRequiresCSRF(t *testing.T) {
-	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "CSRF deck")
-	seedBasic(t, db, deck.ID, "Q1", "A1")
-	src := seedDeck(t, db, ownerID, "CSRF src")
-	seedBasic(t, db, src.ID, "NEW", "x")
-	pkg := exportPackageBytes(t, srv, src.ID, ownerCookies)
-
-	rec := uploadPackage(t, srv, "/import", ownerCookies, "", "pack.edeck", pkg, map[string]string{
-		"target": "into_deck", "deck_id": u64str(deck.ID),
-	})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("POST /import without CSRF = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if n, err := countDeckNotes(db, deck.ID); err != nil || n != 1 {
-		t.Errorf("deck notes = %d err %v, want 1 (no write without CSRF)", n, err)
-	}
-}
-
-// TestImportIntoOwnDeckSucceeds 是正向对照：卡组 owner 自己 into_deck 成功，且确实写入新笔记。
-func TestImportIntoOwnDeckSucceeds(t *testing.T) {
-	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Own deck")
-	seedBasic(t, db, deck.ID, "Q1", "A1")
-	src := seedDeck(t, db, ownerID, "Own src")
-	seedBasic(t, db, src.ID, "NEW", "x")
-	pkg := exportPackageBytes(t, srv, src.ID, ownerCookies)
-
-	rec := uploadPackage(t, srv, "/import", ownerCookies, ownerCSRF, "pack.edeck", pkg, map[string]string{
-		"target": "into_deck", "deck_id": u64str(deck.ID), "on_conflict": "update",
-	})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("owner POST /import into own deck = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if n, err := countDeckNotes(db, deck.ID); err != nil || n != 2 {
-		t.Errorf("owner import notes = %d err %v, want 2", n, err)
-	}
-	// 断言确实写入：目标卡组里出现了包内的新笔记内容。
-	var found int64
-	if err := db.Model(&store.Note{}).Where("deck_id = ? AND fields_json LIKE ?", deck.ID, "%NEW%").Count(&found).Error; err != nil {
-		t.Fatalf("count imported note: %v", err)
-	}
-	if found != 1 {
-		t.Errorf("imported note count = %d, want 1", found)
-	}
-}
-
 // countDeckNotes 数一个卡组下的笔记条数，用于往返校验。
 func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 	var n int64
@@ -261,76 +104,4 @@ func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 		return 0, err
 	}
 	return n, nil
-}
-
-// TestImportSubmitWritesAudit 是 F20 的 web 回归：经浏览器 /import 成功导入后必须写一条
-// deck.package_import 审计，且归属发起导入的用户。改走 api.ImportDeckPackage 后审计仍由 service
-// 单点记录，web 不再自己写（同一条决定不能两处实现）。
-func TestImportSubmitWritesAudit(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	src := seedDeck(t, db, ownerID, "Audit src")
-	seedBasic(t, db, src.ID, "Q1", "A1")
-	pkg := exportPackageBytes(t, srv, src.ID, cookies)
-
-	rec := uploadPackage(t, srv, "/import", cookies, csrf, "pack.edeck", pkg, map[string]string{
-		"target": "new_deck", "on_conflict": "update",
-	})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /import = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	entries, err := store.NewAuditStore(db).List(context.Background(), 50)
-	if err != nil {
-		t.Fatalf("list audit: %v", err)
-	}
-	var found int
-	for i := range entries {
-		if entries[i].Action != "deck.package_import" {
-			continue
-		}
-		found++
-		if entries[i].UserID == nil || *entries[i].UserID != ownerID {
-			t.Errorf("audit deck.package_import user_id = %v, want %d", entries[i].UserID, ownerID)
-		}
-	}
-	if found != 1 {
-		t.Fatalf("deck.package_import audit rows = %d, want 1", found)
-	}
-}
-
-// TestImportRejectsOversizedRequestBodyWeb 是 F14 的 web 回归：请求体超过管理员配置的上传上限
-// （media_max_bytes）时，上传在解析 multipart 阶段就被拒（4xx，绝不 500），且库中不留任何写入。
-func TestImportRejectsOversizedRequestBodyWeb(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	src := seedDeck(t, db, ownerID, "F14 src")
-	seedBasic(t, db, src.ID, "Q1", "A1")
-	pkg := exportPackageBytes(t, srv, src.ID, cookies)
-	if len(pkg) <= 256 {
-		t.Fatalf("exported package is %d bytes, need > 256 to exceed the test limit", len(pkg))
-	}
-	// 关掉环境变量覆盖，让上限取 settings 表里的值。
-	t.Setenv(media.EnvMediaMaxBytes, "")
-	if err := store.PutSetting(context.Background(), db, media.SettingKeyMediaMaxBytes, "256", nil, time.Now().UTC()); err != nil {
-		t.Fatalf("PutSetting media_max_bytes: %v", err)
-	}
-
-	var before int64
-	if err := db.Model(&store.Deck{}).Count(&before).Error; err != nil {
-		t.Fatalf("count decks before: %v", err)
-	}
-	rec := uploadPackage(t, srv, "/import", cookies, csrf, "big.edeck", pkg, map[string]string{
-		"target": "new_deck",
-	})
-	if rec.Code < 400 || rec.Code >= 500 {
-		t.Fatalf("oversized import = %d, want 4xx (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), "import.error.") {
-		t.Errorf("oversized import leaked a raw catalog key:\n%s", snippet(rec.Body.String()))
-	}
-	var after int64
-	if err := db.Model(&store.Deck{}).Count(&after).Error; err != nil {
-		t.Fatalf("count decks after: %v", err)
-	}
-	if after != before {
-		t.Errorf("oversized import wrote %d new deck(s), want 0", after-before)
-	}
 }

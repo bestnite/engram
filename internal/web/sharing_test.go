@@ -39,8 +39,14 @@ func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string)
 	return u.ID, login.Result().Cookies(), sess.CSRFToken
 }
 
+// grantsJSONPath 是共享授权的 JSON 路径。
+func grantsJSONPath(deckID uint64) string {
+	return "/api/v1/decks/" + u64str(deckID) + "/sharing/grants"
+}
+
 // TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest 是 M5-2 的主验收：
 // owner 授权后对方马上能访问；撤销后对方下一次请求立即被拒；并各写一行审计。
+// 授权写路径走 SPA 的 JSON 端点（SSR 共享表单入口已删除）。
 func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Shared deck")
@@ -52,12 +58,11 @@ func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.
 		t.Fatalf("before grant: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// owner 通过共享页授予 reader。
-	rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "username": {"reader2"}, "role": {store.RoleReader},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST grant status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	// owner 授予 reader。
+	rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
+		`{"username":"reader2","role":"reader"}`, ownerCookies, ownerCSRF)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST grant status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	// 授权后：对方下一个请求立即能访问。
@@ -66,22 +71,20 @@ func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.
 	}
 
 	// 改角色 reader -> editor：写 deck.role_change，对方仍可访问。
-	rec = postForm(t, srv, deckPath+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(user2ID)}, "role": {store.RoleEditor},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST role change status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	rec = jsonRequest(t, srv, http.MethodPatch, grantsJSONPath(deck.ID)+"/"+u64str(user2ID),
+		`{"role":"editor"}`, ownerCookies, ownerCSRF)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH role status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusOK {
 		t.Fatalf("after role change: GET notes status = %d, want 200", rec.Code)
 	}
 
 	// 撤销：对方下一次请求立即被拒。
-	rec = postForm(t, srv, deckPath+"/sharing/revoke", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(user2ID)},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST revoke status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	rec = jsonRequest(t, srv, http.MethodDelete, grantsJSONPath(deck.ID)+"/"+u64str(user2ID),
+		"", ownerCookies, ownerCSRF)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DELETE grant status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("after revoke: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
@@ -107,17 +110,16 @@ func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.
 	}
 }
 
-// TestSharingPageRejectsNonOwner 覆盖反面用例：非 owner 打不开共享页、提交表单也被拒且不落库。
+// TestSharingPageRejectsNonOwner 覆盖反面用例：非 owner 打不开共享页、写端点也被拒且不落库。
 func TestSharingPageRejectsNonOwner(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Owner only")
 	deckPath := "/decks/" + u64str(deck.ID)
 	// 建一个普通用户并授予 editor：他仍不是 owner，不能管理授权。
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "editor2")
-	if rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "username": {"editor2"}, "role": {store.RoleEditor},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("owner grant editor status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
+	if rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
+		`{"username":"editor2","role":"editor"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+		t.Fatalf("owner grant editor status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	// editor 打开共享页 -> 403。
@@ -129,9 +131,8 @@ func TestSharingPageRejectsNonOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list grants: %v", err)
 	}
-	if rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
-		"csrf_token": {u2CSRF}, "username": {"editor2"}, "role": {store.RoleReader},
-	}, u2Cookies); rec.Code != http.StatusForbidden {
+	if rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
+		`{"username":"editor2","role":"reader"}`, u2Cookies, u2CSRF); rec.Code != http.StatusForbidden {
 		t.Fatalf("editor POST grant status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 	after, err := store.NewGrantStore(db).ListByDeck(context.Background(), deck.ID)
@@ -155,9 +156,8 @@ func TestSharingGrantRequiresCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "CSRF deck")
 	createUserAndLogin(t, srv, db, "csrf_target")
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/grant", url.Values{
-		"username": {"csrf_target"}, "role": {store.RoleReader},
-	}, ownerCookies)
+	rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
+		`{"username":"csrf_target","role":"reader"}`, ownerCookies, "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("POST grant without CSRF status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}

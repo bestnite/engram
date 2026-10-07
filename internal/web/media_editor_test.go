@@ -7,7 +7,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -69,8 +68,6 @@ func mediaShaOK(sha string) bool {
 // 有该引用、预览里仍有 <img>（且不是 base64 内联）。
 func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	// GET /decks/:id/notes/:nid 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退编辑页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Media deck")
 	note := seedBasic(t, db, deck.ID, "front", "back")
 	deckPath := "/decks/" + u64str(deck.ID)
@@ -97,50 +94,62 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Fatalf("GET %s Content-Type = %q, want image/png", saved.URL, ct)
 	}
 
-	// 3) 把 Markdown 图片引用插入 front 字段，htmx 预览应渲染出 <img>。
+	// 3) 把 Markdown 图片引用插入 front 字段，SPA 预览端点应渲染出 <img>。
 	ref := "![](" + saved.URL + ")"
-	prev := postForm(t, srv, deckPath+"/preview", url.Values{
-		"csrf_token":  {csrf},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {"see " + ref},
-		"field.back":  {"back"},
-	}, cookies)
+	prev := postSPAJSON(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+		"kind":   "basic",
+		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+	}, cookies, csrf)
 	if prev.Code != http.StatusOK {
 		t.Fatalf("preview status = %d, want 200 (body %s)", prev.Code, prev.Body.String())
 	}
-	if !strings.Contains(prev.Body.String(), `<img src="`+saved.URL+`"`) {
+	var prevBody struct {
+		Cards []struct {
+			FrontHTML string `json:"front_html"`
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(prev.Body.Bytes(), &prevBody); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if len(prevBody.Cards) == 0 || !strings.Contains(prevBody.Cards[0].FrontHTML, `<img src="`+saved.URL+`"`) {
 		t.Fatalf("preview did not render the uploaded image: %s", snippet(prev.Body.String()))
 	}
 
-	// 4) 保存该引用。
-	save := postForm(t, srv, deckPath+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {csrf},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {"see " + ref},
-		"field.back":  {"back"},
-	}, cookies)
-	if save.Code != http.StatusSeeOther {
-		t.Fatalf("save status = %d, want 303 (body %s)", save.Code, save.Body.String())
+	// 4) 保存该引用（SPA 的卡片更新走 PATCH /api/v1/notes/:id）。
+	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+u64str(note.ID),
+		`{"kind":"basic","fields":{"front":"see `+ref+`","back":"back"}}`, cookies, csrf)
+	if save.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want 200 (body %s)", save.Code, save.Body.String())
 	}
 
-	// 5) 刷新编辑页：字段值里仍有引用，预览里仍有 <img>。
-	reload := getWithCookies(t, srv, deckPath+"/notes/"+u64str(note.ID), cookies)
+	// 5) 再次预览：字段值里仍有引用，预览里仍有 <img>（且不是 base64 内联）。
+	reload := postSPAJSON(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+		"kind":   "basic",
+		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+	}, cookies, csrf)
 	if reload.Code != http.StatusOK {
-		t.Fatalf("reload status = %d, want 200", reload.Code)
+		t.Fatalf("reload preview status = %d, want 200", reload.Code)
 	}
-	body := reload.Body.String()
-	if !strings.Contains(body, ref) {
-		t.Errorf("reloaded field lost the /media reference: %s", snippet(body))
+	var reloadBody struct {
+		Cards []struct {
+			FrontHTML string `json:"front_html"`
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(reload.Body.Bytes(), &reloadBody); err != nil {
+		t.Fatalf("decode reload preview: %v", err)
+	}
+	if len(reloadBody.Cards) == 0 {
+		t.Fatalf("reload preview returned no cards: %s", snippet(reload.Body.String()))
+	}
+	body := reloadBody.Cards[0].FrontHTML
+	if !strings.Contains(body, saved.URL) {
+		t.Errorf("reloaded preview lost the /media reference: %s", snippet(body))
 	}
 	if !strings.Contains(body, `<img src="`+saved.URL+`"`) {
 		t.Errorf("reloaded preview lost the <img>: %s", snippet(body))
 	}
 	if strings.Contains(body, "data:image") {
 		t.Errorf("media was inlined as base64 instead of referenced")
-	}
-	// 上传控件本身也渲染在编辑页上，且指向卡组内上传端点。
-	if !strings.Contains(body, "data-media-upload") || !strings.Contains(body, deckPath+"/media") {
-		t.Errorf("edit page does not render the media upload control: %s", snippet(body))
 	}
 
 	// 存储层确认字段里存的是引用而非内联数据。
@@ -194,11 +203,7 @@ func TestEditorMediaUploadRequiresEditorRoleAndCSRF(t *testing.T) {
 
 	// 授予第二个用户 reader 角色。
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "media-reader")
-	if rec := postForm(t, srv, deckPath+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(user2ID)}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Fatalf("grant status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
+	grantRole(t, srv, deck.ID, user2ID, store.RoleReader, ownerCookies, ownerCSRF)
 
 	// 读者上传被拒 403。
 	reader := uploadMediaTo(t, srv, u2Cookies, deckPath+"/media", u2CSRF, "pic.png", "image/png", pngBody())

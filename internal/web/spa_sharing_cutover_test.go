@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -75,47 +74,12 @@ func TestSharingRouteDeniesNonOwnerAndAnonymous(t *testing.T) {
 	}
 }
 
-// TestSharingRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET /decks/:id/sharing 回退 SSR 共享页：
-// 模板与 handler 全部保留，不是应用壳。
-func TestSharingRouteFallsBackToSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Sharing fallback deck")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/sharing", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET sharing fallback = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("fallback returned the SPA shell; the SSR sharing page must be preserved")
-	}
-	if !strings.Contains(rec.Body.String(), ssrSharingMarker(deck.ID)) {
-		t.Errorf("fallback is missing the SSR sharing form: %s", snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), `name="username"`) {
-		t.Errorf("fallback is missing the SSR grant input: %s", snippet(rec.Body.String()))
-	}
-}
-
-// TestSharingMutationsKeepCSRF 断言切壳没有移除写路径，也没有放松 CSRF：
-// SSR 表单写（/decks/:id/sharing/grant）与 SPA JSON 写（/api/v1/decks/:id/sharing/grants）
-// 缺 token 都 403，带正确 token 才通过。
+// TestSharingMutationsKeepCSRF 断言切壳没有放松 CSRF：SPA JSON 写
+// （/api/v1/decks/:id/sharing/grants）缺 token 403、带正确 token 才通过。
 func TestSharingMutationsKeepCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "CSRF cutover deck")
 	_, _, _ = createUserAndLogin(t, srv, db, "csrf-cutover-target")
-
-	ssrPath := "/decks/" + u64str(deck.ID) + "/sharing/grant"
-	if rec := postForm(t, srv, ssrPath, url.Values{
-		"username": {"csrf-cutover-target"}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusForbidden {
-		t.Errorf("SSR grant without CSRF = %d, want 403", rec.Code)
-	}
-	if rec := postForm(t, srv, ssrPath, url.Values{
-		"csrf_token": {ownerCSRF}, "username": {"csrf-cutover-target"}, "role": {store.RoleReader},
-	}, ownerCookies); rec.Code != http.StatusSeeOther {
-		t.Errorf("SSR grant with CSRF = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
 
 	apiPath := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
 	if rec := jsonRequest(t, srv, http.MethodPost, apiPath, `{"username":"csrf-cutover-target","role":"editor"}`, ownerCookies, ""); rec.Code != http.StatusForbidden {
@@ -256,32 +220,24 @@ func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 	}
 }
 
-// TestShareLinkBrowseStaysSSR 把边界钉死：公开分享浏览 /s/:token 仍是 SSR 页面，
-// 没有随共享管理页切流改成应用壳——它的口令/锁定/清洗后卡片内容与登录要求仍由 SSR 保证。
-func TestShareLinkBrowseStaysSSR(t *testing.T) {
+// TestShareLinkBrowseServesSPAShell 把边界钉死：GET /s/:token 返回应用壳，由客户端路由渲染；
+// 可达性（撤销/过期/不存在 404）仍由服务端在切壳之前判定。
+func TestShareLinkBrowseServesSPAShell(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// GET /s/:token 已切到 SPA 应用壳：本用例改为断言 SPA 缺失时的 SSR 回退，故置空 SPA。
-	srv.spa = nil
-	deck := seedDeck(t, db, ownerID, "Public share SSR deck")
+	deck := seedDeck(t, db, ownerID, "Public share shell deck")
 	seedBasic(t, db, deck.ID, "公开正面", "公开背面")
 
-	rec := postForm(t, srv, shareLinksPath(deck.ID), url.Values{"csrf_token": {ownerCSRF}}, ownerCookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("create share link = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	token := extractShareToken(t, rec.Body.String())
+	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
 	browse := get(t, srv, "/s/"+token, nil)
 	if browse.Code != http.StatusOK {
 		t.Fatalf("GET /s/<token> = %d, want 200 (body %s)", browse.Code, snippet(browse.Body.String()))
 	}
-	if strings.Contains(browse.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("public share browse returned the SPA shell; it must stay SSR until full parity")
+	if !strings.Contains(browse.Body.String(), `<div id="app"></div>`) {
+		t.Errorf("share browse did not return the SPA shell: %s", snippet(browse.Body.String()))
 	}
-	if !strings.Contains(browse.Body.String(), "公开正面") {
-		t.Errorf("public share browse is missing the sanitized card content: %s", snippet(browse.Body.String()))
-	}
-	if !strings.Contains(browse.Body.String(), "/login") {
-		t.Errorf("public share browse no longer prompts login: %s", snippet(browse.Body.String()))
+	// 不存在的 token 仍在切壳之前 404。
+	if rec := get(t, srv, "/s/does-not-exist-token", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown token GET /s/<token> = %d, want 404", rec.Code)
 	}
 }
