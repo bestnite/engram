@@ -10,6 +10,7 @@
   import Dialog from '../components/ui/Dialog.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -273,7 +274,7 @@
     <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
       <a href="/decks" data-testid="back-to-decks" class="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors inline-flex items-center gap-1 font-medium">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-        <span>卡组列表</span>
+        <span>{$t('decks.list_title')}</span>
       </a>
       <span>/</span>
       <span class="text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-xs">{deck ? deck.name : `#${deckId}`}</span>
@@ -300,23 +301,15 @@
 
       <!-- 右侧主要动作区 -->
       <div class="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
-        <button
-          type="button"
-          onclick={() => showExportModal = true}
-          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer"
-        >
+        <Button variant="outline" onclick={() => showExportModal = true}>
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>导出</span>
-        </button>
+          <span>{$t('package.export.short')}</span>
+        </Button>
 
-        <a
-          href="/decks/{encodeURIComponent(deckId)}/notes/new"
-          data-testid="create-note-link"
-          class="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer"
-        >
+        <Button href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span>{$t('notes.create')}</span>
-        </a>
+        </Button>
       </div>
     </div>
 
@@ -327,7 +320,7 @@
         onclick={() => activeTab = 'cards'}
         class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'cards' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
       >
-        卡片列表 ({total})
+        {$t('deck.tab.notes', { count: total })}
       </button>
 
       <button

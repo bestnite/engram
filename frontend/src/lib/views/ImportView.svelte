@@ -6,6 +6,7 @@
   import type { Deck, PackageImportReport } from '../api';
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   let decks = $state<Deck[]>([]);
   let file = $state<File | null>(null);
@@ -108,7 +109,7 @@
         <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
       </div>
       {#if errorKey}<p role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t(errorKey)}</p>{/if}
-      <button type="submit" disabled={submitting} class="px-4 py-2 rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50">{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</button>
+      <Button type="submit" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</Button>
     </form>
   </section>
   {#if report}

@@ -2,6 +2,7 @@
   import { routeStore, navigate } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
+  import Button from '../components/ui/Button.svelte';
 
   let front = $state('');
   let back = $state('');
@@ -64,8 +65,8 @@
     {#if errorKey}<p role="alert" data-testid="note-create-error" class="text-rose-600 dark:text-rose-400">{$t(errorKey)}</p>{/if}
     {#if saved}<p role="status" data-testid="note-create-success" class="text-emerald-700 dark:text-emerald-400">{$t('note_create.saved')}</p>{/if}
     <div class="flex gap-3">
-      <button data-testid="note-create-submit" type="submit" disabled={saving || !front.trim() || !back.trim()} class="rounded-md bg-zinc-900 text-white px-4 py-2 disabled:opacity-50">{saving ? $t('note_create.saving') : $t('note_create.submit')}</button>
-      <button type="button" onclick={() => navigate(`/decks/${encodeURIComponent(deckId)}`)} class="rounded-md px-4 py-2">{$t('note_create.cancel')}</button>
+      <Button type="submit" testId="note-create-submit" disabled={saving || !front.trim() || !back.trim()}>{saving ? $t('note_create.saving') : $t('note_create.submit')}</Button>
+      <Button variant="ghost" onclick={() => navigate(`/decks/${encodeURIComponent(deckId)}`)}>{$t('note_create.cancel')}</Button>
     </div>
   </form>
 </section>

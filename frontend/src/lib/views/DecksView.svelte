@@ -212,7 +212,7 @@
           {$t('decks.title')}
         </h1>
         <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-          {decks.length} 个卡组
+          {$t('decks.count', { count: decks.length })}
         </p>
       </div>
 
@@ -262,26 +262,25 @@
             <span>{selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}</span>
           </label>
           {#if selectedDeckIds.length > 0}
-            <span class="text-zinc-400 dark:text-zinc-500">已选 {selectedDeckIds.length} 个</span>
+            <span class="text-zinc-400 dark:text-zinc-500">{$t('decks.selected_count', { count: selectedDeckIds.length })}</span>
           {/if}
         </div>
 
         {#if selectedDeckIds.length > 0}
           <div class="flex items-center gap-2">
-            <button
-              type="button"
-              data-testid="decks-batch-export"
+            <Button
+              variant="primary"
+              testId="decks-batch-export"
               disabled={batchExporting}
               onclick={handleBatchExport}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium btn-press cursor-pointer"
             >
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>{batchExporting ? '导出中...' : $t('package.batch_export', { count: selectedDeckIds.length })}</span>
-            </button>
+              <span>{batchExporting ? $t('package.batch_export_progress') : $t('package.batch_export', { count: selectedDeckIds.length })}</span>
+            </Button>
           </div>
         {/if}
       </div>
@@ -424,7 +423,7 @@
             bind:value={name}
             required
             maxlength="200"
-            placeholder="例如：高级英汉词汇"
+            placeholder={$t('decks.spa_create.name_placeholder')}
             class="block w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100"
           />
         </div>
@@ -439,7 +438,7 @@
             bind:value={description}
             maxlength="2000"
             rows="3"
-            placeholder="可选填写卡组简介"
+            placeholder={$t('decks.spa_create.description_placeholder')}
             class="block w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100"
           ></textarea>
           <div>

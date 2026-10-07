@@ -3,6 +3,7 @@
   import { t } from '../i18n';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   let keys = $state<APIKeyRecord[]>([]);
   let name = $state('');
@@ -99,7 +100,7 @@
           </label>
         {/each}
       </fieldset>
-      <button disabled={saving} class="rounded-xl bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2 text-white disabled:opacity-50 cursor-pointer">{$t(saving ? 'keys.creating' : 'keys.create')}</button>
+      <Button type="submit" testId="keys-create" disabled={saving}>{$t(saving ? 'keys.creating' : 'keys.create')}</Button>
     </form>
 
     {#if loading}

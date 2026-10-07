@@ -190,4 +190,57 @@ describe('loading states and the admin tab bar', () => {
     expect(nav).not.toContain('flex-wrap');
     expect(nav).toContain('block rounded-lg px-3 py-1.5 text-center');
   });
+
+describe('buttons and user-visible copy', () => {
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (entry.name.endsWith('.svelte')) out.push(full);
+    }
+    return out;
+  };
+  const libDir = fileURLToPath(new URL('../lib', import.meta.url));
+  const sources = walk(libDir).map((file) => ({ file: relative(libDir, file), src: readFileSync(file, 'utf8') }));
+  const find = (file: string) => sources.find((s) => s.file === file)?.src ?? '';
+
+  it('routes the deck toolbar and the sharing actions through ui/Button', () => {
+    // 这些按钮曾经是手写类名，其中共享页三个漏了字号类，于是落到正文 16px，
+    // 同一页上比工具条的 12px 大一圈——统一到组件后这类漂移不可能再出现。
+    const toolbar = find('views/DeckDetailView.svelte');
+    expect(toolbar).toContain('<Button variant="outline" onclick={() => showExportModal = true}>');
+    expect(toolbar).toContain('testId="create-note-link"');
+
+    const sharing = find('views/DeckSharingView.svelte');
+    for (const id of ['sharing-grant', 'sharing-create-link', 'sharing-save-visibility']) {
+      expect(sharing, `sharing action ${id}`).toContain(`testId="${id}"`);
+    }
+    // 手写的那三个类名串不得再回来。
+    expect(sharing).not.toContain('px-4 py-2 text-white cursor-pointer');
+    expect(sharing).not.toContain('dark:border-zinc-700 px-4 py-2 cursor-pointer');
+  });
+
+  it('keeps user-visible text and placeholders out of the markup', () => {
+    // 用户可见文案一律走语言包（AGENTS.md §2.1）。中文注释是允许且要求的，
+    // 所以先剥掉注释再扫：正文文本节点与用户可见属性里不得出现汉字。
+    const cjk = /[\u4e00-\u9fff]/;
+    const visibleAttr = /(placeholder|title|aria-label|alt)="([^"]*)"/g;
+    const offenders: string[] = [];
+    for (const { file, src } of sources) {
+      const body = src
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n');
+      const textNodes = body.replace(/<[^>]*>/g, '\n').split('\n').filter((line) => line.trim() && cjk.test(line));
+      if (textNodes.length) offenders.push(`${file}: ${textNodes[0].trim()}`);
+      for (const m of body.matchAll(visibleAttr)) {
+        if (cjk.test(m[2])) offenders.push(`${file}: ${m[1]}="${m[2]}"`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
 });
