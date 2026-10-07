@@ -122,6 +122,15 @@ describe('interactive pieces are owned by the component library', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps no native checkbox or radio input in views', () => {
+    // 复选框/单选组都能用组件库表达（三态、方向键、roving tabindex 都在库里），
+    // 视图里再出现原生 input[type=checkbox|radio] 就是第二份实现。
+    const offenders = sources
+      .filter((s) => s.file.startsWith('views/') && /type="(checkbox|radio)"/.test(s.src))
+      .map((s) => s.file);
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps the modal overlay inside ui/Dialog.svelte only', () => {
     // 自写模态各自手搓遮罩/ESC/焦点，行为与样式都不一致；弹层只允许有一处实现。
     const offenders = sources

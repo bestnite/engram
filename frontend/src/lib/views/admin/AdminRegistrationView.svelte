@@ -6,6 +6,7 @@
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
   import RadioGroup from '../../components/ui/RadioGroup.svelte';
+  import Checkbox from '../../components/ui/Checkbox.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -249,7 +250,7 @@
           <input data-testid="admin-registration-invite-expires" bind:value={form.expires_days} inputmode="numeric" class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
         </label>
         <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:col-span-3">
-          <input type="checkbox" data-testid="admin-registration-invite-send" bind:checked={form.send_email} />
+          <Checkbox testId="admin-registration-invite-send" bind:checked={form.send_email} label={$t('admin.registration.field.send_email')} />
           {$t('admin.registration.field.send_email')}
         </label>
         <div class="sm:col-span-3">

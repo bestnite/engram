@@ -5,6 +5,7 @@
   import { authStore } from '../auth';
   import type { Deck, PackageImportReport } from '../api';
   import Select from '../components/ui/Select.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
 
   let decks = $state<Deck[]>([]);
   let file = $state<File | null>(null);
@@ -102,9 +103,9 @@
         />
       </label>
       <div class="space-y-3 text-sm">
-        <label class="flex items-center gap-2"><input type="checkbox" bind:checked={dryRun} />{$t('package.import.dry_run')}</label>
-        {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><input type="checkbox" bind:checked={allowOthersProgress} />{$t('package.import.allow_progress')}</label>{/if}
-        <label class="flex items-center gap-2"><input type="checkbox" bind:checked={skipMissingMedia} />{$t('package.import.skip_media')}</label>
+        <label class="flex items-center gap-2"><Checkbox bind:checked={dryRun} label={$t('package.import.dry_run')} />{$t('package.import.dry_run')}</label>
+        {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><Checkbox bind:checked={allowOthersProgress} label={$t('package.import.allow_progress')} />{$t('package.import.allow_progress')}</label>{/if}
+        <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
       </div>
       {#if errorKey}<p role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t(errorKey)}</p>{/if}
       <button type="submit" disabled={submitting} class="px-4 py-2 rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50">{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</button>

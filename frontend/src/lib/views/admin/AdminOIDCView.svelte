@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminOIDCResponse, AdminOIDCIdentity, AdminTestResult } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import Checkbox from '../../components/ui/Checkbox.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -170,7 +171,7 @@
     {@const view = data}
     <form onsubmit={save} data-testid="admin-oidc-form" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-2">
       <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:col-span-2">
-        <input type="checkbox" data-testid="admin-oidc-enabled" bind:checked={enabled} />
+        <Checkbox testId="admin-oidc-enabled" bind:checked={enabled} label={$t('admin.oidc.enabled')} />
         {$t('admin.oidc.enabled')}
       </label>
       <label class="block sm:col-span-2">

@@ -642,16 +642,16 @@
   >
       <div class="space-y-3 text-xs text-zinc-700 dark:text-zinc-300">
         <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" bind:checked={includeMedia} class="rounded text-blue-600 focus:ring-blue-500" />
+          <Checkbox bind:checked={includeMedia} label={$t('package.export.include_media')} />
           <span>{$t('package.export.include_media')}</span>
         </label>
         <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" bind:checked={includeProgress} onchange={() => { if (!includeProgress) includeReviews = false; }} class="rounded text-blue-600 focus:ring-blue-500" />
+          <Checkbox bind:checked={includeProgress} label={$t('package.export.include_progress')} />
           <span>{$t('package.export.include_progress')}</span>
         </label>
         {#if includeProgress}
           <label class="flex items-center gap-2 pl-5 cursor-pointer">
-            <input type="checkbox" bind:checked={includeReviews} class="rounded text-blue-600 focus:ring-blue-500" />
+            <Checkbox bind:checked={includeReviews} label={$t('package.export.include_reviews')} />
             <span>{$t('package.export.include_reviews')}</span>
           </label>
         {/if}
