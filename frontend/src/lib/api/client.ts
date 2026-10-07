@@ -52,6 +52,9 @@ import {
   type TOTPRecoveryResponse,
   type NotificationPrefsResponse,
   type UpdateNotificationPrefsRequest,
+  type PresetsResponse,
+  type PresetOptimizeResponse,
+  type PresetWriteRequest,
 } from './types';
 
 /**
@@ -833,6 +836,70 @@ export class ApiClient {
     return this.request<SetupResponse>('/api/v1/auth/setup', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  }
+
+  /** 读取当前用户的全部调度预设与优化门槛（GET /api/v1/presets，仅会话）。 */
+  async listPresets(): Promise<PresetsResponse> {
+    return this.request<PresetsResponse>('/api/v1/presets');
+  }
+
+  /** 新建预设（POST /api/v1/presets）；成功后返回整份列表。 */
+  async createPreset(input: PresetWriteRequest): Promise<PresetsResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<PresetsResponse>('/api/v1/presets', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 编辑预设（PATCH /api/v1/presets/:id）；成功后返回整份列表。 */
+  async updatePreset(id: number | string, input: PresetWriteRequest): Promise<PresetsResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encoded = encodeURIComponent(String(id));
+    return this.request<PresetsResponse>(`/api/v1/presets/${encoded}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 触发参数优化（POST /api/v1/presets/:id/optimize）；不足门槛 400、已在运行 409。 */
+  async optimizePreset(id: number | string): Promise<PresetOptimizeResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encoded = encodeURIComponent(String(id));
+    return this.request<PresetOptimizeResponse>(`/api/v1/presets/${encoded}/optimize`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  /** 轮询优化作业状态（GET /api/v1/presets/:id/optimize/status?job=:jobId）。 */
+  async getPresetOptimizeStatus(
+    id: number | string,
+    jobId: number | string
+  ): Promise<PresetOptimizeResponse> {
+    const encoded = encodeURIComponent(String(id));
+    const job = encodeURIComponent(String(jobId));
+    return this.request<PresetOptimizeResponse>(
+      `/api/v1/presets/${encoded}/optimize/status?job=${job}`
+    );
+  }
+
+  /** 一键回退默认权重（POST /api/v1/presets/:id/optimize/revert）；成功后返回整份列表。 */
+  async revertPresetWeights(id: number | string): Promise<PresetsResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encoded = encodeURIComponent(String(id));
+    return this.request<PresetsResponse>(`/api/v1/presets/${encoded}/optimize/revert`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   }
 }

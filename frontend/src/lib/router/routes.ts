@@ -17,6 +17,7 @@ import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
 import TOTPView from '../views/TOTPView.svelte';
 import NotificationPrefsView from '../views/NotificationPrefsView.svelte';
+import PresetsView from '../views/PresetsView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -199,5 +200,12 @@ export const routes: RouteDefinition[] = [
     path: '/setup',
     name: 'setup',
     component: SetupView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 调度预设页（DESIGN.md §8.1 的规范路径）。服务端 GET /presets 已切到应用壳，
+    // 读写走 /api/v1/presets* 的会话 JSON 端点。
+    path: '/presets',
+    name: 'presets',
+    component: PresetsView as unknown as RouteDefinition['component'],
   },
 ];

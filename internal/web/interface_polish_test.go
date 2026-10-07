@@ -66,6 +66,8 @@ func TestTopNavigationIsIdenticalAcrossPages(t *testing.T) {
 	// GET /stats 已切到 SPA 应用壳，不再是 SSR 页面；禁用 SPA 让本用例继续覆盖
 	// SSR 回退页（降级路径）的顶部导航，与其余 SSR 页面逐项一致。
 	notesSrv.spa = nil
+	// GET /presets 同样已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退页的顶部导航。
+	presetsSrv.spa = nil
 
 	pages := []struct {
 		name    string
