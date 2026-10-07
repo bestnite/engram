@@ -91,6 +91,19 @@ func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values)
 	return rec
 }
 
+// doPostJSON 以 application/json 发起 POST，并按会话前流程补上双提交 cookie 与镜像头
+// （/api/v1/auth/login、/setup 等由 DoubleSubmitMiddleware 保护）。
+func doPostJSON(t *testing.T, srv *web.Server, target, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(auth.CSRFHeaderName, testDoubleSubmitToken)
+	req.AddCookie(&http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
 // hasCookie 报告响应是否下发了指定名字的 cookie。
 func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
 	for _, c := range rec.Result().Cookies() {
@@ -137,26 +150,20 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Errorf("GET /login did not issue the %s cookie", auth.CSRFDoubleSubmitCookieName)
 	}
 
-	// 密码错误：返回文档约定的 401，且不下发会话 cookie。
-	bad := doPostForm(t, srv, "/login", url.Values{
-		"username": {"nobody"},
-		"password": {"WrongPassword!"},
-	})
+	// 密码错误：JSON 登录返回 401，且不下发任何 cookie（SSR 登录表单已随页面层删除）。
+	bad := doPostJSON(t, srv, "/api/v1/auth/login", `{"username":"nobody","password":"WrongPassword!"}`)
 	if bad.Code != http.StatusUnauthorized {
-		t.Fatalf("POST /login with a wrong password status = %d, want 401", bad.Code)
+		t.Fatalf("POST /api/v1/auth/login with a wrong password status = %d, want 401 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
 	if len(bad.Result().Cookies()) != 0 {
 		t.Errorf("failed login unexpectedly set a cookie: %v", bad.Result().Cookies())
 	}
 
 	// 创建首个管理员，随后引导页必须关闭（404）。
-	created := doPostForm(t, srv, "/setup", url.Values{
-		"username": {"root"},
-		"email":    {"root@example.com"},
-		"password": {"Sup3rSecret!"},
-	})
-	if created.Code != http.StatusSeeOther {
-		t.Fatalf("POST /setup status = %d, want 303 (body %s)", created.Code, snippet(created.Body.String()))
+	created := doPostJSON(t, srv, "/api/v1/auth/setup",
+		`{"username":"root","email":"root@example.com","password":"Sup3rSecret!"}`)
+	if created.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/setup status = %d, want 200 (body %s)", created.Code, snippet(created.Body.String()))
 	}
 	if n, err := users.CountActiveAdmins(context.Background()); err != nil || n != 1 {
 		t.Fatalf("CountActiveAdmins() = %d, %v; want 1, nil", n, err)
