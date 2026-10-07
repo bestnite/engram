@@ -63,6 +63,7 @@ import {
   type EmailChangeResponse,
   type ResendVerificationResponse,
   type ShareResponse,
+  type OIDCInfo,
 } from './types';
 
 /**
@@ -939,6 +940,14 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify({ password }),
     });
+  }
+
+  /**
+   * 探测 OIDC 登录入口是否可用（GET /api/v1/auth/oidc）。
+   * 只读、登录前可调用；响应只含 enabled 与稳定的发起地址，绝不含 issuer / secret。
+   */
+  async getOIDC(): Promise<OIDCInfo> {
+    return this.request<OIDCInfo>('/api/v1/auth/oidc');
   }
 }
 

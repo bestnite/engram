@@ -622,4 +622,6 @@ export const zhCN: LocaleCatalog = {
   'share.password.submitting': '校验中…',
   'share.error_password': '口令不正确。',
   'share.error_not_found': '分享链接无效、已撤销或已过期。',
+  // ---- OIDC 登录入口（由 SPA 登录视图探测后渲染），DESIGN.md 4.4、8.1 ----
+  'account.oidc.button': '使用 OIDC 登录',
 };

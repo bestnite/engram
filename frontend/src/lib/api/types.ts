@@ -855,3 +855,11 @@ export interface ShareResponse {
   notes: ShareNote[];
 }
 
+// ---- OIDC 登录入口探测（DESIGN.md §4.4、§8.1；Go: internal/web/spa_oidc.go）----
+
+/** GET /api/v1/auth/oidc：入口是否可用与发起地址；不含任何凭据。 */
+export interface OIDCInfo {
+  enabled: boolean;
+  start_url: string;
+}
+

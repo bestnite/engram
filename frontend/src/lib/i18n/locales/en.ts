@@ -623,4 +623,6 @@ export const en: LocaleCatalog = {
   'share.password.submitting': 'Checking…',
   'share.error_password': 'The password is incorrect.',
   'share.error_not_found': 'This share link is invalid, revoked or expired.',
+  // ---- OIDC sign-in entry (probed by the SPA login view), DESIGN.md 4.4, 8.1 ----
+  'account.oidc.button': 'Sign in with OIDC',
 };
