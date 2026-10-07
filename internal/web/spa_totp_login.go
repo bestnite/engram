@@ -13,16 +13,14 @@ import (
 
 // 本文件是 SPA 登录第二步（TOTP）的同源 JSON 端点（DESIGN.md §4.3、§8.1）。
 //
-// SSR 的第二因素没有可深链的 GET 页面：第一步成功后由 beginTOTPChallengeIfEnabled 在同一个
-// POST /login 响应里直接渲染挑战页。SPA 需要的是「先问状态、再提交」的无状态协议，因此这里
+// 第二步没有可深链的 GET 页面：SPA 需要的是「先问状态、再提交」的无状态协议，因此这里
 // 提供两条端点：
 //
 //   - GET  /api/v1/auth/totp 报告当前请求是否持有有效的第二步凭据（pendingTOTPUser）；
 //   - POST /api/v1/auth/totp 提交验证码或一次性恢复码，通过后签发会话并返回当前用户。
 //
-// 两条端点复用 SSR 的同一份服务逻辑（setTOTPPendingCookie / pendingTOTPUser /
-// VerifySecondFactor）与同一个登录限速器，因此限速、恒定耗时、审计、恢复码消费与
-// 新设备提醒的语义不可能与 SSR 漂移。
+// 两条端点共用 setTOTPPendingCookie / pendingTOTPUser / VerifySecondFactor 与同一个登录限速器，
+// 因此限速、恒定耗时、审计、恢复码消费与新设备提醒的语义只有一份实现。
 //
 // 状态泄露边界：pending 凭据只在第一因素（密码）通过后才下发，且它是 HttpOnly 的 HMAC 签名值，
 // 因此 GET 的 pending=true 只可能来自刚通过密码的调用方；未通过第一因素的人无法据此探测
@@ -153,10 +151,9 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	})
 }
 
-// spaTOTPLoginShell 是 SPA 登录第二步的入口（GET /spa/login/totp）。
+// spaTOTPLoginShell 是 SPA 登录第二步的入口（GET /spa/login/totp，规范路径 /login/totp 由
+// NoRoute 回退到应用壳）。
 //
-// SSR 只注册了 POST /login/totp（挑战页由第一步响应直接渲染），没有 GET 页面可遮蔽；
-// 这里仍按迁移期约定走 /spa 前缀，避免在浏览器端到端验收前占用任何 SSR 已注册的路径。
 // 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳：提交走
 // POST /api/v1/auth/totp（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
 func (s *Server) spaTOTPLoginShell(c *gin.Context) {

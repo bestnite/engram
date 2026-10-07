@@ -18,12 +18,9 @@ import (
 // 本文件是账号安全与邮件流程（M1-19）的 SPA 同源 JSON 传输层（DESIGN.md §4.3、§4.7、§8.1）。
 //
 // 它只新增「传输」：令牌签发/消费、一次性语义、匿名限流、改密码后的密钥作废与审计行全部复用既有
-// 服务逻辑；SSR 的 GET/POST 表单端点一行不改。可导航的读取页（/forgot-password、/reset-password、
-// /settings/email）在 SPA 已嵌入时返回应用壳，缺失（降级构建）时回退各自原有的 SSR 页面。
-//
-// 邮件里的一键 GET 链接（/verify-email、/confirm-email-change）刻意**不切壳**：它们在 GET 时即消费
-// 令牌并渲染结果，是无需 JavaScript 也能完成的权威路径。SPA 客户端改走独立的 /spa/* 应用壳 + JSON
-// 端点（与 /spa/login、/spa/register 同一约定），令牌语义（一次性、过期）与既有结果渲染保持不变。
+// 服务逻辑。可导航的读取页（/forgot-password、/reset-password、/settings/email）与邮件里的一键
+// GET 链接（/verify-email、/confirm-email-change）都只返回应用壳，页面与令牌消费全部走这里的
+// JSON 端点；这些页面因此没有 SSR 回退。
 
 // registerSPAAccountRoutes 挂载账号安全与邮件流程的 SPA JSON 端点与应用壳入口。
 // 令牌服务未装配时跳过，与 registerSecurityMailRoutes 的前置条件一致。
@@ -46,56 +43,44 @@ func (s *Server) registerSPAAccountRoutes(router *gin.Engine) {
 	}
 }
 
-// ── GET 切壳入口（SPA 已加载时返回应用壳，缺失时回退 SSR）────────────────────────
+// ── 应用壳入口（页面只返回应用壳，读写走 JSON 端点）──────────────────────────
 
-// forgotPasswordRoute 提供 GET /forgot-password：SPA 已加载时下发会话前双提交 cookie 并返回应用壳，
+// forgotPasswordRoute 提供 GET /forgot-password：下发会话前双提交 cookie 并返回应用壳，
 // 由客户端路由渲染「请求重置」页；请求重置协议走 POST /api/v1/auth/forgot-password（同一份服务逻辑）。
-// SPA 缺失（降级构建）时回退 SSR 的 forgotPasswordPage，SMTP 未配置的说明与表单保持不变。
+// SMTP 未配置的说明由响应的 mail_ready 字段驱动，不再由服务端渲染。
 func (s *Server) forgotPasswordRoute(c *gin.Context) {
-	if s.spa != nil {
-		auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-		s.spa.ServeIndex(c)
-		return
-	}
-	s.forgotPasswordPage(c)
+	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
+	s.spa.ServeIndex(c)
 }
 
-// resetPasswordRoute 提供 GET /reset-password：SPA 已加载时下发会话前双提交 cookie 并返回应用壳，
+// resetPasswordRoute 提供 GET /reset-password：下发会话前双提交 cookie 并返回应用壳，
 // 由客户端路由从 URL 读取 token 渲染「设置新密码」页；提交走 POST /api/v1/auth/reset-password。
-// token 缺失或无效的判定仍由 JSON 端点给出，SSR 页面在缺壳时保留原有的一气呵成结果渲染。
+// token 缺失或无效的判定由 JSON 端点给出。
 func (s *Server) resetPasswordRoute(c *gin.Context) {
-	if s.spa != nil {
-		auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-		s.spa.ServeIndex(c)
-		return
-	}
-	s.resetPasswordPage(c)
+	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
+	s.spa.ServeIndex(c)
 }
 
-// emailChangeRoute 提供 GET /settings/email：SPA 已加载时返回应用壳，由客户端路由渲染改邮箱页；
+// emailChangeRoute 提供 GET /settings/email：返回应用壳，由客户端路由渲染改邮箱页；
 // 读取与提交走 /api/v1/settings/email（同一份服务逻辑）。授权判定与迁移前逐项一致——这是登录用户
-// 自己的页面，未登录一律重定向登录页，切壳前先过 requireUser，绝不因切壳放开。SPA 缺失时回退 SSR 页。
+// 自己的页面，未登录一律重定向登录页，切壳前先过 requireUser，绝不因切壳放开。
 func (s *Server) emailChangeRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
 	}
-	if s.spa != nil {
-		s.spa.ServeIndex(c)
-		return
-	}
-	s.emailChangePage(c)
+	s.spa.ServeIndex(c)
 }
 
-// spaVerifyEmailShell 是 SPA 邮箱验证入口（GET /spa/verify-email），与免登录的 SSR /verify-email 并存。
-// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；验证协议走 POST /api/v1/auth/verify-email。
-// 这里只返回壳，不消费任何令牌、不改任何库行。
+// spaVerifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
+// 由 SPA 读取 ?token= 并通过 POST /api/v1/auth/verify-email 消费（一次性、有过期）。
+// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
 func (s *Server) spaVerifyEmailShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
 }
 
-// spaConfirmEmailChangeShell 是 SPA 改邮箱确认入口（GET /spa/confirm-email-change）。
-// 与 /spa/verify-email 同构：下发双提交 cookie 并返回应用壳，确认协议走
+// spaConfirmEmailChangeShell 是改邮箱确认的规范入口（GET /confirm-email-change）。
+// 与 /verify-email 同构：下发双提交 cookie 并返回应用壳，确认协议走
 // POST /api/v1/auth/confirm-email-change。这里只返回壳，不消费令牌。
 func (s *Server) spaConfirmEmailChangeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())

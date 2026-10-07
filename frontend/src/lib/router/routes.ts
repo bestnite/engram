@@ -334,4 +334,19 @@ export const routes: RouteDefinition[] = [
     name: 'share-browse',
     component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
+  {
+    // 邮箱验证结果的规范路径（DESIGN.md §8.1）。服务端 GET /verify-email 返回应用壳，
+    // 邮件里的一键链接就指向这里；令牌由视图读取 ?token= 后经 POST /api/v1/auth/verify-email 消费。
+    // /spa/verify-email 保留为迁移期别名。
+    path: '/verify-email',
+    name: 'verify-email',
+    component: VerifyEmailView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 改邮箱确认结果的规范路径。服务端 GET /confirm-email-change 返回应用壳，
+    // 令牌经 POST /api/v1/auth/confirm-email-change 消费。/spa/confirm-email-change 保留为别名。
+    path: '/confirm-email-change',
+    name: 'confirm-email-change',
+    component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
+  },
 ];

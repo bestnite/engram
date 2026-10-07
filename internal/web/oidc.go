@@ -19,6 +19,17 @@ import (
 //   GET /auth/oidc/callback  校验 state（一次性）、换 token、校验 nonce 与签名、绑定并开会话
 //
 // OIDC 默认关闭：配置不完整时这两个路由返回 404，登录页也不显示入口（不允许半开）。
+//
+// 失败一律 303 回 SPA 登录页（GET /login）。SPA 取代 SSR 登录页后这里不再渲染任何 HTML；
+// 失败原因记英文日志。客户端要文案时需要一条稳定的错误交接约定（当前没有消费方）。
+
+// oidcFailToLogin 把一次 OIDC 登录失败送回 SPA 登录页；reason 只用于日志（英文）。
+// 用 303 而不是直接渲染页面：回调是浏览器导航，重定向让地址栏回到 /login，
+// 由客户端路由决定展示什么。会话 cookie 只在成功分支签发，失败分支绝不签发。
+func (s *Server) oidcFailToLogin(c *gin.Context, reason string) {
+	s.logger.Info("oidc: login failed", "reason", reason)
+	c.Redirect(http.StatusSeeOther, "/login")
+}
 
 // oidcLoadConfig 读取生效的 OIDC 配置；数据库未装配时视为未配置。
 func (s *Server) oidcLoadConfig(c *gin.Context) (*auth.OIDCConfig, error) {
@@ -46,10 +57,6 @@ func (s *Server) oidcRedirectURI(c *gin.Context) string {
 
 // oidcStart 发起一次 OIDC 登录：发现文档 → state/nonce/PKCE → 跳授权端点。
 func (s *Server) oidcStart(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
@@ -66,7 +73,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 	party, err := s.oidc.Client(ctx, cfg, redirectURI)
 	if err != nil {
 		s.logger.Error("oidc: discovery failed", "issuer", cfg.Issuer, "error", err)
-		s.renderLogin(c, loc, http.StatusBadGateway, loc.T("auth.error.oidc_unavailable"))
+		s.oidcFailToLogin(c, "discovery_unavailable")
 		return
 	}
 	state, err := auth.NewState()
@@ -96,7 +103,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 		// 待完成登录表已满：拒绝新发起，避免匿名请求把内存表堆大（F17；DESIGN.md §4.4）。
 		// 只记英文日志与通用提示，不回显 state / nonce。
 		s.logger.Warn("oidc: pending state table is full, rejecting a new login start")
-		s.renderLogin(c, loc, http.StatusTooManyRequests, loc.T("error.rate_limited"))
+		s.oidcFailToLogin(c, "pending_table_full")
 		return
 	}
 	authURL := auth.BuildAuthURL(party, state, nonce, pkce.Challenge)
@@ -105,10 +112,6 @@ func (s *Server) oidcStart(c *gin.Context) {
 
 // oidcCallback 处理授权回调：校验 state → 换 token → 校验 ID Token → 绑定 → 开会话。
 func (s *Server) oidcCallback(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
@@ -126,16 +129,16 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
-	// provider 侧主动返回错误（用户取消、scope 不足等）：原样带进日志，页面给本地化提示。
+	// provider 侧主动返回错误（用户取消、scope 不足等）：原样带进日志，回登录页。
 	if perr := strings.TrimSpace(c.Query("error")); perr != "" {
 		s.logger.Info("oidc: provider returned an error", "error", perr, "description", c.Query("error_description"))
-		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T("auth.error.oidc_failed"))
+		s.oidcFailToLogin(c, "provider_error")
 		return
 	}
 
 	state := strings.TrimSpace(c.Query("state"))
 	if state == "" {
-		s.renderLogin(c, loc, http.StatusBadRequest, loc.T("auth.error.oidc_state"))
+		s.oidcFailToLogin(c, "missing_state")
 		return
 	}
 	// state 一次性：未知（伪造或重放）或已过期都在这里被拒（M1-11 负例）。
@@ -143,13 +146,13 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	if !ok {
 		s.logger.Info("oidc: callback with an unknown or expired state")
 		s.oidcRecordFailure(ctx, "state")
-		s.renderLogin(c, loc, http.StatusBadRequest, loc.T("auth.error.oidc_state"))
+		s.oidcFailToLogin(c, "state_rejected")
 		return
 	}
 
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
-		s.renderLogin(c, loc, http.StatusBadRequest, loc.T("auth.error.oidc_failed"))
+		s.oidcFailToLogin(c, "missing_code")
 		return
 	}
 
@@ -157,13 +160,13 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	party, err := s.oidc.Client(ctx, cfg, pending.RedirectURI)
 	if err != nil {
 		s.logger.Error("oidc: discovery failed during callback", "issuer", cfg.Issuer, "error", err)
-		s.renderLogin(c, loc, http.StatusBadGateway, loc.T("auth.error.oidc_unavailable"))
+		s.oidcFailToLogin(c, "discovery_unavailable")
 		return
 	}
 	claims, err := s.oidc.ExchangeCode(ctx, party, code, pending.Verifier, pending.Nonce)
 	if err != nil {
 		s.logger.Error("oidc: token exchange or id_token verification failed", "error", err)
-		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T("auth.error.oidc_failed"))
+		s.oidcFailToLogin(c, "token_exchange_failed")
 		return
 	}
 	profile := cfg.ProfileFromClaims(party.Issuer(), claims.Claims)
@@ -175,13 +178,13 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	u, decision, err := s.identityLink.Resolve(ctx, profile, policy)
 	if err != nil {
 		if err == auth.ErrIdentityLinkDenied {
-			// closed 策略下没有既有绑定也无法自动匹配：提示联系管理员（DESIGN.md §4.5.3）。
+			// closed 策略下没有既有绑定也无法自动匹配：回登录页（DESIGN.md §4.5.3）。
 			s.logger.Info("oidc: login denied by registration policy", "provider", profile.Provider)
-			s.renderLogin(c, loc, http.StatusForbidden, loc.T("auth.error.oidc_link_denied"))
+			s.oidcFailToLogin(c, "link_denied")
 			return
 		}
 		s.logger.Error("oidc: identity link failed", "error", err)
-		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T("auth.error.oidc_failed"))
+		s.oidcFailToLogin(c, "identity_link_failed")
 		return
 	}
 	if _, err := s.sessions.StartSession(ctx, c, u.ID); err != nil {

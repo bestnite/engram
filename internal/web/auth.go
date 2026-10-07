@@ -5,9 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +14,6 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // registerAuthRoutes 挂载认证路由（M1-4、M1-5）。
@@ -27,23 +24,14 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	if s.accounts == nil || s.sessions == nil || s.users == nil {
 		return
 	}
-	// 登录/注册/引导是登录前流程：此时还没有服务端会话，会话绑定的 CSRF token 无从产生。
-	// 这三条 POST 改用双提交 cookie（B-13）：GET 下发随机 token 的 cookie 并镜像进表单，
-	// 提交时中间件比对两者，缺镜像 cookie 一律 403。已有会话的写请求仍走会话绑定的 CSRF。
-	//
-	// 三条 GET 已切到 SPA（DESIGN.md §8.1 的规范路径）：SPA 已加载时返回应用壳，由客户端路由
-	// 渲染页面，协议是 /api/v1/auth/{session,login,register,setup}；SSR 未装配（降级构建）时
-	// 回退各自的 SSR 页面。POST 仍是 SSR 表单处理器——无脚本客户端照旧可以登录/注册/引导。
+	// 登录/注册/引导三条页面只返回 SPA 应用壳（DESIGN.md §8.1）：页面判定与写操作全部由
+	// 客户端的同源 JSON 端点承担（/api/v1/auth/{session,login,register,setup}）。
+	// 会话前写请求没有服务端会话可绑 token，仍由 DoubleSubmitMiddleware 校验双提交 cookie
+	// 与镜像 token（B-13）。
 	router.GET("/login", s.spaLoginShell)
-	router.POST("/login", auth.DoubleSubmitMiddleware(), s.loginSubmit)
 	router.GET("/register", s.spaRegisterShell)
-	router.POST("/register", auth.DoubleSubmitMiddleware(), s.registerSubmit)
 	router.GET("/setup", s.spaSetupShell)
-	router.POST("/setup", auth.DoubleSubmitMiddleware(), s.setupSubmit)
-	// 登出是登录后流程：会话已存在，必须携带会话绑定的 CSRF token（DESIGN.md §4.3）。
-	router.POST("/logout", s.sessions.CSRFMiddleware(), s.logout)
 	// OIDC 可选登录（M1-11）：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
-	// 与 /login 同属登录前流程，没有会话可绑 CSRF token，故不挂 CSRFMiddleware。
 	router.GET("/auth/oidc/start", s.oidcStart)
 	router.GET("/auth/oidc/callback", s.oidcCallback)
 	// SPA 的 OIDC 入口探测（spa_oidc.go）：只读，供登录视图决定是否显示第二个登录按钮。
@@ -55,22 +43,19 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.GET("/api/v1/auth/session", s.apiSession)
 	router.GET("/api/v1/session", s.apiSession)
 	router.POST("/api/v1/auth/login", auth.DoubleSubmitMiddleware(), s.apiLogin)
-	// 注册与引导是登录前流程：同样没有服务端会话，POST 走双提交 cookie（与 SSR 的
-	// /register、/setup 同一中间件）。判定与建号复用 SSR 的同一份服务逻辑。
+	// 注册与引导是登录前流程：同样没有服务端会话，POST 走双提交 cookie。
 	router.POST("/api/v1/auth/register", auth.DoubleSubmitMiddleware(), s.apiRegister)
 	router.POST("/api/v1/auth/setup", auth.DoubleSubmitMiddleware(), s.apiSetup)
 	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
 
-	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与上面的规范路径
+	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与规范路径
 	// 共用同一处理器（同一份双提交 cookie 与可达性判定），保留是为了既有深链不失效。
-	if s.spa != nil {
-		router.GET("/spa/login", s.spaLoginShell)
-		router.GET("/spa/register", s.spaRegisterShell)
-		router.GET("/spa/setup", s.spaSetupShell)
-		// 登录第二步（TOTP）的 SPA 入口。SSR 只注册 POST /login/totp，没有可遮蔽的 GET 页面；
-		// 仍按迁移期约定走 /spa 前缀。协议是 GET/POST /api/v1/auth/totp。
-		router.GET("/spa/login/totp", s.spaTOTPLoginShell)
-	}
+	router.GET("/spa/login", s.spaLoginShell)
+	router.GET("/spa/register", s.spaRegisterShell)
+	router.GET("/spa/setup", s.spaSetupShell)
+	// 登录第二步（TOTP）的 SPA 入口。规范路径 /login/totp 由 NoRoute 回退到应用壳；
+	// 协议是 GET/POST /api/v1/auth/totp。
+	router.GET("/spa/login/totp", s.spaTOTPLoginShell)
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。
@@ -84,64 +69,6 @@ func (s *Server) localizer(c *gin.Context) (*i18n.Localizer, bool) {
 	return loc, true
 }
 
-// authLayout 构造认证页外壳数据；标题文案由调用方给定语言包 key。
-// 页头的语言切换下拉与页脚仓库链接由 decorateLayout 统一补齐。
-func (s *Server) authLayout(c *gin.Context, loc *i18n.Localizer, titleKey string) views.LayoutData {
-	layout := views.LayoutData{
-		Lang:       loc.Locale(),
-		Title:      loc.T(titleKey),
-		Brand:      loc.T("app.name"),
-		HomeURL:    "/",
-		CSSURL:     s.assets.URL("css/tailwind.css"),
-		HTMXURL:    s.assets.URL("js/htmx.min.js"),
-		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-	}
-	s.decorateLayout(c, loc, &layout)
-	return layout
-}
-
-// renderAuth 写出认证页；status 用于把校验失败渲染成 4xx 而不是一律 200。
-func (s *Server) renderAuth(c *gin.Context, status int, data views.AuthFormData) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Status(status)
-	if err := views.AuthPage(data).Render(c.Request.Context(), c.Writer); err != nil {
-		s.logger.Error("render template failed", "error", err, "path", c.Request.URL.Path)
-	}
-}
-
-// loginPage 渲染登录表单。
-func (s *Server) loginPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	s.renderLogin(c, loc, http.StatusOK, "")
-}
-
-// renderLogin 渲染登录表单并带上一条已本地化的错误提示（可为空）。
-func (s *Server) renderLogin(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
-	data := views.AuthFormData{
-		Layout:               s.authLayout(c, loc, "auth.login.title"),
-		Heading:              loc.T("auth.login.heading"),
-		Action:               "/login",
-		SubmitLabel:          loc.T("auth.login.submit"),
-		ErrorMessage:         errMsg,
-		CSRF:                 auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
-		UsernameLabel:        loc.T("auth.field.username"),
-		PasswordLabel:        loc.T("auth.field.password"),
-		PasswordAutocomplete: "current-password",
-		AltLabel:             loc.T("auth.login.to_register"),
-		AltHref:              "/register",
-	}
-	// OIDC 默认关闭：只有配置完整可用时登录页才出现第二个登录入口（DESIGN.md §4.4）。
-	if cfg, err := s.oidcLoadConfig(c); err == nil && cfg.Usable() {
-		data.OIDCEnabled = true
-		data.OIDCLabel = loc.T("auth.oidc.button")
-		data.OIDCHref = "/auth/oidc/start"
-	}
-	s.renderAuth(c, status, data)
-}
-
 // audit 是写审计的统一出口（M1-10）：所有变更都经这里落 audit_log。
 // 审计写失败只记英文日志、不回滚已发生的业务变更 —— 但绝不静默，否则审计会悄悄缺行。
 func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
@@ -151,65 +78,6 @@ func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
 	if err := s.auditor.Record(ctx, e); err != nil {
 		s.logger.Error("write audit log failed", "action", e.Action, "error", err)
 	}
-}
-
-// loginSubmit 校验凭据、建立服务端会话并重定向到首页；失败时回填错误提示而不是跳转。
-func (s *Server) loginSubmit(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-	username := strings.TrimSpace(c.PostForm("username"))
-	ip := c.ClientIP()
-	// 认证前先按已累计的失败次数递增延迟（M1-9）：防爆破，也拉平暴力尝试的速率。
-	if s.loginLimiter != nil {
-		if _, err := s.loginLimiter.Wait(ctx, username, ip); err != nil {
-			s.logger.Info("login delay aborted", "error", err)
-			c.AbortWithStatus(http.StatusRequestTimeout)
-			return
-		}
-	}
-	u, err := s.accounts.Authenticate(ctx, username, c.PostForm("password"))
-	if err != nil {
-		if s.loginLimiter != nil {
-			s.loginLimiter.RecordFailure(username, ip)
-		}
-		// 只记用户名与错误，绝不记录密码（AGENTS.md §2.1：日志英文）。
-		s.logger.Info("login failed", "username", username, "error", err)
-		s.audit(ctx, store.AuditEntry{
-			Action: store.ActionUserLoginFailed,
-			Detail: map[string]any{"username": username, "ip": ip, "reason": err.Error()},
-		})
-		key := "auth.error.invalid_credentials"
-		if errors.Is(err, auth.ErrUserDisabled) {
-			key = "auth.error.user_disabled"
-		}
-		s.renderLogin(c, loc, http.StatusUnauthorized, loc.T(key))
-		return
-	}
-	// M1-16：启用了 TOTP 的账号，密码只是第一因素；这里不建立会话，改为进入第二步。
-	// 放在限速清零之前：只有第二因素也通过才算本次登录成功。
-	if s.beginTOTPChallengeIfEnabled(c, loc, u) {
-		return
-	}
-	// 成功后清零该账号与 IP 的失败计数（M1-9 验收点）。
-	if s.loginLimiter != nil {
-		s.loginLimiter.Reset(username, ip)
-	}
-	if _, err := s.sessions.StartSession(ctx, c, u.ID); err != nil {
-		s.logger.Error("start session failed", "user_id", u.ID, "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	s.audit(ctx, store.AuditEntry{
-		UserID: store.Ptr(u.ID),
-		Action: store.ActionUserLoginSucceeded,
-		Detail: map[string]any{"ip": ip},
-	})
-	// M1-19：记录登录指纹，新设备/新 IP 时投递提醒；发信失败不影响登录。
-	s.notifyNewDeviceLogin(c, u)
-	c.Redirect(http.StatusSeeOther, "/")
 }
 
 // anonRateLimited 报告一次匿名入口请求是否应被限流拒绝，并在拒绝时补 Retry-After 响应头。
@@ -226,47 +94,8 @@ func (s *Server) anonRateLimited(c *gin.Context, email string) bool {
 	return true
 }
 
-// registerPage 渲染自助注册表单；?invite=<token> 时把邀请 token 带进表单（M1-7）。
-func (s *Server) registerPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	s.renderRegister(c, loc, http.StatusOK, strings.TrimSpace(c.Query("invite")), "")
-}
-
-// renderRegister 渲染注册表单并带上一条已本地化的错误提示（可为空）。
-// inviteToken 非空时表单 action 与隐藏字段都携带它，提交后接受路径据此放行。
-func (s *Server) renderRegister(c *gin.Context, loc *i18n.Localizer, status int, inviteToken, errMsg string) {
-	action := "/register"
-	intro := ""
-	if inviteToken != "" {
-		action = "/register?invite=" + url.QueryEscape(inviteToken)
-		intro = loc.T("auth.register.invite_intro")
-	}
-	s.renderAuth(c, status, views.AuthFormData{
-		Layout:               s.authLayout(c, loc, "auth.register.title"),
-		Heading:              loc.T("auth.register.heading"),
-		Intro:                intro,
-		Action:               action,
-		SubmitLabel:          loc.T("auth.register.submit"),
-		ErrorMessage:         errMsg,
-		CSRF:                 auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
-		UsernameLabel:        loc.T("auth.field.username"),
-		EmailLabel:           loc.T("auth.field.email"),
-		PasswordLabel:        loc.T("auth.field.password"),
-		DisplayNameLabel:     loc.T("auth.field.display_name"),
-		ShowEmail:            true,
-		ShowDisplayName:      true,
-		PasswordAutocomplete: "new-password",
-		AltLabel:             loc.T("auth.register.to_login"),
-		AltHref:              "/login",
-		InviteToken:          inviteToken,
-	})
-}
-
 // registrationOutcome 是注册与引导判定的结果：Code 为空表示成功并携带新用户。
-// Status 是 SSR 表单渲染用的 HTTP 状态；JSON 接口直接采用同一 status。
+// Status 是 HTTP 状态；JSON 传输直接采用同一 status。
 type registrationOutcome struct {
 	Status int
 	Code   string // 稳定英文 code；空串表示成功
@@ -274,7 +103,7 @@ type registrationOutcome struct {
 }
 
 // registrationDenialCode 把策略或邀请的拒绝原因翻译成稳定英文 code（M1-6、M1-7）。
-// code 同时是语言包键 auth.error.<code> 的后缀与 JSON 错误包壳里的 code。
+// code 同时是 JSON 错误包壳里的 code 与稳定英文 message 的来源。
 func registrationDenialCode(err error) string {
 	switch {
 	case errors.Is(err, auth.ErrEmailDomainNotAllowed):
@@ -289,24 +118,15 @@ func registrationDenialCode(err error) string {
 	}
 }
 
-// registrationMessageKey 把注册失败的 code 映射成语言包键。
-// rate_limited 与 auth.error.* 不在同一命名空间，单独映射；其余 code 直接拼 auth.error.。
-func registrationMessageKey(code string) string {
-	if code == "rate_limited" {
-		return "error.rate_limited"
-	}
-	return "auth.error." + code
-}
-
 // attemptRegistration 执行自助注册的全部服务端判定：匿名限流、表单校验、首个管理员引导、
-// 邀请接受（事务化）与注册策略/邮箱白名单。SSR 表单（registerSubmit）与 SPA JSON 接口
-// （apiRegister）共用它，因此两条传输的策略、限流、审计与事务语义不可能漂移。
+// 邀请接受（事务化）与注册策略/邮箱白名单。SPA JSON 接口（apiRegister）是唯一的传输，
+// 因此策略、限流、审计与事务语义只有一份实现。
 //
-// 它不写响应、不发邮件：调用方据 outcome 渲染或映射。放行分支与拒绝顺序见 DESIGN.md §4.1、§4.2、§4.3。
+// 它不写响应、不发邮件：调用方据 outcome 映射。放行分支与拒绝顺序见 DESIGN.md §4.1、§4.2、§4.3。
 func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, email, displayName, password, inviteToken, locale string) registrationOutcome {
-	// 匿名入口限流（DESIGN.md §4.3）：与 /forgot-password 共用同一套 IP + 目标邮箱双维度固定
-	// 窗口计数（各 5 次 / 15 分钟），任一超限即拒。放在表单校验与任何 DB 动作之前：被拒的请求
-	// 不建号、不写审计、不发验证邮件。
+	// 匿名入口限流（DESIGN.md §4.3）：与 /api/v1/auth/forgot-password 共用同一套 IP + 目标邮箱
+	// 双维度固定窗口计数（各 5 次 / 15 分钟），任一超限即拒。放在表单校验与任何 DB 动作之前：
+	// 被拒的请求不建号、不写审计、不发验证邮件。
 	if s.anonLimiter != nil && !s.anonLimiter.Allow(clientIP, email) {
 		return registrationOutcome{Status: http.StatusTooManyRequests, Code: "rate_limited"}
 	}
@@ -395,9 +215,8 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 	return registrationOutcome{Status: http.StatusOK, User: u}
 }
 
-// attemptSetup 执行首个管理员引导的建号与审计（M1-5）。SSR 表单（setupSubmit）与
-// SPA JSON 接口（apiSetup）共用它，一次性管理员门（CountActiveAdmins==0）由调用方在
-// 入口处校验，与 SSR 的 setupAvailable 规则一致。引导不发送邮箱验证邮件。
+// attemptSetup 执行首个管理员引导的建号与审计（M1-5）。SPA JSON 接口（apiSetup）是唯一的传输，
+// 一次性管理员门（CountActiveAdmins==0）由调用方在入口处校验。引导不发送邮箱验证邮件。
 func (s *Server) attemptSetup(ctx context.Context, username, email, displayName, password, locale string) registrationOutcome {
 	if code := registerInputErrorCode(username, email, password); code != "" {
 		return registrationOutcome{Status: http.StatusBadRequest, Code: code}
@@ -424,63 +243,7 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 	return registrationOutcome{Status: http.StatusOK, User: u}
 }
 
-// registerSubmit 按注册策略创建本地账号（M1-6、M1-7）。
-//
-// 放行与拒绝的判定全部委托给 attemptRegistration（与 SPA JSON 接口同一份逻辑），
-// 这里只负责表单取值、把 code 映射成本地化提示并渲染，以及成功后发送邮箱验证邮件。
-func (s *Server) registerSubmit(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-	inviteToken := strings.TrimSpace(c.PostForm("invite"))
-	if inviteToken == "" {
-		inviteToken = strings.TrimSpace(c.Query("invite"))
-	}
-	username := strings.TrimSpace(c.PostForm("username"))
-	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
-	display := strings.TrimSpace(c.PostForm("display_name"))
-	password := c.PostForm("password")
-
-	outcome := s.attemptRegistration(ctx, c.ClientIP(), username, email, display, password, inviteToken, loc.Locale())
-	if outcome.Code != "" {
-		s.renderRegistrationFailure(c, loc, outcome, inviteToken)
-		return
-	}
-	// M1-19：注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（用户可稍后在设置页重发）。
-	s.sendEmailVerification(c, outcome.User)
-	c.Redirect(http.StatusSeeOther, "/login")
-}
-
-// renderRegistrationFailure 把注册失败结果渲染成认证页。
-// rate_limited 补 Retry-After；internal_error 只回 500（与既有 SSR 行为一致，不回显内部原因）；
-// 其余按 outcome.Status 渲染本地化提示。
-func (s *Server) renderRegistrationFailure(c *gin.Context, loc *i18n.Localizer, outcome registrationOutcome, inviteToken string) {
-	if outcome.Code == "rate_limited" {
-		c.Header("Retry-After", strconv.Itoa(int(auth.DefaultAnonRateWindow.Seconds())))
-	}
-	if outcome.Code == "internal_error" {
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	s.renderRegister(c, loc, outcome.Status, inviteToken, loc.T(registrationMessageKey(outcome.Code)))
-}
-
-// setupPage 渲染首个管理员引导页；已存在管理员时返回 404（M1-5 验收点）。
-func (s *Server) setupPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	if !s.setupAvailable(c) {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-	s.renderSetup(c, loc, http.StatusOK, "")
-}
-
-// setupAvailable 报告引导页是否可达：仅当没有任何仍在用的管理员时可达。
+// setupAvailable 报告引导页是否可达：仅当没有任何仍在用的管理员时可达（M1-5 的一次性管理员门）。
 func (s *Server) setupAvailable(c *gin.Context) bool {
 	n, err := s.users.CountActiveAdmins(c.Request.Context())
 	if err != nil {
@@ -490,77 +253,11 @@ func (s *Server) setupAvailable(c *gin.Context) bool {
 	return n == 0
 }
 
-// renderSetup 渲染引导页；BOOTSTRAP_ADMIN_EMAIL 作为邮箱兜底预填（DESIGN.md §4.1）。
-func (s *Server) renderSetup(c *gin.Context, loc *i18n.Localizer, status int, errMsg string) {
-	s.renderAuth(c, status, views.AuthFormData{
-		Layout:               s.authLayout(c, loc, "auth.setup.title"),
-		Heading:              loc.T("auth.setup.heading"),
-		Intro:                loc.T("auth.setup.intro"),
-		Action:               "/setup",
-		SubmitLabel:          loc.T("auth.setup.submit"),
-		ErrorMessage:         errMsg,
-		CSRF:                 auth.EnsureDoubleSubmitToken(c, s.secureCookies()),
-		UsernameLabel:        loc.T("auth.field.username"),
-		EmailLabel:           loc.T("auth.field.email"),
-		PasswordLabel:        loc.T("auth.field.password"),
-		DisplayNameLabel:     loc.T("auth.field.display_name"),
-		ShowEmail:            true,
-		ShowDisplayName:      true,
-		EmailValue:           s.bootstrapEmail,
-		PasswordAutocomplete: "new-password",
-	})
-}
-
-// setupSubmit 创建首个管理员；引导页不可达时同样返回 404，避免被当作后门重复调用。
-// 建号与审计委托给 attemptSetup（与 SPA JSON 接口同一份逻辑）。
-func (s *Server) setupSubmit(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	if !s.setupAvailable(c) {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-	ctx := c.Request.Context()
-	username := strings.TrimSpace(c.PostForm("username"))
-	email := strings.ToLower(strings.TrimSpace(c.PostForm("email")))
-	if email == "" && s.bootstrapEmail != "" {
-		// 容器化部署用 BOOTSTRAP_ADMIN_EMAIL 兜底：表单未填邮箱时采用环境变量值。
-		email = strings.ToLower(strings.TrimSpace(s.bootstrapEmail))
-	}
-	display := strings.TrimSpace(c.PostForm("display_name"))
-	password := c.PostForm("password")
-
-	outcome := s.attemptSetup(ctx, username, email, display, password, loc.Locale())
-	if outcome.Code != "" {
-		s.renderSetup(c, loc, outcome.Status, loc.T("auth.error."+outcome.Code))
-		return
-	}
-	c.Redirect(http.StatusSeeOther, "/login")
-}
-
-// logout 作废当前会话并清除 cookie，然后回到登录页。
-func (s *Server) logout(c *gin.Context) {
-	ctx := c.Request.Context()
-	var userID *uint64
-	if u, ok := auth.CurrentUser(c); ok {
-		userID = store.Ptr(u.ID)
-	}
-	if err := s.sessions.Logout(ctx, c); err != nil {
-		s.logger.Error("logout failed", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	s.audit(ctx, store.AuditEntry{UserID: userID, Action: store.ActionUserLogout})
-	c.Redirect(http.StatusSeeOther, "/login")
-}
-
 // registerInputErrorCode 校验注册与引导表单输入并返回稳定英文 code；通过时返回空串。
 //
-// SSR 表单（registerSubmit/setupSubmit）与 SPA JSON 接口（apiRegister/apiSetup）共用它，
-// 避免两套传输各写一份校验而漂移（AGENTS.md §2.4「一个业务层，两种传输」）。
-// code 的取值就是语言包键 auth.error.<code> 的后缀，也是 JSON 错误包壳里的稳定 code。
+// SPA JSON 接口（apiRegister/apiSetup）与管理员建号表单共用它，避免两套传输各写一份校验而
+// 漂移（AGENTS.md §2.4「一个业务层，两种传输」）。
+// code 的取值就是 JSON 错误包壳里的稳定 code，也是英文兜底 message 的来源。
 // 密码强度复用 internal/auth 的策略，不在这里定义第二套规则（DESIGN.md §4.3）。
 func registerInputErrorCode(username, email, password string) string {
 	if username == "" {

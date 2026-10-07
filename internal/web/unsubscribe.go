@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -130,6 +131,23 @@ func (s *Server) unsubscribePage(c *gin.Context) {
 	s.renderSecurityForm(c, loc, http.StatusOK, data)
 }
 
+// authLayout 构造一键退订页面的外壳数据；标题文案由调用方给定语言包 key。
+// 页头的语言切换下拉与页脚仓库链接由 decorateLayout 统一补齐。
+// 这是移除 SSR 页面层后仅存的一处「认证页外壳」构造，只服务 unsubscribe.go 的退订确认页。
+func (s *Server) authLayout(c *gin.Context, loc *i18n.Localizer, titleKey string) views.LayoutData {
+	layout := views.LayoutData{
+		Lang:       loc.Locale(),
+		Title:      loc.T(titleKey),
+		Brand:      loc.T("app.name"),
+		HomeURL:    "/",
+		CSSURL:     s.assets.URL("css/tailwind.css"),
+		HTMXURL:    s.assets.URL("js/htmx.min.js"),
+		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
+	}
+	s.decorateLayout(c, loc, &layout)
+	return layout
+}
+
 // renderUnsubscribeResult 渲染退订流程的结果页（无表单）：notice 为成功提示，errMsg 为失败提示。
 func (s *Server) renderUnsubscribeResult(c *gin.Context, loc *i18n.Localizer, status int, notice, errMsg string) {
 	data := views.SecurityFormData{
@@ -173,4 +191,17 @@ func (s *Server) optionalUnsubscribeHeaders(c *gin.Context, userID uint64, typ m
 	}
 	link := s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 	return mail.UnsubscribeHeaders(typ, link)
+}
+
+// actionTokenErrorKey 把令牌消费错误映射到带前缀的稳定语言包 key。
+// 退订流程传 "mail.unsub.error_" 前缀调用它；这是本包唯一的映射实现。
+func actionTokenErrorKey(prefix string, err error) string {
+	switch {
+	case errors.Is(err, store.ErrActionTokenExpired):
+		return prefix + "expired"
+	case errors.Is(err, store.ErrActionTokenUsed):
+		return prefix + "used"
+	default:
+		return prefix + "invalid"
+	}
 }
