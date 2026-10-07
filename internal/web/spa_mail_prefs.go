@@ -13,15 +13,15 @@ import (
 
 // 本文件是 SPA 的邮件通知偏好接口：M1-18（DESIGN.md §4.7、§8.1）的 JSON 版本。
 //
-// 语义与 SSR 页（internal/web/mail_prefs.go）完全一致，只换传输形态：
+// 语义与目录定义（internal/mail）完全一致，只是传输形态是 JSON：
 //   - 可关闭类型、A 类不可关闭、默认开关全部由 internal/mail 目录推导，这里不复制规则；
 //   - 保存时为每个可关闭类型写出一条显式选择，未提交的按关闭处理（与复选框缺席一致）；
 //   - reminder_hour 为 null 表示站点默认（NULL），0–23 是显式小时；0 是合法午夜，
 //     「未设置」只用 null 表示，绝不用 0 顶替（AGENTS.md §2.3 第 9 条）。
 //
 // 读取不要求 CSRF；写入一律过会话 CSRF。响应只暴露目录里登记的类型，未知类型不会出现，
-// 也不允许前端凭目录外的东西写库。SSR 的 GET/POST /settings/notifications 保持原样，
-// SPA 因此走独立的 /spa/settings/notifications 前端路径，不做遮蔽。
+// 也不允许前端凭目录外的东西写库。GET /settings/notifications 只发应用壳
+// （见 mail_prefs.go），偏好的读写全部走这里。
 
 // spaNotificationType 是一种邮件类型在偏好页上的状态：稳定英文标识 + 由目录推导的结果，不含文案。
 // 前端按 type 查自己的语言包键，因此这里绝不返回本地化文本。

@@ -3,30 +3,21 @@ package web
 import (
 	"context"
 	"math"
-	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
-// 管理面板的审计检索页（DESIGN.md §8.4；ROADMAP.md M6-7）。
-//
-// 安全与规模底线：
-//   - 路由在 adminRoutes() 清单里，非 admin 一律 403（守卫先于 handler）。
-//   - 纯读页，无写操作，因此不需要 CSRF。
-//   - 列表一律分页（每页 adminAuditPageSize），store 层另有硬上限；审计表只增不减，
-//     绝不允许一次拉全表。
+// 管理面板审计检索的查询解析（DESIGN.md §8.4；ROADMAP.md M6-7）。
 //
 // 时间口径：库里 created_at 统一 UTC；页面按当前管理员的时区展示，
 // 日期范围过滤把用户时区的自然日边界换算成 UTC 瞬时值再交给 store。
+// SSR 审计页删除后，检索在 /api/v1/admin/audit 的 JSON 端点上（spa_admin_read.go），
+// 过滤解析与分页大小由这里共享。
 
 // adminAuditPageSize 是审计列表每页行数。
 const adminAuditPageSize = 50
@@ -48,12 +39,11 @@ func parseAuditDay(raw string, loc *time.Location) (time.Time, bool) {
 	return t, true
 }
 
-// auditFilterFromQuery 把审计检索的查询参数解析成 store.AuditFilter。
-// 与 adminAuditPage / SPA JSON 端点共用同一份解析逻辑（DESIGN.md §8.4）：
+// auditFilterFromQuery 把审计检索的查询参数解析成 store.AuditFilter（JSON 端点与页面共用）。
 //   - user 支持用户名（非纯数字）或 id；查不到的用户命中空集而不是退化成「不过滤」。
-//   - target_id 非数字、日期格式非法时返回 notice 码（稳定英文），由调用方本地化。
+//   - target_id 非数字、日期格式非法时返回 notice 码（稳定英文），由调用方映射文案。
 //
-// 返回的第二个值是原样的 user 查询串（供 SSR 表单回填），第三个值是 notice 码（空串表示无提示）。
+// 返回的第二个值是原样的 user 查询串，第三个值是 notice 码（空串表示无提示）。
 func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, page int) (store.AuditFilter, string, string) {
 	ctx := c.Request.Context()
 	userRaw := strings.TrimSpace(c.Query("user"))
@@ -108,20 +98,6 @@ func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, pa
 	return filter, userRaw, notice
 }
 
-// auditNoticeLabel 把审计 notice 码翻成文案；未知码不显示。
-func (s *Server) auditNoticeLabel(loc *i18n.Localizer, code string) string {
-	switch code {
-	case "user_not_found":
-		return loc.T("admin.audit.notice.user_not_found")
-	case "invalid_target":
-		return loc.T("admin.audit.notice.invalid_target")
-	case "invalid_date":
-		return loc.T("admin.audit.notice.invalid_date")
-	default:
-		return ""
-	}
-}
-
 // isNumeric 判断字符串是否为纯数字（区分「按 id」与「按用户名」两种输入）。
 func isNumeric(raw string) bool {
 	if raw == "" {
@@ -133,18 +109,6 @@ func isNumeric(raw string) bool {
 		}
 	}
 	return true
-}
-
-// auditPageHref 拼审计分页链接，保留当前全部过滤条件。
-func (s *Server) auditPageHref(c *gin.Context, page int) string {
-	q := url.Values{}
-	for _, k := range []string{"user", "action", "target_type", "target_id", "from", "to"} {
-		if v := strings.TrimSpace(c.Query(k)); v != "" {
-			q.Set(k, v)
-		}
-	}
-	q.Set("page", strconv.Itoa(page))
-	return "/admin/audit?" + q.Encode()
 }
 
 // usernamesFor 批量取当前页涉及的用户名；查不到的用户不写入，由调用方回退到 #id。
@@ -166,132 +130,4 @@ func (s *Server) usernamesFor(ctx context.Context, rows []store.AuditLog) map[ui
 		}
 	}
 	return names
-}
-
-// adminAuditPage 渲染审计检索页：按用户 / 动作 / 目标 / 日期范围过滤，分页展示。
-func (s *Server) adminAuditPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-	actor, _ := auth.CurrentUser(c)
-	userLoc := auditLocation(actor)
-
-	page := parsePage(c.Query("page"))
-	auditStore := store.NewAuditStore(s.db)
-	filter, userRaw, noticeCode := s.auditFilterFromQuery(c, userLoc, page)
-	targetType := strings.TrimSpace(c.Query("target_type"))
-	targetIDRaw := strings.TrimSpace(c.Query("target_id"))
-	fromRaw := strings.TrimSpace(c.Query("from"))
-	toRaw := strings.TrimSpace(c.Query("to"))
-
-	list, total, err := auditStore.Search(ctx, filter)
-	if err != nil {
-		s.logger.Error("admin: search audit log failed", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	pages := int((total + int64(adminAuditPageSize) - 1) / int64(adminAuditPageSize))
-	if pages < 1 {
-		pages = 1
-	}
-
-	// 用户名解析：只解析当前页出现的用户 id（最多一页），避免整表 join。
-	names := s.usernamesFor(ctx, list)
-	rows := make([]views.AdminAuditRow, 0, len(list))
-	for i := range list {
-		row := list[i]
-		display := views.AdminAuditRow{
-			Time:   row.CreatedAt.In(userLoc).Format("2006-01-02 15:04:05"),
-			Action: row.Action,
-		}
-		if row.UserID != nil {
-			if name, ok := names[*row.UserID]; ok {
-				// 显示名不加 # 前缀，与「系统」区分。
-				display.User = name
-			} else {
-				display.User = "#" + strconv.FormatUint(*row.UserID, 10)
-			}
-		} else {
-			display.User = loc.T("admin.audit.user_system")
-		}
-		if row.TargetType != nil && *row.TargetType != "" {
-			display.Target = *row.TargetType
-			if row.TargetID != nil {
-				display.Target += "#" + strconv.FormatUint(*row.TargetID, 10)
-			}
-		} else {
-			display.Target = loc.T("admin.audit.target_empty")
-		}
-		if row.DetailJSON != nil {
-			display.Detail = *row.DetailJSON
-		} else {
-			display.Detail = loc.T("admin.audit.detail_empty")
-		}
-		rows = append(rows, display)
-	}
-
-	// 动作下拉：库中实际出现过的动作 + 一个「全部」项。
-	action := strings.TrimSpace(c.Query("action"))
-	actionOptions := make([]views.AdminOption, 0, 1)
-	actionOptions = append(actionOptions, views.AdminOption{Label: loc.T("admin.audit.filter.any")})
-	if actions, err := auditStore.DistinctActions(ctx); err == nil {
-		for _, a := range actions {
-			actionOptions = append(actionOptions, views.AdminOption{
-				Value: a, Label: a, Selected: a == action,
-			})
-		}
-	}
-
-	prevHref, nextHref := "", ""
-	if page > 1 {
-		prevHref = s.auditPageHref(c, page-1)
-	}
-	if page < pages {
-		nextHref = s.auditPageHref(c, page+1)
-	}
-
-	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
-		Layout:     s.adminLayout(c, loc, "admin.audit.title", "/admin/audit"),
-		Heading:    loc.T("admin.audit.heading"),
-		Intro:      loc.T("admin.audit.intro"),
-		NavHeading: loc.T("admin.nav.heading"),
-		Nav:        s.adminNav(loc, "/admin/audit"),
-		Notice:     s.auditNoticeLabel(loc, noticeCode),
-
-		AuditPage: true,
-		AuditRows: rows,
-
-		AuditFilterHeading: loc.T("admin.audit.filter.heading"),
-		AuditUserLabel:     loc.T("admin.audit.filter.user"),
-		AuditUserValue:     userRaw,
-		AuditActionLabel:   loc.T("admin.audit.filter.action"),
-		AuditActions:       actionOptions,
-		AuditTargetLabel:   loc.T("admin.audit.filter.target_type"),
-		AuditTargetValue:   targetType,
-		AuditTargetIDLabel: loc.T("admin.audit.filter.target_id"),
-		AuditTargetIDValue: targetIDRaw,
-		AuditFromLabel:     loc.T("admin.audit.filter.from"),
-		AuditFromValue:     fromRaw,
-		AuditToLabel:       loc.T("admin.audit.filter.to"),
-		AuditToValue:       toRaw,
-		AuditFilterSubmit:  loc.T("admin.audit.filter.submit"),
-		AuditFilterClear:   loc.T("admin.audit.filter.clear"),
-		AuditRangeHint:     loc.T("admin.audit.filter.range_hint"),
-		AuditClearHref:     "/admin/audit",
-
-		ColAuditTime:   loc.T("admin.audit.col.time"),
-		ColAuditUser:   loc.T("admin.audit.col.user"),
-		ColAuditAction: loc.T("admin.audit.col.action"),
-		ColAuditTarget: loc.T("admin.audit.col.target"),
-		ColAuditDetail: loc.T("admin.audit.col.detail"),
-
-		AuditTotalLabel: loc.T("admin.audit.total_label"),
-
-		Page: page, Pages: pages, Total: total,
-		PrevHref: prevHref, NextHref: nextHref,
-		PrevLabel: loc.T("admin.jobs.prev"), NextLabel: loc.T("admin.jobs.next"),
-		EmptyLabel: loc.T("admin.audit.empty"),
-	}))
 }

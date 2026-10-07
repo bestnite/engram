@@ -9,13 +9,12 @@ import (
 // 本文件覆盖 GET /settings 与 GET /settings/keys 的 SPA 规范路径切流（DESIGN.md §4.1、§7.2、
 // §8.1、§8.5）。
 //
-// 个人设置页与「我的 API Key」页在 SPA 已加载时返回应用壳，由客户端路由渲染，读写走
+// 个人设置页与「我的 API Key」页一律返回应用壳，由客户端路由渲染，读写走
 // /api/v1/profile、/api/v1/settings/locale、/api/v1/settings/password 与 /api/v1/keys 的 JSON
-// 端点；判权与迁移前的 SSR 页逐项一致（都只要求已登录会话，匿名重定向登录页），SPA 缺失
-// （降级）时回退各自的 SSR 页。SSR handler、模板与全部写路径（POST）保持不变。
+// 端点；判权与迁移前的 SSR 页逐项一致（都只要求已登录会话，匿名重定向登录页）。SSR 页面层
+// 已删除，不再回退。
 //
-// 本文件钉住：登录用户拿到应用壳、匿名被重定向、SPA 缺失时回退 SSR 页，以及设置资料/改密与
-// key 创建/撤销四个写路径既仍可用、又仍受 CSRF 保护。
+// 本文件钉住：登录用户拿到应用壳、匿名被重定向，且外壳里不含 SSR 页面结构。
 
 // settingsSSRMarker 是 SSR 设置页特有的表单标记：SPA 应用壳里不会出现。
 func settingsSSRMarker() string { return `action="/settings/profile"` }

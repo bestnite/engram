@@ -3,9 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -19,7 +16,7 @@ func newAdminServer(t *testing.T) (srv *Server, adminCookies []*http.Cookie, adm
 }
 
 // TestAdminRoutesDenyNonAdmin 是 M6-1 的核心验收：建一个普通用户，逐条访问
-// 已注册的每一个 /admin/* 路由，全部必须 403（写路由在守卫处即被拦下，不看 CSRF）。
+// 已注册的每一个 /admin/* 页面路由，全部必须 403（守卫先于外壳）。
 func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	_, cookies, _ := createUserAndLogin(t, srv, db, "plainuser")
@@ -29,12 +26,7 @@ func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 		t.Fatal("adminRoutes() is empty; the guard test would be vacuous")
 	}
 	for _, r := range routes {
-		var rec *httptest.ResponseRecorder
-		if r.Write {
-			rec = postForm(t, srv, r.Path, url.Values{}, cookies)
-		} else {
-			rec = getWithCookies(t, srv, r.Path, cookies)
-		}
+		rec := getWithCookies(t, srv, r.Path, cookies)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("%s %s as non-admin = %d, want 403 (body %s)", r.Method, r.Path, rec.Code, snippet(rec.Body.String()))
 		}
@@ -52,27 +44,5 @@ func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 	}
 	if n == 0 {
 		t.Error("no permission.denied audit rows written for admin route attempts")
-	}
-}
-
-// TestAdminShellShowsFullNavigation 断言导航立住了所有子页的入口。
-// M6-9 / M8-4 落地后，导航里已没有任何置灰子页：每个入口都必须是可用链接。
-func TestAdminShellShowsFullNavigation(t *testing.T) {
-	srv, cookies, _ := newAdminServer(t)
-	// GET /admin 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 外壳的导航全貌断言。
-	srv.spa = nil
-	rec := getWithCookies(t, srv, "/admin", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /admin as admin = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	body := rec.Body.String()
-	for _, label := range []string{"用户管理", "注册与邀请", "身份与 OIDC", "系统设置", "作业", "审计", "健康", "API Key", "语言包"} {
-		if !strings.Contains(body, label) {
-			t.Errorf("admin shell navigation is missing %q", label)
-		}
-	}
-	// 每个子页都已实现：导航里不应再出现「未实现」标记。
-	if strings.Contains(body, "未实现") {
-		t.Errorf("admin navigation still marks a subpage as pending; body = %s", snippet(body))
 	}
 }
