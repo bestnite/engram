@@ -25,7 +25,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mcp"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/reminder"
-	"git.nite07.com/nite/engram/internal/sessioncleanup"
+	"git.nite07.com/nite/engram/internal/retention"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web"
 )
@@ -130,18 +130,22 @@ func runServe(ctx context.Context) error {
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// 过期会话回收：会话行只在读路径上判过期，从不删行，所以要有一层周期回收（见该包注释）。
+	// 历史行回收：会话、一次性令牌、过期邀请、登录指纹都只在读路径上判过期，从不删行，
+	// 所以要有一层周期回收（保留期见该包注释）。
 	// 刻意放在下面的 mail 分支之外——回收与「SMTP 是否配置」无关，而提醒/周报两个 worker 是
 	// 和邮件投递绑在一起的，若把它一并塞进去，未配置 SMTP 的部署就永远不回收。
-	sessionSweeper, err := sessioncleanup.New(sessioncleanup.Deps{
-		Store:  store.NewSessionStore(db),
-		Logger: logger,
+	retentionWorker, err := retention.New(retention.Deps{
+		Sessions:     store.NewSessionStore(db),
+		ActionTokens: store.NewActionTokenStore(db),
+		Invites:      store.NewInviteStore(db),
+		Fingerprints: store.NewLoginFingerprintStore(db),
+		Logger:       logger,
 	})
 	if err != nil {
 		return err
 	}
-	sessionSweeper.Start(ctx)
-	defer sessionSweeper.Stop()
+	retentionWorker.Start(ctx)
+	defer retentionWorker.Stop()
 	// 邮件 outbox worker（M1-17）：随 serve 启动、随信号优雅停止；未装配时跳过。
 	if mb := srv.Mail(); mb != nil {
 		mb.Start(ctx)

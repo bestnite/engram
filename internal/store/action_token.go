@@ -167,3 +167,15 @@ func (s *ActionTokenStore) Consume(ctx context.Context, purpose, plaintext strin
 	tok.UsedAt = &now
 	return tok, nil
 }
+
+// DeleteExpired 删除过期时间早于 before 的令牌行，返回删除行数。
+//
+// before 由调用方给成「现在 − 保留期」：令牌在过期后仍留一段（便于排查「链接失效」类反馈），
+// 超过保留期才真正删掉。读路径（load）本就不再接受过期行，因此删除只影响占用、不影响判定。
+func (s *ActionTokenStore) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
+	res := s.db.WithContext(ctx).Where("expires_at <= ?", before).Delete(&ActionToken{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete expired action tokens: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}

@@ -71,3 +71,16 @@ func (s *LoginFingerprintStore) Touch(ctx context.Context, userID uint64, finger
 	}
 	return res.RowsAffected == 0, nil
 }
+
+// DeleteStale 删除 last_seen_at 早于 before 的指纹行，返回删除行数。
+//
+// 这一张表的增长源是「每个用户见过的每个 (IP, 设备) 组合一行」，只增不减。按最后出现时间回收
+// 意味着「很久没从这个设备登录过」就不再被当成已知设备——代价是它下次登录会被判为新设备并触发
+// 提醒。保留期因此不能太短（调用方给 90 天）：宁可多留一会儿，也不要对正常用户误报新设备。
+func (s *LoginFingerprintStore) DeleteStale(ctx context.Context, before time.Time) (int64, error) {
+	res := s.db.WithContext(ctx).Where("last_seen_at <= ?", before).Delete(&LoginFingerprint{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete stale login fingerprints: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}

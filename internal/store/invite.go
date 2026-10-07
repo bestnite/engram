@@ -202,3 +202,18 @@ func (s *InviteStore) Revoke(ctx context.Context, id uint64) error {
 	}
 	return nil
 }
+
+// DeleteExpired 删除已过期的邀请行，返回删除行数。
+//
+// **只删 expires_at 非空且已到点的行**：expires_at 可空，NULL 表示「这张邀请不过期」，
+// 不能被当成过期清掉。同理，已使用（used_at 非空）但未到期的邀请也保留——它是「谁用了这张
+// 邀请」的凭据，等它自然到点再回收。
+func (s *InviteStore) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
+	res := s.db.WithContext(ctx).
+		Where("expires_at IS NOT NULL AND expires_at <= ?", before).
+		Delete(&Invite{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete expired invites: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
