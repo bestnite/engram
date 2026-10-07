@@ -1011,4 +1011,15 @@ export const zhCN: LocaleCatalog = {
   // ---- 父级补充的导航项（与 SSR mainNav 文案一致）----
   'nav.presets': '调度预设',
   'nav.admin': '管理',
+  // ---- 一键退订页（/unsubscribe，SPA），DESIGN.md 4.7、8.1 ----
+  'unsubscribe.heading': '退订邮件',
+  'unsubscribe.loading': '正在校验退订链接…',
+  'unsubscribe.intro': '你的账号将不再接收「{type}」邮件。该链接只能使用一次，且无法在此恢复。',
+  'unsubscribe.submit': '确认退订',
+  'unsubscribe.confirming': '正在退订…',
+  'unsubscribe.done': '你将不再收到「{type}」邮件。',
+  'unsubscribe.back': '管理邮件偏好',
+  'unsubscribe.error.expired': '该退订链接已过期。若仍需退订，请等待发件方再次发信。',
+  'unsubscribe.error.used': '该退订链接已被使用过。',
+  'unsubscribe.error.invalid': '该退订链接无效。',
 };

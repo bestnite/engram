@@ -81,3 +81,8 @@ func (s *ActionTokenService) Issue(ctx context.Context, userID uint64, purpose, 
 func (s *ActionTokenService) Consume(ctx context.Context, purpose, plaintext string) (*store.ActionToken, error) {
 	return s.tokens.Consume(ctx, purpose, plaintext, s.now())
 }
+
+// Peek 读取令牌但不消费它，错误哨兵与 Consume 相同。供「先展示再确认」的流程使用。
+func (s *ActionTokenService) Peek(ctx context.Context, purpose, plaintext string) (*store.ActionToken, error) {
+	return s.tokens.Peek(ctx, purpose, plaintext, s.now())
+}

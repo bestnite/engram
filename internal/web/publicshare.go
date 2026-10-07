@@ -1,12 +1,10 @@
 package web
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/a-h/templ"
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
@@ -100,14 +98,4 @@ func (s *Server) shareNoteView(note store.Note) (front, back string, err error) 
 		backParts = append(backParts, backHTML)
 	}
 	return strings.Join(frontParts, "\n"), strings.Join(backParts, "\n"), nil
-}
-
-// renderHTMLStatus 写出整页 HTML 并带指定状态码（口令错误要返回 401 而不是 200）。
-// 渲染失败时响应头可能已发出，只能记一条英文日志（与 renderHTML 的约定一致）。
-func renderHTMLStatus(c *gin.Context, status int, comp templ.Component) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Status(status)
-	if err := comp.Render(c.Request.Context(), c.Writer); err != nil {
-		slog.Error("render template failed", "error", err, "path", c.Request.URL.Path)
-	}
 }

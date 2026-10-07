@@ -7,10 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 本文件是 M1-19 的密码重置流程（服务端部分）：令牌签发与投递、以及三条页面的应用壳入口。
@@ -44,11 +42,8 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	s.registerSPAAccountRoutes(router)
 }
 
-// renderSecurityForm 写出安全/事务页面；文案全部来自语言包。
-// 仅 unsubscribe.go 的一键退订页面使用它（其余安全邮件页面已迁移到 SPA）。
-func (s *Server) renderSecurityForm(c *gin.Context, loc *i18n.Localizer, status int, data views.SecurityFormData) {
-	renderHTMLStatus(c, status, views.SecurityPage(data))
-}
+// renderSecurityForm 与它渲染的 security_mail.templ 已随退订页切到 SPA 删除：
+// 安全/事务流程不再有服务端渲染，只剩 JSON 端点与 SPA 应用壳。
 
 // issuePasswordReset 签发密码重置令牌并投递邮件；任何失败只记英文日志（绝不回传）。
 // 日志绝不包含令牌明文。

@@ -1266,3 +1266,16 @@ export interface OIDCInfo {
   start_url: string;
 }
 
+/**
+ * GET /api/v1/unsubscribe?token=… 的响应（DESIGN.md §4.7、§8.1）。
+ * type 是令牌指名的可选邮件类型；服务端只读取、不消费令牌。
+ */
+export interface UnsubscribeReadResponse {
+  type: string;
+}
+
+/** POST /api/v1/unsubscribe 的响应：确认退订后回带被关掉的类型。 */
+export interface UnsubscribeConfirmResponse {
+  type: string;
+}
+

@@ -111,10 +111,10 @@ func (s *ActionTokenStore) Create(ctx context.Context, tok *ActionToken) error {
 	return nil
 }
 
-// Consume 校验并消费一枚令牌：找到行后按 used_at / expires_at 判定，
-// 再用条件更新 `WHERE id = ? AND used_at IS NULL` 原子地标记已用，
-// 从而在并发下也保证「一码一用」。成功时返回被消费的行。
-func (s *ActionTokenStore) Consume(ctx context.Context, purpose, plaintext string, now time.Time) (*ActionToken, error) {
+// load 读取一枚令牌并执行 used_at / expires_at 判定，返回通过校验的行。
+// Consume 与 Peek 共用它：校验规则（摘要匹配、一次性、有效期）只有这一处实现，
+// 两个入口不会因各写一份而漂移。错误是稳定哨兵。
+func (s *ActionTokenStore) load(ctx context.Context, purpose, plaintext string, now time.Time) (*ActionToken, error) {
 	purpose = strings.TrimSpace(purpose)
 	plaintext = strings.TrimSpace(plaintext)
 	if purpose == "" || plaintext == "" {
@@ -132,10 +132,28 @@ func (s *ActionTokenStore) Consume(ctx context.Context, purpose, plaintext strin
 	if tok.UsedAt != nil {
 		return nil, ErrActionTokenUsed
 	}
-	now = now.UTC()
-	if !tok.ExpiresAt.After(now) {
+	if !tok.ExpiresAt.After(now.UTC()) {
 		return nil, ErrActionTokenExpired
 	}
+	return &tok, nil
+}
+
+// Peek 读取一枚令牌但不消费它：校验规则与 Consume 完全相同，唯一区别是不写 used_at。
+// 供「先展示再确认」的免登录流程使用（一键退订确认页要先把令牌指名的类型展示给用户，
+// 又不该因为一次 GET / 预取就作废令牌）。
+func (s *ActionTokenStore) Peek(ctx context.Context, purpose, plaintext string, now time.Time) (*ActionToken, error) {
+	return s.load(ctx, purpose, plaintext, now)
+}
+
+// Consume 校验并消费一枚令牌：先用 load 做摘要匹配与 used_at / expires_at 判定，
+// 再用条件更新 `WHERE id = ? AND used_at IS NULL` 原子地标记已用，
+// 从而在并发下也保证「一码一用」。成功时返回被消费的行。
+func (s *ActionTokenStore) Consume(ctx context.Context, purpose, plaintext string, now time.Time) (*ActionToken, error) {
+	tok, err := s.load(ctx, purpose, plaintext, now)
+	if err != nil {
+		return nil, err
+	}
+	now = now.UTC()
 	res := s.db.WithContext(ctx).Model(&ActionToken{}).
 		Where("id = ? AND used_at IS NULL", tok.ID).
 		Update("used_at", now)
@@ -147,5 +165,5 @@ func (s *ActionTokenStore) Consume(ctx context.Context, purpose, plaintext strin
 		return nil, ErrActionTokenUsed
 	}
 	tok.UsedAt = &now
-	return &tok, nil
+	return tok, nil
 }

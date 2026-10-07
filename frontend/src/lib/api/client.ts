@@ -1176,6 +1176,30 @@ export class ApiClient {
   async getOIDC(): Promise<OIDCInfo> {
     return this.request<OIDCInfo>('/api/v1/auth/oidc');
   }
+
+  /**
+   * 读取一枚退订令牌指名的可选邮件类型（GET /api/v1/unsubscribe，免登录、不消费令牌）。
+   * 令牌无效/已用/过期时服务端返回稳定 code（token_invalid / token_used / token_expired）。
+   */
+  async readUnsubscribe(token: string): Promise<import('./types').UnsubscribeReadResponse> {
+    return this.request<import('./types').UnsubscribeReadResponse>(
+      `/api/v1/unsubscribe?token=${encodeURIComponent(token)}`
+    );
+  }
+
+  /**
+   * 确认退订（POST /api/v1/unsubscribe）。会话前写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
+   * 一次性消费令牌，只关掉令牌指名的那个可选类型；响应回带被关掉的类型。
+   */
+  async confirmUnsubscribe(token: string): Promise<import('./types').UnsubscribeConfirmResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<import('./types').UnsubscribeConfirmResponse>('/api/v1/unsubscribe', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
 }
 
 /**

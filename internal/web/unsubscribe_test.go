@@ -20,8 +20,9 @@ import (
 //  3. A 类邮件不带退订头（A 类的正例见 internal/mail/unsubscribe_test.go）。
 //
 // 一键 POST 一律**不带 cookie**（不登录），以证明端点确实在免登录下可用。
-// 退订是本域唯一保留的服务端页面：它的 POST 是没有 JSON 等价物的机器端点（邮件客户端直发），
-// SPA 也没有退订视图，因此 GET 确认页与 POST 端点都留在服务端。
+// 移除 SSR 页面后，退订由三条传输承担：GET /unsubscribe 返回应用壳并下发双提交 cookie，
+// POST /unsubscribe 是 RFC 8058 One-Click 的机器端点（只回状态码，不渲染模板），
+// /api/v1/unsubscribe 是 SPA 的同源 JSON 传输（GET 读不消费、POST 消费）。
 
 // tokenFromUnsubscribeHeader 从 List-Unsubscribe 头（形如 <URL>）里取出令牌。
 func tokenFromUnsubscribeHeader(t *testing.T, header string) string {
@@ -91,14 +92,17 @@ func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 		t.Fatalf("SetChoices: %v", err)
 	}
 
-	// 管理员把邀请寄给这个已注册邮箱。
-	created := postForm(t, ts.srv, "/admin/invites", url.Values{
-		auth.CSRFFieldName: {ts.csrf}, "role": {"user"},
-		"email": {"invitee@example.com"}, "send_email": {"1"},
-	}, ts.cookies)
-	if created.Code != http.StatusSeeOther || noticeFrom(t, created) != noticeInviteMailQueued {
-		t.Fatalf("POST /admin/invites = %d notice %q, want 303 %q",
-			created.Code, noticeFrom(t, created), noticeInviteMailQueued)
+	// 管理员把邀请寄给这个已注册邮箱（SSR 的 /admin/invites 表单端点已删除，走 JSON 端点）。
+	created := postJSON(ts.srv, "/api/v1/admin/invites", map[string]any{
+		"role": "user", "email": "invitee@example.com", "send_email": true,
+	}, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/admin/invites = %d, want 201 (body %s)",
+			created.Code, snippet(created.Body.String()))
+	}
+	// 发信成功时 mail_notice 回带稳定结果码 invite_mail_queued（非空表示已入队）。
+	if !strings.Contains(created.Body.String(), `"mail_notice":"`+noticeInviteMailQueued+`"`) {
+		t.Fatalf("invite create did not queue the mail: %s", snippet(created.Body.String()))
 	}
 
 	// 夹具登录本身会入队一封 new_device_login；只取邀请那一封。
@@ -175,8 +179,8 @@ func TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers(t *testing.T) {
 	if second.Code != http.StatusBadRequest {
 		t.Fatalf("replayed one-click status = %d, want 400 (body %s)", second.Code, snippet(second.Body.String()))
 	}
-	if !strings.Contains(second.Body.String(), "已被使用过") {
-		t.Errorf("replay did not report the link as used: %s", snippet(second.Body.String()))
+	if !strings.Contains(second.Body.String(), "token_used") {
+		t.Errorf("replay did not report the link as used (token_used): %s", snippet(second.Body.String()))
 	}
 
 	choicesA, err := prefs.Choices(ctx, userA.ID)
@@ -238,6 +242,13 @@ func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 		if page.Code != http.StatusOK {
 			t.Fatalf("GET /unsubscribe #%d status = %d, want 200 (body %s)", i+1, page.Code, snippet(page.Body.String()))
 		}
+		// GET 现在返回 SPA 应用壳（不再渲染 SSR 确认页），并下发会话前双提交 cookie。
+		if !strings.Contains(page.Body.String(), `id="app"`) {
+			t.Errorf("GET /unsubscribe #%d did not serve the SPA shell: %s", i+1, snippet(page.Body.String()))
+		}
+		if findCookie(page, auth.CSRFDoubleSubmitCookieName) == nil {
+			t.Errorf("GET /unsubscribe #%d did not initialize the double-submit cookie", i+1)
+		}
 	}
 	// GET 不消费：偏好未变，令牌仍可用。
 	choices, _ := store.NewEmailPrefStore(ts.db).Choices(ctx, user.ID)
@@ -266,7 +277,140 @@ func TestUnsubscribeExpiredTokenRejected(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expired token status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "已过期") {
-		t.Errorf("expired token did not report expiry: %s", snippet(rec.Body.String()))
+	if !strings.Contains(rec.Body.String(), "token_expired") {
+		t.Errorf("expired token did not report expiry (token_expired): %s", snippet(rec.Body.String()))
+	}
+}
+
+// ── SPA 同源 JSON 传输（读与确认）──────────────────────────────────────────────
+
+// TestUnsubscribeJSONReadDoesNotConsume 断言读端点返回令牌指名的可选类型，但不消费令牌（可反复读）。
+func TestUnsubscribeJSONReadDoesNotConsume(t *testing.T) {
+	ts := newSecurityServer(t, false)
+	ctx := context.Background()
+	user, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+		Username: "unsub-reader", Email: "unsub-reader@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		rec := get(t, ts.srv, "/api/v1/unsubscribe?token="+url.QueryEscape(token), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/unsubscribe #%d = %d, want 200 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
+		}
+		if !strings.Contains(rec.Body.String(), `"type":"review_reminder"`) {
+			t.Errorf("read did not return the named type: %s", snippet(rec.Body.String()))
+		}
+	}
+	if choices, _ := store.NewEmailPrefStore(ts.db).Choices(ctx, user.ID); len(choices) != 0 {
+		t.Fatalf("read consumed the token or wrote a preference: %v", choices)
+	}
+}
+
+// TestUnsubscribeJSONConfirmConsumesOnlyNamedType 断言确认端点消费令牌、只关掉指名的可选类型，
+// 并落下一条与 SSR 相同的审计行。
+func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
+	ts := newSecurityServer(t, false)
+	ctx := context.Background()
+	user, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+		Username: "unsub-confirm", Email: "unsub-confirm@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+	prefs := store.NewEmailPrefStore(ts.db)
+	// 另一个可选类型显式打开，验证确认只关掉指名的那一个。
+	if err := prefs.SetChoices(ctx, user.ID, map[string]bool{string(mail.TypeDeckShared): true}, time.Now().UTC()); err != nil {
+		t.Fatalf("SetChoices: %v", err)
+	}
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+
+	// 会话前双提交 cookie 与镜像 token 由 GET /unsubscribe 下发。
+	cookie, headers := preSessionPair(t, ts.srv, "/unsubscribe")
+	rec := postJSON(ts.srv, "/api/v1/unsubscribe", map[string]string{"token": token}, []*http.Cookie{cookie}, headers)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/unsubscribe = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), `"type":"review_reminder"`) {
+		t.Errorf("confirm did not return the named type: %s", snippet(rec.Body.String()))
+	}
+
+	choices, err := prefs.Choices(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Choices: %v", err)
+	}
+	if on, present := choices[string(mail.TypeReviewReminder)]; !present || on {
+		t.Errorf("review_reminder = %v (present=%v), want off", on, present)
+	}
+	if !choices[string(mail.TypeDeckShared)] {
+		t.Errorf("deck_shared was touched by the confirm: %v", choices)
+	}
+	n, err := store.NewAuditStore(ts.db).CountByAction(ctx, store.ActionUserEmailUnsubscribe)
+	if err != nil {
+		t.Fatalf("CountByAction: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("audit rows for %s = %d, want 1", store.ActionUserEmailUnsubscribe, n)
+	}
+}
+
+// TestUnsubscribeJSONConfirmRequiresPreSessionCSRF 断言确认请求缺少双提交镜像 token 时被拒，
+// 且不消费令牌、不写偏好。
+func TestUnsubscribeJSONConfirmRequiresPreSessionCSRF(t *testing.T) {
+	ts := newSecurityServer(t, false)
+	ctx := context.Background()
+	user, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+		Username: "unsub-csrf", Email: "unsub-csrf@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), auth.UnsubscribeTTL)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	cookie, _ := preSessionPair(t, ts.srv, "/unsubscribe")
+	rec := postJSON(ts.srv, "/api/v1/unsubscribe", map[string]string{"token": token}, []*http.Cookie{cookie}, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("confirm without the mirror token = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if choices, _ := store.NewEmailPrefStore(ts.db).Choices(ctx, user.ID); len(choices) != 0 {
+		t.Fatalf("a CSRF-rejected confirm consumed the token or wrote a preference: %v", choices)
+	}
+}
+
+// TestUnsubscribeMachineEndpointDoesNotRenderTemplate 断言 RFC 8058 One-Click 端点只回状态码与
+// 最小 JSON 体，绝不渲染 SSR 模板。
+func TestUnsubscribeMachineEndpointDoesNotRenderTemplate(t *testing.T) {
+	ts := newSecurityServer(t, false)
+	ctx := context.Background()
+	user, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+		Username: "unsub-machine", Email: "unsub-machine@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), auth.UnsubscribeTTL)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	rec := oneClickPost(t, ts.srv, token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("one-click status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("one-click endpoint rendered a template: %s", snippet(body))
+	}
+	if !strings.Contains(body, `"unsubscribed":true`) {
+		t.Errorf("one-click endpoint body = %s, want a minimal JSON result", snippet(body))
 	}
 }
