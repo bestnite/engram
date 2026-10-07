@@ -77,16 +77,30 @@ html.dark #review-done {
   }
 }
 
-/* 极简卡片与边缘微光 */
+/* 极简卡片与边缘微光。
+   两个工具类都必须自带 dark 变体：全站约 37 个视图用它们当面板底，
+   而卡片内的文字用的是 dark: 变体（近白）。只写浅色底会让深色模式变成「白底近白字」
+   （对比度 ~1.1:1，实测截图上标题与数字完全看不清）。@variant dark 见本文件顶部的声明。 */
 @utility card-elevated {
   background-color: #ffffff;
   border: 1px solid rgba(228, 228, 231, 0.85);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+
+  @variant dark {
+    background-color: #18181b;
+    border-color: rgba(63, 63, 70, 0.8);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  }
 }
 
 @utility card-subtle {
   background-color: #fafafa;
   border: 1px solid rgba(228, 228, 231, 0.6);
+
+  @variant dark {
+    background-color: #27272a;
+    border-color: rgba(63, 63, 70, 0.6);
+  }
 }
 
 /* 自定义下拉选项选中态 */

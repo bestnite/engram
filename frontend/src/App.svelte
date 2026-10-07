@@ -45,10 +45,14 @@
     <ActiveComponent />
   </main>
 
-  <footer class="border-t border-zinc-200 dark:border-zinc-800 py-6 text-center text-xs text-zinc-400">
-    <div class="max-w-5xl mx-auto px-4 flex items-center justify-between">
-      <span>{$t('app.name')}</span>
-      <span>{$t('shell.status')}</span>
-    </div>
+  <footer class="border-t border-zinc-200 dark:border-zinc-800 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
+    <a
+      href="https://github.com/bestnite/engram"
+      target="_blank"
+      rel="noreferrer noopener"
+      class="font-medium hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+    >
+      {$t('app.name')}
+    </a>
   </footer>
 </div>
