@@ -81,32 +81,28 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
-  describe('SPA media picker', () => {
-    it('loads the existing editor-gated picker with same-origin cookies and no bearer token', async () => {
+  describe('SPA media library list', () => {
+    it('loads the readable media library over same-origin JSON and keeps no bearer token', async () => {
       const sha = 'a'.repeat(64);
-      const button = {
-        title: sha,
-        getAttribute: (name: string) => name === 'data-media-insert' ? `/media/${sha}` : null,
-        querySelector: () => ({ getAttribute: () => `/media/${sha}` }),
-      };
-      const root = { querySelectorAll: () => [button], querySelector: () => null };
-      vi.stubGlobal('window', { location: { origin: 'http://localhost' } });
-      vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelector: () => root }; } });
-      mockFetch.mockResolvedValueOnce(new Response('<div id="media-picker-list"></div>', { status: 200 }));
-      await expect(client.getMediaPickerPage(12)).resolves.toEqual({
-        items: [{ sha256: sha, src: `/media/${sha}`, insert_url: `/media/${sha}` }], next_cursor: '',
-      });
+      const item = { sha256: sha, mime: 'image/png', bytes: 12, url: `/media/${sha}`, created_at: '2026-10-07T00:00:00Z' };
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ items: [item], next_cursor: 'next-token' }), { status: 200 }));
+      await expect(client.listMedia()).resolves.toEqual({ items: [item], next_cursor: 'next-token' });
       const [url, init] = mockFetch.mock.calls[0]!;
-      expect(url).toBe('/decks/12/media/picker');
+      expect(url).toBe('/api/v1/media');
       expect(init?.credentials).toBe('same-origin');
-      expect(new Headers(init?.headers).get('Accept')).toBe('text/html');
+      expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
       expect(new Headers(init?.headers).has('Authorization')).toBe(false);
-      vi.unstubAllGlobals();
     });
 
-    it('preserves the server editor authorization failure', async () => {
-      mockFetch.mockResolvedValueOnce(new Response('', { status: 403 }));
-      await expect(client.getMediaPickerPage(12)).rejects.toMatchObject({ status: 403 });
+    it('passes the cursor as a query parameter when paginating', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ items: [], next_cursor: '' }), { status: 200 }));
+      await expect(client.listMedia('cursor tok/1')).resolves.toEqual({ items: [], next_cursor: '' });
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/media?cursor=cursor+tok%2F1');
+    });
+
+    it('preserves the stable server error code on failure', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'no' } }), { status: 401 }));
+      await expect(client.listMedia()).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
     });
   });
 

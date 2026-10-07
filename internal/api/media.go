@@ -19,6 +19,7 @@ type MediaItem struct {
 	Sha256    string    `json:"sha256"`
 	Mime      string    `json:"mime"`
 	Bytes     int64     `json:"bytes"`
+	URL       string    `json:"url"`
 	Width     *int      `json:"width,omitempty"`
 	Height    *int      `json:"height,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -53,9 +54,12 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 	items := make([]MediaItem, 0, len(rows))
 	for _, m := range rows {
 		items = append(items, MediaItem{
-			Sha256:    m.Sha256,
-			Mime:      m.Mime,
-			Bytes:     m.Bytes,
+			Sha256: m.Sha256,
+			Mime:   m.Mime,
+			Bytes:  m.Bytes,
+			// URL 由哈希拼成，与上传响应的 url 同形（DESIGN.md §6.3）：媒体选择器直接引用它，
+			// 不在客户端重复拼接 /media/<sha256> 这一契约。
+			URL:       "/media/" + m.Sha256,
 			Width:     m.Width,
 			Height:    m.Height,
 			CreatedAt: m.CreatedAt,

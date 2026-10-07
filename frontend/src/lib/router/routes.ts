@@ -35,6 +35,7 @@ import EmailSettingsView from '../views/EmailSettingsView.svelte';
 import VerifyEmailView from '../views/VerifyEmailView.svelte';
 import ConfirmEmailChangeView from '../views/ConfirmEmailChangeView.svelte';
 import ShareBrowseView from '../views/ShareBrowseView.svelte';
+import UnsubscribeView from '../views/UnsubscribeView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -348,5 +349,18 @@ export const routes: RouteDefinition[] = [
     path: '/confirm-email-change',
     name: 'confirm-email-change',
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 一键退订的规范路径（DESIGN.md §4.7、§8.1）。服务端 GET /unsubscribe 返回应用壳并下发
+    // 会话前双提交 cookie，令牌由视图读取 ?token= 后经 GET/POST /api/v1/unsubscribe 读取与确认。
+    path: '/unsubscribe',
+    name: 'unsubscribe',
+    component: UnsubscribeView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 迁移期的旧 SPA 退订地址，保留以兼容既有深链；新入口统一走 /unsubscribe。
+    path: '/spa/unsubscribe',
+    name: 'unsubscribe-spa',
+    component: UnsubscribeView as unknown as RouteDefinition['component'],
   },
 ];

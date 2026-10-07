@@ -96,15 +96,23 @@ export interface NotePreviewResponse {
   cards: Array<{ front_html: string; back_html: string }>;
 }
 
-/** A media item parsed from the existing editor-authorized server picker fragment. */
-export interface MediaPickerItem {
+/**
+ * GET /api/v1/media 的一项（与 Go internal/api.MediaItem 对齐，DESIGN.md §6.3、§7.3）。
+ * url 由 sha256 拼成 /media/<sha256>，可直接用于 <img src> 与 Markdown 引用插入。
+ */
+export interface MediaItem {
   sha256: string;
-  src: string;
-  insert_url: string;
+  mime: string;
+  bytes: number;
+  url: string;
+  width?: number | null;
+  height?: number | null;
+  created_at: string;
 }
 
-export interface MediaPickerPage {
-  items: MediaPickerItem[];
+/** GET /api/v1/media 的一页；next_cursor 为空串表示已到底。 */
+export interface MediaListResponse {
+  items: MediaItem[];
   next_cursor: string;
 }
 
@@ -1256,5 +1264,18 @@ export interface ShareResponse {
 export interface OIDCInfo {
   enabled: boolean;
   start_url: string;
+}
+
+/**
+ * GET /api/v1/unsubscribe?token=… 的响应（DESIGN.md §4.7、§8.1）。
+ * type 是令牌指名的可选邮件类型；服务端只读取、不消费令牌。
+ */
+export interface UnsubscribeReadResponse {
+  type: string;
+}
+
+/** POST /api/v1/unsubscribe 的响应：确认退订后回带被关掉的类型。 */
+export interface UnsubscribeConfirmResponse {
+  type: string;
 }
 

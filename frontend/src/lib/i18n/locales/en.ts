@@ -1015,4 +1015,15 @@ export const en: LocaleCatalog = {
   // ---- parent-owned navigation entries (mirrors the SSR mainNav labels) ----
   'nav.presets': 'Presets',
   'nav.admin': 'Admin',
+  // ---- One-click unsubscribe page (/unsubscribe, SPA), DESIGN.md 4.7, 8.1 ----
+  'unsubscribe.heading': 'Unsubscribe',
+  'unsubscribe.loading': 'Checking your unsubscribe link…',
+  'unsubscribe.intro': 'Stop sending “{type}” emails to your account. This link works only once and cannot be undone from here.',
+  'unsubscribe.submit': 'Unsubscribe',
+  'unsubscribe.confirming': 'Unsubscribing…',
+  'unsubscribe.done': 'You will no longer receive “{type}” emails.',
+  'unsubscribe.back': 'Manage email preferences',
+  'unsubscribe.error.expired': 'This unsubscribe link has expired. Ask the sender for a new email if you still want to unsubscribe.',
+  'unsubscribe.error.used': 'This unsubscribe link has already been used.',
+  'unsubscribe.error.invalid': 'This unsubscribe link is invalid.',
 };
