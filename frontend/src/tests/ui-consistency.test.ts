@@ -289,7 +289,7 @@ describe('form field skin', () => {
 
   const classOf = (tag: string): string => /class="([^"]*)"/.exec(tag)?.[1] ?? '';
 
-  it('styles every field through the field-input utility with an explicit size', () => {
+  it('styles every field through the field-input utility with an explicit size and width', () => {
     // 皮肤只允许有一处定义；字号必须由调用点显式给出——否则元素会继承祖先字号，
     // 同一页里两个输入框一个大一个小（按钮区已经发生过同样的漂移）。
     const offenders: string[] = [];
@@ -297,7 +297,10 @@ describe('form field skin', () => {
       for (const tag of scanTags(src, ['input', 'textarea'])) {
         const cls = classOf(tag);
         if (!/\bfield-input\b/.test(cls)) continue;
-        if (!/\btext-(xs|sm|base)\b/.test(cls)) offenders.push(`${file}: ${cls.slice(0, 60)}`);
+        if (!/\btext-(xs|sm|base)\b/.test(cls)) offenders.push(`${file}: 缺字号 — ${cls.slice(0, 50)}`);
+        // 宽度同样必须显式给出：field-input 只写皮肤，不给宽度时元素会掉回固有宽度
+        //（约 20 个字符），同一页的框就宽窄不一 —— 这是真实报障过的形态。
+        if (!/\b(w-|max-w-|min-w-)/.test(cls)) offenders.push(`${file}: 缺宽度 — ${cls.slice(0, 50)}`);
       }
     }
     expect(offenders).toEqual([]);

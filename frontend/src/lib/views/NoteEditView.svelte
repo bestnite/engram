@@ -219,7 +219,7 @@
             {$t('note_edit.kind')}
           </span>
           <Select
-            class="mt-1.5 max-w-xs"
+            class="mt-1.5 w-full"
             testId="note-edit-kind"
             value={kind}
             onValueChange={changeKind}
@@ -239,7 +239,7 @@
       <Panel padding="md" class="mt-5 space-y-3">
         <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('media.spa.field')}
           <Select
-            class="ml-2 w-52"
+            class="mt-1.5 w-full"
             bind:value={selectedField}
             testId="spa-media-field"
             options={textFields}

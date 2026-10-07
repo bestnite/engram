@@ -86,7 +86,7 @@
           spellcheck="false"
           value={asString(spec.key)}
           oninput={(event) => setString(spec.key, event.currentTarget.value)}
-          class="field-input text-sm"></textarea>
+          class="field-input text-sm mt-1.5 block w-full"></textarea>
       {:else if spec.control === 'lines'}
         <textarea
           data-testid="{testIdPrefix}-{spec.key}"
@@ -94,7 +94,7 @@
           spellcheck="false"
           value={arrayToLines(fields[spec.key])}
           oninput={(event) => (fields[spec.key] = linesToArray(event.currentTarget.value))}
-          class="field-input text-sm"></textarea>
+          class="field-input text-sm mt-1.5 block w-full"></textarea>
       {:else if spec.control === 'number'}
         <input
           type="text"
@@ -102,7 +102,7 @@
           data-testid="{testIdPrefix}-{spec.key}"
           value={asNumber(spec.key)}
           oninput={(event) => setNumber(spec.key, event.currentTarget.value)}
-          class="field-input text-sm"
+          class="field-input text-sm mt-1.5 block w-full"
         />
       {:else if spec.control === 'index'}
         {#if options.length === 0}
@@ -141,7 +141,7 @@
           data-testid="{testIdPrefix}-{spec.key}"
           value={asString(spec.key)}
           oninput={(event) => setString(spec.key, event.currentTarget.value)}
-          class="field-input text-sm"
+          class="field-input text-sm mt-1.5 block w-full"
         />
       {/if}
     {/if}
