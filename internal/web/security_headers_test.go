@@ -57,14 +57,12 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 // 健康检查、/api/v1 与 /mcp 前缀和 404 回退。中间件挂全局，这几条出口都不能漏。
 func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "CSP deck")
 	seedBasic(t, db, deck.ID, "FrontCSP", "BackCSP")
 
-	asset := srv.assets.URL("js/htmx.min.js")
+	asset := srv.assets.URL("js/pwa.js")
 	if asset == "" {
-		t.Fatal("htmx asset is not embedded")
+		t.Fatal("pwa asset is not embedded")
 	}
 
 	tests := []struct {
@@ -90,22 +88,21 @@ func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 }
 
 // TestSecurityHeadersDoNotAlterResponseBody 断言中间件只加头、不改状态码与响应体：
-// 登录页与复习页仍是 200 与各自的真实内容。
+// 登录页与复习页仍是 200 且都返回真实的 SPA 应用壳（而非被中间件截断）。
 func TestSecurityHeadersDoNotAlterResponseBody(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	// GET /review 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 复习页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedReviewDeck(t, db, ownerID, "CSP body deck")
 	seedBasic(t, db, deck.ID, "FrontCSP", "BackCSP")
 
+	const shellMarker = `<div id="app">`
 	tests := []struct {
 		name    string
 		path    string
 		cookies []*http.Cookie
 		want    []string
 	}{
-		{name: "login page", path: "/login", want: []string{"<form", "csrf_token"}},
-		{name: "review page", path: "/review?deck=" + u64str(deck.ID), cookies: cookies, want: []string{"review-area", "FrontCSP"}},
+		{name: "login page", path: "/login", want: []string{shellMarker}},
+		{name: "review page", path: "/review?deck=" + u64str(deck.ID), cookies: cookies, want: []string{shellMarker}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

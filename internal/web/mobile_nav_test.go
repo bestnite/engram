@@ -1,23 +1,19 @@
 package web
 
-// 本文件锁定用户报告的移动端抽屉缺陷（回归测试，M8-7 之后的修复）：
+// 本文件只保留移动端抽屉缺陷的**标记检查器**及其负例。
 //
-//	(a) 抽屉必须脱离文档流。它原先用 relative，展开后把页头撑高、<main> 被整体挤到下方；
-//	(b) 遮罩必须位于 <header> 之外。页头带 backdrop-blur-md，而 backdrop-filter 会让元素成为
-//	    fixed/absolute 后代的包含块，遮罩放在页头内部时 fixed inset-0 只覆盖页头那一条，
-//	    于是点击页面空白处关不掉抽屉，也没有压暗效果。
+// 用户报告的缺陷（抽屉用 relative 把页头撑高、遮罩放在带 backdrop-filter 的 <header> 内
+// 导致 fixed inset-0 只覆盖页头一条）此前由 SSR 页头渲染的 HTML 断言。页面层已切到 SPA
+// 应用壳：抽屉与遮罩标记改由前端（Svelte）渲染，Go 侧不再产生这段 HTML，页面级与组件级
+// 断言随之删除（相关回归由前端测试覆盖）。
 //
-// 浏览器里的观感无法在这里断言（CI 不跑浏览器），可断言的是渲染出的 HTML 结构：
-// 抽屉脱离文档流且锚在页头下沿，遮罩在页头之外并覆盖视口。
+// 检查器本身仍可独立验证：下面用缺陷时的标记与修好后的标记各跑一遍，确保检查逻辑不会
+// 静默假绿。
 
 import (
-	"context"
-	"net/http"
 	"regexp"
 	"strings"
 	"testing"
-
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 var reHeaderElement = regexp.MustCompile(`(?s)<header\b[^>]*>.*?</header>`)
@@ -72,79 +68,8 @@ func mobileNavScrimInsideHeaderProblem(html string) string {
 	return ""
 }
 
-// TestMobileNavDrawerFloatsAndScrimCoversViewport 是本次缺陷的验收测试：真实页面渲染出的
-// 抽屉必须脱离文档流、锚在页头下沿，遮罩必须在页头之外并覆盖整个视口。
-func TestMobileNavDrawerFloatsAndScrimCoversViewport(t *testing.T) {
-	srv, _, _, cookies, _ := newNotesServer(t)
-	// 断言的是 SSR 页头渲染出的移动端抽屉标记，显式走 SPA 缺失的回退分支。
-	srv.spa = nil
-	rec := getWithCookies(t, srv, "/", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	html := rec.Body.String()
-
-	if !strings.Contains(html, `id="mobile-nav-menu"`) {
-		t.Fatalf("GET / did not render the mobile drawer, so the assertions below would be vacuous: %s", snippet(html))
-	}
-	if problem := mobileNavDrawerInFlowProblem(html); problem != "" {
-		t.Errorf("GET /: %s", problem)
-	}
-	if problem := mobileNavScrimInsideHeaderProblem(html); problem != "" {
-		t.Errorf("GET /: %s", problem)
-	}
-
-	// 抽屉要锚在页头下沿（top-full）。少了它抽屉会盖住导航栏本身或漂到页头上方。
-	drawerTag := openingTagByID(html, "mobile-nav-menu")
-	if !classListOf(drawerTag)["top-full"] {
-		t.Errorf("#mobile-nav-menu is not anchored to the bottom edge of the header (top-full missing): %s", drawerTag)
-	}
-
-	// 遮罩要覆盖整个视口。它在页头之外（上面已断言），因此 fixed inset-0 以视口为包含块。
-	scrimTag := openingTagByID(html, "mobile-nav-backdrop")
-	if scrimTag == "" {
-		t.Fatalf("the rendered page has no #mobile-nav-backdrop element: %s", snippet(html))
-	}
-	scrimClasses := classListOf(scrimTag)
-	if !scrimClasses["fixed"] || !scrimClasses["inset-0"] {
-		t.Errorf("#mobile-nav-backdrop is not a viewport-sized overlay (fixed + inset-0 missing): %s", scrimTag)
-	}
-	t.Logf("mobile drawer: out of flow and anchored with top-full; scrim: outside <header>, fixed inset-0")
-}
-
-// TestMobileNavHeaderComponentRendersDrawer 断言页头组件本身（不经 HTTP 栈）就带着修好的标记。
-// 页面级测试依赖 handler 传入的导航数据，这一条不依赖。
-func TestMobileNavHeaderComponentRendersDrawer(t *testing.T) {
-	data := views.LayoutData{
-		Brand:        "Engram",
-		HomeURL:      "/",
-		Nav:          []views.NavItem{{Label: "Decks", Href: "/decks", Active: true}},
-		SessionLabel: "Log out",
-		SessionHref:  "/logout",
-		SessionForm:  true,
-		CSRF:         "test-token",
-	}
-	var sb strings.Builder
-	if err := views.Header(data).Render(context.Background(), &sb); err != nil {
-		t.Fatalf("render Header: %v", err)
-	}
-	html := sb.String()
-
-	if problem := mobileNavDrawerInFlowProblem(html); problem != "" {
-		t.Errorf("Header component: %s", problem)
-	}
-	if problem := mobileNavScrimInsideHeaderProblem(html); problem != "" {
-		t.Errorf("Header component: %s", problem)
-	}
-	if !strings.Contains(html, `id="mobile-nav-toggle"`) || !strings.Contains(html, "mobile-nav-icon-close") {
-		t.Errorf("Header component no longer renders the drawer toggle and both icons: %s", snippet(html))
-	}
-	t.Logf("Header component: drawer markup carries the out-of-flow positioning and the scrim is a sibling of <header>")
-}
-
 // TestMobileNavProblemCheckersFlagBrokenMarkup 是检查函数自身的负例：缺陷当时的标记
 // （抽屉 relative、遮罩在页头内部）必须被抓出来，修好后的标记必须放行。
-// 否则上面两条正例测试会静默假绿。
 func TestMobileNavProblemCheckersFlagBrokenMarkup(t *testing.T) {
 	broken := `<header class="sticky top-0 backdrop-blur-md">` +
 		`<div id="mobile-nav-backdrop" class="fixed inset-0 z-40 hidden sm:hidden"></div>` +
