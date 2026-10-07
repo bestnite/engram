@@ -4,7 +4,7 @@
   import { register } from '../auth';
   import { getApiErrorMessageKey, ApiClientError } from '../api';
 
-  // 邀请 token 由 URL 查询参数带入（GET /spa/register?invite=... 下发应用壳）。
+  // 邀请 token 由 URL 查询参数带入（GET /register?invite=... 下发应用壳）。
   const invite =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('invite') ?? '')
@@ -33,7 +33,7 @@
         invite,
       });
       // 注册不建立会话：与 SSR 一致，成功后回到登录页。
-      navigate('/spa/login');
+      navigate('/login');
     } catch (err) {
       errorKey = err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown';
     } finally {
@@ -146,7 +146,7 @@
     </form>
 
     <div class="mt-6 text-center text-sm">
-      <a href="/spa/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+      <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
         {$t('auth.register.to_login')}
       </a>
     </div>

@@ -175,41 +175,56 @@ func (s *Server) apiLogin(c *gin.Context) {
 	})
 }
 
-// spaLoginShell 是 SPA 登录入口（GET /spa/login）。
+// spaLoginShell 提供 GET /login：SPA 已加载时返回应用壳（DESIGN.md §8.1 的规范路径），
+// 由客户端路由渲染登录页；登录协议走 GET /api/v1/auth/session + POST /api/v1/auth/login，
+// 第二步走 GET /login/totp / POST /api/v1/auth/totp。
 //
-// 与 SSR 的 GET /login 并存，不遮蔽它：后者仍是当前被链接、且无脚本也能提交的登录页，
-// SPA 在浏览器端到端验证前走独立的 /spa 迁移目标路径（与 /spa/review、/spa/settings/totp
-// 同一约定，DESIGN.md §8.1）。
-//
-// 像 SSR 的 GET /login 一样先初始化会话前双提交 cookie：SPA 挂载后从
+// 像 SSR 的登录页一样先初始化会话前双提交 cookie：SPA 挂载后从
 // GET /api/v1/auth/session 取回同一 token 放进 X-CSRF-Token，POST /api/v1/auth/login
 // 的 DoubleSubmitMiddleware 据此比对 cookie 与镜像值。这里只下发 cookie 并返回应用壳，
 // 不渲染表单、不建立会话、不返回任何凭据（会话 cookie 始终由服务端在登录成功后签发）。
+//
+// POST /login 仍由 SSR 表单处理器承担（无脚本客户端仍可登录），SPA 未嵌入（降级构建）时
+// GET 也回退 SSR 登录页。迁移期别名 /spa/login 由同一处理器服务。
 func (s *Server) spaLoginShell(c *gin.Context) {
+	if s.spa == nil {
+		s.loginPage(c)
+		return
+	}
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
 }
 
-// spaRegisterShell 是 SPA 注册入口（GET /spa/register）。
-//
-// 与 SSR 的 GET /register 并存，不遮蔽它：后者仍是被链接、且无脚本也能提交的注册页。
-// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；注册协议走
-// POST /api/v1/auth/register（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
+// spaRegisterShell 提供 GET /register：SPA 已加载时返回应用壳（DESIGN.md §8.1 的规范路径），
+// 注册协议走 POST /api/v1/auth/register（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
 // ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
 // 不建号、不建立会话、不返回任何凭据。
+//
+// POST /register 仍由 SSR 表单处理器承担，SPA 未嵌入（降级构建）时 GET 回退 SSR 注册页。
+// 迁移期别名 /spa/register 由同一处理器服务。
 func (s *Server) spaRegisterShell(c *gin.Context) {
+	if s.spa == nil {
+		s.registerPage(c)
+		return
+	}
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
 }
 
-// spaSetupShell 是 SPA 引导入口（GET /spa/setup）。
+// spaSetupShell 提供 GET /setup：SPA 已加载时返回应用壳（DESIGN.md §8.1 的规范路径），
+// 引导协议走 POST /api/v1/auth/setup。可达性与 SSR 的 GET /setup 完全一致：已存在活跃管理员
+// 时返回 404（一次性管理员门，避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并
+// 返回应用壳；这里只下发 cookie 并返回应用壳，不建号、不建会话。
 //
-// 可达性与 SSR 的 GET /setup 完全一致：已存在活跃管理员时返回 404（一次性管理员门，
-// 避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳，
-// 引导协议走 POST /api/v1/auth/setup。这里只下发 cookie 并返回应用壳，不建号、不建会话。
+// POST /setup 仍由 SSR 表单处理器承担，SPA 未嵌入（降级构建）时 GET 回退 SSR 引导页。
+// 迁移期别名 /spa/setup 由同一处理器服务。
 func (s *Server) spaSetupShell(c *gin.Context) {
 	if !s.setupAvailable(c) {
 		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if s.spa == nil {
+		s.setupPage(c)
 		return
 	}
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())

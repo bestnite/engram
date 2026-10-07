@@ -91,6 +91,16 @@ func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values)
 	return rec
 }
 
+// hasCookie 报告响应是否下发了指定名字的 cookie。
+func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name && c.Value != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // TestWiredServerExposesAuthRoutes 是 M1-14 的验收测试：真实装配路径下 /login、/setup、
 // /healthz 都可达，/setup 在首个管理员出现后按约定变为 404，密码错误按约定返回 401。
 func TestWiredServerExposesAuthRoutes(t *testing.T) {
@@ -101,25 +111,30 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Fatalf("GET /healthz status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 尚无管理员：引导页可达，并预填 BOOTSTRAP_ADMIN_EMAIL（走 config，而不是硬编码）。
+	// 尚无管理员：引导页可达。GET /setup 已切到 SPA 应用壳（DESIGN.md §8.1 的规范路径），
+	// 因此这里断言「可达 + 是应用壳 + 下发了会话前双提交 cookie」；SSR 引导页本身的渲染细节
+	// （本地化文案、BOOTSTRAP_ADMIN_EMAIL 预填）由 internal/web 的回退分支用例覆盖。
 	setup := doGet(t, srv, "/setup")
 	if setup.Code != http.StatusOK {
 		t.Fatalf("GET /setup with no admin status = %d, want 200 (body %s)", setup.Code, setup.Body.String())
 	}
-	if !strings.Contains(setup.Body.String(), "创建首个管理员") {
-		t.Errorf("setup page is not localized (zh-CN): %s", snippet(setup.Body.String()))
+	if !strings.Contains(setup.Body.String(), `id="app"`) {
+		t.Errorf("GET /setup did not serve the SPA shell: %s", snippet(setup.Body.String()))
 	}
-	if !strings.Contains(setup.Body.String(), "bootstrap@example.com") {
-		t.Errorf("setup page did not prefill BOOTSTRAP_ADMIN_EMAIL: %s", snippet(setup.Body.String()))
+	if !hasCookie(setup, auth.CSRFDoubleSubmitCookieName) {
+		t.Errorf("GET /setup did not issue the %s cookie", auth.CSRFDoubleSubmitCookieName)
 	}
 
-	// /login 是这次修复的核心：接线前它是 404。
+	// /login 同样切到 SPA 应用壳。
 	login := doGet(t, srv, "/login")
 	if login.Code != http.StatusOK {
 		t.Fatalf("GET /login status = %d, want 200 (body %s)", login.Code, login.Body.String())
 	}
-	if !strings.Contains(login.Body.String(), "登录") {
-		t.Errorf("login page did not render catalog text: %s", snippet(login.Body.String()))
+	if !strings.Contains(login.Body.String(), `id="app"`) {
+		t.Errorf("GET /login did not serve the SPA shell: %s", snippet(login.Body.String()))
+	}
+	if !hasCookie(login, auth.CSRFDoubleSubmitCookieName) {
+		t.Errorf("GET /login did not issue the %s cookie", auth.CSRFDoubleSubmitCookieName)
 	}
 
 	// 密码错误：返回文档约定的 401，且不下发会话 cookie。

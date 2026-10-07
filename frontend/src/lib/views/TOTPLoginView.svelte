@@ -92,7 +92,7 @@
         <p class="font-medium mb-1">{$t('auth.totp.expired')}</p>
         <div class="mt-3">
           <a
-            href="/spa/login"
+            href="/login"
             class="inline-block text-xs font-semibold px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors cursor-pointer"
           >
             {$t('auth.totp.back_to_login')}

@@ -28,7 +28,7 @@ describe('TOTPLoginView renders the second-factor states truthfully', () => {
   it('renders the expired notice and a way back to sign in when no challenge exists', () => {
     const { html } = render(TOTPLoginView, { props: { initialPending: false } });
     expect(html).toContain('data-testid="totp-login-expired"');
-    expect(html).toContain('href="/spa/login"');
+    expect(html).toContain('href="/login"');
     expect(html).toContain('重新登录');
     expect(html).not.toContain('data-testid="totp-login-code"');
   });

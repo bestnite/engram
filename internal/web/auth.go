@@ -30,11 +30,15 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// 登录/注册/引导是登录前流程：此时还没有服务端会话，会话绑定的 CSRF token 无从产生。
 	// 这三条 POST 改用双提交 cookie（B-13）：GET 下发随机 token 的 cookie 并镜像进表单，
 	// 提交时中间件比对两者，缺镜像 cookie 一律 403。已有会话的写请求仍走会话绑定的 CSRF。
-	router.GET("/login", s.loginPage)
+	//
+	// 三条 GET 已切到 SPA（DESIGN.md §8.1 的规范路径）：SPA 已加载时返回应用壳，由客户端路由
+	// 渲染页面，协议是 /api/v1/auth/{session,login,register,setup}；SSR 未装配（降级构建）时
+	// 回退各自的 SSR 页面。POST 仍是 SSR 表单处理器——无脚本客户端照旧可以登录/注册/引导。
+	router.GET("/login", s.spaLoginShell)
 	router.POST("/login", auth.DoubleSubmitMiddleware(), s.loginSubmit)
-	router.GET("/register", s.registerPage)
+	router.GET("/register", s.spaRegisterShell)
 	router.POST("/register", auth.DoubleSubmitMiddleware(), s.registerSubmit)
-	router.GET("/setup", s.setupPage)
+	router.GET("/setup", s.spaSetupShell)
 	router.POST("/setup", auth.DoubleSubmitMiddleware(), s.setupSubmit)
 	// 登出是登录后流程：会话已存在，必须携带会话绑定的 CSRF token（DESIGN.md §4.3）。
 	router.POST("/logout", s.sessions.CSRFMiddleware(), s.logout)
@@ -55,8 +59,8 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.POST("/api/v1/auth/setup", auth.DoubleSubmitMiddleware(), s.apiSetup)
 	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
 
-	// SPA 登录/注册/引导入口（迁移目标路径 /spa/*）：SSR 的 GET/POST /login、/register、/setup
-	// 保持原样、不被遮蔽。只返回应用壳并初始化会话前双提交 cookie，协议仍是上面的 JSON 端点。
+	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与上面的规范路径
+	// 共用同一处理器（同一份双提交 cookie 与可达性判定），保留是为了既有深链不失效。
 	if s.spa != nil {
 		router.GET("/spa/login", s.spaLoginShell)
 		router.GET("/spa/register", s.spaRegisterShell)

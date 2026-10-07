@@ -187,4 +187,17 @@ export const routes: RouteDefinition[] = [
     name: 'spa-setup',
     component: SetupView as unknown as RouteDefinition['component'],
   },
+  {
+    // 注册与首个管理员引导的规范路径（DESIGN.md §8.1）。服务端 GET /register、/setup 已切到
+    // 应用壳，协议是 POST /api/v1/auth/register、POST /api/v1/auth/setup；POST /register、/setup
+    // 仍是 SSR 表单处理器，无脚本客户端照旧可用。
+    path: '/register',
+    name: 'register',
+    component: RegisterView as unknown as RouteDefinition['component'],
+  },
+  {
+    path: '/setup',
+    name: 'setup',
+    component: SetupView as unknown as RouteDefinition['component'],
+  },
 ];

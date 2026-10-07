@@ -345,6 +345,8 @@ func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 // TestBootstrapAdminEmailPrefillsSetup 断言 BOOTSTRAP_ADMIN_EMAIL 作为引导页邮箱兜底。
 func TestBootstrapAdminEmailPrefillsSetup(t *testing.T) {
 	srv, _ := newAuthServer(t)
+	// 断言 SSR 引导页的邮箱兜底渲染，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	srv.bootstrapEmail = "bootstrap@example.com"
 	body := get(t, srv, "/setup", nil).Body.String()
 	if !strings.Contains(body, "bootstrap@example.com") {

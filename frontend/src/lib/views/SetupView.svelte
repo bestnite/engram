@@ -26,10 +26,10 @@
         password,
       });
       // 引导不建立会话：与 SSR 一致，成功后回到登录页。
-      navigate('/spa/login');
+      navigate('/login');
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 404) {
-        // 已有活跃管理员：引导窗口已关闭（GET /spa/setup 也会 404）。
+        // 已有活跃管理员：引导窗口已关闭（GET /setup 也会 404）。
         errorKey = 'auth.setup.unavailable';
       } else {
         errorKey = err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown';

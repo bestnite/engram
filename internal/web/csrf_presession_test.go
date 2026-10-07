@@ -39,6 +39,8 @@ func doubleSubmitFromPage(t *testing.T, srv *Server, path string) (string, strin
 // 镜像 token，再带着它们 POST）不受影响，/setup 与 /login 都能正常走通。
 func TestPreSessionCSRFNormalBrowserFlow(t *testing.T) {
 	srv, _ := newAuthServer(t)
+	// 本用例从 SSR 表单里取镜像 token，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 
 	cookie, token := doubleSubmitFromPage(t, srv, "/setup")
 	rec := postForm(t, srv, "/setup", url.Values{
@@ -109,6 +111,8 @@ func TestPreSessionCSRFRejections(t *testing.T) {
 // token 不能替代双提交 cookie，双提交 cookie 也不能放行会话前表单之外的写请求。
 func TestSessionCSRFTokenDoesNotAuthorizePreSessionForms(t *testing.T) {
 	srv, _ := newAuthServer(t)
+	// 本用例从 SSR 表单里取镜像 token，显式走 SPA 缺失的回退分支。
+	srv.spa = nil
 	seedAdminUser(t, srv)
 
 	// 会话绑定的 CSRF token（服务端状态）拿不到，就构不出合法会话请求；这里验证的是

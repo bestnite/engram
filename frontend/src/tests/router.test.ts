@@ -96,10 +96,10 @@ describe('SPA router matching and query parsing', () => {
     expect(matchRoute('/review/unknown', prodRoutes).route).toBeNull();
   });
 
-  it('exposes the SPA login entry at /spa/login without removing SSR /login', async () => {
+  it('exposes the SPA login entry at /login and keeps the /spa/login alias', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
 
-    // SPA 迁移目标路径：服务端 GET /spa/login 返回应用壳并初始化双提交 cookie。
+    // 规范路径 /login 由服务端 GET 返回应用壳并初始化双提交 cookie；/spa/login 是迁移期别名。
     const spaLogin = matchRoute('/spa/login', prodRoutes);
     expect(spaLogin.route?.name).toBe('spa-login');
     expect(spaLogin.params).toEqual({});
@@ -107,5 +107,18 @@ describe('SPA router matching and query parsing', () => {
     // SSR /login 仍保留在同一前端路由表内（客户端导航用），不被遮蔽。
     const ssrLogin = matchRoute('/login', prodRoutes);
     expect(ssrLogin.route?.name).toBe('login');
+  });
+});
+
+describe('auth entry routes after the SPA cutover', () => {
+  it('serves /login, /register and /setup canonically and keeps the /spa aliases', async () => {
+    const { routes: prodRoutes } = await import('../lib/router/routes');
+    expect(matchRoute('/login', prodRoutes).route?.name).toBe('login');
+    expect(matchRoute('/register', prodRoutes).route?.name).toBe('register');
+    expect(matchRoute('/setup', prodRoutes).route?.name).toBe('setup');
+    // 迁移期别名保留，既有深链不失效。
+    expect(matchRoute('/spa/login', prodRoutes).route?.name).toBe('spa-login');
+    expect(matchRoute('/spa/register', prodRoutes).route?.name).toBe('spa-register');
+    expect(matchRoute('/spa/setup', prodRoutes).route?.name).toBe('spa-setup');
   });
 });
