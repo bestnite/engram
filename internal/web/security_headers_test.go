@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"git.nite07.com/nite/engram/frontend"
 )
 
 // 本文件是 F26 的验收：一组固定安全响应头挂在所有路由上，CSP 已从 Report-Only 切成
@@ -132,7 +135,7 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 	for _, want := range []string{
 		"default-src 'self'",
 		"script-src 'self'",
-		"style-src 'self' 'unsafe-inline'", // 内联 style= 属性（stats.templ）
+		"style-src 'self' 'unsafe-inline'", // 内联 style= 属性（统计页柱宽、骨架屏宽度）
 		"img-src 'self' https:",            // /media 与卡面允许的 https 外链图
 		"connect-src 'self'",
 		"object-src 'none'",
@@ -146,10 +149,10 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 		}
 	}
 
-	// hx-on 已改成委托监听（notes.js），策略不应再需要 'unsafe-eval'：htmx 一旦用它
-	// 编译 JS 表达式就必须 eval，留着等于把 script-src 重新打开。
+	// 交付的脚本没有一个在运行时编译 JS（守护用例对自有脚本断言这一点），策略带
+	// 'unsafe-eval' 等于白白把 script-src 重新打开。
 	if scriptSrc := cspDirectiveValue(csp, "script-src"); strings.Contains(scriptSrc, "'unsafe-eval'") {
-		t.Errorf("script-src must not carry 'unsafe-eval' now that hx-on is gone: %q", scriptSrc)
+		t.Errorf("script-src must not carry 'unsafe-eval': no served script compiles JS at runtime: %q", scriptSrc)
 	}
 
 	// 页面唯一的 inline <script>（主题引导）必须用 hash 放行；nonce 或 script-src
@@ -193,36 +196,38 @@ func TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap(t *testing.T) {
 	}
 }
 
-// ---- 静态守护：策略必须覆盖模板与脚本里的实际用法 ----
+// ---- 静态守护：策略必须覆盖实际交付的脚本与样式来源 ----
 
-// cspGuardedFiles 返回守护用例要扫描的源码清单：internal/web/views/*.templ 与
-// internal/web/static/js/*.js，排除打包产物（*.min.js）与 mathjax 子目录
-// （filepath.Glob 的 * 不跨目录，mathjax 天然被排除）。测试的工作目录就是
-// internal/web，故用相对路径。
-func cspGuardedFiles(t *testing.T) []string {
+// cspServedScripts 返回守护用例要扫描的「服务端自己产出的脚本文本」：internal/web/static/js
+// 下 go:embed 的静态脚本（filepath.Glob 的 * 不跨目录，mathjax 子目录因此天然被排除）。
+// 打包好的 Svelte 产物（/assets/index-*.js）不在其列：那是压缩过的框架与第三方代码，文本
+// 匹配只会误报，只能靠浏览器冒烟。
+// 测试的工作目录就是 internal/web，故用相对路径。
+func cspServedScripts(t *testing.T) map[string]string {
 	t.Helper()
-	var files []string
-	for _, pattern := range []string{"views/*.templ", "static/js/*.js"} {
-		matched, err := filepath.Glob(pattern)
+	matched, err := filepath.Glob("static/js/*.js")
+	if err != nil {
+		t.Fatalf("glob static/js/*.js: %v", err)
+	}
+	out := make(map[string]string, len(matched))
+	for _, f := range matched {
+		if strings.HasSuffix(f, ".min.js") {
+			continue
+		}
+		raw, err := os.ReadFile(f)
 		if err != nil {
-			t.Fatalf("glob %s: %v", pattern, err)
+			t.Fatalf("read %s: %v", f, err)
 		}
-		for _, f := range matched {
-			if strings.HasSuffix(f, ".min.js") {
-				continue
-			}
-			files = append(files, f)
-		}
+		out[f] = string(raw)
 	}
-	if len(files) == 0 {
-		t.Fatal("no template or script files matched; the guard would pass vacuously")
+	if len(out) == 0 {
+		t.Fatal("no embedded static script matched; the guard would pass vacuously")
 	}
-	return files
+	return out
 }
 
-// cspStripLineComments 丢掉以 // 开头的整行注释。templ 与 JS 源码里都有注释，而
-// base.templ 的注释正文里就写着 "<script>"、review.js 的注释里写着 "hx-on"——不先
-// 剔除，守护用例会对注释误报。
+// cspStripLineComments 丢掉以 // 开头的整行注释。脚本与应用壳标记里都有注释，而注释正文
+// 里就可能出现 "on*=" 或 "eval" 一类的字样——不先剔除，守护用例会对注释误报。
 func cspStripLineComments(src string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(src, "\n") {
@@ -236,8 +241,8 @@ func cspStripLineComments(src string) string {
 	return b.String()
 }
 
-// cspInlineScriptBodies 抽出不带 src 的 <script> 正文。templ 源不是 HTML，这里只做
-// 最小组装：标签含 src= 的算外链、跳过；其余标签的正文返回给调用方独立算哈希。
+// cspInlineScriptBodies 抽出不带 src 的 <script> 正文：标签含 src= 的算外链、跳过；
+// 其余标签的正文返回给调用方独立算哈希。
 func cspInlineScriptBodies(src string) []string {
 	const closeTag = "</script>"
 	var out []string
@@ -271,33 +276,38 @@ var (
 	// cspEventAttr 命中 HTML 事件属性 on*=。要求前导是空白/引号/尖括号，避免误伤
 	// JS 里的属性赋值（形如 btn.onclick = fn，前导是点号）。
 	cspEventAttr = regexp.MustCompile(`(?:^|[\s"'<>])on[a-z]+\s*=`)
-	// cspHTMXEvalUse 命中 htmx 需要运行时编译 JS 的写法：hx-on（含 hx-on: 与 hx-on-）
-	// 与 hx-vals / hx-trigger 值里的 js: 表达式。它们执行时都走 new Function/Function，
-	// 依赖 script-src 'unsafe-eval'。
-	cspHTMXEvalUse = regexp.MustCompile(`hx-on|hx-(?:vals|trigger)\s*=\s*["'][^"']*js:`)
+	// cspRuntimeCompile 命中运行时编译 JS 的写法（eval / new Function）。它们依赖
+	// script-src 'unsafe-eval'，而策略刻意不写：自有脚本一旦引入，用例就变红，
+	// 逼作者先想清楚是放宽策略还是换实现。
+	cspRuntimeCompile = regexp.MustCompile(`\beval\s*\(|new\s+Function\s*\(`)
+	// cspExternalResource 命中 src= / href= 里的绝对地址（http(s): 或协议相对 //）。
+	// 策略只给了 'self' 与主题引导的 hash，多一个来源都会被浏览器阻断。
+	cspExternalResource = regexp.MustCompile(`(?i)(?:src|href)\s*=\s*["'](?:https?:)?//[^"']*`)
 )
 
-// TestSecurityHeadersGuardCoversTemplAndScripts 是代替「人工逐页走查」的静态守护用例。
+// TestSecurityHeadersGuardCoversServedShellAndScripts 是代替「人工逐页走查」的静态守护用例。
 //
-// 它把 internal/web/views/*.templ 与 internal/web/static/js/*.js（排除打包产物与
-// mathjax）里会触达 CSP 的写法抽出来，与「实际下发的策略」逐条对照：
+// 它把真正会送到浏览器的来源抽出来，与「实际下发的策略」逐条对照：
 //
-//   - 内联 <script>（无 src）→ 其 SHA-256 必须出现在 script-src（hash 放行）；
-//   - <style> 块或 style= 属性 → style-src 必须含 'unsafe-inline'（style 属性无法
-//     被 hash 覆盖，理由见 security_headers.go）；
+//   - 渲染出的 SPA 应用壳（用例直接取响应体）、go:embed 的静态脚本与 Go 现场生成的
+//     /sw.js 里的内联 <script>（无 src）→ 其 SHA-256 必须出现在 script-src（hash 放行）；
+//   - 同一批来源里的 <style> 块或 style= 属性 → style-src 必须含 'unsafe-inline'
+//     （style 属性无法被 hash/nonce 覆盖，理由见 security_headers.go）；
 //   - 事件属性 on*= → script-src 必须含 'unsafe-inline'（事件属性同样无法 hash）；
-//   - hx-on / hx-*="js:…" → script-src 必须含 'unsafe-eval'（htmx 用 new Function 编译）。
+//   - 自有脚本里的 eval / new Function → 需要 script-src 'unsafe-eval'，而策略刻意不写，
+//     用例因此变红；
+//   - 应用壳里的外链脚本/样式必须同源：策略只给了 'self' 与主题引导的 hash，多一个来源
+//     （CDN、独立静态域名）都会被浏览器阻断；
+//   - 构建期生成的入口 index.html → 必须没有内联 <script>：服务端只给应用壳补 hash，
+//     不会给构建产物补，一旦出现就是只在线上暴露的阻断。
 //
-// 任何「源码用了、策略没放行」的组合都会让用例变红——典型场景是未来有人往模板里塞
-// 一段新的内联 <script>，而策略没有对应的 hash/nonce。
-//
-// 它拦不住的东西（必须靠浏览器冒烟）：运行时由脚本动态插入 DOM 的资源
-// （如 htmx 自己注入的指示器 <style>、matchMedia 的响应用法）、由 Go 常量经 rawHTML
-// 输出的 inline 资源（如 decks_data.go 的 noscriptDialogStyle、themeBootstrap——后者
-// 由 TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap 单独用渲染结果兜住）。
-func TestSecurityHeadersGuardCoversTemplAndScripts(t *testing.T) {
+// 任何「实际在用、策略没放行」的组合都会让用例变红。它拦不住的两类必须靠浏览器冒烟：
+// 运行时由脚本动态插入 DOM 的资源，以及压缩过的打包产物内部（/assets/index-*.js 不参与
+// 文本匹配）。
+func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
-	csp := getWithCookies(t, srv, "/login", nil).Header().Get(wantCSPHeader)
+	shell := getWithCookies(t, srv, "/login", nil)
+	csp := shell.Header().Get(wantCSPHeader)
 	if csp == "" {
 		t.Fatalf("%s is missing", wantCSPHeader)
 	}
@@ -307,29 +317,51 @@ func TestSecurityHeadersGuardCoversTemplAndScripts(t *testing.T) {
 		t.Fatalf("CSP %q is missing script-src or style-src", csp)
 	}
 
-	for _, path := range cspGuardedFiles(t) {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		src := cspStripLineComments(string(raw))
+	shellBody := shell.Body.String()
+	sources := cspServedScripts(t)
+	sources["rendered SPA shell"] = shellBody
+	sw := getWithCookies(t, srv, "/sw.js", nil).Body.String()
+	if !strings.Contains(sw, "STATIC_CACHE") {
+		t.Fatalf("/sw.js did not serve the generated service worker: %s", snippet(sw))
+	}
+	sources["/sw.js"] = sw
+
+	for name, raw := range sources {
+		src := cspStripLineComments(raw)
 
 		for _, body := range cspInlineScriptBodies(src) {
 			sum := sha256.Sum256([]byte(body))
 			token := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
 			if !strings.Contains(scriptSrc, token) {
-				t.Errorf("%s: inline <script> with hash %s is not whitelisted by script-src %q", path, token, scriptSrc)
+				t.Errorf("%s: inline <script> with hash %s is not whitelisted by script-src %q", name, token, scriptSrc)
 			}
 		}
 		if cspStyleUse.MatchString(src) && !strings.Contains(styleSrc, "'unsafe-inline'") {
-			t.Errorf("%s: inline style (<style> or style=) is used but style-src %q lacks 'unsafe-inline'", path, styleSrc)
+			t.Errorf("%s: inline style (<style> or style=) is used but style-src %q lacks 'unsafe-inline'", name, styleSrc)
 		}
 		if cspEventAttr.MatchString(src) && !strings.Contains(scriptSrc, "'unsafe-inline'") {
-			t.Errorf("%s: inline event attribute on*= is used but script-src %q lacks 'unsafe-inline'", path, scriptSrc)
+			t.Errorf("%s: inline event attribute on*= is used but script-src %q lacks 'unsafe-inline'", name, scriptSrc)
 		}
-		if cspHTMXEvalUse.MatchString(src) && !strings.Contains(scriptSrc, "'unsafe-eval'") {
-			t.Errorf("%s: htmx JS-expression attribute (hx-on / js:) needs 'unsafe-eval' but script-src %q lacks it", path, scriptSrc)
+		if cspRuntimeCompile.MatchString(src) {
+			t.Errorf("%s: eval / new Function needs script-src 'unsafe-eval', which the policy deliberately omits: %q", name, scriptSrc)
 		}
+	}
+
+	for _, ref := range cspExternalResource.FindAllString(shellBody, -1) {
+		t.Errorf("rendered SPA shell references a cross-origin resource (%s); the policy only allows 'self'", ref)
+	}
+
+	// 入口由 Vite 生成，服务端只在它上面注入外壳标记，不会为构建期出现的内联脚本补 hash。
+	dist, err := frontend.FS()
+	if err != nil {
+		t.Fatalf("frontend.FS: %v", err)
+	}
+	entry, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		t.Fatalf("read embedded dist/index.html: %v", err)
+	}
+	if bodies := cspInlineScriptBodies(string(entry)); len(bodies) != 0 {
+		t.Errorf("embedded dist/index.html carries %d inline <script> block(s) that no CSP hash covers", len(bodies))
 	}
 }
 

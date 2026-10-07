@@ -182,8 +182,8 @@ func (s *SPA) SetShell(shell SPAShell) {
 }
 
 // buildShellBlock 拼出注入 <head> 的外壳标记。属性值一律转义：图标/脚本 URL 来自装配期
-// 解析，将来若含引号也不会破坏文档结构。顺序与 base.templ 一致——theme-color 早于主题
-// 引导，因为引导会同步该 meta 的内容。
+// 解析，将来若含引号也不会破坏文档结构。theme-color 必须排在主题引导之前——引导会同步该
+// meta 的内容，顺序反了首帧会读到旧颜色。
 func buildShellBlock(shell SPAShell) []byte {
 	var b strings.Builder
 	if shell.ThemeColor != "" {

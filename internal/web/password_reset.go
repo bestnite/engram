@@ -42,8 +42,7 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	s.registerSPAAccountRoutes(router)
 }
 
-// renderSecurityForm 与它渲染的 security_mail.templ 已随退订页切到 SPA 删除：
-// 安全/事务流程不再有服务端渲染，只剩 JSON 端点与 SPA 应用壳。
+// 安全/事务流程没有服务端渲染：只有同源 JSON 端点与 SPA 应用壳，页面全部由前端路由呈现。
 
 // issuePasswordReset 签发密码重置令牌并投递邮件；任何失败只记英文日志（绝不回传）。
 // 日志绝不包含令牌明文。
