@@ -1,10 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { routeStore, initRouter } from './lib/router';
+  import { routeStore, initRouter, navigate } from './lib/router';
   import { localeStore, t } from './lib/i18n';
-  import { initAuth } from './lib/auth';
+  import { initAuth, clearSession } from './lib/auth';
+  import { apiClient } from './lib/api';
   import NavHeader from './lib/components/NavHeader.svelte';
   import NotFoundView from './lib/views/NotFoundView.svelte';
+
+  // 会话中途失效（401，或登录后端点的 CSRF 校验发现没有会话）：清掉认证状态并送回登录页。
+  // 修复前这里什么都不做——界面继续显示「已登录」，每个操作都失败，必须手动刷新才恢复。
+  // 已经在认证页面上时不跳转，免得打断登录/注册/引导本身的错误提示。
+  const AUTH_PAGES = ['/login', '/login/totp', '/register', '/setup'];
+  apiClient.onUnauthorized = () => {
+    clearSession();
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (!AUTH_PAGES.includes(path)) {
+      navigate('/login');
+    }
+  };
 
   // 挂载时初始化认证会话与浏览器路由监听（popstate 与链接代理）
   onMount(() => {

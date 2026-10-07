@@ -63,6 +63,22 @@ export async function initAuth(): Promise<SessionResponse | null> {
 }
 
 /**
+ * 会话中途失效时把认证状态归零（由外壳在 ApiClient.onUnauthorized 里调用）。
+ *
+ * 刻意不改动 error：界面要显示什么由调用方决定，这里只负责「不再声称已登录」。
+ * 不在这里导航也是同样的理由——导航策略属于外壳。
+ */
+export function clearSession(): void {
+  authStore.set({
+    initialized: true,
+    loading: false,
+    authenticated: false,
+    user: null,
+    error: null,
+  });
+}
+
+/**
  * SPA 登录操作
  */
 export async function login(username: string, password: string): Promise<LoginResponse> {

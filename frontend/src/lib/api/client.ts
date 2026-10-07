@@ -115,6 +115,14 @@ export class ApiClient {
   private readonly fetchFn: typeof fetch;
   private csrfToken: string | null = null;
 
+  /**
+   * 会话中途失效时的回调（由应用外壳注册：清认证状态 + 送回登录页）。
+   *
+   * 客户端只负责**发现**「这个会话已经不算数了」，不决定界面策略——策略（是否跳转、跳到哪）
+   * 属于外壳。两者分开后，客户端不需要 import 路由，也不会与视图形成循环依赖。
+   */
+  onUnauthorized: (() => void) | null = null;
+
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = config.baseUrl || '';
     this.fetchFn =
@@ -138,8 +146,10 @@ export class ApiClient {
 
   /**
    * 基础通用请求方法
+   *
+   * isRetry 只由本方法内部在「陈旧 CSRF」自愈时置位，用来保证最多重试一次（不会无限递归）。
    */
-  async request<T>(path: string, init?: RequestInit): Promise<T> {
+  async request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {
     const url = this.baseUrl ? `${this.baseUrl}${path}` : path;
     const headers = new Headers(init?.headers);
 
@@ -197,6 +207,21 @@ export class ApiClient {
       }
 
       const code = errorEnvelope?.error?.code || inferErrorCodeFromStatus(res.status);
+
+      // 陈旧 CSRF 自愈：内存里的 token 已经不匹配（典型：会话刚失效或刚被换掉，而页面还没重新
+      // 问一次会话）。重新取一次会话拿到当前该用的值，再原样重试一次——客户端只有一个 csrf 字段，
+      // 重取后它自动变成服务端此刻期望的那个（匿名时是双提交值、已登录时是会话值）。
+      if (code === 'csrf_failed' && !isRetry) {
+        await this.getSession();
+        return this.request<T>(path, init, true);
+      }
+
+      // 会话已经不算数：通知外壳清认证状态并送回登录页（是否跳转由外壳决定）。
+      // csrf_no_session 是「登录后端点的 CSRF 校验发现根本没有会话」，与 401 同义。
+      if (res.status === 401 || code === 'csrf_no_session') {
+        this.onUnauthorized?.();
+      }
+
       throw new ApiClientError(`HTTP ${res.status}: ${code}`, {
         status: res.status,
         code,

@@ -73,8 +73,14 @@ describe('Centralized typed same-origin REST API client', () => {
     });
 
     it('fetches a CSRF session token before multipart upload and keeps server errors', async () => {
-      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'fresh-package-csrf' }), { status: 200 }));
-      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'csrf_failed', message: 'no' } }), { status: 403 }));
+      const sessionOnce = () => new Response(JSON.stringify({ authenticated: true, csrf_token: 'fresh-package-csrf' }), { status: 200 });
+      const csrfRejected = () => new Response(JSON.stringify({ error: { code: 'csrf_failed', message: 'no' } }), { status: 403 });
+      // 第一次上传前先取会话；被拒后客户端会「重取会话 + 原样重试一次」，
+      // 所以备两轮：重试同样失败时错误照常浮出，不会被自愈逻辑吞掉（见 session-recovery.test.ts）。
+      mockFetch.mockResolvedValueOnce(sessionOnce());
+      mockFetch.mockResolvedValueOnce(csrfRejected());
+      mockFetch.mockResolvedValueOnce(sessionOnce());
+      mockFetch.mockResolvedValueOnce(csrfRejected());
       await expect(client.importDeckPackage(new File(['x'], 'a.edeck'), { target: 'new_deck' })).rejects.toMatchObject({ status: 403, code: 'csrf_failed' });
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       expect(new Headers(mockFetch.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe('fresh-package-csrf');
