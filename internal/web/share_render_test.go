@@ -49,6 +49,8 @@ const (
 // （internal/render.RenderMarkdown），即把渲染结果作为标签注入而不是再转义一次。
 func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /s/:token 已切到 SPA 应用壳：本用例断言 SSR 回退页的清洗渲染，故置空 SPA（DESIGN.md §8.5）。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Render deck")
 	front := `<span class="hl">高亮</span> 与 **加粗** 与 \(x+y\)`
 	seedBasic(t, db, deck.ID, front, "背面")

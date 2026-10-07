@@ -86,6 +86,8 @@ func revokeShareLink(t *testing.T, srv *Server, deckID uint64, ownerCookies []*h
 // 未打开过分享页的登录访客读不到私有卡组的媒体；打开分享页后同一会话即可读到。
 func TestShareLinkMediaReadableAfterBrowse(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 open deck", 'a')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-open")
 	target := "/media/" + sha
@@ -115,6 +117,8 @@ func TestShareLinkMediaReadableAfterBrowse(t *testing.T) {
 // TestShareLinkMediaGrantExpiryIsMinOfLinkAndSession 断言授权行的过期时刻取「链接过期」与「会话过期」较早者。
 func TestShareLinkMediaGrantExpiryIsMinOfLinkAndSession(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deck, _ := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 expiry deck", 'b')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-expiry")
 
@@ -185,6 +189,8 @@ func TestShareLinkPasswordGateForMedia(t *testing.T) {
 // TestShareLinkMediaLapsesAfterRevoke 覆盖撤销：之前打开过（已登记授权）的会话，链接被撤销后媒体必须立即 404。
 func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 revoke deck", 'd')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-revoke")
 	target := "/media/" + sha
@@ -211,6 +217,8 @@ func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 // TestShareLinkMediaLapsesAfterLinkExpiry 覆盖过期：链接在打开时有效、之后过期，已登记的授权不得再放行。
 func TestShareLinkMediaLapsesAfterLinkExpiry(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 expiry lapse deck", 'e')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-lapse")
 	target := "/media/" + sha
@@ -243,6 +251,8 @@ func TestShareLinkMediaLapsesAfterLinkExpiry(t *testing.T) {
 // 访客打开 A 的分享页后，B 卡组的媒体（同属 owner）与没有任何 note 引用的媒体都必须 404。
 func TestShareLinkMediaCoversOnlyTheSharedDeck(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deckA, shaA := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 scope A", 'f')
 	_, shaB := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 scope B", 'g')
 	// 一份没有任何 note 引用的媒体（owner 上传、无人引用）。
@@ -269,6 +279,8 @@ func TestShareLinkMediaCoversOnlyTheSharedDeck(t *testing.T) {
 // 另一个（同属一个用户、未打开过分享页）的会话拿不到媒体。
 func TestShareLinkMediaGrantIsSessionScoped(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// 分享浏览已切到 SPA 应用壳：本用例断言 SSR 回退路径（媒体授权经 SSR 浏览登记），故置空 SPA。
+	srv.spa = nil
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 session scope", 'i')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-session")
 	target := "/media/" + sha

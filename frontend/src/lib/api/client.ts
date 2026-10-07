@@ -62,6 +62,7 @@ import {
   type EmailChangeRequest,
   type EmailChangeResponse,
   type ResendVerificationResponse,
+  type ShareResponse,
 } from './types';
 
 /**
@@ -918,6 +919,25 @@ export class ApiClient {
     return this.request<ResendVerificationResponse>('/api/v1/settings/verify-email', {
       method: 'POST',
       body: JSON.stringify({}),
+    });
+  }
+
+  /**
+   * 读取一份分享卡组的只读内容（GET /api/v1/share/:token）。
+   * 匿名可访问（链接本身即凭据）；有口令的链接在解锁前只返回 password_required: true。
+   */
+  async getShare(token: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}`);
+  }
+
+  /**
+   * 校验分享口令并取回内容（POST /api/v1/share/:token/unlock）。
+   * 与 SSR 一样无状态：每次请求都重新校验口令，不建立解锁状态，也无需 CSRF token。
+   */
+  async unlockShare(token: string, password: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
     });
   }
 }

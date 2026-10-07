@@ -22,6 +22,7 @@ import ResetPasswordView from '../views/ResetPasswordView.svelte';
 import EmailSettingsView from '../views/EmailSettingsView.svelte';
 import VerifyEmailView from '../views/VerifyEmailView.svelte';
 import ConfirmEmailChangeView from '../views/ConfirmEmailChangeView.svelte';
+import ShareBrowseView from '../views/ShareBrowseView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -226,5 +227,12 @@ export const routes: RouteDefinition[] = [
     path: '/spa/confirm-email-change',
     name: 'spa-confirm-email-change',
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 公开只读分享浏览。服务端 GET /s/:token 已切到应用壳（无效/撤销链接仍在服务端 404），
+    // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock（DESIGN.md §5）。
+    path: '/s/:token',
+    name: 'share-browse',
+    component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
 ];
