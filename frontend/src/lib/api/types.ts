@@ -1347,12 +1347,27 @@ export interface AdminMailTemplateRow {
   updated_at: string;
 }
 
+/**
+ * 某类型在某语言下的**内置正文**（DESIGN.md §4.7）。
+ *
+ * 与发信方兜底用的是同一段代码，只是代入占位符而不是真实值——所以编辑框预填它之后，
+ * 「看到的默认」与「实际发出去的默认」不会是两份文本。
+ */
+export interface AdminMailTemplateDefault {
+  type: string;
+  locale: string;
+  subject: string;
+  body_md: string;
+}
+
 export interface AdminMailTemplatesResponse {
   locales: string[];
   /** 回退链第二级：没有自定义模板时按它取，界面据此说明。 */
   site_default_locale: string;
   types: AdminMailTemplateType[];
   rows: AdminMailTemplateRow[];
+  /** 每个类型 × 每种语言的内置正文；编辑框据此预填，「恢复默认」后也回到它。 */
+  defaults: AdminMailTemplateDefault[];
 }
 
 export interface AdminMailTemplatePreview {

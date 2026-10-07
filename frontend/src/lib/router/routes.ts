@@ -29,7 +29,8 @@ import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
 import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
 import AdminJobsView from '../views/admin/AdminJobsView.svelte';
 import AdminI18nView from '../views/admin/AdminI18nView.svelte';
-import AdminMailTemplatesView from '../views/admin/AdminMailTemplatesView.svelte';
+// 邮件模板并入 AdminSMTPView（同一页），这里只留旧路径的搬家视图。
+import AdminMailMovedView from '../views/admin/AdminMailMovedView.svelte';
 import ForgotPasswordView from '../views/ForgotPasswordView.svelte';
 import ResetPasswordView from '../views/ResetPasswordView.svelte';
 import EmailSettingsView from '../views/EmailSettingsView.svelte';
@@ -295,11 +296,11 @@ export const routes: RouteDefinition[] = [
     component: AdminI18nView as unknown as RouteDefinition['component'],
   },
 {
-    // 邮件模板（DESIGN.md §4.7）。服务端 GET /admin/mail-templates 已切到应用壳，
-    // 读写走 /api/v1/admin/mail-templates*。
+    // 邮件模板已并入「邮件」页（上面那条）；这条只为让旧链接与书签不作废：
+    // 它不渲染内容，只把地址换过去（读写仍走 /api/v1/admin/mail-templates*）。
     path: '/admin/mail-templates',
-    name: 'admin-mail-templates',
-    component: AdminMailTemplatesView as unknown as RouteDefinition['component'],
+    name: 'admin-mail-templates-moved',
+    component: AdminMailMovedView as unknown as RouteDefinition['component'],
   },
   {
     // 请求密码重置（DESIGN.md §8.1）。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。

@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminSMTPResponse, AdminTestResult } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import AdminMailTemplatesView from './AdminMailTemplatesView.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
@@ -203,4 +204,14 @@
       <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('admin.smtp.admin_notify.label')}: {configuredLabel(view.admin_notify_ready)}</p>
     </section>
   {/if}
+
+  <!-- 邮件模板：与 SMTP 同页（同一个「邮件」入口）。两件事本来就是一体的——
+       配好发信通道之后，紧接着就是「发出去的信长什么样」。 -->
+  <section class="space-y-3" data-testid="admin-smtp-templates">
+    <div>
+      <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.mail.heading')}</h2>
+      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.mail.intro')}</p>
+    </div>
+    <AdminMailTemplatesView embedded />
+  </section>
 </div>

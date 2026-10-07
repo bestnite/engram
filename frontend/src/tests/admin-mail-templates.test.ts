@@ -7,6 +7,11 @@ import { en } from '../lib/i18n/locales/en';
 import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 import type { AdminMailTemplatesResponse } from '../lib/api';
+import { draftFor } from '../lib/mail-template-draft';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
 
 // 邮件模板管理页（DESIGN.md §4.7）。夹具刻意只放两个变量：一个必填（链接）、一个可选，
 // 因为「必填标记」正是这个页面要传达的核心信息。
@@ -26,6 +31,21 @@ const fixture: AdminMailTemplatesResponse = {
     },
   ],
   rows: [],
+  // 内置正文：编辑框在没有自定义版本时预填的就是它（Go 侧由 mail.DefaultTemplate 生成）。
+  defaults: [
+    {
+      type: 'password_reset',
+      locale: 'zh-CN',
+      subject: '【默认】重置密码',
+      body_md: '你好，\n\n{{url}}\n\n{{site}}',
+    },
+    {
+      type: 'password_reset',
+      locale: 'en',
+      subject: '[default] Reset your password',
+      body_md: 'Hello,\n\n{{url}}',
+    },
+  ],
 };
 
 describe('AdminMailTemplatesView', () => {
@@ -75,8 +95,11 @@ describe('AdminMailTemplatesView', () => {
 });
 
 describe('mail template admin route and catalog keys', () => {
-  it('resolves /admin/mail-templates to its own route', () => {
-    expect(matchRoute('/admin/mail-templates', routes).route?.name).toBe('admin-mail-templates');
+  it('serves the templates on the mail page and keeps the old path working', () => {
+    // 两个 tab 合成一个：模板编辑器现在挂在「邮件」页里（AdminSMTPView 内嵌）。
+    expect(matchRoute('/admin/smtp', routes).route?.name).toBe('admin-smtp');
+    // 旧地址只为不作废书签，落到搬家视图（它把地址换成 /admin/smtp）。
+    expect(matchRoute('/admin/mail-templates', routes).route?.name).toBe('admin-mail-templates-moved');
   });
 
   // 这份清单镜像 internal/mail/vars.go 的变量表。Go 侧每条 VarSpec 都带一个 NoteKey，
@@ -86,6 +109,9 @@ describe('mail template admin route and catalog keys', () => {
     'job_id', 'job_kind', 'jobs_url', 'media_limit', 'media_used', 'pass_rate', 'preset', 'presets_url',
     'reason', 'reset_url', 'review_url', 'reviewed_count', 'role', 'settings_url', 'site', 'stats_url',
     'status', 'streak_days', 'time', 'unsubscribe_url', 'username', 'verify_url', 'what',
+    // 摘要的六个统计行里有两个数字当初只传给渲染函数、没进变量表；预填默认要用到它们，
+    // 于是补进了 internal/mail/vars.go —— 这里跟着钉住。
+    'new_cards',
   ];
 
   it('defines every variable note key in both catalogs', () => {
@@ -111,18 +137,45 @@ describe('mail template admin route and catalog keys', () => {
       'admin.mail.preview_heading',
       'admin.mail.save',
       'admin.mail.saved',
-      'admin.mail.delete',
-      'admin.mail.deleted',
+      'admin.mail.restore',
+      'admin.mail.restore_hint',
+      'admin.mail.restored',
+      'admin.mail.prefill_builtin',
+      'admin.mail.prefill_custom',
       'admin.mail.test',
       'admin.mail.test_queued',
       'admin.mail.empty_body',
       'admin.mail.error.invalid_template',
       'admin.mail.error.mail_not_configured',
-      'admin.nav.mail_templates',
     ] as const;
     for (const key of keys) {
       expect(zhCN[key], `zh-CN missing ${key}`).toBeTruthy();
       expect(en[key], `en missing ${key}`).toBeTruthy();
     }
+  });
+});
+
+describe('the editor is pre-filled with the built-in default', () => {
+  it('prefers the saved template, and falls back to the built-in default', () => {
+    const builtin = { type: 'password_reset', locale: 'zh-CN', subject: '内置主题', body_md: '内置正文' };
+    // 没有自定义版本 -> 预填内置默认（而不是空框）。
+    expect(draftFor(null, builtin)).toEqual({ subject: '内置主题', body: '内置正文' });
+    // 有自定义版本 -> 编辑框显示的是它，不是默认。
+    const row = { type: 'password_reset', locale: 'zh-CN', subject: '我的主题', body_md: '我的正文', updated_at: '2026-10-07T00:00:00Z' };
+    expect(draftFor(row, builtin)).toEqual({ subject: '我的主题', body: '我的正文' });
+    // 两边都没有 -> 空（不会渲染出 undefined）。
+    expect(draftFor(null, null)).toEqual({ subject: '', body: '' });
+  });
+
+  it('the view and the mail page actually use it', () => {
+    const view = read('src/lib/views/admin/AdminMailTemplatesView.svelte');
+    expect(view).toContain('draftFor(currentRow, currentDefault)');
+    expect(view).toContain('data-testid="admin-mail-template-prefill"');
+    // 「恢复默认」只在有自定义版本时可用——没有自定义却点得动，等于让人删一个不存在的东西。
+    // 组件 prop 是 testId（渲染后为 data-testid），所以源码断言要写前者。
+    expect(view).toContain('testId="admin-mail-template-restore"');
+    expect(view).toContain('disabled={busy || !currentRow}');
+    const page = read('src/lib/views/admin/AdminSMTPView.svelte');
+    expect(page).toContain('<AdminMailTemplatesView embedded />');
   });
 });

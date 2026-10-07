@@ -8,14 +8,17 @@
   import Button from '../../components/ui/Button.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import { draftFor } from '../../mail-template-draft';
 
   interface Props {
     initialLoading?: boolean;
     initialError?: ApiClientError | Error | null;
     initialData?: AdminMailTemplatesResponse | null;
+    /** 嵌在「邮件」页里时不再渲染页面级宽度、页标题与侧栏导航（套两层会让它们重复）。 */
+    embedded?: boolean;
   }
 
-  let { initialLoading = true, initialError = null, initialData = null }: Props = $props();
+  let { initialLoading = true, initialError = null, initialData = null, embedded = false }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   let loading = $state(initialLoading);
@@ -43,14 +46,19 @@
   const currentRow = $derived(
     (data?.rows ?? []).find((row) => row.type === selectedType && row.locale === selectedLocale) ?? null
   );
+  /** 该类型该语言的内置正文；没有自定义模板时编辑框预填的就是它。 */
+  const currentDefault = $derived(
+    (data?.defaults ?? []).find((item) => item.type === selectedType && item.locale === selectedLocale) ?? null
+  );
   const typeOptions = $derived(types.map((item) => ({ value: item.type, label: $t(item.label_key) })));
   const localeOptions = $derived(locales.map((code) => ({ value: code, label: code })));
 
-  /** 起草稿：有自定义就载入，没有就留空表示「用内置正文」。
-   *  只在浏览器运行；它只读 currentRow，所以不会因为打字（写 subject/body）而回灌覆盖。 */
+  /** 起草稿：有自定义就载入，没有就**预填内置默认正文**（初值规则与它的用例在
+   *  mail-template-draft.ts）。它只读 currentRow/currentDefault，所以不会因为打字而回灌覆盖。 */
   $effect(() => {
-    subject = currentRow?.subject ?? '';
-    body = currentRow?.body_md ?? '';
+    const draft = draftFor(currentRow, currentDefault);
+    subject = draft.subject;
+    body = draft.body;
     preview = null;
     notice = '';
     errorKey = '';
@@ -123,7 +131,7 @@
     try {
       await apiClient.deleteAdminMailTemplate(selectedType, selectedLocale);
       await load();
-      notice = 'admin.mail.deleted';
+      notice = 'admin.mail.restored';
     } catch (err) {
       errorKey = errorKeyFor(err);
     } finally {
@@ -168,13 +176,15 @@
   }
 </script>
 
-<div class="py-10 max-w-5xl mx-auto px-4">
-  <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.mail.heading')}</h1>
-  <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.mail.intro')}</p>
+<div class={embedded ? 'space-y-5' : 'py-10 max-w-5xl mx-auto px-4'} data-testid="admin-mail-templates">
+  {#if !embedded}
+    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.mail.heading')}</h1>
+    <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.mail.intro')}</p>
 
-  <div class="mt-6">
-    <AdminNav />
-  </div>
+    <div class="mt-6">
+      <AdminNav />
+    </div>
+  {/if}
 
   {#if loading}
     <div class="mt-6">
@@ -217,6 +227,10 @@
 
         <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-fallback">
           {$t('admin.mail.fallback_hint', { locale: data.site_default_locale || '—' })}
+        </p>
+
+        <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-prefill">
+          {$t(currentRow ? 'admin.mail.prefill_custom' : 'admin.mail.prefill_builtin')}
         </p>
 
         {#if currentType}
@@ -281,16 +295,16 @@
             {$t('admin.mail.test')}
           </Button>
           <Button
-            variant="danger-outline"
+            variant="outline"
             size="lg"
-            testId="admin-mail-template-delete"
+            testId="admin-mail-template-restore"
             disabled={busy || !currentRow}
             onclick={remove}
           >
-            {$t('admin.mail.delete')}
+            {$t('admin.mail.restore')}
           </Button>
         </div>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.mail.delete_hint')}</p>
+        <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.mail.restore_hint')}</p>
 
         <p class="text-sm text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-state">
           {currentRow

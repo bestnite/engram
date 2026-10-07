@@ -15,7 +15,6 @@
     { href: '/admin/health', key: 'admin.nav.health' },
     { href: '/admin/api-keys', key: 'admin.nav.api_keys' },
     { href: '/admin/i18n', key: 'admin.nav.i18n' },
-    { href: '/admin/mail-templates', key: 'admin.nav.mail_templates' },
   ];
 
   // 精确匹配子页；/admin 是概览，只在恰好命中时点亮，避免在任何子页都高亮它。
