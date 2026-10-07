@@ -40,7 +40,7 @@ import ShareBrowseView from '../views/ShareBrowseView.svelte';
 import UnsubscribeView from '../views/UnsubscribeView.svelte';
 
 /**
- * 前端骨架路由定义列表（DESIGN.md §8.1）
+ * 前端骨架路由定义列表
  */
 export const routes: RouteDefinition[] = [
   {
@@ -64,7 +64,7 @@ export const routes: RouteDefinition[] = [
     component: DeckSharingView as unknown as RouteDefinition['component'],
   },
   {
-    // 卡组每日上限设置（DESIGN.md §8.1 的规范路径）。服务端 GET /decks/:id/settings 已切到
+    // 卡组每日上限设置（规范路径）。服务端 GET /decks/:id/settings 已切到
     // 应用壳（owner 门禁仍在服务端），读写走 /api/v1/decks/:id/settings。
     path: '/decks/:id/settings',
     name: 'deck-settings',
@@ -97,7 +97,7 @@ export const routes: RouteDefinition[] = [
     component: NoteCreateView as unknown as RouteDefinition['component'],
   },
   {
-    // 旧 SSR 编辑地址（DESIGN.md §8.1 的规范路由）：服务端 GET /decks/:id/notes/:nid 现在返回
+    // 旧 SSR 编辑地址（规范路由）：服务端 GET /decks/:id/notes/:nid 现在返回
     // 应用壳，客户端必须能处理这个精确 URL，否则旧链接与刷新会落到 404 视图。
     // 参数名用 noteId，与 NoteEditView 读取的 $routeStore.params.noteId 保持一致。
     path: '/decks/:id/notes/:noteId',
@@ -111,7 +111,7 @@ export const routes: RouteDefinition[] = [
     component: NoteCreateView as unknown as RouteDefinition['component'],
   },
   {
-    // 复习页的规范路由（DESIGN.md §8.1）。服务端 GET /review 已切到 SPA 应用壳，
+    // 复习页的规范路由。服务端 GET /review 已切到 SPA 应用壳，
     // 客户端必须能处理这个精确 URL，否则首页「开始复习」链接与刷新会落到 404 视图。
     path: '/review',
     name: 'review',
@@ -139,7 +139,7 @@ export const routes: RouteDefinition[] = [
     component: APIKeysView as unknown as RouteDefinition['component'],
   },
   {
-    // 两步验证管理（DESIGN.md §8.1 的规范路径）。服务端 GET /settings/totp 已切到应用壳，
+    // 两步验证管理（规范路径）。服务端 GET /settings/totp 已切到应用壳，
     // 读写走 /api/v1/settings/totp*。
     path: '/settings/totp',
     name: 'totp-settings',
@@ -152,7 +152,7 @@ export const routes: RouteDefinition[] = [
     component: TOTPView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮件通知偏好（DESIGN.md §8.1 的规范路径）。服务端 GET /settings/notifications 已切到
+    // 邮件通知偏好（规范路径）。服务端 GET /settings/notifications 已切到
     // 应用壳，读写走 /api/v1/settings/notifications。
     path: '/settings/notifications',
     name: 'notification-settings',
@@ -171,7 +171,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     // SPA 登录入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /login，
-    // 在浏览器端到端验证之前不遮蔽它（DESIGN.md §8.1 的迁移目标路径）。
+    // 在浏览器端到端验证之前不遮蔽它（迁移目标路径）。
     // 服务端 GET /spa/login 返回应用壳并初始化会话前双提交 cookie；
     // 登录协议仍走 /api/v1/auth/session + /api/v1/auth/login。
     path: '/spa/login',
@@ -209,7 +209,7 @@ export const routes: RouteDefinition[] = [
     component: SetupView as unknown as RouteDefinition['component'],
   },
   {
-    // 注册与首个管理员引导的规范路径（DESIGN.md §8.1）。服务端 GET /register、/setup 已切到
+    // 注册与首个管理员引导的规范路径。服务端 GET /register、/setup 已切到
     // 应用壳，协议是 POST /api/v1/auth/register、POST /api/v1/auth/setup；POST /register、/setup
     // 仍是 SSR 表单处理器，无脚本客户端照旧可用。
     path: '/register',
@@ -222,14 +222,14 @@ export const routes: RouteDefinition[] = [
     component: SetupView as unknown as RouteDefinition['component'],
   },
   {
-    // 调度预设页（DESIGN.md §8.1 的规范路径）。服务端 GET /presets 已切到应用壳，
+    // 调度预设页（规范路径）。服务端 GET /presets 已切到应用壳，
     // 读写走 /api/v1/presets* 的会话 JSON 端点。
     path: '/presets',
     name: 'presets',
     component: PresetsView as unknown as RouteDefinition['component'],
   },
   {
-    // 管理面板概览（DESIGN.md §8.1、§8.4）。服务端 GET /admin 已切到应用壳（requireAdmin 先于
+    // 管理面板概览。服务端 GET /admin 已切到应用壳（requireAdmin 先于
     // 外壳），计数走 /api/v1/admin/summary。
     path: '/admin',
     name: 'admin-dashboard',
@@ -303,7 +303,7 @@ export const routes: RouteDefinition[] = [
     component: AdminMailMovedView as unknown as RouteDefinition['component'],
   },
   {
-    // 请求密码重置（DESIGN.md §8.1）。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。
+    // 请求密码重置。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。
     // 协议走 POST /api/v1/auth/forgot-password；响应只含站点级 mail_ready，不透露账号是否存在。
     path: '/forgot-password',
     name: 'forgot-password',
@@ -339,13 +339,13 @@ export const routes: RouteDefinition[] = [
   },
   {
     // 公开只读分享浏览。服务端 GET /s/:token 已切到应用壳（无效/撤销链接仍在服务端 404），
-    // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock（DESIGN.md §5）。
+    // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock。
     path: '/s/:token',
     name: 'share-browse',
     component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮箱验证结果的规范路径（DESIGN.md §8.1）。服务端 GET /verify-email 返回应用壳，
+    // 邮箱验证结果的规范路径。服务端 GET /verify-email 返回应用壳，
     // 邮件里的一键链接就指向这里；令牌由视图读取 ?token= 后经 POST /api/v1/auth/verify-email 消费。
     // /spa/verify-email 保留为迁移期别名。
     path: '/verify-email',
@@ -360,7 +360,7 @@ export const routes: RouteDefinition[] = [
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
   },
   {
-    // 一键退订的规范路径（DESIGN.md §4.7、§8.1）。服务端 GET /unsubscribe 返回应用壳并下发
+    // 一键退订的规范路径。服务端 GET /unsubscribe 返回应用壳并下发
     // 会话前双提交 cookie，令牌由视图读取 ?token= 后经 GET/POST /api/v1/unsubscribe 读取与确认。
     path: '/unsubscribe',
     name: 'unsubscribe',

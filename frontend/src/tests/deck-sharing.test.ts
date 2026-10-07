@@ -4,7 +4,7 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
- * 卡组共享与克隆入口的 SPA 侧断言（DESIGN.md §5、§8.1）。
+ * 卡组共享与克隆入口的 SPA 侧断言。
  *
  * 服务端切流由 internal/web/spa_sharing_cutover_test.go 钉住；这里钉前端：
  * 共享管理路由由客户端接管 /decks/:id/sharing，克隆动作通过类型化客户端打

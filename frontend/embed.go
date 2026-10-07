@@ -1,4 +1,4 @@
-// Package frontend 承载前端 Svelte SPA 生产构建产物的嵌入（DESIGN.md §8.5、§10.2）。
+// Package frontend 承载前端 Svelte SPA 生产构建产物的嵌入。
 package frontend
 
 import (

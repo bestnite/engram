@@ -32,7 +32,7 @@
   let batchExporting = $state(false);
   let batchExportError = $state<string | null>(null);
 
-  // 待接受的共享邀请（DESIGN.md §4.4 同意制）：分享先产生邀请，接受那一步才写授权。
+  // 待接受的共享邀请（同意制）：分享先产生邀请，接受那一步才写授权。
   // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
   let invites = $state<DeckShareInvite[]>([]);
   let inviteBusy = $state<number | null>(null);

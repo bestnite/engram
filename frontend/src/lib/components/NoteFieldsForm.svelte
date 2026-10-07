@@ -5,7 +5,7 @@
   import Select from './ui/Select.svelte';
 
   /**
-   * 按题型渲染字段表单（DESIGN.md §6.2）。
+   * 按题型渲染字段表单。
    *
    * 字段顺序与控件形态来自 card-fields.ts 的字段表，本组件不含任何按题型分支的
    * 业务判断；视图因此不再把 fields 当 JSON 给用户编辑。

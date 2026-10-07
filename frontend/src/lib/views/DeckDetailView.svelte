@@ -42,7 +42,7 @@
   const perPage = 50;
 
   // 筛选条件：输入即生效（没有「应用」按钮），文本输入 300ms 防抖。
-  // 已删除的卡片不再提供筛选入口（DESIGN.md §8.1：列表只呈现未删除内容）。
+  // 已删除的卡片不再提供筛选入口（列表只呈现未删除内容）。
   let queryInput = $state('');
   let tagInput = $state('');
   let kindSelect = $state('');

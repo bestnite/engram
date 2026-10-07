@@ -1,6 +1,5 @@
 /**
  * 卡组数据结构（与 Go 后端 internal/api/decks.go:DeckResponse 对齐）
- * DESIGN.md §2.2、§7.3
  */
 export interface Deck {
   id: number;
@@ -22,7 +21,7 @@ export interface DecksResponse {
 }
 
 /**
- * 一条待接受的卡组共享邀请（DESIGN.md §4.4、§5 同意制；Go: internal/web/spa_share_invites.go）。
+ * 一条待接受的卡组共享邀请（同意制；Go: internal/web/spa_share_invites.go）。
  *
  * 收件人视角读 deck_name + inviter_name（谁邀请我用哪个卡组），属主视角读 username
  * （我邀请了谁）。同一结构两种读法，字段按视角取用。
@@ -67,7 +66,7 @@ export interface DeckQueueCountsResponse {
 }
 
 /**
- * GET/PATCH /api/v1/decks/:id/settings（DESIGN.md §8.1、§3.3，Go: internal/web/spa_deck_settings.go）。
+ * GET/PATCH /api/v1/decks/:id/settings（Go: internal/web/spa_deck_settings.go）。
  * new_per_day / reviews_per_day 为 0 表示不限；new_unlimited / review_unlimited 显式表达
  * 「不限」，因为 0 与「今日剩余 0 张」在整数上同形。今日已用/剩余与复习队列同源。
  */
@@ -105,7 +104,6 @@ export interface CreateDeckRequest {
 
 /**
  * 笔记数据结构（与 Go 后端 internal/api/notes.go:NoteJSON 对齐）
- * DESIGN.md §2.2、§6.2、§7.3
  */
 export interface Note {
   id: number;
@@ -142,7 +140,7 @@ export interface NotePreviewResponse {
 }
 
 /**
- * GET /api/v1/media 的一项（与 Go internal/api.MediaItem 对齐，DESIGN.md §6.3、§7.3）。
+ * GET /api/v1/media 的一项（与 Go internal/api.MediaItem 对齐）。
  * url 由 sha256 拼成 /media/<sha256>，可直接用于 <img src> 与 Markdown 引用插入。
  */
 export interface MediaItem {
@@ -163,7 +161,7 @@ export interface MediaListResponse {
 
 /**
  * 编辑器上传成功响应（与 Go 后端 internal/web/media.go:storeUpload 对齐）。
- * 对外标识是 sha256，url 直接由哈希拼成 /media/<sha256>（DESIGN.md §6.3）。
+ * 对外标识是 sha256，url 直接由哈希拼成 /media/<sha256>。
  */
 export interface MediaUploadResult {
   sha256: string;
@@ -185,7 +183,7 @@ export interface NoteListParams {
   status?: string;
 }
 
-/** 对齐 DESIGN.md §7.3 的批量写入契约；此界面只允许提交 basic 字段。 */
+/** 批量写入契约的请求体；此界面只允许提交 basic 字段。 */
 export interface CreateNotesRequest {
   notes: Array<{
     kind: 'basic';
@@ -205,7 +203,7 @@ export interface CreateNotesResponse {
 }
 
 /**
- * POST /api/v1/notes/bulk 请求体（DESIGN.md §7.3；权威 schema 是 schema/note-bulk.schema.json）。
+ * POST /api/v1/notes/bulk 请求体（权威 schema 是 schema/note-bulk.schema.json）。
  * action 的取值集合与 Go 侧 bulkAction* 常量逐项一致；note_ids 去重后 1..500；
  * tags 仅标签动作需要（1..20），delete 不得带 tags。
  */
@@ -252,7 +250,6 @@ export interface PackageImportReport {
 
 /**
  * 学习统计概要（与 Go 后端 internal/api/service.go:StatsSummary 对齐）
- * DESIGN.md §7.3、§9
  */
 export interface StatsSummary {
   decks: number;
@@ -266,7 +263,7 @@ export interface StatsSummary {
 
 /**
  * 统计明细（与 Go 后端 internal/web/spa_stats.go 的 spaStatsDetail 对齐）
- * DESIGN.md §9：与 SSR 统计页同源，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
+ * 与统计页同一批聚合查询，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
  */
 export interface StatsVolume {
   today: number;
@@ -351,7 +348,6 @@ export interface StatsDetail {
 
 /**
  * 到期卡片对外形态（与 Go 后端 internal/api/service.go:DueCard 对齐）
- * DESIGN.md §3.3、§7.3
  */
 export interface DueCard {
   card_id: number;
@@ -369,7 +365,6 @@ export interface DueCard {
 
 /**
  * GET /api/v1/review/due 响应体结构
- * DESIGN.md §3.3、§7.3
  */
 export interface DueCardsResponse {
   cards: DueCard[];
@@ -395,7 +390,7 @@ export interface SubmitReviewResult {
 }
 
 /**
- * 作答类题型提交的原始作答（DESIGN.md §6.2、§8.2）。
+ * 作答类题型提交的原始作答。
  * 评分由服务端判分器产生，客户端绝不提交档位。
  */
 export type GradedAnswer = string | number | boolean | number[];
@@ -455,7 +450,7 @@ export interface RevealAnswerResponse {
 /**
  * POST /api/v1/review/render 响应体（Go: internal/web/spa_review.go）。
  * front_html / back_html 已由服务端 goldmark + bluemonday 清洗，是复习页唯一的 HTML 汇
- * （DESIGN.md §6.1）；edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
+ * edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
  */
 export interface ReviewRenderResponse {
   card_id: number;
@@ -466,7 +461,7 @@ export interface ReviewRenderResponse {
 
 /**
  * POST /api/v1/review/bury 响应体：埋藏只写本人进度，不产生 reviews 行；
- * cards / remaining 是同一范围重建后的队列（DESIGN.md §8.2）。
+ * cards / remaining 是同一范围重建后的队列。
  */
 export interface ReviewQueueResponse {
   cards: DueCard[];
@@ -475,7 +470,6 @@ export interface ReviewQueueResponse {
 
 /**
  * GET /api/v1/review/due 查询参数
- * DESIGN.md §3.3、§7.3:
  * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
  */
 export interface DueCardsQuery {
@@ -485,7 +479,6 @@ export interface DueCardsQuery {
 
 /**
  * 用户信息结构（与 Go 后端 internal/web/spa_auth.go 对齐）
- * DESIGN.md §4.1、§8.3
  */
 export interface User {
   id: number;
@@ -498,7 +491,6 @@ export interface User {
 
 /**
  * GET /api/v1/auth/session 响应体结构
- * DESIGN.md §4.3、§8.3
  */
 export interface SessionResponse {
   authenticated: boolean;
@@ -550,7 +542,7 @@ export interface LogoutResponse {
 }
 
 /**
- * POST /api/v1/auth/register 请求体（DESIGN.md §4.2、§8.1）。
+ * POST /api/v1/auth/register 请求体。
  * invite 为空时按站点注册策略判定；非空时走一次性邀请接受路径。
  */
 export interface RegisterRequest {
@@ -567,7 +559,7 @@ export interface RegisterResponse {
 }
 
 /**
- * POST /api/v1/auth/setup 请求体（DESIGN.md §4.1）。
+ * POST /api/v1/auth/setup 请求体。
  * email 为空且配置了 BOOTSTRAP_ADMIN_EMAIL 时由服务端兜底。
  */
 export interface SetupRequest {
@@ -592,7 +584,6 @@ export interface ApiErrorDetail {
 
 /**
  * 统一错误包壳（{"error": {"code": "...", "message": "..."}}）
- * DESIGN.md §7.3
  */
 export interface ApiErrorEnvelope {
   error: ApiErrorDetail;
@@ -700,7 +691,7 @@ export class ApiClientError extends Error {
 }
 
 /**
- * 用户基础资料与设置结构（DESIGN.md §4.1、§8.3，Go: internal/store/models.go:User）
+ * 用户基础资料与设置结构（Go: internal/store/models.go:User）
  */
 export interface UserProfile {
   id?: number;
@@ -723,7 +714,7 @@ export interface UpdateProfileRequest {
 }
 
 /**
- * 切换语言请求体结构（DESIGN.md §8.3）
+ * 切换语言请求体结构
  */
 export interface UpdateLocaleRequest {
   locale: string;
@@ -770,7 +761,7 @@ export interface SessionInfo {
 }
 
 /**
- * TOTP 管理接口（DESIGN.md §4.3、§8.1，Go: internal/web/spa_totp.go）。
+ * TOTP 管理接口（Go: internal/web/spa_totp.go）。
  *
  * GET 只报告状态，绝不返回 secret 或 otpauth；secret 只在 begin 响应里出现一次，
  * 恢复码明文只在 confirm / recovery 响应里出现一次。
@@ -807,7 +798,7 @@ export interface TOTPRecoveryResponse {
 }
 
 /**
- * 邮件通知偏好接口（DESIGN.md §4.7、§8.1，Go: internal/web/spa_mail_prefs.go）。
+ * 邮件通知偏好接口（Go: internal/web/spa_mail_prefs.go）。
  *
  * 分组与开关由服务端从 internal/mail 目录推导；前端只按稳定标识查自己的语言包，
  * 不另列一份类型清单。reminder_hour 为 null 表示站点默认，0–23 是显式小时（0 是合法午夜）。
@@ -838,7 +829,7 @@ export interface UpdateNotificationPrefsRequest {
 }
 
 /**
- * 调度预设接口（DESIGN.md §3.5、§8.1，Go: internal/web/spa_presets.go）。
+ * 调度预设接口（Go: internal/web/spa_presets.go）。
  *
  * 与 SSR 预设页同源：默认预设补齐、门槛、单并发入队、状态与回退全部复用同一批
  * store/jobs 方法。verdict 是服务端算出的三态枚举，前端据此查语言包，不复制判据。
@@ -921,7 +912,7 @@ export interface PresetWriteRequest {
 }
 
 /**
- * 管理面板接口（DESIGN.md §8.4，Go: internal/web/spa_admin_read.go）。
+ * 管理面板接口（Go: internal/web/spa_admin_read.go）。
  * 响应只带原始值与稳定英文标识，任何本地化文案都由前端语言包按标识映射。
  */
 
@@ -988,7 +979,7 @@ export interface AdminAuditQuery {
   page?: number;
 }
 
-/** 用户管理（DESIGN.md §8.4，Go: internal/web/spa_admin_users.go）。 */
+/** 用户管理（Go: internal/web/spa_admin_users.go）。 */
 
 /** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
 export interface AdminUser {
@@ -1232,7 +1223,7 @@ export interface AdminI18nResponse {
   locales: AdminLocaleCoverage[];
   all_complete: boolean;
 }
-// ---- 账号安全与邮件流程（DESIGN.md §4.3、§4.7、§8.1；Go: internal/web/spa_account.go）----
+// ---- 账号安全与邮件流程（Go: internal/web/spa_account.go）----
 
 /** POST /api/v1/auth/forgot-password 请求。响应只含站点级邮件是否可用，绝不回显账号存在性。 */
 export interface ForgotPasswordRequest {
@@ -1287,7 +1278,7 @@ export interface ResendVerificationResponse {
   sent: boolean;
 }
 
-// ---- 公开只读分享浏览（DESIGN.md §5、§6.1、§8.1；Go: internal/web/spa_share.go）----
+// ---- 公开只读分享浏览（Go: internal/web/spa_share.go）----
 
 /** 一条共享卡片的正反面，均为服务端清洗后的 HTML（客户端只做 {@html}，绝不再渲染 Markdown）。 */
 export interface ShareNote {
@@ -1303,7 +1294,7 @@ export interface ShareResponse {
   notes: ShareNote[];
 }
 
-// ---- OIDC 登录入口探测（DESIGN.md §4.4、§8.1；Go: internal/web/spa_oidc.go）----
+// ---- OIDC 登录入口探测（Go: internal/web/spa_oidc.go）----
 
 /** GET /api/v1/auth/oidc：入口是否可用与发起地址；不含任何凭据。 */
 export interface OIDCInfo {
@@ -1312,7 +1303,7 @@ export interface OIDCInfo {
 }
 
 /**
- * GET /api/v1/unsubscribe?token=… 的响应（DESIGN.md §4.7、§8.1）。
+ * GET /api/v1/unsubscribe?token=… 的响应。
  * type 是令牌指名的可选邮件类型；服务端只读取、不消费令牌。
  */
 export interface UnsubscribeReadResponse {
@@ -1324,7 +1315,7 @@ export interface UnsubscribeConfirmResponse {
   type: string;
 }
 
-/** 邮件模板（DESIGN.md §4.7）：每个邮件类型每种语言一份，缺失即回退内置正文。 */
+/** 邮件模板：每个邮件类型每种语言一份，缺失即回退内置正文。 */
 export interface AdminMailTemplateVar {
   name: string;
   required: boolean;
@@ -1348,7 +1339,7 @@ export interface AdminMailTemplateRow {
 }
 
 /**
- * 某类型在某语言下的**内置正文**（DESIGN.md §4.7）。
+ * 某类型在某语言下的**内置正文**。
  *
  * 与发信方兜底用的是同一段代码，只是代入占位符而不是真实值——所以编辑框预填它之后，
  * 「看到的默认」与「实际发出去的默认」不会是两份文本。

@@ -62,7 +62,7 @@
   }
 
   /**
-   * 耗时按量级显示（DESIGN.md §9，与 internal/web/elapsed.go 的 elapsedLabel 同口径）：
+   * 耗时按量级显示（与 internal/web/elapsed.go 的 elapsedLabel 同口径）：
    * < 1 秒毫秒、< 1 分钟秒（一位小数）、< 1 小时分钟（一位小数）、更长「N 小时 M 分」。
    */
   function formatDuration(ms: number): string {

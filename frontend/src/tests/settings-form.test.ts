@@ -134,7 +134,7 @@ describe('Settings view form state and API gap handling', () => {
     });
   });
 
-  describe('Locale persistence in SPA client store (DESIGN.md §8.3)', () => {
+  describe('Locale persistence in SPA client store', () => {
     it('immediately reflects language changes in localeStore upon selection', () => {
       expect(getLocale()).toBe('zh-CN');
 

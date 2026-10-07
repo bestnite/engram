@@ -1,7 +1,7 @@
 import { CARD_KIND_FIELDS } from './card-fields';
 
 /**
- * 后端枚举 → 界面文案（DESIGN.md §8）。
+ * 后端枚举 → 界面文案。
  *
  * 后端发的 `private` / `basic_both` 这类值是**机器词汇**：把它直接插进模板
  * （`<span>{deck.visibility}</span>`）就等于在中文界面里印英文——它和硬编码英文的结果

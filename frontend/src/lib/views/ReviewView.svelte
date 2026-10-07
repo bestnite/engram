@@ -40,7 +40,7 @@
     initialRevealed = false,
   }: Props = $props();
 
-  // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分（DESIGN.md §8.2）。
+  // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分。
   const SELF_ASSESSABLE = ['basic', 'basic_both', 'cloze', 'list', 'short_answer'];
   const GRADED_KINDS = ['typed', 'numeric', 'choice_single', 'choice_multi', 'true_false'];
 
@@ -72,7 +72,7 @@
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
 
-  // 服务端清洗后的卡面 HTML（复习页唯一的 HTML 汇，DESIGN.md §6.1）。空串表示尚未取到，
+  // 服务端清洗后的卡面 HTML（复习页唯一的 HTML 汇）。空串表示尚未取到，
   // 此时回退纯文本；绝不把 fields 原文当 Markdown 送进 HTML 汇。
   // svelte-ignore state_referenced_locally
   let frontHTML = $state(initialFrontHTML);
@@ -82,7 +82,7 @@
   let editHref = $state(initialEditHref);
   let renderToken = 0;
 
-  // 服务端清洗后返回的 HTML 容器：只对它们排版公式，绝不整页排版（DESIGN.md §6.1、§11）。
+  // 服务端清洗后返回的 HTML 容器：只对它们排版公式，绝不整页排版。
   let frontSection = $state<HTMLElement | null>(null);
   let answerSection = $state<HTMLElement | null>(null);
   let feedbackSection = $state<HTMLElement | null>(null);
@@ -93,7 +93,7 @@
   const gradedKind = $derived(current !== null && GRADED_KINDS.includes(current.kind));
   const front = $derived(current ? cardSide(current, false) : []);
   const answer = $derived(current ? cardSide(current, true) : []);
-  // 编辑入口：优先用服务端 render 返回的 edit_href；未取到时按规范路径拼接（DESIGN.md §8.1）。
+  // 编辑入口：优先用服务端 render 返回的 edit_href；未取到时按规范路径拼接。
   const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
   function cardSide(card: DueCard, back: boolean): [string, string][] {
@@ -169,7 +169,7 @@
   }
 
   /**
-   * 取当前卡的服务端清洗 HTML（DESIGN.md §6.1）。token 防止换卡后旧请求覆盖新卡内容；
+   * 取当前卡的服务端清洗 HTML。token 防止换卡后旧请求覆盖新卡内容；
    * 失败只丢弃富文本并回退纯文本，绝不打断复习流程。
    */
   async function loadRender(card: DueCard, token: number): Promise<void> {
@@ -336,7 +336,7 @@
   }
 
   /**
-   * 埋藏当前卡（DESIGN.md §8.2）：只写本人进度，不产生 reviews 行；响应带同范围重建后的队列。
+   * 埋藏当前卡：只写本人进度，不产生 reviews 行；响应带同范围重建后的队列。
    * 服务端按 reader 判定，共享卡组读者可自行复习。
    */
   async function bury(): Promise<void> {
@@ -474,7 +474,7 @@
     }
   }
 
-  // 手机滑动：落点在输入控件/按钮/链接上时不当作滑动（DESIGN.md §8.2）。
+  // 手机滑动：落点在输入控件/按钮/链接上时不当作滑动。
   let touchStartX = 0;
   let touchStartY = 0;
   let tracking = false;

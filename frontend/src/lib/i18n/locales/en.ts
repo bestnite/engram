@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from '../types';
 
 /**
- * 英文语言包骨架（DESIGN.md §8.3、§10.4）
+ * 英文语言包骨架
  * key 一律英文小写点分。与 zh-CN.ts 的 key 集合必须完全一致。
  */
 export const en: LocaleCatalog = {
@@ -424,7 +424,7 @@ export const en: LocaleCatalog = {
   'deck.sharing.link_revoked': 'Revoked',
   'deck.sharing.password_set': 'Password protected',
   'deck.sharing.revoke_all': 'Revoke all active links',
-  // ---- Detailed statistics (/stats), DESIGN.md §9 ----
+  // ---- Detailed statistics (/stats) ----
   // Numbers arrive raw from GET /api/v1/stats/detail; these keys only carry labels and units.
   'stats.volume.heading': 'Review volume',
   'stats.volume.today': 'Today',
@@ -491,7 +491,7 @@ export const en: LocaleCatalog = {
   'stats.tag.col.reviews': 'Reviews',
   'stats.tag.col.retention': 'Retention',
   'stats.table.rate': '{rate}%',
-  // ---- Deck daily-cap settings (/decks/:id/settings), DESIGN.md §8.1、§3.3 ----
+  // ---- Deck daily-cap settings (/decks/:id/settings) ----
   'deck.settings.entry': 'Settings',
   'deck.settings.title': 'Deck settings',
   'deck.settings.back': 'Back to deck',
@@ -517,7 +517,7 @@ export const en: LocaleCatalog = {
   'deck.settings.error.failed': 'Could not save the limits. Please try again.',
   'deck.settings.error.forbidden': 'Only the deck owner can change these limits.',
   'deck.settings.failed': 'Could not load the deck limits.',
-  // ---- TOTP two-factor management (/settings/totp), DESIGN.md §4.3、§8.1 ----
+  // ---- TOTP two-factor management (/settings/totp) ----
   // secret is shown only once (from begin); recovery codes only when generated.
   'settings.totp.heading': 'Two-factor authentication',
   'settings.totp.intro': 'When enabled, signing in also requires a time-based code from your authenticator app.',
@@ -554,7 +554,7 @@ export const en: LocaleCatalog = {
   'settings.totp.error.invalid_request': 'Enter the required value.',
   'settings.totp.error.failed': 'The operation failed. Please try again.',
   'settings.totp.failed': 'Could not load the two-factor settings.',
-  // ---- Notification/email preferences (/settings/notifications), DESIGN.md §4.7、§8.1 ----
+  // ---- Notification/email preferences (/settings/notifications) ----
   // Type and class identifiers come from the server catalog; the text is localised by stable id,
   // so the frontend never keeps a second type list of its own.
   'settings.notifications.heading': 'Email notification preferences',
@@ -616,7 +616,7 @@ export const en: LocaleCatalog = {
   'auth.error.invite_invalid': 'The invite link is invalid.',
   'auth.error.registration_closed': 'Self-service registration is closed.',
   'auth.error.create_failed': 'The account could not be created.',
-  // ---- login second factor (TOTP, /login/totp), DESIGN.md 4.3, 8.1 ----
+  // ---- login second factor (TOTP, /login/totp) ----
   'auth.totp.heading': 'Two-factor verification',
   'auth.totp.intro': 'Enter the code from your authenticator app to finish signing in.',
   'auth.totp.code_label': 'Code',
@@ -628,7 +628,7 @@ export const en: LocaleCatalog = {
   'auth.totp.back_to_login': 'Back to sign in',
   'auth.error.totp_invalid': 'The code is not valid.',
   'auth.error.totp_challenge_expired': 'This two-factor challenge has expired. Sign in again.',
-  // ── Scheduling presets (session JSON endpoints in internal/web/spa_presets.go, DESIGN.md 3.5, 8.1) ──
+  // ── Scheduling presets (session JSON endpoints in internal/web/spa_presets.go) ──
   'presets.heading': 'Scheduling presets',
   'presets.empty': 'No scheduling preset yet.',
   'presets.failed': 'Could not load the presets. Please try again.',
@@ -692,7 +692,7 @@ export const en: LocaleCatalog = {
   'presets.optimize.stage.unknown': 'Stage: unknown',
   'presets.error.not_found': 'The requested preset was not found.',
   'presets.error.failed': 'The optimisation action failed. Please try again.',
-  // ---- admin panel (DESIGN.md 8.1, 8.4; Go: internal/web/spa_admin*.go) ----
+  // ---- admin panel (Go: internal/web/spa_admin*.go) ----
   'admin.nav.heading': 'Admin',
   'admin.nav.dashboard': 'Overview',
   'admin.nav.users': 'Users',
@@ -820,7 +820,7 @@ export const en: LocaleCatalog = {
   'admin.audit.col.detail': 'Detail',
   'admin.audit.total_label': '{total} matches',
   'admin.audit.empty': 'No matching records.',
-  // ---- admin panel: user management, registration & invites, API keys (DESIGN.md 8.4) ----
+  // ---- admin panel: user management, registration & invites, API keys ----
   'admin.common.copy': 'Copy',
   'admin.users.heading': 'Users',
   'admin.users.search_label': 'Search',
@@ -933,7 +933,7 @@ export const en: LocaleCatalog = {
   'admin.keys.notice.revoked': 'Key revoked.',
   'admin.keys.notice.revoke_failed': 'The key could not be revoked.',
   'admin.keys.notice.invalid_key': 'That key does not exist.',
-  // ---- admin panel: system settings, SMTP, OIDC (DESIGN.md 8.4) ----
+  // ---- admin panel: system settings, SMTP, OIDC ----
   'admin.settings.heading': 'System settings',
   'admin.settings.intro': 'Changes take effect on the next request; no restart needed.',
   'admin.settings.source_label': 'Source',
@@ -1039,7 +1039,7 @@ export const en: LocaleCatalog = {
   'admin.oidc.notice.unlinked': 'Identity unlinked.',
   'admin.oidc.notice.invalid_issuer': 'Enter a valid issuer URL.',
   'admin.oidc.notice.failed': 'The change could not be saved.',
-  // ---- admin panel: jobs and translation coverage (DESIGN.md 8.4, 8.3) ----
+  // ---- admin panel: jobs and translation coverage ----
   'admin.jobs.heading': 'Jobs',
   'admin.jobs.col.id': 'ID',
   'admin.jobs.col.kind': 'Kind',
@@ -1079,7 +1079,7 @@ export const en: LocaleCatalog = {
   'admin.i18n.status.incomplete': '{count} missing',
   'admin.i18n.all_complete': 'All language packs are complete.',
   'admin.i18n.load_failed': 'Could not load the coverage report. Try again.',
-  // ---- Account security and email flows (/forgot-password, /reset-password, /settings/email, /spa/verify-email, /spa/confirm-email-change), DESIGN.md 4.3, 4.7, 8.1 ----
+  // ---- Account security and email flows (/forgot-password, /reset-password, /settings/email, /spa/verify-email, /spa/confirm-email-change) ----
   'account.forgot.heading': 'Reset your password',
   'account.forgot.intro': 'Enter your account email and we will send you a reset link if the address is registered.',
   'account.forgot.email_label': 'Email',
@@ -1134,7 +1134,7 @@ export const en: LocaleCatalog = {
   'account.error.password_too_long': 'The password is too long.',
   'account.error.password_too_common': 'The password is too common.',
   'account.error.rate_limited': 'Too many attempts. Please wait and try again.',
-  // ---- Public read-only share browser (GET /s/:token), DESIGN.md 5, 6.1, 8.1 ----
+  // ---- Public read-only share browser (GET /s/:token) ----
   'share.browse.heading': 'Shared deck',
   'share.browse.intro': 'Read-only preview of the shared cards. Sign in to review them with your own progress.',
   'share.browse.login': 'Sign in to review',
@@ -1149,12 +1149,12 @@ export const en: LocaleCatalog = {
   'share.password.submitting': 'Checking…',
   'share.error_password': 'The password is incorrect.',
   'share.error_not_found': 'This share link is invalid, revoked or expired.',
-  // ---- OIDC sign-in entry (probed by the SPA login view), DESIGN.md 4.4, 8.1 ----
+  // ---- OIDC sign-in entry (probed by the SPA login view) ----
   'account.oidc.button': 'Sign in with OIDC',
   // ---- parent-owned navigation entries (mirrors the SSR mainNav labels) ----
   'nav.presets': 'Presets',
   'nav.admin': 'Admin',
-  // ---- One-click unsubscribe page (/unsubscribe, SPA), DESIGN.md 4.7, 8.1 ----
+  // ---- One-click unsubscribe page (/unsubscribe, SPA) ----
   'unsubscribe.heading': 'Unsubscribe',
   'unsubscribe.loading': 'Checking your unsubscribe link…',
   'unsubscribe.intro': 'Stop sending “{type}” emails to your account. This link works only once and cannot be undone from here.',

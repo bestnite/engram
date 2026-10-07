@@ -104,7 +104,7 @@ describe('no decorative arrow glyphs in user-facing copy', () => {
 });
 
 describe('interactive pieces are owned by the component library', () => {
-  // DESIGN.md §8：交互件优先用成熟组件库，组件库能覆盖的不得自写第二份实现。
+  // 交互件优先用成熟组件库，组件库能覆盖的不得自写第二份实现。
   const walk = (dir: string): string[] => {
     const out: string[] = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

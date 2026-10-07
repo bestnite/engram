@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
 
-// 邮件模板管理页（DESIGN.md §4.7）。夹具刻意只放两个变量：一个必填（链接）、一个可选，
+// 邮件模板管理页。夹具刻意只放两个变量：一个必填（链接）、一个可选，
 // 因为「必填标记」正是这个页面要传达的核心信息。
 
 const fixture: AdminMailTemplatesResponse = {

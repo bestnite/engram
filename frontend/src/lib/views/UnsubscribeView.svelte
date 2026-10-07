@@ -5,7 +5,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
 
-  // 一键退订的 SPA 视图（DESIGN.md §4.7、§8.1）：服务端 GET /unsubscribe 只返回应用壳并下发
+  // 一键退订的 SPA 视图：服务端 GET /unsubscribe 只返回应用壳并下发
   // 会话前双提交 cookie，确认页由本视图渲染。令牌由视图读取 ?token= 后先经
   // GET /api/v1/unsubscribe 读取指名的类型（不消费），用户确认后再经 POST /api/v1/unsubscribe
   // 消费（一次性）。/spa/unsubscribe 保留为迁移期别名，指向同一视图。
@@ -19,7 +19,7 @@
   let errorKey = $state('unsubscribe.error.invalid');
 
   // errorKeyFor 把服务端稳定错误 code 映射到本地化 key；未知 code 回落到通用失败提示。
-  // 前端不解析后端英文 message（DESIGN.md §8.3），也不把任何后端文案渲染成 HTML。
+  // 前端不解析后端英文 message，也不把任何后端文案渲染成 HTML。
   function errorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     switch (code) {

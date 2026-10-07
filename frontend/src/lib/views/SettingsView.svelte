@@ -25,7 +25,7 @@
   let passwordNotice = $state<string | null>(null);
   let passwordSaving = $state(false);
 
-  // 卡组共享接收策略（DESIGN.md §5 同意制）：谁可以把卡组分享给我。
+  // 卡组共享接收策略（同意制）：谁可以把卡组分享给我。
   // allowList 存服务端回读的真值（带用户名），本地不推断并集运算的结果。
   let sharePolicy = $state<'anyone' | 'whitelist' | 'nobody'>('anyone');
   let allowList = $state<ShareAllowRow[]>([]);
@@ -44,7 +44,7 @@
   let dayCutoff = $state('');
 
   /**
-   * 初始化探测与加载已有用户数据（DESIGN.md §4.1、§8.3）
+   * 初始化探测与加载已有用户数据
    * 若服务端尚未实现 JSON 端点（404 Not Found），安全优雅地切入本地状态模式，
    * 严禁无根据臆测或向 SSR 表单端点伪造请求。
    */
@@ -96,7 +96,7 @@
   }
 
   /**
-   * 切换界面语言：前端 UI 即时同步更新响应式 store（DESIGN.md §8.3）
+   * 切换界面语言：前端 UI 即时同步更新响应式 store
    */
   function handleLocaleChange(nextLocale: string): void {
     if (isSupportedLocale(nextLocale)) {

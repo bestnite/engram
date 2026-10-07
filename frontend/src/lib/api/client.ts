@@ -80,7 +80,7 @@ export interface ApiClientConfig {
 }
 
 /**
- * 根据 HTTP 状态码推导稳定错误 code（DESIGN.md §7.3、§8.3）
+ * 根据 HTTP 状态码推导稳定错误 code
  */
 function inferErrorCodeFromStatus(status: number): string {
   switch (status) {
@@ -104,7 +104,6 @@ function inferErrorCodeFromStatus(status: number): string {
 
 /**
  * 集中式类型安全同源 REST API 客户端
- * DESIGN.md §7.3、§8.3
  *
  * 核心设计决策：
  * 1. 严格使用 credentials: 'same-origin'（HttpOnly Cookie 会话）
@@ -140,7 +139,7 @@ export class ApiClient {
   }
 
   /**
-   * 配置或更新客户端绑定的 CSRF Token（DESIGN.md §4.3）
+   * 配置或更新客户端绑定的 CSRF Token
    */
   setCsrfToken(token: string | null): void {
     this.csrfToken = token;
@@ -159,7 +158,7 @@ export class ApiClient {
       headers.set('Accept', 'application/json');
     }
 
-    // 严禁发送 Authorization 标头（DESIGN.md §8.3）
+    // 严禁发送 Authorization 标头
     headers.delete('Authorization');
 
     const method = (init?.method || 'GET').toUpperCase();
@@ -294,7 +293,6 @@ export class ApiClient {
 
   /**
    * 获取当前用户的卡组列表（GET /api/v1/decks）
-   * DESIGN.md §7.3
    */
   async getDecks(): Promise<DecksResponse> {
     return this.request<DecksResponse>('/api/v1/decks');
@@ -390,7 +388,7 @@ export class ApiClient {
   }
 
   /**
-   * 克隆一个自己可读的卡组（POST /api/v1/decks/:id/clone，DESIGN.md §5）。
+   * 克隆一个自己可读的卡组（POST /api/v1/decks/:id/clone）。
    * reader 及以上都能克隆；服务端判权与审计，返回新卡组的 {id, name}（进度不跟随）。
    * 显式声明 Accept: application/json，服务端据此返回 JSON 而不是 303 重定向。
    */
@@ -408,7 +406,6 @@ export class ApiClient {
 
   /**
    * 获取卡组下的卡片列表（GET /api/v1/decks/:id/notes）
-   * DESIGN.md §7.3、§8.1
    */
   async getDeckNotes(
     deckId: number | string,
@@ -484,7 +481,7 @@ export class ApiClient {
   }
 
   /**
-   * 批量删除/改标签（POST /api/v1/notes/bulk，DESIGN.md §7.3）。
+   * 批量删除/改标签（POST /api/v1/notes/bulk）。
    * 行级失败不回滚整批：响应 skipped 逐行给出 not_found / insufficient_role，
    * 调用方据 affected 与 skipped 报告真实结果，不做乐观假设。
    */
@@ -511,7 +508,7 @@ export class ApiClient {
   }
 
   /**
-   * 列出当前用户可读的媒体库一页（GET /api/v1/media，DESIGN.md §6.3、§7.3）。
+   * 列出当前用户可读的媒体库一页（GET /api/v1/media）。
    * 取代已删除的 SSR 片段端点：返回的 JSON 每项含 sha256 与可直接引用的 url（/media/<sha256>），
    * 前端不再解析 HTML。参数缺省时服务端给默认页大小；游标非法/超限由服务端回 400。
    */
@@ -527,7 +524,7 @@ export class ApiClient {
    * 端点要求 editor 及以上角色，由服务端判定，前端不隐藏失败；multipart 边界交由浏览器生成，
    * 因此 request 不会替 FormData 设置 Content-Type（仅字符串 body 才强制 application/json）。
    * 成功响应必须满足 /media/<sha256> 的哈希契约，否则按无效响应拒绝，避免把不受约束的
-   * 字符串插入字段（DESIGN.md §6.3）。
+   * 字符串插入字段。
    */
   async uploadDeckMedia(deckId: number | string, file: File): Promise<MediaUploadResult> {
     if (!this.csrfToken) {
@@ -557,7 +554,6 @@ export class ApiClient {
 
   /**
    * 获取当前用户基础资料（GET /api/v1/profile）
-   * DESIGN.md §4.1、§8.3
    */
   async getProfile(): Promise<UserProfile> {
     const res = await this.request<ProfileResponse | UserProfile>('/api/v1/profile');
@@ -569,7 +565,6 @@ export class ApiClient {
 
   /**
    * 更新当前用户资料（PATCH /api/v1/profile）
-   * DESIGN.md §4.1、§8.3
    * 严格使用同源凭据与 CSRF 标头
    */
   async updateProfile(
@@ -594,7 +589,6 @@ export class ApiClient {
 
   /**
    * 仅切换用户界面语言偏好（PATCH /api/v1/settings/locale）
-   * DESIGN.md §8.3
    */
   async updateLocale(
     locale: string,
@@ -614,7 +608,6 @@ export class ApiClient {
 
   /**
    * 获取当前用户学习统计概要（GET /api/v1/stats/summary）
-   * DESIGN.md §7.3、§9
    */
   async getStatsSummary(): Promise<StatsSummary> {
     return this.request<StatsSummary>('/api/v1/stats/summary');
@@ -622,7 +615,7 @@ export class ApiClient {
 
   /**
    * 获取当前用户统计明细（GET /api/v1/stats/detail）
-   * DESIGN.md §8.1、§9：与 SSR 统计页同源，返回 §9 全部指标的原始数值。
+   * 与统计页同一批聚合查询，返回全部指标的原始数值（计数/比例/毫秒），本地化由前端负责。
    */
   async getStatsDetail(): Promise<StatsDetail> {
     return this.request<StatsDetail>('/api/v1/stats/detail');
@@ -630,7 +623,6 @@ export class ApiClient {
 
   /**
    * 获取到期卡片列表（GET /api/v1/review/due）
-   * DESIGN.md §3.3、§7.3:
    * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
    */
   async getDueCards(query?: DueCardsQuery): Promise<DueCardsResponse> {
@@ -662,7 +654,7 @@ export class ApiClient {
   }
 
   /**
-   * 提交作答类题型的原始作答，由服务端判分并写入 reviews（DESIGN.md §6.2、§8.2）。
+   * 提交作答类题型的原始作答，由服务端判分并写入 reviews。
    * 客户端不提交档位；判分档位来自服务端 graderFor 与 preset 映射。
    */
   async submitGradedReview(input: SubmitGradedReviewRequest): Promise<GradedReviewResult> {
@@ -682,7 +674,7 @@ export class ApiClient {
 
   /**
    * 取一张卡正反面的服务端清洗 HTML 与编辑地址（POST /api/v1/review/render）。
-   * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染（DESIGN.md §6.1）。
+   * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染。
    */
   async renderReviewCard(input: { card_id: number; deck?: number[] }): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {
@@ -696,7 +688,7 @@ export class ApiClient {
 
   /**
    * 埋藏当前卡（POST /api/v1/review/bury）：只写本人进度，不产生 reviews 行。
-   * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组（DESIGN.md §8.2）。
+   * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组。
    */
   async buryReview(input: { card_id: number; deck?: number[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
@@ -728,7 +720,6 @@ export class ApiClient {
 
   /**
    * 获取会话状态与安全 CSRF Token（GET /api/v1/auth/session）
-   * DESIGN.md §4.3、§8.3
    */
   async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
     await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
@@ -910,7 +901,7 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
-  // ── 管理面板（DESIGN.md §8.4，Go: internal/web/spa_admin*.go）──────────────
+  // ── 管理面板（Go: internal/web/spa_admin*.go）──────────────
   // 全部走同源会话 cookie，判权在服务端（匿名 401、非 admin 403）；这里只做传输。
 
   /** 读取实例级计数（GET /api/v1/admin/summary）。 */

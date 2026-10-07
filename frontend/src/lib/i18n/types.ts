@@ -1,5 +1,5 @@
 /**
- * 支持的语言代码（DESIGN.md §8.3）
+ * 支持的语言代码
  */
 export type SupportedLocale = 'zh-CN' | 'en';
 

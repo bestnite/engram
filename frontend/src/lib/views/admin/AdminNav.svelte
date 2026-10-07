@@ -2,7 +2,7 @@
   import { t } from '../../i18n';
   import { routeStore } from '../../router';
 
-  // 管理面板自己的导航（DESIGN.md §8.4）。全部子页都已实现，因此每一项都是可用链接。
+  // 管理面板自己的导航。全部子页都已实现，因此每一项都是可用链接。
   const items = [
     { href: '/admin', key: 'admin.nav.dashboard' },
     { href: '/admin/users', key: 'admin.nav.users' },

@@ -4,7 +4,7 @@
   import { cn } from './utils';
 
   /**
-   * 全站唯一的复选框（DESIGN.md §8：交互件用成熟组件库）。
+   * 全站唯一的复选框（交互件用成熟组件库）。
    * 原生 <input type="checkbox"> 在深浅两套主题下的系统外观不一致，且三态
    * （indeterminate）需要手写 property，交给 bits-ui 处理。
    */

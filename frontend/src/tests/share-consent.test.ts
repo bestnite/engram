@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
- * 分享同意制的前端断言（DESIGN.md §5）。
+ * 分享同意制的前端断言。
  *
  * 服务端语义由 internal/web/share_invite_test.go 钉住（分享后仍无授权、接受才生效、
  * 拒绝不留痕、策略在邀请发出前拦住）；这里钉三件事：

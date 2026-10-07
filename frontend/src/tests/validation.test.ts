@@ -9,7 +9,7 @@ import {
 } from '../lib/api/validation';
 
 describe('Profile and settings form validation', () => {
-  describe('validateDisplayName (DESIGN.md §4.1)', () => {
+  describe('validateDisplayName', () => {
     it('rejects empty or whitespace-only display name', () => {
       expect(validateDisplayName('')).toEqual({
         valid: false,
@@ -45,7 +45,7 @@ describe('Profile and settings form validation', () => {
     });
   });
 
-  describe('validateLocale (DESIGN.md §8.3)', () => {
+  describe('validateLocale', () => {
     it('accepts supported locales (zh-CN and en)', () => {
       expect(validateLocale('zh-CN')).toEqual({ valid: true, value: 'zh-CN' });
       expect(validateLocale('en')).toEqual({ valid: true, value: 'en' });
@@ -76,7 +76,7 @@ describe('Profile and settings form validation', () => {
     });
   });
 
-  describe('validateTimezone (DESIGN.md §4.1)', () => {
+  describe('validateTimezone', () => {
     it('accepts common and standard IANA timezones', () => {
       expect(validateTimezone('Asia/Shanghai')).toEqual({
         valid: true,
@@ -132,7 +132,7 @@ describe('Profile and settings form validation', () => {
     });
   });
 
-  describe('validateDayCutoffHour (DESIGN.md §4.7, Go: store.ResolveCutoff)', () => {
+  describe('validateDayCutoffHour (Go: store.ResolveCutoff)', () => {
     it('accepts empty/null/undefined as valid null (defaults to 04:00)', () => {
       expect(validateDayCutoffHour(null)).toEqual({ valid: true, value: null });
       expect(validateDayCutoffHour(undefined)).toEqual({ valid: true, value: null });

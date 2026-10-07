@@ -4,7 +4,7 @@
   import type { MediaItem } from '../api';
   import Button from './ui/Button.svelte';
 
-  // 媒体库选择器（DESIGN.md §6.3）：数据来自 GET /api/v1/media 的同源 JSON，不再拉取已删除的
+  // 媒体库选择器：数据来自 GET /api/v1/media 的同源 JSON，不再拉取已删除的
   // SSR HTML 片段。缩略预览直接用原图（服务端不生成缩略图），由 CSS 限尺寸 + loading="lazy"
   // 承担；每一页的翻页游标也来自 JSON 的 next_cursor。
   //

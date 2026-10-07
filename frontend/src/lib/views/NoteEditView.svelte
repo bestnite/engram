@@ -37,7 +37,7 @@
   // 预览结果容器：只对它调用 MathJax 排版，绝不整页排版编辑器原始 Markdown。
   let previewSection = $state<HTMLElement | null>(null);
   let selectedField = $state('');
-  // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（DESIGN.md §6.3 编辑器媒体面）。
+  // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（编辑器媒体面）。
   let uploadInput = $state<HTMLInputElement | null>(null);
   let uploading = $state(false);
   let uploadErrorKey = $state('');
@@ -115,7 +115,7 @@
   }
 
   // uploadErrorKeyFor 把服务端稳定错误 code 映射到本地化 key；未知 code 回落到通用失败提示。
-  // 前端不解析后端英文 message（DESIGN.md §8.3）。
+  // 前端不解析后端英文 message。
   function uploadErrorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
@@ -235,7 +235,7 @@
         </label>
       </Panel>
 
-      <!-- 选择器只引用原图；延迟加载与限高遵循 DESIGN.md §6.3。 -->
+      <!-- 选择器只引用原图；延迟加载与限高由 CSS 负责。 -->
       <Panel padding="md" class="mt-5 space-y-3">
         <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('media.spa.field')}
           <Select

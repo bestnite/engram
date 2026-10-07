@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
- * SPA 公式渲染的 HTML sink 回归守护（DESIGN.md §6.1、§11）。
+ * SPA 公式渲染的 HTML sink 回归守护。
  *
  * MathJax 只应排版「服务端清洗后返回的 HTML」：本用例把两个视图里的 {@html …} 表达式钉死
  * 成白名单，并断言渲染后调用了 MathJax 排版。若有人把编辑器原始 Markdown 或字段原文塞进

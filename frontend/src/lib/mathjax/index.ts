@@ -1,5 +1,5 @@
 /**
- * SPA 端 MathJax 加载与排版（DESIGN.md §6.1、§8.5、§11）。
+ * SPA 端 MathJax 加载与排版。
  *
  * MathJax 3 是自托管静态资源（`internal/web/static/js/mathjax/tex-svg.js`，go:embed 进
  * 二进制，无公网 CDN）。它的内容哈希 URL 在 Vite 构建期未知，因此 Go 端在 SPA 入口
@@ -8,7 +8,7 @@
  * 外链脚本，所以既不需要内联配置脚本，也不需要 nonce / 'unsafe-inline'。
  *
  * 排版边界：只对「服务端清洗后返回的 HTML 容器」调用 typeset，绝不整页排版——编辑器里的
- * 原始 Markdown 是纯文本，绝不能经 HTML sink 或 MathJax 二次解释（DESIGN.md §6.1、§11）。
+ * 原始 Markdown 是纯文本，绝不能经 HTML sink 或 MathJax 二次解释。
  */
 
 const META_NAME = 'engram-mathjax';
@@ -22,7 +22,7 @@ interface MathJaxGlobal {
 /**
  * MathJax v3 启动配置。`startup.typeset: false` 关闭整页自动排版：SPA 的内容是异步到达的，
  * 只应在服务端清洗后的节点上显式排版。分隔符沿用打包版本的默认值——行内 `\(…\)`、块级
- * `\[…\]`（并保留 `$$…$$`），与 SSR 页面行为一致（DESIGN.md §6.1）。
+ * `\[…\]`（并保留 `$$…$$`），与 SSR 页面行为一致。
  */
 const MATHJAX_CONFIG = {
   tex: {
@@ -89,7 +89,7 @@ export function ensureMathJax(): Promise<MathJaxGlobal | null> {
  * typeset 对给定的「服务端清洗后的 HTML」容器重新排版。
  *
  * 先 typesetClear 再 typesetPromise：清掉旧节点的 MathJax 排版状态，避免换卡/换答案后
- * 残留过期的公式 DOM（DESIGN.md §8.2 的换卡路径）。渲染失败只吞掉——公式排版失败不该
+ * 残留过期的公式 DOM（换卡路径）。渲染失败只吞掉——公式排版失败不该
  * 打断编辑页或复习页（与 SSR 的 notes.js / review.js 同策略）。
  */
 export async function typeset(nodes: Array<Element | null | undefined>): Promise<void> {

@@ -24,7 +24,7 @@ const authErrorCodes = new Set([
 ]);
 
 /**
- * 将 API 错误转换为前端语言包 key（DESIGN.md §8.3）
+ * 将 API 错误转换为前端语言包 key
  * 后端 REST 错误只返回英文 code 与英文 message，前端根据稳定 code 映射本地化文案，
  * 绝不直接把后端的英文 message 暴露在界面上。
  */

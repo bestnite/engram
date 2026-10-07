@@ -3,7 +3,7 @@ import { ApiClientError } from './types';
 /**
  * 账号安全与邮件流程的稳定错误 code 集合。
  * 与 Go 侧 internal/web/spa_account.go 返回的 code 一一对应；统一映射到 account.error.<code>
- * 语言包键，绝不把后端的英文 message 直接展示在界面上（DESIGN.md §8.3）。
+ * 语言包键，绝不把后端的英文 message 直接展示在界面上。
  */
 const accountErrorCodes = new Set([
   'token_expired',

@@ -22,7 +22,7 @@ export const COMMON_TIMEZONES = [
 ] as const;
 
 /**
- * 校验显示名：非空（Trim 后）（DESIGN.md §4.1）
+ * 校验显示名：非空（Trim 后）
  */
 export function validateDisplayName(displayName: string | null | undefined): {
   valid: boolean;
@@ -37,7 +37,7 @@ export function validateDisplayName(displayName: string | null | undefined): {
 }
 
 /**
- * 校验界面语言代码：必须为受支持的语言码之一（DESIGN.md §8.3）
+ * 校验界面语言代码：必须为受支持的语言码之一
  */
 export function validateLocale(locale: string | null | undefined): {
   valid: boolean;

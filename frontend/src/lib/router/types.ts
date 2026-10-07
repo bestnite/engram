@@ -1,7 +1,7 @@
 import type { Component } from 'svelte';
 
 /**
- * 路由定义接口（DESIGN.md §8.1）
+ * 路由定义接口
  */
 export interface RouteDefinition {
   path: string;

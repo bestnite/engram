@@ -8,7 +8,7 @@ import {
 } from '../lib/i18n';
 
 describe('i18n language resolution and formatting', () => {
-  it('resolves locale following DESIGN.md §8.3 priority hierarchy', () => {
+  it('resolves locale following the documented priority hierarchy', () => {
     // 优先级 1：URL 参数覆盖所有后续配置
     expect(
       resolveLocale({

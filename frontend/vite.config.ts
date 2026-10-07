@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 
 /**
- * Vite 构建与测试配置（DESIGN.md §8、§10.1）
+ * Vite 构建与测试配置
  * 配置纯客户端 SPA 构建与 Vitest 测试套件。
  */
 export default defineConfig({

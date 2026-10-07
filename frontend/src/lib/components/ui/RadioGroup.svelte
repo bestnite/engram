@@ -9,7 +9,7 @@
   }
 
   /**
-   * 全站唯一的单选组（DESIGN.md §8：交互件用成熟组件库）。
+   * 全站唯一的单选组（交互件用成熟组件库）。
    *
    * 底层是 bits-ui 的 RadioGroup：方向键切换、roving tabindex、aria-radiogroup 关联
    * 与隐藏 input 的表单语义都由库提供；此前每个单选组各自手写原生 radio + label。

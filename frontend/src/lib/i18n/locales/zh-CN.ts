@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from '../types';
 
 /**
- * 简体中文语言包骨架（DESIGN.md §8.3、§10.4）
+ * 简体中文语言包骨架
  * key 一律英文小写点分。与 en.ts 的 key 集合必须完全一致。
  */
 export const zhCN: LocaleCatalog = {
@@ -424,7 +424,7 @@ export const zhCN: LocaleCatalog = {
   'deck.sharing.link_revoked': '已撤销',
   'deck.sharing.password_set': '已设置口令',
   'deck.sharing.revoke_all': '撤销全部有效链接',
-  // ---- 统计明细（/stats），DESIGN.md §9 ----
+  // ---- 统计明细（/stats） ----
   // 数字来自 GET /api/v1/stats/detail，语言包只负责标签与单位。
   'stats.volume.heading': '复习量',
   'stats.volume.today': '今日',
@@ -491,7 +491,7 @@ export const zhCN: LocaleCatalog = {
   'stats.tag.col.reviews': '复习量',
   'stats.tag.col.retention': '留存率',
   'stats.table.rate': '{rate}%',
-  // ---- 卡组每日上限设置（/decks/:id/settings），DESIGN.md §8.1、§3.3 ----
+  // ---- 卡组每日上限设置（/decks/:id/settings） ----
   'deck.settings.entry': '设置',
   'deck.settings.title': '卡组设置',
   'deck.settings.back': '返回卡组',
@@ -517,7 +517,7 @@ export const zhCN: LocaleCatalog = {
   'deck.settings.error.failed': '保存失败，请重试。',
   'deck.settings.error.forbidden': '只有卡组所有者能修改这些上限。',
   'deck.settings.failed': '无法加载卡组上限。',
-  // ---- 两步验证管理（/settings/totp），DESIGN.md §4.3、§8.1 ----
+  // ---- 两步验证管理（/settings/totp） ----
   // secret 只在 begin 时显示一次；恢复码只在生成时显示。
   'settings.totp.heading': '两步验证',
   'settings.totp.intro': '启用后，登录还需要认证器 App 生成的动态验证码。',
@@ -554,7 +554,7 @@ export const zhCN: LocaleCatalog = {
   'settings.totp.error.invalid_request': '请填写必填项。',
   'settings.totp.error.failed': '操作失败，请重试。',
   'settings.totp.failed': '无法加载两步验证设置。',
-  // ---- 邮件通知偏好（/settings/notifications），DESIGN.md §4.7、§8.1 ----
+  // ---- 邮件通知偏好（/settings/notifications） ----
   // 类型与大类标识来自服务端目录；文案按稳定标识本地化，前端不另列类型清单。
   'settings.notifications.heading': '邮件通知偏好',
   'settings.notifications.intro': '选择本站可以给你发送哪些可选邮件；安全与事务类邮件不可关闭。',
@@ -615,7 +615,7 @@ export const zhCN: LocaleCatalog = {
   'auth.error.invite_invalid': '邀请链接无效、已过期或已被使用，请联系管理员重新获取。',
   'auth.error.registration_closed': '自助注册已关闭，请联系管理员开通账号。',
   'auth.error.create_failed': '创建账号失败，请稍后重试或更换用户名/邮箱。',
-  // ---- 登录第二步（TOTP，/login/totp），DESIGN.md 4.3、8.1 ----
+  // ---- 登录第二步（TOTP，/login/totp） ----
   'auth.totp.heading': '两步验证',
   'auth.totp.intro': '请输入认证器 App 显示的一次性验证码以完成登录。',
   'auth.totp.code_label': '验证码',
@@ -627,7 +627,7 @@ export const zhCN: LocaleCatalog = {
   'auth.totp.back_to_login': '返回登录',
   'auth.error.totp_invalid': '验证码无效。',
   'auth.error.totp_challenge_expired': '两步验证已超时，请重新登录。',
-  // ── 调度预设（internal/web/spa_presets.go 的会话 JSON 端点，DESIGN.md 3.5、8.1）──
+  // ── 调度预设（internal/web/spa_presets.go 的会话 JSON 端点）──
   'presets.heading': '调度预设',
   'presets.empty': '还没有调度预设。',
   'presets.failed': '加载预设失败，请重试。',
@@ -688,7 +688,7 @@ export const zhCN: LocaleCatalog = {
   'presets.optimize.stage.unknown': '阶段：未知',
   'presets.error.not_found': '未找到该预设。',
   'presets.error.failed': '优化操作失败，请重试。',
-  // ---- 管理面板（DESIGN.md 8.1、8.4；Go: internal/web/spa_admin*.go）----
+  // ---- 管理面板（Go: internal/web/spa_admin*.go）----
   'admin.nav.heading': '管理面板',
   'admin.nav.dashboard': '概览',
   'admin.nav.users': '用户管理',
@@ -816,7 +816,7 @@ export const zhCN: LocaleCatalog = {
   'admin.audit.col.detail': '详情',
   'admin.audit.total_label': '命中 {total} 条',
   'admin.audit.empty': '没有匹配的记录。',
-  // ---- 管理面板：用户管理、注册与邀请、API Key 总览（DESIGN.md 8.4）----
+  // ---- 管理面板：用户管理、注册与邀请、API Key 总览----
   'admin.common.copy': '复制',
   'admin.users.heading': '用户管理',
   'admin.users.search_label': '搜索',
@@ -929,7 +929,7 @@ export const zhCN: LocaleCatalog = {
   'admin.keys.notice.revoked': 'Key 已撤销。',
   'admin.keys.notice.revoke_failed': '撤销 key 失败。',
   'admin.keys.notice.invalid_key': '该 key 不存在。',
-  // ---- 管理面板：系统设置、邮件、OIDC（DESIGN.md 8.4）----
+  // ---- 管理面板：系统设置、邮件、OIDC----
   'admin.settings.heading': '系统设置',
   'admin.settings.intro': '改动对下一次请求立即生效，无需重启。',
   'admin.settings.source_label': '来源',
@@ -1035,7 +1035,7 @@ export const zhCN: LocaleCatalog = {
   'admin.oidc.notice.unlinked': '身份已解绑。',
   'admin.oidc.notice.invalid_issuer': '请填写有效的 issuer URL。',
   'admin.oidc.notice.failed': '保存失败。',
-  // ---- 管理面板：作业与语言包完整度（DESIGN.md 8.4、8.3）----
+  // ---- 管理面板：作业与语言包完整度----
   'admin.jobs.heading': '作业',
   'admin.jobs.col.id': 'ID',
   'admin.jobs.col.kind': '类型',
@@ -1075,7 +1075,7 @@ export const zhCN: LocaleCatalog = {
   'admin.i18n.status.incomplete': '缺失 {count} 条',
   'admin.i18n.all_complete': '全部语言包完整。',
   'admin.i18n.load_failed': '加载完整度报告失败，请重试。',
-  // ---- 账号安全与邮件流程（/forgot-password、/reset-password、/settings/email、/spa/verify-email、/spa/confirm-email-change），DESIGN.md 4.3、4.7、8.1 ----
+  // ---- 账号安全与邮件流程（/forgot-password、/reset-password、/settings/email、/spa/verify-email、/spa/confirm-email-change） ----
   'account.forgot.heading': '重置密码',
   'account.forgot.intro': '请输入账号邮箱，若该邮箱已注册，我们会发送一封重置邮件。',
   'account.forgot.email_label': '邮箱',
@@ -1130,7 +1130,7 @@ export const zhCN: LocaleCatalog = {
   'account.error.password_too_long': '密码长度超限。',
   'account.error.password_too_common': '密码过于常见，请更换更复杂的密码。',
   'account.error.rate_limited': '尝试过于频繁，请稍后再试。',
-  // ---- 公开只读分享浏览（GET /s/:token），DESIGN.md 5、6.1、8.1 ----
+  // ---- 公开只读分享浏览（GET /s/:token） ----
   'share.browse.heading': '共享卡组',
   'share.browse.intro': '这是共享卡片的只读预览。登录后可用你自己的进度复习它们。',
   'share.browse.login': '登录后复习',
@@ -1145,12 +1145,12 @@ export const zhCN: LocaleCatalog = {
   'share.password.submitting': '校验中…',
   'share.error_password': '口令不正确。',
   'share.error_not_found': '分享链接无效、已撤销或已过期。',
-  // ---- OIDC 登录入口（由 SPA 登录视图探测后渲染），DESIGN.md 4.4、8.1 ----
+  // ---- OIDC 登录入口（由 SPA 登录视图探测后渲染） ----
   'account.oidc.button': '使用 OIDC 登录',
   // ---- 父级补充的导航项（与 SSR mainNav 文案一致）----
   'nav.presets': '调度预设',
   'nav.admin': '管理',
-  // ---- 一键退订页（/unsubscribe，SPA），DESIGN.md 4.7、8.1 ----
+  // ---- 一键退订页（/unsubscribe，SPA） ----
   'unsubscribe.heading': '退订邮件',
   'unsubscribe.loading': '正在校验退订链接…',
   'unsubscribe.intro': '你的账号将不再接收「{type}」邮件。该链接只能使用一次，且无法在此恢复。',

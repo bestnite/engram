@@ -2,7 +2,7 @@ import { tv } from 'tailwind-variants';
 
 /**
  * 全站按钮的唯一样式来源。此前同一组类名在视图里被抄了 40 余处，
- * 改一次底色要改十几个文件（DESIGN.md §8「多处复用的样式必须封装成组件」）。
+ * 改一次底色要改十几个文件（「多处复用的样式必须封装成组件」）。
  */
 export const buttonVariants = tv({
   base: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors btn-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',

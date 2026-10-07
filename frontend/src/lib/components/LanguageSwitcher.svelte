@@ -4,7 +4,7 @@
   import Select from './ui/Select.svelte';
 
   /**
-   * 页头语言切换器（DESIGN.md §8.3）。
+   * 页头语言切换器。
    *
    * 下拉本体是 ui/Select（bits-ui），不再用原生 select 元素：原生控件在深浅两套主题下
    * 外观由系统决定，与页头其它控件排在一起时高度与配色都对不齐。

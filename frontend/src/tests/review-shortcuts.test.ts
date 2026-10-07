@@ -3,7 +3,7 @@ import { reviewShortcut, reviewSwipe, SWIPE_THRESHOLD } from '../lib/review-shor
 import type { ReviewShortcutState, ReviewSwipeState } from '../lib/review-shortcuts';
 
 /**
- * 复习页键位与滑动的行为回归（DESIGN.md §8.2）。
+ * 复习页键位与滑动的行为回归。
  *
  * 这些用例穷举「每种卡片状态 × 每个按键/位移」的决策，补上无浏览器环境下无法触发的
  * 真实交互；浏览器端到端只再验证副作用确实接上（翻面、评分请求、埋藏请求）。
@@ -69,7 +69,7 @@ describe('reviewShortcut keyboard mapping', () => {
       expect(reviewShortcut(key, noMods, result)).toEqual({ kind: 'continue' });
     }
     expect(reviewShortcut('e', noMods, result)).toEqual({ kind: 'edit' });
-    // 结果面板不再提供 b（DESIGN.md §8.2）。
+    // 结果面板不再提供 b。
     expect(reviewShortcut('b', noMods, result)).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('x', noMods, result)).toEqual({ kind: 'ignore' });
   });

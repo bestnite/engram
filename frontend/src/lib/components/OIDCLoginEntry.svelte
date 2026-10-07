@@ -4,7 +4,7 @@
   import { apiClient } from '../api';
   import type { OIDCInfo } from '../api';
 
-  // OIDC 登录入口组件（DESIGN.md §4.4）。
+  // OIDC 登录入口组件。
   //
   // SSR 的登录页只在 OIDC 配置完整可用时渲染第二个登录按钮；SPA 登录视图无法在构建期知道服务端配置，
   // 因此这里在挂载时探测 GET /api/v1/auth/oidc（只读、登录前可调用），仅在 enabled 为真时渲染入口。

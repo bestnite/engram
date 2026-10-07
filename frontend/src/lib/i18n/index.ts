@@ -44,7 +44,7 @@ export interface ResolveLocaleOptions {
 }
 
 /**
- * 解析语言优先级（DESIGN.md §8.3）：
+ * 解析语言优先级：
  * URL 参数 ?lang=<code> > 已登录用户个人设置 > Accept-Language / navigator.language > 站点默认语言
  */
 export function resolveLocale(options: ResolveLocaleOptions = {}): SupportedLocale {

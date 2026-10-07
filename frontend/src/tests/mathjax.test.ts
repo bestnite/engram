@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 /**
- * SPA MathJax 加载器的单元测试（DESIGN.md §6.1、§8.5、§11）。
+ * SPA MathJax 加载器的单元测试。
  *
  * 测试环境是 node（无 DOM），因此这里手搓一个最小 document/window 替身：它记录被注入的
  * <script>、在 appendChild 时捕获加载前的 window.MathJax 配置、并模拟脚本执行后把全局

@@ -234,7 +234,7 @@ describe('Centralized typed same-origin REST API client', () => {
       const [url, init] = call!;
       expect(url).toBe('/api/v1/decks');
 
-      // 验证同源 HttpOnly 凭据策略（DESIGN.md §8.3：绝不使用 API Key，使用 same-origin cookie）
+      // 验证同源 HttpOnly 凭据策略（绝不使用 API Key，使用 same-origin cookie）
       expect(init?.credentials).toBe('same-origin');
 
       // 验证请求头包含 Accept: application/json，且无 Authorization 标头
@@ -586,7 +586,7 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
-  describe('CSRF token awareness on mutating requests (DESIGN.md §4.3)', () => {
+  describe('CSRF token awareness on mutating requests', () => {
     it('fetches a session token before creating a deck and posts the typed payload', async () => {
       const deck = {
         id: 12,
@@ -705,7 +705,7 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
-  describe('User profile and locale API methods (DESIGN.md §4.1、§8.3)', () => {
+  describe('User profile and locale API methods', () => {
     it('getProfile fetches and unwraps user profile payload', async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(

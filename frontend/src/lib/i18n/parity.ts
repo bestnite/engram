@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from './types';
 
 /**
- * 校验两个语言包的 key 是否完全一致（DESIGN.md §8.3、AGENTS.md §2.1）
+ * 校验两个语言包的 key 是否完全一致（AGENTS.md §2.1）
  */
 export interface ParityResult {
   identical: boolean;
