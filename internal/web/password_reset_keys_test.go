@@ -65,11 +65,9 @@ func TestForgotPasswordResetRevokesAPIKeys(t *testing.T) {
 
 	// 完整忘记密码流程：请求发信 → 用邮件里的真实令牌设置新密码。
 	plain, _ := issueResetToken(t, ts)
-	reset := postForm(t, ts.srv, "/reset-password", url.Values{
-		"token": {plain}, "password": {"N3wSup3rSecret!"},
-	}, nil)
+	reset := resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
 	if reset.Code != http.StatusOK {
-		t.Fatalf("POST /reset-password status = %d, want 200 (body %s)", reset.Code, snippet(reset.Body.String()))
+		t.Fatalf("POST /api/v1/auth/reset-password status = %d, want 200 (body %s)", reset.Code, snippet(reset.Body.String()))
 	}
 
 	// 两把旧 key：库里已失效，且对真实 REST 链返回 401（与既有撤销 key 语义一致）。

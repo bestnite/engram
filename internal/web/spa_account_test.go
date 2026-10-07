@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -49,8 +48,8 @@ func jsonResetToken(t *testing.T, ts securityTestServer, cookie *http.Cookie, he
 	return tokenFromBody(t, rows[len(rows)-1].TextBody)
 }
 
-// TestSPAAccountRouteCutover 覆盖三个可导航读取页的切壳、/settings/email 的登录门禁、免登录
-// 一键链接保持服务端行为，以及 SPA 缺失时的 SSR 回退。
+// TestSPAAccountRouteCutover 覆盖三个可导航读取页与两条一键链接的应用壳、/settings/email 的登录门禁，
+// 以及一键链接入口初始化双提交 cookie 但不消费令牌。
 func TestSPAAccountRouteCutover(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
@@ -58,34 +57,24 @@ func TestSPAAccountRouteCutover(t *testing.T) {
 		assertServesSPAShell(t, getWithCookies(t, ts.srv, path, ts.cookies), "GET "+path)
 	}
 
+	// 邮件里的一键链接落在规范路径上，同样返回应用壳（服务端不再渲染结果页）。
+	for _, path := range []string{"/verify-email?token=bogus", "/confirm-email-change?token=bogus"} {
+		rec := get(t, ts.srv, path, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200 (body %s)", path, rec.Code, snippet(rec.Body.String()))
+		}
+		if !strings.Contains(rec.Body.String(), `id="app"`) {
+			t.Errorf("GET %s did not serve the SPA shell: %s", path, snippet(rec.Body.String()))
+		}
+		if findCookie(rec, auth.CSRFDoubleSubmitCookieName) == nil {
+			t.Errorf("GET %s must initialize the double-submit cookie", path)
+		}
+	}
+
 	// 未登录的 /settings/email 仍重定向登录页：授权判定在服务端，先于切壳。
 	anon := get(t, ts.srv, "/settings/email", nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Errorf("anonymous GET /settings/email = %d %q, want 303 /login", anon.Code, anon.Header().Get("Location"))
-	}
-
-	// 免登录的一键链接刻意不切壳：服务端消费并渲染结果，无脚本也能完成。
-	for _, path := range []string{"/verify-email?token=bogus", "/confirm-email-change?token=bogus"} {
-		rec := get(t, ts.srv, path, nil)
-		if strings.Contains(rec.Body.String(), `id="app"`) {
-			t.Errorf("GET %s must keep its server-side behaviour, not serve the SPA shell", path)
-		}
-	}
-
-	// SPA 缺失（降级构建）时回退各自原有的 SSR 页面。
-	ts.srv.spa = nil
-	for _, tc := range []struct{ path, marker string }{
-		{"/forgot-password", `action="/forgot-password"`},
-		{"/reset-password?token=x", `action="/reset-password`},
-		{"/settings/email", `action="/settings/email"`},
-	} {
-		rec := getWithCookies(t, ts.srv, tc.path, ts.cookies)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("SSR fallback GET %s = %d, want 200 (body %s)", tc.path, rec.Code, snippet(rec.Body.String()))
-		}
-		if !strings.Contains(rec.Body.String(), tc.marker) {
-			t.Errorf("SSR fallback GET %s did not render its form (missing %q): %s", tc.path, tc.marker, snippet(rec.Body.String()))
-		}
 	}
 }
 
@@ -143,12 +132,8 @@ func TestSPAAccountForgotResetFlow(t *testing.T) {
 	if !resetRes.Reset {
 		t.Errorf("reset-password reset = false, want true")
 	}
-	login := postForm(t, ts.srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"N3wSup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Errorf("login with the reset password = %d, want 303 (body %s)", login.Code, snippet(login.Body.String()))
-	}
+	// 新密码真的能登录（走同源 JSON 登录端点）。
+	loginJSON(t, ts.srv, ts.db, "owner", "N3wSup3rSecret!")
 
 	// 同一令牌二次使用：token_used。
 	reuse := postJSON(ts.srv, "/api/v1/auth/reset-password",

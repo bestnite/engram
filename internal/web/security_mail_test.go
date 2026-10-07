@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -26,7 +27,9 @@ import (
 // 本文件是 M1-19（A 类事务安全邮件）的验收测试。
 //
 // 覆盖：五类各自的触发点、重置链接一次性与过期、库中只存摘要、明文不进日志、
-// A 类不携带退订头、SMTP 未配置时流程禁用并说明原因。
+// A 类不携带退订头、SMTP 未配置时流程禁用。页面已迁移到 SPA，触发点走同源 JSON 端点
+// （/api/v1/auth/*、/api/v1/settings/*）；仍由 SSR 表单承担的写端点（改密码、管理员禁用）
+// 保持原样，因为它们不属于本次删除的页面。
 //
 // 测试用一个记录型 Sender 承接入队的邮件，从而不依赖真实 SMTP；投递本身由 M1-17
 // 的 outbox worker 负责，这里只验证「触发点确实把正确类型的邮件写进了队列」。
@@ -55,7 +58,7 @@ type securityTestServer struct {
 }
 
 // newSecurityServer 装配一个带账号、会话、TOTP 与邮件 outbox 的测试服务，并登录 owner。
-// withMail 为 false 时故意不装配 outbox，用来验证「SMTP 未配置时流程禁用并说明原因」。
+// withMail 为 false 时故意不装配 outbox，用来验证「SMTP 未配置时流程禁用」。
 func newSecurityServer(t *testing.T, withMail bool) securityTestServer {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "security.db"))
@@ -134,17 +137,9 @@ func newSecurityServer(t *testing.T, withMail bool) securityTestServer {
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303 (body %s)", login.Code, snippet(login.Body.String()))
-	}
-	var sess store.Session
-	if err := db.Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row: %v", err)
-	}
-	return securityTestServer{srv: srv, db: db, ownerID: srvOwnerID(owner), cookies: login.Result().Cookies(), csrf: sess.CSRFToken, logs: logs}
+	// 登录走同源 JSON 端点：会话 cookie 与会话绑定的 CSRF token 一并取回。
+	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	return securityTestServer{srv: srv, db: db, ownerID: srvOwnerID(owner), cookies: cookies, csrf: csrf, logs: logs}
 }
 
 func srvOwnerID(u *store.User) uint64 { return u.ID }
@@ -195,19 +190,43 @@ func assertNoUnsubscribeHeader(t *testing.T, rows []store.OutboxMessage) {
 	}
 }
 
-// issueResetToken 走真实触发点 POST /forgot-password，返回邮件正文里的明文令牌与那封邮件。
+// issueResetToken 走真实触发点 POST /api/v1/auth/forgot-password，返回邮件正文里的明文令牌与那封邮件。
 func issueResetToken(t *testing.T, ts securityTestServer) (string, store.OutboxMessage) {
 	t.Helper()
-	rec := postForm(t, ts.srv, "/forgot-password", url.Values{"email": {"owner@example.com"}}, nil)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST /forgot-password status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	cookie, headers := preSessionPair(t, ts.srv, "/forgot-password")
+	rec := postJSON(ts.srv, "/api/v1/auth/forgot-password",
+		map[string]string{"email": "owner@example.com"}, []*http.Cookie{cookie}, headers)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/forgot-password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	rows := outboxByType(t, ts.db, mail.TypePasswordReset)
 	if len(rows) == 0 {
-		t.Fatal("no password_reset mail enqueued after POST /forgot-password")
+		t.Fatal("no password_reset mail enqueued after the reset request")
 	}
 	last := rows[len(rows)-1]
 	return tokenFromBody(t, last.TextBody), last
+}
+
+// resetPasswordJSON 用一次性令牌经 JSON 端点设置新密码，返回响应。
+func resetPasswordJSON(t *testing.T, ts securityTestServer, token, password string) *httptest.ResponseRecorder {
+	t.Helper()
+	cookie, headers := preSessionPair(t, ts.srv, "/reset-password")
+	return postJSON(ts.srv, "/api/v1/auth/reset-password",
+		map[string]string{"token": token, "password": password}, []*http.Cookie{cookie}, headers)
+}
+
+// resendVerificationJSON 重发验证邮件（会话端点）。
+func resendVerificationJSON(t *testing.T, ts securityTestServer) *httptest.ResponseRecorder {
+	t.Helper()
+	return postJSON(ts.srv, "/api/v1/settings/verify-email", nil, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
+}
+
+// verifyEmailJSON 消费验证令牌（免登录，双提交 CSRF）。
+func verifyEmailJSON(t *testing.T, ts securityTestServer, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	cookie, headers := preSessionPair(t, ts.srv, "/verify-email")
+	return postJSON(ts.srv, "/api/v1/auth/verify-email",
+		map[string]string{"token": token}, []*http.Cookie{cookie}, headers)
 }
 
 // createTargetUser 直接落一个可被管理员操作的普通用户行（不依赖注册策略）。
@@ -245,11 +264,9 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 	assertNoUnsubscribeHeader(t, []store.OutboxMessage{resetRow})
 
 	// 3) 邮箱验证（重发验证邮件，需登录 + 会话绑定的 CSRF）。
-	verify := postForm(t, ts.srv, "/settings/verify-email", url.Values{
-		auth.CSRFFieldName: {ts.csrf},
-	}, ts.cookies)
+	verify := resendVerificationJSON(t, ts)
 	if verify.Code != http.StatusOK {
-		t.Fatalf("POST /settings/verify-email status = %d, want 200 (body %s)", verify.Code, snippet(verify.Body.String()))
+		t.Fatalf("POST /api/v1/settings/verify-email status = %d, want 200 (body %s)", verify.Code, snippet(verify.Body.String()))
 	}
 	verifyRows := outboxByType(t, ts.db, mail.TypeEmailVerification)
 	if len(verifyRows) != 1 {
@@ -257,7 +274,7 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 	}
 	assertNoUnsubscribeHeader(t, verifyRows)
 
-	// 4) 凭据变更通知（改密码）。
+	// 4) 凭据变更通知（改密码）——该端点仍由 SSR 表单承担，不在本次删除范围内。
 	change := postForm(t, ts.srv, "/settings/password", url.Values{
 		auth.CSRFFieldName: {ts.csrf},
 		"old_password":     {"Sup3rSecret!"},
@@ -296,38 +313,20 @@ func TestSecurityMailResetLinkIsSingleUse(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	plain, _ := issueResetToken(t, ts)
 
-	// 首次：表单可达且提交成功。
-	form := getWithCookies(t, ts.srv, "/reset-password?token="+url.QueryEscape(plain), nil)
-	if form.Code != http.StatusOK {
-		t.Fatalf("GET /reset-password?token=... status = %d, want 200 (body %s)", form.Code, snippet(form.Body.String()))
-	}
-	first := postForm(t, ts.srv, "/reset-password", url.Values{
-		"token": {plain}, "password": {"N3wSup3rSecret!"},
-	}, nil)
+	// 首次：提交成功，且新密码真的生效（能登录）。
+	first := resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
 	if first.Code != http.StatusOK {
 		t.Fatalf("first reset submit status = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
-	if !strings.Contains(first.Body.String(), "密码已重置") {
+	if !strings.Contains(first.Body.String(), `"reset":true`) {
 		t.Errorf("first reset did not report success: %s", snippet(first.Body.String()))
 	}
+	loginJSON(t, ts.srv, ts.db, "owner", "N3wSup3rSecret!")
 
-	// 新密码真的生效：用新密码登录应 303。
-	login := postForm(t, ts.srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"N3wSup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Errorf("login with the reset password status = %d, want 303 (body %s)", login.Code, snippet(login.Body.String()))
-	}
-
-	// 二次使用同一令牌：必须被拒。
-	second := postForm(t, ts.srv, "/reset-password", url.Values{
-		"token": {plain}, "password": {"An0therSecret!"},
-	}, nil)
-	if second.Code != http.StatusBadRequest {
-		t.Fatalf("second reset submit status = %d, want 400 (body %s)", second.Code, snippet(second.Body.String()))
-	}
-	if !strings.Contains(second.Body.String(), "已被使用过") {
-		t.Errorf("second reset did not report the link as used: %s", snippet(second.Body.String()))
+	// 二次使用同一令牌：必须被拒（一次性）。
+	second := resetPasswordJSON(t, ts, plain, "An0therSecret!")
+	if second.Code != http.StatusBadRequest || apiErrorCode(t, second) != "token_used" {
+		t.Fatalf("second reset submit = %d %s, want 400 token_used (body %s)", second.Code, apiErrorCode(t, second), snippet(second.Body.String()))
 	}
 }
 
@@ -339,14 +338,9 @@ func TestSecurityMailResetLinkExpires(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue expired token: %v", err)
 	}
-	rec := postForm(t, ts.srv, "/reset-password", url.Values{
-		"token": {plain}, "password": {"N3wSup3rSecret!"},
-	}, nil)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expired reset submit status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), "已过期") {
-		t.Errorf("expired reset did not report expiry: %s", snippet(rec.Body.String()))
+	rec := resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
+	if rec.Code != http.StatusBadRequest || apiErrorCode(t, rec) != "token_expired" {
+		t.Fatalf("expired reset submit = %d %s, want 400 token_expired (body %s)", rec.Code, apiErrorCode(t, rec), snippet(rec.Body.String()))
 	}
 }
 
@@ -385,9 +379,9 @@ func TestSecurityMailTokenNeverLogged(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	plain, _ := issueResetToken(t, ts)
 
-	// 再走一遍消费路径，确保失败分支也不打明文。
-	postForm(t, ts.srv, "/reset-password", url.Values{"token": {plain}, "password": {"N3wSup3rSecret!"}}, nil)
-	postForm(t, ts.srv, "/reset-password", url.Values{"token": {plain}, "password": {"N3wSup3rSecret!"}}, nil)
+	// 再走一遍消费路径（成功 + 二次失败），确保失败分支也不打明文。
+	resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
+	resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
 
 	if logs := ts.logs.String(); strings.Contains(logs, plain) {
 		t.Errorf("the plaintext reset token appears in the server log:\n%s", snippet(logs))
@@ -399,7 +393,7 @@ func TestSecurityMailClassAHasNoUnsubscribeHeader(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	// 触发全部五类。
 	_, _ = issueResetToken(t, ts)
-	postForm(t, ts.srv, "/settings/verify-email", url.Values{auth.CSRFFieldName: {ts.csrf}}, ts.cookies)
+	resendVerificationJSON(t, ts)
 	postForm(t, ts.srv, "/settings/password", url.Values{
 		auth.CSRFFieldName: {ts.csrf}, "old_password": {"Sup3rSecret!"}, "new_password": {"N3wSup3rSecret!"},
 	}, ts.cookies)
@@ -421,42 +415,38 @@ func TestSecurityMailClassAHasNoUnsubscribeHeader(t *testing.T) {
 	}
 }
 
-// TestSecurityMailEmailVerifyAndChangeFlow 覆盖邮箱验证与改邮箱确认两条链路。
+// TestSecurityMailEmailVerifyAndChangeFlow 覆盖邮箱验证与改邮箱确认两条链路（JSON）。
 func TestSecurityMailEmailVerifyAndChangeFlow(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
-	// 邮箱验证：重发 → 点链接 → email_verified_at 落值；令牌一次性。
-	resend := postForm(t, ts.srv, "/settings/verify-email", url.Values{auth.CSRFFieldName: {ts.csrf}}, ts.cookies)
+	// 邮箱验证：重发 → 消费令牌 → email_verified_at 落值；令牌一次性。
+	resend := resendVerificationJSON(t, ts)
 	if resend.Code != http.StatusOK {
 		t.Fatalf("resend verification status = %d, want 200 (body %s)", resend.Code, snippet(resend.Body.String()))
 	}
 	verifyRows := outboxByType(t, ts.db, mail.TypeEmailVerification)
 	plain := tokenFromBody(t, verifyRows[len(verifyRows)-1].TextBody)
-	ok := getWithCookies(t, ts.srv, "/verify-email?token="+url.QueryEscape(plain), nil)
+	ok := verifyEmailJSON(t, ts, plain)
 	if ok.Code != http.StatusOK {
-		t.Fatalf("GET /verify-email status = %d, want 200 (body %s)", ok.Code, snippet(ok.Body.String()))
-	}
-	if !strings.Contains(ok.Body.String(), "邮箱已验证") {
-		t.Errorf("verification page did not confirm success: %s", snippet(ok.Body.String()))
+		t.Fatalf("verify-email status = %d, want 200 (body %s)", ok.Code, snippet(ok.Body.String()))
 	}
 	var owner store.User
 	if err := ts.db.First(&owner, ts.ownerID).Error; err != nil {
 		t.Fatalf("reload owner: %v", err)
 	}
 	if owner.EmailVerifiedAt == nil {
-		t.Error("email_verified_at is still NULL after clicking the verification link")
+		t.Error("email_verified_at is still NULL after consuming the verification link")
 	}
-	again := getWithCookies(t, ts.srv, "/verify-email?token="+url.QueryEscape(plain), nil)
-	if again.Code != http.StatusBadRequest || !strings.Contains(again.Body.String(), "已被使用过") {
-		t.Errorf("reused verification token status = %d body = %s, want 400 and 'already used'", again.Code, snippet(again.Body.String()))
+	again := verifyEmailJSON(t, ts, plain)
+	if again.Code != http.StatusBadRequest || apiErrorCode(t, again) != "token_used" {
+		t.Errorf("reused verification token = %d %s, want 400 token_used", again.Code, apiErrorCode(t, again))
 	}
 
 	// 改邮箱：向新地址发确认信，确认前不改库。
-	change := postForm(t, ts.srv, "/settings/email", url.Values{
-		auth.CSRFFieldName: {ts.csrf}, "email": {"new-owner@example.com"},
-	}, ts.cookies)
+	change := postJSON(ts.srv, "/api/v1/settings/email",
+		map[string]string{"email": "new-owner@example.com"}, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
 	if change.Code != http.StatusOK {
-		t.Fatalf("POST /settings/email status = %d, want 200 (body %s)", change.Code, snippet(change.Body.String()))
+		t.Fatalf("POST /api/v1/settings/email status = %d, want 200 (body %s)", change.Code, snippet(change.Body.String()))
 	}
 	rows := outboxByType(t, ts.db, mail.TypeEmailVerification)
 	changeRows := rows[len(rows)-1]
@@ -471,9 +461,11 @@ func TestSecurityMailEmailVerifyAndChangeFlow(t *testing.T) {
 		t.Fatalf("email changed before confirmation: %q", owner.Email)
 	}
 	changeToken := tokenFromBody(t, changeRows.TextBody)
-	confirm := getWithCookies(t, ts.srv, "/confirm-email-change?token="+url.QueryEscape(changeToken), nil)
+	cc, ch := preSessionPair(t, ts.srv, "/confirm-email-change")
+	confirm := postJSON(ts.srv, "/api/v1/auth/confirm-email-change",
+		map[string]string{"token": changeToken}, []*http.Cookie{cc}, ch)
 	if confirm.Code != http.StatusOK {
-		t.Fatalf("GET /confirm-email-change status = %d, want 200 (body %s)", confirm.Code, snippet(confirm.Body.String()))
+		t.Fatalf("confirm-email-change status = %d, want 200 (body %s)", confirm.Code, snippet(confirm.Body.String()))
 	}
 	if err := ts.db.First(&owner, ts.ownerID).Error; err != nil {
 		t.Fatalf("reload owner: %v", err)
@@ -488,9 +480,7 @@ func TestSecurityMailNewDeviceLoginDeduped(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	before := len(outboxByType(t, ts.db, mail.TypeNewDeviceLogin))
 	// 同一 httptest 客户端（同 IP + 同 User-Agent）再登录一次。
-	postForm(t, ts.srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"Sup3rSecret!"},
-	}, nil)
+	loginJSON(t, ts.srv, ts.db, "owner", "Sup3rSecret!")
 	after := len(outboxByType(t, ts.db, mail.TypeNewDeviceLogin))
 	if after != before {
 		t.Errorf("new_device_login rows %d -> %d after an identical second login, want no new mail", before, after)
@@ -498,20 +488,23 @@ func TestSecurityMailNewDeviceLoginDeduped(t *testing.T) {
 }
 
 // TestSecurityMailDisabledWhenSMTPNotConfigured 断言 SMTP 未配置时流程禁用并说明原因，绝不静默。
+// SPA 依据响应的 mail_ready=false 渲染「本站未开启邮件功能」，服务端不再渲染说明页。
 func TestSecurityMailDisabledWhenSMTPNotConfigured(t *testing.T) {
 	ts := newSecurityServer(t, false)
-	// 本用例断言 SSR 页面文案：SPA 已嵌入时 GET /forgot-password 返回应用壳，故置空以走 SSR 回退。
-	ts.srv.spa = nil
-	page := getWithCookies(t, ts.srv, "/forgot-password", nil)
-	if page.Code != http.StatusOK {
-		t.Fatalf("GET /forgot-password status = %d, want 200", page.Code)
+	cookie, headers := preSessionPair(t, ts.srv, "/forgot-password")
+	rec := postJSON(ts.srv, "/api/v1/auth/forgot-password",
+		map[string]string{"email": "owner@example.com"}, []*http.Cookie{cookie}, headers)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/forgot-password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if !strings.Contains(page.Body.String(), "本站未开启邮件功能") {
-		t.Errorf("forgot-password page does not explain that mail is disabled: %s", snippet(page.Body.String()))
+	var res struct {
+		MailReady bool `json:"mail_ready"`
 	}
-	rec := postForm(t, ts.srv, "/forgot-password", url.Values{"email": {"owner@example.com"}}, nil)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST /forgot-password status = %d, want 303", rec.Code)
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if res.MailReady {
+		t.Error("mail_ready = true while SMTP is unconfigured")
 	}
 	if rows := outboxByType(t, ts.db, mail.TypePasswordReset); len(rows) != 0 {
 		t.Errorf("password_reset mail enqueued while SMTP is unconfigured: %d rows", len(rows))

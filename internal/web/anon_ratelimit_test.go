@@ -1,11 +1,12 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -16,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是匿名入口限流（/forgot-password、/register）的验收测试。
+// 本文件是匿名入口限流（/api/v1/auth/forgot-password、/api/v1/auth/register）的验收测试。
 //
 // 阈值固定为「IP 与目标邮箱各 5 次 / 15 分钟」（DESIGN.md §4.3）。时钟注入到限流器，
 // 因此窗口过期可以即时断言，不需要真实等待；请求方 IP 通过 RemoteAddr 显式指定
@@ -49,19 +50,17 @@ func anonLimiterWithClock(clock *fakeRateClock) *auth.AnonymousLimiter {
 	return auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, clock.now)
 }
 
-// postFormFromIP 与 postForm 相同，但显式指定请求方 IP（RemoteAddr），
+// postJSONFromIP 发一次带双提交 CSRF 的 JSON 写请求，并显式指定请求方 IP（RemoteAddr），
 // 让「同 IP 换邮箱」与「同邮箱换 IP」两条路径可以分别构造。
-func postFormFromIP(t *testing.T, srv *Server, target, ip string, values url.Values) *httptest.ResponseRecorder {
+func postJSONFromIP(t *testing.T, srv *Server, path, ip string, body any) *httptest.ResponseRecorder {
 	t.Helper()
-	cp := url.Values{}
-	for k, v := range values {
-		cp[k] = v
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
 	}
-	if cp.Get(auth.CSRFFieldName) == "" {
-		cp.Set(auth.CSRFFieldName, testDoubleSubmitToken)
-	}
-	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(cp.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(auth.CSRFHeaderName, testDoubleSubmitToken)
 	req.RemoteAddr = ip + ":54321"
 	req.AddCookie(&http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
 	rec := httptest.NewRecorder()
@@ -94,16 +93,16 @@ func TestForgotPasswordRateLimitByIP(t *testing.T) {
 		mustCreateUser(t, ts, emails[i])
 	}
 	for i := 0; i < 5; i++ {
-		rec := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {emails[i]}})
-		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("request %d status = %d, want 303 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
+		rec := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": emails[i]})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status = %d, want 200 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
 		}
 	}
 	before := len(outboxByType(t, ts.db, mail.TypePasswordReset))
 	if before != 5 {
 		t.Fatalf("reset mails after 5 allowed requests = %d, want 5", before)
 	}
-	sixth := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {emails[5]}})
+	sixth := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": emails[5]})
 	if sixth.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th request from same IP status = %d, want 429 (body %s)", sixth.Code, snippet(sixth.Body.String()))
 	}
@@ -121,16 +120,16 @@ func TestForgotPasswordRateLimitByEmail(t *testing.T) {
 	const email = "owner@example.com"
 	for i := 0; i < 5; i++ {
 		ip := fmt.Sprintf("203.0.113.%d", 20+i)
-		rec := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {email}})
-		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("request %d status = %d, want 303 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
+		rec := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": email})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status = %d, want 200 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
 		}
 	}
 	before := len(outboxByType(t, ts.db, mail.TypePasswordReset))
 	if before != 5 {
 		t.Fatalf("reset mails after 5 allowed requests = %d, want 5", before)
 	}
-	sixth := postFormFromIP(t, ts.srv, "/forgot-password", "203.0.113.99", url.Values{"email": {email}})
+	sixth := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", "203.0.113.99", map[string]string{"email": email})
 	if sixth.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th request for same email status = %d, want 429 (body %s)", sixth.Code, snippet(sixth.Body.String()))
 	}
@@ -149,19 +148,19 @@ func TestForgotPasswordRateLimitWindowExpiry(t *testing.T) {
 	const ip = "203.0.113.30"
 	const email = "owner@example.com"
 	for i := 0; i < 5; i++ {
-		rec := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {email}})
-		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("request %d status = %d, want 303 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
+		rec := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": email})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status = %d, want 200 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
 		}
 	}
-	sixth := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {email}})
+	sixth := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": email})
 	if sixth.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th request status = %d, want 429", sixth.Code)
 	}
 	clock.advance(16 * time.Minute)
-	seventh := postFormFromIP(t, ts.srv, "/forgot-password", ip, url.Values{"email": {email}})
-	if seventh.Code != http.StatusSeeOther {
-		t.Fatalf("request after window expiry status = %d, want 303 (body %s)", seventh.Code, snippet(seventh.Body.String()))
+	seventh := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", ip, map[string]string{"email": email})
+	if seventh.Code != http.StatusOK {
+		t.Fatalf("request after window expiry status = %d, want 200 (body %s)", seventh.Code, snippet(seventh.Body.String()))
 	}
 }
 
@@ -174,17 +173,17 @@ func TestRegisterRateLimitByIP(t *testing.T) {
 
 	const ip = "203.0.113.40"
 	for i := 0; i < 5; i++ {
-		rec := postFormFromIP(t, srv, "/register", ip, url.Values{
-			"username": {fmt.Sprintf("rlreg%d", i)},
-			"email":    {fmt.Sprintf("rlreg%d@example.com", i)},
-			"password": {"Sup3rSecret!"},
+		rec := postJSONFromIP(t, srv, "/api/v1/auth/register", ip, map[string]string{
+			"username": fmt.Sprintf("rlreg%d", i),
+			"email":    fmt.Sprintf("rlreg%d@example.com", i),
+			"password": "Sup3rSecret!",
 		})
-		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("registration %d status = %d, want 303 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("registration %d status = %d, want 200 (body %s)", i+1, rec.Code, snippet(rec.Body.String()))
 		}
 	}
-	sixth := postFormFromIP(t, srv, "/register", ip, url.Values{
-		"username": {"rlreg5"}, "email": {"rlreg5@example.com"}, "password": {"Sup3rSecret!"},
+	sixth := postJSONFromIP(t, srv, "/api/v1/auth/register", ip, map[string]string{
+		"username": "rlreg5", "email": "rlreg5@example.com", "password": "Sup3rSecret!",
 	})
 	if sixth.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th registration from same IP status = %d, want 429 (body %s)", sixth.Code, snippet(sixth.Body.String()))
@@ -208,15 +207,15 @@ func TestRegisterRateLimitByEmail(t *testing.T) {
 
 	const email = "blocked@example.com"
 	for i := 0; i < 5; i++ {
-		rec := postFormFromIP(t, srv, "/register", fmt.Sprintf("203.0.113.%d", 50+i), url.Values{
-			"username": {fmt.Sprintf("blk%d", i)}, "email": {email}, "password": {"Sup3rSecret!"},
+		rec := postJSONFromIP(t, srv, "/api/v1/auth/register", fmt.Sprintf("203.0.113.%d", 50+i), map[string]string{
+			"username": fmt.Sprintf("blk%d", i), "email": email, "password": "Sup3rSecret!",
 		})
 		if rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("request %d unexpectedly rate-limited; policy rejection expected first", i+1)
 		}
 	}
-	sixth := postFormFromIP(t, srv, "/register", "203.0.113.99", url.Values{
-		"username": {"blk5"}, "email": {email}, "password": {"Sup3rSecret!"},
+	sixth := postJSONFromIP(t, srv, "/api/v1/auth/register", "203.0.113.99", map[string]string{
+		"username": "blk5", "email": email, "password": "Sup3rSecret!",
 	})
 	if sixth.Code != http.StatusTooManyRequests {
 		t.Fatalf("6th registration for same email status = %d, want 429 (body %s)", sixth.Code, snippet(sixth.Body.String()))
@@ -227,19 +226,19 @@ func TestRegisterRateLimitByEmail(t *testing.T) {
 func TestAnonRateLimitFirstRequestSucceeds(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	ts.srv.anonLimiter = anonLimiterWithClock(newFakeRateClock())
-	rec := postFormFromIP(t, ts.srv, "/forgot-password", "203.0.113.70", url.Values{"email": {"owner@example.com"}})
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("first forgot-password status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	rec := postJSONFromIP(t, ts.srv, "/api/v1/auth/forgot-password", "203.0.113.70", map[string]string{"email": "owner@example.com"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first forgot-password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "open")))
 	srv.anonLimiter = anonLimiterWithClock(newFakeRateClock())
-	reg := postFormFromIP(t, srv, "/register", "203.0.113.71", url.Values{
-		"username": {"firstok"}, "email": {"firstok@example.com"}, "password": {"Sup3rSecret!"},
+	reg := postJSONFromIP(t, srv, "/api/v1/auth/register", "203.0.113.71", map[string]string{
+		"username": "firstok", "email": "firstok@example.com", "password": "Sup3rSecret!",
 	})
-	if reg.Code != http.StatusSeeOther {
-		t.Fatalf("first register status = %d, want 303 (body %s)", reg.Code, snippet(reg.Body.String()))
+	if reg.Code != http.StatusOK {
+		t.Fatalf("first register status = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 }
