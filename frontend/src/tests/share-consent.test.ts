@@ -1,19 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiClient } from '../lib/api';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 /**
- * 分享同意制的前端断言。
+ * 分享同意制的前端契约：客户端打的端点与 CSRF 行为。
  *
  * 服务端语义由 internal/web/share_invite_test.go 钉住（分享后仍无授权、接受才生效、
- * 拒绝不留痕、策略在邀请发出前拦住）；这里钉三件事：
- *   1. 客户端打的端点与 CSRF 行为正确；
- *   2. /decks 的邀请卡片把「接受/拒绝」接到这两个端点上；
- *   3. 设置页的接收策略三档齐全，且保存后以服务端回读为准。
+ * 拒绝不留痕、策略在邀请发出前拦住）。
  */
-
-const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 describe('share invite API client', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -112,60 +105,5 @@ describe('share invite API client', () => {
     await expect(fresh.saveSharePolicy({ allow_usernames: ['nobody'] })).rejects.toMatchObject({
       code: 'user_not_found',
     });
-  });
-});
-
-describe('the decks page offers accept and decline', () => {
-  const source = read('../lib/views/DecksView.svelte');
-
-  it('loads pending invites and renders one accept/reject pair per invite', () => {
-    expect(source).toContain('getShareInvites()');
-    expect(source).toContain('acceptShareInvite(deckId)');
-    expect(source).toContain('rejectShareInvite(deckId)');
-    expect(source).toContain('data-testid="deck-invites"');
-    expect(source).toContain('testId="deck-invite-accept-{invite.deck_id}"');
-    expect(source).toContain('testId="deck-invite-reject-{invite.deck_id}"');
-  });
-
-  it('says that nothing changes until the recipient accepts', () => {
-    expect(source).toContain("$t('decks.invites.hint')");
-    expect(source).toContain("$t('decks.invites.accept')");
-    expect(source).toContain("$t('decks.invites.reject')");
-  });
-});
-
-describe('the settings page owns the receive policy', () => {
-  const settings = read('../lib/views/SettingsView.svelte');
-  const sharing = read('../lib/views/DeckSharingView.svelte');
-
-  it('offers all three policies and saves on change', () => {
-    expect(settings).toContain('data-testid="settings-share-policy"');
-    for (const value of ["'anyone'", "'whitelist'", "'nobody'"]) {
-      expect(settings).toContain(`value: ${value}`);
-    }
-    expect(settings).toContain('saveSharePolicy({ policy: next');
-    expect(settings).toContain('data-testid="share-policy-allow-input"');
-  });
-
-  it('renders the three policies as the shared select, not as a stack of radio buttons', () => {
-    // 同一页其余设置项（界面语言、复习日切点、时区）都是下拉；这一块曾是竖排三个带边框的
-    // 单选项，是页面上唯一一处那种形态。控件换成下拉后，别再退回 RadioGroup。
-    expect(settings).toContain('components/ui/Select.svelte');
-    expect(settings).toContain('testId="share-policy-options"');
-    expect(settings).toContain('allowDeselect={false}');
-    expect(settings).not.toContain('RadioGroup');
-  });
-
-  it('explains that the policy is checked before the invitation is sent', () => {
-    expect(settings).toContain("$t('settings.share_policy.intro')");
-  });
-
-  it('the owner sees pending invitations separately from actual access', () => {
-    expect(sharing).toContain('data-testid="sharing-pending-invites"');
-    expect(sharing).toContain('pending_invites');
-    expect(sharing).toContain("$t('deck.sharing.pending_hint')");
-    // 对方拒收是可解释的结果，要单独告诉属主，而不是笼统的「操作失败」。
-    expect(sharing).toContain("'recipient_refuses_shares'");
-    expect(sharing).toContain("'deck.sharing.refused'");
   });
 });

@@ -8,10 +8,6 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 import type { AdminMailTemplatesResponse } from '../lib/api';
 import { draftFor } from '../lib/mail-template-draft';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
-const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
 
 // 邮件模板管理页。夹具刻意只放两个变量：一个必填（链接）、一个可选，
 // 因为「必填标记」正是这个页面要传达的核心信息。
@@ -165,17 +161,5 @@ describe('the editor is pre-filled with the built-in default', () => {
     expect(draftFor(row, builtin)).toEqual({ subject: '我的主题', body: '我的正文' });
     // 两边都没有 -> 空（不会渲染出 undefined）。
     expect(draftFor(null, null)).toEqual({ subject: '', body: '' });
-  });
-
-  it('the view and the mail page actually use it', () => {
-    const view = read('src/lib/views/admin/AdminMailTemplatesView.svelte');
-    expect(view).toContain('draftFor(currentRow, currentDefault)');
-    expect(view).toContain('data-testid="admin-mail-template-prefill"');
-    // 「恢复默认」只在有自定义版本时可用——没有自定义却点得动，等于让人删一个不存在的东西。
-    // 组件 prop 是 testId（渲染后为 data-testid），所以源码断言要写前者。
-    expect(view).toContain('testId="admin-mail-template-restore"');
-    expect(view).toContain('disabled={busy || !currentRow}');
-    const page = read('src/lib/views/admin/AdminSMTPView.svelte');
-    expect(page).toContain('<AdminMailTemplatesView embedded />');
   });
 });

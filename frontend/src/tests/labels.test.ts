@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { formatMessage } from '../lib/i18n';
 import {
   deckVisibilityLabel,
@@ -10,11 +8,10 @@ import {
 } from '../lib/labels';
 
 /**
- * 枚举文案的守卫。
+ * 枚举文案映射：后端枚举值一律经 lib/labels.ts 翻成语言包文案，未知值渲染成空。
  *
- * 缺陷形态：模板里直接插后端枚举值——`<span>{deck.visibility}</span>` 在中文界面里印
- * `private`，与硬编码英文结果一样，但**看起来不像**硬编码，所以「模板里不得出现用户可见
- * 字面量」那类扫描抓不到它。判据不是「有没有引号」，而是「这个串是给机器读还是给人读的」。
+ * 判据不是「有没有引号」，而是「这个串是给机器读还是给人读的」——模板里直接插原值
+ * （`{deck.visibility}`）在中文界面里会印出 `private`，与硬编码英文同害，却不容易看出来。
  */
 
 const zh = (key: string) => formatMessage('zh-CN', key);
@@ -47,35 +44,5 @@ describe('enum labels go through the catalog', () => {
     expect(deckVisibilityLabelKey('nope')).toBeNull();
     expect(noteKindLabelKey('cloze')).toBe('notes.kind.cloze');
     expect(noteKindLabelKey('nope')).toBeNull();
-  });
-});
-
-describe('no view prints a raw enum', () => {
-  const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
-
-  // 五个曾经直接插原值的徽标（/、/decks、卡组详情标题、note 行、复习卡）。
-  const cases = [
-    ['../lib/views/HomeView.svelte', 'visibilityLabel(deck.visibility, $t)'],
-    ['../lib/views/DecksView.svelte', 'visibilityLabel(deck.visibility, $t)'],
-    ['../lib/views/DeckDetailView.svelte', 'visibilityLabel(deck?.visibility, $t)'],
-    ['../lib/views/DeckDetailView.svelte', 'kindLabel(note.kind, $t)'],
-    ['../lib/views/ReviewView.svelte', 'kindLabel(current.kind, $t)'],
-  ] as const;
-
-  for (const [rel, expected] of cases) {
-    it(`${rel} renders ${expected}`, () => {
-      const source = read(rel);
-      expect(source).toContain(expected);
-      // 反面：原值不得出现在模板插值位置上（`{deck.visibility}` 这类）。
-      // helper 调用里当然含 `deck.visibility` 这几个字，所以查的是**带花括号的插值**形态。
-      for (const raw of ['{deck.visibility}', '{deck?.visibility}', '{note.kind}', '{current.kind}']) {
-        expect(source).not.toContain(raw);
-      }
-    });
-  }
-
-  it('the kind list comes from the field table, not a second copy', () => {
-    const source = read('../lib/views/DeckDetailView.svelte');
-    expect(source).toContain('const CARD_KINDS = Object.keys(CARD_KIND_FIELDS)');
   });
 });

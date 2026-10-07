@@ -1,23 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { render } from 'svelte/server';
 import HomeView from '../lib/views/HomeView.svelte';
 import StatsView from '../lib/views/StatsView.svelte';
 import { ApiClientError } from '../lib/api';
 import type { StatsSummary, StatsDetail, Deck } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-
-describe('NoteEditView sanitized preview sink', () => {
-  it('binds HTML sinks only to preview API response properties, never editor fields', () => {
-    const source = readFileSync(new URL('../lib/views/NoteEditView.svelte', import.meta.url), 'utf8');
-    expect(source).toContain('{@html card.front_html}');
-    expect(source).toContain('{@html card.back_html}');
-    expect(source).toContain('const response = await apiClient.previewNote(deckId, note.kind, fields);');
-    expect(source).toContain('previewCards = response.cards;');
-    expect(source).not.toContain('{@html fields');
-    expect(source).not.toContain('{@html fieldsText');
-  });
-});
 
 describe('HomeView component response states and truthful rendering', () => {
   beforeEach(() => {

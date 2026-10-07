@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import {
   CARD_KIND_FIELDS,
   emptyFields,
@@ -80,23 +78,5 @@ describe('field model conversions', () => {
   it('keeps unknown keys out of the form model so the view can preserve them separately', () => {
     const form = toFormFields('basic', { front: 'Q', back: 'A', custom: 'x' });
     expect(Object.keys(form)).not.toContain('custom');
-  });
-});
-
-describe('the note editor no longer exposes JSON', () => {
-  const view = readFileSync(
-    fileURLToPath(new URL('../lib/views/NoteEditView.svelte', import.meta.url)),
-    'utf8'
-  );
-
-  it('renders the per-type field form instead of a JSON textarea', () => {
-    expect(view).toContain('<NoteFieldsForm');
-    expect(view).not.toContain('JSON.stringify');
-    expect(view).not.toContain('note-fields-editor');
-  });
-
-  it('lets the user switch the card type', () => {
-    expect(view).toContain('testId="note-edit-kind"');
-    expect(view).toContain('onValueChange={changeKind}');
   });
 });

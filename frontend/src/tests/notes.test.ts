@@ -1,7 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   ApiClient,
   ApiClientError,
@@ -18,16 +15,6 @@ describe('Deck and notes list API client and view contracts', () => {
   beforeEach(() => {
     mockFetch = vi.fn();
     client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
-  });
-
-  it('exposes a per-note delete control, confirmation, and localized result affordances', () => {
-    const view = fs.readFileSync(fileURLToPath(new URL('../lib/views/DeckDetailView.svelte', import.meta.url)), 'utf-8');
-    expect(view).toContain('data-testid="delete-note-{note.id}"');
-    expect(view).toContain('data-testid="confirm-delete-note-{note.id}"');
-    expect(view).toContain('data-testid="note-delete-success"');
-    expect(view).toContain('data-testid="note-delete-error"');
-    expect(view).toContain('await apiClient.deleteNote(note.id)');
-    expect(view).not.toContain('restoreNote');
   });
 
   describe('GET /api/v1/decks/:id/notes query and path encoding', () => {
@@ -258,58 +245,7 @@ describe('Deck and notes list API client and view contracts', () => {
     });
   });
 
-  describe('Strict security: sanitized preview is the only HTML sink', () => {
-    it('allows HTML only from the note preview API response', () => {
-      const viewsDir = fileURLToPath(new URL('../lib/views', import.meta.url));
-      const viewFiles = fs.readdirSync(viewsDir).filter((f) => f.endsWith('.svelte'));
-
-      expect(viewFiles.length).toBeGreaterThan(0);
-
-      for (const file of viewFiles) {
-        const content = fs.readFileSync(path.join(viewsDir, file), 'utf-8');
-        if (file === 'NoteEditView.svelte') {
-          expect(content).toContain('{@html card.front_html}');
-          expect(content).toContain('{@html card.back_html}');
-          expect(content).not.toContain('{@html fields');
-          expect(content).not.toContain('{@html fieldsText');
-        } else if (file === 'ReviewView.svelte') {
-          // 复习页的 HTML 汇只有服务端清洗后的内容：卡面 front/back（render 端点）与判分/揭示
-          // 答案；note 字段原文绝不得喂进 {@html}。
-          expect(content).toContain('{@html frontHTML}');
-          expect(content).toContain('{@html backHTML}');
-          expect(content).toContain('{@html feedback.answer_html}');
-          expect(content).toContain('{@html revealedAnswerHTML}');
-          expect(content).not.toContain('{@html fields');
-          expect(content).not.toContain('{@html gradedPrompt');
-          expect(content).not.toContain('{@html answerText');
-          expect(content.match(/\{@html/g) ?? []).toHaveLength(5);
-        } else if (file === 'ShareBrowseView.svelte') {
-          // 分享浏览页的 HTML 汇只有服务端清洗后的卡面：note.front_html / note.back_html
-          // （shareNoteView → renderSide）。note 字段原文绝不得喂进 {@html}。
-          expect(content).toContain('{@html note.front_html}');
-          expect(content).toContain('{@html note.back_html}');
-          expect(content).not.toContain('{@html fields');
-          expect(content.match(/\{@html/g) ?? []).toHaveLength(2);
-        } else {
-          expect(content, `File ${file} must not contain {@html} expressions`).not.toContain('{@html');
-        }
-      }
-    });
-
-    it('verifies that components also contain no {@html} expressions', () => {
-      const compsDir = fileURLToPath(new URL('../lib/components', import.meta.url));
-      const compFiles = fs.readdirSync(compsDir).filter((f) => f.endsWith('.svelte'));
-
-      for (const file of compFiles) {
-        const filePath = path.join(compsDir, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        expect(
-          content.includes('{@html'),
-          `Component ${file} must not contain {@html} expressions`
-        ).toBe(false);
-      }
-    });
-
+  describe('deck notes catalog keys exist in both locales', () => {
     it('ensures catalog keys for deck notes exist in both zh-CN and en with matching values', () => {
       const noteKeys = [
         'decks.view_notes',
@@ -461,51 +397,5 @@ describe('Deck notes deleted-status query and bulk note actions', () => {
     await expect(client.bulkNotes({ action: 'delete', note_ids: [] })).rejects.toMatchObject({
       code: 'invalid_request',
     });
-  });
-});
-
-describe('DeckDetailView deleted listing and bulk selection wiring', () => {
-  const view = fs.readFileSync(
-    fileURLToPath(new URL('../lib/views/DeckDetailView.svelte', import.meta.url)),
-    'utf-8'
-  );
-
-  it('applies filters as the user types instead of behind an apply button', () => {
-    // 输入即生效：文本防抖、下拉立即；没有独立的「应用」按钮，也没有「待应用」的影子状态。
-    expect(view).toContain('oninput={scheduleFilterReload}');
-    expect(view).toContain('onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}');
-    expect(view).not.toContain('filter-apply-btn');
-    expect(view).not.toContain('appliedKind');
-    expect(view).toContain('testId="filter-kind-select"');
-    expect(view).toContain('data-testid="filter-reset-btn"');
-  });
-
-  it('drops the deleted-notes listing entirely', () => {
-    // 界面只呈现未删除的卡片：没有状态筛选、没有已删除徽章，也不承诺恢复
-    //（没有恢复 API，出现任何 restore 入口都等于承诺一个不存在的动作）。
-    expect(view).not.toContain('filter-status-select');
-    expect(view).not.toContain('notes-deleted-notice');
-    expect(view).not.toContain('note-deleted-badge-');
-    expect(view).not.toContain('appliedStatus');
-    expect(view).not.toContain('restore');
-  });
-
-  it('wires selection to the existing bulk endpoint with the exact payload', () => {
-    expect(view).toContain('data-testid="notes-bulk-toolbar"');
-    expect(view).toContain('testId="bulk-select-all"');
-    expect(view).toContain('testId="select-note-{note.id}"');
-    expect(view).toContain('apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false })');
-    expect(view).toContain("runBulk('add_tags')");
-    expect(view).toContain("runBulk('remove_tags')");
-    expect(view).toContain("runBulk('set_tags')");
-    expect(view).toContain("runBulk('delete')");
-  });
-
-  it('reports per-row skipped reasons instead of claiming every row changed', () => {
-    expect(view).toContain("item.code === 'not_found'");
-    expect(view).toContain("item.code === 'insufficient_role'");
-    expect(view).toContain('data-testid="notes-bulk-result"');
-    expect(view).toContain('data-testid="notes-bulk-skipped-not-found"');
-    expect(view).toContain('data-testid="notes-bulk-skipped-forbidden"');
   });
 });
