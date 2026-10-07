@@ -145,23 +145,4 @@ func TestMediaPickerPaginatesOverHtmx(t *testing.T) {
 	}
 }
 
-// TestNoteEditPageRendersMediaPickerLauncher 断言编辑页上有「从媒体库选择」入口，
-// 且它指向片段端点、目标是列表容器。
-func TestNoteEditPageRendersMediaPickerLauncher(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	// GET /decks/:id/notes/:nid 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退编辑页（DESIGN.md §8.5）。
-	srv.spa = nil
-	deck := seedDeck(t, db, ownerID, "Launcher deck")
-	note := seedBasic(t, db, deck.ID, "front", "back")
-
-	body := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), cookies).Body.String()
-	if !strings.Contains(body, "data-media-picker") {
-		t.Errorf("edit page has no media picker launcher: %s", snippet(body))
-	}
-	if !strings.Contains(body, "/decks/"+u64str(deck.ID)+"/media/picker") {
-		t.Errorf("edit page launcher does not point at the picker endpoint: %s", snippet(body))
-	}
-	if !strings.Contains(body, `data-note-form`) {
-		t.Errorf("edit page note form is missing the data-note-form marker the picker inserts into")
-	}
-}
+// TestMediaPickerPaginatesOverHtmx 覆盖翻页：片段携带下一页 htmx 按钮，走完不重不漏。

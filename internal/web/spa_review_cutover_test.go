@@ -109,29 +109,6 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	}
 }
 
-// TestReviewRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET /review 回退 SSR 复习页：
-// #review-area 与卡组隐藏字段仍在，不是应用壳。
-func TestReviewRouteFallsBackToSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedReviewDeck(t, db, ownerID, "Review fallback deck")
-	seedBasic(t, db, deck.ID, "FallbackFront", "FallbackBack")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/review?deck="+u64str(deck.ID), cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET review fallback = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("fallback returned the SPA shell; the SSR review page must be preserved")
-	}
-	if !strings.Contains(rec.Body.String(), `id="review-area"`) {
-		t.Errorf("fallback is missing the SSR review area: %s", snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), `name="deck" value="`+u64str(deck.ID)+`"`) {
-		t.Errorf("fallback is missing the hidden deck field: %s", snippet(rec.Body.String()))
-	}
-}
-
 // TestSPAReviewBuryRequiresCSRFAndReader 断言埋藏端点的拒绝路径：无会话 401、缺/错 CSRF 403、
 // 读不到卡组的陌生用户 4xx、卡不在所选范围内 400；任一拒绝都不得写 card_states。
 func TestSPAReviewBuryRequiresCSRFAndReader(t *testing.T) {

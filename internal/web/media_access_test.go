@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"gorm.io/gorm"
@@ -84,24 +83,19 @@ func referenceMediaBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, 
 }
 
 // grantRole 让 owner 把卡组的指定角色授予 userID。
+// 直接写授权表：SSR 的共享表单入口已随页面层删除，SPA 的共享写入走 /api/v1/decks/:id/sharing/grants。
 func grantRole(t *testing.T, srv *Server, deckID, userID uint64, role string, ownerCookies []*http.Cookie, ownerCSRF string) {
 	t.Helper()
-	rec := postForm(t, srv, "/decks/"+u64str(deckID)+"/sharing/grant", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(userID)}, "role": {role},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("grant %s status = %d, want 303 (body %s)", role, rec.Code, snippet(rec.Body.String()))
+	if err := store.NewGrantStore(srv.db).Grant(context.Background(), deckID, userID, role, nil); err != nil {
+		t.Fatalf("grant %s on deck %d to user %d: %v", role, deckID, userID, err)
 	}
 }
 
-// revokeGrant 让 owner 撤销 userID 在该卡组上的授权。
+// revokeGrant 让 owner 撤销 userID 在该卡组上的授权（同样直接写授权表）。
 func revokeGrant(t *testing.T, srv *Server, deckID, userID uint64, ownerCookies []*http.Cookie, ownerCSRF string) {
 	t.Helper()
-	rec := postForm(t, srv, "/decks/"+u64str(deckID)+"/sharing/revoke", url.Values{
-		"csrf_token": {ownerCSRF}, "user_id": {u64str(userID)},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("revoke status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	if err := store.NewGrantStore(srv.db).Revoke(context.Background(), deckID, userID); err != nil {
+		t.Fatalf("revoke grant on deck %d from user %d: %v", deckID, userID, err)
 	}
 }
 
@@ -249,132 +243,10 @@ func TestMediaAccessNullAuthorReferenceGrants(t *testing.T) {
 	}
 }
 
-// TestMediaAccessResidualEditorInjectionIsDenied 是反转后的 F2c 用例（旧名 …StillGrants）：
-// 共享卡组的 editor B 编辑 A 写的 note、把 A 的 media 引用注入进去——写前校验对**写入之前的状态**
-// 求值，B 读不到 A 的 media，故整次写入被拒（400），字段与映射均不变，B 也读不到 A 的媒体。
-func TestMediaAccessResidualEditorInjectionIsDenied(t *testing.T) {
-	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "residual deck")
-	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	target := "/media/" + mediaA
-	// A 写一条不含任何媒体引用的普通 note（created_by=A）。
-	note := noteBy(t, db, deck.ID, &ownerID, map[string]any{"front": "plain", "back": "x"})
-
-	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-attacker")
-	// 基线：B 此时读不到 A 的 media。
-	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
-		t.Fatalf("pre-grant B GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
-	}
-	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
-
-	// B 编辑 A 写的 note，把 A 的 media 引用注入进去：必须被拒。
-	save := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {bCSRF},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {fmt.Sprintf("![](%s)", target)},
-		"field.back":  {"x"},
-	}, bCookies)
-	if save.Code != http.StatusBadRequest {
-		t.Fatalf("editor injection status = %d, want 400 (rejected) (body %s)", save.Code, snippet(save.Body.String()))
-	}
-
-	// 库里没有脏数据：note 字段未变（仍无引用），且没有为它建立 media_notes 映射。
-	var reloaded store.Note
-	if err := db.First(&reloaded, note.ID).Error; err != nil {
-		t.Fatalf("reload note: %v", err)
-	}
-	if reloaded.FieldsJSON != note.FieldsJSON {
-		t.Errorf("note fields changed on a rejected write: got %s want %s", reloaded.FieldsJSON, note.FieldsJSON)
-	}
-	if n := mediaNoteRows(t, db, mediaA, note.ID); n != 0 {
-		t.Errorf("rejected injection created %d media_notes rows, want 0", n)
-	}
-	// 注入未生效：B 仍读不到 A 的媒体。
-	if rec := getWithCookies(t, srv, target, bCookies); rec.Code != http.StatusNotFound {
-		t.Fatalf("after rejected injection B GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
-	}
-}
-
-// TestMediaAccessEditorInjectionOnCreateIsDenied 覆盖新建入口：共享卡组的 editor B 新建一条
-// 引用 A 的 media 的卡片——写前校验拒绝，且库里没有留下任何 note / 映射行。
-func TestMediaAccessEditorInjectionOnCreateIsDenied(t *testing.T) {
-	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "create injection deck")
-	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-creator")
-	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
-
-	before, _, err := store.NewNoteStore(db).List(context.Background(), store.NoteListOptions{DeckID: deck.ID})
-	if err != nil {
-		t.Fatalf("list notes: %v", err)
-	}
-
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes", url.Values{
-		"csrf_token":  {bCSRF},
-		"kind":        {"basic"},
-		"field.front": {"![](/media/" + mediaA + ")"},
-		"field.back":  {"x"},
-	}, bCookies)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("editor create injection status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	after, _, err := store.NewNoteStore(db).List(context.Background(), store.NoteListOptions{DeckID: deck.ID})
-	if err != nil {
-		t.Fatalf("list notes: %v", err)
-	}
-	if len(after) != len(before) {
-		t.Fatalf("rejected create left %d notes, want %d", len(after), len(before))
-	}
-	var mapping int64
-	if err := db.Model(&store.MediaNote{}).Where("media_sha = ?", mediaA).Count(&mapping).Error; err != nil {
-		t.Fatalf("count media_notes: %v", err)
-	}
-	if mapping != 0 {
-		t.Errorf("rejected create left %d media_notes rows, want 0", mapping)
-	}
-}
-
-// TestMediaAccessEditorKeepsExistingReferenceAndAddsOwnUpload 覆盖「不误伤」：
-// B 是 A 卡组的 editor，保存 A 的卡（字段含 A 的图）被允许；B 再往这张卡里插入自己刚上传的图也被允许。
-func TestMediaAccessEditorKeepsExistingReferenceAndAddsOwnUpload(t *testing.T) {
-	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "no false positive deck")
-	mediaA := uploadAndSha(t, srv, ownerCookies, ownerCSRF, pngBody())
-	note := referenceMediaBy(t, db, deck.ID, &ownerID, mediaA)
-
-	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-editor-keeping")
-	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
-
-	// 1) 原样保存 A 的卡（保留 A 的图）：旧引用不是本次新引入的，允许。
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {bCSRF},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {"![](/media/" + mediaA + ")"},
-		"field.back":  {"edited by editor"},
-	}, bCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("editor save with existing reference status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-
-	// 2) B 上传自己的图（editor 可向卡组塞媒体），再插入到同一张卡：新引用对 B 可读（uploaders），允许。
-	mediaB := uploadToDeckAndSha(t, srv, deck.ID, bCookies, bCSRF, append(pngBody(), 'b'))
-	rec = postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {bCSRF},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {"![](/media/" + mediaA + ") ![](/media/" + mediaB + ")"},
-		"field.back":  {"edited by editor"},
-	}, bCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("editor adding own upload status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if r := getWithCookies(t, srv, "/media/"+mediaB, bCookies); r.Code != http.StatusOK {
-		t.Fatalf("B GET own uploaded media = %d, want 200 (body %s)", r.Code, r.Body.String())
-	}
-	if r := getWithCookies(t, srv, "/media/"+mediaA, bCookies); r.Code != http.StatusOK {
-		t.Fatalf("B GET A's media referenced by shared note = %d, want 200 (body %s)", r.Code, r.Body.String())
-	}
-}
-
+// TestMediaAccessResidualEditorInjectionIsDenied 的写前校验断言现在由 internal/api 的
+// media_access_test.go 覆盖（REST PATCH/POST 是唯一写入传输）；web 侧只保留读取鉴权用例。
+// 下面这些用例仍覆盖「映射只在可见卡组内授权读取」的读侧行为。
+//
 // TestMediaAccessUploaderKeepsAccessAfterGrantRevoked 覆盖「A 撤销共享后 B 仍可读自己上传的媒体」：
 // B 在共享期间上传的字节经 media_uploaders 获得永久归属，撤销授权不影响。
 func TestMediaAccessUploaderKeepsAccessAfterGrantRevoked(t *testing.T) {
@@ -444,14 +316,11 @@ func TestMediaAccessReferenceRemovalLapsesAccess(t *testing.T) {
 	}
 
 	// A 去掉引用并保存（同一写入方法 → 重建映射）。
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {ownerCSRF},
-		"note_id":     {u64str(note.ID)},
-		"field.front": {"no media any more"},
-		"field.back":  {"x"},
-	}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("save after removing reference status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	// 页面层的 note 写入口已删除；这里直接走 store 的写入方法（重建映射的唯一的实现）。
+	if _, err := store.NewNoteStore(db).Update(context.Background(), note, map[string]any{
+		"front": "no media any more", "back": "x",
+	}); err != nil {
+		t.Fatalf("save after removing reference: %v", err)
 	}
 
 	if n := mediaNoteRows(t, db, mediaSha, note.ID); n != 0 {
