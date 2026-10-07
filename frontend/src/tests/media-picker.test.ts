@@ -15,9 +15,9 @@ describe('SPA media picker editor integration', () => {
     expect(picker).toContain('apiClient.listMedia(');
     expect(picker).not.toContain('getMediaPickerPage');
     expect(picker).not.toContain('DOMParser');
-    expect(picker).toContain('data-testid="spa-media-picker-toggle"');
+    expect(picker).toContain('testId="spa-media-picker-toggle"');
     expect(picker).toContain('data-testid="spa-media-item-{item.sha256}"');
-    expect(picker).toContain('data-testid="spa-media-next"');
+    expect(picker).toContain('testId="spa-media-next"');
     expect(picker).toContain('loading="lazy"');
     // 缩略预览与插入都用服务端给出的 url（/media/<sha256>），前端不自己拼路径。
     expect(picker).toContain('onselect(item.url)');

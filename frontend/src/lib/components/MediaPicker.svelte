@@ -2,6 +2,7 @@
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import type { MediaItem } from '../api';
+  import Button from './ui/Button.svelte';
 
   // 媒体库选择器（DESIGN.md §6.3）：数据来自 GET /api/v1/media 的同源 JSON，不再拉取已删除的
   // SSR HTML 片段。缩略预览直接用原图（服务端不生成缩略图），由 CSS 限尺寸 + loading="lazy"
@@ -44,7 +45,7 @@
   }
 </script>
 
-<button data-testid="spa-media-picker-toggle" type="button" onclick={toggle} class="rounded-md border px-4 py-2">{$t('media.spa.open')}</button>
+<Button testId="spa-media-picker-toggle" variant="outline" size="lg" onclick={toggle}>{$t('media.spa.open')}</Button>
 {#if open}
   <section data-testid="spa-media-picker" class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
     <h2 class="text-lg font-semibold">{$t('media.spa.heading')}</h2>
@@ -61,6 +62,6 @@
         {/each}
       </div>
     {/if}
-    {#if hasMore}<button data-testid="spa-media-next" type="button" disabled={loading} onclick={() => load(false)} class="mt-3 rounded-md border px-4 py-2 disabled:opacity-50">{$t('media.spa.next')}</button>{/if}
+    {#if hasMore}<Button testId="spa-media-next" variant="outline" size="lg" class="mt-3" disabled={loading} onclick={() => load(false)}>{$t('media.spa.next')}</Button>{/if}
   </section>
 {/if}

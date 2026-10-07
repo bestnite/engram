@@ -9,6 +9,7 @@
 
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -732,15 +733,9 @@
 
         {#if !feedback}
           <div class="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <button
-              type="button"
-              disabled={submitting}
-              onclick={() => void bury()}
-              class="self-start px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700/80 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium disabled:opacity-50 transition-colors cursor-pointer"
-              data-testid="review-bury"
-            >
+            <Button variant="outline" size="sm" class="self-start" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
               {$t('review.spa.bury')}
-            </button>
+            </Button>
             <p class="text-xs text-zinc-400 dark:text-zinc-500" data-testid="review-bury-hint">
               {$t('review.spa.bury_hint')}
             </p>

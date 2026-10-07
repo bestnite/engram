@@ -9,7 +9,7 @@
     <h1 class="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
       {$t('common.not_found')}
     </h1>
-    <Button href="/" variant="primary" size="lg">
+    <Button href="/" variant="primary" size="lg" testId="not-found-home">
       {$t('common.back_home')}
     </Button>
   </div>
