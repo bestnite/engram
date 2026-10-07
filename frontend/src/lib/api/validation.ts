@@ -72,8 +72,16 @@ export function validateTimezone(timezone: string | null | undefined): {
 }
 
 /**
- * 校验复习日切点小时：留空表示默认 04:00 (NULL)；若填写必须为 0–23 整数（0 表示午夜）
- * 与 Go: internal/store/cutoff.go 及 ResolveCutoff 规则保持完全一致
+ * 服务端默认日切点（本地 04:00 换日），与 Go: internal/store/stats.go 的 DefaultDayCutoffHour 同值。
+ *
+ * 界面不再提供「未设置」这一项：切点必须是一个具体整点。库里为 NULL 的旧账号按这个值显示，
+ * 保存一次即成为显式值（两者生效结果相同，所以这不是行为变化）。
+ */
+export const DEFAULT_DAY_CUTOFF_HOUR = 4;
+
+/**
+ * 校验复习日切点小时：null 或空串表示未设置（落库为 NULL，按 04:00 处理）；填写的值必须是
+ * 0–23 的整数（0 表示午夜）。与 Go: internal/store/stats.go 的 ResolveCutoff 同一口径。
  */
 export function validateDayCutoffHour(raw: number | string | null | undefined): {
   valid: boolean;
