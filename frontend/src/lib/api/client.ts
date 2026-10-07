@@ -1338,6 +1338,52 @@ export class ApiClient {
   }
 
   /**
+   * 读取我待接受的卡组共享邀请，连同我的接收策略与白名单（GET /api/v1/sharing/invites）。
+   * 待接受的邀请不产生任何授权：不点接受，别人的卡组不会出现在我的列表或队列里。
+   */
+  async getShareInvites(): Promise<import('./types').ShareInvitesResponse> {
+    return this.request<import('./types').ShareInvitesResponse>('/api/v1/sharing/invites');
+  }
+
+  /** 接受一条共享邀请（POST /api/v1/sharing/invites/:deckId/accept）。接受那一步才写授权。 */
+  async acceptShareInvite(deckId: number | string): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request(`/api/v1/sharing/invites/${encodeURIComponent(String(deckId))}/accept`, {
+      method: 'POST',
+    });
+  }
+
+  /** 拒绝一条共享邀请（POST /api/v1/sharing/invites/:deckId/reject）。拒绝即删邀请，授权从未存在。 */
+  async rejectShareInvite(deckId: number | string): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request(`/api/v1/sharing/invites/${encodeURIComponent(String(deckId))}/reject`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * 保存我的接收策略与白名单增删（PUT /api/v1/settings/share-policy）。
+   * policy 留空表示只改白名单；响应回读服务端真值，界面以响应为准而不是本地推断。
+   */
+  async saveSharePolicy(input: {
+    policy?: import('./types').ShareAcceptPolicy;
+    allow?: number[];
+    revoke?: number[];
+  }): Promise<import('./types').SharePolicyResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<import('./types').SharePolicyResponse>('/api/v1/settings/share-policy', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
    * 确认退订（POST /api/v1/unsubscribe）。会话前写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
    * 一次性消费令牌，只关掉令牌指名的那个可选类型；响应回带被关掉的类型。
    */

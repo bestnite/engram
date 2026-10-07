@@ -3,7 +3,7 @@
   import { navigate } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Deck } from '../api';
+  import type { Deck, DeckShareInvite } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
   import Select from '../components/ui/Select.svelte';
@@ -31,6 +31,12 @@
   let batchExporting = $state(false);
   let batchExportError = $state<string | null>(null);
 
+  // 待接受的共享邀请（DESIGN.md §4.4 同意制）：分享先产生邀请，接受那一步才写授权。
+  // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
+  let invites = $state<DeckShareInvite[]>([]);
+  let inviteBusy = $state<number | null>(null);
+  let inviteError = $state<string | null>(null);
+
   // 删除卡组确认弹窗状态
   let deckToDelete = $state<Deck | null>(null);
   let deleting = $state(false);
@@ -51,6 +57,43 @@
       error = err instanceof Error ? err : new Error(String(err));
     } finally {
       loading = false;
+    }
+  }
+
+  /**
+   * 读取待接受的共享邀请（GET /api/v1/sharing/invites）。
+   * 未登录或接口失败都只是"没有邀请可显示"，不升级成页面级错误。
+   */
+  async function fetchInvites(): Promise<void> {
+    try {
+      const res = await apiClient.getShareInvites();
+      invites = res.invites;
+    } catch {
+      invites = [];
+    }
+  }
+
+  /**
+   * 接受或拒绝一条邀请。接受成功后重新拉卡组列表——卡组正是那一步才出现在这里。
+   * 失败时只在这一块提示，不动整页状态。
+   */
+  async function respondToInvite(deckId: number, accept: boolean): Promise<void> {
+    inviteBusy = deckId;
+    inviteError = null;
+    try {
+      if (accept) {
+        await apiClient.acceptShareInvite(deckId);
+      } else {
+        await apiClient.rejectShareInvite(deckId);
+      }
+      invites = invites.filter((invite) => invite.deck_id !== deckId);
+      if (accept) {
+        await fetchDecks();
+      }
+    } catch {
+      inviteError = 'decks.invites.failed';
+    } finally {
+      inviteBusy = null;
     }
   }
 
@@ -198,6 +241,7 @@
 
   onMount(() => {
     fetchDecks();
+    fetchInvites();
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
   });
@@ -243,6 +287,62 @@
         </Button>
       </div>
     </div>
+
+    <!-- 待接受的共享邀请：同意制的入口。没有邀请时整块不渲染。 -->
+    {#if invites.length > 0}
+      <div
+        data-testid="deck-invites"
+        class="mb-4 rounded-xl border border-indigo-200/70 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/25 p-4"
+      >
+        <div class="flex items-center gap-2 mb-1">
+          <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16v16H4z" />
+            <path d="m4 6 8 6 8-6" />
+          </svg>
+          <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{$t('decks.invites.title')}</h2>
+        </div>
+        <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{$t('decks.invites.hint')}</p>
+
+        <ul class="space-y-2">
+          {#each invites as invite (invite.deck_id)}
+            <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/80 dark:bg-zinc-900/60 px-3 py-2">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{invite.deck_name}</p>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                  {$t('decks.invites.from', { name: invite.inviter_name || invite.username || '—' })}
+                  ·
+                  {$t('decks.invites.role', { role: $t(`deck.sharing.role.${invite.role}`) })}
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <Button
+                  testId="deck-invite-accept-{invite.deck_id}"
+                  variant="primary"
+                  size="sm"
+                  disabled={inviteBusy === invite.deck_id}
+                  onclick={() => respondToInvite(invite.deck_id, true)}
+                >
+                  {$t('decks.invites.accept')}
+                </Button>
+                <Button
+                  testId="deck-invite-reject-{invite.deck_id}"
+                  variant="outline"
+                  size="sm"
+                  disabled={inviteBusy === invite.deck_id}
+                  onclick={() => respondToInvite(invite.deck_id, false)}
+                >
+                  {$t('decks.invites.reject')}
+                </Button>
+              </div>
+            </li>
+          {/each}
+        </ul>
+
+        {#if inviteError}
+          <p role="alert" class="mt-2 text-xs text-rose-600 dark:text-rose-400">{$t(inviteError)}</p>
+        {/if}
+      </div>
+    {/if}
 
     <!-- 批量工具栏 -->
     {#if !loading && !error && decks.length > 0}

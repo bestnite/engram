@@ -21,6 +21,46 @@ export interface DecksResponse {
   decks: Deck[];
 }
 
+/**
+ * 一条待接受的卡组共享邀请（DESIGN.md §4.4、§5 同意制；Go: internal/web/spa_share_invites.go）。
+ *
+ * 收件人视角读 deck_name + inviter_name（谁邀请我用哪个卡组），属主视角读 username
+ * （我邀请了谁）。同一结构两种读法，字段按视角取用。
+ */
+export interface DeckShareInvite {
+  deck_id: number;
+  deck_name: string;
+  user_id: number;
+  username: string;
+  role: 'reader' | 'editor' | 'owner';
+  invited_by: number;
+  inviter_name: string;
+  created_at: string;
+  expires_at: string;
+}
+
+/** 接收策略：谁可以把卡组分享给我。NULL/缺省按 anyone。 */
+export type ShareAcceptPolicy = 'anyone' | 'whitelist' | 'nobody';
+
+/** 白名单里的一行。带用户名是因为界面要显示「谁」，裸 id 不可读。 */
+export interface ShareAllowRow {
+  user_id: number;
+  username: string;
+}
+
+/** GET /api/v1/sharing/invites（我的待接受邀请 + 我的接收策略）。 */
+export interface ShareInvitesResponse {
+  invites: DeckShareInvite[];
+  policy: ShareAcceptPolicy;
+  allow_list: ShareAllowRow[];
+}
+
+/** GET/PUT /api/v1/settings/share-policy 的响应。 */
+export interface SharePolicyResponse {
+  policy: ShareAcceptPolicy;
+  allow_list: ShareAllowRow[];
+}
+
 /** GET /api/v1/decks/queue-counts response; counts are produced by the shared queue builder. */
 export interface DeckQueueCountsResponse {
   decks: Array<{ deck_id: number; new_count: number; review_count: number }>;

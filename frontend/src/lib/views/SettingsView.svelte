@@ -8,8 +8,10 @@
     validateProfileForm,
     COMMON_TIMEZONES,
     type UserProfile,
+    type ShareAllowRow,
   } from '../api';
   import Select from '../components/ui/Select.svelte';
+  import RadioGroup from '../components/ui/RadioGroup.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
 
@@ -22,6 +24,15 @@
   let passwordError = $state<string | null>(null);
   let passwordNotice = $state<string | null>(null);
   let passwordSaving = $state(false);
+
+  // 卡组共享接收策略（DESIGN.md §5 同意制）：谁可以把卡组分享给我。
+  // allowList 存服务端回读的真值（带用户名），本地不推断并集运算的结果。
+  let sharePolicy = $state<'anyone' | 'whitelist' | 'nobody'>('anyone');
+  let allowList = $state<ShareAllowRow[]>([]);
+  let allowName = $state('');
+  let shareSaving = $state(false);
+  let shareNotice = $state<string | null>(null);
+  let shareError = $state<string | null>(null);
   let oldPassword = $state('');
   let newPassword = $state('');
   let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour', string>>>({});
@@ -159,8 +170,50 @@
     } finally { passwordSaving = false; }
   }
 
+  /** 读取当前接收策略与白名单（GET /api/v1/settings/share-policy）。 */
+  async function loadSharePolicy(): Promise<void> {
+    try {
+      const res = await apiClient.getShareInvites();
+      sharePolicy = res.policy;
+      allowList = res.allow_list ?? [];
+    } catch {
+      // 读不到就保持默认（anyone）：这正是「没有特殊设置」的真实含义，不是错误。
+    }
+  }
+
+  /**
+   * 保存接收策略（PUT /api/v1/settings/share-policy）。
+   *
+   * 保存成功后以服务端返回的策略与白名单为准——白名单是并集语义，本地推断会漂移。
+   * 未知用户名由服务端返回 user_not_found，这里翻成对应文案。
+   */
+  async function saveSharePolicy(input: {
+    policy?: 'anyone' | 'whitelist' | 'nobody';
+    allow_usernames?: string[];
+    revoke?: number[];
+  }): Promise<void> {
+    shareSaving = true;
+    shareNotice = null;
+    shareError = null;
+    try {
+      const res = await apiClient.saveSharePolicy(input);
+      sharePolicy = res.policy;
+      allowList = res.allow_list ?? [];
+      allowName = '';
+      shareNotice = 'settings.share_policy.saved';
+    } catch (err) {
+      shareError =
+        err instanceof ApiClientError && err.code === 'user_not_found'
+          ? 'settings.share_policy.user_not_found'
+          : 'settings.share_policy.failed';
+    } finally {
+      shareSaving = false;
+    }
+  }
+
   onMount(() => {
     loadProfile();
+    loadSharePolicy();
   });
 </script>
 
@@ -336,6 +389,81 @@
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
         <Button href="/settings/notifications" variant="primary" size="lg" class="mt-4">{$t('settings.notifications.entry')}</Button>
+      </section>
+
+      <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
+      <section class="card-elevated p-6 rounded-xl mt-6 space-y-4" data-testid="settings-share-policy">
+        <div>
+          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.share_policy.heading')}</h2>
+          <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.share_policy.intro')}</p>
+        </div>
+
+        <RadioGroup
+          bind:value={sharePolicy}
+          name="share-policy"
+          testId="share-policy-options"
+          itemTestIdPrefix="share-policy-"
+          disabled={shareSaving}
+          options={[
+            { value: 'anyone', label: $t('settings.share_policy.anyone') },
+            { value: 'whitelist', label: $t('settings.share_policy.whitelist') },
+            { value: 'nobody', label: $t('settings.share_policy.nobody') },
+          ]}
+          onValueChange={(next) => saveSharePolicy({ policy: next as 'anyone' | 'whitelist' | 'nobody' })}
+        />
+
+        {#if sharePolicy === 'whitelist'}
+          <div class="pt-1" data-testid="share-policy-whitelist">
+            <span class="block text-xs font-semibold mb-1.5 text-zinc-700 dark:text-zinc-300">{$t('settings.share_policy.allow_label')}</span>
+            {#if allowList.length === 0}
+              <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('settings.share_policy.allow_empty')}</p>
+            {:else}
+              <ul class="space-y-1.5">
+                {#each allowList as row (row.user_id)}
+                  <li class="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-1.5">
+                    <span class="text-sm text-zinc-800 dark:text-zinc-200 truncate">{row.username || '#' + row.user_id}</span>
+                    <Button
+                      testId="share-policy-remove-{row.user_id}"
+                      variant="ghost"
+                      size="xs"
+                      disabled={shareSaving}
+                      onclick={() => saveSharePolicy({ revoke: [row.user_id] })}
+                    >
+                      {$t('settings.share_policy.allow_remove')}
+                    </Button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            <form
+              class="mt-2 flex items-center gap-2"
+              onsubmit={(event) => {
+                event.preventDefault();
+                const name = allowName.trim();
+                if (name) saveSharePolicy({ allow_usernames: [name] });
+              }}
+            >
+              <input
+                type="text"
+                bind:value={allowName}
+                placeholder={$t('settings.share_policy.allow_placeholder')}
+                aria-label={$t('settings.share_policy.allow_placeholder')}
+                class="field-input text-sm flex-1 max-w-xs"
+                data-testid="share-policy-allow-input"
+              />
+              <Button type="submit" variant="outline" size="sm" disabled={shareSaving} testId="share-policy-allow-add">
+                {$t('settings.share_policy.allow_add')}
+              </Button>
+            </form>
+          </div>
+        {/if}
+
+        {#if shareNotice}
+          <p class="text-xs text-emerald-600 dark:text-emerald-400" role="status">{$t(shareNotice)}</p>
+        {/if}
+        {#if shareError}
+          <p class="text-xs text-rose-600 dark:text-rose-400" role="alert">{$t(shareError)}</p>
+        {/if}
       </section>
     {/if}
   </div>
