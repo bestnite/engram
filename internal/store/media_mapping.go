@@ -22,7 +22,8 @@ import (
 // 「什么算可读」的判断而漂移。
 
 // CodeMediaNotReadable 是 note 写入被写前校验拒绝时的稳定英文 code（条目级，见 MediaWriteError）。
-// 它同时登记在 api 的错误码表与两份语言包里（error.media_not_readable）。
+// 它同时登记在 api 的英文错误码表里（internal/api 的 errorMessages，与 CodeMediaNotReadable 同值）。
+// 错误文案按约定恒为英文、不落语言包，所以两份语言包里没有对应的 error.* 条目。
 const CodeMediaNotReadable = "media_not_readable"
 
 // MediaWriteError 表示一次 note 写入引用了写入者无法读取的媒体，整次写入被拒。
