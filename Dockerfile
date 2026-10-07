@@ -1,6 +1,6 @@
-# M0-11：多阶段构建，产出「一个静态服务二进制 + 一个优化器适配器」的镜像（DESIGN.md §10.2、ROADMAP.md M0-11）。
+# M0-11：多阶段构建，产出「一个静态服务二进制 + 一个优化器适配器」的镜像（ROADMAP.md M0-11）。
 # 服务侧构建物只有一个二进制 + 可选 SQLite 文件；模板、静态资源、语言包都已 go:embed。
-# 另带 FSRS 优化器适配器（tools/optimizer，Rust）——§3.5 明确要求它「可执行文件与主程序一起分发」。
+# 另带 FSRS 优化器适配器（tools/optimizer，Rust），可执行文件与主程序一起分发。
 # 本文件不含任何私有 registry、主机名或部署细节，只使用公开官方镜像。
 # syntax=docker/dockerfile:1
 
@@ -67,7 +67,7 @@ RUN go generate ./... \
 # ---- 运行阶段：alpine + tzdata，非 root，最小可运行面 ----
 FROM alpine:3.22
 
-# tzdata 供用户时区/复习日切点使用（DESIGN.md §10.4）；ca-certificates 供将来 OIDC 出站。
+# tzdata 供用户时区/复习日切点使用；ca-certificates 供将来 OIDC 出站。
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 -h /app app \
     && mkdir -p /data/media \
@@ -81,7 +81,7 @@ COPY --from=optimizer /src/tools/optimizer/target/release/optimizer /usr/local/b
 USER 10001:10001
 WORKDIR /app
 
-# 默认单机形态：SQLite + 启动自动迁移（DESIGN.md §10.2）。密钥是占位值，
+# 默认单机形态：SQLite + 启动自动迁移。密钥是占位值，
 # 真实部署必须通过环境变量覆盖，镜像内不承载任何真实凭据。
 ENV HTTP_ADDR=0.0.0.0:8080 \
     DB_DRIVER=sqlite \

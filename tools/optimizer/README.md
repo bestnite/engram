@@ -2,7 +2,7 @@
 
 A small Rust binary that turns a standard review log into a 21-element FSRS v6
 weight array as JSON. It wraps the optimiser of the upstream `fsrs` crate; no
-FSRS algorithm is reimplemented here (`DESIGN.md` §3.5, `AGENTS.md` M9-2).
+FSRS algorithm is reimplemented here (`AGENTS.md` M9-2).
 
 The web-triggered optimisation job (`internal/jobs`) runs this binary as a
 subprocess. The algorithm never enters the Go code.
@@ -80,7 +80,7 @@ Conversion to training items:
    `review_rating`, so the result does not depend on the input line order).
 2. Each review is assigned a *review day*: the local calendar date of
    `review_time` in the record's `timezone`, shifted back by `day_start` hours
-   (the same rule as `DESIGN.md` §3.3). `delta_t` between consecutive reviews of
+   (the same rule the scheduler uses for review days). `delta_t` between consecutive reviews of
    a card is the difference in review-day numbers; the first review of a card
    uses `delta_t = 0` and same-day reviews get `delta_t = 0`.
 3. For a card with reviews `r0..rn`, the items are the cumulative prefixes

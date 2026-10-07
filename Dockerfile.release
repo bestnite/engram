@@ -14,7 +14,7 @@ ARG TARGETARCH
 # ---- 运行阶段：alpine + tzdata，非 root，与 Dockerfile 的运行阶段保持一致 ----
 FROM alpine:3.22
 
-# tzdata 供用户时区/复习日切点使用（DESIGN.md §10.4）；ca-certificates 供将来 OIDC 出站。
+# tzdata 供用户时区/复习日切点使用；ca-certificates 供将来 OIDC 出站。
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 -h /app app \
     && mkdir -p /data/media \
@@ -30,7 +30,7 @@ COPY tools/optimizer/dist/linux/${TARGETARCH}/optimizer /usr/local/bin/optimizer
 USER 10001:10001
 WORKDIR /app
 
-# 默认单机形态：SQLite + 启动自动迁移（DESIGN.md §10.2）。密钥是占位值，
+# 默认单机形态：SQLite + 启动自动迁移。密钥是占位值，
 # 真实部署必须通过环境变量覆盖，镜像内不承载任何真实凭据。
 ENV HTTP_ADDR=0.0.0.0:8080 \
     DB_DRIVER=sqlite \

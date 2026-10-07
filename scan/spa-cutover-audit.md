@@ -89,7 +89,7 @@ No currently active SSR route/template is proven dead; do not remove one based o
 
 
 
-**Scope:** source audit of `main` at `77f1ce0` (the checked-out `feat/spa-audit-refresh` worktree is based on that commit). This records current code behavior, not intended behavior. `DESIGN.md` §8 describes a pure Svelte SPA replacing templ/htmx; server authorization remains authoritative. This report is an audit, not a claim of complete cutover.
+**Scope:** source audit of `main` at `77f1ce0` (the checked-out `feat/spa-audit-refresh` worktree is based on that commit). This records current code behavior, not intended behavior. The intended end state is a pure Svelte SPA replacing templ/htmx; server authorization remains authoritative. This report is an audit, not a claim of complete cutover.
 
 ## Executive findings
 

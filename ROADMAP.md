@@ -13,7 +13,7 @@ cannot obtain.
 
 Conventions:
 
-- `- [ ]` open, `- [x]` done. Sections are milestones from `DESIGN.md` §12.
+- `- [ ]` open, `- [x]` done. Sections are the milestones M0…M10, in dependency order.
 - IDs are stable. Never renumber or reuse an ID; append new tasks at the end of their
   milestone as `M<n>-<next number>`.
 - Each task is written to be handed to one subagent without extra context: it names the
@@ -33,8 +33,8 @@ Conventions:
   reports the effective value and its source (`env` or `db`).
   *Acceptance:* unit test asserts env-over-db precedence and that a missing required
   variable fails startup with an English error.
-- [x] **M0-3 GORM models** — `internal/store/models.go`: every table from `DESIGN.md`
-  §2.2 with tags that work on both PostgreSQL and SQLite (no `jsonb`, no `serial`).
+- [x] **M0-3 GORM models** — `internal/store/models.go`: every table of the service schema,
+  with tags that work on both PostgreSQL and SQLite (no `jsonb`, no `serial`).
   *Acceptance:* AutoMigrate on both drivers creates all tables; a test asserts table
   count and the unique constraints on `notes (deck_id, external_ref)`,
   `cards (note_id, template)`, `identities (provider, subject)`, `media (sha256)`.
@@ -71,8 +71,8 @@ Conventions:
   *Acceptance:* image builds locally and serves `/healthz`.
 
 - [x] **M0-12 README (English primary, Chinese parallel)** — `AGENTS.md` section 3 lists
-  `README.md` and `README.zh.md` in the layout, and `DESIGN.md` §11 requires the backup and restore
-  procedure for both databases to be documented there, but neither file exists. An open-source
+  `README.md` and `README.zh.md` in the layout, and both databases need a documented backup and restore
+  procedure in the README, but neither file exists. An open-source
   repository with no README has no front door: nobody can tell what the service is, how to run it
   locally, or how to deploy and back it up.
   *Acceptance:* both files exist, the Chinese file is a parallel translation rather than a stub,
@@ -157,7 +157,7 @@ Conventions:
   a wrong host surfaces the server error; the password shows as configured or not configured; a
   transient send failure is retried and the last error is visible in the admin panel.
 - [x] **M1-18 Email type catalog and per-user preferences** — one catalog, one definition (see
-  `DESIGN.md` 4.7), shared by the preferences page and every sender so the two cannot disagree.
+  one catalog, one definition), shared by the preferences page and every sender so the two cannot disagree.
   Class A cannot be switched off, class B defaults on, class C defaults off. Per-user preferences need
   storage: decide between a JSON column and a table, remembering that `models.go` is a single-writer
   hotspot.
@@ -209,7 +209,7 @@ Conventions:
   one exists.
 - [x] **M1-15 Rebuild the OIDC client on `zitadel/oidc/v3`** — M1-11 shipped a working, tested
   OIDC client built on the standard library, because that module was never in `go.mod` (nothing
-  imported it) and the gap stayed invisible until someone implemented the flow. `DESIGN.md` names
+  imported it) and the gap stayed invisible until someone implemented the flow. The dependency choices name
   `github.com/zitadel/oidc/v3` in three places and that choice was deliberate, so the user ruled the
   hand-rolled client a violation of the "prefer a mature library over inventing one" principle and
   wants it rebuilt on the library.
@@ -234,7 +234,7 @@ Conventions:
   `state` is rejected; the test connection returns the provider error text.
 - [x] **M1-12 Identity binding** — lookup by `(provider, subject)`, auto-link by verified
   email, policy-gated account creation, and unlink in the admin panel.
-  *Acceptance:* table-driven test covers all three branches of `DESIGN.md` §4.5 plus the
+  *Acceptance:* table-driven test covers all three identity-link branches plus the
   unlink path.
 - [x] **M1-14 Wire authentication into the binary** — `cmd/engram/main.go` currently starts the
   web server without constructing the auth services, so `/login`, `/register` and `/setup` are not
@@ -295,7 +295,7 @@ Conventions:
   `internal/i18n/locales/zh-CN.yaml` and `en.yaml`.
   *Acceptance:* a test enumerating `Registry.Kinds()` fails if any type label is missing from either
   catalog, and the note editor renders a label (not a raw key) for every field of every type.
-- [x] **M2-11 Deck list and deck creation UI** — `DESIGN.md` §8.1 lists `/decks` as a page and the
+- [x] **M2-11 Deck list and deck creation UI** — the page list calls for `/decks` and the
   store layer can create decks, but no route or template exists: a smoke run of the real binary
   answers `GET /decks` with `404`, so a user cannot create a deck in the browser at all. Add the
   deck list page and a creation form (name, description, preset selection), with the usual i18n,
@@ -305,7 +305,7 @@ Conventions:
 - [x] **M2-12 Create-note UI** — there is no way to create a note in the browser: the editor only
   edits notes that already exist, so the deck page cannot be used to author cards at all (noted by a
   lane that tried to satisfy M2-11's "the new deck is selectable when creating notes"). Add a create
-  form on the deck page: pick a card type, fill its fields (per `DESIGN.md` §6.2), preview through
+  form on the deck page: pick a card type, fill its fields (the frozen field names), preview through
   `internal/render`, save through `NoteStore`. Card types come from `Registry.Kinds()`.
   *Acceptance:* a logged-in user creates one note per card type in the browser and sees the expected
   number of cards per note; the form rejects an invalid field set with a localised message.
@@ -319,7 +319,7 @@ Conventions:
   limit; deleting media frees the quota again; the default is off rather than a number nobody chose.
 
 - [x] **M2-14 Per-deck daily caps in the UI** — `new_per_day` / `reviews_per_day` are deck columns
-  (DESIGN.md §3.3) but had no reference anywhere in `internal/web`: the only way to change how many
+  (deck-level daily caps) but had no reference anywhere in `internal/web`: the only way to change how many
   cards a deck serves per day was to edit the database, so a deck list showing "new 0" gave the user
   no way to see why or to change it. An owner-only `GET/POST /decks/:id/settings` now reads and
   writes both caps (`0` = unlimited, written verbatim), shows today's used and remaining per deck
@@ -335,7 +335,7 @@ Conventions:
 - [x] **M3-1 FSRS wrapper** — `internal/schedule`: construct the scheduler from preset
   weights or `DefaultWeights()`, preview four ratings, submit one rating.
   *Acceptance:* test asserts `Repeat` returns four options and `Next` advances the card
-  state as documented in `DESIGN.md` §3.2.
+  state along the documented new → learning → review / relearning path.
 - [x] **M3-2 Queue builder** — learning cards first, then due reviews ordered by
   retrievability (default) or due date, then new cards limited by the daily cap and
   counted from the `reviews` table.
@@ -358,8 +358,8 @@ Conventions:
   in the preset.
   *Acceptance:* tolerance tests cover case, whitespace, multiple accepted answers,
   absolute and relative numeric tolerance, and partial-credit mapping to `Hard`.
-- [x] **M3-8 Deck-level daily caps in the schema** — `DESIGN.md` §3.3 defines `new_per_day` and
-  `reviews_per_day` as deck settings and §2.2 now lists both columns, but the `decks` model does
+- [x] **M3-8 Deck-level daily caps in the schema** — `new_per_day` and
+  `reviews_per_day` are deck settings and both columns are in the schema, but the `decks` model does
   not have them, so the schedule package currently receives them through `QueueOptions` with
   hard-coded defaults. Add the columns (`INTEGER NOT NULL DEFAULT 20` / `200`), expose them in the
   deck store, and make the queue builder read them from the deck. Requires editing
@@ -380,7 +380,7 @@ Conventions:
   WHERE`).
   *Acceptance:* a test issuing two concurrent first submissions against PostgreSQL asserts exactly
   one review row and one state row survive, and the loser receives the conflict sentinel.
-- [x] **M3-11 Register `short_answer`** — `DESIGN.md` §6.2 lists ten built-in types but
+- [x] **M3-11 Register `short_answer`** — the card-type catalog has ten built-in types but
   `internal/cardtype/builtin.go` registered only nine. Implemented as a self-graded free-text type
   (`prompt` plus optional `reference`), deliberately without a `Grader`, so the review flow falls
   back to the four buttons; the LLM grader stays in §14.
@@ -403,7 +403,7 @@ Conventions:
   read back on POST), accept repeated `deck` parameters in `GET /api/v1/review/due`, add a
   mutually exclusive `deck_ids` array to the MCP `get_due_cards` tool, and give `/decks` a
   per-row checkbox with a "review selected" submit plus a per-row review link. Multi-deck
-  follows the all-decks rules for daily caps and preset (`DESIGN.md` §3.3).
+  follows the all-decks rules for daily caps and preset.
   *Acceptance:* `/review?deck=A&deck=B` serves cards from both decks, and after three
   consecutive ratings the queue still holds cards from the other deck (this fails before the
   change); `/review` with no parameter keeps serving the whole collection after the first
@@ -416,7 +416,7 @@ Conventions:
   optimise endpoints), and the default preset is created lazily inside deck creation
   (`internal/web/decks.go:209`). A brand-new user therefore meets an empty preset dropdown on the
   deck form and can never own more than that one implicit preset, so the "several decks share a
-  preset" case in `DESIGN.md` §2.2 cannot actually happen. Add create and edit (name, desired
+  preset" case cannot actually happen. Add create and edit (name, desired
   retention, learning steps, relearning steps, maximum interval, fuzz) and create the default
   preset present whenever the deck form or the presets page renders (an idempotent ensure in the web
   layer) instead of creating it implicitly on the first deck creation.
@@ -436,7 +436,7 @@ Conventions:
   rows with `api_key_id`.
   *Acceptance:* table-driven test covers missing scope, expired key, revoked key, and
   rate-limit exhaustion.
-- [x] **M4-3 REST endpoints** — the `/api/v1` surface in `DESIGN.md` §7.3, including
+- [x] **M4-3 REST endpoints** — the `/api/v1` surface, including
   `dry_run`, idempotent bulk create by `external_ref`, and the documented error envelope.
   *Acceptance:* a repeated bulk import creates no duplicates and reports
   `created`/`updated`/`skipped` counts correctly.
@@ -466,7 +466,7 @@ Conventions:
   *Acceptance:* test asserts the same `code` yields Chinese and English messages for the
   two `Accept-Language` values.
 
-- [x] **M4-10 User-level API key management** — `DESIGN.md` §8.1 lists API key management under
+- [x] **M4-10 User-level API key management** — keys are meant to be managed under
   `/settings`, but no user-facing route exists: the only key surface is `/admin/api-keys`, an
   admin-wide overview that can revoke but not create (`internal/web/admin_keys.go`). A non-admin
   therefore cannot obtain a key at all, which makes the REST API and the MCP server unreachable for
@@ -480,7 +480,7 @@ Conventions:
 - [x] **M4-11 MCP `create_deck` tool** — the MCP surface can list decks and import a deck package
   but cannot create an empty deck, so an agent has no way to start one. The REST equivalent
   (`POST /api/v1/decks`, `internal/api/decks.go`) keeps its logic inside the handler, so an MCP
-  tool cannot reuse it without duplicating validation, which `DESIGN.md` §7.4 forbids. Extract
+  tool cannot reuse it without duplicating validation, which the one-business-layer rule forbids. Extract
   `CreateDeck(ctx, user, CreateDeckInput)` into `internal/api/service.go` (name trimmed and
   required, visibility defaulting to private, `preset_id` 0 meaning the ensured default preset,
   audit row, the same error codes), have the REST handler call it, and register a `create_deck`
@@ -495,7 +495,7 @@ Conventions:
   but a set of them cannot be deleted or retagged through the API, and an agent holding note ids
   cannot rewrite their content: the only bulk entry point is the web form
   (`POST /decks/:id/bulk`, `internal/web/notes.go`), which REST and MCP do not have. Two changes,
-  both specified in `DESIGN.md` §7.3:
+  both specified for the REST surface:
   *Part 1 — `POST /api/v1/notes/bulk` (scope write).* Body `{action, note_ids, tags, dry_run}` where
   `action` is `delete`, `add_tags`, `remove_tags` or `set_tags`; `note_ids` deduplicated and 1..500
   long; `tags` required only for the tag actions, 1..20 entries after trimming. A request-level
@@ -532,7 +532,7 @@ Conventions:
   `internal/mcp/tools.go` and `internal/mcp/mcp.go` with the same `{action, note_ids, tags, dry_run}`
   arguments as `POST /api/v1/notes/bulk`; add the optional `note_id` to the `create_notes` item and
   forward it into the shared import service. The scope filter at handshake and the re-check on every
-  call stay as they are — no MCP-side validation beyond argument shaping (`DESIGN.md` §7.4).
+  call stay as they are — no MCP-side validation beyond argument shaping.
   *Acceptance:* `tools/list` for a write key contains `bulk_notes` and the full write set matches the
   documented tools; a read key neither sees it nor can call it by name (`scope_required`); a
   `bulk_notes` call and the equivalent REST request produce identical results for the same input, and
@@ -573,7 +573,7 @@ Conventions:
 - [x] **M5-5 Visibility** — `private`, `unlisted`, `public` with correct listing behaviour.
   *Acceptance:* test asserts `unlisted` decks never appear in any listing but resolve by
   direct id.
-- [x] **M5-6 Deck package export** — the `.edeck` zip described in `DESIGN.md` §7.6
+- [x] **M5-6 Deck package export** — the `.edeck` zip
   (`manifest.json`, `notes.json`, `cards.json`, `preset.json`, optional `progress.json`,
   optional `media/` with `media.json`), exposed through the deck page, `GET
   /api/v1/decks/:id/package`, MCP `export_deck`, and the CLI.

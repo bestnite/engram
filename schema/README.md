@@ -2,14 +2,14 @@
 
 Three JSON Schema (draft 2020-12) documents that describe the data exchanged with the
 HTTP API, so external tools and agents can validate and generate payloads without
-reading the server code. All of them are the machine-readable companion of `DESIGN.md`; the
+reading the server code. They mirror the payloads the server accepts; the
 server remains the source of truth for validation.
 
-| File | Describes | Design reference |
-|---|---|---|
-| `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes` | `DESIGN.md` §7.3 (endpoint), §6.2 (card types) |
-| `note-bulk.schema.json` | Request body of the notes bulk action endpoint `POST /api/v1/notes/bulk` | `DESIGN.md` §7.3 (endpoint) |
-| `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) | `DESIGN.md` §7.6 |
+| File | Describes |
+|---|---|
+| `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes`, including the per-kind `fields` of the built-in card types |
+| `note-bulk.schema.json` | Request body of the notes bulk action endpoint `POST /api/v1/notes/bulk` |
+| `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) |
 
 ## `note-bulk.schema.json`
 

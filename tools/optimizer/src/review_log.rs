@@ -1,6 +1,6 @@
 //! 标准 review-log（JSONL）的解析与到 fsrs 训练项的转换。
 //!
-//! 输入 schema 见 DESIGN.md §3.5 与上游 fsrs-optimizer 的 README：
+//! 输入 schema 与上游 fsrs-optimizer 的 README 一致：
 //! `card_id / review_time(ms,UTC) / review_rating(1-4) / review_state(0-3) /
 //! review_duration / timezone / day_start`。
 //!
@@ -170,7 +170,7 @@ fn convert(raw: &RawReview, line_no: usize) -> Result<ParsedReview, String> {
         .timestamp_millis_opt(raw.review_time)
         .single()
         .ok_or_else(|| format!("line {line_no}: review_time is out of range"))?;
-    // 复习日的定义：把本地时间往前推 day_start 小时后取日期，与 DESIGN.md §3.3 的跨天规则一致。
+    // 复习日的定义：把本地时间往前推 day_start 小时后取日期；与调度侧的跨天规则一致。
     let local = utc.with_timezone(&tz) - Duration::hours(day_start);
     let day_index = local.date_naive().num_days_from_ce() as i64;
 

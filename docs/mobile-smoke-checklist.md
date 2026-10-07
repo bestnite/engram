@@ -2,7 +2,7 @@
 
 > 任务：ROADMAP.md **M8-6**。覆盖 **复习 / 编辑 / 离线提示 / 从主屏启动** 四条路径。
 > 日期：**2026-10-02**（本清单的编写与代码侧核实日期；真机执行后请在文末「真机执行记录」补日期）。
-> 规范来源：`DESIGN.md` §8.2（复习页交互）、§8.5（PWA）、§8.3（i18n）；`ROADMAP.md` M8-1、M8-2、M8-6。
+> 规范来源：`ROADMAP.md` M8-1、M8-2、M8-6；下面表格里逐条写明的判据本身。
 >
 > **诚实边界（先读）**
 > 本清单的「实际观察」列有两种取值，含义严格区分：
@@ -50,7 +50,7 @@ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 | A6 | 连续快速点两次评分按钮 | 页面**不缩放** | **待 nite 真机执行**（iOS Safari / Android Chrome 的系统双击缩放是否被抑制，无法在 CI 断言；SSR 的 `review.js` 与其 Node 模拟器已随 SSR 页面层删除，SPA 侧的滑动/键盘决策由 `frontend/src/lib/review-shortcuts.ts` 的单测覆盖，本条仍需真机手测）。 |
 | A7 | 在卡片正文上长按约 1 秒 | 不弹「拷贝 / 查询」菜单，不选中文字 | **待 nite 真机执行**。 |
 | A8 | 观察评分按钮的点击区高度 | 每档按钮点击区 ≥ 44px | **已核实**：评分按钮 class 含 `min-h-11`（`review.templ:96`），Tailwind 默认 `min-h-11` = 2.75rem = **44px**（根字号 16px 时）；「显示答案」按钮同为 `min-h-11`（`review.templ:69`）。复习区域带 `touch-manipulation select-none`（`review.templ:21`）。 |
-| A9 | 连刷 50 张卡 | 无卡顿、无系统菜单误触（`DESIGN.md` §12 M8 验收） | **待 nite 真机执行**。 |
+| A9 | 连刷 50 张卡 | 无卡顿、无系统菜单误触（`ROADMAP.md` M8 的验收标准） | **待 nite 真机执行**。 |
 | A10 | 桌面浏览器按空格显示答案、按 `1`–`4` 评分、`u` 撤销、`e` 编辑、`s` 暂停、`b` 埋藏 | 快捷键按文档生效 | **已核实**（`review.js` `onKeyDown`：空格/Enter、`1`–`4`、`u`/`s`/`b`/`e`；`review.templ:113` 渲染提示文案 `review.shortcuts`）。手机外接键盘同源，但真机手感仍需手测。 |
 
 ---
@@ -100,8 +100,8 @@ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 1. **图标只有 SVG，无 192/512 PNG**：`pwaShellAssets` 与 manifest 只声明 `icons/icon.svg`（`sizes: "any"`）。Chromium 的「可安装性」判定与桌面/Android 的启动图标质量通常期望 192×192 与 512×512 位图；SVG 图标在各平台的支持程度不一致。真机 D2/D5 请确认：**能否出现「安装应用」入口**、安装后图标是否清晰。
 2. **iOS 专用标签缺失**：`base.templ` 无 `apple-touch-icon`、无 `apple-mobile-web-app-capable`、无 `apple-mobile-web-app-status-bar-style`。iOS Safari 对标准 manifest `display: standalone` 的支持版本有限，iOS 主屏启动可能仍带地址栏或复用页面截图作图标。D8 请明确记录。
 3. **SW 只在安全上下文注册**：`http://` 非 localhost 地址不会注册 SW（`pwa.js` 静默 catch，不报错）。冒烟必须用 https 或 localhost。
-4. **离线只提示、不答题**：按 `DESIGN.md` §1 非目标，本服务不做离线答题；离线时整页不可用，仅「已加载页面上的单次评分失败」会触发横幅（§5 C3）。
-5. **双击缩放的抑制范围**：抑制逻辑绑定在 `#review-area` 内的 `dblclick`，且 `viewport` 未设 `user-scalable=no`（有意保留可达性）。复习区域外（页头/页脚）的双击缩放不受影响 —— 这符合 `DESIGN.md` §8.2 的范围，但真机 A6 需在复习区域内测。
+4. **离线只提示、不答题**：本服务刻意不做离线答题（离线优先也是明确的非目标）；离线时整页不可用，仅「已加载页面上的单次评分失败」会触发横幅（§5 C3）。
+5. **双击缩放的抑制范围**：抑制逻辑绑定在 `#review-area` 内的 `dblclick`，且 `viewport` 未设 `user-scalable=no`（有意保留可达性）。复习区域外（页头/页脚）的双击缩放不受影响 —— 这符合「抑制只作用于复习区域」的既定范围，但真机 A6 需在复习区域内测。
 6. **`min-h-11` = 44px 依赖根字号**：若用户浏览器把默认字号调大，实际高度会大于 44px；调小则可能小于 44px。A8 请以真机渲染高度为准。
 
 ---

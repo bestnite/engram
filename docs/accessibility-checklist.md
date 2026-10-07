@@ -3,7 +3,7 @@
 > 任务：ROADMAP.md **M8-5**（keyboard-only flow for review and editing, visible focus, labels on inputs）。
 > 覆盖页面：**复习页、卡组页、设置页**（外加卡片列表页，因为它是「编辑」流程的入口）。
 > 日期：**2026-10-02**（本清单的编写与代码侧核实日期；真人手测后请在文末「手动执行记录」补日期）。
-> 规范来源：`DESIGN.md` §8.2（复习页交互与快捷键）、§8.3（页面清单）、§8.4（管理面板）；`AGENTS.md` §4（Definition of done）、`ROADMAP.md` M8-5。
+> 规范来源：`AGENTS.md` §4（Definition of done）、`ROADMAP.md` M8-5；下面表格里逐条写明的判据本身。
 >
 > **诚实边界（先读）**
 > 本清单没有真机、也没有真人参与，因此「实际观察」列只有两种取值，含义严格区分：
@@ -43,7 +43,7 @@ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 | R5 | 作答类卡片（`typed`/`numeric`）的答案输入框 | 输入框有与之关联的 `<label>`，不是只有 placeholder | **已核实**：`TestAccessibilityFormControlsHaveLabels` 断言 `id="review-answer-input"` 与 `for="review-answer-input"` 同时存在；标签文案来自语言包 `a11y.review.answer_input`（zh「你的答案」/ en「Your answer」）。 |
 | R6 | 复习页所有可见表单控件（含隐藏字段以外的全部 input/select/textarea） | 每个都有 `<label>` / `for=` / `aria-label` 三者之一 | **已核实**：`TestAccessibilityFormControlsHaveLabels` 对 `review-basic` 审计 13 个控件、`review-graded` 审计 14 个控件，0 个未标注。 |
 | R7 | 键盘焦点是否可见 | 焦点控件有清晰的高对比焦点环 | **已核实（样式来源）**：`internal/web/static/css/input.css` 有 `:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }`；`go generate ./...` 后产物 `tailwind.css` 含该规则；`TestAccessibilityFocusVisibleStyle` 通过。**焦点环在真实页面上的对比度与可见度待 nite 手动执行。** |
-| R8 | 键盘快捷键全集（空格/Enter、1–4、`u` 撤销、`e` 编辑、`s` 暂停、`b` 埋藏） | 与 `DESIGN.md` §8.2 一致 | **已核实（脚本绑定）**：`TestAccessibilityReviewKeyboardShortcuts` 通过。**真实按键手感待 nite 手动执行。** |
+| R8 | 键盘快捷键全集（空格/Enter、1–4、`u` 撤销、`e` 编辑、`s` 暂停、`b` 埋藏） | 与复习页的键位约定一致 | **已核实（脚本绑定）**：`TestAccessibilityReviewKeyboardShortcuts` 通过。**真实按键手感待 nite 手动执行。** |
 | R9 | 用屏幕阅读器走一遍卡片 | 正反面、按钮、计数被正确朗读 | **待 nite 手动执行**（需读屏软件，本清单无法断言）。 |
 
 ---

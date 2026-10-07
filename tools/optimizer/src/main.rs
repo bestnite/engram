@@ -1,7 +1,7 @@
-//! FSRS 参数优化器适配器（ROADMAP.md M9-2；DESIGN.md §3.5）。
+//! FSRS 参数优化器适配器（ROADMAP.md M9-2）。
 //!
 //! 职责单一：读标准 review-log（JSONL）-> 调 `fsrs` crate 的优化器 -> 写出 21 元权重 JSON。
-//! 算法实现全部来自上游 `fsrs`，本项目不重写任何 FSRS 逻辑（DESIGN.md §3.5 的硬约束：
+//! 算法实现全部来自上游 `fsrs`，本项目不重写任何 FSRS 逻辑（硬约束：
 //! 算法永不进 Go 代码）。本二进制与主程序一起分发，由 `internal/jobs` 以子进程方式调用。
 //!
 //! CLI 契约（参数、输入输出格式、退出码、确定性）写在 `tools/optimizer/README.md`。
