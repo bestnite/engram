@@ -1645,6 +1645,36 @@
   translation: "This is a test mail: you are previewing an email template in the admin panel.
 
 It renders with sample variables; real recipients see their own data."
+- id: mail.role.reader
+  translation: "readable"
+- id: mail.role.editor
+  translation: "editable"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} shared a deck with you - {{.site}}"
+- id: mail.deck_shared.greeting
+  translation: "Hello,"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} shared the deck {{.deck}} with you as {{.role}}."
+- id: mail.deck_shared.link_label
+  translation: "Open the deck:"
+- id: mail.deck_permission.subject
+  translation: "Your deck access changed - {{.site}}"
+- id: mail.deck_permission.greeting
+  translation: "Hello,"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} changed your access to the deck {{.deck}} to {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} removed your access to the deck {{.deck}}."
+- id: mail.deck_permission.link_label
+  translation: "Open the deck:"
+- id: mail.optimize.subject
+  translation: "Parameter optimisation finished - {{.site}}"
+- id: mail.optimize.greeting
+  translation: "Hello,"
+- id: mail.optimize.body
+  translation: "The parameters for the preset {{.preset}} have been optimised from {{.count}} reviews. They are in effect now; you can review or revert them on the presets page at any time."
+- id: mail.optimize.link_label
+  translation: "Open the presets page:"
 - id: mail.footer.note
   translation: "You are receiving this because you turned this notification on. You can turn it off at any time in settings."
 - id: mail.footer.unsubscribe

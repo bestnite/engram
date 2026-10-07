@@ -118,6 +118,12 @@ type CommandBuilder func(ctx context.Context, job *store.Job, rep Reporter) (Com
 // 再交给 FinishOptimize 写回 job 行与 preset。返回错误则作业标记为 failed。
 type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail string) (store.OptimizeResult, error)
 
+// SuccessFunc 在作业被标记为 succeeded 之后被调用（C 类「参数优化完成」通知挂点）。
+//
+// 与 FailureFunc 同一契约：只做副作用、返回不了错误、panic 会被兜住——通知失败绝不改变
+// 作业本身的结果。
+type SuccessFunc func(ctx context.Context, job store.Job)
+
 // FailureFunc 在作业被标记为 failed 之后被调用（M1-24 的 D 类管理员通知挂点）。
 //
 // 它在状态已经落库之后运行，因此实现只能做副作用（例如把通知写进邮件 outbox），
@@ -143,6 +149,9 @@ type Deps struct {
 	// OnFailure 可选；作业被标记为 failed 后调用（M1-24 的 D 类管理员通知挂点）。
 	// 为空时不做任何额外动作。见 FailureFunc 的契约。
 	OnFailure FailureFunc
+	// OnSuccess 可选；作业被标记为 succeeded 后调用（C 类「参数优化完成」通知挂点）。
+	// 为空时不做任何额外动作。见 SuccessFunc 的契约。
+	OnSuccess SuccessFunc
 	// Now 可注入时钟；为空时用系统 UTC 时间。
 	Now func() time.Time
 	// LogTailLines 是日志尾巴行数上限；<=0 时用 DefaultLogTailLines。
@@ -162,6 +171,7 @@ type Runner struct {
 	command      CommandBuilder
 	complete     CompleteFunc
 	onFailure    FailureFunc
+	onSuccess    SuccessFunc
 	now          func() time.Time
 	logTailLines int
 
@@ -214,6 +224,7 @@ func New(deps Deps) (*Runner, error) {
 		command:      command,
 		complete:     deps.Complete,
 		onFailure:    deps.OnFailure,
+		onSuccess:    deps.OnSuccess,
 		now:          now,
 		logTailLines: tailLines,
 		queue:        make(chan *store.Job, queueDepth),
@@ -297,6 +308,11 @@ func (r *Runner) Cancel(ctx context.Context, id uint64) error {
 		return ErrNotRunning
 	}
 	return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
+}
+
+// SetOnSuccess 设置作业成功钩子；须在 Start 之前调用，避免与 worker 竞态（同 SetOnFailure）。
+func (r *Runner) SetOnSuccess(fn SuccessFunc) {
+	r.onSuccess = fn
 }
 
 // SetOnFailure 设置作业失败钩子（M1-24）；须在 Start 之前调用，避免与 worker 竞态。
@@ -412,12 +428,36 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		if err := r.FinishOptimize(ctx, job.ID, result, tail); err != nil {
 			r.logger.Error("finish optimize failed", "job_id", job.ID, "error", err)
 			r.fail(ctx, job.ID, fmt.Sprintf("finish optimize: %v", err), tail)
+			return
 		}
+		r.notifySuccess(ctx, job.ID)
 		return
 	}
 	if err := r.store.FinishSucceeded(ctx, job.ID, r.now(), "", tail); err != nil {
 		r.logger.Error("finish job succeeded failed", "job_id", job.ID, "error", err)
+		return
 	}
+	r.notifySuccess(ctx, job.ID)
+}
+
+// notifySuccess 在作业成功落库后调用 OnSuccess 钩子；未配置时直接返回。
+// 与 notifyFailure 同一条纪律：钩子 panic 被兜住，通知失败不影响作业结果。
+func (r *Runner) notifySuccess(ctx context.Context, id uint64) {
+	fn := r.onSuccess
+	if fn == nil {
+		return
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.logger.Error("job success hook panicked", "job_id", id, "panic", rec)
+		}
+	}()
+	job, err := r.store.ByID(ctx, id)
+	if err != nil {
+		r.logger.Error("load succeeded job for notification failed", "job_id", id, "error", err)
+		return
+	}
+	fn(ctx, *job)
 }
 
 // fail 把作业标记为 failed 并记录错误与日志尾巴；失败原因写英文（AGENTS.md §2.1）。

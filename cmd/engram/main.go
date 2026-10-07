@@ -338,6 +338,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	}
 	// M1-24：作业失败后通知管理员（D 类）。钩子在 Start 之前接好，避免与 worker 竞态。
 	jobRunner.SetOnFailure(webSrv.NotifyJobFailed)
+	jobRunner.SetOnSuccess(webSrv.NotifyOptimizeDone)
 	jobRunner.Start(context.Background())
 	return webSrv, nil
 }

@@ -1643,6 +1643,36 @@
   translation: "这是一封测试邮件：你正在管理面板里预览邮件模板。
 
 它用样例变量渲染；真正的收件人会看到他们的真实数据。"
+- id: mail.role.reader
+  translation: "可阅读"
+- id: mail.role.editor
+  translation: "可编辑"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} 把卡组分享给你 - {{.site}}"
+- id: mail.deck_shared.greeting
+  translation: "你好，"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} 把卡组「{{.deck}}」分享给了你，你的权限是 {{.role}}。"
+- id: mail.deck_shared.link_label
+  translation: "打开卡组："
+- id: mail.deck_permission.subject
+  translation: "你的卡组权限有变更 - {{.site}}"
+- id: mail.deck_permission.greeting
+  translation: "你好，"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} 把你在卡组「{{.deck}}」里的权限改成了 {{.role}}。"
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} 取消了你对卡组「{{.deck}}」的访问权限。"
+- id: mail.deck_permission.link_label
+  translation: "打开发起变更的卡组："
+- id: mail.optimize.subject
+  translation: "参数优化完成 - {{.site}}"
+- id: mail.optimize.greeting
+  translation: "你好，"
+- id: mail.optimize.body
+  translation: "预设「{{.preset}}」的参数优化已经完成，本次用到了 {{.count}} 条复习记录。新的参数已经生效，你可以随时在调度预设页面查看或回退。"
+- id: mail.optimize.link_label
+  translation: "打开调度预设页："
 - id: mail.footer.note
   translation: "你收到这封邮件，因为你开启了此类通知；可以随时在设置里关闭。"
 - id: mail.footer.unsubscribe

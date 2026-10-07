@@ -161,6 +161,8 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 				auditAction = store.ActionDeckRoleChange
 			}
 			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: auditAction, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role, "previous_role": existing}})
+			// 通知被授权者（B 类，可退订）。放在审计之后、且不返回错误：通知只是副作用。
+			s.notifyDeckGrantChange(c, deck, user, target, existing, role)
 		}
 	case "revoke":
 		id := req.UserID
@@ -181,6 +183,7 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 		}
 		if existing != "" {
 			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": id, "previous_role": existing}})
+			s.notifyDeckRevoke(c, deck, user, id, existing)
 		}
 	case "visibility":
 		v := strings.TrimSpace(req.Visibility)
