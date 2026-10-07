@@ -8,6 +8,7 @@
   import Button from '../components/ui/Button.svelte';
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -291,16 +292,7 @@
 
     <!-- 列表内容区 -->
     {#if loading}
-      <!-- 骨架屏 -->
-      <div data-testid="decks-loading" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {#each [1, 2, 3, 4] as item (item)}
-          <div class="p-5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 space-y-3 skeleton-block">
-            <div class="h-5 w-1/3 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
-            <div class="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
-            <div class="h-4 w-1/2 bg-zinc-200 dark:bg-zinc-700/60 rounded pt-3"></div>
-          </div>
-        {/each}
-      </div>
+      <Skeleton testId="decks-loading" label={$t('common.loading')} variant="cards" count={4} columns={2} />
     {:else if error}
       <div
         data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'decks-unauthorized' : 'decks-failed'}

@@ -5,6 +5,7 @@
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import type {
     PresetsResponse,
     PresetRecord,
@@ -419,10 +420,7 @@
   </div>
 
   {#if loading}
-    <div data-testid="presets-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-      <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
-      <p class="text-sm">{$t('common.loading')}</p>
-    </div>
+    <Skeleton testId="presets-loading" label={$t('common.loading')} />
   {:else if loadError}
     <div data-testid="presets-failed" class="card-elevated p-8 rounded-xl text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>

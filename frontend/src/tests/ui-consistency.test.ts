@@ -150,3 +150,35 @@ describe('interactive pieces are owned by the component library', () => {
   });
 });
 
+describe('loading states and the admin tab bar', () => {
+  // 与上一节同样的全目录扫描：这条守卫要覆盖每个视图，而不是一份手工维护的清单。
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (entry.name.endsWith('.svelte')) out.push(full);
+    }
+    return out;
+  };
+  const libDir = fileURLToPath(new URL('../lib', import.meta.url));
+  const sources = walk(libDir).map((file) => ({ file: relative(libDir, file), src: readFileSync(file, 'utf8') }));
+
+  it('renders every page-level loading state through the shared Skeleton component', () => {
+    // 加载态用骨架屏而不是空白或「加载中…」文字；这条样式必须只有一份实现
+    //（同一组类名在二十个视图里各写一遍，就是下一次改版必然漂移的地方）。
+    const pages = sources.filter((s) => s.file.startsWith('views/') && s.src.includes('-loading'));
+    expect(pages.length).toBeGreaterThanOrEqual(20);
+    const offenders = pages.filter((s) => !s.src.includes('<Skeleton')).map((s) => s.file);
+    expect(offenders).toEqual([]);
+    // 自写的页面级加载块（裸 div + 文案）已清零，只允许组件内部出现 data-testid。
+    const raw = sources
+      .filter((s) => s.file.startsWith('views/') && /data-testid="[a-z-]*-loading"/.test(s.src))
+      .map((s) => s.file);
+    expect(raw).toEqual([]);
+  });
+
+  it('keeps the pulse placeholder in a single implementation', () => {
+    const owners = sources.filter((s) => s.src.includes('skeleton-block')).map((s) => s.file);
+    expect(owners).toEqual(['components/ui/Skeleton.svelte']);
+});

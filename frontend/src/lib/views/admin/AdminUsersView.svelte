@@ -5,6 +5,7 @@
   import type { AdminUsersResponse, AdminUser } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
+  import Skeleton from '../../components/ui/Skeleton.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -233,7 +234,7 @@
   </form>
 
   {#if loading}
-    <div data-testid="admin-users-loading" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('common.loading')}</div>
+    <Skeleton testId="admin-users-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-users-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>

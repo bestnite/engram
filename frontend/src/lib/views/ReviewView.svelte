@@ -8,6 +8,7 @@
   import RadioGroup from '../components/ui/RadioGroup.svelte';
 
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -544,10 +545,7 @@
     ontouchend={onTouchEnd}
   >
     {#if loading}
-      <div data-testid="review-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400 space-y-3">
-        <div class="inline-block animate-spin w-7 h-7 border-2 border-current border-t-transparent rounded-full" aria-hidden="true"></div>
-        <p class="text-sm font-medium">{$t('review.spa.loading')}</p>
-      </div>
+      <Skeleton testId="review-loading" label={$t('review.spa.loading')} lines={2} />
     {:else if error}
       <div class="text-center space-y-4 py-6" data-testid="review-error">
         <p class="text-rose-700 dark:text-rose-300 font-medium">{error instanceof ApiClientError ? $t('error.' + (error.isConflict ? 'conflict' : error.isUnauthorized ? 'unauthorized' : error.isForbidden ? 'forbidden' : error.isNetworkError ? 'network' : 'unknown')) : $t('review.spa.failed')}</p>

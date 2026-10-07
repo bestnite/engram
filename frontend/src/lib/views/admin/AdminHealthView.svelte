@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminHealth } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import Skeleton from '../../components/ui/Skeleton.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -97,9 +98,7 @@
   </header>
 
   {#if loading}
-    <div data-testid="admin-health-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-      <p class="text-sm">{$t('common.loading')}</p>
-    </div>
+    <Skeleton testId="admin-health-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-health-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>

@@ -3,6 +3,7 @@
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, StatsDetail } from '../api';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -194,10 +195,7 @@
     </div>
 
     {#if loading}
-      <div data-testid="stats-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-        <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
-        <p class="text-sm">{$t('stats.loading')}</p>
-      </div>
+      <Skeleton testId="stats-loading" label={$t('stats.loading')} />
     {:else if error}
       <div
         data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'stats-unauthorized' : 'stats-failed'}

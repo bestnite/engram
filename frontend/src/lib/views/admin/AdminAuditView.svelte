@@ -6,6 +6,7 @@
   import { routeStore } from '../../router';
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
+  import Skeleton from '../../components/ui/Skeleton.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -144,9 +145,7 @@
   </form>
 
   {#if loading}
-    <div data-testid="admin-audit-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-      <p class="text-sm">{$t('common.loading')}</p>
-    </div>
+    <Skeleton testId="admin-audit-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-audit-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>

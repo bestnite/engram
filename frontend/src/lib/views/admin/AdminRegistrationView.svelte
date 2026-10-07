@@ -7,6 +7,7 @@
   import Select from '../../components/ui/Select.svelte';
   import RadioGroup from '../../components/ui/RadioGroup.svelte';
   import Checkbox from '../../components/ui/Checkbox.svelte';
+  import Skeleton from '../../components/ui/Skeleton.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -163,7 +164,7 @@
   {#if actionError}<div data-testid="admin-registration-error" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">{$t(actionError)}</div>{/if}
 
   {#if loading}
-    <div data-testid="admin-registration-loading" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('common.loading')}</div>
+    <Skeleton testId="admin-registration-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-registration-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>

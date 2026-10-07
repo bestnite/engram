@@ -5,6 +5,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { DeckSettings } from '../api';
   import Select from '../components/ui/Select.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -146,10 +147,7 @@
   {/if}
 
   {#if loading}
-    <div data-testid="deck-settings-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-      <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
-      <p class="text-sm">{$t('common.loading')}</p>
-    </div>
+    <Skeleton testId="deck-settings-loading" label={$t('common.loading')} />
   {:else if loadError}
     <div
       data-testid={loadError instanceof ApiClientError && loadError.isForbidden ? 'deck-settings-forbidden' : 'deck-settings-failed'}

@@ -9,6 +9,7 @@
   import Select from '../components/ui/Select.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -462,14 +463,7 @@
       {/if}
 
       {#if loading}
-        <div data-testid="notes-loading" class="space-y-3">
-          {#each [1, 2, 3] as item (item)}
-            <div class="p-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 space-y-2 skeleton-block">
-              <div class="h-4 w-28 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
-              <div class="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
-            </div>
-          {/each}
-        </div>
+        <Skeleton testId="notes-loading" label={$t('common.loading')} variant="cards" count={3} columns={1} />
       {:else if error}
         <div
           data-testid={error instanceof ApiClientError && error.isUnauthorized

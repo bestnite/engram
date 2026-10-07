@@ -10,6 +10,7 @@
     type UserProfile,
   } from '../api';
   import Select from '../components/ui/Select.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   // 视图响应式状态（Svelte 5 runes）
   let loading = $state(true);
@@ -174,10 +175,7 @@
     </div>
 
     {#if loading}
-      <div data-testid="settings-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-        <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
-        <p class="text-sm">{$t('common.loading')}</p>
-      </div>
+      <Skeleton testId="settings-loading" label={$t('common.loading')} />
     {:else}
       {#if generalError}
         <div

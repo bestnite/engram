@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { ShareResponse } from '../api';
   import { routeStore } from '../router';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
   // 卡片正反面一律是服务端清洗后的 HTML，这里只把清洗结果作为标签注入，绝不把 fields 原文当 Markdown 渲染。
@@ -67,7 +68,7 @@
   </div>
 
   {#if status === 'loading'}
-    <p data-testid="share-loading" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('share.browse.loading')}</p>
+    <Skeleton testId="share-loading" label={$t('share.browse.loading')} lines={2} />
   {:else if status === 'error'}
     <div
       data-testid="share-error"

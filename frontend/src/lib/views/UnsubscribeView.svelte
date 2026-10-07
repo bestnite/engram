@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
+  import Skeleton from '../components/ui/Skeleton.svelte';
 
   // 一键退订的 SPA 视图（DESIGN.md §4.7、§8.1）：服务端 GET /unsubscribe 只返回应用壳并下发
   // 会话前双提交 cookie，确认页由本视图渲染。令牌由视图读取 ?token= 后先经
@@ -73,7 +74,7 @@
     </h1>
 
     {#if status === 'loading'}
-      <p data-testid="unsubscribe-loading" class="text-sm text-zinc-600 dark:text-zinc-400">{$t('unsubscribe.loading')}</p>
+      <Skeleton testId="unsubscribe-loading" label={$t('unsubscribe.loading')} lines={2} />
     {:else if status === 'ready' || status === 'confirming'}
       <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('unsubscribe.intro', { type: $t('settings.notifications.type.' + typeCode) })}</p>
       <button
