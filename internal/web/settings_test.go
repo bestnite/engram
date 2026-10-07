@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,34 +29,36 @@ func postProfile(t *testing.T, srv *Server, cookies []*http.Cookie, csrf, displa
 	}, cookies)
 }
 
-// rateNextCard 走真实的复习页流程给下一张到期卡评 Good，并返回刚写入的 reviews 行。
-// 它复用页面上的隐藏字段，不手拼 expected_version，因此与真实浏览器路径一致。
+// rateNextCard 走真实的复习流程给下一张到期卡评 Good，并返回刚写入的 reviews 行。
+// 复习页已切到 SPA 应用壳：这里用 SPA 的两条 JSON 端点（/api/v1/review/due 取卡、
+// /api/v1/review/answer 提交），带会话 cookie 与 CSRF 头，路径与真实浏览器一致。
 func rateNextCard(t *testing.T, srv *Server, db *gorm.DB, cookies []*http.Cookie, csrf string, deckID uint64) store.Review {
 	t.Helper()
-	// GET /review 已切到 SPA 应用壳；本 helper 复用 SSR 复习页的隐藏字段，故禁用 SPA。
-	srv.spa = nil
-	page := getWithCookies(t, srv, "/review?deck="+u64str(deckID), cookies)
-	if page.Code != http.StatusOK {
-		t.Fatalf("GET /review status = %d, want 200 (body %s)", page.Code, snippet(page.Body.String()))
+	due := getWithCookies(t, srv, "/api/v1/review/due?deck="+u64str(deckID), cookies)
+	if due.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/review/due status = %d, want 200 (body %s)", due.Code, snippet(due.Body.String()))
 	}
-	body := page.Body.String()
-	cardID := attrValue(body, "card_id")
-	expected := attrValue(body, "expected_version")
-	done := attrValue(body, "done")
-	if cardID == "" {
-		t.Fatalf("review page has no card to rate: %s", snippet(body))
+	var dueBody struct {
+		Cards []struct {
+			CardID  uint64 `json:"card_id"`
+			Version int    `json:"version"`
+		} `json:"cards"`
 	}
-	rec := postForm(t, srv, "/review/answer", url.Values{
-		"csrf_token":       {csrf},
-		"card_id":          {cardID},
-		"deck":             {u64str(deckID)},
-		"rating":           {"3"},
-		"expected_version": {expected},
-		"done":             {done},
-		"elapsed_ms":       {"120"},
-	}, cookies)
+	if err := json.Unmarshal(due.Body.Bytes(), &dueBody); err != nil {
+		t.Fatalf("decode due cards: %v (body %s)", err, snippet(due.Body.String()))
+	}
+	if len(dueBody.Cards) == 0 {
+		t.Fatalf("no due card to rate (body %s)", snippet(due.Body.String()))
+	}
+	rec := postSPAJSON(t, srv, "/api/v1/review/answer", map[string]any{
+		"card_id":          dueBody.Cards[0].CardID,
+		"rating":           3,
+		"expected_version": dueBody.Cards[0].Version,
+		"elapsed_ms":       120,
+		"deck":             []uint64{deckID},
+	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /review/answer status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("POST /api/v1/review/answer status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	var row store.Review
 	if err := db.Order("id desc").First(&row).Error; err != nil {

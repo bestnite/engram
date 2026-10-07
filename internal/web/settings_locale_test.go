@@ -266,7 +266,8 @@ func TestHeaderLocaleSwitchHtmxRefreshesSwitcher(t *testing.T) {
 // 标记决定 htmx 响应是否为设置页的语言控件生成带外交换。
 func TestSettingsPageMarksLocaleControlForOOB(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
-	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
+	// GET /settings 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退设置页（DESIGN.md §8.5）。
+	spa := srv.spa
 	srv.spa = nil
 
 	settings := getWithCookies(t, srv, "/settings", cookies)
@@ -280,6 +281,8 @@ func TestSettingsPageMarksLocaleControlForOOB(t *testing.T) {
 		t.Errorf("settings page does not render the locale control anchor: %s", snippet(settings.Body.String()))
 	}
 
+	// GET /decks 现在是 SPA 应用壳：它天然不带 oob 标记，仍能证明「没有该控件的页面不带标记」。
+	srv.spa = spa
 	decks := getWithCookies(t, srv, "/decks", cookies)
 	if decks.Code != http.StatusOK {
 		t.Fatalf("GET /decks status = %d, want 200", decks.Code)

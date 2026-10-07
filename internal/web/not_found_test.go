@@ -44,69 +44,6 @@ func TestNotFoundFallbackServesSPAIndex(t *testing.T) {
 	}
 }
 
-// TestNotFoundRendersLocalizedPageWhenSPANil 断言当 SPA 未加载（例如降级场景）时，
-// 未知 GET 路径回退设计过的本地化 404 页面（views.NotFound）。
-func TestNotFoundRendersLocalizedPageWhenSPANil(t *testing.T) {
-	srv := newRenderServer(t, nil)
-	srv.spa = nil
-
-	rec := get(t, srv, unknownPath, nil)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("GET %s status = %d, want 404 (body %s)", unknownPath, rec.Code, snippet(rec.Body.String()))
-	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("Content-Type = %q, want text/html", ct)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `lang="zh-CN"`) {
-		t.Errorf("page does not declare lang=\"zh-CN\"; body = %s", snippet(body))
-	}
-	if !strings.Contains(body, "页面未找到") {
-		t.Errorf("page is missing the localized heading; body = %s", snippet(body))
-	}
-	if !strings.Contains(body, "返回首页") {
-		t.Errorf("page is missing the localized home action; body = %s", snippet(body))
-	}
-	if !strings.Contains(body, `href="https://git.nite07.com/nite/engram"`) {
-		t.Errorf("page is missing the repository footer link; body = %s", snippet(body))
-	}
-	if !strings.Contains(body, `href="/no-such-page-zz9?lang=en"`) {
-		t.Errorf("page is missing the language selector link for the current path; body = %s", snippet(body))
-	}
-}
-
-func TestNotFoundAuthenticatedPageIncludesSettingsEntry(t *testing.T) {
-	srv, _, _, cookies, _ := newNotesServer(t)
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, unknownPath, cookies)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("GET %s status = %d, want 404", unknownPath, rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), `href="/settings"`) {
-		t.Errorf("authenticated 404 page does not link to personal settings: %s", snippet(rec.Body.String()))
-	}
-}
-
-func TestNotFoundLocalizesByAcceptLanguage(t *testing.T) {
-	srv := newRenderServer(t, nil)
-	srv.spa = nil
-
-	en := get(t, srv, unknownPath, map[string]string{"Accept-Language": "en-US,en;q=0.9"})
-	if en.Code != http.StatusNotFound {
-		t.Fatalf("GET %s (en) status = %d, want 404", unknownPath, en.Code)
-	}
-	if !strings.Contains(en.Body.String(), "Page not found") {
-		t.Errorf("en response is missing the English heading; body = %s", snippet(en.Body.String()))
-	}
-	if !strings.Contains(en.Body.String(), "Back to home") {
-		t.Errorf("en response is missing the English home action; body = %s", snippet(en.Body.String()))
-	}
-	if strings.Contains(en.Body.String(), "页面未找到") {
-		t.Errorf("en response still contains the Chinese heading")
-	}
-}
-
 // TestNotFoundDoesNotShadowRegisteredRoutes 断言回退只处理未命中路由，
 // 已注册路径（首页、健康检查、登录页）仍走各自 handler。
 func TestNotFoundDoesNotShadowRegisteredRoutes(t *testing.T) {

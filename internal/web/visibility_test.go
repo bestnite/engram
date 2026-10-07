@@ -3,30 +3,40 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// setVisibility 通过共享管理页的可见性表单修改卡组可见性。
+// 可见性的读侧（谁能在列表里看到）走 GET /api/v1/decks 的 JSON 列表；写侧走
+// PATCH /api/v1/decks/:id/sharing/visibility。页面层不再渲染 SSR 列表页。
+
+// setVisibility 通过 SPA JSON 端点修改卡组可见性。
 func setVisibility(t *testing.T, srv *Server, deckID uint64, visibility string, cookies []*http.Cookie, csrf string) {
 	t.Helper()
-	rec := postForm(t, srv, "/decks/"+u64str(deckID)+"/sharing/visibility", url.Values{
-		"csrf_token": {csrf}, "visibility": {visibility},
-	}, cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("set visibility %q status = %d, want 303 (body %s)", visibility, rec.Code, snippet(rec.Body.String()))
+	rec := jsonRequest(t, srv, http.MethodPatch,
+		"/api/v1/decks/"+u64str(deckID)+"/sharing/visibility",
+		`{"visibility":"`+visibility+`"}`, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set visibility %q status = %d, want 200 (body %s)", visibility, rec.Code, snippet(rec.Body.String()))
 	}
+}
+
+// deckListingBody 取当前会话在 GET /api/v1/decks 里看到的卡组列表 JSON 文本。
+func deckListingBody(t *testing.T, srv *Server, cookies []*http.Cookie) string {
+	t.Helper()
+	rec := getWithCookies(t, srv, "/api/v1/decks", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/decks status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	return rec.Body.String()
 }
 
 // TestUnlistedDeckHiddenFromListsButReachableByID 是 M5-5 的主验收：
 // unlisted 永不出现在任何列表里，但能按直接 id 访问。
 func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Unlisted deck")
 	seedBasic(t, db, deck.ID, "unlisted front", "unlisted back")
 
@@ -35,12 +45,8 @@ func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 	_, u2Cookies, _ := createUserAndLogin(t, srv, db, "unlisted_viewer")
 
 	// 列表：不出现。
-	list := getWithCookies(t, srv, "/decks", u2Cookies)
-	if list.Code != http.StatusOK {
-		t.Fatalf("GET /decks status = %d, want 200", list.Code)
-	}
-	if strings.Contains(list.Body.String(), "Unlisted deck") {
-		t.Errorf("unlisted deck appeared in the deck listing")
+	if body := deckListingBody(t, srv, u2Cookies); strings.Contains(body, "Unlisted deck") {
+		t.Errorf("unlisted deck appeared in the deck listing: %s", snippet(body))
 	}
 	// 直接 id：可见（拿到链接可看）。
 	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", u2Cookies); rec.Code != http.StatusOK {
@@ -51,8 +57,6 @@ func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 // TestPublicDeckVisibleInListingToSignedInUser 覆盖 public：登录用户的列表里出现，且能直接访问。
 func TestPublicDeckVisibleInListingToSignedInUser(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Public deck")
 	seedBasic(t, db, deck.ID, "public front", "public back")
 
@@ -60,12 +64,8 @@ func TestPublicDeckVisibleInListingToSignedInUser(t *testing.T) {
 
 	_, u2Cookies, _ := createUserAndLogin(t, srv, db, "public_viewer")
 
-	list := getWithCookies(t, srv, "/decks", u2Cookies)
-	if list.Code != http.StatusOK {
-		t.Fatalf("GET /decks status = %d, want 200", list.Code)
-	}
-	if !strings.Contains(list.Body.String(), "Public deck") {
-		t.Errorf("public deck missing from a signed-in user's listing")
+	if body := deckListingBody(t, srv, u2Cookies); !strings.Contains(body, "Public deck") {
+		t.Errorf("public deck missing from a signed-in user's listing: %s", snippet(body))
 	}
 	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", u2Cookies); rec.Code != http.StatusOK {
 		t.Errorf("public deck by direct id status = %d, want 200", rec.Code)
@@ -75,16 +75,13 @@ func TestPublicDeckVisibleInListingToSignedInUser(t *testing.T) {
 // TestPrivateDeckStaysHidden 覆盖 private：既不在列表里，也不能按 id 访问。
 func TestPrivateDeckStaysHidden(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
-	// GET /decks 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 回退列表页（DESIGN.md §8.5）。
-	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Private deck")
 	seedBasic(t, db, deck.ID, "private front", "private back")
 
 	_, u2Cookies, _ := createUserAndLogin(t, srv, db, "private_viewer")
 
-	list := getWithCookies(t, srv, "/decks", u2Cookies)
-	if strings.Contains(list.Body.String(), "Private deck") {
-		t.Errorf("private deck appeared in a stranger's listing")
+	if body := deckListingBody(t, srv, u2Cookies); strings.Contains(body, "Private deck") {
+		t.Errorf("private deck appeared in a stranger's listing: %s", snippet(body))
 	}
 	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("private deck by direct id status = %d, want 403", rec.Code)
@@ -98,9 +95,9 @@ func TestVisibilityChangeOwnerOnlyAndAudited(t *testing.T) {
 	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "visitor")
 
 	// 非 owner（且无授权）：403，且可见性不变。
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/visibility", url.Values{
-		"csrf_token": {u2CSRF}, "visibility": {store.DeckVisibilityPublic},
-	}, u2Cookies); rec.Code != http.StatusForbidden {
+	if rec := jsonRequest(t, srv, http.MethodPatch,
+		"/api/v1/decks/"+u64str(deck.ID)+"/sharing/visibility",
+		`{"visibility":"public"}`, u2Cookies, u2CSRF); rec.Code != http.StatusForbidden {
 		t.Fatalf("non-owner visibility change status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	got, err := store.NewDeckStore(db).ByID(context.Background(), deck.ID)
@@ -112,9 +109,9 @@ func TestVisibilityChangeOwnerOnlyAndAudited(t *testing.T) {
 	}
 
 	// 非法取值：400。
-	if rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/sharing/visibility", url.Values{
-		"csrf_token": {ownerCSRF}, "visibility": {"everyone"},
-	}, ownerCookies); rec.Code != http.StatusBadRequest {
+	if rec := jsonRequest(t, srv, http.MethodPatch,
+		"/api/v1/decks/"+u64str(deck.ID)+"/sharing/visibility",
+		`{"visibility":"everyone"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid visibility status = %d, want 400", rec.Code)
 	}
 

@@ -45,20 +45,15 @@ func (s *Server) registerSPAShareRoutes(router *gin.Engine) {
 	router.POST("/api/v1/share/:token/unlock", s.spaShareUnlock)
 }
 
-// shareBrowseRoute 提供 GET /s/:token：SPA 已加载时返回应用壳，由客户端路由渲染只读浏览页；
+// shareBrowseRoute 提供 GET /s/:token：返回应用壳，由客户端路由渲染只读浏览页；
 // 内容走 GET /api/v1/share/:token（同一份清洗渲染与媒体授权）。
 //
 // 可达性判定必须留在切壳之前：撤销、过期或不存在的链接仍返回 404，与该 URL 迁移前的行为一致。
-// SPA 缺失（降级构建）时回退 SSR 的 shareBrowse 页面。
 func (s *Server) shareBrowseRoute(c *gin.Context) {
 	if _, _, ok := s.resolveShareLink(c); !ok {
 		return
 	}
-	if s.spa != nil {
-		s.spa.ServeIndex(c)
-		return
-	}
-	s.shareBrowse(c)
+	s.spa.ServeIndex(c)
 }
 
 // spaShareGet 返回一份分享卡组的只读内容（GET /api/v1/share/:token）。
@@ -131,13 +126,13 @@ func (s *Server) spaShareContent(c *gin.Context, deck *store.Deck, link *store.S
 	}
 	rendered := make([]apiShareNote, 0, len(notes))
 	for i := range notes {
-		note, err := s.shareNoteView(notes[i])
+		front, back, err := s.shareNoteView(notes[i])
 		if err != nil {
 			// 单张坏卡不阻断浏览：跳过并记英文日志，其余内容照常展示。
 			s.logger.Error("render shared note failed", "note_id", notes[i].ID, "error", err)
 			continue
 		}
-		rendered = append(rendered, apiShareNote{FrontHTML: note.FrontHTML, BackHTML: note.BackHTML})
+		rendered = append(rendered, apiShareNote{FrontHTML: front, BackHTML: back})
 	}
 	c.JSON(http.StatusOK, apiShareResponse{
 		DeckName:         deck.Name,

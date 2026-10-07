@@ -2,14 +2,11 @@ package web
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/api"
-	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // registerNotFoundRoute 挂上未知路径回退（NoRoute）。
@@ -25,7 +22,7 @@ func (s *Server) registerNotFoundRoute(router *gin.Engine) {
 //   - /api 子路径：回 internal/api 的统一 JSON 错误包壳，脚本客户端永远拿到 JSON；
 //   - /mcp 子路径与非 GET 请求：只回朴素的 404 状态，不塞 HTML；
 //   - 静态/媒体资源未命中路径（/assets/、/static/、/media/ 等）：只回 404 状态，严禁回退 HTML；
-//   - 其余未知的页面型 GET 路径：回退 SPA 应用壳（index.html），由客户端路由接管。若 SPA 未加载则回退本地化 404 页面。
+//   - 其余未知的页面型 GET 路径：回退 SPA 应用壳（index.html），由客户端路由接管。
 func (s *Server) notFound(c *gin.Context) {
 	path := c.Request.URL.Path
 	switch {
@@ -36,11 +33,7 @@ func (s *Server) notFound(c *gin.Context) {
 	case isStaticOrMediaPath(path):
 		c.AbortWithStatus(http.StatusNotFound)
 	default:
-		if s.spa != nil {
-			s.spa.ServeIndex(c)
-			return
-		}
-		s.renderNotFoundPage(c)
+		s.spa.ServeIndex(c)
 	}
 }
 
@@ -52,52 +45,6 @@ func (s *Server) apiNotFound(c *gin.Context) {
 		"code":    code,
 		"message": api.ErrorMessage(c.Request.Context(), code),
 	}})
-}
-
-// renderNotFoundPage 渲染设计过的本地化 404 页面（仅 GET 页面路径）。
-func (s *Server) renderNotFoundPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	data := views.NotFoundData{
-		Layout: views.LayoutData{
-			Lang:       loc.Locale(),
-			Title:      loc.T("notfound.title"),
-			Brand:      s.siteName(c.Request.Context(), loc),
-			HomeURL:    "/",
-			CSSURL:     s.assets.URL("css/tailwind.css"),
-			HTMXURL:    s.assets.URL("js/htmx.min.js"),
-			MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-		},
-		Code:      strconv.Itoa(http.StatusNotFound),
-		Heading:   loc.T("notfound.heading"),
-		Message:   loc.T("error.not_found"),
-		HomeLabel: loc.T("notfound.home_action"),
-		HomeHref:  "/",
-	}
-	s.decorateLayout(c, loc, &data.Layout)
-	// 顶部导航与其它页面完全一致（M8-7）；404 页不命中任何导航项。
-	data.Layout.Nav = s.mainNav(c, loc, c.Request.URL.Path)
-	// 页头会话入口沿用通用外壳的规则：已登录显示登出（POST + CSRF），否则显示登录链接。
-	if _, ok := auth.CurrentUser(c); ok {
-		data.Layout.SessionLabel = loc.T("nav.logout")
-		data.Layout.SessionHref = "/logout"
-		data.Layout.SessionForm = true
-		if sess, ok := auth.CurrentSession(c); ok {
-			data.Layout.CSRF = sess.CSRFToken
-		}
-	} else {
-		data.Layout.SessionLabel = loc.T("nav.login")
-		data.Layout.SessionHref = "/login"
-	}
-	// 不复用 renderHTMLStatus：NotFound 页单独记自己的英文日志（render not found page
-	// failed），与通用模板渲染日志区分。状态码必须在写出 body 之前定下。
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Status(http.StatusNotFound)
-	if err := views.NotFound(data).Render(c.Request.Context(), c.Writer); err != nil {
-		s.logger.Error("render not found page failed", "error", err, "path", c.Request.URL.Path)
-	}
 }
 
 // isAPIPath 判断路径是否属于 REST API（/api 与 /api/...）。
