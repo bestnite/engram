@@ -6,6 +6,7 @@
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -136,7 +137,7 @@
   {:else if loadError}
     <div data-testid="admin-smtp-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-smtp-retry" onclick={() => load()} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('common.retry')}</button>
+      <Button type="button" testId="admin-smtp-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
@@ -173,7 +174,7 @@
         <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.smtp.password.hint')}</span>
       </label>
       <div class="flex gap-3 sm:col-span-2">
-        <button type="submit" data-testid="admin-smtp-save" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.smtp.save')}</button>
+        <Button type="submit" testId="admin-smtp-save" disabled={saving} variant="primary" size="lg">{$t('admin.smtp.save')}</Button>
         <button type="button" data-testid="admin-smtp-test" onclick={test} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{$t('admin.smtp.test')}</button>
       </div>
     </form>

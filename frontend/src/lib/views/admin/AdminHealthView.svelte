@@ -5,6 +5,7 @@
   import type { AdminHealth } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -102,14 +103,9 @@
   {:else if loadError}
     <div data-testid="admin-health-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button
-        type="button"
-        data-testid="admin-health-retry"
-        class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        onclick={() => load()}
-      >
+      <Button type="button" testId="admin-health-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
-      </button>
+      </Button>
     </div>
   {:else if data}
     <dl class="card-elevated divide-y divide-zinc-100 rounded-xl dark:divide-zinc-800" data-testid="admin-health-rows">

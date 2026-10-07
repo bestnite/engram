@@ -6,6 +6,7 @@
   import AdminNav from './AdminNav.svelte';
   import Checkbox from '../../components/ui/Checkbox.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -166,7 +167,7 @@
   {:else if loadError}
     <div data-testid="admin-oidc-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-oidc-retry" onclick={() => load()} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('common.retry')}</button>
+      <Button type="button" testId="admin-oidc-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
@@ -215,7 +216,7 @@
         <input data-testid="admin-oidc-claim-email-verified" bind:value={claimEmailVerified} class="field-input text-sm mt-1 w-full" />
       </label>
       <div class="flex gap-3 sm:col-span-2">
-        <button type="submit" data-testid="admin-oidc-save" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.oidc.save')}</button>
+        <Button type="submit" testId="admin-oidc-save" disabled={saving} variant="primary" size="lg">{$t('admin.oidc.save')}</Button>
         <button type="button" data-testid="admin-oidc-test" onclick={test} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{$t('admin.oidc.test')}</button>
       </div>
     </form>

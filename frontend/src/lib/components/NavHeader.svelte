@@ -5,6 +5,7 @@
   import { authStore, logout } from '../auth';
   import { isDark, toggleTheme } from '../theme';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
+  import Button from './ui/Button.svelte';
 
   let logoutLoading = $state(false);
 
@@ -148,13 +149,11 @@
           </button>
         </div>
       {:else}
-        <a
-          href="/login"
-          data-testid="nav-login-link"
-          class="px-3 py-1.5 rounded-lg bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 text-xs sm:text-sm font-medium hover:bg-zinc-800 dark:hover:bg-white transition-colors"
+        <Button variant="primary" size="sm" href="/login"
+          testId="nav-login-link"
         >
           {$t('nav.login')}
-        </a>
+        </Button>
       {/if}
     </div>
   </div>

@@ -8,6 +8,7 @@
   import RadioGroup from '../../components/ui/RadioGroup.svelte';
   import Checkbox from '../../components/ui/Checkbox.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -168,7 +169,7 @@
   {:else if loadError}
     <div data-testid="admin-registration-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-registration-retry" onclick={() => load()} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('common.retry')}</button>
+      <Button type="button" testId="admin-registration-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
@@ -185,7 +186,7 @@
         <input data-testid="admin-registration-domains" bind:value={emailDomains} class="field-input text-sm mt-1.5 w-full" />
         <span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.registration.allowlist_hint')}</span>
       </label>
-      <button type="submit" data-testid="admin-registration-save" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.registration.save')}</button>
+      <Button type="submit" testId="admin-registration-save" disabled={saving} variant="primary" size="lg">{$t('admin.registration.save')}</Button>
     </form>
 
     <section class="space-y-4">
@@ -255,7 +256,7 @@
           {$t('admin.registration.field.send_email')}
         </label>
         <div class="sm:col-span-3">
-          <button type="submit" data-testid="admin-registration-invite-submit" class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.registration.invite_submit')}</button>
+          <Button type="submit" testId="admin-registration-invite-submit" variant="primary" size="lg">{$t('admin.registration.invite_submit')}</Button>
         </div>
       </form>
     </section>

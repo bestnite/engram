@@ -6,6 +6,7 @@
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -186,9 +187,9 @@
         class="field-input text-sm mt-1.5 w-full"
       />
     </label>
-    <button type="submit" data-testid="admin-users-search-submit" class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
+    <Button type="submit" testId="admin-users-search-submit" variant="primary" size="lg">
       {$t('admin.users.search_submit')}
-    </button>
+    </Button>
   </form>
 
   {#if notice}<div data-testid="admin-users-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -227,9 +228,9 @@
       />
     </label>
     <div class="sm:col-span-3">
-      <button type="submit" data-testid="admin-users-create-submit" disabled={creating} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+      <Button type="submit" testId="admin-users-create-submit" disabled={creating} variant="primary" size="lg">
         {$t('admin.users.create_submit')}
-      </button>
+      </Button>
     </div>
   </form>
 
@@ -238,7 +239,7 @@
   {:else if loadError}
     <div data-testid="admin-users-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-users-retry" onclick={() => load(1)} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">{$t('common.retry')}</button>
+      <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}

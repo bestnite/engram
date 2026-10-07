@@ -7,6 +7,7 @@
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
+  import Button from '../../components/ui/Button.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -135,9 +136,9 @@
     </label>
     <p class="sm:col-span-3 text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.audit.filter.range_hint')}</p>
     <div class="flex items-center gap-3 sm:col-span-3">
-      <button type="submit" data-testid="admin-audit-filter-submit" class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
+      <Button type="submit" testId="admin-audit-filter-submit" variant="primary" size="lg">
         {$t('admin.audit.filter.submit')}
-      </button>
+      </Button>
       <button type="button" data-testid="admin-audit-filter-clear" onclick={clearFilters} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
         {$t('admin.audit.filter.clear')}
       </button>
@@ -149,9 +150,9 @@
   {:else if loadError}
     <div data-testid="admin-audit-failed" class="card-elevated rounded-xl p-8 text-center">
       <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <button type="button" data-testid="admin-audit-retry" onclick={() => load(data?.page ?? 1)} class="btn-press mt-4 cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+      <Button type="button" testId="admin-audit-retry" onclick={() => load(data?.page ?? 1)} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
-      </button>
+      </Button>
     </div>
   {:else if data}
     {@const view = data}
