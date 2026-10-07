@@ -88,3 +88,16 @@ func (a *API) createDeck(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, toDeckResponse(*d))
 }
+
+func (a *API) deleteDeck(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	deckID, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	if err := a.DeleteDeck(c.Request.Context(), u, deckID, CurrentAPIKeyID(c)); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}

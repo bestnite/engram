@@ -46,7 +46,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="admin-i18n">
+<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-i18n">
   <AdminNav />
 
   <header class="space-y-1">

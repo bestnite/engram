@@ -116,6 +116,8 @@ var spaPresetErrorMessages = map[string]string{
 	"not_found":                   "The requested preset was not found.",
 	"insufficient_reviews":        "There are not enough reviews to optimise yet.",
 	"optimize_conflict":           "Another optimisation job is already running.",
+	"preset_in_use":               "This preset is used by one or more decks and cannot be deleted.",
+	"preset_default_protected":    "The default preset cannot be deleted.",
 	"internal_error":              "An internal error occurred.",
 }
 
@@ -129,6 +131,7 @@ func (s *Server) registerSPAPresetRoutes(router *gin.Engine) {
 	router.GET("/api/v1/presets", s.spaPresetList)
 	router.POST("/api/v1/presets", s.sessions.CSRFMiddleware(), s.spaPresetCreate)
 	router.PATCH("/api/v1/presets/:id", s.sessions.CSRFMiddleware(), s.spaPresetUpdate)
+	router.DELETE("/api/v1/presets/:id", s.sessions.CSRFMiddleware(), s.spaPresetDelete)
 	router.POST("/api/v1/presets/:id/optimize", s.sessions.CSRFMiddleware(), s.spaPresetOptimize)
 	router.GET("/api/v1/presets/:id/optimize/status", s.spaPresetOptimizeStatus)
 	router.POST("/api/v1/presets/:id/optimize/revert", s.sessions.CSRFMiddleware(), s.spaPresetOptimizeRevert)
@@ -208,6 +211,40 @@ func (s *Server) spaPresetUpdate(c *gin.Context) {
 		Detail:     map[string]any{"name": p.Name, "desired_retention": p.DesiredRetention, "via": "spa"},
 	})
 	s.writeSPAPresetList(c, user.ID, "return presets after SPA update failed")
+}
+
+// spaPresetDelete 删除预设（仅 owner，默认预设与使用中的预设不可删除）。
+func (s *Server) spaPresetDelete(c *gin.Context) {
+	user, ok := s.spaProfileSessionOnly(c)
+	if !ok {
+		return
+	}
+	p, ok := s.spaOwnedPreset(c, user.ID)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	if err := s.presets.Delete(ctx, user.ID, p.ID); err != nil {
+		if errors.Is(err, store.ErrPresetInUse) {
+			spaPresetError(c, http.StatusConflict, "preset_in_use")
+			return
+		}
+		if errors.Is(err, store.ErrDefaultPresetCannotDelete) {
+			spaPresetError(c, http.StatusBadRequest, "preset_default_protected")
+			return
+		}
+		s.logger.Error("delete preset via SPA failed", "user_id", user.ID, "preset_id", p.ID, "error", err)
+		spaPresetError(c, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	s.audit(ctx, store.AuditEntry{
+		UserID:     store.Ptr(user.ID),
+		Action:     store.ActionPresetDelete,
+		TargetType: "preset",
+		TargetID:   store.Ptr(p.ID),
+		Detail:     map[string]any{"name": p.Name, "via": "spa"},
+	})
+	s.writeSPAPresetList(c, user.ID, "return presets after SPA delete failed")
 }
 
 // spaPresetOptimize 触发优化：先判门槛再入队（复用 jobs.Runner.EnqueueOptimize）。

@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { routeStore, navigate } from '../router';
+  import { routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, Note, BulkNotesResponse } from '../api';
+  import DeckSharingView from './DeckSharingView.svelte';
+  import DeckSettingsView from './DeckSettingsView.svelte';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -12,18 +14,23 @@
   let notes = $state<Note[]>([]);
   let total = $state(0);
   let page = $state(1);
+  let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
+
+  // 逐条删除状态
   let confirmingDeleteId = $state<number | null>(null);
   let deletingNoteId = $state<number | null>(null);
   let deleteError = $state('');
   let deleteSuccess = $state(false);
+
+  // 导出对话框状态
+  let showExportModal = $state(false);
   let exporting = $state(false);
   let exportError = $state(false);
-  let cloneSubmitting = $state(false);
-  let cloneError = $state(false);
   let includeMedia = $state(true);
   let includeProgress = $state(false);
   let includeReviews = $state(false);
-  // owner 才显示卡组设置入口：以服务端是否返回卡组设置为准（非 owner 会 403/404），不靠客户端猜测。
+
+  // owner 才显示卡组设置入口：以服务端是否返回卡组设置判定
   let isOwner = $state(false);
   const perPage = 50;
 
@@ -31,8 +38,6 @@
   let queryInput = $state('');
   let tagInput = $state('');
   let kindSelect = $state('');
-  // 状态筛选只有 active / deleted 两项：列表 JSON 不携带逐条删除标记，若暴露 all，
-  // 视图无法区分其中哪些是已删除行，编辑/删除/批量入口就会指向不可执行的行。
   let statusSelect = $state<'active' | 'deleted'>('active');
 
   // 已经应用的筛选条件
@@ -41,7 +46,7 @@
   let appliedKind = $state('');
   let appliedStatus = $state<'active' | 'deleted'>('active');
 
-  // 批量动作（仅 active 视图可用；服务端逐行判权，客户端不做乐观假设）
+  // 批量动作
   let selectedIds = $state<number[]>([]);
   let bulkTagInput = $state('');
   let bulkBusy = $state(false);
@@ -51,31 +56,25 @@
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
-  // 状态不是 active 也算一次筛选：空结果要显示「没有符合条件」而不是「卡组暂无卡片」。
   const hasFilter = $derived(Boolean(appliedQ || appliedTag || appliedKind) || appliedStatus !== 'active');
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
 
   /**
    * 加载卡组卡片数据及卡组元数据
-   * 严格遵守只读约定：仅调用 GET /api/v1/decks/:id/notes 与 GET /api/v1/decks
    */
   async function loadData(targetPage = 1): Promise<void> {
     if (!deckId) return;
     loading = true;
     error = null;
     page = targetPage;
-    // 换页或换筛选后清空选择：选择只对当前可见列表有意义，残留会指向已不在列表里的 note。
     selectedIds = [];
     confirmingBulkDelete = false;
 
     try {
-      // 若卡组元数据尚未加载，尝试拉取
       if (!deck) {
         try {
           deck = await apiClient.getDeck(deckId);
-        } catch {
-          // getDeck 失败时不中断笔记加载，服务端 GET /api/v1/decks/:id/notes 会进行独立鉴权
-        }
+        } catch {}
       }
 
       const res = await apiClient.getDeckNotes(deckId, {
@@ -142,7 +141,6 @@
     selectedIds = allSelected ? [] : notes.map((n) => n.id);
   }
 
-  /** 把逗号分隔的标签输入解析成去空白、去空的数组；去重与限长仍由服务端判定。 */
   function parseTags(raw: string): string[] {
     return raw
       .split(',')
@@ -150,7 +148,6 @@
       .filter((s) => s !== '');
   }
 
-  /** 只统计服务端逐行返回的 skipped 原因；affected 是真实改动行数，不做乐观假设。 */
   function summarizeBulk(res: BulkNotesResponse): { affected: number; notFound: number; insufficientRole: number } {
     let notFound = 0;
     let insufficientRole = 0;
@@ -164,7 +161,6 @@
   async function runBulk(action: 'delete' | 'add_tags' | 'remove_tags' | 'set_tags'): Promise<void> {
     if (bulkBusy || selectedIds.length === 0) return;
     const tags = action === 'delete' ? [] : parseTags(bulkTagInput);
-    // 标签动作缺标签必然 400：在客户端先拦一次，服务端仍是权威校验。
     if (action !== 'delete' && tags.length === 0) {
       bulkError = 'notes.bulk_failed';
       return;
@@ -177,7 +173,6 @@
       const res = await apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false });
       bulkResult = summarizeBulk(res);
       bulkTagInput = '';
-      // 重新取数：删除会移出列表，标签动作要显示新标签；loadData 同时清空选择。
       await loadData(1);
     } catch (err) {
       bulkError = err instanceof ApiClientError && err.isForbidden ? 'error.forbidden' : 'notes.bulk_failed';
@@ -214,7 +209,9 @@
       anchor.href = url;
       anchor.download = filename;
       anchor.click();
+      anchor.remove();
       URL.revokeObjectURL(url);
+      showExportModal = false;
     } catch {
       exportError = true;
     } finally {
@@ -222,27 +219,6 @@
     }
   }
 
-  /**
-   * 克隆当前卡组到自己的账号下（reader 及以上可克隆，服务端判权与审计）。
-   * 成功后跳到新卡组的卡片列表，与 SSR 克隆表单 303 的目标一致；失败显示本地化错误。
-   */
-  async function cloneDeck(): Promise<void> {
-    cloneSubmitting = true;
-    cloneError = false;
-    try {
-      const cloned = await apiClient.cloneDeck(deckId);
-      cloneSubmitting = false;
-      navigate(`/decks/${encodeURIComponent(String(cloned.id))}/notes`);
-    } catch {
-      cloneError = true;
-      cloneSubmitting = false;
-    }
-  }
-
-  /**
-   * 将任意字段值安全转换为纯文本字符串
-   * 绝不使用原始 HTML 注入，天然防止 XSS
-   */
   function formatFieldValue(val: unknown): string {
     if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val;
@@ -255,12 +231,6 @@
     return JSON.stringify(val, null, 2);
   }
 
-  onMount(() => {
-    loadData(1);
-    loadOwnerFlag();
-  });
-
-  /** 探测 owner 身份：只有 owner 能读到 GET /api/v1/decks/:id/settings，其余一律隐藏设置入口。 */
   async function loadOwnerFlag(): Promise<void> {
     if (!deckId) return;
     try {
@@ -270,361 +240,436 @@
       isOwner = false;
     }
   }
+
+  onMount(() => {
+    loadData(1);
+    loadOwnerFlag();
+  });
 </script>
 
-<div class="py-10 max-w-5xl mx-auto px-4">
-  <div class="mb-6">
-    <a
-      href="/decks"
-      data-testid="back-to-decks"
-      class="inline-flex items-center text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-    >
-      &larr; {$t('notes.back_to_decks')}
-    </a>
-  </div>
+<div class="py-8 max-w-5xl mx-auto px-4 space-y-6">
+  <!-- 顶栏精炼导航与卡组信息 -->
+  <div class="card-elevated p-6 sm:p-8 rounded-2xl">
+    <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+      <a href="/decks" data-testid="back-to-decks" class="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors inline-flex items-center gap-1 font-medium">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>卡组列表</span>
+      </a>
+      <span>/</span>
+      <span class="text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-xs">{deck ? deck.name : `#${deckId}`}</span>
+    </div>
 
-  <div class="card-elevated p-8 rounded-xl mb-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
-          {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
-        </h1>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
+            {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
+          </h1>
+          {#if deck?.visibility}
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
+              {deck.visibility}
+            </span>
+          {/if}
+        </div>
         {#if deck?.description}
-          <p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+          <p class="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 max-w-2xl leading-relaxed">
             {deck.description}
           </p>
         {/if}
       </div>
 
-      {#if deck}
-        <div class="flex items-center gap-2 text-xs">
-          {#if deck.visibility}
-            <span class="px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
-              {deck.visibility}
-            </span>
-          {/if}
-          <span class="px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-            {deck.new_per_day} / {deck.reviews_per_day}
-          </span>
-        </div>
-      {/if}
-    </div>
-
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <a
-        href="/decks/{encodeURIComponent(deckId)}/notes/new"
-        data-testid="create-note-link"
-        class="inline-flex items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
-        {$t('notes.create')}
-      </a>
-      <a
-        href="/decks/{encodeURIComponent(deckId)}/sharing"
-        data-testid="deck-sharing-link"
-        class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
-      >{$t('deck.sharing.title')}</a>
-      {#if isOwner}
-        <a
-          href="/decks/{encodeURIComponent(deckId)}/settings"
-          data-testid="deck-settings-link"
-          class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium"
-        >{$t('deck.settings.entry')}</a>
-      {/if}
-      {#if cloneError}<span role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t('deck.clone.failed')}</span>{/if}
-      <button type="button" data-testid="deck-clone" disabled={cloneSubmitting || !deck} onclick={cloneDeck} class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium disabled:opacity-50">{$t(cloneSubmitting ? 'deck.clone.submitting' : 'deck.clone.action')}</button>
-      <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeMedia} />{$t('package.export.include_media')}</label>
-      <label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeProgress} onchange={() => { if (!includeProgress) includeReviews = false; }} />{$t('package.export.include_progress')}</label>
-      {#if includeProgress}<label class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"><input type="checkbox" bind:checked={includeReviews} />{$t('package.export.include_reviews')}</label>{/if}
-      <button type="button" data-testid="deck-package-export" disabled={exporting || !deck} onclick={exportPackage} class="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium disabled:opacity-50">{$t(exporting ? 'package.export.exporting' : 'package.export.action')}</button>
-      {#if exportError}<span role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t('package.export.failed')}</span>{/if}
-    </div>
-
-    <!-- 搜索与筛选表单 -->
-    <form
-      onsubmit={handleFilterSubmit}
-      class="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap gap-2 items-center"
-      data-testid="notes-filter-form"
-    >
-      <input
-        type="text"
-        data-testid="filter-query-input"
-        placeholder={$t('notes.search_placeholder')}
-        bind:value={queryInput}
-        class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 w-full sm:w-48"
-      />
-      <input
-        type="text"
-        data-testid="filter-tag-input"
-        placeholder={$t('notes.tag_placeholder')}
-        bind:value={tagInput}
-        class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 w-full sm:w-36"
-      />
-      <select
-        data-testid="filter-kind-select"
-        bind:value={kindSelect}
-        class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-zinc-500"
-      >
-        <option value="">{$t('notes.all_kinds')}</option>
-        <option value="basic">basic</option>
-        <option value="basic_both">basic_both</option>
-        <option value="cloze">cloze</option>
-        <option value="list">list</option>
-        <option value="typed">typed</option>
-        <option value="numeric">numeric</option>
-        <option value="choice_single">choice_single</option>
-        <option value="choice_multi">choice_multi</option>
-        <option value="true_false">true_false</option>
-        <option value="short_answer">short_answer</option>
-      </select>
-      <select
-        data-testid="filter-status-select"
-        bind:value={statusSelect}
-        class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-zinc-500"
-      >
-        <option value="active">{$t('notes.status_active')}</option>
-        <option value="deleted">{$t('notes.status_deleted')}</option>
-      </select>
-      <button
-        type="submit"
-        data-testid="filter-apply-btn"
-        class="text-xs px-3 py-1.5 rounded-md font-medium bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
-      >
-        {$t('notes.filter_apply')}
-      </button>
-      {#if hasFilter}
+      <!-- 右侧主要动作区 -->
+      <div class="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
         <button
           type="button"
-          data-testid="filter-reset-btn"
-          class="text-xs px-2.5 py-1.5 rounded-md font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          onclick={handleFilterReset}
+          onclick={() => showExportModal = true}
+          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer"
         >
-          {$t('notes.filter_reset')}
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>导出</span>
+        </button>
+
+        <a
+          href="/decks/{encodeURIComponent(deckId)}/notes/new"
+          data-testid="create-note-link"
+          class="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>{$t('notes.create')}</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- 统一 Tab 标签栏导航 -->
+    <div class="mt-6 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2">
+      <button
+        type="button"
+        onclick={() => activeTab = 'cards'}
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'cards' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+      >
+        卡片列表 ({total})
+      </button>
+
+      <button
+        type="button"
+        data-testid="deck-sharing-link"
+        onclick={() => activeTab = 'sharing'}
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'sharing' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+      >
+        {$t('deck.sharing.title')}
+      </button>
+
+      {#if isOwner}
+        <button
+          type="button"
+          data-testid="deck-settings-link"
+          onclick={() => activeTab = 'settings'}
+          class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+        >
+          {$t('deck.settings.entry')}
         </button>
       {/if}
-      <div class="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
-        {$t('notes.total_count', { total })}
-      </div>
-    </form>
+    </div>
   </div>
 
-  <!-- 卡片列表主体内容 -->
-  <div class="card-elevated p-8 rounded-xl">
-    {#if appliedStatus === 'deleted'}
-      <p role="note" data-testid="notes-deleted-notice" class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{$t('notes.deleted_readonly')}</p>
-    {/if}
-
-    {#if appliedStatus === 'active'}
-      {#if !loading && !error && notes.length > 0}
-        <div
-          data-testid="notes-bulk-toolbar"
-          class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2"
-        >
-          <label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
-            <input type="checkbox" data-testid="bulk-select-all" checked={allSelected} onchange={toggleSelectAll} />
-            {$t('notes.select_all')}
-          </label>
-          <span data-testid="bulk-selected-count" class="text-xs text-zinc-500 dark:text-zinc-400">
-            {$t('notes.selected_count', { count: selectedIds.length })}
-          </span>
-          <input
-            type="text"
-            data-testid="bulk-tag-input"
-            placeholder={$t('notes.bulk_tag_placeholder')}
-            bind:value={bulkTagInput}
-            class="text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 w-full sm:w-40"
-          />
-          <button type="button" data-testid="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_add_tags')}</button>
-          <button type="button" data-testid="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_remove_tags')}</button>
-          <button type="button" data-testid="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} class="text-xs px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">{$t('notes.bulk_set_tags')}</button>
-          {#if confirmingBulkDelete}
-            <span class="text-xs text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
-            <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-xs text-rose-700 underline disabled:opacity-40 cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
-            <button type="button" data-testid="bulk-cancel-delete" class="text-xs underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
-          {:else}
-            <button type="button" data-testid="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} class="text-xs px-2.5 py-1 rounded-md border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }}>{$t('notes.bulk_delete')}</button>
-          {/if}
-          {#if bulkBusy}<span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_applying')}</span>{/if}
-        </div>
-      {/if}
-
-      {#if bulkError}
-        <p role="alert" data-testid="notes-bulk-error" class="mb-4 text-sm text-rose-700 dark:text-rose-400">{$t(bulkError)}</p>
-      {/if}
-      {#if bulkResult}
-        <div role="status" data-testid="notes-bulk-result" class="mb-4 text-sm text-zinc-700 dark:text-zinc-300">
-          <p>{$t('notes.bulk_result', { affected: bulkResult.affected, skipped: bulkResult.notFound + bulkResult.insufficientRole })}</p>
-          {#if bulkResult.notFound > 0}
-            <p data-testid="notes-bulk-skipped-not-found" class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_skipped_not_found', { count: bulkResult.notFound })}</p>
-          {/if}
-          {#if bulkResult.insufficientRole > 0}
-            <p data-testid="notes-bulk-skipped-forbidden" class="text-xs text-zinc-500 dark:text-zinc-400">{$t('notes.bulk_skipped_forbidden', { count: bulkResult.insufficientRole })}</p>
-          {/if}
-        </div>
-      {/if}
-    {/if}
-
-    {#if deleteSuccess}
-      <p role="status" data-testid="note-delete-success" class="mb-4 text-sm text-emerald-700 dark:text-emerald-400">{$t('notes.delete_success')}</p>
-    {/if}
-    {#if deleteError}
-      <p role="alert" data-testid="note-delete-error" class="mb-4 text-sm text-rose-700 dark:text-rose-400">{$t(deleteError)}</p>
-    {/if}
-    {#if loading}
-      <div data-testid="notes-loading" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-        <div class="inline-block animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full mb-3" aria-hidden="true"></div>
-        <p class="text-sm">{$t('notes.loading')}</p>
-      </div>
-    {:else if error}
-      <div
-        data-testid={error instanceof ApiClientError && error.isUnauthorized
-          ? 'notes-unauthorized'
-          : error instanceof ApiClientError && error.isForbidden
-            ? 'notes-forbidden'
-            : error instanceof ApiClientError && error.isNotFound
-              ? 'notes-not-found'
-              : 'notes-failed'}
-        class="py-10 text-center"
+  <!-- Tab 内容区域 -->
+  {#if activeTab === 'sharing'}
+    <DeckSharingView />
+  {:else if activeTab === 'settings'}
+    <DeckSettingsView />
+  {:else}
+    <!-- 卡片管理 Tab -->
+    <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-5">
+      <!-- 紧凑搜索与筛选栏 -->
+      <form
+        onsubmit={handleFilterSubmit}
+        class="flex flex-wrap gap-2 items-center pb-4 border-b border-zinc-100 dark:border-zinc-800/80"
+        data-testid="notes-filter-form"
       >
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 mb-3">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <p class="text-base font-medium text-zinc-900 dark:text-zinc-100 mb-2">
-          {#if error instanceof ApiClientError && error.isUnauthorized}
-            {$t('notes.unauthorized')}
-          {:else if error instanceof ApiClientError && error.isForbidden}
-            {$t('notes.forbidden')}
-          {:else if error instanceof ApiClientError && error.isNotFound}
-            {$t('notes.not_found')}
-          {:else}
-            {$t('notes.failed')}
-          {/if}
-        </p>
-        <div class="mt-4">
-          <button
-            data-testid="notes-retry"
-            type="button"
-            class="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
-            onclick={() => loadData(page)}
-          >
-            {$t('notes.retry')}
-          </button>
-        </div>
-      </div>
-    {:else if notes.length === 0}
-      <div data-testid="notes-empty" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-        <p class="text-base font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-          {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
-        </p>
+        <input
+          type="text"
+          data-testid="filter-query-input"
+          placeholder={$t('notes.search_placeholder')}
+          bind:value={queryInput}
+          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-44"
+        />
+        <input
+          type="text"
+          data-testid="filter-tag-input"
+          placeholder={$t('notes.tag_placeholder')}
+          bind:value={tagInput}
+          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-32"
+        />
+        <select
+          data-testid="filter-kind-select"
+          bind:value={kindSelect}
+          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 cursor-pointer"
+        >
+          <option value="">{$t('notes.all_kinds')}</option>
+          <option value="basic">basic</option>
+          <option value="basic_both">basic_both</option>
+          <option value="cloze">cloze</option>
+          <option value="list">list</option>
+          <option value="typed">typed</option>
+          <option value="numeric">numeric</option>
+          <option value="choice_single">choice_single</option>
+          <option value="choice_multi">choice_multi</option>
+          <option value="true_false">true_false</option>
+          <option value="short_answer">short_answer</option>
+        </select>
+        <select
+          data-testid="filter-status-select"
+          bind:value={statusSelect}
+          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 cursor-pointer"
+        >
+          <option value="active">{$t('notes.status_active')}</option>
+          <option value="deleted">{$t('notes.status_deleted')}</option>
+        </select>
+        <button
+          type="submit"
+          data-testid="filter-apply-btn"
+          class="text-xs px-3 py-1.5 rounded-xl font-medium bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
+        >
+          {$t('notes.filter_apply')}
+        </button>
         {#if hasFilter}
           <button
             type="button"
-            class="mt-3 text-xs px-3 py-1.5 rounded-md font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 transition-colors cursor-pointer"
+            data-testid="filter-reset-btn"
+            class="text-xs px-2.5 py-1.5 rounded-xl font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             onclick={handleFilterReset}
           >
             {$t('notes.filter_reset')}
           </button>
         {/if}
-      </div>
-    {:else}
-      <div data-testid="notes-list" class="space-y-4">
-        {#each notes as note (note.id)}
-          <div data-testid="note-card-{note.id}" class="card-subtle p-5 rounded-lg border border-zinc-200/60 dark:border-zinc-800/60 flex flex-col gap-3">
-            <div class="flex items-center justify-between gap-2 pb-2 border-b border-zinc-200/40 dark:border-zinc-800/40 text-xs">
-              <div class="flex items-center gap-2">
-                {#if appliedStatus === 'active'}
-                  <input
-                    type="checkbox"
-                    data-testid="select-note-{note.id}"
-                    checked={isSelected(note.id)}
-                    onchange={() => toggleSelect(note.id)}
-                    aria-label={$t('notes.select_all')}
-                  />
-                {/if}
-                <span class="font-mono font-medium text-zinc-700 dark:text-zinc-300">#{note.id}</span>
-                <span class="px-2 py-0.5 rounded font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                  {note.kind}
-                </span>
-                {#if note.external_ref}
-                  <span class="text-zinc-400 dark:text-zinc-500 text-xs font-mono" title="External Ref">
-                    [{note.external_ref}]
-                  </span>
-                {/if}
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="text-zinc-400 dark:text-zinc-500">
-                  {note.created_at ? note.created_at.slice(0, 10) : ''}
-                </span>
-                {#if appliedStatus === 'active'}
-                  <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-xs underline">{$t('note_edit.action')}</a>
-                  {#if confirmingDeleteId === note.id}
-                    <span class="text-xs">{$t('notes.delete_confirm')}</span>
-                    <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-xs text-rose-700 underline disabled:opacity-50" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
-                    <button type="button" class="text-xs underline" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
-                  {:else}
-                    <button data-testid="delete-note-{note.id}" type="button" class="text-xs text-rose-700 underline" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
-                  {/if}
-                {:else}
-                  <span data-testid="note-deleted-badge-{note.id}" class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400">{$t('notes.deleted_badge')}</span>
-                {/if}
-              </div>
-            </div>
+      </form>
 
-            <!-- 内容字段展示（纯文本转义呈现，严禁 HTML 解析） -->
-            <div class="space-y-2" data-testid="note-fields-{note.id}">
-              {#each Object.entries(note.fields) as [fieldName, fieldValue] (fieldName)}
-                <div class="text-xs flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                  <span class="font-semibold text-zinc-500 dark:text-zinc-400 sm:w-20 shrink-0 capitalize">
-                    {fieldName}:
-                  </span>
-                  <span class="font-mono text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words flex-1 bg-zinc-50 dark:bg-zinc-900/60 px-2 py-1 rounded">
-                    {formatFieldValue(fieldValue)}
-                  </span>
-                </div>
-              {/each}
-            </div>
+      {#if appliedStatus === 'deleted'}
+        <p role="note" data-testid="notes-deleted-notice" class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800/80">
+          {$t('notes.deleted_readonly')}
+        </p>
+      {/if}
 
-            <!-- 标签展示 -->
-            {#if note.tags && note.tags.length > 0}
-              <div class="flex flex-wrap gap-1.5 pt-2 border-t border-zinc-200/40 dark:border-zinc-800/40" data-testid="note-tags-{note.id}">
-                {#each note.tags as tag (tag)}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
-                    #{tag}
-                  </span>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <!-- 分页控制栏 -->
-      {#if totalPages > 1}
-        <div data-testid="notes-pagination" class="flex items-center justify-between pt-6 border-t border-zinc-200 dark:border-zinc-800 mt-6">
-          <button
-            data-testid="notes-prev-page"
-            type="button"
-            disabled={page <= 1}
-            class="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            onclick={handlePrevPage}
-          >
-            &larr; {$t('notes.prev_page')}
-          </button>
-          <span class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
-            {$t('notes.page_info', { page, totalPages })}
+      <!-- 批量操作工具条 -->
+      {#if appliedStatus === 'active' && !loading && !error && notes.length > 0}
+        <div
+          data-testid="notes-bulk-toolbar"
+          class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
+        >
+          <label class="flex items-center gap-1.5 font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
+            <input type="checkbox" data-testid="bulk-select-all" checked={allSelected} onchange={toggleSelectAll} class="rounded text-blue-600 focus:ring-blue-500" />
+            {$t('notes.select_all')}
+          </label>
+          <span data-testid="bulk-selected-count" class="text-zinc-400 dark:text-zinc-500">
+            {$t('notes.selected_count', { count: selectedIds.length })}
           </span>
-          <button
-            data-testid="notes-next-page"
-            type="button"
-            disabled={page >= totalPages}
-            class="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            onclick={handleNextPage}
-          >
-            {$t('notes.next_page')} &rarr;
-          </button>
+
+          <input
+            type="text"
+            data-testid="bulk-tag-input"
+            placeholder={$t('notes.bulk_tag_placeholder')}
+            bind:value={bulkTagInput}
+            class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs w-36"
+          />
+          <button type="button" data-testid="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_add_tags')}</button>
+          <button type="button" data-testid="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_remove_tags')}</button>
+          <button type="button" data-testid="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_set_tags')}</button>
+
+          {#if confirmingBulkDelete}
+            <span class="text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
+            <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
+            <button type="button" data-testid="bulk-cancel-delete" class="underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
+          {:else}
+            <button type="button" data-testid="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} class="px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 disabled:opacity-40 cursor-pointer" onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }}>{$t('notes.bulk_delete')}</button>
+          {/if}
+          {#if bulkBusy}<span class="text-zinc-400">{$t('notes.bulk_applying')}</span>{/if}
         </div>
       {/if}
-    {/if}
-  </div>
+
+      {#if bulkError}
+        <p role="alert" data-testid="notes-bulk-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(bulkError)}</p>
+      {/if}
+      {#if bulkResult}
+        <div role="status" data-testid="notes-bulk-result" class="text-xs text-zinc-700 dark:text-zinc-300">
+          <p>{$t('notes.bulk_result', { affected: bulkResult.affected, skipped: bulkResult.notFound + bulkResult.insufficientRole })}</p>
+          {#if bulkResult.notFound > 0}
+            <p data-testid="notes-bulk-skipped-not-found" class="text-zinc-400">{$t('notes.bulk_skipped_not-found', { count: bulkResult.notFound })}</p>
+          {/if}
+          {#if bulkResult.insufficientRole > 0}
+            <p data-testid="notes-bulk-skipped-forbidden" class="text-zinc-400">{$t('notes.bulk_skipped_forbidden', { count: bulkResult.insufficientRole })}</p>
+          {/if}
+        </div>
+      {/if}
+
+      {#if deleteSuccess}
+        <p role="status" data-testid="note-delete-success" class="text-xs text-emerald-700 dark:text-emerald-400">{$t('notes.delete_success')}</p>
+      {/if}
+      {#if deleteError}
+        <p role="alert" data-testid="note-delete-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(deleteError)}</p>
+      {/if}
+
+      {#if loading}
+        <div data-testid="notes-loading" class="space-y-3">
+          {#each [1, 2, 3] as item (item)}
+            <div class="p-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 space-y-2 skeleton-block">
+              <div class="h-4 w-28 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
+              <div class="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-700/60 rounded"></div>
+            </div>
+          {/each}
+        </div>
+      {:else if error}
+        <div
+          data-testid={error instanceof ApiClientError && error.isUnauthorized
+            ? 'notes-unauthorized'
+            : error instanceof ApiClientError && error.isForbidden
+              ? 'notes-forbidden'
+              : error instanceof ApiClientError && error.isNotFound
+                ? 'notes-not-found'
+                : 'notes-failed'}
+          class="py-12 text-center space-y-3"
+        >
+          <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            {#if error instanceof ApiClientError && error.isNotFound}
+              {$t('notes.not_found')}
+            {:else if error instanceof ApiClientError && error.isForbidden}
+              {$t('notes.forbidden')}
+            {:else if error instanceof ApiClientError && error.isUnauthorized}
+              {$t('notes.unauthorized')}
+            {:else}
+              {$t('notes.failed')}
+            {/if}
+          </p>
+          <button
+            data-testid="notes-retry"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
+            onclick={() => loadData(page)}
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
+            <span>{$t('notes.retry')}</span>
+          </button>
+        </div>
+      {:else if notes.length === 0}
+        <div data-testid="notes-empty" class="py-16 text-center text-zinc-500 dark:text-zinc-400">
+          <p class="text-sm font-medium">
+            {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
+          </p>
+        </div>
+      {:else}
+        <!-- 扁平化独立卡片项：消除四层嵌套与大色块包裹 -->
+        <div data-testid="notes-list" class="space-y-3">
+          {#each notes as note (note.id)}
+            <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors space-y-2.5">
+              <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
+                <div class="flex items-center gap-2">
+                  {#if appliedStatus === 'active'}
+                    <input
+                      type="checkbox"
+                      data-testid="select-note-{note.id}"
+                      checked={isSelected(note.id)}
+                      onchange={() => toggleSelect(note.id)}
+                      aria-label={$t('notes.select_all')}
+                      class="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  {/if}
+                  <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
+                  <span class="px-2 py-0.5 rounded font-mono text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
+                    {note.kind}
+                  </span>
+                  {#if note.external_ref}
+                    <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
+                      [{note.external_ref}]
+                    </span>
+                  {/if}
+                </div>
+
+                <div class="flex items-center gap-3">
+                  <span class="text-zinc-400 text-xs">
+                    {note.created_at ? note.created_at.slice(0, 10) : ''}
+                  </span>
+                  {#if appliedStatus === 'active'}
+                    <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
+                    {#if confirmingDeleteId === note.id}
+                      <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
+                      <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
+                      <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
+                    {:else}
+                      <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                    {/if}
+                  {:else}
+                    <span data-testid="note-deleted-badge-{note.id}" class="px-2 py-0.5 rounded text-xs bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400">{$t('notes.deleted_badge')}</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- 字段内容展示：自然排版，不套多余深色框 -->
+              <div class="space-y-1.5 text-xs" data-testid={`note-fields-${note.id}`}>
+                {#each Object.entries(note.fields) as [fieldName, fieldValue] (fieldName)}
+                  <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                    <span class="font-semibold text-zinc-500 dark:text-zinc-400 sm:w-20 shrink-0 capitalize">
+                      {fieldName}:
+                    </span>
+                    <span class="font-mono text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words flex-1 leading-relaxed">
+                      {formatFieldValue(fieldValue)}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+
+              <!-- 标签展示 -->
+              {#if note.tags && note.tags.length > 0}
+                <div class="flex flex-wrap gap-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/40" data-testid={`note-tags-${note.id}`}>
+                  {#each note.tags as tag (tag)}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                      #{tag}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        <!-- 分页栏 -->
+        {#if totalPages > 1}
+          <div data-testid="notes-pagination" class="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+            <button
+              data-testid="notes-prev-page"
+              type="button"
+              disabled={page <= 1}
+              class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+              onclick={handlePrevPage}
+            >
+              &larr; {$t('notes.prev_page')}
+            </button>
+            <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
+              {$t('notes.page_info', { page, totalPages })}
+            </span>
+            <button
+              data-testid="notes-next-page"
+              type="button"
+              disabled={page >= totalPages}
+              class="px-3 py-1.5 font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer"
+              onclick={handleNextPage}
+            >
+              {$t('notes.next_page')} &rarr;
+            </button>
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 </div>
+
+<!-- 导出包设置对话框（Modal） -->
+{#if showExportModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
+    <div
+      role="document"
+      class="card-elevated w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-in zoom-in-95 duration-150"
+    >
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+        <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">导出卡组包 (.edeck)</h2>
+        <button type="button" class="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer" onclick={() => showExportModal = false} aria-label="关闭">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-zinc-700 dark:text-zinc-300">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" bind:checked={includeMedia} class="rounded text-blue-600 focus:ring-blue-500" />
+          <span>{$t('package.export.include_media')}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" bind:checked={includeProgress} onchange={() => { if (!includeProgress) includeReviews = false; }} class="rounded text-blue-600 focus:ring-blue-500" />
+          <span>{$t('package.export.include_progress')}</span>
+        </label>
+        {#if includeProgress}
+          <label class="flex items-center gap-2 pl-5 cursor-pointer">
+            <input type="checkbox" bind:checked={includeReviews} class="rounded text-blue-600 focus:ring-blue-500" />
+            <span>{$t('package.export.include_reviews')}</span>
+          </label>
+        {/if}
+      </div>
+
+      {#if exportError}
+        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t('package.export.failed')}</p>
+      {/if}
+
+      <div class="pt-2 flex items-center justify-end gap-3">
+        <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer">
+          取消
+        </button>
+        <button
+          type="button"
+          data-testid="deck-package-export"
+          disabled={exporting}
+          onclick={exportPackage}
+          class="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer"
+        >
+          {exporting ? $t('package.export.exporting') : $t('package.export.action')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

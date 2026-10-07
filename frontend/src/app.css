@@ -18,14 +18,30 @@
     color-scheme: dark;
   }
 
-  /* 可见焦点：键盘 Tab 导航时给出高对比度焦点环，鼠标点击不显示 */
-  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  /* 可见焦点：键盘 Tab 导航时为交互元素给出高对比度焦点环，表单输入框由下方专用平滑焦点接管 */
+  :where(a, button, summary, [tabindex]):focus-visible {
     outline: 2px solid #18181b;
     outline-offset: 2px;
   }
 
-  html.dark :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  html.dark :where(a, button, summary, [tabindex]):focus-visible {
     outline-color: #f4f4f5;
+  }
+
+  /* 输入框与表单控件的平滑焦点动效与高质感微光环 */
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+    transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms ease;
+  }
+
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18) !important;
+  }
+
+  html.dark :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
+    border-color: #60a5fa !important;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25) !important;
   }
 
   /* 优化选中与滚动条 */
@@ -100,6 +116,16 @@ html.dark #review-done {
   @variant dark {
     background-color: #27272a;
     border-color: rgba(63, 63, 70, 0.6);
+  }
+}
+
+/* 优雅的骨架屏脉冲微动效 */
+@utility skeleton-block {
+  background-color: #f4f4f5;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @variant dark {
+    background-color: #27272a;
   }
 }
 

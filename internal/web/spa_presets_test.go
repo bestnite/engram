@@ -3,11 +3,14 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -396,6 +399,7 @@ func TestSPAPresetsRequireSessionAndCSRF(t *testing.T) {
 	for _, target := range []struct{ method, path, body string }{
 		{http.MethodPost, "/api/v1/presets", createBody},
 		{http.MethodPatch, "/api/v1/presets/" + u64str(p.ID), createBody},
+		{http.MethodDelete, "/api/v1/presets/" + u64str(p.ID), ""},
 		{http.MethodPost, "/api/v1/presets/" + u64str(p.ID) + "/optimize", `{}`},
 		{http.MethodPost, "/api/v1/presets/" + u64str(p.ID) + "/optimize/revert", `{}`},
 	} {
@@ -411,5 +415,51 @@ func TestSPAPresetsRequireSessionAndCSRF(t *testing.T) {
 	}
 	if presets != 1 {
 		t.Errorf("presets = %d after CSRF-less writes, want 1", presets)
+	}
+}
+
+// TestSPAPresetDelete 覆盖通过 SPA 端点删除预设：默认保护、引用保护、成功删除。
+func TestSPAPresetDelete(t *testing.T) {
+	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
+	ctx := context.Background()
+
+	// 1. 尝试删除确保存在的默认预设
+	defaultPresets, err := store.EnsureDefaultPreset(ctx, db, ownerID)
+	if err != nil {
+		t.Fatalf("ensure default preset: %v", err)
+	}
+	delDefault := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(defaultPresets[0].ID), "", cookies, csrf)
+	if delDefault.Code != http.StatusBadRequest {
+		t.Errorf("DELETE default preset = %d, want 400 (body %s)", delDefault.Code, snippet(delDefault.Body.String()))
+	}
+
+	// 2. 创建自定义预设
+	custom := store.NewPreset(ownerID, "Custom For Delete")
+	if err := store.NewPresetStore(db).Create(ctx, &custom); err != nil {
+		t.Fatalf("create custom preset: %v", err)
+	}
+
+	// 3. 关联卡组后删除被拒（409 Conflict）
+	d := &store.Deck{OwnerUserID: ownerID, Name: "Deck using preset", PresetID: custom.ID}
+	if err := store.NewDeckStore(db).Create(ctx, d); err != nil {
+		t.Fatalf("create deck: %v", err)
+	}
+	delInUse := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(custom.ID), "", cookies, csrf)
+	if delInUse.Code != http.StatusConflict {
+		t.Errorf("DELETE in-use preset = %d, want 409 (body %s)", delInUse.Code, snippet(delInUse.Body.String()))
+	}
+
+	// 4. 解除引用（删除卡组）后成功删除
+	if err := store.NewDeckStore(db).Delete(ctx, ownerID, d.ID); err != nil {
+		t.Fatalf("delete deck: %v", err)
+	}
+	delOk := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(custom.ID), "", cookies, csrf)
+	if delOk.Code != http.StatusOK {
+		t.Fatalf("DELETE unused preset = %d, want 200 (body %s)", delOk.Code, snippet(delOk.Body.String()))
+	}
+
+	// 确认数据库已清除
+	if _, err := store.NewPresetStore(db).ByID(ctx, custom.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("preset %d still in db after delete: %v", custom.ID, err)
 	}
 }

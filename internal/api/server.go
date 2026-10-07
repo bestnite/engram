@@ -137,6 +137,7 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/decks", a.authn.RequireScope(store.ScopeRead), a.listDecks)
 	v1.GET("/media", a.authn.RequireScope(store.ScopeRead), a.listMedia)
 	v1.POST("/decks", a.authn.RequireScope(store.ScopeWrite), a.createDeck)
+	v1.DELETE("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteDeck)
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
 	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)

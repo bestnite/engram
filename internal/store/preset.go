@@ -40,6 +40,10 @@ var (
 	ErrInvalidDesiredRetention = errors.New("desired retention must be in (0, 1]")
 	// ErrInvalidMaximumInterval 表示最大间隔天数非正。
 	ErrInvalidMaximumInterval = errors.New("maximum interval days must be positive")
+	// ErrPresetInUse 表示预设正被一个或多个卡组使用，不可删除。
+	ErrPresetInUse = errors.New("preset is in use by one or more decks")
+	// ErrDefaultPresetCannotDelete 表示默认预设不可删除。
+	ErrDefaultPresetCannotDelete = errors.New("default preset cannot be deleted")
 )
 
 // NewPreset 返回一个带文档化默认值的调度预设；归属与名字由调用方给出。
@@ -247,5 +251,30 @@ func (p *Preset) SetGradeMapping(m cardtype.GradeMapping) error {
 		return err
 	}
 	p.GradeMappingJSON = &raw
+	return nil
+}
+
+// Delete 删除预设；只有 owner 能删。默认预设不可删除，正被卡组引用的预设不可删除。
+func (s *PresetStore) Delete(ctx context.Context, actorUserID, presetID uint64) error {
+	existing, err := s.ByID(ctx, presetID)
+	if err != nil {
+		return err
+	}
+	if err := requirePresetOwner(existing, actorUserID); err != nil {
+		return err
+	}
+	if existing.Name == DefaultPresetName {
+		return ErrDefaultPresetCannotDelete
+	}
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("preset_id = ?", presetID).Count(&count).Error; err != nil {
+		return fmt.Errorf("check preset usage: %w", err)
+	}
+	if count > 0 {
+		return ErrPresetInUse
+	}
+	if err := s.db.WithContext(ctx).Delete(&Preset{}, "id = ?", presetID).Error; err != nil {
+		return fmt.Errorf("delete preset %d: %w", presetID, err)
+	}
 	return nil
 }

@@ -8,6 +8,7 @@
     PresetJob,
     PresetWriteRequest,
     OptimizeGate,
+    Deck,
   } from '../api';
 
   interface Props {
@@ -46,6 +47,12 @@
   let notice = $state<{ id: number; key: string } | null>(null);
   let busyId = $state<number | null>(null);
 
+  // 关联卡组与删除预设状态
+  let decks = $state<Deck[]>([]);
+  let presetToDelete = $state<PresetRecord | null>(null);
+  let deletingPreset = $state(false);
+  let deletePresetError = $state('');
+
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let pollPresetId: number | null = null;
   let pollJobId: number | null = null;
@@ -58,12 +65,45 @@
     loading = true;
     loadError = null;
     try {
-      data = await apiClient.listPresets();
+      const [pRes, dRes] = await Promise.all([
+        apiClient.listPresets(),
+        apiClient.getDecks().catch(() => ({ decks: [] })),
+      ]);
+      data = pRes;
+      decks = dRes.decks;
       resumePolling();
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
     } finally {
       loading = false;
+    }
+  }
+
+  function getPresetDecks(presetId: number): Deck[] {
+    return decks.filter((d) => d.preset_id === presetId);
+  }
+
+  function promptDeletePreset(p: PresetRecord): void {
+    presetToDelete = p;
+    deletePresetError = '';
+  }
+
+  async function confirmDeletePreset(): Promise<void> {
+    if (!presetToDelete || deletingPreset) return;
+    deletingPreset = true;
+    deletePresetError = '';
+    try {
+      const nextData = await apiClient.deletePreset(presetToDelete.id);
+      data = nextData;
+      presetToDelete = null;
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'preset_in_use') {
+        deletePresetError = 'presets.delete.in_use';
+      } else {
+        deletePresetError = 'presets.delete.failed';
+      }
+    } finally {
+      deletingPreset = false;
     }
   }
 
@@ -387,9 +427,12 @@
         type="button"
         data-testid="presets-retry"
         onclick={load}
-        class="mt-4 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
+        class="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer"
       >
-        {$t('common.retry')}
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
+        </svg>
+        <span>{$t('common.retry')}</span>
       </button>
     </div>
   {:else if data && presets.length === 0}
@@ -401,9 +444,25 @@
       {#each presets as p (p.id)}
         <article data-testid={`preset-${p.id}`} class="card-elevated rounded-xl p-6 space-y-5">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4">
-            <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid={`preset-${p.id}-name`}>
-              {p.name}
-            </h2>
+            <div>
+              <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid={`preset-${p.id}-name`}>
+                {p.name}
+              </h2>
+              <div class="flex items-center gap-2 text-xs pt-1.5">
+                <span class="text-zinc-500 dark:text-zinc-400">{$t('presets.used_by_decks')}</span>
+                {#if getPresetDecks(p.id).length > 0}
+                  <div class="flex flex-wrap gap-1.5">
+                    {#each getPresetDecks(p.id) as d (d.id)}
+                      <a href={`/decks/${d.id}`} class="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 font-medium hover:underline">
+                        {d.name}
+                      </a>
+                    {/each}
+                  </div>
+                {:else}
+                  <span class="text-zinc-400 dark:text-zinc-500 font-normal">{$t('presets.unused')}</span>
+                {/if}
+              </div>
+            </div>
             <div class="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -416,9 +475,10 @@
               <button
                 type="button"
                 data-testid={`preset-${p.id}-optimize`}
-                disabled={busyId === p.id}
+                disabled={busyId === p.id || (gate !== null && !gate.eligible)}
+                title={gate && !gate.eligible ? $t('presets.optimize.gate_shortfall', { count: gate.shortfall }) : ''}
                 onclick={() => runOptimize(p)}
-                class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white disabled:opacity-60 transition-colors cursor-pointer"
+                class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {$t('presets.optimize.button')}
               </button>
@@ -431,6 +491,18 @@
               >
                 {$t('presets.revert.button')}
               </button>
+              {#if p.name !== 'Default'}
+                <button
+                  type="button"
+                  data-testid={`preset-${p.id}-delete`}
+                  disabled={busyId === p.id || getPresetDecks(p.id).length > 0}
+                  title={getPresetDecks(p.id).length > 0 ? $t('presets.delete.in_use') : $t('presets.delete.action')}
+                  onclick={() => promptDeletePreset(p)}
+                  class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {$t('presets.delete.action')}
+                </button>
+              {/if}
             </div>
           </div>
 
@@ -622,6 +694,51 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+{/if}
+
+<!-- 删除预设二次确认对话框（Modal） -->
+{#if presetToDelete}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
+    <div
+      role="alertdialog"
+      class="card-elevated w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-in zoom-in-95 duration-150"
+    >
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">{$t('presets.delete.confirm_title')}</h2>
+          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            {$t('presets.delete.confirm_desc', { name: presetToDelete.name })}
+          </p>
+        </div>
+      </div>
+
+      {#if deletePresetError}
+        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(deletePresetError)}</p>
+      {/if}
+
+      <div class="pt-2 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          disabled={deletingPreset}
+          onclick={() => presetToDelete = null}
+          class="px-4 py-2 text-sm font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+        >
+          {$t('presets.delete.cancel_btn')}
+        </button>
+        <button
+          type="button"
+          disabled={deletingPreset}
+          onclick={confirmDeletePreset}
+          class="px-4 py-2 text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors btn-press cursor-pointer"
+        >
+          {deletingPreset ? '正在删除...' : $t('presets.delete.confirm_btn')}
+        </button>
+      </div>
     </div>
   </div>
 {/if}

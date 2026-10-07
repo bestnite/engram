@@ -118,7 +118,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-10" data-testid="admin-smtp">
+<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-smtp">
   <AdminNav />
 
   <header class="space-y-1">

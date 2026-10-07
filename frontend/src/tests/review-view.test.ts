@@ -113,7 +113,8 @@ describe('ReviewView graded answering', () => {
     });
     expect(html).toContain('data-testid="review-front"');
     expect(html).not.toContain('data-testid="review-graded-prompt"');
-    expect(html).toContain('显示答案 · 空格 / 回车');
+    expect(html).toContain('显示答案');
+    expect(html).toContain('空格 / 回车：显示答案');
   });
 });
 

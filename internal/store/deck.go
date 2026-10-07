@@ -268,3 +268,42 @@ func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64,
 	}
 	return nil
 }
+
+// Delete 删除卡组及其关联内容；只有 owner 能删。
+func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) error {
+	existing, err := s.ByID(ctx, deckID)
+	if err != nil {
+		return err
+	}
+	if err := requireDeckOwner(existing, actorUserID); err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 显式级联清理关联表，确保两库在外键 PRAGMA 配置不同时行为均完全一致（AGENTS.md §2.3 第 4 条）
+		if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
+			return fmt.Errorf("delete media_notes: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM card_states WHERE card_id IN (SELECT id FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?))", deckID).Error; err != nil {
+			return fmt.Errorf("delete card_states: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
+			return fmt.Errorf("delete cards: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM notes WHERE deck_id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete notes: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM deck_grants WHERE deck_id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete deck_grants: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete share_links: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM share_session_decks WHERE deck_id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete share_session_decks: %w", err)
+		}
+		if err := tx.Exec("DELETE FROM decks WHERE id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete deck: %w", err)
+		}
+		return nil
+	})
+}

@@ -338,6 +338,55 @@ export class ApiClient {
     });
   }
 
+  /** 删除卡组（DELETE /api/v1/decks/:id，仅 owner）。 */
+  async deleteDeck(deckId: number | string): Promise<{ deleted: boolean }> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const id = encodeURIComponent(String(deckId));
+    return this.request<{ deleted: boolean }>(`/api/v1/decks/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
+  async exportDecksZip(
+    deckIds: number[],
+    options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean } = {}
+  ): Promise<{ blob: Blob; filename: string }> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      Accept: 'application/zip',
+    });
+    if (this.csrfToken) {
+      headers.set('X-CSRF-Token', this.csrfToken);
+    }
+    const res = await this.fetchFn(this.baseUrl ? `${this.baseUrl}/api/v1/decks/export-zip` : '/api/v1/decks/export-zip', {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        deck_ids: deckIds,
+        include_media: options.includeMedia ?? true,
+        include_progress: options.includeProgress ?? false,
+        include_reviews: options.includeReviews ?? false,
+      }),
+    });
+    if (!res.ok) {
+      let envelope: any = null;
+      try { envelope = await res.json(); } catch {}
+      const code = envelope?.error?.code || inferErrorCodeFromStatus(res.status);
+      throw new ApiClientError(`HTTP ${res.status}: ${code}`, { status: res.status, code, details: envelope ?? undefined });
+    }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const filename = match?.[1] ? decodeURIComponent(match[1]) : (match?.[2] || 'engram-decks-export.zip');
+    return { blob: await res.blob(), filename };
+  }
+
   /**
    * 克隆一个自己可读的卡组（POST /api/v1/decks/:id/clone，DESIGN.md §5）。
    * reader 及以上都能克隆；服务端判权与审计，返回新卡组的 {id, name}（进度不跟随）。
@@ -927,6 +976,17 @@ export class ApiClient {
     return this.request<PresetsResponse>(`/api/v1/presets/${encoded}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
+    });
+  }
+
+  /** 删除预设（DELETE /api/v1/presets/:id）；成功后返回整份最新预设列表。 */
+  async deletePreset(id: number | string): Promise<PresetsResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encoded = encodeURIComponent(String(id));
+    return this.request<PresetsResponse>(`/api/v1/presets/${encoded}`, {
+      method: 'DELETE',
     });
   }
   /** 启用 / 禁用账号（POST /api/v1/admin/users/:id/status）。 */

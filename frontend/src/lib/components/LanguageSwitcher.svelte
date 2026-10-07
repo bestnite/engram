@@ -15,13 +15,19 @@
   <label for="language-select" class="sr-only">
     {$t('language.label')}
   </label>
-  <select
-    id="language-select"
-    value={$localeStore}
-    onchange={handleSelect}
-    class="text-xs font-medium bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-md px-2 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-950 dark:focus:ring-zinc-300 transition-colors cursor-pointer"
-  >
-    <option value="zh-CN">{$t('language.zh-CN')}</option>
-    <option value="en">{$t('language.en')}</option>
-  </select>
+  <div class="inline-flex items-center h-8.5 px-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors">
+    <svg class="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20" />
+    </svg>
+    <select
+      id="language-select"
+      value={$localeStore}
+      onchange={handleSelect}
+      class="text-xs font-medium bg-transparent text-zinc-700 dark:text-zinc-200 focus:outline-none cursor-pointer pr-1"
+    >
+      <option value="zh-CN">{$t('language.zh-CN')}</option>
+      <option value="en">{$t('language.en')}</option>
+    </select>
+  </div>
 </div>

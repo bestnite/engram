@@ -68,6 +68,9 @@ const (
 	// ActionPresetCreate / ActionPresetUpdate 是预设页新建与编辑预设（M3-14）时写入的审计动作。
 	ActionPresetCreate = "preset.create"
 	ActionPresetUpdate = "preset.update"
+	// 卡组与预设删除。
+	ActionDeckDelete   = "deck.delete"
+	ActionPresetDelete = "preset.delete"
 	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
 	ActionJobCancel = "job.cancel"
 

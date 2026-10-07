@@ -117,17 +117,45 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		if errors.Is(err, store.ErrDeckNameInvalid) {
 			return nil, newServiceError(http.StatusBadRequest, CodeDeckNameInvalid, "")
 		}
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
 	}
 	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   in.APIKeyID,
-		Action:     "deck.create",
+		Action:     store.ActionDeckCreate,
 		TargetType: "deck",
 		TargetID:   store.Ptr(d.ID),
 		Detail:     map[string]any{"name": d.Name, "visibility": d.Visibility},
 	})
 	return &d, nil
+}
+
+// DeleteDeck 删除一个卡组（scope: write）；REST 与内置 MCP 共用。只有 owner 能删。
+func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiKeyID *uint64) error {
+	deck, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return newServiceError(http.StatusNotFound, CodeNotFound, "")
+		}
+		a.logger.Error("load deck for delete failed", "deck_id", deckID, "error", err)
+		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	if deck.OwnerUserID != u.ID {
+		return newServiceError(http.StatusForbidden, CodeForbidden, "")
+	}
+	if err := a.decks.Delete(ctx, u.ID, deckID); err != nil {
+		a.logger.Error("delete deck failed", "deck_id", deckID, "user_id", u.ID, "error", err)
+		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		APIKeyID:   apiKeyID,
+		Action:     store.ActionDeckDelete,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deckID),
+		Detail:     map[string]any{"deck_name": deck.Name},
+	})
+	return nil
 }
 
 // RequireDeckRole 校验用户在卡组上至少拥有 want 角色（M5-1）。

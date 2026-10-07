@@ -146,6 +146,18 @@ func TestDeckStoreCRUD(t *testing.T) {
 			if err := decks.SetVisibility(ctx, ownerA, d.ID, "secret"); !errors.Is(err, ErrInvalidVisibility) {
 				t.Errorf("SetVisibility(invalid) error = %v, want ErrInvalidVisibility", err)
 			}
+
+			// delete：非 owner 删除被拒。
+			if err := decks.Delete(ctx, ownerB, d.ID); !errors.Is(err, ErrNotOwner) {
+				t.Errorf("Delete() by non-owner error = %v, want ErrNotOwner", err)
+			}
+			// owner 删除成功，随后 ByID 返回记录未找到。
+			if err := decks.Delete(ctx, ownerA, d.ID); err != nil {
+				t.Fatalf("Delete() error = %v", err)
+			}
+			if _, err := decks.ByID(ctx, d.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+				t.Errorf("ByID() after Delete() error = %v, want ErrRecordNotFound", err)
+			}
 		})
 	}
 }

@@ -230,6 +230,63 @@ func mustListPresets(t *testing.T, db *gorm.DB, ownerID uint64) []Preset {
 	return presets
 }
 
+func TestPresetStoreDelete(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := seedUsers(t, db, "preset_del_a", "preset_del_b")
+			ownerA, ownerB := users[0], users[1]
+			presets := NewPresetStore(db)
+
+			defaultPresets, err := EnsureDefaultPreset(ctx, db, ownerA)
+			if err != nil {
+				t.Fatalf("EnsureDefaultPreset error = %v", err)
+			}
+			defaultP := defaultPresets[0]
+
+			// 1. 默认预设保护
+			if err := presets.Delete(ctx, ownerA, defaultP.ID); !errors.Is(err, ErrDefaultPresetCannotDelete) {
+				t.Errorf("Delete(default) error = %v, want ErrDefaultPresetCannotDelete", err)
+			}
+
+			// 自定义预设
+			custom := NewPreset(ownerA, "Custom Preset")
+			if err := presets.Create(ctx, &custom); err != nil {
+				t.Fatalf("Create() custom preset error = %v", err)
+			}
+
+			// 2. 他人不能删除
+			if err := presets.Delete(ctx, ownerB, custom.ID); !errors.Is(err, ErrNotOwner) {
+				t.Errorf("Delete() by non-owner error = %v, want ErrNotOwner", err)
+			}
+
+			// 3. 被卡组引用的预设不能删除
+			decks := NewDeckStore(db)
+			d := &Deck{OwnerUserID: ownerA, Name: "Deck using custom", PresetID: custom.ID}
+			if err := decks.Create(ctx, d); err != nil {
+				t.Fatalf("Create() deck error = %v", err)
+			}
+			if err := presets.Delete(ctx, ownerA, custom.ID); !errors.Is(err, ErrPresetInUse) {
+				t.Errorf("Delete() in-use preset error = %v, want ErrPresetInUse", err)
+			}
+
+			// 删除该卡组后，该预设即可成功删除
+			if err := decks.Delete(ctx, ownerA, d.ID); err != nil {
+				t.Fatalf("Delete deck error = %v", err)
+			}
+			if err := presets.Delete(ctx, ownerA, custom.ID); err != nil {
+				t.Fatalf("Delete() unused preset error = %v", err)
+			}
+			if _, err := presets.ByID(ctx, custom.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+				t.Errorf("ByID() after Delete error = %v, want ErrRecordNotFound", err)
+			}
+		})
+	}
+}
+
 // presetNames 取预设名列表，仅用于失败信息。
 func presetNames(presets []Preset) []string {
 	names := make([]string, 0, len(presets))
