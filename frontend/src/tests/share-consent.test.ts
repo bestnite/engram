@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ApiClient, ApiClientError } from '../lib/api';
+import { ApiClient } from '../lib/api';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

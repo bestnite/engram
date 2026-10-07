@@ -1373,6 +1373,9 @@ export class ApiClient {
     policy?: import('./types').ShareAcceptPolicy;
     allow?: number[];
     revoke?: number[];
+    // 界面只认识用户名；服务端按名字解析（未知名字整单 400 user_not_found，不静默丢弃）。
+    allow_usernames?: string[];
+    revoke_usernames?: string[];
   }): Promise<import('./types').SharePolicyResponse> {
     if (!this.csrfToken) {
       await this.getSession();
