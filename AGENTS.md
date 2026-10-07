@@ -55,7 +55,8 @@ end user → translation catalog.
 - **This rule has no automated check any more** (the check scripts were removed on
   2026-10-06): review it by eye on every commit and re-read the staged diff before merging.
   A subagent's "the checks pass" is not evidence on its own — the mechanically enforced
-  neighbour is the template rule (visible text must come from the catalog, see §2.1).
+  neighbour is the visible-text rule (every user-facing string comes from the catalog, see
+  §2.1).
 - A test fixture needs a placeholder domain too: emails in fixtures must use `example.com`,
   `example.org`, `example.net`, or `localhost`.
 
@@ -147,7 +148,7 @@ engram/
 │   ├── api/                  # /api/v1 handlers
 │   ├── mcp/                  # MCP server: tool definitions that call the services
 │   ├── i18n/                 # locales/{zh-CN,en}.yaml plus loader and translator
-│   └── web/                  # gin routes, handlers, templ views, static assets
+│   └── web/                  # gin routes, JSON handlers, SPA shell serving, static assets
 ```
 
 There is no top-level `test/` directory: integration coverage lives beside the code as
@@ -162,23 +163,17 @@ or in-memory) for storage.
 # code
 go build ./... && go vet ./... && gofmt -l . && go test ./...
 
-# generated code and assets (templ emits *_templ.go; Tailwind emits the CSS bundle)
-templ generate
-tailwindcss -i ./internal/web/static/css/input.css \
-            -o ./internal/web/static/css/tailwind.css --minify
+# the embedded frontend build output is gitignored, so build it before the Go build
+npm --prefix frontend ci
+npm --prefix frontend run build
 
 # run locally (SQLite is fine for development)
 DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
 ```
 
-Run the code checks **and** the two generation steps before committing anything that
-touches templates or styles, because both outputs are gitignored and a stale build is
-invisible in `git status`.
-
-The Tailwind prebuilt CLI is a **glibc** binary: it cannot run inside a musl image, so the
-container builder stage must use a glibc base (`golang:1.26-bookworm`), not alpine. The
-Tailwind and templ versions are pinned in the Dockerfile and the CI workflow; bump them
-together with `go.mod`.
+Run the frontend build **before** the code checks whenever the change touches `frontend/`:
+`go build ./...` embeds `frontend/dist`, which is gitignored, so a stale build is invisible in
+`git status`.
 
 ### Definition of done
 
@@ -258,10 +253,9 @@ git worktree prune                         # drop stale entries
 - Add a new route to `adminRoutes()` in the same change that registers it. That list is what the
   "non-admin gets 403 on every /admin route" test walks, so a route missing from it is a route
   that is never checked.
-- Generated artifacts are per worktree: run `templ generate` and the Tailwind build inside
-  each worktree. The Go module cache and build cache are shared and safe for concurrent
-  use. Never run repository maintenance commands (`git gc`, `git prune`, `git repack`)
-  from a worktree.
+- Generated artifacts are per worktree: run `npm --prefix frontend run build` inside each
+  worktree. The Go module cache and build cache are shared and safe for concurrent use. Never
+  run repository maintenance commands (`git gc`, `git prune`, `git repack`) from a worktree.
 - Subagents are session-scoped and are killed when the session ends. Require an early
   commit, even a work-in-progress one, so the work lands in the shared object database
   instead of an orphaned directory.
