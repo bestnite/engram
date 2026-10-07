@@ -42,19 +42,18 @@ subagents as much as to external contributors.
 
 - **Go 1.26 or newer** (the module declares `go 1.26`; the development machines run 1.27).
 - A C toolchain is not required for development: SQLite works through a pure-Go driver.
-- `templ` and the standalone `tailwindcss` CLI are needed for the generated code and CSS
-  bundle. Their versions are pinned in the `Dockerfile` and the CI workflow; bump them
-  together with `go.mod`.
-- The Tailwind standalone CLI is a **glibc** binary. It cannot run inside a musl (Alpine)
-  image, so any container builder stage must use a glibc base image
-  (`golang:1.26-bookworm`), not Alpine.
+- **Node.js 22 or newer** builds the frontend. Its output (`frontend/dist`) is embedded with
+  `go:embed`, so the frontend build has to run before the Go build; `go build ./...` fails
+  while that directory is missing.
+- No template engine and no standalone CSS toolchain are involved: Svelte 5 compiles the
+  interface and Tailwind runs as a Vite plugin inside `npm run build`.
 - PostgreSQL is the default deployment database; SQLite is fine for local development.
   Both must keep working (see [Both databases must work](#both-databases-must-work)).
 - Tests run on SQLite only — neither a local run nor CI starts a database service. The
   PostgreSQL cases gated by `internal/pgtest` skip themselves; set `TEST_PG_DSN` to run
   them by hand when you touch driver-sensitive code.
 
-## Build, test, and generate
+## Build, test, and check
 
 Run the full check suite from the repository root before every commit:
 
@@ -64,26 +63,16 @@ go build ./... && go vet ./... && gofmt -l . && go test ./...
 
 `gofmt -l .` prints files that need formatting; it must print nothing.
 
-Generated code and assets are **gitignored**, so a fresh checkout does not build until you
-generate them. Both steps are wired into `go generate`:
+The frontend build output is **gitignored**, so a fresh checkout does not build until you
+build it — `go:embed` needs `frontend/dist` to exist:
 
 ```bash
-go generate ./...
+npm --prefix frontend ci
+npm --prefix frontend run build
 ```
 
-That runs `templ generate` (which emits `*_templ.go`) and the Tailwind build (which emits
-`internal/web/static/css/tailwind.css`). If you prefer to run them explicitly, the two
-equivalent commands are:
-
-```bash
-templ generate
-tailwindcss -i ./internal/web/static/css/input.css \
-            -o ./internal/web/static/css/tailwind.css --minify
-```
-
-Run the code checks **and** the generation steps before committing anything that touches
-templates or styles: both outputs are gitignored, so a stale build is invisible in
-`git status`.
+Run that before the Go checks whenever you touch anything under `frontend/`: the output is
+gitignored, so a stale build is invisible in `git status`.
 
 To start the service locally with SQLite, use the quick start in [`README.md`](README.md).
 It covers the data directory, the required environment variables, and the first-admin
@@ -108,8 +97,11 @@ repository check scripts were removed on 2026-10-06):
   addresses, personal email addresses, credentials, or key material in any committed file —
   use `example.com`, `localhost`, `CHANGE_ME`. The Go module path is the one deliberate
   exception: it is the project's publication address.
-- **No hardcoded user-facing text.** Every visible string in a `*.templ` template must come
-  from the translation catalog; key parity between catalogues is enforced by the test above.
+- **No hardcoded user-facing text.** Every visible string must come from a translation
+  catalogue: the Svelte components use `frontend/src/lib/i18n/locales/*.ts`, server-side
+  messages use `internal/i18n/locales/*.yaml`. The server-side pair is kept identical by
+  `go test ./internal/i18n/...`; the frontend pair has per-view coverage tests under
+  `frontend/src/tests/`.
 
 ## Non-negotiable rules
 
@@ -230,7 +222,7 @@ directly (see the next section). Both follow the same branch naming and commit r
    `feat/<task-id>-<slug>` (for example `feat/m3-2-queue-builder`), or `fix/<slug>` and
    `docs/<slug>` where there is no task ID.
 2. Make your change, adding tests including the negative cases.
-3. Regenerate templates and CSS if you touched them (`go generate ./...`).
+3. Rebuild the frontend if you touched it (`npm --prefix frontend run build`).
 4. Stage your files, then run **both** repository checks and the full check suite:
    `git add …`, `go build ./... && go vet ./... && gofmt -l . && go test ./...`.
 5. Commit with a signed, conventional message — one logical change per commit.
@@ -266,8 +258,8 @@ Working rules:
 
 - A subagent never merges or pushes. The parent performs the merge serially (rebase onto
   `main`, run the checks, then merge).
-- Generated artifacts are per worktree: run `templ generate` and the Tailwind build inside
-  each worktree. The Go module cache and build cache are shared and safe for concurrent use.
+- Generated artifacts are per worktree: run `npm --prefix frontend run build` inside each
+  worktree. The Go module cache and build cache are shared and safe for concurrent use.
 - Never run repository maintenance commands (`git gc`, `git prune`, `git repack`) from a
   worktree.
 - Commit early, even a work-in-progress commit, so the work lands in the shared object
