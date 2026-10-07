@@ -1307,22 +1307,6 @@
   translation: "Personal settings"
 - id: settings.intro
   translation: "These settings only affect your own interface and how your review days are split."
-- id: settings.profile.heading
-  translation: "Profile"
-- id: settings.profile.display_name_label
-  translation: "Display name"
-- id: settings.profile.locale_label
-  translation: "Interface language"
-- id: settings.profile.timezone_label
-  translation: "Time zone"
-- id: settings.profile.timezone_hint
-  translation: "Use an IANA zone name, for example Asia/Shanghai."
-- id: settings.profile.cutoff_label
-  translation: "Review day cutoff (hour 0–23)"
-- id: settings.profile.cutoff_hint
-  translation: "A new day starts at this hour in your local time. 0 means midnight; leave blank to use 04:00. It only affects future review days; existing records are unchanged."
-- id: settings.profile.submit
-  translation: "Save"
 - id: settings.password.heading
   translation: "Change password"
 - id: settings.password.old_label
