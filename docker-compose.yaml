@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: engram
+      POSTGRES_PASSWORD: engram
+      POSTGRES_DB: engram
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engram -d engram"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pg-data:/var/lib/postgresql
+
+  engram:
+    image: nite07/engram:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DB_DRIVER: postgres
+      DB_DSN: "postgres://engram:engram@db:5432/engram?sslmode=disable"
+      SESSION_SECRET: "${SESSION_SECRET:?run: openssl rand -base64 32}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?run: openssl rand -base64 32}"
+      # BASE_URL: "https://engram.example.com"
+    volumes:
+      - engram-media:/data/media
+
+volumes:
+  pg-data:
+  engram-media:
