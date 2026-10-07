@@ -16,21 +16,10 @@ import (
 
 // newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。
 // M1-25 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
-// 注意：它同时被 SPA 资源/回退用例复用，因此这里不置空 spa；需要断言 SSR 首页的用例
-// 自行设置 srv.spa = nil 走 homeRoute 的 SSR 回退分支。
 func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
 	t.Helper()
 	srv := newFreshServer(t, userLocale)
 	seedActiveAdmin(t, srv)
-	return srv
-}
-
-// newSSRServer 构造一个强制走 SSR 回退分支的测试服务：在 newRenderServer 之上置空 spa，
-// 使 GET / 落到 homeRoute 的 SSR 首页分支（模板文案、本地化、哈希资源引用都在这里断言）。
-func newSSRServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
-	t.Helper()
-	srv := newRenderServer(t, userLocale)
-	srv.spa = nil
 	return srv
 }
 
@@ -81,47 +70,9 @@ func get(t *testing.T, srv *Server, target string, headers map[string]string) *h
 	return rec
 }
 
-// TestHomeRendersHashedStaticAssets 断言页面源码引用的是哈希化路径（M0-9 验收点）。
-func TestHomeRendersHashedStaticAssets(t *testing.T) {
-	srv := newSSRServer(t, nil)
-	assets := srv.assets
-
-	rec := get(t, srv, "/", nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / status = %d, want 200", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("Content-Type = %q, want text/html", ct)
-	}
-	body := rec.Body.String()
-
-	for _, logical := range []string{"js/htmx.min.js", "js/mathjax/tex-svg.js"} {
-		url := assets.URL(logical)
-		if url == "" {
-			t.Fatalf("asset %q is not embedded", logical)
-		}
-		if !strings.Contains(body, url) {
-			t.Errorf("page source does not reference the hashed URL for %q (%s)", logical, url)
-		}
-	}
-
-	if !assets.Has("css/tailwind.css") {
-		// tailwind.css 是 CI/构建期生成的（AGENTS.md §4）；未生成时跳过而不是误报失败。
-		t.Skip("css/tailwind.css not generated; run the Tailwind CLI step from AGENTS.md §4")
-	}
-	cssURL := assets.URL("css/tailwind.css")
-	if !strings.Contains(body, cssURL) {
-		t.Errorf("page source does not reference the hashed CSS URL %s", cssURL)
-	}
-	// 示例页确实用了至少一个 utility 类，供 Tailwind 产物验证其在页面上的存在。
-	if !strings.Contains(body, "bg-slate-50") {
-		t.Error("sample page does not use the bg-slate-50 utility class")
-	}
-}
-
 // TestStaticRouteServesEmbeddedAsset 断言 /static/v/<hash>/... 路由已接入并返回内容。
 func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
-	srv := newSSRServer(t, nil)
+	srv := newRenderServer(t, nil)
 	url := srv.assets.URL("js/htmx.min.js")
 	if url == "" {
 		t.Fatal("htmx asset is not embedded")
@@ -135,46 +86,8 @@ func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 	}
 }
 
-// TestHomeLocalizesByAcceptLanguage 断言相同路径按 Accept-Language 返回不同语言。
-func TestHomeLocalizesByAcceptLanguage(t *testing.T) {
-	srv := newSSRServer(t, nil)
-
-	zh := get(t, srv, "/", nil).Body.String()
-	if !strings.Contains(zh, "今日复习") {
-		t.Errorf("default response is not Chinese; body = %s", snippet(zh))
-	}
-	if !strings.Contains(zh, `lang="zh-CN"`) {
-		t.Errorf("default response does not declare lang=\"zh-CN\"; body = %s", snippet(zh))
-	}
-
-	en := get(t, srv, "/", map[string]string{"Accept-Language": "en-US,en;q=0.9"}).Body.String()
-	if !strings.Contains(en, "Today&#39;s review") && !strings.Contains(en, "Today's review") {
-		t.Errorf("Accept-Language en did not switch the page; body = %s", snippet(en))
-	}
-	if strings.Contains(en, "今日复习") {
-		t.Errorf("en response still contains the Chinese heading")
-	}
-}
-
-// TestHomeExplicitLangBeatsHeader 断言 ?lang 是最高优先级的显式覆盖。
-func TestHomeExplicitLangBeatsHeader(t *testing.T) {
-	srv := newSSRServer(t, nil)
-	body := get(t, srv, "/?lang=en", map[string]string{"Accept-Language": "zh-CN,zh;q=0.9"}).Body.String()
-	if !strings.Contains(body, "Today") {
-		t.Errorf("?lang=en did not override Accept-Language; body = %s", snippet(body))
-	}
-}
-
-// TestUserLocaleSettingBeatsAcceptLanguage 断言用户设置优先于 Accept-Language（M0-8 验收点）。
-func TestUserLocaleSettingBeatsAcceptLanguage(t *testing.T) {
-	srv := newSSRServer(t, func(c *gin.Context) string { return "zh-CN" })
-	body := get(t, srv, "/", map[string]string{"Accept-Language": "en-US,en;q=0.9"}).Body.String()
-	if !strings.Contains(body, "今日复习") {
-		t.Errorf("user locale setting did not beat Accept-Language; body = %s", snippet(body))
-	}
-}
-
 // TestHomeFirstRunRedirect 断言首启窗口内 GET / 303 到 /setup，窗口由「是否存在活跃管理员」界定（M1-25 验收点）。
+// 管理员存在时 GET / 交给 SPA 应用壳（由客户端路由渲染首页）。
 func TestHomeFirstRunRedirect(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -213,8 +126,6 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := newFreshServer(t, nil)
-			// 断言 SSR 首页内容（重定向窗口与管理员已存在时的 200 正文），显式走回退分支。
-			srv.spa = nil
 			if tc.seed != nil {
 				tc.seed.CreatedAt = time.Now().UTC()
 				if err := srv.users.Create(context.Background(), tc.seed); err != nil {
@@ -230,13 +141,13 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 			}
 			if tc.wantLoc != "" {
 				// 首启窗口内首页不渲染自身内容，只回一个跳转（gin 会附一段链接文本）。
-				if body := rec.Body.String(); strings.Contains(body, "今日复习") {
-					t.Errorf("redirect body leaked home content: %s", snippet(body))
+				if strings.Contains(rec.Body.String(), `<div id="app">`) {
+					t.Error("first-run redirect returned the SPA shell; /setup must win")
 				}
 				return
 			}
-			if body := rec.Body.String(); !strings.Contains(body, "今日复习") {
-				t.Errorf("home page after setup is missing the heading; body = %s", snippet(body))
+			if body := rec.Body.String(); !strings.Contains(body, `<div id="app">`) {
+				t.Errorf("home after setup is not the SPA shell: %s", snippet(body))
 			}
 		})
 	}

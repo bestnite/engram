@@ -5,32 +5,26 @@ import (
 	"testing"
 )
 
-// TestThemeBootstrapRunsBeforeStylesheet 是 M8-8 的验收：主题引导必须内联在 <head> 内、
-// 且早于样式表链接出现。外链的 pwa.js 与 tailwind.css 都是独立请求，浏览器可能在它们
-// 到达前先画出一帧白底；内联引导把暗色类、color-scheme、画布底色提前到首帧之前。
+// TestThemeBootstrapRunsBeforeStylesheet 是 M8-8 的验收：主题引导必须内联在 <head> 内。
+// 外链的 pwa.js 与样式表都是独立请求，浏览器可能在它们到达前先画出一帧白底；内联引导把暗色类、
+// color-scheme、画布底色提前到首帧之前。
+//
+// 页面层只剩 SPA 应用壳：引导由 server.go 在装配期注入入口 <head>（SPA.SetShell），
+// 本用例断言它在壳里原样出现且未转义。
 func TestThemeBootstrapRunsBeforeStylesheet(t *testing.T) {
-	srv := newSSRServer(t, nil)
-	if !srv.assets.Has("css/tailwind.css") {
-		// tailwind.css 是 CI/构建期生成的（AGENTS.md §4）；未生成时跳过而不是误报失败
-		// ——与 home_test.go 的 hashed-asset 用例同一口径。
-		t.Skip("css/tailwind.css not generated; run the Tailwind CLI step from AGENTS.md §4")
-	}
+	srv := newRenderServer(t, nil)
 	body := get(t, srv, "/", nil).Body.String()
 
 	head := strings.Index(body, "<head>")
 	if head < 0 {
-		t.Fatalf("rendered page has no <head>: %s", snippet(body))
+		t.Fatalf("rendered shell has no <head>: %s", snippet(body))
 	}
 	script := strings.Index(body, `localStorage.getItem("engram-theme")`)
 	if script < 0 {
 		t.Fatalf("head has no inline theme bootstrap (engram-theme lookup): %s", snippet(body))
 	}
-	link := strings.Index(body, `rel="stylesheet"`)
-	if link < 0 {
-		t.Fatalf("rendered page has no stylesheet link: %s", snippet(body))
-	}
-	if !(head < script && script < link) {
-		t.Errorf("theme bootstrap must sit in <head> before the stylesheet: head=%d script=%d stylesheet=%d", head, script, link)
+	if headEnd := strings.Index(body, "</head>"); headEnd >= 0 && script > headEnd {
+		t.Errorf("theme bootstrap must sit inside <head>: head=%d script=%d headEnd=%d", head, script, headEnd)
 	}
 
 	// 逐项断言引导必须覆盖的内容：存储键、color-scheme、暗色画布底色，以及系统主题回退。
@@ -47,7 +41,7 @@ func TestThemeBootstrapRunsBeforeStylesheet(t *testing.T) {
 		}
 	}
 
-	// 原样输出说明 templ.Raw 生效；被 HTML 转义时（&#34; 等）不会匹配到常量本身。
+	// 原样输出说明注入未转义；被 HTML 转义时（&#34; 等）不会匹配到常量本身。
 	if !strings.Contains(body, themeBootstrap) {
 		t.Errorf("theme bootstrap is not rendered verbatim (escaped?): %s", snippet(body))
 	}

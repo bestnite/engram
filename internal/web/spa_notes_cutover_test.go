@@ -1,9 +1,7 @@
 package web
 
 import (
-	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -102,69 +100,5 @@ func TestNotePageRoutesRedirectAnonymous(t *testing.T) {
 		if loc := rec.Header().Get("Location"); loc != "/login" {
 			t.Errorf("anonymous GET %s Location = %q, want /login", target, loc)
 		}
-	}
-}
-
-// TestNoteFormPostRoutesStillRegistered 断言页面切壳没有移除写路径：POST 建卡与 POST 保存仍由
-// SSR handler 处理，校验、落库与 303 重定向与迁移前一致。
-func TestNoteFormPostRoutesStillRegistered(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Write deck")
-	note := seedBasic(t, db, deck.ID, "old front", "old back")
-
-	create := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes", url.Values{
-		"csrf_token":  {csrf},
-		"kind":        {"basic"},
-		"field.front": {"created front"},
-		"field.back":  {"created back"},
-	}, cookies)
-	if create.Code != http.StatusSeeOther {
-		t.Fatalf("POST create status = %d, want 303 (body %s)", create.Code, snippet(create.Body.String()))
-	}
-	var created store.Note
-	if err := db.Where("deck_id = ? AND kind = ?", deck.ID, "basic").Order("id desc").First(&created).Error; err != nil {
-		t.Fatalf("created note was not persisted: %v", err)
-	}
-	if created.ID == note.ID {
-		t.Fatalf("POST create did not insert a new note")
-	}
-
-	update := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), url.Values{
-		"csrf_token":  {csrf},
-		"field.front": {"updated front"},
-		"field.back":  {"updated back"},
-	}, cookies)
-	if update.Code != http.StatusSeeOther {
-		t.Fatalf("POST update status = %d, want 303 (body %s)", update.Code, snippet(update.Body.String()))
-	}
-	saved, err := store.NewNoteStore(db).ByID(context.Background(), note.ID)
-	if err != nil {
-		t.Fatalf("reload note: %v", err)
-	}
-	fields, err := store.ParseFields(saved.FieldsJSON)
-	if err != nil {
-		t.Fatalf("ParseFields() error = %v", err)
-	}
-	if fields["front"] != "updated front" || fields["back"] != "updated back" {
-		t.Errorf("saved fields = %v, want the posted values", fields)
-	}
-}
-
-// TestNoteCreateRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET /decks/:id/new-note 回退 SSR
-// 新建页：模板与 handler 全部保留。
-func TestNoteCreateRouteFallsBackToSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Create fallback deck")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/new-note", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET create fallback status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("create fallback returned the SPA shell; the SSR create page must be preserved")
-	}
-	if !strings.Contains(rec.Body.String(), "data-note-form") {
-		t.Errorf("create fallback is missing the SSR create form: %s", snippet(rec.Body.String()))
 	}
 }

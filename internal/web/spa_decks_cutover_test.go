@@ -3,19 +3,13 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
-
-	"git.nite07.com/nite/engram/internal/store"
 )
 
 // 本文件覆盖 GET /decks 与 GET /decks/:id/notes 的 SPA 规范路径切流（DESIGN.md §8.1、§8.5）：
-// SPA 已加载时返回应用壳（index.html），由客户端路由渲染页面；SPA 缺失（降级）时回退 SSR 页面。
-// 两条路径都先要求已登录会话，卡片列表还保留与 SSR 相同的 reader 角色判定。
-// 卡片编辑/新建两条 GET 路径的切流断言在 spa_notes_cutover_test.go；本文件末尾的编辑路径用例
-// 只覆盖 SSR 降级回退。
-// SSR handler、模板与全部写路径（POST）保持不变。
+// 两条路径都返回应用壳（index.html），由客户端路由渲染页面；鉴权判定（会话 + 角色）先于切壳执行。
+// 卡片编辑/新建两条 GET 路径的切流断言在 spa_notes_cutover_test.go。
 
 // assertSPAShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
 // 且含应用挂载点 <div id="app"></div>（DESIGN.md §8.5）。
@@ -54,24 +48,6 @@ func TestDeckListRouteServesSPAShell(t *testing.T) {
 	}
 }
 
-// TestDeckListRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET /decks 回退 SSR 列表页。
-func TestDeckListRouteFallsBackToSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	seedDeck(t, db, ownerID, "Fallback deck")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/decks", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), "Fallback deck") {
-		t.Errorf("SSR fallback deck list is missing the deck: %s", snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), `name="preset_id"`) {
-		t.Errorf("SSR fallback deck list is missing the create form: %s", snippet(rec.Body.String()))
-	}
-}
-
 // TestDeckListRouteRedirectsAnonymous 断言切壳不改动授权：匿名访问 GET /decks 仍重定向登录页，
 // 应用壳不会泄漏给未登录访客。
 func TestDeckListRouteRedirectsAnonymous(t *testing.T) {
@@ -82,26 +58,6 @@ func TestDeckListRouteRedirectsAnonymous(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); loc != "/login" {
 		t.Errorf("anonymous GET /decks Location = %q, want /login", loc)
-	}
-}
-
-// TestDeckListPostStillCreatesDeck 断言写路径未动：SPA 已加载时 POST /decks 仍由 SSR 处理，
-// 校验、落库与 303 重定向与迁移前一致。
-func TestDeckListPostStillCreatesDeck(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	rec := postForm(t, srv, "/decks", url.Values{
-		"csrf_token": {csrf}, "name": {"SPA-era deck"},
-	}, cookies)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/decks" {
-		t.Fatalf("POST /decks status = %d loc = %q, want 303 /decks (body %s)",
-			rec.Code, rec.Header().Get("Location"), snippet(rec.Body.String()))
-	}
-	var n int64
-	if err := db.Model(&store.Deck{}).Where("owner_user_id = ? AND name = ?", ownerID, "SPA-era deck").Count(&n).Error; err != nil {
-		t.Fatalf("count decks: %v", err)
-	}
-	if n != 1 {
-		t.Errorf("persisted deck rows = %d, want 1", n)
 	}
 }
 
@@ -119,22 +75,6 @@ func TestNoteListRouteServesSPAShell(t *testing.T) {
 	}
 }
 
-// TestNoteListRouteFallsBackToSSR 断言 SPA 缺失（降级）时 GET /decks/:id/notes 回退 SSR 列表页。
-func TestNoteListRouteFallsBackToSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Fallback notes deck")
-	seedBasic(t, db, deck.ID, "FallbackQ", "FallbackA")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if !strings.Contains(rec.Body.String(), "FallbackQ") {
-		t.Errorf("SSR fallback note list is missing the note: %s", snippet(rec.Body.String()))
-	}
-}
-
 // TestNoteListRouteEnforcesDeckRole 断言切壳不改动授权：卡片列表保留与迁移前 SSR 列表页相同的
 // reader 判定——匿名重定向登录页，无权读的卡组仍 403，不因返回应用壳而放行。
 func TestNoteListRouteEnforcesDeckRole(t *testing.T) {
@@ -148,26 +88,5 @@ func TestNoteListRouteEnforcesDeckRole(t *testing.T) {
 	_, u2Cookies, _ := createUserAndLogin(t, srv, db, "notes_stranger")
 	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("foreign GET notes status = %d, want 403", rec.Code)
-	}
-}
-
-// TestNoteListEditPathStaysSSR 断言卡片编辑（GET /decks/:id/notes/:nid）的 SSR 回退仍可渲染：
-// 该路径已切到 SPA 应用壳（切流断言见 spa_notes_cutover_test.go）；这里在 SPA 缺失（降级）时
-// 断言旧编辑表单仍被返回，模板与 handler 全部保留。
-func TestNoteListEditPathStaysSSR(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Edit path deck")
-	note := seedBasic(t, db, deck.ID, "EditQ", "EditA")
-	srv.spa = nil
-
-	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET editor status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("editor route returned the SPA shell; the SSR fallback editor must be preserved")
-	}
-	if !strings.Contains(rec.Body.String(), `name="field.front"`) {
-		t.Errorf("editor route is missing the SSR field inputs: %s", snippet(rec.Body.String()))
 	}
 }

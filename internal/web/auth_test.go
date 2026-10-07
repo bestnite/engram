@@ -282,11 +282,9 @@ func TestRegisterLoginLogoutFlow(t *testing.T) {
 }
 
 // TestHomeRedirectsToSetupUntilFirstAdmin 是 M1-25 的验收测试：
-// 安装完但还没 setup 时，GET / 303 到 /setup；首个管理员建立后首页正常渲染。
+// 安装完但还没 setup 时，GET / 303 到 /setup；首个管理员建立后首页交给 SPA 应用壳。
 func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	srv, _ := newAuthServer(t)
-	// 断言首启窗口与引导完成后 SSR 首页的正文，显式走 SPA 缺失的回退分支。
-	srv.spa = nil
 
 	rec := get(t, srv, "/", nil)
 	if rec.Code != http.StatusSeeOther {
@@ -308,8 +306,8 @@ func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	if after.Code != http.StatusOK {
 		t.Fatalf("GET / after setup = %d, want 200", after.Code)
 	}
-	if body := after.Body.String(); !strings.Contains(body, "今日复习") {
-		t.Errorf("home page after setup is missing the heading; body = %s", snippet(body))
+	if body := after.Body.String(); !strings.Contains(body, `<div id="app">`) {
+		t.Errorf("home after setup is not the SPA shell; body = %s", snippet(body))
 	}
 }
 
