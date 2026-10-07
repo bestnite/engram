@@ -5,6 +5,7 @@
   import type { AdminRegistrationResponse, AdminInvite } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Select from '../../components/ui/Select.svelte';
+  import RadioGroup from '../../components/ui/RadioGroup.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -171,14 +172,12 @@
     {@const view = data}
     <form onsubmit={savePolicy} data-testid="admin-registration-policy" class="card-elevated space-y-4 rounded-xl p-5">
       <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.policy_heading')}</h2>
-      <div class="flex flex-wrap gap-4">
-        {#each policies as p (p)}
-          <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-            <input type="radio" name="policy" value={p} bind:group={policy} data-testid="admin-registration-policy-{p}" />
-            {$t('admin.registration.policy.' + p)}
-          </label>
-        {/each}
-      </div>
+      <RadioGroup
+        bind:value={policy}
+        name="policy"
+        itemTestIdPrefix="admin-registration-policy-"
+        options={policies.map((p) => ({ value: p, label: $t('admin.registration.policy.' + p) }))}
+      />
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.allowlist_label')}</span>
         <input data-testid="admin-registration-domains" bind:value={emailDomains} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />

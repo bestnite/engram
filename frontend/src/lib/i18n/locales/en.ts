@@ -24,6 +24,8 @@ export const en: LocaleCatalog = {
   'common.back_home': 'Back to Home',
   'common.retry': 'Retry',
   'common.deleting': 'Deleting...',
+  'notes.select_one': 'Select this card',
+  'decks.select_deck': 'Select deck {name}',
   'common.empty': 'No data',
   'common.failed': 'Failed to load',
   'common.unauthorized': 'Authentication required',

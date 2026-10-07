@@ -6,6 +6,7 @@
   import type { Deck } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -87,8 +88,7 @@
     }
   }
 
-  function toggleSelectDeck(deckId: number, e: Event): void {
-    e.stopPropagation();
+  function toggleSelectDeck(deckId: number): void {
     if (selectedDeckIds.includes(deckId)) {
       selectedDeckIds = selectedDeckIds.filter((id) => id !== deckId);
     } else {
@@ -228,11 +228,10 @@
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800/60 text-xs">
         <div class="flex items-center gap-3">
           <label class="flex items-center gap-1.5 cursor-pointer text-zinc-600 dark:text-zinc-400 font-medium select-none">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={selectedDeckIds.length > 0 && selectedDeckIds.length === decks.length}
-              onchange={toggleSelectAll}
-              class="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+              onCheckedChange={toggleSelectAll}
+              label={selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}
             />
             <span>{selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}</span>
           </label>
@@ -334,13 +333,12 @@
             <div>
               <div class="flex items-start justify-between gap-2 mb-2">
                 <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                    class="mt-0.5"
                     checked={selectedDeckIds.includes(deck.id)}
-                    onclick={(e) => e.stopPropagation()}
-                    onchange={(e) => toggleSelectDeck(deck.id, e)}
-                    class="rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0 mt-0.5"
-                    aria-label={`选择卡组 ${deck.name}`}
+                    onclick={(event) => event.stopPropagation()}
+                    onCheckedChange={() => toggleSelectDeck(deck.id)}
+                    label={$t('decks.select_deck', { name: deck.name })}
                   />
                   <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                     {deck.name}

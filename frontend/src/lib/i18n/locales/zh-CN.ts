@@ -24,6 +24,8 @@ export const zhCN: LocaleCatalog = {
   'common.back_home': '返回首页',
   'common.retry': '重试',
   'common.deleting': '正在删除...',
+  'notes.select_one': '选择这张卡片',
+  'decks.select_deck': '选择卡组 {name}',
   'common.empty': '暂无数据',
   'common.failed': '加载失败',
   'common.unauthorized': '未登录或会话已过期',

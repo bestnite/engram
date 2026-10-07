@@ -17,6 +17,8 @@
     testId?: string;
     class?: string;
     onCheckedChange?: (checked: boolean) => void;
+    /** 阻止点击冒泡到外层可点击容器（如整张卡片）时使用。 */
+    onclick?: (event: MouseEvent) => void;
   }
 
   let {
@@ -27,6 +29,7 @@
     testId,
     class: klass = '',
     onCheckedChange,
+    onclick,
   }: Props = $props();
 </script>
 
@@ -37,6 +40,7 @@
   aria-label={label}
   data-testid={testId}
   onCheckedChange={(next) => onCheckedChange?.(next)}
+  {onclick}
   class={cn(
     'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border border-zinc-300 transition-colors data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=indeterminate]:border-blue-600 data-[state=indeterminate]:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600',
     klass

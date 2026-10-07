@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { NotificationPrefsResponse, UpdateNotificationPrefsRequest } from '../api';
   import Select from '../components/ui/Select.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -85,8 +86,7 @@
     return map[code] || 'settings.notifications.error.failed';
   }
 
-  function toggle(type: string, event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
+  function toggle(type: string, checked: boolean): void {
     choices = { ...choices, [type]: checked };
   }
 
@@ -172,20 +172,20 @@
             {#each group.types as item (item.type)}
               <li class="py-3.5 flex items-start gap-3.5 first:pt-0 last:pb-0">
                 {#if item.locked}
-                  <input
-                    data-testid="notifications-locked-{item.type}"
-                    class="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-400 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 cursor-not-allowed"
-                    type="checkbox"
+                  <Checkbox
+                    testId="notifications-locked-{item.type}"
                     checked
                     disabled
+                    class="mt-1"
+                    label={$t('settings.notifications.type.' + item.type)}
                   />
                 {:else}
-                  <input
-                    data-testid="notifications-type-{item.type}"
-                    class="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:ring-zinc-100 cursor-pointer"
-                    type="checkbox"
+                  <Checkbox
+                    testId="notifications-type-{item.type}"
+                    class="mt-1"
                     checked={choices[item.type] ?? false}
-                    onchange={(event) => toggle(item.type, event)}
+                    onCheckedChange={(checked) => toggle(item.type, checked)}
+                    label={$t('settings.notifications.type.' + item.type)}
                   />
                 {/if}
                 <div class="space-y-0.5">

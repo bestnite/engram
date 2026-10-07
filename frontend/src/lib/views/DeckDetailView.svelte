@@ -8,6 +8,7 @@
   import DeckSettingsView from './DeckSettingsView.svelte';
   import Select from '../components/ui/Select.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -429,7 +430,7 @@
           class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
         >
           <label class="flex items-center gap-1.5 font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
-            <input type="checkbox" data-testid="bulk-select-all" checked={allSelected} onchange={toggleSelectAll} class="rounded text-blue-600 focus:ring-blue-500" />
+            <Checkbox testId="bulk-select-all" checked={allSelected} onCheckedChange={toggleSelectAll} label={$t('notes.select_all')} />
             {$t('notes.select_all')}
           </label>
           <span data-testid="bulk-selected-count" class="text-zinc-400 dark:text-zinc-500">
@@ -535,13 +536,11 @@
               <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
                 <div class="flex items-center gap-2">
                   {#if appliedStatus === 'active'}
-                    <input
-                      type="checkbox"
-                      data-testid="select-note-{note.id}"
+                    <Checkbox
+                      testId="select-note-{note.id}"
                       checked={isSelected(note.id)}
-                      onchange={() => toggleSelect(note.id)}
-                      aria-label={$t('notes.select_all')}
-                      class="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      onCheckedChange={() => toggleSelect(note.id)}
+                      label={$t('notes.select_one')}
                     />
                   {/if}
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>

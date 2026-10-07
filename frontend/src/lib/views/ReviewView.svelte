@@ -5,7 +5,9 @@
   import type { ApiClient, DueCard, GradedAnswer, GradedFeedback } from '../api';
   import { typeset } from '../mathjax';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
+  import RadioGroup from '../components/ui/RadioGroup.svelte';
 
+  import Checkbox from '../components/ui/Checkbox.svelte';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -678,34 +680,46 @@
                   class="w-full min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 text-lg"
                 />
               {:else if current.kind === 'choice_single'}
-                <div role="radiogroup" class="space-y-2" data-testid="review-graded-options">
-                  {#each gradedOptions(current) as option, index (index)}
-                    <label class="flex items-center gap-3 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600 px-4 transition-colors cursor-pointer">
-                      <input type="radio" name="graded-single" value={index} bind:group={singleChoice} data-testid="review-graded-option" />
-                      <span>{option}</span>
-                    </label>
-                  {/each}
-                </div>
+                <RadioGroup
+                  testId="review-graded-options"
+                  itemTestId="review-graded-option"
+                  itemClass="min-h-12"
+                  name="graded-single"
+                  ariaLabel={$t('review.spa.ratings')}
+                  value={singleChoice === null ? '' : String(singleChoice)}
+                  onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
+                  options={gradedOptions(current).map((option, index) => ({ value: String(index), label: option }))}
+                />
               {:else if current.kind === 'choice_multi'}
                 <div class="space-y-2" data-testid="review-graded-options">
                   {#each gradedOptions(current) as option, index (index)}
-                    <label class="flex items-center gap-3 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600 px-4 transition-colors cursor-pointer">
-                      <input type="checkbox" value={index} bind:group={multiChoice} data-testid="review-graded-option" />
+                    <div class="flex min-h-12 items-center gap-3 rounded-xl border border-zinc-300 px-4 transition-colors hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600">
+                      <Checkbox
+                        testId="review-graded-option"
+                        checked={multiChoice.includes(index)}
+                        onCheckedChange={(checked) =>
+                          (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
+                        label={option}
+                      />
                       <span>{option}</span>
-                    </label>
+                    </div>
                   {/each}
                 </div>
               {:else if current.kind === 'true_false'}
-                <div role="radiogroup" class="grid grid-cols-2 gap-3" data-testid="review-graded-options">
-                  <label class="flex items-center justify-center gap-3 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600 px-4 transition-colors cursor-pointer">
-                    <input type="radio" name="graded-bool" value={true} bind:group={boolChoice} data-testid="review-graded-option" />
-                    <span class="font-medium">{$t('review.spa.graded.true')}</span>
-                  </label>
-                  <label class="flex items-center justify-center gap-3 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600 px-4 transition-colors cursor-pointer">
-                    <input type="radio" name="graded-bool" value={false} bind:group={boolChoice} data-testid="review-graded-option" />
-                    <span class="font-medium">{$t('review.spa.graded.false')}</span>
-                  </label>
-                </div>
+                <RadioGroup
+                  testId="review-graded-options"
+                  itemTestId="review-graded-option"
+                  class="grid grid-cols-2 gap-3"
+                  itemClass="min-h-12 justify-center font-medium"
+                  name="graded-bool"
+                  ariaLabel={$t('review.spa.ratings')}
+                  value={boolChoice === null ? '' : String(boolChoice)}
+                  onValueChange={(value) => (boolChoice = value === '' ? null : value === 'true')}
+                  options={[
+                    { value: 'true', label: $t('review.spa.graded.true') },
+                    { value: 'false', label: $t('review.spa.graded.false') },
+                  ]}
+                />
               {/if}
               {#if needAnswer}
                 <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.spa.graded.need_answer')}</p>

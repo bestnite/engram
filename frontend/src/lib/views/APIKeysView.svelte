@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
+  import Checkbox from '../components/ui/Checkbox.svelte';
 
   let keys = $state<APIKeyRecord[]>([]);
   let name = $state('');
@@ -87,7 +88,15 @@
       <label class="block text-sm">{$t('keys.name')}<input required maxlength="100" bind:value={name} class="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2" /></label>
       <fieldset class="flex flex-wrap gap-4 text-sm"><legend class="mb-2">{$t('keys.scopes')}</legend>
         {#each ['read', 'write', 'review', 'keys'] as scope}
-          <label class="cursor-pointer"><input type="checkbox" value={scope} bind:group={scopes} /> {scope}</label>
+          <label class="flex cursor-pointer items-center gap-1.5">
+            <Checkbox
+              checked={scopes.includes(scope)}
+              onCheckedChange={(checked) =>
+                (scopes = checked ? [...scopes, scope] : scopes.filter((item) => item !== scope))}
+              label={scope}
+            />
+            <span>{scope}</span>
+          </label>
         {/each}
       </fieldset>
       <button disabled={saving} class="rounded-xl bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2 text-white disabled:opacity-50 cursor-pointer">{$t(saving ? 'keys.creating' : 'keys.create')}</button>

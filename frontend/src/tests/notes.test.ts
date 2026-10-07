@@ -488,8 +488,8 @@ describe('DeckDetailView deleted listing and bulk selection wiring', () => {
 
   it('wires selection to the existing bulk endpoint with the exact payload', () => {
     expect(view).toContain('data-testid="notes-bulk-toolbar"');
-    expect(view).toContain('data-testid="bulk-select-all"');
-    expect(view).toContain('data-testid="select-note-{note.id}"');
+    expect(view).toContain('testId="bulk-select-all"');
+    expect(view).toContain('testId="select-note-{note.id}"');
     expect(view).toContain('apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false })');
     expect(view).toContain("runBulk('add_tags')");
     expect(view).toContain("runBulk('remove_tags')");

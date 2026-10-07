@@ -30,11 +30,14 @@ const fixture: NotificationPrefsResponse = {
   timezone: 'Asia/Shanghai',
 };
 
-/** 取包含 testid 的那个 <input> 标签本身，用于判断 checked/disabled 等属性。 */
-function inputTag(html: string, testid: string): string {
+/**
+ * 取包含 testid 的那个标签本身（不再假定它是 <input>：复选框已换成组件库的 button 语义，
+ * 状态用 data-state/aria-checked 表达而不是 checked 属性）。
+ */
+function controlTag(html: string, testid: string): string {
   const i = html.indexOf(`data-testid="${testid}"`);
   if (i < 0) return '';
-  const start = html.lastIndexOf('<input', i);
+  const start = html.lastIndexOf('<', i);
   const end = html.indexOf('>', i);
   return html.slice(start, end + 1);
 }
@@ -57,17 +60,17 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
 
   it('locks class A as a disabled checkbox with no submittable input', () => {
     const { html } = render(NotificationPrefsView, { props: { initialLoading: false, initialData: fixture } });
-    const locked = inputTag(html, 'notifications-locked-password_reset');
+    const locked = controlTag(html, 'notifications-locked-password_reset');
     expect(locked).toContain('disabled');
-    expect(locked).toContain('checked');
+    expect(locked).toContain('data-state="checked"');
     expect(html).not.toContain('data-testid="notifications-type-password_reset"');
     expect(html).toContain('始终开启');
   });
 
   it('reflects the directory defaults: B on, C off', () => {
     const { html } = render(NotificationPrefsView, { props: { initialLoading: false, initialData: fixture } });
-    expect(inputTag(html, 'notifications-type-deck_shared')).toContain('checked');
-    expect(inputTag(html, 'notifications-type-review_reminder')).not.toContain('checked');
+    expect(controlTag(html, 'notifications-type-deck_shared')).toContain('data-state="checked"');
+    expect(controlTag(html, 'notifications-type-review_reminder')).toContain('data-state="unchecked"');
   });
 
   it('renders the localized reminder select with the site default and every hour', () => {

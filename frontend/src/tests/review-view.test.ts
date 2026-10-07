@@ -50,11 +50,12 @@ describe('ReviewView graded answering', () => {
     expect(singleHtml).toContain('data-testid="review-graded-options"');
     expect(singleHtml).toContain('2+2=?');
     expect(singleHtml).toContain('4');
-    expect(singleHtml).toContain('type="radio"');
+    // 单选组由组件库提供：渲染成 button + role="radio"（不再是原生 input[type=radio]）。
+    expect(singleHtml).toContain('role="radio"');
 
     const multi = gradedCard('choice_multi', { question: '偶数？', options: ['1', '2', '3', '4'], answers: [1, 3] });
     const multiHtml = render(ReviewView, { props: { initialLoading: false, initialCards: [multi] } }).html;
-    expect(multiHtml).toContain('type="checkbox"');
+    expect(multiHtml).toContain('role="checkbox"');
     expect(multiHtml).toContain('偶数？');
   });
 
