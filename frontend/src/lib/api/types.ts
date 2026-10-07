@@ -1179,4 +1179,82 @@ export interface AdminI18nResponse {
   locales: AdminLocaleCoverage[];
   all_complete: boolean;
 }
+// ---- 账号安全与邮件流程（DESIGN.md §4.3、§4.7、§8.1；Go: internal/web/spa_account.go）----
+
+/** POST /api/v1/auth/forgot-password 请求。响应只含站点级邮件是否可用，绝不回显账号存在性。 */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  mail_ready: boolean;
+}
+
+/** POST /api/v1/auth/reset-password：一次性令牌 + 新密码。 */
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+export interface ResetPasswordResponse {
+  reset: boolean;
+}
+
+/** 只带一枚令牌的请求（邮箱验证、改邮箱确认）。 */
+export interface TokenOnlyRequest {
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  verified: boolean;
+}
+
+export interface ConfirmEmailChangeResponse {
+  changed: boolean;
+}
+
+/** GET /api/v1/settings/email（会话）：当前邮箱、验证状态与站点邮件是否可用。 */
+export interface EmailSettingsResponse {
+  email: string;
+  email_verified: boolean;
+  mail_ready: boolean;
+}
+
+/** POST /api/v1/settings/email（会话）：请求改邮箱，确认前库中地址不变。 */
+export interface EmailChangeRequest {
+  email: string;
+}
+
+export interface EmailChangeResponse {
+  sent: boolean;
+}
+
+/** POST /api/v1/settings/verify-email（会话）：重发验证邮件。 */
+export interface ResendVerificationResponse {
+  sent: boolean;
+}
+
+// ---- 公开只读分享浏览（DESIGN.md §5、§6.1、§8.1；Go: internal/web/spa_share.go）----
+
+/** 一条共享卡片的正反面，均为服务端清洗后的 HTML（客户端只做 {@html}，绝不再渲染 Markdown）。 */
+export interface ShareNote {
+  front_html: string;
+  back_html: string;
+}
+
+/** GET /api/v1/share/:token 与 POST /api/v1/share/:token/unlock 的响应。 */
+export interface ShareResponse {
+  deck_name: string;
+  /** 为真时 notes 恒为空：有口令的链接在解锁前不返回任何正文。 */
+  password_required: boolean;
+  notes: ShareNote[];
+}
+
+// ---- OIDC 登录入口探测（DESIGN.md §4.4、§8.1；Go: internal/web/spa_oidc.go）----
+
+/** GET /api/v1/auth/oidc：入口是否可用与发起地址；不含任何凭据。 */
+export interface OIDCInfo {
+  enabled: boolean;
+  start_url: string;
+}
 

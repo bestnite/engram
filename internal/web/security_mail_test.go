@@ -500,6 +500,8 @@ func TestSecurityMailNewDeviceLoginDeduped(t *testing.T) {
 // TestSecurityMailDisabledWhenSMTPNotConfigured 断言 SMTP 未配置时流程禁用并说明原因，绝不静默。
 func TestSecurityMailDisabledWhenSMTPNotConfigured(t *testing.T) {
 	ts := newSecurityServer(t, false)
+	// 本用例断言 SSR 页面文案：SPA 已嵌入时 GET /forgot-password 返回应用壳，故置空以走 SSR 回退。
+	ts.srv.spa = nil
 	page := getWithCookies(t, ts.srv, "/forgot-password", nil)
 	if page.Code != http.StatusOK {
 		t.Fatalf("GET /forgot-password status = %d, want 200", page.Code)

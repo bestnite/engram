@@ -55,6 +55,18 @@ import {
   type PresetsResponse,
   type PresetOptimizeResponse,
   type PresetWriteRequest,
+  type ForgotPasswordRequest,
+  type ForgotPasswordResponse,
+  type ResetPasswordRequest,
+  type ResetPasswordResponse,
+  type VerifyEmailResponse,
+  type ConfirmEmailChangeResponse,
+  type EmailSettingsResponse,
+  type EmailChangeRequest,
+  type EmailChangeResponse,
+  type ResendVerificationResponse,
+  type ShareResponse,
+  type OIDCInfo,
 } from './types';
 
 /**
@@ -898,6 +910,20 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
+  /**
+   * 请求密码重置（POST /api/v1/auth/forgot-password）。
+   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
+   * 响应只含站点级 mail_ready，不透露账号是否存在；未配置邮件时前端渲染说明而不是谎报已发送。
+   */
+  async requestPasswordReset(input: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ForgotPasswordResponse>('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
 
   /** 编辑预设（PATCH /api/v1/presets/:id）；成功后返回整份列表。 */
   async updatePreset(id: number | string, input: PresetWriteRequest): Promise<PresetsResponse> {
@@ -971,6 +997,16 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
+  /** 用一次性令牌设置新密码（POST /api/v1/auth/reset-password）。 */
+  async resetPassword(input: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ResetPasswordResponse>('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
 
   /** 触发参数优化（POST /api/v1/presets/:id/optimize）；不足门槛 400、已在运行 409。 */
   async optimizePreset(id: number | string): Promise<PresetOptimizeResponse> {
@@ -979,6 +1015,54 @@ export class ApiClient {
     }
     const encoded = encodeURIComponent(String(id));
     return this.request<PresetOptimizeResponse>(`/api/v1/presets/${encoded}/optimize`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+  /** 消费邮箱验证令牌（POST /api/v1/auth/verify-email）。 */
+  async verifyEmail(token: string): Promise<VerifyEmailResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<VerifyEmailResponse>('/api/v1/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  /** 消费改邮箱确认令牌（POST /api/v1/auth/confirm-email-change）。 */
+  async confirmEmailChange(token: string): Promise<ConfirmEmailChangeResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ConfirmEmailChangeResponse>('/api/v1/auth/confirm-email-change', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  /** 读取当前邮箱与验证状态（GET /api/v1/settings/email，仅会话）。 */
+  async getEmailSettings(): Promise<EmailSettingsResponse> {
+    return this.request<EmailSettingsResponse>('/api/v1/settings/email');
+  }
+
+  /** 提交改邮箱请求（POST /api/v1/settings/email）；确认邮件发出前库中地址不变。 */
+  async requestEmailChange(input: EmailChangeRequest): Promise<EmailChangeResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<EmailChangeResponse>('/api/v1/settings/email', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 重发邮箱验证邮件（POST /api/v1/settings/verify-email）。 */
+  async resendVerification(): Promise<ResendVerificationResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ResendVerificationResponse>('/api/v1/settings/verify-email', {
       method: 'POST',
       body: JSON.stringify({}),
     });
@@ -1097,6 +1181,32 @@ export class ApiClient {
   /** 语言包完整度报告（GET /api/v1/admin/i18n）。 */
   async getAdminI18n(): Promise<import('./types').AdminI18nResponse> {
     return this.request<import('./types').AdminI18nResponse>('/api/v1/admin/i18n');
+  }
+  /**
+   * 读取一份分享卡组的只读内容（GET /api/v1/share/:token）。
+   * 匿名可访问（链接本身即凭据）；有口令的链接在解锁前只返回 password_required: true。
+   */
+  async getShare(token: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}`);
+  }
+
+  /**
+   * 校验分享口令并取回内容（POST /api/v1/share/:token/unlock）。
+   * 与 SSR 一样无状态：每次请求都重新校验口令，不建立解锁状态，也无需 CSRF token。
+   */
+  async unlockShare(token: string, password: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  }
+
+  /**
+   * 探测 OIDC 登录入口是否可用（GET /api/v1/auth/oidc）。
+   * 只读、登录前可调用；响应只含 enabled 与稳定的发起地址，绝不含 issuer / secret。
+   */
+  async getOIDC(): Promise<OIDCInfo> {
+    return this.request<OIDCInfo>('/api/v1/auth/oidc');
   }
 }
 

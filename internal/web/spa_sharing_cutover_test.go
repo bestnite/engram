@@ -260,6 +260,8 @@ func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 // 没有随共享管理页切流改成应用壳——它的口令/锁定/清洗后卡片内容与登录要求仍由 SSR 保证。
 func TestShareLinkBrowseStaysSSR(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /s/:token 已切到 SPA 应用壳：本用例改为断言 SPA 缺失时的 SSR 回退，故置空 SPA。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Public share SSR deck")
 	seedBasic(t, db, deck.ID, "公开正面", "公开背面")
 

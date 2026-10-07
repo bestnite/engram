@@ -283,6 +283,13 @@ describe('Deck and notes list API client and view contracts', () => {
           expect(content).not.toContain('{@html gradedPrompt');
           expect(content).not.toContain('{@html answerText');
           expect(content.match(/\{@html/g) ?? []).toHaveLength(5);
+        } else if (file === 'ShareBrowseView.svelte') {
+          // 分享浏览页的 HTML 汇只有服务端清洗后的卡面：note.front_html / note.back_html
+          // （shareNoteView → renderSide）。note 字段原文绝不得喂进 {@html}。
+          expect(content).toContain('{@html note.front_html}');
+          expect(content).toContain('{@html note.back_html}');
+          expect(content).not.toContain('{@html fields');
+          expect(content.match(/\{@html/g) ?? []).toHaveLength(2);
         } else {
           expect(content, `File ${file} must not contain {@html} expressions`).not.toContain('{@html');
         }

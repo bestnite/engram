@@ -46,6 +46,8 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// 与 /login 同属登录前流程，没有会话可绑 CSRF token，故不挂 CSRFMiddleware。
 	router.GET("/auth/oidc/start", s.oidcStart)
 	router.GET("/auth/oidc/callback", s.oidcCallback)
+	// SPA 的 OIDC 入口探测（spa_oidc.go）：只读，供登录视图决定是否显示第二个登录按钮。
+	s.registerSPAOIDCRoutes(router)
 	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
 

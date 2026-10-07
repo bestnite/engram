@@ -29,6 +29,12 @@ import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
 import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
 import AdminJobsView from '../views/admin/AdminJobsView.svelte';
 import AdminI18nView from '../views/admin/AdminI18nView.svelte';
+import ForgotPasswordView from '../views/ForgotPasswordView.svelte';
+import ResetPasswordView from '../views/ResetPasswordView.svelte';
+import EmailSettingsView from '../views/EmailSettingsView.svelte';
+import VerifyEmailView from '../views/VerifyEmailView.svelte';
+import ConfirmEmailChangeView from '../views/ConfirmEmailChangeView.svelte';
+import ShareBrowseView from '../views/ShareBrowseView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -285,5 +291,47 @@ export const routes: RouteDefinition[] = [
     path: '/admin/i18n',
     name: 'admin-i18n',
     component: AdminI18nView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 请求密码重置（DESIGN.md §8.1）。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。
+    // 协议走 POST /api/v1/auth/forgot-password；响应只含站点级 mail_ready，不透露账号是否存在。
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: ForgotPasswordView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 设置新密码。服务端 GET /reset-password 已切到应用壳；token 由邮件链接的查询串带入，
+    // 提交走 POST /api/v1/auth/reset-password（一次性令牌语义与 SSR 相同）。
+    path: '/reset-password',
+    name: 'reset-password',
+    component: ResetPasswordView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 账号与邮箱设置。服务端 GET /settings/email 已切到应用壳，未登录在服务端即重定向登录页。
+    // 读取/改邮箱/重发验证走 /api/v1/settings/email 与 /api/v1/settings/verify-email。
+    path: '/settings/email',
+    name: 'email-settings',
+    component: EmailSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 邮箱验证结果的 SPA 入口。刻意走 /spa 前缀：免登录的一键链接 /verify-email 仍在服务端消费
+    // 令牌并渲染结果（无脚本也能完成），SPA 客户端走此独立入口，协议 POST /api/v1/auth/verify-email。
+    path: '/spa/verify-email',
+    name: 'spa-verify-email',
+    component: VerifyEmailView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 改邮箱确认结果的 SPA 入口。与 /spa/verify-email 同构：SSR 的免登录链接 /confirm-email-change
+    // 保持服务端消费，SPA 走此入口，协议 POST /api/v1/auth/confirm-email-change。
+    path: '/spa/confirm-email-change',
+    name: 'spa-confirm-email-change',
+    component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 公开只读分享浏览。服务端 GET /s/:token 已切到应用壳（无效/撤销链接仍在服务端 404），
+    // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock（DESIGN.md §5）。
+    path: '/s/:token',
+    name: 'share-browse',
+    component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
 ];

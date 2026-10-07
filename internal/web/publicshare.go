@@ -25,8 +25,10 @@ func (s *Server) registerShareBrowseRoutes(router *gin.Engine) {
 	if s.shareLinks == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	router.GET("/s/:token", s.shareBrowse)
+	router.GET("/s/:token", s.shareBrowseRoute)
 	router.POST("/s/:token/unlock", s.shareUnlock)
+	// SPA 的同源 JSON 传输层（spa_share.go）：与上面的 SSR 处理器并存，不遮蔽；可达性与媒体授权不变。
+	s.registerSPAShareRoutes(router)
 }
 
 // shareBrowse 渲染只读浏览页；撤销、过期或不存在一律 404（不区分三者，避免泄漏 token 历史）。

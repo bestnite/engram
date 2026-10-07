@@ -33,6 +33,8 @@ func shareLinksPath(deckID uint64) string {
 // 创建后匿名可浏览内容、库里只存摘要、撤销后立即 404。
 func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	// GET /s/:token 已切到 SPA 应用壳：本用例断言 SSR 回退页的内容与撤销语义，故置空 SPA。
+	srv.spa = nil
 	deck := seedDeck(t, db, ownerID, "Link deck")
 	seedBasic(t, db, deck.ID, "秘密正面", "秘密背面")
 

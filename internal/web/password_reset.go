@@ -31,18 +31,22 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 		return
 	}
 	// 登录前流程：没有会话可绑 CSRF，用双提交 cookie（B-13），与 /login 一致。
-	router.GET("/forgot-password", s.forgotPasswordPage)
+	// GET 已切到 SPA 应用壳（forgotPasswordRoute / resetPasswordRoute）；POST 仍是原 SSR 处理器。
+	router.GET("/forgot-password", s.forgotPasswordRoute)
 	router.POST("/forgot-password", auth.DoubleSubmitMiddleware(), s.forgotPasswordSubmit)
-	router.GET("/reset-password", s.resetPasswordPage)
+	router.GET("/reset-password", s.resetPasswordRoute)
 	router.POST("/reset-password", auth.DoubleSubmitMiddleware(), s.resetPasswordSubmit)
-	// 邮箱验证与改邮箱确认：验证链接免登录（凭令牌），改邮箱请求需登录。
+	// 邮箱验证与改邮箱确认：验证链接免登录（凭令牌），GET 刻意不切壳（无脚本也能完成，见 spa_account.go）。
 	router.GET("/verify-email", s.verifyEmail)
 	router.GET("/confirm-email-change", s.confirmEmailChange)
-	router.GET("/settings/email", s.emailChangePage)
+	// GET /settings/email 已切到 SPA 应用壳（emailChangeRoute，未登录仍重定向登录页）；POST 不变。
+	router.GET("/settings/email", s.emailChangeRoute)
 	if s.sessions != nil {
 		router.POST("/settings/email", s.sessions.CSRFMiddleware(), s.emailChangeSubmit)
 		router.POST("/settings/verify-email", s.sessions.CSRFMiddleware(), s.resendVerificationSubmit)
 	}
+	// SPA 的同源 JSON 传输层与应用壳入口（spa_account.go）：与上面的 SSR 处理器并存，不遮蔽。
+	s.registerSPAAccountRoutes(router)
 }
 
 // renderSecurityForm 写出安全/事务页面；文案全部来自语言包。
