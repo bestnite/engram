@@ -1637,6 +1637,10 @@
   translation: "最后一次尝试次数"
 - id: admin.setting.smtp.outbox.none
   translation: "—"
+- id: mail.footer.note
+  translation: "你收到这封邮件，因为你开启了此类通知；可以随时在设置里关闭。"
+- id: mail.footer.unsubscribe
+  translation: "一键退订这类邮件"
 - id: mail.not_configured
   translation: "本站未开启邮件功能，请联系管理员。"
 # ── 邮件类型目录与偏好（M1-18）────────────────────────────────

@@ -76,10 +76,15 @@ func loginFingerprint(c *gin.Context) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ── 五类邮件的文案组装（正文只有纯文本；HTMLBody 留空）────────────────────────────
+// ── 五类邮件的文案组装（默认正文只有纯文本；管理员配了模板才产出 HTML 段）──────────
+//
+// 每个组装函数做三件事：给出模板变量、给出内置正文（今天的行为）、交给 renderMail 渲染。
+// 变量名必须与 internal/mail/vars.go 的表一致，否则必填校验会在发送时拦下（这是有意的
+// 失败方向：宁可不发，也不发一封没有重置链接的邮件）。
 
 // passwordResetMessage 组装密码重置邮件。链接明文只出现在这里，绝不入库、绝不进日志。
-func passwordResetMessage(loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	lines := []string{
 		loc.T("mail.reset.greeting"),
 		"",
@@ -88,18 +93,17 @@ func passwordResetMessage(loc *i18n.Localizer, to, link, site string, expires ti
 		loc.T("mail.reset.link_label"),
 		link,
 		"",
-		loc.Tf("mail.reset.expires", map[string]any{"expires": expires.UTC().Format("2006-01-02 15:04 UTC")}),
+		loc.Tf("mail.reset.expires", map[string]any{"expires": expiresAt}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypePasswordReset),
-		Subject:  loc.Tf("mail.reset.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypePasswordReset, vars,
+		loc.Tf("mail.reset.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypePasswordReset), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // emailVerificationMessage 组装邮箱验证邮件。
-func emailVerificationMessage(loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	lines := []string{
 		loc.T("mail.verify.greeting"),
 		"",
@@ -108,18 +112,20 @@ func emailVerificationMessage(loc *i18n.Localizer, to, link, site string, expire
 		loc.T("mail.verify.link_label"),
 		link,
 		"",
-		loc.Tf("mail.verify.expires", map[string]any{"expires": expires.UTC().Format("2006-01-02 15:04 UTC")}),
+		loc.Tf("mail.verify.expires", map[string]any{"expires": expiresAt}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeEmailVerification),
-		Subject:  loc.Tf("mail.verify.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars,
+		loc.Tf("mail.verify.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // emailChangeMessage 组装改邮箱确认邮件；发给待确认的新地址。
-func emailChangeMessage(loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+//
+// 它复用邮箱验证这个类型（同属「确认一个邮箱地址」），所以管理员为 email_verification
+// 配的模板对两类信都生效，变量集也是同一套（site/url/expires）。
+func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	lines := []string{
 		loc.T("mail.verify.change_greeting"),
 		"",
@@ -128,63 +134,52 @@ func emailChangeMessage(loc *i18n.Localizer, to, link, site string, expires time
 		loc.T("mail.verify.change_link_label"),
 		link,
 		"",
-		loc.Tf("mail.verify.change_expires", map[string]any{"expires": expires.UTC().Format("2006-01-02 15:04 UTC")}),
+		loc.Tf("mail.verify.change_expires", map[string]any{"expires": expiresAt}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeEmailVerification),
-		Subject:  loc.Tf("mail.verify.change_subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars,
+		loc.Tf("mail.verify.change_subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // newDeviceLoginMessage 组装新设备/新 IP 登录提醒。
-func newDeviceLoginMessage(loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
+func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
+	atText := at.UTC().Format("2006-01-02 15:04 UTC")
 	lines := []string{
 		loc.T("mail.notice.greeting"),
 		"",
-		loc.Tf("mail.notice.new_device.body", map[string]any{
-			"site": site,
-			"ip":   ip,
-			"time": at.UTC().Format("2006-01-02 15:04 UTC"),
-		}),
+		loc.Tf("mail.notice.new_device.body", map[string]any{"site": site, "ip": ip, "time": atText}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeNewDeviceLogin),
-		Subject:  loc.Tf("mail.notice.new_device.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "ip": ip, "time": atText}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeNewDeviceLogin, vars,
+		loc.Tf("mail.notice.new_device.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypeNewDeviceLogin), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // credentialChangedMessage 组装凭据变更通知；what 是已本地化的「改了什么」短语。
-func credentialChangedMessage(loc *i18n.Localizer, to, site, what string) mail.Message {
+func (s *Server) credentialChangedMessage(ctx context.Context, loc *i18n.Localizer, to, site, what string) mail.Message {
 	lines := []string{
 		loc.T("mail.notice.greeting"),
 		"",
 		loc.Tf("mail.notice.credential.body", map[string]any{"site": site, "what": what}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeCredentialChanged),
-		Subject:  loc.Tf("mail.notice.credential.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "what": what}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeCredentialChanged, vars,
+		loc.Tf("mail.notice.credential.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypeCredentialChanged), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // accountStatusMessage 组装账号状态变更通知；status 是已本地化的状态短语。
-func accountStatusMessage(loc *i18n.Localizer, to, site, status string) mail.Message {
+func (s *Server) accountStatusMessage(ctx context.Context, loc *i18n.Localizer, to, site, status string) mail.Message {
 	lines := []string{
 		loc.T("mail.notice.greeting"),
 		"",
 		loc.Tf("mail.notice.account.body", map[string]any{"site": site, "status": status}),
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeAccountStatus),
-		Subject:  loc.Tf("mail.notice.account.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "status": status}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeAccountStatus, vars,
+		loc.Tf("mail.notice.account.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{To: to, Type: string(mail.TypeAccountStatus), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // ── 触发点通知（各调用点只需一行；绝不返回 error）────────────────────────────────
@@ -206,7 +201,7 @@ func (s *Server) notifyNewDeviceLogin(c *gin.Context, u *store.User) {
 		return
 	}
 	loc := s.userLocalizer(u)
-	msg := newDeviceLoginMessage(loc, u.Email, securitySiteName(loc), strings.TrimSpace(c.ClientIP()),
+	msg := s.newDeviceLoginMessage(ctx, loc, u.Email, securitySiteName(loc), strings.TrimSpace(c.ClientIP()),
 		strings.TrimSpace(c.GetHeader("User-Agent")), now)
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeNewDeviceLogin, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
@@ -218,7 +213,7 @@ func (s *Server) notifyCredentialChanged(ctx context.Context, u *store.User, kin
 		return
 	}
 	loc := s.userLocalizer(u)
-	msg := credentialChangedMessage(loc, u.Email, securitySiteName(loc), loc.T("mail.notice.credential."+kind))
+	msg := s.credentialChangedMessage(ctx, loc, u.Email, securitySiteName(loc), loc.T("mail.notice.credential."+kind))
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeCredentialChanged, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
@@ -229,7 +224,7 @@ func (s *Server) notifyAccountStatus(ctx context.Context, u *store.User, status 
 		return
 	}
 	loc := s.userLocalizer(u)
-	msg := accountStatusMessage(loc, u.Email, securitySiteName(loc), loc.T("mail.notice.account."+status))
+	msg := s.accountStatusMessage(ctx, loc, u.Email, securitySiteName(loc), loc.T("mail.notice.account."+status))
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeAccountStatus, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
@@ -251,7 +246,7 @@ func (s *Server) sendEmailVerification(c *gin.Context, u *store.User) bool {
 	}
 	loc := s.userLocalizer(u)
 	link := s.securityAbsoluteURL(c, "/verify-email?token="+url.QueryEscape(token))
-	msg := emailVerificationMessage(loc, u.Email, link, securitySiteName(loc), now.Add(auth.EmailVerifyTTL))
+	msg := s.emailVerificationMessage(ctx, loc, u.Email, link, securitySiteName(loc), now.Add(auth.EmailVerifyTTL))
 	return s.sendSecurity(ctx, u.ID, msg.To, mail.TypeEmailVerification, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
@@ -269,6 +264,6 @@ func (s *Server) sendEmailChangeConfirmation(c *gin.Context, u *store.User, newE
 	}
 	loc := s.userLocalizer(u)
 	link := s.securityAbsoluteURL(c, "/confirm-email-change?token="+url.QueryEscape(token))
-	msg := emailChangeMessage(loc, newEmail, link, securitySiteName(loc), now.Add(auth.EmailChangeTTL))
+	msg := s.emailChangeMessage(ctx, loc, newEmail, link, securitySiteName(loc), now.Add(auth.EmailChangeTTL))
 	return s.sendSecurity(ctx, u.ID, msg.To, mail.TypeEmailVerification, msg.Subject, msg.TextBody, msg.HTMLBody)
 }

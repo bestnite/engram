@@ -153,6 +153,8 @@ type Server struct {
 	tokens *auth.ActionTokenService
 	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」（M1-19）。
 	fingerprints *store.LoginFingerprintStore
+	// mailTemplates 是管理员自定义的邮件模板（DESIGN.md §4.7）；缺失即回退内置正文。
+	mailTemplates *store.MailTemplateStore
 	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走 §4.5 三分支。
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
@@ -262,6 +264,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 	s.tokens = tokens
 	s.fingerprints = store.NewLoginFingerprintStore(deps.DB)
+	s.mailTemplates = store.NewMailTemplateStore(deps.DB)
 	if deps.Mail != nil {
 		s.securityMail = mail.NewSecurityNotifier(deps.Mail, store.NewEmailPrefStore(deps.DB), logger)
 	}

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"git.nite07.com/nite/engram/internal/i18n"
@@ -71,7 +72,7 @@ func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *
 // 它运行在作业 worker 的上下文里，必须快速返回且绝不 panic（jobs 侧已包 recover 兜底）。
 func (s *Server) NotifyJobFailed(ctx context.Context, job store.Job, reason string) {
 	s.notifyAdmins(ctx, mail.TypeJobFailed, func(loc *i18n.Localizer) mail.Message {
-		return adminJobFailedMessage(loc, securitySiteName(loc), job, reason)
+		return s.adminJobFailedMessage(ctx, loc, securitySiteName(loc), job, reason)
 	})
 }
 
@@ -82,14 +83,14 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 		return
 	}
 	s.notifyAdmins(ctx, mail.TypeMediaDiskAlert, func(loc *i18n.Localizer) mail.Message {
-		return adminMediaAlertMessage(loc, securitySiteName(loc), *u, used, quota)
+		return s.adminMediaAlertMessage(ctx, loc, securitySiteName(loc), *u, used, quota)
 	})
 }
 
-// ── 两类邮件的文案组装（正文只有纯文本；HTMLBody 留空）────────────────────────────
+// ── 两类邮件的文案组装（默认正文只有纯文本；管理员配了模板才产出 HTML 段）──────────
 
 // adminJobFailedMessage 组装「作业失败」通知；reason 是失败原因（英文，来自 jobs.error）。
-func adminJobFailedMessage(loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
+func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
 	lines := []string{
 		loc.T("mail.admin.greeting"),
 		"",
@@ -97,23 +98,26 @@ func adminJobFailedMessage(loc *i18n.Localizer, site string, job store.Job, reas
 			"site": site, "job_id": job.ID, "kind": job.Kind, "reason": reason,
 		}),
 	}
-	return mail.Message{
-		Subject:  loc.Tf("mail.admin.job_failed.subject", map[string]any{"site": site, "job_id": job.ID}),
-		TextBody: strings.Join(lines, "\n"),
+	vars := mail.Vars{
+		"site": site, "job_id": strconv.FormatUint(job.ID, 10), "kind": job.Kind, "reason": reason,
 	}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars,
+		loc.Tf("mail.admin.job_failed.subject", map[string]any{"site": site, "job_id": job.ID}), strings.Join(lines, "\n"), "")
+	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // adminMediaAlertMessage 组装「媒体配额」告警；used/quota 是字节数（展示时人类可读）。
-func adminMediaAlertMessage(loc *i18n.Localizer, site string, u store.User, used, quota int64) mail.Message {
+func (s *Server) adminMediaAlertMessage(ctx context.Context, loc *i18n.Localizer, site string, u store.User, used, quota int64) mail.Message {
+	usedText, limitText := humanBytes(used), humanBytes(quota)
 	lines := []string{
 		loc.T("mail.admin.greeting"),
 		"",
 		loc.Tf("mail.admin.media_alert.body", map[string]any{
-			"site": site, "username": u.Username, "used": humanBytes(used), "limit": humanBytes(quota),
+			"site": site, "username": u.Username, "used": usedText, "limit": limitText,
 		}),
 	}
-	return mail.Message{
-		Subject:  loc.Tf("mail.admin.media_alert.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	vars := mail.Vars{"site": site, "username": u.Username, "used": usedText, "limit": limitText}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeMediaDiskAlert, vars,
+		loc.Tf("mail.admin.media_alert.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), "")
+	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

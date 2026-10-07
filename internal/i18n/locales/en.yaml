@@ -1639,6 +1639,10 @@
   translation: "Attempts for last error"
 - id: admin.setting.smtp.outbox.none
   translation: "—"
+- id: mail.footer.note
+  translation: "You are receiving this because you turned this notification on. You can turn it off at any time in settings."
+- id: mail.footer.unsubscribe
+  translation: "Unsubscribe from these emails"
 - id: mail.not_configured
   translation: "Mail is not enabled on this site; contact an administrator."
 # ── Email type catalog and preferences (M1-18) ────────────────

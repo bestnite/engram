@@ -71,6 +71,11 @@ func Render(in RenderInput) (Rendered, error) {
 	if strings.TrimSpace(in.BodyMD) == "" {
 		return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}, nil
 	}
+	// 模板内容也在这里校验一次，而不是只在管理页保存时校验：行可能被直写库、或由旧版本
+	// 写进来，而「丢掉了重置链接的模板」必须退到内置正文，不能发出一封没用的信。
+	if err := ValidateBody(in.Type, in.BodyMD); err != nil {
+		return Rendered{}, fmt.Errorf("mail template is invalid: %w", err)
+	}
 	if err := checkRequiredVars(in.Type, in.Vars); err != nil {
 		return Rendered{}, err
 	}

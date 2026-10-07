@@ -81,13 +81,15 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 	}
 
 	link := s.securityAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
-	msg := inviteMessage(recipientLoc, to, link, s.siteName(ctx, recipientLoc), inv.ExpiresAt)
 
-	// 收件人是本站用户时，这封 B 类（可选类型）邮件带 RFC 8058 一键退订头（M1-22）：
-	// 令牌指名 invite 这一个类型，用户不登录即可关掉它。非本站用户没有偏好可关，故不带。
+	// 收件人是本站用户时，这封 B 类（可选类型）邮件带退订入口（M1-22）：令牌指名 invite
+	// 这一个类型，用户不登录即可关掉它。非本站用户没有偏好可关，故不带。
+	unsubURL := ""
 	if recipient != nil {
-		msg.Headers = s.optionalUnsubscribeHeaders(c, recipient.ID, mail.TypeInvite)
+		unsubURL = s.optionalUnsubscribeLink(c, recipient.ID, mail.TypeInvite)
 	}
+	msg := s.inviteMessage(ctx, recipientLoc, to, link, s.siteName(ctx, recipientLoc), inv.ExpiresAt, unsubURL)
+	msg.Headers = mail.UnsubscribeHeaders(mail.TypeInvite, unsubURL)
 
 	if err := s.mail.Enqueue(ctx, msg); err != nil {
 		if errors.Is(err, mail.ErrNotConfigured) {
@@ -122,8 +124,9 @@ func inviteMailNote(loc *i18n.Localizer, available bool) string {
 	return loc.T("mail.not_configured")
 }
 
-// inviteMessage 组装邀请邮件。Headers 刻意留空：一键退订头属于 M1-22。
-func inviteMessage(loc *i18n.Localizer, to, link, site string, expiresAt *time.Time) mail.Message {
+// inviteMessage 组装邀请邮件。unsubURL 非空时把它渲染进正文页脚与纯文本段末尾——
+// RFC 8058 头只有邮件客户端看得到，正文里也要有一个可点的退订入口。
+func (s *Server) inviteMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expiresAt *time.Time, unsubURL string) mail.Message {
 	lines := []string{
 		loc.T("mail.invite.greeting"),
 		"",
@@ -132,14 +135,13 @@ func inviteMessage(loc *i18n.Localizer, to, link, site string, expiresAt *time.T
 		loc.T("mail.invite.link_label"),
 		link,
 	}
+	vars := mail.Vars{"site": site, "url": link}
 	if expiresAt != nil {
-		lines = append(lines, "",
-			loc.Tf("mail.invite.expires", map[string]any{"expires": expiresAt.UTC().Format("2006-01-02 15:04 UTC")}))
+		expiresAtText := expiresAt.UTC().Format("2006-01-02 15:04 UTC")
+		lines = append(lines, "", loc.Tf("mail.invite.expires", map[string]any{"expires": expiresAtText}))
+		vars["expires"] = expiresAtText
 	}
-	return mail.Message{
-		To:       to,
-		Type:     string(mail.TypeInvite),
-		Subject:  loc.Tf("mail.invite.subject", map[string]any{"site": site}),
-		TextBody: strings.Join(lines, "\n"),
-	}
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars,
+		loc.Tf("mail.invite.subject", map[string]any{"site": site}), strings.Join(lines, "\n"), unsubURL)
+	return mail.Message{To: to, Type: string(mail.TypeInvite), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

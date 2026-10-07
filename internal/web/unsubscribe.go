@@ -199,19 +199,23 @@ func (s *Server) writeUnsubscribeError(c *gin.Context, err error) {
 	}
 }
 
-// optionalUnsubscribeHeaders 为可选类型签发一枚指名该类型的免登录退订令牌，并返回 RFC 8058 头。
+// optionalUnsubscribeLink 为可选类型签发一枚指名该类型的免登录退订令牌，返回退订链接。
 //
-// A 类（不可关闭）或签发失败时返回 nil —— 宁可这封邮件少一个退订入口，也绝不给安全邮件
-// 加退订头，或让发信因退订令牌失败而失败（DESIGN.md §4.7：发信失败不得让触发操作失败）。
-func (s *Server) optionalUnsubscribeHeaders(c *gin.Context, userID uint64, typ mail.Type) map[string]string {
+// A 类（不可关闭）或签发失败时返回空串 —— 宁可这封邮件少一个退订入口，也绝不给安全邮件
+// 加退订入口，或让发信因退订令牌失败而失败（DESIGN.md §4.7：发信失败不得让触发操作失败）。
+//
+// 拆出「拿链接」这一层是因为**邮件正文里也要有它**：只有 RFC 8058 头的话，读纯文本段的
+// 读者看不到任何退订入口（头是给邮件客户端读的）。
+func (s *Server) optionalUnsubscribeLink(c *gin.Context, userID uint64, typ mail.Type) string {
 	if s.tokens == nil || !mail.CanUnsubscribe(typ) {
-		return nil
+		return ""
 	}
 	token, err := s.tokens.Issue(c.Request.Context(), userID, store.ActionTokenUnsubscribe, string(typ), auth.UnsubscribeTTL)
 	if err != nil {
 		s.logger.Error("unsubscribe: issue token failed", "user_id", userID, "type", string(typ), "error", err)
-		return nil
+		return ""
 	}
-	link := s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
-	return mail.UnsubscribeHeaders(typ, link)
+	return s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 }
+
+// optionalUnsubscribeHeaders 是上面的薄封装：拿链接 → 转成 RFC 8058 头。
