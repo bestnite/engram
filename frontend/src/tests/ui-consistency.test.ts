@@ -122,6 +122,15 @@ describe('interactive pieces are owned by the component library', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps the native datalist out of the time zone field', () => {
+    // 原生 datalist 的弹出层外观由浏览器决定（与深浅两套主题对不齐），候选也只列固定的几个；
+    // 需要输入筛选的下拉统一走 ui/Combobox（bits-ui），别再退回 input[list=]。
+    const offenders = sources
+      .filter((s) => s.src.includes('<datalist') || /\slist="/.test(s.src))
+      .map((s) => s.file);
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps no native checkbox or radio input in views', () => {
     // 复选框/单选组都能用组件库表达（三态、方向键、roving tabindex 都在库里），
     // 视图里再出现原生 input[type=checkbox|radio] 就是第二份实现。

@@ -6,11 +6,13 @@
     ApiClientError,
     getApiErrorMessageKey,
     validateProfileForm,
-    COMMON_TIMEZONES,
+    DEFAULT_DAY_CUTOFF_HOUR,
     type UserProfile,
     type ShareAllowRow,
   } from '../api';
+  import { timezoneOptions } from '../timezones';
   import Select from '../components/ui/Select.svelte';
+  import Combobox from '../components/ui/Combobox.svelte';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -41,7 +43,17 @@
   let displayName = $state('');
   let selectedLocale = $state<SupportedLocale>($localeStore);
   let timezone = $state('');
-  let dayCutoff = $state('');
+  // 切点必须是一个具体整点：界面不提供「未设置」，库里为 NULL 的旧账号按服务端默认值显示。
+  let dayCutoff = $state(String(DEFAULT_DAY_CUTOFF_HOUR));
+
+  // 候选项要跟着当前值算：库里可能存着本浏览器不认识的历史时区名，不并进列表就会显示成空。
+  const timezoneChoices = $derived(timezoneOptions(timezone));
+  const cutoffChoices = $derived(
+    Array.from({ length: 24 }, (_, hour) => ({
+      value: String(hour),
+      label: `${String(hour).padStart(2, '0')}:00`,
+    }))
+  );
 
   /**
    * 初始化探测与加载已有用户数据
@@ -76,11 +88,8 @@
       if (profile.timezone) {
         timezone = profile.timezone;
       }
-      if (profile.day_cutoff_hour !== null && profile.day_cutoff_hour !== undefined) {
-        dayCutoff = String(profile.day_cutoff_hour);
-      } else {
-        dayCutoff = '';
-      }
+      // 0 是合法切点（午夜）；NULL 是旧账号的未设置状态，界面按服务端默认值显示，保存后成为显式值。
+      dayCutoff = String(profile.day_cutoff_hour ?? DEFAULT_DAY_CUTOFF_HOUR);
     } catch (err) {
       if (err instanceof ApiClientError && err.isNotFound) {
         // 服务端尚未提供 profile JSON 端点（API Gap 明确报告），安全降级并保留前端安全输入与本地生效
@@ -119,7 +128,7 @@
     generalError = null;
     fieldErrors = {};
 
-    const rawCutoff = dayCutoff.trim() === '' ? null : dayCutoff;
+    const rawCutoff = dayCutoff;
     const validation = validateProfileForm({
       display_name: displayName,
       locale: selectedLocale,
@@ -313,19 +322,14 @@
             <label for="settings-timezone" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
               {$t('settings.profile.timezone_label')}
             </label>
-            <input
+            <Combobox
               id="settings-timezone"
-              data-testid="settings-timezone"
-              type="text"
+              testId="settings-timezone"
               bind:value={timezone}
-              list="settings-timezone-options"
-              class="field-input text-sm w-full transition-colors"
+              options={timezoneChoices}
+              ariaLabel={$t('settings.profile.timezone_label')}
+              class="transition-colors"
             />
-            <datalist id="settings-timezone-options">
-              {#each COMMON_TIMEZONES as tz}
-                <option value={tz}></option>
-              {/each}
-            </datalist>
             <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
               {$t('settings.profile.timezone_hint')}
             </p>
@@ -341,14 +345,13 @@
             <label for="settings-cutoff" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
               {$t('settings.profile.cutoff_label')}
             </label>
-            <input
+            <Select
               id="settings-cutoff"
-              data-testid="settings-cutoff"
-              type="number"
-              min="0"
-              max="23"
+              testId="settings-cutoff"
               bind:value={dayCutoff}
-              class="field-input text-sm w-32 font-mono transition-colors"
+              options={cutoffChoices}
+              allowDeselect={false}
+              ariaLabel={$t('settings.profile.cutoff_label')}
             />
             <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
               {$t('settings.profile.cutoff_hint')}

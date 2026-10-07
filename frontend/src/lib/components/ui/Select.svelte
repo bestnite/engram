@@ -2,12 +2,7 @@
   import { Select as BitsSelect } from 'bits-ui';
   import { ChevronDown, Check } from '@lucide/svelte';
   import { cn } from './utils';
-
-  export interface SelectOption {
-    value: string;
-    label: string;
-    disabled?: boolean;
-  }
+  import type { SelectOption } from './options';
 
   /**
    * 全站唯一的单选下拉（交互件用成熟组件库）。
@@ -22,6 +17,12 @@
     /** 未选中时触发器里显示的文案。 */
     placeholder?: string;
     disabled?: boolean;
+    /**
+     * 再点一次当前项是否清空选择。库的默认是清空，但「清空」在单选控件上只会把值变成
+     * 空串、触发器退回留白，而调用方大多把它当必填（卡组、预设、语言）：那是一次误操作
+     * 而不是一次选择。要求必有值的调用点显式传 false。
+     */
+    allowDeselect?: boolean;
     /** 触发器尺寸：sm 用于表格行内，md 用于表单。 */
     size?: 'sm' | 'md';
     ariaLabel?: string;
@@ -36,6 +37,7 @@
     options,
     placeholder = '',
     disabled = false,
+    allowDeselect = true,
     size = 'md',
     ariaLabel,
     testId,
@@ -52,7 +54,7 @@
   const triggerSize = { sm: 'py-1 text-xs', md: 'py-2 text-xs' } as const;
 </script>
 
-<BitsSelect.Root type="single" bind:value {items} {disabled} onValueChange={(next) => onValueChange?.(next)}>
+<BitsSelect.Root type="single" bind:value {items} {disabled} {allowDeselect} onValueChange={(next) => onValueChange?.(next)}>
   <BitsSelect.Trigger
     {id}
     data-testid={testId}
