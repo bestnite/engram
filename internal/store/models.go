@@ -381,5 +381,24 @@ func AllModels() []any {
 		// M1-23 每周学习摘要的发送台账：模型定义在 digest.go。
 		&DigestLog{},
 		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
+		// 管理员自定义邮件模板（DESIGN.md §4.7）：缺失即回退内置正文。
+		&MailTemplate{},
 	}
 }
+
+// MailTemplate 是管理员自定义的邮件模板（DESIGN.md §4.7）。
+//
+// 唯一键是 (type, locale)：同一类型每种语言一份。**表里没有行是正常状态**——那表示该类型
+// 该语言用内置正文（发信方组装的那份），所以「删除自定义」就是删这一行，内置默认不可能被
+// 弄丢。正文存 Markdown 原文而不是渲染结果：渲染、清洗、变量替换都发生在发送时，于是改
+// 模板只影响之后入队的邮件。
+type MailTemplate struct {
+	Type      string    `gorm:"primaryKey;size:64" json:"type"`
+	Locale    string    `gorm:"primaryKey;size:16" json:"locale"`
+	Subject   string    `gorm:"not null" json:"subject"`
+	BodyMD    string    `gorm:"not null" json:"body_md"`
+	UpdatedBy *uint64   `json:"updated_by,omitempty"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (MailTemplate) TableName() string { return "mail_templates" }
