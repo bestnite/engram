@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../i18n';
   import { navigate } from '../router';
-  import { register } from '../auth';
+  import { register, authStore } from '../auth';
   import { getApiErrorMessageKey, ApiClientError } from '../api';
 
   // 邀请 token 由 URL 查询参数带入（GET /register?invite=... 下发应用壳）。
@@ -16,6 +16,16 @@
   let password = $state('');
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
+
+  // 已登录用户访问注册页同样直接送去控制台：会话前端点（注册）要求「双提交 cookie 对」，
+  // 而已登录时 /api/v1/auth/session 给的是会话绑定 token，提交必然 403。
+  // 用 $effect 而不是 onMount：整页加载时 initAuth() 是异步的，onMount 时认证状态还没就绪。
+  $effect(() => {
+    if ($authStore.initialized && $authStore.authenticated) {
+      navigate('/');
+    }
+  });
+
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();

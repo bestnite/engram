@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../i18n';
   import { navigate } from '../router';
-  import { login } from '../auth';
+  import { login, authStore } from '../auth';
   import { getApiErrorMessageKey, ApiClientError } from '../api';
   import OIDCLoginEntry from '../components/OIDCLoginEntry.svelte';
 
@@ -9,6 +9,15 @@
   let password = $state('');
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
+
+  // 已登录用户访问登录页时直接送去控制台：会话前端点（登录/注册/验证）要求「双提交 cookie 对」，
+  // 而已登录时 /api/v1/auth/session 给的是会话绑定 token，两者不相等，提交必然 403。
+  // 用 $effect 而不是 onMount：整页加载时 initAuth() 是异步的，onMount 时认证状态还没就绪。
+  $effect(() => {
+    if ($authStore.initialized && $authStore.authenticated) {
+      navigate('/');
+    }
+  });
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
