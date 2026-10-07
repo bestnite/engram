@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render } from 'svelte/server';
 import NotificationPrefsView from '../lib/views/NotificationPrefsView.svelte';
 import { ApiClient } from '../lib/api';
@@ -73,9 +74,14 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
     const { html } = render(NotificationPrefsView, { props: { initialLoading: false, initialData: fixture } });
     expect(html).toContain('data-testid="notifications-reminder"');
     expect(html).toContain('站点默认（19:00）');
-    expect(html).toContain('>0:00<');
-    expect(html).toContain('>23:00<');
     expect(html).toContain('Asia/Shanghai');
+    // 小时选项现在是组件库下拉的 options 数据：弹层只在展开时渲染（bits-ui Portal），
+    // 不在首屏 HTML 里。因此这条断言改到源码上——它保证选项仍由 hours 逐项生成。
+    const src = readFileSync(
+      new URL('../lib/views/NotificationPrefsView.svelte', import.meta.url),
+      'utf8'
+    );
+    expect(src).toContain('...hours.map((hour) => ({ value: String(hour), label: `${hour}:00` }))');
   });
 
   it('renders the loading state before any data arrives', () => {

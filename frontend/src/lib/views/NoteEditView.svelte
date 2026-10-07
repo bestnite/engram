@@ -6,6 +6,7 @@
   import type { Note } from '../api';
   import { typeset } from '../mathjax';
   import MediaPicker from '../components/MediaPicker.svelte';
+  import Select from '../components/ui/Select.svelte';
 
   let note = $state<Note | null>(null);
   let fieldsText = $state('');
@@ -187,11 +188,14 @@
       <!-- 选择器只引用原图；延迟加载与限高遵循 DESIGN.md §6.3。 -->
       <div class="space-y-3">
         <label class="block text-sm font-medium">{$t('media.spa.field')}
-          <select data-testid="spa-media-field" bind:value={selectedField} class="ml-2 rounded-md border px-3 py-2">
-            {#each Object.entries(note.fields).filter(([, value]) => typeof value === 'string') as [key]}
-              <option value={key}>{key}</option>
-            {/each}
-          </select>
+          <Select
+            class="ml-2 w-40"
+            bind:value={selectedField}
+            testId="spa-media-field"
+            options={Object.entries(note.fields)
+              .filter(([, value]) => typeof value === 'string')
+              .map(([key]) => ({ value: key, label: key }))}
+          />
         </label>
         <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
         <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 space-y-3">

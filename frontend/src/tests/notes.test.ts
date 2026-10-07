@@ -471,9 +471,11 @@ describe('DeckDetailView deleted listing and bulk selection wiring', () => {
   );
 
   it('exposes a status filter that drives the status query parameter', () => {
-    expect(view).toContain('data-testid="filter-status-select"');
-    expect(view).toContain('<option value="active">');
-    expect(view).toContain('<option value="deleted">');
+    // 下拉已换成组件库实现：选项以 options 数据传入（弹层由 bits-ui 渲染，不在首屏 HTML 里），
+    // 所以断言落在 testId 与选项数据上，而不是原生 <option> 标记。
+    expect(view).toContain('testId="filter-status-select"');
+    expect(view).toContain("{ value: 'active', label: $t('notes.status_active') }");
+    expect(view).toContain("{ value: 'deleted', label: $t('notes.status_deleted') }");
     expect(view).toContain('status: appliedStatus,');
   });
 

@@ -9,6 +9,7 @@
     COMMON_TIMEZONES,
     type UserProfile,
   } from '../api';
+  import Select from '../components/ui/Select.svelte';
 
   // 视图响应式状态（Svelte 5 runes）
   let loading = $state(true);
@@ -84,9 +85,7 @@
   /**
    * 切换界面语言：前端 UI 即时同步更新响应式 store（DESIGN.md §8.3）
    */
-  function handleLocaleChange(event: Event): void {
-    const target = event.target as HTMLSelectElement;
-    const nextLocale = target.value;
+  function handleLocaleChange(nextLocale: string): void {
     if (isSupportedLocale(nextLocale)) {
       selectedLocale = nextLocale;
       setLocale(nextLocale);
@@ -243,16 +242,13 @@
             <label for="settings-locale" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
               {$t('settings.profile.locale_label')}
             </label>
-            <select
-              id="settings-locale"
-              data-testid="settings-locale"
+            <Select
               value={selectedLocale}
-              onchange={handleLocaleChange}
-              class="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer"
-            >
-              <option value="zh-CN">{$t('language.zh-CN')}</option>
-              <option value="en">{$t('language.en')}</option>
-            </select>
+              onValueChange={handleLocaleChange}
+              testId="settings-locale"
+              options={[{ value: 'zh-CN', label: $t('language.zh-CN') }, { value: 'en', label: $t('language.en') }]}
+              class="py-2.5"
+            />
             {#if fieldErrors.locale}
               <p data-testid="settings-error-locale" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
                 {$t(fieldErrors.locale)}

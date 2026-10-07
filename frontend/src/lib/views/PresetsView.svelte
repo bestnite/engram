@@ -2,6 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
+  import Dialog from '../components/ui/Dialog.svelte';
+  import Button from '../components/ui/Button.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
   import type {
     PresetsResponse,
     PresetRecord,
@@ -609,11 +612,13 @@
 </div>
 
 {#if formOpen}
-  <div class="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/40 p-4" data-testid="presets-form-overlay">
-    <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 p-6 sm:p-8 space-y-5 shadow-xl">
-      <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="presets-form-heading">
-        {formMode === 'create' ? $t('presets.new.heading') : $t('presets.edit.heading')}
-      </h2>
+  <Dialog
+    open={true}
+    onOpenChange={(open) => { if (!open) closeForm(); }}
+    title={formMode === 'create' ? $t('presets.new.heading') : $t('presets.edit.heading')}
+    size="lg"
+    testId="presets-form-dialog"
+  >
       {#if formError}
         <p role="alert" data-testid="presets-form-error" class="rounded-xl border border-rose-200 dark:border-rose-900/60 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">{formError}</p>
       {/if}
@@ -668,77 +673,45 @@
             class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
           />
         </label>
-        <label class="flex items-center gap-2">
-          <input type="checkbox" bind:checked={formFuzz} data-testid="presets-form-fuzz" class="h-4 w-4 rounded border-zinc-300" />
+        <div class="flex items-center gap-2">
+          <Checkbox bind:checked={formFuzz} testId="presets-form-fuzz" label={$t('presets.form.fuzz')} />
           <span class="text-sm text-zinc-700 dark:text-zinc-300">{$t('presets.form.fuzz')}</span>
-        </label>
+        </div>
         {#if formMode === 'edit'}
           <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.form.edit_note')}</p>
         {/if}
         <div class="flex items-center gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={formSaving}
-            data-testid="presets-form-submit"
-            class="px-5 py-2.5 text-sm font-semibold rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white disabled:opacity-60 cursor-pointer"
-          >
+          <Button type="submit" size="lg" testId="presets-form-submit" disabled={formSaving}>
             {formSaving ? $t('presets.form.saving') : $t('presets.form.save')}
-          </button>
-          <button
-            type="button"
-            data-testid="presets-form-cancel"
-            onclick={closeForm}
-            class="px-4 py-2.5 text-sm font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-          >
+          </Button>
+          <Button variant="outline" size="lg" testId="presets-form-cancel" onclick={closeForm}>
             {$t('presets.form.cancel')}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
-  </div>
+  </Dialog>
 {/if}
 
 <!-- 删除预设二次确认对话框（Modal） -->
 {#if presetToDelete}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
-    <div
-      role="alertdialog"
-      class="card-elevated w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-in zoom-in-95 duration-150"
-    >
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">{$t('presets.delete.confirm_title')}</h2>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            {$t('presets.delete.confirm_desc', { name: presetToDelete.name })}
-          </p>
-        </div>
-      </div>
-
+  <Dialog
+    open={true}
+    onOpenChange={(open) => { if (!open) presetToDelete = null; }}
+    title={$t('presets.delete.confirm_title')}
+    description={$t('presets.delete.confirm_desc', { name: presetToDelete.name })}
+    testId="preset-delete-dialog"
+  >
       {#if deletePresetError}
         <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(deletePresetError)}</p>
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
-        <button
-          type="button"
-          disabled={deletingPreset}
-          onclick={() => presetToDelete = null}
-          class="px-4 py-2 text-sm font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
-        >
+        <Button variant="outline" size="lg" disabled={deletingPreset} onclick={() => presetToDelete = null}>
           {$t('presets.delete.cancel_btn')}
-        </button>
-        <button
-          type="button"
-          disabled={deletingPreset}
-          onclick={confirmDeletePreset}
-          class="px-4 py-2 text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors btn-press cursor-pointer"
-        >
-          {deletingPreset ? '正在删除...' : $t('presets.delete.confirm_btn')}
-        </button>
+        </Button>
+        <Button variant="danger" size="lg" disabled={deletingPreset} onclick={confirmDeletePreset} testId="preset-delete-confirm">
+          {deletingPreset ? $t('common.deleting') : $t('presets.delete.confirm_btn')}
+        </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

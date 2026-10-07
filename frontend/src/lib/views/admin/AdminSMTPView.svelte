@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminSMTPResponse, AdminTestResult } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import Select from '../../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -158,11 +159,12 @@
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.tls_mode')}</span>
-        <select data-testid="admin-smtp-tls" bind:value={tlsMode} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-          {#each tlsModes as mode (mode)}
-            <option value={mode}>{$t('admin.smtp.tls.' + mode)}</option>
-          {/each}
-        </select>
+        <Select
+          class="mt-1.5"
+          bind:value={tlsMode}
+          testId="admin-smtp-tls"
+          options={tlsModes.map((mode) => ({ value: mode, label: $t('admin.smtp.tls.' + mode) }))}
+        />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.password')}</span>

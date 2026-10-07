@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import { authStore } from '../auth';
   import type { Deck, PackageImportReport } from '../api';
+  import Select from '../components/ui/Select.svelte';
 
   let decks = $state<Deck[]>([]);
   let file = $state<File | null>(null);
@@ -71,29 +72,34 @@
         <input class="mt-2 block w-full text-sm" type="file" accept=".edeck,.zip" required onchange={(e) => file = e.currentTarget.files?.[0] ?? null} />
       </label>
       <label class="block text-sm font-medium">{$t('package.import.target')}
-        <select class="mt-2 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" bind:value={target}>
-          <option value="new_deck">{$t('package.import.new_deck')}</option>
-          <option value="into_deck">{$t('package.import.into_deck')}</option>
-        </select>
+        <Select
+          class="mt-2"
+          value={target}
+          onValueChange={(value) => (target = value as typeof target)}
+          options={[{ value: 'new_deck', label: $t('package.import.new_deck') }, { value: 'into_deck', label: $t('package.import.into_deck') }]}
+        />
       </label>
       {#if target === 'into_deck'}
         <label class="block text-sm font-medium">{$t('package.import.deck')}
           {#if decks.length}
-            <select class="mt-2 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" bind:value={deckId}>
-              <option value="">{$t('package.import.choose_deck')}</option>
-              {#each decks as deck (deck.id)}<option value={String(deck.id)}>{deck.name}</option>{/each}
-            </select>
+            <Select
+              class="mt-2"
+              bind:value={deckId}
+              placeholder={$t('package.import.choose_deck')}
+              options={decks.map((deck) => ({ value: String(deck.id), label: deck.name }))}
+            />
           {:else}
             <input class="mt-2 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" type="number" min="1" bind:value={deckId} />
           {/if}
         </label>
       {/if}
       <label class="block text-sm font-medium">{$t('package.import.conflict')}
-        <select class="mt-2 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" bind:value={onConflict}>
-          <option value="update">{$t('package.import.update')}</option>
-          <option value="skip">{$t('package.import.skip')}</option>
-          <option value="fail">{$t('package.import.fail')}</option>
-        </select>
+        <Select
+          class="mt-2"
+          value={onConflict}
+          onValueChange={(value) => (onConflict = value as typeof onConflict)}
+          options={[{ value: 'update', label: $t('package.import.update') }, { value: 'skip', label: $t('package.import.skip') }, { value: 'fail', label: $t('package.import.fail') }]}
+        />
       </label>
       <div class="space-y-3 text-sm">
         <label class="flex items-center gap-2"><input type="checkbox" bind:checked={dryRun} />{$t('package.import.dry_run')}</label>

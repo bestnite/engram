@@ -6,6 +6,8 @@
   import type { Deck, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
   import DeckSettingsView from './DeckSettingsView.svelte';
+  import Select from '../components/ui/Select.svelte';
+  import Dialog from '../components/ui/Dialog.svelte';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -53,6 +55,25 @@
   let bulkError = $state('');
   let confirmingBulkDelete = $state(false);
   let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
+
+  // 题型清单的后端标识与展示名分开：标识符进查询串，展示名一律走语言包
+  // （此前下拉里直接渲染 kind 字面量，中文界面下会露出 basic/cloze 这类内部标识）。
+  const CARD_KINDS = [
+    'basic',
+    'basic_both',
+    'cloze',
+    'list',
+    'typed',
+    'numeric',
+    'choice_single',
+    'choice_multi',
+    'true_false',
+    'short_answer',
+  ] as const;
+
+  function cardKindLabel(kind: string): string {
+    return $t(`notes.kind.${kind}` as never);
+  }
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
@@ -360,31 +381,22 @@
           bind:value={tagInput}
           class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-32"
         />
-        <select
-          data-testid="filter-kind-select"
+        <Select
+          class="w-40"
           bind:value={kindSelect}
-          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 cursor-pointer"
-        >
-          <option value="">{$t('notes.all_kinds')}</option>
-          <option value="basic">basic</option>
-          <option value="basic_both">basic_both</option>
-          <option value="cloze">cloze</option>
-          <option value="list">list</option>
-          <option value="typed">typed</option>
-          <option value="numeric">numeric</option>
-          <option value="choice_single">choice_single</option>
-          <option value="choice_multi">choice_multi</option>
-          <option value="true_false">true_false</option>
-          <option value="short_answer">short_answer</option>
-        </select>
-        <select
-          data-testid="filter-status-select"
-          bind:value={statusSelect}
-          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2.5 py-1.5 cursor-pointer"
-        >
-          <option value="active">{$t('notes.status_active')}</option>
-          <option value="deleted">{$t('notes.status_deleted')}</option>
-        </select>
+          testId="filter-kind-select"
+          options={[
+            { value: '', label: $t('notes.all_kinds') },
+            ...CARD_KINDS.map((kind) => ({ value: kind, label: cardKindLabel(kind) })),
+          ]}
+        />
+        <Select
+          class="w-28"
+          value={statusSelect}
+          onValueChange={(value) => (statusSelect = value as typeof statusSelect)}
+          testId="filter-status-select"
+          options={[{ value: 'active', label: $t('notes.status_active') }, { value: 'deleted', label: $t('notes.status_deleted') }]}
+        />
         <button
           type="submit"
           data-testid="filter-apply-btn"
@@ -623,18 +635,12 @@
 
 <!-- 导出包设置对话框（Modal） -->
 {#if showExportModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
-    <div
-      role="document"
-      class="card-elevated w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-in zoom-in-95 duration-150"
-    >
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-        <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">导出卡组包 (.edeck)</h2>
-        <button type="button" class="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer" onclick={() => showExportModal = false} aria-label="关闭">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-
+  <Dialog
+    open={true}
+    onOpenChange={(open) => { if (!open) showExportModal = false; }}
+    title={$t('package.export.heading')}
+    testId="deck-export-dialog"
+  >
       <div class="space-y-3 text-xs text-zinc-700 dark:text-zinc-300">
         <label class="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" bind:checked={includeMedia} class="rounded text-blue-600 focus:ring-blue-500" />
@@ -658,7 +664,7 @@
 
       <div class="pt-2 flex items-center justify-end gap-3">
         <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer">
-          取消
+          {$t('note_edit.cancel')}
         </button>
         <button
           type="button"
@@ -670,6 +676,5 @@
           {exporting ? $t('package.export.exporting') : $t('package.export.action')}
         </button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

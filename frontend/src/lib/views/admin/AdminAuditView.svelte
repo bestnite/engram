@@ -5,6 +5,7 @@
   import type { AdminAuditResponse, AdminAuditQuery } from '../../api';
   import { routeStore } from '../../router';
   import AdminNav from './AdminNav.svelte';
+  import Select from '../../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -108,12 +109,12 @@
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.action')}</span>
-      <select data-testid="admin-audit-filter-action" bind:value={filters.action} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-        <option value="">{$t('admin.audit.filter.any')}</option>
-        {#each data?.actions ?? [] as action (action)}
-          <option value={action}>{action}</option>
-        {/each}
-      </select>
+      <Select
+        class="mt-1.5"
+        bind:value={filters.action}
+        testId="admin-audit-filter-action"
+        options={[{ value: '', label: $t('admin.audit.filter.any') }, ...(data?.actions ?? []).map((action) => ({ value: action, label: action }))]}
+      />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.target_type')}</span>

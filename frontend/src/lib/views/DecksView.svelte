@@ -4,6 +4,8 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck } from '../api';
+  import Dialog from '../components/ui/Dialog.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -389,23 +391,13 @@
 
 <!-- 新建卡组对话框（Modal） -->
 {#if showCreateModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
-    <div
-      role="document"
-      class="card-elevated w-full max-w-lg p-6 rounded-2xl shadow-xl space-y-5 animate-in zoom-in-95 duration-150"
-    >
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-        <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">{$t('decks.spa_create.heading')}</h2>
-        <button
-          type="button"
-          class="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          onclick={closeCreateModal}
-          aria-label="关闭"
-        >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-
+  <Dialog
+    open={true}
+    onOpenChange={(open) => { if (!open) closeCreateModal(); }}
+    title={$t('decks.spa_create.heading')}
+    size="lg"
+    testId="deck-create-dialog"
+  >
       <form onsubmit={createDeck} class="space-y-4">
         <div>
           <label for="deck-name-input" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
@@ -442,68 +434,35 @@
         {/if}
 
         <div class="pt-2 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onclick={closeCreateModal}
-            class="px-4 py-2 text-sm font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
-          >
-            取消
-          </button>
-          <button
-            data-testid="deck-create-submit"
-            type="submit"
-            disabled={creating}
-            class="px-4 py-2 text-sm font-semibold rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer"
-          >
+          <Button variant="outline" size="lg" onclick={closeCreateModal}>{$t('note_edit.cancel')}</Button>
+          <Button type="submit" size="lg" testId="deck-create-submit" disabled={creating}>
             {creating ? $t('decks.spa_create.submitting') : $t('decks.spa_create.submit')}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
-  </div>
+  </Dialog>
 {/if}
 
 <!-- 删除卡组二次确认对话框（Modal） -->
 {#if deckToDelete}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true">
-    <div
-      role="alertdialog"
-      class="card-elevated w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-in zoom-in-95 duration-150"
-    >
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">{$t('decks.delete.confirm_title')}</h2>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            {$t('decks.delete.confirm_desc', { name: deckToDelete.name })}
-          </p>
-        </div>
-      </div>
-
+  <Dialog
+    open={true}
+    onOpenChange={(open) => { if (!open) closeDeleteModal(); }}
+    title={$t('decks.delete.confirm_title')}
+    description={$t('decks.delete.confirm_desc', { name: deckToDelete.name })}
+    testId="deck-delete-dialog"
+  >
       {#if deleteError}
         <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(deleteError)}</p>
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
-        <button
-          type="button"
-          disabled={deleting}
-          onclick={closeDeleteModal}
-          class="px-4 py-2 text-sm font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
-        >
+        <Button variant="outline" size="lg" disabled={deleting} onclick={closeDeleteModal}>
           {$t('decks.delete.cancel_btn')}
-        </button>
-        <button
-          type="button"
-          disabled={deleting}
-          onclick={confirmDeleteDeck}
-          class="px-4 py-2 text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors btn-press cursor-pointer"
-        >
-          {deleting ? '正在删除...' : $t('decks.delete.confirm_btn')}
-        </button>
+        </Button>
+        <Button variant="danger" size="lg" disabled={deleting} onclick={confirmDeleteDeck} testId="deck-delete-confirm">
+          {deleting ? $t('common.deleting') : $t('decks.delete.confirm_btn')}
+        </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

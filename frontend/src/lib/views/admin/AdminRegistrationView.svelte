@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminRegistrationResponse, AdminInvite } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import Select from '../../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -237,10 +238,12 @@
         </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.field.role')}</span>
-          <select data-testid="admin-registration-invite-role" bind:value={form.role} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-            <option value="user">{$t('admin.users.role.user')}</option>
-            <option value="admin">{$t('admin.users.role.admin')}</option>
-          </select>
+          <Select
+            class="mt-1.5"
+            bind:value={form.role}
+            testId="admin-registration-invite-role"
+            options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
+          />
         </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.field.expires_days')}</span>

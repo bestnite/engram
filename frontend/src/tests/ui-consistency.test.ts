@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 import { en } from '../lib/i18n/locales/en';
 
@@ -101,3 +102,42 @@ describe('no decorative arrow glyphs in user-facing copy', () => {
     }
   });
 });
+
+describe('interactive pieces are owned by the component library', () => {
+  // DESIGN.md §8：交互件优先用成熟组件库，组件库能覆盖的不得自写第二份实现。
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (entry.name.endsWith('.svelte')) out.push(full);
+    }
+    return out;
+  };
+  const libDir = fileURLToPath(new URL('../lib', import.meta.url));
+  const sources = walk(libDir).map((file) => ({ file: relative(libDir, file), src: readFileSync(file, 'utf8') }));
+
+  it('keeps no native <select> anywhere in views or components', () => {
+    const offenders = sources.filter((s) => s.src.includes('<select')).map((s) => s.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the modal overlay inside ui/Dialog.svelte only', () => {
+    // 自写模态各自手搓遮罩/ESC/焦点，行为与样式都不一致；弹层只允许有一处实现。
+    const offenders = sources
+      .filter((s) => s.src.includes('fixed inset-0') && s.file !== 'components/ui/Dialog.svelte')
+      .map((s) => s.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('routes every modal-owning view through ui/Dialog', () => {
+    for (const file of [
+      'views/DecksView.svelte',
+      'views/PresetsView.svelte',
+      'views/DeckDetailView.svelte',
+    ]) {
+      expect(sources.find((s) => s.file === file)?.src, file).toContain('components/ui/Dialog.svelte');
+    }
+  });
+});
+

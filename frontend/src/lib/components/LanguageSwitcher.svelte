@@ -1,33 +1,33 @@
 <script lang="ts">
+  import { Globe } from '@lucide/svelte';
   import { localeStore, setLocale, t, type SupportedLocale } from '../i18n';
+  import Select from './ui/Select.svelte';
 
   /**
-   * 页头语言切换器（DESIGN.md §8.3）
+   * 页头语言切换器（DESIGN.md §8.3）。
+   *
+   * 下拉本体是 ui/Select（bits-ui），不再用原生 select 元素：原生控件在深浅两套主题下
+   * 外观由系统决定，与页头其它控件排在一起时高度与配色都对不齐。
    */
-  function handleSelect(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    const value = target.value as SupportedLocale;
-    setLocale(value);
+  const options = $derived([
+    { value: 'zh-CN', label: $t('language.zh-CN') },
+    { value: 'en', label: $t('language.en') },
+  ]);
+
+  function handleSelect(value: string) {
+    setLocale(value as SupportedLocale);
   }
 </script>
 
-<div class="relative inline-flex items-center">
-  <label for="language-select" class="sr-only">
-    {$t('language.label')}
-  </label>
-  <div class="inline-flex items-center h-8.5 px-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors">
-    <svg class="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20" />
-    </svg>
-    <select
-      id="language-select"
-      value={$localeStore}
-      onchange={handleSelect}
-      class="text-xs font-medium bg-transparent text-zinc-700 dark:text-zinc-200 focus:outline-none cursor-pointer pr-1"
-    >
-      <option value="zh-CN">{$t('language.zh-CN')}</option>
-      <option value="en">{$t('language.en')}</option>
-    </select>
-  </div>
+<div class="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 transition-colors dark:border-zinc-700 dark:bg-zinc-800">
+  <Globe class="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+  <Select
+    value={$localeStore}
+    {options}
+    onValueChange={handleSelect}
+    ariaLabel={$t('language.label')}
+    testId="language-select"
+    size="sm"
+    class="w-20 border-0 bg-transparent px-0 hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent"
+  />
 </div>

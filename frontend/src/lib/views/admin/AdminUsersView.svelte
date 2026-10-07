@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminUsersResponse, AdminUser } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import Select from '../../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -124,8 +125,7 @@
     });
   }
 
-  async function changeRole(u: AdminUser, event: Event): Promise<void> {
-    const role = (event.target as HTMLSelectElement).value;
+  async function changeRole(u: AdminUser, role: string): Promise<void> {
     await confirmThen('admin.users.confirm_role', async () => {
       await apiClient.setAdminUserRole(u.id, role);
       notice = 'admin.users.notice.updated';
@@ -218,10 +218,12 @@
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.role')}</span>
-      <select data-testid="admin-users-create-role" bind:value={form.role} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-        <option value="user">{$t('admin.users.role.user')}</option>
-        <option value="admin">{$t('admin.users.role.admin')}</option>
-      </select>
+      <Select
+        class="mt-1.5"
+        bind:value={form.role}
+        testId="admin-users-create-role"
+        options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
+      />
     </label>
     <div class="sm:col-span-3">
       <button type="submit" data-testid="admin-users-create-submit" disabled={creating} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
@@ -271,10 +273,14 @@
                     <button type="button" data-testid="admin-users-status-{u.id}" onclick={() => toggleStatus(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">
                       {u.status === 'disabled' ? $t('admin.users.enable') : $t('admin.users.disable')}
                     </button>
-                    <select data-testid="admin-users-role-{u.id}" value={u.role} onchange={(e) => changeRole(u, e)} class="rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
-                      <option value="user">{$t('admin.users.role.user')}</option>
-                      <option value="admin">{$t('admin.users.role.admin')}</option>
-                    </select>
+                    <Select
+                      class="w-24"
+                      size="sm"
+                      value={u.role}
+                      onValueChange={(role) => changeRole(u, role)}
+                      testId="admin-users-role-{u.id}"
+                      options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
+                    />
                     <button type="button" data-testid="admin-users-password-{u.id}" onclick={() => resetPassword(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">{$t('admin.users.reset_password')}</button>
                     <button type="button" data-testid="admin-users-logout-{u.id}" onclick={() => forceLogout(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">{$t('admin.users.force_logout')}</button>
                     <button type="button" data-testid="admin-users-delete-{u.id}" onclick={() => remove(u)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.users.delete')}</button>

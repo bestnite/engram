@@ -3,6 +3,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { NotificationPrefsResponse, UpdateNotificationPrefsRequest } from '../api';
+  import Select from '../components/ui/Select.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -205,16 +206,15 @@
         </h2>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.notifications.reminder.label')}</span>
-          <select
-            data-testid="notifications-reminder"
+          <Select
+            class="mt-1.5 py-2.5"
             bind:value={reminderHour}
-            class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors cursor-pointer"
-          >
-            <option value="">{$t('settings.notifications.reminder.default', { hour: data.default_reminder_hour })}</option>
-            {#each hours as hour}
-              <option value={String(hour)}>{String(hour)}:00</option>
-            {/each}
-          </select>
+            testId="notifications-reminder"
+            options={[
+              { value: '', label: $t('settings.notifications.reminder.default', { hour: data.default_reminder_hour }) },
+              ...hours.map((hour) => ({ value: String(hour), label: `${hour}:00` })),
+            ]}
+          />
           <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
             {$t('settings.notifications.reminder.hint', { tz: data.timezone })}
           </p>
