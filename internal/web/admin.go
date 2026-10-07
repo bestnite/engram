@@ -3,22 +3,19 @@ package web
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
-// 管理面板外壳（DESIGN.md §8.4；ROADMAP.md M6-1）。
+// 管理面板入口（DESIGN.md §8.4；ROADMAP.md M6-1）。
 //
-// 硬约束：只有 role = admin 能进；其余一律 403。导航立起全部子页入口，
-// 尚未注册路由的子页置灰，避免点进去 404 跳出面板。
+// 硬约束：只有 role = admin 能进；其余一律 403。SSR 页面层已删除：每条 GET 路由先过
+// requireAdmin，再发 SPA 应用壳；面板的读写在 /api/v1/admin/* 的 JSON 端点上（spa_admin*.go）。
 
 const (
 	// settingKeySiteName 是站点名称；缺省回退语言包 app.name（DESIGN.md §8.5）。
@@ -32,128 +29,37 @@ const (
 type adminRoute struct {
 	Method string
 	Path   string
-	// Write 为 true 时该路由是写操作，注册时要挂 CSRF 中间件。
-	Write bool
 }
 
-// adminRoutes 是当前已注册的 /admin/* 路由全集。新增子页时在这里加一行，
-// 测试会据此逐条验证非 admin 访问被拒。
+// adminRoutes 是当前已注册的 /admin/* 路由全集（SSR 页面层删除后只剩 GET 页面外壳）。
+// 新增子页时在这里加一行，测试会据此逐条验证非 admin 访问被拒。
 func adminRoutes() []adminRoute {
 	return []adminRoute{
 		{Method: http.MethodGet, Path: "/admin"},
 		{Method: http.MethodGet, Path: "/admin/users"},
-		{Method: http.MethodPost, Path: "/admin/users", Write: true},
-		{Method: http.MethodPost, Path: "/admin/users/:id/status", Write: true},
-		{Method: http.MethodPost, Path: "/admin/users/:id/role", Write: true},
-		{Method: http.MethodPost, Path: "/admin/users/:id/password", Write: true},
-		{Method: http.MethodPost, Path: "/admin/users/:id/logout", Write: true},
-		{Method: http.MethodPost, Path: "/admin/users/:id/delete", Write: true},
 		{Method: http.MethodGet, Path: "/admin/registration"},
-		{Method: http.MethodPost, Path: "/admin/registration", Write: true},
-		{Method: http.MethodPost, Path: "/admin/invites", Write: true},
-		{Method: http.MethodPost, Path: "/admin/invites/:id/revoke", Write: true},
 		{Method: http.MethodGet, Path: "/admin/settings"},
-		{Method: http.MethodPost, Path: "/admin/settings", Write: true},
 		{Method: http.MethodGet, Path: "/admin/jobs"},
-		{Method: http.MethodPost, Path: "/admin/jobs/:id/cancel", Write: true},
 		{Method: http.MethodGet, Path: "/admin/oidc"},
-		{Method: http.MethodPost, Path: "/admin/oidc", Write: true},
-		{Method: http.MethodPost, Path: "/admin/oidc/test", Write: true},
-		{Method: http.MethodPost, Path: "/admin/oidc/identities/:id/unlink", Write: true},
 		{Method: http.MethodGet, Path: "/admin/smtp"},
-		{Method: http.MethodPost, Path: "/admin/smtp", Write: true},
-		{Method: http.MethodPost, Path: "/admin/smtp/test", Write: true},
 		{Method: http.MethodGet, Path: "/admin/audit"},
 		{Method: http.MethodGet, Path: "/admin/health"},
 		{Method: http.MethodGet, Path: "/admin/api-keys"},
-		{Method: http.MethodPost, Path: "/admin/api-keys/:id/revoke", Write: true},
 		{Method: http.MethodGet, Path: "/admin/i18n"},
 	}
 }
 
-// registerAdminRoutes 挂载管理面板。会话未装配时跳过，保持 M0 阶段测试可构造。
+// registerAdminRoutes 挂载管理面板的页面外壳与 JSON 端点。
+// 会话未装配时跳过，保持 M0 阶段测试可构造。
 func (s *Server) registerAdminRoutes(router *gin.Engine) {
 	if s.sessions == nil {
 		return
 	}
+	// 每条页面路由都是 requireAdmin + 应用壳：requireAdmin 先跑，非 admin 拿不到外壳。
 	for _, r := range adminRoutes() {
-		handlers := []gin.HandlerFunc{s.requireAdmin()}
-		if r.Write {
-			handlers = append(handlers, s.sessions.CSRFMiddleware())
-		}
-		switch r.Path {
-		case "/admin":
-			handlers = append(handlers, s.spaAdminPage(s.adminDashboard))
-		case "/admin/users":
-			if r.Write {
-				handlers = append(handlers, s.adminUserCreate)
-			} else {
-				handlers = append(handlers, s.spaAdminPage(s.adminUsersPage))
-			}
-		case "/admin/users/:id/status":
-			handlers = append(handlers, s.adminUserStatus)
-		case "/admin/users/:id/role":
-			handlers = append(handlers, s.adminUserRole)
-		case "/admin/users/:id/password":
-			handlers = append(handlers, s.adminUserResetPassword)
-		case "/admin/users/:id/logout":
-			handlers = append(handlers, s.adminUserForceLogout)
-		case "/admin/users/:id/delete":
-			handlers = append(handlers, s.adminUserDelete)
-		case "/admin/registration":
-			if r.Write {
-				handlers = append(handlers, s.adminRegistrationSave)
-			} else {
-				handlers = append(handlers, s.spaAdminPage(s.adminRegistrationPage))
-			}
-		case "/admin/invites":
-			handlers = append(handlers, s.adminInviteCreate)
-		case "/admin/invites/:id/revoke":
-			handlers = append(handlers, s.adminInviteRevoke)
-		case "/admin/settings":
-			if r.Write {
-				handlers = append(handlers, s.adminSettingsSave)
-			} else {
-				handlers = append(handlers, s.spaAdminPage(s.adminSettingsPage))
-			}
-		case "/admin/jobs":
-			handlers = append(handlers, s.spaAdminPage(s.adminJobsPage))
-		case "/admin/jobs/:id/cancel":
-			handlers = append(handlers, s.adminJobCancel)
-		case "/admin/oidc":
-			if r.Write {
-				handlers = append(handlers, s.adminOIDCSave)
-			} else {
-				handlers = append(handlers, s.spaAdminPage(s.adminOIDCPage))
-			}
-		case "/admin/oidc/test":
-			handlers = append(handlers, s.adminOIDCTest)
-		case "/admin/oidc/identities/:id/unlink":
-			handlers = append(handlers, s.adminOIDCUnlink)
-		case "/admin/smtp":
-			if r.Write {
-				handlers = append(handlers, s.adminSMTPSave)
-			} else {
-				handlers = append(handlers, s.spaAdminPage(s.adminSMTPPage))
-			}
-		case "/admin/smtp/test":
-			handlers = append(handlers, s.adminSMTPTest)
-		case "/admin/audit":
-			handlers = append(handlers, s.spaAdminPage(s.adminAuditPage))
-		case "/admin/health":
-			handlers = append(handlers, s.spaAdminPage(s.adminHealthPage))
-		case "/admin/api-keys":
-			handlers = append(handlers, s.spaAdminPage(s.adminAPIKeysPage))
-		case "/admin/api-keys/:id/revoke":
-			handlers = append(handlers, s.adminAPIKeyRevoke)
-		case "/admin/i18n":
-			handlers = append(handlers, s.spaAdminPage(s.adminI18nPage))
-		default:
-			continue
-		}
-		router.Handle(r.Method, r.Path, handlers...)
+		router.Handle(r.Method, r.Path, s.requireAdmin(), s.spaAdminShell)
 	}
-	// SPA 的 JSON 端点（/api/v1/admin/*）：与 SSR 表单端点并存，判权在 spaAdminGuard。
+	// SPA 的 JSON 端点（/api/v1/admin/*），判权在 spaAdminGuard。
 	s.registerSPAAdminRoutes(router)
 }
 
@@ -180,70 +86,6 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-// adminNav 构造导航。Implemented=false 的子页渲染成置灰文本：
-// 它们尚未注册路由，做成链接会 404 跳出面板（M6-1 要求导航立住全貌）。
-func (s *Server) adminNav(loc *i18n.Localizer, active string) []views.AdminNavItem {
-	defs := []struct {
-		key  string
-		href string
-		impl bool
-		// labelKey 为空时用 "admin.nav." + key；SMTP 页的标签键在自己的前缀块下。
-		labelKey string
-	}{
-		{"dashboard", "/admin", true, ""},
-		{"users", "/admin/users", true, ""},
-		{"registration", "/admin/registration", true, ""},
-		{"oidc", "/admin/oidc", true, ""},
-		{"smtp", "/admin/smtp", true, "admin.setting.smtp.nav"},
-		{"settings", "/admin/settings", true, ""},
-		{"jobs", "/admin/jobs", true, ""},
-		{"audit", "/admin/audit", true, ""},
-		{"health", "/admin/health", true, ""},
-		{"api_keys", "/admin/api-keys", true, ""},
-		{"i18n", "/admin/i18n", true, ""},
-	}
-	pending := loc.T("admin.nav.pending")
-	out := make([]views.AdminNavItem, 0, len(defs))
-	for _, d := range defs {
-		labelKey := d.labelKey
-		if labelKey == "" {
-			labelKey = "admin.nav." + d.key
-		}
-		out = append(out, views.AdminNavItem{
-			Label:        loc.T(labelKey),
-			Href:         d.href,
-			Active:       d.href == active,
-			Implemented:  d.impl,
-			PendingLabel: pending,
-		})
-	}
-	return out
-}
-
-// adminLayout 构造管理页外壳：品牌名用站点名称的生效值，登出入口复用通用外壳。
-func (s *Server) adminLayout(c *gin.Context, loc *i18n.Localizer, titleKey, active string) views.LayoutData {
-	layout := views.LayoutData{
-		Lang:       loc.Locale(),
-		Title:      loc.T(titleKey),
-		Brand:      s.siteName(c.Request.Context(), loc),
-		HomeURL:    "/",
-		CSSURL:     s.assets.URL("css/tailwind.css"),
-		HTMXURL:    s.assets.URL("js/htmx.min.js"),
-		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-	}
-	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致。
-	s.decorateLayout(c, loc, &layout)
-	// 顶部导航走全站唯一构造器（M8-7）：管理面板的每个子页都把「管理」标为当前项。
-	layout.Nav = s.mainNav(c, loc, "/admin")
-	layout.SessionLabel = loc.T("nav.logout")
-	layout.SessionHref = "/logout"
-	layout.SessionForm = true
-	if sess, ok := auth.CurrentSession(c); ok {
-		layout.CSRF = sess.CSRFToken
-	}
-	return layout
 }
 
 // siteName 返回站点名称的生效值：settings 表 > 语言包 app.name（DESIGN.md §8.5）。
@@ -275,60 +117,4 @@ func (s *Server) siteDefaultLocale(ctx context.Context) string {
 		}
 	}
 	return ""
-}
-
-// adminDashboard 渲染 /admin 首页：计数卡概览，每张卡链到它统计的分区（DESIGN.md §8.4）。
-// 计数取不到时返回 500 而不是显示 0——空实例和查询失败看起来不该一样。
-func (s *Server) adminDashboard(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-	stats, err := store.InstanceSummary(ctx, s.db, time.Now().UTC())
-	if err != nil {
-		s.logger.Error("admin dashboard: instance summary failed", "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	renderHTMLStatus(c, http.StatusOK, views.AdminPage(views.AdminPageData{
-		Layout:        s.adminLayout(c, loc, "admin.title", "/admin"),
-		Heading:       loc.T("admin.dashboard.heading"),
-		NavHeading:    loc.T("admin.nav.heading"),
-		Nav:           s.adminNav(loc, "/admin"),
-		DashboardPage: true,
-		DashboardCards: []views.AdminDashboardCard{
-			{
-				Label: loc.T("admin.nav.users"),
-				Value: loc.Tf("admin.dashboard.users_value", map[string]any{
-					"total": stats.Users, "active": stats.ActiveUsers,
-				}),
-				Href: "/admin/users",
-			},
-			{
-				Label: loc.T("admin.dashboard.decks"),
-				Value: strconv.FormatInt(stats.Decks, 10),
-				Href:  "/decks",
-			},
-			{
-				Label: loc.T("admin.dashboard.notes_cards"),
-				Value: loc.Tf("admin.dashboard.notes_cards_value", map[string]any{
-					"notes": stats.Notes, "cards": stats.Cards,
-				}),
-				Href: "/decks",
-			},
-			{
-				Label: loc.T("admin.dashboard.due"),
-				Value: strconv.FormatInt(stats.DueNow, 10),
-				Href:  "/admin/health",
-			},
-			{
-				Label: loc.T("admin.nav.jobs"),
-				Value: loc.Tf("admin.dashboard.jobs_value", map[string]any{
-					"running": stats.JobsRunning, "failed": stats.JobsFailed,
-				}),
-				Href: "/admin/jobs",
-			},
-		},
-	}))
 }

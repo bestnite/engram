@@ -13,8 +13,8 @@ import (
 )
 
 // 本文件是管理面板「用户管理 / 注册与邀请 / API Key 总览」切流到 SPA 的验收：
-//   - GET /admin/users、/admin/registration、/admin/api-keys 在 SPA 已加载时返回应用壳，
-//     缺失时回退 SSR 页面；requireAdmin 仍在返回外壳之前生效。
+//   - GET /admin/users、/admin/registration、/admin/api-keys 一律返回应用壳；
+//     requireAdmin 仍在返回外壳之前生效。
 //   - /api/v1/admin/* 的写端点复用与 SSR 完全同一份 store/service 调用与危险动作保护。
 
 // adminPostJSON 发一个带会话 cookie 与 CSRF 头的 JSON 写请求。
@@ -41,7 +41,7 @@ func adminPostJSON(t *testing.T, srv *Server, target string, body any, cookies [
 	return rec
 }
 
-// TestSPAAdminUserPagesCutover 覆盖用户管理 / 注册邀请 / API Key 总览三页的切流与回退。
+// TestSPAAdminUserPagesCutover 覆盖用户管理 / 注册邀请 / API Key 总览三页的切流与非管理员门禁。
 func TestSPAAdminUserPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin/users", "/admin/registration", "/admin/api-keys"} {
 		t.Run(path, func(t *testing.T) {
@@ -56,11 +56,6 @@ func TestSPAAdminUserPagesCutover(t *testing.T) {
 				t.Fatalf("non-admin GET %s = %d, want 403", path, denied.Code)
 			}
 
-			srv.spa = nil
-			ssr := getWithCookies(t, srv, path, cookies)
-			if ssr.Code != http.StatusOK {
-				t.Fatalf("SSR fallback GET %s = %d, want 200", path, ssr.Code)
-			}
 		})
 	}
 }

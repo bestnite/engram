@@ -12,8 +12,7 @@ import (
 )
 
 // 本文件是管理面板只读页（概览 / 健康 / 审计）切流到 SPA 的验收，外加它们的 JSON 端点：
-//   - GET /admin、/admin/health、/admin/audit 在 SPA 已加载时返回应用壳；
-//     在 SPA 缺失（降级构建）时回退各自原有的 SSR 页面。
+//   - GET /admin、/admin/health、/admin/audit 一律返回应用壳（SSR 页面层已删除）。
 //   - /api/v1/admin/* 的 JSON 端点判权与 requireAdmin 同源：匿名 401、非 admin 403、bearer 403。
 //
 // 页面迁移不改动授权判定：requireAdmin 仍在返回应用壳之前生效，非管理员永远拿不到外壳。
@@ -59,18 +58,6 @@ func TestSPAAdminReadPagesCutover(t *testing.T) {
 				t.Errorf("a non-admin must not receive the SPA shell at %s", path)
 			}
 
-			// SPA 缺失：回退 SSR 页面（仅 admin 可达）。
-			srv.spa = nil
-			ssr := getWithCookies(t, srv, path, cookies)
-			if ssr.Code != http.StatusOK {
-				t.Fatalf("SSR fallback GET %s = %d, want 200", path, ssr.Code)
-			}
-			if strings.Contains(ssr.Body.String(), `id="app"`) {
-				t.Errorf("SSR fallback for %s served the SPA shell", path)
-			}
-			if !strings.Contains(ssr.Body.String(), "tailwind.css") {
-				t.Errorf("SSR fallback for %s did not render the SSR shell: %s", path, snippet(ssr.Body.String()))
-			}
 		})
 	}
 }

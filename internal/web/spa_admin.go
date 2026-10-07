@@ -13,28 +13,21 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板迁到 SPA（DESIGN.md §8.1、§8.4）的公共装配：
-//   - spaAdminPage 把 SSR 页面处理器包成「有 SPA 就发应用壳、没有就回退 SSR」的 GET 处理器；
+// 本文件是管理面板的公共装配（DESIGN.md §8.1、§8.4）：
+//   - spaAdminShell 发管理面板 GET 页面的应用壳（requireAdmin 已在它之前跑过）；
 //   - spaAdminGuard 给 /api/v1/admin/* 的 JSON 端点做与 requireAdmin 等价的判权，
 //     但以 JSON 401/403 回应（浏览器 fetch 不能跟着 303 去登录页拿 HTML）；
 //   - registerSPAAdminRoutes 挂载全部 JSON 端点。
 //
-// 判权语义刻意与 SSR 的 requireAdmin 逐条对齐：未登录 401、非 admin 403 并写
+// 判权语义与页面守卫 requireAdmin 逐条对齐：未登录 401、非 admin 403 并写
 // permission.denied 审计、bearer/API Key 不属于浏览器会话一律 403。授权判定只在服务端，
 // 前端拿不到任何未授权数据。
 
-// spaAdminPage 返回一个 GET 处理器：SPA 已加载时发应用壳，否则调用原有 SSR 处理器。
-//
-// 它不改变任何判权：调用它的路由仍然先经过 requireAdmin（未登录 303 到登录页、
-// 非 admin 403），因此非管理员永远拿不到应用壳（DESIGN.md §8.5）。
-func (s *Server) spaAdminPage(ssr gin.HandlerFunc) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if s.spa != nil {
-			s.spa.ServeIndex(c)
-			return
-		}
-		ssr(c)
-	}
+// spaAdminShell 是管理面板每条 GET 页面路由的处理器：requireAdmin 已在它之前跑过
+// （未登录 303 到登录页、非 admin 403），这里只发 SPA 应用壳（DESIGN.md §8.4、§8.5）。
+// SSR 页面层已删除，不再回退任何 SSR 页面。
+func (s *Server) spaAdminShell(c *gin.Context) {
+	s.spa.ServeIndex(c)
 }
 
 // spaAdminError 写出管理 JSON 端点的错误包壳：code 稳定且英文，message 为英文兜底文案，
@@ -95,7 +88,7 @@ func parseUintParam(raw string) (uint64, error) {
 // registerSPAAdminRoutes 挂载管理面板的 JSON 端点（读 + 写）。
 //
 // 依赖未装配时整体跳过，保证 M0 阶段与未启用会话的测试仍能构造 Server。写操作一律过会话
-// CSRF（DESIGN.md §4.3）。SSR 的 /admin/* 表单端点保持原样，SPA 因此不遮蔽任何既有路径。
+// CSRF（DESIGN.md §4.3）。管理面板的读写只有这一批 JSON 端点（SSR 表单端点已删除）。
 func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil {
 		return

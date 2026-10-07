@@ -52,9 +52,8 @@ type spaDeckSettingsRequest struct {
 
 // registerSPADeckSettingsRoutes 挂载 SPA 的卡组每日上限读写接口（仅 owner，写操作过 CSRF）。
 //
-// 只注册 /api/v1/decks/:id/settings 这两个 JSON 端点，绝不改动 SSR 的
-// GET/POST /decks/:id/settings —— 后者仍是同一路径上的权威路由，SPA 页面因此走
-// 独立前端路径 /spa/decks/:id/settings，避免在浏览器验证之前遮蔽 SSR 路由。
+// 只注册 /api/v1/decks/:id/settings 这两个 JSON 端点；GET /decks/:id/settings 只发应用壳
+// （见 deck_settings.go），卡组上限的读写全部走这里。
 func (s *Server) registerSPADeckSettingsRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {
 		return

@@ -3,28 +3,22 @@ package web
 import (
 	"context"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/config"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
-// 系统设置页（DESIGN.md §8.4；ROADMAP.md M6-5）。
+// 系统设置的可编辑项定义（DESIGN.md §8.4；ROADMAP.md M6-5）。
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
-// settings 表按请求现读，因此管理员改完下一次请求即生效，无需重启。每一行都标出来源。
+// settings 表按请求现读。SSR 设置页删除后，页面的读写在 /api/v1/admin/settings 的 JSON
+// 端点（spa_admin_settings.go）上；这里保留该端点复用的设置项规格、生效值与读数工具。
 
 // settingSpec 描述一个可编辑设置：settings 键、可选环境变量覆盖、默认值来源与文案键。
 type settingSpec struct {
@@ -75,7 +69,7 @@ func mediaSettingSpecs() []settingSpec {
 
 // optimizeSettingSpecs 是「参数优化」区块的设置项（ROADMAP.md M9-12）。
 // 门槛下限由 store.MinOptimizeMinReviews 强制，表单拒绝低于下限的值；存量的低于下限的值
-// 在读取路径会被钳到下限（store.OptimizeMinReviews），页面显示的是存量值，钳制不另做展示。
+// 在读取路径会被钳到下限（store.OptimizeMinReviews）。
 func optimizeSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
@@ -87,8 +81,7 @@ func optimizeSettingSpecs() []settingSpec {
 }
 
 // effectiveSetting 解析一个设置的生效值与其来源：环境变量 > settings 表 > 默认值。
-// 复用 internal/config 的 Source 常量与优先级语义；settings 表按请求现读，
-// 所以管理员改完下一次请求即生效（M6-5 验收）。
+// 复用 internal/config 的 Source 常量与优先级语义；settings 表按请求现读。
 func (s *Server) effectiveSetting(ctx context.Context, loc *i18n.Localizer, spec settingSpec) (string, config.Source) {
 	if spec.envVar != "" {
 		if raw := strings.TrimSpace(os.Getenv(spec.envVar)); raw != "" {
@@ -103,24 +96,6 @@ func (s *Server) effectiveSetting(ctx context.Context, loc *i18n.Localizer, spec
 		}
 	}
 	return spec.def(loc), config.SourceDefault
-}
-
-// sourceLabel 把来源翻成语言包文案。
-func sourceLabel(loc *i18n.Localizer, src config.Source) string {
-	return loc.T("admin.source." + string(src))
-}
-
-// settingRow 把一个 spec 渲染成表格行（非敏感、可编辑）。
-func (s *Server) settingRow(ctx context.Context, loc *i18n.Localizer, spec settingSpec) views.SettingRow {
-	value, src := s.effectiveSetting(ctx, loc, spec)
-	return views.SettingRow{
-		Label:       loc.T(spec.labelKey),
-		Key:         spec.key,
-		Value:       value,
-		SourceLabel: sourceLabel(loc, src),
-		Hint:        loc.T(spec.hintKey),
-		Editable:    true,
-	}
 }
 
 // mediaDirSize 递归统计媒体目录占用；目录不存在时按 0 计（尚未上传过任何文件）。
@@ -163,238 +138,4 @@ func humanBytes(n int64) string {
 		}
 	}
 	return strconv.FormatInt(n, 10) + " B"
-}
-
-// adminSettingsPage 渲染系统设置页：通用 / 媒体 / 敏感配置三块，
-// 每项标出生效值来源；媒体目录占用是现算的只读读数。
-func (s *Server) adminSettingsPage(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-
-	general := make([]views.SettingRow, 0, 2)
-	for _, spec := range generalSettingSpecs() {
-		general = append(general, s.settingRow(ctx, loc, spec))
-	}
-	mediaRows := make([]views.SettingRow, 0, 4)
-	for _, spec := range mediaSettingSpecs() {
-		mediaRows = append(mediaRows, s.settingRow(ctx, loc, spec))
-	}
-	optimizeRows := make([]views.SettingRow, 0, 1)
-	for _, spec := range optimizeSettingSpecs() {
-		optimizeRows = append(optimizeRows, s.settingRow(ctx, loc, spec))
-	}
-	// 媒体目录与占用是只读读数：路径来自 MEDIA_DIR（环境变量或默认），占用现算。
-	dir := loc.T("admin.value.unset")
-	dirSrc := config.SourceDefault
-	if s.media != nil {
-		dir = s.media.Root()
-	}
-	if raw := strings.TrimSpace(os.Getenv("MEDIA_DIR")); raw != "" {
-		dir, dirSrc = raw, config.SourceEnv
-	}
-	mediaRows = append(mediaRows,
-		views.SettingRow{
-			Label: loc.T("admin.setting.media_dir"), Value: dir,
-			SourceLabel: sourceLabel(loc, dirSrc), Hint: loc.T("admin.setting.media_dir.hint"),
-		})
-	size := int64(0)
-	if s.media != nil {
-		if n, err := mediaDirSize(s.media.Root()); err == nil {
-			size = n
-		} else {
-			s.logger.Error("admin: compute media directory size failed", "error", err)
-		}
-	}
-	mediaRows = append(mediaRows,
-		views.SettingRow{
-			Label: loc.T("admin.setting.media_usage"), Value: humanBytes(size),
-			SourceLabel: loc.T("admin.source.computed"),
-		})
-
-	sections := []views.AdminSection{
-		{Heading: loc.T("admin.section.general"), Rows: general},
-		{Heading: loc.T("admin.section.media"), Rows: mediaRows},
-		{Heading: loc.T("admin.section.optimize"), Rows: optimizeRows},
-	}
-	if sensitive := s.sensitiveSection(ctx, loc); len(sensitive.Rows) > 0 {
-		sections = append(sections, sensitive)
-	}
-
-	csrf := ""
-	if sess, ok := auth.CurrentSession(c); ok {
-		csrf = sess.CSRFToken
-	}
-	data := views.AdminPageData{
-		Layout:     s.adminLayout(c, loc, "admin.settings.title", "/admin/settings"),
-		Heading:    loc.T("admin.settings.heading"),
-		Intro:      loc.T("admin.settings.intro"),
-		NavHeading: loc.T("admin.nav.heading"),
-		Nav:        s.adminNav(loc, "/admin/settings"),
-		Columns: views.AdminColumns{
-			Setting: loc.T("admin.column.setting"),
-			Value:   loc.T("admin.column.value"),
-			Source:  loc.T("admin.column.source"),
-		},
-		Sections:   sections,
-		Notice:     s.settingNotice(loc, c.Query("notice")),
-		ShowForm:   true,
-		FormAction: "/admin/settings",
-		CSRF:       csrf,
-		SaveLabel:  loc.T("admin.action.save"),
-	}
-	renderHTMLStatus(c, http.StatusOK, views.AdminPage(data))
-}
-
-// sensitiveSection 列出 settings 表里所有敏感键，只显示「已配置/未配置」，绝不回显明文（M6-10）。
-func (s *Server) sensitiveSection(ctx context.Context, loc *i18n.Localizer) views.AdminSection {
-	section := views.AdminSection{
-		Heading: loc.T("admin.section.sensitive"),
-		Intro:   loc.T("admin.section.sensitive.intro"),
-	}
-	if s.db == nil {
-		return section
-	}
-	keys, err := store.SensitiveSettingKeys(ctx, s.db)
-	if err != nil {
-		s.logger.Error("admin: list sensitive setting keys failed", "error", err)
-		return section
-	}
-	for _, key := range keys {
-		configured, err := store.SecretConfigured(ctx, s.db, key)
-		if err != nil {
-			s.logger.Error("admin: read sensitive setting status failed", "key", key, "error", err)
-			continue
-		}
-		statusKey := "admin.sensitive.not_configured"
-		src := config.SourceDefault
-		if configured {
-			statusKey = "admin.sensitive.configured"
-			src = config.SourceDB
-		}
-		section.Rows = append(section.Rows, views.SettingRow{
-			Label:       key,
-			Key:         key,
-			StatusText:  loc.T(statusKey),
-			SourceLabel: sourceLabel(loc, src),
-			Hint:        loc.T("admin.sensitive.hint"),
-			Sensitive:   true,
-			Editable:    true,
-		})
-	}
-	return section
-}
-
-// settingNotice 把重定向回带的 notice 码翻成文案；未知码不显示。
-func (s *Server) settingNotice(loc *i18n.Localizer, code string) string {
-	switch code {
-	case "saved":
-		return loc.T("admin.notice.saved")
-	case "invalid_locale":
-		return loc.T("admin.notice.invalid_locale")
-	case "invalid_number":
-		return loc.T("admin.notice.invalid_number")
-	case "invalid_mime":
-		return loc.T("admin.notice.invalid_mime")
-	case "optimize_min_reviews_too_low":
-		return loc.T("admin.notice.optimize_min_reviews_too_low")
-	case "save_failed":
-		return loc.T("admin.notice.save_failed")
-	default:
-		return ""
-	}
-}
-
-// adminSettingsSave 写入系统设置。校验通过后逐项 upsert，写审计，再重定向回设置页；
-// 重定向后的 GET 会现读数据库，因此页面立刻反映新值（M6-5 免重启验收）。
-func (s *Server) adminSettingsSave(c *gin.Context) {
-	u, ok := auth.CurrentUser(c)
-	if !ok {
-		c.AbortWithStatus(http.StatusForbidden)
-		return
-	}
-	ctx := c.Request.Context()
-	now := time.Now().UTC()
-
-	// 通用与媒体设置：字段名即 settings 键。
-	specs := append(append(generalSettingSpecs(), mediaSettingSpecs()...), optimizeSettingSpecs()...)
-	changed := make([]string, 0, len(specs)+1)
-	for _, spec := range specs {
-		if !c.Request.PostForm.Has(spec.key) {
-			continue
-		}
-		raw := strings.TrimSpace(c.PostForm(spec.key))
-		if raw == "" {
-			// 留空表示不修改；清空回到默认值的语义留待后续任务明确。
-			continue
-		}
-		switch spec.key {
-		case settingKeySiteDefaultLocale:
-			if !s.supportedLocale(raw) {
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_locale")
-				return
-			}
-		case media.SettingKeyMediaMaxBytes:
-			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n <= 0 {
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_number")
-				return
-			}
-		case settingKeyMediaAllowedMimes:
-			if len(splitMimeList(raw)) == 0 {
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_mime")
-				return
-			}
-		case settingKeyMediaUserQuotaBytes:
-			// 0 = 不限（默认），负数无意义；空值在上面已按“不修改”跳过。
-			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n < 0 {
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=invalid_number")
-				return
-			}
-		case store.SettingKeyOptimizeMinReviews:
-			// 解析失败或低于下限一律拒绝并重定向，**不写库**（ROADMAP.md M9-12 验收 2）。
-			if n, err := strconv.Atoi(raw); err != nil || n < store.MinOptimizeMinReviews {
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=optimize_min_reviews_too_low")
-				return
-			}
-		}
-		if err := store.PutSetting(ctx, s.db, spec.key, raw, store.Ptr(u.ID), now); err != nil {
-			s.logger.Error("admin: save setting failed", "key", spec.key, "error", err)
-			c.Redirect(http.StatusSeeOther, "/admin/settings?notice=save_failed")
-			return
-		}
-		changed = append(changed, spec.key)
-	}
-
-	// 敏感键：只接受非空的新值，经 AES-GCM 加密后落库，永不回显（M6-10）。
-	if s.secrets != nil {
-		keys, err := store.SensitiveSettingKeys(ctx, s.db)
-		if err != nil {
-			s.logger.Error("admin: list sensitive keys failed", "error", err)
-			c.Redirect(http.StatusSeeOther, "/admin/settings?notice=save_failed")
-			return
-		}
-		for _, key := range keys {
-			raw := c.PostForm(key)
-			if strings.TrimSpace(raw) == "" {
-				continue
-			}
-			if err := store.PutSecret(ctx, s.db, s.secrets, key, raw, store.Ptr(u.ID), now); err != nil {
-				s.logger.Error("admin: save secret failed", "key", key, "error", err)
-				c.Redirect(http.StatusSeeOther, "/admin/settings?notice=save_failed")
-				return
-			}
-			changed = append(changed, key)
-		}
-	}
-
-	if len(changed) > 0 {
-		sort.Strings(changed)
-		s.audit(ctx, store.AuditEntry{
-			UserID: store.Ptr(u.ID), Action: store.ActionSettingUpdate,
-			TargetType: "setting", Detail: map[string]any{"keys": changed},
-		})
-	}
-	c.Redirect(http.StatusSeeOther, "/admin/settings?notice=saved")
 }

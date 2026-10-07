@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -185,21 +184,4 @@ func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 		t.Fatalf("over-quota upload with a broken mailer = %d, want 413", rec.Code)
 	}
 	t.Logf("mail enqueue failed on the quota trigger, yet the upload was still rejected with 413")
-}
-
-// TestAdminMailUnconfiguredExplainedOnSMTPPage 证明 SMTP 未配置时页面渲染 mail.not_configured，
-// 绝不静默。
-func TestAdminMailUnconfiguredExplainedOnSMTPPage(t *testing.T) {
-	srv, _, _, cookies, _ := newNotesServer(t)
-	// GET /admin/smtp 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 未配置说明渲染。
-	srv.spa = nil
-	// 不调用 attachAdminMail：srv.mail 保持为空（未配置）。
-
-	page := getWithCookies(t, srv, "/admin/smtp", cookies)
-	if page.Code != http.StatusOK {
-		t.Fatalf("GET /admin/smtp = %d, want 200 (body %s)", page.Code, snippet(page.Body.String()))
-	}
-	if !strings.Contains(page.Body.String(), "本站未开启邮件功能") {
-		t.Errorf("SMTP page does not render mail.not_configured for class-D notifications; body = %s", snippet(page.Body.String()))
-	}
 }

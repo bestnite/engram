@@ -28,10 +28,6 @@ func TestSPAAdminConfigPagesCutover(t *testing.T) {
 				t.Fatalf("non-admin GET %s = %d, want 403", path, rec.Code)
 			}
 
-			srv.spa = nil
-			if rec := getWithCookies(t, srv, path, cookies); rec.Code != http.StatusOK {
-				t.Fatalf("SSR fallback GET %s = %d, want 200", path, rec.Code)
-			}
 		})
 	}
 }

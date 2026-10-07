@@ -10,7 +10,7 @@ import (
 
 // 本文件是管理面板「作业 / 语言包」页切流到 SPA 的验收。
 
-// TestSPAAdminJobsAndI18nCutover 覆盖两页的切流、回退与非管理员门禁。
+// TestSPAAdminJobsAndI18nCutover 覆盖两页的切流与非管理员门禁。
 func TestSPAAdminJobsAndI18nCutover(t *testing.T) {
 	for _, path := range []string{"/admin/jobs", "/admin/i18n"} {
 		t.Run(path, func(t *testing.T) {
@@ -23,10 +23,6 @@ func TestSPAAdminJobsAndI18nCutover(t *testing.T) {
 				t.Fatalf("non-admin GET %s = %d, want 403", path, rec.Code)
 			}
 
-			srv.spa = nil
-			if rec := getWithCookies(t, srv, path, cookies); rec.Code != http.StatusOK {
-				t.Fatalf("SSR fallback GET %s = %d, want 200", path, rec.Code)
-			}
 		})
 	}
 }

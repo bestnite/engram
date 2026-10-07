@@ -2,11 +2,11 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -18,6 +18,9 @@ import (
 // 本文件是 F20 的验收测试：管理面板里两个高影响动作——OIDC「测试连接」、
 // SMTP「测试连接」——必须写审计行，且成功与失败都要留痕。审计行不得包含
 // 口令 / secret / token 等敏感值（只记动作、actor 与目标元信息）。
+//
+// SSR 端点删除后，测试连接走 SPA 的 JSON 端点（/api/v1/admin/{oidc,smtp}/test），
+// 审计语义与响应形态与迁移前一致。
 
 // 两个 canary 值只用于断言「它们不会出现在审计行里」，与任何真实凭据无关。
 const (
@@ -73,6 +76,16 @@ func assertNoAuditLeak(t *testing.T, db *gorm.DB, canaries ...string) {
 	}
 }
 
+// decodeAdminTestResult 解出测试连接的响应体。
+func decodeAdminTestResult(t *testing.T, rec *httptest.ResponseRecorder) spaAdminTestResult {
+	t.Helper()
+	var result spaAdminTestResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode test result: %v (body %s)", err, snippet(rec.Body.String()))
+	}
+	return result
+}
+
 // TestAdminOIDCTestWritesAuditOnSuccessAndFailure 验证 OIDC「测试连接」成功与失败各写一行，
 // actor 正确，且审计行不含提交的 client secret。
 func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
@@ -82,13 +95,15 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 
 	// 成功路径：stub provider 提供发现文档。
 	okStub := newStubOIDC(t)
-	okRec := postForm(t, srv, "/admin/oidc/test", url.Values{
-		"csrf_token":         {csrf},
-		"oidc.issuer":        {okStub.srv.URL},
-		"oidc.client_secret": {oidcSecretCanary},
-	}, cookies)
+	okRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", spaAdminOIDCRequest{
+		Issuer:       okStub.srv.URL,
+		ClientSecret: oidcSecretCanary,
+	}, cookies, csrf)
 	if okRec.Code != http.StatusOK {
 		t.Fatalf("OIDC test (success) = %d, want 200 (body %s)", okRec.Code, snippet(okRec.Body.String()))
+	}
+	if got := decodeAdminTestResult(t, okRec); !got.OK {
+		t.Fatalf("OIDC test (success) result = %+v, want ok", got)
 	}
 
 	// 失败路径：一个总是返回 404 的 provider。
@@ -97,13 +112,15 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 		_, _ = w.Write([]byte("provider-says-no-discovery"))
 	}))
 	t.Cleanup(broken.Close)
-	badRec := postForm(t, srv, "/admin/oidc/test", url.Values{
-		"csrf_token":         {csrf},
-		"oidc.issuer":        {broken.URL},
-		"oidc.client_secret": {oidcSecretCanary},
-	}, cookies)
+	badRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", spaAdminOIDCRequest{
+		Issuer:       broken.URL,
+		ClientSecret: oidcSecretCanary,
+	}, cookies, csrf)
 	if badRec.Code != http.StatusOK {
 		t.Fatalf("OIDC test (failure) = %d, want 200 (body %s)", badRec.Code, snippet(badRec.Body.String()))
+	}
+	if got := decodeAdminTestResult(t, badRec); got.OK || got.Message == "" {
+		t.Fatalf("OIDC test (failure) result = %+v, want failure with provider error text", got)
 	}
 
 	n, err := store.NewAuditStore(db).CountByAction(ctx, store.ActionAdminOIDCTest)
@@ -137,30 +154,28 @@ func TestAdminSMTPTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	// 成功路径：进程内的假 SMTP 服务（不设账号口令——假服务不实现 AUTH 握手）。
 	addr := startFakeSMTP(t)
 	host, port, _ := net.SplitHostPort(addr)
-	okRec := postForm(t, srv, "/admin/smtp/test", url.Values{
-		"csrf_token":    {csrf},
-		"smtp_host":     {host},
-		"smtp_port":     {port},
-		"smtp_from":     {"no-reply@example.com"},
-		"smtp_tls_mode": {"none"},
-	}, cookies)
-	if okRec.Code != http.StatusOK || !strings.Contains(okRec.Body.String(), "连接成功") {
-		t.Fatalf("SMTP test (success): status=%d body=%s", okRec.Code, snippet(okRec.Body.String()))
+	okRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{
+		Host: host, Port: port, From: "no-reply@example.com", TLSMode: "none",
+	}, cookies, csrf)
+	if okRec.Code != http.StatusOK {
+		t.Fatalf("SMTP test (success) = %d, want 200 (body %s)", okRec.Code, snippet(okRec.Body.String()))
+	}
+	if got := decodeAdminTestResult(t, okRec); !got.OK {
+		t.Fatalf("SMTP test (success) result = %+v, want ok", got)
 	}
 
 	// 失败路径：一个当前无人监听的本地地址。
 	dead := deadAddr(t)
 	dhost, dport, _ := net.SplitHostPort(dead)
-	badRec := postForm(t, srv, "/admin/smtp/test", url.Values{
-		"csrf_token":    {csrf},
-		"smtp_host":     {dhost},
-		"smtp_port":     {dport},
-		"smtp_from":     {"no-reply@example.com"},
-		"smtp_password": {smtpPasswordCanary},
-		"smtp_tls_mode": {"none"},
-	}, cookies)
-	if badRec.Code != http.StatusOK || !strings.Contains(badRec.Body.String(), "连接失败") {
-		t.Fatalf("SMTP test (failure): status=%d body=%s", badRec.Code, snippet(badRec.Body.String()))
+	badRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{
+		Host: dhost, Port: dport, From: "no-reply@example.com",
+		Password: smtpPasswordCanary, TLSMode: "none",
+	}, cookies, csrf)
+	if badRec.Code != http.StatusOK {
+		t.Fatalf("SMTP test (failure) = %d, want 200 (body %s)", badRec.Code, snippet(badRec.Body.String()))
+	}
+	if got := decodeAdminTestResult(t, badRec); got.OK || got.Message == "" {
+		t.Fatalf("SMTP test (failure) result = %+v, want failure with server error text", got)
 	}
 
 	n, err := store.NewAuditStore(db).CountByAction(ctx, store.ActionAdminSMTPTest)
