@@ -44,36 +44,6 @@ func (s *Server) requireUser(c *gin.Context) (*store.User, bool) {
 	return u, true
 }
 
-// pageLayout 构造普通页面（列表/编辑）的外壳数据；文案全部取自语言包。
-// 顶部导航走全站唯一构造器 mainNav（M8-7），active 取当前请求路径。
-func (s *Server) pageLayout(c *gin.Context, loc *i18n.Localizer, titleKey string) views.LayoutData {
-	layout := views.LayoutData{
-		Lang:       loc.Locale(),
-		Title:      loc.T(titleKey),
-		Brand:      loc.T("app.name"),
-		HomeURL:    "/",
-		CSSURL:     s.assets.URL("css/tailwind.css"),
-		HTMXURL:    s.assets.URL("js/htmx.min.js"),
-		MathJaxURL: s.assets.URL("js/mathjax/tex-svg.js"),
-		MediaJSURL: s.assets.URL("js/media.js"),
-		NotesJSURL: s.assets.URL("js/notes.js"),
-	}
-	// 语言切换下拉、页脚与哈希化图标对所有页面外壳一致。
-	s.decorateLayout(c, loc, &layout)
-	layout.Nav = s.mainNav(c, loc, c.Request.URL.Path)
-	layout.SessionLabel = loc.T("nav.login")
-	layout.SessionHref = "/login"
-	if _, ok := auth.CurrentUser(c); ok {
-		layout.SessionLabel = loc.T("nav.logout")
-		layout.SessionHref = "/logout"
-		layout.SessionForm = true
-		if sess, ok := auth.CurrentSession(c); ok {
-			layout.CSRF = sess.CSRFToken
-		}
-	}
-	return layout
-}
-
 // deckIDParam 解析 :id 路径参数；解析失败时返回 false 并写 404。
 func deckIDParam(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)

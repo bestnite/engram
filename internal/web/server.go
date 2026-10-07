@@ -205,10 +205,10 @@ func New(addr string, deps Deps) (*Server, error) {
 	// （CSP script-src 'self' 已放行，无需内联脚本；DESIGN.md §6.1、§8.5）。资源缺失时
 	// URL 为空，不注入，前端加载器随之跳过加载。
 	spa.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
-	// PWA 外壳与 SSR 同源（DESIGN.md §8.5）：manifest、theme-color、图标、注册脚本与主题
-	// 引导都注入 SPA 入口 <head>。图标走内容哈希 URL，与 SSR 的 decorateLayout 取值一致；
-	// 主题引导复用 SSR 的同一编译期常量 themeBootstrap，CSP 的 script-src hash 白名单因此
-	// 无需改动。manifest 与 /pwa.js 是稳定 URL，登录前也需可取（registerPWARoutes）。
+	// PWA 外壳（DESIGN.md §8.5）：manifest、theme-color、图标、注册脚本与主题引导都注入
+	// SPA 入口 <head>。图标走内容哈希 URL；主题引导用编译期常量 themeBootstrap，与 CSP 的
+	// script-src hash 白名单同源，因此改它必须同步改策略。manifest 与 /pwa.js 是稳定 URL，
+	// 登录前也需可取（registerPWARoutes）。
 	spa.SetShell(SPAShell{
 		ManifestURL:       manifestPath,
 		ThemeColor:        "#18181b",

@@ -1,14 +1,7 @@
 package views
 
 // ReviewPageData 是复习页（M3-5）整页的渲染数据；所有用户可见文案都已本地化。
-type ReviewPageData struct {
-	Layout LayoutData
-	// JSURL 是复习交互脚本（键盘/滑动）的内容哈希 URL；为空时模板跳过引用。
-	JSURL string
-	Area  ReviewAreaData
-}
 
-// ReviewRating 是一档评分按钮；Value 是 1–4，Label 已本地化。
 type ReviewRating struct {
 	Value int
 	Label string
