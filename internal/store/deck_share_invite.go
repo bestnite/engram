@@ -56,16 +56,39 @@ func (s *DeckShareInviteStore) ByDeckAndUser(ctx context.Context, deckID, userID
 	return &inv, nil
 }
 
-// DeckShareInviteView 是一条带展示信息的待接受邀请（卡组名与邀请人名由 join 带出）。
+// DeckShareInviteView 是一条带展示信息的待接受邀请。
+//
+// 收件人视角用 DeckName + InviterName（卡组名、谁邀请我）；属主视角用 Username
+// （我邀请了谁）。两个视角共用这一个结构，因为它们是同一行的两种读法。
 type DeckShareInviteView struct {
-	DeckID    uint64 `json:"deck_id"`
-	DeckName  string `json:"deck_name"`
-	Role      string `json:"role"`
-	InvitedBy uint64 `json:"invited_by"`
-	// InviterName 是邀请人的显示名（为空时界面回落到用户名）。
+	DeckID   uint64 `json:"deck_id"`
+	DeckName string `json:"deck_name"`
+	UserID   uint64 `json:"user_id"`
+	// Username 是被邀请者的用户名（属主视角）。
+	Username string `json:"username"`
+	Role     string `json:"role"`
+	// InvitedBy 与 InviterName 是邀请人（收件人视角）。
+	InvitedBy   uint64    `json:"invited_by"`
 	InviterName string    `json:"inviter_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// ListForDeck 列出某卡组待接受的邀请（属主视角：我邀请了谁还没答应），按邀请时间倒序。
+func (s *DeckShareInviteStore) ListForDeck(ctx context.Context, deckID uint64) ([]DeckShareInviteView, error) {
+	var rows []DeckShareInviteView
+	err := s.db.WithContext(ctx).
+		Table("deck_share_invites AS i").
+		Select("i.deck_id, '' AS deck_name, i.user_id, COALESCE(u.username, '') AS username, i.role, i.invited_by, COALESCE(v.display_name, v.username, '') AS inviter_name, i.created_at, i.expires_at").
+		Joins("LEFT JOIN users AS u ON u.id = i.user_id").
+		Joins("LEFT JOIN users AS v ON v.id = i.invited_by").
+		Where("i.deck_id = ? AND i.expires_at > ?", deckID, time.Now().UTC()).
+		Order("i.created_at DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list deck share invites for deck: %w", err)
+	}
+	return rows, nil
 }
 
 // ListForUser 列出某人待接受的邀请，按邀请时间倒序。
@@ -76,7 +99,7 @@ func (s *DeckShareInviteStore) ListForUser(ctx context.Context, userID uint64) (
 	var rows []DeckShareInviteView
 	err := s.db.WithContext(ctx).
 		Table("deck_share_invites AS i").
-		Select("i.deck_id, d.name AS deck_name, i.role, i.invited_by, COALESCE(u.display_name, u.username, '') AS inviter_name, i.created_at, i.expires_at").
+		Select("i.deck_id, d.name AS deck_name, i.user_id, '' AS username, i.role, i.invited_by, COALESCE(u.display_name, u.username, '') AS inviter_name, i.created_at, i.expires_at").
 		// decks 是**硬删除**（DeckStore.Delete 显式级联清关联表），没有 deleted_at 列；
 		// 卡组被删时邀请行由那个级联一起清掉，所以这里不需要软删过滤。
 		Joins("JOIN decks AS d ON d.id = i.deck_id").

@@ -27,20 +27,64 @@ import (
 // internal/retention 每小时回收，不在读路径上删。
 const ShareInviteTTL = 30 * 24 * time.Hour
 
+// spaShareAllowRow 是白名单里的一行。带用户名是因为界面要显示"谁"，而裸 id 不可读。
+type spaShareAllowRow struct {
+	UserID   uint64 `json:"user_id"`
+	Username string `json:"username"`
+}
+
 // spaShareInvitesResponse 是待接受邀请的列表。
 type spaShareInvitesResponse struct {
 	Invites []store.DeckShareInviteView `json:"invites"`
 	// Policy 与 AllowList 一起返回：界面上「待接受」与「谁能分享给我」是同一件事的两面。
 	Policy    store.ShareAcceptPolicy `json:"policy"`
-	AllowList []uint64                `json:"allow_list"`
+	AllowList []spaShareAllowRow      `json:"allow_list"`
 }
 
 // spaSharePolicyRequest 是接收策略的写入请求。
+//
+// 白名单按**用户名**收（与共享授权端点同一口径）：界面能显示的是用户名，要求前端自己
+// 把名字翻成 id 就得再暴露一个用户搜索端点，而"谁能邀请我"不该有这个前置条件。
 type spaSharePolicyRequest struct {
 	Policy string `json:"policy"`
-	// Allow 与 Revoke 分别是「加进白名单」「移出白名单」的用户 id。
+	// Allow 与 Revoke 分别是"加进白名单""移出白名单"的用户 id。
 	Allow  []uint64 `json:"allow,omitempty"`
 	Revoke []uint64 `json:"revoke,omitempty"`
+	// AllowUsernames 与 RevokeUsernames 同上的用户名写法。
+	AllowUsernames  []string `json:"allow_usernames,omitempty"`
+	RevokeUsernames []string `json:"revoke_usernames,omitempty"`
+}
+
+// shareAllowRows 把白名单 id 列表翻成带用户名的行（id 查不到就留空名，行仍保留）。
+func (s *Server) shareAllowRows(c *gin.Context, userID uint64) ([]spaShareAllowRow, error) {
+	ids, err := s.sharePolicy.AllowList(c.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]spaShareAllowRow, 0, len(ids))
+	for _, id := range ids {
+		rows = append(rows, spaShareAllowRow{UserID: id, Username: s.usernameFor(c, id)})
+	}
+	return rows, nil
+}
+
+// resolveShareTargets 把一批用户名翻成 id；任何一个查不到都返回 false（已写好 400 响应）。
+func (s *Server) resolveShareTargets(c *gin.Context, names []string) ([]uint64, bool) {
+	ctx := c.Request.Context()
+	out := make([]uint64, 0, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		u, err := s.users.ByUsername(ctx, name)
+		if err != nil {
+			spaShareError(c, http.StatusBadRequest, "user_not_found")
+			return nil, false
+		}
+		out = append(out, u.ID)
+	}
+	return out, true
 }
 
 // spaShareInvites 返回当前用户待接受的邀请、接收策略与白名单（GET /api/v1/sharing/invites）。
@@ -63,7 +107,7 @@ func (s *Server) spaShareInvites(c *gin.Context) {
 		spaShareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	allow, err := s.sharePolicy.AllowList(ctx, u.ID)
+	allow, err := s.shareAllowRows(c, u.ID)
 	if err != nil {
 		s.logger.Error("load share allow list failed", "user_id", u.ID, "error", err)
 		spaShareError(c, http.StatusInternalServerError, "internal_error")
@@ -172,7 +216,7 @@ func (s *Server) spaSharePolicyGet(c *gin.Context) {
 		spaShareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	allow, err := s.sharePolicy.AllowList(ctx, u.ID)
+	allow, err := s.shareAllowRows(c, u.ID)
 	if err != nil {
 		s.logger.Error("load share allow list failed", "user_id", u.ID, "error", err)
 		spaShareError(c, http.StatusInternalServerError, "internal_error")
@@ -210,7 +254,18 @@ func (s *Server) spaSharePolicySave(c *gin.Context) {
 			return
 		}
 	}
-	for _, from := range req.Allow {
+	// 用户名与 id 两种写法合并处理：界面提交用户名（它只认识名字），测试与脚本提交 id。
+	byName, ok := s.resolveShareTargets(c, req.AllowUsernames)
+	if !ok {
+		return
+	}
+	revokeByName, ok := s.resolveShareTargets(c, req.RevokeUsernames)
+	if !ok {
+		return
+	}
+	allowIDs := append(append([]uint64{}, req.Allow...), byName...)
+	revokeIDs := append(append([]uint64{}, req.Revoke...), revokeByName...)
+	for _, from := range allowIDs {
 		if from == 0 || from == u.ID {
 			continue
 		}
@@ -220,7 +275,7 @@ func (s *Server) spaSharePolicySave(c *gin.Context) {
 			return
 		}
 	}
-	for _, from := range req.Revoke {
+	for _, from := range revokeIDs {
 		if err := s.sharePolicy.RevokeAllow(ctx, u.ID, from); err != nil {
 			s.logger.Error("remove share allow failed", "user_id", u.ID, "error", err)
 			spaShareError(c, http.StatusInternalServerError, "internal_error")
@@ -230,10 +285,11 @@ func (s *Server) spaSharePolicySave(c *gin.Context) {
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionSharePolicyUpdate,
 		TargetType: "user", TargetID: store.Ptr(u.ID),
-		Detail: map[string]any{"policy": policyRaw, "allow": len(req.Allow), "revoke": len(req.Revoke)},
+		Detail: map[string]any{"policy": policyRaw, "allow": len(allowIDs), "revoke": len(revokeIDs)},
 	})
+	// 写后回读：白名单是并集操作，本地推断出的列表未必等于库里的真值。
 	policy, _ := s.sharePolicy.Policy(ctx, u.ID)
-	allow, _ := s.sharePolicy.AllowList(ctx, u.ID)
+	allow, _ := s.shareAllowRows(c, u.ID)
 	c.JSON(http.StatusOK, gin.H{"policy": policy, "allow_list": allow})
 }
 

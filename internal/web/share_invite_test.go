@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -187,6 +188,26 @@ func TestSharePolicySaveEndpoint(t *testing.T) {
 	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionSharePolicyUpdate); err != nil || n != 1 {
 		t.Errorf("audit rows = %d (err %v), want 1", n, err)
 	}
+	// 用户名写法（界面用这个）：认得的名字进名单，不认识的名字整单拒绝且不改任何状态。
+	rec = jsonRequest(t, srv, http.MethodPut, "/api/v1/settings/share-policy",
+		`{"allow_usernames":["allowee"]}`, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT allow_usernames = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var after map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &after); err != nil {
+		t.Fatalf("decode policy response: %v", err)
+	}
+	// 响应回读的服务端真值：白名单带用户名，界面不必再查一次。
+	if !strings.Contains(string(after["allow_list"]), "allowee") {
+		t.Errorf("allow_list = %s, want the resolved username", after["allow_list"])
+	}
+	rec = jsonRequest(t, srv, http.MethodPut, "/api/v1/settings/share-policy",
+		`{"allow_usernames":["nobody-by-this-name"]}`, cookies, csrf)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT unknown username = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
 	// 移出白名单。
 	rec = jsonRequest(t, srv, http.MethodPut, "/api/v1/settings/share-policy",
 		`{"revoke":[`+u64str(other.ID)+`]}`, cookies, csrf)

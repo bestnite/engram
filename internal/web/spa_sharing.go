@@ -80,7 +80,15 @@ func (s *Server) spaSharingGet(c *gin.Context) {
 	if visibility == "" {
 		visibility = store.DeckVisibilityPrivate
 	}
-	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "deck_name": deck.Name, "visibility": visibility, "grants": grantRows, "links": linkRows})
+	// 待接受的邀请单独一列：属主必须能区分「已授权」与「邀请了还没答应」——后者随时可能
+	// 被拒绝，界面上不该显示成已有访问权。
+	pending, err := s.shareInvites.ListForDeck(ctx, deck.ID)
+	if err != nil {
+		s.logger.Error("list SPA deck share invites failed", "deck_id", deck.ID, "error", err)
+		spaShareError(c, 500, "internal_error")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "deck_name": deck.Name, "visibility": visibility, "grants": grantRows, "pending_invites": pending, "links": linkRows})
 }
 
 func (s *Server) spaSharingWrite(c *gin.Context, action string) {
