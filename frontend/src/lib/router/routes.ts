@@ -170,17 +170,16 @@ export const routes: RouteDefinition[] = [
     component: LoginView as unknown as RouteDefinition['component'],
   },
   {
-    // SPA 登录入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /login，
-    // 在浏览器端到端验证之前不遮蔽它（迁移目标路径）。
-    // 服务端 GET /spa/login 返回应用壳并初始化会话前双提交 cookie；
-    // 登录协议仍走 /api/v1/auth/session + /api/v1/auth/login。
+    // 登录入口的迁移期别名。规范路径 /login 由服务端 GET /login 应答
+    // （spaLoginShell 返回应用壳并初始化会话前双提交 cookie），/spa/login 由同一处理器服务；
+    // 登录协议走 /api/v1/auth/session + /api/v1/auth/login。
     path: '/spa/login',
     name: 'spa-login',
     component: LoginView as unknown as RouteDefinition['component'],
   },
   {
-    // 登录第二步（TOTP）。服务端只注册 POST /login/totp（挑战页由第一步响应直接渲染），
-    // 没有可遮蔽的 GET 页面，因此规范路径 /login/totp 由 NoRoute 回退到应用壳。
+    // 登录第二步（TOTP）。服务端没有 /login/totp 的 GET 路由，规范路径由 NoRoute
+    // 回退到应用壳（页面型 GET 一律回壳）。
     // 协议是 GET /api/v1/auth/totp（查询凭据状态）与 POST /api/v1/auth/totp（提交验证码）。
     path: '/login/totp',
     name: 'totp-login',
@@ -193,25 +192,24 @@ export const routes: RouteDefinition[] = [
     component: TOTPLoginView as unknown as RouteDefinition['component'],
   },
   {
-    // SPA 注册入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /register。
-    // 服务端 GET /spa/register 返回应用壳并初始化会话前双提交 cookie；
+    // 注册入口的迁移期别名。规范路径 /register 由服务端 GET /register 应答（spaRegisterShell），
+    // /spa/register 由同一处理器服务；
     // 注册协议走 POST /api/v1/auth/register，?invite= 由视图从 URL 读取。
     path: '/spa/register',
     name: 'spa-register',
     component: RegisterView as unknown as RouteDefinition['component'],
   },
   {
-    // SPA 首个管理员引导入口。刻意走 /spa 前缀：SSR 仍占用 GET/POST /setup。
-    // 服务端 GET /spa/setup 仅在没有活跃管理员时返回应用壳（否则 404）；
+    // 首个管理员引导的迁移期别名。规范路径 /setup 由服务端 GET /setup 应答
+    // （spaSetupShell 仅在没有活跃管理员时可达，否则 404），/spa/setup 由同一处理器服务；
     // 引导协议走 POST /api/v1/auth/setup。
     path: '/spa/setup',
     name: 'spa-setup',
     component: SetupView as unknown as RouteDefinition['component'],
   },
   {
-    // 注册与首个管理员引导的规范路径。服务端 GET /register、/setup 已切到
-    // 应用壳，协议是 POST /api/v1/auth/register、POST /api/v1/auth/setup；POST /register、/setup
-    // 仍是 SSR 表单处理器，无脚本客户端照旧可用。
+    // 注册与首个管理员引导的规范路径。服务端 GET /register、/setup 由应用壳应答，
+    // 写协议是 POST /api/v1/auth/register、POST /api/v1/auth/setup。
     path: '/register',
     name: 'register',
     component: RegisterView as unknown as RouteDefinition['component'],
@@ -303,15 +301,15 @@ export const routes: RouteDefinition[] = [
     component: AdminMailMovedView as unknown as RouteDefinition['component'],
   },
   {
-    // 请求密码重置。服务端 GET /forgot-password 已切到应用壳，SPA 缺失时回退 SSR。
+    // 请求密码重置。服务端 GET /forgot-password 由应用壳应答。
     // 协议走 POST /api/v1/auth/forgot-password；响应只含站点级 mail_ready，不透露账号是否存在。
     path: '/forgot-password',
     name: 'forgot-password',
     component: ForgotPasswordView as unknown as RouteDefinition['component'],
   },
   {
-    // 设置新密码。服务端 GET /reset-password 已切到应用壳；token 由邮件链接的查询串带入，
-    // 提交走 POST /api/v1/auth/reset-password（一次性令牌语义与 SSR 相同）。
+    // 设置新密码。服务端 GET /reset-password 由应用壳应答；token 由邮件链接的查询串带入，
+    // 提交走 POST /api/v1/auth/reset-password（一次性令牌，用掉即废）。
     path: '/reset-password',
     name: 'reset-password',
     component: ResetPasswordView as unknown as RouteDefinition['component'],
@@ -324,15 +322,15 @@ export const routes: RouteDefinition[] = [
     component: EmailSettingsView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮箱验证结果的 SPA 入口。刻意走 /spa 前缀：免登录的一键链接 /verify-email 仍在服务端消费
-    // 令牌并渲染结果（无脚本也能完成），SPA 客户端走此独立入口，协议 POST /api/v1/auth/verify-email。
+    // 邮箱验证结果的入口别名。规范路径 /verify-email 由服务端 GET 返回应用壳并下发会话前
+    // 双提交 cookie；令牌由前端从查询串读出，经 POST /api/v1/auth/verify-email 消费。
     path: '/spa/verify-email',
     name: 'spa-verify-email',
     component: VerifyEmailView as unknown as RouteDefinition['component'],
   },
   {
-    // 改邮箱确认结果的 SPA 入口。与 /spa/verify-email 同构：SSR 的免登录链接 /confirm-email-change
-    // 保持服务端消费，SPA 走此入口，协议 POST /api/v1/auth/confirm-email-change。
+    // 改邮箱确认结果的入口别名，与 /verify-email 同构：规范路径 /confirm-email-change 由服务端
+    // GET 返回应用壳，令牌经 POST /api/v1/auth/confirm-email-change 消费。
     path: '/spa/confirm-email-change',
     name: 'spa-confirm-email-change',
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],

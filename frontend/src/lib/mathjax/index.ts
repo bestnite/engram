@@ -90,7 +90,7 @@ export function ensureMathJax(): Promise<MathJaxGlobal | null> {
  *
  * 先 typesetClear 再 typesetPromise：清掉旧节点的 MathJax 排版状态，避免换卡/换答案后
  * 残留过期的公式 DOM（换卡路径）。渲染失败只吞掉——公式排版失败不该
- * 打断编辑页或复习页（与 SSR 的 notes.js / review.js 同策略）。
+ * 打断编辑页或复习页。
  */
 export async function typeset(nodes: Array<Element | null | undefined>): Promise<void> {
   const targets = nodes.filter((node): node is Element => node != null);

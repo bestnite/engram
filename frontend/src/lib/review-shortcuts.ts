@@ -32,7 +32,7 @@ export interface ReviewShortcutState {
 
 /**
  * 把一次 keydown 映射成复习动作。
- * 修饰键（Alt/Ctrl/Meta）或输入焦点一律忽略；其余分支与 SSR 复习页的 review.js 对齐。
+ * 修饰键（Alt/Ctrl/Meta）或输入焦点一律忽略；其余按键都映射到复习动作。
  */
 export function reviewShortcut(
   key: string,
@@ -78,7 +78,7 @@ export interface ReviewSwipeState {
   revealed: boolean;
 }
 
-/** 横向滑动阈值（与 SSR review.js 一致）。 */
+/** 横向滑动阈值（像素；复习视图与手势判定共用）。 */
 export const SWIPE_THRESHOLD = 45;
 
 /**

@@ -104,7 +104,7 @@ describe('SPA router matching and query parsing', () => {
     expect(spaLogin.route?.name).toBe('spa-login');
     expect(spaLogin.params).toEqual({});
 
-    // SSR /login 仍保留在同一前端路由表内（客户端导航用），不被遮蔽。
+    // 规范路径 /login 也在同一前端路由表内（客户端导航用），不被 /spa 别名遮蔽。
     const ssrLogin = matchRoute('/login', prodRoutes);
     expect(ssrLogin.route?.name).toBe('login');
   });
