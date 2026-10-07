@@ -22,7 +22,7 @@ const DefaultPresetName = "Default"
 // ErrNoDefaultPreset 表示 EnsureDefaultPreset 之后仍未找到默认预设；出现即 store 契约被破坏。
 var ErrNoDefaultPreset = errors.New("default preset missing after ensure")
 
-// 调度参数的文档化默认值（DESIGN.md §2.2、§3.2、§3.5）。
+// 调度参数的文档化默认值。
 // 这些数值同时是 decks 新建时的预填值；learning_steps 允许为空串表示关闭学习步骤，
 // 因此默认值只在构造时给出，Create 不再把它改写回来。
 const (
@@ -233,7 +233,7 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 	return nil
 }
 
-// GradeMapping 解析该预设的「分数→评分档位」映射（DESIGN.md §6.2）。
+// GradeMapping 解析该预设的「分数→评分档位」映射。
 // GradeMappingJSON 为 NULL 时回退到 cardtype.DefaultGradeMapping（全对 Good / 部分对 Hard /
 // 全错 Again），因此未配置映射的 preset 也能直接判分。
 func (p *Preset) GradeMapping() (cardtype.GradeMapping, error) {

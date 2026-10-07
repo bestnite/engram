@@ -93,7 +93,7 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	if logs != 1 {
 		t.Errorf("reviews = %d, want 1 after undo", logs)
 	}
-	// 写一条 review.undo 审计（DESIGN.md §3.4）。
+	// 写一条 review.undo 审计。
 	var audits int64
 	if err := db.Model(&store.AuditLog{}).Where("action = ?", store.ActionReviewUndo).Count(&audits).Error; err != nil {
 		t.Fatalf("count audit: %v", err)

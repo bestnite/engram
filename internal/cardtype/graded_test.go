@@ -196,7 +196,7 @@ func TestTrueFalseGrading(t *testing.T) {
 	}
 }
 
-// TestGradeMappingDefaults 断言默认映射与 DESIGN.md §6.2 一致。
+// TestGradeMappingDefaults 断言默认映射：全对 Good、部分 Hard、全错 Again。
 func TestGradeMappingDefaults(t *testing.T) {
 	m := DefaultGradeMapping()
 	cases := []struct {

@@ -26,9 +26,9 @@ var (
 	ErrInviteTokenRequired = errors.New("invite token is required")
 )
 
-// InviteStore 封装 invites 表；token 一次性、可限定邮箱、可设过期（DESIGN.md §2.2、§4.2）。
+// InviteStore 封装 invites 表；token 一次性、可限定邮箱、可设过期。
 //
-// 关于“撤销”：DESIGN.md §2.2 的 invites 表没有 revoked_at 列，因此撤销实现为删除整行。
+// 关于“撤销” invites 表没有 revoked_at 列，因此撤销实现为删除整行。
 // 被撤销的 token 在 ByToken/MarkUsed 里与“不存在”同路被拒。若将来需要保留撤销审计，
 // 应新增 revoked_at 列（需要独写 models.go 的 owner 排期），本实现不擅自加列。
 type InviteStore struct {
@@ -38,7 +38,7 @@ type InviteStore struct {
 // NewInviteStore 构造邀请存储。
 func NewInviteStore(db *gorm.DB) *InviteStore { return &InviteStore{db: db} }
 
-// newInviteToken 生成 32 字节随机 token 的 URL 安全编码（与分享链接同规格，DESIGN.md §4.6）。
+// newInviteToken 生成 32 字节随机 token 的 URL 安全编码（与分享链接同规格）。
 func newInviteToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {

@@ -13,10 +13,10 @@ import (
 )
 
 // ErrVersionConflict 表示调用方持有的 expected_version 与库里不一致：客户端重放、
-// 双开窗口，或一次评分被提交了两次。调用方应把它映射成 HTTP 409（DESIGN.md §3.4）。
+// 双开窗口，或一次评分被提交了两次。调用方应把它映射成 HTTP 409。
 var ErrVersionConflict = errors.New("schedule: card state version conflict")
 
-// grade_source 的合法取值（DESIGN.md §2.2、§14）。typed/llm 属于作答类与未来 LLM 评分。
+// grade_source 的合法取值。typed/llm 属于作答类与未来 LLM 评分。
 const (
 	GradeSourceSelf  = "self"
 	GradeSourceTyped = "typed"
@@ -27,7 +27,7 @@ const (
 //
 // 事务边界由调用方提供：tx 必须是调用方开启的事务（或裸句柄，此时不保证单事务），
 // Submit 只通过它读写 card_states / reviews，自己不 Begin/Commit。这样评分提交能与
-// 外层更广的操作共用一个事务（AGENTS.md §2.4、DESIGN.md §3.4）。
+// 外层更广的操作共用一个事务（AGENTS.md §2.4）。
 type SubmitInput struct {
 	CardID uint64
 	UserID uint64
@@ -45,7 +45,7 @@ type SubmitInput struct {
 	Scheduler *Scheduler
 	// Now 为零值时取当前时间；到期日与复习日都以它为准。
 	Now time.Time
-	// Location/Timezone/DayCutoffHour 决定 review_day 的切分（DESIGN.md §3.3）。
+	// Location/Timezone/DayCutoffHour 决定 review_day 的切分。
 	Location      *time.Location
 	Timezone      string
 	DayCutoffHour *int
@@ -62,7 +62,7 @@ type SubmitResult struct {
 }
 
 // Submit 在给定的 tx 内提交一次评分：读取并锁定当前状态、校验 expected_version、
-// 计算新状态、UPSERT card_states、INSERT reviews（DESIGN.md §3.4）。
+// 计算新状态、UPSERT card_states、INSERT reviews。
 //
 // 所有写操作都走同一个 tx：调用方回滚时，状态更新与 review 行一并消失，
 // 因此“事务失败后不留 reviews 行”成立。重复提交同一 expected_version 时，
@@ -142,7 +142,7 @@ func Submit(ctx context.Context, tx *gorm.DB, in SubmitInput) (SubmitResult, err
 			ErrVersionConflict, in.CardID, in.UserID, in.ExpectedVersion)
 	}
 
-	// 5. 写 reviews。所有 §2.2 列出的字段都写全，它是参数优化的唯一燃料。
+	// 5. 写 reviews。表结构列出的字段全部写全，它是参数优化的唯一燃料。
 	review := reviewFromOutcome(in, base, outcome, stateBefore, now)
 	if err := tx.WithContext(ctx).Create(&review).Error; err != nil {
 		return SubmitResult{}, fmt.Errorf("schedule: submit review: insert review for card %d: %w", in.CardID, err)
@@ -193,7 +193,7 @@ func stateFromOutcome(base *store.CardState, o Outcome, now time.Time, version i
 	}
 }
 
-// upsertState 用 GORM 的 clause.OnConflict（双库各自生成正确的 SQL，DESIGN.md §2.3）
+// upsertState 用 GORM 的 clause.OnConflict（双库各自生成正确的 SQL）
 // 写入状态行：首次评分建行，之后按 (card_id, user_id) 更新。
 //
 // expectedVersion 是本次写入前读到的 card_states.version，作为 DO UPDATE 分支的守卫：

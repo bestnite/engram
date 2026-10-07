@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ClozeDeletion 是一次挖空：{{cN::text}} 或 {{cN::text::hint}}（DESIGN.md §6.2）。
+// ClozeDeletion 是一次挖空：{{cN::text}} 或 {{cN::text::hint}}。
 type ClozeDeletion struct {
 	Index int    // cN 中的 N，是卡片标识 cloze:<index> 的来源。
 	Text  string // 挖空内容原文。
@@ -18,7 +18,7 @@ type ClozeDeletion struct {
 
 // ParseCloze 解析 cloze 文本，按首次出现顺序返回最外层挖空项。
 //
-// 语法与边界（DESIGN.md §6.2）：
+// 语法与边界：
 //   - {{cN::text}} 与 {{cN::text::hint}}；N 为一个或多个十进制数字。
 //   - 内容里成对的 {{ ... }} 按深度匹配，不会提前闭合（嵌套花括号）。
 //     嵌套里的 {{cM::...}} 作为普通内容原样保留，不单独成卡 —— 只解析最外层。
@@ -138,7 +138,7 @@ func splitClozeContent(content string, hintSep, contentStart int) (text, hint st
 	return content[:rel], content[rel+2:]
 }
 
-// clozeType 是挖空卡：每个不同序号产出一张卡（DESIGN.md §6.2）。
+// clozeType 是挖空卡：每个不同序号产出一张卡。
 // 字段：text（必填，至少含一个 {{cN::…}}），extra / source_url（可选）。
 type clozeType struct{}
 

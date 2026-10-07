@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 学习摘要（C 类）的发送台账（ROADMAP.md M1-23；DESIGN.md §4.7）。
+// 学习摘要（C 类）的发送台账（ROADMAP.md M1-23）。
 //
 // 为什么单开一张表，而不是复用 reminder_log：reminder_log 的主键是 (user_id, day)，
 // 其中 day 是「用户本地复习日」——与周粒度会撞键（同一个复习日既可能属于这一周也可能属于
@@ -24,7 +24,7 @@ import (
 // WeekStart 是该用户**本地周起始日**（周一）的 YYYY-MM-DD，不是 UTC 日期：跨时区用户在
 // 本地周一凌晨必须落到同一周，否则会出现「一周两封」或「少发一封」。
 //
-// 这是 DESIGN.md §2.2 表清单之外的新表，维护者需把它补进 §2.2。
+// M1-23 新增的表：纯增量建表，AutoMigrate 直接处理，不需要一次性迁移函数。
 type DigestLog struct {
 	UserID uint64 `gorm:"primaryKey;column:user_id" json:"user_id"`
 	// WeekStart 是用户本地周起始日（周一），YYYY-MM-DD。

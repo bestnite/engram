@@ -19,7 +19,7 @@ import (
 // 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值（ROADMAP.md M5-10）。
 
 // seedMediaNote 把 raw 按内容寻址写进 srcRoot 与媒体元数据表，并在卡组里放一条引用它的 note；
-// 返回 sha256。媒体引用形如 media/<sha256>.<ext>（DESIGN.md §7.6）。
+// 返回 sha256。媒体引用形如 media/<sha256>.<ext>。
 func seedMediaNote(t *testing.T, db *gorm.DB, srcRoot string, owner, deckID uint64, raw []byte, mime, ext string) string {
 	t.Helper()
 	m, err := NewMediaStore(db).SaveBytes(context.Background(), srcRoot, mime, raw, Ptr(owner))

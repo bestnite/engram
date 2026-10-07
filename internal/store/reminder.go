@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 复习到期提醒（C 类）的发送台账（DESIGN.md §4.7；AGENTS.md M1-21）。
+// 复习到期提醒（C 类）的发送台账（AGENTS.md M1-21）。
 //
 // 为什么用一张小表而不是别的方案：
 //   - 「每用户每天最多一封」必须跨进程重启仍然成立。进程内计数器一重启就归零，
@@ -51,7 +51,7 @@ type ReminderCandidate struct {
 // ReminderCandidates 返回有到期卡、可收信的活跃用户。
 //
 // 到期口径与 schedule 队列、DueQueueSize 一致：只算已排期且 due_at <= now 的 card_states，
-// 排除软删除的 card/note 与暂停的卡（DESIGN.md §3.3）。同一用户可能有多行，用 GROUP BY
+// 排除软删除的 card/note 与暂停的卡。同一用户可能有多行，用 GROUP BY
 // 归并并顺带给出到期卡数。
 func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]ReminderCandidate, error) {
 	var out []ReminderCandidate

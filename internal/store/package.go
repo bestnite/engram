@@ -21,13 +21,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包（.edeck）导出/导入（DESIGN.md §7.6，AGENTS.md M5-6/M5-7）。
+// 卡组包（.edeck）导出/导入（AGENTS.md M5-6/M5-7）。
 //
 // 格式：单个 zip，含 manifest.json / notes.json / cards.json / preset.json，
 // 可选 progress.json 与 media/ + media.json。它把\"一个卡组\"变成自包含文件，
 // 用于备份、跨实例迁移与离线转交；与克隆（同实例复制）语义一致：内容走、进度不跟随。
 
-// PackageFormatVersion 是当前包格式版本；导入端至少兼容 N-1（DESIGN.md §7.6）。
+// PackageFormatVersion 是当前包格式版本；导入端至少兼容 N-1。
 const PackageFormatVersion = 1
 
 // 稳定的导入错误 code（英文标识符，供调用方程序化判断；AGENTS.md §2.1）。
@@ -46,7 +46,7 @@ const (
 	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。
 	CodePackageQuotaExceeded = "media_quota_exceeded"
 	// CodePackageMediaForbidden 表示包内 note 引用了导入者无法读取的媒体（写前校验拒绝）；
-	// 逐条列出被拒的引用（DESIGN.md §6.3）。它与单卡写入的 media_not_readable 是同一规则在
+	// 逐条列出被拒的引用。它与单卡写入的 media_not_readable 是同一规则在
 	// 包导入链上的稳定 code。
 	CodePackageMediaForbidden = "package_media_forbidden"
 )
@@ -66,9 +66,9 @@ func (e *PackageError) Error() string {
 	return e.Code + ": " + e.Message + ": " + strings.Join(e.Entries, ", ")
 }
 
-// PackageOptions 控制一次导出的内容（DESIGN.md §7.6 的三个开关）。
+// PackageOptions 控制一次导出的内容（三个开关）。
 type PackageOptions struct {
-	// IncludeProgress 默认 off：卡组包主要用途是把内容给别人/搬到别的实例（§13 #8）。
+	// IncludeProgress 默认 off：卡组包主要用途是把内容给别人/搬到别的实例。
 	IncludeProgress bool
 	// IncludeMedia 默认 on。
 	IncludeMedia bool
@@ -82,7 +82,7 @@ type PackageOptions struct {
 	Now func() time.Time
 }
 
-// PackageManifest 是包内 manifest.json（字段名已冻结，DESIGN.md §7.6）。
+// PackageManifest 是包内 manifest.json（字段名已冻结）。
 type PackageManifest struct {
 	FormatVersion   int          `json:"format_version"`
 	ExportedAt      string       `json:"exported_at"`
@@ -93,7 +93,7 @@ type PackageManifest struct {
 	IncludeReviews  bool         `json:"include_reviews"`
 	Counts          PackageCount `json:"counts"`
 	// ExportedBy 是导出者的不透明标识（用登录名，不是数据库 id），
-	// 导入端据此判断包内进度是否属于导入者本人（DESIGN.md §7.6「进度归属判定」）。
+	// 导入端据此判断包内进度是否属于导入者本人（「进度归属判定」）。
 	ExportedBy string `json:"exported_by,omitempty"`
 }
 
@@ -110,7 +110,7 @@ type PackageCount struct {
 	Media int `json:"media,omitempty"`
 }
 
-// PackageNote 是 notes.json 的一条；形状与 §7.3 的导入体一致。
+// PackageNote 是 notes.json 的一条；形状与批量导入体一致。
 type PackageNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
@@ -212,10 +212,10 @@ var (
 	ErrPackageMediaMissing = errors.New("deck package: media bytes are unavailable")
 )
 
-// mediaRefRE 匹配 note 字段里形如 media/<sha256>.<ext> 的媒体引用（DESIGN.md §7.6 示例）。
+// mediaRefRE 匹配 note 字段里形如 media/<sha256>.<ext> 的媒体引用（示例）。
 var mediaRefRE = regexp.MustCompile(`^media/([a-f0-9]{64})\.([A-Za-z0-9]+)$`)
 
-// ExportPackage 装配一个卡组包（DESIGN.md §7.6、M5-6）。
+// ExportPackage 装配一个卡组包（M5-6）。
 //
 // 边界（内容与进度分离）：
 //   - 进度只取 actorUserID 本人的 card_states；导出他人共享的卡组时，包里绝不含他人进度。
@@ -544,7 +544,7 @@ func formatTimePtr(t *time.Time) *string {
 	return &s
 }
 
-// collectMediaRefs 递归扫描 note 字段里形如 media/<sha256>.<ext> 的引用（DESIGN.md §7.6 示例约定）。
+// collectMediaRefs 递归扫描 note 字段里形如 media/<sha256>.<ext> 的引用（示例约定）。
 func collectMediaRefs(v any, out map[string]bool) {
 	switch x := v.(type) {
 	case string:
@@ -562,7 +562,7 @@ func collectMediaRefs(v any, out map[string]bool) {
 	}
 }
 
-// NoteFingerprint 是 note 的内容指纹：kind + 规范化字段的 sha256（DESIGN.md §7.6 去重规则）。
+// NoteFingerprint 是 note 的内容指纹：kind + 规范化字段的 sha256（去重规则）。
 // 规范化 = 解析 fields_json 后重新序列化（encoding/json 对 map 键排序），
 // 因此同一份内容在不同导出/导入之间得到同一个指纹。
 func NoteFingerprint(kind, fieldsJSON string) string {
@@ -587,7 +587,7 @@ func CanonicalFieldsJSON(fieldsJSON string) string {
 // NewMediaStore 构造媒体元数据存储（只用到按 sha256 查行，供卡组包导出/导入）。
 func NewMediaStore(db *gorm.DB) *MediaStore { return &MediaStore{db: db} }
 
-// MediaStore 封装 media 表的元数据访问；字节仍在本地文件系统（DESIGN.md §6.3）。
+// MediaStore 封装 media 表的元数据访问；字节仍在本地文件系统。
 type MediaStore struct{ db *gorm.DB }
 
 // BySha256 按内容寻址取媒体元数据；不存在返回 (nil, nil)。
@@ -621,7 +621,7 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 		return nil, "", err
 	} else if existing != nil {
 		// 去重命中：字节已在库里，但「本次提供者」仍需登记归属（否则 B 上传与 C 相同的字节时
-		// B 拿不到 media_uploaders 记录，A 撤销共享后 B 读不到自己提供的文件，DESIGN.md §6.3）。
+		// B 拿不到 media_uploaders 记录，A 撤销共享后 B 读不到自己提供的文件）。
 		if createdBy != nil {
 			if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
 				return nil, "", err

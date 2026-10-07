@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// API Key 的五档 scope（DESIGN.md §7.2）；本项目的权限模型就是这五档，不再往细里做。
+// API Key 的五档 scope；本项目的权限模型就是这五档，不再往细里做。
 // 取值用英文常量：scope 字符串会写进 api_keys.scopes 并被 REST/MCP 复用，必须稳定。
 const (
 	ScopeRead   = "read"   // 读卡组、卡片、统计
@@ -27,13 +27,13 @@ const (
 )
 
 const (
-	// APIKeyPlaintextPrefix 是明文 key 的前缀（DESIGN.md §7.2：fcard_<base64url>）。
+	// APIKeyPlaintextPrefix 是明文 key 的前缀（fcard_<base64url>）。
 	APIKeyPlaintextPrefix = "fcard_"
 	// apiKeyDisplayChars 是展示前缀在 "fcard_" 之后保留的明文字符数，如 fcard_ab12cd34。
 	apiKeyDisplayChars = 8
-	// apiKeyRandomBytes 是生成明文用的随机字节数（DESIGN.md §7.2：32 字节）。
+	// apiKeyRandomBytes 是生成明文用的随机字节数（32 字节）。
 	apiKeyRandomBytes = 32
-	// defaultAPIKeyScope 是新 key 不给 scopes 时的默认值（DESIGN.md §7.2：默认只给 read）。
+	// defaultAPIKeyScope 是新 key 不给 scopes 时的默认值（默认只给 read）。
 	defaultAPIKeyScope = ScopeRead
 )
 
@@ -80,7 +80,7 @@ func ParseScopes(raw string) []string {
 }
 
 // NormalizeScopes 校验并归一化一组 scope：去重、按规范顺序排序、逗号连接。
-// 空输入落到默认的 read（DESIGN.md §7.2）；出现五档之外的取值返回 ErrAPIKeyInvalidScope。
+// 空输入落到默认的 read；出现五档之外的取值返回 ErrAPIKeyInvalidScope。
 func NormalizeScopes(scopes []string) (string, error) {
 	if len(scopes) == 0 {
 		return defaultAPIKeyScope, nil
@@ -104,7 +104,7 @@ func NormalizeScopes(scopes []string) (string, error) {
 
 // ScopesIncludeAdmin 判断一组 scope 是否试图授予 admin（按请求原值匹配，未归一化）。
 // 取值合法性由 NormalizeScopes 负责，这里只回答「有没有 admin」。Web 表单与 REST
-// 建 key 两条入口共用同一判定（DESIGN.md §7.2：admin scope 只能发给管理员账号）。
+// 建 key 两条入口共用同一判定（admin scope 只能发给管理员账号）。
 func ScopesIncludeAdmin(scopes []string) bool {
 	for _, s := range scopes {
 		if strings.TrimSpace(s) == ScopeAdmin {
@@ -115,7 +115,7 @@ func ScopesIncludeAdmin(scopes []string) bool {
 }
 
 // HasScope 判断 scopes 字符串是否覆盖 want。
-// admin 等价于管理员权限（DESIGN.md §7.2），因此它蕴含其余四档（含 keys）；反向不成立，
+// admin 等价于管理员权限，因此它蕴含其余四档（含 keys）；反向不成立，
 // 其余各档之间互不蕴含。
 func HasScope(scopes, want string) bool {
 	for _, s := range ParseScopes(scopes) {
@@ -134,7 +134,7 @@ func (k *APIKey) HasScope(want string) bool {
 	return HasScope(k.Scopes, want)
 }
 
-// HashAPIKey 返回明文的 sha256 十六进制摘要；库里只存这个值（DESIGN.md §7.2）。
+// HashAPIKey 返回明文的 sha256 十六进制摘要；库里只存这个值。
 func HashAPIKey(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
@@ -272,7 +272,7 @@ func (s *APIKeyStore) Authenticate(ctx context.Context, plaintext string, now ti
 	return &k, nil
 }
 
-// TouchLastUsed 更新 last_used_at；用于每次成功的 key 调用（DESIGN.md §7.2）。
+// TouchLastUsed 更新 last_used_at；用于每次成功的 key 调用。
 func (s *APIKeyStore) TouchLastUsed(ctx context.Context, id uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -357,13 +357,13 @@ func (s *APIKeyStore) RevokeByID(ctx context.Context, keyID uint64, at time.Time
 	return nil
 }
 
-// RevokeAllForUser 作废某用户的全部有效 key（口令重置时调用，DESIGN.md §11）。
+// RevokeAllForUser 作废某用户的全部有效 key（口令重置时调用）。
 // 用户主动改密不走这里：key 有独立于口令的生命周期。
 func (s *APIKeyStore) RevokeAllForUser(ctx context.Context, userID uint64, at time.Time) error {
 	return s.RevokeAllForUserTx(ctx, s.db, userID, at)
 }
 
-// RevokeAllForUserTx 在调用方给定的事务里批量吊销某用户的全部有效 key（DESIGN.md §11）。
+// RevokeAllForUserTx 在调用方给定的事务里批量吊销某用户的全部有效 key。
 // 只命中 revoked_at IS NULL 的行，重复调用幂等（与 sessions 的批量作废同构）；
 // 必须与密码写入共享同一事务句柄，否则失败会半吊销。
 func (s *APIKeyStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {

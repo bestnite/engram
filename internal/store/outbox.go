@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 邮件 outbox（DESIGN.md §4.7；AGENTS.md M1-17）。
+// 邮件 outbox（AGENTS.md M1-17）。
 //
 // 投递设计：入站只写这张队列表，后台 worker 带重试与退避投递，绝不在请求路径里同步发信。
 // 发信失败不得让触发它的操作失败，因此 Enqueue 只落一行 pending，投递结果由 worker 写回。
@@ -31,10 +31,10 @@ const (
 // OutboxMessage 是一封待投递（或已投递）的邮件。
 //
 // 表名固定为 mail_outbox，避免复数化规则漂移。正文与自定义头都以 TEXT 存储，
-// 双库兼容（DESIGN.md §2.3：不用 jsonb/array）。HeadersJSON 是 map[string]string 的 JSON。
+// 双库兼容（不用 jsonb/array）。HeadersJSON 是 map[string]string 的 JSON。
 type OutboxMessage struct {
 	ID uint64 `gorm:"primaryKey" json:"id"`
-	// To 是收件地址（只用登录邮箱，DESIGN.md §4.7）。
+	// To 是收件地址（只用登录邮箱）。
 	To string `gorm:"not null" json:"to"`
 	// Type 是自由字符串邮件类型；目录由 M1-18 定义，这里只原样存。
 	Type string `gorm:"not null" json:"type"`

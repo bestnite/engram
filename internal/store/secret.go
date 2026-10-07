@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 敏感配置的加密通道（DESIGN.md §8.4、§11；ROADMAP.md M6-10）。
+// 敏感配置的加密通道（ROADMAP.md M6-10）。
 //
 // 约定：
 //   - 主密钥来自环境变量 ENCRYPTION_KEY（internal/config 的 KeyEncryptionKey），
@@ -128,7 +128,7 @@ func (c *SecretCodec) Decrypt(ciphertext string) (string, error) {
 var sensitiveKeySuffixes = []string{"_secret", "_key", "_password", "_token"}
 
 // IsSensitiveSettingKey 报告一个 settings 键是否属于敏感值，管理面板据此决定是否加密存储、
-// 以及是否只显示「已配置/未配置」（DESIGN.md §8.4）。
+// 以及是否只显示「已配置/未配置」。
 func IsSensitiveSettingKey(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
 	for _, suffix := range sensitiveKeySuffixes {
@@ -195,7 +195,7 @@ func GetSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key string)
 	return plaintext, true, nil
 }
 
-// SecretConfigured 只报告「已配置/未配置」，不接触明文，供管理面板展示（DESIGN.md §8.4）。
+// SecretConfigured 只报告「已配置/未配置」，不接触明文，供管理面板展示。
 func SecretConfigured(ctx context.Context, db *gorm.DB, key string) (bool, error) {
 	var row Setting
 	if err := db.WithContext(ctx).First(&row, "key = ?", key).Error; err != nil {

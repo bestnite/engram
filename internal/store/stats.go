@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件实现 DESIGN.md §9「统计与洞察」的只读聚合查询。
+// 本文件实现统计页的只读聚合查询。
 //
 // 为什么放在 internal/store 而不是新建 internal/stats 包：这些指标全部是对 reviews /
 // card_states / cards / notes / decks 的纯聚合，口径与表结构强绑定；放进 store 可以直接
@@ -21,7 +21,7 @@ import (
 // 每个函数都接受调用方传入的 now / today / 日期窗口，绝不读取挂钟：页面（M7-3）与
 // 手算对拍测试因此能在固定时间上复现同一组数字。
 
-// StatsStore 提供 §9 的统计聚合；只读，不写任何表。
+// StatsStore 提供统计页的聚合查询；只读，不写任何表。
 type StatsStore struct {
 	db *gorm.DB
 }
@@ -29,7 +29,7 @@ type StatsStore struct {
 // NewStatsStore 构造统计存储。
 func NewStatsStore(db *gorm.DB) *StatsStore { return &StatsStore{db: db} }
 
-// ReviewVolume 是复习量指标：今日 / 近 7 日 / 近 30 日的 count(*)（DESIGN.md §9）。
+// ReviewVolume 是复习量指标：今日 / 近 7 日 / 近 30 日的 count(*)。
 // 窗口按 review_day（复习日字符串）闭区间计算，today 是调用方算好的复习日。
 type ReviewVolume struct {
 	Today      int64
@@ -38,7 +38,7 @@ type ReviewVolume struct {
 }
 
 // ReviewVolume 按 review_day 聚合复习量。today 采用 review_day 的格式（YYYY-MM-DD），
-// 近 7 日 = [today-6, today]，近 30 日 = [today-29, today]，与 §9 的「按 review_day 聚合」一致。
+// 近 7 日 = [today-6, today]，近 30 日 = [today-29, today]，与其余指标「按 review_day 聚合」一致。
 func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today string) (ReviewVolume, error) {
 	base, err := time.Parse("2006-01-02", today)
 	if err != nil {
@@ -63,10 +63,10 @@ func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today stri
 	return ReviewVolume{Today: row.Today, Last7Days: row.Last7Days, Last30Days: row.Last30Days}, nil
 }
 
-// DueForecast 是到期预测的分桶计数（DESIGN.md §9）：今日（含已过期）/明日/7 日内/30 日内/
+// DueForecast 是到期预测的分桶计数：今日（含已过期）/明日/7 日内/30 日内/
 // 更远，以及「新卡未到期」（尚无状态行、或状态为 new 但到期日未到）。
 //
-// 日边界取复习日起点：本地 (now - day_cutoff_hour) 所在日期的切点时刻，见 Design §3.3。
+// 日边界取复习日起点：本地 (now - day_cutoff_hour) 所在日期的切点时刻，见 schedule 的跨天规则。
 // 「今日」桶包含所有 due_at <= 今日结束 的卡，因此逾期的卡不会被漏掉。
 type DueForecast struct {
 	Today     int64
@@ -177,7 +177,7 @@ type RetentionBucket struct {
 	Rate float64
 }
 
-// RetentionStats 是留存率结果（DESIGN.md §9）：「到期时首次评分不是 Again」的比例，
+// RetentionStats 是留存率结果：「到期时首次评分不是 Again」的比例，
 // 按 stability 分桶。
 type RetentionStats struct {
 	Buckets []RetentionBucket
@@ -188,7 +188,7 @@ type RetentionStats struct {
 
 // RetentionByStability 统计到期复习的留存率。
 //
-// 口径（§9）：只取 state_before = Review(2) 的日志 —— 那是「到期时」的一次复习；
+// 口径：只取 state_before = Review(2) 的日志 —— 那是「到期时」的一次复习；
 // 判「记住」的条件是 rating != Again(1)。stability 取该次评分产生的新稳定性（reviews.stability），
 // NULL 的旧行没有可用的分桶依据，排除。
 func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID uint64) (RetentionStats, error) {
@@ -245,7 +245,7 @@ func stabilityRangeSQL(low, high float64) string {
 	return cond
 }
 
-// TimeSpent 是时间投入指标（DESIGN.md §9）：elapsed_ms 的总量、日均与中位数。
+// TimeSpent 是时间投入指标：elapsed_ms 的总量、日均与中位数。
 type TimeSpent struct {
 	TotalMS int64
 	Count   int64
@@ -289,7 +289,7 @@ func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDa
 	return out, nil
 }
 
-// DeckStat 是一个卡组的统计行（DESIGN.md §9「卡组维度」）。
+// DeckStat 是一个卡组的统计行（「卡组维度」）。
 type DeckStat struct {
 	DeckID    uint64
 	Name      string
@@ -396,7 +396,7 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	return out, nil
 }
 
-// TagStat 是一个标签的统计行（DESIGN.md §9「标签维度」）。
+// TagStat 是一个标签的统计行（「标签维度」）。
 type TagStat struct {
 	Tag       string
 	Reviews   int64
@@ -466,7 +466,7 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 	return out, nil
 }
 
-// GradeSourceStat 是一种判分来源的计数（DESIGN.md §9「判分来源分布」）。
+// GradeSourceStat 是一种判分来源的计数（「判分来源分布」）。
 type GradeSourceStat struct {
 	Source string
 	Count  int64
@@ -498,7 +498,7 @@ func (s *StatsStore) GradeSourceDistribution(ctx context.Context, userID uint64)
 	return out, nil
 }
 
-// StreakStats 是连续打卡结果（DESIGN.md §9「连续打卡」）。
+// StreakStats 是连续打卡结果（「连续打卡」）。
 type StreakStats struct {
 	// Current 是到「今天」为止仍未中断的连续复习天数；今天尚未复习不算断，
 	// 但整整一个复习日被跳过（今天与昨天都没有复习）则为 0。
@@ -555,7 +555,7 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 	return StreakStats{Current: current, Longest: longest}, nil
 }
 
-// LearningCurvePoint 是学习曲线上的一个复习日（DESIGN.md §9「学习曲线」）。
+// LearningCurvePoint 是学习曲线上的一个复习日（「学习曲线」）。
 type LearningCurvePoint struct {
 	Day string
 	// New 是当天「新引入」的卡数：state_before = New 的首次复习。
@@ -566,7 +566,7 @@ type LearningCurvePoint struct {
 
 // LearningCurve 返回 [fromDay, toDay] 内每个有复习记录的复习日的「新引入 vs 复习量」，
 // 按日期升序。新引入口径是 state_before = New，其余算复习量，两者互斥、相加即当天总量。
-// fromDay/toDay 是 review_day 格式的闭区间，与 §9 其余指标一致。
+// fromDay/toDay 是 review_day 格式的闭区间，与其余统计指标一致。
 func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, toDay string) ([]LearningCurvePoint, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("learning curve: user id is required")
@@ -591,10 +591,10 @@ func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, 
 	return out, nil
 }
 
-// reviewStateNew 是 reviews.state_before 的 New 取值（DESIGN.md §2.2：0=New）。
+// reviewStateNew 是 reviews.state_before 的 New 取值（0=New）。
 const reviewStateNew = 0
 
-// DefaultDayCutoffHour 是文档化默认日切点小时（DESIGN.md §3.3：本地 04:00 换日）。
+// DefaultDayCutoffHour 是文档化默认日切点小时（本地 04:00 换日）。
 // 放在 store 而不是 schedule：store 是 schedule/web/reminder/digest 都能依赖的最底层，
 // 归一化规则必须能被这几层共享，且 schedule 依赖 store（反向会成导入环）。
 const DefaultDayCutoffHour = 4

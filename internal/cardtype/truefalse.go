@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// trueFalseType 是判断卡：用户判定 statement 的真假（DESIGN.md §6.2）。
+// trueFalseType 是判断卡：用户判定 statement 的真假。
 // 字段：statement / answer（bool，必填），extra / source_url（可选）。
 type trueFalseType struct{}
 
@@ -31,7 +31,7 @@ func (trueFalseType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给陈述句；背面给出真假。真假是内容本身，本地化由视图层负责（DESIGN.md §8.3）。
+// Render 正面给陈述句；背面给出真假。真假是内容本身，本地化由视图层负责。
 func (trueFalseType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -73,7 +73,7 @@ func (trueFalseType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 为未来 LLM 评分提供题目与参考答案。
 func (trueFalseType) PromptContext(note Note) PromptContext {
 	statement, _ := stringField(note.Fields, "statement")
 	answer, _ := requiredBoolField(note.Fields, "answer")

@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// SessionStore 封装 sessions 表。会话是服务端状态：登出、改密码、禁用都靠它作废（DESIGN.md §4.3、§11）。
+// SessionStore 封装 sessions 表。会话是服务端状态：登出、改密码、禁用都靠它作废。
 type SessionStore struct {
 	db *gorm.DB
 }
@@ -51,7 +51,7 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID uint64, at t
 }
 
 // RevokeAllForUserTx 在调用方给定的事务里批量作废某用户的全部有效会话。
-// 口令重置需要它与密码写入、API Key 吊销共享同一事务，失败时不留下半作废（DESIGN.md §11）。
+// 口令重置需要它与密码写入、API Key 吊销共享同一事务，失败时不留下半作废。
 // 该用户全部会话的分享授权（L3）在同一事务里一并删除。
 func (s *SessionStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
 	if err := tx.WithContext(ctx).Model(&Session{}).

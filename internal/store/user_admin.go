@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 管理面板的用户管理（DESIGN.md §8.4；ROADMAP.md M6-2）所需的用户存储扩展。
+// 管理面板的用户管理（ROADMAP.md M6-2）所需的用户存储扩展。
 //
 // 放在独立文件而不是塞进 user.go / models.go：这两处是其它里程碑的单写者热点，
 // 并行工作时尽量不动它们。这里只新增方法，不改动既有行为。
@@ -18,7 +18,7 @@ const AdminListUsersPageSize = 50
 
 // ListForAdmin 按搜索词分页列出用户。query 为空表示不筛选；命中用户名、邮箱或显示名。
 // 搜索一律 LOWER(...) 比较：SQLite 的 LIKE 对 ASCII 默认不区分大小写，而 PostgreSQL 区分，
-// 统一转小写才能让两库行为一致（DESIGN.md §2.3 的双库约定）。
+// 统一转小写才能让两库行为一致（双库约定）。
 func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size int) ([]User, int64, error) {
 	if size <= 0 || size > AdminListUsersPageSize {
 		size = AdminListUsersPageSize
@@ -45,7 +45,7 @@ func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size i
 
 // ListAdmins 返回所有仍可登录的管理员账号（role = admin 且 status = active），按 id 升序。
 //
-// D 类管理员通知（M1-24）据此解析收件地址：DESIGN.md §4.7 规定只用登录邮箱、不设单独收件
+// D 类管理员通知（M1-24）据此解析收件地址 规定只用登录邮箱、不设单独收件
 // 邮箱，所以收件人就是这些账号的 Email。只取 active 的管理员：被禁用的账号收不到信也不该
 // 被当成投递目标。
 func (s *UserStore) ListAdmins(ctx context.Context) ([]User, error) {

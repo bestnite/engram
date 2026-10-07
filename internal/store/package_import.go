@@ -26,18 +26,18 @@ import (
 	"git.nite07.com/nite/engram/internal/mediatype"
 )
 
-// 卡组包导入（DESIGN.md §7.6、AGENTS.md M5-7）。
+// 卡组包导入（AGENTS.md M5-7）。
 //
 // 安全是重点：解压前拒绝路径穿越与软链、限制总解压体积与条目数（防 zip bomb）；
 // 业务写入全部在一个事务内完成（失败不留半成品）；重复导入靠 external_ref 或内容指纹去重。
 
-// 导入目标三种（DESIGN.md §7.6）。
+// 导入目标三种。
 const (
 	// PackageTargetNewDeck 用包内卡组名新建卡组（重名自动加后缀）。
 	PackageTargetNewDeck = "new_deck"
 )
 
-// PackageLimits 是解压安全上限（DESIGN.md §7.6「安全」）。
+// PackageLimits 是解压安全上限（「安全」）。
 type PackageLimits struct {
 	MaxEntries    int
 	MaxFileBytes  int64
@@ -114,7 +114,7 @@ func packageDeckMetaError(entries []string) error {
 	}
 }
 
-// PackageImportOptions 控制一次导入（DESIGN.md §7.6）。
+// PackageImportOptions 控制一次导入。
 type PackageImportOptions struct {
 	// Target 取值 new_deck（默认）、into_deck:<id>、replace_deck:<id>。
 	Target string
@@ -145,7 +145,7 @@ type PackageImportError struct {
 	Reason string `json:"reason"`
 }
 
-// PackageImportReport 是导入（含 dry_run）的报告，形态与 §7.3 批量导入一致。
+// PackageImportReport 是导入（含 dry_run）的报告，形态与批量导入一致。
 type PackageImportReport struct {
 	Target            string               `json:"target"`
 	DryRun            bool                 `json:"dry_run"`
@@ -167,7 +167,7 @@ type PackageImportReport struct {
 var ErrPackageDryRun = errors.New("deck package: dry run rollback")
 
 // ReadPackageArchive 安全地读出一个 zip：拒绝路径穿越、绝对路径、软链，
-// 并限制条目数与总解压体积（DESIGN.md §7.6「安全」）。
+// 并限制条目数与总解压体积（「安全」）。
 func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, error) {
 	// 先整体读入内存（有总量上限），因为 zip.NewReader 需要 ReaderAt。
 	raw, err := io.ReadAll(io.LimitReader(r, limits.MaxTotalBytes+1))
@@ -258,13 +258,13 @@ func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
 	return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
 }
 
-// ImportPackage 导入一个卡组包（DESIGN.md §7.6、M5-7）。
+// ImportPackage 导入一个卡组包（M5-7）。
 //
 // 调用方（API/Web/MCP/CLI）负责在调用前完成卡组级权限判定；本方法只做包级校验、
 // 去重、id 重映射、进度归属判定与事务化写入。
 func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.Reader, opts PackageImportOptions) (*PackageImportReport, error) {
 	// 本次导入的执行者：note 写入的写前校验据此判断「新引入的引用是否导入者可读」
-	// （DESIGN.md §6.3）。包内提供的媒体字节会先登记到 media_uploaders，再校验。
+	// 包内提供的媒体字节会先登记到 media_uploaders，再校验。
 	ctx = WithActor(ctx, actorUserID)
 	if opts.Now == nil {
 		opts.Now = func() time.Time { return time.Now().UTC() }
@@ -545,7 +545,7 @@ func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64,
 // importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
 func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
 	// 包内的媒体字节视为「本次由导入者提供」：先登记到 media_uploaders，再做 note 写入的
-	// 写前校验（DESIGN.md §6.3：先把本次提供的 sha 写入 media_uploaders 再校验）。否则
+	// 写前校验（先把本次提供的 sha 写入 media_uploaders 再校验）。否则
 	// 「导入自己刚提供的字节」会被写前校验误判成越权引用。dry_run 不落任何行。
 	if !opts.DryRun && opts.MediaRoot != "" {
 		for sha := range pkg.MediaRaw {
@@ -567,7 +567,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		}
 	}
 
-	// 现有内容索引：external_ref 优先，其次内容指纹（DESIGN.md §7.6 去重规则）。
+	// 现有内容索引：external_ref 优先，其次内容指纹（去重规则）。
 	byRef, byFingerprint, err := s.existingNoteIndex(ctx, tx, deckID)
 	if err != nil {
 		return err
@@ -753,7 +753,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 	}
 }
 
-// uniqueDeckName 在重名时追加 (2)、(3)… 后缀（DESIGN.md §7.6）。
+// uniqueDeckName 在重名时追加 (2)、(3)… 后缀。
 func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string) (string, error) {
 	var names []string
 	if err := tx.WithContext(ctx).Model(&Deck{}).Where("owner_user_id = ?", owner).

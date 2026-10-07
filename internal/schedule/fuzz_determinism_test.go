@@ -8,7 +8,7 @@ import (
 )
 
 // TestFuzzIsDeterministicForSameSeed 断言 EnableFuzz 下同一张卡、同一 now 的两次评分产出
-// 完全相同的间隔（DESIGN.md §9 验收：fuzz 确定性 —— 同一种子重放得到相同间隔）。
+// 完全相同的间隔（验收：fuzz 确定性 —— 同一种子重放得到相同间隔）。
 //
 // go-fsrs 的 fuzz 种子由 (now.UnixMilli, reps, difficulty*stability) 组成（见上游
 // scheduler.initSeed），因此对本包而言“种子”就是 (CardState, now)：二者相同则 ALEA

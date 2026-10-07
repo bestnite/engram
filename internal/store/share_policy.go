@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// SharePolicyStore 读写「谁可以把卡组分享给我」这一策略与它的白名单（DESIGN.md §4.4）。
+// SharePolicyStore 读写「谁可以把卡组分享给我」这一策略与它的白名单。
 //
 // 判定只有一个入口 **Allows**：策略与白名单分散判断必然漂移，而漂移的表现是「白名单配了
 // 却拦不住人」这种很难被发现的越权。

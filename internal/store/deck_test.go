@@ -243,7 +243,7 @@ func TestDeckCreateValidation(t *testing.T) {
 }
 
 // TestDeckSetPresetRequiresOwnership 是「卡组切换调度」的验收：owner 可以在自己名下的预设
-// 之间切换，但换成别人的预设必须被拒——卡组可读就意味着它的排程参数可读（DESIGN.md §8.1）。
+// 之间切换，但换成别人的预设必须被拒——卡组可读就意味着它的排程参数可读。
 func TestDeckSetPresetRequiresOwnership(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

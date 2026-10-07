@@ -89,7 +89,7 @@ func packageReader(pkg any, limits PackageLimits) (io.Reader, error) {
 }
 
 // decodeBase64Bounded 解码一段 base64：先按 maxBytes 对应的 base64 展开上界拒绝超限输入，
-// 超限时根本不进入解码，避免把超过归档上限的字节先整体解进内存（DESIGN.md §7.6「解压拒绝超限」）。
+// 超限时根本不进入解码，避免把超过归档上限的字节先整体解进内存（「解压拒绝超限」）。
 // 错误沿用既有的 package_too_large code，与 ReadPackageArchive 的上限同一口径，不新造 code。
 func decodeBase64Bounded(s string, maxBytes int64) ([]byte, error) {
 	if maxBytes > 0 && int64(len(s)) > int64(base64.StdEncoding.EncodedLen(int(maxBytes))) {

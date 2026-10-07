@@ -73,11 +73,11 @@ func boolField(fields map[string]any, name string, def bool) (bool, error) {
 	return b, nil
 }
 
-// validateCommonOptional 校验通用可选字段 extra / source_url（DESIGN.md §6.2）。
+// validateCommonOptional 校验通用可选字段 extra / source_url。
 //
-// 注意：DESIGN.md §6.2 把它们列为所有题型可用的可选字段；而
+// 冻结表把它们列为所有题型可用的可选字段；而
 // schema/note-import.schema.json 把它们放在 note 层（与 fields 平级）。
-// 两处位置不一致，本包按 DESIGN.md 在 fields 内接受并做类型校验；
+// 两处位置不一致，本包按冻结表在 fields 内接受并做类型校验；
 // 放在 note 层时不由本包处理。该差异已在交付报告中说明，未改动 schema。
 func validateCommonOptional(fields map[string]any) error {
 	if v, ok := fields["source_url"]; ok && v != nil {

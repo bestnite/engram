@@ -84,7 +84,7 @@ func TestSubmitWritesStateAndReviewInOneTransaction(t *testing.T) {
 }
 
 // TestSubmitDuplicateReturnsVersionConflict 断言重复提交同一 expected_version 时，
-// 第二次返回 ErrVersionConflict，且不改变任何一行（DESIGN.md §3.4、M3-3 验收）。
+// 第二次返回 ErrVersionConflict，且不改变任何一行（M3-3 验收）。
 func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

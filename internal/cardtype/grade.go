@@ -11,7 +11,7 @@ import (
 // 以及 fields 的数值/整数读取辅助。五个具体题型在 typed.go / numeric.go /
 // choice.go / truefalse.go 中实现。
 
-// FSRS 四档评分，与 reviews.rating 的整数约定一致（DESIGN.md §2.2、§3.4）。
+// FSRS 四档评分，与 reviews.rating 的整数约定一致。
 const (
 	RatingAgain = 1
 	RatingHard  = 2
@@ -19,10 +19,10 @@ const (
 	RatingEasy  = 4
 )
 
-// GradeMapping 是「分数→评分档位」映射，以 JSON 存进 preset（DESIGN.md §6.2）。
+// GradeMapping 是「分数→评分档位」映射，以 JSON 存进 preset。
 //
-// 分数是 [0,1] 的正确率：1 = 全对，0 = 全错，其余为部分得分。默认映射与
-// DESIGN.md §6.2 一致：全对 = Good、部分对 = Hard、全错 = Again。把它放进 preset
+// 分数是 [0,1] 的正确率：1 = 全对，0 = 全错，其余为部分得分。默认映射是
+// 全对 = Good、部分对 = Hard、全错 = Again。把它放进 preset
 // 是为了按题型/卡组微调，例如把全对提到 Easy，或把部分对降成 Again。
 //
 // 阈值可选：score >= FullThreshold 判为全对，score <= NoneThreshold 判为全错，
@@ -39,7 +39,7 @@ type GradeMapping struct {
 // GradeMappingVersion 是本包认识的映射结构版本；未知版本拒绝，避免静默误读。
 const GradeMappingVersion = 1
 
-// DefaultGradeMapping 返回 DESIGN.md §6.2 的默认映射：全对 Good、部分 Hard、全错 Again。
+// DefaultGradeMapping 返回默认映射：全对 Good、部分 Hard、全错 Again。
 func DefaultGradeMapping() GradeMapping {
 	return GradeMapping{
 		Version:       GradeMappingVersion,
@@ -139,7 +139,7 @@ func (m GradeMapping) RatingFor(score float64) int {
 // 正确答案、选项、容差规则都在里面），Mapping 是该题所属 preset 的映射（nil = 默认）。
 //
 // 判分器只拿到 input，因此字段必须随 input 传入；这样可选窄接口 Grader 无需扩张，
-// 核心提交管线也不必改动（DESIGN.md §6.2、§14.4）。
+// 核心提交管线也不必改动。
 type GradeContext struct {
 	Fields  map[string]any
 	Mapping *GradeMapping

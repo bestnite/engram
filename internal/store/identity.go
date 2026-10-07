@@ -12,7 +12,7 @@ import (
 // ErrIdentityNotFound 表示按条件未找到绑定；上层据此与真正的数据库故障区分。
 var ErrIdentityNotFound = errors.New("identity not found")
 
-// IdentityStore 封装 identities 表的 GORM 访问（DESIGN.md §2.2、§4.5）。
+// IdentityStore 封装 identities 表的 GORM 访问。
 // (provider, subject) 唯一约束由模型定义，重复绑定会在 Create 时报错。
 type IdentityStore struct {
 	db *gorm.DB
@@ -57,7 +57,7 @@ func (s *IdentityStore) ByID(ctx context.Context, id uint64) (*Identity, error) 
 	return &ident, nil
 }
 
-// ListForUser 返回某内部用户已绑定的全部外部身份（一个用户可有多个，§4.5）。
+// ListForUser 返回某内部用户已绑定的全部外部身份（一个用户可有多个）。
 // 管理面板（M6）查看绑定列表时使用；按绑定时间升序，保证展示顺序稳定。
 func (s *IdentityStore) ListForUser(ctx context.Context, userID uint64) ([]Identity, error) {
 	var rows []Identity
@@ -83,7 +83,7 @@ func (s *IdentityStore) ListAll(ctx context.Context) ([]Identity, error) {
 // Delete 解绑一条外部身份（按主键）。行不存在时返回 ErrIdentityNotFound。
 //
 // 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI（ROADMAP.md M1-12）。
-// 删除整行而非软删除，是因为 identities 表没有 revoked_at 列（DESIGN.md §2.2），
+// 删除整行而非软删除，是因为 identities 表没有 revoked_at 列，
 // 擅自加列属于 models.go 单写者的活。
 func (s *IdentityStore) Delete(ctx context.Context, id uint64) error {
 	res := s.db.WithContext(ctx).Delete(&Identity{}, "id = ?", id)

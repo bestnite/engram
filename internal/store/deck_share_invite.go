@@ -14,7 +14,7 @@ import (
 // 用哨兵是为了让调用方把「没有」与「查库失败」分开。
 var ErrShareInviteNotFound = errors.New("deck share invite not found")
 
-// DeckShareInviteStore 读写待接受的共享邀请（DESIGN.md §4.4）。
+// DeckShareInviteStore 读写待接受的共享邀请。
 //
 // 授权（deck_grants）只在接受时才写，所以这张表**不参与任何可见性判定**：待接受的邀请
 // 不该让别人看到卡组内容。

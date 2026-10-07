@@ -70,7 +70,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 				t.Errorf("round-trip mismatch: %+v", again)
 			}
 
-			// 空 learning_steps 是有意义的取值（关闭学习步骤，DESIGN.md §3.2），必须原样保留。
+			// 空 learning_steps 是有意义的取值（关闭学习步骤），必须原样保留。
 			empty := NewPreset(owner, "NoSteps")
 			empty.LearningSteps = ""
 			if err := presets.Create(ctx, &empty); err != nil {

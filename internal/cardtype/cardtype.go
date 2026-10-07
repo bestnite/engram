@@ -1,11 +1,11 @@
-// Package cardtype 是题型注册表与核心管线（DESIGN.md §6.2）。
+// Package cardtype 是题型注册表与核心管线。
 //
 // 设计目标：新增题型 = 新增一个实现文件 + 注册，核心代码不改动
 // （AGENTS.md §2.3 第 7 条）。为此核心只依赖一个窄接口 CardType；作答类判分、
 // 未来 LLM 评分等能力用可选窄接口（Grader / PromptContexter / ReferenceRefer）断言，
-// 不预先塞进大接口（DESIGN.md §6.2、§14.4）。
+// 不预先塞进大接口。
 //
-// 字段名与 DESIGN.md §6.2 的冻结表逐字一致（basic/basic_both: front/back；
+// 字段名是冻结的，与 schema/note-import.schema.json 逐字一致（basic/basic_both: front/back；
 // cloze: text；list: prompt/items[]/ordered；通用可选 extra/source_url）。
 package cardtype
 
@@ -17,7 +17,7 @@ import (
 
 // Note 是题型看到的内容视图：Kind 决定 Fields 的结构。
 // 与 store.Note 分离，因为注册表只关心内容，不关心持久化
-// （内容与进度分离，DESIGN.md §2.1）。
+// （内容与进度分离）。
 type Note struct {
 	Kind   string
 	Fields map[string]any
@@ -25,7 +25,7 @@ type Note struct {
 
 // Card 既承载呈现标识，也承载渲染所需的字段。
 //
-// Template 必须落在 cards.template 的约定内（DESIGN.md §2.2）：
+// Template 必须落在 cards.template 的约定内：
 // forward / reverse / cloze:<index>。Ordinal 在同一 note 内从 0 起单调递增。
 // Fields 是所属 note 的字段，渲染前由调用方填充（生成卡片标识时它可为空，不落库）。
 type Card struct {
@@ -53,7 +53,7 @@ func (s Side) String() string {
 }
 
 // RenderResult 是某一侧的渲染输入：Markdown + TeX 原文，
-// HTML 化与清洗由渲染管线负责（DESIGN.md §6.1）。
+// HTML 化与清洗由渲染管线负责。
 type RenderResult struct {
 	// Body 是这一侧的主内容。
 	Body string
@@ -70,7 +70,7 @@ type CardType interface {
 	Cards(note Note) []Card
 	// Render 返回 card 在指定侧要展示的内容。
 	Render(card Card, side Side) (RenderResult, error)
-	// Label 返回 i18n 语言包的键名，而不是用户可见文案（DESIGN.md §8.3）。
+	// Label 返回 i18n 语言包的键名，而不是用户可见文案。
 	Label() string
 }
 
@@ -82,18 +82,18 @@ type Grader interface {
 	Grade(input any) (rating int, detail map[string]any, ok bool)
 }
 
-// PromptContext 是 PromptContexter 返回的题目上下文，供未来 LLM 评分使用（DESIGN.md §14.2）。
+// PromptContext 是 PromptContexter 返回的题目上下文，供未来 LLM 评分使用。
 type PromptContext struct {
 	Question  string
 	Reference string
 }
 
-// PromptContexter 是可选能力：为 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 是可选能力：为 LLM 评分提供题目与参考答案。
 type PromptContexter interface {
 	PromptContext(note Note) PromptContext
 }
 
-// ReferenceRefer 是可选能力：返回该 note 依赖的知识库片段引用（DESIGN.md §14.4）。
+// ReferenceRefer 是可选能力：返回该 note 依赖的知识库片段引用。
 type ReferenceRefer interface {
 	ReferenceRefs(note Note) []string
 }

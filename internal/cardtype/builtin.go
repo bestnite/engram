@@ -13,7 +13,7 @@ func init() {
 	mustRegister("choice_single", choiceSingleType{})
 	mustRegister("choice_multi", choiceMultiType{})
 	mustRegister("true_false", trueFalseType{})
-	// 主观类（M3-11）：自评的自由文本题型；LLM 判分留待 §14。
+	// 主观类（M3-11）：自评的自由文本题型；LLM 判分留待后续。
 	mustRegister("short_answer", shortAnswerType{})
 }
 

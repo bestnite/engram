@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// 本文件实现两种选择卡（DESIGN.md §6.2）：
+// 本文件实现两种选择卡：
 //   choice_single: question / options[]（≥2，去重）/ answer（0 基索引）
 //   choice_multi : question / options[]（≥2，去重）/ answers[]（0 基索引，≥1，去重）
 // options 与答案索引的约束 JSON Schema 表达不了，由 Validate 在此处保证并点名字段。
@@ -90,7 +90,7 @@ func (choiceSingleType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 为未来 LLM 评分提供题目与参考答案。
 func (choiceSingleType) PromptContext(note Note) PromptContext {
 	question, options, answer, err := choiceSingleParts(note.Fields)
 	if err != nil {
@@ -190,7 +190,7 @@ type ChoiceMultiInput struct {
 
 // Grade 判分并给出部分得分：score = max(0, 命中数 - 误选数) / 正确数，上限 1。
 // 这样「选中全部正确项」= 1 分（Good），「只选中一部分」= 部分分（默认 Hard），
-// 「全错」= 0 分（Again），满足 DESIGN.md §6.2 的部分得分映射。
+// 「全错」= 0 分（Again），满足部分得分的默认映射。
 // 任一选中索引越界视为无法判分。
 func (choiceMultiType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(ChoiceMultiInput)
@@ -231,7 +231,7 @@ func (choiceMultiType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(score, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 为未来 LLM 评分提供题目与参考答案。
 func (choiceMultiType) PromptContext(note Note) PromptContext {
 	question, options, answers, err := choiceMultiParts(note.Fields)
 	if err != nil {

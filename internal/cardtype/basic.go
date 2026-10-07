@@ -2,7 +2,7 @@ package cardtype
 
 import "fmt"
 
-// basicType 是基础问答卡：front 提问、back 回答，产出 1 张卡（DESIGN.md §6.2）。
+// basicType 是基础问答卡：front 提问、back 回答，产出 1 张卡。
 // 字段：front / back（必填），extra / source_url（可选）。
 type basicType struct{}
 
@@ -47,7 +47,7 @@ func (basicType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: front}, nil
 }
 
-// basicBothType 是双向问答卡：正反各一张（DESIGN.md §6.2）。
+// basicBothType 是双向问答卡：正反各一张。
 // 字段：front / back（必填），extra / source_url（可选）。
 type basicBothType struct{}
 

@@ -2,7 +2,7 @@ package cardtype
 
 import "fmt"
 
-// listType 是列表卡：给出 prompt，逐项揭示 items（DESIGN.md §6.2）。
+// listType 是列表卡：给出 prompt，逐项揭示 items。
 // 字段：prompt（必填）、items[]（必填、非空）、ordered（可选 bool，缺省 false），
 // extra / source_url（可选）。
 type listType struct{}
@@ -18,7 +18,7 @@ func (listType) Validate(fields map[string]any) error {
 	if _, err := stringSliceField(fields, "items"); err != nil {
 		return fmt.Errorf("list: %w", err)
 	}
-	// ordered 缺省 false（DESIGN.md §6.2 冻结表）。
+	// ordered 缺省 false（冻结表）。
 	if _, err := boolField(fields, "ordered", false); err != nil {
 		return fmt.Errorf("list: %w", err)
 	}

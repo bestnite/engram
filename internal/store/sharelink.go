@@ -16,14 +16,14 @@ import (
 // ErrShareLinkNotFound 表示分享链接不存在、已撤销或已过期。
 //
 // 三种情况故意合并成同一个哨兵：撤销/过期的链接必须与“从来没存在过”返回同样的结果
-// （DESIGN.md §11 的安全要求、M5-3 验收“撤销或过期后的链接返回 404”），
+// （安全要求、M5-3 验收“撤销或过期后的链接返回 404”），
 // 否则调用方会泄漏“这个 token 曾经有效”这一事实。
 var ErrShareLinkNotFound = errors.New("share link not found")
 
 // ShareLinkDigest 返回明文 token 的 sha256 十六进制摘要。
 //
-// 库里只存摘要（DESIGN.md §11）：即使数据库泄漏，攻击者也拿不到可用的链接。
-// 明文只在创建时返回一次，与 API Key 的处理方式一致（§7.2）。
+// 库里只存摘要：即使数据库泄漏，攻击者也拿不到可用的链接。
+// 明文只在创建时返回一次，与 API Key 的处理方式一致。
 func ShareLinkDigest(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
@@ -61,7 +61,7 @@ type ShareLinkStore struct {
 func NewShareLinkStore(db *gorm.DB) *ShareLinkStore { return &ShareLinkStore{db: db} }
 
 // Create 生成明文 token、落库摘要并返回明文（明文只此一次机会，调用方必须立刻展示给用户）。
-// 分享链接恒为 reader：它只用于免注册只读浏览（DESIGN.md §5），不接受调用方自定义角色。
+// 分享链接恒为 reader：它只用于免注册只读浏览，不接受调用方自定义角色。
 func (s *ShareLinkStore) Create(ctx context.Context, in ShareLinkInput) (string, *ShareLink, error) {
 	if in.DeckID == 0 || in.CreatedBy == 0 {
 		return "", nil, errors.New("share link: deck_id and created_by are required")

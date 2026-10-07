@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 媒体映射与可读性判定（DESIGN.md §6.3，2026-10-06 定）。
+// 媒体映射与可读性判定（-10-06 定）。
 //
 // 两个事实：
 //   - media_notes：note 字段里引用了哪些媒体（派生索引，由 note 写入路径重建）；
@@ -41,7 +41,7 @@ func (e *MediaWriteError) Error() string {
 	return e.Code + ": " + strings.Join(e.Entries, ", ")
 }
 
-// RecordMediaUploader 幂等登记「userID 提供过 sha 这份字节」（DESIGN.md §6.3）。
+// RecordMediaUploader 幂等登记「userID 提供过 sha 这份字节」。
 //
 // 上传与导入（凡本次提供字节的路径）都调用它；重复登记不报错、不建重复行（主键冲突忽略）。
 // 写入后不可撤销：没有删除路径，删了「提供过」就不成立。
@@ -67,13 +67,13 @@ func mediaRefsIn(fields map[string]any) map[string]bool {
 	return refs
 }
 
-// mediaReadableByUser 判定 sha 的媒体是否可被 userID 读取（DESIGN.md §6.3 的两支 + L3 的分享支）。
+// mediaReadableByUser 判定 sha 的媒体是否可被 userID 读取（两支 + L3 的分享支）。
 //
 // 允许读取的充要条件，三选一：
 //  1. media_uploaders 里存在指向 userID 的记录（他提供过这份字节，去重命中也算，且不可撤销）；
 //  2. media_notes 映射里存在一条指向「userID 可见卡组内、未软删的 note」的记录；
 //  3. shareSessionID 非空、且 media_notes 映射里存在一条指向「该**服务端会话**通过分享链接打开过、
-//     且该授权未过期」的卡组内、未软删的 note（L3，DESIGN.md §5）。
+//     且该授权未过期」的卡组内、未软删的 note（L3）。
 //
 // 第 3 支只对读取路径开放：写入前校验（checkNewMediaRefs）传空 sessionID。分享链接的访客是 reader，
 // 本就不能写 note；把分享授权也算进「可读」，会让写前校验引用一个语义上不该有的来源。
@@ -111,7 +111,7 @@ func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaS
 
 // checkNewMediaRefs 在写入之前校验「本次新引入的引用」是否都是写入者（actor）可读的。
 //
-// 规则（DESIGN.md §6.3「写入时校验」）：
+// 规则（「写入时校验」）：
 //   - 只校验 newFields 里新出现、oldFields 里没有的 sha（旧引用本就已通过过校验，重复校验无意义）；
 //   - 校验对**写入之前的状态**求值：调用方必须在写入媒体/映射之前调用它，否则映射一建立即自我满足；
 //   - 库里根本没有这份字节（media 无行）的引用放行：它泄露不了任何东西，且是「导出关闭媒体后
@@ -159,7 +159,7 @@ func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor uint64, oldFields
 
 // rebuildMediaNotes 重建某 note 的 media_notes 映射：删掉该 note 的全部旧行，再按新字段插入。
 //
-// 必须**重建**而非追加（DESIGN.md §6.3）：追加会让「删掉引用」不再撤销读取权——旧行留在表里，
+// 必须**重建**而非追加：追加会让「删掉引用」不再撤销读取权——旧行留在表里，
 // 读取鉴权仍能命中它。它跑在同一个事务里，与 note 写入同生共死。
 func rebuildMediaNotes(ctx context.Context, tx *gorm.DB, noteID uint64, fields map[string]any) error {
 	if err := tx.WithContext(ctx).Where("note_id = ?", noteID).Delete(&MediaNote{}).Error; err != nil {

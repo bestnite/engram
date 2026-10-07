@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// typedType 是输入作答卡：用户键入文本，机器判分（DESIGN.md §6.2）。
+// typedType 是输入作答卡：用户键入文本，机器判分。
 // 字段：prompt / answer（必填），accept[] / ignore_case / ignore_whitespace / regex（可选），
 // extra / source_url（可选）。
 type typedType struct{}
@@ -119,7 +119,7 @@ func (typedType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 为未来 LLM 评分提供题目与参考答案。
 func (typedType) PromptContext(note Note) PromptContext {
 	prompt, _ := stringField(note.Fields, "prompt")
 	answer, _ := stringField(note.Fields, "answer")

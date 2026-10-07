@@ -1,7 +1,7 @@
 // Package store 持有 GORM 模型与数据访问。
 // 同一套模型同时服务业务、GORM 与 JSON/CSV 序列化，不做 DTO 映射层（AGENTS.md §2.4）。
 //
-// 双库兼容（DESIGN.md §2.3）：不使用任何 PG 专有类型（jsonb / serial / array），
+// 双库兼容：不使用任何 PG 专有类型（jsonb / serial / array），
 // JSON 一律存 TEXT；字符串型列级默认值（如 'user' / 'basic'）不写进 DDL —— 未加引号的
 // 默认值在 PostgreSQL 里可能被当成同名函数或关键字，两库行为不一致；这些默认值由 store
 // 层写入时在 Go 侧显式给出。数值与布尔默认值两库语义一致，可以写在 DDL 里。
@@ -96,7 +96,7 @@ type Preset struct {
 	WeightsJSON        *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
 	WeightsOptimizedAt *time.Time `json:"weights_optimized_at,omitempty"`
 	WeightsReviewCount *int       `json:"weights_review_count,omitempty"`
-	// GradeMappingJSON 是机器判分的「分数→评分档位」映射（JSON，DESIGN.md §6.2）。
+	// GradeMappingJSON 是机器判分的「分数→评分档位」映射（JSON）。
 	// NULL 表示用内置默认映射（全对 Good / 部分对 Hard / 全错 Again）。
 	// 可空 TEXT，不设数据库默认值：默认行为由 cardtype.DefaultGradeMapping 在 Go 侧给出。
 	GradeMappingJSON *string   `gorm:"column:grade_mapping_json" json:"grade_mapping_json,omitempty"`
@@ -106,8 +106,8 @@ type Preset struct {
 
 func (Preset) TableName() string { return "presets" }
 
-// Deck 是扁平卡组（不做卡组树，DESIGN.md §2.2）。
-// NewPerDay / ReviewsPerDay 是卡组级每日上限（DESIGN.md §3.3），0 表示不限。
+// Deck 是扁平卡组（不做卡组树）。
+// NewPerDay / ReviewsPerDay 是卡组级每日上限，0 表示不限。
 // 两列都是带数据库默认值的整型，零值由 GORM 省略、由数据库默认值补齐；
 // 显式把上限设为 0 请走 DeckStore.SetCaps（map 更新会写入 0）。
 type Deck struct {
@@ -191,7 +191,7 @@ type Review struct {
 	StateBefore     int       `gorm:"not null" json:"state_before"` // 0=New 1=Learning 2=Review 3=Relearning
 	// StepIndexBefore 是本次评分前 card_states.step_index 的快照（剩余学习步骤数）。
 	// 评分前的 FSRS 学习步骤游标没有别的来源，而 fsrs.Rollback 会把 step_index 归零；
-	// 存下它 Undo 才能精确还原步骤进度（DESIGN.md §3.4，M3-9）。
+	// 存下它 Undo 才能精确还原步骤进度（M3-9）。
 	// 可空：旧行没有这个快照，Undo 遇到 NULL 时退回归零行为。整数不用带默认值的布尔（AGENTS.md §2.3 第 9 条）。
 	StepIndexBefore *int     `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
 	IntervalDays    *float64 `json:"interval_days,omitempty"`
@@ -227,7 +227,7 @@ type ShareLink struct {
 func (ShareLink) TableName() string { return "share_links" }
 
 // Media 只存元数据，字节在本地文件系统，路径由 sha256 决定。
-// 主键 = 内容 sha256（DESIGN.md §2.2、§6.3）：对外标识就是哈希，不再有自增 id。
+// 主键 = 内容 sha256：对外标识就是哈希，不再有自增 id。
 type Media struct {
 	Sha256    string    `gorm:"primaryKey" json:"sha256"`
 	RelPath   string    `gorm:"not null" json:"rel_path"`
@@ -241,14 +241,14 @@ type Media struct {
 
 func (Media) TableName() string { return "media" }
 
-// MediaNote 是 media ↔ note 的显式引用映射（DESIGN.md §2.2、§6.3，2026-10-06 定）。
+// MediaNote 是 media ↔ note 的显式引用映射（-10-06 定）。
 //
 // 它是**派生索引**：内容的唯一来源始终是 notes.fields_json，映射由 note 写入路径在每次
 // 写入后**重建**（删旧建新，见 NoteStore）。读取鉴权据此判定「这份媒体是否被我的可读卡组里的
 // 未软删 note 引用」，不再扫描 fields_json。
 //
 // 为什么不带「谁建立的引用」列：越权引用改由写侧单点校验（写入前对写入前状态求值）拦住，
-// 前提是所有 note 写入路径收敛到同一个方法（DESIGN.md §6.3）。
+// 前提是所有 note 写入路径收敛到同一个方法。
 type MediaNote struct {
 	MediaSha string `gorm:"column:media_sha;not null;uniqueIndex:idx_media_notes_media_note,priority:1" json:"media_sha"`
 	NoteID   uint64 `gorm:"column:note_id;not null;uniqueIndex:idx_media_notes_media_note,priority:2" json:"note_id"`
@@ -258,14 +258,14 @@ type MediaNote struct {
 
 func (MediaNote) TableName() string { return "media_notes" }
 
-// MediaUploader 记录「谁提供过这份字节」（DESIGN.md §2.2、§6.3，2026-10-06 定）。
+// MediaUploader 记录「谁提供过这份字节」（-10-06 定）。
 //
 // 为什么不是 media.created_by 一列：字节按 sha256 去重，同一份字节全库只有一行，一列只能记
 // 第一个上传者；于是「B 上传的字节恰好与 C 已有的相同（去重命中）」时 B 拿不到归属——A 撤销
 // 共享后 B 读不到自己提供的文件。多对多记全部提供者，才让「能提供字节 ⇒ 可读」在去重下也成立。
 //
 // 上传与导入（凡本次提供字节的路径）按 (media_sha, user_id) **幂等**写入（clause.OnConflict
-// 忽略重复）。**写入后不可撤销**：删了「提供过」就不再成立（DESIGN.md §6.3）。
+// 忽略重复）。**写入后不可撤销**：删了「提供过」就不再成立。
 type MediaUploader struct {
 	MediaSha  string    `gorm:"primaryKey;column:media_sha" json:"media_sha"`
 	UserID    uint64    `gorm:"primaryKey;column:user_id" json:"user_id"`
@@ -274,7 +274,7 @@ type MediaUploader struct {
 
 func (MediaUploader) TableName() string { return "media_uploaders" }
 
-// ShareSessionDeck 记录「某个服务端会话通过分享链接打开过某个卡组」（L3，DESIGN.md §5）。
+// ShareSessionDeck 记录「某个服务端会话通过分享链接打开过某个卡组」（L3）。
 // 业务存取与过期规则在同文件的 ShareSessionStore，登记在 AllModels() 里。
 type ShareSessionDeck struct {
 	SessionID string    `gorm:"primaryKey;column:session_id" json:"session_id"`
@@ -351,7 +351,7 @@ const (
 
 // Session 是服务端会话记录：cookie 只持有不可读的会话 ID 与签名，作废以这里的行状态为准。
 // 把它放进库而非纯无状态 cookie，是为了让登出、改密码、禁用三种情况都能真正"服务端作废"
-// （DESIGN.md §4.3、§11）。csrf_token 绑定会话，供 CSRF 中间件校验。
+// csrf_token 绑定会话，供 CSRF 中间件校验。
 type Session struct {
 	ID         string     `gorm:"primaryKey;column:id" json:"id"`
 	UserID     uint64     `gorm:"not null;index" json:"user_id"`
@@ -384,14 +384,14 @@ func AllModels() []any {
 		// M1-23 每周学习摘要的发送台账：模型定义在 digest.go。
 		&DigestLog{},
 		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
-		// 管理员自定义邮件模板（DESIGN.md §4.7）：缺失即回退内置正文。
+		// 管理员自定义邮件模板：缺失即回退内置正文。
 		&MailTemplate{},
 		// L3 分享同意制：待接受的邀请与接收白名单。
 		&DeckShareInvite{}, &ShareAllow{},
 	}
 }
 
-// MailTemplate 是管理员自定义的邮件模板（DESIGN.md §4.7）。
+// MailTemplate 是管理员自定义的邮件模板。
 //
 // 唯一键是 (type, locale)：同一类型每种语言一份。**表里没有行是正常状态**——那表示该类型
 // 该语言用内置正文（发信方组装的那份），所以「删除自定义」就是删这一行，内置默认不可能被
@@ -408,7 +408,7 @@ type MailTemplate struct {
 
 func (MailTemplate) TableName() string { return "mail_templates" }
 
-// DeckShareInvite 是「已发出、还没被接受」的卡组共享邀请（DESIGN.md §4.4）。
+// DeckShareInvite 是「已发出、还没被接受」的卡组共享邀请。
 //
 // 同意制的落地方式：**授权（deck_grants）只在被邀请者接受时才写**，而可见集合谓词读的正是
 // deck_grants——所以待接受的邀请不进任何可见集合，队列、统计、回溯、媒体鉴权全都不用改。

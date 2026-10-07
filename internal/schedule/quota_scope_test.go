@@ -10,12 +10,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestNewCardQuotaIsCountedPerDeck 是额度口径的验收：DESIGN.md §3.3 把 new_per_day 定义为
+// TestNewCardQuotaIsCountedPerDeck 是额度口径的验收 把 new_per_day 定义为
 // **卡组级**设置，所以单卡组范围内"今日已引入"只能数该卡组的记录。
 //
 // 修复前它按全库统计：一个卡组刷满新卡额度会把另一个卡组的新卡一起挡住，用户实测到的症状
 // 是"卡组列表显示 6 张到期，点进去却说当前没有到期的卡片"。现在全库/多卡组范围也按各卡组
-// 自己的额度求和（DESIGN.md §3.3 把 new_per_day 定义在卡组上）。
+// 自己的额度求和（new_per_day 是卡组级列）。
 func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)

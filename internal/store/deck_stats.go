@@ -10,7 +10,7 @@ import (
 //
 // 「今日可刷多少张」不在这里：它必须先过队列的每日额度（schedule.DeckCounts），
 // 由 web 层用同一套取卡路径取得 —— 存储层再算一份原始积压数只会和队列口径漂移
-// （DESIGN.md §8.1 要求的是「各卡组到期数/新卡数」两个数，不是原始积压）。
+// 要求的是「各卡组到期数/新卡数」两个数，不是原始积压。
 type DeckSummary struct {
 	Deck Deck
 	// CardCount 是卡组内未删除 note 产生的未删除 card 数。

@@ -21,7 +21,7 @@ import (
 // 未覆盖：标签维度与判分来源分布——它们的口径依赖 tags_json 解码与任意来源分组，
 // 已由 stats_test.go 的手工 SQL 用例覆盖，此处不重复。
 
-// PageNumbers 是统计页（M7-3）会直接展示的标量数字集合，每个 §9 条目取一个有代表性的
+// PageNumbers 是统计页（M7-3）会直接展示的标量数字集合，每个统计指标取一个有代表性的
 // 标量；列表型结果（分桶、每卡组、每标签）在这里取合计值，避免逐行比对而让校验脆弱。
 type PageNumbers struct {
 	ReviewToday int64
@@ -132,7 +132,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: review volume: %w", err)
 	}
 
-	// 到期与新增：日边界与 §3.3 一致（复习日起点 04:00，本地）。
+	// 到期与新增：日边界与队列一致（复习日起点 04:00，本地）。
 	// 两条都以「可见卡组」为范围，与 StatsStore.DueForecast 同一谓词（visibleDeckIDsQuery）；
 	// 少了它，别人 private 卡组里没有状态行的卡会被算成「新卡未到期」。
 	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)

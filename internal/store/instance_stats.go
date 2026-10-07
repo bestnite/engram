@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// InstanceStats 是管理面板概览页（DESIGN.md §8.4）要用的实例级计数。
+// InstanceStats 是管理面板概览页要用的实例级计数。
 // 全部是廉价的 COUNT(*)：概览页是落地页，不该拖慢任何一个分区页。
 type InstanceStats struct {
 	// Users 是账号总数；ActiveUsers 是其中状态为 active 的（禁用账号不计）。

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestAPIKeyKeysScopeSemantics 钉住 F11 引入的第五档 scope `keys`（DESIGN.md §7.2）：
+// TestAPIKeyKeysScopeSemantics 钉住 F11 引入的第五档 scope `keys`：
 // keys 是独立档位（不蕴含 read/write/review，也不被它们蕴含）；admin 蕴含包括 keys
 // 在内的其余各档，反向不成立。归一化后 keys 排在 admin 之前。
 func TestAPIKeyKeysScopeSemantics(t *testing.T) {

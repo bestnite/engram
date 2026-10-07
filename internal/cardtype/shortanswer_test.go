@@ -7,7 +7,7 @@ import (
 )
 
 // TestShortAnswerRegistered 是 M3-11 的验收：文档冻结的十个题型全部注册，
-// 且 short_answer 在列（DESIGN.md §6.2）。
+// 且 short_answer 在列。
 func TestShortAnswerRegistered(t *testing.T) {
 	want := []string{
 		"basic", "basic_both", "choice_multi", "choice_single", "cloze",
@@ -22,7 +22,7 @@ func TestShortAnswerRegistered(t *testing.T) {
 }
 
 // TestShortAnswerIsSelfAssessed 断言 short_answer 不实现 Grader：复习流程对它走自评
-// （DESIGN §6.2「先自评」；LLM 判分留待 §14）。
+// （「先自评」；LLM 判分留待后续）。
 func TestShortAnswerIsSelfAssessed(t *testing.T) {
 	impl, ok := Lookup("short_answer")
 	if !ok {

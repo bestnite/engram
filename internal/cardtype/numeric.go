@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// numericType 是数值作答卡：用户键入数值，按绝对/相对容差判分（DESIGN.md §6.2）。
+// numericType 是数值作答卡：用户键入数值，按绝对/相对容差判分。
 // 字段：prompt / value（必填），tolerance_absolute / tolerance_relative / unit（可选），
 // extra / source_url（可选）。这套判分直接服务「分数↔百分数」这类纯记忆映射内容。
 type numericType struct{}
@@ -131,7 +131,7 @@ func (numericType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案（DESIGN.md §14.4）。
+// PromptContexter 为未来 LLM 评分提供题目与参考答案。
 func (numericType) PromptContext(note Note) PromptContext {
 	prompt, _ := stringField(note.Fields, "prompt")
 	value, err := numberField(note.Fields, "value")

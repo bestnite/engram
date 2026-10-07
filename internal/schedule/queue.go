@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 队列构建的文档化默认值（DESIGN.md §3.3）。日切点默认值以 store 为唯一来源，
+// 队列构建的文档化默认值。日切点默认值以 store 为唯一来源，
 // 因为归一化规则（0/越界 → 默认）必须被 store/schedule/web/reminder/digest 共享。
 const (
 	DefaultDayCutoffHour = store.DefaultDayCutoffHour
@@ -26,7 +26,7 @@ const (
 )
 
 // deckUnlimited 是「该卡组此项今日不限」的哨兵值。卡组列写 0 就是不限，不是「回落到默认」
-// （DESIGN.md §3.3），因此「不限」需要与「剩余 0 张」区分开。
+// 因此「不限」需要与「剩余 0 张」区分开。
 const deckUnlimited = -1
 
 // ReviewOrder 决定到期复习卡的排序方式。
@@ -43,7 +43,7 @@ const (
 type NewOrder int
 
 const (
-	// NewOrderRandom 随机打乱，避免永远只背开头几张（DESIGN.md §3.3 默认）。
+	// NewOrderRandom 随机打乱，避免永远只背开头几张（默认）。
 	NewOrderRandom NewOrder = iota
 	// NewOrderCreated 按创建顺序，便于测试与\"按序引入\"的偏好。
 	NewOrderCreated
@@ -63,11 +63,11 @@ const (
 
 // QueueOptions 是一次队列构建的入参。零值经 withDefaults 补齐为文档化默认值。
 //
-// 卡组范围（三种口径，DESIGN.md §3.3）：DeckIDs 非空（去重后）→ 取集合内所有卡组；
+// 卡组范围（三种口径）：DeckIDs 非空（去重后）→ 取集合内所有卡组；
 // DeckID 非 0 且 DeckIDs 为空 → 只取该卡组；两者都为空 → 该用户**可见**的卡组集合
 // （store.DeckStore.VisibleIDs，与卡组列表页同一集合，排除别人的 private/unlisted）。
 //
-// 每日上限一律**按卡组算**（DESIGN.md §3.3 把 new_per_day/reviews_per_day 定义为卡组级）：
+// 每日上限一律**按卡组算**（new_per_day/reviews_per_day 是卡组级列）：
 // 范围里每个卡组各自用它的列与今日已用量算出剩余额度，多卡组/全库＝各卡组额度之和。
 // 本包不再有任何「全局合计」路径。
 //
@@ -87,8 +87,8 @@ type QueueOptions struct {
 	// 直接展开取卡。
 	//
 	// 为什么不把判权搬进 builder：判权下沉到 builder 后只剩「静默丢弃该卡组、返回其余卡片」
-	// 这一种可表达的行为，会把「无权限卡组＝整次请求失败」退化成部分成功，与 DESIGN.md §3.3
-	// 的口径相悖（该口径由 REST 的 API.DueCards 与 web 的 loadDeckForRole 逐 id 兑现）。
+	// 这一种可表达的行为，会把「无权限卡组＝整次请求失败」退化成部分成功，与既定口径
+	// 相悖（该口径由 REST 的 API.DueCards 与 web 的 loadDeckForRole 逐 id 兑现）。
 	DeckIDs []uint64
 	// Now 为观测时刻；零值表示使用当前时间。到期判定与复习日都以它为准。
 	Now time.Time
@@ -117,7 +117,7 @@ type QueueOptions struct {
 	Rand *rand.Rand
 }
 
-// DefaultQueueOptions 返回 DESIGN.md §3.3 的文档化默认值（新卡 20、复习 200、
+// DefaultQueueOptions 返回文档化的默认值（新卡 20、复习 200、
 // 复习卡按 retrievability 升序、新卡随机）。零值 QueueOptions 不等价于本返回值：
 // 零值的 ReviewsPerDay 表示"读卡组值"，因此显式默认值必须由调用方在此取得后再覆盖。
 func DefaultQueueOptions() QueueOptions {
@@ -213,7 +213,7 @@ func (r stateRow) toCardState() *store.CardState {
 	}
 }
 
-// Build 按\"学习卡 → 到期复习卡 → 新卡\"的优先级构造队列（DESIGN.md §3.3）。
+// Build 按\"学习卡 → 到期复习卡 → 新卡\"的优先级构造队列。
 // 学习卡不占额度；复习卡与新卡各自受所在卡组的 reviews_per_day / new_per_day 限制。
 func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptions) ([]QueueItem, error) {
 	if err := b.validate(userID); err != nil {
@@ -278,7 +278,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 // 为什么不用「构建时刻」播种：那个值每次请求都不同，于是同一天里刷新页面、取下一批新卡都会
 // 换一个排列——学习者看到的顺序不稳定，报告问题时也无从复现。改用 (用户, 复习日) 之后，
 // 同一天内顺序固定（同一批次的顺序可复现），隔天自动轮换，仍满足「避免永远只背开头几张」
-// 这一初衷（DESIGN.md §3.3）；不同用户同一天也不共享排列。
+// 这一初衷；不同用户同一天也不共享排列。
 //
 // 复习日必须用本包唯一的 ReviewDay 定义（含用户时区与切点），否则轮换时点会与配额、连击、
 // 提醒等一切按复习日计数的功能错开一天。
@@ -401,7 +401,7 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 		out.order = append(out.order, d.id)
 	}
 
-	// 学习/再学习到期卡：一条查询取全部，不受额度裁剪（DESIGN.md §3.3：学习卡不占复习上限）。
+	// 学习/再学习到期卡：一条查询取全部，不受额度裁剪（学习卡不占复习上限）。
 	learning, err := b.learningDue(ctx, userID, now, deckIDs)
 	if err != nil {
 		return nil, err
@@ -469,7 +469,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 	for _, id := range ids {
 		c, ok := caps[id]
 		if !ok {
-			// 读不到卡组列（卡组行不存在）才兜底默认；卡组列写 0 表示不限，不是回退默认（DESIGN.md §3.3）。
+			// 读不到卡组列（卡组行不存在）才兜底默认；卡组列写 0 表示不限，不是回退默认。
 			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
 		}
 		// 显式覆盖对范围内所有卡组统一生效；旧入口的正值字段同义（见 QueueOptions 文档）。
@@ -506,7 +506,7 @@ func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts Que
 }
 
 // deckBudget 计算一个卡组今日剩余的新卡与复习额度；这是「每日额度如何算」的唯一实现，
-// Build 与 DeckCounts 都经它，避免两处公式漂移（DESIGN.md §3.3）。
+// Build 与 DeckCounts 都经它，避免两处公式漂移。
 // caps 里某项 <= 0 表示该项不限，返回 deckUnlimited；否则返回 max(cap-used, 0)。
 func deckBudget(caps store.DeckCaps, introducedToday, reviewedToday int) (newLeft, reviewLeft int) {
 	return budgetLeft(caps.NewPerDay, introducedToday), budgetLeft(caps.ReviewsPerDay, reviewedToday)
@@ -558,7 +558,7 @@ func (o QueueOptions) now() time.Time {
 }
 
 // deckUsage 是一个卡组今日的用量：introduced 是今日引入的新卡数（state_before = 0），
-// reviewed 是今日的复习量（state_before <> 0）。DESIGN.md §2.2：不建计数表，从 reviews 聚合。
+// reviewed 是今日的复习量（state_before <> 0）。不建计数表，从 reviews 聚合。
 type deckUsage struct{ introduced, reviewed int }
 
 // loadDeckCaps 一次取回范围内各卡组的每日上限；卡组行不存在时该 id 不出现在结果里。
@@ -583,7 +583,7 @@ func (b *QueueBuilder) loadDeckCaps(ctx context.Context, deckIDs []uint64) (map[
 
 // countUsage 按 (user_id, review_day) 从 reviews 聚合各卡组今日用量，一次分组查询取回。
 // 新卡统计 state_before = 0，复习统计 state_before <> 0；额度是卡组级的，所以必须按卡组分组
-// （DESIGN.md §3.3：new_per_day/reviews_per_day 定义在卡组上）。
+// （new_per_day/reviews_per_day 定义在卡组上）。
 func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string, deckIDs []uint64) (map[uint64]deckUsage, error) {
 	var rows []struct {
 		DeckID     uint64 `gorm:"column:deck_id"`
@@ -722,7 +722,7 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 }
 
 // ReviewDay 按用户本地时间与切点计算复习日（YYYY-MM-DD）：本地时间减去 day_cutoff_hour 后取日期，
-// 因此切点之前的凌晨时刻算作前一天（DESIGN.md §3.3）。
+// 因此切点之前的凌晨时刻算作前一天。
 //
 // 已解析切点只对越界回退默认 4，午夜 0 保留，与 store.ReviewDayString 同口径：
 // 复习日的写入（本包提交/埋藏）与读取（统计/连续天数/提醒/摘要）必须落在同一天，否则同一个

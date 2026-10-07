@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Clone 把一个卡组的全部内容（note 与 card）复制到 targetUserID 名下（DESIGN.md §5「克隆/fork」）。
+// Clone 把一个卡组的全部内容（note 与 card）复制到 targetUserID 名下（「克隆/fork」）。
 //
 // 语义要点（内容与进度分离）：
 //   - 只复制内容列（kind / fields_json / tags_json / external_ref / source / reference_refs）；
@@ -32,7 +32,7 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	if presetID == 0 {
 		return nil, ErrDeckPresetRequired
 	}
-	// 克隆者 = 目标用户：副本里的 note 引用必须对它可读（DESIGN.md §6.3 写前校验）。
+	// 克隆者 = 目标用户：副本里的 note 引用必须对它可读（写前校验）。
 	// 克隆者能看见源卡组时，源 note 的映射即构成可读性，因此合法克隆不会被误挡；
 	// 克隆后副本映射指向新 note，读者不再依赖源卡组仍可见。
 	ctx = WithActor(ctx, targetUserID)

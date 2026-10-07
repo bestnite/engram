@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件覆盖 L3 的分享会话授权（share_session.go，DESIGN.md §5）：
+// 本文件覆盖 L3 的分享会话授权（share_session.go）：
 //   - 登记后读取鉴权第三支放行，且只对登记的那个会话放行（会话隔离）；
 //   - 授权过期后不再放行；RemoveExpired 负责回收；
 //   - 会话作废（登出、改密码踢下线、禁用）时该会话的授权行一并删除。

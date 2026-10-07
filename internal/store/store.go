@@ -26,7 +26,7 @@ func newGormLogger() gormlogger.Interface {
 	})
 }
 
-// Open 按 DB_DRIVER 打开数据库连接；只支持两种驱动（DESIGN.md §10.1）。
+// Open 按 DB_DRIVER 打开数据库连接；只支持两种驱动。
 func Open(driver, dsn string) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch driver {
@@ -50,7 +50,7 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	if driver == "sqlite" {
-		// SQLite 单写连接即可串行化写入，避免 database is locked（DESIGN.md §3.4 依赖这一点）。
+		// SQLite 单写连接即可串行化写入，避免 database is locked（依赖这一点）。
 		sqlDB, err := db.DB()
 		if err != nil {
 			return nil, fmt.Errorf("get sql.DB: %w", err)

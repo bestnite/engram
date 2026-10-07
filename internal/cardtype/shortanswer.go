@@ -3,14 +3,14 @@ package cardtype
 import "fmt"
 
 // shortAnswerType 是主观自由文本卡：prompt 提问，作答后自评，可选 reference 作参考答案
-// （DESIGN.md §6.2「主观类（§14）」、§14：先自评，LLM 评分留待后续）。
+// （「主观类」：先自评，LLM 评分留待后续）。
 //
 // 字段：prompt（必填）、reference（可选参考答案）、extra / source_url（可选）。
 // 本题型故意不实现 Grader：它不在 M3-6 的机器判分集合内，复习流程对它走自评路径；
 // LLM 判分（M10-3）会在本题型补齐 PromptContexter / Grader 时再接入，届时核心管线不变。
 type shortAnswerType struct{}
 
-// Label 返回语言包键名（DESIGN.md §8.3）。
+// Label 返回语言包键名。
 func (shortAnswerType) Label() string { return "cardtype.short_answer" }
 
 // Validate 校验 prompt / reference。reference 是可选的参考答案，缺省合法。
@@ -27,7 +27,7 @@ func (shortAnswerType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡（DESIGN.md §6.2 冻结表：生成 card = 1）。
+// Cards 产出一张正向卡（冻结表：生成 card = 1）。
 func (shortAnswerType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
@@ -55,7 +55,7 @@ func (shortAnswerType) Render(card Card, side Side) (RenderResult, error) {
 }
 
 // optionalStringField 读取可选字符串字段：缺失或 nil 返回空串，存在时必须是非空字符串。
-// 与 stringField 分开，避免把「可选的参考答案」误判成必填（DESIGN.md §6.2 冻结表）。
+// 与 stringField 分开，避免把「可选的参考答案」误判成必填（冻结表）。
 func optionalStringField(fields map[string]any, name string) (string, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {

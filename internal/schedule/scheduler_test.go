@@ -32,7 +32,7 @@ func mustScheduler(t *testing.T, preset *store.Preset) *Scheduler {
 	return s
 }
 
-// TestPreviewReturnsFourRatings 断言 Repeat 预览返回四档选项，且新卡各档的状态推进符合 §3.2。
+// TestPreviewReturnsFourRatings 断言 Repeat 预览返回四档选项，且新卡各档的状态推进符合状态机。
 func TestPreviewReturnsFourRatings(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -65,7 +65,7 @@ func TestPreviewReturnsFourRatings(t *testing.T) {
 	}
 }
 
-// TestNextAdvancesStateMachine 逐条覆盖 DESIGN.md §3.2 的状态机转移。
+// TestNextAdvancesStateMachine 逐条覆盖状态机的转移：new / learning / review / relearning。
 func TestNextAdvancesStateMachine(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)

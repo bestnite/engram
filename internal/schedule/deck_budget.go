@@ -10,7 +10,7 @@ import (
 // DeckBudget 是一个卡组今日的额度情况，供设置页显示「已用 / 剩余」。
 //
 // 两个 *Unlimited 字段表达「该项今日不限」：为 true 时对应的 PerDay / Left 数值无意义
-// （写库的 0 表示不限，与「剩余 0 张」是同形的整数，必须靠布尔量区分，见 DESIGN.md §3.3）。
+// （写库的 0 表示不限，与「剩余 0 张」是同形的整数，必须靠布尔量区分）。
 // 为 false 时 Left = max(PerDay-Used, 0)，Used 是今日已用量。
 type DeckBudget struct {
 	// NewPerDay / ReviewsPerDay 是卡组列上的每日上限；写 0 表示不限。

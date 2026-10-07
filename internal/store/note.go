@@ -63,7 +63,7 @@ func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
 	return opts
 }
 
-// NoteStore 封装 notes 表，并实现\"由题型生成 cards\"的管线（DESIGN.md §2.1、§6.2）。
+// NoteStore 封装 notes 表，并实现\"由题型生成 cards\"的管线。
 //
 // 内容与进度分离是本项目最重要的一条设计原则：note/card 只描述内容，
 // 用户的 FSRS 进度挂在 card 上。因此更新内容时绝不能重建（删旧插新）card，
@@ -102,7 +102,7 @@ func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtyp
 // actorKey 是 note 写入校验用的 context 键：本次写入的执行者用户 id。
 type actorKey struct{}
 
-// WithActor 标注本次 note 写入的执行者，供写前校验判定「新引入的引用是否我可读」（DESIGN.md §6.3）。
+// WithActor 标注本次 note 写入的执行者，供写前校验判定「新引入的引用是否我可读」。
 //
 // 为什么不把 actor 做成写入方法的显式参数：note 写入被 web / REST / MCP / 包导入 / 克隆 / CLI
 // 以多种形态调用，actor 走 context 能保持写入方法签名不变，同时让「写前校验」与「映射重建」这对
@@ -158,7 +158,7 @@ func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 }
 
 // createInTx 在一个事务里写入一条新 note：先做写前校验（本次新引入的引用必须可读），
-// 写入 note 与 cards，最后重建它的 media_notes 映射（DESIGN.md §6.3）。
+// 写入 note 与 cards，最后重建它的 media_notes 映射。
 // 任一步失败则整体回滚，不会留下「有 note 无 card」或「映射与字段不一致」的半截状态。
 func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.DeckID == 0 {
@@ -310,7 +310,7 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 
 // List 按条件分页列出卡组的 notes，返回当页行与符合条件的总数（M2-7）。
 //
-// 查询约定（DESIGN.md §2.3）：分页统一 LIMIT/OFFSET；模糊匹配用 LOWER(col) LIKE，
+// 查询约定：分页统一 LIMIT/OFFSET；模糊匹配用 LOWER(col) LIKE，
 // 不使用任何 PG 专有的 ILIKE 或表达式索引。搜索覆盖 fields_json 的全部字段文本，
 // 因此正面与背面都能命中；标签用带引号边界的 LIKE 精确匹配数组元素。
 func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {

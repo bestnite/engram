@@ -11,14 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是参数优化（DESIGN.md §3.5、ROADMAP.md M9-5）在 store 层的部分：
+// 本文件是参数优化（ROADMAP.md M9-5）在 store 层的部分：
 // 服务端门槛（复习条数不足直接拒绝并给出差额）与拟合报告的数据形态。
 //
 // 分工边界：权重拟合算法属于 M9-2 的 Rust 适配器，永不进 Go 代码；这里只定义
 // 「门槛怎么判定」与「指标写在哪、叫什么」，让 web 层（M9-4）与适配器有稳定契约。
 
 const (
-	// DefaultOptimizeMinReviews 是优化门槛的默认值（DESIGN.md §3.5：默认 < 500 条拒绝）。
+	// DefaultOptimizeMinReviews 是优化门槛的默认值（默认 < 500 条拒绝）。
 	// 管理员可通过 settings 表的 SettingKeyOptimizeMinReviews 调整。
 	DefaultOptimizeMinReviews = 500
 
@@ -58,7 +58,7 @@ func OptimizeMinReviews(ctx context.Context, db *gorm.DB) (int, error) {
 	return n, nil
 }
 
-// CountByUser 返回某用户的复习日志总条数，是优化门槛的输入（唯一燃料，DESIGN.md §3.5）。
+// CountByUser 返回某用户的复习日志总条数，是优化门槛的输入（唯一燃料）。
 func (s *ReviewStore) CountByUser(ctx context.Context, userID uint64) (int64, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&Review{}).
@@ -99,7 +99,7 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID uint64) (OptimizeGate
 	return gate, nil
 }
 
-// FitMetrics 是优化前后各测一次的拟合指标（DESIGN.md §3.5「优化前后拟合对比」，
+// FitMetrics 是优化前后各测一次的拟合指标（设置页的「优化前后拟合对比」，
 // 对应 Anki 手册的 "Check health" 思路：用历史复习反推参数对实际结果的贴合度）。
 //
 // 指标定义（由 internal/schedule 用 go-fsrs 回放复习日志算出，见 ROADMAP.md M9-11）：
@@ -125,7 +125,7 @@ type FitMetrics struct {
 // 「未改善」是对一次本就没机会的优化的误导；取 200 留出余量，实测 184 item 起判定稳定。
 const MinFitItems = 200
 
-// OptimizeResult 是 optimize 作业 result_json 的结构（jobs.result_json，DESIGN.md §2.2）。
+// OptimizeResult 是 optimize 作业 result_json 的结构（jobs.result_json）。
 // 落在 job 行而非 preset 行：报告属于「这一次优化」，preset 只保存最终生效的权重
 // （weights_json / weights_optimized_at / weights_review_count）。
 type OptimizeResult struct {
@@ -158,9 +158,8 @@ func (m FitMetrics) SampleSufficient() bool { return m.Available() && m.Items >=
 // ErrPresetWeightsIDRequired 表示回退默认权重时未给出预设主键。
 var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is required")
 
-// ResetPresetWeights 把预设的优化权重一键回退为默认权重（DESIGN.md §3.5「一键回退默认权重」、
-// §12 M9 验收「可一键回退」）：weights_json、weights_optimized_at、weights_review_count
-// 三列一并写回 NULL。
+// ResetPresetWeights 把预设的优化权重一键回退为默认权重（M9 验收「可一键回退」）：weights_json、
+// weights_optimized_at、weights_review_count 三列一并写回 NULL。
 //
 // 为什么三列必须一起清：调度器（schedule.NewScheduler）以 weights_json 是否为 NULL 决定用
 // DefaultWeights() 还是优化权重；只把 weights_json 清掉、却留下 weights_optimized_at 与

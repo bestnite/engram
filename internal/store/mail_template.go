@@ -14,7 +14,7 @@ import (
 // 所以它是**正常状态**而不是错误；用哨兵是为了让「没有」与「查库失败」可区分。
 var ErrMailTemplateNotFound = errors.New("mail template not found")
 
-// MailTemplateStore 读写管理员自定义的邮件模板（DESIGN.md §4.7）。
+// MailTemplateStore 读写管理员自定义的邮件模板。
 //
 // 只有取一份、列全部、整份覆盖、删掉四个动作：保存就是**整份替换**，不做部分更新——
 // 主题与正文必须来自同一次编辑，否则会出现「新主题配旧正文」的中间态。

@@ -55,7 +55,7 @@ func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 	return &u, nil
 }
 
-// Update 保存用户全部字段；Save 在两库都生成正确的 upsert（DESIGN.md §2.3）。
+// Update 保存用户全部字段；Save 在两库都生成正确的 upsert。
 func (s *UserStore) Update(ctx context.Context, u *User) error {
 	if err := s.db.WithContext(ctx).Save(u).Error; err != nil {
 		return fmt.Errorf("update user: %w", err)
@@ -69,7 +69,7 @@ func (s *UserStore) SetPasswordHash(ctx context.Context, id uint64, hash string)
 }
 
 // SetPasswordHashTx 在调用方给定的事务里改密码哈希一列。
-// 口令重置需要它：密码写入必须与同一事务里的会话/API Key 吊销要么全成、要么全不生效（DESIGN.md §11）。
+// 口令重置需要它：密码写入必须与同一事务里的会话/API Key 吊销要么全成、要么全不生效。
 func (s *UserStore) SetPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint64, hash string) error {
 	if err := tx.WithContext(ctx).Model(&User{}).Where("id = ?", id).
 		Update("password_hash", hash).Error; err != nil {

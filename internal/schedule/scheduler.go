@@ -1,8 +1,8 @@
 // Package schedule 是 go-fsrs 的薄封装：把数据库里的整数状态/评分与 FSRS v6 的类型互转，
 // 并在此之上做队列构建。服务只做三件事 —— 持久化状态、构造队列、把评分喂给调度器
-// （DESIGN.md §3.1），因此本包刻意不引入业务规则之外的抽象。
+// 因此本包刻意不引入业务规则之外的抽象。
 //
-// 整数约定（DESIGN.md §3.4、AGENTS.md §2.3 第 3 条）：评分用 1–4（Again/Hard/Good/Easy），
+// 整数约定（AGENTS.md §2.3 第 3 条）：评分用 1–4（Again/Hard/Good/Easy），
 // 状态用 0–3（New/Learning/Review/Relearning），与 FSRS 生态的复习日志格式一致，
 // 将来接优化器零转换。数据库里 state 存字符串（new/learning/review/relearning），
 // 在边界处转成整数。
@@ -31,7 +31,7 @@ const (
 	Easy  Rating = 4
 )
 
-// String 返回英文名，仅用于日志与错误信息（DESIGN.md §10.4：给机器看的用英文）。
+// String 返回英文名，仅用于日志与错误信息（给机器看的用英文）。
 func (r Rating) String() string {
 	switch r {
 	case Again:
@@ -122,8 +122,7 @@ type Scheduler struct {
 }
 
 // NewScheduler 从 preset 构造调度器：权重取 preset.WeightsJSON（支持 17/19/21 维自动迁移），
-// 为 NULL 时用 fsrs.DefaultWeights()；学习/再学习步骤、目标保留率、最大间隔与 fuzz 均来自 preset
-// （DESIGN.md §3.2、§3.5）。
+// 为 NULL 时用 fsrs.DefaultWeights()；学习/再学习步骤、目标保留率、最大间隔与 fuzz 均来自 preset。
 func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	p, err := Parameters(preset)
 	if err != nil {
@@ -173,7 +172,7 @@ func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Par
 	p.W = weights
 	p.LearningSteps = learning
 	p.RelearningSteps = relearning
-	// DefaultParam 保持 EnableShortTerm=true，与 DESIGN.md §3.2 的\"学习步骤 + 短期记忆\"一致。
+	// DefaultParam 保持 EnableShortTerm=true，即"学习步骤 + 短期记忆"的行为。
 
 	return p, nil
 }
@@ -256,7 +255,7 @@ func stepMinutes(part string) (float64, error) {
 // cardFromState 把数据库行转成 go-fsrs 的 Card。
 //
 // 学习步骤游标：go-fsrs 的 RemainingSteps 是「还剩几步」的倒计时，card_states.step_index 的语义
-// 与之同向（DESIGN.md §3.3 已冻结为「剩余」步数）——不要读成「已走步数」，否则状态机会整体反着跑。
+// 与之同向（已冻结为「剩余」步数）——不要读成「已走步数」，否则状态机会整体反着跑。
 // 首次评分之后由 FSRS 接管该字段。
 func cardFromState(st *store.CardState) (fsrs.Card, error) {
 	state, err := ParseState(st.State)

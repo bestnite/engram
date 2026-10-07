@@ -8,10 +8,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// MediaAccessibleToUser 判定 sha256 为 mediaSha 的媒体是否可被 userID 读取（F2 的读取鉴权口径，
-// DESIGN.md §6.3「鉴权只需一处（有卡组访问权的登录用户）」）。
+// MediaAccessibleToUser 判定 sha256 为 mediaSha 的媒体是否可被 userID 读取（F2 的读取鉴权口径）。
 //
-// sessionID 是发起请求的服务端会话 id（L3，DESIGN.md §5）：非空时额外放行「该会话通过分享链接
+// sessionID 是发起请求的服务端会话 id（L3）：非空时额外放行「该会话通过分享链接
 // 打开过、且授权未过期」的卡组里的引用。会话 id 由 web 层从请求上下文取出后显式传入，不用包级全局、
 // 也不塞进 context——读取鉴权的输入必须在本函数签名里可见，隐藏状态会让「谁读到了什么」无法审计。
 // 匿名请求（未登录）根本到不了这里（mediaServe 先要求登录），传空串即可。

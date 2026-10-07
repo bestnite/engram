@@ -34,7 +34,7 @@ const (
 
 	// ActionSettingUpdate 是管理面板修改系统设置（M6-5）时写入的审计动作。
 	ActionSettingUpdate = "setting.update"
-	// ActionMailTemplateUpdate 是管理面板保存或删除邮件模板（DESIGN.md §4.7）时写入的
+	// ActionMailTemplateUpdate 是管理面板保存或删除邮件模板时写入的
 	// 审计动作。模板决定所有用户收到的邮件长什么样，与系统设置同级。
 	ActionMailTemplateUpdate = "mail.template_update"
 
@@ -104,7 +104,7 @@ const (
 	// 两者都是高影响动作：两次「测试连接」会发起管理员指定的出站连接。
 	// 成功与失败都要有行——失败同样留下「谁在何时试图连到哪里」的取证线索。
 	// 审计行只记动作与目标元信息（测试连接记 host / issuer），
-	// 绝不记凭据、口令、token 或邮件正文（DESIGN.md §11）。
+	// 绝不记凭据、口令、token 或邮件正文。
 	ActionAdminOIDCTest = "admin.oidc_test"
 	ActionAdminSMTPTest = "admin.smtp_test"
 )
@@ -239,7 +239,7 @@ func (s *AuditStore) auditQuery(ctx context.Context, f AuditFilter) *gorm.DB {
 }
 
 // Search 按过滤条件分页返回审计行与命中总数，按 id 倒序（最新在前）。
-// 结果行数受 auditSearchMaxLimit 限制，分页用 LIMIT/OFFSET（DESIGN.md §2.3）。
+// 结果行数受 auditSearchMaxLimit 限制，分页用 LIMIT/OFFSET。
 func (s *AuditStore) Search(ctx context.Context, f AuditFilter) ([]AuditLog, int64, error) {
 	var total int64
 	if err := s.auditQuery(ctx, f).Count(&total).Error; err != nil {

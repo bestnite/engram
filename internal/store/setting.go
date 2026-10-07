@@ -15,7 +15,7 @@ import (
 
 // 普通（非敏感）系统设置的写入通道。读取端是 store.go 的 LoadSettings；
 // 写入值同样 JSON 编码，保证两端约定一致。敏感值走 secret.go 的 PutSecret，
-// 不能经过这里，否则密文写作明文会破坏 §11 的加密要求。
+// 不能经过这里，否则密文写作明文会破坏敏感值的加密存储要求。
 func PutSetting(ctx context.Context, db *gorm.DB, key, value string, updatedBy *uint64, at time.Time) error {
 	if strings.TrimSpace(key) == "" {
 		return errors.New("store: setting key is required")

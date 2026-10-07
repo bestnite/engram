@@ -10,14 +10,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组可见性取值（DESIGN.md §5）。
+// 卡组可见性取值。
 const (
 	DeckVisibilityPrivate  = "private"
 	DeckVisibilityUnlisted = "unlisted"
 	DeckVisibilityPublic   = "public"
 )
 
-// 卡组级每日上限的文档化默认值（DESIGN.md §3.3）：新卡 20、复习 200，0 表示不限。
+// 卡组级每日上限的文档化默认值：新卡 20、复习 200，0 表示不限。
 // 与 decks 表的列默认值保持一致；改这里必须同步改 models.go 的 default 标签。
 const (
 	DefaultNewPerDay     = 20
@@ -135,7 +135,7 @@ func validateDeckForWrite(d *Deck, create bool) error {
 		return fmt.Errorf("%w: %s", ErrDeckDescriptionInvalid, entries[0])
 	}
 	if d.Visibility == "" {
-		// 字符串型默认值由 store 层在 Go 侧给出（models.go 包注释）；DESIGN.md §2.2 默认 private。
+		// 字符串型默认值由 store 层在 Go 侧给出（models.go 包注释） 默认 private。
 		d.Visibility = DeckVisibilityPrivate
 	}
 	if !validDeckVisibility(d.Visibility) {
@@ -234,7 +234,7 @@ func (s *DeckStore) Restore(ctx context.Context, actorUserID, deckID uint64) err
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": nil})
 }
 
-// Caps 读取卡组的每日上限（DESIGN.md §3.3）；卡组不存在时返回底层错误。
+// Caps 读取卡组的每日上限；卡组不存在时返回底层错误。
 func (s *DeckStore) Caps(ctx context.Context, deckID uint64) (DeckCaps, error) {
 	var d Deck
 	if err := s.db.WithContext(ctx).Select("id", "new_per_day", "reviews_per_day").
@@ -257,7 +257,7 @@ func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, cap
 	})
 }
 
-// SetPreset 改卡组的调度预设（DESIGN.md §8.1）；只有 owner 能改，
+// SetPreset 改卡组的调度预设；只有 owner 能改，
 // 且目标预设必须属于同一个用户——否则可以把别人的预设挂到自己的卡组上，
 // 借由「卡组读得到」把他人预设参数暴露出去。
 func (s *DeckStore) SetPreset(ctx context.Context, actorUserID, deckID, presetID uint64) error {

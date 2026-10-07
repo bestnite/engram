@@ -100,7 +100,7 @@ func seedReview(t *testing.T, db *gorm.DB, cardID uint64, day string, rating, st
 	}
 }
 
-// TestStatsReviewVolumeMatchesHandSQL 用独立 SQL 对拍复习量（DESIGN.md §9 第一条）。
+// TestStatsReviewVolumeMatchesHandSQL 用独立 SQL 对拍复习量（第一条）。
 // 期望值同时对照固定数据集：今日 2、近 7 日 3、近 30 日 4。
 func TestStatsReviewVolumeMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -129,7 +129,7 @@ func TestStatsReviewVolumeMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsDueForecastMatchesHandSQL 用独立 SQL 对拍到预测分桶（DESIGN.md §9）。
+// TestStatsDueForecastMatchesHandSQL 用独立 SQL 对拍到预测分桶。
 // 日边界取复习日起点 04:00 UTC：今日结束 10-03 04:00、明日结束 10-04 04:00、
 // 7 日结束 10-09 04:00、30 日结束 11-01 04:00。
 func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
@@ -173,7 +173,7 @@ func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsRetentionByStabilityMatchesHandSQL 用独立 SQL 对拍留存率（DESIGN.md §9）：
+// TestStatsRetentionByStabilityMatchesHandSQL 用独立 SQL 对拍留存率：
 // 到期复习（state_before=Review）中「评分不是 Again」的比例，按 stability 分桶。
 func TestStatsRetentionByStabilityMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -224,7 +224,7 @@ func TestStatsRetentionByStabilityMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsTimeSpentMatchesHandSQL 对拍时间投入的日均与中位数（DESIGN.md §9）。
+// TestStatsTimeSpentMatchesHandSQL 对拍时间投入的日均与中位数。
 func TestStatsTimeSpentMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -249,7 +249,7 @@ func TestStatsTimeSpentMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsGradeSourceDistribution 对拍判分来源分布（DESIGN.md §9）。
+// TestStatsGradeSourceDistribution 对拍判分来源分布。
 func TestStatsGradeSourceDistribution(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -276,7 +276,7 @@ func TestStatsGradeSourceDistribution(t *testing.T) {
 	}
 }
 
-// TestStatsDeckBreakdownMatchesHandSQL 对拍卡组维度（DESIGN.md §9）。
+// TestStatsDeckBreakdownMatchesHandSQL 对拍卡组维度。
 func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -314,7 +314,7 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsTagBreakdown 对拍标签维度（DESIGN.md §9）：tags_json 在 Go 侧解码后聚合。
+// TestStatsTagBreakdown 对拍标签维度：tags_json 在 Go 侧解码后聚合。
 func TestStatsTagBreakdown(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -439,7 +439,7 @@ func TestStatsStreakCurrentAndLongest(t *testing.T) {
 	}
 }
 
-// TestStatsLearningCurveMatchesHandSQL 对拍学习曲线（DESIGN.md §9）：每日新引入
+// TestStatsLearningCurveMatchesHandSQL 对拍学习曲线：每日新引入
 // 是 state_before=New 的次数，其余算复习量。期望值全部硬编码，逐日断言两个数字。
 func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -501,7 +501,7 @@ func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility s
 	return d.ID
 }
 
-// TestStatsScopesToVisibleDecks 是卡组越权的回归用例（DESIGN.md §9 卡组维度与到期预测）。
+// TestStatsScopesToVisibleDecks 是卡组越权的回归用例（卡组维度与到期预测）。
 //
 // 缺陷形态：DeckBreakdown 的到期量与 DueForecast 的新卡计数都以 cards 为起点、只按
 // user_id 左连接 card_states，没有任何卡组范围过滤——别人卡组里的卡对当前用户没有
@@ -620,14 +620,14 @@ func addUser1Reviews(t *testing.T, db *gorm.DB, deckID uint64, want int) {
 	}
 }
 
-// TestStatsTagBreakdownScopesToVisibleDecks 是标签维度越权的回归用例（DESIGN.md §9 标签维度）。
+// TestStatsTagBreakdownScopesToVisibleDecks 是标签维度越权的回归用例（标签维度）。
 //
 // 缺陷形态：TagBreakdown 以 reviews 为起点、JOIN notes 取 tags_json 在 Go 侧聚合。
 // 标签是 note 级内容元数据，reviews.user_id 这道行级安全挡不住它：A 撤销对 B 的授权后，
 // B 的统计页仍会列出原卡组的标签及其复习量/留存率（本仓真实缺陷）。
 //
 // 口径：标签维度与卡组维度同源，只聚合「当前可见卡组」的标签；其余 reviews 纯聚合
-// （ReviewVolume 等）按 DESIGN.md §9 的刻意不对称保持全史。本用例在同一个夹具里
+// （ReviewVolume 等）按刻意不对称的口径保持全史。本用例在同一个夹具里
 // 用正向对照把这两条口径一起钉死，防止实现顺手给别的聚合也加上谓词。
 func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -693,7 +693,7 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 	}
 }
 
-// TestStatsTagBreakdownCountsOnlyReviewedNotes 把标签维度的口径钉死（DESIGN.md §9）：
+// TestStatsTagBreakdownCountsOnlyReviewedNotes 把标签维度的口径钉死：
 // 这个维度回答的是「哪块内容弱」，留存率要由复习记录算出来，所以它只统计**已复习卡片上**
 // 的标签。同一个卡组里没有复习记录的标签不会出现——这是刻意口径，不是漏算；页面上也写了
 // 这行说明，否则它会看起来像在重复卡组维度。

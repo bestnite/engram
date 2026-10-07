@@ -30,7 +30,7 @@ type UndoInput struct {
 }
 
 // Rollback 撤销该卡最后一次评分：用最后一条 reviews 作为日志驱动 fsrs.Rollback 恢复状态，
-// 删除该日志行，并把恢复后的状态写回 card_states（DESIGN.md §3.4）。
+// 删除该日志行，并把恢复后的状态写回 card_states。
 //
 // 为什么需要“上一条日志”：reviews 只记录评分后的调度结果（interval_days/stability/difficulty），
 // 评分前的 FSRS 快照没有独立列。上一条日志的评分后结果恰好就是本条的评分前快照，因此用它
@@ -186,7 +186,7 @@ func parseStateInt(v int) string {
 	}
 }
 
-// writeUndoAudit 在同一个事务里写一条 audit_log，说明哪一条评分被撤销（DESIGN.md §3.4）。
+// writeUndoAudit 在同一个事务里写一条 audit_log，说明哪一条评分被撤销。
 func writeUndoAudit(ctx context.Context, tx *gorm.DB, in UndoInput, last store.Review) error {
 	detail, err := json.Marshal(map[string]any{
 		"review_id":    last.ID,
@@ -216,7 +216,7 @@ func writeUndoAudit(ctx context.Context, tx *gorm.DB, in UndoInput, last store.R
 }
 
 // Suspend 暂停一张卡（cards.suspended_at = at）。暂停是卡片级、对所有用户生效的
-// 共享状态（DESIGN.md §2.2），因此不以 user_id 为条件。
+// 共享状态，因此不以 user_id 为条件。
 func Suspend(ctx context.Context, tx *gorm.DB, cardID uint64, at time.Time) error {
 	if tx == nil {
 		return errors.New("schedule: suspend: transaction is required")
@@ -250,7 +250,7 @@ type BuryInput struct {
 }
 
 // Bury 把一张卡埋藏到下一个复习日开始：把它（该用户）的 due_at 推后到下一个切点，
-// 从而在本日队列里消失，但不改动任何学习进度数值（DESIGN.md §3.3 的切点规则、§8.2 的 b 键）。
+// 从而在本日队列里消失，但不改动任何学习进度数值（切点规则、复习页的 b 键埋藏）。
 //
 // 没有 card_states 行的新卡会先建一行（state=new、due_at=下一个切点）；队列构建对
 // “新卡且 due_at 未到”的卡不取出，因此新卡也能被埋藏。

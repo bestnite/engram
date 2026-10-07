@@ -60,7 +60,7 @@ func TestGrantStoreLifecycle(t *testing.T) {
 				t.Fatalf("DeckIDsForUser = (%v,%v), want [%d]", ids, err, d.ID)
 			}
 
-			// 撤销即删除整行；下一次查询立刻为空（§5“立即生效”）。
+			// 撤销即删除整行；下一次查询立刻为空（撤销立即生效）。
 			if err := gs.Revoke(ctx, d.ID, member); err != nil {
 				t.Fatalf("revoke: %v", err)
 			}
@@ -74,7 +74,7 @@ func TestGrantStoreLifecycle(t *testing.T) {
 	}
 }
 
-// TestRoleAllows 断言 §5 权限表的“至少”语义：owner > editor > reader，未知角色一律无权。
+// TestRoleAllows 断言权限表的“至少”语义：owner > editor > reader，未知角色一律无权。
 func TestRoleAllows(t *testing.T) {
 	cases := []struct {
 		have, want string

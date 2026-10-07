@@ -10,7 +10,7 @@ import (
 )
 
 // Migration 是一次性的显式迁移，用于 AutoMigrate 做不到的破坏性变更
-// （改列类型、删列、新增非空约束，DESIGN.md §2.3、AGENTS.md §2.3 第 5 条）。
+// （改列类型、删列、新增非空约束，AGENTS.md §2.3 第 5 条）。
 // Name 是必填的稳定英文标识：没有名字的破坏性变更无法被追踪，必须被拒绝。
 type Migration struct {
 	Name string
@@ -22,7 +22,7 @@ type Migration struct {
 var BuiltinMigrations = []Migration{
 	// M0 阶段还没有破坏性变更；第一个真实迁移从这里往后追加。
 	{
-		// 媒体主键从自增 id 换成内容 sha256（DESIGN.md §6.3）：删列不在 AutoMigrate
+		// 媒体主键从自增 id 换成内容 sha256：删列不在 AutoMigrate
 		// 的加法范围内，必须显式迁移。这里只改主键，不迁移旧引用。
 		Name: "0001_media_primary_key_sha256",
 		Up:   mediaPrimaryKeySha256,
@@ -59,7 +59,7 @@ func mediaPrimaryKeySha256(tx *gorm.DB) error {
 
 // rebuildMediaForShaPrimaryKey 用「建新表 → 搬数据 → 换名」重建 media，绕开 SQLite
 // 不能删主键列的限制。列定义与 GORM 为该模型生成的形状对齐（尤其 created_at 是 datetime：
-// 写成 TEXT 会让驱动无法把它扫回 time.Time）。列清单与 DESIGN.md §2.2 的 media 表一致。
+// 写成 TEXT 会让驱动无法把它扫回 time.Time）。列清单与 media 模型一致。
 func rebuildMediaForShaPrimaryKey(tx *gorm.DB) error {
 	stmts := []string{
 		`CREATE TABLE media_sha_pk (
@@ -235,7 +235,7 @@ func CurrentVersion(ctx context.Context, db *gorm.DB) (int, error) {
 	return row.Version, nil
 }
 
-// setVersion 用 Save 写单行版本表，两库都会生成正确的 upsert（DESIGN.md §2.3）。
+// setVersion 用 Save 写单行版本表，两库都会生成正确的 upsert。
 func setVersion(tx *gorm.DB, version int) error {
 	row := SchemaVersion{ID: 1, Version: version, UpdatedAt: time.Now().UTC()}
 	if err := tx.Save(&row).Error; err != nil {

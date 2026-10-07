@@ -164,7 +164,7 @@ func withOrder(o QueueOptions, order ReviewOrder) QueueOptions {
 }
 
 // TestDailyNewCapAcrossDayBoundary 断言 03:59 / 04:00 两个瞬时点属于不同复习日，
-// 因而每日新卡上限按各自已引入数正确扣减（DESIGN.md §3.3 的切点规则）。
+// 因而每日新卡上限按各自已引入数正确扣减（切点规则）。
 func TestDailyNewCapAcrossDayBoundary(t *testing.T) {
 	db := newTestDB(t)
 	loc := time.FixedZone("test", 8*3600)
@@ -278,7 +278,7 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 
 // ---- M3-13：多卡组复习范围 ----
 
-// seedDeckCaps 建一个卡组并把每日上限写成给定值（DESIGN.md §3.3 的卡组级配置）。
+// seedDeckCaps 建一个卡组并把每日上限写成给定值（卡组级配置）。
 func seedDeckCaps(t *testing.T, db *gorm.DB, now time.Time, newPerDay, reviewsPerDay int) uint64 {
 	t.Helper()
 	deckID := seedDeck(t, db, now)
@@ -381,7 +381,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 
 // TestScopeHonoursPerDeckCaps 断言集合口径（含多个卡组）也按**各卡组自己的**额度算：
 // A 卡组 1/1、B 卡组 3/3，各 3 张新卡 + 3 张到期复习卡 → 合计新卡 1+3、复习 1+3。
-// 这是「多卡组＝各卡组额度之和」的直接验收（DESIGN.md §3.3）。
+// 这是「多卡组＝各卡组额度之和」的直接验收。
 func TestScopeHonoursPerDeckCaps(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)

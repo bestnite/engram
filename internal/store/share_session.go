@@ -9,18 +9,18 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 分享会话授权（L3，DESIGN.md §5）：登录用户通过分享链接打开的卡组计入其会话级可见集合，
+// 分享会话授权（L3）：登录用户通过分享链接打开的卡组计入其会话级可见集合，
 // 媒体读取（mediaReadableByUser 的第三支）据此放行。
 //
 // 为什么记在服务端会话而不是 cookie：会话是服务端状态（sessions 表），登出/改密码/禁用都会
-// 作废它，授权必须随之消失；写进签名 cookie 反而无法即时撤销（DESIGN.md §4.3、§11）。
+// 作废它，授权必须随之消失；写进签名 cookie 反而无法即时撤销。
 //
 // 为什么键是 (session_id, deck_id) 而不是 (user_id, deck_id)：分享链接的可见性只属于「打开过
 // 它的那个会话」，同一用户换一个会话（另一台设备、另一个浏览器）不该继承；会话隔离由主键天然强制。
 //
 // 授权行只镜像「这个会话打开过这个卡组」，本身不携带 token：读取时还会要求该卡组当前仍有一条
 // 有效分享链接（见 shareSessionDeckIDsQuery），所以链接一旦被撤销或过期，读取立即失效
-// （DESIGN.md §5「可即时撤销」「撤销/过期即时生效」）。
+// （「可即时撤销」「撤销/过期即时生效」）。
 
 // ShareSessionGrantMaxTTL 是分享会话授权在「链接与会话都没有给出过期时刻」时的兜底上限。
 //
@@ -75,7 +75,7 @@ func (s *ShareSessionStore) RemoveExpired(ctx context.Context, now time.Time) (i
 
 // ShareSessionGrantExpiry 计算一条分享授权行的过期时刻。
 //
-// 规则（DESIGN.md §5）：链接过期与会话过期取较早者——任一失效，授权都失效。
+// 规则：链接过期与会话过期取较早者——任一失效，授权都失效。
 // 两者都可能为空/为零（正常路径下会话过期总是存在）：此时用调用时刻加 ShareSessionGrantMaxTTL
 // 兜底，保证不会写出永不过期的行。
 func ShareSessionGrantExpiry(linkExpiresAt *time.Time, sessionExpiresAt, now time.Time) time.Time {

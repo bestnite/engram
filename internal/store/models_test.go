@@ -32,7 +32,7 @@ func testDatabases(t *testing.T) map[string]*gorm.DB {
 	return out
 }
 
-// expectedTables 是 DESIGN.md §2.2 的全部表加 M0-4 的 schema_version、M1-2 的 sessions、
+// expectedTables 是全部模型对应的表：M0-4 的 schema_version、M1-2 的 sessions、
 // M1-16 的 user_totp 与 totp_recovery_codes、M1-17 的 mail_outbox。
 var expectedTables = []string{
 	"users", "identities", "invites", "settings", "presets", "decks", "notes", "cards",
