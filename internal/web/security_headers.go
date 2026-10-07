@@ -37,7 +37,7 @@ var cspScriptHash = func() string {
 //     notes.js / review.js / pwa.js / sw.js（base.templ、review.templ）；内联主题引导用
 //     hash 放行。这里刻意不写 script-src 'unsafe-inline'：内联脚本已由 hash 精确放行。
 //     也不写 'unsafe-eval'：htmx 只在 hx-on / hx-*="js:…" 这类 JS 表达式上才用
-//     new Function 编译（DESIGN.md §11）。原先 notes.templ 预览区的
+//     new Function 编译。原先 notes.templ 预览区的
 //     hx-on::after-swap 已改成 notes.js 里的委托监听（与 review.js 同一手法），全仓
 //     再无触发 eval 的写法，TestSecurityHeadersGuardCoversTemplAndScripts 守着这一点。
 //   - style-src 'self' 'unsafe-inline'：tailwind.css 自托管；stats.templ 的进度条用内联

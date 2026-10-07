@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 GET /decks/:id/sharing 的 SPA 规范路径切流与克隆入口（DESIGN.md §5、§8.1、§8.5）。
+// 本文件覆盖 GET /decks/:id/sharing 的 SPA 规范路径切流与克隆入口。
 //
 // 共享管理页（owner 专属）在 SPA 已加载时返回应用壳，由客户端路由渲染，数据走
 // /api/v1/decks/:id/sharing 下的 JSON 端点；判权与迁移前的 SSR 页逐项一致（先要求已登录会话，

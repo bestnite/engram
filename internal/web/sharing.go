@@ -20,7 +20,7 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	}
 	// GET /decks/:id/sharing 返回应用壳，由客户端路由渲染共享管理页，数据走下面的 JSON 端点。
 	router.GET("/decks/:id/sharing", s.sharingPageRoute)
-	// SPA 的共享读写端点（spa_sharing.go）：数据仍走同一批 store 方法（DESIGN.md §8.1、§8.5）。
+	// SPA 的共享读写端点（spa_sharing.go）：数据仍走同一批 store 方法。
 	router.GET("/api/v1/decks/:id/sharing", s.spaSharingGet)
 	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
 	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
@@ -34,8 +34,8 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	router.DELETE("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.spaSharingLinkRevokeAll)
 }
 
-// sharingPageRoute 提供 GET /decks/:id/sharing：返回应用壳（DESIGN.md §8.5），
-// 由客户端路由渲染共享管理页，数据仍走既有 JSON 端点（DESIGN.md §8.1）。
+// sharingPageRoute 提供 GET /decks/:id/sharing：返回应用壳，
+// 由客户端路由渲染共享管理页，数据仍走既有 JSON 端点。
 //
 // 判权与迁移前的 SSR 共享页逐项一致：先要求已登录会话（匿名重定向登录页），再按 owner 角色
 // 判定卡组归属——editor/reader 与陌生用户仍回 403，不因切壳而把共享壳交给无权用户。

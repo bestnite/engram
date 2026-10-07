@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// spaAsset 是一个已嵌入的 SPA 静态资源元数据（DESIGN.md §8.5）。
+// spaAsset 是一个已嵌入的 SPA 静态资源元数据。
 type spaAsset struct {
 	path        string
 	hash        string
@@ -29,7 +29,7 @@ type spaAsset struct {
 	data        []byte
 }
 
-// SPA 管理嵌入的 Svelte SPA 生产构建产物（DESIGN.md §8.5、§10.2）。
+// SPA 管理嵌入的 Svelte SPA 生产构建产物。
 type SPA struct {
 	fs        fs.FS
 	rawIndex  []byte
@@ -132,14 +132,14 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 
 // mathjaxMetaName 是 SPA 入口 <head> 里承载自托管 MathJax 内容哈希 URL 的 meta 名。
 // 前端加载器按它读取 URL，再用动态 <script src> 引入同源脚本——CSP 的 script-src 'self'
-// 已放行同源外链脚本，无需内联脚本、nonce 或 'unsafe-inline'（DESIGN.md §6.1、§8.5、§11）。
+// 已放行同源外链脚本，无需内联脚本、nonce 或 'unsafe-inline'。
 const mathjaxMetaName = "engram-mathjax"
 
 // SetMathJaxURL 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口的 <head>。
 //
 // 传空串或资源未嵌入时不注入，前端加载器读到空 URL 会跳过加载（与 SSR 缺资源时跳过引用
 // 一致）。入口内容随注入变化，重建后 ServeIndex 按实际写出的内容重算 ETag，浏览器不会
-// 拿旧引用配新资源（DESIGN.md §8.5）。
+// 拿旧引用配新资源。
 func (s *SPA) SetMathJaxURL(url string) {
 	if url == s.mathjaxURL {
 		return
@@ -148,7 +148,7 @@ func (s *SPA) SetMathJaxURL(url string) {
 	s.rebuild()
 }
 
-// SPAShell 是注入 SPA 入口 <head> 的 PWA 外壳元素（DESIGN.md §8.5）。
+// SPAShell 是注入 SPA 入口 <head> 的 PWA 外壳元素。
 //
 // 这些值在装配期解析：manifest 与 /pwa.js 是稳定 URL，图标走内容哈希 URL，主题引导是
 // 与 SSR 共用的同一常量。任何字段为空即跳过对应标记——资源缺失时与 SSR 一样不引用，
@@ -171,7 +171,7 @@ type SPAShell struct {
 }
 
 // SetShell 注入 PWA 外壳标记：manifest、theme-color、图标、注册脚本与主题引导。
-// 与 SetMathJaxURL 一样，注入会重建入口内容（DESIGN.md §8.5）。
+// 与 SetMathJaxURL 一样，注入会重建入口内容。
 func (s *SPA) SetShell(shell SPAShell) {
 	block := buildShellBlock(shell)
 	if bytes.Equal(block, s.shellBlock) {
@@ -280,7 +280,7 @@ func setHTMLLang(index []byte, lang string) []byte {
 }
 
 // requestLocale 取请求已解析的语言码，用于入口 <html lang>：与 SSR 外壳同源，遵循
-// ?lang > 用户设置 > Accept-Language > 站点默认 的优先级（DESIGN.md §8.3）。本地化器
+// ?lang > 用户设置 > Accept-Language > 站点默认 的优先级。本地化器
 // 缺失时（未挂语言中间件的测试）回退到站点默认语言。
 func requestLocale(c *gin.Context) string {
 	if loc := i18n.FromContext(c.Request.Context()); loc != nil {
@@ -318,7 +318,7 @@ func (s *SPA) IndexHTML() []byte {
 }
 
 // ServeAsset 提供 Vite 哈希静态资源访问（/assets/*filepath）。
-// 命中时返回不可变长效缓存；缺失时返回 404，严禁回退 index.html（DESIGN.md §8.5）。
+// 命中时返回不可变长效缓存；缺失时返回 404，严禁回退 index.html。
 func (s *SPA) ServeAsset(c *gin.Context) {
 	relPath := strings.TrimPrefix(c.Param("filepath"), "/")
 	asset, ok := s.assets["assets/"+relPath]
@@ -340,9 +340,9 @@ func (s *SPA) ServeAsset(c *gin.Context) {
 	c.Data(http.StatusOK, asset.contentType, asset.data)
 }
 
-// ServeIndex 提供 SPA HTML 入口，使用 revalidation/no-cache 避免长期缓存旧引用（DESIGN.md §8.5）。
+// ServeIndex 提供 SPA HTML 入口，使用 revalidation/no-cache 避免长期缓存旧引用。
 //
-// 每个请求按已解析语言重写入口的 <html lang>，与 SSR 外壳同源（DESIGN.md §8.3）。因为
+// 每个请求按已解析语言重写入口的 <html lang>，与 SSR 外壳同源。因为
 // 响应体随语言变化，ETag 也按实际写出的内容计算——否则换语言后会命中旧的 304 缓存。
 func (s *SPA) ServeIndex(c *gin.Context) {
 	body := s.indexHTML

@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 C 类「参数优化完成」（optimize_done）的发信方（DESIGN.md §4.7）。
+// 本文件是 C 类「参数优化完成」（optimize_done）的发信方。
 //
 // 它由作业成功钩子调用，**没有请求上下文**：绝对地址只能靠 BASE_URL 拼，没配就跳过退订
 // 入口（宁少一个入口，也不拼一个点不开的相对链接）。类型属于「默认关」的可选类，所以只有

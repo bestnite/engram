@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// 本文件覆盖 GET /settings 与 GET /settings/keys 的 SPA 规范路径切流（DESIGN.md §4.1、§7.2、
-// §8.1、§8.5）。
+// 本文件覆盖 GET /settings 与 GET /settings/keys 的 SPA 规范路径切流。
 //
 // 个人设置页与「我的 API Key」页一律返回应用壳，由客户端路由渲染，读写走
 // /api/v1/profile、/api/v1/settings/locale、/api/v1/settings/password 与 /api/v1/keys 的 JSON

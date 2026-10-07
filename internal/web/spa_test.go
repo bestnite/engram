@@ -8,7 +8,7 @@ import (
 )
 
 // TestSPAServesAssetsWithImmutableCache 断言已嵌入的 Vite 构建资源（/assets/*）
-// 能被正确提供，并带有长效不可变缓存、ETag 与正确的 MIME 类型（DESIGN.md §8.5）。
+// 能被正确提供，并带有长效不可变缓存、ETag 与正确的 MIME 类型。
 func TestSPAServesAssetsWithImmutableCache(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	if srv.spa == nil {
@@ -69,7 +69,7 @@ func TestSPAServesAssetsWithImmutableCache(t *testing.T) {
 }
 
 // TestSPAMissingAssetReturns404 断言请求不存在的 /assets/* 静态资源时明确返回 404，
-// 严禁错误回退到 SPA index.html 应用壳（DESIGN.md §8.5）。
+// 严禁错误回退到 SPA index.html 应用壳。
 func TestSPAMissingAssetReturns404(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -82,7 +82,7 @@ func TestSPAMissingAssetReturns404(t *testing.T) {
 	}
 }
 
-// TestSPAFallbackDeepLinks 断言 SPA 客户端深链接访问时回退 index.html（DESIGN.md §8.5）。
+// TestSPAFallbackDeepLinks 断言 SPA 客户端深链接访问时回退 index.html。
 func TestSPAFallbackDeepLinks(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -125,7 +125,7 @@ func TestNewSPAErrorsOnEmptyOrMissingIndex(t *testing.T) {
 
 // TestSPAIndexInjectsSelfHostedMathJaxURL 断言 SPA 入口把自托管 MathJax 的内容哈希 URL
 // 以 <meta name="engram-mathjax"> 注入 <head>：前端据此用同源外链脚本加载 MathJax，
-// 无需内联脚本，也就无需放宽 CSP（DESIGN.md §6.1、§8.5、§11）。
+// 无需内联脚本，也就无需放宽 CSP。
 func TestSPAIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	want := srv.assets.URL("js/mathjax/tex-svg.js")
@@ -150,7 +150,7 @@ func TestSPAIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 		t.Errorf("SPA index references an external URL; MathJax must stay self-hosted")
 	}
 
-	// 入口内容已变，ETag 必须随注入后的内容重算，否则旧引用会被浏览器缓存（DESIGN.md §8.5）。
+	// 入口内容已变，ETag 必须随注入后的内容重算，否则旧引用会被浏览器缓存。
 	etag := rec.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("SPA index ETag is missing")

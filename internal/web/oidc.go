@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 登录流程（DESIGN.md §4.4、§4.5；ROADMAP.md M1-11）。
+// OIDC 登录流程（ROADMAP.md M1-11）。
 //
 // 只实现协议交互与路由，身份绑定全部交给 auth.IdentityLinkService（oauthlink.go）：
 //   GET /auth/oidc/start     生成 state / nonce / PKCE，跳转到 provider 授权端点
@@ -100,7 +100,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 		RedirectURI: redirectURI,
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
 	}) {
-		// 待完成登录表已满：拒绝新发起，避免匿名请求把内存表堆大（F17；DESIGN.md §4.4）。
+		// 待完成登录表已满：拒绝新发起，避免匿名请求把内存表堆大（F17）。
 		// 只记英文日志与通用提示，不回显 state / nonce。
 		s.logger.Warn("oidc: pending state table is full, rejecting a new login start")
 		s.oidcFailToLogin(c, "pending_table_full")
@@ -178,7 +178,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	u, decision, err := s.identityLink.Resolve(ctx, profile, policy)
 	if err != nil {
 		if err == auth.ErrIdentityLinkDenied {
-			// closed 策略下没有既有绑定也无法自动匹配：回登录页（DESIGN.md §4.5.3）。
+			// closed 策略下没有既有绑定也无法自动匹配：回登录页。
 			s.logger.Info("oidc: login denied by registration policy", "provider", profile.Provider)
 			s.oidcFailToLogin(c, "link_denied")
 			return

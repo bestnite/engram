@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-24：D 类管理员通知邮件（DESIGN.md §4.7、ROADMAP.md M1-24）。
+// 本文件是 M1-24：D 类管理员通知邮件（ROADMAP.md M1-24）。
 //
 // 三个触发点里，本仓库真实存在的是两个：
 //   - 作业失败：internal/jobs/jobs.go 的 fail（Runner 通过 OnFailure 钩子回调本文件的
@@ -22,7 +22,7 @@ import (
 //   - 发信失败不让触发操作失败：所有触发函数不返回 error，失败只记英文日志；
 //   - SMTP 未配置时不得静默：触发点记 Warn，且 SMTP 配置页渲染 mail.not_configured 说明。
 //
-// 收件地址：D 类发给管理员账号的登录邮箱（store.UserStore.ListAdmins，DESIGN.md §4.7）。
+// 收件地址：D 类发给管理员账号的登录邮箱（store.UserStore.ListAdmins）。
 // 偏好：D 类默认开、可关闭，按**收件管理员自己**的偏好判定（mail.ResolveEnabled）。
 
 // adminRecipients 返回所有仍可登录的管理员；查询失败时记日志并返回空列表。

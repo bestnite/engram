@@ -42,7 +42,7 @@ func (s *Server) resolveShareLink(c *gin.Context) (*store.ShareLink, *store.Deck
 	return link, deck, true
 }
 
-// recordShareGrant 把「该服务端会话打开过该卡组」登记下来（L3，DESIGN.md §5）：
+// recordShareGrant 把「该服务端会话打开过该卡组」登记下来（L3）：
 // 登录用户通过分享链接打开的卡组计入其会话级可见集合，媒体读取（GET /media/<sha256>）据此放行。
 //
 // 过期时刻取链接过期与会话过期的较早者（store.ShareSessionStore.Grant）。登记失败只记一条英文日志、

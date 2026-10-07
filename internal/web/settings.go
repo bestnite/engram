@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// registerSettingsRoutes 挂载个人设置页（M1-8，DESIGN.md §4.1、§8.1）。
+// registerSettingsRoutes 挂载个人设置页（M1-8）。
 //
 // 这是登录用户自己的页面，路由不挂在 /admin/* 下：任何已登录用户都能改自己的
 // 显示名、界面语言、时区、复习日切点与密码。SSR 页面层已删除：/settings 与
@@ -15,13 +15,13 @@ func (s *Server) registerSettingsRoutes(router *gin.Engine) {
 		return
 	}
 	router.GET("/settings", s.settingsRoute)
-	// 用户级 API Key 管理（M4-10，DESIGN.md §8.1）：路由与 handler 在 keys.go。
+	// 用户级 API Key 管理（M4-10）：路由与 handler 在 keys.go。
 	router.GET("/settings/keys", s.keysRoute)
 	// 邮件类型偏好页（M1-18）：路由与 handler 在 mail_prefs.go，仍属个人设置体系。
 	s.registerMailPrefsRoutes(router)
 }
 
-// settingsRoute 提供 GET /settings：只发 SPA 应用壳（DESIGN.md §8.1、§8.5），
+// settingsRoute 提供 GET /settings：只发 SPA 应用壳，
 // 由客户端路由渲染个人设置页；资料/密码/语言的读写走 /api/v1/profile、
 // /api/v1/settings/locale 与 /api/v1/settings/password 的 JSON 端点。
 //

@@ -52,7 +52,7 @@ func (a *API) dueCards(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"cards": cards})
 }
 
-// submitReviewRequest 是评分提交请求体（DESIGN.md §3.4）。
+// submitReviewRequest 是评分提交请求体。
 type submitReviewRequest struct {
 	CardID          uint64 `json:"card_id"`
 	Rating          int    `json:"rating"`
@@ -61,7 +61,7 @@ type submitReviewRequest struct {
 	GradeSource     string `json:"grade_source"`
 }
 
-// submitReview 提交一次评分；乐观锁不匹配返回 409（DESIGN.md §3.4），scope: review。
+// submitReview 提交一次评分；乐观锁不匹配返回 409，scope: review。
 func (a *API) submitReview(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req submitReviewRequest

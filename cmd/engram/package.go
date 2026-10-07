@@ -22,7 +22,7 @@ import (
 // cliOut 是 CLI 的诊断/报告输出目标；测试替换它来捕获输出（默认 stdout）。
 var cliOut io.Writer = os.Stdout
 
-// 卡组包的 CLI 入口（AGENTS.md M5-8、DESIGN.md §7.6）。
+// 卡组包的 CLI 入口（AGENTS.md M5-8）。
 //
 // CLI 是无会话的运维/自动化通道：导出/导入都通过 --user 指定acting user，
 // 业务与权限判定复用 internal/api 的 service 方法，避免出现第二套规则。
@@ -62,7 +62,7 @@ func openPackageCLI(ctx context.Context) (*api.API, *store.UserStore, *gorm.DB, 
 
 // resolveCLIUser 决定导出（只读）操作的 acting user：显式 --user 优先，未给出时回落到卡组
 // owner（导出只读，拿走自己的内容）。导入不再走这里：导入会写入账号名下，必须显式写明身份
-// （DESIGN.md §7.6 的 CLI 身份裁定、AGENTS.md M5-12），见 resolveImportUser。
+// （CLI 身份裁定、AGENTS.md M5-12），见 resolveImportUser。
 func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, explicit uint64, deckID uint64) (*store.User, error) {
 	if explicit != 0 {
 		u, err := users.ByID(ctx, explicit)
@@ -93,7 +93,7 @@ func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, ex
 //
 // 导入会把内容写进某个账号名下，身份必须由调用者写明：空值、指向不存在的用户、以及
 // 「数字既像 id 又像用户名且指向不同用户」的歧义取值都点名拒绝，绝不回落到任何默认账号
-// （DESIGN.md §7.6 的 CLI 身份裁定、AGENTS.md M5-12）。
+// （CLI 身份裁定、AGENTS.md M5-12）。
 func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) (*store.User, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {

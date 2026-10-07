@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// PWA 外壳（M8-2，DESIGN.md §8.5）。
+// PWA 外壳（M8-2）。
 //
 // 与内容哈希化的静态资源不同，manifest 与 service worker 必须是稳定 URL：
 //   - service worker 的默认作用域由脚本路径决定，放在 /static/v/<hash>/ 下只能控制
@@ -45,7 +45,7 @@ func (s *Server) registerPWARoutes(router *gin.Engine) {
 	router.GET(manifestPath, s.webManifest)
 	router.GET(serviceWorkerPath, s.serviceWorker)
 	router.GET(pwaScriptPath, s.servePWAScript)
-	// /favicon.ico 不能 404（DESIGN.md §8.5）：浏览器对根路径 favicon 的探测是惯例，
+	// /favicon.ico 不能 404：浏览器对根路径 favicon 的探测是惯例，
 	// 重定向到哈希化的 SVG 图标即可；保持公开 GET、无鉴权。
 	router.GET("/favicon.ico", s.favicon)
 }

@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 B 类协作邮件里与卡组共享有关的两类（DESIGN.md §4.7）：
+// 本文件是 B 类协作邮件里与卡组共享有关的两类：
 //
 //	deck_shared              —— 有人把卡组分享给你
 //	deck_permission_changed   —— 你在某个卡组里的权限被改动或被撤销

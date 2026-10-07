@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「身份与 OIDC」页的 SPA JSON 端点（DESIGN.md §8.4；ROADMAP.md M6-4）。
+// 本文件是管理面板「身份与 OIDC」页的 SPA JSON 端点（ROADMAP.md M6-4）。
 //
 // 读取与写入复用 oidcLoadConfig 与 s.oidc 客户端，与 SSR 页完全同一份解析；client secret 只回
 // 「已配置/未配置」，绝不回显明文。redirect_uri 与登录流程共用 s.oidcRedirectURI，因此页面显示
@@ -120,7 +120,7 @@ func (s *Server) spaAdminOIDC(c *gin.Context) {
 }
 
 // spaAdminOIDCSave 保存 OIDC 配置：非敏感值走 PutSetting，client secret 走 PutSecret（加密）。
-// 保存后使发现文档缓存失效（DESIGN.md §4.4），写审计。
+// 保存后使发现文档缓存失效，写审计。
 func (s *Server) spaAdminOIDCSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -232,7 +232,7 @@ func (s *Server) spaAdminOIDCTest(c *gin.Context) {
 	if issuer == "" {
 		result.Code = "no_issuer"
 	} else if _, derr := s.oidc.Discover(ctx, issuer); derr != nil {
-		// 原样带上 provider 的错误文本，而不是只写日志（DESIGN.md §4.4）。
+		// 原样带上 provider 的错误文本，而不是只写日志。
 		s.logger.Info("spa admin: oidc test connection failed", "issuer", issuer, "error", derr)
 		result.Code = "failed"
 		result.Message = derr.Error()

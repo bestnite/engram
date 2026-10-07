@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板入口（DESIGN.md §8.4；ROADMAP.md M6-1）。
+// 管理面板入口（ROADMAP.md M6-1）。
 //
 // 硬约束：只有 role = admin 能进；其余一律 403。SSR 页面层已删除：每条 GET 路由先过
 // requireAdmin，再发 SPA 应用壳；面板的读写在 /api/v1/admin/* 的 JSON 端点上（spa_admin*.go）。
 
 const (
-	// settingKeySiteName 是站点名称；缺省回退语言包 app.name（DESIGN.md §8.5）。
+	// settingKeySiteName 是站点名称；缺省回退语言包 app.name。
 	settingKeySiteName = "site.name"
 	// settingKeySiteDefaultLocale 是站点默认语言，用于语言解析的最后一级回退。
 	settingKeySiteDefaultLocale = "site.default_locale"
@@ -89,7 +89,7 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 	}
 }
 
-// siteName 返回站点名称的生效值：settings 表 > 语言包 app.name（DESIGN.md §8.5）。
+// siteName 返回站点名称的生效值：settings 表 > 语言包 app.name。
 func (s *Server) siteName(ctx context.Context, loc *i18n.Localizer) string {
 	if s.db != nil {
 		if settings, err := store.LoadSettings(ctx, s.db); err == nil {

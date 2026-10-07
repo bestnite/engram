@@ -8,7 +8,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// TestElapsedLabelUnits 固定"耗时随量级换单位"的口径（DESIGN.md §9）。边界值既是
+// TestElapsedLabelUnits 固定"耗时随量级换单位"的口径。边界值既是
 // "上提一级"的守卫（59.96 秒 → 1 分钟、59.98 分钟 → 1 小时），也是"亚秒仍写毫秒"
 // 的守卫——单次复习的耗时就在这个量级，换成秒会把 420 毫秒说成 0.4 秒。
 func TestElapsedLabelUnits(t *testing.T) {

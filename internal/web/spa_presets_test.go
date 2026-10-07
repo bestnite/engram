@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 SPA 调度预设接口（DESIGN.md §3.5、§8.1，internal/web/spa_presets.go）。
+// 本文件覆盖 SPA 调度预设接口（internal/web/spa_presets.go）。
 //
 // 语义与 SSR 预设页逐项一致：默认预设补齐、优化门槛、单并发入队、状态与回退都调用同一批
 // store/jobs 方法。这里钉住：列表与门槛的真值、创建/编辑的落库与审计、非法输入零副作用、

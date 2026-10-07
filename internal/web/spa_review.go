@@ -30,7 +30,7 @@ type spaReviewRequest struct {
 }
 
 // spaGradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
-// 客户端只提交原始作答（Answer），绝不提交档位——否则就是自评冒充机器判分（DESIGN.md §6.2、§8.2）。
+// 客户端只提交原始作答（Answer），绝不提交档位——否则就是自评冒充机器判分。
 //
 // Action 决定这次请求的语义：
 //   - ""：正常判分，写 reviews（grade_source=typed）；
@@ -46,7 +46,7 @@ type spaGradeRequest struct {
 }
 
 // spaReviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
-// 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列（DESIGN.md §8.2）。
+// 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列。
 type spaReviewCardRequest struct {
 	CardID uint64   `json:"card_id"`
 	Deck   []uint64 `json:"deck"`
@@ -68,7 +68,7 @@ func (s *Server) spaReviewAnswer(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// 作答类题型不得走自评入口：那会把机器判分的评分权交回客户端（DESIGN.md §8.2）。
+	// 作答类题型不得走自评入口：那会把机器判分的评分权交回客户端。
 	// SPA 对这类卡改走 /api/v1/review/grade。
 	if _, graded := graderFor(note.Kind); graded {
 		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
@@ -88,7 +88,7 @@ func (s *Server) spaReviewAnswer(c *gin.Context) {
 
 // spaReviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
 // 计算档位并按 preset 的分数→档位映射写入 reviews（grade_source=typed、grade_detail_json）。
-// 客户端提交原始作答，不提交档位；判分规则与 SSR 共用 graderFor / buildGradeInput（DESIGN.md §3.4、§6.2）。
+// 客户端提交原始作答，不提交档位；判分规则与 SSR 共用 graderFor / buildGradeInput。
 func (s *Server) spaReviewGrade(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || s.api == nil {
@@ -177,7 +177,7 @@ func (s *Server) spaGradeSubmit(c *gin.Context, user *store.User, card *store.Ca
 }
 
 // spaGradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
-// 揭示后由前端切到「放弃作答」态，用户再点按钮才走 give_up 记 Again（DESIGN.md §8.2）。
+// 揭示后由前端切到「放弃作答」态，用户再点按钮才走 give_up 记 Again。
 func (s *Server) spaGradeReveal(c *gin.Context, user *store.User, card *store.Card) {
 	answerHTML, err := s.spaSanitizedBack(c.Request.Context(), user, card)
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *Server) spaGradeReveal(c *gin.Context, user *store.User, card *store.Ca
 }
 
 // spaGradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
-// grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生（DESIGN.md §8.2）。
+// grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
 func (s *Server) spaGradeGiveUp(c *gin.Context, user *store.User, req spaGradeRequest) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Rating: int(schedule.Again), ExpectedVersion: req.ExpectedVersion,
@@ -206,7 +206,7 @@ func (s *Server) spaGradeGiveUp(c *gin.Context, user *store.User, req spaGradeRe
 // spaReviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
 // 复习日），调度逻辑仍在 internal/schedule（schedule.Bury），transport 只做参数校验与事务边界
 // （AGENTS.md §2.3.6：一种业务逻辑、两条传输）。埋藏只需 reader——它写的是 (card_id, user_id)
-// 的本人进度，共享卡组的读者可自行复习（DESIGN.md §5、§8.2）。响应带同范围重建后的队列。
+// 的本人进度，共享卡组的读者可自行复习。响应带同范围重建后的队列。
 func (s *Server) spaReviewBury(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -245,7 +245,7 @@ func (s *Server) spaReviewBury(c *gin.Context) {
 	s.writeSPAQueue(c, user, req.Deck)
 }
 
-// spaReviewRender 返回一张卡正反面的服务端清洗 HTML（DESIGN.md §6.1）：SPA 只把这里返回的
+// spaReviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
 // HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
 // 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。
 func (s *Server) spaReviewRender(c *gin.Context) {
@@ -336,7 +336,7 @@ func (s *Server) writeSPAReviewResult(c *gin.Context, user *store.User, deckIDs 
 }
 
 // writeSPAQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
-// 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组（DESIGN.md §8.2）。
+// 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组。
 func (s *Server) writeSPAQueue(c *gin.Context, user *store.User, deckIDs []uint64) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
 	if err != nil {
@@ -386,7 +386,7 @@ func (s *Server) spaGradeFeedback(ctx context.Context, user *store.User, note *s
 }
 
 // spaSanitizedBack 渲染一张卡的背面并经 internal/render 清洗，供 SPA 展示正确答案。
-// 复用 cardView，保证与 SSR 走同一条清洗路径（DESIGN.md §6.1）。
+// 复用 cardView，保证与 SSR 走同一条清洗路径。
 func (s *Server) spaSanitizedBack(ctx context.Context, user *store.User, card *store.Card) (string, error) {
 	view, err := s.cardView(ctx, user, schedule.QueueItem{CardID: card.ID})
 	if err != nil {

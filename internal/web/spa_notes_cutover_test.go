@@ -9,7 +9,7 @@ import (
 )
 
 // 本文件覆盖 GET /decks/:id/notes/:nid（卡片编辑）与 GET /decks/:id/new-note（新建卡片）两条
-// 页面的 SPA 规范路径切流（DESIGN.md §8.1、§8.5）：SPA 已加载时返回应用壳（index.html），由客户端
+// 页面的 SPA 规范路径切流：SPA 已加载时返回应用壳（index.html），由客户端
 // 路由渲染页面；SPA 缺失（降级）时回退对应的 SSR 页面。
 //
 // 两条路径都保留迁移前 SSR 页面的判权：先要求已登录会话（匿名重定向登录页），再按 editor 角色

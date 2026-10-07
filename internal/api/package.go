@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包（.edeck）的 REST 入口（DESIGN.md §7.6、M5-6/M5-7）：
+// 卡组包（.edeck）的 REST 入口（M5-6/M5-7）：
 //   GET  /api/v1/decks/:id/package  导出（read）
 //   POST /api/v1/decks/import       导入（write）
 // 业务逻辑全在 store 层；这里只做参数整形、权限判定与错误映射。
@@ -39,7 +39,7 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, incl
 }
 
 // ImportDeckPackage 解析并导入一个卡组包；target 决定三种目标之一。
-// allowOthersProgress 只有在调用者是管理员时才生效（DESIGN.md §7.6 进度导入边界）。
+// allowOthersProgress 只有在调用者是管理员时才生效（进度导入边界）。
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	targetKind, targetDeckID, err := store.ParsePackageTarget(opts.Target)
 	if err != nil {
@@ -89,7 +89,7 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 //
 // 每个包错误都产出它自己的稳定 code（原样透出 store.PackageError.Code），不再把
 // package_bad_format 折叠成笼统的 invalid_request——否则 error.package_* 这批语言包键
-// 永无产出，用户也分不清“格式无效”/“题型不支持”/“媒体类型不允许”（DESIGN.md §7.3、§7.6）。
+// 永无产出，用户也分不清“格式无效”/“题型不支持”/“媒体类型不允许”。
 // HTTP 状态保持既有语义不变：配额不足 413、引用不可读媒体 403，其余包错误 400。
 func mapPackageError(err error) error {
 	var pe *store.PackageError
@@ -145,7 +145,7 @@ func (a *API) handleExportPackage(c *gin.Context) {
 	}
 	includeProgress := c.Query("include_progress") == "1"
 	includeReviews := c.Query("include_reviews") == "1"
-	// include_media 默认 on；显式传 0 关闭（DESIGN.md §7.6）。
+	// include_media 默认 on；显式传 0 关闭。
 	includeMedia := c.DefaultQuery("include_media", "1") != "0"
 
 	pkg, err := a.ExportDeckPackage(c.Request.Context(), u.ID, deckID, includeProgress, includeMedia, includeReviews)
@@ -179,7 +179,7 @@ func isRequestBodyTooLarge(err error) bool {
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	// 先按管理员配置的上传上限限制请求体，再解析 multipart：gin 会按 MaxMultipartMemory 把
-	// 超出内存的 part 落到临时盘，不先设上限就给了内存/磁盘放大（DESIGN.md §6.3、§7.6）。
+	// 超出内存的 part 落到临时盘，不先设上限就给了内存/磁盘放大。
 	// 超限稳定 413，code 沿用卡组包既有的 package_too_large。
 	limit := media.ResolveMaxBytes(c.Request.Context(), a.db)
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)

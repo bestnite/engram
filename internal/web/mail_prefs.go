@@ -18,7 +18,7 @@ func (s *Server) registerMailPrefsRoutes(router *gin.Engine) {
 	router.GET("/settings/notifications", s.mailPrefsRoute)
 }
 
-// mailPrefsRoute 提供 GET /settings/notifications：只发 SPA 应用壳（DESIGN.md §8.1、§8.5），
+// mailPrefsRoute 提供 GET /settings/notifications：只发 SPA 应用壳，
 // 由客户端路由渲染邮件通知偏好页；读取与写入走 /api/v1/settings/notifications（同一份服务逻辑）。
 // 授权判定与迁移前一致：未登录一律重定向登录页。SSR 页面层已删除，不再回退偏好页。
 func (s *Server) mailPrefsRoute(c *gin.Context) {

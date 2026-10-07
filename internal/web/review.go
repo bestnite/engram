@@ -26,14 +26,14 @@ func (s *Server) registerReviewRoutes(router *gin.Engine) {
 		return
 	}
 	// GET /review 返回应用壳：reviewPageRoute 先按原有的会话与卡组范围判定鉴权，再交出应用壳，
-	// 由客户端路由渲染复习页（DESIGN.md §8.1、§8.2、§8.5）。评分与动作走 SPA 的 JSON 端点
+	// 由客户端路由渲染复习页。评分与动作走 SPA 的 JSON 端点
 	// （PATCH/POST /api/v1/review/*），不再有分离的 htmx 评分端点。
 	router.GET(reviewPagePath, s.reviewPageRoute)
 }
 
 // reviewPageRoute 提供 GET /review：返回应用壳，由客户端路由渲染复习页，
-// 数据仍走既有 JSON 端点（DESIGN.md §8.1、§8.2）。会话与卡组范围判定先于切壳执行——
-// 非法 deck 参数 400、范围里出现读不到的卡组 403/404，不因返回应用壳而放行（DESIGN.md §8.2）。
+// 数据仍走既有 JSON 端点。会话与卡组范围判定先于切壳执行——
+// 非法 deck 参数 400、范围里出现读不到的卡组 403/404，不因返回应用壳而放行。
 func (s *Server) reviewPageRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -46,7 +46,7 @@ func (s *Server) reviewPageRoute(c *gin.Context) {
 }
 
 // reviewScope 是一次复习请求的卡组范围：deckIDs 为空表示全库（不按卡组过滤）。
-// 范围由 URL 的可重复 deck 参数决定，并由 SPA 的 JSON 请求原样带回（DESIGN.md §8.2）。
+// 范围由 URL 的可重复 deck 参数决定，并由 SPA 的 JSON 请求原样带回。
 type reviewScope struct{ deckIDs []uint64 }
 
 // deckScopeFromValues 解析可重复的 deck 参数值：去重、跳过空串；任一值非数字或为 0
@@ -85,7 +85,7 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 }
 
 // schedulerFor 取卡组预设构造调度器；只有恰好指定一个卡组时才用它的预设，
-// 多卡组与全库回退到文档化默认参数（DESIGN.md §3.3）。无卡组/预设缺失同样回退默认。
+// 多卡组与全库回退到文档化默认参数。无卡组/预设缺失同样回退默认。
 func (s *Server) schedulerFor(ctx context.Context, userID uint64, deckIDs []uint64) (*schedule.Scheduler, error) {
 	var preset *store.Preset
 	if len(deckIDs) == 1 {
@@ -149,7 +149,7 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	}, nil
 }
 
-// stateVersion 读取 (card_id, user_id) 的乐观锁版本；没有状态行的新卡返回 0（DESIGN.md §3.4）。
+// stateVersion 读取 (card_id, user_id) 的乐观锁版本；没有状态行的新卡返回 0。
 func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	var st store.CardState
 	err := s.db.WithContext(ctx).Where("card_id = ? AND user_id = ?", cardID, userID).Take(&st).Error
@@ -159,7 +159,7 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	return st.Version
 }
 
-// graderFor 用可选窄接口断言判断题型是否支持机器判分（DESIGN.md §6.2、M3-12）。
+// graderFor 用可选窄接口断言判断题型是否支持机器判分（M3-12）。
 // 判分能力是可选能力，核心管线不依赖它：未实现 Grader 的题型返回 false，仍走四档自评。
 func graderFor(kind string) (cardtype.Grader, bool) {
 	t, ok := cardtype.Lookup(kind)

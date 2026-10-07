@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件实现 SPA 统计明细接口（GET /api/v1/stats/detail，DESIGN.md §8.1、§9）。
+// 本文件实现 SPA 统计明细接口（GET /api/v1/stats/detail）。
 //
 // 它与 SSR 统计页（internal/web/stats.go 的 statsData）共用 collectStatsMeasures：
 // 复习日、时区、日切点、可见卡组范围与每个聚合函数都与页面逐项相同，因此「迁移到 SPA」
@@ -35,10 +35,10 @@ type statsMeasures struct {
 	Grades    []store.GradeSourceStat
 }
 
-// collectStatsMeasures 调用 §9 的全部既有聚合查询（M7-1/M7-2）；handler 不写任何统计 SQL。
+// collectStatsMeasures 调用统计页的全部既有聚合查询（M7-1/M7-2）；handler 不写任何统计 SQL。
 //
-// now 只取一次：所有指标共用同一个时刻与同一个复习日窗口（近 30 日 = [today-29, today]，
-// DESIGN.md §9）。SSR 统计页与 SPA 明细接口都从这里取数，两边因此不会对同一请求给出不同
+// now 只取一次：所有指标共用同一个时刻与同一个复习日窗口（近 30 日 = [today-29, today]）。
+// 统计页与明细接口都从这里取数，两边因此不会对同一请求给出不同
 // 口径的数字，也不会各自复制一份编排逻辑。
 func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (statsMeasures, error) {
 	now := time.Now()
@@ -124,7 +124,7 @@ type spaStatsVolume struct {
 	Last30Days int64 `json:"last_30_days"`
 }
 
-// spaStatsDue 是到期预测的互斥分桶；NewNotDue 是新卡未排期（DESIGN.md §9）。
+// spaStatsDue 是到期预测的互斥分桶；NewNotDue 是新卡未排期。
 type spaStatsDue struct {
 	Today     int64 `json:"today"`
 	Tomorrow  int64 `json:"tomorrow"`

@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerPresetRoutes 挂载调度预设页入口（M9-4，DESIGN.md §3.5、§8.1）。
+// registerPresetRoutes 挂载调度预设页入口（M9-4）。
 //
 // SSR 页面层已删除：GET /presets 只发应用壳，预设的列表/新建/编辑/优化/回退全部走
 // /api/v1/presets* 的 JSON 端点（spa_presets.go，与 SSR 页面同一批 store/jobs 方法）。
@@ -23,7 +23,7 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 		return
 	}
 	router.GET("/presets", s.presetRoute)
-	// SPA 预设接口（DESIGN.md §8.1）：同源 JSON 读写走 /api/v1/presets*。
+	// SPA 预设接口：同源 JSON 读写走 /api/v1/presets*。
 	s.registerSPAPresetRoutes(router)
 }
 

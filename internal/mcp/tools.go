@@ -37,11 +37,11 @@ type searchNotesIn struct {
 // getStatsIn 无参数。
 type getStatsIn struct{}
 
-// exportDeckIn 是 export_deck 的入参；它导出一个**卡组包**（DESIGN.md §7.6）。
+// exportDeckIn 是 export_deck 的入参；它导出一个**卡组包**。
 type exportDeckIn struct {
 	DeckID          uint64 `json:"deck_id" jsonschema:"the deck to export as a package"`
 	IncludeProgress bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
-	// IncludeMedia 缺省为 true（DESIGN.md §7.6：媒体默认内联）。
+	// IncludeMedia 缺省为 true（媒体默认内联）。
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
 	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include review logs (requires include_progress)"`
 }
@@ -51,7 +51,7 @@ type importNoteIn struct {
 	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze)"`
 	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
-	// NoteID 按主键寻址已有 note 就地改写；与 external_ref 互斥（DESIGN.md §7.3、M4-12）。
+	// NoteID 按主键寻址已有 note 就地改写；与 external_ref 互斥（M4-12）。
 	NoteID uint64   `json:"note_id,omitempty" jsonschema:"address an existing note by primary key to rewrite in place; mutually exclusive with external_ref"`
 	Tags   []string `json:"tags,omitempty" jsonschema:"note tags"`
 }
@@ -65,7 +65,7 @@ type bulkNotesIn struct {
 }
 
 // bulkActionIn 是 bulk_notes 的入参，与 REST 的 POST /notes/bulk 请求体同形
-// （DESIGN.md §7.3、§7.4：MCP 只做参数整形，语义与校验都在 service 层）。
+// （MCP 只做参数整形，语义与校验都在 service 层）。
 type bulkActionIn struct {
 	Action  string   `json:"action" jsonschema:"bulk action: delete, add_tags, remove_tags or set_tags"`
 	NoteIDs []uint64 `json:"note_ids" jsonschema:"notes to act on, deduplicated to 1..500 entries"`
@@ -73,7 +73,7 @@ type bulkActionIn struct {
 	DryRun  bool     `json:"dry_run,omitempty" jsonschema:"count without writing or auditing"`
 }
 
-// importDeckIn 是 import_deck 的入参：接受一个卡组包（DESIGN.md §7.6）。
+// importDeckIn 是 import_deck 的入参：接受一个卡组包。
 type importDeckIn struct {
 	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .edeck zip。
 	Package any `json:"package" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive"`
@@ -101,7 +101,7 @@ type deleteNoteIn struct {
 }
 
 // getDueCardsIn 是 get_due_cards 的入参。
-// deck_id 与 deck_ids 互斥：同时给出返回参数错误；两者都缺省＝全部卡组（DESIGN.md §7.4）。
+// deck_id 与 deck_ids 互斥：同时给出返回参数错误；两者都缺省＝全部卡组。
 type getDueCardsIn struct {
 	DeckID  uint64   `json:"deck_id,omitempty" jsonschema:"single deck to scope the queue; 0 or absent means all decks; mutually exclusive with deck_ids"`
 	DeckIDs []uint64 `json:"deck_ids,omitempty" jsonschema:"set of decks to scope the queue; absent or empty means all decks; mutually exclusive with deck_id"`
@@ -131,7 +131,7 @@ func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any
 	return map[string]any{"decks": out}, nil
 }
 
-// createDeck 建一个空卡组：与 REST `POST /decks` 走同一 service 方法（DESIGN.md §7.4）。
+// createDeck 建一个空卡组：与 REST `POST /decks` 走同一 service 方法。
 // 返回与 REST 相同的 api.DeckResponse，保证两种传输的响应形态不会漂移。
 func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (any, error) {
 	d, err := s.api.CreateDeck(ctx, id.User, api.CreateDeckInput{

@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 系统设置的可编辑项定义（DESIGN.md §8.4；ROADMAP.md M6-5）。
+// 系统设置的可编辑项定义（ROADMAP.md M6-5）。
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
 // settings 表按请求现读。SSR 设置页删除后，页面的读写在 /api/v1/admin/settings 的 JSON

@@ -1,5 +1,5 @@
 // Package mcp 提供内置 MCP server：同进程 HTTP（POST /mcp，streamable HTTP），
-// 复用用户级 API Key 鉴权与 internal/api 的 service 层（DESIGN.md §7.4、ROADMAP.md M4-6/M4-7）。
+// 复用用户级 API Key 鉴权与 internal/api 的 service 层（ROADMAP.md M4-6/M4-7）。
 //
 // 只提供 HTTP，不提供 stdio（多用户服务没有“进程即身份”的语义）。
 // 工具不封装业务逻辑，只做参数校验并调用与 REST 完全相同的方法。
@@ -96,7 +96,7 @@ const (
 // ServeHTTP 实现 http.Handler；调用方必须先完成鉴权并把身份写入请求上下文
 // （见 WithIdentity），复用与 REST 相同的 API Key 校验、限流与审计。
 //
-// 它额外强制两条规则（DESIGN.md §7.4）：
+// 它额外强制两条规则：
 //  1. /mcp 只接受 API Key：没有 key 的身份（会话 cookie 通道）一律 401。
 //  2. 会话内每个请求的 key 属主必须等于握手用户：会话号只证明“同一个客户端”，
 //     不证明“同一个用户”，否则 B 用自己的 key 加 A 的会话号就能借用 A 的身份。
@@ -301,7 +301,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "create_deck", "Create an empty deck (name required; visibility defaults to private; preset_id 0 uses the caller's Default preset).", s.createDeck)
 	addTool(s, srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
-	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package (DESIGN.md §7.6): manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
+	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package: manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
 	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
 	addTool(s, srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
 	addTool(s, srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
@@ -348,7 +348,7 @@ func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, nam
 		var zero Out
 		id := s.requestIdentity(handshake, req)
 		if !hasScope(id, scope) {
-			// 与 REST 共用同一 code 与英文文案（DESIGN.md §8.3、§10.4）；scope 名作为细节附后。
+			// 与 REST 共用同一 code 与英文文案；scope 名作为细节附后。
 			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)
 		}
 		out, err := fn(ctx, id, in)

@@ -10,8 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 GET /review 的 SPA 规范路径切流与复习页新增的两个会话 CSRF 端点（DESIGN.md
-// §6.1、§8.1、§8.2、§8.5）：
+// 本文件覆盖 GET /review 的 SPA 规范路径切流与复习页新增的两个会话 CSRF 端点：
 //
 //   - GET /review 在 SPA 已加载时返回应用壳，由客户端路由渲染复习页；会话与卡组范围判定
 //     先于切壳执行——匿名 303 登录页、非法 deck 参数 400、范围里读不到的卡组 403，都不因
@@ -76,7 +75,7 @@ func TestReviewRouteRedirectsAnonymous(t *testing.T) {
 }
 
 // TestReviewRouteRejectsInvalidAndUnreadableScope 断言范围判定先于切壳执行：非数字或 0 的
-// deck 参数 400；范围里出现读不到的卡组 403。两者都不返回应用壳（DESIGN.md §8.2）。
+// deck 参数 400；范围里出现读不到的卡组 403。两者都不返回应用壳。
 func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	foreign := seedReviewDeck(t, db, ownerID, "Foreign review deck")

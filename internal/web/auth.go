@@ -24,7 +24,7 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	if s.accounts == nil || s.sessions == nil || s.users == nil {
 		return
 	}
-	// 登录/注册/引导三条页面只返回 SPA 应用壳（DESIGN.md §8.1）：页面判定与写操作全部由
+	// 登录/注册/引导三条页面只返回 SPA 应用壳：页面判定与写操作全部由
 	// 客户端的同源 JSON 端点承担（/api/v1/auth/{session,login,register,setup}）。
 	// 会话前写请求没有服务端会话可绑 token，仍由 PreSessionCSRFMiddleware 校验双提交 cookie
 	// 与镜像 token（B-13）。
@@ -39,7 +39,7 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
 
-	// SPA / 同源 JSON 会话与认证端点（DESIGN.md §4.3、§8.3）
+	// SPA / 同源 JSON 会话与认证端点
 	router.GET("/api/v1/auth/session", s.apiSession)
 	router.GET("/api/v1/session", s.apiSession)
 	router.POST("/api/v1/auth/login", auth.PreSessionCSRFMiddleware(), s.apiLogin)
@@ -82,7 +82,7 @@ func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
 
 // anonRateLimited 报告一次匿名入口请求是否应被限流拒绝，并在拒绝时补 Retry-After 响应头。
 // /register 与 /forgot-password 共用同一套 "IP + 目标邮箱 各 5 次 / 15 分钟" 的双维度计数
-// （DESIGN.md §4.3）。未装配限流器时一律放行，与 loginLimiter 的装配约定一致。
+// 未装配限流器时一律放行，与 loginLimiter 的装配约定一致。
 func (s *Server) anonRateLimited(c *gin.Context, email string) bool {
 	if s.anonLimiter == nil {
 		return false
@@ -122,9 +122,9 @@ func registrationDenialCode(err error) string {
 // 邀请接受（事务化）与注册策略/邮箱白名单。SPA JSON 接口（apiRegister）是唯一的传输，
 // 因此策略、限流、审计与事务语义只有一份实现。
 //
-// 它不写响应、不发邮件：调用方据 outcome 映射。放行分支与拒绝顺序见 DESIGN.md §4.1、§4.2、§4.3。
+// 它不写响应、不发邮件：调用方据 outcome 映射响应形态。
 func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, email, displayName, password, inviteToken, locale string) registrationOutcome {
-	// 匿名入口限流（DESIGN.md §4.3）：与 /api/v1/auth/forgot-password 共用同一套 IP + 目标邮箱
+	// 匿名入口限流：与 /api/v1/auth/forgot-password 共用同一套 IP + 目标邮箱
 	// 双维度固定窗口计数（各 5 次 / 15 分钟），任一超限即拒。放在表单校验与任何 DB 动作之前：
 	// 被拒的请求不建号、不写审计、不发验证邮件。
 	if s.anonLimiter != nil && !s.anonLimiter.Allow(clientIP, email) {
@@ -258,7 +258,7 @@ func (s *Server) setupAvailable(c *gin.Context) bool {
 // SPA JSON 接口（apiRegister/apiSetup）与管理员建号表单共用它，避免两套传输各写一份校验而
 // 漂移（AGENTS.md §2.4「一个业务层，两种传输」）。
 // code 的取值就是 JSON 错误包壳里的稳定 code，也是英文兜底 message 的来源。
-// 密码强度复用 internal/auth 的策略，不在这里定义第二套规则（DESIGN.md §4.3）。
+// 密码强度复用 internal/auth 的策略，不在这里定义第二套规则。
 func registerInputErrorCode(username, email, password string) string {
 	if username == "" {
 		return "username_required"

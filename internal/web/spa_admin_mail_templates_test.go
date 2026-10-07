@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件模板」（DESIGN.md §4.7）的验收：切流、读取、保存校验、
+// 本文件是管理面板「邮件模板」的验收：切流、读取、保存校验、
 // 删除回退、预览的零副作用，以及缺 CSRF 的负例。
 
 // TestSPAAdminMailTemplatePagesCutover 断言页面走 SPA 外壳，且非管理员拿 403。
@@ -26,7 +26,7 @@ func TestSPAAdminMailTemplatePagesCutover(t *testing.T) {
 }
 
 // TestSPAAdminMailTemplatesShipTheBuiltinDefaults 断言列表响应带回每个类型 × 每种语言的
-// **内置正文**，且它就是编辑框预填的那一份（DESIGN.md §4.7）。
+// **内置正文**，且它就是编辑框预填的那一份。
 //
 // 这条链之所以要端到端钉住：管理页显示的「默认」如果和发信方兜底不是同一份文本，管理员会
 // 以为自己改的是默认，实际改的是另一个东西——而页面上看不出任何异常。

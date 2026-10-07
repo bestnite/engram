@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板的注册与邀请支撑函数（DESIGN.md §4.2、§8.4；ROADMAP.md M6-3）。
+// 管理面板的注册与邀请支撑函数（ROADMAP.md M6-3）。
 //
 // SSR 注册与邀请页删除后，策略与邀请的读写在 /api/v1/admin/registration 与
 // /api/v1/admin/invites* 的 JSON 端点上（spa_admin_registration.go）；
@@ -33,7 +33,7 @@ func (s *Server) regNotice(loc *i18n.Localizer, code string) string {
 	case noticeInviteMailQueued:
 		return loc.T("mail.invite.notice.queued")
 	case noticeInviteMailUnconfigured:
-		// 说明原因而不是静默：邀请已创建，但本站未开邮件功能（DESIGN.md §4.7）。
+		// 说明原因而不是静默：邀请已创建，但本站未开邮件功能。
 		return loc.T("admin.registration.notice.invite_created") + " " + loc.T("mail.not_configured")
 	case noticeInviteMailFailed:
 		return loc.T("mail.invite.notice.failed")

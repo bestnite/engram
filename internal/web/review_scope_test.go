@@ -35,7 +35,7 @@ func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
 
 // TestReviewScopeRejectsMixedUnreadableDeck 覆盖混合集合负例：一个自己可读的卡组和一个他人的
 // 私有卡组同时出现时，整次请求失败，不得静默丢弃无权限的那个。
-// 与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck 是同一口径（DESIGN.md §3.3）。
+// 与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck 是同一口径。
 func TestReviewScopeRejectsMixedUnreadableDeck(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	readable := seedReviewDeck(t, db, ownerID, "Mine")

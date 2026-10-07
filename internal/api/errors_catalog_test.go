@@ -23,7 +23,7 @@ import (
 
 // TestErrorRegistryCoversEveryCode 解析源码里全部 Code* 常量（api 包所有非测试 .go 文件 + store 包卡组包错误码），
 // 断言每一个 code 都在 errorMessages 注册表里登记了非空的稳定英文文案，且 ErrorMessage 返回该文案。
-// 不再要求在 Go 语言包（zh-CN.yaml / en.yaml）里登记 REST/MCP 错误（DESIGN.md §8.3、§10.4）。
+// 不再要求在 Go 语言包（zh-CN.yaml / en.yaml）里登记 REST/MCP 错误。
 func TestErrorRegistryCoversEveryCode(t *testing.T) {
 	apiCodes := codeConstantsInDir(t, ".")
 	storeCodes := codeConstantsInFile(t, filepath.Join("..", "store", "package.go"))
@@ -49,7 +49,7 @@ func TestErrorRegistryCoversEveryCode(t *testing.T) {
 
 // TestAPIErrorOutputIdenticalAcrossAcceptLanguage 断言针对相同错误场景，
 // 无论请求头 Accept-Language 为 zh-CN、en 或其它语言，API 错误响应的 JSON 输出都是
-// 逐字节完全一致的稳定英文（DESIGN.md §7.3、§8.3、§10.4）。
+// 逐字节完全一致的稳定英文。
 func TestAPIErrorOutputIdenticalAcrossAcceptLanguage(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "err_lang_test", store.RoleUser)

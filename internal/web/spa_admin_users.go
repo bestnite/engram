@@ -13,11 +13,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「用户管理」的 SPA JSON 端点（DESIGN.md §8.4；ROADMAP.md M6-2）。
+// 本文件是管理面板「用户管理」的 SPA JSON 端点（ROADMAP.md M6-2）。
 //
 // 语义与 SSR 表单（admin_users.go）逐项一致，只换传输形态：同一份 store/service 调用、
 // 同一份危险动作保护（不可删自己、不可清空最后一个管理员、危险动作需确认）。响应只带原始
-// 值与稳定英文 code，本地化文案由前端语言包按 code 映射（DESIGN.md §8.3）。
+// 值与稳定英文 code，本地化文案由前端语言包按 code 映射。
 
 // spaAdminUser 是用户列表里的一行；role/status 是存储取值，由前端映射文案。
 type spaAdminUser struct {

@@ -165,7 +165,7 @@ func tokenFromBody(t *testing.T, body string) string {
 
 // assertNoUnsubscribeHeader 断言这些 A 类邮件都不带退订头。
 // SecurityNotifier 从不写 Headers，因此 headers_json 是空对象，也绝不出现
-// List-Unsubscribe / List-Unsubscribe-Post（DESIGN.md §4.7）。
+// List-Unsubscribe / List-Unsubscribe-Post。
 func assertNoUnsubscribeHeader(t *testing.T, rows []store.OutboxMessage) {
 	t.Helper()
 	for _, row := range rows {

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 本文件是 OIDC 可选登录入口的 SPA 同源 JSON 探测端点（DESIGN.md §4.4、§8.1）。
+// 本文件是 OIDC 可选登录入口的 SPA 同源 JSON 探测端点。
 //
 // SPA 的登录视图无法在构建期知道服务端是否开启了 OIDC，因此需要一个只读探测端点。
 // 它只暴露「是否可用」与稳定的发起地址，绝不回显 issuer / client_id / client_secret 或任何凭据。

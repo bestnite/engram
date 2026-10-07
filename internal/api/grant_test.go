@@ -129,7 +129,7 @@ func TestUnauthorizedCannotSeeDeck(t *testing.T) {
 	}
 }
 
-// TestRevokeTakesEffectImmediately 覆盖 §5“撤销立即生效”：撤销后下一个请求即被拒。
+// TestRevokeTakesEffectImmediately 覆盖「撤销立即生效」：撤销后下一个请求即被拒。
 func TestRevokeTakesEffectImmediately(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "revoke_owner", store.RoleUser)

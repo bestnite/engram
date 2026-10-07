@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 L3（DESIGN.md §5）：「登录用户通过分享链接打开的卡组计入其可见集合，媒体读取据此放行」。
+// 本文件覆盖 L3：「登录用户通过分享链接打开的卡组计入其可见集合，媒体读取据此放行」。
 //
 // 打开动作走 /api/v1/share/:token（GET 或 POST .../unlock），它登记会话级媒体授权并返回清洗后的内容；
 // 浏览器随后对图片发起的 GET /media/<sha256> 才放行。语义（本文件钉死）：

@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是邮件模板（DESIGN.md §4.7）在真实触发点上的验收：走 POST /api/v1/auth/forgot-password，
+// 本文件是邮件模板在真实触发点上的验收：走 POST /api/v1/auth/forgot-password，
 // 读真实入队的 outbox 行。测试账号的语言是 en，所以模板也按 en 写。
 
 // saveTemplate 直接写库，绕开管理页的保存校验——用来覆盖「模板先坏了」这类状态。
@@ -63,7 +63,7 @@ func TestPasswordResetMailWithoutTemplateStaysPlainText(t *testing.T) {
 	}
 }
 
-// TestBrokenTemplateFallsBackToBuiltinBody 是 DESIGN.md §4.7 那条承诺的回归：模板丢了必填
+// TestBrokenTemplateFallsBackToBuiltinBody 是「模板坏了也不会让邮件发不出去」那条承诺的回归：模板丢了必填
 // 变量（这里绕开保存校验直接写库）时，邮件必须照常发出去，收件人拿到内置正文与可用的链接，
 // 而不是一封没有链接的信。
 func TestBrokenTemplateFallsBackToBuiltinBody(t *testing.T) {

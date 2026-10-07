@@ -16,7 +16,7 @@ type spaNotePreviewRequest struct {
 	Fields map[string]any `json:"fields"`
 }
 
-// spaNotePreview 只返回 internal/render 清洗过的卡面 HTML（DESIGN.md §6.1）。
+// spaNotePreview 只返回 internal/render 清洗过的卡面 HTML。
 func (s *Server) spaNotePreview(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {

@@ -24,13 +24,13 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	// 卡片列表、编辑与新建三个 GET 页都返回应用壳（DESIGN.md §8.1、§8.5）：三个 *Route 处理器
+	// 卡片列表、编辑与新建三个 GET 页都返回应用壳：三个 *Route 处理器
 	// 先按各自原有的会话与角色判定鉴权，再交出应用壳，由客户端路由与 JSON 端点渲染页面。
 	router.GET("/decks/:id/notes", s.noteListRoute)
 	router.GET("/decks/:id/notes/:nid", s.noteEditRoute)
 	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
 	router.GET("/decks/:id/new-note", s.noteNewRoute)
-	// SPA 的新建/编辑预览走 JSON（DESIGN.md §8.1）。
+	// SPA 的新建/编辑预览走 JSON。
 	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.spaNotePreview)
 }
 
@@ -94,8 +94,8 @@ func parsePage(raw string) int {
 	return n
 }
 
-// noteListRoute 提供 GET /decks/:id/notes：返回应用壳（DESIGN.md §8.5），由客户端路由渲染
-// 卡片列表，数据仍走既有 JSON 端点（GET /api/v1/decks/:id/notes，DESIGN.md §8.1）。
+// noteListRoute 提供 GET /decks/:id/notes：返回应用壳，由客户端路由渲染
+// 卡片列表，数据仍走既有 JSON 端点（GET /api/v1/decks/:id/notes）。
 //
 // 鉴权与迁移前的 SSR 列表页逐项一致：先要求已登录会话（匿名重定向登录页），再按 reader 角色
 // 判定卡组可读性——无权读的卡组仍回 403，不因切壳而放行。
@@ -114,8 +114,8 @@ func (s *Server) noteListRoute(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
-// noteEditRoute 提供 GET /decks/:id/notes/:nid：返回应用壳（DESIGN.md §8.5），由客户端路由
-// 渲染卡片编辑页，数据仍走既有 JSON 端点（GET 列表 + PATCH /api/v1/notes/:id，DESIGN.md §8.1）。
+// noteEditRoute 提供 GET /decks/:id/notes/:nid：返回应用壳，由客户端路由
+// 渲染卡片编辑页，数据仍走既有 JSON 端点（GET 列表 + PATCH /api/v1/notes/:id）。
 // 编辑页的写入在 SPA 里走 REST，但读页面的判权仍由服务端负责。
 //
 // 鉴权与迁移前的 SSR 编辑页逐项一致：先要求已登录会话（匿名重定向登录页），再按 editor 角色
@@ -136,7 +136,7 @@ func (s *Server) noteEditRoute(c *gin.Context) {
 }
 
 // noteNewRoute 提供 GET /decks/:id/new-note：返回应用壳，由客户端路由渲染新建卡片页，
-// 提交仍走 POST /api/v1/decks/:id/notes（DESIGN.md §8.1、§8.5）。
+// 提交仍走 POST /api/v1/decks/:id/notes。
 //
 // 鉴权与迁移前的 SSR 新建页逐项一致：匿名重定向登录页，非 editor 回 403。
 func (s *Server) noteNewRoute(c *gin.Context) {

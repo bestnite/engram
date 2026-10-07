@@ -237,7 +237,7 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 // TestGetDueCardsRejectsMixedUnreadableDeckIDs 覆盖混合集合负例：deck_ids 里一个自己可读的
 // 卡组和一个他人的私有卡组混在一起时整次调用失败，不得只返回可读卡组的卡片。
 // MCP 复用 api.DueCards 的逐 id 判权，与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck
-// 同一口径（DESIGN.md §3.3）。
+// 同一口径。
 func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "mixed-owner")

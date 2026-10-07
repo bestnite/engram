@@ -20,7 +20,7 @@ type apiLoginRequest struct {
 	Password string `json:"password" form:"password"`
 }
 
-// apiSession 提供同源 SPA 会话引导与 CSRF token 读取（DESIGN.md §4.3、§8.3、§11）。
+// apiSession 提供同源 SPA 会话引导与 CSRF token 读取。
 //
 // 无论登录与否，均不暴露 session ID、签名密钥或任何内部凭据；
 // 已登录时返回当前用户信息与绑定在服务端会话上的 CSRF token；
@@ -54,7 +54,7 @@ func (s *Server) apiSession(c *gin.Context) {
 	})
 }
 
-// apiLogin 校验凭据并建立服务端会话（DESIGN.md §4.3、§11）。
+// apiLogin 校验凭据并建立服务端会话。
 //
 // 挂载 auth.PreSessionCSRFMiddleware 保证请求同时携带 csrf_double cookie 与 X-CSRF-Token 头。
 // 密码校验、限流递增延迟、恒定耗时 dummy hash、审计日志与 TOTP 二次验证均复用既有服务语义。
@@ -175,7 +175,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 	})
 }
 
-// spaLoginShell 提供 GET /login：返回应用壳（DESIGN.md §8.1 的规范路径），
+// spaLoginShell 提供 GET /login：返回应用壳（规范路径），
 // 由客户端路由渲染登录页；登录协议走 GET /api/v1/auth/session + POST /api/v1/auth/login，
 // 第二步走 GET /login/totp / POST /api/v1/auth/totp。
 //
@@ -188,7 +188,7 @@ func (s *Server) spaLoginShell(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
-// spaRegisterShell 提供 GET /register：返回应用壳（DESIGN.md §8.1 的规范路径），
+// spaRegisterShell 提供 GET /register：返回应用壳（规范路径），
 // 注册协议走 POST /api/v1/auth/register（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
 // ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
 // 不建号、不建立会话、不返回任何凭据。迁移期别名 /spa/register 由同一处理器服务。
@@ -197,7 +197,7 @@ func (s *Server) spaRegisterShell(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
-// spaSetupShell 提供 GET /setup：返回应用壳（DESIGN.md §8.1 的规范路径），
+// spaSetupShell 提供 GET /setup：返回应用壳（规范路径），
 // 引导协议走 POST /api/v1/auth/setup。可达性与迁移前完全一致：已存在活跃管理员时返回 404
 // （一次性管理员门，避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳；
 // 这里只下发 cookie 并返回应用壳，不建号、不建会话。迁移期别名 /spa/setup 由同一处理器服务。
@@ -302,7 +302,7 @@ func (s *Server) writeRegistrationError(c *gin.Context, outcome registrationOutc
 }
 
 // registrationErrorMessage 返回注册失败 code 对应的稳定英文兜底文案。
-// 前端按 code 映射本地化提示，绝不解析这条 message（DESIGN.md §8.3）。
+// 前端按 code 映射本地化提示，绝不解析这条 message。
 func registrationErrorMessage(code string) string {
 	switch code {
 	case "username_required":
@@ -348,7 +348,7 @@ func apiAuthError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
-// apiLogout 作废当前会话并清除 cookie（DESIGN.md §4.3、§11）。
+// apiLogout 作废当前会话并清除 cookie。
 //
 // 挂载 s.sessions.CSRFMiddleware 强制要求会话绑定的 CSRF token。
 // 登出后重置双提交 CSRF cookie 并返回相应 token，保证后续无缝进入登录等流程。

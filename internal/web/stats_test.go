@@ -17,7 +17,7 @@ import (
 
 // newStatsServer 装配一个带会话的测试服务，登录一个 owner，并种入最小统计夹具。
 //
-// 夹具覆盖每个 §9 指标至少一个非零值，这样页面渲染的是真实聚合结果，而不是一排空柱：
+// 夹具覆盖每个统计指标至少一个非零值，这样页面渲染的是真实聚合结果，而不是一排空柱：
 // 两条今日复习 + 一条昨日复习（复习量与学习曲线）、一个带稳定性与到期日的状态行
 // （到期预测与留存）、一条带标签的笔记（标签维度）、一个卡组（卡组维度）。
 func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, cookies []*http.Cookie) {
@@ -140,7 +140,7 @@ func TestStatsPageRedirectsAnonymous(t *testing.T) {
 // （index.html），由客户端路由渲染统计页，而不再渲染 SSR 页面。
 //
 // 深链（?lang=）随请求原样带过；外壳用 revalidation/no-cache 与 ETag，避免长期缓存
-// 旧资源引用（DESIGN.md §8.5）。数据仍在客户端经 GET /api/v1/stats/detail 取得。
+// 旧资源引用。数据仍在客户端经 GET /api/v1/stats/detail 取得。
 func TestStatsRouteServesSPAShell(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 

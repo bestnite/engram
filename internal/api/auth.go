@@ -87,7 +87,7 @@ func NewAuthenticator(cfg AuthConfig) (*Authenticator, error) {
 // bearer 通道在这里完成校验、刷 last_used_at、按 key 限流并写带 api_key_id 的审计。
 func (a *Authenticator) Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// MCP 只接受 API key；先拒绝 cookie 通道，避免普通 REST 的 CSRF 规则覆盖 401（DESIGN.md §7.4、§11）。
+		// MCP 只接受 API key；先拒绝 cookie 通道，避免普通 REST 的 CSRF 规则覆盖 401。
 		if c.Request.URL.Path == "/mcp" {
 			if _, ok := bearerToken(c.Request); !ok {
 				abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
@@ -116,7 +116,7 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 }
 
 // AuthMiddleware 暴露与 /api/v1 完全相同的鉴权中间件，供内置 MCP 的 /mcp 端点复用
-// （DESIGN.md §7.4：MCP 复用用户级 API Key，不另写一套鉴权）。
+// （MCP 复用用户级 API Key，不另写一套鉴权）。
 func (a *API) AuthMiddleware() gin.HandlerFunc { return a.authn.Auth() }
 
 // authenticateKey 校验 bearer key 并把用户与 key 写进上下文。
@@ -147,7 +147,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 
 	c.Set(string(ctxUserKey), u)
 	c.Set(string(ctxKeyKey), key)
-	// 每次 key 调用写审计并带 api_key_id（DESIGN.md §7.2）；写失败不阻断请求。
+	// 每次 key 调用写审计并带 api_key_id；写失败不阻断请求。
 	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: store.Ptr(key.ID),
@@ -168,7 +168,7 @@ func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 				abortError(c, http.StatusForbidden, CodeScopeRequired, scope)
 				return
 			}
-			// admin 只能发给管理员账号（DESIGN.md §7.2）：key 的 scopes 不脱离账号角色，
+			// admin 只能发给管理员账号：key 的 scopes 不脱离账号角色，
 			// 账号被降级后，遗留的 admin-scope key 立即失去 admin 面。角色每请求现查，
 			// 不缓存，因此降级即时生效。
 			if scope == store.ScopeAdmin {
@@ -234,7 +234,7 @@ func bearerToken(r *http.Request) (string, bool) {
 	return tok, true
 }
 
-// isMutating 判断请求是否写操作；写操作使用更严的限流配额（DESIGN.md §7.2）。
+// isMutating 判断请求是否写操作；写操作使用更严的限流配额。
 func isMutating(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:

@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件模板」的 SPA JSON 端点（DESIGN.md §4.7）。
+// 本文件是管理面板「邮件模板」的 SPA JSON 端点。
 //
 // 页面只列**已有变量表**的类型，而变量表只覆盖已有发信方的类型——所以管理页不会出现
 // 「能配但永远不发」的模板槽。保存时的校验与发送时的校验是同一份（mail.Validate），
@@ -42,7 +42,7 @@ type spaMailTemplateRow struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// spaMailTemplateDefault 是某类型在某语言下的**内置正文**（DESIGN.md §4.7）。
+// spaMailTemplateDefault 是某类型在某语言下的**内置正文**。
 //
 // 它与发信方兜底用的是同一段代码（mail.DefaultTemplate），只是代入的是占位符而不是真实值，
 // 所以「编辑框里看到的默认」与「实际发出去的默认」不可能不一样——编辑框预填的就是它。

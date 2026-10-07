@@ -71,7 +71,7 @@ type Deps struct {
 	AnonLimiter *auth.AnonymousLimiter
 	// TOTP 是本地账号的可选二次因素（M1-16）；为空时登录只校验密码，不暴露 TOTP 相关路由。
 	TOTP *auth.TOTPService
-	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单（DESIGN.md §4.1）。
+	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单。
 	BootstrapAdminEmail string
 	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
 	API *api.API
@@ -93,7 +93,7 @@ type Deps struct {
 	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
 	BaseURL string
 	// TrustedProxies 是允许改写 ClientIP() 的代理地址（IP 或 CIDR），来自启动配置 TRUSTED_PROXIES。
-	// 为空 = 不信任任何代理，ClientIP() 回落到 RemoteAddr（DESIGN.md §4.3、§11）。
+	// 为空 = 不信任任何代理，ClientIP 回落到 RemoteAddr。
 	TrustedProxies []string
 }
 
@@ -153,12 +153,12 @@ type Server struct {
 	tokens *auth.ActionTokenService
 	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」（M1-19）。
 	fingerprints *store.LoginFingerprintStore
-	// mailTemplates 是管理员自定义的邮件模板（DESIGN.md §4.7）；缺失即回退内置正文。
+	// mailTemplates 是管理员自定义的邮件模板；缺失即回退内置正文。
 	mailTemplates *store.MailTemplateStore
 	// shareInvites 是待接受的卡组共享邀请（L3 同意制）；sharePolicy 是「谁能分享给我」的策略。
 	shareInvites *store.DeckShareInviteStore
 	sharePolicy  *store.SharePolicyStore
-	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走 §4.5 三分支。
+	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走身份绑定的三个分支。
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
 	// oidc 是协议客户端（发现文档缓存 + state 表）；baseURL 用于拼 redirect_uri。
@@ -166,7 +166,7 @@ type Server struct {
 	baseURL string
 }
 
-// secureCookies 报告站点是否经 https 提供，依据 BASE_URL 的 scheme（DESIGN.md §4.3、§4.4）。
+// secureCookies 报告站点是否经 https 提供，依据 BASE_URL 的 scheme。
 // 生产是「Caddy 终止 TLS → 应用只收到明文 http」，所以绝不能看请求自身的 TLS 状态，
 // 否则线上 cookie 会丢掉 Secure。
 func (s *Server) secureCookies() bool {
@@ -207,10 +207,10 @@ func New(addr string, deps Deps) (*Server, error) {
 		return nil, errors.New("web: the embedded SPA is required")
 	}
 	// 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口，供前端加载器按同源外链引入
-	// （CSP script-src 'self' 已放行，无需内联脚本；DESIGN.md §6.1、§8.5）。资源缺失时
+	// （CSP script-src 'self' 已放行，无需内联脚本）。资源缺失时
 	// URL 为空，不注入，前端加载器随之跳过加载。
 	spa.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
-	// PWA 外壳（DESIGN.md §8.5）：manifest、theme-color、图标、注册脚本与主题引导都注入
+	// PWA 外壳：manifest、theme-color、图标、注册脚本与主题引导都注入
 	// SPA 入口 <head>。图标走内容哈希 URL；主题引导用编译期常量 themeBootstrap，与 CSP 的
 	// script-src hash 白名单同源，因此改它必须同步改策略。manifest 与 /pwa.js 是稳定 URL，
 	// 登录前也需可取（registerPWARoutes）。
@@ -312,7 +312,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router := gin.New()
 	// gin 默认信任所有代理（trustedProxies = 0.0.0.0/0、::/0），会无条件采信 X-Forwarded-For /
 	// X-Real-IP。那会让登录限流键、审计 IP 与新设备提醒被请求头伪造，因此显式收敛到配置的可信
-	// 代理列表：空列表即完全不信任，ClientIP() 回落到 RemoteAddr（DESIGN.md §4.3、§11）。
+	// 代理列表：空列表即完全不信任，ClientIP 回落到 RemoteAddr。
 	// 非法项在此也会让构造失败，绝不静默忽略。
 	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("web: set trusted proxies: %w", err)
@@ -348,9 +348,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerSPADeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
 	s.registerSPADeckSettingsRoutes(router)
-	// SPA 的 TOTP 管理接口（M1-16 的 JSON 版本，DESIGN.md §4.3）：SSR 的 /settings/totp* 不动。
+	// SPA 的 TOTP 管理接口（M1-16 的 JSON 版本）：SSR 的 /settings/totp* 不动。
 	s.registerSPATOTPRoutes(router)
-	// SPA 的邮件通知偏好接口（M1-18 的 JSON 版本，DESIGN.md §4.7）：SSR 的 /settings/notifications 不动。
+	// SPA 的邮件通知偏好接口（M1-18 的 JSON 版本）：SSR 的 /settings/notifications 不动。
 	s.registerSPAMailPrefsRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
@@ -376,16 +376,16 @@ func New(addr string, deps Deps) (*Server, error) {
 		// SPA 答题只接受会话 cookie，并在 API 组之外显式校验会话绑定的 CSRF。
 		if s.sessions != nil {
 			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.spaReviewAnswer)
-			// 作答类题型走判分入口：服务端判分并写 grade_source=typed（DESIGN.md §6.2、§8.2）。
+			// 作答类题型走判分入口：服务端判分并写 grade_source=typed。
 			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.spaReviewGrade)
 			// 埋藏与卡面渲染：只写本人进度 / 只读清洗后 HTML，仍是会话 + CSRF 保护的 web 端点
-			// （DESIGN.md §6.1、§8.2）。埋藏的调度逻辑复用 internal/schedule。
+			// 埋藏的调度逻辑复用 internal/schedule。
 			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.spaReviewBury)
 			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.spaReviewRender)
 		}
 	}
 	if s.mcp != nil && s.api != nil {
-		// MCP 复用同一套鉴权（DESIGN.md §7.4）；鉴权后把身份注入请求上下文再交给 streamable handler。
+		// MCP 复用同一套鉴权；鉴权后把身份注入请求上下文再交给 streamable handler。
 		g := router.Group("")
 		g.Use(s.api.AuthMiddleware())
 		g.POST("/mcp", s.mcpEndpoint)

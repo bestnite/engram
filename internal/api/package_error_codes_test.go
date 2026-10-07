@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是“卡组包错误码逐码浮出”的 REST 端验收（DESIGN.md §7.3、§7.6）：
+// 本文件是“卡组包错误码逐码浮出”的 REST 端验收：
 // mapPackageError 不再把 package_bad_format 折叠成笼统的 invalid_request，而是逐码透出
 // store.PackageError.Code。每条用例同时断言 HTTP 状态与修前一致（本任务只改 body 里的 code）。
 //

@@ -34,7 +34,7 @@ func (s *Server) deckBudget(ctx context.Context, userID, deckID uint64) (schedul
 	return budgets[deckID], nil
 }
 
-// deckSettingsRoute 提供 GET /decks/:id/settings：只发 SPA 应用壳（DESIGN.md §8.1、§8.5），
+// deckSettingsRoute 提供 GET /decks/:id/settings：只发 SPA 应用壳，
 // 由客户端路由渲染卡组每日上限页；读写走 /api/v1/decks/:id/settings（同一份服务逻辑与审计）。
 //
 // owner 门禁留在服务端：非 owner 与不存在的卡组在返回应用壳之前就以 403 / 404 结束，

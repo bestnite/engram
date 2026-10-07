@@ -13,11 +13,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件（SMTP）」页的 SPA JSON 端点（DESIGN.md §4.7；AGENTS.md M1-17）。
+// 本文件是管理面板「邮件（SMTP）」页的 SPA JSON 端点（AGENTS.md M1-17）。
 //
 // 读取与写入复用 mail.NewResolver（环境变量 > settings 表 > 默认值）与 store.PutSecret，
 // 与 SSR 页完全同一份解析；口令只回「已配置/未配置」，绝不回显明文。测试连接把服务端的原始
-// 错误文本带进响应，供前端显示失败原因（DESIGN.md §4.7）。
+// 错误文本带进响应，供前端显示失败原因。
 
 // spaAdminOutbox 是 outbox 读数。
 type spaAdminOutbox struct {
@@ -251,7 +251,7 @@ func (s *Server) spaAdminSMTPTest(c *gin.Context) {
 	if cfg.Host == "" {
 		result.Code = "no_host"
 	} else if terr := mail.TestConnection(ctx, cfg); terr != nil {
-		// 原样带上服务端/网络层的错误文本，而不是只写日志（DESIGN.md §4.7）。
+		// 原样带上服务端/网络层的错误文本，而不是只写日志。
 		s.logger.Info("spa admin: smtp test connection failed", "host", cfg.Host, "port", cfg.Port, "error", terr)
 		result.Code = "failed"
 		result.Message = terr.Error()

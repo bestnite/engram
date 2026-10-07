@@ -124,7 +124,7 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Fatalf("GET /healthz status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 尚无管理员：引导页可达。GET /setup 已切到 SPA 应用壳（DESIGN.md §8.1 的规范路径），
+	// 尚无管理员：引导页可达。GET /setup 已切到 SPA 应用壳（规范路径），
 	// 因此这里断言「可达 + 是应用壳 + 下发了会话前双提交 cookie」；SSR 引导页本身的渲染细节
 	// （本地化文案、BOOTSTRAP_ADMIN_EMAIL 预填）由 internal/web 的回退分支用例覆盖。
 	setup := doGet(t, srv, "/setup")

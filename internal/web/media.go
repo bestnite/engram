@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 媒体相关的系统设置键与对应的环境变量覆盖名（DESIGN.md §6.3、§8.4）。
+// 媒体相关的系统设置键与对应的环境变量覆盖名。
 // 环境变量 > settings 表 > 内置默认，与 internal/config 的优先级一致；这里直接读
 // settings 表以便管理员改完立即生效，无需重启。
 const (
@@ -163,7 +163,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		TargetType: "media",
 		Detail:     map[string]any{"sha256": saved.Sha256, "mime": saved.Mime, "bytes": saved.Bytes},
 	})
-	// 对外标识就是 sha256（DESIGN.md §6.3）：响应不再有自增 id，url 直接由哈希拼成。
+	// 对外标识就是 sha256：响应不再有自增 id，url 直接由哈希拼成。
 	c.JSON(http.StatusCreated, gin.H{
 		"sha256": saved.Sha256,
 		"mime":   saved.Mime,
@@ -203,7 +203,7 @@ func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, q
 	return false
 }
 
-// mediaQuotaMessage 组装点名限额与已用量的本地化文案（DESIGN.md §8.3：用户可见文案走语言包）。
+// mediaQuotaMessage 组装点名限额与已用量的本地化文案（用户可见文案走语言包）。
 // 本地化器缺失时回退英文兜底，绝不把数字藏起来。
 func (s *Server) mediaQuotaMessage(c *gin.Context, used, quota int64) string {
 	loc, ok := s.localizer(c)
@@ -242,7 +242,7 @@ func writeMediaError(c *gin.Context, status int, code, message string) {
 // 不合形的参数直接 404，且在此之前不查库——避免拿任意字符串去命中 media 表。
 var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-// mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存（DESIGN.md §6.3）。
+// mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存。
 //
 // 鉴权（F2）：登录之外还要「有卡组访问权」——判定三选一：① media_uploaders 里存在指向我的
 // 记录（我提供过这份字节，去重命中也算）；② media_notes 映射里存在指向我可见卡组内、未软删的
@@ -260,7 +260,7 @@ func (s *Server) mediaServe(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	// 分享授权挂在服务端会话上（L3，DESIGN.md §5）：把当前会话 id 显式交给 store 层，
+	// 分享授权挂在服务端会话上（L3）：把当前会话 id 显式交给 store 层，
 	// 让「本会话通过分享链接打开过的卡组」也计入可读范围。未登录到不了这里（requireUser 已拦截）。
 	sessionID := ""
 	if sess, ok := auth.CurrentSession(c); ok {

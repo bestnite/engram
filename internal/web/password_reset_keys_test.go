@@ -13,7 +13,7 @@ import (
 )
 
 // 本文件是 F18 的验收测试：口令重置（忘记密码、管理员重置）必须在同一事务里一并吊销
-// 该用户的全部 API Key（DESIGN.md §11）；用户主动改密不吊销，保持 key 独立生命周期。
+// 该用户的全部 API Key；用户主动改密不吊销，保持 key 独立生命周期。
 //
 // 断言分三层：库里的 revoked_at 已写、旧 key 对真实 /api/v1 链 401、旧会话同时失效。
 // 反面对照（TestSelfPasswordChangeKeepsAPIKeys）锁死「主动改密不吊销」的边界。
@@ -111,7 +111,7 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 }
 
 // TestSelfPasswordChangeKeepsAPIKeys 是反面对照：用户主动改密（/settings/password）
-// 绝不吊销自己的 key（DESIGN.md §11）。缩小范围的顺手改动会让这条变红。
+// 绝不吊销自己的 key。缩小范围的顺手改动会让这条变红。
 func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	member, err := ts.srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
@@ -140,7 +140,7 @@ func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 		t.Fatalf("ListByUser() error = %v", err)
 	}
 	if len(keys) != 1 || keys[0].RevokedAt != nil {
-		t.Errorf("self password change revoked the user's own api key; want it kept (DESIGN.md §11)")
+		t.Errorf("self password change revoked the user's own api key; want it kept")
 	}
 	if code := apiGetDecks(t, rest, k1.Plaintext); code != http.StatusOK {
 		t.Errorf("old api key after self change = %d, want 200", code)

@@ -171,7 +171,7 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 				s.notifyDeckGrantChange(c, deck, user, target, existing, role)
 				break
 			}
-			// 新人：**发邀请，不直接授权**（同意制，DESIGN.md §4.4）。接受时才写 deck_grants，
+			// 新人：**发邀请，不直接授权**（同意制）。接受时才写 deck_grants，
 			// 所以「别人把卡组硬塞给我」在这条路径上不可能发生。
 			allowed, policyErr := s.sharePolicy.Allows(ctx, target.ID, user.ID)
 			if policyErr != nil {

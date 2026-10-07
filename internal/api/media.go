@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// MediaItem 是媒体库列表的一项对外形态（DESIGN.md §7.3）。
+// MediaItem 是媒体库列表的一项对外形态。
 type MediaItem struct {
 	Sha256    string    `json:"sha256"`
 	Mime      string    `json:"mime"`
@@ -31,7 +31,7 @@ type MediaPage struct {
 	NextCursor string      `json:"next_cursor"`
 }
 
-// ListReadableMedia 返回该用户可读的媒体一页（REST `GET /api/v1/media`，DESIGN.md §6.3、§7.3）。
+// ListReadableMedia 返回该用户可读的媒体一页（REST `GET /api/v1/media`）。
 //
 // 业务规则集中在 store（可读谓词与 keyset 分页），这里只做参数校验、错误映射与形态转换：
 //   - limit 必须落在 [1, MaxMediaPageSize]，否则 400（绝不静默截断成上限——调用方会以为
@@ -57,7 +57,7 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 			Sha256: m.Sha256,
 			Mime:   m.Mime,
 			Bytes:  m.Bytes,
-			// URL 由哈希拼成，与上传响应的 url 同形（DESIGN.md §6.3）：媒体选择器直接引用它，
+			// URL 由哈希拼成，与上传响应的 url 同形：媒体选择器直接引用它，
 			// 不在客户端重复拼接 /media/<sha256> 这一契约。
 			URL:       "/media/" + m.Sha256,
 			Width:     m.Width,

@@ -19,7 +19,7 @@ import (
 
 // 本文件是匿名入口限流（/api/v1/auth/forgot-password、/api/v1/auth/register）的验收测试。
 //
-// 阈值固定为「IP 与目标邮箱各 5 次 / 15 分钟」（DESIGN.md §4.3）。时钟注入到限流器，
+// 阈值固定为「IP 与目标邮箱各 5 次 / 15 分钟」。时钟注入到限流器，
 // 因此窗口过期可以即时断言，不需要真实等待；请求方 IP 通过 RemoteAddr 显式指定
 // （服务默认不信任任何代理，ClientIP() 取 RemoteAddr），从而把 IP 维度与邮箱维度分开验证。
 

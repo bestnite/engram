@@ -14,7 +14,7 @@ import (
 )
 
 // 本文件是 B 类协作邮件（deck_shared / deck_permission_changed）与 C 类「参数优化完成」
-// 的验收（DESIGN.md §4.7）。都走真实触发点：共享走 HTTP 端点，优化完成走作业成功钩子的入口。
+// 的验收。都走真实触发点：共享走 HTTP 端点，优化完成走作业成功钩子的入口。
 
 // newGrantee 建一个可收信的普通用户。
 func newGrantee(t *testing.T, srv *Server, name, email string) *store.User {

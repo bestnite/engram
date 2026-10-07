@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「作业」页的 SPA JSON 端点（DESIGN.md §8.4；ROADMAP.md M6-6）。
+// 本文件是管理面板「作业」页的 SPA JSON 端点（ROADMAP.md M6-6）。
 //
 // 读取复用 s.jobRunner.List，取消复用 s.jobRunner.Cancel 与 jobs.ErrNotRunning，与 SSR 页
 // 完全同一份调用。kind/status/stage 是稳定英文标识，由前端映射文案。

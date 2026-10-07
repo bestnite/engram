@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的 TOTP 管理接口：M1-16（DESIGN.md §4.3、§8.1）的 JSON 版本。
+// 本文件是 SPA 的 TOTP 管理接口：M1-16的 JSON 版本。
 //
 // 安全约定与 SSR 设置页（internal/web/totp.go）完全一致，只换传输形态：
 //   - secret 与 otpauth 链接只在 begin 的响应里出现一次（与恢复码只在生成时出现一次同一约定）；

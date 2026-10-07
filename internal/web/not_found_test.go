@@ -12,7 +12,7 @@ import (
 const unknownPath = "/no-such-page-zz9"
 
 // TestNotFoundFallbackServesSPAIndex 断言当 SPA 已嵌入时，未知的页面型 GET 路径
-// 回退 SPA 应用壳（index.html，DESIGN.md §8.5、ROADMAP Task B2），
+// 回退 SPA 应用壳（index.html，ROADMAP Task B2），
 // 返回 200 状态码并带有正确的缓存与 MIME 响应头。
 func TestNotFoundFallbackServesSPAIndex(t *testing.T) {
 	srv := newRenderServer(t, nil)

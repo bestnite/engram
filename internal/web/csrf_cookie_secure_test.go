@@ -8,7 +8,7 @@ import (
 )
 
 // TestPreSessionCSRFCookieSecureMatchesSiteScheme 断言登录前双提交 cookie 的 Secure 由
-// BASE_URL 的 scheme 决定，而不是请求自身的 TLS 状态（DESIGN.md §4.3）。
+// BASE_URL 的 scheme 决定，而不是请求自身的 TLS 状态。
 //
 // 生产是「Caddy 终止 TLS → 应用只收到明文 http」，若按请求 TLS 判断，线上登录前表单下发的
 // csrf_double 会缺失 Secure；浏览器不回传 http 站点上的 Secure cookie，反过来 http 开发站

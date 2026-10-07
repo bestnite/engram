@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// 按 key 限流的默认参数（DESIGN.md §7.2：默认 60 req/min，写入类更严）。
+// 按 key 限流的默认参数（默认 60 req/min，写入类更严）。
 const (
 	DefaultReadLimit  = 60
 	DefaultWriteLimit = 30
@@ -20,7 +20,7 @@ type rateBucket struct {
 
 // RateLimiter 是按 key 或用户计数的内存限流器。
 //
-// 状态放内存：本服务单实例部署（DESIGN.md §11），不引 Redis；限流是短时保护数据，
+// 状态放内存：本服务单实例部署，不引 Redis；限流是短时保护数据，
 // 进程重启即清零是可接受的权衡。时钟可注入，测试因此不需要真实等待。
 type RateLimiter struct {
 	mu      sync.Mutex

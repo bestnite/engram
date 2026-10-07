@@ -20,7 +20,7 @@ func spaShellBody(t *testing.T, srv *Server, path string, headers map[string]str
 }
 
 // TestSPAShellDeclaresPWAHead 断言 SPA 应用壳的 <head> 与 SSR 外壳一致：manifest、
-// theme-color、内容哈希图标、/pwa.js 注册脚本与内联主题引导（DESIGN.md §8.5）。
+// theme-color、内容哈希图标、/pwa.js 注册脚本与内联主题引导。
 func TestSPAShellDeclaresPWAHead(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	icon := srv.assets.URL("icons/icon.svg")
@@ -110,7 +110,7 @@ func TestSPAShellThemeBootstrapHashWhitelisted(t *testing.T) {
 }
 
 // TestSPAShellLanguageFollowsI18nRules 断言 SPA 外壳的 <html lang> 按 i18n 优先级解析
-// （?lang > 用户设置 > Accept-Language > 站点默认，DESIGN.md §8.3），与 SSR 一致。
+// （?lang > 用户设置 > Accept-Language > 站点默认），与 SSR 一致。
 func TestSPAShellLanguageFollowsI18nRules(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -136,7 +136,7 @@ func TestSPAShellLanguageFollowsI18nRules(t *testing.T) {
 }
 
 // TestSPAShellETagTracksLanguage 断言入口 ETag 随语言变化：不同语言必须拿到不同 ETag，
-// 否则换语言后的条件请求会命中旧壳（DESIGN.md §8.5 的 no-cache 语义）。
+// 否则换语言后的条件请求会命中旧壳（no-cache 语义）。
 func TestSPAShellETagTracksLanguage(t *testing.T) {
 	srv := newRenderServer(t, nil)
 

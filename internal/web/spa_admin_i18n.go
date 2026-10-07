@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 本文件是管理面板「语言包完整度」页的 SPA JSON 端点（DESIGN.md §8.3；ROADMAP.md M8-4）。
+// 本文件是管理面板「语言包完整度」页的 SPA JSON 端点（ROADMAP.md M8-4）。
 //
 // 口径与 adminI18nPage 相同：基准 key 集合 = 各语言包 key 集合的并集（见 i18n.Coverage 注释），
 // 覆盖率 < 100% 时逐条列出缺失 key。纯读页，无写操作。

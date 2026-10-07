@@ -8,7 +8,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerStatsRoutes 挂载统计页（M7-3，DESIGN.md §8.1、§9）。
+// registerStatsRoutes 挂载统计页（M7-3）。
 //
 // 页面上的每个数字都来自 internal/store 的既有聚合查询（M7-1/M7-2）；handler 不写任何
 // 统计 SQL。原因：M7-4 的回溯校验（store.RetroCheck）对照的正是这批查询，一旦 handler
@@ -23,12 +23,12 @@ func (s *Server) registerStatsRoutes(router *gin.Engine) {
 	// 这一个 GET 路由，其余路由（含 SPA 明细接口）不变。
 	router.GET("/stats", s.statsRoute)
 	// SPA 统计明细接口：只读、只接受浏览器会话（不走 /api/v1 的 API Key 组），
-	// 与统计页共用同一批 store 聚合，口径不会分叉（DESIGN.md §8.1、§9）。
+	// 与统计页共用同一批 store 聚合，口径不会分叉。
 	router.GET("/api/v1/stats/detail", s.spaStatsDetail)
 }
 
-// statsRoute 提供 GET /stats：返回应用壳（DESIGN.md §8.5），由客户端路由渲染统计页，
-// 数据走同一批 store 聚合的 GET /api/v1/stats/detail（DESIGN.md §8.1、§9）。
+// statsRoute 提供 GET /stats：返回应用壳，由客户端路由渲染统计页，
+// 数据走同一批 store 聚合的 GET /api/v1/stats/detail。
 //
 // 与迁移前的 SSR 页面一致：先要求已登录会话，未登录一律重定向到登录页，页面迁移不改动授权
 // 判定，也不新增任何写路径。

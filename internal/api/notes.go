@@ -64,7 +64,7 @@ func NoteJSON(n *store.Note) map[string]any {
 // noteJSON 保留旧名，供包内既有调用。
 func noteJSON(n *store.Note) map[string]any { return NoteJSON(n) }
 
-// importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等（DESIGN.md §7.3）。
+// importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
 func (a *API) importNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	deckID, ok := pathID(c, "id")

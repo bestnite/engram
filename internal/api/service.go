@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 REST 与内置 MCP 共用的 service 层（DESIGN.md §7.1、§7.4：两者只做参数
+// 本文件是 REST 与内置 MCP 共用的 service 层：两者只做参数
 // 校验与包装，真实业务规则必须只有一份实现）。REST handler 与 MCP 工具都调用这里的
 // 方法，保证同名操作产出完全一致。
 
@@ -37,7 +37,7 @@ func newServiceError(status int, code, message string) *ServiceError {
 // InvalidRequest 构造一个 400 invalid_request 的 ServiceError。
 //
 // REST 之外的调用方（如 MCP 工具的参数互斥校验）需要与 REST 相同的错误形态与稳定 code，
-// 但不能各自发明错误结构；导出这一个构造器，让它们复用同一条错误出口（DESIGN.md §7.3）。
+// 但不能各自发明错误结构；导出这一个构造器，让它们复用同一条错误出口。
 func InvalidRequest(message string) *ServiceError {
 	return newServiceError(http.StatusBadRequest, CodeInvalidRequest, message)
 }
@@ -56,7 +56,7 @@ func asServiceError(err error) *ServiceError {
 // ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public）。
 //
 // 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
-// 完全一致，谓词只有 store.visibleDeckIDsQuery 一份（DESIGN.md §5、§7.3）。REST 与内置 MCP
+// 完全一致，谓词只有 store.visibleDeckIDsQuery 一份。REST 与内置 MCP
 // 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组（F5）。
 func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error) {
 	decks, err := a.decks.ListVisible(ctx, userID)
@@ -67,7 +67,7 @@ func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error
 	return decks, nil
 }
 
-// CreateDeckInput 是建卡组的输入（DESIGN.md §7.3）。
+// CreateDeckInput 是建卡组的输入。
 // APIKeyID 仅用于审计条目，会话通道（网页登录）下为 nil。
 type CreateDeckInput struct {
 	Name        string
@@ -77,7 +77,7 @@ type CreateDeckInput struct {
 	APIKeyID    *uint64
 }
 
-// CreateDeck 建一个空卡组（scope: write）；REST 与内置 MCP 共用这一份实现（DESIGN.md §7.4）。
+// CreateDeck 建一个空卡组（scope: write）；REST 与内置 MCP 共用这一份实现。
 //
 // 行为与错误 code 与 REST handler 旧实现完全一致：name 去空白后必填，visibility 缺省
 // private，preset_id 为 0 时使用（或创建）调用者的 Default 预设；store 的任何拒绝都映射成
@@ -266,7 +266,7 @@ type ImportError struct {
 	Reason string `json:"reason"`
 }
 
-// ImportResponse 是批量导入的响应体（DESIGN.md §7.3）。
+// ImportResponse 是批量导入的响应体。
 type ImportResponse struct {
 	DryRun  bool          `json:"dry_run"`
 	Created int           `json:"created"`
@@ -275,10 +275,10 @@ type ImportResponse struct {
 	Errors  []ImportError `json:"errors"`
 }
 
-// MaxImportNotes 是单次批量导入的上限（DESIGN.md §7.3：单次 ≤ 500）。
+// MaxImportNotes 是单次批量导入的上限（单次 ≤ 500）。
 const MaxImportNotes = 500
 
-// ImportBatchSize 是批量导入每个事务写入的行数（DESIGN.md §10.4：默认 200 条/事务）。
+// ImportBatchSize 是批量导入每个事务写入的行数（默认 200 条/事务）。
 // 分批提交把每行一次 fsync 降到每 200 行一次，同时让\"失败可续\"成立：进程在导入中途
 // 退出时，已提交的批次留在库里，重试同一请求会按 external_ref 幂等命中，不会重复建卡。
 const ImportBatchSize = 200
@@ -292,7 +292,7 @@ type importPlan struct {
 	fields   map[string]any
 }
 
-// ImportNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等（DESIGN.md §7.3）。
+// ImportNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
 //
 // 采用两遍法：第一遍校验并规划每条的去向（create/update/skip），第二遍才写库。
 // 第二遍按 ImportBatchSize 分批，每批一个事务；批内单行写失败用保存点回滚该行并
@@ -300,7 +300,7 @@ type importPlan struct {
 // 在报告里给出失败行的索引\"。dry_run 时停在第一遍，只返回计数；on_conflict=fail 时
 // 任何冲突或校验错误都会整批拒绝。
 func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
-	// 每条 note 的写前校验据此判断「本次新引入的引用是否调用者可读」（DESIGN.md §6.3）。
+	// 每条 note 的写前校验据此判断「本次新引入的引用是否调用者可读」。
 	ctx = store.WithActor(ctx, userID)
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
@@ -500,7 +500,7 @@ type UpdateNoteInput struct {
 
 // UpdateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
 func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64, in UpdateNoteInput) (*store.Note, error) {
-	// 写前校验据此判断「本次新引入的引用是否调用者可读」（DESIGN.md §6.3）。
+	// 写前校验据此判断「本次新引入的引用是否调用者可读」。
 	ctx = store.WithActor(ctx, userID)
 	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
@@ -513,7 +513,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if kind == "" {
 		kind = existing.Kind
 	}
-	// REST/MCP 错误统一返回稳定英文文案（DESIGN.md §8.3、§10.4），不随 Accept-Language 改变。
+	// REST/MCP 错误统一返回稳定英文文案，不随 Accept-Language 改变。
 	if err := cardtype.Validate(kind, in.Fields); err != nil {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
@@ -526,7 +526,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if _, err := a.notes.Update(ctx, &n, in.Fields); err != nil {
 		var mwe *store.MediaWriteError
 		if errors.As(err, &mwe) {
-			// 写前校验拒绝：引用了调用者读不到的媒体，条目级 stable code（DESIGN.md §6.3）。
+			// 写前校验拒绝：引用了调用者读不到的媒体，条目级 stable code。
 			return nil, newServiceError(http.StatusForbidden, CodeMediaNotReadable, strings.Join(mwe.Entries, ", "))
 		}
 		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
@@ -579,7 +579,7 @@ const (
 // bulkMaxTags 是单个标签动作允许的标签数上限（去重后）。
 const bulkMaxTags = 20
 
-// BulkNotesInput 是批量卡片动作的输入（REST 与内置 MCP 共用，DESIGN.md §2.4 一个模型服务业务与 JSON）。
+// BulkNotesInput 是批量卡片动作的输入（REST 与内置 MCP 共用， 一个模型服务业务与 JSON）。
 type BulkNotesInput struct {
 	Action  string   `json:"action"`
 	NoteIDs []uint64 `json:"note_ids"`
@@ -593,7 +593,7 @@ type BulkNotesSkipped struct {
 	Code   string `json:"code"`
 }
 
-// BulkNotesResponse 是批量动作的响应体（DESIGN.md §7.3）。Affected 只计真正改动的行，
+// BulkNotesResponse 是批量动作的响应体。Affected 只计真正改动的行，
 // 因此重复提交同一请求第二次返回 affected=0。
 type BulkNotesResponse struct {
 	DryRun   bool               `json:"dry_run"`
@@ -681,7 +681,7 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 //
 // audit 为 true 时走共享的 RequireNoteRole —— 它会在角色不足时写一条 permission.denied 审计，
 // 与 REST 其它写操作的取证口径一致（谁在什么时候试图改什么被挡下）。dry_run 传 false，逐行
-// 静默判定：一次 dry run 若有 500 个 id 都无权限，不该抖出 500 条审计行（§7.3：dry_run 不写
+// 静默判定：一次 dry run 若有 500 个 id 都无权限，不该抖出 500 条审计行（dry_run 不写
 // 任何行、不写审计行、零副作用）。两条路径对同一情形必须给出同一个 code。
 func (a *API) bulkRowCode(ctx context.Context, userID, noteID uint64, audit bool) string {
 	var err error
@@ -748,7 +748,7 @@ type StatsSummary struct {
 
 // Stats 汇总当前用户的到期量 / 复习量 / 留存概要；所有数字都由 reviews + card_states 聚合。
 //
-// 口径刻意不对称（DESIGN.md §9 的 2026-10-06 决定）：decks/due/notes/cards 只算当前可见
+// 口径刻意不对称（2026-10-06 决定）：decks/due/notes/cards 只算当前可见
 // 卡组（与 list_decks、网页列表页、复习队列同一个 store 谓词），卡组集合为空时它们为 0；
 // reviews_today / reviews_total / retention 按 user_id 保留全史——复习是本人的记录，
 // 撤销授权不追溯。因此即便一个可见卡组都没有，也必须继续聚合 reviews，不能提前返回把
@@ -819,7 +819,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	return resp, nil
 }
 
-// ExportRow 是卡片级导出的扁平行（DESIGN.md §7.5：给外部工具用的粒度）。
+// ExportRow 是卡片级导出的扁平行（给外部工具用的粒度）。
 type ExportRow struct {
 	CardID      uint64         `json:"card_id"`
 	NoteID      uint64         `json:"note_id"`
@@ -855,7 +855,7 @@ type DueCard struct {
 // DueCards 返回到期卡（含字段原文）；deckIDs 为空表示全部卡组；limit 取 [1,500]。
 //
 // 每个卡组 id 都要求至少 reader 角色：任一个不可读或不存在即整次调用失败（不静默过滤）。
-// 只有恰好指定一个卡组时才用该卡组的预设构造调度器；多卡组与全库用默认预设（DESIGN.md §3.3）。
+// 只有恰好指定一个卡组时才用该卡组的预设构造调度器；多卡组与全库用默认预设。
 func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, limit int) ([]DueCard, error) {
 	if limit < 1 {
 		limit = 1
@@ -967,7 +967,7 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 	return out
 }
 
-// SubmitReviewInput 是评分提交输入（DESIGN.md §3.4）。
+// SubmitReviewInput 是评分提交输入。
 type SubmitReviewInput struct {
 	CardID          uint64
 	Rating          int

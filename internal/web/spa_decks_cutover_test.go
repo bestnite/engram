@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// 本文件覆盖 GET /decks 与 GET /decks/:id/notes 的 SPA 规范路径切流（DESIGN.md §8.1、§8.5）：
+// 本文件覆盖 GET /decks 与 GET /decks/:id/notes 的 SPA 规范路径切流：
 // 两条路径都返回应用壳（index.html），由客户端路由渲染页面；鉴权判定（会话 + 角色）先于切壳执行。
 // 卡片编辑/新建两条 GET 路径的切流断言在 spa_notes_cutover_test.go。
 
 // assertSPAShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
-// 且含应用挂载点 <div id="app"></div>（DESIGN.md §8.5）。
+// 且含应用挂载点 <div id="app"></div>。
 func assertSPAShell(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	if rec.Code != http.StatusOK {

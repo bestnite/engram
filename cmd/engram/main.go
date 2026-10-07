@@ -1,4 +1,4 @@
-// Command engram 是服务唯一入口：单二进制 + 子命令（DESIGN.md §10.2）。
+// Command engram 是服务唯一入口：单二进制 + 子命令。
 // 依赖在这里显式装配（AGENTS.md §2.4）。
 package main
 
@@ -42,7 +42,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		// 默认子命令是 serve，与 DESIGN.md §10.2 一致。
+		// 默认子命令是 serve。
 		return runServe(ctx)
 	}
 	switch args[0] {
@@ -78,7 +78,7 @@ func newLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
-// loadConfig 读取环境变量；数据库可用时再叠加 settings 表覆盖值（DESIGN.md §8.4 的优先级）。
+// loadConfig 读取环境变量；数据库可用时再叠加 settings 表覆盖值（优先级）。
 func loadConfig(ctx context.Context, db *gorm.DB) (*config.Config, error) {
 	cfg, err := config.Load(os.LookupEnv, nil)
 	if err != nil {
@@ -162,7 +162,7 @@ func runServe(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		// 邮件模板（DESIGN.md §4.7）：周期 worker 与 web 层共用同一份查找实现，
+		// 邮件模板：周期 worker 与 web 层共用同一份查找实现，
 		// 否则会出现「网页发的信有模板、提醒发的没有」这种很难察觉的不一致。
 		templates := mail.StoreLookup(store.NewMailTemplateStore(db), logger)
 		siteLocale := func() string {
@@ -217,7 +217,7 @@ func runServe(ctx context.Context) error {
 // newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps（M1-14）。
 // runServe 与集成测试共用这一条装配路径，避免测试用的依赖与生产漂移。
 func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
-	// 可信代理列表（DESIGN.md §4.3、§11）：在启动期解析并校验，非法项直接拒绝启动。
+	// 可信代理列表：在启动期解析并校验，非法项直接拒绝启动。
 	// 缺省为空 = 不信任任何代理，ClientIP() 回落到 RemoteAddr。
 	trustedProxies, err := cfg.TrustedProxies()
 	if err != nil {
@@ -233,7 +233,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
-	// 匿名入口限流（F13，DESIGN.md §4.3）：/register 与 /forgot-password 共用一套
+	// 匿名入口限流（F13）：/register 与 /forgot-password 共用一套
 	// 「IP 与目标邮箱各 5 次 / 15 分钟」的固定窗口计数，防匿名轰炸式发信。
 	anonLimiter := auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, nil)
 	// 媒体存储（M2-8）：本地目录 + media 元数据表；目录来自 MEDIA_DIR。
@@ -326,9 +326,9 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		// OIDC（M1-11）：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
 		Identities: store.NewIdentityStore(db),
 		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
-		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单（DESIGN.md §4.1）。
+		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单。
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
-		// TRUSTED_PROXIES 决定哪些代理可以改写 ClientIP()（DESIGN.md §4.3、§11）。
+		// TRUSTED_PROXIES 决定哪些代理可以改写 ClientIP。
 		TrustedProxies: trustedProxies,
 		API:            apiSrv,
 		MCP:            mcpSrv,
@@ -359,7 +359,7 @@ func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.
 	}
 	manager, err := auth.NewSessionManager(users, sessions, auth.SessionConfig{
 		Secret: []byte(cfg.Get(config.KeySessionSecret).Value),
-		// 生产必须 Secure（DESIGN.md §4.3）；本地 http 开发由 BASE_URL 的 scheme 决定，
+		// 生产必须 Secure；本地 http 开发由 BASE_URL 的 scheme 决定，
 		// 否则开发态浏览器/curl 不会回传 cookie，登录流程无法联调。
 		Secure: strings.HasPrefix(cfg.Get(config.KeyBaseURL).Value, "https://"),
 	})

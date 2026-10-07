@@ -4,7 +4,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// 管理面板的语言包完整度报告（DESIGN.md §8.3；ROADMAP.md M8-4）。
+// 管理面板的语言包完整度报告（ROADMAP.md M8-4）。
 //
 // 口径：基准 key 集合 = 各语言包 key 集合的并集（见 i18n.Coverage 的注释）。
 // SSR 报告页删除后，报告数据由 /api/v1/admin/i18n 的 JSON 端点（spa_admin_i18n.go）输出。

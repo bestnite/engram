@@ -12,9 +12,9 @@ import (
 
 // 本文件是管理面板只读页（概览 / 健康 / 审计）的 SPA JSON 端点。
 //
-// 口径与各自 SSR 页逐项一致（DESIGN.md §8.4）：概览调 store.InstanceSummary，健康页现算
+// 口径与各自 SSR 页逐项一致：概览调 store.InstanceSummary，健康页现算
 // 四项读数，审计检索走 store.AuditStore.Search。响应只带原始值与稳定英文标识，本地化文案
-// 一律由前端语言包按标识映射（DESIGN.md §8.3），因此这里不返回任何本地化文本。
+// 一律由前端语言包按标识映射，因此这里不返回任何本地化文本。
 
 // spaAdminSummaryResponse 是概览页（/admin）的计数卡数据。
 type spaAdminSummaryResponse struct {

@@ -63,7 +63,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 
 	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	// 库里只存 sha256 摘要，绝不落明文（DESIGN.md §11）。
+	// 库里只存 sha256 摘要，绝不落明文。
 	var link store.ShareLink
 	if err := db.Where("deck_id = ?", deck.ID).First(&link).Error; err != nil {
 		t.Fatalf("load share link row: %v", err)

@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// DeckResponse 是卡组的对外形态（DESIGN.md §2.2）；REST 与 MCP 共用同一形态。
+// DeckResponse 是卡组的对外形态；REST 与 MCP 共用同一形态。
 type DeckResponse struct {
 	ID            uint64     `json:"id"`
 	Name          string     `json:"name"`
@@ -67,7 +67,7 @@ type createDeckRequest struct {
 }
 
 // createDeck 建卡组（scope: write）：只做 JSON 绑定与包壳，业务在 service 层 CreateDeck
-// （DESIGN.md §7.4：REST 与内置 MCP 共用同一实现，不得各自复制校验）。
+// （REST 与内置 MCP 共用同一实现，不得各自复制校验）。
 func (a *API) createDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req createDeckRequest

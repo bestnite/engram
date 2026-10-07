@@ -29,7 +29,7 @@ type createKeyRequest struct {
 	ExpiresAt *time.Time `json:"expires_at"`
 }
 
-// createKey 新建一个 key；明文只在这次响应里出现一次（DESIGN.md §7.2）。
+// createKey 新建一个 key；明文只在这次响应里出现一次。
 func (a *API) createKey(c *gin.Context) {
 	u, ok := CurrentUser(c)
 	if !ok || u == nil {
@@ -46,7 +46,7 @@ func (a *API) createKey(c *gin.Context) {
 		return
 	}
 	// admin scope 只能发给管理员账号：非管理员（含持有 keys 或遗留 admin-scope key 的
-	// 普通用户）经任何路径提交 admin 都拒绝，且不落库（DESIGN.md §7.2）。钤制必须在知道
+	// 普通用户）经任何路径提交 admin 都拒绝，且不落库。钤制必须在知道
 	// actor 角色的传输层做，store 层看不到调用者身份。
 	if store.ScopesIncludeAdmin(req.Scopes) && u.Role != store.RoleAdmin {
 		abortError(c, http.StatusForbidden, CodeScopeNotGrantable, "")
@@ -71,7 +71,7 @@ func (a *API) createKey(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"key": created.Key, "plaintext": created.Plaintext})
 }
 
-// deleteKey 撤销一个属于当前用户的 key；撤销即时生效（DESIGN.md §7.2）。
+// deleteKey 撤销一个属于当前用户的 key；撤销即时生效。
 func (a *API) deleteKey(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	keyID, ok := pathID(c, "id")

@@ -27,7 +27,7 @@ func spaDeckSettingsPayload(deck *store.Deck, budget schedule.DeckBudget) spaDec
 	}
 }
 
-// spaDeckSettingsResponse 是 SPA 卡组设置接口的响应体（DESIGN.md §8.1、§3.3）。
+// spaDeckSettingsResponse 是 SPA 卡组设置接口的响应体。
 //
 // NewPerDay / ReviewsPerDay 是卡组列上的原始值：0 表示不限，不是「回落到默认」。
 // 因为「0 表示不限」与「今日剩余 0 张」在整数上同形，额外的 NewUnlimited /

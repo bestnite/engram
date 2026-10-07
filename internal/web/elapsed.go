@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// elapsedLabel 渲染"已经花掉多久"，单位随量级走（DESIGN.md §9）。
+// elapsedLabel 渲染"已经花掉多久"，单位随量级走。
 //
 // 累计耗时没有上界——几千条复习就是几小时——一律写毫秒会让页面出现
 // "5400000 毫秒" 这种没人读得下去的数。口径：

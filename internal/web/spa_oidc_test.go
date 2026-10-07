@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的 OIDC 登录入口探测端点验收（DESIGN.md §4.4、§8.1；internal/web/spa_oidc.go）。
+// 本文件是 SPA 的 OIDC 登录入口探测端点验收（internal/web/spa_oidc.go）。
 //
 // 覆盖：默认关闭时 enabled=false、配置完整可用时 enabled=true，且响应绝不含 issuer / client_id
 // 等凭据；start_url 与 SSR 登录页按钮同源。

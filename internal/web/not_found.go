@@ -18,7 +18,7 @@ func (s *Server) registerNotFoundRoute(router *gin.Engine) {
 
 // notFound 是未命中任何路由的 catchall 回退（gin NoRoute 语义保证它不会遮蔽已注册路由）。
 //
-// 分四种出口，避免形态漂移（DESIGN.md §8.5、ROADMAP Task B2）：
+// 分四种出口，避免形态漂移（ROADMAP Task B2）：
 //   - /api 子路径：回 internal/api 的统一 JSON 错误包壳，脚本客户端永远拿到 JSON；
 //   - /mcp 子路径与非 GET 请求：只回朴素的 404 状态，不塞 HTML；
 //   - 静态/媒体资源未命中路径（/assets/、/static/、/media/ 等）：只回 404 状态，严禁回退 HTML；
@@ -38,7 +38,7 @@ func (s *Server) notFound(c *gin.Context) {
 }
 
 // apiNotFound 给未知的 /api 子路径回统一错误包壳，字段形态与 internal/api 的 abortError
-// 一致（{"error":{"code","message"}}，DESIGN.md §7）；message 走同一份稳定英文出口。
+// 一致（{"error":{"code","message"}}）；message 走同一份稳定英文出口。
 func (s *Server) apiNotFound(c *gin.Context) {
 	code := api.CodeNotFound
 	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": gin.H{

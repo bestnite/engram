@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板的公共装配（DESIGN.md §8.1、§8.4）：
+// 本文件是管理面板的公共装配：
 //   - spaAdminShell 发管理面板 GET 页面的应用壳（requireAdmin 已在它之前跑过）；
 //   - spaAdminGuard 给 /api/v1/admin/* 的 JSON 端点做与 requireAdmin 等价的判权，
 //     但以 JSON 401/403 回应（浏览器 fetch 不能跟着 303 去登录页拿 HTML）；
@@ -24,14 +24,14 @@ import (
 // 前端拿不到任何未授权数据。
 
 // spaAdminShell 是管理面板每条 GET 页面路由的处理器：requireAdmin 已在它之前跑过
-// （未登录 303 到登录页、非 admin 403），这里只发 SPA 应用壳（DESIGN.md §8.4、§8.5）。
+// （未登录 303 到登录页、非 admin 403），这里只发 SPA 应用壳。
 // SSR 页面层已删除，不再回退任何 SSR 页面。
 func (s *Server) spaAdminShell(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
 // spaAdminError 写出管理 JSON 端点的错误包壳：code 稳定且英文，message 为英文兜底文案，
-// 前端按 code 映射本地化提示（DESIGN.md §7.3、§8.3）。
+// 前端按 code 映射本地化提示。
 func spaAdminError(c *gin.Context, status int, code string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{
 		"code":    code,
@@ -88,7 +88,7 @@ func parseUintParam(raw string) (uint64, error) {
 // registerSPAAdminRoutes 挂载管理面板的 JSON 端点（读 + 写）。
 //
 // 依赖未装配时整体跳过，保证 M0 阶段与未启用会话的测试仍能构造 Server。写操作一律过会话
-// CSRF（DESIGN.md §4.3）。管理面板的读写只有这一批 JSON 端点（SSR 表单端点已删除）。
+// CSRF。管理面板的读写只有这一批 JSON 端点（SSR 表单端点已删除）。
 func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil {
 		return
@@ -110,7 +110,7 @@ func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	g.POST("/users/:id/logout", s.sessions.CSRFMiddleware(), s.spaAdminUserForceLogout)
 	g.POST("/users/:id/delete", s.sessions.CSRFMiddleware(), s.spaAdminUserDelete)
 
-	// 邮件模板（DESIGN.md §4.7）：列表读 + 保存 / 删除 / 预览 / 测试发信（写操作过 CSRF）。
+	// 邮件模板：列表读 + 保存 / 删除 / 预览 / 测试发信（写操作过 CSRF）。
 	g.GET("/mail-templates", s.spaAdminMailTemplates)
 	g.PUT("/mail-templates/:type/:locale", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplateSave)
 	g.DELETE("/mail-templates/:type/:locale", s.sessions.CSRFMiddleware(), s.spaAdminMailTemplateDelete)

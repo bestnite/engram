@@ -36,7 +36,7 @@ func grantsJSONPath(deckID uint64) string {
 }
 
 // TestSharingGrantInvitesThenAcceptanceGivesAccess 是 M5-2 的主验收，语义是**同意制**
-// （DESIGN.md §4.4）：owner 分享只发出邀请、不产生授权；被邀请者接受后才拿到访问权；
+// owner 分享只发出邀请、不产生授权；被邀请者接受后才拿到访问权；
 // 撤销之后对方下一次请求立即被拒。每一步各写一行审计。
 func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

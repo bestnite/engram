@@ -1,5 +1,5 @@
 // Package api 提供 /api/v1 的 REST handler 与鉴权、限流中间件
-// （DESIGN.md §7.2、§7.3；ROADMAP.md M4-2、M4-3）。
+// （ROADMAP.md M4-2、M4-3）。
 package api
 
 import (
@@ -11,9 +11,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 稳定的错误 code（英文常量，供调用方程序化判断，DESIGN.md §7.3、§8.3、§10.4）。
+// 稳定的错误 code（英文常量，供调用方程序化判断）。
 //
-// REST 与 MCP 的错误统一返回稳定英文 code 与英文 message（DESIGN.md §8.3、§10.4），
+// REST 与 MCP 的错误统一返回稳定英文 code 与英文 message，
 // 不随请求的 Accept-Language 改变。SPA 前端根据稳定 code 映射本地化提示，不解析后端 message。
 // 新增 code 时必须在 errorMessages 登记英文文案。
 const (
@@ -28,7 +28,7 @@ const (
 	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断（M5-1）。
 	CodeInsufficientRole = "insufficient_role"
 	// CodeScopeNotGrantable 表示请求要创建的 key 含只有管理员才能持有的 scope
-	// （当前只有 admin）：DESIGN.md §7.2「admin 只能发给管理员账号」。
+	// （当前只有 admin）「admin 只能发给管理员账号」。
 	CodeScopeNotGrantable = "scope_not_grantable"
 	CodeConflict          = "conflict"
 	CodeVersionConflict   = "version_conflict"
@@ -39,9 +39,9 @@ const (
 	// CodeDeckDescriptionInvalid 表示描述超长或含非法字符。
 	CodeDeckDescriptionInvalid = "deck_description_invalid"
 	// CodeMediaNotReadable 表示 note 写入引用了写入者无法读取的媒体，写入被拒（写前校验）。
-	// 与 store.CodeMediaNotReadable 同值（DESIGN.md §6.3）。
+	// 与 store.CodeMediaNotReadable 同值。
 	CodeMediaNotReadable = "media_not_readable"
-	// CodeCSRFFailed 表示 CSRF token 缺失或校验失败（DESIGN.md §4.3、§11）。
+	// CodeCSRFFailed 表示 CSRF token 缺失或校验失败。
 	CodeCSRFFailed = "csrf_failed"
 	// CodeCSRFNoSession 表示无活跃会话进行 CSRF 校验。
 	CodeCSRFNoSession = "csrf_no_session"
@@ -88,7 +88,7 @@ var errorMessages = map[string]string{
 	CodeTOTPInvalid:          "The two-factor code is not valid.",
 	CodeTOTPChallengeExpired: "The two-factor challenge has expired. Sign in again.",
 
-	// 卡组包导入的稳定 code（DESIGN.md §7.6；store.PackageError.Code）。
+	// 卡组包导入的稳定 code（store.PackageError.Code）。
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",
 	store.CodePackageTooLarge:        "The package exceeds the allowed size.",
 	store.CodePackageBadFormat:       "The package format is invalid.",
@@ -98,7 +98,7 @@ var errorMessages = map[string]string{
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
 	store.CodePackageMediaForbidden:  "The package references media you cannot read.",
 
-	// 写前媒体可读性校验的稳定 code（DESIGN.md §6.3；store.MediaWriteError.Code）。
+	// 写前媒体可读性校验的稳定 code（store.MediaWriteError.Code）。
 	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
 
 	// 建卡组/改名的稳定 code（store.ErrDeckNameInvalid）。

@@ -19,7 +19,7 @@ import (
 // postLoginFrom 以给定的 RemoteAddr 与额外请求头发起 JSON 登录（POST /api/v1/auth/login），
 // 并补齐会话前双提交 CSRF（cookie + 镜像头）。
 // 限流与审计的 IP 都取自 gin 的 ClientIP，而 ClientIP 是否采信 X-Forwarded-For 取决于可信代理配置，
-// 因此必须能同时控制 RemoteAddr 与 XFF（DESIGN.md §4.3、§11）。
+// 因此必须能同时控制 RemoteAddr 与 XFF。
 func postLoginFrom(t *testing.T, srv *Server, username, password, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"username": username, "password": password})

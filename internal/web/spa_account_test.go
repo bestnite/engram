@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是账号安全与邮件流程 SPA 传输层的验收（DESIGN.md §4.3、§4.7、§8.1；internal/web/spa_account.go）。
+// 本文件是账号安全与邮件流程 SPA 传输层的验收（internal/web/spa_account.go）。
 //
 // 覆盖：可导航读取页的切壳与 SSR 回退、免登录一键链接保持服务端行为、同源 JSON 端点的令牌
 // 一次性/过期语义、匿名限流、会话与 CSRF 负例，以及改邮箱确认前不改库。全部走真实路由与 SQLite。

@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// staticFS 把 internal/web/static 下的全部资源打进二进制（DESIGN.md §8.5、§10.2）。
+// staticFS 把 internal/web/static 下的全部资源打进二进制。
 // 用 all: 前缀，以便以后可能出现的点文件或下划线文件也一并嵌入。
 //
 // 注意：CSS 产物 tailwind.css 与生成的 *_templ.go 一样是 gitignore 的，构建前必须按

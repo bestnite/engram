@@ -28,12 +28,12 @@ func (s *Server) registerDeckRoutes(router *gin.Engine) {
 		return
 	}
 	// GET /decks 已切到 SPA 规范路径：deckListRoute 返回应用壳，由客户端路由渲染卡组列表，
-	// 数据走既有 JSON 端点（DESIGN.md §8.1、§8.5）。
+	// 数据走既有 JSON 端点。
 	router.GET("/decks", s.deckListRoute)
 }
 
-// deckListRoute 提供 GET /decks：返回应用壳（DESIGN.md §8.5），由客户端路由渲染卡组列表，
-// 数据走 GET /api/v1/decks 与 GET /api/v1/decks/queue-counts（DESIGN.md §8.1）。
+// deckListRoute 提供 GET /decks：返回应用壳，由客户端路由渲染卡组列表，
+// 数据走 GET /api/v1/decks 与 GET /api/v1/decks/queue-counts。
 //
 // 与迁移前的 SSR 列表页一样先要求已登录会话：匿名一律重定向登录页，页面迁移不改动授权判定，
 // 也不新增写路径。

@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的邮件通知偏好接口：M1-18（DESIGN.md §4.7、§8.1）的 JSON 版本。
+// 本文件是 SPA 的邮件通知偏好接口：M1-18的 JSON 版本。
 //
 // 语义与目录定义（internal/mail）完全一致，只是传输形态是 JSON：
 //   - 可关闭类型、A 类不可关闭、默认开关全部由 internal/mail 目录推导，这里不复制规则；
@@ -117,7 +117,7 @@ func (s *Server) spaNotificationPrefsPayload(c *gin.Context, userID uint64) (spa
 
 // spaNotificationPrefsPatch 保存用户对可选类型的开关与发送小时。
 //
-// 规则（DESIGN.md §4.7）与 SSR 一致：先校验提交里出现的每个偏好键再写库，拒绝时不产生半截保存；
+// 规则与 SSR 一致：先校验提交里出现的每个偏好键再写库，拒绝时不产生半截保存；
 // A 类不可关闭，任何指向 A 类的提交都以 400 拒绝；未知类型同样拒绝；
 // 可关闭类型按提交里的值写出显式选择（缺席 = 关闭），因此默认关的 C 类也能被打开。
 // 发送小时 null = 站点默认，0–23 为显式值，其余拒绝。

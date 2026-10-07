@@ -129,7 +129,7 @@ func New(deps Deps) (*API, error) {
 	}, nil
 }
 
-// Register 把 /api/v1 挂到给定的 router 上；每条路由在其 scope 对应的中间件后执行（DESIGN.md §7.3）。
+// Register 把 /api/v1 挂到给定的 router 上；每条路由在其 scope 对应的中间件后执行。
 func (a *API) Register(r gin.IRouter) {
 	v1 := r.Group("/api/v1")
 	v1.Use(a.authn.Auth())
@@ -191,7 +191,7 @@ func queryInt(c *gin.Context, name string, def int) int {
 }
 
 // ensureDefaultPreset 返回该用户默认预设的 id：不存在则由 store.EnsureDefaultPreset 补齐。
-// 外部调用方建卡组时通常不关心预设，服务端给出一个可用的默认预设（DESIGN.md §3.5）。
+// 外部调用方建卡组时通常不关心预设，服务端给出一个可用的默认预设。
 // 预设名是稳定字面量（store.DefaultPresetName），与 web 入口共用同一补齐逻辑（M3-14）。
 func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, error) {
 	list, err := store.EnsureDefaultPreset(ctx, a.db, userID)

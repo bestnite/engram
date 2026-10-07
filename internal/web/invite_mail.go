@@ -14,9 +14,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-20：邀请邮件投递（B 类协作/授权，DESIGN.md §4.7、§4.1）。
+// 本文件是 M1-20：邀请邮件投递（B 类协作/授权）。
 //
-// 设计约束（照 DESIGN.md §4.7，逐条落实）：
+// 设计约束（照，逐条落实）：
 //   - 绝不在请求路径同步发信：一律经 Outbox.Enqueue 入队，由后台 worker 投递。
 //   - 发信失败不得让触发操作失败：建邀请照旧成功，Enqueue 出错只记英文日志并回显提示。
 //   - SMTP 未配置时流程禁用并说明原因：邀请页的「寄到邮箱」入口渲染 mail.not_configured，

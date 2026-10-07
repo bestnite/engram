@@ -10,7 +10,7 @@ import (
 // intervalLabel 把「距下次到期还有多久」渲染成本地化文案（Anki 式的 "10 分钟"、"3 天"）。
 //
 // 学习步骤以分钟计（默认预设 `1m,10m`），所以这里必须能表达亚天级的等待：它正是
-// "刚答完几分钟后这张卡又回来"这件事的可见化（DESIGN.md §8.2）。
+// "刚答完几分钟后这张卡又回来"这件事的可见化。
 func intervalLabel(loc *i18n.Localizer, wait time.Duration) string {
 	if wait <= 0 {
 		return loc.T("review.interval.under_minute")

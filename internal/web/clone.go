@@ -92,7 +92,7 @@ func acceptsJSON(c *gin.Context) bool {
 }
 
 // clonePreset 复制一份源卡组的预设到调用者名下；源预设缺失时退回调用者的默认预设。
-// 预设随克隆一起带走，保证克隆卡组的调度参数与源一致（DESIGN.md §7.6 的同类语义）。
+// 预设随克隆一起带走，保证克隆卡组的调度参数与源一致（同类语义）。
 func (s *Server) clonePreset(ctx context.Context, loc *i18n.Localizer, ownerID uint64, src *store.Deck) (uint64, error) {
 	srcPreset, err := s.presets.ByID(ctx, src.PresetID)
 	if err != nil {

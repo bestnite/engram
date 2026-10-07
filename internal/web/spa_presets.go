@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的调度预设接口（DESIGN.md §3.5、§8.1）的 JSON 版本。
+// 本文件是 SPA 的调度预设接口的 JSON 版本。
 //
 // 默认预设的补齐、优化门槛、单并发入队、状态与回退全部调用同一批 store/jobs 方法，
 // 这里不复制调度、门槛或作业编排逻辑。SSR 预设页删除后，
@@ -23,7 +23,7 @@ import (
 // 所有端点只接受浏览器会话（spaProfileSessionOnly 拒绝 bearer 与 API Key）：预设是个人数据，
 // 与卡组设置、统计明细同一安全边界。写操作一律过会话 CSRF。
 
-// spaOptimizeGate 是优化门槛在响应里的形态（DESIGN.md §3.5）。
+// spaOptimizeGate 是优化门槛在响应里的形态。
 // shortfall 只在 eligible 为 false 时有意义，等于「还差多少条」。
 type spaOptimizeGate struct {
 	Reviews   int64 `json:"reviews"`
@@ -32,7 +32,7 @@ type spaOptimizeGate struct {
 	Eligible  bool  `json:"eligible"`
 }
 
-// spaFitMetrics 是优化前后各一次拟合的指标（DESIGN.md §3.5）。
+// spaFitMetrics 是优化前后各一次拟合的指标。
 type spaFitMetrics struct {
 	LogLoss float64 `json:"log_loss"`
 	RMSE    float64 `json:"rmse"`

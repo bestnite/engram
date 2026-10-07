@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是账号安全与邮件流程（M1-19）的 SPA 同源 JSON 传输层（DESIGN.md §4.3、§4.7、§8.1）。
+// 本文件是账号安全与邮件流程（M1-19）的 SPA 同源 JSON 传输层。
 //
 // 它只新增「传输」：令牌签发/消费、一次性语义、匿名限流、改密码后的密钥作废与审计行全部复用既有
 // 服务逻辑。可导航的读取页（/forgot-password、/reset-password、/settings/email）与邮件里的一键
@@ -341,7 +341,7 @@ func (s *Server) spaResendVerificationSubmit(c *gin.Context) {
 // ── 共享判定（JSON 传输专用）────────────────────────────────────────────────
 
 // actionTokenErrorCode 把令牌消费错误映射到稳定英文 code（与 SSR 的 actionTokenErrorKey 同源规则）。
-// 前端按 code 映射本地化文案，绝不解析英文 message（DESIGN.md §8.3）。
+// 前端按 code 映射本地化文案，绝不解析英文 message。
 func actionTokenErrorCode(err error) string {
 	switch {
 	case errors.Is(err, store.ErrActionTokenExpired):

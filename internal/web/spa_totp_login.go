@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 登录第二步（TOTP）的同源 JSON 端点（DESIGN.md §4.3、§8.1）。
+// 本文件是 SPA 登录第二步（TOTP）的同源 JSON 端点。
 //
 // 第二步没有可深链的 GET 页面：SPA 需要的是「先问状态、再提交」的无状态协议，因此这里
 // 提供两条端点：

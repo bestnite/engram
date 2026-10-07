@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是「分享同意制」的服务端（DESIGN.md §4.4）：
+// 本文件是「分享同意制」的服务端：
 //
 //   - 属主发出的是**邀请**，写 deck_share_invites，不写 deck_grants；
 //   - 被邀请者在自己的列表里接受或拒绝；
