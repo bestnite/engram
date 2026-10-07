@@ -5,6 +5,7 @@
   import { completeTOTP } from '../auth';
   import { apiClient, getApiErrorMessageKey, ApiClientError } from '../api';
   import type { ApiClient } from '../api';
+  import Button from '../components/ui/Button.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -135,19 +136,14 @@
         </div>
 
         <div class="pt-2">
-          <button
-            type="submit"
-            data-testid="totp-login-submit"
-            disabled={loading || !code.trim()}
-            class="w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer flex items-center justify-center space-x-2"
-          >
+          <Button type="submit" testId="totp-login-submit" disabled={loading || !code.trim()} variant="primary" size="lg" class="w-full">
             {#if loading}
               <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
               <span>{$t('auth.totp.submitting')}</span>
             {:else}
               <span>{$t('auth.totp.submit')}</span>
             {/if}
-          </button>
+          </Button>
         </div>
       </form>
     {/if}

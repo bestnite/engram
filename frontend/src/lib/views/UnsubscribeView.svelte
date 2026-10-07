@@ -3,6 +3,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   // 一键退订的 SPA 视图（DESIGN.md §4.7、§8.1）：服务端 GET /unsubscribe 只返回应用壳并下发
   // 会话前双提交 cookie，确认页由本视图渲染。令牌由视图读取 ?token= 后先经
@@ -77,15 +78,9 @@
       <Skeleton testId="unsubscribe-loading" label={$t('unsubscribe.loading')} lines={2} />
     {:else if status === 'ready' || status === 'confirming'}
       <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('unsubscribe.intro', { type: $t('settings.notifications.type.' + typeCode) })}</p>
-      <button
-        data-testid="unsubscribe-confirm"
-        type="button"
-        onclick={confirm}
-        disabled={status === 'confirming'}
-        class="mt-6 w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer"
-      >
+      <Button testId="unsubscribe-confirm" type="button" onclick={confirm} disabled={status === 'confirming'} variant="primary" size="lg" class="w-full mt-6">
         {status === 'confirming' ? $t('unsubscribe.confirming') : $t('unsubscribe.submit')}
-      </button>
+      </Button>
     {:else if status === 'done'}
       <p data-testid="unsubscribe-done" class="text-sm text-emerald-600 dark:text-emerald-400">{$t('unsubscribe.done', { type: $t('settings.notifications.type.' + typeCode) })}</p>
     {:else}

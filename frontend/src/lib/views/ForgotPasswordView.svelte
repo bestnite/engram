@@ -2,6 +2,7 @@
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
+  import Button from '../components/ui/Button.svelte';
 
   // 请求密码重置（服务端 GET /forgot-password 切壳后由客户端路由渲染此页）。
   // 协议走 POST /api/v1/auth/forgot-password：无论账号是否存在都回同形响应，避免账号枚举。
@@ -78,17 +79,13 @@
         </div>
 
         <div class="pt-2">
-          <button
-            type="submit"
-            disabled={loading || !email.trim()}
-            class="w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer flex items-center justify-center space-x-2"
-          >
+          <Button type="submit" disabled={loading || !email.trim()} variant="primary" size="lg" class="w-full">
             {#if loading}
               <span>{$t('account.forgot.submitting')}</span>
             {:else}
               <span>{$t('account.forgot.submit')}</span>
             {/if}
-          </button>
+          </Button>
         </div>
       </form>
 

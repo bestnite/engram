@@ -5,6 +5,7 @@
   import type { ShareResponse } from '../api';
   import { routeStore } from '../router';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Button from '../components/ui/Button.svelte';
 
   // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
   // 卡片正反面一律是服务端清洗后的 HTML，这里只把清洗结果作为标签注入，绝不把 fields 原文当 Markdown 渲染。
@@ -99,13 +100,9 @@
         {#if errorKey}
           <p data-testid="share-password-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(errorKey)}</p>
         {/if}
-        <button
-          type="submit"
-          disabled={unlocking || !password}
-          class="w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer"
-        >
+        <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" class="w-full">
           {unlocking ? $t('share.password.submitting') : $t('share.password.submit')}
-        </button>
+        </Button>
       </form>
     </div>
   {:else if share}

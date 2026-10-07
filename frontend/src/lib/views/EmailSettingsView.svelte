@@ -3,6 +3,7 @@
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
+  import Button from '../components/ui/Button.svelte';
 
   // 账号与邮箱设置（服务端 GET /settings/email 切壳后由客户端路由渲染此页，未登录在服务端即重定向）。
   // 读取与提交走 /api/v1/settings/email，重发验证走 /api/v1/settings/verify-email。
@@ -164,17 +165,13 @@
         </div>
 
         <div class="pt-2">
-          <button
-            type="submit"
-            disabled={submitting || !mailReady || !newEmail.trim()}
-            class="w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer flex items-center justify-center space-x-2"
-          >
+          <Button type="submit" disabled={submitting || !mailReady || !newEmail.trim()} variant="primary" size="lg" class="w-full">
             {#if submitting}
               <span>{$t('account.email.change_submitting')}</span>
             {:else}
               <span>{$t('account.email.change_submit')}</span>
             {/if}
-          </button>
+          </Button>
         </div>
       </form>
 

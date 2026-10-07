@@ -3,6 +3,7 @@
   import { navigate } from '../router';
   import { register, authStore } from '../auth';
   import { getApiErrorMessageKey, ApiClientError } from '../api';
+  import Button from '../components/ui/Button.svelte';
 
   // 邀请 token 由 URL 查询参数带入（GET /register?invite=... 下发应用壳）。
   const invite =
@@ -140,18 +141,14 @@
       </div>
 
       <div class="pt-2">
-        <button
-          type="submit"
-          disabled={loading || !username.trim() || !email.trim() || !password}
-          class="w-full py-2.5 px-4 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 btn-press cursor-pointer flex items-center justify-center space-x-2"
-        >
+        <Button type="submit" disabled={loading || !username.trim() || !email.trim() || !password} variant="primary" size="lg" class="w-full">
           {#if loading}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
             <span>{$t('auth.register.submitting')}</span>
           {:else}
             <span>{$t('auth.register.submit')}</span>
           {/if}
-        </button>
+        </Button>
       </div>
     </form>
 
