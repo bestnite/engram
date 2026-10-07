@@ -246,6 +246,8 @@ func TestAdminSMTPConfigWritesAudit(t *testing.T) {
 // TestAdminNavHasSMTPEntry 证明导航里有 SMTP 入口且不是置灰项。
 func TestAdminNavHasSMTPEntry(t *testing.T) {
 	srv, cookies, _ := newAdminServer(t)
+	// GET /admin 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 外壳的导航断言。
+	srv.spa = nil
 	body := getWithCookies(t, srv, "/admin", cookies).Body.String()
 	if !strings.Contains(body, "邮件（SMTP）") {
 		t.Errorf("admin nav is missing the SMTP entry; body = %s", snippet(body))

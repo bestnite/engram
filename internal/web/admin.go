@@ -83,7 +83,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		}
 		switch r.Path {
 		case "/admin":
-			handlers = append(handlers, s.adminDashboard)
+			handlers = append(handlers, s.spaAdminPage(s.adminDashboard))
 		case "/admin/users":
 			if r.Write {
 				handlers = append(handlers, s.adminUserCreate)
@@ -139,9 +139,9 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		case "/admin/smtp/test":
 			handlers = append(handlers, s.adminSMTPTest)
 		case "/admin/audit":
-			handlers = append(handlers, s.adminAuditPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminAuditPage))
 		case "/admin/health":
-			handlers = append(handlers, s.adminHealthPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminHealthPage))
 		case "/admin/api-keys":
 			handlers = append(handlers, s.adminAPIKeysPage)
 		case "/admin/api-keys/:id/revoke":
@@ -153,6 +153,8 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		}
 		router.Handle(r.Method, r.Path, handlers...)
 	}
+	// SPA 的 JSON 端点（/api/v1/admin/*）：与 SSR 表单端点并存，判权在 spaAdminGuard。
+	s.registerSPAAdminRoutes(router)
 }
 
 // requireAdmin 是管理面板的唯一入口守卫：未登录回登录页，非 admin 一律 403。

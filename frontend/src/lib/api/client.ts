@@ -835,6 +835,33 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
+
+  // ── 管理面板（DESIGN.md §8.4，Go: internal/web/spa_admin*.go）──────────────
+  // 全部走同源会话 cookie，判权在服务端（匿名 401、非 admin 403）；这里只做传输。
+
+  /** 读取实例级计数（GET /api/v1/admin/summary）。 */
+  async getAdminSummary(): Promise<import('./types').AdminSummary> {
+    return this.request<import('./types').AdminSummary>('/api/v1/admin/summary');
+  }
+
+  /** 读取健康页读数（GET /api/v1/admin/health）。 */
+  async getAdminHealth(): Promise<import('./types').AdminHealth> {
+    return this.request<import('./types').AdminHealth>('/api/v1/admin/health');
+  }
+
+  /** 检索审计日志（GET /api/v1/admin/audit）；过滤与分页与服务端 SSR 页同源。 */
+  async getAdminAudit(query?: import('./types').AdminAuditQuery): Promise<import('./types').AdminAuditResponse> {
+    const params = new URLSearchParams();
+    if (query) {
+      for (const key of ['user', 'action', 'target_type', 'target_id', 'from', 'to'] as const) {
+        const value = query[key];
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      }
+      if (query.page !== undefined) params.set('page', String(query.page));
+    }
+    const qs = params.toString();
+    return this.request<import('./types').AdminAuditResponse>(`/api/v1/admin/audit${qs ? `?${qs}` : ''}`);
+  }
 }
 
 /**

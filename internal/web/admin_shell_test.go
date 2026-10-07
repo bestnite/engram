@@ -59,6 +59,8 @@ func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 // M6-9 / M8-4 落地后，导航里已没有任何置灰子页：每个入口都必须是可用链接。
 func TestAdminShellShowsFullNavigation(t *testing.T) {
 	srv, cookies, _ := newAdminServer(t)
+	// GET /admin 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 外壳的导航全貌断言。
+	srv.spa = nil
 	rec := getWithCookies(t, srv, "/admin", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /admin as admin = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))

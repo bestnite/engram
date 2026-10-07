@@ -38,6 +38,8 @@ func healthValues(t *testing.T, srv *Server, cookies []*http.Cookie) map[string]
 // 自行累加；到期数由测试按 seed 的 fixture 手算（不调用页面实现）。
 func TestAdminHealthValuesMatchIndependentComputation(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	// GET /admin/health 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 健康页的四个读数。
+	srv.spa = nil
 	ctx := context.Background()
 	now := time.Now().UTC()
 	past := now.Add(-time.Hour)
@@ -133,6 +135,8 @@ func TestAdminHealthValuesMatchIndependentComputation(t *testing.T) {
 // 这条直接锁住新增路由本身）。同时确认导航里的「健康」入口已点亮为链接。
 func TestAdminHealthPageRequiresAdmin(t *testing.T) {
 	srv, db, _, ownerCookies, _ := newNotesServer(t)
+	// GET /admin/health 已切到 SPA 应用壳；禁用 SPA 以覆盖 SSR 页的导航断言。
+	srv.spa = nil
 	_, bobCookies, _ := createUserAndLogin(t, srv, db, "bob")
 
 	rec := getWithCookies(t, srv, "/admin/health", bobCookies)

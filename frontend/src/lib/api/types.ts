@@ -784,3 +784,71 @@ export interface UpdateNotificationPrefsRequest {
   reminder_hour: number | null;
 }
 
+/**
+ * 管理面板接口（DESIGN.md §8.4，Go: internal/web/spa_admin_read.go）。
+ * 响应只带原始值与稳定英文标识，任何本地化文案都由前端语言包按标识映射。
+ */
+
+/** GET /api/v1/admin/summary：实例级计数。 */
+export interface AdminSummary {
+  users_total: number;
+  users_active: number;
+  decks: number;
+  notes: number;
+  cards: number;
+  due: number;
+  jobs_running: number;
+  jobs_failed: number;
+}
+
+/** GET /api/v1/admin/health：健康页读数。schema_version / due 为 null 表示读不出来。 */
+export interface AdminHealth {
+  database: 'ok' | 'error';
+  schema_version: number | null;
+  media_bytes: number;
+  media_truncated: boolean;
+  due: number | null;
+}
+
+/** 审计行的操作者；null 表示系统动作（无 UserID）。 */
+export interface AdminAuditActor {
+  user_id: number | null;
+  username: string;
+}
+
+/** 审计行的目标对象；null 表示无目标。 */
+export interface AdminAuditTarget {
+  type: string;
+  id: number | null;
+}
+
+/** 一行审计记录；time 已按当前管理员时区格式化，detail 为原始 JSON 串（空串表示无详情）。 */
+export interface AdminAuditRow {
+  time: string;
+  actor: AdminAuditActor | null;
+  action: string;
+  target: AdminAuditTarget | null;
+  detail: string;
+}
+
+/** GET /api/v1/admin/audit 响应；notice 是稳定英文码（空串表示无提示）。 */
+export interface AdminAuditResponse {
+  rows: AdminAuditRow[];
+  actions: string[];
+  page: number;
+  pages: number;
+  total: number;
+  notice: string;
+}
+
+/** 审计检索的过滤条件；空串/缺省表示不过滤该项。 */
+export interface AdminAuditQuery {
+  user?: string;
+  action?: string;
+  target_type?: string;
+  target_id?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+}
+

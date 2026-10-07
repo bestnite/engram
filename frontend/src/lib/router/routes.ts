@@ -17,6 +17,9 @@ import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
 import TOTPView from '../views/TOTPView.svelte';
 import NotificationPrefsView from '../views/NotificationPrefsView.svelte';
+import AdminDashboardView from '../views/admin/AdminDashboardView.svelte';
+import AdminHealthView from '../views/admin/AdminHealthView.svelte';
+import AdminAuditView from '../views/admin/AdminAuditView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -186,5 +189,24 @@ export const routes: RouteDefinition[] = [
     path: '/spa/setup',
     name: 'spa-setup',
     component: SetupView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板概览（DESIGN.md §8.1、§8.4）。服务端 GET /admin 已切到应用壳（requireAdmin 先于
+    // 外壳），计数走 /api/v1/admin/summary。
+    path: '/admin',
+    name: 'admin-dashboard',
+    component: AdminDashboardView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板健康页。服务端 GET /admin/health 已切到应用壳，读数走 /api/v1/admin/health。
+    path: '/admin/health',
+    name: 'admin-health',
+    component: AdminHealthView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 管理面板审计检索。服务端 GET /admin/audit 已切到应用壳，检索走 /api/v1/admin/audit。
+    path: '/admin/audit',
+    name: 'admin-audit',
+    component: AdminAuditView as unknown as RouteDefinition['component'],
   },
 ];
