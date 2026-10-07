@@ -784,3 +784,58 @@ export interface UpdateNotificationPrefsRequest {
   reminder_hour: number | null;
 }
 
+// ---- 账号安全与邮件流程（DESIGN.md §4.3、§4.7、§8.1；Go: internal/web/spa_account.go）----
+
+/** POST /api/v1/auth/forgot-password 请求。响应只含站点级邮件是否可用，绝不回显账号存在性。 */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  mail_ready: boolean;
+}
+
+/** POST /api/v1/auth/reset-password：一次性令牌 + 新密码。 */
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+export interface ResetPasswordResponse {
+  reset: boolean;
+}
+
+/** 只带一枚令牌的请求（邮箱验证、改邮箱确认）。 */
+export interface TokenOnlyRequest {
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  verified: boolean;
+}
+
+export interface ConfirmEmailChangeResponse {
+  changed: boolean;
+}
+
+/** GET /api/v1/settings/email（会话）：当前邮箱、验证状态与站点邮件是否可用。 */
+export interface EmailSettingsResponse {
+  email: string;
+  email_verified: boolean;
+  mail_ready: boolean;
+}
+
+/** POST /api/v1/settings/email（会话）：请求改邮箱，确认前库中地址不变。 */
+export interface EmailChangeRequest {
+  email: string;
+}
+
+export interface EmailChangeResponse {
+  sent: boolean;
+}
+
+/** POST /api/v1/settings/verify-email（会话）：重发验证邮件。 */
+export interface ResendVerificationResponse {
+  sent: boolean;
+}
+
