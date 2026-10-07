@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,11 +90,13 @@ func TestMcpEndpointRejectsSessionCookie(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {"cookie-user"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login = %d, want 303", login.Code)
+	// 登录走 SPA 的同源 JSON 端点，取回会话 cookie（这里不关心 CSRF）。
+	cookie, headers := preSessionPair(t, srv, "/login")
+	login := postJSON(srv, "/api/v1/auth/login", map[string]string{
+		"username": "cookie-user", "password": "Sup3rSecret!",
+	}, []*http.Cookie{cookie}, headers)
+	if login.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/login = %d, want 200 (body %s)", login.Code, snippet(login.Body.String()))
 	}
 	cookies := login.Result().Cookies()
 	if len(cookies) == 0 {

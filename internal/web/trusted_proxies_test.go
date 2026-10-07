@@ -1,11 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,14 +16,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// postLoginFrom 以给定的 RemoteAddr 与额外请求头发起 POST /login，并补齐会话前双提交 CSRF。
+// postLoginFrom 以给定的 RemoteAddr 与额外请求头发起 JSON 登录（POST /api/v1/auth/login），
+// 并补齐会话前双提交 CSRF（cookie + 镜像头）。
 // 限流与审计的 IP 都取自 gin 的 ClientIP，而 ClientIP 是否采信 X-Forwarded-For 取决于可信代理配置，
 // 因此必须能同时控制 RemoteAddr 与 XFF（DESIGN.md §4.3、§11）。
 func postLoginFrom(t *testing.T, srv *Server, username, password, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	values := url.Values{"username": {username}, "password": {password}, auth.CSRFFieldName: {testDoubleSubmitToken}}
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(values.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	payload, err := json.Marshal(map[string]string{"username": username, "password": password})
+	if err != nil {
+		t.Fatalf("marshal login body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(auth.CSRFHeaderName, testDoubleSubmitToken)
 	req.AddCookie(&http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
 	req.RemoteAddr = remoteAddr
 	for k, v := range headers {

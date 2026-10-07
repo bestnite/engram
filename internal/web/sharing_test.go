@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"gorm.io/gorm"
@@ -26,17 +25,9 @@ func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string)
 	if err != nil {
 		t.Fatalf("CreateLocalUser(%q) error = %v", username, err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {username}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login (%s) status = %d, want 303", username, login.Code)
-	}
-	var sess store.Session
-	if err := db.Where("user_id = ?", u.ID).Order("created_at desc, id desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row for %s: %v", username, err)
-	}
-	return u.ID, login.Result().Cookies(), sess.CSRFToken
+	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	cookies, csrf := loginJSON(t, srv, db, username, "Sup3rSecret!")
+	return u.ID, cookies, csrf
 }
 
 // grantsJSONPath 是共享授权的 JSON 路径。

@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,17 +93,9 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303", login.Code)
-	}
-	var sess store.Session
-	if err := db.Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row: %v", err)
-	}
-	return srv, db, owner.ID, login.Result().Cookies(), sess.CSRFToken
+	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	cookies, csrf = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	return srv, db, owner.ID, cookies, csrf
 }
 
 // seedDeck 建一个属于 owner 的卡组（含一个调度预设，满足外键列）。
@@ -173,17 +164,12 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create stranger: %v", err)
 	}
-	strangerLogin := postForm(t, srv, "/login", url.Values{
-		"username": {"stranger"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if strangerLogin.Code != http.StatusSeeOther {
-		t.Fatalf("stranger login status = %d, want 303", strangerLogin.Code)
-	}
-	foreign := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", strangerLogin.Result().Cookies())
+	strangerCookies, _ := loginJSON(t, srv, db, "stranger", "Sup3rSecret!")
+	foreign := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", strangerCookies)
 	if foreign.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET list status = %d, want 403", foreign.Code)
 	}
-	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), strangerLogin.Result().Cookies()); rec.Code != http.StatusForbidden {
+	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), strangerCookies); rec.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET editor status = %d, want 403", rec.Code)
 	}
 }

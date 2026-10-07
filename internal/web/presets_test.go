@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -69,17 +68,9 @@ func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, c
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303", login.Code)
-	}
-	var sess store.Session
-	if err := db.Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row: %v", err)
-	}
-	return srv, db, owner.ID, login.Result().Cookies(), sess.CSRFToken, runner
+	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	cookies, csrf = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	return srv, db, owner.ID, cookies, csrf, runner
 }
 
 // seedPreset 建一个属于 owner 的**默认**预设：名用稳定字面量 store.DefaultPresetName，

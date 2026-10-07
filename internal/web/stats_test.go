@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -65,13 +64,9 @@ func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	}
 	seedStatsFixture(t, db, owner.ID)
 
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {"owner"}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303", login.Code)
-	}
-	return srv, db, owner.ID, login.Result().Cookies()
+	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie。
+	cookies, _ = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	return srv, db, owner.ID, cookies
 }
 
 // seedStatsFixture 写入一组可预测的统计夹具。

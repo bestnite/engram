@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"regexp"
 	"testing"
 	"time"
@@ -70,17 +69,9 @@ func loginMember(t *testing.T, srv *Server, db *gorm.DB, username string) (uint6
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	login := postForm(t, srv, "/login", url.Values{
-		"username": {username}, "password": {"Sup3rSecret!"},
-	}, nil)
-	if login.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login (%s) = %d, want 303", username, login.Code)
-	}
-	var sess store.Session
-	if err := db.Where("user_id = ?", u.ID).Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load member session: %v", err)
-	}
-	return u.ID, login.Result().Cookies(), sess.CSRFToken
+	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与绑定的 CSRF token。
+	cookies, csrf := loginJSON(t, srv, db, username, "Sup3rSecret!")
+	return u.ID, cookies, csrf
 }
 
 // keyCount 返回某用户当前的 key 数。

@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strconv"
 	"testing"
 
@@ -97,10 +96,10 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 		t.Fatalf("pre-reset GET /api/v1/decks = %d, want 200", code)
 	}
 
-	rec := postForm(t, ts.srv, "/admin/users/"+strconv.FormatUint(targetID, 10)+"/password",
-		url.Values{"confirm": {"1"}, "csrf_token": {ts.csrf}}, ts.cookies)
+	rec := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/password",
+		`{"confirm":true}`, ts.cookies, ts.csrf)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /admin/users/:id/password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("POST /api/v1/admin/users/:id/password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
 	assertAllKeysRevoked(t, ts.db, targetID)
@@ -130,11 +129,10 @@ func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 		t.Fatalf("pre-change GET /api/v1/decks = %d, want 200", code)
 	}
 
-	rec := postForm(t, ts.srv, "/settings/password", url.Values{
-		"old_password": {"Sup3rSecret!"}, "new_password": {"N3wSup3rSecret!"}, "csrf_token": {csrf},
-	}, cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST /settings/password status = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+	rec := jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
+		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, cookies, csrf)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("PATCH /api/v1/settings/password status = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
 	keys, err := store.NewAPIKeyStore(ts.db).ListByUser(context.Background(), memberID)
