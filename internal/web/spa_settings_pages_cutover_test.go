@@ -32,7 +32,7 @@ func assertServesSPAShell(t *testing.T, rec *httptest.ResponseRecorder, what str
 	}
 }
 
-// TestSPATOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流与回退。
+// TestSPATOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流（页面只返回应用壳，无 SSR 回退）。
 func TestSPATOTPSettingsRouteCutover(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
@@ -45,16 +45,6 @@ func TestSPATOTPSettingsRouteCutover(t *testing.T) {
 	anon := get(t, srv, "/settings/totp", nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Errorf("anonymous GET /settings/totp = %d %q, want 303 /login", anon.Code, anon.Header().Get("Location"))
-	}
-
-	// SPA 缺失时回退 SSR 设置页。
-	srv.spa = nil
-	ssr := getWithCookies(t, srv, "/settings/totp", cookies)
-	if ssr.Code != http.StatusOK {
-		t.Fatalf("SSR fallback GET /settings/totp = %d, want 200", ssr.Code)
-	}
-	if !strings.Contains(ssr.Body.String(), `name="csrf_token"`) {
-		t.Errorf("SSR fallback did not render the settings page: %s", snippet(ssr.Body.String()))
 	}
 }
 

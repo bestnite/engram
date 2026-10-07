@@ -151,19 +151,22 @@ func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
 
 // TestOIDCLoginAgainstStubProvider 是 M1-11 的核心验收：stub provider 下登录成功，错误 state 被拒。
 func TestOIDCLoginAgainstStubProvider(t *testing.T) {
-	srv, db, _, _, _ := newNotesServer(t)
+	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
 
 	state, nonce := startOIDCLogin(t, srv)
 	p.nonce = nonce
 
-	// 错误 state 必须被拒，且不下发会话。
+	// 错误 state 必须被拒：SPA 已取代 SSR 登录页，失败回 303 登录页，且不下发会话。
 	bad := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state=forged-state", nil)
-	if bad.Code != http.StatusBadRequest {
-		t.Fatalf("callback with a wrong state = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
+	if bad.Code != http.StatusSeeOther {
+		t.Fatalf("callback with a wrong state = %d, want 303 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
-	// 错误 state 必须被拒，且不下发会话 cookie（登录页会下发会话前的 CSRF cookie，不算会话）。
+	if loc := bad.Header().Get("Location"); loc != "/login" {
+		t.Fatalf("wrong-state redirect Location = %q, want /login", loc)
+	}
+	// 错误 state 必须被拒，且不下发会话 cookie。
 	for _, ck := range bad.Result().Cookies() {
 		if ck.Name == srv.sessions.CookieName() {
 			t.Fatalf("wrong state unexpectedly set a session cookie")
@@ -208,7 +211,7 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 
 // TestOIDCDisabledHidesEntryAndRoutes 验证默认关闭：登录页无入口，相关路由 404（不允许半开）。
 func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
-	srv, _, _, _, _ := newNotesServer(t)
+	srv, _ := newAuthServer(t)
 	// 未配置任何 OIDC 设置。
 	body := getWithCookies(t, srv, "/login", nil).Body.String()
 	if strings.Contains(body, "OIDC") {
@@ -223,9 +226,9 @@ func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 }
 
 // TestOIDCStartRejectsWhenPendingTableFull 是 F17 的验收：未完成的 state 表达到上限后，
-// 新的 OIDC 发起必须被拒绝（429 + 本地化提示），而不是继续往表里堆（内存 DoS）。
+// 新的 OIDC 发起必须被拒绝（303 回登录页），而不是继续往表里堆（内存 DoS）。
 func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
-	srv, db, _, _, _ := newNotesServer(t)
+	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
 
@@ -240,11 +243,11 @@ func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
 	}
 
 	rec := getWithCookies(t, srv, "/auth/oidc/start", nil)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("GET /auth/oidc/start with a full pending table = %d, want 429 (body %s)", rec.Code, snippet(rec.Body.String()))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /auth/oidc/start with a full pending table = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "请求过于频繁") {
-		t.Errorf("rejection page does not show the localized rate-limit message; body = %s", snippet(rec.Body.String()))
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Errorf("rejection redirect Location = %q, want /login", loc)
 	}
 	for _, ck := range rec.Result().Cookies() {
 		if ck.Name == srv.sessions.CookieName() {

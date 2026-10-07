@@ -228,7 +228,7 @@ func TestSPATOTPLoginSecondStepGuards(t *testing.T) {
 }
 
 // TestSPATOTPLoginShellServesAppShell 断言 GET /spa/login/totp 返回应用壳并下发双提交 cookie，
-// 且与 SSR 的 POST /login/totp 并存（那一步没有被遮蔽）。
+// 且第二步不再有 SSR 表单端点：POST /login/totp 未注册，落到 NoRoute（非 GET 一律 404）。
 func TestSPATOTPLoginShellServesAppShell(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	rec := get(t, srv, "/spa/login/totp", nil)
@@ -244,10 +244,9 @@ func TestSPATOTPLoginShellServesAppShell(t *testing.T) {
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
 		t.Error("GET /spa/login/totp must not issue a session cookie")
 	}
-	// SSR 的第二步表单端点仍然注册（未被 SPA 外壳遮蔽）：缺双提交 token 时它回 403，
-	// 而路由不存在会走 NoRoute（非 GET 页面路径）回 404。
+	// SSR 的第二步表单端点已随页面层移除：POST /login/totp 不再是注册路由。
 	ssrStep := postJSON(srv, "/login/totp", map[string]string{"code": "123456"}, nil, nil)
-	if ssrStep.Code != http.StatusForbidden {
-		t.Errorf("POST /login/totp = %d, want 403 from the double-submit middleware", ssrStep.Code)
+	if ssrStep.Code != http.StatusNotFound {
+		t.Errorf("POST /login/totp = %d, want 404 after the SSR endpoint was removed", ssrStep.Code)
 	}
 }

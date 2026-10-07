@@ -4,10 +4,9 @@
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
 
-  // 改邮箱确认结果的 SPA 视图（挂载于 /spa/confirm-email-change 应用壳）。
-  // 免登录的一键链接 /confirm-email-change 仍在服务端消费令牌并渲染结果，无脚本也能完成；此视图
-  // 是给 JavaScript 客户端走的独立入口，令牌语义相同（一次性、有过期），协议走
-  // POST /api/v1/auth/confirm-email-change。
+  // 改邮箱确认结果的 SPA 视图（服务端 GET /confirm-email-change 返回应用壳，服务端不再渲染页面）。
+  // 令牌由本视图读取 ?token= 后经 POST /api/v1/auth/confirm-email-change 消费（一次性、有过期）。
+  // /spa/confirm-email-change 保留为迁移期别名，指向同一视图。
   const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -23,24 +22,10 @@ import (
 // 安全断言的重点：GET /api/v1/settings/totp 绝不返回 secret / otpauth；
 // secret 与恢复码明文只在 begin / confirm / recovery 的响应里各出现一次。
 
-// spaTOTPLogin 在账号尚未启用 TOTP 时用密码登录，返回会话 cookie 与会话绑定的 CSRF token。
+// spaTOTPLogin 在账号尚未启用 TOTP 时用密码经 JSON 登录，返回会话 cookie 与会话绑定的 CSRF token。
 func spaTOTPLogin(t *testing.T, srv *Server, db *gorm.DB) ([]*http.Cookie, string) {
 	t.Helper()
-	rec := postForm(t, srv, "/login", url.Values{
-		"username": {"admin"},
-		"password": {"Sup3rSecret!"},
-	}, nil)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	var sess store.Session
-	if err := db.Order("created_at desc").First(&sess).Error; err != nil {
-		t.Fatalf("load session row: %v", err)
-	}
-	if sess.CSRFToken == "" {
-		t.Fatal("session row has no CSRF token")
-	}
-	return rec.Result().Cookies(), sess.CSRFToken
+	return loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 }
 
 // spaTOTPEnable 走 HTTP 流程启用 TOTP，返回确认时用到的明文 secret。

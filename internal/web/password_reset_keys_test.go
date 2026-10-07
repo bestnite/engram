@@ -9,6 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -65,11 +66,9 @@ func TestForgotPasswordResetRevokesAPIKeys(t *testing.T) {
 
 	// 完整忘记密码流程：请求发信 → 用邮件里的真实令牌设置新密码。
 	plain, _ := issueResetToken(t, ts)
-	reset := postForm(t, ts.srv, "/reset-password", url.Values{
-		"token": {plain}, "password": {"N3wSup3rSecret!"},
-	}, nil)
+	reset := resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
 	if reset.Code != http.StatusOK {
-		t.Fatalf("POST /reset-password status = %d, want 200 (body %s)", reset.Code, snippet(reset.Body.String()))
+		t.Fatalf("POST /api/v1/auth/reset-password status = %d, want 200 (body %s)", reset.Code, snippet(reset.Body.String()))
 	}
 
 	// 两把旧 key：库里已失效，且对真实 REST 链返回 401（与既有撤销 key 语义一致）。
@@ -116,7 +115,14 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 // 绝不吊销自己的 key（DESIGN.md §11）。缩小范围的顺手改动会让这条变红。
 func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
-	memberID, cookies, csrf := loginMember(t, ts.srv, ts.db, "member")
+	member, err := ts.srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
+		Username: "member", Email: "member@example.com", Password: "Sup3rSecret!", Role: store.RoleUser, Locale: "en",
+	})
+	if err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	memberID := member.ID
+	cookies, csrf := loginJSON(t, ts.srv, ts.db, "member", "Sup3rSecret!")
 	rest := newKeysAPI(t, ts.db)
 	k1 := seedAPIKey(t, ts.db, memberID, "cli")
 

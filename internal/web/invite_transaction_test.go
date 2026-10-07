@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/auth"
@@ -25,14 +24,15 @@ func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 	}
 
 	// 用户名与既有 admin 冲突：建号失败，整个接受事务回滚。
-	failed := postForm(t, srv, "/register", url.Values{
-		"username": {"admin"},
-		"email":    {"admin@example.com"},
-		"password": {"Sup3rSecret!"},
-		"invite":   {inv.Token},
-	}, nil)
+	cookie, headers := preSessionPair(t, srv, "/register")
+	failed := postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": "admin",
+		"email":    "admin@example.com",
+		"password": "Sup3rSecret!",
+		"invite":   inv.Token,
+	}, []*http.Cookie{cookie}, headers)
 	if failed.Code != http.StatusConflict {
-		t.Fatalf("POST /register with a failing create = %d, want 409 (body %s)", failed.Code, snippet(failed.Body.String()))
+		t.Fatalf("POST /api/v1/auth/register with a failing create = %d, want 409 (body %s)", failed.Code, snippet(failed.Body.String()))
 	}
 
 	// 回滚后 token 未被消费：used_at 仍为空，管理员可再次使用它。
@@ -45,14 +45,14 @@ func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 	}
 
 	// 同一 token 换一个用户名可以正常接受，且 used_by 指向新用户。
-	retry := postForm(t, srv, "/register", url.Values{
-		"username": {"invitee"},
-		"email":    {"invitee@example.com"},
-		"password": {"Sup3rSecret!"},
-		"invite":   {inv.Token},
-	}, nil)
-	if retry.Code != http.StatusSeeOther {
-		t.Fatalf("POST /register after the rollback = %d, want 303 (body %s)", retry.Code, snippet(retry.Body.String()))
+	retry := postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": "invitee",
+		"email":    "invitee@example.com",
+		"password": "Sup3rSecret!",
+		"invite":   inv.Token,
+	}, []*http.Cookie{cookie}, headers)
+	if retry.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/auth/register after the rollback = %d, want 200 (body %s)", retry.Code, snippet(retry.Body.String()))
 	}
 	used, err := invites.ByToken(context.Background(), inv.Token)
 	if err != nil {

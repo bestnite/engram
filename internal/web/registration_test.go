@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -25,60 +23,8 @@ func seedAdminUser(t *testing.T, srv *Server) {
 	}
 }
 
-// TestRegistrationPolicyMatrix 是 M1-6 的 HTTP 级验收：每一种策略与白名单拒绝都走真实注册请求。
-func TestRegistrationPolicyMatrix(t *testing.T) {
-	cases := []struct {
-		name       string
-		policy     string
-		allowlist  string
-		email      string
-		wantStatus int
-		wantText   string
-	}{
-		{
-			name: "open without allowlist allows anyone", policy: "open",
-			email: "alice@example.org", wantStatus: http.StatusSeeOther,
-		},
-		{
-			name: "open with allowlist match", policy: "open", allowlist: `["example.com"]`,
-			email: "alice@example.com", wantStatus: http.StatusSeeOther,
-		},
-		{
-			name: "open with allowlist denial", policy: "open", allowlist: `["example.com"]`,
-			email: "alice@example.net", wantStatus: http.StatusForbidden, wantText: "该邮箱域名不在允许注册的范围内",
-		},
-		{
-			name: "invite requires a token", policy: "invite",
-			email: "alice@example.com", wantStatus: http.StatusForbidden, wantText: "注册需要邀请链接",
-		},
-		{
-			name: "closed rejects everyone", policy: "closed",
-			email: "alice@example.com", wantStatus: http.StatusForbidden, wantText: "自助注册已关闭",
-		},
-	}
-	for i, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			srv, db := newAuthServer(t)
-			seedAdminUser(t, srv)
-			writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, tc.policy)))
-			if tc.allowlist != "" {
-				writeSetting(t, db, auth.SettingKeyEmailAllowlist, tc.allowlist)
-			}
-			rec := postForm(t, srv, "/register", url.Values{
-				"username": {string(rune('a'+i)) + "_user"},
-				"email":    {tc.email},
-				"password": {"Sup3rSecret!"},
-			}, nil)
-			if rec.Code != tc.wantStatus {
-				t.Fatalf("POST /register (%s) status = %d, want %d (body %s)",
-					tc.name, rec.Code, tc.wantStatus, snippet(rec.Body.String()))
-			}
-			if tc.wantText != "" && !strings.Contains(rec.Body.String(), tc.wantText) {
-				t.Errorf("POST /register (%s) body missing %q; body = %s", tc.name, tc.wantText, snippet(rec.Body.String()))
-			}
-		})
-	}
-}
+// 注册策略矩阵与表单校验的 JSON 验收见 spa_auth_register_test.go（TestSPARegisterAPI_*）。
+// 本文件只保留邀请接受与邀请拒绝两条 HTTP 级链路。
 
 // TestInviteAcceptCreatesExactlyOneUser 是 M1-7 的 HTTP 级验收：
 // 有效邀请放行一次，令牌随即失效，且只产生一个用户。
@@ -93,29 +39,22 @@ func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 		t.Fatalf("create invite: %v", err)
 	}
 
-	form := url.Values{
-		"username": {"invitee"},
-		"email":    {"invitee@example.com"},
-		"password": {"Sup3rSecret!"},
-		"invite":   {inv.Token},
-	}
-	first := postForm(t, srv, "/register", form, nil)
-	if first.Code != http.StatusSeeOther {
-		t.Fatalf("POST /register with invite status = %d, want 303 (body %s)", first.Code, snippet(first.Body.String()))
+	cookie, headers := preSessionPair(t, srv, "/register")
+	first := postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": "invitee", "email": "invitee@example.com",
+		"password": "Sup3rSecret!", "invite": inv.Token,
+	}, []*http.Cookie{cookie}, headers)
+	if first.Code != http.StatusOK {
+		t.Fatalf("registration with invite = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
 
 	// 再次使用同一 token 必须被拒（一次性）。
-	second := postForm(t, srv, "/register", url.Values{
-		"username": {"invitee2"},
-		"email":    {"invitee2@example.com"},
-		"password": {"Sup3rSecret!"},
-		"invite":   {inv.Token},
-	}, nil)
-	if second.Code != http.StatusForbidden {
-		t.Fatalf("reused invite status = %d, want 403 (body %s)", second.Code, snippet(second.Body.String()))
-	}
-	if !strings.Contains(second.Body.String(), "邀请链接无效") {
-		t.Errorf("reused-invite page is missing the localized notice; body = %s", snippet(second.Body.String()))
+	second := postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": "invitee2", "email": "invitee2@example.com",
+		"password": "Sup3rSecret!", "invite": inv.Token,
+	}, []*http.Cookie{cookie}, headers)
+	if second.Code != http.StatusForbidden || apiErrorCode(t, second) != "invite_invalid" {
+		t.Fatalf("reused invite = %d %s, want 403 invite_invalid", second.Code, apiErrorCode(t, second))
 	}
 
 	// 邀请只创建一个用户，且已记录 used_at/used_by。
@@ -135,7 +74,7 @@ func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 	}
 }
 
-// TestInviteRejections 覆盖已过期与邮箱不符两种拒绝路径（HTTP 层）。
+// TestInviteRejections 覆盖已过期与邮箱不符两种拒绝路径（JSON 层）。
 func TestInviteRejections(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -169,17 +108,13 @@ func TestInviteRejections(t *testing.T) {
 			if err := invites.Create(context.Background(), inv); err != nil {
 				t.Fatalf("create invite: %v", err)
 			}
-			rec := postForm(t, srv, "/register", url.Values{
-				"username": {"rejectee"},
-				"email":    {tc.email},
-				"password": {"Sup3rSecret!"},
-				"invite":   {inv.Token},
-			}, nil)
-			if rec.Code != http.StatusForbidden {
-				t.Fatalf("POST /register status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
-			}
-			if !strings.Contains(rec.Body.String(), "邀请链接无效") {
-				t.Errorf("rejection page missing localized notice; body = %s", snippet(rec.Body.String()))
+			cookie, headers := preSessionPair(t, srv, "/register")
+			rec := postJSON(srv, "/api/v1/auth/register", map[string]string{
+				"username": "rejectee", "email": tc.email,
+				"password": "Sup3rSecret!", "invite": inv.Token,
+			}, []*http.Cookie{cookie}, headers)
+			if rec.Code != http.StatusForbidden || apiErrorCode(t, rec) != "invite_invalid" {
+				t.Fatalf("registration = %d %s, want 403 invite_invalid (body %s)", rec.Code, apiErrorCode(t, rec), snippet(rec.Body.String()))
 			}
 		})
 	}
