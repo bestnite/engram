@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// F15：REST 导入入口（与 MCP / CLI 共用 ImportDeckPackage）必须把包内新增媒体计入
+// REST 导入入口（与 MCP / CLI 共用 ImportDeckPackage）必须把包内新增媒体计入
 // **导入者**配额。修前 REST 导入不经过上传链的 checkMediaQuota，一个装满媒体的包可以
 // 无限占用空间；因此这条用例修前红（200），修后绿（413 + media_quota_exceeded）。
 

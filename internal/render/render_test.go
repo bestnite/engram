@@ -252,7 +252,7 @@ func TestRenderMarkdownEscapesHTMLInsideMath(t *testing.T) {
 	}
 }
 
-// F8：公式的还原点必须与它最终的 HTML 上下文无关。
+// 公式的还原点必须与它最终的 HTML 上下文无关。
 //
 // 占位符是在清洗之前插进 Markdown 文本里的，goldmark 可能把它放进属性值位置
 // （链接目标、图片 alt、raw HTML 的 class/href 等）。bluemonday 当时校验的是

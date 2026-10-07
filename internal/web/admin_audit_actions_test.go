@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 F20 的验收测试：管理面板里两个高影响动作——OIDC「测试连接」、
+// 本文件是验收测试：管理面板里两个高影响动作——OIDC「测试连接」、
 // SMTP「测试连接」——必须写审计行，且成功与失败都要留痕。审计行不得包含
 // 口令 / secret / token 等敏感值（只记动作、actor 与目标元信息）。
 //

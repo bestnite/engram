@@ -124,7 +124,7 @@ func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName st
 // Confirm 用一次验证码确认待确认的绑定；成功后启用并生成一批一次性恢复码。
 // 返回的恢复码明文只在此刻返回一次。
 // 确认时接受的验证码同样登记时间步：确认后二次验证立即生效，若不登记，
-// 被观测到的确认码在其窗口内还能再通过一次登录（F19 要堵的就是这条重放路径）。
+// 被观测到的确认码在其窗口内还能再通过一次登录（这正是要堵的重放路径）。
 func (s *TOTPService) Confirm(ctx context.Context, userID uint64, code string) (recoveryCodes []string, err error) {
 	row, err := s.store.Get(ctx, userID)
 	if err != nil {
@@ -220,7 +220,7 @@ func (s *TOTPService) Disable(ctx context.Context, userID uint64) error {
 	return s.store.Delete(ctx, userID)
 }
 
-// acceptCode 校验 6 位验证码并登记其时间步（F19：窗口内同一码不得二次通过）。
+// acceptCode 校验 6 位验证码并登记其时间步（窗口内同一码不得二次通过）。
 //
 // 返回 ok=false 有两种情况，对外不区分：① 码不在 ±totpSkew 窗口内；
 // ② 该步不晚于已接受的最大步（重放，或比已接受步更早的旧码）。

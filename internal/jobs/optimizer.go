@@ -37,7 +37,7 @@ const optimizerWeightCount = 21
 
 // maxAdapterWeightsBytes 是适配器权重文件（weights.json）的读取上限，1 MiB。
 // 理由：权重是固定 21 个 float64 的 JSON 数组，正常输出只有几百字节；适配器异常产出超大文件时
-// os.ReadFile 会把整个文件读进内存再解码，内存占用不受控（F23）。1 MiB 足以容纳 21 个双精度数的
+// os.ReadFile 会把整个文件读进内存再解码，内存占用不受控。1 MiB 足以容纳 21 个双精度数的
 // 任何合理排版（含空白），超出即判为异常输出并让作业失败，而不是先把它读全。
 const maxAdapterWeightsBytes = 1 << 20
 

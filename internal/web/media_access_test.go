@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 F2/F2c：GET /media/<sha256> 的读取鉴权，以及 note 写入的写前媒体校验。
+// 本文件覆盖两条规则：GET /media/<sha256> 的读取鉴权，以及 note 写入的写前媒体校验。
 //
 // 读取口径（鉴权只需一处：有卡组访问权的登录用户）：一个登录用户能读到某
 // media 的充要条件是——① media_uploaders 里存在指向他的记录（他提供过这份字节，去重命中也算，
@@ -110,7 +110,7 @@ func mediaNoteRows(t *testing.T, db *gorm.DB, sha string, noteID uint64) int64 {
 	return n
 }
 
-// TestMediaAccessFollowsVisibleDeckGrantAndRevoke 是 F2 的主验收：
+// TestMediaAccessFollowsVisibleDeckGrantAndRevoke 是主验收：
 // private 卡组里被 note 引用的 media，对无授权用户 404；授权为 reader 后 200；撤销后立即 404。
 func TestMediaAccessFollowsVisibleDeckGrantAndRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

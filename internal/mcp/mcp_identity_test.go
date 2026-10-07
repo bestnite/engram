@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件的用例覆盖 F10：/mcp 只接受 API key，且会话身份必须是每次请求现算的。
+// 本文件的用例覆盖这条规则：/mcp 只接受 API key，且会话身份必须是每次请求现算的。
 // 为手工复用会话号，这里发原始 JSON-RPC（SDK 客户端无法指定 Mcp-Session-Id）。
 
 const rawInitBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"raw","version":"0.0.1"}}}`

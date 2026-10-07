@@ -81,7 +81,7 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # 漏洞门禁（F25）：只把「可达」漏洞作为失败条件。govulncheck 默认只报告调用路径
+      # 漏洞门禁：只把「可达」漏洞作为失败条件。govulncheck 默认只报告调用路径
       # 可达的漏洞，命中时退出码为 3；依赖里存在但代码并未调用的漏洞不阻断构建，避免
       # 误报噪声。版本固定，避免 CI 结论随工具版本漂移（本机以 v1.8.0 验证）。
       - name: Vulnerability check (govulncheck, reachable only)

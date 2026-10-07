@@ -24,7 +24,7 @@ const (
 	DefaultReviewsPerDay = 200
 )
 
-// 卡组名与描述的长度界限（F27，2026-10-06 由用户拍板）。
+// 卡组名与描述的长度界限（2026-10-06 由用户拍板）。
 //
 // 按 Unicode 字符（rune）计数，不按字节：一个汉字或 emoji 算一个字符。若按字节，
 // 中文卡组名会被腰斩到 66 个字，而 200 个 emoji 只能留下 50 个——字号与用户认知的
@@ -104,7 +104,7 @@ type DeckStore struct {
 // NewDeckStore 构造卡组存储。
 func NewDeckStore(db *gorm.DB) *DeckStore { return &DeckStore{db: db} }
 
-// validateDeckName 校验卡组名，规则与 F27 卡组包 manifest 完全一致：非空、合法 UTF-8、
+// validateDeckName 校验卡组名，规则与卡组包 manifest 完全一致：非空、合法 UTF-8、
 // 不含 C0 控制字符（U+0000–U+001F）、长度不超过 maxDeckNameChars（按 rune 计）。
 //
 // 空名保持既有语义返回 ErrDeckNameRequired，不并入 ErrDeckNameInvalid——调用方对

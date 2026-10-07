@@ -2175,13 +2175,13 @@
   translation: "每日上限必须是不小于 0 的整数；0 表示不限。"
 - id: decks.settings.error.save_failed
   translation: "保存卡组设置失败。"
-# F9: 卡组包导入媒体校验
+# 卡组包导入媒体校验
 - id: error.package_unsafe_media
   translation: "卡组包包含不允许的媒体类型。"
-# F27: 卡组包 manifest 卡组名/描述界限
+# 卡组包 manifest 卡组名/描述界限
 - id: error.package_deck_meta_invalid
   translation: "卡组包中的卡组名称或描述不合法。"
-# F15: 卡组包导入媒体配额
+# 卡组包导入媒体配额
 - id: error.media_quota_exceeded
   translation: "导入的媒体将超出你的媒体配额。"
 # F27b: 创建/改名时的卡组名界限（与卡组包 manifest 规则同源）

@@ -57,7 +57,7 @@ func asServiceError(err error) *ServiceError {
 //
 // 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
 // 完全一致，谓词只有 store.visibleDeckIDsQuery 一份。REST 与内置 MCP
-// 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组（F5）。
+// 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组。
 func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error) {
 	decks, err := a.decks.ListVisible(ctx, userID)
 	if err != nil {
@@ -752,7 +752,7 @@ type StatsSummary struct {
 // 卡组（与 list_decks、网页列表页、复习队列同一个 store 谓词），卡组集合为空时它们为 0；
 // reviews_today / reviews_total / retention 按 user_id 保留全史——复习是本人的记录，
 // 撤销授权不追溯。因此即便一个可见卡组都没有，也必须继续聚合 reviews，不能提前返回把
-// 历史数字静默清零（F6）。
+// 历史数字静默清零。
 func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	now := a.now()
 

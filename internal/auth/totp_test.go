@@ -204,7 +204,7 @@ func mustCode(t *testing.T, secret string) string {
 }
 
 // mustNextCode 生成下一个时间步的验证码。
-// F19 之后「已被接受的时间步」不再允许第二次通过，而本用例的确认码恰好用掉了当前步，
+// 「已被接受的时间步」不再允许第二次通过，而本用例的确认码恰好用掉了当前步，
 // 因此登录验收要用一个更晚、且仍在 ±1 窗口内的新步。
 func mustNextCode(t *testing.T, secret string) string {
 	t.Helper()

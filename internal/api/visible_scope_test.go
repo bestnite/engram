@@ -78,7 +78,7 @@ func listDeckIDsViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]bool 
 	return out
 }
 
-// TestListDecksUsesVisibleScope 是 F5 的验收：REST 列表必须与网页列表页同口径
+// TestListDecksUsesVisibleScope 是对这条规则的验收：REST 列表必须与网页列表页同口径
 // ——自有 ∪ 被授权 ∪ 他人 public；未授权的 private 与任何 unlisted 都不得出现。
 func TestListDecksUsesVisibleScope(t *testing.T) {
 	f := newVisibleFixture(t)
@@ -108,7 +108,7 @@ func TestListDecksUsesVisibleScope(t *testing.T) {
 	}
 }
 
-// TestStatsVisibleContentButFullReviewHistory 是 F6 的验收：
+// TestStatsVisibleContentButFullReviewHistory 是对这条规则的验收：
 //   - notes/cards/due/decks 只算可见集合（被授权卡组计入，撤销后不再计入）；
 //   - reviews_today / reviews_total / retention 按本人历史返回，撤销授权不追溯；
 //   - 没有可见卡组的用户不得因提前 return 把历史复习数字清零。

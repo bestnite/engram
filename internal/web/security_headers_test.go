@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/frontend"
 )
 
-// 本文件是 F26 的验收：一组固定安全响应头挂在所有路由上，CSP 已从 Report-Only 切成
+// 本文件是验收用例：一组固定安全响应头挂在所有路由上，CSP 已从 Report-Only 切成
 // 强制模式。断言一律用字面量，不用被测包里的常量，避免「常量改了测试跟着改」自证。
 const (
 	wantCSPHeader      = "Content-Security-Policy"

@@ -2,7 +2,7 @@
 //
 // 它是叶子包：只依赖标准库，既不 import internal/store，也不包含 internal/media 的存储部分。
 // 这样普通上传链（internal/media）与卡组包导入链（internal/store）能共用同一份判定与白名单，
-// 既避免重复实现，也避免 store → media 的循环导入（F9）。
+// 既避免重复实现，也避免 store → media 的循环导入。
 package mediatype
 
 import (

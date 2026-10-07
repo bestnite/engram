@@ -233,7 +233,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
-	// 匿名入口限流（F13）：/register 与 /forgot-password 共用一套
+	// 匿名入口限流：/register 与 /forgot-password 共用一套
 	// 「IP 与目标邮箱各 5 次 / 15 分钟」的固定窗口计数，防匿名轰炸式发信。
 	anonLimiter := auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, nil)
 	// 媒体存储（M2-8）：本地目录 + media 元数据表；目录来自 MEDIA_DIR。

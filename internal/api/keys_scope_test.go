@@ -21,7 +21,7 @@ func keyCountFor(t *testing.T, keys *store.APIKeyStore, userID uint64) int {
 	return len(list)
 }
 
-// TestKeysEndpointRequiresKeysScope 覆盖 F11：/api/v1/keys 的门槛是第五档 keys。
+// TestKeysEndpointRequiresKeysScope 覆盖这条规则：/api/v1/keys 的门槛是第五档 keys。
 // 普通用户凭 keys scope 可以管理自己的 key（且只看得到自己的），read scope 仍被拒。
 func TestKeysEndpointRequiresKeysScope(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
@@ -62,7 +62,7 @@ func TestKeysEndpointRequiresKeysScope(t *testing.T) {
 	})
 }
 
-// TestNonAdminCannotGrantAdminScopeOverREST 覆盖 F11：非管理员在任何路径都不能创建
+// TestNonAdminCannotGrantAdminScopeOverREST 覆盖这条规则：非管理员在任何路径都不能创建
 // admin scope 的 key——即便是持有 keys scope（或修复前遗留的 admin scope key）的账号，
 // REST 也必须拒绝且不落库。只持 read 的 key 连 keys 门槛都过不了。
 func TestNonAdminCannotGrantAdminScopeOverREST(t *testing.T) {
@@ -96,7 +96,7 @@ func TestNonAdminCannotGrantAdminScopeOverREST(t *testing.T) {
 	}
 }
 
-// TestAdminCanGrantAdminScopeOverREST 覆盖 F11：管理员可创建 admin scope 的 key，
+// TestAdminCanGrantAdminScopeOverREST 覆盖这条规则：管理员可创建 admin scope 的 key，
 // 且 admin scope 蕴含 keys，能通过 /keys 的 keys 门槛。
 func TestAdminCanGrantAdminScopeOverREST(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
@@ -126,7 +126,7 @@ func TestAdminCanGrantAdminScopeOverREST(t *testing.T) {
 	}
 }
 
-// TestAdminScopeKeyLosesAdminSurfaceAfterDemotion 覆盖 F11 第 3 点：bearer 通道的
+// TestAdminScopeKeyLosesAdminSurfaceAfterDemotion 覆盖这条规则的第三点：bearer 通道的
 // admin scope 不是账号角色的替代品——账号被降级后，同一把 admin-scope key 立即失去
 // admin 面（每请求查库拿 role 的既有路径）。探针路由只要求 admin scope，代表未来的
 // 真正 admin 面。

@@ -37,7 +37,7 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 			if !ok {
 				return nil, fmt.Errorf("package entry %s must be a base64 string", name)
 			}
-			// 单条媒体同样先按上限校验再解码，避免一条超大 base64 先被整体解进内存（F14）。
+			// 单条媒体同样先按上限校验再解码，避免一条超大 base64 先被整体解进内存。
 			raw, err = decodeBase64Bounded(s, DefaultPackageLimits().MaxFileBytes)
 		}
 		if err != nil {

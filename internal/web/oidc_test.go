@@ -225,7 +225,7 @@ func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 	}
 }
 
-// TestOIDCStartRejectsWhenPendingTableFull 是 F17 的验收：未完成的 state 表达到上限后，
+// TestOIDCStartRejectsWhenPendingTableFull 是这条规则的验收：未完成的 state 表达到上限后，
 // 新的 OIDC 发起必须被拒绝（303 回登录页），而不是继续往表里堆（内存 DoS）。
 func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
 	srv, db := newAuthServer(t)

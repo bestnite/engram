@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// F17：OIDC 的待完成登录表（OIDCClient.pending）是有界性与过期淘汰的验收测试。
+// OIDC 的待完成登录表（OIDCClient.pending）是有界性与过期淘汰的验收测试。
 //
 // 该表是纯内存结构：匿名者可以反复 GET /auth/oidc/start，而只有带正确 state 的回调才会删除
 // 对应项。没有上限与淘汰时它会被堆大（内存 DoS）。这里直接对 OIDCClient 做单元测试，

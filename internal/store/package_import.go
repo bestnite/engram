@@ -50,7 +50,7 @@ func DefaultPackageLimits() PackageLimits {
 }
 
 // 卡组名与描述的长度界限由 deck.go 统一持有（创建/改名与卡组包导入共用同一来源）。
-// 这里保留 F27 的旧名，避免已经散落的引用漂移。
+// 这里保留旧的导出名，避免已经散落的引用漂移。
 const (
 	maxPackageDeckNameChars        = maxDeckNameChars
 	maxPackageDeckDescriptionChars = maxDeckDescriptionChars
@@ -128,7 +128,7 @@ type PackageImportOptions struct {
 	// MediaQuotaBytes 是导入者当前生效的每用户媒体总量配额（字节）；0 表示不限。
 	//
 	// 包内新增媒体字节（按 sha256 去重、扣除导入者已计费的 sha）计入**导入者**配额，
-	// 超限整包失败、不留部分媒体（F15）。取值由调用方从 media.ResolveUserQuotaBytes 解析后传入，
+	// 超限整包失败、不留部分媒体。取值由调用方从 media.ResolveUserQuotaBytes 解析后传入，
 	// 保证 web / REST / MCP / CLI 四条入口只有一处口径。
 	MediaQuotaBytes int64
 	// MediaRoot 是媒体字节落盘根目录；为空表示不落盘媒体（只在需要时）。
@@ -191,7 +191,7 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 		if strings.HasSuffix(name, "/") || f.FileInfo().IsDir() {
 			continue
 		}
-		// F22：同名条目（重复路径）必须拒绝。zip 允许同一名字出现多次，而这里按名字存入
+		// 同名条目（重复路径）必须拒绝。zip 允许同一名字出现多次，而这里按名字存入
 		// map——若不拦，后一个条目会静默覆盖前一个，包因此能藏一个与索引不符的覆盖层。
 		if _, dup := out[name]; dup {
 			return nil, &PackageError{Code: CodePackageBadFormat, Message: "archive contains a duplicate entry", Entries: []string{name}}
@@ -301,12 +301,12 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	}
 
 	// 媒体以真实字节为准做白名单与声明交叉校验；放在事务之前，dry_run 与真实导入同样被拒，
-	// 且任何文件都还没落盘（F9）。
+	// 且任何文件都还没落盘。
 	if err := validatePackageMedia(pkg); err != nil {
 		return nil, err
 	}
 
-	// F15：导入新增的媒体字节计入**导入者**配额，超限整包失败。检查同样放在事务与任何
+	// 导入新增的媒体字节计入**导入者**配额，超限整包失败。检查同样放在事务与任何
 	// 写盘之前，因此被拒时库里没有卡组/卡/媒体行，磁盘上也没有字节。
 	if err := checkImportMediaQuota(ctx, s.db, actorUserID, pkg, opts.MediaQuotaBytes); err != nil {
 		return nil, err
@@ -393,14 +393,14 @@ func parseJSONEntry(entries map[string][]byte, name string, out any) error {
 func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	pkg := &packageModel{Media: map[string]PackageMediaEntry{}, MediaRaw: map[string][]byte{}}
 	// manifest.json 的原始字节必须是合法 UTF-8：encoding/json 会把非法字节静默替换成
-	// U+FFFD（按文档“不是错误”），只看解码后的字符串就永远抓不到它，只能在原始字节上把关（F27）。
+	// U+FFFD（按文档“不是错误”），只看解码后的字符串就永远抓不到它，只能在原始字节上把关。
 	if raw, ok := entries["manifest.json"]; ok && !utf8.Valid(raw) {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid UTF-8 in manifest", Entries: []string{"manifest.json: invalid UTF-8"}}
 	}
 	if err := parseJSONEntry(entries, "manifest.json", &pkg.Manifest); err != nil {
 		return nil, err
 	}
-	// 卡组名/描述的长度与字符界限（F27）：在解析出 manifest 后立即校验，事务开始前拒绝整包。
+	// 卡组名/描述的长度与字符界限：在解析出 manifest 后立即校验，事务开始前拒绝整包。
 	if err := packageDeckMetaError(deckMetaErrors(pkg.Manifest.Deck.Name, pkg.Manifest.Deck.Description)); err != nil {
 		return nil, err
 	}
@@ -432,7 +432,7 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 			if unsafeZipName(entry.Path) || !strings.HasPrefix(entry.Path, "media/") {
 				return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "media path is unsafe", Entries: []string{entry.Path}}
 			}
-			// F22：文件名必须是 `<sha256>.<ext>`，否则声明的 sha 与条目名对不上（索引与内容脱钩）。
+			// 文件名必须是 `<sha256>.<ext>`，否则声明的 sha 与条目名对不上（索引与内容脱钩）。
 			base := path.Base(entry.Path)
 			if !strings.HasPrefix(base, sha+".") || len(base) <= len(sha)+1 {
 				return nil, &PackageError{Code: CodePackageBadFormat, Message: "media entry name does not match the declared sha256", Entries: []string{entry.Path}}
@@ -441,7 +441,7 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 			if !ok {
 				continue
 			}
-			// F22：声明的 sha256 必须等于字节的真实 sha256，挡住"假 sha"（声明与内容不符）。
+			// 声明的 sha256 必须等于字节的真实 sha256，挡住"假 sha"（声明与内容不符）。
 			// 这一校验在任何落盘/写库之前完成，因此被拒的包零副作用。
 			sum := sha256.Sum256(raw)
 			if hex.EncodeToString(sum[:]) != sha {
@@ -673,7 +673,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 			continue
 		}
 		// 落库的 mime 以字节判定为准（validatePackageMedia 已确认它是白名单类型）；
-		// media.json 的声明只作交叉校验，绝不当真写进 media 表（F9）。
+		// media.json 的声明只作交叉校验，绝不当真写进 media 表。
 		detected, _, _ := mediatype.Detect(headBytes(raw))
 		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, detected, raw, Ptr(actorUserID))
 		if abs != "" {
@@ -720,7 +720,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 			name = "Imported deck"
 		}
 		// 覆盖值（opts.NewDeckName）可能与 manifest 不同：界限对最终写进 decks.name 的那个值同样生效，
-		// 否则调用方能用覆盖绕开 manifest 校验（F27）。
+		// 否则调用方能用覆盖绕开 manifest 校验。
 		if err := packageDeckMetaError(textFieldErrors("deck.name", name, maxPackageDeckNameChars)); err != nil {
 			return 0, err
 		}

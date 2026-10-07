@@ -40,7 +40,7 @@ const (
 	// CodePackageUnsafeMedia 表示包内媒体的真实字节不在白名单内，或与 media.json 的声明不符；逐条列出。
 	CodePackageUnsafeMedia = "package_unsafe_media"
 	// CodePackageDeckMetaInvalid 表示 manifest 的卡组名/描述越过界限（长度、控制字符或非法 UTF-8）；
-	// 逐条列出出错的字段与原因（F27）。
+	// 逐条列出出错的字段与原因。
 	CodePackageDeckMetaInvalid = "package_deck_meta_invalid"
 	// CodePackageQuotaExceeded 表示导入新增媒体会超出导入者配额；沿用上传链的稳定 code
 	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。

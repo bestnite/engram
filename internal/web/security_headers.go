@@ -67,7 +67,7 @@ var cspPolicy = "default-src 'self'; " +
 
 // securityHeaders 给每个响应统一加五组安全头。挂全局中间件，因此 /media、/api/v1、/mcp、
 // 静态资源与 404 回退都覆盖到；静态资源本就自托管（'self'），同一份策略无需特例放宽。
-// CSP 是强制头：命中违规即阻断（F26 已从 Report-Only 切换）。
+// CSP 是强制头：命中违规即阻断（已从 Report-Only 切换）。
 func securityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.Writer.Header()

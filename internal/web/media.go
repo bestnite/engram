@@ -244,7 +244,7 @@ var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存。
 //
-// 鉴权（F2）：登录之外还要「有卡组访问权」——判定三选一：① media_uploaders 里存在指向我的
+// 鉴权：登录之外还要「有卡组访问权」——判定三选一：① media_uploaders 里存在指向我的
 // 记录（我提供过这份字节，去重命中也算）；② media_notes 映射里存在指向我可见卡组内、未软删的
 // note；③（L3）映射指向我当前会话经分享链接打开过、且授权未过期的卡组内、未软删的 note。
 // 谓词与列表/队列/统计同源（store.MediaAccessibleToUser → mediaReadableByUser），
@@ -292,7 +292,7 @@ func (s *Server) mediaServe(c *gin.Context) {
 	etag := `"` + m.Sha256 + `"`
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "private, max-age=31536000, immutable")
-	// 读侧兼容库里可能存在的历史污染行（F9）：只有字节判定白名单内的类型才按声明内联，
+	// 读侧兼容库里可能存在的历史污染行：只有字节判定白名单内的类型才按声明内联，
 	// 其余（如被旧导入链写入的 text/html、image/svg+xml）一律降级为下载，避免同源存储型 XSS。
 	contentType := m.Mime
 	if !mediatype.Allowed(m.Mime, mediatype.DefaultAllowedMimes()) {

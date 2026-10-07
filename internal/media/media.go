@@ -90,7 +90,7 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 }
 
 // DefaultAllowedMimes 是默认白名单；判定实现已抽到叶子包 mediatype，
-// 这里保留同名入口，避免改动大量调用点（F9）。
+// 这里保留同名入口，避免改动大量调用点。
 func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
 // 每用户媒体总量配额（M2-13）的 settings 键与环境变量覆盖名。

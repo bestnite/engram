@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// MediaAccessibleToUser 判定 sha256 为 mediaSha 的媒体是否可被 userID 读取（F2 的读取鉴权口径）。
+// MediaAccessibleToUser 判定 sha256 为 mediaSha 的媒体是否可被 userID 读取（读取鉴权口径）。
 //
 // sessionID 是发起请求的服务端会话 id（L3）：非空时额外放行「该会话通过分享链接
 // 打开过、且授权未过期」的卡组里的引用。会话 id 由 web 层从请求上下文取出后显式传入，不用包级全局、

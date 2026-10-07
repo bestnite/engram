@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// F15：卡组包导入新增的媒体字节必须计入**导入者**配额，超限整包失败、零残留。
+// 卡组包导入新增的媒体字节必须计入**导入者**配额，超限整包失败、零残留。
 //
 // 修前 ImportPackage 完全不看配额：只要包能解开、媒体在白名单内，字节就落盘。上传链
 // （internal/web 的 checkMediaQuota）挡在 /media 与 /decks/:id/media 两个入口，而
@@ -28,7 +28,7 @@ func quotaImportFixture(t *testing.T, src *gorm.DB) (raw []byte, sha string, siz
 	return raw, sha, len(body)
 }
 
-// TestImportPackageMediaQuotaRejectsAndLeavesNoTrace 是 F15 的核心负例：新增媒体会超出导入者
+// TestImportPackageMediaQuotaRejectsAndLeavesNoTrace 是核心负例：新增媒体会超出导入者
 // 配额时整包被拒，且库里没有任何行、磁盘上没有残留文件。
 func TestImportPackageMediaQuotaRejectsAndLeavesNoTrace(t *testing.T) {
 	srcs := packageDatabases(t)

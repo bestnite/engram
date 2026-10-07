@@ -30,7 +30,7 @@ func fetchShareHTML(t *testing.T, srv *Server, deckID uint64, ownerCookies []*ht
 	return body.Notes[0].FrontHTML, body.Notes[0].BackHTML
 }
 
-// TestShareBrowseRendersSanitizedCardHTML 锁定 F21：分享内容把卡面正文当已清洗 HTML 注入，
+// TestShareBrowseRendersSanitizedCardHTML 锁定这条规则：分享内容把卡面正文当已清洗 HTML 注入，
 // 用户看到 <span> 而不是 &lt;span&gt;。它复用复习页同一套 internal/render.RenderMarkdown。
 func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
@@ -54,13 +54,13 @@ func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	}
 }
 
-// TestShareBrowseSanitizesUnsafeCardHTML 是 F21 的安全负例端到端：
-// 同一张卡的字段里放脚本、事件属性与 F8 的公式绕过样本，分享与复习两条通道都不得出现可执行形式，
+// TestShareBrowseSanitizesUnsafeCardHTML 是安全负例端到端：
+// 同一张卡的字段里放脚本、事件属性与公式绕过样本，分享与复习两条通道都不得出现可执行形式，
 // 且两条通道渲染出的正文 HTML 完全一致。
 //
 // 清洗本身由 internal/render 的用例穷尽覆盖：
 //   - TestRenderMarkdownStripsUnsafe（script / onerror / javascript: URL）
-//   - TestRenderMarkdownNeutralizesMathAttributeEscape（F8：公式还原后的属性逃逸）
+//   - TestRenderMarkdownNeutralizesMathAttributeEscape（公式还原后的属性逃逸）
 func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Unsafe deck")

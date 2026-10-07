@@ -81,7 +81,7 @@ func newMcpWebServer(t *testing.T) (*Server, *auth.AccountService) {
 	return srv, accounts
 }
 
-// TestMcpEndpointRejectsSessionCookie 覆盖 F10 规则 1：带有效会话 cookie、不带 API key
+// TestMcpEndpointRejectsSessionCookie 覆盖规则 1：带有效会话 cookie、不带 API key
 // 访问 /mcp 必须 401，且不得建立会话。
 func TestMcpEndpointRejectsSessionCookie(t *testing.T) {
 	srv, accounts := newMcpWebServer(t)

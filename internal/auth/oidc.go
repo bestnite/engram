@@ -58,7 +58,7 @@ const (
 // ErrOIDCDisabled 表示 OIDC 未启用或配置不完整；transport 层据此把相关路由置为不可用。
 var ErrOIDCDisabled = errors.New("oidc is not configured")
 
-// OIDC 待完成登录表（pending）的内存上限与过期淘汰（F17）。
+// OIDC 待完成登录表（pending）的内存上限与过期淘汰。
 //
 // 匿名者可以反复 GET /auth/oidc/start，而只有携带正确 state 的回调才会删除对应项：
 // 没有上限与淘汰时这个 map 会被堆大，是一条内存 DoS 路径。

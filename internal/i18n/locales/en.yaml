@@ -2177,13 +2177,13 @@ It renders with sample variables; real recipients see their own data."
   translation: "Each limit must be an integer of 0 or greater; 0 means unlimited."
 - id: decks.settings.error.save_failed
   translation: "Could not save the deck settings."
-# F9: deck package import media validation
+# deck package import media validation
 - id: error.package_unsafe_media
   translation: "The package contains media of a disallowed type."
-# F27: deck package manifest deck name/description limits
+# deck package manifest deck name/description limits
 - id: error.package_deck_meta_invalid
   translation: "The deck name or description in the package is invalid."
-# F15: deck package import media quota
+# deck package import media quota
 - id: error.media_quota_exceeded
   translation: "The imported media would exceed your media quota."
 # F27b: deck name limit on create/rename (shared with the package manifest rule)

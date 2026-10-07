@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// F9 读侧兜底：库里可能已存在被旧导入链写入的污染行（mime=text/html、image/svg+xml …）。
+// 读侧兜底：库里可能已存在被旧导入链写入的污染行（mime=text/html、image/svg+xml …）。
 // mediaServe 绝不能把这类 mime 原样回成 Content-Type，必须降级为下载/八位流，并带 nosniff。
 
 // TestMediaServeNeutralisesPollutedMime 直接造一行 mime=text/html 的 media 记录与磁盘字节，
@@ -36,7 +36,7 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 		t.Fatalf("write media file: %v", err)
 	}
 	// owner 提供过这份字节：登记 media_uploaders（读取鉴权靠归属，不再看 media.created_by）。
-	// 本用例只关心 mime 兜底，读取鉴权（F2）由此放行。
+	// 本用例只关心 mime 兜底，读取鉴权由此放行。
 	row := store.Media{Sha256: sha, RelPath: rel, Mime: "text/html", Bytes: int64(len(body)), CreatedBy: store.Ptr(ownerID), CreatedAt: time.Now().UTC()}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed polluted media row: %v", err)

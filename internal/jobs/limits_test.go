@@ -1,7 +1,7 @@
 //go:build unix
 
 // 只在 Unix 上编译：复用 jobs_test.go / optimizer_wiring_test.go 里 unix-only 的测试脚手架
-// （newWiringDB、okBuilder 等）。本文件覆盖 F23 的两个健壮性缺陷：MarkRunning 失败必须把作业
+// （newWiringDB、okBuilder 等）。本文件覆盖两个健壮性缺陷：MarkRunning 失败必须把作业
 // 标成 failed（而不是留在 queued 阻塞队列），以及适配器权重文件的读取必须有尺寸上限。
 
 package jobs
@@ -65,7 +65,7 @@ func runJobWithFailingMarkRunning(t *testing.T) (*Runner, *Store, uint64) {
 	return runner, st, job.ID
 }
 
-// TestMarkRunningFailureMarksJobFailed 覆盖 F23 缺陷 1 的落库部分：MarkRunning 失败时作业必须
+// TestMarkRunningFailureMarksJobFailed 覆盖第一个缺陷的落库部分：MarkRunning 失败时作业必须
 // 进入 failed 终态，并带上点名原因的英文错误文本；修前它只记日志就 return，作业停在 queued。
 func TestMarkRunningFailureMarksJobFailed(t *testing.T) {
 	_, st, id := runJobWithFailingMarkRunning(t)
@@ -89,7 +89,7 @@ func TestMarkRunningFailureMarksJobFailed(t *testing.T) {
 	t.Logf("job %d -> status=%s error=%q finished=%v", id, got.Status, *got.Error, got.FinishedAt != nil)
 }
 
-// TestMarkRunningFailureUnblocksQueue 覆盖 F23 缺陷 1 的阻塞部分：MarkRunning 失败留下的
+// TestMarkRunningFailureUnblocksQueue 覆盖第一个缺陷的阻塞部分：MarkRunning 失败留下的
 // queued 行会被 Store.Active 当作在途作业，让后续 Enqueue 永久 409。修后该行已 failed，
 // 新作业必须能入队。修前 Enqueue 返回 ErrAlreadyRunning（HTTP 409）。
 func TestMarkRunningFailureUnblocksQueue(t *testing.T) {
@@ -158,7 +158,7 @@ func newCompleteTestOptimizer(t *testing.T, job *store.Job) *Optimizer {
 	return opt
 }
 
-// TestCompleteRejectsOversizedWeights 覆盖 F23 缺陷 2：适配器写出的 weights.json 超过上限时，
+// TestCompleteRejectsOversizedWeights 覆盖第二个缺陷：适配器写出的 weights.json 超过上限时，
 // Complete 必须报错（点名上限），而不能把整个文件读进内存。文件是合法 JSON，所以修前会被
 // 整体读取并成功解码——红灯正是「无尺寸上限」本身。
 func TestCompleteRejectsOversizedWeights(t *testing.T) {

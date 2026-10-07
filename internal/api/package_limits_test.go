@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// F14：REST 导入入口的请求体上限验收。上限来源与 Web 上传一致（管理员配置的
+// REST 导入入口的请求体上限验收。上限来源与 Web 上传一致（管理员配置的
 // media_max_bytes），且必须在解析 multipart 之前生效，超限稳定 413。
 
 // multipartBody 构造一个只含 file 字段的 multipart 请求体与其 Content-Type。
@@ -72,7 +72,7 @@ func minimalPackageZip(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// TestImportPackageRejectsOversizedBody 是 F14 的核心负例：把 media_max_bytes 设为 256 字节，
+// TestImportPackageRejectsOversizedBody 是核心负例：把 media_max_bytes 设为 256 字节，
 // 一个 4 KiB 的 multipart 体必须在解析前被拒（413，code package_too_large）。
 //
 // 修前：handler 先 FormFile，gin 把 4 KiB 的 part 全读进内存后才处理，于是得到 400

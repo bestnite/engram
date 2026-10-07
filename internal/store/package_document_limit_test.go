@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// F14：MCP/CLI 的 base64 归档入口在解码前先按「归档上限对应的展开上界」拒绝超限输入，
+// MCP/CLI 的 base64 归档入口在解码前先按「归档上限对应的展开上界」拒绝超限输入，
 // 绝不对超限串做整体解码。
 
 // TestPackageReaderRejectsOversizedBase64BeforeDecoding 断言超限的 base64 串在解码前被拒。

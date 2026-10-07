@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// legacyUserTOTP 是 F19 之前的 user_totp 形态（没有 last_used_step）。
+// legacyUserTOTP 是 user_totp 的旧形态（没有 last_used_step）。
 // 用它建表可以忠实模拟「已有数据的旧库」，验证 AutoMigrate 只加列、不重建、不丢行。
 type legacyUserTOTP struct {
 	UserID           uint64 `gorm:"primaryKey;column:user_id"`
@@ -22,7 +22,7 @@ type legacyUserTOTP struct {
 
 func (legacyUserTOTP) TableName() string { return "user_totp" }
 
-// TestAutoMigrateAddsTOTPStepToExistingRows 断言 F19 新增的可空列能加在已有数据的库上：
+// TestAutoMigrateAddsTOTPStepToExistingRows 断言新增的可空列能加在已有数据的库上：
 // 旧行保留、新列为 NULL（= 尚未接受过任何验证码），并且随后可用 AcceptStep 前移。
 func TestAutoMigrateAddsTOTPStepToExistingRows(t *testing.T) {
 	ctx := context.Background()

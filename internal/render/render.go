@@ -65,7 +65,7 @@ func RenderMarkdown(src string) (string, error) {
 	// 反斜杠与花括号保持不变，MathJax 才能读到原始 TeX。
 	restored := restoreMath(string(clean), spans)
 
-	// F8：还原必须再过一次同一白名单。
+	// 还原必须再过一次同一白名单。
 	//
 	// 占位符是在清洗之前插入的，goldmark 可能把它放进属性值位置（链接目标、
 	// 图片 alt、raw HTML 的 class/href）。第一遍 bluemonday 校验的是纯字母数字的

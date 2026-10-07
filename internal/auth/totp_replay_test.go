@@ -9,7 +9,7 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-// 本文件是 F19（TOTP 时间步防重放）的验收用例。约定：
+// 本文件是 TOTP 时间步防重放的验收用例。约定：
 // 每用户记录已接受的最大时间步，窗口内同一码不得二次通过。
 //
 // 时间用固定时间步而不是真实时钟：验证码按步生成、步与步之间只差 30 秒，
@@ -48,7 +48,7 @@ func enabledAt(t *testing.T, svc *TOTPService, userID uint64, username string, s
 func at(svc *TOTPService, step int64) { svc.now = func() time.Time { return stepStart(step) } }
 
 // TestTOTPRejectsReplayWithinSameStep 断言：同一步的同一个码只能用一次。
-// 这是 F19 的核心回归——修复前窗口内被观测到的码可无限重放。
+// 这是核心回归——修复前窗口内被观测到的码可无限重放。
 func TestTOTPRejectsReplayWithinSameStep(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-replay-same")
