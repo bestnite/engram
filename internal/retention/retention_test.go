@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -19,8 +21,10 @@ type fixture struct {
 	sessions     *store.SessionStore
 	tokens       *store.ActionTokenStore
 	invites      *store.InviteStore
+	shareInvites *store.DeckShareInviteStore
 	fingerprints *store.LoginFingerprintStore
 	logs         *bytes.Buffer
+	db           *gorm.DB
 }
 
 func newFixture(t *testing.T) fixture {
@@ -36,8 +40,10 @@ func newFixture(t *testing.T) fixture {
 		sessions:     store.NewSessionStore(db),
 		tokens:       store.NewActionTokenStore(db),
 		invites:      store.NewInviteStore(db),
+		shareInvites: store.NewDeckShareInviteStore(db),
 		fingerprints: store.NewLoginFingerprintStore(db),
 		logs:         &bytes.Buffer{},
+		db:           db,
 	}
 }
 
@@ -47,6 +53,7 @@ func (f fixture) deps() Deps {
 		Sessions:     f.sessions,
 		ActionTokens: f.tokens,
 		Invites:      f.invites,
+		ShareInvites: f.shareInvites,
 		Fingerprints: f.fingerprints,
 		Logger:       slog.New(slog.NewTextHandler(f.logs, nil)),
 		Interval:     time.Hour,
@@ -152,6 +159,10 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Fatalf("create invite: %v", err)
 	}
 
+	// 卡组共享邀请：到期即删（未到期的必须留下——它还是「待接受」）。
+	seedShareInvite(t, f, 7, 11, -time.Hour) // 已过期，该删
+	seedShareInvite(t, f, 8, 12, time.Hour)  // 还有一小时，留下
+
 	// 登录指纹：最后出现超过 FingerprintRetention 才删。
 	if _, err := f.fingerprints.Touch(ctx, 1, "stale-device", time.Now().Add(-FingerprintRetention-time.Hour)); err != nil {
 		t.Fatalf("touch stale-device: %v", err)
@@ -161,6 +172,14 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 	}
 
 	f.sweepOnce(t)
+
+	// 卡组共享邀请：过期的没了，未到期的还在（读路径也判过期，这里验的是回收真的删了）。
+	if _, err := f.shareInvites.ByDeckAndUser(ctx, 7, 11); !errors.Is(err, store.ErrShareInviteNotFound) {
+		t.Errorf("expired deck share invite should be gone, got err = %v", err)
+	}
+	if _, err := f.shareInvites.ByDeckAndUser(ctx, 8, 12); err != nil {
+		t.Errorf("live deck share invite must survive: %v", err)
+	}
 
 	// 会话：过期的没了，有效还在。
 	if _, err := f.sessions.ByID(ctx, "session-expired"); err == nil {
@@ -253,22 +272,38 @@ func TestNewRequiresEveryStore(t *testing.T) {
 	f := newFixture(t)
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	base := Deps{
-		Sessions: f.sessions, ActionTokens: f.tokens, Invites: f.invites, Fingerprints: f.fingerprints, Logger: logger,
+		Sessions: f.sessions, ActionTokens: f.tokens, Invites: f.invites,
+		ShareInvites: f.shareInvites, Fingerprints: f.fingerprints, Logger: logger,
 	}
 	if _, err := New(base); err != nil {
 		t.Fatalf("New() with all deps error = %v", err)
 	}
 	for name, mutate := range map[string]func(*Deps){
-		"sessions":     func(d *Deps) { d.Sessions = nil },
-		"tokens":       func(d *Deps) { d.ActionTokens = nil },
-		"invites":      func(d *Deps) { d.Invites = nil },
-		"fingerprints": func(d *Deps) { d.Fingerprints = nil },
-		"logger":       func(d *Deps) { d.Logger = nil },
+		"sessions":      func(d *Deps) { d.Sessions = nil },
+		"tokens":        func(d *Deps) { d.ActionTokens = nil },
+		"invites":       func(d *Deps) { d.Invites = nil },
+		"share_invites": func(d *Deps) { d.ShareInvites = nil },
+		"fingerprints":  func(d *Deps) { d.Fingerprints = nil },
+		"logger":        func(d *Deps) { d.Logger = nil },
 	} {
 		d := base
 		mutate(&d)
 		if _, err := New(d); err == nil {
 			t.Errorf("New() without %s should fail", name)
 		}
+	}
+}
+
+// seedShareInvite 直接写一条卡组共享邀请：本用例只验回收窗口，不需要真的建卡组与用户
+// （这两列没有外键约束，id 用任意值即可）。
+func seedShareInvite(t *testing.T, f fixture, deckID, userID uint64, ttl time.Duration) {
+	t.Helper()
+	now := time.Now().UTC()
+	err := f.shareInvites.Invite(context.Background(), store.DeckShareInvite{
+		DeckID: deckID, UserID: userID, Role: store.RoleReader, InvitedBy: 1,
+		CreatedAt: now, ExpiresAt: now.Add(ttl),
+	})
+	if err != nil {
+		t.Fatalf("seed share invite: %v", err)
 	}
 }

@@ -316,6 +316,10 @@ func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) erro
 		if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
 			return fmt.Errorf("delete share_links: %w", err)
 		}
+		// 待接受的邀请也要清：卡组没了，那条邀请点开只会 404。
+		if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
+			return fmt.Errorf("delete deck_share_invites: %w", err)
+		}
 		if err := tx.Exec("DELETE FROM share_session_decks WHERE deck_id = ?", deckID).Error; err != nil {
 			return fmt.Errorf("delete share_session_decks: %w", err)
 		}

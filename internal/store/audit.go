@@ -54,6 +54,11 @@ const (
 	ActionDeckGrant      = "deck.grant"
 	ActionDeckRoleChange = "deck.role_change"
 	ActionDeckRevoke     = "deck.revoke"
+	// L3 分享同意制：邀请、接受、拒绝各一条，以及用户改自己的接收策略。
+	ActionDeckShareInvite   = "deck.share_invite"
+	ActionDeckShareAccept   = "deck.share_accept"
+	ActionDeckShareReject   = "deck.share_reject"
+	ActionSharePolicyUpdate = "share.policy_update"
 	// M5-4 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
 	ActionDeckClone = "deck.clone"
 	// M5-3 分享链接：创建 / 单个撤销 / 一次撤销全部。

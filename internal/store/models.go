@@ -32,9 +32,12 @@ type User struct {
 	// 回落到全局默认 reminder.DefaultSendHour。必须是可空指针：0 是合法值（午夜），用普通
 	// int 加默认值会分不清「未设置」与「午夜」，且 GORM 会把零值当成未提供（AGENTS.md §2.3 第 9 条
 	// 记的是同一个坑：带 default 标签的列，零值字段会被数据库默认覆盖）。
-	ReminderHour *int       `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
-	CreatedAt    time.Time  `gorm:"not null" json:"created_at"`
-	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
+	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
+	// ShareAcceptFrom 是「谁可以把卡组分享给我」：anyone | whitelist | nobody。
+	// NULL 按 anyone 处理（与上线前的行为一致：那时所有人都能被分享）。
+	ShareAcceptFrom *string    `gorm:"column:share_accept_from" json:"share_accept_from,omitempty"`
+	CreatedAt       time.Time  `gorm:"not null" json:"created_at"`
+	LastSeenAt      *time.Time `json:"last_seen_at,omitempty"`
 }
 
 // TableName 固定表名，避免复数化规则在不同 GORM 版本下漂移。
@@ -383,6 +386,8 @@ func AllModels() []any {
 		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
 		// 管理员自定义邮件模板（DESIGN.md §4.7）：缺失即回退内置正文。
 		&MailTemplate{},
+		// L3 分享同意制：待接受的邀请与接收白名单。
+		&DeckShareInvite{}, &ShareAllow{},
 	}
 }
 
@@ -402,3 +407,46 @@ type MailTemplate struct {
 }
 
 func (MailTemplate) TableName() string { return "mail_templates" }
+
+// DeckShareInvite 是「已发出、还没被接受」的卡组共享邀请（DESIGN.md §4.4）。
+//
+// 同意制的落地方式：**授权（deck_grants）只在被邀请者接受时才写**，而可见集合谓词读的正是
+// deck_grants——所以待接受的邀请不进任何可见集合，队列、统计、回溯、媒体鉴权全都不用改。
+// 这是选「新表」而不是「给 deck_grants 加状态列」的唯一理由。
+//
+// 同一 (卡组, 用户) 只有一行：重复邀请是刷新那一行的角色与有效期，不叠加。
+type DeckShareInvite struct {
+	DeckID    uint64    `gorm:"primaryKey" json:"deck_id"`
+	UserID    uint64    `gorm:"primaryKey" json:"user_id"`
+	Role      string    `gorm:"not null" json:"role"`
+	InvitedBy uint64    `gorm:"not null" json:"invited_by"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+	// ExpiresAt 之后邀请作废（到期行由 internal/retention 每小时回收）。
+	ExpiresAt time.Time `gorm:"not null;index" json:"expires_at"`
+}
+
+func (DeckShareInvite) TableName() string { return "deck_share_invites" }
+
+// ShareAcceptPolicy 是一个用户对「别人可以把卡组分享给我吗」的答复。
+//
+// 三档而不是「白名单布尔」：拒绝所有人是最常见的诉求（不想被任何人拉进来），把它表达成
+// 「白名单为空」会与「白名单还没配」混为一谈。
+type ShareAcceptPolicy string
+
+const (
+	// ShareAcceptAnyone 是默认：任何人都可以邀请我。
+	ShareAcceptAnyone ShareAcceptPolicy = "anyone"
+	// ShareAcceptWhitelist 只接受 share_allow 里列出的人。
+	ShareAcceptWhitelist ShareAcceptPolicy = "whitelist"
+	// ShareAcceptNobody 拒绝所有分享邀请。
+	ShareAcceptNobody ShareAcceptPolicy = "nobody"
+)
+
+// ShareAllow 是一行「from 可以把卡组分享给 to」的许可（由 to 自己配置）。
+type ShareAllow struct {
+	FromUserID uint64    `gorm:"primaryKey" json:"from_user_id"`
+	ToUserID   uint64    `gorm:"primaryKey" json:"to_user_id"`
+	CreatedAt  time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (ShareAllow) TableName() string { return "share_allow" }

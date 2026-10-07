@@ -1650,13 +1650,13 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.role.editor
   translation: "editable"
 - id: mail.deck_shared.subject
-  translation: "{{.inviter}} shared a deck with you - {{.site}}"
+  translation: "{{.inviter}} invited you to a deck ({{.deck}}) - {{.site}}"
 - id: mail.deck_shared.greeting
   translation: "Hello,"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} shared the deck {{.deck}} with you as {{.role}}."
+  translation: "{{.inviter}} invited you to use the deck {{.deck}} as {{.role}}. Accept or decline it on your decks page; nothing changes if you decline."
 - id: mail.deck_shared.link_label
-  translation: "Open the deck:"
+  translation: "Open my decks:"
 - id: mail.deck_permission.subject
   translation: "Your deck access changed - {{.site}}"
 - id: mail.deck_permission.greeting

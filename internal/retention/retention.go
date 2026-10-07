@@ -14,6 +14,7 @@
 //   - 令牌（验证/重置/退订）：到期后再留 ActionTokenGrace，方便排查「链接失效」类反馈。
 //   - 邀请：到期即删；expires_at 为 NULL 的邀请永不过期，绝不删。
 //   - 登录指纹：最后出现后再留 FingerprintRetention——删早了会把老设备误判成新设备并触发提醒。
+//   - 卡组共享邀请：到期即删（读路径也判过期，删掉只是让表不再增长）。
 //
 // **API key 刻意不自动删**：它是用户可见、可自行删除的资产，且数量与用户数同阶（不是增长源）；
 // 自动删掉一张「已过期但还在列表里」的 key 属于替用户做决定。
@@ -51,11 +52,12 @@ type StalePurger interface {
 	DeleteStale(ctx context.Context, before time.Time) (int64, error)
 }
 
-// Deps 是 New 的构造参数；四类存储都必填（缺一项就少回收一类，属于装配错误，早失败更好）。
+// Deps 是 New 的构造参数；五类存储都必填（缺一项就少回收一类，属于装配错误，早失败更好）。
 type Deps struct {
 	Sessions     Expirer
 	ActionTokens Expirer
 	Invites      Expirer
+	ShareInvites Expirer
 	Fingerprints StalePurger
 	Logger       *slog.Logger
 	// Interval 是回收间隔；<=0 时用 DefaultInterval。
@@ -71,6 +73,8 @@ func New(deps Deps) (*worker.Lifecycle, error) {
 		return nil, errors.New("retention: Deps.ActionTokens is required")
 	case deps.Invites == nil:
 		return nil, errors.New("retention: Deps.Invites is required")
+	case deps.ShareInvites == nil:
+		return nil, errors.New("retention: Deps.ShareInvites is required")
 	case deps.Fingerprints == nil:
 		return nil, errors.New("retention: Deps.Fingerprints is required")
 	case deps.Logger == nil:
@@ -102,6 +106,7 @@ func sweep(ctx context.Context, deps Deps) error {
 		{"sessions", now, deps.Sessions.DeleteExpired},
 		{"action_tokens", now.Add(-ActionTokenGrace), deps.ActionTokens.DeleteExpired},
 		{"invites", now, deps.Invites.DeleteExpired},
+		{"deck_share_invites", now, deps.ShareInvites.DeleteExpired},
 		{"login_fingerprints", now.Add(-FingerprintRetention), deps.Fingerprints.DeleteStale},
 	}
 

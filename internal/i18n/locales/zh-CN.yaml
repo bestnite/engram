@@ -1648,13 +1648,13 @@
 - id: mail.role.editor
   translation: "可编辑"
 - id: mail.deck_shared.subject
-  translation: "{{.inviter}} 把卡组分享给你 - {{.site}}"
+  translation: "{{.inviter}} 邀请你使用卡组 {{.deck}} - {{.site}}"
 - id: mail.deck_shared.greeting
   translation: "你好，"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} 把卡组「{{.deck}}」分享给了你，你的权限是 {{.role}}。"
+  translation: "{{.inviter}} 邀请你以 {{.role}} 的身份使用卡组「{{.deck}}」。到「我的卡组」页面接受或拒绝即可——不接受不会有任何变化。"
 - id: mail.deck_shared.link_label
-  translation: "打开卡组："
+  translation: "打开我的卡组："
 - id: mail.deck_permission.subject
   translation: "你的卡组权限有变更 - {{.site}}"
 - id: mail.deck_permission.greeting

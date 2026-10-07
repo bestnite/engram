@@ -62,8 +62,9 @@ func TestSPASharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, nonOwnerCookies, nonOwnerCSRF); got.Code != http.StatusForbidden {
 		t.Fatalf("non-owner write = %d, want 403", got.Code)
 	}
-	if n, err := store.NewAuditStore(db).CountByAction(t.Context(), store.ActionDeckGrant); err != nil || n < 1 {
-		t.Fatalf("grant audit count=(%d,%v)", n, err)
+	// 同意制：共享写路径落的是**邀请**审计（授权要等对方接受时才写）。
+	if n, err := store.NewAuditStore(db).CountByAction(t.Context(), store.ActionDeckShareInvite); err != nil || n < 1 {
+		t.Fatalf("share invite audit count=(%d,%v)", n, err)
 	}
 }
 

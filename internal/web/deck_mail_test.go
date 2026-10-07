@@ -28,17 +28,18 @@ func newGrantee(t *testing.T, srv *Server, name, email string) *store.User {
 	return u
 }
 
-// TestDeckGrantMailNotifiesTheGrantee 覆盖分享→改造→撤销三步的通知类型与收件人。
+// TestDeckGrantMailNotifiesTheGrantee 覆盖邀请→接受→改造→撤销四步的通知类型与收件人。
 func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Shared deck")
 	sender := startInviteMail(t, srv, db)
-	grantee := newGrantee(t, srv, "grantee", "grantee@example.com")
+	granteeID, granteeCookies, granteeCSRF := createUserAndLogin(t, srv, db, "grantee")
+	granteeEmail := "grantee@example.com"
 	base := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
 
 	// ① 分享：给被授权者发 deck_shared，且写清卡组名与分享人。
 	rec := jsonRequest(t, srv, http.MethodPost, base,
-		`{"user_id":`+u64str(grantee.ID)+`,"role":"reader"}`, cookies, csrf)
+		`{"user_id":`+u64str(granteeID)+`,"role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("POST grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -47,8 +48,8 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	if first.Type != string(mail.TypeDeckShared) {
 		t.Errorf("mail type = %q, want %q", first.Type, mail.TypeDeckShared)
 	}
-	if first.To != grantee.Email {
-		t.Errorf("mail to = %q, want the grantee %q", first.To, grantee.Email)
+	if first.To != granteeEmail {
+		t.Errorf("mail to = %q, want the grantee %q", first.To, granteeEmail)
 	}
 	if !strings.Contains(first.TextBody, "Shared deck") {
 		t.Errorf("text body = %q, want the deck name", first.TextBody)
@@ -58,8 +59,18 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 		t.Errorf("headers = %v, want List-Unsubscribe for a class B mail", first.Headers)
 	}
 
-	// ② 改角色：deck_permission_changed，而不是再发一次「分享给你」。
-	rec = jsonRequest(t, srv, http.MethodPatch, base+"/"+u64str(grantee.ID),
+	// ② 被邀请者接受（同意制）：这一步之后他才是真的成员，后面的改角色才是「改角色」。
+	if rec := jsonRequest(t, srv, http.MethodPost,
+		"/api/v1/sharing/invites/"+u64str(deck.ID)+"/accept", "", granteeCookies, granteeCSRF); rec.Code != http.StatusOK {
+		t.Fatalf("accept invite = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	// 接受本身不发信（邀请信已经发过了），所以这里仍只有 1 封。
+	if got := len(sender.messages()); got != 1 {
+		t.Errorf("delivered %d messages after acceptance, want 1 (acceptance itself must not mail)", got)
+	}
+
+	// ③ 改角色：deck_permission_changed，而不是再发一次「分享给你」。
+	rec = jsonRequest(t, srv, http.MethodPatch, base+"/"+u64str(granteeID),
 		`{"role":"editor"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("PATCH grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -69,8 +80,8 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 		t.Errorf("second mail type = %q, want %q", msgs[1].Type, mail.TypeDeckPermissionChanged)
 	}
 
-	// ③ 撤销：仍是 permission_changed，正文要说「被取消」而不是「改成了空」。
-	rec = jsonRequest(t, srv, http.MethodDelete, base+"/"+u64str(grantee.ID), "", cookies, csrf)
+	// ④ 撤销：仍是 permission_changed，正文要说「被取消」而不是「改成了空」。
+	rec = jsonRequest(t, srv, http.MethodDelete, base+"/"+u64str(granteeID), "", cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("DELETE grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -106,9 +117,9 @@ func TestDeckGrantMailHonorsPreference(t *testing.T) {
 	if got := len(sender.messages()); got != 0 {
 		t.Errorf("delivered %d messages, want 0 (recipient opted out)", got)
 	}
-	// 共享本身必须照常生效：通知只是副作用。
-	if role, err := store.NewGrantStore(db).Role(context.Background(), deck.ID, grantee.ID); err != nil || role == "" {
-		t.Errorf("grant role = %q (err %v), want the share to be applied", role, err)
+	// 分享本身必须照常生效：通知只是副作用。同意制下这一步的产物是**邀请**（授权等对方接受）。
+	if _, err := store.NewDeckShareInviteStore(db).ByDeckAndUser(context.Background(), deck.ID, grantee.ID); err != nil {
+		t.Errorf("invite missing after the share: %v", err)
 	}
 }
 

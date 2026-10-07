@@ -35,30 +35,38 @@ func grantsJSONPath(deckID uint64) string {
 	return "/api/v1/decks/" + u64str(deckID) + "/sharing/grants"
 }
 
-// TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest 是 M5-2 的主验收：
-// owner 授权后对方马上能访问；撤销后对方下一次请求立即被拒；并各写一行审计。
-// 授权写路径走 SPA 的 JSON 端点（SSR 共享表单入口已删除）。
-func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.T) {
+// TestSharingGrantInvitesThenAcceptanceGivesAccess 是 M5-2 的主验收，语义是**同意制**
+// （DESIGN.md §4.4）：owner 分享只发出邀请、不产生授权；被邀请者接受后才拿到访问权；
+// 撤销之后对方下一次请求立即被拒。每一步各写一行审计。
+func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Shared deck")
 	deckPath := "/decks/" + u64str(deck.ID)
-	user2ID, u2Cookies, _ := createUserAndLogin(t, srv, db, "reader2")
+	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "reader2")
 
 	// 授权前：无访问权，GET 列表页被拒 403。
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("before grant: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// owner 授予 reader。
+	// owner 分享：这只是一条**邀请**，不是授权。
 	rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
 		`{"username":"reader2","role":"reader"}`, ownerCookies, ownerCSRF)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST grant status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
+	// 关键负例：还没接受，对方**不能**访问——这就是同意制与旧行为的区别。
+	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("before acceptance: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
 
-	// 授权后：对方下一个请求立即能访问。
+	// 被邀请者接受：这一步才写授权。
+	if rec := jsonRequest(t, srv, http.MethodPost,
+		"/api/v1/sharing/invites/"+u64str(deck.ID)+"/accept", "", u2Cookies, u2CSRF); rec.Code != http.StatusOK {
+		t.Fatalf("accept invite status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusOK {
-		t.Fatalf("after grant: GET notes status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+		t.Fatalf("after acceptance: GET notes status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	// 改角色 reader -> editor：写 deck.role_change，对方仍可访问。
@@ -81,13 +89,14 @@ func TestSharingGrantGivesImmediateAccessThenRevokeDeniesNextRequest(t *testing.
 		t.Fatalf("after revoke: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 审计：授予 1、改角色 1、撤销 1。
+	// 审计：邀请 1、接受 1、改角色 1、撤销 1。
 	audits := store.NewAuditStore(db)
 	for _, c := range []struct {
 		action string
 		want   int64
 	}{
-		{store.ActionDeckGrant, 1},
+		{store.ActionDeckShareInvite, 1},
+		{store.ActionDeckShareAccept, 1},
 		{store.ActionDeckRoleChange, 1},
 		{store.ActionDeckRevoke, 1},
 	} {
@@ -111,6 +120,11 @@ func TestSharingPageRejectsNonOwner(t *testing.T) {
 	if rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.ID),
 		`{"username":"editor2","role":"editor"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("owner grant editor status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	// 同意制下要先接受，editor 才是真的 editor（本用例要考的是「有权限的人仍不是 owner」）。
+	if rec := jsonRequest(t, srv, http.MethodPost,
+		"/api/v1/sharing/invites/"+u64str(deck.ID)+"/accept", "", u2Cookies, u2CSRF); rec.Code != http.StatusOK {
+		t.Fatalf("editor accept invite status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	// editor 打开共享页 -> 403。

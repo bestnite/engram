@@ -138,6 +138,7 @@ func runServe(ctx context.Context) error {
 		Sessions:     store.NewSessionStore(db),
 		ActionTokens: store.NewActionTokenStore(db),
 		Invites:      store.NewInviteStore(db),
+		ShareInvites: store.NewDeckShareInviteStore(db),
 		Fingerprints: store.NewLoginFingerprintStore(db),
 		Logger:       logger,
 	})

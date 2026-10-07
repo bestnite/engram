@@ -151,18 +151,42 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 			return
 		}
 		if existing != role {
-			if err = s.grants.Grant(ctx, deck.ID, target.ID, role, store.Ptr(user.ID)); err != nil {
-				s.logger.Error("grant SPA deck role failed", "deck_id", deck.ID, "error", err)
+			if existing != "" {
+				// 已经在里面的人：改角色不需要再征得同意——同意在接受那一刻就给过了。
+				if err = s.grants.Grant(ctx, deck.ID, target.ID, role, store.Ptr(user.ID)); err != nil {
+					s.logger.Error("grant SPA deck role failed", "deck_id", deck.ID, "error", err)
+					spaShareError(c, 500, "internal_error")
+					return
+				}
+				s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role, "previous_role": existing}})
+				// 通知（B 类，可退订）。放在审计之后、且不返回错误：通知只是副作用。
+				s.notifyDeckGrantChange(c, deck, user, target, existing, role)
+				break
+			}
+			// 新人：**发邀请，不直接授权**（同意制，DESIGN.md §4.4）。接受时才写 deck_grants，
+			// 所以「别人把卡组硬塞给我」在这条路径上不可能发生。
+			allowed, policyErr := s.sharePolicy.Allows(ctx, target.ID, user.ID)
+			if policyErr != nil {
+				s.logger.Error("check recipient share policy failed", "deck_id", deck.ID, "user_id", target.ID, "error", policyErr)
 				spaShareError(c, 500, "internal_error")
 				return
 			}
-			auditAction := store.ActionDeckGrant
-			if existing != "" {
-				auditAction = store.ActionDeckRoleChange
+			if !allowed {
+				// 对方设了「不接受分享」或不在白名单里：如实拒绝，并让属主看到原因。
+				spaShareError(c, 409, "recipient_refuses_shares")
+				return
 			}
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: auditAction, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role, "previous_role": existing}})
-			// 通知被授权者（B 类，可退订）。放在审计之后、且不返回错误：通知只是副作用。
-			s.notifyDeckGrantChange(c, deck, user, target, existing, role)
+			now := time.Now().UTC()
+			if err := s.shareInvites.Invite(ctx, store.DeckShareInvite{
+				DeckID: deck.ID, UserID: target.ID, Role: role, InvitedBy: user.ID,
+				CreatedAt: now, ExpiresAt: now.Add(ShareInviteTTL),
+			}); err != nil {
+				s.logger.Error("create deck share invite failed", "deck_id", deck.ID, "error", err)
+				spaShareError(c, 500, "internal_error")
+				return
+			}
+			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckShareInvite, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role}})
+			s.notifyDeckGrantChange(c, deck, user, target, "", role)
 		}
 	case "revoke":
 		id := req.UserID
@@ -184,6 +208,13 @@ func (s *Server) spaSharingWrite(c *gin.Context, action string) {
 		if existing != "" {
 			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": id, "previous_role": existing}})
 			s.notifyDeckRevoke(c, deck, user, id, existing)
+			break
+		}
+		// 没有生效的授权，但可能挂着一条还没被接受的邀请：这时「撤销」的语义是取消邀请。
+		if err := s.shareInvites.Delete(ctx, deck.ID, id); err != nil {
+			s.logger.Error("cancel deck share invite failed", "deck_id", deck.ID, "user_id", id, "error", err)
+			spaShareError(c, 500, "internal_error")
+			return
 		}
 	case "visibility":
 		v := strings.TrimSpace(req.Visibility)
