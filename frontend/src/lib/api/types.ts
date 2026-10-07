@@ -714,13 +714,6 @@ export interface UpdateProfileRequest {
 }
 
 /**
- * 切换语言请求体结构
- */
-export interface UpdateLocaleRequest {
-  locale: string;
-}
-
-/**
  * 个人资料响应体结构
  */
 export interface ProfileResponse {

@@ -588,25 +588,6 @@ export class ApiClient {
   }
 
   /**
-   * 仅切换用户界面语言偏好（PATCH /api/v1/settings/locale）
-   */
-  async updateLocale(
-    locale: string,
-    options?: { csrfToken?: string }
-  ): Promise<{ locale: string }> {
-    const headers = new Headers();
-    const token = options?.csrfToken || this.csrfToken;
-    if (token) {
-      headers.set('X-CSRF-Token', token);
-    }
-    return this.request<{ locale: string }>('/api/v1/settings/locale', {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ locale }),
-    });
-  }
-
-  /**
    * 获取当前用户学习统计概要（GET /api/v1/stats/summary）
    */
   async getStatsSummary(): Promise<StatsSummary> {

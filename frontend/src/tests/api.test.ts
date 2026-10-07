@@ -689,16 +689,29 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(headers.has('X-CSRF-Token')).toBe(false);
     });
 
-    it('allows overriding CSRF token via options on updateProfile and updateLocale', async () => {
+    it('allows overriding the CSRF token via options on updateProfile', async () => {
       client.setCsrfToken('global-token');
       mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ locale: 'zh-CN' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        new Response(
+          JSON.stringify({
+            profile: {
+              id: 1,
+              username: 'alice',
+              email: 'alice@example.com',
+              display_name: 'Alice',
+              locale: 'zh-CN',
+              timezone: 'UTC',
+              day_cutoff_hour: 4,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
       );
 
-      await client.updateLocale('zh-CN', { csrfToken: 'explicit-token' });
+      await client.updateProfile(
+        { display_name: 'Alice', locale: 'zh-CN', timezone: 'UTC', day_cutoff_hour: 4 },
+        { csrfToken: 'explicit-token' }
+      );
       const [, init] = mockFetch.mock.calls[0]!;
       const headers = new Headers(init?.headers);
       expect(headers.get('X-CSRF-Token')).toBe('explicit-token');
@@ -765,23 +778,6 @@ describe('Centralized typed same-origin REST API client', () => {
       ).rejects.toSatisfy((err: unknown) => {
         return err instanceof ApiClientError && err.status === 502 && err.code === 'internal_error';
       });
-    });
-
-    it('updateLocale issues PATCH request with locale payload', async () => {
-      mockFetch.mockResolvedValueOnce(
-        new Response(JSON.stringify({ locale: 'en' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      );
-
-      const res = await client.updateLocale('en');
-      expect(res.locale).toBe('en');
-
-      const [url, init] = mockFetch.mock.calls[0]!;
-      expect(url).toBe('/api/v1/settings/locale');
-      expect(init?.method).toBe('PATCH');
-      expect(JSON.parse(init?.body as string)).toEqual({ locale: 'en' });
     });
   });
 
