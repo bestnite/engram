@@ -1017,6 +1017,23 @@ export class ApiClient {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/oidc/identities/${encodeURIComponent(String(id))}/unlink`, { method: 'POST', body: '{}' });
   }
+
+  /** 作业列表（GET /api/v1/admin/jobs）。 */
+  async getAdminJobs(params?: { page?: number }): Promise<import('./types').AdminJobsResponse> {
+    const qs = params?.page !== undefined ? `?page=${params.page}` : '';
+    return this.request<import('./types').AdminJobsResponse>(`/api/v1/admin/jobs${qs}`);
+  }
+
+  /** 取消一个作业（POST /api/v1/admin/jobs/:id/cancel）。 */
+  async cancelAdminJob(id: number): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/jobs/${encodeURIComponent(String(id))}/cancel`, { method: 'POST', body: '{}' });
+  }
+
+  /** 语言包完整度报告（GET /api/v1/admin/i18n）。 */
+  async getAdminI18n(): Promise<import('./types').AdminI18nResponse> {
+    return this.request<import('./types').AdminI18nResponse>('/api/v1/admin/i18n');
+  }
 }
 
 /**

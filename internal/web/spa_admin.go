@@ -141,4 +141,11 @@ func (s *Server) registerSPAAdminRoutes(router *gin.Engine) {
 	g.POST("/oidc", s.sessions.CSRFMiddleware(), s.spaAdminOIDCSave)
 	g.POST("/oidc/test", s.sessions.CSRFMiddleware(), s.spaAdminOIDCTest)
 	g.POST("/oidc/identities/:id/unlink", s.sessions.CSRFMiddleware(), s.spaAdminOIDCUnlink)
+
+	// 作业列表与取消。
+	g.GET("/jobs", s.spaAdminJobs)
+	g.POST("/jobs/:id/cancel", s.sessions.CSRFMiddleware(), s.spaAdminJobCancel)
+
+	// 语言包完整度报告（只读）。
+	g.GET("/i18n", s.spaAdminI18n)
 }

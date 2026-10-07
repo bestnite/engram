@@ -1057,3 +1057,43 @@ export interface AdminOIDCRequest {
   client_secret?: string;
 }
 
+/** 作业与语言包报告（Go: internal/web/spa_admin_{jobs,i18n}.go）。 */
+
+/** 一个作业的元信息；stage 为 null 表示尚未进入训练阶段。 */
+export interface AdminJob {
+  id: number;
+  kind: string;
+  status: string;
+  stage: string | null;
+  created_at: string;
+  started_at: string;
+  finished_at: string;
+  log_tail: string;
+  error: string;
+  can_cancel: boolean;
+}
+
+/** GET /api/v1/admin/jobs 响应。 */
+export interface AdminJobsResponse {
+  jobs: AdminJob[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+/** 一种语言的覆盖率。 */
+export interface AdminLocaleCoverage {
+  code: string;
+  percent: number;
+  present: number;
+  total: number;
+  complete: boolean;
+  missing: string[];
+}
+
+/** GET /api/v1/admin/i18n 响应。 */
+export interface AdminI18nResponse {
+  locales: AdminLocaleCoverage[];
+  all_complete: boolean;
+}
+

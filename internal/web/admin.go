@@ -117,7 +117,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 				handlers = append(handlers, s.spaAdminPage(s.adminSettingsPage))
 			}
 		case "/admin/jobs":
-			handlers = append(handlers, s.adminJobsPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminJobsPage))
 		case "/admin/jobs/:id/cancel":
 			handlers = append(handlers, s.adminJobCancel)
 		case "/admin/oidc":
@@ -147,7 +147,7 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 		case "/admin/api-keys/:id/revoke":
 			handlers = append(handlers, s.adminAPIKeyRevoke)
 		case "/admin/i18n":
-			handlers = append(handlers, s.adminI18nPage)
+			handlers = append(handlers, s.spaAdminPage(s.adminI18nPage))
 		default:
 			continue
 		}

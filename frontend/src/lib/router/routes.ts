@@ -26,6 +26,8 @@ import AdminAPIKeysView from '../views/admin/AdminAPIKeysView.svelte';
 import AdminSettingsView from '../views/admin/AdminSettingsView.svelte';
 import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
 import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
+import AdminJobsView from '../views/admin/AdminJobsView.svelte';
+import AdminI18nView from '../views/admin/AdminI18nView.svelte';
 
 /**
  * 前端骨架路由定义列表（DESIGN.md §8.1）
@@ -250,5 +252,17 @@ export const routes: RouteDefinition[] = [
     path: '/admin/oidc',
     name: 'admin-oidc',
     component: AdminOIDCView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 作业。服务端 GET /admin/jobs 已切到应用壳，列表与取消走 /api/v1/admin/jobs*。
+    path: '/admin/jobs',
+    name: 'admin-jobs',
+    component: AdminJobsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // 语言包完整度。服务端 GET /admin/i18n 已切到应用壳，报告走 /api/v1/admin/i18n。
+    path: '/admin/i18n',
+    name: 'admin-i18n',
+    component: AdminI18nView as unknown as RouteDefinition['component'],
   },
 ];
