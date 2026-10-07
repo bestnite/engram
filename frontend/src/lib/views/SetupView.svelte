@@ -68,6 +68,7 @@
         </label>
         <input
           id="setup-username"
+          data-testid="setup-username"
           name="username"
           type="text"
           autocomplete="username"
@@ -84,6 +85,7 @@
         </label>
         <input
           id="setup-email"
+          data-testid="setup-email"
           name="email"
           type="email"
           autocomplete="email"
@@ -99,6 +101,7 @@
         </label>
         <input
           id="setup-display-name"
+          data-testid="setup-display-name"
           name="display_name"
           type="text"
           autocomplete="name"
@@ -114,6 +117,7 @@
         </label>
         <input
           id="setup-password"
+          data-testid="setup-password"
           name="password"
           type="password"
           autocomplete="new-password"
@@ -125,7 +129,7 @@
       </div>
 
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full">
+        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full" testId="setup-submit">
           {#if loading}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
             <span>{$t('auth.setup.submitting')}</span>

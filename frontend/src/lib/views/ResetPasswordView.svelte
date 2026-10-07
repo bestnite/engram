@@ -84,6 +84,7 @@
           </label>
           <input
             id="reset-password"
+            data-testid="reset-password"
             name="password"
             type="password"
             autocomplete="new-password"
@@ -95,7 +96,7 @@
         </div>
 
         <div class="pt-2">
-          <Button type="submit" disabled={loading || !password} variant="primary" size="lg" class="w-full">
+          <Button type="submit" disabled={loading || !password} variant="primary" size="lg" class="w-full" testId="reset-submit">
             {#if loading}
               <span>{$t('account.reset.submitting')}</span>
             {:else}

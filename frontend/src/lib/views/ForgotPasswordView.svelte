@@ -68,6 +68,7 @@
           </label>
           <input
             id="forgot-email"
+            data-testid="forgot-email"
             name="email"
             type="email"
             autocomplete="email"
@@ -79,7 +80,7 @@
         </div>
 
         <div class="pt-2">
-          <Button type="submit" disabled={loading || !email.trim()} variant="primary" size="lg" class="w-full">
+          <Button type="submit" disabled={loading || !email.trim()} variant="primary" size="lg" class="w-full" testId="forgot-submit">
             {#if loading}
               <span>{$t('account.forgot.submitting')}</span>
             {:else}

@@ -83,6 +83,7 @@
         </label>
         <input
           id="register-username"
+          data-testid="register-username"
           name="username"
           type="text"
           autocomplete="username"
@@ -99,6 +100,7 @@
         </label>
         <input
           id="register-email"
+          data-testid="register-email"
           name="email"
           type="email"
           autocomplete="email"
@@ -115,6 +117,7 @@
         </label>
         <input
           id="register-display-name"
+          data-testid="register-display-name"
           name="display_name"
           type="text"
           autocomplete="name"
@@ -130,6 +133,7 @@
         </label>
         <input
           id="register-password"
+          data-testid="register-password"
           name="password"
           type="password"
           autocomplete="new-password"
@@ -141,7 +145,7 @@
       </div>
 
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !email.trim() || !password} variant="primary" size="lg" class="w-full">
+        <Button type="submit" disabled={loading || !username.trim() || !email.trim() || !password} variant="primary" size="lg" class="w-full" testId="register-submit">
           {#if loading}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
             <span>{$t('auth.register.submitting')}</span>

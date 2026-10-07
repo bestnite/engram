@@ -76,6 +76,7 @@
         </label>
         <input
           id="login-username"
+          data-testid="login-username"
           name="username"
           type="text"
           autocomplete="username"
@@ -92,6 +93,7 @@
         </label>
         <input
           id="login-password"
+          data-testid="login-password"
           name="password"
           type="password"
           autocomplete="current-password"
@@ -103,7 +105,7 @@
       </div>
 
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full">
+        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full" testId="login-submit">
           {#if loading}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
             <span>{$t('auth.login.submitting')}</span>

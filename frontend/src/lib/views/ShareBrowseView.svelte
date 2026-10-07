@@ -87,6 +87,7 @@
           </label>
           <input
             id="share-password"
+            data-testid="share-password"
             name="password"
             type="password"
             autocomplete="current-password"
@@ -100,7 +101,7 @@
         {#if errorKey}
           <p data-testid="share-password-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(errorKey)}</p>
         {/if}
-        <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" class="w-full">
+        <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" class="w-full" testId="share-browse-submit">
           {unlocking ? $t('share.password.submitting') : $t('share.password.submit')}
         </Button>
       </form>
