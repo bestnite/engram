@@ -10,8 +10,8 @@
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
 
-  // 已登录用户访问登录页时直接送去控制台：会话前端点（登录/注册/验证）要求「双提交 cookie 对」，
-  // 而已登录时 /api/v1/auth/session 给的是会话绑定 token，两者不相等，提交必然 403。
+  // 已登录用户访问登录页时直接送去控制台：这是体验问题，不是安全兜底——
+  // CSRF 层已按「本次请求有没有有效会话」分档，已登录时用会话绑定 token 校验，不再 403。
   // 用 $effect 而不是 onMount：整页加载时 initAuth() 是异步的，onMount 时认证状态还没就绪。
   $effect(() => {
     if ($authStore.initialized && $authStore.authenticated) {

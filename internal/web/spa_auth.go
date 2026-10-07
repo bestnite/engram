@@ -56,7 +56,7 @@ func (s *Server) apiSession(c *gin.Context) {
 
 // apiLogin 校验凭据并建立服务端会话（DESIGN.md §4.3、§11）。
 //
-// 挂载 auth.DoubleSubmitMiddleware 保证请求同时携带 csrf_double cookie 与 X-CSRF-Token 头。
+// 挂载 auth.PreSessionCSRFMiddleware 保证请求同时携带 csrf_double cookie 与 X-CSRF-Token 头。
 // 密码校验、限流递增延迟、恒定耗时 dummy hash、审计日志与 TOTP 二次验证均复用既有服务语义。
 func (s *Server) apiLogin(c *gin.Context) {
 	var req apiLoginRequest
@@ -180,7 +180,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 // 第二步走 GET /login/totp / POST /api/v1/auth/totp。
 //
 // 先初始化会话前双提交 cookie：SPA 挂载后从 GET /api/v1/auth/session 取回同一 token 放进
-// X-CSRF-Token，POST /api/v1/auth/login 的 DoubleSubmitMiddleware 据此比对 cookie 与镜像值。
+// X-CSRF-Token，POST /api/v1/auth/login 的 PreSessionCSRFMiddleware 据此比对 cookie 与镜像值。
 // 这里只下发 cookie 并返回应用壳，不渲染表单、不建立会话、不返回任何凭据
 // （会话 cookie 始终由服务端在登录成功后签发）。迁移期别名 /spa/login 由同一处理器服务。
 func (s *Server) spaLoginShell(c *gin.Context) {
@@ -189,7 +189,7 @@ func (s *Server) spaLoginShell(c *gin.Context) {
 }
 
 // spaRegisterShell 提供 GET /register：返回应用壳（DESIGN.md §8.1 的规范路径），
-// 注册协议走 POST /api/v1/auth/register（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
+// 注册协议走 POST /api/v1/auth/register（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
 // ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
 // 不建号、不建立会话、不返回任何凭据。迁移期别名 /spa/register 由同一处理器服务。
 func (s *Server) spaRegisterShell(c *gin.Context) {
@@ -231,7 +231,7 @@ type apiSetupRequest struct {
 
 // apiRegister 是 SPA 自助注册端点（POST /api/v1/auth/register）。
 //
-// 挂载 auth.DoubleSubmitMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
+// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
 // 全部判定（匿名限流、校验、首个管理员引导、邀请事务、注册策略/白名单）复用
 // attemptRegistration，与 SSR 的 registerSubmit 是同一份逻辑，因此策略语义不可能漂移。
 // 成功不建立会话（与 SSR 注册后跳转登录一致），只返回 created=true。
@@ -261,7 +261,7 @@ func (s *Server) apiRegister(c *gin.Context) {
 // apiSetup 是 SPA 首个管理员引导端点（POST /api/v1/auth/setup）。
 //
 // 与 SSR 的 setupSubmit 同一可达性规则：没有活跃管理员时才可达，否则 404（一次性管理员门）。
-// 建号与审计复用 attemptSetup，挂载 DoubleSubmitMiddleware。成功不建立会话。
+// 建号与审计复用 attemptSetup，挂载 PreSessionCSRFMiddleware。成功不建立会话。
 func (s *Server) apiSetup(c *gin.Context) {
 	if !s.setupAvailable(c) {
 		c.AbortWithStatus(http.StatusNotFound)

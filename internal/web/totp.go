@@ -34,7 +34,7 @@ func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	// SPA 登录第二步的同源 JSON 协议（DESIGN.md §4.3、§8.1）：GET 报告是否持有有效的第二步
 	// 凭据，POST 提交验证码并签发会话。挂双提交 cookie 中间件（登录前流程没有会话可绑 token）。
 	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
-	router.POST("/api/v1/auth/totp", auth.DoubleSubmitMiddleware(), s.apiTOTPSubmit)
+	router.POST("/api/v1/auth/totp", auth.PreSessionCSRFMiddleware(), s.apiTOTPSubmit)
 	// 两步验证管理页只返回应用壳；读写走 /api/v1/settings/totp*（spa_totp.go）。
 	router.GET("/settings/totp", s.totpSettingsRoute)
 }

@@ -29,10 +29,10 @@ func (s *Server) registerSPAAccountRoutes(router *gin.Engine) {
 		return
 	}
 	// 登录前流程：没有会话可绑 CSRF，用双提交 cookie（与 SSR 的 /forgot-password、/reset-password 一致）。
-	router.POST("/api/v1/auth/forgot-password", auth.DoubleSubmitMiddleware(), s.spaForgotPasswordSubmit)
-	router.POST("/api/v1/auth/reset-password", auth.DoubleSubmitMiddleware(), s.spaResetPasswordSubmit)
-	router.POST("/api/v1/auth/verify-email", auth.DoubleSubmitMiddleware(), s.spaVerifyEmailSubmit)
-	router.POST("/api/v1/auth/confirm-email-change", auth.DoubleSubmitMiddleware(), s.spaConfirmEmailChangeSubmit)
+	router.POST("/api/v1/auth/forgot-password", auth.PreSessionCSRFMiddleware(), s.spaForgotPasswordSubmit)
+	router.POST("/api/v1/auth/reset-password", auth.PreSessionCSRFMiddleware(), s.spaResetPasswordSubmit)
+	router.POST("/api/v1/auth/verify-email", auth.PreSessionCSRFMiddleware(), s.spaVerifyEmailSubmit)
+	router.POST("/api/v1/auth/confirm-email-change", auth.PreSessionCSRFMiddleware(), s.spaConfirmEmailChangeSubmit)
 	// SPA 应用壳入口：与 /spa/login 同一约定，不遮蔽 SSR 的免登录一键链接。
 	router.GET("/spa/verify-email", s.spaVerifyEmailShell)
 	router.GET("/spa/confirm-email-change", s.spaConfirmEmailChangeShell)

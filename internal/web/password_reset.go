@@ -33,7 +33,7 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	router.GET("/reset-password", s.resetPasswordRoute)
 	// 邮件里的一键 GET 链接落在规范路径上，返回应用壳；令牌由 SPA 通过
 	// /api/v1/auth/{verify-email,confirm-email-change} 消费（一次性、有过期）。
-	// 会话前写请求由 DoubleSubmitMiddleware 校验双提交 cookie 与镜像 token。
+	// 会话前写请求由 PreSessionCSRFMiddleware 校验双提交 cookie 与镜像 token。
 	router.GET("/verify-email", s.spaVerifyEmailShell)
 	router.GET("/confirm-email-change", s.spaConfirmEmailChangeShell)
 	// 改邮箱页是登录用户自己的页面：未登录先重定向登录页。

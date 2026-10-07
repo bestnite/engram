@@ -63,33 +63,64 @@ func EnsureDoubleSubmitToken(c *gin.Context, secure bool) string {
 	return tok
 }
 
-// DoubleSubmitMiddleware 校验会话前表单的双提交 cookie，与 SameSite=Lax 形成双保险。
+// PreSessionCSRFMiddleware 保护「登录前就能调用」的写端点（登录、注册、引导、忘记/重置密码、
+// 邮箱验证与改邮箱确认、退订、TOTP 第二步）。
 //
-// 与 Manager.CSRFMiddleware 的关键区别：它不依赖服务端会话，因此可用于登录前的 POST。
-// 已有会话的写请求仍走会话绑定的 CSRFMiddleware，两条路径互不影响。
+// 为什么不能一律用会话绑定校验：这些端点的契约是「匿名也能调」（忘记密码的前提就是登不进去），
+// 而匿名时服务端没有会话可存、没有值可比。
 //
-// 校验规则：非 GET/HEAD/OPTIONS 请求必须同时携带 csrf_double cookie 与镜像 token 的请求值
-// （表单字段 csrf_token 或头部 X-CSRF-Token），两者一致才放行；缺任意一侧或值不一致返回 403。
-func DoubleSubmitMiddleware() gin.HandlerFunc {
+// 为什么不能一律用双提交：请求可能来自**已登录**的浏览器（例如已登录用户点邮件里的验证/退订链接）。
+// 此时浏览器手里只有会话绑定 token，双提交 cookie 与之天然不等，于是这类请求必然 403 —— 这是
+// 真实发生过的故障。而「已登录时拿到的是哪种值」由 /api/v1/auth/session 决定，客户端无从选择。
+//
+// 因此按**本次请求有没有有效会话**分档，弱的那档只留给匿名：
+//
+//   - 有有效会话（会话中间件的判定结果，见 Manager.Middleware）→ 请求值必须等于会话行里的
+//     CSRF token。这一档比双提交更强：攻击者即使能往受害者浏览器写 cookie 也读不到会话行里的值。
+//   - 匿名 → 双提交：csrf_double cookie 必须等于请求携带的镜像值。这是唯一不需要服务端状态的
+//     做法，代价是攻击者若能给目标域写 cookie 即可绕过（故只用于匿名场景）。
+//
+// 注意**不要**把本中间件挂到登录后的端点：那些端点必须要求会话存在（无会话一律 403 csrf_no_session），
+// 否则匿名请求可以只靠 cookie 对通过校验、再由 handler 以「无用户」状态继续。
+func PreSessionCSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch c.Request.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
 			c.Next()
 			return
 		}
-		cookie, err := c.Cookie(CSRFDoubleSubmitCookieName)
-		token := c.GetHeader(CSRFHeaderName)
-		if token == "" {
-			// PostForm 会解析并缓存表单体，不会与后续 handler 的读取冲突。
-			token = c.PostForm(CSRFFieldName)
+		if sess, ok := CurrentSession(c); ok {
+			submitted := submittedCSRFToken(c)
+			if !validDoubleSubmitToken(submitted) ||
+				subtle.ConstantTimeCompare([]byte(submitted), []byte(sess.CSRFToken)) != 1 {
+				abortCSRF(c)
+				return
+			}
+			c.Next()
+			return
 		}
-		if err != nil || !validDoubleSubmitToken(cookie) || token == "" ||
-			subtle.ConstantTimeCompare([]byte(cookie), []byte(token)) != 1 {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": gin.H{"code": "csrf_failed", "message": "invalid or missing CSRF token"},
-			})
+		cookie, err := c.Cookie(CSRFDoubleSubmitCookieName)
+		if err != nil || !validDoubleSubmitToken(cookie) ||
+			subtle.ConstantTimeCompare([]byte(cookie), []byte(submittedCSRFToken(c))) != 1 {
+			abortCSRF(c)
 			return
 		}
 		c.Next()
 	}
+}
+
+// submittedCSRFToken 取请求携带的镜像 token：优先请求头（SPA 的 JSON 请求），
+// 退回表单字段（无脚本表单）。PostForm 会解析并缓存表单体，不会与后续 handler 的读取冲突。
+func submittedCSRFToken(c *gin.Context) string {
+	if token := c.GetHeader(CSRFHeaderName); token != "" {
+		return token
+	}
+	return c.PostForm(CSRFFieldName)
+}
+
+// abortCSRF 以统一形态拒绝校验失败的写请求（稳定 code + 英文文案，前端按 code 映射提示）。
+func abortCSRF(c *gin.Context) {
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+		"error": gin.H{"code": "csrf_failed", "message": "invalid or missing CSRF token"},
+	})
 }

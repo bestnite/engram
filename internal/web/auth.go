@@ -26,7 +26,7 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	}
 	// 登录/注册/引导三条页面只返回 SPA 应用壳（DESIGN.md §8.1）：页面判定与写操作全部由
 	// 客户端的同源 JSON 端点承担（/api/v1/auth/{session,login,register,setup}）。
-	// 会话前写请求没有服务端会话可绑 token，仍由 DoubleSubmitMiddleware 校验双提交 cookie
+	// 会话前写请求没有服务端会话可绑 token，仍由 PreSessionCSRFMiddleware 校验双提交 cookie
 	// 与镜像 token（B-13）。
 	router.GET("/login", s.spaLoginShell)
 	router.GET("/register", s.spaRegisterShell)
@@ -42,10 +42,10 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// SPA / 同源 JSON 会话与认证端点（DESIGN.md §4.3、§8.3）
 	router.GET("/api/v1/auth/session", s.apiSession)
 	router.GET("/api/v1/session", s.apiSession)
-	router.POST("/api/v1/auth/login", auth.DoubleSubmitMiddleware(), s.apiLogin)
+	router.POST("/api/v1/auth/login", auth.PreSessionCSRFMiddleware(), s.apiLogin)
 	// 注册与引导是登录前流程：同样没有服务端会话，POST 走双提交 cookie。
-	router.POST("/api/v1/auth/register", auth.DoubleSubmitMiddleware(), s.apiRegister)
-	router.POST("/api/v1/auth/setup", auth.DoubleSubmitMiddleware(), s.apiSetup)
+	router.POST("/api/v1/auth/register", auth.PreSessionCSRFMiddleware(), s.apiRegister)
+	router.POST("/api/v1/auth/setup", auth.PreSessionCSRFMiddleware(), s.apiSetup)
 	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
 
 	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与规范路径

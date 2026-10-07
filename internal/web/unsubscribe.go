@@ -44,7 +44,7 @@ import (
 //     它只能关掉一个可选类型，且用后即废。相比强行套 CSRF 而让功能不可用，
 //     令牌即能力（capability）是 RFC 8058 认可的正确边界。
 //   - SPA 的 POST /api/v1/unsubscribe 是会话前写请求，照 /api/v1/auth/verify-email 的约定
-//     挂 auth.DoubleSubmitMiddleware（双提交 cookie 由 GET /unsubscribe 下发）。
+//     挂 auth.PreSessionCSRFMiddleware（双提交 cookie 由 GET /unsubscribe 下发）。
 //   - 其余带会话的写路径不受影响，照旧走 CSRFMiddleware（见 mail_prefs.go 等）。
 
 // unsubscribeTypeInvalidCode 是令牌载荷不是可退订类型时的稳定英文 code。
@@ -69,7 +69,7 @@ func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 	router.GET("/spa/unsubscribe", s.unsubscribeShell)
 	// SPA 的同源 JSON 传输：读不消费令牌，确认消费令牌；确认走会话前双提交 CSRF。
 	router.GET("/api/v1/unsubscribe", s.spaUnsubscribeRead)
-	router.POST("/api/v1/unsubscribe", auth.DoubleSubmitMiddleware(), s.spaUnsubscribeConfirm)
+	router.POST("/api/v1/unsubscribe", auth.PreSessionCSRFMiddleware(), s.spaUnsubscribeConfirm)
 }
 
 // unsubscribeShell 提供 GET /unsubscribe 与 /spa/unsubscribe：先下发会话前双提交 cookie

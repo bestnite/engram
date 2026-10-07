@@ -48,7 +48,7 @@ func (s *Server) apiTOTPPending(c *gin.Context) {
 
 // apiTOTPSubmit 校验第二因素并建立会话（POST /api/v1/auth/totp）。
 //
-// 挂载 auth.DoubleSubmitMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头
+// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头
 // （与 SSR 的 POST /login/totp 同一中间件）。失败复用登录限速（M1-9）：与第一步共用同一
 // 账号/IP 维度，第二步不能成为绕过限速的缺口。
 func (s *Server) apiTOTPSubmit(c *gin.Context) {
@@ -155,7 +155,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 // NoRoute 回退到应用壳）。
 //
 // 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳：提交走
-// POST /api/v1/auth/totp（DoubleSubmitMiddleware 据 cookie 与镜像 token 比对）。
+// POST /api/v1/auth/totp（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
 func (s *Server) spaTOTPLoginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)

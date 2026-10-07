@@ -10,11 +10,11 @@ import (
 )
 
 // doubleSubmitRouter 是不依赖会话的一套路由：GET /form 下发双提交 cookie 并回显镜像 token，
-// POST /submit 只由 DoubleSubmitMiddleware 校验。用它可以证明会话前 CSRF 不依赖服务端会话。
+// POST /submit 只由 PreSessionCSRFMiddleware 校验。用它可以证明会话前 CSRF 不依赖服务端会话。
 // secure 是调用方判定「站点是否 https」后传入的值（这里由测试直接给定）。
 func doubleSubmitRouter(secure bool) *gin.Engine {
 	router := gin.New()
-	router.Use(DoubleSubmitMiddleware())
+	router.Use(PreSessionCSRFMiddleware())
 	router.GET("/form", func(c *gin.Context) {
 		c.String(http.StatusOK, EnsureDoubleSubmitToken(c, secure))
 	})

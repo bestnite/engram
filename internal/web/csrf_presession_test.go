@@ -10,7 +10,7 @@ import (
 // 本文件是 B-13（会话前双提交 CSRF）的验收测试。
 //
 // 移除 SSR 会话前表单后，会话前的写请求全部是同源 JSON 端点（登录、注册、引导、找回密码、
-// 重置密码、登录第二步）。它们仍由 auth.DoubleSubmitMiddleware 保护：请求必须同时携带
+// 重置密码、登录第二步）。它们仍由 auth.PreSessionCSRFMiddleware 保护：请求必须同时携带
 // csrf_double cookie 与镜像 token（X-CSRF-Token 头或 csrf_token 表单字段）。
 
 // doubleSubmitFromShell 走一次 GET /login 应用壳，返回下发的 csrf_double cookie 与镜像 token。
