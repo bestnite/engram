@@ -177,19 +177,19 @@
       </label>
       <label class="block sm:col-span-2">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.issuer')}</span>
-        <input data-testid="admin-oidc-issuer" bind:value={issuer} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-issuer" bind:value={issuer} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.client_id')}</span>
-        <input data-testid="admin-oidc-client-id" bind:value={clientId} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-client-id" bind:value={clientId} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.scopes')}</span>
-        <input data-testid="admin-oidc-scopes" bind:value={scopes} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-scopes" bind:value={scopes} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block sm:col-span-2">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.client_secret')}</span>
-        <input type="password" data-testid="admin-oidc-secret" bind:value={clientSecret} placeholder={configuredLabel(view.secret_configured)} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input type="password" data-testid="admin-oidc-secret" bind:value={clientSecret} placeholder={configuredLabel(view.secret_configured)} class="field-input text-sm mt-1.5 w-full" />
         <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.oidc.client_secret.hint')}</span>
       </label>
       <div class="block sm:col-span-2">
@@ -200,19 +200,19 @@
       <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 sm:col-span-2">{$t('admin.oidc.claims')}</h3>
       <label class="block">
         <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.subject')}</span>
-        <input data-testid="admin-oidc-claim-subject" bind:value={claimSubject} class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-claim-subject" bind:value={claimSubject} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
         <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.email')}</span>
-        <input data-testid="admin-oidc-claim-email" bind:value={claimEmail} class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-claim-email" bind:value={claimEmail} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
         <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.name')}</span>
-        <input data-testid="admin-oidc-claim-name" bind:value={claimName} class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-claim-name" bind:value={claimName} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
         <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.email_verified')}</span>
-        <input data-testid="admin-oidc-claim-email-verified" bind:value={claimEmailVerified} class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-oidc-claim-email-verified" bind:value={claimEmailVerified} class="field-input text-sm mt-1 w-full" />
       </label>
       <div class="flex gap-3 sm:col-span-2">
         <button type="submit" data-testid="admin-oidc-save" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.oidc.save')}</button>

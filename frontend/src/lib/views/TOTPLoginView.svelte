@@ -129,7 +129,7 @@
             bind:value={code}
             disabled={loading}
             data-testid="totp-login-code"
-            class="w-full px-3.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 transition-colors disabled:opacity-50 text-sm"
+            class="field-input text-sm w-full transition-colors disabled:opacity-50"
           />
           <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{$t('auth.totp.recovery_hint')}</p>
         </div>

@@ -365,7 +365,7 @@
           placeholder={$t('notes.search_placeholder')}
           bind:value={queryInput}
           oninput={scheduleFilterReload}
-          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-44"
+          class="field-input text-sm w-full sm:w-44"
         />
         <input
           type="text"
@@ -373,7 +373,7 @@
           placeholder={$t('notes.tag_placeholder')}
           bind:value={tagInput}
           oninput={scheduleFilterReload}
-          class="text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-1.5 w-full sm:w-32"
+          class="field-input text-sm w-full sm:w-32"
         />
         <Select
           class="w-40"
@@ -416,7 +416,7 @@
             data-testid="bulk-tag-input"
             placeholder={$t('notes.bulk_tag_placeholder')}
             bind:value={bulkTagInput}
-            class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs w-36"
+            class="field-input text-sm w-36"
           />
           <button type="button" data-testid="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_add_tags')}</button>
           <button type="button" data-testid="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} class="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 disabled:opacity-40 cursor-pointer">{$t('notes.bulk_remove_tags')}</button>

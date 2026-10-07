@@ -424,7 +424,7 @@
             required
             maxlength="200"
             placeholder={$t('decks.spa_create.name_placeholder')}
-            class="block w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100"
+            class="field-input text-sm block w-full"
           />
         </div>
 
@@ -439,7 +439,7 @@
             maxlength="2000"
             rows="3"
             placeholder={$t('decks.spa_create.description_placeholder')}
-            class="block w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100"
+            class="field-input text-sm block w-full"
           ></textarea>
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" for="deck-create-preset">

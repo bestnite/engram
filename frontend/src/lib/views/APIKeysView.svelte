@@ -86,7 +86,7 @@
     {/if}
 
     <form onsubmit={create} class="rounded-xl border border-zinc-200 dark:border-zinc-700/80 p-5 space-y-4">
-      <label class="block text-sm">{$t('keys.name')}<input required maxlength="100" bind:value={name} class="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2" /></label>
+      <label class="block text-sm">{$t('keys.name')}<input required maxlength="100" bind:value={name} class="field-input text-sm mt-1 w-full" /></label>
       <fieldset class="flex flex-wrap gap-4 text-sm"><legend class="mb-2">{$t('keys.scopes')}</legend>
         {#each ['read', 'write', 'review', 'keys'] as scope}
           <label class="flex cursor-pointer items-center gap-1.5">

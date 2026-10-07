@@ -189,13 +189,13 @@
                       data-testid="admin-settings-secret-{row.key}"
                       bind:value={secrets[row.key]}
                       placeholder={row.configured ? $t('admin.settings.sensitive.configured') : $t('admin.settings.sensitive.not_configured')}
-                      class="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                      class="field-input text-sm w-full"
                     />
                   {:else}
                     <input
                       data-testid="admin-settings-value-{row.key}"
                       bind:value={values[row.key]}
-                      class="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                      class="field-input text-sm w-full"
                     />
                   {/if}
                   <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.settings.source_label')}: {sourceLabel(row.source)}</p>

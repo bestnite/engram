@@ -235,12 +235,95 @@ describe('buttons and user-visible copy', () => {
         .filter((line) => !line.trim().startsWith('//'))
         .join('\n');
       const textNodes = body.replace(/<[^>]*>/g, '\n').split('\n').filter((line) => line.trim() && cjk.test(line));
-      if (textNodes.length) offenders.push(`${file}: ${textNodes[0].trim()}`);
+      const first = textNodes[0];
+      if (first) offenders.push(`${file}: ${first.trim()}`);
       for (const m of body.matchAll(visibleAttr)) {
-        if (cjk.test(m[2])) offenders.push(`${file}: ${m[1]}="${m[2]}"`);
+        const value = m[2] ?? '';
+        if (cjk.test(value)) offenders.push(`${file}: ${m[1]}="${value}"`);
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('form field skin', () => {
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (entry.name.endsWith('.svelte')) out.push(full);
+    }
+    return out;
+  };
+  const libDir = fileURLToPath(new URL('../lib', import.meta.url));
+  const sources = walk(libDir).map((file) => ({ file: relative(libDir, file), src: readFileSync(file, 'utf8') }));
+
+  // 属性里可能出现箭头函数的 `>`，所以不能拿 /<input[^>]*>/ 取标签。
+  const scanTags = (src: string, names: string[]): string[] => {
+    const out: string[] = [];
+    let i = 0;
+    for (;;) {
+      const rest = src.slice(i);
+      const m = new RegExp(`<(${names.join('|')})\\b`).exec(rest);
+      if (!m || m.index === undefined) break;
+      const start = i + m.index;
+      let j = start + m[0].length;
+      let depth = 0;
+      let quote: string | null = null;
+      while (j < src.length) {
+        const c = src[j];
+        if (quote) {
+          if (c === quote) quote = null;
+        } else if (c === '"' || c === "'") quote = c;
+        else if (c === '{') depth += 1;
+        else if (c === '}') depth = Math.max(0, depth - 1);
+        else if (c === '>' && depth === 0) break;
+        j += 1;
+      }
+      out.push(src.slice(start, j + 1));
+      i = j + 1;
+    }
+    return out;
+  };
+
+  const classOf = (tag: string): string => /class="([^"]*)"/.exec(tag)?.[1] ?? '';
+
+  it('styles every field through the field-input utility with an explicit size', () => {
+    // 皮肤只允许有一处定义；字号必须由调用点显式给出——否则元素会继承祖先字号，
+    // 同一页里两个输入框一个大一个小（按钮区已经发生过同样的漂移）。
+    const offenders: string[] = [];
+    for (const { file, src } of sources) {
+      for (const tag of scanTags(src, ['input', 'textarea'])) {
+        const cls = classOf(tag);
+        if (!/\bfield-input\b/.test(cls)) continue;
+        if (!/\btext-(xs|sm|base)\b/.test(cls)) offenders.push(`${file}: ${cls.slice(0, 60)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the radius and border skin off the raw field elements', () => {
+    // 皮肤搬进 @utility 之后，字段上再出现 rounded-*/border 就是第二份实现。
+    const offenders: string[] = [];
+    for (const { file, src } of sources) {
+      for (const tag of scanTags(src, ['input', 'textarea'])) {
+        if (/type="(file|checkbox|radio|range)"/.test(tag)) continue;
+        const cls = classOf(tag);
+        if (!cls) continue;
+        // 按 token 精确判定：`dark:focus:border-zinc-100` 里的 border 不算皮肤。
+        const skin = cls
+          .split(/\s+/)
+          .filter((token) => /^(rounded(-[\w.]+)?|border|border-zinc-\d+|focus:border(-[\w-]+)?)$/.test(token));
+        if (skin.length) offenders.push(`${file}: ${skin.join(' ')}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('uses the shared utility widely enough to be the only path', () => {
+    const users = sources.filter((s) => s.src.includes('field-input')).length;
+    expect(users).toBeGreaterThanOrEqual(25);
   });
 });
 });

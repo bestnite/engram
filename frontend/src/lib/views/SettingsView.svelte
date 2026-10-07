@@ -226,7 +226,7 @@
               data-testid="settings-display-name"
               type="text"
               bind:value={displayName}
-              class="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm w-full transition-colors"
             />
             {#if fieldErrors.display_name}
               <p data-testid="settings-error-display-name" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
@@ -265,7 +265,7 @@
               type="text"
               bind:value={timezone}
               list="settings-timezone-options"
-              class="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm w-full transition-colors"
             />
             <datalist id="settings-timezone-options">
               {#each COMMON_TIMEZONES as tz}
@@ -294,7 +294,7 @@
               min="0"
               max="23"
               bind:value={dayCutoff}
-              class="w-32 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 font-mono shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm w-32 font-mono transition-colors"
             />
             <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
               {$t('settings.profile.cutoff_hint')}
@@ -324,8 +324,8 @@
         {#if passwordError}<p role="alert">{$t(passwordError)}</p>{/if}
         {#if passwordNotice}<p role="status">{$t(passwordNotice)}</p>{/if}
         <form onsubmit={handlePasswordSubmit} class="space-y-4">
-          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.old_label')}</span><input type="password" autocomplete="current-password" bind:value={oldPassword} required class="w-full rounded-xl border px-3.5 py-2.5 text-sm" /></label>
-          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="w-full rounded-xl border px-3.5 py-2.5 text-sm" /></label>
+          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.old_label')}</span><input type="password" autocomplete="current-password" bind:value={oldPassword} required class="field-input text-sm w-full" /></label>
+          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input text-sm w-full" /></label>
           <button type="submit" disabled={passwordSaving} class="rounded-xl bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</button>
         </form>
       </section>

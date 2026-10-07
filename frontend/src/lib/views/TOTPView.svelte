@@ -256,7 +256,7 @@
               autocomplete="one-time-code"
               bind:value={confirmCode}
               required
-              class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm font-mono text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm mt-1.5 w-full font-mono transition-colors"
             />
           </label>
           <button
@@ -286,7 +286,7 @@
               autocomplete="current-password"
               bind:value={disablePassword}
               required
-              class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm mt-1.5 w-full transition-colors"
             />
           </label>
           <button
@@ -329,7 +329,7 @@
               autocomplete="current-password"
               bind:value={recoveryPassword}
               required
-              class="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-2xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100 transition-colors"
+              class="field-input text-sm mt-1.5 w-full transition-colors"
             />
           </label>
           <button

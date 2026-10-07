@@ -89,7 +89,7 @@
             required
             bind:value={password}
             disabled={loading}
-            class="w-full px-3.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 transition-colors disabled:opacity-50 text-sm"
+            class="field-input text-sm w-full transition-colors disabled:opacity-50"
           />
         </div>
 

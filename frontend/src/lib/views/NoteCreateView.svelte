@@ -52,15 +52,15 @@
   <form onsubmit={create} class="card-elevated rounded-xl p-6 space-y-4" data-testid="note-create-form">
     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
       {$t('note_create.front')}
-      <textarea data-testid="note-create-front" bind:value={front} required rows="4" class="mt-1 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3"></textarea>
+      <textarea data-testid="note-create-front" bind:value={front} required rows="4" class="field-input text-sm mt-1 w-full"></textarea>
     </label>
     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
       {$t('note_create.back_field')}
-      <textarea data-testid="note-create-back" bind:value={back} required rows="4" class="mt-1 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3"></textarea>
+      <textarea data-testid="note-create-back" bind:value={back} required rows="4" class="field-input text-sm mt-1 w-full"></textarea>
     </label>
     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
       {$t('note_create.tags')}
-      <input data-testid="note-create-tags" bind:value={tagsText} class="mt-1 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2" />
+      <input data-testid="note-create-tags" bind:value={tagsText} class="field-input text-sm mt-1 w-full" />
     </label>
     {#if errorKey}<p role="alert" data-testid="note-create-error" class="text-rose-600 dark:text-rose-400">{$t(errorKey)}</p>{/if}
     {#if saved}<p role="status" data-testid="note-create-success" class="text-emerald-700 dark:text-emerald-400">{$t('note_create.saved')}</p>{/if}

@@ -20,8 +20,6 @@
 
   let { specs, fields, testIdPrefix = 'note-field' }: Props = $props();
 
-  const inputClass =
-    'mt-1.5 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100';
 
   /** options 字段既用于「选项」编辑，也用于选择题答案的下标选择。 */
   const options = $derived(
@@ -88,8 +86,7 @@
           spellcheck="false"
           value={asString(spec.key)}
           oninput={(event) => setString(spec.key, event.currentTarget.value)}
-          class={inputClass}
-        ></textarea>
+          class="field-input text-sm"></textarea>
       {:else if spec.control === 'lines'}
         <textarea
           data-testid="{testIdPrefix}-{spec.key}"
@@ -97,8 +94,7 @@
           spellcheck="false"
           value={arrayToLines(fields[spec.key])}
           oninput={(event) => (fields[spec.key] = linesToArray(event.currentTarget.value))}
-          class={inputClass}
-        ></textarea>
+          class="field-input text-sm"></textarea>
       {:else if spec.control === 'number'}
         <input
           type="text"
@@ -106,7 +102,7 @@
           data-testid="{testIdPrefix}-{spec.key}"
           value={asNumber(spec.key)}
           oninput={(event) => setNumber(spec.key, event.currentTarget.value)}
-          class={inputClass}
+          class="field-input text-sm"
         />
       {:else if spec.control === 'index'}
         {#if options.length === 0}
@@ -145,7 +141,7 @@
           data-testid="{testIdPrefix}-{spec.key}"
           value={asString(spec.key)}
           oninput={(event) => setString(spec.key, event.currentTarget.value)}
-          class={inputClass}
+          class="field-input text-sm"
         />
       {/if}
     {/if}

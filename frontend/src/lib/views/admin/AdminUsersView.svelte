@@ -183,7 +183,7 @@
         data-testid="admin-users-search-input"
         bind:value={query}
         placeholder={$t('admin.users.search_placeholder')}
-        class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        class="field-input text-sm mt-1.5 w-full"
       />
     </label>
     <button type="submit" data-testid="admin-users-search-submit" class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
@@ -203,19 +203,19 @@
     <h2 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.create_heading')}</h2>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.username')}</span>
-      <input data-testid="admin-users-create-username" bind:value={form.username} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-users-create-username" bind:value={form.username} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.email')}</span>
-      <input data-testid="admin-users-create-email" bind:value={form.email} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-users-create-email" bind:value={form.email} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.display_name')}</span>
-      <input data-testid="admin-users-create-display" bind:value={form.display_name} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-users-create-display" bind:value={form.display_name} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.password')}</span>
-      <input data-testid="admin-users-create-password" type="password" bind:value={form.password} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-users-create-password" type="password" bind:value={form.password} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.role')}</span>

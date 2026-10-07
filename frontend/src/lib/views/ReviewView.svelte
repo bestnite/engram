@@ -675,7 +675,7 @@
                   placeholder={current.kind === 'numeric' ? $t('review.spa.graded.placeholder_number') : $t('review.spa.graded.placeholder')}
                   aria-label={$t('review.spa.graded.placeholder')}
                   data-testid="review-graded-input"
-                  class="w-full min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 text-lg"
+                  class="field-input text-sm w-full min-h-12 text-lg"
                 />
               {:else if current.kind === 'choice_single'}
                 <RadioGroup

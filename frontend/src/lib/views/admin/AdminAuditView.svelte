@@ -106,7 +106,7 @@
     </h2>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.user')}</span>
-      <input data-testid="admin-audit-filter-user" bind:value={filters.user} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-audit-filter-user" bind:value={filters.user} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.action')}</span>
@@ -119,19 +119,19 @@
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.target_type')}</span>
-      <input data-testid="admin-audit-filter-target-type" bind:value={filters.target_type} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-audit-filter-target-type" bind:value={filters.target_type} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.target_id')}</span>
-      <input data-testid="admin-audit-filter-target-id" bind:value={filters.target_id} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-audit-filter-target-id" bind:value={filters.target_id} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.from')}</span>
-      <input data-testid="admin-audit-filter-from" type="date" bind:value={filters.from} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-audit-filter-from" type="date" bind:value={filters.from} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
       <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.to')}</span>
-      <input data-testid="admin-audit-filter-to" type="date" bind:value={filters.to} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+      <input data-testid="admin-audit-filter-to" type="date" bind:value={filters.to} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <p class="sm:col-span-3 text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.audit.filter.range_hint')}</p>
     <div class="flex items-center gap-3 sm:col-span-3">

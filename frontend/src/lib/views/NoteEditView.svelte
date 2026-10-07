@@ -231,7 +231,7 @@
         <NoteFieldsForm specs={fieldsForKind(kind)} {fields} testIdPrefix="note-field" />
 
         <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_edit.tags')}
-          <input data-testid="note-tags-editor" bind:value={tagsText} class="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+          <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
         </label>
       </Panel>
 

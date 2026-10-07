@@ -143,20 +143,20 @@
     <form onsubmit={save} data-testid="admin-smtp-form" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-2">
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.host')}</span>
-        <input data-testid="admin-smtp-host" bind:value={host} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-smtp-host" bind:value={host} class="field-input text-sm mt-1.5 w-full" />
         <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.settings.source_label')}: {sourceLabel(view.host_source)}</span>
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.port')}</span>
-        <input data-testid="admin-smtp-port" bind:value={port} inputmode="numeric" class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-smtp-port" bind:value={port} inputmode="numeric" class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.username')}</span>
-        <input data-testid="admin-smtp-username" bind:value={username} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-smtp-username" bind:value={username} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.from')}</span>
-        <input data-testid="admin-smtp-from" bind:value={from} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-smtp-from" bind:value={from} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.tls_mode')}</span>
@@ -169,7 +169,7 @@
       </label>
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.password')}</span>
-        <input type="password" data-testid="admin-smtp-password" bind:value={password} placeholder={configuredLabel(view.password_configured)} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input type="password" data-testid="admin-smtp-password" bind:value={password} placeholder={configuredLabel(view.password_configured)} class="field-input text-sm mt-1.5 w-full" />
         <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.smtp.password.hint')}</span>
       </label>
       <div class="flex gap-3 sm:col-span-2">

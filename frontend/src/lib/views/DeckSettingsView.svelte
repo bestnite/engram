@@ -199,7 +199,7 @@
               step="1"
               data-testid="deck-settings-new-per-day"
               bind:value={newPerDay}
-              class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              class="field-input text-sm mt-1 block w-full"
             />
           </label>
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -210,7 +210,7 @@
               step="1"
               data-testid="deck-settings-reviews-per-day"
               bind:value={reviewsPerDay}
-              class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              class="field-input text-sm mt-1 block w-full"
             />
           </label>
         </div>

@@ -182,7 +182,7 @@
       />
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.allowlist_label')}</span>
-        <input data-testid="admin-registration-domains" bind:value={emailDomains} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+        <input data-testid="admin-registration-domains" bind:value={emailDomains} class="field-input text-sm mt-1.5 w-full" />
         <span class="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.registration.allowlist_hint')}</span>
       </label>
       <button type="submit" data-testid="admin-registration-save" disabled={saving} class="btn-press cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">{$t('admin.registration.save')}</button>
@@ -235,7 +235,7 @@
         <h3 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.invite_create_heading')}</h3>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.field.email')}</span>
-          <input data-testid="admin-registration-invite-email" bind:value={form.email} class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+          <input data-testid="admin-registration-invite-email" bind:value={form.email} class="field-input text-sm mt-1.5 w-full" />
         </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.field.role')}</span>
@@ -248,7 +248,7 @@
         </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.registration.field.expires_days')}</span>
-          <input data-testid="admin-registration-invite-expires" bind:value={form.expires_days} inputmode="numeric" class="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+          <input data-testid="admin-registration-invite-expires" bind:value={form.expires_days} inputmode="numeric" class="field-input text-sm mt-1.5 w-full" />
         </label>
         <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:col-span-3">
           <Checkbox testId="admin-registration-invite-send" bind:checked={form.send_email} label={$t('admin.registration.field.send_email')} />

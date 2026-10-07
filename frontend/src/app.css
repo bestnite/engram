@@ -119,6 +119,33 @@ html.dark #review-done {
   }
 }
 
+/* 表单字段的统一皮肤（DESIGN.md §8：多处复用的样式必须封装成一处）。
+   只写"皮肤"（圆角/边框/底色/内边距/配色），宽度、间距、字号留给调用点——
+   字号刻意不在这里定：它必须由调用点显式给出，否则元素会继承祖先字号，
+   同一页两个输入框一个 16px 一个 14px（按钮区就发生过同样的漂移）。
+   焦点样式由上面 @layer base 的规则统一接管，调用点不要再写 focus: 类。 */
+@utility field-input {
+  border-radius: 0.75rem;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  padding: 0.5rem 0.875rem;
+  color: #18181b;
+
+  &::placeholder {
+    color: #a1a1aa;
+  }
+
+  @variant dark {
+    border-color: #3f3f46;
+    background-color: #18181b;
+    color: #f4f4f5;
+
+    &::placeholder {
+      color: #71717a;
+    }
+  }
+}
+
 /* 优雅的骨架屏脉冲微动效 */
 @utility skeleton-block {
   background-color: #f4f4f5;

@@ -628,7 +628,7 @@
             required
             bind:value={formName}
             data-testid="presets-form-name"
-            class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
+            class="field-input text-sm mt-1 block w-full"
           />
         </label>
         <label class="block">
@@ -639,7 +639,7 @@
             required
             bind:value={formRetention}
             data-testid="presets-form-retention"
-            class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
+            class="field-input text-sm mt-1 block w-full"
           />
         </label>
         <label class="block">
@@ -648,7 +648,7 @@
             type="text"
             bind:value={formLearning}
             data-testid="presets-form-learning-steps"
-            class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
+            class="field-input text-sm mt-1 block w-full"
           />
         </label>
         <label class="block">
@@ -657,7 +657,7 @@
             type="text"
             bind:value={formRelearning}
             data-testid="presets-form-relearning-steps"
-            class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
+            class="field-input text-sm mt-1 block w-full"
           />
         </label>
         <label class="block">
@@ -668,7 +668,7 @@
             required
             bind:value={formMaxInterval}
             data-testid="presets-form-max-interval"
-            class="mt-1 block w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm"
+            class="field-input text-sm mt-1 block w-full"
           />
         </label>
         <div class="flex items-center gap-2">
