@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -25,30 +24,6 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	router.GET("/presets", s.presetRoute)
 	// SPA 预设接口：同源 JSON 读写走 /api/v1/presets*。
 	s.registerPresetAPIRoutes(router)
-}
-
-// ownedPreset 解析 :id 并确认预设属于当前用户；否则按「不存在」处理，不泄露他人预设的存在性。
-func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		c.AbortWithStatus(http.StatusNotFound)
-		return nil, false
-	}
-	p, err := s.presets.ByID(c.Request.Context(), id)
-	if err != nil {
-		if !store.IsNotFound(err) {
-			s.logger.Error("load preset failed", "preset_id", id, "error", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return nil, false
-		}
-		c.AbortWithStatus(http.StatusNotFound)
-		return nil, false
-	}
-	if p.OwnerUserID != userID {
-		c.AbortWithStatus(http.StatusNotFound)
-		return nil, false
-	}
-	return p, true
 }
 
 // optimizeJobFor 按 id 读取优化作业，并校验它确实属于该预设（kind 与 target 都对）。

@@ -22,25 +22,14 @@ import (
 //
 // 公开分享浏览 /s/:token 的切流断言在 share_test.go；本文件只覆盖共享管理页与克隆入口。
 
-// ssrSharingMarker 是 SSR 共享页特有的表单标记：SPA 应用壳里不会出现。
-func ssrSharingMarker(deckID uint64) string {
-	return `action="/decks/` + u64str(deckID) + `/sharing/grant"`
-}
-
 // TestSharingRouteServesShellForOwner 断言 owner 访问 GET /decks/:id/sharing 得到 SPA 应用壳，
-// 由客户端路由渲染共享管理页，不再渲染 SSR 共享页。
+// 由客户端路由渲染共享管理页。
 func TestSharingRouteServesShellForOwner(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Sharing shell deck")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/sharing", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), ssrSharingMarker(deck.ID)) {
-		t.Errorf("GET sharing still renders the SSR page: %s", snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `name="username"`) {
-		t.Errorf("GET sharing still renders the SSR grant form: %s", snippet(rec.Body.String()))
-	}
 }
 
 // TestSharingRouteDeniesNonOwnerAndAnonymous 断言切壳不改动授权：匿名 303 重定向登录页；

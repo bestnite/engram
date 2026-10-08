@@ -317,13 +317,6 @@ func requestLocale(c *gin.Context) string {
 	return i18n.DefaultLocaleCode
 }
 
-// HasAsset 报告指定逻辑路径的静态资源是否存在。
-func (s *Shell) HasAsset(logical string) bool {
-	clean := strings.TrimPrefix(logical, "/")
-	_, ok := s.assets[clean]
-	return ok
-}
-
 // StaticShellURLs 返回嵌入构建中可安全预缓存的 Vite 脚本与样式表。
 func (s *Shell) StaticShellURLs() []string {
 	urls := make([]string, 0, len(s.assets))

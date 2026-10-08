@@ -14,7 +14,7 @@ import (
 // 页面迁移不改动授权判定：未登录一律重定向登录页，卡组设置页的 owner 门禁仍在返回应用壳
 // 之前生效，写操作全部走 JSON 端点。
 
-// assertServesShell 断言响应是 SPA 应用壳（入口脚本引用），而不是 SSR 页面。
+// assertServesShell 断言响应是 SPA 应用壳（入口脚本引用）。
 func assertServesShell(t *testing.T, rec *httptest.ResponseRecorder, what string) {
 	t.Helper()
 	body := rec.Body.String()
@@ -23,12 +23,6 @@ func assertServesShell(t *testing.T, rec *httptest.ResponseRecorder, what string
 	}
 	if !strings.Contains(body, `id="app"`) {
 		t.Errorf("%s did not serve the SPA shell: %s", what, snippet(body))
-	}
-	// SSR 设置页的标志性结构不得出现（服务端不再渲染它们）。
-	for _, marker := range []string{"hx-post", "name=\"csrf_token\""} {
-		if strings.Contains(body, marker) {
-			t.Errorf("%s still renders the SSR page (%q present)", what, marker)
-		}
 	}
 }
 

@@ -3,31 +3,13 @@ package web
 import (
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 管理面板的用户管理支撑函数（ROADMAP.md M6-2）。
 //
 // SSR 用户管理页删除后，用户管理的读写在 /api/v1/admin/users* 的 JSON 端点上
-// （admin_users_api.go）；这里只保留 JSON 路径仍复用的判定与选项构造。
-
-// statusLabel 把存储取值翻成显示文案。
-func statusLabel(loc *i18n.Localizer, status string) string {
-	if status == store.StatusDisabled {
-		return loc.T("admin.users.status.disabled")
-	}
-	return loc.T("admin.users.status.active")
-}
-
-// roleOptions 返回角色下拉项，顺序固定（admin 在前）。卡组共享页仍复用它。
-func roleOptions(loc *i18n.Localizer) []views.AdminRoleOption {
-	return []views.AdminRoleOption{
-		{Value: store.RoleUser, Label: loc.T("admin.users.role.user")},
-		{Value: store.RoleAdmin, Label: loc.T("admin.users.role.admin")},
-	}
-}
+// （admin_users_api.go）；这里只保留 JSON 路径仍复用的判定。
 
 // wouldRemoveLastAdmin 判断对 target 做「禁用 / 删除 / 降权」是否会清空管理员。
 // 仅在 target 本身是活跃管理员、且系统里没有第二个活跃管理员时为 true。

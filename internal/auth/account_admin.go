@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -64,9 +63,6 @@ func (s *AccountService) ResetPasswordTx(ctx context.Context, tx *gorm.DB, userI
 	}
 	return temp, nil
 }
-
-// ErrLastAdmin 表示该操作会让系统一个可登录管理员都不剩；handler 据此拒绝并给稳定错误码。
-var ErrLastAdmin = errors.New("cannot remove the last active admin")
 
 // ForceLogout 作废指定用户当前全部会话（强制下线），不改密码、不改状态。
 func (s *AccountService) ForceLogout(ctx context.Context, userID uint64) error {

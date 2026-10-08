@@ -65,7 +65,7 @@ func (a *API) createKey(c *gin.Context) {
 	recordAudit(c.Request.Context(), a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
-		Action:   "api_key.create",
+		Action:   store.ActionAPIKeyCreate,
 		Detail:   map[string]any{"key_id": created.Key.ID, "name": created.Key.Name, "scopes": created.Key.Scopes},
 	})
 	c.JSON(http.StatusCreated, gin.H{"key": created.Key, "plaintext": created.Plaintext})

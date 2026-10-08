@@ -745,15 +745,6 @@ export interface ProfileValidationResult {
 }
 
 /**
- * 会话与 CSRF 信息包结构
- */
-export interface SessionInfo {
-  authenticated: boolean;
-  user?: UserProfile;
-  csrf_token?: string;
-}
-
-/**
  * TOTP 管理接口（Go: internal/web/totp_api.go）。
  *
  * GET 只报告状态，绝不返回 secret 或 otpauth；secret 只在 begin 响应里出现一次，
@@ -1235,11 +1226,6 @@ export interface ResetPasswordRequest {
 
 export interface ResetPasswordResponse {
   reset: boolean;
-}
-
-/** 只带一枚令牌的请求（邮箱验证、改邮箱确认）。 */
-export interface TokenOnlyRequest {
-  token: string;
 }
 
 export interface VerifyEmailResponse {

@@ -124,15 +124,6 @@ func (s *DeckShareInviteStore) Delete(ctx context.Context, deckID, userID uint64
 	return nil
 }
 
-// DeleteForDeck 清掉某个卡组的全部邀请（卡组被删除时级联，别留孤儿行）。
-func (s *DeckShareInviteStore) DeleteForDeck(ctx context.Context, deckID uint64) error {
-	err := s.db.WithContext(ctx).Where("deck_id = ?", deckID).Delete(&DeckShareInvite{}).Error
-	if err != nil {
-		return fmt.Errorf("delete deck share invites for deck: %w", err)
-	}
-	return nil
-}
-
 // DeleteExpired 删除已过期的邀请（internal/retention 的 Expirer）。
 func (s *DeckShareInviteStore) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
 	res := s.db.WithContext(ctx).

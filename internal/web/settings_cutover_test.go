@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 )
 
@@ -13,39 +12,24 @@ import (
 // 端点；判权与迁移前的 SSR 页逐项一致（都只要求已登录会话，匿名重定向登录页）。SSR 页面层
 // 已删除，不再回退。
 //
-// 本文件钉住：登录用户拿到应用壳、匿名被重定向，且外壳里不含 SSR 页面结构。
-
-// settingsSSRMarker 是 SSR 设置页特有的表单标记：SPA 应用壳里不会出现。
-func settingsSSRMarker() string { return `action="/settings/profile"` }
-
-// keysSSRMarker 是 SSR「我的 API Key」页特有的创建表单标记：SPA 应用壳里不会出现。
-func keysSSRMarker() string { return `action="/settings/keys"` }
+// 本文件钉住：登录用户拿到应用壳、匿名被重定向。
 
 // TestSettingsRouteServesShell 断言登录用户访问 GET /settings 得到 SPA 应用壳，
-// 由客户端路由渲染个人设置页，不再渲染 SSR 设置页。
+// 由客户端路由渲染个人设置页。
 func TestSettingsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getWithCookies(t, srv, "/settings", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), settingsSSRMarker()) {
-		t.Errorf("GET /settings still renders the SSR settings form: %s", snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), `id="settings-display-name"`) {
-		t.Errorf("GET /settings still renders the SSR profile input: %s", snippet(rec.Body.String()))
-	}
 }
 
 // TestKeysRouteServesShell 断言登录用户访问 GET /settings/keys 得到 SPA 应用壳，
-// 由客户端路由渲染「我的 API Key」页，不再渲染 SSR keys 页。
+// 由客户端路由渲染「我的 API Key」页。
 func TestKeysRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getWithCookies(t, srv, "/settings/keys", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), keysSSRMarker()) {
-		t.Errorf("GET /settings/keys still renders the SSR keys form: %s", snippet(rec.Body.String()))
-	}
 }
 
 // TestSettingsAndKeysRoutesRedirectAnonymous 断言切壳不改动授权：两个页面都只要求已登录

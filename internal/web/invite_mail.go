@@ -115,15 +115,6 @@ func (s *Server) inviteRecipient(ctx context.Context, email string) *store.User 
 	return u
 }
 
-// inviteMailNote 返回邀请页「寄到邮箱」入口旁的说明：可用时说明行为，不可用时
-// 直接给出 mail.not_configured 的原因文案，让管理员一眼知道为什么发不出去。
-func inviteMailNote(loc *i18n.Localizer, available bool) string {
-	if available {
-		return loc.T("mail.invite.form_note")
-	}
-	return loc.T("mail.not_configured")
-}
-
 // inviteMessage 组装邀请邮件。unsubURL 非空时把它渲染进正文页脚与纯文本段末尾——
 // RFC 8058 头只有邮件客户端看得到，正文里也要有一个可点的退订入口。
 func (s *Server) inviteMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expiresAt *time.Time, unsubURL string) mail.Message {

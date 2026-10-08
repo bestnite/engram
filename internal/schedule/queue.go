@@ -117,21 +117,6 @@ type QueueOptions struct {
 	Rand *rand.Rand
 }
 
-// DefaultQueueOptions 返回文档化的默认值（新卡 20、复习 200、
-// 复习卡按 retrievability 升序、新卡随机）。零值 QueueOptions 不等价于本返回值：
-// 零值的 ReviewsPerDay 表示"读卡组值"，因此显式默认值必须由调用方在此取得后再覆盖。
-func DefaultQueueOptions() QueueOptions {
-	return QueueOptions{
-		Timezone:      DefaultQueueTimezone,
-		DayCutoffHour: store.Ptr(DefaultDayCutoffHour),
-		NewPerDay:     DefaultNewPerDay,
-		ReviewsPerDay: DefaultReviewsPerDay,
-		ReviewOrder:   OrderByRetrievability,
-		NewOrder:      NewOrderRandom,
-		BatchSize:     DefaultReviewBatch,
-	}
-}
-
 // withDefaults 把零值字段补齐为文档化默认值。整型零值无法区分"未设置"与"显式 0"，
 // 因此每日上限不在默认值里 —— 它们要先从各卡组读取（0 由卡组列表达"不限"）。
 func (o QueueOptions) withDefaults() QueueOptions {

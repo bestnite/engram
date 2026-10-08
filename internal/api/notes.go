@@ -8,13 +8,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 类型别名保留旧名，避免既有测试与调用处改名（真实定义在 service.go，REST 与 MCP 共用）。
-type (
-	importNote     = ImportNote
-	importRequest  = ImportRequest
-	importError    = ImportError
-	importResponse = ImportResponse
-)
+// importResponse 保留旧名，避免既有调用处改名（真实定义在 service.go，REST 与 MCP 共用）。
+type importResponse = ImportResponse
 
 // listNotes 返回卡组下的卡片列表（分页、标签过滤、关键词搜索）。
 func (a *API) listNotes(c *gin.Context) {
@@ -60,9 +55,6 @@ func NoteJSON(n *store.Note) map[string]any {
 		"external_ref": n.ExternalRef,
 	}
 }
-
-// noteJSON 保留旧名，供包内既有调用。
-func noteJSON(n *store.Note) map[string]any { return NoteJSON(n) }
 
 // importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
 func (a *API) importNotes(c *gin.Context) {

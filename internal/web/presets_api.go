@@ -187,7 +187,7 @@ func (s *Server) presetUpdate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, ok := s.ownedPresetAPI(c, user.ID)
+	p, ok := s.ownedPreset(c, user.ID)
 	if !ok {
 		return
 	}
@@ -219,7 +219,7 @@ func (s *Server) presetDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, ok := s.ownedPresetAPI(c, user.ID)
+	p, ok := s.ownedPreset(c, user.ID)
 	if !ok {
 		return
 	}
@@ -258,7 +258,7 @@ func (s *Server) presetOptimize(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, ok := s.ownedPresetAPI(c, user.ID)
+	p, ok := s.ownedPreset(c, user.ID)
 	if !ok {
 		return
 	}
@@ -309,7 +309,7 @@ func (s *Server) presetOptimizeStatus(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, ok := s.ownedPresetAPI(c, user.ID)
+	p, ok := s.ownedPreset(c, user.ID)
 	if !ok {
 		return
 	}
@@ -335,7 +335,7 @@ func (s *Server) presetOptimizeRevert(c *gin.Context) {
 	if !ok {
 		return
 	}
-	p, ok := s.ownedPresetAPI(c, user.ID)
+	p, ok := s.ownedPreset(c, user.ID)
 	if !ok {
 		return
 	}
@@ -403,9 +403,9 @@ func (s *Server) writePresetList(c *gin.Context, userID uint64, logMsg string) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ownedPresetAPI 解析 :id 并确认预设属于当前用户；非 owner/不存在/解析失败一律 404 JSON，
-// 与 ownedPreset 的同口径（不通过状态码泄露他人预设的存在性）。
-func (s *Server) ownedPresetAPI(c *gin.Context, userID uint64) (*store.Preset, bool) {
+// ownedPreset 解析 :id 并确认预设属于当前用户；非 owner/不存在/解析失败一律 404 JSON，
+// 不通过状态码泄露他人预设的存在性。
+func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
 		presetError(c, http.StatusNotFound, "not_found")

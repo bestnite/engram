@@ -19,7 +19,6 @@ const (
 	ActionUserLoginFailed    = "user.login_failed"
 	ActionUserLogout         = "user.logout"
 	// M2-7 卡片列表/编辑页的写操作。
-	ActionNoteCreate = "note.create"
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
@@ -51,7 +50,6 @@ const (
 	// M6-4 管理面板解绑外部身份。
 	ActionIdentityUnlink = "identity.unlink"
 	// M5-2 授权变更（共享页面）：授予 / 改角色 / 撤销。
-	ActionDeckGrant      = "deck.grant"
 	ActionDeckRoleChange = "deck.role_change"
 	ActionDeckRevoke     = "deck.revoke"
 	// L3 分享同意制：邀请、接受、拒绝各一条，以及用户改自己的接收策略。

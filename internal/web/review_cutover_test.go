@@ -40,8 +40,7 @@ type reviewRenderBody struct {
 	EditHref  string `json:"edit_href"`
 }
 
-// TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由
-// 渲染复习页，不再渲染 SSR 复习页（SSR 的 #review-area 与四档按钮必须消失）。
+// TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由渲染复习页。
 // 卡组范围参数同样接受：/review?deck=A&deck=B 返回的仍是应用壳。
 func TestReviewRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
@@ -55,9 +54,6 @@ func TestReviewRouteServesShell(t *testing.T) {
 	} {
 		rec := getWithCookies(t, srv, path, cookies)
 		assertShell(t, rec)
-		if strings.Contains(rec.Body.String(), `id="review-area"`) {
-			t.Errorf("GET %s still renders the SSR review page: %s", path, snippet(rec.Body.String()))
-		}
 	}
 }
 

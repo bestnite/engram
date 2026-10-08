@@ -1,11 +1,7 @@
 package i18n
 
 import (
-	"fmt"
-	"io/fs"
-	"path"
 	"sort"
-	"strings"
 )
 
 // 语言包完整度报告（ROADMAP.md M8-4）。
@@ -36,32 +32,6 @@ func (c LocaleCoverage) Percent() int {
 
 // Complete 表示该语言相对基准没有任何缺失 key。
 func (c LocaleCoverage) Complete() bool { return len(c.Missing) == 0 }
-
-// CatalogSets 读取 <dir>/*.yaml 语言包的 key 集合，文件名（去掉 .yaml）即语言码。
-// 与 NewFromFS 不同，它**不做 parity 校验**：完整度报告正需要看见「不完整」的语言包，
-// 因此这里只解析 id 集合，缺 key 不报错。
-func CatalogSets(fsys fs.FS, dir string) (map[string]map[string]bool, error) {
-	entries, err := fs.ReadDir(fsys, dir)
-	if err != nil {
-		return nil, fmt.Errorf("i18n: read locale dir %q: %w", dir, err)
-	}
-	sets := make(map[string]map[string]bool)
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := fs.ReadFile(fsys, path.Join(dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("i18n: read locale file %q: %w", e.Name(), err)
-		}
-		ids, err := messageIDs(data)
-		if err != nil {
-			return nil, fmt.Errorf("i18n: parse locale file %q: %w", e.Name(), err)
-		}
-		sets[strings.TrimSuffix(e.Name(), ".yaml")] = ids
-	}
-	return sets, nil
-}
 
 // Coverage 计算每种语言相对基准 key 集合的覆盖率（口径见本文件顶部注释）。
 // 返回顺序按语言码字典序，保证页面渲染稳定。

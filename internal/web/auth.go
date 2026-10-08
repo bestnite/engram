@@ -278,12 +278,3 @@ func registerInputErrorCode(username, email, password string) string {
 	}
 	return ""
 }
-
-// validateRegisterInput 做表单级校验并返回已本地化的提示；全部通过时返回空串。
-// 判定委托给 registerInputErrorCode，本地化只是把同一份 code 映射成语言包文案。
-func validateRegisterInput(loc *i18n.Localizer, username, email, password string) string {
-	if code := registerInputErrorCode(username, email, password); code != "" {
-		return loc.T("auth.error." + code)
-	}
-	return ""
-}

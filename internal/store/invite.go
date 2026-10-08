@@ -22,8 +22,6 @@ var (
 	ErrInviteExpired = errors.New("invite expired")
 	// ErrInviteEmailMismatch 表示注册邮箱与邀请限定的邮箱不一致。
 	ErrInviteEmailMismatch = errors.New("invite is restricted to another email")
-	// ErrInviteTokenRequired 表示生成邀请时 token 为空且随机生成失败。
-	ErrInviteTokenRequired = errors.New("invite token is required")
 )
 
 // InviteStore 封装 invites 表；token 一次性、可限定邮箱、可设过期。
@@ -169,16 +167,6 @@ func (s *InviteStore) MarkUsed(ctx context.Context, token string, at time.Time) 
 		return false, fmt.Errorf("mark invite used: %w", res.Error)
 	}
 	return res.RowsAffected == 1, nil
-}
-
-// SetUsedBy 记录接受邀请的用户；建号成功后调用，best-effort。
-func (s *InviteStore) SetUsedBy(ctx context.Context, token string, userID uint64) error {
-	if err := s.db.WithContext(ctx).Model(&Invite{}).
-		Where("token = ?", token).
-		Update("used_by", userID).Error; err != nil {
-		return fmt.Errorf("set invite used_by: %w", err)
-	}
-	return nil
 }
 
 // Release 回滚一次 MarkUsed：建号失败时把 used_at 清空，让邀请仍可用。

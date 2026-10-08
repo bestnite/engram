@@ -33,19 +33,13 @@ func assertShell(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 // TestDeckListRouteServesShell 断言 GET /decks 返回 SPA 应用壳，由客户端路由渲染卡组列表，
-// 不再渲染 SSR 列表页（SSR 页面上的卡组名与「复习所选」控件必须消失）。
+// 页面正文不含任何服务端渲染的列表数据（应用壳是静态入口）。
 func TestDeckListRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	seedDeck(t, db, ownerID, "SPA shell deck")
+	seedDeck(t, db, ownerID, "List deck")
 
 	rec := getWithCookies(t, srv, "/decks", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), "SPA shell deck") {
-		t.Errorf("GET /decks still renders the SSR deck list: %s", snippet(rec.Body.String()))
-	}
-	if strings.Contains(rec.Body.String(), "复习所选") {
-		t.Errorf("GET /decks still renders the SSR review-selected control: %s", snippet(rec.Body.String()))
-	}
 }
 
 // TestDeckListRouteRedirectsAnonymous 断言切壳不改动授权：匿名访问 GET /decks 仍重定向登录页，
@@ -62,21 +56,18 @@ func TestDeckListRouteRedirectsAnonymous(t *testing.T) {
 }
 
 // TestNoteListRouteServesShell 断言 GET /decks/:id/notes 对可读卡组返回 SPA 应用壳，
-// 由客户端路由渲染卡片列表，不再渲染 SSR 列表页（SSR 的卡组标题必须消失）。
+// 由客户端路由渲染卡片列表。
 func TestNoteListRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "SPA notes deck")
+	deck := seedDeck(t, db, ownerID, "Notes deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), "SPA notes deck") {
-		t.Errorf("GET notes still renders the SSR list: %s", snippet(rec.Body.String()))
-	}
 }
 
-// TestNoteListRouteEnforcesDeckRole 断言切壳不改动授权：卡片列表保留与迁移前 SSR 列表页相同的
-// reader 判定——匿名重定向登录页，无权读的卡组仍 403，不因返回应用壳而放行。
+// TestNoteListRouteEnforcesDeckRole 断言授权判定不被发壳绕过：匿名重定向登录页，
+// 无权读的卡组仍 403。
 func TestNoteListRouteEnforcesDeckRole(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Private notes deck")

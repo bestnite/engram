@@ -145,9 +145,6 @@ func (t *Translator) SupportedCodes() []string {
 	return out
 }
 
-// DefaultCode 返回站点默认语言码。
-func (t *Translator) DefaultCode() string { return DefaultLocaleCode }
-
 // Pick 按固定优先级选出请求语言：requested（?lang 显式覆盖）> userLocale（用户设置）
 // > acceptLanguage > 站点默认。某一级给出的是不受支持的语言时跳到下一级，而不是做
 // 就近匹配——否则用户把语言设成 "de" 会压过 Accept-Language 里的 "en"。

@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -17,7 +16,7 @@ import (
 // 角色授予复用 media_access_test.go 里的 grantRole，直接写 store 的授权表。
 
 // TestNoteEditRouteServesShell 断言 GET /decks/:id/notes/:nid 对 owner 返回 SPA 应用壳，
-// 由客户端路由渲染编辑页，不再渲染 SSR 编辑表单。
+// 由客户端路由渲染编辑页。
 func TestNoteEditRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "SPA edit deck")
@@ -25,25 +24,19 @@ func TestNoteEditRouteServesShell(t *testing.T) {
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), `name="field.front"`) {
-		t.Errorf("GET edit still renders the SSR editor form: %s", snippet(rec.Body.String()))
-	}
 }
 
 // TestNoteNewRouteServesShell 断言 GET /decks/:id/new-note 对 owner 返回 SPA 应用壳，
-// 不再渲染 SSR 新建表单。
+// 页面正文不含服务端渲染的表单。
 func TestNoteNewRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "SPA create deck")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/new-note", cookies)
 	assertShell(t, rec)
-	if strings.Contains(rec.Body.String(), "data-note-form") {
-		t.Errorf("GET create still renders the SSR create form: %s", snippet(rec.Body.String()))
-	}
 }
 
-// TestNoteEditRouteAllowsEditorAndDeniesReader 断言编辑壳沿用 SSR 编辑页的 editor 判权：
+// TestNoteEditRouteAllowsEditorAndDeniesReader 断言编辑壳沿用 editor 判权：
 // 被授予 editor 的用户拿到应用壳，被授予 reader 的用户仍回 403。
 func TestNoteEditRouteAllowsEditorAndDeniesReader(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

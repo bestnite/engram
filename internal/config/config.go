@@ -125,20 +125,6 @@ func (c *Config) Get(key Key) Value {
 // String 便于直接当字符串使用。
 func (v Value) String() string { return v.Value }
 
-// All 按 Key 排序返回全部配置项的生效值，供管理面板展示"值 + 来源"。
-func (c *Config) All() []Value {
-	keys := make([]string, 0, len(fields))
-	for key := range fields {
-		keys = append(keys, string(key))
-	}
-	sort.Strings(keys)
-	out := make([]Value, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, c.Get(Key(k)))
-	}
-	return out
-}
-
 // TrustedProxies 解析并校验 TRUSTED_PROXIES：逗号分隔的 IP 或 CIDR 列表。
 //
 // 缺省为空 = 不信任任何代理：gin 不再采信 X-Forwarded-For / X-Real-IP，ClientIP() 回落到
@@ -182,14 +168,4 @@ func validateProxyEntry(entry string) error {
 		return fmt.Errorf("not a valid IP or CIDR")
 	}
 	return nil
-}
-
-// EnvNames 返回注册表中全部环境变量名，按字母序。
-func EnvNames() []string {
-	names := make([]string, 0, len(fields))
-	for _, f := range fields {
-		names = append(names, f.env)
-	}
-	sort.Strings(names)
-	return names
 }
