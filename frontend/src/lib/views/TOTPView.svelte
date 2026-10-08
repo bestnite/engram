@@ -5,6 +5,7 @@
   import type { TOTPStatus } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -194,9 +195,9 @@
         {$t('settings.totp.heading')}
       </h1>
       <p class="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
-      <p data-testid="totp-status" class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+      <Badge testId="totp-status" class="px-3 py-1 font-semibold">
         {status.enabled ? $t('settings.totp.status.enabled') : $t('settings.totp.status.disabled')}
-      </p>
+      </Badge>
     </header>
 
     {#if actionError}

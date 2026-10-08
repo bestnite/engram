@@ -11,6 +11,7 @@
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import { deckVisibilityLabel as visibilityLabel, noteKindLabel as kindLabel } from '../labels';
   import { CARD_KIND_FIELDS } from '../card-fields';
 
@@ -275,9 +276,7 @@
             {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
           </h1>
           {#if visibilityLabel(deck?.visibility, $t)}
-            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
-              {visibilityLabel(deck?.visibility, $t)}
-            </span>
+            <Badge>{visibilityLabel(deck?.visibility, $t)}</Badge>
           {/if}
         </div>
         {#if deck?.description}
@@ -488,9 +487,7 @@
                     label={$t('notes.select_one')}
                   />
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
-                  <span class="px-2 py-0.5 rounded text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
-                    {kindLabel(note.kind, $t)}
-                  </span>
+                  <Badge class="font-semibold">{kindLabel(note.kind, $t)}</Badge>
                   {#if note.external_ref}
                     <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
                       [{note.external_ref}]
@@ -531,9 +528,7 @@
               {#if note.tags && note.tags.length > 0}
                 <div class="flex flex-wrap gap-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/40" data-testid={`note-tags-${note.id}`}>
                   {#each note.tags as tag (tag)}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                      #{tag}
-                    </span>
+                    <Badge>#{tag}</Badge>
                   {/each}
                 </div>
               {/if}

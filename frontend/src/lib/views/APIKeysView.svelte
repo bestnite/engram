@@ -4,6 +4,7 @@
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
 
   let keys = $state<APIKeyRecord[]>([]);
   let name = $state('');
@@ -130,9 +131,7 @@
               <strong class="text-zinc-600 dark:text-zinc-300 line-through">{key.name}</strong>
               <p class="text-xs text-zinc-500 dark:text-zinc-400">{key.prefix} · {key.scopes}</p>
             </div>
-            <span data-testid="keys-revoked-badge-{key.id}" class="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-              {$t('keys.revoked')}
-            </span>
+            <Badge testId={`keys-revoked-badge-${key.id}`}>{$t('keys.revoked')}</Badge>
           </li>
         {/each}
       </ul>

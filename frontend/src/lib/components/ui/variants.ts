@@ -27,3 +27,17 @@ export const buttonVariants = tv({
   },
   defaultVariants: { variant: 'primary', size: 'md' },
 });
+/** 状态徽章（已撤销、可见性、题型、标签等）的唯一样式来源。 */
+export const badgeVariants = tv({
+  base: 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+  variants: {
+    variant: {
+      neutral: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+      info: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+      success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+      warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+      danger: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+    },
+  },
+  defaultVariants: { variant: 'neutral' },
+});

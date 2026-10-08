@@ -5,6 +5,7 @@
   import type { ApiClient, StatsSummary, Deck } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import { deckVisibilityLabel as visibilityLabel } from '../labels';
 
   interface Props {
@@ -125,9 +126,7 @@
                 {$t('home.start_review')} ({formatNumber(summary.due)})
               </Button>
             {:else}
-              <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                {$t('home.all_caught_up')}
-              </span>
+              <Badge variant="success" class="px-3 py-1.5">{$t('home.all_caught_up')}</Badge>
             {/if}
           </div>
         </div>
@@ -188,9 +187,7 @@
                         {deck.name}
                       </h3>
                       {#if visibilityLabel(deck.visibility, $t)}
-                        <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">
-                          {visibilityLabel(deck.visibility, $t)}
-                        </span>
+                        <Badge>{visibilityLabel(deck.visibility, $t)}</Badge>
                       {/if}
                     </div>
                     {#if deck.description}

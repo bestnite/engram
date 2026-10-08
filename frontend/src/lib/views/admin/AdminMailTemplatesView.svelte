@@ -6,6 +6,7 @@
   import AdminNav from './AdminNav.svelte';
   import Panel from '../../components/ui/Panel.svelte';
   import Button from '../../components/ui/Button.svelte';
+  import Badge from '../../components/ui/Badge.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import { draftFor } from '../../mail-template-draft';
@@ -243,10 +244,7 @@
                     >{`{{${variable.name}}}`}</code
                   >
                   {#if variable.required}
-                    <span
-                      class="rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-amber-700 dark:text-amber-300"
-                      data-testid="admin-mail-template-var-required">{variable.name}</span
-                    >
+                    <Badge variant="warning" testId="admin-mail-template-var-required">{variable.name}</Badge>
                   {/if}
                   <span class="text-zinc-500 dark:text-zinc-400">{$t(variable.note_key)}</span>
                 </li>

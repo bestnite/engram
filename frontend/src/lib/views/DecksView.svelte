@@ -6,6 +6,7 @@
   import type { Deck, DeckShareInvite } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -454,9 +455,7 @@
 
                 <div class="flex items-center gap-1.5 shrink-0">
                   {#if visibilityLabel(deck.visibility, $t)}
-                    <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-medium">
-                      {visibilityLabel(deck.visibility, $t)}
-                    </span>
+                    <Badge>{visibilityLabel(deck.visibility, $t)}</Badge>
                   {/if}
                   <button
                     type="button"

@@ -10,6 +10,7 @@
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   interface Props {
     client?: ApiClient;
@@ -388,14 +389,14 @@
     }
   });
 
-  function verdictBadgeClass(verdict: GradedFeedback['verdict']): string {
+  function verdictVariant(verdict: GradedFeedback['verdict']): 'success' | 'warning' | 'danger' {
     switch (verdict) {
       case 'correct':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800';
+        return 'success';
       case 'partial':
-        return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800';
+        return 'warning';
       default:
-        return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800';
+        return 'danger';
     }
   }
 
@@ -564,9 +565,7 @@
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
-          <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded">
-            {kindLabel(current.kind, $t)}
-          </span>
+          <Badge class="px-2.5 font-semibold">{kindLabel(current.kind, $t)}</Badge>
           <button
             type="button"
             onclick={gotoEdit}
@@ -622,7 +621,7 @@
           {#if feedback}
             <div bind:this={feedbackSection} class="space-y-5" data-testid="review-graded-result">
               <div class="flex items-center justify-between">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border {verdictBadgeClass(feedback.verdict)}" data-testid="review-graded-verdict">
+                <Badge variant={verdictVariant(feedback.verdict)} class="gap-1.5 px-3 py-1 text-sm font-semibold" testId="review-graded-verdict">
                   {#if feedback.verdict === 'correct'}
                     <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
@@ -637,10 +636,10 @@
                     </svg>
                   {/if}
                   <span>{$t(`review.graded.${feedback.verdict}`)}</span>
-                </span>
-                <span class="text-xs px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-mono" data-testid="review-graded-score">
+                </Badge>
+                <Badge testId="review-graded-score" class="px-2.5 py-1 font-mono">
                   {$t('review.graded.score')} · {Math.round(feedback.score * 100)}%
-                </span>
+                </Badge>
               </div>
               <div class="border-t border-zinc-200 dark:border-zinc-700 pt-5">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>

@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import type {
@@ -444,9 +445,9 @@
                 {#if getPresetDecks(p.id).length > 0}
                   <div class="flex flex-wrap gap-1.5">
                     {#each getPresetDecks(p.id) as d (d.id)}
-                      <a href={`/decks/${d.id}`} class="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 font-medium hover:underline">
-                        {d.name}
-                      </a>
+                      <Badge variant="info">
+                        <a href={`/decks/${d.id}`} class="hover:underline">{d.name}</a>
+                      </Badge>
                     {/each}
                   </div>
                 {:else}
@@ -501,9 +502,7 @@
           <section class="rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-5 space-y-2">
             <div class="flex items-center justify-between">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.weights.heading')}</h3>
-              <span class="rounded-md px-2 py-0.5 text-xs font-medium" data-testid={`preset-${p.id}-weights-source`}>
-                {$t(weightsSourceKey(p))}
-              </span>
+              <Badge testId={`preset-${p.id}-weights-source`}>{$t(weightsSourceKey(p))}</Badge>
             </div>
             {#if p.weights_optimized_at}
               <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.weights.optimized_at', { time: p.weights_optimized_at })}</p>
