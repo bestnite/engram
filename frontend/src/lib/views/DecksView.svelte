@@ -145,13 +145,13 @@
       showCreateModal = false;
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'deck_name_invalid') {
-        createError = 'decks.spa_create.name_invalid';
+        createError = 'decks.create.name_invalid';
       } else if (err instanceof ApiClientError && err.code === 'deck_description_invalid') {
-        createError = 'decks.spa_create.description_invalid';
+        createError = 'decks.create.description_invalid';
       } else if (err instanceof ApiClientError && err.code === 'invalid_request') {
-        createError = 'decks.spa_create.invalid_request';
+        createError = 'decks.create.invalid_request';
       } else {
-        createError = 'decks.spa_create.failed';
+        createError = 'decks.create.failed';
       }
     } finally {
       creating = false;
@@ -284,7 +284,7 @@
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          <span>{$t('decks.spa_create.heading')}</span>
+          <span>{$t('decks.create.heading')}</span>
         </Button>
       </div>
     </div>
@@ -422,7 +422,7 @@
           onclick={openCreateModal}
           class="text-xs px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
         >
-          + {$t('decks.spa_create.heading')}
+          + {$t('decks.create.heading')}
         </button>
       </div>
     {:else}
@@ -499,14 +499,14 @@
   <Dialog
     open={true}
     onOpenChange={(open) => { if (!open) closeCreateModal(); }}
-    title={$t('decks.spa_create.heading')}
+    title={$t('decks.create.heading')}
     size="lg"
     testId="deck-create-dialog"
   >
       <form onsubmit={createDeck} class="space-y-4">
         <div>
           <label for="deck-name-input" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            {$t('decks.spa_create.name')}
+            {$t('decks.create.name')}
           </label>
           <input
             id="deck-name-input"
@@ -514,14 +514,14 @@
             bind:value={name}
             required
             maxlength="200"
-            placeholder={$t('decks.spa_create.name_placeholder')}
+            placeholder={$t('decks.create.name_placeholder')}
             class="field-input text-sm block w-full"
           />
         </div>
 
         <div>
           <label for="deck-desc-input" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            {$t('decks.spa_create.description')}
+            {$t('decks.create.description')}
           </label>
           <textarea
             id="deck-desc-input"
@@ -529,12 +529,12 @@
             bind:value={description}
             maxlength="2000"
             rows="3"
-            placeholder={$t('decks.spa_create.description_placeholder')}
+            placeholder={$t('decks.create.description_placeholder')}
             class="field-input text-sm block w-full"
           ></textarea>
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" for="deck-create-preset">
-              {$t('decks.spa_create.preset')}
+              {$t('decks.create.preset')}
             </label>
             <Select
               class="w-full"
@@ -553,7 +553,7 @@
         <div class="pt-2 flex items-center justify-end gap-3">
           <Button variant="outline" size="lg" onclick={closeCreateModal}>{$t('note_edit.cancel')}</Button>
           <Button type="submit" size="lg" testId="deck-create-submit" disabled={creating}>
-            {creating ? $t('decks.spa_create.submitting') : $t('decks.spa_create.submit')}
+            {creating ? $t('decks.create.submitting') : $t('decks.create.submit')}
           </Button>
         </div>
       </form>

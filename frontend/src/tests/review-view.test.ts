@@ -183,8 +183,8 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     // 文案来自语言包，不是裸 key。
     expect(html).toContain('编辑');
     expect(html).toContain('埋藏');
-    expect(html).not.toContain('review.spa.edit');
-    expect(html).not.toContain('review.spa.bury');
+    expect(html).not.toContain('review.edit');
+    expect(html).not.toContain('review.bury');
   });
 
   it('drops the bury control on the graded result panel but keeps edit', () => {

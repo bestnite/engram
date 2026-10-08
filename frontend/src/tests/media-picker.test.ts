@@ -9,18 +9,18 @@ import { en } from '../lib/i18n/locales/en';
  */
 describe('SPA media picker catalog keys', () => {
   it('pins the complete set of media upload keys', () => {
-    const keys = Object.keys(en).filter((key) => key.startsWith('media.spa.upload.')).sort();
+    const keys = Object.keys(en).filter((key) => key.startsWith('media.upload.')).sort();
     expect(keys).toEqual([
-      'media.spa.upload.button',
-      'media.spa.upload.failed',
-      'media.spa.upload.file_required',
-      'media.spa.upload.inserted',
-      'media.spa.upload.label',
-      'media.spa.upload.magic_mismatch',
-      'media.spa.upload.mime_not_allowed',
-      'media.spa.upload.quota_exceeded',
-      'media.spa.upload.too_large',
-      'media.spa.upload.uploading',
+      'media.upload.button',
+      'media.upload.failed',
+      'media.upload.file_required',
+      'media.upload.inserted',
+      'media.upload.label',
+      'media.upload.magic_mismatch',
+      'media.upload.mime_not_allowed',
+      'media.upload.quota_exceeded',
+      'media.upload.too_large',
+      'media.upload.uploading',
     ]);
   });
 });

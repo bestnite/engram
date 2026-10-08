@@ -45,13 +45,13 @@
   }
 </script>
 
-<Button testId="spa-media-picker-toggle" variant="outline" size="lg" onclick={toggle}>{$t('media.spa.open')}</Button>
+<Button testId="spa-media-picker-toggle" variant="outline" size="lg" onclick={toggle}>{$t('media.open')}</Button>
 {#if open}
   <section data-testid="spa-media-picker" class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
-    <h2 class="text-lg font-semibold">{$t('media.spa.heading')}</h2>
-    {#if loading}<p role="status">{$t('media.spa.loading')}</p>{/if}
-    {#if failed}<p role="alert">{$t('media.spa.failed')}</p><button type="button" onclick={() => load(!cursor)}>{$t('media.spa.retry')}</button>{/if}
-    {#if !loading && !failed && items.length === 0}<p>{$t('media.spa.empty')}</p>{/if}
+    <h2 class="text-lg font-semibold">{$t('media.heading')}</h2>
+    {#if loading}<p role="status">{$t('media.loading')}</p>{/if}
+    {#if failed}<p role="alert">{$t('media.failed')}</p><button type="button" onclick={() => load(!cursor)}>{$t('media.retry')}</button>{/if}
+    {#if !loading && !failed && items.length === 0}<p>{$t('media.empty')}</p>{/if}
     {#if items.length > 0}
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {#each items as item (item.sha256)}
@@ -62,6 +62,6 @@
         {/each}
       </div>
     {/if}
-    {#if hasMore}<Button testId="spa-media-next" variant="outline" size="lg" class="mt-3" disabled={loading} onclick={() => load(false)}>{$t('media.spa.next')}</Button>{/if}
+    {#if hasMore}<Button testId="spa-media-next" variant="outline" size="lg" class="mt-3" disabled={loading} onclick={() => load(false)}>{$t('media.next')}</Button>{/if}
   </section>
 {/if}

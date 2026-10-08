@@ -119,13 +119,13 @@
   function uploadErrorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
-      media_too_large: 'media.spa.upload.too_large',
-      media_mime_not_allowed: 'media.spa.upload.mime_not_allowed',
-      media_magic_mismatch: 'media.spa.upload.magic_mismatch',
-      media_quota_exceeded: 'media.spa.upload.quota_exceeded',
-      media_missing_file: 'media.spa.upload.file_required',
+      media_too_large: 'media.upload.too_large',
+      media_mime_not_allowed: 'media.upload.mime_not_allowed',
+      media_magic_mismatch: 'media.upload.magic_mismatch',
+      media_quota_exceeded: 'media.upload.quota_exceeded',
+      media_missing_file: 'media.upload.file_required',
     };
-    return map[code] || 'media.spa.upload.failed';
+    return map[code] || 'media.upload.failed';
   }
 
   async function uploadMedia(): Promise<void> {
@@ -134,7 +134,7 @@
     const input = uploadInput;
     const file = input?.files?.[0];
     if (!file) {
-      uploadErrorKey = 'media.spa.upload.file_required';
+      uploadErrorKey = 'media.upload.file_required';
       return;
     }
     uploading = true;
@@ -237,7 +237,7 @@
 
       <!-- 选择器只引用原图；延迟加载与限高由 CSS 负责。 -->
       <Panel padding="md" class="mt-5 space-y-3">
-        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('media.spa.field')}
+        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('media.field')}
           <Select
             class="mt-1.5 w-full"
             bind:value={selectedField}
@@ -247,13 +247,13 @@
         </label>
         <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
         <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
-          <label class="block text-sm font-medium">{$t('media.spa.upload.label')}
+          <label class="block text-sm font-medium">{$t('media.upload.label')}
             <input data-testid="spa-media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
           </label>
           <Button variant="outline" size="lg" testId="spa-media-upload-submit" disabled={uploading} onclick={uploadMedia}>
-            {uploading ? $t('media.spa.upload.uploading') : $t('media.spa.upload.button')}
+            {uploading ? $t('media.upload.uploading') : $t('media.upload.button')}
           </Button>
-          {#if uploaded}<p role="status" data-testid="spa-media-upload-status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('media.spa.upload.inserted')}</p>{/if}
+          {#if uploaded}<p role="status" data-testid="spa-media-upload-status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('media.upload.inserted')}</p>{/if}
           {#if uploadErrorKey}<p role="alert" data-testid="spa-media-upload-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(uploadErrorKey)}</p>{/if}
         </div>
         <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
@@ -262,27 +262,27 @@
 
       <div class="mt-5 flex items-center gap-3">
         <Button variant="outline" size="lg" testId="note-preview" disabled={previewLoading} onclick={preview}>
-          {previewLoading ? $t('note_preview.spa.loading') : $t('note_preview.spa.action')}
+          {previewLoading ? $t('note_preview.loading') : $t('note_preview.action')}
         </Button>
         {#if invalid}<p role="alert" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_edit.invalid')}</p>{/if}
         {#if error}<p role="alert" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_edit.failed')}</p>{/if}
         {#if saved}<p role="status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('note_edit.saved')}</p>{/if}
       </div>
 
-      {#if previewError}<p role="alert" data-testid="note-preview-error" class="mt-3 text-sm text-rose-600 dark:text-rose-400">{$t('note_preview.spa.failed')}</p>{/if}
+      {#if previewError}<p role="alert" data-testid="note-preview-error" class="mt-3 text-sm text-rose-600 dark:text-rose-400">{$t('note_preview.failed')}</p>{/if}
       {#if previewCards}
         <section bind:this={previewSection} data-testid="note-preview-result" class="mt-5 space-y-3">
-          <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('note_preview.spa.title')}</h2>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_preview.spa.math_notice')}</p>
+          <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('note_preview.title')}</h2>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_preview.math_notice')}</p>
           {#each previewCards as card, index}
             <Panel padding="sm" class="space-y-3">
               <div data-testid="note-preview-front-{index}">
-                <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.spa.front')}</h3>
+                <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.front')}</h3>
                 <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
                 <div class="prose dark:prose-invert">{@html card.front_html}</div>
               </div>
               <div data-testid="note-preview-back-{index}">
-                <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.spa.back')}</h3>
+                <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.back')}</h3>
                 <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
                 <div class="prose dark:prose-invert">{@html card.back_html}</div>
               </div>
