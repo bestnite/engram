@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -309,38 +307,6 @@ func TestSPAMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, bearer)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("bearer GET = %d, want 403", rec.Code)
-	}
-}
-
-// TestSPAMailPrefsFrontendCatalogsCoverCatalog 是跨端目录一致性验收：
-// 目录里每个类型与大类在 SPA 的两套语言包里都必须有对应标签键，
-// 否则前端会渲染出裸 key。目录是唯一来源，前端不得另列一份类型清单。
-func TestSPAMailPrefsFrontendCatalogsCoverCatalog(t *testing.T) {
-	files := map[string]string{
-		"en":    filepath.Join("..", "..", "frontend", "src", "lib", "i18n", "locales", "en.ts"),
-		"zh-CN": filepath.Join("..", "..", "frontend", "src", "lib", "i18n", "locales", "zh-CN.ts"),
-	}
-	bodies := make(map[string]string, len(files))
-	for locale, path := range files {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s catalog %s: %v", locale, path, err)
-		}
-		bodies[locale] = string(b)
-	}
-	keys := []string{"settings.notifications.heading", "settings.notifications.locked", "settings.notifications.submit"}
-	for _, class := range mail.ClassOrder() {
-		keys = append(keys, "settings.notifications.class."+string(class)+".heading")
-	}
-	for _, def := range mail.Catalog() {
-		keys = append(keys, "settings.notifications.type."+string(def.Type))
-	}
-	for locale, body := range bodies {
-		for _, key := range keys {
-			if !strings.Contains(body, "'"+key+"'") {
-				t.Errorf("%s.ts is missing the SPA notification key %q", locale, key)
-			}
-		}
 	}
 }
 

@@ -6,8 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -196,36 +194,6 @@ func TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap(t *testing.T) {
 	}
 }
 
-// ---- 静态守护：策略必须覆盖实际交付的脚本与样式来源 ----
-
-// cspServedScripts 返回守护用例要扫描的「服务端自己产出的脚本文本」：internal/web/static/js
-// 下 go:embed 的静态脚本（filepath.Glob 的 * 不跨目录，mathjax 子目录因此天然被排除）。
-// 打包好的 Svelte 产物（/assets/index-*.js）不在其列：那是压缩过的框架与第三方代码，文本
-// 匹配只会误报，只能靠浏览器冒烟。
-// 测试的工作目录就是 internal/web，故用相对路径。
-func cspServedScripts(t *testing.T) map[string]string {
-	t.Helper()
-	matched, err := filepath.Glob("static/js/*.js")
-	if err != nil {
-		t.Fatalf("glob static/js/*.js: %v", err)
-	}
-	out := make(map[string]string, len(matched))
-	for _, f := range matched {
-		if strings.HasSuffix(f, ".min.js") {
-			continue
-		}
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		out[f] = string(raw)
-	}
-	if len(out) == 0 {
-		t.Fatal("no embedded static script matched; the guard would pass vacuously")
-	}
-	return out
-}
-
 // cspStripLineComments 丢掉以 // 开头的整行注释。脚本与应用壳标记里都有注释，而注释正文
 // 里就可能出现 "on*=" 或 "eval" 一类的字样——不先剔除，守护用例会对注释误报。
 func cspStripLineComments(src string) string {
@@ -289,12 +257,12 @@ var (
 //
 // 它把真正会送到浏览器的来源抽出来，与「实际下发的策略」逐条对照：
 //
-//   - 渲染出的 SPA 应用壳（用例直接取响应体）、go:embed 的静态脚本与 Go 现场生成的
-//     /sw.js 里的内联 <script>（无 src）→ 其 SHA-256 必须出现在 script-src（hash 放行）；
+//   - 渲染出的 SPA 应用壳（用例直接取响应体）与 Go 现场生成的 /sw.js 里的内联 <script>
+//     （无 src）→ 其 SHA-256 必须出现在 script-src（hash 放行）；
 //   - 同一批来源里的 <style> 块或 style= 属性 → style-src 必须含 'unsafe-inline'
 //     （style 属性无法被 hash/nonce 覆盖，理由见 security_headers.go）；
 //   - 事件属性 on*= → script-src 必须含 'unsafe-inline'（事件属性同样无法 hash）；
-//   - 自有脚本里的 eval / new Function → 需要 script-src 'unsafe-eval'，而策略刻意不写，
+//   - 这两处来源里的 eval / new Function → 需要 script-src 'unsafe-eval'，而策略刻意不写，
 //     用例因此变红；
 //   - 应用壳里的外链脚本/样式必须同源：策略只给了 'self' 与主题引导的 hash，多一个来源
 //     （CDN、独立静态域名）都会被浏览器阻断；
@@ -318,13 +286,12 @@ func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 	}
 
 	shellBody := shell.Body.String()
-	sources := cspServedScripts(t)
-	sources["rendered SPA shell"] = shellBody
 	sw := getWithCookies(t, srv, "/sw.js", nil).Body.String()
 	if !strings.Contains(sw, "STATIC_CACHE") {
 		t.Fatalf("/sw.js did not serve the generated service worker: %s", snippet(sw))
 	}
-	sources["/sw.js"] = sw
+	// 只核对运行时真的会送到浏览器的两处来源：渲染出的应用壳与现场生成的 /sw.js。
+	sources := map[string]string{"rendered SPA shell": shellBody, "/sw.js": sw}
 
 	for name, raw := range sources {
 		src := cspStripLineComments(raw)

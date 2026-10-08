@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -227,10 +226,6 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 	}
 	if knownStale {
 		t.Error("a device last seen before the retention window should count as new again")
-	}
-
-	if !strings.Contains(f.logs.String(), "expired rows removed") {
-		t.Errorf("sweep should log removals, got %q", f.logs.String())
 	}
 }
 

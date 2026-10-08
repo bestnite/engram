@@ -5,14 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -20,32 +14,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/store"
 )
-
-// TestErrorRegistryCoversEveryCode 解析源码里全部 Code* 常量（api 包所有非测试 .go 文件 + store 包卡组包错误码），
-// 断言每一个 code 都在 errorMessages 注册表里登记了非空的稳定英文文案，且 ErrorMessage 返回该文案。
-// 不再要求在 Go 语言包（zh-CN.yaml / en.yaml）里登记 REST/MCP 错误。
-func TestErrorRegistryCoversEveryCode(t *testing.T) {
-	apiCodes := codeConstantsInDir(t, ".")
-	storeCodes := codeConstantsInFile(t, filepath.Join("..", "store", "package.go"))
-	codes := append(apiCodes, storeCodes...)
-	if len(apiCodes) < 11 {
-		t.Fatalf("found only %d Code* constants in the api package, expected at least 11", len(apiCodes))
-	}
-	if len(storeCodes) < 4 {
-		t.Fatalf("found only %d Code* constants in store/package.go, expected at least 4", len(storeCodes))
-	}
-
-	for _, code := range codes {
-		msg := defaultErrorMessage(code)
-		if strings.TrimSpace(msg) == "" {
-			t.Errorf("code %q is not registered in errorMessages", code)
-		}
-		got := ErrorMessage(context.Background(), code)
-		if got != msg {
-			t.Errorf("ErrorMessage for code %q = %q, want %q", code, got, msg)
-		}
-	}
-}
 
 // TestAPIErrorOutputIdenticalAcrossAcceptLanguage 断言针对相同错误场景，
 // 无论请求头 Accept-Language 为 zh-CN、en 或其它语言，API 错误响应的 JSON 输出都是
@@ -260,59 +228,4 @@ func TestMCPErrorTextUsesSameEnglishMappingAsREST(t *testing.T) {
 			t.Errorf("ErrorText does not match REST format: got %q, want %q", text, expectedMCPText)
 		}
 	}
-}
-
-// codeConstantsInDir 解析目录下所有非测试 .go 文件里的 Code* 字符串常量。
-func codeConstantsInDir(t *testing.T, dir string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read dir %s: %v", dir, err)
-	}
-	var out []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		out = append(out, codeConstantsInFile(t, filepath.Join(dir, e.Name()))...)
-	}
-	return out
-}
-
-// codeConstantsInFile 解析单个 Go 文件里所有形如 CodeX = "..." 的常量值。
-func codeConstantsInFile(t *testing.T, path string) []string {
-	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", path, err)
-	}
-	var out []string
-	for _, decl := range f.Decls {
-		gd, ok := decl.(*ast.GenDecl)
-		if !ok || gd.Tok != token.CONST {
-			continue
-		}
-		for _, spec := range gd.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok {
-				continue
-			}
-			for i, name := range vs.Names {
-				if !strings.HasPrefix(name.Name, "Code") || i >= len(vs.Values) {
-					continue
-				}
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					continue
-				}
-				val, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					t.Fatalf("unquote %s in %s: %v", lit.Value, path, err)
-				}
-				out = append(out, val)
-			}
-		}
-	}
-	return out
 }

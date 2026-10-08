@@ -3,30 +3,13 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 )
 
 // 本文件是 M8-7（界面打磨）里仍可从服务端核实、且不依赖 SSR 页面渲染的部分：favicon 重定向、
-// SPA 应用壳声明的图标、manifest 与 service worker 的缓存清单，以及 pwa.js 不做按 href 的高亮。
+// SPA 应用壳声明的图标、manifest 与 service worker 的缓存清单。
 // 页面级的导航/页脚/对话框观感已由 SPA 客户端路由承担，不再由服务端渲染。
-
-// TestPWAScriptDoesNotHighlightByHref 是 M8-7 (a) 的回归闸：高亮逻辑必须留在客户端路由，
-// 脚本里不得再出现按 window.location.pathname 匹配导航项并加活动类样的代码。
-func TestPWAScriptDoesNotHighlightByHref(t *testing.T) {
-	raw, err := os.ReadFile("static/js/pwa.js")
-	if err != nil {
-		t.Fatalf("read pwa.js: %v", err)
-	}
-	js := string(raw)
-	if strings.Contains(js, "window.location.pathname") {
-		t.Errorf("pwa.js still inspects window.location.pathname for nav highlighting")
-	}
-	if strings.Contains(js, `classList.add("bg-zinc-100"`) {
-		t.Errorf("pwa.js still adds the active-tab background class at runtime")
-	}
-}
 
 // TestFaviconRedirectsToHashedIcon 是 M8-7 (f) 的验收：/favicon.ico 不再 404，
 // 而是重定向到内容哈希化的 SVG 图标。

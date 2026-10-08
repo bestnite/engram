@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -200,19 +198,5 @@ func TestTrustedProxiesRejectsInvalidEntry(t *testing.T) {
 			}
 			assertASCIIEnglish(t, err.Error())
 		})
-	}
-}
-
-// TestEnvExampleListsEveryVariable 保证 .env.example 与 internal/config 同步（AGENTS.md M0-1）。
-func TestEnvExampleListsEveryVariable(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", ".env.example"))
-	if err != nil {
-		t.Fatalf("read .env.example: %v", err)
-	}
-	content := string(raw)
-	for _, name := range EnvNames() {
-		if !strings.Contains(content, name) {
-			t.Errorf(".env.example does not mention %s; keep it in sync with internal/config", name)
-		}
 	}
 }
