@@ -861,6 +861,8 @@ export interface OptimizeGate {
 export interface PresetRecord {
   id: number;
   name: string;
+  /** 是否为默认预设；显示名与「不可删除/不可改名」的判据都用它，界面不必知道存储名。 */
+  is_default: boolean;
   desired_retention: number;
   learning_steps: string;
   relearning_steps: string;

@@ -634,6 +634,7 @@ export const en: LocaleCatalog = {
   'auth.error.totp_invalid': 'The code is not valid.',
   'auth.error.totp_challenge_expired': 'This two-factor challenge has expired. Sign in again.',
   // ── Scheduling presets (session JSON endpoints in internal/web/presets_api.go) ──
+  'presets.default_name': 'Default',
   'presets.heading': 'Scheduling presets',
   'presets.empty': 'No scheduling preset yet.',
   'presets.failed': 'Could not load the presets. Please try again.',
@@ -642,6 +643,7 @@ export const en: LocaleCatalog = {
   'presets.edit.button': 'Edit',
   'presets.edit.heading': 'Edit preset',
   'presets.form.name': 'Name',
+  'presets.form.name_locked': 'The default preset keeps its name.',
   'presets.form.retention': 'Desired retention (between 0 and 1, e.g. 0.9)',
   'presets.form.learning_steps': 'Learning steps (comma-separated, e.g. 1m,10m; empty disables them)',
   'presets.form.relearning_steps': 'Relearning steps (comma-separated, e.g. 10m; empty disables them)',
@@ -657,6 +659,7 @@ export const en: LocaleCatalog = {
   'presets.form.error.max_interval': 'Maximum interval must be a positive whole number of days.',
   'presets.form.error.steps': 'Invalid learning steps; use comma-separated durations such as 1m,10m.',
   'presets.form.error.invalid_request': 'The preset request is invalid.',
+  'presets.form.error.default_protected': 'The default preset cannot be renamed or deleted.',
   'presets.form.error.save_failed': 'Could not save the preset.',
   'presets.retention_label': 'Desired retention',
   'presets.max_interval_label': 'Maximum interval (days)',

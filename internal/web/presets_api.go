@@ -63,9 +63,12 @@ type jobView struct {
 
 // presetView 是单个预设的 JSON 形态，同时携带其权重来源与在途作业。
 // job 只在该预设确有在途（queued/running）作业时出现，供刷新页面后续上轮询。
+// IsDefault 让界面不必知道「默认预设」的存储名（store.DefaultPresetName 是机器标识，
+// 不是给人看的文案）：显示名与「不可删除/不可改名」的判据都由它决定。
 type presetView struct {
 	ID                  uint64  `json:"id"`
 	Name                string  `json:"name"`
+	IsDefault           bool    `json:"is_default"`
 	DesiredRetention    float64 `json:"desired_retention"`
 	LearningSteps       string  `json:"learning_steps"`
 	RelearningSteps     string  `json:"relearning_steps"`
@@ -117,7 +120,7 @@ var presetErrorMessages = map[string]string{
 	"insufficient_reviews":        "There are not enough reviews to optimise yet.",
 	"optimize_conflict":           "Another optimisation job is already running.",
 	"preset_in_use":               "This preset is used by one or more decks and cannot be deleted.",
-	"preset_default_protected":    "The default preset cannot be deleted.",
+	"preset_default_protected":    "The default preset cannot be renamed or deleted.",
 	"internal_error":              "An internal error occurred.",
 }
 
@@ -433,6 +436,7 @@ func presetPayload(p *store.Preset) presetView {
 	item := presetView{
 		ID:                  p.ID,
 		Name:                p.Name,
+		IsDefault:           p.Name == store.DefaultPresetName,
 		DesiredRetention:    p.DesiredRetention,
 		LearningSteps:       p.LearningSteps,
 		RelearningSteps:     p.RelearningSteps,
@@ -577,6 +581,9 @@ func presetStoreCode(err error) string {
 		return "preset_retention_invalid"
 	case errors.Is(err, store.ErrInvalidMaximumInterval):
 		return "preset_max_interval_invalid"
+	case errors.Is(err, store.ErrDefaultPresetCannotRename):
+		// 与删除保护共用同一个 code：对界面而言都是「默认预设受保护」。
+		return "preset_default_protected"
 	default:
 		return "preset_save_failed"
 	}

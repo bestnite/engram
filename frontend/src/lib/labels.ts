@@ -46,3 +46,14 @@ export function noteKindLabel(kind: string | null | undefined, t: Translate): st
   const key = noteKindLabelKey(kind);
   return key ? t(key) : '';
 }
+
+/**
+ * 预设显示名。
+ *
+ * 默认预设的库内名字是稳定标识（`store.DefaultPresetName`，英文常量"Default"），
+ * 它是**机器词汇**：直接印在中文界面上就是英文，与硬编码英文没有区别。凡是要显示在
+ * 屏幕上的预设名都走这里，由服务端的 `is_default` 决定用语言包文案还是用户自己起的名字。
+ */
+export function presetDisplayName(name: string, isDefault: boolean, t: Translate): string {
+  return isDefault ? t('presets.default_name') : name;
+}

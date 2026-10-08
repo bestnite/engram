@@ -44,6 +44,12 @@ var (
 	ErrPresetInUse = errors.New("preset is in use by one or more decks")
 	// ErrDefaultPresetCannotDelete 表示默认预设不可删除。
 	ErrDefaultPresetCannotDelete = errors.New("default preset cannot be deleted")
+	// ErrDefaultPresetCannotRename 表示默认预设不可改名。
+	//
+	// 默认预设的身份就是 DefaultPresetName 这个字面量（DefaultPreset 按名字查找、删除保护也按名字判），
+	// 改名会让身份失配：此后 EnsureDefaultPreset 找不到它，会再补一条同名的默认预设，
+	// 于是同一用户名下出现两条「默认」。
+	ErrDefaultPresetCannotRename = errors.New("default preset cannot be renamed")
 )
 
 // NewPreset 返回一个带文档化默认值的调度预设；归属与名字由调用方给出。
@@ -199,7 +205,8 @@ func (s *PresetStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Pr
 	return presets, nil
 }
 
-// Update 修改预设的调度参数；只有 owner 能改。
+// Update 修改预设的调度参数；只有 owner 能改。默认预设可以改参数，但不可改名——
+// 它的身份就是 DefaultPresetName 这个字面量，改名会让后续补齐再建一条同名预设。
 func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset) error {
 	if p.ID == 0 {
 		return errors.New("update preset: id is required")
@@ -213,6 +220,9 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 	}
 	if err := validatePresetForWrite(p, false); err != nil {
 		return err
+	}
+	if existing.Name == DefaultPresetName && p.Name != DefaultPresetName {
+		return ErrDefaultPresetCannotRename
 	}
 	updates := map[string]any{
 		"name":                  p.Name,

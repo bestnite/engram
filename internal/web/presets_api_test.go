@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -74,6 +75,9 @@ func TestPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	if p.Name != store.DefaultPresetName {
 		t.Errorf("default preset name = %q, want %q", p.Name, store.DefaultPresetName)
 	}
+	if !p.IsDefault {
+		t.Errorf("default preset is_default = false, want true")
+	}
 	if p.WeightsOptimized || p.WeightsRaw != nil || p.WeightsOptimizedAt != nil {
 		t.Errorf("fresh preset reports optimised weights: %+v", p)
 	}
@@ -106,6 +110,9 @@ func TestPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	}
 	if evening == nil {
 		t.Fatalf("created preset missing from response: %s", snippet(create.Body.String()))
+	}
+	if evening.IsDefault {
+		t.Errorf("created preset reports is_default = true, want false")
 	}
 	var persisted store.Preset
 	if err := db.Where("owner_user_id = ? AND name = ?", ownerID, "Evening").First(&persisted).Error; err != nil {
@@ -461,5 +468,56 @@ func TestPresetDelete(t *testing.T) {
 	// 确认数据库已清除
 	if _, err := store.NewPresetStore(db).ByID(ctx, custom.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("preset %d still in db after delete: %v", custom.ID, err)
+	}
+}
+
+// TestPresetDefaultCannotBeRenamed 断言默认预设的改名在 HTTP 层被拒（400 + 稳定 code，
+// 库里名字不变），而名字原样回传时改参数照旧成功。
+// 界面的「默认」显示名依赖这个名字作为身份标识：一旦改掉，后续补齐会再建一条同名预设。
+func TestPresetDefaultCannotBeRenamed(t *testing.T) {
+	srv, db, _, cookies, csrf, _ := newPresetsServer(t)
+	ctx := context.Background()
+
+	body := decodePresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
+	var def *presetView
+	for i := range body.Presets {
+		if body.Presets[i].IsDefault {
+			def = &body.Presets[i]
+		}
+	}
+	if def == nil {
+		t.Fatal("no preset reports is_default = true")
+	}
+
+	params := `{"name":%q,"desired_retention":0.85,"learning_steps":"1m,10m","relearning_steps":"10m","maximum_interval_days":36500,"enable_fuzz":true}`
+
+	renamed := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(def.ID),
+		fmt.Sprintf(params, "Renamed Default"), cookies, csrf)
+	if renamed.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH rename default = %d, want 400 (body %s)", renamed.Code, snippet(renamed.Body.String()))
+	}
+	if code, _ := decodePresetError(t, renamed); code != "preset_default_protected" {
+		t.Errorf("rename default code = %q, want preset_default_protected", code)
+	}
+	var persisted store.Preset
+	if err := db.First(&persisted, "id = ?", def.ID).Error; err != nil {
+		t.Fatalf("reload default preset: %v", err)
+	}
+	if persisted.Name != store.DefaultPresetName {
+		t.Errorf("default preset name after rejected rename = %q, want %q", persisted.Name, store.DefaultPresetName)
+	}
+
+	edited := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(def.ID),
+		fmt.Sprintf(params, store.DefaultPresetName), cookies, csrf)
+	if edited.Code != http.StatusOK {
+		t.Fatalf("PATCH default params = %d, want 200 (body %s)", edited.Code, snippet(edited.Body.String()))
+	}
+	reloaded, err := store.NewPresetStore(db).ByID(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("reload default preset: %v", err)
+	}
+	if reloaded.Name != store.DefaultPresetName || reloaded.DesiredRetention != 0.85 {
+		t.Errorf("default preset after param edit = %+v, want name %q and retention 0.85",
+			reloaded, store.DefaultPresetName)
 	}
 }

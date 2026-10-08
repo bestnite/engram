@@ -10,7 +10,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
-  import { deckVisibilityLabel as visibilityLabel } from '../labels';
+  import { deckVisibilityLabel as visibilityLabel, presetDisplayName } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -118,7 +118,11 @@
       apiClient
         .listPresets()
         .then((response) => {
-          createPresets = response.presets.map((item) => ({ value: String(item.id), label: item.name }));
+          createPresets = response.presets.map((item) => ({
+            value: String(item.id),
+            // 默认预设的库内名是机器标识，显示名走语言包（labels.presetDisplayName）。
+            label: presetDisplayName(item.name, item.is_default, $t),
+          }));
         })
         .catch(() => {
           // 预设列表拿不到不影响建卡组：仍走服务端默认预设。

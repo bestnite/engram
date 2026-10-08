@@ -4,6 +4,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { DeckSettings } from '../api';
+  import { presetDisplayName } from '../labels';
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -49,7 +50,11 @@
   async function loadPresets(): Promise<void> {
     try {
       const response = await apiClient.listPresets();
-      presets = response.presets.map((item) => ({ value: String(item.id), label: item.name }));
+      presets = response.presets.map((item) => ({
+        value: String(item.id),
+        // 默认预设的库内名是机器标识，显示名走语言包（labels.presetDisplayName）。
+        label: presetDisplayName(item.name, item.is_default, $t),
+      }));
       presetsError = false;
     } catch {
       presetsError = true;

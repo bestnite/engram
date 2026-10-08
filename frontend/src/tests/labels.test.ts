@@ -5,6 +5,7 @@ import {
   deckVisibilityLabelKey,
   noteKindLabel,
   noteKindLabelKey,
+  presetDisplayName,
 } from '../lib/labels';
 
 /**
@@ -44,5 +45,14 @@ describe('enum labels go through the catalog', () => {
     expect(deckVisibilityLabelKey('nope')).toBeNull();
     expect(noteKindLabelKey('cloze')).toBe('notes.kind.cloze');
     expect(noteKindLabelKey('nope')).toBeNull();
+  });
+
+  it('renders the default preset through the catalog instead of its storage name', () => {
+    // 库内名 "Default"（store.DefaultPresetName）是默认预设的身份标识：直接印在中文界面上
+    // 就是英文。判据是服务端的 is_default，用户自建的预设照原样显示名字。
+    expect(presetDisplayName('Default', true, zh)).toBe('默认');
+    expect(presetDisplayName('Default', true, en)).toBe('Default');
+    expect(presetDisplayName('Evening', false, zh)).toBe('Evening');
+    expect(presetDisplayName('Evening', false, en)).toBe('Evening');
   });
 });

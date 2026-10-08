@@ -7,6 +7,7 @@
   import Badge from '../components/ui/Badge.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import { presetDisplayName } from '../labels';
   import type {
     PresetsResponse,
     PresetRecord,
@@ -47,6 +48,9 @@
   let formFuzz = $state(true);
   let formSaving = $state(false);
   let formError = $state('');
+  // 默认预设的名字是它的身份标识（服务端按名字找它），因此编辑时该字段只读：
+  // 让它可改会写出一个「默认预设不再叫 Default」的状态，服务端随后会再补一条同名的。
+  let formNameLocked = $state(false);
 
   // notice 是按预设定位的一次性操作提示（i18n key）；gate 的「还差 N 条」单独由门槛渲染。
   let notice = $state<{ id: number; key: string } | null>(null);
@@ -166,6 +170,7 @@
     formMode = 'create';
     formTargetId = null;
     formName = '';
+    formNameLocked = false;
     formRetention = '0.90';
     formLearning = '1m,10m';
     formRelearning = '10m';
@@ -179,6 +184,7 @@
     formMode = 'edit';
     formTargetId = p.id;
     formName = p.name;
+    formNameLocked = p.is_default;
     formRetention = p.desired_retention.toFixed(2);
     formLearning = p.learning_steps;
     formRelearning = p.relearning_steps;
@@ -311,6 +317,8 @@
           return 'presets.form.error.steps';
         case 'invalid_request':
           return 'presets.form.error.invalid_request';
+        case 'preset_default_protected':
+          return 'presets.form.error.default_protected';
         case 'not_found':
           return 'presets.error.not_found';
         default:
@@ -438,7 +446,7 @@
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4">
             <div>
               <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid={`preset-${p.id}-name`}>
-                {p.name}
+                {presetDisplayName(p.name, p.is_default, $t)}
               </h2>
               <div class="flex items-center gap-2 text-xs pt-1.5">
                 <span class="text-zinc-500 dark:text-zinc-400">{$t('presets.used_by_decks')}</span>
@@ -476,7 +484,7 @@
               >
                 {$t('presets.revert.button')}
               </button>
-              {#if p.name !== 'Default'}
+              {#if !p.is_default}
                 <Button type="button" testId={`preset-${p.id}-delete`} disabled={busyId === p.id || getPresetDecks(p.id).length > 0} title={getPresetDecks(p.id).length > 0 ? $t('presets.delete.in_use') : $t('presets.delete.action')} onclick={() => promptDeletePreset(p)} variant="danger-outline" size="sm">
                   {$t('presets.delete.action')}
                 </Button>
@@ -601,10 +609,16 @@
           <input
             type="text"
             required
+            readonly={formNameLocked}
             bind:value={formName}
             data-testid="presets-form-name"
             class="field-input text-sm mt-1 block w-full"
           />
+          {#if formNameLocked}
+            <span data-testid="presets-form-name-locked" class="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
+              {$t('presets.form.name_locked')}
+            </span>
+          {/if}
         </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.retention')}</span>
@@ -671,7 +685,7 @@
     open={true}
     onOpenChange={(open) => { if (!open) presetToDelete = null; }}
     title={$t('presets.delete.confirm_title')}
-    description={$t('presets.delete.confirm_desc', { name: presetToDelete.name })}
+    description={$t('presets.delete.confirm_desc', { name: presetToDelete ? presetDisplayName(presetToDelete.name, presetToDelete.is_default, $t) : '' })}
     testId="preset-delete-dialog"
   >
       {#if deletePresetError}

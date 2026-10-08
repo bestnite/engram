@@ -11,6 +11,7 @@ function preset(overrides: Partial<PresetRecord> = {}): PresetRecord {
   return {
     id: 7,
     name: 'Default',
+    is_default: true,
     desired_retention: 0.9,
     learning_steps: '1m,10m',
     relearning_steps: '10m',
@@ -40,7 +41,9 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
       props: { initialLoading: false, initialData: payload },
     });
     expect(html).toContain('data-testid="preset-7-name"');
-    expect(html).toContain('Default');
+    // 默认预设的库内名是 "Default"（机器标识），界面上必须是语言包文案。
+    expect(html).toMatch(/>\s*默认\s*<\/h2>/);
+    expect(html).not.toMatch(/>\s*Default\s*<\/h2>/);
     expect(html).toContain('data-testid="preset-7-retention"');
     expect(html).toContain('data-testid="preset-7-max-interval"');
     expect(html).toContain('data-testid="preset-7-optimize"');
@@ -53,6 +56,25 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     expect(html).toContain('可用复习记录：0 条');
     expect(html).toContain('data-testid="preset-7-shortfall"');
     expect(html).toContain('还差 500 条');
+  });
+
+  it('labels the default preset from the catalog and offers no delete button for it', () => {
+    // 默认预设不可删除：判据是服务端的 is_default，不是前端比较库内名。
+    const { html } = render(PresetsView, {
+      props: { initialLoading: false, initialData: payload },
+    });
+    expect(html).toMatch(/>\s*默认\s*<\/h2>/);
+    expect(html).not.toContain('data-testid="preset-7-delete"');
+  });
+
+  it('keeps the user-chosen name and the delete button for a user-created preset', () => {
+    const data: PresetsResponse = {
+      presets: [preset({ id: 8, name: 'Evening', is_default: false })],
+      gate: { reviews: 0, min: 500, shortfall: 500, eligible: false },
+    };
+    const { html } = render(PresetsView, { props: { initialLoading: false, initialData: data } });
+    expect(html).toMatch(/>\s*Evening\s*<\/h2>/);
+    expect(html).toContain('data-testid="preset-8-delete"');
   });
 
   it('shows the optimised weight source, timestamp, count and raw detail', () => {

@@ -295,3 +295,56 @@ func presetNames(presets []Preset) []string {
 	}
 	return names
 }
+
+// TestPresetDefaultCannotBeRenamed 断言默认预设可以改调度参数、但改名被拒：
+// 它的身份就是 DefaultPresetName 这个字面量，改名会让后续补齐再建一条同名预设。
+func TestPresetDefaultCannotBeRenamed(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "preset_rename")[0]
+			presets := NewPresetStore(db)
+
+			list, err := EnsureDefaultPreset(ctx, db, owner)
+			if err != nil {
+				t.Fatalf("EnsureDefaultPreset error = %v", err)
+			}
+			def := DefaultPreset(list)
+			if def == nil {
+				t.Fatalf("no default preset after EnsureDefaultPreset (names %v)", presetNames(list))
+			}
+
+			// 改名被拒，且库里的名字没变。
+			renamed := *def
+			renamed.Name = "Mine"
+			if err := presets.Update(ctx, owner, &renamed); !errors.Is(err, ErrDefaultPresetCannotRename) {
+				t.Errorf("Update(rename default) error = %v, want ErrDefaultPresetCannotRename", err)
+			}
+			after, err := presets.ByID(ctx, def.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			if after.Name != DefaultPresetName {
+				t.Errorf("default preset name after rejected rename = %q, want %q", after.Name, DefaultPresetName)
+			}
+
+			// 名字原样回传时，参数仍然可改。
+			edited := *def
+			edited.DesiredRetention = 0.8
+			if err := presets.Update(ctx, owner, &edited); err != nil {
+				t.Fatalf("Update(default params) error = %v", err)
+			}
+			got, err := presets.ByID(ctx, def.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			if got.Name != DefaultPresetName || got.DesiredRetention != 0.8 {
+				t.Errorf("default preset after param edit = %+v, want name %q and retention 0.8",
+					got, DefaultPresetName)
+			}
+		})
+	}
+}

@@ -633,6 +633,7 @@ export const zhCN: LocaleCatalog = {
   'auth.error.totp_invalid': '验证码无效。',
   'auth.error.totp_challenge_expired': '两步验证已超时，请重新登录。',
   // ── 调度预设（internal/web/presets_api.go 的会话 JSON 端点）──
+  'presets.default_name': '默认',
   'presets.heading': '调度预设',
   'presets.empty': '还没有调度预设。',
   'presets.failed': '加载预设失败，请重试。',
@@ -641,6 +642,7 @@ export const zhCN: LocaleCatalog = {
   'presets.edit.button': '编辑',
   'presets.edit.heading': '编辑预设',
   'presets.form.name': '名称',
+  'presets.form.name_locked': '默认预设的名称固定为「默认」，不可修改。',
   'presets.form.retention': '目标保留率（0–1 之间，如 0.9）',
   'presets.form.learning_steps': '学习步骤（逗号分隔，如 1m,10m；留空表示不启用）',
   'presets.form.relearning_steps': '再学习步骤（逗号分隔，如 10m；留空表示不启用）',
@@ -655,6 +657,7 @@ export const zhCN: LocaleCatalog = {
   'presets.form.error.max_interval': '最大间隔必须是正整数天数。',
   'presets.form.error.steps': '学习步骤格式无效，请用逗号分隔的时长，如 1m,10m。',
   'presets.form.error.invalid_request': '预设请求无效。',
+  'presets.form.error.default_protected': '默认预设不可改名，也不可删除。',
   'presets.form.error.save_failed': '保存预设失败。',
   'presets.retention_label': '目标保留率',
   'presets.max_interval_label': '最大间隔（天）',
