@@ -9,7 +9,7 @@ package web
 const themeBootstrapJS = `(function(){var s;try{s=localStorage.getItem("engram-theme")}catch(e){}var d=s==="dark"||(s!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";r.style.backgroundColor=d?"#09090b":"#f8fafc";var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",d?"#09090b":"#ffffff")}})();`
 
 // themeBootstrap 是自带 <script> 标签的完整片段，由服务端在装配期注入 SPA 入口的 <head>
-// （spa.SetShell），早于任何样式表执行。这里只做「首帧之前必须成立」的最小集合——暗色类、
+// （Shell.SetShell），早于任何样式表执行。这里只做「首帧之前必须成立」的最小集合——暗色类、
 // color-scheme、画布底色与 theme-color，用内联 style 设底色，任何样式表都抢不到这个竞态。
 // 颜色值与 /pwa.js 的 applyTheme 保持一致。
 const themeBootstrap = "<script>" + themeBootstrapJS + "</script>"

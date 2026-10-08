@@ -25,7 +25,7 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 	}
 	router.GET("/decks/:id/package", s.deckPackageExport)
 	router.POST("/api/v1/decks/export-zip", s.sessions.CSRFMiddleware(), s.deckBatchExportZip)
-	// 导入页返回应用壳，由客户端路由渲染；上传走 JSON 端点（spa 侧 client.ts 的 importDeckPackage）。
+	// 导入页返回应用壳，由客户端路由渲染；上传走 JSON 端点（前端的 importDeckPackage）。
 	router.GET("/import", s.shell.ServeIndex)
 }
 

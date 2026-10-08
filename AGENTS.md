@@ -242,7 +242,7 @@ git worktree prune                         # drop stale entries
   **disjoint file sets**. Parallelism is decided by file overlap, nothing else.
 - Single-writer hotspots — one writer at a time, other tasks wait for the next phase:
   `internal/store/models.go`, `internal/config/`, `internal/i18n/locales/`,
-  `internal/web/views/`.
+  `frontend/src/lib/views/`.
 - The locale catalogs are the one hotspot that can be shared, under a strict convention: each
   writer **appends its own block at the end of the file**, using a prefix it owns (`stats.`,
   `admin.audit.`), and never reorders or reformats an existing line. Measured over three rounds:
@@ -288,5 +288,5 @@ worktrees are the default.
 | B | M1 (auth) ∥ M2 (store, cardtype, web) | Disjoint packages |
 | C | M3 (schedule) ∥ M4 (api, mcp) | Freeze the shared store models; neither lane may change them |
 | D | M5 (grants) ∥ M7 (statistics) | Disjoint packages |
-| E | M6 (admin views) **or** M8 (mobile, i18n) | Both rewrite `internal/web/views/`; run them in sequence. If they must overlap, split M8 into "gestures and JS" and "view text", and keep the view-text half exclusive with M6 |
+| E | M6 (admin views) **or** M8 (mobile, i18n) | Both rewrite `frontend/src/lib/views/`; run them in sequence. If they must overlap, split M8 into "gestures and JS" and "view text", and keep the view-text half exclusive with M6 |
 | F | M9 last | Needs real review data produced by M3 |

@@ -734,7 +734,8 @@ Conventions:
 
 - [x] **M8-8 No white flash when navigating in dark mode** — the theme is decided by
   `internal/web/static/js/pwa.js`, which `<head>` pulls in as an external `<script src="/pwa.js">`
-  (`internal/web/views/base.templ`), so the browser can paint a white frame before that script
+  (the head is `frontend/index.html`; the server injects the inline bootstrap into it at assembly
+  time, see `internal/web/theme.go`), so the browser can paint a white frame before that script
   runs and flips `<html class="dark">`. The canvas colour and `color-scheme` arrive even later,
   with `tailwind.css` (`input.css` declares `html.dark { color-scheme: dark }`, the body carries
   `bg-slate-50 dark:bg-zinc-950`). Inline a small bootstrap in `<head>` **before** the stylesheet
