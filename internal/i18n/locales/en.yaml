@@ -411,3 +411,7 @@ It renders with sample variables; real recipients see their own data."
   translation: "Site default ({{.hour}}:00)"
 - id: mail.prefs.error.reminder_hour_invalid
   translation: "Send time must be a whole hour from 0 to 23, or left as the site default."
+
+# Display name of the default preset in server-rendered text (the stored name is an identity literal).
+- id: presets.default_name
+  translation: "Default"

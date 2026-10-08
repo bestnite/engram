@@ -411,3 +411,7 @@
   translation: "站点默认（{{.hour}}:00）"
 - id: mail.prefs.error.reminder_hour_invalid
   translation: "发送时间必须是 0 到 23 的整点，或留空使用站点默认。"
+
+# 服务端可见文本里的「默认预设」显示名（库内名 Default 是身份标识，不是给人看的文案）。
+- id: presets.default_name
+  translation: "默认"

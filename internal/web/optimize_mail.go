@@ -82,8 +82,15 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 	unsubURL := s.optionalUnsubscribeLinkCtx(ctx, owner.ID, mail.TypeOptimizeDone)
 	reviewCount := optimizeReviewCount(job)
 
+	// 默认预设的库内名是身份标识（store.DefaultPresetName），不是给人看的文案：
+	// 邮件正文是用户可见文本，按收件人语言换成语言包里的显示名，用户自建的预设照原样显示。
+	presetName := preset.Name
+	if preset.Name == store.DefaultPresetName {
+		presetName = loc.T("presets.default_name")
+	}
+
 	vars := mail.Vars{
-		"site": site, "preset": preset.Name,
+		"site": site, "preset": presetName,
 		"count": strconv.Itoa(reviewCount), "url": link,
 	}
 	if unsubURL != "" {

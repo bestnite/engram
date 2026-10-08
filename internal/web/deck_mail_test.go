@@ -168,3 +168,40 @@ func TestOptimizeDoneMailNotifiesPresetOwner(t *testing.T) {
 		t.Errorf("text body = %q, want the preset name and the review count", msgs[0].TextBody)
 	}
 }
+
+// TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage 断言默认预设的通知邮件
+// 用语言包里的显示名，而不是库内的身份标识 "Default"——邮件正文是用户可见文本。
+func TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage(t *testing.T) {
+	srv, db, ownerID, _, _ := newNotesServer(t)
+	sender := startInviteMail(t, srv, db)
+	ctx := context.Background()
+
+	preset := store.NewPreset(ownerID, store.DefaultPresetName)
+	if err := db.Create(&preset).Error; err != nil {
+		t.Fatalf("create default preset: %v", err)
+	}
+	// 正文语言由收件人设置决定：钉成简体中文，才能断言出现的是「默认」而不是 Default。
+	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("locale", "zh-CN").Error; err != nil {
+		t.Fatalf("set owner locale: %v", err)
+	}
+	if err := store.NewEmailPrefStore(db).SetChoices(ctx, ownerID,
+		map[string]bool{string(mail.TypeOptimizeDone): true}, time.Now().UTC()); err != nil {
+		t.Fatalf("SetChoices: %v", err)
+	}
+
+	result := `{"reviews_used":42,"weights":[],"fit_before":{"log_loss":0,"rmse":0,"items":0},"fit_after":{"log_loss":0,"rmse":0,"items":0},"optimized_at":"2026-01-01T00:00:00Z"}`
+	job := store.Job{Kind: jobs.KindOptimize, TargetID: &preset.ID, Status: jobs.StatusSucceeded,
+		ResultJSON: &result, CreatedAt: time.Now().UTC()}
+	if err := db.Create(&job).Error; err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	srv.NotifyOptimizeDone(ctx, job)
+	msgs := waitForMail(t, sender, 1)
+	if !strings.Contains(msgs[0].TextBody, "预设「默认」") {
+		t.Errorf("text body = %q, want the localized default preset name", msgs[0].TextBody)
+	}
+	if strings.Contains(msgs[0].TextBody, "预设「Default」") {
+		t.Errorf("text body = %q, want no storage literal in user-facing text", msgs[0].TextBody)
+	}
+}
