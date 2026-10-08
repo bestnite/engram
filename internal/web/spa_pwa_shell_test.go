@@ -187,10 +187,10 @@ func TestSetHTMLLangRewritesOpenTag(t *testing.T) {
 
 // TestBuildShellBlockSkipsEmptyAndEscapes 断言空字段不产出标记，属性值一律转义。
 func TestBuildShellBlockSkipsEmptyAndEscapes(t *testing.T) {
-	if block := buildShellBlock(SPAShell{}); len(block) != 0 {
-		t.Errorf("empty SPAShell should inject nothing, got %q", block)
+	if block := buildShellBlock(ShellHTML{}); len(block) != 0 {
+		t.Errorf("empty ShellHTML should inject nothing, got %q", block)
 	}
-	block := string(buildShellBlock(SPAShell{ManifestURL: `/m"x`}))
+	block := string(buildShellBlock(ShellHTML{ManifestURL: `/m"x`}))
 	if !strings.Contains(block, `href="/m&#34;x"`) {
 		t.Errorf("shell attribute value is not escaped: %q", block)
 	}
@@ -199,23 +199,23 @@ func TestBuildShellBlockSkipsEmptyAndEscapes(t *testing.T) {
 // TestShellComposesWithMathJax 断言外壳注入、MathJax 注入与版本注入互不覆盖：三者都在
 // </head> 之前出现，且后设置的注入不会丢掉先前设置的那一项。
 func TestShellComposesWithMathJax(t *testing.T) {
-	spa, err := NewSPA(fstest.MapFS{
+	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html lang="zh-CN"><head></head><body><div id="app"></div></body></html>`)},
 	})
 	if err != nil {
-		t.Fatalf("NewSPA() error = %v", err)
+		t.Fatalf("NewShell() error = %v", err)
 	}
 
-	spa.SetMathJaxURL("/static/v/abcd1234/js/mathjax/tex-svg.js")
-	spa.SetShell(SPAShell{
+	shell.SetMathJaxURL("/static/v/abcd1234/js/mathjax/tex-svg.js")
+	shell.SetShell(ShellHTML{
 		ManifestURL:    manifestPath,
 		ThemeColor:     "#18181b",
 		ScriptURL:      pwaScriptPath,
 		ThemeBootstrap: themeBootstrap,
 	})
-	spa.SetVersion("v0.1.4")
+	shell.SetVersion("v0.1.4")
 
-	got := string(spa.IndexHTML())
+	got := string(shell.IndexHTML())
 	headEnd := strings.Index(got, "</head>")
 	for _, want := range []string{
 		`<meta name="` + mathjaxMetaName + `" content="/static/v/abcd1234/js/mathjax/tex-svg.js" />`,

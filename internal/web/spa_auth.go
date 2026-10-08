@@ -185,7 +185,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 // （会话 cookie 始终由服务端在登录成功后签发）。迁移期别名 /spa/login 由同一处理器服务。
 func (s *Server) loginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // registerShell 提供 GET /register：返回应用壳（规范路径），
@@ -194,7 +194,7 @@ func (s *Server) loginShell(c *gin.Context) {
 // 不建号、不建立会话、不返回任何凭据。迁移期别名 /spa/register 由同一处理器服务。
 func (s *Server) registerShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // setupShell 提供 GET /setup：返回应用壳（规范路径），
@@ -207,7 +207,7 @@ func (s *Server) setupShell(c *gin.Context) {
 		return
 	}
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // apiRegisterRequest 是 POST /api/v1/auth/register 的请求体。

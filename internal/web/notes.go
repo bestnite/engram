@@ -111,7 +111,7 @@ func (s *Server) noteListRoute(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // noteEditRoute 提供 GET /decks/:id/notes/:nid：返回应用壳，由客户端路由
@@ -132,7 +132,7 @@ func (s *Server) noteEditRoute(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // noteNewRoute 提供 GET /decks/:id/new-note：返回应用壳，由客户端路由渲染新建卡片页，
@@ -151,7 +151,7 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // buildPreview 用 internal/render 渲染每个 card 的正反面，供 SPA 预览 JSON 使用。

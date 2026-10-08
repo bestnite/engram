@@ -51,5 +51,5 @@ func (s *Server) deckSettingsRoute(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }

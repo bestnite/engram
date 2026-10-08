@@ -42,7 +42,7 @@ func (s *Server) reviewPageRoute(c *gin.Context) {
 	if _, ok := s.parseDeckScope(c, user); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // reviewScope 是一次复习请求的卡组范围：deckIDs 为空表示全库（不按卡组过滤）。

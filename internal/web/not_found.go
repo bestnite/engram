@@ -33,7 +33,7 @@ func (s *Server) notFound(c *gin.Context) {
 	case isStaticOrMediaPath(path):
 		c.AbortWithStatus(http.StatusNotFound)
 	default:
-		s.spa.ServeIndex(c)
+		s.shell.ServeIndex(c)
 	}
 }
 

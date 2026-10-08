@@ -51,7 +51,7 @@ func (s *Server) sharingPageRoute(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // usernameFor 解析用户 id 对应的显示名；查不到时退回 #id，保证列表不因单个坏行而失败。

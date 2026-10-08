@@ -158,5 +158,5 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 // POST /api/v1/auth/totp（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
 func (s *Server) totpLoginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }

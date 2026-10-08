@@ -186,7 +186,7 @@ func (s *Server) pwaShellURLs() []string {
 			urls = append(urls, url)
 		}
 	}
-	urls = append(urls, s.spa.StaticShellURLs()...)
+	urls = append(urls, s.shell.StaticShellURLs()...)
 	urls = append(urls, manifestPath)
 	return urls
 }

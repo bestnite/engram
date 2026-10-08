@@ -30,7 +30,7 @@ type shellAsset struct {
 }
 
 // SPA 管理嵌入的 Svelte SPA 生产构建产物。
-type SPA struct {
+type Shell struct {
 	fs        fs.FS
 	rawIndex  []byte
 	indexHTML []byte
@@ -44,26 +44,26 @@ type SPA struct {
 	assets     map[string]*shellAsset
 }
 
-// LoadSPA 从 frontend 嵌入文件系统加载生产构建产物。
-func LoadSPA() (*SPA, error) {
+// LoadShell 从 frontend 嵌入文件系统加载生产构建产物。
+func LoadShell() (*Shell, error) {
 	subFS, err := frontend.FS()
 	if err != nil {
-		return nil, fmt.Errorf("web: load SPA: %w", err)
+		return nil, fmt.Errorf("web: load Shell: %w", err)
 	}
-	return NewSPA(subFS)
+	return NewShell(subFS)
 }
 
-// NewSPA 从指定的 fs.FS 构造 SPA 资源服务实例（支持依赖注入与单元测试）。
-func NewSPA(subFS fs.FS) (*SPA, error) {
+// NewShell 从指定的 fs.FS 构造 SPA 资源服务实例（支持依赖注入与单元测试）。
+func NewShell(subFS fs.FS) (*Shell, error) {
 	indexData, err := fs.ReadFile(subFS, "index.html")
 	if err != nil {
-		return nil, fmt.Errorf("web: read spa index.html: %w", err)
+		return nil, fmt.Errorf("web: read shell index.html: %w", err)
 	}
 	if len(indexData) == 0 {
-		return nil, fmt.Errorf("web: spa index.html is empty")
+		return nil, fmt.Errorf("web: shell index.html is empty")
 	}
 
-	spa := &SPA{
+	shell := &Shell{
 		fs:        subFS,
 		rawIndex:  indexData,
 		indexHTML: indexData,
@@ -119,17 +119,17 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 			contentType: ct,
 			data:        data,
 		}
-		spa.assets[cleanPath] = asset
+		shell.assets[cleanPath] = asset
 		if strings.HasPrefix(cleanPath, "assets/") {
-			spa.assets[strings.TrimPrefix(cleanPath, "assets/")] = asset
+			shell.assets[strings.TrimPrefix(cleanPath, "assets/")] = asset
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("web: walk spa assets: %w", err)
+		return nil, fmt.Errorf("web: walk shell assets: %w", err)
 	}
 
-	return spa, nil
+	return shell, nil
 }
 
 // mathjaxMetaName 是 SPA 入口 <head> 里承载自托管 MathJax 内容哈希 URL 的 meta 名。
@@ -145,7 +145,7 @@ const versionMetaName = "engram-version"
 // 传空串或资源未嵌入时不注入，前端加载器读到空 URL 会跳过加载（与 SSR 缺资源时跳过引用
 // 一致）。入口内容随注入变化，重建后 ServeIndex 按实际写出的内容重算 ETag，浏览器不会
 // 拿旧引用配新资源。
-func (s *SPA) SetMathJaxURL(url string) {
+func (s *Shell) SetMathJaxURL(url string) {
 	if url == s.mathjaxURL {
 		return
 	}
@@ -158,7 +158,7 @@ func (s *SPA) SetMathJaxURL(url string) {
 // 传空串时不注入（测试，或未注入版本的构建），前端读到空值即不显示版本。与 SetMathJaxURL
 // 一样，注入变化会重建入口内容，ServeIndex 按实际写出的字节现算 ETag，浏览器拿不到
 // 「旧壳 + 新版本」的组合。
-func (s *SPA) SetVersion(version string) {
+func (s *Shell) SetVersion(version string) {
 	if version == s.version {
 		return
 	}
@@ -166,13 +166,13 @@ func (s *SPA) SetVersion(version string) {
 	s.rebuild()
 }
 
-// SPAShell 是注入 SPA 入口 <head> 的 PWA 外壳元素。
+// ShellHTML 是注入 SPA 入口 <head> 的 PWA 外壳元素。
 //
 // 这些值在装配期解析：manifest 与 /pwa.js 是稳定 URL，图标走内容哈希 URL，主题引导是
 // 与 SSR 共用的同一常量。任何字段为空即跳过对应标记——资源缺失时与 SSR 一样不引用，
 // 而不是给出一条空 href。此处不含用户文案：manifest 的应用名由 /manifest.webmanifest
 // 端点按 settings 渲染，这里只负责引用它。
-type SPAShell struct {
+type ShellHTML struct {
 	// ManifestURL 是 manifest 的稳定路径（/manifest.webmanifest）。
 	ManifestURL string
 	// ThemeColor 是初始 theme-color 内容；主题引导会随后按明暗同步它。
@@ -190,7 +190,7 @@ type SPAShell struct {
 
 // SetShell 注入 PWA 外壳标记：manifest、theme-color、图标、注册脚本与主题引导。
 // 与 SetMathJaxURL 一样，注入会重建入口内容。
-func (s *SPA) SetShell(shell SPAShell) {
+func (s *Shell) SetShell(shell ShellHTML) {
 	block := buildShellBlock(shell)
 	if bytes.Equal(block, s.shellBlock) {
 		return
@@ -202,7 +202,7 @@ func (s *SPA) SetShell(shell SPAShell) {
 // buildShellBlock 拼出注入 <head> 的外壳标记。属性值一律转义：图标/脚本 URL 来自装配期
 // 解析，将来若含引号也不会破坏文档结构。theme-color 必须排在主题引导之前——引导会同步该
 // meta 的内容，顺序反了首帧会读到旧颜色。
-func buildShellBlock(shell SPAShell) []byte {
+func buildShellBlock(shell ShellHTML) []byte {
 	var b strings.Builder
 	if shell.ThemeColor != "" {
 		b.WriteString(`<meta name="theme-color" content="` + html.EscapeString(shell.ThemeColor) + `"/>`)
@@ -228,7 +228,7 @@ func buildShellBlock(shell SPAShell) []byte {
 // rebuild 依据当前注入项（MathJax meta、版本 meta 与 PWA 外壳块）重建入口内容。
 // 每个注入点都从这里出发，避免各自基于 rawIndex 组装而丢掉其余注入。ETag 不在这里算：
 // ServeIndex 按每次实际写出的内容（含请求语言）现算。
-func (s *SPA) rebuild() {
+func (s *Shell) rebuild() {
 	index := s.rawIndex
 	if s.mathjaxURL != "" {
 		index = injectMathJaxMeta(index, s.mathjaxURL)
@@ -318,14 +318,14 @@ func requestLocale(c *gin.Context) string {
 }
 
 // HasAsset 报告指定逻辑路径的静态资源是否存在。
-func (s *SPA) HasAsset(logical string) bool {
+func (s *Shell) HasAsset(logical string) bool {
 	clean := strings.TrimPrefix(logical, "/")
 	_, ok := s.assets[clean]
 	return ok
 }
 
 // StaticShellURLs 返回嵌入构建中可安全预缓存的 Vite 脚本与样式表。
-func (s *SPA) StaticShellURLs() []string {
+func (s *Shell) StaticShellURLs() []string {
 	urls := make([]string, 0, len(s.assets))
 	for key, asset := range s.assets {
 		if key != asset.path || !strings.HasPrefix(asset.path, "assets/") {
@@ -341,13 +341,13 @@ func (s *SPA) StaticShellURLs() []string {
 }
 
 // IndexHTML 返回 index.html 的原始内容。
-func (s *SPA) IndexHTML() []byte {
+func (s *Shell) IndexHTML() []byte {
 	return s.indexHTML
 }
 
 // ServeAsset 提供 Vite 哈希静态资源访问（/assets/*filepath）。
 // 命中时返回不可变长效缓存；缺失时返回 404，严禁回退 index.html。
-func (s *SPA) ServeAsset(c *gin.Context) {
+func (s *Shell) ServeAsset(c *gin.Context) {
 	relPath := strings.TrimPrefix(c.Param("filepath"), "/")
 	asset, ok := s.assets["assets/"+relPath]
 	if !ok {
@@ -372,7 +372,7 @@ func (s *SPA) ServeAsset(c *gin.Context) {
 //
 // 每个请求按已解析语言重写入口的 <html lang>，与 SSR 外壳同源。因为
 // 响应体随语言变化，ETag 也按实际写出的内容计算——否则换语言后会命中旧的 304 缓存。
-func (s *SPA) ServeIndex(c *gin.Context) {
+func (s *Shell) ServeIndex(c *gin.Context) {
 	body := s.indexHTML
 	if lang := requestLocale(c); lang != "" {
 		body = setHTMLLang(body, lang)

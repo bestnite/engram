@@ -31,7 +31,7 @@ func (s *Server) settingsRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // supportedLocale 报告 code 是否是当前受支持的语言码。

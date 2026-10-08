@@ -35,7 +35,7 @@ type Deps struct {
 	// Assets 是已嵌入的静态资源清单；为空时由 New 从 embed 加载。
 	Assets *Assets
 	// SPA 是已嵌入的 SPA 静态资源及入口清单；为空时由 New 从 frontend.FS() 加载。
-	SPA *SPA
+	Shell *Shell
 	// Translator 是 i18n 本地化器工厂；为空时由 New 从嵌入语言包加载。
 	Translator *i18n.Translator
 	// UserLocale 返回当前请求的用户语言设置（可为空串）。M0 尚无会话，M1 接入后提供。
@@ -109,7 +109,7 @@ type Server struct {
 	// schemaVersion 由 main 注入，避免 web 反向依赖 store 的具体实现。
 	schemaVersion func(ctx context.Context) (int, error)
 	assets        *Assets
-	spa           *SPA
+	shell         *Shell
 	i18n          *i18n.Translator
 	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证 M8-4 报告页会渲染
 	// <100% 并点名缺失的 key；生产为空，报告走 i18n.Coverage。
@@ -199,25 +199,25 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 	// SPA 是唯一的页面渲染层（SSR 页面层已删除）：嵌入资源缺失时启动即失败，
 	// 不再有「降级回退到服务端渲染页面」这条路径。
-	spa := deps.SPA
-	if spa == nil {
+	shell := deps.Shell
+	if shell == nil {
 		var err error
-		if spa, err = LoadSPA(); err != nil {
+		if shell, err = LoadShell(); err != nil {
 			return nil, err
 		}
 	}
-	if spa == nil {
+	if shell == nil {
 		return nil, errors.New("web: the embedded SPA is required")
 	}
 	// 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口，供前端加载器按同源外链引入
 	// （CSP script-src 'self' 已放行，无需内联脚本）。资源缺失时
 	// URL 为空，不注入，前端加载器随之跳过加载。
-	spa.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
+	shell.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
 	// PWA 外壳：manifest、theme-color、图标、注册脚本与主题引导都注入
 	// SPA 入口 <head>。图标走内容哈希 URL；主题引导用编译期常量 themeBootstrap，与 CSP 的
 	// script-src hash 白名单同源，因此改它必须同步改策略。manifest 与 /pwa.js 是稳定 URL，
 	// 登录前也需可取（registerPWARoutes）。
-	spa.SetShell(SPAShell{
+	shell.SetShell(ShellHTML{
 		ManifestURL:       manifestPath,
 		ThemeColor:        "#18181b",
 		IconURL:           assets.URL("icons/icon.svg"),
@@ -226,7 +226,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		ThemeBootstrap:    themeBootstrap,
 	})
 	// 程序版本注入 SPA 入口 <head>，前端页脚读取显示；为空则不注入。
-	spa.SetVersion(deps.Version)
+	shell.SetVersion(deps.Version)
 	translator := deps.Translator
 	if translator == nil {
 		var err error
@@ -241,7 +241,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		db:             deps.DB,
 		schemaVersion:  deps.SchemaVersion,
 		assets:         assets,
-		spa:            spa,
+		shell:          shell,
 		i18n:           translator,
 		userLocale:     deps.UserLocale,
 		accounts:       deps.Accounts,
@@ -335,7 +335,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.homeRoute)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
-	router.GET("/assets/*filepath", s.spa.ServeAsset)
+	router.GET("/assets/*filepath", s.shell.ServeAsset)
 	if deps.Sessions != nil && deps.Users != nil {
 		// SPA 个人资料 API 仅在会话依赖齐备时注册，写请求继续由会话 CSRF 中间件保护。
 		profile := router.Group("/api/v1")

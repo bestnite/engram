@@ -79,7 +79,7 @@ func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 // 用户会莫名其妙被退订。真正的退订只由 POST 完成。
 func (s *Server) unsubscribeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // unsubscribeTokenFromRequest 从查询串或表单体里取出明文令牌（机器端点的入参形态）。

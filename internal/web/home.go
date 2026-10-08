@@ -20,5 +20,5 @@ func (s *Server) homeRoute(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/setup")
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }

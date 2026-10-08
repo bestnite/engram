@@ -65,7 +65,7 @@ func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 	if !strings.Contains(body, `if (req.method !== "GET")`) {
 		t.Errorf("service worker must ignore non-GET requests (no caching of POSTs)")
 	}
-	for _, path := range []string{"/", "/review", "/spa/review", "/api/v1/reviews"} {
+	for _, path := range []string{"/", "/review", "/shell/review", "/api/v1/reviews"} {
 		if strings.Contains(strings.Join(swAssetList(t, body), "\n"), `"`+path+`"`) {
 			t.Errorf("cache list must not contain document or data route %q", path)
 		}
@@ -83,7 +83,7 @@ func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 
 func TestServiceWorkerIncludesEmbeddedViteAssets(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
-	spa, err := NewSPA(fstest.MapFS{
+	shell, err := NewShell(fstest.MapFS{
 		"index.html":                 &fstest.MapFile{Data: []byte("<html>shell</html>")},
 		"assets/index-abc123.js":     &fstest.MapFile{Data: []byte("console.log('app')")},
 		"assets/index-def456.css":    &fstest.MapFile{Data: []byte("body { color: red }")},
@@ -93,7 +93,7 @@ func TestServiceWorkerIncludesEmbeddedViteAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.spa = spa
+	srv.shell = shell
 
 	body := getWithCookies(t, srv, serviceWorkerPath, nil).Body.String()
 	assets := swAssetList(t, body)

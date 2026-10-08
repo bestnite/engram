@@ -27,7 +27,7 @@ import (
 // （未登录 303 到登录页、非 admin 403），这里只发 SPA 应用壳。
 // SSR 页面层已删除，不再回退任何 SSR 页面。
 func (s *Server) adminShell(c *gin.Context) {
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // adminError 写出管理 JSON 端点的错误包壳：code 稳定且英文，message 为英文兜底文案，

@@ -36,7 +36,7 @@ func (s *Server) statsRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // userLocation 解析用户时区；回退规则见 store.LoadLocation（空/非法名 → UTC），

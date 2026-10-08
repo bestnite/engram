@@ -22,5 +22,5 @@ func (s *Server) keysRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }

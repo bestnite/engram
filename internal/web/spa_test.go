@@ -11,13 +11,13 @@ import (
 // 能被正确提供，并带有长效不可变缓存、ETag 与正确的 MIME 类型。
 func TestServesAssetsWithImmutableCache(t *testing.T) {
 	srv := newRenderServer(t, nil)
-	if srv.spa == nil {
-		t.Fatal("srv.spa is nil")
+	if srv.shell == nil {
+		t.Fatal("srv.shell is nil")
 	}
 
 	// 至少包含 index-*.css 与 index-*.js
 	var jsPath, cssPath string
-	for p := range srv.spa.assets {
+	for p := range srv.shell.assets {
 		if strings.HasSuffix(p, ".js") && strings.HasPrefix(p, "assets/") {
 			jsPath = "/" + p
 		}
@@ -26,7 +26,7 @@ func TestServesAssetsWithImmutableCache(t *testing.T) {
 		}
 	}
 	if jsPath == "" || cssPath == "" {
-		t.Fatalf("expected both js and css assets in spa, got js=%q css=%q", jsPath, cssPath)
+		t.Fatalf("expected both js and css assets in shell, got js=%q css=%q", jsPath, cssPath)
 	}
 
 	for _, target := range []struct {
@@ -88,7 +88,7 @@ func TestFallbackDeepLinks(t *testing.T) {
 
 	deepLinks := []string{
 		"/decks/42/details",
-		"/spa/review",
+		"/shell/review",
 		"/stats/history",
 		"/settings/profile",
 	}
@@ -111,15 +111,15 @@ func TestNewErrorsOnEmptyOrMissingIndex(t *testing.T) {
 	missingFS := fstest.MapFS{
 		"assets/bundle.js": &fstest.MapFile{Data: []byte("console.log('hi');")},
 	}
-	if _, err := NewSPA(missingFS); err == nil {
-		t.Errorf("NewSPA(missingFS) error = nil, want error")
+	if _, err := NewShell(missingFS); err == nil {
+		t.Errorf("NewShell(missingFS) error = nil, want error")
 	}
 
 	emptyFS := fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("")},
 	}
-	if _, err := NewSPA(emptyFS); err == nil {
-		t.Errorf("NewSPA(emptyFS) error = nil, want error")
+	if _, err := NewShell(emptyFS); err == nil {
+		t.Errorf("NewShell(emptyFS) error = nil, want error")
 	}
 }
 
@@ -136,9 +136,9 @@ func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 		t.Fatalf("mathjax URL = %q, want content-hashed %q prefix", want, staticPathPrefix)
 	}
 
-	rec := get(t, srv, "/spa/review", nil)
+	rec := get(t, srv, "/shell/review", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /spa/review status = %d, want 200", rec.Code)
+		t.Fatalf("GET /shell/review status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
 	meta := `<meta name="engram-mathjax" content="` + want + `" />`
@@ -155,28 +155,28 @@ func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	if etag == "" {
 		t.Fatal("SPA index ETag is missing")
 	}
-	cond := get(t, srv, "/spa/review", map[string]string{"If-None-Match": etag})
+	cond := get(t, srv, "/shell/review", map[string]string{"If-None-Match": etag})
 	if cond.Code != http.StatusNotModified {
-		t.Errorf("conditional GET /spa/review status = %d, want 304", cond.Code)
+		t.Errorf("conditional GET /shell/review status = %d, want 304", cond.Code)
 	}
 }
 
 // TestIndexMathJaxMetaFollowsSetURL 断言注入是 SetMathJaxURL 驱动的：默认不带 meta，
 // 传入 URL 后出现在 </head> 之前，再传空串则移除（资源缺失时与 SSR 一样不引用 MathJax）。
 func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
-	spa, err := NewSPA(fstest.MapFS{
+	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<html><head></head><body><div id=\"app\"></div></body></html>")},
 	})
 	if err != nil {
-		t.Fatalf("NewSPA() error = %v", err)
+		t.Fatalf("NewShell() error = %v", err)
 	}
-	if strings.Contains(string(spa.IndexHTML()), "engram-mathjax") {
+	if strings.Contains(string(shell.IndexHTML()), "engram-mathjax") {
 		t.Errorf("fresh SPA index should not carry a MathJax meta")
 	}
 
 	url := "/static/v/abcd1234/js/mathjax/tex-svg.js"
-	spa.SetMathJaxURL(url)
-	got := string(spa.IndexHTML())
+	shell.SetMathJaxURL(url)
+	got := string(shell.IndexHTML())
 	meta := `<meta name="engram-mathjax" content="` + url + `" />`
 	if !strings.Contains(got, meta) {
 		t.Errorf("SetMathJaxURL did not inject %q into the index", meta)
@@ -185,8 +185,8 @@ func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 		t.Errorf("MathJax meta must be injected inside <head>, before </head>")
 	}
 
-	spa.SetMathJaxURL("")
-	if strings.Contains(string(spa.IndexHTML()), "engram-mathjax") {
+	shell.SetMathJaxURL("")
+	if strings.Contains(string(shell.IndexHTML()), "engram-mathjax") {
 		t.Errorf("SetMathJaxURL(\"\") should remove the MathJax meta")
 	}
 }
@@ -194,18 +194,18 @@ func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 // TestIndexVersionMetaFollowsSetVersion 断言版本注入由 SetVersion 驱动：默认不带 meta，
 // 传入版本后出现在 </head> 之前，值一律转义，再传空串则移除（未注入版本的构建不显示版本）。
 func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
-	spa, err := NewSPA(fstest.MapFS{
+	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html><head></head><body><div id="app"></div></body></html>`)},
 	})
 	if err != nil {
-		t.Fatalf("NewSPA() error = %v", err)
+		t.Fatalf("NewShell() error = %v", err)
 	}
-	if strings.Contains(string(spa.IndexHTML()), versionMetaName) {
+	if strings.Contains(string(shell.IndexHTML()), versionMetaName) {
 		t.Errorf("fresh SPA index should not carry a version meta")
 	}
 
-	spa.SetVersion("v0.1.4")
-	got := string(spa.IndexHTML())
+	shell.SetVersion("v0.1.4")
+	got := string(shell.IndexHTML())
 	meta := `<meta name="engram-version" content="v0.1.4" />`
 	if !strings.Contains(got, meta) {
 		t.Errorf("SetVersion did not inject %q into the index", meta)
@@ -215,13 +215,13 @@ func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
 	}
 
 	// 版本串将来可能含引号，属性值必须转义，否则会破坏文档结构。
-	spa.SetVersion(`v1" onload="x`)
-	if !strings.Contains(string(spa.IndexHTML()), `content="v1&#34; onload=&#34;x"`) {
-		t.Errorf("version meta value is not escaped: %s", string(spa.IndexHTML()))
+	shell.SetVersion(`v1" onload="x`)
+	if !strings.Contains(string(shell.IndexHTML()), `content="v1&#34; onload=&#34;x"`) {
+		t.Errorf("version meta value is not escaped: %s", string(shell.IndexHTML()))
 	}
 
-	spa.SetVersion("")
-	if strings.Contains(string(spa.IndexHTML()), versionMetaName) {
+	shell.SetVersion("")
+	if strings.Contains(string(shell.IndexHTML()), versionMetaName) {
 		t.Errorf("SetVersion(\"\") should remove the version meta")
 	}
 }

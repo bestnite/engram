@@ -53,7 +53,7 @@ func (s *Server) shareBrowseRoute(c *gin.Context) {
 	if _, _, ok := s.resolveShareLink(c); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // shareGet 返回一份分享卡组的只读内容（GET /api/v1/share/:token）。

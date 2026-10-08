@@ -50,7 +50,7 @@ func (s *Server) registerAccountRoutes(router *gin.Engine) {
 // SMTP 未配置的说明由响应的 mail_ready 字段驱动，不再由服务端渲染。
 func (s *Server) forgotPasswordRoute(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // resetPasswordRoute 提供 GET /reset-password：下发会话前双提交 cookie 并返回应用壳，
@@ -58,7 +58,7 @@ func (s *Server) forgotPasswordRoute(c *gin.Context) {
 // token 缺失或无效的判定由 JSON 端点给出。
 func (s *Server) resetPasswordRoute(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // emailChangeRoute 提供 GET /settings/email：返回应用壳，由客户端路由渲染改邮箱页；
@@ -68,7 +68,7 @@ func (s *Server) emailChangeRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
 	}
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // verifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
@@ -76,7 +76,7 @@ func (s *Server) emailChangeRoute(c *gin.Context) {
 // 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
 func (s *Server) verifyEmailShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // confirmEmailChangeShell 是改邮箱确认的规范入口（GET /confirm-email-change）。
@@ -84,7 +84,7 @@ func (s *Server) verifyEmailShell(c *gin.Context) {
 // POST /api/v1/auth/confirm-email-change。这里只返回壳，不消费令牌。
 func (s *Server) confirmEmailChangeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.spa.ServeIndex(c)
+	s.shell.ServeIndex(c)
 }
 
 // ── JSON 端点（会话前）──────────────────────────────────────────────────────
