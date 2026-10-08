@@ -2,7 +2,9 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -172,4 +174,134 @@ func parseDeckIDFromLocation(t *testing.T, location string) uint64 {
 		t.Fatalf("cannot parse deck id from Location %q: %v", location, err)
 	}
 	return id
+}
+
+// TestCloneAPIAllowsOwnerEditorReader 断言 owner/editor/reader 三种角色都能通过
+// POST /api/v1/decks/:id/clone 把卡组克隆到自己名下，响应是新卡组的 JSON {id,name}，
+// 且新卡组归属调用者（进度不跟随由 clone_test.go 覆盖）。
+func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Clone API source")
+	seedBasic(t, db, deck.ID, "Q", "A")
+	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+
+	editorID, editorCookies, editorCSRF := createUserAndLogin(t, srv, db, "clone-editor")
+	grantRole(t, srv, deck.ID, editorID, store.RoleEditor, ownerCookies, ownerCSRF)
+	readerID, readerCookies, readerCSRF := createUserAndLogin(t, srv, db, "clone-reader")
+	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
+
+	for _, tc := range []struct {
+		name    string
+		userID  uint64
+		cookies []*http.Cookie
+		csrf    string
+	}{
+		{"owner", ownerID, ownerCookies, ownerCSRF},
+		{"editor", editorID, editorCookies, editorCSRF},
+		{"reader", readerID, readerCookies, readerCSRF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postAccept(t, srv, path, "{}", "application/json", tc.cookies, tc.csrf)
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("POST clone (%s) = %d, want 201 (body %s)", tc.name, rec.Code, snippet(rec.Body.String()))
+			}
+			var body cloneResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode clone response: %v (body %s)", err, rec.Body.String())
+			}
+			if body.ID == 0 || body.ID == deck.ID {
+				t.Errorf("clone (%s) id = %d, want a new non-zero id", tc.name, body.ID)
+			}
+			var cloned store.Deck
+			if err := db.First(&cloned, "id = ?", body.ID).Error; err != nil {
+				t.Fatalf("load cloned deck: %v", err)
+			}
+			if cloned.OwnerUserID != tc.userID {
+				t.Errorf("clone (%s) owner = %d, want %d", tc.name, cloned.OwnerUserID, tc.userID)
+			}
+		})
+	}
+}
+
+// TestCloneAPIRejectsNonReaderAndMissingCSRF 断言克隆 API 的两条拒绝路径：
+// 无任何授权的陌生用户 403；缺 CSRF token 403；两者都不产生新卡组。
+func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Clone guard source")
+	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+
+	var before int64
+	if err := db.Model(&store.Deck{}).Count(&before).Error; err != nil {
+		t.Fatalf("count decks: %v", err)
+	}
+
+	_, strangerCookies, strangerCSRF := createUserAndLogin(t, srv, db, "clone-stranger")
+	if rec := postAccept(t, srv, path, "{}", "application/json", strangerCookies, strangerCSRF); rec.Code != http.StatusForbidden {
+		t.Errorf("stranger POST clone = %d, want 403", rec.Code)
+	}
+	if rec := postAccept(t, srv, path, "{}", "application/json", ownerCookies, ""); rec.Code != http.StatusForbidden {
+		t.Errorf("clone without CSRF = %d, want 403", rec.Code)
+	}
+	// 正确 token 下 owner 仍可克隆，证明前两条失败是判权/CSRF 而非路径错误。
+	if rec := postAccept(t, srv, path, "{}", "application/json", ownerCookies, ownerCSRF); rec.Code != http.StatusCreated {
+		t.Fatalf("owner POST clone with CSRF = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	var after int64
+	if err := db.Model(&store.Deck{}).Count(&after).Error; err != nil {
+		t.Fatalf("count decks: %v", err)
+	}
+	if after != before+1 {
+		t.Errorf("deck count = %d, want %d (only the authorised clone persisted)", after, before+1)
+	}
+}
+
+// TestCloneAcceptHeaderChoosesJSONOrRedirect 断言克隆端点的响应形态由 Accept 决定：
+// 带参数的 application/json（客户端可能附 charset）仍返回 201 JSON，浏览器表单形态的 Accept
+// 仍走 303 重定向到新卡组——避免 JSON 调用被误判成表单提交后跟随 303 拿到 HTML。
+func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Clone accept source")
+	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+
+	jsonRec := postAccept(t, srv, path, "{}", "application/json; charset=utf-8", ownerCookies, ownerCSRF)
+	if jsonRec.Code != http.StatusCreated {
+		t.Fatalf("clone with charset Accept = %d, want 201 (body %s)", jsonRec.Code, snippet(jsonRec.Body.String()))
+	}
+	if ct := jsonRec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("clone Content-Type = %q, want application/json", ct)
+	}
+
+	htmlRec := postAccept(t, srv, path, "", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", ownerCookies, ownerCSRF)
+	if htmlRec.Code != http.StatusSeeOther {
+		t.Fatalf("clone with browser Accept = %d, want 303 (body %s)", htmlRec.Code, snippet(htmlRec.Body.String()))
+	}
+	if loc := htmlRec.Header().Get("Location"); !strings.HasPrefix(loc, "/decks/") || !strings.HasSuffix(loc, "/notes") {
+		t.Errorf("clone redirect Location = %q, want /decks/<id>/notes", loc)
+	}
+}
+
+// postAccept 发一个带显式 Accept 的 POST，用来断言 Accept 决定返回 JSON 还是 303 重定向。
+func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", accept)
+	if csrf != "" {
+		req.Header.Set("X-CSRF-Token", csrf)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// cloneResponse 是克隆端点的 JSON 响应体。
+type cloneResponse struct {
+	ID   uint64 `json:"id"`
+	Name string `json:"name"`
 }

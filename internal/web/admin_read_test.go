@@ -40,7 +40,7 @@ func TestAdminReadPagesCutover(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
 			// SPA 已加载：返回应用壳，绝不渲染 SSR 页面。
-			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertShell(t, getWithCookies(t, srv, path, cookies))
 
 			// 匿名：重定向登录页，绝不返回外壳。
 			anon := get(t, srv, path, nil)

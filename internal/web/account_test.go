@@ -54,7 +54,7 @@ func TestAccountRouteCutover(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
 	for _, path := range []string{"/forgot-password", "/reset-password", "/settings/email"} {
-		assertServesShell(t, getWithCookies(t, ts.srv, path, ts.cookies), "GET "+path)
+		assertShell(t, getWithCookies(t, ts.srv, path, ts.cookies))
 	}
 
 	// 邮件里的一键链接落在规范路径上，同样返回应用壳（服务端不再渲染结果页）。

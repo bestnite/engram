@@ -32,16 +32,16 @@ func decodeShareResponse(t *testing.T, rec *httptest.ResponseRecorder) shareResp
 	return body
 }
 
-// TestShareBrowseCutover 覆盖 GET /s/:token 的切壳与撤销/未知链接的 404。
-func TestShareBrowseCutover(t *testing.T) {
+// TestShareBrowseServesShell 覆盖 GET /s/:token 的应用壳与未知链接的 404。
+func TestShareBrowseServesShell(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Cutover share deck")
 	seedBasic(t, db, deck.ID, "正面", "背面")
 	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	assertServesShell(t, get(t, srv, "/s/"+token, nil), "GET /s/<token>")
+	assertShell(t, get(t, srv, "/s/"+token, nil))
 
-	// 未知链接仍 404（切壳不改变可达性判定）。
+	// 未知链接仍 404：可达性判定发生在发壳之前。
 	if rec := get(t, srv, "/s/does-not-exist-token-1234567890", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("GET /s/<unknown> = %d, want 404", rec.Code)
 	}

@@ -10,19 +10,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 GET /review 的 SPA 规范路径切流与复习页新增的两个会话 CSRF 端点：
+// 复习页的同源 JSON 端点（卡面渲染、埋藏）与范围校验。
 //
-//   - GET /review 在 SPA 已加载时返回应用壳，由客户端路由渲染复习页；会话与卡组范围判定
-//     先于切壳执行——匿名 303 登录页、非法 deck 参数 400、范围里读不到的卡组 403，都不因
-//     返回应用壳而放行。
-//   - POST /api/v1/review/bury：埋藏只写本人进度（reader 即可），会话 + CSRF 保护，响应带
-//     同范围重建后的队列。
-//   - POST /api/v1/review/render：只返回服务端清洗后的卡面 HTML（唯一 HTML 汇），会话 + CSRF
-//     保护；SPA 绝不把 fields 原文送进 {@html}。
-//
-// 评分与动作写路径是 /api/v1/review/answer、/grade、/bury、/render，各自有既有测试覆盖。
+// 页面本身只发应用壳（见 page_routes_test.go），数据与写操作全走这里钉住的端点；
+// 两个写端点都挂会话 CSRF，且范围参数必须整次校验通过。
 
-// queueBody 是复习队列响应的对外形态（埋藏与渲染入口共用的最小字段）。
 type queueBody struct {
 	CardID    uint64 `json:"card_id"`
 	Remaining int    `json:"remaining"`
@@ -42,33 +34,6 @@ type reviewRenderBody struct {
 
 // TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由渲染复习页。
 // 卡组范围参数同样接受：/review?deck=A&deck=B 返回的仍是应用壳。
-func TestReviewRouteServesShell(t *testing.T) {
-	srv, db, ownerID, cookies, _ := newNotesServer(t)
-	deck := seedReviewDeck(t, db, ownerID, "Review shell deck")
-	seedBasic(t, db, deck.ID, "Q", "A")
-
-	for _, path := range []string{
-		"/review",
-		"/review?deck=" + u64str(deck.ID),
-		"/review?deck=" + u64str(deck.ID) + "&deck=" + u64str(deck.ID),
-	} {
-		rec := getWithCookies(t, srv, path, cookies)
-		assertShell(t, rec)
-	}
-}
-
-// TestReviewRouteRedirectsAnonymous 断言切壳不改动授权：匿名访问 GET /review 仍 303 重定向
-// 登录页，应用壳不会泄漏给未登录访客。
-func TestReviewRouteRedirectsAnonymous(t *testing.T) {
-	srv, _, _, _, _ := newNotesServer(t)
-	rec := getWithCookies(t, srv, "/review", nil)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
-		t.Fatalf("anonymous GET /review = %d loc %q, want 303 /login", rec.Code, rec.Header().Get("Location"))
-	}
-	if strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("anonymous GET /review leaked the SPA shell")
-	}
-}
 
 // TestReviewRouteRejectsInvalidAndUnreadableScope 断言范围判定先于切壳执行：非数字或 0 的
 // deck 参数 400；范围里出现读不到的卡组 403。两者都不返回应用壳。

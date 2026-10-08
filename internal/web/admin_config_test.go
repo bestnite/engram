@@ -21,7 +21,7 @@ func TestAdminConfigPagesCutover(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
-			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertShell(t, getWithCookies(t, srv, path, cookies))
 
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "cfg_stranger")
 			if rec := getWithCookies(t, srv, path, strangerCookies); rec.Code != http.StatusForbidden {

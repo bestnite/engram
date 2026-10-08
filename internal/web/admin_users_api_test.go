@@ -48,7 +48,7 @@ func TestAdminUserPagesCutover(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 			srv.invites = store.NewInviteStore(db)
 
-			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertShell(t, getWithCookies(t, srv, path, cookies))
 
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "cut_stranger")
 			denied := getWithCookies(t, srv, path, strangerCookies)

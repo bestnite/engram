@@ -17,7 +17,7 @@ import (
 // TestAdminMailTemplatePagesCutover 断言页面走 SPA 外壳，且非管理员拿 403。
 func TestAdminMailTemplatePagesCutover(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
-	assertServesShell(t, getWithCookies(t, srv, "/admin/mail-templates", cookies), "GET /admin/mail-templates")
+	assertShell(t, getWithCookies(t, srv, "/admin/mail-templates", cookies))
 
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "tpl_stranger")
 	if rec := getWithCookies(t, srv, "/admin/mail-templates", strangerCookies); rec.Code != http.StatusForbidden {
