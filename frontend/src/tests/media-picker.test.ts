@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { en } from '../lib/i18n/locales/en';
-import { zhCN } from '../lib/i18n/locales/zh-CN';
 
-/** 媒体选择器与上传的中文/英文文案：键必须两套都在，上传失败的分支一个都不能少。 */
+/**
+ * 上传链路的文案键：每一条失败分支都要有对应键，一个都不能少。
+ *
+ * 下面钉的是完整清单——增删键都要在这里显式改一次。两套语言包的键集合一致性由
+ * parity.test.ts 全局保证，这里不再逐块重复断言同一件事。
+ */
 describe('SPA media picker catalog keys', () => {
-  it('provides identical media.spa key sets in both catalogs', () => {
-    const keys = Object.keys(en).filter((key) => key.startsWith('media.spa.')).sort();
-    expect(keys.length).toBeGreaterThan(0);
-    expect(Object.keys(zhCN).filter((key) => key.startsWith('media.spa.')).sort()).toEqual(keys);
-  });
-
-  it('provides identical localized upload keys in both catalogs', () => {
+  it('pins the complete set of media upload keys', () => {
     const keys = Object.keys(en).filter((key) => key.startsWith('media.spa.upload.')).sort();
     expect(keys).toEqual([
       'media.spa.upload.button',
@@ -24,6 +22,5 @@ describe('SPA media picker catalog keys', () => {
       'media.spa.upload.too_large',
       'media.spa.upload.uploading',
     ]);
-    expect(Object.keys(zhCN).filter((key) => key.startsWith('media.spa.upload.')).sort()).toEqual(keys);
   });
 });
