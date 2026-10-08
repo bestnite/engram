@@ -63,6 +63,14 @@ describe('SPA register and setup client flows', () => {
     expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('setup-csrf');
   });
 
+  it('probes the registration policy from the anonymous read-only endpoint', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ policy: 'closed' }), { status: 200 }));
+
+    await expect(client.registrationInfo()).resolves.toEqual({ policy: 'closed' });
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/registration');
+    expect(mockFetch.mock.calls[0]?.[1]?.method).toBeUndefined();
+  });
+
   it('keeps the server stable code on registration failure', async () => {
     client.setCsrfToken('reg-csrf');
     mockFetch.mockResolvedValueOnce(

@@ -112,6 +112,23 @@ export function validateDayCutoffHour(raw: number | string | null | undefined): 
 }
 
 /**
+ * 校验两次输入的密码是否一致（注册与首个管理员引导共用）。
+ *
+ * 只负责「两次输入是否一致」这一条纯前端约定：密码强度与其它规则由服务端策略裁决，
+ * 这里不重复实现，也不产生任何服务端语义（请求体里只有 password 一个字段）。
+ * 返回本地化 error key；一致时 errorKey 为 undefined。
+ */
+export function validatePasswordConfirmation(password: string, confirmation: string): {
+  valid: boolean;
+  errorKey?: string;
+} {
+  if (password !== confirmation) {
+    return { valid: false, errorKey: 'auth.error.password_mismatch' };
+  }
+  return { valid: true };
+}
+
+/**
  * 统一验证个人资料表单
  */
 export function validateProfileForm(form: {

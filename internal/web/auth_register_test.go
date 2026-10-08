@@ -372,3 +372,48 @@ func TestSetupAPI_CSRFRejection(t *testing.T) {
 		t.Errorf("CSRF-rejected setup created %d users, want 0", n)
 	}
 }
+
+// TestRegistrationInfoEndpoint 断言 GET /api/v1/auth/registration 与注册端点同源地报告策略：
+// open / invite / closed 原样返回，未设置或未知取值归一为 closed（安全默认）。
+// 该端点是登录前的只读探测：匿名（无 cookie）即可调用，不签发会话 cookie，也不建立会话。
+func TestRegistrationInfoEndpoint(t *testing.T) {
+	cases := []struct {
+		name    string
+		setting string // 空串表示不写入设置，走「未设置」路径
+		want    string
+	}{
+		{name: "unset falls back to closed", want: auth.PolicyClosed},
+		{name: "unknown value falls back to closed", setting: "nonsense", want: auth.PolicyClosed},
+		{name: "open reported as-is", setting: auth.PolicyOpen, want: auth.PolicyOpen},
+		{name: "invite reported as-is", setting: auth.PolicyInvite, want: auth.PolicyInvite},
+		{name: "closed reported as-is", setting: auth.PolicyClosed, want: auth.PolicyClosed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db := newAuthServer(t)
+			seedAdminUser(t, srv)
+			if tc.setting != "" {
+				writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, tc.setting)))
+			}
+
+			// 不带任何 cookie：探测必须对匿名访问者可用。
+			rec := get(t, srv, "/api/v1/auth/registration", nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET /api/v1/auth/registration status = %d, want 200 (body %s)",
+					rec.Code, snippet(rec.Body.String()))
+			}
+			var resp struct {
+				Policy string `json:"policy"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("unmarshal registration info: %v (body %s)", err, snippet(rec.Body.String()))
+			}
+			if resp.Policy != tc.want {
+				t.Errorf("policy = %q, want %q", resp.Policy, tc.want)
+			}
+			if findCookie(rec, srv.sessions.CookieName()) != nil {
+				t.Errorf("GET /api/v1/auth/registration must not issue a session cookie")
+			}
+		})
+	}
+}

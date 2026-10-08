@@ -69,6 +69,7 @@ import {
   type ResendVerificationResponse,
   type ShareResponse,
   type OIDCInfo,
+  type RegistrationInfo,
 } from './types';
 
 /**
@@ -1319,6 +1320,15 @@ export class ApiClient {
    */
   async getOIDC(): Promise<OIDCInfo> {
     return this.request<OIDCInfo>('/api/v1/auth/oidc');
+  }
+
+  /**
+   * 探测当前的自助注册策略（GET /api/v1/auth/registration）。
+   * 只读、登录前可调用；注册页据此在渲染表单前决定是否直接说明「无法自助注册」。
+   * 响应只含 policy 取值（open / invite / closed），不含任何凭据或邮箱白名单。
+   */
+  async registrationInfo(): Promise<RegistrationInfo> {
+    return this.request<RegistrationInfo>('/api/v1/auth/registration');
   }
 
   /**

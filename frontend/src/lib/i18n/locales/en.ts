@@ -595,6 +595,8 @@ export const en: LocaleCatalog = {
   // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': 'Email',
   'auth.field.display_name': 'Display name',
+  'auth.field.password_confirm': 'Confirm password',
+  'auth.register.blocked_heading': 'Self-service registration is unavailable',
   'auth.register.heading': 'Create your account',
   'auth.register.invite_intro': 'You were invited. Complete registration to join.',
   'auth.register.submit': 'Create account',
@@ -612,6 +614,8 @@ export const en: LocaleCatalog = {
   'auth.error.password_too_short': 'The password is too short.',
   'auth.error.password_too_long': 'The password is too long.',
   'auth.error.password_too_common': 'The password is too common.',
+  // 两次输入不一致只由前端判定（请求体里只有一个 password），服务端不会发出这个 code。
+  'auth.error.password_mismatch': 'The passwords do not match.',
   'auth.error.email_domain_not_allowed': 'This email domain is not allowed to register.',
   'auth.error.invite_required': 'Registration requires an invite link.',
   'auth.error.invite_invalid': 'The invite link is invalid.',

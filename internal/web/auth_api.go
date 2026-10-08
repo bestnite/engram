@@ -197,6 +197,31 @@ func (s *Server) registerShell(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
+// apiRegistrationInfoResponse 是 GET /api/v1/auth/registration 的响应体：只有注册策略。
+type apiRegistrationInfoResponse struct {
+	Policy string `json:"policy"`
+}
+
+// apiRegistrationInfo 返回当前的自助注册策略（GET /api/v1/auth/registration）。
+//
+// 注册页在渲染表单之前调用它：策略为 closed、或为 invite 而这次访问没带邀请令牌时，
+// 页面直接说明「无法自助注册」，而不是让访问者填完整张表单才被 403 拒绝。
+// 判定与 attemptRegistration 同源（同一份 settings、同一个 ParseRegistrationPolicy），
+// 因此不会出现「页面写着 A、提交判 B」的漂移。策略读取失败返回 500，
+// 前端据此退回「照常显示表单」——是否放行最终仍由提交时的服务端判定。
+// 响应不含任何凭据，匿名可调。
+func (s *Server) apiRegistrationInfo(c *gin.Context) {
+	settings, err := store.LoadSettings(c.Request.Context(), s.db)
+	if err != nil {
+		s.logger.Error("registration info: load settings failed", "error", err)
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	c.JSON(http.StatusOK, apiRegistrationInfoResponse{
+		Policy: auth.ParseRegistrationPolicy(settings[auth.SettingKeyRegistrationPolicy]),
+	})
+}
+
 // setupShell 提供 GET /setup：返回应用壳（规范路径），
 // 引导协议走 POST /api/v1/auth/setup。可达性与迁移前完全一致：已存在活跃管理员时返回 404
 // （一次性管理员门，避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳；

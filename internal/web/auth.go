@@ -36,6 +36,8 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.GET("/auth/oidc/callback", s.oidcCallback)
 	// SPA 的 OIDC 入口探测（oidc_api.go）：只读，供登录视图决定是否显示第二个登录按钮。
 	s.registerOIDCRoutes(router)
+	// 注册策略探测：只读、匿名可调，供注册视图在渲染表单前决定是否直接说明「无法自助注册」。
+	router.GET("/api/v1/auth/registration", s.apiRegistrationInfo)
 	// TOTP 二次验证：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
 

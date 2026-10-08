@@ -2,19 +2,26 @@
   import { t } from '../i18n';
   import { navigate } from '../router';
   import { setup } from '../auth';
-  import { getApiErrorMessageKey, ApiClientError } from '../api';
+  import { getApiErrorMessageKey, validatePasswordConfirmation, ApiClientError } from '../api';
   import Button from '../components/ui/Button.svelte';
 
   let username = $state('');
   let email = $state('');
   let displayName = $state('');
   let password = $state('');
+  let confirmPassword = $state('');
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
-    if (!username.trim() || !password) {
+    if (!username.trim() || !password || !confirmPassword) {
+      return;
+    }
+    // 两次输入不一致是纯前端约定：服务端只收一个 password，因此这里不提交任何请求。
+    const confirmation = validatePasswordConfirmation(password, confirmPassword);
+    if (!confirmation.valid) {
+      errorKey = confirmation.errorKey ?? 'error.unknown';
       return;
     }
     loading = true;
@@ -128,8 +135,25 @@
         />
       </div>
 
+      <div>
+        <label for="setup-password-confirm" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          {$t('auth.field.password_confirm')}
+        </label>
+        <input
+          id="setup-password-confirm"
+          data-testid="setup-password-confirm"
+          name="password_confirm"
+          type="password"
+          autocomplete="new-password"
+          required
+          bind:value={confirmPassword}
+          disabled={loading}
+          class="field-input text-sm w-full transition-colors disabled:opacity-50"
+        />
+      </div>
+
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full" testId="setup-submit">
+        <Button type="submit" disabled={loading || !username.trim() || !password || !confirmPassword} variant="primary" size="lg" class="w-full" testId="setup-submit">
           {#if loading}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
             <span>{$t('auth.setup.submitting')}</span>

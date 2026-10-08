@@ -594,6 +594,8 @@ export const zhCN: LocaleCatalog = {
   // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': '邮箱',
   'auth.field.display_name': '显示名',
+  'auth.field.password_confirm': '确认密码',
+  'auth.register.blocked_heading': '无法自助注册',
   'auth.register.heading': '创建账号',
   'auth.register.invite_intro': '你收到了邀请，完成注册即可加入。',
   'auth.register.submit': '创建账号',
@@ -611,6 +613,8 @@ export const zhCN: LocaleCatalog = {
   'auth.error.password_too_short': '密码至少需要 8 个字符。',
   'auth.error.password_too_long': '密码不能超过 128 个字符。',
   'auth.error.password_too_common': '密码过于常见，请更换更复杂的密码。',
+  // 两次输入不一致只由前端判定（请求体里只有一个 password），服务端不会发出这个 code。
+  'auth.error.password_mismatch': '两次输入的密码不一致。',
   'auth.error.email_domain_not_allowed': '该邮箱域名不在允许注册的范围内，请联系管理员。',
   'auth.error.invite_required': '注册需要邀请链接，请联系管理员获取。',
   'auth.error.invite_invalid': '邀请链接无效、已过期或已被使用，请联系管理员重新获取。',

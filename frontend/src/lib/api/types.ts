@@ -1281,6 +1281,16 @@ export interface OIDCInfo {
   start_url: string;
 }
 
+// ---- 注册策略探测（Go: internal/web/auth_api.go）----
+
+/** 站点自助注册策略；取值与 Go 侧 internal/auth/policy.go 一一对应。 */
+export type RegistrationPolicy = 'open' | 'invite' | 'closed';
+
+/** GET /api/v1/auth/registration：当前注册策略；不含任何凭据，匿名可调。 */
+export interface RegistrationInfo {
+  policy: RegistrationPolicy;
+}
+
 /**
  * GET /api/v1/unsubscribe?token=… 的响应。
  * type 是令牌指名的可选邮件类型；服务端只读取、不消费令牌。

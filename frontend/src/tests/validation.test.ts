@@ -4,9 +4,26 @@ import {
   validateLocale,
   validateTimezone,
   validateDayCutoffHour,
+  validatePasswordConfirmation,
   validateProfileForm,
   COMMON_TIMEZONES,
 } from '../lib/api/validation';
+
+describe('Registration and setup password confirmation', () => {
+  describe('validatePasswordConfirmation', () => {
+    it('accepts two identical inputs', () => {
+      expect(validatePasswordConfirmation('Sup3rSecret!', 'Sup3rSecret!')).toEqual({ valid: true });
+    });
+
+    it('rejects any difference, including case and trailing whitespace', () => {
+      for (const confirmation of ['Sup3rSecret', 'sup3rsecret!', 'Sup3rSecret! ', '']) {
+        const res = validatePasswordConfirmation('Sup3rSecret!', confirmation);
+        expect(res.valid).toBe(false);
+        expect(res.errorKey).toBe('auth.error.password_mismatch');
+      }
+    });
+  });
+});
 
 describe('Profile and settings form validation', () => {
   describe('validateDisplayName', () => {
