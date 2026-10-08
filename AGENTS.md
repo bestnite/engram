@@ -8,20 +8,18 @@ not obvious from the code and the definition of "done". The task backlog with st
 
 ## 1. Source of truth
 
-- `DESIGN.md` is the single source of truth for behaviour, data model, and scope. It is
-  **not part of this repository**: the maintainer keeps it in the local working tree and it is
-  not committed (see `.gitignore`). Read it there before making a change; when you start from a
-  fresh worktree, the maintainer copies it in.
-- If code and `DESIGN.md` disagree, one of them is a bug. Fix the code and report the
-  disagreement: `DESIGN.md` is owned by the maintainer, who updates it.
-- Anything not decided in `DESIGN.md` (section 13 holds the open questions) must be asked
-  or added there, not invented in code.
+- The code and its tests are the only statement of behaviour, data model, and scope. Nothing
+  outside this repository is authoritative, and there is no separate specification to consult
+  before making a change. If code and a document disagree, the code decides; if a comment and
+  the code disagree, one of them is a bug — fix the code and report the disagreement.
+- Anything the code does not decide must be asked, not invented. A decision that has to outlive
+  the change carrying it belongs in a committed file, or the next reader cannot find it.
 - **Code comments must be self-contained.** A comment states the rule and its reason in its
-  own words. It never cites `DESIGN.md`, any other document that is not committed, or a bare
-  section number such as `§4.5`: a public reader has neither the file nor the numbering, so a
-  citation there is a dangling pointer that carries no reason. The rule content stays, the
-  pointer goes. References to committed files (`AGENTS.md`, `ROADMAP.md`, `schema/*.json`,
-  RFCs) remain allowed, because those resolve for every reader.
+  own words. It never cites a document that is not committed, or a bare section number such as
+  `§4.5`: a public reader has neither the file nor the numbering, so a citation there is a
+  dangling pointer that carries no reason. The rule content stays, the pointer goes. References
+  to committed files (`AGENTS.md`, `ROADMAP.md`, `schema/*.json`, RFCs) remain allowed, because
+  those resolve for every reader.
 
 ---
 
@@ -122,7 +120,7 @@ end user → translation catalog.
 Every written requirement, instruction, or document line must have exactly **one**
 possible reading. After writing, re-read each line; if a second reading is possible,
 split it into explicit statements. This applies to code comments, task descriptions in
-this file, commit messages, and `DESIGN.md`.
+this file, and commit messages.
 
 ---
 
@@ -132,7 +130,6 @@ this file, commit messages, and `DESIGN.md`.
 engram/
 ├── AGENTS.md                 # this file: the rules
 ├── ROADMAP.md                # the task backlog and progress conventions
-├── DESIGN.md                 # specification of record (maintainer-local, untracked)
 ├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
 ├── LICENSE
 ├── go.mod                    # module git.nite07.com/nite/engram
@@ -184,8 +181,8 @@ A task is done only when all of the following hold:
 3. New behaviour has tests, including the negative cases named in the task.
 4. Logs are English, comments are Chinese, user-facing strings come from the catalog.
 5. The change is committed with a signed, conventional commit; `git status` is clean.
-6. If the change alters behaviour or decisions, report it in your final message so the
-   maintainer can update `DESIGN.md`; you cannot commit that file because it is not tracked.
+6. If the change alters behaviour or decisions, report it in your final message: the
+   maintainer decides which committed file records it.
 7. No comment, document or commit message cites a file that is not in the repository.
    Every reference resolves for a public reader: `AGENTS.md`, `ROADMAP.md`, `README*`,
    `schema/*.json`, RFCs, or code paths inside the repository.
@@ -197,18 +194,19 @@ A task is done only when all of the following hold:
 - **Subagents must never edit `AGENTS.md` or `ROADMAP.md`** (or any project-context file such as
   `CLAUDE.md` or `.hermes.md`). Writing them requires user approval, which a leaf subagent cannot obtain: the
   attempt is auto-denied or it interrupts the user mid-workflow. The parent records verified
-  progress in the gitignored `PROGRESS.local.md` and applies checkbox and counting updates to
+  progress in the gitignored `PROGRESS.local.md` and deletes the finished entries from
   `ROADMAP.md` in batches, with the user present.
 
 
-- One task per subagent. Pass the task's ID, its full text from `ROADMAP.md`, and the
-  relevant `DESIGN.md` sections as context; subagents do not share this conversation.
+- One task per subagent. Pass the task's ID, its full text from `ROADMAP.md`, and the code
+  paths it touches as context; subagents do not share this conversation.
 - Require the subagent to run the verification commands from section 4 and to report the
   raw output, not a summary claim.
-- The parent verifies the reported evidence before marking the checkbox; a subagent's
-  self-report is not proof.
-- A subagent that discovers missing design information must report it instead of
-  inventing behaviour; the parent then records the decision in `DESIGN.md`.
+- The parent verifies the reported evidence before deleting the entry from `ROADMAP.md`; a
+  subagent's self-report is not proof.
+- A subagent that discovers missing design information must report it instead of inventing
+  behaviour; the parent then records the decision in the committed file that owns it, or
+  reports it for the maintainer to place.
 - Keep one commit per task so progress can be audited with `git log`.
 
 ## 6. Parallel development with git worktrees

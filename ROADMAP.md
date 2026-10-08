@@ -68,15 +68,6 @@ release; a task moves into a release milestone when it is scheduled.
 
 ---
 
-### Backlog (no milestone yet)
-
-- [ ] **B-10 English `DESIGN.md`** — the specification is currently Chinese only; for a
-  public repository either translate it to English and keep the Chinese version as
-  `DESIGN.zh.md`, or state explicitly that Chinese is the primary language of the
-  specification (blocked on a decision).
-
----
-
 ### Security pass (2026-10-05/06)
 
 One-off repository-wide audit and remediation, run outside the milestone plan and therefore
@@ -117,8 +108,8 @@ logged-in account. Existing note references to the old numeric form were **not**
 
 ### After the 0.1.0 release (2026-10-06)
 
-Not milestone tasks and deliberately not checkboxes, so the counting rules in section 2.1
-stay intact.
+Not milestone tasks and deliberately not checkboxes, so they stay out of the open-task count
+in section 2.1.
 
 **Hardening completed.** The CSP is now **enforcing** (no `'unsafe-eval'`): the two
 `hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`),
@@ -204,5 +195,5 @@ executed locally. Local and CI tests use SQLite; PostgreSQL testing remains out 
 - A task may be deleted only when the acceptance criteria pass with evidence (command output
   or captured response) and `AGENTS.md` section 4's definition of done holds.
 - If a task turns out to be wrong or unnecessary, do not delete it as if it were done: delete
-  it with a commit message saying what replaced it, and update `DESIGN.md` if the change is
-  behavioural.
+  it with a commit message saying what replaced it, and record the decision in the committed
+  file that owns it.

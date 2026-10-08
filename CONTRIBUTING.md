@@ -5,10 +5,10 @@ and restates the rules that external contributors are expected to follow. It is 
 short on the product itself: for what the service is and how to run it locally, read
 [`README.md`](README.md) first — this file does not repeat the quick start.
 
-This repository ships no in-tree specification document: the behaviour rules that matter to a
-contribution are restated below, and the rest live with the maintainers. When you find a gap or a
-contradiction, report it to the maintainers (an issue or a pull request comment) instead of
-inventing a decision in code.
+This repository ships no in-tree specification document: the code and its tests are the
+statement of behaviour, the rules that matter to a contribution are restated below, and anything
+neither covers is a question for the maintainers. When you find a gap or a contradiction, report
+it (an issue or a pull request comment) instead of inventing a decision in code.
 
 `AGENTS.md` is the maintainers' development guide (non-negotiable rules, definition of done,
 task backlog). You are welcome to read it. **Do not edit it** (see
@@ -277,8 +277,8 @@ leaf subagent cannot obtain; the attempt is auto-denied or it interrupts the use
 This is the easiest trap to fall into when a task description says "update the guide": report
 the needed change to the parent instead.
 
-Maintainers record verified progress in the gitignored `PROGRESS.local.md` and apply checkbox
-and counting updates to `AGENTS.md` in batches, with the user present.
+Maintainers record verified progress in the gitignored `PROGRESS.local.md` and delete the
+finished entries from `ROADMAP.md` in batches, with the user present.
 
 ## Project name and licence
 
