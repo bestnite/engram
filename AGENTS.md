@@ -53,10 +53,9 @@ end user → translation catalog.
   stays out of the repository (see `.gitignore`). Run `git status` before every commit and
   check nothing unintended is staged.
 - **This rule has no automated check any more** (the check scripts were removed on
-  2026-10-06): review it by eye on every commit and re-read the staged diff before merging.
-  A subagent's "the checks pass" is not evidence on its own — the mechanically enforced
-  neighbour is the visible-text rule (every user-facing string comes from the catalog, see
-  §2.1).
+  2026-10-06, and the source-text test guards on 2026-10-08): review it by eye on every
+  commit and re-read the staged diff before merging. A subagent's "the checks pass" is not
+  evidence on its own — nothing automated covers this rule.
 - A test fixture needs a placeholder domain too: emails in fixtures must use `example.com`,
   `example.org`, `example.net`, or `localhost`.
 

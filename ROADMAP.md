@@ -63,9 +63,11 @@ Conventions:
   htmx and MathJax; a helper generates the hashed URLs for templates.
   *Acceptance:* page source references hashed paths; changing an asset changes its hash.
 - [x] **M0-10 CI pipeline** — workflow running `go build`, `go vet`, `gofmt -l`, `go test`,
-  the sanitisation keyword scan, the i18n parity check, and a check that no user-facing
-  literal appears in templates.
-  *Acceptance:* the pipeline fails on a deliberately planted violation of each check.
+  and `go test ./internal/i18n/...` for language-pack parity. The sanitisation keyword scan
+  and the user-facing-literal check were written with this task and are gone (the check
+  scripts were removed on 2026-10-06, the source-text test guards on 2026-10-08).
+  *Acceptance:* the pipeline fails on a deliberately planted key mismatch between the two
+  catalogs.
 - [x] **M0-11 Container build (optional)** — multi-stage `Dockerfile` producing a
   single static binary image; no private registry, host names, or deployment specifics.
   *Acceptance:* image builds locally and serves `/healthz`.
@@ -697,9 +699,13 @@ Conventions:
   static assets only.
   *Acceptance:* the service worker cache contains no API response; a test asserts the
   cache list contains only static asset paths.
-- [x] **M8-3 i18n completion** — every template string through the translator, key parity
-  between catalogs, and a lint that fails on a user-facing literal in templates.
-  *Acceptance:* planting a hardcoded Chinese or English string in a template fails CI.
+- [x] **M8-3 i18n completion** — every user-facing string through the translator, and key
+  parity between the catalogs on both sides: `go test ./internal/i18n/...` for the Go YAML
+  catalogs, `parity.test.ts` for the SPA catalogs. The template lint named here went away
+  with the server templates; those two parity checks plus a read of the staged diff are what
+  stands in its place.
+  *Acceptance:* a key present in one catalog and missing from the other fails
+  `go test ./internal/i18n/...` (Go) or `parity.test.ts` (SPA).
 - [x] **M8-4 Language pack completeness report** — admin view of translation coverage per
   locale.
   *Acceptance:* a catalog with a missing key reports less than 100% and names the key.
@@ -722,8 +728,9 @@ Conventions:
   *Acceptance:* the brand never takes the active-tab background; every page renders the same
   navigation; the footer shows the project name; the listed strings are gone from both catalogues;
   creating a deck opens a dialog; `/` declares an icon and `/favicon.ico` no longer returns 404;
-  `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean, both check scripts are
-  green after `git add`, and a real instance is inspected at desktop and phone width.
+  `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean, the frontend
+  check, test and build are green, and a real instance is inspected at desktop and phone
+  width.
 
 - [x] **M8-8 No white flash when navigating in dark mode** — the theme is decided by
   `internal/web/static/js/pwa.js`, which `<head>` pulls in as an external `<script src="/pwa.js">`
@@ -737,8 +744,7 @@ Conventions:
   toggle and of the system-theme listener.
   *Acceptance:* with the cache disabled, loading a page while the stored theme is dark shows no
   white frame (verified from a screenshot sequence or the first paint); the toggle and the
-  system-theme change still work; both check scripts stay green and the inline script carries no
-  user-facing text.
+  system-theme change still work; the inline script carries no user-facing text.
 
 ### M9 — Parameter optimisation
 
@@ -970,7 +976,7 @@ logged-in account. Existing note references to the old numeric form were **not**
 
 - **Closed:** deck descriptions now share the 2000-character bound across creation,
   updates and package import.
-- ~~CSP is report-only; `script-src` keeps `'unsafe-eval'` because htmx compiles `hx-on`~~ — **closed 2026-10-06**: CSP enforces, `'unsafe-eval'` is gone, the two `hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`), and a source-level guard test fails if a template ever needs what the policy lacks
+- ~~CSP is report-only; `script-src` keeps `'unsafe-eval'` because htmx compiles `hx-on`~~ — **closed 2026-10-06**: CSP enforces, `'unsafe-eval'` is gone, the two `hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`), and a source-level guard test fails if the served shell ever needs something the policy lacks
   handlers with `new Function`.
 - The PostgreSQL branch of the media primary-key migration has never been executed: local and
   CI testing is SQLite only.
@@ -988,7 +994,7 @@ stay intact.
 
 **Hardening completed.** The CSP is now **enforcing** (no `'unsafe-eval'`): the two
 `hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`),
-and a source-level guard test fails if a template ever needs what the policy lacks.
+and a source-level guard test fails if the served shell ever needs something the policy lacks.
 Verified in a real browser: the note-editor preview still re-typesets MathJax after an htmx
 swap, the review page still renders formulas, and the route set produces zero CSP
 violations. The card-body attribute whitelist now has explicit regression tests for
