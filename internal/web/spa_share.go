@@ -35,14 +35,14 @@ type apiShareResponse struct {
 	Notes            []apiShareNote `json:"notes"`
 }
 
-// registerSPAShareRoutes 挂载分享浏览的 SPA JSON 端点；口令解锁走免 CSRF 的 POST（与 SSR 同一理由：
+// registerShareRoutes 挂载分享浏览的 SPA JSON 端点；口令解锁走免 CSRF 的 POST（与 SSR 同一理由：
 // 此刻没有服务端会话可绑定 token，且除渲染内容外不产生状态）。
-func (s *Server) registerSPAShareRoutes(router *gin.Engine) {
+func (s *Server) registerShareRoutes(router *gin.Engine) {
 	if s.shareLinks == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	router.GET("/api/v1/share/:token", s.spaShareGet)
-	router.POST("/api/v1/share/:token/unlock", s.spaShareUnlock)
+	router.GET("/api/v1/share/:token", s.shareGet)
+	router.POST("/api/v1/share/:token/unlock", s.shareUnlock)
 }
 
 // shareBrowseRoute 提供 GET /s/:token：返回应用壳，由客户端路由渲染只读浏览页；
@@ -56,10 +56,10 @@ func (s *Server) shareBrowseRoute(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
-// spaShareGet 返回一份分享卡组的只读内容（GET /api/v1/share/:token）。
+// shareGet 返回一份分享卡组的只读内容（GET /api/v1/share/:token）。
 //
 // 无口令链接直接返回内容；有口令的链接在解锁前只返回 {password_required: true}，不泄漏卡片正文。
-func (s *Server) spaShareGet(c *gin.Context) {
+func (s *Server) shareGet(c *gin.Context) {
 	link, deck, ok := s.resolveShareLink(c)
 	if !ok {
 		return
@@ -72,14 +72,14 @@ func (s *Server) spaShareGet(c *gin.Context) {
 		})
 		return
 	}
-	s.spaShareContent(c, deck, link)
+	s.shareContent(c, deck, link)
 }
 
-// spaShareUnlock 校验口令并返回内容（POST /api/v1/share/:token/unlock）。
+// shareUnlock 校验口令并返回内容（POST /api/v1/share/:token/unlock）。
 //
 // 无口令链接等价于直接浏览（幂等）；口令错误返回 401 与稳定 code。
 // 这里刻意不消费任何令牌、不建立解锁状态——每次请求都重新校验，因此无状态。
-func (s *Server) spaShareUnlock(c *gin.Context) {
+func (s *Server) shareUnlock(c *gin.Context) {
 	var req struct {
 		Password string `json:"password"`
 	}
@@ -92,7 +92,7 @@ func (s *Server) spaShareUnlock(c *gin.Context) {
 		return
 	}
 	if link.PasswordHash == nil {
-		s.spaShareContent(c, deck, link)
+		s.shareContent(c, deck, link)
 		return
 	}
 	matched, err := auth.Verify(*link.PasswordHash, req.Password)
@@ -106,12 +106,12 @@ func (s *Server) spaShareUnlock(c *gin.Context) {
 		apiAuthError(c, http.StatusUnauthorized, "share_password_invalid", "The password is incorrect.")
 		return
 	}
-	s.spaShareContent(c, deck, link)
+	s.shareContent(c, deck, link)
 }
 
-// spaShareContent 组装只读内容的 JSON：登记会话级媒体授权后列出卡片并清洗渲染。
+// shareContent 组装只读内容的 JSON：登记会话级媒体授权后列出卡片并清洗渲染。
 // 单张坏卡跳过并记英文日志，不阻断其余内容的展示。
-func (s *Server) spaShareContent(c *gin.Context, deck *store.Deck, link *store.ShareLink) {
+func (s *Server) shareContent(c *gin.Context, deck *store.Deck, link *store.ShareLink) {
 	ctx := c.Request.Context()
 	// 访问已经成功（无口令，或口令校验通过）→ 登记「本会话打开过这个卡组」，
 	// 浏览器随后对 /media/<sha256> 的请求才放行；匿名访客没有服务端会话，直接跳过。

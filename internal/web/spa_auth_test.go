@@ -70,7 +70,7 @@ func createTestUser(t *testing.T, srv *Server, username, password, role string, 
 	return u
 }
 
-func TestSPASession_Unauthenticated(t *testing.T) {
+func TestSession_Unauthenticated(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
 	rec := get(t, srv, "/api/v1/auth/session", nil)
@@ -119,7 +119,7 @@ func TestSPASession_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestSPASession_Authenticated(t *testing.T) {
+func TestSession_Authenticated(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	u := createTestUser(t, srv, "alice", "Password123!", store.RoleUser, true)
 
@@ -184,7 +184,7 @@ func TestSPASession_Authenticated(t *testing.T) {
 	}
 }
 
-func TestSPASession_DisabledUser(t *testing.T) {
+func TestSession_DisabledUser(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	u := createTestUser(t, srv, "disabled_user", "Password123!", store.RoleUser, false)
 
@@ -218,7 +218,7 @@ func TestSPASession_DisabledUser(t *testing.T) {
 	}
 }
 
-func TestSPALogin_CSRFRejections(t *testing.T) {
+func TestLogin_CSRFRejections(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "bob", "Password123!", store.RoleUser, true)
 
@@ -253,7 +253,7 @@ func TestSPALogin_CSRFRejections(t *testing.T) {
 	}
 }
 
-func TestSPALogin_SuccessAndFailure(t *testing.T) {
+func TestLogin_SuccessAndFailure(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "carol", "Password123!", store.RoleUser, true)
 	createTestUser(t, srv, "disabled_carol", "Password123!", store.RoleUser, false)
@@ -333,7 +333,7 @@ func TestSPALogin_SuccessAndFailure(t *testing.T) {
 	}
 }
 
-func TestSPALogin_TOTPChallenge(t *testing.T) {
+func TestLogin_TOTPChallenge(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	u := createTestUser(t, srv, "totp_user", "Password123!", store.RoleUser, true)
 
@@ -391,7 +391,7 @@ func TestSPALogin_TOTPChallenge(t *testing.T) {
 	}
 }
 
-func TestSPALogout_Flow(t *testing.T) {
+func TestLogout_Flow(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	u := createTestUser(t, srv, "dan", "Password123!", store.RoleUser, true)
 
@@ -469,11 +469,11 @@ func TestSPALogout_Flow(t *testing.T) {
 	}
 }
 
-// TestSPALoginShellServesAppAndInitializesDoubleSubmitCookie 断言 SPA 登录入口
+// TestLoginShellServesAppAndInitializesDoubleSubmitCookie 断言 SPA 登录入口
 // GET /spa/login 返回应用壳，并像 SSR 的 GET /login 一样先下发会话前双提交 cookie，
 // 使 SPA 挂载后的 POST /api/v1/auth/login 具备可校验的镜像 token。
 // 它只读：不建立会话、不返回任何凭据，也不渲染 SSR 表单。
-func TestSPALoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
+func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
 	rec := get(t, srv, "/spa/login", nil)
@@ -511,11 +511,11 @@ func TestSPALoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	}
 }
 
-// TestSPALoginShellCookieMatchesSessionToken 断言入口下发的双提交 cookie 与
+// TestLoginShellCookieMatchesSessionToken 断言入口下发的双提交 cookie 与
 // GET /api/v1/auth/session 返回的 csrf_token 是同一个值：SPA 因此能用响应里的 token
 // 通过 POST /api/v1/auth/login 的镜像校验，无需读取 HttpOnly cookie。
 // 该链路正是未登录用户经 SPA 登录成功的完整路径。
-func TestSPALoginShellCookieMatchesSessionToken(t *testing.T) {
+func TestLoginShellCookieMatchesSessionToken(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "shelluser", "Password123!", store.RoleUser, true)
 

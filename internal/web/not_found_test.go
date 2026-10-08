@@ -11,10 +11,10 @@ import (
 // unknownPath 是一个不与任何已注册路由匹配的路径，用于触发 NoRoute 回退。
 const unknownPath = "/no-such-page-zz9"
 
-// TestNotFoundFallbackServesSPAIndex 断言当 SPA 已嵌入时，未知的页面型 GET 路径
+// TestNotFoundFallbackServesIndex 断言当 SPA 已嵌入时，未知的页面型 GET 路径
 // 回退 SPA 应用壳（index.html，ROADMAP Task B2），
 // 返回 200 状态码并带有正确的缓存与 MIME 响应头。
-func TestNotFoundFallbackServesSPAIndex(t *testing.T) {
+func TestNotFoundFallbackServesIndex(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
 	rec := get(t, srv, unknownPath, nil)

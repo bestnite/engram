@@ -68,8 +68,8 @@ func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 	// 迁移期别名：与 /verify-email、/spa/verify-email 同构，共用同一处理器。
 	router.GET("/spa/unsubscribe", s.unsubscribeShell)
 	// SPA 的同源 JSON 传输：读不消费令牌，确认消费令牌；确认走会话前双提交 CSRF。
-	router.GET("/api/v1/unsubscribe", s.spaUnsubscribeRead)
-	router.POST("/api/v1/unsubscribe", auth.PreSessionCSRFMiddleware(), s.spaUnsubscribeConfirm)
+	router.GET("/api/v1/unsubscribe", s.unsubscribeRead)
+	router.POST("/api/v1/unsubscribe", auth.PreSessionCSRFMiddleware(), s.unsubscribeConfirm)
 }
 
 // unsubscribeShell 提供 GET /unsubscribe 与 /spa/unsubscribe：先下发会话前双提交 cookie
@@ -95,10 +95,10 @@ type apiUnsubscribeRequest struct {
 	Token string `json:"token"`
 }
 
-// spaUnsubscribeRead 是 SPA 的读端点（GET /api/v1/unsubscribe?token=…）：
+// unsubscribeRead 是 SPA 的读端点（GET /api/v1/unsubscribe?token=…）：
 // 只读取令牌指名的可选类型，不消费令牌、不写任何偏好。令牌无效/已用/过期时返回稳定 code，
 // 让客户端在用户点确认之前就能提示「链接已失效」，而不是让他白点一次。
-func (s *Server) spaUnsubscribeRead(c *gin.Context) {
+func (s *Server) unsubscribeRead(c *gin.Context) {
 	tok, err := s.tokens.Peek(c.Request.Context(), store.ActionTokenUnsubscribe, strings.TrimSpace(c.Query("token")))
 	if err != nil {
 		s.writeUnsubscribeError(c, err)
@@ -112,9 +112,9 @@ func (s *Server) spaUnsubscribeRead(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"type": string(typ)})
 }
 
-// spaUnsubscribeConfirm 是 SPA 的确认端点（POST /api/v1/unsubscribe，会话前双提交 CSRF）：
+// unsubscribeConfirm 是 SPA 的确认端点（POST /api/v1/unsubscribe，会话前双提交 CSRF）：
 // 消费一次性退订令牌，只关掉令牌指名的那个可选类型。
-func (s *Server) spaUnsubscribeConfirm(c *gin.Context) {
+func (s *Server) unsubscribeConfirm(c *gin.Context) {
 	var req apiUnsubscribeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")

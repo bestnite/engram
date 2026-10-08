@@ -171,7 +171,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     // 登录入口的迁移期别名。规范路径 /login 由服务端 GET /login 应答
-    // （spaLoginShell 返回应用壳并初始化会话前双提交 cookie），/spa/login 由同一处理器服务；
+    // （loginShell 返回应用壳并初始化会话前双提交 cookie），/spa/login 由同一处理器服务；
     // 登录协议走 /api/v1/auth/session + /api/v1/auth/login。
     path: '/spa/login',
     name: 'spa-login',
@@ -192,7 +192,7 @@ export const routes: RouteDefinition[] = [
     component: TOTPLoginView as unknown as RouteDefinition['component'],
   },
   {
-    // 注册入口的迁移期别名。规范路径 /register 由服务端 GET /register 应答（spaRegisterShell），
+    // 注册入口的迁移期别名。规范路径 /register 由服务端 GET /register 应答（registerShell），
     // /spa/register 由同一处理器服务；
     // 注册协议走 POST /api/v1/auth/register，?invite= 由视图从 URL 读取。
     path: '/spa/register',
@@ -201,7 +201,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     // 首个管理员引导的迁移期别名。规范路径 /setup 由服务端 GET /setup 应答
-    // （spaSetupShell 仅在没有活跃管理员时可达，否则 404），/spa/setup 由同一处理器服务；
+    // （setupShell 仅在没有活跃管理员时可达，否则 404），/spa/setup 由同一处理器服务；
     // 引导协议走 POST /api/v1/auth/setup。
     path: '/spa/setup',
     name: 'spa-setup',

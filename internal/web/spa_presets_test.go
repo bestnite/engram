@@ -22,24 +22,24 @@ import (
 // 他人预设 404、门槛不足给出结构化差额、已有作业 409、完成后状态与拟合结论、回退清三列，
 // 以及会话 + CSRF 两个必测负例。
 
-// decodeSPAPresetList 解析列表响应；失败即终止测试。
-func decodeSPAPresetList(t *testing.T, rec *httptest.ResponseRecorder) spaPresetListResponse {
+// decodePresetList 解析列表响应；失败即终止测试。
+func decodePresetList(t *testing.T, rec *httptest.ResponseRecorder) presetListResponse {
 	t.Helper()
-	var body spaPresetListResponse
+	var body presetListResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode SPA preset list: %v (body %s)", err, snippet(rec.Body.String()))
 	}
 	return body
 }
 
-// decodeSPAPresetError 解析错误包壳与可选的结构化门槛。
-func decodeSPAPresetError(t *testing.T, rec *httptest.ResponseRecorder) (string, *spaOptimizeGate) {
+// decodePresetError 解析错误包壳与可选的结构化门槛。
+func decodePresetError(t *testing.T, rec *httptest.ResponseRecorder) (string, *optimizeGate) {
 	t.Helper()
 	var envelope struct {
 		Error struct {
 			Code string `json:"code"`
 		} `json:"error"`
-		Gate *spaOptimizeGate `json:"gate"`
+		Gate *optimizeGate `json:"gate"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode SPA preset error: %v (body %s)", err, snippet(rec.Body.String()))
@@ -47,8 +47,8 @@ func decodeSPAPresetError(t *testing.T, rec *httptest.ResponseRecorder) (string,
 	return envelope.Error.Code, envelope.Gate
 }
 
-// findSPAPreset 在列表响应里按 id 取一条预设。
-func findSPAPreset(body spaPresetListResponse, id uint64) *spaPreset {
+// findPreset 在列表响应里按 id 取一条预设。
+func findPreset(body presetListResponse, id uint64) *presetView {
 	for i := range body.Presets {
 		if body.Presets[i].ID == id {
 			return &body.Presets[i]
@@ -57,16 +57,16 @@ func findSPAPreset(body spaPresetListResponse, id uint64) *spaPreset {
 	return nil
 }
 
-// TestSPAPresetListReturnsDefaultPresetAndGate 是读验收：全新账号 GET /api/v1/presets
+// TestPresetListReturnsDefaultPresetAndGate 是读验收：全新账号 GET /api/v1/presets
 // 得到一个默认预设与用户级门槛，未优化时权重来源是默认。
-func TestSPAPresetListReturnsDefaultPresetAndGate(t *testing.T) {
+func TestPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	srv, _, _, cookies, _, _ := newPresetsServer(t)
 
 	rec := getWithCookies(t, srv, "/api/v1/presets", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/presets = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	body := decodeSPAPresetList(t, rec)
+	body := decodePresetList(t, rec)
 	if len(body.Presets) != 1 {
 		t.Fatalf("presets = %d, want 1 (a fresh account is ensured one default preset)", len(body.Presets))
 	}
@@ -85,9 +85,9 @@ func TestSPAPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	}
 }
 
-// TestSPAPresetCreateAndUpdateRoundTrip 覆盖创建与编辑主路径：值正确落库、留审计、
+// TestPresetCreateAndUpdateRoundTrip 覆盖创建与编辑主路径：值正确落库、留审计、
 // 未勾选 fuzz 落库为 false，且响应回整份列表。
-func TestSPAPresetCreateAndUpdateRoundTrip(t *testing.T) {
+func TestPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
 
@@ -97,8 +97,8 @@ func TestSPAPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	if create.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/presets = %d, want 200 (body %s)", create.Code, snippet(create.Body.String()))
 	}
-	created := decodeSPAPresetList(t, create)
-	var evening *spaPreset
+	created := decodePresetList(t, create)
+	var evening *presetView
 	for i := range created.Presets {
 		if created.Presets[i].Name == "Evening" {
 			evening = &created.Presets[i]
@@ -142,9 +142,9 @@ func TestSPAPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSPAPresetWriteRejectsInvalidInput 是必测负例：各类非法输入一律 400 + 稳定 code，
+// TestPresetWriteRejectsInvalidInput 是必测负例：各类非法输入一律 400 + 稳定 code，
 // 且不写库（预设总数保持 0）。
-func TestSPAPresetWriteRejectsInvalidInput(t *testing.T) {
+func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 	cases := []struct {
 		name     string
 		body     string
@@ -167,7 +167,7 @@ func TestSPAPresetWriteRejectsInvalidInput(t *testing.T) {
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("POST %s = %d, want 400 (body %s)", tc.body, rec.Code, snippet(rec.Body.String()))
 			}
-			if code, _ := decodeSPAPresetError(t, rec); code != tc.wantCode {
+			if code, _ := decodePresetError(t, rec); code != tc.wantCode {
 				t.Errorf("error code = %q, want %q", code, tc.wantCode)
 			}
 			var n int64
@@ -181,9 +181,9 @@ func TestSPAPresetWriteRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-// TestSPAPresetUpdateOtherUsersPresetIsNotFound 是必测负例：他人预设返回 404（不泄露存在性），
+// TestPresetUpdateOtherUsersPresetIsNotFound 是必测负例：他人预设返回 404（不泄露存在性），
 // 且列值不变。
-func TestSPAPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
+func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 	srv, db, _, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
 	other := store.User{
@@ -205,7 +205,7 @@ func TestSPAPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("PATCH another user's preset = %d, want 404 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if code, _ := decodeSPAPresetError(t, rec); code != "not_found" {
+	if code, _ := decodePresetError(t, rec); code != "not_found" {
 		t.Errorf("error code = %q, want not_found", code)
 	}
 	after, err := store.NewPresetStore(db).ByID(ctx, foreign.ID)
@@ -217,9 +217,9 @@ func TestSPAPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 	}
 }
 
-// TestSPAPresetOptimizeGateAndConflict 覆盖门槛不足与单并发：不足时 400 且给出结构化差额、
+// TestPresetOptimizeGateAndConflict 覆盖门槛不足与单并发：不足时 400 且给出结构化差额、
 // 不建作业；够门槛时 202 建作业；第二次 409 且不再建。
-func TestSPAPresetOptimizeGateAndConflict(t *testing.T) {
+func TestPresetOptimizeGateAndConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
 	path := "/api/v1/presets/" + u64str(p.ID) + "/optimize"
@@ -228,7 +228,7 @@ func TestSPAPresetOptimizeGateAndConflict(t *testing.T) {
 	if below.Code != http.StatusBadRequest {
 		t.Fatalf("POST optimize below threshold = %d, want 400 (body %s)", below.Code, snippet(below.Body.String()))
 	}
-	code, gate := decodeSPAPresetError(t, below)
+	code, gate := decodePresetError(t, below)
 	if code != "insufficient_reviews" {
 		t.Errorf("below-threshold code = %q, want insufficient_reviews", code)
 	}
@@ -243,7 +243,7 @@ func TestSPAPresetOptimizeGateAndConflict(t *testing.T) {
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("first eligible optimize = %d, want 202 (body %s)", first.Code, snippet(first.Body.String()))
 	}
-	var body spaOptimizeResponse
+	var body optimizeResponse
 	if err := json.Unmarshal(first.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode optimize response: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestSPAPresetOptimizeGateAndConflict(t *testing.T) {
 	if second.Code != http.StatusConflict {
 		t.Fatalf("second optimize = %d, want 409 (body %s)", second.Code, snippet(second.Body.String()))
 	}
-	if code, _ := decodeSPAPresetError(t, second); code != "optimize_conflict" {
+	if code, _ := decodePresetError(t, second); code != "optimize_conflict" {
 		t.Errorf("conflict code = %q, want optimize_conflict", code)
 	}
 	var jobs int64
@@ -267,9 +267,9 @@ func TestSPAPresetOptimizeGateAndConflict(t *testing.T) {
 	}
 }
 
-// TestSPAPresetOptimizeStatusAndRevert 覆盖完成后状态、拟合结论与一键回退：
+// TestPresetOptimizeStatusAndRevert 覆盖完成后状态、拟合结论与一键回退：
 // 列表在途作业可续轮询、状态返回 succeeded + 三态结论、回退清三列并回默认权重。
-func TestSPAPresetOptimizeStatusAndRevert(t *testing.T) {
+func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, runner := newPresetsServer(t)
 	ctx := context.Background()
 	p := seedPreset(t, db, ownerID)
@@ -282,8 +282,8 @@ func TestSPAPresetOptimizeStatusAndRevert(t *testing.T) {
 	}
 
 	// 在途作业必须在列表里标注，刷新页面后才能续上轮询。
-	list := decodeSPAPresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
-	card := findSPAPreset(list, p.ID)
+	list := decodePresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
+	card := findPreset(list, p.ID)
 	if card == nil || card.Job == nil || card.Job.Status != "queued" {
 		t.Fatalf("in-flight job not attached to the preset card: %+v", card)
 	}
@@ -311,7 +311,7 @@ func TestSPAPresetOptimizeStatusAndRevert(t *testing.T) {
 	if status.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want 200 (body %s)", status.Code, snippet(status.Body.String()))
 	}
-	var statusBody spaOptimizeResponse
+	var statusBody optimizeResponse
 	if err := json.Unmarshal(status.Body.Bytes(), &statusBody); err != nil {
 		t.Fatalf("decode status response: %v", err)
 	}
@@ -332,8 +332,8 @@ func TestSPAPresetOptimizeStatusAndRevert(t *testing.T) {
 	if revert.Code != http.StatusOK {
 		t.Fatalf("POST revert = %d, want 200 (body %s)", revert.Code, snippet(revert.Body.String()))
 	}
-	after := decodeSPAPresetList(t, revert)
-	reverted := findSPAPreset(after, p.ID)
+	after := decodePresetList(t, revert)
+	reverted := findPreset(after, p.ID)
 	if reverted == nil || reverted.WeightsOptimized || reverted.WeightsRaw != nil {
 		t.Errorf("revert response still reports optimised weights: %+v", reverted)
 	}
@@ -347,9 +347,9 @@ func TestSPAPresetOptimizeStatusAndRevert(t *testing.T) {
 	}
 }
 
-// TestSPAPresetOptimizeStatusIgnoresForeignJob 是必测负例：状态端点只认本预设的作业，
+// TestPresetOptimizeStatusIgnoresForeignJob 是必测负例：状态端点只认本预设的作业，
 // 指向别的预设的 job id 一律按「无作业」返回，不泄露它。
-func TestSPAPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
+func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p1 := seedPreset(t, db, ownerID)
 	p2 := store.NewPreset(ownerID, "Other")
@@ -372,7 +372,7 @@ func TestSPAPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	if status.Code != http.StatusOK {
 		t.Fatalf("GET status for the other preset = %d, want 200", status.Code)
 	}
-	var body spaOptimizeResponse
+	var body optimizeResponse
 	if err := json.Unmarshal(status.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
@@ -381,9 +381,9 @@ func TestSPAPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	}
 }
 
-// TestSPAPresetsRequireSessionAndCSRF 是必测负例：匿名 GET 401、缺 CSRF 的写操作 403，
+// TestPresetsRequireSessionAndCSRF 是必测负例：匿名 GET 401、缺 CSRF 的写操作 403，
 // 且都不产生副作用。
-func TestSPAPresetsRequireSessionAndCSRF(t *testing.T) {
+func TestPresetsRequireSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
 
@@ -391,7 +391,7 @@ func TestSPAPresetsRequireSessionAndCSRF(t *testing.T) {
 	if anon.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous GET = %d, want 401 (body %s)", anon.Code, snippet(anon.Body.String()))
 	}
-	if code, _ := decodeSPAPresetError(t, anon); code != "unauthorized" {
+	if code, _ := decodePresetError(t, anon); code != "unauthorized" {
 		t.Errorf("anonymous code = %q, want unauthorized", code)
 	}
 
@@ -418,8 +418,8 @@ func TestSPAPresetsRequireSessionAndCSRF(t *testing.T) {
 	}
 }
 
-// TestSPAPresetDelete 覆盖通过 SPA 端点删除预设：默认保护、引用保护、成功删除。
-func TestSPAPresetDelete(t *testing.T) {
+// TestPresetDelete 覆盖通过 SPA 端点删除预设：默认保护、引用保护、成功删除。
+func TestPresetDelete(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
 

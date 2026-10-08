@@ -21,13 +21,13 @@ func settingsSSRMarker() string { return `action="/settings/profile"` }
 // keysSSRMarker 是 SSR「我的 API Key」页特有的创建表单标记：SPA 应用壳里不会出现。
 func keysSSRMarker() string { return `action="/settings/keys"` }
 
-// TestSettingsRouteServesSPAShell 断言登录用户访问 GET /settings 得到 SPA 应用壳，
+// TestSettingsRouteServesShell 断言登录用户访问 GET /settings 得到 SPA 应用壳，
 // 由客户端路由渲染个人设置页，不再渲染 SSR 设置页。
-func TestSettingsRouteServesSPAShell(t *testing.T) {
+func TestSettingsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getWithCookies(t, srv, "/settings", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), settingsSSRMarker()) {
 		t.Errorf("GET /settings still renders the SSR settings form: %s", snippet(rec.Body.String()))
 	}
@@ -36,13 +36,13 @@ func TestSettingsRouteServesSPAShell(t *testing.T) {
 	}
 }
 
-// TestKeysRouteServesSPAShell 断言登录用户访问 GET /settings/keys 得到 SPA 应用壳，
+// TestKeysRouteServesShell 断言登录用户访问 GET /settings/keys 得到 SPA 应用壳，
 // 由客户端路由渲染「我的 API Key」页，不再渲染 SSR keys 页。
-func TestKeysRouteServesSPAShell(t *testing.T) {
+func TestKeysRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getWithCookies(t, srv, "/settings/keys", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), keysSSRMarker()) {
 		t.Errorf("GET /settings/keys still renders the SSR keys form: %s", snippet(rec.Body.String()))
 	}

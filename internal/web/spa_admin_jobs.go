@@ -16,8 +16,8 @@ import (
 // 读取复用 s.jobRunner.List，取消复用 s.jobRunner.Cancel 与 jobs.ErrNotRunning，与 SSR 页
 // 完全同一份调用。kind/status/stage 是稳定英文标识，由前端映射文案。
 
-// spaAdminJob 是一个作业的元信息；时间为 UTC 文本，空串表示尚未发生。
-type spaAdminJob struct {
+// adminJob 是一个作业的元信息；时间为 UTC 文本，空串表示尚未发生。
+type adminJob struct {
 	ID         uint64  `json:"id"`
 	Kind       string  `json:"kind"`
 	Status     string  `json:"status"`
@@ -30,26 +30,26 @@ type spaAdminJob struct {
 	CanCancel  bool    `json:"can_cancel"`
 }
 
-// spaAdminJobsResponse 是作业列表的分页响应。
-type spaAdminJobsResponse struct {
-	Jobs  []spaAdminJob `json:"jobs"`
-	Page  int           `json:"page"`
-	Pages int           `json:"pages"`
-	Total int64         `json:"total"`
+// adminJobsResponse 是作业列表的分页响应。
+type adminJobsResponse struct {
+	Jobs  []adminJob `json:"jobs"`
+	Page  int        `json:"page"`
+	Pages int        `json:"pages"`
+	Total int64      `json:"total"`
 }
 
-// spaAdminJobs 返回作业列表（分页），口径与 adminJobsPage 一致。
-func (s *Server) spaAdminJobs(c *gin.Context) {
+// adminJobs 返回作业列表（分页），口径与 adminJobsPage 一致。
+func (s *Server) adminJobs(c *gin.Context) {
 	ctx := c.Request.Context()
 	page := parsePage(c.Query("page"))
-	rows := make([]spaAdminJob, 0)
+	rows := make([]adminJob, 0)
 	var total int64
 	pages := 1
 	if s.jobRunner != nil {
 		list, count, err := s.jobRunner.List(ctx, adminJobsPageSize, (page-1)*adminJobsPageSize)
 		if err != nil {
 			s.logger.Error("spa admin: list jobs failed", "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "internal_error")
+			adminError(c, http.StatusInternalServerError, "internal_error")
 			return
 		}
 		total = count
@@ -58,7 +58,7 @@ func (s *Server) spaAdminJobs(c *gin.Context) {
 		}
 		for i := range list {
 			job := list[i]
-			row := spaAdminJob{
+			row := adminJob{
 				ID: job.ID, Kind: job.Kind, Status: job.Status, Stage: job.Stage,
 				CreatedAt:  formatJobTime(&job.CreatedAt),
 				StartedAt:  formatJobTime(job.StartedAt),
@@ -74,33 +74,33 @@ func (s *Server) spaAdminJobs(c *gin.Context) {
 			rows = append(rows, row)
 		}
 	}
-	c.JSON(http.StatusOK, spaAdminJobsResponse{Jobs: rows, Page: page, Pages: pages, Total: total})
+	c.JSON(http.StatusOK, adminJobsResponse{Jobs: rows, Page: page, Pages: pages, Total: total})
 }
 
-// spaAdminJobCancel 取消一个作业：运行中的会被杀进程组并标 failed，排队中的直接标 failed。
-func (s *Server) spaAdminJobCancel(c *gin.Context) {
+// adminJobCancel 取消一个作业：运行中的会被杀进程组并标 failed，排队中的直接标 failed。
+func (s *Server) adminJobCancel(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
 	id, err := parseUintParam(c.Param("id"))
 	if err != nil {
-		spaAdminError(c, http.StatusNotFound, "invalid_job")
+		adminError(c, http.StatusNotFound, "invalid_job")
 		return
 	}
 	if s.jobRunner == nil {
-		spaAdminError(c, http.StatusServiceUnavailable, "unavailable")
+		adminError(c, http.StatusServiceUnavailable, "unavailable")
 		return
 	}
 	ctx := c.Request.Context()
 	if err := s.jobRunner.Cancel(ctx, id); err != nil {
 		if errors.Is(err, jobs.ErrNotRunning) {
-			spaAdminError(c, http.StatusConflict, "not_running")
+			adminError(c, http.StatusConflict, "not_running")
 			return
 		}
 		s.logger.Error("spa admin: cancel job failed", "job_id", id, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "failed")
+		adminError(c, http.StatusInternalServerError, "failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{

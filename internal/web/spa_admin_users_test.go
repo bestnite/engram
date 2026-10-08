@@ -41,14 +41,14 @@ func adminPostJSON(t *testing.T, srv *Server, target string, body any, cookies [
 	return rec
 }
 
-// TestSPAAdminUserPagesCutover 覆盖用户管理 / 注册邀请 / API Key 总览三页的切流与非管理员门禁。
-func TestSPAAdminUserPagesCutover(t *testing.T) {
+// TestAdminUserPagesCutover 覆盖用户管理 / 注册邀请 / API Key 总览三页的切流与非管理员门禁。
+func TestAdminUserPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin/users", "/admin/registration", "/admin/api-keys"} {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 			srv.invites = store.NewInviteStore(db)
 
-			assertServesSPAShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
 
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "cut_stranger")
 			denied := getWithCookies(t, srv, path, strangerCookies)
@@ -60,13 +60,13 @@ func TestSPAAdminUserPagesCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAdminUserLifecycle 覆盖创建 / 列表 / 改角色 / 禁用 / 重置密码 / 删除的 JSON 路径。
-func TestSPAAdminUserLifecycle(t *testing.T) {
+// TestAdminUserLifecycle 覆盖创建 / 列表 / 改角色 / 禁用 / 重置密码 / 删除的 JSON 路径。
+func TestAdminUserLifecycle(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 
 	// 创建：校验通过后落库。
-	rec := adminPostJSON(t, srv, "/api/v1/admin/users", spaAdminUserCreateRequest{
+	rec := adminPostJSON(t, srv, "/api/v1/admin/users", adminUserCreateRequest{
 		Username: "apiuser", Email: "apiuser@example.com", DisplayName: "API User",
 		Password: "Sup3rSecret!", Role: store.RoleUser,
 	}, cookies, csrf)
@@ -79,7 +79,7 @@ func TestSPAAdminUserLifecycle(t *testing.T) {
 	}
 
 	// 弱密码：稳定 code，且不落库。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", spaAdminUserCreateRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", adminUserCreateRequest{
 		Username: "weak", Email: "weak@example.com", Password: "short", Role: store.RoleUser,
 	}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("weak password create = %d, want 400", rec.Code)
@@ -87,7 +87,7 @@ func TestSPAAdminUserLifecycle(t *testing.T) {
 
 	// 列表：包含新建用户与用量字段。
 	listRec := getJSON(t, srv, "/api/v1/admin/users", cookies, nil)
-	var list spaAdminUsersResponse
+	var list adminUsersResponse
 	if err := json.Unmarshal(listRec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode users: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestSPAAdminUserLifecycle(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("reset password = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var pw spaAdminUserPasswordResponse
+	var pw adminUserPasswordResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &pw); err != nil || pw.TempPassword == "" {
 		t.Fatalf("reset password returned no temp password: %v %+v", err, pw)
 	}
@@ -133,7 +133,7 @@ func TestSPAAdminUserLifecycle(t *testing.T) {
 
 	// 删除自己：拒绝。
 	meRec := getJSON(t, srv, "/api/v1/admin/summary", cookies, nil)
-	var me spaAdminSummaryResponse
+	var me adminSummaryResponse
 	_ = json.Unmarshal(meRec.Body.Bytes(), &me)
 	ownerID, _ := store.NewUserStore(db).ByUsername(ctx, "owner")
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+u64str(ownerID.ID)+"/delete", map[string]any{"confirm": true}, cookies, csrf); rec.Code != http.StatusBadRequest {
@@ -149,14 +149,14 @@ func TestSPAAdminUserLifecycle(t *testing.T) {
 	}
 }
 
-// TestSPAAdminRegistrationAndInvites 覆盖注册策略保存与邀请创建 / 撤销的 JSON 路径。
-func TestSPAAdminRegistrationAndInvites(t *testing.T) {
+// TestAdminRegistrationAndInvites 覆盖注册策略保存与邀请创建 / 撤销的 JSON 路径。
+func TestAdminRegistrationAndInvites(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
 	ctx := context.Background()
 
 	// 保存策略与白名单。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/registration", spaAdminRegistrationRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/registration", adminRegistrationRequest{
 		Policy: auth.PolicyOpen, EmailDomains: "example.com, example.org",
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save registration = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -172,20 +172,20 @@ func TestSPAAdminRegistrationAndInvites(t *testing.T) {
 		t.Errorf("allowlist = %q, want normalized comma list", settings[auth.SettingKeyEmailAllowlist])
 	}
 	// 非法策略：拒绝且不落库。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/registration", spaAdminRegistrationRequest{Policy: "bogus"}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/registration", adminRegistrationRequest{Policy: "bogus"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid policy = %d, want 400", rec.Code)
 	}
 
 	// 创建邀请。
 	expires := 7
-	rec := adminPostJSON(t, srv, "/api/v1/admin/invites", spaAdminInviteCreateRequest{
+	rec := adminPostJSON(t, srv, "/api/v1/admin/invites", adminInviteCreateRequest{
 		Email: "invitee@example.com", Role: store.RoleUser, ExpiresDays: &expires,
 	}, cookies, csrf)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create invite = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	var created struct {
-		Invite spaAdminInvite `json:"invite"`
+		Invite adminInvite `json:"invite"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode invite: %v", err)
@@ -196,7 +196,7 @@ func TestSPAAdminRegistrationAndInvites(t *testing.T) {
 
 	// 读取：列表包含新邀请。
 	readResp := getJSON(t, srv, "/api/v1/admin/registration", cookies, nil)
-	var reg spaAdminRegistrationResponse
+	var reg adminRegistrationResponse
 	if err := json.Unmarshal(readResp.Body.Bytes(), &reg); err != nil {
 		t.Fatalf("decode registration: %v", err)
 	}
@@ -213,8 +213,8 @@ func TestSPAAdminRegistrationAndInvites(t *testing.T) {
 	}
 }
 
-// TestSPAAdminAPIKeysListAndRevoke 覆盖 API Key 总览读取与撤销的 JSON 路径。
-func TestSPAAdminAPIKeysListAndRevoke(t *testing.T) {
+// TestAdminAPIKeysListAndRevoke 覆盖 API Key 总览读取与撤销的 JSON 路径。
+func TestAdminAPIKeysListAndRevoke(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 	created, err := store.NewAPIKeyStore(db).Create(ctx, store.CreateAPIKeyParams{
@@ -228,7 +228,7 @@ func TestSPAAdminAPIKeysListAndRevoke(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET api-keys = %d, want 200", rec.Code)
 	}
-	var list spaAdminAPIKeysResponse
+	var list adminAPIKeysResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode api keys: %v", err)
 	}
@@ -256,17 +256,17 @@ func TestSPAAdminAPIKeysListAndRevoke(t *testing.T) {
 	}
 }
 
-// TestSPAAdminWriteEndpointsGuard 钉住写端点的判权：匿名 401、非 admin 403。
-func TestSPAAdminWriteEndpointsGuard(t *testing.T) {
+// TestAdminWriteEndpointsGuard 钉住写端点的判权：匿名 401、非 admin 403。
+func TestAdminWriteEndpointsGuard(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "writer_stranger")
 
 	// 匿名：无会话 → 401（在 CSRF 之前就被拒）。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", spaAdminUserCreateRequest{Username: "x"}, nil, ""); rec.Code != http.StatusUnauthorized {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", adminUserCreateRequest{Username: "x"}, nil, ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous write = %d, want 401", rec.Code)
 	}
 	// 非 admin：403（写路由判权先于 CSRF）。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", spaAdminUserCreateRequest{Username: "x"}, strangerCookies, ""); rec.Code != http.StatusForbidden {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users", adminUserCreateRequest{Username: "x"}, strangerCookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("non-admin write = %d, want 403", rec.Code)
 	}
 }

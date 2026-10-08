@@ -33,14 +33,14 @@ func getJSON(t *testing.T, srv *Server, target string, cookies []*http.Cookie, h
 	return rec
 }
 
-// TestSPAAdminReadPagesCutover 覆盖三个只读页的切流、回退与非管理员门禁。
-func TestSPAAdminReadPagesCutover(t *testing.T) {
+// TestAdminReadPagesCutover 覆盖三个只读页的切流、回退与非管理员门禁。
+func TestAdminReadPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin", "/admin/health", "/admin/audit"} {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
 			// SPA 已加载：返回应用壳，绝不渲染 SSR 页面。
-			assertServesSPAShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
 
 			// 匿名：重定向登录页，绝不返回外壳。
 			anon := get(t, srv, path, nil)
@@ -62,8 +62,8 @@ func TestSPAAdminReadPagesCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAdminJSONGuard 钉住 JSON 端点的判权：匿名 401、非 admin 403、bearer 403。
-func TestSPAAdminJSONGuard(t *testing.T) {
+// TestAdminJSONGuard 钉住 JSON 端点的判权：匿名 401、非 admin 403、bearer 403。
+func TestAdminJSONGuard(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	paths := []string{"/api/v1/admin/summary", "/api/v1/admin/health", "/api/v1/admin/audit"}
 
@@ -94,8 +94,8 @@ func TestSPAAdminJSONGuard(t *testing.T) {
 	}
 }
 
-// TestSPAAdminJSONSummaryMatchesInstance 断言概览 JSON 的计数与库里一致。
-func TestSPAAdminJSONSummaryMatchesInstance(t *testing.T) {
+// TestAdminJSONSummaryMatchesInstance 断言概览 JSON 的计数与库里一致。
+func TestAdminJSONSummaryMatchesInstance(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "json deck")
 	seedBasic(t, db, deck.ID, "q", "a")
@@ -104,7 +104,7 @@ func TestSPAAdminJSONSummaryMatchesInstance(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET summary = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var got spaAdminSummaryResponse
+	var got adminSummaryResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
@@ -126,15 +126,15 @@ func TestSPAAdminJSONSummaryMatchesInstance(t *testing.T) {
 	}
 }
 
-// TestSPAAdminJSONHealthShape 断言健康 JSON 的读数形态：连通 ok、schema 与 due 有值。
-func TestSPAAdminJSONHealthShape(t *testing.T) {
+// TestAdminJSONHealthShape 断言健康 JSON 的读数形态：连通 ok、schema 与 due 有值。
+func TestAdminJSONHealthShape(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
 
 	rec := getJSON(t, srv, "/api/v1/admin/health", cookies, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET health = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var got spaAdminHealthResponse
+	var got adminHealthResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode health: %v", err)
 	}
@@ -153,8 +153,8 @@ func TestSPAAdminJSONHealthShape(t *testing.T) {
 	}
 }
 
-// TestSPAAdminJSONAuditFilters 断言审计 JSON 与 SSR 用同一份过滤语义与 notice 码。
-func TestSPAAdminJSONAuditFilters(t *testing.T) {
+// TestAdminJSONAuditFilters 断言审计 JSON 与 SSR 用同一份过滤语义与 notice 码。
+func TestAdminJSONAuditFilters(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	aliceID := createRoleUser(t, db, "audit_alice", store.RoleUser)
 	if err := db.Where("1 = 1").Delete(&store.AuditLog{}).Error; err != nil {
@@ -170,10 +170,10 @@ func TestSPAAdminJSONAuditFilters(t *testing.T) {
 		t.Fatalf("seed audit rows: %v", err)
 	}
 
-	decode := func(query string) (spaAdminAuditResponse, int) {
+	decode := func(query string) (adminAuditResponse, int) {
 		t.Helper()
 		rec := getJSON(t, srv, "/api/v1/admin/audit"+query, cookies, nil)
-		var got spaAdminAuditResponse
+		var got adminAuditResponse
 		if rec.Code == http.StatusOK {
 			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 				t.Fatalf("decode audit%s: %v", query, err)

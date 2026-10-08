@@ -63,7 +63,7 @@ func enableTOTPFor(t *testing.T, srv *Server, u *store.User) (string, []string) 
 // 同时断言此时还没有会话。第一因素的 pending cookie 是服务端在响应里下发的 HttpOnly 值。
 func startSecondStep(t *testing.T, srv *Server) *http.Cookie {
 	t.Helper()
-	rec, _, pendingCookie := spaTOTPJSONLogin(t, srv, "admin", "Sup3rSecret!")
+	rec, _, pendingCookie := totpJSONLogin(t, srv, "admin", "Sup3rSecret!")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/auth/login (password ok, TOTP enabled) = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -86,7 +86,7 @@ func TestAcceptance1_PasswordAloneCannotFinishLogin(t *testing.T) {
 	secret, _ := enableTOTPFor(t, srv, u)
 
 	// 密码错误：必须仍是通用凭据错误，绝不透露「该账号启用了 TOTP」。
-	bad, _, badPending := spaTOTPJSONLogin(t, srv, "admin", "WrongPassword!")
+	bad, _, badPending := totpJSONLogin(t, srv, "admin", "WrongPassword!")
 	if bad.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong password = %d, want 401", bad.Code)
 	}
@@ -164,7 +164,7 @@ func TestAcceptance3_DisableRequiresPassword(t *testing.T) {
 	}
 
 	// 密码错误：关闭被拒，仍然启用。
-	wrong := postSPAJSON(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "WrongPassword!"}, cookies, sess.CSRFToken)
+	wrong := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "WrongPassword!"}, cookies, sess.CSRFToken)
 	if wrong.Code != http.StatusUnauthorized {
 		t.Fatalf("disable with a wrong password = %d, want 401 (body %s)", wrong.Code, snippet(wrong.Body.String()))
 	}
@@ -173,7 +173,7 @@ func TestAcceptance3_DisableRequiresPassword(t *testing.T) {
 	}
 
 	// 密码正确：关闭成功。
-	right := postSPAJSON(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "Sup3rSecret!"}, cookies, sess.CSRFToken)
+	right := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "Sup3rSecret!"}, cookies, sess.CSRFToken)
 	if right.Code != http.StatusOK {
 		t.Fatalf("disable with the correct password = %d, want 200 (body %s)", right.Code, snippet(right.Body.String()))
 	}

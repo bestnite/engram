@@ -28,14 +28,14 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// 客户端的同源 JSON 端点承担（/api/v1/auth/{session,login,register,setup}）。
 	// 会话前写请求没有服务端会话可绑 token，仍由 PreSessionCSRFMiddleware 校验双提交 cookie
 	// 与镜像 token（B-13）。
-	router.GET("/login", s.spaLoginShell)
-	router.GET("/register", s.spaRegisterShell)
-	router.GET("/setup", s.spaSetupShell)
+	router.GET("/login", s.loginShell)
+	router.GET("/register", s.registerShell)
+	router.GET("/setup", s.setupShell)
 	// OIDC 可选登录（M1-11）：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
 	router.GET("/auth/oidc/start", s.oidcStart)
 	router.GET("/auth/oidc/callback", s.oidcCallback)
 	// SPA 的 OIDC 入口探测（spa_oidc.go）：只读，供登录视图决定是否显示第二个登录按钮。
-	s.registerSPAOIDCRoutes(router)
+	s.registerOIDCRoutes(router)
 	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
 
@@ -50,12 +50,12 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 
 	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与规范路径
 	// 共用同一处理器（同一份双提交 cookie 与可达性判定），保留是为了既有深链不失效。
-	router.GET("/spa/login", s.spaLoginShell)
-	router.GET("/spa/register", s.spaRegisterShell)
-	router.GET("/spa/setup", s.spaSetupShell)
+	router.GET("/spa/login", s.loginShell)
+	router.GET("/spa/register", s.registerShell)
+	router.GET("/spa/setup", s.setupShell)
 	// 登录第二步（TOTP）的 SPA 入口。规范路径 /login/totp 由 NoRoute 回退到应用壳；
 	// 协议是 GET/POST /api/v1/auth/totp。
-	router.GET("/spa/login/totp", s.spaTOTPLoginShell)
+	router.GET("/spa/login/totp", s.totpLoginShell)
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。

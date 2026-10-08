@@ -903,7 +903,7 @@ describe('Centralized typed same-origin REST API client', () => {
 
   describe('GET /api/v1/stats/detail data wiring and contract fixtures', () => {
     it('requests GET /api/v1/stats/detail with same-origin credentials and parses the raw measures', async () => {
-      // 与 Go 测试 internal/web/spa_stats_test.go:TestSPAStatsDetailMatchesStoreMeasures 同源。
+      // 与 Go 测试 internal/web/spa_stats_test.go:TestStatsDetailMatchesStoreMeasures 同源。
       const goFixture: StatsDetail = {
         generated_at: '2026-10-06T12:00:00Z',
         empty: false,

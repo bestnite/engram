@@ -20,8 +20,8 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// spaAsset 是一个已嵌入的 SPA 静态资源元数据。
-type spaAsset struct {
+// shellAsset 是一个已嵌入的 SPA 静态资源元数据。
+type shellAsset struct {
 	path        string
 	hash        string
 	etag        string
@@ -41,7 +41,7 @@ type SPA struct {
 	// shellBlock 是注入入口 <head> 的 PWA 外壳标记（manifest/theme-color/图标/pwa.js/主题引导）。
 	// 它是装配期设定的一次性内容；之后每个请求只重写 <html> 的 lang 属性，不改动这块标记。
 	shellBlock []byte
-	assets     map[string]*spaAsset
+	assets     map[string]*shellAsset
 }
 
 // LoadSPA 从 frontend 嵌入文件系统加载生产构建产物。
@@ -67,7 +67,7 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 		fs:        subFS,
 		rawIndex:  indexData,
 		indexHTML: indexData,
-		assets:    make(map[string]*spaAsset),
+		assets:    make(map[string]*shellAsset),
 	}
 
 	err = fs.WalkDir(subFS, ".", func(p string, d fs.DirEntry, walkErr error) error {
@@ -112,7 +112,7 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 			ct += "; charset=utf-8"
 		}
 
-		asset := &spaAsset{
+		asset := &shellAsset{
 			path:        cleanPath,
 			hash:        h,
 			etag:        etag,

@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-func (s *Server) registerSPADeckQueueCountRoute(router *gin.Engine) {
+func (s *Server) registerDeckQueueCountRoute(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil {
 		return
 	}

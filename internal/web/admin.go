@@ -58,10 +58,10 @@ func (s *Server) registerAdminRoutes(router *gin.Engine) {
 	}
 	// 每条页面路由都是 requireAdmin + 应用壳：requireAdmin 先跑，非 admin 拿不到外壳。
 	for _, r := range adminRoutes() {
-		router.Handle(r.Method, r.Path, s.requireAdmin(), s.spaAdminShell)
+		router.Handle(r.Method, r.Path, s.requireAdmin(), s.adminShell)
 	}
-	// SPA 的 JSON 端点（/api/v1/admin/*），判权在 spaAdminGuard。
-	s.registerSPAAdminRoutes(router)
+	// SPA 的 JSON 端点（/api/v1/admin/*），判权在 adminGuard。
+	s.registerAdminAPIRoutes(router)
 }
 
 // requireAdmin 是管理面板的唯一入口守卫：未登录回登录页，非 admin 一律 403。

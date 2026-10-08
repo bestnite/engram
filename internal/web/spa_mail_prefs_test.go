@@ -24,9 +24,9 @@ import (
 //   - reminder_hour 的 null 与 0（午夜）可区分，越界被拒；
 //   - 写入过会话 CSRF，且只接受浏览器会话。
 
-// spaNotificationPatch 带会话 cookie 与 X-CSRF-Token 头提交 PATCH JSON。
-// 与 postSPAJSON 同形，只是方法为 PATCH（邮件偏好接口用 PATCH 保存）。
-func spaNotificationPatch(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
+// notificationPatch 带会话 cookie 与 X-CSRF-Token 头提交 PATCH JSON。
+// 与 postJSONWithCSRF 同形，只是方法为 PATCH（邮件偏好接口用 PATCH 保存）。
+func notificationPatch(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -45,25 +45,25 @@ func spaNotificationPatch(t *testing.T, srv *Server, path string, body any, cook
 	return rec
 }
 
-// loadSPANotificationPrefs 读取接口响应并解码；状态码不是 200 直接失败。
-func loadSPANotificationPrefs(t *testing.T, rec *httptest.ResponseRecorder) spaNotificationPrefsResponse {
+// loadNotificationPrefs 读取接口响应并解码；状态码不是 200 直接失败。
+func loadNotificationPrefs(t *testing.T, rec *httptest.ResponseRecorder) notificationPrefsResponse {
 	t.Helper()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("request status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var got spaNotificationPrefsResponse
+	var got notificationPrefsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v (body %s)", err, snippet(rec.Body.String()))
 	}
 	return got
 }
 
-// TestSPAMailPrefsGetMatchesCatalog 是读取侧的目录一致性验收：
+// TestMailPrefsGetMatchesCatalog 是读取侧的目录一致性验收：
 // 分组顺序等于 ClassOrder，类型集合与顺序等于 mail.Catalog，locked/enabled 由 CanDisable/ResolveEnabled 推导。
-func TestSPAMailPrefsGetMatchesCatalog(t *testing.T) {
+func TestMailPrefsGetMatchesCatalog(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 
-	got := loadSPANotificationPrefs(t, getWithCookies(t, srv, "/api/v1/settings/notifications", cookies))
+	got := loadNotificationPrefs(t, getWithCookies(t, srv, "/api/v1/settings/notifications", cookies))
 
 	classes := mail.ClassOrder()
 	if len(got.Groups) != len(classes) {
@@ -111,19 +111,19 @@ func TestSPAMailPrefsGetMatchesCatalog(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsPatchRoundTrips 验收「保存后立即生效、显式选择覆盖每个可关闭类型」：
+// TestMailPrefsPatchRoundTrips 验收「保存后立即生效、显式选择覆盖每个可关闭类型」：
 // 打开一个默认关的 C 类、关闭一个默认开的 B 类，其余可关闭类型写成关闭；重启读取路径仍一致。
-func TestSPAMailPrefsPatchRoundTrips(t *testing.T) {
+func TestMailPrefsPatchRoundTrips(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
-	rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{
 			string(mail.TypeReviewReminder): true,  // C：打开
 			string(mail.TypeDeckShared):     false, // B：关闭
 		},
 		"reminder_hour": 7,
 	}, cookies, csrf)
-	got := loadSPANotificationPrefs(t, rec)
+	got := loadNotificationPrefs(t, rec)
 
 	// 响应立刻反映新状态：C 开、B 关，A 仍恒开。
 	if !enabledOf(got, mail.TypeReviewReminder) {
@@ -173,9 +173,9 @@ func TestSPAMailPrefsPatchRoundTrips(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsReminderHourNullAndMidnight 验收发送小时的三个关键点：
+// TestMailPrefsReminderHourNullAndMidnight 验收发送小时的三个关键点：
 // 0 存成 0（午夜，绝不是 NULL）、null 存成 NULL、越界以 400 拒绝且不改动已存值。
-func TestSPAMailPrefsReminderHourNullAndMidnight(t *testing.T) {
+func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	users := store.NewUserStore(db)
 	load := func() *store.User {
@@ -188,7 +188,7 @@ func TestSPAMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	}
 
 	// 0 点：必须存成 0，不能和「未设置」混在一起。
-	if rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 0}, cookies, csrf); rec.Code != http.StatusOK {
+	if rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 0}, cookies, csrf); rec.Code != http.StatusOK {
 		t.Fatalf("saving hour 0 status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	if u := load(); u.ReminderHour == nil {
@@ -198,7 +198,7 @@ func TestSPAMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	}
 
 	// null：回到站点默认（NULL）。
-	if rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": nil}, cookies, csrf); rec.Code != http.StatusOK {
+	if rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": nil}, cookies, csrf); rec.Code != http.StatusOK {
 		t.Fatalf("saving the site default status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	if u := load(); u.ReminderHour != nil {
@@ -206,7 +206,7 @@ func TestSPAMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	}
 
 	// 越界：400，且不改动已存值（仍为 NULL）。
-	rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 24}, cookies, csrf)
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 24}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("saving hour 24 status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -218,11 +218,11 @@ func TestSPAMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsRejectsClassA 是「拒绝关闭 A 类」的负例：指向 A 类的提交 400，且不写任何行。
-func TestSPAMailPrefsRejectsClassA(t *testing.T) {
+// TestMailPrefsRejectsClassA 是「拒绝关闭 A 类」的负例：指向 A 类的提交 400，且不写任何行。
+func TestMailPrefsRejectsClassA(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
-	rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{string(mail.TypePasswordReset): true},
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -243,11 +243,11 @@ func TestSPAMailPrefsRejectsClassA(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsRejectsUnknownType 断言目录外的类型被拒：不暴露、不接受、不写库。
-func TestSPAMailPrefsRejectsUnknownType(t *testing.T) {
+// TestMailPrefsRejectsUnknownType 断言目录外的类型被拒：不暴露、不接受、不写库。
+func TestMailPrefsRejectsUnknownType(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
-	rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{"totally_made_up": true},
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -265,11 +265,11 @@ func TestSPAMailPrefsRejectsUnknownType(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsRejectsMissingCSRF 断言保存必须带会话绑定的 CSRF token，缺失即被拒且不写入。
-func TestSPAMailPrefsRejectsMissingCSRF(t *testing.T) {
+// TestMailPrefsRejectsMissingCSRF 断言保存必须带会话绑定的 CSRF token，缺失即被拒且不写入。
+func TestMailPrefsRejectsMissingCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 
-	rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{string(mail.TypeInvite): true},
 	}, cookies, "")
 	if rec.Code != http.StatusForbidden {
@@ -284,14 +284,14 @@ func TestSPAMailPrefsRejectsMissingCSRF(t *testing.T) {
 	}
 }
 
-// TestSPAMailPrefsRejectsAnonymousAndBearer 断言接口只接受浏览器会话，读写都不接受 bearer 凭据。
-func TestSPAMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
+// TestMailPrefsRejectsAnonymousAndBearer 断言接口只接受浏览器会话，读写都不接受 bearer 凭据。
+func TestMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 
 	if rec := getWithCookies(t, srv, "/api/v1/settings/notifications", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous GET = %d, want 401", rec.Code)
 	}
-	if rec := spaNotificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{}, nil, ""); rec.Code != http.StatusForbidden {
+	if rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{}, nil, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("anonymous PATCH = %d, want 403 CSRF denial", rec.Code)
 	}
 
@@ -311,7 +311,7 @@ func TestSPAMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 }
 
 // enabledOf 报告响应里某类型的有效开关；类型缺失时直接失败。
-func enabledOf(resp spaNotificationPrefsResponse, typ mail.Type) bool {
+func enabledOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
 		for _, item := range group.Types {
 			if item.Type == string(typ) {
@@ -323,7 +323,7 @@ func enabledOf(resp spaNotificationPrefsResponse, typ mail.Type) bool {
 }
 
 // lockedOf 报告响应里某类型是否被锁；类型缺失时直接失败。
-func lockedOf(resp spaNotificationPrefsResponse, typ mail.Type) bool {
+func lockedOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
 		for _, item := range group.Types {
 			if item.Type == string(typ) {

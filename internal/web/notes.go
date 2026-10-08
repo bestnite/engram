@@ -31,7 +31,7 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
 	router.GET("/decks/:id/new-note", s.noteNewRoute)
 	// SPA 的新建/编辑预览走 JSON。
-	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.spaNotePreview)
+	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.notePreview)
 }
 
 // requireUser 取当前登录用户；未登录时重定向到登录页并返回 false。

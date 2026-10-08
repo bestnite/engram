@@ -13,8 +13,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// spaProfilePayload 是 SPA 个人资料 API 的公开字段集合。
-type spaProfilePayload struct {
+// profilePayload 是 SPA 个人资料 API 的公开字段集合。
+type profilePayload struct {
 	ID            uint64 `json:"id"`
 	Username      string `json:"username"`
 	Email         string `json:"email"`
@@ -24,40 +24,40 @@ type spaProfilePayload struct {
 	DayCutoffHour *int   `json:"day_cutoff_hour"`
 }
 
-type spaProfileRequest struct {
+type profileRequest struct {
 	DisplayName   string `json:"display_name"`
 	Locale        string `json:"locale"`
 	Timezone      string `json:"timezone"`
 	DayCutoffHour *int   `json:"day_cutoff_hour"`
 }
 
-type spaLocaleRequest struct {
+type localeRequest struct {
 	Locale string `json:"locale"`
 }
 
-type spaPasswordRequest struct {
+type passwordRequest struct {
 	OldPassword string `json:"old_password"`
 	NewPassword string `json:"new_password"`
 }
 
-func (s *Server) spaPasswordPatch(c *gin.Context) {
-	u, ok := s.spaProfileSessionOnly(c)
+func (s *Server) passwordPatch(c *gin.Context) {
+	u, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
-	var req spaPasswordRequest
+	var req passwordRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.OldPassword == "" || req.NewPassword == "" {
-		spaPasswordError(c, http.StatusBadRequest, "invalid_request", "The password request is invalid.")
+		passwordError(c, http.StatusBadRequest, "invalid_request", "The password request is invalid.")
 		return
 	}
 	fresh, err := s.users.ByID(c.Request.Context(), u.ID)
 	if err != nil {
 		s.logger.Error("load user for SPA password change failed", "user_id", u.ID, "error", err)
-		spaPasswordError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
+		passwordError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
 	if fresh.PasswordHash == nil {
-		spaPasswordError(c, http.StatusConflict, "password_unavailable", "Password change is unavailable for this account.")
+		passwordError(c, http.StatusConflict, "password_unavailable", "Password change is unavailable for this account.")
 		return
 	}
 	sess, _ := auth.CurrentSession(c)
@@ -74,7 +74,7 @@ func (s *Server) spaPasswordPatch(c *gin.Context) {
 		case errors.Is(err, auth.ErrPasswordUnchanged):
 			code, status, message = "password_unchanged", http.StatusBadRequest, "The new password must differ from the current password."
 		}
-		spaPasswordError(c, status, code, message)
+		passwordError(c, status, code, message)
 		return
 	}
 	s.audit(c.Request.Context(), store.AuditEntry{UserID: store.Ptr(u.ID), Action: store.ActionUserPasswordChange, TargetType: "user", TargetID: store.Ptr(u.ID)})
@@ -82,19 +82,19 @@ func (s *Server) spaPasswordPatch(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func spaPasswordError(c *gin.Context, status int, code, message string) {
+func passwordError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
-func spaUserPayload(u *store.User) spaProfilePayload {
-	return spaProfilePayload{
+func userPayload(u *store.User) profilePayload {
+	return profilePayload{
 		ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 		Locale: u.Locale, Timezone: u.Timezone, DayCutoffHour: u.DayCutoffHour,
 	}
 }
 
-// spaProfileSessionOnly 拒绝 bearer 凭据，确保个人资料路由只接受浏览器会话。
-func (s *Server) spaProfileSessionOnly(c *gin.Context) (*store.User, bool) {
+// profileSessionOnly 拒绝 bearer 凭据，确保个人资料路由只接受浏览器会话。
+func (s *Server) profileSessionOnly(c *gin.Context) (*store.User, bool) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.GetHeader("Authorization"))), "bearer ") {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
 			"code": api.CodeForbidden, "message": api.ErrorMessage(c.Request.Context(), api.CodeForbidden),
@@ -117,8 +117,8 @@ func (s *Server) spaProfileSessionOnly(c *gin.Context) (*store.User, bool) {
 	return u, true
 }
 
-func (s *Server) spaProfileGet(c *gin.Context) {
-	u, ok := s.spaProfileSessionOnly(c)
+func (s *Server) profileGet(c *gin.Context) {
+	u, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
@@ -130,15 +130,15 @@ func (s *Server) spaProfileGet(c *gin.Context) {
 		}})
 		return
 	}
-	c.JSON(http.StatusOK, spaUserPayload(fresh))
+	c.JSON(http.StatusOK, userPayload(fresh))
 }
 
-func (s *Server) spaProfilePatch(c *gin.Context) {
-	u, ok := s.spaProfileSessionOnly(c)
+func (s *Server) profilePatch(c *gin.Context) {
+	u, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
-	var req spaProfileRequest
+	var req profileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{
 			"code": api.CodeInvalidRequest, "message": api.ErrorMessage(c.Request.Context(), api.CodeInvalidRequest),
@@ -157,20 +157,20 @@ func (s *Server) spaProfilePatch(c *gin.Context) {
 	req.Locale = strings.TrimSpace(req.Locale)
 	req.Timezone = strings.TrimSpace(req.Timezone)
 	if req.DisplayName == "" || !s.supportedLocale(req.Locale) || req.Timezone == "" {
-		spaProfileBadRequest(c)
+		profileBadRequest(c)
 		return
 	}
 	if _, err := time.LoadLocation(req.Timezone); err != nil {
-		spaProfileBadRequest(c)
+		profileBadRequest(c)
 		return
 	}
 	if req.DayCutoffHour != nil && (*req.DayCutoffHour < 0 || *req.DayCutoffHour > 23) {
-		spaProfileBadRequest(c)
+		profileBadRequest(c)
 		return
 	}
 	changed := fresh.DisplayName != req.DisplayName || fresh.Locale != req.Locale || fresh.Timezone != req.Timezone || !sameOptionalInt(fresh.DayCutoffHour, req.DayCutoffHour)
 	if !changed {
-		c.JSON(http.StatusOK, spaUserPayload(fresh))
+		c.JSON(http.StatusOK, userPayload(fresh))
 		return
 	}
 	fresh.DisplayName = req.DisplayName
@@ -188,17 +188,17 @@ func (s *Server) spaProfilePatch(c *gin.Context) {
 		UserID: store.Ptr(u.ID), Action: store.ActionUserProfileUpdate, TargetType: "user", TargetID: store.Ptr(u.ID),
 		Detail: map[string]any{"locale": req.Locale, "timezone": req.Timezone, "day_cutoff_hour": req.DayCutoffHour, "via": "spa"},
 	})
-	c.JSON(http.StatusOK, spaUserPayload(fresh))
+	c.JSON(http.StatusOK, userPayload(fresh))
 }
 
-func (s *Server) spaLocalePatch(c *gin.Context) {
-	u, ok := s.spaProfileSessionOnly(c)
+func (s *Server) localePatch(c *gin.Context) {
+	u, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
-	var req spaLocaleRequest
+	var req localeRequest
 	if err := c.ShouldBindJSON(&req); err != nil || !s.supportedLocale(strings.TrimSpace(req.Locale)) {
-		spaProfileBadRequest(c)
+		profileBadRequest(c)
 		return
 	}
 	locale := strings.TrimSpace(req.Locale)
@@ -227,7 +227,7 @@ func (s *Server) spaLocalePatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"locale": locale})
 }
 
-func spaProfileBadRequest(c *gin.Context) {
+func profileBadRequest(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{
 		"code": api.CodeInvalidRequest, "message": api.ErrorMessage(c.Request.Context(), api.CodeInvalidRequest),
 	}})

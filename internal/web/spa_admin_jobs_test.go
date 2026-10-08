@@ -10,13 +10,13 @@ import (
 
 // 本文件是管理面板「作业 / 语言包」页切流到 SPA 的验收。
 
-// TestSPAAdminJobsAndI18nCutover 覆盖两页的切流与非管理员门禁。
-func TestSPAAdminJobsAndI18nCutover(t *testing.T) {
+// TestAdminJobsAndI18nCutover 覆盖两页的切流与非管理员门禁。
+func TestAdminJobsAndI18nCutover(t *testing.T) {
 	for _, path := range []string{"/admin/jobs", "/admin/i18n"} {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
-			assertServesSPAShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
 
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "job_stranger")
 			if rec := getWithCookies(t, srv, path, strangerCookies); rec.Code != http.StatusForbidden {
@@ -27,15 +27,15 @@ func TestSPAAdminJobsAndI18nCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAdminJobsJSON 断言作业 JSON 的形态：未装配执行器时返回空列表而不是 500。
-func TestSPAAdminJobsJSON(t *testing.T) {
+// TestAdminJobsJSON 断言作业 JSON 的形态：未装配执行器时返回空列表而不是 500。
+func TestAdminJobsJSON(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getJSON(t, srv, "/api/v1/admin/jobs", cookies, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET jobs = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var got spaAdminJobsResponse
+	var got adminJobsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode jobs: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestSPAAdminJobsJSON(t *testing.T) {
 	}
 }
 
-// TestSPAAdminI18nJSON 断言语言包 JSON 报告把每个语言的覆盖率与缺失 key 如实带出。
-func TestSPAAdminI18nJSON(t *testing.T) {
+// TestAdminI18nJSON 断言语言包 JSON 报告把每个语言的覆盖率与缺失 key 如实带出。
+func TestAdminI18nJSON(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 	srv.coverageOverride = func() []i18n.LocaleCoverage {
 		return []i18n.LocaleCoverage{
@@ -58,7 +58,7 @@ func TestSPAAdminI18nJSON(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET i18n = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var got spaAdminI18nResponse
+	var got adminI18nResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode i18n: %v", err)
 	}

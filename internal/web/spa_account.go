@@ -22,24 +22,24 @@ import (
 // GET 链接（/verify-email、/confirm-email-change）都只返回应用壳，页面与令牌消费全部走这里的
 // JSON 端点；这些页面因此没有 SSR 回退。
 
-// registerSPAAccountRoutes 挂载账号安全与邮件流程的 SPA JSON 端点与应用壳入口。
+// registerAccountRoutes 挂载账号安全与邮件流程的 SPA JSON 端点与应用壳入口。
 // 令牌服务未装配时跳过，与 registerSecurityMailRoutes 的前置条件一致。
-func (s *Server) registerSPAAccountRoutes(router *gin.Engine) {
+func (s *Server) registerAccountRoutes(router *gin.Engine) {
 	if s.tokens == nil {
 		return
 	}
 	// 登录前流程：没有会话可绑 CSRF，用双提交 cookie（与 SSR 的 /forgot-password、/reset-password 一致）。
-	router.POST("/api/v1/auth/forgot-password", auth.PreSessionCSRFMiddleware(), s.spaForgotPasswordSubmit)
-	router.POST("/api/v1/auth/reset-password", auth.PreSessionCSRFMiddleware(), s.spaResetPasswordSubmit)
-	router.POST("/api/v1/auth/verify-email", auth.PreSessionCSRFMiddleware(), s.spaVerifyEmailSubmit)
-	router.POST("/api/v1/auth/confirm-email-change", auth.PreSessionCSRFMiddleware(), s.spaConfirmEmailChangeSubmit)
+	router.POST("/api/v1/auth/forgot-password", auth.PreSessionCSRFMiddleware(), s.forgotPasswordSubmit)
+	router.POST("/api/v1/auth/reset-password", auth.PreSessionCSRFMiddleware(), s.resetPasswordSubmit)
+	router.POST("/api/v1/auth/verify-email", auth.PreSessionCSRFMiddleware(), s.verifyEmailSubmit)
+	router.POST("/api/v1/auth/confirm-email-change", auth.PreSessionCSRFMiddleware(), s.confirmEmailChangeSubmit)
 	// SPA 应用壳入口：与 /spa/login 同一约定，不遮蔽 SSR 的免登录一键链接。
-	router.GET("/spa/verify-email", s.spaVerifyEmailShell)
-	router.GET("/spa/confirm-email-change", s.spaConfirmEmailChangeShell)
+	router.GET("/spa/verify-email", s.verifyEmailShell)
+	router.GET("/spa/confirm-email-change", s.confirmEmailChangeShell)
 	if s.sessions != nil {
-		router.GET("/api/v1/settings/email", s.spaEmailSettingsGet)
-		router.POST("/api/v1/settings/email", s.sessions.CSRFMiddleware(), s.spaEmailChangeSubmit)
-		router.POST("/api/v1/settings/verify-email", s.sessions.CSRFMiddleware(), s.spaResendVerificationSubmit)
+		router.GET("/api/v1/settings/email", s.emailSettingsGet)
+		router.POST("/api/v1/settings/email", s.sessions.CSRFMiddleware(), s.emailChangeSubmit)
+		router.POST("/api/v1/settings/verify-email", s.sessions.CSRFMiddleware(), s.resendVerificationSubmit)
 	}
 }
 
@@ -71,18 +71,18 @@ func (s *Server) emailChangeRoute(c *gin.Context) {
 	s.spa.ServeIndex(c)
 }
 
-// spaVerifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
+// verifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
 // 由 SPA 读取 ?token= 并通过 POST /api/v1/auth/verify-email 消费（一次性、有过期）。
 // 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
-func (s *Server) spaVerifyEmailShell(c *gin.Context) {
+func (s *Server) verifyEmailShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
 }
 
-// spaConfirmEmailChangeShell 是改邮箱确认的规范入口（GET /confirm-email-change）。
+// confirmEmailChangeShell 是改邮箱确认的规范入口（GET /confirm-email-change）。
 // 与 /verify-email 同构：下发双提交 cookie 并返回应用壳，确认协议走
 // POST /api/v1/auth/confirm-email-change。这里只返回壳，不消费令牌。
-func (s *Server) spaConfirmEmailChangeShell(c *gin.Context) {
+func (s *Server) confirmEmailChangeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.spa.ServeIndex(c)
 }
@@ -94,13 +94,13 @@ type apiForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-// spaForgotPasswordSubmit 处理 SPA 的重置请求（POST /api/v1/auth/forgot-password）。
+// forgotPasswordSubmit 处理 SPA 的重置请求（POST /api/v1/auth/forgot-password）。
 //
 // 匿名限流（IP + 目标邮箱各 5 次 / 15 分钟）在查库与
 // 入 outbox 之前；无论邮箱是否存在都返回同形响应，避免账号枚举。响应里的 mail_ready 只反映站点
 // 级的「邮件是否配置」，与账号存在性无关，前端据此在未配置时渲染 mail.not_configured 而不是
 // 谎报「已发送」。这里不返回令牌、不回显邮箱。
-func (s *Server) spaForgotPasswordSubmit(c *gin.Context) {
+func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 	var req apiForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
@@ -129,12 +129,12 @@ type apiResetPasswordRequest struct {
 	Password string `json:"password"`
 }
 
-// spaResetPasswordSubmit 消费一次性重置令牌并设置新密码（POST /api/v1/auth/reset-password）。
+// resetPasswordSubmit 消费一次性重置令牌并设置新密码（POST /api/v1/auth/reset-password）。
 //
 // 令牌只由服务端签发并只存摘要，消费是条件更新（一次性）；密码不合规时令牌已被消费——这是刻意的，
 // 与 SSR 一致：一次性令牌用掉即废，用户重新走一次「忘记密码」即可，不留可反复尝试的窗口。
 // 改密码的密钥作废由 SetPasswordFromResetTx 承担；审计行与 SSR 完全相同。
-func (s *Server) spaResetPasswordSubmit(c *gin.Context) {
+func (s *Server) resetPasswordSubmit(c *gin.Context) {
 	var req apiResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
@@ -177,9 +177,9 @@ type apiTokenOnlyRequest struct {
 	Token string `json:"token"`
 }
 
-// spaVerifyEmailSubmit 消费邮箱验证令牌并标记邮箱已验证（POST /api/v1/auth/verify-email）。
+// verifyEmailSubmit 消费邮箱验证令牌并标记邮箱已验证（POST /api/v1/auth/verify-email）。
 // 令牌语义与 SSR 的 verifyEmail 完全一致：一次性、有过期；成功写审计，失败返回稳定 code。
-func (s *Server) spaVerifyEmailSubmit(c *gin.Context) {
+func (s *Server) verifyEmailSubmit(c *gin.Context) {
 	var req apiTokenOnlyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
@@ -206,9 +206,9 @@ func (s *Server) spaVerifyEmailSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"verified": true})
 }
 
-// spaConfirmEmailChangeSubmit 消费改邮箱令牌并真正更新邮箱（POST /api/v1/auth/confirm-email-change）。
+// confirmEmailChangeSubmit 消费改邮箱令牌并真正更新邮箱（POST /api/v1/auth/confirm-email-change）。
 // 令牌 Payload 保存待确认的新邮箱；确认成功写审计，新邮箱冲突返回 409（与 SSR 一致）。
-func (s *Server) spaConfirmEmailChangeSubmit(c *gin.Context) {
+func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 	var req apiTokenOnlyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
@@ -243,10 +243,10 @@ func (s *Server) spaConfirmEmailChangeSubmit(c *gin.Context) {
 
 // ── JSON 端点（会话）────────────────────────────────────────────────────────
 
-// spaEmailSettingsGet 返回当前用户的邮箱、验证状态与站点邮件是否可用（GET /api/v1/settings/email）。
-// 仅接受浏览器会话；会话缺失时由 spaProfileSessionOnly 返回 401。绝不返回任何其它用户数据。
-func (s *Server) spaEmailSettingsGet(c *gin.Context) {
-	user, ok := s.spaProfileSessionOnly(c)
+// emailSettingsGet 返回当前用户的邮箱、验证状态与站点邮件是否可用（GET /api/v1/settings/email）。
+// 仅接受浏览器会话；会话缺失时由 profileSessionOnly 返回 401。绝不返回任何其它用户数据。
+func (s *Server) emailSettingsGet(c *gin.Context) {
+	user, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
@@ -268,12 +268,12 @@ type apiEmailChangeRequest struct {
 	Email string `json:"email"`
 }
 
-// spaEmailChangeSubmit 提交改邮箱请求（POST /api/v1/settings/email）：向新地址发确认信，确认前不改库。
+// emailChangeSubmit 提交改邮箱请求（POST /api/v1/settings/email）：向新地址发确认信，确认前不改库。
 //
 // SMTP 未配置、格式非法、与原邮箱相同、已被占用都拒绝且
 // 不写库；成功只入队确认信并写审计（ActionUserEmailChangeRequest），库中的邮箱在点击确认链接前不变。
-func (s *Server) spaEmailChangeSubmit(c *gin.Context) {
-	user, ok := s.spaProfileSessionOnly(c)
+func (s *Server) emailChangeSubmit(c *gin.Context) {
+	user, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
@@ -318,10 +318,10 @@ func (s *Server) spaEmailChangeSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sent": true})
 }
 
-// spaResendVerificationSubmit 重发邮箱验证邮件（POST /api/v1/settings/verify-email，登录用户）。
+// resendVerificationSubmit 重发邮箱验证邮件（POST /api/v1/settings/verify-email，登录用户）。
 // 语言跟随用户自己的设置（sendEmailVerification → userLocalizer），审计行与 SSR 完全相同。
-func (s *Server) spaResendVerificationSubmit(c *gin.Context) {
-	user, ok := s.spaProfileSessionOnly(c)
+func (s *Server) resendVerificationSubmit(c *gin.Context) {
+	user, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}

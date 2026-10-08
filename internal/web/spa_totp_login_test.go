@@ -24,9 +24,9 @@ import (
 // 时间步注意：Confirm 会记录「已接受的最大时间步」（与登录同规），因此启用后必须用
 // 下一步的码登录——夹具统一用 time.Now().Add(totpPeriod*time.Second)（既有 TOTP 测试同法）。
 
-// spaTOTPJSONLogin 走 SPA 的 JSON 登录（POST /api/v1/auth/login），返回响应与前后的 cookie。
+// totpJSONLogin 走 SPA 的 JSON 登录（POST /api/v1/auth/login），返回响应与前后的 cookie。
 // 第一因素通过但账号启用 TOTP 时，服务端下发第二步凭据 cookie 并返回 requires_totp=true。
-func spaTOTPJSONLogin(t *testing.T, srv *Server, username, password string) (*httptest.ResponseRecorder, *http.Cookie, *http.Cookie) {
+func totpJSONLogin(t *testing.T, srv *Server, username, password string) (*httptest.ResponseRecorder, *http.Cookie, *http.Cookie) {
 	t.Helper()
 	initRec := get(t, srv, "/api/v1/auth/session", nil)
 	doubleCookie := findCookie(initRec, auth.CSRFDoubleSubmitCookieName)
@@ -61,13 +61,13 @@ func postTOTPJSON(t *testing.T, srv *Server, code string, cookies []*http.Cookie
 	return postJSON(srv, "/api/v1/auth/totp", map[string]string{"code": code}, all, headers)
 }
 
-// TestSPATOTPLoginPendingReflectsChallengeState 断言 pending 只反映「是否持有有效的第二步凭据」，
+// TestTOTPLoginPendingReflectsChallengeState 断言 pending 只反映「是否持有有效的第二步凭据」，
 // 且匿名请求永远得到 false（不泄露任何账号是否启用 TOTP）。
-func TestSPATOTPLoginPendingReflectsChallengeState(t *testing.T) {
+func TestTOTPLoginPendingReflectsChallengeState(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
-	cookies, csrf := spaTOTPLogin(t, srv, db)
-	_ = spaTOTPEnable(t, srv, cookies, csrf)
+	cookies, csrf := totpLogin(t, srv, db)
+	_ = totpEnable(t, srv, cookies, csrf)
 
 	// 匿名：没有凭据，且响应体里不出现任何 TOTP 材料。
 	anon := getWithCookies(t, srv, "/api/v1/auth/totp", nil)
@@ -86,7 +86,7 @@ func TestSPATOTPLoginPendingReflectsChallengeState(t *testing.T) {
 	}
 
 	// 第一因素通过后才下发凭据：此后 pending=true。
-	loginRec, _, pendingCookie := spaTOTPJSONLogin(t, srv, "admin", "Sup3rSecret!")
+	loginRec, _, pendingCookie := totpJSONLogin(t, srv, "admin", "Sup3rSecret!")
 	if loginRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/auth/login = %d, want 200 (body %s)", loginRec.Code, snippet(loginRec.Body.String()))
 	}
@@ -113,15 +113,15 @@ func TestSPATOTPLoginPendingReflectsChallengeState(t *testing.T) {
 	assertNoTOTPSecret(t, withChallenge.Body.String())
 }
 
-// TestSPATOTPLoginSecondStepIssuesSession 覆盖：错误码被拒且留痕、正确码签发会话、
+// TestTOTPLoginSecondStepIssuesSession 覆盖：错误码被拒且留痕、正确码签发会话、
 // 凭据被清理、会话 cookie 立即可用。
-func TestSPATOTPLoginSecondStepIssuesSession(t *testing.T) {
+func TestTOTPLoginSecondStepIssuesSession(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
-	cookies, csrf := spaTOTPLogin(t, srv, db)
-	secret := spaTOTPEnable(t, srv, cookies, csrf)
+	cookies, csrf := totpLogin(t, srv, db)
+	secret := totpEnable(t, srv, cookies, csrf)
 
-	_, _, pendingCookie := spaTOTPJSONLogin(t, srv, "admin", "Sup3rSecret!")
+	_, _, pendingCookie := totpJSONLogin(t, srv, "admin", "Sup3rSecret!")
 	if pendingCookie == nil {
 		t.Fatal("login did not set the second-factor pending cookie")
 	}
@@ -193,14 +193,14 @@ func TestSPATOTPLoginSecondStepIssuesSession(t *testing.T) {
 	}
 }
 
-// TestSPATOTPLoginSecondStepGuards 覆盖两条拒绝路径：缺少双提交 token、以及没有第二步凭据。
-func TestSPATOTPLoginSecondStepGuards(t *testing.T) {
+// TestTOTPLoginSecondStepGuards 覆盖两条拒绝路径：缺少双提交 token、以及没有第二步凭据。
+func TestTOTPLoginSecondStepGuards(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
-	cookies, csrf := spaTOTPLogin(t, srv, db)
-	_ = spaTOTPEnable(t, srv, cookies, csrf)
+	cookies, csrf := totpLogin(t, srv, db)
+	_ = totpEnable(t, srv, cookies, csrf)
 
-	_, _, pendingCookie := spaTOTPJSONLogin(t, srv, "admin", "Sup3rSecret!")
+	_, _, pendingCookie := totpJSONLogin(t, srv, "admin", "Sup3rSecret!")
 	if pendingCookie == nil {
 		t.Fatal("login did not set the second-factor pending cookie")
 	}
@@ -227,9 +227,9 @@ func TestSPATOTPLoginSecondStepGuards(t *testing.T) {
 	}
 }
 
-// TestSPATOTPLoginShellServesAppShell 断言 GET /spa/login/totp 返回应用壳并下发双提交 cookie，
+// TestTOTPLoginShellServesAppShell 断言 GET /spa/login/totp 返回应用壳并下发双提交 cookie，
 // 且第二步不再有 SSR 表单端点：POST /login/totp 未注册，落到 NoRoute（非 GET 一律 404）。
-func TestSPATOTPLoginShellServesAppShell(t *testing.T) {
+func TestTOTPLoginShellServesAppShell(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	rec := get(t, srv, "/spa/login/totp", nil)
 	if rec.Code != http.StatusOK {

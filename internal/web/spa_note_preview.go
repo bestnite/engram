@@ -11,38 +11,38 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-type spaNotePreviewRequest struct {
+type notePreviewRequest struct {
 	Kind   string         `json:"kind"`
 	Fields map[string]any `json:"fields"`
 }
 
-// spaNotePreview 只返回 internal/render 清洗过的卡面 HTML。
-func (s *Server) spaNotePreview(c *gin.Context) {
+// notePreview 只返回 internal/render 清洗过的卡面 HTML。
+func (s *Server) notePreview(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
 	user, ok := auth.CurrentUser(c)
 	if !ok || user.Status != store.StatusActive {
-		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
 	deckID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || deckID == 0 {
-		writeSPARenderError(c, http.StatusNotFound, api.CodeNotFound)
+		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
 		return
 	}
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
-	var req spaNotePreviewRequest
+	var req notePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Fields == nil {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	preview := s.buildPreview(loc, req.Kind, req.Fields)
 	if preview.Error != "" || len(preview.Cards) == 0 {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	result := make([]gin.H, 0, len(preview.Cards))
@@ -52,7 +52,7 @@ func (s *Server) spaNotePreview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"cards": result})
 }
 
-func writeSPARenderError(c *gin.Context, status int, code string) {
+func writeRenderError(c *gin.Context, status int, code string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{
 		"code": code, "message": api.ErrorMessage(c.Request.Context(), code),
 	}})

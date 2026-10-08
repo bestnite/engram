@@ -52,9 +52,9 @@ func countUsersByEmail(t *testing.T, srv *Server, email string) int64 {
 	return n
 }
 
-// TestSPARegisterShellServesAppAndInitializesDoubleSubmitCookie 断言 GET /spa/register
+// TestRegisterShellServesAppAndInitializesDoubleSubmitCookie 断言 GET /spa/register
 // 返回应用壳并下发会话前双提交 cookie，但不建立会话、不渲染 SSR 表单。
-func TestSPARegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
+func TestRegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
 	rec := get(t, srv, "/spa/register", nil)
@@ -86,9 +86,9 @@ func TestSPARegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T)
 	}
 }
 
-// TestSPASetupShellAvailability 断言 GET /spa/setup 只在没有活跃管理员时返回应用壳，
+// TestSetupShellAvailability 断言 GET /spa/setup 只在没有活跃管理员时返回应用壳，
 // 已存在管理员时返回 404（与 SSR 的一次性管理员门一致）。
-func TestSPASetupShellAvailability(t *testing.T) {
+func TestSetupShellAvailability(t *testing.T) {
 	// 首启窗口：没有管理员，可达，下发双提交 cookie。
 	fresh, _ := newAuthServer(t)
 	rec := get(t, fresh, "/spa/setup", nil)
@@ -114,9 +114,9 @@ func TestSPASetupShellAvailability(t *testing.T) {
 	}
 }
 
-// TestSPARegisterAPI_CSRFRejections 断言注册 JSON 端点复用会话前双提交中间件：
+// TestRegisterAPI_CSRFRejections 断言注册 JSON 端点复用会话前双提交中间件：
 // 缺 cookie、缺镜像 token、值不匹配一律 403 csrf_failed，且不建号。
-func TestSPARegisterAPI_CSRFRejections(t *testing.T) {
+func TestRegisterAPI_CSRFRejections(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	seedAdminUser(t, srv)
 	writeSetting(t, srv.db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "open")))
@@ -150,9 +150,9 @@ func TestSPARegisterAPI_CSRFRejections(t *testing.T) {
 	}
 }
 
-// TestSPARegisterAPI_PolicyMatrix 断言 JSON 注册端点与 SSR 走同一套策略判定：
+// TestRegisterAPI_PolicyMatrix 断言 JSON 注册端点与 SSR 走同一套策略判定：
 // open 放行、closed 拒绝、invite 无令牌拒绝、白名单不匹配拒绝。
-func TestSPARegisterAPI_PolicyMatrix(t *testing.T) {
+func TestRegisterAPI_PolicyMatrix(t *testing.T) {
 	cases := []struct {
 		name       string
 		policy     string
@@ -202,9 +202,9 @@ func TestSPARegisterAPI_PolicyMatrix(t *testing.T) {
 	}
 }
 
-// TestSPARegisterAPI_SuccessIssuesNoSession 断言注册成功只返回 created=true，
+// TestRegisterAPI_SuccessIssuesNoSession 断言注册成功只返回 created=true，
 // 不签发会话 cookie（与 SSR 注册后跳转登录一致）。
-func TestSPARegisterAPI_SuccessIssuesNoSession(t *testing.T) {
+func TestRegisterAPI_SuccessIssuesNoSession(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "open")))
@@ -234,9 +234,9 @@ func TestSPARegisterAPI_SuccessIssuesNoSession(t *testing.T) {
 	}
 }
 
-// TestSPARegisterAPI_Invite 断言邀请路径与 SSR 一致：有效邀请建号一次并占用 token，
+// TestRegisterAPI_Invite 断言邀请路径与 SSR 一致：有效邀请建号一次并占用 token，
 // 复用同一 token 返回 403 invite_invalid，且不产生第二个用户。
-func TestSPARegisterAPI_Invite(t *testing.T) {
+func TestRegisterAPI_Invite(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "invite")))
@@ -275,8 +275,8 @@ func TestSPARegisterAPI_Invite(t *testing.T) {
 	}
 }
 
-// TestSPARegisterAPI_Validation 断言表单级校验返回稳定 code 且不建号。
-func TestSPARegisterAPI_Validation(t *testing.T) {
+// TestRegisterAPI_Validation 断言表单级校验返回稳定 code 且不建号。
+func TestRegisterAPI_Validation(t *testing.T) {
 	cases := []struct {
 		name     string
 		body     map[string]string
@@ -306,9 +306,9 @@ func TestSPARegisterAPI_Validation(t *testing.T) {
 	}
 }
 
-// TestSPASetupAPI_CreatesFirstAdminAndCloses 断言引导 JSON 端点在没有管理员时创建管理员，
+// TestSetupAPI_CreatesFirstAdminAndCloses 断言引导 JSON 端点在没有管理员时创建管理员，
 // 之后同一端点 404（一次性管理员门），且成功不签发会话 cookie。
-func TestSPASetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
+func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	cookie, headers := preSessionPair(t, srv, "/spa/setup")
 
@@ -341,9 +341,9 @@ func TestSPASetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 	}
 }
 
-// TestSPASetupAPI_BootstrapEmailFallback 断言请求未填邮箱时采用 BOOTSTRAP_ADMIN_EMAIL，
+// TestSetupAPI_BootstrapEmailFallback 断言请求未填邮箱时采用 BOOTSTRAP_ADMIN_EMAIL，
 // 兜底行为与引导页的应用壳入口一致。
-func TestSPASetupAPI_BootstrapEmailFallback(t *testing.T) {
+func TestSetupAPI_BootstrapEmailFallback(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	srv.bootstrapEmail = "boot@example.com"
 	cookie, headers := preSessionPair(t, srv, "/spa/setup")
@@ -359,8 +359,8 @@ func TestSPASetupAPI_BootstrapEmailFallback(t *testing.T) {
 	}
 }
 
-// TestSPASetupAPI_CSRFRejection 断言引导 JSON 端点同样强制会话前双提交 CSRF。
-func TestSPASetupAPI_CSRFRejection(t *testing.T) {
+// TestSetupAPI_CSRFRejection 断言引导 JSON 端点同样强制会话前双提交 CSRF。
+func TestSetupAPI_CSRFRejection(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	rec := postJSON(srv, "/api/v1/auth/setup", map[string]string{
 		"username": "root", "email": "root@example.com", "password": "Sup3rSecret!",

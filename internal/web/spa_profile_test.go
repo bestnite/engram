@@ -34,13 +34,13 @@ func patchProfile(t *testing.T, srv *Server, path string, body any, cookies []*h
 	return rec
 }
 
-func TestSPAProfilePersistence(t *testing.T) {
+func TestProfilePersistence(t *testing.T) {
 	srv, db, userID, cookies, csrf := newNotesServer(t)
 	initial := getWithCookies(t, srv, "/api/v1/profile", cookies)
 	if initial.Code != http.StatusOK {
 		t.Fatalf("GET profile = %d, want 200: %s", initial.Code, initial.Body.String())
 	}
-	var before spaProfilePayload
+	var before profilePayload
 	if err := json.Unmarshal(initial.Body.Bytes(), &before); err != nil {
 		t.Fatal(err)
 	}
@@ -49,12 +49,12 @@ func TestSPAProfilePersistence(t *testing.T) {
 	}
 
 	cutoff := 0
-	updated := spaProfileRequest{DisplayName: "Updated Name", Locale: "en", Timezone: "Asia/Tokyo", DayCutoffHour: &cutoff}
+	updated := profileRequest{DisplayName: "Updated Name", Locale: "en", Timezone: "Asia/Tokyo", DayCutoffHour: &cutoff}
 	patch := patchProfile(t, srv, "/api/v1/profile", updated, cookies, csrf, "")
 	if patch.Code != http.StatusOK {
 		t.Fatalf("PATCH profile = %d, want 200: %s", patch.Code, patch.Body.String())
 	}
-	var result spaProfilePayload
+	var result profilePayload
 	if err := json.Unmarshal(patch.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestSPAProfilePersistence(t *testing.T) {
 	if rec := patchProfile(t, srv, "/api/v1/profile", updated, cookies, csrf, ""); rec.Code != http.StatusOK {
 		t.Fatalf("PATCH unchanged profile = %d: %s", rec.Code, rec.Body.String())
 	}
-	locale := patchProfile(t, srv, "/api/v1/settings/locale", spaLocaleRequest{Locale: "en"}, cookies, csrf, "")
+	locale := patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "en"}, cookies, csrf, "")
 	var localeResponse struct {
 		Locale string `json:"locale"`
 	}
@@ -88,7 +88,7 @@ func TestSPAProfilePersistence(t *testing.T) {
 		t.Fatalf("profile audit rows = (%d, %v), want 1", count, err)
 	}
 
-	locale = patchProfile(t, srv, "/api/v1/settings/locale", spaLocaleRequest{Locale: "zh-CN"}, cookies, csrf, "")
+	locale = patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "zh-CN"}, cookies, csrf, "")
 	if locale.Code != http.StatusOK {
 		t.Fatalf("PATCH locale = %d, want 200: %s", locale.Code, locale.Body.String())
 	}
@@ -101,9 +101,9 @@ func TestSPAProfilePersistence(t *testing.T) {
 	}
 }
 
-func TestSPAProfileAuthorizationAndValidation(t *testing.T) {
+func TestProfileAuthorizationAndValidation(t *testing.T) {
 	srv, db, userID, cookies, csrf := newNotesServer(t)
-	valid := spaProfileRequest{DisplayName: "Changed", Locale: "en", Timezone: "UTC"}
+	valid := profileRequest{DisplayName: "Changed", Locale: "en", Timezone: "UTC"}
 
 	if rec := get(t, srv, "/api/v1/profile", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous GET profile = %d, want 401", rec.Code)
@@ -117,7 +117,7 @@ func TestSPAProfileAuthorizationAndValidation(t *testing.T) {
 	if rec := patchProfile(t, srv, "/api/v1/profile", valid, cookies, "invalid", ""); rec.Code != http.StatusForbidden {
 		t.Errorf("bad CSRF PATCH profile = %d, want 403", rec.Code)
 	}
-	if rec := patchProfile(t, srv, "/api/v1/settings/locale", spaLocaleRequest{Locale: "en"}, cookies, "", ""); rec.Code != http.StatusForbidden {
+	if rec := patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "en"}, cookies, "", ""); rec.Code != http.StatusForbidden {
 		t.Errorf("missing CSRF PATCH locale = %d, want 403", rec.Code)
 	}
 
@@ -141,12 +141,12 @@ func TestSPAProfileAuthorizationAndValidation(t *testing.T) {
 	badCutoff := 24
 	cases := []struct {
 		name string
-		body spaProfileRequest
+		body profileRequest
 	}{
-		{"empty display name", spaProfileRequest{DisplayName: "  ", Locale: "en", Timezone: "UTC"}},
-		{"unsupported locale", spaProfileRequest{DisplayName: "Name", Locale: "fr", Timezone: "UTC"}},
-		{"invalid timezone", spaProfileRequest{DisplayName: "Name", Locale: "en", Timezone: "No/Such_Zone"}},
-		{"cutoff above range", spaProfileRequest{DisplayName: "Name", Locale: "en", Timezone: "UTC", DayCutoffHour: &badCutoff}},
+		{"empty display name", profileRequest{DisplayName: "  ", Locale: "en", Timezone: "UTC"}},
+		{"unsupported locale", profileRequest{DisplayName: "Name", Locale: "fr", Timezone: "UTC"}},
+		{"invalid timezone", profileRequest{DisplayName: "Name", Locale: "en", Timezone: "No/Such_Zone"}},
+		{"cutoff above range", profileRequest{DisplayName: "Name", Locale: "en", Timezone: "UTC", DayCutoffHour: &badCutoff}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -156,7 +156,7 @@ func TestSPAProfileAuthorizationAndValidation(t *testing.T) {
 			}
 		})
 	}
-	if rec := patchProfile(t, srv, "/api/v1/settings/locale", spaLocaleRequest{Locale: "fr"}, cookies, csrf, ""); rec.Code != http.StatusBadRequest {
+	if rec := patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "fr"}, cookies, csrf, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("unsupported locale PATCH = %d, want 400", rec.Code)
 	}
 	stored, err := store.NewUserStore(db).ByID(context.Background(), userID)
@@ -171,7 +171,7 @@ func TestSPAProfileAuthorizationAndValidation(t *testing.T) {
 	}
 }
 
-func TestSPAProfileRejectsDisabledSessionUser(t *testing.T) {
+func TestProfileRejectsDisabledSessionUser(t *testing.T) {
 	srv, db, userID, cookies, _ := newNotesServer(t)
 	if err := store.NewUserStore(db).SetStatus(context.Background(), userID, store.StatusDisabled); err != nil {
 		t.Fatal(err)

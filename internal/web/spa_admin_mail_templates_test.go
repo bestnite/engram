@@ -14,10 +14,10 @@ import (
 // 本文件是管理面板「邮件模板」的验收：切流、读取、保存校验、
 // 删除回退、预览的零副作用，以及缺 CSRF 的负例。
 
-// TestSPAAdminMailTemplatePagesCutover 断言页面走 SPA 外壳，且非管理员拿 403。
-func TestSPAAdminMailTemplatePagesCutover(t *testing.T) {
+// TestAdminMailTemplatePagesCutover 断言页面走 SPA 外壳，且非管理员拿 403。
+func TestAdminMailTemplatePagesCutover(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
-	assertServesSPAShell(t, getWithCookies(t, srv, "/admin/mail-templates", cookies), "GET /admin/mail-templates")
+	assertServesShell(t, getWithCookies(t, srv, "/admin/mail-templates", cookies), "GET /admin/mail-templates")
 
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "tpl_stranger")
 	if rec := getWithCookies(t, srv, "/admin/mail-templates", strangerCookies); rec.Code != http.StatusForbidden {
@@ -25,12 +25,12 @@ func TestSPAAdminMailTemplatePagesCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAdminMailTemplatesShipTheBuiltinDefaults 断言列表响应带回每个类型 × 每种语言的
+// TestAdminMailTemplatesShipTheBuiltinDefaults 断言列表响应带回每个类型 × 每种语言的
 // **内置正文**，且它就是编辑框预填的那一份。
 //
 // 这条链之所以要端到端钉住：管理页显示的「默认」如果和发信方兜底不是同一份文本，管理员会
 // 以为自己改的是默认，实际改的是另一个东西——而页面上看不出任何异常。
-func TestSPAAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
+func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 
 	rec := getJSON(t, srv, "/api/v1/admin/mail-templates", cookies, nil)
@@ -41,7 +41,7 @@ func TestSPAAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	if len(list.Defaults) == 0 {
 		t.Fatal("defaults is empty, want one entry per type and locale")
 	}
-	byKey := map[string]spaMailTemplateDefault{}
+	byKey := map[string]mailTemplateDefault{}
 	for _, d := range list.Defaults {
 		byKey[d.Type+"|"+d.Locale] = d
 	}
@@ -78,7 +78,7 @@ func TestSPAAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 		t.Fatalf("PUT = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	after := decodeMailTemplates(t, getJSON(t, srv, "/api/v1/admin/mail-templates", cookies, nil).Body.Bytes())
-	var again spaMailTemplateDefault
+	var again mailTemplateDefault
 	for _, d := range after.Defaults {
 		if d.Type == "password_reset" && d.Locale == "zh-CN" {
 			again = d
@@ -91,17 +91,17 @@ func TestSPAAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 }
 
 // decodeMailTemplates 解析列表响应。
-func decodeMailTemplates(t *testing.T, body []byte) spaMailTemplatesResponse {
+func decodeMailTemplates(t *testing.T, body []byte) mailTemplatesResponse {
 	t.Helper()
-	var out spaMailTemplatesResponse
+	var out mailTemplatesResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("decode mail templates: %v", err)
 	}
 	return out
 }
 
-// TestSPAAdminMailTemplatesReadSaveDelete 覆盖读取、校验、落库、审计与删除回退。
-func TestSPAAdminMailTemplatesReadSaveDelete(t *testing.T) {
+// TestAdminMailTemplatesReadSaveDelete 覆盖读取、校验、落库、审计与删除回退。
+func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 
@@ -206,15 +206,15 @@ func TestSPAAdminMailTemplatesReadSaveDelete(t *testing.T) {
 	}
 }
 
-// TestSPAAdminMailTemplatePreviewRendersAndWritesNothing 断言预览渲染样例并零副作用。
-func TestSPAAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
+// TestAdminMailTemplatePreviewRendersAndWritesNothing 断言预览渲染样例并零副作用。
+func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/admin/mail-templates/preview",
 		`{"type":"password_reset","locale":"en","subject":"Reset for {{site}}","body_md":"**Hi** {{url}}"}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var out spaMailTemplatePreviewResponse
+	var out mailTemplatePreviewResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
@@ -232,9 +232,9 @@ func TestSPAAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	}
 }
 
-// TestSPAAdminMailTemplatesRequireCSRF 是必测负例：缺 CSRF 的写路径 403 且零副作用。
+// TestAdminMailTemplatesRequireCSRF 是必测负例：缺 CSRF 的写路径 403 且零副作用。
 // 新增写路径必须同时进这张表，否则这条路径不在任何负例覆盖之内。
-func TestSPAAdminMailTemplatesRequireCSRF(t *testing.T) {
+func TestAdminMailTemplatesRequireCSRF(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
 	for _, target := range []struct{ method, path, body string }{
 		{http.MethodPut, "/api/v1/admin/mail-templates/password_reset/en", `{"subject":"s","body_md":"{{url}} {{expires}}"}`},

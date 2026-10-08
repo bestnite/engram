@@ -27,14 +27,14 @@ func ssrSharingMarker(deckID uint64) string {
 	return `action="/decks/` + u64str(deckID) + `/sharing/grant"`
 }
 
-// TestSharingRouteServesSPAShellForOwner 断言 owner 访问 GET /decks/:id/sharing 得到 SPA 应用壳，
+// TestSharingRouteServesShellForOwner 断言 owner 访问 GET /decks/:id/sharing 得到 SPA 应用壳，
 // 由客户端路由渲染共享管理页，不再渲染 SSR 共享页。
-func TestSharingRouteServesSPAShellForOwner(t *testing.T) {
+func TestSharingRouteServesShellForOwner(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Sharing shell deck")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/sharing", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), ssrSharingMarker(deck.ID)) {
 		t.Errorf("GET sharing still renders the SSR page: %s", snippet(rec.Body.String()))
 	}
@@ -219,9 +219,9 @@ func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 	}
 }
 
-// TestShareLinkBrowseServesSPAShell 把边界钉死：GET /s/:token 返回应用壳，由客户端路由渲染；
+// TestShareLinkBrowseServesShell 把边界钉死：GET /s/:token 返回应用壳，由客户端路由渲染；
 // 可达性（撤销/过期/不存在 404）仍由服务端在切壳之前判定。
-func TestShareLinkBrowseServesSPAShell(t *testing.T) {
+func TestShareLinkBrowseServesShell(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Public share shell deck")
 	seedBasic(t, db, deck.ID, "公开正面", "公开背面")

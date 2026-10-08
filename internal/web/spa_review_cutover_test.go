@@ -22,8 +22,8 @@ import (
 //
 // 评分与动作写路径是 /api/v1/review/answer、/grade、/bury、/render，各自有既有测试覆盖。
 
-// spaQueueBody 是复习队列响应的对外形态（埋藏与渲染入口共用的最小字段）。
-type spaQueueBody struct {
+// queueBody 是复习队列响应的对外形态（埋藏与渲染入口共用的最小字段）。
+type queueBody struct {
 	CardID    uint64 `json:"card_id"`
 	Remaining int    `json:"remaining"`
 	Cards     []struct {
@@ -32,18 +32,18 @@ type spaQueueBody struct {
 	} `json:"cards"`
 }
 
-// spaRenderBody 是卡面渲染响应的对外形态。
-type spaRenderBody struct {
+// reviewRenderBody 是卡面渲染响应的对外形态。
+type reviewRenderBody struct {
 	CardID    uint64 `json:"card_id"`
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
 	EditHref  string `json:"edit_href"`
 }
 
-// TestReviewRouteServesSPAShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由
+// TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由
 // 渲染复习页，不再渲染 SSR 复习页（SSR 的 #review-area 与四档按钮必须消失）。
 // 卡组范围参数同样接受：/review?deck=A&deck=B 返回的仍是应用壳。
-func TestReviewRouteServesSPAShell(t *testing.T) {
+func TestReviewRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Review shell deck")
 	seedBasic(t, db, deck.ID, "Q", "A")
@@ -54,7 +54,7 @@ func TestReviewRouteServesSPAShell(t *testing.T) {
 		"/review?deck=" + u64str(deck.ID) + "&deck=" + u64str(deck.ID),
 	} {
 		rec := getWithCookies(t, srv, path, cookies)
-		assertSPAShell(t, rec)
+		assertShell(t, rec)
 		if strings.Contains(rec.Body.String(), `id="review-area"`) {
 			t.Errorf("GET %s still renders the SSR review page: %s", path, snippet(rec.Body.String()))
 		}
@@ -108,9 +108,9 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	}
 }
 
-// TestSPAReviewBuryRequiresCSRFAndReader 断言埋藏端点的拒绝路径：无会话 401、缺/错 CSRF 403、
+// TestReviewBuryRequiresCSRFAndReader 断言埋藏端点的拒绝路径：无会话 401、缺/错 CSRF 403、
 // 读不到卡组的陌生用户 4xx、卡不在所选范围内 400；任一拒绝都不得写 card_states。
-func TestSPAReviewBuryRequiresCSRFAndReader(t *testing.T) {
+func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Bury guard deck")
 	other := seedReviewDeck(t, db, ownerID, "Bury other deck")
@@ -119,24 +119,24 @@ func TestSPAReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	valid := map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}
 
 	// 无会话。
-	anon := postSPAJSON(t, srv, "/api/v1/review/bury", valid, nil, "")
+	anon := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, nil, "")
 	if anon.Code != http.StatusForbidden {
 		t.Fatalf("bury without session = %d, want 403 (body %s)", anon.Code, snippet(anon.Body.String()))
 	}
 	// 缺 CSRF 与错 CSRF。
-	if rec := postSPAJSON(t, srv, "/api/v1/review/bury", valid, cookies, ""); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("bury without CSRF = %d, want 403", rec.Code)
 	}
-	if rec := postSPAJSON(t, srv, "/api/v1/review/bury", valid, cookies, "not-the-token"); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, cookies, "not-the-token"); rec.Code != http.StatusForbidden {
 		t.Errorf("bury with bad CSRF = %d, want 403", rec.Code)
 	}
 	// 卡不在所选范围内。
-	if rec := postSPAJSON(t, srv, "/api/v1/review/bury", map[string]any{"card_id": cardID, "deck": []uint64{other.ID}}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{"card_id": cardID, "deck": []uint64{other.ID}}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("bury out-of-scope card = %d, want 400", rec.Code)
 	}
 	// 陌生用户即使拿到卡片 id 也读不到卡组。
 	_, outsiderCookies, outsiderCSRF := createUserAndLogin(t, srv, db, "bury-outsider")
-	if rec := postSPAJSON(t, srv, "/api/v1/review/bury", valid, outsiderCookies, outsiderCSRF); rec.Code < 400 || rec.Code >= 500 {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, outsiderCookies, outsiderCSRF); rec.Code < 400 || rec.Code >= 500 {
 		t.Errorf("bury by outsider = %d, want 4xx", rec.Code)
 	}
 
@@ -147,9 +147,9 @@ func TestSPAReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	}
 }
 
-// TestSPAReviewBuryDefersCardAndKeepsScope 断言埋藏的核心行为：reader 及以上可埋藏本人进度，
+// TestReviewBuryDefersCardAndKeepsScope 断言埋藏的核心行为：reader 及以上可埋藏本人进度，
 // 埋藏把到期日推到下一个复习日（当天队列少一张），响应带同范围重建后的队列，且跨卡组范围不退化。
-func TestSPAReviewBuryDefersCardAndKeepsScope(t *testing.T) {
+func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deckA := seedReviewDeck(t, db, ownerID, "Bury deck A")
 	deckB := seedReviewDeck(t, db, ownerID, "Bury deck B")
@@ -158,13 +158,13 @@ func TestSPAReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	cardA := cardIDOfNote(t, db, noteA.ID)
 
 	// 多卡组范围：埋藏 A 卡后队列应只剩 B 卡，范围仍是 A∪B。
-	rec := postSPAJSON(t, srv, "/api/v1/review/bury", map[string]any{
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{
 		"card_id": cardA, "deck": []uint64{deckA.ID, deckB.ID},
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("bury = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var body spaQueueBody
+	var body queueBody
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode bury response: %v (body %s)", err, snippet(rec.Body.String()))
 	}
@@ -202,9 +202,9 @@ func TestSPAReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	}
 }
 
-// TestSPAReviewRenderReturnsSanitizedHTML 断言卡面渲染端点返回服务端清洗后的 HTML：脚本与
+// TestReviewRenderReturnsSanitizedHTML 断言卡面渲染端点返回服务端清洗后的 HTML：脚本与
 // 事件属性被去掉、合法内容保留、edit_href 指向卡片编辑页；缺会话/CSRF 与越权范围都被拒绝。
-func TestSPAReviewRenderReturnsSanitizedHTML(t *testing.T) {
+func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Render deck")
 	note := seedBasic(t, db, deck.ID,
@@ -213,18 +213,18 @@ func TestSPAReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	cardID := cardIDOfNote(t, db, note.ID)
 
 	// 拒绝路径。
-	if rec := postSPAJSON(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, nil, ""); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, nil, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("render without session = %d, want 403", rec.Code)
 	}
-	if rec := postSPAJSON(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, cookies, ""); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("render without CSRF = %d, want 403", rec.Code)
 	}
 
-	rec := postSPAJSON(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}, cookies, csrf)
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var body spaRenderBody
+	var body reviewRenderBody
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
 	}

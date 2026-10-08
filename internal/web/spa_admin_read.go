@@ -16,8 +16,8 @@ import (
 // 四项读数，审计检索走 store.AuditStore.Search。响应只带原始值与稳定英文标识，本地化文案
 // 一律由前端语言包按标识映射，因此这里不返回任何本地化文本。
 
-// spaAdminSummaryResponse 是概览页（/admin）的计数卡数据。
-type spaAdminSummaryResponse struct {
+// adminSummaryResponse 是概览页（/admin）的计数卡数据。
+type adminSummaryResponse struct {
 	UsersTotal  int64 `json:"users_total"`
 	UsersActive int64 `json:"users_active"`
 	Decks       int64 `json:"decks"`
@@ -28,25 +28,25 @@ type spaAdminSummaryResponse struct {
 	JobsFailed  int64 `json:"jobs_failed"`
 }
 
-// spaAdminSummary 返回实例级计数。任何一项查询失败整体 500——空实例与查询失败不该同形。
-func (s *Server) spaAdminSummary(c *gin.Context) {
+// adminSummary 返回实例级计数。任何一项查询失败整体 500——空实例与查询失败不该同形。
+func (s *Server) adminSummary(c *gin.Context) {
 	stats, err := store.InstanceSummary(c.Request.Context(), s.db, time.Now().UTC())
 	if err != nil {
 		s.logger.Error("spa admin: instance summary failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, spaAdminSummaryResponse{
+	c.JSON(http.StatusOK, adminSummaryResponse{
 		UsersTotal: stats.Users, UsersActive: stats.ActiveUsers,
 		Decks: stats.Decks, Notes: stats.Notes, Cards: stats.Cards,
 		Due: stats.DueNow, JobsRunning: stats.JobsRunning, JobsFailed: stats.JobsFailed,
 	})
 }
 
-// spaAdminHealthResponse 是健康页的读数。
+// adminHealthResponse 是健康页的读数。
 // schema_version / due 为 null 表示读不出来（与 SSR 的「未知」占位同义）；
 // media_bytes 是原始字节数，前端负责人类可读格式化。
-type spaAdminHealthResponse struct {
+type adminHealthResponse struct {
 	Database       string `json:"database"` // ok | error
 	SchemaVersion  *int   `json:"schema_version"`
 	MediaBytes     int64  `json:"media_bytes"`
@@ -54,10 +54,10 @@ type spaAdminHealthResponse struct {
 	Due            *int64 `json:"due"`
 }
 
-// spaAdminHealth 返回健康页的四项读数，口径与 adminHealthPage 完全相同。
-func (s *Server) spaAdminHealth(c *gin.Context) {
+// adminHealth 返回健康页的四项读数，口径与 adminHealthPage 完全相同。
+func (s *Server) adminHealth(c *gin.Context) {
 	ctx := c.Request.Context()
-	resp := spaAdminHealthResponse{Database: "ok"}
+	resp := adminHealthResponse{Database: "ok"}
 
 	if sqlDB, err := s.db.DB(); err != nil {
 		resp.Database = "error"
@@ -85,40 +85,40 @@ func (s *Server) spaAdminHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// spaAdminAuditActor 是审计行里的操作者；nil 表示系统动作（无 UserID）。
-type spaAdminAuditActor struct {
+// adminAuditActor 是审计行里的操作者；nil 表示系统动作（无 UserID）。
+type adminAuditActor struct {
 	UserID   *uint64 `json:"user_id"`
 	Username string  `json:"username"`
 }
 
-// spaAdminAuditTarget 是审计行里的目标对象；nil 表示无目标。
-type spaAdminAuditTarget struct {
+// adminAuditTarget 是审计行里的目标对象；nil 表示无目标。
+type adminAuditTarget struct {
 	Type string  `json:"type"`
 	ID   *uint64 `json:"id"`
 }
 
-// spaAdminAuditRow 是一行审计记录。时间已按当前管理员时区格式化。
-type spaAdminAuditRow struct {
-	Time   string               `json:"time"`
-	Actor  *spaAdminAuditActor  `json:"actor"`
-	Action string               `json:"action"`
-	Target *spaAdminAuditTarget `json:"target"`
+// adminAuditRow 是一行审计记录。时间已按当前管理员时区格式化。
+type adminAuditRow struct {
+	Time   string            `json:"time"`
+	Actor  *adminAuditActor  `json:"actor"`
+	Action string            `json:"action"`
+	Target *adminAuditTarget `json:"target"`
 	// Detail 为原始 JSON 串；空串表示无详情。
 	Detail string `json:"detail"`
 }
 
-// spaAdminAuditResponse 是审计检索的响应；notice 是稳定英文码（空串表示无提示）。
-type spaAdminAuditResponse struct {
-	Rows    []spaAdminAuditRow `json:"rows"`
-	Actions []string           `json:"actions"`
-	Page    int                `json:"page"`
-	Pages   int                `json:"pages"`
-	Total   int64              `json:"total"`
-	Notice  string             `json:"notice"`
+// adminAuditResponse 是审计检索的响应；notice 是稳定英文码（空串表示无提示）。
+type adminAuditResponse struct {
+	Rows    []adminAuditRow `json:"rows"`
+	Actions []string        `json:"actions"`
+	Page    int             `json:"page"`
+	Pages   int             `json:"pages"`
+	Total   int64           `json:"total"`
+	Notice  string          `json:"notice"`
 }
 
-// spaAdminAudit 返回审计检索结果，过滤与分页语义与 adminAuditPage 完全一致。
-func (s *Server) spaAdminAudit(c *gin.Context) {
+// adminAudit 返回审计检索结果，过滤与分页语义与 adminAuditPage 完全一致。
+func (s *Server) adminAudit(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)
 	userLoc := auditLocation(actor)
@@ -129,7 +129,7 @@ func (s *Server) spaAdminAudit(c *gin.Context) {
 	list, total, err := auditStore.Search(ctx, filter)
 	if err != nil {
 		s.logger.Error("spa admin: search audit log failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	pages := int((total + int64(adminAuditPageSize) - 1) / int64(adminAuditPageSize))
@@ -138,22 +138,22 @@ func (s *Server) spaAdminAudit(c *gin.Context) {
 	}
 
 	names := s.usernamesFor(ctx, list)
-	rows := make([]spaAdminAuditRow, 0, len(list))
+	rows := make([]adminAuditRow, 0, len(list))
 	for i := range list {
 		row := list[i]
-		out := spaAdminAuditRow{
+		out := adminAuditRow{
 			Time:   row.CreatedAt.In(userLoc).Format("2006-01-02 15:04:05"),
 			Action: row.Action,
 		}
 		if row.UserID != nil {
-			actor := &spaAdminAuditActor{UserID: row.UserID}
+			actor := &adminAuditActor{UserID: row.UserID}
 			if name, ok := names[*row.UserID]; ok {
 				actor.Username = name
 			}
 			out.Actor = actor
 		}
 		if row.TargetType != nil && *row.TargetType != "" {
-			out.Target = &spaAdminAuditTarget{Type: *row.TargetType, ID: row.TargetID}
+			out.Target = &adminAuditTarget{Type: *row.TargetType, ID: row.TargetID}
 		}
 		if row.DetailJSON != nil {
 			out.Detail = *row.DetailJSON
@@ -166,7 +166,7 @@ func (s *Server) spaAdminAudit(c *gin.Context) {
 		actions = distinct
 	}
 
-	c.JSON(http.StatusOK, spaAdminAuditResponse{
+	c.JSON(http.StatusOK, adminAuditResponse{
 		Rows: rows, Actions: actions,
 		Page: page, Pages: pages, Total: total,
 		Notice: notice,

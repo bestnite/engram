@@ -19,34 +19,34 @@ import (
 // 与 SSR 页完全同一份解析；口令只回「已配置/未配置」，绝不回显明文。测试连接把服务端的原始
 // 错误文本带进响应，供前端显示失败原因。
 
-// spaAdminOutbox 是 outbox 读数。
-type spaAdminOutbox struct {
+// adminOutbox 是 outbox 读数。
+type adminOutbox struct {
 	Pending      int64  `json:"pending"`
 	Failed       int64  `json:"failed"`
 	LastError    string `json:"last_error"`
 	LastAttempts int    `json:"last_attempts"`
 }
 
-// spaAdminSMTPResponse 是 SMTP 配置页的读取结果；source 取值 db/env/default。
-type spaAdminSMTPResponse struct {
-	Host               string         `json:"host"`
-	HostSource         string         `json:"host_source"`
-	Port               string         `json:"port"`
-	PortSource         string         `json:"port_source"`
-	Username           string         `json:"username"`
-	UsernameSource     string         `json:"username_source"`
-	From               string         `json:"from"`
-	FromSource         string         `json:"from_source"`
-	TLSMode            string         `json:"tls_mode"`
-	PasswordConfigured bool           `json:"password_configured"`
-	PasswordSource     string         `json:"password_source"`
-	Configured         bool           `json:"configured"`
-	Outbox             spaAdminOutbox `json:"outbox"`
-	AdminNotifyReady   bool           `json:"admin_notify_ready"`
+// adminSMTPResponse 是 SMTP 配置页的读取结果；source 取值 db/env/default。
+type adminSMTPResponse struct {
+	Host               string      `json:"host"`
+	HostSource         string      `json:"host_source"`
+	Port               string      `json:"port"`
+	PortSource         string      `json:"port_source"`
+	Username           string      `json:"username"`
+	UsernameSource     string      `json:"username_source"`
+	From               string      `json:"from"`
+	FromSource         string      `json:"from_source"`
+	TLSMode            string      `json:"tls_mode"`
+	PasswordConfigured bool        `json:"password_configured"`
+	PasswordSource     string      `json:"password_source"`
+	Configured         bool        `json:"configured"`
+	Outbox             adminOutbox `json:"outbox"`
+	AdminNotifyReady   bool        `json:"admin_notify_ready"`
 }
 
-// spaAdminSMTPRequest 是保存与测试共用的请求体；空字段表示沿用已保存值。
-type spaAdminSMTPRequest struct {
+// adminSMTPRequest 是保存与测试共用的请求体；空字段表示沿用已保存值。
+type adminSMTPRequest struct {
 	Host     string `json:"host"`
 	Port     string `json:"port"`
 	Username string `json:"username"`
@@ -55,68 +55,68 @@ type spaAdminSMTPRequest struct {
 	Password string `json:"password"`
 }
 
-// spaAdminTestResult 是「测试连接」的响应；ok 为 true 时忽略 message。
-type spaAdminTestResult struct {
+// adminTestResult 是「测试连接」的响应；ok 为 true 时忽略 message。
+type adminTestResult struct {
 	OK      bool   `json:"ok"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// spaAdminSMTP 返回 SMTP 配置与 outbox 读数。
-func (s *Server) spaAdminSMTP(c *gin.Context) {
+// adminSMTP 返回 SMTP 配置与 outbox 读数。
+func (s *Server) adminSMTP(c *gin.Context) {
 	ctx := c.Request.Context()
 	resolver := mail.NewResolver(s.db, s.secrets)
 
 	host, hostSrc, err := resolver.Field(ctx, mail.SettingKeySMTPHost)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp host failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	port, portSrc, err := resolver.Field(ctx, mail.SettingKeySMTPPort)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp port failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	username, usernameSrc, err := resolver.Field(ctx, mail.SettingKeySMTPUsername)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp username failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	from, fromSrc, err := resolver.Field(ctx, mail.SettingKeySMTPFrom)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp from failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	tlsMode, _, err := resolver.Field(ctx, mail.SettingKeySMTPTLSMode)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp tls mode failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	pwConfigured, pwSrc, err := resolver.PasswordConfigured(ctx)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp password status failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	_, configured, err := resolver.Config(ctx)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp config failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	summary, err := store.OutboxSummaryOf(ctx, s.db)
 	if err != nil {
 		s.logger.Error("spa admin: read outbox summary failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 
-	c.JSON(http.StatusOK, spaAdminSMTPResponse{
+	c.JSON(http.StatusOK, adminSMTPResponse{
 		Host: host, HostSource: string(hostSrc),
 		Port: port, PortSource: string(portSrc),
 		Username: username, UsernameSource: string(usernameSrc),
@@ -124,7 +124,7 @@ func (s *Server) spaAdminSMTP(c *gin.Context) {
 		TLSMode:            mail.NormalizeTLSMode(tlsMode),
 		PasswordConfigured: pwConfigured, PasswordSource: string(pwSrc),
 		Configured: configured,
-		Outbox: spaAdminOutbox{
+		Outbox: adminOutbox{
 			Pending: summary.Pending, Failed: summary.Failed,
 			LastError: summary.LastError, LastAttempts: summary.LastAttempts,
 		},
@@ -132,28 +132,28 @@ func (s *Server) spaAdminSMTP(c *gin.Context) {
 	})
 }
 
-// spaAdminSMTPSave 保存 SMTP 配置：非敏感值走 PutSetting，口令走 PutSecret（加密）。
+// adminSMTPSave 保存 SMTP 配置：非敏感值走 PutSetting，口令走 PutSecret（加密）。
 // 校验端口与 TLS 模式，写审计。空字段表示不修改。
-func (s *Server) spaAdminSMTPSave(c *gin.Context) {
+func (s *Server) adminSMTPSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminSMTPRequest
+	var req adminSMTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if raw := strings.TrimSpace(req.Port); raw != "" {
 		if n, err := strconv.Atoi(raw); err != nil || n < 1 || n > 65535 {
-			spaAdminError(c, http.StatusBadRequest, "invalid_port")
+			adminError(c, http.StatusBadRequest, "invalid_port")
 			return
 		}
 	}
 	if raw := strings.TrimSpace(req.TLSMode); raw != "" {
 		if !mail.ValidTLSMode(raw) {
-			spaAdminError(c, http.StatusBadRequest, "invalid_tls_mode")
+			adminError(c, http.StatusBadRequest, "invalid_tls_mode")
 			return
 		}
 	}
@@ -179,7 +179,7 @@ func (s *Server) spaAdminSMTPSave(c *gin.Context) {
 		}
 		if err := store.PutSetting(ctx, s.db, key, raw, store.Ptr(u.ID), now); err != nil {
 			s.logger.Error("spa admin: save smtp setting failed", "key", key, "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		changed = append(changed, key)
@@ -188,7 +188,7 @@ func (s *Server) spaAdminSMTPSave(c *gin.Context) {
 		if pw := req.Password; strings.TrimSpace(pw) != "" {
 			if err := store.PutSecret(ctx, s.db, s.secrets, mail.SettingKeySMTPPassword, pw, store.Ptr(u.ID), now); err != nil {
 				s.logger.Error("spa admin: save smtp password failed", "error", err)
-				spaAdminError(c, http.StatusInternalServerError, "save_failed")
+				adminError(c, http.StatusInternalServerError, "save_failed")
 				return
 			}
 			changed = append(changed, mail.SettingKeySMTPPassword)
@@ -204,17 +204,17 @@ func (s *Server) spaAdminSMTPSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminSMTPTest 用表单值（缺省回落到已保存值）做一次连接与认证握手，
+// adminSMTPTest 用表单值（缺省回落到已保存值）做一次连接与认证握手，
 // 失败时把服务端的原始错误文本带进响应（M1-17 验收点）。
-func (s *Server) spaAdminSMTPTest(c *gin.Context) {
+func (s *Server) adminSMTPTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminSMTPRequest
+	var req adminSMTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	ctx := c.Request.Context()
@@ -222,7 +222,7 @@ func (s *Server) spaAdminSMTPTest(c *gin.Context) {
 	cfg, _, err := resolver.Config(ctx)
 	if err != nil {
 		s.logger.Error("spa admin: resolve smtp config failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	// 表单值覆盖已保存值；留空表示沿用已保存值（口令不回显，只能沿用）。
@@ -247,7 +247,7 @@ func (s *Server) spaAdminSMTPTest(c *gin.Context) {
 		cfg.Password = pw
 	}
 
-	result := spaAdminTestResult{}
+	result := adminTestResult{}
 	if cfg.Host == "" {
 		result.Code = "no_host"
 	} else if terr := mail.TestConnection(ctx, cfg); terr != nil {

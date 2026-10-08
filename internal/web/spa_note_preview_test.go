@@ -9,10 +9,10 @@ import (
 	"testing"
 )
 
-func TestSPANotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
+func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")
-	payload, _ := json.Marshal(spaNotePreviewRequest{Kind: "basic", Fields: map[string]any{
+	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{
 		"front": `<img src=x onerror=alert(1)> \(x^2\)`, "back": `<script>alert(1)</script>safe`,
 	}})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", bytes.NewReader(payload))
@@ -35,10 +35,10 @@ func TestSPANotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 	}
 }
 
-func TestSPANotePreviewRequiresSessionAndCSRF(t *testing.T) {
+func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")
-	payload, _ := json.Marshal(spaNotePreviewRequest{Kind: "basic", Fields: map[string]any{"front": "a", "back": "b"}})
+	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{"front": "a", "back": "b"}})
 	request := func(withCookie, withCSRF bool) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")

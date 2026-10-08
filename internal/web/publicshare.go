@@ -22,7 +22,7 @@ func (s *Server) registerShareBrowseRoutes(router *gin.Engine) {
 	}
 	router.GET("/s/:token", s.shareBrowseRoute)
 	// SPA 的同源 JSON 传输层（spa_share.go）；可达性与媒体授权不变。
-	s.registerSPAShareRoutes(router)
+	s.registerShareRoutes(router)
 }
 
 // resolveShareLink 解析路径里的明文 token 并取回卡组；无效时写 404 并返回 false。

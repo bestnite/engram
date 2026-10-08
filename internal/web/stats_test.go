@@ -136,12 +136,12 @@ func TestStatsPageRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-// TestStatsRouteServesSPAShell 是页面迁移的验收点：GET /stats 返回 SPA 应用壳
+// TestStatsRouteServesShell 是页面迁移的验收点：GET /stats 返回 SPA 应用壳
 // （index.html），由客户端路由渲染统计页，而不再渲染 SSR 页面。
 //
 // 深链（?lang=）随请求原样带过；外壳用 revalidation/no-cache 与 ETag，避免长期缓存
 // 旧资源引用。数据仍在客户端经 GET /api/v1/stats/detail 取得。
-func TestStatsRouteServesSPAShell(t *testing.T) {
+func TestStatsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 
 	rec := getWithCookies(t, srv, "/stats?lang=en", cookies)

@@ -73,8 +73,8 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	}
 }
 
-// TestImportPageServesSPAShell 断言 /import 返回 SPA 外壳，路由鉴权由 API 会话端点负责。
-func TestImportPageServesSPAShell(t *testing.T) {
+// TestImportPageServesShell 断言 /import 返回 SPA 外壳，路由鉴权由 API 会话端点负责。
+func TestImportPageServesShell(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/import", nil)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {

@@ -241,20 +241,20 @@
           <Select
             class="mt-1.5 w-full"
             bind:value={selectedField}
-            testId="spa-media-field"
+            testId="media-field"
             options={textFields}
           />
         </label>
         <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
         <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
           <label class="block text-sm font-medium">{$t('media.upload.label')}
-            <input data-testid="spa-media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
+            <input data-testid="media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
           </label>
-          <Button variant="outline" size="lg" testId="spa-media-upload-submit" disabled={uploading} onclick={uploadMedia}>
+          <Button variant="outline" size="lg" testId="media-upload-submit" disabled={uploading} onclick={uploadMedia}>
             {uploading ? $t('media.upload.uploading') : $t('media.upload.button')}
           </Button>
-          {#if uploaded}<p role="status" data-testid="spa-media-upload-status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('media.upload.inserted')}</p>{/if}
-          {#if uploadErrorKey}<p role="alert" data-testid="spa-media-upload-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(uploadErrorKey)}</p>{/if}
+          {#if uploaded}<p role="status" data-testid="media-upload-status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('media.upload.inserted')}</p>{/if}
+          {#if uploadErrorKey}<p role="alert" data-testid="media-upload-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(uploadErrorKey)}</p>{/if}
         </div>
         <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
         <MediaPicker onselect={insertMedia} />

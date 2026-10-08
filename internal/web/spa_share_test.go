@@ -32,14 +32,14 @@ func decodeShareResponse(t *testing.T, rec *httptest.ResponseRecorder) shareResp
 	return body
 }
 
-// TestSPAShareBrowseCutover 覆盖 GET /s/:token 的切壳与撤销/未知链接的 404。
-func TestSPAShareBrowseCutover(t *testing.T) {
+// TestShareBrowseCutover 覆盖 GET /s/:token 的切壳与撤销/未知链接的 404。
+func TestShareBrowseCutover(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Cutover share deck")
 	seedBasic(t, db, deck.ID, "正面", "背面")
 	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
 
-	assertServesSPAShell(t, get(t, srv, "/s/"+token, nil), "GET /s/<token>")
+	assertServesShell(t, get(t, srv, "/s/"+token, nil), "GET /s/<token>")
 
 	// 未知链接仍 404（切壳不改变可达性判定）。
 	if rec := get(t, srv, "/s/does-not-exist-token-1234567890", nil); rec.Code != http.StatusNotFound {
@@ -47,8 +47,8 @@ func TestSPAShareBrowseCutover(t *testing.T) {
 	}
 }
 
-// TestSPAShareJSONContent 断言 JSON 内容端点返回服务端清洗后的正反面 HTML，且未知链接 404。
-func TestSPAShareJSONContent(t *testing.T) {
+// TestShareJSONContent 断言 JSON 内容端点返回服务端清洗后的正反面 HTML，且未知链接 404。
+func TestShareJSONContent(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "JSON share deck")
 	seedBasic(t, db, deck.ID, "安全正面", "安全背面")
@@ -78,8 +78,8 @@ func TestSPAShareJSONContent(t *testing.T) {
 	}
 }
 
-// TestSPAShareJSONPasswordGate 断言有口令链接在解锁前不返回正文，错误口令 401、正确口令 200。
-func TestSPAShareJSONPasswordGate(t *testing.T) {
+// TestShareJSONPasswordGate 断言有口令链接在解锁前不返回正文，错误口令 401、正确口令 200。
+func TestShareJSONPasswordGate(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Locked share deck")
 	seedBasic(t, db, deck.ID, "机密正面", "机密背面")
@@ -102,9 +102,9 @@ func TestSPAShareJSONPasswordGate(t *testing.T) {
 	}
 }
 
-// TestSPAShareJSONRecordsMediaGrant 断言经 JSON 成功打开分享页后，登录访客对同一会话即可读媒体
+// TestShareJSONRecordsMediaGrant 断言经 JSON 成功打开分享页后，登录访客对同一会话即可读媒体
 // （与 SSR 的 recordShareGrant 同源，媒体授权不因切壳而丢失）。
-func TestSPAShareJSONRecordsMediaGrant(t *testing.T) {
+func TestShareJSONRecordsMediaGrant(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "JSON media deck", 'a')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "spa-json-visitor")

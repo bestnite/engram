@@ -262,7 +262,7 @@ export interface StatsSummary {
 }
 
 /**
- * 统计明细（与 Go 后端 internal/web/spa_stats.go 的 spaStatsDetail 对齐）
+ * 统计明细（与 Go 后端 internal/web/spa_stats.go 的 statsDetail 对齐）
  * 与统计页同一批聚合查询，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
  */
 export interface StatsVolume {

@@ -18,8 +18,8 @@ import (
 // 免重启生效的关键与 SSR 相同：settings 表按请求现读（注册流程每次 LoadSettings），因此写库后
 // 下一次注册尝试立即按新策略判定。校验与写库调用与 SSR 表单完全同一份 store/auth 函数。
 
-// spaAdminInvite 是一条邀请的原始字段；role/status 是存储取值，由前端映射文案。
-type spaAdminInvite struct {
+// adminInvite 是一条邀请的原始字段；role/status 是存储取值，由前端映射文案。
+type adminInvite struct {
 	ID        uint64 `json:"id"`
 	Token     string `json:"token"`
 	Link      string `json:"link"`
@@ -32,36 +32,36 @@ type spaAdminInvite struct {
 	UsedBy    string `json:"used_by"`
 }
 
-// spaAdminRegistrationResponse 是注册与邀请页的读取结果。
-type spaAdminRegistrationResponse struct {
-	Policy       string           `json:"policy"`
-	EmailDomains string           `json:"email_domains"`
-	Invites      []spaAdminInvite `json:"invites"`
+// adminRegistrationResponse 是注册与邀请页的读取结果。
+type adminRegistrationResponse struct {
+	Policy       string        `json:"policy"`
+	EmailDomains string        `json:"email_domains"`
+	Invites      []adminInvite `json:"invites"`
 }
 
-// spaAdminRegistrationRequest 是保存注册策略与白名单的请求体。
-type spaAdminRegistrationRequest struct {
+// adminRegistrationRequest 是保存注册策略与白名单的请求体。
+type adminRegistrationRequest struct {
 	Policy       string `json:"policy"`
 	EmailDomains string `json:"email_domains"`
 }
 
-// spaAdminInviteCreateRequest 是创建邀请的请求体。
+// adminInviteCreateRequest 是创建邀请的请求体。
 // ExpiresDays 为 nil 或 0 表示不过期；负数拒绝。
-type spaAdminInviteCreateRequest struct {
+type adminInviteCreateRequest struct {
 	Email       string `json:"email"`
 	Role        string `json:"role"`
 	ExpiresDays *int   `json:"expires_days"`
 	SendEmail   bool   `json:"send_email"`
 }
 
-// spaAdminInviteCreateResponse 回带新邀请与发信结果码（空串表示未请求或不适用）。
-type spaAdminInviteCreateResponse struct {
-	Invite     spaAdminInvite `json:"invite"`
-	MailNotice string         `json:"mail_notice"`
+// adminInviteCreateResponse 回带新邀请与发信结果码（空串表示未请求或不适用）。
+type adminInviteCreateResponse struct {
+	Invite     adminInvite `json:"invite"`
+	MailNotice string      `json:"mail_notice"`
 }
 
-// spaAdminInviteJSON 把一条邀请转换成响应结构；used_by 解析成用户名，解析失败回落到十进制 id。
-func (s *Server) spaAdminInviteJSON(c *gin.Context, inv store.Invite, now time.Time) spaAdminInvite {
+// adminInviteJSON 把一条邀请转换成响应结构；used_by 解析成用户名，解析失败回落到十进制 id。
+func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time) adminInvite {
 	ctx := c.Request.Context()
 	email := ""
 	if inv.Email != nil {
@@ -79,7 +79,7 @@ func (s *Server) spaAdminInviteJSON(c *gin.Context, inv store.Invite, now time.T
 	if inv.ExpiresAt != nil {
 		expires = inv.ExpiresAt.UTC().Format("2006-01-02 15:04")
 	}
-	return spaAdminInvite{
+	return adminInvite{
 		ID:        inv.ID,
 		Token:     inv.Token,
 		Link:      "/register?invite=" + inv.Token,
@@ -93,52 +93,52 @@ func (s *Server) spaAdminInviteJSON(c *gin.Context, inv store.Invite, now time.T
 	}
 }
 
-// spaAdminRegistration 返回当前注册策略、白名单与邀请列表。
-func (s *Server) spaAdminRegistration(c *gin.Context) {
+// adminRegistration 返回当前注册策略、白名单与邀请列表。
+func (s *Server) adminRegistration(c *gin.Context) {
 	ctx := c.Request.Context()
 	settings, err := store.LoadSettings(ctx, s.db)
 	if err != nil {
 		s.logger.Error("spa admin: load settings failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	resp := spaAdminRegistrationResponse{
+	resp := adminRegistrationResponse{
 		Policy:       auth.ParseRegistrationPolicy(settings[auth.SettingKeyRegistrationPolicy]),
 		EmailDomains: strings.TrimSpace(settings[auth.SettingKeyEmailAllowlist]),
-		Invites:      []spaAdminInvite{},
+		Invites:      []adminInvite{},
 	}
 	if s.invites != nil {
 		invites, err := s.invites.List(ctx)
 		if err != nil {
 			s.logger.Error("spa admin: list invites failed", "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "internal_error")
+			adminError(c, http.StatusInternalServerError, "internal_error")
 			return
 		}
 		now := time.Now().UTC()
 		for _, inv := range invites {
-			resp.Invites = append(resp.Invites, s.spaAdminInviteJSON(c, inv, now))
+			resp.Invites = append(resp.Invites, s.adminInviteJSON(c, inv, now))
 		}
 	}
 	c.JSON(http.StatusOK, resp)
 }
 
-// spaAdminRegistrationSave 写入注册策略与邮箱域名白名单（均为普通 settings），写审计。
-func (s *Server) spaAdminRegistrationSave(c *gin.Context) {
+// adminRegistrationSave 写入注册策略与邮箱域名白名单（均为普通 settings），写审计。
+func (s *Server) adminRegistrationSave(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminRegistrationRequest
+	var req adminRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	policy := strings.TrimSpace(req.Policy)
 	switch policy {
 	case auth.PolicyOpen, auth.PolicyInvite, auth.PolicyClosed:
 	default:
-		spaAdminError(c, http.StatusBadRequest, "invalid_policy")
+		adminError(c, http.StatusBadRequest, "invalid_policy")
 		return
 	}
 	// 白名单归一化后以逗号分隔存储（ParseEmailAllowlist 兼容该写法）；空串表示不限制。
@@ -148,12 +148,12 @@ func (s *Server) spaAdminRegistrationSave(c *gin.Context) {
 
 	if err := store.PutSetting(ctx, s.db, auth.SettingKeyRegistrationPolicy, policy, store.Ptr(actor.ID), now); err != nil {
 		s.logger.Error("spa admin: save registration policy failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	if err := store.PutSetting(ctx, s.db, auth.SettingKeyEmailAllowlist, allowlist, store.Ptr(actor.ID), now); err != nil {
 		s.logger.Error("spa admin: save email allowlist failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -164,26 +164,26 @@ func (s *Server) spaAdminRegistrationSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminInviteCreate 创建一条邀请：可选限定邮箱、角色与有效天数，可选寄信。
+// adminInviteCreate 创建一条邀请：可选限定邮箱、角色与有效天数，可选寄信。
 // 发信的任何问题都不影响创建结果——只通过 mail_notice 如实回显发生了什么。
-func (s *Server) spaAdminInviteCreate(c *gin.Context) {
+func (s *Server) adminInviteCreate(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
 	if s.invites == nil {
-		spaAdminError(c, http.StatusInternalServerError, "invite_create_failed")
+		adminError(c, http.StatusInternalServerError, "invite_create_failed")
 		return
 	}
-	var req spaAdminInviteCreateRequest
+	var req adminInviteCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	role := strings.TrimSpace(req.Role)
 	if role != store.RoleAdmin && role != store.RoleUser {
-		spaAdminError(c, http.StatusBadRequest, "invite_create_failed")
+		adminError(c, http.StatusBadRequest, "invite_create_failed")
 		return
 	}
 	inv := &store.Invite{Role: role, CreatedBy: store.Ptr(actor.ID), CreatedAt: time.Now().UTC()}
@@ -193,7 +193,7 @@ func (s *Server) spaAdminInviteCreate(c *gin.Context) {
 	// 有效天数：留空或 0 表示不过期；非法值拒绝而不是静默当成不过期。
 	if req.ExpiresDays != nil {
 		if *req.ExpiresDays < 0 {
-			spaAdminError(c, http.StatusBadRequest, "invite_create_failed")
+			adminError(c, http.StatusBadRequest, "invite_create_failed")
 			return
 		}
 		if *req.ExpiresDays > 0 {
@@ -204,7 +204,7 @@ func (s *Server) spaAdminInviteCreate(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := s.invites.Create(ctx, inv); err != nil {
 		s.logger.Error("spa admin: create invite failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "invite_create_failed")
+		adminError(c, http.StatusInternalServerError, "invite_create_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -223,32 +223,32 @@ func (s *Server) spaAdminInviteCreate(c *gin.Context) {
 			mailNotice = code
 		}
 	}
-	c.JSON(http.StatusCreated, spaAdminInviteCreateResponse{
-		Invite:     s.spaAdminInviteJSON(c, *inv, time.Now().UTC()),
+	c.JSON(http.StatusCreated, adminInviteCreateResponse{
+		Invite:     s.adminInviteJSON(c, *inv, time.Now().UTC()),
 		MailNotice: mailNotice,
 	})
 }
 
-// spaAdminInviteRevoke 撤销一条邀请（删除整行），写审计。
-func (s *Server) spaAdminInviteRevoke(c *gin.Context) {
+// adminInviteRevoke 撤销一条邀请（删除整行），写审计。
+func (s *Server) adminInviteRevoke(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 || s.invites == nil {
-		spaAdminError(c, http.StatusNotFound, "invite_invalid")
+		adminError(c, http.StatusNotFound, "invite_invalid")
 		return
 	}
 	ctx := c.Request.Context()
 	if err := s.invites.Revoke(ctx, id); err != nil {
 		if errors.Is(err, store.ErrInviteNotFound) {
-			spaAdminError(c, http.StatusNotFound, "invite_invalid")
+			adminError(c, http.StatusNotFound, "invite_invalid")
 			return
 		}
 		s.logger.Error("spa admin: revoke invite failed", "invite_id", id, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{

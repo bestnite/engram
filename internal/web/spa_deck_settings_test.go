@@ -13,15 +13,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// spaDeckSettingsPath 返回 SPA 卡组设置接口的路径。
-func spaDeckSettingsPath(deckID uint64) string {
+// deckSettingsPath 返回 SPA 卡组设置接口的路径。
+func deckSettingsPath(deckID uint64) string {
 	return "/api/v1/decks/" + u64str(deckID) + "/settings"
 }
 
-// decodeSPADeckSettings 解析响应体；失败即终止测试。
-func decodeSPADeckSettings(t *testing.T, raw []byte) spaDeckSettingsResponse {
+// decodeDeckSettings 解析响应体；失败即终止测试。
+func decodeDeckSettings(t *testing.T, raw []byte) deckSettingsResponse {
 	t.Helper()
-	var body spaDeckSettingsResponse
+	var body deckSettingsResponse
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("decode SPA deck settings: %v", err)
 	}
@@ -47,9 +47,9 @@ func seedQueueCards(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newCards,
 	}
 }
 
-// TestSPADeckSettingsOwnerViewReportsCapsAndUsage 是设置接口的读验收：owner 拿到的
+// TestDeckSettingsOwnerViewReportsCapsAndUsage 是设置接口的读验收：owner 拿到的
 // new_per_day / reviews_per_day 是库里的原值，今日已用/剩余来自 schedule.DeckBudgets。
-func TestSPADeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
+func TestDeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA settings deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
@@ -59,11 +59,11 @@ func TestSPADeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	// 今日已引入 2 张新卡、复习 3 张 → 新卡剩余 3、复习剩余 7。
 	seedTodayUsage(t, db, ownerID, deck.ID, 2, 3)
 
-	rec := getWithCookies(t, srv, spaDeckSettingsPath(deck.ID), cookies)
+	rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), cookies)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET %s = %d, want 200 (body %s)", spaDeckSettingsPath(deck.ID), rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("GET %s = %d, want 200 (body %s)", deckSettingsPath(deck.ID), rec.Code, snippet(rec.Body.String()))
 	}
-	body := decodeSPADeckSettings(t, rec.Body.Bytes())
+	body := decodeDeckSettings(t, rec.Body.Bytes())
 	if body.DeckID != deck.ID || body.DeckName != "SPA settings deck" {
 		t.Errorf("deck identity = %d/%q, want %d/%q", body.DeckID, body.DeckName, deck.ID, deck.Name)
 	}
@@ -81,9 +81,9 @@ func TestSPADeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsUpdateTakesEffectAndAudits 是写验收：PATCH 改小上限后库里的两列
+// TestDeckSettingsUpdateTakesEffectAndAudits 是写验收：PATCH 改小上限后库里的两列
 // 立刻变成提交值，队列随之变小，并留一条 deck.caps_change 审计。
-func TestSPADeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
+func TestDeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA capped deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
@@ -95,7 +95,7 @@ func TestSPADeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 		t.Fatalf("before update queue = %d new / %d review, want 5/3", n, r)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		`{"new_per_day":2,"reviews_per_day":1}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -111,15 +111,15 @@ func TestSPADeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 	} else if n != 1 {
 		t.Errorf("audit rows for %s = %d, want 1", store.ActionDeckCaps, n)
 	}
-	body := decodeSPADeckSettings(t, rec.Body.Bytes())
+	body := decodeDeckSettings(t, rec.Body.Bytes())
 	if body.NewPerDay != 2 || body.ReviewsPerDay != 1 {
 		t.Errorf("PATCH response caps = %d/%d, want 2/1", body.NewPerDay, body.ReviewsPerDay)
 	}
 }
 
-// TestSPADeckSettingsZeroRoundTripsAsUnlimited 断言 0 原样落库并显式表达「不限」：
+// TestDeckSettingsZeroRoundTripsAsUnlimited 断言 0 原样落库并显式表达「不限」：
 // 响应里 new_per_day=0 且 unlimited=true，队列不再封顶。
-func TestSPADeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
+func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA unlimited deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
@@ -131,7 +131,7 @@ func TestSPADeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 		t.Fatalf("before update queue = %d new / %d review, want 1/1", n, r)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		`{"new_per_day":0,"reviews_per_day":0}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH 0/0 = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -140,7 +140,7 @@ func TestSPADeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	if caps := deckCapsFromDB(t, db, deck.ID); caps.NewPerDay != 0 || caps.ReviewsPerDay != 0 {
 		t.Fatalf("stored caps = %d/%d, want 0/0 (0 means unlimited, not the default)", caps.NewPerDay, caps.ReviewsPerDay)
 	}
-	body := decodeSPADeckSettings(t, rec.Body.Bytes())
+	body := decodeDeckSettings(t, rec.Body.Bytes())
 	if body.NewPerDay != 0 || body.ReviewsPerDay != 0 {
 		t.Errorf("response caps = %d/%d, want 0/0", body.NewPerDay, body.ReviewsPerDay)
 	}
@@ -155,9 +155,9 @@ func TestSPADeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRejectsNonOwner 是必测负例：非 owner 读不了也改不了，且列值不变、
+// TestDeckSettingsRejectsNonOwner 是必测负例：非 owner 读不了也改不了，且列值不变、
 // 不写 deck.caps_change 审计。
-func TestSPADeckSettingsRejectsNonOwner(t *testing.T) {
+func TestDeckSettingsRejectsNonOwner(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA owned deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
@@ -166,10 +166,10 @@ func TestSPADeckSettingsRejectsNonOwner(t *testing.T) {
 	}
 	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "spa_settings_intruder")
 
-	if rec := getWithCookies(t, srv, spaDeckSettingsPath(deck.ID), u2Cookies); rec.Code != http.StatusForbidden {
+	if rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		`{"new_per_day":0,"reviews_per_day":0}`, u2Cookies, u2CSRF)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("non-owner PATCH = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -184,15 +184,15 @@ func TestSPADeckSettingsRejectsNonOwner(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRequiresCSRF 是必测负例：缺 CSRF 的 PATCH 被中间件挡下，列值不变。
-func TestSPADeckSettingsRequiresCSRF(t *testing.T) {
+// TestDeckSettingsRequiresCSRF 是必测负例：缺 CSRF 的 PATCH 被中间件挡下，列值不变。
+func TestDeckSettingsRequiresCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA csrf deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
 		store.DeckCaps{NewPerDay: 4, ReviewsPerDay: 4}); err != nil {
 		t.Fatalf("SetCaps: %v", err)
 	}
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		`{"new_per_day":0,"reviews_per_day":0}`, cookies, "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("PATCH without CSRF = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -207,9 +207,9 @@ func TestSPADeckSettingsRequiresCSRF(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRejectsInvalidInput 是必测负例：非数字 / 负数 / 缺字段 / 空体一律
+// TestDeckSettingsRejectsInvalidInput 是必测负例：非数字 / 负数 / 缺字段 / 空体一律
 // 400、不写库、不写审计。
-func TestSPADeckSettingsRejectsInvalidInput(t *testing.T) {
+func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
@@ -229,7 +229,7 @@ func TestSPADeckSettingsRejectsInvalidInput(t *testing.T) {
 				store.DeckCaps{NewPerDay: 6, ReviewsPerDay: 6}); err != nil {
 				t.Fatalf("SetCaps: %v", err)
 			}
-			rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID), tc.body, cookies, csrf)
+			rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID), tc.body, cookies, csrf)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("PATCH %s = %d, want 400 (body %s)", tc.body, rec.Code, snippet(rec.Body.String()))
 			}
@@ -246,11 +246,11 @@ func TestSPADeckSettingsRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRequiresSession 断言匿名访问拿到 401，而不是 SSR 页面的 303 跳转。
-func TestSPADeckSettingsRequiresSession(t *testing.T) {
+// TestDeckSettingsRequiresSession 断言匿名访问拿到 401，而不是 SSR 页面的 303 跳转。
+func TestDeckSettingsRequiresSession(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA anon deck")
-	rec := getWithCookies(t, srv, spaDeckSettingsPath(deck.ID), nil)
+	rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), nil)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous GET = %d, want 401 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -267,9 +267,9 @@ func TestSPADeckSettingsRequiresSession(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsSwitchesPreset 是卡组切换调度的写验收：PATCH 带 preset_id 时卡组改按
+// TestDeckSettingsSwitchesPreset 是卡组切换调度的写验收：PATCH 带 preset_id 时卡组改按
 // 新预设排程，响应回显新值，并且留下一条 deck.preset_change 审计。
-func TestSPADeckSettingsSwitchesPreset(t *testing.T) {
+func TestDeckSettingsSwitchesPreset(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA switchable deck")
 	second := store.NewPreset(ownerID, "second preset")
@@ -277,12 +277,12 @@ func TestSPADeckSettingsSwitchesPreset(t *testing.T) {
 		t.Fatalf("create second preset: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, second.ID), cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	body := decodeSPADeckSettings(t, rec.Body.Bytes())
+	body := decodeDeckSettings(t, rec.Body.Bytes())
 	if body.PresetID != second.ID {
 		t.Errorf("response preset_id = %d, want %d", body.PresetID, second.ID)
 	}
@@ -300,9 +300,9 @@ func TestSPADeckSettingsSwitchesPreset(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRejectsForeignPreset 是必测负例：挂别人的预设会连带把他人调好的
+// TestDeckSettingsRejectsForeignPreset 是必测负例：挂别人的预设会连带把他人调好的
 // 排程参数读出来，必须 400 拒绝，且卡组的 preset_id 一个字节都不动、不写审计。
-func TestSPADeckSettingsRejectsForeignPreset(t *testing.T) {
+func TestDeckSettingsRejectsForeignPreset(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA foreign preset deck")
 	intruder := store.User{Username: "preset_intruder", Email: "preset_intruder@example.com",
@@ -316,7 +316,7 @@ func TestSPADeckSettingsRejectsForeignPreset(t *testing.T) {
 		t.Fatalf("create foreign preset: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, spaDeckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
 		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, foreign.ID), cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("PATCH foreign preset = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))

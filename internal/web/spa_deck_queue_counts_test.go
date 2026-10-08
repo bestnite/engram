@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-func TestSPADeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
+func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	ownerDeck := seedDeck(t, db, ownerID, "owner-deck")
 	publicDeck := seedDeck(t, db, ownerID, "public-deck")

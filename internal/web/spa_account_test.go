@@ -48,13 +48,13 @@ func jsonResetToken(t *testing.T, ts securityTestServer, cookie *http.Cookie, he
 	return tokenFromBody(t, rows[len(rows)-1].TextBody)
 }
 
-// TestSPAAccountRouteCutover 覆盖三个可导航读取页与两条一键链接的应用壳、/settings/email 的登录门禁，
+// TestAccountRouteCutover 覆盖三个可导航读取页与两条一键链接的应用壳、/settings/email 的登录门禁，
 // 以及一键链接入口初始化双提交 cookie 但不消费令牌。
-func TestSPAAccountRouteCutover(t *testing.T) {
+func TestAccountRouteCutover(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
 	for _, path := range []string{"/forgot-password", "/reset-password", "/settings/email"} {
-		assertServesSPAShell(t, getWithCookies(t, ts.srv, path, ts.cookies), "GET "+path)
+		assertServesShell(t, getWithCookies(t, ts.srv, path, ts.cookies), "GET "+path)
 	}
 
 	// 邮件里的一键链接落在规范路径上，同样返回应用壳（服务端不再渲染结果页）。
@@ -78,9 +78,9 @@ func TestSPAAccountRouteCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAccountJSON_CSRFRejections 断言会话前 JSON 端点复用双提交 CSRF：缺 cookie / 缺镜像
+// TestAccountJSON_CSRFRejections 断言会话前 JSON 端点复用双提交 CSRF：缺 cookie / 缺镜像
 // 值一律 403 csrf_failed，且不触发任何业务动作。
-func TestSPAAccountJSON_CSRFRejections(t *testing.T) {
+func TestAccountJSON_CSRFRejections(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	for _, path := range []string{
 		"/api/v1/auth/forgot-password",
@@ -98,9 +98,9 @@ func TestSPAAccountJSON_CSRFRejections(t *testing.T) {
 	}
 }
 
-// TestSPAAccountForgotResetFlow 覆盖 JSON 的重置请求与提交：成功改密、令牌一次性、过期与
+// TestAccountForgotResetFlow 覆盖 JSON 的重置请求与提交：成功改密、令牌一次性、过期与
 // 弱密码拒绝，以及新密码真的能登录。
-func TestSPAAccountForgotResetFlow(t *testing.T) {
+func TestAccountForgotResetFlow(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	cookie, headers := preSessionPair(t, ts.srv, "/forgot-password")
 
@@ -162,8 +162,8 @@ func TestSPAAccountForgotResetFlow(t *testing.T) {
 	}
 }
 
-// TestSPAAccountEmailVerifyFlows 覆盖会话端点的读取/重发/改邮箱，以及免登录的验证与确认 JSON 端点。
-func TestSPAAccountEmailVerifyFlows(t *testing.T) {
+// TestAccountEmailVerifyFlows 覆盖会话端点的读取/重发/改邮箱，以及免登录的验证与确认 JSON 端点。
+func TestAccountEmailVerifyFlows(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
 	// GET /api/v1/settings/email：当前邮箱 + 未验证 + 邮件可用。
@@ -277,9 +277,9 @@ func TestSPAAccountEmailVerifyFlows(t *testing.T) {
 	}
 }
 
-// TestSPAShellEndpointsServeAppAndDoubleSubmitCookie 断言 /spa/verify-email 与
+// TestShellEndpointsServeAppAndDoubleSubmitCookie 断言 /spa/verify-email 与
 // /spa/confirm-email-change 下发双提交 cookie 并返回应用壳，且不消费任何令牌。
-func TestSPAShellEndpointsServeAppAndDoubleSubmitCookie(t *testing.T) {
+func TestShellEndpointsServeAppAndDoubleSubmitCookie(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	for _, path := range []string{"/spa/verify-email", "/spa/confirm-email-change"} {
 		rec := get(t, ts.srv, path, nil)

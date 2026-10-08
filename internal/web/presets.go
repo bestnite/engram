@@ -24,7 +24,7 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	}
 	router.GET("/presets", s.presetRoute)
 	// SPA 预设接口：同源 JSON 读写走 /api/v1/presets*。
-	s.registerSPAPresetRoutes(router)
+	s.registerPresetAPIRoutes(router)
 }
 
 // ownedPreset 解析 :id 并确认预设属于当前用户；否则按「不存在」处理，不泄露他人预设的存在性。

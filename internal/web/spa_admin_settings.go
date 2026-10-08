@@ -22,8 +22,8 @@ import (
 // 复用 effectiveSetting 与同一个 settingSpec 列表，因此不会出现两套解析。响应里每行都带
 // source（env/db/default/computed）与原始值，本地化文案由前端语言包按 key 映射。
 
-// spaAdminSettingRow 是设置表格里的一行。readonly 为 true 时前端只展示不提交。
-type spaAdminSettingRow struct {
+// adminSettingRow 是设置表格里的一行。readonly 为 true 时前端只展示不提交。
+type adminSettingRow struct {
 	Key        string `json:"key"`
 	Value      string `json:"value"`
 	Source     string `json:"source"`
@@ -34,35 +34,35 @@ type spaAdminSettingRow struct {
 	Unit string `json:"unit,omitempty"`
 }
 
-// spaAdminSettingsSection 是一个设置分区（general / media / optimize / sensitive）。
-type spaAdminSettingsSection struct {
-	Name string               `json:"name"`
-	Rows []spaAdminSettingRow `json:"rows"`
+// adminSettingsSection 是一个设置分区（general / media / optimize / sensitive）。
+type adminSettingsSection struct {
+	Name string            `json:"name"`
+	Rows []adminSettingRow `json:"rows"`
 }
 
-// spaAdminSettingsResponse 是系统设置页的读取结果。
-type spaAdminSettingsResponse struct {
-	Sections []spaAdminSettingsSection `json:"sections"`
+// adminSettingsResponse 是系统设置页的读取结果。
+type adminSettingsResponse struct {
+	Sections []adminSettingsSection `json:"sections"`
 }
 
-// spaAdminSettingsRequest 是保存请求：键即 settings 键，值为待写文本；缺失或空串表示不修改。
-type spaAdminSettingsRequest struct {
+// adminSettingsRequest 是保存请求：键即 settings 键，值为待写文本；缺失或空串表示不修改。
+type adminSettingsRequest struct {
 	Values map[string]string `json:"values"`
 }
 
-// spaAdminSettings 返回系统设置的分区与行，口径与 adminSettingsPage 一致。
-func (s *Server) spaAdminSettings(c *gin.Context) {
+// adminSettings 返回系统设置的分区与行，口径与 adminSettingsPage 一致。
+func (s *Server) adminSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
 	}
 
-	rows := func(specs []settingSpec) []spaAdminSettingRow {
-		out := make([]spaAdminSettingRow, 0, len(specs))
+	rows := func(specs []settingSpec) []adminSettingRow {
+		out := make([]adminSettingRow, 0, len(specs))
 		for _, spec := range specs {
 			value, src := s.effectiveSetting(ctx, loc, spec)
-			out = append(out, spaAdminSettingRow{
+			out = append(out, adminSettingRow{
 				Key: spec.key, Value: value, Source: string(src), Editable: true,
 			})
 		}
@@ -79,7 +79,7 @@ func (s *Server) spaAdminSettings(c *gin.Context) {
 	if raw := strings.TrimSpace(os.Getenv("MEDIA_DIR")); raw != "" {
 		dir, dirSrc = raw, config.SourceEnv
 	}
-	mediaRows = append(mediaRows, spaAdminSettingRow{
+	mediaRows = append(mediaRows, adminSettingRow{
 		Key: "media_dir", Value: dir, Source: string(dirSrc), Editable: false,
 	})
 	size := int64(0)
@@ -90,23 +90,23 @@ func (s *Server) spaAdminSettings(c *gin.Context) {
 			s.logger.Error("spa admin: compute media directory size failed", "error", err)
 		}
 	}
-	mediaRows = append(mediaRows, spaAdminSettingRow{
+	mediaRows = append(mediaRows, adminSettingRow{
 		Key: "media_usage", Value: strconv.FormatInt(size, 10), Source: "computed", Editable: false, Unit: "bytes",
 	})
 
-	sections := []spaAdminSettingsSection{
+	sections := []adminSettingsSection{
 		{Name: "general", Rows: rows(generalSettingSpecs())},
 		{Name: "media", Rows: mediaRows},
 		{Name: "optimize", Rows: rows(optimizeSettingSpecs())},
 	}
-	if sensitive := s.spaAdminSensitiveRows(ctx); len(sensitive) > 0 {
-		sections = append(sections, spaAdminSettingsSection{Name: "sensitive", Rows: sensitive})
+	if sensitive := s.adminSensitiveRows(ctx); len(sensitive) > 0 {
+		sections = append(sections, adminSettingsSection{Name: "sensitive", Rows: sensitive})
 	}
-	c.JSON(http.StatusOK, spaAdminSettingsResponse{Sections: sections})
+	c.JSON(http.StatusOK, adminSettingsResponse{Sections: sections})
 }
 
-// spaAdminSensitiveRows 列出 settings 表里所有敏感键，只显示「已配置/未配置」，绝不含明文。
-func (s *Server) spaAdminSensitiveRows(ctx context.Context) []spaAdminSettingRow {
+// adminSensitiveRows 列出 settings 表里所有敏感键，只显示「已配置/未配置」，绝不含明文。
+func (s *Server) adminSensitiveRows(ctx context.Context) []adminSettingRow {
 	if s.db == nil {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (s *Server) spaAdminSensitiveRows(ctx context.Context) []spaAdminSettingRow
 		s.logger.Error("spa admin: list sensitive setting keys failed", "error", err)
 		return nil
 	}
-	rows := make([]spaAdminSettingRow, 0, len(keys))
+	rows := make([]adminSettingRow, 0, len(keys))
 	for _, key := range keys {
 		configured, err := store.SecretConfigured(ctx, s.db, key)
 		if err != nil {
@@ -126,24 +126,24 @@ func (s *Server) spaAdminSensitiveRows(ctx context.Context) []spaAdminSettingRow
 		if configured {
 			src = config.SourceDB
 		}
-		rows = append(rows, spaAdminSettingRow{
+		rows = append(rows, adminSettingRow{
 			Key: key, Source: string(src), Editable: true, Sensitive: true, Configured: configured,
 		})
 	}
 	return rows
 }
 
-// spaAdminSettingsSave 写入系统设置；校验与 adminSettingsSave 逐条相同（同一 switch），
+// adminSettingsSave 写入系统设置；校验与 adminSettingsSave 逐条相同（同一 switch），
 // 非法值 400 且不写库。敏感键经 AES-GCM 加密落库，永不回显。
-func (s *Server) spaAdminSettingsSave(c *gin.Context) {
+func (s *Server) adminSettingsSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminSettingsRequest
+	var req adminSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	ctx := c.Request.Context()
@@ -164,33 +164,33 @@ func (s *Server) spaAdminSettingsSave(c *gin.Context) {
 		switch spec.key {
 		case settingKeySiteDefaultLocale:
 			if !s.supportedLocale(raw) {
-				spaAdminError(c, http.StatusBadRequest, "invalid_locale")
+				adminError(c, http.StatusBadRequest, "invalid_locale")
 				return
 			}
 		case media.SettingKeyMediaMaxBytes:
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n <= 0 {
-				spaAdminError(c, http.StatusBadRequest, "invalid_number")
+				adminError(c, http.StatusBadRequest, "invalid_number")
 				return
 			}
 		case settingKeyMediaAllowedMimes:
 			if len(splitMimeList(raw)) == 0 {
-				spaAdminError(c, http.StatusBadRequest, "invalid_mime")
+				adminError(c, http.StatusBadRequest, "invalid_mime")
 				return
 			}
 		case settingKeyMediaUserQuotaBytes:
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n < 0 {
-				spaAdminError(c, http.StatusBadRequest, "invalid_number")
+				adminError(c, http.StatusBadRequest, "invalid_number")
 				return
 			}
 		case store.SettingKeyOptimizeMinReviews:
 			if n, err := strconv.Atoi(raw); err != nil || n < store.MinOptimizeMinReviews {
-				spaAdminError(c, http.StatusBadRequest, "optimize_min_reviews_too_low")
+				adminError(c, http.StatusBadRequest, "optimize_min_reviews_too_low")
 				return
 			}
 		}
 		if err := store.PutSetting(ctx, s.db, spec.key, raw, store.Ptr(u.ID), now); err != nil {
 			s.logger.Error("spa admin: save setting failed", "key", spec.key, "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		changed = append(changed, spec.key)
@@ -201,7 +201,7 @@ func (s *Server) spaAdminSettingsSave(c *gin.Context) {
 		keys, err := store.SensitiveSettingKeys(ctx, s.db)
 		if err != nil {
 			s.logger.Error("spa admin: list sensitive keys failed", "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		for _, key := range keys {
@@ -211,7 +211,7 @@ func (s *Server) spaAdminSettingsSave(c *gin.Context) {
 			}
 			if err := store.PutSecret(ctx, s.db, s.secrets, key, raw, store.Ptr(u.ID), now); err != nil {
 				s.logger.Error("spa admin: save secret failed", "key", key, "error", err)
-				spaAdminError(c, http.StatusInternalServerError, "save_failed")
+				adminError(c, http.StatusInternalServerError, "save_failed")
 				return
 			}
 			changed = append(changed, key)

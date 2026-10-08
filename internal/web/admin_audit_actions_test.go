@@ -77,9 +77,9 @@ func assertNoAuditLeak(t *testing.T, db *gorm.DB, canaries ...string) {
 }
 
 // decodeAdminTestResult 解出测试连接的响应体。
-func decodeAdminTestResult(t *testing.T, rec *httptest.ResponseRecorder) spaAdminTestResult {
+func decodeAdminTestResult(t *testing.T, rec *httptest.ResponseRecorder) adminTestResult {
 	t.Helper()
-	var result spaAdminTestResult
+	var result adminTestResult
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode test result: %v (body %s)", err, snippet(rec.Body.String()))
 	}
@@ -95,7 +95,7 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 
 	// 成功路径：stub provider 提供发现文档。
 	okStub := newStubOIDC(t)
-	okRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", spaAdminOIDCRequest{
+	okRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", adminOIDCRequest{
 		Issuer:       okStub.srv.URL,
 		ClientSecret: oidcSecretCanary,
 	}, cookies, csrf)
@@ -112,7 +112,7 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 		_, _ = w.Write([]byte("provider-says-no-discovery"))
 	}))
 	t.Cleanup(broken.Close)
-	badRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", spaAdminOIDCRequest{
+	badRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", adminOIDCRequest{
 		Issuer:       broken.URL,
 		ClientSecret: oidcSecretCanary,
 	}, cookies, csrf)
@@ -154,7 +154,7 @@ func TestAdminSMTPTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	// 成功路径：进程内的假 SMTP 服务（不设账号口令——假服务不实现 AUTH 握手）。
 	addr := startFakeSMTP(t)
 	host, port, _ := net.SplitHostPort(addr)
-	okRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{
+	okRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{
 		Host: host, Port: port, From: "no-reply@example.com", TLSMode: "none",
 	}, cookies, csrf)
 	if okRec.Code != http.StatusOK {
@@ -167,7 +167,7 @@ func TestAdminSMTPTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	// 失败路径：一个当前无人监听的本地地址。
 	dead := deadAddr(t)
 	dhost, dport, _ := net.SplitHostPort(dead)
-	badRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{
+	badRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{
 		Host: dhost, Port: dport, From: "no-reply@example.com",
 		Password: smtpPasswordCanary, TLSMode: "none",
 	}, cookies, csrf)

@@ -19,8 +19,8 @@ import (
 // 同一份危险动作保护（不可删自己、不可清空最后一个管理员、危险动作需确认）。响应只带原始
 // 值与稳定英文 code，本地化文案由前端语言包按 code 映射。
 
-// spaAdminUser 是用户列表里的一行；role/status 是存储取值，由前端映射文案。
-type spaAdminUser struct {
+// adminUser 是用户列表里的一行；role/status 是存储取值，由前端映射文案。
+type adminUser struct {
 	ID          uint64 `json:"id"`
 	Username    string `json:"username"`
 	Email       string `json:"email"`
@@ -33,17 +33,17 @@ type spaAdminUser struct {
 	IsSelf      bool   `json:"is_self"`
 }
 
-// spaAdminUsersResponse 是用户列表响应；query 回带搜索词，供分页链接保持过滤。
-type spaAdminUsersResponse struct {
-	Users []spaAdminUser `json:"users"`
-	Page  int            `json:"page"`
-	Pages int            `json:"pages"`
-	Total int64          `json:"total"`
-	Query string         `json:"query"`
+// adminUsersResponse 是用户列表响应；query 回带搜索词，供分页链接保持过滤。
+type adminUsersResponse struct {
+	Users []adminUser `json:"users"`
+	Page  int         `json:"page"`
+	Pages int         `json:"pages"`
+	Total int64       `json:"total"`
+	Query string      `json:"query"`
 }
 
-// spaAdminUserCreateRequest 是新建本地账号的请求体。
-type spaAdminUserCreateRequest struct {
+// adminUserCreateRequest 是新建本地账号的请求体。
+type adminUserCreateRequest struct {
 	Username    string `json:"username"`
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
@@ -51,29 +51,29 @@ type spaAdminUserCreateRequest struct {
 	Role        string `json:"role"`
 }
 
-// spaAdminUserStatusRequest 是启用/禁用的请求体；action 取 enable|disable。
-type spaAdminUserStatusRequest struct {
+// adminUserStatusRequest 是启用/禁用的请求体；action 取 enable|disable。
+type adminUserStatusRequest struct {
 	Action string `json:"action"`
 }
 
-// spaAdminUserRoleRequest 是改角色的请求体；危险动作需 confirm。
-type spaAdminUserRoleRequest struct {
+// adminUserRoleRequest 是改角色的请求体；危险动作需 confirm。
+type adminUserRoleRequest struct {
 	Role    string `json:"role"`
 	Confirm bool   `json:"confirm"`
 }
 
-// spaAdminUserConfirmRequest 是仅需确认的危险动作请求体（重置密码 / 删除）。
-type spaAdminUserConfirmRequest struct {
+// adminUserConfirmRequest 是仅需确认的危险动作请求体（重置密码 / 删除）。
+type adminUserConfirmRequest struct {
 	Confirm bool `json:"confirm"`
 }
 
-// spaAdminUserPasswordResponse 一次性返回重置后的临时口令（绝不写日志、不入库）。
-type spaAdminUserPasswordResponse struct {
+// adminUserPasswordResponse 一次性返回重置后的临时口令（绝不写日志、不入库）。
+type adminUserPasswordResponse struct {
 	TempPassword string `json:"temp_password"`
 }
 
-// spaAdminUsers 返回用户列表（搜索 + 分页 + 每用户用量），口径与 renderUsersPage 一致。
-func (s *Server) spaAdminUsers(c *gin.Context) {
+// adminUsers 返回用户列表（搜索 + 分页 + 每用户用量），口径与 renderUsersPage 一致。
+func (s *Server) adminUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := strings.TrimSpace(c.Query("q"))
 	page := parsePage(c.Query("page"))
@@ -82,20 +82,20 @@ func (s *Server) spaAdminUsers(c *gin.Context) {
 	users, total, err := s.users.ListForAdmin(ctx, query, page, size)
 	if err != nil {
 		s.logger.Error("spa admin: list users failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	var currentID uint64
 	if u, ok := auth.CurrentUser(c); ok {
 		currentID = u.ID
 	}
-	rows := make([]spaAdminUser, 0, len(users))
+	rows := make([]adminUser, 0, len(users))
 	for _, u := range users {
 		usage, err := s.users.UsageCounts(ctx, u.ID)
 		if err != nil {
 			s.logger.Error("spa admin: usage counts failed", "user_id", u.ID, "error", err)
 		}
-		rows = append(rows, spaAdminUser{
+		rows = append(rows, adminUser{
 			ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 			Role: u.Role, Status: u.Status,
 			Decks: usage.Decks, Cards: usage.Cards, Reviews: usage.Reviews,
@@ -106,31 +106,31 @@ func (s *Server) spaAdminUsers(c *gin.Context) {
 	if pages < 1 {
 		pages = 1
 	}
-	c.JSON(http.StatusOK, spaAdminUsersResponse{Users: rows, Page: page, Pages: pages, Total: total, Query: query})
+	c.JSON(http.StatusOK, adminUsersResponse{Users: rows, Page: page, Pages: pages, Total: total, Query: query})
 }
 
-// spaAdminUserCreate 新建本地账号（仅管理员）。校验复用 registerInputErrorCode，
+// adminUserCreate 新建本地账号（仅管理员）。校验复用 registerInputErrorCode，
 // 失败时把稳定 code 交给前端映射，绝不落库。
-func (s *Server) spaAdminUserCreate(c *gin.Context) {
+func (s *Server) adminUserCreate(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminUserCreateRequest
+	var req adminUserCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 	if req.Role != store.RoleAdmin && req.Role != store.RoleUser {
-		spaAdminError(c, http.StatusBadRequest, "invalid_role")
+		adminError(c, http.StatusBadRequest, "invalid_role")
 		return
 	}
 	if code := registerInputErrorCode(req.Username, req.Email, req.Password); code != "" {
-		spaAdminError(c, http.StatusBadRequest, code)
+		adminError(c, http.StatusBadRequest, code)
 		return
 	}
 	ctx := c.Request.Context()
@@ -140,7 +140,7 @@ func (s *Server) spaAdminUserCreate(c *gin.Context) {
 	})
 	if err != nil {
 		s.logger.Error("spa admin: create user failed", "username", req.Username, "error", err)
-		spaAdminError(c, http.StatusBadRequest, "create_failed")
+		adminError(c, http.StatusBadRequest, "create_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -148,41 +148,41 @@ func (s *Server) spaAdminUserCreate(c *gin.Context) {
 		TargetType: "user", TargetID: store.Ptr(created.ID),
 		Detail: map[string]any{"username": created.Username, "role": created.Role, "by_admin": true},
 	})
-	c.JSON(http.StatusCreated, spaAdminUser{
+	c.JSON(http.StatusCreated, adminUser{
 		ID: created.ID, Username: created.Username, Email: created.Email,
 		DisplayName: created.DisplayName, Role: created.Role, Status: created.Status,
 	})
 }
 
-// spaAdminUserStatus 启用或禁用账号；禁用会作废其全部会话（M6-2 验收）。
-func (s *Server) spaAdminUserStatus(c *gin.Context) {
+// adminUserStatus 启用或禁用账号；禁用会作废其全部会话（M6-2 验收）。
+func (s *Server) adminUserStatus(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	target, ok := s.spaAdminTargetUser(c)
+	target, ok := s.adminTargetUser(c)
 	if !ok {
 		return
 	}
-	var req spaAdminUserStatusRequest
+	var req adminUserStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	ctx := c.Request.Context()
 	if strings.TrimSpace(req.Action) == "disable" {
 		if target.ID == actor.ID {
-			spaAdminError(c, http.StatusBadRequest, "self_forbidden")
+			adminError(c, http.StatusBadRequest, "self_forbidden")
 			return
 		}
 		if s.wouldRemoveLastAdmin(c, target) {
-			spaAdminError(c, http.StatusBadRequest, "last_admin")
+			adminError(c, http.StatusBadRequest, "last_admin")
 			return
 		}
 		if err := s.accounts.DisableUser(ctx, target.ID); err != nil {
 			s.logger.Error("spa admin: disable user failed", "user_id", target.ID, "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		s.audit(ctx, store.AuditEntry{
@@ -193,7 +193,7 @@ func (s *Server) spaAdminUserStatus(c *gin.Context) {
 	} else {
 		if err := s.accounts.EnableUser(ctx, target.ID); err != nil {
 			s.logger.Error("spa admin: enable user failed", "user_id", target.ID, "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		s.audit(ctx, store.AuditEntry{
@@ -204,38 +204,38 @@ func (s *Server) spaAdminUserStatus(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminUserRole 改角色（危险动作，需确认）；不得降掉最后一个管理员。
-func (s *Server) spaAdminUserRole(c *gin.Context) {
+// adminUserRole 改角色（危险动作，需确认）；不得降掉最后一个管理员。
+func (s *Server) adminUserRole(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminUserRoleRequest
+	var req adminUserRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if !req.Confirm {
-		spaAdminError(c, http.StatusBadRequest, "confirm_required")
+		adminError(c, http.StatusBadRequest, "confirm_required")
 		return
 	}
 	if req.Role != store.RoleAdmin && req.Role != store.RoleUser {
-		spaAdminError(c, http.StatusBadRequest, "invalid_role")
+		adminError(c, http.StatusBadRequest, "invalid_role")
 		return
 	}
-	target, ok := s.spaAdminTargetUser(c)
+	target, ok := s.adminTargetUser(c)
 	if !ok {
 		return
 	}
 	if req.Role != store.RoleAdmin && s.wouldRemoveLastAdmin(c, target) {
-		spaAdminError(c, http.StatusBadRequest, "last_admin")
+		adminError(c, http.StatusBadRequest, "last_admin")
 		return
 	}
 	ctx := c.Request.Context()
 	if err := s.users.SetRole(ctx, target.ID, req.Role); err != nil {
 		s.logger.Error("spa admin: set role failed", "user_id", target.ID, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -246,19 +246,19 @@ func (s *Server) spaAdminUserRole(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminUserResetPassword 生成临时口令并作废目标用户全部会话，一次性返回口令。
-func (s *Server) spaAdminUserResetPassword(c *gin.Context) {
+// adminUserResetPassword 生成临时口令并作废目标用户全部会话，一次性返回口令。
+func (s *Server) adminUserResetPassword(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminUserConfirmRequest
+	var req adminUserConfirmRequest
 	if err := c.ShouldBindJSON(&req); err != nil || !req.Confirm {
-		spaAdminError(c, http.StatusBadRequest, "confirm_required")
+		adminError(c, http.StatusBadRequest, "confirm_required")
 		return
 	}
-	target, ok := s.spaAdminTargetUser(c)
+	target, ok := s.adminTargetUser(c)
 	if !ok {
 		return
 	}
@@ -271,31 +271,31 @@ func (s *Server) spaAdminUserResetPassword(c *gin.Context) {
 	})
 	if err != nil {
 		s.logger.Error("spa admin: reset password failed", "user_id", target.ID, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserPasswordReset,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 	})
-	c.JSON(http.StatusOK, spaAdminUserPasswordResponse{TempPassword: temp})
+	c.JSON(http.StatusOK, adminUserPasswordResponse{TempPassword: temp})
 }
 
-// spaAdminUserForceLogout 强制下线：作废目标用户全部会话。
-func (s *Server) spaAdminUserForceLogout(c *gin.Context) {
+// adminUserForceLogout 强制下线：作废目标用户全部会话。
+func (s *Server) adminUserForceLogout(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	target, ok := s.spaAdminTargetUser(c)
+	target, ok := s.adminTargetUser(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
 		s.logger.Error("spa admin: force logout failed", "user_id", target.ID, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -305,28 +305,28 @@ func (s *Server) spaAdminUserForceLogout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminUserDelete 删除用户：需确认；不能删自己，也不能删掉最后一个管理员。
-func (s *Server) spaAdminUserDelete(c *gin.Context) {
+// adminUserDelete 删除用户：需确认；不能删自己，也不能删掉最后一个管理员。
+func (s *Server) adminUserDelete(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminUserConfirmRequest
+	var req adminUserConfirmRequest
 	if err := c.ShouldBindJSON(&req); err != nil || !req.Confirm {
-		spaAdminError(c, http.StatusBadRequest, "confirm_required")
+		adminError(c, http.StatusBadRequest, "confirm_required")
 		return
 	}
-	target, ok := s.spaAdminTargetUser(c)
+	target, ok := s.adminTargetUser(c)
 	if !ok {
 		return
 	}
 	if target.ID == actor.ID {
-		spaAdminError(c, http.StatusBadRequest, "self_forbidden")
+		adminError(c, http.StatusBadRequest, "self_forbidden")
 		return
 	}
 	if s.wouldRemoveLastAdmin(c, target) {
-		spaAdminError(c, http.StatusBadRequest, "last_admin")
+		adminError(c, http.StatusBadRequest, "last_admin")
 		return
 	}
 	ctx := c.Request.Context()
@@ -338,7 +338,7 @@ func (s *Server) spaAdminUserDelete(c *gin.Context) {
 	}
 	if err := s.users.DeleteUser(ctx, target.ID); err != nil {
 		s.logger.Error("spa admin: delete user failed", "user_id", target.ID, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -349,21 +349,21 @@ func (s *Server) spaAdminUserDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminTargetUser 解析 :id 并取目标用户；解析失败或不存在时写 404 并返回 false。
-func (s *Server) spaAdminTargetUser(c *gin.Context) (*store.User, bool) {
+// adminTargetUser 解析 :id 并取目标用户；解析失败或不存在时写 404 并返回 false。
+func (s *Server) adminTargetUser(c *gin.Context) (*store.User, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		spaAdminError(c, http.StatusNotFound, "invalid_user")
+		adminError(c, http.StatusNotFound, "invalid_user")
 		return nil, false
 	}
 	u, err := s.users.ByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			spaAdminError(c, http.StatusNotFound, "invalid_user")
+			adminError(c, http.StatusNotFound, "invalid_user")
 			return nil, false
 		}
 		s.logger.Error("spa admin: load target user failed", "user_id", id, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return nil, false
 	}
 	return u, true

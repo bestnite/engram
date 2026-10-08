@@ -34,12 +34,12 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	// 邮件里的一键 GET 链接落在规范路径上，返回应用壳；令牌由 SPA 通过
 	// /api/v1/auth/{verify-email,confirm-email-change} 消费（一次性、有过期）。
 	// 会话前写请求由 PreSessionCSRFMiddleware 校验双提交 cookie 与镜像 token。
-	router.GET("/verify-email", s.spaVerifyEmailShell)
-	router.GET("/confirm-email-change", s.spaConfirmEmailChangeShell)
+	router.GET("/verify-email", s.verifyEmailShell)
+	router.GET("/confirm-email-change", s.confirmEmailChangeShell)
 	// 改邮箱页是登录用户自己的页面：未登录先重定向登录页。
 	router.GET("/settings/email", s.emailChangeRoute)
 	// SPA 的同源 JSON 传输层与应用壳入口（spa_account.go）。
-	s.registerSPAAccountRoutes(router)
+	s.registerAccountRoutes(router)
 }
 
 // 安全/事务流程没有服务端渲染：只有同源 JSON 端点与 SPA 应用壳，页面全部由前端路由呈现。

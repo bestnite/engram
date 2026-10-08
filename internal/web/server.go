@@ -339,24 +339,24 @@ func New(addr string, deps Deps) (*Server, error) {
 	if deps.Sessions != nil && deps.Users != nil {
 		// SPA 个人资料 API 仅在会话依赖齐备时注册，写请求继续由会话 CSRF 中间件保护。
 		profile := router.Group("/api/v1")
-		profile.GET("/profile", s.spaProfileGet)
-		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.spaProfilePatch)
-		profile.PATCH("/settings/locale", deps.Sessions.CSRFMiddleware(), s.spaLocalePatch)
+		profile.GET("/profile", s.profileGet)
+		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.profilePatch)
+		profile.PATCH("/settings/locale", deps.Sessions.CSRFMiddleware(), s.localePatch)
 		if deps.Accounts != nil {
-			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.spaPasswordPatch)
+			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.passwordPatch)
 		}
 	}
 	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
 	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
 	s.registerDeckRoutes(router)
-	s.registerSPADeckQueueCountRoute(router)
+	s.registerDeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
-	s.registerSPADeckSettingsRoutes(router)
+	s.registerDeckSettingsAPIRoutes(router)
 	// 两步验证管理：GET /settings/totp 由应用壳应答，读写走 /api/v1/settings/totp*。
-	s.registerSPATOTPRoutes(router)
+	s.registerTOTPAPIRoutes(router)
 	// 邮件通知偏好：GET /settings/notifications 由应用壳应答，读写走 /api/v1/settings/notifications。
-	s.registerSPAMailPrefsRoutes(router)
+	s.registerMailPrefsAPIRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)
@@ -380,13 +380,13 @@ func New(addr string, deps Deps) (*Server, error) {
 		s.api.Register(router)
 		// SPA 答题只接受会话 cookie，并在 API 组之外显式校验会话绑定的 CSRF。
 		if s.sessions != nil {
-			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.spaReviewAnswer)
+			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.reviewAnswer)
 			// 作答类题型走判分入口：服务端判分并写 grade_source=typed。
-			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.spaReviewGrade)
+			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.reviewGrade)
 			// 埋藏与卡面渲染：只写本人进度 / 只读清洗后 HTML，仍是会话 + CSRF 保护的 web 端点
 			// 埋藏的调度逻辑复用 internal/schedule。
-			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.spaReviewBury)
-			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.spaReviewRender)
+			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.reviewBury)
+			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.reviewRender)
 		}
 	}
 	if s.mcp != nil && s.api != nil {

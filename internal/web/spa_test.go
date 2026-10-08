@@ -7,9 +7,9 @@ import (
 	"testing/fstest"
 )
 
-// TestSPAServesAssetsWithImmutableCache 断言已嵌入的 Vite 构建资源（/assets/*）
+// TestServesAssetsWithImmutableCache 断言已嵌入的 Vite 构建资源（/assets/*）
 // 能被正确提供，并带有长效不可变缓存、ETag 与正确的 MIME 类型。
-func TestSPAServesAssetsWithImmutableCache(t *testing.T) {
+func TestServesAssetsWithImmutableCache(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	if srv.spa == nil {
 		t.Fatal("srv.spa is nil")
@@ -68,9 +68,9 @@ func TestSPAServesAssetsWithImmutableCache(t *testing.T) {
 	}
 }
 
-// TestSPAMissingAssetReturns404 断言请求不存在的 /assets/* 静态资源时明确返回 404，
+// TestMissingAssetReturns404 断言请求不存在的 /assets/* 静态资源时明确返回 404，
 // 严禁错误回退到 SPA index.html 应用壳。
-func TestSPAMissingAssetReturns404(t *testing.T) {
+func TestMissingAssetReturns404(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
 	rec := get(t, srv, "/assets/not-found-bundle.js", nil)
@@ -82,8 +82,8 @@ func TestSPAMissingAssetReturns404(t *testing.T) {
 	}
 }
 
-// TestSPAFallbackDeepLinks 断言 SPA 客户端深链接访问时回退 index.html。
-func TestSPAFallbackDeepLinks(t *testing.T) {
+// TestFallbackDeepLinks 断言 SPA 客户端深链接访问时回退 index.html。
+func TestFallbackDeepLinks(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
 	deepLinks := []string{
@@ -106,8 +106,8 @@ func TestSPAFallbackDeepLinks(t *testing.T) {
 	}
 }
 
-// TestNewSPAErrorsOnEmptyOrMissingIndex 断言当缺少 index.html 或文件为空时构造失败。
-func TestNewSPAErrorsOnEmptyOrMissingIndex(t *testing.T) {
+// TestNewErrorsOnEmptyOrMissingIndex 断言当缺少 index.html 或文件为空时构造失败。
+func TestNewErrorsOnEmptyOrMissingIndex(t *testing.T) {
 	missingFS := fstest.MapFS{
 		"assets/bundle.js": &fstest.MapFile{Data: []byte("console.log('hi');")},
 	}
@@ -123,10 +123,10 @@ func TestNewSPAErrorsOnEmptyOrMissingIndex(t *testing.T) {
 	}
 }
 
-// TestSPAIndexInjectsSelfHostedMathJaxURL 断言 SPA 入口把自托管 MathJax 的内容哈希 URL
+// TestIndexInjectsSelfHostedMathJaxURL 断言 SPA 入口把自托管 MathJax 的内容哈希 URL
 // 以 <meta name="engram-mathjax"> 注入 <head>：前端据此用同源外链脚本加载 MathJax，
 // 无需内联脚本，也就无需放宽 CSP。
-func TestSPAIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
+func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	want := srv.assets.URL("js/mathjax/tex-svg.js")
 	if want == "" {
@@ -161,9 +161,9 @@ func TestSPAIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	}
 }
 
-// TestSPAIndexMathJaxMetaFollowsSetURL 断言注入是 SetMathJaxURL 驱动的：默认不带 meta，
+// TestIndexMathJaxMetaFollowsSetURL 断言注入是 SetMathJaxURL 驱动的：默认不带 meta，
 // 传入 URL 后出现在 </head> 之前，再传空串则移除（资源缺失时与 SSR 一样不引用 MathJax）。
-func TestSPAIndexMathJaxMetaFollowsSetURL(t *testing.T) {
+func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 	spa, err := NewSPA(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<html><head></head><body><div id=\"app\"></div></body></html>")},
 	})
@@ -191,9 +191,9 @@ func TestSPAIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 	}
 }
 
-// TestSPAIndexVersionMetaFollowsSetVersion 断言版本注入由 SetVersion 驱动：默认不带 meta，
+// TestIndexVersionMetaFollowsSetVersion 断言版本注入由 SetVersion 驱动：默认不带 meta，
 // 传入版本后出现在 </head> 之前，值一律转义，再传空串则移除（未注入版本的构建不显示版本）。
-func TestSPAIndexVersionMetaFollowsSetVersion(t *testing.T) {
+func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
 	spa, err := NewSPA(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html><head></head><body><div id="app"></div></body></html>`)},
 	})
@@ -226,11 +226,11 @@ func TestSPAIndexVersionMetaFollowsSetVersion(t *testing.T) {
 	}
 }
 
-// TestSPAVersionMetaReachesShell 断言 web.Deps.Version 真的经 New 注入到应用壳的 <head>：
+// TestVersionMetaReachesShell 断言 web.Deps.Version 真的经 New 注入到应用壳的 <head>：
 // 前端页脚的版本号只有这一条来源，装配漏传时页脚会静默地不显示版本。
-func TestSPAVersionMetaReachesShell(t *testing.T) {
+func TestVersionMetaReachesShell(t *testing.T) {
 	srv := newRenderServer(t, nil, func(d *Deps) { d.Version = "v9.9.9" })
-	body := spaShellBody(t, srv, "/", nil)
+	body := fetchShellBody(t, srv, "/", nil)
 	want := `<meta name="engram-version" content="v9.9.9" />`
 	if !strings.Contains(body, want) {
 		t.Errorf("SPA shell is missing %q: %s", want, snippet(body))
@@ -238,7 +238,7 @@ func TestSPAVersionMetaReachesShell(t *testing.T) {
 
 	// 未设置 Deps.Version（如测试装配）时不得出现该 meta。
 	plain := newRenderServer(t, nil)
-	if strings.Contains(spaShellBody(t, plain, "/", nil), `name="`+versionMetaName+`"`) {
+	if strings.Contains(fetchShellBody(t, plain, "/", nil), `name="`+versionMetaName+`"`) {
 		t.Error("SPA shell carries a version meta although Deps.Version is empty")
 	}
 }

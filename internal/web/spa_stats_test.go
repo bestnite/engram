@@ -7,16 +7,16 @@ import (
 	"testing"
 )
 
-// TestSPAStatsDetailMatchesStoreMeasures 断言 SPA 明细接口的每个数字都能用 seedStatsFixture
+// TestStatsDetailMatchesStoreMeasures 断言 SPA 明细接口的每个数字都能用 seedStatsFixture
 // 的夹具独立复算：复习量、到期、留存桶、时间投入、连续打卡、卡组/标签维度与判分来源。
 // 夹具口径见 internal/web/stats_test.go（UTC、午夜切点，与 handler 的复习日一致）。
-func TestSPAStatsDetailMatchesStoreMeasures(t *testing.T) {
+func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/api/v1/stats/detail", cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/stats/detail = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	var detail spaStatsDetail
+	var detail statsDetail
 	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("decode stats detail: %v", err)
 	}
@@ -94,9 +94,9 @@ func TestSPAStatsDetailMatchesStoreMeasures(t *testing.T) {
 	}
 }
 
-// TestSPAStatsDetailRequiresSession 是负例：匿名请求返回 401 与稳定英文 code，
+// TestStatsDetailRequiresSession 是负例：匿名请求返回 401 与稳定英文 code，
 // 而不是 SSR 页面那种 303 重定向（JSON 客户端不该收到 HTML 跳转）。
-func TestSPAStatsDetailRequiresSession(t *testing.T) {
+func TestStatsDetailRequiresSession(t *testing.T) {
 	srv, _, _, _ := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/api/v1/stats/detail", nil)
 	if rec.Code != http.StatusUnauthorized {

@@ -14,8 +14,8 @@ import (
 // 页面迁移不改动授权判定：未登录一律重定向登录页，卡组设置页的 owner 门禁仍在返回应用壳
 // 之前生效，写操作全部走 JSON 端点。
 
-// assertServesSPAShell 断言响应是 SPA 应用壳（入口脚本引用），而不是 SSR 页面。
-func assertServesSPAShell(t *testing.T, rec *httptest.ResponseRecorder, what string) {
+// assertServesShell 断言响应是 SPA 应用壳（入口脚本引用），而不是 SSR 页面。
+func assertServesShell(t *testing.T, rec *httptest.ResponseRecorder, what string) {
 	t.Helper()
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK {
@@ -32,14 +32,14 @@ func assertServesSPAShell(t *testing.T, rec *httptest.ResponseRecorder, what str
 	}
 }
 
-// TestSPATOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流（页面只返回应用壳，无 SSR 回退）。
-func TestSPATOTPSettingsRouteCutover(t *testing.T) {
+// TestTOTPSettingsRouteCutover 覆盖 GET /settings/totp 的切流（页面只返回应用壳，无 SSR 回退）。
+func TestTOTPSettingsRouteCutover(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
-	cookies, _ := spaTOTPLogin(t, srv, db)
+	cookies, _ := totpLogin(t, srv, db)
 
 	rec := getWithCookies(t, srv, "/settings/totp", cookies)
-	assertServesSPAShell(t, rec, "GET /settings/totp")
+	assertServesShell(t, rec, "GET /settings/totp")
 
 	// 未登录仍然重定向登录页（授权判定不变）。
 	anon := get(t, srv, "/settings/totp", nil)
@@ -48,12 +48,12 @@ func TestSPATOTPSettingsRouteCutover(t *testing.T) {
 	}
 }
 
-// TestSPANotificationPrefsRouteCutover 覆盖 GET /settings/notifications 的切流。
-func TestSPANotificationPrefsRouteCutover(t *testing.T) {
+// TestNotificationPrefsRouteCutover 覆盖 GET /settings/notifications 的切流。
+func TestNotificationPrefsRouteCutover(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
 	rec := getWithCookies(t, srv, "/settings/notifications", cookies)
-	assertServesSPAShell(t, rec, "GET /settings/notifications")
+	assertServesShell(t, rec, "GET /settings/notifications")
 
 	anon := get(t, srv, "/settings/notifications", nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
@@ -61,14 +61,14 @@ func TestSPANotificationPrefsRouteCutover(t *testing.T) {
 	}
 }
 
-// TestSPADeckSettingsRouteCutover 覆盖 GET /decks/:id/settings 的切流，并钉住 owner 门禁
+// TestDeckSettingsRouteCutover 覆盖 GET /decks/:id/settings 的切流，并钉住 owner 门禁
 // 仍在应用壳之前生效（无权用户拿不到页面外壳）。
-func TestSPADeckSettingsRouteCutover(t *testing.T) {
+func TestDeckSettingsRouteCutover(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Cutover deck")
 	path := "/decks/" + u64str(deck.ID) + "/settings"
 
-	assertServesSPAShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+	assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
 
 	// 未登录：重定向登录页，绝不返回外壳。
 	anon := get(t, srv, path, nil)

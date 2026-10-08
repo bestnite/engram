@@ -11,9 +11,9 @@ import (
 // 两条路径都返回应用壳（index.html），由客户端路由渲染页面；鉴权判定（会话 + 角色）先于切壳执行。
 // 卡片编辑/新建两条 GET 路径的切流断言在 spa_notes_cutover_test.go。
 
-// assertSPAShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
+// assertShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
 // 且含应用挂载点 <div id="app"></div>。
-func assertSPAShell(t *testing.T, rec *httptest.ResponseRecorder) {
+func assertShell(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -32,14 +32,14 @@ func assertSPAShell(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// TestDeckListRouteServesSPAShell 断言 GET /decks 返回 SPA 应用壳，由客户端路由渲染卡组列表，
+// TestDeckListRouteServesShell 断言 GET /decks 返回 SPA 应用壳，由客户端路由渲染卡组列表，
 // 不再渲染 SSR 列表页（SSR 页面上的卡组名与「复习所选」控件必须消失）。
-func TestDeckListRouteServesSPAShell(t *testing.T) {
+func TestDeckListRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	seedDeck(t, db, ownerID, "SPA shell deck")
 
 	rec := getWithCookies(t, srv, "/decks", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), "SPA shell deck") {
 		t.Errorf("GET /decks still renders the SSR deck list: %s", snippet(rec.Body.String()))
 	}
@@ -61,15 +61,15 @@ func TestDeckListRouteRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-// TestNoteListRouteServesSPAShell 断言 GET /decks/:id/notes 对可读卡组返回 SPA 应用壳，
+// TestNoteListRouteServesShell 断言 GET /decks/:id/notes 对可读卡组返回 SPA 应用壳，
 // 由客户端路由渲染卡片列表，不再渲染 SSR 列表页（SSR 的卡组标题必须消失）。
-func TestNoteListRouteServesSPAShell(t *testing.T) {
+func TestNoteListRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "SPA notes deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), "SPA notes deck") {
 		t.Errorf("GET notes still renders the SSR list: %s", snippet(rec.Body.String()))
 	}

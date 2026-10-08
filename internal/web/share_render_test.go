@@ -76,7 +76,7 @@ func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 
 	shareFront, shareBack := fetchShareHTML(t, srv, deck.ID, ownerCookies, ownerCSRF)
 
-	renderRec := postSPAJSON(t, srv, "/api/v1/review/render",
+	renderRec := postJSONWithCSRF(t, srv, "/api/v1/review/render",
 		map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}, ownerCookies, ownerCSRF)
 	if renderRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/review/render = %d, want 200 (body %s)", renderRec.Code, snippet(renderRec.Body.String()))

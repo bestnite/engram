@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-func TestSPASharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
+func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Share SPA")
 	path := "/api/v1/decks/" + u64str(deck.ID) + "/sharing"

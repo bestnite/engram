@@ -21,7 +21,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-type spaReviewRequest struct {
+type reviewRequest struct {
 	CardID          uint64   `json:"card_id"`
 	Rating          int      `json:"rating"`
 	ExpectedVersion int      `json:"expected_version"`
@@ -29,14 +29,14 @@ type spaReviewRequest struct {
 	Deck            []uint64 `json:"deck"`
 }
 
-// spaGradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
+// gradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
 // 客户端只提交原始作答（Answer），绝不提交档位——否则就是自评冒充机器判分。
 //
 // Action 决定这次请求的语义：
 //   - ""：正常判分，写 reviews（grade_source=typed）；
 //   - "reveal"：只返回清洗后的正确答案，不判分、不写库（揭示前的只读预览）；
 //   - "give_up"：已揭示答案后放弃作答，按 Again 记一条自评日志（grade_source=self）。
-type spaGradeRequest struct {
+type gradeRequest struct {
 	CardID          uint64          `json:"card_id"`
 	ExpectedVersion int             `json:"expected_version"`
 	ElapsedMS       *int            `json:"elapsed_ms"`
@@ -45,33 +45,33 @@ type spaGradeRequest struct {
 	Answer          json.RawMessage `json:"answer"`
 }
 
-// spaReviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
+// reviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
 // 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列。
-type spaReviewCardRequest struct {
+type reviewCardRequest struct {
 	CardID uint64   `json:"card_id"`
 	Deck   []uint64 `json:"deck"`
 }
 
-// spaReviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
-func (s *Server) spaReviewAnswer(c *gin.Context) {
+// reviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
+func (s *Server) reviewAnswer(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || s.api == nil {
-		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req spaReviewRequest
+	var req reviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, note, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	_, note, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
 	// 作答类题型不得走自评入口：那会把机器判分的评分权交回客户端。
 	// SPA 对这类卡改走 /api/v1/review/grade。
 	if _, graded := graderFor(note.Kind); graded {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
@@ -83,78 +83,78 @@ func (s *Server) spaReviewAnswer(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeSPAReviewResult(c, user, req.Deck, result)
+	s.writeReviewResult(c, user, req.Deck, result)
 }
 
-// spaReviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
+// reviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
 // 计算档位并按 preset 的分数→档位映射写入 reviews（grade_source=typed、grade_detail_json）。
 // 客户端提交原始作答，不提交档位；判分规则与 SSR 共用 graderFor / buildGradeInput。
-func (s *Server) spaReviewGrade(c *gin.Context) {
+func (s *Server) reviewGrade(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || s.api == nil {
-		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req spaGradeRequest
+	var req gradeRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, note, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	card, note, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
 	if _, graded := graderFor(note.Kind); !graded {
 		// 自评类题型走错入口：拒绝，避免把四档评分伪装成机器判分。
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	switch req.Action {
-	case spaGradeActionReveal:
-		s.spaGradeReveal(c, user, card)
+	case gradeActionReveal:
+		s.gradeReveal(c, user, card)
 		return
-	case spaGradeActionGiveUp:
-		s.spaGradeGiveUp(c, user, req)
+	case gradeActionGiveUp:
+		s.gradeGiveUp(c, user, req)
 		return
 	case "":
 	default:
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	s.spaGradeSubmit(c, user, card, note, req)
+	s.gradeSubmit(c, user, card, note, req)
 }
 
-// spaGradeSubmit 执行一次真正的机器判分：构造判分输入、判分、按映射得档位，单事务写库。
-func (s *Server) spaGradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req spaGradeRequest) {
+// gradeSubmit 执行一次真正的机器判分：构造判分输入、判分、按映射得档位，单事务写库。
+func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest) {
 	ctx := c.Request.Context()
 	g, _ := graderFor(note.Kind)
 	fields, err := store.ParseFields(note.FieldsJSON)
 	if err != nil {
 		s.logger.Error("parse note fields for spa grading failed", "note_id", note.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	mapping := s.gradeMappingFor(ctx, note.DeckID)
-	form, err := spaGradeAnswerToForm(note.Kind, req.Answer)
+	form, err := gradeAnswerToForm(note.Kind, req.Answer)
 	if err != nil {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	input, err := buildGradeInput(note.Kind, fields, mapping, form)
 	if err != nil {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	rating, detail, ok := g.Grade(input)
 	if !ok {
 		// 输入无法判分（如索引越界）不写库，让用户重新作答。
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
 	detailJSON, err := json.Marshal(detail)
 	if err != nil {
 		s.logger.Error("marshal spa grade detail failed", "note_id", note.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	raw := string(detailJSON)
@@ -167,30 +167,30 @@ func (s *Server) spaGradeSubmit(c *gin.Context, user *store.User, card *store.Ca
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	feedback, err := s.spaGradeFeedback(ctx, user, note, card, fields, detail, mapping)
+	feedback, err := s.gradeFeedback(ctx, user, note, card, fields, detail, mapping)
 	if err != nil {
 		s.logger.Error("build spa grade feedback failed", "card_id", card.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeSPAReviewResult(c, user, req.Deck, result, gin.H{"feedback": feedback})
+	s.writeReviewResult(c, user, req.Deck, result, gin.H{"feedback": feedback})
 }
 
-// spaGradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
+// gradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
 // 揭示后由前端切到「放弃作答」态，用户再点按钮才走 give_up 记 Again。
-func (s *Server) spaGradeReveal(c *gin.Context, user *store.User, card *store.Card) {
-	answerHTML, err := s.spaSanitizedBack(c.Request.Context(), user, card)
+func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card) {
+	answerHTML, err := s.sanitizedBack(c.Request.Context(), user, card)
 	if err != nil {
 		s.logger.Error("render spa graded answer failed", "card_id", card.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"revealed": true, "card_id": card.ID, "answer_html": answerHTML})
 }
 
-// spaGradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
+// gradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
 // grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
-func (s *Server) spaGradeGiveUp(c *gin.Context, user *store.User, req spaGradeRequest) {
+func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Rating: int(schedule.Again), ExpectedVersion: req.ExpectedVersion,
 		ElapsedMS: req.ElapsedMS, GradeSource: schedule.GradeSourceSelf,
@@ -200,25 +200,25 @@ func (s *Server) spaGradeGiveUp(c *gin.Context, user *store.User, req spaGradeRe
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeSPAReviewResult(c, user, req.Deck, result, gin.H{"gave_up": true})
+	s.writeReviewResult(c, user, req.Deck, result, gin.H{"gave_up": true})
 }
 
-// spaReviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
+// reviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
 // 复习日），调度逻辑仍在 internal/schedule（schedule.Bury），transport 只做参数校验与事务边界
 // （AGENTS.md §2.3.6：一种业务逻辑、两条传输）。埋藏只需 reader——它写的是 (card_id, user_id)
 // 的本人进度，共享卡组的读者可自行复习。响应带同范围重建后的队列。
-func (s *Server) spaReviewBury(c *gin.Context) {
+func (s *Server) reviewBury(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
-		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req spaReviewCardRequest
+	var req reviewCardRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	card, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
@@ -226,7 +226,7 @@ func (s *Server) spaReviewBury(c *gin.Context) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		s.logger.Error("begin spa bury transaction failed", "user_id", user.ID, "error", tx.Error)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	if _, err := schedule.Bury(ctx, tx, schedule.BuryInput{
@@ -234,39 +234,39 @@ func (s *Server) spaReviewBury(c *gin.Context) {
 	}); err != nil {
 		_ = tx.Rollback().Error
 		s.logger.Error("bury review card failed", "user_id", user.ID, "card_id", card.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	if err := tx.Commit().Error; err != nil {
 		s.logger.Error("commit spa bury failed", "user_id", user.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeSPAQueue(c, user, req.Deck)
+	s.writeQueue(c, user, req.Deck)
 }
 
-// spaReviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
+// reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
 // HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
 // 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。
-func (s *Server) spaReviewRender(c *gin.Context) {
+func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
-		writeSPARenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req spaReviewCardRequest
+	var req reviewCardRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
-		writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, ok := s.spaReviewCard(c, user, req.Deck, req.CardID)
+	card, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
 	view, err := s.cardView(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID})
 	if err != nil {
 		s.logger.Error("render spa review card failed", "card_id", card.ID, "error", err)
-		writeSPARenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -277,12 +277,12 @@ func (s *Server) spaReviewRender(c *gin.Context) {
 	})
 }
 
-// spaReviewCard 校验 SPA 请求的卡组范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
+// reviewCard 校验 SPA 请求的卡组范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
 // 不静默丢弃），目标卡必须存在且落在范围内。失败时已写出响应并返回 false。
-func (s *Server) spaReviewCard(c *gin.Context, user *store.User, deckIDs []uint64, cardID uint64) (*store.Card, *store.Note, bool) {
+func (s *Server) reviewCard(c *gin.Context, user *store.User, deckIDs []uint64, cardID uint64) (*store.Card, *store.Note, bool) {
 	for _, deckID := range deckIDs {
 		if deckID == 0 {
-			writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+			writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 			return nil, nil, false
 		}
 		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
@@ -291,12 +291,12 @@ func (s *Server) spaReviewCard(c *gin.Context, user *store.User, deckIDs []uint6
 	}
 	card, err := s.cards.ByID(c.Request.Context(), cardID)
 	if err != nil {
-		writeSPARenderError(c, http.StatusNotFound, api.CodeNotFound)
+		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
 		return nil, nil, false
 	}
 	note, err := s.notes.ByID(c.Request.Context(), card.NoteID)
 	if err != nil {
-		writeSPARenderError(c, http.StatusNotFound, api.CodeNotFound)
+		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
 		return nil, nil, false
 	}
 	if len(deckIDs) > 0 {
@@ -308,16 +308,16 @@ func (s *Server) spaReviewCard(c *gin.Context, user *store.User, deckIDs []uint6
 			}
 		}
 		if !inScope {
-			writeSPARenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+			writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 			return nil, nil, false
 		}
 	}
 	return card, note, true
 }
 
-// writeSPAReviewResult 写出一次评分后的统一响应：新状态 + 同范围队列（预取下一张），
+// writeReviewResult 写出一次评分后的统一响应：新状态 + 同范围队列（预取下一张），
 // 外加调用方附加的字段（判分反馈 / 放弃标记）。范围原样带回，队列不会退化成单卡组。
-func (s *Server) writeSPAReviewResult(c *gin.Context, user *store.User, deckIDs []uint64, result api.SubmitReviewResult, extra ...gin.H) {
+func (s *Server) writeReviewResult(c *gin.Context, user *store.User, deckIDs []uint64, result api.SubmitReviewResult, extra ...gin.H) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
 	if err != nil {
 		se := apiError(err)
@@ -335,9 +335,9 @@ func (s *Server) writeSPAReviewResult(c *gin.Context, user *store.User, deckIDs 
 	c.JSON(http.StatusOK, body)
 }
 
-// writeSPAQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
+// writeQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
 // 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组。
-func (s *Server) writeSPAQueue(c *gin.Context, user *store.User, deckIDs []uint64) {
+func (s *Server) writeQueue(c *gin.Context, user *store.User, deckIDs []uint64) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
 	if err != nil {
 		se := apiError(err)
@@ -347,10 +347,10 @@ func (s *Server) writeSPAQueue(c *gin.Context, user *store.User, deckIDs []uint6
 	c.JSON(http.StatusOK, gin.H{"cards": cards, "remaining": len(cards)})
 }
 
-// spaGradeFeedback 组装判分反馈：判定来自分数与映射阈值，正确答案用服务端清洗后的 HTML，
+// gradeFeedback 组装判分反馈：判定来自分数与映射阈值，正确答案用服务端清洗后的 HTML，
 // 作答文本按题型还原成可读串（选项索引转成选项文本，判分细节不直接暴露给前端）。
-func (s *Server) spaGradeFeedback(ctx context.Context, user *store.User, note *store.Note, card *store.Card, fields map[string]any, detail map[string]any, mapping *cardtype.GradeMapping) (gin.H, error) {
-	answerHTML, err := s.spaSanitizedBack(ctx, user, card)
+func (s *Server) gradeFeedback(ctx context.Context, user *store.User, note *store.Note, card *store.Card, fields map[string]any, detail map[string]any, mapping *cardtype.GradeMapping) (gin.H, error) {
+	answerHTML, err := s.sanitizedBack(ctx, user, card)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,7 @@ func (s *Server) spaGradeFeedback(ctx context.Context, user *store.User, note *s
 		"score":       score,
 		"rating":      rating,
 		"answer_html": answerHTML,
-		"given":       spaGradeGivenText(note.Kind, fields, detail),
+		"given":       gradeGivenText(note.Kind, fields, detail),
 	}
 	if parsed, ok := detail["parsed_answer"]; ok {
 		out["parsed"] = numberText(parsed)
@@ -385,9 +385,9 @@ func (s *Server) spaGradeFeedback(ctx context.Context, user *store.User, note *s
 	return out, nil
 }
 
-// spaSanitizedBack 渲染一张卡的背面并经 internal/render 清洗，供 SPA 展示正确答案。
+// sanitizedBack 渲染一张卡的背面并经 internal/render 清洗，供 SPA 展示正确答案。
 // 复用 cardView，保证与 SSR 走同一条清洗路径。
-func (s *Server) spaSanitizedBack(ctx context.Context, user *store.User, card *store.Card) (string, error) {
+func (s *Server) sanitizedBack(ctx context.Context, user *store.User, card *store.Card) (string, error) {
 	view, err := s.cardView(ctx, user, schedule.QueueItem{CardID: card.ID})
 	if err != nil {
 		return "", err
@@ -395,9 +395,9 @@ func (s *Server) spaSanitizedBack(ctx context.Context, user *store.User, card *s
 	return view.BackHTML, nil
 }
 
-// spaGradeGivenText 把判分细节还原成展示用的作答文本：选项索引转成选项文本，
+// gradeGivenText 把判分细节还原成展示用的作答文本：选项索引转成选项文本，
 // 判断题返回 "true"/"false"（前端负责本地化），其余直接取判分器记录的 given。
-func spaGradeGivenText(kind string, fields map[string]any, detail map[string]any) string {
+func gradeGivenText(kind string, fields map[string]any, detail map[string]any) string {
 	switch kind {
 	case "typed", "numeric":
 		given, _ := detail["given"].(string)
@@ -429,16 +429,16 @@ func spaGradeGivenText(kind string, fields map[string]any, detail map[string]any
 	}
 }
 
-// spaGradeAction* 是判分请求的三种语义（见 spaGradeRequest）。
+// spaGradeAction* 是判分请求的三种语义（见 gradeRequest）。
 const (
-	spaGradeActionReveal = "reveal"
-	spaGradeActionGiveUp = "give_up"
+	gradeActionReveal = "reveal"
+	gradeActionGiveUp = "give_up"
 )
 
-// spaGradeAnswerToForm 把 SPA 的 JSON 作答归一化成表单值，使 SPA 与 SSR 共用同一份
+// gradeAnswerToForm 把 SPA 的 JSON 作答归一化成表单值，使 SPA 与 SSR 共用同一份
 // buildGradeInput 映射（判分输入规则只有一处）。缺作答时返回空表单：对 typed/choice_multi
 // 而言空作答是合法的错误答案（记 0 分），对 choice_single/true_false 则由 buildGradeInput 拒绝。
-func spaGradeAnswerToForm(kind string, raw json.RawMessage) (url.Values, error) {
+func gradeAnswerToForm(kind string, raw json.RawMessage) (url.Values, error) {
 	form := url.Values{}
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {

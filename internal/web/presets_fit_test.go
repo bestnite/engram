@@ -6,14 +6,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSPAOptimizeVerdictThreeState 是 M9-12 验收 3：优化前后拟合对比的三态判据
+// TestOptimizeVerdictThreeState 是 M9-12 验收 3：优化前后拟合对比的三态判据
 // （原先由 SSR 卡片渲染的 applyResultToCard 覆盖，SSR 页面层删除后该判据的唯一实现是
-// spaOptimizeVerdict，测试随之盯住它）。
+// optimizeVerdict，测试随之盯住它）。
 //
 //   - 没有任何可用指标 -> unavailable（前端不渲染结论，避免把零值误报成「未改善」）；
 //   - 两个指标都算出来但样本不足（可用 item 数 < MinFitItems）-> insufficient_sample；
 //   - 样本足够且 after < before -> improved；after > before -> not_improved。
-func TestSPAOptimizeVerdictThreeState(t *testing.T) {
+func TestOptimizeVerdictThreeState(t *testing.T) {
 	items := store.MinFitItems + 50
 	cases := []struct {
 		name   string
@@ -55,8 +55,8 @@ func TestSPAOptimizeVerdictThreeState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := spaOptimizeVerdict(&tc.result); got != tc.want {
-				t.Errorf("spaOptimizeVerdict = %q, want %q", got, tc.want)
+			if got := optimizeVerdict(&tc.result); got != tc.want {
+				t.Errorf("optimizeVerdict = %q, want %q", got, tc.want)
 			}
 		})
 	}

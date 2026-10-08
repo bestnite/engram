@@ -96,7 +96,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 
 	// 3) 把 Markdown 图片引用插入 front 字段，SPA 预览端点应渲染出 <img>。
 	ref := "![](" + saved.URL + ")"
-	prev := postSPAJSON(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)
@@ -123,7 +123,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 
 	// 5) 再次预览：字段值里仍有引用，预览里仍有 <img>（且不是 base64 内联）。
-	reload := postSPAJSON(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+	reload := postJSONWithCSRF(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)

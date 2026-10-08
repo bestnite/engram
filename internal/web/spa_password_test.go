@@ -9,10 +9,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-func TestSPAPasswordChangeSecurityFlow(t *testing.T) {
+func TestPasswordChangeSecurityFlow(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	post := func(old, next, token string) *httptest.ResponseRecorder {
-		return patchProfile(t, srv, "/api/v1/settings/password", spaPasswordRequest{OldPassword: old, NewPassword: next}, cookies, token, "")
+		return patchProfile(t, srv, "/api/v1/settings/password", passwordRequest{OldPassword: old, NewPassword: next}, cookies, token, "")
 	}
 	if rec := post("wrong", "N3wStrongPassword!", csrf); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong current password: %d %s", rec.Code, rec.Body.String())

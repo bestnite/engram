@@ -17,8 +17,8 @@ import (
 // sha256，模型里没有明文列，因此响应不可能带出任何 key 内容。撤销是写操作，写审计且审计详情
 // 不含任何 key 内容。列表分页，绝不一次拉全表。
 
-// spaAdminAPIKey 是一把 key 的元信息；时间已按当前管理员时区格式化，null 表示未设置。
-type spaAdminAPIKey struct {
+// adminAPIKey 是一把 key 的元信息；时间已按当前管理员时区格式化，null 表示未设置。
+type adminAPIKey struct {
 	ID         uint64   `json:"id"`
 	UserID     uint64   `json:"user_id"`
 	Owner      string   `json:"owner"`
@@ -30,16 +30,16 @@ type spaAdminAPIKey struct {
 	State      string   `json:"state"`
 }
 
-// spaAdminAPIKeysResponse 是 API Key 总览的分页响应。
-type spaAdminAPIKeysResponse struct {
-	Keys  []spaAdminAPIKey `json:"keys"`
-	Page  int              `json:"page"`
-	Pages int              `json:"pages"`
-	Total int64            `json:"total"`
+// adminAPIKeysResponse 是 API Key 总览的分页响应。
+type adminAPIKeysResponse struct {
+	Keys  []adminAPIKey `json:"keys"`
+	Page  int           `json:"page"`
+	Pages int           `json:"pages"`
+	Total int64         `json:"total"`
 }
 
-// spaAdminAPIKeys 返回全用户 API Key 元信息（分页），口径与 adminAPIKeysPage 一致。
-func (s *Server) spaAdminAPIKeys(c *gin.Context) {
+// adminAPIKeys 返回全用户 API Key 元信息（分页），口径与 adminAPIKeysPage 一致。
+func (s *Server) adminAPIKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)
 	userLoc := auditLocation(actor)
@@ -48,7 +48,7 @@ func (s *Server) spaAdminAPIKeys(c *gin.Context) {
 	keys, total, err := store.NewAPIKeyStore(s.db).ListAll(ctx, adminKeysPageSize, (page-1)*adminKeysPageSize)
 	if err != nil {
 		s.logger.Error("spa admin: list api keys failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 
@@ -67,10 +67,10 @@ func (s *Server) spaAdminAPIKeys(c *gin.Context) {
 	}
 
 	now := time.Now().UTC()
-	rows := make([]spaAdminAPIKey, 0, len(keys))
+	rows := make([]adminAPIKey, 0, len(keys))
 	for i := range keys {
 		k := keys[i]
-		row := spaAdminAPIKey{
+		row := adminAPIKey{
 			ID: k.ID, UserID: k.UserID, Owner: names[k.UserID],
 			Name: k.Name, Prefix: k.Prefix, Scopes: store.ParseScopes(k.Scopes),
 			State: store.APIKeyState(&k, now),
@@ -90,29 +90,29 @@ func (s *Server) spaAdminAPIKeys(c *gin.Context) {
 	if pages < 1 {
 		pages = 1
 	}
-	c.JSON(http.StatusOK, spaAdminAPIKeysResponse{Keys: rows, Page: page, Pages: pages, Total: total})
+	c.JSON(http.StatusOK, adminAPIKeysResponse{Keys: rows, Page: page, Pages: pages, Total: total})
 }
 
-// spaAdminAPIKeyRevoke 撤销任意用户的一把 key（管理员动作）；幂等。
-func (s *Server) spaAdminAPIKeyRevoke(c *gin.Context) {
+// adminAPIKeyRevoke 撤销任意用户的一把 key（管理员动作）；幂等。
+func (s *Server) adminAPIKeyRevoke(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
 	id, err := parseUintParam(c.Param("id"))
 	if err != nil {
-		spaAdminError(c, http.StatusNotFound, "invalid_key")
+		adminError(c, http.StatusNotFound, "invalid_key")
 		return
 	}
 	ctx := c.Request.Context()
 	if err := store.NewAPIKeyStore(s.db).RevokeByID(ctx, id, time.Now().UTC()); err != nil {
 		if errors.Is(err, store.ErrAPIKeyNotFound) {
-			spaAdminError(c, http.StatusNotFound, "invalid_key")
+			adminError(c, http.StatusNotFound, "invalid_key")
 			return
 		}
 		s.logger.Error("spa admin: revoke api key failed", "key_id", id, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "revoke_failed")
+		adminError(c, http.StatusInternalServerError, "revoke_failed")
 		return
 	}
 	// 审计只记「谁撤销了哪把 key」；不写任何 key 内容（明文不存在，哈希也不该进审计）。

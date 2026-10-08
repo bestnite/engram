@@ -21,17 +21,17 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	// GET /decks/:id/sharing 返回应用壳，由客户端路由渲染共享管理页，数据走下面的 JSON 端点。
 	router.GET("/decks/:id/sharing", s.sharingPageRoute)
 	// SPA 的共享读写端点（spa_sharing.go）：数据仍走同一批 store 方法。
-	router.GET("/api/v1/decks/:id/sharing", s.spaSharingGet)
-	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
-	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingGrant)
-	router.DELETE("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.spaSharingRevoke)
+	router.GET("/api/v1/decks/:id/sharing", s.sharingGet)
+	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.sharingGrant)
+	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.sharingGrant)
+	router.DELETE("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.sharingRevoke)
 	// 分享同意制（L3）：待接受的邀请、接受/拒绝，以及用户自己的接收策略。
 	s.registerShareInviteRoutes(router)
-	router.PATCH("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.spaSharingVisibility)
-	router.POST("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.spaSharingVisibility)
-	router.POST("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.spaSharingLinkCreate)
-	router.DELETE("/api/v1/decks/:id/sharing/links/revoke/:digest", s.sessions.CSRFMiddleware(), s.spaSharingLinkRevoke)
-	router.DELETE("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.spaSharingLinkRevokeAll)
+	router.PATCH("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.sharingVisibility)
+	router.POST("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.sharingVisibility)
+	router.POST("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.sharingLinkCreate)
+	router.DELETE("/api/v1/decks/:id/sharing/links/revoke/:digest", s.sessions.CSRFMiddleware(), s.sharingLinkRevoke)
+	router.DELETE("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.sharingLinkRevokeAll)
 }
 
 // sharingPageRoute 提供 GET /decks/:id/sharing：返回应用壳，

@@ -16,28 +16,28 @@ import (
 // 写路径全部走同源 JSON 端点。
 // 角色授予复用 media_access_test.go 里的 grantRole，直接写 store 的授权表。
 
-// TestNoteEditRouteServesSPAShell 断言 GET /decks/:id/notes/:nid 对 owner 返回 SPA 应用壳，
+// TestNoteEditRouteServesShell 断言 GET /decks/:id/notes/:nid 对 owner 返回 SPA 应用壳，
 // 由客户端路由渲染编辑页，不再渲染 SSR 编辑表单。
-func TestNoteEditRouteServesSPAShell(t *testing.T) {
+func TestNoteEditRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "SPA edit deck")
 	note := seedBasic(t, db, deck.ID, "EditQ", "EditA")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), `name="field.front"`) {
 		t.Errorf("GET edit still renders the SSR editor form: %s", snippet(rec.Body.String()))
 	}
 }
 
-// TestNoteNewRouteServesSPAShell 断言 GET /decks/:id/new-note 对 owner 返回 SPA 应用壳，
+// TestNoteNewRouteServesShell 断言 GET /decks/:id/new-note 对 owner 返回 SPA 应用壳，
 // 不再渲染 SSR 新建表单。
-func TestNoteNewRouteServesSPAShell(t *testing.T) {
+func TestNoteNewRouteServesShell(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "SPA create deck")
 
 	rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/new-note", cookies)
-	assertSPAShell(t, rec)
+	assertShell(t, rec)
 	if strings.Contains(rec.Body.String(), "data-note-form") {
 		t.Errorf("GET create still renders the SSR create form: %s", snippet(rec.Body.String()))
 	}
@@ -53,7 +53,7 @@ func TestNoteEditRouteAllowsEditorAndDeniesReader(t *testing.T) {
 
 	editorID, editorCookies, _ := createUserAndLogin(t, srv, db, "notes-editor")
 	grantRole(t, srv, deck.ID, editorID, store.RoleEditor, ownerCookies, ownerCSRF)
-	assertSPAShell(t, getWithCookies(t, srv, editPath, editorCookies))
+	assertShell(t, getWithCookies(t, srv, editPath, editorCookies))
 
 	readerID, readerCookies, _ := createUserAndLogin(t, srv, db, "notes-reader")
 	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
@@ -71,7 +71,7 @@ func TestNoteNewRouteAllowsEditorAndDeniesReader(t *testing.T) {
 
 	editorID, editorCookies, _ := createUserAndLogin(t, srv, db, "notes-create-editor")
 	grantRole(t, srv, deck.ID, editorID, store.RoleEditor, ownerCookies, ownerCSRF)
-	assertSPAShell(t, getWithCookies(t, srv, createPath, editorCookies))
+	assertShell(t, getWithCookies(t, srv, createPath, editorCookies))
 
 	readerID, readerCookies, _ := createUserAndLogin(t, srv, db, "notes-create-reader")
 	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)

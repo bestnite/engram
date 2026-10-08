@@ -24,7 +24,7 @@ func (s *Server) registerStatsRoutes(router *gin.Engine) {
 	router.GET("/stats", s.statsRoute)
 	// SPA 统计明细接口：只读、只接受浏览器会话（不走 /api/v1 的 API Key 组），
 	// 与统计页共用同一批 store 聚合，口径不会分叉。
-	router.GET("/api/v1/stats/detail", s.spaStatsDetail)
+	router.GET("/api/v1/stats/detail", s.statsDetail)
 }
 
 // statsRoute 提供 GET /stats：返回应用壳，由客户端路由渲染统计页，

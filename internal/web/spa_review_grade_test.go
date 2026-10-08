@@ -13,8 +13,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// postSPAJSON 带会话 cookie 与 X-CSRF-Token 头提交 JSON（SPA 写操作的统一形态）。
-func postSPAJSON(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
+// postJSONWithCSRF 带会话 cookie 与 X-CSRF-Token 头提交 JSON（SPA 写操作的统一形态）。
+func postJSONWithCSRF(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -33,8 +33,8 @@ func postSPAJSON(t *testing.T, srv *Server, path string, body any, cookies []*ht
 	return rec
 }
 
-// spaGradeFeedbackBody 是判分反馈的对外形态（与 handler 返回的 feedback 对象对齐）。
-type spaGradeFeedbackBody struct {
+// gradeFeedbackBody 是判分反馈的对外形态（与 handler 返回的 feedback 对象对齐）。
+type gradeFeedbackBody struct {
 	Verdict    string  `json:"verdict"`
 	Score      float64 `json:"score"`
 	Rating     int     `json:"rating"`
@@ -43,22 +43,22 @@ type spaGradeFeedbackBody struct {
 	Parsed     string  `json:"parsed"`
 }
 
-// spaGradeResponseBody 是判分入口的对外形态（判分与放弃两条路径共用状态字段）。
-type spaGradeResponseBody struct {
-	CardID    uint64                `json:"card_id"`
-	ReviewID  uint64                `json:"review_id"`
-	State     string                `json:"state"`
-	Version   int                   `json:"version"`
-	Remaining int                   `json:"remaining"`
-	Cards     []api.DueCard         `json:"cards"`
-	Feedback  *spaGradeFeedbackBody `json:"feedback"`
-	GaveUp    bool                  `json:"gave_up"`
+// gradeResponseBody 是判分入口的对外形态（判分与放弃两条路径共用状态字段）。
+type gradeResponseBody struct {
+	CardID    uint64             `json:"card_id"`
+	ReviewID  uint64             `json:"review_id"`
+	State     string             `json:"state"`
+	Version   int                `json:"version"`
+	Remaining int                `json:"remaining"`
+	Cards     []api.DueCard      `json:"cards"`
+	Feedback  *gradeFeedbackBody `json:"feedback"`
+	GaveUp    bool               `json:"gave_up"`
 }
 
-// decodeSPAGrade 解码判分响应；失败即测试失败。
-func decodeSPAGrade(t *testing.T, rec *httptest.ResponseRecorder) spaGradeResponseBody {
+// decodeGrade 解码判分响应；失败即测试失败。
+func decodeGrade(t *testing.T, rec *httptest.ResponseRecorder) gradeResponseBody {
 	t.Helper()
-	var body spaGradeResponseBody
+	var body gradeResponseBody
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode grade response: %v (body %s)", err, snippet(rec.Body.String()))
 	}
@@ -75,9 +75,9 @@ func reviewRowForCard(t *testing.T, srv *Server, cardID uint64) store.Review {
 	return rev
 }
 
-// TestSPAGradeNumericAcceptance 覆盖 SPA 判分入口的核心：numeric 答对/答错/容差边界
+// TestGradeNumericAcceptance 覆盖 SPA 判分入口的核心：numeric 答对/答错/容差边界
 // 都由服务端判分器决定档位，写库的 grade_source=typed 且带判分细节。
-func TestSPAGradeNumericAcceptance(t *testing.T) {
+func TestGradeNumericAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA numeric")
 	cases := []struct {
@@ -99,14 +99,14 @@ func TestSPAGradeNumericAcceptance(t *testing.T) {
 			})
 			cardID := cardIDOfNote(t, db, note.ID)
 
-			rec := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+			rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 				"card_id": cardID, "expected_version": 0, "elapsed_ms": 1200,
 				"deck": []uint64{deck.ID}, "answer": tc.answer,
 			}, cookies, csrf)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("POST grade status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 			}
-			body := decodeSPAGrade(t, rec)
+			body := decodeGrade(t, rec)
 			if body.Feedback == nil {
 				t.Fatalf("numeric grade returned no feedback: %s", snippet(rec.Body.String()))
 			}
@@ -148,9 +148,9 @@ func TestSPAGradeNumericAcceptance(t *testing.T) {
 	}
 }
 
-// TestSPAGradeOtherTypesAcceptance 覆盖 typed / choice_single / choice_multi / true_false：
+// TestGradeOtherTypesAcceptance 覆盖 typed / choice_single / choice_multi / true_false：
 // 正确与错误（多选部分对 → partial/Hard）各一例，档位由判分器与映射决定。
-func TestSPAGradeOtherTypesAcceptance(t *testing.T) {
+func TestGradeOtherTypesAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA graded")
 	cases := []struct {
@@ -175,13 +175,13 @@ func TestSPAGradeOtherTypesAcceptance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			note := seedGradedNote(t, db, deck.ID, tc.kind, tc.fields)
 			cardID := cardIDOfNote(t, db, note.ID)
-			rec := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+			rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 				"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": tc.answer,
 			}, cookies, csrf)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("POST grade status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 			}
-			body := decodeSPAGrade(t, rec)
+			body := decodeGrade(t, rec)
 			if body.Feedback == nil {
 				t.Fatalf("%s: no feedback: %s", tc.name, snippet(rec.Body.String()))
 			}
@@ -199,9 +199,9 @@ func TestSPAGradeOtherTypesAcceptance(t *testing.T) {
 	}
 }
 
-// TestSPAGradeAuthorizationAndCSRF 覆盖拒绝路径：无会话、缺/错 CSRF、bearer、不可读卡组、
+// TestGradeAuthorizationAndCSRF 覆盖拒绝路径：无会话、缺/错 CSRF、bearer、不可读卡组、
 // 卡不在范围内、自评类题型走判分入口、无法判分的作答。任一拒绝都不得写入进度。
-func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
+func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA auth")
 	otherDeck := seedReviewDeck(t, db, ownerID, "SPA other")
@@ -223,7 +223,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 	for _, tc := range denied {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := postSPAJSON(t, srv, "/api/v1/review/grade", tc.body, tc.cookies, tc.csrf)
+			rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", tc.body, tc.cookies, tc.csrf)
 			if rec.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 			}
@@ -247,7 +247,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 
 	// 自评类题型不得走判分入口。
-	rec = postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": basicCardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "Back",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -255,7 +255,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 
 	// 卡不在所选范围内。
-	rec = postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{otherDeck.ID}, "answer": "a",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -263,7 +263,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 
 	// 零卡组 id 不是合法范围。
-	rec = postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{0}, "answer": "a",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -272,7 +272,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 
 	// choice_single 缺作答无法判分：400 且不写库。
 	single := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{"question": "q", "options": []string{"a", "b"}, "answer": 0})
-	rec = postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardIDOfNote(t, db, single.ID), "expected_version": 0, "deck": []uint64{deck.ID},
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
@@ -288,7 +288,7 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 
 	// 无授权用户即使拿到卡片 id 也读不到卡组。
 	_, outsiderCookies, outsiderCSRF := createUserAndLogin(t, srv, db, "grade-outsider")
-	rec = postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
 	}, outsiderCookies, outsiderCSRF)
 	if rec.Code < 400 || rec.Code >= 500 {
@@ -296,20 +296,20 @@ func TestSPAGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 }
 
-// TestSPAGradeVersionConflict 覆盖乐观锁：expected_version 不匹配返回 409 且不写第二条 review。
-func TestSPAGradeVersionConflict(t *testing.T) {
+// TestGradeVersionConflict 覆盖乐观锁：expected_version 不匹配返回 409 且不写第二条 review。
+func TestGradeVersionConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA conflict")
 	note := seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "p", "answer": "a"})
 	cardID := cardIDOfNote(t, db, note.ID)
 
-	first := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	first := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
 	}, cookies, csrf)
 	if first.Code != http.StatusOK {
 		t.Fatalf("first grade = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
-	stale := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	stale := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
 	}, cookies, csrf)
 	if stale.Code != http.StatusConflict {
@@ -322,15 +322,15 @@ func TestSPAGradeVersionConflict(t *testing.T) {
 	}
 }
 
-// TestSPAGradeRevealAndGiveUp 覆盖揭示的只读预览与「放弃作答记 Again」：
+// TestGradeRevealAndGiveUp 覆盖揭示的只读预览与「放弃作答记 Again」：
 // reveal 返回清洗后的正确答案且不写库；give_up 写一条 grade_source=self 的 Again。
-func TestSPAGradeRevealAndGiveUp(t *testing.T) {
+func TestGradeRevealAndGiveUp(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA reveal")
 	note := seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "prompt", "answer": "Paris"})
 	cardID := cardIDOfNote(t, db, note.ID)
 
-	reveal := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	reveal := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "deck": []uint64{deck.ID}, "action": "reveal",
 	}, cookies, csrf)
 	if reveal.Code != http.StatusOK {
@@ -352,13 +352,13 @@ func TestSPAGradeRevealAndGiveUp(t *testing.T) {
 		t.Fatalf("reveal wrote %d reviews, want 0", reviewsAfterReveal)
 	}
 
-	giveUp := postSPAJSON(t, srv, "/api/v1/review/grade", map[string]any{
+	giveUp := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "action": "give_up",
 	}, cookies, csrf)
 	if giveUp.Code != http.StatusOK {
 		t.Fatalf("give_up = %d, want 200 (body %s)", giveUp.Code, snippet(giveUp.Body.String()))
 	}
-	body := decodeSPAGrade(t, giveUp)
+	body := decodeGrade(t, giveUp)
 	if !body.GaveUp || body.Feedback != nil {
 		t.Fatalf("give_up body = %+v, want gave_up without feedback", body)
 	}

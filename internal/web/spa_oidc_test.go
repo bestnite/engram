@@ -16,8 +16,8 @@ import (
 // 覆盖：默认关闭时 enabled=false、配置完整可用时 enabled=true，且响应绝不含 issuer / client_id
 // 等凭据；start_url 与 SSR 登录页按钮同源。
 
-// TestSPAOIDCEntryProbe 断言探测端点只反映「是否可用」，绝不回显任何配置凭据。
-func TestSPAOIDCEntryProbe(t *testing.T) {
+// TestOIDCEntryProbe 断言探测端点只反映「是否可用」，绝不回显任何配置凭据。
+func TestOIDCEntryProbe(t *testing.T) {
 	srv, db := newAuthServer(t)
 
 	type probe struct {

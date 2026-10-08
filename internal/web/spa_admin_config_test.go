@@ -15,13 +15,13 @@ import (
 // 本文件是管理面板「系统设置 / 邮件 / 身份与 OIDC」切流到 SPA 的验收。
 // 读写端点复用与 SSR 完全同一份解析与校验；敏感项只回状态，绝不回显明文。
 
-// TestSPAAdminConfigPagesCutover 覆盖三个配置页的切流与回退。
-func TestSPAAdminConfigPagesCutover(t *testing.T) {
+// TestAdminConfigPagesCutover 覆盖三个配置页的切流与回退。
+func TestAdminConfigPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin/settings", "/admin/smtp", "/admin/oidc"} {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
-			assertServesSPAShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
+			assertServesShell(t, getWithCookies(t, srv, path, cookies), "GET "+path)
 
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "cfg_stranger")
 			if rec := getWithCookies(t, srv, path, strangerCookies); rec.Code != http.StatusForbidden {
@@ -32,8 +32,8 @@ func TestSPAAdminConfigPagesCutover(t *testing.T) {
 	}
 }
 
-// TestSPAAdminSettingsReadAndSave 覆盖系统设置 JSON 的读取、校验与落库。
-func TestSPAAdminSettingsReadAndSave(t *testing.T) {
+// TestAdminSettingsReadAndSave 覆盖系统设置 JSON 的读取、校验与落库。
+func TestAdminSettingsReadAndSave(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 
@@ -41,7 +41,7 @@ func TestSPAAdminSettingsReadAndSave(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET settings = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var read spaAdminSettingsResponse
+	var read adminSettingsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &read); err != nil {
 		t.Fatalf("decode settings: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestSPAAdminSettingsReadAndSave(t *testing.T) {
 	}
 
 	// 合法保存：落库且标出来源为 db。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", spaAdminSettingsRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"site.name": "Example Deck Site", "media_max_bytes": "2048"},
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save settings = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -86,7 +86,7 @@ func TestSPAAdminSettingsReadAndSave(t *testing.T) {
 	}
 
 	// 非法语言：400 且不落库。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", spaAdminSettingsRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"site.default_locale": "de"},
 	}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid locale = %d, want 400", rec.Code)
@@ -96,8 +96,8 @@ func TestSPAAdminSettingsReadAndSave(t *testing.T) {
 	}
 }
 
-// TestSPAAdminSettingsSecretNeverRevealed 断言敏感键经加密落库，响应里只回「已配置」。
-func TestSPAAdminSettingsSecretNeverRevealed(t *testing.T) {
+// TestAdminSettingsSecretNeverRevealed 断言敏感键经加密落库，响应里只回「已配置」。
+func TestAdminSettingsSecretNeverRevealed(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
 	ctx := context.Background()
@@ -121,7 +121,7 @@ func TestSPAAdminSettingsSecretNeverRevealed(t *testing.T) {
 	if strings.Contains(rec.Body.String(), first) {
 		t.Fatal("settings response leaked the secret plaintext")
 	}
-	var read spaAdminSettingsResponse
+	var read adminSettingsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &read); err != nil {
 		t.Fatalf("decode settings: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSPAAdminSettingsSecretNeverRevealed(t *testing.T) {
 
 	// 通过 JSON 写入新值：库里不得出现明文，响应依旧不回显。
 	const second = "spa-plaintext-secret-two"
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", spaAdminSettingsRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"oidc_client_secret": second},
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save secret = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -158,8 +158,8 @@ func TestSPAAdminSettingsSecretNeverRevealed(t *testing.T) {
 	}
 }
 
-// TestSPAAdminSMTPReadSaveAndTest 覆盖 SMTP JSON 的读取、校验与测试连接失败原因。
-func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
+// TestAdminSMTPReadSaveAndTest 覆盖 SMTP JSON 的读取、校验与测试连接失败原因。
+func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
 
@@ -167,7 +167,7 @@ func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET smtp = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var read spaAdminSMTPResponse
+	var read adminSMTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &read); err != nil {
 		t.Fatalf("decode smtp: %v", err)
 	}
@@ -176,16 +176,16 @@ func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
 	}
 
 	// 非法端口：400 且不落库。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", spaAdminSMTPRequest{Port: "70000"}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{Port: "70000"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid port = %d, want 400", rec.Code)
 	}
 	// 非法 TLS 模式：400。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", spaAdminSMTPRequest{TLSMode: "ssl"}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{TLSMode: "ssl"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid tls mode = %d, want 400", rec.Code)
 	}
 
 	// 合法保存：写库并显示已配置。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", spaAdminSMTPRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{
 		Host: "localhost", Port: "587", From: "no-reply@example.com", TLSMode: "starttls", Password: "smtp-pw",
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save smtp = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -204,10 +204,10 @@ func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
 	// 测试连接失败：把服务端原始错误带到响应（M1-17 验收点）。
 	addr := deadAddr(t)
 	host, port, _ := net.SplitHostPort(addr)
-	testRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{
+	testRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{
 		Host: host, Port: port, From: "no-reply@example.com", TLSMode: "none",
 	}, cookies, csrf)
-	var result spaAdminTestResult
+	var result adminTestResult
 	if err := json.Unmarshal(testRec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode smtp test: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
 
 	// 没有主机：稳定 no_host 码（用未配置的新服务，已保存 host 会在上面命中）。
 	emptySrv, _, _, emptyCookies, emptyCSRF := newNotesServer(t)
-	noHost := adminPostJSON(t, emptySrv, "/api/v1/admin/smtp/test", spaAdminSMTPRequest{}, emptyCookies, emptyCSRF)
+	noHost := adminPostJSON(t, emptySrv, "/api/v1/admin/smtp/test", adminSMTPRequest{}, emptyCookies, emptyCSRF)
 	if err := json.Unmarshal(noHost.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode smtp test: %v", err)
 	}
@@ -226,15 +226,15 @@ func TestSPAAdminSMTPReadSaveAndTest(t *testing.T) {
 	}
 }
 
-// TestSPAAdminOIDCReadSaveAndTest 覆盖 OIDC JSON 的读取、校验与测试连接无 issuer。
-func TestSPAAdminOIDCReadSaveAndTest(t *testing.T) {
+// TestAdminOIDCReadSaveAndTest 覆盖 OIDC JSON 的读取、校验与测试连接无 issuer。
+func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 
 	rec := getJSON(t, srv, "/api/v1/admin/oidc", cookies, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET oidc = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	var read spaAdminOIDCResponse
+	var read adminOIDCResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &read); err != nil {
 		t.Fatalf("decode oidc: %v", err)
 	}
@@ -243,16 +243,16 @@ func TestSPAAdminOIDCReadSaveAndTest(t *testing.T) {
 	}
 
 	// 启用但 issuer 非法：400。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", spaAdminOIDCRequest{Enabled: true, Issuer: "not a url"}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{Enabled: true, Issuer: "not a url"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid issuer = %d, want 400", rec.Code)
 	}
 	// 启用但 issuer 为空：400。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", spaAdminOIDCRequest{Enabled: true}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{Enabled: true}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("empty issuer with enabled = %d, want 400", rec.Code)
 	}
 
 	// 合法保存：issuer 落库。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", spaAdminOIDCRequest{
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{
 		Enabled: true, Issuer: "https://idp.example.com/", ClientID: "engram", Scopes: "openid email",
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save oidc = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -267,8 +267,8 @@ func TestSPAAdminOIDCReadSaveAndTest(t *testing.T) {
 
 	// 测试连接：没有可用的 issuer（已保存的空）→ no_issuer。
 	emptySrv, _, _, emptyCookies, emptyCSRF := newNotesServer(t)
-	testRec := adminPostJSON(t, emptySrv, "/api/v1/admin/oidc/test", spaAdminOIDCRequest{}, emptyCookies, emptyCSRF)
-	var result spaAdminTestResult
+	testRec := adminPostJSON(t, emptySrv, "/api/v1/admin/oidc/test", adminOIDCRequest{}, emptyCookies, emptyCSRF)
+	var result adminTestResult
 	if err := json.Unmarshal(testRec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode oidc test: %v", err)
 	}

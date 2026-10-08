@@ -13,9 +13,9 @@ import (
 // 本文件是分享同意制的验收：发邀请不发授权、接受才生效、拒绝不留痕，
 // 以及接收策略（anyone / whitelist / nobody）在**邀请发出之前**就拦住。
 
-func decodeShareInvites(t *testing.T, body []byte) spaShareInvitesResponse {
+func decodeShareInvites(t *testing.T, body []byte) shareInvitesResponse {
 	t.Helper()
-	var out spaShareInvitesResponse
+	var out shareInvitesResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("decode share invites: %v", err)
 	}

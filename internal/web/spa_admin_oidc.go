@@ -18,8 +18,8 @@ import (
 // 「已配置/未配置」，绝不回显明文。redirect_uri 与登录流程共用 s.oidcRedirectURI，因此页面显示
 // 的就是实际发出的值。测试连接把 provider 的原始错误文本带进响应（M6-4 验收点）。
 
-// spaAdminOIDCIdentity 是一条已绑定身份。
-type spaAdminOIDCIdentity struct {
+// adminOIDCIdentity 是一条已绑定身份。
+type adminOIDCIdentity struct {
 	ID       uint64 `json:"id"`
 	Provider string `json:"provider"`
 	Subject  string `json:"subject"`
@@ -28,23 +28,23 @@ type spaAdminOIDCIdentity struct {
 	LinkedAt string `json:"linked_at"`
 }
 
-// spaAdminOIDCResponse 是 OIDC 配置页的读取结果。
-type spaAdminOIDCResponse struct {
-	Enabled            bool                   `json:"enabled"`
-	Issuer             string                 `json:"issuer"`
-	ClientID           string                 `json:"client_id"`
-	SecretConfigured   bool                   `json:"secret_configured"`
-	RedirectURI        string                 `json:"redirect_uri"`
-	Scopes             string                 `json:"scopes"`
-	ClaimSubject       string                 `json:"claim_subject"`
-	ClaimEmail         string                 `json:"claim_email"`
-	ClaimName          string                 `json:"claim_name"`
-	ClaimEmailVerified string                 `json:"claim_email_verified"`
-	Identities         []spaAdminOIDCIdentity `json:"identities"`
+// adminOIDCResponse 是 OIDC 配置页的读取结果。
+type adminOIDCResponse struct {
+	Enabled            bool                `json:"enabled"`
+	Issuer             string              `json:"issuer"`
+	ClientID           string              `json:"client_id"`
+	SecretConfigured   bool                `json:"secret_configured"`
+	RedirectURI        string              `json:"redirect_uri"`
+	Scopes             string              `json:"scopes"`
+	ClaimSubject       string              `json:"claim_subject"`
+	ClaimEmail         string              `json:"claim_email"`
+	ClaimName          string              `json:"claim_name"`
+	ClaimEmailVerified string              `json:"claim_email_verified"`
+	Identities         []adminOIDCIdentity `json:"identities"`
 }
 
-// spaAdminOIDCRequest 是保存 / 测试共用的请求体；空字段表示不修改。
-type spaAdminOIDCRequest struct {
+// adminOIDCRequest 是保存 / 测试共用的请求体；空字段表示不修改。
+type adminOIDCRequest struct {
 	Enabled            bool   `json:"enabled"`
 	Issuer             string `json:"issuer"`
 	ClientID           string `json:"client_id"`
@@ -56,19 +56,19 @@ type spaAdminOIDCRequest struct {
 	ClientSecret       string `json:"client_secret"`
 }
 
-// spaAdminOIDC 返回 OIDC 配置、回调地址与已绑定身份列表。
-func (s *Server) spaAdminOIDC(c *gin.Context) {
+// adminOIDC 返回 OIDC 配置、回调地址与已绑定身份列表。
+func (s *Server) adminOIDC(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
 		s.logger.Error("spa admin: load oidc config failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	saved, err := store.LoadSettings(ctx, s.db)
 	if err != nil {
 		s.logger.Error("spa admin: load settings failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	secretConfigured := false
@@ -78,7 +78,7 @@ func (s *Server) spaAdminOIDC(c *gin.Context) {
 		}
 	}
 
-	resp := spaAdminOIDCResponse{
+	resp := adminOIDCResponse{
 		Enabled:            cfg.Enabled,
 		Issuer:             saved[auth.SettingKeyOIDCIssuer],
 		ClientID:           saved[auth.SettingKeyOIDCClientID],
@@ -89,13 +89,13 @@ func (s *Server) spaAdminOIDC(c *gin.Context) {
 		ClaimEmail:         saved[auth.SettingKeyOIDCClaimEmail],
 		ClaimName:          saved[auth.SettingKeyOIDCClaimName],
 		ClaimEmailVerified: saved[auth.SettingKeyOIDCClaimEmailVerified],
-		Identities:         []spaAdminOIDCIdentity{},
+		Identities:         []adminOIDCIdentity{},
 	}
 	if s.identities != nil {
 		rows, err := s.identities.ListAll(ctx)
 		if err != nil {
 			s.logger.Error("spa admin: list identities failed", "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "internal_error")
+			adminError(c, http.StatusInternalServerError, "internal_error")
 			return
 		}
 		for _, row := range rows {
@@ -109,7 +109,7 @@ func (s *Server) spaAdminOIDC(c *gin.Context) {
 			if row.Email != nil {
 				email = *row.Email
 			}
-			resp.Identities = append(resp.Identities, spaAdminOIDCIdentity{
+			resp.Identities = append(resp.Identities, adminOIDCIdentity{
 				ID: row.ID, Provider: row.Provider, Subject: row.Subject,
 				Email: email, Username: username,
 				LinkedAt: row.LinkedAt.Format(time.RFC3339),
@@ -119,28 +119,28 @@ func (s *Server) spaAdminOIDC(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// spaAdminOIDCSave 保存 OIDC 配置：非敏感值走 PutSetting，client secret 走 PutSecret（加密）。
+// adminOIDCSave 保存 OIDC 配置：非敏感值走 PutSetting，client secret 走 PutSecret（加密）。
 // 保存后使发现文档缓存失效，写审计。
-func (s *Server) spaAdminOIDCSave(c *gin.Context) {
+func (s *Server) adminOIDCSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminOIDCRequest
+	var req adminOIDCRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	issuer := strings.TrimRight(strings.TrimSpace(req.Issuer), "/")
 	if req.Enabled && issuer != "" {
 		if parsed, err := url.Parse(issuer); err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			spaAdminError(c, http.StatusBadRequest, "invalid_issuer")
+			adminError(c, http.StatusBadRequest, "invalid_issuer")
 			return
 		}
 	}
 	if req.Enabled && issuer == "" {
-		spaAdminError(c, http.StatusBadRequest, "invalid_issuer")
+		adminError(c, http.StatusBadRequest, "invalid_issuer")
 		return
 	}
 
@@ -149,7 +149,7 @@ func (s *Server) spaAdminOIDCSave(c *gin.Context) {
 	old, err := s.oidcLoadConfig(c)
 	if err != nil {
 		s.logger.Error("spa admin: load oidc config failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "save_failed")
+		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 
@@ -178,7 +178,7 @@ func (s *Server) spaAdminOIDCSave(c *gin.Context) {
 	for _, w := range writes {
 		if err := store.PutSetting(ctx, s.db, w.key, w.value, store.Ptr(u.ID), now); err != nil {
 			s.logger.Error("spa admin: save oidc setting failed", "key", w.key, "error", err)
-			spaAdminError(c, http.StatusInternalServerError, "save_failed")
+			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
 		changed = append(changed, w.key)
@@ -187,7 +187,7 @@ func (s *Server) spaAdminOIDCSave(c *gin.Context) {
 		if secret := req.ClientSecret; strings.TrimSpace(secret) != "" {
 			if err := store.PutSecret(ctx, s.db, s.secrets, auth.SettingKeyOIDCClientSecret, secret, store.Ptr(u.ID), now); err != nil {
 				s.logger.Error("spa admin: save oidc client secret failed", "error", err)
-				spaAdminError(c, http.StatusInternalServerError, "save_failed")
+				adminError(c, http.StatusInternalServerError, "save_failed")
 				return
 			}
 			changed = append(changed, auth.SettingKeyOIDCClientSecret)
@@ -204,31 +204,31 @@ func (s *Server) spaAdminOIDCSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// spaAdminOIDCTest 对表单里的 issuer（缺省用已保存值）拉取发现文档，
+// adminOIDCTest 对表单里的 issuer（缺省用已保存值）拉取发现文档，
 // 失败时把 provider 的原始错误文本带进响应（M6-4 验收点）。
-func (s *Server) spaAdminOIDCTest(c *gin.Context) {
+func (s *Server) adminOIDCTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	var req spaAdminOIDCRequest
+	var req adminOIDCRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		spaAdminError(c, http.StatusBadRequest, "invalid_request")
+		adminError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
 		s.logger.Error("spa admin: load oidc config failed", "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "internal_error")
+		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	issuer := strings.TrimRight(strings.TrimSpace(req.Issuer), "/")
 	if issuer == "" {
 		issuer = cfg.Issuer
 	}
-	result := spaAdminTestResult{}
+	result := adminTestResult{}
 	if issuer == "" {
 		result.Code = "no_issuer"
 	} else if _, derr := s.oidc.Discover(ctx, issuer); derr != nil {
@@ -248,28 +248,28 @@ func (s *Server) spaAdminOIDCTest(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// spaAdminOIDCUnlink 解绑一条外部身份并写审计。解绑后该身份不能再用它登录。
-func (s *Server) spaAdminOIDCUnlink(c *gin.Context) {
+// adminOIDCUnlink 解绑一条外部身份并写审计。解绑后该身份不能再用它登录。
+func (s *Server) adminOIDCUnlink(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
-		spaAdminError(c, http.StatusForbidden, "forbidden")
+		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
 	id, err := parseUintParam(c.Param("id"))
 	if err != nil {
-		spaAdminError(c, http.StatusNotFound, "unlink_failed")
+		adminError(c, http.StatusNotFound, "unlink_failed")
 		return
 	}
 	ctx := c.Request.Context()
 	ident, err := s.identities.ByID(ctx, id)
 	if err != nil {
 		s.logger.Error("spa admin: load identity failed", "id", id, "error", err)
-		spaAdminError(c, http.StatusNotFound, "unlink_failed")
+		adminError(c, http.StatusNotFound, "unlink_failed")
 		return
 	}
 	if err := s.identities.Delete(ctx, id); err != nil {
 		s.logger.Error("spa admin: unlink identity failed", "id", id, "error", err)
-		spaAdminError(c, http.StatusInternalServerError, "unlink_failed")
+		adminError(c, http.StatusInternalServerError, "unlink_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{

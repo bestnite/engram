@@ -99,32 +99,32 @@ func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (st
 	}, nil
 }
 
-// spaStatsDetail 是 GET /api/v1/stats/detail 的响应体。
-type spaStatsDetail struct {
+// statsDetail 是 GET /api/v1/stats/detail 的响应体。
+type statsDetail struct {
 	// GeneratedAt 是所有指标共用的 now 快照（RFC3339，UTC）。
 	GeneratedAt string `json:"generated_at"`
 	// Empty 与 SSR 统计页同一判据：窗口内毫无复习、无到期卡、无卡组数据。
-	Empty     bool                  `json:"empty"`
-	Volume    spaStatsVolume        `json:"volume"`
-	Due       spaStatsDue           `json:"due"`
-	Retention spaStatsRetention     `json:"retention"`
-	TimeSpent spaStatsTimeSpent     `json:"time_spent"`
-	Streak    spaStatsStreak        `json:"streak"`
-	Curve     []spaStatsCurvePoint  `json:"curve"`
-	Decks     []spaStatsDeck        `json:"decks"`
-	Tags      []spaStatsTag         `json:"tags"`
-	Grades    []spaStatsGradeSource `json:"grades"`
+	Empty     bool               `json:"empty"`
+	Volume    statsVolume        `json:"volume"`
+	Due       statsDue           `json:"due"`
+	Retention statsRetention     `json:"retention"`
+	TimeSpent statsTimeSpent     `json:"time_spent"`
+	Streak    statsStreak        `json:"streak"`
+	Curve     []statsCurvePoint  `json:"curve"`
+	Decks     []statsDeck        `json:"decks"`
+	Tags      []statsTag         `json:"tags"`
+	Grades    []statsGradeSource `json:"grades"`
 }
 
-// spaStatsVolume 是复习量指标（今日 / 近 7 日 / 近 30 日）。
-type spaStatsVolume struct {
+// statsVolume 是复习量指标（今日 / 近 7 日 / 近 30 日）。
+type statsVolume struct {
 	Today      int64 `json:"today"`
 	Last7Days  int64 `json:"last_7_days"`
 	Last30Days int64 `json:"last_30_days"`
 }
 
-// spaStatsDue 是到期预测的互斥分桶；NewNotDue 是新卡未排期。
-type spaStatsDue struct {
+// statsDue 是到期预测的互斥分桶；NewNotDue 是新卡未排期。
+type statsDue struct {
 	Today     int64 `json:"today"`
 	Tomorrow  int64 `json:"tomorrow"`
 	Within7   int64 `json:"within_7_days"`
@@ -133,45 +133,45 @@ type spaStatsDue struct {
 	NewNotDue int64 `json:"new_not_due"`
 }
 
-// spaStatsRetentionBucket 是一个稳定性桶的留存情况；Rate 是 Passed/Total（Total 为 0 时为 0）。
-type spaStatsRetentionBucket struct {
+// statsRetentionBucket 是一个稳定性桶的留存情况；Rate 是 Passed/Total（Total 为 0 时为 0）。
+type statsRetentionBucket struct {
 	Label  string  `json:"label"`
 	Total  int64   `json:"total"`
 	Passed int64   `json:"passed"`
 	Rate   float64 `json:"rate"`
 }
 
-// spaStatsRetention 是留存率总体值加每个稳定性桶。
-type spaStatsRetention struct {
-	Total   int64                     `json:"total"`
-	Passed  int64                     `json:"passed"`
-	Rate    float64                   `json:"rate"`
-	Buckets []spaStatsRetentionBucket `json:"buckets"`
+// statsRetention 是留存率总体值加每个稳定性桶。
+type statsRetention struct {
+	Total   int64                  `json:"total"`
+	Passed  int64                  `json:"passed"`
+	Rate    float64                `json:"rate"`
+	Buckets []statsRetentionBucket `json:"buckets"`
 }
 
-// spaStatsTimeSpent 是时间投入指标（毫秒）。
-type spaStatsTimeSpent struct {
+// statsTimeSpent 是时间投入指标（毫秒）。
+type statsTimeSpent struct {
 	TotalMS  int64   `json:"total_ms"`
 	Count    int64   `json:"count"`
 	AvgMS    float64 `json:"avg_ms"`
 	MedianMS int64   `json:"median_ms"`
 }
 
-// spaStatsStreak 是连续打卡天数。
-type spaStatsStreak struct {
+// statsStreak 是连续打卡天数。
+type statsStreak struct {
 	Current int `json:"current"`
 	Longest int `json:"longest"`
 }
 
-// spaStatsCurvePoint 是学习曲线上的一个复习日：New 为新引入，Review 为复习量。
-type spaStatsCurvePoint struct {
+// statsCurvePoint 是学习曲线上的一个复习日：New 为新引入，Review 为复习量。
+type statsCurvePoint struct {
 	Day    string `json:"day"`
 	New    int64  `json:"new"`
 	Review int64  `json:"review"`
 }
 
-// spaStatsDeck 是一个卡组的统计行。
-type spaStatsDeck struct {
+// statsDeck 是一个卡组的统计行。
+type statsDeck struct {
 	DeckID    uint64  `json:"deck_id"`
 	Name      string  `json:"name"`
 	DueCount  int64   `json:"due_count"`
@@ -180,25 +180,25 @@ type spaStatsDeck struct {
 	ElapsedMS int64   `json:"elapsed_ms"`
 }
 
-// spaStatsTag 是一个标签的统计行。
-type spaStatsTag struct {
+// statsTag 是一个标签的统计行。
+type statsTag struct {
 	Tag       string  `json:"tag"`
 	Reviews   int64   `json:"reviews"`
 	Retention float64 `json:"retention"`
 }
 
-// spaStatsGradeSource 是一种判分来源的计数（self/typed/llm）。
-type spaStatsGradeSource struct {
+// statsGradeSource 是一种判分来源的计数（self/typed/llm）。
+type statsGradeSource struct {
 	Source string `json:"source"`
 	Count  int64  `json:"count"`
 }
 
-// spaStatsDetail 是会话专用的只读接口，只接受浏览器会话，不接受 bearer / API Key。
+// statsDetail 是会话专用的只读接口，只接受浏览器会话，不接受 bearer / API Key。
 //
 // 挂在 /api/v1 之外（见 registerStatsRoutes），因此不受 API Key 组中间件影响；这里显式
 // 要求活跃会话，未登录一律 401，与 SSR 页面的「重定向到登录页」在语义上一致（JSON 客户端
 // 不该收到 HTML 重定向）。GET 是安全方法，无需 CSRF。
-func (s *Server) spaStatsDetail(c *gin.Context) {
+func (s *Server) statsDetail(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || user.Status != store.StatusActive {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{
@@ -206,7 +206,7 @@ func (s *Server) spaStatsDetail(c *gin.Context) {
 		}})
 		return
 	}
-	detail, err := s.buildSPAStatsDetail(c.Request.Context(), user)
+	detail, err := s.buildStatsDetail(c.Request.Context(), user)
 	if err != nil {
 		s.logger.Error("build SPA stats detail failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": gin.H{
@@ -217,24 +217,24 @@ func (s *Server) spaStatsDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
-// buildSPAStatsDetail 把原始聚合结果映射成稳定的 JSON 形态；切片一律初始化为非 nil，
+// buildStatsDetail 把原始聚合结果映射成稳定的 JSON 形态；切片一律初始化为非 nil，
 // 让空结果序列化成 [] 而不是 null，前端无需为 null 单独分支。
-func (s *Server) buildSPAStatsDetail(ctx context.Context, user *store.User) (spaStatsDetail, error) {
+func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsDetail, error) {
 	m, err := s.collectStatsMeasures(ctx, user)
 	if err != nil {
-		return spaStatsDetail{}, err
+		return statsDetail{}, err
 	}
-	detail := spaStatsDetail{
+	detail := statsDetail{
 		GeneratedAt: m.Now.UTC().Format(time.RFC3339),
 		// 空态判据：没有任何复习量、没有今日到期、没有卡组数据。
 		Empty: m.Volume.Today == 0 && m.Volume.Last30Days == 0 &&
 			m.Due.Today == 0 && m.Due.NewNotDue == 0 && len(m.Decks) == 0,
-		Volume: spaStatsVolume{
+		Volume: statsVolume{
 			Today:      m.Volume.Today,
 			Last7Days:  m.Volume.Last7Days,
 			Last30Days: m.Volume.Last30Days,
 		},
-		Due: spaStatsDue{
+		Due: statsDue{
 			Today:     m.Due.Today,
 			Tomorrow:  m.Due.Tomorrow,
 			Within7:   m.Due.Within7,
@@ -242,43 +242,43 @@ func (s *Server) buildSPAStatsDetail(ctx context.Context, user *store.User) (spa
 			Later:     m.Due.Later,
 			NewNotDue: m.Due.NewNotDue,
 		},
-		Retention: spaStatsRetention{
+		Retention: statsRetention{
 			Total:   m.Retention.Total,
 			Passed:  m.Retention.Passed,
 			Rate:    m.Retention.Rate,
-			Buckets: make([]spaStatsRetentionBucket, 0, len(m.Retention.Buckets)),
+			Buckets: make([]statsRetentionBucket, 0, len(m.Retention.Buckets)),
 		},
-		TimeSpent: spaStatsTimeSpent{
+		TimeSpent: statsTimeSpent{
 			TotalMS:  m.TimeSpent.TotalMS,
 			Count:    m.TimeSpent.Count,
 			AvgMS:    m.TimeSpent.AvgMS,
 			MedianMS: m.TimeSpent.MedianMS,
 		},
-		Streak: spaStatsStreak{Current: m.Streak.Current, Longest: m.Streak.Longest},
-		Curve:  make([]spaStatsCurvePoint, 0, len(m.Curve)),
-		Decks:  make([]spaStatsDeck, 0, len(m.Decks)),
-		Tags:   make([]spaStatsTag, 0, len(m.Tags)),
-		Grades: make([]spaStatsGradeSource, 0, len(m.Grades)),
+		Streak: statsStreak{Current: m.Streak.Current, Longest: m.Streak.Longest},
+		Curve:  make([]statsCurvePoint, 0, len(m.Curve)),
+		Decks:  make([]statsDeck, 0, len(m.Decks)),
+		Tags:   make([]statsTag, 0, len(m.Tags)),
+		Grades: make([]statsGradeSource, 0, len(m.Grades)),
 	}
 	for _, b := range m.Retention.Buckets {
-		detail.Retention.Buckets = append(detail.Retention.Buckets, spaStatsRetentionBucket{
+		detail.Retention.Buckets = append(detail.Retention.Buckets, statsRetentionBucket{
 			Label: b.Label, Total: b.Total, Passed: b.Passed, Rate: b.Rate,
 		})
 	}
 	for _, p := range m.Curve {
-		detail.Curve = append(detail.Curve, spaStatsCurvePoint{Day: p.Day, New: p.New, Review: p.Review})
+		detail.Curve = append(detail.Curve, statsCurvePoint{Day: p.Day, New: p.New, Review: p.Review})
 	}
 	for _, d := range m.Decks {
-		detail.Decks = append(detail.Decks, spaStatsDeck{
+		detail.Decks = append(detail.Decks, statsDeck{
 			DeckID: d.DeckID, Name: d.Name, DueCount: d.DueCount,
 			Reviews: d.Reviews, Retention: d.Retention, ElapsedMS: d.ElapsedMS,
 		})
 	}
 	for _, tg := range m.Tags {
-		detail.Tags = append(detail.Tags, spaStatsTag{Tag: tg.Tag, Reviews: tg.Reviews, Retention: tg.Retention})
+		detail.Tags = append(detail.Tags, statsTag{Tag: tg.Tag, Reviews: tg.Reviews, Retention: tg.Retention})
 	}
 	for _, g := range m.Grades {
-		detail.Grades = append(detail.Grades, spaStatsGradeSource{Source: g.Source, Count: g.Count})
+		detail.Grades = append(detail.Grades, statsGradeSource{Source: g.Source, Count: g.Count})
 	}
 	return detail, nil
 }
