@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/api"
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -149,14 +148,4 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		},
 		"csrf_token": sess.CSRFToken,
 	})
-}
-
-// totpLoginShell 是 SPA 登录第二步的入口（GET /spa/login/totp，规范路径 /login/totp 由
-// NoRoute 回退到应用壳）。
-//
-// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳：提交走
-// POST /api/v1/auth/totp（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
-func (s *Server) totpLoginShell(c *gin.Context) {
-	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
-	s.shell.ServeIndex(c)
 }

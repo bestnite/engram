@@ -33,9 +33,6 @@ func (s *Server) registerAccountRoutes(router *gin.Engine) {
 	router.POST("/api/v1/auth/reset-password", auth.PreSessionCSRFMiddleware(), s.resetPasswordSubmit)
 	router.POST("/api/v1/auth/verify-email", auth.PreSessionCSRFMiddleware(), s.verifyEmailSubmit)
 	router.POST("/api/v1/auth/confirm-email-change", auth.PreSessionCSRFMiddleware(), s.confirmEmailChangeSubmit)
-	// SPA 应用壳入口：与 /spa/login 同一约定，不遮蔽 SSR 的免登录一键链接。
-	router.GET("/spa/verify-email", s.verifyEmailShell)
-	router.GET("/spa/confirm-email-change", s.confirmEmailChangeShell)
 	if s.sessions != nil {
 		router.GET("/api/v1/settings/email", s.emailSettingsGet)
 		router.POST("/api/v1/settings/email", s.sessions.CSRFMiddleware(), s.emailChangeSubmit)
@@ -73,7 +70,7 @@ func (s *Server) emailChangeRoute(c *gin.Context) {
 
 // verifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
 // 由 SPA 读取 ?token= 并通过 POST /api/v1/auth/verify-email 消费（一次性、有过期）。
-// 像 /spa/login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
+// 像 /login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
 func (s *Server) verifyEmailShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)

@@ -1076,7 +1076,7 @@ export const zhCN: LocaleCatalog = {
   'admin.i18n.status.incomplete': '缺失 {count} 条',
   'admin.i18n.all_complete': '全部语言包完整。',
   'admin.i18n.load_failed': '加载完整度报告失败，请重试。',
-  // ---- 账号安全与邮件流程（/forgot-password、/reset-password、/settings/email、/spa/verify-email、/spa/confirm-email-change） ----
+  // ---- 账号安全与邮件流程（/forgot-password、/reset-password、/settings/email） ----
   'account.forgot.heading': '重置密码',
   'account.forgot.intro': '请输入账号邮箱，若该邮箱已注册，我们会发送一封重置邮件。',
   'account.forgot.email_label': '邮箱',

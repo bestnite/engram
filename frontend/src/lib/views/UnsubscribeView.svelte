@@ -8,7 +8,7 @@
   // 一键退订的 SPA 视图：服务端 GET /unsubscribe 只返回应用壳并下发
   // 会话前双提交 cookie，确认页由本视图渲染。令牌由视图读取 ?token= 后先经
   // GET /api/v1/unsubscribe 读取指名的类型（不消费），用户确认后再经 POST /api/v1/unsubscribe
-  // 消费（一次性）。/spa/unsubscribe 保留为迁移期别名，指向同一视图。
+  // 消费（一次性）。
   const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')

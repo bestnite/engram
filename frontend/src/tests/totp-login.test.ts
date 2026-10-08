@@ -6,8 +6,8 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
- * 登录第二步（TOTP）的 SPA 视图与路由：/login/totp 是规范路径（服务端只注册 POST /login/totp，
- * 没有可遮蔽的 GET 页面），/spa/login/totp 是迁移期别名。协议为 GET/POST /api/v1/auth/totp。
+ * 登录第二步（TOTP）的 SPA 视图与路由：/login/totp 是规范路径（服务端没有为它注册 GET 路由，
+ * 由 NoRoute 回退到应用壳），协议为 GET/POST /api/v1/auth/totp。
  */
 describe('TOTPLoginView renders the second-factor states truthfully', () => {
   beforeEach(() => {
@@ -41,15 +41,11 @@ describe('TOTPLoginView renders the second-factor states truthfully', () => {
 });
 
 describe('the second-factor route table', () => {
-  it('serves /login/totp and the /spa/login/totp alias', () => {
+  it('serves /login/totp', () => {
     const canonical = matchRoute('/login/totp', routes);
     expect(canonical.route?.name).toBe('totp-login');
 
-    const alias = matchRoute('/spa/login/totp', routes);
-    expect(alias.route?.name).toBe('totp-login-spa');
-
     // 第一步登录路由不能被第二步遮蔽。
-    expect(matchRoute('/spa/login', routes).route?.name).toBe('spa-login');
     expect(matchRoute('/login', routes).route?.name).toBe('login');
   });
 });

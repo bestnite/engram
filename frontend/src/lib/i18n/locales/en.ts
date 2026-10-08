@@ -1080,7 +1080,7 @@ export const en: LocaleCatalog = {
   'admin.i18n.status.incomplete': '{count} missing',
   'admin.i18n.all_complete': 'All language packs are complete.',
   'admin.i18n.load_failed': 'Could not load the coverage report. Try again.',
-  // ---- Account security and email flows (/forgot-password, /reset-password, /settings/email, /spa/verify-email, /spa/confirm-email-change) ----
+  // ---- Account security and email flows (/forgot-password, /reset-password, /settings/email) ----
   'account.forgot.heading': 'Reset your password',
   'account.forgot.intro': 'Enter your account email and we will send you a reset link if the address is registered.',
   'account.forgot.email_label': 'Email',

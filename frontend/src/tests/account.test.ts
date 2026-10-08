@@ -121,8 +121,8 @@ describe('SPA account security and email client flows', () => {
     expect(matchRoute('/forgot-password').route?.name).toBe('forgot-password');
     expect(matchRoute('/reset-password').route?.name).toBe('reset-password');
     expect(matchRoute('/settings/email').route?.name).toBe('email-settings');
-    expect(matchRoute('/spa/verify-email').route?.name).toBe('spa-verify-email');
-    expect(matchRoute('/spa/confirm-email-change').route?.name).toBe('spa-confirm-email-change');
+    expect(matchRoute('/verify-email').route?.name).toBe('verify-email');
+    expect(matchRoute('/confirm-email-change').route?.name).toBe('confirm-email-change');
   });
 });
 

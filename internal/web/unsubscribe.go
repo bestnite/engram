@@ -31,7 +31,7 @@ import (
 // （consumeUnsubscribe）；这里是「加传输」，安全模型不变：
 //   - POST /unsubscribe：RFC 8058 One-Click 的机器端点（邮件客户端直接 POST），
 //     只回状态码与一个最小 JSON 体，绝不渲染模板；
-//   - GET /unsubscribe（及迁移期别名 /spa/unsubscribe）：返回 SPA 应用壳并下发会话前
+//   - GET /unsubscribe：返回 SPA 应用壳并下发会话前
 //     双提交 cookie（收件人可能未登录），页面由客户端渲染；
 //   - /api/v1/unsubscribe：SPA 的同源 JSON 传输。GET 读取令牌指名的类型（不消费），
 //     POST 消费令牌、落偏好并写审计。
@@ -65,14 +65,12 @@ func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 	// 两者都不挂 CSRFMiddleware —— 理由见文件头注释。
 	router.GET("/unsubscribe", s.unsubscribeShell)
 	router.POST("/unsubscribe", s.unsubscribeSubmit)
-	// 迁移期别名：与 /verify-email、/spa/verify-email 同构，共用同一处理器。
-	router.GET("/spa/unsubscribe", s.unsubscribeShell)
 	// SPA 的同源 JSON 传输：读不消费令牌，确认消费令牌；确认走会话前双提交 CSRF。
 	router.GET("/api/v1/unsubscribe", s.unsubscribeRead)
 	router.POST("/api/v1/unsubscribe", auth.PreSessionCSRFMiddleware(), s.unsubscribeConfirm)
 }
 
-// unsubscribeShell 提供 GET /unsubscribe 与 /spa/unsubscribe：先下发会话前双提交 cookie
+// unsubscribeShell 提供 GET /unsubscribe：先下发会话前双提交 cookie
 // （收件人可能未登录），再返回 SPA 应用壳；退订协议由客户端走 /api/v1/unsubscribe。
 //
 // 刻意**不消费**令牌：链接预取器、安全扫描器会对 URL 发 GET，若 GET 即退订，

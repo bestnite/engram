@@ -48,14 +48,9 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	router.POST("/api/v1/auth/setup", auth.PreSessionCSRFMiddleware(), s.apiSetup)
 	router.POST("/api/v1/auth/logout", s.sessions.CSRFMiddleware(), s.apiLogout)
 
-	// 迁移期别名：/spa/login、/spa/register、/spa/setup、/spa/login/totp 与规范路径
-	// 共用同一处理器（同一份双提交 cookie 与可达性判定），保留是为了既有深链不失效。
-	router.GET("/spa/login", s.loginShell)
-	router.GET("/spa/register", s.registerShell)
-	router.GET("/spa/setup", s.setupShell)
-	// 登录第二步（TOTP）的 SPA 入口。规范路径 /login/totp 由 NoRoute 回退到应用壳；
-	// 协议是 GET/POST /api/v1/auth/totp。
-	router.GET("/spa/login/totp", s.totpLoginShell)
+	// 登录第二步（TOTP）没有可深链的 GET 页面：没有为它注册路由，规范路径 /login/totp
+	// 由 NoRoute 回退到应用壳；协议是 GET/POST /api/v1/auth/totp，匿名 CSRF 由
+	// GET /api/v1/auth/session 下发双提交 cookie。
 }
 
 // localizer 从请求 context 取本地化器；缺失属于装配缺陷，记英文日志并 500。

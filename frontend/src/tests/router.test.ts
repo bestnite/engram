@@ -70,14 +70,12 @@ describe('SPA router matching and query parsing', () => {
 
     // 字面量 new 必须先于 :noteId 命中，不能被编辑别名吞掉。
     expect(matchRoute('/decks/456/notes/new', prodRoutes).route?.name).toBe('note-create');
-    // 旧 SPA 复习地址仍在路由表内（兼容既有深链），但规范入口是 /review。
-    expect(matchRoute('/spa/review?deck=7&deck=9', prodRoutes).route?.name).toBe('review-spa');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
   });
 
   // 回归：服务端 GET /review 已返回应用壳（5a3b489 切流），客户端路由必须能处理这个精确
   // URL，否则首页「开始复习」链接与直接访问/刷新都会落到 NotFoundView（实测 404）。
-  it('serves the canonical review route at /review and keeps the /spa alias', async () => {
+  it('serves the canonical review route at /review', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
 
     const canonical = matchRoute('/review', prodRoutes);
@@ -88,37 +86,25 @@ describe('SPA router matching and query parsing', () => {
     expect(scoped.route?.name).toBe('review');
     expect(scoped.query).toEqual({ deck: '9' });
 
-    // 迁移期旧地址仍可用，但不得遮蔽规范路由。
-    const alias = matchRoute('/spa/review', prodRoutes);
-    expect(alias.route?.name).toBe('review-spa');
-
     // 未匹配路径仍是 404 视图。
     expect(matchRoute('/review/unknown', prodRoutes).route).toBeNull();
   });
 
-  it('exposes the SPA login entry at /login and keeps the /spa/login alias', async () => {
+  it('exposes the login entry at /login', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
 
-    // 规范路径 /login 由服务端 GET 返回应用壳并初始化双提交 cookie；/spa/login 是迁移期别名。
-    const spaLogin = matchRoute('/spa/login', prodRoutes);
-    expect(spaLogin.route?.name).toBe('spa-login');
-    expect(spaLogin.params).toEqual({});
-
-    // 规范路径 /login 也在同一前端路由表内（客户端导航用），不被 /spa 别名遮蔽。
-    const ssrLogin = matchRoute('/login', prodRoutes);
-    expect(ssrLogin.route?.name).toBe('login');
+    // 服务端 GET /login 返回应用壳并初始化双提交 cookie。
+    const login = matchRoute('/login', prodRoutes);
+    expect(login.route?.name).toBe('login');
+    expect(login.params).toEqual({});
   });
 });
 
 describe('auth entry routes after the SPA cutover', () => {
-  it('serves /login, /register and /setup canonically and keeps the /spa aliases', async () => {
+  it('serves /login, /register and /setup canonically', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
     expect(matchRoute('/login', prodRoutes).route?.name).toBe('login');
     expect(matchRoute('/register', prodRoutes).route?.name).toBe('register');
     expect(matchRoute('/setup', prodRoutes).route?.name).toBe('setup');
-    // 迁移期别名保留，既有深链不失效。
-    expect(matchRoute('/spa/login', prodRoutes).route?.name).toBe('spa-login');
-    expect(matchRoute('/spa/register', prodRoutes).route?.name).toBe('spa-register');
-    expect(matchRoute('/spa/setup', prodRoutes).route?.name).toBe('spa-setup');
   });
 });

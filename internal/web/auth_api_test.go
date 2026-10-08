@@ -470,31 +470,31 @@ func TestLogout_Flow(t *testing.T) {
 }
 
 // TestLoginShellServesAppAndInitializesDoubleSubmitCookie 断言 SPA 登录入口
-// GET /spa/login 返回应用壳，并像 SSR 的 GET /login 一样先下发会话前双提交 cookie，
+// GET /login 返回应用壳，并像 SSR 的 GET /login 一样先下发会话前双提交 cookie，
 // 使 SPA 挂载后的 POST /api/v1/auth/login 具备可校验的镜像 token。
 // 它只读：不建立会话、不返回任何凭据，也不渲染 SSR 表单。
 func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
-	rec := get(t, srv, "/spa/login", nil)
+	rec := get(t, srv, "/login", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /spa/login status = %d, want 200", rec.Code)
+		t.Fatalf("GET /login status = %d, want 200", rec.Code)
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("GET /spa/login Content-Type = %q, want text/html", ct)
+		t.Errorf("GET /login Content-Type = %q, want text/html", ct)
 	}
 	body := rec.Body.String()
 	if !strings.Contains(body, `<div id="app"></div>`) {
-		t.Errorf("GET /spa/login did not serve the SPA shell: %s", snippet(body))
+		t.Errorf("GET /login did not serve the SPA shell: %s", snippet(body))
 	}
 	// 应用壳不是登录表单：不得出现密码字段或 SSR 表单 action。
 	if strings.Contains(body, `name="password"`) || strings.Contains(body, `action="/login"`) {
-		t.Errorf("GET /spa/login must not render the SSR login form: %s", snippet(body))
+		t.Errorf("GET /login must not render the SSR login form: %s", snippet(body))
 	}
 
 	c := findCookie(rec, auth.CSRFDoubleSubmitCookieName)
 	if c == nil {
-		t.Fatalf("GET /spa/login did not set %s", auth.CSRFDoubleSubmitCookieName)
+		t.Fatalf("GET /login did not set %s", auth.CSRFDoubleSubmitCookieName)
 	}
 	if !c.HttpOnly {
 		t.Errorf("csrf_double cookie must be HttpOnly")
@@ -507,7 +507,7 @@ func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	}
 	// 登录入口绝不提早签发会话 cookie。
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
-		t.Errorf("GET /spa/login must not issue a session cookie")
+		t.Errorf("GET /login must not issue a session cookie")
 	}
 }
 
@@ -519,10 +519,10 @@ func TestLoginShellCookieMatchesSessionToken(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "shelluser", "Password123!", store.RoleUser, true)
 
-	shell := get(t, srv, "/spa/login", nil)
+	shell := get(t, srv, "/login", nil)
 	cookie := findCookie(shell, auth.CSRFDoubleSubmitCookieName)
 	if cookie == nil {
-		t.Fatalf("GET /spa/login did not set %s", auth.CSRFDoubleSubmitCookieName)
+		t.Fatalf("GET /login did not set %s", auth.CSRFDoubleSubmitCookieName)
 	}
 
 	sess := getWithCookies(t, srv, "/api/v1/auth/session", []*http.Cookie{cookie})

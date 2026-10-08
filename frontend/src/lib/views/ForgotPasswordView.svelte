@@ -44,7 +44,7 @@
         <span>{mailReady ? $t('account.forgot.sent') : $t('account.error.mail_not_configured')}</span>
       </div>
       <a
-        href="/spa/login"
+        href="/login"
         class="block text-center text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
         {$t('account.forgot.back_login')}
@@ -91,7 +91,7 @@
       </form>
 
       <div class="mt-6 text-center text-sm">
-        <a href="/spa/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
           {$t('account.forgot.back_login')}
         </a>
       </div>

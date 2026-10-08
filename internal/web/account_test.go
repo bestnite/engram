@@ -198,7 +198,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	verifyToken := tokenFromBody(t, verifyRows[len(verifyRows)-1].TextBody)
 
 	// 消费验证令牌（免登录，双提交 CSRF）。
-	vc, vh := preSessionPair(t, ts.srv, "/spa/verify-email")
+	vc, vh := preSessionPair(t, ts.srv, "/verify-email")
 	verified := postJSON(ts.srv, "/api/v1/auth/verify-email",
 		map[string]string{"token": verifyToken}, []*http.Cookie{vc}, vh)
 	if verified.Code != http.StatusOK {
@@ -263,7 +263,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 
 	// 确认改邮箱（免登录，双提交 CSRF）：真正改库。
 	changeToken := tokenFromBody(t, rows[len(rows)-1].TextBody)
-	cc, ch := preSessionPair(t, ts.srv, "/spa/confirm-email-change")
+	cc, ch := preSessionPair(t, ts.srv, "/confirm-email-change")
 	confirm := postJSON(ts.srv, "/api/v1/auth/confirm-email-change",
 		map[string]string{"token": changeToken}, []*http.Cookie{cc}, ch)
 	if confirm.Code != http.StatusOK {
@@ -277,11 +277,11 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	}
 }
 
-// TestShellEndpointsServeAppAndDoubleSubmitCookie 断言 /spa/verify-email 与
-// /spa/confirm-email-change 下发双提交 cookie 并返回应用壳，且不消费任何令牌。
+// TestShellEndpointsServeAppAndDoubleSubmitCookie 断言 /verify-email 与
+// /confirm-email-change 下发双提交 cookie 并返回应用壳，且不消费任何令牌。
 func TestShellEndpointsServeAppAndDoubleSubmitCookie(t *testing.T) {
 	ts := newSecurityServer(t, true)
-	for _, path := range []string{"/spa/verify-email", "/spa/confirm-email-change"} {
+	for _, path := range []string{"/verify-email", "/confirm-email-change"} {
 		rec := get(t, ts.srv, path, nil)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", path, rec.Code)

@@ -1046,6 +1046,14 @@ that already had a localised default preset may end up with one extra row.
   `package_bad_format`; the existing HTTP status semantics are unchanged.
 - `AGENTS.md` now states that integration tests live beside their packages instead of
   listing a nonexistent top-level `test/` directory.
+- The migration-period `/spa/*` aliases are gone (2026-10-08). Every page the SSR layer
+  owned keeps exactly one address — `/login`, `/register`, `/setup`, `/login/totp`,
+  `/review`, `/decks/:id/settings`, `/settings/totp`, `/settings/notifications`,
+  `/verify-email`, `/confirm-email-change`, `/unsubscribe` — and the second router table
+  that mirrored them under `/spa/...` was removed from both the server and the SPA router.
+  A bookmark to an old address now falls through to the SPA's not-found view. `/login/totp`
+  never had a server route of its own: it is served by the catch-all shell fallback, and the
+  anonymous CSRF cookie comes from `GET /api/v1/auth/session`.
 
 **Unverified.** The PostgreSQL branch of the media primary-key migration has not been
 executed locally. Local and CI tests use SQLite; PostgreSQL testing remains out of scope.

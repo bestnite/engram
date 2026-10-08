@@ -6,8 +6,7 @@
 
   // 邮箱验证结果的 SPA 视图（服务端 GET /verify-email 返回应用壳，服务端不再渲染页面）。
   // 令牌由本视图读取 ?token= 后经 POST /api/v1/auth/verify-email 消费（一次性、有过期）。
-  // /spa/verify-email 保留为迁移期别名，指向同一视图。
-  const token =
+    const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')
       : '';
@@ -46,7 +45,7 @@
     {/if}
 
     <div class="mt-6 text-sm">
-      <a href="/spa/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+      <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
         {$t('account.verify.back_login')}
       </a>
     </div>

@@ -1072,7 +1072,7 @@ export interface AdminAPIKeysResponse {
   total: number;
 }
 
-/** 系统设置 / SMTP / OIDC（Go: internal/web/spa_admin_{settings,smtp,oidc}.go）。 */
+/** 系统设置 / SMTP / OIDC（Go: internal/web/admin_settings_api.go、admin_smtp.go、admin_oidc.go）。 */
 
 /** 设置表格里的一行；unit 非空时值按单位解释（当前只有 "bytes"）。 */
 export interface AdminSettingRow {
@@ -1177,7 +1177,7 @@ export interface AdminOIDCRequest {
   client_secret?: string;
 }
 
-/** 作业与语言包报告（Go: internal/web/spa_admin_{jobs,i18n}.go）。 */
+/** 作业与语言包报告（Go: internal/web/admin_jobs_api.go、admin_i18n_api.go）。 */
 
 /** 一个作业的元信息；stage 为 null 表示尚未进入训练阶段。 */
 export interface AdminJob {

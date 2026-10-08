@@ -71,12 +71,6 @@ export const routes: RouteDefinition[] = [
     component: DeckSettingsView as unknown as RouteDefinition['component'],
   },
   {
-    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /decks/:id/settings。
-    path: '/spa/decks/:id/settings',
-    name: 'deck-settings-spa',
-    component: DeckSettingsView as unknown as RouteDefinition['component'],
-  },
-  {
     path: '/decks/:id',
     name: 'deck-detail',
     component: DeckDetailView as unknown as RouteDefinition['component'],
@@ -118,12 +112,6 @@ export const routes: RouteDefinition[] = [
     component: ReviewView as unknown as RouteDefinition['component'],
   },
   {
-    // 迁移期的旧 SPA 复习地址，保留以兼容既有深链；新入口统一走 /review。
-    path: '/spa/review',
-    name: 'review-spa',
-    component: ReviewView as unknown as RouteDefinition['component'],
-  },
-  {
     path: '/stats',
     name: 'stats',
     component: StatsView as unknown as RouteDefinition['component'],
@@ -146,12 +134,6 @@ export const routes: RouteDefinition[] = [
     component: TOTPView as unknown as RouteDefinition['component'],
   },
   {
-    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /settings/totp。
-    path: '/spa/settings/totp',
-    name: 'totp-settings-spa',
-    component: TOTPView as unknown as RouteDefinition['component'],
-  },
-  {
     // 邮件通知偏好（规范路径）。服务端 GET /settings/notifications 已切到
     // 应用壳，读写走 /api/v1/settings/notifications。
     path: '/settings/notifications',
@@ -159,22 +141,8 @@ export const routes: RouteDefinition[] = [
     component: NotificationPrefsView as unknown as RouteDefinition['component'],
   },
   {
-    // 迁移期的旧 SPA 地址，保留以兼容既有深链；新入口统一走 /settings/notifications。
-    path: '/spa/settings/notifications',
-    name: 'notification-settings-spa',
-    component: NotificationPrefsView as unknown as RouteDefinition['component'],
-  },
-  {
     path: '/login',
     name: 'login',
-    component: LoginView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 登录入口的迁移期别名。规范路径 /login 由服务端 GET /login 应答
-    // （loginShell 返回应用壳并初始化会话前双提交 cookie），/spa/login 由同一处理器服务；
-    // 登录协议走 /api/v1/auth/session + /api/v1/auth/login。
-    path: '/spa/login',
-    name: 'spa-login',
     component: LoginView as unknown as RouteDefinition['component'],
   },
   {
@@ -184,28 +152,6 @@ export const routes: RouteDefinition[] = [
     path: '/login/totp',
     name: 'totp-login',
     component: TOTPLoginView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 迁移期的旧 SPA 第二步地址，保留以兼容既有深链；新入口统一走 /login/totp。
-    path: '/spa/login/totp',
-    name: 'totp-login-spa',
-    component: TOTPLoginView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 注册入口的迁移期别名。规范路径 /register 由服务端 GET /register 应答（registerShell），
-    // /spa/register 由同一处理器服务；
-    // 注册协议走 POST /api/v1/auth/register，?invite= 由视图从 URL 读取。
-    path: '/spa/register',
-    name: 'spa-register',
-    component: RegisterView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 首个管理员引导的迁移期别名。规范路径 /setup 由服务端 GET /setup 应答
-    // （setupShell 仅在没有活跃管理员时可达，否则 404），/spa/setup 由同一处理器服务；
-    // 引导协议走 POST /api/v1/auth/setup。
-    path: '/spa/setup',
-    name: 'spa-setup',
-    component: SetupView as unknown as RouteDefinition['component'],
   },
   {
     // 注册与首个管理员引导的规范路径。服务端 GET /register、/setup 由应用壳应答，
@@ -322,20 +268,6 @@ export const routes: RouteDefinition[] = [
     component: EmailSettingsView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮箱验证结果的入口别名。规范路径 /verify-email 由服务端 GET 返回应用壳并下发会话前
-    // 双提交 cookie；令牌由前端从查询串读出，经 POST /api/v1/auth/verify-email 消费。
-    path: '/spa/verify-email',
-    name: 'spa-verify-email',
-    component: VerifyEmailView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 改邮箱确认结果的入口别名，与 /verify-email 同构：规范路径 /confirm-email-change 由服务端
-    // GET 返回应用壳，令牌经 POST /api/v1/auth/confirm-email-change 消费。
-    path: '/spa/confirm-email-change',
-    name: 'spa-confirm-email-change',
-    component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
-  },
-  {
     // 公开只读分享浏览。服务端 GET /s/:token 已切到应用壳（无效/撤销链接仍在服务端 404），
     // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock。
     path: '/s/:token',
@@ -345,14 +277,13 @@ export const routes: RouteDefinition[] = [
   {
     // 邮箱验证结果的规范路径。服务端 GET /verify-email 返回应用壳，
     // 邮件里的一键链接就指向这里；令牌由视图读取 ?token= 后经 POST /api/v1/auth/verify-email 消费。
-    // /spa/verify-email 保留为迁移期别名。
     path: '/verify-email',
     name: 'verify-email',
     component: VerifyEmailView as unknown as RouteDefinition['component'],
   },
   {
     // 改邮箱确认结果的规范路径。服务端 GET /confirm-email-change 返回应用壳，
-    // 令牌经 POST /api/v1/auth/confirm-email-change 消费。/spa/confirm-email-change 保留为别名。
+    // 令牌经 POST /api/v1/auth/confirm-email-change 消费。
     path: '/confirm-email-change',
     name: 'confirm-email-change',
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
@@ -362,12 +293,6 @@ export const routes: RouteDefinition[] = [
     // 会话前双提交 cookie，令牌由视图读取 ?token= 后经 GET/POST /api/v1/unsubscribe 读取与确认。
     path: '/unsubscribe',
     name: 'unsubscribe',
-    component: UnsubscribeView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 迁移期的旧 SPA 退订地址，保留以兼容既有深链；新入口统一走 /unsubscribe。
-    path: '/spa/unsubscribe',
-    name: 'unsubscribe-spa',
     component: UnsubscribeView as unknown as RouteDefinition['component'],
   },
 ];

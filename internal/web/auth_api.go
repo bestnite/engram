@@ -182,7 +182,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 // 先初始化会话前双提交 cookie：SPA 挂载后从 GET /api/v1/auth/session 取回同一 token 放进
 // X-CSRF-Token，POST /api/v1/auth/login 的 PreSessionCSRFMiddleware 据此比对 cookie 与镜像值。
 // 这里只下发 cookie 并返回应用壳，不渲染表单、不建立会话、不返回任何凭据
-// （会话 cookie 始终由服务端在登录成功后签发）。迁移期别名 /spa/login 由同一处理器服务。
+// （会话 cookie 始终由服务端在登录成功后签发）。
 func (s *Server) loginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
@@ -191,7 +191,7 @@ func (s *Server) loginShell(c *gin.Context) {
 // registerShell 提供 GET /register：返回应用壳（规范路径），
 // 注册协议走 POST /api/v1/auth/register（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
 // ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
-// 不建号、不建立会话、不返回任何凭据。迁移期别名 /spa/register 由同一处理器服务。
+// 不建号、不建立会话、不返回任何凭据。
 func (s *Server) registerShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
@@ -200,7 +200,7 @@ func (s *Server) registerShell(c *gin.Context) {
 // setupShell 提供 GET /setup：返回应用壳（规范路径），
 // 引导协议走 POST /api/v1/auth/setup。可达性与迁移前完全一致：已存在活跃管理员时返回 404
 // （一次性管理员门，避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳；
-// 这里只下发 cookie 并返回应用壳，不建号、不建会话。迁移期别名 /spa/setup 由同一处理器服务。
+// 这里只下发 cookie 并返回应用壳，不建号、不建会话。
 func (s *Server) setupShell(c *gin.Context) {
 	if !s.setupAvailable(c) {
 		c.AbortWithStatus(http.StatusNotFound)

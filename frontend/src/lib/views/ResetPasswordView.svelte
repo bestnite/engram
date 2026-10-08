@@ -47,7 +47,7 @@
         <span>{$t('account.reset.done')}</span>
       </div>
       <a
-        href="/spa/login"
+        href="/login"
         class="block text-center text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
         {$t('account.reset.back_login')}
@@ -60,7 +60,7 @@
         <span>{$t('account.error.token_invalid')}</span>
       </div>
       <a
-        href="/spa/login"
+        href="/login"
         class="block text-center text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
         {$t('account.reset.back_login')}

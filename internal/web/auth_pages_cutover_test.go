@@ -38,15 +38,11 @@ func assertAuthShell(t *testing.T, rec *httptest.ResponseRecorder, srv *Server, 
 	}
 }
 
-// TestLoginRegisterShellsCutOver 覆盖 GET /login 与 GET /register 的应用壳与迁移期别名。
+// TestLoginRegisterShellsCutOver 覆盖 GET /login 与 GET /register 的应用壳。
 func TestLoginRegisterShellsCutOver(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
 	for _, path := range []string{"/login", "/register"} {
-		assertAuthShell(t, get(t, srv, path, nil), srv, "GET "+path)
-	}
-	// 迁移期别名与规范路径共用同一处理器。
-	for _, path := range []string{"/spa/login", "/spa/register"} {
 		assertAuthShell(t, get(t, srv, path, nil), srv, "GET "+path)
 	}
 }
@@ -55,17 +51,16 @@ func TestLoginRegisterShellsCutOver(t *testing.T) {
 func TestSetupShellCutOver(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
-	// 尚无管理员：两条路径都可达并返回应用壳。
+	// 尚无管理员：可达并返回应用壳。
 	assertAuthShell(t, get(t, srv, "/setup", nil), srv, "GET /setup (first run)")
-	assertAuthShell(t, get(t, srv, "/spa/setup", nil), srv, "GET /spa/setup (first run)")
 
 	// 建出首个管理员（走 JSON 引导端点）。
 	if setup := setupFirstAdmin(t, srv, "admin", "admin@example.com", "Sup3rSecret!"); setup.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/auth/setup = %d, want 200 (body %s)", setup.Code, snippet(setup.Body.String()))
 	}
 
-	// 引导窗口关闭：两条路径都必须 404，且不得泄漏 SSR 引导表单。
-	for _, path := range []string{"/setup", "/spa/setup"} {
+	// 引导窗口关闭：必须 404，且不得泄漏 SSR 引导表单。
+	for _, path := range []string{"/setup"} {
 		after := get(t, srv, path, nil)
 		if after.Code != http.StatusNotFound {
 			t.Errorf("GET %s after the first admin = %d, want 404 (body %s)", path, after.Code, snippet(after.Body.String()))

@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 SPA 注册与首个管理员引导：GET /spa/register、GET /spa/setup 应用壳，
+// 本文件覆盖 SPA 注册与首个管理员引导：GET /register、GET /setup 应用壳，
 // 以及 POST /api/v1/auth/register、POST /api/v1/auth/setup 两个 JSON 端点。
 // 安全语义与 SSR 表单一致：会话前双提交 CSRF、注册策略/邮箱白名单/邀请事务、引导一次性
 // 管理员门、成功不建立会话。全部走真实路由与 SQLite，不 mock 数据库。
@@ -52,28 +52,28 @@ func countUsersByEmail(t *testing.T, srv *Server, email string) int64 {
 	return n
 }
 
-// TestRegisterShellServesAppAndInitializesDoubleSubmitCookie 断言 GET /spa/register
+// TestRegisterShellServesAppAndInitializesDoubleSubmitCookie 断言 GET /register
 // 返回应用壳并下发会话前双提交 cookie，但不建立会话、不渲染 SSR 表单。
 func TestRegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
-	rec := get(t, srv, "/spa/register", nil)
+	rec := get(t, srv, "/register", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /spa/register status = %d, want 200", rec.Code)
+		t.Fatalf("GET /register status = %d, want 200", rec.Code)
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("GET /spa/register Content-Type = %q, want text/html", ct)
+		t.Errorf("GET /register Content-Type = %q, want text/html", ct)
 	}
 	body := rec.Body.String()
 	if !strings.Contains(body, `<div id="app"></div>`) {
-		t.Errorf("GET /spa/register did not serve the SPA shell: %s", snippet(body))
+		t.Errorf("GET /register did not serve the SPA shell: %s", snippet(body))
 	}
 	if strings.Contains(body, `name="password"`) || strings.Contains(body, `action="/register"`) {
-		t.Errorf("GET /spa/register must not render the SSR register form: %s", snippet(body))
+		t.Errorf("GET /register must not render the SSR register form: %s", snippet(body))
 	}
 	c := findCookie(rec, auth.CSRFDoubleSubmitCookieName)
 	if c == nil {
-		t.Fatalf("GET /spa/register did not set %s", auth.CSRFDoubleSubmitCookieName)
+		t.Fatalf("GET /register did not set %s", auth.CSRFDoubleSubmitCookieName)
 	}
 	if !c.HttpOnly {
 		t.Errorf("csrf_double cookie must be HttpOnly")
@@ -82,35 +82,35 @@ func TestRegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 		t.Errorf("csrf_double cookie SameSite = %v, want Lax", c.SameSite)
 	}
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
-		t.Errorf("GET /spa/register must not issue a session cookie")
+		t.Errorf("GET /register must not issue a session cookie")
 	}
 }
 
-// TestSetupShellAvailability 断言 GET /spa/setup 只在没有活跃管理员时返回应用壳，
+// TestSetupShellAvailability 断言 GET /setup 只在没有活跃管理员时返回应用壳，
 // 已存在管理员时返回 404（与 SSR 的一次性管理员门一致）。
 func TestSetupShellAvailability(t *testing.T) {
 	// 首启窗口：没有管理员，可达，下发双提交 cookie。
 	fresh, _ := newAuthServer(t)
-	rec := get(t, fresh, "/spa/setup", nil)
+	rec := get(t, fresh, "/setup", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /spa/setup (no admin) status = %d, want 200", rec.Code)
+		t.Fatalf("GET /setup (no admin) status = %d, want 200", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), `<div id="app"></div>`) {
-		t.Errorf("GET /spa/setup did not serve the SPA shell: %s", snippet(rec.Body.String()))
+		t.Errorf("GET /setup did not serve the SPA shell: %s", snippet(rec.Body.String()))
 	}
 	if findCookie(rec, auth.CSRFDoubleSubmitCookieName) == nil {
-		t.Errorf("GET /spa/setup must initialize the double-submit cookie")
+		t.Errorf("GET /setup must initialize the double-submit cookie")
 	}
 	if findCookie(rec, fresh.sessions.CookieName()) != nil {
-		t.Errorf("GET /spa/setup must not issue a session cookie")
+		t.Errorf("GET /setup must not issue a session cookie")
 	}
 
 	// 已有管理员：引导窗口关闭，必须 404。
 	seeded, _ := newAuthServer(t)
 	seedAdminUser(t, seeded)
-	closed := get(t, seeded, "/spa/setup", nil)
+	closed := get(t, seeded, "/setup", nil)
 	if closed.Code != http.StatusNotFound {
-		t.Fatalf("GET /spa/setup (admin exists) status = %d, want 404", closed.Code)
+		t.Fatalf("GET /setup (admin exists) status = %d, want 404", closed.Code)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestRegisterAPI_PolicyMatrix(t *testing.T) {
 			if tc.allowlist != "" {
 				writeSetting(t, db, auth.SettingKeyEmailAllowlist, tc.allowlist)
 			}
-			cookie, headers := preSessionPair(t, srv, "/spa/register")
+			cookie, headers := preSessionPair(t, srv, "/register")
 			rec := postJSON(srv, "/api/v1/auth/register", map[string]string{
 				"username": string(rune('a'+i)) + "_user",
 				"email":    tc.email,
@@ -209,7 +209,7 @@ func TestRegisterAPI_SuccessIssuesNoSession(t *testing.T) {
 	seedAdminUser(t, srv)
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "open")))
 
-	cookie, headers := preSessionPair(t, srv, "/spa/register")
+	cookie, headers := preSessionPair(t, srv, "/register")
 	rec := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "newcomer", "email": "newcomer@example.com", "password": "Sup3rSecret!",
 	}, []*http.Cookie{cookie}, headers)
@@ -246,7 +246,7 @@ func TestRegisterAPI_Invite(t *testing.T) {
 		t.Fatalf("create invite: %v", err)
 	}
 
-	cookie, headers := preSessionPair(t, srv, "/spa/register")
+	cookie, headers := preSessionPair(t, srv, "/register")
 	first := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "invitee", "email": "invitee@example.com",
 		"password": "Sup3rSecret!", "invite": inv.Token,
@@ -297,7 +297,7 @@ func TestRegisterAPI_Validation(t *testing.T) {
 			srv, db := newAuthServer(t)
 			seedAdminUser(t, srv)
 			writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "open")))
-			cookie, headers := preSessionPair(t, srv, "/spa/register")
+			cookie, headers := preSessionPair(t, srv, "/register")
 			rec := postJSON(srv, "/api/v1/auth/register", tc.body, []*http.Cookie{cookie}, headers)
 			if rec.Code != http.StatusBadRequest || apiErrorCode(t, rec) != tc.wantCode {
 				t.Fatalf("status/code = %d %s, want 400 %s", rec.Code, apiErrorCode(t, rec), tc.wantCode)
@@ -310,7 +310,7 @@ func TestRegisterAPI_Validation(t *testing.T) {
 // 之后同一端点 404（一次性管理员门），且成功不签发会话 cookie。
 func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 	srv, _ := newAuthServer(t)
-	cookie, headers := preSessionPair(t, srv, "/spa/setup")
+	cookie, headers := preSessionPair(t, srv, "/setup")
 
 	rec := postJSON(srv, "/api/v1/auth/setup", map[string]string{
 		"username": "root", "email": "root@example.com", "password": "Sup3rSecret!",
@@ -346,7 +346,7 @@ func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 func TestSetupAPI_BootstrapEmailFallback(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	srv.bootstrapEmail = "boot@example.com"
-	cookie, headers := preSessionPair(t, srv, "/spa/setup")
+	cookie, headers := preSessionPair(t, srv, "/setup")
 
 	rec := postJSON(srv, "/api/v1/auth/setup", map[string]string{
 		"username": "bootroot", "password": "Sup3rSecret!",

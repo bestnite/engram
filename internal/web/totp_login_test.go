@@ -19,7 +19,7 @@ import (
 // 走真实路由 + 真实 SQLite，复用 auth.TOTPService，断言的状态与 SSR 表单路径一致。
 //
 // 覆盖点：pending 查询的状态语义、双提交 CSRF 强制、凭据缺失/过期、验证码错误（含审计）、
-// 恢复码消费、通过后签发会话与会话 cookie、以及 /spa/login/totp 外壳。
+// 恢复码消费、通过后签发会话与会话 cookie、以及 /login/totp 外壳。
 //
 // 时间步注意：Confirm 会记录「已接受的最大时间步」（与登录同规），因此启用后必须用
 // 下一步的码登录——夹具统一用 time.Now().Add(totpPeriod*time.Second)（既有 TOTP 测试同法）。
@@ -227,22 +227,20 @@ func TestTOTPLoginSecondStepGuards(t *testing.T) {
 	}
 }
 
-// TestTOTPLoginShellServesAppShell 断言 GET /spa/login/totp 返回应用壳并下发双提交 cookie，
-// 且第二步不再有 SSR 表单端点：POST /login/totp 未注册，落到 NoRoute（非 GET 一律 404）。
+// TestTOTPLoginShellServesAppShell 断言登录第二步没有专属的 GET 页面路由：GET /login/totp
+// 落到 NoRoute 回退、返回应用壳（也因此不下发双提交 cookie——匿名 CSRF 由
+// GET /api/v1/auth/session 下发），POST /login/totp 不是注册路由（非 GET 一律 404）。
 func TestTOTPLoginShellServesAppShell(t *testing.T) {
 	srv, _ := newAuthServer(t)
-	rec := get(t, srv, "/spa/login/totp", nil)
+	rec := get(t, srv, "/login/totp", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /spa/login/totp = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("GET /login/totp = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("GET /spa/login/totp Content-Type = %q, want text/html", ct)
-	}
-	if findCookie(rec, auth.CSRFDoubleSubmitCookieName) == nil {
-		t.Errorf("GET /spa/login/totp did not set the %s cookie", auth.CSRFDoubleSubmitCookieName)
+		t.Errorf("GET /login/totp Content-Type = %q, want text/html", ct)
 	}
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
-		t.Error("GET /spa/login/totp must not issue a session cookie")
+		t.Error("GET /login/totp must not issue a session cookie")
 	}
 	// SSR 的第二步表单端点已随页面层移除：POST /login/totp 不再是注册路由。
 	ssrStep := postJSON(srv, "/login/totp", map[string]string{"code": "123456"}, nil, nil)

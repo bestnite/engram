@@ -56,11 +56,10 @@ describe('SPA one-click unsubscribe client flows', () => {
 });
 
 describe('SPA unsubscribe route and view', () => {
-  it('serves /unsubscribe canonically and keeps the /spa alias', async () => {
+  it('serves /unsubscribe canonically', async () => {
     const { routes } = await import('../lib/router/routes');
     expect(matchRoute('/unsubscribe', routes).route?.name).toBe('unsubscribe');
     expect(matchRoute('/unsubscribe?token=abc', routes).query).toEqual({ token: 'abc' });
-    expect(matchRoute('/spa/unsubscribe', routes).route?.name).toBe('unsubscribe-spa');
   });
 
   it('renders the confirm copy from the catalog', () => {
