@@ -204,14 +204,26 @@ type apiRegistrationInfoResponse struct {
 
 // apiRegistrationInfo 返回当前的自助注册策略（GET /api/v1/auth/registration）。
 //
-// 注册页在渲染表单之前调用它：策略为 closed、或为 invite 而这次访问没带邀请令牌时，
-// 页面直接说明「无法自助注册」，而不是让访问者填完整张表单才被 403 拒绝。
-// 判定与 attemptRegistration 同源（同一份 settings、同一个 ParseRegistrationPolicy），
-// 因此不会出现「页面写着 A、提交判 B」的漂移。策略读取失败返回 500，
-// 前端据此退回「照常显示表单」——是否放行最终仍由提交时的服务端判定。
-// 响应不含任何凭据，匿名可调。
+// 注册页在渲染表单之前调用它：这次访问提交注册表单会被放行时不提示，会被拒时直接说明原因，
+// 而不是让访问者填完整张表单才被 403 拒绝。
+// 取值与 attemptRegistration 的分支顺序同源：没有任何活跃管理员时，注册端点会把这个账号建成
+// 管理员（引导窗口），策略与白名单都不参与判定，因此这时按 open 作答——取值仍取自同一个
+// ParseRegistrationPolicy，只是多了这个例外；否则新实例上会出现「页面说无法自助注册、
+// 提交却能建成管理员」。策略读取失败返回 500，前端据此退回「照常显示表单」——
+// 是否放行最终仍由提交时的服务端判定。响应不含任何凭据，匿名可调。
 func (s *Server) apiRegistrationInfo(c *gin.Context) {
-	settings, err := store.LoadSettings(c.Request.Context(), s.db)
+	ctx := c.Request.Context()
+	admins, err := s.users.CountActiveAdmins(ctx)
+	if err != nil {
+		s.logger.Error("registration info: count active admins failed", "error", err)
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	if admins == 0 {
+		c.JSON(http.StatusOK, apiRegistrationInfoResponse{Policy: auth.PolicyOpen})
+		return
+	}
+	settings, err := store.LoadSettings(ctx, s.db)
 	if err != nil {
 		s.logger.Error("registration info: load settings failed", "error", err)
 		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")

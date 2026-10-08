@@ -38,11 +38,20 @@ describe('RegisterView first paint states', () => {
     expect(html).not.toContain('data-testid="register-blocked"');
   });
 
-  it('keeps the form available while the policy is still unknown', () => {
-    const { html } = render(RegisterView, { props: { initialPolicy: null } });
+  it('treats a failed probe as unknown and keeps the form available', () => {
+    const { html } = render(RegisterView, { props: { initialPolicy: 'unknown' } });
 
     expect(html).toContain('data-testid="register-submit"');
     expect(html).toContain('data-testid="register-password-confirm"');
+    expect(html).not.toContain('data-testid="register-blocked"');
+  });
+
+  it('renders neither the form nor the notice while the policy is still being probed', () => {
+    // 首帧不渲染表单：closed 的站点否则会先闪一下表单再被拦截面板替换。
+    const { html } = render(RegisterView, { props: { initialPolicy: 'probing' } });
+
+    expect(html).toContain('data-testid="register-probing"');
+    expect(html).not.toContain('data-testid="register-submit"');
     expect(html).not.toContain('data-testid="register-blocked"');
   });
 });

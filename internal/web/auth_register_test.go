@@ -417,3 +417,51 @@ func TestRegistrationInfoEndpoint(t *testing.T) {
 		})
 	}
 }
+
+// TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow 断言探测与提交同源：
+// 没有活跃管理员时注册端点会把这个账号建成管理员（策略不参与判定），探测也必须按 open 作答，
+// 否则新实例上会出现「页面说无法自助注册、提交却能建成管理员」。
+func TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow(t *testing.T) {
+	srv, db := newAuthServer(t)
+	// 策略是 closed，但引导窗口优先于策略——探测要如实报告这一点。
+	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, auth.PolicyClosed)))
+
+	rec := get(t, srv, "/api/v1/auth/registration", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var resp struct {
+		Policy string `json:"policy"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal registration info: %v", err)
+	}
+	if resp.Policy != auth.PolicyOpen {
+		t.Fatalf("policy during the bootstrap window = %q, want %q", resp.Policy, auth.PolicyOpen)
+	}
+
+	// 提交确实被放行，并且第一个账号是管理员：探测的答案与真实行为一致。
+	cookie, headers := preSessionPair(t, srv, "/register")
+	post := postJSON(srv, "/api/v1/auth/register", map[string]string{
+		"username": "firstroot", "email": "firstroot@example.com", "password": "Sup3rSecret!",
+	}, []*http.Cookie{cookie}, headers)
+	if post.Code != http.StatusOK {
+		t.Fatalf("bootstrap registration status = %d, want 200 (body %s)", post.Code, snippet(post.Body.String()))
+	}
+	u, err := srv.users.ByUsername(context.Background(), "firstroot")
+	if err != nil {
+		t.Fatalf("ByUsername(firstroot) error = %v", err)
+	}
+	if u.Role != store.RoleAdmin {
+		t.Errorf("bootstrap user role = %q, want admin", u.Role)
+	}
+
+	// 引导窗口关闭后，同一个 closed 策略开始生效，探测随即改口。
+	after := get(t, srv, "/api/v1/auth/registration", nil)
+	if err := json.Unmarshal(after.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal registration info: %v", err)
+	}
+	if resp.Policy != auth.PolicyClosed {
+		t.Errorf("policy after the bootstrap window = %q, want %q", resp.Policy, auth.PolicyClosed)
+	}
+}

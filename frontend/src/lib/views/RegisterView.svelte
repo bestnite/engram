@@ -7,13 +7,18 @@
   import type { RegistrationPolicy } from '../api';
   import Button from '../components/ui/Button.svelte';
 
-  // 可选 props.initialPolicy 供服务端渲染与测试注入已知策略，避免首帧闪烁；生产由探测结果驱动。
+  // 注册页的首帧形态由站点策略决定，因此探测落定之前不能渲染表单：否则一个 closed 的站点会先闪出
+  // 表单、再被拦截面板替换。'probing'＝探测中；'unknown'＝探测失败，或这次访问不受策略约束
+  // （带邀请令牌）——两者都落到表单，是否放行最终由提交时的服务端判定。
+  type RegistrationState = 'probing' | 'unknown' | RegistrationPolicy;
+
+  // 可选 props.initialPolicy 供服务端渲染与测试注入已知状态，避免首帧闪烁；生产由探测结果驱动。
   interface Props {
-    initialPolicy?: RegistrationPolicy | null;
+    initialPolicy?: RegistrationState;
   }
 
   // svelte-ignore state_referenced_locally
-  let { initialPolicy = null }: Props = $props();
+  let { initialPolicy = 'probing' }: Props = $props();
 
   // 邀请 token 由 URL 查询参数带入（GET /register?invite=... 下发应用壳）。
   const invite =
@@ -28,10 +33,10 @@
   let confirmPassword = $state('');
   let loading = $state(false);
   let errorKey = $state<string | null>(null);
-  // 当前注册策略；null 表示尚未探测到（含探测失败）。此时照常渲染表单——是否放行最终由服务端在
-  // 提交时判定，探测失败不该把一个本来可用的注册入口藏起来。
+  // 带邀请令牌的访问走邀请接受路径，与策略无关（invite 策略正是靠它放行），因此一开始就按
+  // 「不受策略约束」处理，直接给表单。
   // svelte-ignore state_referenced_locally
-  let policy = $state<RegistrationPolicy | null>(initialPolicy);
+  let registrationState = $state<RegistrationState>(invite ? 'unknown' : initialPolicy);
 
   // 已登录用户访问注册页时直接送去控制台：这是体验问题，不是安全兜底——
   // CSRF 层已按「本次请求有没有有效会话」分档，已登录时用会话绑定 token 校验，不再 403。
@@ -42,16 +47,16 @@
     }
   });
 
-  // 带邀请令牌的访问走邀请接受路径，与策略无关（invite 策略正是靠它放行），因此无需探测。
+  // 策略探测：只读、匿名可调。带邀请令牌时不必探测（邀请路径与策略无关）。
   onMount(async () => {
-    if (policy !== null || invite) {
+    if (registrationState !== 'probing') {
       return;
     }
     try {
-      policy = (await apiClient.registrationInfo()).policy;
+      registrationState = (await apiClient.registrationInfo()).policy;
     } catch {
-      // 探测失败等同于「策略未知」：保持表单可用，最终判定交给提交时的服务端。
-      policy = null;
+      // 探测失败等同于「策略未知」：给表单，最终判定交给提交时的服务端。
+      registrationState = 'unknown';
     }
   });
 
@@ -60,9 +65,9 @@
   const blockedReason = $derived(
     invite
       ? null
-      : policy === 'closed'
+      : registrationState === 'closed'
         ? 'auth.error.registration_closed'
-        : policy === 'invite'
+        : registrationState === 'invite'
           ? 'auth.error.invite_required'
           : null
   );
@@ -98,7 +103,16 @@
   }
 </script>
 
-{#if blockedReason}
+{#if registrationState === 'probing'}
+  <div class="py-12 max-w-md mx-auto px-4">
+    <div class="card-elevated p-8 rounded-xl" data-testid="register-probing">
+      <div class="flex items-center justify-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
+        <span>{$t('common.loading')}</span>
+      </div>
+    </div>
+  </div>
+{:else if blockedReason}
   <div class="py-12 max-w-md mx-auto px-4">
     <div class="card-elevated p-8 rounded-xl" data-testid="register-blocked">
       <div class="mb-6 text-center">
@@ -107,7 +121,7 @@
         </h1>
       </div>
 
-      <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+      <p class="mb-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
         {$t(blockedReason)}
       </p>
 
