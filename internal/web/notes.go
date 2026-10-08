@@ -13,7 +13,6 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/render"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // registerNoteRoutes 挂载卡片列表与编辑页（M2-7）。
@@ -154,9 +153,25 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
+// PreviewCard 是一张卡的正反面渲染结果。
+type PreviewCard struct {
+	TemplateLabel string
+	FrontHTML     string
+	BackHTML      string
+}
+
+// NotePreviewData 是卡片编辑页预览的载荷。
+type NotePreviewData struct {
+	Title      string
+	FrontLabel string
+	BackLabel  string
+	Error      string
+	Cards      []PreviewCard
+}
+
 // buildPreview 用 internal/render 渲染每个 card 的正反面，供 SPA 预览 JSON 使用。
-func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[string]any) views.NotePreviewData {
-	data := views.NotePreviewData{
+func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[string]any) NotePreviewData {
+	data := NotePreviewData{
 		Title:      loc.T("notes.preview.title"),
 		FrontLabel: loc.T("notes.preview.front"),
 		BackLabel:  loc.T("notes.preview.back"),
@@ -192,7 +207,7 @@ func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[strin
 			data.Error = loc.T("notes.preview.invalid") + err.Error()
 			return data
 		}
-		data.Cards = append(data.Cards, views.PreviewCard{
+		data.Cards = append(data.Cards, PreviewCard{
 			TemplateLabel: card.Template,
 			FrontHTML:     frontHTML,
 			BackHTML:      backHTML,

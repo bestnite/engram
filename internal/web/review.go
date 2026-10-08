@@ -13,7 +13,6 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
-	"git.nite07.com/nite/engram/internal/web/views"
 )
 
 // 复习页的规范路径（M3-5）。评分与动作走 SPA 的同源 JSON 端点（/api/v1/review/*）。
@@ -102,8 +101,23 @@ func (s *Server) schedulerFor(ctx context.Context, userID uint64, deckIDs []uint
 	return schedule.NewScheduler(preset)
 }
 
+// ReviewCardView 是当前卡片的两面渲染结果与标识。
+// FrontHTML / BackHTML 一定来自 internal/render 的白名单清洗，SPA 可安全地按原样嵌入。
+type ReviewCardView struct {
+	CardID string
+	NoteID string
+	DeckID string
+	// ExpectedVersion 是提交时携带的乐观锁版本（新卡为 "0"）。
+	ExpectedVersion string
+	Template        string
+	FrontHTML       string
+	BackHTML        string
+	// EditHref 指向该 note 的编辑页，供 e 键跳转。
+	EditHref string
+}
+
 // cardView 渲染一张卡的正反面并取乐观锁版本。
-func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.QueueItem) (*views.ReviewCardView, error) {
+func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.QueueItem) (*ReviewCardView, error) {
 	card, err := s.cards.ByID(ctx, item.CardID)
 	if err != nil {
 		return nil, err
@@ -137,7 +151,7 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
-	return &views.ReviewCardView{
+	return &ReviewCardView{
 		CardID:          strconv.FormatUint(card.ID, 10),
 		NoteID:          strconv.FormatUint(note.ID, 10),
 		DeckID:          strconv.FormatUint(note.DeckID, 10),
