@@ -265,7 +265,7 @@ Working rules:
 - Commit early, even a work-in-progress commit, so the work lands in the shared object
   database instead of an orphaned directory.
 - Single-writer hotspots — one writer at a time: `internal/store/models.go`,
-  `internal/config/`, `internal/i18n/locales/`, `internal/web/views/`.
+  `internal/config/`, `internal/i18n/locales/`, `frontend/src/lib/views/`.
 - Repository configuration is shared from the main repository: `user.signingkey` and
   `core.hooksPath` are visible inside every worktree.
 

@@ -179,14 +179,14 @@ func TestSharingGrantRequiresCSRF(t *testing.T) {
 // （/api/v1/decks/:id/sharing/grants）缺 token 403、带正确 token 才通过。
 func TestSharingMutationsKeepCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "CSRF cutover deck")
-	_, _, _ = createUserAndLogin(t, srv, db, "csrf-cutover-target")
+	deck := seedDeck(t, db, ownerID, "CSRF sharing deck")
+	_, _, _ = createUserAndLogin(t, srv, db, "csrf-target")
 
 	apiPath := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
-	if rec := jsonRequest(t, srv, http.MethodPost, apiPath, `{"username":"csrf-cutover-target","role":"editor"}`, ownerCookies, ""); rec.Code != http.StatusForbidden {
+	if rec := jsonRequest(t, srv, http.MethodPost, apiPath, `{"username":"csrf-target","role":"editor"}`, ownerCookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("SPA grant without CSRF = %d, want 403", rec.Code)
 	}
-	if rec := jsonRequest(t, srv, http.MethodPost, apiPath, `{"username":"csrf-cutover-target","role":"editor"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+	if rec := jsonRequest(t, srv, http.MethodPost, apiPath, `{"username":"csrf-target","role":"editor"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Errorf("SPA grant with CSRF = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 }

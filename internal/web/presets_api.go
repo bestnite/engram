@@ -122,7 +122,7 @@ var presetErrorMessages = map[string]string{
 }
 
 // registerPresetAPIRoutes 挂载 SPA 的调度预设接口；写操作过会话 CSRF。
-// 只注册 /api/v1/presets* 这批 JSON 端点（/presets 只发应用壳，见 presets_cutover.go）。
+// 只注册 /api/v1/presets* 这批 JSON 端点；/presets 本身只发应用壳，由客户端路由渲染。
 // 依赖未装配时跳过，保证 M0 阶段与未装作业执行器的测试仍能构造 Server。
 func (s *Server) registerPresetAPIRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {
