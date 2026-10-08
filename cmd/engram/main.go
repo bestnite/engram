@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,8 +31,59 @@ import (
 	"git.nite07.com/nite/engram/internal/web"
 )
 
-// version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 dev。
-var version = "dev"
+// version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 devVersion。
+var version = devVersion
+
+// devVersion 是未注入构建版本时的取值；此时对外展示的版本会回落到 Go 构建信息里的 VCS
+// 修订号，让本地开发与未打标签的构建也能看出对应哪次提交。
+const devVersion = "dev"
+
+// displayVersion 返回对外展示的程序版本。`engram version` 子命令与前端页脚同源，
+// 两处不会各说一套版本。
+func displayVersion() string {
+	info, _ := debug.ReadBuildInfo()
+	return formatVersion(version, info)
+}
+
+// formatVersion 把注入版本与 Go 构建信息合成展示版本：
+//   - 注入了发布标签（如 v0.1.4）→ 原样返回；
+//   - 未注入（空串或 devVersion）→ 用构建信息里的 VCS 修订号补足，形如 dev (e223664)，
+//     构建时工作区有未提交改动则再加 -dirty 后缀；
+//   - 构建信息里没有 VCS 记录（不在 git 工作区构建，或用了 -buildvcs=false）→ 返回 devVersion。
+func formatVersion(injected string, info *debug.BuildInfo) string {
+	if injected != "" && injected != devVersion {
+		return injected
+	}
+	revision, modified := vcsStamp(info)
+	if revision == "" {
+		return devVersion
+	}
+	short := revision
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	if modified {
+		short += "-dirty"
+	}
+	return devVersion + " (" + short + ")"
+}
+
+// vcsStamp 从 Go 构建信息里取 VCS 修订号与「构建时工作区是否有未提交改动」。
+// 修订号为空表示构建信息里没有 VCS 记录（调用方据此回落到 devVersion）。
+func vcsStamp(info *debug.BuildInfo) (revision string, modified bool) {
+	if info == nil {
+		return "", false
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			revision = s.Value
+		case "vcs.modified":
+			modified = s.Value == "true"
+		}
+	}
+	return revision, modified
+}
 
 func main() {
 	if err := run(context.Background(), os.Args[1:]); err != nil {
@@ -55,7 +107,7 @@ func run(ctx context.Context, args []string) error {
 	case "import":
 		return runImport(args[1:])
 	case "version":
-		fmt.Println(version)
+		fmt.Println(displayVersion())
 		return nil
 	case "help", "-h", "--help":
 		printUsage()
@@ -330,9 +382,11 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
 		// TRUSTED_PROXIES 决定哪些代理可以改写 ClientIP。
 		TrustedProxies: trustedProxies,
-		API:            apiSrv,
-		MCP:            mcpSrv,
-		Jobs:           jobRunner,
+		// 程序版本注入 SPA 入口 <head>，前端页脚读取显示。
+		Version: displayVersion(),
+		API:     apiSrv,
+		MCP:     mcpSrv,
+		Jobs:    jobRunner,
 	})
 	if err != nil {
 		return nil, err

@@ -36,6 +36,8 @@ type SPA struct {
 	indexHTML []byte
 	// mathjaxURL 是自托管 MathJax 的内容哈希 URL；为空表示未注入（资源缺失或未调用 SetMathJaxURL）。
 	mathjaxURL string
+	// version 是注入入口 <head> 的程序版本号；为空表示不注入，前端页脚随之不显示版本。
+	version string
 	// shellBlock 是注入入口 <head> 的 PWA 外壳标记（manifest/theme-color/图标/pwa.js/主题引导）。
 	// 它是装配期设定的一次性内容；之后每个请求只重写 <html> 的 lang 属性，不改动这块标记。
 	shellBlock []byte
@@ -135,6 +137,9 @@ func NewSPA(subFS fs.FS) (*SPA, error) {
 // 已放行同源外链脚本，无需内联脚本、nonce 或 'unsafe-inline'。
 const mathjaxMetaName = "engram-mathjax"
 
+// versionMetaName 是 SPA 入口 <head> 里承载程序版本的 meta 名；前端页脚读它显示版本。
+const versionMetaName = "engram-version"
+
 // SetMathJaxURL 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口的 <head>。
 //
 // 传空串或资源未嵌入时不注入，前端加载器读到空 URL 会跳过加载（与 SSR 缺资源时跳过引用
@@ -145,6 +150,19 @@ func (s *SPA) SetMathJaxURL(url string) {
 		return
 	}
 	s.mathjaxURL = url
+	s.rebuild()
+}
+
+// SetVersion 把程序版本注入 SPA 入口的 <head>，供前端页脚显示。
+//
+// 传空串时不注入（测试，或未注入版本的构建），前端读到空值即不显示版本。与 SetMathJaxURL
+// 一样，注入变化会重建入口内容，ServeIndex 按实际写出的字节现算 ETag，浏览器拿不到
+// 「旧壳 + 新版本」的组合。
+func (s *SPA) SetVersion(version string) {
+	if version == s.version {
+		return
+	}
+	s.version = version
 	s.rebuild()
 }
 
@@ -207,13 +225,16 @@ func buildShellBlock(shell SPAShell) []byte {
 	return []byte(b.String())
 }
 
-// rebuild 依据当前注入项（MathJax meta 与 PWA 外壳块）重建入口内容。
-// 两个注入点都从这里出发，避免各自基于 rawIndex 组装而丢掉对方的注入。ETag 不在这里算：
+// rebuild 依据当前注入项（MathJax meta、版本 meta 与 PWA 外壳块）重建入口内容。
+// 每个注入点都从这里出发，避免各自基于 rawIndex 组装而丢掉其余注入。ETag 不在这里算：
 // ServeIndex 按每次实际写出的内容（含请求语言）现算。
 func (s *SPA) rebuild() {
 	index := s.rawIndex
 	if s.mathjaxURL != "" {
 		index = injectMathJaxMeta(index, s.mathjaxURL)
+	}
+	if s.version != "" {
+		index = injectVersionMeta(index, s.version)
 	}
 	if len(s.shellBlock) > 0 {
 		index = injectBeforeHeadEnd(index, s.shellBlock)
@@ -231,6 +252,13 @@ func indexHashOf(b []byte) string {
 // 保证 meta 一定出现在文档里——前端加载器全靠它发现 MathJax。
 func injectMathJaxMeta(index []byte, url string) []byte {
 	meta := []byte(`<meta name="` + mathjaxMetaName + `" content="` + html.EscapeString(url) + `" />`)
+	return injectBeforeHeadEnd(index, meta)
+}
+
+// injectVersionMeta 在 </head> 之前插入承载程序版本的 meta。值来自构建期注入，仍走
+// html.EscapeString 转义，避免将来版本串含引号时破坏文档结构。
+func injectVersionMeta(index []byte, version string) []byte {
+	meta := []byte(`<meta name="` + versionMetaName + `" content="` + html.EscapeString(version) + `" />`)
 	return injectBeforeHeadEnd(index, meta)
 }
 

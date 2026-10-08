@@ -95,6 +95,9 @@ type Deps struct {
 	// TrustedProxies 是允许改写 ClientIP() 的代理地址（IP 或 CIDR），来自启动配置 TRUSTED_PROXIES。
 	// 为空 = 不信任任何代理，ClientIP 回落到 RemoteAddr。
 	TrustedProxies []string
+	// Version 是程序版本号（构建期注入的标签；开发构建为 dev + 提交短哈希），注入 SPA 入口
+	// <head> 供前端页脚显示。为空时不注入，页脚不显示版本。
+	Version string
 }
 
 // Server 持有路由与监听地址。
@@ -222,6 +225,8 @@ func New(addr string, deps Deps) (*Server, error) {
 		ScriptURL:         pwaScriptPath,
 		ThemeBootstrap:    themeBootstrap,
 	})
+	// 程序版本注入 SPA 入口 <head>，前端页脚读取显示；为空则不注入。
+	spa.SetVersion(deps.Version)
 	translator := deps.Translator
 	if translator == nil {
 		var err error

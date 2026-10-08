@@ -4,8 +4,12 @@
   import { localeStore, t } from './lib/i18n';
   import { initAuth, clearSession } from './lib/auth';
   import { apiClient } from './lib/api';
+  import { appVersion } from './lib/version';
   import NavHeader from './lib/components/NavHeader.svelte';
   import NotFoundView from './lib/views/NotFoundView.svelte';
+
+  // 程序版本由服务端注入入口 <head> 的 meta 提供；开发模式或静态预览下为空，页脚不显示。
+  const version = appVersion();
 
   // 会话中途失效（401，或登录后端点的 CSRF 校验发现没有会话）：清掉认证状态并送回登录页。
   // 修复前这里什么都不做——界面继续显示「已登录」，每个操作都失败，必须手动刷新才恢复。
@@ -46,13 +50,19 @@
   </main>
 
   <footer class="border-t border-zinc-200 dark:border-zinc-800 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
-    <a
-      href="https://github.com/bestnite/engram"
-      target="_blank"
-      rel="noreferrer noopener"
-      class="font-medium hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-    >
-      {$t('app.name')}
-    </a>
+    <div class="flex items-center justify-center gap-2">
+      <a
+        href="https://github.com/bestnite/engram"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="font-medium hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+      >
+        {$t('app.name')}
+      </a>
+      {#if version}
+        <span aria-hidden="true">·</span>
+        <span>{version}</span>
+      {/if}
+    </div>
   </footer>
 </div>

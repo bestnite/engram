@@ -196,8 +196,8 @@ func TestBuildShellBlockSkipsEmptyAndEscapes(t *testing.T) {
 	}
 }
 
-// TestSPAShellComposesWithMathJax 断言外壳注入与 MathJax 注入互不覆盖：两者都在 </head>
-// 之前出现，且后设置的注入不会丢掉先前设置的那一项。
+// TestSPAShellComposesWithMathJax 断言外壳注入、MathJax 注入与版本注入互不覆盖：三者都在
+// </head> 之前出现，且后设置的注入不会丢掉先前设置的那一项。
 func TestSPAShellComposesWithMathJax(t *testing.T) {
 	spa, err := NewSPA(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html lang="zh-CN"><head></head><body><div id="app"></div></body></html>`)},
@@ -213,11 +213,13 @@ func TestSPAShellComposesWithMathJax(t *testing.T) {
 		ScriptURL:      pwaScriptPath,
 		ThemeBootstrap: themeBootstrap,
 	})
+	spa.SetVersion("v0.1.4")
 
 	got := string(spa.IndexHTML())
 	headEnd := strings.Index(got, "</head>")
 	for _, want := range []string{
 		`<meta name="` + mathjaxMetaName + `" content="/static/v/abcd1234/js/mathjax/tex-svg.js" />`,
+		`<meta name="` + versionMetaName + `" content="v0.1.4" />`,
 		`<link rel="manifest" href="` + manifestPath + `"/>`,
 		`<script src="` + pwaScriptPath + `"></script>`,
 		themeBootstrap,

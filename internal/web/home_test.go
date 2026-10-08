@@ -16,15 +16,16 @@ import (
 
 // newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。
 // M1-25 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
-func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
+// mut 可选地改写装配参数（例如给 Deps.Version 设值）。
+func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string, mut ...func(*Deps)) *Server {
 	t.Helper()
-	srv := newFreshServer(t, userLocale)
+	srv := newFreshServer(t, userLocale, mut...)
 	seedActiveAdmin(t, srv)
 	return srv
 }
 
 // newFreshServer 构造一个没有任何用户的测试服务，等价于「安装完但还没 setup」。
-func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string) *Server {
+func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string, mut ...func(*Deps)) *Server {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "render.db"))
 	if err != nil {
@@ -33,13 +34,17 @@ func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string) *Serve
 	if err := store.AutoMigrate(context.Background(), db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
-	srv, err := New("127.0.0.1:0", Deps{
+	deps := Deps{
 		DB:            db,
 		Users:         store.NewUserStore(db),
 		Logger:        discardLogger(),
 		SchemaVersion: func(ctx context.Context) (int, error) { return store.CurrentVersion(ctx, db) },
 		UserLocale:    userLocale,
-	})
+	}
+	for _, m := range mut {
+		m(&deps)
+	}
+	srv, err := New("127.0.0.1:0", deps)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

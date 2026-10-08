@@ -190,3 +190,55 @@ func TestSPAIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 		t.Errorf("SetMathJaxURL(\"\") should remove the MathJax meta")
 	}
 }
+
+// TestSPAIndexVersionMetaFollowsSetVersion 断言版本注入由 SetVersion 驱动：默认不带 meta，
+// 传入版本后出现在 </head> 之前，值一律转义，再传空串则移除（未注入版本的构建不显示版本）。
+func TestSPAIndexVersionMetaFollowsSetVersion(t *testing.T) {
+	spa, err := NewSPA(fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html><head></head><body><div id="app"></div></body></html>`)},
+	})
+	if err != nil {
+		t.Fatalf("NewSPA() error = %v", err)
+	}
+	if strings.Contains(string(spa.IndexHTML()), versionMetaName) {
+		t.Errorf("fresh SPA index should not carry a version meta")
+	}
+
+	spa.SetVersion("v0.1.4")
+	got := string(spa.IndexHTML())
+	meta := `<meta name="engram-version" content="v0.1.4" />`
+	if !strings.Contains(got, meta) {
+		t.Errorf("SetVersion did not inject %q into the index", meta)
+	}
+	if strings.Index(got, meta) > strings.Index(got, "</head>") {
+		t.Errorf("version meta must be injected inside <head>, before </head>")
+	}
+
+	// 版本串将来可能含引号，属性值必须转义，否则会破坏文档结构。
+	spa.SetVersion(`v1" onload="x`)
+	if !strings.Contains(string(spa.IndexHTML()), `content="v1&#34; onload=&#34;x"`) {
+		t.Errorf("version meta value is not escaped: %s", string(spa.IndexHTML()))
+	}
+
+	spa.SetVersion("")
+	if strings.Contains(string(spa.IndexHTML()), versionMetaName) {
+		t.Errorf("SetVersion(\"\") should remove the version meta")
+	}
+}
+
+// TestSPAVersionMetaReachesShell 断言 web.Deps.Version 真的经 New 注入到应用壳的 <head>：
+// 前端页脚的版本号只有这一条来源，装配漏传时页脚会静默地不显示版本。
+func TestSPAVersionMetaReachesShell(t *testing.T) {
+	srv := newRenderServer(t, nil, func(d *Deps) { d.Version = "v9.9.9" })
+	body := spaShellBody(t, srv, "/", nil)
+	want := `<meta name="engram-version" content="v9.9.9" />`
+	if !strings.Contains(body, want) {
+		t.Errorf("SPA shell is missing %q: %s", want, snippet(body))
+	}
+
+	// 未设置 Deps.Version（如测试装配）时不得出现该 meta。
+	plain := newRenderServer(t, nil)
+	if strings.Contains(spaShellBody(t, plain, "/", nil), `name="`+versionMetaName+`"`) {
+		t.Error("SPA shell carries a version meta although Deps.Version is empty")
+	}
+}
