@@ -47,9 +47,10 @@ Conventions:
   with database connectivity and schema version.
   *Acceptance:* `curl /healthz` returns `200` with both fields; shutdown logs one English
   line and exits within two seconds.
-- [x] **M0-6 Templ toolchain** — `templ generate` wired into the build, `base.templ`
-  layout, one sample page, generated files gitignored.
-  *Acceptance:* `templ generate && go build ./...` succeeds; the sample page renders.
+- ~~**M0-6 Templ toolchain**~~ — **retired 2026-10-08**: the SSR page layer was removed in favour
+  of a single Svelte SPA, so `templ` is no longer a build dependency, `base.templ` and the
+  generated files no longer exist, and `templ generate` has nothing to run. M0-7 (Tailwind
+  toolchain) is unaffected and still current.
 - [x] **M0-7 Tailwind toolchain** — standalone CLI config plus `input.css`, output at
   `internal/web/static/css/tailwind.css` (gitignored), embedded via `go:embed`.
   *Acceptance:* the build produces a CSS bundle; the sample page uses at least one
