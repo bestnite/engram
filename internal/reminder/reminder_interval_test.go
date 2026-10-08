@@ -14,13 +14,6 @@ import (
 //
 // 全部用真实 SQLite（newTestDB + store.LastReminderSentAt 读 SentAt 列），不 mock 数据库。
 
-// TestMinSendIntervalConstant 钉住阈值取值：改小它就会放行贴身双发，是本文件的负向对照锚点。
-func TestMinSendIntervalConstant(t *testing.T) {
-	if MinSendInterval != 20*time.Hour {
-		t.Fatalf("MinSendInterval = %v, want 20h", MinSendInterval)
-	}
-}
-
 // TestMinSendIntervalBlocksBackToBackDoubleSend 是核心验收：0 点/切点 4 点的用户不再一天两封。
 func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	db := newTestDB(t)

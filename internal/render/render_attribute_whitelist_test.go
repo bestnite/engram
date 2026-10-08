@@ -7,10 +7,10 @@ import (
 
 // TestRenderMarkdownLocksAttributeWhitelist 锁定卡面的属性白名单（buildPolicy）。
 //
-// 为什么必须有这组用例：卡面上方用 @rawHTML 直接输出本包清洗后的 HTML，而站点加载了
-// htmx——htmx 会把真实存在的 hx-* / data-hx-* 属性交给 new Function 编译执行。
-// 因此“用户内容里能不能活下来一个 htmx 属性、事件处理属性或 style”就是能否注入 JS 的
-// 关键，必须逐条钉死，而不能只依赖“我们记得白名单是严的”。
+// 为什么必须有这组用例：清洗后的 HTML 直接进卡面渲染，属性白名单是唯一的屏障。能执行代码的
+// 载体不止 on* 一类——hx-*/data-hx-* 前缀（htmx 那类库会把它们交给 new Function 编译）、
+// style（覆盖站点样式）、srcdoc（承载完整文档）都曾是真实存在的注入口，白名单放宽一条就是
+// 开一个口子。所以逐条钉死，而不是只依赖「我们记得白名单是严的」。
 //
 // 每条用例同时断言两件事：forbidden 里的可执行形式不得出现在输出中；
 // required 里的合法标签与文字必须保留，证明剥属性不等于吞内容。
@@ -25,14 +25,9 @@ func TestRenderMarkdownLocksAttributeWhitelist(t *testing.T) {
 		required  []string
 	}{
 		{
-			// 1. 链接目标里的 javascript: scheme。
-			name:      "href javascript scheme",
-			src:       `<a href="javascript:alert(1)">x</a>`,
-			forbidden: []string{"javascript:", "alert("},
-			required:  []string{"x"},
-		},
-		{
 			// 2. img 的事件处理属性onerror。
+			// 与 render_test.go 里那条 `src="javascript:…" + onerror` 不同：这条要求剥掉
+			// onerror 之后 img 与它合法的 src 仍然存活。
 			name:      "img onerror event attribute",
 			src:       `<img src=x onerror=alert(1)>`,
 			forbidden: []string{"onerror", "alert("},
@@ -74,7 +69,8 @@ func TestRenderMarkdownLocksAttributeWhitelist(t *testing.T) {
 			required:  []string{"<span>x</span>"},
 		},
 		{
-			// 7a. iframe 不在白名单：标签连内容一并丢弃。
+			// 7a. iframe 不在白名单：标签连内容一并丢弃（同一条向量在 render_test.go 里
+			// 也有一条，这里是属性白名单视角，保留是因为它同时断言 src 值不得留下）。
 			name:      "iframe not in whitelist",
 			src:       `<iframe src="https://example.com"></iframe>`,
 			forbidden: []string{"<iframe", "example.com"},

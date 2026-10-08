@@ -46,83 +46,63 @@ func localTimeAt(t *testing.T, tz string, day, hour, min int) time.Time {
 	return time.Date(2026, 6, day, hour, min, 0, 0, loc).UTC()
 }
 
-// TestUserSendHourGatesDelivery 是核心验收：用户设定 19 点后，只有本地到点才发。
+// TestUserSendHourGatesDelivery 是核心验收：只有本地到点才发，未设置（NULL）回落全局默认 19 点。
+//
+// 两档走的是同一段阶梯（07:00 不发 → 18:59 不发 → 19:00 发），差别只在 users.reminder_hour
+// 是显式 19 还是 NULL，所以合成一张表跑，不把同一段阶梯抄两遍。
 func TestUserSendHourGatesDelivery(t *testing.T) {
-	db := newTestDB(t)
-	userID := seedUserWithDueCard(t, db, "alice", "alice@example.com", "en", "Asia/Shanghai", 4,
-		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	enableReminder(t, db, userID)
-	setUserSendHour(t, db, userID, intHour(19))
-
-	enq := &fakeEnqueuer{configured: true}
-	clock := localTimeAt(t, "Asia/Shanghai", 2, 7, 0)
-	r := newReminder(t, db, enq, func() time.Time { return clock })
-	ctx := context.Background()
-
-	// 07:00：旧实现会在这里发信，新规则下必须不发。
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 07:00: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("tick at local 07:00 before the chosen hour 19: enqueued %d, want 0", got)
-	}
-
-	// 18:59：仍未到点。
-	clock = localTimeAt(t, "Asia/Shanghai", 2, 18, 59)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 18:59: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("tick at local 18:59 before the chosen hour 19: enqueued %d, want 0", got)
-	}
-
-	// 19:00：到点，发一封。
-	clock = localTimeAt(t, "Asia/Shanghai", 2, 19, 0)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 19:00: %v", err)
-	}
-	if got := enq.count(); got != 1 {
-		t.Fatalf("tick at local 19:00 at the chosen hour: enqueued %d, want 1", got)
-	}
-}
-
-// TestUnsetSendHourUsesGlobalDefault 验收：reminder_hour 为 NULL 时走全局默认 19:00。
-func TestUnsetSendHourUsesGlobalDefault(t *testing.T) {
 	if DefaultSendHour != 19 {
 		t.Fatalf("DefaultSendHour = %d, want 19", DefaultSendHour)
 	}
-	db := newTestDB(t)
-	// 不调用 setUserSendHour：users.reminder_hour 保持 NULL。
-	userID := seedUserWithDueCard(t, db, "bob", "bob@example.com", "en", "Asia/Shanghai", 4,
-		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	enableReminder(t, db, userID)
+	cases := []struct {
+		name string
+		hour *int
+	}{
+		{name: "explicit 19", hour: intHour(19)},
+		{name: "unset falls back to the default 19", hour: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newTestDB(t)
+			userID := seedUserWithDueCard(t, db, "alice", "alice@example.com", "en", "Asia/Shanghai", 4,
+				time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+			enableReminder(t, db, userID)
+			// nil 不写库：users.reminder_hour 保持 NULL，走的正是「未设置」分支。
+			if tc.hour != nil {
+				setUserSendHour(t, db, userID, tc.hour)
+			}
 
-	enq := &fakeEnqueuer{configured: true}
-	clock := localTimeAt(t, "Asia/Shanghai", 2, 7, 0)
-	r := newReminder(t, db, enq, func() time.Time { return clock })
-	ctx := context.Background()
+			enq := &fakeEnqueuer{configured: true}
+			clock := localTimeAt(t, "Asia/Shanghai", 2, 7, 0)
+			r := newReminder(t, db, enq, func() time.Time { return clock })
+			ctx := context.Background()
 
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 07:00: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("unset hour, tick at local 07:00: enqueued %d, want 0", got)
-	}
+			// 07:00：早于发送时间，不发。
+			if err := r.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce at 07:00: %v", err)
+			}
+			if got := enq.count(); got != 0 {
+				t.Fatalf("tick at local 07:00 before the chosen hour: enqueued %d, want 0", got)
+			}
 
-	clock = localTimeAt(t, "Asia/Shanghai", 2, 18, 59)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 18:59: %v", err)
-	}
-	if got := enq.count(); got != 0 {
-		t.Fatalf("unset hour, tick at local 18:59: enqueued %d, want 0 (default is 19:00)", got)
-	}
+			// 18:59：仍未到点。
+			clock = localTimeAt(t, "Asia/Shanghai", 2, 18, 59)
+			if err := r.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce at 18:59: %v", err)
+			}
+			if got := enq.count(); got != 0 {
+				t.Fatalf("tick at local 18:59 before the chosen hour: enqueued %d, want 0", got)
+			}
 
-	clock = localTimeAt(t, "Asia/Shanghai", 2, 19, 0)
-	if err := r.RunOnce(ctx); err != nil {
-		t.Fatalf("RunOnce at 19:00: %v", err)
-	}
-	if got := enq.count(); got != 1 {
-		t.Fatalf("unset hour falls back to the default 19:00: enqueued %d, want 1", got)
+			// 19:00：到点，发一封。
+			clock = localTimeAt(t, "Asia/Shanghai", 2, 19, 0)
+			if err := r.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce at 19:00: %v", err)
+			}
+			if got := enq.count(); got != 1 {
+				t.Fatalf("tick at local 19:00 at the chosen hour: enqueued %d, want 1", got)
+			}
+		})
 	}
 }
 
