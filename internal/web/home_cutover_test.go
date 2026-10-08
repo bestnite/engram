@@ -48,7 +48,7 @@ func TestHomeRouteServesShellForAnonymousWithActiveAdmin(t *testing.T) {
 
 // TestHomeRouteRedirectsToSetupBeforeSPA 断言首启窗口优先级最高：还没有活跃管理员时，即使 SPA
 // 已加载，GET / 仍 303 到 /setup，且响应体不是应用壳。这条覆盖「无管理员 → /setup 不变」。
-func TestHomeRouteRedirectsToSetupBeforeSPA(t *testing.T) {
+func TestHomeRouteRedirectsToSetupBeforeShell(t *testing.T) {
 	srv := newFreshServer(t, nil)
 
 	rec := get(t, srv, "/", nil)

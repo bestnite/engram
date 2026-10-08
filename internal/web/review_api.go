@@ -429,7 +429,7 @@ func gradeGivenText(kind string, fields map[string]any, detail map[string]any) s
 	}
 }
 
-// spaGradeAction* 是判分请求的三种语义（见 gradeRequest）。
+// gradeAction* 是判分请求的三种语义（见 gradeRequest）。
 const (
 	gradeActionReveal = "reveal"
 	gradeActionGiveUp = "give_up"

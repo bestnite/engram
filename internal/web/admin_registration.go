@@ -10,7 +10,7 @@ import (
 // 管理面板的注册与邀请支撑函数（ROADMAP.md M6-3）。
 //
 // SSR 注册与邀请页删除后，策略与邀请的读写在 /api/v1/admin/registration 与
-// /api/v1/admin/invites* 的 JSON 端点上（spa_admin_registration.go）；
+// /api/v1/admin/invites* 的 JSON 端点上（admin_registration_api.go）；
 // 这里只保留仍被复用的 notice 翻译、邀请状态与时间格式化。
 
 // regNotice 把重定向/JSON 回带的 notice 码翻成文案；未知码不显示。

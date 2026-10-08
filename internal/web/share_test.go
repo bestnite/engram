@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// 本文件是公开只读分享浏览 SPA 化的验收（internal/web/spa_share.go）。
+// 本文件是公开只读分享浏览 SPA 化的验收（internal/web/share_api.go）。
 //
 // 覆盖：GET /s/:token 的切壳、撤销/未知链接仍 404、JSON 内容复用服务端清洗渲染、
 // 口令门禁（解锁前不返回正文）、以及打开成功时经 JSON 登记会话级媒体授权。走真实路由与 SQLite。

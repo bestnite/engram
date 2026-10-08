@@ -35,7 +35,7 @@ func (s *Server) settingsRoute(c *gin.Context) {
 }
 
 // supportedLocale 报告 code 是否是当前受支持的语言码。
-// 仍被 SPA 的 JSON 端点（spa_profile.go、spa_admin_settings.go）与语言解析复用。
+// 仍被 SPA 的 JSON 端点（profile.go、admin_settings_api.go）与语言解析复用。
 func (s *Server) supportedLocale(code string) bool {
 	for _, c := range s.i18n.SupportedCodes() {
 		if c == code {

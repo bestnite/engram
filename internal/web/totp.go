@@ -16,7 +16,7 @@ import (
 // 本文件是 M1-16 的 Web 层：登录第二步的凭据 cookie，以及两步验证管理页的应用壳入口。
 //
 // 与共享热点隔离：路由与 handler 全部落在本文件，对 internal/web/auth.go 只做路由注册插入，
-// 不重排既有代码。登录第二步与设置的读写协议在同源 JSON 端点上（spa_totp_login.go / spa_totp.go）。
+// 不重排既有代码。登录第二步与设置的读写协议在同源 JSON 端点上（totp_login.go / totp_api.go）。
 
 const (
 	// totpPendingCookieName 是「密码已通过、等待第二因素」的短期凭据 cookie 名。
@@ -35,7 +35,7 @@ func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	// 凭据，POST 提交验证码并签发会话。挂双提交 cookie 中间件（登录前流程没有会话可绑 token）。
 	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
 	router.POST("/api/v1/auth/totp", auth.PreSessionCSRFMiddleware(), s.apiTOTPSubmit)
-	// 两步验证管理页只返回应用壳；读写走 /api/v1/settings/totp*（spa_totp.go）。
+	// 两步验证管理页只返回应用壳；读写走 /api/v1/settings/totp*（totp_api.go）。
 	router.GET("/settings/totp", s.totpSettingsRoute)
 }
 

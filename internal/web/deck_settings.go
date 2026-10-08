@@ -13,7 +13,7 @@ import (
 //
 // 门控与 registerDeckRoutes 相同：列表页上渲染的 /decks/:id/settings 链接与这里注册的路由
 // 必须共享同一依赖前提，否则会出现「链接在、点进去 404」。SSR 页面层已删除：页面只发应用壳，
-// 读写走 /api/v1/decks/:id/settings 的 JSON 端点（spa_deck_settings.go）。
+// 读写走 /api/v1/decks/:id/settings 的 JSON 端点（deck_settings_api.go）。
 func (s *Server) registerDeckSettingsRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {
 		return

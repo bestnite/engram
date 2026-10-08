@@ -7,7 +7,7 @@ import (
 // 本文件是 M1-18 的 Web 层入口：邮件偏好页（/settings/notifications）只发 SPA 应用壳。
 //
 // 偏好目录与发信方共用 internal/mail 的目录；页面读取与保存走
-// /api/v1/settings/notifications 的 JSON 端点（spa_mail_prefs.go），SSR 页面层已删除。
+// /api/v1/settings/notifications 的 JSON 端点（mail_prefs_api.go），SSR 页面层已删除。
 
 // registerMailPrefsRoutes 挂载邮件偏好页路由（M1-18）。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。

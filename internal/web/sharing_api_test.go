@@ -18,18 +18,18 @@ func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	if owner.Code != http.StatusOK || !strings.Contains(owner.Body.String(), `"visibility"`) {
 		t.Fatalf("owner read = %d %s", owner.Code, owner.Body.String())
 	}
-	nonOwnerID, nonOwnerCookies, nonOwnerCSRF := createUserAndLogin(t, srv, db, "spa_non_owner")
+	nonOwnerID, nonOwnerCookies, nonOwnerCSRF := createUserAndLogin(t, srv, db, "non_owner")
 	_ = nonOwnerID
 	if got := getWithCookies(t, srv, path, nonOwnerCookies); got.Code != http.StatusForbidden {
 		t.Fatalf("non-owner read = %d, want 403", got.Code)
 	}
-	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"spa_non_owner","role":"reader"}`, ownerCookies, ""); got.Code != http.StatusForbidden {
+	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"non_owner","role":"reader"}`, ownerCookies, ""); got.Code != http.StatusForbidden {
 		t.Fatalf("missing CSRF = %d, want 403", got.Code)
 	}
-	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"spa_non_owner","role":"reader"}`, ownerCookies, ownerCSRF); got.Code != http.StatusCreated && got.Code != http.StatusOK {
+	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"non_owner","role":"reader"}`, ownerCookies, ownerCSRF); got.Code != http.StatusCreated && got.Code != http.StatusOK {
 		t.Fatalf("grant = %d: %s", got.Code, got.Body.String())
 	}
-	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"spa_non_owner","role":"owner"}`, ownerCookies, ownerCSRF); got.Code != http.StatusBadRequest {
+	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"non_owner","role":"owner"}`, ownerCookies, ownerCSRF); got.Code != http.StatusBadRequest {
 		t.Fatalf("owner grant = %d, want 400", got.Code)
 	}
 	link := jsonRequest(t, srv, "POST", path+"/links", `{}`, ownerCookies, ownerCSRF)

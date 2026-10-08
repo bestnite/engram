@@ -13,7 +13,7 @@ import { en } from '../lib/i18n/locales/en';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 
 // 账号安全与邮件流程前端契约：同源 JSON、写请求自动带内存 CSRF、稳定 code 映射本地化、
-// 新路由可解析、视图文案来自语言包。服务端行为由 internal/web/spa_account_test.go 覆盖。
+// 新路由可解析、视图文案来自语言包。服务端行为由 internal/web/account_test.go 覆盖。
 describe('SPA account security and email client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;

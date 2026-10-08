@@ -15,13 +15,13 @@ import (
 // registerShareBrowseRoutes 挂载免注册只读浏览页（M5-3）。
 //
 // GET /s/:token 返回应用壳，由客户端路由渲染只读浏览页；内容与口令解锁走 api/v1/share/*
-// 的 JSON 端点（spa_share.go）。链接本身（可选加口令）就是凭据，因此不要求登录。
+// 的 JSON 端点（share_api.go）。链接本身（可选加口令）就是凭据，因此不要求登录。
 func (s *Server) registerShareBrowseRoutes(router *gin.Engine) {
 	if s.shareLinks == nil || s.decks == nil || s.notes == nil {
 		return
 	}
 	router.GET("/s/:token", s.shareBrowseRoute)
-	// SPA 的同源 JSON 传输层（spa_share.go）；可达性与媒体授权不变。
+	// SPA 的同源 JSON 传输层（share_api.go）；可达性与媒体授权不变。
 	s.registerShareRoutes(router)
 }
 

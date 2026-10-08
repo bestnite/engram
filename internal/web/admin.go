@@ -15,7 +15,7 @@ import (
 // 管理面板入口（ROADMAP.md M6-1）。
 //
 // 硬约束：只有 role = admin 能进；其余一律 403。SSR 页面层已删除：每条 GET 路由先过
-// requireAdmin，再发 SPA 应用壳；面板的读写在 /api/v1/admin/* 的 JSON 端点上（spa_admin*.go）。
+// requireAdmin，再发 SPA 应用壳；面板的读写在 /api/v1/admin/* 的 JSON 端点上（admin_api.go 起的那几个文件）。
 
 const (
 	// settingKeySiteName 是站点名称；缺省回退语言包 app.name。

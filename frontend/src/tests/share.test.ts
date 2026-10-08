@@ -8,7 +8,7 @@ import { en } from '../lib/i18n/locales/en';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 
 // 公开只读分享浏览前端契约：同源 JSON、清洗后 HTML 直接注入、路由可解析、文案来自语言包。
-// 服务端可达性、口令门禁与清洗由 internal/web/spa_share_test.go 覆盖。
+// 服务端可达性、口令门禁与清洗由 internal/web/share_test.go 覆盖。
 describe('SPA public share browser client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;

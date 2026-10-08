@@ -20,7 +20,7 @@ import (
 // POST /api/v1/decks/:id/clone 调用；本文件钉住 owner/editor/reader 三种体验、非读者与缺 CSRF
 // 的拒绝，以及 Accept 决定返回 JSON 还是 303 重定向。
 //
-// 公开分享浏览 /s/:token 的切流断言在 spa_share_test.go；本文件只覆盖共享管理页与克隆入口。
+// 公开分享浏览 /s/:token 的切流断言在 share_test.go；本文件只覆盖共享管理页与克隆入口。
 
 // ssrSharingMarker 是 SSR 共享页特有的表单标记：SPA 应用壳里不会出现。
 func ssrSharingMarker(deckID uint64) string {

@@ -1,7 +1,7 @@
 import { ApiClientError } from './types';
 
 /**
- * 注册/引导接口的稳定错误 code 集合（与 Go 侧 internal/web/spa_auth.go 的 registrationErrorMessage 一一对应）。
+ * 注册/引导接口的稳定错误 code 集合（与 Go 侧 internal/web/auth_api.go 的 registrationErrorMessage 一一对应）。
  * 它们统一映射到 auth.error.<code> 语言包键，与 SSR 认证页共用同一批文案。
  */
 const authErrorCodes = new Set([

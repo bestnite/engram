@@ -592,7 +592,7 @@ export const en: LocaleCatalog = {
   'settings.notifications.error.reminder_hour_invalid': 'Send time must be a whole hour from 0 to 23, or left as the site default.',
   'settings.notifications.error.invalid_request': 'The request is invalid.',
   'settings.notifications.error.failed': 'Could not save the preferences. Please try again.',
-  // SPA 注册与首个管理员引导（internal/web/spa_auth.go 的 JSON 端点）。
+  // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': 'Email',
   'auth.field.display_name': 'Display name',
   'auth.register.heading': 'Create your account',
@@ -629,7 +629,7 @@ export const en: LocaleCatalog = {
   'auth.totp.back_to_login': 'Back to sign in',
   'auth.error.totp_invalid': 'The code is not valid.',
   'auth.error.totp_challenge_expired': 'This two-factor challenge has expired. Sign in again.',
-  // ── Scheduling presets (session JSON endpoints in internal/web/spa_presets.go) ──
+  // ── Scheduling presets (session JSON endpoints in internal/web/presets_api.go) ──
   'presets.heading': 'Scheduling presets',
   'presets.empty': 'No scheduling preset yet.',
   'presets.failed': 'Could not load the presets. Please try again.',
@@ -693,7 +693,7 @@ export const en: LocaleCatalog = {
   'presets.optimize.stage.unknown': 'Stage: unknown',
   'presets.error.not_found': 'The requested preset was not found.',
   'presets.error.failed': 'The optimisation action failed. Please try again.',
-  // ---- admin panel (Go: internal/web/spa_admin*.go) ----
+  // ---- admin panel (Go: internal/web/admin_api.go and friends) ----
   'admin.nav.heading': 'Admin',
   'admin.nav.dashboard': 'Overview',
   'admin.nav.users': 'Users',
@@ -1121,7 +1121,7 @@ export const en: LocaleCatalog = {
   'account.confirm_change.done': 'Your email address has been updated.',
   'account.confirm_change.failed': 'This confirmation link is invalid or has expired.',
   'account.confirm_change.back_login': 'Back to sign in',
-  // Stable English codes from internal/web/spa_account.go; the UI maps them by code, never by message.
+  // Stable English codes from internal/web/account.go; the UI maps them by code, never by message.
   'account.error.token_expired': 'This link has expired. Request a new one.',
   'account.error.token_used': 'This link has already been used.',
   'account.error.token_invalid': 'This link is invalid.',

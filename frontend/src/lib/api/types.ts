@@ -21,7 +21,7 @@ export interface DecksResponse {
 }
 
 /**
- * 一条待接受的卡组共享邀请（同意制；Go: internal/web/spa_share_invites.go）。
+ * 一条待接受的卡组共享邀请（同意制；Go: internal/web/share_invites.go）。
  *
  * 收件人视角读 deck_name + inviter_name（谁邀请我用哪个卡组），属主视角读 username
  * （我邀请了谁）。同一结构两种读法，字段按视角取用。
@@ -66,7 +66,7 @@ export interface DeckQueueCountsResponse {
 }
 
 /**
- * GET/PATCH /api/v1/decks/:id/settings（Go: internal/web/spa_deck_settings.go）。
+ * GET/PATCH /api/v1/decks/:id/settings（Go: internal/web/deck_settings_api.go）。
  * new_per_day / reviews_per_day 为 0 表示不限；new_unlimited / review_unlimited 显式表达
  * 「不限」，因为 0 与「今日剩余 0 张」在整数上同形。今日已用/剩余与复习队列同源。
  */
@@ -262,7 +262,7 @@ export interface StatsSummary {
 }
 
 /**
- * 统计明细（与 Go 后端 internal/web/spa_stats.go 的 statsDetail 对齐）
+ * 统计明细（与 Go 后端 internal/web/stats_api.go 的 statsDetail 对齐）
  * 与统计页同一批聚合查询，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
  */
 export interface StatsVolume {
@@ -422,7 +422,7 @@ export interface GradedFeedback {
 }
 
 /**
- * POST /api/v1/review/grade 响应体（与 Go 后端 internal/web/spa_review.go 对齐）。
+ * POST /api/v1/review/grade 响应体（与 Go 后端 internal/web/review_api.go 对齐）。
  * 判分与放弃两条路径都返回新状态与同范围队列；reveal 走 RevealAnswerResponse。
  */
 export interface GradedReviewResult {
@@ -448,7 +448,7 @@ export interface RevealAnswerResponse {
 }
 
 /**
- * POST /api/v1/review/render 响应体（Go: internal/web/spa_review.go）。
+ * POST /api/v1/review/render 响应体（Go: internal/web/review_api.go）。
  * front_html / back_html 已由服务端 goldmark + bluemonday 清洗，是复习页唯一的 HTML 汇
  * edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
  */
@@ -478,7 +478,7 @@ export interface DueCardsQuery {
 }
 
 /**
- * 用户信息结构（与 Go 后端 internal/web/spa_auth.go 对齐）
+ * 用户信息结构（与 Go 后端 internal/web/auth_api.go 对齐）
  */
 export interface User {
   id: number;
@@ -754,7 +754,7 @@ export interface SessionInfo {
 }
 
 /**
- * TOTP 管理接口（Go: internal/web/spa_totp.go）。
+ * TOTP 管理接口（Go: internal/web/totp_api.go）。
  *
  * GET 只报告状态，绝不返回 secret 或 otpauth；secret 只在 begin 响应里出现一次，
  * 恢复码明文只在 confirm / recovery 响应里出现一次。
@@ -791,7 +791,7 @@ export interface TOTPRecoveryResponse {
 }
 
 /**
- * 邮件通知偏好接口（Go: internal/web/spa_mail_prefs.go）。
+ * 邮件通知偏好接口（Go: internal/web/mail_prefs_api.go）。
  *
  * 分组与开关由服务端从 internal/mail 目录推导；前端只按稳定标识查自己的语言包，
  * 不另列一份类型清单。reminder_hour 为 null 表示站点默认，0–23 是显式小时（0 是合法午夜）。
@@ -822,7 +822,7 @@ export interface UpdateNotificationPrefsRequest {
 }
 
 /**
- * 调度预设接口（Go: internal/web/spa_presets.go）。
+ * 调度预设接口（Go: internal/web/presets_api.go）。
  *
  * 与 SSR 预设页同源：默认预设补齐、门槛、单并发入队、状态与回退全部复用同一批
  * store/jobs 方法。verdict 是服务端算出的三态枚举，前端据此查语言包，不复制判据。
@@ -905,7 +905,7 @@ export interface PresetWriteRequest {
 }
 
 /**
- * 管理面板接口（Go: internal/web/spa_admin_read.go）。
+ * 管理面板接口（Go: internal/web/admin_read.go）。
  * 响应只带原始值与稳定英文标识，任何本地化文案都由前端语言包按标识映射。
  */
 
@@ -972,7 +972,7 @@ export interface AdminAuditQuery {
   page?: number;
 }
 
-/** 用户管理（Go: internal/web/spa_admin_users.go）。 */
+/** 用户管理（Go: internal/web/admin_users_api.go）。 */
 
 /** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
 export interface AdminUser {
@@ -1006,7 +1006,7 @@ export interface AdminUserCreateRequest {
   role: string;
 }
 
-/** 注册与邀请（Go: internal/web/spa_admin_registration.go）。 */
+/** 注册与邀请（Go: internal/web/admin_registration_api.go）。 */
 
 /** 一条邀请；role/status 是存储取值，link 供管理员复制。 */
 export interface AdminInvite {
@@ -1049,7 +1049,7 @@ export interface AdminInviteCreateResponse {
   mail_notice: string;
 }
 
-/** API Key 总览（Go: internal/web/spa_admin_keys.go）。 */
+/** API Key 总览（Go: internal/web/admin_keys_api.go）。 */
 
 /** 一把 key 的元信息；时间已按管理员时区格式化，null 表示未设置。 */
 export interface AdminAPIKey {
@@ -1216,7 +1216,7 @@ export interface AdminI18nResponse {
   locales: AdminLocaleCoverage[];
   all_complete: boolean;
 }
-// ---- 账号安全与邮件流程（Go: internal/web/spa_account.go）----
+// ---- 账号安全与邮件流程（Go: internal/web/account.go）----
 
 /** POST /api/v1/auth/forgot-password 请求。响应只含站点级邮件是否可用，绝不回显账号存在性。 */
 export interface ForgotPasswordRequest {
@@ -1271,7 +1271,7 @@ export interface ResendVerificationResponse {
   sent: boolean;
 }
 
-// ---- 公开只读分享浏览（Go: internal/web/spa_share.go）----
+// ---- 公开只读分享浏览（Go: internal/web/share_api.go）----
 
 /** 一条共享卡片的正反面，均为服务端清洗后的 HTML（客户端只做 {@html}，绝不再渲染 Markdown）。 */
 export interface ShareNote {
@@ -1287,7 +1287,7 @@ export interface ShareResponse {
   notes: ShareNote[];
 }
 
-// ---- OIDC 登录入口探测（Go: internal/web/spa_oidc.go）----
+// ---- OIDC 登录入口探测（Go: internal/web/oidc_api.go）----
 
 /** GET /api/v1/auth/oidc：入口是否可用与发起地址；不含任何凭据。 */
 export interface OIDCInfo {

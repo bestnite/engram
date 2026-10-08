@@ -3,7 +3,7 @@ import { ApiClient, ApiClientError, apiClient, getApiErrorMessageKey } from '../
 import { register, setup } from '../lib/auth';
 
 // SPA 注册与首个管理员引导的前端契约：同源 JSON、写请求自动带内存 CSRF、稳定 code 映射本地化。
-// 服务端行为（策略、邀请、引导门）由 internal/web/spa_auth_register_test.go 覆盖。
+// 服务端行为（策略、邀请、引导门）由 internal/web/auth_register_test.go 覆盖。
 describe('SPA register and setup client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;

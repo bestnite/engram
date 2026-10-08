@@ -591,7 +591,7 @@ export const zhCN: LocaleCatalog = {
   'settings.notifications.error.reminder_hour_invalid': '发送时间必须是 0 到 23 的整点，或保留站点默认。',
   'settings.notifications.error.invalid_request': '请求无效。',
   'settings.notifications.error.failed': '保存失败，请重试。',
-  // SPA 注册与首个管理员引导（internal/web/spa_auth.go 的 JSON 端点）。
+  // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': '邮箱',
   'auth.field.display_name': '显示名',
   'auth.register.heading': '创建账号',
@@ -628,7 +628,7 @@ export const zhCN: LocaleCatalog = {
   'auth.totp.back_to_login': '返回登录',
   'auth.error.totp_invalid': '验证码无效。',
   'auth.error.totp_challenge_expired': '两步验证已超时，请重新登录。',
-  // ── 调度预设（internal/web/spa_presets.go 的会话 JSON 端点）──
+  // ── 调度预设（internal/web/presets_api.go 的会话 JSON 端点）──
   'presets.heading': '调度预设',
   'presets.empty': '还没有调度预设。',
   'presets.failed': '加载预设失败，请重试。',
@@ -689,7 +689,7 @@ export const zhCN: LocaleCatalog = {
   'presets.optimize.stage.unknown': '阶段：未知',
   'presets.error.not_found': '未找到该预设。',
   'presets.error.failed': '优化操作失败，请重试。',
-  // ---- 管理面板（Go: internal/web/spa_admin*.go）----
+  // ---- 管理面板（Go: internal/web/admin_api.go 起的那几个文件）----
   'admin.nav.heading': '管理面板',
   'admin.nav.dashboard': '概览',
   'admin.nav.users': '用户管理',
@@ -1117,7 +1117,7 @@ export const zhCN: LocaleCatalog = {
   'account.confirm_change.done': '邮箱已更新。',
   'account.confirm_change.failed': '确认链接无效或已过期。',
   'account.confirm_change.back_login': '返回登录',
-  // internal/web/spa_account.go 返回的稳定英文 code；界面按 code 映射，绝不解析 message。
+  // internal/web/account.go 返回的稳定英文 code；界面按 code 映射，绝不解析 message。
   'account.error.token_expired': '链接已过期，请重新获取。',
   'account.error.token_used': '该链接已被使用过。',
   'account.error.token_invalid': '链接无效。',

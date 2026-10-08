@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 登录第二步（internal/web/spa_totp_login.go）的端到端证据：
+// 本文件是 SPA 登录第二步（internal/web/totp_login.go）的端到端证据：
 // 走真实路由 + 真实 SQLite，复用 auth.TOTPService，断言的状态与 SSR 表单路径一致。
 //
 // 覆盖点：pending 查询的状态语义、双提交 CSRF 强制、凭据缺失/过期、验证码错误（含审计）、

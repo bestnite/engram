@@ -120,7 +120,7 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 
 // optimizeReviewCount 从作业结果里取「用了多少条复习」，取不到就返回 0。
 //
-// 它只用于正文里的一个数字，缺了不该影响发信，所以不返回错误（与 spa_presets.go 读同一份
+// 它只用于正文里的一个数字，缺了不该影响发信，所以不返回错误（与 presets_api.go 读同一份
 // result_json，字段名以 store.OptimizeResult 为准）。
 func optimizeReviewCount(job store.Job) int {
 	if job.ResultJSON == nil || strings.TrimSpace(*job.ResultJSON) == "" {

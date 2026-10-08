@@ -18,7 +18,7 @@ import (
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
 // settings 表按请求现读。SSR 设置页删除后，页面的读写在 /api/v1/admin/settings 的 JSON
-// 端点（spa_admin_settings.go）上；这里保留该端点复用的设置项规格、生效值与读数工具。
+// 端点（admin_settings_api.go）上；这里保留该端点复用的设置项规格、生效值与读数工具。
 
 // settingSpec 描述一个可编辑设置：settings 键、可选环境变量覆盖、默认值来源与文案键。
 type settingSpec struct {

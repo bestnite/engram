@@ -23,7 +23,7 @@ func seedAdminUser(t *testing.T, srv *Server) {
 	}
 }
 
-// 注册策略矩阵与表单校验的 JSON 验收见 spa_auth_register_test.go（TestSPARegisterAPI_*）。
+// 注册策略矩阵与表单校验的 JSON 验收见 auth_register_test.go（TestSPARegisterAPI_*）。
 // 本文件只保留邀请接受与邀请拒绝两条 HTTP 级链路。
 
 // TestInviteAcceptCreatesExactlyOneUser 是 M1-7 的 HTTP 级验收：

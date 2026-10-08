@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 邮件通知偏好接口（internal/web/spa_mail_prefs.go）的端到端证据：
+// 本文件是 SPA 邮件通知偏好接口（internal/web/mail_prefs_api.go）的端到端证据：
 // 走真实路由 + 真实 SQLite，复用 store.EmailPrefStore 与 users 行，断言与 SSR 页一致的行为。
 //
 // 覆盖的重点：

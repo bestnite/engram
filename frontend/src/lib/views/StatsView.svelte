@@ -125,7 +125,7 @@
 
   /**
    * 加载当前用户统计明细（GET /api/v1/stats/detail）。
-   * 数值口径与 SSR 统计页同源（internal/web/spa_stats.go）；本页只做本地化与柱宽，
+   * 数值口径与 SSR 统计页同源（internal/web/stats_api.go）；本页只做本地化与柱宽，
    * 不自行聚合、不捏造任何分桶或图表数据。
    */
   async function fetchStats(): Promise<void> {

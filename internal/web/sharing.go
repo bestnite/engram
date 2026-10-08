@@ -20,7 +20,7 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	}
 	// GET /decks/:id/sharing 返回应用壳，由客户端路由渲染共享管理页，数据走下面的 JSON 端点。
 	router.GET("/decks/:id/sharing", s.sharingPageRoute)
-	// SPA 的共享读写端点（spa_sharing.go）：数据仍走同一批 store 方法。
+	// SPA 的共享读写端点（sharing_api.go）：数据仍走同一批 store 方法。
 	router.GET("/api/v1/decks/:id/sharing", s.sharingGet)
 	router.POST("/api/v1/decks/:id/sharing/grants", s.sessions.CSRFMiddleware(), s.sharingGrant)
 	router.PATCH("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.sharingGrant)

@@ -164,7 +164,7 @@ func TestDeckSettingsRejectsNonOwner(t *testing.T) {
 		store.DeckCaps{NewPerDay: 7, ReviewsPerDay: 8}); err != nil {
 		t.Fatalf("SetCaps: %v", err)
 	}
-	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "spa_settings_intruder")
+	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "settings_intruder")
 
 	if rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))

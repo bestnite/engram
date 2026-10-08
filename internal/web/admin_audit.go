@@ -16,7 +16,7 @@ import (
 //
 // 时间口径：库里 created_at 统一 UTC；页面按当前管理员的时区展示，
 // 日期范围过滤把用户时区的自然日边界换算成 UTC 瞬时值再交给 store。
-// SSR 审计页删除后，检索在 /api/v1/admin/audit 的 JSON 端点上（spa_admin_read.go），
+// SSR 审计页删除后，检索在 /api/v1/admin/audit 的 JSON 端点上（admin_read.go），
 // 过滤解析与分页大小由这里共享。
 
 // adminAuditPageSize 是审计列表每页行数。

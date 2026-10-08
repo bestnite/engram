@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA TOTP 管理接口（internal/web/spa_totp.go）的端到端证据：
+// 本文件是 SPA TOTP 管理接口（internal/web/totp_api.go）的端到端证据：
 // 走真实路由 + 真实 SQLite，复用 auth.TOTPService，断言的状态与 SSR 设置页一致。
 //
 // 安全断言的重点：GET /api/v1/settings/totp 绝不返回 secret / otpauth；

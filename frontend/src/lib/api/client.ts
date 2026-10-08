@@ -904,7 +904,7 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
-  // ── 管理面板（Go: internal/web/spa_admin*.go）──────────────
+  // ── 管理面板（Go: internal/web/admin_api.go 起的那几个文件）──────────
   // 全部走同源会话 cookie，判权在服务端（匿名 401、非 admin 403）；这里只做传输。
 
   /** 读取实例级计数（GET /api/v1/admin/summary）。 */

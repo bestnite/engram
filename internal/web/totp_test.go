@@ -36,7 +36,7 @@ func createTOTPAdmin(t *testing.T, srv *Server, db *gorm.DB) *store.User {
 	return &u
 }
 
-// enableTOTPFor 直接经服务层绑定并启用（JSON 接口流程另由 spa_totp_test.go 覆盖），
+// enableTOTPFor 直接经服务层绑定并启用（JSON 接口流程另由 totp_api_test.go 覆盖），
 // 返回明文 secret 与恢复码。
 func enableTOTPFor(t *testing.T, srv *Server, u *store.User) (string, []string) {
 	t.Helper()

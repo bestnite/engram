@@ -16,7 +16,7 @@ import (
 // registerPresetRoutes 挂载调度预设页入口（M9-4）。
 //
 // SSR 页面层已删除：GET /presets 只发应用壳，预设的列表/新建/编辑/优化/回退全部走
-// /api/v1/presets* 的 JSON 端点（spa_presets.go，与 SSR 页面同一批 store/jobs 方法）。
+// /api/v1/presets* 的 JSON 端点（presets_api.go，与 SSR 页面同一批 store/jobs 方法）。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {

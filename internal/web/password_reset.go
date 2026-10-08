@@ -19,7 +19,7 @@ import (
 //   - 请求重置一律回同一结果，不因邮箱是否存在而不同，避免账号枚举；
 //   - SMTP 未配置时响应渲染 mail_ready=false，绝不静默。
 //
-// 页面的读写协议全部走同源 JSON 端点（spa_account.go）；本文件只保留页面外壳与令牌签发。
+// 页面的读写协议全部走同源 JSON 端点（account.go）；本文件只保留页面外壳与令牌签发。
 
 // registerSecurityMailRoutes 挂载 M1-19 的密码重置、邮箱验证与改邮箱确认路由。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
@@ -38,7 +38,7 @@ func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	router.GET("/confirm-email-change", s.confirmEmailChangeShell)
 	// 改邮箱页是登录用户自己的页面：未登录先重定向登录页。
 	router.GET("/settings/email", s.emailChangeRoute)
-	// SPA 的同源 JSON 传输层与应用壳入口（spa_account.go）。
+	// SPA 的同源 JSON 传输层与应用壳入口（account.go）。
 	s.registerAccountRoutes(router)
 }
 
