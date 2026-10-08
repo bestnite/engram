@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckCloneCopiesContentWithoutProgress 是 M5-4 的主验收：
+// TestDeckCloneCopiesContentWithoutProgress 是主验收：
 // 克隆后 note/card 数量一致、新 owner 名下 card_states 为 0、原卡组不受影响。
 func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

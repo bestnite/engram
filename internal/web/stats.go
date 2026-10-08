@@ -8,10 +8,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerStatsRoutes 挂载统计页（M7-3）。
+// registerStatsRoutes 挂载统计页。
 //
-// 页面上的每个数字都来自 internal/store 的既有聚合查询（M7-1/M7-2）；handler 不写任何
-// 统计 SQL。原因：M7-4 的回溯校验（store.RetroCheck）对照的正是这批查询，一旦 handler
+// 页面上的每个数字都来自 internal/store 的既有聚合查询；handler 不写任何
+// 统计 SQL。原因：回溯校验（store.RetroCheck）对照的正是这批查询，一旦 handler
 // 另写一套 SQL，页面数字就脱离了可校验的路径。
 //
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。

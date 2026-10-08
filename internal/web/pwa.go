@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// PWA 外壳（M8-2）。
+// PWA 外壳。
 //
 // 与内容哈希化的静态资源不同，manifest 与 service worker 必须是稳定 URL：
 //   - service worker 的默认作用域由脚本路径决定，放在 /static/v/<hash>/ 下只能控制
@@ -31,7 +31,7 @@ const (
 
 // pwaShellAssets 是“应用外壳”的逻辑路径：数学渲染与图标（SPA 自己的 JS/CSS 走 Vite 产物，
 // 由 StaticShellURLs 追加）。
-// 只包含静态资源，不含任何答题数据或 API 端点（M8-2 验收：缓存里没有 API 响应）。
+// 只包含静态资源，不含任何答题数据或 API 端点（验收：缓存里没有 API 响应）。
 var pwaShellAssets = []string{
 	"js/mathjax/tex-svg.js",
 	"icons/icon.svg",
@@ -50,7 +50,7 @@ func (s *Server) registerPWARoutes(router *gin.Engine) {
 	router.GET("/favicon.ico", s.favicon)
 }
 
-// favicon 把 /favicon.ico 重定向到内容哈希化的 SVG 图标（M8-7）。
+// favicon 把 /favicon.ico 重定向到内容哈希化的 SVG 图标。
 // 图标未嵌入时回 404，与其它静态资源一致，而不是给出一个空响应。
 func (s *Server) favicon(c *gin.Context) {
 	icon := s.assets.URL("icons/icon.svg")
@@ -202,10 +202,10 @@ func shellVersion(urls []string) string {
 }
 
 // serviceWorkerJS 生成 service worker 脚本。缓存清单里的每一项都必须是静态外壳路径；
-// 该函数不接收、也不可能写入 API 或答题端点（M8-2 的负面验收在测试里断言）。
+// 该函数不接收、也不可能写入 API 或答题端点（负面验收在测试里断言）。
 func serviceWorkerJS(version string, urls []string) string {
 	var b strings.Builder
-	b.WriteString("// Engram service worker (M8-2)：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
+	b.WriteString("// Engram service worker ：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
 	b.WriteString("// 版本号由静态资源内容派生；激活时清理所有旧版本缓存。\n")
 	b.WriteString("var SW_VERSION = \"")
 	b.WriteString(version)

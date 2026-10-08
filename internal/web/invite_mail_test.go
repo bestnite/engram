@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-20 的 HTTP 级验收：邀请码可由管理员直接寄到被邀请人邮箱（B 类）。
+// 本文件是 HTTP 级验收：邀请码可由管理员直接寄到被邀请人邮箱（B 类）。
 //
 // 覆盖四条验收线：
 //  1. 为某邮箱建的邀请能投递并被接受；
@@ -127,7 +127,7 @@ func registerWithInviteJSON(t *testing.T, srv *Server, username, email, invite s
 	}, []*http.Cookie{cookie}, headers)
 }
 
-// TestInviteEmailDeliveredAndAccepted 是 M1-20 的核心验收：
+// TestInviteEmailDeliveredAndAccepted 是核心验收：
 // 为某邮箱建的邀请被投递（邮件里带可用的接受链接），并且该链接能被接受。
 func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)

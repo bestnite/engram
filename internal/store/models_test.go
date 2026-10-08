@@ -13,7 +13,7 @@ import (
 )
 
 // testDatabases 返回本机可用的测试数据库。SQLite 必须真实跑通；
-// PostgreSQL 路径用 TEST_PG_DSN 门控（本机没有可用实例时自动跳过，见 AGENTS.md M0-3 约定）。
+// PostgreSQL 路径用 TEST_PG_DSN 门控（本机没有可用实例时自动跳过，见约定）。
 //
 // PG 侧每次调用都拿到一个全新的临时 schema（见 internal/pgtest）：共享实例上的
 // 测试会互相污染、重跑必炸；SQLite 用 t.TempDir() 建全新库文件，所以这个缺陷
@@ -32,8 +32,8 @@ func testDatabases(t *testing.T) map[string]*gorm.DB {
 	return out
 }
 
-// expectedTables 是全部模型对应的表：M0-4 的 schema_version、M1-2 的 sessions、
-// M1-16 的 user_totp 与 totp_recovery_codes、M1-17 的 mail_outbox。
+// expectedTables 是全部模型对应的表：schema_version、sessions、
+// user_totp 与 totp_recovery_codes、mail_outbox。
 var expectedTables = []string{
 	"users", "identities", "invites", "settings", "presets", "decks", "notes", "cards",
 	"card_states", "reviews", "deck_grants", "share_links", "media", "media_notes", "media_uploaders",

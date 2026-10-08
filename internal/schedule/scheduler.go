@@ -101,7 +101,7 @@ func (s State) fsrsState() fsrs.State { return fsrs.State(s) }
 func stateFromFSRS(s fsrs.State) State { return State(s) }
 
 // Outcome 是一次评分（或预览）的调度结果；字段与 card_states / reviews 的写入口径对齐，
-// 让 M3-3 的提交事务可以直接取用而不必再算第二遍。
+// 让提交事务可以直接取用而不必再算第二遍。
 type Outcome struct {
 	Rating         Rating
 	Due            time.Time // UTC 到期时间
@@ -133,7 +133,7 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 
 // Parameters 从 preset 装配 go-fsrs 参数，是「排程参数如何来」的唯一来源：
 // 权重（17/19/21 维自动迁移，NULL 用默认）、目标保留率、学习/再学习步骤、最大间隔与 fuzz。
-// NewScheduler 与拟合回放（ROADMAP.md M9-11）都走这里，避免两处各写一份装配而慢慢跑偏。
+// NewScheduler 与拟合回放都走这里，避免两处各写一份装配而慢慢跑偏。
 func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	if preset == nil {
 		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")

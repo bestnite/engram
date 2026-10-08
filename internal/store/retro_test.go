@@ -14,7 +14,7 @@ const (
 	retroToday = "2026-10-02"
 )
 
-// TestRetroCheckRecomputesPageNumbers 是 M7-4 的正面验收：统计页数字与从原始表
+// TestRetroCheckRecomputesPageNumbers 是正面验收：统计页数字与从原始表
 // 重算的结果必须逐项一致，否则报出漂移项。
 func TestRetroCheckRecomputesPageNumbers(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -41,7 +41,7 @@ func TestRetroCheckRecomputesPageNumbers(t *testing.T) {
 	}
 }
 
-// TestRetroCheckCatchesCorruptedAggregate 是 M7-4 的反面验收：故意破坏一个聚合值，
+// TestRetroCheckCatchesCorruptedAggregate 是反面验收：故意破坏一个聚合值，
 // 校验必须失败并指名该数字。这里破坏的是页面侧的 review_volume.today——正是「数字漂移」
 // 的典型形态（聚合代码改坏，而原始表没变）。
 func TestRetroCheckCatchesCorruptedAggregate(t *testing.T) {

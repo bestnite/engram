@@ -7,13 +7,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// 管理面板的用户管理（ROADMAP.md M6-2）所需的用户存储扩展。
+// 管理面板的用户管理所需的用户存储扩展。
 //
 // 放在独立文件而不是塞进 user.go / models.go：这两处是其它里程碑的单写者热点，
 // 并行工作时尽量不动它们。这里只新增方法，不改动既有行为。
 
 // AdminListUsersPageSize 是管理面板用户列表的每页条数；同时作为一次渲染的上限，
-// 避免一次把全库用户全画出来（M6-2 的「分页或上限保护」）。
+// 避免一次把全库用户全画出来（「分页或上限保护」）。
 const AdminListUsersPageSize = 50
 
 // ListForAdmin 按搜索词分页列出用户。query 为空表示不筛选；命中用户名、邮箱或显示名。
@@ -45,7 +45,7 @@ func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size i
 
 // ListAdmins 返回所有仍可登录的管理员账号（role = admin 且 status = active），按 id 升序。
 //
-// D 类管理员通知（M1-24）据此解析收件地址 规定只用登录邮箱、不设单独收件
+// D 类管理员通知据此解析收件地址规定只用登录邮箱、不设单独收件
 // 邮箱，所以收件人就是这些账号的 Email。只取 active 的管理员：被禁用的账号收不到信也不该
 // 被当成投递目标。
 func (s *UserStore) ListAdmins(ctx context.Context) ([]User, error) {

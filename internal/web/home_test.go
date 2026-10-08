@@ -15,7 +15,7 @@ import (
 )
 
 // newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。
-// M1-25 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
+// 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
 // mut 可选地改写装配参数（例如给 Deps.Version 设值）。
 func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string, mut ...func(*Deps)) *Server {
 	t.Helper()
@@ -51,7 +51,7 @@ func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string, mut ..
 	return srv
 }
 
-// seedActiveAdmin 落一个活跃管理员，让实例越过首启窗口（M1-25）。
+// seedActiveAdmin 落一个活跃管理员，让实例越过首启窗口。
 func seedActiveAdmin(t *testing.T, srv *Server) {
 	t.Helper()
 	admin := &store.User{
@@ -91,7 +91,7 @@ func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 	}
 }
 
-// TestHomeFirstRunRedirect 断言首启窗口内 GET / 303 到 /setup，窗口由「是否存在活跃管理员」界定（M1-25 验收点）。
+// TestHomeFirstRunRedirect 断言首启窗口内 GET / 303 到 /setup，窗口由「是否存在活跃管理员」界定（验收点）。
 // 管理员存在时 GET / 交给 SPA 应用壳（由客户端路由渲染首页）。
 func TestHomeFirstRunRedirect(t *testing.T) {
 	tests := []struct {

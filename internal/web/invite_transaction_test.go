@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestInviteAcceptFailureKeepsTokenUsable 是 B-12 的 HTTP 级反面验收：
+// TestInviteAcceptFailureKeepsTokenUsable 是 HTTP 级反面验收：
 // 邀请建号失败时 token 必须仍然可用，且不暴露“已使用→又变可用”的中间态。
 // 失败用用户名冲突触发（与既有 admin 同名），这是真实的建号失败，而非伪造。
 func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {

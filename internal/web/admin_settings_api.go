@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「系统设置」的 SPA JSON 端点（ROADMAP.md M6-5）。
+// 本文件是管理面板「系统设置」的 SPA JSON 端点。
 //
 // 取值优先级与校验与 SSR 页（admin_settings.go）完全相同：环境变量 > settings 表 > 默认值，
 // 复用 effectiveSetting 与同一个 settingSpec 列表，因此不会出现两套解析。响应里每行都带
@@ -196,7 +196,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		changed = append(changed, spec.key)
 	}
 
-	// 敏感键：只接受非空的新值，经 AES-GCM 加密后落库，永不回显（M6-10）。
+	// 敏感键：只接受非空的新值，经 AES-GCM 加密后落库，永不回显。
 	if s.secrets != nil {
 		keys, err := store.SensitiveSettingKeys(ctx, s.db)
 		if err != nil {

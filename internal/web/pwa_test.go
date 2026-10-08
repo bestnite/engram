@@ -31,7 +31,7 @@ func swAssetList(t *testing.T, body string) []string {
 	return out
 }
 
-// TestServiceWorkerCachesOnlyStaticAssets 是 M8-2 的核心验收：缓存清单里只有静态资源
+// TestServiceWorkerCachesOnlyStaticAssets 是核心验收：缓存清单里只有静态资源
 // 路径，没有 API 端点、没有复习/答题路由。
 func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)

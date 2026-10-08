@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「API Key 总览」的 SPA JSON 端点（ROADMAP.md M6-9）。
+// 本文件是管理面板「API Key 总览」的 SPA JSON 端点。
 //
 // 安全底线与 SSR 相同：只暴露元信息（名称、前缀、scopes、最后使用、过期、状态）；库里只存
 // sha256，模型里没有明文列，因此响应不可能带出任何 key 内容。撤销是写操作，写审计且审计详情

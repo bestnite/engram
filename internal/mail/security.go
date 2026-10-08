@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-19（A 类事务安全邮件）的入站投递助手。
+// 本文件是（A 类事务安全邮件）的入站投递助手。
 //
 // 三条约束都收敛在这里，调用方（web 触发点）不必各自实现：
 //   - 绝不同步发信：只调用 Outbox.Enqueue 写队列表；

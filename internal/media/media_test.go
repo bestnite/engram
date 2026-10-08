@@ -35,7 +35,7 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
-// TestSaveDeduplicatesBySha256 是 M2-8 的核心验收：同一文件上传两次只存一份。
+// TestSaveDeduplicatesBySha256 是核心验收：同一文件上传两次只存一份。
 func TestSaveDeduplicatesBySha256(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

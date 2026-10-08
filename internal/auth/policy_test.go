@@ -82,7 +82,7 @@ func TestEmailDomainAllowed(t *testing.T) {
 	}
 }
 
-// TestDecideRegistration 是 M1-6 的验收矩阵：每一种策略 × 白名单的放行/拒绝组合。
+// TestDecideRegistration 是验收矩阵：每一种策略 × 白名单的放行/拒绝组合。
 func TestDecideRegistration(t *testing.T) {
 	cases := []struct {
 		name      string

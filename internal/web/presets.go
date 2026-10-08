@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerPresetRoutes 挂载调度预设页入口（M9-4）。
+// registerPresetRoutes 挂载调度预设页入口。
 //
 // SSR 页面层已删除：GET /presets 只发应用壳，预设的列表/新建/编辑/优化/回退全部走
 // /api/v1/presets* 的 JSON 端点（presets_api.go，与 SSR 页面同一批 store/jobs 方法）。

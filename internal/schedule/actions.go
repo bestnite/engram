@@ -35,7 +35,7 @@ type UndoInput struct {
 // 为什么需要“上一条日志”：reviews 只记录评分后的调度结果（interval_days/stability/difficulty），
 // 评分前的 FSRS 快照没有独立列。上一条日志的评分后结果恰好就是本条的评分前快照，因此用它
 // 重建 ReviewLog 的评分前字段；由此 due_at 与 interval 能精确恢复到本次评分之前的值。
-// step_index（剩余学习步骤）由被撤销日志的 step_index_before 精确还原（M3-9）；旧行该列为
+// step_index（剩余学习步骤）由被撤销日志的 step_index_before 精确还原；旧行该列为
 // NULL 时退回 fsrs.Rollback 的结果（会把 step_index 归零）。
 func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, error) {
 	if tx == nil {
@@ -138,7 +138,7 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 		State:  fsrs.State(last.StateBefore),
 		Review: last.ReviewedAt.UTC(),
 	}
-	// 学习步骤游标：评分前的剩余步骤数只有 reviews.step_index_before 知道（M3-9）。
+	// 学习步骤游标：评分前的剩余步骤数只有 reviews.step_index_before 知道。
 	// 旧行该列为 NULL，保持 0 —— 即旧行为（Undo 后 step_index 归零）。
 	if last.StepIndexBefore != nil {
 		log.RemainingSteps = *last.StepIndexBefore

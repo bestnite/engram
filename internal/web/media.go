@@ -25,14 +25,14 @@ import (
 // settings 表以便管理员改完立即生效，无需重启。
 const (
 	settingKeyMediaAllowedMimes = "media_allowed_mimes"
-	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限（M2-13）。
+	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限。
 	// 与 envMediaUserQuotaBytes 一起指向 internal/media 的同一份解析（上传链与导入链共用）。
 	settingKeyMediaUserQuotaBytes = media.SettingKeyMediaUserQuotaBytes
 	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
 	envMediaUserQuotaBytes        = media.EnvMediaUserQuotaBytes
 )
 
-// registerMediaRoutes 挂载媒体上传与读取（M2-8）。依赖未装配时跳过。
+// registerMediaRoutes 挂载媒体上传与读取。依赖未装配时跳过。
 func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.media == nil {
 		return
@@ -40,14 +40,14 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	// 上传是写操作，过 CSRF 中间件；读取只要求登录（M5 授权落地前的最小鉴权）。
 	router.POST("/media", s.sessions.CSRFMiddleware(), s.mediaUpload)
 	router.GET("/media/:sha", s.mediaServe)
-	// M2-9：编辑器使用的卡组内上传入口。写入要求卡组的 editor 角色，读者无法把媒体
-	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（M5-1，单一实现）。
+	// 编辑器使用的卡组内上传入口。写入要求卡组的 editor 角色，读者无法把媒体
+	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（单一实现）。
 	if s.access != nil {
 		router.POST("/decks/:id/media", s.sessions.CSRFMiddleware(), s.deckMediaUpload)
 	}
 }
 
-// deckMediaUpload 是编辑器（M2-9）使用的上传入口：先确认当前用户对卡组至少有 editor 角色，
+// deckMediaUpload 是编辑器使用的上传入口：先确认当前用户对卡组至少有 editor 角色，
 // 再走与 /media 相同的存储与校验逻辑。
 func (s *Server) deckMediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
@@ -82,7 +82,7 @@ func (s *Server) allowedMimes(ctx context.Context) []string {
 }
 
 // userMediaQuota 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
-// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字（M2-13）。
+// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字。
 // 解析实现与卡组包导入链共用 internal/media.ResolveUserQuotaBytes，避免两处口径漂移。
 func (s *Server) userMediaQuota(ctx context.Context) int64 {
 	return media.ResolveUserQuotaBytes(ctx, s.db)
@@ -99,7 +99,7 @@ func splitMimeList(raw string) []string {
 	return out
 }
 
-// mediaUpload 是 M2-8 的通用上传入口：登录用户即可上传（授权落地前的行为，保持不变）。
+// mediaUpload 是通用上传入口：登录用户即可上传（授权落地前的行为，保持不变）。
 func (s *Server) mediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -124,7 +124,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		declared = header.Header.Get("Content-Type")
 	}
 	fileLimit := media.ResolveMaxBytes(ctx, s.db)
-	// 先校验再落盘（M2-13）：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
+	// 先校验再落盘：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
 	// 全部拒绝判断都在这之后进行，通过后才交给存储层写临时文件 + rename，避免"写了一半
 	// 才发现超限"。内存占用以单文件上限为界，不随上传并发之外的规模增长。
 	raw, err := io.ReadAll(io.LimitReader(file, fileLimit+1))
@@ -198,7 +198,7 @@ func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, q
 		"user_id", user.ID, "code", media.CodeQuotaExceeded, "used", usage.Bytes, "quota", quota)
 	writeMediaError(c, http.StatusRequestEntityTooLarge, media.CodeQuotaExceeded,
 		s.mediaQuotaMessage(c, usage.Bytes, quota))
-	// M1-24：配额被触及时通知管理员（D 类）。发信失败绝不影响这次上传的错误响应。
+	// 配额被触及时通知管理员（D 类）。发信失败绝不影响这次上传的错误响应。
 	s.NotifyMediaAlert(ctx, user, usage.Bytes, quota)
 	return false
 }

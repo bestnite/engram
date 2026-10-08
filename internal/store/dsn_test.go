@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestSQLiteDBPath 覆盖从 DSN 里取路径的各种形态（ROADMAP.md M0-13）。
+// TestSQLiteDBPath 覆盖从 DSN 里取路径的各种形态。
 func TestSQLiteDBPath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -33,7 +33,7 @@ func TestSQLiteDBPath(t *testing.T) {
 	}
 }
 
-// TestOpenSQLiteCreatesMissingParentDir 是 M0-13 的正向验收：
+// TestOpenSQLiteCreatesMissingParentDir 是正向验收：
 // 父目录不存在时，sqlite 驱动应自动、幂等地创建它并成功打开，而不是报 out of memory。
 func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 	base := t.TempDir()

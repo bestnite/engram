@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是 M1-19（A 类事务安全邮件）的一次性动作令牌持久化层。
+// 本文件是（A 类事务安全邮件）的一次性动作令牌持久化层。
 //
 // 为什么用一张通用表而不是每种令牌各建一张：密码重置、邮箱验证、改邮箱确认的
 // 生命周期完全相同——随机明文只出现在邮件链接里，库里只存摘要，用过一次即作废，
@@ -30,7 +30,7 @@ const (
 	ActionTokenEmailVerify = "email_verification"
 	// ActionTokenEmailChange 是改邮箱确认令牌；Payload 保存待确认的新邮箱。
 	ActionTokenEmailChange = "email_change"
-	// ActionTokenUnsubscribe 是一键退订令牌（M1-22）；Payload 保存它指名的可选邮件类型，
+	// ActionTokenUnsubscribe 是一键退订令牌；Payload 保存它指名的可选邮件类型，
 	// 因此一枚令牌只能关掉那一个类型，无法被改指到别的类型。
 	ActionTokenUnsubscribe = "unsubscribe"
 )
@@ -45,7 +45,7 @@ var (
 	ErrActionTokenExpired = errors.New("action token expired")
 )
 
-// M1-19 的审计动作；集中在本文件，避免改动其它里程碑的 audit_*.go 热点。
+// 审计动作；集中在本文件，避免改动其它里程碑的 audit_*.go 热点。
 const (
 	// ActionUserPasswordResetComplete 是用户凭邮件链接完成密码重置。
 	ActionUserPasswordResetComplete = "user.password_reset_complete"

@@ -32,7 +32,7 @@ func serviceCode(t *testing.T, err error) (int, string) {
 	return se.Status, se.Code
 }
 
-// TestReaderCannotModifyNote 是 M5-1 的反面用例：reader 能看能复习，但不能改卡片内容。
+// TestReaderCannotModifyNote 是反面用例：reader 能看能复习，但不能改卡片内容。
 func TestReaderCannotModifyNote(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "reader_owner", store.RoleUser)
@@ -80,7 +80,7 @@ func TestReaderCannotModifyNote(t *testing.T) {
 	}
 }
 
-// TestEditorCannotChangeDeckSettingsOrGrants 是 M5-1 的反面用例：
+// TestEditorCannotChangeDeckSettingsOrGrants 是反面用例：
 // editor 能改卡片内容，但改不了卡组设置（owner 级）与授权。
 func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

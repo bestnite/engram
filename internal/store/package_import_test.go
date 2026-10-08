@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// ---- M5-7 导入：往返一致 / 幂等 / 安全 / 进度归属 ----
+// ---- 导入：往返一致 / 幂等 / 安全 / 进度归属 ----
 
 // TestImportRoundTripIdentical 断言导出→导入空库后 note 数/字段/标签完全一致，且二次导入不产生重复卡。
 // SQLite 与 PostgreSQL 各跑一遍，源库与目标库都是全新实例。
@@ -75,7 +75,7 @@ func TestImportRoundTripIdentical(t *testing.T) {
 	}
 }
 
-// TestImportRejectsUnsafeArchive 断言含路径穿越 / 软链的包被拒（M5-7 验收）。
+// TestImportRejectsUnsafeArchive 断言含路径穿越 / 软链的包被拒
 func TestImportRejectsUnsafeArchive(t *testing.T) {
 	cases := []struct {
 		name string
@@ -116,7 +116,7 @@ func TestReadPackageArchiveRejectsBomb(t *testing.T) {
 	}
 }
 
-// TestImportUnknownKindListsEntries 断言未知 kind 报错并逐条列出出错的条目（M5-7 验收）。
+// TestImportUnknownKindListsEntries 断言未知 kind 报错并逐条列出出错的条目
 func TestImportUnknownKindListsEntries(t *testing.T) {
 	raw := buildZip(t, map[string]string{
 		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":2,"cards":0}}`,
@@ -138,7 +138,7 @@ func TestImportUnknownKindListsEntries(t *testing.T) {
 	}
 }
 
-// TestImportDiscardsOthersProgress 断言他人 progress.json 默认被丢弃并告知（M5-7 验收）。
+// TestImportDiscardsOthersProgress 断言他人 progress.json 默认被丢弃并告知
 func TestImportDiscardsOthersProgress(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)

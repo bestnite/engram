@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestAuditStoreWriteRecordsOneRowPerMutation 是 M1-10 的验收测试：
+// TestAuditStoreWriteRecordsOneRowPerMutation 是验收测试：
 // 每次变更写入恰好一行，且 action 字符串与常量完全一致。
 func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 	for driver, db := range testDatabases(t) {

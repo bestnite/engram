@@ -53,7 +53,7 @@ func TestDoubleSubmitIssuesCookieAndMirroredToken(t *testing.T) {
 	}
 }
 
-// TestDoubleSubmitRejections 是 B-13 的反面用例：缺 cookie、缺镜像 token、值不一致都必须 403。
+// TestDoubleSubmitRejections 是反面用例：缺 cookie、缺镜像 token、值不一致都必须 403。
 func TestDoubleSubmitRejections(t *testing.T) {
 	cases := []struct {
 		name   string

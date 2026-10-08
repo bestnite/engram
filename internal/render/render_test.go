@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// TestRenderMarkdownStripsUnsafe 是 M2-6 的反面用例：
+// TestRenderMarkdownStripsUnsafe 是反面用例：
 // script、事件属性、javascript:/data: URL、非白名单元素属性都必须被剥离，
 // 而链接文字等内容要保留（剥离标签不等于吞掉内容）。
 func TestRenderMarkdownStripsUnsafe(t *testing.T) {
@@ -84,7 +84,7 @@ func TestRenderMarkdownStripsUnsafe(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownKeepsAllowedMarkup 是 M2-6 的正面用例：
+// TestRenderMarkdownKeepsAllowedMarkup 是正面用例：
 // 表格、代码块、常用内联/块级标记必须存活，且 URL 允许名单内的链接与图片要保留。
 func TestRenderMarkdownKeepsAllowedMarkup(t *testing.T) {
 	cases := []struct {
@@ -174,7 +174,7 @@ func TestRenderMarkdownKeepsAllowedMarkup(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownPreservesMath 是 M2-6 的公式存活用例：
+// TestRenderMarkdownPreservesMath 是公式存活用例：
 // \(...\) 与 \[...\] 的分隔符、反斜杠命令、花括号必须原样出现在 HTML 里，
 // 不能被 goldmark 的反斜杠转义吃掉，也不能被清洗器换成 HTML 实体。
 func TestRenderMarkdownPreservesMath(t *testing.T) {

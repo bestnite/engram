@@ -2,7 +2,7 @@ package mail
 
 import "testing"
 
-// TestUnsubscribeHeadersOnlyForOptionalTypes 是 M1-22 验收项「A 类不带退订头」的单元证据：
+// TestUnsubscribeHeadersOnlyForOptionalTypes 是验收项「A 类不带退订头」的单元证据：
 // 可选类型（B/C/D，CanDisable 为真）才得到两个 RFC 8058 头；A 类与未登记类型一律返回 nil。
 func TestUnsubscribeHeadersOnlyForOptionalTypes(t *testing.T) {
 	const url = "https://example.com/unsubscribe?token=abc"

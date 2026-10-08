@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-19 的密码重置流程（服务端部分）：令牌签发与投递、以及三条页面的应用壳入口。
+// 本文件是密码重置流程（服务端部分）：令牌签发与投递、以及三条页面的应用壳入口。
 //
 // 安全要点：
 //   - 明文令牌只出现在邮件链接里，绝不入库、绝不进日志（日志只记 user_id 与结果）；
@@ -21,7 +21,7 @@ import (
 //
 // 页面的读写协议全部走同源 JSON 端点（account.go）；本文件只保留页面外壳与令牌签发。
 
-// registerSecurityMailRoutes 挂载 M1-19 的密码重置、邮箱验证与改邮箱确认路由。
+// registerSecurityMailRoutes 挂载密码重置、邮箱验证与改邮箱确认路由。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	if s.tokens == nil {

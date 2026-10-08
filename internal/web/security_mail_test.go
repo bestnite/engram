@@ -23,14 +23,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-19（A 类事务安全邮件）的验收测试。
+// 本文件是（A 类事务安全邮件）的验收测试。
 //
 // 覆盖：五类各自的触发点、重置链接一次性与过期、库中只存摘要、明文不进日志、
 // A 类不携带退订头、SMTP 未配置时流程禁用。页面已切到 SPA，触发点全部走同源 JSON 端点
 // （/api/v1/auth/*、/api/v1/settings/*）。
 //
-// 测试用一个记录型 Sender 承接入队的邮件，从而不依赖真实 SMTP；投递本身由 M1-17
-// 的 outbox worker 负责，这里只验证「触发点确实把正确类型的邮件写进了队列」。
+// 测试用一个记录型 Sender 承接入队的邮件，从而不依赖真实 SMTP；投递本身由
+// outbox worker 负责，这里只验证「触发点确实把正确类型的邮件写进了队列」。
 
 // recordingSender 是 mail.Sender 的测试替身：把每次投递的邮件记下来，永远成功。
 type recordingSender struct {

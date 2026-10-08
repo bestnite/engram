@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestThemeBootstrapRunsBeforeStylesheet 是 M8-8 的验收：主题引导必须内联在 <head> 内。
+// TestThemeBootstrapRunsBeforeStylesheet 是验收：主题引导必须内联在 <head> 内。
 // 外链的 pwa.js 与样式表都是独立请求，浏览器可能在它们到达前先画出一帧白底；内联引导把暗色类、
 // color-scheme、画布底色提前到首帧之前。
 //

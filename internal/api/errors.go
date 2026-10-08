@@ -1,5 +1,4 @@
-// Package api 提供 /api/v1 的 REST handler 与鉴权、限流中间件
-// （ROADMAP.md M4-2、M4-3）。
+// Package api 提供 /api/v1 的 REST handler 与鉴权、限流中间件。
 package api
 
 import (
@@ -25,7 +24,7 @@ const (
 	CodeNotFound       = "not_found"
 	CodeForbidden      = "forbidden"
 	// CodeInsufficientRole 表示用户对卡组有访问权但角色不够（如 reader 试图改卡），
-	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断（M5-1）。
+	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断。
 	CodeInsufficientRole = "insufficient_role"
 	// CodeScopeNotGrantable 表示请求要创建的 key 含只有管理员才能持有的 scope
 	// （当前只有 admin）「admin 只能发给管理员账号」。

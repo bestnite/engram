@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDecideIdentityLink 是 M1-12 的验收矩阵：表驱动覆盖身份自动绑定的三个分支，
+// TestDecideIdentityLink 是验收矩阵：表驱动覆盖身份自动绑定的三个分支，
 // 并显式覆盖四种输入（sub 已存在 / 已验邮箱 / 未验邮箱 / 无邮箱）。
 func TestDecideIdentityLink(t *testing.T) {
 	matched := &store.User{ID: 11, Email: "alice@example.com"}

@@ -191,7 +191,7 @@ type Review struct {
 	StateBefore     int       `gorm:"not null" json:"state_before"` // 0=New 1=Learning 2=Review 3=Relearning
 	// StepIndexBefore 是本次评分前 card_states.step_index 的快照（剩余学习步骤数）。
 	// 评分前的 FSRS 学习步骤游标没有别的来源，而 fsrs.Rollback 会把 step_index 归零；
-	// 存下它 Undo 才能精确还原步骤进度（M3-9）。
+	// 存下它 Undo 才能精确还原步骤进度。
 	// 可空：旧行没有这个快照，Undo 遇到 NULL 时退回归零行为。整数不用带默认值的布尔（AGENTS.md §2.3 第 9 条）。
 	StepIndexBefore *int     `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
 	IntervalDays    *float64 `json:"interval_days,omitempty"`
@@ -332,7 +332,7 @@ type AuditLog struct {
 func (AuditLog) TableName() string { return "audit_log" }
 
 // SchemaVersion 是单行表（id 恒为 1），记录已应用的破坏性迁移版本。
-// 表名用单数，与 AGENTS.md M0-4 的措辞一致。
+// 表名用单数，与措辞一致。
 type SchemaVersion struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Version   int       `gorm:"not null" json:"version"`
@@ -375,15 +375,15 @@ func AllModels() []any {
 		// L3 分享会话授权：模型定义在 models.go，存取在 share_session.go。
 		&ShareSessionDeck{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
-		// M1-16 TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
+		// TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
 		&UserTOTP{}, &TOTPRecoveryCode{},
-		// M1-17 SMTP：outbox 队列表，模型定义在 outbox.go。
+		// SMTP：outbox 队列表，模型定义在 outbox.go。
 		&OutboxMessage{},
 		&EmailPref{},
 		&ReminderLog{},
-		// M1-23 每周学习摘要的发送台账：模型定义在 digest.go。
+		// 每周学习摘要的发送台账：模型定义在 digest.go。
 		&DigestLog{},
-		&ActionToken{}, &LoginFingerprint{}, // M1-19 A-class security mail: one-time tokens and login fingerprints.
+		&ActionToken{}, &LoginFingerprint{}, // A-class security mail: one-time tokens and login fingerprints.
 		// 管理员自定义邮件模板：缺失即回退内置正文。
 		&MailTemplate{},
 		// L3 分享同意制：待接受的邀请与接收白名单。

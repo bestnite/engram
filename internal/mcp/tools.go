@@ -51,12 +51,12 @@ type importNoteIn struct {
 	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze)"`
 	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
-	// NoteID 按主键寻址已有 note 就地改写；与 external_ref 互斥（M4-12）。
+	// NoteID 按主键寻址已有 note 就地改写；与 external_ref 互斥。
 	NoteID uint64   `json:"note_id,omitempty" jsonschema:"address an existing note by primary key to rewrite in place; mutually exclusive with external_ref"`
 	Tags   []string `json:"tags,omitempty" jsonschema:"note tags"`
 }
 
-// bulkNotesIn 是 create_notes 的入参（M4-3 批量建卡路径）。
+// bulkNotesIn 是 create_notes 的入参（批量建卡路径）。
 type bulkNotesIn struct {
 	DeckID     uint64         `json:"deck_id" jsonschema:"target deck"`
 	Notes      []importNoteIn `json:"notes" jsonschema:"notes to create or update (1..500)"`
@@ -171,7 +171,7 @@ func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, 
 	return s.api.Stats(ctx, id.User)
 }
 
-// exportDeck 导出卡组包（M5-8）：与 REST `GET /decks/:id/package` 走同一 service 方法。
+// exportDeck 导出卡组包：与 REST `GET /decks/:id/package` 走同一 service 方法。
 // 返回包内逻辑内容的 JSON 文档形态，可直接对照 schema/deck-package.schema.json 校验。
 func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (any, error) {
 	includeMedia := true
@@ -189,7 +189,7 @@ func (s *Server) createNotes(ctx context.Context, id Identity, in bulkNotesIn) (
 	return s.api.ImportNotes(ctx, id.User.ID, in.DeckID, id.apiKeyID(), toImportRequest(in))
 }
 
-// bulkNotes 对一组 note 执行批量动作（M4-13）：与 REST `POST /notes/bulk` 走同一 service 方法。
+// bulkNotes 对一组 note 执行批量动作：与 REST `POST /notes/bulk` 走同一 service 方法。
 func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (any, error) {
 	return s.api.BulkNotes(ctx, id.User.ID, id.apiKeyID(), api.BulkNotesInput{
 		Action:  in.Action,
@@ -199,7 +199,7 @@ func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (a
 	})
 }
 
-// importDeck 导入卡组包（M5-8）：与 REST `POST /decks/import` 走同一 service 方法。
+// importDeck 导入卡组包：与 REST `POST /decks/import` 走同一 service 方法。
 // 包的权限判定、进度归属与审计都在 service 层（ImportDeckPackage）完成。
 func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
 	r, err := store.PackageReader(in.Package)

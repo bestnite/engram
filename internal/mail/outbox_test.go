@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestEnqueueDoesNotSendInRequestPath 是 M1-17 的核心约束之一：Enqueue 只写队列表。
+// TestEnqueueDoesNotSendInRequestPath 是核心约束之一：Enqueue 只写队列表。
 // 用一个阻塞在 gate 上的替身证明 Send 尚未完成时 Enqueue 已经返回。
 func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 	db := testDB(t)
@@ -77,7 +77,7 @@ func TestWorkerDeliversQueuedMessage(t *testing.T) {
 	}
 }
 
-// TestTransientFailureIsRetriedAndLastErrorVisible 是 M1-17 的验收点：
+// TestTransientFailureIsRetriedAndLastErrorVisible 是验收点：
 // 瞬时发信失败会被重试，最后一次错误与尝试次数可从管理面板读到（OutboxSummaryOf）。
 func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 	db := testDB(t)

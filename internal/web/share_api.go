@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是公开只读分享浏览（M5-3）的 SPA 同源 JSON 传输层与 GET 切壳。
+// 本文件是公开只读分享浏览的 SPA 同源 JSON 传输层与 GET 切壳。
 //
 // 安全边界与迁移前逐项一致，绝不因切壳放宽或收紧：
 //   - 撤销、过期或不存在一律 404，不区分三者（不泄漏 token 历史）；

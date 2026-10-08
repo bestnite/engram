@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// 卡组包的 JSON 文档形态与 zip 字节之间的互转（M5-8）。
+// 卡组包的 JSON 文档形态与 zip 字节之间的互转。
 //
 // MCP/CLI 既可能拿到 `export_deck` 输出的 JSON 文档（键为 manifest.json 等，
 // 媒体条目为 base64 字符串），也可能拿到 base64 编码的 .edeck zip。两条入口都归一到

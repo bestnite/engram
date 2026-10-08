@@ -83,7 +83,7 @@ func worseWeights() fsrs.Weights {
 	return w
 }
 
-// TestCompareFitKnownBetterWeights 是 M9-11 验收 1：固定复习日志、更好的权重集已知，
+// TestCompareFitKnownBetterWeights 是验收 1：固定复习日志、更好的权重集已知，
 // 断言方向（更差权重在前、更好权重在后时 Improved() 为 true），并打印两组实际数值。
 func TestCompareFitKnownBetterWeights(t *testing.T) {
 	const cards, days = 3, 6
@@ -110,7 +110,7 @@ func TestCompareFitKnownBetterWeights(t *testing.T) {
 	t.Logf("Improved()=%v", result.Improved())
 }
 
-// TestCompareFitSameItemCount 是 M9-11 验收 2/3：两个指标覆盖相同的 item 数，
+// TestCompareFitSameItemCount 是验收 2/3：两个指标覆盖相同的 item 数，
 // 且每张卡的第一条复习被排除（只有一条复习的卡贡献 0 个 item）。
 func TestCompareFitSameItemCount(t *testing.T) {
 	const cards, days = 3, 6
@@ -131,7 +131,7 @@ func TestCompareFitSameItemCount(t *testing.T) {
 	t.Logf("items: before=%d after=%d want=%d", before.Items, after.Items, want)
 }
 
-// TestCompareFitNoPredictableItems 是 M9-11 验收 5（数据侧）：没有任何可预测 item 时
+// TestCompareFitNoPredictableItems 是验收 5（数据侧）：没有任何可预测 item 时
 // 两个指标都是零值，Available() 为 false，页面因此不会声称「未改善」。
 func TestCompareFitNoPredictableItems(t *testing.T) {
 	preset := fitTestPreset(t, jsonWeights(t, worseWeights()))

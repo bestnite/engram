@@ -18,7 +18,7 @@ import (
 // 复用同一批模型与可见性规则（软删除、暂停卡排除），也符合 AGENTS.md §2.4「concrete Store
 // 类型包住 GORM 访问」的既有约定。新建包只会多一层对 store 模型的转发，没有收益。
 //
-// 每个函数都接受调用方传入的 now / today / 日期窗口，绝不读取挂钟：页面（M7-3）与
+// 每个函数都接受调用方传入的 now / today / 日期窗口，绝不读取挂钟：页面与
 // 手算对拍测试因此能在固定时间上复现同一组数字。
 
 // StatsStore 提供统计页的聚合查询；只读，不写任何表。
@@ -510,7 +510,7 @@ type StreakStats struct {
 // Streak 计算连续复习天数。口径按 review_day（复习日字符串，已由调用方按切点算好）：
 // 相邻两个复习日都出现过复习才算连续。判定「今天」时用 now 与切点现算，因此凌晨
 // 03:59 的一次复习仍算前一天 —— 只有整整一个复习日被跳过，连续才会中断
-// （AGENTS.md M7-2 验收）。now/loc/cutoffHour 由调用方传入，函数不读挂钟。
+// now/loc/cutoffHour 由调用方传入，函数不读挂钟。
 func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (StreakStats, error) {
 	if userID == 0 {
 		return StreakStats{}, fmt.Errorf("streak: user id is required")
@@ -644,7 +644,7 @@ func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 	return reviewDayStart(now, loc, cutoffHour).In(locOrUTC(loc)).Format("2006-01-02")
 }
 
-// ReviewDayString 导出复习日计算，供统计页（M7-3）等调用方复用同一口径。
+// ReviewDayString 导出复习日计算，供统计页等调用方复用同一口径。
 // 页面必须用与聚合查询相同的日界，否则「今日复习量」会与库里的 review_day 对不上。
 func ReviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 	return reviewDayString(now, loc, cutoffHour)

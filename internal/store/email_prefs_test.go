@@ -112,7 +112,7 @@ func TestEmailPrefsSetChoicesReplaces(t *testing.T) {
 }
 
 // TestEmailPrefsTableRegisteredForMigration 断言 email_prefs 进了 AllModels()：
-// AutoMigrate 从 AllModels 取，漏登记会让建表静默少一张（AGENTS.md §6.4、M1-18 守卫测试）。
+// AutoMigrate 从 AllModels 取，漏登记会让建表静默少一张（AGENTS.md §6.4、守卫测试）。
 func TestEmailPrefsTableRegisteredForMigration(t *testing.T) {
 	found := false
 	for _, model := range AllModels() {

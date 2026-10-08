@@ -14,7 +14,7 @@ import (
 )
 
 // 身份绑定决策的稳定错误值；transport 层据此映射到稳定英文 code 与本地化文案
-// （bootstrap 文案“请联系管理员绑定账号”属于 M1-11 的页面职责，本包不产出用户可见文字）。
+// （bootstrap 文案“请联系管理员绑定账号”属于页面职责，本包不产出用户可见文字）。
 var (
 	// ErrIdentityLinkDenied 表示 closed 策略下既无既有绑定、又无法自动匹配，只能由管理员手工绑定。
 	ErrIdentityLinkDenied = errors.New("identity link denied by registration policy")
@@ -110,7 +110,7 @@ type IdentityLinkStore interface {
 }
 
 // IdentityLinkService 串联身份绑定的完整流程：查绑定 → 自动绑定 → 按策略建号。
-// 它不实现 OIDC 协议交互（M1-11）；调用方只需把规范化后的 OAuthProfile 交给 Resolve。
+// 它不实现 OIDC 协议交互；调用方只需把规范化后的 OAuthProfile 交给 Resolve。
 type IdentityLinkService struct {
 	store  IdentityLinkStore
 	audit  *Auditor
@@ -119,7 +119,7 @@ type IdentityLinkService struct {
 }
 
 // NewIdentityLinkService 构造绑定服务。store 必填；audit 可为空（不记审计）；
-// logger 为空时用 slog.Default()，审计写失败只记英文日志、不影响已经完成的绑定（M1-10 原则）。
+// logger 为空时用 slog.Default()，审计写失败只记英文日志、不影响已经完成的绑定（原则）。
 func NewIdentityLinkService(st IdentityLinkStore, audit *Auditor, logger *slog.Logger) (*IdentityLinkService, error) {
 	if st == nil {
 		return nil, errors.New("auth: identity link store is required")
@@ -198,7 +198,7 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 	}
 }
 
-// link 写入一条 identities 并记审计；审计失败只记英文日志，不回滚绑定（M1-10 原则）。
+// link 写入一条 identities 并记审计；审计失败只记英文日志，不回滚绑定（原则）。
 func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
 	ident := &store.Identity{
 		UserID:   userID,

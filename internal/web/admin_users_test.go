@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// M6-2 用户管理的验收测试：每个动作一条，重点覆盖会话作废与最后管理员保护。
+// 用户管理的验收测试：每个动作一条，重点覆盖会话作废与最后管理员保护。
 
 // createRoleUser 直接建一个指定角色的本地用户（管理员用例需要造第二个管理员）。
 func createRoleUser(t *testing.T, db *gorm.DB, username, role string) uint64 {

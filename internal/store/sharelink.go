@@ -16,7 +16,7 @@ import (
 // ErrShareLinkNotFound 表示分享链接不存在、已撤销或已过期。
 //
 // 三种情况故意合并成同一个哨兵：撤销/过期的链接必须与“从来没存在过”返回同样的结果
-// （安全要求、M5-3 验收“撤销或过期后的链接返回 404”），
+// （安全要求、验收“撤销或过期后的链接返回 404”），
 // 否则调用方会泄漏“这个 token 曾经有效”这一事实。
 var ErrShareLinkNotFound = errors.New("share link not found")
 
@@ -109,7 +109,7 @@ func (s *ShareLinkStore) Revoke(ctx context.Context, deckID uint64, digest strin
 	return nil
 }
 
-// RevokeAll 一次撤销该卡组的全部有效链接（M5-3「可一次撤销全部」）。
+// RevokeAll 一次撤销该卡组的全部有效链接（「可一次撤销全部」）。
 // 返回实际撤销的条数，便于审计与测试断言。
 func (s *ShareLinkStore) RevokeAll(ctx context.Context, deckID uint64) (int64, error) {
 	now := time.Now().UTC()

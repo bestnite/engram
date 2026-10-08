@@ -17,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-22：RFC 8058 一键退订。
+// 本文件是：RFC 8058 一键退订。
 //
 // 设计要点：
 //   - 退订入口只加在**可选类型**（CanDisable 为真的 B/C/D）的邮件上；A 类一律不带
@@ -55,7 +55,7 @@ const unsubscribeTypeInvalidCode = "unsubscribe_type_invalid"
 // 与 store 的令牌哨兵错误分开，便于调用方把它映射成专属 code。
 var errUnsubscribableType = errors.New("unsubscribe token names an unsubscribable mail type")
 
-// registerUnsubscribeRoutes 挂载 M1-22 的免登录一键退订路由。
+// registerUnsubscribeRoutes 挂载免登录一键退订路由。
 // 令牌服务未装配时跳过（M0 阶段仍可构造 Server）。
 func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 	if s.tokens == nil {

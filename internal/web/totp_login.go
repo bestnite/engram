@@ -48,7 +48,7 @@ func (s *Server) apiTOTPPending(c *gin.Context) {
 // apiTOTPSubmit 校验第二因素并建立会话（POST /api/v1/auth/totp）。
 //
 // 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
-// 失败复用登录限速（M1-9）：与第一步共用同一
+// 失败复用登录限速：与第一步共用同一
 // 账号/IP 维度，第二步不能成为绕过限速的缺口。
 func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	if s.totp == nil {
@@ -110,7 +110,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		return
 	}
 	if usedRecovery {
-		// 恢复码被消费：这是安全相关事件，必须留痕（M1-16 要求用掉/生成新的都有审计）。
+		// 恢复码被消费：这是安全相关事件，必须留痕（要求用掉/生成新的都有审计）。
 		s.audit(ctx, store.AuditEntry{
 			UserID: store.Ptr(userID),
 			Action: store.ActionTOTPRecoveryUsed,
@@ -133,7 +133,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": c.ClientIP(), "second_factor": "totp"},
 	})
-	// M1-19：第二因素通过后的登录同样记录指纹并在新设备/新 IP 时提醒。
+	// 第二因素通过后的登录同样记录指纹并在新设备/新 IP 时提醒。
 	s.notifyNewDeviceLogin(c, u)
 
 	c.JSON(http.StatusOK, gin.H{

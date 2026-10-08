@@ -27,7 +27,7 @@ func mustUndo(t *testing.T, db *gorm.DB, cardID, userID uint64, s *Scheduler, no
 }
 
 // TestSubmitWritesStepIndexSnapshot 断言提交路径把评分前的剩余学习步骤写进
-// reviews.step_index_before（DESC 未定义该列，M3-9 要求它随第一条日志起就写全）。
+// reviews.step_index_before（DESC 未定义该列，要求它随第一条日志起就写全）。
 //
 // 快照是“评分前”的值：首评前是 0；第二评前等于首评后留下的 step_index。
 func TestSubmitWritesStepIndexSnapshot(t *testing.T) {
@@ -70,7 +70,7 @@ func TestSubmitWritesStepIndexSnapshot(t *testing.T) {
 	}
 }
 
-// TestUndoRestoresLearningStepExactly 是 M3-9 的验收用例：一张学习卡向前走两步，
+// TestUndoRestoresLearningStepExactly 是验收用例：一张学习卡向前走两步，
 // 连续两次 Undo，每一步的 step_index 都精确回到评分前的值。
 //
 // 修复前 Rollback 会把 step_index 归零，于是第一次 Undo 就还原不出中间那一步 ——

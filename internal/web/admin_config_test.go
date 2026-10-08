@@ -201,7 +201,7 @@ func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 		t.Fatal("smtp password stored in plaintext")
 	}
 
-	// 测试连接失败：把服务端原始错误带到响应（M1-17 验收点）。
+	// 测试连接失败：把服务端原始错误带到响应（验收点）。
 	addr := deadAddr(t)
 	host, port, _ := net.SplitHostPort(addr)
 	testRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{

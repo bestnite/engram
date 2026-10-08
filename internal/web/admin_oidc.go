@@ -12,11 +12,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「身份与 OIDC」页的 SPA JSON 端点（ROADMAP.md M6-4）。
+// 本文件是管理面板「身份与 OIDC」页的 SPA JSON 端点。
 //
 // 读取与写入复用 oidcLoadConfig 与 s.oidc 客户端，与 SSR 页完全同一份解析；client secret 只回
 // 「已配置/未配置」，绝不回显明文。redirect_uri 与登录流程共用 s.oidcRedirectURI，因此页面显示
-// 的就是实际发出的值。测试连接把 provider 的原始错误文本带进响应（M6-4 验收点）。
+// 的就是实际发出的值。测试连接把 provider 的原始错误文本带进响应（验收点）。
 
 // adminOIDCIdentity 是一条已绑定身份。
 type adminOIDCIdentity struct {
@@ -205,7 +205,7 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 }
 
 // adminOIDCTest 对表单里的 issuer（缺省用已保存值）拉取发现文档，
-// 失败时把 provider 的原始错误文本带进响应（M6-4 验收点）。
+// 失败时把 provider 的原始错误文本带进响应（验收点）。
 func (s *Server) adminOIDCTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {

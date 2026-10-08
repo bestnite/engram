@@ -6,7 +6,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板的用户管理支撑函数（ROADMAP.md M6-2）。
+// 管理面板的用户管理支撑函数。
 //
 // SSR 用户管理页删除后，用户管理的读写在 /api/v1/admin/users* 的 JSON 端点上
 // （admin_users_api.go）；这里只保留 JSON 路径仍复用的判定。

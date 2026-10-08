@@ -177,7 +177,7 @@ func (s *Server) totpConfirm(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
-	// M1-19：凭据变更通知（TOTP 启用）；发信失败不影响启用。
+	// 凭据变更通知（TOTP 启用）；发信失败不影响启用。
 	s.notifyCredentialChanged(ctx, user, "totp_enabled")
 	c.JSON(http.StatusOK, totpConfirmResponse{Enabled: true, RecoveryCodes: codes, RecoveryRemaining: int64(len(codes))})
 }
@@ -219,7 +219,7 @@ func (s *Server) totpDisable(c *gin.Context) {
 		TargetType: "user",
 		TargetID:   store.Ptr(user.ID),
 	})
-	// M1-19：凭据变更通知（TOTP 关闭）。
+	// 凭据变更通知（TOTP 关闭）。
 	s.notifyCredentialChanged(ctx, fresh, "totp_disabled")
 	c.JSON(http.StatusOK, totpDisableResponse{Enabled: false})
 }
@@ -270,7 +270,7 @@ func (s *Server) totpRecovery(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
-	// M1-19：凭据变更通知（恢复码重新生成）。
+	// 凭据变更通知（恢复码重新生成）。
 	s.notifyCredentialChanged(ctx, fresh, "recovery_codes")
 	c.JSON(http.StatusOK, totpRecoveryResponse{RecoveryCodes: codes, RecoveryRemaining: int64(len(codes))})
 }

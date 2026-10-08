@@ -15,7 +15,7 @@ import (
 )
 
 // measurePeak 执行 fn，并返回执行期间堆分配（HeapAlloc）相对执行前基线增长的最大字节数。
-// 用后台采样线程读取 MemStats —— M4-5 验收要求的\"峰值内存断言\"。
+// 用后台采样线程读取 MemStats —— 验收要求的\"峰值内存断言\"。
 func measurePeak(t *testing.T, fn func()) uint64 {
 	t.Helper()
 	runtime.GC()
@@ -90,7 +90,7 @@ func seedBulkNotes(t *testing.T, env *testEnv, deckID uint64, n int) {
 	}
 }
 
-// TestExportTenThousandNotesStreamsWithoutBuffering 是 M4-5 的核心验收：
+// TestExportTenThousandNotesStreamsWithoutBuffering 是核心验收：
 // 导出 1 万条 note 时流式路径的峰值内存显著低于整体收集路径，证明没有把整组读进内存。
 func TestExportTenThousandNotesStreamsWithoutBuffering(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

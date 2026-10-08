@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 审计动作常量集中定义（ROADMAP.md M1-10）。值一律英文点分、保持稳定：
+// 审计动作常量集中定义。值一律英文点分、保持稳定：
 // action 是审计检索的键，调用点写裸字符串会让历史数据无法按动作聚合。
 // 新增写操作时在这里加常量，不要另起一套命名。
 const (
@@ -18,38 +18,38 @@ const (
 	ActionUserLoginSucceeded = "user.login_succeeded"
 	ActionUserLoginFailed    = "user.login_failed"
 	ActionUserLogout         = "user.logout"
-	// M2-7 卡片列表/编辑页的写操作。
+	// 卡片列表/编辑页的写操作。
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
-	// M4-12 批量标签动作：移除与整体设置标签。与 ActionNoteTagAdd 并列，
+	// 批量标签动作：移除与整体设置标签。与 ActionNoteTagAdd 并列，
 	// 三条动作名各自稳定，便于按动作聚合历史审计。
 	ActionNoteTagRemove = "note.tag_remove"
 	ActionNoteTagSet    = "note.tag_set"
-	// M2-11 新建卡组。
+	// 新建卡组。
 	ActionDeckCreate = "deck.create"
-	// M2-8 上传媒体。
+	// 上传媒体。
 	ActionMediaUpload = "media.upload"
 
-	// ActionSettingUpdate 是管理面板修改系统设置（M6-5）时写入的审计动作。
+	// ActionSettingUpdate 是管理面板修改系统设置时写入的审计动作。
 	ActionSettingUpdate = "setting.update"
 	// ActionMailTemplateUpdate 是管理面板保存或删除邮件模板时写入的
 	// 审计动作。模板决定所有用户收到的邮件长什么样，与系统设置同级。
 	ActionMailTemplateUpdate = "mail.template_update"
 
-	// ActionInviteCreate 是管理面板创建邀请码（M6-3）时写入的审计动作。
+	// ActionInviteCreate 是管理面板创建邀请码时写入的审计动作。
 	ActionInviteCreate = "invite.create"
-	// ActionInviteRevoke 是管理面板撤销邀请码（M6-3）时写入的审计动作。
+	// ActionInviteRevoke 是管理面板撤销邀请码时写入的审计动作。
 	ActionInviteRevoke = "invite.revoke"
-	// M3-4 撤销评分。
+	// 撤销评分。
 	ActionReviewUndo = "review.undo"
-	// M5-1 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
+	// 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
 	ActionPermissionDenied = "permission.denied"
-	// M1-12 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。
+	// 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。
 	ActionIdentityLink = "identity.link"
-	// M6-4 管理面板解绑外部身份。
+	// 管理面板解绑外部身份。
 	ActionIdentityUnlink = "identity.unlink"
-	// M5-2 授权变更（共享页面）：授予 / 改角色 / 撤销。
+	// 授权变更（共享页面）：授予 / 改角色 / 撤销。
 	ActionDeckRoleChange = "deck.role_change"
 	ActionDeckRevoke     = "deck.revoke"
 	// L3 分享同意制：邀请、接受、拒绝各一条，以及用户改自己的接收策略。
@@ -57,21 +57,21 @@ const (
 	ActionDeckShareAccept   = "deck.share_accept"
 	ActionDeckShareReject   = "deck.share_reject"
 	ActionSharePolicyUpdate = "share.policy_update"
-	// M5-4 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
+	// 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
 	ActionDeckClone = "deck.clone"
-	// M5-3 分享链接：创建 / 单个撤销 / 一次撤销全部。
+	// 分享链接：创建 / 单个撤销 / 一次撤销全部。
 	ActionShareLinkCreate    = "share_link.create"
 	ActionShareLinkRevoke    = "share_link.revoke"
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
-	// M5-5 卡组可见性变更（private / unlisted / public）。
+	// 卡组可见性变更（private / unlisted / public）。
 	ActionDeckVisibility = "deck.visibility_change"
-	// M2-14 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
+	// 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
 	// 张出来」，与其他卡组变更一样要留痕。
 	ActionDeckCaps = "deck.caps_change"
-	// M9-4 预设参数优化：触发优化作业与一键回退默认权重。
+	// 预设参数优化：触发优化作业与一键回退默认权重。
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
-	// ActionPresetCreate / ActionPresetUpdate 是预设页新建与编辑预设（M3-14）时写入的审计动作。
+	// ActionPresetCreate / ActionPresetUpdate 是预设页新建与编辑预设时写入的审计动作。
 	ActionPresetCreate = "preset.create"
 	ActionPresetUpdate = "preset.update"
 	// 卡组与预设删除。
@@ -80,10 +80,10 @@ const (
 	// ActionDeckPreset 是卡组切换调度预设时写入的审计动作：它决定这个卡组按哪套
 	// FSRS 参数排程，与每日额度同级，必须留痕。
 	ActionDeckPreset = "deck.preset_change"
-	// ActionJobCancel 是管理面板取消后台作业（M6-6）时写入的审计动作。
+	// ActionJobCancel 是管理面板取消后台作业时写入的审计动作。
 	ActionJobCancel = "job.cancel"
 
-	// M1-16 TOTP 二次验证：绑定开始 / 启用 / 关闭 / 重新生成恢复码 / 恢复码被消费 / 第二步失败。
+	// TOTP 二次验证：绑定开始 / 启用 / 关闭 / 重新生成恢复码 / 恢复码被消费 / 第二步失败。
 	// 恢复码明文永不入审计（detail 只记数量与来源 IP）。
 	ActionTOTPBegin              = "totp.begin"
 	ActionTOTPEnable             = "totp.enable"
@@ -92,13 +92,13 @@ const (
 	ActionTOTPRecoveryUsed       = "totp.recovery_used"
 	ActionTOTPVerifyFailed       = "totp.verify_failed"
 
-	// M1-18 邮件偏好：用户保存可选邮件类型的开关时留痕（detail 只记变更的类型与开关）。
+	// 邮件偏好：用户保存可选邮件类型的开关时留痕（detail 只记变更的类型与开关）。
 	ActionUserEmailPrefsUpdate = "user.email_prefs_update"
 
-	// M1-22 一键退订：用户凭免登录令牌关掉某个可选邮件类型时留痕。
+	// 一键退订：用户凭免登录令牌关掉某个可选邮件类型时留痕。
 	ActionUserEmailUnsubscribe = "user.email_unsubscribe"
 
-	// M6-4 OIDC「测试连接」与 M1-17 SMTP「测试连接」。
+	// OIDC「测试连接」与 SMTP「测试连接」。
 	// 两者都是高影响动作：两次「测试连接」会发起管理员指定的出站连接。
 	// 成功与失败都要有行——失败同样留下「谁在何时试图连到哪里」的取证线索。
 	// 审计行只记动作与目标元信息（测试连接记 host / issuer），
@@ -121,7 +121,7 @@ type AuditEntry struct {
 	Detail any
 }
 
-// AuditStore 封装 audit_log 表；Write 是全部写操作留痕的唯一入口（M1-10）。
+// AuditStore 封装 audit_log 表；Write 是全部写操作留痕的唯一入口。
 type AuditStore struct {
 	db *gorm.DB
 }
@@ -182,7 +182,7 @@ func (s *AuditStore) CountByAction(ctx context.Context, action string) (int64, e
 	return n, nil
 }
 
-// AuditFilter 是审计检索（M6-7）的过滤条件；每个字段的零值都表示「不按该维度过滤」。
+// AuditFilter 是审计检索的过滤条件；每个字段的零值都表示「不按该维度过滤」。
 //
 // 时间口径：created_at 一律以 UTC 存储；From 是下界（含），To 是上界（不含）。
 // 调用方负责把用户时区的自然日边界换算成这两个 UTC 瞬时值——store 层不猜时区。

@@ -66,7 +66,7 @@ func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput
 	return u, nil
 }
 
-// CreateLocalUserTx 在调用方给定的事务里创建本地账号（B-12）：邀请占用与建号因此共享同一事务。
+// CreateLocalUserTx 在调用方给定的事务里创建本地账号：邀请占用与建号因此共享同一事务。
 // 校验与哈希与 CreateLocalUser 走同一条准备路径，避免两条建号路径漂移。
 func (s *AccountService) CreateLocalUserTx(ctx context.Context, tx *gorm.DB, in CreateUserInput) (*store.User, error) {
 	u, err := s.prepareLocalUser(in)
@@ -94,7 +94,7 @@ func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, erro
 // CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL）。
 //
 // 与 CreateLocalUser 的区别只有凭据：不做密码策略校验，也不派生哈希 —— OIDC 账号靠
-// 绑定的外部身份登录（M1-11 接入流程，M1-12 提供建号能力）。用户名与邮箱仍为必填，
+// 绑定的外部身份登录（接入流程，提供建号能力）。用户名与邮箱仍为必填，
 // 否则唯一约束与后续找回都会失去依据。
 func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
 	u, err := newUserFromInput(in, nil, s.now())

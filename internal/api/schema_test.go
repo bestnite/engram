@@ -8,7 +8,7 @@ import (
 )
 
 // TestNoteImportSchemaAcceptsNoteIDAndRejectsUnknownKind 直接对 schema/note-import.schema.json
-// 做机器校验（M4-12）：带 note_id 的请求体通过校验，未知 kind 与「同时给出 note_id 与
+// 做机器校验：带 note_id 的请求体通过校验，未知 kind 与「同时给出 note_id 与
 // external_ref」的请求体被拒。schema 是外部工具校验的机器可读契约，必须与实现同步。
 func TestNoteImportSchemaAcceptsNoteIDAndRejectsUnknownKind(t *testing.T) {
 	sch, err := jsonschema.NewCompiler().Compile("../../schema/note-import.schema.json")

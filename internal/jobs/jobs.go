@@ -1,13 +1,13 @@
 // Package jobs 提供单并发的后台作业框架：jobs 表持久化、子进程执行（命令可注入）、
 // 超时后杀掉整个进程组、阶段级进度与日志尾巴捕获
-// （jobs 表；ROADMAP.md M9-1）。
+// （jobs 表；）。
 //
 // 设计要点与理由：
 //   - 单并发：进程内只有一个 worker 消费队列；入队时若已有未完成作业，返回
 //     ErrAlreadyRunning，由 REST 层映射成 409（「已有任务则 409」）。
 //   - 子进程执行：训练是 CPU 密集且可能崩溃/挂死，放到独立进程里既能隔离，也能超时取消；
-//     优化器算法本身不是 Go 库（M9-2 的 Rust 适配器），只能走子进程。
-//   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用 M9-10 的优化器
+//     优化器算法本身不是 Go 库（Rust 适配器），只能走子进程。
+//   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用优化器
 //     适配器（internal/jobs/optimizer.go，返回直接调用 Rust 适配器的 Command），测试注入
 //     `/bin/sh -c ...`，从而不依赖真实优化器。
 //   - 结果可注入：Complete 可选，命令成功退出后，由 Complete 解析命令的副作用（例如适配器
@@ -55,15 +55,15 @@ const (
 
 const (
 	// StaleJobReason 是启动时回收残留 running 作业写入的失败原因（英文，AGENTS.md §2.1）。
-	// 语义：子进程随上次进程退出必然已消失，running 只是崩溃/重启遗留的假状态（M9-7）。
+	// 语义：子进程随上次进程退出必然已消失，running 只是崩溃/重启遗留的假状态。
 	StaleJobReason = "interrupted by restart"
 
-	// NeverStartedJobReason 是启动时回收残留 queued 作业写入的失败原因（M9-8）。
+	// NeverStartedJobReason 是启动时回收残留 queued 作业写入的失败原因。
 	// 语义：入队只写库并把作业放进内存队列，队列随上个进程消失，所以这些行永远不会被执行；
 	// 它们却被 Store.Active 当作在途作业，会让后续 Enqueue 永久返回 409。
 	NeverStartedJobReason = "job never started"
 
-	// DefaultTimeout 是子进程的默认超时；优化训练可能跑很久，但必须有上限（M9-1 验收）。
+	// DefaultTimeout 是子进程的默认超时；优化训练可能跑很久，但必须有上限
 	DefaultTimeout = 30 * time.Minute
 	// DefaultLogTailLines 是落库的日志尾巴行数上限。
 	DefaultLogTailLines = 40
@@ -86,7 +86,7 @@ var (
 	ErrTimedOut = errors.New("job timed out")
 	// ErrNoCommand 表示没有为作业配置可执行的命令。
 	ErrNoCommand = errors.New("no command configured for job")
-	// ErrNotRunning 表示要取消的作业既不在运行、也不是可取消的 queued 状态（M6-6）。
+	// ErrNotRunning 表示要取消的作业既不在运行、也不是可取消的 queued 状态。
 	ErrNotRunning = errors.New("job is not running")
 )
 
@@ -114,7 +114,7 @@ type CommandBuilder func(ctx context.Context, job *store.Job, rep Reporter) (Com
 // CompleteFunc 把命令成功退出后的副作用解析成优化结果。
 //
 // 命令本身只负责执行（进程退出码语义），像「适配器把权重写到哪个文件」这类知识属于
-// 生产装配（M9-10 的 Optimizer）；Runner 在命令成功后调用它拿到 OptimizeResult，
+// 生产装配（Optimizer）；Runner 在命令成功后调用它拿到 OptimizeResult，
 // 再交给 FinishOptimize 写回 job 行与 preset。返回错误则作业标记为 failed。
 type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail string) (store.OptimizeResult, error)
 
@@ -124,7 +124,7 @@ type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail st
 // 作业本身的结果。
 type SuccessFunc func(ctx context.Context, job store.Job)
 
-// FailureFunc 在作业被标记为 failed 之后被调用（M1-24 的 D 类管理员通知挂点）。
+// FailureFunc 在作业被标记为 failed 之后被调用（D 类管理员通知挂点）。
 //
 // 它在状态已经落库之后运行，因此实现只能做副作用（例如把通知写进邮件 outbox），
 // 不得试图改写作业状态；它的返回值被忽略，且 panic 会被 Runner 兜住——
@@ -146,7 +146,7 @@ type Deps struct {
 	Command CommandBuilder
 	// Complete 可选；命令成功退出后解析其副作用并产出优化结果。为空时只按退出码判成功。
 	Complete CompleteFunc
-	// OnFailure 可选；作业被标记为 failed 后调用（M1-24 的 D 类管理员通知挂点）。
+	// OnFailure 可选；作业被标记为 failed 后调用（D 类管理员通知挂点）。
 	// 为空时不做任何额外动作。见 FailureFunc 的契约。
 	OnFailure FailureFunc
 	// OnSuccess 可选；作业被标记为 succeeded 后调用（C 类「参数优化完成」通知挂点）。
@@ -179,7 +179,7 @@ type Runner struct {
 	started bool
 	queue   chan *store.Job
 
-	// 运行中作业的取消句柄（M6-6）。与 mu 分开，避免 Cancel 在 execute 运行期间
+	// 运行中作业的取消句柄。与 mu 分开，避免 Cancel 在 execute 运行期间
 	// 争用 Enqueue 的锁；currentDone 在 execute 返回前关闭，Cancel 借此等待落库完成。
 	runMu         sync.Mutex
 	currentID     uint64
@@ -234,7 +234,7 @@ func New(deps Deps) (*Runner, error) {
 // Start 启动唯一的 worker goroutine；重复调用是幂等的。ctx 取消时 worker 退出，
 // 正在执行的子进程会被杀掉（runProcess 监听 ctx.Done）。
 //
-// 启动前会先调用 RecoverStale 回收上次进程遗留的未完成作业（running 与 queued，M9-7 / M9-8）：
+// 启动前会先调用 RecoverStale 回收上次进程遗留的未完成作业（running 与 queued， /）：
 // 否则这些残留行会让 Store.Active 永远认为「有作业在跑」，后续 Enqueue 一直返回 409。恢复失败只记
 // 日志，不阻塞 worker 启动；回收逻辑本身是显式入口（RecoverStale），不是隐蔽副作用。
 func (r *Runner) Start(ctx context.Context) {
@@ -249,7 +249,7 @@ func (r *Runner) Start(ctx context.Context) {
 	go r.loop(ctx)
 }
 
-// RecoverStale 是 M9-7 / M9-8 的显式入口：把重启/崩溃前遗留的未完成作业回收为 failed，
+// RecoverStale 是显式入口：把重启/崩溃前遗留的未完成作业回收为 failed，
 // 并保留其 log_tail 供诊断。running 作业写 StaleJobReason，queued 作业写 NeverStartedJobReason
 // （原因不同，因为只有 running 的那批真的启动过）。返回被回收的行数。
 // Start 会在启动 worker 前调用一次；调用方也可在需要时显式调用。
@@ -268,12 +268,12 @@ func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
 	return recovered, nil
 }
 
-// List 返回一页作业（含状态/阶段/日志尾巴）与总数，供管理面板分页展示（M6-6）。
+// List 返回一页作业（含状态/阶段/日志尾巴）与总数，供管理面板分页展示。
 func (r *Runner) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
 	return r.store.List(ctx, limit, offset)
 }
 
-// Cancel 取消一个作业（M6-6）：运行中的作业会被杀掉整个进程组，随后由 execute 把它
+// Cancel 取消一个作业：运行中的作业会被杀掉整个进程组，随后由 execute 把它
 // 落库为 failed 且 error = CancelReason；仍排队的作业则直接标记为 failed（execute 会
 // 跳过已处于终态的作业，所以它不会被真正执行）。
 //
@@ -315,7 +315,7 @@ func (r *Runner) SetOnSuccess(fn SuccessFunc) {
 	r.onSuccess = fn
 }
 
-// SetOnFailure 设置作业失败钩子（M1-24）；须在 Start 之前调用，避免与 worker 竞态。
+// SetOnFailure 设置作业失败钩子；须在 Start 之前调用，避免与 worker 竞态。
 // 生产装配在 cmd/engram 把它接到 web 层的管理员通知上。
 func (r *Runner) SetOnFailure(fn FailureFunc) {
 	r.mu.Lock()
@@ -368,7 +368,7 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		}
 	}()
 
-	// 排队期间被取消（M6-6）：Cancel 已把该行标为 failed，这里直接跳过，不再启动子进程。
+	// 排队期间被取消：Cancel 已把该行标为 failed，这里直接跳过，不再启动子进程。
 	if current, err := r.store.ByID(ctx, job.ID); err == nil && current.Status == StatusFailed {
 		return
 	}
@@ -385,7 +385,7 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	startedAt := r.now()
 	if err := r.store.MarkRunning(ctx, job.ID, startedAt); err != nil {
 		// 标 running 失败也必须落终态：留在 queued 会被 Store.Active 当作在途作业，
-		// 让后续 Enqueue 永久返回 409，直到进程重启才被 RecoverStale 回收（M9-8 同源症状）。
+		// 让后续 Enqueue 永久返回 409，直到进程重启才被 RecoverStale 回收（同源症状）。
 		// 错误文本点名失败的步骤，方便从 jobs.error 一眼定位。
 		r.logger.Error("mark job running failed", "job_id", job.ID, "error", err)
 		r.fail(ctx, job.ID, fmt.Sprintf("mark job running: %v", err), "")
@@ -416,7 +416,7 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		return
 	}
 
-	// 命令成功返回即进入写回阶段：配了 Complete 的作业（M9-10 的优化作业）由它解析
+	// 命令成功返回即进入写回阶段：配了 Complete 的作业（优化作业）由它解析
 	// 适配器写出的权重并交给 FinishOptimize；其余作业仍按「退出码 0 即成功」处理。
 	r.setStage(ctx, job.ID, StageWriting)
 	if r.complete != nil {
@@ -461,7 +461,7 @@ func (r *Runner) notifySuccess(ctx context.Context, id uint64) {
 }
 
 // fail 把作业标记为 failed 并记录错误与日志尾巴；失败原因写英文（AGENTS.md §2.1）。
-// 状态落库成功后再调用 OnFailure 钩子（M1-24）：钩子只做副作用，且绝不改变本次结果。
+// 状态落库成功后再调用 OnFailure 钩子：钩子只做副作用，且绝不改变本次结果。
 func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 	if err := r.store.FinishFailed(ctx, id, r.now(), msg, tail); err != nil {
 		r.logger.Error("finish job failed failed", "job_id", id, "error", err)
@@ -471,7 +471,7 @@ func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 }
 
 // notifyFailure 在作业失败落库后调用 OnFailure 钩子；未配置钩子时直接返回。
-// 钩子 panic 会被兜住：通知失败绝不能反过来影响作业失败处理（M1-24 验收）。
+// 钩子 panic 会被兜住：通知失败绝不能反过来影响作业失败处理
 func (r *Runner) notifyFailure(ctx context.Context, id uint64, reason string) {
 	fn := r.onFailure
 	if fn == nil {
@@ -531,13 +531,13 @@ func (j jobReporter) SetStage(stage string) { j.runner.setStage(j.ctx, j.id, sta
 //
 // 刻意不再「重新 exec 自身并带 optimize --job」：那条自指路径依赖一个已删除的 CLI 子命令，
 // 会让作业在生产里以「命令未实现」收场。生产装配必须显式传入 Optimizer.CommandBuilder()，
-// 与 M9-10 的真实适配器对接；这里只负责在装配缺失时大声失败。
+// 与真实适配器对接；这里只负责在装配缺失时大声失败。
 func noCommandBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 	return Command{}, ErrNoCommand
 }
 
 // HTTPStatus 把 jobs 包的哨兵错误映射成 HTTP 状态码：重复入队 -> 409，其余 -> 500。
-// 409 的语义只在这里定义一处，REST 层（M9-4）直接复用，避免两处漂移。
+// 409 的语义只在这里定义一处，REST 层直接复用，避免两处漂移。
 func HTTPStatus(err error) int {
 	if errors.Is(err, ErrAlreadyRunning) {
 		return http.StatusConflict
@@ -549,7 +549,7 @@ func HTTPStatus(err error) int {
 //
 // 子进程被放进独立进程组（setProcessGroup），超时或 ctx 取消时杀掉整棵树
 // （killProcessGroup）：只杀直接子进程会留下它派生的进程（例如 shell 下的后台训练
-// 进程），它们会继续占 CPU 并让作业「看似结束实则仍在跑」——这正是 M9-1 要求
+// 进程），它们会继续占 CPU 并让作业「看似结束实则仍在跑」——这正是要求
 // 「杀整个进程组」的原因。两个动作的平台实现分别在 process_unix.go、process_windows.go。
 func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes int) (string, error) {
 	cmd := exec.Command(c.Name, c.Args...)

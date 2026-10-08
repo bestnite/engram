@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerShareBrowseRoutes 挂载免注册只读浏览页（M5-3）。
+// registerShareBrowseRoutes 挂载免注册只读浏览页。
 //
 // GET /s/:token 返回应用壳，由客户端路由渲染只读浏览页；内容与口令解锁走 api/v1/share/*
 // 的 JSON 端点（share_api.go）。链接本身（可选加口令）就是凭据，因此不要求登录。

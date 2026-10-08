@@ -123,7 +123,7 @@ func (a *API) deleteNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "id": deleted})
 }
 
-// bulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags（M4-12）。
+// bulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags。
 // 请求体形态与 BulkNotes 输入一致；错误走统一包壳，成功 200 返回 BulkNotesResponse。
 func (a *API) bulkNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)

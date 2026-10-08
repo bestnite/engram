@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包（.edeck）的浏览器路径（ROADMAP.md M5-9）：
+// 卡组包（.edeck）的浏览器路径：
 //   GET  /decks/:id/package  导出一个卡组为 .edeck 下载（沿用 store 层导出，不重写）
 //   GET  /import             导入页（返回 SPA 应用壳，由客户端路由渲染）
 // 导入本身走 REST `POST /api/v1/decks/import`，与 SPA 的内置页共用同一 service 入口。

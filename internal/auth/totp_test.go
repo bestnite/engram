@@ -106,7 +106,7 @@ func TestTOTPConfirmEnablesAndVerifies(t *testing.T) {
 	}
 }
 
-// TestRecoveryCodeIsSingleUse 是 M1-16 验收②：恢复码只能用一次。
+// TestRecoveryCodeIsSingleUse 是验收②：恢复码只能用一次。
 func TestRecoveryCodeIsSingleUse(t *testing.T) {
 	svc, st, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-recovery")

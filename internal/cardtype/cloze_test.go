@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestClozeCardsFromTwoIndices 断言一个 note 因两个序号生成两张卡（M2-4 验收）。
+// TestClozeCardsFromTwoIndices 断言一个 note 因两个序号生成两张卡
 func TestClozeCardsFromTwoIndices(t *testing.T) {
 	fields := map[string]any{"text": "The {{c1::mitochondrion}} carries its own {{c2::DNA::genetic material}}."}
 	if err := Validate("cloze", fields); err != nil {

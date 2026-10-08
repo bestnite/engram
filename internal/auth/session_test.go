@@ -197,7 +197,7 @@ func TestSessionProtectedRoute(t *testing.T) {
 	}
 }
 
-// TestDisabledUserSessionRejected 是 M1-2 的验收反面用例：禁用后下一次请求即被拒。
+// TestDisabledUserSessionRejected 是验收反面用例：禁用后下一次请求即被拒。
 func TestDisabledUserSessionRejected(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "dave")

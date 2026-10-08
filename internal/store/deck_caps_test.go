@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestDeckCapsDefaultsAndRoundTrip 是 M3-8 的 store 侧验收用例：
+// TestDeckCapsDefaultsAndRoundTrip 是 store 侧验收用例：
 // 未显式设置时列默认值生效（20/200）；SetCaps 能写入与默认值不同的上限，
 // 也能显式写入 0（不限）；负数与非 owner 的写入被拒。
 func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {

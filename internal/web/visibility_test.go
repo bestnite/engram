@@ -33,7 +33,7 @@ func deckListingBody(t *testing.T, srv *Server, cookies []*http.Cookie) string {
 	return rec.Body.String()
 }
 
-// TestUnlistedDeckHiddenFromListsButReachableByID 是 M5-5 的主验收：
+// TestUnlistedDeckHiddenFromListsButReachableByID 是主验收：
 // unlisted 永不出现在任何列表里，但能按直接 id 访问。
 func TestUnlistedDeckHiddenFromListsButReachableByID(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

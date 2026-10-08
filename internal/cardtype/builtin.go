@@ -7,13 +7,13 @@ func init() {
 	mustRegister("basic_both", basicBothType{})
 	mustRegister("cloze", clozeType{})
 	mustRegister("list", listType{})
-	// 作答类题型（M3-6）：都实现可选的 Grader。
+	// 作答类题型：都实现可选的 Grader。
 	mustRegister("typed", typedType{})
 	mustRegister("numeric", numericType{})
 	mustRegister("choice_single", choiceSingleType{})
 	mustRegister("choice_multi", choiceMultiType{})
 	mustRegister("true_false", trueFalseType{})
-	// 主观类（M3-11）：自评的自由文本题型；LLM 判分留待后续。
+	// 主观类：自评的自由文本题型；LLM 判分留待后续。
 	mustRegister("short_answer", shortAnswerType{})
 }
 

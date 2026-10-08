@@ -26,7 +26,7 @@ func seedAdminUser(t *testing.T, srv *Server) {
 // 注册策略矩阵与表单校验的 JSON 验收见 auth_register_test.go（TestSPARegisterAPI_*）。
 // 本文件只保留邀请接受与邀请拒绝两条 HTTP 级链路。
 
-// TestInviteAcceptCreatesExactlyOneUser 是 M1-7 的 HTTP 级验收：
+// TestInviteAcceptCreatesExactlyOneUser 是 HTTP 级验收：
 // 有效邀请放行一次，令牌随即失效，且只产生一个用户。
 func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 	srv, db := newAuthServer(t)

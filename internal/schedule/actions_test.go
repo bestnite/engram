@@ -26,7 +26,7 @@ func mustSubmit(t *testing.T, db *gorm.DB, in SubmitInput) SubmitResult {
 }
 
 // TestUndoRestoresPreviousDueAndInterval 断言 Undo 精确恢复上一次评分之后的到期日与间隔
-// （M3-4 验收）。做法：评分两次，快照第一次之后的状态，Undo 后逐字段比对。
+// 做法：评分两次，快照第一次之后的状态，Undo 后逐字段比对。
 func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

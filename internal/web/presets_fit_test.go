@@ -6,7 +6,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestOptimizeVerdictThreeState 是 M9-12 验收 3：优化前后拟合对比的三态判据
+// TestOptimizeVerdictThreeState 是验收 3：优化前后拟合对比的三态判据
 // （原先由 SSR 卡片渲染的 applyResultToCard 覆盖，SSR 页面层删除后该判据的唯一实现是
 // optimizeVerdict，测试随之盯住它）。
 //

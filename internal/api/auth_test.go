@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestAuthenticatorNegativeCases 覆盖 M4-2 的四种反面用例：
+// TestAuthenticatorNegativeCases 覆盖四种反面用例：
 // 缺 scope、过期 key、已撤销 key、限流耗尽，外加无凭据。
 func TestAuthenticatorNegativeCases(t *testing.T) {
 	cases := []struct {

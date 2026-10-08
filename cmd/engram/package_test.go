@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// M5-8 CLI 验收：export 写出 .edeck，import 从该文件往返导入并给出与 REST 一致的报告。
+// CLI 验收：export 写出 .edeck，import 从该文件往返导入并给出与 REST 一致的报告。
 
 // seedCLIDeck 建一个 owner + 卡组 + 两张 basic note（各一张卡）。
 func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
@@ -60,7 +60,7 @@ func cfgEnv(t *testing.T, dbPath string) {
 	t.Setenv("MEDIA_DIR", filepath.Join(t.TempDir(), "media"))
 }
 
-// TestCLIPackageRoundTrip 是 M5-8 的 CLI 验收：export 出的文件能被 import 往返。
+// TestCLIPackageRoundTrip 是 CLI 验收：export 出的文件能被 import 往返。
 func TestCLIPackageRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
 	cfgEnv(t, dbPath)
@@ -186,7 +186,7 @@ func countDecks(t *testing.T, db *gorm.DB) int64 {
 	return n
 }
 
-// TestCLIImportRequiresExplicitUser 是 M5-12 的命令级验收：
+// TestCLIImportRequiresExplicitUser 是命令级验收：
 // 缺 --user 非零退出且不建卡组、带 --user 落到指定账号（id 与用户名两种取值）、
 // --user 指向不存在的人则拒绝且不落库。
 func TestCLIImportRequiresExplicitUser(t *testing.T) {

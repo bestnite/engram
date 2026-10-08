@@ -58,7 +58,7 @@ func (s *Store) Active(ctx context.Context) (*store.Job, error) {
 	return &job, nil
 }
 
-// RecoverStale 把上次进程遗留的未完成作业一律标为 failed（M9-7 回收 running，M9-8 追加 queued）：
+// RecoverStale 把上次进程遗留的未完成作业一律标为 failed（回收 running，追加 queued）：
 // 写 finished_at 与对应失败原因，但不清空 log_tail，保留现场供诊断。返回被回收的总行数。
 //
 // 两类残留的原因不同，必须分开写：running 的子进程确实启动过（原因 = interrupted by restart），
@@ -88,7 +88,7 @@ func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, q
 	return total, nil
 }
 
-// List 按 id 倒序返回一页作业与总数，供管理面板分页展示（M6-6）。
+// List 按 id 倒序返回一页作业与总数，供管理面板分页展示。
 // 必须限量：jobs 表会随每次优化持续增长，一次性全量渲染会拖垮页面。
 func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
 	if limit <= 0 {

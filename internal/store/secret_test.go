@@ -23,7 +23,7 @@ func testCodec(t *testing.T, fill byte) *SecretCodec {
 	return codec
 }
 
-// TestSecretRoundTrip 是 M6-10 的第一条验收：加密值能正确往返，且密文带算法版本前缀。
+// TestSecretRoundTrip 是第一条验收：加密值能正确往返，且密文带算法版本前缀。
 func TestSecretRoundTrip(t *testing.T) {
 	codec := testCodec(t, 0x2a)
 	const plaintext = "oidc-client-secret-value"
@@ -47,7 +47,7 @@ func TestSecretRoundTrip(t *testing.T) {
 	t.Logf("round-trip ok: plaintext=%q ciphertext=%s", plaintext, ciphertext)
 }
 
-// TestSecretWrongKeyFailsLoudly 是 M6-10 的第二条验收：用错主密钥解密必须报错，不得返回空值。
+// TestSecretWrongKeyFailsLoudly 是第二条验收：用错主密钥解密必须报错，不得返回空值。
 func TestSecretWrongKeyFailsLoudly(t *testing.T) {
 	encryptor := testCodec(t, 0x2a)
 	decryptor := testCodec(t, 0x2b) // 不同的主密钥

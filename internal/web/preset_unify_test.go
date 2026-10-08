@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDefaultPresetSingleAcrossWebAndREST 是 M3-14「同一用户攒出两个默认预设」的回归。
+// TestDefaultPresetSingleAcrossWebAndREST 是「同一用户攒出两个默认预设」的回归。
 //
 // 修前：web 用本地化名创建默认预设（zh-CN 下是「默认」），REST 用字面量 "Default" 查找/创建，
 // 两条入口对同一条逻辑预设给出不同名字，用户先经 web 建组再经 REST 建组就会各写一条。

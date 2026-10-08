@@ -13,7 +13,7 @@ import (
 	gorm "gorm.io/gorm"
 )
 
-// ---- M4-13：bulk_notes 工具与 create_notes 按 note_id 寻址 ----
+// ---- ：bulk_notes 工具与 create_notes 按 note_id 寻址 ----
 
 // toMap 把 service 层的响应体转成 JSON map，便于与 MCP structured content 逐字段比较。
 func toMap(t *testing.T, v any) map[string]any {
@@ -43,7 +43,7 @@ func noteIDsInDeck(t *testing.T, db *gorm.DB, deckID uint64) []uint64 {
 	return ids
 }
 
-// TestBulkNotesMatchesREST 是 M4-13 的核心验收：bulk_notes 与直接调用 api.BulkNotes（REST
+// TestBulkNotesMatchesREST 是核心验收：bulk_notes 与直接调用 api.BulkNotes（REST
 // POST /notes/bulk 的 service 方法）在同一输入下产出同一返回体，并真正改写库中的 tags_json；
 // 重复提交同一请求第二次 affected=0（幂等）。
 func TestBulkNotesMatchesREST(t *testing.T) {
@@ -122,7 +122,7 @@ func containsStr(xs []string, want string) bool {
 }
 
 // TestBulkNotesHiddenFromReadKey 断言只读 key 在 tools/list 里看不到 bulk_notes，
-// 且按名字硬调返回 scope_required（M4-6 的复查逻辑覆盖新工具）。
+// 且按名字硬调返回 scope_required（复查逻辑覆盖新工具）。
 func TestBulkNotesHiddenFromReadKey(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "readonlybulk")
@@ -139,7 +139,7 @@ func TestBulkNotesHiddenFromReadKey(t *testing.T) {
 	}
 }
 
-// TestCreateNotesByNoteIDRewritesInPlace 覆盖 M4-13 第二部分：create_notes 的 item 带 note_id
+// TestCreateNotesByNoteIDRewritesInPlace 覆盖第二部分：create_notes 的 item 带 note_id
 // 时原地改写已有 note 的字段，保留 card id 与复习进度；note_id 与 external_ref 同时给出时该行报 errors[]。
 func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	_, db, keys, ts := newEnv(t)

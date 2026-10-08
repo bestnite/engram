@@ -29,7 +29,7 @@ func (s *DeckStore) visibleDecksQuery(ctx context.Context, userID uint64) *gorm.
 	return s.db.WithContext(ctx).Model(&Deck{}).Where("id IN (?)", visibleDeckIDsQuery(s.db, userID))
 }
 
-// ListVisible 返回某用户“在列表里应该看到”的卡组（M5-5 列表语义），按创建时间倒序。
+// ListVisible 返回某用户“在列表里应该看到”的卡组（列表语义），按创建时间倒序。
 func (s *DeckStore) ListVisible(ctx context.Context, userID uint64) ([]Deck, error) {
 	var decks []Deck
 	if err := s.visibleDecksQuery(ctx, userID).

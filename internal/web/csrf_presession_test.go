@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 )
 
-// 本文件是 B-13（会话前双提交 CSRF）的验收测试。
+// 本文件是（会话前双提交 CSRF）的验收测试。
 //
 // 移除 SSR 会话前表单后，会话前的写请求全部是同源 JSON 端点（登录、注册、引导、找回密码、
 // 重置密码、登录第二步）。它们仍由 auth.PreSessionCSRFMiddleware 保护：请求必须同时携带
@@ -28,7 +28,7 @@ func doubleSubmitFromShell(t *testing.T, srv *Server) (*http.Cookie, string) {
 	return cookie, cookie.Value
 }
 
-// TestPreSessionCSRFNormalBrowserFlow 是 B-13 的正向验收：SPA 从应用壳拿到 cookie 与镜像 token，
+// TestPreSessionCSRFNormalBrowserFlow 是正向验收：SPA 从应用壳拿到 cookie 与镜像 token，
 // 再带着它们提交 JSON 写请求，引导与登录都能走通。
 func TestPreSessionCSRFNormalBrowserFlow(t *testing.T) {
 	srv, _ := newAuthServer(t)
@@ -50,7 +50,7 @@ func TestPreSessionCSRFNormalBrowserFlow(t *testing.T) {
 	}
 }
 
-// TestPreSessionCSRFRejections 是 B-13 的反面验收：缺少镜像 cookie 或值不匹配的会话前 JSON 写请求一律 403。
+// TestPreSessionCSRFRejections 是反面验收：缺少镜像 cookie 或值不匹配的会话前 JSON 写请求一律 403。
 func TestPreSessionCSRFRejections(t *testing.T) {
 	body := map[string]string{
 		"username": "intruder", "email": "intruder@example.com", "password": "Sup3rSecret!",

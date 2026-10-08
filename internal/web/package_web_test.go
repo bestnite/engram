@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包浏览器路径（M5-9）仍留在 web 层的部分：导出下载。导入本身已切到 REST
+// 卡组包浏览器路径仍留在 web 层的部分：导出下载。导入本身已切到 REST
 // `POST /api/v1/decks/import`（SPA 的 client.ts 用它），因此 web 只保留导出与 /import 外壳。
 
 // uploadPackage 以 multipart 拼一个 .edeck 上传请求；供仍按 REST 导入端点的测试复用。

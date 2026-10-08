@@ -19,7 +19,7 @@ type ReviewStore struct {
 func NewReviewStore(db *gorm.DB) *ReviewStore { return &ReviewStore{db: db} }
 
 // OptimizerReviewLog 是一行标准的优化器复习日志，字段名与上游 `review_logs` schema 完全一致，
-// 可直接喂给 M9-2 的 Rust 适配器（ROADMAP.md M9-3）。
+// 可直接喂给 Rust 适配器。
 //
 // 依据的上游文档（字段与取值范围）：
 // https://github.com/open-spaced-repetition/fsrs-optimizer#review-logs-schema
@@ -56,7 +56,7 @@ type OptimizerReviewLog struct {
 //
 // 流式的意义：优化器门槛是「至少数百条复习」，但真实用户可能有数十万条；
 // 用 Rows() 游标而不是 Find()，任意时刻内存里只有当前一行，峰值内存不随日志总量增长
-// （与 internal/api 的 ExportCards 同一手法，M4-5 先例）。
+// （与 internal/api 的 ExportCards 同一手法，先例）。
 func (s *ReviewStore) StreamByUser(ctx context.Context, userID uint64, emit func(*Review) error) error {
 	const cols = "id, card_id, user_id, rating, state_before, reviewed_at, elapsed_ms"
 	rows, err := s.db.WithContext(ctx).
@@ -86,7 +86,7 @@ func (s *ReviewStore) StreamByUser(ctx context.Context, userID uint64, emit func
 }
 
 // ExportOptimizerLog 把某用户的复习日志按标准 schema 流式写成 JSONL（每行一个 JSON 对象）
-// 到 w，供 M9-2 的适配器读取。时区与日切取自用户记录：优化器需要它们才能把跨午夜的复习
+// 到 w，供适配器读取。时区与日切取自用户记录：优化器需要它们才能把跨午夜的复习
 // 正确归到同一天。
 //
 // 返回值只在读取用户、遍历日志或写入失败时非 nil；单行编码失败（例如磁盘写满）会中止导出，

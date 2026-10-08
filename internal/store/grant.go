@@ -43,7 +43,7 @@ func RoleAllows(have, want string) bool {
 	return w > 0 && roleRank(have) >= w
 }
 
-// GrantStore 封装 deck_grants 表：授予、改角色、撤销、查询（ROADMAP.md M5-1）。
+// GrantStore 封装 deck_grants 表：授予、改角色、撤销、查询。
 //
 // 撤销采用“删除整行”而不是写 revoked 标记：撤销要求立即生效，删除让下一次
 // requireRole 查不到任何行，天然即时，且无需在读取路径上再加一层过滤。
@@ -107,7 +107,7 @@ func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 	return nil
 }
 
-// ListByDeck 列出卡组的全部授权；共享管理页（M5-2）用它展示当前授权列表。
+// ListByDeck 列出卡组的全部授权；共享管理页用它展示当前授权列表。
 func (s *GrantStore) ListByDeck(ctx context.Context, deckID uint64) ([]DeckGrant, error) {
 	var rows []DeckGrant
 	if err := s.db.WithContext(ctx).
@@ -117,7 +117,7 @@ func (s *GrantStore) ListByDeck(ctx context.Context, deckID uint64) ([]DeckGrant
 	return rows, nil
 }
 
-// DeckIDsForUser 返回某用户被显式授权的全部卡组 id；列表按权限过滤时与 owner 卡组合并（M5-5）。
+// DeckIDsForUser 返回某用户被显式授权的全部卡组 id；列表按权限过滤时与 owner 卡组合并。
 func (s *GrantStore) DeckIDsForUser(ctx context.Context, userID uint64) ([]uint64, error) {
 	var ids []uint64
 	if err := s.db.WithContext(ctx).Model(&DeckGrant{}).

@@ -36,7 +36,7 @@ func importErrIndices(t *testing.T, raw []byte) map[int]string {
 	return out
 }
 
-// TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress 覆盖 M4-12 Part 2：
+// TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress 覆盖 Part 2：
 // 一次导入按 note_id 改写多条 note 的字段与标签，保留每张 card 的 id 与所有用户的进度；
 // 跨卡组 id 与"同时带 note_id 与 external_ref"的行各报一条行错误，其余行照常写入。
 func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {

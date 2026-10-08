@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-16 的 Web 层：登录第二步的凭据 cookie，以及两步验证管理页的应用壳入口。
+// 本文件是 Web 层：登录第二步的凭据 cookie，以及两步验证管理页的应用壳入口。
 //
 // 与共享热点隔离：路由与 handler 全部落在本文件，对 internal/web/auth.go 只做路由注册插入，
 // 不重排既有代码。登录第二步与设置的读写协议在同源 JSON 端点上（totp_login.go / totp_api.go）。
@@ -25,7 +25,7 @@ const (
 	totpPendingTTL = 5 * time.Minute
 )
 
-// registerTOTPRoutes 挂载 TOTP 的全部路由（M1-16）。
+// registerTOTPRoutes 挂载 TOTP 的全部路由。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	if s.totp == nil || s.sessions == nil || s.users == nil || s.accounts == nil {

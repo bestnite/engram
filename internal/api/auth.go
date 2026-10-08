@@ -37,7 +37,7 @@ type AuthConfig struct {
 	RateWindow time.Duration
 }
 
-// Authenticator 实现 M4-2：同一条请求管道同时接受会话 cookie 与 bearer key，
+// Authenticator 实现：同一条请求管道同时接受会话 cookie 与 bearer key，
 // 两者都解析到同一个用户，随后由 RequireScope 强制 scope。
 type Authenticator struct {
 	keys    *store.APIKeyStore

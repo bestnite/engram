@@ -54,7 +54,7 @@ type shareResponse struct {
 	} `json:"notes"`
 }
 
-// TestShareLinkCreateBrowseThenRevoke 是 M5-3 的主验收：
+// TestShareLinkCreateBrowseThenRevoke 是主验收：
 // 创建后任何人可浏览内容、库里只存摘要、撤销后立即 404。
 func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)

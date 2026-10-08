@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件实现 ROADMAP.md M7-4「回溯校验」：把统计页展示的数字与直接从原始表
+// 本文件实现「回溯校验」：把统计页展示的数字与直接从原始表
 // （reviews / card_states / cards / notes）重算出来的数字逐一对照，任何漂移都被
 // 指名道姓地报出来，而不是靠嘴争论。
 //
@@ -21,7 +21,7 @@ import (
 // 未覆盖：标签维度与判分来源分布——它们的口径依赖 tags_json 解码与任意来源分组，
 // 已由 stats_test.go 的手工 SQL 用例覆盖，此处不重复。
 
-// PageNumbers 是统计页（M7-3）会直接展示的标量数字集合，每个统计指标取一个有代表性的
+// PageNumbers 是统计页会直接展示的标量数字集合，每个统计指标取一个有代表性的
 // 标量；列表型结果（分桶、每卡组、每标签）在这里取合计值，避免逐行比对而让校验脆弱。
 type PageNumbers struct {
 	ReviewToday int64

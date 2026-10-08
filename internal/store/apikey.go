@@ -303,7 +303,7 @@ func (s *APIKeyStore) Revoke(ctx context.Context, actorUserID, keyID uint64, at 
 	return nil
 }
 
-// API Key 的展示状态（M6-9）。取值英文、稳定：页面文案由语言包按状态映射。
+// API Key 的展示状态。取值英文、稳定：页面文案由语言包按状态映射。
 const (
 	APIKeyStateActive  = "active"
 	APIKeyStateRevoked = "revoked"

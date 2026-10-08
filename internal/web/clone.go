@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerCloneRoutes 挂载卡组克隆（M5-4）。克隆对「自己可读」的卡组开放（reader 及以上），
+// registerCloneRoutes 挂载卡组克隆。克隆对「自己可读」的卡组开放（reader 及以上），
 // 把内容复制到调用者账号下；写操作过 CSRF 中间件。依赖未装配时跳过。
 func (s *Server) registerCloneRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.presets == nil {
@@ -23,7 +23,7 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 	router.POST("/api/v1/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
 }
 
-// deckClone 把一个「自己可读」的卡组复制到当前账号下（M5-4）。
+// deckClone 把一个「自己可读」的卡组复制到当前账号下。
 //
 // 内容复制（note + card），进度不跟随（新 card 没有任何 card_states 行）；共享关系与可见性
 // 不复制，克隆结果默认 private。预设按源预设参数复制一份到调用者名下，保证排程一致。

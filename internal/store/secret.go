@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 敏感配置的加密通道（ROADMAP.md M6-10）。
+// 敏感配置的加密通道。
 //
 // 约定：
 //   - 主密钥来自环境变量 ENCRYPTION_KEY（internal/config 的 KeyEncryptionKey），
@@ -99,7 +99,7 @@ func (c *SecretCodec) Encrypt(plaintext string) (string, error) {
 }
 
 // Decrypt 解密带版本前缀的密文。
-// 主密钥不对时 GCM 认证失败 → 返回 ErrSecretDecrypt，绝不返回空值（M6-10 验收）。
+// 主密钥不对时 GCM 认证失败 → 返回 ErrSecretDecrypt，绝不返回空值
 func (c *SecretCodec) Decrypt(ciphertext string) (string, error) {
 	version, payload, ok := strings.Cut(ciphertext, ":")
 	if !ok {

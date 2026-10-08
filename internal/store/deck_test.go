@@ -162,8 +162,8 @@ func TestDeckStoreCRUD(t *testing.T) {
 	}
 }
 
-// TestDeckNonOwnerCannotModifyBeforeGrants 是 M2-1 的验收用例：
-// deck_grants 尚不存在任何行时，非 owner 对卡组的任何修改都必须被拒 —— 这是 M5-1 的地基。
+// TestDeckNonOwnerCannotModifyBeforeGrants 是验收用例：
+// deck_grants 尚不存在任何行时，非 owner 对卡组的任何修改都必须被拒 —— 这是地基。
 func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

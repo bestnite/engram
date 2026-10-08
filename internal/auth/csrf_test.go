@@ -39,7 +39,7 @@ func serve(router *gin.Engine, req *http.Request) *httptest.ResponseRecorder {
 	return rec
 }
 
-// TestCSRFRejectsPostWithoutToken 是 M1-3 的验收反面用例：缺 token 的 POST 返回 403。
+// TestCSRFRejectsPostWithoutToken 是验收反面用例：缺 token 的 POST 返回 403。
 func TestCSRFRejectsPostWithoutToken(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "judy")

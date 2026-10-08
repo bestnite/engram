@@ -11,8 +11,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是参数优化在本包的服务端门槛与结果写回（ROADMAP.md M9-5）。
-// 权重拟合本身属于 M9-2 的 Rust 适配器；这里只负责「先判够不够，再建作业」与
+// 本文件是参数优化在本包的服务端门槛与结果写回。
+// 权重拟合本身属于 Rust 适配器；这里只负责「先判够不够，再建作业」与
 // 「把适配器产出的拟合报告写进 job 行的 result_json」。
 
 // ErrInsufficientReviews 是复习条数不足门槛的哨兵错误；调用方可用 errors.Is 判别，
@@ -57,7 +57,7 @@ func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint
 }
 
 // FinishOptimize 把适配器产出的拟合报告写入 job 行的 result_json 并把作业置为 succeeded，
-// 同时把 21 维权重写回作业目标 preset（AGENTS.md M9-10：预设页轮询要看到真实结果）。
+// 同时把 21 维权重写回作业目标 preset（预设页轮询要看到真实结果）。
 // 适配器缺席时也可显式调用（例如测试的占位路径）。
 //
 // 写回顺序：先写 preset 再落 job 状态。若 preset 写回失败，本函数返回错误，调用方会把作业

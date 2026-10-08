@@ -201,9 +201,9 @@ func rest(t *testing.T, base, method, path, key, body string) (int, map[string]a
 	return resp.StatusCode, m
 }
 
-// ---- M4-6：scope 过滤 ----
+// ---- ：scope 过滤 ----
 
-// TestReadOnlyKeySeesNoWriteTools 是 M4-6 的核心验收：
+// TestReadOnlyKeySeesNoWriteTools 是核心验收：
 // read-only key 在 tools/list 里看不到写/复习工具，按名字硬调返回权限错误。
 func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)

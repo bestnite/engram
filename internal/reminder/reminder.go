@@ -1,4 +1,4 @@
-// Package reminder 实现 C 类「复习到期提醒」的周期后台 worker（AGENTS.md M1-21）。
+// Package reminder 实现 C 类「复习到期提醒」的周期后台 worker。
 //
 // 行为约束：
 //   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
@@ -100,7 +100,7 @@ type Deps struct {
 	BaseURL string
 	// ReviewPath 覆盖复习页路径；为空时用 DefaultReviewPath。
 	ReviewPath string
-	// Tokens 签发一键退订令牌（M1-22）；为空时提醒邮件不带退订头（可选类型才需要）。
+	// Tokens 签发一键退订令牌；为空时提醒邮件不带退订头（可选类型才需要）。
 	Tokens *auth.ActionTokenService
 	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
 	Templates mail.LookupFunc
@@ -122,7 +122,7 @@ type Reminder struct {
 	now        func() time.Time
 	baseURL    string
 	reviewPath string
-	// tokens 签发退订令牌（M1-22）；为空时不加退订头。
+	// tokens 签发退订令牌；为空时不加退订头。
 	tokens *auth.ActionTokenService
 	// templates 取自定义邮件模板；缺失即用内置正文。
 	templates mail.LookupFunc
@@ -260,7 +260,7 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	return nil
 }
 
-// message 按用户语言组装提醒邮件。提醒是 C 类可选邮件，故带 RFC 8058 一键退订头（M1-22）：
+// message 按用户语言组装提醒邮件。提醒是 C 类可选邮件，故带 RFC 8058 一键退订头：
 // 令牌指名 review_reminder 这一个类型，收件人（必为本站用户）不登录即可关掉它。
 // 令牌签发失败只记日志并照常发信：退订入口缺失不该让提醒发不出去。
 func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.Message {

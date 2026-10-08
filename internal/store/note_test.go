@@ -32,7 +32,7 @@ func cardTemplates(cards []Card) map[string]uint64 {
 	return out
 }
 
-// TestNoteCreateGeneratesCards 覆盖 M2-5 的第一半：创建 note 时经 cardtype 生成 cards。
+// TestNoteCreateGeneratesCards 覆盖第一半：创建 note 时经 cardtype 生成 cards。
 func TestNoteCreateGeneratesCards(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -95,7 +95,7 @@ func TestNoteCreateGeneratesCards(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateKeepsCardIDs 是 M2-5 的验收用例：
+// TestNoteUpdateKeepsCardIDs 是验收用例：
 // 更新 note 字段后，已存在的 cards 与其 id 保持不变。
 func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -219,7 +219,7 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	}
 }
 
-// TestNoteSoftDeleteHidesCardsAndRestore 覆盖 M2-5 的另一半：
+// TestNoteSoftDeleteHidesCardsAndRestore 覆盖另一半：
 // 软删除 note 后其 cards 不可见，恢复后重新可见，且期间不物理删行。
 func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -300,7 +300,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 	}
 }
 
-// TestNoteCardTemplateUniqueness 覆盖 M2-5 的\"强制 (note_id, template) 唯一\"：
+// TestNoteCardTemplateUniqueness 覆盖 \"强制 (note_id, template) 唯一\"：
 // 数据库唯一索引是兜底，管线本身也不会产生重复 template。
 func TestNoteCardTemplateUniqueness(t *testing.T) {
 	for driver, db := range testDatabases(t) {

@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestReminderCarriesUnsubscribeHeaders 是 M1-22 在 C 类发信方一侧的证据：
+// TestReminderCarriesUnsubscribeHeaders 是在 C 类发信方一侧的证据：
 // 复习提醒是可选类型，装配了退订令牌服务时，邮件带 RFC 8058 两个头，
 // 且头里的令牌确实指名 review_reminder 这一个类型、归属正确的用户。
 func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {

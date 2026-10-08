@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M9-10 的生产接线：把 M9-2 的 Rust 适配器（tools/optimizer）接进作业链路。
+// 本文件是生产接线：把 Rust 适配器（tools/optimizer）接进作业链路。
 //
 // 数据流：web 用 EnqueueOptimize 建 job -> Runner 执行 Optimizer.CommandBuilder 造出的命令
 // （先由 Go 侧 ExportOptimizerLog 导出该用户复习日志，再 exec 适配器读日志、写权重文件）
@@ -177,7 +177,7 @@ func (o *Optimizer) CommandBuilder() CommandBuilder {
 
 // Complete 解析适配器写出的权重文件，算出优化前后的拟合指标，产出交给 FinishOptimize 的结果。
 //
-// 拟合指标（ROADMAP.md M9-11）：用适配器训练所用的同一份复习日志，在 preset 当前权重（旧）与
+// 拟合指标：用适配器训练所用的同一份复习日志，在 preset 当前权重（旧）与
 // 适配器产出的新权重下各回放一次，得到 FitBefore/FitAfter，页面据此给出真实的「改善/未改善」。
 // 旧权重必须在 FinishOptimize 写回之前从 preset 读出——本函数在写回前跑，正好读到旧值。
 // 指标算不出来（无目标预设、日志不可读、无任何可预测 item）时不失败：权重本身仍然有效，

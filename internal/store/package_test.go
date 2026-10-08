@@ -18,7 +18,7 @@ import (
 
 // packageDatabases 返回本机可用的、已建表的全新测试库：SQLite 临时库 + 门控的 PostgreSQL。
 // 卡组包用例在两种驱动上跑同一套断言——PG 侧经 internal/pgtest 每次拿独立 schema，
-// 与 SQLite 的临时库隔离程度等价（AGENTS.md M5-10 要求 PG 分支真正跑起来，而不是只在 SQLite 上过）。
+// 与 SQLite 的临时库隔离程度等价（要求 PG 分支真正跑起来，而不是只在 SQLite 上过）。
 func packageDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	out := testDatabases(t)
@@ -96,7 +96,7 @@ func exportZip(t *testing.T, db *gorm.DB, owner, deckID uint64, opts PackageOpti
 	return buf.Bytes()
 }
 
-// ---- M5-6 导出 ----
+// ---- 导出 ----
 
 // TestExportPackageValidatesAgainstSchema 断言导出包通过 schema/deck-package.schema.json（SQLite + PG）。
 func TestExportPackageValidatesAgainstSchema(t *testing.T) {
@@ -123,7 +123,7 @@ func TestExportPackageValidatesAgainstSchema(t *testing.T) {
 	}
 }
 
-// TestExportProgressIsolatedPerUser 断言包里绝不包含导出者以外任何人的进度（M5-6 验收）。
+// TestExportProgressIsolatedPerUser 断言包里绝不包含导出者以外任何人的进度
 func TestExportProgressIsolatedPerUser(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestExportProgressIsolatedPerUser(t *testing.T) {
 	}
 }
 
-// TestExportMediaOffDeclaresHonestly 断言 include_media=0 时无媒体条目且 manifest 如实声明（M5-6 验收）。
+// TestExportMediaOffDeclaresHonestly 断言 include_media=0 时无媒体条目且 manifest 如实声明
 func TestExportMediaOffDeclaresHonestly(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -235,7 +235,7 @@ func buildSymlinkZip(t *testing.T) []byte {
 }
 
 // validateAgainstSchema 用真库（santhosh-tekuri/jsonschema v6，draft 2020-12）校验一份文档，
-// 对照仓库里的 schema 文件；M5-8 用它替换 M5-6 手写的子集校验器，关键字覆盖与规范一致。
+// 对照仓库里的 schema 文件；用它替换手写的子集校验器，关键字覆盖与规范一致。
 func validateAgainstSchema(t *testing.T, instance any, schemaPath string) error {
 	t.Helper()
 	raw, err := os.ReadFile(schemaPath)

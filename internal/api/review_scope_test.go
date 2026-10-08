@@ -27,7 +27,7 @@ func seedDueCard(t *testing.T, db *gorm.DB, deckID uint64) {
 	}
 }
 
-// TestDueCardsAcceptsRepeatedDeckParams 是 M3-13 的 REST 验收：重复的 deck 参数取多个卡组的并集。
+// TestDueCardsAcceptsRepeatedDeckParams 是 REST 验收：重复的 deck 参数取多个卡组的并集。
 func TestDueCardsAcceptsRepeatedDeckParams(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "reviewer", store.RoleUser)

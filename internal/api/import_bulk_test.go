@@ -24,7 +24,7 @@ func buildBulkBody(n int) string {
 	return b.String()
 }
 
-// TestBulkImportReportsInvalidRowIndexAndImportsValidRows 是 M4-4 的核心验收：
+// TestBulkImportReportsInvalidRowIndexAndImportsValidRows 是核心验收：
 // 一个含单行非法数据的批次把合法行导入，并在报告里给出失败行的下标。
 func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

@@ -7,8 +7,8 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// TestPresetGradeMappingRoundTrip 是 M3-6 的存储验收：分数→评分档位映射存进 preset
-// 的新列后能原样读回；未配置（NULL）时回退到内置默认映射。
+// TestPresetGradeMappingRoundTrip 是存储验收：分数→评分档位映射存进 preset
+// 新列后能原样读回；未配置（NULL）时回退到内置默认映射。
 func TestPresetGradeMappingRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

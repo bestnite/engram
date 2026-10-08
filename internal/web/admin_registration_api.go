@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「注册与邀请」的 SPA JSON 端点（ROADMAP.md M6-3）。
+// 本文件是管理面板「注册与邀请」的 SPA JSON 端点。
 //
 // 免重启生效的关键与 SSR 相同：settings 表按请求现读（注册流程每次 LoadSettings），因此写库后
 // 下一次注册尝试立即按新策略判定。校验与写库调用与 SSR 表单完全同一份 store/auth 函数。

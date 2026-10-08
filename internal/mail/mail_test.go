@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestUnconfiguredReturnsErrNotConfigured 是 M1-17 的门禁核心：未配置 SMTP 时
+// TestUnconfiguredReturnsErrNotConfigured 是门禁核心：未配置 SMTP 时
 // Configured() 为 false，Enqueue 返回 ErrNotConfigured（不静默丢弃），且不写任何行。
 func TestUnconfiguredReturnsErrNotConfigured(t *testing.T) {
 	db := testDB(t)

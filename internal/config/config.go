@@ -37,7 +37,7 @@ const (
 	// KeyTrustedProxies 是允许改写 ClientIP() 的代理地址列表（逗号分隔的 IP 或 CIDR）。
 	// 缺省为空 = 不信任任何代理。
 	KeyTrustedProxies Key = "trusted_proxies"
-	// KeyOptimizerPath 是 FSRS 优化器适配器二进制的路径（M9-10）。
+	// KeyOptimizerPath 是 FSRS 优化器适配器二进制的路径。
 	// 留空时由 internal/jobs 解析：先找服务二进制旁的 optimizer，再回退到仓库构建产物。
 	KeyOptimizerPath Key = "optimizer_path"
 )

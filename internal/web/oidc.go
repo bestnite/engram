@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 登录流程（ROADMAP.md M1-11）。
+// OIDC 登录流程。
 //
 // 只实现协议交互与路由，身份绑定全部交给 auth.IdentityLinkService（oauthlink.go）：
 //   GET /auth/oidc/start     生成 state / nonce / PKCE，跳转到 provider 授权端点
@@ -141,7 +141,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		s.oidcFailToLogin(c, "missing_state")
 		return
 	}
-	// state 一次性：未知（伪造或重放）或已过期都在这里被拒（M1-11 负例）。
+	// state 一次性：未知（伪造或重放）或已过期都在这里被拒（负例）。
 	pending, ok := s.oidc.TakePending(state)
 	if !ok {
 		s.logger.Info("oidc: callback with an unknown or expired state")

@@ -6,8 +6,8 @@ import "fmt"
 // （「主观类」：先自评，LLM 评分留待后续）。
 //
 // 字段：prompt（必填）、reference（可选参考答案）、extra / source_url（可选）。
-// 本题型故意不实现 Grader：它不在 M3-6 的机器判分集合内，复习流程对它走自评路径；
-// LLM 判分（M10-3）会在本题型补齐 PromptContexter / Grader 时再接入，届时核心管线不变。
+// 本题型故意不实现 Grader：它不在机器判分集合内，复习流程对它走自评路径；
+// LLM 判分会在本题型补齐 PromptContexter / Grader 时再接入，届时核心管线不变。
 type shortAnswerType struct{}
 
 // Label 返回语言包键名。

@@ -1,6 +1,6 @@
 package mail
 
-// 本文件是邮件类型目录（M1-18）：**一处定义**，偏好页与每个发信方共用它。
+// 本文件是邮件类型目录：**一处定义**，偏好页与每个发信方共用它。
 //
 // 分类依据是**能不能被用户关掉**，不是邮件内容——允许关掉安全邮件等于给人留后门。
 // 因此「默认开关」「可否关闭」都由 Class 推导，而不是每个类型各自标注：
@@ -10,7 +10,7 @@ package mail
 // Lookup / CanDisable / DefaultEnabled / ResolveEnabled，不复制这里的任何规则。
 //
 // 命名边界：本文件不得定义 Message、Outbox、ErrNotConfigured、Configured —— 那些是
-// 传输层（M1-17）的符号，同包并行开发，重复声明会撞符号。
+// 传输层的符号，同包并行开发，重复声明会撞符号。
 
 // Class 是邮件类型的大类；分类依据是能否被用户关闭。
 type Class string

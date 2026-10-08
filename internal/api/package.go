@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包（.edeck）的 REST 入口（M5-6/M5-7）：
+// 卡组包（.edeck）的 REST 入口：
 //   GET  /api/v1/decks/:id/package  导出（read）
 //   POST /api/v1/decks/import       导入（write）
 // 业务逻辑全在 store 层；这里只做参数整形、权限判定与错误映射。

@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件（SMTP）」页的 SPA JSON 端点（AGENTS.md M1-17）。
+// 本文件是管理面板「邮件（SMTP）」页的 SPA JSON 端点。
 //
 // 读取与写入复用 mail.NewResolver（环境变量 > settings 表 > 默认值）与 store.PutSecret，
 // 与 SSR 页完全同一份解析；口令只回「已配置/未配置」，绝不回显明文。测试连接把服务端的原始
@@ -205,7 +205,7 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 }
 
 // adminSMTPTest 用表单值（缺省回落到已保存值）做一次连接与认证握手，
-// 失败时把服务端的原始错误文本带进响应（M1-17 验收点）。
+// 失败时把服务端的原始错误文本带进响应（验收点）。
 func (s *Server) adminSMTPTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {

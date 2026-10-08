@@ -74,7 +74,7 @@ type CardType interface {
 	Label() string
 }
 
-// Grader 是可选能力：作答类题型实现机器判分（M3-6）。
+// Grader 是可选能力：作答类题型实现机器判分。
 // 未实现的题型不做断言，核心管线不依赖它。
 type Grader interface {
 	// Grade 对用户输入判分。rating 是 1–4（Again/Hard/Good/Easy），

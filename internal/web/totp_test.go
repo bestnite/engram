@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-16 三条验收的端到端证据（httptest 走真实路由 + 真实 SQLite）。
+// 本文件是三条验收的端到端证据（httptest 走真实路由 + 真实 SQLite）。
 //
 // 页面已迁移到 SPA：登录两步与设置读写全部走同源 JSON 端点
 // （POST /api/v1/auth/login、POST /api/v1/auth/totp、/api/v1/settings/totp*）。

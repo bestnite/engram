@@ -1,4 +1,4 @@
-// Package mail 提供可选的邮件投递层（AGENTS.md M1-17）。
+// Package mail 提供可选的邮件投递层。
 //
 // 三条不变量：
 //   - 邮件是可选组件。SMTP 未配置时，Enqueue 返回 ErrNotConfigured，绝不静默丢弃；
@@ -26,7 +26,7 @@ import (
 // 它是可判定的哨兵错误（errors.Is），调用方据此区分"未配置"与"投递失败"。
 var ErrNotConfigured = errors.New("mail is not configured")
 
-// Message 是一封待投递邮件。Type 是自由字符串，目录由 M1-18 定义；本包不解释它。
+// Message 是一封待投递邮件。Type 是自由字符串，目录由定义；本包不解释它。
 type Message struct {
 	To       string
 	Type     string

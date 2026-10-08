@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerSharingRoutes 挂载共享管理页（M5-2）。
+// registerSharingRoutes 挂载共享管理页。
 //
 // 共享管理页只对 owner 开放（判定走 auth.DeckAccess）。GET 返回应用壳；所有写操作都走
 // /api/v1/decks/:id/sharing 下的 JSON 端点，并过 CSRF 中间件。

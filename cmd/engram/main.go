@@ -199,17 +199,17 @@ func runServe(ctx context.Context) error {
 	}
 	retentionWorker.Start(ctx)
 	defer retentionWorker.Stop()
-	// 邮件 outbox worker（M1-17）：随 serve 启动、随信号优雅停止；未装配时跳过。
+	// 邮件 outbox worker：随 serve 启动、随信号优雅停止；未装配时跳过。
 	if mb := srv.Mail(); mb != nil {
 		mb.Start(ctx)
 		defer mb.Stop()
-		// 复习到期提醒 worker（M1-21，C 类）：独立的周期扫描，不复用优化器的单并发 jobs 体系。
+		// 复习到期提醒 worker（C 类）：独立的周期扫描，不复用优化器的单并发 jobs 体系。
 		// 文案走语言包，因此这里单独加载一份翻译器；SMTP 未配置时 worker 仍启动但只记日志。
 		translator, err := i18n.New()
 		if err != nil {
 			return err
 		}
-		// 退订令牌服务（M1-22）：提醒是可选类型，带上免登录的一键退订头。
+		// 退订令牌服务：提醒是可选类型，带上免登录的一键退订头。
 		tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(db))
 		if err != nil {
 			return err
@@ -245,7 +245,7 @@ func runServe(ctx context.Context) error {
 		}
 		reminderWorker.Start(ctx)
 		defer reminderWorker.Stop()
-		// 每周学习摘要 worker（M1-23，C 类）：同为周期扫描，但节律是周、候选集是所有可收信
+		// 每周学习摘要 worker（C 类）：同为周期扫描，但节律是周、候选集是所有可收信
 		// 用户（不要求有到期卡），去重台账是独立的 digest_log，故不复用提醒 worker。
 		digestWorker, err := digest.New(digest.Deps{
 			DB:                db,
@@ -266,7 +266,7 @@ func runServe(ctx context.Context) error {
 	return srv.Run(ctx)
 }
 
-// newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps（M1-14）。
+// newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps。
 // runServe 与集成测试共用这一条装配路径，避免测试用的依赖与生产漂移。
 func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
 	// 可信代理列表：在启动期解析并校验，非法项直接拒绝启动。
@@ -279,7 +279,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
-	// 审计（M1-10）与登录限流（M1-9）在此显式装配；两者都是无状态/内存态，单实例直接复用。
+	// 审计与登录限流在此显式装配；两者都是无状态/内存态，单实例直接复用。
 	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
 	if err != nil {
 		return nil, err
@@ -288,21 +288,21 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	// 匿名入口限流：/register 与 /forgot-password 共用一套
 	// 「IP 与目标邮箱各 5 次 / 15 分钟」的固定窗口计数，防匿名轰炸式发信。
 	anonLimiter := auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, nil)
-	// 媒体存储（M2-8）：本地目录 + media 元数据表；目录来自 MEDIA_DIR。
+	// 媒体存储：本地目录 + media 元数据表；目录来自 MEDIA_DIR。
 	mediaStore, err := media.New(cfg.Get(config.KeyMediaDir).Value, db)
 	if err != nil {
 		return nil, err
 	}
-	// 对外 REST API（M4-2 鉴权 + M4-3 端点）：依赖齐备才挂载 /api/v1。
-	// 敏感设置的编解码器（M6-10）：主密钥来自 ENCRYPTION_KEY，格式非法直接拒绝启动。
+	// 对外 REST API（鉴权 + 端点）：依赖齐备才挂载 /api/v1。
+	// 敏感设置的编解码器：主密钥来自 ENCRYPTION_KEY，格式非法直接拒绝启动。
 	secrets, err := store.NewSecretCodec(cfg.Get(config.KeyEncryptionKey).Value)
 	if err != nil {
 		return nil, err
 	}
-	// 邮件 outbox（M1-17）：SMTP 配置走 settings 表（口令复用上面的 AES-GCM 编解码器），
+	// 邮件 outbox：SMTP 配置走 settings 表（口令复用上面的 AES-GCM 编解码器），
 	// worker 由 runServe 启动与优雅停止。未配置 SMTP 时 Enqueue 返回 ErrNotConfigured。
 	mailOutbox := mail.NewOutbox(mail.Deps{DB: db, Secrets: secrets, Logger: logger})
-	// TOTP 二次验证（M1-16）：secret 复用上面的 AES-GCM 编解码器加密存储。
+	// TOTP 二次验证：secret 复用上面的 AES-GCM 编解码器加密存储。
 	totpService, err := auth.NewTOTPService(store.NewTOTPStore(db), secrets, "")
 	if err != nil {
 		return nil, err
@@ -317,21 +317,21 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Presets: store.NewPresetStore(db),
 		Cards:   store.NewCardStore(db),
 		Auditor: auditor,
-		// 卡组包内联媒体（M5-6/M5-7）：字节根目录与媒体存储同一个。
+		// 卡组包内联媒体：字节根目录与媒体存储同一个。
 		MediaRoot: mediaStore.Root(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	// 内置 MCP server（M4-6）复用同一 api 实例：工具直接调用与 REST 相同的 service 方法。
+	// 内置 MCP server 复用同一 api 实例：工具直接调用与 REST 相同的 service 方法。
 	mcpSrv, err := mcp.New(mcp.Deps{API: apiSrv, Logger: logger})
 	if err != nil {
 		return nil, err
 	}
-	// 参数优化作业执行器（M9-1）：单并发 worker + 子进程。Start 在 web 服务启动前调用，
-	// worker 随进程存活；启动时会回收上次进程遗留的未完成作业（M9-7/M9-8）。
+	// 参数优化作业执行器：单并发 worker + 子进程。Start 在 web 服务启动前调用，
+	// worker 随进程存活；启动时会回收上次进程遗留的未完成作业。
 	//
-	// M9-10 生产接线：Command 直接调用 Rust 适配器（先导出复习日志再 exec），Complete 解析
+	// 生产接线：Command 直接调用 Rust 适配器（先导出复习日志再 exec），Complete 解析
 	// 适配器写出的 21 维权重并交给 FinishOptimize 写回 job 与 preset。适配器路径可配置
 	// （OPTIMIZER_PATH），缺省按「服务二进制旁 -> 仓库构建产物」解析。
 	optimizer, err := jobs.NewOptimizer(jobs.OptimizerDeps{
@@ -373,9 +373,9 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		TOTP:         totpService,
 		Media:        mediaStore,
 		Secrets:      secrets,
-		// 邮件 outbox（M1-17）：管理面板读投递状态、SMTP 配置页与测试连接都基于它。
+		// 邮件 outbox：管理面板读投递状态、SMTP 配置页与测试连接都基于它。
 		Mail: mailOutbox,
-		// OIDC（M1-11）：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
+		// OIDC：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
 		Identities: store.NewIdentityStore(db),
 		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
 		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单。
@@ -391,7 +391,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
-	// M1-24：作业失败后通知管理员（D 类）。钩子在 Start 之前接好，避免与 worker 竞态。
+	// 作业失败后通知管理员（D 类）。钩子在 Start 之前接好，避免与 worker 竞态。
 	jobRunner.SetOnFailure(webSrv.NotifyJobFailed)
 	jobRunner.SetOnSuccess(webSrv.NotifyOptimizeDone)
 	jobRunner.Start(context.Background())

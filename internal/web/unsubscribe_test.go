@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-22（RFC 8058 一键退订）的 HTTP 级验收。覆盖三条验收：
+// 本文件是（RFC 8058 一键退订）的 HTTP 级验收。覆盖三条验收：
 //  1. 一键 POST 只关掉令牌指名的那个类型；
 //  2. 令牌不能被重放到另一个类型或另一个用户；
 //  3. A 类邮件不带退订头（A 类的正例见 internal/mail/unsubscribe_test.go）。

@@ -17,7 +17,7 @@ import (
 
 // newPresetsServer 装配一个带作业执行器的测试服务并登录 owner。
 // runner 不调用 Start：作业会停在内存队列里保持 queued，测试因此可以确定性地模拟
-// 「适配器跑完并写回权重」，而不用真的跑外部优化器（M9-4 允许注入假命令/直接驱动状态）。
+// 「适配器跑完并写回权重」，而不用真的跑外部优化器（允许注入假命令/直接驱动状态）。
 func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, cookies []*http.Cookie, csrf string, runner *jobs.Runner) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "presets.db"))
@@ -74,7 +74,7 @@ func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, c
 }
 
 // seedPreset 建一个属于 owner 的**默认**预设：名用稳定字面量 store.DefaultPresetName，
-// 这样页面渲染时的 store.EnsureDefaultPreset 会认它、不再补一条（M3-14）。
+// 这样页面渲染时的 store.EnsureDefaultPreset 会认它、不再补一条。
 func seedPreset(t *testing.T, db *gorm.DB, ownerID uint64) *store.Preset {
 	t.Helper()
 	p := store.NewPreset(ownerID, store.DefaultPresetName)
@@ -125,4 +125,4 @@ func TestPresetListRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-// ---- M3-14 预设管理：新建、编辑与默认预设 ------------------------------------
+// ---- 预设管理：新建、编辑与默认预设 ------------------------------------

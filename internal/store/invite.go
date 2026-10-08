@@ -113,7 +113,7 @@ func UsableInvite(inv *Invite, email string, now time.Time) error {
 	return nil
 }
 
-// Accept 在单个事务里消费邀请并执行建号回调（B-12）。
+// Accept 在单个事务里消费邀请并执行建号回调。
 //
 // 旧的“先 MarkUsed 占用、建号失败再 Release”会在两步之间留下可观测的中间态（先显示已使用、
 // 又变回可用）。这里把占用与建号放进同一个事务：要么都提交，要么都回滚，外界看不到半完成状态。

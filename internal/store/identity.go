@@ -70,7 +70,7 @@ func (s *IdentityStore) ListForUser(ctx context.Context, userID uint64) ([]Ident
 	return rows, nil
 }
 
-// ListAll 返回全部外部身份（含所属用户），供管理面板的「已绑定身份列表」展示（M6-4）。
+// ListAll 返回全部外部身份（含所属用户），供管理面板的「已绑定身份列表」展示。
 // 按用户、再按绑定时间排序，保证跨请求顺序稳定；调用方按 user_id 关联用户信息。
 func (s *IdentityStore) ListAll(ctx context.Context) ([]Identity, error) {
 	var rows []Identity
@@ -82,7 +82,7 @@ func (s *IdentityStore) ListAll(ctx context.Context) ([]Identity, error) {
 
 // Delete 解绑一条外部身份（按主键）。行不存在时返回 ErrIdentityNotFound。
 //
-// 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI（ROADMAP.md M1-12）。
+// 解绑是 M6 管理面板的后端能力：本轮只提供存储与测试，不接 UI。
 // 删除整行而非软删除，是因为 identities 表没有 revoked_at 列，
 // 擅自加列属于 models.go 单写者的活。
 func (s *IdentityStore) Delete(ctx context.Context, id uint64) error {

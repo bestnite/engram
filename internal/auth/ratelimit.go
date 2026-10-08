@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// 登录限流的默认参数。延迟按 基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（ROADMAP.md M1-9、
+// 登录限流的默认参数。延迟按基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（
 // 会话与安全约定）。
 const (
 	DefaultRateLimitBaseDelay = 200 * time.Millisecond
@@ -171,7 +171,7 @@ func (l *LoginLimiter) RecordFailure(username, ip string) int {
 	return count
 }
 
-// Reset 在登录成功后清零该账号与 IP 的失败计数（M1-9 验收：成功后重置）。
+// Reset 在登录成功后清零该账号与 IP 的失败计数（验收：成功后重置）。
 func (l *LoginLimiter) Reset(username, ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

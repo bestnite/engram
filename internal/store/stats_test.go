@@ -368,7 +368,7 @@ func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
 	}
 }
 
-// TestStatsStreakBoundaryAtCutoff 是 M7-2 的验收边界：连续天数只在「整整一个复习日
+// TestStatsStreakBoundaryAtCutoff 是验收边界：连续天数只在「整整一个复习日
 // 被跳过」时中断。同一个挂钟日期 2026-10-04，03:30 仍算复习日 10-03（连续未断），
 // 04:30 跨过 04:00 切点后 10-03 已被整天跳过（连续归零）。
 func TestStatsStreakBoundaryAtCutoff(t *testing.T) {

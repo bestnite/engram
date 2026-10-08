@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 客户端（ROADMAP.md M1-15）。
+// OIDC 客户端。
 //
 // 协议交互全部交给 github.com/zitadel/oidc/v3：
 //   - 发现文档与端点解析：rp.NewRelyingPartyOIDC（本文件只在其上做一层带 TTL 的按 issuer 缓存，

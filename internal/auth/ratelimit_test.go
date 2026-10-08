@@ -29,7 +29,7 @@ func (r *sleepRecorder) last() time.Duration {
 	return r.delays[len(r.delays)-1]
 }
 
-// TestLoginLimiterDelayGrowsAndResetsOnSuccess 是 M1-9 的验收测试：
+// TestLoginLimiterDelayGrowsAndResetsOnSuccess 是验收测试：
 // 失败越多延迟越长，登录成功后归零。
 func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 	rec := &sleepRecorder{}
@@ -68,7 +68,7 @@ func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 		t.Errorf("4th delay = %v, want %v", prev, 8*base)
 	}
 
-	// 登录成功后重置：延迟归零（M1-9 验收点）。
+	// 登录成功后重置：延迟归零（验收点）。
 	lim.Reset("alice", "127.0.0.1")
 	if d, err := lim.Wait(ctx, "alice", "127.0.0.1"); err != nil || d != 0 {
 		t.Fatalf("Wait() after Reset = (%v, %v), want (0, nil)", d, err)

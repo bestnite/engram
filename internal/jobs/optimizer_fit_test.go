@@ -38,7 +38,7 @@ func setPresetWeightsForTest(db *gorm.DB, presetID uint64, w fsrs.Weights) error
 	return db.Model(&store.Preset{}).Where("id = ?", presetID).Update("weights_json", string(raw)).Error
 }
 
-// TestOptimizeEndToEndComputesFitMetrics 是 M9-11 验收 4：走真实适配器的端到端作业跑完后，
+// TestOptimizeEndToEndComputesFitMetrics 是验收 4：走真实适配器的端到端作业跑完后，
 // job 行上的优化前后拟合指标都必须非零（此前恒为零，页面因此永远显示「未改善」）。
 // preset 被预置一套与适配器输出不同的旧权重，因此 before/after 必须不同——这同时证明旧权重
 // 是在 FinishOptimize 写回之前读取的，而不是把新权重复制到两边。本机已构建适配器，故真跑而非跳过。
@@ -50,7 +50,7 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
 	u, p := seedOptimizerUserAndPreset(t, db)
-	// 8 张卡 × 40 天 = 320 条复习：既越过 300 条门槛下限（M9-12），也让可预测 item 数
+	// 8 张卡 × 40 天 = 320 条复习：既越过 300 条门槛下限，也让可预测 item 数
 	// （320 - 每卡首条 = 312）稳稳超过 MinFitItems，端到端因此能给出真正的判定。
 	const cards, days = 8, 40
 	seedAdapterReviews(t, db, u.ID, cards, days)
@@ -92,7 +92,7 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 	if !result.FitBefore.Available() || !result.FitAfter.Available() {
 		t.Fatalf("metrics reported unavailable after a real run: before=%+v after=%+v", result.FitBefore, result.FitAfter)
 	}
-	// M9-12：item 数必须随指标一起落进 result_json（fitMetrics 此前只搬 LogLoss/RMSE），
+	// item 数必须随指标一起落进 result_json（fitMetrics 此前只搬 LogLoss/RMSE），
 	// 且这批样本要大到足以判定「改善/未改善」。
 	if result.FitBefore.Items <= 0 || result.FitAfter.Items <= 0 {
 		t.Fatalf("fit metrics carried no item count after a real run: before=%+v after=%+v", result.FitBefore, result.FitAfter)

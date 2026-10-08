@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSubmitConcurrentFirstReviewIsAtomic 是 M3-10 的验收用例：在真实 PostgreSQL 上
+// TestSubmitConcurrentFirstReviewIsAtomic 是验收用例：在真实 PostgreSQL 上
 // 并发发起两次同一张全新卡的首评，断言最终恰好一条 reviews 行与一条 card_states 行存活，
 // 且输家收到冲突哨兵（ErrVersionConflict）。
 //

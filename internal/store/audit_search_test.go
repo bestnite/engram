@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestAuditSearchFilters 是 M6-7 的验收：seeded fixture 下，每个过滤条件各自
+// TestAuditSearchFilters 是验收：seeded fixture 下，每个过滤条件各自
 // 返回精确预期的行数。fixture 的时间戳全部显式给定，不受运行时刻影响。
 func TestAuditSearchFilters(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "audit-search.db"))

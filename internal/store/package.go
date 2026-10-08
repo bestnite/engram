@@ -21,7 +21,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包（.edeck）导出/导入（AGENTS.md M5-6/M5-7）。
+// 卡组包（.edeck）导出/导入。
 //
 // 格式：单个 zip，含 manifest.json / notes.json / cards.json / preset.json，
 // 可选 progress.json 与 media/ + media.json。它把\"一个卡组\"变成自包含文件，
@@ -215,7 +215,7 @@ var (
 // mediaRefRE 匹配 note 字段里形如 media/<sha256>.<ext> 的媒体引用（示例）。
 var mediaRefRE = regexp.MustCompile(`^media/([a-f0-9]{64})\.([A-Za-z0-9]+)$`)
 
-// ExportPackage 装配一个卡组包（M5-6）。
+// ExportPackage 装配一个卡组包。
 //
 // 边界（内容与进度分离）：
 //   - 进度只取 actorUserID 本人的 card_states；导出他人共享的卡组时，包里绝不含他人进度。
@@ -613,7 +613,7 @@ func (s *MediaStore) SaveBytes(ctx context.Context, root, mime string, raw []byt
 // 命中已有元数据（去重）或未落盘时返回空串。
 //
 // 卡组包导入用它登记“这次写了哪些文件”，事务随后失败回滚时据此清理——否则元数据行
-// 回滚而字节留在磁盘上，形成无人引用的孤儿文件（AGENTS.md M5-11）。
+// 回滚而字节留在磁盘上，形成无人引用的孤儿文件。
 func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, string, error) {
 	sum := sha256.Sum256(raw)
 	sha := hex.EncodeToString(sum[:])

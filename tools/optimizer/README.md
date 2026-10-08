@@ -2,7 +2,7 @@
 
 A small Rust binary that turns a standard review log into a 21-element FSRS v6
 weight array as JSON. It wraps the optimiser of the upstream `fsrs` crate; no
-FSRS algorithm is reimplemented here (`AGENTS.md` M9-2).
+FSRS algorithm is reimplemented here (`AGENTS.md` ).
 
 The web-triggered optimisation job (`internal/jobs`) runs this binary as a
 subprocess. The algorithm never enters the Go code.

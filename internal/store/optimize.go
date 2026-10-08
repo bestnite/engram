@@ -11,11 +11,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是参数优化（ROADMAP.md M9-5）在 store 层的部分：
+// 本文件是参数优化在 store 层的部分：
 // 服务端门槛（复习条数不足直接拒绝并给出差额）与拟合报告的数据形态。
 //
-// 分工边界：权重拟合算法属于 M9-2 的 Rust 适配器，永不进 Go 代码；这里只定义
-// 「门槛怎么判定」与「指标写在哪、叫什么」，让 web 层（M9-4）与适配器有稳定契约。
+// 分工边界：权重拟合算法属于 Rust 适配器，永不进 Go 代码；这里只定义
+// 「门槛怎么判定」与「指标写在哪、叫什么」，让 web 层与适配器有稳定契约。
 
 const (
 	// DefaultOptimizeMinReviews 是优化门槛的默认值（默认 < 500 条拒绝）。
@@ -26,7 +26,7 @@ const (
 	// 编码文本存储（见 PutSetting / LoadSettings），内容为十进制整数条数。
 	SettingKeyOptimizeMinReviews = "optimize.min_reviews"
 
-	// MinOptimizeMinReviews 是优化门槛的下限（ROADMAP.md M9-12）。
+	// MinOptimizeMinReviews 是优化门槛的下限。
 	// 依据：250 卡 / 1969 条真日志的实测里，可用 item 少于约 184 时适配器学不动或落回
 	// 默认权重，优化前后指标相同，页面会对一次本就没机会的优化报「未改善」。184 item
 	// 约合 210 条复习，取 300 条留出余量。低于下限的门槛拦不住任何会产生误导结论的优化。
@@ -102,7 +102,7 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID uint64) (OptimizeGate
 // FitMetrics 是优化前后各测一次的拟合指标（设置页的「优化前后拟合对比」，
 // 对应 Anki 手册的 "Check health" 思路：用历史复习反推参数对实际结果的贴合度）。
 //
-// 指标定义（由 internal/schedule 用 go-fsrs 回放复习日志算出，见 ROADMAP.md M9-11）：
+// 指标定义（由 internal/schedule 用 go-fsrs 回放复习日志算出，见）：
 //   - LogLoss：每次到期复习的预测对数损失，predicted 是参数对「该次复习会回忆起来」
 //     给出的概率（0-1），observed 取 1（非 Again）或 0（Again）。越小越贴合；
 //     这是与 Anki 优化器输出 magnitude 同量纲、可跨参数集直接比较的标量。
@@ -115,12 +115,12 @@ type FitMetrics struct {
 	LogLoss float64 `json:"log_loss"`
 	RMSE    float64 `json:"rmse"`
 	// Items 是本次评估实际覆盖的可预测 item 数（已排除每张卡的首条复习与不可预测点）。
-	// 加它是为了把「算出来了」与「算出来了但样本太小」区分开（ROADMAP.md M9-12）：
+	// 加它是为了把「算出来了」与「算出来了但样本太小」区分开：
 	// 旧 result_json 没有这个字段，反序列化得到 0，向后兼容。
 	Items int `json:"items"`
 }
 
-// MinFitItems 是可信判定「改善/未改善」所需的最小 item 数（ROADMAP.md M9-12）。
+// MinFitItems 是可信判定「改善/未改善」所需的最小 item 数。
 // 依据：可用 item 少于约 184 时适配器学不动或落回默认权重，优化前后指标相同，
 // 「未改善」是对一次本就没机会的优化的误导；取 200 留出余量，实测 184 item 起判定稳定。
 const MinFitItems = 200
@@ -146,7 +146,7 @@ func (r OptimizeResult) Improved() bool { return r.FitAfter.LogLoss < r.FitBefor
 // Available 报告这次拟合是否真的覆盖了至少一个可预测 item。
 // 没有任何可预测 item（例如复习日志全是每张卡的首条复习、或全部无法回放）时，
 // CompareFit 返回零值；预测概率被夹在开区间 (0,1) 内，LogLoss 恒为正，因此零值即「无指标」。
-// 预设页据此避免在无指标时给出「未改善」这种误导性结论（ROADMAP.md M9-11 验收 5）。
+// 预设页据此避免在无指标时给出「未改善」这种误导性结论（验收 5）。
 func (m FitMetrics) Available() bool { return m.LogLoss > 0 }
 
 // SampleSufficient 报告这次拟合的样本是否足够支撑「改善/未改善」结论。
@@ -167,7 +167,7 @@ var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is require
 // 一次性清三列后，读到的预设与从未优化过的新预设完全一致。
 //
 // 幂等：本来就是默认（三列为 NULL）的预设再调用一次也返回 nil——「已经是默认」不是错误，
-// UI 的按钮可能被重复点击。只有 owner 能回退，授权规则与 Update 一致（preset 不参与 M5-1 的授权表）。
+// UI 的按钮可能被重复点击。只有 owner 能回退，授权规则与 Update 一致（preset 不参与授权表）。
 func (s *PresetStore) ResetPresetWeights(ctx context.Context, actorUserID, presetID uint64) error {
 	if presetID == 0 {
 		return ErrPresetWeightsIDRequired

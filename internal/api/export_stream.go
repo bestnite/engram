@@ -8,7 +8,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 流式导出（M4-5）。放在独立文件里，与批量导入（M4-4）的内部实现分开，
+// 流式导出。放在独立文件里，与批量导入的内部实现分开，
 // 两者都在 service 层，REST handler 与 MCP 工具共用。
 
 // exportScanRow 是导出游标的一行原始列；字段名与 SELECT 列表一一对应，由 GORM 按列名映射。
@@ -30,7 +30,7 @@ type exportScanRow struct {
 // ExportCards 以回调方式流式读出卡片级导出数据：逐行解析后调用 emit，emit 返回错误时立即中止
 // （供 HTTP 客户端断开或写入失败时提前收场）。
 //
-// M4-5 的关键：用 Rows() 游标逐行扫描，任何时刻内存里只有当前一行的列与解析后的 ExportRow，
+// 关键：用 Rows() 游标逐行扫描，任何时刻内存里只有当前一行的列与解析后的 ExportRow，
 // 不把整组读进内存，所以导出 1 万条 note 时峰值内存不随总数线性增长。需要整体切片时用
 // CollectExportRows（MCP 工具必须一次返回完整 JSON）。
 func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool, emit func(ExportRow) error) error {

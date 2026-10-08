@@ -237,7 +237,7 @@ func (m *Manager) Middleware() gin.HandlerFunc {
 func (m *Manager) RequireUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := CurrentUser(c); !ok {
-			// 英文内部错误；面向用户文案待语言包（M0-8/M1-4 接入）。
+			// 英文内部错误；面向用户文案待语言包（接入）。
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{"code": "unauthorized", "message": "authentication required"},
 			})

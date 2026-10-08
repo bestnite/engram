@@ -59,7 +59,7 @@ func pngBody() []byte {
 	return append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte("payload")...)
 }
 
-// TestMediaUploadDedupeAndServe 是 M2-8 的主验收：同文件两次上传只存一份，
+// TestMediaUploadDedupeAndServe 是主验收：同文件两次上传只存一份，
 // GET /media/<sha256> 带 ETag 与 immutable 缓存，命中 ETag 返回 304。
 func TestMediaUploadDedupeAndServe(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)

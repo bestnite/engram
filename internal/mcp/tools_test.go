@@ -15,9 +15,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ---- M4-7：工具与 REST 行为一致 ----
+// ---- ：工具与 REST 行为一致 ----
 
-// TestToolsMatchREST 是 M4-7 的核心验收：每个工具与其同名 REST 路径在同一输入下产出相同结果。
+// TestToolsMatchREST 是核心验收：每个工具与其同名 REST 路径在同一输入下产出相同结果。
 func TestToolsMatchREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "user")
@@ -53,7 +53,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("get_stats MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// export_deck（M5-8）：返回卡组包文档，含 manifest/notes/cards/preset。
+	// export_deck：返回卡组包文档，含 manifest/notes/cards/preset。
 	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID})
 	if isErr {
 		t.Fatalf("export_deck error: %s", text)
@@ -79,7 +79,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("create_notes(dry_run) MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// import_deck（M5-8）：接受 export_deck 输出的文档，dry_run 预演不写入。
+	// import_deck：接受 export_deck 输出的文档，dry_run 预演不写入。
 	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID, "include_progress": true})
 	mcpOut, isErr, text = callTool(t, cs, "import_deck", map[string]any{"package": pkgDoc, "dry_run": true, "target": "new_deck"})
 	if isErr {
@@ -182,7 +182,7 @@ func normalizeCards(m map[string]any) map[string]any {
 	return m
 }
 
-// ---- M3-13：多卡组复习范围 ----
+// ---- ：多卡组复习范围 ----
 
 // seedDueCardMCP 建一个 note 与它的一张 card，不写 card_states：该卡是新卡，必然出现在队列里。
 func seedDueCardMCP(t *testing.T, db *gorm.DB, deckID uint64) {
@@ -262,7 +262,7 @@ func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	}
 }
 
-// ---- M4-11：create_deck 与 REST 建卡组同源 ----
+// ---- ：create_deck 与 REST 建卡组同源 ----
 
 // errorCode 取 REST 统一错误包壳里的稳定 code。
 func errorCode(m map[string]any) string {
@@ -278,7 +278,7 @@ func errorMessage(m map[string]any) string {
 	return c
 }
 
-// TestCreateDeckMatchesREST 是 M4-11 的核心验收：create_deck 与 REST POST /decks 同参数同结果，
+// TestCreateDeckMatchesREST 是核心验收：create_deck 与 REST POST /decks 同参数同结果，
 // 空名字/非法 visibility 用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
 // scope 的 key 按名字硬调也被拒。
 func TestCreateDeckMatchesREST(t *testing.T) {

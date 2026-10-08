@@ -18,7 +18,7 @@ func optimiseSampleWeights() []float64 {
 	return w
 }
 
-// TestOptimisePresetWeightsRoundTrip 是 M9-6「权重往返」在 store 层的用例：优化器产出的
+// TestOptimisePresetWeightsRoundTrip 是「权重往返」在 store 层的用例：优化器产出的
 // 21 维权重写进 preset 后，读回必须逐元素一致，且优化时间与使用条数一并保存。
 // 这是「优化完成 → 落库 → 页面/调度器读到同一组权重」这条链路的数据侧契约。
 func TestOptimisePresetWeightsRoundTrip(t *testing.T) {
@@ -80,7 +80,7 @@ func TestOptimisePresetWeightsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestOptimiseResetWeightsClearsPreset 是 M9-6「回退」用例，覆盖 M9-4 点名要求的后端能力：
+// TestOptimiseResetWeightsClearsPreset 是「回退」用例，覆盖点名要求的后端能力：
 // 一键回退默认权重后，weights_json / weights_optimized_at / weights_review_count 三列
 // 一起归 NULL（只清 weights_json 会留下「已优化」的假象），并验证幂等与 owner 授权。
 func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
@@ -143,7 +143,7 @@ func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 	}
 }
 
-// TestOptimizeMinReviewsFloor 是 M9-12 验收 1：门槛读取路径对存量值的四种局面。
+// TestOptimizeMinReviewsFloor 是验收 1：门槛读取路径对存量值的四种局面。
 // 存量值低于下限（如 100，可能来自直接写库或旧版本）被钳到 300，而不是退回默认 500；
 // 恰好等于下限的 300 与下限之上的 500 原样生效；未设置/空值/非数字/非正整数仍退回默认 500
 // （那是「值不可用」，与「值合法但太低」的钳制语义不同）。

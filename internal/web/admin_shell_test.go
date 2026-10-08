@@ -15,7 +15,7 @@ func newAdminServer(t *testing.T) (srv *Server, adminCookies []*http.Cookie, adm
 	return srv, cookies, csrf
 }
 
-// TestAdminRoutesDenyNonAdmin 是 M6-1 的核心验收：建一个普通用户，逐条访问
+// TestAdminRoutesDenyNonAdmin 是核心验收：建一个普通用户，逐条访问
 // 已注册的每一个 /admin/* 页面路由，全部必须 403（守卫先于外壳）。
 func TestAdminRoutesDenyNonAdmin(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)

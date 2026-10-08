@@ -20,7 +20,7 @@ func newTestTranslator(t *testing.T) *Translator {
 }
 
 // TestPickResolutionOrder 覆盖语言解析顺序：?lang > 用户设置 > Accept-Language > 默认。
-// 这是 M0-8 的验收点之一，逐条断言，避免顺序被改坏。
+// 这是验收点之一，逐条断言，避免顺序被改坏。
 func TestPickResolutionOrder(t *testing.T) {
 	tr := newTestTranslator(t)
 	cases := []struct {

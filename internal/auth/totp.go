@@ -18,7 +18,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-16 的 TOTP 业务层：生成 secret、加密落库、校验验证码、一次性恢复码、关闭。
+// 本文件是 TOTP 业务层：生成 secret、加密落库、校验验证码、一次性恢复码、关闭。
 //
 // 依赖选择（AGENTS.md §2.4）：TOTP 算法用事实标准库
 // github.com/pquerna/otp，不自己写 HMAC。库负责 secret 生成与验证码校验；
@@ -115,7 +115,7 @@ func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName st
 	}
 	plain, err := s.codec.Decrypt(row.SecretCiphertext)
 	if err != nil {
-		// 解不开必须大声报错，绝不当作「没绑定」（M6-10 的约定）。
+		// 解不开必须大声报错，绝不当作「没绑定」（约定）。
 		return "", "", false, fmt.Errorf("decrypt pending totp secret: %w", err)
 	}
 	return plain, otpauthURL(s.issuer, accountName, plain), true, nil

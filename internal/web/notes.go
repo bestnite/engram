@@ -15,10 +15,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerNoteRoutes 挂载卡片列表与编辑页（M2-7）。
+// registerNoteRoutes 挂载卡片列表与编辑页。
 //
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。所有权判断先用 deck owner
-// （deck_grants 尚未落地，M5-1 会把它扩展成 owner/editor 判定）。
+// （deck_grants 尚未落地，会把它扩展成 owner/editor 判定）。
 func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil {
 		return
@@ -27,7 +27,7 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	// 先按各自原有的会话与角色判定鉴权，再交出应用壳，由客户端路由与 JSON 端点渲染页面。
 	router.GET("/decks/:id/notes", s.noteListRoute)
 	router.GET("/decks/:id/notes/:nid", s.noteEditRoute)
-	// M2-12 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
+	// 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
 	router.GET("/decks/:id/new-note", s.noteNewRoute)
 	// SPA 的新建/编辑预览走 JSON。
 	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.notePreview)
@@ -53,7 +53,7 @@ func deckIDParam(c *gin.Context) (uint64, bool) {
 	return id, true
 }
 
-// loadDeckForRole 取卡组并校验当前用户至少拥有 want 角色（M5-1）。
+// loadDeckForRole 取卡组并校验当前用户至少拥有 want 角色。
 //
 // 判定本体在 auth.DeckAccess（与 REST/MCP 共用同一实现，不复制第二份）；这里只负责
 // 把错误映射成 HTML 响应：卡组不存在 -> 404，权限不足 -> 403，并写一条 permission.denied

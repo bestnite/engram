@@ -8,7 +8,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestQueueHonoursDeckDailyCaps 是 M3-8 的验收用例：每日上限必须来自卡组列，
+// TestQueueHonoursDeckDailyCaps 是验收用例：每日上限必须来自卡组列，
 // 而不是 QueueOptions 里的硬编码默认值。卡组设成 2/1（远低于默认 20/200），
 // 若仍走默认值，下面的断言会立刻失败。
 func TestQueueHonoursDeckDailyCaps(t *testing.T) {

@@ -24,7 +24,7 @@ func doJSON(t *testing.T, h http.Handler, method, path, plaintext, body string) 
 	return rec.Code, rec.Body.Bytes()
 }
 
-// TestBulkImportIsIdempotentByExternalRef 是 M4-3 的核心验收：
+// TestBulkImportIsIdempotentByExternalRef 是核心验收：
 // 同一批数据重复提交不产生重复卡，且 created/updated/skipped 计数正确。
 func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

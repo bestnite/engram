@@ -43,7 +43,7 @@ func okBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 	return Command{Name: "/bin/sh", Args: []string{"-c", "exit 0"}}, nil
 }
 
-// TestOptimiseThresholdRefusesBelowThreshold 是 M9-6「阈值」用例（M9-5 验收之一）：复习太少的预设被拒绝，
+// TestOptimiseThresholdRefusesBelowThreshold 是「阈值」用例（验收之一）：复习太少的预设被拒绝，
 // 且错误里指名差额（还差多少条）。默认门槛 500，这里只有 3 条，差额应为 497。
 func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
@@ -71,7 +71,7 @@ func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 }
 
 // TestOptimiseThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖，且覆盖值受
-// M9-12 的 300 条下限约束：存量写成 2（绕过表单直接写库）会被读取路径钳到 300，
+// 300 条下限约束：存量写成 2（绕过表单直接写库）会被读取路径钳到 300，
 // 于是刚好 300 条复习可以入队——若读取端仍按 2 放行，这个用例会因门槛形同虚设而失去意义。
 func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
@@ -98,8 +98,8 @@ func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	}
 }
 
-// TestOptimiseResultStoresFitMetricsOnJobRow 是 M9-5 的另一条验收：拟合指标存在 job 行上。
-// 适配器（M9-2）缺席时走 FinishOptimize 占位路径，断言 result_json 里 before/after 可解析。
+// TestOptimiseResultStoresFitMetricsOnJobRow 是另一条验收：拟合指标存在 job 行上。
+// 适配器缺席时走 FinishOptimize 占位路径，断言 result_json 里 before/after 可解析。
 func TestOptimiseResultStoresFitMetricsOnJobRow(t *testing.T) {
 	runner, st, _ := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()

@@ -22,7 +22,7 @@ var (
 	ErrNoteTagRequired = errors.New("note tag is required")
 )
 
-// 列表状态取值（M2-7）：active 是默认（排除软删除），deleted 只看已软删除，
+// 列表状态取值：active 是默认（排除软删除），deleted 只看已软删除，
 // all 两者都看。用稳定英文常量，避免在 handler 里散落裸字符串。
 const (
 	NoteStatusActive  = "active"
@@ -33,7 +33,7 @@ const (
 // DefaultNotePageSize 是卡片列表的每页条数；设计只要求分页可用，不暴露给用户配置。
 const DefaultNotePageSize = 50
 
-// NoteListOptions 是卡片列表的查询条件（M2-7 分页、搜索、标签与题型筛选）。
+// NoteListOptions 是卡片列表的查询条件（分页、搜索、标签与题型筛选）。
 type NoteListOptions struct {
 	DeckID uint64
 	// Page 从 1 起；小于 1 时按 1 处理。
@@ -152,7 +152,7 @@ func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) 
 	return s.Save(ctx, n, fields)
 }
 
-// CreateInTx 在调用方给定的事务里新建一条 note（M4-4 批量导入按批提交用）；等价于 SaveInTx。
+// CreateInTx 在调用方给定的事务里新建一条 note（批量导入按批提交用）；等价于 SaveInTx。
 func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	return s.SaveInTx(ctx, tx, n, fields)
 }
@@ -217,7 +217,7 @@ func (s *NoteStore) Update(ctx context.Context, n *Note, fields map[string]any) 
 	return s.Save(ctx, n, fields)
 }
 
-// UpdateInTx 在调用方给定的事务里更新 note 与它的 cards（M4-4 批量导入按批提交用）。
+// UpdateInTx 在调用方给定的事务里更新 note 与它的 cards（批量导入按批提交用）。
 // 与 Update 语义一致，只是复用外部事务；现有 card 的 id 与用户进度保持不变。
 func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	return s.SaveInTx(ctx, tx, n, fields)
@@ -294,7 +294,7 @@ func (s *NoteStore) Restore(ctx context.Context, id uint64) error {
 	return s.RestoreInTx(ctx, s.db, id)
 }
 
-// RestoreInTx 在调用方给定的事务里恢复软删除的 note（M4-4 批量导入按批提交用：
+// RestoreInTx 在调用方给定的事务里恢复软删除的 note（批量导入按批提交用：
 // 命中已软删除的 external_ref 时先恢复，再 Update 才能生效）。
 func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) error {
 	res := tx.WithContext(ctx).Unscoped().Model(&Note{}).Where("id = ?", id).
@@ -308,7 +308,7 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 	return nil
 }
 
-// List 按条件分页列出卡组的 notes，返回当页行与符合条件的总数（M2-7）。
+// List 按条件分页列出卡组的 notes，返回当页行与符合条件的总数。
 //
 // 查询约定：分页统一 LIMIT/OFFSET；模糊匹配用 LOWER(col) LIKE，
 // 不使用任何 PG 专有的 ILIKE 或表达式索引。搜索覆盖 fields_json 的全部字段文本，
@@ -360,7 +360,7 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 
 // DeleteMany 软删除一组 note（只写 notes.deleted_at，不碰 cards 行）。
 // 已删除或不存在的 id 不计入返回的条数；ids 为空时直接返回 (0, nil)。
-// dryRun 只统计「会被删除的行数」，不执行任何写操作（M4-12）。
+// dryRun 只统计「会被删除的行数」，不执行任何写操作。
 func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil

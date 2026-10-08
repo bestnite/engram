@@ -23,7 +23,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-11 / M6-4 的验收测试：用一个自写的 stub OIDC provider（httptest + 测试内生成的
+// 本文件是验收测试：用一个自写的 stub OIDC provider（httptest + 测试内生成的
 // RSA 密钥）驱动完整登录流，不依赖外网或任何真实 IdP。
 
 // stubOIDC 是一个最小 OIDC provider：发现文档、authorize、token、jwks。
@@ -149,7 +149,7 @@ func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
 	return q.Get("state"), q.Get("nonce")
 }
 
-// TestOIDCLoginAgainstStubProvider 是 M1-11 的核心验收：stub provider 下登录成功，错误 state 被拒。
+// TestOIDCLoginAgainstStubProvider 是核心验收：stub provider 下登录成功，错误 state 被拒。
 func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)

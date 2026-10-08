@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 本文件是 M1-16（TOTP 二次验证）的持久化层。
+// 本文件是（TOTP 二次验证）的持久化层。
 //
 // 为什么不把这两张表并进 models.go：models.go 是单写者热点（AGENTS.md §6.4），
 // 本轮与其它泳道并行，故新表定义放在独立文件里，仅在 AutoMigrate 处并集一次。

@@ -41,7 +41,7 @@ type fitMetrics struct {
 
 // optimizeResult 是 optimize 作业 result_json 的 JSON 投影。
 // verdict 由服务端按 store.OptimizeResult 的三态判据算出，前端据稳定枚举查语言包，
-// 不复制 Improved/SampleSufficient 的规则，避免两边判据漂移（M9-12）。
+// 不复制 Improved/SampleSufficient 的规则，避免两边判据漂移。
 type optimizeResult struct {
 	ReviewsUsed int64      `json:"reviews_used"`
 	Weights     []float64  `json:"weights"`
@@ -487,7 +487,7 @@ func (s *Server) jobPayload(job *store.Job) *jobView {
 	return item
 }
 
-// optimizeResultPayload 投影拟合报告并给出稳定 verdict（三态，M9-12）。
+// optimizeResultPayload 投影拟合报告并给出稳定 verdict（三态）。
 func optimizeResultPayload(r *store.OptimizeResult) *optimizeResult {
 	out := &optimizeResult{
 		ReviewsUsed: r.ReviewsUsed,
@@ -508,7 +508,7 @@ func fitMetricsPayload(m store.FitMetrics) fitMetrics {
 	return fitMetrics{LogLoss: m.LogLoss, RMSE: m.RMSE, Items: m.Items}
 }
 
-// optimizeVerdict 是拟合对比的三态判据（M9-12）：
+// optimizeVerdict 是拟合对比的三态判据：
 //   - 两边都算出来且样本足够 -> improved / not_improved；
 //   - 两边都算出来但样本太小 -> insufficient_sample；
 //   - 没算出来 -> unavailable（前端不渲染结论）。

@@ -1,4 +1,4 @@
-// Package digest 实现 C 类「每周学习摘要」的周期后台 worker（ROADMAP.md M1-23）。
+// Package digest 实现 C 类「每周学习摘要」的周期后台 worker。
 //
 // 行为约束：
 //   - 摘要默认**每周**一次（不是每日），按用户本地时区成周；可关闭（C 类默认关）。
@@ -8,13 +8,13 @@
 //   - 发送时间与复习提醒共用同一小时（users.reminder_hour，未设置时用 reminder.DefaultSendHour）：
 //     到达该小时后的首轮轮询即发，小时按用户时区解释。
 //   - SMTP 未配置时不发也不报错，只记一条英文日志。
-//   - 摘要是可选类型，带 RFC 8058 一键退订头（M1-22）。
+//   - 摘要是可选类型，带 RFC 8058 一键退订头。
 //
 // 静默窗口（旧 23:00–07:00）随复习提醒一并删除：发送时刻现在由用户显式选择（默认 19:00），
 // 静默窗既无用途又会压制用户明确选的深夜时段，详情见 internal/reminder 的包注释。
 //
 // 数字口径：摘要展示的每个数字都直接来自 internal/store 的 StatsStore 聚合方法（与统计页
-// M7-3 是同一批调用），handler 与 worker 都不写统计 SQL。窗口与统计页的「近 7 日」一致：
+// 是同一批调用），handler 与 worker 都不写统计 SQL。窗口与统计页的「近 7 日」一致：
 // [today-6, today]（review_day 闭区间）。
 //
 // 为什么是独立 worker 而不是复用提醒 worker：两者节律不同（日 vs 周）、候选集不同
@@ -79,7 +79,7 @@ type Deps struct {
 	BaseURL string
 	// StatsPath 覆盖统计页路径；为空时用 DefaultStatsPath。
 	StatsPath string
-	// Tokens 签发一键退订令牌（M1-22）；为空时邮件不带退订头。
+	// Tokens 签发一键退订令牌；为空时邮件不带退订头。
 	Tokens *auth.ActionTokenService
 	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
 	Templates mail.LookupFunc
@@ -297,7 +297,7 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 	}, nil
 }
 
-// message 按用户语言组装摘要邮件。摘要是 C 类可选邮件，故带 RFC 8058 一键退订头（M1-22）：
+// message 按用户语言组装摘要邮件。摘要是 C 类可选邮件，故带 RFC 8058 一键退订头：
 // 令牌指名 study_digest 这一个类型，收件人不登录即可关掉它。令牌签发失败只记日志并照常发信。
 func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestStats) mail.Message {
 	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))

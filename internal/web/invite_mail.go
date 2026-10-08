@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-20：邀请邮件投递（B 类协作/授权）。
+// 本文件是：邀请邮件投递（B 类协作/授权）。
 //
 // 设计约束（照，逐条落实）：
 //   - 绝不在请求路径同步发信：一律经 Outbox.Enqueue 入队，由后台 worker 投递。
@@ -22,7 +22,7 @@ import (
 //   - SMTP 未配置时流程禁用并说明原因：邀请页的「寄到邮箱」入口渲染 mail.not_configured，
 //     提交时也走同一说明文案，绝不静默什么也不做。
 //   - B 类可关：收件人若是本站用户，尊重其对 invite 类型的显式偏好；不是则回落默认（开）。
-//   - 一键退订头是 M1-22 的任务，本任务不设置 Message.Headers（保持为空）。
+//   - 一键退订头属于后续任务，本任务不设置 Message.Headers（保持为空）。
 //
 // 邀请的存储 / 校验 / 接受逻辑完全不变；这里只在既有创建流程后追加「寄邮件」这一步。
 
@@ -82,7 +82,7 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 
 	link := s.securityAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
 
-	// 收件人是本站用户时，这封 B 类（可选类型）邮件带退订入口（M1-22）：令牌指名 invite
+	// 收件人是本站用户时，这封 B 类（可选类型）邮件带退订入口：令牌指名 invite
 	// 这一个类型，用户不登录即可关掉它。非本站用户没有偏好可关，故不带。
 	unsubURL := ""
 	if recipient != nil {

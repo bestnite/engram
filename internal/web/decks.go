@@ -21,7 +21,7 @@ func (s *Server) registerDeckQueueCountRoute(router *gin.Engine) {
 	router.GET("/api/v1/decks/queue-counts", s.deckQueueCountsAPI)
 }
 
-// registerDeckRoutes 挂载卡组列表页（M2-11）。
+// registerDeckRoutes 挂载卡组列表页。
 // 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
 func (s *Server) registerDeckRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {

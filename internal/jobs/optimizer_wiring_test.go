@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newWiringDB 打开临时 SQLite 库并迁移，供 M9-10 接线用例复用。
+// newWiringDB 打开临时 SQLite 库并迁移，供接线用例复用。
 func newWiringDB(t *testing.T) (*gorm.DB, *Store) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "wiring.db"))
@@ -98,7 +98,7 @@ func seedAdapterReviews(t *testing.T, db *gorm.DB, userID uint64, cards, days in
 	}
 }
 
-// TestOptimizeEndToEndRunsRealAdapter 是 M9-10 的端到端验收：驱动一个复习条数足够阈值的
+// TestOptimizeEndToEndRunsRealAdapter 是端到端验收：驱动一个复习条数足够阈值的
 // 预设走完 runner + 真实 Rust 适配器，断言作业 succeeded，且 job 行与 preset 上都有 21 维权重。
 // 适配器未构建时跳过（CI 无 Rust 工具链）；本机已构建，因此这里会真跑。
 func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
@@ -109,7 +109,7 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
 	u, p := seedOptimizerUserAndPreset(t, db)
-	// 8 张卡 × 40 天 = 320 条复习：越过 M9-12 的 300 条门槛下限，且够适配器训练。
+	// 8 张卡 × 40 天 = 320 条复习：越过 300 条门槛下限，且够适配器训练。
 	const cards, days = 8, 40
 	seedAdapterReviews(t, db, u.ID, cards, days)
 	// 门槛设到下限：默认 500 会挡住这 320 条复习。
@@ -168,7 +168,7 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	t.Logf("preset %d weights_json=%s optimized_at=%v review_count=%v", preset.ID, *preset.WeightsJSON, preset.WeightsOptimizedAt, preset.WeightsReviewCount)
 }
 
-// TestOptimizeJobFailsWhenAdapterMissing 是 M9-10 的第二条验收：适配器缺失时作业必须
+// TestOptimizeJobFailsWhenAdapterMissing 是第二条验收：适配器缺失时作业必须
 // 失败，且失败消息点名期望路径，让运维一眼知道缺的是哪个文件。
 func TestOptimizeJobFailsWhenAdapterMissing(t *testing.T) {
 	ctx := context.Background()

@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-24（D 类管理员通知邮件）的入站投递助手，与 security.go 的 SecurityNotifier
+// 本文件是（D 类管理员通知邮件）的入站投递助手，与 security.go 的 SecurityNotifier
 // 同构：把三条硬约束收敛在一处，调用方（各触发点）不必各自实现。
 //
 //   - 绝不同步发信：只调用 Outbox.Enqueue 写队列表；
@@ -16,10 +16,10 @@ import (
 //   - D 类可关闭：按**收件管理员自己**的偏好判定，关掉就不寄；目录判定走 ResolveEnabled，
 //     因此「偏好页能关、后端照发」不可能出现。
 //
-// 退订头（M1-22）是独立任务，这里不写 Headers。
+// 退订头是独立任务，这里不写 Headers。
 //
 // 命名边界：本文件不得定义 Message、Outbox、ErrNotConfigured、Configured —— 那些是传输层
-// （M1-17）的符号，重复声明会撞符号。
+// 的符号，重复声明会撞符号。
 
 // AdminNotifier 把 D 类管理员通知写进 outbox。
 type AdminNotifier struct {
@@ -63,7 +63,7 @@ func (n *AdminNotifier) Send(ctx context.Context, adminID uint64, to string, t T
 			return false
 		}
 	}
-	// Headers 留空：一键退订头属于 M1-22。
+	// Headers 留空：一键退订头属于。
 	if err := n.outbox.Enqueue(ctx, Message{
 		To:       to,
 		Type:     string(t),

@@ -71,7 +71,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Accounts:      accounts,
 		Sessions:      mgr,
 		Users:         users,
-		// 会话中间件先于语言中间件运行，用户设置里的语言才会生效（M1-8）。
+		// 会话中间件先于语言中间件运行，用户设置里的语言才会生效。
 		UserLocale: SessionUserLocale,
 		Decks:      store.NewDeckStore(db),
 		Notes:      store.NewNoteStore(db),

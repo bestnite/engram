@@ -15,7 +15,7 @@ import (
 // DefaultPresetName 是默认预设的稳定标识与创建名。
 //
 // 它是**存储数据而不是 UI 文案**：把它本地化正是「同一用户攒出两个默认预设」这一缺陷的根源
-// （M3-14）。web 建组用本地化名、REST 建组用字面量时，两条入口对同一条逻辑预设给出不同名字，
+// web 建组用本地化名、REST 建组用字面量时，两条入口对同一条逻辑预设给出不同名字，
 // 谁都找不到对方建的那条。这里定义唯一字面量，所有入口共用，语言包不再参与预设名。
 const DefaultPresetName = "Default"
 
@@ -65,7 +65,7 @@ func NewPreset(ownerUserID uint64, name string) Preset {
 // 所有读取方都走这里，避免各处重复处理 nil。
 func (p *Preset) FuzzEnabled() bool { return p.EnableFuzz == nil || *p.EnableFuzz }
 
-// requirePresetOwner 与卡组共用 ErrNotOwner：预设仍属创建者，M5-1 的授权表不涉及 preset。
+// requirePresetOwner 与卡组共用 ErrNotOwner：预设仍属创建者，授权表不涉及 preset。
 func requirePresetOwner(p *Preset, actorUserID uint64) error {
 	if p.OwnerUserID != actorUserID {
 		return fmt.Errorf("%w: preset %d is owned by user %d", ErrNotOwner, p.ID, p.OwnerUserID)
@@ -111,7 +111,7 @@ var ensurePresetMu sync.Mutex
 // DefaultPresetName 的预设，并返回其全部预设（按创建时间倒序）。
 //
 // web 与 REST/MCP 都经这里补齐默认预设，预设名不再本地化，因此同一用户不会再因入口不同而攒出
-// 两条「默认」预设（M3-14）。
+// 两条「默认」预设。
 func EnsureDefaultPreset(ctx context.Context, db *gorm.DB, ownerUserID uint64) ([]Preset, error) {
 	presets, err := NewPresetStore(db).ListByOwner(ctx, ownerUserID)
 	if err != nil {

@@ -26,7 +26,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mediatype"
 )
 
-// 卡组包导入（AGENTS.md M5-7）。
+// 卡组包导入。
 //
 // 安全是重点：解压前拒绝路径穿越与软链、限制总解压体积与条目数（防 zip bomb）；
 // 业务写入全部在一个事务内完成（失败不留半成品）；重复导入靠 external_ref 或内容指纹去重。
@@ -258,7 +258,7 @@ func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
 	return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
 }
 
-// ImportPackage 导入一个卡组包（M5-7）。
+// ImportPackage 导入一个卡组包。
 //
 // 调用方（API/Web/MCP/CLI）负责在调用前完成卡组级权限判定；本方法只做包级校验、
 // 去重、id 重映射、进度归属判定与事务化写入。
@@ -325,7 +325,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	report.MediaMissing = len(mediaMissing)
 
 	// writtenMedia 记录本次事务实际落盘的媒体文件；事务失败回滚时据此清理，
-	// 避免元数据行回滚而字节留在磁盘上形成孤儿文件（AGENTS.md M5-11）。
+	// 避免元数据行回滚而字节留在磁盘上形成孤儿文件。
 	var writtenMedia []mediaWrite
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return s.importInTx(ctx, tx, actorUserID, username, pkg, targetKind, targetDeckID, opts, report, &writtenMedia)

@@ -276,7 +276,7 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 	}
 }
 
-// ---- M3-13：多卡组复习范围 ----
+// ---- ：多卡组复习范围 ----
 
 // seedDeckCaps 建一个卡组并把每日上限写成给定值（卡组级配置）。
 func seedDeckCaps(t *testing.T, db *gorm.DB, now time.Time, newPerDay, reviewsPerDay int) uint64 {

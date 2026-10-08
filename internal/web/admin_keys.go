@@ -1,6 +1,6 @@
 package web
 
-// 管理面板 API Key 总览（ROADMAP.md M6-9）。
+// 管理面板 API Key 总览。
 //
 // SSR 总览页删除后，列表与撤销在 /api/v1/admin/api-keys* 的 JSON 端点上（admin_keys_api.go）。
 // 这里只保留分页大小常量，供该端点复用。

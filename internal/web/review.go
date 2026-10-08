@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 复习页的规范路径（M3-5）。评分与动作走 SPA 的同源 JSON 端点（/api/v1/review/*）。
+// 复习页的规范路径。评分与动作走 SPA 的同源 JSON 端点（/api/v1/review/*）。
 const reviewPagePath = "/review"
 
 // registerReviewRoutes 挂载复习页。
@@ -173,7 +173,7 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	return st.Version
 }
 
-// graderFor 用可选窄接口断言判断题型是否支持机器判分（M3-12）。
+// graderFor 用可选窄接口断言判断题型是否支持机器判分。
 // 判分能力是可选能力，核心管线不依赖它：未实现 Grader 的题型返回 false，仍走四档自评。
 func graderFor(kind string) (cardtype.Grader, bool) {
 	t, ok := cardtype.Lookup(kind)

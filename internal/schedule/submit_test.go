@@ -84,7 +84,7 @@ func TestSubmitWritesStateAndReviewInOneTransaction(t *testing.T) {
 }
 
 // TestSubmitDuplicateReturnsVersionConflict 断言重复提交同一 expected_version 时，
-// 第二次返回 ErrVersionConflict，且不改变任何一行（M3-3 验收）。
+// 第二次返回 ErrVersionConflict，且不改变任何一行
 func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -140,7 +140,7 @@ func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 }
 
 // TestSubmitRollbackLeavesNoReviewRow 断言状态更新与 review 行共用调用方的事务：
-// 事务回滚后两行都不存在（M3-3 验收：“事务失败后不留 reviews 行”）。
+// 事务回滚后两行都不存在（验收：“事务失败后不留 reviews 行”）。
 func TestSubmitRollbackLeavesNoReviewRow(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

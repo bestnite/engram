@@ -86,8 +86,8 @@ func validDeckVisibility(v string) bool {
 
 // requireDeckOwner 检查 actor 是否为卡组 owner，不是则返回 ErrNotOwner。
 //
-// M2-1 阶段 decks 是唯一的归属来源：deck_grants 里还没有任何行，所以\"谁能改\"只由
-// owner_user_id 决定。M5-1 引入授权后，这里会扩展为 owner/editor 的读写判定，
+// 阶段 decks 是唯一的归属来源：deck_grants 里还没有任何行，所以\"谁能改\"只由
+// owner_user_id 决定。 引入授权后，这里会扩展为 owner/editor 的读写判定，
 // reader 与陌生人仍在此被拒 —— 本轮的 owner 检查是它的子集，不会推翻。
 func requireDeckOwner(d *Deck, actorUserID uint64) error {
 	if d.OwnerUserID != actorUserID {

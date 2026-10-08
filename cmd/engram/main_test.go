@@ -28,7 +28,7 @@ var testEncryptionKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcd
 // testDoubleSubmitToken 是集成测试用的会话前 CSRF token；值只需满足长度下限。
 const testDoubleSubmitToken = "test-double-submit-token-0123456789"
 
-// newWiredServer 通过与 runServe 相同的装配路径构造服务，验证 M1-14 的接线的确把
+// newWiredServer 通过与 runServe 相同的装配路径构造服务，验证接线的确把
 // /login、/setup 等认证路由注册进了进程，而不是只在 web 包的单元测试里成立。
 func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
 	t.Helper()
@@ -68,7 +68,7 @@ func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecor
 
 // doPostForm 以 x-www-form-urlencoded 发起 POST。
 //
-// 登录前表单（/login、/register、/setup）需要双提交 cookie（B-13）：这里自动补上 cookie 与
+// 登录前表单（/login、/register、/setup）需要双提交 cookie：这里自动补上 cookie 与
 // 镜像 token，让本测试继续验证接线本身。拒绝路径（缺镜像 cookie）由
 // internal/web 的 csrf_presession_test.go 用原始请求单独覆盖。
 func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values) *httptest.ResponseRecorder {
@@ -114,7 +114,7 @@ func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
 	return false
 }
 
-// TestWiredServerExposesAuthRoutes 是 M1-14 的验收测试：真实装配路径下 /login、/setup、
+// TestWiredServerExposesAuthRoutes 是验收测试：真实装配路径下 /login、/setup、
 // /healthz 都可达，/setup 在首个管理员出现后按约定变为 404，密码错误按约定返回 401。
 func TestWiredServerExposesAuthRoutes(t *testing.T) {
 	srv, users := newWiredServer(t)
@@ -182,7 +182,7 @@ func snippet(body string) string {
 	return body[:max] + "..."
 }
 
-// TestWiredServerStartsWithMailOutbox 验证 M1-17 的接线：真实装配路径下 Server 暴露了
+// TestWiredServerStartsWithMailOutbox 验证接线：真实装配路径下 Server 暴露了
 // 邮件 outbox，且默认未配置 SMTP（Configured()=false），worker 可启动并优雅停止。
 func TestWiredServerStartsWithMailOutbox(t *testing.T) {
 	srv, _ := newWiredServer(t)

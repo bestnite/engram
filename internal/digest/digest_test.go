@@ -418,7 +418,7 @@ func TestDigestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	}
 }
 
-// TestDigestUnsubscribeHeaders 验证 C 类摘要带 M1-22 的一键退订头，且令牌指名 study_digest。
+// TestDigestUnsubscribeHeaders 验证 C 类摘要带一键退订头，且令牌指名 study_digest。
 func TestDigestUnsubscribeHeaders(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUser(t, db, "frank", "frank@example.com", "en", "Asia/Shanghai", 4)

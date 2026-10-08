@@ -387,7 +387,7 @@
     }
   }
 
-  /** 只有两侧指标样本都足够时才渲染 before/after 与结论（M9-12）。 */
+  /** 只有两侧指标样本都足够时才渲染 before/after 与结论。 */
   function showsFit(verdict: string): boolean {
     return verdict === 'improved' || verdict === 'not_improved';
   }

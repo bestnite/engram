@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 邮件 outbox（AGENTS.md M1-17）。
+// 邮件 outbox。
 //
 // 投递设计：入站只写这张队列表，后台 worker 带重试与退避投递，绝不在请求路径里同步发信。
 // 发信失败不得让触发它的操作失败，因此 Enqueue 只落一行 pending，投递结果由 worker 写回。
@@ -36,7 +36,7 @@ type OutboxMessage struct {
 	ID uint64 `gorm:"primaryKey" json:"id"`
 	// To 是收件地址（只用登录邮箱）。
 	To string `gorm:"not null" json:"to"`
-	// Type 是自由字符串邮件类型；目录由 M1-18 定义，这里只原样存。
+	// Type 是自由字符串邮件类型；目录由定义，这里只原样存。
 	Type string `gorm:"not null" json:"type"`
 	// Subject 是主题；用户可见文案在入站时已本地化，这里只存结果。
 	Subject  string `gorm:"not null" json:"subject"`

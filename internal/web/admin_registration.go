@@ -6,7 +6,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板的注册与邀请支撑函数（ROADMAP.md M6-3）。
+// 管理面板的注册与邀请支撑函数。
 //
 // SSR 注册与邀请页删除后，策略与邀请的读写在 /api/v1/admin/registration 与
 // /api/v1/admin/invites* 的 JSON 端点上（admin_registration_api.go）；

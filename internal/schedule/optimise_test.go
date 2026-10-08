@@ -50,7 +50,7 @@ func optimiseWeights21() []float64 {
 	return w
 }
 
-// TestOptimiseWeightRoundTrip 是 M9-6「权重往返」的端到端用例：优化写回的权重落库后，
+// TestOptimiseWeightRoundTrip 是「权重往返」的端到端用例：优化写回的权重落库后，
 // 调度器 NewScheduler 读到的就是同一组权重（而不是默认权重）。
 // 这条链路串起 store（落库）与 schedule（消费），正是「优化完成即生效」的数据契约。
 func TestOptimiseWeightRoundTrip(t *testing.T) {
@@ -103,7 +103,7 @@ func TestOptimiseWeightRoundTrip(t *testing.T) {
 	}
 }
 
-// TestOptimiseRevertRestoresDefaultWeights 是 M9-6「回退」的端到端用例：一键回退后，
+// TestOptimiseRevertRestoresDefaultWeights 是「回退」的端到端用例：一键回退后，
 // 调度器重新落到 fsrs.DefaultWeights()，三列权重元数据一并归 NULL。
 func TestOptimiseRevertRestoresDefaultWeights(t *testing.T) {
 	db := optimiseDB(t)

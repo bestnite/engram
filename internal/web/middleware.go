@@ -12,7 +12,7 @@ import (
 
 // SessionUserLocale 是 Deps.UserLocale 的默认实现：从已解析的会话用户取界面语言。
 // 装配时把它交给 web.Deps（会话中间件必须先于语言中间件运行），
-// 个人设置里的语言（M1-8）才会真正参与 i18n 解析优先级。
+// 个人设置里的语言才会真正参与 i18n 解析优先级。
 func SessionUserLocale(c *gin.Context) string {
 	if u, ok := auth.CurrentUser(c); ok {
 		return u.Locale
@@ -20,7 +20,7 @@ func SessionUserLocale(c *gin.Context) string {
 	return ""
 }
 
-// localeMiddleware 按固定优先级解析请求语言，并把本地化器放进请求 context（M0-8）。
+// localeMiddleware 按固定优先级解析请求语言，并把本地化器放进请求 context。
 // 优先级：?lang 显式覆盖 > 用户设置（Deps.UserLocale 提供；M0 无会话，M1 接入）
 // > Accept-Language > 站点默认。
 func (s *Server) localeMiddleware() gin.HandlerFunc {
@@ -32,7 +32,7 @@ func (s *Server) localeMiddleware() gin.HandlerFunc {
 		requested := c.Query("lang")
 		accept := c.GetHeader("Accept-Language")
 		tag := s.i18n.Pick(requested, userLocale, accept)
-		// 站点默认语言设置（M6-5）是最后一级回退：只有当 ?lang、用户设置、Accept-Language
+		// 站点默认语言设置是最后一级回退：只有当 ?lang、用户设置、Accept-Language
 		// 三个更明确的来源都缺席时才应用它，绝不覆盖它们。
 		if requested == "" && userLocale == "" && strings.TrimSpace(accept) == "" {
 			if code := s.siteDefaultLocale(c.Request.Context()); code != "" {

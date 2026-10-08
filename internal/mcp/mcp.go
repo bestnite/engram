@@ -1,5 +1,5 @@
 // Package mcp 提供内置 MCP server：同进程 HTTP（POST /mcp，streamable HTTP），
-// 复用用户级 API Key 鉴权与 internal/api 的 service 层（ROADMAP.md M4-6/M4-7）。
+// 复用用户级 API Key 鉴权与 internal/api 的 service 层。
 //
 // 只提供 HTTP，不提供 stdio（多用户服务没有“进程即身份”的语义）。
 // 工具不封装业务逻辑，只做参数校验并调用与 REST 完全相同的方法。

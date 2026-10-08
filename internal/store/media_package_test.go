@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// 媒体是卡组包里唯一会往磁盘写文件的路径，却是覆盖最少的：M5-10 要求导出→导入新库后
-// 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值（ROADMAP.md M5-10）。
+// 媒体是卡组包里唯一会往磁盘写文件的路径，却是覆盖最少的：要求导出→导入新库后
+// 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值。
 
 // seedMediaNote 把 raw 按内容寻址写进 srcRoot 与媒体元数据表，并在卡组里放一条引用它的 note；
 // 返回 sha256。媒体引用形如 media/<sha256>.<ext>。
@@ -166,7 +166,7 @@ func entryContains(entries []string, needle string) bool {
 	return false
 }
 
-// TestImportPackageRollbackLeavesNoOrphanMedia 是 M5-11 的验收测试：媒体写入发生在
+// TestImportPackageRollbackLeavesNoOrphanMedia 是验收测试：媒体写入发生在
 // 事务提交之前，若事务随后失败回滚，写下的字节必须一并清理，不能留下无人引用的孤儿文件。
 //
 // 构造方式：目标卡组里预置一条与包内 note 同 external_ref 的记录，配合 on_conflict=fail

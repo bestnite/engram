@@ -19,7 +19,7 @@ func newSQLite(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestApplyRefusesUnnamedMigration 覆盖 M0-4 的反面用例：
+// TestApplyRefusesUnnamedMigration 覆盖反面用例：
 // 没有注册名字的破坏性变更必须被 schema sync 拒绝。
 func TestApplyRefusesUnnamedMigration(t *testing.T) {
 	db := newSQLite(t)

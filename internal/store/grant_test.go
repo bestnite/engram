@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestGrantStoreLifecycle 覆盖 deck_grants 的授予 / 改角色 / 查询 / 撤销（M5-1）。
+// TestGrantStoreLifecycle 覆盖 deck_grants 的授予 / 改角色 / 查询 / 撤销。
 func TestGrantStoreLifecycle(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

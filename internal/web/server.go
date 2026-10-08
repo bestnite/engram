@@ -40,55 +40,55 @@ type Deps struct {
 	Translator *i18n.Translator
 	// UserLocale 返回当前请求的用户语言设置（可为空串）。M0 尚无会话，M1 接入后提供。
 	UserLocale func(c *gin.Context) string
-	// Accounts 提供本地账号的创建与认证（M1-4）；与 Sessions、Users 一起接入认证路由。
+	// Accounts 提供本地账号的创建与认证；与 Sessions、Users 一起接入认证路由。
 	Accounts *auth.AccountService
-	// Sessions 提供会话解析与 CSRF 两个中间件（M1-2、M1-3）；登录/登出流程基于它。
+	// Sessions 提供会话解析与 CSRF 两个中间件；登录/登出流程基于它。
 	Sessions *auth.Manager
-	// Users 用于判断是否已存在管理员，决定 /setup 引导是否可达（M1-5）。
+	// Users 用于判断是否已存在管理员，决定 /setup 引导是否可达。
 	Users *store.UserStore
-	// Invites 提供邀请的创建/列出/撤销/接受（M1-7）；策略为 invite 时注册流程依赖它。
+	// Invites 提供邀请的创建/列出/撤销/接受；策略为 invite 时注册流程依赖它。
 	Invites *store.InviteStore
-	// Decks 提供卡组的读取与归属判断，供卡片列表/编辑页使用（M2-7）。
+	// Decks 提供卡组的读取与归属判断，供卡片列表/编辑页使用。
 	Decks *store.DeckStore
-	// Notes 提供 note 的查询、更新与批量操作，供卡片列表/编辑页使用（M2-7）。
+	// Notes 提供 note 的查询、更新与批量操作，供卡片列表/编辑页使用。
 	Notes *store.NoteStore
-	// Cards 提供 card 的读取，供复习页取卡与渲染（M3-5）。
+	// Cards 提供 card 的读取，供复习页取卡与渲染。
 	Cards *store.CardStore
-	// Presets 提供调度预设的读取，供复习页构造 FSRS 调度器（M3-5）。
+	// Presets 提供调度预设的读取，供复习页构造 FSRS 调度器。
 	Presets *store.PresetStore
-	// Grants 是卡组授权存储（M5-1）；为空时由 New 从 DB 构造。
+	// Grants 是卡组授权存储；为空时由 New 从 DB 构造。
 	Grants *store.GrantStore
-	// ShareLinks 是分享链接存储（M5-3）；为空时由 New 从 DB 构造。
+	// ShareLinks 是分享链接存储；为空时由 New 从 DB 构造。
 	ShareLinks *store.ShareLinkStore
 	// ShareSessions 是分享链接打开的卡组的会话级授权（L3）；为空时由 New 从 DB 构造。
 	ShareSessions *store.ShareSessionStore
-	// Auditor 是全部写操作的统一审计出口（M1-10）；为空时不写审计。
+	// Auditor 是全部写操作的统一审计出口；为空时不写审计。
 	Auditor *auth.Auditor
-	// LoginLimiter 提供登录失败的递增延迟（M1-9）；为空时登录不做限流。
+	// LoginLimiter 提供登录失败的递增延迟；为空时登录不做限流。
 	LoginLimiter *auth.LoginLimiter
 	// AnonLimiter 对 /register 与 /forgot-password 这类匿名入口按 IP 与目标邮箱做固定
 	// 窗口限流（5 次 / 15 分钟）；为空时这两个入口不做限流。
 	AnonLimiter *auth.AnonymousLimiter
-	// TOTP 是本地账号的可选二次因素（M1-16）；为空时登录只校验密码，不暴露 TOTP 相关路由。
+	// TOTP 是本地账号的可选二次因素；为空时登录只校验密码，不暴露 TOTP 相关路由。
 	TOTP *auth.TOTPService
 	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单。
 	BootstrapAdminEmail string
-	// API 是 /api/v1 的 handler 集合（M4-3）；非空时挂载到 /api/v1。
+	// API 是 api/v1 的 handler 集合；非空时挂载到 /api/v1。
 	API *api.API
-	// MCP 是内置 MCP server（M4-6）；非空时在 /mcp 挂载 streamable HTTP。
+	// MCP 是内置 MCP server；非空时在 /mcp 挂载 streamable HTTP。
 	MCP *mcp.Server
-	// Media 是本地媒体存储（M2-8）；非空时挂载上传与 /media/<sha256> 代理。
+	// Media 是本地媒体存储；非空时挂载上传与 /media/<sha256> 代理。
 	Media *media.Store
-	// Secrets 是敏感设置的 AES-GCM 编解码器（M6-10）；非空时管理面板可写入
+	// Secrets 是敏感设置的 AES-GCM 编解码器；非空时管理面板可写入
 	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。
 	Secrets *store.SecretCodec
-	// Jobs 是后台作业的单并发执行器（M9-1）；非空时预设页可触发参数优化（M9-4），
-	// 管理面板也可列出作业并取消（M6-6）；为空时作业页只渲染空列表。
+	// Jobs 是后台作业的单并发执行器；非空时预设页可触发参数优化，
+	// 管理面板也可列出作业并取消；为空时作业页只渲染空列表。
 	Jobs *jobs.Runner
-	// Mail 是邮件 outbox 与后台 worker（M1-17）；非空时 SMTP 配置页可用，管理面板可
+	// Mail 是邮件 outbox 与后台 worker；非空时 SMTP 配置页可用，管理面板可
 	// 读到投递状态；为空时相关能力只显示"未配置"。
 	Mail *mail.Outbox
-	// Identities 提供外部身份（OIDC）的读取、绑定与解绑（M1-11、M6-4）；为空时由 New 从 DB 构造。
+	// Identities 提供外部身份（OIDC）的读取、绑定与解绑；为空时由 New 从 DB 构造。
 	Identities *store.IdentityStore
 	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
 	BaseURL string
@@ -111,7 +111,7 @@ type Server struct {
 	assets        *Assets
 	shell         *Shell
 	i18n          *i18n.Translator
-	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证 M8-4 报告页会渲染
+	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证报告页会渲染
 	// <100% 并点名缺失的 key；生产为空，报告走 i18n.Coverage。
 	coverageOverride func() []i18n.LocaleCoverage
 	userLocale       func(c *gin.Context) string
@@ -127,41 +127,41 @@ type Server struct {
 	shareLinks       *store.ShareLinkStore
 	// shareSessions 记录「本会话通过分享链接打开过哪些卡组」（L3）；媒体读取据此放行。
 	shareSessions *store.ShareSessionStore
-	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
+	// access 是 Web 与 REST/MCP 共用的权限判定（单一实现见 auth.DeckAccess）。
 	access       *auth.DeckAccess
 	auditor      *auth.Auditor
 	loginLimiter *auth.LoginLimiter
 	// anonLimiter 限流 /register 与 /forgot-password 的匿名请求（IP + 目标邮箱双维度）。
 	anonLimiter *auth.AnonymousLimiter
-	// totp 是本地账号的二次因素服务（M1-16）；为空时登录不含第二步。
+	// totp 是本地账号的二次因素服务；为空时登录不含第二步。
 	totp           *auth.TOTPService
 	bootstrapEmail string
 	api            *api.API
 	mcp            *mcp.Server
 	media          *media.Store
-	// secrets 供管理面板写入敏感设置（M6-10）；为空时拒绝写入，只显示状态。
+	// secrets 供管理面板写入敏感设置；为空时拒绝写入，只显示状态。
 	secrets *store.SecretCodec
-	// mediaSizeMu/mediaSize 是健康页媒体占用的采样缓存（M6-8）：避免每次请求都全量递归扫描。
+	// mediaSizeMu/mediaSize 是健康页媒体占用的采样缓存：避免每次请求都全量递归扫描。
 	mediaSizeMu sync.Mutex
 	mediaSize   *mediaSizeSample
-	// jobRunner 是作业入口（M9-4 入队、M6-6 列表与取消）；jobStore 供轮询按 id 读状态。
+	// jobRunner 是作业入口（入队、列表与取消）；jobStore 供轮询按 id 读状态。
 	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
-	// mail 是邮件 outbox（M1-17）；由 cmd/engram 启动/停止其 worker。
+	// mail 是邮件 outbox；由 cmd/engram 启动/停止其 worker。
 	mail *mail.Outbox
-	// securityMail 是 A 类事务安全邮件的入站投递助手（M1-19）。
+	// securityMail 是 A 类事务安全邮件的入站投递助手。
 	securityMail *mail.SecurityNotifier
-	// tokens 签发/消费一次性动作令牌（M1-19）：密码重置、邮箱验证、改邮箱确认。
+	// tokens 签发/消费一次性动作令牌：密码重置、邮箱验证、改邮箱确认。
 	tokens *auth.ActionTokenService
-	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」（M1-19）。
+	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」。
 	fingerprints *store.LoginFingerprintStore
 	// mailTemplates 是管理员自定义的邮件模板；缺失即回退内置正文。
 	mailTemplates *store.MailTemplateStore
 	// shareInvites 是待接受的卡组共享邀请（L3 同意制）；sharePolicy 是「谁能分享给我」的策略。
 	shareInvites *store.DeckShareInviteStore
 	sharePolicy  *store.SharePolicyStore
-	// identities / identityLink 是 OIDC 绑定能力（M1-11）：store 供解绑与列表，service 走身份绑定的三个分支。
+	// identities / identityLink 是 OIDC 绑定能力：store 供解绑与列表，service 走身份绑定的三个分支。
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
 	// oidc 是协议客户端（发现文档缓存 + state 表）；baseURL 用于拼 redirect_uri。
@@ -265,7 +265,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		jobStore:       jobs.NewStore(deps.DB),
 		mail:           deps.Mail,
 	}
-	// A 类事务安全邮件（M1-19）：outbox 装配时才构造投递助手；令牌与指纹存储总是可用。
+	// A 类事务安全邮件：outbox 装配时才构造投递助手；令牌与指纹存储总是可用。
 	tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(deps.DB))
 	if err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	if deps.Mail != nil {
 		s.securityMail = mail.NewSecurityNotifier(deps.Mail, store.NewEmailPrefStore(deps.DB), logger)
 	}
-	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器（M5-1）。
+	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器。
 	s.grants = deps.Grants
 	if s.grants == nil {
 		s.grants = store.NewGrantStore(deps.DB)
@@ -296,7 +296,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
 	}
 
-	// OIDC 装配（M1-11）：协议客户端常驻；绑定服务需要账号与用户存储齐备。
+	// OIDC 装配：协议客户端常驻；绑定服务需要账号与用户存储齐备。
 	s.oidc = auth.NewOIDCClient(nil)
 	s.baseURL = strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/")
 	s.identities = deps.Identities
@@ -326,7 +326,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	// 安全响应头挂在全局，覆盖静态资源、/media、/api/v1、/mcp 与 404 回退；
 	// 放在 session/locale 之前，保证任何提前中止的响应也带齐这组头。CSP 只上报不阻断。
 	router.Use(securityHeaders())
-	// 会话中间件先于语言中间件：个人设置里的语言（M1-8）要参与 i18n 解析优先级，
+	// 会话中间件先于语言中间件：个人设置里的语言要参与 i18n 解析优先级，
 	// 而它只能从已解析的会话用户读取。会话解析本身不依赖语言，先后次序安全。
 	if s.sessions != nil {
 		router.Use(s.sessions.Middleware())
@@ -346,7 +346,7 @@ func New(addr string, deps Deps) (*Server, error) {
 			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.passwordPatch)
 		}
 	}
-	// PWA 外壳（M8-2）：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
+	// PWA 外壳：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
 	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
 	s.registerDeckRoutes(router)
@@ -366,9 +366,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
 	s.registerSettingsRoutes(router)
-	// M1-19 A 类事务安全邮件：密码重置、邮箱验证与改邮箱确认的页面与触发点。
+	// A 类事务安全邮件：密码重置、邮箱验证与改邮箱确认的页面与触发点。
 	s.registerSecurityMailRoutes(router)
-	// M1-22 一键退订（RFC 8058）：免登录的一键退订端点（可选类型专用）。
+	// 一键退订（RFC 8058）：免登录的一键退订端点（可选类型专用）。
 	s.registerUnsubscribeRoutes(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
@@ -404,7 +404,7 @@ func New(addr string, deps Deps) (*Server, error) {
 // Handler 返回底层 handler，便于测试直接注入请求。
 func (s *Server) Handler() http.Handler { return s.router }
 
-// Mail 返回邮件 outbox（M1-17）；cmd/engram 借此启动与优雅停止其后台 worker。
+// Mail 返回邮件 outbox；cmd/engram 借此启动与优雅停止其后台 worker。
 // 未装配时为 nil。
 func (s *Server) Mail() *mail.Outbox { return s.mail }
 

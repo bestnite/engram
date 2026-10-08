@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「用户管理」的 SPA JSON 端点（ROADMAP.md M6-2）。
+// 本文件是管理面板「用户管理」的 SPA JSON 端点。
 //
 // 语义与 SSR 表单（admin_users.go）逐项一致，只换传输形态：同一份 store/service 调用、
 // 同一份危险动作保护（不可删自己、不可清空最后一个管理员、危险动作需确认）。响应只带原始
@@ -154,7 +154,7 @@ func (s *Server) adminUserCreate(c *gin.Context) {
 	})
 }
 
-// adminUserStatus 启用或禁用账号；禁用会作废其全部会话（M6-2 验收）。
+// adminUserStatus 启用或禁用账号；禁用会作废其全部会话
 func (s *Server) adminUserStatus(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -330,7 +330,7 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	// M1-19：删除前先发「账号被删除」通知；发信失败不影响删除（通知函数不返回 error）。
+	// 删除前先发「账号被删除」通知；发信失败不影响删除（通知函数不返回 error）。
 	s.notifyAccountStatus(ctx, target, "deleted")
 	// 删除前先作废会话，保证即便删除中途失败也不留下可用会话。
 	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {

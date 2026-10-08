@@ -40,7 +40,7 @@ func bulkActionsFromSchema(t *testing.T, path string) []string {
 }
 
 // TestNoteBulkSchemaMatchesTheGoActions 断言 schema 的 action 枚举与 Go 侧常量完全一致，
-// 并校验仓库里那份示例请求体真的能通过它自己的 schema（M4-12：schema 是给外部工具用的
+// 并校验仓库里那份示例请求体真的能通过它自己的 schema（schema 是给外部工具用的
 // 机器可读契约，示例与契约必须同步）。
 func TestNoteBulkSchemaMatchesTheGoActions(t *testing.T) {
 	const path = "../../schema/note-bulk.schema.json"

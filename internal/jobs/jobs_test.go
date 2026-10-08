@@ -83,7 +83,7 @@ func TestEnqueueRequiresKind(t *testing.T) {
 	}
 }
 
-// TestOptimiseSingleFlightReturnsConflict 是 M9-6「单并发」用例（M9-1 第一条验收）：
+// TestOptimiseSingleFlightReturnsConflict 是「单并发」用例（第一条验收）：
 // 作业在跑时第二次入队应得到可识别为 409 的哨兵错误。
 //
 // 用一个阻塞在 stdin 上的真实子进程（`sh -c 'cat'`）让第一个作业停在 running，
@@ -112,7 +112,7 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 		t.Fatalf("second Enqueue error = %v, want ErrAlreadyRunning", err)
 	}
 
-	// REST 层映射：哨兵错误必须映射成 409（M9-4 接线时复用 HTTPStatus）。
+	// REST 层映射：哨兵错误必须映射成 409（接线时复用 HTTPStatus）。
 	rec := httptest.NewRecorder()
 	http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "job conflict", HTTPStatus(err))
@@ -139,7 +139,7 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	t.Logf("job %d status=%s stage=%v started=%v finished=%v", done.ID, done.Status, deref(done.Stage), done.StartedAt != nil, done.FinishedAt != nil)
 }
 
-// TestOptimiseTimeoutMarksJobFailed 是 M9-6「超时」用例（M9-1 第二条验收的前半）：
+// TestOptimiseTimeoutMarksJobFailed 是「超时」用例（第二条验收的前半）：
 // 卡死的适配器在配置超时后被取消，作业标记为 failed 且原因写明超时。命令自身要睡 30s，
 // 而测试在 5s 内就拿到 failed，说明是超时机制结束的作业，而不是命令自然退出。
 // 「连它派生的子进程一起杀掉」由下一条 TestOptimiseTimeoutKillsProcessGroup 单独覆盖。
@@ -169,7 +169,7 @@ func TestOptimiseTimeoutMarksJobFailed(t *testing.T) {
 	t.Logf("job %d status=%s elapsed=%s error=%q", failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error)
 }
 
-// TestOptimiseTimeoutKillsProcessGroup 是 M9-6「杀进程」用例（M9-1 第二条验收的后半）：
+// TestOptimiseTimeoutKillsProcessGroup 是「杀进程」用例（第二条验收的后半）：
 // 超时必须杀掉整个进程组，而不只是直接子进程。
 //
 // 命令是 `sh -c 'sleep 30 & echo child=$!; cat'`：shell 与后台 sleep 同属一个进程组，
@@ -309,7 +309,7 @@ func TestTailBufferAndLines(t *testing.T) {
 	}
 }
 
-// TestRecoverStaleJobsAtStartup 是 M9-6 的验收：预置一行上次进程遗留的 running 作业，
+// TestRecoverStaleJobsAtStartup 是验收：预置一行上次进程遗留的 running 作业，
 // 构造并启动 Runner 后它必须变为 failed、原因记录为 StaleJobReason、日志尾巴保留，
 // 且随后新入队不再被永久 409 阻塞。
 func TestRecoverStaleJobsAtStartup(t *testing.T) {
@@ -348,7 +348,7 @@ func TestRecoverStaleJobsAtStartup(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	// 恢复前：残留的 running 行让入队撞上单并发门（这正是 M9-6 要修的症状）。
+	// 恢复前：残留的 running 行让入队撞上单并发门（这正是要修的症状）。
 	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
 	}
@@ -416,7 +416,7 @@ func TestRecoverStaleExplicitEntry(t *testing.T) {
 	}
 }
 
-// TestRecoverQueuedJobsAtStartup 是 M9-8 的验收：预置一行上次进程在「insert 之后、启动之前」
+// TestRecoverQueuedJobsAtStartup 是验收：预置一行上次进程在「insert 之后、启动之前」
 // 崩溃遗留的 queued 作业（内存队列随进程消失，它永远不会被执行），启动恢复后它必须变为
 // failed、原因是「作业从未启动」，且随后新入队不再被永久 409 阻塞。
 func TestRecoverQueuedJobsAtStartup(t *testing.T) {
@@ -451,7 +451,7 @@ func TestRecoverQueuedJobsAtStartup(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	// 恢复前：残留 queued 行让 Enqueue 永久 409，这正是 M9-8 要修的症状。
+	// 恢复前：残留 queued 行让 Enqueue 永久 409，这正是要修的症状。
 	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
 	}

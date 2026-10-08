@@ -824,7 +824,7 @@ export interface PresetFitMetrics {
   items: number;
 }
 
-/** 优化前后拟合结论的稳定枚举（M9-12）。 */
+/** 优化前后拟合结论的稳定枚举。 */
 export type PresetOptimizeVerdict =
   | 'improved'
   | 'not_improved'

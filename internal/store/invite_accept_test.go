@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestInviteAcceptRollsBackOnCreateFailure 是 B-12 的反面用例：建号回调失败时邀请必须保持可用，
+// TestInviteAcceptRollsBackOnCreateFailure 是反面用例：建号回调失败时邀请必须保持可用，
 // 且整个过程没有“已使用→又变可用”的中间态 —— 占用与建号在同一个事务里一起回滚。
 func TestInviteAcceptRollsBackOnCreateFailure(t *testing.T) {
 	db := newInviteTestDB(t)

@@ -24,7 +24,7 @@ var gradedFieldKeys = []string{
 	"ignore_case", "ignore_whitespace", "regex", "reference",
 }
 
-// TestCardTypeLabelsCoverRegistry 是 M2-10 的验收测试：枚举 Registry.Kinds()，
+// TestCardTypeLabelsCoverRegistry 是验收测试：枚举 Registry.Kinds()，
 // 任一题型在中英任一套语言包里缺显示名（cardtype.<kind>）就失败。
 // 同时校验文档冻结的十个题型与全部作答类字段名都有标签，避免目录被悄悄裁剪。
 func TestCardTypeLabelsCoverRegistry(t *testing.T) {

@@ -18,7 +18,7 @@ func registerJSON(t *testing.T, srv *Server, body map[string]string) *httptest.R
 	return postJSON(srv, "/api/v1/auth/register", body, []*http.Cookie{cookie}, headers)
 }
 
-// TestMutationsWriteExactlyOneAuditRow 是 M1-10 的接线验收：注册、登录、登出各写一行，
+// TestMutationsWriteExactlyOneAuditRow 是接线验收：注册、登录、登出各写一行，
 // action 字符串与 store 中的常量一致。
 func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 	srv, db := newAuthServer(t)
@@ -64,7 +64,7 @@ func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 	}
 }
 
-// TestLoginFailureIsAuditedAndLimiterResets 是 M1-9 的接线验收：失败写审计并累加限流，
+// TestLoginFailureIsAuditedAndLimiterResets 是接线验收：失败写审计并累加限流，
 // 成功登录后限流重置。
 func TestLoginFailureIsAuditedAndLimiterResets(t *testing.T) {
 	srv, db := newAuthServer(t)

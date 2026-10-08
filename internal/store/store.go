@@ -32,7 +32,7 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	switch driver {
 	case "sqlite":
 		// sqlite 的父目录不存在时先幂等创建，避免 SQLite 给出误导性的 "out of memory (14)"
-		// （ROADMAP.md M0-13；理由见 dsn.go 顶部注释）。只对 sqlite 生效。
+		// （理由见 dsn.go 顶部注释）。只对 sqlite 生效。
 		if err := prepareSQLiteDir(dsn); err != nil {
 			return nil, err
 		}

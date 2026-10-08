@@ -30,7 +30,7 @@ const (
 	CodeTooLarge       = "media_too_large"
 	CodeMimeNotAllowed = "media_mime_not_allowed"
 	CodeMagicMismatch  = "media_magic_mismatch"
-	// CodeQuotaExceeded 表示本次上传会超出该用户的媒体总量配额（M2-13）。
+	// CodeQuotaExceeded 表示本次上传会超出该用户的媒体总量配额。
 	// 用量是「该用户 note 引用到的媒体去重求和」，由路由层在落盘前算出，见 internal/store 的 UserMediaUsage。
 	CodeQuotaExceeded = "media_quota_exceeded"
 )
@@ -93,7 +93,7 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 // 这里保留同名入口，避免改动大量调用点。
 func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
-// 每用户媒体总量配额（M2-13）的 settings 键与环境变量覆盖名。
+// 每用户媒体总量配额的 settings 键与环境变量覆盖名。
 // Web 上传、REST/MCP/CLI 导入与 Web 导入共用下面这一份解析，四条入口只有一处口径。
 const (
 	SettingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
@@ -101,7 +101,7 @@ const (
 )
 
 // ResolveUserQuotaBytes 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
-// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字（M2-13）。
+// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字。
 //
 // 上传链（internal/web 的 checkMediaQuota）与卡组包导入链（store.ImportPackage 的
 // MediaQuotaBytes）都从这里取值，保证“新增媒体字节计入导入者配额”在所有入口一致。

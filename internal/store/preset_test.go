@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestPresetDefaultsAppliedAndRoundTrip 是 M2-2 的验收用例：
+// TestPresetDefaultsAppliedAndRoundTrip 是验收用例：
 // 文档化默认值必须落到库里，且每个可改参数都能原样读回。
 func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -164,7 +164,7 @@ func TestPresetValidationRejectsZeroValues(t *testing.T) {
 	}
 }
 
-// TestEnsureDefaultPresetIdempotentAndConcurrent 是 M3-14 默认预设补齐的验收：
+// TestEnsureDefaultPresetIdempotentAndConcurrent 是默认预设补齐的验收：
 // 重复调用与并发调用都只能得到一条默认预设，且都不报错。
 //
 // 并发部分覆盖「两个请求同时为同一用户补齐」：presets 表没有 (owner_user_id, name) 唯一约束，

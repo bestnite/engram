@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 M2-9：编辑器里的媒体面——上传图片并插入到卡片字段。
+// 本文件覆盖：编辑器里的媒体面——上传图片并插入到卡片字段。
 // 验收主线是「上传的图片在预览里渲染，且刷新页面后仍在」；同时给出权限与校验的反面用例。
 
 // uploadMediaTo 向指定上传端点提交 multipart，用于区分 /media 与 /decks/:id/media 两个入口。
@@ -63,7 +63,7 @@ func mediaShaOK(sha string) bool {
 	return true
 }
 
-// TestEditorMediaUploadInsertsAndSurvivesReload 是 M2-9 的主验收：从编辑器使用的卡组上传
+// TestEditorMediaUploadInsertsAndSurvivesReload 是主验收：从编辑器使用的卡组上传
 // 入口上传图片 → 以 Markdown 引用插入字段 → 预览渲染出 <img> → 保存 → 刷新后字段值里仍
 // 有该引用、预览里仍有 <img>（且不是 base64 内联）。
 func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {

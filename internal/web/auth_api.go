@@ -82,7 +82,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 	ctx := c.Request.Context()
 	ip := c.ClientIP()
 
-	// 认证前先按已累计的失败次数递增延迟（M1-9）：防爆破，拉平暴力尝试速率
+	// 认证前先按已累计的失败次数递增延迟：防爆破，拉平暴力尝试速率
 	if s.loginLimiter != nil {
 		if _, err := s.loginLimiter.Wait(ctx, username, ip); err != nil {
 			s.logger.Info("login delay aborted", "error", err)
@@ -253,7 +253,7 @@ func (s *Server) apiRegister(c *gin.Context) {
 		s.writeRegistrationError(c, outcome)
 		return
 	}
-	// M1-19：注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（与 SSR 一致）。
+	// 注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（与 SSR 一致）。
 	s.sendEmailVerification(c, outcome.User)
 	c.JSON(http.StatusOK, gin.H{"created": true})
 }

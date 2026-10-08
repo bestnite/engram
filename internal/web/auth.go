@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerAuthRoutes 挂载认证路由（M1-4、M1-5）。
+// registerAuthRoutes 挂载认证路由。
 //
 // 依赖未装配时（例如 M0 阶段的测试只构造了 DB/Logger）直接跳过，保证 New 仍可用；
 // 生产装配见 cmd/engram，需要显式提供 Accounts、Sessions、Users。
@@ -27,16 +27,16 @@ func (s *Server) registerAuthRoutes(router *gin.Engine) {
 	// 登录/注册/引导三条页面只返回 SPA 应用壳：页面判定与写操作全部由
 	// 客户端的同源 JSON 端点承担（/api/v1/auth/{session,login,register,setup}）。
 	// 会话前写请求没有服务端会话可绑 token，仍由 PreSessionCSRFMiddleware 校验双提交 cookie
-	// 与镜像 token（B-13）。
+	// 与镜像 token。
 	router.GET("/login", s.loginShell)
 	router.GET("/register", s.registerShell)
 	router.GET("/setup", s.setupShell)
-	// OIDC 可选登录（M1-11）：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
+	// OIDC 可选登录：默认关闭，配置不完整时 handler 返回 404（不允许半开）。
 	router.GET("/auth/oidc/start", s.oidcStart)
 	router.GET("/auth/oidc/callback", s.oidcCallback)
 	// SPA 的 OIDC 入口探测（oidc_api.go）：只读，供登录视图决定是否显示第二个登录按钮。
 	s.registerOIDCRoutes(router)
-	// TOTP 二次验证（M1-16）：登录第二步与设置页路由集中在 internal/web/totp.go。
+	// TOTP 二次验证：登录第二步与设置页路由集中在 internal/web/totp.go。
 	s.registerTOTPRoutes(router)
 
 	// SPA / 同源 JSON 会话与认证端点
@@ -64,7 +64,7 @@ func (s *Server) localizer(c *gin.Context) (*i18n.Localizer, bool) {
 	return loc, true
 }
 
-// audit 是写审计的统一出口（M1-10）：所有变更都经这里落 audit_log。
+// audit 是写审计的统一出口：所有变更都经这里落 audit_log。
 // 审计写失败只记英文日志、不回滚已发生的业务变更 —— 但绝不静默，否则审计会悄悄缺行。
 func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
 	if s.auditor == nil {
@@ -97,7 +97,7 @@ type registrationOutcome struct {
 	User   *store.User
 }
 
-// registrationDenialCode 把策略或邀请的拒绝原因翻译成稳定英文 code（M1-6、M1-7）。
+// registrationDenialCode 把策略或邀请的拒绝原因翻译成稳定英文 code。
 // code 同时是 JSON 错误包壳里的 code 与稳定英文 message 的来源。
 func registrationDenialCode(err error) string {
 	switch {
@@ -179,7 +179,7 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 
 	var u *store.User
 	if invite != nil {
-		// 邀请接受事务化（B-12）：Accept 在一个事务里占用 token、建号并回填 used_by。
+		// 邀请接受事务化：Accept 在一个事务里占用 token、建号并回填 used_by。
 		// 建号失败时整体回滚，token 保持可用；并发下条件更新保证只有一个请求能占用成功。
 		created, aerr := s.invites.Accept(ctx, invite.Token, now, func(tx *gorm.DB) (*store.User, error) {
 			return s.accounts.CreateLocalUserTx(ctx, tx, input)
@@ -210,7 +210,7 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 	return registrationOutcome{Status: http.StatusOK, User: u}
 }
 
-// attemptSetup 执行首个管理员引导的建号与审计（M1-5）。SPA JSON 接口（apiSetup）是唯一的传输，
+// attemptSetup 执行首个管理员引导的建号与审计。SPA JSON 接口（apiSetup）是唯一的传输，
 // 一次性管理员门（CountActiveAdmins==0）由调用方在入口处校验。引导不发送邮箱验证邮件。
 func (s *Server) attemptSetup(ctx context.Context, username, email, displayName, password, locale string) registrationOutcome {
 	if code := registerInputErrorCode(username, email, password); code != "" {
@@ -238,7 +238,7 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 	return registrationOutcome{Status: http.StatusOK, User: u}
 }
 
-// setupAvailable 报告引导页是否可达：仅当没有任何仍在用的管理员时可达（M1-5 的一次性管理员门）。
+// setupAvailable 报告引导页是否可达：仅当没有任何仍在用的管理员时可达（一次性管理员门）。
 func (s *Server) setupAvailable(c *gin.Context) bool {
 	n, err := s.users.CountActiveAdmins(c.Request.Context())
 	if err != nil {

@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// 本文件是 M8-7（界面打磨）里仍可从服务端核实、且不依赖 SSR 页面渲染的部分：favicon 重定向、
+// 本文件是界面打磨里仍可从服务端核实、且不依赖 SSR 页面渲染的部分：favicon 重定向、
 // SPA 应用壳声明的图标、manifest 与 service worker 的缓存清单。
 // 页面级的导航/页脚/对话框观感已由 SPA 客户端路由承担，不再由服务端渲染。
 
-// TestFaviconRedirectsToHashedIcon 是 M8-7 (f) 的验收：/favicon.ico 不再 404，
+// TestFaviconRedirectsToHashedIcon 是 (f) 的验收：/favicon.ico 不再 404，
 // 而是重定向到内容哈希化的 SVG 图标。
 func TestFaviconRedirectsToHashedIcon(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
@@ -33,7 +33,7 @@ func TestFaviconRedirectsToHashedIcon(t *testing.T) {
 }
 
 // TestPagesDeclareIconLinks 断言 SPA 应用壳在 <head> 声明 SVG favicon 与 apple-touch-icon，
-// 两者都走内容哈希路径（M8-7 (f)）。页面层只剩应用壳，图标由 server.go 注入入口。
+// 两者都走内容哈希路径（(f)）。页面层只剩应用壳，图标由 server.go 注入入口。
 func TestPagesDeclareIconLinks(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	icon := srv.assets.URL("icons/icon.svg")
@@ -52,7 +52,7 @@ func TestPagesDeclareIconLinks(t *testing.T) {
 }
 
 // TestManifestDeclaresAdaptiveAndMaskableIcons 断言 manifest 声明两个图标：自适应 any 的
-// icon.svg 与白底 maskable 的 icon-maskable.svg，且 maskable 走 512x512（M8-7 (f)）。
+// icon.svg 与白底 maskable 的 icon-maskable.svg，且 maskable 走 512x512（(f)）。
 func TestManifestDeclaresAdaptiveAndMaskableIcons(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, manifestPath, nil)
@@ -91,7 +91,7 @@ func TestManifestDeclaresAdaptiveAndMaskableIcons(t *testing.T) {
 	}
 }
 
-// TestServiceWorkerCachesIcons 断言两个图标与 apple-touch-icon 都进了外壳缓存清单（M8-7 (f)）。
+// TestServiceWorkerCachesIcons 断言两个图标与 apple-touch-icon 都进了外壳缓存清单（(f)）。
 func TestServiceWorkerCachesIcons(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	body := getWithCookies(t, srv, serviceWorkerPath, nil).Body.String()

@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// optimizerLogRequiredFields 是上游 review_logs schema 要求的字段集合（AGENTS.md M9-3）。
+// optimizerLogRequiredFields 是上游 review_logs schema 要求的字段集合。
 // 逐个断言存在性，避免漏写字段却仍能解析成零值的假通过。
 var optimizerLogRequiredFields = []string{
 	"card_id", "review_time", "review_rating", "review_state",
@@ -21,7 +21,7 @@ var optimizerLogRequiredFields = []string{
 }
 
 // decodeOptimizerLogLine 解析一行 JSONL 并逐字段断言其存在与取值范围，返回解码结果。
-// 这是 M9-3 验收「导出文件能通过上游文档 schema 的解析」的可执行形式：
+// 这是验收「导出文件能通过上游文档 schema 的解析」的可执行形式：
 // 上游只给了表结构文档、没有机器可读 JSON Schema，所以这里把文档里的类型/范围约束固化成断言。
 // 依据的文档 URL 见 OptimizerReviewLog 的注释。
 func decodeOptimizerLogLine(t *testing.T, line []byte) OptimizerReviewLog {
@@ -81,7 +81,7 @@ func seedExportUser(t *testing.T, db *gorm.DB, id uint64, tz string, cutoff int)
 	}
 }
 
-// TestExportOptimizerLogMatchesUpstreamSchema 是 M9-3 的验收：把若干复习行导出为 JSONL，
+// TestExportOptimizerLogMatchesUpstreamSchema 是验收：把若干复习行导出为 JSONL，
 // 逐行断言它们满足上游 review_logs schema 的类型与范围约束，并核对字段映射与 UTC 毫秒。
 func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "reviews.db"))

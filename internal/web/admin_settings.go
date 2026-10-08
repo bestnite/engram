@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 系统设置的可编辑项定义（ROADMAP.md M6-5）。
+// 系统设置的可编辑项定义。
 //
 // 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
 // settings 表按请求现读。SSR 设置页删除后，页面的读写在 /api/v1/admin/settings 的 JSON
@@ -58,7 +58,7 @@ func mediaSettingSpecs() []settingSpec {
 			def: func(*i18n.Localizer) string { return strings.Join(media.DefaultAllowedMimes(), ", ") },
 		},
 		{
-			// 每用户媒体总量配额（M2-13）：0 = 不限（默认）。0 沿用项目既有约定（每日上限也用 0 表示不限），
+			// 每用户媒体总量配额：0 = 不限（默认）。0 沿用项目既有约定（每日上限也用 0 表示不限），
 			// 不是一个被自拟的具体数字；未配置时显示 0，管理员填入正数即启用。
 			key: settingKeyMediaUserQuotaBytes, envVar: envMediaUserQuotaBytes,
 			labelKey: "media.quota.setting.label", hintKey: "media.quota.setting.hint",
@@ -67,7 +67,7 @@ func mediaSettingSpecs() []settingSpec {
 	}
 }
 
-// optimizeSettingSpecs 是「参数优化」区块的设置项（ROADMAP.md M9-12）。
+// optimizeSettingSpecs 是「参数优化」区块的设置项。
 // 门槛下限由 store.MinOptimizeMinReviews 强制，表单拒绝低于下限的值；存量的低于下限的值
 // 在读取路径会被钳到下限（store.OptimizeMinReviews）。
 func optimizeSettingSpecs() []settingSpec {

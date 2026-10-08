@@ -25,7 +25,7 @@ type Deps struct {
 	Notes   *store.NoteStore
 	Presets *store.PresetStore
 	Cards   *store.CardStore
-	// Grants 是卡组授权存储（M5-1）；为空时由 New 从 DB 构造。
+	// Grants 是卡组授权存储；为空时由 New 从 DB 构造。
 	Grants  *store.GrantStore
 	Auditor *auth.Auditor
 	// Now 可注入时钟；为零时用系统 UTC 时间。
@@ -49,7 +49,7 @@ type API struct {
 	presets *store.PresetStore
 	cards   *store.CardStore
 	grants  *store.GrantStore
-	// access 是 Web 与 REST/MCP 共用的权限判定（M5-1，单一实现见 auth.DeckAccess）。
+	// access 是 Web 与 REST/MCP 共用的权限判定（单一实现见 auth.DeckAccess）。
 	access  *auth.DeckAccess
 	auditor *auth.Auditor
 	now     func() time.Time
@@ -58,7 +58,7 @@ type API struct {
 	mediaRoot string
 }
 
-// New 构造 API；M4-2 中间件与 M4-3 handler 的依赖必须齐备。
+// New 构造 API；中间件与 handler 的依赖必须齐备。
 func New(deps Deps) (*API, error) {
 	if deps.DB == nil {
 		return nil, errors.New("api: Deps.DB is required")
@@ -85,7 +85,7 @@ func New(deps Deps) (*API, error) {
 	if len(missing) > 0 {
 		return nil, errors.New("api: missing required dependencies: " + joinStrings(missing))
 	}
-	// 授权存储可按需从 DB 构造，避免每个调用方（含测试）都要显式装配（M5-1）。
+	// 授权存储可按需从 DB 构造，避免每个调用方（含测试）都要显式装配。
 	grants := deps.Grants
 	if grants == nil {
 		grants = store.NewGrantStore(deps.DB)
@@ -192,7 +192,7 @@ func queryInt(c *gin.Context, name string, def int) int {
 
 // ensureDefaultPreset 返回该用户默认预设的 id：不存在则由 store.EnsureDefaultPreset 补齐。
 // 外部调用方建卡组时通常不关心预设，服务端给出一个可用的默认预设。
-// 预设名是稳定字面量（store.DefaultPresetName），与 web 入口共用同一补齐逻辑（M3-14）。
+// 预设名是稳定字面量（store.DefaultPresetName），与 web 入口共用同一补齐逻辑。
 func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, error) {
 	list, err := store.EnsureDefaultPreset(ctx, a.db, userID)
 	if err != nil {

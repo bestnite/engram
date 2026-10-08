@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// TestUserMediaUsageDedupesAndReleases 覆盖 M2-13 的计量口径：
+// TestUserMediaUsageDedupesAndReleases 覆盖计量口径：
 //   - 同一 blob 被同一用户的多个 note/多处引用只计一次（去重）；
 //   - 不同用户各自引用同一 blob 互不影响（各自计一次，不重复计入同一人）；
 //   - 删除引用（note 软删除）即释放配额；

@@ -34,7 +34,7 @@ type statsMeasures struct {
 	Grades    []store.GradeSourceStat
 }
 
-// collectStatsMeasures 调用统计页的全部既有聚合查询（M7-1/M7-2）；handler 不写任何统计 SQL。
+// collectStatsMeasures 调用统计页的全部既有聚合查询；handler 不写任何统计 SQL。
 //
 // now 只取一次：所有指标共用同一个时刻与同一个复习日窗口（近 30 日 = [today-29, today]）。
 // 统计页与明细接口都从这里取数，两边因此不会对同一请求给出不同

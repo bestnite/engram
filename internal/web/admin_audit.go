@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板审计检索的查询解析（ROADMAP.md M6-7）。
+// 管理面板审计检索的查询解析。
 //
 // 时间口径：库里 created_at 统一 UTC；页面按当前管理员的时区展示，
 // 日期范围过滤把用户时区的自然日边界换算成 UTC 瞬时值再交给 store。

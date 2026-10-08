@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 用户级 API Key 管理页（M4-10）。
+// 用户级 API Key 管理页。
 //
 // 与 /admin/api-keys 的分工：管理面板是全用户总览（可撤销、不能创建）；/settings/keys 是登录
 // 用户自己的 key 列表。SSR 页面层已删除：这里只发 SPA 应用壳，列表/创建/撤销走

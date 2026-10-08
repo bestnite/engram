@@ -34,7 +34,7 @@ func TestLoadAssetsBuildsContentHashedURLs(t *testing.T) {
 	}
 }
 
-// TestAssetHashChangesWithContent 是 M0-9 的验收点：内容变了，哈希必须跟着变。
+// TestAssetHashChangesWithContent 是验收点：内容变了，哈希必须跟着变。
 func TestAssetHashChangesWithContent(t *testing.T) {
 	first := newAsset("js/app.js", []byte("console.log(1)"))
 	same := newAsset("js/app.js", []byte("console.log(1)"))

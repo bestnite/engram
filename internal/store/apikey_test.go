@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// TestAPIKeyCreateStoresHashOnly 是 M4-1 的验收用例之一：明文绝不落库。
+// TestAPIKeyCreateStoresHashOnly 是验收用例之一：明文绝不落库。
 // 库里只允许出现 sha256 摘要与展示前缀。
 func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -70,7 +70,7 @@ func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 	}
 }
 
-// TestAPIKeyAuthenticateAndRevokeIsImmediate 是 M4-1 的另一个验收用例：
+// TestAPIKeyAuthenticateAndRevokeIsImmediate 是另一个验收用例：
 // 正常 key 能通过验证并刷新 last_used_at；撤销后同一明文立即被拒。
 func TestAPIKeyAuthenticateAndRevokeIsImmediate(t *testing.T) {
 	for driver, db := range testDatabases(t) {

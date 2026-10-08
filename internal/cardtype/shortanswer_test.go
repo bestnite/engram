@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestShortAnswerRegistered 是 M3-11 的验收：文档冻结的十个题型全部注册，
+// TestShortAnswerRegistered 是验收：文档冻结的十个题型全部注册，
 // 且 short_answer 在列。
 func TestShortAnswerRegistered(t *testing.T) {
 	want := []string{

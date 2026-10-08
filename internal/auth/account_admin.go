@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 管理面板的用户管理所需的账号操作（ROADMAP.md M6-2）。
+// 管理面板的用户管理所需的账号操作。
 // 放在独立文件，避免改动 account.go（其它里程碑的单写者热点）。
 
 // tempPasswordAlphabet 是临时口令的字符集：去掉了易混淆的 0/O/1/l/I。

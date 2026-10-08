@@ -20,7 +20,7 @@ func (s *UserStore) Create(ctx context.Context, u *User) error {
 	return s.CreateTx(ctx, s.db, u)
 }
 
-// CreateTx 在调用方给定的事务里写入新用户（B-12）：邀请占用与建号因此能共享同一个事务边界。
+// CreateTx 在调用方给定的事务里写入新用户：邀请占用与建号因此能共享同一个事务边界。
 func (s *UserStore) CreateTx(ctx context.Context, tx *gorm.DB, u *User) error {
 	if err := tx.WithContext(ctx).Create(u).Error; err != nil {
 		return fmt.Errorf("create user: %w", err)
@@ -96,7 +96,7 @@ func (s *UserStore) SetStatus(ctx context.Context, id uint64, status string) err
 	return nil
 }
 
-// CountActiveAdmins 统计仍可登录的管理员数；用于禁止把最后一个管理员禁用（M1-5 引导页依赖它）。
+// CountActiveAdmins 统计仍可登录的管理员数；用于禁止把最后一个管理员禁用（引导页依赖它）。
 func (s *UserStore) CountActiveAdmins(ctx context.Context) (int64, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&User{}).

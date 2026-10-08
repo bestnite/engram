@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-24 的作业侧验收：作业失败落库后，OnFailure 钩子被调用一次，
+// 本文件是作业侧验收：作业失败落库后，OnFailure 钩子被调用一次，
 // 且钩子 panic 不会反过来影响作业失败处理（「发信失败不影响触发操作」在作业侧的体现）。
 
 // failingRunner 构造一个不自动 Start 的 Runner，方便在 Start 之前接好钩子。

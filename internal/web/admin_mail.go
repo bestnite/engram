@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 M1-24：D 类管理员通知邮件（ROADMAP.md M1-24）。
+// 本文件是：D 类管理员通知邮件。
 //
 // 三个触发点里，本仓库真实存在的是两个：
 //   - 作业失败：internal/jobs/jobs.go 的 fail（Runner 通过 OnFailure 钩子回调本文件的

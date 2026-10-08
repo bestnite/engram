@@ -158,7 +158,7 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 	return nil
 }
 
-// RequireDeckRole 校验用户在卡组上至少拥有 want 角色（M5-1）。
+// RequireDeckRole 校验用户在卡组上至少拥有 want 角色。
 //
 // 判定本体在 auth.DeckAccess（REST 与内置 MCP 共用同一实现）；这里把它翻译成带稳定
 // code 的 ServiceError 并写一条 permission.denied 审计。无访问权 -> forbidden，
@@ -248,7 +248,7 @@ type ImportNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
-	// NoteID 按主键寻址已有 note（M4-12）；与 ExternalRef 互斥。
+	// NoteID 按主键寻址已有 note；与 ExternalRef 互斥。
 	NoteID uint64   `json:"note_id"`
 	Tags   []string `json:"tags"`
 }
@@ -341,7 +341,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 
 		if item.NoteID != 0 && strings.TrimSpace(item.ExternalRef) != "" {
-			// 两种寻址方式互斥：同时给出无法判定按哪个定位，直接判该行非法（M4-12）。
+			// 两种寻址方式互斥：同时给出无法判定按哪个定位，直接判该行非法。
 			resp.Errors = append(resp.Errors, ImportError{i, "note_id and external_ref are mutually exclusive"})
 			hasFailure = true
 			continue
@@ -352,7 +352,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		var existing *store.Note
 		if byID {
 			// 按主键寻址：只认属于本卡组的、未软删的 note。取不到与跨卡组用同一句
-			// 「note not found in deck」，不泄露另一个卡组是否存在该 id（M4-12）。
+			// 「note not found in deck」，不泄露另一个卡组是否存在该 id。
 			found, err := a.notes.ByID(ctx, item.NoteID)
 			if err != nil || found.DeckID != d.ID {
 				resp.Errors = append(resp.Errors, ImportError{i, "note not found in deck"})
@@ -384,7 +384,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		if existing != nil {
 			if byID {
 				// note_id 行按定义一定已存在，on_conflict 对它不适用：一律走更新，
-				// 也不因它触发 on_conflict=fail 的整批拒绝（M4-12）。
+				// 也不因它触发 on_conflict=fail 的整批拒绝。
 				action = "update"
 			} else {
 				switch onConflict {
@@ -566,7 +566,7 @@ func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	return existing.ID, nil
 }
 
-// ---- 批量卡片动作（M4-12）----
+// ---- 批量卡片动作----
 
 // 批量动作的稳定英文取值（REST 请求体 action 字段、审计 detail.action 共用）。
 const (
@@ -601,7 +601,7 @@ type BulkNotesResponse struct {
 	Skipped  []BulkNotesSkipped `json:"skipped"`
 }
 
-// BulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags（M4-12）。
+// BulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags。
 //
 // 请求级校验（未知 action、note_ids 越界、tag 动作缺 tags、delete 带 tags）返回 400
 // invalid_request 且一行都不写。通过校验后逐行判权：缺失或已软删的 id 记为 not_found，

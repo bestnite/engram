@@ -129,7 +129,7 @@ func Submit(ctx context.Context, tx *gorm.DB, in SubmitInput) (SubmitResult, err
 
 	// 4. 写 card_states（version + 1）。用带 version 守卫的条件 upsert：行锁锁不住
 	//    “还不存在的行”，两次并发首评会双双读到 version=0 并双双放行，因此把守卫
-	//    下推到 upsert 的 DO UPDATE 分支里，插入与更新由同一条 SQL 原子完成（M3-10）。
+	//    下推到 upsert 的 DO UPDATE 分支里，插入与更新由同一条 SQL 原子完成。
 	newState := stateFromOutcome(base, outcome, now, version+1)
 	written, err := upsertState(ctx, tx, &newState, version)
 	if err != nil {
@@ -197,7 +197,7 @@ func stateFromOutcome(base *store.CardState, o Outcome, now time.Time, version i
 // 写入状态行：首次评分建行，之后按 (card_id, user_id) 更新。
 //
 // expectedVersion 是本次写入前读到的 card_states.version，作为 DO UPDATE 分支的守卫：
-// 行锁锁不住“尚不存在的行”，两次并发首评会双双读到 version=0 并双双放行（M3-10）。
+// 行锁锁不住“尚不存在的行”，两次并发首评会双双读到 version=0 并双双放行。
 // 加上 `WHERE card_states.version = expectedVersion` 后，后到的写入在冲突分支里因版本
 // 不匹配而影响 0 行 —— 写不进去就没有写入，也不需要第二次读。返回 written=false 表示
 // 守卫拦下了这次写入（并发冲突），插入新行时守卫不参与求值，永远算写入成功。
@@ -231,7 +231,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	difficulty := o.Difficulty
 	loc := queueLocation(in.Location, in.Timezone)
 	cutoff := store.ResolveCutoff(in.DayCutoffHour)
-	// 评分前的剩余学习步骤快照（M3-9）。全新卡没有状态行，base.StepIndex 为 0，
+	// 评分前的剩余学习步骤快照。全新卡没有状态行，base.StepIndex 为 0，
 	// 正是“评分前”的值；已有状态行则取它评分前的 step_index。
 	stepIndexBefore := 0
 	if base != nil {

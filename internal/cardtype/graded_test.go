@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// M3-6 验收：容差测试覆盖大小写、空白、多答案、数值的绝对/相对容差、部分得分映射到 Hard。
+// 验收：容差测试覆盖大小写、空白、多答案、数值的绝对/相对容差、部分得分映射到 Hard。
 
 func boolPtr(b bool) *bool { return &b }
 func mapPtr(m GradeMapping) *GradeMapping {

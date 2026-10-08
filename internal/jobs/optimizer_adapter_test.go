@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// optimizerBinary 返回 M9-2 适配器二进制的预期绝对路径（仓库根下的 tools/optimizer）。
+// optimizerBinary 返回适配器二进制的预期绝对路径（仓库根下的 tools/optimizer）。
 // 用绝对路径是因为 runProcess 会给子进程设置工作目录，相对的可执行文件路径在那个目录下
 // 解析不到（实测 fork/exec 会报 no such file or directory）。
 func optimizerBinary() string {
@@ -47,7 +47,7 @@ func optimizerCommand(bin, fixture, out string) Command {
 	}
 }
 
-// TestOptimizerAdapterDeterminism 是针对 M9-2 的 Go 侧集成测试：以命令注入方式调用
+// TestOptimizerAdapterDeterminism 是针对 Go 侧集成测试：以命令注入方式调用
 // Rust 适配器，对固定 fixture 连跑两次，断言两次权重 JSON 逐字节相同且为 21 个数字。
 // 二进制未构建时跳过（CI 不装 Rust 工具链也能通过）。
 func TestOptimizerAdapterDeterminism(t *testing.T) {

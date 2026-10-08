@@ -72,7 +72,7 @@ func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *
 		MaxDelay:  50 * time.Millisecond,
 		Sleep:     func(context.Context, time.Duration) error { return nil },
 	})
-	// TOTP 二次验证（M1-16）：真实 SecretCodec + TOTPStore，登录第二步与设置接口因此可用。
+	// TOTP 二次验证：真实 SecretCodec + TOTPStore，登录第二步与设置接口因此可用。
 	codec, err := store.NewSecretCodec(testEncryptionKey())
 	if err != nil {
 		t.Fatalf("NewSecretCodec() error = %v", err)
@@ -165,7 +165,7 @@ func setupFirstAdmin(t *testing.T, srv *Server, username, email, password string
 	return postJSON(srv, "/api/v1/auth/setup", body, []*http.Cookie{cookie}, headers)
 }
 
-// TestAuthFlowThroughJSONEndpoints 是 M1-4 的验收：引导建管理员 → JSON 登录 → JSON 登出。
+// TestAuthFlowThroughJSONEndpoints 是验收：引导建管理员 → JSON 登录 → JSON 登出。
 // 页面已迁移到 SPA，这条链路的唯一传输是 /api/v1/auth/{setup,login,session,logout}。
 func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 	srv, db := newAuthServer(t)
@@ -223,7 +223,7 @@ func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 	}
 }
 
-// TestHomeRedirectsToSetupUntilFirstAdmin 是 M1-25 的验收：安装完但还没 setup 时，
+// TestHomeRedirectsToSetupUntilFirstAdmin 是验收：安装完但还没 setup 时，
 // GET / 303 到 /setup（引导窗口）；首个管理员建立后首页返回应用壳。
 func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	srv, _ := newAuthServer(t)
@@ -249,7 +249,7 @@ func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	}
 }
 
-// TestSetupUnavailableAfterAdminExists 是 M1-5 的验收点：一次性管理员门。
+// TestSetupUnavailableAfterAdminExists 是验收点：一次性管理员门。
 // 有管理员之前 GET /setup 可达，之后 GET /setup 与 POST /api/v1/auth/setup 都必须 404。
 func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 	srv, _ := newAuthServer(t)

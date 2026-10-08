@@ -37,7 +37,7 @@ func waitFileNonEmpty(t *testing.T, path string, limit time.Duration) {
 	t.Fatalf("file %s stayed empty within %s; the subprocess never produced output", path, limit)
 }
 
-// TestCancelRunningJobKillsProcessAndUnblocksQueue 是 M6-6 的核心验收：
+// TestCancelRunningJobKillsProcessAndUnblocksQueue 是核心验收：
 // 用一个真实的长时间子进程让作业停在 running，然后取消它，必须做到
 //  1. Cancel 立即返回（不阻塞）；
 //  2. 作业落库为 failed 且 error = CancelReason；

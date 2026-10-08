@@ -17,7 +17,7 @@ import (
 
 // Outbox 是邮件队列与后台 worker。
 //
-// 契约（M1-17）：
+// 契约：
 //   - Enqueue 只写 outbox 队列表并唤醒 worker，绝不在请求路径里同步发信。
 //   - SMTP 未配置时 Enqueue 返回 ErrNotConfigured，不静默丢弃。
 //   - 投递失败由 worker 带退避重试，最后一次错误与尝试次数可从管理面板读到。
