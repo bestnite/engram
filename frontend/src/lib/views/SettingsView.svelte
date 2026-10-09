@@ -396,7 +396,7 @@
               max={MAX_LEARN_AHEAD_MINUTES}
               step="1"
               bind:value={learnAhead}
-              class="field-input text-sm block w-40"
+              class="field-input text-sm w-full"
             />
             <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
               {$t('settings.profile.learn_ahead_hint')}
