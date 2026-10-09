@@ -187,7 +187,7 @@
   translation: "{{.hours}} h {{.minutes}} min"
 # ── Per-user media quota (M2-13) ─────────────────────────────
 - id: media.quota.exceeded
-  translation: "Media quota exceeded: you have used {{.used}} of your {{.limit}} limit. Delete some media references to free space."
+  translation: "Media quota exceeded: you have used {{.used}} of your {{.limit}} limit. Remove some media you no longer use and try again."
 - id: media.quota.setting.label
   translation: "Per-user media quota (bytes)"
 - id: media.quota.setting.hint
@@ -207,7 +207,7 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.deck_shared.greeting
   translation: "Hello,"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} invited you to use the deck {{.deck}} as {{.role}}. Accept or decline it on your decks page; nothing changes if you decline."
+  translation: "{{.inviter}} invited you to use the deck {{.deck}} as {{.role}}. Accept or decline it on your decks page."
 - id: mail.deck_shared.link_label
   translation: "Open my decks:"
 - id: mail.deck_permission.subject
@@ -250,15 +250,15 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.prefs.submit
   translation: "Save preferences"
 - id: mail.prefs.saved
-  translation: "Preferences saved and effective immediately."
+  translation: "Preferences saved."
 - id: mail.prefs.locked
-  translation: "Always on: security and transactional mail protects your account, so turning it off would leave a back door."
+  translation: "Always on: security and transactional mail protects your account."
 - id: mail.prefs.class.security.heading
   translation: "Security and transactional"
 - id: mail.prefs.class.collab.heading
   translation: "Collaboration and permissions"
 - id: mail.prefs.class.study.heading
-  translation: "Study and operations"
+  translation: "Study"
 - id: mail.prefs.class.admin.heading
   translation: "Administrator notices"
 - id: mail.prefs.type.password_reset
@@ -276,7 +276,7 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.prefs.type.deck_permission_changed
   translation: "Deck permission changed or revoked"
 - id: mail.prefs.type.invite
-  translation: "Invite code sent to the invitee"
+  translation: "Registration invitation"
 - id: mail.prefs.type.review_reminder
   translation: "Review due reminder"
 - id: mail.prefs.type.study_digest
@@ -400,7 +400,7 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.prefs.reminder_time.label
   translation: "Send at (your local time)"
 - id: mail.prefs.reminder_time.hint
-  translation: "Uses your timezone ({{.tz}}). The review reminder and the weekly report are sent at the first check after this hour."
+  translation: "Uses your timezone ({{.tz}}). The review reminder and the weekly report are sent after this hour."
 - id: mail.prefs.reminder_time.default
   translation: "Site default ({{.hour}}:00)"
 

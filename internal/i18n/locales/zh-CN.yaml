@@ -41,7 +41,7 @@
 - id: cardtype.basic_both
   translation: "双向问答"
 - id: cardtype.cloze
-  translation: "挖空"
+  translation: "填空"
 - id: cardtype.list
   translation: "列表"
 # M2-10 剩余题型的显示名（十个内置题型全覆盖）。
@@ -187,7 +187,7 @@
   translation: "{{.hours}} 小时 {{.minutes}} 分"
 # ── 每用户媒体配额（M2-13）────────────────────────────────────
 - id: media.quota.exceeded
-  translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。删除部分媒体引用即可释放配额。"
+  translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。请删除部分不再使用的媒体后重试。"
 - id: media.quota.setting.label
   translation: "每用户媒体配额（字节）"
 - id: media.quota.setting.hint
@@ -207,7 +207,7 @@
 - id: mail.deck_shared.greeting
   translation: "你好，"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} 邀请你以 {{.role}} 的身份使用卡组「{{.deck}}」。到「我的卡组」页面接受或拒绝即可——不接受不会有任何变化。"
+  translation: "{{.inviter}} 邀请你以 {{.role}} 的身份使用卡组「{{.deck}}」。请到「我的卡组」页面接受或拒绝。"
 - id: mail.deck_shared.link_label
   translation: "打开我的卡组："
 - id: mail.deck_permission.subject
@@ -250,15 +250,15 @@
 - id: mail.prefs.submit
   translation: "保存偏好"
 - id: mail.prefs.saved
-  translation: "偏好已保存，立即生效。"
+  translation: "偏好已保存。"
 - id: mail.prefs.locked
-  translation: "不可关闭：安全与事务类邮件关乎账号安全，关闭等于给账号留后门。"
+  translation: "安全与事务类邮件关乎账号安全，不可关闭。"
 - id: mail.prefs.class.security.heading
   translation: "安全与事务"
 - id: mail.prefs.class.collab.heading
   translation: "协作与授权"
 - id: mail.prefs.class.study.heading
-  translation: "学习与运营"
+  translation: "学习"
 - id: mail.prefs.class.admin.heading
   translation: "管理员通知"
 - id: mail.prefs.type.password_reset
@@ -276,7 +276,7 @@
 - id: mail.prefs.type.deck_permission_changed
   translation: "卡组权限被变更或撤销"
 - id: mail.prefs.type.invite
-  translation: "邀请码发给被邀请人"
+  translation: "注册邀请"
 - id: mail.prefs.type.review_reminder
   translation: "复习到期提醒"
 - id: mail.prefs.type.study_digest
@@ -400,7 +400,7 @@
 - id: mail.prefs.reminder_time.label
   translation: "发送时间（按你的本地时区）"
 - id: mail.prefs.reminder_time.hint
-  translation: "按你的时区（{{.tz}}）。复习提醒与每周摘要在该小时之后的首次检查时发送。"
+  translation: "按你的时区（{{.tz}}）。复习提醒与每周摘要会在这个时间之后发送。"
 - id: mail.prefs.reminder_time.default
   translation: "站点默认（{{.hour}}:00）"
 

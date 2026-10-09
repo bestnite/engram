@@ -90,7 +90,7 @@ describe('ReviewView graded answering', () => {
     // 作答文本按纯文本渲染，不经过 HTML 汇。
     expect(html).toContain('paris');
     // 档位映射可见。
-    expect(html).toContain('记入评分');
+    expect(html).toContain('评分 · ');
     expect(html).toContain('良好');
     expect(html).toContain('data-testid="review-graded-continue"');
     // 结果态下 1–4 不再宣传评分。
@@ -109,7 +109,7 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('data-testid="review-graded-revealed"');
     expect(html).toContain('<em>对</em>');
     expect(html).toContain('data-testid="review-graded-give-up"');
-    expect(html).toContain('已揭示答案，记 0 分并继续');
+    expect(html).toContain('记为重来并继续');
     expect(html).not.toContain('data-testid="review-graded-submit"');
   });
 
@@ -263,7 +263,7 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     // 结果面板按钮不出现（自评题没有面板）。
     expect(html).not.toContain('data-testid="review-undo"');
     // 键位提示也带上 u。
-    expect(html).toContain('u：撤销上一次评分');
+    expect(html).toContain('u：撤销');
   });
 
   it('keeps the header undo entry reachable when the queue has emptied', () => {

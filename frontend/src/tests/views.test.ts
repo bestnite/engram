@@ -238,11 +238,11 @@ describe('StatsView component response states and truthful rendering', () => {
     // 标签维度的口径必须写在页面上：它只数「已复习卡片上的标签」，不写清楚时看起来像在
     // 重复卡组维度（没复习过的大标签一个都不出现，用户会以为统计只认卡组名）。
     expect(html).toContain('data-testid="stats-tag-scope"');
-    expect(html).toContain('留存率需要复习记录才算得出来');
+    expect(html).toContain('只列出所选区间内复习过的卡片上的标签');
 
     // 判分来源分布。
     expect(html).toContain('自评');
-    expect(html).toContain('机器判分');
+    expect(html).toContain('自动判分');
 
     // 学习曲线日期。
     expect(html).toContain('2026-10-06');
@@ -270,8 +270,8 @@ describe('StatsView component response states and truthful rendering', () => {
 
     expect(html).toContain('Review volume');
     expect(html).toContain('Due forecast');
-    expect(html).toContain('Grading source');
-    expect(html).toContain('retention rate needs review records');
+    expect(html).toContain('Grading method');
+    expect(html).toContain('Only tags on cards reviewed in the selected range');
     expect(html).not.toContain('复习量');
   });
 });

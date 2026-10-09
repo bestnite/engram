@@ -285,7 +285,6 @@
       {#if previewCards}
         <section bind:this={previewSection} data-testid="note-preview-result" class="mt-5 space-y-3">
           <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('note_preview.title')}</h2>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_preview.math_notice')}</p>
           {#each previewCards as card, index}
             <Panel padding="sm" class="space-y-3">
               <div data-testid="note-preview-front-{index}">

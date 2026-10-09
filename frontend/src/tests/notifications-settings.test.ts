@@ -53,7 +53,7 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
     }
     expect(html).toContain('安全与事务');
     expect(html).toContain('协作与授权');
-    expect(html).toContain('学习与运营');
+    expect(html).toContain('学习');
     expect(html).toContain('管理员通知');
   });
 

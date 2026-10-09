@@ -53,7 +53,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     expect(html).toContain('默认权重');
     expect(html).not.toContain('data-testid="preset-7-weights-raw"');
     // 门槛：可用 0 条、门槛 500 条，并给出「还差 500 条」。
-    expect(html).toContain('使用本预设的卡组上的复习记录：0 条');
+    expect(html).toContain('可用于优化的复习记录：0 条');
     expect(html).toContain('data-testid="preset-7-shortfall"');
     expect(html).toContain('还差 500 条');
   });

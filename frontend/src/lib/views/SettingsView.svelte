@@ -350,9 +350,6 @@
               ariaLabel={$t('settings.profile.timezone_label')}
               class="transition-colors"
             />
-            <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-              {$t('settings.profile.timezone_hint')}
-            </p>
             {#if fieldErrors.timezone}
               <p data-testid="settings-error-timezone" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
                 {$t(fieldErrors.timezone)}

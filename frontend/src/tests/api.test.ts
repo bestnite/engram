@@ -530,8 +530,8 @@ describe('Centralized typed same-origin REST API client', () => {
       });
       const keyConflict = getApiErrorMessageKey(errConflict);
       expect(keyConflict).toBe('error.conflict');
-      expect(formatMessage('zh-CN', keyConflict)).toBe('数据状态冲突，请刷新后重试');
-      expect(formatMessage('en', keyConflict)).toBe('Conflict with current state, please refresh');
+      expect(formatMessage('zh-CN', keyConflict)).toBe('内容已在别处更新，请刷新后重试');
+      expect(formatMessage('en', keyConflict)).toBe('This was changed elsewhere. Refresh and try again.');
 
       const errRateLimited = new ApiClientError('HTTP 429', {
         status: 429,
@@ -581,8 +581,8 @@ describe('Centralized typed same-origin REST API client', () => {
       });
       const keyCsrfFailed = getApiErrorMessageKey(errCsrfFailed);
       expect(keyCsrfFailed).toBe('error.csrf_failed');
-      expect(formatMessage('zh-CN', keyCsrfFailed)).toBe('CSRF 校验失败，请刷新页面后重试');
-      expect(formatMessage('en', keyCsrfFailed)).toBe('CSRF validation failed, please refresh and try again');
+      expect(formatMessage('zh-CN', keyCsrfFailed)).toBe('页面已过期，请刷新后重试');
+      expect(formatMessage('en', keyCsrfFailed)).toBe('This page has expired. Refresh and try again.');
     });
   });
 

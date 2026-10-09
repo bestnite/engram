@@ -72,7 +72,7 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     });
     expect(html).toContain('data-testid="deck-settings-form"');
     expect(html).toContain('data-testid="deck-settings-personal-hint"');
-    expect(html).toContain('这些设置只对你自己生效');
+    expect(html).toContain('这些设置仅对你生效');
   });
 
   it('renders the deck-info form for the owner with the current name and description', () => {
