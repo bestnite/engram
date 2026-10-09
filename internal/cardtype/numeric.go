@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -76,6 +77,29 @@ func (numericType) Render(card Card, side Side) (RenderResult, error) {
 type NumericInput struct {
 	GradeContext
 	Answer string
+}
+
+// ParseAnswer 解码作答：通常是字符串（可能带单位），也接受裸 JSON 数字并保留原文；
+// 没有作答按空串判分。
+func (numericType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	if emptyAnswer(raw) {
+		return NumericInput{GradeContext: gc}, nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return NumericInput{GradeContext: gc, Answer: s}, nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return nil, fmt.Errorf("numeric answer must be a string or number")
+	}
+	return NumericInput{GradeContext: gc, Answer: n.String()}, nil
+}
+
+// GivenText 返回用户输入的原文。
+func (numericType) GivenText(_ map[string]any, detail map[string]any) string {
+	given, _ := detail["given"].(string)
+	return given
 }
 
 // Grade 判分：|answer - value| 不超过绝对容差与相对容差（相对值是 |value| 的比例）中的较大者

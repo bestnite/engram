@@ -54,6 +54,8 @@ const (
 	CodeTOTPInvalid = "totp_invalid"
 	// CodeTOTPChallengeExpired 表示第二步凭据缺失或已过期（必须从第一步重新登录）。
 	CodeTOTPChallengeExpired = "totp_challenge_expired"
+	// CodeGradingRequired 表示对作答类题型提交了自评分：这类卡只能由服务端判分。
+	CodeGradingRequired = "grading_required"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -86,6 +88,7 @@ var errorMessages = map[string]string{
 	CodeTOTPRequired:         "Two-factor authentication required.",
 	CodeTOTPInvalid:          "The two-factor code is not valid.",
 	CodeTOTPChallengeExpired: "The two-factor challenge has expired. Sign in again.",
+	CodeGradingRequired:      "This card type is graded by the server: send an answer or give up instead of a rating.",
 
 	// 卡组包导入的稳定 code（store.PackageError.Code）。
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",

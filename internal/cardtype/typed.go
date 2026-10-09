@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -81,6 +82,21 @@ func (typedType) Render(card Card, side Side) (RenderResult, error) {
 type TypedInput struct {
 	GradeContext
 	Answer string
+}
+
+// ParseAnswer 解码作答：字符串；没有作答按空串判分（记全错），不拒绝。
+func (typedType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	s, err := answerString(raw, "typed")
+	if err != nil {
+		return nil, err
+	}
+	return TypedInput{GradeContext: gc, Answer: s}, nil
+}
+
+// GivenText 返回用户输入的原文。
+func (typedType) GivenText(_ map[string]any, detail map[string]any) string {
+	given, _ := detail["given"].(string)
+	return given
 }
 
 // Grade 判分：正则优先于字面比较；字面比较按 ignore_case / ignore_whitespace 归一化后

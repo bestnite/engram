@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -187,99 +186,6 @@ func graderFor(kind string) (cardtype.Grader, bool) {
 	}
 	g, ok := t.(cardtype.Grader)
 	return g, ok
-}
-
-// gradeMappingFor 取卡组预设的「分数→评分档位」映射；缺失时返回 nil（判分器回退默认映射）。
-func (s *Server) gradeMappingFor(ctx context.Context, deckID uint64) *cardtype.GradeMapping {
-	if deckID == 0 {
-		return nil
-	}
-	deck, err := s.decks.ByID(ctx, deckID)
-	if err != nil || deck.PresetID == 0 {
-		return nil
-	}
-	p, err := s.presets.ByID(ctx, deck.PresetID)
-	if err != nil {
-		return nil
-	}
-	m, err := p.GradeMapping()
-	if err != nil {
-		return nil
-	}
-	return &m
-}
-
-// optionTexts 读取 options 字段，兼容 JSON 反序列化的 []any 与 Go 侧构造的 []string。
-func optionTexts(fields map[string]any) []string {
-	switch v := fields["options"].(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-// buildGradeInput 按题型构造判分器需要的输入结构。判分器各自断言自己的输入类型；
-// 只有 web 层知道表单字段如何映射到题型输入，因此映射集中在这里（不改核心管线）。
-// SPA 端把 JSON 作答归一化成同样的 url.Values 后调用它，规则只有一处。
-func buildGradeInput(kind string, fields map[string]any, mapping *cardtype.GradeMapping, form url.Values) (any, error) {
-	gc := cardtype.GradeContext{Fields: fields, Mapping: mapping}
-	switch kind {
-	case "typed":
-		return cardtype.TypedInput{GradeContext: gc, Answer: form.Get("answer")}, nil
-	case "numeric":
-		return cardtype.NumericInput{GradeContext: gc, Answer: form.Get("answer")}, nil
-	case "choice_single":
-		idx, err := strconv.Atoi(strings.TrimSpace(form.Get("answer")))
-		if err != nil {
-			return nil, fmt.Errorf("choice_single answer is not an option index")
-		}
-		return cardtype.ChoiceSingleInput{GradeContext: gc, Selected: idx}, nil
-	case "choice_multi":
-		selected, err := parseSelectedIndices(form["answer"])
-		if err != nil {
-			return nil, err
-		}
-		return cardtype.ChoiceMultiInput{GradeContext: gc, Selected: selected}, nil
-	case "true_false":
-		answer, err := parseBoolAnswer(form.Get("answer"))
-		if err != nil {
-			return nil, err
-		}
-		return cardtype.TrueFalseInput{GradeContext: gc, Answer: &answer}, nil
-	default:
-		return nil, fmt.Errorf("card type %q has no grading input", kind)
-	}
-}
-
-// parseSelectedIndices 解析多选的 0 基索引集合；空选择是合法作答（记 0 分）。
-func parseSelectedIndices(raw []string) ([]int, error) {
-	out := make([]int, 0, len(raw))
-	for _, item := range raw {
-		idx, err := strconv.Atoi(strings.TrimSpace(item))
-		if err != nil {
-			return nil, fmt.Errorf("choice_multi answer is not an option index")
-		}
-		out = append(out, idx)
-	}
-	return out, nil
-}
-
-// parseBoolAnswer 解析判断题作答；SPA 提交 "true"/"false"。
-func parseBoolAnswer(raw string) (bool, error) {
-	b, err := strconv.ParseBool(strings.TrimSpace(raw))
-	if err != nil {
-		return false, fmt.Errorf("true_false answer is not a boolean")
-	}
-	return b, nil
 }
 
 // numberText 以最简形式输出数值（解析后的作答），避免 50 显示成 50.000000。

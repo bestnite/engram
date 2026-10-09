@@ -1,14 +1,10 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +12,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -64,19 +59,14 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, note, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
-	// 作答类题型不得走自评入口：那会把机器判分的评分权交回客户端。
-	// SPA 对这类卡改走 /api/v1/review/grade。
-	if _, graded := graderFor(note.Kind); graded {
-		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-		return
-	}
+	// 作答类题型的自评分由 service 拒绝（grading_required）：SPA 对这类卡走 /api/v1/review/grade。
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Rating: req.Rating, ExpectedVersion: req.ExpectedVersion,
-		ElapsedMS: req.ElapsedMS, GradeSource: schedule.GradeSourceSelf,
+		ElapsedMS: req.ElapsedMS,
 	})
 	if err != nil {
 		se := apiError(err)
@@ -124,50 +114,20 @@ func (s *Server) reviewGrade(c *gin.Context) {
 	s.gradeSubmit(c, user, card, note, req, deckIDs)
 }
 
-// gradeSubmit 执行一次真正的机器判分：构造判分输入、判分、按映射得档位，单事务写库。
+// gradeSubmit 把作答交给 service 判分并写库，再把判分结果组装成页面反馈。
+// 判分规则（作答解码、判分、分数→档位映射）全部在 service 与题型里，这里只做传输。
 func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest, deckIDs []uint64) {
 	ctx := c.Request.Context()
-	g, _ := graderFor(note.Kind)
-	fields, err := store.ParseFields(note.FieldsJSON)
-	if err != nil {
-		s.logger.Error("parse note fields for spa grading failed", "note_id", note.ID, "error", err)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
-		return
-	}
-	mapping := s.gradeMappingFor(ctx, note.DeckID)
-	form, err := gradeAnswerToForm(note.Kind, req.Answer)
-	if err != nil {
-		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-		return
-	}
-	input, err := buildGradeInput(note.Kind, fields, mapping, form)
-	if err != nil {
-		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-		return
-	}
-	rating, detail, ok := g.Grade(input)
-	if !ok {
-		// 输入无法判分（如索引越界）不写库，让用户重新作答。
-		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-		return
-	}
-	detailJSON, err := json.Marshal(detail)
-	if err != nil {
-		s.logger.Error("marshal spa grade detail failed", "note_id", note.ID, "error", err)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
-		return
-	}
-	raw := string(detailJSON)
 	result, err := s.api.SubmitReview(ctx, user, nil, api.SubmitReviewInput{
-		CardID: req.CardID, Rating: rating, ExpectedVersion: req.ExpectedVersion,
-		ElapsedMS: req.ElapsedMS, GradeSource: schedule.GradeSourceTyped, GradeDetailJSON: &raw,
+		CardID: req.CardID, Answer: req.Answer, ExpectedVersion: req.ExpectedVersion,
+		ElapsedMS: req.ElapsedMS,
 	})
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	feedback, err := s.gradeFeedback(ctx, user, note, card, fields, detail, mapping)
+	feedback, err := s.gradeFeedback(ctx, user, card, result.Grade)
 	if err != nil {
 		s.logger.Error("build spa grade feedback failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
@@ -192,8 +152,8 @@ func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card)
 // grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
 func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest, deckIDs []uint64) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
-		CardID: req.CardID, Rating: int(schedule.Again), ExpectedVersion: req.ExpectedVersion,
-		ElapsedMS: req.ElapsedMS, GradeSource: schedule.GradeSourceSelf,
+		CardID: req.CardID, GiveUp: true, ExpectedVersion: req.ExpectedVersion,
+		ElapsedMS: req.ElapsedMS,
 	})
 	if err != nil {
 		se := apiError(err)
@@ -343,39 +303,24 @@ func (s *Server) writeQueue(c *gin.Context, user *store.User, deckIDs []uint64) 
 	c.JSON(http.StatusOK, gin.H{"cards": cards, "remaining": len(cards)})
 }
 
-// gradeFeedback 组装判分反馈：判定来自分数与映射阈值，正确答案用服务端清洗后的 HTML，
-// 作答文本按题型还原成可读串（选项索引转成选项文本，判分细节不直接暴露给前端）。
-func (s *Server) gradeFeedback(ctx context.Context, user *store.User, note *store.Note, card *store.Card, fields map[string]any, detail map[string]any, mapping *cardtype.GradeMapping) (gin.H, error) {
+// gradeFeedback 组装判分反馈：判定、得分与作答文本来自 service 的判分结果，正确答案用
+// 服务端清洗后的 HTML；数值题额外带解析出的数值。
+func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, grade *api.GradeResult) (gin.H, error) {
+	if grade == nil {
+		return nil, errors.New("graded submission returned no grade result")
+	}
 	answerHTML, err := s.sanitizedBack(ctx, user, card)
 	if err != nil {
 		return nil, err
 	}
-	m := cardtype.DefaultGradeMapping()
-	if mapping != nil {
-		m = *mapping
-	}
-	score := 0.0
-	if v, ok := detail["score"].(float64); ok {
-		score = v
-	}
-	verdict := "incorrect"
-	if score >= m.FullThreshold {
-		verdict = "correct"
-	} else if score > m.NoneThreshold {
-		verdict = "partial"
-	}
-	rating := 0
-	if v, ok := detail["rating"].(int); ok {
-		rating = v
-	}
 	out := gin.H{
-		"verdict":     verdict,
-		"score":       score,
-		"rating":      rating,
+		"verdict":     grade.Verdict,
+		"score":       grade.Score,
+		"rating":      grade.Rating,
 		"answer_html": answerHTML,
-		"given":       gradeGivenText(note.Kind, fields, detail),
+		"given":       grade.Given,
 	}
-	if parsed, ok := detail["parsed_answer"]; ok {
+	if parsed, ok := grade.Detail["parsed_answer"]; ok {
 		out["parsed"] = numberText(parsed)
 	}
 	return out, nil
@@ -391,103 +336,11 @@ func (s *Server) sanitizedBack(ctx context.Context, user *store.User, card *stor
 	return view.BackHTML, nil
 }
 
-// gradeGivenText 把判分细节还原成展示用的作答文本：选项索引转成选项文本，
-// 判断题返回 "true"/"false"（前端负责本地化），其余直接取判分器记录的 given。
-func gradeGivenText(kind string, fields map[string]any, detail map[string]any) string {
-	switch kind {
-	case "typed", "numeric":
-		given, _ := detail["given"].(string)
-		return given
-	case "choice_single":
-		opts := optionTexts(fields)
-		if idx, ok := detail["selected"].(int); ok && idx >= 0 && idx < len(opts) {
-			return opts[idx]
-		}
-		return ""
-	case "choice_multi":
-		opts := optionTexts(fields)
-		picked := make([]string, 0, len(opts))
-		if idxs, ok := detail["selected"].([]int); ok {
-			for _, idx := range idxs {
-				if idx >= 0 && idx < len(opts) {
-					picked = append(picked, opts[idx])
-				}
-			}
-		}
-		return strings.Join(picked, ", ")
-	case "true_false":
-		if b, ok := detail["selected"].(bool); ok {
-			return strconv.FormatBool(b)
-		}
-		return ""
-	default:
-		return ""
-	}
-}
-
 // gradeAction* 是判分请求的三种语义（见 gradeRequest）。
 const (
 	gradeActionReveal = "reveal"
 	gradeActionGiveUp = "give_up"
 )
-
-// gradeAnswerToForm 把 SPA 的 JSON 作答归一化成表单值，使 SPA 与 SSR 共用同一份
-// buildGradeInput 映射（判分输入规则只有一处）。缺作答时返回空表单：对 typed/choice_multi
-// 而言空作答是合法的错误答案（记 0 分），对 choice_single/true_false 则由 buildGradeInput 拒绝。
-func gradeAnswerToForm(kind string, raw json.RawMessage) (url.Values, error) {
-	form := url.Values{}
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || string(trimmed) == "null" {
-		return form, nil
-	}
-	switch kind {
-	case "typed":
-		var s string
-		if err := json.Unmarshal(trimmed, &s); err != nil {
-			return nil, fmt.Errorf("typed answer must be a string")
-		}
-		form.Set("answer", s)
-	case "numeric":
-		// 数值作答通常是字符串（可能带单位）；也接受裸 JSON 数字，原样保留文本。
-		var s string
-		if err := json.Unmarshal(trimmed, &s); err == nil {
-			form.Set("answer", s)
-			break
-		}
-		if !json.Valid(trimmed) {
-			return nil, fmt.Errorf("numeric answer must be a string or number")
-		}
-		form.Set("answer", string(trimmed))
-	case "choice_single":
-		var idx int
-		if err := json.Unmarshal(trimmed, &idx); err == nil {
-			form.Set("answer", strconv.Itoa(idx))
-			break
-		}
-		var s string
-		if err := json.Unmarshal(trimmed, &s); err != nil {
-			return nil, fmt.Errorf("choice_single answer must be an option index")
-		}
-		form.Set("answer", s)
-	case "choice_multi":
-		var idxs []int
-		if err := json.Unmarshal(trimmed, &idxs); err != nil {
-			return nil, fmt.Errorf("choice_multi answer must be an array of option indices")
-		}
-		for _, idx := range idxs {
-			form.Add("answer", strconv.Itoa(idx))
-		}
-	case "true_false":
-		var b bool
-		if err := json.Unmarshal(trimmed, &b); err != nil {
-			return nil, fmt.Errorf("true_false answer must be a boolean")
-		}
-		form.Set("answer", strconv.FormatBool(b))
-	default:
-		return nil, fmt.Errorf("card type %q has no grading input", kind)
-	}
-	return form, nil
-}
 
 func apiError(err error) *api.ServiceError {
 	var se *api.ServiceError
