@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -22,6 +23,7 @@ type fixture struct {
 	invites      *store.InviteStore
 	shareInvites *store.DeckShareInviteStore
 	fingerprints *store.LoginFingerprintStore
+	media        *media.Store
 	logs         *bytes.Buffer
 	db           *gorm.DB
 }
@@ -35,7 +37,12 @@ func newFixture(t *testing.T) fixture {
 	if err := store.AutoMigrate(context.Background(), db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
+	mediaStore, err := media.New(filepath.Join(t.TempDir(), "media"), db)
+	if err != nil {
+		t.Fatalf("media.New() error = %v", err)
+	}
 	return fixture{
+		media:        mediaStore,
 		sessions:     store.NewSessionStore(db),
 		tokens:       store.NewActionTokenStore(db),
 		invites:      store.NewInviteStore(db),
@@ -54,6 +61,7 @@ func (f fixture) deps() Deps {
 		Invites:      f.invites,
 		ShareInvites: f.shareInvites,
 		Fingerprints: f.fingerprints,
+		Media:        f.media,
 		Logger:       slog.New(slog.NewTextHandler(f.logs, nil)),
 		Interval:     time.Hour,
 	}
@@ -268,7 +276,7 @@ func TestNewRequiresEveryStore(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	base := Deps{
 		Sessions: f.sessions, ActionTokens: f.tokens, Invites: f.invites,
-		ShareInvites: f.shareInvites, Fingerprints: f.fingerprints, Logger: logger,
+		ShareInvites: f.shareInvites, Fingerprints: f.fingerprints, Media: f.media, Logger: logger,
 	}
 	if _, err := New(base); err != nil {
 		t.Fatalf("New() with all deps error = %v", err)
@@ -279,6 +287,7 @@ func TestNewRequiresEveryStore(t *testing.T) {
 		"invites":       func(d *Deps) { d.Invites = nil },
 		"share_invites": func(d *Deps) { d.ShareInvites = nil },
 		"fingerprints":  func(d *Deps) { d.Fingerprints = nil },
+		"media":         func(d *Deps) { d.Media = nil },
 		"logger":        func(d *Deps) { d.Logger = nil },
 	} {
 		d := base

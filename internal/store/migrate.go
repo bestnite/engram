@@ -287,7 +287,17 @@ func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error)
 	if err := AutoMigrate(ctx, db); err != nil {
 		return 0, err
 	}
-	return Apply(ctx, db, migrations)
+	applied, err := Apply(ctx, db, migrations)
+	if err != nil || applied == 0 {
+		return applied, err
+	}
+	// 显式迁移可能重建了表（例如 0001 在 SQLite 上按固定列清单重建 media），
+	// 把第一次 AutoMigrate 刚加上的新列一并丢掉；再跑一次增量迁移把它们补回来，
+	// 否则要等下次启动才有这些列。
+	if err := AutoMigrate(ctx, db); err != nil {
+		return applied, err
+	}
+	return applied, nil
 }
 
 // Apply 校验迁移列表并执行尚未应用的条目。每个迁移与其版本号在同一事务里提交，

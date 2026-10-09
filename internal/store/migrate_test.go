@@ -139,6 +139,10 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	if applied == 0 {
 		t.Fatal("Sync() applied no migration, want the media primary-key migration")
 	}
+	// 重建表按固定列清单进行，会丢掉第一次 AutoMigrate 加的新列；Sync 必须在迁移后补回来。
+	if !db.Migrator().HasColumn("media", "orphaned_at") {
+		t.Error("media lost the orphaned_at column after the rebuild migration")
+	}
 
 	// 行数保留，id 列消失，sha256 列仍在。
 	var rows int64

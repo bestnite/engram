@@ -244,6 +244,9 @@ type Media struct {
 	Height    *int      `json:"height,omitempty"`
 	CreatedBy *uint64   `json:"created_by,omitempty"`
 	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+	// OrphanedAt 是媒体回收第一次发现「没有任何 note 引用它」的时刻；有引用时为 NULL。
+	// 回收只删除孤立超过宽限期的媒体，给「误删引用后再改回来」留出窗口（见 MarkOrphanedMedia）。
+	OrphanedAt *time.Time `gorm:"column:orphaned_at;index" json:"-"`
 }
 
 func (Media) TableName() string { return "media" }

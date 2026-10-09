@@ -245,6 +245,14 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
 			return nil, err
 		}
+		// 重新上传一份正在等待回收的字节，说明它又要被用了：清掉孤立标记，宽限期从下一轮
+		// 回收重新算起，否则可能在用户把它插进卡片之前就被删掉。
+		if existing.OrphanedAt != nil && s.db != nil {
+			if err := s.db.WithContext(ctx).Model(&store.Media{}).Where("sha256 = ?", sum).
+				Update("orphaned_at", nil).Error; err != nil {
+				return nil, fmt.Errorf("media: clear orphan mark: %w", err)
+			}
+		}
 		return existing, nil
 	}
 
@@ -342,4 +350,46 @@ func (s *Store) bySha256(ctx context.Context, sum string) (*store.Media, error) 
 		return nil, nil
 	}
 	return nil, fmt.Errorf("media: lookup sha256: %w", err)
+}
+
+// gcBatch 是一次删除事务处理的媒体行数上限，保证单个事务不会随孤立媒体的数量无限变大。
+const gcBatch = 200
+
+// CollectGarbage 回收孤立媒体：先刷新孤立标记，再删除孤立时刻早于 now-grace 的媒体行与文件。
+// 返回删除的媒体个数。
+//
+// 文件在数据库行删除提交之后再删；删之前再确认这份字节没有被重新上传（重新上传会建一行新的
+// 媒体，路径相同），否则会删掉刚落盘的新文件。文件已不存在不算错误。
+func (s *Store) CollectGarbage(ctx context.Context, now time.Time, grace time.Duration) (int64, error) {
+	if s.db == nil {
+		return 0, nil
+	}
+	if _, _, err := store.MarkOrphanedMedia(ctx, s.db, now); err != nil {
+		return 0, err
+	}
+	var removed int64
+	for {
+		rows, err := store.DeleteOrphanedMedia(ctx, s.db, now.Add(-grace), gcBatch)
+		if err != nil {
+			return removed, err
+		}
+		for _, m := range rows {
+			if again, err := s.bySha256(ctx, m.Sha256); err != nil {
+				return removed, err
+			} else if again != nil {
+				continue
+			}
+			abs, err := s.absPath(m.RelPath)
+			if err != nil {
+				return removed, err
+			}
+			if err := os.Remove(abs); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return removed, fmt.Errorf("media: remove orphaned file %s: %w", m.Sha256, err)
+			}
+		}
+		removed += int64(len(rows))
+		if len(rows) < gcBatch {
+			return removed, nil
+		}
+	}
 }
