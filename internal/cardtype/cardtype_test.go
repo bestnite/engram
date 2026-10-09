@@ -13,6 +13,18 @@ type fakeType struct{}
 
 func (fakeType) Label() string { return "cardtype.fake" }
 
+// Describe 让假题型满足 CardType 的新自描述方法；内容与它的 prompt 字段一致。
+func (fakeType) Describe() Description {
+	return Description{
+		Kind:          "fake",
+		LabelKey:      "cardtype.fake",
+		AnswerControl: AnswerNone,
+		FrontField:    "prompt",
+		BackField:     "prompt",
+		Fields:        fieldsWithCommon(FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true}),
+	}
+}
+
 func (fakeType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {
 		return err

@@ -16,6 +16,25 @@ type numericType struct{}
 // Label 返回语言包键名。
 func (numericType) Label() string { return "cardtype.numeric" }
 
+// Describe 自描述：正面 prompt、背面 value；作答控件是数值，判分由 Grader 提供。
+func (numericType) Describe() Description {
+	return Description{
+		Kind:          "numeric",
+		LabelKey:      "cardtype.numeric",
+		AnswerControl: AnswerNumber,
+		FrontField:    "prompt",
+		BackField:     "value",
+		PromptField:   "prompt",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "value", Control: ControlNumber, Required: true},
+			FieldSpec{Key: "unit", Control: ControlText},
+			FieldSpec{Key: "tolerance_absolute", Control: ControlNumber},
+			FieldSpec{Key: "tolerance_relative", Control: ControlNumber},
+		),
+	}
+}
+
 // Validate 校验 prompt / value 与容差规则；相对容差是 0–1 的比例。
 func (numericType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {

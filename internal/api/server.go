@@ -159,6 +159,8 @@ func (a *API) Register(r gin.IRouter) {
 	v1.PUT("/notes/:id/suspension", a.authn.RequireScope(store.ScopeReview), a.putNoteSuspension)
 	v1.DELETE("/notes/:id/suspension", a.authn.RequireScope(store.ScopeReview), a.deleteNoteSuspension)
 	v1.GET("/stats/summary", a.authn.RequireScope(store.ScopeRead), a.statsSummary)
+	// 题型自描述：静态元数据（无用户状态），供前端渲染编辑表单与复习控件。
+	v1.GET("/card-types", a.authn.RequireScope(store.ScopeRead), a.cardTypes)
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
 	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
 	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)

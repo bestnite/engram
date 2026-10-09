@@ -13,6 +13,21 @@ type shortAnswerType struct{}
 // Label 返回语言包键名。
 func (shortAnswerType) Label() string { return "cardtype.short_answer" }
 
+// Describe 自描述：正面 prompt、背面 reference；自评题型（不实现 Grader）。
+func (shortAnswerType) Describe() Description {
+	return Description{
+		Kind:          "short_answer",
+		LabelKey:      "cardtype.short_answer",
+		AnswerControl: AnswerNone,
+		FrontField:    "prompt",
+		BackField:     "reference",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "reference", Control: ControlTextarea},
+		),
+	}
+}
+
 // Validate 校验 prompt / reference。reference 是可选的参考答案，缺省合法。
 func (shortAnswerType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {

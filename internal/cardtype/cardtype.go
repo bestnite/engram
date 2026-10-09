@@ -73,6 +73,9 @@ type CardType interface {
 	Render(card Card, side Side) (RenderResult, error)
 	// Label 返回 i18n 语言包的键名，而不是用户可见文案。
 	Label() string
+	// Describe 返回题型的自描述（字段表、正反面字段、作答控件），供编辑页与复习页渲染。
+	// Graded 由注册表在枚举时对 Grader 做接口断言得出，这里不声明。
+	Describe() Description
 }
 
 // Grader 是可选能力：作答类题型实现机器判分。

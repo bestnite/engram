@@ -9,6 +9,21 @@ type basicType struct{}
 // Label 返回语言包键名。
 func (basicType) Label() string { return "cardtype.basic" }
 
+// Describe 自描述：正反面是 front/back，自评题型（不实现 Grader）。
+func (basicType) Describe() Description {
+	return Description{
+		Kind:          "basic",
+		LabelKey:      "cardtype.basic",
+		AnswerControl: AnswerNone,
+		FrontField:    "front",
+		BackField:     "back",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "front", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "back", Control: ControlTextarea, Required: true},
+		),
+	}
+}
+
 // Validate 校验 front / back。
 func (basicType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "front"); err != nil {
@@ -53,6 +68,21 @@ type basicBothType struct{}
 
 // Label 返回语言包键名。
 func (basicBothType) Label() string { return "cardtype.basic_both" }
+
+// Describe 自描述：正反面是 front/back；反向卡是模板层的事，不改变字段映射。
+func (basicBothType) Describe() Description {
+	return Description{
+		Kind:          "basic_both",
+		LabelKey:      "cardtype.basic_both",
+		AnswerControl: AnswerNone,
+		FrontField:    "front",
+		BackField:     "back",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "front", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "back", Control: ControlTextarea, Required: true},
+		),
+	}
+}
 
 // Validate 校验 front / back。
 func (basicBothType) Validate(fields map[string]any) error {

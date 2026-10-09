@@ -13,6 +13,22 @@ type trueFalseType struct{}
 // Label 返回语言包键名。
 func (trueFalseType) Label() string { return "cardtype.true_false" }
 
+// Describe 自描述：正面 statement、背面 answer；作答控件是布尔判断题。
+func (trueFalseType) Describe() Description {
+	return Description{
+		Kind:          "true_false",
+		LabelKey:      "cardtype.true_false",
+		AnswerControl: AnswerBool,
+		FrontField:    "statement",
+		BackField:     "answer",
+		PromptField:   "statement",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "statement", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "answer", Control: ControlBool, Required: true},
+		),
+	}
+}
+
 // Validate 校验 statement 与布尔 answer。
 func (trueFalseType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "statement"); err != nil {
