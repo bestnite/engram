@@ -84,8 +84,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	// 第二步与第一步共用同一限速器：失败同样递增延迟。
 	if s.loginLimiter != nil {
 		if _, err := s.loginLimiter.Wait(ctx, u.Username, c.ClientIP()); err != nil {
-			s.logger.Info("totp second step delay aborted", "error", err)
-			c.AbortWithStatus(http.StatusRequestTimeout)
+			s.writeLoginLimited(c, err, u.Username, c.ClientIP())
 			return
 		}
 	}

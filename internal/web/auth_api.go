@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -82,11 +83,10 @@ func (s *Server) apiLogin(c *gin.Context) {
 	ctx := c.Request.Context()
 	ip := c.ClientIP()
 
-	// 认证前先按已累计的失败次数递增延迟：防爆破，拉平暴力尝试速率
+	// 认证前先按已累计的失败次数递增延迟，失败次数达到阈值时直接拒绝：防爆破，拉平暴力尝试速率
 	if s.loginLimiter != nil {
 		if _, err := s.loginLimiter.Wait(ctx, username, ip); err != nil {
-			s.logger.Info("login delay aborted", "error", err)
-			c.AbortWithStatus(http.StatusRequestTimeout)
+			s.writeLoginLimited(c, err, username, ip)
 			return
 		}
 	}
@@ -130,6 +130,10 @@ func (s *Server) apiLogin(c *gin.Context) {
 			return
 		}
 		if enabled {
+			// 第一因素通过不算成功也不算失败：归还占位，失败计数留给第二步一起累计。
+			if s.loginLimiter != nil {
+				s.loginLimiter.Release(username, ip)
+			}
 			s.setTOTPPendingCookie(c, u.ID)
 			c.JSON(http.StatusOK, gin.H{
 				"requires_totp": true,
@@ -377,6 +381,24 @@ func (s *Server) requestLocale(c *gin.Context) string {
 		return loc.Locale()
 	}
 	return ""
+}
+
+// writeLoginLimited 把限流器拒绝映射成响应：失败次数达到阈值时 429 rate_limited 并带
+// Retry-After；等待期间请求被取消（客户端断开）时 408。
+func (s *Server) writeLoginLimited(c *gin.Context, err error, username, ip string) {
+	var locked *auth.LockedError
+	if errors.As(err, &locked) {
+		s.logger.Info("login attempt locked out", "username", username, "ip", ip, "retry_after", locked.RetryAfter)
+		secs := int(locked.RetryAfter.Round(time.Second) / time.Second)
+		if secs < 1 {
+			secs = 1
+		}
+		c.Header("Retry-After", strconv.Itoa(secs))
+		apiAuthError(c, http.StatusTooManyRequests, api.CodeRateLimited, "Too many failed attempts. Try again later.")
+		return
+	}
+	s.logger.Info("login delay aborted", "error", err)
+	c.AbortWithStatus(http.StatusRequestTimeout)
 }
 
 // apiAuthError 写出认证类 SPA 接口的错误包壳（与 totpError 同形）。
