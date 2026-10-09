@@ -6,20 +6,21 @@ import (
 )
 
 // TestCatalogClassesAndDefaults 锁定邮件目录的四类与默认值：
-// A 不可关闭、默认开；B 默认开、可关；C 默认关、可关；D 默认开、可关。
+// A 不可关闭、默认开；B 默认开、可关；C 默认关、可关；D 默认开、可关、只面向管理员。
 func TestCatalogClassesAndDefaults(t *testing.T) {
 	cases := []struct {
-		class       Class
-		wantTypes   int
-		wantDisable bool
-		wantDefault bool
+		class         Class
+		wantTypes     int
+		wantDisable   bool
+		wantDefault   bool
+		wantAdminOnly bool
 	}{
-		{ClassSecurity, 5, false, true},
-		{ClassCollab, 3, true, true},
+		{ClassSecurity, 5, false, true, false},
+		{ClassCollab, 3, true, true, false},
 		// C 类 2026-10-07 从 5 种降到 3 种：连续打卡即将中断与导入导出完成因没有触发点被移出
 		// 目录（理由见 catalog.go 的注释）。这个数字随目录变动，改目录时同步改这里。
-		{ClassStudy, 3, true, false},
-		{ClassAdmin, 2, true, true},
+		{ClassStudy, 3, true, false, false},
+		{ClassAdmin, 2, true, true, true},
 	}
 	counts := map[Class]int{}
 	for _, def := range Catalog() {
@@ -34,6 +35,9 @@ func TestCatalogClassesAndDefaults(t *testing.T) {
 		}
 		if got := DefaultEnabled(tc.class); got != tc.wantDefault {
 			t.Errorf("DefaultEnabled(%q) = %v, want %v", tc.class, got, tc.wantDefault)
+		}
+		if got := AdminOnly(tc.class); got != tc.wantAdminOnly {
+			t.Errorf("AdminOnly(%q) = %v, want %v", tc.class, got, tc.wantAdminOnly)
 		}
 	}
 }

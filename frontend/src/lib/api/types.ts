@@ -792,6 +792,7 @@ export interface TOTPRecoveryResponse {
  *
  * 分组与开关由服务端从 internal/mail 目录推导；前端只按稳定标识查自己的语言包，
  * 不另列一份类型清单。reminder_hour 为 null 表示站点默认，0–23 是显式小时（0 是合法午夜）。
+ * D 管理员通知类只对管理员返回：非管理员的响应里没有该分组，提交它会被 403 拒绝（forbidden_type）。
  */
 export interface NotificationPrefType {
   type: string;

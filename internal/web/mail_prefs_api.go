@@ -16,6 +16,8 @@ import (
 // 语义与目录定义（internal/mail）完全一致，只是传输形态是 JSON：
 //   - 可关闭类型、A 类不可关闭、默认开关全部由 internal/mail 目录推导，这里不复制规则；
 //   - 保存时为每个可关闭类型写出一条显式选择，未提交的按关闭处理（与复选框缺席一致）；
+//   - D 管理员通知只发给管理员：非管理员的响应不含该分组，提交该类的偏好以 403 拒绝，
+//     也不为非管理员写下该类的显式选择（否则日后被提升为管理员的人会带着陈旧的「关闭」上任）；
 //   - reminder_hour 为 null 表示站点默认（NULL），0–23 是显式小时；0 是合法午夜，
 //     「未设置」只用 null 表示，绝不用 0 顶替（AGENTS.md §2.3 第 9 条）。
 //
@@ -82,6 +84,7 @@ func (s *Server) notificationPrefsGet(c *gin.Context) {
 
 // notificationPrefsPayload 组装偏好响应：分组与开关一律由 internal/mail 目录推导。
 // 发送小时与用户行上的最新值一致，因此重新读一次 users（会话缓存可能是旧快照）。
+// 角色也取自这一次重读：D 类只发给管理员，非管理员的响应里连该分组都不出现。
 func (s *Server) notificationPrefsPayload(c *gin.Context, userID uint64) (notificationPrefsResponse, error) {
 	ctx := c.Request.Context()
 	choices, err := store.NewEmailPrefStore(s.db).Choices(ctx, userID)
@@ -92,8 +95,12 @@ func (s *Server) notificationPrefsPayload(c *gin.Context, userID uint64) (notifi
 	if err != nil {
 		return notificationPrefsResponse{}, err
 	}
+	admin := fresh.Role == store.RoleAdmin
 	groups := make([]notificationGroup, 0, len(mail.ClassOrder()))
 	for _, class := range mail.ClassOrder() {
+		if mail.AdminOnly(class) && !admin {
+			continue
+		}
 		group := notificationGroup{Class: string(class)}
 		for _, def := range mail.Catalog() {
 			if def.Class != class {
@@ -118,7 +125,9 @@ func (s *Server) notificationPrefsPayload(c *gin.Context, userID uint64) (notifi
 // notificationPrefsPatch 保存用户对可选类型的开关与发送小时。
 //
 // 规则与 SSR 一致：先校验提交里出现的每个偏好键再写库，拒绝时不产生半截保存；
-// A 类不可关闭，任何指向 A 类的提交都以 400 拒绝；未知类型同样拒绝；
+// A 类不可关闭，任何指向 A 类的提交都以 400 拒绝；D 类只对管理员开放，非管理员提交它以
+// 403 拒绝（而不是静默忽略——忽略会让伪造请求以为配置成功，也让「页面不该展示它」这条
+// 规则没有服务端落地）；未知类型同样拒绝；
 // 可关闭类型按提交里的值写出显式选择（缺席 = 关闭），因此默认关的 C 类也能被打开。
 // 发送小时 null = 站点默认，0–23 为显式值，其余拒绝。
 func (s *Server) notificationPrefsPatch(c *gin.Context) {
@@ -126,6 +135,8 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// 角色每请求现查（会话中间件从库里重读 users 行），因此降级或提升即时生效。
+	admin := user.Role == store.RoleAdmin
 	var req notificationPrefsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		notificationPrefsError(c, http.StatusBadRequest, "invalid_request", "The notification preferences request is invalid.")
@@ -143,6 +154,10 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 			notificationPrefsError(c, http.StatusBadRequest, "class_locked", "Security and transactional mail cannot be turned off.")
 			return
 		}
+		if mail.AdminOnly(def.Class) && !admin {
+			notificationPrefsError(c, http.StatusForbidden, "forbidden_type", "Administrator notices can only be configured by administrators.")
+			return
+		}
 	}
 	// 0 是合法值（午夜），因此越界判断只在非 nil 时进行；null 与缺席都表示站点默认。
 	if req.ReminderHour != nil && (*req.ReminderHour < 0 || *req.ReminderHour > 23) {
@@ -152,9 +167,14 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	// 复选框缺席表示关闭；为每个可关闭类型都写出显式选择，不依赖存储里的旧值。
+	// D 类只对管理员有意义，非管理员不为它写出选择：留空即回落到目录默认（开），
+	// 这样日后被提升为管理员的人不会带着一个陈旧的「关闭」上任。
 	choices := make(map[string]bool, len(mail.Catalog()))
 	for _, def := range mail.Catalog() {
 		if !mail.CanDisable(def.Class) {
+			continue
+		}
+		if mail.AdminOnly(def.Class) && !admin {
 			continue
 		}
 		choices[string(def.Type)] = req.Choices[string(def.Type)]

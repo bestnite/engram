@@ -140,6 +140,14 @@ func DefaultEnabled(c Class) bool {
 	return c != ClassStudy
 }
 
+// AdminOnly 报告某一大类是否只面向管理员。
+// 只有 D 管理员通知类只发给管理员：非管理员的偏好页不展示它，也不接受它的选择。
+// 判定与 CanDisable/DefaultEnabled 同放目录里，理由相同——「哪一类面向谁」只有一处定义，
+// 展示与保存就不可能分歧。
+func AdminOnly(c Class) bool {
+	return c == ClassAdmin
+}
+
 // ResolveEnabled 是发信方与偏好页共用的唯一判定：在用户显式选择之上套用目录规则。
 //
 //   - 不可关闭的类（A）恒为 true，用户选择被忽略——即使存储里存在 A=false 也不可能生效；

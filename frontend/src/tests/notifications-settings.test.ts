@@ -93,6 +93,17 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
     expect(html).not.toContain('data-testid="notifications-submit"');
   });
 
+  it('renders only the groups the server sent: a non-admin response has no administrator section', () => {
+    const nonAdmin: NotificationPrefsResponse = {
+      ...fixture,
+      groups: fixture.groups.filter((group) => group.class !== 'admin'),
+    };
+    const { html } = render(NotificationPrefsView, { props: { initialLoading: false, initialData: nonAdmin } });
+    expect(html).toContain('data-testid="notifications-group-security"');
+    expect(html).not.toContain('data-testid="notifications-group-admin"');
+    expect(html).not.toContain('管理员通知');
+  });
+
   it('covers every catalog identifier in both locale catalogs', () => {
     for (const [cls, types] of Object.entries(catalog)) {
       expect(zhCN[`settings.notifications.class.${cls}.heading`]).toBeTruthy();
@@ -101,6 +112,16 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
         expect(zhCN[`settings.notifications.type.${type}`]).toBeTruthy();
         expect(en[`settings.notifications.type.${type}`]).toBeTruthy();
       }
+    }
+  });
+
+  // 视图把服务端的稳定错误 code 映射成本地化 key（actionErrorKey）；这里守住那组 key 存在，
+  // 否则一次 403（forbidden_type）会退化成通用失败提示。
+  it('localizes every rejection code the view maps, including the admin-only one', () => {
+    const codes = ['unknown_type', 'class_locked', 'reminder_hour_invalid', 'invalid_request', 'forbidden_type'];
+    for (const code of codes) {
+      expect(zhCN[`settings.notifications.error.${code}`]).toBeTruthy();
+      expect(en[`settings.notifications.error.${code}`]).toBeTruthy();
     }
   });
 });

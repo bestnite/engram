@@ -598,6 +598,7 @@ export const zhCN: LocaleCatalog = {
   'settings.notifications.error.class_locked': '安全与事务类邮件不可关闭。',
   'settings.notifications.error.reminder_hour_invalid': '发送时间必须是 0 到 23 的整点，或保留站点默认。',
   'settings.notifications.error.invalid_request': '请求无效。',
+  'settings.notifications.error.forbidden_type': '管理员通知只对管理员开放。',
   'settings.notifications.error.failed': '保存失败，请重试。',
   // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': '邮箱',

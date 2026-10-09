@@ -599,6 +599,7 @@ export const en: LocaleCatalog = {
   'settings.notifications.error.class_locked': 'Security and transactional mail cannot be turned off.',
   'settings.notifications.error.reminder_hour_invalid': 'Send time must be a whole hour from 0 to 23, or left as the site default.',
   'settings.notifications.error.invalid_request': 'The request is invalid.',
+  'settings.notifications.error.forbidden_type': 'Administrator notices are for administrators only.',
   'settings.notifications.error.failed': 'Could not save the preferences. Please try again.',
   // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
   'auth.field.email': 'Email',

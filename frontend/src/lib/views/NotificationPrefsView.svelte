@@ -84,6 +84,8 @@
       class_locked: 'settings.notifications.error.class_locked',
       reminder_hour_invalid: 'settings.notifications.error.reminder_hour_invalid',
       invalid_request: 'settings.notifications.error.invalid_request',
+      // 服务端只对管理员开放 D 管理员通知类：非管理员提交该类会被 403 拒绝。
+      forbidden_type: 'settings.notifications.error.forbidden_type',
     };
     return map[code] || 'settings.notifications.error.failed';
   }

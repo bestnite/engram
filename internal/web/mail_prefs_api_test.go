@@ -310,6 +310,109 @@ func TestMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 	}
 }
 
+// TestMailPrefsAdminClassIsAdminOnly 是「非管理员看不到也配不了 D 类」的负例：
+// 响应只有 A/B/C 三组且不含任何 D 类类型；提交 D 类以 403 + forbidden_type 拒绝且不写库；
+// 一次正常保存也不为非管理员写下 D 类的显式选择（日后被提升为管理员时回落到目录默认=开）。
+func TestMailPrefsAdminClassIsAdminOnly(t *testing.T) {
+	srv, db, _, _, _ := newNotesServer(t)
+	member, err := srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
+		Username: "member", Email: "member@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateLocalUser() error = %v", err)
+	}
+	cookies, csrf := loginJSON(t, srv, db, "member", "Sup3rSecret!")
+
+	got := loadNotificationPrefs(t, getWithCookies(t, srv, "/api/v1/settings/notifications", cookies))
+	wantGroups := 0
+	for _, class := range mail.ClassOrder() {
+		if !mail.AdminOnly(class) {
+			wantGroups++
+		}
+	}
+	if len(got.Groups) != wantGroups {
+		t.Fatalf("non-admin group count = %d, want %d (D 类不展示)", len(got.Groups), wantGroups)
+	}
+	for _, group := range got.Groups {
+		if mail.AdminOnly(mail.Class(group.Class)) {
+			t.Errorf("non-admin response contains the %q group, want none", group.Class)
+		}
+	}
+	for _, def := range mail.Catalog() {
+		if mail.AdminOnly(def.Class) && hasNotificationType(got, def.Type) {
+			t.Errorf("non-admin response exposes the admin-only type %q", def.Type)
+		}
+	}
+
+	// 提交 D 类：403 + forbidden_type，且一行都不写。
+	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+		"choices": map[string]bool{string(mail.TypeJobFailed): false},
+	}, cookies, csrf)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin D-class submission status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), "forbidden_type") {
+		t.Errorf("rejection does not carry the forbidden_type code: %s", snippet(rec.Body.String()))
+	}
+	if choices, err := store.NewEmailPrefStore(db).Choices(context.Background(), member.ID); err != nil {
+		t.Fatalf("Choices() error = %v", err)
+	} else if len(choices) != 0 {
+		t.Errorf("a rejected D-class submission wrote choices: %v", choices)
+	}
+
+	// 正常保存（不带 D 类键）成功，库里也不出现 D 类的显式选择。
+	rec = notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
+		"choices": map[string]bool{string(mail.TypeDeckShared): true}, "reminder_hour": 8,
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-admin save status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	choices, err := store.NewEmailPrefStore(db).Choices(context.Background(), member.ID)
+	if err != nil {
+		t.Fatalf("Choices() error = %v", err)
+	}
+	wantChoices := 0
+	for _, def := range mail.Catalog() {
+		if !mail.CanDisable(def.Class) || mail.AdminOnly(def.Class) {
+			continue
+		}
+		wantChoices++
+		if _, ok := choices[string(def.Type)]; !ok {
+			t.Errorf("non-admin save did not write an explicit choice for %q", def.Type)
+		}
+	}
+	if len(choices) != wantChoices {
+		t.Errorf("stored choice count = %d, want %d (可关闭且非 D 类的类型)", len(choices), wantChoices)
+	}
+	for _, def := range mail.Catalog() {
+		if !mail.AdminOnly(def.Class) {
+			continue
+		}
+		if _, ok := choices[string(def.Type)]; ok {
+			t.Errorf("non-admin save wrote the admin-only choice %q", def.Type)
+		}
+	}
+	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionUserEmailPrefsUpdate); err != nil || n != 1 {
+		t.Fatalf("user.email_prefs_update audit = (%d, %v), want 1 (only the accepted save)", n, err)
+	}
+	if after := loadNotificationPrefs(t, getWithCookies(t, srv, "/api/v1/settings/notifications", cookies)); len(after.Groups) != wantGroups {
+		t.Errorf("after save non-admin group count = %d, want %d", len(after.Groups), wantGroups)
+	}
+}
+
+// hasNotificationType 报告响应里是否出现了某类型。
+// enabledOf/lockedOf 在类型缺失时也返回 false，无法区分「不存在」与「值为假」，因此需要它。
+func hasNotificationType(resp notificationPrefsResponse, typ mail.Type) bool {
+	for _, group := range resp.Groups {
+		for _, item := range group.Types {
+			if item.Type == string(typ) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // enabledOf 报告响应里某类型的有效开关；类型缺失时直接失败。
 func enabledOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
