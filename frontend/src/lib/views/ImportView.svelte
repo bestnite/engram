@@ -140,9 +140,17 @@
     }
   }
 
+  function targetLabel(raw: string): string {
+    if (raw === 'new_deck') return $t('package.import.new_deck');
+    // 合并到已有卡组时服务端写成 into_deck:<卡组 id>，卡组 id 另有一行显示。
+    if (raw === 'into_deck' || raw.startsWith('into_deck:')) return $t('package.import.into_deck');
+    return raw;
+  }
+
   function reportRows(value: PackageImportReport): Array<[string, number | string]> {
     return [
-      ['package.report.target', value.target], ['package.report.dry_run', value.dry_run ? 1 : 0],
+      // 目标是服务端的稳定取值（new_deck / into_deck），显示时换成与表单选项相同的文案。
+      ['package.report.target', targetLabel(value.target)], ['package.report.dry_run', value.dry_run ? 1 : 0],
       ['package.report.deck_id', value.deck_id ?? '—'], ['package.report.notes_created', value.notes_created],
       ['package.report.notes_updated', value.notes_updated], ['package.report.notes_skipped', value.notes_skipped],
       ['package.report.cards_created', value.cards_created], ['package.report.media_new', value.media_new],
@@ -226,7 +234,7 @@
       <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
     </div>
     <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-      <Button type="submit" size="lg" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</Button>
+      <Button type="submit" size="lg" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</Button>
       {#if errorKey}<p role="alert" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>{/if}
     </div>
   </form>

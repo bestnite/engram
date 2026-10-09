@@ -233,6 +233,9 @@ describe('ImportView — URL source', () => {
     expect(reportSection()).toBeTruthy();
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.heading'));
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.preview_notice'));
+    // 报告里的「导入到」显示表单选项的文案，而不是服务端的原始取值。
+    expect(reportSection()?.textContent).toContain(formatMessage('zh-CN', 'package.import.new_deck'));
+    expect(reportSection()?.textContent).not.toContain('new_deck');
   });
 
   it('renders a real (non-dry-run) URL report without the preview notice', async () => {
