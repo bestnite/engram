@@ -189,8 +189,11 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
+	// 「下一个复习日」必须按用户自己的时区与日切点算：按 UTC 算时，UTC+8 的上午埋藏的卡
+	// 当天中午就会回到队列。
 	if _, err := schedule.Bury(ctx, tx, schedule.BuryInput{
 		CardID: card.ID, UserID: user.ID, Now: time.Now().UTC(),
+		Timezone: user.Timezone, DayCutoffHour: user.DayCutoffHour,
 	}); err != nil {
 		_ = tx.Rollback().Error
 		s.logger.Error("bury review card failed", "user_id", user.ID, "card_id", card.ID, "error", err)
