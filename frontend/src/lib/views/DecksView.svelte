@@ -277,7 +277,7 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2">
         {#if !loading && !error && decks.length > 0}
           <button
             type="button"
@@ -294,6 +294,17 @@
             </svg>
           </button>
         {/if}
+
+        <!-- 卡组包导入入口。放列表头部而不进全局导航：导航已有六项，移动端放不下；
+             链接指向 /import，客户端路由渲染 ImportView。 -->
+        <Button variant="outline" size="lg" href="/import" testId="decks-import-open">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>{$t('package.import.title')}</span>
+        </Button>
 
         <Button type="button" testId="deck-create-open" onclick={openCreateModal} variant="primary" size="lg">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
