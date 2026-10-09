@@ -37,7 +37,7 @@ func TestClozeRepeatedIndexProducesOneCard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if res.Body != "[…] and […] but {{c2::c}}" {
+	if res.Body != `<span class="cloze">[…]</span> and <span class="cloze">[…]</span> but c` {
 		t.Errorf("front = %q, want both c1 hidden", res.Body)
 	}
 }
@@ -112,26 +112,72 @@ func TestClozeHint(t *testing.T) {
 	}
 	card := Card{Template: "cloze:1", Fields: fields}
 	front, _ := clozeType{}.Render(card, SideFront)
-	if front.Body != "The [organelle] is the powerhouse." {
+	if front.Body != `The <span class="cloze">[organelle]</span> is the powerhouse.` {
 		t.Errorf("front = %q, want hint placeholder", front.Body)
 	}
 	back, _ := clozeType{}.Render(card, SideBack)
-	if back.Body != fields["text"] {
-		t.Errorf("back = %q, want original text", back.Body)
+	if back.Body != `The <span class="cloze">mitochondrion</span> is the powerhouse.` {
+		t.Errorf("back = %q, want highlighted answer without the hint", back.Body)
 	}
 }
 
-// TestClozeRenderRevealsOtherIndices 断言渲染目标序号时其它序号按原文显示。
-func TestClozeRenderRevealsOtherIndices(t *testing.T) {
-	fields := map[string]any{"text": "{{c1::one}} {{c2::two}}"}
-	card := Card{Template: "cloze:1", Fields: fields}
-	front, _ := clozeType{}.Render(card, SideFront)
-	if front.Body != "[…] {{c2::two}}" {
-		t.Errorf("front = %q, want c1 hidden and c2 shown", front.Body)
+// TestClozeRenderHidesMarkup 断言卡面上不出现 {{cN::}} 原始标记：目标序号正面是占位、
+// 背面是高亮内容，其它序号（含嵌套在内容里的）只显示内容。
+func TestClozeRenderHidesMarkup(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		template  string
+		wantFront string
+		wantBack  string
+	}{
+		{
+			name:      "other index shows its content",
+			text:      "{{c1::one}} {{c2::two}}",
+			template:  "cloze:1",
+			wantFront: `<span class="cloze">[…]</span> two`,
+			wantBack:  `<span class="cloze">one</span> two`,
+		},
+		{
+			name:      "second card hides only its own index",
+			text:      "{{c1::one}} {{c2::two::hint}}",
+			template:  "cloze:2",
+			wantFront: `one <span class="cloze">[hint]</span>`,
+			wantBack:  `one <span class="cloze">two</span>`,
+		},
+		{
+			name:      "nested marker is stripped",
+			text:      "x {{c1::a {{c2::b}} c}} y",
+			template:  "cloze:1",
+			wantFront: `x <span class="cloze">[…]</span> y`,
+			wantBack:  `x <span class="cloze">a b c</span> y`,
+		},
+		{
+			name:      "template without a matching deletion shows plain text",
+			text:      "{{c1::one}} rest",
+			template:  "cloze:9",
+			wantFront: "one rest",
+			wantBack:  "one rest",
+		},
 	}
-	back, _ := clozeType{}.Render(card, SideBack)
-	if back.Body != fields["text"] {
-		t.Errorf("back = %q, want full text", back.Body)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			card := Card{Template: tc.template, Fields: map[string]any{"text": tc.text}}
+			front, err := clozeType{}.Render(card, SideFront)
+			if err != nil {
+				t.Fatalf("Render front: %v", err)
+			}
+			if front.Body != tc.wantFront {
+				t.Errorf("front = %q, want %q", front.Body, tc.wantFront)
+			}
+			back, err := clozeType{}.Render(card, SideBack)
+			if err != nil {
+				t.Fatalf("Render back: %v", err)
+			}
+			if back.Body != tc.wantBack {
+				t.Errorf("back = %q, want %q", back.Body, tc.wantBack)
+			}
+		})
 	}
 }
 

@@ -167,3 +167,13 @@ html.dark #review-done {
   background-color: #27272a;
   color: #fafafa;
 }
+
+/* 填空卡的考点：正面占位与背面答案都由服务端包在 span.cloze 里 */
+.cloze {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+:where(.dark, .dark *) .cloze {
+  color: #60a5fa;
+}
