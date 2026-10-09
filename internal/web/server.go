@@ -408,9 +408,28 @@ func (s *Server) Handler() http.Handler { return s.router }
 // 未装配时为 nil。
 func (s *Server) Mail() *mail.Outbox { return s.mail }
 
+// 连接级超时。只限制请求头与空闲连接，不设整体读写超时：媒体上传与卡组包导入的请求体
+// 可以很大，流式导出的响应可以很长，整体超时会把合法的慢连接截断。
+const (
+	// httpReadHeaderTimeout 防止慢速发送请求头的连接（slowloris）长期占着连接与 goroutine。
+	httpReadHeaderTimeout = 10 * time.Second
+	// httpIdleTimeout 回收 keep-alive 空闲连接。
+	httpIdleTimeout = 2 * time.Minute
+)
+
+// newHTTPServer 构造带连接级超时的 http.Server；Run 与测试共用，保证测的就是上线的配置。
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		IdleTimeout:       httpIdleTimeout,
+	}
+}
+
 // Run 启动 HTTP 服务并在 ctx 取消时优雅关闭：停止接收新请求，最多等 2 秒。
 func (s *Server) Run(ctx context.Context) error {
-	srv := &http.Server{Addr: s.addr, Handler: s.router}
+	srv := newHTTPServer(s.addr, s.router)
 	errCh := make(chan error, 1)
 	go func() {
 		s.logger.Info("http server listening", "addr", s.addr)
