@@ -22,13 +22,13 @@ function preset(overrides: Partial<PresetRecord> = {}): PresetRecord {
     weights_review_count: null,
     weights_raw: null,
     job: null,
+    gate: { reviews: 0, min: 500, shortfall: 500, eligible: false },
     ...overrides,
   };
 }
 
 const payload: PresetsResponse = {
   presets: [preset()],
-  gate: { reviews: 0, min: 500, shortfall: 500, eligible: false },
 };
 
 describe('PresetsView renders presets, weights and the optimise gate truthfully', () => {
@@ -53,7 +53,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     expect(html).toContain('默认权重');
     expect(html).not.toContain('data-testid="preset-7-weights-raw"');
     // 门槛：可用 0 条、门槛 500 条，并给出「还差 500 条」。
-    expect(html).toContain('可用复习记录：0 条');
+    expect(html).toContain('使用本预设的卡组上的复习记录：0 条');
     expect(html).toContain('data-testid="preset-7-shortfall"');
     expect(html).toContain('还差 500 条');
   });
@@ -70,7 +70,6 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
   it('keeps the user-chosen name and the delete button for a user-created preset', () => {
     const data: PresetsResponse = {
       presets: [preset({ id: '8', name: 'Evening', is_default: false })],
-      gate: { reviews: 0, min: 500, shortfall: 500, eligible: false },
     };
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: data } });
     expect(html).toMatch(/>\s*Evening\s*<\/h2>/);
@@ -87,9 +86,9 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
           weights_optimized_at: '2026-10-02T12:00:00Z',
           weights_review_count: 600,
           weights_raw: '[0.5,1.5]',
+          gate: { reviews: 600, min: 500, shortfall: 0, eligible: true },
         },
       ],
-      gate: { reviews: 600, min: 500, shortfall: 0, eligible: true },
     };
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: data } });
     expect(html).toContain('已优化');
@@ -121,9 +120,9 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
               verdict: 'improved',
             },
           },
+          gate: { reviews: 600, min: 500, shortfall: 0, eligible: true },
         }),
       ],
-      gate: { reviews: 600, min: 500, shortfall: 0, eligible: true },
     };
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: withJob } });
     expect(html).toContain('data-testid="preset-7-job"');
@@ -155,9 +154,9 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
               verdict: 'insufficient_sample',
             },
           },
+          gate: { reviews: 320, min: 300, shortfall: 0, eligible: true },
         }),
       ],
-      gate: { reviews: 320, min: 300, shortfall: 0, eligible: true },
     };
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: small } });
     expect(html).toContain('data-testid="preset-7-verdict"');
@@ -239,7 +238,7 @@ describe('presets API client', () => {
 
   it('polls the status endpoint with the job query parameter', async () => {
     mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ job: null, gate: payload.gate }), { status: 200 })
+      new Response(JSON.stringify({ job: null, gate: payload.presets[0]!.gate }), { status: 200 })
     );
     await client.getPresetOptimizeStatus('7', '12');
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/presets/7/optimize/status?job=12');

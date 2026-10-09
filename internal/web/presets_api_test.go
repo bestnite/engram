@@ -80,11 +80,11 @@ func TestPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	if p.WeightsOptimized || p.WeightsRaw != nil || p.WeightsOptimizedAt != nil {
 		t.Errorf("fresh preset reports optimised weights: %+v", p)
 	}
-	if body.Gate.Eligible {
+	if p.Gate.Eligible {
 		t.Errorf("gate eligible = true with no reviews, want false")
 	}
-	if body.Gate.Min <= 0 || body.Gate.Shortfall != int64(body.Gate.Min)-body.Gate.Reviews {
-		t.Errorf("gate = %+v, want Shortfall = Min - Reviews", body.Gate)
+	if p.Gate.Min <= 0 || p.Gate.Shortfall != int64(p.Gate.Min)-p.Gate.Reviews {
+		t.Errorf("gate = %+v, want Shortfall = Min - Reviews", p.Gate)
 	}
 }
 
@@ -243,7 +243,7 @@ func TestPresetOptimizeGateAndConflict(t *testing.T) {
 	}
 
 	setMinReviews(t, db, store.MinOptimizeMinReviews)
-	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
+	seedReviews(t, db, ownerID, p.ID, store.MinOptimizeMinReviews)
 
 	first := jsonRequest(t, srv, http.MethodPost, path, `{}`, cookies, csrf)
 	if first.Code != http.StatusAccepted {
@@ -280,7 +280,7 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 	ctx := context.Background()
 	p := seedPreset(t, db, ownerID)
 	setMinReviews(t, db, store.MinOptimizeMinReviews)
-	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
+	seedReviews(t, db, ownerID, p.ID, store.MinOptimizeMinReviews)
 
 	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+p.PublicID+"/optimize", `{}`, cookies, csrf)
 	if enq.Code != http.StatusAccepted {
@@ -363,7 +363,7 @@ func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 		t.Fatalf("create second preset: %v", err)
 	}
 	setMinReviews(t, db, store.MinOptimizeMinReviews)
-	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
+	seedReviews(t, db, ownerID, p1.ID, store.MinOptimizeMinReviews)
 
 	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+p1.PublicID+"/optimize", `{}`, cookies, csrf)
 	if enq.Code != http.StatusAccepted {
@@ -518,5 +518,26 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 	if reloaded.Name != store.DefaultPresetName || reloaded.DesiredRetention != 0.85 {
 		t.Errorf("default preset after param edit = %+v, want name %q and retention 0.85",
 			reloaded, store.DefaultPresetName)
+	}
+}
+
+// TestPresetGateCountsOnlyItsOwnDecks 断言预设列表里每个预设的门槛只数挂着它的卡组上的复习：
+// 同一账号两个预设，复习只发生在第一个预设的卡组上，第二个预设的可用条数是 0（反面）。
+func TestPresetGateCountsOnlyItsOwnDecks(t *testing.T) {
+	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
+	used := seedPreset(t, db, ownerID)
+	idle := store.NewPreset(ownerID, "Idle")
+	if err := store.NewPresetStore(db).Create(context.Background(), &idle); err != nil {
+		t.Fatalf("create idle preset: %v", err)
+	}
+	seedReviews(t, db, ownerID, used.ID, 7)
+
+	body := decodePresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
+	got := map[string]int64{}
+	for _, p := range body.Presets {
+		got[p.ID] = p.Gate.Reviews
+	}
+	if got[used.PublicID] != 7 || got[idle.PublicID] != 0 {
+		t.Errorf("gate reviews = %v, want %s:7 and %s:0", got, used.PublicID, idle.PublicID)
 	}
 }

@@ -81,6 +81,31 @@ func seedExportUser(t *testing.T, db *gorm.DB, id uint64, tz string, cutoff int)
 	}
 }
 
+// seedPresetCards 建一个属于 ownerID 的新预设、挂着它的卡组与卡组里的 n 张卡，返回预设与卡的主键。
+// 优化日志按「挂着该预设的卡组」取复习，所以夹具的复习必须落在真实的卡上。
+func seedPresetCards(t *testing.T, db *gorm.DB, ownerID uint64, n int) (uint64, []uint64) {
+	t.Helper()
+	deckID := seedDeck(t, db, ownerID)
+	var deck Deck
+	if err := db.First(&deck, deckID).Error; err != nil {
+		t.Fatalf("load deck: %v", err)
+	}
+	now := time.Now().UTC()
+	ids := make([]uint64, 0, n)
+	for i := 0; i < n; i++ {
+		note := Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+		if err := db.Create(&note).Error; err != nil {
+			t.Fatalf("create note: %v", err)
+		}
+		card := Card{NoteID: note.ID, Template: "forward", CreatedAt: now}
+		if err := db.Create(&card).Error; err != nil {
+			t.Fatalf("create card: %v", err)
+		}
+		ids = append(ids, card.ID)
+	}
+	return deck.PresetID, ids
+}
+
 // TestExportOptimizerLogMatchesUpstreamSchema 是验收：把若干复习行导出为 JSONL，
 // 逐行断言它们满足上游 review_logs schema 的类型与范围约束，并核对字段映射与 UTC 毫秒。
 func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
@@ -93,6 +118,7 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	}
 	ctx := context.Background()
 	seedExportUser(t, db, 1, "America/New_York", 4)
+	presetID, cards := seedPresetCards(t, db, 1, 3)
 
 	// 一条已知时刻的行，用来断言 review_time 恰好是 reviewed_at 的 UTC 毫秒。
 	known := time.Date(2026, 10, 2, 12, 0, 0, 123_000_000, time.UTC) // .123s 精度
@@ -100,7 +126,7 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	nilMS := []*int{nil, &zero, &neg}
 	for i, ms := range nilMS {
 		rv := Review{
-			CardID: uint64(200 + i), UserID: 1, Rating: i + 1, GradeSource: "self",
+			CardID: cards[i], UserID: 1, Rating: i + 1, GradeSource: "self",
 			ReviewedAt: known.Add(time.Duration(i) * time.Hour), ReviewDay: "2026-10-02",
 			ElapsedMS: ms, StateBefore: i, // state_before 依次 0,1,2
 		}
@@ -110,7 +136,7 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := NewReviewStore(db).ExportOptimizerLog(ctx, 1, &buf); err != nil {
+	if err := NewReviewStore(db).ExportOptimizerLog(ctx, 1, presetID, &buf); err != nil {
 		t.Fatalf("ExportOptimizerLog: %v", err)
 	}
 
@@ -124,7 +150,7 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	}
 
 	// 字段映射：card_id/rating/state_before 原样带出，时区与日切取自用户记录。
-	if rows[0].CardID != 200 || rows[2].CardID != 202 {
+	if rows[0].CardID != cards[0] || rows[2].CardID != cards[2] {
 		t.Errorf("card_id mapping wrong: %+v", rows)
 	}
 	if rows[0].ReviewRating != 1 || rows[2].ReviewRating != 3 {
@@ -193,9 +219,10 @@ func TestExportOptimizerLogStreams(t *testing.T) {
 	}
 	ctx := context.Background()
 	seedExportUser(t, db, 1, "UTC", 4)
+	presetID, cards := seedPresetCards(t, db, 1, 5)
 	for i := 0; i < 5; i++ {
 		rv := Review{
-			CardID: uint64(300 + i), UserID: 1, Rating: 3, GradeSource: "self",
+			CardID: cards[i], UserID: 1, Rating: 3, GradeSource: "self",
 			ReviewedAt: time.Now().UTC().Add(time.Duration(i) * time.Minute),
 			ReviewDay:  "2026-10-02", StateBefore: 2,
 		}
@@ -205,7 +232,7 @@ func TestExportOptimizerLogStreams(t *testing.T) {
 	}
 
 	w := &failAfterFirstWrite{}
-	err = NewReviewStore(db).ExportOptimizerLog(ctx, 1, w)
+	err = NewReviewStore(db).ExportOptimizerLog(ctx, 1, presetID, w)
 	if err == nil {
 		t.Fatal("ExportOptimizerLog returned nil, want the write error to surface")
 	}
@@ -228,4 +255,78 @@ func nonEmptyLines(data []byte) [][]byte {
 		}
 	}
 	return out
+}
+
+// TestOptimizerLogCoversOnlyDecksUsingThePreset 是 FX 验收：一个用户有两个预设、各挂一个自己的卡组，
+// 另在别人的共享卡组上用第一个预设。优化第一个预设只用它自己卡组与那个共享卡组上的复习；
+// 第二个预设只用它自己卡组上的复习（反面：按用户全量取会让两个预设得到同一份日志）。
+func TestOptimizerLogCoversOnlyDecksUsingThePreset(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate: %v", err)
+			}
+			ids := seedUsers(t, db, "opt_user", "opt_sharer")
+			user, sharer := ids[0], ids[1]
+			presetA, cardsA := seedPresetCards(t, db, user, 2)
+			presetB, cardsB := seedPresetCards(t, db, user, 1)
+			_, sharedCards := seedPresetCards(t, db, sharer, 1)
+			var shared Card
+			if err := db.First(&shared, sharedCards[0]).Error; err != nil {
+				t.Fatal(err)
+			}
+			var sharedNote Note
+			if err := db.First(&sharedNote, shared.NoteID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&DeckMemberSetting{DeckID: sharedNote.DeckID, UserID: user, PresetID: presetA,
+				NewPerDay: 20, ReviewsPerDay: 200, UpdatedAt: time.Now().UTC()}).Error; err != nil {
+				t.Fatalf("seed member settings: %v", err)
+			}
+			review := func(userID, cardID uint64) {
+				t.Helper()
+				if err := db.Create(&Review{CardID: cardID, UserID: userID, Rating: 3, GradeSource: "self",
+					ReviewedAt: time.Now().UTC(), ReviewDay: "2026-10-02", StateBefore: 2}).Error; err != nil {
+					t.Fatalf("seed review: %v", err)
+				}
+			}
+			for _, c := range append(append(append([]uint64{}, cardsA...), cardsB...), sharedCards...) {
+				review(user, c)
+			}
+			review(sharer, sharedCards[0]) // 别人的复习永远不算进来
+
+			cases := []struct {
+				name   string
+				preset uint64
+				want   map[uint64]bool
+			}{
+				{"preset A: own deck and the shared deck", presetA, map[uint64]bool{cardsA[0]: true, cardsA[1]: true, sharedCards[0]: true}},
+				{"preset B: only its own deck", presetB, map[uint64]bool{cardsB[0]: true}},
+			}
+			for _, tc := range cases {
+				var buf bytes.Buffer
+				if err := NewReviewStore(db).ExportOptimizerLog(ctx, user, tc.preset, &buf); err != nil {
+					t.Fatalf("%s: ExportOptimizerLog: %v", tc.name, err)
+				}
+				lines := nonEmptyLines(buf.Bytes())
+				got := map[uint64]bool{}
+				for _, line := range lines {
+					got[decodeOptimizerLogLine(t, line).CardID] = true
+				}
+				if len(lines) != len(tc.want) || len(got) != len(tc.want) {
+					t.Errorf("%s: exported cards %v, want %v", tc.name, got, tc.want)
+				}
+				for id := range tc.want {
+					if !got[id] {
+						t.Errorf("%s: card %d missing from %v", tc.name, id, got)
+					}
+				}
+				n, err := NewReviewStore(db).CountForPreset(ctx, user, tc.preset)
+				if err != nil || n != int64(len(tc.want)) {
+					t.Errorf("%s: CountForPreset = %d, %v; want %d", tc.name, n, err, len(tc.want))
+				}
+			}
+		})
+	}
 }

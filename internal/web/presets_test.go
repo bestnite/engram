@@ -85,12 +85,18 @@ func seedPreset(t *testing.T, db *gorm.DB, ownerID uint64) *store.Preset {
 }
 
 // seedReviews 插入 n 条属于 userID 的复习日志；优化门槛只按 user_id 计数。
-func seedReviews(t *testing.T, db *gorm.DB, userID uint64, n int) {
+func seedReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, n int) {
 	t.Helper()
 	now := time.Now().UTC()
+	// 优化门槛只数挂着该预设的卡组上的复习，所以复习要落在这样一个卡组的卡上。
+	deck := store.Deck{OwnerUserID: userID, Name: "optimize fuel", PresetID: presetID, CreatedAt: now}
+	if err := db.Create(&deck).Error; err != nil {
+		t.Fatalf("seed deck: %v", err)
+	}
+	cardID := seedCardRow(t, db, deck.ID, "fuel", now)
 	for i := 0; i < n; i++ {
 		row := store.Review{
-			CardID:      uint64(i + 1),
+			CardID:      cardID,
 			UserID:      userID,
 			Rating:      3,
 			GradeSource: "self",

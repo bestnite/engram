@@ -157,7 +157,7 @@ func (o *Optimizer) CommandBuilder() CommandBuilder {
 		if err != nil {
 			return Command{}, fmt.Errorf("create review log: %w", err)
 		}
-		exportErr := store.NewReviewStore(o.db).ExportOptimizerLog(ctx, ownerID, f)
+		exportErr := store.NewReviewStore(o.db).ExportOptimizerLog(ctx, ownerID, *job.TargetID, f)
 		closeErr := f.Close()
 		if exportErr != nil {
 			return Command{}, fmt.Errorf("export review log: %w", exportErr)
@@ -267,7 +267,7 @@ func readOptimizerLog(path string) ([]store.OptimizerReviewLog, error) {
 	return logs, nil
 }
 
-// ownerUserID 从作业目标预设反查复习日志的归属者（作业只带 preset_id，日志按用户统计）。
+// ownerUserID 从作业目标预设反查复习日志的归属者（作业只带 preset_id；日志取该用户在挂着这个预设的卡组上的复习）。
 func (o *Optimizer) ownerUserID(ctx context.Context, job *store.Job) (uint64, error) {
 	if job.TargetID == nil || *job.TargetID == 0 {
 		return 0, errors.New("optimize job has no target preset; cannot locate the owner's review log")

@@ -677,7 +677,7 @@ export const zhCN: LocaleCatalog = {
   'presets.weights.optimized_at': '优化时间：{time}',
   'presets.weights.review_count': '使用复习记录：{count} 条',
   'presets.weights.raw_label': '权重明细（与数据库一致）',
-  'presets.reviews.available': '可用复习记录：{count} 条',
+  'presets.reviews.available': '使用本预设的卡组上的复习记录：{count} 条',
   'presets.reviews.threshold': '优化门槛：至少 {min} 条',
   'presets.reschedule.note': '优化与回退只影响未来的间隔；重算到期日默认不执行。',
   'presets.revert.note': '回退后立即使用默认权重（weights_json 归 NULL）。',

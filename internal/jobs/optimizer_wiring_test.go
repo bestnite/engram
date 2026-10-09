@@ -76,14 +76,15 @@ func seedOptimizerUserAndPreset(t *testing.T, db *gorm.DB) (*store.User, *store.
 
 // seedAdapterReviews 写入跨多天、多张卡的复习日志，让适配器有足够「长期复习」项训练
 // （适配器要求过滤后至少 8 项）。同卡按天递增，delta_t > 0，评分在 1..4 间变化。
-func seedAdapterReviews(t *testing.T, db *gorm.DB, userID uint64, cards, days int) {
+func seedAdapterReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, cards, days int) {
 	t.Helper()
+	cardIDs := seedPresetDeckCards(t, db, userID, presetID, cards)
 	base := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 	for card := 0; card < cards; card++ {
 		for day := 0; day < days; day++ {
 			at := base.AddDate(0, 0, day).Add(time.Duration(card) * time.Minute)
 			rv := store.Review{
-				CardID:      uint64(card + 1),
+				CardID:      cardIDs[card],
 				UserID:      userID,
 				Rating:      1 + (card*3+day)%4,
 				GradeSource: "self",
@@ -111,7 +112,7 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	u, p := seedOptimizerUserAndPreset(t, db)
 	// 8 张卡 × 40 天 = 320 条复习：越过 300 条门槛下限，且够适配器训练。
 	const cards, days = 8, 40
-	seedAdapterReviews(t, db, u.ID, cards, days)
+	seedAdapterReviews(t, db, u.ID, p.ID, cards, days)
 	// 门槛设到下限：默认 500 会挡住这 320 条复习。
 	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, strconv.Itoa(store.MinOptimizeMinReviews), nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)

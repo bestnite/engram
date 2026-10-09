@@ -38,9 +38,9 @@ func (e *ThresholdError) Is(target error) bool { return target == ErrInsufficien
 
 // EnqueueOptimize 是优化作业的唯一入队入口：先按门槛判定资格，再复用单并发 Enqueue。
 // 条数不足时不建作业、不入队，直接返回 ThresholdError，让上层把差额展示给用户。
-// ownerUserID 是预设所属用户，也就是复习日志的归属者（优化燃料按用户统计）。
+// ownerUserID 是预设所属用户，也就是复习日志的归属者；门槛只数该预设所挂卡组上的复习。
 func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint64) (*store.Job, error) {
-	gate, err := store.GateOptimize(ctx, r.db, ownerUserID)
+	gate, err := store.GateOptimize(ctx, r.db, ownerUserID, presetID)
 	if err != nil {
 		return nil, fmt.Errorf("check optimize threshold: %w", err)
 	}
