@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
   import { t } from '../i18n';
@@ -53,11 +54,11 @@
   onMount(() => { void load(); });
 </script>
 
-<div class={embedded ? 'space-y-5' : 'mx-auto max-w-4xl space-y-6 px-4 py-10'} data-testid="deck-sharing-view">
+<Page {embedded} class={embedded ? 'space-y-5' : 'space-y-6'} testId="deck-sharing-view">
   {#if loading}<p class="text-sm text-muted-foreground" role="status">{$t('common.loading')}</p>
   {:else if failed}<p class="text-sm text-rose-600 dark:text-rose-400" role="alert">{$t(error)}</p>
   {:else if data}
-    {#if !embedded}<header><h1 class="text-2xl font-bold tracking-tight text-foreground">{$t('deck.sharing.title')}: {data.deck_name}</h1></header>{/if}
+    {#if !embedded}<header><h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('deck.sharing.title')}: {data.deck_name}</h1></header>{/if}
     {#if error}<p class="text-sm text-rose-600 dark:text-rose-400" role="alert">{$t(error)}</p>{/if}
     {#if newLink}<section class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-800/80 dark:bg-emerald-950/30" role="status"><p class="text-sm">{$t('deck.sharing.link_once')}</p><a class="break-all underline" href={newLink}>{newLink}</a><button class="ml-3 underline cursor-pointer" onclick={() => newLink=''}>{$t('deck.sharing.dismiss')}</button></section>{/if}
     <section class="card-elevated space-y-4 rounded-2xl p-5"><h2 class="text-lg font-semibold text-foreground">{$t('deck.sharing.grants')}</h2>
@@ -81,4 +82,4 @@
     </section>
     <section class="card-elevated space-y-4 rounded-2xl p-5"><h2 class="text-lg font-semibold text-foreground">{$t('deck.sharing.links')}</h2><form class="flex flex-wrap items-end gap-3" onsubmit={createLink}><label class="grid gap-1 text-sm text-foreground/80">{$t('deck.sharing.password')}<input type="password" bind:value={password} class="field-input text-sm w-full" /></label><label class="grid gap-1 text-sm text-foreground/80">{$t('deck.sharing.expiry')}<input type="date" bind:value={expiresAt} class="field-input text-sm w-full" /></label><Button type="submit" disabled={saving} testId="sharing-create-link">{$t('deck.sharing.create_link')}</Button></form><ul class="divide-y divide-zinc-200 dark:divide-zinc-800">{#each data.links as link (link.prefix)}<li class="flex flex-wrap items-center justify-between gap-3 py-3"><span class="font-mono text-sm text-muted-foreground">{link.prefix} · {$t(link.revoked ? 'deck.sharing.link_revoked' : link.expired ? 'deck.sharing.link_expired' : 'deck.sharing.link_active')}{#if link.has_password} · {$t('deck.sharing.password_set')}{/if}</span>{#if !link.revoked && !link.expired}<button class="text-rose-700 dark:text-rose-400 underline cursor-pointer" disabled={saving} onclick={() => change('DELETE',`${apiPath}/links/revoke/${link.prefix}`)}>{$t('deck.sharing.revoke')}</button>{/if}</li>{/each}</ul><button disabled={saving || !data.links.some((link) => !link.revoked && !link.expired)} class="text-rose-700 dark:text-rose-400 underline disabled:opacity-40 cursor-pointer" onclick={() => change('DELETE',`${apiPath}/links`)}>{$t('deck.sharing.revoke_all')}</button></section>
   {/if}
-</div>
+</Page>

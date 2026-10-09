@@ -76,7 +76,7 @@
         <span class="text-sm text-foreground/80">{$t('note.fields.' + spec.key)}</span>
       </div>
     {:else}
-      <span class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <span class="block text-sm font-medium text-foreground">
         {$t('note.fields.' + spec.key)}
       </span>
       {#if spec.control === 'textarea'}

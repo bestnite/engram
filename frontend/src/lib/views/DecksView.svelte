@@ -273,7 +273,7 @@
     <!-- 顶栏标题与操作 -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-border">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('decks.title')}
         </h1>
         <p class="text-xs text-muted-foreground mt-1">

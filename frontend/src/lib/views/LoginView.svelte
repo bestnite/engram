@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
   import { login, authStore } from '../auth';
@@ -49,10 +50,10 @@
   }
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('auth.login.heading')}
       </h1>
     </div>
@@ -119,4 +120,4 @@
     <!-- OIDC 可选登录：组件挂载时探测服务端配置，仅在 enabled 时渲染入口 -->
     <OIDCLoginEntry />
   </div>
-</div>
+</Page>

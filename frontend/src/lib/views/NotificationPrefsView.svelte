@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -121,7 +122,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="notifications-view">
+<Page class="space-y-6" testId="notifications-view">
   <a
     href="/settings"
     data-testid="notifications-back"
@@ -141,7 +142,7 @@
     </div>
   {:else if data}
     <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="notifications-title">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="notifications-title">
         {$t('settings.notifications.heading')}
       </h1>
       <p class="text-sm text-muted-foreground leading-relaxed">{$t('settings.notifications.intro')}</p>
@@ -224,4 +225,4 @@
       </div>
     </form>
   {/if}
-</div>
+</Page>

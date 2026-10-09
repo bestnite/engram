@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -171,7 +172,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="totp-view">
+<Page class="space-y-6" testId="totp-view">
   <a
     href="/settings"
     data-testid="totp-back"
@@ -191,7 +192,7 @@
     </div>
   {:else if status}
     <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="totp-title">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="totp-title">
         {$t('settings.totp.heading')}
       </h1>
       <p class="text-sm text-muted-foreground leading-relaxed">{$t('settings.totp.intro')}</p>
@@ -325,4 +326,4 @@
       </section>
     {/if}
   {/if}
-</div>
+</Page>

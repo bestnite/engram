@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -77,8 +78,8 @@
   });
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-6 sm:p-8 rounded-xl space-y-6">
+<Page>
+  <div class="space-y-6">
     {#if loading}
       <Skeleton testId="home-loading" label={$t('home.loading')} />
     {:else if error}
@@ -109,7 +110,7 @@
         <!-- 顶部操作区 -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
           <div>
-            <h1 class="text-2xl font-bold tracking-tight text-foreground">
+            <h1 class="text-2xl font-semibold tracking-tight text-foreground">
               {$t('home.title')}
             </h1>
             <p class="text-sm text-muted-foreground mt-1">
@@ -208,4 +209,4 @@
       </div>
     {/if}
   </div>
-</div>
+</Page>

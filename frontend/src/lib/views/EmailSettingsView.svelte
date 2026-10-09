@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
@@ -65,10 +66,10 @@
   }
 </script>
 
-<div class="py-12 max-w-lg mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('account.email.heading')}
       </h1>
       <p class="mt-2 text-sm text-muted-foreground">{$t('account.email.intro')}</p>
@@ -182,4 +183,4 @@
       </div>
     {/if}
   </div>
-</div>
+</Page>

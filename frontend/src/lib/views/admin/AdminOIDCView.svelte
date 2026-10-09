@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
@@ -151,11 +152,11 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-oidc">
+<Page class="space-y-6" testId="admin-oidc">
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-oidc-title">{$t('admin.oidc.heading')}</h1>
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="admin-oidc-title">{$t('admin.oidc.heading')}</h1>
     <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.oidc.intro')}</p>
   </header>
 
@@ -269,4 +270,4 @@
       {/if}
     </section>
   {/if}
-</div>
+</Page>

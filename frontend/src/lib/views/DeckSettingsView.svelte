@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
   import { t } from '../i18n';
@@ -183,7 +184,7 @@
   });
 </script>
 
-<div class={embedded ? 'space-y-5' : 'mx-auto max-w-4xl space-y-6 px-4 py-10'} data-testid="deck-settings-view">
+<Page {embedded} class={embedded ? 'space-y-5' : 'space-y-6'} testId="deck-settings-view">
   {#if !embedded}
     <a
       href="/decks/{encodeURIComponent(deckId)}"
@@ -210,7 +211,7 @@
   {:else if settings}
     {#if !embedded}
       <header>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="deck-settings-title">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-settings-title">
           {$t('deck.settings.title')}: {settings.deck_name}
         </h1>
       </header>
@@ -325,4 +326,4 @@
       </dl>
     </section>
   {/if}
-</div>
+</Page>

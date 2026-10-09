@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
@@ -69,10 +70,10 @@
   onMount(() => load());
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-6">
+<Page>
+  <div class="space-y-6">
     <header>
-      <h1 class="text-2xl font-bold text-foreground">{$t('keys.title')}</h1>
+      <h1 class="text-2xl font-semibold text-foreground">{$t('keys.title')}</h1>
       <p class="mt-1 text-sm text-muted-foreground">{$t('keys.notice')}</p>
     </header>
 
@@ -137,4 +138,4 @@
       </ul>
     {/if}
   </div>
-</div>
+</Page>

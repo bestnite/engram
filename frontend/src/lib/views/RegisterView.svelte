@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
@@ -103,9 +104,10 @@
   }
 </script>
 
+<Page width="narrow">
 {#if registrationState === 'probing'}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl" data-testid="register-probing">
+  <div>
+    <div data-testid="register-probing">
       <div class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
         <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
         <span>{$t('common.loading')}</span>
@@ -113,10 +115,10 @@
     </div>
   </div>
 {:else if blockedReason}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl" data-testid="register-blocked">
+  <div>
+    <div data-testid="register-blocked">
       <div class="mb-6 text-center">
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('auth.register.blocked_heading')}
         </h1>
       </div>
@@ -134,10 +136,10 @@
     </div>
   </div>
 {:else}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl">
+  <div>
+    <div>
       <div class="mb-6 text-center">
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('auth.register.heading')}
         </h1>
       </div>
@@ -262,3 +264,4 @@
     </div>
   </div>
 {/if}
+</Page>

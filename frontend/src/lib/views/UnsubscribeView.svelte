@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -68,9 +69,9 @@
   }
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl text-center">
-    <h1 class="mb-4 text-2xl font-bold tracking-tight text-foreground">
+<Page width="narrow">
+  <div class="text-center">
+    <h1 class="mb-4 text-2xl font-semibold tracking-tight text-foreground">
       {$t('unsubscribe.heading')}
     </h1>
 
@@ -93,4 +94,4 @@
       </a>
     </div>
   </div>
-</div>
+</Page>

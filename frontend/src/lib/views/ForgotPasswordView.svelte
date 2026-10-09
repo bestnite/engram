@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
@@ -28,10 +29,10 @@
   }
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('account.forgot.heading')}
       </h1>
     </div>
@@ -97,4 +98,4 @@
       </div>
     {/if}
   </div>
-</div>
+</Page>

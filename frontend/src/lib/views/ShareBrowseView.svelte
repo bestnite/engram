@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -87,9 +88,9 @@
   onMount(loadShare);
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
+<Page>
   <div class="mb-6">
-    <h1 class="text-2xl font-bold tracking-tight text-foreground">
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground">
       {$t('share.browse.heading')}
     </h1>
     {#if share}
@@ -183,4 +184,4 @@
       {/if}
     </div>
   {/if}
-</div>
+</Page>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount, tick } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -635,9 +636,9 @@
 </script>
 
 <svelte:head><title>{$t('review.title')} · {$t('app.name')}</title></svelte:head>
-<section class="max-w-4xl mx-auto px-4 py-10">
+<Page as="section">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-    <h1 class="text-2xl font-bold tracking-tight text-foreground">{$t('review.title')}</h1>
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('review.title')}</h1>
     <div class="flex items-center gap-2 self-start sm:self-auto">
       <!-- 撤销上一次评分：自评题提交后没有结果面板，入口在这里；判分题面板打开时隐藏，避免两个入口。 -->
       {#if lastUndo && !feedback}
@@ -879,4 +880,4 @@
   <p class="mt-4 text-center text-xs text-muted-foreground">
     {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_give_up') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
   </p>
-</section>
+</Page>

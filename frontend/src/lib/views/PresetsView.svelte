@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -411,9 +412,9 @@
   onDestroy(stopPolling);
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="presets-view">
+<Page class="space-y-6" testId="presets-view">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="presets-heading">
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="presets-heading">
       {$t('presets.heading')}
     </h1>
     <Button type="button" testId="presets-new" onclick={openCreate} variant="primary" size="lg">
@@ -586,7 +587,7 @@
       {/each}
     </div>
   {/if}
-</div>
+</Page>
 
 {#if formOpen}
   <Dialog

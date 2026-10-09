@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
@@ -86,11 +87,11 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-jobs">
+<Page class="space-y-6" testId="admin-jobs">
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-jobs-title">{$t('admin.jobs.heading')}</h1>
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="admin-jobs-title">{$t('admin.jobs.heading')}</h1>
   </header>
 
   {#if notice}<div data-testid="admin-jobs-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -148,4 +149,4 @@
       </div>
     {/if}
   {/if}
-</div>
+</Page>

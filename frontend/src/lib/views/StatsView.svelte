@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -169,11 +170,11 @@
   );
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-6 sm:p-8 rounded-xl space-y-8">
+<Page>
+  <div class="space-y-8">
     <div class="flex items-center justify-between pb-4 border-b border-border">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('stats.title')}
         </h1>
       </div>
@@ -524,4 +525,4 @@
       </div>
     {/if}
   </div>
-</div>
+</Page>

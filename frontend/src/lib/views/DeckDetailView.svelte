@@ -282,7 +282,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-2.5">
-          <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="deck-title">
+          <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-title">
             {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
           </h1>
         </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
@@ -177,9 +178,9 @@
   }
 </script>
 
-<div class={embedded ? 'space-y-5' : 'py-10 max-w-5xl mx-auto px-4'} data-testid="admin-mail-templates">
+<Page {embedded} class={embedded ? 'space-y-5' : 'space-y-6'} testId="admin-mail-templates">
   {#if !embedded}
-    <h1 class="text-2xl font-bold tracking-tight text-foreground">{$t('admin.mail.heading')}</h1>
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('admin.mail.heading')}</h1>
     <p class="mt-2 text-sm text-muted-foreground">{$t('admin.mail.intro')}</p>
 
     <div class="mt-6">
@@ -349,4 +350,4 @@
       {/if}
     </div>
   {/if}
-</div>
+</Page>

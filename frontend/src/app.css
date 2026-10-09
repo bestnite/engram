@@ -245,7 +245,8 @@ html.dark #review-done {
   border-radius: var(--radius);
   border: 1px solid var(--input);
   background-color: var(--background);
-  padding: 0.5rem 0.75rem;
+  /* 7px 上下内边距 + 20px 行高 + 边框 = 36px，与 Select、lg 按钮同高，同一行的控件天然对齐。 */
+  padding: 0.4375rem 0.75rem;
   color: var(--foreground);
 
   &::placeholder {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t, localeStore, setLocale, type SupportedLocale, isSupportedLocale } from '../i18n';
   import {
@@ -246,10 +247,10 @@
   });
 </script>
 
-<div data-testid="settings-view" class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page testId="settings-view">
+  <div>
     <div class="mb-6">
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('settings.heading')}
       </h1>
       <p class="mt-1 text-sm text-muted-foreground leading-relaxed">
@@ -522,4 +523,4 @@
       </section>
     {/if}
   </div>
-</div>
+</Page>
