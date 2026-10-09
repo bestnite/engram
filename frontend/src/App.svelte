@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { routeStore, initRouter, navigate, viewKey } from './lib/router';
-  import { localeStore, t } from './lib/i18n';
+  import { localeStore } from './lib/i18n';
   import { initAuth, clearSession } from './lib/auth';
   import { apiClient } from './lib/api';
   import { appVersion } from './lib/version';
-  import NavHeader from './lib/components/NavHeader.svelte';
+  import AppShell from './lib/components/shell/AppShell.svelte';
   import NotFoundView from './lib/views/NotFoundView.svelte';
 
   // 程序版本由服务端注入入口 <head> 的 meta 提供；开发模式或静态预览下为空，页脚不显示。
@@ -46,29 +46,8 @@
   const activeKey = $derived(viewKey($routeStore));
 </script>
 
-<div class="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-  <NavHeader />
-
-  <main class="flex-1">
-    {#key activeKey}
-      <ActiveComponent />
-    {/key}
-  </main>
-
-  <footer class="border-t border-zinc-200 dark:border-zinc-800 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
-    <div class="flex items-center justify-center gap-2">
-      <a
-        href="https://github.com/bestnite/engram"
-        target="_blank"
-        rel="noreferrer noopener"
-        class="font-medium hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-      >
-        {$t('app.name')}
-      </a>
-      {#if version}
-        <span aria-hidden="true">·</span>
-        <span>{version}</span>
-      {/if}
-    </div>
-  </footer>
-</div>
+<AppShell {version}>
+  {#key activeKey}
+    <ActiveComponent />
+  {/key}
+</AppShell>

@@ -1241,4 +1241,20 @@ export const en: LocaleCatalog = {
   'package.error.url_not_package': 'That link did not return a deck package.',
   // 示例地址也属于用户可见文案，因此由语言包提供。
   'package.import.url_placeholder': 'https://example.com/deck.edeck',
+  // 侧边栏外壳（导航分组、收起、账户菜单）。
+  'sidebar.label': 'Main navigation',
+  'sidebar.group.study': 'Study',
+  'sidebar.group.library': 'Library',
+  'sidebar.import': 'Import',
+  'sidebar.all_decks': 'All decks',
+  'sidebar.collapse': 'Collapse sidebar',
+  'sidebar.expand': 'Expand sidebar',
+  'sidebar.open': 'Open navigation',
+  'sidebar.account': 'Account menu',
+  'sidebar.theme_light': 'Light mode',
+  'sidebar.theme_dark': 'Dark mode',
+  'sidebar.language': 'Language',
+  'sidebar.due_count': '{count} due',
+  'sidebar.exit_review': 'Exit review',
+  'sidebar.version': 'Version {version}',
 };

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from 'svelte/server';
-import NavHeader from '../lib/components/NavHeader.svelte';
+import AppSidebar from '../lib/components/shell/AppSidebar.svelte';
 import SettingsView from '../lib/views/SettingsView.svelte';
 import { setLocale } from '../lib/i18n';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
@@ -9,9 +9,9 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
- * API 密钥入口从页头导航移到 /settings 页。
+ * API 密钥入口从主导航移到 /settings 页。
  *
- * 两个可观测事实：页头不再有 /settings/keys 链接；设置页多了一张指向 /settings/keys 的入口卡片。
+ * 两个可观测事实：主导航不再有 /settings/keys 链接；设置页多了一张指向 /settings/keys 的入口卡片。
  * 页面内容本身仍留在 /settings/keys——这里只验证路由还在，不重复 APIKeysView 自己的测试。
  */
 describe('API keys entry lives on the settings page, not the header', () => {
@@ -26,10 +26,10 @@ describe('API keys entry lives on the settings page, not the header', () => {
     expect(html).toContain('管理 API 密钥');
   });
 
-  it('no longer offers an API keys link in the header nav', () => {
-    const { html } = render(NavHeader);
+  it('no longer offers an API keys link in the main navigation', () => {
+    const { html } = render(AppSidebar);
     expect(html).not.toContain('href="/settings/keys"');
-    // 设置入口本身仍在页头：否则整段导航被删时上面那条否定断言也会「通过」。
+    // 设置入口本身仍在主导航：否则整段导航被删时上面那条否定断言也会「通过」。
     expect(html).toContain('href="/settings"');
   });
 

@@ -1240,4 +1240,20 @@ export const zhCN: LocaleCatalog = {
   'package.error.url_not_package': '该链接返回的不是卡组包。',
   // 直链输入框的示例占位符：用户可见文本一律走语言包，不在模板里硬编码。
   'package.import.url_placeholder': 'https://example.com/deck.edeck',
+  // 侧边栏外壳（导航分组、收起、账户菜单）。
+  'sidebar.label': '主导航',
+  'sidebar.group.study': '学习',
+  'sidebar.group.library': '内容',
+  'sidebar.import': '导入',
+  'sidebar.all_decks': '全部卡组',
+  'sidebar.collapse': '收起侧边栏',
+  'sidebar.expand': '展开侧边栏',
+  'sidebar.open': '打开导航',
+  'sidebar.account': '账户菜单',
+  'sidebar.theme_light': '浅色模式',
+  'sidebar.theme_dark': '深色模式',
+  'sidebar.language': '语言',
+  'sidebar.due_count': '{count} 张待复习',
+  'sidebar.exit_review': '退出复习',
+  'sidebar.version': '版本 {version}',
 };
