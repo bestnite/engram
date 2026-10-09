@@ -18,9 +18,9 @@
 | AUDIT-04 | 当前库内的埋藏到期时间恢复测试通过；包迁移遗漏见 RECHECK-04 |
 | AUDIT-05 | 已修复：克隆执行统一校验，网页副本名按字符截断源名称 |
 | AUDIT-06 | 已修复：单页上限为 200，页码上限为 1000000 |
-| AUDIT-07 | 路径参数变化时重建组件；复习范围查询参数变化仍未处理，见 RECHECK-03 |
+| AUDIT-07 | 路径参数变化时重建组件；复习范围查询参数变化已修复，见 RECHECK-03 |
 | AUDIT-08 | 已按返回的 reader 角色隐藏内容修改入口；个人暂停和学习设置入口保留 |
-| AUDIT-09 | REST、MCP 和网页入口已接通；修改接口仍有 RECHECK-01 和 RECHECK-02 |
+| AUDIT-09 | REST、MCP 和网页入口已接通；RECHECK-01 和 RECHECK-02 已修复 |
 | AUDIT-10 | 归档入口仍未实现，维护者已说明该范围 |
 | AUDIT-11 | 自定义映射入口仍未实现，维护者已说明该范围 |
 | AUDIT-12 | 回收站入口仍未实现，维护者已说明该范围 |
@@ -29,6 +29,8 @@
 ### RECHECK-01 修改卡组信息会覆盖期间更新的调度预设
 
 优先级：高。证据：真实 SQLite 数据库上的可控交错复现。
+
+**已修复**（`92c4a21`）：`DeckStore.Update` 只更新 `name` 与 `description`，不再写 `preset_id`；调度预设只经 `SetPreset` / `SetStudySettings` 变更。验收：`internal/api` 的 `TestUpdateDeckKeepsPreset` 与 `internal/store` 的 `TestDeckStoreCRUD`（改名后预设保持原值）。
 
 位置：[service.go](internal/api/service.go)，`API.UpdateDeck`；[deck.go](internal/store/deck.go)，`DeckStore.Update`。
 
@@ -42,6 +44,8 @@
 
 优先级：中。证据：真实 SQLite 数据库和 REST handler 复现。
 
+**已修复**（`94a0ff1`）：REST 请求体、共享业务入参与 MCP 入参改用指针区分「未提供」与「显式空串」；存储层按 PATCH 语义只写给出的字段，校验针对合并后的最终文本。验收：`TestUpdateDeckPartialUpdateKeepsOmittedFields`、`TestUpdateDeckHTTPPartialBodyKeepsDescription`、`TestUpdateDeckRejectsInvalidText`。
+
 位置：[decks.go](internal/api/decks.go)，`updateDeckRequest`；[service.go](internal/api/service.go)，`UpdateDeckInput`；[tools.go](internal/mcp/tools.go)，`updateDeckIn`。
 
 REST 请求和 MCP 输入用普通字符串承载名称、描述，无法区分字段缺失与显式空字符串。请求注释允许两个字段缺省，但实现将缺失描述当成空描述写入，并将缺失名称当成非法空名称拒绝。
@@ -53,6 +57,8 @@ REST 请求和 MCP 输入用普通字符串承载名称、描述，无法区分�
 ### RECHECK-03 复习范围查询参数变化不会重载队列
 
 优先级：中。证据：真实 Chromium 加载生产构建后的交互复现；HTTP 响应使用本地测试数据。
+
+**已修复**（`17cb995`）：`viewKey` 纳入原始查询串（按段排序，重复键保留），复习范围变化即触发组件重建并重新取队列；无关参数顺序变化不重建。浏览器复现脚本需重跑确认。
 
 位置：[router/index.ts](frontend/src/lib/router/index.ts)，`viewKey`；[ReviewView.svelte](frontend/src/lib/views/ReviewView.svelte)，`selectedDecks` 和 `onMount`；[App.svelte](frontend/src/App.svelte)，组件重建边界。
 
@@ -73,6 +79,8 @@ DUE_REQUESTS /api/v1/review/due?deck=A&limit=500
 ### RECHECK-04 卡组包迁移丢失撤销快照
 
 优先级：中。证据：真实 SQLite 数据库上的导出、导入和撤销复现。
+
+**已修复**（`d4244f2`）：`PackageReview` 增加 `step_index_before` 与 `due_before` 两个可空字段，导出写入、导入写回，`schema/deck-package.schema.json` 同步补记；旧包缺字段时仍按「回退到上一条日志推算」处理。验收：`TestPackageRoundTripKeepsReviewUndoSnapshots`。
 
 位置：[package.go](internal/store/package.go)，`PackageReview` 和 `exportProgress`；[package_import.go](internal/store/package_import.go)，`applyProgress`；[models.go](internal/store/models.go)，`Review.DueBefore`；[actions.go](internal/schedule/actions.go)，`Rollback`。
 
