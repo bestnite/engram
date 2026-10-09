@@ -260,7 +260,6 @@ export const zhCN: LocaleCatalog = {
   'presets.used_by_decks': '关联卡组：',
   'presets.unused': '未关联卡组',
   'presets.optimize.gate_shortfall': '尚差 {count} 条复习记录满足优化门槛',
-  'nav.api_keys': 'API 密钥',
   'keys.title': 'API 密钥',
   'keys.notice': '密钥仅在创建时显示一次。请妥善保存明文，本页面不会存储它。',
   'keys.created_once': '请立即复制此密钥，之后将无法再次查看。',
@@ -568,6 +567,11 @@ export const zhCN: LocaleCatalog = {
   'settings.notifications.heading': '邮件通知偏好',
   'settings.notifications.intro': '选择本站可以给你发送哪些可选邮件；安全与事务类邮件不可关闭。',
   'settings.notifications.entry': '管理邮件通知偏好',
+  // ---- API 密钥（/settings/keys） ----
+  // 入口挂在设置页上；页头导航里不再有它。
+  'settings.keys.heading': 'API 密钥',
+  'settings.keys.intro': '创建与撤销用于 REST 与 MCP API 的密钥；明文只在创建后完整显示一次。',
+  'settings.keys.entry': '管理 API 密钥',
   'settings.notifications.locked': '始终开启：这类邮件保护你的账号。',
   'settings.notifications.class.security.heading': '安全与事务',
   'settings.notifications.class.collab.heading': '协作与授权',
