@@ -12,6 +12,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import { noteKindLabel as kindLabel } from '../labels';
+  import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -42,8 +43,7 @@
   }: Props = $props();
 
   // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分。
-  const SELF_ASSESSABLE = ['basic', 'basic_both', 'cloze', 'list', 'short_answer'];
-  const GRADED_KINDS = ['typed', 'numeric', 'choice_single', 'choice_multi', 'true_false'];
+  // 哪些题型属于哪一类由服务端的自描述决定（graded / answer_control），前端不再维护清单。
 
   // svelte-ignore state_referenced_locally
   let cards = $state<DueCard[]>(initialCards);
@@ -90,26 +90,32 @@
   let revealedSection = $state<HTMLElement | null>(null);
 
   const current = $derived(cards[0] || null);
-  const selfAssessable = $derived(current !== null && SELF_ASSESSABLE.includes(current.kind));
-  const gradedKind = $derived(current !== null && GRADED_KINDS.includes(current.kind));
-  const front = $derived(current ? cardSide(current, false) : []);
-  const answer = $derived(current ? cardSide(current, true) : []);
+  // 当前卡的题型自描述；元数据未就绪或题型未知时为 null，视图渲染加载态而不是乱猜字段。
+  const desc = $derived(descriptionOf($cardTypes, current?.kind));
+  const selfAssessable = $derived(desc !== null && !desc.graded);
+  const gradedKind = $derived(desc !== null && desc.graded);
+  const answerControl = $derived(desc?.answer_control ?? 'none');
+  const front = $derived(current && $cardTypes ? cardSide($cardTypes, current, false) : []);
+  const answer = $derived(current && $cardTypes ? cardSide($cardTypes, current, true) : []);
   // 编辑入口：优先用服务端 render 返回的 edit_href；未取到时按规范路径拼接。
   const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
-  function cardSide(card: DueCard, back: boolean): [string, string][] {
+  /**
+   * 卡面的正/反面字段：正反面字段名来自元数据（front_field / back_field）。
+   * 模板级反转（basic_both 的 reverse）在这里把正反面互换——元数据描述的是正向映射，
+   * 不编码模板级反转。
+   */
+  function cardSide(
+    catalog: CardTypeCatalog,
+    card: DueCard,
+    back: boolean
+  ): [string, string][] {
+    const description = descriptionOf(catalog, card.kind);
+    if (!description) return [];
     const fields = card.fields || {};
     const reverse = card.template === 'reverse';
-    const frontKey = card.kind === 'cloze' || card.kind === 'list' || card.kind === 'typed' || card.kind === 'numeric'
-      ? (card.kind === 'cloze' ? 'text' : 'prompt')
-      : card.kind === 'choice_single' || card.kind === 'choice_multi' ? 'question'
-        : card.kind === 'true_false' ? 'statement' : (reverse ? 'back' : 'front');
-    const answerKey = card.kind === 'cloze' ? 'text'
-      : card.kind === 'list' ? 'items'
-        : card.kind === 'typed' || card.kind === 'short_answer' ? (card.kind === 'typed' ? 'answer' : 'reference')
-          : card.kind === 'numeric' ? 'value'
-            : card.kind === 'choice_single' || card.kind === 'choice_multi' ? 'options'
-              : card.kind === 'true_false' ? 'answer' : (reverse ? 'front' : 'back');
+    const frontKey = reverse ? description.back_field : description.front_field;
+    const answerKey = reverse ? description.front_field : description.back_field;
     const key = back ? answerKey : frontKey;
     const value = fields[key];
     return value === undefined ? [] : [[key, formatValue(value)]];
@@ -122,19 +128,18 @@
     return String(value);
   }
 
-  /** 作答类题型的题面文本：typed/numeric 用 prompt，choice_* 用 question，true_false 用 statement。 */
-  function gradedPrompt(card: DueCard): string {
-    const fields = card.fields || {};
-    const key = card.kind === 'typed' || card.kind === 'numeric'
-      ? 'prompt'
-      : card.kind === 'true_false' ? 'statement' : 'question';
-    const value = fields[key];
+  /** 作答类题型的题面文本：字段名来自元数据的 prompt_field。 */
+  function gradedPrompt(catalog: CardTypeCatalog | null, card: DueCard): string {
+    const description = descriptionOf(catalog, card.kind);
+    if (!description || !description.prompt_field) return '';
+    const value = (card.fields || {})[description.prompt_field];
     return value === undefined || value === null ? '' : String(value);
   }
 
-  /** 选择题的选项文本；只读 options，绝不把答案字段渲染进题面。 */
-  function gradedOptions(card: DueCard): string[] {
-    const raw = (card.fields || {}).options;
+  /** 选择题的选项文本：字段名来自元数据的 options_field；只读选项，绝不渲染答案字段。 */
+  function gradedOptions(catalog: CardTypeCatalog | null, card: DueCard): string[] {
+    const description = descriptionOf(catalog, card.kind);
+    const raw = description && description.options_field ? (card.fields || {})[description.options_field] : undefined;
     return Array.isArray(raw) ? raw.map((option) => String(option)) : [];
   }
 
@@ -146,17 +151,17 @@
     needAnswer = false;
   }
 
-  /** 组装当前卡片的原始作答；未作答的选择题返回 undefined（提交前拦截）。 */
+  /** 组装当前卡片的原始作答；未作答的选择题返回 undefined（提交前拦截）。控件类型来自元数据。 */
   function currentAnswer(): GradedAnswer | undefined {
-    switch (current?.kind) {
-      case 'typed':
-      case 'numeric':
+    switch (answerControl) {
+      case 'text':
+      case 'number':
         return answerText;
-      case 'choice_single':
+      case 'single':
         return singleChoice ?? undefined;
-      case 'choice_multi':
+      case 'multi':
         return multiChoice;
-      case 'true_false':
+      case 'bool':
         return boolChoice ?? undefined;
       default:
         return undefined;
@@ -560,6 +565,8 @@
 
   onMount(() => {
     void loadQueue();
+    // 元数据只加载一次（模块内幂等）；失败时静默降级为加载/空态，不打断复习流程。
+    void loadCardTypes(client).catch(() => {});
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
   });
@@ -609,7 +616,7 @@
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
-          <Badge class="px-2.5 font-semibold">{kindLabel(current.kind, $t)}</Badge>
+          <Badge class="px-2.5 font-semibold">{kindLabel(current.kind, $cardTypes, $t)}</Badge>
           <button
             type="button"
             onclick={gotoEdit}
@@ -623,7 +630,10 @@
           </button>
         </div>
 
-        {#if selfAssessable}
+        {#if !desc}
+          <!-- 元数据未就绪（加载中或拉取失败）：渲染加载态，不猜测字段、不打印机器词汇。 -->
+          <Skeleton testId="review-meta-loading" label={$t('common.loading')} lines={3} />
+        {:else if selfAssessable}
           <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-front">
             {#if frontHTML}
               {@html frontHTML}
@@ -712,20 +722,20 @@
           {:else}
             <div class="space-y-5">
               <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-graded-prompt">
-                {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt(current)}{/if}
+                {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt($cardTypes, current)}{/if}
               </div>
-              {#if current.kind === 'typed' || current.kind === 'numeric'}
+              {#if answerControl === 'text' || answerControl === 'number'}
                 <input
                   bind:this={inputElement}
                   type="text"
-                  inputmode={current.kind === 'numeric' ? 'decimal' : undefined}
+                  inputmode={answerControl === 'number' ? 'decimal' : undefined}
                   bind:value={answerText}
-                  placeholder={current.kind === 'numeric' ? $t('review.graded.placeholder_number') : $t('review.graded.placeholder')}
+                  placeholder={answerControl === 'number' ? $t('review.graded.placeholder_number') : $t('review.graded.placeholder')}
                   aria-label={$t('review.graded.placeholder')}
                   data-testid="review-graded-input"
                   class="field-input text-sm w-full min-h-12 text-lg"
                 />
-              {:else if current.kind === 'choice_single'}
+              {:else if answerControl === 'single'}
                 <RadioGroup
                   testId="review-graded-options"
                   itemTestId="review-graded-option"
@@ -734,11 +744,11 @@
                   ariaLabel={$t('review.ratings')}
                   value={singleChoice === null ? '' : String(singleChoice)}
                   onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
-                  options={gradedOptions(current).map((option, index) => ({ value: String(index), label: option }))}
+                  options={gradedOptions($cardTypes, current).map((option, index) => ({ value: String(index), label: option }))}
                 />
-              {:else if current.kind === 'choice_multi'}
+              {:else if answerControl === 'multi'}
                 <div class="space-y-2" data-testid="review-graded-options">
-                  {#each gradedOptions(current) as option, index (index)}
+                  {#each gradedOptions($cardTypes, current) as option, index (index)}
                     <div class="flex min-h-12 items-center gap-3 rounded-xl border border-zinc-300 px-4 transition-colors hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600">
                       <Checkbox
                         testId="review-graded-option"
@@ -751,7 +761,7 @@
                     </div>
                   {/each}
                 </div>
-              {:else if current.kind === 'true_false'}
+              {:else if answerControl === 'bool'}
                 <RadioGroup
                   testId="review-graded-options"
                   itemTestId="review-graded-option"

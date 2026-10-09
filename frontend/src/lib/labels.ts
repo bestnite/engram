@@ -1,4 +1,4 @@
-import { CARD_KIND_FIELDS } from './card-fields';
+import type { CardTypeCatalog } from './card-types';
 
 /**
  * 后端枚举 → 界面文案。
@@ -20,9 +20,15 @@ import { CARD_KIND_FIELDS } from './card-fields';
 /** 翻译函数的最小形状（`$t` 即可）。 */
 export type Translate = (key: string) => string;
 
-/** 题型的语言包键；未知/空值返回 null。题型清单以字段表为唯一来源。 */
-export function noteKindLabelKey(kind: string | null | undefined): string | null {
-  if (!kind || !(kind in CARD_KIND_FIELDS)) return null;
+/**
+ * 题型的语言包键；未知/空值或元数据未就绪时返回 null。
+ * 题型清单以服务端的自描述（GET /api/v1/card-types）为唯一来源。
+ */
+export function noteKindLabelKey(
+  kind: string | null | undefined,
+  catalog: CardTypeCatalog | null
+): string | null {
+  if (!kind || !catalog || !catalog.byKind.has(kind)) return null;
   return `notes.kind.${kind}`;
 }
 
@@ -52,9 +58,13 @@ export function deckActionKind(role: string | null | undefined): DeckActionKind 
   }
 }
 
-/** 题型徽标文案；未知枚举返回空串。 */
-export function noteKindLabel(kind: string | null | undefined, t: Translate): string {
-  const key = noteKindLabelKey(kind);
+/** 题型徽标文案；未知枚举或元数据未就绪返回空串。 */
+export function noteKindLabel(
+  kind: string | null | undefined,
+  catalog: CardTypeCatalog | null,
+  t: Translate
+): string {
+  const key = noteKindLabelKey(kind, catalog);
   return key ? t(key) : '';
 }
 

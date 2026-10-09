@@ -11,12 +11,11 @@
   import Button from '../components/ui/Button.svelte';
   import Panel from '../components/ui/Panel.svelte';
   import {
-    CARD_KIND_FIELDS,
     emptyFields,
-    fieldsForKind,
     toFormFields,
     toPayloadFields,
   } from '../card-fields';
+  import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
 
   // 编辑器的字段模型按题型走字段表（card-fields.ts），界面不再暴露 JSON：
   // 每个题型有各自的字段与控件形态，用户看到的是「正面/背面」而不是键值对。
@@ -31,6 +30,8 @@
   let error = $state(false);
   let invalid = $state(false);
   let saved = $state(false);
+  // 元数据拉取失败：视图形同「加载中」，但不打印机器词汇，只给一条通用错误。
+  let metaError = $state(false);
   let previewLoading = $state(false);
   let previewError = $state(false);
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
@@ -45,19 +46,20 @@
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
 
+  // 题型下拉：清单与顺序来自服务端的自描述（kind 字典序），元数据未就绪时为空。
   const kindOptions = $derived(
-    Object.keys(CARD_KIND_FIELDS).map((value) => ({ value, label: $t(`notes.kind.${value}` as never) }))
+    kindOrder($cardTypes).map((value) => ({ value, label: $t(`notes.kind.${value}` as never) }))
   );
 
   // 可插入媒体的字段：只有文本类字段能承载 Markdown 图片引用。
   const textFields = $derived(
-    fieldsForKind(kind)
+    fieldsForKind($cardTypes, kind)
       .filter((spec) => spec.control === 'text' || spec.control === 'textarea' || spec.control === 'lines')
       .map((spec) => ({ value: spec.key, label: $t('note.fields.' + spec.key) }))
   );
 
   function firstTextField(nextKind: string): string {
-    const spec = fieldsForKind(nextKind).find(
+    const spec = fieldsForKind($cardTypes, nextKind).find(
       (item) => item.control === 'text' || item.control === 'textarea' || item.control === 'lines'
     );
     return spec ? spec.key : '';
@@ -66,8 +68,8 @@
   /** 载入卡片并把服务端字段收进表单模型；返回未知键另存，供保存时合并。 */
   function adoptFields(loaded: Note): void {
     kind = loaded.kind;
-    fields = toFormFields(loaded.kind, loaded.fields);
-    const known = new Set(fieldsForKind(loaded.kind).map((spec) => spec.key));
+    fields = toFormFields(fieldsForKind($cardTypes, loaded.kind), loaded.fields);
+    const known = new Set(fieldsForKind($cardTypes, loaded.kind).map((spec) => spec.key));
     unknownKeys = Object.fromEntries(Object.entries(loaded.fields).filter(([key]) => !known.has(key)));
     tagsText = loaded.tags.join(', ');
     selectedField = firstTextField(loaded.kind);
@@ -76,6 +78,12 @@
   async function load(): Promise<void> {
     loading = true;
     error = false;
+    // 先确保题型元数据就绪：字段表随元数据一起到达，未知题型无法初始化表单。
+    try {
+      await loadCardTypes(apiClient);
+    } catch {
+      metaError = true;
+    }
     try {
       // 列表返回字段保持纯文本；编辑器不把 Markdown 当 HTML 渲染。
       const result = await apiClient.getDeckNotes(deckId, { page: 1, per_page: 100 });
@@ -96,7 +104,7 @@
    */
   function changeKind(next: string): void {
     kind = next;
-    fields = emptyFields(next);
+    fields = emptyFields(fieldsForKind($cardTypes, next));
     if (note) note.kind = next;
     selectedField = firstTextField(next);
     previewCards = null;
@@ -207,10 +215,12 @@
     <span>{$t('note_edit.back')}</span>
   </a>
   <h1 class="text-2xl font-bold my-5">{$t('note_edit.title', { id: noteId })}</h1>
-  {#if loading}
+  {#if loading || (note && !$cardTypes && !metaError)}
     <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_edit.loading')}</p>
   {:else if error && !note}
     <p role="alert" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_edit.not_found')}</p>
+  {:else if metaError && !$cardTypes}
+    <p role="alert" data-testid="note-edit-metadata-error" class="text-sm text-rose-600 dark:text-rose-400">{$t('common.error')}</p>
   {:else if note}
     <form onsubmit={save}>
       <Panel class="space-y-5">
@@ -228,7 +238,7 @@
           <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.kind_hint')}</p>
         </div>
 
-        <NoteFieldsForm specs={fieldsForKind(kind)} {fields} testIdPrefix="note-field" />
+        <NoteFieldsForm specs={fieldsForKind($cardTypes, kind)} {fields} testIdPrefix="note-field" />
 
         <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_edit.tags')}
           <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />

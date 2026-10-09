@@ -13,7 +13,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import { noteKindLabel as kindLabel } from '../labels';
-  import { CARD_KIND_FIELDS } from '../card-fields';
+  import { cardTypes, kindOrder, loadCardTypes } from '../card-types';
 
   // 状态变量（Svelte 5 runes）
   let loading = $state(true);
@@ -57,8 +57,8 @@
 
   // 题型清单的后端标识与展示名分开：标识符进查询串，展示名一律走语言包
   // （此前下拉里直接渲染 kind 字面量，中文界面下会露出 basic/cloze 这类内部标识）。
-  // 清单本身取自字段表——同一份题型清单在别处再写一遍，迟早会漂移。
-  const CARD_KINDS = Object.keys(CARD_KIND_FIELDS);
+  // 清单本身取自服务端的题型自描述——同一份题型清单在别处再写一遍，迟早会漂移。
+  const cardKinds = $derived(kindOrder($cardTypes));
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
@@ -254,6 +254,8 @@
 
   onMount(() => {
     loadData(1);
+    // 元数据只加载一次（模块内幂等）；失败时筛选下拉退化为只剩「全部题型」，不打断页面。
+    void loadCardTypes(apiClient).catch(() => {});
   });
 
   onDestroy(() => {
@@ -369,7 +371,7 @@
           testId="filter-kind-select"
           options={[
             { value: '', label: $t('notes.all_kinds') },
-            ...CARD_KINDS.map((kind) => ({ value: kind, label: kindLabel(kind, $t) })),
+            ...cardKinds.map((kind) => ({ value: kind, label: kindLabel(kind, $cardTypes, $t) })),
           ]}
         />
         {#if hasFilter}
@@ -490,7 +492,7 @@
                     label={$t('notes.select_one')}
                   />
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
-                  <Badge class="font-semibold">{kindLabel(note.kind, $t)}</Badge>
+                  <Badge class="font-semibold">{kindLabel(note.kind, $cardTypes, $t)}</Badge>
                   {#if note.suspended}
                     <Badge testId={`note-suspended-${note.id}`}>{$t('notes.suspended')}</Badge>
                   {/if}

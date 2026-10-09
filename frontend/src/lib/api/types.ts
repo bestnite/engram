@@ -148,6 +148,56 @@ export interface NotePreviewResponse {
 }
 
 /**
+ * GET /api/v1/card-types 的字段控件取值。
+ * 与 Go internal/cardtype 的 Control* 常量逐项一致；前端据此选择编辑表单控件。
+ */
+export type CardTypeFieldControl =
+  | 'text'
+  | 'textarea'
+  | 'lines'
+  | 'number'
+  | 'bool'
+  | 'index'
+  | 'indexes';
+
+/**
+ * GET /api/v1/card-types 的作答控件取值。
+ * 与 Go internal/cardtype 的 Answer* 常量逐项一致；none 表示自评题型。
+ */
+export type CardTypeAnswerControl = 'none' | 'text' | 'number' | 'single' | 'multi' | 'bool';
+
+/** 题型的一个字段规格（与 Go internal/cardtype.FieldSpec 对齐）。 */
+export interface CardTypeField {
+  key: string;
+  control: CardTypeFieldControl;
+  required: boolean;
+  /** 带库默认值的布尔字段的服务端默认值；无默认时服务端省略该键。 */
+  default?: unknown;
+}
+
+/**
+ * 题型的自描述（与 Go internal/cardtype.Description 对齐）。
+ * 编辑表单与复习页据此渲染，不再各自硬编码一张题型表。
+ */
+export interface CardTypeDescription {
+  kind: string;
+  label_key: string;
+  /** 是否由服务端判分（等价于「题型实现了 Grader」）。 */
+  graded: boolean;
+  answer_control: CardTypeAnswerControl;
+  front_field: string;
+  back_field: string;
+  prompt_field: string;
+  options_field: string;
+  fields: CardTypeField[];
+}
+
+/** GET /api/v1/card-types 响应体；kinds 按 kind 字典序，结果稳定。 */
+export interface CardTypesResponse {
+  kinds: CardTypeDescription[];
+}
+
+/**
  * GET /api/v1/media 的一项（与 Go internal/api.MediaItem 对齐）。
  * url 由 sha256 拼成 /media/<sha256>，可直接用于 <img src> 与 Markdown 引用插入。
  */
