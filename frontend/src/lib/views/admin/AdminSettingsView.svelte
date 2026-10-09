@@ -5,6 +5,9 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminSettingsResponse } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import PageHeader from '../../components/ui/PageHeader.svelte';
+  import SettingsSection from '../../components/ui/SettingsSection.svelte';
+  import { toast } from '../../components/ui/toast';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
 
@@ -150,66 +153,74 @@
       load();
     }
   });
+
+  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  $effect(() => {
+    if (notice) {
+      toast.success($t(notice));
+      notice = '';
+    }
+  });
+  $effect(() => {
+    if (actionError) {
+      toast.error($t(actionError));
+      actionError = '';
+    }
+  });
 </script>
 
-<Page class="space-y-6" testId="admin-settings">
+<Page testId="admin-settings">
   <AdminNav />
-
-  <header class="space-y-1">
-    <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="admin-settings-title">{$t('admin.settings.heading')}</h1>
-    <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.settings.intro')}</p>
-  </header>
-
-  {#if notice}<div data-testid="admin-settings-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
-  {#if actionError}<div data-testid="admin-settings-error" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">{$t(actionError)}</div>{/if}
+  <PageHeader title={$t('admin.settings.heading')} testId="admin-settings-title" description={$t('admin.settings.intro')} />
 
   {#if loading}
     <Skeleton testId="admin-settings-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
-    <div data-testid="admin-settings-failed" class="card-elevated rounded-xl p-8 text-center">
+    <div data-testid="admin-settings-failed" class="py-16 text-center">
       <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
+      <Button type="button" testId="admin-settings-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
-    <form onsubmit={save} class="space-y-6" data-testid="admin-settings-form">
+    <form onsubmit={save} data-testid="admin-settings-form">
       {#each data.sections as section (section.name)}
-        <section data-testid="admin-settings-section-{section.name}" class="card-elevated space-y-4 rounded-xl p-5">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sectionLabel(section.name)}</h2>
-          <div class="space-y-4">
+        <SettingsSection title={sectionLabel(section.name)} testId="admin-settings-section-{section.name}">
+          <div class="max-w-2xl space-y-5">
             {#each section.rows as row (row.key)}
-              <div data-testid="admin-settings-row-{row.key}" class="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:items-center">
-                <div>
-                  <p class="text-sm font-medium text-foreground/80">{labelFor(row.key)}</p>
-                  {#if hintFor(row.key)}<p class="text-xs text-muted-foreground/70">{hintFor(row.key)}</p>{/if}
-                </div>
-                <div>
+              <div data-testid="admin-settings-row-{row.key}">
+                <p class="block text-sm font-medium text-foreground">{labelFor(row.key)}</p>
+                {#if hintFor(row.key)}<p class="mt-0.5 text-xs text-muted-foreground">{hintFor(row.key)}</p>{/if}
+                <div class="mt-1.5">
                   {#if !row.editable}
-                    <p class="text-sm font-mono text-muted-foreground">{displayValue(row)}</p>
+                    <p class="rounded-md bg-surface px-3 py-2 font-mono text-[13px] text-foreground/80">{displayValue(row)}</p>
                   {:else if row.sensitive}
                     <input
                       type="password"
                       data-testid="admin-settings-secret-{row.key}"
                       bind:value={secrets[row.key]}
+                      aria-label={labelFor(row.key)}
                       placeholder={row.configured ? $t('admin.settings.sensitive.configured') : $t('admin.settings.sensitive.not_configured')}
-                      class="field-input text-sm w-full"
+                      class="field-input w-full text-sm"
                     />
                   {:else}
                     <input
                       data-testid="admin-settings-value-{row.key}"
                       bind:value={values[row.key]}
-                      class="field-input text-sm w-full"
+                      aria-label={labelFor(row.key)}
+                      class="field-input w-full text-sm"
                     />
                   {/if}
-                  <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('admin.settings.source_label')}: {sourceLabel(row.source)}</p>
                 </div>
+                <p class="mt-1 text-xs text-muted-foreground">{$t('admin.settings.source_label')}: {sourceLabel(row.source)}</p>
               </div>
             {/each}
           </div>
-        </section>
+        </SettingsSection>
       {/each}
-      <Button type="submit" testId="admin-settings-submit" disabled={saving} variant="primary" size="lg">
-        {$t('admin.settings.save')}
-      </Button>
+      <div class="flex justify-end border-t border-border pt-5">
+        <Button type="submit" testId="admin-settings-submit" disabled={saving} variant="primary" size="lg">
+          {$t('admin.settings.save')}
+        </Button>
+      </div>
     </form>
   {/if}
 </Page>

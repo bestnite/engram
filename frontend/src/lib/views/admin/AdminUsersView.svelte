@@ -12,6 +12,7 @@
   import Badge from '../../components/ui/Badge.svelte';
   import Dialog from '../../components/ui/Dialog.svelte';
   import PageHeader from '../../components/ui/PageHeader.svelte';
+  import Pager from '../../components/ui/Pager.svelte';
   import { listClasses, menuClasses } from '../../components/ui/variants';
   import { toast } from '../../components/ui/toast';
   import { DropdownMenu } from 'bits-ui';
@@ -314,11 +315,7 @@
         </table>
       </div>
 
-      <div class="mt-3 flex items-center justify-end gap-2 text-[13px] text-muted-foreground" data-testid="admin-users-pager">
-        <span class="tabular-nums">{view.page} / {view.pages}</span>
-        <Button testId="admin-users-prev" variant="outline" size="sm" disabled={view.page <= 1} onclick={() => load(view.page - 1)}>{$t('admin.common.prev')}</Button>
-        <Button testId="admin-users-next" variant="outline" size="sm" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)}>{$t('admin.common.next')}</Button>
-      </div>
+      <Pager page={view.page} pages={view.pages} onPage={(n) => load(n)} testIdPrefix="admin-users" />
     {/if}
   {/if}
 </Page>

@@ -186,7 +186,7 @@
     </div>
   {:else if data}
     {@const view = data}
-    <SettingsSection title={$t('admin.registration.policy_heading')} description={$t('admin.registration.allowlist_hint')}>
+    <SettingsSection title={$t('admin.registration.policy_heading')}>
       <form onsubmit={savePolicy} data-testid="admin-registration-policy" class="max-w-xl space-y-5">
         <SegmentedControl
           value={policy}
@@ -197,6 +197,7 @@
         />
         <label class="block text-sm font-medium text-foreground">{$t('admin.registration.allowlist_label')}
           <input data-testid="admin-registration-domains" bind:value={emailDomains} class="field-input mt-1.5 w-full text-sm font-normal" />
+          <span class="mt-1.5 block text-xs font-normal text-muted-foreground">{$t('admin.registration.allowlist_hint')}</span>
         </label>
         <Button type="submit" testId="admin-registration-save" disabled={saving} variant="primary" size="lg">{$t('admin.registration.save')}</Button>
       </form>

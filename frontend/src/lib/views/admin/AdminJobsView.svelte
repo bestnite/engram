@@ -6,6 +6,10 @@
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminJobsResponse, AdminJob } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import PageHeader from '../../components/ui/PageHeader.svelte';
+  import Pager from '../../components/ui/Pager.svelte';
+  import Badge from '../../components/ui/Badge.svelte';
+  import { toast } from '../../components/ui/toast';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
 
@@ -86,55 +90,67 @@
       load(1);
     }
   });
+
+  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  $effect(() => {
+    if (notice) {
+      toast.success($t(notice));
+      notice = '';
+    }
+  });
+  $effect(() => {
+    if (actionError) {
+      toast.error($t(actionError));
+      actionError = '';
+    }
+  });
 </script>
 
-<Page class="space-y-6" testId="admin-jobs">
+<Page testId="admin-jobs">
   <AdminNav />
-
-  <header class="space-y-1">
-    <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="admin-jobs-title">{$t('admin.jobs.heading')}</h1>
-  </header>
-
-  {#if notice}<div data-testid="admin-jobs-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
-  {#if actionError}<div data-testid="admin-jobs-error" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">{$t(actionError)}</div>{/if}
+  <PageHeader title={$t('admin.jobs.heading')} testId="admin-jobs-title" />
 
   {#if loading}
     <Skeleton testId="admin-jobs-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
-    <div data-testid="admin-jobs-failed" class="card-elevated rounded-xl p-8 text-center">
+    <div data-testid="admin-jobs-failed" class="py-16 text-center">
       <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-jobs-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
+      <Button type="button" testId="admin-jobs-retry" onclick={() => load(1)} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     {#if view.jobs.length === 0}
-      <p data-testid="admin-jobs-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('admin.jobs.empty')}</p>
+      <p data-testid="admin-jobs-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.jobs.empty')}</p>
     {:else}
-      <div class="card-elevated overflow-x-auto rounded-xl">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-zinc-200 text-xs uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div class="overflow-x-auto rounded-lg border border-border">
+        <table class="w-full min-w-[760px] text-left text-sm">
+          <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
             <tr>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.id')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.kind')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.status')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.stage')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.created')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.log')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.jobs.col.actions')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.jobs.col.kind')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.jobs.col.status')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.jobs.col.created')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.jobs.col.log')}</th>
+              <th class="w-20 px-4 py-2.5"><span class="sr-only">{$t('admin.jobs.col.actions')}</span></th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <tbody class="divide-y divide-border">
             {#each view.jobs as job (job.id)}
               <tr data-testid="admin-jobs-row-{job.id}">
-                <td class="px-4 py-2.5 text-foreground/80">#{job.id}</td>
-                <td class="px-4 py-2.5 text-muted-foreground">{kindLabel(job.kind)}</td>
-                <td class="px-4 py-2.5 text-muted-foreground">{statusLabel(job.status)}</td>
-                <td class="px-4 py-2.5 text-muted-foreground">{stageLabel(job.stage)}</td>
-                <td class="px-4 py-2.5 text-muted-foreground">{job.created_at}</td>
-                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{job.error || job.log_tail || $t('admin.jobs.log_empty')}</td>
                 <td class="px-4 py-2.5">
+                  <div class="text-foreground">{kindLabel(job.kind)}</div>
+                  <div class="font-mono text-xs text-muted-foreground">#{job.id}</div>
+                </td>
+                <td class="px-4 py-2.5">
+                  <Badge variant={job.status === 'failed' ? 'danger' : job.status === 'succeeded' ? 'success' : job.status === 'running' ? 'info' : 'neutral'}>{statusLabel(job.status)}</Badge>
+                  {#if job.stage}<div class="mt-1 text-xs text-muted-foreground">{stageLabel(job.stage)}</div>{/if}
+                </td>
+                <td class="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground">{job.created_at}</td>
+                <td class="max-w-md px-4 py-2.5">
+                  <p class="line-clamp-2 break-all font-mono text-xs {job.error ? 'text-destructive-foreground' : 'text-muted-foreground'}" title={job.error || job.log_tail || ''}>{job.error || job.log_tail || $t('admin.jobs.log_empty')}</p>
+                </td>
+                <td class="px-4 py-2.5 text-right">
                   {#if job.can_cancel}
-                    <button type="button" data-testid="admin-jobs-cancel-{job.id}" onclick={() => cancel(job)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.jobs.cancel')}</button>
+                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-jobs-cancel-{job.id}" onclick={() => cancel(job)}>{$t('admin.jobs.cancel')}</Button>
                   {/if}
                 </td>
               </tr>
@@ -142,12 +158,7 @@
           </tbody>
         </table>
       </div>
-
-      <div class="flex items-center justify-between" data-testid="admin-jobs-pager">
-        <button type="button" data-testid="admin-jobs-prev" disabled={view.page <= 1} onclick={() => load(view.page - 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.prev')}</button>
-        <span class="text-sm text-muted-foreground">{view.page} / {view.pages}</span>
-        <button type="button" data-testid="admin-jobs-next" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.next')}</button>
-      </div>
+      <Pager page={view.page} pages={view.pages} onPage={(n) => load(n)} testIdPrefix="admin-jobs" />
     {/if}
   {/if}
 </Page>
