@@ -51,7 +51,10 @@
   const currentDefault = $derived(
     (data?.defaults ?? []).find((item) => item.type === selectedType && item.locale === selectedLocale) ?? null
   );
-  const typeOptions = $derived(types.map((item) => ({ value: item.type, label: $t(item.label_key) })));
+  // 显示名取 SPA 语言包里通知偏好页的同名类型（settings.notifications.type.<type>）。
+  // 服务端给的 label_key 属于服务端模板的 mail.prefs.type.* 命名空间，SPA 语言包里没有这组键，
+  // 直接拿它翻译会把原始键名显示给管理员。
+  const typeOptions = $derived(types.map((item) => ({ value: item.type, label: $t('settings.notifications.type.' + item.type) })));
   const localeOptions = $derived(locales.map((code) => ({ value: code, label: code })));
 
   /** 起草稿：有自定义就载入，没有就**预填内置默认正文**（初值规则与它的用例在

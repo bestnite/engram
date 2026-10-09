@@ -71,6 +71,9 @@ describe('AdminMailTemplatesView', () => {
       props: { initialLoading: false, initialData: fixture },
     });
     expect(html).not.toContain('admin.mail.var.reset_url');
+    // 邮件类型显示人类可读的名称，而不是服务端的 label_key 原文。
+    expect(html).not.toContain('mail.prefs.type.password_reset');
+    expect(html).toContain(zhCN['settings.notifications.type.password_reset']);
     expect(html).toContain(zhCN['admin.mail.var.reset_url']);
   });
 
