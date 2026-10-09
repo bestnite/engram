@@ -43,7 +43,7 @@ describe('Auth store and SPA session management', () => {
     vi.spyOn(apiClient, 'getSession').mockResolvedValueOnce({
       authenticated: true,
       user: {
-        id: 10,
+        id: '10',
         username: 'bob',
         email: 'bob@example.com',
         role: 'user',
@@ -66,7 +66,7 @@ describe('Auth store and SPA session management', () => {
     vi.spyOn(apiClient, 'login').mockResolvedValueOnce({
       authenticated: true,
       user: {
-        id: 20,
+        id: '20',
         username: 'carol',
         email: 'carol@example.com',
         role: 'admin',
@@ -106,7 +106,7 @@ describe('Auth store and SPA session management', () => {
       loading: false,
       authenticated: true,
       user: {
-        id: 1,
+        id: '1',
         username: 'alice',
         email: 'alice@example.com',
         role: 'user',
@@ -132,7 +132,7 @@ describe('Auth store and SPA session management', () => {
     vi.spyOn(apiClient, 'getSession').mockResolvedValueOnce({
       authenticated: true,
       user: {
-        id: 1,
+        id: '1',
         username: 'alice',
         email: 'alice@example.com',
         role: 'user',

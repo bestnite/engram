@@ -32,7 +32,7 @@ const health: AdminHealth = {
 
 const audit: AdminAuditResponse = {
   rows: [
-    { time: '2026-03-10 20:00:00', actor: { user_id: 1, username: 'owner' }, action: 'deck.grant', target: { type: 'deck', id: 7 }, detail: '{"role":"reader"}' },
+    { time: '2026-03-10 20:00:00', actor: { user_id: '1', username: 'owner' }, action: 'deck.grant', target: { type: 'deck', id: '7' }, detail: '{"role":"reader"}' },
     { time: '2026-03-10 21:00:00', actor: null, action: 'system.tick', target: null, detail: '' },
   ],
   actions: ['deck.grant', 'system.tick'],

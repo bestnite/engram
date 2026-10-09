@@ -48,7 +48,7 @@ describe('Centralized typed same-origin REST API client', () => {
     });
 
     it('rejects review history without progress before making a request', async () => {
-      await expect(client.downloadDeckPackage(3, { includeReviews: true })).rejects.toMatchObject({ code: 'invalid_request' });
+      await expect(client.downloadDeckPackage('3', { includeReviews: true })).rejects.toMatchObject({ code: 'invalid_request' });
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -136,7 +136,7 @@ describe('Centralized typed same-origin REST API client', () => {
     it('fetches a CSRF session token before upload and keeps stable server error codes', async () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'fresh-upload-csrf' }), { status: 200 }));
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'media_mime_not_allowed', message: 'no' } }), { status: 415 }));
-      await expect(client.uploadDeckMedia(3, new File(['x'], 'a.txt'))).rejects.toMatchObject({ status: 415, code: 'media_mime_not_allowed' });
+      await expect(client.uploadDeckMedia('3', new File(['x'], 'a.txt'))).rejects.toMatchObject({ status: 415, code: 'media_mime_not_allowed' });
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       expect(new Headers(mockFetch.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe('fresh-upload-csrf');
     });
@@ -144,7 +144,7 @@ describe('Centralized typed same-origin REST API client', () => {
     it('rejects a response that breaks the /media/<sha256> contract', async () => {
       client.setCsrfToken('upload-csrf');
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sha256: 'not-a-hash', mime: 'image/png', bytes: 1, url: 'javascript:alert(1)' }), { status: 201 }));
-      await expect(client.uploadDeckMedia(3, new File(['x'], 'a.png'))).rejects.toMatchObject({ code: 'invalid_response' });
+      await expect(client.uploadDeckMedia('3', new File(['x'], 'a.png'))).rejects.toMatchObject({ code: 'invalid_response' });
     });
   });
 
@@ -170,7 +170,7 @@ describe('Centralized typed same-origin REST API client', () => {
     it('preserves server validation errors', async () => {
       client.setCsrfToken('csrf');
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'invalid_request', message: 'Invalid note.' } }), { status: 400 }));
-      await expect(client.createNotes(8, { notes: [{ kind: 'basic', fields: { front: '', back: 'A' }, tags: [] }] }))
+      await expect(client.createNotes('8', { notes: [{ kind: 'basic', fields: { front: '', back: 'A' }, tags: [] }] }))
         .rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'invalid_request');
     });
   });
@@ -187,7 +187,7 @@ describe('Centralized typed same-origin REST API client', () => {
       const createInit = createCall[1] as RequestInit;
       expect(new Headers(createInit.headers).get('X-CSRF-Token')).toBe('csrf-test');
       expect(JSON.parse(createInit.body as string)).toEqual({ name: 'cli', scopes: ['read'] });
-      await client.deleteAPIKey(1);
+      await client.deleteAPIKey('1');
       const deleteCall = mockFetch.mock.calls[1]!;
       expect(deleteCall[0]).toBe('/api/v1/keys/1');
       expect(new Headers((deleteCall[1] as RequestInit).headers).get('X-CSRF-Token')).toBe('csrf-test');
@@ -195,7 +195,7 @@ describe('Centralized typed same-origin REST API client', () => {
   });
 
   it('loads the explicit per-visible-deck queue count contract', async () => {
-    const response = { decks: [{ deck_id: 7, new_count: 2, review_count: 4 }] };
+    const response = { decks: [{ deck_id: '7', new_count: 2, review_count: 4 }] };
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200 }));
     await expect(client.getDeckQueueCounts()).resolves.toEqual(response);
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/queue-counts');
@@ -207,12 +207,12 @@ describe('Centralized typed same-origin REST API client', () => {
       const mockResponse: DecksResponse = {
         decks: [
           {
-            id: 1,
+            id: '1',
             name: '默认卡组',
             description: '系统默认卡组',
             new_per_day: 20,
             reviews_per_day: 100,
-            preset_id: 1,
+            preset_id: '1',
             created_at: '2026-10-06T00:00:00Z',
             role: 'owner',
           },
@@ -244,7 +244,7 @@ describe('Centralized typed same-origin REST API client', () => {
 
       // 验证返回的数据结构与类型一致
       expect(result.decks).toHaveLength(1);
-      expect(result.decks[0]?.id).toBe(1);
+      expect(result.decks[0]?.id).toBe('1');
       expect(result.decks[0]?.name).toBe('默认卡组');
     });
 
@@ -290,9 +290,9 @@ describe('Centralized typed same-origin REST API client', () => {
   describe('Note updates', () => {
     it('sends a typed PATCH payload with the session CSRF token and maps the response', async () => {
       client.setCsrfToken('session-csrf');
-      const updated = { id: 7, deck_id: 3, kind: 'basic', fields: { front: '<' + 'img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
+      const updated = { id: '7', deck_id: '3', kind: 'basic', fields: { front: '<' + 'img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }));
-      const result = await client.updateNote(7, { kind: 'basic', fields: updated.fields, tags: ['safe'] });
+      const result = await client.updateNote('7', { kind: 'basic', fields: updated.fields, tags: ['safe'] });
       expect(result).toEqual(updated);
       const [url, init] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/notes/7');
@@ -304,21 +304,21 @@ describe('Centralized typed same-origin REST API client', () => {
     it('surfaces server validation and permission errors', async () => {
       for (const [status, code] of [[400, 'invalid_request'], [403, 'insufficient_role']] as const) {
         mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code, message: 'no' } }), { status }));
-        await expect(client.updateNote(1, { fields: {} })).rejects.toMatchObject({ status, code });
+        await expect(client.updateNote('1', { fields: {} })).rejects.toMatchObject({ status, code });
       }
     });
 
     it('uses DELETE with session CSRF and preserves REST permission errors', async () => {
       client.setCsrfToken('delete-csrf');
-      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true, id: 7 }), { status: 200 }));
-      await expect(client.deleteNote(7)).resolves.toEqual({ deleted: true, id: 7 });
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true, id: '7' }), { status: 200 }));
+      await expect(client.deleteNote('7')).resolves.toEqual({ deleted: true, id: '7' });
       const [url, init] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/notes/7');
       expect(init?.method).toBe('DELETE');
       expect(init?.credentials).toBe('same-origin');
       expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('delete-csrf');
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'insufficient_role', message: 'denied' } }), { status: 403 }));
-      await expect(client.deleteNote(7)).rejects.toMatchObject({ status: 403, code: 'insufficient_role' });
+      await expect(client.deleteNote('7')).rejects.toMatchObject({ status: 403, code: 'insufficient_role' });
     });
   });
 
@@ -589,12 +589,12 @@ describe('Centralized typed same-origin REST API client', () => {
   describe('CSRF token awareness on mutating requests', () => {
     it('fetches a session token before creating a deck and posts the typed payload', async () => {
       const deck = {
-        id: 12,
+        id: '12',
         name: 'Biology',
         description: 'Cells',
         new_per_day: 20,
         reviews_per_day: 200,
-        preset_id: 4,
+        preset_id: '4',
         created_at: '2026-10-06T00:00:00Z',
       };
       mockFetch
@@ -607,7 +607,7 @@ describe('Centralized typed same-origin REST API client', () => {
           headers: { 'Content-Type': 'application/json' },
         }));
 
-      const input = { name: 'Biology', description: 'Cells', preset_id: 0 };
+      const input = { name: 'Biology', description: 'Cells', preset_id: '' };
       await expect(client.createDeck(input)).resolves.toEqual(deck);
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
@@ -626,7 +626,7 @@ describe('Centralized typed same-origin REST API client', () => {
       }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
 
       await expect(client.createDeck({
-        name: '', description: '', preset_id: 0,
+        name: '', description: '', preset_id: '',
       })).rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'deck_name_invalid');
     });
 
@@ -918,7 +918,7 @@ describe('Centralized typed same-origin REST API client', () => {
         streak: { current: 2, longest: 2 },
         curve: [{ day: '2026-10-06', new: 0, review: 2 }],
         decks: [
-          { deck_id: 1, name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
+          { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
         ],
         tags: [{ tag: 'algebra', reviews: 3, retention: 2 / 3 }],
         grades: [
@@ -994,9 +994,9 @@ describe('Centralized typed same-origin REST API client', () => {
       const goFixture: DueCardsResponse = {
         cards: [
           {
-            card_id: 101,
-            note_id: 201,
-            deck_id: 1,
+            card_id: '101',
+            note_id: '201',
+            deck_id: '1',
             state: 'review',
             due_at: '2026-10-06T00:00:00Z',
             retrievability: 0.88,
@@ -1007,9 +1007,9 @@ describe('Centralized typed same-origin REST API client', () => {
             version: 0,
           },
           {
-            card_id: 102,
-            note_id: 202,
-            deck_id: 2,
+            card_id: '102',
+            note_id: '202',
+            deck_id: '2',
             state: 'new',
             due_at: '2026-10-06T00:00:00Z',
             retrievability: 0,
@@ -1028,18 +1028,18 @@ describe('Centralized typed same-origin REST API client', () => {
         })
       );
 
-      const result = await client.getDueCards({ deck: [1, 2], limit: 50 });
+      const result = await client.getDueCards({ deck: ['1', '2'], limit: 50 });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url, init] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/review/due?deck=1&deck=2&limit=50');
       expect(init?.credentials).toBe('same-origin');
       expect(result.cards).toHaveLength(2);
-      expect(result.cards[0]?.card_id).toBe(101);
-      expect(result.cards[0]?.deck_id).toBe(1);
+      expect(result.cards[0]?.card_id).toBe('101');
+      expect(result.cards[0]?.deck_id).toBe('1');
       expect(result.cards[0]?.fields).toEqual({ front: 'question 1', back: 'answer 1' });
-      expect(result.cards[1]?.card_id).toBe(102);
-      expect(result.cards[1]?.deck_id).toBe(2);
+      expect(result.cards[1]?.card_id).toBe('102');
+      expect(result.cards[1]?.deck_id).toBe('2');
     });
 
     it('handles single deck param correctly', async () => {
@@ -1050,7 +1050,7 @@ describe('Centralized typed same-origin REST API client', () => {
         })
       );
 
-      await client.getDueCards({ deck: 42 });
+      await client.getDueCards({ deck: '42' });
 
       const [url] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/review/due?deck=42');
@@ -1066,7 +1066,7 @@ describe('Centralized typed same-origin REST API client', () => {
         )
       );
 
-      await expect(client.getDueCards({ deck: 0 })).rejects.toSatisfy((err: unknown) => {
+      await expect(client.getDueCards({ deck: 'not-a-public-id' })).rejects.toSatisfy((err: unknown) => {
         expect(err).toBeInstanceOf(ApiClientError);
         const apiErr = err as ApiClientError;
         expect(apiErr.status).toBe(400);
@@ -1085,7 +1085,7 @@ describe('Centralized typed same-origin REST API client', () => {
         )
       );
 
-      await expect(client.getDueCards({ deck: 999 })).rejects.toSatisfy((err: unknown) => {
+      await expect(client.getDueCards({ deck: '999' })).rejects.toSatisfy((err: unknown) => {
         expect(err).toBeInstanceOf(ApiClientError);
         const apiErr = err as ApiClientError;
         expect(apiErr.status).toBe(403);

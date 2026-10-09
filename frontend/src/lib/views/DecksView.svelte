@@ -16,7 +16,7 @@
   let loading = $state(true);
   let error = $state<ApiClientError | Error | null>(null);
   let decks = $state<Deck[]>([]);
-  let queueCounts = $state<Record<number, { new_count: number; review_count: number }>>({});
+  let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
 
   // 新建卡组弹窗状态
   let showCreateModal = $state(false);
@@ -24,7 +24,7 @@
   let description = $state('');
   // 新建卡组时可选调度预设。下拉只列真实预设（不含「默认预设」哨兵项），
   // 加载完成后预选默认预设；拉取失败时 createPresetId 留空，按服务端默认预设提交
-  // （请求体 preset_id: 0）。
+  // （请求体 preset_id 为空串）。
   let createPresets = $state<Array<{ value: string; label: string }>>([]);
   let createPresetDefault = $state('');
   let createPresetId = $state('');
@@ -32,14 +32,14 @@
   let createError = $state<string | null>(null);
 
   // 批量选择与导出状态
-  let selectedDeckIds = $state<number[]>([]);
+  let selectedDeckIds = $state<string[]>([]);
   let batchExporting = $state(false);
   let batchExportError = $state<string | null>(null);
 
   // 待接受的共享邀请（同意制）：分享先产生邀请，接受那一步才写授权。
   // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
   let invites = $state<DeckShareInvite[]>([]);
-  let inviteBusy = $state<number | null>(null);
+  let inviteBusy = $state<string | null>(null);
   let inviteError = $state<string | null>(null);
 
   // 卡组危险操作的确认弹窗状态：删除（自有卡组）与退出共享（被共享卡组）共用一套弹窗，
@@ -83,7 +83,7 @@
    * 接受或拒绝一条邀请。接受成功后重新拉卡组列表——卡组正是那一步才出现在这里。
    * 失败时只在这一块提示，不动整页状态。
    */
-  async function respondToInvite(deckId: number, accept: boolean): Promise<void> {
+  async function respondToInvite(deckId: string, accept: boolean): Promise<void> {
     inviteBusy = deckId;
     inviteError = null;
     try {
@@ -145,7 +145,7 @@
       const deck = await apiClient.createDeck({
         name,
         description,
-        preset_id: createPresetId ? Number(createPresetId) : 0,
+        preset_id: createPresetId,
       });
       decks = [deck, ...decks];
       queueCounts = { ...queueCounts, [deck.id]: { new_count: 0, review_count: 0 } };
@@ -168,7 +168,7 @@
     }
   }
 
-  function toggleSelectDeck(deckId: number): void {
+  function toggleSelectDeck(deckId: string): void {
     if (selectedDeckIds.includes(deckId)) {
       selectedDeckIds = selectedDeckIds.filter((id) => id !== deckId);
     } else {
@@ -244,7 +244,7 @@
     }
   }
 
-  function handleCardClick(e: MouseEvent, deckId: number): void {
+  function handleCardClick(e: MouseEvent, deckId: string): void {
     // 忽略复选框、按钮点击触发卡片跳转
     const target = e.target as HTMLElement;
     if (target.closest('input') || target.closest('button')) {

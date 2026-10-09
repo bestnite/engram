@@ -91,7 +91,7 @@
               options={decks.map((deck) => ({ value: String(deck.id), label: deck.name }))}
             />
           {:else}
-            <input class="field-input text-sm mt-2 block w-full" type="number" min="1" bind:value={deckId} />
+            <input class="field-input text-sm mt-2 block w-full" type="text" bind:value={deckId} />
           {/if}
         </label>
       {/if}

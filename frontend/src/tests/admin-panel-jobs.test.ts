@@ -12,8 +12,8 @@ import { routes } from '../lib/router/routes';
 
 const jobs: AdminJobsResponse = {
   jobs: [
-    { id: 12, kind: 'optimize', status: 'running', stage: 'training', created_at: '2026-03-10 20:00:00', started_at: '2026-03-10 20:00:01', finished_at: '', log_tail: 'epoch 3', error: '', can_cancel: true },
-    { id: 11, kind: 'optimize', status: 'failed', stage: null, created_at: '2026-03-09 20:00:00', started_at: '2026-03-09 20:00:01', finished_at: '2026-03-09 20:00:05', log_tail: '', error: 'killed', can_cancel: false },
+    { id: '12', kind: 'optimize', status: 'running', stage: 'training', created_at: '2026-03-10 20:00:00', started_at: '2026-03-10 20:00:01', finished_at: '', log_tail: 'epoch 3', error: '', can_cancel: true },
+    { id: '11', kind: 'optimize', status: 'failed', stage: null, created_at: '2026-03-09 20:00:00', started_at: '2026-03-09 20:00:01', finished_at: '2026-03-09 20:00:05', log_tail: '', error: 'killed', can_cancel: false },
   ],
   page: 1,
   pages: 1,
@@ -91,7 +91,7 @@ describe('Admin jobs/i18n API client', () => {
   it('cancels a job with a CSRF-protected POST', async () => {
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'j' }), { status: 200 }));
     mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await client.cancelAdminJob(12);
+    await client.cancelAdminJob('12');
     const [url, init] = mockFetch.mock.calls[1]!;
     expect(url).toBe('/api/v1/admin/jobs/12/cancel');
     expect(init?.method).toBe('POST');

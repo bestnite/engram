@@ -25,8 +25,8 @@
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
 
   // 逐条删除状态
-  let confirmingDeleteId = $state<number | null>(null);
-  let deletingNoteId = $state<number | null>(null);
+  let confirmingDeleteId = $state<string | null>(null);
+  let deletingNoteId = $state<string | null>(null);
   let deleteError = $state('');
   let deleteSuccess = $state(false);
 
@@ -50,7 +50,7 @@
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 批量动作
-  let selectedIds = $state<number[]>([]);
+  let selectedIds = $state<string[]>([]);
   let bulkTagInput = $state('');
   let bulkBusy = $state(false);
   let bulkError = $state('');
@@ -135,11 +135,11 @@
     }
   }
 
-  function isSelected(id: number): boolean {
+  function isSelected(id: string): boolean {
     return selectedIds.includes(id);
   }
 
-  function toggleSelect(id: number): void {
+  function toggleSelect(id: string): void {
     selectedIds = isSelected(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id];
   }
 

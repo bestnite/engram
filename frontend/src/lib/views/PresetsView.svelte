@@ -39,7 +39,7 @@
   // 新建/编辑对话框共用一个表单；formMode 决定提交到 create 还是 update。
   let formOpen = $state(false);
   let formMode = $state<'create' | 'edit'>('create');
-  let formTargetId = $state<number | null>(null);
+  let formTargetId = $state<string | null>(null);
   let formName = $state('');
   let formRetention = $state('0.90');
   let formLearning = $state('1m,10m');
@@ -53,8 +53,8 @@
   let formNameLocked = $state(false);
 
   // notice 是按预设定位的一次性操作提示（i18n key）；gate 的「还差 N 条」单独由门槛渲染。
-  let notice = $state<{ id: number; key: string } | null>(null);
-  let busyId = $state<number | null>(null);
+  let notice = $state<{ id: string; key: string } | null>(null);
+  let busyId = $state<string | null>(null);
 
   // 关联卡组与删除预设状态
   let decks = $state<Deck[]>([]);
@@ -63,8 +63,8 @@
   let deletePresetError = $state('');
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let pollPresetId: number | null = null;
-  let pollJobId: number | null = null;
+  let pollPresetId: string | null = null;
+  let pollJobId: string | null = null;
 
   const presets = $derived(data ? data.presets : []);
   const gate = $derived(data ? data.gate : null);
@@ -88,7 +88,7 @@
     }
   }
 
-  function getPresetDecks(presetId: number): Deck[] {
+  function getPresetDecks(presetId: string): Deck[] {
     return decks.filter((d) => d.preset_id === presetId);
   }
 
@@ -260,7 +260,7 @@
     }
   }
 
-  function startPolling(presetId: number, jobId: number): void {
+  function startPolling(presetId: string, jobId: string): void {
     stopPolling();
     pollPresetId = presetId;
     pollJobId = jobId;
@@ -296,7 +296,7 @@
   }
 
   /** 就地更新某个预设的作业与门槛，不改动其它预设。 */
-  function applyJob(presetId: number, job: PresetJob | null, nextGate: OptimizeGate): void {
+  function applyJob(presetId: string, job: PresetJob | null, nextGate: OptimizeGate): void {
     if (!data) return;
     data = {
       gate: nextGate,

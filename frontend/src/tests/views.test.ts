@@ -85,12 +85,12 @@ describe('HomeView component response states and truthful rendering', () => {
       retention: 0.5,
     };
     const goDeck: Deck = {
-      id: 10,
+      id: '10',
       name: '测试卡组 <安全测试>',
       description: '卡组描述 & 详情',
       new_per_day: 20,
       reviews_per_day: 100,
-      preset_id: 1,
+      preset_id: '1',
       created_at: '2026-10-06T00:00:00Z',
       role: 'owner',
     };
@@ -190,7 +190,7 @@ describe('StatsView component response states and truthful rendering', () => {
       { day: '2026-10-06', new: 0, review: 2 },
     ],
     decks: [
-      { deck_id: 1, name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
+      { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
     ],
     tags: [{ tag: 'algebra', reviews: 3, retention: 2 / 3 }],
     grades: [

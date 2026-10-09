@@ -13,8 +13,8 @@ import { routes } from '../lib/router/routes';
 
 const users: AdminUsersResponse = {
   users: [
-    { id: 1, username: 'owner', email: 'owner@example.com', display_name: 'Owner', role: 'admin', status: 'active', decks: 2, cards: 5, reviews: 9, is_self: true },
-    { id: 2, username: 'alice', email: 'alice@example.com', display_name: 'Alice', role: 'user', status: 'disabled', decks: 1, cards: 1, reviews: 0, is_self: false },
+    { id: '1', username: 'owner', email: 'owner@example.com', display_name: 'Owner', role: 'admin', status: 'active', decks: 2, cards: 5, reviews: 9, is_self: true },
+    { id: '2', username: 'alice', email: 'alice@example.com', display_name: 'Alice', role: 'user', status: 'disabled', decks: 1, cards: 1, reviews: 0, is_self: false },
   ],
   page: 1,
   pages: 2,
@@ -26,13 +26,13 @@ const registration: AdminRegistrationResponse = {
   policy: 'invite',
   email_domains: 'example.com',
   invites: [
-    { id: 3, token: 'tok-abc', link: '/register?invite=tok-abc', email: 'invitee@example.com', role: 'user', status: 'active', created_at: '2026-03-10 20:00', expires_at: '2026-03-17 20:00', used_at: '', used_by: '' },
+    { id: '3', token: 'tok-abc', link: '/register?invite=tok-abc', email: 'invitee@example.com', role: 'user', status: 'active', created_at: '2026-03-10 20:00', expires_at: '2026-03-17 20:00', used_at: '', used_by: '' },
   ],
 };
 
 const apiKeys: AdminAPIKeysResponse = {
   keys: [
-    { id: 9, user_id: 1, owner: 'owner', name: 'ci', prefix: 'fcard_ab12cd34', scopes: ['read', 'write'], last_used_at: null, expires_at: null, state: 'active' },
+    { id: '9', user_id: '1', owner: 'owner', name: 'ci', prefix: 'fcard_ab12cd34', scopes: ['read', 'write'], last_used_at: null, expires_at: null, state: 'active' },
   ],
   page: 1,
   pages: 1,
@@ -114,7 +114,7 @@ describe('Admin management API client', () => {
   it('sends confirm=true for dangerous user actions', async () => {
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'c' }), { status: 200 }));
     mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await client.deleteAdminUser(5);
+    await client.deleteAdminUser('5');
     const [url, init] = mockFetch.mock.calls[1]!;
     expect(url).toBe('/api/v1/admin/users/5/delete');
     expect(JSON.parse(String(init?.body))).toEqual({ confirm: true });
@@ -127,7 +127,7 @@ describe('Admin management API client', () => {
 
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'c' }), { status: 200 }));
     mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await client.revokeAdminInvite(3);
+    await client.revokeAdminInvite('3');
     expect(mockFetch.mock.calls[2]?.[0]).toBe('/api/v1/admin/invites/3/revoke');
   });
 });

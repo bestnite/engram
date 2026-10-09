@@ -7,9 +7,9 @@ import { setLocale } from '../lib/i18n';
 /** 构造一张作答类到期卡（字段形态与 GET /api/v1/review/due 一致，含答案原文）。 */
 function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
   return {
-    card_id: 11,
-    note_id: 21,
-    deck_id: 5,
+    card_id: '11',
+    note_id: '21',
+    deck_id: '5',
     state: 'new',
     due_at: '2026-10-06T00:00:00Z',
     retrievability: 0,

@@ -213,7 +213,7 @@
   async function saveSharePolicy(input: {
     policy?: 'anyone' | 'whitelist' | 'nobody';
     allow_usernames?: string[];
-    revoke?: number[];
+    revoke?: string[];
   }): Promise<void> {
     shareSaving = true;
     shareNotice = null;

@@ -33,7 +33,7 @@ describe('Deck and notes list API client and view contracts', () => {
         })
       );
 
-      const res = await client.getDeckNotes(42);
+      const res = await client.getDeckNotes('42');
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url, init] = mockFetch.mock.calls[0]!;
@@ -65,7 +65,7 @@ describe('Deck and notes list API client and view contracts', () => {
         })
       );
 
-      await client.getDeckNotes(10, {
+      await client.getDeckNotes('10', {
         page: 2,
         per_page: 20,
         q: 'algorithm & data',
@@ -95,7 +95,7 @@ describe('Deck and notes list API client and view contracts', () => {
         })
       );
 
-      await client.getDeckNotes(5, {
+      await client.getDeckNotes('5', {
         page: 1,
         q: '',
         tag: undefined,
@@ -113,7 +113,7 @@ describe('Deck and notes list API client and view contracts', () => {
         })
       );
 
-      await client.getNotes(7, { page: 3 });
+      await client.getNotes('7', { page: 3 });
 
       const [url] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/decks/7/notes?page=3');
@@ -123,8 +123,8 @@ describe('Deck and notes list API client and view contracts', () => {
   describe('Actual typed response fields (matching Go NoteJSON & listNotes)', () => {
     it('deserializes complete note objects with all fields and tags', async () => {
       const mockNote: Note = {
-        id: 101,
-        deck_id: 1,
+        id: '101',
+        deck_id: '1',
         kind: 'basic',
         fields: {
           front: 'What is FSRS?',
@@ -150,7 +150,7 @@ describe('Deck and notes list API client and view contracts', () => {
         })
       );
 
-      const res = await client.getDeckNotes(1);
+      const res = await client.getDeckNotes('1');
 
       expect(res.total).toBe(1);
       expect(res.page).toBe(1);
@@ -158,8 +158,8 @@ describe('Deck and notes list API client and view contracts', () => {
       expect(res.notes).toHaveLength(1);
 
       const item = res.notes[0]!;
-      expect(item.id).toBe(101);
-      expect(item.deck_id).toBe(1);
+      expect(item.id).toBe('101');
+      expect(item.deck_id).toBe('1');
       expect(item.kind).toBe('basic');
       expect(item.fields).toEqual({
         front: 'What is FSRS?',
@@ -186,10 +186,10 @@ describe('Deck and notes list API client and view contracts', () => {
         )
       );
 
-      await expect(client.getDeckNotes(1)).rejects.toThrow(ApiClientError);
+      await expect(client.getDeckNotes('1')).rejects.toThrow(ApiClientError);
 
       try {
-        await client.getDeckNotes(1);
+        await client.getDeckNotes('1');
       } catch (err) {
         expect(err).toBeInstanceOf(ApiClientError);
         const apiErr = err as ApiClientError;
@@ -212,7 +212,7 @@ describe('Deck and notes list API client and view contracts', () => {
       );
 
       try {
-        await client.getDeckNotes(1);
+        await client.getDeckNotes('1');
       } catch (err) {
         expect(err).toBeInstanceOf(ApiClientError);
         const apiErr = err as ApiClientError;
@@ -235,7 +235,7 @@ describe('Deck and notes list API client and view contracts', () => {
       );
 
       try {
-        await client.getDeckNotes(999);
+        await client.getDeckNotes('999');
       } catch (err) {
         expect(err).toBeInstanceOf(ApiClientError);
         const apiErr = err as ApiClientError;
@@ -323,7 +323,7 @@ describe('Deck notes deleted-status query and bulk note actions', () => {
       })
     );
 
-    await client.getDeckNotes(7, { status: 'deleted' });
+    await client.getDeckNotes('7', { status: 'deleted' });
 
     const [url] = mockFetch.mock.calls[0]!;
     expect(url).toBe('/api/v1/decks/7/notes?status=deleted');
@@ -337,14 +337,14 @@ describe('Deck notes deleted-status query and bulk note actions', () => {
       new Response(JSON.stringify({ dry_run: false, affected: 2, skipped: [] }), { status: 200 })
     );
 
-    const res = await client.bulkNotes({ action: 'delete', note_ids: [1, 2], dry_run: false });
+    const res = await client.bulkNotes({ action: 'delete', note_ids: ['1', '2'], dry_run: false });
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
     const [url, init] = mockFetch.mock.calls[1]!;
     expect(url).toBe('/api/v1/notes/bulk');
     expect(init?.method).toBe('POST');
     expect(init?.credentials).toBe('same-origin');
-    expect(JSON.parse(String(init?.body))).toEqual({ action: 'delete', note_ids: [1, 2], dry_run: false });
+    expect(JSON.parse(String(init?.body))).toEqual({ action: 'delete', note_ids: ['1', '2'], dry_run: false });
     expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('bulk-csrf');
     expect(res.affected).toBe(2);
     expect(res.skipped).toEqual([]);
@@ -360,26 +360,26 @@ describe('Deck notes deleted-status query and bulk note actions', () => {
           dry_run: false,
           affected: 1,
           skipped: [
-            { note_id: 9, code: 'not_found' },
-            { note_id: 10, code: 'insufficient_role' },
+            { note_id: '9', code: 'not_found' },
+            { note_id: '10', code: 'insufficient_role' },
           ],
         }),
         { status: 200 }
       )
     );
 
-    const res = await client.bulkNotes({ action: 'add_tags', note_ids: [1, 9, 10], tags: ['math', 'cs'] });
+    const res = await client.bulkNotes({ action: 'add_tags', note_ids: ['1', '9', '10'], tags: ['math', 'cs'] });
 
     const [, init] = mockFetch.mock.calls[1]!;
     expect(JSON.parse(String(init?.body))).toEqual({
       action: 'add_tags',
-      note_ids: [1, 9, 10],
+      note_ids: ['1', '9', '10'],
       tags: ['math', 'cs'],
     });
     expect(res.affected).toBe(1);
     expect(res.skipped).toEqual([
-      { note_id: 9, code: 'not_found' },
-      { note_id: 10, code: 'insufficient_role' },
+      { note_id: '9', code: 'not_found' },
+      { note_id: '10', code: 'insufficient_role' },
     ]);
   });
 

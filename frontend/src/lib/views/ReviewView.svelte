@@ -163,9 +163,9 @@
     }
   }
 
-  function selectedDecks(): number[] | undefined {
+  function selectedDecks(): string[] | undefined {
     const search = new URLSearchParams(window.location.search);
-    const values = search.getAll('deck').flatMap((raw) => raw.split(',')).filter(Boolean).map(Number);
+    const values = search.getAll('deck').flatMap((raw) => raw.split(',')).filter(Boolean);
     return values.length ? values : undefined;
   }
 

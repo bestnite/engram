@@ -99,12 +99,11 @@
     }
     saving = true;
     try {
-      // preset_id 只在选中了一个真实预设时提交：空值提交会被服务端当成 0 而拒绝，
-      // 不能拿它冒充「默认」。
+      // preset_id 只在选中了一个真实预设时提交：省略即不动预设，空串不是合法预设标识。
       const data = await apiClient.updateDeckSettings(deckId, {
         new_per_day: n,
         reviews_per_day: r,
-        ...(presetId ? { preset_id: Number(presetId) } : {}),
+        ...(presetId ? { preset_id: presetId } : {}),
       });
       settings = data;
       newPerDay = String(data.new_per_day);
