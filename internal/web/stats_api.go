@@ -29,6 +29,9 @@ type statsMeasures struct {
 	TimeSpent store.TimeSpent
 	Streak    store.StreakStats
 	Curve     []store.LearningCurvePoint
+	// CurveFrom / CurveTo 是学习曲线窗口的首尾复习日（含两端，按用户时区与日切点）。
+	CurveFrom string
+	CurveTo   string
 	Decks     []store.DeckStat
 	Tags      []store.TagStat
 	Grades    []store.GradeSourceStat
@@ -93,6 +96,8 @@ func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (st
 		TimeSpent: timeSpent,
 		Streak:    streak,
 		Curve:     curve,
+		CurveFrom: from30,
+		CurveTo:   today,
 		Decks:     decks,
 		Tags:      tags,
 		Grades:    grades,
@@ -104,13 +109,17 @@ type statsDetail struct {
 	// GeneratedAt 是所有指标共用的 now 快照（RFC3339，UTC）。
 	GeneratedAt string `json:"generated_at"`
 	// Empty 与 SSR 统计页同一判据：窗口内毫无复习、无到期卡、无卡组数据。
-	Empty     bool               `json:"empty"`
-	Volume    statsVolume        `json:"volume"`
-	Due       statsDue           `json:"due"`
-	Retention statsRetention     `json:"retention"`
-	TimeSpent statsTimeSpent     `json:"time_spent"`
-	Streak    statsStreak        `json:"streak"`
-	Curve     []statsCurvePoint  `json:"curve"`
+	Empty     bool              `json:"empty"`
+	Volume    statsVolume       `json:"volume"`
+	Due       statsDue          `json:"due"`
+	Retention statsRetention    `json:"retention"`
+	TimeSpent statsTimeSpent    `json:"time_spent"`
+	Streak    statsStreak       `json:"streak"`
+	Curve     []statsCurvePoint `json:"curve"`
+	// CurveFrom / CurveTo 给出曲线窗口的首尾复习日：curve 只含有复习的日子，
+	// 客户端画连续的日期轴需要知道窗口边界，而它算不出用户时区与日切点下的「今天」。
+	CurveFrom string             `json:"curve_from"`
+	CurveTo   string             `json:"curve_to"`
 	Decks     []statsDeck        `json:"decks"`
 	Tags      []statsTag         `json:"tags"`
 	Grades    []statsGradeSource `json:"grades"`
@@ -229,6 +238,8 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 		// 空态判据：没有任何复习量、没有今日到期、没有卡组数据。
 		Empty: m.Volume.Today == 0 && m.Volume.Last30Days == 0 &&
 			m.Due.Today == 0 && m.Due.NewNotDue == 0 && len(m.Decks) == 0,
+		CurveFrom: m.CurveFrom,
+		CurveTo:   m.CurveTo,
 		Volume: statsVolume{
 			Today:      m.Volume.Today,
 			Last7Days:  m.Volume.Last7Days,

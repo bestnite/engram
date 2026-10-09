@@ -42,6 +42,9 @@
   --overlay: rgb(9 9 11 / 0.4);
   --sidebar: #fafafa;
   --sidebar-border: #ededf0;
+  /* 图表分类色：按固定顺序取用，不循环。两色已用色觉缺陷模拟校验过（相邻 ΔE ≥ 24，对底色 ≥ 3:1）。 */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
   --radius: 0.5rem;
 }
 
@@ -69,6 +72,8 @@
   --overlay: rgb(0 0 0 / 0.6);
   --sidebar: #0f0f11;
   --sidebar-border: #1f1f23;
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
 }
 
 /* inline：工具类直接引用 var()，切换 .dark 时无需重新生成类。 */
@@ -96,6 +101,8 @@
   --color-overlay: var(--overlay);
   --color-sidebar: var(--sidebar);
   --color-sidebar-border: var(--sidebar-border);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
 }
 
 @layer base {

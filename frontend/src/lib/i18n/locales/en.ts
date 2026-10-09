@@ -1271,4 +1271,9 @@ export const en: LocaleCatalog = {
   'notes.bulk_tags_hint': 'Separate tags with commas.',
   'notes.delete_desc': 'This cannot be undone.',
   'notes.bulk_delete_desc': '{count} notes will be deleted. This cannot be undone.',
+  // 统计页学习曲线图表。
+  'stats.curve.summary': 'Last 30 days: {new} new · {review} reviews',
+  'stats.curve.total': 'Total {count}',
+  'stats.curve.table': 'Learning curve data',
+  'stats.curve.col_day': 'Date',
 };

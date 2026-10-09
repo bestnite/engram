@@ -1270,4 +1270,9 @@ export const zhCN: LocaleCatalog = {
   'notes.bulk_tags_hint': '多个标签用逗号分隔。',
   'notes.delete_desc': '删除后无法恢复。',
   'notes.bulk_delete_desc': '将删除 {count} 条笔记，删除后无法恢复。',
+  // 统计页学习曲线图表。
+  'stats.curve.summary': '近 30 天新学 {new} · 复习 {review}',
+  'stats.curve.total': '合计 {count}',
+  'stats.curve.table': '学习曲线数据',
+  'stats.curve.col_day': '日期',
 };

@@ -917,6 +917,8 @@ describe('Centralized typed same-origin REST API client', () => {
         time_spent: { total_ms: 3000, count: 2, avg_ms: 1500, median_ms: 1500 },
         streak: { current: 2, longest: 2 },
         curve: [{ day: '2026-10-06', new: 0, review: 2 }],
+        curve_from: '2026-09-07',
+        curve_to: '2026-10-06',
         decks: [
           { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
         ],

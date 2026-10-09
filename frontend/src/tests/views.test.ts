@@ -191,6 +191,8 @@ describe('StatsView component response states and truthful rendering', () => {
       { day: '2026-10-05', new: 1, review: 0 },
       { day: '2026-10-06', new: 0, review: 2 },
     ],
+    curve_from: '2026-09-07',
+    curve_to: '2026-10-06',
     decks: [
       { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
     ],
@@ -246,8 +248,10 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('自评');
     expect(html).toContain('自动判分');
 
-    // 学习曲线日期。
-    expect(html).toContain('2026-10-06');
+    // 学习曲线：图表容器、窗口合计，以及读屏用的数据表（日期写在表里）。
+    expect(html).toContain('data-testid="stats-curve-chart"');
+    expect(html).toContain('近 30 天新学 1 · 复习 2');
+    expect(html).toMatch(/data-testid="stats-curve-table"[\s\S]*2026-10-06/);
   });
 
   it('renders zero retention as 0.0% (0/0) without fabricating a rate', () => {

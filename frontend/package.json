@@ -20,6 +20,7 @@
     "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "^1.52.0",
     "bits-ui": "^2.19.5",
+    "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
     "svelte": "^5.57.1",
     "svelte-sonner": "^1.2.1",

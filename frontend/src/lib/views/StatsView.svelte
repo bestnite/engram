@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LearningCurveChart from '../components/LearningCurveChart.svelte';
   import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
@@ -165,9 +166,6 @@
       : 0
   );
   const gradeMax = $derived(detail ? maxOf(detail.grades.map((g) => g.count)) : 0);
-  const curveMax = $derived(
-    detail ? maxOf(detail.curve.flatMap((p) => [p.new, p.review])) : 0
-  );
 </script>
 
 <Page>
@@ -413,39 +411,13 @@
         <!-- 学习曲线 -->
         <section data-testid="stats-curve" class="card-elevated p-5 rounded-lg space-y-4">
           <div>
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.curve.heading')}
-            </h2>
-            <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('stats.curve.intro')}</p>
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.curve.intro')}</p>
           </div>
           {#if detail.curve.length === 0}
-            <p class="text-xs text-muted-foreground/70">{$t('stats.curve.empty')}</p>
+            <p class="text-xs text-muted-foreground">{$t('stats.curve.empty')}</p>
           {:else}
-            <ul class="space-y-3">
-              {#each detail.curve as point}
-                <li class="rounded-xl border border-zinc-100 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-800/40 p-3 space-y-2">
-                  <div class="text-xs font-semibold font-mono text-foreground/80">{point.day}</div>
-                  <div class="flex items-center gap-3">
-                    <span class="w-16 shrink-0 text-xs font-medium text-muted-foreground">{$t('stats.curve.new')}</span>
-                    <div class="h-2 flex-1 rounded-full bg-zinc-200/80 dark:bg-zinc-700 overflow-hidden">
-                      <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(point.new, curveMax)}%"></div>
-                    </div>
-                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-foreground">
-                      {$t('stats.curve.value', { count: formatNumber(point.new) })}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <span class="w-16 shrink-0 text-xs font-medium text-muted-foreground">{$t('stats.curve.review')}</span>
-                    <div class="h-2 flex-1 rounded-full bg-zinc-200/80 dark:bg-zinc-700 overflow-hidden">
-                      <div class="h-full rounded-full bg-emerald-600" style="width: {barWidth(point.review, curveMax)}%"></div>
-                    </div>
-                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-foreground">
-                      {$t('stats.curve.value', { count: formatNumber(point.review) })}
-                    </span>
-                  </div>
-                </li>
-              {/each}
-            </ul>
+            <LearningCurveChart points={detail.curve} from={detail.curve_from} to={detail.curve_to} />
           {/if}
         </section>
 
