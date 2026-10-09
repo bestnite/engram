@@ -509,7 +509,7 @@ export class ApiClient {
     });
   }
 
-  /** 使用同源会话与内存 CSRF token 调用安全批量端点创建一条基础笔记。 */
+  /** 使用同源会话与内存 CSRF token 调用安全批量端点创建笔记（kind 可为任意已注册题型）。 */
   async createNotes(deckId: string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
     if (!this.csrfToken) {
       await this.getSession();

@@ -13,7 +13,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest"
+    "test": "vitest",
+    "test:client": "vitest run --config vitest.config.client.ts"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",

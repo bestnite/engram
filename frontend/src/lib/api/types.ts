@@ -243,11 +243,16 @@ export interface NoteListParams {
   status?: string;
 }
 
-/** 批量写入契约的请求体；此界面只允许提交 basic 字段。 */
+/**
+ * 批量写入契约的请求体。
+ *
+ * 服务端按 kind 从题型注册表取字段校验，接受任意已注册题型；这里不把 kind 收窄成
+ * 'basic'，否则统一编辑器无法提交非基础题型。fields 用 Record 承载各题型自己的字段。
+ */
 export interface CreateNotesRequest {
   notes: Array<{
-    kind: 'basic';
-    fields: { front: string; back: string };
+    kind: string;
+    fields: Record<string, unknown>;
     tags: string[];
   }>;
   dry_run?: boolean;
