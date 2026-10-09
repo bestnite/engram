@@ -260,7 +260,6 @@ export const en: LocaleCatalog = {
   'presets.used_by_decks': 'Used by decks: ',
   'presets.unused': 'Not used by any deck',
   'presets.optimize.gate_shortfall': '{count} more reviews needed to reach optimization threshold',
-  'nav.api_keys': 'API Keys',
   'keys.title': 'API keys',
   'keys.notice': 'Keys are shown only once when created. Store the plaintext securely; it is not saved by this page.',
   'keys.created_once': 'Copy this key now. It will not be shown again.',
@@ -569,6 +568,11 @@ export const en: LocaleCatalog = {
   'settings.notifications.heading': 'Email notification preferences',
   'settings.notifications.intro': 'Choose which optional emails this site sends you. Security and transactional mail cannot be turned off.',
   'settings.notifications.entry': 'Manage email notification preferences',
+  // ---- API keys (/settings/keys) ----
+  // The entry point lives on this settings page; it is no longer a header nav item.
+  'settings.keys.heading': 'API keys',
+  'settings.keys.intro': 'Create and revoke keys for the REST and MCP APIs. The plaintext is shown in full only once, right after you create it.',
+  'settings.keys.entry': 'Manage API keys',
   'settings.notifications.locked': 'Always on: this mail protects your account.',
   'settings.notifications.class.security.heading': 'Security and transactional',
   'settings.notifications.class.collab.heading': 'Collaboration and permissions',

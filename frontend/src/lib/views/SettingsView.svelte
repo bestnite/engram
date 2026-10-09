@@ -16,8 +16,17 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
 
+  interface Props {
+    initialLoading?: boolean;
+  }
+
+  // 测试用它直接进入已加载态（与 NotificationPrefsView / TOTPView 同一模式）：
+  // 应用挂载时不传，默认仍先渲染骨架再拉数据。
+  let { initialLoading = true }: Props = $props();
+
   // 视图响应式状态（Svelte 5 runes）
-  let loading = $state(true);
+  // svelte-ignore state_referenced_locally
+  let loading = $state(initialLoading);
   let saving = $state(false);
   let serverApiAvailable = $state<boolean | null>(null);
   let savedNotice = $state<string | null>(null);
@@ -397,6 +406,13 @@
         <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
         <Button href="/settings/notifications" variant="primary" size="lg" class="mt-4">{$t('settings.notifications.entry')}</Button>
+      </section>
+      <!-- API 密钥入口：服务端 GET /settings/keys 已切到应用壳，走规范路径。
+           入口从页头导航移到这里——它属于账号访问凭据，与两步验证、通知偏好同属个人设置。 -->
+      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-keys-entry">
+        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.keys.heading')}</h2>
+        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.keys.intro')}</p>
+        <Button href="/settings/keys" variant="primary" size="lg" class="mt-4">{$t('settings.keys.entry')}</Button>
       </section>
 
       <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
