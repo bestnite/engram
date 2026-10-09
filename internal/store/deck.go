@@ -262,35 +262,41 @@ func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) erro
 		return err
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 显式级联清理关联表，确保两库在外键 PRAGMA 配置不同时行为均完全一致（AGENTS.md §2.3 第 4 条）
-		if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
-			return fmt.Errorf("delete media_notes: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM card_states WHERE card_id IN (SELECT id FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?))", deckID).Error; err != nil {
-			return fmt.Errorf("delete card_states: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
-			return fmt.Errorf("delete cards: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM notes WHERE deck_id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete notes: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM deck_grants WHERE deck_id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete deck_grants: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete share_links: %w", err)
-		}
-		// 待接受的邀请也要清：卡组没了，那条邀请点开只会 404。
-		if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete deck_share_invites: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM share_session_decks WHERE deck_id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete share_session_decks: %w", err)
-		}
-		if err := tx.Exec("DELETE FROM decks WHERE id = ?", deckID).Error; err != nil {
-			return fmt.Errorf("delete deck: %w", err)
-		}
-		return nil
+		return deleteDeckTx(tx, deckID)
 	})
+}
+
+// deleteDeckTx 在给定事务里硬删除一个卡组及其全部关联行（不做权限判断）。
+// 卡组删除与用户删除（删除其名下全部卡组）共用这一份级联，保证两处清理的范围一致。
+func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
+	// 显式级联清理关联表，确保两库在外键 PRAGMA 配置不同时行为均完全一致（AGENTS.md §2.3 第 4 条）
+	if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
+		return fmt.Errorf("delete media_notes: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM card_states WHERE card_id IN (SELECT id FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?))", deckID).Error; err != nil {
+		return fmt.Errorf("delete card_states: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
+		return fmt.Errorf("delete cards: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM notes WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete notes: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM deck_grants WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete deck_grants: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete share_links: %w", err)
+	}
+	// 待接受的邀请也要清：卡组没了，那条邀请点开只会 404。
+	if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete deck_share_invites: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM share_session_decks WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete share_session_decks: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM decks WHERE id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete deck: %w", err)
+	}
+	return nil
 }
