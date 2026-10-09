@@ -75,19 +75,25 @@ func (s *Server) deckIDParam(c *gin.Context) (uint64, bool) {
 // 把错误映射成 HTML 响应：卡组不存在 -> 404，权限不足 -> 403，并写一条 permission.denied
 // 审计（谁在什么时候想对哪个卡组做什么被挡下）。
 func (s *Server) loadDeckForRole(c *gin.Context, user *store.User, deckID uint64, want string) (*store.Deck, bool) {
+	deck, _, ok := s.loadDeckWithRole(c, user, deckID, want)
+	return deck, ok
+}
+
+// loadDeckWithRole 与 loadDeckForRole 相同，另外返回调用者在卡组上的有效角色。
+func (s *Server) loadDeckWithRole(c *gin.Context, user *store.User, deckID uint64, want string) (*store.Deck, string, bool) {
 	if s.access == nil {
 		// 装配缺失属于服务端配置问题，不能放行。
 		s.logger.Error("deck access checker is not wired", "deck_id", deckID)
 		c.AbortWithStatus(http.StatusInternalServerError)
-		return nil, false
+		return nil, "", false
 	}
 	deck, role, err := s.access.RequireRole(c.Request.Context(), deckID, user.ID, want)
 	if err == nil {
-		return deck, true
+		return deck, role, true
 	}
 	if errors.Is(err, auth.ErrDeckNotFound) {
 		c.AbortWithStatus(http.StatusNotFound)
-		return nil, false
+		return nil, "", false
 	}
 	s.audit(c.Request.Context(), store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
@@ -97,7 +103,7 @@ func (s *Server) loadDeckForRole(c *gin.Context, user *store.User, deckID uint64
 		Detail:     map[string]any{"required_role": want, "user_role": role},
 	})
 	c.AbortWithStatus(http.StatusForbidden)
-	return nil, false
+	return nil, "", false
 }
 
 // parsePage 解析 ?page=；非法或缺失时按第 1 页处理。

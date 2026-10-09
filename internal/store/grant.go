@@ -91,20 +91,27 @@ func (s *GrantStore) Grant(ctx context.Context, deckID, userID uint64, role stri
 		if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 			return fmt.Errorf("create deck grant: %w", err)
 		}
-		return nil
+		// 新成员从自己的默认预设与默认上限开始，而不是沿用属主的设置。
+		return ensureMemberSettings(ctx, s.db, deckID, userID)
 	default:
 		return fmt.Errorf("read deck grant: %w", err)
 	}
 }
 
 // Revoke 删除授权行；删除后下一个请求即被拒（“撤销立即生效”）。
+// 成员在该卡组上的学习设置随授权一起删除。
 func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
-	if err := s.db.WithContext(ctx).
-		Where("deck_id = ? AND user_id = ?", deckID, userID).
-		Delete(&DeckGrant{}).Error; err != nil {
-		return fmt.Errorf("revoke deck grant: %w", err)
-	}
-	return nil
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
+			Delete(&DeckGrant{}).Error; err != nil {
+			return fmt.Errorf("revoke deck grant: %w", err)
+		}
+		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
+			Delete(&DeckMemberSetting{}).Error; err != nil {
+			return fmt.Errorf("delete member settings: %w", err)
+		}
+		return nil
+	})
 }
 
 // ListByDeck 列出卡组的全部授权；共享管理页用它展示当前授权列表。

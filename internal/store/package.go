@@ -235,7 +235,12 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	if err != nil {
 		return nil, fmt.Errorf("export package: load deck: %w", err)
 	}
-	preset, err := NewPresetStore(s.db).ByID(ctx, deck.PresetID)
+	// 包里带的是导出者自己在这个卡组上生效的预设：成员导出共享卡组时不带出属主的参数。
+	settings, err := s.StudySettings(ctx, actorUserID, deck)
+	if err != nil {
+		return nil, fmt.Errorf("export package: load study settings: %w", err)
+	}
+	preset, err := NewPresetStore(s.db).ByID(ctx, settings.PresetID)
 	if err != nil {
 		return nil, fmt.Errorf("export package: load preset: %w", err)
 	}

@@ -276,11 +276,16 @@ func (s *PresetStore) Delete(ctx context.Context, actorUserID, presetID uint64) 
 	if existing.Name == DefaultPresetName {
 		return ErrDefaultPresetCannotDelete
 	}
+	// 被引用有两种：自己卡组的 decks.preset_id，以及自己在共享卡组上的成员设置。
 	var count int64
 	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("preset_id = ?", presetID).Count(&count).Error; err != nil {
 		return fmt.Errorf("check preset usage: %w", err)
 	}
-	if count > 0 {
+	var memberCount int64
+	if err := s.db.WithContext(ctx).Model(&DeckMemberSetting{}).Where("preset_id = ?", presetID).Count(&memberCount).Error; err != nil {
+		return fmt.Errorf("check preset usage by member settings: %w", err)
+	}
+	if count > 0 || memberCount > 0 {
 		return ErrPresetInUse
 	}
 	if err := s.db.WithContext(ctx).Delete(&Preset{}, "id = ?", presetID).Error; err != nil {

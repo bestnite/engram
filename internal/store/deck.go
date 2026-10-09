@@ -285,6 +285,9 @@ func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
 	if err := tx.Exec("DELETE FROM deck_grants WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_grants: %w", err)
 	}
+	if err := tx.Exec("DELETE FROM deck_member_settings WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete deck_member_settings: %w", err)
+	}
 	if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete share_links: %w", err)
 	}

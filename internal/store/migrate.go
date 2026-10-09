@@ -53,6 +53,54 @@ var BuiltinMigrations = []Migration{
 		Name: "0005_backfill_media_notes",
 		Up:   backfillMediaNotes,
 	},
+	{
+		// 共享卡组的成员改用自己的学习设置：为已有授权补上 deck_member_settings 行。
+		// 预设取成员自己的默认预设（这是本次变更的目的：不再沿用属主的预设）；每日上限
+		// 沿用卡组当前的值，成员升级后每天看到的卡量不变，之后可在卡组设置里自己改。
+		Name: "0006_backfill_member_settings",
+		Up:   backfillMemberSettings,
+	},
+}
+
+// backfillMemberSettings 为每条授权补一行成员设置；已存在的行（OnConflict）保持不动。
+func backfillMemberSettings(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("deck_grants") || !m.HasTable("deck_member_settings") {
+		return nil
+	}
+	var grants []struct {
+		DeckID        uint64
+		UserID        uint64
+		NewPerDay     int
+		ReviewsPerDay int
+	}
+	if err := tx.Table("deck_grants AS g").
+		Select("g.deck_id, g.user_id, d.new_per_day, d.reviews_per_day").
+		Joins("JOIN decks AS d ON d.id = g.deck_id").
+		Where("d.owner_user_id <> g.user_id").
+		Scan(&grants).Error; err != nil {
+		return fmt.Errorf("backfill member settings: list grants: %w", err)
+	}
+	ctx := tx.Statement.Context
+	presetByUser := map[uint64]uint64{}
+	now := time.Now().UTC()
+	for _, g := range grants {
+		presetID, ok := presetByUser[g.UserID]
+		if !ok {
+			initial, err := defaultStudySettings(ctx, tx, g.UserID)
+			if err != nil {
+				return fmt.Errorf("backfill member settings: user %d: %w", g.UserID, err)
+			}
+			presetID = initial.PresetID
+			presetByUser[g.UserID] = presetID
+		}
+		row := DeckMemberSetting{DeckID: g.DeckID, UserID: g.UserID, PresetID: presetID,
+			NewPerDay: g.NewPerDay, ReviewsPerDay: g.ReviewsPerDay, UpdatedAt: now}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+			return fmt.Errorf("backfill member settings: deck %d user %d: %w", g.DeckID, g.UserID, err)
+		}
+	}
+	return nil
 }
 
 // backfillMediaNotes 按 note 字段补齐 media_notes；已存在的映射行由 OnConflict 忽略。

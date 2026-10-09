@@ -13,18 +13,23 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// schedulerForDeck 取卡组的调度器（由卡组预设构造）。
-func (a *API) schedulerForDeck(ctx context.Context, deck *store.Deck) (*schedule.Scheduler, error) {
-	preset, err := a.presetForDeck(ctx, deck)
+// schedulerForDeck 取 userID 复习该卡组时的调度器（由其生效的预设构造）。
+func (a *API) schedulerForDeck(ctx context.Context, userID uint64, deck *store.Deck) (*schedule.Scheduler, error) {
+	preset, err := a.presetForDeck(ctx, userID, deck)
 	if err != nil {
 		return nil, err
 	}
 	return schedule.NewScheduler(preset)
 }
 
-// presetForDeck 取复习该卡组时生效的预设（调度参数与作答题的分数→档位映射都在里面）。
-func (a *API) presetForDeck(ctx context.Context, deck *store.Deck) (*store.Preset, error) {
-	return a.presets.ByID(ctx, deck.PresetID)
+// presetForDeck 取 userID 复习该卡组时生效的预设（调度参数与作答题的分数→档位映射都在里面）。
+// 属主用卡组上的预设，共享成员用自己的成员设置（store.StudySettings）。
+func (a *API) presetForDeck(ctx context.Context, userID uint64, deck *store.Deck) (*store.Preset, error) {
+	settings, err := a.decks.StudySettings(ctx, userID, deck)
+	if err != nil {
+		return nil, err
+	}
+	return a.presets.ByID(ctx, settings.PresetID)
 }
 
 // userLocation 按用户时区加载 Location；回退规则见 store.LoadLocation（空/非法名 → UTC）。

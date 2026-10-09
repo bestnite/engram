@@ -86,14 +86,16 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 	return s.deckScopeFromValues(c, user, c.QueryArray("deck"))
 }
 
-// schedulerFor 取卡组预设构造调度器；只有恰好指定一个卡组时才用它的预设，
-// 多卡组与全库回退到文档化默认参数。无卡组/预设缺失同样回退默认。
+// schedulerFor 取 userID 生效的预设构造调度器；只有恰好指定一个卡组时才用该用户在这个卡组上的
+// 预设，多卡组与全库回退到文档化默认参数。无卡组/预设缺失同样回退默认。
 func (s *Server) schedulerFor(ctx context.Context, userID uint64, deckIDs []uint64) (*schedule.Scheduler, error) {
 	var preset *store.Preset
 	if len(deckIDs) == 1 {
-		if deck, err := s.decks.ByID(ctx, deckIDs[0]); err == nil && deck.PresetID != 0 {
-			if p, err := s.presets.ByID(ctx, deck.PresetID); err == nil {
-				preset = p
+		if deck, err := s.decks.ByID(ctx, deckIDs[0]); err == nil {
+			if settings, err := s.decks.StudySettings(ctx, userID, deck); err == nil {
+				if p, err := s.presets.ByID(ctx, settings.PresetID); err == nil {
+					preset = p
+				}
 			}
 		}
 	}

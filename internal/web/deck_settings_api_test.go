@@ -155,9 +155,9 @@ func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRejectsNonOwner 是必测负例：非 owner 读不了也改不了，且列值不变、
+// TestDeckSettingsRejectsNonMember 是必测负例：与卡组无关的用户读不了也改不了，且列值不变、
 // 不写 deck.caps_change 审计。
-func TestDeckSettingsRejectsNonOwner(t *testing.T) {
+func TestDeckSettingsRejectsNonMember(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA owned deck")
 	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
@@ -343,5 +343,57 @@ func TestDeckSettingsRejectsForeignPreset(t *testing.T) {
 		t.Fatalf("count audit rows: %v", err)
 	} else if n != 0 {
 		t.Errorf("audit rows for %s = %d, want 0 (no write happened)", store.ActionDeckPreset, n)
+	}
+}
+
+// TestDeckSettingsMemberEditsOwnSettings 断言共享成员可以打开卡组设置并修改**自己的**学习设置：
+// 成员看到的是自己的默认预设与默认上限，修改只写成员自己的设置，属主的卡组列与预设不变；
+// 成员挂属主的预设被拒（反面）。
+func TestDeckSettingsMemberEditsOwnSettings(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA shared settings deck")
+	if err := store.NewDeckStore(db).SetCaps(context.Background(), ownerID, deck.ID,
+		store.DeckCaps{NewPerDay: 7, ReviewsPerDay: 8}); err != nil {
+		t.Fatalf("SetCaps: %v", err)
+	}
+	memberID, memberCookies, memberCSRF := createUserAndLogin(t, srv, db, "settings_member")
+	grantRole(t, srv, deck.ID, memberID, store.RoleReader, ownerCookies, ownerCSRF)
+
+	// 页面路径对成员同样开放（拿到应用壳）。
+	assertShell(t, getWithCookies(t, srv, "/decks/"+deck.PublicID+"/settings", memberCookies))
+
+	rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), memberCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("member GET = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	got := decodeDeckSettings(t, rec.Body.Bytes())
+	ownerPresetPublic := srv.presetPublicID(context.Background(), deck.PresetID)
+	if got.Role != store.RoleReader || got.PresetID == ownerPresetPublic || got.NewPerDay != store.DefaultNewPerDay {
+		t.Fatalf("member view = %+v, want role reader, the member's own preset and default caps", got)
+	}
+
+	rec = jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		`{"new_per_day":2,"reviews_per_day":0}`, memberCookies, memberCSRF)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("member PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if after := decodeDeckSettings(t, rec.Body.Bytes()); after.NewPerDay != 2 || !after.ReviewUnlimited {
+		t.Errorf("member settings after PATCH = %+v, want 2 new per day and unlimited reviews", after)
+	}
+	if caps := deckCapsFromDB(t, db, deck.ID); caps.NewPerDay != 7 || caps.ReviewsPerDay != 8 {
+		t.Errorf("owner caps changed by the member: got %d/%d, want 7/8", caps.NewPerDay, caps.ReviewsPerDay)
+	}
+
+	rec = jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":0,"preset_id":%q}`, ownerPresetPublic), memberCookies, memberCSRF)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("member attaching the owner's preset = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var reloaded store.Deck
+	if err := db.First(&reloaded, deck.ID).Error; err != nil {
+		t.Fatalf("reload deck: %v", err)
+	}
+	if reloaded.PresetID != deck.PresetID {
+		t.Errorf("owner preset changed to %d by the member", reloaded.PresetID)
 	}
 }

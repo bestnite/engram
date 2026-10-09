@@ -1,15 +1,12 @@
 package web
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -26,7 +23,8 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 // deckClone 把一个「自己可读」的卡组复制到当前账号下。
 //
 // 内容复制（note + card），进度不跟随（新 card 没有任何 card_states 行）；共享授权不复制，
-// 克隆结果只有调用者一个 owner。预设按源预设参数复制一份到调用者名下，保证排程一致。
+// 克隆结果只有调用者一个 owner。克隆卡组沿用调用者自己在源卡组上生效的预设：克隆别人的卡组
+// 不会把属主的调度参数（含优化出的权重）复制给调用者，学习参数始终是各人自己的。
 func (s *Server) deckClone(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
@@ -47,12 +45,13 @@ func (s *Server) deckClone(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 
-	presetID, err := s.clonePreset(ctx, loc, user.ID, src)
+	settings, err := s.decks.StudySettings(ctx, user.ID, src)
 	if err != nil {
-		s.logger.Error("clone preset for deck failed", "deck_id", src.ID, "error", err)
+		s.logger.Error("load study settings for deck clone failed", "deck_id", src.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	presetID := settings.PresetID
 	name := loc.Tf("clone.name", map[string]any{"name": src.Name})
 	cloned, err := s.decks.Clone(ctx, src, user.ID, name, presetID)
 	if err != nil {
@@ -89,26 +88,4 @@ func acceptsJSON(c *gin.Context) bool {
 		}
 	}
 	return false
-}
-
-// clonePreset 复制一份源卡组的预设到调用者名下；源预设缺失时退回调用者的默认预设。
-// 预设随克隆一起带走，保证克隆卡组的调度参数与源一致（同类语义）。
-func (s *Server) clonePreset(ctx context.Context, loc *i18n.Localizer, ownerID uint64, src *store.Deck) (uint64, error) {
-	srcPreset, err := s.presets.ByID(ctx, src.PresetID)
-	if err != nil {
-		// 源预设缺失（数据异常）时不让克隆整体失败：退回调用者的默认预设。
-		return s.resolvePresetID(ctx, ownerID, "")
-	}
-	p := *srcPreset
-	p.ID = 0
-	// 对外 id 必须清空，让 BeforeCreate 钩子生成新的：不清空会与源预设的 public_id 撞唯一索引。
-	p.PublicID = ""
-	p.OwnerUserID = ownerID
-	p.Name = loc.Tf("clone.preset_name", map[string]any{"name": srcPreset.Name})
-	p.CreatedAt = time.Time{}
-	p.UpdatedAt = time.Time{}
-	if err := s.presets.Create(ctx, &p); err != nil {
-		return 0, err
-	}
-	return p.ID, nil
 }

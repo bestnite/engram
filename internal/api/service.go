@@ -953,7 +953,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 	// 队列构建需要调度器（只为复习卡算 retrievability）；多卡组/无卡组时用默认预设。
 	var sched *schedule.Scheduler
 	if deck != nil {
-		s, err := a.schedulerForDeck(ctx, deck)
+		s, err := a.schedulerForDeck(ctx, u.ID, deck)
 		if err != nil {
 			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
 		}
@@ -1109,7 +1109,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 	if err != nil {
 		return SubmitReviewResult{}, err
 	}
-	preset, err := a.presetForDeck(ctx, deck)
+	preset, err := a.presetForDeck(ctx, u.ID, deck)
 	if err != nil {
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck preset")
 	}

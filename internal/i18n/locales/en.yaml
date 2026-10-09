@@ -125,8 +125,6 @@
 # M5-4 deck clone.
 - id: clone.name
   translation: "{{.name}} (copy)"
-- id: clone.preset_name
-  translation: "{{.name}} (copy)"
 - id: admin.setting.site_name
   translation: "Site name"
 - id: admin.setting.site_name.hint

@@ -111,7 +111,8 @@ type Preset struct {
 func (Preset) TableName() string { return "presets" }
 
 // Deck 是扁平卡组（不做卡组树）。
-// NewPerDay / ReviewsPerDay 是卡组级每日上限，0 表示不限。
+// PresetID / NewPerDay / ReviewsPerDay 是**属主自己**的学习设置（调度预设与每日上限，0 表示不限）；
+// 其他成员的设置在 deck_member_settings，按用户解析统一走 StudySettings（见 deck_member_settings.go）。
 // 两列都是带数据库默认值的整型，零值由 GORM 省略、由数据库默认值补齐；
 // 显式把上限设为 0 请走 DeckStore.SetCaps（map 更新会写入 0）。
 type Deck struct {
@@ -402,6 +403,8 @@ func AllModels() []any {
 		&MailTemplate{},
 		// L3 分享同意制：待接受的邀请与接收白名单。
 		&DeckShareInvite{}, &ShareAllow{},
+		// 共享卡组成员各自的学习设置：模型定义在 deck_member_settings.go。
+		&DeckMemberSetting{},
 	}
 }
 

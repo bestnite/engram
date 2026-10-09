@@ -43,7 +43,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	}
 	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
 
-	// 新卡组归属调用者、名字带副本后缀、预设另建一份、默认私有。
+	// 新卡组归属调用者、名字带副本后缀、沿用调用者自己在源卡组上的预设（属主即源卡组的预设）。
 	var cloned store.Deck
 	if err := db.First(&cloned, "public_id = ?", newID).Error; err != nil {
 		t.Fatalf("load cloned deck: %v", err)
@@ -54,8 +54,8 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	if cloned.ID == deck.ID {
 		t.Fatal("clone reused the source deck id")
 	}
-	if cloned.PresetID == deck.PresetID {
-		t.Errorf("clone shares the source preset id %d, want a copied preset", cloned.PresetID)
+	if cloned.PresetID != deck.PresetID {
+		t.Errorf("owner clone preset = %d, want the owner's own preset %d", cloned.PresetID, deck.PresetID)
 	}
 	if cloned.Name == deck.Name || !strings.Contains(cloned.Name, deck.Name) {
 		t.Errorf("cloned deck name = %q, want it to contain %q", cloned.Name, deck.Name)
@@ -127,6 +127,14 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	}
 	if states != 0 {
 		t.Errorf("reader clone carries progress: %d rows, want 0", states)
+	}
+	// 反面：克隆别人的卡组不带走属主的预设（参数与优化出的权重），用的是读者自己的预设。
+	var preset store.Preset
+	if err := db.First(&preset, "id = ?", cloned.PresetID).Error; err != nil {
+		t.Fatalf("load cloned deck preset: %v", err)
+	}
+	if preset.OwnerUserID != user2ID {
+		t.Errorf("cloned deck preset belongs to user %d, want the reader %d", preset.OwnerUserID, user2ID)
 	}
 }
 

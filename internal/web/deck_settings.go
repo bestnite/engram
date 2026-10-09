@@ -22,12 +22,8 @@ func (s *Server) registerDeckSettingsRoutes(router *gin.Engine) {
 }
 
 // deckBudget 取单个卡组今日的额度情况，走 schedule.DeckBudgets（与复习队列同源）。
-func (s *Server) deckBudget(ctx context.Context, userID, deckID uint64) (schedule.DeckBudget, error) {
-	sched, err := s.schedulerFor(ctx, userID, []uint64{deckID})
-	if err != nil {
-		return schedule.DeckBudget{}, err
-	}
-	budgets, err := schedule.NewQueueBuilder(s.db, s.decks, sched).DeckBudgets(ctx, userID, []uint64{deckID})
+func (s *Server) deckBudget(ctx context.Context, user *store.User, deckID uint64) (schedule.DeckBudget, error) {
+	budgets, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckBudgets(ctx, user.ID, []uint64{deckID})
 	if err != nil {
 		return schedule.DeckBudget{}, err
 	}
@@ -37,8 +33,8 @@ func (s *Server) deckBudget(ctx context.Context, userID, deckID uint64) (schedul
 // deckSettingsRoute 提供 GET /decks/:id/settings：只发 SPA 应用壳，
 // 由客户端路由渲染卡组每日上限页；读写走 /api/v1/decks/:id/settings（同一份服务逻辑与审计）。
 //
-// owner 门禁留在服务端：非 owner 与不存在的卡组在返回应用壳之前就以 403 / 404 结束，
-// 与迁移前的 SSR 页面完全一致（否则会让无权用户拿到页面外壳）。SSR 页面层已删除，不再回退。
+// 门禁留在服务端：页面编辑的是调用者自己在该卡组上的学习设置，卡组的任何成员（reader 及以上）
+// 都可以打开；无权访问与不存在的卡组在返回应用壳之前就以 403 / 404 结束。
 func (s *Server) deckSettingsRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -48,7 +44,7 @@ func (s *Server) deckSettingsRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner); !ok {
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
 		return
 	}
 	s.shell.ServeIndex(c)

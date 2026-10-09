@@ -11,12 +11,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// deckSettingsPayload 把卡组与今日额度装配成响应体；0 原样返回，不限由布尔量表达。
+// deckSettingsPayload 把卡组与调用者自己的今日额度装配成响应体；0 原样返回，不限由布尔量表达。
 // deck_id / preset_id 是对外 id：卡组的数字主键不对外，预设同理，这里由调用方传进来。
-func deckSettingsPayload(deck *store.Deck, presetPublicID string, budget schedule.DeckBudget) deckSettingsResponse {
+func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget schedule.DeckBudget) deckSettingsResponse {
 	return deckSettingsResponse{
 		DeckID:          deck.PublicID,
 		DeckName:        deck.Name,
+		Role:            role,
 		PresetID:        presetPublicID,
 		NewPerDay:       budget.NewPerDay,
 		ReviewsPerDay:   budget.ReviewsPerDay,
@@ -29,14 +30,17 @@ func deckSettingsPayload(deck *store.Deck, presetPublicID string, budget schedul
 	}
 }
 
-// deckSettingsResponse 是 SPA 卡组设置接口的响应体。
+// deckSettingsResponse 是 SPA 卡组设置接口的响应体：调用者自己在该卡组上的学习设置与今日额度。
+// 属主与共享成员各有一份设置，互不影响（见 store.StudySettings）。
 //
-// NewPerDay / ReviewsPerDay 是卡组列上的原始值：0 表示不限，不是「回落到默认」。
+// NewPerDay / ReviewsPerDay 是设置里的原始值：0 表示不限，不是「回落到默认」。
 // 因为「0 表示不限」与「今日剩余 0 张」在整数上同形，额外的 NewUnlimited /
 // ReviewUnlimited 布尔量显式表达不限，前端据此渲染「不限」而不是 0。
 type deckSettingsResponse struct {
-	DeckID          string `json:"deck_id"`
-	DeckName        string `json:"deck_name"`
+	DeckID   string `json:"deck_id"`
+	DeckName string `json:"deck_name"`
+	// Role 是调用者在卡组上的角色（owner / editor / reader），页面据此决定是否展示属主才有的入口。
+	Role            string `json:"role"`
 	PresetID        string `json:"preset_id"`
 	NewPerDay       int    `json:"new_per_day"`
 	ReviewsPerDay   int    `json:"reviews_per_day"`
@@ -56,7 +60,7 @@ type deckSettingsRequest struct {
 	PresetID      *string `json:"preset_id"`
 }
 
-// registerDeckSettingsAPIRoutes 挂载 SPA 的卡组每日上限读写接口（仅 owner，写操作过 CSRF）。
+// registerDeckSettingsAPIRoutes 挂载 SPA 的卡组学习设置读写接口（卡组任何成员，写操作过 CSRF）。
 //
 // 只注册 /api/v1/decks/:id/settings 这两个 JSON 端点；GET /decks/:id/settings 只发应用壳
 // （见 deck_settings.go），卡组上限的读写全部走这里。
@@ -68,7 +72,7 @@ func (s *Server) registerDeckSettingsAPIRoutes(router *gin.Engine) {
 	router.PATCH("/api/v1/decks/:id/settings", s.sessions.CSRFMiddleware(), s.deckSettingsPatch)
 }
 
-// deckSettingsGet 读取单个卡组的每日上限与今日已用/剩余（仅 owner）。
+// deckSettingsGet 读取调用者在单个卡组上的学习设置与今日已用/剩余（卡组任何成员）。
 // 只接受浏览器会话，拒绝 API Key / bearer；额度取自 schedule.DeckBudgets，
 // 与复习队列同源，网页层不重算公式。
 func (s *Server) deckSettingsGet(c *gin.Context) {
@@ -80,23 +84,33 @@ func (s *Server) deckSettingsGet(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner)
+	deck, role, ok := s.loadDeckWithRole(c, user, deckID, store.RoleReader)
 	if !ok {
 		return
 	}
-	budget, err := s.deckBudget(c.Request.Context(), user.ID, deck.ID)
+	s.writeDeckSettings(c, user, deck, role)
+}
+
+// writeDeckSettings 读出调用者的学习设置与额度并写响应。
+func (s *Server) writeDeckSettings(c *gin.Context, user *store.User, deck *store.Deck, role string) {
+	ctx := c.Request.Context()
+	settings, err := s.decks.StudySettings(ctx, user.ID, deck)
+	if err != nil {
+		s.logger.Error("load study settings for SPA settings failed", "deck_id", deck.ID, "error", err)
+		shareError(c, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	budget, err := s.deckBudget(ctx, user, deck.ID)
 	if err != nil {
 		s.logger.Error("load deck budget for SPA settings failed", "deck_id", deck.ID, "error", err)
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	presetPub := s.presetPublicID(c.Request.Context(), deck.PresetID)
-	c.JSON(http.StatusOK, deckSettingsPayload(deck, presetPub, budget))
+	c.JSON(http.StatusOK, deckSettingsPayload(deck, role, s.presetPublicID(ctx, settings.PresetID), budget))
 }
 
-// deckSettingsPatch 保存每日上限（仅 owner）。
-// 复用 store.DeckStore.SetCaps（owner 校验与 0 原样落库都在那里）与同一条
-// deck.caps_change 审计；非法输入（非数字 / 负数 / 缺字段）一律 400 且不写库、不写审计。
+// deckSettingsPatch 保存调用者在该卡组上的学习设置（卡组任何成员；只影响调用者自己）。
+// 预设必须是调用者自己的；非法输入（非数字 / 负数 / 缺字段 / 别人的预设）一律 400 且不写库、不写审计。
 func (s *Server) deckSettingsPatch(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -106,7 +120,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleOwner)
+	deck, role, ok := s.loadDeckWithRole(c, user, deckID, store.RoleReader)
 	if !ok {
 		return
 	}
@@ -116,62 +130,55 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		return
 	}
 	if *req.NewPerDay < 0 || *req.ReviewsPerDay < 0 {
-		// 负值在 handler 层就拒掉，交给 store 会变成 500（ErrInvalidDeckCap）。
 		shareError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	// 预设是可选项：只改额度的老请求不带它，行为保持不变。
+	ctx := c.Request.Context()
+	// 预设是可选项：只改额度的请求不带它。
+	var presetID *uint64
+	var presetPublic string
 	if req.PresetID != nil {
-		preset, err := s.presets.ByPublicID(c.Request.Context(), strings.TrimSpace(*req.PresetID))
+		preset, err := s.presets.ByPublicID(ctx, strings.TrimSpace(*req.PresetID))
 		if err != nil {
 			// 未知或空串的预设对外 id 与「预设不可用」同形：400，不写库、不写审计。
 			shareError(c, http.StatusBadRequest, "invalid_request")
 			return
 		}
-		if err := s.decks.SetPreset(c.Request.Context(), user.ID, deck.ID, preset.ID); err != nil {
-			if errors.Is(err, store.ErrDeckPresetInvalid) {
-				shareError(c, http.StatusBadRequest, "invalid_request")
-				return
-			}
-			s.logger.Error("set deck preset for SPA failed", "deck_id", deck.ID, "error", err)
-			shareError(c, http.StatusInternalServerError, "internal_error")
+		presetID = &preset.ID
+		presetPublic = preset.PublicID
+	}
+	caps := store.DeckCaps{NewPerDay: *req.NewPerDay, ReviewsPerDay: *req.ReviewsPerDay}
+	if err := s.decks.SetStudySettings(ctx, user.ID, deck, presetID, &caps); err != nil {
+		if errors.Is(err, store.ErrDeckPresetInvalid) {
+			shareError(c, http.StatusBadRequest, "invalid_request")
 			return
 		}
-		s.audit(c.Request.Context(), store.AuditEntry{
+		s.logger.Error("set study settings for SPA failed", "deck_id", deck.ID, "error", err)
+		shareError(c, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if presetID != nil {
+		s.audit(ctx, store.AuditEntry{
 			UserID:     store.Ptr(user.ID),
 			Action:     store.ActionDeckPreset,
 			TargetType: "deck",
 			TargetID:   store.Ptr(deck.ID),
-			Detail:     map[string]any{"preset_id": preset.PublicID},
+			Detail:     map[string]any{"preset_id": presetPublic},
 		})
 	}
-	caps := store.DeckCaps{NewPerDay: *req.NewPerDay, ReviewsPerDay: *req.ReviewsPerDay}
-	if err := s.decks.SetCaps(c.Request.Context(), user.ID, deck.ID, caps); err != nil {
-		s.logger.Error("set deck caps for SPA failed", "deck_id", deck.ID, "error", err)
-		shareError(c, http.StatusInternalServerError, "internal_error")
-		return
-	}
-	// 与其他卡组变更同口径：改额度也留痕，它决定这个卡组每天向所有使用者放多少张卡出来。
-	s.audit(c.Request.Context(), store.AuditEntry{
+	s.audit(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionDeckCaps,
 		TargetType: "deck",
 		TargetID:   store.Ptr(deck.ID),
 		Detail:     map[string]any{"new_per_day": caps.NewPerDay, "reviews_per_day": caps.ReviewsPerDay},
 	})
-	budget, err := s.deckBudget(c.Request.Context(), user.ID, deck.ID)
-	if err != nil {
-		s.logger.Error("reload deck budget after SPA caps change failed", "deck_id", deck.ID, "error", err)
-		shareError(c, http.StatusInternalServerError, "internal_error")
-		return
-	}
-	// 回读一次再组响应：上面的写入都发生在库上，用写入前读到的 deck 会回显旧的 preset_id，
-	// 让「改了但没生效」这种最贵的故障从响应里看不出来。
-	updated, err := s.decks.ByID(c.Request.Context(), deck.ID)
+	// 回读一次再组响应：上面的写入都发生在库上，用写入前读到的卡组行会回显旧的设置。
+	updated, err := s.decks.ByID(ctx, deck.ID)
 	if err != nil {
 		s.logger.Error("reload deck after SPA settings change failed", "deck_id", deck.ID, "error", err)
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, deckSettingsPayload(updated, s.presetPublicID(c.Request.Context(), updated.PresetID), budget))
+	s.writeDeckSettings(c, user, updated, role)
 }

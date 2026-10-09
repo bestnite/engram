@@ -489,7 +489,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 		return nil, nil
 	}
 
-	caps, err := b.loadDeckCaps(ctx, ids)
+	caps, err := b.loadDeckCaps(ctx, userID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -600,22 +600,21 @@ func (o QueueOptions) now() time.Time {
 // reviewed 是今日的复习量（state_before <> 0）。不建计数表，从 reviews 聚合。
 type deckUsage struct{ introduced, reviewed int }
 
-// loadDeckCaps 一次取回范围内各卡组的每日上限；卡组行不存在时该 id 不出现在结果里。
-func (b *QueueBuilder) loadDeckCaps(ctx context.Context, deckIDs []uint64) (map[uint64]store.DeckCaps, error) {
-	var rows []struct {
-		ID            uint64 `gorm:"column:id"`
-		NewPerDay     int    `gorm:"column:new_per_day"`
-		ReviewsPerDay int    `gorm:"column:reviews_per_day"`
-	}
-	if err := b.db.WithContext(ctx).Table("decks").
-		Select("id, new_per_day, reviews_per_day").
-		Where("id IN ?", deckIDs).
-		Scan(&rows).Error; err != nil {
+// loadDeckCaps 读取 userID 在各卡组上的每日上限：属主读卡组列，其他成员读自己的成员设置
+// （规则只在 store.StudySettingsFor 一处）。
+func (b *QueueBuilder) loadDeckCaps(ctx context.Context, userID uint64, deckIDs []uint64) (map[uint64]store.DeckCaps, error) {
+	var decks []store.Deck
+	if err := b.db.WithContext(ctx).Select("id", "owner_user_id", "preset_id", "new_per_day", "reviews_per_day").
+		Where("id IN ?", deckIDs).Find(&decks).Error; err != nil {
 		return nil, fmt.Errorf("schedule: load deck caps: %w", err)
 	}
-	out := make(map[uint64]store.DeckCaps, len(rows))
-	for _, r := range rows {
-		out[r.ID] = store.DeckCaps{NewPerDay: r.NewPerDay, ReviewsPerDay: r.ReviewsPerDay}
+	settings, err := store.StudySettingsFor(ctx, b.db, userID, decks)
+	if err != nil {
+		return nil, fmt.Errorf("schedule: load deck caps: %w", err)
+	}
+	out := make(map[uint64]store.DeckCaps, len(settings))
+	for id, st := range settings {
+		out[id] = st.Caps
 	}
 	return out, nil
 }

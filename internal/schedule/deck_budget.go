@@ -52,7 +52,7 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 	opts := QueueOptions{DeckIDs: ids}
 	opts = opts.withDefaults()
 
-	caps, err := b.loadDeckCaps(ctx, ids)
+	caps, err := b.loadDeckCaps(ctx, userID, ids)
 	if err != nil {
 		return nil, err
 	}
