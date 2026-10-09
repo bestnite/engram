@@ -85,9 +85,11 @@
       metaError = true;
     }
     try {
+      // 按对外 id 直接读目标卡片；不再用列表分页去「找」它（第 100 条之后的卡片会打不开）。
       // 列表返回字段保持纯文本；编辑器不把 Markdown 当 HTML 渲染。
-      const result = await apiClient.getDeckNotes(deckId, { page: 1, per_page: 100 });
-      const loadedNote = result.notes.find((item) => String(item.id) === noteId) || null;
+      const loaded = await apiClient.getNote(noteId);
+      // 卡片必须属于地址上的卡组：否则按「不存在」处理，禁止跨卡组编辑。
+      const loadedNote = loaded && String(loaded.deck_id) === deckId ? loaded : null;
       note = loadedNote;
       if (loadedNote) adoptFields(loadedNote);
       else error = true;

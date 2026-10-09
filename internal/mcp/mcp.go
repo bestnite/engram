@@ -274,6 +274,7 @@ func hasScope(id Identity, scope string) bool {
 var toolScopes = map[string]string{
 	"list_decks":    store.ScopeRead,
 	"search_notes":  store.ScopeRead,
+	"get_note":      store.ScopeRead,
 	"get_stats":     store.ScopeRead,
 	"export_deck":   store.ScopeRead,
 	"create_deck":   store.ScopeWrite,
@@ -300,6 +301,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "list_decks", "List the decks visible to the caller (owned, or granted by another user).", s.listDecks)
 	addTool(s, srv, id, "create_deck", "Create an empty deck (name required; preset_id 0 uses the caller's Default preset).", s.createDeck)
 	addTool(s, srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
+	addTool(s, srv, id, "get_note", "Read one note by its public id.", s.getNote)
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
 	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package: manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
 	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)

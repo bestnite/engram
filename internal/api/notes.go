@@ -84,6 +84,23 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 	return out
 }
 
+// getNote 读取单条笔记（GET /api/v1/notes/:id，scope: read）。
+// 编辑页据此直接取目标行，不再靠列表分页去「找到」它。
+func (a *API) getNote(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	ctx := c.Request.Context()
+	publicID, ok := pathPublicID(c, "id")
+	if !ok {
+		return
+	}
+	n, err := a.GetNote(ctx, u.ID, publicID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, a.NotesJSON(ctx, u.ID, []store.Note{*n})[0])
+}
+
 // importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
 func (a *API) importNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)

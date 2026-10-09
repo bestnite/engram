@@ -400,3 +400,51 @@ describe('Deck notes deleted-status query and bulk note actions', () => {
     });
   });
 });
+
+describe('GET /api/v1/notes/:id single-note read', () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let client: ApiClient;
+
+  beforeEach(() => {
+    mockFetch = vi.fn();
+    client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
+  });
+
+  it('reads one note by public id and encodes the id in the path', async () => {
+    const mockNote: Note = {
+      id: 'note-7',
+      deck_id: 'deck-3',
+      kind: 'basic',
+      fields: { front: 'q', back: 'a' },
+      tags: [],
+      created_at: '2026-10-01T00:00:00Z',
+      updated_at: '2026-10-01T00:00:00Z',
+      external_ref: '',
+      suspended: false,
+    };
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(mockNote), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const res = await client.getNote('note 7/x');
+
+    const [url, init] = mockFetch.mock.calls[0]!;
+    expect(url).toBe('/api/v1/notes/note%207%2Fx');
+    expect(init?.credentials).toBe('same-origin');
+    expect(res).toEqual(mockNote);
+  });
+
+  it('maps 404 to not_found for an unknown note id', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: 'not_found', message: 'note not found' } }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await expect(client.getNote('missing')).rejects.toMatchObject({ code: 'not_found' });
+  });
+});

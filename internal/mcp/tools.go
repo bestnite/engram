@@ -38,6 +38,11 @@ type searchNotesIn struct {
 	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page"`
 }
 
+// getNoteIn 是 get_note 的入参。
+type getNoteIn struct {
+	NoteID string `json:"note_id" jsonschema:"the public id of the note to read"`
+}
+
 // getStatsIn 无参数。
 type getStatsIn struct{}
 
@@ -181,6 +186,15 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 	}
 	out := s.api.NotesJSON(ctx, id.User.ID, notes)
 	return map[string]any{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage}, nil
+}
+
+// getNote 按对外 id 读取单条 note；与 REST `GET /notes/:id` 走同一 service 方法。
+func (s *Server) getNote(ctx context.Context, id Identity, in getNoteIn) (any, error) {
+	n, err := s.api.GetNote(ctx, id.User.ID, in.NoteID)
+	if err != nil {
+		return nil, err
+	}
+	return s.api.NotesJSON(ctx, id.User.ID, []store.Note{*n})[0], nil
 }
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {

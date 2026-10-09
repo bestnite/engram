@@ -578,6 +578,17 @@ export class ApiClient {
   }
 
   /**
+   * 读取单条卡片（GET /api/v1/notes/:id）。
+   *
+   * 编辑页按对外 id 直接取目标行，不再拉列表再 find——列表是分页的，
+   * 位置在单页之外的卡片会因此永远打不开。
+   */
+  async getNote(noteId: string): Promise<Note> {
+    const id = encodeURIComponent(String(noteId));
+    return this.request<Note>(`/api/v1/notes/${id}`);
+  }
+
+  /**
    * 获取当前用户基础资料（GET /api/v1/profile）
    */
   async getProfile(): Promise<UserProfile> {

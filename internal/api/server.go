@@ -149,6 +149,7 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
 	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)
+	v1.GET("/notes/:id", a.authn.RequireScope(store.ScopeRead), a.getNote)
 	v1.DELETE("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteNote)
 	// gin 按 method 建树；POST 侧没有 /notes/:id，故 /notes/bulk 与它不冲突。
 	v1.POST("/notes/bulk", a.authn.RequireScope(store.ScopeWrite), a.bulkNotes)

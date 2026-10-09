@@ -308,6 +308,22 @@ func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.N
 	return notes, total, nil
 }
 
+// GetNote 按对外 id 读取单条 note，并要求调用者对该 note 所在卡组至少是 reader。
+//
+// 编辑页只拿到一个 note 的对外 id，列表分页会让「翻到第几页」成为正确性的一部分；
+// 提供单条读取后，编辑页不再依赖列表能否覆盖目标行。未知 id 与无权读取一律 404，
+// 不泄露「该 id 存在但你无权看」。
+func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (*store.Note, error) {
+	n, err := a.notes.ByPublicID(ctx, notePublicID)
+	if err != nil {
+		return nil, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
+	}
+	if _, err := a.RequireDeckRole(ctx, userID, n.DeckID, store.RoleReader); err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
 // ImportNote 是批量导入的单个 note；字段名与 schema/note-import.schema.json 一致。
 type ImportNote struct {
 	Kind        string         `json:"kind"`
