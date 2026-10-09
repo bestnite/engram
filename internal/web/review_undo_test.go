@@ -47,6 +47,10 @@ func TestReviewUndoRestoresStateAndDeletesReview(t *testing.T) {
 		t.Fatalf("load state after first review: %v", err)
 	}
 	submitSelfReview(t, srv, cookies, csrf, cardPub, deck.PublicID, 3, afterFirst.Version)
+	var beforeUndo store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&beforeUndo).Error; err != nil {
+		t.Fatalf("load state before undo: %v", err)
+	}
 
 	var reviewsBefore int64
 	db.Model(&store.Review{}).Where("card_id = ?", cardID).Count(&reviewsBefore)
@@ -55,7 +59,7 @@ func TestReviewUndoRestoresStateAndDeletesReview(t *testing.T) {
 	}
 
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/undo", map[string]any{
-		"card_id": cardPub, "deck": []string{deck.PublicID},
+		"card_id": cardPub, "deck": []string{deck.PublicID}, "expected_version": beforeUndo.Version,
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("undo = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -109,6 +113,41 @@ func TestReviewUndoRestoresStateAndDeletesReview(t *testing.T) {
 	}
 }
 
+// TestReviewUndoReplayIsRejectedWithoutDeletingAnotherReview 是 AUDIT-02 的 HTTP 层验收：
+// 同一撤销请求重发第二次必须 409，且只删掉一条评分——网络重试、双开窗口都不会误删另一条历史评分。
+func TestReviewUndoReplayIsRejectedWithoutDeletingAnotherReview(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Undo replay deck")
+	note := seedBasic(t, db, deck.ID, "Q", "A")
+	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
+
+	submitSelfReview(t, srv, cookies, csrf, cardPub, deck.PublicID, 3, 0)
+	var v1 store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&v1).Error; err != nil {
+		t.Fatalf("load state after first review: %v", err)
+	}
+	submitSelfReview(t, srv, cookies, csrf, cardPub, deck.PublicID, 3, v1.Version)
+	var v2 store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&v2).Error; err != nil {
+		t.Fatalf("load state after second review: %v", err)
+	}
+
+	body := map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}, "expected_version": v2.Version}
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/undo", body, cookies, csrf); rec.Code != http.StatusOK {
+		t.Fatalf("first undo = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/undo", body, cookies, csrf)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("replayed undo = %d, want 409 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var reviews int64
+	db.Model(&store.Review{}).Where("card_id = ?", cardID).Count(&reviews)
+	if reviews != 1 {
+		t.Errorf("reviews after replayed undo = %d, want 1 (must not delete another review)", reviews)
+	}
+}
+
 // TestReviewUndoReturnsCardToQueue 断言撤销把卡放回队列，且响应里的 undone_card_id 指向它：
 // 前端据此定位当前卡，而不是假定它排在重建队列的首位。
 func TestReviewUndoReturnsCardToQueue(t *testing.T) {
@@ -117,9 +156,13 @@ func TestReviewUndoReturnsCardToQueue(t *testing.T) {
 	note := seedBasic(t, db, deck.ID, "Q", "A")
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
 	submitSelfReview(t, srv, cookies, csrf, cardPub, deck.PublicID, 3, 0)
+	var beforeUndo store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardIDOfNote(t, db, note.ID), ownerID).First(&beforeUndo).Error; err != nil {
+		t.Fatalf("load state before undo: %v", err)
+	}
 
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/undo", map[string]any{
-		"card_id": cardPub, "deck": []string{deck.PublicID},
+		"card_id": cardPub, "deck": []string{deck.PublicID}, "expected_version": beforeUndo.Version,
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("undo = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))

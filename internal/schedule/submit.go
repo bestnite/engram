@@ -237,6 +237,13 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	if base != nil {
 		stepIndexBefore = base.StepIndex
 	}
+	// 评分前的到期日快照：埋藏只改 due_at、不写日志，撤销只能靠它精确还原。
+	// 拷贝值（而不是存指针），避免与状态行共享同一块内存。
+	var dueBefore *time.Time
+	if base != nil && base.DueAt != nil {
+		d := *base.DueAt
+		dueBefore = &d
+	}
 	row := store.Review{
 		CardID:          in.CardID,
 		UserID:          in.UserID,
@@ -249,6 +256,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 		DurationDays:    durationDaysSince(base, now),
 		StateBefore:     int(stateBefore),
 		StepIndexBefore: &stepIndexBefore,
+		DueBefore:       dueBefore,
 		IntervalDays:    &interval,
 		Stability:       &stability,
 		Difficulty:      &difficulty,

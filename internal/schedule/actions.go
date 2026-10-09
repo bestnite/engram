@@ -20,9 +20,13 @@ var ErrNothingToUndo = errors.New("schedule: no review to undo")
 
 // UndoInput 是一次撤销的入参；tx 的语义与 Submit 相同（事务边界由调用方提供）。
 type UndoInput struct {
-	CardID    uint64
-	UserID    uint64
-	Scheduler *Scheduler
+	CardID uint64
+	UserID uint64
+	// ExpectedVersion 是调用方读到的 card_states.version（通常是它刚提交评分后得到的版本）。
+	// 撤销把它当作目标：不匹配返回 ErrVersionConflict，且不删任何日志——这样重放请求、
+	// 双开窗口或旧版本请求都不会误删另一条评分。
+	ExpectedVersion int
+	Scheduler       *Scheduler
 	// Now 为零值时取当前时间，仅用于审计时间戳。
 	Now time.Time
 }
@@ -35,6 +39,12 @@ type UndoInput struct {
 // 重建 ReviewLog 的评分前字段；由此 due_at 与 interval 能精确恢复到本次评分之前的值。
 // step_index（剩余学习步骤）由被撤销日志的 step_index_before 精确还原；旧行该列为
 // NULL 时退回 fsrs.Rollback 的结果（会把 step_index 归零）。
+// 评分前的到期日优先用被撤销日志的 due_before 快照：埋藏只改 due_at、不写日志，上一条日志
+// 推算不出被埋藏后的到期日；旧行该列为 NULL 时退回上一条日志的推算。
+//
+// 执行顺序（PostgreSQL 下防竞态）：先锁定状态行并校验版本，再读日志。反过来（先读日志再锁行）
+// 会让另一事务在两步之间提交新评分：撤销随后读到新状态却仍持有旧日志，写守卫用新版本，
+// 检测不出日志与状态的错配。
 func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, error) {
 	if tx == nil {
 		return store.CardState{}, errors.New("schedule: undo: transaction is required")
@@ -46,6 +56,22 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, errors.New("schedule: undo: card id and user id are required")
 	}
 
+	// 1. 先锁定状态行；没有状态行就没有评分可撤。
+	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
+	if err != nil {
+		return store.CardState{}, err
+	}
+	if cur == nil {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d has no state row", ErrNothingToUndo, in.CardID, in.UserID)
+	}
+
+	// 2. 版本守卫：重放、旧版本或双开窗口的请求在此被拦下，不删任何日志。
+	if cur.Version != in.ExpectedVersion {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d holds version %d, expected %d",
+			ErrVersionConflict, in.CardID, in.UserID, cur.Version, in.ExpectedVersion)
+	}
+
+	// 3. 锁住状态行之后再读日志：此时不会有并发评分提交，日志与状态必然一致。
 	// 取最近两条日志：last 是要撤销的，prev 提供评分前快照（可能不存在）。
 	var logs []store.Review
 	if err := tx.WithContext(ctx).Where("card_id = ? AND user_id = ?", in.CardID, in.UserID).
@@ -61,14 +87,6 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		prev = &logs[1]
 	}
 
-	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
-	if err != nil {
-		return store.CardState{}, err
-	}
-	if cur == nil {
-		return store.CardState{}, fmt.Errorf("schedule: undo: card %d user %d has a review log but no state row", in.CardID, in.UserID)
-	}
-
 	stateBefore, err := ParseState(parseStateInt(last.StateBefore))
 	if err != nil {
 		return store.CardState{}, err
@@ -79,6 +97,11 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, err
 	}
 	log, due, lastReview, scheduledDays := rebuildReviewLog(last, prev)
+	// 评分前的到期日优先用快照：埋藏只改 due_at、不写日志，上一条日志推算不出它。
+	if last.DueBefore != nil {
+		d := last.DueBefore.UTC()
+		due = &d
+	}
 	restored, err := in.Scheduler.fsrs.Rollback(card, log)
 	if err != nil {
 		return store.CardState{}, fmt.Errorf("schedule: undo: rollback card %d: %w", in.CardID, err)

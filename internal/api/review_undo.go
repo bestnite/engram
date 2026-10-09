@@ -16,6 +16,10 @@ import (
 // UndoReviewInput 是一次撤销的入参：CardID 是要撤销最后一次评分的卡的对外 id。
 type UndoReviewInput struct {
 	CardID string
+	// ExpectedVersion 是调用方读到的 card_states.version，通常是它刚提交评分后得到的版本。
+	// 撤销据此绑定目标评分：不匹配返回 409，且不删任何评分——重放请求与双开窗口因此不会
+	// 误删另一条历史评分。
+	ExpectedVersion int
 }
 
 // UndoReviewResult 是撤销的响应形态。
@@ -66,10 +70,11 @@ func (a *API) UndoReview(ctx context.Context, u *store.User, in UndoReviewInput)
 	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var inner error
 		restored, inner = schedule.Rollback(ctx, tx, schedule.UndoInput{
-			CardID:    card.ID,
-			UserID:    u.ID,
-			Scheduler: sched,
-			Now:       a.now(),
+			CardID:          card.ID,
+			UserID:          u.ID,
+			ExpectedVersion: in.ExpectedVersion,
+			Scheduler:       sched,
+			Now:             a.now(),
 		})
 		return inner
 	})

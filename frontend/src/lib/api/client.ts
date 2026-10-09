@@ -758,7 +758,7 @@ export class ApiClient {
    * 响应带同范围重建的队列与被撤销卡的对外 id（undone_card_id）；队列按 due_at 排序，
    * 被撤销的卡不保证排在首位，调用方必须据 undone_card_id 把当前卡定位回它。
    */
-  async undoReview(input: { card_id: string; deck?: string[] }): Promise<ReviewUndoResponse> {
+  async undoReview(input: { card_id: string; expected_version: number; deck?: string[] }): Promise<ReviewUndoResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }

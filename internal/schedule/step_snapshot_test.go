@@ -11,11 +11,16 @@ import (
 )
 
 // mustUndo 在自建事务里撤销一次评分并提交，返回恢复后的状态行。
+// ExpectedVersion 取库里当前的版本（撤销的目标就是它刚产生的状态）。
 func mustUndo(t *testing.T, db *gorm.DB, cardID, userID uint64, s *Scheduler, now time.Time) store.CardState {
 	t.Helper()
+	var cur store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, userID).First(&cur).Error; err != nil {
+		t.Fatalf("load state before undo: %v", err)
+	}
 	tx := db.Begin()
 	restored, err := Rollback(context.Background(), tx, UndoInput{
-		CardID: cardID, UserID: userID, Scheduler: s, Now: now,
+		CardID: cardID, UserID: userID, ExpectedVersion: cur.Version, Scheduler: s, Now: now,
 	})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)

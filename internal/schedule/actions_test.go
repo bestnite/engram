@@ -51,7 +51,8 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	})
 
 	tx := db.Begin()
-	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, Scheduler: s, Now: now2})
+	// 第二次评分把版本推进到 2；撤销以该版本为目标。
+	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, ExpectedVersion: 2, Scheduler: s, Now: now2})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
@@ -118,7 +119,8 @@ func TestUndoFirstReviewReturnsCardToNew(t *testing.T) {
 	})
 
 	tx := db.Begin()
-	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, Scheduler: s, Now: now})
+	// 首次评分把版本推进到 1；撤销以该版本为目标。
+	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, ExpectedVersion: 1, Scheduler: s, Now: now})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
@@ -154,7 +156,7 @@ func TestUndoWithoutLogReturnsError(t *testing.T) {
 
 	tx := db.Begin()
 	defer tx.Rollback()
-	_, err := Rollback(context.Background(), tx, UndoInput{CardID: cardID, UserID: 1, Scheduler: s, Now: now})
+	_, err := Rollback(context.Background(), tx, UndoInput{CardID: cardID, UserID: 1, ExpectedVersion: 0, Scheduler: s, Now: now})
 	if !errors.Is(err, ErrNothingToUndo) {
 		t.Fatalf("Rollback() error = %v, want ErrNothingToUndo", err)
 	}

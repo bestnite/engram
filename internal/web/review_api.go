@@ -233,21 +233,30 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 	s.writeQueue(c, user, deckIDs)
 }
 
+// reviewUndoRequest 是撤销入口的请求体：除目标卡与卡组范围外，必须带调用方读到的
+// 状态版本（通常是刚提交评分后响应里的 version），撤销据此绑定目标评分。
+type reviewUndoRequest struct {
+	CardID          string   `json:"card_id"`
+	Deck            []string `json:"deck"`
+	ExpectedVersion int      `json:"expected_version"`
+}
+
 // reviewUndo 是「撤销刚提交的评分」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
 // UndoReview（内部调 schedule.Rollback）。判权用 reader —— 撤销写的是本人的
 // (card_id, user_id) 进度，共享卡组的读者可撤销自己刚做的评分；卡组范围里任一卡组
 // 不可读即整次失败（复用 reviewCard，与埋藏同口径）。
 //
-// 响应契约：除同范围重建的队列（cards/remaining）外，显式带上被撤销卡的对外 id
-// （undone_card_id）。队列按 due_at 排序，被撤销的卡不保证排在首位，前端必须据
-// undone_card_id 把当前卡定位回它，不能假定它出现在队列首位。
+// 请求必须带 expected_version：撤销只在版本匹配时生效，重放请求或双开窗口的旧版本请求
+// 返回 409 且不删任何评分。响应契约：除同范围重建的队列（cards/remaining）外，显式带上
+// 被撤销卡的对外 id（undone_card_id）。队列按 due_at 排序，被撤销的卡不保证排在首位，
+// 前端必须据 undone_card_id 把当前卡定位回它，不能假定它出现在队列首位。
 func (s *Server) reviewUndo(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
 		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req reviewCardRequest
+	var req reviewUndoRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
@@ -256,7 +265,10 @@ func (s *Server) reviewUndo(c *gin.Context) {
 	if !ok {
 		return
 	}
-	result, err := s.api.UndoReview(c.Request.Context(), user, api.UndoReviewInput{CardID: req.CardID})
+	result, err := s.api.UndoReview(c.Request.Context(), user, api.UndoReviewInput{
+		CardID:          req.CardID,
+		ExpectedVersion: req.ExpectedVersion,
+	})
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})

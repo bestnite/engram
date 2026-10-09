@@ -55,6 +55,17 @@ describe('review submission API', () => {
     expect(result.answer_html).toBe('<b>x</b>');
   });
 
+  it('sends the target state version when undoing a review', async () => {
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ cards: [], remaining: 0, undone_card_id: '11' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+    await client.undoReview({ card_id: '11', expected_version: 6, deck: ['2', '7'] });
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe('/api/v1/review/undo');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ card_id: '11', expected_version: 6, deck: ['2', '7'] });
+  });
+
   it('renders one card through the sanitized render endpoint with session CSRF', async () => {
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
       card_id: 11, front_html: '<p>F</p>', back_html: '<p>B</p>', edit_href: '/decks/2/notes/7',

@@ -67,6 +67,9 @@
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
   let pendingCards = $state<DueCard[]>([]);
+  // 刚提交的评分所产生的状态版本：撤销据此绑定目标评分（版本不匹配时服务端 409 且不删日志）。
+  // 判分后当前卡仍停留在旧对象上（用户点「继续」才换卡），故不能读 current.version。
+  let undoVersion = $state(0);
   // svelte-ignore state_referenced_locally
   let revealedAnswerHTML = $state(initialRevealedAnswerHTML);
   // svelte-ignore state_referenced_locally
@@ -211,6 +214,7 @@
     revealed = false;
     feedback = null;
     pendingCards = [];
+    undoVersion = 0;
     gradedRevealed = false;
     revealedAnswerHTML = '';
     resetAnswerState();
@@ -281,6 +285,7 @@
       pendingCards = response.cards;
       remaining = response.remaining;
       feedback = response.feedback ?? null;
+      undoVersion = response.version;
       done += 1;
       // 等结果面板挂上 DOM，再只对它排版服务端返回的答案 HTML。
       await tick();
@@ -329,6 +334,7 @@
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
+      undoVersion = response.version;
       done += 1;
       gradedRevealed = false;
       revealedAnswerHTML = '';
@@ -390,6 +396,7 @@
     cards = pendingCards.slice(0, 1);
     pendingCards = [];
     feedback = null;
+    undoVersion = 0;
     gradedRevealed = false;
     revealedAnswerHTML = '';
     resetAnswerState();
@@ -406,7 +413,11 @@
     submitting = true;
     error = null;
     try {
-      const response = await client.undoReview({ card_id: current.card_id, deck: selectedDecks() });
+      const response = await client.undoReview({
+        card_id: current.card_id,
+        deck: selectedDecks(),
+        expected_version: undoVersion,
+      });
       const target = response.cards.find((card) => card.card_id === response.undone_card_id) ?? current;
       cards = [target];
       remaining = response.remaining;

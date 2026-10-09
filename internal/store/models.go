@@ -207,10 +207,17 @@ type Review struct {
 	// 评分前的 FSRS 学习步骤游标没有别的来源，而 fsrs.Rollback 会把 step_index 归零；
 	// 存下它 Undo 才能精确还原步骤进度。
 	// 可空：旧行没有这个快照，Undo 遇到 NULL 时退回归零行为。整数不用带默认值的布尔（AGENTS.md §2.3 第 9 条）。
-	StepIndexBefore *int     `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
-	IntervalDays    *float64 `json:"interval_days,omitempty"`
-	Stability       *float64 `json:"stability,omitempty"`
-	Difficulty      *float64 `json:"difficulty,omitempty"`
+	StepIndexBefore *int `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
+	// DueBefore 是本次评分前 card_states.due_at 的快照。
+	//
+	// 评分前的到期日无法从上一条日志推算：埋藏只推迟 due_at、不写日志，于是「上一条日志的
+	// 到期日」与「本次评分前的到期日」会不一致，撤销若只靠上一条日志重建，会把被埋藏后的
+	// 到期日还原成 NULL 或错误值。可空：全新卡首评前没有到期日（NULL），旧行也没有这个快照，
+	// 撤销遇到 NULL 时退回上一条日志的推算。
+	DueBefore    *time.Time `gorm:"column:due_before" json:"due_before,omitempty"`
+	IntervalDays *float64   `json:"interval_days,omitempty"`
+	Stability    *float64   `json:"stability,omitempty"`
+	Difficulty   *float64   `json:"difficulty,omitempty"`
 }
 
 func (Review) TableName() string { return "reviews" }
