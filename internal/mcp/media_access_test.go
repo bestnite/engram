@@ -42,7 +42,7 @@ func TestMCPUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	key := newKey(t, keys, attacker.ID, []string{store.ScopeWrite})
 	cs := connect(t, ts.URL, key)
 	_, isErr, text := callTool(t, cs, "update_note", map[string]any{
-		"note_id": note.ID,
+		"note_id": note.PublicID,
 		"fields":  map[string]any{"front": "![](/media/" + sha + ")", "back": "x"},
 	})
 	if !isErr {

@@ -217,7 +217,7 @@ func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 		t.Fatalf("read-only tools/list = %v, want %v", got, want)
 	}
 
-	_, isErr, text := callTool(t, cs, "create_notes", map[string]any{"deck_id": 1, "notes": []any{}})
+	_, isErr, text := callTool(t, cs, "create_notes", map[string]any{"deck_id": "x", "notes": []any{}})
 	if !isErr {
 		t.Fatalf("hard-calling create_notes with a read-only key must fail")
 	}
