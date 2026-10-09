@@ -97,7 +97,7 @@ type PackageManifest struct {
 	ExportedBy string `json:"exported_by,omitempty"`
 }
 
-// PackageDeck 是随包走的卡组元信息；授权、可见性、审计等实例内状态一概不导出。
+// PackageDeck 是随包走的卡组元信息；授权、审计等实例内状态一概不导出。
 type PackageDeck struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -219,7 +219,7 @@ var mediaRefRE = regexp.MustCompile(`^media/([a-f0-9]{64})\.([A-Za-z0-9]+)$`)
 //
 // 边界（内容与进度分离）：
 //   - 进度只取 actorUserID 本人的 card_states；导出他人共享的卡组时，包里绝不含他人进度。
-//   - 授权、可见性、审计等实例内状态一概不导出。
+//   - 授权、审计等实例内状态一概不导出。
 //   - include_media=0 时 Media 为空、manifest.include_media=false，如实声明。
 func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint64, opts PackageOptions) (*DeckPackage, error) {
 	if deckID == 0 {

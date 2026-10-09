@@ -69,7 +69,7 @@ func seedDeckWithNewCap(t *testing.T, db *gorm.DB, now time.Time, name string, n
 		t.Fatalf("create preset: %v", err)
 	}
 	d := store.Deck{
-		OwnerUserID: 1, Name: name, Description: "", Visibility: store.DeckVisibilityPrivate,
+		OwnerUserID: 1, Name: name, Description: "",
 		NewPerDay: newPerDay, ReviewsPerDay: 200, PresetID: p.ID, CreatedAt: now,
 	}
 	if err := db.Create(&d).Error; err != nil {

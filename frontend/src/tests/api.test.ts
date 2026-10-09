@@ -210,7 +210,6 @@ describe('Centralized typed same-origin REST API client', () => {
             id: 1,
             name: '默认卡组',
             description: '系统默认卡组',
-            visibility: 'private',
             new_per_day: 20,
             reviews_per_day: 100,
             preset_id: 1,
@@ -593,7 +592,6 @@ describe('Centralized typed same-origin REST API client', () => {
         id: 12,
         name: 'Biology',
         description: 'Cells',
-        visibility: 'private',
         new_per_day: 20,
         reviews_per_day: 200,
         preset_id: 4,
@@ -609,7 +607,7 @@ describe('Centralized typed same-origin REST API client', () => {
           headers: { 'Content-Type': 'application/json' },
         }));
 
-      const input = { name: 'Biology', description: 'Cells', visibility: 'private' as const, preset_id: 0 };
+      const input = { name: 'Biology', description: 'Cells', preset_id: 0 };
       await expect(client.createDeck(input)).resolves.toEqual(deck);
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
@@ -628,7 +626,7 @@ describe('Centralized typed same-origin REST API client', () => {
       }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
 
       await expect(client.createDeck({
-        name: '', description: '', visibility: 'private', preset_id: 0,
+        name: '', description: '', preset_id: 0,
       })).rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'deck_name_invalid');
     });
 

@@ -279,7 +279,7 @@ func errorMessage(m map[string]any) string {
 }
 
 // TestCreateDeckMatchesREST 是核心验收：create_deck 与 REST POST /decks 同参数同结果，
-// 空名字/非法 visibility 用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
+// 空名字用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
 // scope 的 key 按名字硬调也被拒。
 func TestCreateDeckMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
@@ -289,7 +289,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 
 	// 同一参数：MCP 建一个、REST 建一个，去掉动态字段后应完全一致。
 	mcpOut, isErr, text := callTool(t, cs, "create_deck", map[string]any{
-		"name": "  Parity  ", "description": "same args", "visibility": "unlisted",
+		"name": "  Parity  ", "description": "same args",
 	})
 	if isErr {
 		t.Fatalf("create_deck error: %s", text)
@@ -298,7 +298,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("create_deck name = %v, want trimmed %q", mcpOut["name"], "Parity")
 	}
 	st, restOut := rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key,
-		`{"name":"Parity","description":"same args","visibility":"unlisted"}`)
+		`{"name":"Parity","description":"same args"}`)
 	if st != http.StatusCreated {
 		t.Fatalf("REST create status = %d body %v", st, restOut)
 	}
@@ -332,17 +332,13 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("MCP blank name error text = %q, want %q", text, wantText)
 	}
 
-	// 非法 visibility：同样由共享 code 拒绝，且英文文案严格对齐。
-	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "x", "visibility": "bogus"})
-	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
-		t.Errorf("create_deck(bad visibility) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
+	// 旧客户端的 visibility 字段：已删除的字段被忽略，卡组照常创建，响应里不再出现它。
+	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key, `{"name":"legacy","visibility":"public"}`)
+	if st != http.StatusCreated {
+		t.Fatalf("REST create with a legacy visibility field status = %d, want 201 (body %v)", st, restOut)
 	}
-	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key, `{"name":"x","visibility":"bogus"}`)
-	if st != http.StatusBadRequest || errorCode(restOut) != api.CodeInvalidRequest {
-		t.Errorf("REST bad visibility status=%d code=%q, want 400 %s", st, errorCode(restOut), api.CodeInvalidRequest)
-	}
-	if wantText := api.CodeInvalidRequest + ": " + errorMessage(restOut); text != wantText {
-		t.Errorf("MCP bad visibility error text = %q, want %q", text, wantText)
+	if _, present := restOut["visibility"]; present {
+		t.Errorf("REST create response still carries visibility: %v", restOut)
 	}
 
 	// 无 write scope 的 key 即使按名字硬调 create_deck 也被拒，错误文案与 REST 严格一致。

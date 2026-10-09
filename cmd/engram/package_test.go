@@ -33,7 +33,7 @@ func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 	if err := store.NewPresetStore(db).Create(ctx, &preset); err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	d := store.Deck{OwnerUserID: u.ID, Name: "cli deck", Visibility: "private", PresetID: preset.ID, CreatedAt: time.Now().UTC()}
+	d := store.Deck{OwnerUserID: u.ID, Name: "cli deck", PresetID: preset.ID, CreatedAt: time.Now().UTC()}
 	if err := store.NewDeckStore(db).Create(ctx, &d); err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

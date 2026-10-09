@@ -10,7 +10,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
-  import { deckVisibilityLabel as visibilityLabel, deckActionKind, presetSelectOptions } from '../labels';
+  import { deckActionKind, presetSelectOptions } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -145,7 +145,6 @@
       const deck = await apiClient.createDeck({
         name,
         description,
-        visibility: 'private',
         preset_id: createPresetId ? Number(createPresetId) : 0,
       });
       decks = [deck, ...decks];
@@ -485,9 +484,6 @@
                 </div>
 
                 <div class="flex items-center gap-1.5 shrink-0">
-                  {#if visibilityLabel(deck.visibility, $t)}
-                    <Badge>{visibilityLabel(deck.visibility, $t)}</Badge>
-                  {/if}
                   {#if deckActionKind(deck.role) === 'leave'}
                     <Badge testId={`deck-shared-badge-${deck.id}`}>{$t('decks.shared_badge')}</Badge>
                   {/if}

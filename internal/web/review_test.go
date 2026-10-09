@@ -19,7 +19,7 @@ func seedReviewDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *sto
 	if err := store.NewPresetStore(db).Create(context.Background(), &preset); err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	deck := store.Deck{OwnerUserID: ownerID, Name: name, Visibility: store.DeckVisibilityPrivate, PresetID: preset.ID}
+	deck := store.Deck{OwnerUserID: ownerID, Name: name, PresetID: preset.ID}
 	if err := store.NewDeckStore(db).Create(context.Background(), &deck); err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

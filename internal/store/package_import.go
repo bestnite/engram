@@ -734,7 +734,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		d := Deck{
 			OwnerUserID: actorUserID, Name: name, Description: pkg.Manifest.Deck.Description,
-			Visibility: DeckVisibilityPrivate, PresetID: presetID, CreatedAt: opts.Now().UTC(),
+			PresetID: presetID, CreatedAt: opts.Now().UTC(),
 		}
 		if err := tx.WithContext(ctx).Create(&d).Error; err != nil {
 			return 0, fmt.Errorf("import package: create deck: %w", err)

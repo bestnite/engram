@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -173,6 +174,83 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	}
 
 	// 迁移幂等：第二次 Sync 不再是「本次执行」，也不会因为表已是新形状而报错。
+	applied, err = Sync(ctx, db, BuiltinMigrations)
+	if err != nil {
+		t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
+	}
+	if applied != 0 {
+		t.Errorf("second Sync() applied = %d, want 0", applied)
+	}
+}
+
+// legacyDeck 只用于迁移测试：它是 decks 还带 visibility 列时的形状。
+// 业务模型已删除该列，因此不能拿 store.Deck 造出旧表。
+type legacyDeck struct {
+	ID            uint64    `gorm:"primaryKey"`
+	OwnerUserID   uint64    `gorm:"not null;index"`
+	Name          string    `gorm:"not null"`
+	Description   string    `gorm:"not null"`
+	Visibility    string    `gorm:"not null"`
+	NewPerDay     int       `gorm:"not null;default:20"`
+	ReviewsPerDay int       `gorm:"not null;default:200"`
+	PresetID      uint64    `gorm:"not null;index"`
+	CreatedAt     time.Time `gorm:"not null"`
+}
+
+func (legacyDeck) TableName() string { return "decks" }
+
+// TestBuiltinDropDeckVisibilityMigration 覆盖破坏性迁移：decks.visibility 被删除。
+// 先在临时库里造**旧 schema**（带 visibility 列）并写入一行自有、一行「公开」卡组；
+// 跑 Sync 后断言列消失、两行都还在，且旧 public 行不再对别的用户可见——这正是删列的目的。
+func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
+	ctx := context.Background()
+	db := newSQLite(t)
+	if err := db.AutoMigrate(&legacyDeck{}); err != nil {
+		t.Fatalf("create legacy decks table: %v", err)
+	}
+	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, row := range []legacyDeck{
+		{OwnerUserID: 1, Name: "mine", Visibility: "private", PresetID: 1, CreatedAt: ts},
+		{OwnerUserID: 2, Name: "theirs", Visibility: "public", PresetID: 1, CreatedAt: ts},
+	} {
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("seed legacy deck %q: %v", row.Name, err)
+		}
+	}
+	if !db.Migrator().HasColumn("decks", "visibility") {
+		t.Fatal("fixture is not the old schema: decks has no visibility column")
+	}
+
+	applied, err := Sync(ctx, db, BuiltinMigrations)
+	if err != nil {
+		t.Fatalf("Sync(BuiltinMigrations) error = %v", err)
+	}
+	if applied == 0 {
+		t.Fatal("Sync() applied no migration, want the deck-visibility drop")
+	}
+	if db.Migrator().HasColumn("decks", "visibility") {
+		t.Error("decks still has a visibility column after the migration")
+	}
+
+	// 两行都保留（删列不改数据），公开卡组的名字也没被动过。
+	var decks []Deck
+	if err := db.Order("owner_user_id ASC").Find(&decks).Error; err != nil {
+		t.Fatalf("read decks after migration: %v", err)
+	}
+	if len(decks) != 2 || decks[0].Name != "mine" || decks[1].Name != "theirs" {
+		t.Fatalf("decks after migration = %+v, want the two seeded rows intact", decks)
+	}
+
+	// 关键行为：原先靠 public 对所有人可见的那张卡组，现在只属于它的属主。
+	visible, err := NewDeckStore(db).ListVisible(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListVisible() error = %v", err)
+	}
+	if len(visible) != 1 || visible[0].Name != "mine" {
+		t.Fatalf("ListVisible(1) = %+v, want only the caller's own deck", visible)
+	}
+
+	// 幂等：第二次 Sync 不再是「本次执行」，也不会因为列已删除而报错。
 	applied, err = Sync(ctx, db, BuiltinMigrations)
 	if err != nil {
 		t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)

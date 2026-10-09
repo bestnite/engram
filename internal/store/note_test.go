@@ -16,7 +16,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) uint64 {
 	t.Helper()
 	presetID := seedPresetRow(t, db, ownerID)
 	d := Deck{OwnerUserID: ownerID, Name: "Deck", Description: "",
-		Visibility: DeckVisibilityPrivate, PresetID: presetID, CreatedAt: time.Now().UTC()}
+		PresetID: presetID, CreatedAt: time.Now().UTC()}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

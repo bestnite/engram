@@ -68,6 +68,7 @@ import {
   type EmailChangeResponse,
   type ResendVerificationResponse,
   type ShareResponse,
+  type JoinShareResponse,
   type OIDCInfo,
   type RegistrationInfo,
 } from './types';
@@ -1325,6 +1326,22 @@ export class ApiClient {
     return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/unlock`, {
       method: 'POST',
       body: JSON.stringify({ password }),
+    });
+  }
+
+  /**
+   * 把分享链接指的卡组加进自己的列表（POST /api/v1/share/:token/join）。
+   *
+   * 与「打开链接」是两件事：打开只登记会话级只读（看得到、不入列表），入伙才写授权，
+   * 卡组此后出现在我的列表与复习队列里。token 即凭据；未登录时服务端拒绝，调用方须先引导登录。
+   * 缺少会话令牌时先获取 CSRF token。
+   */
+  async joinSharedDeck(token: string): Promise<JoinShareResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<JoinShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/join`, {
+      method: 'POST',
     });
   }
 

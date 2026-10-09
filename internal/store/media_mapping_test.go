@@ -384,7 +384,7 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 }
 
 // TestCloneKeepsClonedMediaReadable 覆盖克隆端到端：B 克隆一份可见卡组后，副本里的图对 B 可读，
-// 且不再依赖源卡组仍可见（把源卡组改成 private 后 B 仍能读副本里的图）。
+// 且不再依赖源卡组仍对 B 可见（撤销源卡组授权后 B 仍能读副本里的图）。
 func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -396,9 +396,13 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			owner, cloner := users[0], users[1]
 
 			presetID := seedPresetRow(t, db, owner)
-			src := Deck{OwnerUserID: owner, Name: "public source", Visibility: DeckVisibilityPublic, PresetID: presetID}
+			src := Deck{OwnerUserID: owner, Name: "shared source", PresetID: presetID}
 			if err := NewDeckStore(db).Create(ctx, &src); err != nil {
 				t.Fatalf("create source deck: %v", err)
+			}
+			// 克隆者能看见源卡组，靠的是一条显式授权（可见性不再是读取来源）。
+			if err := NewGrantStore(db).Grant(ctx, src.ID, cloner, RoleReader, Ptr(owner)); err != nil {
+				t.Fatalf("grant source deck: %v", err)
 			}
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("clone"))
 			saveRefNote(t, db, src.ID, Ptr(owner), refFront(sha))
@@ -411,14 +415,9 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media: readable=%v err=%v, want true", ok, err)
 			}
-			// 源卡组改为 private、并把源 note 软删：副本不再依赖源卡组仍可见。
-			var reloaded Deck
-			if err := db.First(&reloaded, src.ID).Error; err != nil {
-				t.Fatalf("reload source deck: %v", err)
-			}
-			if err := db.Model(&Deck{}).Where("id = ?", src.ID).
-				Update("visibility", DeckVisibilityPrivate).Error; err != nil {
-				t.Fatalf("make source private: %v", err)
+			// 撤销源卡组的授权、并把源 note 软删：副本不再依赖源卡组仍可见。
+			if err := NewGrantStore(db).Revoke(ctx, src.ID, cloner); err != nil {
+				t.Fatalf("revoke source grant: %v", err)
 			}
 			if _, err := NewNoteStore(db).DeleteMany(ctx, mustNoteIDs(t, db, src.ID), false); err != nil {
 				t.Fatalf("soft delete source notes: %v", err)

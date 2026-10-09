@@ -38,6 +38,10 @@ func NewDeckAccess(decks *store.DeckStore, grants *store.GrantStore) *DeckAccess
 
 // Role 返回用户在卡组上的有效角色；无访问权时返回空串。
 // 卡组不存在返回 ErrDeckNotFound，避免调用方把“不存在”与“无授权”混为一谈。
+//
+// 有效角色只有两条来源：decks.owner_user_id（M2 建的卡组没有授权行，owner 列是唯一真相，
+// 这条回落保证升级后既有卡组仍归原主）与 deck_grants 里的显式授权行。没有第三种
+// 「靠可见性获得的隐式只读」——那等于把别人的卡组内容对所有人开放，与同意制相悖。
 func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, error) {
 	deck, err := d.decks.ByID(ctx, deckID)
 	if err != nil {
@@ -54,22 +58,10 @@ func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, e
 		return "", err
 	}
 	if !store.ValidRole(role) {
-		return visibilityRole(deck), nil
+		// 授权行里的角色不是三个合法值之一（脏数据）：按「无授权」处理，宁可拒绝也不放行。
+		return "", nil
 	}
 	return role, nil
-}
-
-// visibilityRole 把卡组可见性折算成“隐式只读”：public 与 unlisted 都允许任何登录用户
-// 以 reader 身份访问内容（public 登录用户可见，unlisted 拿到链接可看）。
-// 它只授 reader，因此看不到内容的人也无法借可见性获得写权限 —— 写入仍要求 editor/owner。
-// private（含空串，兼容 M2 建的老行）不授任何权限。
-func visibilityRole(deck *store.Deck) string {
-	switch deck.Visibility {
-	case store.DeckVisibilityPublic, store.DeckVisibilityUnlisted:
-		return store.RoleReader
-	default:
-		return ""
-	}
 }
 
 // RequireRole 要求用户在卡组上至少拥有 want 角色，返回命中的卡组与该用户的有效角色。
@@ -92,11 +84,7 @@ func (d *DeckAccess) RequireRole(ctx context.Context, deckID, userID uint64, wan
 		}
 		if store.ValidRole(granted) {
 			role = granted
-		} else {
-			role = visibilityRole(deck)
 		}
-	} else {
-		role = visibilityRole(deck)
 	}
 	if !store.RoleAllows(role, want) {
 		return nil, role, ErrForbidden

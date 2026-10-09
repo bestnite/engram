@@ -12,7 +12,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
-  import { deckVisibilityLabel as visibilityLabel, noteKindLabel as kindLabel } from '../labels';
+  import { noteKindLabel as kindLabel } from '../labels';
   import { CARD_KIND_FIELDS } from '../card-fields';
 
   // 状态变量（Svelte 5 runes）
@@ -275,9 +275,6 @@
           <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
             {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
           </h1>
-          {#if visibilityLabel(deck?.visibility, $t)}
-            <Badge>{visibilityLabel(deck?.visibility, $t)}</Badge>
-          {/if}
         </div>
         {#if deck?.description}
           <p class="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 max-w-2xl leading-relaxed">

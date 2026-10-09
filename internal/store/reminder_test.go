@@ -25,7 +25,7 @@ func seedReminderUser(t *testing.T, db *gorm.DB, name, email string, dueAt time.
 	if err := db.Create(&preset).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	deck := Deck{OwnerUserID: user.ID, Name: "Deck", Description: "", Visibility: "private",
+	deck := Deck{OwnerUserID: user.ID, Name: "Deck", Description: "",
 		NewPerDay: 20, ReviewsPerDay: 200, PresetID: preset.ID, CreatedAt: now}
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)

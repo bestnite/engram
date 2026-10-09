@@ -99,7 +99,7 @@ func seedCard(t *testing.T, db *gorm.DB, userID uint64) uint64 {
 		t.Fatalf("create preset: %v", err)
 	}
 	deck := store.Deck{
-		OwnerUserID: userID, Name: "Deck", Description: "", Visibility: "private",
+		OwnerUserID: userID, Name: "Deck", Description: "",
 		NewPerDay: 20, ReviewsPerDay: 200, PresetID: preset.ID, CreatedAt: now,
 	}
 	if err := db.Create(&deck).Error; err != nil {

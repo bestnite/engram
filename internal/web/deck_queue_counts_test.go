@@ -12,11 +12,8 @@ import (
 func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	ownerDeck := seedDeck(t, db, ownerID, "owner-deck")
-	publicDeck := seedDeck(t, db, ownerID, "public-deck")
-	if err := store.NewDeckStore(db).SetVisibility(t.Context(), ownerID, publicDeck.ID, store.DeckVisibilityPublic); err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range []*store.Deck{ownerDeck, publicDeck} {
+	secondDeck := seedDeck(t, db, ownerID, "second-deck")
+	for _, d := range []*store.Deck{ownerDeck, secondDeck} {
 		seedBasic(t, db, d.ID, "question", "answer")
 	}
 
@@ -46,7 +43,7 @@ func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 			t.Errorf("count for deck %d = %+v, want new=1 review=0", item.DeckID, item)
 		}
 	}
-	if !seen[ownerDeck.ID] || !seen[publicDeck.ID] {
+	if !seen[ownerDeck.ID] || !seen[secondDeck.ID] {
 		t.Fatalf("visible decks missing from counts: %+v", body)
 	}
 

@@ -25,8 +25,8 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 
 // deckClone 把一个「自己可读」的卡组复制到当前账号下。
 //
-// 内容复制（note + card），进度不跟随（新 card 没有任何 card_states 行）；共享关系与可见性
-// 不复制，克隆结果默认 private。预设按源预设参数复制一份到调用者名下，保证排程一致。
+// 内容复制（note + card），进度不跟随（新 card 没有任何 card_states 行）；共享授权不复制，
+// 克隆结果只有调用者一个 owner。预设按源预设参数复制一份到调用者名下，保证排程一致。
 func (s *Server) deckClone(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {

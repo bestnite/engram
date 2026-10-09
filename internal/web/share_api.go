@@ -43,6 +43,10 @@ func (s *Server) registerShareRoutes(router *gin.Engine) {
 	}
 	router.GET("/api/v1/share/:token", s.shareGet)
 	router.POST("/api/v1/share/:token/unlock", s.shareUnlock)
+	// 加入卡组会写授权行（状态变更）且只对已登录用户开放，因此过 CSRF 中间件。
+	if s.sessions != nil {
+		router.POST("/api/v1/share/:token/join", s.sessions.CSRFMiddleware(), s.shareJoin)
+	}
 }
 
 // shareBrowseRoute 提供 GET /s/:token：返回应用壳，由客户端路由渲染只读浏览页；
@@ -139,4 +143,60 @@ func (s *Server) shareContent(c *gin.Context, deck *store.Deck, link *store.Shar
 		PasswordRequired: false,
 		Notes:            rendered,
 	})
+}
+
+// shareJoin 让「持链接的已登录用户」把这个卡组加进自己的列表（POST /api/v1/share/:token/join）。
+//
+// 为什么入伙要一次显式动作，而不是打开链接就自动入伙：链接会被转发、会在群里被随手点开，
+// 而「打开一次」只等于同意看一次，不等于同意把一个卡组塞进我的列表与复习队列——进了列表
+// 就会占我的每日新卡额度。因此打开链接只登记会话级只读（recordShareGrant，与链接同生死），
+// 入伙由用户自己按一次按钮决定；token 就是这次入伙的凭据，没有链接的人拿不到授权。
+//
+// 入伙之后这条授权与链接无关（撤销/过期链接不回收它），属主要在共享页逐个撤销成员——
+// 与「邀请被接受」得到的授权完全同一种，撤销路径也同一条。
+//
+// 失败语义：链接已撤销/已过期/不存在 → 404（不区分三者，不泄漏 token 历史）；
+// 未登录 → 401（前端把未登录访客引导去登录，不显示这个按钮）；属主自己按、或已有授权
+// （含 editor）→ 幂等成功，既不写多余授权行，也不把角色降级成 reader。
+func (s *Server) shareJoin(c *gin.Context) {
+	if s.grants == nil {
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	user, ok := auth.CurrentUser(c)
+	if !ok || user == nil {
+		apiAuthError(c, http.StatusUnauthorized, api.CodeUnauthorized, "Authentication is required.")
+		return
+	}
+	// 可达性判定与浏览页同源：撤销/过期/不存在一律 404。
+	_, deck, ok := s.resolveShareLink(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	joinable := deck.OwnerUserID != user.ID
+	if joinable {
+		existing, err := s.grants.Role(ctx, deck.ID, user.ID)
+		if err != nil {
+			s.logger.Error("read deck grant for share join failed", "deck_id", deck.ID, "user_id", user.ID, "error", err)
+			apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+			return
+		}
+		joinable = !store.ValidRole(existing)
+	}
+	if joinable {
+		if err := s.grants.Grant(ctx, deck.ID, user.ID, store.RoleReader, nil); err != nil {
+			s.logger.Error("join deck via share link failed", "deck_id", deck.ID, "user_id", user.ID, "error", err)
+			apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+			return
+		}
+		s.audit(ctx, store.AuditEntry{
+			UserID:     store.Ptr(user.ID),
+			Action:     store.ActionShareLinkJoin,
+			TargetType: "deck",
+			TargetID:   store.Ptr(deck.ID),
+			Detail:     map[string]any{"role": store.RoleReader},
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "joined": true})
 }

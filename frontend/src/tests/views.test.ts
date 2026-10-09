@@ -88,7 +88,6 @@ describe('HomeView component response states and truthful rendering', () => {
       id: 10,
       name: '测试卡组 <安全测试>',
       description: '卡组描述 & 详情',
-      visibility: 'private',
       new_per_day: 20,
       reviews_per_day: 100,
       preset_id: 1,

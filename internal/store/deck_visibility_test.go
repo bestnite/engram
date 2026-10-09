@@ -6,8 +6,10 @@ import (
 )
 
 // TestVisibleIDsMatchesListVisibility 是越权修复的地基用例：VisibleIDs 与 ListVisible 必须看到
-// 同一批卡组（自有 ∪ 被 deck_grants 授权 ∪ 其他用户的 public）。
-// 负例：其他用户的 private / unlisted 卡组既不出现在列表里，也不出现在 id 集合里。
+// 同一批卡组（自有 ∪ 被 deck_grants 授权）。
+//
+// 负例：别人建的卡组既不出现在列表里，也不出现在 id 集合里——要被看见只能靠一条显式授权行，
+// 而授权撤销后下一次查询它就消失（与 auth.DeckAccess 的「撤销即时生效」同口径）。
 func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -21,32 +23,30 @@ func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 			presetOther := seedPresetRow(t, db, other)
 			decks := NewDeckStore(db)
 
-			mk := func(owner uint64, name, visibility string, presetID uint64) *Deck {
+			mk := func(owner uint64, name string, presetID uint64) *Deck {
 				t.Helper()
-				d := &Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: presetID}
+				d := &Deck{OwnerUserID: owner, Name: name, PresetID: presetID}
 				if err := decks.Create(ctx, d); err != nil {
 					t.Fatalf("create deck %s: %v", name, err)
 				}
 				return d
 			}
 
-			ownPrivate := mk(me, "own-private", DeckVisibilityPrivate, presetMe)
-			ownPublic := mk(me, "own-public", DeckVisibilityPublic, presetMe)
-			otherPublic := mk(other, "other-public", DeckVisibilityPublic, presetOther)
-			otherPrivate := mk(other, "other-private", DeckVisibilityPrivate, presetOther)
-			otherUnlisted := mk(other, "other-unlisted", DeckVisibilityUnlisted, presetOther)
-			grantedPrivate := mk(other, "granted-private", DeckVisibilityPrivate, presetOther)
+			ownOne := mk(me, "own-one", presetMe)
+			ownTwo := mk(me, "own-two", presetMe)
+			otherOne := mk(other, "other-one", presetOther)
+			otherTwo := mk(other, "other-two", presetOther)
+			granted := mk(other, "granted", presetOther)
 
-			// 把 granted-private 授权给 me：它必须出现，而 other-private 不出现。
-			if err := db.Create(&DeckGrant{DeckID: grantedPrivate.ID, UserID: me, Role: RoleReader}).Error; err != nil {
+			// 把 granted 授权给 me：它必须出现，而 otherOne / otherTwo 不出现。
+			if err := db.Create(&DeckGrant{DeckID: granted.ID, UserID: me, Role: RoleReader}).Error; err != nil {
 				t.Fatalf("create grant: %v", err)
 			}
 
 			want := map[uint64]bool{
-				ownPrivate.ID:     true,
-				ownPublic.ID:      true,
-				otherPublic.ID:    true,
-				grantedPrivate.ID: true,
+				ownOne.ID:  true,
+				ownTwo.ID:  true,
+				granted.ID: true,
 			}
 
 			visible, err := decks.ListVisible(ctx, me)
@@ -74,16 +74,30 @@ func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 					t.Errorf("VisibleIDs is missing visible deck %d", id)
 				}
 			}
-			for _, id := range []uint64{otherPrivate.ID, otherUnlisted.ID} {
+			for _, id := range []uint64{otherOne.ID, otherTwo.ID} {
 				if listSet[id] {
-					t.Errorf("ListVisible leaked private/unlisted deck %d", id)
+					t.Errorf("ListVisible leaked another user's deck %d", id)
 				}
 				if idSet[id] {
-					t.Errorf("VisibleIDs leaked private/unlisted deck %d", id)
+					t.Errorf("VisibleIDs leaked another user's deck %d", id)
 				}
 			}
 			if len(listSet) != len(idSet) {
 				t.Errorf("VisibleIDs set size = %d, ListVisible set size = %d; want equal", len(idSet), len(listSet))
+			}
+
+			// 撤销授权：同一集合口径下它必须立即消失，不留缓存。
+			if err := db.Where("deck_id = ? AND user_id = ?", granted.ID, me).Delete(&DeckGrant{}).Error; err != nil {
+				t.Fatalf("delete grant: %v", err)
+			}
+			after, err := decks.VisibleIDs(ctx, me)
+			if err != nil {
+				t.Fatalf("VisibleIDs() after revoke error = %v", err)
+			}
+			for _, id := range after {
+				if id == granted.ID {
+					t.Errorf("VisibleIDs still lists deck %d after the grant was revoked", id)
+				}
 			}
 		})
 	}

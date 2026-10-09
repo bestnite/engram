@@ -33,7 +33,7 @@ func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	d := store.Deck{OwnerUserID: 1, Name: "Deck", Description: "", Visibility: store.DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: now}
+	d := store.Deck{OwnerUserID: 1, Name: "Deck", Description: "", PresetID: p.ID, CreatedAt: now}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

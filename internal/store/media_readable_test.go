@@ -13,7 +13,7 @@ import (
 // 本文件覆盖媒体库列表（GET /api/v1/media 与选择器共用的 store 原语）：
 //   - 可读集合是「我上传」∪「我可读卡组里未软删 note 引用」的并集，必须去重；
 //   - keyset 分页在同一游标下不重不漏，排序 media.created_at DESC, sha256 DESC 稳定；
-//   - 别人 private 卡组里引用的媒体不得出现；他人 public 卡组里的引用按同一谓词应出现；
+//   - 别人卡组里引用的媒体不得出现，只有显式授权（deck_grants）才把那份字节带进可读集合；
 //   - 授权撤销后立即从列表消失（不缓存）。
 //
 // 媒体行直接落库以精确控制 created_at（排序键）；note 一律经 NoteStore 写入方法构造，
@@ -163,9 +163,9 @@ func nextCursorOf(t *testing.T, db *gorm.DB, userID uint64, n int) string {
 	}
 }
 
-// TestListReadableMediaExcludesOthersPrivate 断言他人 private 卡组里的媒体不出现，
-// 而他人 public 卡组里的引用按同一可见性谓词出现。
-func TestListReadableMediaExcludesOthersPrivate(t *testing.T) {
+// TestListReadableMediaExcludesOtherUsersDecks 断言别人的卡组里的媒体不出现，
+// 只有显式授权（deck_grants）才把那份字节带进可读集合——可见性不再是一条读取来源。
+func TestListReadableMediaExcludesOtherUsersDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -176,40 +176,46 @@ func TestListReadableMediaExcludesOthersPrivate(t *testing.T) {
 			ctx := context.Background()
 			base := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 
-			privateDeck := seedDeck(t, db, other)
-			publicDeck := seedDeck(t, db, other)
-			if err := db.Model(&Deck{}).Where("id = ?", publicDeck).Update("visibility", DeckVisibilityPublic).Error; err != nil {
-				t.Fatalf("make deck public: %v", err)
-			}
+			foreignDeck := seedDeck(t, db, other)
+			grantedDeck := seedDeck(t, db, other)
 
-			secret := testMediaSha(201)
-			seedListMediaRow(t, db, secret, base)
-			if err := RecordMediaUploader(ctx, db, secret, other); err != nil {
+			hidden := testMediaSha(201)
+			seedListMediaRow(t, db, hidden, base)
+			if err := RecordMediaUploader(ctx, db, hidden, other); err != nil {
 				t.Fatalf("record uploader: %v", err)
 			}
-			saveRefNote(t, db, privateDeck, Ptr(other), refFront(secret))
+			saveRefNote(t, db, foreignDeck, Ptr(other), refFront(hidden))
 
 			shared := testMediaSha(202)
 			seedListMediaRow(t, db, shared, base.Add(time.Minute))
 			if err := RecordMediaUploader(ctx, db, shared, other); err != nil {
 				t.Fatalf("record uploader: %v", err)
 			}
-			saveRefNote(t, db, publicDeck, Ptr(other), refFront(shared))
+			saveRefNote(t, db, grantedDeck, Ptr(other), refFront(shared))
 
-			got := listAllReadable(t, db, owner, 10)
-			for _, sha := range got {
-				if sha == secret {
-					t.Fatalf("list leaked media %s referenced only by another user's private deck: %v", secret, got)
+			// 授权之前：别人的卡组一份字节都进不来。
+			for _, sha := range listAllReadable(t, db, owner, 10) {
+				if sha == hidden || sha == shared {
+					t.Fatalf("list leaked media %s from another user's deck before any grant", sha)
 				}
 			}
+
+			// 只授权 grantedDeck：它引用的字节随授权出现，未被授权的仍然不出现。
+			if err := NewGrantStore(db).Grant(ctx, grantedDeck, owner, RoleReader, Ptr(other)); err != nil {
+				t.Fatalf("grant: %v", err)
+			}
+			got := listAllReadable(t, db, owner, 10)
 			found := false
 			for _, sha := range got {
+				if sha == hidden {
+					t.Fatalf("list leaked media %s from an ungranted deck: %v", hidden, got)
+				}
 				if sha == shared {
 					found = true
 				}
 			}
 			if !found {
-				t.Fatalf("list omitted media %s referenced by another user's public deck: %v", shared, got)
+				t.Fatalf("list omitted media %s referenced by a granted deck: %v", shared, got)
 			}
 		})
 	}
