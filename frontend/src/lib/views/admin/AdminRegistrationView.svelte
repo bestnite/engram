@@ -205,7 +205,8 @@
 
     <SettingsSection title={$t('admin.registration.invites_heading')} description={$t('admin.registration.invites_hint')}>
       <form onsubmit={createInvite} data-testid="admin-registration-invite-create" class="space-y-3">
-        <div class="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <!-- 按底部对齐：哪个标签换了行，三个输入框也仍在同一条线上。 -->
+        <div class="grid items-end gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <label class="block text-sm font-medium text-foreground">{$t('admin.registration.field.email')}
             <input data-testid="admin-registration-invite-email" type="email" bind:value={form.email} class="field-input mt-1.5 w-full text-sm font-normal" />
           </label>
@@ -220,7 +221,7 @@
             />
           </div>
           <label class="block text-sm font-medium text-foreground">{$t('admin.registration.field.expires_days')}
-            <input data-testid="admin-registration-invite-expires" bind:value={form.expires_days} inputmode="numeric" class="field-input mt-1.5 w-full text-sm font-normal" />
+            <input data-testid="admin-registration-invite-expires" bind:value={form.expires_days} inputmode="numeric" placeholder={$t('admin.registration.field.expires_placeholder')} class="field-input mt-1.5 w-full text-sm font-normal" />
           </label>
         </div>
         <div class="flex flex-wrap items-center justify-between gap-3">

@@ -103,7 +103,7 @@
       <Button type="button" testId="admin-health-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
-    <dl class="max-w-3xl divide-y divide-border rounded-lg border border-border" data-testid="admin-health-rows">
+    <dl class="divide-y divide-border rounded-lg border border-border" data-testid="admin-health-rows">
       {#each rows as row (row.key)}
         <div class="flex items-center justify-between gap-4 px-4 py-3" data-testid="admin-health-row-{row.key}">
           <dt class="text-sm text-muted-foreground">{row.label}</dt>

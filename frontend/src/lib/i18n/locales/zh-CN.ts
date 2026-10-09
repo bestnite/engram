@@ -889,7 +889,7 @@ export const zhCN: LocaleCatalog = {
   'admin.registration.invite_create_heading': '新建邀请',
   'admin.registration.field.email': '邮箱（可选）',
   'admin.registration.field.role': '角色',
-  'admin.registration.field.expires_days': '有效天数（留空＝不过期）',
+  'admin.registration.field.expires_days': '有效天数',
   'admin.registration.field.send_email': '用邮件发送链接',
   'admin.registration.invite_submit': '创建邀请',
   'admin.registration.revoke': '撤销',
@@ -1301,4 +1301,6 @@ export const zhCN: LocaleCatalog = {
   'admin.smtp.section.server': '发信服务器',
   // 导入页：勾选「先试导入」时提交按钮的文字。
   'package.import.submit_dry': '试导入',
+  // 邀请有效天数的占位提示。
+  'admin.registration.field.expires_placeholder': '留空表示永不过期',
 };

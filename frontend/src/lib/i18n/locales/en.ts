@@ -890,7 +890,7 @@ export const en: LocaleCatalog = {
   'admin.registration.invite_create_heading': 'Create invite',
   'admin.registration.field.email': 'Email (optional)',
   'admin.registration.field.role': 'Role',
-  'admin.registration.field.expires_days': 'Valid for (days, empty = no expiry)',
+  'admin.registration.field.expires_days': 'Valid for (days)',
   'admin.registration.field.send_email': 'Send the link by email',
   'admin.registration.invite_submit': 'Create invite',
   'admin.registration.revoke': 'Revoke',
@@ -1302,4 +1302,6 @@ export const en: LocaleCatalog = {
   'admin.smtp.section.server': 'Mail server',
   // 导入页：勾选「先试导入」时提交按钮的文字。
   'package.import.submit_dry': 'Run dry run',
+  // 邀请有效天数的占位提示。
+  'admin.registration.field.expires_placeholder': 'Leave empty to never expire',
 };
