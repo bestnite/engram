@@ -164,18 +164,12 @@ type UpdateDeckInput struct {
 // 名称与描述过 store 的同一套校验（与建组、包导入同源），失败不写入；
 // 校验失败映射成与建组一致的专属 code，非 owner 映射成 forbidden。
 func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in UpdateDeckInput) (*store.Deck, error) {
-	deck, err := a.decks.ByID(ctx, deckID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "")
-		}
-		a.logger.Error("load deck for update failed", "deck_id", deckID, "error", err)
-		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
-	}
-	// d.PresetID 原样带上：DeckStore.Update 会写 preset_id，省略它会清掉卡组的预设。
-	updated := store.Deck{ID: deckID, Name: strings.TrimSpace(in.Name), Description: in.Description, PresetID: deck.PresetID}
+	// 只改名称与描述：DeckStore.Update 不写 preset_id，因此不会把期间变更过的学习设置写回去。
+	updated := store.Deck{ID: deckID, Name: strings.TrimSpace(in.Name), Description: in.Description}
 	if err := a.decks.Update(ctx, u.ID, &updated); err != nil {
 		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "")
 		case errors.Is(err, store.ErrNotOwner):
 			return nil, newServiceError(http.StatusForbidden, CodeForbidden, "")
 		case errors.Is(err, store.ErrDeckDescriptionInvalid):

@@ -177,8 +177,11 @@ func (s *DeckStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Deck
 	return decks, nil
 }
 
-// Update 修改卡组的设置字段；只有 owner 能改。
-// 归属、创建时间、归档状态不在可改字段内，避免一次整行覆盖顺带抹掉它们。
+// Update 修改卡组的名称与描述；只有 owner 能改。
+//
+// **不写 preset_id**：调度预设是学习设置，只经 SetPreset / SetStudySettings 变更。改名路径若
+// 把它写回去，就会用本次调用更早读到的值覆盖期间发生的预设变更（属主的设置就存在 decks.preset_id）。
+// 归属、创建时间、归档状态同样不在可改字段内，避免一次整行覆盖顺带抹掉它们。
 func (s *DeckStore) Update(ctx context.Context, actorUserID uint64, d *Deck) error {
 	if d.ID == 0 {
 		return errors.New("update deck: id is required")
@@ -196,7 +199,6 @@ func (s *DeckStore) Update(ctx context.Context, actorUserID uint64, d *Deck) err
 	updates := map[string]any{
 		"name":        d.Name,
 		"description": d.Description,
-		"preset_id":   d.PresetID,
 	}
 	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("id = ?", d.ID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("update deck: %w", err)

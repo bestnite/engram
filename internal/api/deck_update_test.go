@@ -47,6 +47,39 @@ func TestUpdateDeckOwnerEditsNameAndDescription(t *testing.T) {
 	}
 }
 
+// TestUpdateDeckKeepsPreset 是 AUDIT 回归：改名只改名称与描述，绝不动卡组的调度预设。
+// 修复前改名会把本次调用读到的 preset_id 写回去，覆盖期间变更过的学习设置。
+func TestUpdateDeckKeepsPreset(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	owner := seedUser(t, env.db, "deck_upd_preset", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	ctx := t.Context()
+
+	// 属主换到另一个自己的预设（走学习设置这条正经路径）。
+	second := store.NewPreset(owner.ID, "Second")
+	if err := store.NewPresetStore(env.db).Create(ctx, &second); err != nil {
+		t.Fatalf("create second preset: %v", err)
+	}
+	if err := env.db.Model(&store.Deck{}).Where("id = ?", deck.ID).
+		Update("preset_id", second.ID).Error; err != nil {
+		t.Fatalf("set preset: %v", err)
+	}
+
+	if _, err := env.api.UpdateDeck(ctx, owner, deck.ID, UpdateDeckInput{Name: "Renamed", Description: "d"}); err != nil {
+		t.Fatalf("UpdateDeck error = %v", err)
+	}
+	var reloaded store.Deck
+	if err := env.db.First(&reloaded, "id = ?", deck.ID).Error; err != nil {
+		t.Fatalf("reload deck: %v", err)
+	}
+	if reloaded.Name != "Renamed" {
+		t.Errorf("name = %q, want Renamed", reloaded.Name)
+	}
+	if reloaded.PresetID != second.ID {
+		t.Errorf("preset_id = %d, want %d (a rename must not touch the scheduling preset)", reloaded.PresetID, second.ID)
+	}
+}
+
 // TestUpdateDeckRejectsNonOwner 是反面用例：editor / reader / 陌生人都不能改名称与描述，
 // 且失败不写入。
 func TestUpdateDeckRejectsNonOwner(t *testing.T) {
