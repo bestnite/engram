@@ -6,6 +6,7 @@
   import { apiClient } from './lib/api';
   import { appVersion } from './lib/version';
   import AppShell from './lib/components/shell/AppShell.svelte';
+  import Toaster from './lib/components/ui/Toaster.svelte';
   import NotFoundView from './lib/views/NotFoundView.svelte';
 
   // 程序版本由服务端注入入口 <head> 的 meta 提供；开发模式或静态预览下为空，页脚不显示。
@@ -51,3 +52,4 @@
     <ActiveComponent />
   {/key}
 </AppShell>
+<Toaster />

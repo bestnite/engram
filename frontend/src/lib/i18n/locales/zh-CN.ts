@@ -1270,4 +1270,15 @@ export const zhCN: LocaleCatalog = {
   'list.col.name': '名称',
   'list.col.today': '今日',
   'list.col.limits': '每日上限',
+  // 卡组详情的笔记表格（行菜单、批量标签、删除确认）。
+  'notes.col_content': '内容',
+  'notes.more_actions': '更多操作',
+  'notes.copy_id': '复制 ID',
+  'notes.id_copied': '已复制笔记 ID',
+  'notes.copy_failed': '复制失败，请手动选择。',
+  'notes.external_ref': '外部引用',
+  'notes.bulk_tags': '编辑标签',
+  'notes.bulk_tags_hint': '多个标签用逗号分隔。',
+  'notes.delete_desc': '删除后无法恢复。',
+  'notes.bulk_delete_desc': '将删除 {count} 条笔记，删除后无法恢复。',
 };

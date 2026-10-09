@@ -1271,4 +1271,15 @@ export const en: LocaleCatalog = {
   'list.col.name': 'Name',
   'list.col.today': 'Today',
   'list.col.limits': 'Daily limits',
+  // 卡组详情的笔记表格（行菜单、批量标签、删除确认）。
+  'notes.col_content': 'Content',
+  'notes.more_actions': 'More actions',
+  'notes.copy_id': 'Copy ID',
+  'notes.id_copied': 'Note ID copied',
+  'notes.copy_failed': 'Could not copy. Select it manually.',
+  'notes.external_ref': 'External reference',
+  'notes.bulk_tags': 'Edit tags',
+  'notes.bulk_tags_hint': 'Separate tags with commas.',
+  'notes.delete_desc': 'This cannot be undone.',
+  'notes.bulk_delete_desc': '{count} notes will be deleted. This cannot be undone.',
 };
