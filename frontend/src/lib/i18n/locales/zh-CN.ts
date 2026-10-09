@@ -1285,4 +1285,11 @@ export const zhCN: LocaleCatalog = {
   'keys.copied': '密钥已复制',
   'account.email.change_hint': '确认链接会发到新地址，确认之前邮箱不会变更。',
   'settings.email.entry': '管理邮箱',
+  // 统一确认对话框的按钮。
+  'common.confirm': '确定',
+  'common.cancel': '取消',
+  // 用户管理行菜单。
+  'admin.users.make_admin': '设为管理员',
+  'admin.users.make_user': '设为普通用户',
+  'admin.users.temp_password_copied': '临时密码已复制',
 };

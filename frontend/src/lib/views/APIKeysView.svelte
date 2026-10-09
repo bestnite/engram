@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { askConfirm } from '../components/ui/confirm';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
@@ -69,7 +70,7 @@
   }
 
   async function revoke(key: APIKeyRecord): Promise<void> {
-    if (!confirm($t('keys.confirm_revoke', { name: key.name }))) return;
+    if (!(await askConfirm({ title: $t('keys.confirm_revoke', { name: key.name }), confirmLabel: $t('keys.revoke'), destructive: true }))) return;
     error = null;
     revokingId = key.id;
     try {

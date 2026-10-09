@@ -1286,4 +1286,11 @@ export const en: LocaleCatalog = {
   'keys.copied': 'Key copied',
   'account.email.change_hint': 'A confirmation link goes to the new address; nothing changes until you confirm.',
   'settings.email.entry': 'Manage email',
+  // 统一确认对话框的按钮。
+  'common.confirm': 'Confirm',
+  'common.cancel': 'Cancel',
+  // 用户管理行菜单。
+  'admin.users.make_admin': 'Make admin',
+  'admin.users.make_user': 'Make regular user',
+  'admin.users.temp_password_copied': 'Temporary password copied',
 };

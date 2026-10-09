@@ -22,20 +22,20 @@
   }
 </script>
 
-<nav data-testid="admin-nav" aria-label={$t('admin.nav.heading')} class="space-y-2">
-  <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.nav.heading')}</h2>
-  <!-- 等宽网格而非按内容宽度排：各 tab 文字长短不同，按内容宽度排会在窄容器里换行、
-       切页时换行点随各子页容器宽度变化而跳动（用户报障形态）。网格让每个 tab 宽度固定。 -->
-  <ul class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+<!-- 管理面板的二级导航：与卡组详情页同一种下划线标签栏。一行排开，窄屏横向滚动，
+     不再用网格按钮——网格三行高，选中项的实心块比页面标题还抢眼。 -->
+<nav data-testid="admin-nav" aria-label={$t('admin.nav.heading')} class="mb-6 border-b border-border">
+  <ul class="-mb-px flex gap-6 overflow-x-auto overflow-y-hidden">
     {#each items as item (item.href)}
-      <li>
+      {@const active = isActive(item.href, $routeStore.path)}
+      <li class="shrink-0">
         <a
           href={item.href}
           data-testid="admin-nav-{item.key}"
-          aria-current={isActive(item.href, $routeStore.path) ? 'page' : undefined}
-          class="block rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors {$routeStore.path === item.href || isActive(item.href, $routeStore.path)
-            ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-            : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-900'}"
+          aria-current={active ? 'page' : undefined}
+          class="block whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors {active
+            ? 'border-foreground font-medium text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'}"
         >
           {$t(item.key)}
         </a>

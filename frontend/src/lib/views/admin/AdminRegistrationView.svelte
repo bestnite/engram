@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { askConfirm } from '../../components/ui/confirm';
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
@@ -128,7 +129,7 @@
   async function revoke(inv: AdminInvite): Promise<void> {
     notice = '';
     actionError = '';
-    if (typeof window !== 'undefined' && !window.confirm($t('admin.registration.revoke'))) return;
+    if (!(await askConfirm({ title: $t('admin.registration.revoke'), destructive: true }))) return;
     try {
       await apiClient.revokeAdminInvite(inv.id);
       notice = 'admin.registration.notice.invite_revoked';

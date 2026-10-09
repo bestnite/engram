@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { askConfirm } from '../../components/ui/confirm';
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
@@ -70,7 +71,7 @@
   async function cancel(job: AdminJob): Promise<void> {
     notice = '';
     actionError = '';
-    if (typeof window !== 'undefined' && !window.confirm($t('admin.jobs.confirm_cancel'))) return;
+    if (!(await askConfirm({ title: $t('admin.jobs.confirm_cancel'), destructive: true }))) return;
     try {
       await apiClient.cancelAdminJob(job.id);
       notice = 'admin.jobs.notice.cancelled';

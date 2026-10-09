@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { askConfirm } from '../../components/ui/confirm';
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
@@ -135,7 +136,7 @@
   async function unlink(row: AdminOIDCIdentity): Promise<void> {
     notice = '';
     actionError = '';
-    if (typeof window !== 'undefined' && !window.confirm($t('admin.oidc.confirm_unlink'))) return;
+    if (!(await askConfirm({ title: $t('admin.oidc.confirm_unlink'), destructive: true }))) return;
     try {
       await apiClient.unlinkAdminOIDCIdentity(row.id);
       notice = 'admin.oidc.notice.unlinked';
