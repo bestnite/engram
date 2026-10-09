@@ -120,6 +120,8 @@ export interface Note {
   created_at: string;
   updated_at: string;
   external_ref: string;
+  /** 调用者是否暂停了这条 note 下的卡（暂停只对本人生效）。 */
+  suspended: boolean;
 }
 
 /**

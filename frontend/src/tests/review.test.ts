@@ -89,4 +89,30 @@ describe('review submission API', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ card_id: '11', deck: ['2', '7'] });
     expect(result.remaining).toBe(0);
   });
+
+  it('suspends the current card through the session-CSRF suspend endpoint', async () => {
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ cards: [], remaining: 0 }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+
+    await client.suspendReview({ card_id: '11', deck: ['2'] });
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe('/api/v1/review/suspend');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('session-token');
+    expect(JSON.parse(init?.body as string)).toEqual({ card_id: '11', deck: ['2'] });
+  });
+
+  it('suspends and resumes a note for the current user only', async () => {
+    for (const [suspended, method] of [[true, 'PUT'], [false, 'DELETE']] as const) {
+      fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ suspended, cards: ['c1'] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }));
+      const res = await client.setNoteSuspended('n 1', suspended);
+      const [url, init] = fetcher.mock.calls.at(-1)!;
+      expect(url).toBe('/api/v1/notes/n%201/suspension');
+      expect(init?.method).toBe(method);
+      expect(res.suspended).toBe(suspended);
+    }
+  });
 });

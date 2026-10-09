@@ -205,6 +205,31 @@ func (s *Server) reviewBury(c *gin.Context) {
 	s.writeQueue(c, user, deckIDs)
 }
 
+// reviewSuspend 是复习页「暂停这张卡」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
+// SetCardSuspended（只写本人进度，reader 即可）；响应带同范围重建后的队列。
+func (s *Server) reviewSuspend(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		return
+	}
+	var req reviewCardRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		return
+	}
+	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	if !ok {
+		return
+	}
+	if _, err := s.api.SetCardSuspended(c.Request.Context(), user, nil, req.CardID, true); err != nil {
+		se := apiError(err)
+		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
+		return
+	}
+	s.writeQueue(c, user, deckIDs)
+}
+
 // reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
 // HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
 // 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。

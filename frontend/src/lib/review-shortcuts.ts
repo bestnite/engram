@@ -1,7 +1,7 @@
 /**
  * 复习页键盘与触屏手势的纯决策函数。
  *
- * 视图只负责把这里的决策映射成副作用（翻面、评分、埋藏、跳转编辑），DOM 判定留在视图里。
+ * 视图只负责把这里的决策映射成副作用（翻面、评分、埋藏、暂停、跳转编辑），DOM 判定留在视图里。
  * 拆出来是为了让「按键/滑动在每种卡片状态下该做什么」能在无浏览器环境（vitest 的 node
  * 环境）里被穷举单测——真实按键与手势仍由浏览器端到端验证。
  */
@@ -14,6 +14,7 @@ export type ReviewShortcut =
   | { kind: 'reveal' } // 空格/回车：判分卡请求揭示、自评卡翻面
   | { kind: 'rate'; rating: number }
   | { kind: 'bury' }
+  | { kind: 'suspend' }
   | { kind: 'edit' };
 
 /** 按键决策依赖的复习状态。 */
@@ -60,6 +61,7 @@ export function reviewShortcut(
 
   const lower = key.toLowerCase();
   if (lower === 'b') return { kind: 'bury' };
+  if (lower === 's') return { kind: 'suspend' };
   if (lower === 'e') return { kind: 'edit' };
   return { kind: 'ignore' };
 }

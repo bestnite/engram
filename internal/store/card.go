@@ -118,3 +118,22 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time
 	}
 	return out, nil
 }
+
+// SuspendedNoteIDs 返回 noteIDs 中「userID 暂停了其下至少一张未删除卡」的 note（暂停只对本人生效）。
+func SuspendedNoteIDs(ctx context.Context, db *gorm.DB, userID uint64, noteIDs []uint64) (map[uint64]bool, error) {
+	out := map[uint64]bool{}
+	if len(noteIDs) == 0 {
+		return out, nil
+	}
+	var ids []uint64
+	if err := db.WithContext(ctx).Table("card_states AS cs").
+		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL").
+		Where("cs.user_id = ? AND cs.suspended_at IS NOT NULL AND c.note_id IN ?", userID, noteIDs).
+		Distinct("c.note_id").Pluck("c.note_id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("store: list suspended notes: %w", err)
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
+}

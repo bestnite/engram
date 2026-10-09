@@ -207,3 +207,45 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
 	}
 }
+
+// TestReviewSuspendRemovesCardForCallerOnly 覆盖复习页的暂停端点：缺 CSRF 被拒且不写库（反面）；
+// 暂停后响应里的队列不再有这张卡，状态行带 suspended_at；进度数值不变。
+func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Suspend deck")
+	note := seedBasic(t, db, deck.ID, "Q", "A")
+	seedBasic(t, db, deck.ID, "Q2", "A2")
+	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
+	req := map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}
+
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/suspend", req, cookies, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("suspend without CSRF = %d, want 403", rec.Code)
+	}
+	var states int64
+	db.Model(&store.CardState{}).Count(&states)
+	if states != 0 {
+		t.Fatalf("denied suspend wrote %d card_states rows, want 0", states)
+	}
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/suspend", req, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("suspend = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var body queueBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode suspend response: %v", err)
+	}
+	for _, c := range body.Cards {
+		if c.CardID == cardPub {
+			t.Fatalf("suspended card %s is still in the returned queue", cardPub)
+		}
+	}
+	var st store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&st).Error; err != nil {
+		t.Fatalf("load suspended state: %v", err)
+	}
+	if st.SuspendedAt == nil || st.State != "new" {
+		t.Errorf("state after suspend = %+v, want suspended_at set on a new-card row", st)
+	}
+}
