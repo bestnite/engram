@@ -142,6 +142,23 @@ function withLanguage(to: string): string {
 }
 
 /**
+ * 视图重建键：路径模式 + 路径参数（不含查询串）。
+ *
+ * 应用按「页面组件类型」渲染视图，同一组件的不同实体（卡组 A→B、笔记 A→B）若共用实例，
+ * 只在挂载时取数的视图会保留上一实体的数据。把这个键交给 `{#key}` 即建立按路由的重建边界：
+ * 路径模式或路径参数一变，组件销毁重建。查询串刻意不参与——筛选与分页是组件内状态，
+ * 改它们不该重建页面。
+ */
+export function viewKey(match: RouteMatch): string {
+  if (!match.route) return `not-found|${match.path}`;
+  const params = Object.keys(match.params)
+    .sort()
+    .map((key) => `${key}=${match.params[key]}`)
+    .join('&');
+  return `${match.route.path}|${params}`;
+}
+
+/**
  * 初始化浏览器路由事件监听（popstate 与链接代理）
  */
 export function initRouter(): () => void {

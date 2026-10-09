@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchRoute, parseQuery } from '../lib/router';
+import { matchRoute, parseQuery, viewKey } from '../lib/router';
 import type { RouteDefinition } from '../lib/router/types';
 
 describe('SPA router matching and query parsing', () => {
@@ -106,5 +106,36 @@ describe('auth entry routes after the SPA cutover', () => {
     expect(matchRoute('/login', prodRoutes).route?.name).toBe('login');
     expect(matchRoute('/register', prodRoutes).route?.name).toBe('register');
     expect(matchRoute('/setup', prodRoutes).route?.name).toBe('setup');
+  });
+});
+
+describe('view rebuild key', () => {
+  const dummyComponent = {} as unknown as RouteDefinition['component'];
+  const testRoutes: RouteDefinition[] = [
+    { path: '/decks/:id', name: 'deck-detail', component: dummyComponent },
+    { path: '/decks/:id/notes/:nid', name: 'note-edit', component: dummyComponent },
+  ];
+
+  it('changes when a path param changes so the same view is rebuilt', () => {
+    const a = viewKey(matchRoute('/decks/42', testRoutes));
+    const b = viewKey(matchRoute('/decks/43', testRoutes));
+    expect(a).not.toBe(b);
+  });
+
+  it('changes when the note id changes even within the same deck', () => {
+    const a = viewKey(matchRoute('/decks/42/notes/1', testRoutes));
+    const b = viewKey(matchRoute('/decks/42/notes/2', testRoutes));
+    expect(a).not.toBe(b);
+  });
+
+  it('ignores the query string so filters do not rebuild the page', () => {
+    const a = viewKey(matchRoute('/decks/42', testRoutes));
+    const b = viewKey(matchRoute('/decks/42?q=algo&page=3', testRoutes));
+    expect(a).toBe(b);
+  });
+
+  it('is stable for the same route and gives the not-found view its own key', () => {
+    expect(viewKey(matchRoute('/decks/42', testRoutes))).toBe(viewKey(matchRoute('/decks/42', testRoutes)));
+    expect(viewKey(matchRoute('/missing', testRoutes))).toBe('not-found|/missing');
   });
 });

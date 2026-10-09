@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { routeStore, initRouter, navigate } from './lib/router';
+  import { routeStore, initRouter, navigate, viewKey } from './lib/router';
   import { localeStore, t } from './lib/i18n';
   import { initAuth, clearSession } from './lib/auth';
   import { apiClient } from './lib/api';
@@ -40,13 +40,19 @@
   const ActiveComponent = $derived(
     $routeStore.route ? $routeStore.route.component : (NotFoundView as any)
   );
+
+  // 按路由建立组件重建边界：同一组件的不同实体（卡组 A→B、笔记 A→B）拿到全新实例，
+  // 只在挂载时取数的视图不会保留上一实体的标题、表单与写请求目标。
+  const activeKey = $derived(viewKey($routeStore));
 </script>
 
 <div class="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
   <NavHeader />
 
   <main class="flex-1">
-    <ActiveComponent />
+    {#key activeKey}
+      <ActiveComponent />
+    {/key}
   </main>
 
   <footer class="border-t border-zinc-200 dark:border-zinc-800 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
