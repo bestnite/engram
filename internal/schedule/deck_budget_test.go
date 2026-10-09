@@ -83,7 +83,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	sched := mustScheduler(t, testPreset(t))
 	builder := NewQueueBuilder(db, decks, sched)
 
-	budgets, err := builder.DeckBudgets(ctx, 1, []uint64{unlimited, atCap, overCap, untouched})
+	budgets, err := builder.DeckBudgets(ctx, 1, []uint64{unlimited, atCap, overCap, untouched}, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckBudgets() error = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	}
 
 	// 不存在的卡组 id 沿用 resolveScope 的兜底：新卡上限取默认，复习不限。
-	missing, err := builder.DeckBudgets(ctx, 1, []uint64{99999})
+	missing, err := builder.DeckBudgets(ctx, 1, []uint64{99999}, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckBudgets(missing) error = %v", err)
 	}
@@ -146,14 +146,43 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	}
 
 	// 空集合与非零 userID 校验。
-	empty, err := builder.DeckBudgets(ctx, 1, nil)
+	empty, err := builder.DeckBudgets(ctx, 1, nil, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckBudgets(nil) error = %v", err)
 	}
 	if len(empty) != 0 {
 		t.Errorf("DeckBudgets(nil) returned %d entries, want 0", len(empty))
 	}
-	if _, err := builder.DeckBudgets(ctx, 0, []uint64{unlimited}); err == nil {
+	if _, err := builder.DeckBudgets(ctx, 0, []uint64{unlimited}, QueueOptions{}); err == nil {
 		t.Error("DeckBudgets(userID=0) error = nil, want an error")
+	}
+}
+
+// TestDeckBudgetsUseTheUsersReviewDay 断言设置页的「今日已用」按用户时区的复习日统计（反面：UTC 口径
+// 在 UTC+8 的上午会算成前一天，把今天已用的额度显示成没用）。
+func TestDeckBudgetsUseTheUsersReviewDay(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 7, 1, 0, 0, 0, time.UTC)
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	deckID := seedDeck(t, db, now)
+	userDay := ReviewDay(now, shanghai, DefaultDayCutoffHour)
+	used := seedCard(t, db, deckID, "used", now)
+	seedReview(t, db, 1, used, userDay, int(StateNew), now.Add(-time.Minute))
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), nil)
+	for _, tc := range []struct {
+		tz       string
+		wantUsed int
+	}{{"Asia/Shanghai", 1}, {"UTC", 0}} {
+		budgets, err := builder.DeckBudgets(ctx, 1, []uint64{deckID}, QueueOptions{Now: now, Timezone: tc.tz})
+		if err != nil {
+			t.Fatalf("DeckBudgets(%s) error = %v", tc.tz, err)
+		}
+		if got := budgets[deckID].NewUsed; got != tc.wantUsed {
+			t.Errorf("%s: NewUsed = %d, want %d", tc.tz, got, tc.wantUsed)
+		}
 	}
 }

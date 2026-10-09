@@ -38,8 +38,6 @@
   let includeProgress = $state(false);
   let includeReviews = $state(false);
 
-  // owner 才显示卡组设置入口：以服务端是否返回卡组设置判定
-  let isOwner = $state(false);
   const perPage = 50;
 
   // 筛选条件：输入即生效（没有「应用」按钮），文本输入 300ms 防抖。
@@ -237,19 +235,8 @@
     return JSON.stringify(val, null, 2);
   }
 
-  async function loadOwnerFlag(): Promise<void> {
-    if (!deckId) return;
-    try {
-      await apiClient.getDeckSettings(deckId);
-      isOwner = true;
-    } catch {
-      isOwner = false;
-    }
-  }
-
   onMount(() => {
     loadData(1);
-    loadOwnerFlag();
   });
 
   onDestroy(() => {
@@ -316,16 +303,15 @@
         {$t('deck.sharing.title')}
       </button>
 
-      {#if isOwner}
-        <button
-          type="button"
-          data-testid="deck-settings-link"
-          onclick={() => activeTab = 'settings'}
-          class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
-        >
-          {$t('deck.settings.entry')}
-        </button>
-      {/if}
+      <!-- 学习设置是每个成员自己的，所有成员都能打开。 -->
+      <button
+        type="button"
+        data-testid="deck-settings-link"
+        onclick={() => activeTab = 'settings'}
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+      >
+        {$t('deck.settings.entry')}
+      </button>
     </div>
   </div>
 

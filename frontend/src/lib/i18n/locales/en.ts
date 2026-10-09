@@ -517,7 +517,7 @@ export const en: LocaleCatalog = {
   'deck.settings.saved': 'Saved.',
   'deck.settings.error.invalid': 'Enter a whole number that is 0 or greater.',
   'deck.settings.error.failed': 'Could not save the limits. Please try again.',
-  'deck.settings.error.forbidden': 'Only the deck owner can change these limits.',
+  'deck.settings.error.forbidden': 'You do not have access to this deck.',
   'deck.settings.failed': 'Could not load the deck limits.',
   // ---- TOTP two-factor management (/settings/totp) ----
   // secret is shown only once (from begin); recovery codes only when generated.
@@ -1214,4 +1214,5 @@ export const en: LocaleCatalog = {
   'admin.mail.prefill_builtin': 'This is the built-in default. Saving it unchanged makes it your version, which then stops following language-pack updates.',
   'admin.mail.prefill_custom': 'This type and language has your version; the box shows it.',
   'admin.mail.var.new_cards': 'New cards',
+  'deck.settings.personal_hint': 'These settings apply only to you: everyone who shares this deck has their own preset and daily limits.',
 };

@@ -30,33 +30,35 @@ type DeckResponse struct {
 // deckResponse 保留旧名，供包内既有调用。
 type deckResponse = DeckResponse
 
-// ToDeckResponse 把 store.Deck 映射成对外形态；REST 与 MCP 共用。
+// ToDeckResponse 把 store.Deck 映射成 userID 视角下的对外形态；REST 与 MCP 共用。
 //
-// ID 取卡组自己的对外 id；PresetID 取该卡组预设的对外 id——数字主键留在库里，
-// 由这里按主键查预设补出对外 id，客户端拿不到任何自增键。
-func (a *API) ToDeckResponse(ctx context.Context, d store.Deck, role string) DeckResponse {
-	presetPublicID := ""
-	if d.PresetID != 0 {
-		if p, err := a.presets.ByID(ctx, d.PresetID); err == nil {
-			presetPublicID = p.PublicID
-		}
+// ID 取卡组自己的对外 id。NewPerDay / ReviewsPerDay / PresetID 是**调用者自己**在该卡组上的
+// 学习设置（属主读卡组列，共享成员读自己的成员设置），预设的数字主键在这里换成对外 id。
+func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
+	out := DeckResponse{
+		ID:          d.PublicID,
+		Name:        d.Name,
+		Description: d.Description,
+		ArchivedAt:  d.ArchivedAt,
+		CreatedAt:   d.CreatedAt,
+		Role:        role,
 	}
-	return DeckResponse{
-		ID:            d.PublicID,
-		Name:          d.Name,
-		Description:   d.Description,
-		NewPerDay:     d.NewPerDay,
-		ReviewsPerDay: d.ReviewsPerDay,
-		PresetID:      presetPublicID,
-		ArchivedAt:    d.ArchivedAt,
-		CreatedAt:     d.CreatedAt,
-		Role:          role,
+	settings, err := a.decks.StudySettings(ctx, userID, &d)
+	if err != nil {
+		a.logger.Error("load study settings for deck response failed", "deck_id", d.ID, "user_id", userID, "error", err)
+		return out
 	}
+	out.NewPerDay = settings.Caps.NewPerDay
+	out.ReviewsPerDay = settings.Caps.ReviewsPerDay
+	if p, err := a.presets.ByID(ctx, settings.PresetID); err == nil {
+		out.PresetID = p.PublicID
+	}
+	return out
 }
 
 // toDeckResponse 保留旧名，供包内既有调用。
-func (a *API) toDeckResponse(ctx context.Context, d store.Deck, role string) DeckResponse {
-	return a.ToDeckResponse(ctx, d, role)
+func (a *API) toDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
+	return a.ToDeckResponse(ctx, userID, d, role)
 }
 
 // listDecks 返回当前用户可见的卡组（业务逻辑在 service 层 ListDecks，与 MCP 的 list_decks 同源）。
@@ -70,7 +72,7 @@ func (a *API) listDecks(c *gin.Context) {
 	}
 	out := make([]deckResponse, 0, len(decks))
 	for _, d := range decks {
-		out = append(out, a.toDeckResponse(ctx, d.Deck, d.Role))
+		out = append(out, a.toDeckResponse(ctx, u.ID, d.Deck, d.Role))
 	}
 	c.JSON(http.StatusOK, gin.H{"decks": out})
 }
@@ -113,7 +115,7 @@ func (a *API) createDeck(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, a.toDeckResponse(ctx, *d, store.RoleOwner))
+	c.JSON(http.StatusCreated, a.toDeckResponse(ctx, u.ID, *d, store.RoleOwner))
 }
 
 func (a *API) deleteDeck(c *gin.Context) {

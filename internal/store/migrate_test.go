@@ -303,7 +303,9 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 				t.Fatalf("seed existing mapping: %v", err)
 			}
 
-			applied, err := Apply(ctx, db, BuiltinMigrations)
+			// 只跑到本迁移（第 5 个）：之后追加的迁移不属于本用例。
+			upTo := BuiltinMigrations[:5]
+			applied, err := Apply(ctx, db, upTo)
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -329,8 +331,69 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 					t.Errorf("missing mapping %s; have %v", w, got)
 				}
 			}
-			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 0 {
+			if applied, err := Apply(ctx, db, upTo); err != nil || applied != 0 {
 				t.Errorf("second Apply() = %d, %v; want 0, nil", applied, err)
+			}
+		})
+	}
+}
+
+// TestBuiltinBackfillMemberSettingsMigration 模拟成员设置上线前的共享卡组：授权行存在、成员设置行
+// 不存在。迁移后成员得到自己的默认预设（不是属主的）与卡组当前的上限；已有的行不被覆盖。
+func TestBuiltinBackfillMemberSettingsMigration(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			if err := setVersion(db, 5); err != nil {
+				t.Fatalf("set version: %v", err)
+			}
+			ids := seedUsers(t, db, "mig_owner", "mig_member", "mig_kept")
+			owner, member, kept := ids[0], ids[1], ids[2]
+			deckID := seedDeck(t, db, owner)
+			if err := db.Model(&Deck{}).Where("id = ?", deckID).
+				Updates(map[string]any{"new_per_day": 3, "reviews_per_day": 0}).Error; err != nil {
+				t.Fatalf("set caps: %v", err)
+			}
+			now := time.Now().UTC()
+			// 直接写授权行，绕过 GrantStore（它会顺手建成员设置）——模拟旧数据。
+			for _, u := range []uint64{member, kept} {
+				if err := db.Create(&DeckGrant{DeckID: deckID, UserID: u, Role: RoleReader, CreatedAt: now}).Error; err != nil {
+					t.Fatalf("seed grant: %v", err)
+				}
+			}
+			keptPreset := seedPresetRow(t, db, kept)
+			if err := db.Create(&DeckMemberSetting{DeckID: deckID, UserID: kept, PresetID: keptPreset, NewPerDay: 9, ReviewsPerDay: 9, UpdatedAt: now}).Error; err != nil {
+				t.Fatalf("seed existing member settings: %v", err)
+			}
+
+			if applied, err := Apply(ctx, db, BuiltinMigrations[:6]); err != nil || applied != 1 {
+				t.Fatalf("Apply() = %d, %v; want 1, nil", applied, err)
+			}
+			var got DeckMemberSetting
+			if err := db.First(&got, "deck_id = ? AND user_id = ?", deckID, member).Error; err != nil {
+				t.Fatalf("member settings not backfilled: %v", err)
+			}
+			memberDefault := DefaultPreset(mustPresets(t, db, member))
+			if memberDefault == nil || got.PresetID != memberDefault.ID {
+				t.Errorf("backfilled preset = %d, want the member's own default preset", got.PresetID)
+			}
+			if got.NewPerDay != 3 || got.ReviewsPerDay != 0 {
+				t.Errorf("backfilled caps = %d/%d, want the deck's 3/0", got.NewPerDay, got.ReviewsPerDay)
+			}
+			var existing DeckMemberSetting
+			if err := db.First(&existing, "deck_id = ? AND user_id = ?", deckID, kept).Error; err != nil {
+				t.Fatalf("load existing settings: %v", err)
+			}
+			if existing.PresetID != keptPreset || existing.NewPerDay != 9 {
+				t.Errorf("existing member settings were overwritten: %+v", existing)
+			}
+			var ownerRows int64
+			db.Model(&DeckMemberSetting{}).Where("user_id = ?", owner).Count(&ownerRows)
+			if ownerRows != 0 {
+				t.Errorf("owner got %d member settings rows, want 0 (owner settings live on the deck)", ownerRows)
 			}
 		})
 	}

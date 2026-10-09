@@ -10,6 +10,7 @@ import { routes } from '../lib/router/routes';
 const settings: DeckSettings = {
   deck_id: '7',
   deck_name: 'Biology',
+  role: 'owner',
   preset_id: '3',
   new_per_day: 5,
   reviews_per_day: 10,
@@ -64,7 +65,16 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     expect(html).not.toContain('data-testid="deck-settings-form"');
   });
 
-  it('renders a forbidden state for a non-owner', () => {
+  it('renders the form for a shared-deck member and says the settings are personal', () => {
+    const { html } = render(DeckSettingsView, {
+      props: { initialLoading: false, initialSettings: { ...settings, role: 'reader' } },
+    });
+    expect(html).toContain('data-testid="deck-settings-form"');
+    expect(html).toContain('data-testid="deck-settings-personal-hint"');
+    expect(html).toContain('这些设置只对你自己生效');
+  });
+
+  it('renders a forbidden state for a user without access', () => {
     const err = new ApiClientError('HTTP 403', { status: 403, code: 'forbidden' });
     const { html } = render(DeckSettingsView, {
       props: { initialLoading: false, initialError: err },

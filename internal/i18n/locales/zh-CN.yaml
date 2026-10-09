@@ -125,8 +125,6 @@
 # M5-4 克隆卡组。
 - id: clone.name
   translation: "{{.name}}（副本）"
-- id: clone.preset_name
-  translation: "{{.name}}（副本）"
 - id: admin.setting.site_name
   translation: "站点名称"
 - id: admin.setting.site_name.hint

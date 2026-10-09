@@ -45,7 +45,7 @@
 
   const deckId = $derived($routeStore.params.id || '');
 
-  /** 读取上限与今日额度；非 owner 由服务端 403/404 决定，前端不猜测权限。 */
+  /** 读取调用者自己的设置与今日额度；无权访问由服务端 403/404 决定，前端不猜测权限。 */
   /** 预设列表只读一次；失败时保留当前值（保存也不会带上 preset_id），不静默改成别的预设。 */
   async function loadPresets(): Promise<void> {
     try {
@@ -175,6 +175,7 @@
     <section class="card-elevated p-6 rounded-xl">
       <form onsubmit={save} data-testid="deck-settings-form" class="space-y-4">
         <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('deck.settings.heading')}</h2>
+        <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
         <div>
           <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('deck.settings.preset')}</span>
           {#if presets.length > 0}

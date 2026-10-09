@@ -517,7 +517,7 @@ export const zhCN: LocaleCatalog = {
   'deck.settings.saved': '已保存。',
   'deck.settings.error.invalid': '请输入不小于 0 的整数。',
   'deck.settings.error.failed': '保存失败，请重试。',
-  'deck.settings.error.forbidden': '只有卡组所有者能修改这些上限。',
+  'deck.settings.error.forbidden': '你没有访问这个卡组的权限。',
   'deck.settings.failed': '无法加载卡组上限。',
   // ---- 两步验证管理（/settings/totp） ----
   // secret 只在 begin 时显示一次；恢复码只在生成时显示。
@@ -1210,4 +1210,5 @@ export const zhCN: LocaleCatalog = {
   'admin.mail.prefill_builtin': '当前显示的是内置默认正文。不改动直接保存会成为你的自定义版本（此后不再跟随语言包更新）。',
   'admin.mail.prefill_custom': '这一种类型这一种语言已有自定义版本，框里显示的就是它。',
   'admin.mail.var.new_cards': '新卡数',
+  'deck.settings.personal_hint': '这些设置只对你自己生效：共享这个卡组的每个人都有自己的预设和每日上限。',
 };
