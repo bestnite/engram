@@ -1276,4 +1276,14 @@ export const en: LocaleCatalog = {
   'deck.sharing.links_hint': 'Anyone with the link can preview this deck and join after signing in. A password and an expiry date are optional.',
   'deck.sharing.link_copied': 'Link copied',
   'deck.sharing.copy': 'Copy',
+  // 个人设置页：其余设置的入口分区。
+  'settings.more.heading': 'More settings',
+  // 两步验证页：绑定步骤的分区标题。
+  'settings.totp.begin.heading': 'Set up an authenticator',
+  // API 密钥与邮箱设置的分区说明。
+  'keys.create_hint': 'Pick only the scopes you need. The key is shown in full once, right after creation.',
+  'keys.list_heading': 'Your keys',
+  'keys.copied': 'Key copied',
+  'account.email.change_hint': 'A confirmation link goes to the new address; nothing changes until you confirm.',
+  'settings.email.entry': 'Manage email',
 };

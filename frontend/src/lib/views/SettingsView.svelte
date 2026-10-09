@@ -1,5 +1,9 @@
 <script lang="ts">
   import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import SettingsSection from '../components/ui/SettingsSection.svelte';
+  import { listClasses } from '../components/ui/variants';
+  import { ChevronRight, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore, setLocale, type SupportedLocale, isSupportedLocale } from '../i18n';
   import {
@@ -248,279 +252,190 @@
 </script>
 
 <Page testId="settings-view">
-  <div>
-    <div class="mb-6">
-      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-        {$t('settings.heading')}
-      </h1>
-      <p class="mt-1 text-sm text-muted-foreground leading-relaxed">
-        {$t('settings.intro')}
-      </p>
-    </div>
+  <PageHeader title={$t('settings.heading')} description={$t('settings.intro')} />
 
-    {#if loading}
-      <Skeleton testId="settings-loading" label={$t('common.loading')} />
-    {:else}
-      {#if generalError}
-        <div
-          data-testid="settings-general-error"
-          class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 shadow-xs mb-6"
-          role="alert"
-        >
-          {$t(generalError)}
-        </div>
-      {/if}
-
-      {#if savedNotice}
-        <div
-          data-testid="settings-saved-notice"
-          class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-xs mb-6"
-          role="status"
-        >
-          {$t(savedNotice)}
-        </div>
-      {/if}
-
+  {#if loading}
+    <Skeleton testId="settings-loading" label={$t('common.loading')} />
+  {:else}
+    <!-- 个人资料：只放 profile 与 locale 字段（密码、两步验证等各有独立分区） -->
+    <SettingsSection title={$t('settings.profile.heading')}>
       {#if serverApiAvailable === false}
-        <div
-          data-testid="settings-api-unavailable"
-          class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 shadow-xs mb-6"
-          role="note"
-        >
-          {$t('settings.profile.api_unavailable')}
-        </div>
+        <p data-testid="settings-api-unavailable" class="mb-4 text-[13px] text-warning" role="note">{$t('settings.profile.api_unavailable')}</p>
       {/if}
-
-      <!-- 个人基础资料区块：只放 profile 与 locale 字段（密码、两步验证等各有独立区块） -->
-      <section class="card-elevated p-6 rounded-xl space-y-6">
-        <div>
-          <h2 class="text-lg font-bold tracking-tight text-foreground">
-            {$t('settings.profile.heading')}
-          </h2>
-        </div>
-
-        <form onsubmit={handleSubmit} class="space-y-5" novalidate>
-          <!-- 显示名 -->
-          <div class="block">
-            <label for="settings-display-name" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {$t('settings.profile.display_name_label')}
-            </label>
-            <input
-              id="settings-display-name"
-              data-testid="settings-display-name"
-              type="text"
-              bind:value={displayName}
-              class="field-input text-sm w-full transition-colors"
-            />
+      <form onsubmit={handleSubmit} class="space-y-5" novalidate>
+        <div class="grid max-w-2xl gap-5 sm:grid-cols-2">
+          <div>
+            <label for="settings-display-name" class="block text-sm font-medium text-foreground">{$t('settings.profile.display_name_label')}</label>
+            <input id="settings-display-name" data-testid="settings-display-name" type="text" bind:value={displayName} class="field-input mt-1.5 w-full text-sm" />
             {#if fieldErrors.display_name}
-              <p data-testid="settings-error-display-name" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
-                {$t(fieldErrors.display_name)}
-              </p>
+              <p data-testid="settings-error-display-name" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.display_name)}</p>
             {/if}
           </div>
-
-          <!-- 界面语言 -->
-          <div class="block">
-            <label for="settings-locale" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {$t('settings.profile.locale_label')}
-            </label>
+          <div>
+            <label for="settings-locale" class="block text-sm font-medium text-foreground">{$t('settings.profile.locale_label')}</label>
             <Select
+              id="settings-locale"
               value={selectedLocale}
               onValueChange={handleLocaleChange}
               testId="settings-locale"
+              ariaLabel={$t('settings.profile.locale_label')}
               options={[{ value: 'zh-CN', label: $t('language.zh-CN') }, { value: 'en', label: $t('language.en') }]}
-              class="py-2.5"
+              class="mt-1.5"
             />
             {#if fieldErrors.locale}
-              <p data-testid="settings-error-locale" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
-                {$t(fieldErrors.locale)}
-              </p>
+              <p data-testid="settings-error-locale" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.locale)}</p>
             {/if}
           </div>
-
-          <!-- 时区 -->
-          <div class="block">
-            <label for="settings-timezone" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {$t('settings.profile.timezone_label')}
-            </label>
-            <Combobox
-              id="settings-timezone"
-              testId="settings-timezone"
-              bind:value={timezone}
-              options={timezoneChoices}
-              ariaLabel={$t('settings.profile.timezone_label')}
-              class="transition-colors"
-            />
+          <div class="sm:col-span-2">
+            <label for="settings-timezone" class="block text-sm font-medium text-foreground">{$t('settings.profile.timezone_label')}</label>
+            <Combobox id="settings-timezone" testId="settings-timezone" bind:value={timezone} options={timezoneChoices} ariaLabel={$t('settings.profile.timezone_label')} class="mt-1.5" />
             {#if fieldErrors.timezone}
-              <p data-testid="settings-error-timezone" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
-                {$t(fieldErrors.timezone)}
-              </p>
+              <p data-testid="settings-error-timezone" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.timezone)}</p>
             {/if}
           </div>
-
-          <!-- 复习日切点 -->
-          <div class="block">
-            <label for="settings-cutoff" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {$t('settings.profile.cutoff_label')}
-            </label>
-            <Select
-              id="settings-cutoff"
-              testId="settings-cutoff"
-              bind:value={dayCutoff}
-              options={cutoffChoices}
-              allowDeselect={false}
-              ariaLabel={$t('settings.profile.cutoff_label')}
-            />
-            <p class="mt-1 text-xs text-muted-foreground/70">
-              {$t('settings.profile.cutoff_hint')}
-            </p>
+          <div>
+            <label for="settings-cutoff" class="block text-sm font-medium text-foreground">{$t('settings.profile.cutoff_label')}</label>
+            <Select id="settings-cutoff" testId="settings-cutoff" bind:value={dayCutoff} options={cutoffChoices} allowDeselect={false} ariaLabel={$t('settings.profile.cutoff_label')} class="mt-1.5" />
+            <p class="mt-1.5 text-xs text-muted-foreground">{$t('settings.profile.cutoff_hint')}</p>
             {#if fieldErrors.day_cutoff_hour}
-              <p data-testid="settings-error-cutoff" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
-                {$t(fieldErrors.day_cutoff_hour)}
-              </p>
+              <p data-testid="settings-error-cutoff" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.day_cutoff_hour)}</p>
             {/if}
           </div>
-
-          <!-- 提前学习 -->
-          <div class="block">
-            <label for="settings-learn-ahead" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {$t('settings.profile.learn_ahead_label')}
-            </label>
-            <input
-              id="settings-learn-ahead"
-              data-testid="settings-learn-ahead"
-              type="number"
-              min="0"
-              max={MAX_LEARN_AHEAD_MINUTES}
-              step="1"
-              bind:value={learnAhead}
-              class="field-input text-sm w-full"
-            />
-            <p class="mt-1 text-xs text-muted-foreground/70">
-              {$t('settings.profile.learn_ahead_hint')}
-            </p>
+          <div>
+            <label for="settings-learn-ahead" class="block text-sm font-medium text-foreground">{$t('settings.profile.learn_ahead_label')}</label>
+            <input id="settings-learn-ahead" data-testid="settings-learn-ahead" type="number" min="0" max={MAX_LEARN_AHEAD_MINUTES} step="1" bind:value={learnAhead} class="field-input mt-1.5 w-full text-sm" />
+            <p class="mt-1.5 text-xs text-muted-foreground">{$t('settings.profile.learn_ahead_hint')}</p>
             {#if fieldErrors.learn_ahead_minutes}
-              <p data-testid="settings-error-learn-ahead" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
-                {$t(fieldErrors.learn_ahead_minutes)}
-              </p>
+              <p data-testid="settings-error-learn-ahead" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.learn_ahead_minutes)}</p>
             {/if}
           </div>
-
-          <!-- 保存按钮 -->
-          <div class="pt-2">
-            <Button testId="settings-submit" type="submit" disabled={saving} variant="primary" size="lg">
-              {$t(saving ? 'settings.profile.saving' : 'settings.profile.submit')}
-            </Button>
-          </div>
-        </form>
-      </section>
-      <section class="card-elevated p-6 rounded-xl space-y-5 mt-6" data-testid="settings-password">
-        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.password.heading')}</h2>
-        {#if passwordError}<p role="alert">{$t(passwordError)}</p>{/if}
-        {#if passwordNotice}<p role="status">{$t(passwordNotice)}</p>{/if}
-        <form onsubmit={handlePasswordSubmit} class="space-y-4">
-          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.old_label')}</span><input type="password" autocomplete="current-password" bind:value={oldPassword} required class="field-input text-sm w-full" /></label>
-          <label class="block"><span class="block text-xs font-semibold mb-1.5">{$t('settings.password.new_label')}</span><input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input text-sm w-full" /></label>
-          <Button type="submit" disabled={passwordSaving} variant="primary" size="lg">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</Button>
-        </form>
-      </section>
-      <!-- 两步验证入口：服务端 GET /settings/totp 已切到应用壳，走规范路径 -->
-      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
-        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.totp.heading')}</h2>
-        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.totp.intro')}</p>
-        <Button href="/settings/totp" variant="primary" size="lg" class="mt-4">{$t('settings.totp.entry')}</Button>
-      </section>
-      <!-- 邮件通知偏好入口：服务端 GET /settings/notifications 已切到应用壳，走规范路径 -->
-      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
-        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.notifications.heading')}</h2>
-        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.notifications.intro')}</p>
-        <Button href="/settings/notifications" variant="primary" size="lg" class="mt-4">{$t('settings.notifications.entry')}</Button>
-      </section>
-      <!-- API 密钥入口：服务端 GET /settings/keys 已切到应用壳，走规范路径。
-           入口从页头导航移到这里——它属于账号访问凭据，与两步验证、通知偏好同属个人设置。 -->
-      <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-keys-entry">
-        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.keys.heading')}</h2>
-        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.keys.intro')}</p>
-        <Button href="/settings/keys" variant="primary" size="lg" class="mt-4">{$t('settings.keys.entry')}</Button>
-      </section>
-
-      <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
-      <section class="card-elevated p-6 rounded-xl mt-6 space-y-4" data-testid="settings-share-policy">
-        <div>
-          <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.share_policy.heading')}</h2>
-          <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.share_policy.intro')}</p>
         </div>
+        <!-- 保存结果写在按钮旁边：不再在页面顶部插入横幅把整页往下推。 -->
+        <div class="flex flex-wrap items-center gap-3">
+          <Button testId="settings-submit" type="submit" disabled={saving} variant="primary" size="lg">
+            {$t(saving ? 'settings.profile.saving' : 'settings.profile.submit')}
+          </Button>
+          {#if generalError}
+            <p data-testid="settings-general-error" class="text-sm text-destructive-foreground" role="alert">{$t(generalError)}</p>
+          {/if}
+          {#if savedNotice}
+            <p data-testid="settings-saved-notice" class="text-sm text-success" role="status">{$t(savedNotice)}</p>
+          {/if}
+        </div>
+      </form>
+    </SettingsSection>
 
-        <!-- 三档接收策略走与同页其余设置项同款的下拉（界面语言、复习日切点、时区），
-             不再渲染成竖排三个带边框的单选项：同一页里只有这一处是那种形态。 -->
-        <Select
-          bind:value={sharePolicy}
-          testId="share-policy-options"
-          allowDeselect={false}
-          ariaLabel={$t('settings.share_policy.heading')}
-          disabled={shareSaving}
-          class="py-2.5"
-          options={[
-            { value: 'anyone', label: $t('settings.share_policy.anyone') },
-            { value: 'whitelist', label: $t('settings.share_policy.whitelist') },
-            { value: 'nobody', label: $t('settings.share_policy.nobody') },
-          ]}
-          onValueChange={(next) => saveSharePolicy({ policy: next as 'anyone' | 'whitelist' | 'nobody' })}
-        />
+    <SettingsSection title={$t('settings.password.heading')} testId="settings-password">
+      <form onsubmit={handlePasswordSubmit} class="space-y-5">
+        <div class="grid max-w-2xl gap-5 sm:grid-cols-2">
+          <label class="block text-sm font-medium text-foreground">{$t('settings.password.old_label')}
+            <input type="password" autocomplete="current-password" bind:value={oldPassword} required class="field-input mt-1.5 w-full text-sm font-normal" />
+          </label>
+          <label class="block text-sm font-medium text-foreground">{$t('settings.password.new_label')}
+            <input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input mt-1.5 w-full text-sm font-normal" />
+          </label>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={passwordSaving} variant="outline" size="lg">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</Button>
+          {#if passwordError}<p role="alert" class="text-sm text-destructive-foreground">{$t(passwordError)}</p>{/if}
+          {#if passwordNotice}<p role="status" class="text-sm text-success">{$t(passwordNotice)}</p>{/if}
+        </div>
+      </form>
+    </SettingsSection>
 
-        {#if sharePolicy === 'whitelist'}
-          <div class="pt-1" data-testid="share-policy-whitelist">
-            <span class="block text-xs font-semibold mb-1.5 text-foreground/80">{$t('settings.share_policy.allow_label')}</span>
-            {#if allowList.length === 0}
-              <p class="text-xs text-muted-foreground">{$t('settings.share_policy.allow_empty')}</p>
-            {:else}
-              <ul class="space-y-1.5">
-                {#each allowList as row (row.user_id)}
-                  <li class="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-1.5">
-                    <span class="text-sm text-foreground/90 truncate">{row.username || '#' + row.user_id}</span>
-                    <Button
-                      testId="share-policy-remove-{row.user_id}"
-                      variant="ghost"
-                      size="xs"
-                      disabled={shareSaving}
-                      onclick={() => saveSharePolicy({ revoke: [row.user_id] })}
-                    >
-                      {$t('settings.share_policy.allow_remove')}
-                    </Button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            <form
-              class="mt-2 flex items-center gap-2"
-              onsubmit={(event) => {
-                event.preventDefault();
-                const name = allowName.trim();
-                if (name) saveSharePolicy({ allow_usernames: [name] });
-              }}
-            >
-              <input
-                type="text"
-                bind:value={allowName}
-                placeholder={$t('settings.share_policy.allow_placeholder')}
-                aria-label={$t('settings.share_policy.allow_placeholder')}
-                class="field-input text-sm flex-1 max-w-xs"
-                data-testid="share-policy-allow-input"
-              />
-              <Button type="submit" variant="outline" size="sm" disabled={shareSaving} testId="share-policy-allow-add">
-                {$t('settings.share_policy.allow_add')}
-              </Button>
-            </form>
-          </div>
-        {/if}
+    <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
+    <SettingsSection title={$t('settings.share_policy.heading')} description={$t('settings.share_policy.intro')} testId="settings-share-policy">
+      <!-- 三档接收策略走与同页其余设置项同款的下拉（界面语言、复习日切点、时区）。 -->
+      <Select
+        bind:value={sharePolicy}
+        testId="share-policy-options"
+        allowDeselect={false}
+        ariaLabel={$t('settings.share_policy.heading')}
+        disabled={shareSaving}
+        class="max-w-sm"
+        options={[
+          { value: 'anyone', label: $t('settings.share_policy.anyone') },
+          { value: 'whitelist', label: $t('settings.share_policy.whitelist') },
+          { value: 'nobody', label: $t('settings.share_policy.nobody') },
+        ]}
+        onValueChange={(next) => saveSharePolicy({ policy: next as 'anyone' | 'whitelist' | 'nobody' })}
+      />
 
-        {#if shareNotice}
-          <p class="text-xs text-emerald-600 dark:text-emerald-400" role="status">{$t(shareNotice)}</p>
-        {/if}
-        {#if shareError}
-          <p class="text-xs text-rose-600 dark:text-rose-400" role="alert">{$t(shareError)}</p>
-        {/if}
-      </section>
-    {/if}
-  </div>
+      {#if sharePolicy === 'whitelist'}
+        <div class="mt-5 max-w-2xl" data-testid="share-policy-whitelist">
+          <span class="block text-sm font-medium text-foreground">{$t('settings.share_policy.allow_label')}</span>
+          <form
+            class="mt-1.5 flex items-center gap-2"
+            onsubmit={(event) => {
+              event.preventDefault();
+              const name = allowName.trim();
+              if (name) saveSharePolicy({ allow_usernames: [name] });
+            }}
+          >
+            <input
+              type="text"
+              bind:value={allowName}
+              placeholder={$t('settings.share_policy.allow_placeholder')}
+              aria-label={$t('settings.share_policy.allow_placeholder')}
+              class="field-input min-w-0 flex-1 text-sm"
+              data-testid="share-policy-allow-input"
+            />
+            <Button type="submit" variant="outline" size="lg" disabled={shareSaving} testId="share-policy-allow-add">
+              {$t('settings.share_policy.allow_add')}
+            </Button>
+          </form>
+          {#if allowList.length === 0}
+            <p class="mt-3 text-xs text-muted-foreground">{$t('settings.share_policy.allow_empty')}</p>
+          {:else}
+            <ul class="{listClasses.root} mt-3">
+              {#each allowList as row (row.user_id)}
+                <li class="flex items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
+                  <span class="min-w-0 flex-1 truncate text-sm text-foreground">{row.username || '#' + row.user_id}</span>
+                  <Button
+                    testId="share-policy-remove-{row.user_id}"
+                    variant="ghost"
+                    size="icon"
+                    label={$t('settings.share_policy.allow_remove')}
+                    title={$t('settings.share_policy.allow_remove')}
+                    disabled={shareSaving}
+                    onclick={() => saveSharePolicy({ revoke: [row.user_id] })}
+                  >
+                    <X class="size-4" aria-hidden="true" />
+                  </Button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+
+      {#if shareNotice}
+        <p class="mt-3 text-xs text-success" role="status">{$t(shareNotice)}</p>
+      {/if}
+      {#if shareError}
+        <p class="mt-3 text-xs text-destructive-foreground" role="alert">{$t(shareError)}</p>
+      {/if}
+    </SettingsSection>
+
+    <!-- 其余个人设置各有独立页面：用一组链接行代替三张各带主按钮的卡片。 -->
+    <SettingsSection title={$t('settings.more.heading')}>
+      <ul class={listClasses.root}>
+        {#each [
+          { href: '/settings/email', testId: 'settings-email-entry', title: 'account.email.heading', intro: 'account.email.intro', entry: 'settings.email.entry' },
+          { href: '/settings/totp', testId: 'settings-totp-entry', title: 'settings.totp.heading', intro: 'settings.totp.intro', entry: 'settings.totp.entry' },
+          { href: '/settings/notifications', testId: 'settings-notifications-entry', title: 'settings.notifications.heading', intro: 'settings.notifications.intro', entry: 'settings.notifications.entry' },
+          { href: '/settings/keys', testId: 'settings-keys-entry', title: 'settings.keys.heading', intro: 'settings.keys.intro', entry: 'settings.keys.entry' },
+        ] as item (item.href)}
+          <li class={listClasses.row} data-testid={item.testId}>
+            <div class="min-w-0 flex-1">
+              <a href={item.href} class={listClasses.rowLink} aria-label={$t(item.entry)}>{$t(item.title)}</a>
+              <p class="text-[13px] text-muted-foreground">{$t(item.intro)}</p>
+            </div>
+            <span class="hidden shrink-0 text-[13px] text-muted-foreground sm:inline">{$t(item.entry)}</span>
+            <ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </li>
+        {/each}
+      </ul>
+    </SettingsSection>
+  {/if}
 </Page>

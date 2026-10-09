@@ -1275,4 +1275,14 @@ export const zhCN: LocaleCatalog = {
   'deck.sharing.links_hint': '持有链接的人可以预览这个卡组，登录后可加入复习。可选设置口令与过期日期。',
   'deck.sharing.link_copied': '链接已复制',
   'deck.sharing.copy': '复制',
+  // 个人设置页：其余设置的入口分区。
+  'settings.more.heading': '更多设置',
+  // 两步验证页：绑定步骤的分区标题。
+  'settings.totp.begin.heading': '绑定认证器',
+  // API 密钥与邮箱设置的分区说明。
+  'keys.create_hint': '按需勾选权限范围；密钥只在创建时完整显示一次。',
+  'keys.list_heading': '已有密钥',
+  'keys.copied': '密钥已复制',
+  'account.email.change_hint': '确认链接会发到新地址，确认之前邮箱不会变更。',
+  'settings.email.entry': '管理邮箱',
 };

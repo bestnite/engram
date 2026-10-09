@@ -22,7 +22,8 @@
 
 <section
   class={cn(
-    'grid gap-x-10 gap-y-4 border-t border-border py-8 first:border-t-0 first:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]',
+    // 只按 section 计「第一个」：页头、提示行等其它元素在前面时，第一个分区上方同样不画线。
+    'grid gap-x-10 gap-y-4 border-t border-border py-8 first-of-type:border-t-0 first-of-type:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]',
     klass
   )}
   data-testid={testId}
