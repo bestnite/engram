@@ -1263,4 +1263,11 @@ export const zhCN: LocaleCatalog = {
   'dropzone.remove': '移除文件',
   'dropzone.import_hint': '支持 .edeck 与 .zip',
   'dropzone.media_hint': '选中后立即上传，并插入到上面选择的字段',
+  // 列表与批量操作条。
+  'selection.toolbar': '批量操作',
+  'selection.count': '已选 {count} 项',
+  'selection.clear': '取消选择',
+  'list.col.name': '名称',
+  'list.col.today': '今日',
+  'list.col.limits': '每日上限',
 };

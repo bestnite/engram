@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { navigate } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckShareInvite } from '../api';
@@ -10,6 +9,11 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import SelectionBar from '../components/ui/SelectionBar.svelte';
+  import { listClasses, selectionBarButton } from '../components/ui/variants';
+  import { Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
@@ -244,15 +248,6 @@
     }
   }
 
-  function handleCardClick(e: MouseEvent, deckId: string): void {
-    // 忽略复选框、按钮点击触发卡片跳转
-    const target = e.target as HTMLElement;
-    if (target.closest('input') || target.closest('button')) {
-      return;
-    }
-    navigate(`/decks/${deckId}`);
-  }
-
   function handleKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       if (showCreateModal) closeCreateModal();
@@ -268,277 +263,188 @@
   });
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-6 sm:p-8 rounded-2xl">
-    <!-- 顶栏标题与操作 -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-border">
-      <div>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-          {$t('decks.title')}
-        </h1>
-        <p class="text-xs text-muted-foreground mt-1">
-          {$t('decks.count', { count: decks.length })}
-        </p>
-      </div>
-
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        {#if !loading && !error && decks.length > 0}
-          <button
-            type="button"
-            title={$t('decks.retry')}
-            aria-label={$t('decks.retry')}
-            class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-muted transition-colors btn-press cursor-pointer border border-input"
-            onclick={fetchDecks}
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-              <path d="M3 21v-5h5" />
-            </svg>
-          </button>
-        {/if}
-
-        <!-- 卡组包导入入口。放列表头部而不进全局导航：导航已有六项，移动端放不下；
-             链接指向 /import，客户端路由渲染 ImportView。 -->
-        <Button variant="outline" size="lg" href="/import" testId="decks-import-open">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span>{$t('package.import.title')}</span>
+<Page>
+  <PageHeader title={$t('decks.title')} description={$t('decks.count', { count: decks.length })}>
+    {#snippet actions()}
+      {#if !loading && !error && decks.length > 0}
+        <Button variant="ghost" size="icon" label={$t('decks.retry')} title={$t('decks.retry')} onclick={fetchDecks}>
+          <RefreshCw class="size-4" aria-hidden="true" />
         </Button>
-
-        <Button type="button" testId="deck-create-open" onclick={openCreateModal} variant="primary" size="lg">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>{$t('decks.create.heading')}</span>
-        </Button>
-      </div>
-    </div>
-
-    <!-- 待接受的共享邀请：同意制的入口。没有邀请时整块不渲染。 -->
-    {#if invites.length > 0}
-      <div
-        data-testid="deck-invites"
-        class="mb-4 rounded-xl border border-indigo-200/70 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/25 p-4"
-      >
-        <div class="flex items-center gap-2 mb-1">
-          <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 4h16v16H4z" />
-            <path d="m4 6 8 6 8-6" />
-          </svg>
-          <h2 class="text-sm font-semibold text-foreground">{$t('decks.invites.title')}</h2>
-        </div>
-        <p class="text-xs text-muted-foreground mb-3">{$t('decks.invites.hint')}</p>
-
-        <ul class="space-y-2">
-          {#each invites as invite (invite.deck_id)}
-            <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/80 dark:bg-zinc-900/60 px-3 py-2">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-foreground truncate">{invite.deck_name}</p>
-                <p class="text-xs text-muted-foreground">
-                  {$t('decks.invites.from', { name: invite.inviter_name || invite.username || '—' })}
-                  ·
-                  {$t('decks.invites.role', { role: $t(`deck.sharing.role.${invite.role}`) })}
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <Button
-                  testId="deck-invite-accept-{invite.deck_id}"
-                  variant="primary"
-                  size="sm"
-                  disabled={inviteBusy === invite.deck_id}
-                  onclick={() => respondToInvite(invite.deck_id, true)}
-                >
-                  {$t('decks.invites.accept')}
-                </Button>
-                <Button
-                  testId="deck-invite-reject-{invite.deck_id}"
-                  variant="outline"
-                  size="sm"
-                  disabled={inviteBusy === invite.deck_id}
-                  onclick={() => respondToInvite(invite.deck_id, false)}
-                >
-                  {$t('decks.invites.reject')}
-                </Button>
-              </div>
-            </li>
-          {/each}
-        </ul>
-
-        {#if inviteError}
-          <p role="alert" class="mt-2 text-xs text-rose-600 dark:text-rose-400">{$t(inviteError)}</p>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- 批量工具栏 -->
-    {#if !loading && !error && decks.length > 0}
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl bg-surface border border-border text-xs">
-        <div class="flex items-center gap-3">
-          <label class="flex items-center gap-1.5 cursor-pointer text-muted-foreground font-medium select-none">
-            <Checkbox
-              checked={selectedDeckIds.length > 0 && selectedDeckIds.length === decks.length}
-              onCheckedChange={toggleSelectAll}
-              label={selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}
-            />
-            <span>{selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}</span>
-          </label>
-          {#if selectedDeckIds.length > 0}
-            <span class="text-muted-foreground/70">{$t('decks.selected_count', { count: selectedDeckIds.length })}</span>
-          {/if}
-        </div>
-
-        {#if selectedDeckIds.length > 0}
-          <div class="flex items-center gap-2">
-            <Button
-              variant="primary"
-              testId="decks-batch-export"
-              disabled={batchExporting}
-              onclick={handleBatchExport}
-            >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <span>{batchExporting ? $t('package.batch_export_progress') : $t('package.batch_export', { count: selectedDeckIds.length })}</span>
-            </Button>
-          </div>
-        {/if}
-      </div>
-      {#if batchExportError}
-        <p role="alert" class="mb-4 text-xs text-rose-600 dark:text-rose-400">{$t(batchExportError)}</p>
       {/if}
-    {/if}
+      <!-- 卡组包导入入口；侧边栏的「导入」是同一个页面，这里是就近入口。 -->
+      <Button variant="outline" size="lg" href="/import" testId="decks-import-open">
+        <Upload class="size-4" aria-hidden="true" />
+        <span>{$t('package.import.title')}</span>
+      </Button>
+      <Button type="button" testId="deck-create-open" onclick={openCreateModal} variant="primary" size="lg">
+        <Plus class="size-4" aria-hidden="true" />
+        <span>{$t('decks.create.heading')}</span>
+      </Button>
+    {/snippet}
+  </PageHeader>
 
-    <!-- 列表内容区 -->
-    {#if loading}
-      <Skeleton testId="decks-loading" label={$t('common.loading')} variant="cards" count={4} columns={2} />
-    {:else if error}
-      <div
-        data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'decks-unauthorized' : 'decks-failed'}
-        class="py-12 text-center space-y-4"
-      >
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 mb-1">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <p class="text-base font-medium text-foreground">
-          {#if error instanceof ApiClientError && error.isUnauthorized}
-            {$t('decks.unauthorized')}
-          {:else}
-            {$t('decks.failed')}
-          {/if}
-        </p>
-        <Button testId="decks-retry" type="button" onclick={fetchDecks} variant="primary" size="lg">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
-          </svg>
-          <span>{$t('decks.retry')}</span>
-        </Button>
+  <!-- 待接受的共享邀请：同意制的入口。没有邀请时整块不渲染。 -->
+  {#if invites.length > 0}
+    <section data-testid="deck-invites" class="mb-6">
+      <div class="mb-2 flex items-baseline gap-2">
+        <h2 class="text-sm font-semibold text-foreground">{$t('decks.invites.title')}</h2>
+        <p class="text-xs text-muted-foreground">{$t('decks.invites.hint')}</p>
       </div>
-    {:else if decks.length === 0}
-      <div data-testid="decks-empty" class="py-16 text-center text-muted-foreground space-y-3">
-        <p class="text-base font-medium text-foreground/80">
-          {$t('decks.empty')}
-        </p>
-        <button
-          type="button"
-          onclick={openCreateModal}
-          class="text-xs px-3 py-1.5 rounded-lg bg-muted text-foreground/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-        >
-          + {$t('decks.create.heading')}
-        </button>
+      <ul class={listClasses.root}>
+        {#each invites as invite (invite.deck_id)}
+          <li class="{listClasses.row} flex-wrap bg-brand-soft/40">
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-foreground">{invite.deck_name}</p>
+              <p class="text-xs text-muted-foreground">
+                {$t('decks.invites.from', { name: invite.inviter_name || invite.username || '—' })}
+                ·
+                {$t('decks.invites.role', { role: $t(`deck.sharing.role.${invite.role}`) })}
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <Button
+                testId="deck-invite-reject-{invite.deck_id}"
+                variant="ghost"
+                size="sm"
+                disabled={inviteBusy === invite.deck_id}
+                onclick={() => respondToInvite(invite.deck_id, false)}
+              >
+                {$t('decks.invites.reject')}
+              </Button>
+              <Button
+                testId="deck-invite-accept-{invite.deck_id}"
+                variant="primary"
+                size="sm"
+                disabled={inviteBusy === invite.deck_id}
+                onclick={() => respondToInvite(invite.deck_id, true)}
+              >
+                {$t('decks.invites.accept')}
+              </Button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+      {#if inviteError}
+        <p role="alert" class="mt-2 text-xs text-destructive-foreground">{$t(inviteError)}</p>
+      {/if}
+    </section>
+  {/if}
+
+  <!-- 列表内容区 -->
+  {#if loading}
+    <Skeleton testId="decks-loading" label={$t('common.loading')} lines={5} />
+  {:else if error}
+    <div
+      data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'decks-unauthorized' : 'decks-failed'}
+      class="space-y-4 py-16 text-center"
+    >
+      <p class="text-base font-medium text-foreground">
+        {#if error instanceof ApiClientError && error.isUnauthorized}
+          {$t('decks.unauthorized')}
+        {:else}
+          {$t('decks.failed')}
+        {/if}
+      </p>
+      <Button testId="decks-retry" type="button" onclick={fetchDecks} variant="outline" size="lg">
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('decks.retry')}</span>
+      </Button>
+    </div>
+  {:else if decks.length === 0}
+    <div data-testid="decks-empty" class="space-y-4 rounded-lg border border-dashed border-border py-16 text-center">
+      <p class="text-sm text-muted-foreground">{$t('decks.empty')}</p>
+      <Button variant="outline" size="lg" onclick={openCreateModal}>
+        <Plus class="size-4" aria-hidden="true" />
+        {$t('decks.create.heading')}
+      </Button>
+    </div>
+  {:else}
+    <div data-testid="decks-list" class={listClasses.root}>
+      <!-- 表头兼作全选：选择状态变化只改这一行的勾选框，不插入任何会撑高页面的工具栏。 -->
+      <div class={listClasses.header}>
+        <Checkbox
+          checked={selectedDeckIds.length > 0 && selectedDeckIds.length === decks.length}
+          indeterminate={selectedDeckIds.length > 0 && selectedDeckIds.length < decks.length}
+          onCheckedChange={toggleSelectAll}
+          label={selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}
+        />
+        <span class="flex-1">{$t('list.col.name')}</span>
+        <span class="hidden w-36 sm:block">{$t('list.col.today')}</span>
+        <span class="hidden w-24 md:block" title={$t('home.deck_limits')}>{$t('list.col.limits')}</span>
+        <span class="w-8" aria-hidden="true"></span>
       </div>
-    {:else}
-      <!-- 卡组卡片列表：整体可点击，去除了下划线与多余查看按钮 -->
-      <div data-testid="decks-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {#each decks as deck (deck.id)}
-          <div
-            role="button"
-            tabindex="0"
-            data-testid={`deck-card-${deck.id}`}
-            class="card-elevated p-5 rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 hover:border-blue-500/50 dark:hover:border-blue-400/50 hover:shadow-sm transition-all duration-150 flex flex-col justify-between cursor-pointer group text-left select-none relative"
-            onclick={(e) => handleCardClick(e, deck.id)}
-            onkeydown={(e) => { if (e.key === 'Enter') navigate(`/decks/${deck.id}`); }}
-          >
-            <div>
-              <div class="flex items-start justify-between gap-2 mb-2">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <Checkbox
-                    class="mt-0.5"
-                    checked={selectedDeckIds.includes(deck.id)}
-                    onclick={(event) => event.stopPropagation()}
-                    onCheckedChange={() => toggleSelectDeck(deck.id)}
-                    label={$t('decks.select_deck', { name: deck.name })}
-                  />
-                  <h2 class="text-base font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
-                    {deck.name}
-                  </h2>
-                </div>
-
-                <div class="flex items-center gap-1.5 shrink-0">
-                  {#if deckActionKind(deck.role) === 'leave'}
-                    <Badge testId={`deck-shared-badge-${deck.id}`}>{$t('decks.shared_badge')}</Badge>
-                  {/if}
-                  {#if deckActionKind(deck.role) === 'delete'}
-                    <button
-                      type="button"
-                      data-testid={`deck-delete-btn-${deck.id}`}
-                      title={$t('decks.delete.action')}
-                      aria-label={$t('decks.delete.action')}
-                      class="p-1 rounded-md text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                      onclick={(e) => promptDeckAction(deck, 'delete', e)}
-                    >
-                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  {:else if deckActionKind(deck.role)}
-                    <button
-                      type="button"
-                      data-testid={`deck-leave-btn-${deck.id}`}
-                      title={$t('decks.leave.action')}
-                      aria-label={$t('decks.leave.action')}
-                      class="p-1 rounded-md text-zinc-400 hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                      onclick={(e) => promptDeckAction(deck, 'leave', e)}
-                    >
-                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
-                      </svg>
-                    </button>
-                  {/if}
-                </div>
-              </div>
-
-              {#if deck.description}
-                <p class="text-xs text-muted-foreground line-clamp-2 mb-4 leading-relaxed pl-6">
-                  {deck.description}
-                </p>
+      {#each decks as deck (deck.id)}
+        <div data-testid={`deck-card-${deck.id}`} class={listClasses.row}>
+          <Checkbox
+            class={listClasses.rowAction}
+            checked={selectedDeckIds.includes(deck.id)}
+            onCheckedChange={() => toggleSelectDeck(deck.id)}
+            label={$t('decks.select_deck', { name: deck.name })}
+          />
+          <div class="flex min-w-0 flex-1 flex-col">
+            <div class="flex min-w-0 items-center gap-2">
+              <a href="/decks/{encodeURIComponent(deck.id)}" class={listClasses.rowLink}>{deck.name}</a>
+              {#if deckActionKind(deck.role) === 'leave'}
+                <Badge testId={`deck-shared-badge-${deck.id}`}>{$t('decks.shared_badge')}</Badge>
               {/if}
             </div>
-
-            <div class="pt-3 border-t border-zinc-200/50 dark:border-zinc-800/50 text-xs text-muted-foreground/70 flex items-center justify-between">
-              <span class="font-mono">{deck.new_per_day} / {deck.reviews_per_day}</span>
-              <span data-testid={`deck-queue-count-${deck.id}`} class="font-medium text-foreground/80">
-                {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
-              </span>
-            </div>
+            {#if deck.description}
+              <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
+            {/if}
           </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
+          <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block">
+            {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
+          </span>
+          <span class="hidden w-24 text-[13px] tabular-nums text-muted-foreground md:block" title={$t('home.deck_limits')}>
+            {deck.new_per_day} / {deck.reviews_per_day}
+          </span>
+          <div class="{listClasses.rowAction} flex w-8 justify-end">
+            {#if deckActionKind(deck.role) === 'delete'}
+              <button
+                type="button"
+                data-testid={`deck-delete-btn-${deck.id}`}
+                title={$t('decks.delete.action')}
+                aria-label={$t('decks.delete.action')}
+                class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-60 transition hover:bg-destructive-soft hover:text-destructive-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 cursor-pointer"
+                onclick={(e) => promptDeckAction(deck, 'delete', e)}
+              >
+                <Trash2 class="size-4" aria-hidden="true" />
+              </button>
+            {:else if deckActionKind(deck.role)}
+              <button
+                type="button"
+                data-testid={`deck-leave-btn-${deck.id}`}
+                title={$t('decks.leave.action')}
+                aria-label={$t('decks.leave.action')}
+                class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-60 transition hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 cursor-pointer"
+                onclick={(e) => promptDeckAction(deck, 'leave', e)}
+              >
+                <LogOut class="size-4" aria-hidden="true" />
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <SelectionBar
+    count={selectedDeckIds.length}
+    onClear={() => (selectedDeckIds = [])}
+    error={batchExportError ? $t(batchExportError) : undefined}
+  >
+    <button
+      type="button"
+      data-testid="decks-batch-export"
+      class={selectionBarButton}
+      disabled={batchExporting}
+      onclick={handleBatchExport}
+    >
+      <Download aria-hidden="true" />
+      {batchExporting ? $t('package.batch_export_progress') : $t('package.export.short')}
+    </button>
+  </SelectionBar>
+</Page>
 
 <!-- 新建卡组对话框（Modal） -->
 {#if showCreateModal}

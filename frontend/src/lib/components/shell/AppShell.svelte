@@ -65,7 +65,7 @@
 </script>
 
 {#if layout === 'sidebar'}
-  <div class="flex min-h-screen bg-background text-foreground">
+  <div class="flex min-h-screen bg-background text-foreground" style="--app-sidebar-w: {$sidebarCollapsed ? '4rem' : '15rem'}">
     <aside
       class={cn(
         'app-sidebar sticky top-0 hidden h-screen shrink-0 border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:block',

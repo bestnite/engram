@@ -62,3 +62,22 @@ export const menuClasses = {
   label: 'px-2 py-1.5 text-xs text-muted-foreground',
   separator: '-mx-1 my-1 h-px bg-border',
 } as const;
+
+/**
+ * 列表（卡组、笔记、用户……）的统一样式：一个带边框的容器，行与行之间只用分隔线，
+ * 不再每一项各自一张卡片。首页与卡组页的卡组列表用途不同、列不同，但行高、hover、
+ * 选中与可点区域都取这一套，所以看起来是同一种东西。
+ */
+export const listClasses = {
+  root: 'overflow-hidden rounded-lg border border-border',
+  header: 'flex h-9 items-center gap-3 border-b border-border bg-surface px-4 text-xs font-medium text-muted-foreground',
+  row: 'group relative flex items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50 has-[[data-state=checked]]:bg-brand-soft/60',
+  // 整行可点：标题链接的伪元素铺满整行；行内其它控件加 rowAction 浮在它上面，点击互不干扰。
+  rowLink:
+    "min-w-0 truncate font-medium text-foreground outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring",
+  rowAction: 'relative z-10',
+} as const;
+
+/** SelectionBar 里的按钮：深色条上的浅色文字按钮。 */
+export const selectionBarButton =
+  'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary-foreground/10 disabled:opacity-50 cursor-pointer [&_svg]:size-4';

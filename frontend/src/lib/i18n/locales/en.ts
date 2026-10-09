@@ -1264,4 +1264,11 @@ export const en: LocaleCatalog = {
   'dropzone.remove': 'Remove file',
   'dropzone.import_hint': 'Accepts .edeck and .zip',
   'dropzone.media_hint': 'Uploads right away and inserts into the field selected above',
+  // 列表与批量操作条。
+  'selection.toolbar': 'Bulk actions',
+  'selection.count': '{count} selected',
+  'selection.clear': 'Clear selection',
+  'list.col.name': 'Name',
+  'list.col.today': 'Today',
+  'list.col.limits': 'Daily limits',
 };

@@ -118,12 +118,14 @@ describe('HomeView component response states and truthful rendering', () => {
     // 验证到期卡片大于 0 时，显示「开始复习」链接并携带准确计数
     expect(html).toContain('data-testid="home-start-review"');
     expect(html).toContain('href="/review"');
-    expect(html).toContain('开始复习 (1)');
+    // 计数放在按钮内单独的数字徽标里。
+    expect(html).toMatch(/data-testid="home-start-review"[^>]*>[\s\S]*?开始复习[\s\S]*?<span[^>]*>\s*1\s*<\/span>/);
 
     // 验证卡组列表与 XSS 安全转义
     expect(html).toContain('data-testid="home-decks-list"');
     expect(html).toContain('href="/review?deck=10"');
-    expect(html).toContain('20 / 100');
+    // 首页的卡组行显示今日队列计数而不是每日上限；上限只在 /decks 列表里显示。
+    expect(html).not.toContain('20 / 100');
     expect(html).toContain('&lt;安全测试>');
     expect(html).toContain('卡组描述 &amp; 详情');
     expect(html).not.toContain('<安全测试>');
