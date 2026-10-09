@@ -425,3 +425,54 @@ func TestScopeHonoursPerDeckCaps(t *testing.T) {
 		t.Errorf("multi-deck review cards = %d, want 4 (A 1 + B 3)", n)
 	}
 }
+
+// TestLearnAheadAppendsSoonDueLearningCards 覆盖提前学习：窗口内即将到期的学习卡排在队列最后
+// （其它卡之后），窗口外的不出现；窗口为 0 时一张都不提前（反面）。
+func TestLearnAheadAppendsSoonDueLearningCards(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	deckID := seedDeck(t, db, now)
+	last := now.Add(-time.Minute)
+	soon := seedCard(t, db, deckID, "forward", now)
+	seedState(t, db, 1, soon, "learning", now.Add(5*time.Minute), 1, 5, &last)
+	later := seedCard(t, db, deckID, "forward", now)
+	seedState(t, db, 1, later, "relearning", now.Add(time.Hour), 1, 5, &last)
+	fresh := seedCard(t, db, deckID, "forward", now)
+
+	s := mustScheduler(t, testPreset(t))
+	build := func(ahead time.Duration) []uint64 {
+		t.Helper()
+		items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(context.Background(), 1,
+			QueueOptions{DeckID: deckID, Now: now, Location: time.UTC, LearnAhead: ahead, NewOrder: NewOrderCreated})
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		ids := make([]uint64, 0, len(items))
+		for _, it := range items {
+			ids = append(ids, it.CardID)
+		}
+		return ids
+	}
+	cases := []struct {
+		name  string
+		ahead time.Duration
+		want  []uint64
+	}{
+		{"no learn-ahead", 0, []uint64{fresh}},
+		{"20 minutes pulls the 5-minute card in after the new card", 20 * time.Minute, []uint64{fresh, soon}},
+		{"two hours also pulls the 1-hour card, in due order", 2 * time.Hour, []uint64{fresh, soon, later}},
+	}
+	for _, tc := range cases {
+		got := build(tc.ahead)
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: queue = %v, want %v", tc.name, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: queue = %v, want %v", tc.name, got, tc.want)
+				break
+			}
+		}
+	}
+}

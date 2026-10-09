@@ -707,6 +707,8 @@ export interface UserProfile {
   locale: string;
   timezone: string;
   day_cutoff_hour: number | null;
+  /** 提前学习窗口（分钟）；null 表示用服务端默认值。 */
+  learn_ahead_minutes?: number | null;
 }
 
 /**
@@ -717,6 +719,7 @@ export interface UpdateProfileRequest {
   locale: string;
   timezone: string;
   day_cutoff_hour?: number | null;
+  learn_ahead_minutes?: number | null;
 }
 
 /**
@@ -746,7 +749,7 @@ export interface APIKeysResponse {
  */
 export interface ProfileValidationResult {
   valid: boolean;
-  errors: Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour', string>>;
+  errors: Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour' | 'learn_ahead_minutes', string>>;
   data?: UpdateProfileRequest;
 }
 

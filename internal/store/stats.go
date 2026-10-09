@@ -618,6 +618,28 @@ func ResolveCutoff(hour *int) int {
 	return NormalizedCutoff(*hour)
 }
 
+// 提前学习窗口的默认值与上限（分钟）。默认 20 分钟与 Anki 一致：足以覆盖常见的 1 分钟 / 10 分钟
+// 学习步骤，又不会把半小时后的卡拉到现在。
+const (
+	DefaultLearnAheadMinutes = 20
+	MaxLearnAheadMinutes     = 1440
+)
+
+// ResolveLearnAhead 把可空的提前学习配置解析成时长：NULL 用默认值，越界夹到 [0, 上限]。
+func ResolveLearnAhead(minutes *int) time.Duration {
+	m := DefaultLearnAheadMinutes
+	if minutes != nil {
+		m = *minutes
+	}
+	if m < 0 {
+		m = 0
+	}
+	if m > MaxLearnAheadMinutes {
+		m = MaxLearnAheadMinutes
+	}
+	return time.Duration(m) * time.Minute
+}
+
 // LoadLocation 解析 IANA 时区名；空串或非法名一律回退 UTC，绝不因脏数据阻塞调用方
 // （页面 500、提醒不发出）。
 //
