@@ -656,7 +656,7 @@ func (b *QueueBuilder) stateFrom(ctx context.Context, userID uint64, deckIDs []u
 		Joins("JOIN cards AS cards ON cards.id = cs.card_id AND cards.deleted_at IS NULL").
 		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
 		Where("cs.user_id = ?", userID).
-		Where("cards.suspended_at IS NULL").
+		Where("cs.suspended_at IS NULL").
 		Where("notes.deck_id IN ?", deckIDs)
 }
 
@@ -784,7 +784,7 @@ func (b *QueueBuilder) newCardsFrom(ctx context.Context, userID uint64, deckIDs 
 	return b.db.WithContext(ctx).Table("cards AS cards").
 		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
 		Joins("LEFT JOIN card_states AS cs ON cs.card_id = cards.id AND cs.user_id = ?", userID).
-		Where("cards.deleted_at IS NULL AND cards.suspended_at IS NULL").
+		Where("cards.deleted_at IS NULL AND cs.suspended_at IS NULL").
 		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
 		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
 		Where("notes.deck_id IN ?", deckIDs)

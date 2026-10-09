@@ -256,7 +256,7 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 
 	suspended := seedCard(t, db, deckID, "forward", now)
 	seedState(t, db, 1, suspended, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
-	if err := db.Model(&store.Card{}).Where("id = ?", suspended).Update("suspended_at", now).Error; err != nil {
+	if err := db.Model(&store.CardState{}).Where("card_id = ? AND user_id = ?", suspended, 1).Update("suspended_at", now).Error; err != nil {
 		t.Fatalf("suspend card: %v", err)
 	}
 

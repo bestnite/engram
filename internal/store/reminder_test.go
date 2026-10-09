@@ -36,15 +36,15 @@ func seedReminderUser(t *testing.T, db *gorm.DB, name, email string, dueAt time.
 		t.Fatalf("create note: %v", err)
 	}
 	card := Card{NoteID: note.ID, Template: "forward", CreatedAt: now}
-	if suspended {
-		s := now
-		card.SuspendedAt = &s
-	}
 	if err := db.Create(&card).Error; err != nil {
 		t.Fatalf("create card: %v", err)
 	}
 	due := dueAt.UTC()
 	state := CardState{CardID: card.ID, UserID: user.ID, State: "review", DueAt: &due}
+	if suspended {
+		s := now
+		state.SuspendedAt = &s
+	}
 	if err := db.Create(&state).Error; err != nil {
 		t.Fatalf("create card state: %v", err)
 	}

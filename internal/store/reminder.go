@@ -59,7 +59,7 @@ func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]Remi
 		Select("u.id AS id, u.email AS email, u.locale AS locale, u.timezone AS timezone, "+
 			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour, COUNT(cs.card_id) AS due_count").
 		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.due_at IS NOT NULL AND cs.due_at <= ?", now.UTC()).
-		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL").
+		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL").
 		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
 		Where("u.status = ? AND u.email <> ''", StatusActive).
 		Group("u.id, u.email, u.locale, u.timezone, u.day_cutoff_hour, u.reminder_hour").

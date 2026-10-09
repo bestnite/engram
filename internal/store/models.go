@@ -152,14 +152,13 @@ func (Note) TableName() string { return "notes" }
 
 // Card 是 note 在某种呈现形式下的实例；调度作用于 card。
 type Card struct {
-	ID          uint64         `gorm:"primaryKey" json:"-"`
-	PublicID    string         `gorm:"column:public_id;uniqueIndex" json:"id"`
-	NoteID      uint64         `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
-	Template    string         `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
-	Ordinal     int            `gorm:"not null;default:0" json:"ordinal"`
-	SuspendedAt *time.Time     `json:"suspended_at,omitempty"`
-	CreatedAt   time.Time      `gorm:"not null" json:"created_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID        uint64         `gorm:"primaryKey" json:"-"`
+	PublicID  string         `gorm:"column:public_id;uniqueIndex" json:"id"`
+	NoteID    uint64         `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
+	Template  string         `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
+	Ordinal   int            `gorm:"not null;default:0" json:"ordinal"`
+	CreatedAt time.Time      `gorm:"not null" json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (Card) TableName() string { return "cards" }
@@ -179,6 +178,9 @@ type CardState struct {
 	ElapsedDays   int        `gorm:"not null;default:0" json:"elapsed_days"`
 	LastReviewAt  *time.Time `json:"last_review_at,omitempty"`
 	Version       int        `gorm:"not null;default:0" json:"version"` // 乐观锁
+	// SuspendedAt 非空表示该用户暂停了这张卡：它不进该用户的队列与统计，其他用户不受影响。
+	// 暂停是每个用户自己的学习决定，所以放在进度行上而不是卡片上。
+	SuspendedAt *time.Time `gorm:"column:suspended_at" json:"suspended_at,omitempty"`
 }
 
 func (CardState) TableName() string { return "card_states" }

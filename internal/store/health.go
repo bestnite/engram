@@ -20,7 +20,7 @@ import (
 func DueQueueSize(ctx context.Context, db *gorm.DB, now time.Time) (int64, error) {
 	var n int64
 	err := db.WithContext(ctx).Table("card_states AS cs").
-		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL").
+		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL").
 		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
 		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now.UTC()).
 		Count(&n).Error

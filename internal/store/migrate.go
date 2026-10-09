@@ -60,6 +60,53 @@ var BuiltinMigrations = []Migration{
 		Name: "0006_backfill_member_settings",
 		Up:   backfillMemberSettings,
 	},
+	{
+		// 暂停从卡片级（对所有人生效）改为每个用户自己的（card_states.suspended_at）。
+		// 已有的卡片级暂停只迁给卡组属主：暂停原本只有属主能做，它是属主的决定；
+		// 共享成员从此各自决定，不再继承。迁移后删除 cards.suspended_at，不留两处来源。
+		Name: "0007_per_user_suspension",
+		Up:   perUserSuspension,
+	},
+}
+
+// perUserSuspension 把 cards.suspended_at 搬到属主的 card_states 行上，再删掉该列。
+// 属主还没有状态行的卡建一行新卡状态；已有行只写 suspended_at，进度不动。
+func perUserSuspension(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("cards") || !m.HasColumn("cards", "suspended_at") {
+		return nil
+	}
+	var rows []struct {
+		CardID      uint64
+		OwnerID     uint64
+		SuspendedAt time.Time
+	}
+	if err := tx.Table("cards AS c").
+		Select("c.id AS card_id, d.owner_user_id AS owner_id, c.suspended_at AS suspended_at").
+		Joins("JOIN notes AS n ON n.id = c.note_id").
+		Joins("JOIN decks AS d ON d.id = n.deck_id").
+		Where("c.suspended_at IS NOT NULL").
+		Scan(&rows).Error; err != nil {
+		return fmt.Errorf("per-user suspension: list suspended cards: %w", err)
+	}
+	for _, r := range rows {
+		at := r.SuspendedAt.UTC()
+		state := CardState{CardID: r.CardID, UserID: r.OwnerID, State: "new", SuspendedAt: &at}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "card_id"}, {Name: "user_id"}},
+			DoUpdates: clause.Assignments(map[string]any{"suspended_at": at}),
+		}).Create(&state).Error; err != nil {
+			return fmt.Errorf("per-user suspension: card %d: %w", r.CardID, err)
+		}
+	}
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		return tx.Exec("ALTER TABLE cards DROP COLUMN suspended_at").Error
+	case "postgres":
+		return tx.Exec("ALTER TABLE cards DROP COLUMN IF EXISTS suspended_at").Error
+	default:
+		return fmt.Errorf("per-user suspension: unsupported dialect %q", tx.Dialector.Name())
+	}
 }
 
 // backfillMemberSettings 为每条授权补一行成员设置；已存在的行（OnConflict）保持不动。
