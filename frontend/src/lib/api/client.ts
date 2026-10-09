@@ -30,6 +30,7 @@ import {
   type RevealAnswerResponse,
   type ReviewRenderResponse,
   type ReviewQueueResponse,
+  type ReviewUndoResponse,
   type ApiErrorEnvelope,
   type UserProfile,
   type UpdateProfileRequest,
@@ -727,6 +728,21 @@ export class ApiClient {
       await this.getSession();
     }
     return this.request<ReviewQueueResponse>('/api/v1/review/suspend', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /**
+   * 撤销刚提交的一次评分（POST /api/v1/review/undo）：恢复进度并删除被撤销的复习日志。
+   * 响应带同范围重建的队列与被撤销卡的对外 id（undone_card_id）；队列按 due_at 排序，
+   * 被撤销的卡不保证排在首位，调用方必须据 undone_card_id 把当前卡定位回它。
+   */
+  async undoReview(input: { card_id: string; deck?: string[] }): Promise<ReviewUndoResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ReviewUndoResponse>('/api/v1/review/undo', {
       method: 'POST',
       body: JSON.stringify(input),
     });

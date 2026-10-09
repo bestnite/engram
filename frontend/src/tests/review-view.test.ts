@@ -208,4 +208,38 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('data-testid="review-edit"');
     expect(html).not.toContain('data-testid="review-bury"');
   });
+
+  it('offers undo only on the graded result panel, never on an active card', () => {
+    const feedback: GradedFeedback = {
+      verdict: 'correct',
+      score: 1,
+      rating: 3,
+      answer_html: '<strong>Paris</strong>',
+      given: 'paris',
+    };
+    const card = gradedCard('typed', { prompt: 'Q', answer: 'Paris' });
+    const result = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card], initialFeedback: feedback },
+    }).html;
+    // 结果面板出现撤销按钮，文案来自语言包（不是裸 key）。
+    expect(result).toContain('data-testid="review-undo"');
+    expect(result).toContain('撤销');
+    expect(result).not.toContain('review.undo');
+
+    // 待作答的判分卡没有撤销按钮。
+    const answering = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card] },
+    }).html;
+    expect(answering).not.toContain('data-testid="review-undo"');
+
+    // 自评卡（已翻面）同样没有撤销按钮。
+    const basic = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [gradedCard('basic', { front: 'Q', back: 'A' })],
+        initialRevealed: true,
+      },
+    }).html;
+    expect(basic).not.toContain('data-testid="review-undo"');
+  });
 });

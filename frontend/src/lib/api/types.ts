@@ -475,6 +475,16 @@ export interface ReviewQueueResponse {
 }
 
 /**
+ * POST /api/v1/review/undo 响应体：除同范围重建的队列外，显式带上被撤销卡的对外 id。
+ * 队列按 due_at 排序，被撤销的卡不保证排在首位，前端必须据 undone_card_id 定位当前卡。
+ */
+export interface ReviewUndoResponse {
+  cards: DueCard[];
+  remaining: number;
+  undone_card_id: string;
+}
+
+/**
  * GET /api/v1/review/due 查询参数
  * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
  */

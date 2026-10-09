@@ -233,6 +233,38 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 	s.writeQueue(c, user, deckIDs)
 }
 
+// reviewUndo 是「撤销刚提交的评分」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
+// UndoReview（内部调 schedule.Rollback）。判权用 reader —— 撤销写的是本人的
+// (card_id, user_id) 进度，共享卡组的读者可撤销自己刚做的评分；卡组范围里任一卡组
+// 不可读即整次失败（复用 reviewCard，与埋藏同口径）。
+//
+// 响应契约：除同范围重建的队列（cards/remaining）外，显式带上被撤销卡的对外 id
+// （undone_card_id）。队列按 due_at 排序，被撤销的卡不保证排在首位，前端必须据
+// undone_card_id 把当前卡定位回它，不能假定它出现在队列首位。
+func (s *Server) reviewUndo(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		return
+	}
+	var req reviewCardRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		return
+	}
+	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	if !ok {
+		return
+	}
+	result, err := s.api.UndoReview(c.Request.Context(), user, api.UndoReviewInput{CardID: req.CardID})
+	if err != nil {
+		se := apiError(err)
+		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
+		return
+	}
+	s.writeQueue(c, user, deckIDs, gin.H{"undone_card_id": result.CardID})
+}
+
 // reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
 // HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
 // 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。
@@ -321,14 +353,21 @@ func (s *Server) writeReviewResult(c *gin.Context, user *store.User, deckIDs []u
 
 // writeQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
 // 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组。
-func (s *Server) writeQueue(c *gin.Context, user *store.User, deckIDs []uint64) {
+// extra 是调用方附加的字段（如撤销时的 undone_card_id），按写入顺序并入响应体。
+func (s *Server) writeQueue(c *gin.Context, user *store.User, deckIDs []uint64, extra ...gin.H) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"cards": cards, "remaining": len(cards)})
+	body := gin.H{"cards": cards, "remaining": len(cards)}
+	for _, item := range extra {
+		for k, v := range item {
+			body[k] = v
+		}
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // gradeFeedback 组装判分反馈：判定、得分与作答文本来自 service 的判分结果，正确答案用

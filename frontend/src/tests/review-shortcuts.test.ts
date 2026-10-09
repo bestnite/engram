@@ -79,6 +79,11 @@ describe('reviewShortcut keyboard mapping', () => {
     // 结果面板不再提供 b。
     expect(reviewShortcut('b', noMods, result)).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('x', noMods, result)).toEqual({ kind: 'ignore' });
+    // 撤销（review.undo）刻意不做键盘绑定：u 在结果面板与任何卡片状态下都不产生动作。
+    expect(reviewShortcut('u', noMods, result)).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('U', noMods, result)).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('u', noMods, keyState())).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('u', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'ignore' });
   });
 });
 

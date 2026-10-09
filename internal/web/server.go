@@ -387,6 +387,9 @@ func New(addr string, deps Deps) (*Server, error) {
 			// 埋藏的调度逻辑复用 internal/schedule。
 			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.reviewBury)
 			router.POST("/api/v1/review/suspend", s.sessions.CSRFMiddleware(), s.reviewSuspend)
+			// 撤销刚提交的评分：恢复 card_states 并删除被撤销的 reviews 行（schedule.Rollback），
+			// 响应显式带 undone_card_id，前端据此回到刚撤销的那张卡。
+			router.POST("/api/v1/review/undo", s.sessions.CSRFMiddleware(), s.reviewUndo)
 			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.reviewRender)
 		}
 	}
