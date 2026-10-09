@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { ApiClient, Deck, DeckQueueCountsResponse } from '../../api';
+import type { ApiClient, DataChangeKind, Deck, DeckQueueCountsResponse } from '../../api';
 
 /** 侧边栏收起状态的存储键。只是本机的显示偏好，不进账号设置。 */
 export const SIDEBAR_COLLAPSED_KEY = 'engram-sidebar-collapsed';
@@ -64,6 +64,8 @@ export function buildSidebarDecks(decks: Deck[], counts: DeckQueueCountsResponse
 
 let lastLoadedAt = 0;
 let inflight: Promise<void> | null = null;
+// 强制刷新撞上进行中的请求时置位：那个请求可能发于改动之前，结束后必须再取一次。
+let refreshAgain = false;
 
 /**
  * 刷新侧边栏的卡组快捷入口。force 为假时 15 秒内的重复调用直接返回。
@@ -73,7 +75,10 @@ let inflight: Promise<void> | null = null;
  */
 export function refreshSidebarDecks(client: ApiClient, force = false): Promise<void> {
   const now = Date.now();
-  if (inflight) return inflight;
+  if (inflight) {
+    if (force) refreshAgain = true;
+    return inflight;
+  }
   if (!force && now - lastLoadedAt < REFRESH_INTERVAL_MS) return Promise.resolve();
   lastLoadedAt = now;
   inflight = (async () => {
@@ -87,9 +92,33 @@ export function refreshSidebarDecks(client: ApiClient, force = false): Promise<v
       lastLoadedAt = 0;
     } finally {
       inflight = null;
+      if (refreshAgain) {
+        refreshAgain = false;
+        void refreshSidebarDecks(client, true);
+      }
     }
   })();
   return inflight;
+}
+
+/**
+ * 标记侧边栏数据已过期但不立即重取：下一次切页时会绕过节流重新取数。
+ * 用于复习作答这类高频改动——每答一张卡都重取会多打两个请求。
+ */
+export function markSidebarStale(): void {
+  lastLoadedAt = 0;
+}
+
+/**
+ * 按接口层的改动通知同步侧边栏（ApiClient.onDataChanged 的订阅方）：
+ * 卡组增删改、卡片与额度变化立即重取；复习作答只标记过期。
+ */
+export function handleDataChanged(client: ApiClient, kind: DataChangeKind): void {
+  if (kind === 'review') {
+    markSidebarStale();
+    return;
+  }
+  void refreshSidebarDecks(client, true);
 }
 
 /** 退出登录后清空，避免下一个登录的人短暂看到上一个人的卡组。 */

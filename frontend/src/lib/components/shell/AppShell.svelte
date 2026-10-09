@@ -12,7 +12,7 @@
   import ThemeToggle from './ThemeToggle.svelte';
   import AppLogo from './AppLogo.svelte';
   import AppSidebar from './AppSidebar.svelte';
-  import { sidebarCollapsed, setSidebarCollapsed, refreshSidebarDecks } from './sidebar';
+  import { sidebarCollapsed, setSidebarCollapsed, refreshSidebarDecks, handleDataChanged } from './sidebar';
 
   /**
    * 应用外壳：按路由与登录状态选择三种布局之一。
@@ -52,6 +52,12 @@
   );
 
   let drawerOpen = $state(false);
+
+  // 侧边栏的卡组列表与待复习数跟着写操作同步：在页面里新建、删除、改名卡组，增删卡片，
+  // 都不会改变路由，只靠「换页时刷新」会一直显示旧列表，直到刷新整个页面。
+  apiClient.onDataChanged = (kind) => {
+    if ($authStore.authenticated) handleDataChanged(apiClient, kind);
+  };
 
   // 换页即关抽屉：抽屉里的链接由全局路由代理处理，不会自己触发关闭。
   // 同时刷新侧边栏的卡组待复习数（有节流），复习或增删卡组之后回到别的页面就能看到新数字。

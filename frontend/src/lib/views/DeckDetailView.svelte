@@ -18,7 +18,6 @@
   import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
   import InlineEdit from '../components/InlineEdit.svelte';
-  import { refreshSidebarDecks } from '../components/shell/sidebar';
   import { DropdownMenu } from 'bits-ui';
   import { Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
@@ -99,7 +98,7 @@
 
   /**
    * 页头原地编辑的保存：名称与描述走同一个接口，没改的那一项按当前值一并提交。
-   * 空名称前端先拦下；400 为名称/描述不合法，403/404 为无权修改。成功后刷新侧边栏里的卡组名。
+   * 空名称前端先拦下；400 为名称/描述不合法，403/404 为无权修改。侧边栏里的卡组名由接口层的改动通知同步（AppShell）。
    */
   async function saveDeckInfo(patch: { name?: string; description?: string }): Promise<boolean> {
     if (!deck) return false;
@@ -112,7 +111,6 @@
     try {
       const updated = await apiClient.updateDeck(deckId, { name, description });
       deck = { ...deck, name: updated.name, description: updated.description };
-      void refreshSidebarDecks(apiClient, true);
       toast.success($t('deck.settings.info_saved'));
       return true;
     } catch (err) {
