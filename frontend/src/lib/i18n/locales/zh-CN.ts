@@ -221,7 +221,7 @@ export const zhCN: LocaleCatalog = {
   'review.shortcuts_result': '回车 / 空格：继续',
   'review.edit': '编辑',
   'review.bury': '埋藏',
-  'review.bury_hint': '埋藏：今天不再出现，明天回到队列，学习进度保留。',
+  'review.bury_hint': '埋藏：今天不再出现，明天回到队列。暂停：不再出现，直到你在卡组的笔记列表里取消暂停。两者都只影响你自己，学习进度保留。',
   'decks.create.heading': '新建卡组',
   'decks.create.name': '名称',
   'decks.create.description': '描述',
@@ -1211,4 +1211,9 @@ export const zhCN: LocaleCatalog = {
   'admin.mail.prefill_custom': '这一种类型这一种语言已有自定义版本，框里显示的就是它。',
   'admin.mail.var.new_cards': '新卡数',
   'deck.settings.personal_hint': '这些设置只对你自己生效：共享这个卡组的每个人都有自己的预设和每日上限。',
+  'review.suspend': '暂停',
+  'notes.suspended': '已暂停',
+  'notes.suspend': '暂停',
+  'notes.unsuspend': '取消暂停',
+  'notes.suspend_failed': '操作失败，请重试。',
 };

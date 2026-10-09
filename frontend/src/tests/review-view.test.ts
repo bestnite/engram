@@ -179,10 +179,13 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     });
     expect(html).toContain('data-testid="review-edit"');
     expect(html).toContain('data-testid="review-bury"');
+    expect(html).toContain('data-testid="review-suspend"');
     expect(html).toContain('data-testid="review-bury-hint"');
     // 文案来自语言包，不是裸 key。
     expect(html).toContain('编辑');
     expect(html).toContain('埋藏');
+    expect(html).toContain('暂停');
+    expect(html).not.toContain('review.suspend');
     expect(html).not.toContain('review.edit');
     expect(html).not.toContain('review.bury');
   });

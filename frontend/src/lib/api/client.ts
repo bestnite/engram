@@ -718,6 +718,30 @@ export class ApiClient {
     });
   }
 
+  /**
+   * 暂停当前卡（POST /api/v1/review/suspend）：只对本人生效，不产生 reviews 行；
+   * 响应带同一范围重建后的队列。
+   */
+  async suspendReview(input: { card_id: string; deck?: string[] }): Promise<ReviewQueueResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<ReviewQueueResponse>('/api/v1/review/suspend', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** 暂停或恢复本人在一条 note 下的全部卡（PUT / DELETE /api/v1/notes/:id/suspension）。 */
+  async setNoteSuspended(noteId: string, suspended: boolean): Promise<{ suspended: boolean; cards: string[] }> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<{ suspended: boolean; cards: string[] }>(`/api/v1/notes/${encodeURIComponent(noteId)}/suspension`, {
+      method: suspended ? 'PUT' : 'DELETE',
+    });
+  }
+
   /** 管理当前账号的 API keys；写操作沿用 request 自动注入的内存 CSRF token。 */
   async getAPIKeys(): Promise<APIKeysResponse> {
     return this.request<APIKeysResponse>('/api/v1/keys');

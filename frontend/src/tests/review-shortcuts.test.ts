@@ -63,6 +63,13 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('b', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'bury' });
   });
 
+  it('maps s to suspend on an active card, but not on the result panel', () => {
+    expect(reviewShortcut('s', noMods, keyState())).toEqual({ kind: 'suspend' });
+    expect(reviewShortcut('S', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'suspend' });
+    expect(reviewShortcut('s', noMods, keyState({ feedback: true }))).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('s', noMods, keyState({ typing: true }))).toEqual({ kind: 'ignore' });
+  });
+
   it('treats the result panel as continue-only plus edit', () => {
     const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true });
     for (const key of [' ', 'Enter', '1', '2', '3', '4']) {

@@ -153,13 +153,13 @@ func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 				db.Raw(sql, args...).Scan(&n)
 				return n
 			}
-			join := "FROM card_states cs JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL WHERE cs.user_id = ?"
+			join := "FROM card_states cs JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL WHERE cs.user_id = ?"
 			wantToday := hand("SELECT COUNT(*) "+join+" AND cs.due_at <= ?", 1, edges[0])
 			wantTomorrow := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[0], edges[1])
 			want7 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[1], edges[2])
 			want30 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[2], edges[3])
 			wantLater := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ?", 1, edges[3])
-			wantNew := hand(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`, 1, statsNow)
+			wantNew := hand(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`, 1, statsNow)
 
 			if got.Today != wantToday || got.Tomorrow != wantTomorrow || got.Within7 != want7 ||
 				got.Within30 != want30 || got.Later != wantLater || got.NewNotDue != wantNew {
@@ -299,7 +299,7 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 			db.Raw(`SELECT COUNT(*) FROM cards c
 				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 				LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
-				WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+				WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))
 				  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
 				1, 1, 1, statsNow).Scan(&wantDue)

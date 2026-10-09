@@ -43,6 +43,9 @@ const (
 	ActionInviteRevoke = "invite.revoke"
 	// 撤销评分。
 	ActionReviewUndo = "review.undo"
+	// ActionCardSuspend / ActionCardUnsuspend 是用户暂停 / 恢复自己的一张卡（只影响本人）。
+	ActionCardSuspend   = "card.suspend"
+	ActionCardUnsuspend = "card.unsuspend"
 	// 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
 	ActionPermissionDenied = "permission.denied"
 	// 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。

@@ -134,6 +134,7 @@ describe('Deck and notes list API client and view contracts', () => {
         created_at: '2026-10-06T12:00:00Z',
         updated_at: '2026-10-06T12:30:00Z',
         external_ref: 'ext-note-001',
+        suspended: false,
       };
 
       const mockResponse: NotesResponse = {

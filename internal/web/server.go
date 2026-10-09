@@ -386,6 +386,7 @@ func New(addr string, deps Deps) (*Server, error) {
 			// 埋藏与卡面渲染：只写本人进度 / 只读清洗后 HTML，仍是会话 + CSRF 保护的 web 端点
 			// 埋藏的调度逻辑复用 internal/schedule。
 			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.reviewBury)
+			router.POST("/api/v1/review/suspend", s.sessions.CSRFMiddleware(), s.reviewSuspend)
 			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.reviewRender)
 		}
 	}

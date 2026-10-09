@@ -93,7 +93,7 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	e30 := e1.Add(30 * 24 * time.Hour) // 30 日结束
 
 	visible := `card_states AS cs
-		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL
+		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL`
 	where := "cs.user_id = ? AND n.deck_id IN (?)"
 	args := []any{userID, visibleDeckIDsQuery(s.db, userID)}
@@ -127,7 +127,7 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	newSQL := fmt.Sprintf(`SELECT COALESCE(COUNT(c.id), 0) AS n FROM cards AS c
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`)
 	newArgs := []any{userID, visibleDeckIDsQuery(s.db, userID), now.UTC()}
@@ -333,7 +333,7 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	dueSQL := `SELECT n.deck_id AS deck_id, COUNT(c.id) AS n FROM cards AS c
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)
 		GROUP BY n.deck_id`

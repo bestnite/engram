@@ -207,3 +207,75 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
 	}
 }
+
+// TestReviewSuspendRemovesCardForCallerOnly 覆盖复习页的暂停端点：缺 CSRF 被拒且不写库（反面）；
+// 暂停后响应里的队列不再有这张卡，状态行带 suspended_at；进度数值不变。
+func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Suspend deck")
+	note := seedBasic(t, db, deck.ID, "Q", "A")
+	seedBasic(t, db, deck.ID, "Q2", "A2")
+	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
+	req := map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}
+
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/suspend", req, cookies, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("suspend without CSRF = %d, want 403", rec.Code)
+	}
+	var states int64
+	db.Model(&store.CardState{}).Count(&states)
+	if states != 0 {
+		t.Fatalf("denied suspend wrote %d card_states rows, want 0", states)
+	}
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/suspend", req, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("suspend = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var body queueBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode suspend response: %v", err)
+	}
+	for _, c := range body.Cards {
+		if c.CardID == cardPub {
+			t.Fatalf("suspended card %s is still in the returned queue", cardPub)
+		}
+	}
+	var st store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&st).Error; err != nil {
+		t.Fatalf("load suspended state: %v", err)
+	}
+	if st.SuspendedAt == nil || st.State != "new" {
+		t.Errorf("state after suspend = %+v, want suspended_at set on a new-card row", st)
+	}
+}
+
+// TestReviewBuryUsesTheUsersReviewDay 断言埋藏推到「用户自己的」下一个复习日起点：到期时刻在用户
+// 时区里正好是日切点（默认 04:00）。反面：按 UTC 计算时，UTC+14 的用户会得到本地 18:00。
+func TestReviewBuryUsesTheUsersReviewDay(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	const tz = "Pacific/Kiritimati"
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("timezone", tz).Error; err != nil {
+		t.Fatalf("set timezone: %v", err)
+	}
+	deck := seedReviewDeck(t, db, ownerID, "Bury tz deck")
+	note := seedBasic(t, db, deck.ID, "Q", "A")
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{
+		"card_id": cardPublicIDOfNote(t, db, note.ID), "deck": []string{deck.PublicID},
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bury = %d (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var st store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardIDOfNote(t, db, note.ID), ownerID).First(&st).Error; err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	local := st.DueAt.In(loc)
+	if local.Hour() != store.DefaultDayCutoffHour || local.Minute() != 0 {
+		t.Errorf("buried until %s local, want the next %02d:00 in %s", local.Format(time.RFC3339), store.DefaultDayCutoffHour, tz)
+	}
+}

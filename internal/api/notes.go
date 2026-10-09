@@ -38,36 +38,50 @@ func (a *API) listNotes(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	out := make([]map[string]any, 0, len(notes))
-	for i := range notes {
-		out = append(out, a.NoteJSON(ctx, &notes[i]))
-	}
+	out := a.NotesJSON(ctx, u.ID, notes)
 	// 回显的生效值就是 NormalizeNoteListOptions 的结果，不再在本处重复夹一次。
 	c.JSON(http.StatusOK, gin.H{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage})
 }
 
-// NoteJSON 把 note 转成对外形态：fields 与 tags 解码成结构化值，避免调用方二次解析。
-// REST（list_notes/update_note）与 MCP 同名工具共用，保证同一 note 产出同一 JSON。
+// NotesJSON 把一组 note 转成 userID 视角下的对外形态：fields 与 tags 解码成结构化值，
+// 避免调用方二次解析。REST（list_notes/update_note）与 MCP 同名工具共用，保证同一 note 产出同一 JSON。
 //
-// id 是 note 自己的对外 id；deck_id 是它所属卡组的对外 id——数字主键不外露，
-// 后者按 note 的主键查库补出。
-func (a *API) NoteJSON(ctx context.Context, n *store.Note) map[string]any {
-	deckPublicID := ""
-	if d, err := a.decks.ByID(ctx, n.DeckID); err == nil {
-		deckPublicID = d.PublicID
+// id 是 note 自己的对外 id；deck_id 是它所属卡组的对外 id——数字主键不外露。
+// suspended 表示调用者暂停了这条 note 下的卡（暂停只对本人生效），一页 note 一次查询取回。
+func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
+	ids := make([]uint64, 0, len(notes))
+	for i := range notes {
+		ids = append(ids, notes[i].ID)
 	}
-	fields := store.FieldsOrEmpty(n.FieldsJSON)
-	tags := store.TagsOrEmpty(n.TagsJSON)
-	return map[string]any{
-		"id":           n.PublicID,
-		"deck_id":      deckPublicID,
-		"kind":         n.Kind,
-		"fields":       fields,
-		"tags":         tags,
-		"created_at":   n.CreatedAt,
-		"updated_at":   n.UpdatedAt,
-		"external_ref": n.ExternalRef,
+	suspended, err := store.SuspendedNoteIDs(ctx, a.db, userID, ids)
+	if err != nil {
+		a.logger.Error("load suspended notes failed", "user_id", userID, "error", err)
+		suspended = map[uint64]bool{}
 	}
+	deckPublic := map[uint64]string{}
+	out := make([]map[string]any, 0, len(notes))
+	for i := range notes {
+		n := &notes[i]
+		pid, ok := deckPublic[n.DeckID]
+		if !ok {
+			if d, err := a.decks.ByID(ctx, n.DeckID); err == nil {
+				pid = d.PublicID
+			}
+			deckPublic[n.DeckID] = pid
+		}
+		out = append(out, map[string]any{
+			"id":           n.PublicID,
+			"deck_id":      pid,
+			"kind":         n.Kind,
+			"fields":       store.FieldsOrEmpty(n.FieldsJSON),
+			"tags":         store.TagsOrEmpty(n.TagsJSON),
+			"created_at":   n.CreatedAt,
+			"updated_at":   n.UpdatedAt,
+			"external_ref": n.ExternalRef,
+			"suspended":    suspended[n.ID],
+		})
+	}
+	return out
 }
 
 // importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
@@ -130,7 +144,7 @@ func (a *API) updateNote(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, a.NoteJSON(ctx, updated))
+	c.JSON(http.StatusOK, a.NotesJSON(ctx, u.ID, []store.Note{*updated})[0])
 }
 
 // deleteNote 软删除单卡（进度保留，误删可恢复）。

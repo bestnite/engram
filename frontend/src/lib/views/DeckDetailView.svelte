@@ -185,6 +185,23 @@
     }
   }
 
+  // 暂停只对本人生效：列表上的切换改的是调用者自己在这条 note 下全部卡的暂停状态。
+  let suspendingNoteId = $state<string | null>(null);
+  let suspendError = $state('');
+
+  async function toggleSuspended(note: Note): Promise<void> {
+    suspendingNoteId = note.id;
+    suspendError = '';
+    try {
+      const res = await apiClient.setNoteSuspended(note.id, !note.suspended);
+      notes = notes.map((item) => (item.id === note.id ? { ...item, suspended: res.suspended } : item));
+    } catch {
+      suspendError = 'notes.suspend_failed';
+    } finally {
+      suspendingNoteId = null;
+    }
+  }
+
   async function deleteNote(note: Note): Promise<void> {
     deletingNoteId = note.id;
     deleteError = '';
@@ -420,6 +437,9 @@
       {#if deleteError}
         <p role="alert" data-testid="note-delete-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(deleteError)}</p>
       {/if}
+      {#if suspendError}
+        <p role="alert" data-testid="note-suspend-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(suspendError)}</p>
+      {/if}
 
       {#if loading}
         <Skeleton testId="notes-loading" label={$t('common.loading')} variant="cards" count={3} columns={1} />
@@ -471,6 +491,9 @@
                   />
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
                   <Badge class="font-semibold">{kindLabel(note.kind, $t)}</Badge>
+                  {#if note.suspended}
+                    <Badge testId={`note-suspended-${note.id}`}>{$t('notes.suspended')}</Badge>
+                  {/if}
                   {#if note.external_ref}
                     <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
                       [{note.external_ref}]
@@ -483,6 +506,7 @@
                     {note.created_at ? note.created_at.slice(0, 10) : ''}
                   </span>
                   <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
+                  <button data-testid="toggle-suspend-{note.id}" type="button" disabled={suspendingNoteId === note.id} class="text-zinc-600 dark:text-zinc-300 hover:underline disabled:opacity-50 cursor-pointer" onclick={() => toggleSuspended(note)}>{$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}</button>
                   {#if confirmingDeleteId === note.id}
                     <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
                     <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>

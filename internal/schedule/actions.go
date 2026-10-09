@@ -10,15 +10,13 @@ import (
 
 	"github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
 
 // ErrNothingToUndo 表示该卡没有任何复习日志，Undo 无对象可回滚。
 var ErrNothingToUndo = errors.New("schedule: no review to undo")
-
-// ErrCardNotFound 表示要操作的目标卡片不存在。
-var ErrCardNotFound = errors.New("schedule: card not found")
 
 // UndoInput 是一次撤销的入参；tx 的语义与 Submit 相同（事务边界由调用方提供）。
 type UndoInput struct {
@@ -215,27 +213,68 @@ func writeUndoAudit(ctx context.Context, tx *gorm.DB, in UndoInput, last store.R
 	return nil
 }
 
-// Suspend 暂停一张卡（cards.suspended_at = at）。暂停是卡片级、对所有用户生效的
-// 共享状态，因此不以 user_id 为条件。
-func Suspend(ctx context.Context, tx *gorm.DB, cardID uint64, at time.Time) error {
+// SuspendInput 是一次暂停 / 取消暂停的入参；tx 的语义与 Submit 相同（事务边界由调用方提供）。
+type SuspendInput struct {
+	CardID uint64
+	UserID uint64
+	// Suspended 为 true 表示暂停，false 表示取消暂停。
+	Suspended bool
+	// Now 为零值时取当前时间，作为暂停时刻。
+	Now time.Time
+}
+
+// SetSuspended 暂停或取消暂停一张卡，只对 UserID 本人生效（card_states.suspended_at）。
+//
+// 暂停是每个用户自己的学习决定：共享卡组里一个成员暂停某张卡，不影响其他成员与属主。
+// 进度数值一概不动；还没有状态行的新卡会先建一行（state=new），与 Bury 同一做法。
+// version 推进：在途的评分提交拿着旧版本，会以冲突结束，而不是悄悄复习一张刚被暂停的卡。
+func SetSuspended(ctx context.Context, tx *gorm.DB, in SuspendInput) (store.CardState, error) {
 	if tx == nil {
-		return errors.New("schedule: suspend: transaction is required")
+		return store.CardState{}, errors.New("schedule: suspend: transaction is required")
 	}
-	if cardID == 0 {
-		return errors.New("schedule: suspend: card id is required")
+	if in.CardID == 0 || in.UserID == 0 {
+		return store.CardState{}, errors.New("schedule: suspend: card id and user id are required")
 	}
-	if at.IsZero() {
-		at = time.Now()
+	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
+	if err != nil {
+		return store.CardState{}, err
 	}
-	res := tx.WithContext(ctx).Model(&store.Card{}).Where("id = ?", cardID).
-		Update("suspended_at", at.UTC())
+	row := store.CardState{CardID: in.CardID, UserID: in.UserID, State: StateNew.String()}
+	version := 0
+	if cur != nil {
+		row = *cur
+		version = cur.Version
+	}
+	if in.Suspended {
+		at := nowOr(in.Now).UTC()
+		row.SuspendedAt = &at
+	} else {
+		row.SuspendedAt = nil
+	}
+	row.Version = version + 1
+	if cur == nil {
+		// 并发的首次写入（评分、埋藏或另一次暂停）先建了行时，这里插不进去：按冲突处理。
+		res := tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
+		if res.Error != nil {
+			return store.CardState{}, fmt.Errorf("schedule: suspend: create state for card %d: %w", in.CardID, res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return store.CardState{}, fmt.Errorf("%w: card %d user %d gained a state row concurrently while suspending",
+				ErrVersionConflict, in.CardID, in.UserID)
+		}
+		return row, nil
+	}
+	res := tx.WithContext(ctx).Model(&store.CardState{}).
+		Where("card_id = ? AND user_id = ? AND version = ?", in.CardID, in.UserID, version).
+		Updates(map[string]any{"suspended_at": row.SuspendedAt, "version": row.Version})
 	if res.Error != nil {
-		return fmt.Errorf("schedule: suspend card %d: %w", cardID, res.Error)
+		return store.CardState{}, fmt.Errorf("schedule: suspend card %d: %w", in.CardID, res.Error)
 	}
 	if res.RowsAffected == 0 {
-		return fmt.Errorf("%w: card %d", ErrCardNotFound, cardID)
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while suspending",
+			ErrVersionConflict, in.CardID, in.UserID)
 	}
-	return nil
+	return row, nil
 }
 
 // BuryInput 是一次“本日埋藏”的入参。

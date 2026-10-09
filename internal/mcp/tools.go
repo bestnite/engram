@@ -179,10 +179,7 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]map[string]any, 0, len(notes))
-	for i := range notes {
-		out = append(out, s.api.NoteJSON(ctx, &notes[i]))
-	}
+	out := s.api.NotesJSON(ctx, id.User.ID, notes)
 	return map[string]any{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage}, nil
 }
 
@@ -262,7 +259,7 @@ func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (
 	if err != nil {
 		return nil, err
 	}
-	return s.api.NoteJSON(ctx, updated), nil
+	return s.api.NotesJSON(ctx, id.User.ID, []store.Note{*updated})[0], nil
 }
 
 func (s *Server) deleteNote(ctx context.Context, id Identity, in deleteNoteIn) (any, error) {

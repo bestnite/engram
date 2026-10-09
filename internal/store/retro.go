@@ -137,7 +137,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	// 少了它，别人 private 卡组里没有状态行的卡会被算成「新卡未到期」。
 	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
-		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND c.suspended_at IS NULL
+		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		WHERE cs.user_id = ? AND n.deck_id IN (?) AND cs.due_at IS NOT NULL AND cs.due_at <= ?`,
 		userID, visibleDeckIDsQuery(db, userID), e1).
@@ -147,7 +147,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(c.id) FROM cards c
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`,
 		userID, visibleDeckIDsQuery(db, userID), now.UTC()).
@@ -186,7 +186,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(c.id) FROM cards c
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
+		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
 		userID, visibleDeckIDsQuery(db, userID), now.UTC()).

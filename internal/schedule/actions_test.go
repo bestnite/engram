@@ -160,33 +160,70 @@ func TestUndoWithoutLogReturnsError(t *testing.T) {
 	}
 }
 
-// TestSuspendRemovesCardFromQueue 断言 Suspend 写入 suspended_at，且该卡随即从队列消失。
-func TestSuspendRemovesCardFromQueue(t *testing.T) {
+// TestSuspendIsPerUser 断言暂停只对暂停者生效：用户 1 暂停后这张卡从他的队列消失，
+// 同一张卡仍在用户 2 的队列里（反面：卡片级暂停会让所有人都看不到）；取消暂停后回到用户 1 的队列，
+// 进度数值与到期日不变。还没有状态行的新卡也能被暂停。
+func TestSuspendIsPerUser(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	deckID := seedDeck(t, db, now)
 	cardID := seedCard(t, db, deckID, "forward", now)
 	seedState(t, db, 1, cardID, "review", now.Add(-time.Hour), 5, 5, &now)
-
-	if err := Suspend(ctx, db, cardID, now); err != nil {
-		t.Fatalf("Suspend() error = %v", err)
-	}
-	var card store.Card
-	if err := db.First(&card, cardID).Error; err != nil {
-		t.Fatalf("load card: %v", err)
-	}
-	if card.SuspendedAt == nil {
-		t.Fatal("suspended_at = nil, want a timestamp")
-	}
+	seedState(t, db, 2, cardID, "review", now.Add(-time.Hour), 5, 5, &now)
+	fresh := seedCard(t, db, deckID, "forward", now)
 
 	s := mustScheduler(t, testPreset(t))
-	items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(ctx, 1, QueueOptions{DeckID: deckID, Now: now, Location: time.UTC})
-	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+	queue := func(user uint64) map[uint64]bool {
+		t.Helper()
+		items, err := NewQueueBuilder(db, store.NewDeckStore(db), s).Build(ctx, user,
+			QueueOptions{DeckIDs: []uint64{deckID}, Now: now, Location: time.UTC, NewPerDayOverride: new(int)})
+		if err != nil {
+			t.Fatalf("Build(%d) error = %v", user, err)
+		}
+		out := map[uint64]bool{}
+		for _, it := range items {
+			out[it.CardID] = true
+		}
+		return out
 	}
-	if len(items) != 0 {
-		t.Errorf("Build() = %+v, want empty (card suspended)", items)
+	set := func(card uint64, suspended bool) store.CardState {
+		t.Helper()
+		var st store.CardState
+		err := db.Transaction(func(tx *gorm.DB) error {
+			var err error
+			st, err = SetSuspended(ctx, tx, SuspendInput{CardID: card, UserID: 1, Suspended: suspended, Now: now})
+			return err
+		})
+		if err != nil {
+			t.Fatalf("SetSuspended(%d, %v) error = %v", card, suspended, err)
+		}
+		return st
+	}
+
+	st := set(cardID, true)
+	if st.SuspendedAt == nil || st.State != "review" || st.Stability == nil || *st.Stability != 5 {
+		t.Fatalf("suspended state = %+v, want suspended_at set and progress untouched", st)
+	}
+	if queue(1)[cardID] {
+		t.Error("user 1 still sees the card after suspending it")
+	}
+	if !queue(2)[cardID] {
+		t.Error("user 2 lost the card because user 1 suspended it")
+	}
+	if st := set(fresh, true); st.State != "new" || st.SuspendedAt == nil {
+		t.Errorf("suspending a new card = %+v, want a new state row with suspended_at", st)
+	}
+	if queue(1)[fresh] {
+		t.Error("user 1 still sees the suspended new card")
+	}
+
+	st = set(cardID, false)
+	if st.SuspendedAt != nil || st.DueAt == nil || !st.DueAt.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("unsuspended state = %+v, want suspended_at cleared and due_at unchanged", st)
+	}
+	if !queue(1)[cardID] {
+		t.Error("user 1 does not see the card after unsuspending it")
 	}
 }
 

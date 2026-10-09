@@ -221,7 +221,7 @@ export const en: LocaleCatalog = {
   'review.shortcuts_result': 'Enter / Space: continue',
   'review.edit': 'Edit',
   'review.bury': 'Bury',
-  'review.bury_hint': 'Bury: hide this card until tomorrow; its progress is kept.',
+  'review.bury_hint': "Bury hides this card until tomorrow. Suspend hides it until you unsuspend it from the deck's note list. Both affect only you and keep your progress.",
   'decks.create.heading': 'Create a deck',
   'decks.create.name': 'Name',
   'decks.create.description': 'Description',
@@ -1215,4 +1215,9 @@ export const en: LocaleCatalog = {
   'admin.mail.prefill_custom': 'This type and language has your version; the box shows it.',
   'admin.mail.var.new_cards': 'New cards',
   'deck.settings.personal_hint': 'These settings apply only to you: everyone who shares this deck has their own preset and daily limits.',
+  'review.suspend': 'Suspend',
+  'notes.suspended': 'Suspended',
+  'notes.suspend': 'Suspend',
+  'notes.unsuspend': 'Unsuspend',
+  'notes.suspend_failed': 'The change failed. Please try again.',
 };

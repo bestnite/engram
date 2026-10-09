@@ -398,3 +398,96 @@ func TestBuiltinBackfillMemberSettingsMigration(t *testing.T) {
 		})
 	}
 }
+
+// TestBuiltinPerUserSuspensionMigration 模拟卡片级暂停的旧库：cards 上有 suspended_at。
+// 迁移后暂停只落在卡组属主的状态行上（属主没有状态行的卡建一行新卡状态），共享成员不继承，
+// 原列被删除；已有进度不变。
+func TestBuiltinPerUserSuspensionMigration(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			if err := setVersion(db, 6); err != nil {
+				t.Fatalf("set version: %v", err)
+			}
+			colType := "datetime"
+			if db.Dialector.Name() == "postgres" {
+				colType = "timestamptz"
+			}
+			if err := db.Exec("ALTER TABLE cards ADD COLUMN suspended_at " + colType).Error; err != nil {
+				t.Fatalf("add legacy column: %v", err)
+			}
+			ids := seedUsers(t, db, "susp_owner", "susp_member")
+			owner, member := ids[0], ids[1]
+			deckID := seedDeck(t, db, owner)
+			now := time.Now().UTC().Truncate(time.Second)
+			mk := func() uint64 {
+				note := Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+				if err := db.Create(&note).Error; err != nil {
+					t.Fatal(err)
+				}
+				card := Card{NoteID: note.ID, Template: "forward", CreatedAt: now}
+				if err := db.Create(&card).Error; err != nil {
+					t.Fatal(err)
+				}
+				return card.ID
+			}
+			withState, noState, active := mk(), mk(), mk()
+			for _, id := range []uint64{withState, noState} {
+				if err := db.Exec("UPDATE cards SET suspended_at = ? WHERE id = ?", now, id).Error; err != nil {
+					t.Fatalf("suspend legacy card: %v", err)
+				}
+			}
+			for _, st := range []CardState{
+				{CardID: withState, UserID: owner, State: "review", Reps: 4, Version: 4},
+				{CardID: withState, UserID: member, State: "review", Reps: 2, Version: 2},
+			} {
+				if err := db.Create(&st).Error; err != nil {
+					t.Fatalf("seed state: %v", err)
+				}
+			}
+
+			if applied, err := Apply(ctx, db, BuiltinMigrations[:7]); err != nil || applied != 1 {
+				t.Fatalf("Apply() = %d, %v; want 1, nil", applied, err)
+			}
+			if db.Migrator().HasColumn("cards", "suspended_at") {
+				t.Error("cards.suspended_at still exists after the migration")
+			}
+			load := func(card, user uint64) *CardState {
+				var st CardState
+				if err := db.Where("card_id = ? AND user_id = ?", card, user).Take(&st).Error; err != nil {
+					return nil
+				}
+				return &st
+			}
+			cases := []struct {
+				name      string
+				card      uint64
+				user      uint64
+				wantRow   bool
+				suspended bool
+				reps      int
+			}{
+				{"owner's existing state is suspended, progress kept", withState, owner, true, true, 4},
+				{"member does not inherit the suspension", withState, member, true, false, 2},
+				{"owner without a state row gets a suspended new state", noState, owner, true, true, 0},
+				{"unsuspended card is untouched", active, owner, false, false, 0},
+			}
+			for _, tc := range cases {
+				st := load(tc.card, tc.user)
+				if (st != nil) != tc.wantRow {
+					t.Errorf("%s: state row present = %v, want %v", tc.name, st != nil, tc.wantRow)
+					continue
+				}
+				if st == nil {
+					continue
+				}
+				if (st.SuspendedAt != nil) != tc.suspended || st.Reps != tc.reps {
+					t.Errorf("%s: state = suspended %v reps %d, want %v and %d", tc.name, st.SuspendedAt != nil, st.Reps, tc.suspended, tc.reps)
+				}
+			}
+		})
+	}
+}

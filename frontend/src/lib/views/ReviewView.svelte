@@ -341,11 +341,23 @@
    * 服务端按 reader 判定，共享卡组读者可自行复习。
    */
   async function bury(): Promise<void> {
+    await skipCurrent((cardId) => client.buryReview({ card_id: cardId, deck: selectedDecks() }));
+  }
+
+  /**
+   * 暂停当前卡：只对本人生效（共享卡组的其他人不受影响），在卡组的笔记列表里可以取消暂停。
+   */
+  async function suspend(): Promise<void> {
+    await skipCurrent((cardId) => client.suspendReview({ card_id: cardId, deck: selectedDecks() }));
+  }
+
+  /** 埋藏与暂停共用：请求成功后换成服务端重建的队列，并重置本卡的作答状态。 */
+  async function skipCurrent(send: (cardId: string) => Promise<{ cards: DueCard[]; remaining: number }>): Promise<void> {
     if (!current || submitting) return;
     submitting = true;
     error = null;
     try {
-      const response = await client.buryReview({ card_id: current.card_id, deck: selectedDecks() });
+      const response = await send(current.card_id);
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
       revealed = false;
@@ -467,6 +479,10 @@
       case 'bury':
         event.preventDefault();
         void bury();
+        return;
+      case 'suspend':
+        event.preventDefault();
+        void suspend();
         return;
       case 'edit':
         event.preventDefault();
@@ -733,9 +749,14 @@
 
         {#if !feedback}
           <div class="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <Button variant="outline" size="sm" class="self-start" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
-              {$t('review.bury')}
-            </Button>
+            <div class="flex gap-2 self-start">
+              <Button variant="outline" size="sm" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
+                {$t('review.bury')}
+              </Button>
+              <Button variant="outline" size="sm" testId="review-suspend" disabled={submitting} onclick={() => void suspend()}>
+                {$t('review.suspend')}
+              </Button>
+            </div>
             <p class="text-xs text-zinc-400 dark:text-zinc-500" data-testid="review-bury-hint">
               {$t('review.bury_hint')}
             </p>
