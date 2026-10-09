@@ -71,7 +71,7 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	counts, err := s.deckQueueCounts(ctx, user.ID, summaries)
+	counts, err := s.deckQueueCounts(ctx, user, summaries)
 	if err != nil {
 		s.logger.Error("count deck queue failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -88,18 +88,17 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 }
 
 // deckQueueCounts 取列表页每个卡组「今日可刷」的构成（新 / 复习两个数），走 schedule.DeckCounts：
-// 它与 /review 的取卡路径同源，因此两个数相加＝点进去实际能刷的张数。
-// sched 用默认预设（schedulerFor 传 nil）——数量统计不算 retrievability，预设不影响结果。
-func (s *Server) deckQueueCounts(ctx context.Context, userID uint64, summaries []store.DeckSummary) (map[uint64]schedule.DeckQueueCounts, error) {
+// 它与 /review 的取卡路径共用筛选条件与额度公式，因此两个数相加＝点进去实际能刷的张数。
+// 计数不算 retrievability，不需要调度器；「今日已用量」按用户自己的时区与日切点统计。
+func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, summaries []store.DeckSummary) (map[uint64]schedule.DeckQueueCounts, error) {
 	ids := make([]uint64, 0, len(summaries))
 	for i := range summaries {
 		ids = append(ids, summaries[i].Deck.ID)
 	}
-	sched, err := s.schedulerFor(ctx, userID, nil)
-	if err != nil {
-		return nil, err
-	}
-	return schedule.NewQueueBuilder(s.db, s.decks, sched).DeckCounts(ctx, userID, ids)
+	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, ids, schedule.QueueOptions{
+		Timezone:      user.Timezone,
+		DayCutoffHour: user.DayCutoffHour,
+	})
 }
 
 // resolvePresetID 解析预设的对外 id：必须属于当前用户；缺省或非法时退回第一个预设。

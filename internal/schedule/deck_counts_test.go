@@ -131,7 +131,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		}
 	}
 
-	counts, err := builder.DeckCounts(ctx, 1, visible)
+	counts, err := builder.DeckCounts(ctx, 1, visible, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckCounts() error = %v", err)
 	}
@@ -188,7 +188,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 			t.Errorf("all-decks queue leaked another user's deck %d", it.DeckID)
 		}
 	}
-	allCounts, err := builder.DeckCounts(ctx, 1, nil)
+	allCounts, err := builder.DeckCounts(ctx, 1, nil, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckCounts(nil) error = %v", err)
 	}
@@ -213,4 +213,93 @@ func containsID(ids []uint64, want uint64) bool {
 		}
 	}
 	return false
+}
+
+// TestDeckCountsUnlimitedIsNotCappedByBatch 断言不限量卡组的复习数是真实张数：
+// 单批取卡上限（BatchSize）只决定一次返回多少，不决定今天能刷多少。
+func TestDeckCountsUnlimitedIsNotCappedByBatch(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	last := now.Add(-48 * time.Hour)
+	p := store.NewPreset(1, "preset")
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset: %v", err)
+	}
+	d := store.Deck{OwnerUserID: 1, Name: "big", PresetID: p.ID, CreatedAt: now}
+	if err := db.Create(&d).Error; err != nil {
+		t.Fatalf("create deck: %v", err)
+	}
+	if err := db.Model(&store.Deck{}).Where("id = ?", d.ID).
+		Updates(map[string]any{"new_per_day": 0, "reviews_per_day": 0}).Error; err != nil {
+		t.Fatalf("set caps: %v", err)
+	}
+	const due, fresh = DefaultReviewBatch + 50, 30
+	for i := 0; i < due; i++ {
+		id := seedCard(t, db, d.ID, "forward", now)
+		seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
+	}
+	for i := 0; i < fresh; i++ {
+		seedCard(t, db, d.ID, "forward", now)
+	}
+	counts, err := NewQueueBuilder(db, store.NewDeckStore(db), nil).DeckCounts(ctx, 1, []uint64{d.ID}, QueueOptions{Now: now})
+	if err != nil {
+		t.Fatalf("DeckCounts() error = %v", err)
+	}
+	if got := counts[d.ID]; got.Review != due || got.New != fresh {
+		t.Errorf("counts = %+v, want Review %d New %d", got, due, fresh)
+	}
+}
+
+// TestDeckCountsUseTheUsersReviewDay 断言「今日已用量」按用户时区的复习日统计。
+// 01:00 UTC 在 UTC+8 已是 09:00，用户的复习日是 10-07；按 UTC 算则仍是 10-06。
+// 当天已引入 1 张、上限 1 张时，用户口径下新卡额度用完（0）；若误用 UTC 口径就会显示 1。
+func TestDeckCountsUseTheUsersReviewDay(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 7, 1, 0, 0, 0, time.UTC)
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	p := store.NewPreset(1, "preset")
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset: %v", err)
+	}
+	d := store.Deck{OwnerUserID: 1, Name: "tz", PresetID: p.ID, CreatedAt: now}
+	if err := db.Create(&d).Error; err != nil {
+		t.Fatalf("create deck: %v", err)
+	}
+	if err := db.Model(&store.Deck{}).Where("id = ?", d.ID).
+		Updates(map[string]any{"new_per_day": 1, "reviews_per_day": 0}).Error; err != nil {
+		t.Fatalf("set caps: %v", err)
+	}
+	userDay := ReviewDay(now, shanghai, DefaultDayCutoffHour)
+	if utcDay := ReviewDay(now, time.UTC, DefaultDayCutoffHour); utcDay == userDay {
+		t.Fatalf("fixture error: user day %s equals UTC day", userDay)
+	}
+	used := seedCard(t, db, d.ID, "used", now)
+	seedReview(t, db, 1, used, userDay, int(StateNew), now.Add(-time.Minute))
+	future := now.Add(48 * time.Hour)
+	seedState(t, db, 1, used, "review", future, 5.0, 5.0, &now)
+	seedCard(t, db, d.ID, "forward", now)
+
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), nil)
+	cases := []struct {
+		name    string
+		tz      string
+		wantNew int
+	}{
+		{"user timezone sees today's quota used", "Asia/Shanghai", 0},
+		{"UTC reading is a different day", "UTC", 1},
+	}
+	for _, tc := range cases {
+		counts, err := builder.DeckCounts(ctx, 1, []uint64{d.ID}, QueueOptions{Now: now, Timezone: tc.tz})
+		if err != nil {
+			t.Fatalf("%s: DeckCounts() error = %v", tc.name, err)
+		}
+		if got := counts[d.ID].New; got != tc.wantNew {
+			t.Errorf("%s: New = %d, want %d", tc.name, got, tc.wantNew)
+		}
+	}
 }
