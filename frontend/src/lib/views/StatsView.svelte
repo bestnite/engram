@@ -1,6 +1,8 @@
 <script lang="ts">
   import LearningCurveChart from '../components/LearningCurveChart.svelte';
   import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import { RefreshCw } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -148,11 +150,6 @@
     }
   });
 
-  const volumeMax = $derived(
-    detail
-      ? maxOf([detail.volume.today, detail.volume.last_7_days, detail.volume.last_30_days])
-      : 0
-  );
   const dueMax = $derived(
     detail
       ? maxOf([
@@ -169,332 +166,248 @@
 </script>
 
 <Page>
-  <div class="space-y-8">
-    <div class="flex items-center justify-between pb-4 border-b border-border">
-      <div>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-          {$t('stats.title')}
-        </h1>
-      </div>
+  <PageHeader title={$t('stats.title')}>
+    {#snippet actions()}
       {#if !loading && !error && detail && !detail.empty}
-        <button
-          type="button"
-          title={$t('stats.retry')}
-          aria-label={$t('stats.retry')}
-          class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-muted transition-colors btn-press cursor-pointer border border-input"
-          onclick={fetchStats}
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-            <path d="M21 3v5h-5" />
-            <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-            <path d="M3 21v-5h5" />
-          </svg>
-        </button>
+        <Button variant="ghost" size="icon" label={$t('stats.retry')} title={$t('stats.retry')} onclick={fetchStats}>
+          <RefreshCw class="size-4" aria-hidden="true" />
+        </Button>
       {/if}
+    {/snippet}
+  </PageHeader>
+
+  {#if loading}
+    <Skeleton testId="stats-loading" label={$t('stats.loading')} />
+  {:else if error}
+    <div
+      data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'stats-unauthorized' : 'stats-failed'}
+      class="py-16 text-center"
+    >
+      <p class="text-base font-medium text-foreground">
+        {#if error instanceof ApiClientError && error.isUnauthorized}
+          {$t('stats.unauthorized')}
+        {:else}
+          {$t('stats.failed')}
+        {/if}
+      </p>
+      <Button testId="stats-retry" type="button" onclick={fetchStats} variant="outline" size="lg" class="mt-4">
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('stats.retry')}</span>
+      </Button>
     </div>
-
-    {#if loading}
-      <Skeleton testId="stats-loading" label={$t('stats.loading')} />
-    {:else if error}
-      <div
-        data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'stats-unauthorized' : 'stats-failed'}
-        class="py-10 text-center"
-      >
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 mb-3">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+  {:else if detail && detail.empty}
+    <div data-testid="stats-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+      {$t('stats.empty')}
+    </div>
+  {:else if detail}
+    <div data-testid="stats-data" class="divide-y divide-border">
+      <!-- 指标带：复习量与连续打卡，一眼看到最常看的五个数。 -->
+      <div class="grid grid-cols-2 pb-8 sm:grid-cols-5 sm:divide-x sm:divide-border">
+        <div data-testid="stats-volume" class="contents">
+          {#each [
+            { key: 'stats.volume.today', value: detail.volume.today },
+            { key: 'stats.volume.last7', value: detail.volume.last_7_days },
+            { key: 'stats.volume.last30', value: detail.volume.last_30_days },
+          ] as row}
+            <dl class="px-4 py-2 first:pl-0">
+              <dt class="text-xs text-muted-foreground">{$t('stats.volume.heading')} · {$t(row.key)}</dt>
+              <dd class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.volume.value', { count: formatNumber(row.value) })}</dd>
+            </dl>
+          {/each}
         </div>
-        <p class="text-base font-medium text-foreground mb-2">
-          {#if error instanceof ApiClientError && error.isUnauthorized}
-            {$t('stats.unauthorized')}
-          {:else}
-            {$t('stats.failed')}
-          {/if}
-        </p>
+        <div data-testid="stats-streak" class="contents">
+          <dl class="px-4 py-2">
+            <dt class="text-xs text-muted-foreground">{$t('stats.streak.current_label')}</dt>
+            <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current) })}</dd>
+          </dl>
+          <dl class="px-4 py-2">
+            <dt class="text-xs text-muted-foreground">{$t('stats.streak.longest_label')}</dt>
+            <dd data-testid="stats-streak-longest" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.longest) })}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- 学习曲线 -->
+      <section data-testid="stats-curve" class="py-8">
+        <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
+        <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.curve.intro')}</p>
         <div class="mt-4">
-          <Button testId="stats-retry" type="button" onclick={fetchStats} variant="primary" size="lg">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
-            </svg>
-            <span>{$t('stats.retry')}</span>
-          </Button>
-        </div>
-      </div>
-    {:else if detail && detail.empty}
-      <div data-testid="stats-empty" class="py-12 text-center text-muted-foreground">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground/70 mb-3">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-        </div>
-        <p class="text-base font-medium text-foreground/80">
-          {$t('stats.empty')}
-        </p>
-      </div>
-    {:else if detail}
-      <div data-testid="stats-data" class="space-y-8">
-        <!-- 复习量 + 到期预测 -->
-        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <section data-testid="stats-volume" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.volume.heading')}
-            </h2>
-            <ul class="space-y-3">
-              {#each [
-                { key: 'stats.volume.today', value: detail.volume.today },
-                { key: 'stats.volume.last7', value: detail.volume.last_7_days },
-                { key: 'stats.volume.last30', value: detail.volume.last_30_days },
-              ] as row}
-                <li>
-                  <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-foreground/80">{$t(row.key)}</span>
-                    <span class="font-mono font-semibold text-foreground">
-                      {$t('stats.volume.value', { count: formatNumber(row.value) })}
-                    </span>
-                  </div>
-                  {#if barWidth(row.value, volumeMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(row.value, volumeMax)}%"></div>
-                    </div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </section>
-
-          <section data-testid="stats-due" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.due.heading')}
-            </h2>
-            <ul class="space-y-3">
-              {#each [
-                { key: 'stats.due.today', value: detail.due.today },
-                { key: 'stats.due.tomorrow', value: detail.due.tomorrow },
-                { key: 'stats.due.within7', value: detail.due.within_7_days },
-                { key: 'stats.due.within30', value: detail.due.within_30_days },
-                { key: 'stats.due.later', value: detail.due.later },
-                { key: 'stats.due.new_not_due', value: detail.due.new_not_due },
-              ] as row}
-                <li>
-                  <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-foreground/80">{$t(row.key)}</span>
-                    <span class="font-mono font-semibold text-foreground">
-                      {$t('stats.due.value', { count: formatNumber(row.value) })}
-                    </span>
-                  </div>
-                  {#if barWidth(row.value, dueMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(row.value, dueMax)}%"></div>
-                    </div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </section>
-        </div>
-
-        <!-- 留存率：总体 + 每个稳定性桶 -->
-        <section data-testid="stats-retention" class="card-elevated p-5 rounded-lg space-y-4">
-          <div>
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.retention.heading')}
-            </h2>
-            <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('stats.retention.intro')}</p>
-          </div>
-          <ul class="space-y-3">
-            <li data-testid="stats-retention-overall">
-              <div class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-foreground/80">{$t('stats.retention.overall')}</span>
-                <span class="font-mono font-semibold text-foreground">
-                  {$t('stats.retention.rate', {
-                    rate: formatPercentValue(detail.retention.rate),
-                    passed: detail.retention.passed,
-                    total: detail.retention.total,
-                  })}
-                </span>
-              </div>
-              {#if percentWidth(detail.retention.rate) > 0}
-                <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
-                  <div class="h-full rounded-full bg-indigo-600" style="width: {percentWidth(detail.retention.rate)}%"></div>
-                </div>
-              {/if}
-            </li>
-            {#each detail.retention.buckets as bucket}
-              <li>
-                <div class="flex items-center justify-between text-xs sm:text-sm">
-                  <span class="font-medium text-foreground/80">{$t(retentionBucketKey(bucket.label))}</span>
-                  <span class="font-mono font-semibold text-foreground">
-                    {$t('stats.retention.rate', {
-                      rate: formatPercentValue(bucket.rate),
-                      passed: bucket.passed,
-                      total: bucket.total,
-                    })}
-                  </span>
-                </div>
-                {#if percentWidth(bucket.rate) > 0}
-                  <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
-                    <div class="h-full rounded-full bg-indigo-600" style="width: {percentWidth(bucket.rate)}%"></div>
-                  </div>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        </section>
-
-        <!-- 时间投入 / 连续打卡 / 判分来源 -->
-        <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <section data-testid="stats-time" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.time.heading')}
-            </h2>
-            <ul class="space-y-3">
-              {#each [
-                { key: 'stats.time.total_label', value: formatDuration(detail.time_spent.total_ms) },
-                { key: 'stats.time.avg_label', value: formatDuration(Math.trunc(detail.time_spent.avg_ms)) },
-                { key: 'stats.time.median_label', value: formatDuration(detail.time_spent.median_ms) },
-                { key: 'stats.time.count_label', value: $t('stats.time.count', { count: formatNumber(detail.time_spent.count) }) },
-              ] as row}
-                <li class="flex items-center justify-between text-xs sm:text-sm">
-                  <span class="font-medium text-foreground/80">{$t(row.key)}</span>
-                  <span class="font-mono font-semibold text-foreground">{row.value}</span>
-                </li>
-              {/each}
-            </ul>
-          </section>
-
-          <section data-testid="stats-streak" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.streak.heading')}
-            </h2>
-            <ul class="space-y-3">
-              <li class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-foreground/80">{$t('stats.streak.current_label')}</span>
-                <span data-testid="stats-streak-current" class="font-mono font-semibold text-foreground">
-                  {$t('stats.streak.days', { days: formatNumber(detail.streak.current) })}
-                </span>
-              </li>
-              <li class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-foreground/80">{$t('stats.streak.longest_label')}</span>
-                <span data-testid="stats-streak-longest" class="font-mono font-semibold text-foreground">
-                  {$t('stats.streak.days', { days: formatNumber(detail.streak.longest) })}
-                </span>
-              </li>
-            </ul>
-          </section>
-
-          <section data-testid="stats-grade" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {$t('stats.grade.heading')}
-            </h2>
-            <ul class="space-y-3">
-              {#each detail.grades as grade}
-                <li>
-                  <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-foreground/80">{$t(gradeSourceKey(grade.source))}</span>
-                    <span class="font-mono font-semibold text-foreground">
-                      {$t('stats.grade.value', { count: formatNumber(grade.count) })}
-                    </span>
-                  </div>
-                  {#if barWidth(grade.count, gradeMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(grade.count, gradeMax)}%"></div>
-                    </div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </section>
-        </div>
-
-        <!-- 学习曲线 -->
-        <section data-testid="stats-curve" class="card-elevated p-5 rounded-lg space-y-4">
-          <div>
-            <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
-            <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.curve.intro')}</p>
-          </div>
           {#if detail.curve.length === 0}
             <p class="text-xs text-muted-foreground">{$t('stats.curve.empty')}</p>
           {:else}
             <LearningCurveChart points={detail.curve} from={detail.curve_from} to={detail.curve_to} />
           {/if}
+        </div>
+      </section>
+
+      <!-- 到期预测 / 留存率 -->
+      <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
+        <section data-testid="stats-due">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.due.heading')}</h2>
+          <ul class="mt-4 space-y-3">
+            {#each [
+              { key: 'stats.due.today', value: detail.due.today },
+              { key: 'stats.due.tomorrow', value: detail.due.tomorrow },
+              { key: 'stats.due.within7', value: detail.due.within_7_days },
+              { key: 'stats.due.within30', value: detail.due.within_30_days },
+              { key: 'stats.due.later', value: detail.due.later },
+              { key: 'stats.due.new_not_due', value: detail.due.new_not_due },
+            ] as row}
+              <li>
+                <div class="flex items-center justify-between text-[13px]">
+                  <span class="text-muted-foreground">{$t(row.key)}</span>
+                  <span class="font-medium tabular-nums text-foreground">{$t('stats.due.value', { count: formatNumber(row.value) })}</span>
+                </div>
+                  {#if barWidth(row.value, dueMax) > 0}
+                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-brand" style="width: {barWidth(row.value, dueMax)}%"></div>
+                    </div>
+                  {/if}
+              </li>
+            {/each}
+          </ul>
         </section>
 
-        <!-- 卡组维度 / 标签维度 -->
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section data-testid="stats-deck" class="card-elevated rounded-lg overflow-hidden">
-            <div class="border-b border-border p-5">
-              <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {$t('stats.deck.heading')}
-              </h2>
-            </div>
-            {#if detail.decks.length === 0}
-              <div class="p-8 text-center text-xs text-muted-foreground/70">{$t('stats.deck.empty')}</div>
-            {:else}
-              <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                  <thead class="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th class="px-5 py-3">{$t('stats.deck.col.name')}</th>
-                      <th class="px-5 py-3">{$t('stats.deck.col.due')}</th>
-                      <th class="px-5 py-3">{$t('stats.deck.col.reviews')}</th>
-                      <th class="px-5 py-3">{$t('stats.deck.col.retention')}</th>
-                      <th class="px-5 py-3">{$t('stats.deck.col.elapsed')}</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {#each detail.decks as deck}
-                      <tr>
-                        <td class="px-5 py-3 font-medium text-foreground">{deck.name}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.table.rate', { rate: formatPercentValue(deck.retention) })}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{formatDuration(deck.elapsed_ms)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
+        <section data-testid="stats-retention">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.retention.heading')}</h2>
+          <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.retention.intro')}</p>
+          <ul class="mt-4 space-y-3">
+            <li data-testid="stats-retention-overall">
+              <div class="flex items-center justify-between text-[13px]">
+                <span class="font-medium text-foreground">{$t('stats.retention.overall')}</span>
+                <span class="font-medium tabular-nums text-foreground">
+                  {$t('stats.retention.rate', { rate: formatPercentValue(detail.retention.rate), passed: detail.retention.passed, total: detail.retention.total })}
+                </span>
               </div>
-            {/if}
-          </section>
-
-          <section data-testid="stats-tag" class="card-elevated rounded-lg overflow-hidden">
-            <div class="border-b border-border p-5">
-              <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {$t('stats.tag.heading')}
-              </h2>
-              <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
-                   在重复卡组维度（没复习过的大标签一个都不出现）。 -->
-              <p data-testid="stats-tag-scope" class="mt-2 text-xs leading-relaxed text-muted-foreground/70">{$t('stats.tag.scope')}</p>
-            </div>
-            {#if detail.tags.length === 0}
-              <div class="p-8 text-center text-xs text-muted-foreground/70">{$t('stats.tag.empty')}</div>
-            {:else}
-              <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                  <thead class="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th class="px-5 py-3">{$t('stats.tag.col.tag')}</th>
-                      <th class="px-5 py-3">{$t('stats.tag.col.reviews')}</th>
-                      <th class="px-5 py-3">{$t('stats.tag.col.retention')}</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {#each detail.tags as tag}
-                      <tr>
-                        <td class="px-5 py-3 font-medium text-foreground">{tag.tag}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
-                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.table.rate', { rate: formatPercentValue(tag.retention) })}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/if}
-          </section>
-        </div>
+                  {#if percentWidth(detail.retention.rate) > 0}
+                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-brand" style="width: {percentWidth(detail.retention.rate)}%"></div>
+                    </div>
+                  {/if}
+            </li>
+            {#each detail.retention.buckets as bucket}
+              <li>
+                <div class="flex items-center justify-between text-[13px]">
+                  <span class="text-muted-foreground">{$t(retentionBucketKey(bucket.label))}</span>
+                  <span class="tabular-nums text-foreground">
+                    {$t('stats.retention.rate', { rate: formatPercentValue(bucket.rate), passed: bucket.passed, total: bucket.total })}
+                  </span>
+                </div>
+                  {#if percentWidth(bucket.rate) > 0}
+                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-brand" style="width: {percentWidth(bucket.rate)}%"></div>
+                    </div>
+                  {/if}
+              </li>
+            {/each}
+          </ul>
+        </section>
       </div>
-    {/if}
-  </div>
+
+      <!-- 时间投入 / 判分来源 -->
+      <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
+        <section data-testid="stats-time">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.time.heading')}</h2>
+          <dl class="mt-4 space-y-2.5">
+            {#each [
+              { key: 'stats.time.total_label', value: formatDuration(detail.time_spent.total_ms) },
+              { key: 'stats.time.avg_label', value: formatDuration(Math.trunc(detail.time_spent.avg_ms)) },
+              { key: 'stats.time.median_label', value: formatDuration(detail.time_spent.median_ms) },
+              { key: 'stats.time.count_label', value: $t('stats.time.count', { count: formatNumber(detail.time_spent.count) }) },
+            ] as row}
+              <div class="flex items-center justify-between text-[13px]">
+                <dt class="text-muted-foreground">{$t(row.key)}</dt>
+                <dd class="font-medium tabular-nums text-foreground">{row.value}</dd>
+              </div>
+            {/each}
+          </dl>
+        </section>
+
+        <section data-testid="stats-grade">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.grade.heading')}</h2>
+          <ul class="mt-4 space-y-3">
+            {#each detail.grades as grade}
+              <li>
+                <div class="flex items-center justify-between text-[13px]">
+                  <span class="text-muted-foreground">{$t(gradeSourceKey(grade.source))}</span>
+                  <span class="font-medium tabular-nums text-foreground">{$t('stats.grade.value', { count: formatNumber(grade.count) })}</span>
+                </div>
+                  {#if barWidth(grade.count, gradeMax) > 0}
+                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-brand" style="width: {barWidth(grade.count, gradeMax)}%"></div>
+                    </div>
+                  {/if}
+              </li>
+            {/each}
+          </ul>
+        </section>
+      </div>
+
+      <!-- 卡组维度 / 标签维度 -->
+      <div class="grid gap-y-8 pt-8 lg:grid-cols-2 lg:gap-x-12">
+        <section data-testid="stats-deck">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.deck.heading')}</h2>
+          {#if detail.decks.length === 0}
+            <p class="mt-4 text-xs text-muted-foreground">{$t('stats.deck.empty')}</p>
+          {:else}
+            <div class="mt-4 overflow-x-auto rounded-lg border border-border">
+              <table class="w-full text-left text-[13px]">
+                <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
+                  <tr>
+                    <th class="px-4 py-2.5 font-medium">{$t('stats.deck.col.name')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.due')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.reviews')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.retention')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.elapsed')}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {#each detail.decks as deck}
+                    <tr>
+                      <td class="px-4 py-2.5 font-medium text-foreground">{deck.name}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.table.rate', { rate: formatPercentValue(deck.retention) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{formatDuration(deck.elapsed_ms)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </section>
+
+        <section data-testid="stats-tag">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.tag.heading')}</h2>
+          <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
+               在重复卡组维度（没复习过的大标签一个都不出现）。 -->
+          <p data-testid="stats-tag-scope" class="mt-0.5 text-xs text-muted-foreground">{$t('stats.tag.scope')}</p>
+          {#if detail.tags.length === 0}
+            <p class="mt-4 text-xs text-muted-foreground">{$t('stats.tag.empty')}</p>
+          {:else}
+            <div class="mt-4 overflow-x-auto rounded-lg border border-border">
+              <table class="w-full text-left text-[13px]">
+                <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
+                  <tr>
+                    <th class="px-4 py-2.5 font-medium">{$t('stats.tag.col.tag')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.tag.col.reviews')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.tag.col.retention')}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {#each detail.tags as tag}
+                    <tr>
+                      <td class="px-4 py-2.5 font-medium text-foreground">{tag.tag}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.table.rate', { rate: formatPercentValue(tag.retention) })}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </section>
+      </div>
+    </div>
+  {/if}
 </Page>
