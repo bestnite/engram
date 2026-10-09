@@ -143,6 +143,7 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/decks", a.authn.RequireScope(store.ScopeRead), a.listDecks)
 	v1.GET("/media", a.authn.RequireScope(store.ScopeRead), a.listMedia)
 	v1.POST("/decks", a.authn.RequireScope(store.ScopeWrite), a.createDeck)
+	v1.PATCH("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.updateDeck)
 	v1.DELETE("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteDeck)
 	// 退出共享：撤掉自己在该卡组的一行授权；与删除卡组是两件事，故独立路径。
 	v1.DELETE("/decks/:id/membership", a.authn.RequireScope(store.ScopeWrite), a.leaveDeck)

@@ -28,6 +28,8 @@ const (
 	ActionNoteTagSet    = "note.tag_set"
 	// 新建卡组。
 	ActionDeckCreate = "deck.create"
+	// ActionDeckUpdate 是修改卡组名称与描述时写入的审计动作。
+	ActionDeckUpdate = "deck.update"
 	// 上传媒体。
 	ActionMediaUpload = "media.upload"
 

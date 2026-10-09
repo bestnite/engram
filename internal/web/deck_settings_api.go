@@ -17,6 +17,7 @@ func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget s
 	return deckSettingsResponse{
 		DeckID:          deck.PublicID,
 		DeckName:        deck.Name,
+		DeckDescription: deck.Description,
 		Role:            role,
 		PresetID:        presetPublicID,
 		NewPerDay:       budget.NewPerDay,
@@ -39,6 +40,8 @@ func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget s
 type deckSettingsResponse struct {
 	DeckID   string `json:"deck_id"`
 	DeckName string `json:"deck_name"`
+	// DeckDescription 供属主在设置页预填「卡组信息」表单；共享成员改不了它，读到也无妨。
+	DeckDescription string `json:"deck_description"`
 	// Role 是调用者在卡组上的角色（owner / editor / reader），页面据此决定是否展示属主才有的入口。
 	Role            string `json:"role"`
 	PresetID        string `json:"preset_id"`

@@ -350,6 +350,21 @@ export class ApiClient {
     });
   }
 
+  /**
+   * 修改卡组名称与描述（PATCH /api/v1/decks/:id，仅 owner）。
+   * 校验与建组同源：名称非空且不超过 200 个字符，描述不超过 2000 个字符（空描述合法）。
+   */
+  async updateDeck(deckId: string, input: { name: string; description: string }): Promise<Deck> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const id = encodeURIComponent(String(deckId));
+    return this.request<Deck>(`/api/v1/decks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
   /** 删除卡组（DELETE /api/v1/decks/:id，仅 owner）。 */
   async deleteDeck(deckId: string): Promise<{ deleted: boolean }> {
     if (!this.csrfToken) {

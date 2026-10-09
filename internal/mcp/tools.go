@@ -27,6 +27,13 @@ type createDeckIn struct {
 	PresetID    string `json:"preset_id,omitempty" jsonschema:"scheduling preset public id; empty uses the caller's Default preset"`
 }
 
+// updateDeckIn 是 update_deck 的入参；两个字段都可缺省，但名称不能改空。
+type updateDeckIn struct {
+	DeckID      string `json:"deck_id" jsonschema:"the public id of the deck to update"`
+	Name        string `json:"name,omitempty" jsonschema:"new deck name; required non-empty"`
+	Description string `json:"description,omitempty" jsonschema:"new deck description; empty is allowed"`
+}
+
 // searchNotesIn 是 search_notes 的入参；deck_id 必填。
 type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
@@ -165,6 +172,23 @@ func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (
 		return nil, err
 	}
 	return s.api.ToDeckResponse(ctx, id.User.ID, *d, store.RoleOwner), nil
+}
+
+// updateDeck 修改卡组的名称与描述；与 REST `PATCH /decks/:id` 走同一 service 方法（仅 owner）。
+func (s *Server) updateDeck(ctx context.Context, id Identity, in updateDeckIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := s.api.UpdateDeck(ctx, id.User, d.ID, api.UpdateDeckInput{
+		Name:        in.Name,
+		Description: in.Description,
+		APIKeyID:    id.apiKeyID(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.api.ToDeckResponse(ctx, id.User.ID, *updated, store.RoleOwner), nil
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {

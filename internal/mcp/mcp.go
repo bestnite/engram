@@ -278,6 +278,7 @@ var toolScopes = map[string]string{
 	"get_stats":     store.ScopeRead,
 	"export_deck":   store.ScopeRead,
 	"create_deck":   store.ScopeWrite,
+	"update_deck":   store.ScopeWrite,
 	"create_notes":  store.ScopeWrite,
 	"update_note":   store.ScopeWrite,
 	"delete_note":   store.ScopeWrite,
@@ -300,6 +301,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 
 	addTool(s, srv, id, "list_decks", "List the decks visible to the caller (owned, or granted by another user).", s.listDecks)
 	addTool(s, srv, id, "create_deck", "Create an empty deck (name required; preset_id 0 uses the caller's Default preset).", s.createDeck)
+	addTool(s, srv, id, "update_deck", "Update a deck's name and description (owner only).", s.updateDeck)
 	addTool(s, srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(s, srv, id, "get_note", "Read one note by its public id.", s.getNote)
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)

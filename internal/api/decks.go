@@ -118,6 +118,44 @@ func (a *API) createDeck(c *gin.Context) {
 	c.JSON(http.StatusCreated, a.toDeckResponse(ctx, u.ID, *d, store.RoleOwner))
 }
 
+// updateDeckRequest 是修改卡组名称与描述的请求体；两个字段都可缺省，但名称不能改空。
+type updateDeckRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// updateDeck 修改卡组的名称与描述（PATCH /api/v1/decks/:id，scope: write，仅 owner）。
+// 只做 JSON 绑定与包壳，业务与校验在 service 层 UpdateDeck（REST 与 MCP 共用）。
+func (a *API) updateDeck(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	ctx := c.Request.Context()
+	publicID, ok := pathPublicID(c, "id")
+	if !ok {
+		return
+	}
+	d, err := a.decks.ByPublicID(ctx, publicID)
+	if err != nil {
+		abortNotFound(c)
+		return
+	}
+	var req updateDeckRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
+	updated, err := a.UpdateDeck(ctx, u, d.ID, UpdateDeckInput{
+		Name:        req.Name,
+		Description: req.Description,
+		APIKeyID:    CurrentAPIKeyID(c),
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	// 修改成功即调用者是 owner（service 层以此为条件），响应里的角色据此给出。
+	c.JSON(http.StatusOK, a.toDeckResponse(ctx, u.ID, *updated, store.RoleOwner))
+}
+
 func (a *API) deleteDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()

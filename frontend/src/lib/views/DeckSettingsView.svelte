@@ -43,6 +43,15 @@
   let saveError = $state('');
   let saved = $state(false);
 
+  // 卡组信息（名称/描述）只有 owner 能改；settings.role 由服务端给出。
+  // svelte-ignore state_referenced_locally
+  let deckName = $state(initialSettings ? initialSettings.deck_name : '');
+  // svelte-ignore state_referenced_locally
+  let deckDescription = $state(initialSettings ? initialSettings.deck_description : '');
+  let infoSaving = $state(false);
+  let infoError = $state('');
+  let infoSaved = $state(false);
+
   const deckId = $derived($routeStore.params.id || '');
 
   /** 读取调用者自己的设置与今日额度；无权访问由服务端 403/404 决定，前端不猜测权限。 */
@@ -72,6 +81,8 @@
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
       presetId = String(data.preset_id);
+      deckName = data.deck_name;
+      deckDescription = data.deck_description;
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -117,6 +128,39 @@
       }
     } finally {
       saving = false;
+    }
+  }
+
+  /**
+   * 保存卡组名称与描述（仅 owner）。空名称前端先拦下；描述可为空。
+   * 400 视为名称/描述不合法，403/404 视为无权修改，其余为通用失败。
+   */
+  async function saveInfo(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    infoError = '';
+    infoSaved = false;
+    const name = deckName.trim();
+    if (!name) {
+      infoError = 'deck.settings.info_error_invalid';
+      return;
+    }
+    infoSaving = true;
+    try {
+      const updated = await apiClient.updateDeck(deckId, { name, description: deckDescription });
+      deckName = updated.name;
+      deckDescription = updated.description;
+      if (settings) settings = { ...settings, deck_name: updated.name, deck_description: updated.description };
+      infoSaved = true;
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 400) {
+        infoError = 'deck.settings.info_error_invalid';
+      } else if (err instanceof ApiClientError && (err.isForbidden || err.isNotFound)) {
+        infoError = 'deck.settings.error.forbidden';
+      } else {
+        infoError = 'deck.settings.info_error_failed';
+      }
+    } finally {
+      infoSaving = false;
     }
   }
 
@@ -170,6 +214,39 @@
           {$t('deck.settings.title')}: {settings.deck_name}
         </h1>
       </header>
+    {/if}
+
+    {#if settings.role === 'owner'}
+      <section class="card-elevated p-6 rounded-xl">
+        <form onsubmit={saveInfo} data-testid="deck-info-form" class="space-y-4">
+          <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('deck.settings.info_heading')}</h2>
+          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            {$t('deck.settings.name')}
+            <input
+              type="text"
+              data-testid="deck-info-name"
+              bind:value={deckName}
+              class="field-input text-sm mt-1 block w-full"
+            />
+          </label>
+          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            {$t('deck.settings.description')}
+            <textarea
+              data-testid="deck-info-description"
+              bind:value={deckDescription}
+              rows="3"
+              class="field-input text-sm mt-1 block w-full"
+            ></textarea>
+          </label>
+          <div class="flex items-center gap-3">
+            <Button type="submit" testId="deck-info-submit" disabled={infoSaving} variant="primary" size="lg">
+              {infoSaving ? $t('deck.settings.info_saving') : $t('deck.settings.info_save')}
+            </Button>
+            {#if infoSaved}<p role="status" data-testid="deck-info-saved" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('deck.settings.info_saved')}</p>{/if}
+            {#if infoError}<p role="alert" data-testid="deck-info-error" class="text-sm text-rose-700 dark:text-rose-400">{$t(infoError)}</p>{/if}
+          </div>
+        </form>
+      </section>
     {/if}
 
     <section class="card-elevated p-6 rounded-xl">

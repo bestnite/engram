@@ -10,6 +10,7 @@ import { routes } from '../lib/router/routes';
 const settings: DeckSettings = {
   deck_id: '7',
   deck_name: 'Biology',
+  deck_description: 'Cells and genes',
   role: 'owner',
   preset_id: '3',
   new_per_day: 5,
@@ -74,6 +75,28 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     expect(html).toContain('这些设置只对你自己生效');
   });
 
+  it('renders the deck-info form for the owner with the current name and description', () => {
+    const { html } = render(DeckSettingsView, {
+      props: { initialLoading: false, initialSettings: settings },
+    });
+    expect(html).toContain('data-testid="deck-info-form"');
+    expect(html).toContain('data-testid="deck-info-name"');
+    expect(html).toContain('data-testid="deck-info-description"');
+    // 预填当前值，而不是空表单。
+    expect(html).toContain('Biology');
+    expect(html).toContain('Cells and genes');
+  });
+
+  it('hides the deck-info form from a reader (only the owner may change deck metadata)', () => {
+    const { html } = render(DeckSettingsView, {
+      props: { initialLoading: false, initialSettings: { ...settings, role: 'reader' } },
+    });
+    expect(html).not.toContain('data-testid="deck-info-form"');
+    expect(html).not.toContain('data-testid="deck-info-name"');
+    // 但个人学习设置仍然可见。
+    expect(html).toContain('data-testid="deck-settings-form"');
+  });
+
   it('renders a forbidden state for a user without access', () => {
     const err = new ApiClientError('HTTP 403', { status: 403, code: 'forbidden' });
     const { html } = render(DeckSettingsView, {
@@ -112,6 +135,22 @@ describe('deck settings API client', () => {
     expect(init?.method).toBe('PATCH');
     expect(init?.credentials).toBe('same-origin');
     expect(JSON.parse(String(init?.body))).toEqual({ new_per_day: 0, reviews_per_day: 0 });
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('deck-csrf');
+  });
+
+  it('PATCHes deck name and description with the session CSRF token', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ authenticated: true, csrf_token: 'deck-csrf' }), { status: 200 })
+    );
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: '7', name: 'Renamed', description: 'new' }), { status: 200 })
+    );
+    await client.updateDeck('7', { name: 'Renamed', description: 'new' });
+    const [url, init] = mockFetch.mock.calls[1]!;
+    expect(url).toBe('/api/v1/decks/7');
+    expect(init?.method).toBe('PATCH');
+    expect(init?.credentials).toBe('same-origin');
+    expect(JSON.parse(String(init?.body))).toEqual({ name: 'Renamed', description: 'new' });
     expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('deck-csrf');
   });
 });

@@ -151,6 +151,57 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 	return &d, nil
 }
 
+// UpdateDeckInput 是修改卡组名称与描述的输入；APIKeyID 仅用于审计条目。
+type UpdateDeckInput struct {
+	Name        string
+	Description string
+	APIKeyID    *uint64
+}
+
+// UpdateDeck 修改卡组的名称与描述（scope: write）；REST 与内置 MCP 共用。
+//
+// 只有 owner 能改：共享成员的学习设置走 SetStudySettings，改的从来不是卡组本身。
+// 名称与描述过 store 的同一套校验（与建组、包导入同源），失败不写入；
+// 校验失败映射成与建组一致的专属 code，非 owner 映射成 forbidden。
+func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in UpdateDeckInput) (*store.Deck, error) {
+	deck, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "")
+		}
+		a.logger.Error("load deck for update failed", "deck_id", deckID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	// d.PresetID 原样带上：DeckStore.Update 会写 preset_id，省略它会清掉卡组的预设。
+	updated := store.Deck{ID: deckID, Name: strings.TrimSpace(in.Name), Description: in.Description, PresetID: deck.PresetID}
+	if err := a.decks.Update(ctx, u.ID, &updated); err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotOwner):
+			return nil, newServiceError(http.StatusForbidden, CodeForbidden, "")
+		case errors.Is(err, store.ErrDeckDescriptionInvalid):
+			return nil, newServiceError(http.StatusBadRequest, CodeDeckDescriptionInvalid, "")
+		case errors.Is(err, store.ErrDeckNameInvalid):
+			return nil, newServiceError(http.StatusBadRequest, CodeDeckNameInvalid, "")
+		default:
+			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
+		}
+	}
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		APIKeyID:   in.APIKeyID,
+		Action:     store.ActionDeckUpdate,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deckID),
+		Detail:     map[string]any{"name": updated.Name},
+	})
+	out, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		a.logger.Error("reload deck after update failed", "deck_id", deckID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	return out, nil
+}
+
 // DeleteDeck 删除一个卡组（scope: write）；REST 与内置 MCP 共用。只有 owner 能删。
 func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiKeyID *uint64) error {
 	deck, err := a.decks.ByID(ctx, deckID)

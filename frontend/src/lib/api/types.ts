@@ -78,6 +78,8 @@ export interface DeckQueueCountsResponse {
 export interface DeckSettings {
   deck_id: string;
   deck_name: string;
+  /** 卡组描述（属主在「卡组信息」表单里预填用；共享成员改不了它）。 */
+  deck_description: string;
   /** 调用者在卡组上的角色：设置是调用者自己的，属主与共享成员各有一份。 */
   role: 'owner' | 'editor' | 'reader';
   preset_id: string;
