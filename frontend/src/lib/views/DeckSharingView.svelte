@@ -13,12 +13,12 @@
   }
   let { embedded = false }: Props = $props();
 
-  type Grant = { user_id: number; username: string; role: 'reader' | 'editor' };
+  type Grant = { user_id: string; username: string; role: 'reader' | 'editor' };
   type Link = { prefix: string; created_at: string; expires_at: string | null; has_password: boolean; revoked: boolean; expired: boolean };
   // 待接受的邀请：属主必须能区分「已授权」与「邀请了还没答应」——后者随时可能被拒绝，
   // 界面上不该显示成已有访问权（同意制）。
-  type Invite = { user_id: number; username: string; role: 'reader' | 'editor'; expires_at: string };
-  type Sharing = { deck_id: number; deck_name: string; grants: Grant[]; pending_invites?: Invite[]; links: Link[] };
+  type Invite = { user_id: string; username: string; role: 'reader' | 'editor'; expires_at: string };
+  type Sharing = { deck_id: string; deck_name: string; grants: Grant[]; pending_invites?: Invite[]; links: Link[] };
   let data = $state<Sharing | null>(null);
   let loading = $state(true);
   let failed = $state(false);

@@ -15,7 +15,8 @@ import (
 
 // User 是本地账号；内置账号为默认身份来源，外部身份见 Identity。
 type User struct {
-	ID              uint64     `gorm:"primaryKey" json:"id"`
+	ID              uint64     `gorm:"primaryKey" json:"-"`
+	PublicID        string     `gorm:"column:public_id;uniqueIndex" json:"id"`
 	Username        string     `gorm:"not null;uniqueIndex" json:"username"`
 	Email           string     `gorm:"not null;uniqueIndex" json:"email"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
@@ -45,7 +46,8 @@ func (User) TableName() string { return "users" }
 
 // Identity 是绑定的外部身份（provider + subject 唯一）。
 type Identity struct {
-	ID       uint64    `gorm:"primaryKey" json:"id"`
+	ID       uint64    `gorm:"primaryKey" json:"-"`
+	PublicID string    `gorm:"column:public_id;uniqueIndex" json:"id"`
 	UserID   uint64    `gorm:"not null;index" json:"user_id"`
 	Provider string    `gorm:"not null;uniqueIndex:idx_identities_provider_subject" json:"provider"`
 	Subject  string    `gorm:"not null;uniqueIndex:idx_identities_provider_subject" json:"subject"`
@@ -57,7 +59,8 @@ func (Identity) TableName() string { return "identities" }
 
 // Invite 是一次性邀请（注册策略为 invite 时使用）。
 type Invite struct {
-	ID        uint64     `gorm:"primaryKey" json:"id"`
+	ID        uint64     `gorm:"primaryKey" json:"-"`
+	PublicID  string     `gorm:"column:public_id;uniqueIndex" json:"id"`
 	Token     string     `gorm:"not null;uniqueIndex" json:"token"`
 	Email     *string    `json:"email,omitempty"`
 	Role      string     `gorm:"not null" json:"role"`
@@ -82,7 +85,8 @@ func (Setting) TableName() string { return "settings" }
 
 // Preset 是一组调度参数，挂在 deck 上，多个 deck 可共用。
 type Preset struct {
-	ID                  uint64  `gorm:"primaryKey" json:"id"`
+	ID                  uint64  `gorm:"primaryKey" json:"-"`
+	PublicID            string  `gorm:"column:public_id;uniqueIndex" json:"id"`
 	OwnerUserID         uint64  `gorm:"not null;index" json:"owner_user_id"`
 	Name                string  `gorm:"not null" json:"name"`
 	DesiredRetention    float64 `gorm:"not null;default:0.9" json:"desired_retention"`
@@ -111,7 +115,8 @@ func (Preset) TableName() string { return "presets" }
 // 两列都是带数据库默认值的整型，零值由 GORM 省略、由数据库默认值补齐；
 // 显式把上限设为 0 请走 DeckStore.SetCaps（map 更新会写入 0）。
 type Deck struct {
-	ID            uint64     `gorm:"primaryKey" json:"id"`
+	ID            uint64     `gorm:"primaryKey" json:"-"`
+	PublicID      string     `gorm:"column:public_id;uniqueIndex" json:"id"`
 	OwnerUserID   uint64     `gorm:"not null;index" json:"owner_user_id"`
 	Name          string     `gorm:"not null" json:"name"`
 	Description   string     `gorm:"not null" json:"description"`
@@ -126,7 +131,8 @@ func (Deck) TableName() string { return "decks" }
 
 // Note 描述"一个事实"，只含内容不含任何用户进度。
 type Note struct {
-	ID         uint64 `gorm:"primaryKey" json:"id"`
+	ID         uint64 `gorm:"primaryKey" json:"-"`
+	PublicID   string `gorm:"column:public_id;uniqueIndex" json:"id"`
 	DeckID     uint64 `gorm:"not null;uniqueIndex:idx_notes_deck_external_ref" json:"deck_id"`
 	Kind       string `gorm:"not null" json:"kind"`
 	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
@@ -145,7 +151,8 @@ func (Note) TableName() string { return "notes" }
 
 // Card 是 note 在某种呈现形式下的实例；调度作用于 card。
 type Card struct {
-	ID          uint64         `gorm:"primaryKey" json:"id"`
+	ID          uint64         `gorm:"primaryKey" json:"-"`
+	PublicID    string         `gorm:"column:public_id;uniqueIndex" json:"id"`
 	NoteID      uint64         `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
 	Template    string         `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
 	Ordinal     int            `gorm:"not null;default:0" json:"ordinal"`
@@ -177,7 +184,8 @@ func (CardState) TableName() string { return "card_states" }
 
 // Review 是 append-only 复习日志，参数优化的唯一燃料；每个字段从第一天就写全。
 type Review struct {
-	ID              uint64    `gorm:"primaryKey" json:"id"`
+	ID              uint64    `gorm:"primaryKey" json:"-"`
+	PublicID        string    `gorm:"column:public_id;uniqueIndex" json:"id"`
 	CardID          uint64    `gorm:"not null;index:idx_reviews_card,priority:1" json:"card_id"`
 	UserID          uint64    `gorm:"not null;index:idx_reviews_user_day,priority:1" json:"user_id"`
 	Rating          int       `gorm:"not null" json:"rating"`       // 1=Again 2=Hard 3=Good 4=Easy
@@ -285,8 +293,10 @@ func (ShareSessionDeck) TableName() string { return "share_session_decks" }
 
 // APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
 type APIKey struct {
-	ID         uint64     `gorm:"primaryKey;column:id" json:"id"`
-	UserID     uint64     `gorm:"not null;index" json:"user_id"`
+	ID       uint64 `gorm:"primaryKey;column:id" json:"-"`
+	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	// UserID 是内部外键：卡组/key 列表按调用者过滤，客户端不需要它，故不出现在 JSON 里。
+	UserID     uint64     `gorm:"not null;index" json:"-"`
 	Name       string     `gorm:"not null" json:"name"`
 	Prefix     string     `gorm:"not null" json:"prefix"`
 	KeyHash    string     `gorm:"column:key_hash;not null;uniqueIndex" json:"-"`
@@ -301,7 +311,8 @@ func (APIKey) TableName() string { return "api_keys" }
 
 // Job 是后台长任务（当前只有参数优化）；web 触发、子进程执行、页面轮询。
 type Job struct {
-	ID         uint64     `gorm:"primaryKey" json:"id"`
+	ID         uint64     `gorm:"primaryKey" json:"-"`
+	PublicID   string     `gorm:"column:public_id;uniqueIndex" json:"id"`
 	Kind       string     `gorm:"not null" json:"kind"`
 	TargetID   *uint64    `json:"target_id,omitempty"`
 	Status     string     `gorm:"not null" json:"status"` // queued | running | succeeded | failed
@@ -318,7 +329,8 @@ func (Job) TableName() string { return "jobs" }
 
 // AuditLog 记录谁在什么时候改了什么。
 type AuditLog struct {
-	ID         uint64    `gorm:"primaryKey" json:"id"`
+	ID         uint64    `gorm:"primaryKey" json:"-"`
+	PublicID   string    `gorm:"column:public_id;uniqueIndex" json:"id"`
 	UserID     *uint64   `json:"user_id,omitempty"`
 	APIKeyID   *uint64   `gorm:"column:api_key_id" json:"api_key_id,omitempty"`
 	Action     string    `gorm:"not null" json:"action"`

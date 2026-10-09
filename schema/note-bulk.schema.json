@@ -16,10 +16,10 @@
       "minItems": 1,
       "maxItems": 500,
       "items": {
-        "type": "integer",
-        "minimum": 1
+        "type": "string",
+        "minLength": 1
       },
-      "description": "The notes to act on, 1 to 500 entries. The notes need not belong to the same deck: the caller's role is checked per note, and an id it may not edit is reported in 'skipped'. Repeating an id is harmless (the server acts on it once) and an already-applied action reports 'affected': 0, so resending a request is idempotent."
+      "description": "Opaque public ids of the notes to act on, 1 to 500 entries. The notes need not belong to the same deck: the caller's role is checked per note, and an id it may not edit is reported in 'skipped'. Repeating an id is harmless (the server acts on it once) and an already-applied action reports 'affected': 0, so resending a request is idempotent."
     },
     "tags": {
       "type": "array",

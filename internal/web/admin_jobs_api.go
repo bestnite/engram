@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,7 +19,7 @@ import (
 
 // adminJob 是一个作业的元信息；时间为 UTC 文本，空串表示尚未发生。
 type adminJob struct {
-	ID         uint64  `json:"id"`
+	ID         string  `json:"id"`
 	Kind       string  `json:"kind"`
 	Status     string  `json:"status"`
 	Stage      *string `json:"stage"`
@@ -59,7 +60,7 @@ func (s *Server) adminJobs(c *gin.Context) {
 		for i := range list {
 			job := list[i]
 			row := adminJob{
-				ID: job.ID, Kind: job.Kind, Status: job.Status, Stage: job.Stage,
+				ID: job.PublicID, Kind: job.Kind, Status: job.Status, Stage: job.Stage,
 				CreatedAt:  formatJobTime(&job.CreatedAt),
 				StartedAt:  formatJobTime(job.StartedAt),
 				FinishedAt: formatJobTime(job.FinishedAt),
@@ -84,8 +85,8 @@ func (s *Server) adminJobCancel(c *gin.Context) {
 		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	id, err := parseUintParam(c.Param("id"))
-	if err != nil {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" || s.jobStore == nil {
 		adminError(c, http.StatusNotFound, "invalid_job")
 		return
 	}
@@ -94,18 +95,23 @@ func (s *Server) adminJobCancel(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if err := s.jobRunner.Cancel(ctx, id); err != nil {
+	job, err := s.jobStore.ByPublicID(ctx, raw)
+	if err != nil {
+		adminError(c, http.StatusNotFound, "invalid_job")
+		return
+	}
+	if err := s.jobRunner.Cancel(ctx, job.ID); err != nil {
 		if errors.Is(err, jobs.ErrNotRunning) {
 			adminError(c, http.StatusConflict, "not_running")
 			return
 		}
-		s.logger.Error("spa admin: cancel job failed", "job_id", id, "error", err)
+		s.logger.Error("spa admin: cancel job failed", "job_id", job.ID, "error", err)
 		adminError(c, http.StatusInternalServerError, "failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionJobCancel,
-		TargetType: "job", TargetID: store.Ptr(id),
+		TargetType: "job", TargetID: store.Ptr(job.ID),
 	})
 	c.Status(http.StatusNoContent)
 }

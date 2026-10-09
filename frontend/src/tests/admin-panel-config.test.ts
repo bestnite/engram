@@ -44,7 +44,7 @@ const oidc: AdminOIDCResponse = {
   redirect_uri: 'https://app.example.com/auth/oidc/callback', scopes: 'openid email',
   claim_subject: 'sub', claim_email: 'email', claim_name: 'name', claim_email_verified: 'email_verified',
   identities: [
-    { id: 4, provider: 'https://idp.example.com', subject: 'abc', email: 'u@example.com', username: 'alice', linked_at: '2026-03-10T12:00:00Z' },
+    { id: '4', provider: 'https://idp.example.com', subject: 'abc', email: 'u@example.com', username: 'alice', linked_at: '2026-03-10T12:00:00Z' },
   ],
 };
 
@@ -117,7 +117,7 @@ describe('Admin config API client', () => {
   it('unlinks an OIDC identity', async () => {
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'c' }), { status: 200 }));
     mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await client.unlinkAdminOIDCIdentity(4);
+    await client.unlinkAdminOIDCIdentity('4');
     expect(mockFetch.mock.calls[1]?.[0]).toBe('/api/v1/admin/oidc/identities/4/unlink');
   });
 });

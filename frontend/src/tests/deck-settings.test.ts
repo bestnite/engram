@@ -8,9 +8,9 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 const settings: DeckSettings = {
-  deck_id: 7,
+  deck_id: '7',
   deck_name: 'Biology',
-  preset_id: 3,
+  preset_id: '3',
   new_per_day: 5,
   reviews_per_day: 10,
   new_used: 2,
@@ -95,7 +95,7 @@ describe('deck settings API client', () => {
       new Response(JSON.stringify({ authenticated: true, csrf_token: 'deck-csrf' }), { status: 200 })
     );
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(settings), { status: 200 }));
-    await client.updateDeckSettings(7, { new_per_day: 0, reviews_per_day: 0 });
+    await client.updateDeckSettings('7', { new_per_day: 0, reviews_per_day: 0 });
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
     const [url, init] = mockFetch.mock.calls[1]!;
     expect(url).toBe('/api/v1/decks/7/settings');

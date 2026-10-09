@@ -46,9 +46,9 @@ func uploadAndSha(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string
 }
 
 // uploadToDeckAndSha 从卡组内上传入口（要求 editor）上传一份字节并解出 sha256。
-func uploadToDeckAndSha(t *testing.T, srv *Server, deckID uint64, cookies []*http.Cookie, csrf string, body []byte) string {
+func uploadToDeckAndSha(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf string, body []byte) string {
 	t.Helper()
-	rec := uploadMediaTo(t, srv, cookies, "/decks/"+u64str(deckID)+"/media", csrf, "pic.png", "image/png", body)
+	rec := uploadMediaTo(t, srv, cookies, "/decks/"+deckPublicID+"/media", csrf, "pic.png", "image/png", body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("deck upload status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -254,7 +254,7 @@ func TestMediaAccessUploaderKeepsAccessAfterGrantRevoked(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "revoke uploader deck")
 	bID, bCookies, bCSRF := createUserAndLogin(t, srv, db, "media-revoked-uploader")
 	grantRole(t, srv, deck.ID, bID, store.RoleEditor, ownerCookies, ownerCSRF)
-	mediaB := uploadToDeckAndSha(t, srv, deck.ID, bCookies, bCSRF, pngBody())
+	mediaB := uploadToDeckAndSha(t, srv, deck.PublicID, bCookies, bCSRF, pngBody())
 
 	revokeGrant(t, srv, deck.ID, bID, ownerCookies, ownerCSRF)
 	if rec := getWithCookies(t, srv, "/media/"+mediaB, bCookies); rec.Code != http.StatusOK {

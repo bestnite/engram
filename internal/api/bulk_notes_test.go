@@ -23,15 +23,18 @@ func seedBasicNote(t *testing.T, env *testEnv, deckID uint64, front, back string
 	return n
 }
 
-// bulkResponse 解析批量动作响应体，便于逐字段断言。
+// bulkResponse 解析批量动作响应体，便于逐字段断言。note_id 是对外 id（字符串）。
 type bulkResponse struct {
 	DryRun   bool  `json:"dry_run"`
 	Affected int64 `json:"affected"`
 	Skipped  []struct {
-		NoteID uint64 `json:"note_id"`
+		NoteID string `json:"note_id"`
 		Code   string `json:"code"`
 	} `json:"skipped"`
 }
+
+// missingPublicID 是一个格式合法但库里不存在的 note 对外 id，用于断言逐行 not_found。
+const missingPublicID = "00000000-0000-7000-8000-000000000000"
 
 func decodeBulk(t *testing.T, raw []byte) bulkResponse {
 	t.Helper()
@@ -76,16 +79,17 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 		if i > 1 {
 			b.WriteString(",")
 		}
-		fmt.Fprintf(&b, "%d", i)
+		// note_ids 是字符串数组；这里也拼成字符串，才真正测到「条数上限」而不是「类型不符」。
+		fmt.Fprintf(&b, "%q", itoa(i))
 	}
 	b.WriteString("]")
 
 	cases := []struct{ name, body string }{
-		{"unknown action", fmt.Sprintf(`{"action":"archive","note_ids":[%d]}`, note.ID)},
+		{"unknown action", fmt.Sprintf(`{"action":"archive","note_ids":["%s"]}`, note.PublicID)},
 		{"empty note_ids", `{"action":"delete","note_ids":[]}`},
 		{"oversized note_ids", `{"action":"delete","note_ids":` + b.String() + `}`},
-		{"tag action without tags", fmt.Sprintf(`{"action":"add_tags","note_ids":[%d]}`, note.ID)},
-		{"delete with tags", fmt.Sprintf(`{"action":"delete","note_ids":[%d],"tags":["x"]}`, note.ID)},
+		{"tag action without tags", fmt.Sprintf(`{"action":"add_tags","note_ids":["%s"]}`, note.PublicID)},
+		{"delete with tags", fmt.Sprintf(`{"action":"delete","note_ids":["%s"],"tags":["x"]}`, note.PublicID)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,8 +147,8 @@ func TestBulkNotesSkipsMissingDeletedAndUnreadableRows(t *testing.T) {
 
 	k := seedKey(t, env.keys, owner.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"action":"add_tags","note_ids":[%d,%d,%d,%d,999999],"tags":["bulk"]}`,
-		editable.ID, deleted.ID, readable.ID, hidden.ID)
+	body := fmt.Sprintf(`{"action":"add_tags","note_ids":["%s","%s","%s","%s","%s"],"tags":["bulk"]}`,
+		editable.PublicID, deleted.PublicID, readable.PublicID, hidden.PublicID, missingPublicID)
 
 	status, raw := doJSON(t, router, http.MethodPost, "/api/v1/notes/bulk", k.Plaintext, body)
 	if status != http.StatusOK {
@@ -155,20 +159,20 @@ func TestBulkNotesSkipsMissingDeletedAndUnreadableRows(t *testing.T) {
 		t.Errorf("affected = %d, want 1 (only the editable row changes)", resp.Affected)
 	}
 	want := []struct {
-		id   uint64
+		id   string
 		code string
 	}{
-		{deleted.ID, "not_found"},
-		{readable.ID, "insufficient_role"},
-		{hidden.ID, "insufficient_role"},
-		{999999, "not_found"},
+		{deleted.PublicID, "not_found"},
+		{readable.PublicID, "insufficient_role"},
+		{hidden.PublicID, "insufficient_role"},
+		{missingPublicID, "not_found"},
 	}
 	if len(resp.Skipped) != len(want) {
 		t.Fatalf("skipped = %+v, want %d entries", resp.Skipped, len(want))
 	}
 	for i, w := range want {
 		if resp.Skipped[i].NoteID != w.id || resp.Skipped[i].Code != w.code {
-			t.Errorf("skipped[%d] = (%d,%q), want (%d,%q)", i, resp.Skipped[i].NoteID, resp.Skipped[i].Code, w.id, w.code)
+			t.Errorf("skipped[%d] = (%s,%q), want (%s,%q)", i, resp.Skipped[i].NoteID, resp.Skipped[i].Code, w.id, w.code)
 		}
 	}
 
@@ -198,7 +202,7 @@ func TestBulkNotesIsIdempotentAndAuditsOnce(t *testing.T) {
 	note := seedBasicNote(t, env, deck.ID, "q", "a", nil)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"action":"add_tags","note_ids":[%d],"tags":["alpha","beta"]}`, note.ID)
+	body := fmt.Sprintf(`{"action":"add_tags","note_ids":["%s"],"tags":["alpha","beta"]}`, note.PublicID)
 
 	status, raw := doJSON(t, router, http.MethodPost, "/api/v1/notes/bulk", k.Plaintext, body)
 	if status != http.StatusOK {
@@ -255,8 +259,8 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 
-	body := fmt.Sprintf(`{"action":"add_tags","dry_run":true,"note_ids":[%d,%d,%d],"tags":["gamma"]}`,
-		a.ID, b.ID, readonly.ID)
+	body := fmt.Sprintf(`{"action":"add_tags","dry_run":true,"note_ids":["%s","%s","%s"],"tags":["gamma"]}`,
+		a.PublicID, b.PublicID, readonly.PublicID)
 	status, raw := doJSON(t, router, http.MethodPost, "/api/v1/notes/bulk", k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", status, raw)
@@ -265,8 +269,8 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	if !resp.DryRun || resp.Affected != 2 {
 		t.Errorf("dry_run response = (dry_run=%v affected=%d), want (true, 2)", resp.DryRun, resp.Affected)
 	}
-	if len(resp.Skipped) != 1 || resp.Skipped[0].NoteID != readonly.ID || resp.Skipped[0].Code != CodeInsufficientRole {
-		t.Errorf("dry_run skipped = %+v, want exactly (%d, %q)", resp.Skipped, readonly.ID, CodeInsufficientRole)
+	if len(resp.Skipped) != 1 || resp.Skipped[0].NoteID != readonly.PublicID || resp.Skipped[0].Code != CodeInsufficientRole {
+		t.Errorf("dry_run skipped = %+v, want exactly (%s, %q)", resp.Skipped, readonly.PublicID, CodeInsufficientRole)
 	}
 
 	noteStore := store.NewNoteStore(env.db)

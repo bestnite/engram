@@ -32,7 +32,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite, store.ScopeRead}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	body := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"a","back":"b"},"external_ref":"n:1"},` +
@@ -134,7 +134,7 @@ func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 	readKey := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
 	writeKey := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	// 只有 read scope 的 key 调写接口 → 403 scope_required。
 	status, raw := doJSON(t, router, http.MethodPost, path, readKey.Plaintext,

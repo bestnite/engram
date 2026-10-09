@@ -25,7 +25,7 @@ func TestToolsMatchREST(t *testing.T) {
 	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview})
 	cs := connect(t, ts.URL, key)
 	base := ts.URL
-	deckPath := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	deckPath := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	// 用 REST 预先建两张内容相同的卡，供后续对比。
 	body := `{"notes":[` +
@@ -42,8 +42,8 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// search_notes（显式分页，两侧一致）
-	mcpOut, _, _ = callTool(t, cs, "search_notes", map[string]any{"deck_id": deck.ID, "page": 1, "per_page": 20})
-	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%d/notes?page=1&per_page=20", deck.ID), key, ""); !reflect.DeepEqual(mcpOut, restOut) {
+	mcpOut, _, _ = callTool(t, cs, "search_notes", map[string]any{"deck_id": deck.PublicID, "page": 1, "per_page": 20})
+	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?page=1&per_page=20", deck.PublicID), key, ""); !reflect.DeepEqual(mcpOut, restOut) {
 		t.Errorf("search_notes MCP=%v REST=%v", mcpOut, restOut)
 	}
 
@@ -54,7 +54,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// export_deck：返回卡组包文档，含 manifest/notes/cards/preset。
-	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID})
+	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
 	if isErr {
 		t.Fatalf("export_deck error: %s", text)
 	}
@@ -71,7 +71,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// create_notes / import_deck（dry_run，同一 deck 状态下产出相同计数）
-	dry := map[string]any{"deck_id": deck.ID, "dry_run": true, "notes": []any{
+	dry := map[string]any{"deck_id": deck.PublicID, "dry_run": true, "notes": []any{
 		map[string]any{"kind": "basic", "fields": map[string]any{"front": "x", "back": "y"}, "external_ref": "n:3"},
 	}}
 	mcpOut, _, _ = callTool(t, cs, "create_notes", dry)
@@ -80,7 +80,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// import_deck：接受 export_deck 输出的文档，dry_run 预演不写入。
-	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.ID, "include_progress": true})
+	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID, "include_progress": true})
 	mcpOut, isErr, text = callTool(t, cs, "import_deck", map[string]any{"package": pkgDoc, "dry_run": true, "target": "new_deck"})
 	if isErr {
 		t.Fatalf("import_deck error: %s", text)
@@ -92,50 +92,50 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("import_deck report is missing the errors field: %v", mcpOut)
 	}
 
-	// 取得 note id 以便 update/delete。
-	_, notesOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%d/notes?per_page=50", deck.ID), key, "")
-	byRef := map[string]float64{}
+	// 取得 note 的对外 id 以便 update/delete。
+	_, notesOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?per_page=50", deck.PublicID), key, "")
+	byRef := map[string]string{}
 	for _, raw := range notesOut["notes"].([]any) {
 		n := raw.(map[string]any)
-		byRef[fmt.Sprint(n["external_ref"])] = n["id"].(float64)
+		byRef[fmt.Sprint(n["external_ref"])] = n["id"].(string)
 	}
-	note1, note2 := uint64(byRef["n:1"]), uint64(byRef["n:2"])
+	note1, note2 := byRef["n:1"], byRef["n:2"]
 
 	// update_note：内容相同，去掉动态字段后应一致。
 	mcpUpd, _, _ := callTool(t, cs, "update_note", map[string]any{"note_id": note1, "kind": "basic", "fields": map[string]any{"front": "u", "back": "Y"}, "tags": []any{"t1"}})
-	_, restUpd := rest(t, base, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", note2), key, `{"kind":"basic","fields":{"front":"u","back":"Y"},"tags":["t1"]}`)
+	_, restUpd := rest(t, base, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note2), key, `{"kind":"basic","fields":{"front":"u","back":"Y"},"tags":["t1"]}`)
 	if !reflect.DeepEqual(stripDynamic(mcpUpd), stripDynamic(restUpd)) {
 		t.Errorf("update_note MCP=%v REST=%v", stripDynamic(mcpUpd), stripDynamic(restUpd))
 	}
 
 	// get_due_cards（此时 note 尚未删除，队列两侧应一致；due_at 依赖调用时刻，比较前归一化）
-	mcpOut, _, _ = callTool(t, cs, "get_due_cards", map[string]any{"deck_id": deck.ID, "limit": 50})
-	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/review/due?deck=%d&limit=50", deck.ID), key, ""); !reflect.DeepEqual(normalizeCards(mcpOut), normalizeCards(restOut)) {
+	mcpOut, _, _ = callTool(t, cs, "get_due_cards", map[string]any{"deck_id": deck.PublicID, "limit": 50})
+	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/review/due?deck=%s&limit=50", deck.PublicID), key, ""); !reflect.DeepEqual(normalizeCards(mcpOut), normalizeCards(restOut)) {
 		t.Errorf("get_due_cards MCP=%v REST=%v", normalizeCards(mcpOut), normalizeCards(restOut))
 	}
 
 	// submit_review：两张卡内容一致，去掉 id 维度后结果应一致。
-	_, exp := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%d&format=json", deck.ID), key, "")
+	_, exp := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), key, "")
 	cards := exp["cards"].([]any)
 	if len(cards) < 2 {
 		t.Fatalf("expected >=2 cards for review, got %d", len(cards))
 	}
-	var ids []float64
+	var ids []string
 	for _, raw := range cards {
-		ids = append(ids, raw.(map[string]any)["card_id"].(float64))
+		ids = append(ids, raw.(map[string]any)["card_id"].(string))
 	}
-	mcpRev, isErr, text := callTool(t, cs, "submit_review", map[string]any{"card_id": uint64(ids[0]), "rating": 3, "expected_version": 0})
+	mcpRev, isErr, text := callTool(t, cs, "submit_review", map[string]any{"card_id": ids[0], "rating": 3, "expected_version": 0})
 	if isErr {
 		t.Fatalf("submit_review MCP error: %s", text)
 	}
-	_, restRev := rest(t, base, http.MethodPost, "/api/v1/review", key, fmt.Sprintf(`{"card_id":%d,"rating":3,"expected_version":0}`, uint64(ids[1])))
+	_, restRev := rest(t, base, http.MethodPost, "/api/v1/review", key, fmt.Sprintf(`{"card_id":"%s","rating":3,"expected_version":0}`, ids[1]))
 	if !reflect.DeepEqual(stripReviewIDs(mcpRev), stripReviewIDs(restRev)) {
 		t.Errorf("submit_review MCP=%v REST=%v", stripReviewIDs(mcpRev), stripReviewIDs(restRev))
 	}
 
 	// delete_note（放在最后，避免影响上面的导出与复习队列）
 	mcpDel, _, _ := callTool(t, cs, "delete_note", map[string]any{"note_id": note1})
-	_, restDel := rest(t, base, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d", note2), key, "")
+	_, restDel := rest(t, base, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", note2), key, "")
 	if !reflect.DeepEqual(stripDynamic(mcpDel), stripDynamic(restDel)) {
 		t.Errorf("delete_note MCP=%v REST=%v", mcpDel, restDel)
 	}
@@ -176,7 +176,7 @@ func normalizeCards(m map[string]any) map[string]any {
 		}
 	}
 	sort.Slice(cards, func(i, j int) bool {
-		return cards[i].(map[string]any)["card_id"].(float64) < cards[j].(map[string]any)["card_id"].(float64)
+		return cards[i].(map[string]any)["card_id"].(string) < cards[j].(map[string]any)["card_id"].(string)
 	})
 	m["cards"] = cards
 	return m
@@ -211,20 +211,20 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	mcpOut, isErr, text := callTool(t, cs, "get_due_cards", map[string]any{
-		"deck_ids": []any{deckA.ID, deckB.ID}, "limit": 50,
+		"deck_ids": []any{deckA.PublicID, deckB.PublicID}, "limit": 50,
 	})
 	if isErr {
 		t.Fatalf("get_due_cards(deck_ids) error: %s", text)
 	}
 	_, restOut := rest(t, ts.URL, http.MethodGet,
-		fmt.Sprintf("/api/v1/review/due?deck=%d&deck=%d&limit=50", deckA.ID, deckB.ID), key, "")
+		fmt.Sprintf("/api/v1/review/due?deck=%s&deck=%s&limit=50", deckA.PublicID, deckB.PublicID), key, "")
 	if !reflect.DeepEqual(normalizeCards(mcpOut), normalizeCards(restOut)) {
 		t.Errorf("get_due_cards(deck_ids) MCP=%v REST=%v", normalizeCards(mcpOut), normalizeCards(restOut))
 	}
 
 	// 互斥：同时给出 deck_id 与 deck_ids 是参数错误，客户端必须看到 isErr。
 	_, isErr, text = callTool(t, cs, "get_due_cards", map[string]any{
-		"deck_id": deckA.ID, "deck_ids": []any{deckB.ID},
+		"deck_id": deckA.PublicID, "deck_ids": []any{deckB.PublicID},
 	})
 	if !isErr {
 		t.Fatalf("get_due_cards with both deck_id and deck_ids must fail")
@@ -250,7 +250,7 @@ func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	_, isErr, text := callTool(t, cs, "get_due_cards", map[string]any{
-		"deck_ids": []any{readable.ID, foreign.ID}, "limit": 50,
+		"deck_ids": []any{readable.PublicID, foreign.PublicID}, "limit": 50,
 	})
 	if !isErr {
 		t.Fatalf("get_due_cards with a readable+foreign deck_ids must fail the whole call")
@@ -306,17 +306,17 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("create_deck MCP=%v REST=%v", stripDynamic(mcpOut), stripDynamic(restOut))
 	}
 
-	// preset_id 为 0 时落在调用者的 Default 预设上（两侧都非 0 且相同）。
-	pid, ok := mcpOut["preset_id"].(float64)
-	if !ok || pid == 0 {
-		t.Fatalf("create_deck preset_id = %v, want the caller's Default preset id", mcpOut["preset_id"])
+	// preset_id 缺省时落在调用者的 Default 预设上（两侧都非空且相同）。
+	pid, ok := mcpOut["preset_id"].(string)
+	if !ok || pid == "" {
+		t.Fatalf("create_deck preset_id = %v, want the caller's Default preset public id", mcpOut["preset_id"])
 	}
 	var defaultPreset store.Preset
 	if err := db.Where("owner_user_id = ? AND name = ?", u.ID, "Default").First(&defaultPreset).Error; err != nil {
 		t.Fatalf("load Default preset: %v", err)
 	}
-	if uint64(pid) != defaultPreset.ID {
-		t.Errorf("create_deck preset_id = %d, want Default preset %d", uint64(pid), defaultPreset.ID)
+	if pid != defaultPreset.PublicID {
+		t.Errorf("create_deck preset_id = %s, want Default preset %s", pid, defaultPreset.PublicID)
 	}
 
 	// 空名字：MCP 与 REST 都用共享的 invalid_request code 拒绝，且英文文案严格对齐。

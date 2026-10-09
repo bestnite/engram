@@ -82,10 +82,10 @@ export interface PresetSelectOption {
  * 而它的显示名（presets.default_name）与哨兵项文案几乎同字：只有一条预设时下拉会同时
  * 出现两条「默认」，看着像一条没删掉的预设。
  *
- * 列表为空（拉取失败）时 selected 为空串，调用方据此按服务端默认预设提交（preset_id: 0）。
+ * 列表为空（拉取失败）时 selected 为空串，调用方据此按服务端默认预设提交（preset_id 为空串）。
  */
 export function presetSelectOptions(
-  presets: ReadonlyArray<{ id: number; name: string; is_default: boolean }>,
+  presets: ReadonlyArray<{ id: string; name: string; is_default: boolean }>,
   t: Translate
 ): { options: PresetSelectOption[]; selected: string } {
   const options = presets.map((item) => ({

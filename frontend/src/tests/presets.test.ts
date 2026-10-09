@@ -9,7 +9,7 @@ import { routes } from '../lib/router/routes';
 
 function preset(overrides: Partial<PresetRecord> = {}): PresetRecord {
   return {
-    id: 7,
+    id: '7',
     name: 'Default',
     is_default: true,
     desired_retention: 0.9,
@@ -69,7 +69,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
 
   it('keeps the user-chosen name and the delete button for a user-created preset', () => {
     const data: PresetsResponse = {
-      presets: [preset({ id: 8, name: 'Evening', is_default: false })],
+      presets: [preset({ id: '8', name: 'Evening', is_default: false })],
       gate: { reviews: 0, min: 500, shortfall: 500, eligible: false },
     };
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: data } });
@@ -107,7 +107,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
           weights_optimized: true,
           weights_raw: '[0.5]',
           job: {
-            id: 12,
+            id: '12',
             status: 'succeeded',
             stage: null,
             log_tail: 'training done',
@@ -141,7 +141,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
       presets: [
         preset({
           job: {
-            id: 13,
+            id: '13',
             status: 'succeeded',
             stage: null,
             log_tail: null,
@@ -232,7 +232,7 @@ describe('presets API client', () => {
         { status: 400 }
       )
     );
-    await expect(client.optimizePreset(7)).rejects.toMatchObject({ code: 'insufficient_reviews' });
+    await expect(client.optimizePreset('7')).rejects.toMatchObject({ code: 'insufficient_reviews' });
     expect(mockFetch.mock.calls[1]?.[0]).toBe('/api/v1/presets/7/optimize');
     expect(mockFetch.mock.calls[1]?.[1]?.method).toBe('POST');
   });
@@ -241,7 +241,7 @@ describe('presets API client', () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ job: null, gate: payload.gate }), { status: 200 })
     );
-    await client.getPresetOptimizeStatus(7, 12);
+    await client.getPresetOptimizeStatus('7', '12');
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/presets/7/optimize/status?job=12');
   });
 });

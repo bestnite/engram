@@ -86,15 +86,16 @@ func (s *Server) adminHealth(c *gin.Context) {
 }
 
 // adminAuditActor 是审计行里的操作者；nil 表示系统动作（无 UserID）。
+// user_id 是对外 id；用户行已不存在时为 null（绝不回退到数字主键）。
 type adminAuditActor struct {
-	UserID   *uint64 `json:"user_id"`
+	UserID   *string `json:"user_id"`
 	Username string  `json:"username"`
 }
 
-// adminAuditTarget 是审计行里的目标对象；nil 表示无目标。
+// adminAuditTarget 是审计行里的目标对象；nil 表示无目标。id 是对外 id。
 type adminAuditTarget struct {
 	Type string  `json:"type"`
-	ID   *uint64 `json:"id"`
+	ID   *string `json:"id"`
 }
 
 // adminAuditRow 是一行审计记录。时间已按当前管理员时区格式化。
@@ -137,7 +138,7 @@ func (s *Server) adminAudit(c *gin.Context) {
 		pages = 1
 	}
 
-	names := s.usernamesFor(ctx, list)
+	actors := s.usersForAudit(ctx, list)
 	rows := make([]adminAuditRow, 0, len(list))
 	for i := range list {
 		row := list[i]
@@ -146,14 +147,15 @@ func (s *Server) adminAudit(c *gin.Context) {
 			Action: row.Action,
 		}
 		if row.UserID != nil {
-			actor := &adminAuditActor{UserID: row.UserID}
-			if name, ok := names[*row.UserID]; ok {
-				actor.Username = name
+			actor := &adminAuditActor{}
+			if u, ok := actors[*row.UserID]; ok {
+				actor.UserID = &u.PublicID
+				actor.Username = u.Username
 			}
 			out.Actor = actor
 		}
 		if row.TargetType != nil && *row.TargetType != "" {
-			out.Target = &adminAuditTarget{Type: *row.TargetType, ID: row.TargetID}
+			out.Target = &adminAuditTarget{Type: *row.TargetType, ID: s.auditTargetPublicID(ctx, *row.TargetType, row.TargetID)}
 		}
 		if row.DetailJSON != nil {
 			out.Detail = *row.DetailJSON

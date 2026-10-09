@@ -248,7 +248,7 @@ export class ApiClient {
   }
 
   /** 使用同源会话下载现有的卡组包附件。 */
-  async downloadDeckPackage(deckId: number | string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
+  async downloadDeckPackage(deckId: string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
     if (options.includeReviews && !options.includeProgress) {
       throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
     }
@@ -309,7 +309,7 @@ export class ApiClient {
    * 读取卡组每日上限与今日已用/剩余（GET /api/v1/decks/:id/settings，仅 owner，会话专用）。
    * 非 owner 由服务端返回 403/404，本方法不隐藏该失败。
    */
-  async getDeckSettings(deckId: number | string): Promise<DeckSettings> {
+  async getDeckSettings(deckId: string): Promise<DeckSettings> {
     const id = encodeURIComponent(String(deckId));
     return this.request<DeckSettings>(`/api/v1/decks/${id}/settings`);
   }
@@ -318,7 +318,7 @@ export class ApiClient {
    * 保存卡组每日上限（PATCH /api/v1/decks/:id/settings，仅 owner）。
    * 0 表示不限，必须原样提交；缺少会话令牌时先获取 CSRF token。
    */
-  async updateDeckSettings(deckId: number | string, input: UpdateDeckSettingsRequest): Promise<DeckSettings> {
+  async updateDeckSettings(deckId: string, input: UpdateDeckSettingsRequest): Promise<DeckSettings> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -341,7 +341,7 @@ export class ApiClient {
   }
 
   /** 删除卡组（DELETE /api/v1/decks/:id，仅 owner）。 */
-  async deleteDeck(deckId: number | string): Promise<{ deleted: boolean }> {
+  async deleteDeck(deckId: string): Promise<{ deleted: boolean }> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -355,7 +355,7 @@ export class ApiClient {
    * 退出共享卡组（DELETE /api/v1/decks/:id/membership，scope: write）。
    * 只删除自己在卡组上的授权行，不动卡组内容；属主没有「退出」语义，由服务端拒绝。
    */
-  async leaveDeck(deckId: number | string): Promise<{ left: boolean }> {
+  async leaveDeck(deckId: string): Promise<{ left: boolean }> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -367,7 +367,7 @@ export class ApiClient {
 
   /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
   async exportDecksZip(
-    deckIds: number[],
+    deckIds: string[],
     options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean } = {}
   ): Promise<{ blob: Blob; filename: string }> {
     if (!this.csrfToken) {
@@ -408,12 +408,12 @@ export class ApiClient {
    * reader 及以上都能克隆；服务端判权与审计，返回新卡组的 {id, name}（进度不跟随）。
    * 显式声明 Accept: application/json，服务端据此返回 JSON 而不是 303 重定向。
    */
-  async cloneDeck(deckId: number | string): Promise<{ id: number; name: string }> {
+  async cloneDeck(deckId: string): Promise<{ id: string; name: string }> {
     if (!this.csrfToken) {
       await this.getSession();
     }
     const id = encodeURIComponent(String(deckId));
-    return this.request<{ id: number; name: string }>(`/api/v1/decks/${id}/clone`, {
+    return this.request<{ id: string; name: string }>(`/api/v1/decks/${id}/clone`, {
       method: 'POST',
       headers: { Accept: 'application/json' },
       body: JSON.stringify({}),
@@ -424,7 +424,7 @@ export class ApiClient {
    * 获取卡组下的卡片列表（GET /api/v1/decks/:id/notes）
    */
   async getDeckNotes(
-    deckId: number | string,
+    deckId: string,
     params?: NoteListParams
   ): Promise<NotesResponse> {
     const encodedId = encodeURIComponent(String(deckId));
@@ -461,14 +461,14 @@ export class ApiClient {
    * 获取卡组卡片列表（getDeckNotes 别名）
    */
   async getNotes(
-    deckId: number | string,
+    deckId: string,
     params?: NoteListParams
   ): Promise<NotesResponse> {
     return this.getDeckNotes(deckId, params);
   }
 
   /** Update one existing note through the authenticated, CSRF-protected REST API. */
-  async updateNote(noteId: number | string, input: UpdateNoteRequest): Promise<Note> {
+  async updateNote(noteId: string, input: UpdateNoteRequest): Promise<Note> {
     const id = encodeURIComponent(String(noteId));
     return this.request<Note>(`/api/v1/notes/${id}`, {
       method: 'PATCH',
@@ -477,15 +477,15 @@ export class ApiClient {
   }
 
   /** Soft-delete one note through the authenticated, CSRF-protected REST API. */
-  async deleteNote(noteId: number | string): Promise<{ deleted: boolean; id: number }> {
+  async deleteNote(noteId: string): Promise<{ deleted: boolean; id: string }> {
     const id = encodeURIComponent(String(noteId));
-    return this.request<{ deleted: boolean; id: number }>(`/api/v1/notes/${id}`, {
+    return this.request<{ deleted: boolean; id: string }>(`/api/v1/notes/${id}`, {
       method: 'DELETE',
     });
   }
 
   /** 使用同源会话与内存 CSRF token 调用安全批量端点创建一条基础笔记。 */
-  async createNotes(deckId: number | string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
+  async createNotes(deckId: string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -512,7 +512,7 @@ export class ApiClient {
   }
 
   /** Preview fields using the authenticated session-only sanitized preview endpoint. */
-  async previewNote(deckId: number | string, kind: string, fields: Record<string, unknown>): Promise<NotePreviewResponse> {
+  async previewNote(deckId: string, kind: string, fields: Record<string, unknown>): Promise<NotePreviewResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -542,7 +542,7 @@ export class ApiClient {
    * 成功响应必须满足 /media/<sha256> 的哈希契约，否则按无效响应拒绝，避免把不受约束的
    * 字符串插入字段。
    */
-  async uploadDeckMedia(deckId: number | string, file: File): Promise<MediaUploadResult> {
+  async uploadDeckMedia(deckId: string, file: File): Promise<MediaUploadResult> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -562,10 +562,9 @@ export class ApiClient {
   /**
    * 通过卡组列表查找单个卡组元数据
    */
-  async getDeck(deckId: number | string): Promise<Deck | null> {
+  async getDeck(deckId: string): Promise<Deck | null> {
     const res = await this.getDecks();
-    const idNum = Number(deckId);
-    return res.decks.find((d) => d.id === idNum) || null;
+    return res.decks.find((d) => d.id === String(deckId)) || null;
   }
 
   /**
@@ -695,7 +694,7 @@ export class ApiClient {
    * 取一张卡正反面的服务端清洗 HTML 与编辑地址（POST /api/v1/review/render）。
    * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染。
    */
-  async renderReviewCard(input: { card_id: number; deck?: number[] }): Promise<ReviewRenderResponse> {
+  async renderReviewCard(input: { card_id: string; deck?: string[] }): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -709,7 +708,7 @@ export class ApiClient {
    * 埋藏当前卡（POST /api/v1/review/bury）：只写本人进度，不产生 reviews 行。
    * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组。
    */
-  async buryReview(input: { card_id: number; deck?: number[] }): Promise<ReviewQueueResponse> {
+  async buryReview(input: { card_id: string; deck?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -731,8 +730,8 @@ export class ApiClient {
     });
   }
 
-  async deleteAPIKey(id: number): Promise<{ revoked: boolean; id: number }> {
-    return this.request<{ revoked: boolean; id: number }>(`/api/v1/keys/${encodeURIComponent(String(id))}`, {
+  async deleteAPIKey(id: string): Promise<{ revoked: boolean; id: string }> {
+    return this.request<{ revoked: boolean; id: string }>(`/api/v1/keys/${encodeURIComponent(String(id))}`, {
       method: 'DELETE',
     });
   }
@@ -980,7 +979,7 @@ export class ApiClient {
   }
 
   /** 编辑预设（PATCH /api/v1/presets/:id）；成功后返回整份列表。 */
-  async updatePreset(id: number | string, input: PresetWriteRequest): Promise<PresetsResponse> {
+  async updatePreset(id: string, input: PresetWriteRequest): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1055,7 +1054,7 @@ export class ApiClient {
     });
   }
 
-  async deletePreset(id: number | string): Promise<PresetsResponse> {
+  async deletePreset(id: string): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1065,7 +1064,7 @@ export class ApiClient {
     });
   }
   /** 启用 / 禁用账号（POST /api/v1/admin/users/:id/status）。 */
-  async setAdminUserStatus(id: number, action: 'enable' | 'disable'): Promise<void> {
+  async setAdminUserStatus(id: string, action: 'enable' | 'disable'): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/status`, {
       method: 'POST',
@@ -1074,7 +1073,7 @@ export class ApiClient {
   }
 
   /** 改角色（POST /api/v1/admin/users/:id/role）；危险动作，服务端要求 confirm。 */
-  async setAdminUserRole(id: number, role: string): Promise<void> {
+  async setAdminUserRole(id: string, role: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/role`, {
       method: 'POST',
@@ -1083,7 +1082,7 @@ export class ApiClient {
   }
 
   /** 重置密码（POST /api/v1/admin/users/:id/password）；一次性返回临时口令。 */
-  async resetAdminUserPassword(id: number): Promise<{ temp_password: string }> {
+  async resetAdminUserPassword(id: string): Promise<{ temp_password: string }> {
     if (!this.csrfToken) await this.getSession();
     return this.request<{ temp_password: string }>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/password`, {
       method: 'POST',
@@ -1092,13 +1091,13 @@ export class ApiClient {
   }
 
   /** 强制下线（POST /api/v1/admin/users/:id/logout）。 */
-  async forceLogoutAdminUser(id: number): Promise<void> {
+  async forceLogoutAdminUser(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/logout`, { method: 'POST', body: '{}' });
   }
 
   /** 删除用户（POST /api/v1/admin/users/:id/delete）；危险动作，服务端要求 confirm。 */
-  async deleteAdminUser(id: number): Promise<void> {
+  async deleteAdminUser(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/delete`, {
       method: 'POST',
@@ -1137,7 +1136,7 @@ export class ApiClient {
   }
 
   /** 触发参数优化（POST /api/v1/presets/:id/optimize）；不足门槛 400、已在运行 409。 */
-  async optimizePreset(id: number | string): Promise<PresetOptimizeResponse> {
+  async optimizePreset(id: string): Promise<PresetOptimizeResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1198,8 +1197,8 @@ export class ApiClient {
 
   /** 轮询优化作业状态（GET /api/v1/presets/:id/optimize/status?job=:jobId）。 */
   async getPresetOptimizeStatus(
-    id: number | string,
-    jobId: number | string
+    id: string,
+    jobId: string
   ): Promise<PresetOptimizeResponse> {
     const encoded = encodeURIComponent(String(id));
     const job = encodeURIComponent(String(jobId));
@@ -1209,7 +1208,7 @@ export class ApiClient {
   }
 
   /** 一键回退默认权重（POST /api/v1/presets/:id/optimize/revert）；成功后返回整份列表。 */
-  async revertPresetWeights(id: number | string): Promise<PresetsResponse> {
+  async revertPresetWeights(id: string): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1220,7 +1219,7 @@ export class ApiClient {
     });
   }
   /** 撤销邀请（POST /api/v1/admin/invites/:id/revoke）。 */
-  async revokeAdminInvite(id: number): Promise<void> {
+  async revokeAdminInvite(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/invites/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
   }
@@ -1232,7 +1231,7 @@ export class ApiClient {
   }
 
   /** 撤销任意用户的一把 key（POST /api/v1/admin/api-keys/:id/revoke）。 */
-  async revokeAdminAPIKey(id: number): Promise<void> {
+  async revokeAdminAPIKey(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/api-keys/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
   }
@@ -1289,7 +1288,7 @@ export class ApiClient {
   }
 
   /** 解绑一条外部身份（POST /api/v1/admin/oidc/identities/:id/unlink）。 */
-  async unlinkAdminOIDCIdentity(id: number): Promise<void> {
+  async unlinkAdminOIDCIdentity(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/oidc/identities/${encodeURIComponent(String(id))}/unlink`, { method: 'POST', body: '{}' });
   }
@@ -1301,7 +1300,7 @@ export class ApiClient {
   }
 
   /** 取消一个作业（POST /api/v1/admin/jobs/:id/cancel）。 */
-  async cancelAdminJob(id: number): Promise<void> {
+  async cancelAdminJob(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/jobs/${encodeURIComponent(String(id))}/cancel`, { method: 'POST', body: '{}' });
   }
@@ -1381,7 +1380,7 @@ export class ApiClient {
   }
 
   /** 接受一条共享邀请（POST /api/v1/sharing/invites/:deckId/accept）。接受那一步才写授权。 */
-  async acceptShareInvite(deckId: number | string): Promise<void> {
+  async acceptShareInvite(deckId: string): Promise<void> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1391,7 +1390,7 @@ export class ApiClient {
   }
 
   /** 拒绝一条共享邀请（POST /api/v1/sharing/invites/:deckId/reject）。拒绝即删邀请，授权从未存在。 */
-  async rejectShareInvite(deckId: number | string): Promise<void> {
+  async rejectShareInvite(deckId: string): Promise<void> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -1406,8 +1405,8 @@ export class ApiClient {
    */
   async saveSharePolicy(input: {
     policy?: import('./types').ShareAcceptPolicy;
-    allow?: number[];
-    revoke?: number[];
+    allow?: string[];
+    revoke?: string[];
     // 界面只认识用户名；服务端按名字解析（未知名字整单 400 user_not_found，不静默丢弃）。
     allow_usernames?: string[];
     revoke_usernames?: string[];

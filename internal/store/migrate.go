@@ -38,6 +38,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0003_drop_deck_visibility",
 		Up:   dropDeckVisibility,
 	},
+	{
+		// 对外 id 从自增主键迁到 public_id：为已有行回填 UUIDv7。
+		// 列本身由 AutoMigrate 加出（可空 + 唯一索引），这里只负责填值。
+		// SQLite 与 PostgreSQL 都没有生成 UUIDv7 的 SQL 函数，所以逐行在 Go 侧生成。
+		Name: "0004_backfill_public_ids",
+		Up:   backfillPublicIDs,
+	},
 }
 
 // dropDeckVisibility 删除 decks.visibility 列。
@@ -60,6 +67,36 @@ func dropDeckVisibility(tx *gorm.DB) error {
 		return fmt.Errorf("drop deck visibility migration: unsupported dialect %q", tx.Dialector.Name())
 	}
 	return tx.Exec(stmt).Error
+}
+
+// publicIDTables 是需要回填 public_id 的表，与对外可见实体一一对应。
+// 未对外暴露的表（sessions、outbox 等）不在此列，也不带 public_id 列。
+// 表名只来自这份固定清单、不含任何外部输入，因此可以安全地拼进 SQL。
+var publicIDTables = []string{
+	"users", "identities", "invites", "presets", "decks",
+	"notes", "cards", "reviews", "api_keys", "jobs", "audit_log",
+}
+
+// backfillPublicIDs 给每个目标表里 public_id 为空的行补一个 UUIDv7。
+// 逐行更新是有意为之：两库都无法在 SQL 里生成 v7，行数也不足以让逐行成为瓶颈。
+func backfillPublicIDs(tx *gorm.DB) error {
+	m := tx.Migrator()
+	for _, table := range publicIDTables {
+		if !m.HasTable(table) || !m.HasColumn(table, "public_id") {
+			continue
+		}
+		var ids []uint64
+		// 用 Table（而不是模型）取行，绕过软删除作用域：软删除的 note/card 同样需要 id。
+		if err := tx.Table(table).Where("public_id IS NULL OR public_id = ''").Pluck("id", &ids).Error; err != nil {
+			return fmt.Errorf("backfill public ids: scan %s: %w", table, err)
+		}
+		for _, id := range ids {
+			if err := tx.Exec("UPDATE "+table+" SET public_id = ? WHERE id = ?", NewPublicID(), id).Error; err != nil {
+				return fmt.Errorf("backfill public ids: update %s id=%d: %w", table, id, err)
+			}
+		}
+	}
+	return nil
 }
 
 // mediaPrimaryKeySha256 把 media 的主键从自增 id 换成内容 sha256。

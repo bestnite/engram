@@ -39,11 +39,12 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
-	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
+	deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader)
+	if !ok {
 		return
 	}
 	pkg, err := s.decks.ExportPackage(c.Request.Context(), user.ID, deckID, store.PackageOptions{
@@ -61,14 +62,14 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	name := fmt.Sprintf("deck-%d.edeck", deckID)
+	name := fmt.Sprintf("deck-%s.edeck", deck.PublicID)
 	c.Header("Content-Type", packageExportMediaType)
 	c.Header("Content-Disposition", `attachment; filename="`+name+`"`)
 	c.Data(http.StatusOK, packageExportMediaType, buf.Bytes())
 }
 
 type batchExportDeckRequest struct {
-	DeckIDs         []uint64 `json:"deck_ids"`
+	DeckIDs         []string `json:"deck_ids"`
 	IncludeMedia    *bool    `json:"include_media"`
 	IncludeProgress bool     `json:"include_progress"`
 	IncludeReviews  bool     `json:"include_reviews"`
@@ -94,32 +95,36 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	zw := zip.NewWriter(&zipBuf)
 
 	ctx := c.Request.Context()
-	for _, deckID := range req.DeckIDs {
-		deck, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader)
+	for _, deckPublicID := range req.DeckIDs {
+		deck, ok := s.deckByPublicID(c, deckPublicID)
 		if !ok {
 			zw.Close()
 			return
 		}
-		pkg, err := s.decks.ExportPackage(ctx, user.ID, deckID, store.PackageOptions{
+		if _, ok := s.loadDeckForRole(c, user, deck.ID, store.RoleReader); !ok {
+			zw.Close()
+			return
+		}
+		pkg, err := s.decks.ExportPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:    includeMedia,
 			IncludeProgress: req.IncludeProgress,
 			IncludeReviews:  req.IncludeReviews,
 			Now:             nowFn,
 		})
 		if err != nil {
-			s.logger.Error("export deck package in batch failed", "deck_id", deckID, "error", err)
+			s.logger.Error("export deck package in batch failed", "deck_id", deck.ID, "error", err)
 			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 		var pkgBuf bytes.Buffer
 		if err := pkg.WriteZip(&pkgBuf); err != nil {
-			s.logger.Error("write deck package zip in batch failed", "deck_id", deckID, "error", err)
+			s.logger.Error("write deck package zip in batch failed", "deck_id", deck.ID, "error", err)
 			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		filename := fmt.Sprintf("deck-%d-%s.edeck", deckID, sanitizeFilename(deck.Name))
+		filename := fmt.Sprintf("deck-%s-%s.edeck", deck.PublicID, sanitizeFilename(deck.Name))
 		f, err := zw.Create(filename)
 		if err != nil {
 			s.logger.Error("create zip entry failed", "filename", filename, "error", err)

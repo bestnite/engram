@@ -158,7 +158,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 	}
 
 	// JSON 不带进度：不含 state 键。
-	status, raw := doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%d&format=json", deck.ID), k.Plaintext, "")
+	status, raw := doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("json export status = %d, want 200 (body %s)", status, raw)
 	}
@@ -178,7 +178,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 
 	// JSON 带进度：state=review、reps=3。
 	status, raw = doJSON(t, router, http.MethodGet,
-		fmt.Sprintf("/api/v1/export?deck=%d&format=json&include_progress=1", deck.ID), k.Plaintext, "")
+		fmt.Sprintf("/api/v1/export?deck=%s&format=json&include_progress=1", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("json progress export status = %d, want 200", status)
 	}
@@ -196,7 +196,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 	}
 
 	// CSV 不带进度：表头 8 列，无 state。
-	status, raw = doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%d&format=csv", deck.ID), k.Plaintext, "")
+	status, raw = doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=csv", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("csv export status = %d, want 200", status)
 	}
@@ -207,7 +207,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 
 	// CSV 带进度：表头含 state,due_at,reps,lapses，数据行含 review 与 3。
 	status, raw = doJSON(t, router, http.MethodGet,
-		fmt.Sprintf("/api/v1/export?deck=%d&format=csv&include_progress=1", deck.ID), k.Plaintext, "")
+		fmt.Sprintf("/api/v1/export?deck=%s&format=csv&include_progress=1", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("csv progress export status = %d, want 200", status)
 	}
@@ -224,7 +224,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 
 	// include_progress 非法值（如 2）按未开启处理，避免静默接受非 0/1。
 	status, raw = doJSON(t, router, http.MethodGet,
-		fmt.Sprintf("/api/v1/export?deck=%d&format=json&include_progress=2", deck.ID), k.Plaintext, "")
+		fmt.Sprintf("/api/v1/export?deck=%s&format=json&include_progress=2", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("include_progress=2 status = %d, want 200", status)
 	}
@@ -236,22 +236,31 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 	}
 }
 
-// TestExportRequiresExplicitDeck 断言 GET /api/v1/export 必须显式指定卡组：deck 缺省或为 0
-// 一律 400。全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个显式卡组。
+// TestExportRequiresExplicitDeck 断言 GET /api/v1/export 必须显式指定卡组：deck 缺省或为空
+// 一律 400；给了一个未知的对外 id 则是 404（与「卡组不存在」同口径）。
+// 全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个显式卡组。
 func TestExportRequiresExplicitDeck(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "exp_nodeck", store.RoleUser)
 	seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
 
+	// 缺 deck 参数（或值为空）：400 invalid_request。
 	for _, target := range []string{
 		"/api/v1/export",
 		"/api/v1/export?format=json",
-		"/api/v1/export?deck=0",
+		"/api/v1/export?deck=",
 	} {
 		status, raw := doJSON(t, env.router(), http.MethodGet, target, k.Plaintext, "")
 		if status != http.StatusBadRequest {
 			t.Errorf("GET %s status = %d, want 400 (body %s)", target, status, raw)
 		}
+	}
+
+	// deck 给了但不是已知的对外 id：404 not_found。
+	status, raw := doJSON(t, env.router(), http.MethodGet,
+		"/api/v1/export?deck="+missingPublicID, k.Plaintext, "")
+	if status != http.StatusNotFound {
+		t.Errorf("GET /api/v1/export with an unknown deck status = %d, want 404 (body %s)", status, raw)
 	}
 }

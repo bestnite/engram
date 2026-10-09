@@ -43,14 +43,30 @@ func (s *Server) requireUser(c *gin.Context) (*store.User, bool) {
 	return u, true
 }
 
-// deckIDParam 解析 :id 路径参数；解析失败时返回 false 并写 404。
-func deckIDParam(c *gin.Context) (uint64, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+// deckByPublicID 解析对外 id 并取卡组；未知、空串或非法一律写 404 并返回 false。
+// 卡组主键不对外，路径参数只带不透明 id，因此每次都要在这里换成数字主键。
+func (s *Server) deckByPublicID(c *gin.Context, publicID string) (*store.Deck, bool) {
+	raw := strings.TrimSpace(publicID)
+	if raw == "" {
 		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	deck, err := s.decks.ByPublicID(c.Request.Context(), raw)
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	return deck, true
+}
+
+// deckIDParam 解析 :id 路径参数（对外 id 字符串）并换成数字主键；
+// 未知、空串或非法一律 404（与「卡组不存在」同形，不泄露存在性）。
+func (s *Server) deckIDParam(c *gin.Context) (uint64, bool) {
+	deck, ok := s.deckByPublicID(c, c.Param("id"))
+	if !ok {
 		return 0, false
 	}
-	return id, true
+	return deck.ID, true
 }
 
 // loadDeckForRole 取卡组并校验当前用户至少拥有 want 角色。
@@ -103,7 +119,7 @@ func (s *Server) noteListRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -124,7 +140,7 @@ func (s *Server) noteEditRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -143,7 +159,7 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}

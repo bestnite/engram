@@ -72,7 +72,7 @@ func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 		cookies []*http.Cookie
 	}{
 		{name: "login page", path: "/login"},
-		{name: "review page", path: "/review?deck=" + u64str(deck.ID), cookies: cookies},
+		{name: "review page", path: "/review?deck=" + deck.PublicID, cookies: cookies},
 		{name: "home page", path: "/"},
 		{name: "static asset", path: asset},
 		{name: "health", path: "/healthz"},
@@ -103,7 +103,7 @@ func TestSecurityHeadersDoNotAlterResponseBody(t *testing.T) {
 		want    []string
 	}{
 		{name: "login page", path: "/login", want: []string{shellMarker}},
-		{name: "review page", path: "/review?deck=" + u64str(deck.ID), cookies: cookies, want: []string{shellMarker}},
+		{name: "review page", path: "/review?deck=" + deck.PublicID, cookies: cookies, want: []string{shellMarker}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

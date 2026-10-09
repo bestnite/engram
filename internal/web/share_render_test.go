@@ -13,9 +13,9 @@ import (
 // 渲染出的正文 HTML 逐字相同（证明两者走同一条 internal/render 管线）。
 
 // fetchShareHTML 打开无口令分享链接并取回第一张卡的正反面 HTML。
-func fetchShareHTML(t *testing.T, srv *Server, deckID uint64, ownerCookies []*http.Cookie, ownerCSRF string) (front, back string) {
+func fetchShareHTML(t *testing.T, srv *Server, deckPublicID string, ownerCookies []*http.Cookie, ownerCSRF string) (front, back string) {
 	t.Helper()
-	token := createShareLinkJSON(t, srv, deckID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deckPublicID, ownerCookies, ownerCSRF, "")
 	rec := get(t, srv, "/api/v1/share/"+token, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/share/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -38,7 +38,7 @@ func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	front := `<span class="hl">高亮</span> 与 **加粗** 与 \(x+y\)`
 	seedBasic(t, db, deck.ID, front, "背面")
 
-	frontHTML, _ := fetchShareHTML(t, srv, deck.ID, ownerCookies, ownerCSRF)
+	frontHTML, _ := fetchShareHTML(t, srv, deck.PublicID, ownerCookies, ownerCSRF)
 
 	// 合法标记必须以标签形式出现。
 	for _, want := range []string{`<span class="hl">高亮</span>`, `<strong>加粗</strong>`, `\(x+y\)`} {
@@ -72,12 +72,11 @@ func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 	}, "\n\n")
 	back := `**背面** 与 \(a<b\)`
 	note := seedBasic(t, db, deck.ID, front, back)
-	cardID := cardIDOfNote(t, db, note.ID)
 
-	shareFront, shareBack := fetchShareHTML(t, srv, deck.ID, ownerCookies, ownerCSRF)
+	shareFront, shareBack := fetchShareHTML(t, srv, deck.PublicID, ownerCookies, ownerCSRF)
 
 	renderRec := postJSONWithCSRF(t, srv, "/api/v1/review/render",
-		map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}, ownerCookies, ownerCSRF)
+		map[string]any{"card_id": cardPublicIDOfNote(t, db, note.ID), "deck": []string{deck.PublicID}}, ownerCookies, ownerCSRF)
 	if renderRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/review/render = %d, want 200 (body %s)", renderRec.Code, snippet(renderRec.Body.String()))
 	}

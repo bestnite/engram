@@ -23,19 +23,19 @@ describe('share invite API client', () => {
         JSON.stringify({
           invites: [
             {
-              deck_id: 7,
+              deck_id: '7',
               deck_name: 'Biology',
-              user_id: 2,
+              user_id: '2',
               username: 'me',
               role: 'reader',
-              invited_by: 1,
+              invited_by: '1',
               inviter_name: 'Alice',
               created_at: '2026-10-07T00:00:00Z',
               expires_at: '2026-11-06T00:00:00Z',
             },
           ],
           policy: 'whitelist',
-          allow_list: [{ user_id: 1, username: 'Alice' }],
+          allow_list: [{ user_id: '1', username: 'Alice' }],
         }),
         { status: 200 }
       )
@@ -55,7 +55,7 @@ describe('share invite API client', () => {
     );
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ accepted: true }), { status: 200 }));
 
-    await client.acceptShareInvite(7);
+    await client.acceptShareInvite('7');
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
     const [url, init] = mockFetch.mock.calls[1]!;
@@ -70,7 +70,7 @@ describe('share invite API client', () => {
     );
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ rejected: true }), { status: 200 }));
 
-    await client.rejectShareInvite(7);
+    await client.rejectShareInvite('7');
 
     const [url, init] = mockFetch.mock.calls[1]!;
     expect(url).toBe('/api/v1/sharing/invites/7/reject');

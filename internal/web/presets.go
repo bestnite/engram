@@ -26,14 +26,14 @@ func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	s.registerPresetAPIRoutes(router)
 }
 
-// optimizeJobFor 按 id 读取优化作业，并校验它确实属于该预设（kind 与 target 都对）。
+// optimizeJobFor 按对外 id 读取优化作业，并校验它确实属于该预设（kind 与 target 都对）。
 // 任何不匹配都返回 nil：状态端点只允许看到本预设自己的作业。
 func (s *Server) optimizeJobFor(ctx context.Context, presetID uint64, raw string) *store.Job {
-	id, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || id == 0 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return nil
 	}
-	job, err := s.jobStore.ByID(ctx, id)
+	job, err := s.jobStore.ByPublicID(ctx, raw)
 	if err != nil {
 		return nil
 	}

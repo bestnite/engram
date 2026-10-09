@@ -12,10 +12,11 @@ import (
 // 两者都在 service 层，REST handler 与 MCP 工具共用。
 
 // exportScanRow 是导出游标的一行原始列；字段名与 SELECT 列表一一对应，由 GORM 按列名映射。
+// id 列取各实体的 public_id（对外 id），不再取自增主键。
 type exportScanRow struct {
-	CardID      uint64
-	NoteID      uint64
-	DeckID      uint64
+	CardID      string
+	NoteID      string
+	DeckID      string
 	Kind        string
 	Template    string
 	FieldsJSON  string
@@ -39,11 +40,13 @@ func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, 
 	}
 	// 进度列只在 include_progress 时选取；未选进度时不引用 card_states，
 	// 否则 SQL 会因缺少该 JOIN 而报 “no such column”。
-	selectCols := `cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id,
+	// 三个 id 列都取各表的 public_id（对外 id）；deck 需要额外 JOIN decks 才能拿到它的对外 id。
+	selectCols := `cards.public_id AS card_id, notes.public_id AS note_id, decks.public_id AS deck_id,
 	        notes.kind AS kind, cards.template AS template, notes.fields_json AS fields_json,
 	        notes.tags_json AS tags_json, notes.external_ref AS external_ref`
 	q := a.db.WithContext(ctx).Table("cards").
 		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
+		Joins("JOIN decks ON decks.id = notes.deck_id").
 		Where("cards.deleted_at IS NULL").
 		Where("notes.deck_id IN ?", deckIDs)
 	if includeProgress {

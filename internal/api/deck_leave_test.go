@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// listDeckRolesViaHTTP 用 key 调 GET /api/v1/decks，返回 deck_id -> role 映射。
-func listDeckRolesViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]string {
+// listDeckRolesViaHTTP 用 key 调 GET /api/v1/decks，返回 deck public id -> role 映射。
+func listDeckRolesViaHTTP(t *testing.T, env *testEnv, key string) map[string]string {
 	t.Helper()
 	status, raw := doJSON(t, env.router(), http.MethodGet, "/api/v1/decks", key, "")
 	if status != http.StatusOK {
@@ -19,24 +19,24 @@ func listDeckRolesViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]str
 	}
 	var body struct {
 		Decks []struct {
-			ID   uint64 `json:"id"`
+			ID   string `json:"id"`
 			Role string `json:"role"`
 		} `json:"decks"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("decode decks: %v (%s)", err, raw)
 	}
-	out := make(map[uint64]string, len(body.Decks))
+	out := make(map[string]string, len(body.Decks))
 	for _, d := range body.Decks {
 		out[d.ID] = d.Role
 	}
 	return out
 }
 
-// leaveDeckViaHTTP 用 key 调 DELETE /api/v1/decks/:id/membership。
-func leaveDeckViaHTTP(t *testing.T, env *testEnv, key string, deckID uint64) (int, []byte) {
+// leaveDeckViaHTTP 用 key 调 DELETE /api/v1/decks/:id/membership（:id 是卡组对外 id）。
+func leaveDeckViaHTTP(t *testing.T, env *testEnv, key string, deckPublicID string) (int, []byte) {
 	t.Helper()
-	return doJSON(t, env.router(), http.MethodDelete, fmt.Sprintf("/api/v1/decks/%d/membership", deckID), key, "")
+	return doJSON(t, env.router(), http.MethodDelete, fmt.Sprintf("/api/v1/decks/%s/membership", deckPublicID), key, "")
 }
 
 // TestListDecksReportsCallerRole 断言列表逐张带出调用者的显式关系：
@@ -59,14 +59,14 @@ func TestListDecksReportsCallerRole(t *testing.T) {
 	key := seedKey(t, env.keys, viewer.ID, []string{store.ScopeRead}, nil)
 	roles := listDeckRolesViaHTTP(t, env, key.Plaintext)
 
-	if roles[ownDeck.ID] != store.RoleOwner {
-		t.Errorf("own deck role = %q, want %q", roles[ownDeck.ID], store.RoleOwner)
+	if roles[ownDeck.PublicID] != store.RoleOwner {
+		t.Errorf("own deck role = %q, want %q", roles[ownDeck.PublicID], store.RoleOwner)
 	}
-	if roles[grantedDeck.ID] != store.RoleEditor {
-		t.Errorf("granted deck role = %q, want %q", roles[grantedDeck.ID], store.RoleEditor)
+	if roles[grantedDeck.PublicID] != store.RoleEditor {
+		t.Errorf("granted deck role = %q, want %q", roles[grantedDeck.PublicID], store.RoleEditor)
 	}
-	if _, ok := roles[foreignDeck.ID]; ok {
-		t.Errorf("another user's ungranted deck %d appeared in the list: %v", foreignDeck.ID, roles)
+	if _, ok := roles[foreignDeck.PublicID]; ok {
+		t.Errorf("another user's ungranted deck %s appeared in the list: %v", foreignDeck.PublicID, roles)
 	}
 	if len(roles) != 2 {
 		t.Errorf("listed roles = %v, want exactly the owned and the granted deck", roles)
@@ -87,7 +87,7 @@ func TestLeaveDeckRemovesOwnGrant(t *testing.T) {
 	}
 	key := seedKey(t, env.keys, member.ID, []string{store.ScopeWrite}, nil)
 
-	status, raw := leaveDeckViaHTTP(t, env, key.Plaintext, deck.ID)
+	status, raw := leaveDeckViaHTTP(t, env, key.Plaintext, deck.PublicID)
 	if status != http.StatusOK {
 		t.Fatalf("leave status = %d, want 200 (body %s)", status, raw)
 	}
@@ -149,7 +149,7 @@ func TestLeaveDeckRequiresWriteScope(t *testing.T) {
 	}
 	key := seedKey(t, env.keys, member.ID, []string{store.ScopeRead}, nil)
 
-	status, raw := leaveDeckViaHTTP(t, env, key.Plaintext, deck.ID)
+	status, raw := leaveDeckViaHTTP(t, env, key.Plaintext, deck.PublicID)
 	if status != http.StatusForbidden {
 		t.Fatalf("read-scope leave status = %d, want 403 (body %s)", status, raw)
 	}

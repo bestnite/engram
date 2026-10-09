@@ -57,9 +57,9 @@ func seedReferencedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uin
 
 // createShareLinkForDeck 建一条分享链接并取回明文 token；password 为空 = 无口令。
 // 兼容既有测试的调用形态，内部走 SPA 的 JSON 端点。
-func createShareLinkForDeck(t *testing.T, srv *Server, deckID uint64, ownerCookies []*http.Cookie, ownerCSRF, password string) string {
+func createShareLinkForDeck(t *testing.T, srv *Server, deckPublicID string, ownerCookies []*http.Cookie, ownerCSRF, password string) string {
 	t.Helper()
-	return createShareLinkJSON(t, srv, deckID, ownerCookies, ownerCSRF, password)
+	return createShareLinkJSON(t, srv, deckPublicID, ownerCookies, ownerCSRF, password)
 }
 
 // openShareLink 以访客身份打开一条无口令分享链接（GET /api/v1/share/:token），登记媒体授权。
@@ -78,7 +78,7 @@ func TestShareLinkMediaReadableAfterBrowse(t *testing.T) {
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 open deck", 'a')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-open")
 	target := "/media/" + sha
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	// 1) 未打开过分享链接：无授权 → 404。
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusNotFound {
@@ -133,7 +133,7 @@ func TestShareLinkPasswordGateForMedia(t *testing.T) {
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 locked deck", 'c')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-locked")
 	target := "/media/" + sha
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "letmein99")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "letmein99")
 	sessionID := visitorSessionID(t, db, visitorID)
 
 	// 1) 未解锁、未授权 → 404。
@@ -169,7 +169,7 @@ func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 revoke deck", 'd')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-revoke")
 	target := "/media/" + sha
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	openShareLink(t, srv, token, visitorCookies)
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
@@ -181,7 +181,7 @@ func TestShareLinkMediaLapsesAfterRevoke(t *testing.T) {
 		t.Fatalf("load share link: %v", err)
 	}
 	if rec := jsonRequest(t, srv, http.MethodDelete,
-		shareLinkJSONPath(deck.ID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+		shareLinkJSONPath(deck.PublicID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("revoke share link status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
@@ -229,7 +229,7 @@ func TestShareLinkMediaCoversOnlyTheSharedDeck(t *testing.T) {
 	unreferenced := uploadAndSha(t, srv, ownerCookies, ownerCSRF, append(pngBody(), 'h'))
 
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-scope")
-	token := createShareLinkJSON(t, srv, deckA.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deckA.PublicID, ownerCookies, ownerCSRF, "")
 	openShareLink(t, srv, token, visitorCookies)
 
 	if rec := getWithCookies(t, srv, "/media/"+shaA, visitorCookies); rec.Code != http.StatusOK {
@@ -250,7 +250,7 @@ func TestShareLinkMediaGrantIsSessionScoped(t *testing.T) {
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 session scope", 'i')
 	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-session")
 	target := "/media/" + sha
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	openShareLink(t, srv, token, visitorCookies)
 	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
@@ -275,7 +275,7 @@ func TestShareLinkJoinGrantsReaderAccess(t *testing.T) {
 	visitorID, visitorCookies, visitorCSRF := createUserAndLogin(t, srv, db, "l3-visitor-join")
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "l3-stranger-join")
 	target := "/media/" + sha
-	joinPath := "/api/v1/share/" + createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "") + "/join"
+	joinPath := "/api/v1/share/" + createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "") + "/join"
 	token := strings.TrimSuffix(strings.TrimPrefix(joinPath, "/api/v1/share/"), "/join")
 
 	// 1) 打开链接前：列表里没有它，媒体 404。

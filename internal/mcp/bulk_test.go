@@ -29,16 +29,16 @@ func toMap(t *testing.T, v any) map[string]any {
 	return m
 }
 
-// noteIDsInDeck 按 id 升序取出卡组内的 note id，供两侧各取一张做对照。
-func noteIDsInDeck(t *testing.T, db *gorm.DB, deckID uint64) []uint64 {
+// noteIDsInDeck 按主键升序取出卡组内 note 的对外 id，供两侧各取一张做对照。
+func noteIDsInDeck(t *testing.T, db *gorm.DB, deckID uint64) []string {
 	t.Helper()
 	var notes []store.Note
 	if err := db.Where("deck_id = ?", deckID).Order("id").Find(&notes).Error; err != nil {
 		t.Fatalf("list notes: %v", err)
 	}
-	ids := make([]uint64, 0, len(notes))
+	ids := make([]string, 0, len(notes))
 	for _, n := range notes {
-		ids = append(ids, n.ID)
+		ids = append(ids, n.PublicID)
 	}
 	return ids
 }
@@ -69,7 +69,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 		t.Fatalf("bulk_notes(add_tags) error: %s", text)
 	}
 	direct, err := apiSrv.BulkNotes(context.Background(), u.ID, nil, api.BulkNotesInput{
-		Action: "add_tags", NoteIDs: []uint64{n2}, Tags: []string{"t1"},
+		Action: "add_tags", NoteIDs: []string{n2}, Tags: []string{"t1"},
 	})
 	if err != nil {
 		t.Fatalf("direct BulkNotes: %v", err)
@@ -84,12 +84,12 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 	// 回读库里的 tags_json：两条 note 都应当带上 t1。
 	noteStore := store.NewNoteStore(db)
 	for _, id := range ids {
-		n, err := noteStore.ByID(context.Background(), id)
+		n, err := noteStore.ByPublicID(context.Background(), id)
 		if err != nil {
-			t.Fatalf("reload note %d: %v", id, err)
+			t.Fatalf("reload note %s: %v", id, err)
 		}
 		if tags, _ := store.ParseTags(n.TagsJSON); !containsStr(tags, "t1") {
-			t.Errorf("note %d tags = %v, want to contain t1", id, tags)
+			t.Errorf("note %s tags = %v, want to contain t1", id, tags)
 		}
 	}
 
@@ -98,7 +98,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 		"action": "add_tags", "note_ids": []any{n1}, "tags": []any{"t1"},
 	})
 	direct, err = apiSrv.BulkNotes(context.Background(), u.ID, nil, api.BulkNotesInput{
-		Action: "add_tags", NoteIDs: []uint64{n2}, Tags: []string{"t1"},
+		Action: "add_tags", NoteIDs: []string{n2}, Tags: []string{"t1"},
 	})
 	if err != nil {
 		t.Fatalf("direct BulkNotes (repeat): %v", err)
@@ -133,7 +133,7 @@ func TestBulkNotesHiddenFromReadKey(t *testing.T) {
 			t.Fatalf("read-only key must not see bulk_notes in tools/list")
 		}
 	}
-	_, isErr, text := callTool(t, cs, "bulk_notes", map[string]any{"action": "delete", "note_ids": []any{1}})
+	_, isErr, text := callTool(t, cs, "bulk_notes", map[string]any{"action": "delete", "note_ids": []any{"x"}})
 	if !isErr || !strings.Contains(text, api.CodeScopeRequired) {
 		t.Fatalf("hard-calling bulk_notes with a read-only key: isErr=%v text=%q, want %s", isErr, text, api.CodeScopeRequired)
 	}
@@ -165,9 +165,9 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeWrite}))
 
 	out, isErr, text := callTool(t, cs, "create_notes", map[string]any{
-		"deck_id": deck.ID,
+		"deck_id": deck.PublicID,
 		"notes": []any{map[string]any{
-			"note_id": note.ID, "kind": "basic",
+			"note_id": note.PublicID, "kind": "basic",
 			"fields": map[string]any{"front": "new", "back": "newA"}, "tags": []any{"t1"},
 		}},
 	})
@@ -205,9 +205,9 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 
 	// note_id 与 external_ref 同时给出：该行报一条行错误，其余不变。
 	out, isErr, text = callTool(t, cs, "create_notes", map[string]any{
-		"deck_id": deck.ID,
+		"deck_id": deck.PublicID,
 		"notes": []any{map[string]any{
-			"note_id": note.ID, "kind": "basic",
+			"note_id": note.PublicID, "kind": "basic",
 			"fields": map[string]any{"front": "z", "back": "z"}, "external_ref": "e:1",
 		}},
 	})

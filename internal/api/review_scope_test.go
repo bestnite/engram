@@ -39,7 +39,7 @@ func TestDueCardsAcceptsRepeatedDeckParams(t *testing.T) {
 	router := env.router()
 
 	status, raw := doJSON(t, router, http.MethodGet,
-		fmt.Sprintf("/api/v1/review/due?deck=%d&deck=%d&limit=50", deckA.ID, deckB.ID), k.Plaintext, "")
+		fmt.Sprintf("/api/v1/review/due?deck=%s&deck=%s&limit=50", deckA.PublicID, deckB.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /review/due?deck=A&deck=B status = %d, want 200 (body %s)", status, raw)
 	}
@@ -49,16 +49,17 @@ func TestDueCardsAcceptsRepeatedDeckParams(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("response is not JSON: %v (%s)", err, raw)
 	}
-	seen := map[uint64]bool{}
+	seen := map[string]bool{}
 	for _, c := range body.Cards {
 		seen[c.DeckID] = true
 	}
-	if !seen[deckA.ID] || !seen[deckB.ID] {
-		t.Errorf("cards by deck = %v, want both deck %d and deck %d", seen, deckA.ID, deckB.ID)
+	if !seen[deckA.PublicID] || !seen[deckB.PublicID] {
+		t.Errorf("cards by deck = %v, want both deck %s and deck %s", seen, deckA.PublicID, deckB.PublicID)
 	}
 }
 
-// TestDueCardsRejectsBadDeckParam 覆盖负例：非数字或 0 的 deck 值返回 400。
+// TestDueCardsRejectsBadDeckParam 覆盖负例：未知、空或非法的卡组对外 id 返回 404。
+// 对外 id 是不透明串，路由层解析不到实体时与「卡组不存在」同一口径，故是 404 而非 400。
 func TestDueCardsRejectsBadDeckParam(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "badparam", store.RoleUser)
@@ -67,10 +68,10 @@ func TestDueCardsRejectsBadDeckParam(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeReview}, nil)
 	router := env.router()
 
-	for _, q := range []string{"deck=abc", "deck=0", fmt.Sprintf("deck=%d&deck=oops", deck.ID)} {
+	for _, q := range []string{"deck=abc", "deck=0", fmt.Sprintf("deck=%s&deck=oops", deck.PublicID)} {
 		status, raw := doJSON(t, router, http.MethodGet, "/api/v1/review/due?"+q, k.Plaintext, "")
-		if status != http.StatusBadRequest {
-			t.Errorf("GET /review/due?%s status = %d, want 400 (body %s)", q, status, raw)
+		if status != http.StatusNotFound {
+			t.Errorf("GET /review/due?%s status = %d, want 404 (body %s)", q, status, raw)
 		}
 	}
 }
@@ -89,8 +90,8 @@ func TestDueCardsFailsWholeRequestForUnreadableDeck(t *testing.T) {
 	router := env.router()
 
 	for _, q := range []string{
-		fmt.Sprintf("deck=%d&deck=%d", readable.ID, foreign.ID),
-		fmt.Sprintf("deck=%d", foreign.ID),
+		fmt.Sprintf("deck=%s&deck=%s", readable.PublicID, foreign.PublicID),
+		fmt.Sprintf("deck=%s", foreign.PublicID),
 	} {
 		status, raw := doJSON(t, router, http.MethodGet, "/api/v1/review/due?"+q, k.Plaintext, "")
 		if status != http.StatusForbidden {

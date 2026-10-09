@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -48,8 +47,8 @@ func decodePresetError(t *testing.T, rec *httptest.ResponseRecorder) (string, *o
 	return envelope.Error.Code, envelope.Gate
 }
 
-// findPreset 在列表响应里按 id 取一条预设。
-func findPreset(body presetListResponse, id uint64) *presetView {
+// findPreset 在列表响应里按对外 id 取一条预设。
+func findPreset(body presetListResponse, id string) *presetView {
 	for i := range body.Presets {
 		if body.Presets[i].ID == id {
 			return &body.Presets[i]
@@ -123,13 +122,13 @@ func TestPresetCreateAndUpdateRoundTrip(t *testing.T) {
 		t.Errorf("persisted preset = %+v, want 0.85 / 2m,20m / 15m / 1000 / fuzz on", persisted)
 	}
 
-	upd := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(evening.ID),
+	upd := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+evening.ID,
 		`{"name":"Night","desired_retention":0.8,"learning_steps":"5m","relearning_steps":"","maximum_interval_days":500,"enable_fuzz":false}`,
 		cookies, csrf)
 	if upd.Code != http.StatusOK {
-		t.Fatalf("PATCH /api/v1/presets/%d = %d, want 200 (body %s)", evening.ID, upd.Code, snippet(upd.Body.String()))
+		t.Fatalf("PATCH /api/v1/presets/%s = %d, want 200 (body %s)", evening.ID, upd.Code, snippet(upd.Body.String()))
 	}
-	reloaded, err := store.NewPresetStore(db).ByID(ctx, evening.ID)
+	reloaded, err := store.NewPresetStore(db).ByPublicID(ctx, evening.ID)
 	if err != nil {
 		t.Fatalf("reload preset: %v", err)
 	}
@@ -206,7 +205,7 @@ func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 		t.Fatalf("create foreign preset: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(foreign.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+foreign.PublicID,
 		`{"name":"hijack","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`,
 		cookies, csrf)
 	if rec.Code != http.StatusNotFound {
@@ -229,7 +228,7 @@ func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 func TestPresetOptimizeGateAndConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
-	path := "/api/v1/presets/" + u64str(p.ID) + "/optimize"
+	path := "/api/v1/presets/" + p.PublicID + "/optimize"
 
 	below := jsonRequest(t, srv, http.MethodPost, path, `{}`, cookies, csrf)
 	if below.Code != http.StatusBadRequest {
@@ -283,14 +282,14 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 	setMinReviews(t, db, store.MinOptimizeMinReviews)
 	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
 
-	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+u64str(p.ID)+"/optimize", `{}`, cookies, csrf)
+	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+p.PublicID+"/optimize", `{}`, cookies, csrf)
 	if enq.Code != http.StatusAccepted {
 		t.Fatalf("enqueue = %d, want 202 (body %s)", enq.Code, snippet(enq.Body.String()))
 	}
 
 	// 在途作业必须在列表里标注，刷新页面后才能续上轮询。
 	list := decodePresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
-	card := findPreset(list, p.ID)
+	card := findPreset(list, p.PublicID)
 	if card == nil || card.Job == nil || card.Job.Status != "queued" {
 		t.Fatalf("in-flight job not attached to the preset card: %+v", card)
 	}
@@ -314,7 +313,7 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 		t.Fatalf("FinishOptimize() error = %v", err)
 	}
 
-	status := getWithCookies(t, srv, "/api/v1/presets/"+u64str(p.ID)+"/optimize/status?job="+strconv.FormatUint(job.ID, 10), cookies)
+	status := getWithCookies(t, srv, "/api/v1/presets/"+p.PublicID+"/optimize/status?job="+job.PublicID, cookies)
 	if status.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want 200 (body %s)", status.Code, snippet(status.Body.String()))
 	}
@@ -335,12 +334,12 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 		t.Errorf("fit metrics = %+v, want before 0.51 / after 0.44", statusBody.Job.Result)
 	}
 
-	revert := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+u64str(p.ID)+"/optimize/revert", `{}`, cookies, csrf)
+	revert := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+p.PublicID+"/optimize/revert", `{}`, cookies, csrf)
 	if revert.Code != http.StatusOK {
 		t.Fatalf("POST revert = %d, want 200 (body %s)", revert.Code, snippet(revert.Body.String()))
 	}
 	after := decodePresetList(t, revert)
-	reverted := findPreset(after, p.ID)
+	reverted := findPreset(after, p.PublicID)
 	if reverted == nil || reverted.WeightsOptimized || reverted.WeightsRaw != nil {
 		t.Errorf("revert response still reports optimised weights: %+v", reverted)
 	}
@@ -366,7 +365,7 @@ func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	setMinReviews(t, db, store.MinOptimizeMinReviews)
 	seedReviews(t, db, ownerID, store.MinOptimizeMinReviews)
 
-	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+u64str(p1.ID)+"/optimize", `{}`, cookies, csrf)
+	enq := jsonRequest(t, srv, http.MethodPost, "/api/v1/presets/"+p1.PublicID+"/optimize", `{}`, cookies, csrf)
 	if enq.Code != http.StatusAccepted {
 		t.Fatalf("enqueue = %d, want 202", enq.Code)
 	}
@@ -375,7 +374,7 @@ func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 		t.Fatalf("load job: %v", err)
 	}
 
-	status := getWithCookies(t, srv, "/api/v1/presets/"+u64str(p2.ID)+"/optimize/status?job="+strconv.FormatUint(job.ID, 10), cookies)
+	status := getWithCookies(t, srv, "/api/v1/presets/"+p2.PublicID+"/optimize/status?job="+job.PublicID, cookies)
 	if status.Code != http.StatusOK {
 		t.Fatalf("GET status for the other preset = %d, want 200", status.Code)
 	}
@@ -405,10 +404,10 @@ func TestPresetsRequireSessionAndCSRF(t *testing.T) {
 	createBody := `{"name":"No CSRF","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`
 	for _, target := range []struct{ method, path, body string }{
 		{http.MethodPost, "/api/v1/presets", createBody},
-		{http.MethodPatch, "/api/v1/presets/" + u64str(p.ID), createBody},
-		{http.MethodDelete, "/api/v1/presets/" + u64str(p.ID), ""},
-		{http.MethodPost, "/api/v1/presets/" + u64str(p.ID) + "/optimize", `{}`},
-		{http.MethodPost, "/api/v1/presets/" + u64str(p.ID) + "/optimize/revert", `{}`},
+		{http.MethodPatch, "/api/v1/presets/" + p.PublicID, createBody},
+		{http.MethodDelete, "/api/v1/presets/" + p.PublicID, ""},
+		{http.MethodPost, "/api/v1/presets/" + p.PublicID + "/optimize", `{}`},
+		{http.MethodPost, "/api/v1/presets/" + p.PublicID + "/optimize/revert", `{}`},
 	} {
 		rec := jsonRequest(t, srv, target.method, target.path, target.body, cookies, "")
 		if rec.Code != http.StatusForbidden {
@@ -435,7 +434,7 @@ func TestPresetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure default preset: %v", err)
 	}
-	delDefault := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(defaultPresets[0].ID), "", cookies, csrf)
+	delDefault := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+defaultPresets[0].PublicID, "", cookies, csrf)
 	if delDefault.Code != http.StatusBadRequest {
 		t.Errorf("DELETE default preset = %d, want 400 (body %s)", delDefault.Code, snippet(delDefault.Body.String()))
 	}
@@ -451,7 +450,7 @@ func TestPresetDelete(t *testing.T) {
 	if err := store.NewDeckStore(db).Create(ctx, d); err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	delInUse := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(custom.ID), "", cookies, csrf)
+	delInUse := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+custom.PublicID, "", cookies, csrf)
 	if delInUse.Code != http.StatusConflict {
 		t.Errorf("DELETE in-use preset = %d, want 409 (body %s)", delInUse.Code, snippet(delInUse.Body.String()))
 	}
@@ -460,7 +459,7 @@ func TestPresetDelete(t *testing.T) {
 	if err := store.NewDeckStore(db).Delete(ctx, ownerID, d.ID); err != nil {
 		t.Fatalf("delete deck: %v", err)
 	}
-	delOk := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+u64str(custom.ID), "", cookies, csrf)
+	delOk := jsonRequest(t, srv, http.MethodDelete, "/api/v1/presets/"+custom.PublicID, "", cookies, csrf)
 	if delOk.Code != http.StatusOK {
 		t.Fatalf("DELETE unused preset = %d, want 200 (body %s)", delOk.Code, snippet(delOk.Body.String()))
 	}
@@ -491,7 +490,7 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 
 	params := `{"name":%q,"desired_retention":0.85,"learning_steps":"1m,10m","relearning_steps":"10m","maximum_interval_days":36500,"enable_fuzz":true}`
 
-	renamed := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(def.ID),
+	renamed := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+def.ID,
 		fmt.Sprintf(params, "Renamed Default"), cookies, csrf)
 	if renamed.Code != http.StatusBadRequest {
 		t.Fatalf("PATCH rename default = %d, want 400 (body %s)", renamed.Code, snippet(renamed.Body.String()))
@@ -500,19 +499,19 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 		t.Errorf("rename default code = %q, want preset_default_protected", code)
 	}
 	var persisted store.Preset
-	if err := db.First(&persisted, "id = ?", def.ID).Error; err != nil {
+	if err := db.First(&persisted, "public_id = ?", def.ID).Error; err != nil {
 		t.Fatalf("reload default preset: %v", err)
 	}
 	if persisted.Name != store.DefaultPresetName {
 		t.Errorf("default preset name after rejected rename = %q, want %q", persisted.Name, store.DefaultPresetName)
 	}
 
-	edited := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+u64str(def.ID),
+	edited := jsonRequest(t, srv, http.MethodPatch, "/api/v1/presets/"+def.ID,
 		fmt.Sprintf(params, store.DefaultPresetName), cookies, csrf)
 	if edited.Code != http.StatusOK {
 		t.Fatalf("PATCH default params = %d, want 200 (body %s)", edited.Code, snippet(edited.Body.String()))
 	}
-	reloaded, err := store.NewPresetStore(db).ByID(ctx, def.ID)
+	reloaded, err := store.NewPresetStore(db).ByPublicID(ctx, def.ID)
 	if err != nil {
 		t.Fatalf("reload default preset: %v", err)
 	}

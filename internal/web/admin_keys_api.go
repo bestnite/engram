@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,8 +20,8 @@ import (
 
 // adminAPIKey 是一把 key 的元信息；时间已按当前管理员时区格式化，null 表示未设置。
 type adminAPIKey struct {
-	ID         uint64   `json:"id"`
-	UserID     uint64   `json:"user_id"`
+	ID         string   `json:"id"`
+	UserID     string   `json:"user_id"`
 	Owner      string   `json:"owner"`
 	Name       string   `json:"name"`
 	Prefix     string   `json:"prefix"`
@@ -52,16 +53,16 @@ func (s *Server) adminAPIKeys(c *gin.Context) {
 		return
 	}
 
-	// 批量取归属用户名，只解析当前页出现的 user_id（最多一页）。
-	names := make(map[uint64]string)
+	// 批量取归属用户，只解析当前页出现的 user_id（最多一页）。
+	owners := make(map[uint64]*store.User)
 	if s.users != nil {
 		for i := range keys {
 			uid := keys[i].UserID
-			if _, seen := names[uid]; seen {
+			if _, seen := owners[uid]; seen {
 				continue
 			}
 			if u, err := s.users.ByID(ctx, uid); err == nil {
-				names[uid] = u.Username
+				owners[uid] = u
 			}
 		}
 	}
@@ -70,10 +71,14 @@ func (s *Server) adminAPIKeys(c *gin.Context) {
 	rows := make([]adminAPIKey, 0, len(keys))
 	for i := range keys {
 		k := keys[i]
+		owner := owners[k.UserID]
 		row := adminAPIKey{
-			ID: k.ID, UserID: k.UserID, Owner: names[k.UserID],
-			Name: k.Name, Prefix: k.Prefix, Scopes: store.ParseScopes(k.Scopes),
+			ID: k.PublicID, Name: k.Name, Prefix: k.Prefix, Scopes: store.ParseScopes(k.Scopes),
 			State: store.APIKeyState(&k, now),
+		}
+		if owner != nil {
+			row.UserID = owner.PublicID
+			row.Owner = owner.Username
 		}
 		if k.LastUsedAt != nil {
 			v := k.LastUsedAt.In(userLoc).Format("2006-01-02 15:04")
@@ -100,25 +105,31 @@ func (s *Server) adminAPIKeyRevoke(c *gin.Context) {
 		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	id, err := parseUintParam(c.Param("id"))
-	if err != nil {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" {
 		adminError(c, http.StatusNotFound, "invalid_key")
 		return
 	}
 	ctx := c.Request.Context()
-	if err := store.NewAPIKeyStore(s.db).RevokeByID(ctx, id, time.Now().UTC()); err != nil {
+	keyStore := store.NewAPIKeyStore(s.db)
+	key, err := keyStore.ByPublicID(ctx, raw)
+	if err != nil {
+		adminError(c, http.StatusNotFound, "invalid_key")
+		return
+	}
+	if err := keyStore.RevokeByID(ctx, key.ID, time.Now().UTC()); err != nil {
 		if errors.Is(err, store.ErrAPIKeyNotFound) {
 			adminError(c, http.StatusNotFound, "invalid_key")
 			return
 		}
-		s.logger.Error("spa admin: revoke api key failed", "key_id", id, "error", err)
+		s.logger.Error("spa admin: revoke api key failed", "key_id", key.ID, "error", err)
 		adminError(c, http.StatusInternalServerError, "revoke_failed")
 		return
 	}
 	// 审计只记「谁撤销了哪把 key」；不写任何 key 内容（明文不存在，哈希也不该进审计）。
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAPIKeyRevoke,
-		TargetType: "api_key", TargetID: store.Ptr(id),
+		TargetType: "api_key", TargetID: store.Ptr(key.ID),
 	})
 	c.Status(http.StatusNoContent)
 }

@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 
 	"gorm.io/gorm"
@@ -96,7 +95,7 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 		t.Fatalf("pre-reset GET /api/v1/decks = %d, want 200", code)
 	}
 
-	rec := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/password",
+	rec := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+userPublicID(t, ts.db, targetID)+"/password",
 		`{"confirm":true}`, ts.cookies, ts.csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/admin/users/:id/password status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))

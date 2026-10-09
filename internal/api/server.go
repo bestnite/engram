@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -168,15 +169,20 @@ func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger
 	}
 }
 
-// pathID 解析路径里的无符号整型参数；解析失败直接写 404 并返回 false。
-func pathID(c *gin.Context, name string) (uint64, bool) {
-	raw := c.Param(name)
-	id, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || id == 0 {
-		abortError(c, http.StatusNotFound, CodeNotFound, "")
-		return 0, false
+// pathPublicID 读取路径里的对外 id 参数（不透明 UUID 串）；空串直接写 404 并返回 false。
+// 实体解析由调用方用对应 store 的 ByPublicID 完成，路由层只负责把对外 id 交给它。
+func pathPublicID(c *gin.Context, name string) (string, bool) {
+	raw := strings.TrimSpace(c.Param(name))
+	if raw == "" {
+		abortNotFound(c)
+		return "", false
 	}
-	return id, true
+	return raw, true
+}
+
+// abortNotFound 写 404 not_found；对外 id 未知、为空或非法时的统一出口。
+func abortNotFound(c *gin.Context) {
+	abortError(c, http.StatusNotFound, CodeNotFound, "")
 }
 
 // queryInt 读取整型查询参数；缺失或非法时返回 def。

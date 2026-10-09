@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"git.nite07.com/nite/engram/internal/i18n"
@@ -92,7 +91,7 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 // adminJobFailedMessage 组装「作业失败」通知；reason 是失败原因（英文，来自 jobs.error）。
 func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
 	vars := mail.Vars{
-		"site": site, "job_id": strconv.FormatUint(job.ID, 10), "kind": job.Kind, "reason": reason,
+		"site": site, "job_id": job.PublicID, "kind": job.Kind, "reason": reason,
 	}
 	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeJobFailed, mail.VariantDefault, loc.Tf, vars)
 	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars, fbSubject, fbText, "")

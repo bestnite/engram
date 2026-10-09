@@ -139,7 +139,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
 		"user": gin.H{
-			"id":           u.ID,
+			"id":           u.PublicID,
 			"username":     u.Username,
 			"email":        u.Email,
 			"display_name": u.DisplayName,

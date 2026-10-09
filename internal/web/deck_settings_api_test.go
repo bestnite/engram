@@ -14,8 +14,8 @@ import (
 )
 
 // deckSettingsPath 返回 SPA 卡组设置接口的路径。
-func deckSettingsPath(deckID uint64) string {
-	return "/api/v1/decks/" + u64str(deckID) + "/settings"
+func deckSettingsPath(deckPublicID string) string {
+	return "/api/v1/decks/" + deckPublicID + "/settings"
 }
 
 // decodeDeckSettings 解析响应体；失败即终止测试。
@@ -59,13 +59,13 @@ func TestDeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	// 今日已引入 2 张新卡、复习 3 张 → 新卡剩余 3、复习剩余 7。
 	seedTodayUsage(t, db, ownerID, deck.ID, 2, 3)
 
-	rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), cookies)
+	rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), cookies)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET %s = %d, want 200 (body %s)", deckSettingsPath(deck.ID), rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("GET %s = %d, want 200 (body %s)", deckSettingsPath(deck.PublicID), rec.Code, snippet(rec.Body.String()))
 	}
 	body := decodeDeckSettings(t, rec.Body.Bytes())
-	if body.DeckID != deck.ID || body.DeckName != "SPA settings deck" {
-		t.Errorf("deck identity = %d/%q, want %d/%q", body.DeckID, body.DeckName, deck.ID, deck.Name)
+	if body.DeckID != deck.PublicID || body.DeckName != "SPA settings deck" {
+		t.Errorf("deck identity = %s/%q, want %s/%q", body.DeckID, body.DeckName, deck.PublicID, deck.Name)
 	}
 	if body.NewPerDay != 5 || body.ReviewsPerDay != 10 {
 		t.Errorf("caps = %d/%d, want 5/10 (verbatim column values)", body.NewPerDay, body.ReviewsPerDay)
@@ -95,7 +95,7 @@ func TestDeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 		t.Fatalf("before update queue = %d new / %d review, want 5/3", n, r)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
 		`{"new_per_day":2,"reviews_per_day":1}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -131,7 +131,7 @@ func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 		t.Fatalf("before update queue = %d new / %d review, want 1/1", n, r)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
 		`{"new_per_day":0,"reviews_per_day":0}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH 0/0 = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -166,10 +166,10 @@ func TestDeckSettingsRejectsNonOwner(t *testing.T) {
 	}
 	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "settings_intruder")
 
-	if rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), u2Cookies); rec.Code != http.StatusForbidden {
+	if rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
 		`{"new_per_day":0,"reviews_per_day":0}`, u2Cookies, u2CSRF)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("non-owner PATCH = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -192,7 +192,7 @@ func TestDeckSettingsRequiresCSRF(t *testing.T) {
 		store.DeckCaps{NewPerDay: 4, ReviewsPerDay: 4}); err != nil {
 		t.Fatalf("SetCaps: %v", err)
 	}
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
 		`{"new_per_day":0,"reviews_per_day":0}`, cookies, "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("PATCH without CSRF = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -229,7 +229,7 @@ func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 				store.DeckCaps{NewPerDay: 6, ReviewsPerDay: 6}); err != nil {
 				t.Fatalf("SetCaps: %v", err)
 			}
-			rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID), tc.body, cookies, csrf)
+			rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID), tc.body, cookies, csrf)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("PATCH %s = %d, want 400 (body %s)", tc.body, rec.Code, snippet(rec.Body.String()))
 			}
@@ -250,7 +250,7 @@ func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 func TestDeckSettingsRequiresSession(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA anon deck")
-	rec := getWithCookies(t, srv, deckSettingsPath(deck.ID), nil)
+	rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), nil)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous GET = %d, want 401 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -277,14 +277,14 @@ func TestDeckSettingsSwitchesPreset(t *testing.T) {
 		t.Fatalf("create second preset: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
-		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, second.ID), cookies, csrf)
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":"%s"}`, second.PublicID), cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	body := decodeDeckSettings(t, rec.Body.Bytes())
-	if body.PresetID != second.ID {
-		t.Errorf("response preset_id = %d, want %d", body.PresetID, second.ID)
+	if body.PresetID != second.PublicID {
+		t.Errorf("response preset_id = %s, want %s", body.PresetID, second.PublicID)
 	}
 	stored, err := store.NewDeckStore(db).ByID(context.Background(), deck.ID)
 	if err != nil {
@@ -316,8 +316,8 @@ func TestDeckSettingsRejectsForeignPreset(t *testing.T) {
 		t.Fatalf("create foreign preset: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.ID),
-		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":%d}`, foreign.ID), cookies, csrf)
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		fmt.Sprintf(`{"new_per_day":2,"reviews_per_day":3,"preset_id":"%s"}`, foreign.PublicID), cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("PATCH foreign preset = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}

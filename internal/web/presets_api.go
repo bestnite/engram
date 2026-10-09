@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +52,7 @@ type optimizeResult struct {
 
 // jobView 是作业状态在响应里的形态；stage/log_tail/error 为空时是 JSON null。
 type jobView struct {
-	ID      uint64          `json:"id"`
+	ID      string          `json:"id"`
 	Status  string          `json:"status"`
 	Stage   *string         `json:"stage"`
 	LogTail *string         `json:"log_tail"`
@@ -66,7 +65,7 @@ type jobView struct {
 // IsDefault 让界面不必知道「默认预设」的存储名（store.DefaultPresetName 是机器标识，
 // 不是给人看的文案）：显示名与「不可删除/不可改名」的判据都由它决定。
 type presetView struct {
-	ID                  uint64  `json:"id"`
+	ID                  string  `json:"id"`
 	Name                string  `json:"name"`
 	IsDefault           bool    `json:"is_default"`
 	DesiredRetention    float64 `json:"desired_retention"`
@@ -294,7 +293,7 @@ func (s *Server) presetOptimize(c *gin.Context) {
 		Action:     store.ActionPresetOptimize,
 		TargetType: "preset",
 		TargetID:   store.Ptr(p.ID),
-		Detail:     map[string]any{"job_id": job.ID, "via": "spa"},
+		Detail:     map[string]any{"job_id": job.PublicID, "via": "spa"},
 	})
 	gate, err := store.GateOptimize(ctx, s.db, user.ID)
 	if err != nil {
@@ -406,18 +405,18 @@ func (s *Server) writePresetList(c *gin.Context, userID uint64, logMsg string) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ownedPreset 解析 :id 并确认预设属于当前用户；非 owner/不存在/解析失败一律 404 JSON，
+// ownedPreset 解析 :id 对外 id 并确认预设属于当前用户；非 owner/不存在/解析失败一律 404 JSON，
 // 不通过状态码泄露他人预设的存在性。
 func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" {
 		presetError(c, http.StatusNotFound, "not_found")
 		return nil, false
 	}
-	p, err := s.presets.ByID(c.Request.Context(), id)
+	p, err := s.presets.ByPublicID(c.Request.Context(), raw)
 	if err != nil {
 		if !store.IsNotFound(err) {
-			s.logger.Error("load preset for SPA failed", "preset_id", id, "error", err)
+			s.logger.Error("load preset for SPA failed", "preset_id", raw, "error", err)
 			presetError(c, http.StatusInternalServerError, "internal_error")
 			return nil, false
 		}
@@ -434,7 +433,7 @@ func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool
 // presetPayload 把一条预设投影成 JSON；权重判据以 weights_json 是否为空为唯一依据。
 func presetPayload(p *store.Preset) presetView {
 	item := presetView{
-		ID:                  p.ID,
+		ID:                  p.PublicID,
 		Name:                p.Name,
 		IsDefault:           p.Name == store.DefaultPresetName,
 		DesiredRetention:    p.DesiredRetention,
@@ -473,7 +472,7 @@ func gatePayload(g store.OptimizeGate) optimizeGate {
 // 解析失败按「无结果」处理并记英文日志，绝不编造指标。
 func (s *Server) jobPayload(job *store.Job) *jobView {
 	item := &jobView{
-		ID:      job.ID,
+		ID:      job.PublicID,
 		Status:  job.Status,
 		Stage:   job.Stage,
 		LogTail: job.LogTail,

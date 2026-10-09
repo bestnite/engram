@@ -32,7 +32,7 @@ func TestStrangerCannotSeeOrOpenAnotherUsersDeck(t *testing.T) {
 	if body := deckListingBody(t, srv, u2Cookies); strings.Contains(body, "Private deck") {
 		t.Errorf("another user's deck appeared in a stranger's listing: %s", snippet(body))
 	}
-	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
+	if rec := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Errorf("stranger reading another user's deck by id = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 }
@@ -44,7 +44,7 @@ func TestDeckVisibilityEndpointRemoved(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "No visibility deck")
 
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/visibility"
+	path := "/api/v1/decks/" + deck.PublicID + "/sharing/visibility"
 	if got := jsonRequest(t, srv, http.MethodPatch, path, `{"visibility":"public"}`, ownerCookies, ownerCSRF); got.Code != http.StatusNotFound {
 		t.Errorf("PATCH %s = %d, want 404 (route must be gone)", path, got.Code)
 	}

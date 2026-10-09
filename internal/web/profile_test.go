@@ -44,7 +44,11 @@ func TestProfilePersistence(t *testing.T) {
 	if err := json.Unmarshal(initial.Body.Bytes(), &before); err != nil {
 		t.Fatal(err)
 	}
-	if before.ID != userID || before.Locale != "zh-CN" {
+	owner, err := store.NewUserStore(db).ByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("load owner: %v", err)
+	}
+	if before.ID != owner.PublicID || before.Locale != "zh-CN" {
 		t.Fatalf("unexpected initial profile: %+v", before)
 	}
 

@@ -15,7 +15,7 @@ import (
 
 // profilePayload 是 SPA 个人资料 API 的公开字段集合。
 type profilePayload struct {
-	ID            uint64 `json:"id"`
+	ID            string `json:"id"`
 	Username      string `json:"username"`
 	Email         string `json:"email"`
 	DisplayName   string `json:"display_name"`
@@ -88,7 +88,7 @@ func passwordError(c *gin.Context, status int, code, message string) {
 
 func userPayload(u *store.User) profilePayload {
 	return profilePayload{
-		ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
+		ID: u.PublicID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 		Locale: u.Locale, Timezone: u.Timezone, DayCutoffHour: u.DayCutoffHour,
 	}
 }

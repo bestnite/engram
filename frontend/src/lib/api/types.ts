@@ -2,12 +2,12 @@
  * 卡组数据结构（与 Go 后端 internal/api/decks.go:DeckResponse 对齐）
  */
 export interface Deck {
-  id: number;
+  id: string;
   name: string;
   description: string;
   new_per_day: number;
   reviews_per_day: number;
-  preset_id: number;
+  preset_id: string;
   archived_at?: string | null;
   created_at: string;
   /**
@@ -32,12 +32,12 @@ export interface DecksResponse {
  * （我邀请了谁）。同一结构两种读法，字段按视角取用。
  */
 export interface DeckShareInvite {
-  deck_id: number;
+  deck_id: string;
   deck_name: string;
-  user_id: number;
+  user_id: string;
   username: string;
   role: 'reader' | 'editor' | 'owner';
-  invited_by: number;
+  invited_by: string;
   inviter_name: string;
   created_at: string;
   expires_at: string;
@@ -48,7 +48,7 @@ export type ShareAcceptPolicy = 'anyone' | 'whitelist' | 'nobody';
 
 /** 白名单里的一行。带用户名是因为界面要显示「谁」，裸 id 不可读。 */
 export interface ShareAllowRow {
-  user_id: number;
+  user_id: string;
   username: string;
 }
 
@@ -67,7 +67,7 @@ export interface SharePolicyResponse {
 
 /** GET /api/v1/decks/queue-counts response; counts are produced by the shared queue builder. */
 export interface DeckQueueCountsResponse {
-  decks: Array<{ deck_id: number; new_count: number; review_count: number }>;
+  decks: Array<{ deck_id: string; new_count: number; review_count: number }>;
 }
 
 /**
@@ -76,9 +76,9 @@ export interface DeckQueueCountsResponse {
  * 「不限」，因为 0 与「今日剩余 0 张」在整数上同形。今日已用/剩余与复习队列同源。
  */
 export interface DeckSettings {
-  deck_id: number;
+  deck_id: string;
   deck_name: string;
-  preset_id: number;
+  preset_id: string;
   new_per_day: number;
   reviews_per_day: number;
   new_used: number;
@@ -96,22 +96,22 @@ export interface DeckSettings {
 export interface UpdateDeckSettingsRequest {
   new_per_day: number;
   reviews_per_day: number;
-  preset_id?: number;
+  preset_id?: string;
 }
 
-/** POST /api/v1/decks 请求体与响应体。preset_id=0 使用服务端默认预设。 */
+/** POST /api/v1/decks 请求体与响应体。preset_id 为空串使用服务端默认预设。 */
 export interface CreateDeckRequest {
   name: string;
   description: string;
-  preset_id: number;
+  preset_id: string;
 }
 
 /**
  * 笔记数据结构（与 Go 后端 internal/api/notes.go:NoteJSON 对齐）
  */
 export interface Note {
-  id: number;
-  deck_id: number;
+  id: string;
+  deck_id: string;
   kind: string;
   fields: Record<string, unknown>;
   tags: string[];
@@ -213,14 +213,14 @@ export interface CreateNotesResponse {
  */
 export interface BulkNotesRequest {
   action: 'delete' | 'add_tags' | 'remove_tags' | 'set_tags';
-  note_ids: number[];
+  note_ids: string[];
   tags?: string[];
   dry_run?: boolean;
 }
 
 /** 批量动作里被逐行拒绝的 note；code 取值 not_found / insufficient_role。 */
 export interface BulkNotesSkipped {
-  note_id: number;
+  note_id: string;
   code: string;
 }
 
@@ -238,7 +238,7 @@ export interface BulkNotesResponse {
 export interface PackageImportReport {
   target: string;
   dry_run: boolean;
-  deck_id?: number;
+  deck_id?: string;
   notes_created: number;
   notes_updated: number;
   notes_skipped: number;
@@ -317,7 +317,7 @@ export interface StatsCurvePoint {
 }
 
 export interface StatsDeck {
-  deck_id: number;
+  deck_id: string;
   name: string;
   due_count: number;
   reviews: number;
@@ -354,9 +354,9 @@ export interface StatsDetail {
  * 到期卡片对外形态（与 Go 后端 internal/api/service.go:DueCard 对齐）
  */
 export interface DueCard {
-  card_id: number;
-  note_id: number;
-  deck_id: number;
+  card_id: string;
+  note_id: string;
+  deck_id: string;
   state: string;
   due_at: string;
   retrievability: number;
@@ -375,16 +375,15 @@ export interface DueCardsResponse {
 }
 
 export interface SubmitSelfReviewRequest {
-  card_id: number;
+  card_id: string;
   rating: number;
   expected_version: number;
   elapsed_ms?: number;
-  deck?: number[];
+  deck?: string[];
 }
 
 export interface SubmitReviewResult {
-  card_id: number;
-  review_id: number;
+  card_id: string;
   state: string;
   due_at: string | null;
   version: number;
@@ -405,10 +404,10 @@ export type GradedAnswer = string | number | boolean | number[];
  * 'give_up' 表示已揭示答案后放弃作答，按 Again 记一条自评。
  */
 export interface SubmitGradedReviewRequest {
-  card_id: number;
+  card_id: string;
   expected_version?: number;
   elapsed_ms?: number;
-  deck?: number[];
+  deck?: string[];
   action?: 'reveal' | 'give_up';
   answer?: GradedAnswer;
 }
@@ -430,8 +429,7 @@ export interface GradedFeedback {
  * 判分与放弃两条路径都返回新状态与同范围队列；reveal 走 RevealAnswerResponse。
  */
 export interface GradedReviewResult {
-  card_id: number;
-  review_id: number;
+  card_id: string;
   state: string;
   due_at: string | null;
   version: number;
@@ -447,7 +445,7 @@ export interface GradedReviewResult {
  */
 export interface RevealAnswerResponse {
   revealed: boolean;
-  card_id: number;
+  card_id: string;
   answer_html: string;
 }
 
@@ -457,7 +455,7 @@ export interface RevealAnswerResponse {
  * edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
  */
 export interface ReviewRenderResponse {
-  card_id: number;
+  card_id: string;
   front_html: string;
   back_html: string;
   edit_href: string;
@@ -477,7 +475,7 @@ export interface ReviewQueueResponse {
  * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
  */
 export interface DueCardsQuery {
-  deck?: number | number[];
+  deck?: string | string[];
   limit?: number;
 }
 
@@ -485,7 +483,7 @@ export interface DueCardsQuery {
  * 用户信息结构（与 Go 后端 internal/web/auth_api.go 对齐）
  */
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   display_name?: string;
@@ -698,7 +696,7 @@ export class ApiClientError extends Error {
  * 用户基础资料与设置结构（Go: internal/store/models.go:User）
  */
 export interface UserProfile {
-  id?: number;
+  id?: string;
   username?: string;
   email?: string;
   display_name: string;
@@ -725,7 +723,7 @@ export interface ProfileResponse {
 }
 
 export interface APIKeyRecord {
-  id: number;
+  id: string;
   name: string;
   prefix: string;
   scopes: string;
@@ -847,7 +845,7 @@ export interface PresetOptimizeResult {
 
 /** 优化作业状态；result 只在 succeeded 且报告可解析时非 null。 */
 export interface PresetJob {
-  id: number;
+  id: string;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | string;
   stage: string | null;
   log_tail: string | null;
@@ -864,7 +862,7 @@ export interface OptimizeGate {
 }
 
 export interface PresetRecord {
-  id: number;
+  id: string;
   name: string;
   /** 是否为默认预设；显示名与「不可删除/不可改名」的判据都用它，界面不必知道存储名。 */
   is_default: boolean;
@@ -930,14 +928,14 @@ export interface AdminHealth {
 
 /** 审计行的操作者；null 表示系统动作（无 UserID）。 */
 export interface AdminAuditActor {
-  user_id: number | null;
+  user_id: string | null;
   username: string;
 }
 
 /** 审计行的目标对象；null 表示无目标。 */
 export interface AdminAuditTarget {
   type: string;
-  id: number | null;
+  id: string | null;
 }
 
 /** 一行审计记录；time 已按当前管理员时区格式化，detail 为原始 JSON 串（空串表示无详情）。 */
@@ -974,7 +972,7 @@ export interface AdminAuditQuery {
 
 /** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
 export interface AdminUser {
-  id: number;
+  id: string;
   username: string;
   email: string;
   display_name: string;
@@ -1008,7 +1006,7 @@ export interface AdminUserCreateRequest {
 
 /** 一条邀请；role/status 是存储取值，link 供管理员复制。 */
 export interface AdminInvite {
-  id: number;
+  id: string;
   token: string;
   link: string;
   email: string;
@@ -1051,8 +1049,8 @@ export interface AdminInviteCreateResponse {
 
 /** 一把 key 的元信息；时间已按管理员时区格式化，null 表示未设置。 */
 export interface AdminAPIKey {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   owner: string;
   name: string;
   prefix: string;
@@ -1139,7 +1137,7 @@ export interface AdminTestResult {
 
 /** 一条已绑定身份。 */
 export interface AdminOIDCIdentity {
-  id: number;
+  id: string;
   provider: string;
   subject: string;
   email: string;
@@ -1179,7 +1177,7 @@ export interface AdminOIDCRequest {
 
 /** 一个作业的元信息；stage 为 null 表示尚未进入训练阶段。 */
 export interface AdminJob {
-  id: number;
+  id: string;
   kind: string;
   status: string;
   stage: string | null;

@@ -44,8 +44,8 @@ func newVisibleFixture(t *testing.T) *visibleFixture {
 	}
 }
 
-// listDeckIDsViaHTTP 用 key 调 GET /api/v1/decks，返回响应里的卡组 id 集合。
-func listDeckIDsViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]bool {
+// listDeckIDsViaHTTP 用 key 调 GET /api/v1/decks，返回响应里的卡组对外 id 集合。
+func listDeckIDsViaHTTP(t *testing.T, env *testEnv, key string) map[string]bool {
 	t.Helper()
 	status, raw := doJSON(t, env.router(), http.MethodGet, "/api/v1/decks", key, "")
 	if status != http.StatusOK {
@@ -53,13 +53,13 @@ func listDeckIDsViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]bool 
 	}
 	var body struct {
 		Decks []struct {
-			ID uint64 `json:"id"`
+			ID string `json:"id"`
 		} `json:"decks"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("decode decks: %v (%s)", err, raw)
 	}
-	out := make(map[uint64]bool, len(body.Decks))
+	out := make(map[string]bool, len(body.Decks))
 	for _, d := range body.Decks {
 		out[d.ID] = true
 	}
@@ -72,12 +72,12 @@ func TestListDecksUsesVisibleScope(t *testing.T) {
 	f := newVisibleFixture(t)
 
 	got := listDeckIDsViaHTTP(t, f.env, f.key.Plaintext)
-	if !got[f.granted.ID] {
-		t.Errorf("GET /decks missing granted deck %d: %v", f.granted.ID, got)
+	if !got[f.granted.PublicID] {
+		t.Errorf("GET /decks missing granted deck %s: %v", f.granted.PublicID, got)
 	}
-	for _, id := range []uint64{f.denied.ID, f.other.ID} {
-		if got[id] {
-			t.Errorf("GET /decks leaked another user's ungranted deck %d: %v", id, got)
+	for _, d := range []*store.Deck{f.denied, f.other} {
+		if got[d.PublicID] {
+			t.Errorf("GET /decks leaked another user's ungranted deck %s: %v", d.PublicID, got)
 		}
 	}
 
@@ -86,8 +86,8 @@ func TestListDecksUsesVisibleScope(t *testing.T) {
 		t.Fatalf("revoke: %v", err)
 	}
 	got = listDeckIDsViaHTTP(t, f.env, f.key.Plaintext)
-	if got[f.granted.ID] {
-		t.Errorf("GET /decks still shows deck %d after the grant was revoked: %v", f.granted.ID, got)
+	if got[f.granted.PublicID] {
+		t.Errorf("GET /decks still shows deck %s after the grant was revoked: %v", f.granted.PublicID, got)
 	}
 	if len(got) != 0 {
 		t.Errorf("GET /decks = %v, want empty (viewer owns nothing and holds no grants)", got)

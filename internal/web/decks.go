@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -49,7 +48,7 @@ type deckQueueCountsResponse struct {
 }
 
 type deckQueueCount struct {
-	DeckID      uint64 `json:"deck_id"`
+	DeckID      string `json:"deck_id"`
 	NewCount    int    `json:"new_count"`
 	ReviewCount int    `json:"review_count"`
 }
@@ -82,7 +81,7 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 	for _, summary := range summaries {
 		count := counts[summary.Deck.ID]
 		response.Decks = append(response.Decks, deckQueueCount{
-			DeckID: summary.Deck.ID, NewCount: count.New, ReviewCount: count.Review,
+			DeckID: summary.Deck.PublicID, NewCount: count.New, ReviewCount: count.Review,
 		})
 	}
 	c.JSON(http.StatusOK, response)
@@ -103,17 +102,16 @@ func (s *Server) deckQueueCounts(ctx context.Context, userID uint64, summaries [
 	return schedule.NewQueueBuilder(s.db, s.decks, sched).DeckCounts(ctx, userID, ids)
 }
 
-// resolvePresetID 解析表单里的 preset_id：必须属于当前用户；缺省或非法时退回第一个预设。
+// resolvePresetID 解析预设的对外 id：必须属于当前用户；缺省或非法时退回第一个预设。
 // 预设由 store.EnsureDefaultPreset 保证至少有一个，因此不会出现「无预设可退回」的分支。
 func (s *Server) resolvePresetID(ctx context.Context, userID uint64, raw string) (uint64, error) {
 	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
 	if err != nil {
 		return 0, err
 	}
-	want, _ := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
-	for i := range presets {
-		if presets[i].ID == want {
-			return presets[i].ID, nil
+	if raw = strings.TrimSpace(raw); raw != "" {
+		if p, err := s.presets.ByPublicID(ctx, raw); err == nil && p.OwnerUserID == userID {
+			return p.ID, nil
 		}
 	}
 	return presets[0].ID, nil

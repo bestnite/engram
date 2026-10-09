@@ -44,7 +44,7 @@ func (s *Server) deckSettingsRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}

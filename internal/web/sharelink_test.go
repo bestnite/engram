@@ -16,18 +16,18 @@ import (
 // 页面层只保留 GET /s/:token 的应用壳与 api/v1/share/:token 的只读内容。
 
 // shareLinkJSONPath 是分享链接的 JSON 增删路径。
-func shareLinkJSONPath(deckID uint64) string {
-	return "/api/v1/decks/" + u64str(deckID) + "/sharing/links"
+func shareLinkJSONPath(deckPublicID string) string {
+	return "/api/v1/decks/" + deckPublicID + "/sharing/links"
 }
 
 // createShareLinkJSON 经 SPA JSON 端点建一条分享链接并取回明文 token；password 为空 = 无口令。
-func createShareLinkJSON(t *testing.T, srv *Server, deckID uint64, cookies []*http.Cookie, csrf, password string) string {
+func createShareLinkJSON(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf, password string) string {
 	t.Helper()
 	body := "{}"
 	if password != "" {
 		body = `{"password":` + strconv.Quote(password) + `}`
 	}
-	rec := jsonRequest(t, srv, http.MethodPost, shareLinkJSONPath(deckID), body, cookies, csrf)
+	rec := jsonRequest(t, srv, http.MethodPost, shareLinkJSONPath(deckPublicID), body, cookies, csrf)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create share link = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -61,7 +61,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Link deck")
 	seedBasic(t, db, deck.ID, "秘密正面", "秘密背面")
 
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	// 库里只存 sha256 摘要，绝不落明文。
 	var link store.ShareLink
@@ -107,7 +107,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 
 	// 单个撤销后立即 404。
 	if rec := jsonRequest(t, srv, http.MethodDelete,
-		shareLinkJSONPath(deck.ID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+		shareLinkJSONPath(deck.PublicID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("revoke share link status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	if got := get(t, srv, "/s/"+token, nil).Code; got != http.StatusNotFound {
@@ -123,9 +123,9 @@ func TestShareLinkRevokeAll(t *testing.T) {
 
 	tokens := make([]string, 0, 2)
 	for i := 0; i < 2; i++ {
-		tokens = append(tokens, createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, ""))
+		tokens = append(tokens, createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, ""))
 	}
-	if rec := jsonRequest(t, srv, http.MethodDelete, shareLinkJSONPath(deck.ID), "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+	if rec := jsonRequest(t, srv, http.MethodDelete, shareLinkJSONPath(deck.PublicID), "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("revoke-all status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	for _, token := range tokens {
@@ -141,7 +141,7 @@ func TestShareLinkPasswordGate(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Locked deck")
 	seedBasic(t, db, deck.ID, "口令内容正面", "口令内容背面")
 
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "letmein99")
+	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "letmein99")
 
 	// 未解锁时只回 password_required，不泄漏内容。
 	locked := get(t, srv, "/api/v1/share/"+token, nil)
@@ -196,7 +196,7 @@ func TestShareLinkWriteRequiresOwnerAndCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Guarded deck")
 	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "linkviewer")
-	path := shareLinkJSONPath(deck.ID)
+	path := shareLinkJSONPath(deck.PublicID)
 
 	// 缺 CSRF：403，且没有链接建立。
 	if rec := jsonRequest(t, srv, http.MethodPost, path, `{"password":"x"}`, ownerCookies, ""); rec.Code != http.StatusForbidden {

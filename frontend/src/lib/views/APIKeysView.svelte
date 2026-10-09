@@ -13,7 +13,7 @@
   let loading = $state(true);
   let saving = $state(false);
   let error = $state<string | null>(null);
-  let revokingId = $state<number | null>(null);
+  let revokingId = $state<string | null>(null);
 
   // 服务端返回的列表**包含已撤销的 key**（带 revoked_at）。界面按状态分两组渲染，
   // 而不是把已撤销项从本地数组里删掉——本地删除只在本会话有效，刷新后它又会回来。

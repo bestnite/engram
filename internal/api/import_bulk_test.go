@@ -32,7 +32,7 @@ func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	// 下标 1 缺必填字段 back（非法），下标 0 与 2 合法。
 	body := `{"notes":[` +
@@ -72,7 +72,7 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	const total = 205 // > ImportBatchSize(200)，强制至少两个事务批次。
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, buildBulkBody(total))
@@ -114,7 +114,7 @@ func TestBulkImportIsolatesRowErrorWithinBatch(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	// 下标 0 与 1 用了同一个 external_ref：第一遍规划时都查不到已有行，都会尝试新建；
 	// 批内第二行撞 (deck_id, external_ref) 唯一约束，应只报它，0 与 2 正常落库。
@@ -148,7 +148,7 @@ func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	broken := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"r:0"},` +

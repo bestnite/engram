@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +20,7 @@ import (
 
 // adminUser 是用户列表里的一行；role/status 是存储取值，由前端映射文案。
 type adminUser struct {
-	ID          uint64 `json:"id"`
+	ID          string `json:"id"`
 	Username    string `json:"username"`
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
@@ -96,7 +95,7 @@ func (s *Server) adminUsers(c *gin.Context) {
 			s.logger.Error("spa admin: usage counts failed", "user_id", u.ID, "error", err)
 		}
 		rows = append(rows, adminUser{
-			ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
+			ID: u.PublicID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 			Role: u.Role, Status: u.Status,
 			Decks: usage.Decks, Cards: usage.Cards, Reviews: usage.Reviews,
 			IsSelf: u.ID == currentID,
@@ -149,7 +148,7 @@ func (s *Server) adminUserCreate(c *gin.Context) {
 		Detail: map[string]any{"username": created.Username, "role": created.Role, "by_admin": true},
 	})
 	c.JSON(http.StatusCreated, adminUser{
-		ID: created.ID, Username: created.Username, Email: created.Email,
+		ID: created.PublicID, Username: created.Username, Email: created.Email,
 		DisplayName: created.DisplayName, Role: created.Role, Status: created.Status,
 	})
 }
@@ -349,20 +348,20 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminTargetUser 解析 :id 并取目标用户；解析失败或不存在时写 404 并返回 false。
+// adminTargetUser 解析 :id 对外 id 并取目标用户；未知、空串或不存在时写 404 并返回 false。
 func (s *Server) adminTargetUser(c *gin.Context) (*store.User, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" {
 		adminError(c, http.StatusNotFound, "invalid_user")
 		return nil, false
 	}
-	u, err := s.users.ByID(c.Request.Context(), id)
+	u, err := s.users.ByPublicID(c.Request.Context(), raw)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			adminError(c, http.StatusNotFound, "invalid_user")
 			return nil, false
 		}
-		s.logger.Error("spa admin: load target user failed", "user_id", id, "error", err)
+		s.logger.Error("spa admin: load target user failed", "user_id", raw, "error", err)
 		adminError(c, http.StatusInternalServerError, "internal_error")
 		return nil, false
 	}

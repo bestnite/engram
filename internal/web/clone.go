@@ -36,7 +36,7 @@ func (s *Server) deckClone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -65,13 +65,13 @@ func (s *Server) deckClone(c *gin.Context) {
 		Action:     store.ActionDeckClone,
 		TargetType: "deck",
 		TargetID:   store.Ptr(cloned.ID),
-		Detail:     map[string]any{"source_deck_id": src.ID, "preset_id": cloned.PresetID},
+		Detail:     map[string]any{"source_deck_id": src.PublicID, "preset_id": cloned.PresetID},
 	})
 	if acceptsJSON(c) {
-		c.JSON(http.StatusCreated, gin.H{"id": cloned.ID, "name": cloned.Name})
+		c.JSON(http.StatusCreated, gin.H{"id": cloned.PublicID, "name": cloned.Name})
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%d/notes", cloned.ID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%s/notes", cloned.PublicID))
 }
 
 // acceptsJSON 报告请求是否要求 JSON 响应（SPA 的 fetch 调用）。
@@ -101,6 +101,8 @@ func (s *Server) clonePreset(ctx context.Context, loc *i18n.Localizer, ownerID u
 	}
 	p := *srcPreset
 	p.ID = 0
+	// 对外 id 必须清空，让 BeforeCreate 钩子生成新的：不清空会与源预设的 public_id 撞唯一索引。
+	p.PublicID = ""
 	p.OwnerUserID = ownerID
 	p.Name = loc.Tf("clone.preset_name", map[string]any{"name": srcPreset.Name})
 	p.CreatedAt = time.Time{}

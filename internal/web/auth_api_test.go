@@ -146,7 +146,7 @@ func TestSession_Authenticated(t *testing.T) {
 	var res struct {
 		Authenticated bool `json:"authenticated"`
 		User          struct {
-			ID          uint64 `json:"id"`
+			ID          string `json:"id"`
 			Username    string `json:"username"`
 			Email       string `json:"email"`
 			DisplayName string `json:"display_name"`
@@ -162,7 +162,7 @@ func TestSession_Authenticated(t *testing.T) {
 	if !res.Authenticated {
 		t.Errorf("expected authenticated=true")
 	}
-	if res.User.Username != "alice" || res.User.ID != u.ID {
+	if res.User.Username != "alice" || res.User.ID != u.PublicID {
 		t.Errorf("unexpected user in response: %+v", res.User)
 	}
 	if res.CSRFToken != sess.CSRFToken {

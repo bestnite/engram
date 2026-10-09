@@ -147,9 +147,11 @@ type PackageImportError struct {
 
 // PackageImportReport 是导入（含 dry_run）的报告，形态与批量导入一致。
 type PackageImportReport struct {
-	Target            string               `json:"target"`
-	DryRun            bool                 `json:"dry_run"`
-	DeckID            uint64               `json:"deck_id,omitempty"`
+	Target string `json:"target"`
+	DryRun bool   `json:"dry_run"`
+	// DeckID 是内部数字主键，只供审计等内部用途；对外暴露的是 DeckPublicID。
+	DeckID            uint64               `json:"-"`
+	DeckPublicID      string               `json:"deck_id,omitempty"`
 	NotesCreated      int                  `json:"notes_created"`
 	NotesUpdated      int                  `json:"notes_updated"`
 	NotesSkipped      int                  `json:"notes_skipped"`
@@ -240,22 +242,53 @@ func unsafeZipName(name string) bool {
 	return false
 }
 
-// ParsePackageTarget 解析目标字符串；空串等同 new_deck。
-func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
+// ParsePackageTargetRef 解析目标串里的种类与卡组标识原文（客户端给的是对外 id）；
+// 空串等同 new_deck。标识的合法性由调用方判定——只有它知道该标识是对外 id 还是内部主键。
+func ParsePackageTargetRef(target string) (kind string, ref string, err error) {
 	target = strings.TrimSpace(target)
 	if target == "" || target == PackageTargetNewDeck {
-		return PackageTargetNewDeck, 0, nil
+		return PackageTargetNewDeck, "", nil
 	}
 	for _, prefix := range []string{"into_deck:", "replace_deck:"} {
 		if strings.HasPrefix(target, prefix) {
-			id, perr := strconv.ParseUint(strings.TrimPrefix(target, prefix), 10, 64)
-			if perr != nil || id == 0 {
-				return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck id must be a positive integer"}
+			ref := strings.TrimSpace(strings.TrimPrefix(target, prefix))
+			if ref == "" {
+				return "", "", &PackageError{Code: CodePackageBadFormat, Message: "target deck id is empty"}
 			}
-			return strings.TrimSuffix(prefix, ":"), id, nil
+			return strings.TrimSuffix(prefix, ":"), ref, nil
 		}
 	}
-	return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
+	return "", "", &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
+}
+
+// ParsePackageTarget 解析 store 内部使用的目标串（卡组标识是数字主键）；空串等同 new_deck。
+func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
+	kind, ref, err := ParsePackageTargetRef(target)
+	if err != nil || kind == PackageTargetNewDeck {
+		return kind, 0, err
+	}
+	id, perr := strconv.ParseUint(ref, 10, 64)
+	if perr != nil || id == 0 {
+		return "", 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck id must be a positive integer"}
+	}
+	return kind, id, nil
+}
+
+// FormatPackageTarget 组装 store 内部形态的目标串；由传输层把对外 id 解析成数字主键后调用。
+func FormatPackageTarget(kind string, deckID uint64) string {
+	if kind == "" || kind == PackageTargetNewDeck {
+		return PackageTargetNewDeck
+	}
+	return kind + ":" + strconv.FormatUint(deckID, 10)
+}
+
+// deckPublicID 取某卡组的对外 id；导入报告带的是对外 id 而不是数字主键。
+func deckPublicID(ctx context.Context, tx *gorm.DB, deckID uint64) (string, error) {
+	var pid string
+	if err := tx.WithContext(ctx).Table("decks").Select("public_id").Where("id = ?", deckID).Scan(&pid).Error; err != nil {
+		return "", fmt.Errorf("load deck public id: %w", err)
+	}
+	return pid, nil
 }
 
 // ImportPackage 导入一个卡组包。
@@ -559,6 +592,11 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		return err
 	}
 	report.DeckID = deckID
+	pid, err := deckPublicID(ctx, tx, deckID)
+	if err != nil {
+		return err
+	}
+	report.DeckPublicID = pid
 
 	// replace_deck 是破坏性操作：先软删除目标卡组全部现有 note（进度保留在 card 上，不级联删行）。
 	if targetKind == "replace_deck" {

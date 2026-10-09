@@ -42,6 +42,18 @@ func (s *Store) ByID(ctx context.Context, id uint64) (*store.Job, error) {
 	return &job, nil
 }
 
+// ByPublicID 按对外 id 读取作业；空串视为未找到，不会匹配到 public_id 为空的旧行。
+func (s *Store) ByPublicID(ctx context.Context, publicID string) (*store.Job, error) {
+	if publicID == "" {
+		return nil, fmt.Errorf("load job %q: %w", publicID, gorm.ErrRecordNotFound)
+	}
+	var job store.Job
+	if err := s.db.WithContext(ctx).First(&job, "public_id = ?", publicID).Error; err != nil {
+		return nil, fmt.Errorf("load job %q: %w", publicID, err)
+	}
+	return &job, nil
+}
+
 // Active 返回当前未完成的作业（queued 或 running）；没有时返回 (nil, nil)。
 // 单并发判定依赖它：只要存在未完成作业，新入队就必须被拒绝。
 func (s *Store) Active(ctx context.Context) (*store.Job, error) {

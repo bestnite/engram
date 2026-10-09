@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +27,7 @@ func TestRoleDenialWritesPermissionDeniedAudit(t *testing.T) {
 	// reader 持有 write scope 的 key，但卡组角色只有 reader —— 两道门里第二道挡下。
 	key := seedKey(t, env.keys, reader.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := "/api/v1/notes/" + strconv.FormatUint(note.ID, 10)
+	path := "/api/v1/notes/" + note.PublicID
 
 	status, raw := doJSON(t, router, http.MethodPatch, path, key.Plaintext,
 		`{"kind":"basic","fields":{"front":"x","back":"y"}}`)

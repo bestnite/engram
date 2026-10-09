@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -38,15 +37,15 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	}
 
 	// owner 克隆自己的卡组。
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/clone", url.Values{"csrf_token": {ownerCSRF}}, ownerCookies)
+	rec := postForm(t, srv, "/decks/"+deck.PublicID+"/clone", url.Values{"csrf_token": {ownerCSRF}}, ownerCookies)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST clone status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
 	}
-	newID := parseDeckIDFromLocation(t, rec.Header().Get("Location"))
+	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
 
 	// 新卡组归属调用者、名字带副本后缀、预设另建一份、默认私有。
 	var cloned store.Deck
-	if err := db.First(&cloned, "id = ?", newID).Error; err != nil {
+	if err := db.First(&cloned, "public_id = ?", newID).Error; err != nil {
 		t.Fatalf("load cloned deck: %v", err)
 	}
 	if cloned.OwnerUserID != ownerID {
@@ -63,17 +62,17 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	}
 
 	// 内容数量一致。
-	if got := countNotes(t, db, newID); got != srcNotes {
+	if got := countNotes(t, db, cloned.ID); got != srcNotes {
 		t.Errorf("cloned note count = %d, want %d", got, srcNotes)
 	}
-	if got := countCards(t, db, newID); got != srcCards {
+	if got := countCards(t, db, cloned.ID); got != srcCards {
 		t.Errorf("cloned card count = %d, want %d", got, srcCards)
 	}
 
 	// 进度为零：新 owner 在新 card 上没有 card_states 行。
 	var states int64
 	if err := db.Model(&store.CardState{}).
-		Where("user_id = ? AND card_id IN (?)", ownerID, cardIDSubquery(db, newID)).
+		Where("user_id = ? AND card_id IN (?)", ownerID, cardIDSubquery(db, cloned.ID)).
 		Count(&states).Error; err != nil {
 		t.Fatalf("count cloned card_states: %v", err)
 	}
@@ -107,19 +106,19 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "cloner2")
 	grantRole(t, srv, deck.ID, user2ID, store.RoleReader, ownerCookies, ownerCSRF)
 
-	rec := postForm(t, srv, "/decks/"+u64str(deck.ID)+"/clone", url.Values{"csrf_token": {u2CSRF}}, u2Cookies)
+	rec := postForm(t, srv, "/decks/"+deck.PublicID+"/clone", url.Values{"csrf_token": {u2CSRF}}, u2Cookies)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("reader POST clone status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
 	}
-	newID := parseDeckIDFromLocation(t, rec.Header().Get("Location"))
+	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
 	var cloned store.Deck
-	if err := db.First(&cloned, "id = ?", newID).Error; err != nil {
+	if err := db.First(&cloned, "public_id = ?", newID).Error; err != nil {
 		t.Fatalf("load cloned deck: %v", err)
 	}
 	if cloned.OwnerUserID != user2ID {
 		t.Errorf("cloned deck owner = %d, want reader id %d", cloned.OwnerUserID, user2ID)
 	}
-	if got := countNotes(t, db, newID); got != 1 {
+	if got := countNotes(t, db, cloned.ID); got != 1 {
 		t.Errorf("cloned note count = %d, want 1", got)
 	}
 	var states int64
@@ -162,18 +161,14 @@ func cardIDSubquery(db *gorm.DB, deckID uint64) *gorm.DB {
 		Where("notes.deck_id = ? AND cards.deleted_at IS NULL", deckID)
 }
 
-// parseDeckIDFromLocation 从 /decks/<id>/notes 形式的 Location 中取出卡组 id。
-func parseDeckIDFromLocation(t *testing.T, location string) uint64 {
+// parseDeckPublicIDFromLocation 从 /decks/<id>/notes 形式的 Location 中取出卡组对外 id。
+func parseDeckPublicIDFromLocation(t *testing.T, location string) string {
 	t.Helper()
 	parts := strings.Split(strings.Trim(location, "/"), "/")
-	if len(parts) < 2 || parts[0] != "decks" {
+	if len(parts) < 2 || parts[0] != "decks" || parts[1] == "" {
 		t.Fatalf("unexpected clone redirect Location %q", location)
 	}
-	id, err := strconv.ParseUint(parts[1], 10, 64)
-	if err != nil || id == 0 {
-		t.Fatalf("cannot parse deck id from Location %q: %v", location, err)
-	}
-	return id
+	return parts[1]
 }
 
 // TestCloneAPIAllowsOwnerEditorReader 断言 owner/editor/reader 三种角色都能通过
@@ -183,7 +178,7 @@ func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone API source")
 	seedBasic(t, db, deck.ID, "Q", "A")
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+	path := "/api/v1/decks/" + deck.PublicID + "/clone"
 
 	editorID, editorCookies, editorCSRF := createUserAndLogin(t, srv, db, "clone-editor")
 	grantRole(t, srv, deck.ID, editorID, store.RoleEditor, ownerCookies, ownerCSRF)
@@ -209,11 +204,11 @@ func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode clone response: %v (body %s)", err, rec.Body.String())
 			}
-			if body.ID == 0 || body.ID == deck.ID {
-				t.Errorf("clone (%s) id = %d, want a new non-zero id", tc.name, body.ID)
+			if body.ID == "" || body.ID == deck.PublicID {
+				t.Errorf("clone (%s) id = %q, want a new non-empty id", tc.name, body.ID)
 			}
 			var cloned store.Deck
-			if err := db.First(&cloned, "id = ?", body.ID).Error; err != nil {
+			if err := db.First(&cloned, "public_id = ?", body.ID).Error; err != nil {
 				t.Fatalf("load cloned deck: %v", err)
 			}
 			if cloned.OwnerUserID != tc.userID {
@@ -228,7 +223,7 @@ func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
 func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone guard source")
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+	path := "/api/v1/decks/" + deck.PublicID + "/clone"
 
 	var before int64
 	if err := db.Model(&store.Deck{}).Count(&before).Error; err != nil {
@@ -262,7 +257,7 @@ func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone accept source")
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/clone"
+	path := "/api/v1/decks/" + deck.PublicID + "/clone"
 
 	jsonRec := postAccept(t, srv, path, "{}", "application/json; charset=utf-8", ownerCookies, ownerCSRF)
 	if jsonRec.Code != http.StatusCreated {
@@ -302,6 +297,6 @@ func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies 
 
 // cloneResponse 是克隆端点的 JSON 响应体。
 type cloneResponse struct {
-	ID   uint64 `json:"id"`
+	ID   string `json:"id"`
 	Name string `json:"name"`
 }

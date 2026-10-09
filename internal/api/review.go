@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -28,23 +27,24 @@ func userLocation(tz string) *time.Location {
 }
 
 // dueCards 返回到期卡（含字段原文），scope: review（业务逻辑在 service 层的 DueCards）。
-// deck 可重复：缺省＝全部卡组；任一值非数字或为 0 → 400（与既有行为一致）。
+// deck 可重复：缺省＝全部卡组；每个值是卡组的对外 id，未知或非法 → 404。
 func (a *API) dueCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
+	ctx := c.Request.Context()
 	deckIDs := make([]uint64, 0, 4)
 	for _, raw := range c.QueryArray("deck") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
 		}
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil || id == 0 {
-			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		d, err := a.decks.ByPublicID(ctx, raw)
+		if err != nil {
+			abortNotFound(c)
 			return
 		}
-		deckIDs = append(deckIDs, id)
+		deckIDs = append(deckIDs, d.ID)
 	}
-	cards, err := a.DueCards(c.Request.Context(), u, deckIDs, queryInt(c, "limit", 50))
+	cards, err := a.DueCards(ctx, u, deckIDs, queryInt(c, "limit", 50))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -52,9 +52,9 @@ func (a *API) dueCards(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"cards": cards})
 }
 
-// submitReviewRequest 是评分提交请求体。
+// submitReviewRequest 是评分提交请求体；card_id 是卡的对外 id（不透明字符串）。
 type submitReviewRequest struct {
-	CardID          uint64 `json:"card_id"`
+	CardID          string `json:"card_id"`
 	Rating          int    `json:"rating"`
 	ExpectedVersion int    `json:"expected_version"`
 	ElapsedMS       *int   `json:"elapsed_ms"`

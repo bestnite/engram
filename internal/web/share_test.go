@@ -37,7 +37,7 @@ func TestShareBrowseServesShell(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Cutover share deck")
 	seedBasic(t, db, deck.ID, "正面", "背面")
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkForDeck(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	assertShell(t, get(t, srv, "/s/"+token, nil))
 
@@ -53,7 +53,7 @@ func TestShareJSONContent(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "JSON share deck")
 	seedBasic(t, db, deck.ID, "安全正面", "安全背面")
 	seedBasic(t, db, deck.ID, `<script>alert(1)</script>`, "背面")
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkForDeck(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
 	body := decodeShareResponse(t, get(t, srv, "/api/v1/share/"+token, nil))
 	if body.DeckName != "JSON share deck" {
@@ -83,7 +83,7 @@ func TestShareJSONPasswordGate(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Locked share deck")
 	seedBasic(t, db, deck.ID, "机密正面", "机密背面")
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "letmein99")
+	token := createShareLinkForDeck(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "letmein99")
 
 	locked := decodeShareResponse(t, get(t, srv, "/api/v1/share/"+token, nil))
 	if !locked.PasswordRequired || len(locked.Notes) != 0 {
@@ -108,7 +108,7 @@ func TestShareJSONRecordsMediaGrant(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "JSON media deck", 'a')
 	visitorID, visitorCookies, _ := createUserAndLogin(t, srv, db, "spa-json-visitor")
-	token := createShareLinkForDeck(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	token := createShareLinkForDeck(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 	sessionID := visitorSessionID(t, db, visitorID)
 
 	if n := shareGrantRows(t, db, sessionID, deck.ID); n != 0 {
