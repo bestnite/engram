@@ -118,10 +118,11 @@ func (a *API) createDeck(c *gin.Context) {
 	c.JSON(http.StatusCreated, a.toDeckResponse(ctx, u.ID, *d, store.RoleOwner))
 }
 
-// updateDeckRequest 是修改卡组名称与描述的请求体；两个字段都可缺省，但名称不能改空。
+// updateDeckRequest 是修改卡组名称与描述的请求体（PATCH）。
+// 用指针区分「未提供」与「提供了空串」：只带名称的请求不该把描述清空；显式给空描述才清空。
 type updateDeckRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
 }
 
 // updateDeck 修改卡组的名称与描述（PATCH /api/v1/decks/:id，scope: write，仅 owner）。

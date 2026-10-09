@@ -49,6 +49,9 @@ var (
 	// ErrDeckPresetInvalid 表示目标预设不属于该卡组的属主。挂别人的预设会把他人
 	// 的调度参数暴露给自己（卡组可读 ⇒ 预设可读）。
 	ErrDeckPresetInvalid = errors.New("deck preset must belong to the deck owner")
+	// ErrDeckUpdateEmpty 表示一次卡组修改既没给名称也没给描述：没有可写字段（PATCH 语义下
+	// 两个字段都可省略，但至少要给一个）。
+	ErrDeckUpdateEmpty = errors.New("deck update has no fields")
 )
 
 // DeckCaps 是卡组级的每日上限；NewPerDay 与 ReviewsPerDay 都为 0 时表示不限。
@@ -177,31 +180,43 @@ func (s *DeckStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Deck
 	return decks, nil
 }
 
-// Update 修改卡组的名称与描述；只有 owner 能改。
+// Update 修改卡组的名称与描述；只有 owner 能改。name / description 为 nil 表示「本次不改这一项」，
+// 因此只带名称的请求不会把描述清空（PATCH 语义）。
 //
-// **不写 preset_id**：调度预设是学习设置，只经 SetPreset / SetStudySettings 变更。改名路径若
+// 校验针对「合并后的最终文本」（现有值 + 本次提供的字段），规则与建组、卡组包导入同源。
+// **不写 preset_id**：调度预设是学习设置，只经 SetPreset / SetStudySettings 变更，改名路径若
 // 把它写回去，就会用本次调用更早读到的值覆盖期间发生的预设变更（属主的设置就存在 decks.preset_id）。
 // 归属、创建时间、归档状态同样不在可改字段内，避免一次整行覆盖顺带抹掉它们。
-func (s *DeckStore) Update(ctx context.Context, actorUserID uint64, d *Deck) error {
-	if d.ID == 0 {
-		return errors.New("update deck: id is required")
+func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name, description *string) error {
+	if name == nil && description == nil {
+		return ErrDeckUpdateEmpty
 	}
-	existing, err := s.ByID(ctx, d.ID)
+	existing, err := s.ByID(ctx, deckID)
 	if err != nil {
 		return err
 	}
 	if err := requireDeckOwner(existing, actorUserID); err != nil {
 		return err
 	}
-	if err := validateDeckForWrite(d, false); err != nil {
+	next := *existing
+	if name != nil {
+		next.Name = *name
+	}
+	if description != nil {
+		next.Description = *description
+	}
+	if err := validateDeckForWrite(&next, false); err != nil {
 		return err
 	}
-	updates := map[string]any{
-		"name":        d.Name,
-		"description": d.Description,
+	updates := map[string]any{}
+	if name != nil {
+		updates["name"] = next.Name
 	}
-	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("id = ?", d.ID).Updates(updates).Error; err != nil {
-		return fmt.Errorf("update deck: %w", err)
+	if description != nil {
+		updates["description"] = next.Description
+	}
+	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("id = ?", deckID).Updates(updates).Error; err != nil {
+		return fmt.Errorf("update deck %d: %w", deckID, err)
 	}
 	return nil
 }

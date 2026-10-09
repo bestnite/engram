@@ -84,19 +84,22 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("ListByOwner(ownerA) = %+v, want only deck %d", owned, d.ID)
 			}
 
-			// update：owner 改设置字段。
+			// update：owner 只改名称与描述；预设不在可改字段内（换预设走 SetPreset / SetStudySettings）。
 			got.Name = "Deck A renamed"
 			got.Description = "desc"
 			got.PresetID = presetB
-			if err := decks.Update(ctx, ownerA, got); err != nil {
+			if err := decks.Update(ctx, ownerA, got.ID, &got.Name, &got.Description); err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}
 			reloaded, err := decks.ByID(ctx, d.ID)
 			if err != nil {
 				t.Fatalf("ByID() after update error = %v", err)
 			}
-			if reloaded.Name != "Deck A renamed" || reloaded.Description != "desc" || reloaded.PresetID != presetB {
-				t.Errorf("after Update() = %+v, want renamed/desc/presetB", reloaded)
+			if reloaded.Name != "Deck A renamed" || reloaded.Description != "desc" {
+				t.Errorf("after Update() = %+v, want renamed/desc", reloaded)
+			}
+			if reloaded.PresetID != d.PresetID {
+				t.Errorf("after Update() preset = %d, want %d (a metadata update must not change the preset)", reloaded.PresetID, d.PresetID)
 			}
 
 			// archive / restore：幂等且状态可往返。
@@ -170,7 +173,7 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 			// 非 owner 改设置被拒。
 			attempt := *d
 			attempt.Name = "Hijacked"
-			if err := decks.Update(ctx, stranger, &attempt); !errors.Is(err, ErrNotOwner) {
+			if err := decks.Update(ctx, stranger, attempt.ID, &attempt.Name, &attempt.Description); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Update() error = %v, want ErrNotOwner", err)
 			}
 			// 非 owner 归档被拒。

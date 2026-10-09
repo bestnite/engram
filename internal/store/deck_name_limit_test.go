@@ -52,11 +52,11 @@ func TestDeckNameLimitCreateAndRename(t *testing.T) {
 					t.Fatalf("Create() error = %v", err)
 				}
 				d.Name = name200
-				if err := decks.Update(ctx, owner, d); err != nil {
+				if err := decks.Update(ctx, owner, d.ID, &d.Name, nil); err != nil {
 					t.Fatalf("Update(200 chars) error = %v, want nil", err)
 				}
 				d.Name = name201
-				if err := decks.Update(ctx, owner, d); !errors.Is(err, ErrDeckNameInvalid) {
+				if err := decks.Update(ctx, owner, d.ID, &d.Name, nil); !errors.Is(err, ErrDeckNameInvalid) {
 					t.Fatalf("Update(201 chars) error = %v, want ErrDeckNameInvalid", err)
 				}
 				// 被拒的改名不得落库：库里仍是上一次合法的 200 字符名。
@@ -124,7 +124,7 @@ func TestDeckNameLimitExportImportRoundTrip(t *testing.T) {
 				t.Fatalf("ByID() error = %v", err)
 			}
 			d.Name = name
-			if err := NewDeckStore(db).Update(ctx, exporter, d); err != nil {
+			if err := NewDeckStore(db).Update(ctx, exporter, d.ID, &d.Name, nil); err != nil {
 				t.Fatalf("rename to 200 chars: %v", err)
 			}
 

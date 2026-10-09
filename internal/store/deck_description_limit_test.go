@@ -66,11 +66,11 @@ func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 					t.Fatalf("Create() error = %v", err)
 				}
 				d.Description = desc2000
-				if err := decks.Update(ctx, owner, d); err != nil {
+				if err := decks.Update(ctx, owner, d.ID, nil, &d.Description); err != nil {
 					t.Fatalf("Update(description 2000) error = %v, want nil", err)
 				}
 				d.Description = desc2001
-				if err := decks.Update(ctx, owner, d); !errors.Is(err, ErrDeckDescriptionInvalid) {
+				if err := decks.Update(ctx, owner, d.ID, nil, &d.Description); !errors.Is(err, ErrDeckDescriptionInvalid) {
 					t.Fatalf("Update(description 2001) error = %v, want ErrDeckDescriptionInvalid", err)
 				}
 				// 被拒的改名不得落库：库里仍是上一次合法的 2000 字符描述。
@@ -134,7 +134,7 @@ func TestDeckDescriptionLimitExportImportRoundTrip(t *testing.T) {
 				t.Fatalf("ByID() error = %v", err)
 			}
 			d.Description = desc
-			if err := NewDeckStore(db).Update(ctx, exporter, d); err != nil {
+			if err := NewDeckStore(db).Update(ctx, exporter, d.ID, nil, &d.Description); err != nil {
 				t.Fatalf("set 2000-char description: %v", err)
 			}
 

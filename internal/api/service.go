@@ -152,21 +152,25 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 }
 
 // UpdateDeckInput 是修改卡组名称与描述的输入；APIKeyID 仅用于审计条目。
+// Name / Description 为 nil 表示本次不改这一项（PATCH 语义），因此省略描述不会清空它。
 type UpdateDeckInput struct {
-	Name        string
-	Description string
+	Name        *string
+	Description *string
 	APIKeyID    *uint64
 }
 
 // UpdateDeck 修改卡组的名称与描述（scope: write）；REST 与内置 MCP 共用。
 //
 // 只有 owner 能改：共享成员的学习设置走 SetStudySettings，改的从来不是卡组本身。
-// 名称与描述过 store 的同一套校验（与建组、包导入同源），失败不写入；
+// 只更新调用方给出的字段；名称与描述过 store 的同一套校验（与建组、包导入同源），失败不写入；
 // 校验失败映射成与建组一致的专属 code，非 owner 映射成 forbidden。
 func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in UpdateDeckInput) (*store.Deck, error) {
-	// 只改名称与描述：DeckStore.Update 不写 preset_id，因此不会把期间变更过的学习设置写回去。
-	updated := store.Deck{ID: deckID, Name: strings.TrimSpace(in.Name), Description: in.Description}
-	if err := a.decks.Update(ctx, u.ID, &updated); err != nil {
+	name := in.Name
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		name = &trimmed
+	}
+	if err := a.decks.Update(ctx, u.ID, deckID, name, in.Description); err != nil {
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "")
@@ -180,19 +184,19 @@ func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in U
 			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
 		}
 	}
+	out, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		a.logger.Error("reload deck after update failed", "deck_id", deckID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
 	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   in.APIKeyID,
 		Action:     store.ActionDeckUpdate,
 		TargetType: "deck",
 		TargetID:   store.Ptr(deckID),
-		Detail:     map[string]any{"name": updated.Name},
+		Detail:     map[string]any{"name": out.Name},
 	})
-	out, err := a.decks.ByID(ctx, deckID)
-	if err != nil {
-		a.logger.Error("reload deck after update failed", "deck_id", deckID, "error", err)
-		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
-	}
 	return out, nil
 }
 

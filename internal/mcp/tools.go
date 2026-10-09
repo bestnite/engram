@@ -27,11 +27,11 @@ type createDeckIn struct {
 	PresetID    string `json:"preset_id,omitempty" jsonschema:"scheduling preset public id; empty uses the caller's Default preset"`
 }
 
-// updateDeckIn 是 update_deck 的入参；两个字段都可缺省，但名称不能改空。
+// updateDeckIn 是 update_deck 的入参；两个字段都可省略，省略即保持原值（PATCH 语义）。
 type updateDeckIn struct {
-	DeckID      string `json:"deck_id" jsonschema:"the public id of the deck to update"`
-	Name        string `json:"name,omitempty" jsonschema:"new deck name; required non-empty"`
-	Description string `json:"description,omitempty" jsonschema:"new deck description; empty is allowed"`
+	DeckID      string  `json:"deck_id" jsonschema:"the public id of the deck to update"`
+	Name        *string `json:"name,omitempty" jsonschema:"new deck name; omit to keep the current name"`
+	Description *string `json:"description,omitempty" jsonschema:"new deck description; omit to keep it, an empty string clears it"`
 }
 
 // searchNotesIn 是 search_notes 的入参；deck_id 必填。
