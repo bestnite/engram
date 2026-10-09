@@ -72,6 +72,7 @@ import {
   type JoinShareResponse,
   type OIDCInfo,
   type RegistrationInfo,
+  type CardTypesResponse,
 } from './types';
 
 /**
@@ -292,6 +293,14 @@ export class ApiClient {
     form.append('allow_others_progress', options.allowOthersProgress ? '1' : '0');
     form.append('skip_missing_media', options.skipMissingMedia ? '1' : '0');
     return this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form });
+  }
+
+  /**
+   * 读取全部题型的自描述（GET /api/v1/card-types，scope: read）。
+   * 静态元数据、不含用户状态；需要会话或 API key，未认证时服务端返回 401。
+   */
+  async getCardTypes(): Promise<CardTypesResponse> {
+    return this.request<CardTypesResponse>('/api/v1/card-types');
   }
 
   /**

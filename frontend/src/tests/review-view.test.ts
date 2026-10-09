@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { DueCard, GradedFeedback } from '../lib/api';
 import { setLocale } from '../lib/i18n';
+import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /** 构造一张作答类到期卡（字段形态与 GET /api/v1/review/due 一致，含答案原文）。 */
 function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
@@ -20,6 +21,11 @@ function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
     version: 0,
   };
 }
+
+// 复习页的题型分支来自服务端元数据：渲染前先注入样例目录，否则只能看到加载态。
+beforeEach(() => {
+  seedCardTypes();
+});
 
 describe('ReviewView graded answering', () => {
   beforeEach(() => {
@@ -241,5 +247,63 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
       },
     }).html;
     expect(basic).not.toContain('data-testid="review-undo"');
+  });
+});
+
+describe('ReviewView card sides and controls come from the server metadata', () => {
+  beforeEach(() => {
+    setLocale('zh-CN');
+  });
+
+  it('renders the short_answer front from prompt and the back from reference', () => {
+    // 回归：此前 cardSide() 按 kind 展开三元链时漏了 short_answer，落到 else 取 front/back，
+    // 而该题型的真实字段是 prompt/reference——正面因此渲染为空。字段名改由元数据提供后应当正确。
+    const card = gradedCard('short_answer', {
+      prompt: '解释一下 CAP 定理',
+      reference: '一致性、可用性、分区容忍',
+    });
+
+    const front = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card] },
+    }).html;
+    expect(front).toContain('data-testid="review-front"');
+    expect(front).toContain('解释一下 CAP 定理');
+    expect(front).not.toContain('一致性、可用性、分区容忍');
+    // 自评题型：走四档自评而不是作答控件。
+    expect(front).toContain('显示答案');
+    expect(front).not.toContain('data-testid="review-graded-input"');
+
+    const revealed = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card], initialRevealed: true },
+    }).html;
+    expect(revealed).toContain('data-testid="review-answer"');
+    expect(revealed).toContain('一致性、可用性、分区容忍');
+    expect(revealed).toContain('data-rating="1"');
+  });
+
+  it('renders a decimal input for the numeric answer control', () => {
+    const card = gradedCard('numeric', { prompt: '光速（m/s）？', value: 299792458, unit: 'm/s' });
+    const { html } = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card] },
+    });
+    expect(html).toContain('data-testid="review-graded-prompt"');
+    expect(html).toContain('光速（m/s）？');
+    expect(html).toContain('data-testid="review-graded-input"');
+    expect(html).toContain('inputmode="decimal"');
+    // 题面不得泄露数值答案。
+    expect(html).not.toContain('299792458');
+  });
+
+  it('renders a loading state instead of guessing fields when metadata is not ready', () => {
+    clearCardTypes();
+    const card = gradedCard('basic', { front: 'Q', back: 'A' });
+    const { html } = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card] },
+    });
+    expect(html).toContain('data-testid="review-meta-loading"');
+    expect(html).not.toContain('data-testid="review-front"');
+    expect(html).not.toContain('data-testid="review-graded-prompt"');
+    // 绝不把裸语言包键或机器词汇当文案印出来。
+    expect(html).not.toContain('notes.kind.');
   });
 });

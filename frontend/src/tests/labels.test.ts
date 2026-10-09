@@ -6,6 +6,10 @@ import {
   presetDisplayName,
   presetSelectOptions,
 } from '../lib/labels';
+import { createCatalog } from '../lib/card-types';
+import { CARD_TYPES } from './card-type-fixture';
+
+const catalog = createCatalog(CARD_TYPES.kinds);
 
 /**
  * 枚举文案映射：后端枚举值一律经 lib/labels.ts 翻成语言包文案，未知值渲染成空。
@@ -19,20 +23,23 @@ const en = (key: string) => formatMessage('en', key);
 
 describe('enum labels go through the catalog', () => {
   it('translates card kinds instead of printing the enum', () => {
-    expect(noteKindLabel('basic_both', zh)).toBe('双向问答');
-    expect(noteKindLabel('cloze', zh)).toBe('填空');
-    expect(noteKindLabel('basic', en)).toBe('Basic');
+    expect(noteKindLabel('basic_both', catalog, zh)).toBe('双向问答');
+    expect(noteKindLabel('cloze', catalog, zh)).toBe('填空');
+    expect(noteKindLabel('basic', catalog, en)).toBe('Basic');
   });
 
   it('renders nothing for an unknown or missing value', () => {
     // 关键：未知值绝不能回落到键名或机器词。$t 找不到键时会原样返回键名，
     // 直接插原值会印英文——两者都比「少一格徽标」糟。
-    expect(noteKindLabel('made_up_kind', zh)).toBe('');
-    expect(noteKindLabel(null, zh)).toBe('');
-    expect(noteKindLabel(undefined, zh)).toBe('');
-    expect(noteKindLabelKey('cloze')).toBe('notes.kind.cloze');
-    expect(noteKindLabelKey('nope')).toBeNull();
-    expect(noteKindLabelKey(null)).toBeNull();
+    expect(noteKindLabel('made_up_kind', catalog, zh)).toBe('');
+    expect(noteKindLabel(null, catalog, zh)).toBe('');
+    expect(noteKindLabel(undefined, catalog, zh)).toBe('');
+    // 元数据未就绪时也没有题型清单可用，同样返回空而不是裸 key。
+    expect(noteKindLabel('cloze', null, zh)).toBe('');
+    expect(noteKindLabelKey('cloze', catalog)).toBe('notes.kind.cloze');
+    expect(noteKindLabelKey('nope', catalog)).toBeNull();
+    expect(noteKindLabelKey(null, catalog)).toBeNull();
+    expect(noteKindLabelKey('cloze', null)).toBeNull();
   });
 
   it('renders the default preset through the catalog instead of its storage name', () => {
