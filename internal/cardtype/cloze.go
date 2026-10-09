@@ -145,6 +145,20 @@ type clozeType struct{}
 // Label 返回语言包键名。
 func (clozeType) Label() string { return "cardtype.cloze" }
 
+// Describe 自描述：正反面都读 text，自评题型。
+func (clozeType) Describe() Description {
+	return Description{
+		Kind:          "cloze",
+		LabelKey:      "cardtype.cloze",
+		AnswerControl: AnswerNone,
+		FrontField:    "text",
+		BackField:     "text",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "text", Control: ControlTextarea, Required: true},
+		),
+	}
+}
+
 // Validate 校验 text 且必须至少含一个挖空项。
 func (clozeType) Validate(fields map[string]any) error {
 	text, err := stringField(fields, "text")

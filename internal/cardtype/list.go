@@ -10,6 +10,23 @@ type listType struct{}
 // Label 返回语言包键名。
 func (listType) Label() string { return "cardtype.list" }
 
+// Describe 自描述：正面 prompt、背面逐项揭示 items；自评题型。
+func (listType) Describe() Description {
+	return Description{
+		Kind:          "list",
+		LabelKey:      "cardtype.list",
+		AnswerControl: AnswerNone,
+		FrontField:    "prompt",
+		BackField:     "items",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "items", Control: ControlLines, Required: true},
+			// ordered 的服务端默认是 false（cardtype.listType 的 boolField 第三参）。
+			FieldSpec{Key: "ordered", Control: ControlBool, Default: false},
+		),
+	}
+}
+
 // Validate 校验 prompt / items / ordered。
 func (listType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {

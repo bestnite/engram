@@ -17,6 +17,24 @@ type choiceSingleType struct{}
 // Label 返回语言包键名。
 func (choiceSingleType) Label() string { return "cardtype.choice_single" }
 
+// Describe 自描述：正面 question、背面 options；作答控件是单选（取 options 下标）。
+func (choiceSingleType) Describe() Description {
+	return Description{
+		Kind:          "choice_single",
+		LabelKey:      "cardtype.choice_single",
+		AnswerControl: AnswerSingle,
+		FrontField:    "question",
+		BackField:     "options",
+		PromptField:   "question",
+		OptionsField:  "options",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "question", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "options", Control: ControlLines, Required: true},
+			FieldSpec{Key: "answer", Control: ControlIndex, Required: true},
+		),
+	}
+}
+
 // Validate 校验 question / options / answer，并保证索引落在 options 范围内。
 func (choiceSingleType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "question"); err != nil {
@@ -143,6 +161,24 @@ type choiceMultiType struct{}
 
 // Label 返回语言包键名。
 func (choiceMultiType) Label() string { return "cardtype.choice_multi" }
+
+// Describe 自描述：正面 question、背面 options；作答控件是多选（取 options 下标集合）。
+func (choiceMultiType) Describe() Description {
+	return Description{
+		Kind:          "choice_multi",
+		LabelKey:      "cardtype.choice_multi",
+		AnswerControl: AnswerMulti,
+		FrontField:    "question",
+		BackField:     "options",
+		PromptField:   "question",
+		OptionsField:  "options",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "question", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "options", Control: ControlLines, Required: true},
+			FieldSpec{Key: "answers", Control: ControlIndexes, Required: true},
+		),
+	}
+}
 
 // Validate 校验 question / options / answers，并保证索引在范围内、无重复。
 func (choiceMultiType) Validate(fields map[string]any) error {

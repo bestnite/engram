@@ -15,6 +15,26 @@ type typedType struct{}
 // Label 返回语言包键名。
 func (typedType) Label() string { return "cardtype.typed" }
 
+// Describe 自描述：正面 prompt、背面 answer；作答控件是文本，判分由 Grader 提供。
+func (typedType) Describe() Description {
+	return Description{
+		Kind:          "typed",
+		LabelKey:      "cardtype.typed",
+		AnswerControl: AnswerText,
+		FrontField:    "prompt",
+		BackField:     "answer",
+		PromptField:   "prompt",
+		Fields: fieldsWithCommon(
+			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
+			FieldSpec{Key: "answer", Control: ControlText, Required: true},
+			FieldSpec{Key: "accept", Control: ControlLines},
+			// 服务端默认忽略大小写与空白差异（typedType 的 boolField 第三参是 true）。
+			FieldSpec{Key: "ignore_case", Control: ControlBool, Default: true},
+			FieldSpec{Key: "ignore_whitespace", Control: ControlBool, Default: true},
+		),
+	}
+}
+
 // typedSettings 是一次判分要用到的容差规则。
 type typedSettings struct {
 	answer           string
