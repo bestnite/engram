@@ -36,6 +36,13 @@ func newEnv(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *httptest.Ser
 // （如会话属主表）使用。
 func newEnvWithServer(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *Server, *httptest.Server) {
 	t.Helper()
+	return newEnvWithPackageFetcher(t, nil)
+}
+
+// newEnvWithPackageFetcher 与 newEnvWithServer 相同，但允许注入受控的直链下载器；
+// 直链导入用例用它避免真实网络，其余用例传 nil 走生产实现。
+func newEnvWithPackageFetcher(t *testing.T, fetcher api.PackageFetcher) (*api.API, *gorm.DB, *store.APIKeyStore, *Server, *httptest.Server) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "mcp.db"))
 	if err != nil {
@@ -54,7 +61,8 @@ func newEnvWithServer(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *Se
 		DB: db, Logger: logger, Keys: keys,
 		Users: store.NewUserStore(db), Decks: store.NewDeckStore(db), Notes: store.NewNoteStore(db),
 		Presets: store.NewPresetStore(db), Cards: store.NewCardStore(db), Auditor: auditor,
-		ReadLimit: 100000, WriteLimit: 100000,
+		PackageFetcher: fetcher,
+		ReadLimit:      100000, WriteLimit: 100000,
 	})
 	if err != nil {
 		t.Fatalf("api.New() error = %v", err)

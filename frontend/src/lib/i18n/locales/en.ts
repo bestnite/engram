@@ -1227,4 +1227,18 @@ export const en: LocaleCatalog = {
   'review.undo': 'Undo',
   'review.undo_last': 'Undo last',
   'review.undo_last_rating': 'Undo last · {rating}',
+  // 直链导入的来源选择、地址说明与专用错误集中放置，便于维护中英文键集合。
+  'package.source.label': 'Source',
+  'package.source.file': 'Upload file',
+  'package.source.url': 'From URL',
+  'package.import.url': 'Package URL',
+  'package.import.url_help': 'Paste a public HTTPS direct file link (.edeck / .zip). Direct file links only — no web pages, and no links that need a sign-in.',
+  'package.error.url_required': 'Enter the public HTTPS link to the deck package.',
+  'package.error.url_scheme': 'Only public https:// direct links are supported.',
+  'package.error.url_invalid': 'That link cannot be used: only public HTTPS direct links, without a username or password.',
+  'package.error.url_blocked': 'That link points to a network address we do not allow.',
+  'package.error.url_fetch_failed': 'The package could not be downloaded from that link. Check the link and try again.',
+  'package.error.url_not_package': 'That link did not return a deck package.',
+  // 示例地址也属于用户可见文案，因此由语言包提供。
+  'package.import.url_placeholder': 'https://example.com/deck.edeck',
 };

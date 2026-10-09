@@ -1226,4 +1226,18 @@ export const zhCN: LocaleCatalog = {
   'review.undo': '撤销',
   'review.undo_last': '撤销上一次',
   'review.undo_last_rating': '撤销上一次 · {rating}',
+  // 直链导入（POST /api/v1/decks/import-url）新增：来源选择、URL 说明与 URL 专用错误。
+  'package.source.label': '导入来源',
+  'package.source.file': '上传文件',
+  'package.source.url': '从链接导入',
+  'package.import.url': '卡组包直链',
+  'package.import.url_help': '粘贴公开可直连的 HTTPS 文件地址（.edeck / .zip）。仅支持直链文件本身，不支持网页地址或需要登录的链接。',
+  'package.error.url_required': '请输入卡组包的公开 HTTPS 直链。',
+  'package.error.url_scheme': '只支持 https:// 开头的公开直链。',
+  'package.error.url_invalid': '链接不可用：仅支持公开的 HTTPS 直链，且不能带用户名或口令。',
+  'package.error.url_blocked': '该链接指向不允许访问的网络地址。',
+  'package.error.url_fetch_failed': '无法从该链接下载卡组包，请检查链接后重试。',
+  'package.error.url_not_package': '该链接返回的不是卡组包。',
+  // 直链输入框的示例占位符：用户可见文本一律走语言包，不在模板里硬编码。
+  'package.import.url_placeholder': 'https://example.com/deck.edeck',
 };

@@ -89,10 +89,12 @@ type bulkActionIn struct {
 	DryRun  bool     `json:"dry_run,omitempty" jsonschema:"count without writing or auditing"`
 }
 
-// importDeckIn 是 import_deck 的入参：接受一个卡组包。
+// importDeckIn 是 import_deck 的入参：接受一个卡组包，来源二选一。
 type importDeckIn struct {
-	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .edeck zip。
-	Package any `json:"package" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive"`
+	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .edeck zip。与 URL 互斥。
+	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive; mutually exclusive with url"`
+	// URL 是公开 HTTPS 直链（.edeck/.zip）；由服务端下载并校验，与 Package 互斥。
+	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .edeck/.zip package; mutually exclusive with package"`
 	// Target 取值 new_deck（默认）、into_deck:<public id>、replace_deck:<public id>。
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
@@ -262,21 +264,33 @@ func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (a
 	})
 }
 
-// importDeck 导入卡组包：与 REST `POST /decks/import` 走同一 service 方法。
-// 包的权限判定、进度归属与审计都在 service 层（ImportDeckPackage）完成；
+// importDeck 导入卡组包：与 REST `POST /decks/import`（或 `POST /decks/import-url`）
+// 走同一 service 方法。包的权限判定、进度归属与审计都在 service 层完成；
 // target 里的 into_deck:<public id> / replace_deck:<public id> 由 service 自行解析。
+// package 与 url 互斥：二选一，缺一报参数错误。
 func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
-	r, err := store.PackageReader(in.Package)
-	if err != nil {
-		return nil, err
-	}
-	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, store.PackageImportOptions{
+	opts := store.PackageImportOptions{
 		Target:              in.Target,
 		DryRun:              in.DryRun,
 		OnConflict:          in.OnConflict,
 		SkipMissingMedia:    in.SkipMissingMedia,
 		AllowOthersProgress: in.AllowOthersProgress,
-	})
+	}
+	url := strings.TrimSpace(in.URL)
+	if url != "" {
+		if in.Package != nil {
+			return nil, api.InvalidRequest("package and url are mutually exclusive")
+		}
+		return s.api.ImportDeckPackageURL(ctx, id.User, id.apiKeyID(), url, opts)
+	}
+	if in.Package == nil {
+		return nil, api.InvalidRequest("package or url is required")
+	}
+	r, err := store.PackageReader(in.Package)
+	if err != nil {
+		return nil, err
+	}
+	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, opts)
 }
 
 func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (any, error) {

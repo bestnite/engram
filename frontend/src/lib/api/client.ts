@@ -296,6 +296,33 @@ export class ApiClient {
   }
 
   /**
+   * 通过同源会话 JSON 路由从公开 HTTPS 直链导入卡组包（POST /api/v1/decks/import-url）。
+   *
+   * 与文件导入共用同一批选项（target / dry_run / on_conflict / allow_others_progress /
+   * skip_missing_media），服务端返回同一份 PackageImportReport，前端不区分结果形状。
+   * 显式写出全部字段而不是依赖服务端默认值：选项的含义在两条入口上必须完全一致，缺省会让
+   * 「界面显示的值」与「实际生效的值」脱钩。CSRF 与 Content-Type 由 request 统一注入（字符串
+   * body 才强制 application/json）。
+   */
+  async importDeckPackageURL(
+    rawURL: string,
+    options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean }
+  ): Promise<PackageImportReport> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<PackageImportReport>('/api/v1/decks/import-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: rawURL,
+        target: options.target,
+        dry_run: options.dryRun === true,
+        on_conflict: options.onConflict || 'update',
+        allow_others_progress: options.allowOthersProgress === true,
+        skip_missing_media: options.skipMissingMedia === true,
+      }),
+    });
+  }
+
+  /**
    * 读取全部题型的自描述（GET /api/v1/card-types，scope: read）。
    * 静态元数据、不含用户状态；需要会话或 API key，未认证时服务端返回 401。
    */
