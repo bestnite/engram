@@ -2,11 +2,101 @@
 
 审查日期：2026 年 10 月 9 日。审查基线：`3e296387f334c3b07d1262093820d1165d98b000`。
 
-本次检查覆盖后端业务、前端入口和已有测试，发现笔记编辑、评分撤销、克隆校验及资源限制问题。以下条目均未修复。修复建议不是已经确定的产品要求；涉及持久化模型或功能范围的选择，由维护者决定。
+初次检查覆盖后端业务、前端入口和已有测试，发现笔记编辑、评分撤销、克隆校验及资源限制问题。原问题描述和初次证据保留在复查记录之后；当前处理状态以本节复查表为准。修复建议不是已经确定的产品要求；涉及持久化模型或功能范围的选择，由维护者决定。
 
 “已复现”表示补充测试已经触发问题。“静态发现”表示依据代码确认实现或推导风险，尚未完成对应的运行时复现。“待设计决定”表示仓库规则与实现冲突，或底层能力尚未形成用户功能。
 
-## 问题清单
+## 修复后的复查
+
+复查日期：2026 年 10 月 9 日。复查基线：`7fe61bc`。复查范围为初次审查后新增的修复提交。维护者说明归档、回收站、自定义判分映射三个功能尚未实现，本次不把这三个功能计为修复遗漏。
+
+| 原编号 | 复查结论 |
+| --- | --- |
+| AUDIT-01 | 已修复：新增单条读取接口，编辑页直接读取笔记并检查所属卡组 |
+| AUDIT-02 | 已修复：撤销携带预期版本，重放和旧版本测试通过 |
+| AUDIT-03 | 已调整为先锁状态并校验版本，再读日志；真实 PostgreSQL 验收仍未执行 |
+| AUDIT-04 | 当前库内的埋藏到期时间恢复测试通过；包迁移遗漏见 RECHECK-04 |
+| AUDIT-05 | 已修复：克隆执行统一校验，网页副本名按字符截断源名称 |
+| AUDIT-06 | 已修复：单页上限为 200，页码上限为 1000000 |
+| AUDIT-07 | 路径参数变化时重建组件；复习范围查询参数变化仍未处理，见 RECHECK-03 |
+| AUDIT-08 | 已按返回的 reader 角色隐藏内容修改入口；个人暂停和学习设置入口保留 |
+| AUDIT-09 | REST、MCP 和网页入口已接通；修改接口仍有 RECHECK-01 和 RECHECK-02 |
+| AUDIT-10 | 归档入口仍未实现，维护者已说明该范围 |
+| AUDIT-11 | 自定义映射入口仍未实现，维护者已说明该范围 |
+| AUDIT-12 | 回收站入口仍未实现，维护者已说明该范围 |
+| AUDIT-13 | 已解决规则冲突：AGENTS.md 明确允许撤销删除目标评分，并要求审计记录 |
+
+### RECHECK-01 修改卡组信息会覆盖期间更新的调度预设
+
+优先级：高。证据：真实 SQLite 数据库上的可控交错复现。
+
+位置：[service.go](internal/api/service.go)，`API.UpdateDeck`；[deck.go](internal/store/deck.go)，`DeckStore.Update`。
+
+信息修改接口先读取卡组的 `preset_id`，把这个旧值放入待更新模型，再调用同时写入名称、描述和 `preset_id` 的存储方法。若学习设置在两次操作之间改成另一预设，信息修改仍会把旧预设写回。名称和描述的修改不应写入调度预设列。
+
+补充测试在服务首次读取卡组的查询回调中写入另一预设，用来确定性模拟读取后发生的设置更新。新预设 ID 为 2；调用信息修改后，持久化预设回退为 1。测试没有依赖线程调度概率。
+
+建议为信息修改提供只更新 `name` 和 `description` 的存储方法。验收应控制交错顺序，确认信息保存不会覆盖期间更新的预设或每日上限。
+
+### RECHECK-02 PATCH 省略描述会清空原描述
+
+优先级：中。证据：真实 SQLite 数据库和 REST handler 复现。
+
+位置：[decks.go](internal/api/decks.go)，`updateDeckRequest`；[service.go](internal/api/service.go)，`UpdateDeckInput`；[tools.go](internal/mcp/tools.go)，`updateDeckIn`。
+
+REST 请求和 MCP 输入用普通字符串承载名称、描述，无法区分字段缺失与显式空字符串。请求注释允许两个字段缺省，但实现将缺失描述当成空描述写入，并将缺失名称当成非法空名称拒绝。
+
+补充测试先保存描述 `keep me`，再发送 `PATCH /api/v1/decks/:id`，请求体仅为 `{"name":"renamed"}`。请求返回 200，原描述被清空为 `""`。
+
+建议在 REST、MCP 和共享业务输入中区分字段是否提供：缺失保持原值，显式空描述用于清空，显式空名称被拒绝。验收应分别覆盖仅修改名称、仅修改描述、清空描述和非法名称。
+
+### RECHECK-03 复习范围查询参数变化不会重载队列
+
+优先级：中。证据：真实 Chromium 加载生产构建后的交互复现；HTTP 响应使用本地测试数据。
+
+位置：[router/index.ts](frontend/src/lib/router/index.ts)，`viewKey`；[ReviewView.svelte](frontend/src/lib/views/ReviewView.svelte)，`selectedDecks` 和 `onMount`；[App.svelte](frontend/src/App.svelte)，组件重建边界。
+
+`viewKey` 排除了全部查询参数。复习页的卡组范围位于 `deck` 查询参数中，队列只在挂载时读取，而评分、埋藏等请求每次从当前地址读取范围。切换范围后，旧卡片与新范围会同时进入页面的后续操作。
+
+浏览器先打开 `/review?deck=A`，再通过站内链接切换到 `/review?deck=B`。捕获结果如下：
+
+```text
+BEFORE url=/review?deck=A front=Question card-A
+AFTER  url=/review?deck=B front=Question card-A
+DUE_REQUESTS /api/v1/review/due?deck=A&limit=500
+```
+
+地址变为 B 后仍显示 A 的卡片，没有发出 B 的队列请求。此时评分请求会携带 A 的卡片和 B 的范围，后端范围校验会拒绝。
+
+建议让复习范围变化触发组件重建或显式重载队列。验收应覆盖单卡组切换、多卡组范围变化，以及前进和后退；不需要因为无关查询参数变化而清空复习过程。
+
+### RECHECK-04 卡组包迁移丢失撤销快照
+
+优先级：中。证据：真实 SQLite 数据库上的导出、导入和撤销复现。
+
+位置：[package.go](internal/store/package.go)，`PackageReview` 和 `exportProgress`；[package_import.go](internal/store/package_import.go)，`applyProgress`；[models.go](internal/store/models.go)，`Review.DueBefore`；[actions.go](internal/schedule/actions.go)，`Rollback`。
+
+新增的 `due_before` 快照没有加入卡组包的评分记录结构、导出映射和导入映射。已有的 `step_index_before` 也未经过该包传输。数据库内撤销恢复测试通过，不能证明包含进度及日志的备份恢复后仍能还原评分前状态。
+
+补充测试先埋藏新卡，再评分，随后导出包含进度和评分日志的卡组包，导入为新卡组，然后撤销导入卡片的最后一次评分。捕获结果如下：
+
+```text
+imported due_before=<nil> step_index_before=<nil>
+before export due=2026-10-03 04:00:00 +0000 UTC
+after imported undo due=<nil>
+```
+
+建议同步包的数据结构、导出、导入及相应 schema，使新包保留撤销所需的快照。旧包缺字段时继续采用明确的兼容行为。验收应覆盖埋藏、学习步骤和普通复习的进度日志往返。
+
+### 复查验证结果
+
+`go build ./... && go vet ./... && gofmt -l . && go test ./...` 通过，格式检查没有输出。`npm --prefix frontend run check` 返回 0 errors、0 warnings；前端 44 个测试文件、369 个测试通过；生产构建通过。
+
+已有的撤销重放、旧版本拒绝和埋藏到期时间恢复测试通过。`TestUndoConcurrentSameVersionIsAtomic` 因未设置 `TEST_PG_DSN` 而跳过，因此 AUDIT-03 的结论仍限于代码执行顺序检查，不能记为已通过 PostgreSQL 验收。
+
+三个补充 Go overlay 测试失败，分别证明 RECHECK-01、RECHECK-02 和 RECHECK-04。RECHECK-03 已在 Chromium 中复现。补充测试和浏览器测试使用临时文件，没有修改业务源码。本次复查只更新问题记录。
+
+## 初次审查问题清单
 
 | 编号 | 优先级 | 问题 | 证据状态 |
 | --- | --- | --- | --- |
