@@ -35,8 +35,6 @@ func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	// 凭据，POST 提交验证码并签发会话。挂双提交 cookie 中间件（登录前流程没有会话可绑 token）。
 	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
 	router.POST("/api/v1/auth/totp", auth.PreSessionCSRFMiddleware(), s.apiTOTPSubmit)
-	// 两步验证管理页只返回应用壳；读写走 /api/v1/settings/totp*（totp_api.go）。
-	router.GET("/settings/totp", s.totpSettingsRoute)
 }
 
 // setTOTPPendingCookie 下发第二步凭据：内容对客户端不可读（HttpOnly + HMAC 签名）。
@@ -106,14 +104,4 @@ func verifyUserPassword(u *store.User, password string) error {
 		return auth.ErrInvalidCredentials
 	}
 	return nil
-}
-
-// totpSettingsRoute 提供 GET /settings/totp：返回应用壳，
-// 由客户端路由渲染两步验证管理页；读写走 /api/v1/settings/totp*（同一份服务逻辑与审计），
-// 因此页面迁移不新增任何写路径。授权判定与迁移前一致：未登录一律重定向登录页。
-func (s *Server) totpSettingsRoute(c *gin.Context) {
-	if _, ok := s.requireUser(c); !ok {
-		return
-	}
-	s.shell.ServeIndex(c)
 }

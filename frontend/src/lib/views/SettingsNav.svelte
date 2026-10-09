@@ -8,10 +8,9 @@
    */
   const items = $derived([
     { href: '/settings', label: $t('settings.nav.general'), testId: 'settings-nav-general' },
-    { href: '/settings/email', label: $t('account.email.heading'), testId: 'settings-nav-email' },
-    { href: '/settings/totp', label: $t('settings.totp.heading'), testId: 'settings-nav-totp' },
-    { href: '/settings/notifications', label: $t('settings.nav.notifications'), testId: 'settings-nav-notifications' },
-    { href: '/settings/keys', label: $t('settings.keys.heading'), testId: 'settings-nav-keys' },
+    { href: '/settings/security', label: $t('settings.nav.security'), testId: 'settings-nav-security' },
+    { href: '/settings/email', label: $t('settings.nav.mail'), testId: 'settings-nav-email' },
+    { href: '/settings/keys', label: $t('settings.nav.api'), testId: 'settings-nav-keys' },
   ]);
 </script>
 

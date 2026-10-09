@@ -39,9 +39,6 @@
   let serverApiAvailable = $state<boolean | null>(null);
   let savedNotice = $state<string | null>(null);
   let generalError = $state<string | null>(null);
-  let passwordError = $state<string | null>(null);
-  let passwordNotice = $state<string | null>(null);
-  let passwordSaving = $state(false);
 
   // 卡组共享接收策略（同意制）：谁可以把卡组分享给我。
   // allowList 存服务端回读的真值（带用户名），本地不推断并集运算的结果。
@@ -51,8 +48,6 @@
   let shareSaving = $state(false);
   let shareNotice = $state<string | null>(null);
   let shareError = $state<string | null>(null);
-  let oldPassword = $state('');
-  let newPassword = $state('');
   let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour' | 'learn_ahead_minutes', string>>>({});
 
   // 表单字段绑定
@@ -196,14 +191,6 @@
     }
   }
 
-  async function handlePasswordSubmit(event: Event): Promise<void> {
-    event.preventDefault(); passwordError = null; passwordNotice = null; passwordSaving = true;
-    try { await apiClient.changePassword({ old_password: oldPassword, new_password: newPassword }); oldPassword = ''; newPassword = ''; passwordNotice = 'settings.password.changed'; }
-    catch (err) {
-      const code = err instanceof ApiClientError ? err.code : '';
-      passwordError = ({ invalid_current_password: 'settings.password.current_wrong', password_rejected: 'settings.password.rejected', password_unchanged: 'settings.password.unchanged', password_unavailable: 'settings.password.unavailable', invalid_request: 'settings.password.invalid' } as Record<string, string>)[code] || getApiErrorMessageKey(err);
-    } finally { passwordSaving = false; }
-  }
 
   /** 读取当前接收策略与白名单（GET /api/v1/settings/share-policy）。 */
   async function loadSharePolicy(): Promise<void> {
@@ -327,23 +314,6 @@
       </form>
     </SettingsSection>
 
-    <SettingsSection title={$t('settings.password.heading')} testId="settings-password">
-      <form onsubmit={handlePasswordSubmit} class="space-y-5">
-        <div class="grid max-w-2xl gap-5 sm:grid-cols-2">
-          <label class="block text-sm font-medium text-foreground">{$t('settings.password.old_label')}
-            <input type="password" autocomplete="current-password" bind:value={oldPassword} required class="field-input mt-1.5 w-full text-sm font-normal" />
-          </label>
-          <label class="block text-sm font-medium text-foreground">{$t('settings.password.new_label')}
-            <input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input mt-1.5 w-full text-sm font-normal" />
-          </label>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={passwordSaving} variant="outline" size="lg">{$t(passwordSaving ? 'settings.password.saving' : 'settings.password.submit')}</Button>
-          {#if passwordError}<p role="alert" class="text-sm text-destructive-foreground">{$t(passwordError)}</p>{/if}
-          {#if passwordNotice}<p role="status" class="text-sm text-success">{$t(passwordNotice)}</p>{/if}
-        </div>
-      </form>
-    </SettingsSection>
 
     <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
     <SettingsSection title={$t('settings.share_policy.heading')} description={$t('settings.share_policy.intro')} testId="settings-share-policy">

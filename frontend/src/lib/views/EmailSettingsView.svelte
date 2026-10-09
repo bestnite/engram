@@ -1,5 +1,6 @@
 <script lang="ts">
   import SettingsNav from './SettingsNav.svelte';
+  import NotificationPrefsView from './NotificationPrefsView.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
@@ -73,17 +74,14 @@
 
 <Page>
   <SettingsNav />
-  <PageHeader
-    title={$t('account.email.heading')}
-    description={$t('account.email.intro')}
-  />
+  <PageHeader title={$t('settings.mail.heading')} description={$t('settings.mail.intro')} />
 
   {#if !loaded}
     <Skeleton testId="email-loading" label={$t('account.email.loading')} lines={2} />
   {:else if loadErrorKey}
     <p data-testid="email-load-error" role="alert" class="py-16 text-center text-sm text-destructive-foreground">{$t(loadErrorKey)}</p>
   {:else}
-    <SettingsSection title={$t('account.email.current_label')}>
+    <SettingsSection title={$t('account.email.current_label')} description={$t('account.email.intro')}>
       <div class="flex flex-wrap items-center gap-3">
         <span data-testid="email-current" class="break-all text-sm font-medium text-foreground">{email}</span>
         <Badge variant={verified ? 'success' : 'warning'}><span data-testid="email-status">{verified ? $t('account.email.verified') : $t('account.email.unverified')}</span></Badge>
@@ -133,4 +131,7 @@
       {/if}
     </SettingsSection>
   {/if}
+
+  <!-- 通知偏好自带读取、保存与错误状态，与上面的改邮箱表单互不影响。 -->
+  <NotificationPrefsView />
 </Page>

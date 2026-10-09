@@ -145,7 +145,7 @@ describe('account views render localized copy from the catalog', () => {
 
   it('renders the email settings loading state before data arrives', () => {
     const { html } = render(EmailSettingsView);
-    expect(html).toContain(en['account.email.heading']);
+    expect(html).toContain(en['settings.mail.heading']);
     expect(html).toContain(en['account.email.loading']);
   });
 

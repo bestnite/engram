@@ -1,7 +1,4 @@
 <script lang="ts">
-  import SettingsNav from './SettingsNav.svelte';
-  import Page from '../components/ui/Page.svelte';
-  import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
@@ -125,13 +122,11 @@
   });
 </script>
 
-<Page testId="notifications-view">
-  <SettingsNav />
-  <PageHeader
-    title={$t('settings.notifications.heading')}
-    testId="notifications-title"
-    description={$t('settings.notifications.intro')}
-  />
+<!-- 邮件通知偏好的分区组：嵌在邮件页（/settings/email）里，排在邮箱地址之后。
+     不再是独立页面；前面一行小标题说明下面几组都是通知开关。 -->
+<div data-testid="notifications-view" class="mt-2 border-t border-border pt-8">
+  <h2 class="text-base font-semibold text-foreground" data-testid="notifications-title">{$t('settings.notifications.heading')}</h2>
+  <p class="mt-1 text-sm text-muted-foreground">{$t('settings.notifications.intro')}</p>
 
   {#if loading}
     <Skeleton testId="notifications-loading" label={$t('common.loading')} />
@@ -143,7 +138,7 @@
       </Button>
     </div>
   {:else if data}
-    <form onsubmit={save}>
+    <form onsubmit={save} class="mt-6">
       {#each data.groups as group (group.class)}
         <SettingsSection title={$t('settings.notifications.class.' + group.class + '.heading')} testId="notifications-group-{group.class}">
           <ul class="space-y-3">
@@ -204,4 +199,4 @@
       </div>
     </form>
   {/if}
-</Page>
+</div>

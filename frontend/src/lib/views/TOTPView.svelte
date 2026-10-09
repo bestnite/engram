@@ -1,7 +1,4 @@
 <script lang="ts">
-  import SettingsNav from './SettingsNav.svelte';
-  import Page from '../components/ui/Page.svelte';
-  import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
@@ -175,22 +172,9 @@
   });
 </script>
 
-<Page testId="totp-view">
-  <SettingsNav />
-  <PageHeader
-    title={$t('settings.totp.heading')}
-    testId="totp-title"
-    description={$t('settings.totp.intro')}
-  >
-    {#snippet meta()}
-      {#if status}
-        <Badge testId="totp-status" variant={status.enabled ? 'success' : 'neutral'}>
-          {status.enabled ? $t('settings.totp.status.enabled') : $t('settings.totp.status.disabled')}
-        </Badge>
-      {/if}
-    {/snippet}
-  </PageHeader>
-
+<!-- 两步验证的分区组：嵌在安全页（/settings/security）里，排在修改密码之后。
+     不再是独立页面，因此不带页面外壳、标签栏与页头；状态徽标放在第一个分区里。 -->
+<div data-testid="totp-view">
   {#if loading}
     <Skeleton testId="totp-loading" label={$t('common.loading')} />
   {:else if loadError}
@@ -201,12 +185,17 @@
       </Button>
     </div>
   {:else if status}
-    {#if actionError}
-      <p data-testid="totp-action-error" role="alert" class="mb-4 text-sm text-destructive-foreground">{$t(actionError)}</p>
-    {/if}
-    {#if notice}
-      <p data-testid="totp-notice" role="status" class="mb-4 text-sm text-success">{$t(notice)}</p>
-    {/if}
+    <SettingsSection title={$t('settings.totp.heading')} description={$t('settings.totp.intro')} testId="totp-status-section" class="first-of-type:border-t first-of-type:pt-8">
+      <Badge testId="totp-status" variant={status.enabled ? 'success' : 'neutral'}>
+        {status.enabled ? $t('settings.totp.status.enabled') : $t('settings.totp.status.disabled')}
+      </Badge>
+      {#if actionError}
+        <p data-testid="totp-action-error" role="alert" class="mt-3 text-sm text-destructive-foreground">{$t(actionError)}</p>
+      {/if}
+      {#if notice}
+        <p data-testid="totp-notice" role="status" class="mt-3 text-sm text-success">{$t(notice)}</p>
+      {/if}
+    </SettingsSection>
 
     {#if !status.enabled}
       <SettingsSection title={$t('settings.totp.begin.heading')} description={$t('settings.totp.begin.hint')} testId="totp-begin-section">
@@ -302,4 +291,4 @@
       </SettingsSection>
     {/if}
   {/if}
-</Page>
+</div>

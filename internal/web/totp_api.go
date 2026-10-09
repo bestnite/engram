@@ -21,7 +21,7 @@ import (
 //   - 关闭与重新生成恢复码都要求重新输入密码。
 //
 // 全部写操作挂会话 CSRF，复用 auth.TOTPService 与既有审计/通知语义，不新增业务规则。
-// 管理页的 GET /settings/totp 由应用壳应答（totpSettingsRoute），读写走 /api/v1/settings/totp*。
+// 管理页是 /settings/security（应用壳，与修改密码同页），读写走 /api/v1/settings/totp*。
 
 // totpStatusResponse 是 GET /api/v1/settings/totp 的响应体；不含任何秘密材料。
 type totpStatusResponse struct {
