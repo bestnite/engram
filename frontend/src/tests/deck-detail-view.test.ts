@@ -71,6 +71,27 @@ describe('DeckDetailView notes table', () => {
     expect(html).toContain('+2');
   });
 
+  it('lets the owner edit the deck name and description in place', () => {
+    const html = renderView([note('n1')]);
+    expect(html).toContain('data-testid="deck-name-edit"');
+    expect(html).toContain('data-testid="deck-description-edit"');
+    expect(html).toMatch(/data-testid="deck-title"[\s\S]*日语 N2 词汇/);
+  });
+
+  it('offers an "add a description" prompt to the owner when the deck has none', () => {
+    const html = render(DeckDetailView, {
+      props: { initialDeck: { ...deck, description: '' }, initialNotes: [], initialTotal: 0, initialLoading: false },
+    }).html;
+    expect(html).toContain('添加描述');
+  });
+
+  it('shows the name as plain text to a reader, without edit controls', () => {
+    const html = renderView([note('n1')], 'reader');
+    expect(html).toContain('日语 N2 词汇');
+    expect(html).not.toContain('data-testid="deck-name-edit"');
+    expect(html).not.toContain('data-testid="deck-description-edit"');
+  });
+
   it('gives a reader no selection boxes and no edit entry', () => {
     const html = renderView([note('n1')], 'reader');
     expect(html).not.toContain('data-testid="select-note-n1"');

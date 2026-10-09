@@ -18,10 +18,12 @@
     class?: string;
     /** 标题下方、说明之后的补充内容（如统计数字一行）。 */
     meta?: Snippet;
+    /** 自定义标题区（如可原地编辑的标题与说明）；给出时替代 title 与 description 的默认渲染。 */
+    heading?: Snippet;
     actions?: Snippet;
   }
 
-  let { title, description, testId, back, class: klass = '', meta, actions }: Props = $props();
+  let { title, description, testId, back, class: klass = '', meta, heading, actions }: Props = $props();
 </script>
 
 <header class={cn('mb-6 space-y-3', klass)}>
@@ -37,9 +39,13 @@
   {/if}
   <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid={testId}>{title}</h1>
-      {#if description}
-        <p class="mt-1 text-sm text-muted-foreground">{description}</p>
+      {#if heading}
+        {@render heading()}
+      {:else}
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid={testId}>{title}</h1>
+        {#if description}
+          <p class="mt-1 text-sm text-muted-foreground">{description}</p>
+        {/if}
       {/if}
       {#if meta}
         <div class="mt-3">{@render meta()}</div>

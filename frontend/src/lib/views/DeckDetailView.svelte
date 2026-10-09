@@ -17,6 +17,8 @@
   import SelectionBar from '../components/ui/SelectionBar.svelte';
   import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
+  import InlineEdit from '../components/InlineEdit.svelte';
+  import { refreshSidebarDecks } from '../components/shell/sidebar';
   import { DropdownMenu } from 'bits-ui';
   import { Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
@@ -92,6 +94,38 @@
   // 但不能新建/编辑/删除卡片或执行批量标签动作（服务端本就会拒绝这些写入）。
   // deck 尚未加载时（role 未知）先按可编辑渲染，避免页面标题区出现无谓的空档。
   const canEditContent = $derived(deck?.role !== 'reader');
+  // 名称与描述只有属主能改（服务端同一判据）；其他成员只看到文字。
+  const isOwner = $derived(deck?.role === 'owner');
+
+  /**
+   * 页头原地编辑的保存：名称与描述走同一个接口，没改的那一项按当前值一并提交。
+   * 空名称前端先拦下；400 为名称/描述不合法，403/404 为无权修改。成功后刷新侧边栏里的卡组名。
+   */
+  async function saveDeckInfo(patch: { name?: string; description?: string }): Promise<boolean> {
+    if (!deck) return false;
+    const name = (patch.name ?? deck.name).trim();
+    const description = (patch.description ?? deck.description).trim();
+    if (!name) {
+      toast.error($t('deck.settings.info_error_invalid'));
+      return false;
+    }
+    try {
+      const updated = await apiClient.updateDeck(deckId, { name, description });
+      deck = { ...deck, name: updated.name, description: updated.description };
+      void refreshSidebarDecks(apiClient, true);
+      toast.success($t('deck.settings.info_saved'));
+      return true;
+    } catch (err) {
+      const key =
+        err instanceof ApiClientError && err.status === 400
+          ? 'deck.settings.info_error_invalid'
+          : err instanceof ApiClientError && (err.isForbidden || err.isNotFound)
+            ? 'deck.settings.error.forbidden'
+            : 'deck.settings.info_error_failed';
+      toast.error($t(key));
+      return false;
+    }
+  }
 
   /**
    * 加载卡组卡片数据及卡组元数据
@@ -334,10 +368,38 @@
 <Page>
   <PageHeader
     title={deck ? deck.name : $t('notes.deck_title', { id: deckId })}
-    testId="deck-title"
-    description={deck?.description || undefined}
     back={{ href: '/decks', label: $t('decks.list_title'), testId: 'back-to-decks' }}
   >
+    {#snippet heading()}
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-title">
+        {#if deck}
+          <InlineEdit
+            value={deck.name}
+            editable={isOwner}
+            label={$t('deck.settings.name')}
+            maxlength={200}
+            testId="deck-name"
+            onSave={(name) => saveDeckInfo({ name })}
+          />
+        {:else}
+          {$t('notes.deck_title', { id: deckId })}
+        {/if}
+      </h1>
+      {#if deck && (deck.description || isOwner)}
+        <div class="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <InlineEdit
+            value={deck.description}
+            editable={isOwner}
+            multiline
+            placeholder={$t('deck.add_description')}
+            label={$t('deck.settings.description')}
+            maxlength={2000}
+            testId="deck-description"
+            onSave={(description) => saveDeckInfo({ description })}
+          />
+        </div>
+      {/if}
+    {/snippet}
     {#snippet actions()}
       <Button variant="outline" size="lg" onclick={() => (showExportModal = true)} testId="deck-export-open">
         <Download class="size-4" aria-hidden="true" />

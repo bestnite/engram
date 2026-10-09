@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
   import { t } from '../i18n';
@@ -9,6 +8,8 @@
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import SettingsSection from '../components/ui/SettingsSection.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -44,15 +45,6 @@
   let saveError = $state('');
   let saved = $state(false);
 
-  // 卡组信息（名称/描述）只有 owner 能改；settings.role 由服务端给出。
-  // svelte-ignore state_referenced_locally
-  let deckName = $state(initialSettings ? initialSettings.deck_name : '');
-  // svelte-ignore state_referenced_locally
-  let deckDescription = $state(initialSettings ? initialSettings.deck_description : '');
-  let infoSaving = $state(false);
-  let infoError = $state('');
-  let infoSaved = $state(false);
-
   const deckId = $derived($routeStore.params.id || '');
 
   /** 读取调用者自己的设置与今日额度；无权访问由服务端 403/404 决定，前端不猜测权限。 */
@@ -82,8 +74,6 @@
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
       presetId = String(data.preset_id);
-      deckName = data.deck_name;
-      deckDescription = data.deck_description;
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -132,39 +122,6 @@
     }
   }
 
-  /**
-   * 保存卡组名称与描述（仅 owner）。空名称前端先拦下；描述可为空。
-   * 400 视为名称/描述不合法，403/404 视为无权修改，其余为通用失败。
-   */
-  async function saveInfo(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
-    infoError = '';
-    infoSaved = false;
-    const name = deckName.trim();
-    if (!name) {
-      infoError = 'deck.settings.info_error_invalid';
-      return;
-    }
-    infoSaving = true;
-    try {
-      const updated = await apiClient.updateDeck(deckId, { name, description: deckDescription });
-      deckName = updated.name;
-      deckDescription = updated.description;
-      if (settings) settings = { ...settings, deck_name: updated.name, deck_description: updated.description };
-      infoSaved = true;
-    } catch (err) {
-      if (err instanceof ApiClientError && err.status === 400) {
-        infoError = 'deck.settings.info_error_invalid';
-      } else if (err instanceof ApiClientError && (err.isForbidden || err.isNotFound)) {
-        infoError = 'deck.settings.error.forbidden';
-      } else {
-        infoError = 'deck.settings.info_error_failed';
-      }
-    } finally {
-      infoSaving = false;
-    }
-  }
-
   /** 剩余额度的展示文本：不限时显示「不限」，绝不拿 0 冒充不限。 */
   function leftText(left: number, unlimited: boolean): string {
     return unlimited ? $t('deck.settings.unlimited') : String(left);
@@ -184,14 +141,14 @@
   });
 </script>
 
-<Page {embedded} class={embedded ? 'space-y-5' : 'space-y-6'} testId="deck-settings-view">
+<Page {embedded} testId="deck-settings-view">
   {#if !embedded}
     <a
       href="/decks/{encodeURIComponent(deckId)}"
       data-testid="deck-settings-back"
-      class="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+      class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
     >
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
       <span>{$t('deck.settings.back')}</span>
     </a>
   {/if}
@@ -201,129 +158,84 @@
   {:else if loadError}
     <div
       data-testid={loadError instanceof ApiClientError && loadError.isForbidden ? 'deck-settings-forbidden' : 'deck-settings-failed'}
-      class="card-elevated p-8 rounded-xl text-center"
+      class="py-16 text-center"
     >
       <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="deck-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
+      <Button type="button" testId="deck-settings-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
     </div>
   {:else if settings}
     {#if !embedded}
-      <header>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-settings-title">
-          {$t('deck.settings.title')}: {settings.deck_name}
-        </h1>
-      </header>
+      <h1 class="mb-6 text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-settings-title">
+        {$t('deck.settings.title')}: {settings.deck_name}
+      </h1>
     {/if}
 
-    {#if settings.role === 'owner'}
-      <section class="card-elevated p-6 rounded-xl">
-        <form onsubmit={saveInfo} data-testid="deck-info-form" class="space-y-4">
-          <h2 class="text-lg font-semibold text-foreground">{$t('deck.settings.info_heading')}</h2>
-          <label class="block text-sm font-medium text-foreground/80">
-            {$t('deck.settings.name')}
-            <input
-              type="text"
-              data-testid="deck-info-name"
-              bind:value={deckName}
-              class="field-input text-sm mt-1 block w-full"
-            />
-          </label>
-          <label class="block text-sm font-medium text-foreground/80">
-            {$t('deck.settings.description')}
-            <textarea
-              data-testid="deck-info-description"
-              bind:value={deckDescription}
-              rows="3"
-              class="field-input text-sm mt-1 block w-full"
-            ></textarea>
-          </label>
-          <div class="flex items-center gap-3">
-            <Button type="submit" testId="deck-info-submit" disabled={infoSaving} variant="primary" size="lg">
-              {infoSaving ? $t('deck.settings.info_saving') : $t('deck.settings.info_save')}
-            </Button>
-            {#if infoSaved}<p role="status" data-testid="deck-info-saved" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('deck.settings.info_saved')}</p>{/if}
-            {#if infoError}<p role="alert" data-testid="deck-info-error" class="text-sm text-rose-700 dark:text-rose-400">{$t(infoError)}</p>{/if}
-          </div>
-        </form>
-      </section>
-    {/if}
+    <!-- 两个分区共用一个表单与一个保存按钮：预设与每日上限是同一次 PATCH。 -->
+    <form onsubmit={save} data-testid="deck-settings-form">
+      <SettingsSection title={$t('deck.settings.preset')} description={$t('deck.settings.preset_hint')}>
+        {#if presets.length > 0}
+          <Select
+            class="max-w-sm"
+            testId="deck-settings-preset"
+            value={presetId}
+            onValueChange={(value) => (presetId = value)}
+            options={presets}
+            ariaLabel={$t('deck.settings.preset')}
+          />
+        {/if}
+        {#if presetsError}
+          <p class="mt-1.5 text-xs text-destructive-foreground">{$t('deck.settings.preset_load_failed')}</p>
+        {/if}
+      </SettingsSection>
 
-    <section class="card-elevated p-6 rounded-xl">
-      <form onsubmit={save} data-testid="deck-settings-form" class="space-y-4">
-        <h2 class="text-lg font-semibold text-foreground">{$t('deck.settings.heading')}</h2>
-        <p class="text-xs text-muted-foreground" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
-        <div>
-          <span class="block text-sm font-medium text-foreground/80">{$t('deck.settings.preset')}</span>
-          {#if presets.length > 0}
-            <Select
-              class="mt-1 max-w-md"
-              testId="deck-settings-preset"
-              value={presetId}
-              onValueChange={(value) => (presetId = value)}
-              options={presets}
-            />
-          {/if}
-          <p class="mt-1 text-xs" class:text-rose-600={presetsError} class:dark:text-rose-400={presetsError} class:text-zinc-400={!presetsError} class:dark:text-zinc-500={!presetsError}>
-            {presetsError ? $t('deck.settings.preset_load_failed') : $t('deck.settings.preset_hint')}
-          </p>
-        </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="block text-sm font-medium text-foreground/80">
-            {$t('deck.settings.new_per_day')}
+      <SettingsSection title={$t('deck.settings.heading')} description="{$t('deck.settings.personal_hint')} {$t('deck.settings.unlimited_hint')}">
+        <p class="sr-only" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
+        <div class="grid max-w-xl gap-5 sm:grid-cols-2">
+          <div>
+            <label class="block text-sm font-medium text-foreground" for="deck-settings-new">{$t('deck.settings.new_per_day')}</label>
             <input
+              id="deck-settings-new"
               type="number"
               min="0"
               step="1"
               data-testid="deck-settings-new-per-day"
               bind:value={newPerDay}
-              class="field-input text-sm mt-1 block w-full"
+              class="field-input mt-1.5 block w-full text-sm"
             />
-          </label>
-          <label class="block text-sm font-medium text-foreground/80">
-            {$t('deck.settings.reviews_per_day')}
+            <!-- 今日用量写在对应输入框下面：改上限时就能看到今天已经用了多少。 -->
+            <dl class="mt-1.5 flex gap-3 text-xs text-muted-foreground">
+              <div class="flex gap-1"><dt>{$t('deck.settings.used_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-used">{settings.new_used}</dd></div>
+              <div class="flex gap-1"><dt>{$t('deck.settings.left_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd></div>
+            </dl>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-foreground" for="deck-settings-reviews">{$t('deck.settings.reviews_per_day')}</label>
             <input
+              id="deck-settings-reviews"
               type="number"
               min="0"
               step="1"
               data-testid="deck-settings-reviews-per-day"
               bind:value={reviewsPerDay}
-              class="field-input text-sm mt-1 block w-full"
+              class="field-input mt-1.5 block w-full text-sm"
             />
-          </label>
+            <dl class="mt-1.5 flex gap-3 text-xs text-muted-foreground">
+              <div class="flex gap-1"><dt>{$t('deck.settings.used_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-review-used">{settings.review_used}</dd></div>
+              <div class="flex gap-1"><dt>{$t('deck.settings.left_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-review-left">{leftText(settings.review_left, settings.review_unlimited)}</dd></div>
+            </dl>
+          </div>
         </div>
-        <p class="text-xs text-muted-foreground">{$t('deck.settings.unlimited_hint')}</p>
-        <div class="flex items-center gap-3">
-          <Button type="submit" testId="deck-settings-submit" disabled={saving} variant="primary" size="lg">
-            {saving ? $t('deck.settings.saving') : $t('deck.settings.save')}
-          </Button>
-          {#if saved}<p role="status" data-testid="deck-settings-saved" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('deck.settings.saved')}</p>{/if}
-          {#if saveError}<p role="alert" data-testid="deck-settings-save-error" class="text-sm text-rose-700 dark:text-rose-400">{$t(saveError)}</p>{/if}
-        </div>
-      </form>
-    </section>
+      </SettingsSection>
 
-    <section class="card-elevated p-6 rounded-xl">
-      <h2 class="text-lg font-semibold text-foreground mb-4">{$t('deck.settings.usage_heading')}</h2>
-      <dl class="grid gap-3 sm:grid-cols-2 text-sm">
-        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
-          <dt class="text-muted-foreground">{$t('deck.settings.new_used')}</dt>
-          <dd class="font-medium text-foreground" data-testid="deck-settings-new-used">{settings.new_used}</dd>
-        </div>
-        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
-          <dt class="text-muted-foreground">{$t('deck.settings.new_left')}</dt>
-          <dd class="font-medium text-foreground" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd>
-        </div>
-        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
-          <dt class="text-muted-foreground">{$t('deck.settings.review_used')}</dt>
-          <dd class="font-medium text-foreground" data-testid="deck-settings-review-used">{settings.review_used}</dd>
-        </div>
-        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
-          <dt class="text-muted-foreground">{$t('deck.settings.review_left')}</dt>
-          <dd class="font-medium text-foreground" data-testid="deck-settings-review-left">{leftText(settings.review_left, settings.review_unlimited)}</dd>
-        </div>
-      </dl>
-    </section>
+      <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+        {#if saveError}<p role="alert" data-testid="deck-settings-save-error" class="text-sm text-destructive-foreground">{$t(saveError)}</p>{/if}
+        {#if saved}<p role="status" data-testid="deck-settings-saved" class="text-sm text-success">{$t('deck.settings.saved')}</p>{/if}
+        <Button type="submit" testId="deck-settings-submit" disabled={saving} variant="primary" size="lg">
+          {saving ? $t('deck.settings.saving') : $t('deck.settings.save')}
+        </Button>
+      </div>
+    </form>
   {/if}
 </Page>

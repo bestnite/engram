@@ -75,25 +75,12 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     expect(html).toContain('这些设置仅对你生效');
   });
 
-  it('renders the deck-info form for the owner with the current name and description', () => {
+  it('no longer renders a deck-info form; name and description are edited in the deck header', () => {
     const { html } = render(DeckSettingsView, {
       props: { initialLoading: false, initialSettings: settings },
     });
-    expect(html).toContain('data-testid="deck-info-form"');
-    expect(html).toContain('data-testid="deck-info-name"');
-    expect(html).toContain('data-testid="deck-info-description"');
-    // 预填当前值，而不是空表单。
-    expect(html).toContain('Biology');
-    expect(html).toContain('Cells and genes');
-  });
-
-  it('hides the deck-info form from a reader (only the owner may change deck metadata)', () => {
-    const { html } = render(DeckSettingsView, {
-      props: { initialLoading: false, initialSettings: { ...settings, role: 'reader' } },
-    });
     expect(html).not.toContain('data-testid="deck-info-form"');
     expect(html).not.toContain('data-testid="deck-info-name"');
-    // 但个人学习设置仍然可见。
     expect(html).toContain('data-testid="deck-settings-form"');
   });
 
