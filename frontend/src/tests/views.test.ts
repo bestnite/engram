@@ -118,12 +118,14 @@ describe('HomeView component response states and truthful rendering', () => {
     // 验证到期卡片大于 0 时，显示「开始复习」链接并携带准确计数
     expect(html).toContain('data-testid="home-start-review"');
     expect(html).toContain('href="/review"');
-    expect(html).toContain('开始复习 (1)');
+    // 计数放在按钮内单独的数字徽标里。
+    expect(html).toMatch(/data-testid="home-start-review"[^>]*>[\s\S]*?开始复习[\s\S]*?<span[^>]*>\s*1\s*<\/span>/);
 
     // 验证卡组列表与 XSS 安全转义
     expect(html).toContain('data-testid="home-decks-list"');
     expect(html).toContain('href="/review?deck=10"');
-    expect(html).toContain('20 / 100');
+    // 首页的卡组行显示今日队列计数而不是每日上限；上限只在 /decks 列表里显示。
+    expect(html).not.toContain('20 / 100');
     expect(html).toContain('&lt;安全测试>');
     expect(html).toContain('卡组描述 &amp; 详情');
     expect(html).not.toContain('<安全测试>');
@@ -189,6 +191,8 @@ describe('StatsView component response states and truthful rendering', () => {
       { day: '2026-10-05', new: 1, review: 0 },
       { day: '2026-10-06', new: 0, review: 2 },
     ],
+    curve_from: '2026-09-07',
+    curve_to: '2026-10-06',
     decks: [
       { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
     ],
@@ -244,8 +248,10 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('自评');
     expect(html).toContain('自动判分');
 
-    // 学习曲线日期。
-    expect(html).toContain('2026-10-06');
+    // 学习曲线：图表容器、窗口合计，以及读屏用的数据表（日期写在表里）。
+    expect(html).toContain('data-testid="stats-curve-chart"');
+    expect(html).toContain('近 30 天新学 1 · 复习 2');
+    expect(html).toMatch(/data-testid="stats-curve-table"[\s\S]*2026-10-06/);
   });
 
   it('renders zero retention as 0.0% (0/0) without fabricating a rate', () => {

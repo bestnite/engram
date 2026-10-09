@@ -1,8 +1,109 @@
 /* Tailwind CSS v4 样式入口
-   保留现有 Tailwind v4 设计体系与样式令牌，接入 Vite 构建。 */
+   设计令牌（颜色、圆角、侧边栏宽度）集中定义在这里，组件只引用语义名（bg-background、
+   text-muted-foreground、border-border……），不再成对书写 zinc-* 与 dark:zinc-*：
+   深浅两套取值只在本文件各写一次，组件换主题不需要任何 dark: 变体。
+   令牌命名沿用 shadcn-svelte 的约定，方便直接移植它的组件配方。 */
 @import "tailwindcss";
+/* 弹窗、下拉、抽屉的进出场动画（animate-in / fade-in / zoom-in / slide-in-from-*）。
+   bits-ui 组件在开合时切换 data-state，配合这些工具类即可得到过渡，不需要手写关键帧。 */
+@import "tw-animate-css";
 
 @variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* 页面底与正文 */
+  --background: #ffffff;
+  --foreground: #18181b;
+  /* 次级底面：侧边栏、表头等弱分区 */
+  --surface: #fafafa;
+  /* 弱填充：hover、标签、键帽 */
+  --muted: #f4f4f5;
+  /* 次要文字。#71717a 在白底上对比度 4.8:1，满足正文 4.5:1 */
+  --muted-foreground: #71717a;
+  /* 当前项（侧边栏选中、菜单高亮） */
+  --selected: #ededf0;
+  --border: #e7e7ea;
+  --input: #e4e4e7;
+  --ring: #2563eb;
+  /* 主操作：近黑实心按钮 */
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  /* 品牌色：只用于焦点、选中、链接与进度，不做大面积底色 */
+  --brand: #2563eb;
+  --brand-foreground: #ffffff;
+  --brand-soft: #eff4ff;
+  --destructive: #e11d48;
+  --destructive-foreground: #be123c;
+  --destructive-soft: #fff1f2;
+  --success: #059669;
+  --warning: #d97706;
+  /* 浮层（弹窗、下拉、抽屉） */
+  --popover: #ffffff;
+  --overlay: rgb(9 9 11 / 0.4);
+  --sidebar: #fafafa;
+  --sidebar-border: #ededf0;
+  /* 图表分类色：按固定顺序取用，不循环。两色已用色觉缺陷模拟校验过（相邻 ΔE ≥ 24，对底色 ≥ 3:1）。 */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --surface: #111113;
+  --muted: #1c1c1f;
+  --muted-foreground: #a1a1aa;
+  --selected: #27272a;
+  --border: #27272a;
+  --input: #3f3f46;
+  --ring: #60a5fa;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --brand: #60a5fa;
+  --brand-foreground: #09090b;
+  --brand-soft: rgb(37 99 235 / 0.14);
+  --destructive: #f43f5e;
+  --destructive-foreground: #fda4af;
+  --destructive-soft: rgb(225 29 72 / 0.14);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --popover: #18181b;
+  --overlay: rgb(0 0 0 / 0.6);
+  --sidebar: #0f0f11;
+  --sidebar-border: #1f1f23;
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+}
+
+/* inline：工具类直接引用 var()，切换 .dark 时无需重新生成类。 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-selected: var(--selected);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-popover: var(--popover);
+  --color-overlay: var(--overlay);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+}
 
 @layer base {
   /* 现代高质量排版基底：平滑字体、优化数字与连字 */
@@ -12,47 +113,51 @@
     text-rendering: optimizeLegibility;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
     letter-spacing: -0.011em;
+    /* 始终为滚动条预留位置：页面高度跨过一屏时滚动条出现或消失，
+       不预留的话整页内容会横向跳动几像素，切换页面时尤其明显。 */
+    scrollbar-gutter: stable;
   }
 
   html.dark {
     color-scheme: dark;
   }
 
-  /* 可见焦点：键盘 Tab 导航时为交互元素给出高对比度焦点环，表单输入框由下方专用平滑焦点接管 */
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* 边框默认取令牌色：只写 border 不写颜色时，与全站分隔线一致。 */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+
+  /* 可见焦点：键盘 Tab 导航时为交互元素给出焦点环，表单输入框由下方专用焦点样式接管 */
   :where(a, button, summary, [tabindex]):focus-visible {
-    outline: 2px solid #18181b;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
-  html.dark :where(a, button, summary, [tabindex]):focus-visible {
-    outline-color: #f4f4f5;
-  }
-
-  /* 输入框与表单控件的平滑焦点动效与高质感微光环 */
+  /* 输入框与表单控件的平滑焦点过渡 */
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
     transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms ease;
   }
 
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
     outline: none !important;
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18) !important;
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent) !important;
   }
 
-  html.dark :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
-    border-color: #60a5fa !important;
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25) !important;
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--brand);
   }
 
-  /* 优化选中与滚动条 */
   ::selection {
-    background-color: #e4e4e7;
-    color: #18181b;
-  }
-
-  html.dark ::selection {
-    background-color: #3f3f46;
-    color: #fafafa;
+    background-color: color-mix(in srgb, var(--brand) 22%, transparent);
   }
 
   /* 细化滚动条 */
@@ -72,10 +177,52 @@
   }
 
   html.dark ::-webkit-scrollbar-thumb {
-    background: #52525b;
+    background: #3f3f46;
   }
   html.dark ::-webkit-scrollbar-thumb:hover {
-    background: #71717a;
+    background: #52525b;
+  }
+}
+
+/* 页面切换过渡（View Transitions API，见 router 的 navigate）：只做短促的淡入淡出，
+   不做位移——位移会让人以为布局在动，正是要消除的「抖动感」。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 140ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 侧边栏在两个都有它的页面之间不参与淡入淡出：它没变，跟着闪一下反而显得整屏在重绘。
+   只有新旧两张快照同时存在时才关闭动画（:only-child 为假）。进入复习页这类没有侧边栏的
+   布局时只剩旧快照，若也关掉动画，它会原样停留到整个过渡结束再突然消失，看起来像卡了一下；
+   这时让它与页面同步淡出（反方向同理淡入）。 */
+.app-sidebar {
+  view-transition-name: app-sidebar;
+}
+
+::view-transition-old(app-sidebar):not(:only-child),
+::view-transition-new(app-sidebar):not(:only-child) {
+  animation: none;
+}
+
+::view-transition-group(app-sidebar),
+::view-transition-old(app-sidebar):only-child,
+::view-transition-new(app-sidebar):only-child {
+  animation-duration: 140ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 用户在系统里关闭了动画：所有过渡与动画缩短到一帧，保留状态变化本身。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }
 
@@ -85,38 +232,25 @@ html.dark #review-done {
   color: #f4f4f5;
 }
 
-/* 按钮微动效与触觉反馈 */
+/* 按钮按下时的轻微缩放反馈 */
 @utility btn-press {
-  transition: transform 100ms ease, box-shadow 100ms ease, background-color 150ms ease;
+  transition: transform 100ms ease, box-shadow 100ms ease, background-color 150ms ease, color 150ms ease;
   &:active {
     transform: scale(0.985);
   }
 }
 
-/* 极简卡片与边缘微光。
-   两个工具类都必须自带 dark 变体：全站约 37 个视图用它们当面板底，
-   而卡片内的文字用的是 dark: 变体（近白）。只写浅色底会让深色模式变成「白底近白字」
-   （对比度 ~1.1:1，实测截图上标题与数字完全看不清）。@variant dark 见本文件顶部的声明。 */
+/* 旧的卡片底面。新页面不要再用：区块之间用标题、间距与分隔线区分，
+   边框只留给真正的容器（表格、输入框），阴影只留给浮层。
+   保留这两个类只是为了让尚未改版的页面继续可用，取值已改为令牌。 */
 @utility card-elevated {
-  background-color: #ffffff;
-  border: 1px solid rgba(228, 228, 231, 0.85);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
-
-  @variant dark {
-    background-color: #18181b;
-    border-color: rgba(63, 63, 70, 0.8);
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
-  }
+  background-color: var(--background);
+  border: 1px solid var(--border);
 }
 
 @utility card-subtle {
-  background-color: #fafafa;
-  border: 1px solid rgba(228, 228, 231, 0.6);
-
-  @variant dark {
-    background-color: #27272a;
-    border-color: rgba(63, 63, 70, 0.6);
-  }
+  background-color: var(--surface);
+  border: 1px solid var(--border);
 }
 
 /* 表单字段的统一皮肤（多处复用的样式必须封装成一处）。
@@ -125,47 +259,45 @@ html.dark #review-done {
    同一页两个输入框一个 16px 一个 14px（按钮区就发生过同样的漂移）。
    焦点样式由上面 @layer base 的规则统一接管，调用点不要再写 focus: 类。 */
 @utility field-input {
-  border-radius: 0.75rem;
-  border: 1px solid #e4e4e7;
-  background-color: #ffffff;
-  padding: 0.5rem 0.875rem;
-  color: #18181b;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  /* 7px 上下内边距 + 20px 行高 + 边框 = 36px，与 Select、lg 按钮同高，同一行的控件天然对齐。 */
+  padding: 0.4375rem 0.75rem;
+  color: var(--foreground);
 
   &::placeholder {
-    color: #a1a1aa;
-  }
-
-  @variant dark {
-    border-color: #3f3f46;
-    background-color: #18181b;
-    color: #f4f4f5;
-
-    &::placeholder {
-      color: #71717a;
-    }
+    color: var(--muted-foreground);
   }
 }
 
-/* 优雅的骨架屏脉冲微动效 */
-@utility skeleton-block {
-  background-color: #f4f4f5;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* 骨架屏延迟显现：前 150ms 完全透明，之后淡入。
+   多数请求在 150ms 内就回来了，此时骨架屏从未被看见，页面直接从空白换成内容；
+   只有真正慢的加载才会看到占位，避免「一闪而过的加载中」。 */
+@utility skeleton-reveal {
+  animation: skeleton-reveal 200ms ease-out 150ms both;
+}
 
-  @variant dark {
-    background-color: #27272a;
+@keyframes skeleton-reveal {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 骨架屏脉冲 */
+@utility skeleton-block {
+  background-color: var(--muted);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* 自定义下拉选项选中态 */
 .select-option-active {
-  background-color: #f4f4f5;
-  color: #09090b;
+  background-color: var(--muted);
+  color: var(--foreground);
   font-weight: 500;
-}
-
-:where(.dark, .dark *) .select-option-active {
-  background-color: #27272a;
-  color: #fafafa;
 }
 
 /* 填空卡的考点：正面占位与背面答案都由服务端包在 span.cloze 里 */

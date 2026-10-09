@@ -134,6 +134,21 @@ describe('field model conversions', () => {
     expect('items' in payload).toBe(false);
   });
 
+  it('keeps numeric fields as numbers when folding server fields into the form', () => {
+    const form = toFormFields(fieldsForKind(catalog, 'numeric'), { prompt: 'g', value: 9.81, tolerance_absolute: 0 });
+    expect(form.value).toBe(9.81);
+    // 0 是合法取值，不能当成「未填」。
+    expect(form.tolerance_absolute).toBe(0);
+    expect(form.tolerance_relative).toBe('');
+    expect(toPayloadFields(form)).toMatchObject({ value: 9.81, tolerance_absolute: 0 });
+  });
+
+  it('parses numeric strings and treats unparsable values as unset', () => {
+    const form = toFormFields(fieldsForKind(catalog, 'numeric'), { value: '42', tolerance_absolute: 'abc' });
+    expect(form.value).toBe(42);
+    expect(form.tolerance_absolute).toBe('');
+  });
+
   it('keeps unknown keys out of the form model so the view can preserve them separately', () => {
     const form = toFormFields(fieldsForKind(catalog, 'basic'), { front: 'Q', back: 'A', custom: 'x' });
     expect(Object.keys(form)).not.toContain('custom');

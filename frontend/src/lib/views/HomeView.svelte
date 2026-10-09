@@ -6,6 +6,9 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import { listClasses } from '../components/ui/variants';
 
   interface Props {
     client?: ApiClient;
@@ -31,6 +34,8 @@
   let summary = $state<StatsSummary | null>(initialSummary);
   // svelte-ignore state_referenced_locally
   let decks = $state<Deck[]>(initialDecks);
+  // 每个卡组今日还能刷的新卡/复习数；取不到时为空，列表只显示名称。
+  let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
 
   function formatNumber(val: number): string {
     return new Intl.NumberFormat($localeStore).format(val);
@@ -57,12 +62,15 @@
     loading = true;
     error = null;
     try {
-      const [statsRes, decksRes] = await Promise.all([
+      const [statsRes, decksRes, countsRes] = await Promise.all([
         client.getStatsSummary(),
         client.getDecks(),
+        // 队列计数只是列表上的补充数字，失败不应该让整个首页报错。
+        client.getDeckQueueCounts().catch(() => null),
       ]);
       summary = statsRes;
       decks = decksRes.decks;
+      queueCounts = Object.fromEntries((countsRes?.decks ?? []).map((count) => [count.deck_id, count]));
     } catch (err) {
       error = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -77,135 +85,103 @@
   });
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="card-elevated p-6 sm:p-8 rounded-xl space-y-6">
-    {#if loading}
-      <Skeleton testId="home-loading" label={$t('home.loading')} />
-    {:else if error}
-      <div
-        data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'home-unauthorized' : 'home-failed'}
-        class="py-10 text-center"
-      >
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 mb-3">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <p class="text-base font-medium text-zinc-900 dark:text-zinc-100 mb-2">
-          {#if error instanceof ApiClientError && error.isUnauthorized}
-            {$t('home.unauthorized')}
-          {:else}
-            {$t('home.failed')}
-          {/if}
-        </p>
-        <div class="mt-4">
-          <Button testId="home-retry" type="button" onclick={loadHomeData} variant="primary" size="lg">
-            {$t('home.retry')}
-          </Button>
-        </div>
+<Page>
+  {#if loading}
+    <Skeleton testId="home-loading" label={$t('home.loading')} />
+  {:else if error}
+    <div
+      data-testid={error instanceof ApiClientError && error.isUnauthorized ? 'home-unauthorized' : 'home-failed'}
+      class="py-16 text-center"
+    >
+      <p class="text-base font-medium text-foreground">
+        {#if error instanceof ApiClientError && error.isUnauthorized}
+          {$t('home.unauthorized')}
+        {:else}
+          {$t('home.failed')}
+        {/if}
+      </p>
+      <div class="mt-4">
+        <Button testId="home-retry" type="button" onclick={loadHomeData} variant="outline" size="lg">
+          {$t('home.retry')}
+        </Button>
       </div>
-    {:else if summary}
-      <div data-testid="home-data" class="space-y-6">
-        <!-- 顶部操作区 -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
-          <div>
-            <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-              {$t('home.title')}
-            </h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-              {$t('shell.subtitle')}
-            </p>
-          </div>
-          <div class="flex items-center gap-3 shrink-0">
-            {#if summary.due > 0}
-              <Button href="/review" testId="home-start-review" variant="primary" size="lg">
-                <svg class="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                {$t('home.start_review')} ({formatNumber(summary.due)})
-              </Button>
-            {:else}
-              <Badge variant="success" class="px-3 py-1.5">{$t('home.all_caught_up')}</Badge>
-            {/if}
-          </div>
-        </div>
-
-        <!-- 聚合指标卡片 -->
-        <div data-testid="home-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.due_count')}</div>
-            <div data-testid="home-due-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
-              {formatNumber(summary.due)}
-            </div>
-          </div>
-          <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.reviews_today')}</div>
-            <div data-testid="home-reviews-today" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
-              {formatNumber(summary.reviews_today)}
-            </div>
-          </div>
-          <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.retention')}</div>
-            <div data-testid="home-retention" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
-              {summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}
-            </div>
-          </div>
-          <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('stats.metric_decks')}</div>
-            <div data-testid="home-decks-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
-              {formatNumber(summary.decks)}
-            </div>
-          </div>
-        </div>
-
-        <!-- 卡组列表区 -->
-        <div class="space-y-4 pt-2">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              {$t('home.decks_title')}
-            </h2>
-            <a
-              href="/decks"
-              class="text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-            >
-              {$t('home.view_all_decks')}
-            </a>
-          </div>
-
-          {#if decks.length === 0}
-            <div data-testid="home-empty-decks" class="card-elevated py-8 text-center text-zinc-500 dark:text-zinc-400 rounded-lg">
-              <p class="text-sm">{$t('home.no_decks')}</p>
-            </div>
+    </div>
+  {:else if summary}
+    <div data-testid="home-data">
+      <PageHeader title={$t('home.title')}>
+        {#snippet actions()}
+          {#if summary && summary.due > 0}
+            <Button href="/review" testId="home-start-review" variant="primary" size="lg">
+              {$t('home.start_review')}
+              <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due)}</span>
+            </Button>
           {:else}
-            <div data-testid="home-decks-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {#each decks as deck (deck.id)}
-                <div class="card-elevated p-4 rounded-lg flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
-                  <div>
-                    <div class="flex items-start justify-between gap-2 mb-1">
-                      <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {deck.name}
-                      </h3>
-                    </div>
-                    {#if deck.description}
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 mb-2">
-                        {deck.description}
-                      </p>
-                    {/if}
-                  </div>
-                  <div class="pt-3 border-t border-zinc-200/60 dark:border-zinc-800/60 flex items-center justify-between text-xs">
-                    <span class="text-zinc-400 dark:text-zinc-500" title={$t('home.deck_limits')}>
-                      {deck.new_per_day} / {deck.reviews_per_day}
-                    </span>
-                    <Button href="/review?deck={deck.id}" variant="primary" size="xs">
-                      {$t('home.deck_review')}
-                    </Button>
-                  </div>
+            <Badge variant="success" class="px-2.5 py-1">{$t('home.all_caught_up')}</Badge>
+          {/if}
+        {/snippet}
+      </PageHeader>
+
+      <!-- 聚合指标：一条横向指标带，四项之间只用竖线分隔，不再是四张卡片。 -->
+      <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
+        <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
+          <dt class="text-xs text-muted-foreground">{$t('home.due_count')}</dt>
+          <dd data-testid="home-due-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.due)}</dd>
+        </div>
+        <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
+          <dt class="text-xs text-muted-foreground">{$t('home.reviews_today')}</dt>
+          <dd data-testid="home-reviews-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.reviews_today)}</dd>
+        </div>
+        <div class="border-border px-4 py-4 text-center max-sm:border-r sm:border-r">
+          <dt class="text-xs text-muted-foreground">{$t('home.retention')}</dt>
+          <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
+        </div>
+        <div class="px-4 py-4 text-center">
+          <dt class="text-xs text-muted-foreground">{$t('stats.metric_decks')}</dt>
+          <dd data-testid="home-decks-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.decks)}</dd>
+        </div>
+      </dl>
+
+      <section class="mt-10">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-foreground">{$t('home.decks_title')}</h2>
+          <a href="/decks" class="text-[13px] text-muted-foreground transition-colors hover:text-foreground">
+            {$t('home.view_all_decks')}
+          </a>
+        </div>
+
+        {#if decks.length === 0}
+          <div data-testid="home-empty-decks" class="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+            {$t('home.no_decks')}
+          </div>
+        {:else}
+          <div data-testid="home-decks-list" class={listClasses.root}>
+            {#each decks as deck (deck.id)}
+              {@const counts = queueCounts[deck.id]}
+              <div class={listClasses.row}>
+                <div class="flex min-w-0 flex-1 flex-col">
+                  <a href="/decks/{encodeURIComponent(deck.id)}" class={listClasses.rowLink}>{deck.name}</a>
+                  {#if deck.description}
+                    <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
+                  {/if}
                 </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-    {/if}
-  </div>
-</div>
+                {#if counts}
+                  <span class="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                    {$t('decks.queue_counts', { new: counts.new_count, review: counts.review_count })}
+                  </span>
+                {/if}
+                <Button
+                  href="/review?deck={encodeURIComponent(deck.id)}"
+                  variant="outline"
+                  size="sm"
+                  class={listClasses.rowAction}
+                >
+                  {$t('home.deck_review')}
+                </Button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    </div>
+  {/if}
+</Page>

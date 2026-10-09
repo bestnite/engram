@@ -353,9 +353,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerDeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
 	s.registerDeckSettingsAPIRoutes(router)
-	// 两步验证管理：GET /settings/totp 由应用壳应答，读写走 /api/v1/settings/totp*。
+	// 两步验证管理：页面是 /settings/security（应用壳），读写走 /api/v1/settings/totp*。
 	s.registerTOTPAPIRoutes(router)
-	// 邮件通知偏好：GET /settings/notifications 由应用壳应答，读写走 /api/v1/settings/notifications。
+	// 邮件通知偏好：页面是 /settings/email（应用壳），读写走 /api/v1/settings/notifications。
 	s.registerMailPrefsAPIRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)

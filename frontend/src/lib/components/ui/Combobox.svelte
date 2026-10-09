@@ -86,14 +86,14 @@
       class={cn('field-input text-sm w-full pr-9', klass)}
     />
     <BitsCombobox.Trigger
-      class="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+      class="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted"
     >
       <ChevronDown class="size-4 shrink-0 opacity-60" aria-hidden="true" />
     </BitsCombobox.Trigger>
   </div>
   <BitsCombobox.Portal>
     <BitsCombobox.Content
-      class="z-50 min-w-[var(--bits-combobox-anchor-width)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+      class="z-50 min-w-[var(--bits-combobox-anchor-width)] overflow-hidden rounded-lg border border-border bg-popover shadow-lg shadow-black/5 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
       sideOffset={4}
     >
       <BitsCombobox.Viewport class="max-h-72 p-1">
@@ -102,7 +102,7 @@
             value={option.value}
             label={option.label}
             disabled={option.disabled}
-            class="relative flex cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-zinc-700 outline-hidden data-[highlighted]:bg-zinc-100 data-[highlighted]:text-zinc-900 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 dark:text-zinc-300 dark:data-[highlighted]:bg-zinc-800 dark:data-[highlighted]:text-zinc-100"
+            class="relative flex h-8 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-foreground outline-hidden data-[highlighted]:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
           >
             {#snippet children({ selected: isSelected })}
               <Check class={cn('size-3.5 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} aria-hidden="true" />

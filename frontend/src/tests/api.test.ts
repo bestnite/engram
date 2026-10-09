@@ -47,6 +47,16 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(new Headers(init?.headers).get('Accept')).toBe('application/vnd.engram.edeck');
     });
 
+    it('decodes a non-ASCII deck title from filename* (the exact header the server sends)', async () => {
+      const bytes = new Blob(['package-bytes'], { type: 'application/vnd.engram.edeck' });
+      mockFetch.mockResolvedValueOnce(new Response(bytes, {
+        status: 200,
+        headers: { 'Content-Disposition': "attachment; filename*=utf-8''%E6%97%A5%E8%AF%AD%20N2%20%E8%AF%8D%E6%B1%87.edeck" },
+      }));
+      const result = await client.downloadDeckPackage('8');
+      expect(result.filename).toBe('日语 N2 词汇.edeck');
+    });
+
     it('rejects review history without progress before making a request', async () => {
       await expect(client.downloadDeckPackage('3', { includeReviews: true })).rejects.toMatchObject({ code: 'invalid_request' });
       expect(mockFetch).not.toHaveBeenCalled();
@@ -917,6 +927,8 @@ describe('Centralized typed same-origin REST API client', () => {
         time_spent: { total_ms: 3000, count: 2, avg_ms: 1500, median_ms: 1500 },
         streak: { current: 2, longest: 2 },
         curve: [{ day: '2026-10-06', new: 0, review: 2 }],
+        curve_from: '2026-09-07',
+        curve_to: '2026-10-06',
         decks: [
           { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
         ],

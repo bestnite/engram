@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
@@ -73,16 +74,16 @@
   });
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('auth.totp.heading')}
       </h1>
     </div>
 
     {#if checking}
-      <div data-testid="totp-login-checking" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+      <div data-testid="totp-login-checking" class="py-8 text-center text-sm text-muted-foreground">
         {$t('auth.totp.checking')}
       </div>
     {:else if !pending}
@@ -101,7 +102,7 @@
         </div>
       </div>
     {:else}
-      <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('auth.totp.intro')}</p>
+      <p class="mb-6 text-sm text-muted-foreground">{$t('auth.totp.intro')}</p>
 
       {#if errorKey}
         <div
@@ -117,7 +118,7 @@
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label for="totp-login-code" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="totp-login-code" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.totp.code_label')}
           </label>
           <input
@@ -132,7 +133,7 @@
             data-testid="totp-login-code"
             class="field-input text-sm w-full transition-colors disabled:opacity-50"
           />
-          <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{$t('auth.totp.recovery_hint')}</p>
+          <p class="mt-2 text-xs text-muted-foreground">{$t('auth.totp.recovery_hint')}</p>
         </div>
 
         <div class="pt-2">
@@ -148,4 +149,4 @@
       </form>
     {/if}
   </div>
-</div>
+</Page>

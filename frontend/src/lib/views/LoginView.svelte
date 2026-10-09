@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
   import { login, authStore } from '../auth';
@@ -49,10 +50,10 @@
   }
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('auth.login.heading')}
       </h1>
     </div>
@@ -71,7 +72,7 @@
 
     <form onsubmit={handleSubmit} class="space-y-4">
       <div>
-        <label for="login-username" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="login-username" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.username')}
         </label>
         <input
@@ -88,7 +89,7 @@
       </div>
 
       <div>
-        <label for="login-password" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="login-password" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.password')}
         </label>
         <input
@@ -119,4 +120,4 @@
     <!-- OIDC 可选登录：组件挂载时探测服务端配置，仅在 enabled 时渲染入口 -->
     <OIDCLoginEntry />
   </div>
-</div>
+</Page>

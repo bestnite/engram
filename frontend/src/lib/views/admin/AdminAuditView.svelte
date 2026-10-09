@@ -1,10 +1,13 @@
 <script lang="ts">
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminAuditResponse, AdminAuditQuery } from '../../api';
   import { routeStore } from '../../router';
   import AdminNav from './AdminNav.svelte';
+  import PageHeader from '../../components/ui/PageHeader.svelte';
+  import Pager from '../../components/ui/Pager.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
@@ -91,130 +94,90 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-audit">
+<Page testId="admin-audit">
   <AdminNav />
+  <PageHeader title={$t('admin.audit.heading')} testId="admin-audit-title" description={$t('admin.audit.intro')} />
 
-  <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-audit-title">
-      {$t('admin.audit.heading')}
-    </h1>
-    <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{$t('admin.audit.intro')}</p>
-  </header>
-
-  <form onsubmit={submit} data-testid="admin-audit-filter" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-3">
-    <h2 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-      {$t('admin.audit.filter.heading')}
-    </h2>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.user')}</span>
-      <input data-testid="admin-audit-filter-user" bind:value={filters.user} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.action')}</span>
-      <Select
-        class="mt-1.5"
-        bind:value={filters.action}
-        testId="admin-audit-filter-action"
-        options={[{ value: '', label: $t('admin.audit.filter.any') }, ...(data?.actions ?? []).map((action) => ({ value: action, label: action }))]}
-      />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.target_type')}</span>
-      <input data-testid="admin-audit-filter-target-type" bind:value={filters.target_type} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.target_id')}</span>
-      <input data-testid="admin-audit-filter-target-id" bind:value={filters.target_id} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.from')}</span>
-      <input data-testid="admin-audit-filter-from" type="date" bind:value={filters.from} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.audit.filter.to')}</span>
-      <input data-testid="admin-audit-filter-to" type="date" bind:value={filters.to} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <p class="sm:col-span-3 text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.audit.filter.range_hint')}</p>
-    <div class="flex items-center gap-3 sm:col-span-3">
-      <Button type="submit" testId="admin-audit-filter-submit" variant="primary" size="lg">
-        {$t('admin.audit.filter.submit')}
-      </Button>
-      <button type="button" data-testid="admin-audit-filter-clear" onclick={clearFilters} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-        {$t('admin.audit.filter.clear')}
-      </button>
+  <!-- 筛选条：放在表格上方的一组输入，不再包成卡片。 -->
+  <form onsubmit={submit} data-testid="admin-audit-filter" class="mb-5 space-y-3" aria-label={$t('admin.audit.filter.heading')}>
+    <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.user')}
+        <input data-testid="admin-audit-filter-user" bind:value={filters.user} class="field-input mt-1.5 w-full text-sm font-normal" />
+      </label>
+      <div>
+        <span class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.action')}</span>
+        <Select
+          class="mt-1.5"
+          bind:value={filters.action}
+          testId="admin-audit-filter-action"
+          ariaLabel={$t('admin.audit.filter.action')}
+          options={[{ value: '', label: $t('admin.audit.filter.any') }, ...(data?.actions ?? []).map((action) => ({ value: action, label: action }))]}
+        />
+      </div>
+      <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.target_type')}
+        <input data-testid="admin-audit-filter-target-type" bind:value={filters.target_type} class="field-input mt-1.5 w-full text-sm font-normal" />
+      </label>
+      <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.target_id')}
+        <input data-testid="admin-audit-filter-target-id" bind:value={filters.target_id} class="field-input mt-1.5 w-full text-sm font-normal" />
+      </label>
+      <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.from')}
+        <input data-testid="admin-audit-filter-from" type="date" bind:value={filters.from} class="field-input mt-1.5 w-full text-sm font-normal" />
+      </label>
+      <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.to')}
+        <input data-testid="admin-audit-filter-to" type="date" bind:value={filters.to} class="field-input mt-1.5 w-full text-sm font-normal" />
+      </label>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <Button type="submit" testId="admin-audit-filter-submit" variant="primary" size="lg">{$t('admin.audit.filter.submit')}</Button>
+      <Button type="button" testId="admin-audit-filter-clear" variant="ghost" size="lg" onclick={clearFilters}>{$t('admin.audit.filter.clear')}</Button>
+      <p class="text-xs text-muted-foreground">{$t('admin.audit.filter.range_hint')}</p>
     </div>
   </form>
 
   {#if loading}
     <Skeleton testId="admin-audit-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
-    <div data-testid="admin-audit-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-audit-retry" onclick={() => load(data?.page ?? 1)} variant="primary" size="lg" class="mt-4">
-        {$t('common.retry')}
-      </Button>
+    <div data-testid="admin-audit-failed" class="py-16 text-center">
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
+      <Button type="button" testId="admin-audit-retry" onclick={() => load(data?.page ?? 1)} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
-    {#if view.notice && noticeKeys[view.notice]}
-      <div data-testid="admin-audit-notice" role="status" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
-        {$t(noticeKeys[view.notice] ?? '')}
-      </div>
-    {/if}
-
-    <p class="text-sm text-zinc-500 dark:text-zinc-400" data-testid="admin-audit-total">
-      {$t('admin.audit.total_label', { total: view.total })}
-    </p>
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <p class="text-[13px] text-muted-foreground" data-testid="admin-audit-total">{$t('admin.audit.total_label', { total: view.total })}</p>
+      {#if view.notice && noticeKeys[view.notice]}
+        <p data-testid="admin-audit-notice" role="status" class="text-[13px] text-warning">{$t(noticeKeys[view.notice] ?? '')}</p>
+      {/if}
+    </div>
 
     {#if view.rows.length === 0}
-      <p data-testid="admin-audit-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.audit.empty')}</p>
+      <p data-testid="admin-audit-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.audit.empty')}</p>
     {:else}
-      <div class="overflow-x-auto card-elevated rounded-xl">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-zinc-200 text-xs uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div class="overflow-x-auto rounded-lg border border-border">
+        <table class="w-full min-w-[760px] text-left text-sm">
+          <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
             <tr>
-              <th class="px-4 py-3 font-semibold">{$t('admin.audit.col.time')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.audit.col.user')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.audit.col.action')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.audit.col.target')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.audit.col.detail')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.audit.col.time')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.audit.col.user')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.audit.col.action')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.audit.col.target')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.audit.col.detail')}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <tbody class="divide-y divide-border">
             {#each view.rows as row, i (i)}
               <tr data-testid="admin-audit-row-{i}">
-                <td class="whitespace-nowrap px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{row.time}</td>
-                <td class="px-4 py-2.5 text-zinc-900 dark:text-zinc-100">{actorLabel(row)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{row.action}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{targetLabel(row)}</td>
-                <td class="px-4 py-2.5 font-mono text-xs text-zinc-500 dark:text-zinc-500">{row.detail || $t('admin.audit.detail_empty')}</td>
+                <td class="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground">{row.time}</td>
+                <td class="px-4 py-2.5 text-foreground">{actorLabel(row)}</td>
+                <td class="px-4 py-2.5"><code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{row.action}</code></td>
+                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{targetLabel(row)}</td>
+                <td class="max-w-sm px-4 py-2.5"><p class="line-clamp-2 break-all font-mono text-xs text-muted-foreground" title={row.detail}>{row.detail || $t('admin.audit.detail_empty')}</p></td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
-
-      <div class="flex items-center justify-between" data-testid="admin-audit-pager">
-        <button
-          type="button"
-          data-testid="admin-audit-prev"
-          disabled={view.page <= 1}
-          onclick={() => load(view.page - 1)}
-          class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
-        >
-          {$t('admin.common.prev')}
-        </button>
-        <span class="text-sm text-zinc-500 dark:text-zinc-400">{view.page} / {view.pages}</span>
-        <button
-          type="button"
-          data-testid="admin-audit-next"
-          disabled={view.page >= view.pages}
-          onclick={() => load(view.page + 1)}
-          class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
-        >
-          {$t('admin.common.next')}
-        </button>
-      </div>
+      <Pager page={view.page} pages={view.pages} onPage={(n) => load(n)} testIdPrefix="admin-audit" />
     {/if}
   {/if}
-</div>
+</Page>

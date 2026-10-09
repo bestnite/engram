@@ -12,23 +12,47 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import SelectionBar from '../components/ui/SelectionBar.svelte';
+  import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
+  import { toast } from '../components/ui/toast';
+  import InlineEdit from '../components/InlineEdit.svelte';
+  import { DropdownMenu } from 'bits-ui';
+  import { Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
-  import { cardTypes, kindOrder, loadCardTypes } from '../card-types';
+  import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
+
+  interface Props {
+    /** 测试注入：给定后挂载时不再取数（与 HomeView 等视图同一约定）。 */
+    initialDeck?: Deck | null;
+    initialNotes?: Note[];
+    initialTotal?: number;
+    initialLoading?: boolean;
+  }
+
+  let { initialDeck = null, initialNotes = [], initialTotal = 0, initialLoading = true }: Props = $props();
 
   // 状态变量（Svelte 5 runes）
-  let loading = $state(true);
+  // svelte-ignore state_referenced_locally
+  let loading = $state(initialLoading);
   let error = $state<ApiClientError | Error | null>(null);
-  let deck = $state<Deck | null>(null);
-  let notes = $state<Note[]>([]);
-  let total = $state(0);
+  // svelte-ignore state_referenced_locally
+  let deck = $state<Deck | null>(initialDeck);
+  // svelte-ignore state_referenced_locally
+  let notes = $state<Note[]>(initialNotes);
+  // svelte-ignore state_referenced_locally
+  let total = $state(initialTotal);
   let page = $state(1);
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
+  // 打开过的标签页保持挂载、只切换显隐：来回切换时不重新取数，也就不会每次都闪一下加载占位。
+  let visitedTabs = $state<Record<string, boolean>>({ cards: true });
 
   // 逐条删除状态
-  let confirmingDeleteId = $state<string | null>(null);
+  // 待确认删除的笔记：确认放在对话框里，不在行内插入文字（插入会把行撑高、文字被挤得换行）。
+  let noteToDelete = $state<Note | null>(null);
   let deletingNoteId = $state<string | null>(null);
   let deleteError = $state('');
-  let deleteSuccess = $state(false);
 
   // 导出对话框状态
   let showExportModal = $state(false);
@@ -53,6 +77,7 @@
   let bulkBusy = $state(false);
   let bulkError = $state('');
   let confirmingBulkDelete = $state(false);
+  let bulkTagsOpen = $state(false);
   let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
 
   // 题型清单的后端标识与展示名分开：标识符进查询串，展示名一律走语言包
@@ -68,6 +93,37 @@
   // 但不能新建/编辑/删除卡片或执行批量标签动作（服务端本就会拒绝这些写入）。
   // deck 尚未加载时（role 未知）先按可编辑渲染，避免页面标题区出现无谓的空档。
   const canEditContent = $derived(deck?.role !== 'reader');
+  // 名称与描述只有属主能改（服务端同一判据）；其他成员只看到文字。
+  const isOwner = $derived(deck?.role === 'owner');
+
+  /**
+   * 页头原地编辑的保存：名称与描述走同一个接口，没改的那一项按当前值一并提交。
+   * 空名称前端先拦下；400 为名称/描述不合法，403/404 为无权修改。侧边栏里的卡组名由接口层的改动通知同步（AppShell）。
+   */
+  async function saveDeckInfo(patch: { name?: string; description?: string }): Promise<boolean> {
+    if (!deck) return false;
+    const name = (patch.name ?? deck.name).trim();
+    const description = (patch.description ?? deck.description).trim();
+    if (!name) {
+      toast.error($t('deck.settings.info_error_invalid'));
+      return false;
+    }
+    try {
+      const updated = await apiClient.updateDeck(deckId, { name, description });
+      deck = { ...deck, name: updated.name, description: updated.description };
+      toast.success($t('deck.settings.info_saved'));
+      return true;
+    } catch (err) {
+      const key =
+        err instanceof ApiClientError && err.status === 400
+          ? 'deck.settings.info_error_invalid'
+          : err instanceof ApiClientError && (err.isForbidden || err.isNotFound)
+            ? 'deck.settings.error.forbidden'
+            : 'deck.settings.info_error_failed';
+      toast.error($t(key));
+      return false;
+    }
+  }
 
   /**
    * 加载卡组卡片数据及卡组元数据
@@ -180,7 +236,10 @@
     try {
       const res = await apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false });
       bulkResult = summarizeBulk(res);
+      announceBulkResult(bulkResult);
       bulkTagInput = '';
+      bulkTagsOpen = false;
+      if (action === 'delete') selectedIds = [];
       await loadData(1);
     } catch (err) {
       bulkError = err instanceof ApiClientError && err.isForbidden ? 'error.forbidden' : 'notes.bulk_failed';
@@ -189,18 +248,27 @@
     }
   }
 
+  // 批量结果用 toast 报告：处理条数一行，跳过的原因各一行。
+  function announceBulkResult(result: { affected: number; notFound: number; insufficientRole: number }): void {
+    const details = [
+      result.notFound > 0 ? $t('notes.bulk_skipped_not_found', { count: result.notFound }) : '',
+      result.insufficientRole > 0 ? $t('notes.bulk_skipped_forbidden', { count: result.insufficientRole }) : '',
+    ].filter(Boolean);
+    toast.success($t('notes.bulk_result', { affected: result.affected, skipped: result.notFound + result.insufficientRole }), {
+      description: details.join('；') || undefined,
+    });
+  }
+
   // 暂停只对本人生效：列表上的切换改的是调用者自己在这条 note 下全部卡的暂停状态。
   let suspendingNoteId = $state<string | null>(null);
-  let suspendError = $state('');
 
   async function toggleSuspended(note: Note): Promise<void> {
     suspendingNoteId = note.id;
-    suspendError = '';
     try {
       const res = await apiClient.setNoteSuspended(note.id, !note.suspended);
       notes = notes.map((item) => (item.id === note.id ? { ...item, suspended: res.suspended } : item));
     } catch {
-      suspendError = 'notes.suspend_failed';
+      toast.error($t('notes.suspend_failed'));
     } finally {
       suspendingNoteId = null;
     }
@@ -212,9 +280,10 @@
     try {
       await apiClient.deleteNote(note.id);
       notes = notes.filter((item) => item.id !== note.id);
+      selectedIds = selectedIds.filter((id) => id !== note.id);
       total = Math.max(0, total - 1);
-      confirmingDeleteId = null;
-      deleteSuccess = true;
+      noteToDelete = null;
+      toast.success($t('notes.delete_success'));
     } catch (err) {
       deleteError = err instanceof ApiClientError
         ? err.code === 'insufficient_role' ? 'error.forbidden' : err.code === 'not_found' ? 'error.not_found' : 'error.unknown'
@@ -244,6 +313,33 @@
     }
   }
 
+  async function copyNoteId(note: Note): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(note.id);
+      toast.success($t('notes.id_copied'));
+    } catch {
+      toast.error($t('notes.copy_failed'));
+    }
+  }
+
+  /**
+   * 列表行的两行摘要：第一行取题型声明的正面字段，第二行取背面字段；
+   * 题型元数据还没加载、或题型没有声明时，退回到第一、二个非空字段。
+   * 换行与连续空白压成一个空格——行内只显示一行，完整内容在编辑页。
+   */
+  function noteSummary(note: Note): { primary: string; secondary: string } {
+    const flat = (value: unknown) => formatFieldValue(value).replace(/\s+/g, ' ').trim();
+    const front = frontField($cardTypes, note.kind);
+    const back = backField($cardTypes, note.kind);
+    const filled = Object.entries(note.fields)
+      .map(([key, value]) => [key, flat(value)] as const)
+      .filter(([, value]) => value !== '');
+    const pick = (key: string) => (key ? flat(note.fields[key]) : '');
+    const primary = pick(front) || filled[0]?.[1] || '';
+    const secondary = pick(back) || filled.find(([, value]) => value !== primary)?.[1] || '';
+    return { primary, secondary };
+  }
+
   function formatFieldValue(val: unknown): string {
     if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val;
@@ -257,7 +353,7 @@
   }
 
   onMount(() => {
-    loadData(1);
+    if (initialLoading) loadData(1);
     // 元数据只加载一次（模块内幂等）；失败时筛选下拉退化为只剩「全部题型」，不打断页面。
     void loadCardTypes(apiClient).catch(() => {});
   });
@@ -267,349 +363,444 @@
   });
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4 space-y-6">
-  <!-- 顶栏精炼导航与卡组信息 -->
-  <div class="card-elevated p-6 sm:p-8 rounded-2xl">
-    <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-      <a href="/decks" data-testid="back-to-decks" class="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors inline-flex items-center gap-1 font-medium">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-        <span>{$t('decks.list_title')}</span>
-      </a>
-      <span>/</span>
-      <span class="text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-xs">{deck ? deck.name : `#${deckId}`}</span>
-    </div>
-
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-2.5">
-          <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
-            {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
-          </h1>
+<Page>
+  <PageHeader
+    title={deck ? deck.name : $t('notes.deck_title', { id: deckId })}
+    back={{ href: '/decks', label: $t('decks.list_title'), testId: 'back-to-decks' }}
+  >
+    {#snippet heading()}
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground" data-testid="deck-title">
+        {#if deck}
+          <InlineEdit
+            value={deck.name}
+            editable={isOwner}
+            label={$t('deck.settings.name')}
+            maxlength={200}
+            testId="deck-name"
+            onSave={(name) => saveDeckInfo({ name })}
+          />
+        {:else}
+          {$t('notes.deck_title', { id: deckId })}
+        {/if}
+      </h1>
+      {#if deck && (deck.description || isOwner)}
+        <div class="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <InlineEdit
+            value={deck.description}
+            editable={isOwner}
+            multiline
+            placeholder={$t('deck.add_description')}
+            label={$t('deck.settings.description')}
+            maxlength={2000}
+            testId="deck-description"
+            onSave={(description) => saveDeckInfo({ description })}
+          />
         </div>
-        {#if deck?.description}
-          <p class="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 max-w-2xl leading-relaxed">
-            {deck.description}
-          </p>
-        {/if}
-      </div>
-
-      <!-- 右侧主要动作区 -->
-      <div class="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
-        <Button variant="outline" onclick={() => showExportModal = true}>
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>{$t('package.export.short')}</span>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      <Button variant="outline" size="lg" onclick={() => (showExportModal = true)} testId="deck-export-open">
+        <Download class="size-4" aria-hidden="true" />
+        <span>{$t('package.export.short')}</span>
+      </Button>
+      {#if canEditContent}
+        <Button variant="outline" size="lg" href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
+          <Plus class="size-4" aria-hidden="true" />
+          <span>{$t('notes.create')}</span>
         </Button>
+      {/if}
+      <Button variant="primary" size="lg" href="/review?deck={encodeURIComponent(deckId)}" testId="deck-start-review">
+        <Play class="size-4" aria-hidden="true" />
+        <span>{$t('home.start_review')}</span>
+      </Button>
+    {/snippet}
+  </PageHeader>
 
-        {#if canEditContent}
-          <Button href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>{$t('notes.create')}</span>
-          </Button>
-        {/if}
-      </div>
-    </div>
-
-    <!-- 统一 Tab 标签栏导航 -->
-    <div class="mt-6 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2">
+  <!-- 标签页：下划线样式，切换只换下方内容，页头不动。 -->
+  <div role="tablist" aria-label={deck?.name ?? ''} class="mb-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-border">
+    {#each [
+      { id: 'cards', label: $t('deck.tab.notes', { count: total }), testId: 'deck-notes-tab' },
+      { id: 'sharing', label: $t('deck.sharing.title'), testId: 'deck-sharing-link' },
+      { id: 'settings', label: $t('deck.settings.entry'), testId: 'deck-settings-link' },
+    ] as tab (tab.id)}
       <button
         type="button"
-        onclick={() => activeTab = 'cards'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'cards' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+        role="tab"
+        aria-selected={activeTab === tab.id}
+        data-testid={tab.testId}
+        onclick={() => { activeTab = tab.id as typeof activeTab; visitedTabs[tab.id] = true; }}
+        class="-mb-px whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors cursor-pointer {activeTab === tab.id
+          ? 'border-foreground font-medium text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground'}"
       >
-        {$t('deck.tab.notes', { count: total })}
+        {tab.label}
       </button>
-
-      <button
-        type="button"
-        data-testid="deck-sharing-link"
-        onclick={() => activeTab = 'sharing'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'sharing' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
-      >
-        {$t('deck.sharing.title')}
-      </button>
-
-      <!-- 学习设置是每个成员自己的，所有成员都能打开。 -->
-      <button
-        type="button"
-        data-testid="deck-settings-link"
-        onclick={() => activeTab = 'settings'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
-      >
-        {$t('deck.settings.entry')}
-      </button>
-    </div>
+    {/each}
   </div>
 
-  <!-- Tab 内容区域 -->
-  {#if activeTab === 'sharing'}
-    <DeckSharingView embedded />
-  {:else if activeTab === 'settings'}
-    <DeckSettingsView embedded />
-  {:else}
-    <!-- 卡片管理 Tab -->
-    <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-5">
-      <!-- 紧凑搜索与筛选栏 -->
-      <form
-        onsubmit={(event) => event.preventDefault()}
-        class="flex flex-wrap gap-2 items-center pb-4 border-b border-zinc-100 dark:border-zinc-800/80"
-        data-testid="notes-filter-form"
-      >
+  {#if visitedTabs.sharing}
+    <div hidden={activeTab !== 'sharing'}><DeckSharingView embedded /></div>
+  {/if}
+  {#if visitedTabs.settings}
+    <!-- 学习设置是每个成员自己的，所有成员都能打开。 -->
+    <div hidden={activeTab !== 'settings'}><DeckSettingsView embedded /></div>
+  {/if}
+  <div hidden={activeTab !== 'cards'}>
+    <!-- 搜索与筛选 -->
+    <form
+      onsubmit={(event) => event.preventDefault()}
+      class="mb-3 flex flex-wrap items-center gap-2"
+      data-testid="notes-filter-form"
+    >
+      <label class="relative flex w-full items-center sm:w-64">
+        <Search class="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true" />
         <input
-          type="text"
+          type="search"
           data-testid="filter-query-input"
+          aria-label={$t('notes.search_placeholder')}
           placeholder={$t('notes.search_placeholder')}
           bind:value={queryInput}
           oninput={scheduleFilterReload}
-          class="field-input text-sm w-full sm:w-44"
+          class="field-input w-full pl-8 text-sm"
         />
-        <input
-          type="text"
-          data-testid="filter-tag-input"
-          placeholder={$t('notes.tag_placeholder')}
-          bind:value={tagInput}
-          oninput={scheduleFilterReload}
-          class="field-input text-sm w-full sm:w-32"
-        />
-        <Select
-          class="w-40"
-          value={kindSelect}
-          onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}
-          testId="filter-kind-select"
-          options={[
-            { value: '', label: $t('notes.all_kinds') },
-            ...cardKinds.map((kind) => ({ value: kind, label: kindLabel(kind, $cardTypes, $t) })),
-          ]}
-        />
-        {#if hasFilter}
-          <button
-            type="button"
-            data-testid="filter-reset-btn"
-            class="text-xs px-2.5 py-1.5 rounded-xl font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            onclick={handleFilterReset}
-          >
-            {$t('notes.filter_reset')}
-          </button>
-        {/if}
-      </form>
+      </label>
+      <input
+        type="text"
+        data-testid="filter-tag-input"
+        aria-label={$t('notes.tag_placeholder')}
+        placeholder={$t('notes.tag_placeholder')}
+        bind:value={tagInput}
+        oninput={scheduleFilterReload}
+        class="field-input w-full text-sm sm:w-36"
+      />
+      <Select
+        class="w-full sm:w-40"
+        value={kindSelect}
+        onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}
+        testId="filter-kind-select"
+        ariaLabel={$t('notes.filter_kind')}
+        options={[
+          { value: '', label: $t('notes.all_kinds') },
+          ...cardKinds.map((kind) => ({ value: kind, label: kindLabel(kind, $cardTypes, $t) })),
+        ]}
+      />
+      {#if hasFilter}
+        <Button variant="ghost" size="lg" testId="filter-reset-btn" onclick={handleFilterReset}>
+          {$t('notes.filter_reset')}
+        </Button>
+      {/if}
+    </form>
 
-      <!-- 批量操作工具条：只有能改内容的角色才看到（reader 没有可执行的批量动作）。 -->
-      {#if canEditContent && !loading && !error && notes.length > 0}
-        <div
-          data-testid="notes-bulk-toolbar"
-          class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
-        >
-          <label class="flex items-center gap-1.5 font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
-            <Checkbox testId="bulk-select-all" checked={allSelected} onCheckedChange={toggleSelectAll} label={$t('notes.select_all')} />
-            {$t('notes.select_all')}
-          </label>
-          <span data-testid="bulk-selected-count" class="text-zinc-400 dark:text-zinc-500">
-            {$t('notes.selected_count', { count: selectedIds.length })}
-          </span>
-
-          <input
-            type="text"
-            data-testid="bulk-tag-input"
-            placeholder={$t('notes.bulk_tag_placeholder')}
-            bind:value={bulkTagInput}
-            class="field-input text-sm w-36"
-          />
-          <Button type="button" testId="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} variant="outline" size="xs">{$t('notes.bulk_add_tags')}</Button>          <Button type="button" testId="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} variant="outline" size="xs">{$t('notes.bulk_remove_tags')}</Button>          <Button type="button" testId="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} variant="outline" size="xs">{$t('notes.bulk_set_tags')}</Button>
-          {#if confirmingBulkDelete}
-            <span class="text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
-            <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
-            <button type="button" data-testid="bulk-cancel-delete" class="underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
+    {#if loading}
+      <Skeleton testId="notes-loading" label={$t('common.loading')} lines={6} />
+    {:else if error}
+      <div
+        data-testid={error instanceof ApiClientError && error.isUnauthorized
+          ? 'notes-unauthorized'
+          : error instanceof ApiClientError && error.isForbidden
+            ? 'notes-forbidden'
+            : error instanceof ApiClientError && error.isNotFound
+              ? 'notes-not-found'
+              : 'notes-failed'}
+        class="space-y-3 py-16 text-center"
+      >
+        <p class="text-sm font-medium text-foreground">
+          {#if error instanceof ApiClientError && error.isNotFound}
+            {$t('notes.not_found')}
+          {:else if error instanceof ApiClientError && error.isForbidden}
+            {$t('notes.forbidden')}
+          {:else if error instanceof ApiClientError && error.isUnauthorized}
+            {$t('notes.unauthorized')}
           {:else}
-            <Button type="button" testId="bulk-delete" disabled={bulkBusy || selectedIds.length === 0} onclick={() => { confirmingBulkDelete = true; bulkError = ''; bulkResult = null; }} variant="danger-outline" size="xs">{$t('notes.bulk_delete')}</Button>          {/if}
-          {#if bulkBusy}<span class="text-zinc-400">{$t('notes.bulk_applying')}</span>{/if}
-        </div>
-      {/if}
-
-      {#if bulkError}
-        <p role="alert" data-testid="notes-bulk-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(bulkError)}</p>
-      {/if}
-      {#if bulkResult}
-        <div role="status" data-testid="notes-bulk-result" class="text-xs text-zinc-700 dark:text-zinc-300">
-          <p>{$t('notes.bulk_result', { affected: bulkResult.affected, skipped: bulkResult.notFound + bulkResult.insufficientRole })}</p>
-          {#if bulkResult.notFound > 0}
-            <p data-testid="notes-bulk-skipped-not-found" class="text-zinc-400">{$t('notes.bulk_skipped_not-found', { count: bulkResult.notFound })}</p>
+            {$t('notes.failed')}
           {/if}
-          {#if bulkResult.insufficientRole > 0}
-            <p data-testid="notes-bulk-skipped-forbidden" class="text-zinc-400">{$t('notes.bulk_skipped_forbidden', { count: bulkResult.insufficientRole })}</p>
-          {/if}
-        </div>
-      {/if}
-
-      {#if deleteSuccess}
-        <p role="status" data-testid="note-delete-success" class="text-xs text-emerald-700 dark:text-emerald-400">{$t('notes.delete_success')}</p>
-      {/if}
-      {#if deleteError}
-        <p role="alert" data-testid="note-delete-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(deleteError)}</p>
-      {/if}
-      {#if suspendError}
-        <p role="alert" data-testid="note-suspend-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(suspendError)}</p>
-      {/if}
-
-      {#if loading}
-        <Skeleton testId="notes-loading" label={$t('common.loading')} variant="cards" count={3} columns={1} />
-      {:else if error}
-        <div
-          data-testid={error instanceof ApiClientError && error.isUnauthorized
-            ? 'notes-unauthorized'
-            : error instanceof ApiClientError && error.isForbidden
-              ? 'notes-forbidden'
-              : error instanceof ApiClientError && error.isNotFound
-                ? 'notes-not-found'
-                : 'notes-failed'}
-          class="py-12 text-center space-y-3"
-        >
-          <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {#if error instanceof ApiClientError && error.isNotFound}
-              {$t('notes.not_found')}
-            {:else if error instanceof ApiClientError && error.isForbidden}
-              {$t('notes.forbidden')}
-            {:else if error instanceof ApiClientError && error.isUnauthorized}
-              {$t('notes.unauthorized')}
-            {:else}
-              {$t('notes.failed')}
-            {/if}
-          </p>
-          <Button testId="notes-retry" type="button" onclick={() => loadData(page)} variant="primary" size="sm">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
-            <span>{$t('notes.retry')}</span>
-          </Button>
-        </div>
-      {:else if notes.length === 0}
-        <div data-testid="notes-empty" class="py-16 text-center text-zinc-500 dark:text-zinc-400">
-          <p class="text-sm font-medium">
-            {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
-          </p>
-        </div>
-      {:else}
-        <!-- 扁平化独立卡片项：消除四层嵌套与大色块包裹 -->
-        <div data-testid="notes-list" class="space-y-3">
-          {#each notes as note (note.id)}
-            <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors space-y-2.5">
-              <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
-                <div class="flex items-center gap-2">
-                  {#if canEditContent}
-                    <Checkbox
-                      testId="select-note-{note.id}"
-                      checked={isSelected(note.id)}
-                      onCheckedChange={() => toggleSelect(note.id)}
-                      label={$t('notes.select_one')}
-                    />
-                  {/if}
-                  <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
-                  <Badge class="font-semibold">{kindLabel(note.kind, $cardTypes, $t)}</Badge>
-                  {#if note.suspended}
-                    <Badge testId={`note-suspended-${note.id}`}>{$t('notes.suspended')}</Badge>
-                  {/if}
-                  {#if note.external_ref}
-                    <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
-                      [{note.external_ref}]
-                    </span>
-                  {/if}
-                </div>
-
-                <div class="flex items-center gap-3">
-                  <span class="text-zinc-400 text-xs">
-                    {note.created_at ? note.created_at.slice(0, 10) : ''}
-                  </span>
-                  {#if canEditContent}
-                    <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
-                  {/if}
-                  <button data-testid="toggle-suspend-{note.id}" type="button" disabled={suspendingNoteId === note.id} class="text-zinc-600 dark:text-zinc-300 hover:underline disabled:opacity-50 cursor-pointer" onclick={() => toggleSuspended(note)}>{$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}</button>
-                  {#if canEditContent}
-                    {#if confirmingDeleteId === note.id}
-                      <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
-                      <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
-                      <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
-                    {:else}
-                      <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
-                    {/if}
-                  {/if}
-                </div>
-              </div>
-
-              <!-- 字段内容展示：自然排版，不套多余深色框 -->
-              <div class="space-y-1.5 text-xs" data-testid={`note-fields-${note.id}`}>
-                {#each Object.entries(note.fields) as [fieldName, fieldValue] (fieldName)}
-                  <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
-                    <span class="font-semibold text-zinc-500 dark:text-zinc-400 sm:w-20 shrink-0 capitalize">
-                      {fieldName}:
-                    </span>
-                    <span class="font-mono text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words flex-1 leading-relaxed">
-                      {formatFieldValue(fieldValue)}
-                    </span>
-                  </div>
-                {/each}
-              </div>
-
-              <!-- 标签展示 -->
-              {#if note.tags && note.tags.length > 0}
-                <div class="flex flex-wrap gap-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/40" data-testid={`note-tags-${note.id}`}>
-                  {#each note.tags as tag (tag)}
-                    <Badge>#{tag}</Badge>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-
-        <!-- 分页栏 -->
-        {#if totalPages > 1}
-          <div data-testid="notes-pagination" class="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
-            <Button testId="notes-prev-page" type="button" disabled={page <= 1} onclick={handlePrevPage} variant="outline" size="sm">
-              {$t('notes.prev_page')}
-            </Button>            <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
-              {$t('notes.page_info', { page, totalPages })}
-            </span>
-            <Button testId="notes-next-page" type="button" disabled={page >= totalPages} onclick={handleNextPage} variant="outline" size="sm">
-              {$t('notes.next_page')}
-            </Button>          </div>
-        {/if}
-      {/if}
-    </div>
-  {/if}
-</div>
-
-<!-- 导出包设置对话框（Modal） -->
-{#if showExportModal}
-  <Dialog
-    open={true}
-    onOpenChange={(open) => { if (!open) showExportModal = false; }}
-    title={$t('package.export.heading')}
-    testId="deck-export-dialog"
-  >
-      <div class="space-y-3 text-xs text-zinc-700 dark:text-zinc-300">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <Checkbox bind:checked={includeMedia} label={$t('package.export.include_media')} />
-          <span>{$t('package.export.include_media')}</span>
-        </label>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <Checkbox bind:checked={includeProgress} label={$t('package.export.include_progress')} />
-          <span>{$t('package.export.include_progress')}</span>
-        </label>
-        {#if includeProgress}
-          <label class="flex items-center gap-2 pl-5 cursor-pointer">
-            <Checkbox bind:checked={includeReviews} label={$t('package.export.include_reviews')} />
-            <span>{$t('package.export.include_reviews')}</span>
-          </label>
-        {/if}
-      </div>
-
-      {#if exportError}
-        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t('package.export.failed')}</p>
-      {/if}
-
-      <div class="pt-2 flex items-center justify-end gap-3">
-        <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer">
-          {$t('note_edit.cancel')}
-        </button>
-        <Button type="button" testId="deck-package-export" disabled={exporting} onclick={exportPackage} variant="primary" size="sm">
-          {exporting ? $t('package.export.exporting') : $t('package.export.action')}
+        </p>
+        <Button testId="notes-retry" type="button" onclick={() => loadData(page)} variant="outline" size="lg">
+          {$t('notes.retry')}
         </Button>
       </div>
-  </Dialog>
-{/if}
+    {:else if notes.length === 0}
+      <div data-testid="notes-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+        {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
+      </div>
+    {:else}
+      {@const cols = canEditContent
+        ? 'grid-cols-[1.25rem_minmax(0,1fr)_4.5rem] md:grid-cols-[1.25rem_minmax(0,1fr)_7rem_10rem_6rem_4.5rem]'
+        : 'grid-cols-[minmax(0,1fr)_4.5rem] md:grid-cols-[minmax(0,1fr)_7rem_10rem_6rem_4.5rem]'}
+      <div data-testid="notes-list" class={listClasses.root}>
+        <div class="grid {cols} h-9 items-center gap-x-3 border-b border-border bg-surface px-4 text-xs font-medium text-muted-foreground">
+          {#if canEditContent}
+            <Checkbox
+              testId="bulk-select-all"
+              checked={allSelected}
+              indeterminate={selectedIds.length > 0 && !allSelected}
+              onCheckedChange={toggleSelectAll}
+              label={$t('notes.select_all')}
+            />
+          {/if}
+          <span>{$t('notes.col_content')}</span>
+          <span class="hidden md:block">{$t('notes.col_kind')}</span>
+          <span class="hidden md:block">{$t('notes.col_tags')}</span>
+          <span class="hidden md:block">{$t('notes.col_created')}</span>
+          <span></span>
+        </div>
+        {#each notes as note (note.id)}
+          {@const summary = noteSummary(note)}
+          <div
+            data-testid={`note-card-${note.id}`}
+            class="group relative grid {cols} min-h-14 items-center gap-x-3 border-b border-border px-4 py-2 transition-colors last:border-b-0 hover:bg-muted/50 has-[[data-state=checked]]:bg-brand-soft/60"
+          >
+            {#if canEditContent}
+              <Checkbox
+                class={listClasses.rowAction}
+                testId="select-note-{note.id}"
+                checked={isSelected(note.id)}
+                onCheckedChange={() => toggleSelect(note.id)}
+                label={$t('notes.select_one')}
+              />
+            {/if}
+            <div class="min-w-0" data-testid={`note-fields-${note.id}`}>
+              <div class="flex min-w-0 items-center gap-2">
+                {#if canEditContent}
+                  <a
+                    href="/decks/{encodeURIComponent(deckId)}/notes/{encodeURIComponent(note.id)}/edit"
+                    class="{listClasses.rowLink} text-sm {note.suspended ? 'text-muted-foreground' : ''}"
+                  >{summary.primary || '—'}</a>
+                {:else}
+                  <span class="min-w-0 truncate text-sm font-medium text-foreground">{summary.primary || '—'}</span>
+                {/if}
+                {#if note.suspended}
+                  <Badge testId={`note-suspended-${note.id}`} class="shrink-0">
+                    <Pause class="size-3" aria-hidden="true" />{$t('notes.suspended')}
+                  </Badge>
+                {/if}
+                {#if note.external_ref}
+                  <span
+                    class="inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded bg-muted px-1.5 font-mono text-[11px] text-muted-foreground"
+                    title="{$t('notes.external_ref')}: {note.external_ref}"
+                  >
+                    <Link2 class="size-3 shrink-0" aria-hidden="true" />
+                    <span class="truncate">{note.external_ref}</span>
+                  </span>
+                {/if}
+              </div>
+              {#if summary.secondary}
+                <p class="truncate text-[13px] text-muted-foreground">{summary.secondary}</p>
+              {/if}
+            </div>
+            <span class="hidden truncate text-[13px] text-muted-foreground md:block">{kindLabel(note.kind, $cardTypes, $t)}</span>
+            <div class="hidden min-w-0 flex-wrap gap-1 md:flex" data-testid={`note-tags-${note.id}`}>
+              {#each (note.tags ?? []).slice(0, 3) as tag (tag)}
+                <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>
+              {/each}
+              {#if (note.tags ?? []).length > 3}
+                <span class="inline-flex h-5 items-center px-1 text-xs text-muted-foreground" title={note.tags.slice(3).join(', ')}>+{note.tags.length - 3}</span>
+              {/if}
+            </div>
+            <span class="hidden text-[13px] tabular-nums text-muted-foreground md:block">{note.created_at ? note.created_at.slice(0, 10) : ''}</span>
+            <div class="{listClasses.rowAction} flex items-center justify-end gap-0.5">
+              {#if canEditContent}
+                <a
+                  data-testid="edit-note-{note.id}"
+                  href="/decks/{encodeURIComponent(deckId)}/notes/{encodeURIComponent(note.id)}/edit"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-100"
+                  aria-label={$t('note_edit.action')}
+                  title={$t('note_edit.action')}
+                >
+                  <Pencil class="size-4" aria-hidden="true" />
+                </a>
+              {/if}
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger
+                  data-testid="note-menu-{note.id}"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground cursor-pointer"
+                  aria-label={$t('notes.more_actions')}
+                  title={$t('notes.more_actions')}
+                >
+                  <MoreHorizontal class="size-4" aria-hidden="true" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content class={menuClasses.content} align="end" sideOffset={4}>
+                    <DropdownMenu.Item
+                      class={menuClasses.item}
+                      data-testid="toggle-suspend-{note.id}"
+                      disabled={suspendingNoteId === note.id}
+                      onSelect={() => toggleSuspended(note)}
+                    >
+                      {#if note.suspended}<Play aria-hidden="true" />{:else}<Pause aria-hidden="true" />{/if}
+                      {$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item class={menuClasses.item} onSelect={() => copyNoteId(note)}>
+                      <Copy aria-hidden="true" />
+                      {$t('notes.copy_id')}
+                    </DropdownMenu.Item>
+                    {#if canEditContent}
+                      <DropdownMenu.Separator class={menuClasses.separator} />
+                      <DropdownMenu.Item
+                        class={menuClasses.destructiveItem}
+                        data-testid="delete-note-{note.id}"
+                        onSelect={() => { noteToDelete = note; deleteError = ''; }}
+                      >
+                        <Trash2 aria-hidden="true" />
+                        {$t('notes.delete')}…
+                      </DropdownMenu.Item>
+                    {/if}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <div class="mt-3 flex items-center justify-between text-[13px] text-muted-foreground">
+        <span class="tabular-nums">{$t('notes.total_count', { total })}</span>
+        {#if totalPages > 1}
+          <div data-testid="notes-pagination" class="flex items-center gap-2">
+            <span data-testid="notes-page-info" class="tabular-nums">{$t('notes.page_info', { page, totalPages })}</span>
+            <Button testId="notes-prev-page" type="button" disabled={page <= 1} onclick={handlePrevPage} variant="outline" size="sm">
+              {$t('notes.prev_page')}
+            </Button>
+            <Button testId="notes-next-page" type="button" disabled={page >= totalPages} onclick={handleNextPage} variant="outline" size="sm">
+              {$t('notes.next_page')}
+            </Button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- 批量操作：只有能改内容的角色才会有选中项（reader 没有勾选框）。 -->
+    <SelectionBar
+      count={selectedIds.length}
+      onClear={() => (selectedIds = [])}
+      testId="notes-bulk-toolbar"
+      error={bulkError && !bulkTagsOpen && !confirmingBulkDelete ? $t(bulkError) : undefined}
+    >
+      <button type="button" class={selectionBarButton} disabled={bulkBusy} onclick={() => { bulkError = ''; bulkTagsOpen = true; }} data-testid="bulk-tags-open">
+        <Tags aria-hidden="true" />
+        {$t('notes.bulk_tags')}
+      </button>
+      <button
+        type="button"
+        class={selectionBarButton}
+        data-testid="bulk-delete"
+        disabled={bulkBusy}
+        onclick={() => { bulkError = ''; bulkResult = null; confirmingBulkDelete = true; }}
+      >
+        <Trash2 aria-hidden="true" />
+        {$t('notes.bulk_delete')}
+      </button>
+    </SelectionBar>
+  </div>
+</Page>
+
+<!-- 批量编辑标签 -->
+<Dialog
+  bind:open={bulkTagsOpen}
+  title={$t('notes.bulk_tags')}
+  description={$t('notes.selected_count', { count: selectedIds.length })}
+  testId="notes-bulk-tags-dialog"
+>
+  <label class="block text-sm font-medium text-foreground">
+    <span class="sr-only">{$t('notes.bulk_tag_placeholder')}</span>
+    <input
+      type="text"
+      data-testid="bulk-tag-input"
+      placeholder={$t('notes.bulk_tag_placeholder')}
+      bind:value={bulkTagInput}
+      class="field-input w-full text-sm"
+    />
+  </label>
+  <p class="mt-1.5 text-xs text-muted-foreground">{$t('notes.bulk_tags_hint')}</p>
+  {#if bulkError}
+    <p role="alert" data-testid="notes-bulk-error" class="mt-3 text-sm text-destructive-foreground">{$t(bulkError)}</p>
+  {/if}
+  <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
+    <Button type="button" testId="bulk-remove-tags" disabled={bulkBusy} onclick={() => runBulk('remove_tags')} variant="outline" size="lg">{$t('notes.bulk_remove_tags')}</Button>
+    <Button type="button" testId="bulk-set-tags" disabled={bulkBusy} onclick={() => runBulk('set_tags')} variant="outline" size="lg">{$t('notes.bulk_set_tags')}</Button>
+    <Button type="button" testId="bulk-add-tags" disabled={bulkBusy} onclick={() => runBulk('add_tags')} variant="primary" size="lg">
+      {bulkBusy ? $t('notes.bulk_applying') : $t('notes.bulk_add_tags')}
+    </Button>
+  </div>
+</Dialog>
+
+<!-- 批量删除确认 -->
+<Dialog
+  bind:open={confirmingBulkDelete}
+  title={$t('notes.bulk_confirm_delete')}
+  description={$t('notes.bulk_delete_desc', { count: selectedIds.length })}
+  testId="notes-bulk-delete-dialog"
+  size="sm"
+>
+  {#if bulkError}
+    <p role="alert" class="text-sm text-destructive-foreground">{$t(bulkError)}</p>
+  {/if}
+  <div class="mt-2 flex items-center justify-end gap-2">
+    <Button type="button" testId="bulk-cancel-delete" variant="outline" size="lg" disabled={bulkBusy} onclick={() => (confirmingBulkDelete = false)}>{$t('note_edit.cancel')}</Button>
+    <Button type="button" testId="bulk-confirm-delete" variant="danger" size="lg" disabled={bulkBusy} onclick={() => runBulk('delete')}>
+      {bulkBusy ? $t('notes.bulk_applying') : $t('notes.bulk_delete')}
+    </Button>
+  </div>
+</Dialog>
+
+<!-- 单条删除确认 -->
+<Dialog
+  open={noteToDelete !== null}
+  onOpenChange={(open) => { if (!open && !deletingNoteId) noteToDelete = null; }}
+  title={$t('notes.delete_confirm')}
+  description={$t('notes.delete_desc')}
+  testId="note-delete-dialog"
+  size="sm"
+>
+  {#if deleteError}
+    <p role="alert" data-testid="note-delete-error" class="text-sm text-destructive-foreground">{$t(deleteError)}</p>
+  {/if}
+  <div class="mt-2 flex items-center justify-end gap-2">
+    <Button type="button" variant="outline" size="lg" disabled={deletingNoteId !== null} onclick={() => (noteToDelete = null)}>{$t('note_edit.cancel')}</Button>
+    <Button
+      type="button"
+      variant="danger"
+      size="lg"
+      testId={noteToDelete ? `confirm-delete-note-${noteToDelete.id}` : undefined}
+      disabled={deletingNoteId !== null}
+      onclick={() => noteToDelete && deleteNote(noteToDelete)}
+    >
+      {deletingNoteId ? $t('notes.deleting') : $t('notes.delete')}
+    </Button>
+  </div>
+</Dialog>
+
+<!-- 导出包设置 -->
+<Dialog
+  bind:open={showExportModal}
+  title={$t('package.export.heading')}
+  testId="deck-export-dialog"
+>
+  <div class="space-y-3 text-sm text-foreground">
+    <label class="flex items-center gap-2 cursor-pointer">
+      <Checkbox bind:checked={includeMedia} label={$t('package.export.include_media')} />
+      <span>{$t('package.export.include_media')}</span>
+    </label>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <Checkbox bind:checked={includeProgress} label={$t('package.export.include_progress')} />
+      <span>{$t('package.export.include_progress')}</span>
+    </label>
+    {#if includeProgress}
+      <label class="flex items-center gap-2 pl-6 cursor-pointer">
+        <Checkbox bind:checked={includeReviews} label={$t('package.export.include_reviews')} />
+        <span>{$t('package.export.include_reviews')}</span>
+      </label>
+    {/if}
+  </div>
+
+  {#if exportError}
+    <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t('package.export.failed')}</p>
+  {/if}
+
+  <div class="mt-5 flex items-center justify-end gap-2">
+    <Button type="button" variant="outline" size="lg" onclick={() => (showExportModal = false)}>{$t('note_edit.cancel')}</Button>
+    <Button type="button" testId="deck-package-export" disabled={exporting} onclick={exportPackage} variant="primary" size="lg">
+      {exporting ? $t('package.export.exporting') : $t('package.export.action')}
+    </Button>
+  </div>
+</Dialog>

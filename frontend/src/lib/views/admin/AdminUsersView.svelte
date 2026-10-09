@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { askConfirm } from '../../components/ui/confirm';
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
@@ -7,6 +9,14 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
+  import Badge from '../../components/ui/Badge.svelte';
+  import Dialog from '../../components/ui/Dialog.svelte';
+  import PageHeader from '../../components/ui/PageHeader.svelte';
+  import Pager from '../../components/ui/Pager.svelte';
+  import { listClasses, menuClasses } from '../../components/ui/variants';
+  import { toast } from '../../components/ui/toast';
+  import { DropdownMenu } from 'bits-ui';
+  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, Search, Shield, Trash2, User, X } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -28,6 +38,30 @@
   let actionError = $state('');
   let tempPassword = $state('');
   let creating = $state(false);
+  let createOpen = $state(false);
+
+  // 操作结果用 toast 报告，不在页面顶部插横幅。新建用户的错误显示在对话框里，对话框关着时才走 toast。
+  $effect(() => {
+    if (notice) {
+      toast.success($t(notice));
+      notice = '';
+    }
+  });
+  $effect(() => {
+    if (actionError && !createOpen) {
+      toast.error($t(actionError));
+      actionError = '';
+    }
+  });
+
+  async function copyTempPassword(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(tempPassword);
+      toast.success($t('admin.users.temp_password_copied'));
+    } catch {
+      toast.error($t('notes.copy_failed'));
+    }
+  }
 
   let form = $state({ username: '', email: '', display_name: '', password: '', role: 'user' });
 
@@ -88,7 +122,7 @@
 
   /** 危险动作统一走一次确认；服务端在收不到 confirm 时也会拒绝。 */
   async function confirmThen(messageKey: string, fn: () => Promise<void>): Promise<void> {
-    if (typeof window !== 'undefined' && !window.confirm($t(messageKey))) return;
+    if (!(await askConfirm({ title: $t(messageKey), destructive: true }))) return;
     await run(fn);
   }
 
@@ -100,6 +134,7 @@
     try {
       await apiClient.createAdminUser(form);
       form = { username: '', email: '', display_name: '', password: '', role: 'user' };
+      createOpen = false;
       notice = 'admin.users.notice.created';
       await load(1);
     } catch (err) {
@@ -138,7 +173,7 @@
     notice = '';
     actionError = '';
     tempPassword = '';
-    if (typeof window !== 'undefined' && !window.confirm($t('admin.users.confirm_reset'))) return;
+    if (!(await askConfirm({ title: $t('admin.users.confirm_reset') }))) return;
     try {
       const res = await apiClient.resetAdminUserPassword(u.id);
       tempPassword = res.temp_password;
@@ -168,125 +203,111 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-users">
+<Page testId="admin-users">
   <AdminNav />
 
-  <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-users-title">
-      {$t('admin.users.heading')}
-    </h1>
-  </header>
+  <PageHeader title={$t('admin.users.heading')} testId="admin-users-title">
+    {#snippet actions()}
+      <Button testId="admin-users-create-open" variant="primary" size="lg" onclick={() => { actionError = ''; createOpen = true; }}>
+        <Plus class="size-4" aria-hidden="true" />
+        {$t('admin.users.create_heading')}
+      </Button>
+    {/snippet}
+  </PageHeader>
 
-  <form onsubmit={(e) => { e.preventDefault(); load(1); }} data-testid="admin-users-search" class="flex items-end gap-3">
-    <label class="block flex-1">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.search_label')}</span>
+  <form onsubmit={(e) => { e.preventDefault(); load(1); }} data-testid="admin-users-search" class="mb-3 flex items-center gap-2">
+    <label class="relative flex w-full items-center sm:w-80">
+      <Search class="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true" />
       <input
+        type="search"
         data-testid="admin-users-search-input"
         bind:value={query}
+        aria-label={$t('admin.users.search_label')}
         placeholder={$t('admin.users.search_placeholder')}
-        class="field-input text-sm mt-1.5 w-full"
+        class="field-input w-full pl-8 text-sm"
       />
     </label>
-    <Button type="submit" testId="admin-users-search-submit" variant="primary" size="lg">
-      {$t('admin.users.search_submit')}
-    </Button>
+    <Button type="submit" testId="admin-users-search-submit" variant="outline" size="lg">{$t('admin.users.search_submit')}</Button>
   </form>
 
-  {#if notice}<div data-testid="admin-users-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
-  {#if actionError}<div data-testid="admin-users-error" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">{$t(actionError)}</div>{/if}
   {#if tempPassword}
-    <div data-testid="admin-users-temp-password" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
-      {$t('admin.users.temp_password_label')}: <span class="font-mono font-semibold">{tempPassword}</span>
+    <!-- 临时密码只显示这一次：贴在列表上方，带复制按钮。 -->
+    <div data-testid="admin-users-temp-password" class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-2.5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-200" role="status">
+      <span class="text-muted-foreground">{$t('admin.users.temp_password_label')}</span>
+      <span class="select-all font-mono font-semibold text-foreground">{tempPassword}</span>
+      <span class="flex-1"></span>
+      <Button variant="outline" size="sm" onclick={copyTempPassword}><Copy class="size-3.5" aria-hidden="true" />{$t('deck.sharing.copy')}</Button>
+      <Button variant="ghost" size="icon" label={$t('deck.sharing.dismiss')} onclick={() => (tempPassword = '')}><X class="size-4" aria-hidden="true" /></Button>
     </div>
   {/if}
-
-  <form onsubmit={create} data-testid="admin-users-create" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-3">
-    <h2 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.create_heading')}</h2>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.username')}</span>
-      <input data-testid="admin-users-create-username" bind:value={form.username} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.email')}</span>
-      <input data-testid="admin-users-create-email" bind:value={form.email} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.display_name')}</span>
-      <input data-testid="admin-users-create-display" bind:value={form.display_name} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.password')}</span>
-      <input data-testid="admin-users-create-password" type="password" bind:value={form.password} class="field-input text-sm mt-1.5 w-full" />
-    </label>
-    <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.role')}</span>
-      <Select
-        class="mt-1.5"
-        bind:value={form.role}
-        testId="admin-users-create-role"
-        options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
-      />
-    </label>
-    <div class="sm:col-span-3">
-      <Button type="submit" testId="admin-users-create-submit" disabled={creating} variant="primary" size="lg">
-        {$t('admin.users.create_submit')}
-      </Button>
-    </div>
-  </form>
 
   {#if loading}
     <Skeleton testId="admin-users-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
-    <div data-testid="admin-users-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
+    <div data-testid="admin-users-failed" class="py-16 text-center">
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
+      <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     {#if view.users.length === 0}
-      <p data-testid="admin-users-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.users.empty')}</p>
+      <p data-testid="admin-users-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.users.empty')}</p>
     {:else}
-      <div class="card-elevated overflow-x-auto rounded-xl">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-zinc-200 text-xs uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div class="{listClasses.root} overflow-x-auto">
+        <table class="w-full min-w-[760px] text-left text-sm">
+          <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
             <tr>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.user')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.email')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.role')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.status')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.decks')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.cards')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.reviews')}</th>
-              <th class="px-4 py-3 font-semibold">{$t('admin.users.col.actions')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.users.col.user')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.users.col.role')}</th>
+              <th class="px-4 py-2.5 font-medium">{$t('admin.users.col.status')}</th>
+              <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.decks')}</th>
+              <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.cards')}</th>
+              <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.reviews')}</th>
+              <th class="w-14 px-4 py-2.5"><span class="sr-only">{$t('admin.users.col.actions')}</span></th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <tbody class="divide-y divide-border">
             {#each view.users as u (u.id)}
-              <tr data-testid="admin-users-row-{u.id}">
-                <td class="px-4 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{u.username}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.email}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{roleLabel(u.role)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{statusLabel(u.status)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.decks}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.cards}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.reviews}</td>
+              <tr data-testid="admin-users-row-{u.id}" class="transition-colors hover:bg-muted/40">
                 <td class="px-4 py-2.5">
-                  <div class="flex flex-wrap gap-1.5">
-                    <button type="button" data-testid="admin-users-status-{u.id}" onclick={() => toggleStatus(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">
-                      {u.status === 'disabled' ? $t('admin.users.enable') : $t('admin.users.disable')}
-                    </button>
-                    <Select
-                      class="w-24"
-                      size="sm"
-                      value={u.role}
-                      onValueChange={(role) => changeRole(u, role)}
-                      testId="admin-users-role-{u.id}"
-                      options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
-                    />
-                    <button type="button" data-testid="admin-users-password-{u.id}" onclick={() => resetPassword(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">{$t('admin.users.reset_password')}</button>
-                    <button type="button" data-testid="admin-users-logout-{u.id}" onclick={() => forceLogout(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">{$t('admin.users.force_logout')}</button>
-                    <button type="button" data-testid="admin-users-delete-{u.id}" onclick={() => remove(u)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.users.delete')}</button>
-                  </div>
+                  <div class="font-medium text-foreground">{u.username}</div>
+                  <div class="text-[13px] text-muted-foreground">{u.email}</div>
+                </td>
+                <td class="px-4 py-2.5"><Badge variant={u.role === 'admin' ? 'info' : 'neutral'}>{roleLabel(u.role)}</Badge></td>
+                <td class="px-4 py-2.5"><Badge variant={u.status === 'disabled' ? 'danger' : 'success'}>{statusLabel(u.status)}</Badge></td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.decks}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.cards}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.reviews}</td>
+                <td class="px-4 py-2.5 text-right">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger
+                      data-testid="admin-users-menu-{u.id}"
+                      class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground data-[state=open]:bg-muted cursor-pointer"
+                      aria-label={$t('admin.users.col.actions')}
+                    >
+                      <MoreHorizontal class="size-4" aria-hidden="true" />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content class={menuClasses.content} align="end" sideOffset={4}>
+                        <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-status-{u.id}" onSelect={() => toggleStatus(u)}>
+                          {#if u.status === 'disabled'}<CheckCircle aria-hidden="true" />{$t('admin.users.enable')}{:else}<Ban aria-hidden="true" />{$t('admin.users.disable')}{/if}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-role-{u.id}" onSelect={() => changeRole(u, u.role === 'admin' ? 'user' : 'admin')}>
+                          {#if u.role === 'admin'}<User aria-hidden="true" />{$t('admin.users.make_user')}{:else}<Shield aria-hidden="true" />{$t('admin.users.make_admin')}{/if}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-password-{u.id}" onSelect={() => resetPassword(u)}>
+                          <KeyRound aria-hidden="true" />{$t('admin.users.reset_password')}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-logout-{u.id}" onSelect={() => forceLogout(u)}>
+                          <LogOut aria-hidden="true" />{$t('admin.users.force_logout')}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Separator class={menuClasses.separator} />
+                        <DropdownMenu.Item class={menuClasses.destructiveItem} data-testid="admin-users-delete-{u.id}" onSelect={() => remove(u)}>
+                          <Trash2 aria-hidden="true" />{$t('admin.users.delete')}…
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
                 </td>
               </tr>
             {/each}
@@ -294,11 +315,43 @@
         </table>
       </div>
 
-      <div class="flex items-center justify-between" data-testid="admin-users-pager">
-        <button type="button" data-testid="admin-users-prev" disabled={view.page <= 1} onclick={() => load(view.page - 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.prev')}</button>
-        <span class="text-sm text-zinc-500 dark:text-zinc-400">{view.page} / {view.pages}</span>
-        <button type="button" data-testid="admin-users-next" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.next')}</button>
-      </div>
+      <Pager page={view.page} pages={view.pages} onPage={(n) => load(n)} testIdPrefix="admin-users" />
     {/if}
   {/if}
-</div>
+</Page>
+
+<Dialog bind:open={createOpen} title={$t('admin.users.create_heading')} size="lg" testId="admin-users-create-dialog">
+  <form onsubmit={create} data-testid="admin-users-create" class="grid gap-4 sm:grid-cols-2">
+    <label class="block text-sm font-medium text-foreground">{$t('admin.users.field.username')}
+      <input data-testid="admin-users-create-username" bind:value={form.username} class="field-input mt-1.5 w-full text-sm font-normal" />
+    </label>
+    <label class="block text-sm font-medium text-foreground">{$t('admin.users.field.display_name')}
+      <input data-testid="admin-users-create-display" bind:value={form.display_name} class="field-input mt-1.5 w-full text-sm font-normal" />
+    </label>
+    <label class="block text-sm font-medium text-foreground sm:col-span-2">{$t('admin.users.field.email')}
+      <input data-testid="admin-users-create-email" type="email" bind:value={form.email} class="field-input mt-1.5 w-full text-sm font-normal" />
+    </label>
+    <label class="block text-sm font-medium text-foreground">{$t('admin.users.field.password')}
+      <input data-testid="admin-users-create-password" type="password" bind:value={form.password} class="field-input mt-1.5 w-full text-sm font-normal" />
+    </label>
+    <div>
+      <span class="block text-sm font-medium text-foreground">{$t('admin.users.field.role')}</span>
+      <Select
+        class="mt-1.5"
+        bind:value={form.role}
+        testId="admin-users-create-role"
+        ariaLabel={$t('admin.users.field.role')}
+        options={[{ value: 'user', label: $t('admin.users.role.user') }, { value: 'admin', label: $t('admin.users.role.admin') }]}
+      />
+    </div>
+    {#if actionError}
+      <p data-testid="admin-users-error" role="alert" class="text-sm text-destructive-foreground sm:col-span-2">{$t(actionError)}</p>
+    {/if}
+    <div class="mt-2 flex justify-end gap-2 sm:col-span-2">
+      <Button variant="outline" size="lg" onclick={() => (createOpen = false)}>{$t('common.cancel')}</Button>
+      <Button type="submit" testId="admin-users-create-submit" disabled={creating} variant="primary" size="lg">
+        {$t('admin.users.create_submit')}
+      </Button>
+    </div>
+  </form>
+</Dialog>

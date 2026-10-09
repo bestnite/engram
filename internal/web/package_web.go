@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -62,9 +64,8 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	name := fmt.Sprintf("deck-%s.edeck", deck.PublicID)
 	c.Header("Content-Type", packageExportMediaType)
-	c.Header("Content-Disposition", `attachment; filename="`+name+`"`)
+	c.Header("Content-Disposition", api.AttachmentDisposition(api.DeckPackageFilename(deck.Name, deck.PublicID)))
 	c.Data(http.StatusOK, packageExportMediaType, buf.Bytes())
 }
 
@@ -95,6 +96,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	zw := zip.NewWriter(&zipBuf)
 
 	ctx := c.Request.Context()
+	used := make(map[string]bool, len(req.DeckIDs))
 	for _, deckPublicID := range req.DeckIDs {
 		deck, ok := s.deckByPublicID(c, deckPublicID)
 		if !ok {
@@ -124,7 +126,8 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		filename := fmt.Sprintf("deck-%s-%s.edeck", deck.PublicID, sanitizeFilename(deck.Name))
+		// zip 内每个包同样以卡组标题命名；两个卡组同名时追加序号，避免条目互相覆盖。
+		filename := uniqueEntryName(api.DeckPackageFilename(deck.Name, deck.PublicID), used)
 		f, err := zw.Create(filename)
 		if err != nil {
 			s.logger.Error("create zip entry failed", "filename", filename, "error", err)
@@ -151,18 +154,14 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", zipBuf.Bytes())
 }
 
-func sanitizeFilename(name string) string {
-	var b strings.Builder
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r > 127 {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune('_')
-		}
+// uniqueEntryName 在 used 里登记并返回一个不重复的 zip 条目名：重名时在扩展名前追加 (2)、(3)……
+func uniqueEntryName(name string, used map[string]bool) string {
+	candidate := name
+	ext := path.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	for i := 2; used[candidate]; i++ {
+		candidate = fmt.Sprintf("%s (%d)%s", base, i, ext)
 	}
-	res := strings.Trim(b.String(), "_")
-	if res == "" {
-		return "deck"
-	}
-	return res
+	used[candidate] = true
+	return candidate
 }

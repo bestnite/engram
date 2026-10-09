@@ -406,6 +406,9 @@ export interface StatsDetail {
   time_spent: StatsTimeSpent;
   streak: StatsStreak;
   curve: StatsCurvePoint[];
+  /** 曲线窗口的首尾复习日（含两端）；curve 只含有复习的日子，画连续日期轴要靠这两个边界。 */
+  curve_from: string;
+  curve_to: string;
   decks: StatsDeck[];
   tags: StatsTag[];
   grades: StatsGradeSource[];

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
   import { setup } from '../auth';
@@ -48,13 +49,13 @@
   }
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
+<Page width="narrow">
+  <div>
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">
         {$t('auth.setup.heading')}
       </h1>
-      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p class="mt-2 text-sm text-muted-foreground">
         {$t('auth.setup.intro')}
       </p>
     </div>
@@ -70,7 +71,7 @@
 
     <form onsubmit={handleSubmit} class="space-y-4">
       <div>
-        <label for="setup-username" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="setup-username" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.username')}
         </label>
         <input
@@ -87,7 +88,7 @@
       </div>
 
       <div>
-        <label for="setup-email" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="setup-email" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.email')}
         </label>
         <input
@@ -103,7 +104,7 @@
       </div>
 
       <div>
-        <label for="setup-display-name" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="setup-display-name" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.display_name')}
         </label>
         <input
@@ -119,7 +120,7 @@
       </div>
 
       <div>
-        <label for="setup-password" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="setup-password" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.password')}
         </label>
         <input
@@ -136,7 +137,7 @@
       </div>
 
       <div>
-        <label for="setup-password-confirm" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+        <label for="setup-password-confirm" class="block text-sm font-medium text-foreground/80 mb-1.5">
           {$t('auth.field.password_confirm')}
         </label>
         <input
@@ -164,4 +165,4 @@
       </div>
     </form>
   </div>
-</div>
+</Page>

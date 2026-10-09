@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { navigate } from '../router';
@@ -103,47 +104,48 @@
   }
 </script>
 
+<Page width="narrow">
 {#if registrationState === 'probing'}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl" data-testid="register-probing">
-      <div class="flex items-center justify-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+  <div>
+    <div data-testid="register-probing">
+      <div class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
         <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
         <span>{$t('common.loading')}</span>
       </div>
     </div>
   </div>
 {:else if blockedReason}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl" data-testid="register-blocked">
+  <div>
+    <div data-testid="register-blocked">
       <div class="mb-6 text-center">
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('auth.register.blocked_heading')}
         </h1>
       </div>
 
-      <p class="mb-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
+      <p class="mb-6 text-center text-sm text-muted-foreground">
         {$t(blockedReason)}
       </p>
 
       <a
         href="/login"
-        class="block text-center text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+        class="block text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         {$t('auth.register.to_login')}
       </a>
     </div>
   </div>
 {:else}
-  <div class="py-12 max-w-md mx-auto px-4">
-    <div class="card-elevated p-8 rounded-xl">
+  <div>
+    <div>
       <div class="mb-6 text-center">
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           {$t('auth.register.heading')}
         </h1>
       </div>
 
       {#if invite}
-        <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <p class="mb-6 text-sm text-muted-foreground">
           {$t('auth.register.invite_intro')}
         </p>
       {/if}
@@ -159,7 +161,7 @@
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label for="register-username" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="register-username" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.field.username')}
           </label>
           <input
@@ -176,7 +178,7 @@
         </div>
 
         <div>
-          <label for="register-email" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="register-email" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.field.email')}
           </label>
           <input
@@ -193,7 +195,7 @@
         </div>
 
         <div>
-          <label for="register-display-name" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="register-display-name" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.field.display_name')}
           </label>
           <input
@@ -209,7 +211,7 @@
         </div>
 
         <div>
-          <label for="register-password" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="register-password" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.field.password')}
           </label>
           <input
@@ -226,7 +228,7 @@
         </div>
 
         <div>
-          <label for="register-password-confirm" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="register-password-confirm" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('auth.field.password_confirm')}
           </label>
           <input
@@ -255,10 +257,11 @@
       </form>
 
       <div class="mt-6 text-center text-sm">
-        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <a href="/login" class="text-muted-foreground hover:text-foreground transition-colors">
           {$t('auth.register.to_login')}
         </a>
       </div>
     </div>
   </div>
 {/if}
+</Page>

@@ -1,9 +1,11 @@
 <script lang="ts">
+  import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminHealth } from '../../api';
   import AdminNav from './AdminNav.svelte';
+  import PageHeader from '../../components/ui/PageHeader.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
 
@@ -89,32 +91,25 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-10" data-testid="admin-health">
+<Page testId="admin-health">
   <AdminNav />
-
-  <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-health-title">
-      {$t('admin.health.heading')}
-    </h1>
-  </header>
+  <PageHeader title={$t('admin.health.heading')} testId="admin-health-title" />
 
   {#if loading}
     <Skeleton testId="admin-health-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
-    <div data-testid="admin-health-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-health-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
-        {$t('common.retry')}
-      </Button>
+    <div data-testid="admin-health-failed" class="py-16 text-center">
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
+      <Button type="button" testId="admin-health-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
-    <dl class="card-elevated divide-y divide-zinc-100 rounded-xl dark:divide-zinc-800" data-testid="admin-health-rows">
+    <dl class="divide-y divide-border rounded-lg border border-border" data-testid="admin-health-rows">
       {#each rows as row (row.key)}
-        <div class="flex items-center justify-between gap-4 px-5 py-4" data-testid="admin-health-row-{row.key}">
-          <dt class="text-sm font-medium text-zinc-600 dark:text-zinc-400">{row.label}</dt>
-          <dd class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{row.value}</dd>
+        <div class="flex items-center justify-between gap-4 px-4 py-3" data-testid="admin-health-row-{row.key}">
+          <dt class="text-sm text-muted-foreground">{row.label}</dt>
+          <dd class="text-sm font-medium tabular-nums text-foreground">{row.value}</dd>
         </div>
       {/each}
     </dl>
   {/if}
-</div>
+</Page>

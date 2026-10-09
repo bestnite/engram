@@ -1,4 +1,11 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
+  import NotificationPrefsView from './NotificationPrefsView.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import SettingsSection from '../components/ui/SettingsSection.svelte';
+  import Badge from '../components/ui/Badge.svelte';
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
@@ -65,93 +72,42 @@
   }
 </script>
 
-<div class="py-12 max-w-lg mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-        {$t('account.email.heading')}
-      </h1>
-      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{$t('account.email.intro')}</p>
-    </div>
+<Page>
+  <SettingsNav />
+  <PageHeader title={$t('settings.mail.heading')} description={$t('settings.mail.intro')} />
 
-    {#if !loaded}
-      <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('account.email.loading')}</p>
-    {:else if loadErrorKey}
-      <div
-        data-testid="email-load-error"
-        class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm"
-      >
-        <span>{$t(loadErrorKey)}</span>
+  {#if !loaded}
+    <Skeleton testId="email-loading" label={$t('account.email.loading')} lines={2} />
+  {:else if loadErrorKey}
+    <p data-testid="email-load-error" role="alert" class="py-16 text-center text-sm text-destructive-foreground">{$t(loadErrorKey)}</p>
+  {:else}
+    <SettingsSection title={$t('account.email.current_label')} description={$t('account.email.intro')}>
+      <div class="flex flex-wrap items-center gap-3">
+        <span data-testid="email-current" class="break-all text-sm font-medium text-foreground">{email}</span>
+        <Badge variant={verified ? 'success' : 'warning'}><span data-testid="email-status">{verified ? $t('account.email.verified') : $t('account.email.unverified')}</span></Badge>
       </div>
-    {:else}
-      <dl class="mb-6 space-y-2 text-sm">
-        <div class="flex items-center justify-between gap-4">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('account.email.current_label')}</dt>
-          <dd data-testid="email-current" class="font-medium text-zinc-900 dark:text-zinc-100 break-all">{email}</dd>
-        </div>
-        <div class="flex items-center justify-between gap-4">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('account.email.status_label')}</dt>
-          <dd data-testid="email-status" class="font-medium {verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
-            {verified ? $t('account.email.verified') : $t('account.email.unverified')}
-          </dd>
-        </div>
-      </dl>
-
       {#if !verified && mailReady}
-        <div class="mb-6">
-          <button
-            type="button"
-            onclick={handleResend}
-            disabled={resending}
-            class="px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
-          >
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="lg" onclick={handleResend} disabled={resending}>
             {resending ? $t('account.email.resending') : $t('account.email.resend')}
-          </button>
+          </Button>
           {#if resendDone}
-            <p data-testid="resend-done" class="mt-2 text-sm text-emerald-600 dark:text-emerald-400">{$t('account.email.resent')}</p>
+            <p data-testid="resend-done" class="text-sm text-success">{$t('account.email.resent')}</p>
           {/if}
           {#if resendErrorKey}
-            <p data-testid="resend-error" class="mt-2 text-sm text-rose-600 dark:text-rose-400">{$t(resendErrorKey)}</p>
+            <p data-testid="resend-error" class="text-sm text-destructive-foreground">{$t(resendErrorKey)}</p>
           {/if}
         </div>
       {/if}
+    </SettingsSection>
 
-      <hr class="my-6 border-zinc-200 dark:border-zinc-800" />
-
-      <h2 class="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('account.email.change_heading')}</h2>
-
-      {#if sent}
-        <div
-          data-testid="email-change-sent"
-          class="mb-4 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm"
-        >
-          <span>{$t('account.email.change_sent')}</span>
-        </div>
-      {/if}
-
-      {#if errorKey}
-        <div
-          data-testid="email-change-error"
-          class="mb-4 p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm"
-        >
-          <span>{$t(errorKey)}</span>
-        </div>
-      {/if}
-
+    <SettingsSection title={$t('account.email.change_heading')} description={$t('account.email.change_hint')}>
       {#if !mailReady}
-        <div
-          data-testid="email-not-configured"
-          class="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 text-sm"
-        >
-          <span>{$t('account.error.mail_not_configured')}</span>
-        </div>
+        <p data-testid="email-not-configured" class="mb-4 text-[13px] text-warning">{$t('account.error.mail_not_configured')}</p>
       {/if}
-
-      <form onsubmit={handleSubmit} class="space-y-4">
-        <div>
-          <label for="email-new" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-            {$t('account.email.change_label')}
-          </label>
+      <form onsubmit={handleSubmit} class="flex max-w-xl flex-wrap items-end gap-2">
+        <div class="min-w-56 flex-1">
+          <label for="email-new" class="block text-sm font-medium text-foreground">{$t('account.email.change_label')}</label>
           <input
             id="email-new"
             name="email"
@@ -160,26 +116,22 @@
             required
             bind:value={newEmail}
             disabled={submitting || !mailReady}
-            class="field-input text-sm w-full transition-colors disabled:opacity-50"
+            class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
           />
         </div>
-
-        <div class="pt-2">
-          <Button type="submit" disabled={submitting || !mailReady || !newEmail.trim()} variant="primary" size="lg" class="w-full">
-            {#if submitting}
-              <span>{$t('account.email.change_submitting')}</span>
-            {:else}
-              <span>{$t('account.email.change_submit')}</span>
-            {/if}
-          </Button>
-        </div>
+        <Button type="submit" disabled={submitting || !mailReady || !newEmail.trim()} variant="primary" size="lg">
+          {submitting ? $t('account.email.change_submitting') : $t('account.email.change_submit')}
+        </Button>
       </form>
+      {#if sent}
+        <p data-testid="email-change-sent" class="mt-3 text-sm text-success" role="status">{$t('account.email.change_sent')}</p>
+      {/if}
+      {#if errorKey}
+        <p data-testid="email-change-error" class="mt-3 text-sm text-destructive-foreground" role="alert">{$t(errorKey)}</p>
+      {/if}
+    </SettingsSection>
+  {/if}
 
-      <div class="mt-6 text-center text-sm">
-        <a href="/settings" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-          {$t('account.email.back_settings')}
-        </a>
-      </div>
-    {/if}
-  </div>
-</div>
+  <!-- 通知偏好自带读取、保存与错误状态，与上面的改邮箱表单互不影响。 -->
+  <NotificationPrefsView />
+</Page>

@@ -115,6 +115,9 @@ function inferErrorCodeFromStatus(status: number): string {
  * 3. 错误响应安全解析为结构化 ApiClientError，保持内部英文诊断，UI 由语言包映射
  * 4. 零外部 HTTP 框架依赖，基于原生 fetch
  */
+/** onDataChanged 的变化种类，见 ApiClient.onDataChanged。 */
+export type DataChangeKind = 'decks' | 'cards' | 'review';
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -127,6 +130,19 @@ export class ApiClient {
    * 属于外壳。两者分开后，客户端不需要 import 路由，也不会与视图形成循环依赖。
    */
   onUnauthorized: (() => void) | null = null;
+
+  /**
+   * 写操作成功后的通知（外壳用它刷新侧边栏的卡组列表与待复习数）。
+   * decks：卡组本身增删改；cards：卡片或额度变化，待复习数会变；review：复习作答，变化频繁，
+   * 订阅方可以只标记过期而不立即重取。失败的请求不通知。
+   */
+  onDataChanged: ((kind: DataChangeKind) => void) | null = null;
+
+  private async notifying<T>(kind: DataChangeKind, pending: Promise<T>): Promise<T> {
+    const result = await pending;
+    this.onDataChanged?.(kind);
+    return result;
+  }
 
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = config.baseUrl || '';
@@ -292,7 +308,7 @@ export class ApiClient {
     form.append('on_conflict', options.onConflict || 'update');
     form.append('allow_others_progress', options.allowOthersProgress ? '1' : '0');
     form.append('skip_missing_media', options.skipMissingMedia ? '1' : '0');
-    return this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form });
+    return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form }));
   }
 
   /**
@@ -309,7 +325,7 @@ export class ApiClient {
     options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean }
   ): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
-    return this.request<PackageImportReport>('/api/v1/decks/import-url', {
+    return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import-url', {
       method: 'POST',
       body: JSON.stringify({
         url: rawURL,
@@ -319,7 +335,7 @@ export class ApiClient {
         allow_others_progress: options.allowOthersProgress === true,
         skip_missing_media: options.skipMissingMedia === true,
       }),
-    });
+    }));
   }
 
   /**
@@ -360,10 +376,10 @@ export class ApiClient {
       await this.getSession();
     }
     const id = encodeURIComponent(String(deckId));
-    return this.request<DeckSettings>(`/api/v1/decks/${id}/settings`, {
+    return this.notifying('cards', this.request<DeckSettings>(`/api/v1/decks/${id}/settings`, {
       method: 'PATCH',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /** 创建卡组；缺少会话令牌时先获取新 CSRF token。 */
@@ -371,10 +387,10 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<Deck>('/api/v1/decks', {
+    return this.notifying('decks', this.request<Deck>('/api/v1/decks', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /**
@@ -386,10 +402,10 @@ export class ApiClient {
       await this.getSession();
     }
     const id = encodeURIComponent(String(deckId));
-    return this.request<Deck>(`/api/v1/decks/${id}`, {
+    return this.notifying('decks', this.request<Deck>(`/api/v1/decks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /** 删除卡组（DELETE /api/v1/decks/:id，仅 owner）。 */
@@ -398,9 +414,9 @@ export class ApiClient {
       await this.getSession();
     }
     const id = encodeURIComponent(String(deckId));
-    return this.request<{ deleted: boolean }>(`/api/v1/decks/${id}`, {
+    return this.notifying('decks', this.request<{ deleted: boolean }>(`/api/v1/decks/${id}`, {
       method: 'DELETE',
-    });
+    }));
   }
 
   /**
@@ -412,9 +428,9 @@ export class ApiClient {
       await this.getSession();
     }
     const id = encodeURIComponent(String(deckId));
-    return this.request<{ left: boolean }>(`/api/v1/decks/${id}/membership`, {
+    return this.notifying('decks', this.request<{ left: boolean }>(`/api/v1/decks/${id}/membership`, {
       method: 'DELETE',
-    });
+    }));
   }
 
   /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
@@ -531,9 +547,9 @@ export class ApiClient {
   /** Soft-delete one note through the authenticated, CSRF-protected REST API. */
   async deleteNote(noteId: string): Promise<{ deleted: boolean; id: string }> {
     const id = encodeURIComponent(String(noteId));
-    return this.request<{ deleted: boolean; id: string }>(`/api/v1/notes/${id}`, {
+    return this.notifying('cards', this.request<{ deleted: boolean; id: string }>(`/api/v1/notes/${id}`, {
       method: 'DELETE',
-    });
+    }));
   }
 
   /** 使用同源会话与内存 CSRF token 调用安全批量端点创建笔记（kind 可为任意已注册题型）。 */
@@ -542,10 +558,10 @@ export class ApiClient {
       await this.getSession();
     }
     const encodedId = encodeURIComponent(String(deckId));
-    return this.request<CreateNotesResponse>(`/api/v1/decks/${encodedId}/notes`, {
+    return this.notifying('cards', this.request<CreateNotesResponse>(`/api/v1/decks/${encodedId}/notes`, {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /**
@@ -557,10 +573,10 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<BulkNotesResponse>('/api/v1/notes/bulk', {
+    return this.notifying('cards', this.request<BulkNotesResponse>('/api/v1/notes/bulk', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /** Preview fields using the authenticated session-only sanitized preview endpoint. */
@@ -728,10 +744,10 @@ export class ApiClient {
   /** 通过 Web 专用 CSRF 端点提交自评，并由服务端重建同范围队列。 */
   async submitSelfReview(input: SubmitSelfReviewRequest): Promise<SubmitReviewResult> {
     const { deck, ...review } = input;
-    return this.request<SubmitReviewResult>('/api/v1/review/answer', {
+    return this.notifying('review', this.request<SubmitReviewResult>('/api/v1/review/answer', {
       method: 'POST',
       body: JSON.stringify({ ...review, deck }),
-    });
+    }));
   }
 
   /**
@@ -739,10 +755,10 @@ export class ApiClient {
    * 客户端不提交档位；判分档位来自服务端 graderFor 与 preset 映射。
    */
   async submitGradedReview(input: SubmitGradedReviewRequest): Promise<GradedReviewResult> {
-    return this.request<GradedReviewResult>('/api/v1/review/grade', {
+    return this.notifying('review', this.request<GradedReviewResult>('/api/v1/review/grade', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /** 请求揭示作答类题型的正确答案（只读预览，不写进度）。 */
@@ -775,10 +791,10 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<ReviewQueueResponse>('/api/v1/review/bury', {
+    return this.notifying('review', this.request<ReviewQueueResponse>('/api/v1/review/bury', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /**
@@ -789,10 +805,10 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<ReviewQueueResponse>('/api/v1/review/suspend', {
+    return this.notifying('review', this.request<ReviewQueueResponse>('/api/v1/review/suspend', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /**
@@ -804,10 +820,10 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<ReviewUndoResponse>('/api/v1/review/undo', {
+    return this.notifying('review', this.request<ReviewUndoResponse>('/api/v1/review/undo', {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
   }
 
   /** 暂停或恢复本人在一条 note 下的全部卡（PUT / DELETE /api/v1/notes/:id/suspension）。 */
@@ -815,9 +831,9 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<{ suspended: boolean; cards: string[] }>(`/api/v1/notes/${encodeURIComponent(noteId)}/suspension`, {
+    return this.notifying('cards', this.request<{ suspended: boolean; cards: string[] }>(`/api/v1/notes/${encodeURIComponent(noteId)}/suspension`, {
       method: suspended ? 'PUT' : 'DELETE',
-    });
+    }));
   }
 
   /** 管理当前账号的 API keys；写操作沿用 request 自动注入的内存 CSRF token。 */
@@ -1441,9 +1457,9 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    return this.request<JoinShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/join`, {
+    return this.notifying('decks', this.request<JoinShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/join`, {
       method: 'POST',
-    });
+    }));
   }
 
   /**
@@ -1486,9 +1502,9 @@ export class ApiClient {
     if (!this.csrfToken) {
       await this.getSession();
     }
-    await this.request(`/api/v1/sharing/invites/${encodeURIComponent(String(deckId))}/accept`, {
+    await this.notifying('decks', this.request(`/api/v1/sharing/invites/${encodeURIComponent(String(deckId))}/accept`, {
       method: 'POST',
-    });
+    }));
   }
 
   /** 拒绝一条共享邀请（POST /api/v1/sharing/invites/:deckId/reject）。拒绝即删邀请，授权从未存在。 */

@@ -2,12 +2,8 @@ package web
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -29,35 +25,6 @@ func setOwnerLocale(t *testing.T, db *gorm.DB, userID uint64, code string) {
 	if err := users.Update(context.Background(), u); err != nil {
 		t.Fatalf("update owner locale: %v", err)
 	}
-}
-
-// postMailPrefs 提交邮件偏好表单；choices 的键是 mail.Type，值 true 表示勾选（开启）。
-// 未列出的可关闭类型按「复选框缺席 = 关闭」处理，与服务端一致。
-func postMailPrefs(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, choices map[mail.Type]bool) *httptest.ResponseRecorder {
-	t.Helper()
-	form := url.Values{"csrf_token": {csrf}}
-	for typ, on := range choices {
-		if on {
-			form.Set("mail_pref."+string(typ), "on")
-		}
-	}
-	return postForm(t, srv, "/settings/notifications", form, cookies)
-}
-
-// checkboxState 报告页面里名为 name 的复选框是否存在、是否勾选。
-// 只看该标签自身（到第一个 "/>" 为止），避免被后面的 "checked" 串味。
-func checkboxState(body, name string) (found, checked bool) {
-	marker := `name="` + name + `"`
-	i := strings.Index(body, marker)
-	if i < 0 {
-		return false, false
-	}
-	rest := body[i:]
-	// 只看该标签自身：到标签结束的 ">" 为止（templ 渲染 void 元素用 ">"，不是 "/>"）。
-	if end := strings.Index(rest, ">"); end >= 0 {
-		rest = rest[:end]
-	}
-	return true, strings.Contains(rest, "checked")
 }
 
 // TestMailPrefsCatalogKeysExistInBothCatalogs 断言目录与页面引用的每个语言包键在中英两套里都存在：

@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import { writable, get } from 'svelte/store';
 import type { RouteDefinition, RouteMatch } from './types';
 import { routes } from './routes';
@@ -120,7 +121,37 @@ export function navigate(to: string, replace = false): void {
       window.history.pushState({}, '', target);
     }
   }
-  routeStore.set(matchRoute(target));
+  commitRoute(matchRoute(target), !replace);
+}
+
+/**
+ * 把新路由写进 store，并在浏览器支持时包进一次 View Transition（app.css 定义了 140ms 淡入淡出）。
+ *
+ * 不支持的浏览器、非浏览器环境（测试）与「减少动态效果」的用户都同步写入，行为与改版前一致。
+ * 过渡回调等 tick()：Svelte 在微任务里才把 store 变化刷到 DOM，不等的话新快照拍到的还是旧页面。
+ * scrollTop 为真时回到页首：pushState 不会滚动，进入新页面却停在上一页的滚动位置，看起来像跳到了页中间。
+ */
+function commitRoute(match: RouteMatch, scrollTop: boolean): void {
+  const apply = () => {
+    routeStore.set(match);
+    if (scrollTop && typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo(0, 0);
+    }
+  };
+  if (!canAnimateRoute()) {
+    apply();
+    return;
+  }
+  (document as Document & { startViewTransition: (cb: () => Promise<void>) => unknown }).startViewTransition(async () => {
+    apply();
+    await tick();
+  });
+}
+
+function canAnimateRoute(): boolean {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return false;
+  if (!('startViewTransition' in document)) return false;
+  return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
 /**
@@ -177,7 +208,7 @@ export function initRouter(): () => void {
   if (typeof window === 'undefined') return () => {};
 
   const handlePopState = () => {
-    routeStore.set(matchRoute(window.location.pathname + window.location.search));
+    commitRoute(matchRoute(window.location.pathname + window.location.search), false);
   };
 
   const handleClick = (e: MouseEvent) => {

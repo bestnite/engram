@@ -1,7 +1,7 @@
 // PWA 外壳注册（M8-2）、暗色模式（Dark Mode）与移动端导航交互。
 // 零依赖、无构建链；不触碰任何答题数据。
 //
-// 暗色模式分工：**切换按钮在 SPA 侧**（`frontend/src/lib/theme.ts` + NavHeader），因为
+// 暗色模式分工：**切换按钮在 SPA 侧**（`frontend/src/lib/theme.ts` + `frontend/src/lib/components/shell/` 里的 ThemeToggle 与 UserMenu），因为
 // SPA 是客户端渲染的，而本文件的绑定只在加载期跑一次、拿不到之后才挂载的按钮。本文件只负责
 // 「加载期应用一次 + 用户未做选择时跟随系统偏好变化」。
 (function () {

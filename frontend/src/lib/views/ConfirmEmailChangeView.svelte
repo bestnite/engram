@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
@@ -30,14 +31,14 @@
   });
 </script>
 
-<div class="py-12 max-w-md mx-auto px-4">
-  <div class="card-elevated p-8 rounded-xl text-center">
-    <h1 class="mb-4 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+<Page width="narrow">
+  <div class="text-center">
+    <h1 class="mb-4 text-2xl font-semibold tracking-tight text-foreground">
       {$t('account.confirm_change.heading')}
     </h1>
 
     {#if status === 'checking'}
-      <p data-testid="confirm-change-checking" class="text-sm text-zinc-600 dark:text-zinc-400">{$t('account.confirm_change.checking')}</p>
+      <p data-testid="confirm-change-checking" class="text-sm text-muted-foreground">{$t('account.confirm_change.checking')}</p>
     {:else if status === 'done'}
       <p data-testid="confirm-change-done" class="text-sm text-emerald-600 dark:text-emerald-400">{$t('account.confirm_change.done')}</p>
     {:else}
@@ -45,9 +46,9 @@
     {/if}
 
     <div class="mt-6 text-sm">
-      <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+      <a href="/login" class="text-muted-foreground hover:text-foreground transition-colors">
         {$t('account.confirm_change.back_login')}
       </a>
     </div>
   </div>
-</div>
+</Page>

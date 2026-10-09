@@ -5,7 +5,7 @@
   import { buttonVariants } from './variants';
 
   type Variant = 'primary' | 'outline' | 'ghost' | 'danger' | 'danger-outline';
-  type Size = 'xs' | 'sm' | 'md' | 'lg';
+  type Size = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
 
   interface Props {
     /** href 存在时渲染成 <a>（导航类按钮），否则渲染 <button>。 */

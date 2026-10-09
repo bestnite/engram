@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -7,6 +8,7 @@
   import { routeStore } from '../router';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
 
   // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
   // 卡片正反面一律是服务端清洗后的 HTML，这里只把清洗结果作为标签注入，绝不把 fields 原文当 Markdown 渲染。
@@ -87,100 +89,95 @@
   onMount(loadShare);
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <div class="mb-6">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-      {$t('share.browse.heading')}
-    </h1>
-    {#if share}
-      <p data-testid="share-deck-name" class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{share.deck_name}</p>
-    {/if}
-  </div>
+<Page>
+  <PageHeader title={$t('share.browse.heading')}>
+    {#snippet meta()}
+      {#if share}
+        <p data-testid="share-deck-name" class="text-base font-medium text-foreground">{share.deck_name}</p>
+        <p class="mt-0.5 text-sm text-muted-foreground">{$t('share.browse.intro')}</p>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      {#if share && status !== 'loading' && status !== 'error' && status !== 'password'}
+        {#if $authStore.authenticated}
+          {#if joined}
+            <p data-testid="share-joined" class="text-sm text-success">{$t('share.browse.joined')}</p>
+            {#if joinedDeckId !== null}
+              <Button testId="share-open-deck" variant="primary" size="lg" href={`/decks/${joinedDeckId}`}>{$t('share.browse.open_deck')}</Button>
+            {/if}
+          {:else}
+            <Button variant="primary" size="lg" disabled={joining} onclick={join} testId="share-join">
+              {joining ? $t('share.browse.joining') : $t('share.browse.join')}
+            </Button>
+          {/if}
+        {:else}
+          <Button variant="primary" size="lg" href="/login">{$t('share.browse.login')}</Button>
+        {/if}
+      {/if}
+    {/snippet}
+  </PageHeader>
+
+  {#if joinErrorKey}
+    <p data-testid="share-join-error" role="alert" class="mb-4 text-sm text-destructive-foreground">{$t(joinErrorKey)}</p>
+  {/if}
 
   {#if status === 'loading'}
     <Skeleton testId="share-loading" label={$t('share.browse.loading')} lines={2} />
   {:else if status === 'error'}
-    <div
-      data-testid="share-error"
-      class="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm"
-    >
-      <span>{errorKey ? $t(errorKey) : $t('share.error_not_found')}</span>
-    </div>
+    <p data-testid="share-error" role="alert" class="py-16 text-center text-sm text-destructive-foreground">
+      {errorKey ? $t(errorKey) : $t('share.error_not_found')}
+    </p>
   {:else if status === 'password'}
-    <div class="card-elevated p-6 rounded-xl max-w-md">
-      <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{$t('share.password.intro')}</p>
-      <form onsubmit={handleUnlock} class="space-y-4">
-        <div>
-          <label for="share-password" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-            {$t('share.password.label')}
-          </label>
-          <input
-            id="share-password"
-            data-testid="share-password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            bind:value={password}
-            disabled={unlocking}
-            placeholder={$t('share.password.placeholder')}
-            class="field-input text-sm w-full transition-colors disabled:opacity-50"
-          />
-        </div>
-        {#if errorKey}
-          <p data-testid="share-password-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(errorKey)}</p>
-        {/if}
-        <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" class="w-full" testId="share-browse-submit">
-          {unlocking ? $t('share.password.submitting') : $t('share.password.submit')}
-        </Button>
-      </form>
-    </div>
-  {:else if share}
-    <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('share.browse.intro')}</p>
-
-    {#if share.notes.length === 0}
-      <p data-testid="share-empty" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('share.browse.empty')}</p>
-    {:else}
-      <ul class="space-y-4">
-        {#each share.notes as note, i}
-          <li data-testid="share-note" class="card-elevated p-5 rounded-xl">
-            <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{$t('share.browse.front')}</div>
-            <div class="mt-2 text-base text-zinc-950 dark:text-zinc-100 leading-relaxed">{@html note.front_html}</div>
-            <hr class="my-4 border-zinc-200 dark:border-zinc-800" />
-            <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{$t('share.browse.back')}</div>
-            <div class="mt-2 text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">{@html note.back_html}</div>
-            <span class="sr-only">{i + 1}</span>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-
-    <div class="mt-8 text-center text-sm">
-      {#if $authStore.authenticated}
-        {#if joined}
-          <p data-testid="share-joined" class="text-emerald-700 dark:text-emerald-400">{$t('share.browse.joined')}</p>
-          {#if joinedDeckId !== null}
-            <a
-              data-testid="share-open-deck"
-              href={`/decks/${joinedDeckId}`}
-              class="mt-2 inline-block text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-            >
-              {$t('share.browse.open_deck')}
-            </a>
-          {/if}
-        {:else}
-          <Button variant="primary" disabled={joining} onclick={join} testId="share-join">
-            {joining ? $t('share.browse.joining') : $t('share.browse.join')}
-          </Button>
-          {#if joinErrorKey}
-            <p data-testid="share-join-error" class="mt-2 text-rose-600 dark:text-rose-400">{$t(joinErrorKey)}</p>
-          {/if}
-        {/if}
-      {:else}
-        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-          {$t('share.browse.login')}
-        </a>
+    <form onsubmit={handleUnlock} class="max-w-sm space-y-4">
+      <p class="text-sm text-muted-foreground">{$t('share.password.intro')}</p>
+      <div>
+        <label for="share-password" class="block text-sm font-medium text-foreground">{$t('share.password.label')}</label>
+        <input
+          id="share-password"
+          data-testid="share-password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          required
+          bind:value={password}
+          disabled={unlocking}
+          placeholder={$t('share.password.placeholder')}
+          class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
+        />
+      </div>
+      {#if errorKey}
+        <p data-testid="share-password-error" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>
       {/if}
-    </div>
+      <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" testId="share-browse-submit">
+        {unlocking ? $t('share.password.submitting') : $t('share.password.submit')}
+      </Button>
+    </form>
+  {:else if share}
+    {#if share.notes.length === 0}
+      <p data-testid="share-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('share.browse.empty')}</p>
+    {:else}
+      <!-- 卡片预览：一行一张卡，左正面右背面，不再一张张卡片竖着堆。 -->
+      <div class="overflow-hidden rounded-lg border border-border">
+        <div class="hidden grid-cols-2 border-b border-border bg-surface text-xs text-muted-foreground sm:grid">
+          <div class="px-4 py-2.5">{$t('share.browse.front')}</div>
+          <div class="border-l border-border px-4 py-2.5">{$t('share.browse.back')}</div>
+        </div>
+        <ul class="divide-y divide-border">
+          {#each share.notes as note, i}
+            <li data-testid="share-note" class="grid sm:grid-cols-2">
+              <div class="px-4 py-3 text-sm leading-relaxed text-foreground">
+                <span class="mb-1 block text-xs text-muted-foreground sm:hidden">{$t('share.browse.front')}</span>
+                {@html note.front_html}
+              </div>
+              <div class="border-border px-4 py-3 text-sm leading-relaxed text-foreground/80 max-sm:border-t sm:border-l">
+                <span class="mb-1 block text-xs text-muted-foreground sm:hidden">{$t('share.browse.back')}</span>
+                {@html note.back_html}
+              </div>
+              <span class="sr-only">{i + 1}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
   {/if}
-</div>
+</Page>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -121,103 +122,77 @@
   });
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="notifications-view">
-  <a
-    href="/settings"
-    data-testid="notifications-back"
-    class="inline-block text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-  >
-    {$t('nav.settings')}
-  </a>
+<!-- 邮件通知偏好的分区组：嵌在邮件页（/settings/email）里，排在邮箱地址之后。
+     不再是独立页面；前面一行小标题说明下面几组都是通知开关。 -->
+<div data-testid="notifications-view" class="mt-2 border-t border-border pt-8">
+  <h2 class="text-base font-semibold text-foreground" data-testid="notifications-title">{$t('settings.notifications.heading')}</h2>
+  <p class="mt-1 text-sm text-muted-foreground">{$t('settings.notifications.intro')}</p>
 
   {#if loading}
     <Skeleton testId="notifications-loading" label={$t('common.loading')} />
   {:else if loadError}
-    <div data-testid="notifications-failed" class="card-elevated p-8 rounded-xl text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="notifications-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
+    <div data-testid="notifications-failed" class="py-16 text-center">
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
+      <Button type="button" testId="notifications-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
     </div>
   {:else if data}
-    <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="notifications-title">
-        {$t('settings.notifications.heading')}
-      </h1>
-      <p class="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
-    </header>
-
-    {#if actionError}
-      <div data-testid="notifications-action-error" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
-        {$t(actionError)}
-      </div>
-    {/if}
-    {#if notice}
-      <div data-testid="notifications-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-        {$t(notice)}
-      </div>
-    {/if}
-
-    <form onsubmit={save} class="space-y-6">
+    <form onsubmit={save} class="mt-6">
       {#each data.groups as group (group.class)}
-        <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="notifications-group-{group.class}">
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            {$t('settings.notifications.class.' + group.class + '.heading')}
-          </h2>
-          <ul class="divide-y divide-zinc-100 dark:divide-zinc-800">
+        <SettingsSection title={$t('settings.notifications.class.' + group.class + '.heading')} testId="notifications-group-{group.class}">
+          <ul class="space-y-3">
             {#each group.types as item (item.type)}
-              <li class="py-3.5 flex items-start gap-3.5 first:pt-0 last:pb-0">
+              <li class="flex items-start gap-3">
                 {#if item.locked}
-                  <Checkbox
-                    testId="notifications-locked-{item.type}"
-                    checked
-                    disabled
-                    class="mt-1"
-                    label={$t('settings.notifications.type.' + item.type)}
-                  />
+                  <Checkbox testId="notifications-locked-{item.type}" checked disabled class="mt-0.5" label={$t('settings.notifications.type.' + item.type)} />
                 {:else}
                   <Checkbox
                     testId="notifications-type-{item.type}"
-                    class="mt-1"
+                    class="mt-0.5"
                     checked={choices[item.type] ?? false}
                     onCheckedChange={(checked) => toggle(item.type, checked)}
                     label={$t('settings.notifications.type.' + item.type)}
                   />
                 {/if}
-                <div class="space-y-0.5">
-                  <span class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.type.' + item.type)}</span>
+                <div>
+                  <span class="text-sm text-foreground">{$t('settings.notifications.type.' + item.type)}</span>
                   {#if item.locked}
-                    <p class="text-xs text-zinc-400 dark:text-zinc-500">{$t('settings.notifications.locked')}</p>
+                    <p class="text-xs text-muted-foreground">{$t('settings.notifications.locked')}</p>
                   {/if}
                 </div>
               </li>
             {/each}
           </ul>
-        </section>
+        </SettingsSection>
       {/each}
 
-      <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="notifications-reminder-section">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-          {$t('settings.notifications.reminder.heading')}
-        </h2>
-        <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.notifications.reminder.label')}</span>
+      <SettingsSection
+        title={$t('settings.notifications.reminder.heading')}
+        description={$t('settings.notifications.reminder.hint', { tz: data.timezone })}
+        testId="notifications-reminder-section"
+      >
+        <label class="block max-w-sm text-sm font-medium text-foreground">{$t('settings.notifications.reminder.label')}
           <Select
-            class="mt-1.5 py-2.5"
+            class="mt-1.5"
             bind:value={reminderHour}
             testId="notifications-reminder"
+            ariaLabel={$t('settings.notifications.reminder.label')}
             options={[
               { value: '', label: $t('settings.notifications.reminder.default', { hour: data.default_reminder_hour }) },
               ...hours.map((hour) => ({ value: String(hour), label: `${hour}:00` })),
             ]}
           />
-          <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            {$t('settings.notifications.reminder.hint', { tz: data.timezone })}
-          </p>
         </label>
-      </section>
+      </SettingsSection>
 
-      <div class="pt-2">
+      <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+        {#if actionError}
+          <p data-testid="notifications-action-error" role="alert" class="text-sm text-destructive-foreground">{$t(actionError)}</p>
+        {/if}
+        {#if notice}
+          <p data-testid="notifications-notice" role="status" class="text-sm text-success">{$t(notice)}</p>
+        {/if}
         <Button type="submit" testId="notifications-submit" disabled={saving} variant="primary" size="lg">
           {$t(saving ? 'settings.notifications.saving' : 'settings.notifications.submit')}
         </Button>

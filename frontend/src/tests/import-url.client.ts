@@ -75,6 +75,14 @@ async function selectOption(testid: string, label: string): Promise<void> {
   await flush();
 }
 
+/** 分段切换（bits-ui ToggleGroup）：直接点击对应文字的那一段。 */
+async function chooseSegment(testid: string, label: string): Promise<void> {
+  const group = target.querySelector(`[data-testid="${testid}"]`) as HTMLElement;
+  const item = Array.from(group.querySelectorAll('button')).find((el) => el.textContent?.trim() === label) as HTMLElement;
+  item.click();
+  await flush();
+}
+
 function setInput(testid: string, value: string): void {
   const el = target.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
   el.value = value;
@@ -205,7 +213,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
 
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     expect(target.querySelector('[data-testid="import-url"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="import-file"]')).toBeNull();
 
@@ -225,6 +233,9 @@ describe('ImportView — URL source', () => {
     expect(reportSection()).toBeTruthy();
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.heading'));
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.preview_notice'));
+    // 报告里的「导入到」显示表单选项的文案，而不是服务端的原始取值。
+    expect(reportSection()?.textContent).toContain(formatMessage('zh-CN', 'package.import.new_deck'));
+    expect(reportSection()?.textContent).not.toContain('new_deck');
   });
 
   it('renders a real (non-dry-run) URL report without the preview notice', async () => {
@@ -233,7 +244,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
     submitForm();
@@ -249,7 +260,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     submitForm();
     await flush();
 
@@ -263,7 +274,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'http://example.com/deck.edeck');
     await flush();
     submitForm();
@@ -287,7 +298,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
     submitForm();
@@ -304,7 +315,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
 
@@ -325,7 +336,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
     submitForm();
@@ -333,7 +344,7 @@ describe('ImportView — URL source', () => {
     expect(reportSection()).toBeTruthy();
 
     // 切回文件来源：上一份直链导入的报告不再对应当前选择，必须消失。
-    await selectOption('import-source', fileLabel());
+    await chooseSegment('import-source', fileLabel());
     expect(reportSection()).toBeNull();
   });
 
@@ -343,7 +354,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
     submitForm();
@@ -363,7 +374,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
 
@@ -372,7 +383,7 @@ describe('ImportView — URL source', () => {
     expect(importUrl).toHaveBeenCalledTimes(1);
 
     // 提交在途时改回文件来源：旧请求仍按原负载执行，但结果不再对应当前选择。
-    await selectOption('import-source', fileLabel());
+    await chooseSegment('import-source', fileLabel());
     expect(reportSection()).toBeNull();
 
     pending.resolve(reportFixture({ notes_created: 7 }));
@@ -391,7 +402,7 @@ describe('ImportView — URL source', () => {
 
     mountView();
     await flush();
-    await selectOption('import-source', urlLabel());
+    await chooseSegment('import-source', urlLabel());
     setInput('import-url', 'https://example.com/deck.edeck');
     await flush();
     submitForm();

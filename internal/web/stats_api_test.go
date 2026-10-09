@@ -5,6 +5,8 @@ import (
 	"math"
 	"net/http"
 	"testing"
+
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestStatsDetailMatchesStoreMeasures 断言 SPA 明细接口的每个数字都能用 seedStatsFixture
@@ -64,6 +66,18 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	}
 	if newTotal != 1 || reviewTotal != 2 {
 		t.Errorf("curve totals = new:%d review:%d, want new=1 review=2", newTotal, reviewTotal)
+	}
+	// 窗口是含两端的 30 个复习日，且每个曲线点都落在窗口内。
+	if detail.CurveFrom == "" || detail.CurveTo == "" {
+		t.Fatalf("curve window = [%q, %q], want both bounds", detail.CurveFrom, detail.CurveTo)
+	}
+	if got := store.ShiftReviewDay(detail.CurveTo, -29); got != detail.CurveFrom {
+		t.Errorf("curve_from = %q, want %q (29 days before curve_to)", detail.CurveFrom, got)
+	}
+	for _, p := range detail.Curve {
+		if p.Day < detail.CurveFrom || p.Day > detail.CurveTo {
+			t.Errorf("curve point %q outside window [%q, %q]", p.Day, detail.CurveFrom, detail.CurveTo)
+		}
 	}
 
 	if len(detail.Decks) != 1 {

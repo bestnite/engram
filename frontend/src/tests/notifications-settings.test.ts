@@ -160,9 +160,10 @@ describe('Notification preferences API client uses session-only, CSRF-protected 
   });
 });
 
-describe('Notification SPA route owns the canonical path', () => {
-  it('resolves /settings/notifications', () => {
-    expect(matchRoute('/settings/notifications', routes).route?.name).toBe('notification-settings');
+describe('Notification preferences live on the email page', () => {
+  it('resolves /settings/email and drops the old /settings/notifications page', () => {
+    expect(matchRoute('/settings/email', routes).route?.name).toBe('email-settings');
+    expect(matchRoute('/settings/notifications', routes).route).toBeNull();
     expect(matchRoute('/settings', routes).route?.name).toBe('settings');
   });
 });

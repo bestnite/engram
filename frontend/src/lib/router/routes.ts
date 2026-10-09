@@ -14,10 +14,9 @@ import NoteEditView from '../views/NoteEditView.svelte';
 import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
-import TOTPView from '../views/TOTPView.svelte';
-import NotificationPrefsView from '../views/NotificationPrefsView.svelte';
+import SecurityView from '../views/SecurityView.svelte';
 import PresetsView from '../views/PresetsView.svelte';
-import AdminDashboardView from '../views/admin/AdminDashboardView.svelte';
+import AdminIndexView from '../views/admin/AdminIndexView.svelte';
 import AdminHealthView from '../views/admin/AdminHealthView.svelte';
 import AdminAuditView from '../views/admin/AdminAuditView.svelte';
 import AdminUsersView from '../views/admin/AdminUsersView.svelte';
@@ -129,18 +128,11 @@ export const routes: RouteDefinition[] = [
     component: APIKeysView as unknown as RouteDefinition['component'],
   },
   {
-    // 两步验证管理（规范路径）。服务端 GET /settings/totp 已切到应用壳，
-    // 读写走 /api/v1/settings/totp*。
-    path: '/settings/totp',
-    name: 'totp-settings',
-    component: TOTPView as unknown as RouteDefinition['component'],
-  },
-  {
-    // 邮件通知偏好（规范路径）。服务端 GET /settings/notifications 已切到
-    // 应用壳，读写走 /api/v1/settings/notifications。
-    path: '/settings/notifications',
-    name: 'notification-settings',
-    component: NotificationPrefsView as unknown as RouteDefinition['component'],
+    // 安全：修改密码与两步验证。服务端 GET /settings/security 返回应用壳，
+    // 读写走 /api/v1/settings/password 与 /api/v1/settings/totp*。
+    path: '/settings/security',
+    name: 'security-settings',
+    component: SecurityView as unknown as RouteDefinition['component'],
   },
   {
     path: '/login',
@@ -175,11 +167,11 @@ export const routes: RouteDefinition[] = [
     component: PresetsView as unknown as RouteDefinition['component'],
   },
   {
-    // 管理面板概览。服务端 GET /admin 已切到应用壳（requireAdmin 先于
-    // 外壳），计数走 /api/v1/admin/summary。
+    // 管理面板入口。服务端 GET /admin 已切到应用壳（requireAdmin 先于外壳）；
+    // 没有概览页，前端直接换到用户管理。
     path: '/admin',
-    name: 'admin-dashboard',
-    component: AdminDashboardView as unknown as RouteDefinition['component'],
+    name: 'admin-index',
+    component: AdminIndexView as unknown as RouteDefinition['component'],
   },
   {
     // 管理面板健康页。服务端 GET /admin/health 已切到应用壳，读数走 /api/v1/admin/health。

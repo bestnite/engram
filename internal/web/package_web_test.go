@@ -1,7 +1,9 @@
 package web
 
 import (
+	"archive/zip"
 	"bytes"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -60,8 +62,8 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	if ct := exp.Header().Get("Content-Type"); ct != packageExportMediaType {
 		t.Errorf("export content-type = %q, want %q", ct, packageExportMediaType)
 	}
-	if cd := exp.Header().Get("Content-Disposition"); !strings.Contains(cd, ".edeck") {
-		t.Errorf("export content-disposition = %q, want a .edeck download", cd)
+	if got := downloadName(t, exp); got != "Pack Deck.edeck" {
+		t.Errorf("export filename = %q, want the deck title %q", got, "Pack Deck.edeck")
 	}
 	if exp.Body.Len() == 0 {
 		t.Error("exported package is empty")
@@ -70,6 +72,64 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	anon := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/package", nil)
 	if anon.Code != http.StatusSeeOther {
 		t.Errorf("anonymous export = %d, want 303 redirect to login", anon.Code)
+	}
+}
+
+// downloadName 从 Content-Disposition 解析出下载文件名（含 filename* 的 UTF-8 形式）。
+func downloadName(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	cd := rec.Header().Get("Content-Disposition")
+	disposition, params, err := mime.ParseMediaType(cd)
+	if err != nil || disposition != "attachment" {
+		t.Fatalf("Content-Disposition = %q, want an attachment (parse error %v)", cd, err)
+	}
+	return params["filename"]
+}
+
+// TestDeckPackageDownloadsAreNamedAfterTheDeck 断言 SPA 实际调用的 REST 导出用卡组标题命名，
+// 中文标题经 filename* 编码后原样还原，而不是对外 id。
+func TestDeckPackageDownloadsAreNamedAfterTheDeck(t *testing.T) {
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "日语 N2 词汇")
+	seedBasic(t, db, deck.ID, "Q1", "A1")
+
+	rec := getWithCookies(t, srv, "/api/v1/decks/"+deck.PublicID+"/package", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET REST export = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if got := downloadName(t, rec); got != "日语 N2 词汇.edeck" {
+		t.Errorf("REST export filename = %q, want %q", got, "日语 N2 词汇.edeck")
+	}
+	if strings.Contains(rec.Header().Get("Content-Disposition"), deck.PublicID) {
+		t.Errorf("Content-Disposition %q still carries the deck id", rec.Header().Get("Content-Disposition"))
+	}
+}
+
+// TestBatchExportNamesEntriesAfterDecksWithoutCollisions 断言批量导出的 zip 条目以卡组标题命名，
+// 同名卡组追加序号而不是互相覆盖。
+func TestBatchExportNamesEntriesAfterDecksWithoutCollisions(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	first := seedDeck(t, db, ownerID, "Biology")
+	second := seedDeck(t, db, ownerID, "Biology")
+	third := seedDeck(t, db, ownerID, "a/b")
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/decks/export-zip", map[string]any{
+		"deck_ids": []string{first.PublicID, second.PublicID, third.PublicID},
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST export-zip = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("read batch zip: %v", err)
+	}
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+	}
+	want := []string{"Biology.edeck", "Biology (2).edeck", "a_b.edeck"}
+	if strings.Join(names, "|") != strings.Join(want, "|") {
+		t.Errorf("zip entries = %q, want %q", names, want)
 	}
 }
 

@@ -31,9 +31,14 @@
     return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value);
   }
 
+  /**
+   * 数值框的显示值。字符串原样显示：它是用户还没输完的内容（如「-」「1e」），
+   * setNumber 解析不了时就原样存着；若这里显示成空，输入框会在敲下第一个字符时被清空。
+   */
   function asNumber(key: string): string {
     const value = fields[key];
-    return typeof value === 'number' ? String(value) : '';
+    if (typeof value === 'number') return String(value);
+    return typeof value === 'string' ? value : '';
   }
 
   /** 数值输入：空串删除该键（可选数值字段的「未填」语义），否则写入数字。 */
@@ -73,10 +78,10 @@
           onCheckedChange={(checked) => (fields[spec.key] = checked)}
           label={$t('note.fields.' + spec.key)}
         />
-        <span class="text-sm text-zinc-700 dark:text-zinc-300">{$t('note.fields.' + spec.key)}</span>
+        <span class="text-sm text-foreground/80">{$t('note.fields.' + spec.key)}</span>
       </div>
     {:else}
-      <span class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+      <span class="block text-sm font-medium text-foreground">
         {$t('note.fields.' + spec.key)}
       </span>
       {#if spec.control === 'textarea'}
@@ -106,7 +111,7 @@
         />
       {:else if spec.control === 'index'}
         {#if options.length === 0}
-          <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.options_first')}</p>
+          <p class="mt-1.5 text-xs text-muted-foreground/70">{$t('note_edit.options_first')}</p>
         {:else}
           <Select
             class="mt-1.5"
@@ -119,7 +124,7 @@
         {/if}
       {:else if spec.control === 'indexes'}
         {#if options.length === 0}
-          <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.options_first')}</p>
+          <p class="mt-1.5 text-xs text-muted-foreground/70">{$t('note_edit.options_first')}</p>
         {:else}
           <ul class="mt-1.5 space-y-1.5">
             {#each options as option, index (index)}
@@ -130,7 +135,7 @@
                   onCheckedChange={(checked) => toggleIndex(spec.key, index, checked)}
                   label={`${index + 1}. ${option}`}
                 />
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">{index + 1}. {option}</span>
+                <span class="text-sm text-foreground/80">{index + 1}. {option}</span>
               </li>
             {/each}
           </ul>

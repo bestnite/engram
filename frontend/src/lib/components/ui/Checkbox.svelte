@@ -42,7 +42,7 @@
   onCheckedChange={(next) => onCheckedChange?.(next)}
   {onclick}
   class={cn(
-    'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded border border-zinc-300 transition-colors data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=indeterminate]:border-blue-600 data-[state=indeterminate]:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600',
+    'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-input bg-background transition-colors data-[state=checked]:border-brand data-[state=checked]:bg-brand data-[state=indeterminate]:border-brand data-[state=indeterminate]:bg-brand disabled:cursor-not-allowed disabled:opacity-50',
     klass
   )}
 >

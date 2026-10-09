@@ -49,7 +49,7 @@ func assertRedirectsToLogin(t *testing.T, rec *httptest.ResponseRecorder, what s
 
 // TestSessionPageRoutesServeShell 覆盖「只要求已登录会话」的页面路径。
 func TestSessionPageRoutesServeShell(t *testing.T) {
-	for _, path := range []string{"/decks", "/review", "/settings", "/settings/keys", "/settings/notifications"} {
+	for _, path := range []string{"/decks", "/review", "/settings", "/settings/security", "/settings/email", "/settings/keys"} {
 		t.Run(path, func(t *testing.T) {
 			srv, _, _, cookies, _ := newNotesServer(t)
 			assertShell(t, getWithCookies(t, srv, path, cookies))
@@ -63,15 +63,6 @@ func TestPresetsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _, _ := newPresetsServer(t)
 	assertShell(t, getWithCookies(t, srv, "/presets", cookies))
 	assertRedirectsToLogin(t, getWithCookies(t, srv, "/presets", nil), "GET /presets")
-}
-
-// TestTOTPSettingsRouteServesShell 覆盖 /settings/totp：它要求已登录会话，夹具需要 TOTP 管理员。
-func TestTOTPSettingsRouteServesShell(t *testing.T) {
-	srv, db := newAuthServer(t)
-	_ = createTOTPAdmin(t, srv, db)
-	cookies, _ := totpLogin(t, srv, db)
-	assertShell(t, getWithCookies(t, srv, "/settings/totp", cookies))
-	assertRedirectsToLogin(t, get(t, srv, "/settings/totp", nil), "GET /settings/totp")
 }
 
 // deckPageRouteCase 一行 = 一条卡组范围内页面路径的可达性断言。

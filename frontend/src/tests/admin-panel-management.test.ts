@@ -48,7 +48,8 @@ describe('Admin management views render server-provided truth', () => {
     expect(html).toContain('alice@example.com');
     expect(html).toContain('管理员');
     expect(html).toContain('已禁用');
-    expect(html).toContain('data-testid="admin-users-create"');
+    // 新建用户改为对话框：页面上是打开它的按钮，表单在对话框里。
+    expect(html).toContain('data-testid="admin-users-create-open"');
   });
 
   it('renders the registration policy, domains and invite table', () => {
