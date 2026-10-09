@@ -322,6 +322,11 @@ func (s *Server) apiSetup(c *gin.Context) {
 	outcome := s.attemptSetup(ctx,
 		strings.TrimSpace(req.Username), email,
 		strings.TrimSpace(req.DisplayName), req.Password, s.requestLocale(c))
+	if outcome.Status == http.StatusNotFound {
+		// 闸门里发现已有管理员：与入口处的一次性门同一响应。
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
 	if outcome.Code != "" {
 		apiAuthError(c, outcome.Status, outcome.Code, registrationErrorMessage(outcome.Code))
 		return

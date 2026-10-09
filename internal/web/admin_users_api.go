@@ -175,10 +175,14 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			adminError(c, http.StatusBadRequest, "self_forbidden")
 			return
 		}
-		if s.wouldRemoveLastAdmin(c, target) {
-			adminError(c, http.StatusBadRequest, "last_admin")
+		// 判定与写入在同一个闸门事务里：两个管理员同时禁用对方时只有一个能成功。
+		err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
+			return guardedUserUpdate(tx, target.ID, admins, "status", store.StatusDisabled)
+		})
+		if s.writeAdminGateError(c, err, "disable user", target.ID) {
 			return
 		}
+		// 状态已在闸门里写入；作废会话与刷新状态由账号服务完成（状态写入是幂等的）。
 		if err := s.accounts.DisableUser(ctx, target.ID); err != nil {
 			s.logger.Error("spa admin: disable user failed", "user_id", target.ID, "error", err)
 			adminError(c, http.StatusInternalServerError, "save_failed")
@@ -227,14 +231,14 @@ func (s *Server) adminUserRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if req.Role != store.RoleAdmin && s.wouldRemoveLastAdmin(c, target) {
-		adminError(c, http.StatusBadRequest, "last_admin")
-		return
-	}
 	ctx := c.Request.Context()
-	if err := s.users.SetRole(ctx, target.ID, req.Role); err != nil {
-		s.logger.Error("spa admin: set role failed", "user_id", target.ID, "error", err)
-		adminError(c, http.StatusInternalServerError, "save_failed")
+	err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
+		if req.Role == store.RoleAdmin {
+			return tx.Model(&store.User{}).Where("id = ?", target.ID).Update("role", req.Role).Error
+		}
+		return guardedUserUpdate(tx, target.ID, admins, "role", req.Role)
+	})
+	if s.writeAdminGateError(c, err, "set role", target.ID) {
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -324,20 +328,30 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		adminError(c, http.StatusBadRequest, "self_forbidden")
 		return
 	}
+	ctx := c.Request.Context()
+	// 先在闸门外做一次无锁预判：明显会清空管理员的请求不发通知、不作废会话。
 	if s.wouldRemoveLastAdmin(c, target) {
 		adminError(c, http.StatusBadRequest, "last_admin")
 		return
 	}
-	ctx := c.Request.Context()
 	// 删除前先发「账号被删除」通知；发信失败不影响删除（通知函数不返回 error）。
 	s.notifyAccountStatus(ctx, target, "deleted")
 	// 删除前先作废会话，保证即便删除中途失败也不留下可用会话。
 	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
 		s.logger.Error("spa admin: revoke sessions before delete failed", "user_id", target.ID, "error", err)
 	}
-	if err := s.users.DeleteUser(ctx, target.ID); err != nil {
-		s.logger.Error("spa admin: delete user failed", "user_id", target.ID, "error", err)
-		adminError(c, http.StatusInternalServerError, "save_failed")
+	// 权威判定与删除在同一个闸门事务里。
+	err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
+		var fresh store.User
+		if err := tx.First(&fresh, "id = ?", target.ID).Error; err != nil {
+			return err
+		}
+		if store.RemovesLastAdmin(&fresh, admins) {
+			return store.ErrLastAdmin
+		}
+		return store.DeleteUserTx(ctx, tx, target.ID)
+	})
+	if s.writeAdminGateError(c, err, "delete user", target.ID) {
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
@@ -366,4 +380,31 @@ func (s *Server) adminTargetUser(c *gin.Context) (*store.User, bool) {
 		return nil, false
 	}
 	return u, true
+}
+
+// guardedUserUpdate 在闸门事务里重新读出目标用户，确认这次「禁用 / 降权」不会清空管理员后
+// 写入一列。读必须在事务里重做：闸门外读到的行可能已被并发请求改过。
+func guardedUserUpdate(tx *gorm.DB, userID uint64, admins int64, column string, value any) error {
+	var fresh store.User
+	if err := tx.First(&fresh, "id = ?", userID).Error; err != nil {
+		return err
+	}
+	if store.RemovesLastAdmin(&fresh, admins) {
+		return store.ErrLastAdmin
+	}
+	return tx.Model(&store.User{}).Where("id = ?", userID).Update(column, value).Error
+}
+
+// writeAdminGateError 把闸门事务的结果映射成响应；有错误时写出响应并返回 true。
+func (s *Server) writeAdminGateError(c *gin.Context, err error, action string, userID uint64) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, store.ErrLastAdmin):
+		adminError(c, http.StatusBadRequest, "last_admin")
+	default:
+		s.logger.Error("spa admin: "+action+" failed", "user_id", userID, "error", err)
+		adminError(c, http.StatusInternalServerError, "save_failed")
+	}
+	return true
 }

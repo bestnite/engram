@@ -101,32 +101,38 @@ func (s *UserStore) UsageCounts(ctx context.Context, userID uint64) (UserUsage, 
 // 在一个事务里显式清理。审计行刻意保留：删除动作本身要留痕（谁删了谁）。
 func (s *UserStore) DeleteUser(ctx context.Context, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		stmts := []string{
-			// 直接按 user_id 引用的表。
-			"DELETE FROM sessions WHERE user_id = ?",
-			"DELETE FROM identities WHERE user_id = ?",
-			"DELETE FROM api_keys WHERE user_id = ?",
-			"DELETE FROM card_states WHERE user_id = ?",
-			"DELETE FROM reviews WHERE user_id = ?",
-			"DELETE FROM deck_grants WHERE user_id = ?",
-			// 授权/分享链接的 created_by 是可空引用，置空即可，不必删别人的卡组授权。
-			"UPDATE deck_grants SET created_by = NULL WHERE created_by = ?",
-			"DELETE FROM share_links WHERE created_by = ?",
-			"DELETE FROM media WHERE created_by = ?",
-			// 其拥有的卡组：先卡片、再笔记、再卡组，最后预设（deck 引用 preset）。
-			`DELETE FROM cards WHERE note_id IN (
-				SELECT id FROM notes WHERE deck_id IN (SELECT id FROM decks WHERE owner_user_id = ?))`,
-			`DELETE FROM notes WHERE deck_id IN (SELECT id FROM decks WHERE owner_user_id = ?)`,
-			"DELETE FROM decks WHERE owner_user_id = ?",
-			"DELETE FROM presets WHERE owner_user_id = ?",
-			// 最后删用户本体。
-			"DELETE FROM users WHERE id = ?",
-		}
-		for _, stmt := range stmts {
-			if err := tx.Exec(stmt, userID).Error; err != nil {
-				return fmt.Errorf("delete user data: %w", err)
-			}
-		}
-		return nil
+		return DeleteUserTx(ctx, tx, userID)
 	})
+}
+
+// DeleteUserTx 在调用方给定的事务里执行 DeleteUser 的清理（管理员闸门在同一事务里先做判定）。
+func DeleteUserTx(ctx context.Context, tx *gorm.DB, userID uint64) error {
+	tx = tx.WithContext(ctx)
+	stmts := []string{
+		// 直接按 user_id 引用的表。
+		"DELETE FROM sessions WHERE user_id = ?",
+		"DELETE FROM identities WHERE user_id = ?",
+		"DELETE FROM api_keys WHERE user_id = ?",
+		"DELETE FROM card_states WHERE user_id = ?",
+		"DELETE FROM reviews WHERE user_id = ?",
+		"DELETE FROM deck_grants WHERE user_id = ?",
+		// 授权/分享链接的 created_by 是可空引用，置空即可，不必删别人的卡组授权。
+		"UPDATE deck_grants SET created_by = NULL WHERE created_by = ?",
+		"DELETE FROM share_links WHERE created_by = ?",
+		"DELETE FROM media WHERE created_by = ?",
+		// 其拥有的卡组：先卡片、再笔记、再卡组，最后预设（deck 引用 preset）。
+		`DELETE FROM cards WHERE note_id IN (
+			SELECT id FROM notes WHERE deck_id IN (SELECT id FROM decks WHERE owner_user_id = ?))`,
+		`DELETE FROM notes WHERE deck_id IN (SELECT id FROM decks WHERE owner_user_id = ?)`,
+		"DELETE FROM decks WHERE owner_user_id = ?",
+		"DELETE FROM presets WHERE owner_user_id = ?",
+		// 最后删用户本体。
+		"DELETE FROM users WHERE id = ?",
+	}
+	for _, stmt := range stmts {
+		if err := tx.Exec(stmt, userID).Error; err != nil {
+			return fmt.Errorf("delete user data: %w", err)
+		}
+	}
+	return nil
 }
