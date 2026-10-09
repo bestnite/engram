@@ -23,7 +23,10 @@ func (s *Server) registerDeckSettingsRoutes(router *gin.Engine) {
 
 // deckBudget 取单个卡组今日的额度情况，走 schedule.DeckBudgets（与复习队列同源）。
 func (s *Server) deckBudget(ctx context.Context, user *store.User, deckID uint64) (schedule.DeckBudget, error) {
-	budgets, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckBudgets(ctx, user.ID, []uint64{deckID})
+	budgets, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckBudgets(ctx, user.ID, []uint64{deckID}, schedule.QueueOptions{
+		Timezone:      user.Timezone,
+		DayCutoffHour: user.DayCutoffHour,
+	})
 	if err != nil {
 		return schedule.DeckBudget{}, err
 	}

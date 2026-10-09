@@ -29,13 +29,14 @@ type DeckBudget struct {
 
 // DeckBudgets 返回每个卡组今日的额度情况。
 //
-// 它与 Build / DeckCounts 共用同一条额度公式（deckBudget）与同一个复习日口径
-// （QueueOptions 的默认 Location / DayCutoffHour，与 DeckCounts 一致），因此设置页上的
-// 「已用 / 剩余」与队列实际能出的张数是同源的，网页层不重写 SQL 也不重算公式。
+// 它与 Build / DeckCounts 共用同一条额度公式（deckBudget）与同一个复习日口径，因此设置页上的
+// 「已用 / 剩余」与队列实际能出的张数是同源的，网页层不重写 SQL 也不重算公式。opts 只读
+// Now、Location/Timezone 与 DayCutoffHour：「今日已用量」必须按用户自己的复习日统计，与评分时
+// 写入 reviews.review_day 的口径一致。
 //
 // deckIDs 是待查询的卡组集合；空集合返回空 map（不报错）。读不到卡组列（卡组行不存在）
 // 时沿用 resolveScope 的兜底：NewPerDay 用 DefaultNewPerDay，ReviewsPerDay 保持 0（不限）。
-func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs []uint64) (map[uint64]DeckBudget, error) {
+func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckBudget, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck budgets: user id is required")
 	}
@@ -48,9 +49,10 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 		return out, nil
 	}
 
-	// 口味与 DeckCounts 完全相同：只用默认的时区与切点，数量/额度统计与 retrievability 无关。
-	opts := QueueOptions{DeckIDs: ids}
-	opts = opts.withDefaults()
+	opts = QueueOptions{
+		DeckIDs: ids, Now: opts.Now, Location: opts.Location, Timezone: opts.Timezone,
+		DayCutoffHour: opts.DayCutoffHour,
+	}.withDefaults()
 
 	caps, err := b.loadDeckCaps(ctx, userID, ids)
 	if err != nil {
