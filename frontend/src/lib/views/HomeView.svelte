@@ -123,19 +123,19 @@
 
       <!-- 聚合指标：一条横向指标带，四项之间只用竖线分隔，不再是四张卡片。 -->
       <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
-        <div class="border-border py-4 pr-4 max-sm:border-b sm:border-r">
+        <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
           <dt class="text-xs text-muted-foreground">{$t('home.due_count')}</dt>
           <dd data-testid="home-due-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.due)}</dd>
         </div>
-        <div class="border-border py-4 pl-4 max-sm:border-b sm:border-r sm:pr-4">
+        <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
           <dt class="text-xs text-muted-foreground">{$t('home.reviews_today')}</dt>
           <dd data-testid="home-reviews-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.reviews_today)}</dd>
         </div>
-        <div class="border-border py-4 pr-4 sm:border-r sm:pl-4">
+        <div class="border-border px-4 py-4 text-center max-sm:border-r sm:border-r">
           <dt class="text-xs text-muted-foreground">{$t('home.retention')}</dt>
           <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
         </div>
-        <div class="py-4 pl-4">
+        <div class="px-4 py-4 text-center">
           <dt class="text-xs text-muted-foreground">{$t('stats.metric_decks')}</dt>
           <dd data-testid="home-decks-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.decks)}</dd>
         </div>

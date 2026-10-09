@@ -155,7 +155,7 @@
 
 <Page>
   <PageHeader title={$t('package.import.title')} description={$t('package.import.intro')} />
-  <form onsubmit={submit} class="max-w-2xl space-y-6">
+  <form onsubmit={submit} class="space-y-6">
     <div class="space-y-2">
       <span class="block text-sm font-medium" id="import-source-label">{$t('package.source.label')}</span>
       <SegmentedControl
@@ -187,7 +187,7 @@
         <span class="mt-1.5 block text-xs font-normal text-muted-foreground">{$t('package.import.url_help')}</span>
       </label>
     {/if}
-    <div class="grid gap-5 sm:grid-cols-2">
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <label class="block text-sm font-medium">{$t('package.import.target')}
         <Select
           class="mt-2"
@@ -231,9 +231,9 @@
     </div>
   </form>
   {#if report}
-    <section class="mt-10 max-w-2xl border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
+    <section class="mt-10 border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
       <h2 class="text-base font-semibold">{$t('package.report.heading')}</h2>
-      <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 text-sm">
+      <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3 text-sm">
         {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
       {#if report.errors.length}<h3 class="mt-5 text-sm font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
