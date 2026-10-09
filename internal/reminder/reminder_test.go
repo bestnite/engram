@@ -84,7 +84,7 @@ func seedUserWithDueCard(t *testing.T, db *gorm.DB, name, email, locale, tz stri
 		t.Fatalf("create preset: %v", err)
 	}
 	deck := store.Deck{
-		OwnerUserID: user.ID, Name: "Deck", Description: "", Visibility: "private",
+		OwnerUserID: user.ID, Name: "Deck", Description: "",
 		NewPerDay: 20, ReviewsPerDay: 200, PresetID: preset.ID, CreatedAt: now,
 	}
 	if err := db.Create(&deck).Error; err != nil {

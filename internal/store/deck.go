@@ -10,13 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组可见性取值。
-const (
-	DeckVisibilityPrivate  = "private"
-	DeckVisibilityUnlisted = "unlisted"
-	DeckVisibilityPublic   = "public"
-)
-
 // 卡组级每日上限的文档化默认值：新卡 20、复习 200，0 表示不限。
 // 与 decks 表的列默认值保持一致；改这里必须同步改 models.go 的 default 标签。
 const (
@@ -41,8 +34,6 @@ var (
 	// ErrNotOwner 表示调用者不是资源的所有者，因此无权修改。
 	// 复用同一个哨兵值，让上层用 errors.Is 一致地翻译成 403。
 	ErrNotOwner = errors.New("actor is not the owner")
-	// ErrInvalidVisibility 表示可见性不在允许集合内。
-	ErrInvalidVisibility = errors.New("invalid deck visibility")
 	// ErrDeckNameRequired 表示卡组名为空。
 	ErrDeckNameRequired = errors.New("deck name is required")
 	// ErrDeckNameInvalid 表示卡组名不满足与卡组包 manifest 共用的规则：超过
@@ -72,16 +63,6 @@ func validDeckCaps(c DeckCaps) error {
 		return fmt.Errorf("%w: new_per_day=%d reviews_per_day=%d", ErrInvalidDeckCap, c.NewPerDay, c.ReviewsPerDay)
 	}
 	return nil
-}
-
-// validDeckVisibility 判断可见性取值是否合法。
-func validDeckVisibility(v string) bool {
-	switch v {
-	case DeckVisibilityPrivate, DeckVisibilityUnlisted, DeckVisibilityPublic:
-		return true
-	default:
-		return false
-	}
 }
 
 // requireDeckOwner 检查 actor 是否为卡组 owner，不是则返回 ErrNotOwner。
@@ -133,13 +114,6 @@ func validateDeckForWrite(d *Deck, create bool) error {
 	// 与包导入复用同一文本规则，避免创建端产出导入端拒绝的描述。空描述合法。
 	if entries := textFieldErrors("deck.description", d.Description, maxDeckDescriptionChars); len(entries) > 0 {
 		return fmt.Errorf("%w: %s", ErrDeckDescriptionInvalid, entries[0])
-	}
-	if d.Visibility == "" {
-		// 字符串型默认值由 store 层在 Go 侧给出（models.go 包注释） 默认 private。
-		d.Visibility = DeckVisibilityPrivate
-	}
-	if !validDeckVisibility(d.Visibility) {
-		return fmt.Errorf("%w: %q", ErrInvalidVisibility, d.Visibility)
 	}
 	if create {
 		if d.OwnerUserID == 0 {
@@ -204,21 +178,12 @@ func (s *DeckStore) Update(ctx context.Context, actorUserID uint64, d *Deck) err
 	updates := map[string]any{
 		"name":        d.Name,
 		"description": d.Description,
-		"visibility":  d.Visibility,
 		"preset_id":   d.PresetID,
 	}
 	if err := s.db.WithContext(ctx).Model(&Deck{}).Where("id = ?", d.ID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("update deck: %w", err)
 	}
 	return nil
-}
-
-// SetVisibility 只改可见性一列；只有 owner 能改。
-func (s *DeckStore) SetVisibility(ctx context.Context, actorUserID, deckID uint64, visibility string) error {
-	if !validDeckVisibility(visibility) {
-		return fmt.Errorf("%w: %q", ErrInvalidVisibility, visibility)
-	}
-	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"visibility": visibility})
 }
 
 // Archive 打上归档时间；重复归档直接返回 nil（幂等）。

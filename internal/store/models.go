@@ -115,7 +115,6 @@ type Deck struct {
 	OwnerUserID   uint64     `gorm:"not null;index" json:"owner_user_id"`
 	Name          string     `gorm:"not null" json:"name"`
 	Description   string     `gorm:"not null" json:"description"`
-	Visibility    string     `gorm:"not null" json:"visibility"` // private | unlisted | public
 	NewPerDay     int        `gorm:"not null;default:20" json:"new_per_day"`
 	ReviewsPerDay int        `gorm:"not null;default:200" json:"reviews_per_day"`
 	PresetID      uint64     `gorm:"not null;index" json:"preset_id"`

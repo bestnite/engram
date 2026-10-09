@@ -27,8 +27,6 @@ func (s *Server) registerSharingRoutes(router *gin.Engine) {
 	router.DELETE("/api/v1/decks/:id/sharing/grants/:userID", s.sessions.CSRFMiddleware(), s.sharingRevoke)
 	// 分享同意制（L3）：待接受的邀请、接受/拒绝，以及用户自己的接收策略。
 	s.registerShareInviteRoutes(router)
-	router.PATCH("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.sharingVisibility)
-	router.POST("/api/v1/decks/:id/sharing/visibility", s.sessions.CSRFMiddleware(), s.sharingVisibility)
 	router.POST("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.sharingLinkCreate)
 	router.DELETE("/api/v1/decks/:id/sharing/links/revoke/:digest", s.sessions.CSRFMiddleware(), s.sharingLinkRevoke)
 	router.DELETE("/api/v1/decks/:id/sharing/links", s.sessions.CSRFMiddleware(), s.sharingLinkRevokeAll)

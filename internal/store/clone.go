@@ -15,7 +15,7 @@ import (
 //   - 只复制内容列（kind / fields_json / tags_json / external_ref / source / reference_refs）；
 //   - 新 note 经题型重新生成 card，得到一组**全新 id、全新行**的 card；
 //   - 绝不复制任何进度：新 card 没有任何 card_states 行，调用方账号下进度从零开始；
-//   - 授权与可见性属于实例内状态，不随内容复制 —— 克隆出的卡组默认 private、只有调用者一个 owner。
+//   - 授权关系属于实例内状态，不随内容复制 —— 克隆出的卡组只有调用者一个 owner。
 //
 // 整个复制在一个事务内完成：任一条失败则回滚，不会留下半截副本。
 // 源卡组只读，不会被本操作修改。
@@ -43,7 +43,6 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 			OwnerUserID: targetUserID,
 			Name:        newName,
 			Description: src.Description,
-			Visibility:  DeckVisibilityPrivate,
 			PresetID:    presetID,
 			CreatedAt:   time.Now().UTC(),
 		}

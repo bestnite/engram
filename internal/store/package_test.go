@@ -35,7 +35,7 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 	t.Helper()
 	ctx := context.Background()
 	presetID := seedPresetRow(t, db, owner)
-	d := Deck{OwnerUserID: owner, Name: "源卡组", PresetID: presetID, Visibility: DeckVisibilityPrivate, Description: "source"}
+	d := Deck{OwnerUserID: owner, Name: "源卡组", PresetID: presetID, Description: "source"}
 	if err := NewDeckStore(db).Create(ctx, &d); err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
@@ -75,7 +75,7 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 func seedPresetDeck(t *testing.T, db *gorm.DB, owner uint64) uint64 {
 	t.Helper()
 	presetID := seedPresetRow(t, db, owner)
-	d := Deck{OwnerUserID: owner, Name: "empty", PresetID: presetID, Visibility: DeckVisibilityPrivate}
+	d := Deck{OwnerUserID: owner, Name: "empty", PresetID: presetID}
 	if err := NewDeckStore(db).Create(context.Background(), &d); err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

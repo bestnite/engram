@@ -11,28 +11,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// setDeckVisibility 直接改一行卡组的可见性；用于验证「可见性即时生效」。
-func setDeckVisibility(t *testing.T, env *testEnv, deckID uint64, visibility string) {
-	t.Helper()
-	if err := env.db.Model(&store.Deck{}).Where("id = ?", deckID).Update("visibility", visibility).Error; err != nil {
-		t.Fatalf("set deck visibility: %v", err)
-	}
-}
-
 // visibleFixture 装配「一个 owner + 一个 viewer」的可见性场景：
-// viewer 被授权 granted、denied 未授权、public 对他人的 public、unlisted 是他人 unlisted。
+// viewer 被授权 granted，denied 与 other 都是 owner 的卡组但没有授权给 viewer。
 type visibleFixture struct {
-	env      *testEnv
-	owner    *store.User
-	viewer   *store.User
-	granted  *store.Deck
-	denied   *store.Deck
-	public   *store.Deck
-	unlisted *store.Deck
-	key      *store.CreatedAPIKey
+	env     *testEnv
+	owner   *store.User
+	viewer  *store.User
+	granted *store.Deck
+	denied  *store.Deck
+	other   *store.Deck
+	key     *store.CreatedAPIKey
 }
 
-// newVisibleFixture 建立上述四个卡组并给 viewer 一个 read key。
+// newVisibleFixture 建立上述三个卡组并给 viewer 一个 read key。
 func newVisibleFixture(t *testing.T) *visibleFixture {
 	t.Helper()
 	env := newTestEnv(t, 600, 600)
@@ -41,10 +32,7 @@ func newVisibleFixture(t *testing.T) *visibleFixture {
 
 	granted := seedDeck(t, env.db, owner.ID)
 	denied := seedDeck(t, env.db, owner.ID)
-	public := seedDeck(t, env.db, owner.ID)
-	setDeckVisibility(t, env, public.ID, store.DeckVisibilityPublic)
-	unlisted := seedDeck(t, env.db, owner.ID)
-	setDeckVisibility(t, env, unlisted.ID, store.DeckVisibilityUnlisted)
+	other := seedDeck(t, env.db, owner.ID)
 
 	if err := store.NewGrantStore(env.db).Grant(context.Background(), granted.ID, viewer.ID, store.RoleReader, store.Ptr(owner.ID)); err != nil {
 		t.Fatalf("grant viewer: %v", err)
@@ -52,7 +40,7 @@ func newVisibleFixture(t *testing.T) *visibleFixture {
 	key := seedKey(t, env.keys, viewer.ID, []string{store.ScopeRead}, nil)
 	return &visibleFixture{
 		env: env, owner: owner, viewer: viewer,
-		granted: granted, denied: denied, public: public, unlisted: unlisted, key: key,
+		granted: granted, denied: denied, other: other, key: key,
 	}
 }
 
@@ -79,32 +67,30 @@ func listDeckIDsViaHTTP(t *testing.T, env *testEnv, key string) map[uint64]bool 
 }
 
 // TestListDecksUsesVisibleScope 是对这条规则的验收：REST 列表必须与网页列表页同口径
-// ——自有 ∪ 被授权 ∪ 他人 public；未授权的 private 与任何 unlisted 都不得出现。
+// ——自有 ∪ 被 deck_grants 授权。别人没授权给我的卡组一律不得出现，且撤销授权即时生效。
 func TestListDecksUsesVisibleScope(t *testing.T) {
 	f := newVisibleFixture(t)
 
 	got := listDeckIDsViaHTTP(t, f.env, f.key.Plaintext)
 	if !got[f.granted.ID] {
-		t.Errorf("GET /decks missing granted private deck %d: %v", f.granted.ID, got)
+		t.Errorf("GET /decks missing granted deck %d: %v", f.granted.ID, got)
 	}
-	if !got[f.public.ID] {
-		t.Errorf("GET /decks missing other user's public deck %d: %v", f.public.ID, got)
-	}
-	if got[f.denied.ID] {
-		t.Errorf("GET /decks leaked unauthorized private deck %d: %v", f.denied.ID, got)
-	}
-	if got[f.unlisted.ID] {
-		t.Errorf("GET /decks leaked unlisted deck %d: %v", f.unlisted.ID, got)
+	for _, id := range []uint64{f.denied.ID, f.other.ID} {
+		if got[id] {
+			t.Errorf("GET /decks leaked another user's ungranted deck %d: %v", id, got)
+		}
 	}
 
-	// 可见性即时生效：public 改为 private 后，同一个 key 的下一次请求就不再看到它。
-	setDeckVisibility(t, f.env, f.public.ID, store.DeckVisibilityPrivate)
-	got = listDeckIDsViaHTTP(t, f.env, f.key.Plaintext)
-	if got[f.public.ID] {
-		t.Errorf("GET /decks still shows deck %d after it became private: %v", f.public.ID, got)
+	// 撤销授权即时生效：同一个 key 的下一次请求就不再看到它。
+	if err := store.NewGrantStore(f.env.db).Revoke(context.Background(), f.granted.ID, f.viewer.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
 	}
-	if !got[f.granted.ID] {
-		t.Errorf("GET /decks lost granted deck %d after unrelated visibility change: %v", f.granted.ID, got)
+	got = listDeckIDsViaHTTP(t, f.env, f.key.Plaintext)
+	if got[f.granted.ID] {
+		t.Errorf("GET /decks still shows deck %d after the grant was revoked: %v", f.granted.ID, got)
+	}
+	if len(got) != 0 {
+		t.Errorf("GET /decks = %v, want empty (viewer owns nothing and holds no grants)", got)
 	}
 }
 

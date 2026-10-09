@@ -83,7 +83,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 		t.Fatalf("create preset: %v", err)
 	}
 	deck := store.Deck{
-		OwnerUserID: userID, Name: "Stats deck", Description: "", Visibility: "private",
+		OwnerUserID: userID, Name: "Stats deck", Description: "",
 		PresetID: preset.ID, CreatedAt: now,
 	}
 	if err := db.Create(&deck).Error; err != nil {

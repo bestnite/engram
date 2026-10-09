@@ -40,10 +40,10 @@ func leaveDeckViaHTTP(t *testing.T, env *testEnv, key string, deckID uint64) (in
 }
 
 // TestListDecksReportsCallerRole 断言列表逐张带出调用者的显式关系：
-// 自有 -> owner，被显式授权 -> 授权角色，仅因 public 可见 -> 空串。
+// 自有 -> owner，被显式授权 -> 授权角色；别人没授权给我的卡组根本不进列表。
 //
-// 空串必须与「被授予的只读」区分开：若把可见性折算成隐式 reader，界面会给陌生人的
-// 公开卡组错误地渲染「退出共享」，而它根本没有可退出的成员身份。
+// 角色必居其一（owner 或授权角色）：不存在「看得到但没有角色」的卡组，
+// 界面因此不必为那种情况准备分支。
 func TestListDecksReportsCallerRole(t *testing.T) {
 	env := newTestEnv(t, 600, 600)
 	owner := seedUser(t, env.db, "role_owner", store.RoleUser)
@@ -51,8 +51,7 @@ func TestListDecksReportsCallerRole(t *testing.T) {
 
 	ownDeck := seedDeck(t, env.db, viewer.ID)
 	grantedDeck := seedDeck(t, env.db, owner.ID)
-	publicDeck := seedDeck(t, env.db, owner.ID)
-	setDeckVisibility(t, env, publicDeck.ID, store.DeckVisibilityPublic)
+	foreignDeck := seedDeck(t, env.db, owner.ID)
 	if err := store.NewGrantStore(env.db).Grant(context.Background(), grantedDeck.ID, viewer.ID, store.RoleEditor, store.Ptr(owner.ID)); err != nil {
 		t.Fatalf("grant viewer: %v", err)
 	}
@@ -66,12 +65,11 @@ func TestListDecksReportsCallerRole(t *testing.T) {
 	if roles[grantedDeck.ID] != store.RoleEditor {
 		t.Errorf("granted deck role = %q, want %q", roles[grantedDeck.ID], store.RoleEditor)
 	}
-	got, ok := roles[publicDeck.ID]
-	if !ok {
-		t.Fatalf("public deck %d missing from list: %v", publicDeck.ID, roles)
+	if _, ok := roles[foreignDeck.ID]; ok {
+		t.Errorf("another user's ungranted deck %d appeared in the list: %v", foreignDeck.ID, roles)
 	}
-	if got != "" {
-		t.Errorf("public deck role = %q, want empty (visible only via public)", got)
+	if len(roles) != 2 {
+		t.Errorf("listed roles = %v, want exactly the owned and the granted deck", roles)
 	}
 }
 
@@ -120,14 +118,13 @@ func TestLeaveDeckRejectsOwner(t *testing.T) {
 	}
 }
 
-// TestLeaveDeckRejectsNonMember 断言没有授权行的用户没有可退出的成员身份（陌生人的公开卡组
-// 就是这种情况）：返回 not_found，且卡组因 public 仍对他可见。
+// TestLeaveDeckRejectsNonMember 断言没有授权行的用户没有可退出的成员身份：
+// 返回 not_found，而且他本来就打不开这张卡组（403）——「没有成员身份」不等于「能看」。
 func TestLeaveDeckRejectsNonMember(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "leave_nm_owner", store.RoleUser)
 	stranger := seedUser(t, env.db, "leave_nm_stranger", store.RoleUser)
 	deck := seedDeck(t, env.db, owner.ID)
-	setDeckVisibility(t, env, deck.ID, store.DeckVisibilityPublic)
 	ctx := context.Background()
 
 	err := env.api.LeaveDeck(ctx, stranger, deck.ID, nil)
@@ -135,8 +132,8 @@ func TestLeaveDeckRejectsNonMember(t *testing.T) {
 	if status != http.StatusNotFound || code != CodeNotFound {
 		t.Fatalf("stranger LeaveDeck = (%d,%q), want (404,%q)", status, code, CodeNotFound)
 	}
-	if _, err := env.api.RequireDeckRole(ctx, stranger.ID, deck.ID, store.RoleReader); err != nil {
-		t.Fatalf("public deck no longer readable after a rejected leave: %v", err)
+	if _, err := env.api.RequireDeckRole(ctx, stranger.ID, deck.ID, store.RoleReader); err == nil {
+		t.Fatalf("stranger could read a deck he was never granted")
 	}
 }
 

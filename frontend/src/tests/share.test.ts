@@ -59,6 +59,24 @@ describe('SPA public share browser client flows', () => {
     });
   });
 
+  // 入伙是状态变更：先取 CSRF token，再 POST 到 join 端点（与「打开链接」是两条路径）。
+  it('joins a shared deck through the join endpoint with a CSRF token', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'fresh-token' }), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ deck_id: 7, joined: true }), { status: 200 }));
+
+    const res = await client.joinSharedDeck('tok-123');
+
+    expect(res).toEqual({ deck_id: 7, joined: true });
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
+    const [url, init] = mockFetch.mock.calls[1]!;
+    expect(url).toBe('/api/v1/share/tok-123/join');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('fresh-token');
+  });
+
   it('resolves the share browse route and extracts the token param', () => {
     const match = matchRoute('/s/abc-DEF_123');
     expect(match.route?.name).toBe('share-browse');

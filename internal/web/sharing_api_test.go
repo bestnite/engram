@@ -15,10 +15,10 @@ func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Share SPA")
 	path := "/api/v1/decks/" + u64str(deck.ID) + "/sharing"
 	owner := getWithCookies(t, srv, path, ownerCookies)
-	if owner.Code != http.StatusOK || !strings.Contains(owner.Body.String(), `"visibility"`) {
+	if owner.Code != http.StatusOK || !strings.Contains(owner.Body.String(), `"pending_invites"`) {
 		t.Fatalf("owner read = %d %s", owner.Code, owner.Body.String())
 	}
-	nonOwnerID, nonOwnerCookies, nonOwnerCSRF := createUserAndLogin(t, srv, db, "non_owner")
+	nonOwnerID, nonOwnerCookies, _ := createUserAndLogin(t, srv, db, "non_owner")
 	_ = nonOwnerID
 	if got := getWithCookies(t, srv, path, nonOwnerCookies); got.Code != http.StatusForbidden {
 		t.Fatalf("non-owner read = %d, want 403", got.Code)
@@ -56,11 +56,9 @@ func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	if strings.Contains(listed.Body.String(), "/s/") {
 		t.Fatalf("link plaintext leaked in listing: %s", listed.Body.String())
 	}
-	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, ownerCookies, ownerCSRF); got.Code != http.StatusOK {
-		t.Fatalf("visibility = %d, want 200", got.Code)
-	}
-	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, nonOwnerCookies, nonOwnerCSRF); got.Code != http.StatusForbidden {
-		t.Fatalf("non-owner write = %d, want 403", got.Code)
+	// 可见性端点已随「公开/不公开卡组」一起删除：路由不存在，写它一律 404。
+	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, ownerCookies, ownerCSRF); got.Code != http.StatusNotFound {
+		t.Fatalf("removed visibility endpoint = %d, want 404", got.Code)
 	}
 	// 同意制：共享写路径落的是**邀请**审计（授权要等对方接受时才写）。
 	if n, err := store.NewAuditStore(db).CountByAction(t.Context(), store.ActionDeckShareInvite); err != nil || n < 1 {

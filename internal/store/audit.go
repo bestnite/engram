@@ -63,8 +63,10 @@ const (
 	ActionShareLinkCreate    = "share_link.create"
 	ActionShareLinkRevoke    = "share_link.revoke"
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
-	// 卡组可见性变更（private / unlisted / public）。
-	ActionDeckVisibility = "deck.visibility_change"
+	// 持链接的登录用户按「加入我的卡组」把该卡组加进自己的列表（share_link.join）。
+	// 它是一次自助授权：token 是属主主动发出的凭据，按按钮是接收方本人的同意，
+	// 因此不需要邀请/接受两步。入伙后这条授权与链接无关，撤销链接不回收它。
+	ActionShareLinkJoin = "share_link.join"
 	// 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
 	// 张出来」，与其他卡组变更一样要留痕。
 	ActionDeckCaps = "deck.caps_change"

@@ -31,6 +31,35 @@ var BuiltinMigrations = []Migration{
 		Name: "0002_nullable_day_cutoff",
 		Up:   nullableDayCutoff,
 	},
+	{
+		// 卡组可见性（private / unlisted / public）整体删除：卡组只对属主与被显式授权者可见。
+		// 删列不在 AutoMigrate 的加法范围内，必须显式迁移。存量 public/unlisted 行随之失去
+		// 那条隐式可见性——这正是本次变更的目的，因此不重写任何数据，只删列。
+		Name: "0003_drop_deck_visibility",
+		Up:   dropDeckVisibility,
+	},
+}
+
+// dropDeckVisibility 删除 decks.visibility 列。
+//
+// 两库都直接 DROP COLUMN：该列既不在主键上，也没有索引或约束，SQLite（≥3.35）与 PostgreSQL
+// 都支持原地删除，无需像 0001 那样重建表。已经是新形状的库（AutoMigrate 建出的 decks 没有
+// 该列）在此直接跳过。
+func dropDeckVisibility(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("decks") || !m.HasColumn("decks", "visibility") {
+		return nil
+	}
+	var stmt string
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		stmt = "ALTER TABLE decks DROP COLUMN visibility"
+	case "postgres":
+		stmt = "ALTER TABLE decks DROP COLUMN IF EXISTS visibility"
+	default:
+		return fmt.Errorf("drop deck visibility migration: unsupported dialect %q", tx.Dialector.Name())
+	}
+	return tx.Exec(stmt).Error
 }
 
 // mediaPrimaryKeySha256 把 media 的主键从自增 id 换成内容 sha256。

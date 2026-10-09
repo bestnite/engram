@@ -6,7 +6,6 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
-  import { deckVisibilityLabel as visibilityLabel } from '../labels';
 
   interface Props {
     client?: ApiClient;
@@ -186,9 +185,6 @@
                       <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {deck.name}
                       </h3>
-                      {#if visibilityLabel(deck.visibility, $t)}
-                        <Badge>{visibilityLabel(deck.visibility, $t)}</Badge>
-                      {/if}
                     </div>
                     {#if deck.description}
                       <p class="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 mb-2">

@@ -55,18 +55,18 @@ func asServiceError(err error) *ServiceError {
 
 // DeckWithRole 是卡组加上调用者在该卡组上的显式关系，供列表接口标出「我的」与「共享给我的」。
 //
-// Role 取 owner（自有，由 decks.owner_user_id 判定）或显式授权角色 editor/reader；
-// 空串表示既非自有、也没有授权行（仅因 public/unlisted 可见）。
-// 空串刻意不折算成隐式 reader——否则「共享给我的只读卡组」与「陌生人的公开卡组」无法区分，
-// 界面会给后者错误地渲染「退出共享」。
+// Role 取 owner（自有，由 decks.owner_user_id 判定）或显式授权角色 editor/reader。
+// 两者必居其一：列表本身只包含自有与被授权的卡组（store.visibleDeckIDsQuery），
+// 因此不存在「看得到但没有角色」的卡组，界面不必为那种情况准备分支。
 type DeckWithRole struct {
 	Deck store.Deck
 	Role string
 }
 
-// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public），并逐张带上
+// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权），并逐张带上
 // 调用者的显式关系（见 DeckWithRole）。
 //
+// 别人没授权给我的卡组不会出现在这里：卡组不接受「未经同意进入他人列表」这种归属。
 // 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
 // 完全一致，谓词只有 store.visibleDeckIDsQuery 一份。REST 与内置 MCP
 // 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组。
@@ -97,24 +97,19 @@ func (a *API) ListDecks(ctx context.Context, userID uint64) ([]DeckWithRole, err
 type CreateDeckInput struct {
 	Name        string
 	Description string
-	Visibility  string
 	PresetID    uint64
 	APIKeyID    *uint64
 }
 
 // CreateDeck 建一个空卡组（scope: write）；REST 与内置 MCP 共用这一份实现。
 //
-// 行为与错误 code 与 REST handler 旧实现完全一致：name 去空白后必填，visibility 缺省
-// private，preset_id 为 0 时使用（或创建）调用者的 Default 预设；store 的任何拒绝都映射成
-// invalid_request（含非法 visibility），默认预设无法确保时映射成 internal_error。
+// 行为与错误 code 与 REST handler 旧实现完全一致：name 去空白后必填，preset_id 为 0 时使用
+// （或创建）调用者的 Default 预设；store 的任何拒绝都映射成 invalid_request，
+// 默认预设无法确保时映射成 internal_error。
 func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput) (*store.Deck, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
-	}
-	visibility := strings.TrimSpace(in.Visibility)
-	if visibility == "" {
-		visibility = "private"
 	}
 	presetID := in.PresetID
 	if presetID == 0 {
@@ -129,13 +124,12 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		OwnerUserID: u.ID,
 		Name:        name,
 		Description: in.Description,
-		Visibility:  visibility,
 		PresetID:    presetID,
 		CreatedAt:   a.now(),
 	}
 	if err := a.decks.Create(ctx, &d); err != nil {
 		// 卡组名不满足与卡组包 manifest 同源的规则时给出专属 code，其余 store 拒绝
-		// （含非法 visibility）仍按 invalid_request，行为与既有 REST/MCP 一致。
+		// 仍按 invalid_request，行为与既有 REST/MCP 一致。
 		if errors.Is(err, store.ErrDeckDescriptionInvalid) {
 			return nil, newServiceError(http.StatusBadRequest, CodeDeckDescriptionInvalid, "")
 		}
@@ -150,7 +144,7 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		Action:     store.ActionDeckCreate,
 		TargetType: "deck",
 		TargetID:   store.Ptr(d.ID),
-		Detail:     map[string]any{"name": d.Name, "visibility": d.Visibility},
+		Detail:     map[string]any{"name": d.Name},
 	})
 	return &d, nil
 }
@@ -187,8 +181,8 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 //
 // 它与 DeleteDeck 是两件事，各自独立：退出只撤掉自己一行授权、不碰卡组内容，且可逆
 // （重新被授权即回来）；删除卡组不可逆。因此 owner 不走这条路径——对自有卡组只能删除。
-// 没有任何授权行时返回 not_found：没有可退出的成员身份（陌生人的公开卡组就是这种情况，
-// 它只是因为 public/unlisted 可见）。
+// 没有任何授权行时返回 not_found：没有可退出的成员身份——一张卡组要么自有，要么被授权，
+// 没有「只是看得到」的中间态。
 //
 // 退出不清理该用户在该卡组的 card_states：进度按用户隔离，重新被授权后仍在。
 // owner 撤销他人授权（internal/web/sharing_api.go）同样保留进度，两边口径一致。

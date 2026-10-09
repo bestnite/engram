@@ -51,16 +51,13 @@ func TestDeckStoreCRUD(t *testing.T) {
 			presetB := seedPresetRow(t, db, ownerB)
 			decks := NewDeckStore(db)
 
-			// create：owner 归属由 OwnerUserID 给出，未填可见性时落到默认 private。
+			// create：owner 归属由 OwnerUserID 给出。
 			d := &Deck{OwnerUserID: ownerA, Name: "Deck A", PresetID: presetID}
 			if err := decks.Create(ctx, d); err != nil {
 				t.Fatalf("Create() error = %v", err)
 			}
 			if d.ID == 0 {
 				t.Fatal("Create() did not populate ID")
-			}
-			if d.Visibility != DeckVisibilityPrivate {
-				t.Errorf("Create() visibility = %q, want %q", d.Visibility, DeckVisibilityPrivate)
 			}
 			if d.CreatedAt.IsZero() {
 				t.Error("Create() did not set CreatedAt")
@@ -90,7 +87,6 @@ func TestDeckStoreCRUD(t *testing.T) {
 			// update：owner 改设置字段。
 			got.Name = "Deck A renamed"
 			got.Description = "desc"
-			got.Visibility = DeckVisibilityUnlisted
 			got.PresetID = presetB
 			if err := decks.Update(ctx, ownerA, got); err != nil {
 				t.Fatalf("Update() error = %v", err)
@@ -99,9 +95,8 @@ func TestDeckStoreCRUD(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ByID() after update error = %v", err)
 			}
-			if reloaded.Name != "Deck A renamed" || reloaded.Description != "desc" ||
-				reloaded.Visibility != DeckVisibilityUnlisted || reloaded.PresetID != presetB {
-				t.Errorf("after Update() = %+v, want renamed/desc/unlisted/presetB", reloaded)
+			if reloaded.Name != "Deck A renamed" || reloaded.Description != "desc" || reloaded.PresetID != presetB {
+				t.Errorf("after Update() = %+v, want renamed/desc/presetB", reloaded)
 			}
 
 			// archive / restore：幂等且状态可往返。
@@ -128,23 +123,6 @@ func TestDeckStoreCRUD(t *testing.T) {
 			}
 			if reloaded.ArchivedAt != nil {
 				t.Errorf("ArchivedAt after Restore = %v, want nil", reloaded.ArchivedAt)
-			}
-
-			// SetVisibility：owner 单独改可见性。
-			if err := decks.SetVisibility(ctx, ownerA, d.ID, DeckVisibilityPublic); err != nil {
-				t.Fatalf("SetVisibility() error = %v", err)
-			}
-			reloaded, err = decks.ByID(ctx, d.ID)
-			if err != nil {
-				t.Fatalf("ByID() after SetVisibility error = %v", err)
-			}
-			if reloaded.Visibility != DeckVisibilityPublic {
-				t.Errorf("Visibility = %q, want %q", reloaded.Visibility, DeckVisibilityPublic)
-			}
-
-			// 校验：非法可见性被拒。
-			if err := decks.SetVisibility(ctx, ownerA, d.ID, "secret"); !errors.Is(err, ErrInvalidVisibility) {
-				t.Errorf("SetVisibility(invalid) error = %v, want ErrInvalidVisibility", err)
 			}
 
 			// delete：非 owner 删除被拒。
@@ -192,17 +170,12 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 			// 非 owner 改设置被拒。
 			attempt := *d
 			attempt.Name = "Hijacked"
-			attempt.Visibility = DeckVisibilityPublic
 			if err := decks.Update(ctx, stranger, &attempt); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Update() error = %v, want ErrNotOwner", err)
 			}
 			// 非 owner 归档被拒。
 			if err := decks.Archive(ctx, stranger, d.ID, time.Now().UTC()); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Archive() error = %v, want ErrNotOwner", err)
-			}
-			// 非 owner 改可见性被拒。
-			if err := decks.SetVisibility(ctx, stranger, d.ID, DeckVisibilityPublic); !errors.Is(err, ErrNotOwner) {
-				t.Errorf("non-owner SetVisibility() error = %v, want ErrNotOwner", err)
 			}
 			// 非 owner 恢复（取消归档）也被拒。
 			if err := decks.Restore(ctx, stranger, d.ID); !errors.Is(err, ErrNotOwner) {
@@ -214,7 +187,7 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ByID() error = %v", err)
 			}
-			if after.Name != "Shared" || after.Visibility != DeckVisibilityPrivate || after.ArchivedAt != nil {
+			if after.Name != "Shared" || after.ArchivedAt != nil {
 				t.Errorf("deck was modified by a non-owner: %+v", after)
 			}
 		})

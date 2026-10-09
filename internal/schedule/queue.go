@@ -65,7 +65,7 @@ const (
 //
 // 卡组范围（三种口径）：DeckIDs 非空（去重后）→ 取集合内所有卡组；
 // DeckID 非 0 且 DeckIDs 为空 → 只取该卡组；两者都为空 → 该用户**可见**的卡组集合
-// （store.DeckStore.VisibleIDs，与卡组列表页同一集合，排除别人的 private/unlisted）。
+// （store.DeckStore.VisibleIDs，与卡组列表页同一集合，排除别人的卡组）。
 //
 // 每日上限一律**按卡组算**（new_per_day/reviews_per_day 是卡组级列）：
 // 范围里每个卡组各自用它的列与今日已用量算出剩余额度，多卡组/全库＝各卡组额度之和。

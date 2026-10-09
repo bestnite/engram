@@ -19,7 +19,6 @@ type listDecksIn struct{}
 type createDeckIn struct {
 	Name        string `json:"name" jsonschema:"the deck name (required)"`
 	Description string `json:"description,omitempty" jsonschema:"optional deck description"`
-	Visibility  string `json:"visibility,omitempty" jsonschema:"visibility: private (default), unlisted or public"`
 	PresetID    uint64 `json:"preset_id,omitempty" jsonschema:"scheduling preset id; 0 uses the caller's Default preset"`
 }
 
@@ -137,7 +136,6 @@ func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (
 	d, err := s.api.CreateDeck(ctx, id.User, api.CreateDeckInput{
 		Name:        in.Name,
 		Description: in.Description,
-		Visibility:  in.Visibility,
 		PresetID:    in.PresetID,
 		APIKeyID:    id.apiKeyID(),
 	})

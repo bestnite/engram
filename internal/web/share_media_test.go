@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,24 +264,70 @@ func TestShareLinkMediaGrantIsSessionScoped(t *testing.T) {
 	}
 }
 
-// TestPublicDeckMediaReadUnchangedByShareGrants 是「未破坏现有行为」的对照：
-// public 卡组的媒体对任意登录用户可直接读（走可见集 own ∪ granted ∪ others' public），
-// 与是否打开过分享链接无关；分享授权的引入不得改动这条路径。
-func TestPublicDeckMediaReadUnchangedByShareGrants(t *testing.T) {
+// TestShareLinkJoinGrantsReaderAccess 钉死「打开链接只读、入伙要点按钮」的语义：
+//   - 打开链接：媒体放行（会话级只读），但卡组**不进**访客的列表，也不写任何授权行；
+//   - POST /api/v1/share/:token/join：拿到显式 reader 授权，卡组进入他的列表；
+//   - 属主自己按 join 幂等且不产生授权行；未登录按 join 被会话/CSRF 门拒（403）；
+//   - 从未打开过链接的第三个账号读不到媒体；匿名访客仍可直接浏览 /s/:token。
+func TestShareLinkJoinGrantsReaderAccess(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
-	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 public deck", 'j')
-	if err := db.Model(&store.Deck{}).Where("id = ?", deck.ID).
-		Update("visibility", store.DeckVisibilityPublic).Error; err != nil {
-		t.Fatalf("set visibility: %v", err)
-	}
-	_, visitorCookies, _ := createUserAndLogin(t, srv, db, "l3-visitor-public")
+	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "L3 join deck", 'j')
+	visitorID, visitorCookies, visitorCSRF := createUserAndLogin(t, srv, db, "l3-visitor-join")
+	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "l3-stranger-join")
+	target := "/media/" + sha
+	joinPath := "/api/v1/share/" + createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "") + "/join"
+	token := strings.TrimSuffix(strings.TrimPrefix(joinPath, "/api/v1/share/"), "/join")
 
-	// 没有分享链接、没有授权：public 卡组的媒体照样可读。
-	if rec := getWithCookies(t, srv, "/media/"+sha, visitorCookies); rec.Code != http.StatusOK {
-		t.Fatalf("public deck media without any share link = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	// 1) 打开链接前：列表里没有它，媒体 404。
+	if body := deckListingBody(t, srv, visitorCookies); strings.Contains(body, deck.Name) {
+		t.Fatalf("deck appeared in the visitor's listing before anything was opened: %s", snippet(body))
 	}
-	// 公开卡组的分享链接对匿名可浏览：GET /s/:token 与应用壳对外仍可达。
-	token := createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "")
+	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusNotFound {
+		t.Fatalf("before browse: visitor GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
+	}
+
+	// 2) 打开链接：只读浏览 + 会话级媒体放行；但「打开一次」不等于入伙。
+	openShareLink(t, srv, token, visitorCookies)
+	if rec := getWithCookies(t, srv, target, visitorCookies); rec.Code != http.StatusOK {
+		t.Fatalf("after browse: visitor GET %s = %d, want 200 (body %s)", target, rec.Code, rec.Body.String())
+	}
+	if body := deckListingBody(t, srv, visitorCookies); strings.Contains(body, deck.Name) {
+		t.Fatalf("opening the link must not add the deck to the visitor's listing: %s", snippet(body))
+	}
+	if role, err := store.NewGrantStore(db).Role(context.Background(), deck.ID, visitorID); err != nil || role != "" {
+		t.Fatalf("opening the link wrote a grant row: role=%q err=%v, want none", role, err)
+	}
+
+	// 3) 入伙：显式 join 才写授权，卡组随后进入列表。
+	if rec := jsonRequest(t, srv, http.MethodPost, joinPath, "", visitorCookies, visitorCSRF); rec.Code != http.StatusOK {
+		t.Fatalf("join status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if body := deckListingBody(t, srv, visitorCookies); !strings.Contains(body, deck.Name) {
+		t.Fatalf("deck missing from the visitor's listing after joining: %s", snippet(body))
+	}
+	if role, err := store.NewGrantStore(db).Role(context.Background(), deck.ID, visitorID); err != nil || role != store.RoleReader {
+		t.Fatalf("grant role after join = %q err=%v, want %q", role, err, store.RoleReader)
+	}
+
+	// 4) 属主自己按 join：幂等成功，不产生授权行（owner 列已是唯一真相）。
+	if rec := jsonRequest(t, srv, http.MethodPost, joinPath, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
+		t.Fatalf("owner join status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if role, err := store.NewGrantStore(db).Role(context.Background(), deck.ID, ownerID); err != nil || role != "" {
+		t.Fatalf("owner got a grant row from joining their own deck: role=%q err=%v, want none", role, err)
+	}
+
+	// 5) 未登录按 join：会话/CSRF 门先拒，且不留下任何授权行。
+	if rec := jsonRequest(t, srv, http.MethodPost, joinPath, "", nil, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("anonymous join status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	// 6) 从未打开过链接的第三个账号：媒体仍 404。
+	if rec := getWithCookies(t, srv, target, strangerCookies); rec.Code != http.StatusNotFound {
+		t.Fatalf("unrelated user GET %s = %d, want 404 (body %s)", target, rec.Code, rec.Body.String())
+	}
+
+	// 7) 匿名仍可直接浏览分享链接。
 	if rec := get(t, srv, "/s/"+token, nil); rec.Code != http.StatusOK {
 		t.Fatalf("anonymous GET /s/<token> = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}

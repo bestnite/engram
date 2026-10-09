@@ -34,7 +34,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		if err := db.Create(&p).Error; err != nil {
 			t.Fatalf("create preset: %v", err)
 		}
-		d := store.Deck{OwnerUserID: 1, Name: name, Visibility: store.DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: now}
+		d := store.Deck{OwnerUserID: 1, Name: name, PresetID: p.ID, CreatedAt: now}
 		if err := db.Create(&d).Error; err != nil {
 			t.Fatalf("create deck %s: %v", name, err)
 		}

@@ -3,8 +3,8 @@ import { CARD_KIND_FIELDS } from './card-fields';
 /**
  * 后端枚举 → 界面文案。
  *
- * 后端发的 `private` / `basic_both` 这类值是**机器词汇**：把它直接插进模板
- * （`<span>{deck.visibility}</span>`）就等于在中文界面里印英文——它和硬编码英文的结果
+ * 后端发的 `basic_both` 这类值是**机器词汇**：把它直接插进模板
+ * （`<span>{note.kind}</span>`）就等于在中文界面里印英文——它和硬编码英文的结果
  * 一模一样，只是看起来不像硬编码，所以 grep 硬编码文案的门禁也抓不到它。
  *
  * 两条约定：
@@ -17,28 +17,13 @@ import { CARD_KIND_FIELDS } from './card-fields';
  *     吐内部标识——因为下一次改动会顺便把它补上，而误报的状态没人会发现。
  */
 
-/** 卡组可见性的全部取值（与 internal/store 的 DeckVisibility* 常量一致）。 */
-export const DECK_VISIBILITIES = ['private', 'unlisted', 'public'] as const;
-
 /** 翻译函数的最小形状（`$t` 即可）。 */
 export type Translate = (key: string) => string;
-
-/** 卡组可见性的语言包键；未知/空值返回 null。 */
-export function deckVisibilityLabelKey(value: string | null | undefined): string | null {
-  if (!value || !(DECK_VISIBILITIES as readonly string[]).includes(value)) return null;
-  return `deck.sharing.visibility.${value}`;
-}
 
 /** 题型的语言包键；未知/空值返回 null。题型清单以字段表为唯一来源。 */
 export function noteKindLabelKey(kind: string | null | undefined): string | null {
   if (!kind || !(kind in CARD_KIND_FIELDS)) return null;
   return `notes.kind.${kind}`;
-}
-
-/** 卡组可见性徽标文案；未知枚举返回空串（调用方据此隐藏徽标）。 */
-export function deckVisibilityLabel(value: string | null | undefined, t: Translate): string {
-  const key = deckVisibilityLabelKey(value);
-  return key ? t(key) : '';
 }
 
 /**
@@ -50,9 +35,10 @@ export type DeckActionKind = 'delete' | 'leave';
 /**
  * 依据调用者在该卡组上的显式关系（Deck.role）决定卡片上显示哪种操作。
  *
- * owner -> 'delete'；editor/reader（被共享）-> 'leave'；''（仅因 public/unlisted 可见）-> null。
- * 未知值一律返回 null：宁可少显示一个按钮，也不能给陌生人的公开卡组渲染「退出共享」——
- * 那种卡组没有可退出的授权行，点了只会得到 not_found。
+ * owner -> 'delete'；editor/reader（被共享）-> 'leave'。
+ * 列表里的卡组必然属于这两类之一（自有，或被显式授权）——不存在「看得到但没有授权」的
+ * 卡组。未知值一律返回 null：宁可少显示一个按钮，也不能给一个没有授权行的卡组渲染
+ * 「退出共享」，那种卡组点了只会得到 not_found。
  */
 export function deckActionKind(role: string | null | undefined): DeckActionKind | null {
   switch (role) {

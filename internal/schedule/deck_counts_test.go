@@ -18,7 +18,7 @@ import (
 //	(a) 今日新卡额度用尽（该卡组 新 0，但学习卡仍出队）；
 //	(b) 多卡组范围按各卡组自己的额度求和（两个 20/20 的卡组，已用分布不同）；
 //	(c) 卡组列 new_per_day=0 / reviews_per_day=0（不限）；
-//	(d) 负例：另一个用户的 private 卡组（含新卡）不出现；可见的 public 卡组出现。
+//	(d) 负例：另一个用户的卡组（含新卡）不出现，无论它叫什么。
 //
 // DeckCounts 无 Now 参数，内部用当刻时钟；夹具里"今日已用"的复习行按 now 的复习日写入，
 // 与 Build 传入的 Now 同一天（两者相隔毫秒，除跨 04:00 切点外一致）。
@@ -32,14 +32,14 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	at := now.Add(-time.Hour)
 
 	decks := store.NewDeckStore(db)
-	mkDeck := func(owner uint64, name, visibility string, newPer, reviewPer int) uint64 {
+	mkDeck := func(owner uint64, name string, newPer, reviewPer int) uint64 {
 		t.Helper()
 		p := store.NewPreset(owner, "preset-"+name)
 		p.EnableFuzz = boolPtr(false)
 		if err := db.Create(&p).Error; err != nil {
 			t.Fatalf("create preset: %v", err)
 		}
-		d := store.Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: p.ID, CreatedAt: now}
+		d := store.Deck{OwnerUserID: owner, Name: name, PresetID: p.ID, CreatedAt: now}
 		if err := db.Create(&d).Error; err != nil {
 			t.Fatalf("create deck %s: %v", name, err)
 		}
@@ -81,7 +81,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	}
 
 	// (a) 新卡额度 1，今日已用尽；另有一张到期的学习卡（不受额度裁剪）。
-	quota := mkDeck(1, "quota-used", store.DeckVisibilityPrivate, 1, 200)
+	quota := mkDeck(1, "quota-used", 1, 200)
 	introduced(quota, 1)
 	seedNew(quota, 2)
 	learning := seedCard(t, db, quota, "learning", now)
@@ -89,12 +89,12 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	dueReview(quota)
 
 	// (b) 20/20 的两个卡组，已用分布不同：limited 用 0，partial 用 5 新 / 8 复习。
-	limited := mkDeck(1, "limited", store.DeckVisibilityPrivate, 20, 20)
+	limited := mkDeck(1, "limited", 20, 20)
 	seedNew(limited, 25)
 	for i := 0; i < 25; i++ {
 		dueReview(limited)
 	}
-	partial := mkDeck(1, "partial", store.DeckVisibilityPrivate, 20, 20)
+	partial := mkDeck(1, "partial", 20, 20)
 	introduced(partial, 5)
 	reviewedToday(partial, 8)
 	seedNew(partial, 25)
@@ -103,17 +103,17 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	}
 
 	// (c) 0 表示不限。
-	unlimited := mkDeck(1, "unlimited", store.DeckVisibilityPrivate, 0, 0)
+	unlimited := mkDeck(1, "unlimited", 0, 0)
 	seedNew(unlimited, 4)
 	for i := 0; i < 4; i++ {
 		dueReview(unlimited)
 	}
 
-	// (d) 别的用户：private 含 5 张新卡（不得出现），public 含 2 张（必须出现）。
-	otherPrivate := mkDeck(2, "other-private", store.DeckVisibilityPrivate, 20, 200)
+	// (d) 别的用户的两张卡组各含新卡，都不该出现：没有授权就没有可见性。
+	otherPrivate := mkDeck(2, "other-private", 20, 200)
 	seedNew(otherPrivate, 5)
-	otherPublic := mkDeck(2, "other-public", store.DeckVisibilityPublic, 20, 200)
-	seedNew(otherPublic, 2)
+	otherDeck := mkDeck(2, "other-deck", 20, 200)
+	seedNew(otherDeck, 2)
 
 	sched := mustScheduler(t, testPreset(t))
 	builder := NewQueueBuilder(db, decks, sched)
@@ -122,16 +122,13 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VisibleIDs() error = %v", err)
 	}
-	if len(visible) != 5 {
-		t.Fatalf("visible decks = %v, want 5 (4 owned + 1 public)", visible)
+	if len(visible) != 4 {
+		t.Fatalf("visible decks = %v, want 4 (owned only: another user's decks are never visible)", visible)
 	}
 	for _, id := range visible {
-		if id == otherPrivate {
-			t.Errorf("visible set leaked another user's private deck %d", id)
+		if id == otherPrivate || id == otherDeck {
+			t.Errorf("visible set leaked another user's deck %d", id)
 		}
-	}
-	if !containsID(visible, otherPublic) {
-		t.Errorf("visible set is missing the public deck %d", otherPublic)
 	}
 
 	counts, err := builder.DeckCounts(ctx, 1, visible)
@@ -181,14 +178,14 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		t.Errorf("unlimited deck counts = %+v, want New=4 Review=4 (0 means unlimited)", got)
 	}
 
-	// (d) 全库口径：只含可见卡组，别人的 private 不出现；public 出现。
+	// (d) 全库口径：只含可见卡组，别人的卡组一张都不出现。
 	all, err := builder.Build(ctx, 1, QueueOptions{Now: now, Location: time.UTC, NewOrder: NewOrderCreated})
 	if err != nil {
 		t.Fatalf("Build(all decks) error = %v", err)
 	}
 	for _, it := range all {
-		if it.DeckID == otherPrivate {
-			t.Errorf("all-decks queue leaked another user's private deck %d", otherPrivate)
+		if it.DeckID == otherPrivate || it.DeckID == otherDeck {
+			t.Errorf("all-decks queue leaked another user's deck %d", it.DeckID)
 		}
 	}
 	allCounts, err := builder.DeckCounts(ctx, 1, nil)
@@ -203,8 +200,8 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 			t.Errorf("deck %d: all-decks counts = %+v, want %+v", id, allCounts[id], want)
 		}
 	}
-	if got := allCounts[otherPublic].New; got != 2 {
-		t.Errorf("public deck new counts = %d, want 2", got)
+	if got, ok := allCounts[otherDeck]; ok {
+		t.Errorf("all-decks counts include another user's deck %d = %+v, want absent", otherDeck, got)
 	}
 }
 

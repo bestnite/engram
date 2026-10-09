@@ -33,7 +33,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB) statsFixture {
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	d := Deck{OwnerUserID: 1, Name: "Deck A", Visibility: DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: statsNow}
+	d := Deck{OwnerUserID: 1, Name: "Deck A", PresetID: p.ID, CreatedAt: statsNow}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
@@ -294,15 +294,15 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 				JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
 				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 				WHERE r.user_id = ?
-				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR visibility = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))`,
-				1, 1, DeckVisibilityPublic, 1).Row().Scan(&wantReviews, &wantPassed, &wantElapsed)
+				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))`,
+				1, 1, 1).Row().Scan(&wantReviews, &wantPassed, &wantElapsed)
 			db.Raw(`SELECT COUNT(*) FROM cards c
 				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 				LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
 				WHERE c.deleted_at IS NULL AND c.suspended_at IS NULL
-				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR visibility = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))
+				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))
 				  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
-				1, 1, DeckVisibilityPublic, 1, statsNow).Scan(&wantDue)
+				1, 1, 1, statsNow).Scan(&wantDue)
 			row := got[0]
 			if row.Reviews != wantReviews || row.Passed != wantPassed || row.ElapsedMS != wantElapsed || row.DueCount != wantDue {
 				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d passed %d elapsed %d due %d", row, wantReviews, wantPassed, wantElapsed, wantDue)
@@ -354,7 +354,7 @@ func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	d := Deck{OwnerUserID: 1, Name: "Streak deck", Visibility: DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: statsNow}
+	d := Deck{OwnerUserID: 1, Name: "Streak deck", PresetID: p.ID, CreatedAt: statsNow}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
@@ -481,13 +481,13 @@ func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 
 // seedForeignDeck 建一个属于 owner 的卡组，含 cards 张没有 card_states 行的新卡，
 // 用来构造「别人的卡组」（对当前用户而言这些卡看起来就是没复习过的新卡）。
-func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility string, cards int) uint64 {
+func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name string, cards int) uint64 {
 	t.Helper()
 	p := NewPreset(owner, name)
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset %s: %v", name, err)
 	}
-	d := Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: p.ID, CreatedAt: statsNow}
+	d := Deck{OwnerUserID: owner, Name: name, PresetID: p.ID, CreatedAt: statsNow}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck %s: %v", name, err)
 	}
@@ -508,17 +508,17 @@ func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility s
 // card_states 行（cs.card_id IS NULL），于是被整体算成「到期 / 新卡未到期」，再按
 // deck_id 分组，别人的私有卡组连名字一起出现在我的统计页上。
 //
-// 口径＝该用户「可见」的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public，与卡组列表页、
-// 全库队列同一集合）：他人 public 出现，他人 private 与「曾授权、现已撤销」的卡组都不出现。
+// 口径＝该用户「可见」的卡组（自有 ∪ 被 deck_grants 授权，与卡组列表页、全库队列同一集合）：
+// 别人的卡组一律不出现，无论它叫什么名字；「曾授权、现已撤销」的卡组同样不出现。
 func TestStatsScopesToVisibleDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			fx := seedStatsFixture(t, db)
 			ctx := context.Background()
 
-			foreignPrivate := seedForeignDeck(t, db, 2, "Other private", DeckVisibilityPrivate, 2)
-			foreignPublic := seedForeignDeck(t, db, 2, "Other public", DeckVisibilityPublic, 3)
-			revoked := seedForeignDeck(t, db, 2, "Revoked grant", DeckVisibilityPrivate, 2)
+			foreignOne := seedForeignDeck(t, db, 2, "Other deck A", 2)
+			foreignTwo := seedForeignDeck(t, db, 2, "Other deck B", 3)
+			revoked := seedForeignDeck(t, db, 2, "Revoked grant", 2)
 
 			// 用户 1 曾在 revoked 卡组里复习过（有状态行与复习日志），随后授权被撤销：
 			// 该卡组当前不可见，统计页不该再出现它，也不该把它的卡算进到期预测。
@@ -540,14 +540,14 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 				t.Fatalf("delete grant: %v", err)
 			}
 
-			// 卡组维度：只有自己的卡组与他人 public 卡组，且到期量各自正确。
+			// 卡组维度：只有自己的卡组，且到期量正确。
 			got, err := NewStatsStore(db).DeckBreakdown(ctx, 1, statsNow)
 			if err != nil {
 				t.Fatalf("DeckBreakdown() error = %v", err)
 			}
-			wantDue := map[uint64]int64{fx.deckID: 2, foreignPublic: 3}
+			wantDue := map[uint64]int64{fx.deckID: 2}
 			if len(got) != len(wantDue) {
-				t.Fatalf("DeckBreakdown() returned %d decks (%+v), want %d (own + other user's public)", len(got), got, len(wantDue))
+				t.Fatalf("DeckBreakdown() returned %d decks (%+v), want %d (own only)", len(got), got, len(wantDue))
 			}
 			for _, row := range got {
 				want, ok := wantDue[row.DeckID]
@@ -559,19 +559,19 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("DeckBreakdown() deck %d due = %d, want %d", row.DeckID, row.DueCount, want)
 				}
 			}
-			// 显式点名：别人的私有卡组一张都不能出现（缺陷的直接症状）。
+			// 显式点名：别人的卡组一张都不能出现（缺陷的直接症状）。
 			for _, row := range got {
-				if row.DeckID == foreignPrivate {
-					t.Errorf("DeckBreakdown() leaked another user's private deck %d (%q)", row.DeckID, row.Name)
+				if row.DeckID == foreignOne || row.DeckID == foreignTwo {
+					t.Errorf("DeckBreakdown() leaked another user's deck %d (%q)", row.DeckID, row.Name)
 				}
 			}
-			// 到期预测：新卡未到期只数可见卡组（夹具 1 张 + 他人 public 3 张）。
+			// 到期预测：新卡未到期只数可见卡组（夹具自有 1 张）。
 			due, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
 			if err != nil {
 				t.Fatalf("DueForecast() error = %v", err)
 			}
-			if due.NewNotDue != 4 {
-				t.Errorf("DueForecast().NewNotDue = %d, want 4 (1 own + 3 other user's public)", due.NewNotDue)
+			if due.NewNotDue != 1 {
+				t.Errorf("DueForecast().NewNotDue = %d, want 1 (own cards only)", due.NewNotDue)
 			}
 			// 撤销授权的卡组里用户 1 有两张已到期的状态行：不过滤时这里会变成 3。
 			if due.Today != 1 {
@@ -582,14 +582,14 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 }
 
 // seedTaggedDeck 建一个属于 owner 的卡组，含一张带单个标签的笔记与 cards 张卡，
-// 供标签维度的可见性用例构造「他人 public / 他人 private / 已撤销授权」三种卡组。
-func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, visibility, tag string, cards int) uint64 {
+// 供标签维度的可见性用例构造「他人卡组 / 已撤销授权」两种卡组。
+func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, tag string, cards int) uint64 {
 	t.Helper()
 	p := NewPreset(owner, name)
 	if err := db.Create(&p).Error; err != nil {
 		t.Fatalf("create preset %s: %v", name, err)
 	}
-	d := Deck{OwnerUserID: owner, Name: name, Visibility: visibility, PresetID: p.ID, CreatedAt: statsNow}
+	d := Deck{OwnerUserID: owner, Name: name, PresetID: p.ID, CreatedAt: statsNow}
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck %s: %v", name, err)
 	}
@@ -635,17 +635,17 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 			seedStatsFixture(t, db)
 			ctx := context.Background()
 
-			// 他人 public 卡组：可见，标签应照常出现。
-			publicDeck := seedTaggedDeck(t, db, 2, "Other public", DeckVisibilityPublic, "shared", 1)
-			// 他人 private 卡组：不可见，标签不得出现（即使存在用户 1 的历史复习）。
-			privateDeck := seedTaggedDeck(t, db, 2, "Other private", DeckVisibilityPrivate, "leaked-private", 2)
+			// 他人卡组：不可见，标签不得出现。
+			otherDeck := seedTaggedDeck(t, db, 2, "Other deck", "shared", 1)
+			// 另一个他人卡组：同样不可见（即使存在用户 1 的历史复习）。
+			privateDeck := seedTaggedDeck(t, db, 2, "Other private", "leaked-private", 2)
 			// 曾授权给用户 1、现已撤销的卡组：不可见，标签不得出现——缺陷的直接症状。
-			revokedDeck := seedTaggedDeck(t, db, 2, "Revoked grant", DeckVisibilityPrivate, "leaked-revoked", 2)
+			revokedDeck := seedTaggedDeck(t, db, 2, "Revoked grant", "leaked-revoked", 2)
 			if err := db.Create(&DeckGrant{DeckID: revokedDeck, UserID: 1, Role: "reader", CreatedAt: statsNow}).Error; err != nil {
 				t.Fatalf("create grant: %v", err)
 			}
 
-			addUser1Reviews(t, db, publicDeck, 1)
+			addUser1Reviews(t, db, otherDeck, 1)
 			addUser1Reviews(t, db, privateDeck, 2)
 			addUser1Reviews(t, db, revokedDeck, 2)
 
@@ -657,8 +657,8 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("TagBreakdown() error = %v", err)
 			}
-			// 只应出现可见卡组的标签：自有（go、fsrs）与他人 public（shared）。
-			want := map[string]int64{"go": 5, "fsrs": 3, "shared": 1}
+			// 只应出现自有卡组的标签：go、fsrs。别人的标签一律不出现。
+			want := map[string]int64{"go": 5, "fsrs": 3}
 			gotTags := make(map[string]int64, len(got))
 			for _, row := range got {
 				gotTags[row.Tag] = row.Reviews
@@ -671,15 +671,15 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("tag %q reviews = %d, want %d", tag, gotTags[tag], reviews)
 				}
 			}
-			// 显式点名两个越权标签，失败信息直接指认缺陷。
-			for _, leak := range []string{"leaked-private", "leaked-revoked"} {
+			// 显式点名三个越权标签，失败信息直接指认缺陷。
+			for _, leak := range []string{"shared", "leaked-private", "leaked-revoked"} {
 				if _, ok := gotTags[leak]; ok {
 					t.Errorf("TagBreakdown() leaked tag %q from a deck not visible to the user", leak)
 				}
 			}
 
 			// 正向对照：ReviewVolume 是纯聚合，保持全史，撤销授权不得让它减少。
-			// 夹具自有 10-02 两条 + 追加的 public 1、private 2、已撤销 2 = 今日 7；
+			// 夹具自有 10-02 两条 + 追加的 other 1、private 2、已撤销 2 = 今日 7；
 			// 近 7 日加 10-01 一条 = 8；近 30 日再加 09-20 一条 = 9。
 			// 若实现顺手给 ReviewVolume 也加了可见卡组谓词，这里会掉到 3/4/5。
 			vol, err := NewStatsStore(db).ReviewVolume(ctx, 1, "2026-10-02")
@@ -707,7 +707,7 @@ func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 			if err := db.Create(&p).Error; err != nil {
 				t.Fatalf("create preset: %v", err)
 			}
-			d := Deck{OwnerUserID: 1, Name: "Tag scope deck", Visibility: DeckVisibilityPrivate, PresetID: p.ID, CreatedAt: statsNow}
+			d := Deck{OwnerUserID: 1, Name: "Tag scope deck", PresetID: p.ID, CreatedAt: statsNow}
 			if err := db.Create(&d).Error; err != nil {
 				t.Fatalf("create deck: %v", err)
 			}

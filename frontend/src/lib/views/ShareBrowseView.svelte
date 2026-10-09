@@ -3,6 +3,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { ShareResponse } from '../api';
+  import { authStore } from '../auth';
   import { routeStore } from '../router';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -10,6 +11,9 @@
   // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
   // 卡片正反面一律是服务端清洗后的 HTML，这里只把清洗结果作为标签注入，绝不把 fields 原文当 Markdown 渲染。
   // 媒体（<img src="/media/<sha>">）的可见性仍由服务端判定：只有登录且打开过该卡组的会话才放行。
+  //
+  // 打开链接只登记「这个会话看过它」，不会把卡组加进访客的列表——链接会被转发，
+  // 随手点开一次不该等于同意接收一个卡组。入伙是下面的显式动作（「加入我的卡组」）。
   const token = $derived($routeStore.params.token ?? '');
 
   let status = $state<'loading' | 'password' | 'content' | 'error'>('loading');
@@ -17,6 +21,12 @@
   let password = $state('');
   let unlocking = $state(false);
   let errorKey = $state<string | null>(null);
+
+  // 入伙状态：joining 期间禁用按钮；joined 后换成成功提示与「打开卡组」。
+  let joining = $state(false);
+  let joined = $state(false);
+  let joinedDeckId = $state<number | null>(null);
+  let joinErrorKey = $state<string | null>(null);
 
   // 把分享接口的稳定错误 code 映射到 share.* 语言包键；绝不回显后端英文 message。
   function mapShareError(err: unknown): string {
@@ -52,6 +62,25 @@
       errorKey = mapShareError(err);
     } finally {
       unlocking = false;
+    }
+  }
+
+  // 入伙：把链接指的卡组加进自己的列表。链接失效/被撤销时服务端返回 404，按同一套 share.* 文案提示。
+  async function join(): Promise<void> {
+    joining = true;
+    joinErrorKey = null;
+    try {
+      const res = await apiClient.joinSharedDeck(token);
+      joined = true;
+      joinedDeckId = res.deck_id;
+    } catch (err) {
+      joinErrorKey = err instanceof ApiClientError && err.isNotFound
+        ? 'share.error_not_found'
+        : err instanceof ApiClientError && err.isNetworkError
+          ? 'error.network'
+          : 'share.browse.join_failed';
+    } finally {
+      joining = false;
     }
   }
 
@@ -127,9 +156,31 @@
     {/if}
 
     <div class="mt-8 text-center text-sm">
-      <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-        {$t('share.browse.login')}
-      </a>
+      {#if $authStore.authenticated}
+        {#if joined}
+          <p data-testid="share-joined" class="text-emerald-700 dark:text-emerald-400">{$t('share.browse.joined')}</p>
+          {#if joinedDeckId !== null}
+            <a
+              data-testid="share-open-deck"
+              href={`/decks/${joinedDeckId}`}
+              class="mt-2 inline-block text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+            >
+              {$t('share.browse.open_deck')}
+            </a>
+          {/if}
+        {:else}
+          <Button variant="primary" disabled={joining} onclick={join} testId="share-join">
+            {joining ? $t('share.browse.joining') : $t('share.browse.join')}
+          </Button>
+          {#if joinErrorKey}
+            <p data-testid="share-join-error" class="mt-2 text-rose-600 dark:text-rose-400">{$t(joinErrorKey)}</p>
+          {/if}
+        {/if}
+      {:else}
+        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+          {$t('share.browse.login')}
+        </a>
+      {/if}
     </div>
   {/if}
 </div>

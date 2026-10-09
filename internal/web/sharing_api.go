@@ -1,7 +1,6 @@
 package web
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,13 +14,12 @@ import (
 )
 
 type sharingRequest struct {
-	Username   string `json:"username"`
-	UserID     uint64 `json:"user_id"`
-	Role       string `json:"role"`
-	Visibility string `json:"visibility"`
-	Link       string `json:"link"`
-	Password   string `json:"password"`
-	ExpiresAt  string `json:"expires_at"`
+	Username  string `json:"username"`
+	UserID    uint64 `json:"user_id"`
+	Role      string `json:"role"`
+	Link      string `json:"link"`
+	Password  string `json:"password"`
+	ExpiresAt string `json:"expires_at"`
 }
 type grant struct {
 	UserID   uint64 `json:"user_id"`
@@ -76,10 +74,6 @@ func (s *Server) sharingGet(c *gin.Context) {
 	for _, l := range links {
 		linkRows = append(linkRows, shareLink{Prefix: shortDigest(l.Token), CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt, HasPassword: l.PasswordHash != nil, Revoked: l.RevokedAt != nil, Expired: l.ExpiresAt != nil && !now.Before(*l.ExpiresAt)})
 	}
-	visibility := deck.Visibility
-	if visibility == "" {
-		visibility = store.DeckVisibilityPrivate
-	}
 	// 待接受的邀请单独一列：属主必须能区分「已授权」与「邀请了还没答应」——后者随时可能
 	// 被拒绝，界面上不该显示成已有访问权。
 	pending, err := s.shareInvites.ListForDeck(ctx, deck.ID)
@@ -88,7 +82,7 @@ func (s *Server) sharingGet(c *gin.Context) {
 		shareError(c, 500, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "deck_name": deck.Name, "visibility": visibility, "grants": grantRows, "pending_invites": pending, "links": linkRows})
+	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "deck_name": deck.Name, "grants": grantRows, "pending_invites": pending, "links": linkRows})
 }
 
 func (s *Server) sharingWrite(c *gin.Context, action string) {
@@ -224,20 +218,6 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 			shareError(c, 500, "internal_error")
 			return
 		}
-	case "visibility":
-		v := strings.TrimSpace(req.Visibility)
-		if err := s.decks.SetVisibility(ctx, user.ID, deck.ID, v); err != nil {
-			if errors.Is(err, store.ErrInvalidVisibility) {
-				bad()
-			} else {
-				s.logger.Error("set SPA deck visibility failed", "deck_id", deck.ID, "error", err)
-				shareError(c, 500, "internal_error")
-			}
-			return
-		}
-		if v != deck.Visibility {
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckVisibility, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"previous": deck.Visibility, "visibility": v}})
-		}
 	case "link_create":
 		pw := strings.TrimSpace(req.Password)
 		var hash *string
@@ -310,7 +290,6 @@ func shareError(c *gin.Context, status int, code string) {
 }
 func (s *Server) sharingGrant(c *gin.Context)         { s.sharingWrite(c, "grant") }
 func (s *Server) sharingRevoke(c *gin.Context)        { s.sharingWrite(c, "revoke") }
-func (s *Server) sharingVisibility(c *gin.Context)    { s.sharingWrite(c, "visibility") }
 func (s *Server) sharingLinkCreate(c *gin.Context)    { s.sharingWrite(c, "link_create") }
 func (s *Server) sharingLinkRevoke(c *gin.Context)    { s.sharingWrite(c, "link_revoke") }
 func (s *Server) sharingLinkRevokeAll(c *gin.Context) { s.sharingWrite(c, "link_revoke_all") }

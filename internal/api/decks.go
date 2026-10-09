@@ -14,15 +14,14 @@ type DeckResponse struct {
 	ID            uint64     `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
-	Visibility    string     `json:"visibility"`
 	NewPerDay     int        `json:"new_per_day"`
 	ReviewsPerDay int        `json:"reviews_per_day"`
 	PresetID      uint64     `json:"preset_id"`
 	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
-	// Role 是调用者在该卡组上的显式关系：owner（自有）或授权角色 editor/reader；
-	// 空串表示既非自有、也无授权行（仅因 public/unlisted 可见）。
-	// 客户端据此决定显示「删除」还是「退出共享」，空串则两者都不显示。
+	// Role 是调用者在该卡组上的显式关系：owner（自有）或授权角色 editor/reader。
+	// 列表里的每张卡组都必然是二者之一——没有第三种「仅因可见性而看得到」的来源。
+	// 客户端据此决定显示「删除」还是「退出共享」。
 	Role string `json:"role"`
 }
 
@@ -36,7 +35,6 @@ func ToDeckResponse(d store.Deck, role string) DeckResponse {
 		ID:            d.ID,
 		Name:          d.Name,
 		Description:   d.Description,
-		Visibility:    d.Visibility,
 		NewPerDay:     d.NewPerDay,
 		ReviewsPerDay: d.ReviewsPerDay,
 		PresetID:      d.PresetID,
@@ -68,7 +66,6 @@ func (a *API) listDecks(c *gin.Context) {
 type createDeckRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Visibility  string `json:"visibility"`
 	PresetID    uint64 `json:"preset_id"`
 }
 
@@ -84,7 +81,6 @@ func (a *API) createDeck(c *gin.Context) {
 	d, err := a.CreateDeck(c.Request.Context(), u, CreateDeckInput{
 		Name:        req.Name,
 		Description: req.Description,
-		Visibility:  req.Visibility,
 		PresetID:    req.PresetID,
 		APIKeyID:    CurrentAPIKeyID(c),
 	})

@@ -5,7 +5,6 @@ export interface Deck {
   id: number;
   name: string;
   description: string;
-  visibility: string;
   new_per_day: number;
   reviews_per_day: number;
   preset_id: number;
@@ -13,10 +12,10 @@ export interface Deck {
   created_at: string;
   /**
    * 调用者在该卡组上的显式关系（Go: DeckResponse.Role）。
-   * 'owner' 为自有；'editor'/'reader' 为被共享；'' 表示仅因 public·unlisted 可见。
+   * 'owner' 为自有；'editor'/'reader' 为被显式授权。列表里的卡组必然属于这两类之一。
    * 列表卡片据此决定显示「删除」（owner）还是「退出共享」（editor/reader）。
    */
-  role: 'owner' | 'editor' | 'reader' | '';
+  role: 'owner' | 'editor' | 'reader';
 }
 
 /**
@@ -104,7 +103,6 @@ export interface UpdateDeckSettingsRequest {
 export interface CreateDeckRequest {
   name: string;
   description: string;
-  visibility: 'private' | 'unlisted' | 'public';
   preset_id: number;
 }
 
@@ -1280,6 +1278,15 @@ export interface ShareResponse {
   /** 为真时 notes 恒为空：有口令的链接在解锁前不返回任何正文。 */
   password_required: boolean;
   notes: ShareNote[];
+}
+
+/**
+ * POST /api/v1/share/:token/join 的响应。
+ * 入伙成功后该卡组进入调用者的列表（并出现在复习队列里），撤销链接不影响它。
+ */
+export interface JoinShareResponse {
+  deck_id: number;
+  joined: boolean;
 }
 
 // ---- OIDC 登录入口探测（Go: internal/web/oidc_api.go）----

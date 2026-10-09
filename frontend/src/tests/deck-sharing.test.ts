@@ -68,13 +68,13 @@ describe('cloneDeck API client', () => {
  * 与属主的删除（DELETE /api/v1/decks/:id）是两条独立路径。
  */
 describe('deck action selection by caller role', () => {
-  it('maps owner to delete, shared roles to leave, and public-only to nothing', () => {
+  it('maps owner to delete, granted roles to leave, and anything else to nothing', () => {
     expect(deckActionKind('owner')).toBe('delete');
     expect(deckActionKind('editor')).toBe('leave');
     expect(deckActionKind('reader')).toBe('leave');
-    // 仅因 public/unlisted 可见的卡组没有可退出的授权行，不显示任何操作。
-    expect(deckActionKind('')).toBeNull();
+    // 未知/缺失的角色不显示任何操作：宁可少一个按钮，也不给没有授权行的卡组渲染「退出共享」。
     expect(deckActionKind(undefined)).toBeNull();
+    expect(deckActionKind(null)).toBeNull();
     expect(deckActionKind('admin')).toBeNull();
   });
 });

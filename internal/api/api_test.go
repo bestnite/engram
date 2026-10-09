@@ -105,7 +105,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) *store.Deck {
 		t.Fatalf("create preset: %v", err)
 	}
 	d := store.Deck{
-		OwnerUserID: ownerID, Name: "deck", Visibility: "private",
+		OwnerUserID: ownerID, Name: "deck",
 		PresetID: preset.ID, CreatedAt: time.Now().UTC(),
 	}
 	if err := store.NewDeckStore(db).Create(context.Background(), &d); err != nil {

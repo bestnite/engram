@@ -21,7 +21,7 @@ func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 		t.Fatalf("create preset: %v", err)
 	}
 	deck := store.Deck{
-		OwnerUserID: 1, Name: "Capped", Description: "", Visibility: store.DeckVisibilityPrivate,
+		OwnerUserID: 1, Name: "Capped", Description: "",
 		NewPerDay: 2, ReviewsPerDay: 1, PresetID: p.ID, CreatedAt: now,
 	}
 	if err := db.Create(&deck).Error; err != nil {
@@ -76,7 +76,7 @@ func TestQueueCapsExplicitOverrideBeatsDeck(t *testing.T) {
 		t.Fatalf("create preset: %v", err)
 	}
 	deck := store.Deck{
-		OwnerUserID: 1, Name: "Capped", Visibility: store.DeckVisibilityPrivate,
+		OwnerUserID: 1, Name: "Capped",
 		NewPerDay: 2, ReviewsPerDay: 1, PresetID: p.ID, CreatedAt: now,
 	}
 	if err := db.Create(&deck).Error; err != nil {

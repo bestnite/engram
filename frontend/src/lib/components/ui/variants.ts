@@ -27,7 +27,7 @@ export const buttonVariants = tv({
   },
   defaultVariants: { variant: 'primary', size: 'md' },
 });
-/** 状态徽章（已撤销、可见性、题型、标签等）的唯一样式来源。 */
+/** 状态徽章（已撤销、题型、标签等）的唯一样式来源。 */
 export const badgeVariants = tv({
   base: 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
   variants: {
