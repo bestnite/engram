@@ -47,6 +47,16 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(new Headers(init?.headers).get('Accept')).toBe('application/vnd.engram.edeck');
     });
 
+    it('decodes a non-ASCII deck title from filename* (the exact header the server sends)', async () => {
+      const bytes = new Blob(['package-bytes'], { type: 'application/vnd.engram.edeck' });
+      mockFetch.mockResolvedValueOnce(new Response(bytes, {
+        status: 200,
+        headers: { 'Content-Disposition': "attachment; filename*=utf-8''%E6%97%A5%E8%AF%AD%20N2%20%E8%AF%8D%E6%B1%87.edeck" },
+      }));
+      const result = await client.downloadDeckPackage('8');
+      expect(result.filename).toBe('日语 N2 词汇.edeck');
+    });
+
     it('rejects review history without progress before making a request', async () => {
       await expect(client.downloadDeckPackage('3', { includeReviews: true })).rejects.toMatchObject({ code: 'invalid_request' });
       expect(mockFetch).not.toHaveBeenCalled();

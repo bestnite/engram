@@ -184,10 +184,9 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	// 文件名用对外 id，避免把自增主键写进客户端可见的下载名。
-	name := "deck-" + publicID + ".edeck"
+	// 下载名用卡组标题，用户在下载目录里能认出是哪个卡组；标题清洗不出可用名字时退回对外 id。
 	c.Header("Content-Type", "application/vnd.engram.edeck")
-	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
+	c.Header("Content-Disposition", AttachmentDisposition(DeckPackageFilename(d.Name, publicID)))
 	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())
 }
 
