@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Migration 是一次性的显式迁移，用于 AutoMigrate 做不到的破坏性变更
@@ -45,6 +46,51 @@ var BuiltinMigrations = []Migration{
 		Name: "0004_backfill_public_ids",
 		Up:   backfillPublicIDs,
 	},
+	{
+		// media_notes 映射表上线时没有为已有 note 回填：升级上来的实例里，旧 note 引用的媒体
+		// 在映射里查不到，共享卡组的成员因此读不到这些图片，媒体回收也会把它们当成无人引用。
+		// 这里扫一遍全部 note（含软删除的，它们可以被恢复）补齐映射，只加不删。
+		Name: "0005_backfill_media_notes",
+		Up:   backfillMediaNotes,
+	},
+}
+
+// backfillMediaNotes 按 note 字段补齐 media_notes；已存在的映射行由 OnConflict 忽略。
+// 按主键分批读取，内存占用与 note 总数无关；字段解析失败的 note 跳过（与配额计量同一口径）。
+func backfillMediaNotes(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("notes") || !m.HasTable("media_notes") {
+		return nil
+	}
+	const batchSize = 500
+	var last uint64
+	now := time.Now().UTC()
+	for {
+		var batch []Note
+		if err := tx.Unscoped().Select("id", "fields_json").Where("id > ?", last).
+			Order("id ASC").Limit(batchSize).Find(&batch).Error; err != nil {
+			return fmt.Errorf("backfill media notes: scan notes after id %d: %w", last, err)
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		var rows []MediaNote
+		for _, n := range batch {
+			last = n.ID
+			fields, err := ParseFields(n.FieldsJSON)
+			if err != nil {
+				continue
+			}
+			for sha := range mediaRefsIn(fields) {
+				rows = append(rows, MediaNote{MediaSha: sha, NoteID: n.ID, CreatedAt: now})
+			}
+		}
+		if len(rows) > 0 {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(&rows, batchSize).Error; err != nil {
+				return fmt.Errorf("backfill media notes: insert rows up to note %d: %w", last, err)
+			}
+		}
+	}
 }
 
 // dropDeckVisibility 删除 decks.visibility 列。
@@ -241,7 +287,17 @@ func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error)
 	if err := AutoMigrate(ctx, db); err != nil {
 		return 0, err
 	}
-	return Apply(ctx, db, migrations)
+	applied, err := Apply(ctx, db, migrations)
+	if err != nil || applied == 0 {
+		return applied, err
+	}
+	// 显式迁移可能重建了表（例如 0001 在 SQLite 上按固定列清单重建 media），
+	// 把第一次 AutoMigrate 刚加上的新列一并丢掉；再跑一次增量迁移把它们补回来，
+	// 否则要等下次启动才有这些列。
+	if err := AutoMigrate(ctx, db); err != nil {
+		return applied, err
+	}
+	return applied, nil
 }
 
 // Apply 校验迁移列表并执行尚未应用的条目。每个迁移与其版本号在同一事务里提交，

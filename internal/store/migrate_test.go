@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -138,6 +139,10 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	if applied == 0 {
 		t.Fatal("Sync() applied no migration, want the media primary-key migration")
 	}
+	// 重建表按固定列清单进行，会丢掉第一次 AutoMigrate 加的新列；Sync 必须在迁移后补回来。
+	if !db.Migrator().HasColumn("media", "orphaned_at") {
+		t.Error("media lost the orphaned_at column after the rebuild migration")
+	}
 
 	// 行数保留，id 列消失，sha256 列仍在。
 	var rows int64
@@ -257,5 +262,76 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 	}
 	if applied != 0 {
 		t.Errorf("second Sync() applied = %d, want 0", applied)
+	}
+}
+
+// TestBuiltinBackfillMediaNotesMigration 模拟映射表上线前的数据：note 字段引用了媒体，
+// media_notes 里却没有行（含一条软删除的 note）。迁移后两条 note 的引用都进了映射，
+// 已有的映射行不重复、不报错；再跑一次不再执行。
+func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			// 前四个迁移视为已执行，只验证本迁移。
+			if err := setVersion(db, 4); err != nil {
+				t.Fatalf("set version: %v", err)
+			}
+			owner := seedUsers(t, db, "backfill_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			shaA := strings.Repeat("a", 64)
+			shaB := strings.Repeat("b", 64)
+			now := time.Now().UTC()
+			live := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+				FieldsJSON: `{"front":"![](/media/` + shaA + `)","back":"![](media/` + shaB + `.png)"}`}
+			gone := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+				FieldsJSON: `{"front":"![](/media/` + shaB + `)","back":"x"}`}
+			plain := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+				FieldsJSON: `{"front":"no media","back":"x"}`}
+			for _, n := range []*Note{&live, &gone, &plain} {
+				if err := db.Create(n).Error; err != nil {
+					t.Fatalf("seed note: %v", err)
+				}
+			}
+			if err := db.Delete(&gone).Error; err != nil {
+				t.Fatalf("soft-delete note: %v", err)
+			}
+			// 一条已存在的映射行：回填不能因唯一索引冲突而失败。
+			if err := db.Create(&MediaNote{MediaSha: shaA, NoteID: live.ID, CreatedAt: now}).Error; err != nil {
+				t.Fatalf("seed existing mapping: %v", err)
+			}
+
+			applied, err := Apply(ctx, db, BuiltinMigrations)
+			if err != nil {
+				t.Fatalf("Apply() error = %v", err)
+			}
+			if applied != 1 {
+				t.Fatalf("Apply() applied = %d, want 1", applied)
+			}
+			var rows []MediaNote
+			if err := db.Order("note_id ASC, media_sha ASC").Find(&rows).Error; err != nil {
+				t.Fatalf("read media notes: %v", err)
+			}
+			got := map[string]bool{}
+			for _, r := range rows {
+				got[fmt.Sprintf("%d:%s", r.NoteID, r.MediaSha[:1])] = true
+			}
+			want := []string{
+				fmt.Sprintf("%d:a", live.ID), fmt.Sprintf("%d:b", live.ID), fmt.Sprintf("%d:b", gone.ID),
+			}
+			if len(rows) != len(want) {
+				t.Fatalf("media notes = %v, want exactly %v", got, want)
+			}
+			for _, w := range want {
+				if !got[w] {
+					t.Errorf("missing mapping %s; have %v", w, got)
+				}
+			}
+			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 0 {
+				t.Errorf("second Apply() = %d, %v; want 0, nil", applied, err)
+			}
+		})
 	}
 }

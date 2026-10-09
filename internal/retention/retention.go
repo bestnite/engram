@@ -15,6 +15,8 @@
 //   - 邀请：到期即删；expires_at 为 NULL 的邀请永不过期，绝不删。
 //   - 登录指纹：最后出现后再留 FingerprintRetention——删早了会把老设备误判成新设备并触发提醒。
 //   - 卡组共享邀请：到期即删（读路径也判过期，删掉只是让表不再增长）。
+//   - 媒体：没有任何 note 引用的媒体先记下孤立时刻，孤立超过 MediaOrphanGrace 后连同文件删除。
+//     宽限期给「编辑时删掉图片又改回来」与「上传后还没插进卡片」留出窗口。
 //
 // **API key 刻意不自动删**：它是用户可见、可自行删除的资产，且数量与用户数同阶（不是增长源）；
 // 自动删掉一张「已过期但还在列表里」的 key 属于替用户做决定。
@@ -40,6 +42,8 @@ const (
 	ActionTokenGrace = 30 * 24 * time.Hour
 	// FingerprintRetention 是登录指纹在最后一次出现后保留的时长（90 天）。
 	FingerprintRetention = 90 * 24 * time.Hour
+	// MediaOrphanGrace 是媒体变成无人引用之后仍保留的时长（7 天）。
+	MediaOrphanGrace = 7 * 24 * time.Hour
 )
 
 // Expirer 是「按时间删除过期行」的最小能力，由 store 的会话/令牌/邀请实现。
@@ -52,13 +56,19 @@ type StalePurger interface {
 	DeleteStale(ctx context.Context, before time.Time) (int64, error)
 }
 
-// Deps 是 New 的构造参数；五类存储都必填（缺一项就少回收一类，属于装配错误，早失败更好）。
+// MediaCollector 是「回收孤立媒体」的最小能力，由 internal/media 的 Store 实现。
+type MediaCollector interface {
+	CollectGarbage(ctx context.Context, now time.Time, grace time.Duration) (int64, error)
+}
+
+// Deps 是 New 的构造参数；各类存储都必填（缺一项就少回收一类，属于装配错误，早失败更好）。
 type Deps struct {
 	Sessions     Expirer
 	ActionTokens Expirer
 	Invites      Expirer
 	ShareInvites Expirer
 	Fingerprints StalePurger
+	Media        MediaCollector
 	Logger       *slog.Logger
 	// Interval 是回收间隔；<=0 时用 DefaultInterval。
 	Interval time.Duration
@@ -77,6 +87,8 @@ func New(deps Deps) (*worker.Lifecycle, error) {
 		return nil, errors.New("retention: Deps.ShareInvites is required")
 	case deps.Fingerprints == nil:
 		return nil, errors.New("retention: Deps.Fingerprints is required")
+	case deps.Media == nil:
+		return nil, errors.New("retention: Deps.Media is required")
 	case deps.Logger == nil:
 		return nil, errors.New("retention: Deps.Logger is required")
 	}
@@ -89,7 +101,7 @@ func New(deps Deps) (*worker.Lifecycle, error) {
 	})
 }
 
-// sweep 跑一轮回收：四类互相独立，各自失败都记下来（用 errors.Join 一并返回），
+// sweep 跑一轮回收：各类互相独立，各自失败都记下来（用 errors.Join 一并返回），
 // 已成功删除的行数照常上报，不因为另一类出错而丢弃日志。
 func sweep(ctx context.Context, deps Deps) error {
 	// **界定值必须是 UTC**：这几张表的时间列全部由写入方以 UTC 落库（auth.Manager.now、
@@ -121,6 +133,13 @@ func sweep(ctx context.Context, deps Deps) error {
 		if removed > 0 {
 			deps.Logger.Info("expired rows removed", "table", t.table, "count", removed)
 		}
+	}
+	removed, err := deps.Media.CollectGarbage(ctx, now, MediaOrphanGrace)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("media: %w", err))
+	}
+	if removed > 0 {
+		deps.Logger.Info("orphaned media removed", "count", removed)
 	}
 	return errors.Join(errs...)
 }

@@ -180,3 +180,45 @@ func referenceMedia(t *testing.T, db *gorm.DB, deckID, ownerID uint64, mediaSha 
 	}
 	return note
 }
+
+// TestMediaQuotaCountsUnreferencedUploads 是反面用例：上传后不插进任何 note 的文件也计入配额，
+// 否则账号可以反复上传「不引用的文件」把磁盘写满。1500 B 待用上传 + 1000 B > 2048 → 拒绝。
+func TestMediaQuotaCountsUnreferencedUploads(t *testing.T) {
+	srv, db, _, cookies, csrf := newNotesServer(t)
+	t.Setenv(envMediaUserQuotaBytes, "")
+	if err := store.PutSetting(context.Background(), db, settingKeyMediaUserQuotaBytes, "2048", nil, time.Now().UTC()); err != nil {
+		t.Fatalf("PutSetting() error = %v", err)
+	}
+	if rec := uploadMedia(t, srv, cookies, csrf, "m1.png", "image/png", quotaPNG(1500)); rec.Code != http.StatusCreated {
+		t.Fatalf("first upload status = %d, want 201", rec.Code)
+	}
+	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("second unreferenced upload status = %d, want 413 (body %s)", rec.Code, rec.Body.String())
+	}
+	var e mediaErrResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if e.Error.Code != media.CodeQuotaExceeded {
+		t.Errorf("code = %q, want %q", e.Error.Code, media.CodeQuotaExceeded)
+	}
+}
+
+// TestMediaUploadRejectsOversizedBody 断言请求体整体超限时以 media_too_large 拒绝（请求体在
+// multipart 解析前就被限长，超大的请求体不会先写进临时盘）。
+func TestMediaUploadRejectsOversizedBody(t *testing.T) {
+	srv, _, _, cookies, csrf := newNotesServer(t)
+	t.Setenv(media.EnvMediaMaxBytes, "4096")
+	rec := uploadMedia(t, srv, cookies, csrf, "huge.png", "image/png", quotaPNG(4096+multipartOverheadBytes+1))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized body status = %d, want 413 (body %s)", rec.Code, rec.Body.String())
+	}
+	var e mediaErrResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if e.Error.Code != media.CodeTooLarge {
+		t.Errorf("code = %q, want %q", e.Error.Code, media.CodeTooLarge)
+	}
+}

@@ -182,16 +182,22 @@ func runServe(ctx context.Context) error {
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// 历史行回收：会话、一次性令牌、过期邀请、登录指纹都只在读路径上判过期，从不删行，
-	// 所以要有一层周期回收（保留期见该包注释）。
+	// 历史行回收：会话、一次性令牌、过期邀请、登录指纹都只在读路径上判过期，从不删行；
+	// 无人引用的媒体也从不删除。所以要有一层周期回收（保留期见该包注释）。
 	// 刻意放在下面的 mail 分支之外——回收与「SMTP 是否配置」无关，而提醒/周报两个 worker 是
 	// 和邮件投递绑在一起的，若把它一并塞进去，未配置 SMTP 的部署就永远不回收。
+	// 媒体回收与 web 层的上传/读取共用同一个媒体目录；Store 本身无状态，另建一个实例即可。
+	mediaStore, err := media.New(cfg.Get(config.KeyMediaDir).Value, db)
+	if err != nil {
+		return err
+	}
 	retentionWorker, err := retention.New(retention.Deps{
 		Sessions:     store.NewSessionStore(db),
 		ActionTokens: store.NewActionTokenStore(db),
 		Invites:      store.NewInviteStore(db),
 		ShareInvites: store.NewDeckShareInviteStore(db),
 		Fingerprints: store.NewLoginFingerprintStore(db),
+		Media:        mediaStore,
 		Logger:       logger,
 	})
 	if err != nil {
