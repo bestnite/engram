@@ -391,6 +391,34 @@
     startedAt = Date.now();
   }
 
+  /**
+   * 撤销刚提交的评分：服务端恢复进度并删除被撤销的那条复习日志，响应带同范围重建的队列。
+   * 结果面板随即关闭，当前卡定位回被撤销的那张——队列按 due_at 排序，被撤销的卡不保证
+   * 排在首位，因此按 undone_card_id 在队列里找它，而不是取队列第一张。
+   */
+  async function undo(): Promise<void> {
+    if (!current || submitting) return;
+    submitting = true;
+    error = null;
+    try {
+      const response = await client.undoReview({ card_id: current.card_id, deck: selectedDecks() });
+      const target = response.cards.find((card) => card.card_id === response.undone_card_id) ?? current;
+      cards = [target];
+      remaining = response.remaining;
+      done = Math.max(0, done - 1);
+      feedback = null;
+      pendingCards = [];
+      gradedRevealed = false;
+      revealedAnswerHTML = '';
+      resetAnswerState();
+      startedAt = Date.now();
+    } catch (cause) {
+      error = cause;
+    } finally {
+      submitting = false;
+    }
+  }
+
   let inputElement = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
@@ -668,7 +696,10 @@
                 <div class="text-sm text-zinc-600 dark:text-zinc-300"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
               {/if}
               <div class="text-sm text-zinc-500" data-testid="review-graded-rating">{$t('review.graded.rating')} · {$t(`review.rating.${feedback.rating}`)}</div>
-              <button type="button" class="w-full min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <button type="button" class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
+                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
+              </div>
             </div>
           {:else if gradedRevealed}
             <div bind:this={revealedSection} class="space-y-5" data-testid="review-graded-revealed">

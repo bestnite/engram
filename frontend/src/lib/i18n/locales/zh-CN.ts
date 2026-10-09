@@ -1219,4 +1219,5 @@ export const zhCN: LocaleCatalog = {
   'settings.profile.learn_ahead_label': '提前学习（分钟）',
   'settings.profile.learn_ahead_hint': '其它卡都复习完后，这么多分钟内就要到期的学习卡提前出现，不必等它到期。0 表示关闭。',
   'settings.error.learn_ahead_invalid': '请输入 0 到 1440 之间的整数。',
+  'review.undo': '撤销',
 };
