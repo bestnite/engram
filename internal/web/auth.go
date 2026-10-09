@@ -180,7 +180,20 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 	}
 
 	var u *store.User
-	if invite != nil {
+	if role == store.RoleAdmin && invite == nil && admins == 0 {
+		// 引导窗口：上面的计数在闸门之外，可能已被并发的引导/注册抢先。在闸门事务里重数并建号，
+		// 保证「没有管理员时注册即成为管理员」最多只发生一次。
+		created, err := s.createBootstrapAdmin(ctx, input)
+		if err != nil {
+			if errors.Is(err, store.ErrAdminExists) {
+				s.logger.Info("bootstrap registration lost the race to another administrator", "username", username)
+				return registrationOutcome{Status: http.StatusConflict, Code: "create_failed"}
+			}
+			s.logger.Error("create local user failed", "username", username, "error", err)
+			return registrationOutcome{Status: http.StatusConflict, Code: "create_failed"}
+		}
+		u = created
+	} else if invite != nil {
 		// 邀请接受事务化：Accept 在一个事务里占用 token、建号并回填 used_by。
 		// 建号失败时整体回滚，token 保持可用；并发下条件更新保证只有一个请求能占用成功。
 		created, aerr := s.invites.Accept(ctx, invite.Token, now, func(tx *gorm.DB) (*store.User, error) {
@@ -218,7 +231,7 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 	if code := registerInputErrorCode(username, email, password); code != "" {
 		return registrationOutcome{Status: http.StatusBadRequest, Code: code}
 	}
-	u, err := s.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
+	u, err := s.createBootstrapAdmin(ctx, auth.CreateUserInput{
 		Username:    username,
 		Email:       email,
 		DisplayName: displayName,
@@ -226,6 +239,10 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 		Role:        store.RoleAdmin,
 		Locale:      locale,
 	})
+	if errors.Is(err, store.ErrAdminExists) {
+		// 入口处的可达性检查之后，另一个请求先完成了引导：与「已有管理员」同样处理。
+		return registrationOutcome{Status: http.StatusNotFound, Code: "not_found"}
+	}
 	if err != nil {
 		s.logger.Error("create bootstrap admin failed", "username", username, "error", err)
 		return registrationOutcome{Status: http.StatusConflict, Code: "create_failed"}
@@ -238,6 +255,22 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 		Detail:     map[string]any{"username": u.Username, "email": u.Email, "role": u.Role, "bootstrap": true},
 	})
 	return registrationOutcome{Status: http.StatusOK, User: u}
+}
+
+// createBootstrapAdmin 在管理员闸门里建首个管理员：事务内重数活跃管理员，已有则返回
+// store.ErrAdminExists，不建号。引导页与「无管理员时的注册」共用它，规则只有一处。
+func (s *Server) createBootstrapAdmin(ctx context.Context, input auth.CreateUserInput) (*store.User, error) {
+	input.Role = store.RoleAdmin
+	var u *store.User
+	err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
+		if admins > 0 {
+			return store.ErrAdminExists
+		}
+		created, err := s.accounts.CreateLocalUserTx(ctx, tx, input)
+		u = created
+		return err
+	})
+	return u, err
 }
 
 // setupAvailable 报告引导页是否可达：仅当没有任何仍在用的管理员时可达（一次性管理员门）。
