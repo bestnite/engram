@@ -557,12 +557,14 @@
             >
               <div class="h-full rounded-full transition-[width] duration-300 {p.gate.eligible ? 'bg-success' : 'bg-brand'}" style="width: {progress * 100}%"></div>
             </div>
-            {#if !p.gate.eligible}
-              <p role="status" data-testid={`preset-${p.id}-shortfall`} class="text-[13px] text-warning">
-                {$t('presets.optimize.shortfall', { count: p.gate.shortfall, have: p.gate.reviews, min: p.gate.min })}
-              </p>
-            {/if}
-            <p class="text-xs text-muted-foreground">{$t('presets.reschedule.note')}</p>
+            <p class="text-xs text-muted-foreground">
+              {#if !p.gate.eligible}
+                <span role="status" data-testid={`preset-${p.id}-shortfall`} class="font-medium text-foreground/80">
+                  {$t('presets.optimize.shortfall', { count: p.gate.shortfall })}
+                </span>
+              {/if}
+              {$t('presets.reschedule.note')}
+            </p>
             {#if notice && notice.id === p.id}
               <p role="alert" data-testid={`preset-${p.id}-notice`} class="text-[13px] text-warning">{$t(notice.key)}</p>
             {/if}

@@ -693,7 +693,7 @@ export const en: LocaleCatalog = {
   'presets.optimize.succeeded': 'Optimisation finished.',
   'presets.optimize.failed': 'Optimisation failed',
   'presets.optimize.conflict': 'Another optimisation job is already running; wait for it to finish and try again.',
-  'presets.optimize.shortfall': 'Not enough reviews yet: {count} more needed ({have} of {min}).',
+  'presets.optimize.shortfall': '{count} more reviews needed before optimizing.',
   'presets.optimize.log_tail': 'Recent log',
   'presets.optimize.result_title': 'Fit comparison (lower is better)',
   'presets.optimize.result_reviews': 'Reviews used for training: {count}',

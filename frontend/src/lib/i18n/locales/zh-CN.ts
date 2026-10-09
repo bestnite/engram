@@ -692,7 +692,7 @@ export const zhCN: LocaleCatalog = {
   'presets.optimize.succeeded': '优化完成。',
   'presets.optimize.failed': '优化失败',
   'presets.optimize.conflict': '已有优化任务正在运行，请等它结束后再试。',
-  'presets.optimize.shortfall': '复习记录不足：还差 {count} 条（当前 {have} 条，需要 {min} 条）。',
+  'presets.optimize.shortfall': '还差 {count} 条即可优化。',
   'presets.optimize.log_tail': '最近日志',
   'presets.optimize.result_title': '拟合对比（越小越贴合）',
   'presets.optimize.result_reviews': '训练使用复习记录：{count} 条',
