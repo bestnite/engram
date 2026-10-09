@@ -56,6 +56,14 @@ const (
 	CodeTOTPChallengeExpired = "totp_challenge_expired"
 	// CodeGradingRequired 表示对作答类题型提交了自评分：这类卡只能由服务端判分。
 	CodeGradingRequired = "grading_required"
+	// CodeImportURLInvalid 表示直链导入的 URL 缺失、非法、非 HTTPS 或带用户凭据。
+	CodeImportURLInvalid = "deck_import_url_invalid"
+	// CodeImportURLBlocked 表示 URL 主机解析到非公网地址（SSRF 防护拒绝）。
+	CodeImportURLBlocked = "deck_import_url_blocked"
+	// CodeImportURLFetchFailed 表示直链下载失败：连接/超时/重定向过多/非 2xx。
+	CodeImportURLFetchFailed = "deck_import_url_fetch_failed"
+	// CodeImportURLNotPackage 表示直链返回的内容不是卡组包（如 HTML 页面）。
+	CodeImportURLNotPackage = "deck_import_url_not_package"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -89,6 +97,12 @@ var errorMessages = map[string]string{
 	CodeTOTPInvalid:          "The two-factor code is not valid.",
 	CodeTOTPChallengeExpired: "The two-factor challenge has expired. Sign in again.",
 	CodeGradingRequired:      "This card type is graded by the server: send an answer or give up instead of a rating.",
+
+	// 直链导入（POST /decks/import-url）的稳定 code。
+	CodeImportURLInvalid:     "The URL is not a valid public HTTPS link.",
+	CodeImportURLBlocked:     "The URL points to a network address that is not allowed.",
+	CodeImportURLFetchFailed: "The package could not be downloaded from the URL.",
+	CodeImportURLNotPackage:  "The URL did not return a deck package.",
 
 	// 卡组包导入的稳定 code（store.PackageError.Code）。
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",

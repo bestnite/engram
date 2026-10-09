@@ -11,7 +11,6 @@ import RegisterView from '../views/RegisterView.svelte';
 import SetupView from '../views/SetupView.svelte';
 import ReviewView from '../views/ReviewView.svelte';
 import NoteEditView from '../views/NoteEditView.svelte';
-import NoteCreateView from '../views/NoteCreateView.svelte';
 import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
@@ -86,9 +85,11 @@ export const routes: RouteDefinition[] = [
     component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
+    // 新建卡片的规范地址。与编辑共用同一个编辑器实现（NoteEditView）：
+    // 地址上没有 noteId 就是新建模式，成功固定跳回 /decks/:id。
     path: '/decks/:id/notes/new',
     name: 'note-create',
-    component: NoteCreateView as unknown as RouteDefinition['component'],
+    component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
     // 旧 SSR 编辑地址（规范路由）：服务端 GET /decks/:id/notes/:nid 现在返回
@@ -100,9 +101,10 @@ export const routes: RouteDefinition[] = [
   },
   {
     // 旧 SSR 新建地址：服务端 GET /decks/:id/new-note 返回应用壳，客户端处理该精确 URL。
+    // 同样指向共用编辑器（新建模式）。
     path: '/decks/:id/new-note',
     name: 'note-create-legacy',
-    component: NoteCreateView as unknown as RouteDefinition['component'],
+    component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
     // 复习页的规范路由。服务端 GET /review 已切到 SPA 应用壳，

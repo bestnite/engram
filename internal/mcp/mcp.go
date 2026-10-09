@@ -310,7 +310,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
 	addTool(s, srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
 	addTool(s, srv, id, "bulk_notes", "Apply one bulk action (delete, add_tags, remove_tags, set_tags) to a set of notes; dry_run counts without writing. Mirrors REST POST /notes/bulk.", s.bulkNotes)
-	addTool(s, srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Accepts the JSON document returned by export_deck, or a base64-encoded .edeck archive.", s.importDeck)
+	addTool(s, srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Give exactly one source: the JSON document returned by export_deck, a base64-encoded .edeck archive, or a public HTTPS direct link (url) to an .edeck/.zip file.", s.importDeck)
 	addTool(s, srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
 	addTool(s, srv, id, "submit_review", "Submit a review for a card with optimistic version check: a self-assessed rating (1..4), or for card types graded by the server an answer (or give_up) that the server grades.", s.submitReview)
 

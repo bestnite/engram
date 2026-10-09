@@ -14,6 +14,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/urlfetch"
 )
 
 // Deps 是 API 的显式依赖（AGENTS.md §2.4：入口显式装配）。
@@ -33,6 +34,9 @@ type Deps struct {
 	Now func() time.Time
 	// MediaRoot 是媒体字节的本地根目录；卡组包导出/导入内联媒体时使用（可为空）。
 	MediaRoot string
+	// PackageFetcher 下载卡组包的公开 HTTPS 直链；为空时用 internal/urlfetch 的生产实现。
+	// 显式可注入，便于测试用受控实现验证端点行为而不依赖公网。
+	PackageFetcher PackageFetcher
 	// ReadLimit / WriteLimit / RateWindow 透传给鉴权中间件的按 key 限流。
 	ReadLimit  int
 	WriteLimit int
@@ -57,6 +61,10 @@ type API struct {
 	authn   *Authenticator
 	// mediaRoot 供卡组包内联媒体使用；为空时不落盘媒体。
 	mediaRoot string
+	// fetcher 下载卡组包的公开 HTTPS 直链（internal/urlfetch）。
+	fetcher PackageFetcher
+	// importURL 是按用户的直链导入限流器：本入口会触发出站请求，需独立限流。
+	importURL *RateLimiter
 	// exportPageSize 是导出分页的页大小：既是一页的内存上界，也是「持有一条数据库连接」的时间上界。
 	// New 填 exportDefaultPageSize；测试可以调小（例如 2）以制造多页，验证连接在页间是空闲的。
 	exportPageSize int
@@ -115,6 +123,11 @@ func New(deps Deps) (*API, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 直链下载默认用生产实现：系统解析器/拨号器/根证书，内置 SSRF 防护。
+	fetcher := deps.PackageFetcher
+	if fetcher == nil {
+		fetcher = urlfetch.New(urlfetch.DefaultLimits())
+	}
 	return &API{
 		db:        deps.DB,
 		logger:    logger,
@@ -130,6 +143,8 @@ func New(deps Deps) (*API, error) {
 		now:       now,
 		authn:     authn,
 		mediaRoot: deps.MediaRoot,
+		fetcher:   fetcher,
+		importURL: NewRateLimiter(importURLRateLimit, importURLRateWindow, now),
 		// 导出分页的默认页大小；见 API.exportPageSize 的说明。
 		exportPageSize: exportDefaultPageSize,
 	}, nil
@@ -166,6 +181,8 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
 	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
 	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)
+	// 从公开 HTTPS 直链导入卡组包：与文件导入同一 service、同一 scope 与 CSRF 规则。
+	v1.POST("/decks/import-url", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackageURL)
 	v1.GET("/keys", a.authn.RequireScope(store.ScopeKeys), a.listKeys)
 	v1.POST("/keys", a.authn.RequireScope(store.ScopeKeys), a.createKey)
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)

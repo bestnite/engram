@@ -64,6 +64,7 @@ jobs:
           npm ci
           npm run check
           npm test -- --run
+          npm run test:client
           npm run build
 
       - name: Check formatting (gofmt)

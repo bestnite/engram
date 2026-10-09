@@ -407,3 +407,14 @@
 # 服务端可见文本里的「默认预设」显示名（库内名 Default 是身份标识，不是给人看的文案）。
 - id: presets.default_name
   translation: "默认"
+
+# 直链导入卡组包端点（POST /api/v1/decks/import-url）的稳定错误文案。
+# 键集合须与英文语言包一致。
+- id: error.deck_import_url_invalid
+  translation: "链接不是有效的公开 HTTPS 直链。"
+- id: error.deck_import_url_blocked
+  translation: "链接指向不允许访问的网络地址。"
+- id: error.deck_import_url_fetch_failed
+  translation: "无法从该链接下载卡组包。"
+- id: error.deck_import_url_not_package
+  translation: "该链接返回的内容不是卡组包。"
