@@ -185,14 +185,24 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 侧边栏不参与页面淡入淡出：它在页面之间不变，跟着闪一下反而显得整屏在重绘。 */
+/* 侧边栏在两个都有它的页面之间不参与淡入淡出：它没变，跟着闪一下反而显得整屏在重绘。
+   只有新旧两张快照同时存在时才关闭动画（:only-child 为假）。进入复习页这类没有侧边栏的
+   布局时只剩旧快照，若也关掉动画，它会原样停留到整个过渡结束再突然消失，看起来像卡了一下；
+   这时让它与页面同步淡出（反方向同理淡入）。 */
 .app-sidebar {
   view-transition-name: app-sidebar;
 }
 
-::view-transition-old(app-sidebar),
-::view-transition-new(app-sidebar) {
+::view-transition-old(app-sidebar):not(:only-child),
+::view-transition-new(app-sidebar):not(:only-child) {
   animation: none;
+}
+
+::view-transition-group(app-sidebar),
+::view-transition-old(app-sidebar):only-child,
+::view-transition-new(app-sidebar):only-child {
+  animation-duration: 140ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 用户在系统里关闭了动画：所有过渡与动画缩短到一帧，保留状态变化本身。 */
