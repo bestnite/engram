@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -307,4 +308,33 @@ func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies 
 type cloneResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// TestCloneTruncatesNearLimitSourceName 是 AUDIT-05 的端到端验收：接近上限的合法源名克隆后
+// 仍产出合法副本名——后缀被容纳、整名不超过 200 个字符（修复前副本名会超长，之后任何改名或
+// 包导入入口都会拒绝它）。
+func TestCloneTruncatesNearLimitSourceName(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	longName := strings.Repeat("卡", 200) // 恰好在上限上的合法源名
+	deck := seedDeck(t, db, ownerID, longName)
+	seedBasic(t, db, deck.ID, "Q", "A")
+
+	rec := postAccept(t, srv, "/api/v1/decks/"+deck.PublicID+"/clone", "{}", "application/json", cookies, csrf)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("clone near-limit name = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var body cloneResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode clone response: %v (body %s)", err, rec.Body.String())
+	}
+	var cloned store.Deck
+	if err := db.First(&cloned, "public_id = ?", body.ID).Error; err != nil {
+		t.Fatalf("load cloned deck: %v", err)
+	}
+	if n := utf8.RuneCountInString(cloned.Name); n > 200 {
+		t.Errorf("cloned name has %d runes, want <= 200 (%q)", n, cloned.Name)
+	}
+	if !strings.HasSuffix(cloned.Name, "（副本）") {
+		t.Errorf("cloned name = %q, want the localized copy suffix", cloned.Name)
+	}
 }

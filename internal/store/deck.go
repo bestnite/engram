@@ -106,6 +106,24 @@ func validateDeckName(name string) error {
 	return nil
 }
 
+// DeckCopyName 返回「源名 + 副本后缀」的卡组名：整串超过 maxDeckNameChars 个字符时，
+// 按 rune 截断源名，保证结果仍满足统一名称校验。后缀由调用方按语言给出（本地化只在传输层），
+// 因此这里只处理长度，不关心后缀内容——否则克隆会给接近上限的合法卡组产出超长副本名。
+func DeckCopyName(sourceName, suffix string) string {
+	if utf8.RuneCountInString(sourceName)+utf8.RuneCountInString(suffix) <= maxDeckNameChars {
+		return sourceName + suffix
+	}
+	keep := maxDeckNameChars - utf8.RuneCountInString(suffix)
+	if keep < 0 {
+		keep = 0
+	}
+	runes := []rune(sourceName)
+	if keep > len(runes) {
+		keep = len(runes)
+	}
+	return string(runes[:keep]) + suffix
+}
+
 // validateDeckForWrite 校验可写字段；create 时额外要求 owner 与 preset 已给定。
 func validateDeckForWrite(d *Deck, create bool) error {
 	if err := validateDeckName(d.Name); err != nil {

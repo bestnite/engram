@@ -52,7 +52,10 @@ func (s *Server) deckClone(c *gin.Context) {
 		return
 	}
 	presetID := settings.PresetID
-	name := loc.Tf("clone.name", map[string]any{"name": src.Name})
+	// 副本名 = 源名 + 本地化后缀；由 store.DeckCopyName 按 rune 截断源名，
+	// 保证接近上限的合法源名不会产出超长副本名。
+	suffix := loc.Tf("clone.name_suffix", nil)
+	name := store.DeckCopyName(src.Name, suffix)
 	cloned, err := s.decks.Clone(ctx, src, user.ID, name, presetID)
 	if err != nil {
 		s.logger.Error("clone deck failed", "deck_id", src.ID, "user_id", user.ID, "error", err)

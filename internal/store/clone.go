@@ -32,6 +32,18 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	if presetID == 0 {
 		return nil, ErrDeckPresetRequired
 	}
+	// 与卡组建组、改名走同一套名称/描述校验：克隆曾只检查非空就 tx.Create，于是能落库一条
+	// 超过 200 字符、或含控制字符的卡组，后续任何改名/导入入口都会拒绝它。
+	dst := Deck{
+		OwnerUserID: targetUserID,
+		Name:        newName,
+		Description: src.Description,
+		PresetID:    presetID,
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := validateDeckForWrite(&dst, true); err != nil {
+		return nil, err
+	}
 	// 克隆者 = 目标用户：副本里的 note 引用必须对它可读（写前校验）。
 	// 克隆者能看见源卡组时，源 note 的映射即构成可读性，因此合法克隆不会被误挡；
 	// 克隆后副本映射指向新 note，读者不再依赖源卡组仍可见。
@@ -39,13 +51,6 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 
 	var out Deck
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		dst := Deck{
-			OwnerUserID: targetUserID,
-			Name:        newName,
-			Description: src.Description,
-			PresetID:    presetID,
-			CreatedAt:   time.Now().UTC(),
-		}
 		if err := tx.Create(&dst).Error; err != nil {
 			return fmt.Errorf("create cloned deck: %w", err)
 		}
