@@ -11,6 +11,12 @@ export interface Deck {
   preset_id: number;
   archived_at?: string | null;
   created_at: string;
+  /**
+   * 调用者在该卡组上的显式关系（Go: DeckResponse.Role）。
+   * 'owner' 为自有；'editor'/'reader' 为被共享；'' 表示仅因 public·unlisted 可见。
+   * 列表卡片据此决定显示「删除」（owner）还是「退出共享」（editor/reader）。
+   */
+  role: 'owner' | 'editor' | 'reader' | '';
 }
 
 /**

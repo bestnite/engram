@@ -10,7 +10,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
-  import { deckVisibilityLabel as visibilityLabel, presetDisplayName } from '../labels';
+  import { deckVisibilityLabel as visibilityLabel, deckActionKind, presetDisplayName } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -39,10 +39,11 @@
   let inviteBusy = $state<number | null>(null);
   let inviteError = $state<string | null>(null);
 
-  // 删除卡组确认弹窗状态
-  let deckToDelete = $state<Deck | null>(null);
-  let deleting = $state(false);
-  let deleteError = $state<string | null>(null);
+  // 卡组危险操作的确认弹窗状态：删除（自有卡组）与退出共享（被共享卡组）共用一套弹窗，
+  // 只有文案与调用的接口不同，避免两套重复的确认 UI。
+  let deckAction = $state<{ deck: Deck; kind: 'delete' | 'leave' } | null>(null);
+  let acting = $state(false);
+  let actionError = $state<string | null>(null);
 
   /**
    * 请求后端卡组列表（GET /api/v1/decks）
@@ -200,32 +201,42 @@
     }
   }
 
-  function promptDeleteDeck(deck: Deck, e: Event): void {
+  /** 打开确认弹窗。kind 决定这是「删除自有卡组」还是「退出共享卡组」。 */
+  function promptDeckAction(deck: Deck, kind: 'delete' | 'leave', e: Event): void {
     e.stopPropagation();
-    deckToDelete = deck;
-    deleteError = null;
+    deckAction = { deck, kind };
+    actionError = null;
   }
 
-  function closeDeleteModal(): void {
-    if (!deleting) {
-      deckToDelete = null;
-      deleteError = null;
+  function closeDeckAction(): void {
+    if (!acting) {
+      deckAction = null;
+      actionError = null;
     }
   }
 
-  async function confirmDeleteDeck(): Promise<void> {
-    if (!deckToDelete || deleting) return;
-    deleting = true;
-    deleteError = null;
+  /**
+   * 执行确认的危险操作：删除走 deleteDeck，退出共享走 leaveDeck。
+   * 两者成功后都把卡组从本地列表移除——退出共享后它不再对你可见，效果与删除相同。
+   */
+  async function confirmDeckAction(): Promise<void> {
+    if (!deckAction || acting) return;
+    const { deck, kind } = deckAction;
+    acting = true;
+    actionError = null;
     try {
-      await apiClient.deleteDeck(deckToDelete.id);
-      decks = decks.filter((d) => d.id !== deckToDelete!.id);
-      selectedDeckIds = selectedDeckIds.filter((id) => id !== deckToDelete!.id);
-      deckToDelete = null;
+      if (kind === 'delete') {
+        await apiClient.deleteDeck(deck.id);
+      } else {
+        await apiClient.leaveDeck(deck.id);
+      }
+      decks = decks.filter((d) => d.id !== deck.id);
+      selectedDeckIds = selectedDeckIds.filter((id) => id !== deck.id);
+      deckAction = null;
     } catch {
-      deleteError = 'decks.delete.failed';
+      actionError = kind === 'delete' ? 'decks.delete.failed' : 'decks.leave.failed';
     } finally {
-      deleting = false;
+      acting = false;
     }
   }
 
@@ -241,7 +252,7 @@
   function handleKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       if (showCreateModal) closeCreateModal();
-      if (deckToDelete) closeDeleteModal();
+      if (deckAction) closeDeckAction();
     }
   }
 
@@ -461,19 +472,39 @@
                   {#if visibilityLabel(deck.visibility, $t)}
                     <Badge>{visibilityLabel(deck.visibility, $t)}</Badge>
                   {/if}
-                  <button
-                    type="button"
-                    data-testid={`deck-delete-btn-${deck.id}`}
-                    title={$t('decks.delete.action')}
-                    aria-label={$t('decks.delete.action')}
-                    class="p-1 rounded-md text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                    onclick={(e) => promptDeleteDeck(deck, e)}
-                  >
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
+                  {#if deckActionKind(deck.role) === 'leave'}
+                    <Badge testId={`deck-shared-badge-${deck.id}`}>{$t('decks.shared_badge')}</Badge>
+                  {/if}
+                  {#if deckActionKind(deck.role) === 'delete'}
+                    <button
+                      type="button"
+                      data-testid={`deck-delete-btn-${deck.id}`}
+                      title={$t('decks.delete.action')}
+                      aria-label={$t('decks.delete.action')}
+                      class="p-1 rounded-md text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      onclick={(e) => promptDeckAction(deck, 'delete', e)}
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  {:else if deckActionKind(deck.role)}
+                    <button
+                      type="button"
+                      data-testid={`deck-leave-btn-${deck.id}`}
+                      title={$t('decks.leave.action')}
+                      aria-label={$t('decks.leave.action')}
+                      class="p-1 rounded-md text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      onclick={(e) => promptDeckAction(deck, 'leave', e)}
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                    </button>
+                  {/if}
                 </div>
               </div>
 
@@ -563,25 +594,35 @@
   </Dialog>
 {/if}
 
-<!-- 删除卡组二次确认对话框（Modal） -->
-{#if deckToDelete}
+<!-- 卡组危险操作二次确认对话框（Modal）：删除自有卡组 / 退出共享卡组共用一套 -->
+{#if deckAction}
   <Dialog
     open={true}
-    onOpenChange={(open) => { if (!open) closeDeleteModal(); }}
-    title={$t('decks.delete.confirm_title')}
-    description={$t('decks.delete.confirm_desc', { name: deckToDelete.name })}
-    testId="deck-delete-dialog"
+    onOpenChange={(open) => { if (!open) closeDeckAction(); }}
+    title={$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_title' : 'decks.leave.confirm_title')}
+    description={$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_desc' : 'decks.leave.confirm_desc', { name: deckAction.deck.name })}
+    testId={deckAction.kind === 'delete' ? 'deck-delete-dialog' : 'deck-leave-dialog'}
   >
-      {#if deleteError}
-        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(deleteError)}</p>
+      {#if actionError}
+        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(actionError)}</p>
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
-        <Button variant="outline" size="lg" disabled={deleting} onclick={closeDeleteModal}>
-          {$t('decks.delete.cancel_btn')}
+        <Button variant="outline" size="lg" disabled={acting} onclick={closeDeckAction}>
+          {$t(deckAction.kind === 'delete' ? 'decks.delete.cancel_btn' : 'decks.leave.cancel_btn')}
         </Button>
-        <Button variant="danger" size="lg" disabled={deleting} onclick={confirmDeleteDeck} testId="deck-delete-confirm">
-          {deleting ? $t('common.deleting') : $t('decks.delete.confirm_btn')}
+        <Button
+          variant={deckAction.kind === 'delete' ? 'danger' : 'danger-outline'}
+          size="lg"
+          disabled={acting}
+          onclick={confirmDeckAction}
+          testId={deckAction.kind === 'delete' ? 'deck-delete-confirm' : 'deck-leave-confirm'}
+        >
+          {#if acting}
+            {$t(deckAction.kind === 'delete' ? 'common.deleting' : 'decks.leave.submitting')}
+          {:else}
+            {$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_btn' : 'decks.leave.confirm_btn')}
+          {/if}
         </Button>
       </div>
   </Dialog>

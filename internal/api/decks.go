@@ -20,13 +20,18 @@ type DeckResponse struct {
 	PresetID      uint64     `json:"preset_id"`
 	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
+	// Role 是调用者在该卡组上的显式关系：owner（自有）或授权角色 editor/reader；
+	// 空串表示既非自有、也无授权行（仅因 public/unlisted 可见）。
+	// 客户端据此决定显示「删除」还是「退出共享」，空串则两者都不显示。
+	Role string `json:"role"`
 }
 
 // deckResponse 保留旧名，供包内既有调用。
 type deckResponse = DeckResponse
 
 // ToDeckResponse 把 store.Deck 映射成对外形态；REST 与 MCP 共用。
-func ToDeckResponse(d store.Deck) DeckResponse {
+// role 是调用者在该卡组上的显式关系（见 DeckResponse.Role），由 service 层解析后传入。
+func ToDeckResponse(d store.Deck, role string) DeckResponse {
 	return DeckResponse{
 		ID:            d.ID,
 		Name:          d.Name,
@@ -37,13 +42,14 @@ func ToDeckResponse(d store.Deck) DeckResponse {
 		PresetID:      d.PresetID,
 		ArchivedAt:    d.ArchivedAt,
 		CreatedAt:     d.CreatedAt,
+		Role:          role,
 	}
 }
 
 // toDeckResponse 保留旧名，供包内既有调用。
-func toDeckResponse(d store.Deck) DeckResponse { return ToDeckResponse(d) }
+func toDeckResponse(d store.Deck, role string) DeckResponse { return ToDeckResponse(d, role) }
 
-// listDecks 返回当前用户拥有的卡组（业务逻辑在 service 层 ListDecks，与 MCP 的 list_decks 同源）。
+// listDecks 返回当前用户可见的卡组（业务逻辑在 service 层 ListDecks，与 MCP 的 list_decks 同源）。
 func (a *API) listDecks(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	decks, err := a.ListDecks(c.Request.Context(), u.ID)
@@ -53,7 +59,7 @@ func (a *API) listDecks(c *gin.Context) {
 	}
 	out := make([]deckResponse, 0, len(decks))
 	for _, d := range decks {
-		out = append(out, toDeckResponse(d))
+		out = append(out, toDeckResponse(d.Deck, d.Role))
 	}
 	c.JSON(http.StatusOK, gin.H{"decks": out})
 }
@@ -86,7 +92,7 @@ func (a *API) createDeck(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toDeckResponse(*d))
+	c.JSON(http.StatusCreated, toDeckResponse(*d, store.RoleOwner))
 }
 
 func (a *API) deleteDeck(c *gin.Context) {
@@ -100,4 +106,21 @@ func (a *API) deleteDeck(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+// leaveDeck 让被共享者退出卡组（DELETE /api/v1/decks/:id/membership，scope: write）。
+//
+// 与 deleteDeck 是两条独立路径：退出只撤掉自己一行授权，删除卡组才是 owner 的不可逆操作。
+// 业务在 service 层 LeaveDeck（REST 与 MCP 共用同一实现）。
+func (a *API) leaveDeck(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	deckID, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	if err := a.LeaveDeck(c.Request.Context(), u, deckID, CurrentAPIKeyID(c)); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"left": true})
 }

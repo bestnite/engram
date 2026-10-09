@@ -74,6 +74,69 @@ func TestGrantStoreLifecycle(t *testing.T) {
 	}
 }
 
+// TestRolesForUser 断言显式授权按 deck_id 聚合：被授权的卡组带角色出现，未授权的卡组不出现，
+// 撤销后从映射里消失。列表接口用它区分「共享给我的」与「自有 / 仅公开可见」。
+func TestRolesForUser(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := seedUsers(t, db, "roles_owner", "roles_member")
+			owner, member := users[0], users[1]
+			presetID := seedPresetRow(t, db, owner)
+			gs := NewGrantStore(db)
+			decks := NewDeckStore(db)
+
+			mk := func(name string) *Deck {
+				t.Helper()
+				d := Deck{OwnerUserID: owner, Name: name, PresetID: presetID}
+				if err := decks.Create(ctx, &d); err != nil {
+					t.Fatalf("create deck %s: %v", name, err)
+				}
+				return &d
+			}
+			readerDeck := mk("roles-reader")
+			editorDeck := mk("roles-editor")
+			noneDeck := mk("roles-none")
+
+			if err := gs.Grant(ctx, readerDeck.ID, member, RoleReader, Ptr(owner)); err != nil {
+				t.Fatalf("grant reader: %v", err)
+			}
+			if err := gs.Grant(ctx, editorDeck.ID, member, RoleEditor, Ptr(owner)); err != nil {
+				t.Fatalf("grant editor: %v", err)
+			}
+
+			roles, err := gs.RolesForUser(ctx, member)
+			if err != nil {
+				t.Fatalf("RolesForUser() error = %v", err)
+			}
+			if len(roles) != 2 {
+				t.Fatalf("RolesForUser() size = %d, want 2 (%v)", len(roles), roles)
+			}
+			if roles[readerDeck.ID] != RoleReader || roles[editorDeck.ID] != RoleEditor {
+				t.Fatalf("RolesForUser() = %v, want %d=%q %d=%q", roles, readerDeck.ID, RoleReader, editorDeck.ID, RoleEditor)
+			}
+			if _, ok := roles[noneDeck.ID]; ok {
+				t.Fatalf("RolesForUser() included un-granted deck %d", noneDeck.ID)
+			}
+
+			// 撤销后该卡组不再出现在映射里。
+			if err := gs.Revoke(ctx, readerDeck.ID, member); err != nil {
+				t.Fatalf("revoke: %v", err)
+			}
+			roles, err = gs.RolesForUser(ctx, member)
+			if err != nil {
+				t.Fatalf("RolesForUser() after revoke error = %v", err)
+			}
+			if _, ok := roles[readerDeck.ID]; ok {
+				t.Fatalf("RolesForUser() still lists revoked deck %d: %v", readerDeck.ID, roles)
+			}
+		})
+	}
+}
+
 // TestRoleAllows 断言权限表的“至少”语义：owner > editor > reader，未知角色一律无权。
 func TestRoleAllows(t *testing.T) {
 	cases := []struct {

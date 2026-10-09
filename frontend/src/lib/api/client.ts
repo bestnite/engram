@@ -350,6 +350,20 @@ export class ApiClient {
     });
   }
 
+  /**
+   * 退出共享卡组（DELETE /api/v1/decks/:id/membership，scope: write）。
+   * 只删除自己在卡组上的授权行，不动卡组内容；属主没有「退出」语义，由服务端拒绝。
+   */
+  async leaveDeck(deckId: number | string): Promise<{ left: boolean }> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const id = encodeURIComponent(String(deckId));
+    return this.request<{ left: boolean }>(`/api/v1/decks/${id}/membership`, {
+      method: 'DELETE',
+    });
+  }
+
   /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
   async exportDecksZip(
     deckIds: number[],

@@ -126,3 +126,21 @@ func (s *GrantStore) DeckIDsForUser(ctx context.Context, userID uint64) ([]uint6
 	}
 	return ids, nil
 }
+
+// RolesForUser 返回某用户全部显式授权的 deck_id -> role 映射。
+//
+// 列表接口用它区分「共享给我的卡组」与「自有卡组」：自有由 decks.owner_user_id 判定，
+// 只有显式授权行才算共享。一次查询取全量，避免列表里每张卡组各查一次。
+// 它刻意不折算可见性（public/unlisted 的隐式 reader 不在此列）——否则「共享给我的只读卡组」
+// 与「陌生人的公开卡组」在界面上无法区分。
+func (s *GrantStore) RolesForUser(ctx context.Context, userID uint64) (map[uint64]string, error) {
+	var rows []DeckGrant
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list granted deck roles: %w", err)
+	}
+	out := make(map[uint64]string, len(rows))
+	for _, r := range rows {
+		out[r.DeckID] = r.Role
+	}
+	return out, nil
+}

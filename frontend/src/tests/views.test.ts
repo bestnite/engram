@@ -93,6 +93,7 @@ describe('HomeView component response states and truthful rendering', () => {
       reviews_per_day: 100,
       preset_id: 1,
       created_at: '2026-10-06T00:00:00Z',
+      role: 'owner',
     };
 
     const { html } = render(HomeView, {

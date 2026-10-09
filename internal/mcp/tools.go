@@ -126,7 +126,7 @@ func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any
 	}
 	out := make([]api.DeckResponse, 0, len(decks))
 	for _, d := range decks {
-		out = append(out, api.ToDeckResponse(d))
+		out = append(out, api.ToDeckResponse(d.Deck, d.Role))
 	}
 	return map[string]any{"decks": out}, nil
 }
@@ -144,7 +144,7 @@ func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (
 	if err != nil {
 		return nil, err
 	}
-	return api.ToDeckResponse(*d), nil
+	return api.ToDeckResponse(*d, store.RoleOwner), nil
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {

@@ -53,18 +53,43 @@ func asServiceError(err error) *ServiceError {
 
 // ---- 卡组 ----
 
-// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public）。
+// DeckWithRole 是卡组加上调用者在该卡组上的显式关系，供列表接口标出「我的」与「共享给我的」。
+//
+// Role 取 owner（自有，由 decks.owner_user_id 判定）或显式授权角色 editor/reader；
+// 空串表示既非自有、也没有授权行（仅因 public/unlisted 可见）。
+// 空串刻意不折算成隐式 reader——否则「共享给我的只读卡组」与「陌生人的公开卡组」无法区分，
+// 界面会给后者错误地渲染「退出共享」。
+type DeckWithRole struct {
+	Deck store.Deck
+	Role string
+}
+
+// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权 ∪ 他人 public），并逐张带上
+// 调用者的显式关系（见 DeckWithRole）。
 //
 // 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
 // 完全一致，谓词只有 store.visibleDeckIDsQuery 一份。REST 与内置 MCP
 // 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组。
-func (a *API) ListDecks(ctx context.Context, userID uint64) ([]store.Deck, error) {
+func (a *API) ListDecks(ctx context.Context, userID uint64) ([]DeckWithRole, error) {
 	decks, err := a.decks.ListVisible(ctx, userID)
 	if err != nil {
 		a.logger.Error("list decks failed", "user_id", userID, "error", err)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list decks")
 	}
-	return decks, nil
+	roles, err := a.grants.RolesForUser(ctx, userID)
+	if err != nil {
+		a.logger.Error("list deck roles failed", "user_id", userID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list decks")
+	}
+	out := make([]DeckWithRole, 0, len(decks))
+	for _, d := range decks {
+		role := roles[d.ID]
+		if d.OwnerUserID == userID {
+			role = store.RoleOwner
+		}
+		out = append(out, DeckWithRole{Deck: d, Role: role})
+	}
+	return out, nil
 }
 
 // CreateDeckInput 是建卡组的输入。
@@ -154,6 +179,50 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 		TargetType: "deck",
 		TargetID:   store.Ptr(deckID),
 		Detail:     map[string]any{"deck_name": deck.Name},
+	})
+	return nil
+}
+
+// LeaveDeck 让被共享者退出卡组（scope: write）：删除自己在 deck_grants 上的授权行。
+//
+// 它与 DeleteDeck 是两件事，各自独立：退出只撤掉自己一行授权、不碰卡组内容，且可逆
+// （重新被授权即回来）；删除卡组不可逆。因此 owner 不走这条路径——对自有卡组只能删除。
+// 没有任何授权行时返回 not_found：没有可退出的成员身份（陌生人的公开卡组就是这种情况，
+// 它只是因为 public/unlisted 可见）。
+//
+// 退出不清理该用户在该卡组的 card_states：进度按用户隔离，重新被授权后仍在。
+// owner 撤销他人授权（internal/web/sharing_api.go）同样保留进度，两边口径一致。
+func (a *API) LeaveDeck(ctx context.Context, u *store.User, deckID uint64, apiKeyID *uint64) error {
+	deck, err := a.decks.ByID(ctx, deckID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return newServiceError(http.StatusNotFound, CodeNotFound, "")
+		}
+		a.logger.Error("load deck for leave failed", "deck_id", deckID, "error", err)
+		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	if deck.OwnerUserID == u.ID {
+		return newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
+	}
+	role, err := a.grants.Role(ctx, deckID, u.ID)
+	if err != nil {
+		a.logger.Error("read deck grant for leave failed", "deck_id", deckID, "user_id", u.ID, "error", err)
+		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	if !store.ValidRole(role) {
+		return newServiceError(http.StatusNotFound, CodeNotFound, "")
+	}
+	if err := a.grants.Revoke(ctx, deckID, u.ID); err != nil {
+		a.logger.Error("leave deck failed", "deck_id", deckID, "user_id", u.ID, "error", err)
+		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
+	}
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		UserID:     store.Ptr(u.ID),
+		APIKeyID:   apiKeyID,
+		Action:     store.ActionDeckRevoke,
+		TargetType: "deck",
+		TargetID:   store.Ptr(deckID),
+		Detail:     map[string]any{"deck_name": deck.Name, "previous_role": role, "self": true},
 	})
 	return nil
 }

@@ -41,6 +41,31 @@ export function deckVisibilityLabel(value: string | null | undefined, t: Transla
   return key ? t(key) : '';
 }
 
+/**
+ * 卡组卡片上的危险操作种类。
+ * delete：自有卡组，删除不可逆；leave：被共享的卡组，退出只撤掉自己一行授权。
+ */
+export type DeckActionKind = 'delete' | 'leave';
+
+/**
+ * 依据调用者在该卡组上的显式关系（Deck.role）决定卡片上显示哪种操作。
+ *
+ * owner -> 'delete'；editor/reader（被共享）-> 'leave'；''（仅因 public/unlisted 可见）-> null。
+ * 未知值一律返回 null：宁可少显示一个按钮，也不能给陌生人的公开卡组渲染「退出共享」——
+ * 那种卡组没有可退出的授权行，点了只会得到 not_found。
+ */
+export function deckActionKind(role: string | null | undefined): DeckActionKind | null {
+  switch (role) {
+    case 'owner':
+      return 'delete';
+    case 'editor':
+    case 'reader':
+      return 'leave';
+    default:
+      return null;
+  }
+}
+
 /** 题型徽标文案；未知枚举返回空串。 */
 export function noteKindLabel(kind: string | null | undefined, t: Translate): string {
   const key = noteKindLabelKey(kind);
