@@ -38,6 +38,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
         path: cleanPath,
         params: {},
         query,
+        search: queryString,
         route,
       };
     }
@@ -72,6 +73,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
           path: cleanPath,
           params,
           query,
+          search: queryString,
           route,
         };
       }
@@ -83,6 +85,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
     path: cleanPath,
     params: {},
     query,
+    search: queryString,
     route: null,
   };
 }
@@ -142,20 +145,29 @@ function withLanguage(to: string): string {
 }
 
 /**
- * 视图重建键：路径模式 + 路径参数（不含查询串）。
+ * 视图重建键：路径模式 + 路径参数 + 查询串（按段排序，保证稳定）。
  *
  * 应用按「页面组件类型」渲染视图，同一组件的不同实体（卡组 A→B、笔记 A→B）若共用实例，
  * 只在挂载时取数的视图会保留上一实体的数据。把这个键交给 `{#key}` 即建立按路由的重建边界：
- * 路径模式或路径参数一变，组件销毁重建。查询串刻意不参与——筛选与分页是组件内状态，
- * 改它们不该重建页面。
+ * 路径模式、路径参数或查询串一变，组件销毁重建。
+ *
+ * 查询串必须参与：复习页的卡组范围就写在地址上（`/review?deck=A`），换范围却不重建的话，
+ * 页面会继续显示上一个范围的卡、也不会重新取队列。用原始查询串（`search`）而不是解析后的
+ * `query`：后者对重复键只留最后一个，`?deck=A&deck=B` 与 `?deck=B` 会被判成同一个键。
+ * 排序只为让「同一次范围的不同书写顺序」不触发多余重建。
  */
 export function viewKey(match: RouteMatch): string {
-  if (!match.route) return `not-found|${match.path}`;
+  const route = match.route ? match.route.path : `not-found:${match.path}`;
   const params = Object.keys(match.params)
     .sort()
     .map((key) => `${key}=${match.params[key]}`)
     .join('&');
-  return `${match.route.path}|${params}`;
+  const search = match.search
+    .split('&')
+    .filter(Boolean)
+    .sort()
+    .join('&');
+  return `${route}|p=${params}|q=${search}`;
 }
 
 /**

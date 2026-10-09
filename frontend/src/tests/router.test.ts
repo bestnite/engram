@@ -114,6 +114,7 @@ describe('view rebuild key', () => {
   const testRoutes: RouteDefinition[] = [
     { path: '/decks/:id', name: 'deck-detail', component: dummyComponent },
     { path: '/decks/:id/notes/:nid', name: 'note-edit', component: dummyComponent },
+    { path: '/review', name: 'review', component: dummyComponent },
   ];
 
   it('changes when a path param changes so the same view is rebuilt', () => {
@@ -128,14 +129,24 @@ describe('view rebuild key', () => {
     expect(a).not.toBe(b);
   });
 
-  it('ignores the query string so filters do not rebuild the page', () => {
-    const a = viewKey(matchRoute('/decks/42', testRoutes));
-    const b = viewKey(matchRoute('/decks/42?q=algo&page=3', testRoutes));
-    expect(a).toBe(b);
+  it('changes when the query changes so a URL-scoped view reloads (review deck scope)', () => {
+    const a = viewKey(matchRoute('/review?deck=A', testRoutes));
+    const b = viewKey(matchRoute('/review?deck=B', testRoutes));
+    expect(a).not.toBe(b);
+  });
+
+  it('treats repeated query keys as part of the identity', () => {
+    // 解析后的 query 只留最后一个 deck，原始 search 才分得清这两个范围。
+    const two = viewKey(matchRoute('/review?deck=A&deck=B', testRoutes));
+    const one = viewKey(matchRoute('/review?deck=B', testRoutes));
+    expect(two).not.toBe(one);
+    // 同一次范围的两种书写顺序不该触发多余重建。
+    const reordered = viewKey(matchRoute('/review?deck=B&deck=A', testRoutes));
+    expect(two).toBe(reordered);
   });
 
   it('is stable for the same route and gives the not-found view its own key', () => {
     expect(viewKey(matchRoute('/decks/42', testRoutes))).toBe(viewKey(matchRoute('/decks/42', testRoutes)));
-    expect(viewKey(matchRoute('/missing', testRoutes))).toBe('not-found|/missing');
+    expect(viewKey(matchRoute('/missing', testRoutes))).toBe('not-found:/missing|p=|q=');
   });
 });
