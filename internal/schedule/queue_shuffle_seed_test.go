@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/pgtest"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -128,4 +131,79 @@ func sameOrder(a, b []uint64) bool {
 		}
 	}
 	return true
+}
+
+// TestNewOrderRandomPicksBeyondTheOldestCards 断言随机顺序作用在「抽哪些卡」上，而不只是当天的
+// 出场顺序：卡组里 40 张新卡、每日上限 5 张时，抽中的不能永远是最早创建的 5 张。
+// 种子由 (用户, 复习日) 决定，因此每一天的结论都是确定的。
+func TestNewOrderRandomPicksBeyondTheOldestCards(t *testing.T) {
+	for driver, db := range queueTestDatabases(t) {
+		t.Run(driver, func(t *testing.T) { assertRandomPicksBeyondOldest(t, db) })
+	}
+}
+
+// queueTestDatabases 返回 SQLite 库，以及设置了 TEST_PG_DSN 时的 PostgreSQL 库：
+// 排序键是手写的 SQL 表达式，两库都必须算出同样的语义。
+func queueTestDatabases(t *testing.T) map[string]*gorm.DB {
+	t.Helper()
+	out := map[string]*gorm.DB{"sqlite": newTestDB(t)}
+	if pg, ok := pgtest.Open(t); ok {
+		if err := pg.AutoMigrate(store.AllModels()...); err != nil {
+			t.Fatalf("AutoMigrate postgres: %v", err)
+		}
+		out["postgres"] = pg
+	}
+	return out
+}
+
+func assertRandomPicksBeyondOldest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	const total, perDay = 40, 5
+	now := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
+	deckID := seedDeck(t, db, now)
+	oldest := map[uint64]bool{}
+	for i := 0; i < total; i++ {
+		id := seedCard(t, db, deckID, "forward", now.Add(time.Duration(i)*time.Minute))
+		if i < perDay {
+			oldest[id] = true
+		}
+	}
+	builder := NewQueueBuilder(db, store.NewDeckStore(db), mustScheduler(t, testPreset(t)))
+	pick := func(day int, order NewOrder) []uint64 {
+		items, err := builder.Build(context.Background(), 1, QueueOptions{
+			DeckID: deckID, Now: now.Add(time.Duration(day) * 24 * time.Hour), Location: time.UTC,
+			NewPerDay: perDay, ReviewsPerDay: 0, NewOrder: order,
+		})
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		var out []uint64
+		for _, it := range items {
+			if it.Kind == QueueNew {
+				out = append(out, it.CardID)
+			}
+		}
+		if len(out) != perDay {
+			t.Fatalf("day %d: built %d new cards, want %d", day, len(out), perDay)
+		}
+		return out
+	}
+
+	// 对照组：创建顺序就是最早的 5 张。
+	for _, id := range pick(0, NewOrderCreated) {
+		if !oldest[id] {
+			t.Fatalf("NewOrderCreated picked card %d, which is not among the oldest %d", id, perDay)
+		}
+	}
+	for day := 0; day < 3; day++ {
+		outside := 0
+		for _, id := range pick(day, NewOrderRandom) {
+			if !oldest[id] {
+				outside++
+			}
+		}
+		if outside == 0 {
+			t.Errorf("day %d: NewOrderRandom picked exactly the oldest %d cards", day, perDay)
+		}
+	}
 }

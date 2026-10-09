@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -207,7 +208,23 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	opts = opts.withDefaults()
 	now := opts.now()
 
-	col, err := b.collect(ctx, userID, opts)
+	// 随机源在取卡之前确定：同一个源先决定「从每个卡组抽哪些新卡」（SQL 里的排序键），
+	// 再决定合并后的出场顺序，两步都随 (用户, 复习日) 确定、可复现。
+	var rng *rand.Rand
+	var order *newCardOrder
+	if opts.NewOrder == NewOrderRandom {
+		rng = opts.Rand
+		if rng == nil {
+			loc, err := opts.location()
+			if err != nil {
+				return nil, err
+			}
+			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour)))))
+		}
+		order = randomNewCardOrder(rng)
+	}
+
+	col, err := b.collect(ctx, userID, opts, order)
 	if err != nil {
 		return nil, err
 	}
@@ -237,15 +254,8 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	}
 
 	fresh := col.mergeFresh()
-	if opts.NewOrder == NewOrderRandom && len(fresh) > 1 {
-		rng := opts.Rand
-		if rng == nil {
-			loc, err := opts.location()
-			if err != nil {
-				return nil, err
-			}
-			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour)))))
-		}
+	if rng != nil && len(fresh) > 1 {
+		// 多卡组时各卡组的新卡按卡组顺序拼接，这里再打乱一次，让卡组之间也交错出场。
 		rng.Shuffle(len(fresh), func(i, j int) { fresh[i], fresh[j] = fresh[j], fresh[i] })
 	}
 
@@ -292,7 +302,7 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 	}
 	opts := QueueOptions{DeckIDs: deckIDs, ReviewOrder: OrderByDueAt, NewOrder: NewOrderCreated}
 	opts = opts.withDefaults()
-	col, err := b.collect(ctx, userID, opts)
+	col, err := b.collect(ctx, userID, opts, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +376,8 @@ func (c *collectedQueue) mergeFresh() []QueueItem {
 
 // collect 是 Build 与 DeckCounts 共用的取卡路径：解析范围与各卡组额度，再按卡组取回
 // 学习卡（一条查询）、到期复习卡（逐卡组、限该卡组剩余额度）、新卡（逐卡组、限剩余额度）。
-func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOptions) (*collectedQueue, error) {
+// order 为 nil 时新卡按创建顺序取，否则按 order 给出的伪随机排序键取。
+func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOptions, order *newCardOrder) (*collectedQueue, error) {
 	opts = opts.withDefaults()
 	now := opts.now()
 
@@ -414,7 +425,7 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 		if d.newLeft == 0 {
 			continue
 		}
-		items, err := b.newCardsDeck(ctx, userID, d.id, d.newLeft, now)
+		items, err := b.newCardsDeck(ctx, userID, d.id, d.newLeft, now, order)
 		if err != nil {
 			return nil, err
 		}
@@ -647,11 +658,50 @@ func (b *QueueBuilder) reviewDueDeck(ctx context.Context, userID uint64, now tim
 	return out, nil
 }
 
-// newCardsDeck 取单个卡组的新卡，按创建顺序。新卡的定义是\"状态为 new\"，包括尚无 card_states
-// 行的卡（LEFT JOIN），这样刚加到共享卡组、用户还没产生任何状态的行也能出现在队列里。
-// 已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求 due_at 未在未来。
-// limit 为 deckUnlimited 时不设 LIMIT。
-func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID uint64, limit int, now time.Time) ([]QueueItem, error) {
+// newCardOrder 是新卡伪随机抽取的排序键参数（见 sortKeySQL）。
+//
+// 为什么在 SQL 里排序而不是取回后打乱：每日上限要落进 LIMIT，若先按创建顺序 LIMIT 再在内存里
+// 打乱，被抽中的永远是最早创建的那几张，「随机」只改变了当天的出场顺序。参数随 (用户, 复习日)
+// 的随机源变化，因此每个复习日抽到的集合不同。
+type newCardOrder struct {
+	Mul1 int64
+	Add  int64
+	Mul2 int64
+}
+
+const newCardOrderModulus = int64(1) << 31
+
+// randomNewCardOrder 从随机源取一组排序键参数；两个乘数强制为奇数。
+func randomNewCardOrder(rng *rand.Rand) *newCardOrder {
+	return &newCardOrder{
+		Mul1: rng.Int63n(newCardOrderModulus/2)*2 + 1,
+		Add:  rng.Int63n(newCardOrderModulus),
+		Mul2: rng.Int63n(newCardOrderModulus/2)*2 + 1,
+	}
+}
+
+// sortKeySQL 返回按 cards.id 计算的排序键表达式，形如一个小型整数哈希：
+//
+//	h1  = ((id mod 2^31) × Mul1 + Add) mod 2^31
+//	h2  = h1 xor (h1 / 2^16)          // xor 写成 (a|b) − (a&b)，两库都只有 | 与 &
+//	key = (h2 × Mul2) mod 2^31
+//
+// 只用乘加取模时，连续的小 id 得到等差数列，排序几乎还是创建顺序；中间的异或打破线性。
+// 三步在 [0, 2^31) 上都是双射（乘数为奇数），所以不会出现并列；每一步乘积都小于 2^62，
+// 两库都不会溢出。表达式里只有本函数生成的整数，没有任何外部输入。
+func (o *newCardOrder) sortKeySQL() string {
+	m := newCardOrderModulus
+	h1 := fmt.Sprintf("(((cards.id %% %d) * %d + %d) %% %d)", m, o.Mul1, o.Add, m)
+	hi := fmt.Sprintf("(%s / 65536)", h1)
+	h2 := fmt.Sprintf("((%s | %s) - (%s & %s))", h1, hi, h1, hi)
+	return fmt.Sprintf("((%s * %d) %% %d)", h2, o.Mul2, m)
+}
+
+// newCardsDeck 取单个卡组的新卡：order 为 nil 时按创建顺序，否则按伪随机排序键。新卡的定义是
+// \"状态为 new\"，包括尚无 card_states 行的卡（LEFT JOIN），这样刚加到共享卡组、用户还没产生
+// 任何状态的行也能出现在队列里。已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求
+// due_at 未在未来。limit 为 deckUnlimited 时不设 LIMIT。
+func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID uint64, limit int, now time.Time, order *newCardOrder) ([]QueueItem, error) {
 	q := b.db.WithContext(ctx).Table("cards AS cards").
 		Select("cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, "+
 			"COALESCE(cs.state, 'new') AS state, cs.due_at AS due_at, cs.stability AS stability, "+
@@ -661,8 +711,13 @@ func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID u
 		Where("cards.deleted_at IS NULL AND cards.suspended_at IS NULL").
 		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
 		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
-		Where("notes.deck_id = ?", deckID).
-		Order("cards.created_at ASC, cards.id ASC")
+		Where("notes.deck_id = ?", deckID)
+	if order != nil {
+		// 必须包成 clause.OrderBy：GORM 的 Order 对裸 clause.Expr 静默忽略，不报错也不排序。
+		q = q.Order(clause.OrderBy{Expression: clause.Expr{SQL: order.sortKeySQL() + ", cards.id ASC"}})
+	} else {
+		q = q.Order("cards.created_at ASC, cards.id ASC")
+	}
 	if limit != deckUnlimited {
 		q = q.Limit(limit)
 	}
