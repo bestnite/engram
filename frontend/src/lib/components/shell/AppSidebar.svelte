@@ -79,7 +79,8 @@
 
   // 管理入口只给管理员（与服务端的管理权限判据一致），避免普通用户点进去吃 403。
   const footerItems = $derived<NavItem[]>([
-    ...(isAdmin ? [{ href: '/admin', label: $t('nav.admin'), icon: Shield, active: path.startsWith('/admin') }] : []),
+    // /admin 没有概览页，直接指向管理导航的第一项。
+    ...(isAdmin ? [{ href: '/admin/users', label: $t('nav.admin'), icon: Shield, active: path.startsWith('/admin') }] : []),
     { href: '/settings', label: $t('nav.settings'), icon: Settings, active: path.startsWith('/settings') },
   ]);
 

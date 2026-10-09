@@ -4,7 +4,6 @@
 
   // 管理面板自己的导航。全部子页都已实现，因此每一项都是可用链接。
   const items = [
-    { href: '/admin', key: 'admin.nav.dashboard' },
     { href: '/admin/users', key: 'admin.nav.users' },
     { href: '/admin/registration', key: 'admin.nav.registration' },
     { href: '/admin/oidc', key: 'admin.nav.oidc' },
@@ -17,9 +16,9 @@
     { href: '/admin/i18n', key: 'admin.nav.i18n' },
   ];
 
-  // 精确匹配子页；/admin 是概览，只在恰好命中时点亮，避免在任何子页都高亮它。
+  // 子页本身或其下级路径都算命中。
   function isActive(href: string, current: string): boolean {
-    return href === '/admin' ? current === '/admin' : current === href || current.startsWith(href + '/');
+    return current === href || current.startsWith(href + '/');
   }
 </script>
 

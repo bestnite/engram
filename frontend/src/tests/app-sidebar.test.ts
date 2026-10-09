@@ -71,14 +71,14 @@ describe('AppSidebar', () => {
   it('hides the admin entry from a non-admin user', () => {
     signIn('user');
     const { html } = render(AppSidebar);
-    expect(html).not.toContain('href="/admin"');
+    expect(html).not.toContain('href="/admin/users"');
     expect(html).toContain('href="/settings"');
   });
 
-  it('shows the admin entry to an admin', () => {
+  it('shows the admin entry to an admin, pointing at the first admin page', () => {
     signIn('admin');
     const { html } = render(AppSidebar);
-    expect(html).toContain('href="/admin"');
+    expect(html).toContain('href="/admin/users"');
   });
 
   it('lists deck shortcuts and marks the current deck as the active page', () => {

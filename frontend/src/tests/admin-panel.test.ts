@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render } from 'svelte/server';
-import AdminDashboardView from '../lib/views/admin/AdminDashboardView.svelte';
 import AdminHealthView from '../lib/views/admin/AdminHealthView.svelte';
 import AdminAuditView from '../lib/views/admin/AdminAuditView.svelte';
 import { ApiClient, ApiClientError } from '../lib/api';
@@ -45,21 +44,14 @@ const audit: AdminAuditResponse = {
 describe('Admin panel views render server-provided truth', () => {
   beforeEach(() => setLocale('zh-CN'));
 
-  it('renders the admin navigation with every subpage link', () => {
-    const { html } = render(AdminDashboardView, { props: { initialLoading: false, initialData: summary } });
-    for (const href of ['/admin', '/admin/users', '/admin/registration', '/admin/oidc', '/admin/smtp', '/admin/settings', '/admin/jobs', '/admin/audit', '/admin/health', '/admin/api-keys', '/admin/i18n']) {
+  it('renders the admin navigation with every subpage link and no overview entry', () => {
+    const { html } = render(AdminHealthView, { props: { initialLoading: false, initialData: health } });
+    // 概览页已移除：导航里不再有指向 /admin 本身的链接。
+    expect(html).not.toContain('href="/admin"');
+    for (const href of ['/admin/users', '/admin/registration', '/admin/oidc', '/admin/smtp', '/admin/settings', '/admin/jobs', '/admin/audit', '/admin/health', '/admin/api-keys', '/admin/i18n']) {
       expect(html).toContain(`href="${href}"`);
     }
     expect(html).toContain('管理面板');
-  });
-
-  it('renders the overview counts and card links', () => {
-    const { html } = render(AdminDashboardView, { props: { initialLoading: false, initialData: summary } });
-    expect(html).toContain('data-testid="admin-dashboard-cards"');
-    expect(html).toContain('5 个账号 · 4 个启用');
-    expect(html).toContain('href="/admin/users"');
-    expect(html).toContain('href="/admin/health"');
-    expect(html).toContain('进行中 1 · 失败 2');
   });
 
   it('renders the health readouts including a formatted byte count', () => {
@@ -85,12 +77,16 @@ describe('Admin panel views render server-provided truth', () => {
     expect(html).not.toContain('data-testid="admin-health-rows"');
   });
 
+  it('drops the overview keys from both catalogs', () => {
+    for (const key of ['admin.nav.dashboard', 'admin.dashboard.heading', 'admin.dashboard.users_value']) {
+      expect(zhCN[key]).toBeUndefined();
+      expect(en[key]).toBeUndefined();
+    }
+  });
+
   it('covers every admin key used by the views in both locale catalogs', () => {
     const keys = [
       'admin.nav.heading',
-      'admin.dashboard.users_value',
-      'admin.dashboard.notes_cards_value',
-      'admin.dashboard.jobs_value',
       'admin.health.database.ok',
       'admin.health.media.truncated',
       'admin.audit.user_system',
@@ -138,10 +134,11 @@ describe('Admin API client uses session-only JSON endpoints', () => {
 
 describe('Admin SPA routes own the canonical panel paths', () => {
   it('resolves every admin page route', () => {
-    expect(matchRoute('/admin', routes).route?.name).toBe('admin-dashboard');
+    // /admin 只是入口，挂载后换到 /admin/users（AdminIndexView）。
+    expect(matchRoute('/admin', routes).route?.name).toBe('admin-index');
     expect(matchRoute('/admin/health', routes).route?.name).toBe('admin-health');
     expect(matchRoute('/admin/audit', routes).route?.name).toBe('admin-audit');
-    // /admin 是概览精确匹配，不得吞掉子页。
-    expect(matchRoute('/admin/users', routes).route?.name ?? null).not.toBe('admin-dashboard');
+    // /admin 精确匹配，不得吞掉子页。
+    expect(matchRoute('/admin/users', routes).route?.name).toBe('admin-users');
   });
 });
