@@ -215,7 +215,7 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).not.toContain('data-testid="review-bury"');
   });
 
-  it('offers undo only on the graded result panel, never on an active card', () => {
+  it('offers undo on the graded result panel, and from the header for any last submission', () => {
     const feedback: GradedFeedback = {
       verdict: 'correct',
       score: 1,
@@ -225,28 +225,58 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     };
     const card = gradedCard('typed', { prompt: 'Q', answer: 'Paris' });
     const result = render(ReviewView, {
-      props: { initialLoading: false, initialCards: [card], initialFeedback: feedback },
+      props: {
+        initialLoading: false,
+        initialCards: [card],
+        initialFeedback: feedback,
+        initialLastUndo: { cardId: '11', version: 5, rating: 3 },
+      },
     }).html;
     // 结果面板出现撤销按钮，文案来自语言包（不是裸 key）。
     expect(result).toContain('data-testid="review-undo"');
     expect(result).toContain('撤销');
     expect(result).not.toContain('review.undo');
+    // 面板开着时不出现第二个（头部）入口。
+    expect(result).not.toContain('data-testid="review-undo-last"');
 
-    // 待作答的判分卡没有撤销按钮。
+    // 判分卡待作答且没有提交记录：两个入口都没有。
     const answering = render(ReviewView, {
       props: { initialLoading: false, initialCards: [card] },
     }).html;
     expect(answering).not.toContain('data-testid="review-undo"');
+    expect(answering).not.toContain('data-testid="review-undo-last"');
+  });
 
-    // 自评卡（已翻面）同样没有撤销按钮。
-    const basic = render(ReviewView, {
+  it('offers the header undo entry for a self-rated card, which has no result panel', () => {
+    const { html } = render(ReviewView, {
       props: {
         initialLoading: false,
         initialCards: [gradedCard('basic', { front: 'Q', back: 'A' })],
         initialRevealed: true,
+        initialLastUndo: { cardId: '11', version: 5, rating: 3 },
       },
-    }).html;
-    expect(basic).not.toContain('data-testid="review-undo"');
+    });
+    expect(html).toContain('data-testid="review-undo-last"');
+    // 文案带档位，避免误以为撤的是正在看的这张。
+    expect(html).toContain('撤销上一次');
+    expect(html).toContain('良好');
+    // 结果面板按钮不出现（自评题没有面板）。
+    expect(html).not.toContain('data-testid="review-undo"');
+    // 键位提示也带上 u。
+    expect(html).toContain('u：撤销上一次评分');
+  });
+
+  it('keeps the header undo entry reachable when the queue has emptied', () => {
+    // 撤完最后一张后 current 为 null：入口在页面头部，因此仍然可达。
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [],
+        initialLastUndo: { cardId: '11', version: 5, rating: 1 },
+      },
+    });
+    expect(html).toContain('data-testid="review-empty"');
+    expect(html).toContain('data-testid="review-undo-last"');
   });
 });
 

@@ -15,6 +15,7 @@ export type ReviewShortcut =
   | { kind: 'rate'; rating: number }
   | { kind: 'bury' }
   | { kind: 'suspend' }
+  | { kind: 'undo' } // u：撤销上一次评分（含自评题）
   | { kind: 'edit' };
 
 /** 按键决策依赖的复习状态。 */
@@ -29,6 +30,8 @@ export interface ReviewShortcutState {
   gradedRevealed: boolean;
   /** 自评卡是否已翻面。 */
   revealed: boolean;
+  /** 本次会话是否还有可撤销的提交（没有时不吞掉 u，交给浏览器）。 */
+  canUndo: boolean;
 }
 
 /**
@@ -46,6 +49,7 @@ export function reviewShortcut(
   if (state.feedback) {
     if (key === ' ' || key === 'Enter' || /^[1-4]$/.test(key)) return { kind: 'continue' };
     if (key.toLowerCase() === 'e') return { kind: 'edit' };
+    if (key.toLowerCase() === 'u') return state.canUndo ? { kind: 'undo' } : { kind: 'ignore' };
     return { kind: 'ignore' };
   }
 
@@ -62,6 +66,7 @@ export function reviewShortcut(
   const lower = key.toLowerCase();
   if (lower === 'b') return { kind: 'bury' };
   if (lower === 's') return { kind: 'suspend' };
+  if (lower === 'u') return state.canUndo ? { kind: 'undo' } : { kind: 'ignore' };
   if (lower === 'e') return { kind: 'edit' };
   return { kind: 'ignore' };
 }

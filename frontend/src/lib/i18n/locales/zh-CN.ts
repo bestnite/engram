@@ -195,6 +195,7 @@ export const zhCN: LocaleCatalog = {
   'review.show_answer': '显示答案',
   'review.ratings': '选择回忆评分',
   'review.shortcuts': '显示答案后：1 重来 · 2 困难 · 3 良好 · 4 简单 · e 编辑',
+  'review.shortcuts_undo': 'u：撤销上一次评分',
   'review.shortcuts_reveal': '空格 / 回车：显示答案 · e：编辑 · b：埋藏',
   'review.rating.1': '重来',
   'review.rating.2': '困难',
@@ -1228,4 +1229,6 @@ export const zhCN: LocaleCatalog = {
   'settings.profile.learn_ahead_hint': '其它卡都复习完后，这么多分钟内就要到期的学习卡提前出现，不必等它到期。0 表示关闭。',
   'settings.error.learn_ahead_invalid': '请输入 0 到 1440 之间的整数。',
   'review.undo': '撤销',
+  'review.undo_last': '撤销上一次',
+  'review.undo_last_rating': '撤销上一次 · {rating}',
 };

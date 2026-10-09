@@ -27,6 +27,8 @@
     initialEditHref?: string;
     /** 自评卡是否已翻面（生产路径由 reveal() 翻转，测试用初值覆盖）。 */
     initialRevealed?: boolean;
+    /** 最近一次提交的撤销记录（生产路径由提交写入，测试用初值覆盖）。 */
+    initialLastUndo?: { cardId: string; version: number; rating: number } | null;
   }
 
   let {
@@ -40,6 +42,7 @@
     initialBackHTML = '',
     initialEditHref = '',
     initialRevealed = false,
+    initialLastUndo = null,
   }: Props = $props();
 
   // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分。
@@ -67,9 +70,11 @@
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
   let pendingCards = $state<DueCard[]>([]);
-  // 刚提交的评分所产生的状态版本：撤销据此绑定目标评分（版本不匹配时服务端 409 且不删日志）。
-  // 判分后当前卡仍停留在旧对象上（用户点「继续」才换卡），故不能读 current.version。
-  let undoVersion = $state(0);
+  // 本次会话最近一次提交（卡 id、提交后的状态版本、档位）：复习页据此提供「撤销上一次评分」。
+  // 自评题提交后画面立刻翻到下一张、没有结果面板，撤销只能靠这个记录；判分题也用同一记录，
+  // 面板按钮与头部入口共用它，避免两套状态。
+  // svelte-ignore state_referenced_locally
+  let lastUndo = $state<{ cardId: string; version: number; rating: number } | null>(initialLastUndo);
   // svelte-ignore state_referenced_locally
   let revealedAnswerHTML = $state(initialRevealedAnswerHTML);
   // svelte-ignore state_referenced_locally
@@ -214,7 +219,7 @@
     revealed = false;
     feedback = null;
     pendingCards = [];
-    undoVersion = 0;
+    lastUndo = null;
     gradedRevealed = false;
     revealedAnswerHTML = '';
     resetAnswerState();
@@ -237,8 +242,9 @@
     error = null;
     try {
       const elapsed = Math.max(0, Date.now() - startedAt);
+      const ratedCardId = current.card_id;
       const response = await client.submitSelfReview({
-        card_id: current.card_id,
+        card_id: ratedCardId,
         rating,
         expected_version: current.version,
         elapsed_ms: elapsed,
@@ -247,6 +253,8 @@
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
       done += 1;
+      // 自评后画面已翻到下一张：记住这次提交，头部「撤销上一次评分」据此可用。
+      lastUndo = { cardId: ratedCardId, version: response.version, rating };
       revealed = false;
       startedAt = Date.now();
     } catch (cause) {
@@ -285,7 +293,7 @@
       pendingCards = response.cards;
       remaining = response.remaining;
       feedback = response.feedback ?? null;
-      undoVersion = response.version;
+      lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
       // 等结果面板挂上 DOM，再只对它排版服务端返回的答案 HTML。
       await tick();
@@ -334,7 +342,8 @@
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
-      undoVersion = response.version;
+      // 放弃作答按 Again 记一条自评日志；撤销入口同样可用。
+      lastUndo = { cardId: current.card_id, version: response.version, rating: 1 };
       done += 1;
       gradedRevealed = false;
       revealedAnswerHTML = '';
@@ -391,12 +400,14 @@
     if (href) window.location.assign(href);
   }
 
-  /** 结果面板的「继续」：换到判分响应里预取的下一张卡，不产生额外写请求。 */
+  /**
+   * 结果面板的「继续」：换到判分响应里预取的下一张卡，不产生额外写请求。
+   * 故意不清 lastUndo：离开面板后头部的「撤销上一次评分」仍然可用（撤销刚判的那张）。
+   */
   function continueNext(): void {
     cards = pendingCards.slice(0, 1);
     pendingCards = [];
     feedback = null;
-    undoVersion = 0;
     gradedRevealed = false;
     revealedAnswerHTML = '';
     resetAnswerState();
@@ -404,24 +415,40 @@
   }
 
   /**
-   * 撤销刚提交的评分：服务端恢复进度并删除被撤销的那条复习日志，响应带同范围重建的队列。
-   * 结果面板随即关闭，当前卡定位回被撤销的那张——队列按 due_at 排序，被撤销的卡不保证
-   * 排在首位，因此按 undone_card_id 在队列里找它，而不是取队列第一张。
+   * 头部撤销按钮的文案：带上被撤销的档位。自评题提交后画面已翻到下一张，只说「撤销」会让人
+   * 以为撤的是当前这张卡。
+   */
+  function undoLabel(): string {
+    const rating = lastUndo?.rating ?? 0;
+    if (rating >= 1 && rating <= 4) {
+      return $t('review.undo_last_rating', { rating: $t(`review.rating.${rating}`) });
+    }
+    return $t('review.undo_last');
+  }
+
+  /**
+   * 撤销上一次提交的评分（自评题与判分题共用这一个入口）：服务端恢复进度并删除那条复习日志，
+   * 响应带同范围重建的队列。撤销后把被撤销的卡放回当前位——队列按 due_at 排序，它不保证排在
+   * 首位，因此按 undone_card_id 在队列里找它。
+   *
+   * 目标是 lastUndo 记下的那张卡，而不是当前正在看的卡：自评提交后画面已经翻到下一张。
    */
   async function undo(): Promise<void> {
-    if (!current || submitting) return;
+    const target = lastUndo;
+    if (!target || submitting) return;
     submitting = true;
     error = null;
     try {
       const response = await client.undoReview({
-        card_id: current.card_id,
+        card_id: target.cardId,
         deck: selectedDecks(),
-        expected_version: undoVersion,
+        expected_version: target.version,
       });
-      const target = response.cards.find((card) => card.card_id === response.undone_card_id) ?? current;
-      cards = [target];
+      const restored = response.cards.find((card) => card.card_id === response.undone_card_id);
+      if (restored) cards = [restored];
       remaining = response.remaining;
       done = Math.max(0, done - 1);
+      lastUndo = null;
       feedback = null;
       pendingCards = [];
       gradedRevealed = false;
@@ -499,6 +526,7 @@
         gradedKind,
         gradedRevealed,
         revealed,
+        canUndo: lastUndo !== null,
       },
     );
     switch (action.kind) {
@@ -531,6 +559,10 @@
       case 'edit':
         event.preventDefault();
         gotoEdit();
+        return;
+      case 'undo':
+        event.preventDefault();
+        void undo();
         return;
     }
   }
@@ -587,10 +619,17 @@
 <section class="max-w-4xl mx-auto px-4 py-10">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
     <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('review.title')}</h1>
-    <div
-      class="inline-flex items-center self-start sm:self-auto gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs text-xs font-medium text-zinc-600 dark:text-zinc-300"
-      aria-live="polite"
-    >
+    <div class="flex items-center gap-2 self-start sm:self-auto">
+      <!-- 撤销上一次评分：自评题提交后没有结果面板，入口在这里；判分题面板打开时隐藏，避免两个入口。 -->
+      {#if lastUndo && !feedback}
+        <Button variant="outline" size="sm" testId="review-undo-last" disabled={submitting} onclick={() => void undo()}>
+          {undoLabel()}
+        </Button>
+      {/if}
+      <div
+        class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs text-xs font-medium text-zinc-600 dark:text-zinc-300"
+        aria-live="polite"
+      >
       <span class="inline-flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
         <span>{$t('review.remaining')}</span>
@@ -600,6 +639,7 @@
       <span class="text-zinc-500 dark:text-zinc-400">
         {$t('review.done', { count: done })}
       </span>
+      </div>
     </div>
   </div>
   <div
@@ -818,6 +858,6 @@
     {/if}
   </div>
   <p class="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
-    {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_result') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}
+    {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_result') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
   </p>
 </section>

@@ -12,7 +12,7 @@ import type { ReviewShortcutState, ReviewSwipeState } from '../lib/review-shortc
 const noMods = { alt: false, ctrl: false, meta: false };
 
 function keyState(over: Partial<ReviewShortcutState> = {}): ReviewShortcutState {
-  return { typing: false, feedback: false, gradedKind: false, gradedRevealed: false, revealed: false, ...over };
+  return { typing: false, feedback: false, gradedKind: false, gradedRevealed: false, revealed: false, canUndo: false, ...over };
 }
 
 describe('reviewShortcut keyboard mapping', () => {
@@ -79,11 +79,20 @@ describe('reviewShortcut keyboard mapping', () => {
     // 结果面板不再提供 b。
     expect(reviewShortcut('b', noMods, result)).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('x', noMods, result)).toEqual({ kind: 'ignore' });
-    // 撤销（review.undo）刻意不做键盘绑定：u 在结果面板与任何卡片状态下都不产生动作。
-    expect(reviewShortcut('u', noMods, result)).toEqual({ kind: 'ignore' });
-    expect(reviewShortcut('U', noMods, result)).toEqual({ kind: 'ignore' });
+  });
+
+  it('maps u to undo only when there is a submission to undo', () => {
+    // 没有可撤销的提交时 u 不吞按键（交给浏览器）。
     expect(reviewShortcut('u', noMods, keyState())).toEqual({ kind: 'ignore' });
-    expect(reviewShortcut('u', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('U', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'ignore' });
+    // 有提交时：自评卡翻面后、判分结果面板上都能撤销（含自评题——它们没有结果面板）。
+    expect(reviewShortcut('u', noMods, keyState({ revealed: true, canUndo: true }))).toEqual({ kind: 'undo' });
+    expect(reviewShortcut('U', noMods, keyState({ gradedKind: true, canUndo: true }))).toEqual({ kind: 'undo' });
+    const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true, canUndo: true });
+    expect(reviewShortcut('u', noMods, result)).toEqual({ kind: 'undo' });
+    expect(reviewShortcut('U', noMods, result)).toEqual({ kind: 'undo' });
+    // 输入焦点上仍不处理。
+    expect(reviewShortcut('u', noMods, keyState({ typing: true, canUndo: true }))).toEqual({ kind: 'ignore' });
   });
 });
 

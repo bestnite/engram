@@ -195,6 +195,7 @@ export const en: LocaleCatalog = {
   'review.show_answer': 'Show answer',
   'review.ratings': 'Rate your recall',
   'review.shortcuts': 'After revealing: 1 Again · 2 Hard · 3 Good · 4 Easy · e Edit',
+  'review.shortcuts_undo': 'u: undo the last rating',
   'review.shortcuts_reveal': 'Space / Enter: show answer · e: edit · b: bury',
   'review.rating.1': 'Again',
   'review.rating.2': 'Hard',
@@ -1232,4 +1233,6 @@ export const en: LocaleCatalog = {
   'settings.profile.learn_ahead_hint': 'When nothing else is left, learning cards due within this many minutes are shown early instead of ending the session. 0 turns it off.',
   'settings.error.learn_ahead_invalid': 'Enter a whole number from 0 to 1440.',
   'review.undo': 'Undo',
+  'review.undo_last': 'Undo last',
+  'review.undo_last_rating': 'Undo last · {rating}',
 };
