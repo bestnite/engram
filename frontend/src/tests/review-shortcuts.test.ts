@@ -12,7 +12,18 @@ import type { ReviewShortcutState, ReviewSwipeState } from '../lib/review-shortc
 const noMods = { alt: false, ctrl: false, meta: false };
 
 function keyState(over: Partial<ReviewShortcutState> = {}): ReviewShortcutState {
-  return { typing: false, feedback: false, gradedKind: false, gradedRevealed: false, revealed: false, canUndo: false, ...over };
+  return {
+    typing: false,
+    choosing: false,
+    composing: false,
+    repeat: false,
+    feedback: false,
+    gradedKind: false,
+    gradedRevealed: false,
+    revealed: false,
+    canUndo: false,
+    ...over,
+  };
 }
 
 describe('reviewShortcut keyboard mapping', () => {
@@ -32,12 +43,46 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('e', noMods, typing)).toEqual({ kind: 'ignore' });
   });
 
-  it('maps space/enter to reveal for both self-assessed and graded cards', () => {
+  it('maps space/enter to reveal on self-assessed cards and space to reveal on graded cards', () => {
     expect(reviewShortcut(' ', noMods, keyState())).toEqual({ kind: 'reveal' });
     expect(reviewShortcut('Enter', noMods, keyState())).toEqual({ kind: 'reveal' });
     expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
     // 已翻面/已揭示时仍返回 reveal，视图侧自行判断为 no-op（保持 SSR 的 preventDefault 语义）。
     expect(reviewShortcut('Enter', noMods, keyState({ revealed: true }))).toEqual({ kind: 'reveal' });
+  });
+
+  it('submits a graded answer with enter from the input, an option or the page', () => {
+    const answering = keyState({ gradedKind: true });
+    expect(reviewShortcut('Enter', noMods, { ...answering, typing: true })).toEqual({ kind: 'submit' });
+    expect(reviewShortcut('Enter', noMods, { ...answering, choosing: true })).toEqual({ kind: 'submit' });
+    expect(reviewShortcut('Enter', noMods, answering)).toEqual({ kind: 'submit' });
+    // 输入框里其它按键仍交给输入框（空格是答案的一部分，不是「显示答案」）。
+    expect(reviewShortcut(' ', noMods, { ...answering, typing: true })).toEqual({ kind: 'ignore' });
+    // 输入框里的回车只对判分卡有意义：自评卡没有可提交的答案。
+    expect(reviewShortcut('Enter', noMods, keyState({ typing: true }))).toEqual({ kind: 'ignore' });
+  });
+
+  it('never submits while an IME is composing, on auto-repeat, or with a modifier', () => {
+    const answering = keyState({ gradedKind: true, typing: true });
+    expect(reviewShortcut('Enter', noMods, { ...answering, composing: true })).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('Enter', noMods, { ...answering, repeat: true })).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('Enter', { alt: false, ctrl: true, meta: false }, answering)).toEqual({ kind: 'ignore' });
+    // 按住回车不放：自动重复不能把「提交」之后的结果面板连带「继续」掉。
+    const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true });
+    expect(reviewShortcut('Enter', noMods, { ...result, repeat: true })).toEqual({ kind: 'ignore' });
+  });
+
+  it('leaves space to a focused choice option instead of revealing the answer', () => {
+    expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true, choosing: true }))).toEqual({ kind: 'ignore' });
+    // 焦点不在选项上时空格仍是「显示答案」。
+    expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
+  });
+
+  it('gives up with enter or space once a graded answer is revealed', () => {
+    const revealed = keyState({ gradedKind: true, gradedRevealed: true });
+    expect(reviewShortcut('Enter', noMods, revealed)).toEqual({ kind: 'give_up' });
+    expect(reviewShortcut(' ', noMods, revealed)).toEqual({ kind: 'give_up' });
+    expect(reviewShortcut('3', noMods, revealed)).toEqual({ kind: 'swallow' });
   });
 
   it('gates 1-4: swallowed on unanswered graded cards, rating only after reveal', () => {

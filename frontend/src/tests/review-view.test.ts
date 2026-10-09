@@ -45,8 +45,8 @@ describe('ReviewView graded answering', () => {
     // 题面不得泄露正确答案，四档自评按钮不得出现。
     expect(html).not.toContain('Paris');
     expect(html).not.toContain('data-rating=');
-    // 键位提示也必须跟着变，不再宣传 1–4 评分。
-    expect(html).toContain('空格：显示答案');
+    // 键位提示也必须跟着变：宣传回车提交，不再宣传 1–4 评分。
+    expect(html).toContain('回车：提交答案');
     expect(html).not.toContain('重来');
   });
 

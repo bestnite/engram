@@ -12,6 +12,8 @@ export type ReviewShortcut =
   | { kind: 'swallow' } // 阻止默认行为但不产生动作（判分卡待作答时的 1–4）
   | { kind: 'continue' } // 结果面板：进入下一张
   | { kind: 'reveal' } // 空格/回车：判分卡请求揭示、自评卡翻面
+  | { kind: 'submit' } // 回车：判分卡待作答时提交答案
+  | { kind: 'give_up' } // 回车/空格：判分卡已揭示答案后记为重来并换卡
   | { kind: 'rate'; rating: number }
   | { kind: 'bury' }
   | { kind: 'suspend' }
@@ -20,8 +22,17 @@ export type ReviewShortcut =
 
 /** 按键决策依赖的复习状态。 */
 export interface ReviewShortcutState {
-  /** 焦点是否落在输入控件上（此时一律不处理快捷键）。 */
+  /** 焦点是否落在文本输入控件上（此时只处理判分卡的回车提交）。 */
   typing: boolean;
+  /**
+   * 焦点是否落在选项控件（单选/多选项）上。这些控件是 role=radio/checkbox 的按钮，空格是它们
+   * 自己的「选中」键，被截成「显示答案」会让键盘用户无法作答。
+   */
+  choosing: boolean;
+  /** 输入法正在组字：此时的回车是确认候选词，不是提交。 */
+  composing: boolean;
+  /** 按住不放产生的自动重复：回车连发会把「提交」和「继续」连成一次按键，一律忽略。 */
+  repeat: boolean;
   /** 是否处于「已作答、只差继续」的结果面板。 */
   feedback: boolean;
   /** 当前卡是否为判分题型。 */
@@ -36,14 +47,21 @@ export interface ReviewShortcutState {
 
 /**
  * 把一次 keydown 映射成复习动作。
- * 修饰键（Alt/Ctrl/Meta）或输入焦点一律忽略；其余按键都映射到复习动作。
+ * 修饰键（Alt/Ctrl/Meta）、输入法组字与自动重复一律忽略；文本输入焦点上只处理判分卡的回车提交，
+ * 其余按键交给输入框本身。
  */
 export function reviewShortcut(
   key: string,
   modifiers: { alt: boolean; ctrl: boolean; meta: boolean },
   state: ReviewShortcutState,
 ): ReviewShortcut {
-  if (modifiers.alt || modifiers.ctrl || modifiers.meta || state.typing) return { kind: 'ignore' };
+  if (modifiers.alt || modifiers.ctrl || modifiers.meta || state.composing || state.repeat) return { kind: 'ignore' };
+
+  // 判分卡待作答：回车提交答案，无论焦点在输入框、选项还是页面上——这是表单的通用约定。
+  const answering = state.gradedKind && !state.gradedRevealed && !state.feedback;
+  if (answering && key === 'Enter') return { kind: 'submit' };
+
+  if (state.typing) return { kind: 'ignore' };
 
   // 结果面板是「已作答、只差继续」的状态：回车/空格/1–4 都走「继续」；e 仍可编辑；b 无效。
   if (state.feedback) {
@@ -53,8 +71,14 @@ export function reviewShortcut(
     return { kind: 'ignore' };
   }
 
-  // 空格/回车始终阻止默认行为：判分卡揭示答案，自评卡翻面。
-  if (key === ' ' || key === 'Enter') return { kind: 'reveal' };
+  if (key === ' ' || key === 'Enter') {
+    // 判分卡已揭示答案后只剩「记为重来并继续」一个出路，回车/空格直接走它。
+    if (state.gradedKind && state.gradedRevealed) return { kind: 'give_up' };
+    // 焦点在选项上时空格留给选项本身去选中。
+    if (state.choosing) return { kind: 'ignore' };
+    // 其余情况阻止默认行为：判分卡揭示答案，自评卡翻面。
+    return { kind: 'reveal' };
+  }
 
   // 判分卡待作答时 1–4 完全失效（不评分、也不揭示答案）。
   if (/^[1-4]$/.test(key)) {

@@ -506,6 +506,13 @@
     );
   }
 
+  /** 焦点是否在判分卡的选项（bits-ui 渲染为 role=radio/checkbox 的按钮）上。 */
+  function isChoiceTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const role = target.getAttribute('role');
+    return role === 'radio' || role === 'checkbox';
+  }
+
   /** 空格/回车与滑动的共同动作：判分卡请求揭示答案，自评卡翻面。 */
   function applyReveal(): void {
     if (gradedKind) {
@@ -522,6 +529,10 @@
       { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },
       {
         typing: isTypingTarget(event.target),
+        choosing: isChoiceTarget(event.target),
+        // keyCode 229 是部分浏览器在组字期间不设 isComposing 时的兜底信号。
+        composing: event.isComposing || event.keyCode === 229,
+        repeat: event.repeat,
         feedback: feedback !== null,
         gradedKind,
         gradedRevealed,
@@ -543,6 +554,14 @@
       case 'reveal':
         event.preventDefault();
         applyReveal();
+        return;
+      case 'submit':
+        event.preventDefault();
+        void submitGraded();
+        return;
+      case 'give_up':
+        event.preventDefault();
+        void giveUp();
         return;
       case 'rate':
         event.preventDefault();
@@ -858,6 +877,6 @@
     {/if}
   </div>
   <p class="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
-    {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_result') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
+    {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_give_up') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
   </p>
 </section>
