@@ -90,7 +90,7 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-jobs-title">{$t('admin.jobs.heading')}</h1>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-jobs-title">{$t('admin.jobs.heading')}</h1>
   </header>
 
   {#if notice}<div data-testid="admin-jobs-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -100,13 +100,13 @@
     <Skeleton testId="admin-jobs-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-jobs-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-jobs-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     {#if view.jobs.length === 0}
-      <p data-testid="admin-jobs-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.jobs.empty')}</p>
+      <p data-testid="admin-jobs-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('admin.jobs.empty')}</p>
     {:else}
       <div class="card-elevated overflow-x-auto rounded-xl">
         <table class="w-full text-left text-sm">
@@ -124,12 +124,12 @@
           <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
             {#each view.jobs as job (job.id)}
               <tr data-testid="admin-jobs-row-{job.id}">
-                <td class="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">#{job.id}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{kindLabel(job.kind)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{statusLabel(job.status)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{stageLabel(job.stage)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{job.created_at}</td>
-                <td class="px-4 py-2.5 font-mono text-xs text-zinc-500 dark:text-zinc-500">{job.error || job.log_tail || $t('admin.jobs.log_empty')}</td>
+                <td class="px-4 py-2.5 text-foreground/80">#{job.id}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{kindLabel(job.kind)}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{statusLabel(job.status)}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{stageLabel(job.stage)}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{job.created_at}</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{job.error || job.log_tail || $t('admin.jobs.log_empty')}</td>
                 <td class="px-4 py-2.5">
                   {#if job.can_cancel}
                     <button type="button" data-testid="admin-jobs-cancel-{job.id}" onclick={() => cancel(job)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.jobs.cancel')}</button>
@@ -143,7 +143,7 @@
 
       <div class="flex items-center justify-between" data-testid="admin-jobs-pager">
         <button type="button" data-testid="admin-jobs-prev" disabled={view.page <= 1} onclick={() => load(view.page - 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.prev')}</button>
-        <span class="text-sm text-zinc-500 dark:text-zinc-400">{view.page} / {view.pages}</span>
+        <span class="text-sm text-muted-foreground">{view.page} / {view.pages}</span>
         <button type="button" data-testid="admin-jobs-next" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.next')}</button>
       </div>
     {/if}

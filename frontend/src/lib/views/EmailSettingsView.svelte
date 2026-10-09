@@ -68,14 +68,14 @@
 <div class="py-12 max-w-lg mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl">
     <div class="mb-6">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-bold tracking-tight text-foreground">
         {$t('account.email.heading')}
       </h1>
-      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{$t('account.email.intro')}</p>
+      <p class="mt-2 text-sm text-muted-foreground">{$t('account.email.intro')}</p>
     </div>
 
     {#if !loaded}
-      <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('account.email.loading')}</p>
+      <p class="text-sm text-muted-foreground">{$t('account.email.loading')}</p>
     {:else if loadErrorKey}
       <div
         data-testid="email-load-error"
@@ -86,11 +86,11 @@
     {:else}
       <dl class="mb-6 space-y-2 text-sm">
         <div class="flex items-center justify-between gap-4">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('account.email.current_label')}</dt>
-          <dd data-testid="email-current" class="font-medium text-zinc-900 dark:text-zinc-100 break-all">{email}</dd>
+          <dt class="text-muted-foreground">{$t('account.email.current_label')}</dt>
+          <dd data-testid="email-current" class="font-medium text-foreground break-all">{email}</dd>
         </div>
         <div class="flex items-center justify-between gap-4">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('account.email.status_label')}</dt>
+          <dt class="text-muted-foreground">{$t('account.email.status_label')}</dt>
           <dd data-testid="email-status" class="font-medium {verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
             {verified ? $t('account.email.verified') : $t('account.email.unverified')}
           </dd>
@@ -103,7 +103,7 @@
             type="button"
             onclick={handleResend}
             disabled={resending}
-            class="px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
+            class="px-4 py-2 rounded-lg border border-input text-sm text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50 cursor-pointer"
           >
             {resending ? $t('account.email.resending') : $t('account.email.resend')}
           </button>
@@ -116,14 +116,14 @@
         </div>
       {/if}
 
-      <hr class="my-6 border-zinc-200 dark:border-zinc-800" />
+      <hr class="my-6 border-border" />
 
-      <h2 class="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('account.email.change_heading')}</h2>
+      <h2 class="mb-4 text-lg font-semibold text-foreground">{$t('account.email.change_heading')}</h2>
 
       {#if sent}
         <div
           data-testid="email-change-sent"
-          class="mb-4 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm"
+          class="mb-4 p-4 rounded-lg bg-muted border border-input text-foreground/80 text-sm"
         >
           <span>{$t('account.email.change_sent')}</span>
         </div>
@@ -149,7 +149,7 @@
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label for="email-new" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="email-new" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('account.email.change_label')}
           </label>
           <input
@@ -176,7 +176,7 @@
       </form>
 
       <div class="mt-6 text-center text-sm">
-        <a href="/settings" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <a href="/settings" class="text-muted-foreground hover:text-foreground transition-colors">
           {$t('account.email.back_settings')}
         </a>
       </div>

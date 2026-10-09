@@ -72,8 +72,8 @@
 <div class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-6 sm:p-8 rounded-2xl space-y-6">
     <header>
-      <h1 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{$t('keys.title')}</h1>
-      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{$t('keys.notice')}</p>
+      <h1 class="text-2xl font-bold text-foreground">{$t('keys.title')}</h1>
+      <p class="mt-1 text-sm text-muted-foreground">{$t('keys.notice')}</p>
     </header>
 
     {#if error}<p class="text-sm text-rose-600 dark:text-rose-400" role="alert">{$t(error)}</p>{/if}
@@ -86,7 +86,7 @@
       </section>
     {/if}
 
-    <form onsubmit={create} class="rounded-xl border border-zinc-200 dark:border-zinc-700/80 p-5 space-y-4">
+    <form onsubmit={create} class="rounded-xl border border-input p-5 space-y-4">
       <label class="block text-sm">{$t('keys.name')}<input required maxlength="100" bind:value={name} class="field-input text-sm mt-1 w-full" /></label>
       <fieldset class="flex flex-wrap gap-4 text-sm"><legend class="mb-2">{$t('keys.scopes')}</legend>
         {#each ['read', 'write', 'review', 'keys'] as scope}
@@ -105,16 +105,16 @@
     </form>
 
     {#if loading}
-      <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('common.loading')}</p>
+      <p class="text-sm text-muted-foreground">{$t('common.loading')}</p>
     {:else if keys.length === 0}
-      <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('keys.empty')}</p>
+      <p class="text-sm text-muted-foreground">{$t('keys.empty')}</p>
     {:else}
       <ul class="divide-y divide-zinc-200 dark:divide-zinc-800">
         {#each activeKeys as key (key.id)}
           <li class="flex items-center justify-between gap-4 py-3">
             <div>
-              <strong class="text-zinc-900 dark:text-zinc-100">{key.name}</strong>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">{key.prefix} · {key.scopes}</p>
+              <strong class="text-foreground">{key.name}</strong>
+              <p class="text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
             </div>
             <button
               type="button"
@@ -128,8 +128,8 @@
         {#each revokedKeys as key (key.id)}
           <li class="flex items-center justify-between gap-4 py-3 opacity-70">
             <div>
-              <strong class="text-zinc-600 dark:text-zinc-300 line-through">{key.name}</strong>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">{key.prefix} · {key.scopes}</p>
+              <strong class="text-muted-foreground line-through">{key.name}</strong>
+              <p class="text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
             </div>
             <Badge testId={`keys-revoked-badge-${key.id}`}>{$t('keys.revoked')}</Badge>
           </li>

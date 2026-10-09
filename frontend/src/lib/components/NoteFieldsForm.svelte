@@ -73,10 +73,10 @@
           onCheckedChange={(checked) => (fields[spec.key] = checked)}
           label={$t('note.fields.' + spec.key)}
         />
-        <span class="text-sm text-zinc-700 dark:text-zinc-300">{$t('note.fields.' + spec.key)}</span>
+        <span class="text-sm text-foreground/80">{$t('note.fields.' + spec.key)}</span>
       </div>
     {:else}
-      <span class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+      <span class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {$t('note.fields.' + spec.key)}
       </span>
       {#if spec.control === 'textarea'}
@@ -106,7 +106,7 @@
         />
       {:else if spec.control === 'index'}
         {#if options.length === 0}
-          <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.options_first')}</p>
+          <p class="mt-1.5 text-xs text-muted-foreground/70">{$t('note_edit.options_first')}</p>
         {:else}
           <Select
             class="mt-1.5"
@@ -119,7 +119,7 @@
         {/if}
       {:else if spec.control === 'indexes'}
         {#if options.length === 0}
-          <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.options_first')}</p>
+          <p class="mt-1.5 text-xs text-muted-foreground/70">{$t('note_edit.options_first')}</p>
         {:else}
           <ul class="mt-1.5 space-y-1.5">
             {#each options as option, index (index)}
@@ -130,7 +130,7 @@
                   onCheckedChange={(checked) => toggleIndex(spec.key, index, checked)}
                   label={`${index + 1}. ${option}`}
                 />
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">{index + 1}. {option}</span>
+                <span class="text-sm text-foreground/80">{index + 1}. {option}</span>
               </li>
             {/each}
           </ul>

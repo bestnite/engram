@@ -155,8 +155,8 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-oidc-title">{$t('admin.oidc.heading')}</h1>
-    <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{$t('admin.oidc.intro')}</p>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-oidc-title">{$t('admin.oidc.heading')}</h1>
+    <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.oidc.intro')}</p>
   </header>
 
   {#if notice}<div data-testid="admin-oidc-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -166,53 +166,53 @@
     <Skeleton testId="admin-oidc-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-oidc-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-oidc-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     <form onsubmit={save} data-testid="admin-oidc-form" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-2">
-      <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:col-span-2">
+      <label class="flex items-center gap-2 text-sm text-foreground/80 sm:col-span-2">
         <Checkbox testId="admin-oidc-enabled" bind:checked={enabled} label={$t('admin.oidc.enabled')} />
         {$t('admin.oidc.enabled')}
       </label>
       <label class="block sm:col-span-2">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.issuer')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.oidc.issuer')}</span>
         <input data-testid="admin-oidc-issuer" bind:value={issuer} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.client_id')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.oidc.client_id')}</span>
         <input data-testid="admin-oidc-client-id" bind:value={clientId} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.scopes')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.oidc.scopes')}</span>
         <input data-testid="admin-oidc-scopes" bind:value={scopes} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block sm:col-span-2">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.client_secret')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.oidc.client_secret')}</span>
         <input type="password" data-testid="admin-oidc-secret" bind:value={clientSecret} placeholder={configuredLabel(view.secret_configured)} class="field-input text-sm mt-1.5 w-full" />
-        <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.oidc.client_secret.hint')}</span>
+        <span class="mt-0.5 block text-xs text-muted-foreground/70">{$t('admin.oidc.client_secret.hint')}</span>
       </label>
       <div class="block sm:col-span-2">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.redirect_uri')}</span>
-        <p data-testid="admin-oidc-redirect-uri" class="mt-1.5 font-mono text-sm text-zinc-700 dark:text-zinc-300">{view.redirect_uri}</p>
-        <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.oidc.redirect_uri.hint')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.oidc.redirect_uri')}</span>
+        <p data-testid="admin-oidc-redirect-uri" class="mt-1.5 font-mono text-sm text-foreground/80">{view.redirect_uri}</p>
+        <span class="mt-0.5 block text-xs text-muted-foreground/70">{$t('admin.oidc.redirect_uri.hint')}</span>
       </div>
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 sm:col-span-2">{$t('admin.oidc.claims')}</h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">{$t('admin.oidc.claims')}</h3>
       <label class="block">
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.subject')}</span>
+        <span class="text-xs text-muted-foreground">{$t('admin.oidc.claim.subject')}</span>
         <input data-testid="admin-oidc-claim-subject" bind:value={claimSubject} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.email')}</span>
+        <span class="text-xs text-muted-foreground">{$t('admin.oidc.claim.email')}</span>
         <input data-testid="admin-oidc-claim-email" bind:value={claimEmail} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.name')}</span>
+        <span class="text-xs text-muted-foreground">{$t('admin.oidc.claim.name')}</span>
         <input data-testid="admin-oidc-claim-name" bind:value={claimName} class="field-input text-sm mt-1 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.claim.email_verified')}</span>
+        <span class="text-xs text-muted-foreground">{$t('admin.oidc.claim.email_verified')}</span>
         <input data-testid="admin-oidc-claim-email-verified" bind:value={claimEmailVerified} class="field-input text-sm mt-1 w-full" />
       </label>
       <div class="flex gap-3 sm:col-span-2">
@@ -234,9 +234,9 @@
     {/if}
 
     <section class="space-y-3" data-testid="admin-oidc-identities">
-      <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.oidc.identities.heading')}</h2>
+      <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('admin.oidc.identities.heading')}</h2>
       {#if view.identities.length === 0}
-        <p data-testid="admin-oidc-identities-empty" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.oidc.identities.empty')}</p>
+        <p data-testid="admin-oidc-identities-empty" class="text-sm text-muted-foreground">{$t('admin.oidc.identities.empty')}</p>
       {:else}
         <div class="card-elevated overflow-x-auto rounded-xl">
           <table class="w-full text-left text-sm">
@@ -253,11 +253,11 @@
             <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
               {#each view.identities as row (row.id)}
                 <tr data-testid="admin-oidc-identity-{row.id}">
-                  <td class="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{row.provider}</td>
-                  <td class="px-4 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{row.subject}</td>
-                  <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{row.email || '—'}</td>
-                  <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{row.username || '—'}</td>
-                  <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{row.linked_at}</td>
+                  <td class="px-4 py-2.5 text-foreground/80">{row.provider}</td>
+                  <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.subject}</td>
+                  <td class="px-4 py-2.5 text-muted-foreground">{row.email || '—'}</td>
+                  <td class="px-4 py-2.5 text-muted-foreground">{row.username || '—'}</td>
+                  <td class="px-4 py-2.5 text-muted-foreground">{row.linked_at}</td>
                   <td class="px-4 py-2.5">
                     <button type="button" data-testid="admin-oidc-unlink-{row.id}" onclick={() => unlink(row)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.oidc.unlink')}</button>
                   </td>

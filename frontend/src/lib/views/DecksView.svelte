@@ -271,12 +271,12 @@
 <div class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-6 sm:p-8 rounded-2xl">
     <!-- 顶栏标题与操作 -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-zinc-100 dark:border-zinc-800">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-border">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <h1 class="text-2xl font-bold tracking-tight text-foreground">
           {$t('decks.title')}
         </h1>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+        <p class="text-xs text-muted-foreground mt-1">
           {$t('decks.count', { count: decks.length })}
         </p>
       </div>
@@ -287,7 +287,7 @@
             type="button"
             title={$t('decks.retry')}
             aria-label={$t('decks.retry')}
-            class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors btn-press cursor-pointer border border-zinc-200 dark:border-zinc-700/80"
+            class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-muted transition-colors btn-press cursor-pointer border border-input"
             onclick={fetchDecks}
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -331,16 +331,16 @@
             <path d="M4 4h16v16H4z" />
             <path d="m4 6 8 6 8-6" />
           </svg>
-          <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{$t('decks.invites.title')}</h2>
+          <h2 class="text-sm font-semibold text-foreground">{$t('decks.invites.title')}</h2>
         </div>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{$t('decks.invites.hint')}</p>
+        <p class="text-xs text-muted-foreground mb-3">{$t('decks.invites.hint')}</p>
 
         <ul class="space-y-2">
           {#each invites as invite (invite.deck_id)}
             <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/80 dark:bg-zinc-900/60 px-3 py-2">
               <div class="min-w-0">
-                <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{invite.deck_name}</p>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                <p class="text-sm font-medium text-foreground truncate">{invite.deck_name}</p>
+                <p class="text-xs text-muted-foreground">
                   {$t('decks.invites.from', { name: invite.inviter_name || invite.username || '—' })}
                   ·
                   {$t('decks.invites.role', { role: $t(`deck.sharing.role.${invite.role}`) })}
@@ -378,9 +378,9 @@
 
     <!-- 批量工具栏 -->
     {#if !loading && !error && decks.length > 0}
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800/60 text-xs">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl bg-surface border border-border text-xs">
         <div class="flex items-center gap-3">
-          <label class="flex items-center gap-1.5 cursor-pointer text-zinc-600 dark:text-zinc-400 font-medium select-none">
+          <label class="flex items-center gap-1.5 cursor-pointer text-muted-foreground font-medium select-none">
             <Checkbox
               checked={selectedDeckIds.length > 0 && selectedDeckIds.length === decks.length}
               onCheckedChange={toggleSelectAll}
@@ -389,7 +389,7 @@
             <span>{selectedDeckIds.length === decks.length ? $t('decks.deselect_all') : $t('decks.select_all')}</span>
           </label>
           {#if selectedDeckIds.length > 0}
-            <span class="text-zinc-400 dark:text-zinc-500">{$t('decks.selected_count', { count: selectedDeckIds.length })}</span>
+            <span class="text-muted-foreground/70">{$t('decks.selected_count', { count: selectedDeckIds.length })}</span>
           {/if}
         </div>
 
@@ -429,7 +429,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <p class="text-base font-medium text-zinc-900 dark:text-zinc-100">
+        <p class="text-base font-medium text-foreground">
           {#if error instanceof ApiClientError && error.isUnauthorized}
             {$t('decks.unauthorized')}
           {:else}
@@ -444,14 +444,14 @@
         </Button>
       </div>
     {:else if decks.length === 0}
-      <div data-testid="decks-empty" class="py-16 text-center text-zinc-500 dark:text-zinc-400 space-y-3">
-        <p class="text-base font-medium text-zinc-700 dark:text-zinc-300">
+      <div data-testid="decks-empty" class="py-16 text-center text-muted-foreground space-y-3">
+        <p class="text-base font-medium text-foreground/80">
           {$t('decks.empty')}
         </p>
         <button
           type="button"
           onclick={openCreateModal}
-          class="text-xs px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+          class="text-xs px-3 py-1.5 rounded-lg bg-muted text-foreground/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
         >
           + {$t('decks.create.heading')}
         </button>
@@ -478,7 +478,7 @@
                     onCheckedChange={() => toggleSelectDeck(deck.id)}
                     label={$t('decks.select_deck', { name: deck.name })}
                   />
-                  <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                  <h2 class="text-base font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                     {deck.name}
                   </h2>
                 </div>
@@ -507,7 +507,7 @@
                       data-testid={`deck-leave-btn-${deck.id}`}
                       title={$t('decks.leave.action')}
                       aria-label={$t('decks.leave.action')}
-                      class="p-1 rounded-md text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                      class="p-1 rounded-md text-zinc-400 hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                       onclick={(e) => promptDeckAction(deck, 'leave', e)}
                     >
                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -521,15 +521,15 @@
               </div>
 
               {#if deck.description}
-                <p class="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 mb-4 leading-relaxed pl-6">
+                <p class="text-xs text-muted-foreground line-clamp-2 mb-4 leading-relaxed pl-6">
                   {deck.description}
                 </p>
               {/if}
             </div>
 
-            <div class="pt-3 border-t border-zinc-200/50 dark:border-zinc-800/50 text-xs text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
+            <div class="pt-3 border-t border-zinc-200/50 dark:border-zinc-800/50 text-xs text-muted-foreground/70 flex items-center justify-between">
               <span class="font-mono">{deck.new_per_day} / {deck.reviews_per_day}</span>
-              <span data-testid={`deck-queue-count-${deck.id}`} class="font-medium text-zinc-700 dark:text-zinc-300">
+              <span data-testid={`deck-queue-count-${deck.id}`} class="font-medium text-foreground/80">
                 {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
               </span>
             </div>
@@ -551,7 +551,7 @@
   >
       <form onsubmit={createDeck} class="space-y-4">
         <div>
-          <label for="deck-name-input" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+          <label for="deck-name-input" class="block text-sm font-medium text-foreground/80 mb-1">
             {$t('decks.create.name')}
           </label>
           <input
@@ -566,7 +566,7 @@
         </div>
 
         <div>
-          <label for="deck-desc-input" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+          <label for="deck-desc-input" class="block text-sm font-medium text-foreground/80 mb-1">
             {$t('decks.create.description')}
           </label>
           <textarea
@@ -579,7 +579,7 @@
             class="field-input text-sm block w-full"
           ></textarea>
           <div>
-            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" for="deck-create-preset">
+            <label class="block text-sm font-medium text-foreground/80 mb-1" for="deck-create-preset">
               {$t('decks.create.preset')}
             </label>
             <Select

@@ -31,7 +31,7 @@
 <div class="py-12 max-w-md mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl">
     <div class="mb-6 text-center">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-bold tracking-tight text-foreground">
         {$t('account.forgot.heading')}
       </h1>
     </div>
@@ -39,18 +39,18 @@
     {#if done}
       <div
         data-testid="forgot-done"
-        class="mb-6 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm"
+        class="mb-6 p-4 rounded-lg bg-muted border border-input text-foreground/80 text-sm"
       >
         <span>{mailReady ? $t('account.forgot.sent') : $t('account.error.mail_not_configured')}</span>
       </div>
       <a
         href="/login"
-        class="block text-center text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+        class="block text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         {$t('account.forgot.back_login')}
       </a>
     {:else}
-      <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('account.forgot.intro')}</p>
+      <p class="mb-6 text-sm text-muted-foreground">{$t('account.forgot.intro')}</p>
 
       {#if errorKey}
         <div
@@ -63,7 +63,7 @@
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label for="forgot-email" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="forgot-email" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('account.forgot.email_label')}
           </label>
           <input
@@ -91,7 +91,7 @@
       </form>
 
       <div class="mt-6 text-center text-sm">
-        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <a href="/login" class="text-muted-foreground hover:text-foreground transition-colors">
           {$t('account.forgot.back_login')}
         </a>
       </div>

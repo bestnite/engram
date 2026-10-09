@@ -76,7 +76,7 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-dashboard-title">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-dashboard-title">
       {$t('admin.dashboard.heading')}
     </h1>
   </header>
@@ -85,7 +85,7 @@
     <Skeleton testId="admin-dashboard-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-dashboard-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-dashboard-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
@@ -95,10 +95,10 @@
       {#each cards as card (card.label)}
         <a
           href={card.href}
-          class="card-elevated block rounded-xl p-5 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700"
+          class="card-elevated block rounded-xl p-5 transition-colors hover:border-foreground/20"
         >
-          <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{card.label}</p>
-          <p class="mt-2 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{card.value}</p>
+          <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{card.label}</p>
+          <p class="mt-2 text-2xl font-bold tracking-tight text-foreground">{card.value}</p>
         </a>
       {/each}
     </div>

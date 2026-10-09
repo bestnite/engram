@@ -249,10 +249,10 @@
 <div data-testid="settings-view" class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl">
     <div class="mb-6">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="text-2xl font-bold tracking-tight text-foreground">
         {$t('settings.heading')}
       </h1>
-      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+      <p class="mt-1 text-sm text-muted-foreground leading-relaxed">
         {$t('settings.intro')}
       </p>
     </div>
@@ -293,7 +293,7 @@
       <!-- 个人基础资料区块：只放 profile 与 locale 字段（密码、两步验证等各有独立区块） -->
       <section class="card-elevated p-6 rounded-xl space-y-6">
         <div>
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h2 class="text-lg font-bold tracking-tight text-foreground">
             {$t('settings.profile.heading')}
           </h2>
         </div>
@@ -301,7 +301,7 @@
         <form onsubmit={handleSubmit} class="space-y-5" novalidate>
           <!-- 显示名 -->
           <div class="block">
-            <label for="settings-display-name" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label for="settings-display-name" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {$t('settings.profile.display_name_label')}
             </label>
             <input
@@ -320,7 +320,7 @@
 
           <!-- 界面语言 -->
           <div class="block">
-            <label for="settings-locale" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label for="settings-locale" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {$t('settings.profile.locale_label')}
             </label>
             <Select
@@ -339,7 +339,7 @@
 
           <!-- 时区 -->
           <div class="block">
-            <label for="settings-timezone" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label for="settings-timezone" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {$t('settings.profile.timezone_label')}
             </label>
             <Combobox
@@ -359,7 +359,7 @@
 
           <!-- 复习日切点 -->
           <div class="block">
-            <label for="settings-cutoff" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label for="settings-cutoff" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {$t('settings.profile.cutoff_label')}
             </label>
             <Select
@@ -370,7 +370,7 @@
               allowDeselect={false}
               ariaLabel={$t('settings.profile.cutoff_label')}
             />
-            <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+            <p class="mt-1 text-xs text-muted-foreground/70">
               {$t('settings.profile.cutoff_hint')}
             </p>
             {#if fieldErrors.day_cutoff_hour}
@@ -382,7 +382,7 @@
 
           <!-- 提前学习 -->
           <div class="block">
-            <label for="settings-learn-ahead" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label for="settings-learn-ahead" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {$t('settings.profile.learn_ahead_label')}
             </label>
             <input
@@ -395,7 +395,7 @@
               bind:value={learnAhead}
               class="field-input text-sm w-full"
             />
-            <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+            <p class="mt-1 text-xs text-muted-foreground/70">
               {$t('settings.profile.learn_ahead_hint')}
             </p>
             {#if fieldErrors.learn_ahead_minutes}
@@ -414,7 +414,7 @@
         </form>
       </section>
       <section class="card-elevated p-6 rounded-xl space-y-5 mt-6" data-testid="settings-password">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.password.heading')}</h2>
+        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.password.heading')}</h2>
         {#if passwordError}<p role="alert">{$t(passwordError)}</p>{/if}
         {#if passwordNotice}<p role="status">{$t(passwordNotice)}</p>{/if}
         <form onsubmit={handlePasswordSubmit} class="space-y-4">
@@ -425,29 +425,29 @@
       </section>
       <!-- 两步验证入口：服务端 GET /settings/totp 已切到应用壳，走规范路径 -->
       <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-totp-entry">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.heading')}</h2>
-        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
+        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.totp.heading')}</h2>
+        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.totp.intro')}</p>
         <Button href="/settings/totp" variant="primary" size="lg" class="mt-4">{$t('settings.totp.entry')}</Button>
       </section>
       <!-- 邮件通知偏好入口：服务端 GET /settings/notifications 已切到应用壳，走规范路径 -->
       <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-notifications-entry">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.heading')}</h2>
-        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
+        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.notifications.heading')}</h2>
+        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.notifications.intro')}</p>
         <Button href="/settings/notifications" variant="primary" size="lg" class="mt-4">{$t('settings.notifications.entry')}</Button>
       </section>
       <!-- API 密钥入口：服务端 GET /settings/keys 已切到应用壳，走规范路径。
            入口从页头导航移到这里——它属于账号访问凭据，与两步验证、通知偏好同属个人设置。 -->
       <section class="card-elevated p-6 rounded-xl mt-6" data-testid="settings-keys-entry">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.keys.heading')}</h2>
-        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.keys.intro')}</p>
+        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.keys.heading')}</h2>
+        <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.keys.intro')}</p>
         <Button href="/settings/keys" variant="primary" size="lg" class="mt-4">{$t('settings.keys.entry')}</Button>
       </section>
 
       <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
       <section class="card-elevated p-6 rounded-xl mt-6 space-y-4" data-testid="settings-share-policy">
         <div>
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.share_policy.heading')}</h2>
-          <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.share_policy.intro')}</p>
+          <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.share_policy.heading')}</h2>
+          <p class="mt-1 text-sm text-muted-foreground leading-relaxed">{$t('settings.share_policy.intro')}</p>
         </div>
 
         <!-- 三档接收策略走与同页其余设置项同款的下拉（界面语言、复习日切点、时区），
@@ -469,14 +469,14 @@
 
         {#if sharePolicy === 'whitelist'}
           <div class="pt-1" data-testid="share-policy-whitelist">
-            <span class="block text-xs font-semibold mb-1.5 text-zinc-700 dark:text-zinc-300">{$t('settings.share_policy.allow_label')}</span>
+            <span class="block text-xs font-semibold mb-1.5 text-foreground/80">{$t('settings.share_policy.allow_label')}</span>
             {#if allowList.length === 0}
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('settings.share_policy.allow_empty')}</p>
+              <p class="text-xs text-muted-foreground">{$t('settings.share_policy.allow_empty')}</p>
             {:else}
               <ul class="space-y-1.5">
                 {#each allowList as row (row.user_id)}
-                  <li class="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-1.5">
-                    <span class="text-sm text-zinc-800 dark:text-zinc-200 truncate">{row.username || '#' + row.user_id}</span>
+                  <li class="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-1.5">
+                    <span class="text-sm text-foreground/90 truncate">{row.username || '#' + row.user_id}</span>
                     <Button
                       testId="share-policy-remove-{row.user_id}"
                       variant="ghost"

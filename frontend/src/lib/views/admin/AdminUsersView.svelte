@@ -172,14 +172,14 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-users-title">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-users-title">
       {$t('admin.users.heading')}
     </h1>
   </header>
 
   <form onsubmit={(e) => { e.preventDefault(); load(1); }} data-testid="admin-users-search" class="flex items-end gap-3">
     <label class="block flex-1">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.search_label')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.search_label')}</span>
       <input
         data-testid="admin-users-search-input"
         bind:value={query}
@@ -201,25 +201,25 @@
   {/if}
 
   <form onsubmit={create} data-testid="admin-users-create" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-3">
-    <h2 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.create_heading')}</h2>
+    <h2 class="sm:col-span-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.create_heading')}</h2>
     <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.username')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.field.username')}</span>
       <input data-testid="admin-users-create-username" bind:value={form.username} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.email')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.field.email')}</span>
       <input data-testid="admin-users-create-email" bind:value={form.email} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.display_name')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.field.display_name')}</span>
       <input data-testid="admin-users-create-display" bind:value={form.display_name} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.password')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.field.password')}</span>
       <input data-testid="admin-users-create-password" type="password" bind:value={form.password} class="field-input text-sm mt-1.5 w-full" />
     </label>
     <label class="block">
-      <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.users.field.role')}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.users.field.role')}</span>
       <Select
         class="mt-1.5"
         bind:value={form.role}
@@ -238,13 +238,13 @@
     <Skeleton testId="admin-users-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-users-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     {#if view.users.length === 0}
-      <p data-testid="admin-users-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.users.empty')}</p>
+      <p data-testid="admin-users-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('admin.users.empty')}</p>
     {:else}
       <div class="card-elevated overflow-x-auto rounded-xl">
         <table class="w-full text-left text-sm">
@@ -263,13 +263,13 @@
           <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
             {#each view.users as u (u.id)}
               <tr data-testid="admin-users-row-{u.id}">
-                <td class="px-4 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{u.username}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.email}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{roleLabel(u.role)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{statusLabel(u.status)}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.decks}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.cards}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{u.reviews}</td>
+                <td class="px-4 py-2.5 font-medium text-foreground">{u.username}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{u.email}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{roleLabel(u.role)}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{statusLabel(u.status)}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{u.decks}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{u.cards}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{u.reviews}</td>
                 <td class="px-4 py-2.5">
                   <div class="flex flex-wrap gap-1.5">
                     <button type="button" data-testid="admin-users-status-{u.id}" onclick={() => toggleStatus(u)} class="cursor-pointer rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700">
@@ -296,7 +296,7 @@
 
       <div class="flex items-center justify-between" data-testid="admin-users-pager">
         <button type="button" data-testid="admin-users-prev" disabled={view.page <= 1} onclick={() => load(view.page - 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.prev')}</button>
-        <span class="text-sm text-zinc-500 dark:text-zinc-400">{view.page} / {view.pages}</span>
+        <span class="text-sm text-muted-foreground">{view.page} / {view.pages}</span>
         <button type="button" data-testid="admin-users-next" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.next')}</button>
       </div>
     {/if}

@@ -35,7 +35,7 @@
   >
     <span class="sr-only">{label}</span>
     {#each Array.from({ length: count }) as _, index (index)}
-      <div class="p-5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 space-y-3">
+      <div class="p-5 rounded-xl border border-border space-y-3">
         <div class="skeleton-block h-5 w-1/3 rounded"></div>
         <div class="skeleton-block h-4 w-3/4 rounded"></div>
         <div class="skeleton-block h-4 w-1/2 rounded"></div>

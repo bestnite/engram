@@ -171,9 +171,9 @@
 
 <div class="py-10 max-w-4xl mx-auto px-4">
   <div class="card-elevated p-6 sm:p-8 rounded-xl space-y-8">
-    <div class="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+    <div class="flex items-center justify-between pb-4 border-b border-border">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <h1 class="text-2xl font-bold tracking-tight text-foreground">
           {$t('stats.title')}
         </h1>
       </div>
@@ -182,7 +182,7 @@
           type="button"
           title={$t('stats.retry')}
           aria-label={$t('stats.retry')}
-          class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors btn-press cursor-pointer border border-zinc-200 dark:border-zinc-700/80"
+          class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-muted transition-colors btn-press cursor-pointer border border-input"
           onclick={fetchStats}
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -207,7 +207,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <p class="text-base font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+        <p class="text-base font-medium text-foreground mb-2">
           {#if error instanceof ApiClientError && error.isUnauthorized}
             {$t('stats.unauthorized')}
           {:else}
@@ -224,13 +224,13 @@
         </div>
       </div>
     {:else if detail && detail.empty}
-      <div data-testid="stats-empty" class="py-12 text-center text-zinc-500 dark:text-zinc-400">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 mb-3">
+      <div data-testid="stats-empty" class="py-12 text-center text-muted-foreground">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground/70 mb-3">
           <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
         </div>
-        <p class="text-base font-medium text-zinc-700 dark:text-zinc-300">
+        <p class="text-base font-medium text-foreground/80">
           {$t('stats.empty')}
         </p>
       </div>
@@ -239,7 +239,7 @@
         <!-- 复习量 + 到期预测 -->
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <section data-testid="stats-volume" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.volume.heading')}
             </h2>
             <ul class="space-y-3">
@@ -250,13 +250,13 @@
               ] as row}
                 <li>
                   <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t(row.key)}</span>
-                    <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                    <span class="font-medium text-foreground/80">{$t(row.key)}</span>
+                    <span class="font-mono font-semibold text-foreground">
                       {$t('stats.volume.value', { count: formatNumber(row.value) })}
                     </span>
                   </div>
                   {#if barWidth(row.value, volumeMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
                       <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(row.value, volumeMax)}%"></div>
                     </div>
                   {/if}
@@ -266,7 +266,7 @@
           </section>
 
           <section data-testid="stats-due" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.due.heading')}
             </h2>
             <ul class="space-y-3">
@@ -280,13 +280,13 @@
               ] as row}
                 <li>
                   <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t(row.key)}</span>
-                    <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                    <span class="font-medium text-foreground/80">{$t(row.key)}</span>
+                    <span class="font-mono font-semibold text-foreground">
                       {$t('stats.due.value', { count: formatNumber(row.value) })}
                     </span>
                   </div>
                   {#if barWidth(row.value, dueMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
                       <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(row.value, dueMax)}%"></div>
                     </div>
                   {/if}
@@ -299,16 +299,16 @@
         <!-- 留存率：总体 + 每个稳定性桶 -->
         <section data-testid="stats-retention" class="card-elevated p-5 rounded-lg space-y-4">
           <div>
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.retention.heading')}
             </h2>
-            <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.retention.intro')}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('stats.retention.intro')}</p>
           </div>
           <ul class="space-y-3">
             <li data-testid="stats-retention-overall">
               <div class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t('stats.retention.overall')}</span>
-                <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                <span class="font-medium text-foreground/80">{$t('stats.retention.overall')}</span>
+                <span class="font-mono font-semibold text-foreground">
                   {$t('stats.retention.rate', {
                     rate: formatPercentValue(detail.retention.rate),
                     passed: detail.retention.passed,
@@ -317,7 +317,7 @@
                 </span>
               </div>
               {#if percentWidth(detail.retention.rate) > 0}
-                <div class="mt-1.5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
                   <div class="h-full rounded-full bg-indigo-600" style="width: {percentWidth(detail.retention.rate)}%"></div>
                 </div>
               {/if}
@@ -325,8 +325,8 @@
             {#each detail.retention.buckets as bucket}
               <li>
                 <div class="flex items-center justify-between text-xs sm:text-sm">
-                  <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t(retentionBucketKey(bucket.label))}</span>
-                  <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                  <span class="font-medium text-foreground/80">{$t(retentionBucketKey(bucket.label))}</span>
+                  <span class="font-mono font-semibold text-foreground">
                     {$t('stats.retention.rate', {
                       rate: formatPercentValue(bucket.rate),
                       passed: bucket.passed,
@@ -335,7 +335,7 @@
                   </span>
                 </div>
                 {#if percentWidth(bucket.rate) > 0}
-                  <div class="mt-1.5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                  <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
                     <div class="h-full rounded-full bg-indigo-600" style="width: {percentWidth(bucket.rate)}%"></div>
                   </div>
                 {/if}
@@ -347,7 +347,7 @@
         <!-- 时间投入 / 连续打卡 / 判分来源 -->
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
           <section data-testid="stats-time" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.time.heading')}
             </h2>
             <ul class="space-y-3">
@@ -358,27 +358,27 @@
                 { key: 'stats.time.count_label', value: $t('stats.time.count', { count: formatNumber(detail.time_spent.count) }) },
               ] as row}
                 <li class="flex items-center justify-between text-xs sm:text-sm">
-                  <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t(row.key)}</span>
-                  <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">{row.value}</span>
+                  <span class="font-medium text-foreground/80">{$t(row.key)}</span>
+                  <span class="font-mono font-semibold text-foreground">{row.value}</span>
                 </li>
               {/each}
             </ul>
           </section>
 
           <section data-testid="stats-streak" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.streak.heading')}
             </h2>
             <ul class="space-y-3">
               <li class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t('stats.streak.current_label')}</span>
-                <span data-testid="stats-streak-current" class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                <span class="font-medium text-foreground/80">{$t('stats.streak.current_label')}</span>
+                <span data-testid="stats-streak-current" class="font-mono font-semibold text-foreground">
                   {$t('stats.streak.days', { days: formatNumber(detail.streak.current) })}
                 </span>
               </li>
               <li class="flex items-center justify-between text-xs sm:text-sm">
-                <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t('stats.streak.longest_label')}</span>
-                <span data-testid="stats-streak-longest" class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                <span class="font-medium text-foreground/80">{$t('stats.streak.longest_label')}</span>
+                <span data-testid="stats-streak-longest" class="font-mono font-semibold text-foreground">
                   {$t('stats.streak.days', { days: formatNumber(detail.streak.longest) })}
                 </span>
               </li>
@@ -386,20 +386,20 @@
           </section>
 
           <section data-testid="stats-grade" class="card-elevated p-5 rounded-lg space-y-4">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.grade.heading')}
             </h2>
             <ul class="space-y-3">
               {#each detail.grades as grade}
                 <li>
                   <div class="flex items-center justify-between text-xs sm:text-sm">
-                    <span class="font-medium text-zinc-700 dark:text-zinc-300">{$t(gradeSourceKey(grade.source))}</span>
-                    <span class="font-mono font-semibold text-zinc-950 dark:text-zinc-100">
+                    <span class="font-medium text-foreground/80">{$t(gradeSourceKey(grade.source))}</span>
+                    <span class="font-mono font-semibold text-foreground">
                       {$t('stats.grade.value', { count: formatNumber(grade.count) })}
                     </span>
                   </div>
                   {#if barWidth(grade.count, gradeMax) > 0}
-                    <div class="mt-1.5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                    <div class="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
                       <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(grade.count, gradeMax)}%"></div>
                     </div>
                   {/if}
@@ -412,33 +412,33 @@
         <!-- 学习曲线 -->
         <section data-testid="stats-curve" class="card-elevated p-5 rounded-lg space-y-4">
           <div>
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('stats.curve.heading')}
             </h2>
-            <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.curve.intro')}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('stats.curve.intro')}</p>
           </div>
           {#if detail.curve.length === 0}
-            <p class="text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.curve.empty')}</p>
+            <p class="text-xs text-muted-foreground/70">{$t('stats.curve.empty')}</p>
           {:else}
             <ul class="space-y-3">
               {#each detail.curve as point}
                 <li class="rounded-xl border border-zinc-100 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-800/40 p-3 space-y-2">
-                  <div class="text-xs font-semibold font-mono text-zinc-700 dark:text-zinc-300">{point.day}</div>
+                  <div class="text-xs font-semibold font-mono text-foreground/80">{point.day}</div>
                   <div class="flex items-center gap-3">
-                    <span class="w-16 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('stats.curve.new')}</span>
+                    <span class="w-16 shrink-0 text-xs font-medium text-muted-foreground">{$t('stats.curve.new')}</span>
                     <div class="h-2 flex-1 rounded-full bg-zinc-200/80 dark:bg-zinc-700 overflow-hidden">
                       <div class="h-full rounded-full bg-indigo-600" style="width: {barWidth(point.new, curveMax)}%"></div>
                     </div>
-                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-foreground">
                       {$t('stats.curve.value', { count: formatNumber(point.new) })}
                     </span>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="w-16 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('stats.curve.review')}</span>
+                    <span class="w-16 shrink-0 text-xs font-medium text-muted-foreground">{$t('stats.curve.review')}</span>
                     <div class="h-2 flex-1 rounded-full bg-zinc-200/80 dark:bg-zinc-700 overflow-hidden">
                       <div class="h-full rounded-full bg-emerald-600" style="width: {barWidth(point.review, curveMax)}%"></div>
                     </div>
-                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                    <span class="w-12 shrink-0 text-right font-mono text-xs font-semibold text-foreground">
                       {$t('stats.curve.value', { count: formatNumber(point.review) })}
                     </span>
                   </div>
@@ -451,17 +451,17 @@
         <!-- 卡组维度 / 标签维度 -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section data-testid="stats-deck" class="card-elevated rounded-lg overflow-hidden">
-            <div class="border-b border-zinc-100 dark:border-zinc-800 p-5">
-              <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <div class="border-b border-border p-5">
+              <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {$t('stats.deck.heading')}
               </h2>
             </div>
             {#if detail.decks.length === 0}
-              <div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.deck.empty')}</div>
+              <div class="p-8 text-center text-xs text-muted-foreground/70">{$t('stats.deck.empty')}</div>
             {:else}
               <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
-                  <thead class="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/60 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <thead class="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <tr>
                       <th class="px-5 py-3">{$t('stats.deck.col.name')}</th>
                       <th class="px-5 py-3">{$t('stats.deck.col.due')}</th>
@@ -473,11 +473,11 @@
                   <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {#each detail.decks as deck}
                       <tr>
-                        <td class="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">{deck.name}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{$t('stats.table.rate', { rate: formatPercentValue(deck.retention) })}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{formatDuration(deck.elapsed_ms)}</td>
+                        <td class="px-5 py-3 font-medium text-foreground">{deck.name}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.table.rate', { rate: formatPercentValue(deck.retention) })}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{formatDuration(deck.elapsed_ms)}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -487,20 +487,20 @@
           </section>
 
           <section data-testid="stats-tag" class="card-elevated rounded-lg overflow-hidden">
-            <div class="border-b border-zinc-100 dark:border-zinc-800 p-5">
-              <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <div class="border-b border-border p-5">
+              <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {$t('stats.tag.heading')}
               </h2>
               <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
                    在重复卡组维度（没复习过的大标签一个都不出现）。 -->
-              <p data-testid="stats-tag-scope" class="mt-2 text-xs leading-relaxed text-zinc-400 dark:text-zinc-500">{$t('stats.tag.scope')}</p>
+              <p data-testid="stats-tag-scope" class="mt-2 text-xs leading-relaxed text-muted-foreground/70">{$t('stats.tag.scope')}</p>
             </div>
             {#if detail.tags.length === 0}
-              <div class="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">{$t('stats.tag.empty')}</div>
+              <div class="p-8 text-center text-xs text-muted-foreground/70">{$t('stats.tag.empty')}</div>
             {:else}
               <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
-                  <thead class="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/60 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <thead class="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <tr>
                       <th class="px-5 py-3">{$t('stats.tag.col.tag')}</th>
                       <th class="px-5 py-3">{$t('stats.tag.col.reviews')}</th>
@@ -510,9 +510,9 @@
                   <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {#each detail.tags as tag}
                       <tr>
-                        <td class="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">{tag.tag}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
-                        <td class="px-5 py-3 font-mono text-zinc-700 dark:text-zinc-300">{$t('stats.table.rate', { rate: formatPercentValue(tag.retention) })}</td>
+                        <td class="px-5 py-3 font-medium text-foreground">{tag.tag}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
+                        <td class="px-5 py-3 font-mono text-foreground/80">{$t('stats.table.rate', { rate: formatPercentValue(tag.retention) })}</td>
                       </tr>
                     {/each}
                   </tbody>

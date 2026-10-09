@@ -32,12 +32,12 @@
 
 <div class="py-12 max-w-md mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl text-center">
-    <h1 class="mb-4 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+    <h1 class="mb-4 text-2xl font-bold tracking-tight text-foreground">
       {$t('account.verify.heading')}
     </h1>
 
     {#if status === 'checking'}
-      <p data-testid="verify-checking" class="text-sm text-zinc-600 dark:text-zinc-400">{$t('account.verify.checking')}</p>
+      <p data-testid="verify-checking" class="text-sm text-muted-foreground">{$t('account.verify.checking')}</p>
     {:else if status === 'done'}
       <p data-testid="verify-done" class="text-sm text-emerald-600 dark:text-emerald-400">{$t('account.verify.done')}</p>
     {:else}
@@ -45,7 +45,7 @@
     {/if}
 
     <div class="mt-6 text-sm">
-      <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+      <a href="/login" class="text-muted-foreground hover:text-foreground transition-colors">
         {$t('account.verify.back_login')}
       </a>
     </div>

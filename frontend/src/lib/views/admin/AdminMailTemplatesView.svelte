@@ -179,8 +179,8 @@
 
 <div class={embedded ? 'space-y-5' : 'py-10 max-w-5xl mx-auto px-4'} data-testid="admin-mail-templates">
   {#if !embedded}
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.mail.heading')}</h1>
-    <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.mail.intro')}</p>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground">{$t('admin.mail.heading')}</h1>
+    <p class="mt-2 text-sm text-muted-foreground">{$t('admin.mail.intro')}</p>
 
     <div class="mt-6">
       <AdminNav />
@@ -205,7 +205,7 @@
       <Panel class="space-y-4">
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
-            <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('admin.mail.type_label')}</span>
+            <span class="block text-sm font-medium text-foreground/80">{$t('admin.mail.type_label')}</span>
             <Select
               class="mt-1 w-full"
               testId="admin-mail-template-type"
@@ -215,7 +215,7 @@
             />
           </div>
           <div>
-            <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('admin.mail.locale_label')}</span>
+            <span class="block text-sm font-medium text-foreground/80">{$t('admin.mail.locale_label')}</span>
             <Select
               class="mt-1 w-full"
               testId="admin-mail-template-locale"
@@ -226,27 +226,27 @@
           </div>
         </div>
 
-        <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-fallback">
+        <p class="text-xs text-muted-foreground" data-testid="admin-mail-template-fallback">
           {$t('admin.mail.fallback_hint', { locale: data.site_default_locale || '—' })}
         </p>
 
-        <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-prefill">
+        <p class="text-xs text-muted-foreground" data-testid="admin-mail-template-prefill">
           {$t(currentRow ? 'admin.mail.prefill_custom' : 'admin.mail.prefill_builtin')}
         </p>
 
         {#if currentType}
           <div data-testid="admin-mail-template-vars">
-            <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('admin.mail.vars_heading')}</span>
+            <span class="block text-sm font-medium text-foreground/80">{$t('admin.mail.vars_heading')}</span>
             <ul class="mt-2 space-y-1.5">
               {#each currentType.vars as variable (variable.name)}
                 <li class="flex flex-wrap items-baseline gap-2 text-xs">
-                  <code class="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 font-mono text-zinc-800 dark:text-zinc-200"
+                  <code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground/90"
                     >{`{{${variable.name}}}`}</code
                   >
                   {#if variable.required}
                     <Badge variant="warning" testId="admin-mail-template-var-required">{variable.name}</Badge>
                   {/if}
-                  <span class="text-zinc-500 dark:text-zinc-400">{$t(variable.note_key)}</span>
+                  <span class="text-muted-foreground">{$t(variable.note_key)}</span>
                 </li>
               {/each}
             </ul>
@@ -256,7 +256,7 @@
 
       <Panel class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300" for="admin-mail-template-subject">
+          <label class="block text-sm font-medium text-foreground/80" for="admin-mail-template-subject">
             {$t('admin.mail.subject_label')}
           </label>
           <input
@@ -265,10 +265,10 @@
             bind:value={subject}
             class="field-input text-sm mt-1.5 w-full"
           />
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.mail.subject_hint')}</p>
+          <p class="mt-1 text-xs text-muted-foreground">{$t('admin.mail.subject_hint')}</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300" for="admin-mail-template-body">
+          <label class="block text-sm font-medium text-foreground/80" for="admin-mail-template-body">
             {$t('admin.mail.body_label')}
           </label>
           <textarea
@@ -279,7 +279,7 @@
             bind:value={body}
             class="field-input text-sm mt-1.5 w-full font-mono"
           ></textarea>
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.mail.body_hint')}</p>
+          <p class="mt-1 text-xs text-muted-foreground">{$t('admin.mail.body_hint')}</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
@@ -302,9 +302,9 @@
             {$t('admin.mail.restore')}
           </Button>
         </div>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.mail.restore_hint')}</p>
+        <p class="text-xs text-muted-foreground">{$t('admin.mail.restore_hint')}</p>
 
-        <p class="text-sm text-zinc-500 dark:text-zinc-400" data-testid="admin-mail-template-state">
+        <p class="text-sm text-muted-foreground" data-testid="admin-mail-template-state">
           {currentRow
             ? `${$t('admin.mail.custom_badge')} · ${$t('admin.mail.updated_at', { time: currentRow.updated_at })}`
             : $t('admin.mail.builtin_badge')}
@@ -323,26 +323,26 @@
 
       {#if preview}
         <Panel class="space-y-4" padding="md">
-          <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{$t('admin.mail.preview_heading')}</h2>
-          <p class="text-sm text-zinc-700 dark:text-zinc-300" data-testid="admin-mail-template-preview-subject">
+          <h2 class="text-sm font-semibold text-foreground">{$t('admin.mail.preview_heading')}</h2>
+          <p class="text-sm text-foreground/80" data-testid="admin-mail-template-preview-subject">
             {preview.subject}
           </p>
           <div>
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('admin.mail.preview_html')}
             </h3>
             <!-- 预览用服务端渲染并经白名单清洗的 HTML；与管理页其它地方一样，禁止把编辑器原文当 HTML 渲染。 -->
             <div
-              class="mt-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-4"
+              class="mt-2 rounded-xl border border-input bg-white p-4"
               data-testid="admin-mail-template-preview-html">{@html preview.html}</div
             >
           </div>
           <div>
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {$t('admin.mail.preview_text')}
             </h3>
             <pre
-              class="mt-2 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 p-4 text-xs text-zinc-700 dark:text-zinc-300"
+              class="mt-2 overflow-x-auto rounded-xl border border-input bg-zinc-50 dark:bg-zinc-900 p-4 text-xs text-foreground/80"
               data-testid="admin-mail-template-preview-text">{preview.text}</pre>
           </div>
         </Panel>

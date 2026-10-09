@@ -188,7 +188,7 @@
     <a
       href="/decks/{encodeURIComponent(deckId)}"
       data-testid="deck-settings-back"
-      class="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+      class="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
     >
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
       <span>{$t('deck.settings.back')}</span>
@@ -202,7 +202,7 @@
       data-testid={loadError instanceof ApiClientError && loadError.isForbidden ? 'deck-settings-forbidden' : 'deck-settings-failed'}
       class="card-elevated p-8 rounded-xl text-center"
     >
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="deck-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
@@ -210,7 +210,7 @@
   {:else if settings}
     {#if !embedded}
       <header>
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-title">
+        <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="deck-settings-title">
           {$t('deck.settings.title')}: {settings.deck_name}
         </h1>
       </header>
@@ -219,8 +219,8 @@
     {#if settings.role === 'owner'}
       <section class="card-elevated p-6 rounded-xl">
         <form onsubmit={saveInfo} data-testid="deck-info-form" class="space-y-4">
-          <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('deck.settings.info_heading')}</h2>
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <h2 class="text-lg font-semibold text-foreground">{$t('deck.settings.info_heading')}</h2>
+          <label class="block text-sm font-medium text-foreground/80">
             {$t('deck.settings.name')}
             <input
               type="text"
@@ -229,7 +229,7 @@
               class="field-input text-sm mt-1 block w-full"
             />
           </label>
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label class="block text-sm font-medium text-foreground/80">
             {$t('deck.settings.description')}
             <textarea
               data-testid="deck-info-description"
@@ -251,10 +251,10 @@
 
     <section class="card-elevated p-6 rounded-xl">
       <form onsubmit={save} data-testid="deck-settings-form" class="space-y-4">
-        <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('deck.settings.heading')}</h2>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
+        <h2 class="text-lg font-semibold text-foreground">{$t('deck.settings.heading')}</h2>
+        <p class="text-xs text-muted-foreground" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
         <div>
-          <span class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('deck.settings.preset')}</span>
+          <span class="block text-sm font-medium text-foreground/80">{$t('deck.settings.preset')}</span>
           {#if presets.length > 0}
             <Select
               class="mt-1 max-w-md"
@@ -269,7 +269,7 @@
           </p>
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label class="block text-sm font-medium text-foreground/80">
             {$t('deck.settings.new_per_day')}
             <input
               type="number"
@@ -280,7 +280,7 @@
               class="field-input text-sm mt-1 block w-full"
             />
           </label>
-          <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label class="block text-sm font-medium text-foreground/80">
             {$t('deck.settings.reviews_per_day')}
             <input
               type="number"
@@ -292,7 +292,7 @@
             />
           </label>
         </div>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('deck.settings.unlimited_hint')}</p>
+        <p class="text-xs text-muted-foreground">{$t('deck.settings.unlimited_hint')}</p>
         <div class="flex items-center gap-3">
           <Button type="submit" testId="deck-settings-submit" disabled={saving} variant="primary" size="lg">
             {saving ? $t('deck.settings.saving') : $t('deck.settings.save')}
@@ -304,23 +304,23 @@
     </section>
 
     <section class="card-elevated p-6 rounded-xl">
-      <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">{$t('deck.settings.usage_heading')}</h2>
+      <h2 class="text-lg font-semibold text-foreground mb-4">{$t('deck.settings.usage_heading')}</h2>
       <dl class="grid gap-3 sm:grid-cols-2 text-sm">
-        <div class="flex items-center justify-between rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('deck.settings.new_used')}</dt>
-          <dd class="font-medium text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-new-used">{settings.new_used}</dd>
+        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
+          <dt class="text-muted-foreground">{$t('deck.settings.new_used')}</dt>
+          <dd class="font-medium text-foreground" data-testid="deck-settings-new-used">{settings.new_used}</dd>
         </div>
-        <div class="flex items-center justify-between rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('deck.settings.new_left')}</dt>
-          <dd class="font-medium text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd>
+        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
+          <dt class="text-muted-foreground">{$t('deck.settings.new_left')}</dt>
+          <dd class="font-medium text-foreground" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd>
         </div>
-        <div class="flex items-center justify-between rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('deck.settings.review_used')}</dt>
-          <dd class="font-medium text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-review-used">{settings.review_used}</dd>
+        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
+          <dt class="text-muted-foreground">{$t('deck.settings.review_used')}</dt>
+          <dd class="font-medium text-foreground" data-testid="deck-settings-review-used">{settings.review_used}</dd>
         </div>
-        <div class="flex items-center justify-between rounded-lg bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2">
-          <dt class="text-zinc-500 dark:text-zinc-400">{$t('deck.settings.review_left')}</dt>
-          <dd class="font-medium text-zinc-900 dark:text-zinc-100" data-testid="deck-settings-review-left">{leftText(settings.review_left, settings.review_unlimited)}</dd>
+        <div class="flex items-center justify-between rounded-lg bg-surface px-3 py-2">
+          <dt class="text-muted-foreground">{$t('deck.settings.review_left')}</dt>
+          <dd class="font-medium text-foreground" data-testid="deck-settings-review-left">{leftText(settings.review_left, settings.review_unlimited)}</dd>
         </div>
       </dl>
     </section>

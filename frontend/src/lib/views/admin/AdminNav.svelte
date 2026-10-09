@@ -24,7 +24,7 @@
 </script>
 
 <nav data-testid="admin-nav" aria-label={$t('admin.nav.heading')} class="space-y-2">
-  <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.nav.heading')}</h2>
+  <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.nav.heading')}</h2>
   <!-- 等宽网格而非按内容宽度排：各 tab 文字长短不同，按内容宽度排会在窄容器里换行、
        切页时换行点随各子页容器宽度变化而跳动（用户报障形态）。网格让每个 tab 宽度固定。 -->
   <ul class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">

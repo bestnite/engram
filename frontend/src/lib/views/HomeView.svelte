@@ -91,7 +91,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <p class="text-base font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+        <p class="text-base font-medium text-foreground mb-2">
           {#if error instanceof ApiClientError && error.isUnauthorized}
             {$t('home.unauthorized')}
           {:else}
@@ -107,12 +107,12 @@
     {:else if summary}
       <div data-testid="home-data" class="space-y-6">
         <!-- 顶部操作区 -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
           <div>
-            <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <h1 class="text-2xl font-bold tracking-tight text-foreground">
               {$t('home.title')}
             </h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+            <p class="text-sm text-muted-foreground mt-1">
               {$t('shell.subtitle')}
             </p>
           </div>
@@ -133,26 +133,26 @@
         <!-- 聚合指标卡片 -->
         <div data-testid="home-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.due_count')}</div>
-            <div data-testid="home-due-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
+            <div class="text-xs font-medium text-muted-foreground">{$t('home.due_count')}</div>
+            <div data-testid="home-due-count" class="text-2xl font-bold text-foreground mt-1">
               {formatNumber(summary.due)}
             </div>
           </div>
           <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.reviews_today')}</div>
-            <div data-testid="home-reviews-today" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
+            <div class="text-xs font-medium text-muted-foreground">{$t('home.reviews_today')}</div>
+            <div data-testid="home-reviews-today" class="text-2xl font-bold text-foreground mt-1">
               {formatNumber(summary.reviews_today)}
             </div>
           </div>
           <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('home.retention')}</div>
-            <div data-testid="home-retention" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
+            <div class="text-xs font-medium text-muted-foreground">{$t('home.retention')}</div>
+            <div data-testid="home-retention" class="text-2xl font-bold text-foreground mt-1">
               {summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}
             </div>
           </div>
           <div class="card-elevated p-4 rounded-lg">
-            <div class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{$t('stats.metric_decks')}</div>
-            <div data-testid="home-decks-count" class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
+            <div class="text-xs font-medium text-muted-foreground">{$t('stats.metric_decks')}</div>
+            <div data-testid="home-decks-count" class="text-2xl font-bold text-foreground mt-1">
               {formatNumber(summary.decks)}
             </div>
           </div>
@@ -161,39 +161,39 @@
         <!-- 卡组列表区 -->
         <div class="space-y-4 pt-2">
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 class="text-lg font-semibold text-foreground">
               {$t('home.decks_title')}
             </h2>
             <a
               href="/decks"
-              class="text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+              class="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               {$t('home.view_all_decks')}
             </a>
           </div>
 
           {#if decks.length === 0}
-            <div data-testid="home-empty-decks" class="card-elevated py-8 text-center text-zinc-500 dark:text-zinc-400 rounded-lg">
+            <div data-testid="home-empty-decks" class="card-elevated py-8 text-center text-muted-foreground rounded-lg">
               <p class="text-sm">{$t('home.no_decks')}</p>
             </div>
           {:else}
             <div data-testid="home-decks-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {#each decks as deck (deck.id)}
-                <div class="card-elevated p-4 rounded-lg flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+                <div class="card-elevated p-4 rounded-lg flex flex-col justify-between hover:border-foreground/20 transition-colors">
                   <div>
                     <div class="flex items-start justify-between gap-2 mb-1">
-                      <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      <h3 class="text-sm font-semibold text-foreground">
                         {deck.name}
                       </h3>
                     </div>
                     {#if deck.description}
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 mb-2">
+                      <p class="text-xs text-muted-foreground line-clamp-2 mb-2">
                         {deck.description}
                       </p>
                     {/if}
                   </div>
-                  <div class="pt-3 border-t border-zinc-200/60 dark:border-zinc-800/60 flex items-center justify-between text-xs">
-                    <span class="text-zinc-400 dark:text-zinc-500" title={$t('home.deck_limits')}>
+                  <div class="pt-3 border-t border-border flex items-center justify-between text-xs">
+                    <span class="text-muted-foreground/70" title={$t('home.deck_limits')}>
                       {deck.new_per_day} / {deck.reviews_per_day}
                     </span>
                     <Button href="/review?deck={deck.id}" variant="primary" size="xs">

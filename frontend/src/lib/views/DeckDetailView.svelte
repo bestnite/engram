@@ -270,24 +270,24 @@
 <div class="py-10 max-w-4xl mx-auto px-4 space-y-6">
   <!-- 顶栏精炼导航与卡组信息 -->
   <div class="card-elevated p-6 sm:p-8 rounded-2xl">
-    <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-      <a href="/decks" data-testid="back-to-decks" class="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors inline-flex items-center gap-1 font-medium">
+    <div class="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+      <a href="/decks" data-testid="back-to-decks" class="hover:text-foreground transition-colors inline-flex items-center gap-1 font-medium">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         <span>{$t('decks.list_title')}</span>
       </a>
       <span>/</span>
-      <span class="text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-xs">{deck ? deck.name : `#${deckId}`}</span>
+      <span class="text-foreground/90 font-medium truncate max-w-xs">{deck ? deck.name : `#${deckId}`}</span>
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-2.5">
-          <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="deck-title">
+          <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="deck-title">
             {deck ? deck.name : $t('notes.deck_title', { id: deckId })}
           </h1>
         </div>
         {#if deck?.description}
-          <p class="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 max-w-2xl leading-relaxed">
+          <p class="text-xs sm:text-sm text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
             {deck.description}
           </p>
         {/if}
@@ -310,11 +310,11 @@
     </div>
 
     <!-- 统一 Tab 标签栏导航 -->
-    <div class="mt-6 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2">
+    <div class="mt-6 pt-2 border-t border-border flex items-center gap-2">
       <button
         type="button"
         onclick={() => activeTab = 'cards'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'cards' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'cards' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-muted-foreground hover:bg-muted'}"
       >
         {$t('deck.tab.notes', { count: total })}
       </button>
@@ -323,7 +323,7 @@
         type="button"
         data-testid="deck-sharing-link"
         onclick={() => activeTab = 'sharing'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'sharing' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'sharing' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-muted-foreground hover:bg-muted'}"
       >
         {$t('deck.sharing.title')}
       </button>
@@ -333,7 +333,7 @@
         type="button"
         data-testid="deck-settings-link"
         onclick={() => activeTab = 'settings'}
-        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}"
+        class="px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer {activeTab === 'settings' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-muted-foreground hover:bg-muted'}"
       >
         {$t('deck.settings.entry')}
       </button>
@@ -351,7 +351,7 @@
       <!-- 紧凑搜索与筛选栏 -->
       <form
         onsubmit={(event) => event.preventDefault()}
-        class="flex flex-wrap gap-2 items-center pb-4 border-b border-zinc-100 dark:border-zinc-800/80"
+        class="flex flex-wrap gap-2 items-center pb-4 border-b border-border"
         data-testid="notes-filter-form"
       >
         <input
@@ -384,7 +384,7 @@
           <button
             type="button"
             data-testid="filter-reset-btn"
-            class="text-xs px-2.5 py-1.5 rounded-xl font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            class="text-xs px-2.5 py-1.5 rounded-xl font-medium text-zinc-500 hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             onclick={handleFilterReset}
           >
             {$t('notes.filter_reset')}
@@ -396,13 +396,13 @@
       {#if canEditContent && !loading && !error && notes.length > 0}
         <div
           data-testid="notes-bulk-toolbar"
-          class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
+          class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-surface px-3 py-2 text-xs"
         >
-          <label class="flex items-center gap-1.5 font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
+          <label class="flex items-center gap-1.5 font-medium text-muted-foreground cursor-pointer select-none">
             <Checkbox testId="bulk-select-all" checked={allSelected} onCheckedChange={toggleSelectAll} label={$t('notes.select_all')} />
             {$t('notes.select_all')}
           </label>
-          <span data-testid="bulk-selected-count" class="text-zinc-400 dark:text-zinc-500">
+          <span data-testid="bulk-selected-count" class="text-muted-foreground/70">
             {$t('notes.selected_count', { count: selectedIds.length })}
           </span>
 
@@ -415,7 +415,7 @@
           />
           <Button type="button" testId="bulk-add-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('add_tags')} variant="outline" size="xs">{$t('notes.bulk_add_tags')}</Button>          <Button type="button" testId="bulk-remove-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('remove_tags')} variant="outline" size="xs">{$t('notes.bulk_remove_tags')}</Button>          <Button type="button" testId="bulk-set-tags" disabled={bulkBusy || selectedIds.length === 0} onclick={() => runBulk('set_tags')} variant="outline" size="xs">{$t('notes.bulk_set_tags')}</Button>
           {#if confirmingBulkDelete}
-            <span class="text-zinc-600 dark:text-zinc-400">{$t('notes.bulk_confirm_delete')}</span>
+            <span class="text-muted-foreground">{$t('notes.bulk_confirm_delete')}</span>
             <button type="button" data-testid="bulk-confirm-delete" disabled={bulkBusy} class="text-rose-700 dark:text-rose-400 font-semibold underline cursor-pointer" onclick={() => runBulk('delete')}>{$t(bulkBusy ? 'notes.bulk_applying' : 'notes.bulk_delete')}</button>
             <button type="button" data-testid="bulk-cancel-delete" class="underline cursor-pointer" onclick={() => confirmingBulkDelete = false}>{$t('note_edit.cancel')}</button>
           {:else}
@@ -428,7 +428,7 @@
         <p role="alert" data-testid="notes-bulk-error" class="text-xs text-rose-600 dark:text-rose-400">{$t(bulkError)}</p>
       {/if}
       {#if bulkResult}
-        <div role="status" data-testid="notes-bulk-result" class="text-xs text-zinc-700 dark:text-zinc-300">
+        <div role="status" data-testid="notes-bulk-result" class="text-xs text-foreground/80">
           <p>{$t('notes.bulk_result', { affected: bulkResult.affected, skipped: bulkResult.notFound + bulkResult.insufficientRole })}</p>
           {#if bulkResult.notFound > 0}
             <p data-testid="notes-bulk-skipped-not-found" class="text-zinc-400">{$t('notes.bulk_skipped_not-found', { count: bulkResult.notFound })}</p>
@@ -462,7 +462,7 @@
                 : 'notes-failed'}
           class="py-12 text-center space-y-3"
         >
-          <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          <p class="text-sm font-medium text-foreground">
             {#if error instanceof ApiClientError && error.isNotFound}
               {$t('notes.not_found')}
             {:else if error instanceof ApiClientError && error.isForbidden}
@@ -479,7 +479,7 @@
           </Button>
         </div>
       {:else if notes.length === 0}
-        <div data-testid="notes-empty" class="py-16 text-center text-zinc-500 dark:text-zinc-400">
+        <div data-testid="notes-empty" class="py-16 text-center text-muted-foreground">
           <p class="text-sm font-medium">
             {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
           </p>
@@ -488,7 +488,7 @@
         <!-- 扁平化独立卡片项：消除四层嵌套与大色块包裹 -->
         <div data-testid="notes-list" class="space-y-3">
           {#each notes as note (note.id)}
-            <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors space-y-2.5">
+            <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-border bg-white dark:bg-zinc-900/40 hover:border-foreground/20 transition-colors space-y-2.5">
               <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
                 <div class="flex items-center gap-2">
                   {#if canEditContent}
@@ -499,13 +499,13 @@
                       label={$t('notes.select_one')}
                     />
                   {/if}
-                  <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
+                  <span class="font-mono font-medium text-muted-foreground">#{note.id}</span>
                   <Badge class="font-semibold">{kindLabel(note.kind, $cardTypes, $t)}</Badge>
                   {#if note.suspended}
                     <Badge testId={`note-suspended-${note.id}`}>{$t('notes.suspended')}</Badge>
                   {/if}
                   {#if note.external_ref}
-                    <span class="text-zinc-400 dark:text-zinc-500 font-mono text-xs" title="External Ref">
+                    <span class="text-muted-foreground/70 font-mono text-xs" title="External Ref">
                       [{note.external_ref}]
                     </span>
                   {/if}
@@ -518,7 +518,7 @@
                   {#if canEditContent}
                     <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
                   {/if}
-                  <button data-testid="toggle-suspend-{note.id}" type="button" disabled={suspendingNoteId === note.id} class="text-zinc-600 dark:text-zinc-300 hover:underline disabled:opacity-50 cursor-pointer" onclick={() => toggleSuspended(note)}>{$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}</button>
+                  <button data-testid="toggle-suspend-{note.id}" type="button" disabled={suspendingNoteId === note.id} class="text-muted-foreground hover:underline disabled:opacity-50 cursor-pointer" onclick={() => toggleSuspended(note)}>{$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}</button>
                   {#if canEditContent}
                     {#if confirmingDeleteId === note.id}
                       <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
@@ -535,10 +535,10 @@
               <div class="space-y-1.5 text-xs" data-testid={`note-fields-${note.id}`}>
                 {#each Object.entries(note.fields) as [fieldName, fieldValue] (fieldName)}
                   <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
-                    <span class="font-semibold text-zinc-500 dark:text-zinc-400 sm:w-20 shrink-0 capitalize">
+                    <span class="font-semibold text-muted-foreground sm:w-20 shrink-0 capitalize">
                       {fieldName}:
                     </span>
-                    <span class="font-mono text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words flex-1 leading-relaxed">
+                    <span class="font-mono text-foreground/90 whitespace-pre-wrap break-words flex-1 leading-relaxed">
                       {formatFieldValue(fieldValue)}
                     </span>
                   </div>
@@ -559,10 +559,10 @@
 
         <!-- 分页栏 -->
         {#if totalPages > 1}
-          <div data-testid="notes-pagination" class="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+          <div data-testid="notes-pagination" class="flex items-center justify-between pt-4 border-t border-border text-xs">
             <Button testId="notes-prev-page" type="button" disabled={page <= 1} onclick={handlePrevPage} variant="outline" size="sm">
               {$t('notes.prev_page')}
-            </Button>            <span class="text-zinc-500 dark:text-zinc-400" data-testid="notes-page-info">
+            </Button>            <span class="text-muted-foreground" data-testid="notes-page-info">
               {$t('notes.page_info', { page, totalPages })}
             </span>
             <Button testId="notes-next-page" type="button" disabled={page >= totalPages} onclick={handleNextPage} variant="outline" size="sm">
@@ -582,7 +582,7 @@
     title={$t('package.export.heading')}
     testId="deck-export-dialog"
   >
-      <div class="space-y-3 text-xs text-zinc-700 dark:text-zinc-300">
+      <div class="space-y-3 text-xs text-foreground/80">
         <label class="flex items-center gap-2 cursor-pointer">
           <Checkbox bind:checked={includeMedia} label={$t('package.export.include_media')} />
           <span>{$t('package.export.include_media')}</span>
@@ -604,7 +604,7 @@
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
-        <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer">
+        <button type="button" onclick={() => showExportModal = false} class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-input hover:bg-muted cursor-pointer">
           {$t('note_edit.cancel')}
         </button>
         <Button type="button" testId="deck-package-export" disabled={exporting} onclick={exportPackage} variant="primary" size="sm">

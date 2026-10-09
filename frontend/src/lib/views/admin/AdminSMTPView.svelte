@@ -126,8 +126,8 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-smtp-title">{$t('admin.smtp.heading')}</h1>
-    <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{$t('admin.smtp.intro')}</p>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-smtp-title">{$t('admin.smtp.heading')}</h1>
+    <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.smtp.intro')}</p>
   </header>
 
   {#if notice}<div data-testid="admin-smtp-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -137,31 +137,31 @@
     <Skeleton testId="admin-smtp-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-smtp-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-smtp-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     <form onsubmit={save} data-testid="admin-smtp-form" class="card-elevated grid gap-3 rounded-xl p-5 sm:grid-cols-2">
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.host')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.host')}</span>
         <input data-testid="admin-smtp-host" bind:value={host} class="field-input text-sm mt-1.5 w-full" />
-        <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.settings.source_label')}: {sourceLabel(view.host_source)}</span>
+        <span class="mt-0.5 block text-xs text-muted-foreground/70">{$t('admin.settings.source_label')}: {sourceLabel(view.host_source)}</span>
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.port')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.port')}</span>
         <input data-testid="admin-smtp-port" bind:value={port} inputmode="numeric" class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.username')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.username')}</span>
         <input data-testid="admin-smtp-username" bind:value={username} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.from')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.from')}</span>
         <input data-testid="admin-smtp-from" bind:value={from} class="field-input text-sm mt-1.5 w-full" />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.tls_mode')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.tls_mode')}</span>
         <Select
           class="mt-1.5"
           bind:value={tlsMode}
@@ -170,9 +170,9 @@
         />
       </label>
       <label class="block">
-        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.password')}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.password')}</span>
         <input type="password" data-testid="admin-smtp-password" bind:value={password} placeholder={configuredLabel(view.password_configured)} class="field-input text-sm mt-1.5 w-full" />
-        <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.smtp.password.hint')}</span>
+        <span class="mt-0.5 block text-xs text-muted-foreground/70">{$t('admin.smtp.password.hint')}</span>
       </label>
       <div class="flex gap-3 sm:col-span-2">
         <Button type="submit" testId="admin-smtp-save" disabled={saving} variant="primary" size="lg">{$t('admin.smtp.save')}</Button>
@@ -193,15 +193,15 @@
     {/if}
 
     <section class="card-elevated space-y-3 rounded-xl p-5" data-testid="admin-smtp-outbox">
-      <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.heading')}</h2>
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('admin.smtp.outbox.heading')}</h2>
       <dl class="grid gap-2 sm:grid-cols-2">
-        <div class="flex justify-between text-sm"><dt class="text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.configured')}</dt><dd class="font-medium text-zinc-900 dark:text-zinc-100">{configuredLabel(view.configured)}</dd></div>
-        <div class="flex justify-between text-sm"><dt class="text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.pending')}</dt><dd class="font-medium text-zinc-900 dark:text-zinc-100">{view.outbox.pending}</dd></div>
-        <div class="flex justify-between text-sm"><dt class="text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.failed')}</dt><dd class="font-medium text-zinc-900 dark:text-zinc-100">{view.outbox.failed}</dd></div>
-        <div class="flex justify-between text-sm"><dt class="text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.attempts')}</dt><dd class="font-medium text-zinc-900 dark:text-zinc-100">{view.outbox.last_attempts}</dd></div>
+        <div class="flex justify-between text-sm"><dt class="text-muted-foreground">{$t('admin.smtp.outbox.configured')}</dt><dd class="font-medium text-foreground">{configuredLabel(view.configured)}</dd></div>
+        <div class="flex justify-between text-sm"><dt class="text-muted-foreground">{$t('admin.smtp.outbox.pending')}</dt><dd class="font-medium text-foreground">{view.outbox.pending}</dd></div>
+        <div class="flex justify-between text-sm"><dt class="text-muted-foreground">{$t('admin.smtp.outbox.failed')}</dt><dd class="font-medium text-foreground">{view.outbox.failed}</dd></div>
+        <div class="flex justify-between text-sm"><dt class="text-muted-foreground">{$t('admin.smtp.outbox.attempts')}</dt><dd class="font-medium text-foreground">{view.outbox.last_attempts}</dd></div>
       </dl>
-      <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('admin.smtp.outbox.last_error')}: {view.outbox.last_error || $t('admin.smtp.outbox.no_error')}</p>
-      <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('admin.smtp.admin_notify.label')}: {configuredLabel(view.admin_notify_ready)}</p>
+      <p class="text-xs text-muted-foreground">{$t('admin.smtp.outbox.last_error')}: {view.outbox.last_error || $t('admin.smtp.outbox.no_error')}</p>
+      <p class="text-sm text-muted-foreground">{$t('admin.smtp.admin_notify.label')}: {configuredLabel(view.admin_notify_ready)}</p>
     </section>
   {/if}
 
@@ -209,8 +209,8 @@
        配好发信通道之后，紧接着就是「发出去的信长什么样」。 -->
   <section class="space-y-3" data-testid="admin-smtp-templates">
     <div>
-      <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('admin.mail.heading')}</h2>
-      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.mail.intro')}</p>
+      <h2 class="text-lg font-semibold tracking-tight text-foreground">{$t('admin.mail.heading')}</h2>
+      <p class="mt-1 text-sm text-muted-foreground">{$t('admin.mail.intro')}</p>
     </div>
     <AdminMailTemplatesView embedded />
   </section>

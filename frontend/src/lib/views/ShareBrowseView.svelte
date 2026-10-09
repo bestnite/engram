@@ -89,11 +89,11 @@
 
 <div class="py-10 max-w-4xl mx-auto px-4">
   <div class="mb-6">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground">
       {$t('share.browse.heading')}
     </h1>
     {#if share}
-      <p data-testid="share-deck-name" class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{share.deck_name}</p>
+      <p data-testid="share-deck-name" class="mt-1 text-sm text-muted-foreground">{share.deck_name}</p>
     {/if}
   </div>
 
@@ -108,10 +108,10 @@
     </div>
   {:else if status === 'password'}
     <div class="card-elevated p-6 rounded-xl max-w-md">
-      <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{$t('share.password.intro')}</p>
+      <p class="mb-4 text-sm text-muted-foreground">{$t('share.password.intro')}</p>
       <form onsubmit={handleUnlock} class="space-y-4">
         <div>
-          <label for="share-password" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label for="share-password" class="block text-sm font-medium text-foreground/80 mb-1.5">
             {$t('share.password.label')}
           </label>
           <input
@@ -136,19 +136,19 @@
       </form>
     </div>
   {:else if share}
-    <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('share.browse.intro')}</p>
+    <p class="mb-6 text-sm text-muted-foreground">{$t('share.browse.intro')}</p>
 
     {#if share.notes.length === 0}
-      <p data-testid="share-empty" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('share.browse.empty')}</p>
+      <p data-testid="share-empty" class="text-sm text-muted-foreground">{$t('share.browse.empty')}</p>
     {:else}
       <ul class="space-y-4">
         {#each share.notes as note, i}
           <li data-testid="share-note" class="card-elevated p-5 rounded-xl">
-            <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{$t('share.browse.front')}</div>
-            <div class="mt-2 text-base text-zinc-950 dark:text-zinc-100 leading-relaxed">{@html note.front_html}</div>
-            <hr class="my-4 border-zinc-200 dark:border-zinc-800" />
-            <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{$t('share.browse.back')}</div>
-            <div class="mt-2 text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">{@html note.back_html}</div>
+            <div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{$t('share.browse.front')}</div>
+            <div class="mt-2 text-base text-foreground leading-relaxed">{@html note.front_html}</div>
+            <hr class="my-4 border-border" />
+            <div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{$t('share.browse.back')}</div>
+            <div class="mt-2 text-base text-foreground/80 leading-relaxed">{@html note.back_html}</div>
             <span class="sr-only">{i + 1}</span>
           </li>
         {/each}
@@ -163,7 +163,7 @@
             <a
               data-testid="share-open-deck"
               href={`/decks/${joinedDeckId}`}
-              class="mt-2 inline-block text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+              class="mt-2 inline-block text-muted-foreground hover:text-foreground transition-colors"
             >
               {$t('share.browse.open_deck')}
             </a>
@@ -177,7 +177,7 @@
           {/if}
         {/if}
       {:else}
-        <a href="/login" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <a href="/login" class="text-muted-foreground hover:text-foreground transition-colors">
           {$t('share.browse.login')}
         </a>
       {/if}

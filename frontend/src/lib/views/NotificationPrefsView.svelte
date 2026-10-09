@@ -125,7 +125,7 @@
   <a
     href="/settings"
     data-testid="notifications-back"
-    class="inline-block text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+    class="inline-block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
   >
     {$t('nav.settings')}
   </a>
@@ -134,17 +134,17 @@
     <Skeleton testId="notifications-loading" label={$t('common.loading')} />
   {:else if loadError}
     <div data-testid="notifications-failed" class="card-elevated p-8 rounded-xl text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="notifications-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
     </div>
   {:else if data}
     <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="notifications-title">
+      <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="notifications-title">
         {$t('settings.notifications.heading')}
       </h1>
-      <p class="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.notifications.intro')}</p>
+      <p class="text-sm text-muted-foreground leading-relaxed">{$t('settings.notifications.intro')}</p>
     </header>
 
     {#if actionError}
@@ -161,7 +161,7 @@
     <form onsubmit={save} class="space-y-6">
       {#each data.groups as group (group.class)}
         <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="notifications-group-{group.class}">
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h2 class="text-lg font-bold tracking-tight text-foreground">
             {$t('settings.notifications.class.' + group.class + '.heading')}
           </h2>
           <ul class="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -185,9 +185,9 @@
                   />
                 {/if}
                 <div class="space-y-0.5">
-                  <span class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{$t('settings.notifications.type.' + item.type)}</span>
+                  <span class="text-sm font-semibold text-foreground">{$t('settings.notifications.type.' + item.type)}</span>
                   {#if item.locked}
-                    <p class="text-xs text-zinc-400 dark:text-zinc-500">{$t('settings.notifications.locked')}</p>
+                    <p class="text-xs text-muted-foreground/70">{$t('settings.notifications.locked')}</p>
                   {/if}
                 </div>
               </li>
@@ -197,11 +197,11 @@
       {/each}
 
       <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="notifications-reminder-section">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <h2 class="text-lg font-bold tracking-tight text-foreground">
           {$t('settings.notifications.reminder.heading')}
         </h2>
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.notifications.reminder.label')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.notifications.reminder.label')}</span>
           <Select
             class="mt-1.5 py-2.5"
             bind:value={reminderHour}
@@ -211,7 +211,7 @@
               ...hours.map((hour) => ({ value: String(hour), label: `${hour}:00` })),
             ]}
           />
-          <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+          <p class="mt-1 text-xs text-muted-foreground/70">
             {$t('settings.notifications.reminder.hint', { tz: data.timezone })}
           </p>
         </label>

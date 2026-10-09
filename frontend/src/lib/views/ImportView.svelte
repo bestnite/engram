@@ -152,7 +152,7 @@
 <div class="py-10 max-w-4xl mx-auto px-4">
   <section class="card-elevated p-6 sm:p-8 rounded-xl">
     <h1 class="text-2xl font-bold tracking-tight">{$t('package.import.title')}</h1>
-    <p class="mt-2 mb-6 text-sm text-zinc-600 dark:text-zinc-400">{$t('package.import.intro')}</p>
+    <p class="mt-2 mb-6 text-sm text-muted-foreground">{$t('package.import.intro')}</p>
     <form onsubmit={submit} class="space-y-5">
       <label class="block text-sm font-medium">{$t('package.source.label')}
         <Select
@@ -180,7 +180,7 @@
             value={packageUrl}
             oninput={(e) => packageUrl = e.currentTarget.value}
           />
-          <span class="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{$t('package.import.url_help')}</span>
+          <span class="mt-1 block text-xs text-muted-foreground">{$t('package.import.url_help')}</span>
         </label>
       {/if}
       <label class="block text-sm font-medium">{$t('package.import.target')}
@@ -227,7 +227,7 @@
     <section class="card-elevated mt-6 p-6 rounded-xl" aria-live="polite">
       <h2 class="text-lg font-semibold">{$t('package.report.heading')}</h2>
       <dl class="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-2"><dt class="text-zinc-600 dark:text-zinc-400">{$t(key)}</dt><dd class="font-medium">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
+        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border pb-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
       {#if report.errors.length}<h3 class="mt-5 font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
       {#if report.dry_run}<p class="mt-4 text-sm text-amber-700 dark:text-amber-400">{$t('package.report.preview_notice')}</p>{/if}

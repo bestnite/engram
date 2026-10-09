@@ -175,7 +175,7 @@
   <a
     href="/settings"
     data-testid="totp-back"
-    class="inline-block text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+    class="inline-block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
   >
     {$t('nav.settings')}
   </a>
@@ -184,17 +184,17 @@
     <Skeleton testId="totp-loading" label={$t('common.loading')} />
   {:else if loadError}
     <div data-testid="totp-failed" class="card-elevated p-8 rounded-xl text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="totp-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">
         {$t('common.retry')}
       </Button>
     </div>
   {:else if status}
     <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="totp-title">
+      <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="totp-title">
         {$t('settings.totp.heading')}
       </h1>
-      <p class="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.intro')}</p>
+      <p class="text-sm text-muted-foreground leading-relaxed">{$t('settings.totp.intro')}</p>
       <Badge testId="totp-status" class="px-3 py-1 font-semibold">
         {status.enabled ? $t('settings.totp.status.enabled') : $t('settings.totp.status.disabled')}
       </Badge>
@@ -213,7 +213,7 @@
 
     {#if !status.enabled}
       <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="totp-begin-section">
-        <p class="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{$t('settings.totp.begin.hint')}</p>
+        <p class="text-sm text-muted-foreground leading-relaxed">{$t('settings.totp.begin.hint')}</p>
         {#if status.pending && !secret}
           <p data-testid="totp-pending-hint" class="text-xs text-amber-700 dark:text-amber-400">{$t('settings.totp.begin.restart_hint')}</p>
         {/if}
@@ -225,21 +225,21 @@
 
     {#if secret}
       <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="totp-pending">
-        <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.pending.heading')}</h2>
-        <div class="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 p-4 space-y-3">
+        <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.totp.pending.heading')}</h2>
+        <div class="rounded-xl border border-border bg-zinc-50/70 dark:bg-zinc-800/50 p-4 space-y-3">
           <div>
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.pending.secret_label')}</span>
-            <p data-testid="totp-secret" class="mt-1 font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100 break-all select-all">{secret}</p>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.pending.secret_label')}</span>
+            <p data-testid="totp-secret" class="mt-1 font-mono text-sm font-semibold text-foreground break-all select-all">{secret}</p>
           </div>
           <div>
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.pending.otpauth_label')}</span>
-            <p data-testid="totp-otpauth" class="mt-1 font-mono text-xs text-zinc-600 dark:text-zinc-400 break-all select-all">{otpauthUrl}</p>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.pending.otpauth_label')}</span>
+            <p data-testid="totp-otpauth" class="mt-1 font-mono text-xs text-muted-foreground break-all select-all">{otpauthUrl}</p>
           </div>
         </div>
         <form onsubmit={confirm} class="space-y-4" data-testid="totp-confirm-form">
-          <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('settings.totp.pending.confirm_hint')}</p>
+          <p class="text-sm text-muted-foreground">{$t('settings.totp.pending.confirm_hint')}</p>
           <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.pending.code_label')}</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.pending.code_label')}</span>
             <input
               data-testid="totp-confirm-code"
               type="text"
@@ -260,12 +260,12 @@
     {#if status.enabled}
       <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="totp-disable">
         <div>
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.disable.heading')}</h2>
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{$t('settings.totp.disable.hint')}</p>
+          <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.totp.disable.heading')}</h2>
+          <p class="mt-1 text-xs text-muted-foreground">{$t('settings.totp.disable.hint')}</p>
         </div>
         <form onsubmit={disable} class="space-y-4">
           <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.disable.password_label')}</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.disable.password_label')}</span>
             <input
               data-testid="totp-disable-password"
               type="password"
@@ -283,8 +283,8 @@
 
       <section class="card-elevated p-6 rounded-xl space-y-4" data-testid="totp-recovery">
         <div>
-          <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('settings.totp.recovery.heading')}</h2>
-          <p data-testid="totp-recovery-remaining" class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <h2 class="text-lg font-bold tracking-tight text-foreground">{$t('settings.totp.recovery.heading')}</h2>
+          <p data-testid="totp-recovery-remaining" class="mt-1 text-xs text-muted-foreground">
             {$t('settings.totp.recovery.remaining', { count: status.recovery_remaining })}
           </p>
         </div>
@@ -293,17 +293,17 @@
         </div>
         {#if recoveryCodes.length > 0}
           <div class="space-y-2">
-            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.recovery.list_label')}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.recovery.list_label')}</p>
             <ul data-testid="totp-recovery-codes" class="grid grid-cols-2 gap-2 font-mono text-xs">
               {#each recoveryCodes as code}
-                <li class="rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-2 text-center text-zinc-800 dark:text-zinc-200 select-all">{code}</li>
+                <li class="rounded-lg border border-border bg-surface p-2 text-center text-foreground/90 select-all">{code}</li>
               {/each}
             </ul>
           </div>
         {/if}
         <form onsubmit={regenerate} class="space-y-4 pt-2">
           <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('settings.totp.recovery.password_label')}</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('settings.totp.recovery.password_label')}</span>
             <input
               data-testid="totp-recovery-password"
               type="password"

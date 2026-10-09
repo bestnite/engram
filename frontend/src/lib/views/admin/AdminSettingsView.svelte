@@ -155,8 +155,8 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-settings-title">{$t('admin.settings.heading')}</h1>
-    <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{$t('admin.settings.intro')}</p>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-settings-title">{$t('admin.settings.heading')}</h1>
+    <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.settings.intro')}</p>
   </header>
 
   {#if notice}<div data-testid="admin-settings-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -166,24 +166,24 @@
     <Skeleton testId="admin-settings-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-settings-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-settings-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     <form onsubmit={save} class="space-y-6" data-testid="admin-settings-form">
       {#each data.sections as section (section.name)}
         <section data-testid="admin-settings-section-{section.name}" class="card-elevated space-y-4 rounded-xl p-5">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{sectionLabel(section.name)}</h2>
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sectionLabel(section.name)}</h2>
           <div class="space-y-4">
             {#each section.rows as row (row.key)}
               <div data-testid="admin-settings-row-{row.key}" class="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:items-center">
                 <div>
-                  <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{labelFor(row.key)}</p>
-                  {#if hintFor(row.key)}<p class="text-xs text-zinc-400 dark:text-zinc-500">{hintFor(row.key)}</p>{/if}
+                  <p class="text-sm font-medium text-foreground/80">{labelFor(row.key)}</p>
+                  {#if hintFor(row.key)}<p class="text-xs text-muted-foreground/70">{hintFor(row.key)}</p>{/if}
                 </div>
                 <div>
                   {#if !row.editable}
-                    <p class="text-sm font-mono text-zinc-600 dark:text-zinc-400">{displayValue(row)}</p>
+                    <p class="text-sm font-mono text-muted-foreground">{displayValue(row)}</p>
                   {:else if row.sensitive}
                     <input
                       type="password"
@@ -199,7 +199,7 @@
                       class="field-input text-sm w-full"
                     />
                   {/if}
-                  <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{$t('admin.settings.source_label')}: {sourceLabel(row.source)}</p>
+                  <p class="mt-0.5 text-xs text-muted-foreground/70">{$t('admin.settings.source_label')}: {sourceLabel(row.source)}</p>
                 </div>
               </div>
             {/each}

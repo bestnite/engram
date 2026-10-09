@@ -65,7 +65,7 @@
       klass
     )}
   >
-    <span class={cn('truncate text-left', !selected && 'text-zinc-400 dark:text-zinc-500')}>
+    <span class={cn('truncate text-left', !selected && 'text-muted-foreground/70')}>
       {selected?.label ?? placeholder}
     </span>
     <ChevronDown class="size-4 shrink-0 opacity-60" aria-hidden="true" />

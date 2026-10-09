@@ -84,10 +84,10 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-api-keys-title">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-api-keys-title">
       {$t('admin.keys.heading')}
     </h1>
-    <p class="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{$t('admin.keys.intro')}</p>
+    <p class="text-sm leading-relaxed text-muted-foreground">{$t('admin.keys.intro')}</p>
   </header>
 
   {#if notice}<div data-testid="admin-api-keys-notice" role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">{$t(notice)}</div>{/if}
@@ -97,13 +97,13 @@
     <Skeleton testId="admin-api-keys-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-api-keys-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-api-keys-retry" onclick={() => load(1)} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
     {@const view = data}
     {#if view.keys.length === 0}
-      <p data-testid="admin-api-keys-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.keys.empty')}</p>
+      <p data-testid="admin-api-keys-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('admin.keys.empty')}</p>
     {:else}
       <div class="card-elevated overflow-x-auto rounded-xl">
         <table class="w-full text-left text-sm">
@@ -122,13 +122,13 @@
           <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
             {#each view.keys as k (k.id)}
               <tr data-testid="admin-api-keys-row-{k.id}">
-                <td class="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{ownerLabel(k)}</td>
-                <td class="px-4 py-2.5 text-zinc-900 dark:text-zinc-100">{k.name}</td>
-                <td class="px-4 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">{k.prefix}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{k.scopes.join(', ')}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{k.last_used_at || $t('admin.keys.last_used_never')}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{k.expires_at || $t('admin.keys.expires_never')}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{stateLabel(k.state)}</td>
+                <td class="px-4 py-2.5 text-foreground/80">{ownerLabel(k)}</td>
+                <td class="px-4 py-2.5 text-foreground">{k.name}</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{k.prefix}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{k.scopes.join(', ')}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{k.last_used_at || $t('admin.keys.last_used_never')}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{k.expires_at || $t('admin.keys.expires_never')}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{stateLabel(k.state)}</td>
                 <td class="px-4 py-2.5">
                   {#if k.state === 'active'}
                     <button type="button" data-testid="admin-api-keys-revoke-{k.id}" onclick={() => revoke(k)} class="cursor-pointer rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 dark:border-rose-900">{$t('admin.keys.revoke')}</button>
@@ -142,7 +142,7 @@
 
       <div class="flex items-center justify-between" data-testid="admin-api-keys-pager">
         <button type="button" data-testid="admin-api-keys-prev" disabled={view.page <= 1} onclick={() => load(view.page - 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.prev')}</button>
-        <span class="text-sm text-zinc-500 dark:text-zinc-400">{view.page} / {view.pages}</span>
+        <span class="text-sm text-muted-foreground">{view.page} / {view.pages}</span>
         <button type="button" data-testid="admin-api-keys-next" disabled={view.page >= view.pages} onclick={() => load(view.page + 1)} class="btn-press cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-700">{$t('admin.common.next')}</button>
       </div>
     {/if}

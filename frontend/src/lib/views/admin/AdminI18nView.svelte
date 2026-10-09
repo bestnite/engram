@@ -52,14 +52,14 @@
   <AdminNav />
 
   <header class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="admin-i18n-title">{$t('admin.i18n.heading')}</h1>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="admin-i18n-title">{$t('admin.i18n.heading')}</h1>
   </header>
 
   {#if loading}
     <Skeleton testId="admin-i18n-loading" label={$t('common.loading')} lines={3} />
   {:else if loadError}
     <div data-testid="admin-i18n-failed" class="card-elevated rounded-xl p-8 text-center">
-      <p role="alert" class="font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="admin-i18n-retry" onclick={() => load()} variant="primary" size="lg" class="mt-4">{$t('common.retry')}</Button>
     </div>
   {:else if data}
@@ -71,7 +71,7 @@
     {/if}
 
     {#if view.locales.length === 0}
-      <p data-testid="admin-i18n-empty" class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{$t('admin.i18n.empty')}</p>
+      <p data-testid="admin-i18n-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('admin.i18n.empty')}</p>
     {:else}
       <div class="card-elevated overflow-x-auto rounded-xl">
         <table class="w-full text-left text-sm">
@@ -86,10 +86,10 @@
           <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
             {#each view.locales as cov (cov.code)}
               <tr data-testid="admin-i18n-row-{cov.code}">
-                <td class="px-4 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{cov.code}</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{$t('admin.i18n.percent', { percent: cov.percent })} ({$t('admin.i18n.counts', { present: cov.present, total: cov.total })})</td>
-                <td class="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{cov.complete ? $t('admin.i18n.status.complete') : $t('admin.i18n.status.incomplete', { count: cov.missing.length })}</td>
-                <td class="px-4 py-2.5 font-mono text-xs text-zinc-500 dark:text-zinc-500">{cov.missing.join(', ')}</td>
+                <td class="px-4 py-2.5 font-medium text-foreground">{cov.code}</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{$t('admin.i18n.percent', { percent: cov.percent })} ({$t('admin.i18n.counts', { present: cov.present, total: cov.total })})</td>
+                <td class="px-4 py-2.5 text-muted-foreground">{cov.complete ? $t('admin.i18n.status.complete') : $t('admin.i18n.status.incomplete', { count: cov.missing.length })}</td>
+                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{cov.missing.join(', ')}</td>
               </tr>
             {/each}
           </tbody>

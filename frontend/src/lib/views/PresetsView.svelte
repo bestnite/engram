@@ -413,7 +413,7 @@
 
 <div class="mx-auto max-w-4xl space-y-6 px-4 py-10" data-testid="presets-view">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid="presets-heading">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground" data-testid="presets-heading">
       {$t('presets.heading')}
     </h1>
     <Button type="button" testId="presets-new" onclick={openCreate} variant="primary" size="lg">
@@ -425,7 +425,7 @@
     <Skeleton testId="presets-loading" label={$t('common.loading')} />
   {:else if loadError}
     <div data-testid="presets-failed" class="card-elevated p-8 rounded-xl text-center">
-      <p role="alert" class="text-base font-medium text-zinc-900 dark:text-zinc-100">{$t(loadErrorKey())}</p>
+      <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="presets-retry" onclick={load} variant="primary" size="lg" class="mt-4">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
@@ -435,19 +435,19 @@
     </div>
   {:else if data && presets.length === 0}
     <div data-testid="presets-empty" class="card-elevated p-12 rounded-xl text-center">
-      <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{$t('presets.empty')}</p>
+      <p class="text-sm font-medium text-muted-foreground">{$t('presets.empty')}</p>
     </div>
   {:else if data}
     <div class="space-y-6" data-testid="presets-list">
       {#each presets as p (p.id)}
         <article data-testid={`preset-${p.id}`} class="card-elevated rounded-xl p-6 space-y-5">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4">
             <div>
-              <h2 class="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100" data-testid={`preset-${p.id}-name`}>
+              <h2 class="text-lg font-bold tracking-tight text-foreground" data-testid={`preset-${p.id}-name`}>
                 {presetDisplayName(p.name, p.is_default, $t)}
               </h2>
               <div class="flex items-center gap-2 text-xs pt-1.5">
-                <span class="text-zinc-500 dark:text-zinc-400">{$t('presets.used_by_decks')}</span>
+                <span class="text-muted-foreground">{$t('presets.used_by_decks')}</span>
                 {#if getPresetDecks(p.id).length > 0}
                   <div class="flex flex-wrap gap-1.5">
                     {#each getPresetDecks(p.id) as d (d.id)}
@@ -457,7 +457,7 @@
                     {/each}
                   </div>
                 {:else}
-                  <span class="text-zinc-400 dark:text-zinc-500 font-normal">{$t('presets.unused')}</span>
+                  <span class="text-muted-foreground/70 font-normal">{$t('presets.unused')}</span>
                 {/if}
               </div>
             </div>
@@ -466,7 +466,7 @@
                 type="button"
                 data-testid={`preset-${p.id}-edit`}
                 onclick={() => openEdit(p)}
-                class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-input hover:bg-muted transition-colors cursor-pointer"
               >
                 {$t('presets.edit.button')}
               </button>
@@ -478,7 +478,7 @@
                 data-testid={`preset-${p.id}-revert`}
                 disabled={busyId === p.id}
                 onclick={() => revertWeights(p)}
-                class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-60 transition-colors cursor-pointer"
+                class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-input hover:bg-muted disabled:opacity-60 transition-colors cursor-pointer"
               >
                 {$t('presets.revert.button')}
               </button>
@@ -491,40 +491,40 @@
           </div>
 
           <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div class="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4">
-              <dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.retention_label')}</dt>
+            <div class="rounded-xl border border-border p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.retention_label')}</dt>
               <dd class="mt-1 text-base font-bold font-mono" data-testid={`preset-${p.id}-retention`}>{p.desired_retention.toFixed(2)}</dd>
             </div>
-            <div class="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4">
-              <dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.max_interval_label')}</dt>
+            <div class="rounded-xl border border-border p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.max_interval_label')}</dt>
               <dd class="mt-1 text-base font-bold font-mono" data-testid={`preset-${p.id}-max-interval`}>{p.maximum_interval_days}</dd>
             </div>
-            <div class="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4">
-              <dt class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.fuzz_label')}</dt>
+            <div class="rounded-xl border border-border p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.fuzz_label')}</dt>
               <dd class="mt-1 text-base font-bold font-mono" data-testid={`preset-${p.id}-fuzz`}>{$t(fuzzValueKey(p))}</dd>
             </div>
           </dl>
 
-          <section class="rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-5 space-y-2">
+          <section class="rounded-xl border border-border p-5 space-y-2">
             <div class="flex items-center justify-between">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.weights.heading')}</h3>
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.weights.heading')}</h3>
               <Badge testId={`preset-${p.id}-weights-source`}>{$t(weightsSourceKey(p))}</Badge>
             </div>
             {#if p.weights_optimized_at}
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.weights.optimized_at', { time: p.weights_optimized_at })}</p>
+              <p class="text-xs text-muted-foreground">{$t('presets.weights.optimized_at', { time: p.weights_optimized_at })}</p>
             {/if}
             {#if p.weights_review_count !== null}
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.weights.review_count', { count: p.weights_review_count })}</p>
+              <p class="text-xs text-muted-foreground">{$t('presets.weights.review_count', { count: p.weights_review_count })}</p>
             {/if}
             {#if p.weights_raw}
               <details>
                 <summary class="cursor-pointer text-xs font-medium text-indigo-600 dark:text-indigo-400">{$t('presets.weights.raw_label')}</summary>
-                <code class="mt-2 block max-h-32 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 font-mono text-[11px] break-all" data-testid={`preset-${p.id}-weights-raw`}>{p.weights_raw}</code>
+                <code class="mt-2 block max-h-32 overflow-auto rounded-lg border border-input p-3 font-mono text-[11px] break-all" data-testid={`preset-${p.id}-weights-raw`}>{p.weights_raw}</code>
               </details>
             {/if}
           </section>
 
-          <div class="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <div class="space-y-1 text-xs text-muted-foreground">
             <p data-testid={`preset-${p.id}-reviews`}>{$t('presets.reviews.available', { count: p.gate.reviews })}</p>
             <p>{$t('presets.reviews.threshold', { min: p.gate.min })}</p>
             <p>{$t('presets.reschedule.note')}</p>
@@ -543,30 +543,30 @@
           {/if}
 
           {#if p.job}
-            <section class="rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-4 space-y-2" data-testid={`preset-${p.id}-job`}>
+            <section class="rounded-xl border border-border p-4 space-y-2" data-testid={`preset-${p.id}-job`}>
               <p class="text-sm font-semibold" data-testid={`preset-${p.id}-status`}>{$t(jobStatusKey(p.job.status))}</p>
               {#if p.job.stage}
-                <p class="text-xs text-zinc-500 dark:text-zinc-400" data-testid={`preset-${p.id}-stage`}>{$t(stageKey(p.job.stage))}</p>
+                <p class="text-xs text-muted-foreground" data-testid={`preset-${p.id}-stage`}>{$t(stageKey(p.job.stage))}</p>
               {/if}
               {#if p.job.error}
                 <p class="rounded-lg border border-rose-200 dark:border-rose-900/60 px-3 py-2 text-xs text-rose-700 dark:text-rose-300" data-testid={`preset-${p.id}-error`}>{p.job.error}</p>
               {/if}
               {#if p.job.log_tail}
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{$t('presets.optimize.log_tail')}</p>
+                  <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{$t('presets.optimize.log_tail')}</p>
                   <pre class="mt-1.5 max-h-48 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-[11px] text-zinc-100" data-testid={`preset-${p.id}-log`}>{p.job.log_tail}</pre>
                 </div>
               {/if}
               {#if p.job.result && p.job.result.verdict !== 'unavailable'}
                 <div class="space-y-2" data-testid={`preset-${p.id}-result`}>
-                  <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.optimize.result_title')}</h4>
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.optimize.result_reviews', { count: p.job.result.reviews_used })}</p>
+                  <h4 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.optimize.result_title')}</h4>
+                  <p class="text-xs text-muted-foreground">{$t('presets.optimize.result_reviews', { count: p.job.result.reviews_used })}</p>
                   {#if showsFit(p.job.result.verdict)}
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                      <p class="rounded-lg bg-zinc-50 dark:bg-zinc-800 p-2" data-testid={`preset-${p.id}-fit-before`}>
+                      <p class="rounded-lg bg-surface p-2" data-testid={`preset-${p.id}-fit-before`}>
                         {fit('presets.optimize.result_before', p.job.result.fit_before.log_loss, p.job.result.fit_before.rmse)}
                       </p>
-                      <p class="rounded-lg bg-zinc-50 dark:bg-zinc-800 p-2" data-testid={`preset-${p.id}-fit-after`}>
+                      <p class="rounded-lg bg-surface p-2" data-testid={`preset-${p.id}-fit-after`}>
                         {fit('presets.optimize.result_after', p.job.result.fit_after.log_loss, p.job.result.fit_after.rmse)}
                       </p>
                     </div>
@@ -601,7 +601,7 @@
       {/if}
       <form onsubmit={submitForm} data-testid="presets-form" class="space-y-4">
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.name')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.form.name')}</span>
           <input
             type="text"
             required
@@ -611,13 +611,13 @@
             class="field-input text-sm mt-1 block w-full"
           />
           {#if formNameLocked}
-            <span data-testid="presets-form-name-locked" class="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
+            <span data-testid="presets-form-name-locked" class="mt-1 block text-xs text-muted-foreground">
               {$t('presets.form.name_locked')}
             </span>
           {/if}
         </label>
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.retention')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.form.retention')}</span>
           <input
             type="text"
             inputmode="decimal"
@@ -628,7 +628,7 @@
           />
         </label>
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.learning_steps')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.form.learning_steps')}</span>
           <input
             type="text"
             bind:value={formLearning}
@@ -637,7 +637,7 @@
           />
         </label>
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.relearning_steps')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.form.relearning_steps')}</span>
           <input
             type="text"
             bind:value={formRelearning}
@@ -646,7 +646,7 @@
           />
         </label>
         <label class="block">
-          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{$t('presets.form.max_interval')}</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{$t('presets.form.max_interval')}</span>
           <input
             type="number"
             min="1"
@@ -658,10 +658,10 @@
         </label>
         <div class="flex items-center gap-2">
           <Checkbox bind:checked={formFuzz} testId="presets-form-fuzz" label={$t('presets.form.fuzz')} />
-          <span class="text-sm text-zinc-700 dark:text-zinc-300">{$t('presets.form.fuzz')}</span>
+          <span class="text-sm text-foreground/80">{$t('presets.form.fuzz')}</span>
         </div>
         {#if formMode === 'edit'}
-          <p class="text-xs text-zinc-500 dark:text-zinc-400">{$t('presets.form.edit_note')}</p>
+          <p class="text-xs text-muted-foreground">{$t('presets.form.edit_note')}</p>
         {/if}
         <div class="flex items-center gap-2 pt-2">
           <Button type="submit" size="lg" testId="presets-form-submit" disabled={formSaving}>

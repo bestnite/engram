@@ -637,7 +637,7 @@
 <svelte:head><title>{$t('review.title')} · {$t('app.name')}</title></svelte:head>
 <section class="max-w-4xl mx-auto px-4 py-10">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-    <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{$t('review.title')}</h1>
+    <h1 class="text-2xl font-bold tracking-tight text-foreground">{$t('review.title')}</h1>
     <div class="flex items-center gap-2 self-start sm:self-auto">
       <!-- 撤销上一次评分：自评题提交后没有结果面板，入口在这里；判分题面板打开时隐藏，避免两个入口。 -->
       {#if lastUndo && !feedback}
@@ -646,16 +646,16 @@
         </Button>
       {/if}
       <div
-        class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs text-xs font-medium text-zinc-600 dark:text-zinc-300"
+        class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-border shadow-xs text-xs font-medium text-muted-foreground"
         aria-live="polite"
       >
       <span class="inline-flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
         <span>{$t('review.remaining')}</span>
-        <strong class="font-mono text-zinc-900 dark:text-zinc-100 text-sm">{remaining}</strong>
+        <strong class="font-mono text-foreground text-sm">{remaining}</strong>
       </span>
-      <span class="w-1 h-3 border-r border-zinc-200 dark:border-zinc-700"></span>
-      <span class="text-zinc-500 dark:text-zinc-400">
+      <span class="w-1 h-3 border-r border-input"></span>
+      <span class="text-muted-foreground">
         {$t('review.done', { count: done })}
       </span>
       </div>
@@ -673,25 +673,25 @@
     {:else if error}
       <div class="text-center space-y-4 py-6" data-testid="review-error">
         <p class="text-rose-700 dark:text-rose-300 font-medium">{error instanceof ApiClientError ? $t('error.' + (error.isConflict ? 'conflict' : error.isUnauthorized ? 'unauthorized' : error.isForbidden ? 'forbidden' : error.isNetworkError ? 'network' : 'unknown')) : $t('review.failed')}</p>
-        <button class="inline-flex items-center gap-2 px-4 py-2 min-h-10 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-sm font-medium transition-colors cursor-pointer" onclick={() => void loadQueue()}>
+        <button class="inline-flex items-center gap-2 px-4 py-2 min-h-10 rounded-lg border border-input hover:bg-muted text-sm font-medium transition-colors cursor-pointer" onclick={() => void loadQueue()}>
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
           <span>{$t('common.retry')}</span>
         </button>
       </div>
     {:else if !current}
       <div class="text-center py-10" data-testid="review-empty">
-        <p class="text-lg font-medium text-zinc-800 dark:text-zinc-200">{$t('review.empty')}</p>
+        <p class="text-lg font-medium text-foreground/90">{$t('review.empty')}</p>
         <a class="inline-block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium" href="/">{$t('review.home')}</a>
       </div>
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
+        <div class="flex items-center justify-between pb-3 border-b border-border">
           <Badge class="px-2.5 font-semibold">{kindLabel(current.kind, $cardTypes, $t)}</Badge>
           <button
             type="button"
             onclick={gotoEdit}
             data-testid="review-edit"
-            class="text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5 cursor-pointer border border-zinc-200 dark:border-zinc-700/80"
+            class="text-xs text-muted-foreground hover:text-foreground hover:bg-muted px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5 cursor-pointer border border-input"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
@@ -712,7 +712,7 @@
             {/if}
           </div>
           {#if revealed}
-            <div bind:this={answerSection} class="border-t border-zinc-200 dark:border-zinc-700 pt-6 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
+            <div bind:this={answerSection} class="border-t border-input pt-6 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
               {#if backHTML}
                 {@html backHTML}
               {:else}
@@ -765,25 +765,25 @@
                   {$t('review.graded.score')} · {Math.round(feedback.score * 100)}%
                 </Badge>
               </div>
-              <div class="border-t border-zinc-200 dark:border-zinc-700 pt-5">
+              <div class="border-t border-input pt-5">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                 <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
               </div>
               {#if feedback.given}
-                <div class="text-sm text-zinc-600 dark:text-zinc-300"><span class="text-xs text-zinc-500">{$t('review.graded.given')}</span> · {feedback.given}</div>
+                <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.given')}</span> · {feedback.given}</div>
               {/if}
               {#if feedback.parsed}
-                <div class="text-sm text-zinc-600 dark:text-zinc-300"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
+                <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
               {/if}
               <div class="text-sm text-zinc-500" data-testid="review-graded-rating">{$t('review.graded.rating')} · {$t(`review.rating.${feedback.rating}`)}</div>
               <div class="flex flex-col sm:flex-row gap-3">
                 <button type="button" class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
-                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
+                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
               </div>
             </div>
           {:else if gradedRevealed}
             <div bind:this={revealedSection} class="space-y-5" data-testid="review-graded-revealed">
-              <div class="border-t border-zinc-200 dark:border-zinc-700 pt-5">
+              <div class="border-t border-input pt-5">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                 <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>
               </div>
@@ -852,14 +852,14 @@
               {/if}
               <div class="flex flex-col sm:flex-row gap-3 pt-2">
                 <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit">{$t('review.graded.submit')}</button>
-                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal">{$t('review.graded.show_answer')}</button>
+                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal">{$t('review.graded.show_answer')}</button>
               </div>
             </div>
           {/if}
         {/if}
 
         {#if !feedback}
-          <div class="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <div class="pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground">
             <div class="flex gap-2 self-start">
               <Button variant="outline" size="sm" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
                 {$t('review.bury')}
@@ -868,7 +868,7 @@
                 {$t('review.suspend')}
               </Button>
             </div>
-            <p class="text-xs text-zinc-400 dark:text-zinc-500" data-testid="review-bury-hint">
+            <p class="text-xs text-muted-foreground/70" data-testid="review-bury-hint">
               {$t('review.bury_hint')}
             </p>
           </div>
@@ -876,7 +876,7 @@
       </article>
     {/if}
   </div>
-  <p class="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
+  <p class="mt-4 text-center text-xs text-muted-foreground">
     {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_give_up') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
   </p>
 </section>

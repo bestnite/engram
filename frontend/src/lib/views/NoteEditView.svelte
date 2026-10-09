@@ -403,7 +403,7 @@
     {isCreate ? $t('note_create.title') : $t('note_edit.title', { id: noteId })}
   </h1>
   {#if loading || (note && !$cardTypes && !metaError)}
-    <p class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_edit.loading')}</p>
+    <p class="text-sm text-muted-foreground">{$t('note_edit.loading')}</p>
   {:else if !isCreate && loadError && !note}
     <p role="alert" data-testid="note-edit-not-found" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_edit.not_found')}</p>
   {:else if metaError && !$cardTypes}
@@ -415,7 +415,7 @@
         <div class="space-y-5">
           <Panel class="space-y-5">
             <div>
-              <span class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {$t('note_edit.kind')}
               </span>
               <Select
@@ -425,19 +425,19 @@
                 onValueChange={changeKind}
                 options={kindOptions}
               />
-              <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{$t('note_edit.kind_hint')}</p>
+              <p class="mt-1 text-xs text-muted-foreground/70">{$t('note_edit.kind_hint')}</p>
             </div>
 
             <NoteFieldsForm specs={fieldsForKind($cardTypes, kind)} {fields} testIdPrefix="note-field" />
 
-            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_edit.tags')}
+            <label class="block text-sm font-medium text-foreground/80">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
             </label>
           </Panel>
 
           <!-- 选择器只引用原图；延迟加载与限高由 CSS 负责。 -->
           <Panel padding="md" class="space-y-3">
-            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('media.field')}
+            <label class="block text-sm font-medium text-foreground/80">{$t('media.field')}
               <Select
                 class="mt-1.5 w-full"
                 bind:value={selectedField}
@@ -446,7 +446,7 @@
               />
             </label>
             <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
-            <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
+            <div class="rounded-xl border border-input p-4 space-y-3">
               <label class="block text-sm font-medium">{$t('media.upload.label')}
                 <input data-testid="media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
               </label>
@@ -464,22 +464,22 @@
         <!-- 右栏：自动预览。随输入、题型与插入变化重排；桌面吸顶，移动端顺排在输入下方。 -->
         <div class="lg:sticky lg:top-6">
           <Panel padding="md" class="space-y-3">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{$t('note_preview.title')}</h2>
+            <h2 class="text-lg font-semibold text-foreground">{$t('note_preview.title')}</h2>
             <!-- 状态文案独占一个 polite 活区：只播报「生成中/不全/失败」这类短句，
                  卡片正文放在活区之外，避免每次重排把整段 HTML 重复念一遍。 -->
             <div aria-live="polite" class="space-y-3">
               {#if previewStatus === 'empty'}
-                <p data-testid="note-preview-empty" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_preview.empty')}</p>
+                <p data-testid="note-preview-empty" class="text-sm text-muted-foreground">{$t('note_preview.empty')}</p>
               {:else if previewStatus === 'incomplete'}
                 <p data-testid="note-preview-incomplete" role="status" class="text-sm text-amber-700 dark:text-amber-400">{$t('note_preview.incomplete')}</p>
               {:else if previewStatus === 'error'}
                 <p data-testid="note-preview-error" role="alert" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_preview.failed')}</p>
               {:else if previewStatus === 'loading' && !previewCards}
-                <p data-testid="note-preview-loading" role="status" class="text-sm text-zinc-500 dark:text-zinc-400">{$t('note_preview.loading')}</p>
+                <p data-testid="note-preview-loading" role="status" class="text-sm text-muted-foreground">{$t('note_preview.loading')}</p>
               {/if}
 
               {#if previewStatus === 'loading' && previewCards}
-                <p data-testid="note-preview-updating" role="status" class="text-sm text-zinc-400 dark:text-zinc-500">{$t('note_preview.updating')}</p>
+                <p data-testid="note-preview-updating" role="status" class="text-sm text-muted-foreground/70">{$t('note_preview.updating')}</p>
               {/if}
             </div>
 
@@ -494,12 +494,12 @@
                 {#each previewCards as card, index}
                   <Panel padding="sm" class="space-y-3">
                     <div data-testid="note-preview-front-{index}">
-                      <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.front')}</h3>
+                      <h3 class="text-sm font-medium text-foreground/80">{$t('note_preview.front')}</h3>
                       <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
                       <div class="prose dark:prose-invert">{@html card.front_html}</div>
                     </div>
                     <div data-testid="note-preview-back-{index}">
-                      <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{$t('note_preview.back')}</h3>
+                      <h3 class="text-sm font-medium text-foreground/80">{$t('note_preview.back')}</h3>
                       <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
                       <div class="prose dark:prose-invert">{@html card.back_html}</div>
                     </div>

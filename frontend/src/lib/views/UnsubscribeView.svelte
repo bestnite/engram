@@ -70,14 +70,14 @@
 
 <div class="py-12 max-w-md mx-auto px-4">
   <div class="card-elevated p-8 rounded-xl text-center">
-    <h1 class="mb-4 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+    <h1 class="mb-4 text-2xl font-bold tracking-tight text-foreground">
       {$t('unsubscribe.heading')}
     </h1>
 
     {#if status === 'loading'}
       <Skeleton testId="unsubscribe-loading" label={$t('unsubscribe.loading')} lines={2} />
     {:else if status === 'ready' || status === 'confirming'}
-      <p class="text-sm text-zinc-600 dark:text-zinc-400">{$t('unsubscribe.intro', { type: $t('settings.notifications.type.' + typeCode) })}</p>
+      <p class="text-sm text-muted-foreground">{$t('unsubscribe.intro', { type: $t('settings.notifications.type.' + typeCode) })}</p>
       <Button testId="unsubscribe-confirm" type="button" onclick={confirm} disabled={status === 'confirming'} variant="primary" size="lg" class="w-full mt-6">
         {status === 'confirming' ? $t('unsubscribe.confirming') : $t('unsubscribe.submit')}
       </Button>
@@ -88,7 +88,7 @@
     {/if}
 
     <div class="mt-6 text-sm">
-      <a href="/settings/notifications" class="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+      <a href="/settings/notifications" class="text-muted-foreground hover:text-foreground transition-colors">
         {$t('unsubscribe.back')}
       </a>
     </div>
