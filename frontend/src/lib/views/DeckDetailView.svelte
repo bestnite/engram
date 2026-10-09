@@ -64,6 +64,10 @@
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
   const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim() || kindSelect));
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
+  // 内容修改入口按服务端返回的角色显示：reader 能看、能复习、能暂停与配置学习设置，
+  // 但不能新建/编辑/删除卡片或执行批量标签动作（服务端本就会拒绝这些写入）。
+  // deck 尚未加载时（role 未知）先按可编辑渲染，避免页面标题区出现无谓的空档。
+  const canEditContent = $derived(deck?.role !== 'reader');
 
   /**
    * 加载卡组卡片数据及卡组元数据
@@ -296,10 +300,12 @@
           <span>{$t('package.export.short')}</span>
         </Button>
 
-        <Button href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>{$t('notes.create')}</span>
-        </Button>
+        {#if canEditContent}
+          <Button href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>{$t('notes.create')}</span>
+          </Button>
+        {/if}
       </div>
     </div>
 
@@ -386,8 +392,8 @@
         {/if}
       </form>
 
-      <!-- 批量操作工具条 -->
-      {#if !loading && !error && notes.length > 0}
+      <!-- 批量操作工具条：只有能改内容的角色才看到（reader 没有可执行的批量动作）。 -->
+      {#if canEditContent && !loading && !error && notes.length > 0}
         <div
           data-testid="notes-bulk-toolbar"
           class="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/60 px-3 py-2 text-xs"
@@ -485,12 +491,14 @@
             <div data-testid={`note-card-${note.id}`} class="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors space-y-2.5">
               <div class="flex items-center justify-between text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/60">
                 <div class="flex items-center gap-2">
-                  <Checkbox
-                    testId="select-note-{note.id}"
-                    checked={isSelected(note.id)}
-                    onCheckedChange={() => toggleSelect(note.id)}
-                    label={$t('notes.select_one')}
-                  />
+                  {#if canEditContent}
+                    <Checkbox
+                      testId="select-note-{note.id}"
+                      checked={isSelected(note.id)}
+                      onCheckedChange={() => toggleSelect(note.id)}
+                      label={$t('notes.select_one')}
+                    />
+                  {/if}
                   <span class="font-mono font-medium text-zinc-500 dark:text-zinc-400">#{note.id}</span>
                   <Badge class="font-semibold">{kindLabel(note.kind, $cardTypes, $t)}</Badge>
                   {#if note.suspended}
@@ -507,14 +515,18 @@
                   <span class="text-zinc-400 text-xs">
                     {note.created_at ? note.created_at.slice(0, 10) : ''}
                   </span>
-                  <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
+                  {#if canEditContent}
+                    <a data-testid="edit-note-{note.id}" href="/decks/{deckId}/notes/{note.id}/edit" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{$t('note_edit.action')}</a>
+                  {/if}
                   <button data-testid="toggle-suspend-{note.id}" type="button" disabled={suspendingNoteId === note.id} class="text-zinc-600 dark:text-zinc-300 hover:underline disabled:opacity-50 cursor-pointer" onclick={() => toggleSuspended(note)}>{$t(note.suspended ? 'notes.unsuspend' : 'notes.suspend')}</button>
-                  {#if confirmingDeleteId === note.id}
-                    <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
-                    <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
-                    <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
-                  {:else}
-                    <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                  {#if canEditContent}
+                    {#if confirmingDeleteId === note.id}
+                      <span class="text-zinc-500">{$t('notes.delete_confirm')}</span>
+                      <button data-testid="confirm-delete-note-{note.id}" type="button" disabled={deletingNoteId === note.id} class="text-rose-700 dark:text-rose-400 font-semibold underline disabled:opacity-50 cursor-pointer" onclick={() => deleteNote(note)}>{$t(deletingNoteId === note.id ? 'notes.deleting' : 'notes.delete')}</button>
+                      <button type="button" class="underline cursor-pointer" onclick={() => confirmingDeleteId = null}>{$t('note_edit.cancel')}</button>
+                    {:else}
+                      <button data-testid="delete-note-{note.id}" type="button" class="text-rose-700 dark:text-rose-400 hover:underline cursor-pointer" onclick={() => { confirmingDeleteId = note.id; deleteError = ''; deleteSuccess = false; }}>{$t('notes.delete')}</button>
+                    {/if}
                   {/if}
                 </div>
               </div>
