@@ -9,7 +9,9 @@
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
-  import Panel from '../components/ui/Panel.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import Dropzone from '../components/ui/Dropzone.svelte';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
 
@@ -39,7 +41,6 @@
 
   let selectedField = $state('');
   // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（编辑器媒体面）。
-  let uploadInput = $state<HTMLInputElement | null>(null);
   let uploading = $state(false);
   let uploadErrorKey = $state('');
   let uploaded = $state(false);
@@ -208,21 +209,15 @@
     return map[code] || 'media.upload.failed';
   }
 
-  async function uploadMedia(): Promise<void> {
+  // 选中或拖入文件即上传：成功后插入到所选字段，与媒体库选择器共用同一段 insertMedia。
+  async function uploadMedia(file: File): Promise<void> {
     uploaded = false;
     uploadErrorKey = '';
-    const input = uploadInput;
-    const file = input?.files?.[0];
-    if (!file) {
-      uploadErrorKey = 'media.upload.file_required';
-      return;
-    }
     uploading = true;
     try {
       const result = await apiClient.uploadDeckMedia(deckId, file);
       if (disposed) return;
       uploaded = insertMedia(result.url);
-      if (input) input.value = '';
     } catch (err) {
       if (disposed) return;
       uploadErrorKey = uploadErrorKeyFor(err);
@@ -394,30 +389,25 @@
   });
 </script>
 
-<section class="py-10 max-w-6xl mx-auto px-4">
-  <a href="/decks/{encodeURIComponent(deckId)}" title={$t('note_edit.back')} class="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors">
-    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-    <span>{$t('note_edit.back')}</span>
-  </a>
-  <h1 class="text-2xl font-bold my-5">
-    {isCreate ? $t('note_create.title') : $t('note_edit.title', { id: noteId })}
-  </h1>
+<Page as="section">
+  <PageHeader
+    title={isCreate ? $t('note_create.title') : $t('note_edit.title')}
+    back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('note_edit.back') }}
+  />
   {#if loading || (note && !$cardTypes && !metaError)}
     <p class="text-sm text-muted-foreground">{$t('note_edit.loading')}</p>
   {:else if !isCreate && loadError && !note}
-    <p role="alert" data-testid="note-edit-not-found" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_edit.not_found')}</p>
+    <p role="alert" data-testid="note-edit-not-found" class="text-sm text-destructive-foreground">{$t('note_edit.not_found')}</p>
   {:else if metaError && !$cardTypes}
-    <p role="alert" data-testid="note-edit-metadata-error" class="text-sm text-rose-600 dark:text-rose-400">{$t('common.error')}</p>
+    <p role="alert" data-testid="note-edit-metadata-error" class="text-sm text-destructive-foreground">{$t('common.error')}</p>
   {:else}
     <form onsubmit={submit} data-testid="note-editor-form">
-      <div class="grid gap-5 lg:grid-cols-2 lg:items-start">
-        <!-- 左栏：输入。题型、字段、标签与媒体面。 -->
-        <div class="space-y-5">
-          <Panel class="space-y-5">
+      <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
+        <!-- 左栏：输入。题型、字段、标签与媒体，按区块用标题与分隔线区分，不再套卡片。 -->
+        <div class="min-w-0 space-y-8">
+          <div class="space-y-5">
             <div>
-              <span class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {$t('note_edit.kind')}
-              </span>
+              <span class="block text-sm font-medium text-foreground">{$t('note_edit.kind')}</span>
               <Select
                 class="mt-1.5 w-full"
                 testId="note-edit-kind"
@@ -425,19 +415,19 @@
                 onValueChange={changeKind}
                 options={kindOptions}
               />
-              <p class="mt-1 text-xs text-muted-foreground/70">{$t('note_edit.kind_hint')}</p>
+              <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.kind_hint')}</p>
             </div>
 
             <NoteFieldsForm specs={fieldsForKind($cardTypes, kind)} {fields} testIdPrefix="note-field" />
 
-            <label class="block text-sm font-medium text-foreground/80">{$t('note_edit.tags')}
+            <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
             </label>
-          </Panel>
+          </div>
 
           <!-- 选择器只引用原图；延迟加载与限高由 CSS 负责。 -->
-          <Panel padding="md" class="space-y-3">
-            <label class="block text-sm font-medium text-foreground/80">{$t('media.field')}
+          <div class="space-y-4 border-t border-border pt-6">
+            <label class="block text-sm font-medium text-foreground">{$t('media.field')}
               <Select
                 class="mt-1.5 w-full"
                 bind:value={selectedField}
@@ -445,73 +435,81 @@
                 options={textFields}
               />
             </label>
-            <!-- 上传控件：外层已是笔记表单，不能嵌套 form；用按钮点击触发，成功走与选择器同一段 insertMedia。 -->
-            <div class="rounded-xl border border-input p-4 space-y-3">
-              <label class="block text-sm font-medium">{$t('media.upload.label')}
-                <input data-testid="media-upload-input" bind:this={uploadInput} type="file" name="file" class="mt-2 block w-full text-sm" />
-              </label>
-              <Button variant="outline" size="lg" testId="media-upload-submit" disabled={uploading} onclick={uploadMedia}>
-                {uploading ? $t('media.upload.uploading') : $t('media.upload.button')}
-              </Button>
-              {#if uploaded}<p role="status" data-testid="media-upload-status" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('media.upload.inserted')}</p>{/if}
-              {#if uploadErrorKey}<p role="alert" data-testid="media-upload-error" class="text-sm text-rose-600 dark:text-rose-400">{$t(uploadErrorKey)}</p>{/if}
+            <!-- 上传区：外层已是笔记表单，不能嵌套 form；选中即上传，成功走与选择器同一段 insertMedia。 -->
+            <div class="space-y-2">
+              <span class="block text-sm font-medium text-foreground">{$t('media.upload.label')}</span>
+              <Dropzone
+                testId="media-upload-input"
+                name="file"
+                disabled={uploading}
+                hint={uploading ? $t('media.upload.uploading') : $t('dropzone.media_hint')}
+                onfile={uploadMedia}
+              />
+              {#if uploaded}<p role="status" data-testid="media-upload-status" class="text-sm text-success">{$t('media.upload.inserted')}</p>{/if}
+              {#if uploadErrorKey}<p role="alert" data-testid="media-upload-error" class="text-sm text-destructive-foreground">{$t(uploadErrorKey)}</p>{/if}
             </div>
             <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
             <MediaPicker onselect={insertMedia} />
-          </Panel>
+          </div>
         </div>
 
-        <!-- 右栏：自动预览。随输入、题型与插入变化重排；桌面吸顶，移动端顺排在输入下方。 -->
-        <div class="lg:sticky lg:top-6">
-          <Panel padding="md" class="space-y-3">
-            <h2 class="text-lg font-semibold text-foreground">{$t('note_preview.title')}</h2>
-            <!-- 状态文案独占一个 polite 活区：只播报「生成中/不全/失败」这类短句，
-                 卡片正文放在活区之外，避免每次重排把整段 HTML 重复念一遍。 -->
-            <div aria-live="polite" class="space-y-3">
-              {#if previewStatus === 'empty'}
-                <p data-testid="note-preview-empty" class="text-sm text-muted-foreground">{$t('note_preview.empty')}</p>
-              {:else if previewStatus === 'incomplete'}
-                <p data-testid="note-preview-incomplete" role="status" class="text-sm text-amber-700 dark:text-amber-400">{$t('note_preview.incomplete')}</p>
-              {:else if previewStatus === 'error'}
-                <p data-testid="note-preview-error" role="alert" class="text-sm text-rose-600 dark:text-rose-400">{$t('note_preview.failed')}</p>
-              {:else if previewStatus === 'loading' && !previewCards}
-                <p data-testid="note-preview-loading" role="status" class="text-sm text-muted-foreground">{$t('note_preview.loading')}</p>
-              {/if}
-
-              {#if previewStatus === 'loading' && previewCards}
-                <p data-testid="note-preview-updating" role="status" class="text-sm text-muted-foreground/70">{$t('note_preview.updating')}</p>
-              {/if}
+        <!-- 右栏：自动预览。随输入、题型与插入变化重排；桌面端吸顶且限高为一屏，
+             预览比屏幕长时在栏内滚动，标题始终可见；移动端顺排在输入下方。 -->
+        <div class="min-w-0 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col">
+          <div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface">
+            <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+              <h2 class="text-sm font-semibold text-foreground">{$t('note_preview.title')}</h2>
+              <!-- 状态文案独占一个 polite 活区：只播报「生成中/不全/失败」这类短句，
+                   卡片正文放在活区之外，避免每次重排把整段 HTML 重复念一遍。 -->
+              <div aria-live="polite" class="min-w-0 truncate text-right text-xs">
+                {#if previewStatus === 'incomplete'}
+                  <p data-testid="note-preview-incomplete" role="status" class="text-warning">{$t('note_preview.incomplete')}</p>
+                {:else if previewStatus === 'error'}
+                  <p data-testid="note-preview-error" role="alert" class="text-destructive-foreground">{$t('note_preview.failed')}</p>
+                {:else if previewStatus === 'loading' && !previewCards}
+                  <p data-testid="note-preview-loading" role="status" class="text-muted-foreground">{$t('note_preview.loading')}</p>
+                {/if}
+                {#if previewStatus === 'loading' && previewCards}
+                  <p data-testid="note-preview-updating" role="status" class="text-muted-foreground">{$t('note_preview.updating')}</p>
+                {/if}
+              </div>
             </div>
 
-            {#if previewCards}
-              <!-- 保留上一份结果时压暗并置 aria-busy，让「陈旧但仍在重排」看得见而不是闪空。 -->
-              <div
-                bind:this={previewSection}
-                data-testid="note-preview-result"
-                aria-busy={previewStatus === 'loading'}
-                class="space-y-3 transition-opacity {previewStatus === 'loading' ? 'opacity-60' : ''}"
-              >
-                {#each previewCards as card, index}
-                  <Panel padding="sm" class="space-y-3">
-                    <div data-testid="note-preview-front-{index}">
-                      <h3 class="text-sm font-medium text-foreground/80">{$t('note_preview.front')}</h3>
-                      <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
-                      <div class="prose dark:prose-invert">{@html card.front_html}</div>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+              {#if previewStatus === 'empty'}
+                <p data-testid="note-preview-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('note_preview.empty')}</p>
+              {/if}
+              {#if previewCards}
+                <!-- 保留上一份结果时压暗并置 aria-busy，让「陈旧但仍在重排」看得见而不是闪空。 -->
+                <div
+                  bind:this={previewSection}
+                  data-testid="note-preview-result"
+                  aria-busy={previewStatus === 'loading'}
+                  class="space-y-4 transition-opacity duration-150 {previewStatus === 'loading' ? 'opacity-60' : ''}"
+                >
+                  {#each previewCards as card, index}
+                    <div class="divide-y divide-border overflow-hidden rounded-md border border-border bg-background">
+                      <div data-testid="note-preview-front-{index}" class="space-y-2 p-4">
+                        <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.front')}</h3>
+                        <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                        <div class="prose dark:prose-invert">{@html card.front_html}</div>
+                      </div>
+                      <div data-testid="note-preview-back-{index}" class="space-y-2 p-4">
+                        <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.back')}</h3>
+                        <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                        <div class="prose dark:prose-invert">{@html card.back_html}</div>
+                      </div>
                     </div>
-                    <div data-testid="note-preview-back-{index}">
-                      <h3 class="text-sm font-medium text-foreground/80">{$t('note_preview.back')}</h3>
-                      <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
-                      <div class="prose dark:prose-invert">{@html card.back_html}</div>
-                    </div>
-                  </Panel>
-                {/each}
-              </div>
-            {/if}
-          </Panel>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="mt-5 flex items-center gap-3 flex-wrap">
+      <!-- 操作栏贴在视口底部：长表单不用滚到底才能保存。 -->
+      <div class="sticky bottom-0 z-10 -mx-4 mt-8 flex flex-wrap items-center gap-3 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
         <Button type="submit" size="lg" testId="note-submit" disabled={saving}>
           {saving
             ? (isCreate ? $t('note_create.saving') : $t('note_edit.saving'))
@@ -520,10 +518,10 @@
         <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(`/decks/${encodeURIComponent(deckId)}`)}>
           {$t('note_edit.cancel')}
         </Button>
-        {#if invalid}<p role="alert" class="text-sm text-rose-600 dark:text-rose-400">{isCreate ? $t('note_create.invalid') : $t('note_edit.invalid')}</p>{/if}
-        {#if saveError}<p role="alert" data-testid="note-save-error" class="text-sm text-rose-600 dark:text-rose-400">{isCreate ? $t('note_create.failed') : $t('note_edit.failed')}</p>{/if}
-        {#if saved}<p role="status" data-testid="note-saved" class="text-sm text-emerald-700 dark:text-emerald-400">{$t('note_edit.saved')}</p>{/if}
+        {#if invalid}<p role="alert" class="text-sm text-destructive-foreground">{isCreate ? $t('note_create.invalid') : $t('note_edit.invalid')}</p>{/if}
+        {#if saveError}<p role="alert" data-testid="note-save-error" class="text-sm text-destructive-foreground">{isCreate ? $t('note_create.failed') : $t('note_edit.failed')}</p>{/if}
+        {#if saved}<p role="status" data-testid="note-saved" class="text-sm text-success">{$t('note_edit.saved')}</p>{/if}
       </div>
     </form>
   {/if}
-</section>
+</Page>

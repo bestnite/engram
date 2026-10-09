@@ -7,6 +7,10 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Page from '../components/ui/Page.svelte';
+  import PageHeader from '../components/ui/PageHeader.svelte';
+  import Dropzone from '../components/ui/Dropzone.svelte';
+  import SegmentedControl from '../components/ui/SegmentedControl.svelte';
 
   // 导入来源：文件或公开 HTTPS 直链。默认文件，两条入口共用下面同一批选项。
   let source = $state<'file' | 'url'>('file');
@@ -149,40 +153,41 @@
   }
 </script>
 
-<div class="py-10 max-w-4xl mx-auto px-4">
-  <section class="card-elevated p-6 sm:p-8 rounded-xl">
-    <h1 class="text-2xl font-bold tracking-tight">{$t('package.import.title')}</h1>
-    <p class="mt-2 mb-6 text-sm text-muted-foreground">{$t('package.import.intro')}</p>
-    <form onsubmit={submit} class="space-y-5">
-      <label class="block text-sm font-medium">{$t('package.source.label')}
-        <Select
-          class="mt-2"
-          testId="import-source"
-          value={source}
-          onValueChange={(value) => (source = value as typeof source)}
-          options={[{ value: 'file', label: $t('package.source.file') }, { value: 'url', label: $t('package.source.url') }]}
+<Page>
+  <PageHeader title={$t('package.import.title')} description={$t('package.import.intro')} />
+  <form onsubmit={submit} class="max-w-2xl space-y-6">
+    <div class="space-y-2">
+      <span class="block text-sm font-medium" id="import-source-label">{$t('package.source.label')}</span>
+      <SegmentedControl
+        testId="import-source"
+        ariaLabel={$t('package.source.label')}
+        value={source}
+        onValueChange={(value) => (source = value as typeof source)}
+        options={[{ value: 'file', label: $t('package.source.file') }, { value: 'url', label: $t('package.source.url') }]}
+      />
+    </div>
+    {#if source === 'file'}
+      <div class="space-y-2">
+        <span class="block text-sm font-medium">{$t('package.import.file')}</span>
+        <!-- 校验统一交给 submit 里的本地判据：原生 required 会在真实提交时先弹浏览器自己的提示，
+             与「缺失时显示语言包文案」的约定冲突，所以不设 required。 -->
+        <Dropzone bind:file testId="import-file" accept=".edeck,.zip" hint={$t('dropzone.import_hint')} />
+      </div>
+    {:else}
+      <label class="block text-sm font-medium">{$t('package.import.url')}
+        <input
+          data-testid="import-url"
+          class="field-input text-sm mt-2 block w-full"
+          type="text"
+          inputmode="url"
+          placeholder={$t('package.import.url_placeholder')}
+          value={packageUrl}
+          oninput={(e) => packageUrl = e.currentTarget.value}
         />
+        <span class="mt-1.5 block text-xs font-normal text-muted-foreground">{$t('package.import.url_help')}</span>
       </label>
-      {#if source === 'file'}
-        <label class="block text-sm font-medium">{$t('package.import.file')}
-          <!-- 校验统一交给 submit 里的本地判据：原生 required 会在真实提交时先弹浏览器自己的提示，
-               与「缺失时显示语言包文案」的约定冲突，所以不设 required。 -->
-          <input data-testid="import-file" class="mt-2 block w-full text-sm" type="file" accept=".edeck,.zip" onchange={(e) => file = e.currentTarget.files?.[0] ?? null} />
-        </label>
-      {:else}
-        <label class="block text-sm font-medium">{$t('package.import.url')}
-          <input
-            data-testid="import-url"
-            class="field-input text-sm mt-2 block w-full"
-            type="text"
-            inputmode="url"
-            placeholder={$t('package.import.url_placeholder')}
-            value={packageUrl}
-            oninput={(e) => packageUrl = e.currentTarget.value}
-          />
-          <span class="mt-1 block text-xs text-muted-foreground">{$t('package.import.url_help')}</span>
-        </label>
-      {/if}
+    {/if}
+    <div class="grid gap-5 sm:grid-cols-2">
       <label class="block text-sm font-medium">{$t('package.import.target')}
         <Select
           class="mt-2"
@@ -214,23 +219,25 @@
           options={[{ value: 'update', label: $t('package.import.update') }, { value: 'skip', label: $t('package.import.skip') }, { value: 'fail', label: $t('package.import.fail') }]}
         />
       </label>
-      <div class="space-y-3 text-sm">
-        <label class="flex items-center gap-2"><Checkbox bind:checked={dryRun} label={$t('package.import.dry_run')} />{$t('package.import.dry_run')}</label>
-        {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><Checkbox bind:checked={allowOthersProgress} label={$t('package.import.allow_progress')} />{$t('package.import.allow_progress')}</label>{/if}
-        <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
-      </div>
-      {#if errorKey}<p role="alert" class="text-sm text-rose-700 dark:text-rose-400">{$t(errorKey)}</p>{/if}
-      <Button type="submit" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</Button>
-    </form>
-  </section>
+    </div>
+    <div class="space-y-3 text-sm">
+      <label class="flex items-center gap-2"><Checkbox bind:checked={dryRun} label={$t('package.import.dry_run')} />{$t('package.import.dry_run')}</label>
+      {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><Checkbox bind:checked={allowOthersProgress} label={$t('package.import.allow_progress')} />{$t('package.import.allow_progress')}</label>{/if}
+      <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+      <Button type="submit" size="lg" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : 'package.import.submit')}</Button>
+      {#if errorKey}<p role="alert" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>{/if}
+    </div>
+  </form>
   {#if report}
-    <section class="card-elevated mt-6 p-6 rounded-xl" aria-live="polite">
-      <h2 class="text-lg font-semibold">{$t('package.report.heading')}</h2>
-      <dl class="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border pb-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
+    <section class="mt-10 max-w-2xl border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
+      <h2 class="text-base font-semibold">{$t('package.report.heading')}</h2>
+      <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 text-sm">
+        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
-      {#if report.errors.length}<h3 class="mt-5 font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
-      {#if report.dry_run}<p class="mt-4 text-sm text-amber-700 dark:text-amber-400">{$t('package.report.preview_notice')}</p>{/if}
+      {#if report.errors.length}<h3 class="mt-5 text-sm font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
+      {#if report.dry_run}<p class="mt-4 text-sm text-warning">{$t('package.report.preview_notice')}</p>{/if}
     </section>
   {/if}
-</div>
+</Page>

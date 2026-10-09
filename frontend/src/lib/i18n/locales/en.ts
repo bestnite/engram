@@ -275,7 +275,7 @@ export const en: LocaleCatalog = {
   'keys.revoked': 'Revoked',
   'keys.confirm_revoke': 'Revoke {name}? This cannot be undone.',
   'note_edit.action': 'Edit',
-  'note_edit.title': 'Edit note #{id}',
+  'note_edit.title': 'Edit note',
   'note_edit.back': 'Back to deck',
   'note_edit.loading': 'Loading note...',
   'note_edit.not_found': 'Note not found',
@@ -1257,4 +1257,11 @@ export const en: LocaleCatalog = {
   'sidebar.due_count': '{count} due',
   'sidebar.exit_review': 'Exit review',
   'sidebar.version': 'Version {version}',
+  // 文件拖放选区。
+  'dropzone.prompt': 'Drop a file here, or',
+  'dropzone.browse': 'browse',
+  'dropzone.release': 'Release to add the file',
+  'dropzone.remove': 'Remove file',
+  'dropzone.import_hint': 'Accepts .edeck and .zip',
+  'dropzone.media_hint': 'Uploads right away and inserts into the field selected above',
 };

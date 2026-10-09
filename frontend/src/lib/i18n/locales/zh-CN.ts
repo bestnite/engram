@@ -275,7 +275,7 @@ export const zhCN: LocaleCatalog = {
   'keys.revoked': '已撤销',
   'keys.confirm_revoke': '确定撤销 {name}？此操作无法撤销。',
   'note_edit.action': '编辑',
-  'note_edit.title': '编辑卡片 #{id}',
+  'note_edit.title': '编辑卡片',
   'note_edit.back': '返回卡组',
   'note_edit.loading': '正在加载卡片...',
   'note_edit.not_found': '卡片不存在',
@@ -1256,4 +1256,11 @@ export const zhCN: LocaleCatalog = {
   'sidebar.due_count': '{count} 张待复习',
   'sidebar.exit_review': '退出复习',
   'sidebar.version': '版本 {version}',
+  // 文件拖放选区。
+  'dropzone.prompt': '拖入文件，或',
+  'dropzone.browse': '选择文件',
+  'dropzone.release': '松开即可添加',
+  'dropzone.remove': '移除文件',
+  'dropzone.import_hint': '支持 .edeck 与 .zip',
+  'dropzone.media_hint': '选中后立即上传，并插入到上面选择的字段',
 };
