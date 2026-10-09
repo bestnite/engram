@@ -1001,14 +1001,54 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 	}
 
 	out := make([]DueCard, 0, len(items))
-	// 卡组的对外 id 按主键缓存：同一队列里多张卡常来自同一个卡组，避免逐张重复查库。
-	deckPublic := make(map[uint64]string)
+	if len(items) == 0 {
+		return out, nil
+	}
+
+	// 装配阶段的取数一律按 id 集合分批：note / card / card_states / 卡组各一次集合查询（按 200 个
+	// id 一批切分），查询数与队列长度无关。逐张 ByID 会让一次答题的查询数随队列长度线性增长，
+	// SQLite 单连接下尤其明显。
+	noteIDs := make([]uint64, 0, len(items))
+	cardIDs := make([]uint64, 0, len(items))
 	for _, it := range items {
-		note, err := a.notes.ByID(ctx, it.NoteID)
-		if err != nil {
+		noteIDs = append(noteIDs, it.NoteID)
+		cardIDs = append(cardIDs, it.CardID)
+	}
+	notesByID, err := a.notes.ByIDs(ctx, noteIDs)
+	if err != nil {
+		a.logger.Error("load due queue notes failed", "user_id", u.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
+	}
+	cardsByID, err := a.cards.ByIDs(ctx, cardIDs)
+	if err != nil {
+		a.logger.Error("load due queue cards failed", "user_id", u.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
+	}
+	statesByCard, err := store.CardStatesByCardIDs(ctx, a.db, u.ID, cardIDs)
+	if err != nil {
+		a.logger.Error("load due queue card states failed", "user_id", u.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
+	}
+
+	// 卡组对外 id：只取队列实际用到的卡组（note 已取回，缺失的 note 对应卡会被丢弃），同样一次集合查询。
+	deckIDsToLoad := make([]uint64, 0, len(items))
+	for _, it := range items {
+		if note, ok := notesByID[it.NoteID]; ok {
+			deckIDsToLoad = append(deckIDsToLoad, note.DeckID)
+		}
+	}
+	decksByID, err := a.decks.ByIDs(ctx, deckIDsToLoad)
+	if err != nil {
+		a.logger.Error("load due queue decks failed", "user_id", u.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
+	}
+
+	for _, it := range items {
+		note, ok := notesByID[it.NoteID]
+		if !ok {
+			// note 不可见（已软删除）：与逐张读取失败时丢弃该卡一致。
 			continue
 		}
-		var state store.CardState
 		entry := DueCard{
 			NoteID:         note.PublicID,
 			State:          it.State.String(),
@@ -1018,17 +1058,15 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 			Fields:         store.FieldsOrEmpty(note.FieldsJSON),
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
 		}
-		if err := a.db.WithContext(ctx).Where("card_id = ? AND user_id = ?", it.CardID, u.ID).Take(&state).Error; err == nil {
+		// 读不到的 card_states / card / deck 保持零值，与逐张读取失败时的结果一致。
+		if state, ok := statesByCard[it.CardID]; ok {
 			entry.Version = state.Version
 		}
-		if card, err := a.cards.ByID(ctx, it.CardID); err == nil {
+		if card, ok := cardsByID[it.CardID]; ok {
 			entry.CardID = card.PublicID
 			entry.Template = card.Template
 		}
-		if pid, ok := deckPublic[note.DeckID]; ok {
-			entry.DeckID = pid
-		} else if d, err := a.decks.ByID(ctx, note.DeckID); err == nil {
-			deckPublic[note.DeckID] = d.PublicID
+		if d, ok := decksByID[note.DeckID]; ok {
 			entry.DeckID = d.PublicID
 		}
 		out = append(out, entry)
