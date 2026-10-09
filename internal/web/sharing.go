@@ -1,8 +1,6 @@
 package web
 
 import (
-	"strconv"
-
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
@@ -42,7 +40,7 @@ func (s *Server) sharingPageRoute(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -50,15 +48,6 @@ func (s *Server) sharingPageRoute(c *gin.Context) {
 		return
 	}
 	s.shell.ServeIndex(c)
-}
-
-// usernameFor 解析用户 id 对应的显示名；查不到时退回 #id，保证列表不因单个坏行而失败。
-func (s *Server) usernameFor(c *gin.Context, userID uint64) string {
-	u, err := s.users.ByID(c.Request.Context(), userID)
-	if err != nil || u == nil {
-		return "#" + strconv.FormatUint(userID, 10)
-	}
-	return u.Username
 }
 
 // shortDigest 截断 token 摘要用于列表展示；摘要不可反推，展示前缀不构成密钥泄漏。

@@ -19,6 +19,16 @@ func cardIDOfNote(t *testing.T, db *gorm.DB, noteID uint64) uint64 {
 	return c.ID
 }
 
+// cardPublicIDOfNote 取 note 下第一张 card 的对外 id；JSON 请求用它按对外 id 引用卡片。
+func cardPublicIDOfNote(t *testing.T, db *gorm.DB, noteID uint64) string {
+	t.Helper()
+	var c store.Card
+	if err := db.Where("note_id = ?", noteID).First(&c).Error; err != nil {
+		t.Fatalf("load card for note %d: %v", noteID, err)
+	}
+	return c.PublicID
+}
+
 // TestReviewScopeRejectsUnreadableDeck 覆盖负例：范围里出现用户读不到的卡组时整次请求失败，
 // 不得静默丢弃该卡组后继续（由 loadDeckForRole 写出 403/404）。
 func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
@@ -26,7 +36,7 @@ func TestReviewScopeRejectsUnreadableDeck(t *testing.T) {
 	// 属于另一个用户的私有卡组；当前登录用户既非 owner 也无授权。
 	foreign := seedReviewDeck(t, db, ownerID+1, "Foreign deck")
 
-	rec := getWithCookies(t, srv, "/review?deck="+u64str(foreign.ID), cookies)
+	rec := getWithCookies(t, srv, "/review?deck="+foreign.PublicID, cookies)
 	if rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
 		t.Fatalf("GET /review with an unreadable deck status = %d, want 403 or 404 (body %s)",
 			rec.Code, snippet(rec.Body.String()))
@@ -43,7 +53,7 @@ func TestReviewScopeRejectsMixedUnreadableDeck(t *testing.T) {
 	seedBasic(t, db, readable.ID, "Front", "Back")
 
 	rec := getWithCookies(t, srv,
-		"/review?deck="+u64str(readable.ID)+"&deck="+u64str(foreign.ID), cookies)
+		"/review?deck="+readable.PublicID+"&deck="+foreign.PublicID, cookies)
 	if rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
 		t.Fatalf("GET /review with a readable+foreign deck status = %d, want 403 or 404 (body %s)",
 			rec.Code, snippet(rec.Body.String()))

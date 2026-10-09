@@ -100,7 +100,7 @@ func waitForMail(t *testing.T, sender *recordingMailSender, n int) []mail.Messag
 // inviteCreateResponse 是创建邀请的 JSON 回包：新邀请 + 发信结果码。
 type inviteCreateResponse struct {
 	Invite struct {
-		ID    uint64 `json:"id"`
+		ID    string `json:"id"`
 		Token string `json:"token"`
 	} `json:"invite"`
 	MailNotice string `json:"mail_notice"`
@@ -210,7 +210,7 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 		t.Fatalf("invites = %d, want 1", len(invites))
 	}
 	revoked := invites[0]
-	rev := postJSONWithSession(srv, "/api/v1/admin/invites/"+u64str(revoked.ID)+"/revoke", nil, cookies, csrf)
+	rev := postJSONWithSession(srv, "/api/v1/admin/invites/"+revoked.PublicID+"/revoke", nil, cookies, csrf)
 	if rev.Code != http.StatusNoContent {
 		t.Fatalf("revoke = %d, want 204", rev.Code)
 	}

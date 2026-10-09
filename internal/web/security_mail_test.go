@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -286,7 +285,7 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 
 	// 5) 账号被禁用通知（管理员禁用另一个账号）。
 	targetID := createTargetUser(t, ts)
-	disable := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/status",
+	disable := jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+userPublicID(t, ts.db, targetID)+"/status",
 		`{"action":"disable"}`, ts.cookies, ts.csrf)
 	if disable.Code != http.StatusNoContent {
 		t.Fatalf("POST /api/v1/admin/users/:id/status status = %d, want 204 (body %s)", disable.Code, snippet(disable.Body.String()))
@@ -390,7 +389,7 @@ func TestSecurityMailClassAHasNoUnsubscribeHeader(t *testing.T) {
 	jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
 		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, ts.cookies, ts.csrf)
 	targetID := createTargetUser(t, ts)
-	jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(targetID, 10)+"/status",
+	jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+userPublicID(t, ts.db, targetID)+"/status",
 		`{"action":"disable"}`, ts.cookies, ts.csrf)
 
 	for _, typ := range []mail.Type{

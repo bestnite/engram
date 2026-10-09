@@ -48,9 +48,9 @@ func (s *Server) reviewPageRoute(c *gin.Context) {
 // 范围由 URL 的可重复 deck 参数决定，并由 SPA 的 JSON 请求原样带回。
 type reviewScope struct{ deckIDs []uint64 }
 
-// deckScopeFromValues 解析可重复的 deck 参数值：去重、跳过空串；任一值非数字或为 0
-// 即写 400 并返回 false。随后逐个校验 loadDeckForRole(..., RoleReader)：任何缺失或
-// 无权限的卡组都让整次请求失败（404/403，由该 helper 写出），绝不静默丢弃某个卡组。
+// deckScopeFromValues 解析可重复的 deck 参数值（对外 id 字符串）：去重、跳过空串；任一值
+// 形状非法即 400、形状合法但库里不存在即 404。随后逐个校验 loadDeckForRole(..., RoleReader)：
+// 任何缺失或无权限的卡组都让整次请求失败（404/403，由该 helper 写出），绝不静默丢弃某个卡组。
 func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw []string) (reviewScope, bool) {
 	ids := make([]uint64, 0, len(raw))
 	seen := make(map[uint64]bool, len(raw))
@@ -59,16 +59,20 @@ func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw []str
 		if v == "" {
 			continue
 		}
-		id, err := strconv.ParseUint(v, 10, 64)
-		if err != nil || id == 0 {
+		if !looksLikePublicID(v) {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return reviewScope{}, false
 		}
-		if seen[id] {
+		deck, err := s.decks.ByPublicID(c.Request.Context(), v)
+		if err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return reviewScope{}, false
+		}
+		if seen[deck.ID] {
 			continue
 		}
-		seen[id] = true
-		ids = append(ids, id)
+		seen[deck.ID] = true
+		ids = append(ids, deck.ID)
 	}
 	for _, id := range ids {
 		if _, ok := s.loadDeckForRole(c, user, id, store.RoleReader); !ok {
@@ -151,15 +155,16 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
+	deckPublic := s.deckPublicID(ctx, note.DeckID)
 	return &ReviewCardView{
-		CardID:          strconv.FormatUint(card.ID, 10),
-		NoteID:          strconv.FormatUint(note.ID, 10),
-		DeckID:          strconv.FormatUint(note.DeckID, 10),
+		CardID:          card.PublicID,
+		NoteID:          note.PublicID,
+		DeckID:          deckPublic,
 		ExpectedVersion: strconv.Itoa(s.stateVersion(ctx, user.ID, card.ID)),
 		Template:        card.Template,
 		FrontHTML:       frontHTML,
 		BackHTML:        backHTML,
-		EditHref:        "/decks/" + strconv.FormatUint(note.DeckID, 10) + "/notes/" + strconv.FormatUint(note.ID, 10),
+		EditHref:        "/decks/" + deckPublic + "/notes/" + note.PublicID,
 	}, nil
 }
 

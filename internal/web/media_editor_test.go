@@ -70,7 +70,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Media deck")
 	note := seedBasic(t, db, deck.ID, "front", "back")
-	deckPath := "/decks/" + u64str(deck.ID)
+	deckPath := "/decks/" + deck.PublicID
 
 	// 1) 从卡组内上传入口上传图片。
 	up := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrf, "pic.png", "image/png", pngBody())
@@ -96,7 +96,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 
 	// 3) 把 Markdown 图片引用插入 front 字段，SPA 预览端点应渲染出 <img>。
 	ref := "![](" + saved.URL + ")"
-	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)
@@ -116,14 +116,14 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 
 	// 4) 保存该引用（SPA 的卡片更新走 PATCH /api/v1/notes/:id）。
-	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+u64str(note.ID),
+	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+note.PublicID,
 		`{"kind":"basic","fields":{"front":"see `+ref+`","back":"back"}}`, cookies, csrf)
 	if save.Code != http.StatusOK {
 		t.Fatalf("save status = %d, want 200 (body %s)", save.Code, save.Body.String())
 	}
 
 	// 5) 再次预览：字段值里仍有引用，预览里仍有 <img>（且不是 base64 内联）。
-	reload := postJSONWithCSRF(t, srv, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", map[string]any{
+	reload := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)
@@ -172,7 +172,7 @@ func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 	t.Setenv("MEDIA_MAX_BYTES", "1024")
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Limits deck")
-	deckPath := "/decks/" + u64str(deck.ID)
+	deckPath := "/decks/" + deck.PublicID
 
 	// 超限：合法 PNG 头 + 填充，超过 1 KiB。
 	big := append(pngBody(), bytes.Repeat([]byte("x"), 2048)...)
@@ -199,7 +199,7 @@ func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 func TestEditorMediaUploadRequiresEditorRoleAndCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Role deck")
-	deckPath := "/decks/" + u64str(deck.ID)
+	deckPath := "/decks/" + deck.PublicID
 
 	// 授予第二个用户 reader 角色。
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "media-reader")

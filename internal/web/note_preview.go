@@ -2,7 +2,7 @@ package web
 
 import (
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -27,12 +27,13 @@ func (s *Server) notePreview(c *gin.Context) {
 		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	deckID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || deckID == 0 {
+	// 路径参数是对外 id；卡组主键不对外，先换成数字主键再判权。
+	deck, err := s.decks.ByPublicID(c.Request.Context(), strings.TrimSpace(c.Param("id")))
+	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
 		return
 	}
-	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
+	if _, ok := s.loadDeckForRole(c, user, deck.ID, store.RoleEditor); !ok {
 		return
 	}
 	var req notePreviewRequest

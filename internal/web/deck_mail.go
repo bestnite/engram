@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -56,7 +55,7 @@ func (s *Server) notifyDeckGrantChange(c *gin.Context, deck *store.Deck, actor, 
 		return
 	}
 	loc := s.userLocalizer(target)
-	link := s.securityAbsoluteURL(c, "/decks/"+strconv.FormatUint(deck.ID, 10))
+	link := s.securityAbsoluteURL(c, "/decks/"+deck.PublicID)
 	unsubURL := s.optionalUnsubscribeLink(c, target.ID, typ)
 	msg := s.deckGrantMessage(ctx, loc, target.Email, typ, actor.Username, deck.Name, newRole, link, unsubURL)
 	if err := s.mail.Enqueue(ctx, msg); err != nil {

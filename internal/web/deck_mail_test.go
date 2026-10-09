@@ -35,11 +35,11 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	sender := startInviteMail(t, srv, db)
 	granteeID, granteeCookies, granteeCSRF := createUserAndLogin(t, srv, db, "grantee")
 	granteeEmail := "grantee@example.com"
-	base := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
+	base := "/api/v1/decks/" + deck.PublicID + "/sharing/grants"
 
 	// ① 分享：给被授权者发 deck_shared，且写清卡组名与分享人。
 	rec := jsonRequest(t, srv, http.MethodPost, base,
-		`{"user_id":`+u64str(granteeID)+`,"role":"reader"}`, cookies, csrf)
+		`{"user_id":"`+userPublicID(t, db, granteeID)+`","role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("POST grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -61,7 +61,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 
 	// ② 被邀请者接受（同意制）：这一步之后他才是真的成员，后面的改角色才是「改角色」。
 	if rec := jsonRequest(t, srv, http.MethodPost,
-		"/api/v1/sharing/invites/"+u64str(deck.ID)+"/accept", "", granteeCookies, granteeCSRF); rec.Code != http.StatusOK {
+		"/api/v1/sharing/invites/"+deck.PublicID+"/accept", "", granteeCookies, granteeCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("accept invite = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	// 接受本身不发信（邀请信已经发过了），所以这里仍只有 1 封。
@@ -70,7 +70,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	}
 
 	// ③ 改角色：deck_permission_changed，而不是再发一次「分享给你」。
-	rec = jsonRequest(t, srv, http.MethodPatch, base+"/"+u64str(granteeID),
+	rec = jsonRequest(t, srv, http.MethodPatch, base+"/"+userPublicID(t, db, granteeID),
 		`{"role":"editor"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("PATCH grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -81,7 +81,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	}
 
 	// ④ 撤销：仍是 permission_changed，正文要说「被取消」而不是「改成了空」。
-	rec = jsonRequest(t, srv, http.MethodDelete, base+"/"+u64str(granteeID), "", cookies, csrf)
+	rec = jsonRequest(t, srv, http.MethodDelete, base+"/"+userPublicID(t, db, granteeID), "", cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("DELETE grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -108,8 +108,8 @@ func TestDeckGrantMailHonorsPreference(t *testing.T) {
 		t.Fatalf("SetChoices: %v", err)
 	}
 
-	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/decks/"+u64str(deck.ID)+"/sharing/grants",
-		`{"user_id":`+u64str(grantee.ID)+`,"role":"reader"}`, cookies, csrf)
+	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/sharing/grants",
+		`{"user_id":"`+grantee.PublicID+`","role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("POST grant = %d, want success", rec.Code)
 	}

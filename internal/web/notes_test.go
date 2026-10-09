@@ -146,7 +146,7 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Private deck")
 	note := seedBasic(t, db, deck.ID, "Q001", "A001")
 
-	if code := get(t, srv, "/decks/"+u64str(deck.ID)+"/notes", nil).Code; code != http.StatusSeeOther {
+	if code := get(t, srv, "/decks/"+deck.PublicID+"/notes", nil).Code; code != http.StatusSeeOther {
 		t.Errorf("anonymous GET list status = %d, want 303 redirect to login", code)
 	}
 
@@ -165,16 +165,26 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 		t.Fatalf("create stranger: %v", err)
 	}
 	strangerCookies, _ := loginJSON(t, srv, db, "stranger", "Sup3rSecret!")
-	foreign := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes", strangerCookies)
+	foreign := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/notes", strangerCookies)
 	if foreign.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET list status = %d, want 403", foreign.Code)
 	}
-	if rec := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID), strangerCookies); rec.Code != http.StatusForbidden {
+	if rec := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/notes/"+note.PublicID, strangerCookies); rec.Code != http.StatusForbidden {
 		t.Errorf("non-owner GET editor status = %d, want 403", rec.Code)
 	}
 }
 
 func u64str(v uint64) string { return itoa(int(v)) }
+
+// userPublicID 取用户主键对应的对外 id：测试里把数字 id 换成路由/请求体用的对外 id。
+func userPublicID(t *testing.T, db *gorm.DB, id uint64) string {
+	t.Helper()
+	u, err := store.NewUserStore(db).ByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("load user %d: %v", id, err)
+	}
+	return u.PublicID
+}
 
 // pad3 是测试里把序号补成三位的小工具（front/back 文案生成用）。
 func pad3(i int) string {

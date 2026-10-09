@@ -13,7 +13,7 @@ import (
 func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Share SPA")
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/sharing"
+	path := "/api/v1/decks/" + deck.PublicID + "/sharing"
 	owner := getWithCookies(t, srv, path, ownerCookies)
 	if owner.Code != http.StatusOK || !strings.Contains(owner.Body.String(), `"pending_invites"`) {
 		t.Fatalf("owner read = %d %s", owner.Code, owner.Body.String())

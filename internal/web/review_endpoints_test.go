@@ -16,17 +16,17 @@ import (
 // 两个写端点都挂会话 CSRF，且范围参数必须整次校验通过。
 
 type queueBody struct {
-	CardID    uint64 `json:"card_id"`
+	CardID    string `json:"card_id"`
 	Remaining int    `json:"remaining"`
 	Cards     []struct {
-		CardID uint64 `json:"card_id"`
-		DeckID uint64 `json:"deck_id"`
+		CardID string `json:"card_id"`
+		DeckID string `json:"deck_id"`
 	} `json:"cards"`
 }
 
 // reviewRenderBody 是卡面渲染响应的对外形态。
 type reviewRenderBody struct {
-	CardID    uint64 `json:"card_id"`
+	CardID    string `json:"card_id"`
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
 	EditHref  string `json:"edit_href"`
@@ -48,7 +48,7 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	}{
 		{"non_numeric", "/review?deck=abc", http.StatusBadRequest},
 		{"zero", "/review?deck=0", http.StatusBadRequest},
-		{"unreadable", "/review?deck=" + u64str(foreign.ID), http.StatusForbidden},
+		{"unreadable", "/review?deck=" + foreign.PublicID, http.StatusForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// 用陌生用户访问 owner 的私有卡组：范围校验必须整次失败。
@@ -64,7 +64,7 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	}
 
 	// 合法范围仍返回应用壳，证明前面的失败来自范围校验而非路径错误。
-	if rec := getWithCookies(t, srv, "/review?deck="+u64str(foreign.ID), cookies); rec.Code != http.StatusOK {
+	if rec := getWithCookies(t, srv, "/review?deck="+foreign.PublicID, cookies); rec.Code != http.StatusOK {
 		t.Fatalf("owner GET review with own deck = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 }
@@ -76,8 +76,8 @@ func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	deck := seedReviewDeck(t, db, ownerID, "Bury guard deck")
 	other := seedReviewDeck(t, db, ownerID, "Bury other deck")
 	note := seedBasic(t, db, deck.ID, "Q", "A")
-	cardID := cardIDOfNote(t, db, note.ID)
-	valid := map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
+	valid := map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}
 
 	// 无会话。
 	anon := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, nil, "")
@@ -92,7 +92,7 @@ func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 		t.Errorf("bury with bad CSRF = %d, want 403", rec.Code)
 	}
 	// 卡不在所选范围内。
-	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{"card_id": cardID, "deck": []uint64{other.ID}}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{"card_id": cardPub, "deck": []string{other.PublicID}}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("bury out-of-scope card = %d, want 400", rec.Code)
 	}
 	// 陌生用户即使拿到卡片 id 也读不到卡组。
@@ -117,10 +117,11 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	noteA := seedBasic(t, db, deckA.ID, "A front", "A back")
 	seedBasic(t, db, deckB.ID, "B front", "B back")
 	cardA := cardIDOfNote(t, db, noteA.ID)
+	cardAPub := cardPublicIDOfNote(t, db, noteA.ID)
 
 	// 多卡组范围：埋藏 A 卡后队列应只剩 B 卡，范围仍是 A∪B。
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{
-		"card_id": cardA, "deck": []uint64{deckA.ID, deckB.ID},
+		"card_id": cardAPub, "deck": []string{deckA.PublicID, deckB.PublicID},
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("bury = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -132,8 +133,8 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	if body.Remaining != 1 || len(body.Cards) != 1 {
 		t.Fatalf("after bury remaining=%d cards=%d, want 1/1 (body %s)", body.Remaining, len(body.Cards), snippet(rec.Body.String()))
 	}
-	if body.Cards[0].DeckID != deckB.ID {
-		t.Errorf("after bury the surviving card is from deck %d, want deck B %d", body.Cards[0].DeckID, deckB.ID)
+	if body.Cards[0].DeckID != deckB.PublicID {
+		t.Errorf("after bury the surviving card is from deck %s, want deck B %s", body.Cards[0].DeckID, deckB.PublicID)
 	}
 
 	// 埋藏把到期日推到下一个复习日：该卡的状态行 due_at 必须晚于现在。
@@ -146,20 +147,20 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	}
 
 	// 同范围再取一次队列，仍只剩 B 卡（范围未退化）。
-	due := getWithCookies(t, srv, "/api/v1/review/due?deck="+u64str(deckA.ID)+"&deck="+u64str(deckB.ID), cookies)
+	due := getWithCookies(t, srv, "/api/v1/review/due?deck="+deckA.PublicID+"&deck="+deckB.PublicID, cookies)
 	if due.Code != http.StatusOK {
 		t.Fatalf("GET due after bury = %d, want 200 (body %s)", due.Code, snippet(due.Body.String()))
 	}
 	var dueBody struct {
 		Cards []struct {
-			DeckID uint64 `json:"deck_id"`
+			DeckID string `json:"deck_id"`
 		} `json:"cards"`
 	}
 	if err := json.Unmarshal(due.Body.Bytes(), &dueBody); err != nil {
 		t.Fatal(err)
 	}
-	if len(dueBody.Cards) != 1 || dueBody.Cards[0].DeckID != deckB.ID {
-		t.Errorf("due after bury = %+v, want only deck B %d", dueBody.Cards, deckB.ID)
+	if len(dueBody.Cards) != 1 || dueBody.Cards[0].DeckID != deckB.PublicID {
+		t.Errorf("due after bury = %+v, want only deck B %s", dueBody.Cards, deckB.PublicID)
 	}
 }
 
@@ -171,17 +172,17 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	note := seedBasic(t, db, deck.ID,
 		"<script>alert(1)</script> front-text",
 		"<img src=x onerror=alert(1)> back-text")
-	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
 	// 拒绝路径。
-	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, nil, ""); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub}, nil, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("render without session = %d, want 403", rec.Code)
 	}
-	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID}, cookies, ""); rec.Code != http.StatusForbidden {
+	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub}, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("render without CSRF = %d, want 403", rec.Code)
 	}
 
-	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardID, "deck": []uint64{deck.ID}}, cookies, csrf)
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -202,7 +203,7 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	if !strings.Contains(body.FrontHTML, "front-text") || !strings.Contains(body.BackHTML, "back-text") {
 		t.Errorf("render dropped benign content: %+v", body)
 	}
-	if body.EditHref != "/decks/"+u64str(deck.ID)+"/notes/"+u64str(note.ID) {
+	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
 	}
 }

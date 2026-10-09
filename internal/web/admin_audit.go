@@ -111,23 +111,70 @@ func isNumeric(raw string) bool {
 	return true
 }
 
-// usernamesFor 批量取当前页涉及的用户名；查不到的用户不写入，由调用方回退到 #id。
-func (s *Server) usernamesFor(ctx context.Context, rows []store.AuditLog) map[uint64]string {
-	names := make(map[uint64]string)
+// usersForAudit 批量取当前页涉及的用户，供审计行的操作者对外 id 与用户名使用；
+// 查不到的用户不写入，调用方把该行的 user_id 渲染成 null，绝不回退到数字主键。
+func (s *Server) usersForAudit(ctx context.Context, rows []store.AuditLog) map[uint64]*store.User {
+	users := make(map[uint64]*store.User)
 	if s.users == nil {
-		return names
+		return users
 	}
 	for i := range rows {
 		id := rows[i].UserID
 		if id == nil {
 			continue
 		}
-		if _, seen := names[*id]; seen {
+		if _, seen := users[*id]; seen {
 			continue
 		}
 		if u, err := s.users.ByID(ctx, *id); err == nil {
-			names[*id] = u.Username
+			users[*id] = u
 		}
 	}
-	return names
+	return users
+}
+
+// auditTargetPublicID 把审计行的数字目标 id 换成对外 id；无法解析（类型未知或目标行已删）
+// 时返回 nil，调用方据此把 target.id 渲染为 null，绝不回退到数字主键。
+func (s *Server) auditTargetPublicID(ctx context.Context, targetType string, id *uint64) *string {
+	if id == nil {
+		return nil
+	}
+	var publicID string
+	switch targetType {
+	case "user":
+		publicID = s.userPublicID(ctx, *id)
+	case "deck":
+		publicID = s.deckPublicID(ctx, *id)
+	case "preset":
+		publicID = s.presetPublicID(ctx, *id)
+	case "job":
+		if s.jobStore != nil {
+			if job, err := s.jobStore.ByID(ctx, *id); err == nil {
+				publicID = job.PublicID
+			}
+		}
+	case "invite":
+		// invites 没有按主键取行的入口（只按 token 或对外 id），直接取 public_id。
+		_ = s.db.WithContext(ctx).Table("invites").Select("public_id").Where("id = ?", *id).Scan(&publicID).Error
+	case "api_key":
+		if k, err := store.NewAPIKeyStore(s.db).ByID(ctx, *id); err == nil {
+			publicID = k.PublicID
+		}
+	case "identity":
+		if s.identities != nil {
+			if ident, err := s.identities.ByID(ctx, *id); err == nil {
+				publicID = ident.PublicID
+			}
+		}
+	case "card":
+		if s.cards != nil {
+			if c, err := s.cards.ByID(ctx, *id); err == nil {
+				publicID = c.PublicID
+			}
+		}
+	}
+	if publicID == "" {
+		return nil
+	}
+	return &publicID
 }

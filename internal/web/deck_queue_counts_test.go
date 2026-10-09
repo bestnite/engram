@@ -36,14 +36,14 @@ func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	seen := map[uint64]bool{}
+	seen := map[string]bool{}
 	for _, item := range body.Decks {
 		seen[item.DeckID] = true
 		if item.NewCount != 1 || item.ReviewCount != 0 {
-			t.Errorf("count for deck %d = %+v, want new=1 review=0", item.DeckID, item)
+			t.Errorf("count for deck %s = %+v, want new=1 review=0", item.DeckID, item)
 		}
 	}
-	if !seen[ownerDeck.ID] || !seen[secondDeck.ID] {
+	if !seen[ownerDeck.PublicID] || !seen[secondDeck.PublicID] {
 		t.Fatalf("visible decks missing from counts: %+v", body)
 	}
 

@@ -15,7 +15,7 @@ func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{
 		"front": `<img src=x onerror=alert(1)> \(x^2\)`, "back": `<script>alert(1)</script>safe`,
 	}})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-CSRF-Token", csrf)
 	for _, cookie := range cookies {
@@ -40,7 +40,7 @@ func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Preview")
 	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{"front": "a", "back": "b"}})
 	request := func(withCookie, withCSRF bool) int {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+u64str(deck.ID)+"/notes/preview", bytes.NewReader(payload))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		if withCSRF {
 			req.Header.Set("X-CSRF-Token", csrf)

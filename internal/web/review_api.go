@@ -22,11 +22,11 @@ import (
 )
 
 type reviewRequest struct {
-	CardID          uint64   `json:"card_id"`
+	CardID          string   `json:"card_id"`
 	Rating          int      `json:"rating"`
 	ExpectedVersion int      `json:"expected_version"`
 	ElapsedMS       *int     `json:"elapsed_ms"`
-	Deck            []uint64 `json:"deck"`
+	Deck            []string `json:"deck"`
 }
 
 // gradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
@@ -37,10 +37,10 @@ type reviewRequest struct {
 //   - "reveal"：只返回清洗后的正确答案，不判分、不写库（揭示前的只读预览）；
 //   - "give_up"：已揭示答案后放弃作答，按 Again 记一条自评日志（grade_source=self）。
 type gradeRequest struct {
-	CardID          uint64          `json:"card_id"`
+	CardID          string          `json:"card_id"`
 	ExpectedVersion int             `json:"expected_version"`
 	ElapsedMS       *int            `json:"elapsed_ms"`
-	Deck            []uint64        `json:"deck"`
+	Deck            []string        `json:"deck"`
 	Action          string          `json:"action"`
 	Answer          json.RawMessage `json:"answer"`
 }
@@ -48,8 +48,8 @@ type gradeRequest struct {
 // reviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
 // 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列。
 type reviewCardRequest struct {
-	CardID uint64   `json:"card_id"`
-	Deck   []uint64 `json:"deck"`
+	CardID string   `json:"card_id"`
+	Deck   []string `json:"deck"`
 }
 
 // reviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
@@ -60,11 +60,11 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		return
 	}
 	var req reviewRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, note, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	_, note, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeReviewResult(c, user, req.Deck, result)
+	s.writeReviewResult(c, user, deckIDs, result)
 }
 
 // reviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
@@ -96,11 +96,11 @@ func (s *Server) reviewGrade(c *gin.Context) {
 		return
 	}
 	var req gradeRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, note, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, note, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
@@ -114,18 +114,18 @@ func (s *Server) reviewGrade(c *gin.Context) {
 		s.gradeReveal(c, user, card)
 		return
 	case gradeActionGiveUp:
-		s.gradeGiveUp(c, user, req)
+		s.gradeGiveUp(c, user, req, deckIDs)
 		return
 	case "":
 	default:
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	s.gradeSubmit(c, user, card, note, req)
+	s.gradeSubmit(c, user, card, note, req, deckIDs)
 }
 
 // gradeSubmit 执行一次真正的机器判分：构造判分输入、判分、按映射得档位，单事务写库。
-func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest) {
+func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest, deckIDs []uint64) {
 	ctx := c.Request.Context()
 	g, _ := graderFor(note.Kind)
 	fields, err := store.ParseFields(note.FieldsJSON)
@@ -173,7 +173,7 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeReviewResult(c, user, req.Deck, result, gin.H{"feedback": feedback})
+	s.writeReviewResult(c, user, deckIDs, result, gin.H{"feedback": feedback})
 }
 
 // gradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
@@ -185,12 +185,12 @@ func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"revealed": true, "card_id": card.ID, "answer_html": answerHTML})
+	c.JSON(http.StatusOK, gin.H{"revealed": true, "card_id": card.PublicID, "answer_html": answerHTML})
 }
 
 // gradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
 // grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
-func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest) {
+func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest, deckIDs []uint64) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Rating: int(schedule.Again), ExpectedVersion: req.ExpectedVersion,
 		ElapsedMS: req.ElapsedMS, GradeSource: schedule.GradeSourceSelf,
@@ -200,7 +200,7 @@ func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeReviewResult(c, user, req.Deck, result, gin.H{"gave_up": true})
+	s.writeReviewResult(c, user, deckIDs, result, gin.H{"gave_up": true})
 }
 
 // reviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
@@ -214,11 +214,11 @@ func (s *Server) reviewBury(c *gin.Context) {
 		return
 	}
 	var req reviewCardRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
@@ -242,7 +242,7 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeQueue(c, user, req.Deck)
+	s.writeQueue(c, user, deckIDs)
 }
 
 // reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
@@ -255,11 +255,11 @@ func (s *Server) reviewRender(c *gin.Context) {
 		return
 	}
 	var req reviewCardRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.CardID == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, _, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
 	if !ok {
 		return
 	}
@@ -270,7 +270,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"card_id":    card.ID,
+		"card_id":    card.PublicID,
 		"front_html": view.FrontHTML,
 		"back_html":  view.BackHTML,
 		"edit_href":  view.EditHref,
@@ -278,30 +278,26 @@ func (s *Server) reviewRender(c *gin.Context) {
 }
 
 // reviewCard 校验 SPA 请求的卡组范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
-// 不静默丢弃），目标卡必须存在且落在范围内。失败时已写出响应并返回 false。
-func (s *Server) reviewCard(c *gin.Context, user *store.User, deckIDs []uint64, cardID uint64) (*store.Card, *store.Note, bool) {
-	for _, deckID := range deckIDs {
-		if deckID == 0 {
-			writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-			return nil, nil, false
-		}
-		if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader); !ok {
-			return nil, nil, false
-		}
+// 不静默丢弃），目标卡必须存在且落在范围内。cardPublicID 与 deckPublicIDs 都是对外 id，
+// 内部一律换成数字主键再判定；失败时已写出响应并返回 false，成功时返回范围对应的数字卡组 id。
+func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs []string, cardPublicID string) (*store.Card, *store.Note, []uint64, bool) {
+	scope, ok := s.deckScopeFromValues(c, user, deckPublicIDs)
+	if !ok {
+		return nil, nil, nil, false
 	}
-	card, err := s.cards.ByID(c.Request.Context(), cardID)
+	card, err := s.cards.ByPublicID(c.Request.Context(), strings.TrimSpace(cardPublicID))
 	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	note, err := s.notes.ByID(c.Request.Context(), card.NoteID)
 	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	if len(deckIDs) > 0 {
+	if len(scope.deckIDs) > 0 {
 		inScope := false
-		for _, deckID := range deckIDs {
+		for _, deckID := range scope.deckIDs {
 			if note.DeckID == deckID {
 				inScope = true
 				break
@@ -309,10 +305,10 @@ func (s *Server) reviewCard(c *gin.Context, user *store.User, deckIDs []uint64, 
 		}
 		if !inScope {
 			writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-			return nil, nil, false
+			return nil, nil, nil, false
 		}
 	}
-	return card, note, true
+	return card, note, scope.deckIDs, true
 }
 
 // writeReviewResult 写出一次评分后的统一响应：新状态 + 同范围队列（预取下一张），
@@ -324,7 +320,7 @@ func (s *Server) writeReviewResult(c *gin.Context, user *store.User, deckIDs []u
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	body := gin.H{"card_id": result.CardID, "review_id": result.ReviewID, "state": result.State,
+	body := gin.H{"card_id": result.CardID, "state": result.State,
 		"due_at": result.DueAt, "version": result.Version, "stability": result.Stability,
 		"cards": cards, "remaining": len(cards)}
 	for _, item := range extra {

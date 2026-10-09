@@ -15,14 +15,14 @@ import (
 
 type sharingRequest struct {
 	Username  string `json:"username"`
-	UserID    uint64 `json:"user_id"`
+	UserID    string `json:"user_id"`
 	Role      string `json:"role"`
 	Link      string `json:"link"`
 	Password  string `json:"password"`
 	ExpiresAt string `json:"expires_at"`
 }
 type grant struct {
-	UserID   uint64 `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 }
@@ -41,7 +41,7 @@ func (s *Server) sharingGet(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		shareError(c, http.StatusNotFound, "not_found")
 		return
@@ -65,9 +65,15 @@ func (s *Server) sharingGet(c *gin.Context) {
 	}
 	grantRows := make([]grant, 0, len(grants))
 	for _, g := range grants {
-		if g.UserID != deck.OwnerUserID {
-			grantRows = append(grantRows, grant{UserID: g.UserID, Username: s.usernameFor(c, g.UserID), Role: g.Role})
+		if g.UserID == deck.OwnerUserID {
+			continue
 		}
+		u, err := s.users.ByID(ctx, g.UserID)
+		if err != nil || u == nil {
+			// 授权行指向的用户已不存在：没有可展示的对外 id，跳过而不回退数字主键。
+			continue
+		}
+		grantRows = append(grantRows, grant{UserID: u.PublicID, Username: u.Username, Role: g.Role})
 	}
 	now := time.Now().UTC()
 	linkRows := make([]shareLink, 0, len(links))
@@ -82,7 +88,7 @@ func (s *Server) sharingGet(c *gin.Context) {
 		shareError(c, 500, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deck_id": deck.ID, "deck_name": deck.Name, "grants": grantRows, "pending_invites": pending, "links": linkRows})
+	c.JSON(http.StatusOK, gin.H{"deck_id": deck.PublicID, "deck_name": deck.Name, "grants": grantRows, "pending_invites": pending, "links": linkRows})
 }
 
 func (s *Server) sharingWrite(c *gin.Context, action string) {
@@ -90,7 +96,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		shareError(c, 404, "not_found")
 		return
@@ -103,12 +109,11 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 	if action == "link_revoke" {
 		req.Link = c.Param("digest")
 	} else if action == "revoke" {
-		id, err := strconv.ParseUint(c.Param("userID"), 10, 64)
-		if err != nil {
+		req.UserID = strings.TrimSpace(c.Param("userID"))
+		if req.UserID == "" {
 			shareError(c, 400, "invalid_request")
 			return
 		}
-		req.UserID = id
 	} else if action != "link_revoke_all" {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			shareError(c, 400, "invalid_request")
@@ -126,17 +131,18 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 		}
 		var target *store.User
 		var err error
-		if req.UserID != 0 {
-			target, err = s.users.ByID(ctx, req.UserID)
-		} else if strings.TrimSpace(req.Username) != "" {
+		switch {
+		case strings.TrimSpace(req.UserID) != "":
+			target, err = s.users.ByPublicID(ctx, strings.TrimSpace(req.UserID))
+		case strings.TrimSpace(req.Username) != "":
 			target, err = s.users.ByUsername(ctx, strings.TrimSpace(req.Username))
-		} else {
-			id, parseErr := strconv.ParseUint(c.Param("userID"), 10, 64)
-			if parseErr != nil || id == 0 {
+		default:
+			raw := strings.TrimSpace(c.Param("userID"))
+			if raw == "" {
 				bad()
 				return
 			}
-			target, err = s.users.ByID(ctx, id)
+			target, err = s.users.ByPublicID(ctx, raw)
 		}
 		if err != nil {
 			shareError(c, 404, "not_found")
@@ -160,7 +166,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 					shareError(c, 500, "internal_error")
 					return
 				}
-				s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role, "previous_role": existing}})
+				s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role, "previous_role": existing}})
 				// 通知（B 类，可退订）。放在审计之后、且不返回错误：通知只是副作用。
 				s.notifyDeckGrantChange(c, deck, user, target, existing, role)
 				break
@@ -187,12 +193,18 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 				shareError(c, 500, "internal_error")
 				return
 			}
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckShareInvite, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.ID, "role": role}})
+			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckShareInvite, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role}})
 			s.notifyDeckGrantChange(c, deck, user, target, "", role)
 		}
 	case "revoke":
-		id := req.UserID
-		if id == 0 || id == deck.OwnerUserID {
+		target, err := s.users.ByPublicID(ctx, strings.TrimSpace(req.UserID))
+		if err != nil {
+			// 未知的对外 id 与「这个用户没有授权可撤」同形：404，不泄露存在性。
+			shareError(c, 404, "not_found")
+			return
+		}
+		id := target.ID
+		if id == deck.OwnerUserID {
 			bad()
 			return
 		}
@@ -208,7 +220,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 			return
 		}
 		if existing != "" {
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": id, "previous_role": existing}})
+			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": target.PublicID, "previous_role": existing}})
 			s.notifyDeckRevoke(c, deck, user, id, existing)
 			break
 		}

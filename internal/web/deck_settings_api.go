@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,11 +12,12 @@ import (
 )
 
 // deckSettingsPayload 把卡组与今日额度装配成响应体；0 原样返回，不限由布尔量表达。
-func deckSettingsPayload(deck *store.Deck, budget schedule.DeckBudget) deckSettingsResponse {
+// deck_id / preset_id 是对外 id：卡组的数字主键不对外，预设同理，这里由调用方传进来。
+func deckSettingsPayload(deck *store.Deck, presetPublicID string, budget schedule.DeckBudget) deckSettingsResponse {
 	return deckSettingsResponse{
-		DeckID:          deck.ID,
+		DeckID:          deck.PublicID,
 		DeckName:        deck.Name,
-		PresetID:        deck.PresetID,
+		PresetID:        presetPublicID,
 		NewPerDay:       budget.NewPerDay,
 		ReviewsPerDay:   budget.ReviewsPerDay,
 		NewUsed:         budget.NewUsed,
@@ -33,9 +35,9 @@ func deckSettingsPayload(deck *store.Deck, budget schedule.DeckBudget) deckSetti
 // 因为「0 表示不限」与「今日剩余 0 张」在整数上同形，额外的 NewUnlimited /
 // ReviewUnlimited 布尔量显式表达不限，前端据此渲染「不限」而不是 0。
 type deckSettingsResponse struct {
-	DeckID          uint64 `json:"deck_id"`
+	DeckID          string `json:"deck_id"`
 	DeckName        string `json:"deck_name"`
-	PresetID        uint64 `json:"preset_id"`
+	PresetID        string `json:"preset_id"`
 	NewPerDay       int    `json:"new_per_day"`
 	ReviewsPerDay   int    `json:"reviews_per_day"`
 	NewUsed         int    `json:"new_used"`
@@ -47,11 +49,11 @@ type deckSettingsResponse struct {
 }
 
 // deckSettingsRequest 是 PATCH 的请求体；用指针区分「未提供」与「提供了 0」。
-// 0 是合法值（不限），因此不能靠零值判断字段是否出现。
+// 0 是合法值（不限），因此不能靠零值判断字段是否出现。PresetID 是对外 id 字符串。
 type deckSettingsRequest struct {
 	NewPerDay     *int    `json:"new_per_day"`
 	ReviewsPerDay *int    `json:"reviews_per_day"`
-	PresetID      *uint64 `json:"preset_id"`
+	PresetID      *string `json:"preset_id"`
 }
 
 // registerDeckSettingsAPIRoutes 挂载 SPA 的卡组每日上限读写接口（仅 owner，写操作过 CSRF）。
@@ -74,7 +76,7 @@ func (s *Server) deckSettingsGet(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -88,7 +90,8 @@ func (s *Server) deckSettingsGet(c *gin.Context) {
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, deckSettingsPayload(deck, budget))
+	presetPub := s.presetPublicID(c.Request.Context(), deck.PresetID)
+	c.JSON(http.StatusOK, deckSettingsPayload(deck, presetPub, budget))
 }
 
 // deckSettingsPatch 保存每日上限（仅 owner）。
@@ -99,7 +102,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 	if !ok {
 		return
 	}
-	deckID, ok := deckIDParam(c)
+	deckID, ok := s.deckIDParam(c)
 	if !ok {
 		return
 	}
@@ -119,7 +122,13 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 	}
 	// 预设是可选项：只改额度的老请求不带它，行为保持不变。
 	if req.PresetID != nil {
-		if err := s.decks.SetPreset(c.Request.Context(), user.ID, deck.ID, *req.PresetID); err != nil {
+		preset, err := s.presets.ByPublicID(c.Request.Context(), strings.TrimSpace(*req.PresetID))
+		if err != nil {
+			// 未知或空串的预设对外 id 与「预设不可用」同形：400，不写库、不写审计。
+			shareError(c, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		if err := s.decks.SetPreset(c.Request.Context(), user.ID, deck.ID, preset.ID); err != nil {
 			if errors.Is(err, store.ErrDeckPresetInvalid) {
 				shareError(c, http.StatusBadRequest, "invalid_request")
 				return
@@ -133,7 +142,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 			Action:     store.ActionDeckPreset,
 			TargetType: "deck",
 			TargetID:   store.Ptr(deck.ID),
-			Detail:     map[string]any{"preset_id": *req.PresetID},
+			Detail:     map[string]any{"preset_id": preset.PublicID},
 		})
 	}
 	caps := store.DeckCaps{NewPerDay: *req.NewPerDay, ReviewsPerDay: *req.ReviewsPerDay}
@@ -164,5 +173,5 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, deckSettingsPayload(updated, budget))
+	c.JSON(http.StatusOK, deckSettingsPayload(updated, s.presetPublicID(c.Request.Context(), updated.PresetID), budget))
 }

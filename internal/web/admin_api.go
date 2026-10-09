@@ -1,9 +1,7 @@
 package web
 
 import (
-	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -74,15 +72,6 @@ func (s *Server) adminGuard() gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-// parseUintParam 解析路径里的十进制 id；0 与非法输入一律返回错误（id 从 1 起）。
-func parseUintParam(raw string) (uint64, error) {
-	id, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
-	if err != nil || id == 0 {
-		return 0, errors.New("invalid id")
-	}
-	return id, nil
 }
 
 // registerAdminAPIRoutes 挂载管理面板的 JSON 端点（读 + 写）。

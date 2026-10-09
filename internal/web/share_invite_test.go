@@ -31,10 +31,10 @@ func TestShareInviteRequiresAcceptance(t *testing.T) {
 	ctx := context.Background()
 	grants := store.NewGrantStore(db)
 	invites := store.NewDeckShareInviteStore(db)
-	base := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
+	base := "/api/v1/decks/" + deck.PublicID + "/sharing/grants"
 
 	rec := jsonRequest(t, srv, http.MethodPost, base,
-		`{"user_id":`+u64str(invitee.ID)+`,"role":"reader"}`, cookies, csrf)
+		`{"user_id":"`+invitee.PublicID+`","role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("POST grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -48,7 +48,7 @@ func TestShareInviteRequiresAcceptance(t *testing.T) {
 
 	// 属主重复分享同一人同一角色：仍然是那一条邀请，不叠加。
 	rec = jsonRequest(t, srv, http.MethodPost, base,
-		`{"user_id":`+u64str(invitee.ID)+`,"role":"reader"}`, cookies, csrf)
+		`{"user_id":"`+invitee.PublicID+`","role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("second POST grant = %d, want success", rec.Code)
 	}
@@ -74,8 +74,8 @@ func TestShareInviteAcceptAndReject(t *testing.T) {
 	// 属主分享两次：一次会被接受，一次会被拒绝。
 	other := seedReviewDeck(t, db, ownerID, "Consent deck 3")
 	for _, d := range []*store.Deck{deck, other} {
-		rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/decks/"+u64str(d.ID)+"/sharing/grants",
-			`{"user_id":`+u64str(inviteeID)+`,"role":"editor"}`, cookies, csrf)
+		rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/decks/"+d.PublicID+"/sharing/grants",
+			`{"user_id":"`+userPublicID(t, db, inviteeID)+`","role":"editor"}`, cookies, csrf)
 		if rec.Code >= 300 {
 			t.Fatalf("POST grant = %d, want success", rec.Code)
 		}
@@ -95,7 +95,7 @@ func TestShareInviteAcceptAndReject(t *testing.T) {
 	}
 
 	// 接受第一条：授权出现、邀请消失。
-	rec = jsonRequest(t, srv, http.MethodPost, "/api/v1/sharing/invites/"+u64str(deck.ID)+"/accept", "", inviteeCookies, inviteeCSRF)
+	rec = jsonRequest(t, srv, http.MethodPost, "/api/v1/sharing/invites/"+deck.PublicID+"/accept", "", inviteeCookies, inviteeCSRF)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("accept = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -107,7 +107,7 @@ func TestShareInviteAcceptAndReject(t *testing.T) {
 	}
 
 	// 拒绝第二条：邀请消失，授权从未出现。
-	rec = jsonRequest(t, srv, http.MethodPost, "/api/v1/sharing/invites/"+u64str(other.ID)+"/reject", "", inviteeCookies, inviteeCSRF)
+	rec = jsonRequest(t, srv, http.MethodPost, "/api/v1/sharing/invites/"+other.PublicID+"/reject", "", inviteeCookies, inviteeCSRF)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("reject = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -130,8 +130,8 @@ func TestSharePolicyRefusesInvites(t *testing.T) {
 	ctx := context.Background()
 	policy := store.NewSharePolicyStore(db)
 	invites := store.NewDeckShareInviteStore(db)
-	path := "/api/v1/decks/" + u64str(deck.ID) + "/sharing/grants"
-	body := `{"user_id":` + u64str(invitee.ID) + `,"role":"reader"}`
+	path := "/api/v1/decks/" + deck.PublicID + "/sharing/grants"
+	body := `{"user_id":"` + invitee.PublicID + `","role":"reader"}`
 
 	// nobody：直接拒绝，且不留邀请。
 	if err := policy.SetPolicy(ctx, invitee.ID, store.ShareAcceptNobody); err != nil {
@@ -161,7 +161,7 @@ func TestSharePolicyRefusesInvites(t *testing.T) {
 	// 默认（anyone）放行。
 	other := newGrantee(t, srv, "open-user", "open-user@example.com")
 	if rec := jsonRequest(t, srv, http.MethodPost, path,
-		`{"user_id":`+u64str(other.ID)+`,"role":"reader"}`, cookies, csrf); rec.Code >= 300 {
+		`{"user_id":"`+other.PublicID+`","role":"reader"}`, cookies, csrf); rec.Code >= 300 {
 		t.Fatalf("grant to a default-policy recipient = %d, want success", rec.Code)
 	}
 }
@@ -177,7 +177,7 @@ func TestSharePolicySaveEndpoint(t *testing.T) {
 		t.Fatalf("PUT invalid policy = %d, want 400", rec.Code)
 	}
 	rec = jsonRequest(t, srv, http.MethodPut, "/api/v1/settings/share-policy",
-		`{"policy":"whitelist","allow":[`+u64str(other.ID)+`]}`, cookies, csrf)
+		`{"policy":"whitelist","allow":["`+other.PublicID+`"]}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT policy = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -210,7 +210,7 @@ func TestSharePolicySaveEndpoint(t *testing.T) {
 
 	// 移出白名单。
 	rec = jsonRequest(t, srv, http.MethodPut, "/api/v1/settings/share-policy",
-		`{"revoke":[`+u64str(other.ID)+`]}`, cookies, csrf)
+		`{"revoke":["`+other.PublicID+`"]}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT revoke = %d, want 200", rec.Code)
 	}

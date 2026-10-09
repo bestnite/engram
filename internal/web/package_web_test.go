@@ -53,7 +53,7 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Pack Deck")
 	seedBasic(t, db, deck.ID, "Q1", "A1")
 
-	exp := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/package", cookies)
+	exp := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/package", cookies)
 	if exp.Code != http.StatusOK {
 		t.Fatalf("GET export = %d, want 200 (body %s)", exp.Code, snippet(exp.Body.String()))
 	}
@@ -67,7 +67,7 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 		t.Error("exported package is empty")
 	}
 
-	anon := getWithCookies(t, srv, "/decks/"+u64str(deck.ID)+"/package", nil)
+	anon := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/package", nil)
 	if anon.Code != http.StatusSeeOther {
 		t.Errorf("anonymous export = %d, want 303 redirect to login", anon.Code)
 	}
@@ -84,15 +84,15 @@ func TestImportPageServesShell(t *testing.T) {
 
 // exportPackageBytes 通过浏览器导出端点取一个卡组包的字节，作为导入用例的合法载荷。
 // 用真实导出的包（而不是手搓字节）保证负例失败的原因是判权，而不是坏包。
-func exportPackageBytes(t *testing.T, srv *Server, deckID uint64, cookies []*http.Cookie) []byte {
+func exportPackageBytes(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie) []byte {
 	t.Helper()
-	rec := getWithCookies(t, srv, "/decks/"+u64str(deckID)+"/package", cookies)
+	rec := getWithCookies(t, srv, "/decks/"+deckPublicID+"/package", cookies)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("export deck %d = %d, want 200 (body %s)", deckID, rec.Code, snippet(rec.Body.String()))
+		t.Fatalf("export deck %s = %d, want 200 (body %s)", deckPublicID, rec.Code, snippet(rec.Body.String()))
 	}
 	body := rec.Body.Bytes()
 	if len(body) == 0 {
-		t.Fatalf("export deck %d produced an empty package", deckID)
+		t.Fatalf("export deck %s produced an empty package", deckPublicID)
 	}
 	return body
 }

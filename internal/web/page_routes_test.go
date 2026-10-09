@@ -77,8 +77,8 @@ func TestTOTPSettingsRouteServesShell(t *testing.T) {
 // deckPageRouteCase 一行 = 一条卡组范围内页面路径的可达性断言。
 type deckPageRouteCase struct {
 	name string
-	// path 由夹具的卡组 / 卡片 id 组成。
-	path func(deckID, noteID uint64) string
+	// path 由夹具的卡组 / 卡片对外 id 组成。
+	path func(deckPublicID, notePublicID string) string
 	// stranger 是「已登录但无权」的会话：none = 无任何授权，reader = 被授予 reader。
 	stranger string
 }
@@ -87,18 +87,18 @@ type deckPageRouteCase struct {
 // 登录页，无权用户 403 且拿不到外壳——判权先于发壳执行。
 func TestDeckScopedPageRoutesEnforceRole(t *testing.T) {
 	cases := []deckPageRouteCase{
-		{"note list", func(d, _ uint64) string { return "/decks/" + u64str(d) + "/notes" }, "none"},
-		{"note edit", func(d, n uint64) string { return "/decks/" + u64str(d) + "/notes/" + u64str(n) }, "reader"},
-		{"note create", func(d, _ uint64) string { return "/decks/" + u64str(d) + "/new-note" }, "reader"},
-		{"deck settings", func(d, _ uint64) string { return "/decks/" + u64str(d) + "/settings" }, "none"},
-		{"deck sharing", func(d, _ uint64) string { return "/decks/" + u64str(d) + "/sharing" }, "reader"},
+		{"note list", func(d, _ string) string { return "/decks/" + d + "/notes" }, "none"},
+		{"note edit", func(d, n string) string { return "/decks/" + d + "/notes/" + n }, "reader"},
+		{"note create", func(d, _ string) string { return "/decks/" + d + "/new-note" }, "reader"},
+		{"deck settings", func(d, _ string) string { return "/decks/" + d + "/settings" }, "none"},
+		{"deck sharing", func(d, _ string) string { return "/decks/" + d + "/sharing" }, "reader"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 			deck := seedReviewDeck(t, db, ownerID, "Page route deck")
 			note := seedBasic(t, db, deck.ID, "Q", "A")
-			path := tc.path(deck.ID, note.ID)
+			path := tc.path(deck.PublicID, note.PublicID)
 
 			assertShell(t, getWithCookies(t, srv, path, ownerCookies))
 			assertRedirectsToLogin(t, get(t, srv, path, nil), "GET "+path)

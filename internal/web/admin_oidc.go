@@ -20,7 +20,7 @@ import (
 
 // adminOIDCIdentity 是一条已绑定身份。
 type adminOIDCIdentity struct {
-	ID       uint64 `json:"id"`
+	ID       string `json:"id"`
 	Provider string `json:"provider"`
 	Subject  string `json:"subject"`
 	Email    string `json:"email"`
@@ -110,7 +110,7 @@ func (s *Server) adminOIDC(c *gin.Context) {
 				email = *row.Email
 			}
 			resp.Identities = append(resp.Identities, adminOIDCIdentity{
-				ID: row.ID, Provider: row.Provider, Subject: row.Subject,
+				ID: row.PublicID, Provider: row.Provider, Subject: row.Subject,
 				Email: email, Username: username,
 				LinkedAt: row.LinkedAt.Format(time.RFC3339),
 			})
@@ -255,27 +255,27 @@ func (s *Server) adminOIDCUnlink(c *gin.Context) {
 		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	id, err := parseUintParam(c.Param("id"))
-	if err != nil {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" {
 		adminError(c, http.StatusNotFound, "unlink_failed")
 		return
 	}
 	ctx := c.Request.Context()
-	ident, err := s.identities.ByID(ctx, id)
+	ident, err := s.identities.ByPublicID(ctx, raw)
 	if err != nil {
-		s.logger.Error("spa admin: load identity failed", "id", id, "error", err)
+		s.logger.Error("spa admin: load identity failed", "id", raw, "error", err)
 		adminError(c, http.StatusNotFound, "unlink_failed")
 		return
 	}
-	if err := s.identities.Delete(ctx, id); err != nil {
-		s.logger.Error("spa admin: unlink identity failed", "id", id, "error", err)
+	if err := s.identities.Delete(ctx, ident.ID); err != nil {
+		s.logger.Error("spa admin: unlink identity failed", "id", ident.ID, "error", err)
 		adminError(c, http.StatusInternalServerError, "unlink_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionIdentityUnlink,
-		TargetType: "identity", TargetID: store.Ptr(id),
-		Detail: map[string]any{"provider": ident.Provider, "subject": ident.Subject, "user_id": ident.UserID, "via": "spa"},
+		TargetType: "identity", TargetID: store.Ptr(ident.ID),
+		Detail: map[string]any{"provider": ident.Provider, "subject": ident.Subject, "user_id": s.userPublicID(ctx, ident.UserID), "via": "spa"},
 	})
 	c.Status(http.StatusNoContent)
 }

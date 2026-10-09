@@ -96,7 +96,7 @@ func TestAdminUserLifecycle(t *testing.T) {
 	}
 
 	// 改角色：缺 confirm 拒绝，带 confirm 通过。
-	id := u64str(created.ID)
+	id := created.PublicID
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+id+"/role", map[string]any{"role": store.RoleAdmin}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("role change without confirm = %d, want 400", rec.Code)
 	}
@@ -136,7 +136,7 @@ func TestAdminUserLifecycle(t *testing.T) {
 	var me adminSummaryResponse
 	_ = json.Unmarshal(meRec.Body.Bytes(), &me)
 	ownerID, _ := store.NewUserStore(db).ByUsername(ctx, "owner")
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+u64str(ownerID.ID)+"/delete", map[string]any{"confirm": true}, cookies, csrf); rec.Code != http.StatusBadRequest {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+ownerID.PublicID+"/delete", map[string]any{"confirm": true}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("delete self = %d, want 400", rec.Code)
 	}
 
@@ -205,7 +205,7 @@ func TestAdminRegistrationAndInvites(t *testing.T) {
 	}
 
 	// 撤销。
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/invites/"+u64str(created.Invite.ID)+"/revoke", nil, cookies, csrf); rec.Code != http.StatusNoContent {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/invites/"+created.Invite.ID+"/revoke", nil, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("revoke invite = %d, want 204", rec.Code)
 	}
 	if _, err := srv.invites.ByToken(ctx, created.Invite.Token); err == nil {
@@ -243,7 +243,7 @@ func TestAdminAPIKeysListAndRevoke(t *testing.T) {
 		t.Fatal("api keys response leaked the plaintext")
 	}
 
-	if rec := adminPostJSON(t, srv, "/api/v1/admin/api-keys/"+u64str(created.Key.ID)+"/revoke", nil, cookies, csrf); rec.Code != http.StatusNoContent {
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/api-keys/"+created.Key.PublicID+"/revoke", nil, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("revoke key = %d, want 204", rec.Code)
 	}
 	if _, err := store.NewAPIKeyStore(db).Authenticate(ctx, created.Plaintext, created.Key.CreatedAt); err == nil {

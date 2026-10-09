@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,9 +26,10 @@ import (
 // internal/retention 每小时回收，不在读路径上删。
 const ShareInviteTTL = 30 * 24 * time.Hour
 
-// shareAllowRow 是白名单里的一行。带用户名是因为界面要显示"谁"，而裸 id 不可读。
+// shareAllowRow 是白名单里的一行。带用户名是因为界面要显示"谁"，而裸 id 不可读；
+// user_id 是对外 id，数字主键不对外。
 type shareAllowRow struct {
-	UserID   uint64 `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 }
 
@@ -45,27 +45,53 @@ type shareInvitesResponse struct {
 //
 // 白名单按**用户名**收（与共享授权端点同一口径）：界面能显示的是用户名，要求前端自己
 // 把名字翻成 id 就得再暴露一个用户搜索端点，而"谁能邀请我"不该有这个前置条件。
+// Allow / Revoke 也接受对外 id 写法（脚本与测试用），两条路径都解析成数字主键。
 type sharePolicyRequest struct {
 	Policy string `json:"policy"`
-	// Allow 与 Revoke 分别是"加进白名单""移出白名单"的用户 id。
-	Allow  []uint64 `json:"allow,omitempty"`
-	Revoke []uint64 `json:"revoke,omitempty"`
+	// Allow 与 Revoke 分别是"加进白名单""移出白名单"的用户对外 id。
+	Allow  []string `json:"allow,omitempty"`
+	Revoke []string `json:"revoke,omitempty"`
 	// AllowUsernames 与 RevokeUsernames 同上的用户名写法。
 	AllowUsernames  []string `json:"allow_usernames,omitempty"`
 	RevokeUsernames []string `json:"revoke_usernames,omitempty"`
 }
 
-// shareAllowRows 把白名单 id 列表翻成带用户名的行（id 查不到就留空名，行仍保留）。
+// shareAllowRows 把白名单主键列表翻成带用户名与对外 id 的行；用户已不存在的行跳过，
+// 不回退到数字主键。
 func (s *Server) shareAllowRows(c *gin.Context, userID uint64) ([]shareAllowRow, error) {
 	ids, err := s.sharePolicy.AllowList(c.Request.Context(), userID)
 	if err != nil {
 		return nil, err
 	}
+	ctx := c.Request.Context()
 	rows := make([]shareAllowRow, 0, len(ids))
 	for _, id := range ids {
-		rows = append(rows, shareAllowRow{UserID: id, Username: s.usernameFor(c, id)})
+		u, err := s.users.ByID(ctx, id)
+		if err != nil || u == nil {
+			continue
+		}
+		rows = append(rows, shareAllowRow{UserID: u.PublicID, Username: u.Username})
 	}
 	return rows, nil
+}
+
+// resolveShareUserIDs 把一批用户对外 id 翻成主键；任一未知即写 400 并返回 false。
+func (s *Server) resolveShareUserIDs(c *gin.Context, ids []string) ([]uint64, bool) {
+	ctx := c.Request.Context()
+	out := make([]uint64, 0, len(ids))
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		u, err := s.users.ByPublicID(ctx, id)
+		if err != nil {
+			shareError(c, http.StatusBadRequest, "user_not_found")
+			return nil, false
+		}
+		out = append(out, u.ID)
+	}
+	return out, true
 }
 
 // resolveShareTargets 把一批用户名翻成 id；任何一个查不到都返回 false（已写好 400 响应）。
@@ -116,14 +142,19 @@ func (s *Server) shareInviteList(c *gin.Context) {
 	c.JSON(http.StatusOK, shareInvitesResponse{Invites: invites, Policy: policy, AllowList: allow})
 }
 
-// shareInviteDeckID 解析路径里的卡组 id；不合法时已写好响应。
-func shareInviteDeckID(c *gin.Context) (uint64, bool) {
-	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("deckID")), 10, 64)
-	if err != nil || id == 0 {
-		shareError(c, http.StatusBadRequest, "invalid_request")
+// shareInviteDeckID 解析路径里的卡组对外 id 并换成数字主键；未知或空串一律 404 invite_not_found。
+func (s *Server) shareInviteDeckID(c *gin.Context) (uint64, bool) {
+	raw := strings.TrimSpace(c.Param("deckID"))
+	if raw == "" {
+		shareError(c, http.StatusNotFound, "invite_not_found")
 		return 0, false
 	}
-	return id, true
+	deck, err := s.decks.ByPublicID(c.Request.Context(), raw)
+	if err != nil {
+		shareError(c, http.StatusNotFound, "invite_not_found")
+		return 0, false
+	}
+	return deck.ID, true
 }
 
 // shareInviteAccept 接受一条邀请：写授权、删邀请、写审计（POST …/accept）。
@@ -133,7 +164,7 @@ func (s *Server) shareInviteAccept(c *gin.Context) {
 		shareError(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	deckID, ok := shareInviteDeckID(c)
+	deckID, ok := s.shareInviteDeckID(c)
 	if !ok {
 		return
 	}
@@ -167,7 +198,7 @@ func (s *Server) shareInviteAccept(c *gin.Context) {
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionDeckShareAccept,
 		TargetType: "deck", TargetID: store.Ptr(deckID),
-		Detail: map[string]any{"role": inv.Role, "invited_by": inv.InvitedBy},
+		Detail: map[string]any{"role": inv.Role, "invited_by": s.userPublicID(ctx, inv.InvitedBy)},
 	})
 	c.JSON(http.StatusOK, gin.H{"accepted": true})
 }
@@ -179,7 +210,7 @@ func (s *Server) shareInviteReject(c *gin.Context) {
 		shareError(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	deckID, ok := shareInviteDeckID(c)
+	deckID, ok := s.shareInviteDeckID(c)
 	if !ok {
 		return
 	}
@@ -197,7 +228,7 @@ func (s *Server) shareInviteReject(c *gin.Context) {
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionDeckShareReject,
 		TargetType: "deck", TargetID: store.Ptr(deckID),
-		Detail: map[string]any{"invited_by": inv.InvitedBy},
+		Detail: map[string]any{"invited_by": s.userPublicID(ctx, inv.InvitedBy)},
 	})
 	c.JSON(http.StatusOK, gin.H{"rejected": true})
 }
@@ -254,7 +285,7 @@ func (s *Server) sharePolicySave(c *gin.Context) {
 			return
 		}
 	}
-	// 用户名与 id 两种写法合并处理：界面提交用户名（它只认识名字），测试与脚本提交 id。
+	// 用户名与对外 id 两种写法合并处理：界面提交用户名（它只认识名字），测试与脚本提交对外 id。
 	byName, ok := s.resolveShareTargets(c, req.AllowUsernames)
 	if !ok {
 		return
@@ -263,8 +294,16 @@ func (s *Server) sharePolicySave(c *gin.Context) {
 	if !ok {
 		return
 	}
-	allowIDs := append(append([]uint64{}, req.Allow...), byName...)
-	revokeIDs := append(append([]uint64{}, req.Revoke...), revokeByName...)
+	byPublicID, ok := s.resolveShareUserIDs(c, req.Allow)
+	if !ok {
+		return
+	}
+	revokeByPublicID, ok := s.resolveShareUserIDs(c, req.Revoke)
+	if !ok {
+		return
+	}
+	allowIDs := append(append([]uint64{}, byPublicID...), byName...)
+	revokeIDs := append(append([]uint64{}, revokeByPublicID...), revokeByName...)
 	for _, from := range allowIDs {
 		if from == 0 || from == u.ID {
 			continue

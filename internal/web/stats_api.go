@@ -172,7 +172,7 @@ type statsCurvePoint struct {
 
 // statsDeck 是一个卡组的统计行。
 type statsDeck struct {
-	DeckID    uint64  `json:"deck_id"`
+	DeckID    string  `json:"deck_id"`
 	Name      string  `json:"name"`
 	DueCount  int64   `json:"due_count"`
 	Reviews   int64   `json:"reviews"`
@@ -270,7 +270,7 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 	}
 	for _, d := range m.Decks {
 		detail.Decks = append(detail.Decks, statsDeck{
-			DeckID: d.DeckID, Name: d.Name, DueCount: d.DueCount,
+			DeckID: d.PublicID, Name: d.Name, DueCount: d.DueCount,
 			Reviews: d.Reviews, Retention: d.Retention, ElapsedMS: d.ElapsedMS,
 		})
 	}

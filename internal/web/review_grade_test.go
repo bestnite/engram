@@ -45,8 +45,7 @@ type gradeFeedbackBody struct {
 
 // gradeResponseBody 是判分入口的对外形态（判分与放弃两条路径共用状态字段）。
 type gradeResponseBody struct {
-	CardID    uint64             `json:"card_id"`
-	ReviewID  uint64             `json:"review_id"`
+	CardID    string             `json:"card_id"`
 	State     string             `json:"state"`
 	Version   int                `json:"version"`
 	Remaining int                `json:"remaining"`
@@ -98,10 +97,11 @@ func TestGradeNumericAcceptance(t *testing.T) {
 				"prompt": "分数 1/2 化成百分数是多少？", "value": 50.0, "tolerance_absolute": 0.5, "unit": "%",
 			})
 			cardID := cardIDOfNote(t, db, note.ID)
+			cardPub := cardPublicIDOfNote(t, db, note.ID)
 
 			rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-				"card_id": cardID, "expected_version": 0, "elapsed_ms": 1200,
-				"deck": []uint64{deck.ID}, "answer": tc.answer,
+				"card_id": cardPub, "expected_version": 0, "elapsed_ms": 1200,
+				"deck": []string{deck.PublicID}, "answer": tc.answer,
 			}, cookies, csrf)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("POST grade status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -176,7 +176,7 @@ func TestGradeOtherTypesAcceptance(t *testing.T) {
 			note := seedGradedNote(t, db, deck.ID, tc.kind, tc.fields)
 			cardID := cardIDOfNote(t, db, note.ID)
 			rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-				"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": tc.answer,
+				"card_id": cardPublicIDOfNote(t, db, note.ID), "expected_version": 0, "deck": []string{deck.PublicID}, "answer": tc.answer,
 			}, cookies, csrf)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("POST grade status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -206,10 +206,10 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	deck := seedReviewDeck(t, db, ownerID, "SPA auth")
 	otherDeck := seedReviewDeck(t, db, ownerID, "SPA other")
 	note := seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "p", "answer": "a"})
-	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
 	basicNote := seedBasic(t, db, deck.ID, "Front", "Back")
-	basicCardID := cardIDOfNote(t, db, basicNote.ID)
-	valid := map[string]any{"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a"}
+	basicCardPub := cardPublicIDOfNote(t, db, basicNote.ID)
+	valid := map[string]any{"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "a"}
 
 	denied := []struct {
 		name    string
@@ -248,7 +248,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 
 	// 自评类题型不得走判分入口。
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": basicCardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "Back",
+		"card_id": basicCardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "Back",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("self-assess card on grade endpoint = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -256,15 +256,15 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 
 	// 卡不在所选范围内。
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{otherDeck.ID}, "answer": "a",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{otherDeck.PublicID}, "answer": "a",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("out-of-scope card = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
-	// 零卡组 id 不是合法范围。
+	// 零卡组 id 不是合法范围（对外 id 形状非法）。
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{0}, "answer": "a",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{"0"}, "answer": "a",
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("zero deck id = %d, want 400", rec.Code)
@@ -273,7 +273,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	// choice_single 缺作答无法判分：400 且不写库。
 	single := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{"question": "q", "options": []string{"a", "b"}, "answer": 0})
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardIDOfNote(t, db, single.ID), "expected_version": 0, "deck": []uint64{deck.ID},
+		"card_id": cardPublicIDOfNote(t, db, single.ID), "expected_version": 0, "deck": []string{deck.PublicID},
 	}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("choice_single without answer = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -289,7 +289,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	// 无授权用户即使拿到卡片 id 也读不到卡组。
 	_, outsiderCookies, outsiderCSRF := createUserAndLogin(t, srv, db, "grade-outsider")
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "a",
 	}, outsiderCookies, outsiderCSRF)
 	if rec.Code < 400 || rec.Code >= 500 {
 		t.Fatalf("outsider status = %d, want 4xx (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -302,15 +302,16 @@ func TestGradeVersionConflict(t *testing.T) {
 	deck := seedReviewDeck(t, db, ownerID, "SPA conflict")
 	note := seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "p", "answer": "a"})
 	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
 	first := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "a",
 	}, cookies, csrf)
 	if first.Code != http.StatusOK {
 		t.Fatalf("first grade = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
 	stale := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "answer": "a",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "a",
 	}, cookies, csrf)
 	if stale.Code != http.StatusConflict {
 		t.Fatalf("stale grade = %d, want 409 (body %s)", stale.Code, snippet(stale.Body.String()))
@@ -329,9 +330,10 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 	deck := seedReviewDeck(t, db, ownerID, "SPA reveal")
 	note := seedGradedNote(t, db, deck.ID, "typed", map[string]any{"prompt": "prompt", "answer": "Paris"})
 	cardID := cardIDOfNote(t, db, note.ID)
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
 	reveal := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "deck": []uint64{deck.ID}, "action": "reveal",
+		"card_id": cardPub, "deck": []string{deck.PublicID}, "action": "reveal",
 	}, cookies, csrf)
 	if reveal.Code != http.StatusOK {
 		t.Fatalf("reveal = %d, want 200 (body %s)", reveal.Code, snippet(reveal.Body.String()))
@@ -353,7 +355,7 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 	}
 
 	giveUp := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
-		"card_id": cardID, "expected_version": 0, "deck": []uint64{deck.ID}, "action": "give_up",
+		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "action": "give_up",
 	}, cookies, csrf)
 	if giveUp.Code != http.StatusOK {
 		t.Fatalf("give_up = %d, want 200 (body %s)", giveUp.Code, snippet(giveUp.Body.String()))

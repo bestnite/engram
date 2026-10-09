@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +19,7 @@ import (
 
 // adminInvite 是一条邀请的原始字段；role/status 是存储取值，由前端映射文案。
 type adminInvite struct {
-	ID        uint64 `json:"id"`
+	ID        string `json:"id"`
 	Token     string `json:"token"`
 	Link      string `json:"link"`
 	Email     string `json:"email"`
@@ -71,8 +70,6 @@ func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time
 	if inv.UsedBy != nil {
 		if u, err := s.users.ByID(ctx, *inv.UsedBy); err == nil && u != nil {
 			usedBy = u.Username
-		} else {
-			usedBy = strconv.FormatUint(*inv.UsedBy, 10)
 		}
 	}
 	expires := ""
@@ -80,7 +77,7 @@ func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time
 		expires = inv.ExpiresAt.UTC().Format("2006-01-02 15:04")
 	}
 	return adminInvite{
-		ID:        inv.ID,
+		ID:        inv.PublicID,
 		Token:     inv.Token,
 		Link:      "/register?invite=" + inv.Token,
 		Email:     email,
@@ -236,24 +233,29 @@ func (s *Server) adminInviteRevoke(c *gin.Context) {
 		adminError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || s.invites == nil {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" || s.invites == nil {
 		adminError(c, http.StatusNotFound, "invite_invalid")
 		return
 	}
 	ctx := c.Request.Context()
-	if err := s.invites.Revoke(ctx, id); err != nil {
+	inv, err := s.invites.ByPublicID(ctx, raw)
+	if err != nil {
+		adminError(c, http.StatusNotFound, "invite_invalid")
+		return
+	}
+	if err := s.invites.Revoke(ctx, inv.ID); err != nil {
 		if errors.Is(err, store.ErrInviteNotFound) {
 			adminError(c, http.StatusNotFound, "invite_invalid")
 			return
 		}
-		s.logger.Error("spa admin: revoke invite failed", "invite_id", id, "error", err)
+		s.logger.Error("spa admin: revoke invite failed", "invite_id", inv.ID, "error", err)
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionInviteRevoke,
-		TargetType: "invite", TargetID: store.Ptr(id),
+		TargetType: "invite", TargetID: store.Ptr(inv.ID),
 	})
 	c.Status(http.StatusNoContent)
 }
