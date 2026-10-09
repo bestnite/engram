@@ -29,20 +29,24 @@
 
 <BitsDialog.Root bind:open {onOpenChange}>
   <BitsDialog.Portal>
-    <BitsDialog.Overlay class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs" />
+    <BitsDialog.Overlay
+      class="fixed inset-0 z-50 bg-overlay backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
+    />
     <BitsDialog.Content
       data-testid={testId}
       class={cn(
-        'card-elevated fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl p-6 shadow-xl',
+        'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-popover p-6 text-foreground shadow-2xl shadow-black/10',
+        // 进出场：淡入 + 轻微放大，时长短到不拖慢操作，但足以让弹窗「出现」而不是「闪现」。
+        'duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
         width[size],
         klass
       )}
     >
-      <BitsDialog.Title class="text-base font-bold text-zinc-900 dark:text-zinc-100">
+      <BitsDialog.Title class="text-base font-semibold text-foreground">
         {title}
       </BitsDialog.Title>
       {#if description}
-        <BitsDialog.Description class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <BitsDialog.Description class="mt-1 text-sm text-muted-foreground">
           {description}
         </BitsDialog.Description>
       {/if}

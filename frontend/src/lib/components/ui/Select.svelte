@@ -72,7 +72,7 @@
   </BitsSelect.Trigger>
   <BitsSelect.Portal>
     <BitsSelect.Content
-      class="z-50 min-w-[var(--bits-select-anchor-width)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+      class="z-50 min-w-[var(--bits-select-anchor-width)] overflow-hidden rounded-lg border border-border bg-popover shadow-lg shadow-black/5 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
       sideOffset={4}
     >
       <BitsSelect.Viewport class="max-h-72 p-1">
