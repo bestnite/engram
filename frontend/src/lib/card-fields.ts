@@ -34,15 +34,29 @@ export function toFormFields(
   raw: Record<string, unknown>
 ): Record<string, unknown> {
   const out = emptyFields(specs);
-  for (const key of Object.keys(out)) {
+  for (const spec of specs) {
+    const key = spec.key;
     const value = raw[key];
     if (value === undefined || value === null) continue;
-    if (out[key] instanceof Array) out[key] = Array.isArray(value) ? [...value] : [];
-    else if (typeof out[key] === 'boolean') out[key] = Boolean(value);
-    else if (typeof out[key] === 'number') out[key] = typeof value === 'number' ? value : Number(value) || '';
+    if (spec.control === 'lines' || spec.control === 'indexes') out[key] = Array.isArray(value) ? [...value] : [];
+    else if (spec.control === 'bool') out[key] = Boolean(value);
+    // 数值与下标按控件判定，不能看空表单里的初值：空表单把它们初始化成 ''（「未填」），
+    // 曾经按初值类型分支，导致服务端的 42 被转成字符串 "42"——输入框显示为空，
+    // 预览请求也因类型不符被服务端以 400 拒绝（界面上表现为「补全必填字段后即可预览」）。
+    else if (spec.control === 'number' || spec.control === 'index') out[key] = toNumberOrEmpty(value);
     else out[key] = String(value);
   }
   return out;
+}
+
+/** 数字原样保留；能完整解析成有限数的字符串转成数字；其余视为未填。 */
+function toNumberOrEmpty(value: unknown): number | '' {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : '';
+  }
+  return '';
 }
 
 /**

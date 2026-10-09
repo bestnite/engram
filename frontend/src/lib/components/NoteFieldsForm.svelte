@@ -31,9 +31,14 @@
     return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value);
   }
 
+  /**
+   * 数值框的显示值。字符串原样显示：它是用户还没输完的内容（如「-」「1e」），
+   * setNumber 解析不了时就原样存着；若这里显示成空，输入框会在敲下第一个字符时被清空。
+   */
   function asNumber(key: string): string {
     const value = fields[key];
-    return typeof value === 'number' ? String(value) : '';
+    if (typeof value === 'number') return String(value);
+    return typeof value === 'string' ? value : '';
   }
 
   /** 数值输入：空串删除该键（可选数值字段的「未填」语义），否则写入数字。 */
