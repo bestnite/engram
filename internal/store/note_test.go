@@ -219,6 +219,73 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	}
 }
 
+// TestNoteUpdateShrinkingClozeSoftDeletesCards 覆盖反方向：删掉一个序号后，它的卡离开可见集合
+// （不再进复习队列），但行与进度保留；序号重新出现时恢复同一张卡，进度跟着回来。
+func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "note_cloze_shrink_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			notes := NewNoteStore(db)
+			cards := NewCardStore(db)
+
+			n := &Note{DeckID: deckID, Kind: "cloze"}
+			created, err := notes.Create(ctx, n, map[string]any{"text": "a {{c1::x}} b {{c2::y}}"})
+			if err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			before := cardTemplates(created)
+			c2 := before["cloze:2"]
+			if err := db.Create(&CardState{CardID: c2, UserID: owner, State: "review", Reps: 3, Version: 3}).Error; err != nil {
+				t.Fatalf("seed card state: %v", err)
+			}
+
+			steps := []struct {
+				name          string
+				text          string
+				wantTemplates []string
+			}{
+				{"remove c2", "a {{c1::x}} b y", []string{"cloze:1"}},
+				{"bring c2 back", "a {{c1::x}} b {{c2::y}}", []string{"cloze:1", "cloze:2"}},
+			}
+			for _, step := range steps {
+				synced, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "cloze"}, map[string]any{"text": step.text})
+				if err != nil {
+					t.Fatalf("%s: Update() error = %v", step.name, err)
+				}
+				live, err := cards.ByNote(ctx, n.ID)
+				if err != nil {
+					t.Fatalf("%s: ByNote() error = %v", step.name, err)
+				}
+				for _, got := range [][]Card{synced, live} {
+					templates := cardTemplates(got)
+					if len(templates) != len(step.wantTemplates) {
+						t.Fatalf("%s: live templates = %v, want %v", step.name, templates, step.wantTemplates)
+					}
+					for _, want := range step.wantTemplates {
+						if templates[want] != before[want] {
+							t.Errorf("%s: card %q id = %d, want %d", step.name, want, templates[want], before[want])
+						}
+					}
+				}
+			}
+
+			// 整个过程中 c2 的进度行从未被删或改。
+			var st CardState
+			if err := db.Where("card_id = ? AND user_id = ?", c2, owner).Take(&st).Error; err != nil {
+				t.Fatalf("card state of c2 disappeared: %v", err)
+			}
+			if st.Reps != 3 || st.Version != 3 {
+				t.Errorf("card state of c2 = reps %d version %d, want 3 and 3", st.Reps, st.Version)
+			}
+		})
+	}
+}
+
 // TestNoteSoftDeleteHidesCardsAndRestore 覆盖另一半：
 // 软删除 note 后其 cards 不可见，恢复后重新可见，且期间不物理删行。
 func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {

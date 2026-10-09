@@ -54,8 +54,10 @@ func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 // 不变量（AGENTS.md §2.3 第 1 条，内容与进度分离）：
 //   - 已存在的 card 与其 id 永远保留：进度数据挂在 card 上，删行会连带丢进度；
 //   - 已存在的 template 复用原行（软删除的在此恢复、ordinal 对齐），id 保持不变；
-//   - 只有新出现的 template 会被插入；已有但不再出现在 wanted 里的 template 不做任何删除
-//     （题型变化导致 template 集合变化时\"只增不删\"），避免误删进度。
+//   - 只有新出现的 template 会被插入；
+//   - 已有但不再出现在 wanted 里的 template 被**软删除**：删掉 {{c2::}} 之后 cloze:2 不能再
+//     进复习队列（它渲染出来没有任何挖空）。软删除只写 cards.deleted_at，card_states 与 reviews
+//     原样保留，template 重新出现时上面的复用分支会恢复同一行，进度随之回来。
 //
 // 同一次同步内若出现重复 template，直接报错 —— 这是 (note_id, template) 唯一约束的
 // Go 侧防线，数据库唯一索引是最终兜底。
@@ -100,6 +102,19 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time
 			return nil, fmt.Errorf("create card %q for note %d: %w", want.Template, noteID, err)
 		}
 		out = append(out, card)
+	}
+
+	// 收尾：仍然存活但已不在 wanted 里的卡软删除。按主键逐个写，范围与上面加载的集合一致。
+	var stale []uint64
+	for i := range existing {
+		if !existing[i].DeletedAt.Valid && !seen[existing[i].Template] {
+			stale = append(stale, existing[i].ID)
+		}
+	}
+	if len(stale) > 0 {
+		if err := tx.Model(&Card{}).Where("id IN ?", stale).Update("deleted_at", now).Error; err != nil {
+			return nil, fmt.Errorf("soft-delete stale cards of note %d: %w", noteID, err)
+		}
 	}
 	return out, nil
 }
