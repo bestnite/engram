@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -262,5 +265,198 @@ func TestExportRequiresExplicitDeck(t *testing.T) {
 		"/api/v1/export?deck="+missingPublicID, k.Plaintext, "")
 	if status != http.StatusNotFound {
 		t.Errorf("GET /api/v1/export with an unknown deck status = %d, want 404 (body %s)", status, raw)
+	}
+}
+
+// blockingResponseWriter 把响应写入挂在测试指定的那次 Write 上，用来模拟「客户端读得很慢」：
+// hold 返回 true 的那次写入先关闭 blocked（通知测试已经挂住），再等 release 放行；后续写入直通。
+// 只挂第一次匹配的写入，所以被挂住的那次写入就是被测代码持有数据库连接的整段时间里的一刻。
+type blockingResponseWriter struct {
+	rec     *httptest.ResponseRecorder
+	hold    func(p []byte) bool
+	blocked chan struct{}
+	release chan struct{}
+	mu      sync.Mutex
+	held    bool
+}
+
+func (w *blockingResponseWriter) Header() http.Header { return w.rec.Header() }
+
+func (w *blockingResponseWriter) WriteHeader(code int) { w.rec.WriteHeader(code) }
+
+func (w *blockingResponseWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	block := !w.held && w.hold(p)
+	if block {
+		w.held = true
+	}
+	w.mu.Unlock()
+	if block {
+		close(w.blocked)
+		<-w.release
+	}
+	return w.rec.Write(p)
+}
+
+// TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked 是 FX-17 的核心验收：
+// 客户端写出被挂住时，导出不得继续持有数据库连接。
+//
+// SQLite 部署把连接数压到 1（internal/store/store.go 的 SetMaxOpenConns(1)，写入靠它串行化），
+// 所以「导出还占着连接」等价于「同一条句柄上的另一次查询在 2 秒预算内做不完」。
+// 夹具 8 行、页大小 2 → 4 页，保证挂住点出现在分页路径上而不是只有一页的退化情形。
+//
+// 负向对照：把 ExportCards 退回「一条游标直接流式写完」，挂住点仍在第一行写出时，
+// 但此时游标没读完、连接没还，这条测试必须变红（并发查询超时）。
+func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "conn_release", store.RoleUser)
+	deck := seedDeck(t, env.db, user.ID)
+	k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
+
+	const total = 8
+	env.api.exportPageSize = 2
+	seedBulkNotes(t, env, deck.ID, total)
+
+	rec := httptest.NewRecorder()
+	w := &blockingResponseWriter{
+		rec:     rec,
+		blocked: make(chan struct{}),
+		release: make(chan struct{}),
+		// 只在第一行卡片数据写出时挂住：此前的写入只有固定的 JSON 前缀（deck_ids 与 "cards":[），
+		// 那时还没有任何数据库交互，挂在那里测不出连接是否被占用。
+		hold: func(p []byte) bool { return bytes.Contains(p, []byte("card_id")) },
+	}
+	router := env.router()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), nil)
+	req.Header.Set("Authorization", "Bearer "+k.Plaintext)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(w, req)
+	}()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(w.release) }) }
+	// 任何提前失败路径都要放行写入并等 handler 收场，避免把 goroutine 与连接留在测试里。
+	defer func() {
+		release()
+		<-done
+	}()
+
+	select {
+	case <-w.blocked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("export never wrote a card row; the blocking writer was not reached")
+	}
+
+	// 客户端被挂住的此刻，从同一条数据库句柄再发一次查询。
+	const budget = 2 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	start := time.Now()
+	var count int64
+	qerr := env.db.WithContext(ctx).Model(&store.Card{}).
+		Where("cards.deleted_at IS NULL").Count(&count).Error
+	elapsed := time.Since(start)
+
+	release()
+	<-done
+
+	if qerr != nil {
+		t.Fatalf("concurrent query while the client write was blocked did not finish within %s (elapsed %s, error %v): the export is holding the only database connection",
+			budget, elapsed, qerr)
+	}
+	if elapsed >= budget {
+		t.Fatalf("concurrent query took %s, want well under %s", elapsed, budget)
+	}
+	t.Logf("concurrent query finished in %s while the export write was blocked", elapsed)
+
+	// 挂住一次写入不改变对外输出：仍是完整合法的 JSON，8 行、count=8。
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		DeckIDs []string         `json:"deck_ids"`
+		Cards   []map[string]any `json:"cards"`
+		Count   int              `json:"count"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("export body is not valid JSON: %v (%s)", err, rec.Body.String())
+	}
+	if out.Count != total || len(out.Cards) != total {
+		t.Fatalf("export count = %d cards = %d, want %d/%d", out.Count, len(out.Cards), total, total)
+	}
+}
+
+// TestExportOutputIsIndependentOfPageSize 断言分页不改变对外输出：同一份数据用「一页装下」与
+// 「每页 2 行」两种页大小导出，JSON 与 CSV、带与不带 include_progress 的响应体必须逐字节相同，
+// 且行顺序按 cards.id 升序（键集分页的推进顺序）。
+func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "page_size", store.RoleUser)
+	deck := seedDeck(t, env.db, user.ID)
+	k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
+
+	const total = 7
+	seedBulkNotes(t, env, deck.ID, total)
+
+	// 前 3 张卡写入进度，覆盖 include_progress 的两种取值。
+	var cardIDs []uint64
+	if err := env.db.Model(&store.Card{}).Order("id ASC").Limit(3).Pluck("id", &cardIDs).Error; err != nil {
+		t.Fatalf("pluck card ids: %v", err)
+	}
+	due := time.Now().UTC().Add(24 * time.Hour)
+	for _, id := range cardIDs {
+		if err := env.db.Create(&store.CardState{
+			CardID: id, UserID: user.ID, State: "review", DueAt: &due, Reps: 3, Lapses: 1,
+		}).Error; err != nil {
+			t.Fatalf("create card state: %v", err)
+		}
+	}
+
+	router := env.router()
+	for _, format := range []string{"json", "csv"} {
+		for _, prog := range []string{"", "&include_progress=1"} {
+			path := fmt.Sprintf("/api/v1/export?deck=%s&format=%s%s", deck.PublicID, format, prog)
+			env.api.exportPageSize = 1000 // 一页装下：与旧实现的一次性游标等价
+			_, onePage := doJSON(t, router, http.MethodGet, path, k.Plaintext, "")
+			env.api.exportPageSize = 2 // 4 页，逼迫多页推进
+			_, manyPages := doJSON(t, router, http.MethodGet, path, k.Plaintext, "")
+			if !bytes.Equal(onePage, manyPages) {
+				t.Errorf("format=%s include_progress=%q: paged body differs from single-page body:\n single page: %s\n paged:       %s",
+					format, prog, onePage, manyPages)
+			}
+		}
+	}
+
+	// 行顺序：按 cards.id 升序，与导出体的 card_id 序列一致。
+	var wantOrder []string
+	if err := env.db.Table("cards").
+		Joins("JOIN notes ON notes.id = cards.note_id").
+		Where("cards.deleted_at IS NULL AND notes.deleted_at IS NULL AND notes.deck_id = ?", deck.ID).
+		Order("cards.id ASC").Pluck("cards.public_id", &wantOrder).Error; err != nil {
+		t.Fatalf("pluck expected order: %v", err)
+	}
+	env.api.exportPageSize = 2
+	status, raw := doJSON(t, router, http.MethodGet,
+		fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), k.Plaintext, "")
+	if status != http.StatusOK {
+		t.Fatalf("paged export status = %d, want 200 (body %s)", status, raw)
+	}
+	var out struct {
+		Cards []struct {
+			CardID string `json:"card_id"`
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("paged export not parseable: %v (%s)", err, raw)
+	}
+	if len(out.Cards) != len(wantOrder) {
+		t.Fatalf("exported %d cards, want %d", len(out.Cards), len(wantOrder))
+	}
+	for i, want := range wantOrder {
+		if out.Cards[i].CardID != want {
+			t.Fatalf("card %d = %s, want %s (export must follow cards.id ASC)", i, out.Cards[i].CardID, want)
+		}
 	}
 }

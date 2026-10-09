@@ -57,6 +57,9 @@ type API struct {
 	authn   *Authenticator
 	// mediaRoot 供卡组包内联媒体使用；为空时不落盘媒体。
 	mediaRoot string
+	// exportPageSize 是导出分页的页大小：既是一页的内存上界，也是「持有一条数据库连接」的时间上界。
+	// New 填 exportDefaultPageSize；测试可以调小（例如 2）以制造多页，验证连接在页间是空闲的。
+	exportPageSize int
 }
 
 // New 构造 API；中间件与 handler 的依赖必须齐备。
@@ -127,6 +130,8 @@ func New(deps Deps) (*API, error) {
 		now:       now,
 		authn:     authn,
 		mediaRoot: deps.MediaRoot,
+		// 导出分页的默认页大小；见 API.exportPageSize 的说明。
+		exportPageSize: exportDefaultPageSize,
 	}, nil
 }
 
