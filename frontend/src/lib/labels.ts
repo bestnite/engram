@@ -82,3 +82,30 @@ export function noteKindLabel(kind: string | null | undefined, t: Translate): st
 export function presetDisplayName(name: string, isDefault: boolean, t: Translate): string {
   return isDefault ? t('presets.default_name') : name;
 }
+
+/** 预设下拉里的一项；value 是预设 id 的字符串形式（Select 只接受字符串值）。 */
+export interface PresetSelectOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * 创建卡组弹窗的预设下拉：把预设列表投影成选项，并给出应预选的值。
+ *
+ * 这里刻意**不**追加「默认预设」哨兵项。服务端的补齐保证列表里至少有一条默认预设，
+ * 而它的显示名（presets.default_name）与哨兵项文案几乎同字：只有一条预设时下拉会同时
+ * 出现两条「默认」，看着像一条没删掉的预设。
+ *
+ * 列表为空（拉取失败）时 selected 为空串，调用方据此按服务端默认预设提交（preset_id: 0）。
+ */
+export function presetSelectOptions(
+  presets: ReadonlyArray<{ id: number; name: string; is_default: boolean }>,
+  t: Translate
+): { options: PresetSelectOption[]; selected: string } {
+  const options = presets.map((item) => ({
+    value: String(item.id),
+    label: presetDisplayName(item.name, item.is_default, t),
+  }));
+  const chosen = presets.find((item) => item.is_default) ?? presets[0];
+  return { options, selected: chosen ? String(chosen.id) : '' };
+}
