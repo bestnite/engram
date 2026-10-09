@@ -1292,4 +1292,11 @@ export const zhCN: LocaleCatalog = {
   'admin.users.make_admin': '设为管理员',
   'admin.users.make_user': '设为普通用户',
   'admin.users.temp_password_copied': '临时密码已复制',
+  // 注册与邀请页的邀请分区说明。
+  'admin.registration.invites_hint': '邀请可指定角色与有效天数；勾选「用邮件发送链接」会直接把链接发给对方。',
+  // OIDC 页的分区标题与说明。
+  'admin.oidc.section.provider': '身份提供方',
+  'admin.oidc.claims_hint': '令牌里的哪些字段对应用户标识、邮箱与名称；通常保持默认即可。',
+  // 邮件页的分区标题。
+  'admin.smtp.section.server': '发信服务器',
 };

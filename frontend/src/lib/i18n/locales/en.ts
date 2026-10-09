@@ -1293,4 +1293,11 @@ export const en: LocaleCatalog = {
   'admin.users.make_admin': 'Make admin',
   'admin.users.make_user': 'Make regular user',
   'admin.users.temp_password_copied': 'Temporary password copied',
+  // 注册与邀请页的邀请分区说明。
+  'admin.registration.invites_hint': 'An invite can set a role and a validity period; tick "send link by email" to mail it directly.',
+  // OIDC 页的分区标题与说明。
+  'admin.oidc.section.provider': 'Identity provider',
+  'admin.oidc.claims_hint': 'Which token claims map to the user ID, email and name. The defaults usually work.',
+  // 邮件页的分区标题。
+  'admin.smtp.section.server': 'Mail server',
 };

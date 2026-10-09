@@ -17,10 +17,12 @@
     onValueChange?: (value: string) => void;
     ariaLabel?: string;
     testId?: string;
+    /** 每一段的 data-testid 前缀：`<prefix><value>`。 */
+    itemTestIdPrefix?: string;
     class?: string;
   }
 
-  let { value, options, onValueChange, ariaLabel, testId, class: klass = '' }: Props = $props();
+  let { value, options, onValueChange, ariaLabel, testId, itemTestIdPrefix, class: klass = '' }: Props = $props();
 
   // single 模式下再次点击已选项会把值清空；分段切换必须始终有一项被选中，所以忽略空值。
   function handleChange(next: string) {
@@ -39,6 +41,7 @@
   {#each options as option (option.value)}
     <ToggleGroup.Item
       value={option.value}
+      data-testid={itemTestIdPrefix ? `${itemTestIdPrefix}${option.value}` : undefined}
       class="inline-flex h-full items-center justify-center rounded-[5px] px-3 text-[13px] font-medium text-muted-foreground transition-all hover:text-foreground cursor-pointer data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
     >
       {option.label}
