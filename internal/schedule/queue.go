@@ -286,39 +286,82 @@ func queueShuffleSeed(userID uint64, day string) int64 {
 	return int64(h.Sum64())
 }
 
-// DeckCounts 返回每个卡组单卡组口径下的队列构成；与 Build(DeckID=d) 出队的张数逐一相等
-// （New = QueueNew，Review = 学习/再学习卡 + 到期复习卡）。
+// DeckCounts 返回每个卡组今日可刷的构成：New = 今日还能引入的新卡数，Review = 学习/再学习
+// 到期卡 + 受 reviews_per_day 限制的到期复习卡。点进该卡组能刷的总张数就是这两个数之和
+// （Build 按批返回，单批最多 BatchSize 张，刷完会取下一批，所以这里**不**按批大小截断）。
 //
-// 它与 Build 共用同一条取卡路径（collect）与同一条额度公式（deckBudget），因此列表页上的数字
-// 就是点进去能刷的张数，不会再出现「列表显示有到期、点进去说没有」。deckIDs 为空时按全库口径
-// （该用户可见卡组）解析，与 Build 的三种范围一致。ReviewOrder 固定为 OrderByDueAt：
-// 数量统计不需要 retrievability，避免白算。
-func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64) (map[uint64]DeckQueueCounts, error) {
+// 它与 Build 共用同一组筛选条件（stateFrom / learningDueWhere / reviewDueWhere / newCardsFrom）
+// 与同一条额度公式（deckBudget），只是把取行换成按卡组分组的 COUNT：列表页不需要卡片本身，
+// 不限量的卡组也不会把全部行读进内存。
+//
+// opts 只读 Now、Location/Timezone 与 DayCutoffHour：「今日已用量」按用户自己的复习日统计，
+// 必须与评分时写入 reviews.review_day 的口径一致。deckIDs 为空时按该用户可见卡组解析。
+func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckQueueCounts, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck counts: user id is required")
 	}
 	if b.decks == nil {
 		return nil, errors.New("schedule: deck counts: deck store is required")
 	}
-	opts := QueueOptions{DeckIDs: deckIDs, ReviewOrder: OrderByDueAt, NewOrder: NewOrderCreated}
-	opts = opts.withDefaults()
-	col, err := b.collect(ctx, userID, opts, nil)
+	opts = QueueOptions{
+		DeckIDs: deckIDs, Now: opts.Now, Location: opts.Location, Timezone: opts.Timezone,
+		DayCutoffHour: opts.DayCutoffHour,
+	}.withDefaults()
+	now := opts.now()
+	scope, err := b.resolveScope(ctx, userID, opts)
 	if err != nil {
 		return nil, err
 	}
-	// 学习/再学习到期卡不占额度，但必须计入「复习」数：它们排在队列最前面，
-	// 少算就会让列表上的两个数小于点进去能刷的张数（正是本次要修的现象之一）。
-	learningByDeck := make(map[uint64]int, len(col.order))
-	for _, it := range col.learning {
-		learningByDeck[it.DeckID]++
+	out := make(map[uint64]DeckQueueCounts, len(scope))
+	if len(scope) == 0 {
+		return out, nil
 	}
-	out := make(map[uint64]DeckQueueCounts, len(col.order))
-	for _, id := range col.order {
-		review := len(col.reviews[id])
-		if review > opts.BatchSize {
-			review = opts.BatchSize
+	ids := make([]uint64, 0, len(scope))
+	for _, d := range scope {
+		ids = append(ids, d.id)
+	}
+
+	learning, err := countByDeck(learningDueWhere(b.stateFrom(ctx, userID, ids), now))
+	if err != nil {
+		return nil, fmt.Errorf("schedule: count learning cards: %w", err)
+	}
+	reviews, err := countByDeck(reviewDueWhere(b.stateFrom(ctx, userID, ids), now))
+	if err != nil {
+		return nil, fmt.Errorf("schedule: count due reviews: %w", err)
+	}
+	fresh, err := countByDeck(b.newCardsFrom(ctx, userID, ids, now))
+	if err != nil {
+		return nil, fmt.Errorf("schedule: count new cards: %w", err)
+	}
+	for _, d := range scope {
+		out[d.id] = DeckQueueCounts{
+			New:    capCount(fresh[d.id], d.newLeft),
+			Review: learning[d.id] + capCount(reviews[d.id], d.reviewLeft),
 		}
-		out[id] = DeckQueueCounts{New: len(col.fresh[id]), Review: learningByDeck[id] + review}
+	}
+	return out, nil
+}
+
+// capCount 把可取张数截到剩余额度；额度为 deckUnlimited 时不截。
+func capCount(n, left int) int {
+	if left != deckUnlimited && n > left {
+		return left
+	}
+	return n
+}
+
+// countByDeck 对已加好筛选条件的查询按 notes.deck_id 分组计数。
+func countByDeck(q *gorm.DB) (map[uint64]int, error) {
+	var rows []struct {
+		DeckID uint64 `gorm:"column:deck_id"`
+		N      int    `gorm:"column:n"`
+	}
+	if err := q.Select("notes.deck_id AS deck_id, COUNT(*) AS n").Group("notes.deck_id").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[uint64]int, len(rows))
+	for _, r := range rows {
+		out[r.DeckID] = r.N
 	}
 	return out, nil
 }
@@ -605,14 +648,12 @@ func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string
 	return out, nil
 }
 
-// baseStateQuery 是学习卡与复习卡共用的查询起点：只取未软删除且未暂停的卡，
-// 并 join 到未软删除的 note 上（与 CardStore 的可见性规则一致）。
-// deckIDs 是已解析的范围集合，总是非空（空集合在 collect 里提前返回）。
-func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckIDs []uint64) *gorm.DB {
+// stateFrom 是学习卡与复习卡共用的 FROM 与筛选：只取未软删除且未暂停的卡，
+// 并 join 到未软删除的 note 上（与 CardStore 的可见性规则一致）。不带 SELECT，
+// 取行（baseStateQuery）与计数（countByDeck）各自补上。
+// deckIDs 是已解析的范围集合，总是非空（空集合在调用方提前返回）。
+func (b *QueueBuilder) stateFrom(ctx context.Context, userID uint64, deckIDs []uint64) *gorm.DB {
 	return b.db.WithContext(ctx).Table("card_states AS cs").
-		Select("cs.card_id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, "+
-			"cs.state AS state, cs.due_at AS due_at, cs.stability AS stability, "+
-			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at").
 		Joins("JOIN cards AS cards ON cards.id = cs.card_id AND cards.deleted_at IS NULL").
 		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
 		Where("cs.user_id = ?", userID).
@@ -620,12 +661,30 @@ func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckID
 		Where("notes.deck_id IN ?", deckIDs)
 }
 
+// baseStateQuery 在 stateFrom 上补齐取行所需的列。
+func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckIDs []uint64) *gorm.DB {
+	return b.stateFrom(ctx, userID, deckIDs).
+		Select("cs.card_id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, " +
+			"cs.state AS state, cs.due_at AS due_at, cs.stability AS stability, " +
+			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
+}
+
+// learningDueWhere 限定为学习/再学习阶段且已到期的卡。
+func learningDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
+	return q.Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
+		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
+}
+
+// reviewDueWhere 限定为复习阶段且已到期的卡。
+func reviewDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
+	return q.Where("cs.state = ?", StateReview.String()).
+		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
+}
+
 // learningDue 取学习/再学习阶段且已到期的卡，按到期时间升序。
 func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.Time, deckIDs []uint64) ([]QueueItem, error) {
 	var rows []stateRow
-	err := b.baseStateQuery(ctx, userID, deckIDs).
-		Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
-		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now).
+	err := learningDueWhere(b.baseStateQuery(ctx, userID, deckIDs), now).
 		Order("cs.due_at ASC, cs.card_id ASC").
 		Scan(&rows).Error
 	if err != nil {
@@ -638,9 +697,7 @@ func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.
 // 逐卡组取是为把各卡组自己的 reviews_per_day 落进 SQL 的 LIMIT；合并后的全局排序交给调用方。
 func (b *QueueBuilder) reviewDueDeck(ctx context.Context, userID uint64, now time.Time, deckID uint64, limit int) ([]dueReview, error) {
 	var rows []stateRow
-	err := b.baseStateQuery(ctx, userID, []uint64{deckID}).
-		Where("cs.state = ?", StateReview.String()).
-		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now).
+	err := reviewDueWhere(b.baseStateQuery(ctx, userID, []uint64{deckID}), now).
 		Order("cs.due_at ASC, cs.card_id ASC").
 		Limit(limit).
 		Scan(&rows).Error
@@ -702,16 +759,10 @@ func (o *newCardOrder) sortKeySQL() string {
 // 任何状态的行也能出现在队列里。已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求
 // due_at 未在未来。limit 为 deckUnlimited 时不设 LIMIT。
 func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID uint64, limit int, now time.Time, order *newCardOrder) ([]QueueItem, error) {
-	q := b.db.WithContext(ctx).Table("cards AS cards").
-		Select("cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, "+
-			"COALESCE(cs.state, 'new') AS state, cs.due_at AS due_at, cs.stability AS stability, "+
-			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at").
-		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
-		Joins("LEFT JOIN card_states AS cs ON cs.card_id = cards.id AND cs.user_id = ?", userID).
-		Where("cards.deleted_at IS NULL AND cards.suspended_at IS NULL").
-		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
-		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
-		Where("notes.deck_id = ?", deckID)
+	q := b.newCardsFrom(ctx, userID, []uint64{deckID}, now).
+		Select("cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, " +
+			"COALESCE(cs.state, 'new') AS state, cs.due_at AS due_at, cs.stability AS stability, " +
+			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
 	if order != nil {
 		// 必须包成 clause.OrderBy：GORM 的 Order 对裸 clause.Expr 静默忽略，不报错也不排序。
 		q = q.Order(clause.OrderBy{Expression: clause.Expr{SQL: order.sortKeySQL() + ", cards.id ASC"}})
@@ -726,6 +777,18 @@ func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID u
 		return nil, fmt.Errorf("schedule: load new cards: %w", err)
 	}
 	return rowsToItems(rows, QueueNew, now)
+}
+
+// newCardsFrom 是新卡的 FROM 与筛选（取行与计数共用）：状态为 new 的卡，包括尚无
+// card_states 行的卡；已埋藏（due_at 在未来）的新卡排除。
+func (b *QueueBuilder) newCardsFrom(ctx context.Context, userID uint64, deckIDs []uint64, now time.Time) *gorm.DB {
+	return b.db.WithContext(ctx).Table("cards AS cards").
+		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
+		Joins("LEFT JOIN card_states AS cs ON cs.card_id = cards.id AND cs.user_id = ?", userID).
+		Where("cards.deleted_at IS NULL AND cards.suspended_at IS NULL").
+		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
+		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
+		Where("notes.deck_id IN ?", deckIDs)
 }
 
 // rowToItem 把一行查询结果转成队列项；now 用于补齐新卡缺失的到期时间。
