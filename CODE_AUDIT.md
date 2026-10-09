@@ -2,9 +2,50 @@
 
 审查日期：2026 年 10 月 9 日。审查基线：`3e296387f334c3b07d1262093820d1165d98b000`。
 
-初次检查覆盖后端业务、前端入口和已有测试，发现笔记编辑、评分撤销、克隆校验及资源限制问题。原问题描述和初次证据保留在复查记录之后；当前处理状态以本节复查表为准。修复建议不是已经确定的产品要求；涉及持久化模型或功能范围的选择，由维护者决定。
+初次检查覆盖后端业务、前端入口和已有测试，发现笔记编辑、评分撤销、克隆校验及资源限制问题。原问题描述和初次证据保留在复查记录之后；当前处理状态以最近一轮复查结论为准。修复建议不是已经确定的产品要求；涉及持久化模型或功能范围的选择，由维护者决定。
 
 “已复现”表示补充测试已经触发问题。“静态发现”表示依据代码确认实现或推导风险，尚未完成对应的运行时复现。“待设计决定”表示仓库规则与实现冲突，或底层能力尚未形成用户功能。
+
+## 第二轮修复复查
+
+复查日期：2026 年 10 月 9 日。复查基线：`41a3906`。检查范围为 `54c29c7..41a3906` 的修复提交、上轮四个问题的原复现场景及相关回归测试。四个问题均通过本轮验证；本轮修改未发现新的可确认缺陷。这个结论不代表重新审查了项目的全部代码。
+
+| 编号 | 本轮验证结果 |
+| --- | --- |
+| RECHECK-01 | 通过。查询回调在读取卡组后写入预设 2；信息修改完成后预设仍为 2。原可控交错测试不再触发覆盖。 |
+| RECHECK-02 | 通过。真实 REST PATCH 仅提供名称后，原描述仍为 `keep me`。已有测试同时覆盖仅改描述、显式清空描述和非法名称。 |
+| RECHECK-03 | 通过。Chromium 加载本轮生产构建；单卡组切换、多卡组范围变化、后退和前进均重新请求对应范围的队列，并显示对应卡片。 |
+| RECHECK-04 | 通过。埋藏、评分、导出含进度及日志的包、导入为新卡组，再撤销；恢复后的到期时间与导出前埋藏时间一致。已有包往返测试另行确认学习步骤快照为 1 时仍被保留。 |
+
+原复现场景的本轮输出：
+
+```text
+concurrent preset change=2; after name update=2
+omitted description: persisted="keep me"
+imported due_before=2026-10-03 04:00:00 +0000 UTC
+before export due=2026-10-03 04:00:00 +0000 UTC
+after imported undo due=2026-10-03 04:00:00 +0000 UTC
+BEFORE       url=/review?deck=A        front=Question card-A
+SWITCH       url=/review?deck=B        front=Question card-B
+BACK         url=/review?deck=A        front=Question card-A
+FORWARD      url=/review?deck=B        front=Question card-B
+MULTI        url=/review?deck=A&deck=B front=Question card-A
+MULTI_CHANGE url=/review?deck=C&deck=B front=Question card-C
+```
+
+浏览器测试使用本地 HTTP 测试响应；路由、组件挂载和队列请求来自真实前端生产构建。上述每次范围切换均捕获到对应的 `/api/v1/review/due` 请求。补充 Go 测试通过临时 overlay 运行，没有写入业务源码。
+
+本轮检查输出：
+
+- `go test ./internal/api ./internal/store ./internal/schedule ./internal/mcp` 通过；这些包的 `go vet` 通过。
+- 通过临时 Go overlay 重跑三个原复现测试：全部通过。测试名称分别为 `TestRecheckDeckInfoDoesNotOverwritePreset`、`TestRecheckDeckPatchOmittedDescription`、`TestRecheckUndoSnapshotSurvivesPackageRoundTrip`。这些补充测试没有保存进仓库。
+- `npm --prefix frontend run check`：0 errors、0 warnings。
+- `npm --prefix frontend test -- --run`：44 个测试文件、370 个测试通过。
+- `npm --prefix frontend run build`：通过；仍输出 JavaScript chunk 超过 500 kB 的构建提示。
+- 前端构建完成后，`go build ./... && go vet ./... && gofmt -l . && go test ./...` 通过；格式检查没有输出。
+- `go test ./internal/schedule -run TestUndoConcurrentSameVersionIsAtomic -v`：因未设置 `TEST_PG_DSN` 跳过。AUDIT-03 的真实 PostgreSQL 并发验收仍未完成。
+
+归档、回收站和自定义判分映射仍为维护者已说明的未实现范围。它们不计为本轮修复遗漏。本轮只更新审查记录，没有修改业务行为。
 
 ## 修复后的复查
 
@@ -58,7 +99,7 @@ REST 请求和 MCP 输入用普通字符串承载名称、描述，无法区分�
 
 优先级：中。证据：真实 Chromium 加载生产构建后的交互复现；HTTP 响应使用本地测试数据。
 
-**已修复**（`17cb995`）：`viewKey` 纳入原始查询串（按段排序，重复键保留），复习范围变化即触发组件重建并重新取队列；无关参数顺序变化不重建。浏览器复现脚本需重跑确认。
+**已修复**（`17cb995`）：`viewKey` 纳入原始查询串（按段排序，重复键保留），复习范围变化即触发组件重建并重新取队列；查询串各段顺序变化不重建。本轮浏览器验证通过，见第二轮修复复查。
 
 位置：[router/index.ts](frontend/src/lib/router/index.ts)，`viewKey`；[ReviewView.svelte](frontend/src/lib/views/ReviewView.svelte)，`selectedDecks` 和 `onMount`；[App.svelte](frontend/src/App.svelte)，组件重建边界。
 
