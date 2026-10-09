@@ -33,6 +33,15 @@ const (
 // DefaultNotePageSize 是卡片列表的每页条数；设计只要求分页可用，不暴露给用户配置。
 const DefaultNotePageSize = 50
 
+// MaxNotePageSize 是单页条数上限：客户端可任意给 per_page，但不设上限就能一次拉走整库内容
+// （限制请求频率管不了一次请求的内存占用）。上限在共享的 NormalizeNoteListOptions 里执行，
+// REST、MCP 与 store.List 因此一致。
+const MaxNotePageSize = 200
+
+// MaxNotePage 是页码上限：page 极大时 (page-1)*perPage 会溢出 int 变成负偏移，
+// 让 LIMIT/OFFSET 拿到非法值；超过上界的页码按「最后一页之外」处理（结果为空）。
+const MaxNotePage = 1_000_000
+
 // NoteListOptions 是卡片列表的查询条件（分页、搜索、标签与题型筛选）。
 type NoteListOptions struct {
 	DeckID uint64
@@ -50,15 +59,22 @@ type NoteListOptions struct {
 	Status string
 }
 
-// NormalizeNoteListOptions 把分页默认值与下界收敛成一处：Page 小于 1 按 1，
-// PerPage 非正按 DefaultNotePageSize。REST handler、MCP 工具、service 与 store.List
-// 四条入口都先过这里，避免同一规则在多处各写一遍（写多了必然漂移）。
+// NormalizeNoteListOptions 把分页默认值与上下界收敛成一处：Page 小于 1 按 1、大于 MaxNotePage
+// 按 MaxNotePage，PerPage 非正按 DefaultNotePageSize、大于 MaxNotePageSize 按 MaxNotePageSize。
+// REST handler、MCP 工具、service 与 store.List 四条入口都先过这里，避免同一规则在多处各写一遍
+// （写多了必然漂移）。
 func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
 	if opts.Page < 1 {
 		opts.Page = 1
 	}
+	if opts.Page > MaxNotePage {
+		opts.Page = MaxNotePage
+	}
 	if opts.PerPage <= 0 {
 		opts.PerPage = DefaultNotePageSize
+	}
+	if opts.PerPage > MaxNotePageSize {
+		opts.PerPage = MaxNotePageSize
 	}
 	return opts
 }
