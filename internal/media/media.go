@@ -31,7 +31,8 @@ const (
 	CodeMimeNotAllowed = "media_mime_not_allowed"
 	CodeMagicMismatch  = "media_magic_mismatch"
 	// CodeQuotaExceeded 表示本次上传会超出该用户的媒体总量配额。
-	// 用量是「该用户 note 引用到的媒体去重求和」，由路由层在落盘前算出，见 internal/store 的 UserMediaUsage。
+	// 用量是「该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传」去重求和，由路由层在落盘前算出，
+	// 见 internal/store 的 UserMediaUsage。
 	CodeQuotaExceeded = "media_quota_exceeded"
 )
 

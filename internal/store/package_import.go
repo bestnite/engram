@@ -548,7 +548,7 @@ func validatePackageMedia(pkg *packageModel) error {
 // checkImportMediaQuota 在写任何文件与数据库行之前，检查导入新增媒体是否超出导入者配额。
 //
 // 计量口径与上传链（internal/store.UserMediaUsage）一致：
-//   - 已用量 = 该用户 note 引用到的媒体按 sha256 去重求和；
+//   - 已用量 = 该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传，按 sha256 去重求和；
 //   - 本次新增 = 包内媒体里该用户**尚未计费**的 sha 的字节之和（同一 blob 已计费则不重复收费，
 //     与上传端「同 sha 新增量为 0」同规）。
 //

@@ -99,6 +99,9 @@ func splitMimeList(raw string) []string {
 	return out
 }
 
+// multipartOverheadBytes 是上传请求体在单文件上限之外允许的余量（分隔符、part 头、其他小字段）。
+const multipartOverheadBytes = 64 << 10
+
 // mediaUpload 是通用上传入口：登录用户即可上传（授权落地前的行为，保持不变）。
 func (s *Server) mediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
@@ -112,8 +115,20 @@ func (s *Server) mediaUpload(c *gin.Context) {
 // /media 与 /decks/:id/media 两个入口共用本函数，保证校验逻辑只有一份。
 func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	ctx := c.Request.Context()
+	fileLimit := media.ResolveMaxBytes(ctx, s.db)
+	// 先给整个请求体设上限再解析 multipart：multipart 解析会把超出内存阈值的 part 落到临时盘，
+	// 不设上限时任意大的请求体都会先写进磁盘，之后才轮到下面的单文件大小检查。
+	// 上限 = 单文件上限 + multipart 分隔与头部的余量。
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, fileLimit+multipartOverheadBytes)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			status, code, msg := mediaErrorResponse(media.ErrTooLarge)
+			s.logger.Info("media upload rejected", "user_id", user.ID, "code", code, "reason", "request body too large")
+			writeMediaError(c, status, code, msg)
+			return
+		}
 		writeMediaError(c, http.StatusBadRequest, "media_missing_file", "no file part named file")
 		return
 	}
@@ -123,7 +138,6 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	if header != nil {
 		declared = header.Header.Get("Content-Type")
 	}
-	fileLimit := media.ResolveMaxBytes(ctx, s.db)
 	// 先校验再落盘：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
 	// 全部拒绝判断都在这之后进行，通过后才交给存储层写临时文件 + rename，避免"写了一半
 	// 才发现超限"。内存占用以单文件上限为界，不随上传并发之外的规模增长。
@@ -175,7 +189,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 // checkMediaQuota 在落盘前检查每用户总量配额：已用量 + 本次新增量 > 限额即拒绝，
 // 写稳定 code media_quota_exceeded 与点名限额/已用量的本地化文案，返回 false。
 //
-// 已用量按“该用户 note 引用到的媒体去重求和”计（口径见 internal/store.UserMediaUsage）。
+// 已用量 = 该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传，去重求和（口径见 internal/store.UserMediaUsage）。
 // 若本次文件与该用户已计费的某个 blob 同 sha256，则新增量为 0（去重不重复收费）。
 func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, quota int64) bool {
 	ctx := c.Request.Context()

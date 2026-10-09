@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // TestUserMediaUsageDedupesAndReleases 覆盖计量口径：
@@ -46,6 +48,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	if err := db.Create(&noteU1).Error; err != nil {
 		t.Fatalf("create u1 note: %v", err)
 	}
+	mapNote(t, db, &noteU1)
 	// u2 的 note：只引用 m1（跨用户重复引用，不应影响 u1 的用量）。
 	noteU2 := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
@@ -55,6 +58,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	if err := db.Create(&noteU2).Error; err != nil {
 		t.Fatalf("create u2 note: %v", err)
 	}
+	mapNote(t, db, &noteU2)
 
 	usage1, err := UserMediaUsage(ctx, db, u1)
 	if err != nil {
@@ -83,6 +87,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	if err := db.Create(&pkgNote).Error; err != nil {
 		t.Fatalf("create sha-form note: %v", err)
 	}
+	mapNote(t, db, &pkgNote)
 	if usage1, err = UserMediaUsage(ctx, db, u1); err != nil {
 		t.Fatalf("UserMediaUsage(u1) after sha note error = %v", err)
 	}
@@ -108,6 +113,73 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	}
 	if usage2.Bytes != 1000 {
 		t.Fatalf("u2 usage after u1 delete = %d, want 1000 (unchanged)", usage2.Bytes)
+	}
+}
+
+// mapNote 补建夹具 note 的 media_notes 映射：夹具直接 db.Create 绕过了 NoteStore，
+// 而计量读的是映射（生产路径里映射由 note 写入路径维护）。
+func mapNote(t *testing.T, db *gorm.DB, n *Note) {
+	t.Helper()
+	fields, err := ParseFields(n.FieldsJSON)
+	if err != nil {
+		t.Fatalf("parse fixture fields: %v", err)
+	}
+	if err := rebuildMediaNotes(context.Background(), db, n.ID, fields); err != nil {
+		t.Fatalf("map fixture note: %v", err)
+	}
+}
+
+// TestUserMediaUsageCountsPendingUploads 覆盖「待用的上传」：没有任何 note 引用的上传计到
+// 上传者名下（反面：不计就能无限上传不引用的文件）；一旦被别人的 note 引用，就转由引用者
+// 计费、不再计到上传者；引用消失（硬删除映射）后又回到上传者名下。
+func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
+	ctx := context.Background()
+	db := newSQLite(t)
+	if err := AutoMigrate(ctx, db); err != nil {
+		t.Fatalf("AutoMigrate() error = %v", err)
+	}
+	now := time.Now().UTC()
+	users := seedUsers(t, db, "pending-uploader", "pending-referrer")
+	uploader, referrer := users[0], users[1]
+	deckID := seedDeck(t, db, referrer)
+	sha := strings.Repeat("c", 64)
+	if err := db.Create(&Media{Sha256: sha, RelPath: "cc/" + sha + ".png", Mime: "image/png", Bytes: 700, CreatedAt: now}).Error; err != nil {
+		t.Fatalf("create media: %v", err)
+	}
+	if err := RecordMediaUploader(ctx, db, sha, uploader); err != nil {
+		t.Fatalf("record uploader: %v", err)
+	}
+
+	usage := func(user uint64) int64 {
+		t.Helper()
+		u, err := UserMediaUsage(ctx, db, user)
+		if err != nil {
+			t.Fatalf("UserMediaUsage(%d) error = %v", user, err)
+		}
+		return u.Bytes
+	}
+	if got := usage(uploader); got != 700 {
+		t.Fatalf("pending upload: uploader usage = %d, want 700", got)
+	}
+
+	ref := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: &referrer, CreatedAt: now, UpdatedAt: now,
+		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)","back":"x"}`, sha)}
+	if err := db.Create(&ref).Error; err != nil {
+		t.Fatalf("create referencing note: %v", err)
+	}
+	mapNote(t, db, &ref)
+	if got := usage(uploader); got != 0 {
+		t.Errorf("referenced by someone else: uploader usage = %d, want 0", got)
+	}
+	if got := usage(referrer); got != 700 {
+		t.Errorf("referenced by someone else: referrer usage = %d, want 700", got)
+	}
+
+	if err := db.Where("note_id = ?", ref.ID).Delete(&MediaNote{}).Error; err != nil {
+		t.Fatalf("drop mapping: %v", err)
+	}
+	if got := usage(uploader); got != 700 {
+		t.Errorf("reference gone: uploader usage = %d, want 700 again", got)
 	}
 }
 
