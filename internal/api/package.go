@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -41,12 +40,14 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, incl
 // ImportDeckPackage 解析并导入一个卡组包；target 决定三种目标之一。
 // allowOthersProgress 只有在调用者是管理员时才生效（进度导入边界）。
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
-	targetKind, targetDeckID, err := store.ParsePackageTarget(opts.Target)
+	// 客户端给的卡组标识是对外 id；store 只认数字主键，故先在这里解析。
+	targetKind, targetDeckID, target, err := a.resolveImportTarget(ctx, opts.Target)
 	if err != nil {
-		return nil, mapPackageError(err)
+		return nil, err
 	}
+	opts.Target = target
 	// 目标已有卡组的权限：合并需要 editor，替换是破坏性操作、只允许 owner。
-	if targetKind == "into_deck" || targetKind == "replace_deck" {
+	if targetDeckID != 0 {
 		want := store.RoleEditor
 		if targetKind == "replace_deck" {
 			want = store.RoleOwner
@@ -83,6 +84,24 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 		},
 	})
 	return report, nil
+}
+
+// resolveImportTarget 把客户端传来的目标串翻成 store 的形态。
+// 客户端给的卡组标识是对外 id，store 只认数字主键；返回种类、目标卡组数字主键
+// （new_deck 为 0）与 store 形态的目标串。
+func (a *API) resolveImportTarget(ctx context.Context, raw string) (kind string, deckID uint64, target string, err error) {
+	kind, ref, err := store.ParsePackageTargetRef(raw)
+	if err != nil {
+		return "", 0, "", mapPackageError(err)
+	}
+	if kind == store.PackageTargetNewDeck {
+		return kind, 0, store.FormatPackageTarget(kind, 0), nil
+	}
+	d, derr := a.decks.ByPublicID(ctx, ref)
+	if derr != nil {
+		return "", 0, "", newServiceError(http.StatusNotFound, CodeNotFound, "deck not found")
+	}
+	return kind, d.ID, store.FormatPackageTarget(kind, d.ID), nil
 }
 
 // mapPackageError 把 store 层的卡组包错误映射成带稳定 code 的 ServiceError。
@@ -139,8 +158,14 @@ func asPackageError(err error, target **store.PackageError) bool {
 // handleExportPackage 是 GET /api/v1/decks/:id/package。
 func (a *API) handleExportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	deckID, ok := pathID(c, "id")
+	ctx := c.Request.Context()
+	publicID, ok := pathPublicID(c, "id")
 	if !ok {
+		return
+	}
+	d, err := a.decks.ByPublicID(ctx, publicID)
+	if err != nil {
+		abortNotFound(c)
 		return
 	}
 	includeProgress := c.Query("include_progress") == "1"
@@ -148,18 +173,19 @@ func (a *API) handleExportPackage(c *gin.Context) {
 	// include_media 默认 on；显式传 0 关闭。
 	includeMedia := c.DefaultQuery("include_media", "1") != "0"
 
-	pkg, err := a.ExportDeckPackage(c.Request.Context(), u.ID, deckID, includeProgress, includeMedia, includeReviews)
+	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, includeProgress, includeMedia, includeReviews)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
 	var buf bytes.Buffer
 	if err := pkg.WriteZip(&buf); err != nil {
-		a.logger.Error("write deck package failed", "deck_id", deckID, "error", err)
+		a.logger.Error("write deck package failed", "deck_id", d.ID, "error", err)
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	name := "deck-" + strconv.FormatUint(deckID, 10) + ".edeck"
+	// 文件名用对外 id，避免把自增主键写进客户端可见的下载名。
+	name := "deck-" + publicID + ".edeck"
 	c.Header("Content-Type", "application/vnd.engram.edeck")
 	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
 	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())

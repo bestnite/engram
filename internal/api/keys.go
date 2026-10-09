@@ -74,24 +74,31 @@ func (a *API) createKey(c *gin.Context) {
 // deleteKey 撤销一个属于当前用户的 key；撤销即时生效。
 func (a *API) deleteKey(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	keyID, ok := pathID(c, "id")
+	ctx := c.Request.Context()
+	publicID, ok := pathPublicID(c, "id")
 	if !ok {
 		return
 	}
-	if err := a.keys.Revoke(c.Request.Context(), u.ID, keyID, a.now()); err != nil {
+	k, err := a.keys.ByPublicID(ctx, publicID)
+	if err != nil {
+		abortNotFound(c)
+		return
+	}
+	if err := a.keys.Revoke(ctx, u.ID, k.ID, a.now()); err != nil {
 		if err == store.ErrAPIKeyNotFound {
-			abortError(c, http.StatusNotFound, CodeNotFound, "")
+			abortNotFound(c)
 			return
 		}
-		a.logger.Error("revoke api key failed", "key_id", keyID, "error", err)
+		a.logger.Error("revoke api key failed", "key_id", k.ID, "error", err)
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	recordAudit(c.Request.Context(), a.auditor, a.logger, store.AuditEntry{
+	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
 		Action:   "api_key.revoke",
-		Detail:   map[string]any{"key_id": keyID},
+		Detail:   map[string]any{"key_id": k.ID},
 	})
-	c.JSON(http.StatusOK, gin.H{"revoked": true, "id": keyID})
+	// 回显对外 id，绝不回显自增主键。
+	c.JSON(http.StatusOK, gin.H{"revoked": true, "id": publicID})
 }

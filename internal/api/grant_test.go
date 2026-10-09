@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -168,7 +167,7 @@ func TestHTTPReaderUpdateReturnsStableCode(t *testing.T) {
 	// reader 持有 write scope 的 key，但卡组角色不够 —— 两道门都要过。
 	key := seedKey(t, env.keys, reader.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := "/api/v1/notes/" + strconv.FormatUint(note.ID, 10)
+	path := "/api/v1/notes/" + note.PublicID
 
 	status, raw := doJSON(t, router, http.MethodPatch, path, key.Plaintext,
 		`{"kind":"basic","fields":{"front":"x","back":"y"}}`)

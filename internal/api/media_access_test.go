@@ -50,7 +50,7 @@ func TestRESTUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	router := env.router()
 	body := fmt.Sprintf(`{"fields":{"front":"![](/media/%s)","back":"x"}}`, sha)
 
-	status, raw := doJSON(t, router, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%d", note.ID), k.Plaintext, body)
+	status, raw := doJSON(t, router, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note.PublicID), k.Plaintext, body)
 	if status != http.StatusForbidden {
 		t.Fatalf("PATCH injection status = %d, want 403 (body %s)", status, raw)
 	}
@@ -98,7 +98,7 @@ func TestRESTBulkImportRejectsUnreadableMediaInjection(t *testing.T) {
 	router := env.router()
 	body := fmt.Sprintf(`{"notes":[{"kind":"basic","fields":{"front":"![](/media/%s)","back":"x"}}]}`, sha)
 
-	status, raw := doJSON(t, router, http.MethodPost, fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID), k.Plaintext, body)
+	status, raw := doJSON(t, router, http.MethodPost, fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID), k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("bulk import status = %d, want 200 with per-row error (body %s)", status, raw)
 	}

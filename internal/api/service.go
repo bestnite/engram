@@ -311,8 +311,8 @@ type ImportNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
-	// NoteID 按主键寻址已有 note；与 ExternalRef 互斥。
-	NoteID uint64   `json:"note_id"`
+	// NoteID 按对外 id 寻址已有 note；与 ExternalRef 互斥。空串表示未按 id 寻址。
+	NoteID string   `json:"note_id"`
 	Tags   []string `json:"tags"`
 }
 
@@ -403,7 +403,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			continue
 		}
 
-		if item.NoteID != 0 && strings.TrimSpace(item.ExternalRef) != "" {
+		if strings.TrimSpace(item.NoteID) != "" && strings.TrimSpace(item.ExternalRef) != "" {
 			// 两种寻址方式互斥：同时给出无法判定按哪个定位，直接判该行非法。
 			resp.Errors = append(resp.Errors, ImportError{i, "note_id and external_ref are mutually exclusive"})
 			hasFailure = true
@@ -411,12 +411,12 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 
 		ref := strings.TrimSpace(item.ExternalRef)
-		byID := item.NoteID != 0
+		byID := strings.TrimSpace(item.NoteID) != ""
 		var existing *store.Note
 		if byID {
-			// 按主键寻址：只认属于本卡组的、未软删的 note。取不到与跨卡组用同一句
-			// 「note not found in deck」，不泄露另一个卡组是否存在该 id。
-			found, err := a.notes.ByID(ctx, item.NoteID)
+			// 按对外 id 寻址：先解析成 note，再只认属于本卡组的、未软删的。取不到与跨卡组用同一句
+			// 「note not found in deck」，不泄露另一个卡组是否存在该 note。
+			found, err := a.notes.ByPublicID(ctx, item.NoteID)
 			if err != nil || found.DeckID != d.ID {
 				resp.Errors = append(resp.Errors, ImportError{i, "note not found in deck"})
 				hasFailure = true
@@ -643,16 +643,18 @@ const (
 const bulkMaxTags = 20
 
 // BulkNotesInput 是批量卡片动作的输入（REST 与内置 MCP 共用， 一个模型服务业务与 JSON）。
+// NoteIDs 是各 note 的对外 id（不透明字符串），由 service 解析成主键后再走数字逻辑。
 type BulkNotesInput struct {
 	Action  string   `json:"action"`
-	NoteIDs []uint64 `json:"note_ids"`
+	NoteIDs []string `json:"note_ids"`
 	Tags    []string `json:"tags"`
 	DryRun  bool     `json:"dry_run"`
 }
 
 // BulkNotesSkipped 是被逐行拒绝的 note：code 取值 not_found / insufficient_role。
+// NoteID 是请求里给出的那个对外 id，原样回显，绝不回显自增主键。
 type BulkNotesSkipped struct {
-	NoteID uint64 `json:"note_id"`
+	NoteID string `json:"note_id"`
 	Code   string `json:"code"`
 }
 
@@ -679,7 +681,7 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 			"action must be one of delete, add_tags, remove_tags, set_tags")
 	}
 
-	ids := uniqueIDs(in.NoteIDs)
+	ids := uniquePublicIDs(in.NoteIDs)
 	if len(ids) == 0 || len(ids) > MaxImportNotes {
 		return BulkNotesResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
 			fmt.Sprintf("note_ids must contain between 1 and %d entries", MaxImportNotes))
@@ -698,14 +700,21 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 
 	resp := BulkNotesResponse{DryRun: in.DryRun, Skipped: []BulkNotesSkipped{}}
 	permitted := make([]uint64, 0, len(ids))
-	for _, id := range ids {
-		if code := a.bulkRowCode(ctx, userID, id, !in.DryRun); code != "" {
-			// 单行判权失败不使整批失败：not_found 与 insufficient_role 各记一条 skipped，
-			// 其余 id 继续处理。
-			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: id, Code: code})
+	for _, publicID := range ids {
+		// 对外 id 先解析成 note：未知、已软删或空串一律记 not_found。
+		// 解析成功后再走共享的逐行判权（bulkRowCode），与 REST 其它写操作同一口径。
+		n, err := a.notes.ByPublicID(ctx, publicID)
+		if err != nil {
+			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: publicID, Code: CodeNotFound})
 			continue
 		}
-		permitted = append(permitted, id)
+		if code := a.bulkRowCode(ctx, userID, n.ID, !in.DryRun); code != "" {
+			// 单行判权失败不使整批失败：not_found 与 insufficient_role 各记一条 skipped，
+			// 其余 id 继续处理。
+			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: publicID, Code: code})
+			continue
+		}
+		permitted = append(permitted, n.ID)
 	}
 
 	var affected int64
@@ -782,10 +791,11 @@ func bulkAuditAction(action string) string {
 	}
 }
 
-// uniqueIDs 按首次出现去重并保持请求顺序；批量动作的响应与审计都依赖这个顺序。
-func uniqueIDs(ids []uint64) []uint64 {
-	seen := make(map[uint64]struct{}, len(ids))
-	out := make([]uint64, 0, len(ids))
+// uniquePublicIDs 按首次出现去重并保持请求顺序；批量动作的响应与审计都依赖这个顺序。
+// 空串不去除：它会在逐行解析时被记为 not_found，保持「请求里写了几个就报几个」。
+func uniquePublicIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
 	for _, id := range ids {
 		if _, ok := seen[id]; ok {
 			continue
@@ -882,11 +892,11 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	return resp, nil
 }
 
-// ExportRow 是卡片级导出的扁平行（给外部工具用的粒度）。
+// ExportRow 是卡片级导出的扁平行（给外部工具用的粒度）；三个 id 都是对外 id。
 type ExportRow struct {
-	CardID      uint64         `json:"card_id"`
-	NoteID      uint64         `json:"note_id"`
-	DeckID      uint64         `json:"deck_id"`
+	CardID      string         `json:"card_id"`
+	NoteID      string         `json:"note_id"`
+	DeckID      string         `json:"deck_id"`
 	Kind        string         `json:"kind"`
 	Template    string         `json:"template"`
 	Fields      map[string]any `json:"fields"`
@@ -900,11 +910,11 @@ type ExportRow struct {
 
 // ---- 复习 ----
 
-// DueCard 是到期卡的对外形态（含字段原文）。
+// DueCard 是到期卡的对外形态（含字段原文）；三个 id 都是对外 id。
 type DueCard struct {
-	CardID         uint64         `json:"card_id"`
-	NoteID         uint64         `json:"note_id"`
-	DeckID         uint64         `json:"deck_id"`
+	CardID         string         `json:"card_id"`
+	NoteID         string         `json:"note_id"`
+	DeckID         string         `json:"deck_id"`
 	State          string         `json:"state"`
 	DueAt          time.Time      `json:"due_at"`
 	Retrievability float64        `json:"retrievability"`
@@ -988,6 +998,8 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 	}
 
 	out := make([]DueCard, 0, len(items))
+	// 卡组的对外 id 按主键缓存：同一队列里多张卡常来自同一个卡组，避免逐张重复查库。
+	deckPublic := make(map[uint64]string)
 	for _, it := range items {
 		note, err := a.notes.ByID(ctx, it.NoteID)
 		if err != nil {
@@ -995,9 +1007,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		}
 		var state store.CardState
 		entry := DueCard{
-			CardID:         it.CardID,
-			NoteID:         it.NoteID,
-			DeckID:         it.DeckID,
+			NoteID:         note.PublicID,
 			State:          it.State.String(),
 			DueAt:          it.DueAt,
 			Retrievability: it.Retrievability,
@@ -1009,7 +1019,14 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 			entry.Version = state.Version
 		}
 		if card, err := a.cards.ByID(ctx, it.CardID); err == nil {
+			entry.CardID = card.PublicID
 			entry.Template = card.Template
+		}
+		if pid, ok := deckPublic[note.DeckID]; ok {
+			entry.DeckID = pid
+		} else if d, err := a.decks.ByID(ctx, note.DeckID); err == nil {
+			deckPublic[note.DeckID] = d.PublicID
+			entry.DeckID = d.PublicID
 		}
 		out = append(out, entry)
 	}
@@ -1030,9 +1047,10 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 	return out
 }
 
-// SubmitReviewInput 是评分提交输入。
+// SubmitReviewInput 是评分提交输入。CardID 是卡的对外 id（不透明字符串），
+// 由 SubmitReview 解析成主键后再进入调度。
 type SubmitReviewInput struct {
-	CardID          uint64
+	CardID          string
 	Rating          int
 	ExpectedVersion int
 	ElapsedMS       *int
@@ -1042,10 +1060,10 @@ type SubmitReviewInput struct {
 	GradeDetailJSON *string
 }
 
-// SubmitReviewResult 是评分提交的响应形态。
+// SubmitReviewResult 是评分提交的响应形态。CardID 是卡的对外 id；
+// 不暴露 review 的自增主键（没有客户端使用它）。
 type SubmitReviewResult struct {
-	CardID    uint64     `json:"card_id"`
-	ReviewID  uint64     `json:"review_id"`
+	CardID    string     `json:"card_id"`
 	State     string     `json:"state"`
 	DueAt     *time.Time `json:"due_at"`
 	Version   int        `json:"version"`
@@ -1054,13 +1072,14 @@ type SubmitReviewResult struct {
 
 // SubmitReview 提交一次评分；乐观锁不匹配返回 409 version_conflict。
 func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64, in SubmitReviewInput) (SubmitReviewResult, error) {
-	if in.CardID == 0 {
+	if strings.TrimSpace(in.CardID) == "" {
 		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "card_id is required")
 	}
 	if !schedule.Rating(in.Rating).Valid() {
 		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
 	}
-	card, err := a.cards.ByID(ctx, in.CardID)
+	// 对外 id -> 主键：之后全部走数字逻辑（调度、审计、card_states 查询）。
+	card, err := a.cards.ByPublicID(ctx, in.CardID)
 	if err != nil {
 		return SubmitReviewResult{}, newServiceError(http.StatusNotFound, CodeNotFound, "card not found")
 	}
@@ -1081,7 +1100,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var inner error
 		result, inner = schedule.Submit(ctx, tx, schedule.SubmitInput{
-			CardID:          in.CardID,
+			CardID:          card.ID,
 			UserID:          u.ID,
 			Rating:          schedule.Rating(in.Rating),
 			ExpectedVersion: in.ExpectedVersion,
@@ -1100,7 +1119,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		if errors.Is(err, schedule.ErrVersionConflict) {
 			return SubmitReviewResult{}, newServiceError(http.StatusConflict, CodeVersionConflict, "card state version conflict")
 		}
-		a.logger.Error("submit review failed", "card_id", in.CardID, "user_id", u.ID, "error", err)
+		a.logger.Error("submit review failed", "card_id", card.ID, "user_id", u.ID, "error", err)
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to submit review")
 	}
 	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
@@ -1108,12 +1127,11 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		APIKeyID:   apiKeyID,
 		Action:     "review.submit",
 		TargetType: "card",
-		TargetID:   store.Ptr(in.CardID),
+		TargetID:   store.Ptr(card.ID),
 		Detail:     map[string]any{"rating": in.Rating, "review_id": result.ReviewID},
 	})
 	return SubmitReviewResult{
-		CardID:    in.CardID,
-		ReviewID:  result.ReviewID,
+		CardID:    card.PublicID,
 		State:     result.State.State,
 		DueAt:     result.State.DueAt,
 		Version:   result.State.Version,

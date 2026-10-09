@@ -42,13 +42,10 @@ func TestKeysEndpointRequiresKeysScope(t *testing.T) {
 		if err := json.Unmarshal(raw, &body); err != nil {
 			t.Fatalf("keys response is not JSON: %v (%s)", err, raw)
 		}
-		if len(body.Keys) != 1 || body.Keys[0].ID != selfKey.Key.ID {
-			t.Fatalf("keys = %+v, want exactly the caller's own key %d", body.Keys, selfKey.Key.ID)
-		}
-		for _, k := range body.Keys {
-			if k.UserID != owner.ID {
-				t.Errorf("list leaked a key owned by user %d", k.UserID)
-			}
+		// 只列自己的 key：恰好一条，且就是调用者那条。APIKey 不再对外暴露 user_id
+		// （自己的 key 列表里它是冗余的），所以「没混进别人的」由条数与 id 共同断言。
+		if len(body.Keys) != 1 || body.Keys[0].PublicID != selfKey.Key.PublicID {
+			t.Fatalf("keys = %+v, want exactly the caller's own key %s", body.Keys, selfKey.Key.PublicID)
 		}
 	})
 

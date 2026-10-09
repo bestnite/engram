@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,13 +21,13 @@ import (
 // 逐行推进，这里只负责把每行直接写进 http.ResponseWriter。
 //
 // deck 必须显式给出：全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个卡组。
+// deck 的值是卡组的对外 id；解析成主键后才进入数字化的 service 层。
 func (a *API) exportCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
 
-	raw := c.Query("deck")
-	id, err := strconv.ParseUint(raw, 10, 64)
-	if raw == "" || err != nil || id == 0 {
+	raw := strings.TrimSpace(c.Query("deck"))
+	if raw == "" {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
@@ -37,29 +38,35 @@ func (a *API) exportCards(c *gin.Context) {
 	}
 	includeProgress := c.Query("include_progress") == "1"
 
+	d, err := a.decks.ByPublicID(ctx, raw)
+	if err != nil {
+		abortNotFound(c)
+		return
+	}
 	// 权限与卡组存在性必须在写任何响应字节之前确定，否则无法回 404/403。
-	if _, err := a.RequireDeckRole(ctx, u.ID, id, store.RoleReader); err != nil {
+	if _, err := a.RequireDeckRole(ctx, u.ID, d.ID, store.RoleReader); err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	deckIDs := []uint64{id}
+	deckIDs := []uint64{d.ID}
 
 	if format == "csv" {
 		a.streamCSV(c, ctx, u.ID, deckIDs, includeProgress)
 		return
 	}
-	a.streamJSON(c, ctx, u.ID, deckIDs, includeProgress)
+	a.streamJSON(c, ctx, u.ID, []string{d.PublicID}, deckIDs, includeProgress)
 }
 
 // streamJSON 以流式方式写 {"deck_ids":[...],"cards":[...],"count":N}。
+// deck_ids 里放的是卡组的对外 id，不是自增主键。
 // 先写固定前缀，再逐行编码数组元素，最后收尾；中途查询失败时仍把数组闭合，
 // 让客户端拿到合法 JSON 并在日志里留下英文错误。
-func (a *API) streamJSON(c *gin.Context, ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) {
+func (a *API) streamJSON(c *gin.Context, ctx context.Context, userID uint64, deckPublicIDs []string, deckIDs []uint64, includeProgress bool) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.Status(http.StatusOK)
 	w := c.Writer
 
-	deckRaw, _ := json.Marshal(deckIDs)
+	deckRaw, _ := json.Marshal(deckPublicIDs)
 	_, _ = w.Write([]byte(`{"deck_ids":`))
 	_, _ = w.Write(deckRaw)
 	_, _ = w.Write([]byte(`,"cards":[`))
@@ -122,8 +129,7 @@ func csvRecord(r ExportRow, includeProgress bool) []string {
 		ref = *r.ExternalRef
 	}
 	rec := []string{
-		strconv.FormatUint(r.CardID, 10), strconv.FormatUint(r.NoteID, 10),
-		strconv.FormatUint(r.DeckID, 10), r.Kind, r.Template,
+		r.CardID, r.NoteID, r.DeckID, r.Kind, r.Template,
 		string(fieldsJSON), string(tagsJSON), ref,
 	}
 	if includeProgress {

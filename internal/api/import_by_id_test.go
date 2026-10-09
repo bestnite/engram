@@ -66,13 +66,13 @@ func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {
 
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	path := fmt.Sprintf("/api/v1/decks/%d/notes", deck.ID)
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 	body := fmt.Sprintf(`{"notes":[`+
-		`{"note_id":%d,"kind":"basic","fields":{"front":"new1","back":"newA"},"tags":["t1"]},`+
-		`{"note_id":%d,"kind":"basic","fields":{"front":"new2","back":"newB"}},`+
-		`{"note_id":%d,"kind":"basic","fields":{"front":"x","back":"y"}},`+
-		`{"note_id":%d,"kind":"basic","fields":{"front":"z","back":"z"},"external_ref":"e:1"}`+
-		`]}`, n1.ID, n2.ID, foreign.ID, n1.ID)
+		`{"note_id":"%s","kind":"basic","fields":{"front":"new1","back":"newA"},"tags":["t1"]},`+
+		`{"note_id":"%s","kind":"basic","fields":{"front":"new2","back":"newB"}},`+
+		`{"note_id":"%s","kind":"basic","fields":{"front":"x","back":"y"}},`+
+		`{"note_id":"%s","kind":"basic","fields":{"front":"z","back":"z"},"external_ref":"e:1"}`+
+		`]}`, n1.PublicID, n2.PublicID, foreign.PublicID, n1.PublicID)
 
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {

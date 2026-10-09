@@ -22,7 +22,8 @@ The request carries one `action` applied to every note in `note_ids`:
 | `remove_tags` | required | removes the given tags |
 | `set_tags` | required | replaces the whole tag list |
 
-`note_ids` holds 1 to 500 entries and `tags` 1 to 20. Two kinds of failure are
+`note_ids` holds 1 to 500 note **public ids** (opaque strings, not database keys) and `tags` 1 to 20.
+Two kinds of failure are
 deliberately different, which the schema states as far as JSON Schema can:
 
 - **Request-level failure** — an unknown action, `note_ids` empty or over the bound, a tag
@@ -65,7 +66,8 @@ built-in kinds and their required fields are:
 Every note may also carry `external_ref` (the caller-defined idempotency key),
 `note_id`, `tags`, `extra` and `source_url`.
 
-`note_id` addresses an existing note of the deck in the path by primary key, so a
+`note_id` addresses an existing note of the deck in the path by its opaque
+**public id** (a string, never the numeric primary key), so a
 single request can rewrite several existing notes in place; their cards and every
 user's review progress are preserved. It is mutually exclusive with `external_ref`,
 which names a note by its idempotency key: a note object that carries both is rejected

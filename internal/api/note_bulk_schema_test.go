@@ -86,7 +86,8 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 
 	ids501 := make([]string, 0, 501)
 	for i := 1; i <= 501; i++ {
-		ids501 = append(ids501, itoa(i))
+		// note_ids 是字符串数组；501 个合法字符串才能测到条数上限。
+		ids501 = append(ids501, `"`+itoa(i)+`"`)
 	}
 	tags21 := make([]string, 0, 21)
 	for i := 1; i <= 21; i++ {
@@ -94,10 +95,10 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 	}
 
 	valid := []string{
-		`{"action":"delete","note_ids":[1,2,3]}`,
-		`{"action":"add_tags","note_ids":[1],"tags":["a"]}`,
-		`{"action":"remove_tags","note_ids":[1,2],"tags":["a","b"]}`,
-		`{"action":"set_tags","note_ids":[1],"tags":["a"],"dry_run":true}`,
+		`{"action":"delete","note_ids":["0198c0de-0000-7000-8000-000000000001","0198c0de-0000-7000-8000-000000000002","0198c0de-0000-7000-8000-000000000003"]}`,
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["a"]}`,
+		`{"action":"remove_tags","note_ids":["0198c0de-0000-7000-8000-000000000001","0198c0de-0000-7000-8000-000000000002"],"tags":["a","b"]}`,
+		`{"action":"set_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["a"],"dry_run":true}`,
 	}
 	for _, body := range valid {
 		if err := validate(body); err != nil {
@@ -106,14 +107,16 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 	}
 
 	invalid := []string{
-		`{"action":"archive","note_ids":[1]}`,
+		`{"action":"archive","note_ids":["0198c0de-0000-7000-8000-000000000001"]}`,
 		`{"action":"delete","note_ids":[]}`,
 		`{"action":"delete","note_ids":[` + strings.Join(ids501, ",") + `]}`,
-		`{"action":"add_tags","note_ids":[1]}`,
-		`{"action":"add_tags","note_ids":[1],"tags":[]}`,
-		`{"action":"add_tags","note_ids":[1],"tags":[` + strings.Join(tags21, ",") + `]}`,
-		`{"action":"delete","note_ids":[1],"tags":["x"]}`,
-		`{"note_ids":[1]}`,
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"]}`,
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[]}`,
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[` + strings.Join(tags21, ",") + `]}`,
+		`{"action":"delete","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["x"]}`,
+		`{"note_ids":["0198c0de-0000-7000-8000-000000000001"]}`,
+		// 数字（旧的自增主键形态）不再是合法的 note_ids 元素。
+		`{"action":"delete","note_ids":[1]}`,
 	}
 	for _, body := range invalid {
 		if err := validate(body); err == nil {
