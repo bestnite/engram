@@ -44,6 +44,8 @@
   let total = $state(initialTotal);
   let page = $state(1);
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
+  // 打开过的标签页保持挂载、只切换显隐：来回切换时不重新取数，也就不会每次都闪一下加载占位。
+  let visitedTabs = $state<Record<string, boolean>>({ cards: true });
 
   // 逐条删除状态
   // 待确认删除的笔记：确认放在对话框里，不在行内插入文字（插入会把行撑高、文字被挤得换行）。
@@ -366,7 +368,7 @@
         role="tab"
         aria-selected={activeTab === tab.id}
         data-testid={tab.testId}
-        onclick={() => (activeTab = tab.id as typeof activeTab)}
+        onclick={() => { activeTab = tab.id as typeof activeTab; visitedTabs[tab.id] = true; }}
         class="-mb-px whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors cursor-pointer {activeTab === tab.id
           ? 'border-foreground font-medium text-foreground'
           : 'border-transparent text-muted-foreground hover:text-foreground'}"
@@ -376,12 +378,14 @@
     {/each}
   </div>
 
-  {#if activeTab === 'sharing'}
-    <DeckSharingView embedded />
-  {:else if activeTab === 'settings'}
+  {#if visitedTabs.sharing}
+    <div hidden={activeTab !== 'sharing'}><DeckSharingView embedded /></div>
+  {/if}
+  {#if visitedTabs.settings}
     <!-- 学习设置是每个成员自己的，所有成员都能打开。 -->
-    <DeckSettingsView embedded />
-  {:else}
+    <div hidden={activeTab !== 'settings'}><DeckSettingsView embedded /></div>
+  {/if}
+  <div hidden={activeTab !== 'cards'}>
     <!-- 搜索与筛选 -->
     <form
       onsubmit={(event) => event.preventDefault()}
@@ -627,7 +631,7 @@
         {$t('notes.bulk_delete')}
       </button>
     </SelectionBar>
-  {/if}
+  </div>
 </Page>
 
 <!-- 批量编辑标签 -->

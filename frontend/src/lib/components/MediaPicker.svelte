@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from './ui/Skeleton.svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import type { MediaItem } from '../api';
@@ -49,7 +50,7 @@
 {#if open}
   <section data-testid="media-picker" class="rounded-xl border border-input p-4">
     <h2 class="text-lg font-semibold">{$t('media.heading')}</h2>
-    {#if loading}<p role="status">{$t('media.loading')}</p>{/if}
+    {#if loading}<Skeleton testId="media-loading" label={$t('media.loading')} lines={2} />{/if}
     {#if failed}<p role="alert">{$t('media.failed')}</p><button type="button" onclick={() => load(!cursor)}>{$t('media.retry')}</button>{/if}
     {#if !loading && !failed && items.length === 0}<p>{$t('media.empty')}</p>{/if}
     {#if items.length > 0}

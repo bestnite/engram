@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
@@ -76,7 +77,7 @@
     </div>
 
     {#if !loaded}
-      <p class="text-sm text-muted-foreground">{$t('account.email.loading')}</p>
+      <Skeleton testId="email-loading" label={$t('account.email.loading')} lines={2} />
     {:else if loadErrorKey}
       <div
         data-testid="email-load-error"

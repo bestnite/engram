@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { t } from '../i18n';
@@ -106,7 +107,7 @@
     </form>
 
     {#if loading}
-      <p class="text-sm text-muted-foreground">{$t('common.loading')}</p>
+      <Skeleton testId="keys-loading" label={$t('common.loading')} lines={2} />
     {:else if keys.length === 0}
       <p class="text-sm text-muted-foreground">{$t('keys.empty')}</p>
     {:else}

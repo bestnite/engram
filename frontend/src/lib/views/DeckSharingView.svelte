@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
@@ -55,7 +56,7 @@
 </script>
 
 <Page {embedded} class={embedded ? 'space-y-5' : 'space-y-6'} testId="deck-sharing-view">
-  {#if loading}<p class="text-sm text-muted-foreground" role="status">{$t('common.loading')}</p>
+  {#if loading}<Skeleton testId="deck-sharing-loading" label={$t('common.loading')} />
   {:else if failed}<p class="text-sm text-rose-600 dark:text-rose-400" role="alert">{$t(error)}</p>
   {:else if data}
     {#if !embedded}<header><h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('deck.sharing.title')}: {data.deck_name}</h1></header>{/if}

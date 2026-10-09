@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from '../components/ui/Skeleton.svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { routeStore, navigate } from '../router';
   import { t } from '../i18n';
@@ -395,7 +396,7 @@
     back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('note_edit.back') }}
   />
   {#if loading || (note && !$cardTypes && !metaError)}
-    <p class="text-sm text-muted-foreground">{$t('note_edit.loading')}</p>
+    <Skeleton testId="note-edit-loading" label={$t('note_edit.loading')} lines={6} />
   {:else if !isCreate && loadError && !note}
     <p role="alert" data-testid="note-edit-not-found" class="text-sm text-destructive-foreground">{$t('note_edit.not_found')}</p>
   {:else if metaError && !$cardTypes}

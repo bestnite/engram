@@ -264,6 +264,22 @@ html.dark #review-done {
   }
 }
 
+/* 骨架屏延迟显现：前 150ms 完全透明，之后淡入。
+   多数请求在 150ms 内就回来了，此时骨架屏从未被看见，页面直接从空白换成内容；
+   只有真正慢的加载才会看到占位，避免「一闪而过的加载中」。 */
+@utility skeleton-reveal {
+  animation: skeleton-reveal 200ms ease-out 150ms both;
+}
+
+@keyframes skeleton-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 骨架屏脉冲 */
 @utility skeleton-block {
   background-color: var(--muted);
