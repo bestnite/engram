@@ -1,9 +1,10 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { listClasses } from '../components/ui/variants';
-  import { ChevronRight, X } from '@lucide/svelte';
+  import { X } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore, setLocale, type SupportedLocale, isSupportedLocale } from '../i18n';
   import {
@@ -252,6 +253,7 @@
 </script>
 
 <Page testId="settings-view">
+  <SettingsNav />
   <PageHeader title={$t('settings.heading')} description={$t('settings.intro')} />
 
   {#if loading}
@@ -417,25 +419,5 @@
       {/if}
     </SettingsSection>
 
-    <!-- 其余个人设置各有独立页面：用一组链接行代替三张各带主按钮的卡片。 -->
-    <SettingsSection title={$t('settings.more.heading')}>
-      <ul class={listClasses.root}>
-        {#each [
-          { href: '/settings/email', testId: 'settings-email-entry', title: 'account.email.heading', intro: 'account.email.intro', entry: 'settings.email.entry' },
-          { href: '/settings/totp', testId: 'settings-totp-entry', title: 'settings.totp.heading', intro: 'settings.totp.intro', entry: 'settings.totp.entry' },
-          { href: '/settings/notifications', testId: 'settings-notifications-entry', title: 'settings.notifications.heading', intro: 'settings.notifications.intro', entry: 'settings.notifications.entry' },
-          { href: '/settings/keys', testId: 'settings-keys-entry', title: 'settings.keys.heading', intro: 'settings.keys.intro', entry: 'settings.keys.entry' },
-        ] as item (item.href)}
-          <li class={listClasses.row} data-testid={item.testId}>
-            <div class="min-w-0 flex-1">
-              <a href={item.href} class={listClasses.rowLink} aria-label={$t(item.entry)}>{$t(item.title)}</a>
-              <p class="text-[13px] text-muted-foreground">{$t(item.intro)}</p>
-            </div>
-            <span class="hidden shrink-0 text-[13px] text-muted-foreground sm:inline">{$t(item.entry)}</span>
-            <ChevronRight class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </li>
-        {/each}
-      </ul>
-    </SettingsSection>
   {/if}
 </Page>

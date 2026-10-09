@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
@@ -125,11 +126,11 @@
 </script>
 
 <Page testId="notifications-view">
+  <SettingsNav />
   <PageHeader
     title={$t('settings.notifications.heading')}
     testId="notifications-title"
     description={$t('settings.notifications.intro')}
-    back={{ href: '/settings', label: $t('nav.settings'), testId: 'notifications-back' }}
   />
 
   {#if loading}

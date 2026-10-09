@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
   import { askConfirm } from '../components/ui/confirm';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
@@ -88,7 +89,8 @@
 </script>
 
 <Page>
-  <PageHeader title={$t('keys.title')} description={$t('keys.notice')} back={{ href: '/settings', label: $t('nav.settings') }} />
+  <SettingsNav />
+  <PageHeader title={$t('keys.title')} description={$t('keys.notice')} />
 
   {#if error}<p class="mb-4 text-sm text-destructive-foreground" role="alert">{$t(error)}</p>{/if}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
@@ -175,11 +176,11 @@
 </script>
 
 <Page testId="totp-view">
+  <SettingsNav />
   <PageHeader
     title={$t('settings.totp.heading')}
     testId="totp-title"
     description={$t('settings.totp.intro')}
-    back={{ href: '/settings', label: $t('nav.settings'), testId: 'totp-back' }}
   >
     {#snippet meta()}
       {#if status}

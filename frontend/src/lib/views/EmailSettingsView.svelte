@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SettingsNav from './SettingsNav.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
@@ -71,10 +72,10 @@
 </script>
 
 <Page>
+  <SettingsNav />
   <PageHeader
     title={$t('account.email.heading')}
     description={$t('account.email.intro')}
-    back={{ href: '/settings', label: $t('account.email.back_settings') }}
   />
 
   {#if !loaded}

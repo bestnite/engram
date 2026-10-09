@@ -5,13 +5,13 @@ import SettingsView from '../lib/views/SettingsView.svelte';
 import { setLocale } from '../lib/i18n';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 import { en } from '../lib/i18n/locales/en';
-import { matchRoute } from '../lib/router';
+import { matchRoute, routeStore } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
  * API 密钥入口从主导航移到 /settings 页。
  *
- * 两个可观测事实：主导航不再有 /settings/keys 链接；设置页多了一张指向 /settings/keys 的入口卡片。
+ * 两个可观测事实：主导航不再有 /settings/keys 链接；设置页的标签栏里有指向 /settings/keys 的一项。
  * 页面内容本身仍留在 /settings/keys——这里只验证路由还在，不重复 APIKeysView 自己的测试。
  */
 describe('API keys entry lives on the settings page, not the header', () => {
@@ -19,11 +19,18 @@ describe('API keys entry lives on the settings page, not the header', () => {
     setLocale('zh-CN');
   });
 
-  it('renders the API keys entry on /settings with a link to /settings/keys', () => {
+  it('renders the API keys tab on /settings with a link to /settings/keys', () => {
     const { html } = render(SettingsView, { props: { initialLoading: false } });
-    expect(html).toContain('data-testid="settings-keys-entry"');
-    expect(html).toContain('href="/settings/keys"');
-    expect(html).toContain('管理 API 密钥');
+    expect(html).toContain('data-testid="settings-nav"');
+    expect(html).toMatch(/href="\/settings\/keys"[^>]*data-testid="settings-nav-keys"/);
+    expect(html).toContain('API 密钥');
+  });
+
+  it('highlights only the general tab on /settings, not every settings tab', () => {
+    routeStore.set(matchRoute('/settings'));
+    const { html } = render(SettingsView, { props: { initialLoading: false } });
+    expect(html).toMatch(/href="\/settings"[^>]*data-testid="settings-nav-general"[^>]*aria-current="page"/);
+    expect(html).not.toMatch(/data-testid="settings-nav-keys"[^>]*aria-current="page"/);
   });
 
   it('no longer offers an API keys link in the main navigation', () => {
@@ -43,7 +50,8 @@ describe('API keys entry lives on the settings page, not the header', () => {
     expect(en['nav.api_keys']).toBeUndefined();
     expect(zhCN['settings.keys.heading']).toBeTruthy();
     expect(en['settings.keys.heading']).toBeTruthy();
-    expect(zhCN['settings.keys.entry']).toBeTruthy();
-    expect(en['settings.keys.entry']).toBeTruthy();
+    // 入口卡片换成了标签栏，卡片按钮的文案不再需要。
+    expect(zhCN['settings.keys.entry']).toBeUndefined();
+    expect(en['settings.keys.entry']).toBeUndefined();
   });
 });

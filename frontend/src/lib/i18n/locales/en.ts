@@ -518,7 +518,6 @@ export const en: LocaleCatalog = {
   // secret is shown only once (from begin); recovery codes only when generated.
   'settings.totp.heading': 'Two-factor authentication',
   'settings.totp.intro': 'When enabled, signing in also requires a time-based code from your authenticator app.',
-  'settings.totp.entry': 'Manage two-factor authentication',
   'settings.totp.status.enabled': 'Status: enabled',
   'settings.totp.status.disabled': 'Status: disabled',
   'settings.totp.begin.hint': 'Start to generate a secret, then add it to your authenticator app.',
@@ -556,12 +555,9 @@ export const en: LocaleCatalog = {
   // so the frontend never keeps a second type list of its own.
   'settings.notifications.heading': 'Email notification preferences',
   'settings.notifications.intro': 'Choose which optional emails this site sends you. Security and transactional mail cannot be turned off.',
-  'settings.notifications.entry': 'Manage email notification preferences',
   // ---- API keys (/settings/keys) ----
   // The entry point lives on this settings page; it is no longer a header nav item.
   'settings.keys.heading': 'API keys',
-  'settings.keys.intro': 'Keys let tools access your data through the REST or MCP API. A key is shown only once, when it is created.',
-  'settings.keys.entry': 'Manage API keys',
   'settings.notifications.locked': 'Always on: this mail protects your account.',
   'settings.notifications.class.security.heading': 'Security and transactional',
   'settings.notifications.class.collab.heading': 'Collaboration and permissions',
@@ -1276,8 +1272,6 @@ export const en: LocaleCatalog = {
   'deck.sharing.links_hint': 'Anyone with the link can preview this deck and join after signing in. A password and an expiry date are optional.',
   'deck.sharing.link_copied': 'Link copied',
   'deck.sharing.copy': 'Copy',
-  // 个人设置页：其余设置的入口分区。
-  'settings.more.heading': 'More settings',
   // 两步验证页：绑定步骤的分区标题。
   'settings.totp.begin.heading': 'Set up an authenticator',
   // API 密钥与邮箱设置的分区说明。
@@ -1285,7 +1279,6 @@ export const en: LocaleCatalog = {
   'keys.list_heading': 'Your keys',
   'keys.copied': 'Key copied',
   'account.email.change_hint': 'A confirmation link goes to the new address; nothing changes until you confirm.',
-  'settings.email.entry': 'Manage email',
   // 统一确认对话框的按钮。
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',
@@ -1302,6 +1295,9 @@ export const en: LocaleCatalog = {
   'admin.smtp.section.server': 'Mail server',
   // 导入页：勾选「先试导入」时提交按钮的文字。
   'package.import.submit_dry': 'Run dry run',
+  // 个人设置的标签栏。
+  'settings.nav.general': 'General',
+  'settings.nav.notifications': 'Email notifications',
   // 邀请有效天数的占位提示。
   'admin.registration.field.expires_placeholder': 'Leave empty to never expire',
 };

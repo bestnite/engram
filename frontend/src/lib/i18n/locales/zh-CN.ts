@@ -518,7 +518,6 @@ export const zhCN: LocaleCatalog = {
   // secret 只在 begin 时显示一次；恢复码只在生成时显示。
   'settings.totp.heading': '两步验证',
   'settings.totp.intro': '启用后，登录还需要认证器 App 生成的动态验证码。',
-  'settings.totp.entry': '管理两步验证',
   'settings.totp.status.enabled': '状态：已启用',
   'settings.totp.status.disabled': '状态：未启用',
   'settings.totp.begin.hint': '点击开始生成密钥，然后把它添加到认证器 App。',
@@ -555,12 +554,9 @@ export const zhCN: LocaleCatalog = {
   // 类型与大类标识来自服务端目录；文案按稳定标识本地化，前端不另列类型清单。
   'settings.notifications.heading': '邮件通知偏好',
   'settings.notifications.intro': '选择本站可以给你发送哪些可选邮件；安全与事务类邮件不可关闭。',
-  'settings.notifications.entry': '管理邮件通知偏好',
   // ---- API 密钥（/settings/keys） ----
   // 入口挂在设置页上；页头导航里不再有它。
   'settings.keys.heading': 'API 密钥',
-  'settings.keys.intro': '用于通过 REST 或 MCP API 访问你的数据。密钥只在创建时显示一次。',
-  'settings.keys.entry': '管理 API 密钥',
   'settings.notifications.locked': '始终开启：这类邮件保护你的账号。',
   'settings.notifications.class.security.heading': '安全与事务',
   'settings.notifications.class.collab.heading': '协作与授权',
@@ -1275,8 +1271,6 @@ export const zhCN: LocaleCatalog = {
   'deck.sharing.links_hint': '持有链接的人可以预览这个卡组，登录后可加入复习。可选设置口令与过期日期。',
   'deck.sharing.link_copied': '链接已复制',
   'deck.sharing.copy': '复制',
-  // 个人设置页：其余设置的入口分区。
-  'settings.more.heading': '更多设置',
   // 两步验证页：绑定步骤的分区标题。
   'settings.totp.begin.heading': '绑定认证器',
   // API 密钥与邮箱设置的分区说明。
@@ -1284,7 +1278,6 @@ export const zhCN: LocaleCatalog = {
   'keys.list_heading': '已有密钥',
   'keys.copied': '密钥已复制',
   'account.email.change_hint': '确认链接会发到新地址，确认之前邮箱不会变更。',
-  'settings.email.entry': '管理邮箱',
   // 统一确认对话框的按钮。
   'common.confirm': '确定',
   'common.cancel': '取消',
@@ -1301,6 +1294,9 @@ export const zhCN: LocaleCatalog = {
   'admin.smtp.section.server': '发信服务器',
   // 导入页：勾选「先试导入」时提交按钮的文字。
   'package.import.submit_dry': '试导入',
+  // 个人设置的标签栏。
+  'settings.nav.general': '通用',
+  'settings.nav.notifications': '邮件通知',
   // 邀请有效天数的占位提示。
   'admin.registration.field.expires_placeholder': '留空表示永不过期',
 };
