@@ -17,14 +17,43 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedOptimizeReviews 直接写入 n 条复习日志，作为优化门槛的燃料。
-// 只关心条数，字段取最小合法值；不建 cards/notes，因为 reviews 没有外键约束。
-func seedOptimizeReviews(t *testing.T, db *gorm.DB, userID uint64, n int) {
+// seedPresetDeckCards 建一个挂着 presetID、属于 ownerID 的卡组与其中 n 张卡，返回卡的主键。
+// 优化只用「挂着该预设的卡组」上的复习，所以作为燃料的复习必须落在这样的卡上。
+func seedPresetDeckCards(t *testing.T, db *gorm.DB, ownerID, presetID uint64, n int) []uint64 {
 	t.Helper()
+	now := time.Now().UTC()
+	deck := store.Deck{OwnerUserID: ownerID, Name: "optimize deck", PresetID: presetID, CreatedAt: now}
+	if err := db.Create(&deck).Error; err != nil {
+		t.Fatalf("create deck: %v", err)
+	}
+	ids := make([]uint64, 0, n)
+	for i := 0; i < n; i++ {
+		note := store.Note{DeckID: deck.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+		if err := db.Create(&note).Error; err != nil {
+			t.Fatalf("create note: %v", err)
+		}
+		card := store.Card{NoteID: note.ID, Template: "forward", CreatedAt: now}
+		if err := db.Create(&card).Error; err != nil {
+			t.Fatalf("create card: %v", err)
+		}
+		ids = append(ids, card.ID)
+	}
+	return ids
+}
+
+// seedOptimizeReviews 建一个属于 userID 的预设与挂着它的卡组，写入 n 条复习日志作为优化门槛的
+// 燃料，返回预设主键。只关心条数，字段取最小合法值。
+func seedOptimizeReviews(t *testing.T, db *gorm.DB, userID uint64, n int) uint64 {
+	t.Helper()
+	p := store.NewPreset(userID, "optimize preset")
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatalf("create preset: %v", err)
+	}
+	card := seedPresetDeckCards(t, db, userID, p.ID, 1)[0]
 	at := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < n; i++ {
 		rv := store.Review{
-			CardID:      1,
+			CardID:      card,
 			UserID:      userID,
 			Rating:      3,
 			GradeSource: "self",
@@ -36,6 +65,7 @@ func seedOptimizeReviews(t *testing.T, db *gorm.DB, userID uint64, n int) {
 			t.Fatalf("create review %d: %v", i, err)
 		}
 	}
+	return p.ID
 }
 
 // okBuilder 返回一条必然成功退出的命令，供需要真实执行作业的用例使用。
@@ -47,9 +77,11 @@ func okBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 // 且错误里指名差额（还差多少条）。默认门槛 500，这里只有 3 条，差额应为 497。
 func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
-	seedOptimizeReviews(t, db, 1, 3)
+	presetID := seedOptimizeReviews(t, db, 1, 3)
+	// 同一用户另一个预设上的复习不算进来（门槛按预设数）。
+	seedOptimizeReviews(t, db, 1, store.DefaultOptimizeMinReviews)
 
-	_, err := runner.EnqueueOptimize(context.Background(), 1, 42)
+	_, err := runner.EnqueueOptimize(context.Background(), 1, presetID)
 	if !errors.Is(err, ErrInsufficientReviews) {
 		t.Fatalf("EnqueueOptimize() error = %v, want ErrInsufficientReviews", err)
 	}
@@ -61,8 +93,8 @@ func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	if te.Shortfall != wantShortfall {
 		t.Errorf("Shortfall = %d, want %d", te.Shortfall, wantShortfall)
 	}
-	if te.PresetID != 42 || te.Reviews != 3 || te.Min != store.DefaultOptimizeMinReviews {
-		t.Errorf("ThresholdError = %+v, want preset 42 / reviews 3 / min %d", te, store.DefaultOptimizeMinReviews)
+	if te.PresetID != presetID || te.Reviews != 3 || te.Min != store.DefaultOptimizeMinReviews {
+		t.Errorf("ThresholdError = %+v, want preset %d / reviews 3 / min %d", te, presetID, store.DefaultOptimizeMinReviews)
 	}
 	if !strings.Contains(err.Error(), "short by 497") {
 		t.Errorf("error %q does not name the shortfall (want %q)", err.Error(), "short by 497")
@@ -76,7 +108,7 @@ func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()
-	seedOptimizeReviews(t, db, 1, store.MinOptimizeMinReviews)
+	presetID := seedOptimizeReviews(t, db, 1, store.MinOptimizeMinReviews)
 
 	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, "2", nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)
@@ -89,12 +121,12 @@ func TestOptimiseThresholdReadsSettings(t *testing.T) {
 		t.Fatalf("OptimizeMinReviews() with stored 2 = %d, want the floor %d", min, store.MinOptimizeMinReviews)
 	}
 
-	job, err := runner.EnqueueOptimize(ctx, 1, 42)
+	job, err := runner.EnqueueOptimize(ctx, 1, presetID)
 	if err != nil {
 		t.Fatalf("EnqueueOptimize() with the floor threshold: %v", err)
 	}
-	if job.TargetID == nil || *job.TargetID != 42 {
-		t.Errorf("job.TargetID = %v, want 42", job.TargetID)
+	if job.TargetID == nil || *job.TargetID != presetID {
+		t.Errorf("job.TargetID = %v, want %d", job.TargetID, presetID)
 	}
 }
 

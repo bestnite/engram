@@ -58,17 +58,16 @@ func OptimizeMinReviews(ctx context.Context, db *gorm.DB) (int, error) {
 	return n, nil
 }
 
-// CountByUser 返回某用户的复习日志总条数，是优化门槛的输入（唯一燃料）。
-func (s *ReviewStore) CountByUser(ctx context.Context, userID uint64) (int64, error) {
+// CountForPreset 返回优化 presetID 时可用的复习条数（口径见 presetReviewsQuery），是门槛的输入。
+func (s *ReviewStore) CountForPreset(ctx context.Context, userID, presetID uint64) (int64, error) {
 	var n int64
-	if err := s.db.WithContext(ctx).Model(&Review{}).
-		Where("user_id = ?", userID).Count(&n).Error; err != nil {
+	if err := presetReviewsQuery(ctx, s.db, userID, presetID).Count(&n).Error; err != nil {
 		return 0, err
 	}
 	return n, nil
 }
 
-// OptimizeGate 是某个用户相对当前门槛的资格判定结果。
+// OptimizeGate 是某个预设相对当前门槛的资格判定结果。
 // Shortfall 只在 Eligible 为 false 时有意义，等于「还差多少条」。
 type OptimizeGate struct {
 	Reviews    int64
@@ -77,16 +76,16 @@ type OptimizeGate struct {
 	Eligible   bool
 }
 
-// GateOptimize 判定某用户是否有资格运行优化：读门槛、数复习、算差额。
-func GateOptimize(ctx context.Context, db *gorm.DB, userID uint64) (OptimizeGate, error) {
-	if userID == 0 {
+// GateOptimize 判定 userID 的 presetID 是否有资格运行优化：读门槛、数该预设可用的复习、算差额。
+func GateOptimize(ctx context.Context, db *gorm.DB, userID, presetID uint64) (OptimizeGate, error) {
+	if userID == 0 || presetID == 0 {
 		return OptimizeGate{}, gorm.ErrPrimaryKeyRequired
 	}
 	min, err := OptimizeMinReviews(ctx, db)
 	if err != nil {
 		return OptimizeGate{}, err
 	}
-	reviews, err := NewReviewStore(db).CountByUser(ctx, userID)
+	reviews, err := NewReviewStore(db).CountForPreset(ctx, userID, presetID)
 	if err != nil {
 		return OptimizeGate{}, err
 	}

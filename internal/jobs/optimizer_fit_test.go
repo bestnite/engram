@@ -53,7 +53,7 @@ func TestOptimizeEndToEndComputesFitMetrics(t *testing.T) {
 	// 8 张卡 × 40 天 = 320 条复习：既越过 300 条门槛下限，也让可预测 item 数
 	// （320 - 每卡首条 = 312）稳稳超过 MinFitItems，端到端因此能给出真正的判定。
 	const cards, days = 8, 40
-	seedAdapterReviews(t, db, u.ID, cards, days)
+	seedAdapterReviews(t, db, u.ID, p.ID, cards, days)
 	// 给 preset 一套与适配器输出不同的旧权重：既证明「旧权重在写回之前读取」，
 	// 也让 after/before 的指标必须不同（不是同一次评估被复制到两边）。
 	if err := setPresetWeightsForTest(db, p.ID, degradedWeights()); err != nil {

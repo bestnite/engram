@@ -679,7 +679,7 @@ export const en: LocaleCatalog = {
   'presets.weights.optimized_at': 'Optimised at: {time}',
   'presets.weights.review_count': 'Reviews used: {count}',
   'presets.weights.raw_label': 'Weights detail (matches the database)',
-  'presets.reviews.available': 'Available reviews: {count}',
+  'presets.reviews.available': 'Reviews on decks using this preset: {count}',
   'presets.reviews.threshold': 'Optimise threshold: at least {min}',
   'presets.reschedule.note':
     'Optimising or reverting only affects future intervals; due dates are not recomputed by default.',

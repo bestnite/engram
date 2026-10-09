@@ -80,12 +80,13 @@ type presetView struct {
 	// WeightsRaw 是数据库 weights_json 原文（字符串），与页面显示的值逐字节一致。
 	WeightsRaw *string  `json:"weights_raw"`
 	Job        *jobView `json:"job"`
+	// Gate 是这个预设的优化门槛：可用复习只数挂着本预设的卡组上的记录，所以每个预设各有一份。
+	Gate optimizeGate `json:"gate"`
 }
 
 // presetListResponse 是 GET /api/v1/presets 与创建/编辑/回退共用的响应体。
 type presetListResponse struct {
 	Presets []presetView `json:"presets"`
-	Gate    optimizeGate `json:"gate"`
 }
 
 // optimizeResponse 是触发优化与轮询状态共用的响应体：在途作业 + 最新门槛。
@@ -295,7 +296,7 @@ func (s *Server) presetOptimize(c *gin.Context) {
 		TargetID:   store.Ptr(p.ID),
 		Detail:     map[string]any{"job_id": job.PublicID, "via": "spa"},
 	})
-	gate, err := store.GateOptimize(ctx, s.db, user.ID)
+	gate, err := store.GateOptimize(ctx, s.db, user.ID, p.ID)
 	if err != nil {
 		s.logger.Error("evaluate optimize gate after SPA enqueue failed", "user_id", user.ID, "error", err)
 		presetError(c, http.StatusInternalServerError, "internal_error")
@@ -317,7 +318,7 @@ func (s *Server) presetOptimizeStatus(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	job := s.optimizeJobFor(ctx, p.ID, c.Query("job"))
-	gate, err := store.GateOptimize(ctx, s.db, user.ID)
+	gate, err := store.GateOptimize(ctx, s.db, user.ID, p.ID)
 	if err != nil {
 		s.logger.Error("evaluate optimize gate for SPA status failed", "user_id", user.ID, "error", err)
 		presetError(c, http.StatusInternalServerError, "internal_error")
@@ -358,15 +359,11 @@ func (s *Server) presetOptimizeRevert(c *gin.Context) {
 }
 
 // presetListPayload 组装列表响应：确保默认预设存在、读取门槛、按在途作业标注卡片。
-// 取数与门槛判定收敛在这一个方法：store.EnsureDefaultPreset + store.GateOptimize，
+// 取数与门槛判定收敛在这一个方法：store.EnsureDefaultPreset + 每个预设一次 store.GateOptimize，
 // 同一用户的预设列表与门槛只有这一份来源。
 func (s *Server) presetListPayload(c *gin.Context, userID uint64) (presetListResponse, error) {
 	ctx := c.Request.Context()
 	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
-	if err != nil {
-		return presetListResponse{}, err
-	}
-	gate, err := store.GateOptimize(ctx, s.db, userID)
 	if err != nil {
 		return presetListResponse{}, err
 	}
@@ -379,13 +376,15 @@ func (s *Server) presetListPayload(c *gin.Context, userID uint64) (presetListRes
 	if active != nil && active.Kind == jobs.KindOptimize && active.TargetID != nil {
 		activeJob = active
 	}
-	out := presetListResponse{
-		Presets: make([]presetView, 0, len(presets)),
-		Gate:    gatePayload(gate),
-	}
+	out := presetListResponse{Presets: make([]presetView, 0, len(presets))}
 	for i := range presets {
 		p := &presets[i]
 		item := presetPayload(p)
+		gate, err := store.GateOptimize(ctx, s.db, userID, p.ID)
+		if err != nil {
+			return presetListResponse{}, err
+		}
+		item.Gate = gatePayload(gate)
 		if activeJob != nil && p.ID == *activeJob.TargetID {
 			item.Job = s.jobPayload(activeJob)
 		}

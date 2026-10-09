@@ -878,12 +878,13 @@ export interface PresetRecord {
   weights_review_count: number | null;
   weights_raw: string | null;
   job: PresetJob | null;
+  /** 本预设的优化门槛：可用复习只数挂着本预设的卡组上的记录，每个预设各有一份。 */
+  gate: OptimizeGate;
 }
 
 /** GET /api/v1/presets 与创建/编辑/回退共用的响应体。 */
 export interface PresetsResponse {
   presets: PresetRecord[];
-  gate: OptimizeGate;
 }
 
 /** 触发优化与轮询状态共用的响应体。 */

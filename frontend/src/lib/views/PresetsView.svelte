@@ -67,7 +67,6 @@
   let pollJobId: string | null = null;
 
   const presets = $derived(data ? data.presets : []);
-  const gate = $derived(data ? data.gate : null);
 
   /** 读取预设列表与优化门槛；服务端补齐默认预设。 */
   async function load(): Promise<void> {
@@ -299,8 +298,7 @@
   function applyJob(presetId: string, job: PresetJob | null, nextGate: OptimizeGate): void {
     if (!data) return;
     data = {
-      gate: nextGate,
-      presets: data.presets.map((p) => (p.id === presetId ? { ...p, job } : p)),
+      presets: data.presets.map((p) => (p.id === presetId ? { ...p, job, gate: nextGate } : p)),
     };
   }
 
@@ -472,7 +470,7 @@
               >
                 {$t('presets.edit.button')}
               </button>
-              <Button type="button" testId={`preset-${p.id}-optimize`} disabled={busyId === p.id || (gate !== null && !gate.eligible)} title={gate && !gate.eligible ? $t('presets.optimize.gate_shortfall', { count: gate.shortfall }) : ''} onclick={() => runOptimize(p)} variant="primary" size="sm">
+              <Button type="button" testId={`preset-${p.id}-optimize`} disabled={busyId === p.id || !p.gate.eligible} title={!p.gate.eligible ? $t('presets.optimize.gate_shortfall', { count: p.gate.shortfall }) : ''} onclick={() => runOptimize(p)} variant="primary" size="sm">
                 {$t('presets.optimize.button')}
               </Button>
               <button
@@ -526,18 +524,16 @@
             {/if}
           </section>
 
-          {#if gate}
-            <div class="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-              <p data-testid={`preset-${p.id}-reviews`}>{$t('presets.reviews.available', { count: gate.reviews })}</p>
-              <p>{$t('presets.reviews.threshold', { min: gate.min })}</p>
-              <p>{$t('presets.reschedule.note')}</p>
-              <p>{$t('presets.revert.note')}</p>
-            </div>
-            {#if !gate.eligible}
-              <p role="status" data-testid={`preset-${p.id}-shortfall`} class="rounded-xl border border-amber-200 dark:border-amber-900/60 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
-                {$t('presets.optimize.shortfall', { count: gate.shortfall, have: gate.reviews, min: gate.min })}
-              </p>
-            {/if}
+          <div class="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <p data-testid={`preset-${p.id}-reviews`}>{$t('presets.reviews.available', { count: p.gate.reviews })}</p>
+            <p>{$t('presets.reviews.threshold', { min: p.gate.min })}</p>
+            <p>{$t('presets.reschedule.note')}</p>
+            <p>{$t('presets.revert.note')}</p>
+          </div>
+          {#if !p.gate.eligible}
+            <p role="status" data-testid={`preset-${p.id}-shortfall`} class="rounded-xl border border-amber-200 dark:border-amber-900/60 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
+              {$t('presets.optimize.shortfall', { count: p.gate.shortfall, have: p.gate.reviews, min: p.gate.min })}
+            </p>
           {/if}
 
           {#if notice && notice.id === p.id}

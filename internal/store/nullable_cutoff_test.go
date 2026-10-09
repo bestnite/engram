@@ -32,12 +32,13 @@ func TestNullableCutoffRoundTripAndOptimizer(t *testing.T) {
 			t.Fatal("explicit cutoff lost")
 		}
 		// 日志内容保持原样；导出只采用当前有效配置，不重写历史复习日。
-		r := Review{CardID: 1, UserID: u.ID, Rating: 3, StateBefore: 2, GradeSource: "self", ReviewedAt: time.Now().UTC(), ReviewDay: "2020-01-01"}
+		presetID, cards := seedPresetCards(t, db, u.ID, 1)
+		r := Review{CardID: cards[0], UserID: u.ID, Rating: 3, StateBefore: 2, GradeSource: "self", ReviewedAt: time.Now().UTC(), ReviewDay: "2020-01-01"}
 		if err := db.Create(&r).Error; err != nil {
 			t.Fatal(err)
 		}
 		var b bytes.Buffer
-		if err := NewReviewStore(db).ExportOptimizerLog(t.Context(), u.ID, &b); err != nil {
+		if err := NewReviewStore(db).ExportOptimizerLog(t.Context(), u.ID, presetID, &b); err != nil {
 			t.Fatal(err)
 		}
 		var log OptimizerReviewLog
