@@ -62,9 +62,12 @@ end user → translation catalog.
 1. **Content and progress are separate.** `notes`/`cards` hold content only; per-user
    scheduling lives in `card_states`, keyed `(card_id, user_id)`. Sharing a deck must
    never mix two users' progress.
-2. **`reviews` is append-only.** Every column of the review log is written from
-   the first commit — it is the only fuel for parameter optimisation and cannot be
-   reconstructed later.
+2. **`reviews` is append-only, with one exception: undoing a review.** Every column of
+   the review log is written from the first commit — it is the only fuel for parameter
+   optimisation and cannot be reconstructed later. The single permitted deletion is the row
+   that a review-undo removes: undo is the user saying "that rating was a mistake", so the
+   row must not be fed to the optimiser. The undo writes an audit row (`review.undo`)
+   recording the removed review, so the fact and its details survive the deletion.
 3. **Ratings and states are integers**: `rating` 1–4 (Again/Hard/Good/Easy),
    `state_before` 0–3 (New/Learning/Review/Relearning). This matches the FSRS ecosystem
    log format and keeps optimiser export trivial.
