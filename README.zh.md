@@ -64,7 +64,7 @@ Engram 暴露 9 个业务 MCP 工具：
 
 - `list_decks` / `create_deck`：查看可访问卡组，或创建新卡组并指定调度预设。
 - `search_notes` / `create_notes` / `update_note` / `delete_note`：卡片全文检索、批量建卡、就地更新及删除；支持 Dry-Run 校验。
-- `get_due_cards` / `submit_review`：拉取今日待复习卡片、提交评分（`Again`、`Hard`、`Good`、`Easy`）并推动排程。
+- `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`）；作答类题型（填写、数值、选择、判断）提交作答，由服务端判分。
 - `get_stats`：获取用户学习总览、各状态卡片数及留存率分析。
 - `export_deck` / `import_deck`：卡组包（`.edeck`）导出与导入。
 

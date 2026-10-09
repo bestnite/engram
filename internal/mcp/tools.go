@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"git.nite07.com/nite/engram/internal/api"
@@ -111,13 +112,16 @@ type getDueCardsIn struct {
 	Limit   int      `json:"limit,omitempty" jsonschema:"maximum cards to return (1..500)"`
 }
 
-// submitReviewIn 是 submit_review 的入参。
+// submitReviewIn 是 submit_review 的入参。规则与 REST 相同（见 api.SubmitReviewInput）：
+// 自评题型给 rating，作答类题型给 answer 或 give_up；grade_source 只接受 self。
 type submitReviewIn struct {
 	CardID          string `json:"card_id" jsonschema:"the public id of the card being reviewed"`
-	Rating          int    `json:"rating" jsonschema:"rating 1=again, 2=hard, 3=good, 4=easy"`
+	Rating          int    `json:"rating,omitempty" jsonschema:"self-assessed rating 1=again, 2=hard, 3=good, 4=easy; omit for card types graded by the server (typed, numeric, choice_single, choice_multi, true_false)"`
+	Answer          any    `json:"answer,omitempty" jsonschema:"the answer for a card type graded by the server: a string for typed, a string or number for numeric, an option index for choice_single, an array of option indices for choice_multi, a boolean for true_false"`
+	GiveUp          bool   `json:"give_up,omitempty" jsonschema:"give up on a card type graded by the server; records Again without grading"`
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"card state version the caller read"`
 	ElapsedMS       *int   `json:"elapsed_ms,omitempty" jsonschema:"time spent on the card in milliseconds"`
-	GradeSource     string `json:"grade_source,omitempty" jsonschema:"where the grade came from"`
+	GradeSource     string `json:"grade_source,omitempty" jsonschema:"must be omitted or self; the server decides where a grade came from"`
 }
 
 // ---- 处理器 ----
@@ -310,12 +314,24 @@ func (s *Server) getDueCards(ctx context.Context, id Identity, in getDueCardsIn)
 }
 
 func (s *Server) submitReview(ctx context.Context, id Identity, in submitReviewIn) (any, error) {
+	if in.GradeSource != "" && in.GradeSource != "self" {
+		return nil, api.InvalidRequest("grade_source is decided by the server")
+	}
+	var answer json.RawMessage
+	if in.Answer != nil {
+		raw, err := json.Marshal(in.Answer)
+		if err != nil {
+			return nil, api.InvalidRequest("answer is not valid JSON")
+		}
+		answer = raw
+	}
 	return s.api.SubmitReview(ctx, id.User, id.apiKeyID(), api.SubmitReviewInput{
 		CardID:          in.CardID,
 		Rating:          in.Rating,
+		Answer:          answer,
+		GiveUp:          in.GiveUp,
 		ExpectedVersion: in.ExpectedVersion,
 		ElapsedMS:       in.ElapsedMS,
-		GradeSource:     in.GradeSource,
 	})
 }
 

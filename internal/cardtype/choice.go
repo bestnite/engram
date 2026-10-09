@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -68,6 +69,24 @@ func (choiceSingleType) Render(card Card, side Side) (RenderResult, error) {
 type ChoiceSingleInput struct {
 	GradeContext
 	Selected int
+}
+
+// ParseAnswer 解码作答：一个 0 基选项索引（整数，或内容为整数的字符串）；没有作答返回错误。
+func (choiceSingleType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	idx, err := answerIndex(raw, "choice_single")
+	if err != nil {
+		return nil, err
+	}
+	return ChoiceSingleInput{GradeContext: gc, Selected: idx}, nil
+}
+
+// GivenText 返回被选中选项的文本。
+func (choiceSingleType) GivenText(fields map[string]any, detail map[string]any) string {
+	idx, ok := detail["selected"].(int)
+	if !ok {
+		return ""
+	}
+	return optionText(fields, idx)
 }
 
 // Grade 判分：选中正确选项记 1 分，选中其它合法选项记 0 分；索引越界视为无法判分。
@@ -186,6 +205,29 @@ func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 type ChoiceMultiInput struct {
 	GradeContext
 	Selected []int
+}
+
+// ParseAnswer 解码作答：0 基选项索引数组；没有作答等同于一个都没选（合法的错误答案）。
+func (choiceMultiType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	selected := []int{}
+	if !emptyAnswer(raw) {
+		if err := json.Unmarshal(raw, &selected); err != nil {
+			return nil, fmt.Errorf("choice_multi answer must be an array of option indices")
+		}
+	}
+	return ChoiceMultiInput{GradeContext: gc, Selected: selected}, nil
+}
+
+// GivenText 返回被选中选项的文本，以逗号连接。
+func (choiceMultiType) GivenText(fields map[string]any, detail map[string]any) string {
+	idxs, _ := detail["selected"].([]int)
+	picked := make([]string, 0, len(idxs))
+	for _, idx := range idxs {
+		if text := optionText(fields, idx); text != "" {
+			picked = append(picked, text)
+		}
+	}
+	return strings.Join(picked, ", ")
 }
 
 // Grade 判分并给出部分得分：score = max(0, 命中数 - 误选数) / 正确数，上限 1。

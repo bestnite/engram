@@ -64,7 +64,7 @@ Engram provides 9 dedicated MCP tools:
 
 - `list_decks` / `create_deck`: Inspect accessible decks or create new ones with custom scheduling presets.
 - `search_notes` / `create_notes` / `update_note` / `delete_note`: Query and manage notes across all supported card types, with full support for dry-run validation and bulk insertion.
-- `get_due_cards` / `submit_review`: Fetch cards due for review and record review ratings (`Again`, `Hard`, `Good`, `Easy`).
+- `get_due_cards` / `submit_review`: Fetch cards due for review and record reviews. Self-assessed cards take a rating (`Again`, `Hard`, `Good`, `Easy`); answer-type cards (typed, numeric, choice, true/false) take the answer instead, and the server grades it.
 - `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
 - `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`).
 

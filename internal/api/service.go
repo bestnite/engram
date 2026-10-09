@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -1049,15 +1051,19 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 
 // SubmitReviewInput 是评分提交输入。CardID 是卡的对外 id（不透明字符串），
 // 由 SubmitReview 解析成主键后再进入调度。
+//
+// 评分来源由服务端决定，调用方不能指定：自评题型给 Rating；作答类题型（cardtype.Grader）
+// 给 Answer 由服务端判分，或给 GiveUp 表示放弃作答（记 Again）。两类字段混用即拒绝。
 type SubmitReviewInput struct {
-	CardID          string
-	Rating          int
+	CardID string
+	// Rating 是自评分（1–4），只用于自评题型；作答类题型必须为 0。
+	Rating int
+	// Answer 是作答类题型的原始作答（JSON），解码规则由题型决定。
+	Answer json.RawMessage
+	// GiveUp 表示作答类题型放弃作答：不判分，按 Again 记一条自评日志。
+	GiveUp          bool
 	ExpectedVersion int
 	ElapsedMS       *int
-	GradeSource     string
-	// GradeDetailJSON 是判分细节原文（作答类题型写入 reviews.grade_detail_json）；
-	// 自评路径为 nil。REST/MCP 的自评请求不带它，只有服务端判分后的 SPA 入口填。
-	GradeDetailJSON *string
 }
 
 // SubmitReviewResult 是评分提交的响应形态。CardID 是卡的对外 id；
@@ -1068,15 +1074,27 @@ type SubmitReviewResult struct {
 	DueAt     *time.Time `json:"due_at"`
 	Version   int        `json:"version"`
 	Stability *float64   `json:"stability"`
+	// Grade 只在服务端判分时出现：本次作答的得分、档位与判定。
+	Grade *GradeResult `json:"grade,omitempty"`
+}
+
+// GradeResult 是一次服务端判分对外的结果；Detail 是写进复习日志的完整细节，只供服务端内部使用。
+type GradeResult struct {
+	Rating  int            `json:"rating"`
+	Score   float64        `json:"score"`
+	Verdict string         `json:"verdict"`
+	Given   string         `json:"given"`
+	Detail  map[string]any `json:"-"`
 }
 
 // SubmitReview 提交一次评分；乐观锁不匹配返回 409 version_conflict。
+//
+// 自评与作答两条路径都经过这里，REST、MCP 与网页三个入口因此遵守同一组规则：
+// 作答类题型不接受自评分（否则判分权回到客户端），grade_source 由服务端写入，
+// 客户端无从伪造「机器判分」的来源。
 func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64, in SubmitReviewInput) (SubmitReviewResult, error) {
 	if strings.TrimSpace(in.CardID) == "" {
 		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "card_id is required")
-	}
-	if !schedule.Rating(in.Rating).Valid() {
-		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
 	}
 	// 对外 id -> 主键：之后全部走数字逻辑（调度、审计、card_states 查询）。
 	card, err := a.cards.ByPublicID(ctx, in.CardID)
@@ -1091,9 +1109,18 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 	if err != nil {
 		return SubmitReviewResult{}, err
 	}
-	sched, err := a.schedulerForDeck(ctx, deck)
+	preset, err := a.presetForDeck(ctx, deck)
+	if err != nil {
+		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck preset")
+	}
+	sched, err := schedule.NewScheduler(preset)
 	if err != nil {
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
+	}
+
+	rating, source, detailJSON, grade, err := a.resolveRating(note, preset, in)
+	if err != nil {
+		return SubmitReviewResult{}, err
 	}
 
 	var result schedule.SubmitResult
@@ -1102,11 +1129,11 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		result, inner = schedule.Submit(ctx, tx, schedule.SubmitInput{
 			CardID:          card.ID,
 			UserID:          u.ID,
-			Rating:          schedule.Rating(in.Rating),
+			Rating:          schedule.Rating(rating),
 			ExpectedVersion: in.ExpectedVersion,
 			ElapsedMS:       in.ElapsedMS,
-			GradeSource:     in.GradeSource,
-			GradeDetailJSON: in.GradeDetailJSON,
+			GradeSource:     source,
+			GradeDetailJSON: detailJSON,
 			Scheduler:       sched,
 			Now:             a.now(),
 			Location:        userLocation(u.Timezone),
@@ -1128,7 +1155,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		Action:     "review.submit",
 		TargetType: "card",
 		TargetID:   store.Ptr(card.ID),
-		Detail:     map[string]any{"rating": in.Rating, "review_id": result.ReviewID},
+		Detail:     map[string]any{"rating": rating, "grade_source": source, "review_id": result.ReviewID},
 	})
 	return SubmitReviewResult{
 		CardID:    card.PublicID,
@@ -1136,5 +1163,56 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		DueAt:     result.State.DueAt,
 		Version:   result.State.Version,
 		Stability: result.State.Stability,
+		Grade:     grade,
+	}, nil
+}
+
+// resolveRating 决定本次提交写入的评分、来源与判分细节（规则见 SubmitReview）。
+func (a *API) resolveRating(note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
+	ct, ok := cardtype.Lookup(note.Kind)
+	if !ok {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "unknown card type")
+	}
+	hasAnswer := len(bytes.TrimSpace(in.Answer)) > 0
+	g, graded := ct.(cardtype.Grader)
+	if !graded {
+		if hasAnswer || in.GiveUp {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "answer and give_up apply only to card types graded by the server")
+		}
+		if !schedule.Rating(in.Rating).Valid() {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
+		}
+		return in.Rating, schedule.GradeSourceSelf, nil, nil, nil
+	}
+	if in.Rating != 0 {
+		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeGradingRequired, "this card type is graded by the server: send answer or give_up instead of rating")
+	}
+	if in.GiveUp {
+		if hasAnswer {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "send either answer or give_up, not both")
+		}
+		// 放弃作答没有发生任何机器判分：记 Again，来源是 self。
+		return int(schedule.Again), schedule.GradeSourceSelf, nil, nil, nil
+	}
+	fields, err := store.ParseFields(note.FieldsJSON)
+	if err != nil {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note fields")
+	}
+	gc := cardtype.GradeContext{Fields: fields}
+	if m, err := preset.GradeMapping(); err == nil {
+		gc.Mapping = &m
+	}
+	out, err := cardtype.GradeAnswer(g, gc, in.Answer)
+	if err != nil {
+		// 解码失败与无法判分都不写库，让用户重新作答。
+		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer cannot be graded")
+	}
+	raw, err := json.Marshal(out.Detail)
+	if err != nil {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to encode grade detail")
+	}
+	detail := string(raw)
+	return out.Rating, schedule.GradeSourceTyped, &detail, &GradeResult{
+		Rating: out.Rating, Score: out.Score, Verdict: out.Verdict, Given: out.Given, Detail: out.Detail,
 	}, nil
 }

@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 )
@@ -54,6 +55,26 @@ func (trueFalseType) Render(card Card, side Side) (RenderResult, error) {
 type TrueFalseInput struct {
 	GradeContext
 	Answer *bool
+}
+
+// ParseAnswer 解码作答：JSON 布尔；没有作答无法判分，返回错误。
+func (trueFalseType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	if emptyAnswer(raw) {
+		return nil, fmt.Errorf("true_false answer is required")
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return nil, fmt.Errorf("true_false answer must be a boolean")
+	}
+	return TrueFalseInput{GradeContext: gc, Answer: &b}, nil
+}
+
+// GivenText 返回 "true" / "false"，本地化由前端负责。
+func (trueFalseType) GivenText(_ map[string]any, detail map[string]any) string {
+	if b, ok := detail["selected"].(bool); ok {
+		return strconv.FormatBool(b)
+	}
+	return ""
 }
 
 // Grade 判分：判断正确记 1 分，错误记 0 分。

@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,10 @@ func (fakeType) Render(card Card, side Side) (RenderResult, error) {
 func (fakeType) Grade(input any) (int, map[string]any, bool) {
 	return 3, map[string]any{"input": input}, true
 }
+
+func (fakeType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) { return raw, nil }
+
+func (fakeType) GivenText(map[string]any, map[string]any) string { return "" }
 
 func (fakeType) PromptContext(note Note) PromptContext {
 	return PromptContext{Question: note.Fields["prompt"].(string)}

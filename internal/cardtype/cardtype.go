@@ -10,6 +10,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -75,11 +76,20 @@ type CardType interface {
 }
 
 // Grader 是可选能力：作答类题型实现机器判分。
-// 未实现的题型不做断言，核心管线不依赖它。
+// 未实现的题型不做断言，核心管线不依赖它；实现了的题型由服务端判分，客户端不能自评。
+//
+// 三个方法覆盖判分的全部题型相关知识，传输层与服务层因此不需要按题型分支：
+// 作答怎么从 JSON 解码（ParseAnswer）、怎么判（Grade）、判完怎么把作答还原成可读文本（GivenText）。
 type Grader interface {
+	// ParseAnswer 把客户端提交的 JSON 作答解码成本题型 Grade 的输入。raw 为空或 JSON null
+	// 表示「没有作答」：能把空作答当作错误答案判分的题型返回对应输入，否则返回错误。
+	ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error)
 	// Grade 对用户输入判分。rating 是 1–4（Again/Hard/Good/Easy），
 	// detail 落库 reviews.grade_detail_json，ok=false 表示该输入无法判分。
 	Grade(input any) (rating int, detail map[string]any, ok bool)
+	// GivenText 把判分细节还原成展示用的作答文本（例如选项索引换成选项文本）；
+	// 判断题返回 "true"/"false"，本地化由前端负责。
+	GivenText(fields map[string]any, detail map[string]any) string
 }
 
 // PromptContext 是 PromptContexter 返回的题目上下文，供未来 LLM 评分使用。
