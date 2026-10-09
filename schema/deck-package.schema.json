@@ -498,6 +498,16 @@
           "maximum": 3,
           "description": "0 = New, 1 = Learning, 2 = Review, 3 = Relearning."
         },
+        "step_index_before": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Remaining learning-step cursor before this rating; the only source for restoring it on undo."
+        },
+        "due_before": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Due date before this rating. Kept because burying changes due_at without writing a review row."
+        },
         "interval_days": { "type": ["number", "null"] },
         "stability": { "type": ["number", "null"] },
         "difficulty": { "type": ["number", "null"] }

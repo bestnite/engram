@@ -176,9 +176,14 @@ type PackageReview struct {
 	ElapsedMS    *int     `json:"elapsed_ms"`
 	DurationDays *float64 `json:"duration_days"`
 	StateBefore  int      `json:"state_before"`
-	IntervalDays *float64 `json:"interval_days"`
-	Stability    *float64 `json:"stability"`
-	Difficulty   *float64 `json:"difficulty"`
+	// StepIndexBefore / DueBefore 是评分前的状态快照（剩余学习步骤游标、到期日）。
+	// 撤销只能靠它们精确还原评分前的状态：due_at 会被埋藏改动却不写日志，step_index 没有别的来源。
+	// 可空：旧包与旧行没有它们，撤销遇到 NULL 时退回上一条日志的推算。
+	StepIndexBefore *int     `json:"step_index_before,omitempty"`
+	DueBefore       *string  `json:"due_before,omitempty"`
+	IntervalDays    *float64 `json:"interval_days"`
+	Stability       *float64 `json:"stability"`
+	Difficulty      *float64 `json:"difficulty"`
 }
 
 // PackageMediaEntry 是 media.json 的一条：sha256 → 包内相对路径 + mime。
@@ -400,9 +405,12 @@ func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, note
 				ElapsedMS:    rv.ElapsedMS,
 				DurationDays: rv.DurationDays,
 				StateBefore:  rv.StateBefore,
-				IntervalDays: rv.IntervalDays,
-				Stability:    rv.Stability,
-				Difficulty:   rv.Difficulty,
+				// 评分前的快照必须随包走：恢复备份后撤销才能精确还原，否则会还原成 NULL 或错误值。
+				StepIndexBefore: rv.StepIndexBefore,
+				DueBefore:       formatTimePtr(rv.DueBefore),
+				IntervalDays:    rv.IntervalDays,
+				Stability:       rv.Stability,
+				Difficulty:      rv.Difficulty,
 			})
 		}
 	}

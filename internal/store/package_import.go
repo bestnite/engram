@@ -978,6 +978,7 @@ func (s *DeckStore) applyProgress(ctx context.Context, tx *gorm.DB, actorUserID 
 			CardID: cardID, UserID: actorUserID, Rating: pr.Rating, GradeSource: src,
 			ReviewedAt: reviewedAt.UTC(), ReviewDay: pr.ReviewDay, ElapsedMS: pr.ElapsedMS,
 			DurationDays: pr.DurationDays, StateBefore: pr.StateBefore,
+			StepIndexBefore: pr.StepIndexBefore, DueBefore: parseTimePtr(pr.DueBefore),
 			IntervalDays: pr.IntervalDays, Stability: pr.Stability, Difficulty: pr.Difficulty,
 		}
 		if row.ReviewDay == "" {
