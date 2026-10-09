@@ -61,7 +61,7 @@ func checkboxState(body, name string) (found, checked bool) {
 }
 
 // TestMailPrefsCatalogKeysExistInBothCatalogs 断言目录与页面引用的每个语言包键在中英两套里都存在：
-// 目录标签是动态拼接的（loc.T(def.LabelKey)），静态 key 扫描器看不见它们，必须在这里兜底。
+// 目录标签是动态拼接的（def.LabelKey），静态 key 扫描器看不见它们，必须在这里兜底。
 func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 	zh := catalogKeys(t, filepath.Join("..", "i18n", "locales", "zh-CN.yaml"))
 	en := catalogKeys(t, filepath.Join("..", "i18n", "locales", "en.yaml"))
@@ -76,13 +76,10 @@ func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 		"mail.prefs.submit",
 		"mail.prefs.saved",
 		"mail.prefs.locked",
-		"mail.prefs.error.unknown_type",
-		"mail.prefs.error.class_locked",
 		"mail.prefs.reminder_time.heading",
 		"mail.prefs.reminder_time.label",
 		"mail.prefs.reminder_time.hint",
 		"mail.prefs.reminder_time.default",
-		"mail.prefs.error.reminder_hour_invalid",
 	}
 	for _, class := range mail.ClassOrder() {
 		// 只断言标题键：分组说明（.note）已按「文案从简」移除，页面上不再有那几行。

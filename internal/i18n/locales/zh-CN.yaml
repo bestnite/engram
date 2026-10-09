@@ -255,10 +255,6 @@
   translation: "偏好已保存，立即生效。"
 - id: mail.prefs.locked
   translation: "不可关闭：安全与事务类邮件关乎账号安全，关闭等于给账号留后门。"
-- id: mail.prefs.error.unknown_type
-  translation: "未知的邮件类型「{{.name}}」，偏好未保存。"
-- id: mail.prefs.error.class_locked
-  translation: "「{{.name}}」属于安全与事务类邮件，不可关闭。"
 - id: mail.prefs.class.security.heading
   translation: "安全与事务"
 - id: mail.prefs.class.collab.heading
@@ -409,8 +405,6 @@
   translation: "按你的时区（{{.tz}}）。复习提醒与每周摘要在该小时之后的首次检查时发送。"
 - id: mail.prefs.reminder_time.default
   translation: "站点默认（{{.hour}}:00）"
-- id: mail.prefs.error.reminder_hour_invalid
-  translation: "发送时间必须是 0 到 23 的整点，或留空使用站点默认。"
 
 # 服务端可见文本里的「默认预设」显示名（库内名 Default 是身份标识，不是给人看的文案）。
 - id: presets.default_name

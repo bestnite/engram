@@ -255,10 +255,6 @@ It renders with sample variables; real recipients see their own data."
   translation: "Preferences saved and effective immediately."
 - id: mail.prefs.locked
   translation: "Always on: security and transactional mail protects your account, so turning it off would leave a back door."
-- id: mail.prefs.error.unknown_type
-  translation: "Unknown email type \"{{.name}}\"; nothing was saved."
-- id: mail.prefs.error.class_locked
-  translation: "\"{{.name}}\" is security and transactional mail and cannot be turned off."
 - id: mail.prefs.class.security.heading
   translation: "Security and transactional"
 - id: mail.prefs.class.collab.heading
@@ -409,8 +405,6 @@ It renders with sample variables; real recipients see their own data."
   translation: "Uses your timezone ({{.tz}}). The review reminder and the weekly report are sent at the first check after this hour."
 - id: mail.prefs.reminder_time.default
   translation: "Site default ({{.hour}}:00)"
-- id: mail.prefs.error.reminder_hour_invalid
-  translation: "Send time must be a whole hour from 0 to 23, or left as the site default."
 
 # Display name of the default preset in server-rendered text (the stored name is an identity literal).
 - id: presets.default_name
