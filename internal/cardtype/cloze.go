@@ -187,7 +187,7 @@ func (clozeType) Cards(note Note) []Card {
 	return cards
 }
 
-// Render 正面掩盖目标序号、背面揭示；其它序号始终按原文显示。
+// Render 正面掩盖目标序号、背面揭示并高亮；其它序号显示挖空内容（不带 {{cN::}} 标记）。
 func (clozeType) Render(card Card, side Side) (RenderResult, error) {
 	index, ok := parseClozeTemplate(card.Template)
 	if !ok {
@@ -214,8 +214,11 @@ func parseClozeTemplate(template string) (int, bool) {
 	return n, true
 }
 
-// renderCloze 按字节偏移重建文本：目标序号在未揭示时被替换为占位，
-// 其余部分一字不差地保留 Markdown/TeX 原文。
+// renderCloze 按字节偏移重建文本，挖空之外的部分一字不差地保留 Markdown/TeX 原文。
+//
+// 挖空标记本身绝不出现在卡面上：目标序号正面换成占位、背面换成内容，两者都包在
+// <span class="cloze"> 里供样式高亮；其它序号只显示内容。span[class] 在 render 包的
+// 白名单内，Markdown 行内原始 HTML 会原样通过 goldmark，内容里的 Markdown 照常渲染。
 func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) string {
 	var b strings.Builder
 	last := 0
@@ -225,15 +228,28 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 			continue
 		}
 		b.WriteString(text[last:d.Start])
-		if d.Index == target && !reveal {
-			b.WriteString(clozeBlank(d))
-		} else {
-			b.WriteString(text[d.Start:d.End])
+		switch {
+		case d.Index != target:
+			b.WriteString(stripCloze(d.Text))
+		case reveal:
+			b.WriteString(`<span class="cloze">` + stripCloze(d.Text) + `</span>`)
+		default:
+			b.WriteString(`<span class="cloze">` + clozeBlank(d) + `</span>`)
 		}
 		last = d.End
 	}
 	b.WriteString(text[last:])
 	return b.String()
+}
+
+// stripCloze 把内容里嵌套的 {{cM::…}} 换成它的内容：嵌套标记不单独成卡，
+// 但也不能以原始语法出现在卡面上。解析失败时按原文返回（外层已校验过，不应发生）。
+func stripCloze(text string) string {
+	dels, err := ParseCloze(text)
+	if err != nil || len(dels) == 0 {
+		return text
+	}
+	return renderCloze(text, dels, -1, true)
 }
 
 // clozeBlank 生成正面的占位：有提示时用 [hint]，否则用 […]。
