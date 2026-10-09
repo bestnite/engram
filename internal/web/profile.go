@@ -22,13 +22,17 @@ type profilePayload struct {
 	Locale        string `json:"locale"`
 	Timezone      string `json:"timezone"`
 	DayCutoffHour *int   `json:"day_cutoff_hour"`
+	// LearnAheadMinutes 是提前学习窗口（分钟）；null 表示用默认值。
+	LearnAheadMinutes *int `json:"learn_ahead_minutes"`
 }
 
+// profileRequest 是个人资料的完整表单；learn_ahead_minutes 缺省或 null 表示回到默认值。
 type profileRequest struct {
-	DisplayName   string `json:"display_name"`
-	Locale        string `json:"locale"`
-	Timezone      string `json:"timezone"`
-	DayCutoffHour *int   `json:"day_cutoff_hour"`
+	DisplayName       string `json:"display_name"`
+	Locale            string `json:"locale"`
+	Timezone          string `json:"timezone"`
+	DayCutoffHour     *int   `json:"day_cutoff_hour"`
+	LearnAheadMinutes *int   `json:"learn_ahead_minutes"`
 }
 
 type localeRequest struct {
@@ -90,6 +94,7 @@ func userPayload(u *store.User) profilePayload {
 	return profilePayload{
 		ID: u.PublicID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 		Locale: u.Locale, Timezone: u.Timezone, DayCutoffHour: u.DayCutoffHour,
+		LearnAheadMinutes: u.LearnAheadMinutes,
 	}
 }
 
@@ -168,7 +173,12 @@ func (s *Server) profilePatch(c *gin.Context) {
 		profileBadRequest(c)
 		return
 	}
-	changed := fresh.DisplayName != req.DisplayName || fresh.Locale != req.Locale || fresh.Timezone != req.Timezone || !sameOptionalInt(fresh.DayCutoffHour, req.DayCutoffHour)
+	if req.LearnAheadMinutes != nil && (*req.LearnAheadMinutes < 0 || *req.LearnAheadMinutes > store.MaxLearnAheadMinutes) {
+		profileBadRequest(c)
+		return
+	}
+	changed := fresh.DisplayName != req.DisplayName || fresh.Locale != req.Locale || fresh.Timezone != req.Timezone ||
+		!sameOptionalInt(fresh.DayCutoffHour, req.DayCutoffHour) || !sameOptionalInt(fresh.LearnAheadMinutes, req.LearnAheadMinutes)
 	if !changed {
 		c.JSON(http.StatusOK, userPayload(fresh))
 		return
@@ -177,6 +187,7 @@ func (s *Server) profilePatch(c *gin.Context) {
 	fresh.Locale = req.Locale
 	fresh.Timezone = req.Timezone
 	fresh.DayCutoffHour = req.DayCutoffHour
+	fresh.LearnAheadMinutes = req.LearnAheadMinutes
 	if err := s.users.Update(c.Request.Context(), fresh); err != nil {
 		s.logger.Error("update SPA profile failed", "user_id", u.ID, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": gin.H{
@@ -186,7 +197,8 @@ func (s *Server) profilePatch(c *gin.Context) {
 	}
 	s.audit(c.Request.Context(), store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionUserProfileUpdate, TargetType: "user", TargetID: store.Ptr(u.ID),
-		Detail: map[string]any{"locale": req.Locale, "timezone": req.Timezone, "day_cutoff_hour": req.DayCutoffHour, "via": "spa"},
+		Detail: map[string]any{"locale": req.Locale, "timezone": req.Timezone, "day_cutoff_hour": req.DayCutoffHour,
+			"learn_ahead_minutes": req.LearnAheadMinutes, "via": "spa"},
 	})
 	c.JSON(http.StatusOK, userPayload(fresh))
 }

@@ -7,6 +7,8 @@
     getApiErrorMessageKey,
     validateProfileForm,
     DEFAULT_DAY_CUTOFF_HOUR,
+    DEFAULT_LEARN_AHEAD_MINUTES,
+    MAX_LEARN_AHEAD_MINUTES,
     type UserProfile,
     type ShareAllowRow,
   } from '../api';
@@ -45,7 +47,7 @@
   let shareError = $state<string | null>(null);
   let oldPassword = $state('');
   let newPassword = $state('');
-  let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour', string>>>({});
+  let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour' | 'learn_ahead_minutes', string>>>({});
 
   // 表单字段绑定
   let displayName = $state('');
@@ -53,6 +55,8 @@
   let timezone = $state('');
   // 切点必须是一个具体整点：界面不提供「未设置」，库里为 NULL 的旧账号按服务端默认值显示。
   let dayCutoff = $state(String(DEFAULT_DAY_CUTOFF_HOUR));
+  // 提前学习窗口（分钟）：库里为 NULL 时显示默认值，保存后成为显式值；0 表示关闭。
+  let learnAhead = $state(String(DEFAULT_LEARN_AHEAD_MINUTES));
 
   // 候选项要跟着当前值算：库里可能存着本浏览器不认识的历史时区名，不并进列表就会显示成空。
   const timezoneChoices = $derived(timezoneOptions(timezone));
@@ -98,6 +102,7 @@
       }
       // 0 是合法切点（午夜）；NULL 是旧账号的未设置状态，界面按服务端默认值显示，保存后成为显式值。
       dayCutoff = String(profile.day_cutoff_hour ?? DEFAULT_DAY_CUTOFF_HOUR);
+      learnAhead = String(profile.learn_ahead_minutes ?? DEFAULT_LEARN_AHEAD_MINUTES);
     } catch (err) {
       if (err instanceof ApiClientError && err.isNotFound) {
         // 服务端尚未提供 profile JSON 端点（API Gap 明确报告），安全降级并保留前端安全输入与本地生效
@@ -148,6 +153,7 @@
       locale: selectedLocale,
       timezone,
       day_cutoff_hour: rawCutoff,
+      learn_ahead_minutes: learnAhead,
     });
 
     if (!validation.valid || !validation.data) {
@@ -373,6 +379,31 @@
             {#if fieldErrors.day_cutoff_hour}
               <p data-testid="settings-error-cutoff" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
                 {$t(fieldErrors.day_cutoff_hour)}
+              </p>
+            {/if}
+          </div>
+
+          <!-- 提前学习 -->
+          <div class="block">
+            <label for="settings-learn-ahead" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+              {$t('settings.profile.learn_ahead_label')}
+            </label>
+            <input
+              id="settings-learn-ahead"
+              data-testid="settings-learn-ahead"
+              type="number"
+              min="0"
+              max={MAX_LEARN_AHEAD_MINUTES}
+              step="1"
+              bind:value={learnAhead}
+              class="field-input text-sm block w-40"
+            />
+            <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+              {$t('settings.profile.learn_ahead_hint')}
+            </p>
+            {#if fieldErrors.learn_ahead_minutes}
+              <p data-testid="settings-error-learn-ahead" class="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
+                {$t(fieldErrors.learn_ahead_minutes)}
               </p>
             {/if}
           </div>

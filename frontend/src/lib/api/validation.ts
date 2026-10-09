@@ -111,6 +111,30 @@ export function validateDayCutoffHour(raw: number | string | null | undefined): 
   return { valid: false, value: null, errorKey: 'settings.error.cutoff_invalid' };
 }
 
+/** 提前学习窗口的默认值与上限（分钟），与 Go: internal/store/stats.go 的 ResolveLearnAhead 同一口径。 */
+export const DEFAULT_LEARN_AHEAD_MINUTES = 20;
+export const MAX_LEARN_AHEAD_MINUTES = 1440;
+
+/**
+ * 校验提前学习窗口（分钟）：空串表示用默认值（落库为 NULL）；填写的值必须是
+ * 0–1440 的整数（0 表示关闭）。
+ */
+export function validateLearnAheadMinutes(raw: string | null | undefined): {
+  valid: boolean;
+  value: number | null;
+  errorKey?: string;
+} {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed === '') {
+    return { valid: true, value: null };
+  }
+  const num = Number(trimmed);
+  if (!/^\d+$/.test(trimmed) || !Number.isInteger(num) || num > MAX_LEARN_AHEAD_MINUTES) {
+    return { valid: false, value: null, errorKey: 'settings.error.learn_ahead_invalid' };
+  }
+  return { valid: true, value: num };
+}
+
 /**
  * 校验两次输入的密码是否一致（注册与首个管理员引导共用）。
  *
@@ -136,6 +160,7 @@ export function validateProfileForm(form: {
   locale: string | null | undefined;
   timezone: string | null | undefined;
   day_cutoff_hour: number | string | null | undefined;
+  learn_ahead_minutes?: string | null | undefined;
 }): ProfileValidationResult {
   const errors: ProfileValidationResult['errors'] = {};
 
@@ -159,6 +184,11 @@ export function validateProfileForm(form: {
     errors.day_cutoff_hour = cutoffRes.errorKey;
   }
 
+  const aheadRes = validateLearnAheadMinutes(form.learn_ahead_minutes);
+  if (!aheadRes.valid && aheadRes.errorKey) {
+    errors.learn_ahead_minutes = aheadRes.errorKey;
+  }
+
   const valid = Object.keys(errors).length === 0;
   if (!valid) {
     return { valid: false, errors };
@@ -172,6 +202,7 @@ export function validateProfileForm(form: {
       locale: localeRes.value,
       timezone: tzRes.value,
       day_cutoff_hour: cutoffRes.value,
+      learn_ahead_minutes: aheadRes.value,
     },
   };
 }

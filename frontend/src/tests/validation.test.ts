@@ -219,7 +219,30 @@ describe('Profile and settings form validation', () => {
         locale: 'zh-CN',
         timezone: 'Asia/Shanghai',
         day_cutoff_hour: 4,
+        learn_ahead_minutes: null,
       });
+    });
+
+    it('validates the learn-ahead window: blank means default, 0 turns it off, out of range is rejected', () => {
+      const base = { display_name: 'Tester', locale: 'en', timezone: 'UTC', day_cutoff_hour: '4' };
+      const cases: Array<[string, number | null, boolean]> = [
+        ['', null, true],
+        ['0', 0, true],
+        ['20', 20, true],
+        ['1440', 1440, true],
+        ['1441', null, false],
+        ['-1', null, false],
+        ['2.5', null, false],
+      ];
+      for (const [raw, value, valid] of cases) {
+        const res = validateProfileForm({ ...base, learn_ahead_minutes: raw });
+        expect(res.valid).toBe(valid);
+        if (valid) {
+          expect(res.data?.learn_ahead_minutes).toBe(value);
+        } else {
+          expect(res.errors.learn_ahead_minutes).toBe('settings.error.learn_ahead_invalid');
+        }
+      }
     });
 
     it('handles blank day_cutoff_hour as null in valid result', () => {

@@ -981,6 +981,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		DayCutoffHour: u.DayCutoffHour,
 		ReviewOrder:   schedule.OrderByDueAt,
 		NewOrder:      schedule.NewOrderRandom,
+		LearnAhead:    store.ResolveLearnAhead(u.LearnAheadMinutes),
 	}
 	// 单卡组走 DeckID（保留卡组上限口径）；多卡组走 DeckIDs 集合。
 	switch len(ids) {

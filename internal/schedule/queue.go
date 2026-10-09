@@ -113,6 +113,9 @@ type QueueOptions struct {
 	NewOrder NewOrder
 	// BatchSize 是复习卡一次取出的批大小（retrievability 需在内存排序）。
 	BatchSize int
+	// LearnAhead 是提前学习窗口：队列末尾追加在 (Now, Now+LearnAhead] 内到期的学习 / 重学卡，
+	// 只在其它卡都复习完之后才轮到它们（队列按序消费、每次评分后重建）。0 表示不提前。
+	LearnAhead time.Duration
 	// Rand 是可选随机源；仅影响 NewOrderRandom。为 nil 时按 (用户, 复习日) 派生固定种子，
 	// 因此同一天内反复构建得到同一排列（见 queueShuffleSeed）。
 	Rand *rand.Rand
@@ -265,7 +268,32 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		out = append(out, reviews[i].item)
 	}
 	out = append(out, fresh...)
+
+	// 提前学习：学习步骤常常只有 1 分钟、10 分钟，最后一张卡按 Again 之后队列就空了，会话随之
+	// 结束，而那张卡几分钟后才到期。把窗口内即将到期的学习卡排在最后：有别的卡时不打扰，
+	// 没有了就接着学。
+	if opts.LearnAhead > 0 && len(col.order) > 0 {
+		ahead, err := b.learningAhead(ctx, userID, now, now.Add(opts.LearnAhead), col.order)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ahead...)
+	}
 	return out, nil
+}
+
+// learningAhead 取 (from, until] 内到期的学习 / 重学卡，按到期时间升序（只用于提前学习）。
+func (b *QueueBuilder) learningAhead(ctx context.Context, userID uint64, from, until time.Time, deckIDs []uint64) ([]QueueItem, error) {
+	var rows []stateRow
+	err := b.baseStateQuery(ctx, userID, deckIDs).
+		Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
+		Where("cs.due_at > ? AND cs.due_at <= ?", from, until).
+		Order("cs.due_at ASC, cs.card_id ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("schedule: load learn-ahead cards: %w", err)
+	}
+	return rowsToItems(rows, QueueLearning, from)
 }
 
 // queueShuffleSeed 从 (用户, 复习日) 派生新卡乱序的种子。

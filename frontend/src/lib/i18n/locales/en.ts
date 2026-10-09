@@ -1220,4 +1220,7 @@ export const en: LocaleCatalog = {
   'notes.suspend': 'Suspend',
   'notes.unsuspend': 'Unsuspend',
   'notes.suspend_failed': 'The change failed. Please try again.',
+  'settings.profile.learn_ahead_label': 'Learn ahead (minutes)',
+  'settings.profile.learn_ahead_hint': 'When nothing else is left, learning cards due within this many minutes are shown early instead of ending the session. 0 turns it off.',
+  'settings.error.learn_ahead_invalid': 'Enter a whole number from 0 to 1440.',
 };

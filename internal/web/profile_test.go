@@ -185,3 +185,39 @@ func TestProfileRejectsDisabledSessionUser(t *testing.T) {
 		t.Fatalf("disabled session GET profile = %d, want 401", rec.Code)
 	}
 }
+
+// TestProfileLearnAheadRoundTrip 断言提前学习窗口：0 按 0 落库（不被当成未设置），null 回到默认，
+// 越界 400 且不写库（反面）。
+func TestProfileLearnAheadRoundTrip(t *testing.T) {
+	srv, db, userID, cookies, csrf := newNotesServer(t)
+	load := func() *int {
+		u, err := store.NewUserStore(db).ByID(context.Background(), userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.LearnAheadMinutes
+	}
+	zero, tooBig := 0, store.MaxLearnAheadMinutes+1
+	base := profileRequest{DisplayName: "L", Locale: "en", Timezone: "UTC"}
+	req := base
+	req.LearnAheadMinutes = &zero
+	if rec := patchProfile(t, srv, "/api/v1/profile", req, cookies, csrf, ""); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH 0 = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := load(); got == nil || *got != 0 {
+		t.Fatalf("stored learn-ahead = %v, want 0", got)
+	}
+	req.LearnAheadMinutes = &tooBig
+	if rec := patchProfile(t, srv, "/api/v1/profile", req, cookies, csrf, ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH out of range = %d, want 400", rec.Code)
+	}
+	if got := load(); got == nil || *got != 0 {
+		t.Fatalf("rejected PATCH changed learn-ahead to %v", got)
+	}
+	if rec := patchProfile(t, srv, "/api/v1/profile", base, cookies, csrf, ""); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH null = %d", rec.Code)
+	}
+	if got := load(); got != nil {
+		t.Fatalf("stored learn-ahead = %v, want NULL (default)", *got)
+	}
+}

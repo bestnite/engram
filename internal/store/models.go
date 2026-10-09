@@ -34,6 +34,10 @@ type User struct {
 	// int 加默认值会分不清「未设置」与「午夜」，且 GORM 会把零值当成未提供（AGENTS.md §2.3 第 9 条
 	// 记的是同一个坑：带 default 标签的列，零值字段会被数据库默认覆盖）。
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
+	// LearnAheadMinutes 是「提前学习」窗口（分钟）：没有别的卡可复习时，这么多分钟内就要到期的
+	// 学习 / 重学卡提前出现，免得会话因为一张 1 分钟后才到期的卡就结束。NULL 用默认值，0 关闭。
+	// 可空指针的理由同 ReminderHour：0 是合法值。
+	LearnAheadMinutes *int `gorm:"column:learn_ahead_minutes" json:"learn_ahead_minutes,omitempty"`
 	// ShareAcceptFrom 是「谁可以把卡组分享给我」：anyone | whitelist | nobody。
 	// NULL 按 anyone 处理（与上线前的行为一致：那时所有人都能被分享）。
 	ShareAcceptFrom *string    `gorm:"column:share_accept_from" json:"share_accept_from,omitempty"`
