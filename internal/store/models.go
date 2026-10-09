@@ -293,9 +293,10 @@ func (ShareSessionDeck) TableName() string { return "share_session_decks" }
 
 // APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
 type APIKey struct {
-	ID         uint64     `gorm:"primaryKey;column:id" json:"-"`
-	PublicID   string     `gorm:"column:public_id;uniqueIndex" json:"id"`
-	UserID     uint64     `gorm:"not null;index" json:"user_id"`
+	ID       uint64 `gorm:"primaryKey;column:id" json:"-"`
+	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	// UserID 是内部外键：卡组/key 列表按调用者过滤，客户端不需要它，故不出现在 JSON 里。
+	UserID     uint64     `gorm:"not null;index" json:"-"`
 	Name       string     `gorm:"not null" json:"name"`
 	Prefix     string     `gorm:"not null" json:"prefix"`
 	KeyHash    string     `gorm:"column:key_hash;not null;uniqueIndex" json:"-"`

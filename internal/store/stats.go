@@ -291,7 +291,9 @@ func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDa
 
 // DeckStat 是一个卡组的统计行（「卡组维度」）。
 type DeckStat struct {
-	DeckID    uint64
+	DeckID uint64
+	// PublicID 是卡组的对外 id；客户端只认它，数字主键不出现在响应里。
+	PublicID  string
 	Name      string
 	DueCount  int64
 	Reviews   int64
@@ -386,6 +388,7 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	for _, d := range decks {
 		if row, ok := stats[d.ID]; ok {
 			row.Name = d.Name
+			row.PublicID = d.PublicID
 		}
 	}
 	out := make([]DeckStat, 0, len(stats))
