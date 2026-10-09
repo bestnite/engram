@@ -6,6 +6,7 @@ import {
   noteKindLabel,
   noteKindLabelKey,
   presetDisplayName,
+  presetSelectOptions,
 } from '../lib/labels';
 
 /**
@@ -54,5 +55,36 @@ describe('enum labels go through the catalog', () => {
     expect(presetDisplayName('Default', true, en)).toBe('Default');
     expect(presetDisplayName('Evening', false, zh)).toBe('Evening');
     expect(presetDisplayName('Evening', false, en)).toBe('Evening');
+  });
+
+  it('builds the create-deck preset options from the preset list alone', () => {
+    // 回归：下拉曾硬编码一个「默认预设」哨兵项再加真实列表，只有一条预设时会出现两条
+    // 「默认」（哨兵文案与 presets.default_name 几乎同字），看着像一条没删掉的预设。
+    // 选项必须与接口返回的预设一一对应，不多不少。
+    const one = presetSelectOptions([{ id: 6, name: 'Default', is_default: true }], zh);
+    expect(one.options).toEqual([{ value: '6', label: '默认' }]);
+    expect(one.selected).toBe('6');
+
+    const many = presetSelectOptions(
+      [
+        { id: 7, name: 'Evening', is_default: false },
+        { id: 6, name: 'Default', is_default: true },
+      ],
+      en
+    );
+    expect(many.options).toEqual([
+      { value: '7', label: 'Evening' },
+      { value: '6', label: 'Default' },
+    ]);
+    expect(many.selected).toBe('6');
+  });
+
+  it('preselects the first preset when none is flagged default, and nothing when the list is empty', () => {
+    // 没有 is_default 时退回第一条；列表为空（拉取失败）时 selected 为空串，
+    // 调用方据此按服务端默认预设提交（preset_id: 0）。
+    expect(presetSelectOptions([{ id: 9, name: 'Morning', is_default: false }], zh).selected).toBe('9');
+    const empty = presetSelectOptions([], zh);
+    expect(empty.options).toEqual([]);
+    expect(empty.selected).toBe('');
   });
 });

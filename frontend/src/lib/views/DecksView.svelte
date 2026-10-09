@@ -10,7 +10,7 @@
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
-  import { deckVisibilityLabel as visibilityLabel, deckActionKind, presetDisplayName } from '../labels';
+  import { deckVisibilityLabel as visibilityLabel, deckActionKind, presetSelectOptions } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
   let loading = $state(true);
@@ -22,8 +22,11 @@
   let showCreateModal = $state(false);
   let name = $state('');
   let description = $state('');
-  // 新建卡组时可选调度预设；空值表示交给服务端的默认预设（请求体 preset_id: 0）。
+  // 新建卡组时可选调度预设。下拉只列真实预设（不含「默认预设」哨兵项），
+  // 加载完成后预选默认预设；拉取失败时 createPresetId 留空，按服务端默认预设提交
+  // （请求体 preset_id: 0）。
   let createPresets = $state<Array<{ value: string; label: string }>>([]);
+  let createPresetDefault = $state('');
   let createPresetId = $state('');
   let creating = $state(false);
   let createError = $state<string | null>(null);
@@ -103,6 +106,7 @@
   function openCreateModal(): void {
     name = '';
     description = '';
+    createPresetId = createPresetDefault;
     createError = null;
     showCreateModal = true;
   }
@@ -119,14 +123,15 @@
       apiClient
         .listPresets()
         .then((response) => {
-          createPresets = response.presets.map((item) => ({
-            value: String(item.id),
-            // 默认预设的库内名是机器标识，显示名走语言包（labels.presetDisplayName）。
-            label: presetDisplayName(item.name, item.is_default, $t),
-          }));
+          const { options, selected } = presetSelectOptions(response.presets, $t);
+          createPresets = options;
+          createPresetDefault = selected;
+          if (!createPresetId) {
+            createPresetId = selected;
+          }
         })
         .catch(() => {
-          // 预设列表拿不到不影响建卡组：仍走服务端默认预设。
+          // 预设列表拿不到不影响建卡组：留空即走服务端默认预设。
           createPresets = [];
         });
     }
@@ -147,7 +152,7 @@
       queueCounts = { ...queueCounts, [deck.id]: { new_count: 0, review_count: 0 } };
       name = '';
       description = '';
-      createPresetId = '';
+      createPresetId = createPresetDefault;
       showCreateModal = false;
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'deck_name_invalid') {
@@ -277,7 +282,7 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2">
         {#if !loading && !error && decks.length > 0}
           <button
             type="button"
@@ -294,6 +299,17 @@
             </svg>
           </button>
         {/if}
+
+        <!-- 卡组包导入入口。放列表头部而不进全局导航：导航已有六项，移动端放不下；
+             链接指向 /import，客户端路由渲染 ImportView。 -->
+        <Button variant="outline" size="lg" href="/import" testId="decks-import-open">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>{$t('package.import.title')}</span>
+        </Button>
 
         <Button type="button" testId="deck-create-open" onclick={openCreateModal} variant="primary" size="lg">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -574,8 +590,9 @@
               class="w-full"
               testId="deck-create-preset"
               value={createPresetId}
+              placeholder={$t('decks.preset_default')}
               onValueChange={(value: string) => (createPresetId = value)}
-              options={[{ value: '', label: $t('decks.preset_default') }, ...createPresets]}
+              options={createPresets}
             />
           </div>
         </div>
