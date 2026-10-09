@@ -26,7 +26,7 @@ func TestPublicIDGeneratedOnCreate(t *testing.T) {
 			assertUUIDv7(t, "user", u.PublicID)
 
 			explicit := "01890000-0000-7000-8000-000000000000"
-			d := Deck{OwnerUserID: u.ID, Name: "D", Description: "", Visibility: "private",
+			d := Deck{OwnerUserID: u.ID, Name: "D", Description: "",
 				PresetID: 1, PublicID: explicit, CreatedAt: now}
 			if err := db.Create(&d).Error; err != nil {
 				t.Fatalf("create deck: %v", err)
@@ -129,7 +129,7 @@ func TestStoreByPublicID(t *testing.T) {
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	deck := Deck{OwnerUserID: u.ID, Name: "D", Description: "", Visibility: "private", PresetID: 1, CreatedAt: now}
+	deck := Deck{OwnerUserID: u.ID, Name: "D", Description: "", PresetID: 1, CreatedAt: now}
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}

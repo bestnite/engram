@@ -275,7 +275,7 @@ func TestShareLinkJoinGrantsReaderAccess(t *testing.T) {
 	visitorID, visitorCookies, visitorCSRF := createUserAndLogin(t, srv, db, "l3-visitor-join")
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "l3-stranger-join")
 	target := "/media/" + sha
-	joinPath := "/api/v1/share/" + createShareLinkJSON(t, srv, deck.ID, ownerCookies, ownerCSRF, "") + "/join"
+	joinPath := "/api/v1/share/" + createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "") + "/join"
 	token := strings.TrimSuffix(strings.TrimPrefix(joinPath, "/api/v1/share/"), "/join")
 
 	// 1) 打开链接前：列表里没有它，媒体 404。

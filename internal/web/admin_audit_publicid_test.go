@@ -19,7 +19,7 @@ func TestAdminAuditFilterAcceptsPublicTargetID(t *testing.T) {
 	if err := store.NewPresetStore(db).Create(ctx, &preset); err != nil {
 		t.Fatalf("create preset: %v", err)
 	}
-	deck := store.Deck{OwnerUserID: ownerID, Name: "audit-filter-deck", Visibility: "private",
+	deck := store.Deck{OwnerUserID: ownerID, Name: "audit-filter-deck",
 		PresetID: preset.ID, CreatedAt: time.Now().UTC()}
 	if err := store.NewDeckStore(db).Create(ctx, &deck); err != nil {
 		t.Fatalf("create deck: %v", err)
