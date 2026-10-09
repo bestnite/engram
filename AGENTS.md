@@ -156,7 +156,7 @@ or in-memory) for storage.
 ## 4. Build and verify
 
 ```bash
-# code
+# full-module check — the parent's merge gate only, never a per-task step
 go build ./... && go vet ./... && gofmt -l . && go test ./...
 
 # the embedded frontend build output is gitignored, so build it before the Go build
@@ -171,13 +171,32 @@ Run the frontend build **before** the code checks whenever the change touches `f
 `go build ./...` embeds `frontend/dist`, which is gitignored, so a stale build is invisible in
 `git status`.
 
+### Scoped test runs
+
+Verify a change with the packages it touches, not the whole module:
+
+```bash
+go test ./internal/schedule/... && go vet ./internal/schedule/...
+```
+
+`go build ./...` and `go test ./...` compile and test every package in the module. Parallel
+writers share one machine, so each full run adds another complete compile and test pass to
+the same CPU and memory; concurrent full runs compete for both and can exhaust memory. The
+full-module command is the parent's merge gate, run once per integration, not once per task.
+
+Never build the executable (`go build ./cmd/engram`, `go build -o ...`) to verify a change:
+`go test` compiles the packages it needs and `go vet` type-checks them. Building the binary
+is a release step, not a verification step.
+
 ### Definition of done
 
 A task is done only when all of the following hold:
 
 1. The acceptance criteria written next to the task in `ROADMAP.md` pass, and the evidence
    is a command output or a captured response — not a claim.
-2. `go build ./... && go vet ./... && gofmt -l . && go test ./...` are clean.
+2. The packages the change touches pass `go vet` and `go test` (see "Scoped test runs"); the
+   parent runs the full-module `go build ./... && go vet ./... && gofmt -l . && go test ./...`
+   once at the merge gate.
 3. New behaviour has tests, including the negative cases named in the task.
 4. Logs are English, comments are Chinese, user-facing strings come from the catalog.
 5. The change is committed with a signed, conventional commit; `git status` is clean.
@@ -200,8 +219,10 @@ A task is done only when all of the following hold:
 
 - One task per subagent. Pass the task's ID, its full text from `ROADMAP.md`, and the code
   paths it touches as context; subagents do not share this conversation.
-- Require the subagent to run the verification commands from section 4 and to report the
-  raw output, not a summary claim.
+- Require the subagent to run the section 4 checks **scoped to the packages its change
+  touches** and to report the raw output, not a summary claim. The parent runs the
+  full-module checks once, after merging, so that N parallel writers do not each trigger a
+  full build and test pass.
 - The parent verifies the reported evidence before deleting the entry from `ROADMAP.md`; a
   subagent's self-report is not proof.
 - A subagent that discovers missing design information must report it instead of inventing
