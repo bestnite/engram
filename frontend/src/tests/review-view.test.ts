@@ -187,6 +187,9 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('data-testid="review-bury"');
     expect(html).toContain('data-testid="review-suspend"');
     expect(html).toContain('data-testid="review-bury-hint"');
+    // 埋藏与暂停的区别收进问号浮层，不再在每张卡底部常驻一整句。
+    expect(html).toContain('aria-label="埋藏与暂停是什么意思？"');
+    expect(html).not.toContain('埋藏：今天跳过');
     // 文案来自语言包，不是裸 key。
     expect(html).toContain('编辑');
     expect(html).toContain('埋藏');

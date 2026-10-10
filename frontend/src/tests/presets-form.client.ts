@@ -103,4 +103,17 @@ describe('PresetsView max interval saving', () => {
     expect(error?.textContent).toContain('最大间隔必须是正整数天数。');
     expect(error?.textContent).not.toContain('presets.form.error');
   });
+
+  it('keeps the field labels short and explains each one in a help button outside its label', async () => {
+    await setup();
+    const label = document.body.querySelector('label[for="presets-form-learning-steps"]');
+    // 标签只剩字段名，格式说明进了浮层；点标签仍然聚焦输入框而不是打开浮层。
+    expect(label?.textContent?.trim()).toBe('学习步骤');
+    expect(label?.querySelector('button')).toBeNull();
+    for (const key of ['retention', 'learning-steps', 'relearning-steps', 'max-interval', 'fuzz']) {
+      const help = document.body.querySelector(`[data-testid="presets-form-${key}-help"]`);
+      expect(help, key).not.toBeNull();
+      expect(help?.closest('label'), key).toBeNull();
+    }
+  });
 });

@@ -6,6 +6,7 @@
   import type { AdminMailTemplatesResponse, AdminMailTemplatePreview } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Button from '../../components/ui/Button.svelte';
+  import HelpTip from '../../components/ui/HelpTip.svelte';
   import { toast } from '../../components/ui/toast';
   import Badge from '../../components/ui/Badge.svelte';
   import Select from '../../components/ui/Select.svelte';
@@ -237,7 +238,10 @@
         <p class="mt-1.5 text-xs text-muted-foreground">{$t('admin.mail.subject_hint')}</p>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="admin-mail-template-body">{$t('admin.mail.body_label')}</label>
+        <div class="flex items-center gap-1">
+          <label class="text-sm font-medium text-foreground" for="admin-mail-template-body">{$t('admin.mail.body_label')}</label>
+          <HelpTip testId="admin-mail-template-body-help" label={$t('admin.mail.body_label')} text={$t('admin.mail.body_hint')} />
+        </div>
         <textarea
           id="admin-mail-template-body"
           data-testid="admin-mail-template-body"
@@ -246,7 +250,6 @@
           bind:value={body}
           class="field-input mt-1.5 w-full font-mono text-sm"
         ></textarea>
-        <p class="mt-1.5 text-xs text-muted-foreground">{$t('admin.mail.body_hint')}</p>
       </div>
 
       {#if currentType}
