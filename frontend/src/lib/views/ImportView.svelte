@@ -11,6 +11,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import Dropzone from '../components/ui/Dropzone.svelte';
   import SegmentedControl from '../components/ui/SegmentedControl.svelte';
+  import { toast } from '../components/ui/toast';
 
   // 导入来源：文件或公开 HTTPS 直链。默认文件，两条入口共用下面同一批选项。
   let source = $state<'file' | 'url'>('file');
@@ -27,6 +28,7 @@
   let submitting = $state(false);
   let errorKey = $state('');
   let report = $state<PackageImportReport | null>(null);
+  let reportSection = $state<HTMLElement | null>(null);
 
   // 挂载标志与输入版本：卸载后不再写状态；输入版本用来判定在途结果是否已过时。
   let mounted = true;
@@ -134,6 +136,7 @@
       // 输入已变（来源/选项/URL）或视图已卸载：这次结果不再对应当前选择，丢弃。
       if (!mounted || revision !== requestRevision) return;
       report = result;
+      notifyResult(result);
     } catch (err) {
       if (!mounted || revision !== requestRevision) return;
       errorKey = importErrorKey(err);
@@ -141,6 +144,26 @@
       // 请求本身已结束：只要还挂载着就解除提交锁，让用户能用新选择再次提交。
       if (mounted) submitting = false;
     }
+  }
+
+  /**
+   * 报告区在表单下方，长表单里用户不往下滚就看不到结果，所以成功落地时再弹一条轻提示，
+   * 并带一个跳到报告区的按钮。有条目未导入时用警告样式，免得用户把部分失败当成全部成功。
+   * 失败不走这里：错误文案就显示在提交按钮旁，用户刚点过按钮，视线就在那里。
+   */
+  function notifyResult(value: PackageImportReport): void {
+    const message = value.dry_run
+      ? $t('package.toast.dry_run_done')
+      : $t('package.toast.import_done', { created: value.notes_created, updated: value.notes_updated });
+    const options = {
+      description: value.errors.length ? $t('package.toast.entries_failed', { count: value.errors.length }) : undefined,
+      action: {
+        label: $t('package.toast.view_report'),
+        onClick: () => reportSection?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      },
+    };
+    if (value.errors.length) toast.warning(message, options);
+    else toast.success(message, options);
   }
 
   function targetLabel(raw: string): string {
@@ -245,7 +268,7 @@
     </div>
   </form>
   {#if report}
-    <section class="mt-10 border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
+    <section bind:this={reportSection} class="mt-10 scroll-mt-6 border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
       <h2 class="text-base font-semibold">{$t('package.report.heading')}</h2>
       <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3 text-sm">
         {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
