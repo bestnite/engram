@@ -9,6 +9,7 @@
   import type { ApiClient, StatsDetail } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import HelpTip from '../components/ui/HelpTip.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -37,6 +38,11 @@
 
   function formatPercentValue(rate: number): string {
     return (rate * 100).toFixed(1);
+  }
+
+  /** 表格行的留存率：分母（到期复习数）为 0 时没有可读的比例，显示「暂无数据」而不是 0.0%。 */
+  function rowRetention(rate: number, total: number): string {
+    return total > 0 ? $t('stats.table.rate', { rate: formatPercentValue(rate) }) : $t('stats.retention_na');
   }
 
   /** 学习曲线/柱状条共用最大值基准，柱长因此可以直接互相比较。 */
@@ -208,16 +214,24 @@
             { key: 'stats.volume.today', value: detail.volume.today },
             { key: 'stats.volume.last7', value: detail.volume.last_7_days },
             { key: 'stats.volume.last30', value: detail.volume.last_30_days },
-          ] as row}
+          ] as row, i}
             <dl class="px-4 py-2 first:pl-0">
-              <dt class="text-xs text-muted-foreground">{$t('stats.volume.heading')} · {$t(row.key)}</dt>
+              <dt class="flex items-center gap-0.5 text-xs text-muted-foreground">
+                {$t('stats.volume.heading')} · {$t(row.key)}
+                {#if i === 0}
+                  <HelpTip testId="stats-volume-help" label={$t('stats.volume.heading')} text={$t('help.stats.volume')} />
+                {/if}
+              </dt>
               <dd class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.volume.value', { count: formatNumber(row.value) })}</dd>
             </dl>
           {/each}
         </div>
         <div data-testid="stats-streak" class="contents">
           <dl class="px-4 py-2">
-            <dt class="text-xs text-muted-foreground">{$t('stats.streak.current_label')}</dt>
+            <dt class="flex items-center gap-0.5 text-xs text-muted-foreground">
+              {$t('stats.streak.current_label')}
+              <HelpTip testId="stats-streak-help" label={$t('stats.streak.heading')} text={$t('help.stats.streak')} />
+            </dt>
             <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current) })}</dd>
           </dl>
           <dl class="px-4 py-2">
@@ -229,7 +243,10 @@
 
       <!-- 学习曲线 -->
       <section data-testid="stats-curve" class="py-8">
-        <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
+        <div class="flex items-center gap-1">
+          <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
+          <HelpTip testId="stats-curve-help" label={$t('stats.curve.heading')} text={$t('help.stats.curve')} />
+        </div>
         <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.curve.intro')}</p>
         <div class="mt-4">
           {#if detail.curve.length === 0}
@@ -243,7 +260,10 @@
       <!-- 到期预测 / 留存率 -->
       <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
         <section data-testid="stats-due">
-          <h2 class="text-sm font-semibold text-foreground">{$t('stats.due.heading')}</h2>
+          <div class="flex items-center gap-1">
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.due.heading')}</h2>
+            <HelpTip testId="stats-due-help" label={$t('stats.due.heading')} text={$t('help.stats.due')} />
+          </div>
           <ul class="mt-4 space-y-3">
             {#each [
               { key: 'stats.due.today', value: detail.due.today },
@@ -269,8 +289,14 @@
         </section>
 
         <section data-testid="stats-retention">
-          <h2 class="text-sm font-semibold text-foreground">{$t('stats.retention.heading')}</h2>
-          <p class="mt-0.5 text-xs text-muted-foreground">{$t('stats.retention.intro')}</p>
+          <div class="flex items-center gap-1">
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.retention.heading')}</h2>
+            <HelpTip testId="stats-retention-help" label={$t('stats.retention.heading')} text={$t('help.retention')} />
+          </div>
+          <p class="mt-0.5 text-xs text-muted-foreground">
+            {$t('stats.retention.intro')}
+            <HelpTip testId="stats-retention-buckets-help" label={$t('help.stats.retention_buckets_label')} text={$t('help.stats.retention_buckets')} />
+          </p>
           <ul class="mt-4 space-y-3">
             <li data-testid="stats-retention-overall">
               <div class="flex items-center justify-between text-[13px]">
@@ -307,7 +333,10 @@
       <!-- 时间投入 / 判分来源 -->
       <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
         <section data-testid="stats-time">
-          <h2 class="text-sm font-semibold text-foreground">{$t('stats.time.heading')}</h2>
+          <div class="flex items-center gap-1">
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.time.heading')}</h2>
+            <HelpTip testId="stats-time-help" label={$t('stats.time.heading')} text={$t('help.stats.time')} />
+          </div>
           <dl class="mt-4 space-y-2.5">
             {#each [
               { key: 'stats.time.total_label', value: formatDuration(detail.time_spent.total_ms) },
@@ -324,7 +353,10 @@
         </section>
 
         <section data-testid="stats-grade">
-          <h2 class="text-sm font-semibold text-foreground">{$t('stats.grade.heading')}</h2>
+          <div class="flex items-center gap-1">
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.grade.heading')}</h2>
+            <HelpTip testId="stats-grade-help" label={$t('stats.grade.heading')} text={$t('help.stats.grade')} />
+          </div>
           <ul class="mt-4 space-y-3">
             {#each detail.grades as grade}
               <li>
@@ -355,10 +387,19 @@
                 <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
                   <tr>
                     <th class="px-4 py-2.5 font-medium">{$t('stats.deck.col.name')}</th>
-                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.due')}</th>
-                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.reviews')}</th>
-                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.retention')}</th>
-                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.deck.col.elapsed')}</th>
+                    {#each [
+                      { key: 'stats.deck.col.due', help: 'help.stats.deck.due', id: 'due' },
+                      { key: 'stats.deck.col.reviews', help: 'help.stats.deck.reviews', id: 'reviews' },
+                      { key: 'stats.deck.col.retention', help: 'help.stats.deck.retention', id: 'retention' },
+                      { key: 'stats.deck.col.elapsed', help: 'help.stats.deck.elapsed', id: 'elapsed' },
+                    ] as col}
+                      <th class="px-4 py-2.5 text-right font-medium">
+                        <span class="inline-flex items-center gap-0.5 whitespace-nowrap">
+                          {$t(col.key)}
+                          <HelpTip testId="stats-deck-{col.id}-help" label={$t(col.key)} text={$t(col.help)} />
+                        </span>
+                      </th>
+                    {/each}
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
@@ -367,7 +408,7 @@
                       <td class="px-4 py-2.5 font-medium text-foreground">{deck.name}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.table.rate', { rate: formatPercentValue(deck.retention) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{rowRetention(deck.retention, deck.retention_total)}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{formatDuration(deck.elapsed_ms)}</td>
                     </tr>
                   {/each}
@@ -378,7 +419,10 @@
         </section>
 
         <section data-testid="stats-tag">
-          <h2 class="text-sm font-semibold text-foreground">{$t('stats.tag.heading')}</h2>
+          <div class="flex items-center gap-1">
+            <h2 class="text-sm font-semibold text-foreground">{$t('stats.tag.heading')}</h2>
+            <HelpTip testId="stats-tag-help" label={$t('stats.tag.heading')} text={$t('help.stats.tag')} />
+          </div>
           <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
                在重复卡组维度（没复习过的大标签一个都不出现）。 -->
           <p data-testid="stats-tag-scope" class="mt-0.5 text-xs text-muted-foreground">{$t('stats.tag.scope')}</p>
@@ -391,7 +435,12 @@
                   <tr>
                     <th class="px-4 py-2.5 font-medium">{$t('stats.tag.col.tag')}</th>
                     <th class="px-4 py-2.5 text-right font-medium">{$t('stats.tag.col.reviews')}</th>
-                    <th class="px-4 py-2.5 text-right font-medium">{$t('stats.tag.col.retention')}</th>
+                    <th class="px-4 py-2.5 text-right font-medium">
+                      <span class="inline-flex items-center gap-0.5 whitespace-nowrap">
+                        {$t('stats.tag.col.retention')}
+                        <HelpTip testId="stats-tag-retention-help" label={$t('stats.tag.col.retention')} text={$t('help.stats.tag.retention')} />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
@@ -399,7 +448,7 @@
                     <tr>
                       <td class="px-4 py-2.5 font-medium text-foreground">{tag.tag}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.table.rate', { rate: formatPercentValue(tag.retention) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{rowRetention(tag.retention, tag.retention_total)}</td>
                     </tr>
                   {/each}
                 </tbody>

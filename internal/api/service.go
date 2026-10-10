@@ -877,13 +877,19 @@ func uniquePublicIDs(ids []string) []string {
 
 // StatsSummary 是 /stats/summary 与 get_stats 工具的共同响应形态。
 type StatsSummary struct {
-	Decks        int     `json:"decks"`
-	Due          int64   `json:"due"`
-	ReviewsToday int64   `json:"reviews_today"`
-	ReviewsTotal int64   `json:"reviews_total"`
-	Retention    float64 `json:"retention"`
-	Notes        int64   `json:"notes"`
-	Cards        int64   `json:"cards"`
+	Decks        int   `json:"decks"`
+	Due          int64 `json:"due"`
+	ReviewsToday int64 `json:"reviews_today"`
+	ReviewsTotal int64 `json:"reviews_total"`
+	// Retention 是真实留存率：到期复习（state_before=Review）中评分不是 Again 的比例，
+	// 与统计页同一口径（store.StatsStore.RetentionByStability）。
+	Retention float64 `json:"retention"`
+	// RetentionTotal / RetentionPassed 是 Retention 的分母与分子。分母只含到期复习，
+	// 不等于 reviews_total；为 0 时客户端应显示「暂无数据」而不是 0%。
+	RetentionTotal  int64 `json:"retention_total"`
+	RetentionPassed int64 `json:"retention_passed"`
+	Notes           int64 `json:"notes"`
+	Cards           int64 `json:"cards"`
 }
 
 // Stats 汇总当前用户的到期量 / 复习量 / 留存概要；所有数字都由 reviews + card_states 聚合。
@@ -892,7 +898,8 @@ type StatsSummary struct {
 // 卡组（与 list_decks、网页列表页、复习队列同一个 store 谓词），卡组集合为空时它们为 0；
 // reviews_today / reviews_total / retention 按 user_id 保留全史——复习是本人的记录，
 // 撤销授权不追溯。因此即便一个可见卡组都没有，也必须继续聚合 reviews，不能提前返回把
-// 历史数字静默清零。
+// 历史数字静默清零。retention 与统计页共用 RetentionByStability：同样不限可见卡组，
+// 但只数到期复习，且已删除卡片的复习不计入（与统计页一致）。
 func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	now := a.now()
 
@@ -927,8 +934,8 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		a.logger.Error("count reviews failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
-	// 留存近似口径：非 Again 的比例（更精细的分桶留给 M7）。
-	nonAgain, err := countNonAgain(ctx, a, u.ID)
+	// 留存复用统计页的聚合函数，保证首页与统计页对同一个用户给出同一个数字。
+	retention, err := store.NewStatsStore(a.db).RetentionByStability(ctx, u.ID, 0)
 	if err != nil {
 		a.logger.Error("count retention failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
@@ -953,9 +960,9 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	resp.ReviewsTotal = reviewsTotal
 	resp.Notes = notes
 	resp.Cards = cards
-	if reviewsTotal > 0 {
-		resp.Retention = float64(nonAgain) / float64(reviewsTotal)
-	}
+	resp.Retention = retention.Rate
+	resp.RetentionTotal = retention.Total
+	resp.RetentionPassed = retention.Passed
 	return resp, nil
 }
 

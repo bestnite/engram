@@ -818,6 +818,8 @@ describe('Centralized typed same-origin REST API client', () => {
         reviews_today: 2,
         reviews_total: 2,
         retention: 0.5,
+        retention_total: 2,
+        retention_passed: 1,
       };
 
       mockFetch.mockResolvedValueOnce(
@@ -854,6 +856,8 @@ describe('Centralized typed same-origin REST API client', () => {
         reviews_today: 0,
         reviews_total: 0,
         retention: 0,
+        retention_total: 0,
+        retention_passed: 0,
       };
 
       mockFetch.mockResolvedValueOnce(
@@ -930,9 +934,9 @@ describe('Centralized typed same-origin REST API client', () => {
         curve_from: '2026-09-07',
         curve_to: '2026-10-06',
         decks: [
-          { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
+          { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
         ],
-        tags: [{ tag: 'algebra', reviews: 3, retention: 2 / 3 }],
+        tags: [{ tag: 'algebra', reviews: 3, retention: 1, retention_total: 2 }],
         grades: [
           { source: 'self', count: 2 },
           { source: 'typed', count: 1 },

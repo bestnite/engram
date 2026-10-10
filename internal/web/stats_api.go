@@ -179,21 +179,24 @@ type statsCurvePoint struct {
 	Review int64  `json:"review"`
 }
 
-// statsDeck 是一个卡组的统计行。
+// statsDeck 是一个卡组的统计行。Reviews 是全部复习次数；Retention 是真实留存率，
+// 分母 RetentionTotal 只数到期复习，为 0 时客户端显示「无数据」而不是 0%。
 type statsDeck struct {
-	DeckID    string  `json:"deck_id"`
-	Name      string  `json:"name"`
-	DueCount  int64   `json:"due_count"`
-	Reviews   int64   `json:"reviews"`
-	Retention float64 `json:"retention"`
-	ElapsedMS int64   `json:"elapsed_ms"`
+	DeckID         string  `json:"deck_id"`
+	Name           string  `json:"name"`
+	DueCount       int64   `json:"due_count"`
+	Reviews        int64   `json:"reviews"`
+	Retention      float64 `json:"retention"`
+	RetentionTotal int64   `json:"retention_total"`
+	ElapsedMS      int64   `json:"elapsed_ms"`
 }
 
-// statsTag 是一个标签的统计行。
+// statsTag 是一个标签的统计行；Reviews / Retention / RetentionTotal 的含义同 statsDeck。
 type statsTag struct {
-	Tag       string  `json:"tag"`
-	Reviews   int64   `json:"reviews"`
-	Retention float64 `json:"retention"`
+	Tag            string  `json:"tag"`
+	Reviews        int64   `json:"reviews"`
+	Retention      float64 `json:"retention"`
+	RetentionTotal int64   `json:"retention_total"`
 }
 
 // statsGradeSource 是一种判分来源的计数（self/typed/llm）。
@@ -282,11 +285,11 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 	for _, d := range m.Decks {
 		detail.Decks = append(detail.Decks, statsDeck{
 			DeckID: d.PublicID, Name: d.Name, DueCount: d.DueCount,
-			Reviews: d.Reviews, Retention: d.Retention, ElapsedMS: d.ElapsedMS,
+			Reviews: d.Reviews, Retention: d.Retention, RetentionTotal: d.RetentionTotal, ElapsedMS: d.ElapsedMS,
 		})
 	}
 	for _, tg := range m.Tags {
-		detail.Tags = append(detail.Tags, statsTag{Tag: tg.Tag, Reviews: tg.Reviews, Retention: tg.Retention})
+		detail.Tags = append(detail.Tags, statsTag{Tag: tg.Tag, Reviews: tg.Reviews, Retention: tg.Retention, RetentionTotal: tg.RetentionTotal})
 	}
 	for _, g := range m.Grades {
 		detail.Grades = append(detail.Grades, statsGradeSource{Source: g.Source, Count: g.Count})
