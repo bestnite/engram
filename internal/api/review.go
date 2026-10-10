@@ -39,6 +39,7 @@ func userLocation(tz string) *time.Location {
 
 // dueCards 返回到期卡（含字段原文），scope: review（业务逻辑在 service 层的 DueCards）。
 // deck 可重复：缺省＝全部卡组；每个值是卡组的对外 id，未知或非法 → 404。
+// tag 可重复：只取带有其中任一标签的卡；带 tag 时 deck 必须恰好一个，否则 400。
 func (a *API) dueCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -55,7 +56,7 @@ func (a *API) dueCards(c *gin.Context) {
 		}
 		deckIDs = append(deckIDs, d.ID)
 	}
-	cards, err := a.DueCards(ctx, u, deckIDs, queryInt(c, "limit", 50))
+	cards, err := a.DueCards(ctx, u, deckIDs, c.QueryArray("tag"), queryInt(c, "limit", 50))
 	if err != nil {
 		writeServiceError(c, err)
 		return

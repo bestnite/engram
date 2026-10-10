@@ -22,6 +22,7 @@ type reviewRequest struct {
 	ExpectedVersion int      `json:"expected_version"`
 	ElapsedMS       *int     `json:"elapsed_ms"`
 	Deck            []string `json:"deck"`
+	Tags            []string `json:"tags"`
 }
 
 // gradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
@@ -36,15 +37,17 @@ type gradeRequest struct {
 	ExpectedVersion int             `json:"expected_version"`
 	ElapsedMS       *int            `json:"elapsed_ms"`
 	Deck            []string        `json:"deck"`
+	Tags            []string        `json:"tags"`
 	Action          string          `json:"action"`
 	Answer          json.RawMessage `json:"answer"`
 }
 
 // reviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
-// 两者都只带目标卡与卡组范围；范围原样带回，服务端据此重建队列。
+// 两者都只带目标卡与复习范围（卡组与标签）；范围原样带回，服务端据此重建队列。
 type reviewCardRequest struct {
 	CardID string   `json:"card_id"`
 	Deck   []string `json:"deck"`
+	Tags   []string `json:"tags"`
 }
 
 // reviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
@@ -59,7 +62,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	_, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -73,7 +76,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeReviewResult(c, user, deckIDs, result)
+	s.writeReviewResult(c, user, scope, result)
 }
 
 // reviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
@@ -90,7 +93,7 @@ func (s *Server) reviewGrade(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, note, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, note, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -104,19 +107,19 @@ func (s *Server) reviewGrade(c *gin.Context) {
 		s.gradeReveal(c, user, card)
 		return
 	case gradeActionGiveUp:
-		s.gradeGiveUp(c, user, req, deckIDs)
+		s.gradeGiveUp(c, user, req, scope)
 		return
 	case "":
 	default:
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	s.gradeSubmit(c, user, card, note, req, deckIDs)
+	s.gradeSubmit(c, user, card, note, req, scope)
 }
 
 // gradeSubmit 把作答交给 service 判分并写库，再把判分结果组装成页面反馈。
 // 判分规则（作答解码、判分、分数→档位映射）全部在 service 与题型里，这里只做传输。
-func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest, deckIDs []uint64) {
+func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest, scope reviewScope) {
 	ctx := c.Request.Context()
 	result, err := s.api.SubmitReview(ctx, user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Answer: req.Answer, ExpectedVersion: req.ExpectedVersion,
@@ -133,7 +136,7 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeReviewResult(c, user, deckIDs, result, gin.H{"feedback": feedback})
+	s.writeReviewResult(c, user, scope, result, gin.H{"feedback": feedback})
 }
 
 // gradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
@@ -150,7 +153,7 @@ func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card)
 
 // gradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
 // grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
-func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest, deckIDs []uint64) {
+func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest, scope reviewScope) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, GiveUp: true, ExpectedVersion: req.ExpectedVersion,
 		ElapsedMS: req.ElapsedMS,
@@ -160,7 +163,7 @@ func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest,
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeReviewResult(c, user, deckIDs, result, gin.H{"gave_up": true})
+	s.writeReviewResult(c, user, scope, result, gin.H{"gave_up": true})
 }
 
 // reviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
@@ -178,7 +181,7 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -205,7 +208,7 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	s.writeQueue(c, user, deckIDs)
+	s.writeQueue(c, user, scope)
 }
 
 // reviewSuspend 是复习页「暂停这张卡」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
@@ -221,7 +224,7 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	_, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -230,7 +233,7 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeQueue(c, user, deckIDs)
+	s.writeQueue(c, user, scope)
 }
 
 // reviewUndoRequest 是撤销入口的请求体：除目标卡与卡组范围外，必须带调用方读到的
@@ -238,6 +241,7 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 type reviewUndoRequest struct {
 	CardID          string   `json:"card_id"`
 	Deck            []string `json:"deck"`
+	Tags            []string `json:"tags"`
 	ExpectedVersion int      `json:"expected_version"`
 }
 
@@ -261,7 +265,7 @@ func (s *Server) reviewUndo(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	_, _, deckIDs, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	_, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -274,7 +278,7 @@ func (s *Server) reviewUndo(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeQueue(c, user, deckIDs, gin.H{"undone_card_id": result.CardID})
+	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
 }
 
 // reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
@@ -291,7 +295,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, _, ok := s.reviewCard(c, user, req.Deck, req.CardID)
+	card, _, _, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
@@ -309,23 +313,26 @@ func (s *Server) reviewRender(c *gin.Context) {
 	})
 }
 
-// reviewCard 校验 SPA 请求的卡组范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
-// 不静默丢弃），目标卡必须存在且落在范围内。cardPublicID 与 deckPublicIDs 都是对外 id，
-// 内部一律换成数字主键再判定；失败时已写出响应并返回 false，成功时返回范围对应的数字卡组 id。
-func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs []string, cardPublicID string) (*store.Card, *store.Note, []uint64, bool) {
-	scope, ok := s.deckScopeFromValues(c, user, deckPublicIDs)
+// reviewCard 校验 SPA 请求的复习范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
+// 不静默丢弃），目标卡必须存在且落在范围的卡组内。cardPublicID 与 deckPublicIDs 都是对外 id，
+// 内部一律换成数字主键再判定；失败时已写出响应并返回 false，成功时返回解析后的范围。
+//
+// 标签只决定队列取哪些卡，不参与目标卡的判定：评分写的是本人对一张可读卡的进度，卡在两次
+// 请求之间被改掉标签也不该让这次评分失败。
+func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs, tags []string, cardPublicID string) (*store.Card, *store.Note, reviewScope, bool) {
+	scope, ok := s.deckScopeFromValues(c, user, deckPublicIDs, tags)
 	if !ok {
-		return nil, nil, nil, false
+		return nil, nil, reviewScope{}, false
 	}
 	card, err := s.cards.ByPublicID(c.Request.Context(), strings.TrimSpace(cardPublicID))
 	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
-		return nil, nil, nil, false
+		return nil, nil, reviewScope{}, false
 	}
 	note, err := s.notes.ByID(c.Request.Context(), card.NoteID)
 	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
-		return nil, nil, nil, false
+		return nil, nil, reviewScope{}, false
 	}
 	if len(scope.deckIDs) > 0 {
 		inScope := false
@@ -337,16 +344,16 @@ func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs []st
 		}
 		if !inScope {
 			writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
-			return nil, nil, nil, false
+			return nil, nil, reviewScope{}, false
 		}
 	}
-	return card, note, scope.deckIDs, true
+	return card, note, scope, true
 }
 
 // writeReviewResult 写出一次评分后的统一响应：新状态 + 同范围队列（预取下一张），
-// 外加调用方附加的字段（判分反馈 / 放弃标记）。范围原样带回，队列不会退化成单卡组。
-func (s *Server) writeReviewResult(c *gin.Context, user *store.User, deckIDs []uint64, result api.SubmitReviewResult, extra ...gin.H) {
-	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
+// 外加调用方附加的字段（判分反馈 / 放弃标记）。范围原样带回，队列不会退化成单卡组，也不会丢掉标签。
+func (s *Server) writeReviewResult(c *gin.Context, user *store.User, scope reviewScope, result api.SubmitReviewResult, extra ...gin.H) {
+	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
@@ -366,8 +373,8 @@ func (s *Server) writeReviewResult(c *gin.Context, user *store.User, deckIDs []u
 // writeQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
 // 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组。
 // extra 是调用方附加的字段（如撤销时的 undone_card_id），按写入顺序并入响应体。
-func (s *Server) writeQueue(c *gin.Context, user *store.User, deckIDs []uint64, extra ...gin.H) {
-	cards, err := s.api.DueCards(c.Request.Context(), user, deckIDs, 500)
+func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope, extra ...gin.H) {
+	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})

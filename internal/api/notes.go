@@ -43,6 +43,28 @@ func (a *API) listNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage})
 }
 
+// listDeckTags 列出卡组内的标签及各自的 note 数，scope: read（业务逻辑在 service 层的 DeckTags）。
+// 供按标签复习时选择标签。
+func (a *API) listDeckTags(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	ctx := c.Request.Context()
+	publicID, ok := pathPublicID(c, "id")
+	if !ok {
+		return
+	}
+	d, err := a.decks.ByPublicID(ctx, publicID)
+	if err != nil {
+		abortNotFound(c)
+		return
+	}
+	tags, err := a.DeckTags(ctx, u.ID, d.ID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": tags})
+}
+
 // NotesJSON 把一组 note 转成 userID 视角下的对外形态：fields 与 tags 解码成结构化值，
 // 避免调用方二次解析。REST（list_notes/update_note）与 MCP 同名工具共用，保证同一 note 产出同一 JSON。
 //

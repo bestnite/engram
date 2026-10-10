@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
@@ -43,14 +44,19 @@ func (s *Server) reviewPageRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// reviewScope 是一次复习请求的卡组范围：deckIDs 为空表示全库（不按卡组过滤）。
-// 范围由 URL 的可重复 deck 参数决定，并由 SPA 的 JSON 请求原样带回。
-type reviewScope struct{ deckIDs []uint64 }
+// reviewScope 是一次复习请求的范围：deckIDs 为空表示全库（不按卡组过滤）；tags 非空时只取
+// 带有其中任一标签的卡（此时 deckIDs 恰好一个，由 api.ReviewTags 校验）。
+// 范围由 URL 的可重复 deck / tag 参数决定，并由 SPA 的 JSON 请求原样带回。
+type reviewScope struct {
+	deckIDs []uint64
+	tags    []string
+}
 
 // deckScopeFromValues 解析可重复的 deck 参数值（对外 id 字符串）：去重、跳过空串；任一值
 // 形状非法即 400、形状合法但库里不存在即 404。随后逐个校验 loadDeckForRole(..., RoleReader)：
 // 任何缺失或无权限的卡组都让整次请求失败（404/403，由该 helper 写出），绝不静默丢弃某个卡组。
-func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw []string) (reviewScope, bool) {
+// rawTags 经 api.ReviewTags 规范化并校验：带标签却不是恰好一个卡组即 400。
+func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw, rawTags []string) (reviewScope, bool) {
 	ids := make([]uint64, 0, len(raw))
 	seen := make(map[uint64]bool, len(raw))
 	for _, v := range raw {
@@ -78,12 +84,17 @@ func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw []str
 			return reviewScope{}, false
 		}
 	}
-	return reviewScope{deckIDs: ids}, true
+	tags, err := api.ReviewTags(ids, rawTags)
+	if err != nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return reviewScope{}, false
+	}
+	return reviewScope{deckIDs: ids, tags: tags}, true
 }
 
-// parseDeckScope 解析 GET 查询串里的可重复 deck 参数（复习页整页请求）。
+// parseDeckScope 解析 GET 查询串里的可重复 deck / tag 参数（复习页整页请求）。
 func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, bool) {
-	return s.deckScopeFromValues(c, user, c.QueryArray("deck"))
+	return s.deckScopeFromValues(c, user, c.QueryArray("deck"), c.QueryArray("tag"))
 }
 
 // ReviewCardView 是当前卡片的两面渲染结果与标识。

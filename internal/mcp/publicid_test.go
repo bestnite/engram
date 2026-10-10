@@ -71,14 +71,15 @@ func TestToolSchemasDeclareStringIDs(t *testing.T) {
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview}))
 
 	stringFields := map[string]string{
-		"create_deck":   "preset_id",
-		"search_notes":  "deck_id",
-		"export_deck":   "deck_id",
-		"create_notes":  "deck_id",
-		"update_note":   "note_id",
-		"delete_note":   "note_id",
-		"get_due_cards": "deck_id",
-		"submit_review": "card_id",
+		"create_deck":    "preset_id",
+		"search_notes":   "deck_id",
+		"export_deck":    "deck_id",
+		"create_notes":   "deck_id",
+		"update_note":    "note_id",
+		"delete_note":    "note_id",
+		"get_due_cards":  "deck_id",
+		"submit_review":  "card_id",
+		"list_deck_tags": "deck_id",
 	}
 	for tool, field := range stringFields {
 		node := propType(t, findTool(t, cs, tool), field)
@@ -112,11 +113,12 @@ func TestToolsRejectNumericIDs(t *testing.T) {
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview}))
 
 	numeric := map[string]map[string]any{
-		"search_notes":  {"deck_id": deck.ID},
-		"export_deck":   {"deck_id": deck.ID},
-		"get_due_cards": {"deck_id": deck.ID},
-		"submit_review": {"card_id": deck.ID, "rating": 3},
-		"update_note":   {"note_id": deck.ID, "fields": map[string]any{"front": "x", "back": "y"}},
+		"search_notes":   {"deck_id": deck.ID},
+		"export_deck":    {"deck_id": deck.ID},
+		"get_due_cards":  {"deck_id": deck.ID},
+		"list_deck_tags": {"deck_id": deck.ID},
+		"submit_review":  {"card_id": deck.ID, "rating": 3},
+		"update_note":    {"note_id": deck.ID, "fields": map[string]any{"front": "x", "back": "y"}},
 	}
 	for name, args := range numeric {
 		if _, isErr, text := callTool(t, cs, name, args); !isErr {
@@ -144,6 +146,7 @@ func TestToolsUnknownPublicIDIsNotFound(t *testing.T) {
 		{"create_notes", map[string]any{"deck_id": missing, "notes": []any{}}},
 		{"get_due_cards", map[string]any{"deck_id": missing}},
 		{"get_due_cards", map[string]any{"deck_ids": []any{missing}}},
+		{"list_deck_tags", map[string]any{"deck_id": missing}},
 		{"update_note", map[string]any{"note_id": missing, "fields": map[string]any{"front": "x", "back": "y"}}},
 		{"delete_note", map[string]any{"note_id": missing}},
 		{"submit_review", map[string]any{"card_id": missing, "rating": 3}},

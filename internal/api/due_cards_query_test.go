@@ -99,7 +99,7 @@ func dueCardsStatements(t *testing.T, n int) (int, []DueCard) {
 	logger := &countingLogger{}
 	env.db.Logger = logger
 	logger.reset()
-	got, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, 500)
+	got, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, nil, 500)
 	if err != nil {
 		t.Fatalf("DueCards() error = %v", err)
 	}
@@ -177,7 +177,7 @@ func TestDueCardsContractFields(t *testing.T) {
 	first := seedReviewCard(t, env.db, deck.ID, user.ID, env.now.Add(-2*time.Hour), "q1", 7)
 	second := seedReviewCard(t, env.db, deck.ID, user.ID, env.now.Add(-time.Hour), "q2", 9)
 
-	got, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, 500)
+	got, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, nil, 500)
 	if err != nil {
 		t.Fatalf("DueCards() error = %v", err)
 	}
@@ -236,7 +236,7 @@ func TestDueCardsLimitClamp(t *testing.T) {
 		seedNewCard(t, env.db, deck.ID, fmt.Sprintf("n%d", i))
 	}
 
-	all, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, 0)
+	all, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, nil, 0)
 	if err != nil {
 		t.Fatalf("DueCards(limit=0) error = %v", err)
 	}
@@ -244,7 +244,7 @@ func TestDueCardsLimitClamp(t *testing.T) {
 		t.Errorf("DueCards(limit=0) returned %d cards, want 1 (clamped to lower bound)", len(all))
 	}
 
-	capped, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, 9999)
+	capped, err := env.api.DueCards(context.Background(), user, []uint64{deck.ID}, nil, 9999)
 	if err != nil {
 		t.Fatalf("DueCards(limit=9999) error = %v", err)
 	}

@@ -184,12 +184,26 @@
   }
 
   /**
+   * 地址上的标签范围（`/review?deck=A&tag=x&tag=y`），与卡组范围一起原样带回每个请求。
+   * 不按逗号拆分：标签本身可以含逗号。
+   */
+  function selectedTags(): string[] | undefined {
+    const search = new URLSearchParams(window.location.search);
+    const values = search.getAll('tag').map((raw) => raw.trim()).filter(Boolean);
+    return values.length ? values : undefined;
+  }
+
+  // 页头展示的标签范围；换范围会让路由重建本视图（查询串参与路由键），所以初始化时取一次即可。
+  // 服务端渲染（测试用 svelte/server）没有 window，此时没有地址可读，按无标签处理。
+  const scopeTags = typeof window === 'undefined' ? [] : (selectedTags() ?? []);
+
+  /**
    * 取当前卡的服务端清洗 HTML。token 防止换卡后旧请求覆盖新卡内容；
    * 失败只丢弃富文本并回退纯文本，绝不打断复习流程。
    */
   async function loadRender(card: DueCard, token: number): Promise<void> {
     try {
-      const response = await client.renderReviewCard({ card_id: card.card_id, deck: selectedDecks() });
+      const response = await client.renderReviewCard({ card_id: card.card_id, deck: selectedDecks(), tags: selectedTags() });
       if (token !== renderToken) return;
       frontHTML = response.front_html;
       backHTML = response.back_html;
@@ -226,7 +240,8 @@
     resetAnswerState();
     try {
       const query = selectedDecks();
-      const response = await client.getDueCards(query ? { deck: query, limit: 500 } : { limit: 500 });
+      const tags = selectedTags();
+      const response = await client.getDueCards(query ? { deck: query, tag: tags, limit: 500 } : { tag: tags, limit: 500 });
       remaining = response.cards.length;
       cards = response.cards.slice(0, 1);
       startedAt = Date.now();
@@ -250,6 +265,7 @@
         expected_version: current.version,
         elapsed_ms: elapsed,
         deck: selectedDecks(),
+        tags: selectedTags(),
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
@@ -289,6 +305,7 @@
         expected_version: current.version,
         elapsed_ms: Math.max(0, Date.now() - startedAt),
         deck: selectedDecks(),
+        tags: selectedTags(),
         answer: answerValue,
       });
       pendingCards = response.cards;
@@ -315,6 +332,7 @@
       const response = await client.revealGradedAnswer({
         card_id: current.card_id,
         deck: selectedDecks(),
+        tags: selectedTags(),
       });
       revealedAnswerHTML = response.answer_html;
       gradedRevealed = true;
@@ -339,6 +357,7 @@
         expected_version: current.version,
         elapsed_ms: Math.max(0, Date.now() - startedAt),
         deck: selectedDecks(),
+        tags: selectedTags(),
         action: 'give_up',
       });
       cards = response.cards.slice(0, 1);
@@ -362,14 +381,14 @@
    * 服务端按 reader 判定，共享卡组读者可自行复习。
    */
   async function bury(): Promise<void> {
-    await skipCurrent((cardId) => client.buryReview({ card_id: cardId, deck: selectedDecks() }));
+    await skipCurrent((cardId) => client.buryReview({ card_id: cardId, deck: selectedDecks(), tags: selectedTags() }));
   }
 
   /**
    * 暂停当前卡：只对本人生效（共享卡组的其他人不受影响），在卡组的笔记列表里可以取消暂停。
    */
   async function suspend(): Promise<void> {
-    await skipCurrent((cardId) => client.suspendReview({ card_id: cardId, deck: selectedDecks() }));
+    await skipCurrent((cardId) => client.suspendReview({ card_id: cardId, deck: selectedDecks(), tags: selectedTags() }));
   }
 
   /** 埋藏与暂停共用：请求成功后换成服务端重建的队列，并重置本卡的作答状态。 */
@@ -443,6 +462,7 @@
       const response = await client.undoReview({
         card_id: target.cardId,
         deck: selectedDecks(),
+        tags: selectedTags(),
         expected_version: target.version,
       });
       const restored = response.cards.find((card) => card.card_id === response.undone_card_id);
@@ -638,7 +658,17 @@
 <svelte:head><title>{$t('review.title')} · {$t('app.name')}</title></svelte:head>
 <Page as="section">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-    <h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('review.title')}</h1>
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('review.title')}</h1>
+      {#if scopeTags.length}
+        <div class="mt-1.5 flex flex-wrap items-center gap-1" data-testid="review-scope-tags">
+          <span class="text-xs text-muted-foreground">{$t('review.tag_scope')}</span>
+          {#each scopeTags as tag (tag)}
+            <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <div class="flex items-center gap-2 self-start sm:self-auto">
       <!-- 撤销上一次评分：自评题提交后没有结果面板，入口在这里；判分题面板打开时隐藏，避免两个入口。 -->
       {#if lastUndo && !feedback}

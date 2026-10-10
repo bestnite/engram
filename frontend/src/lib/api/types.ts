@@ -446,6 +446,7 @@ export interface SubmitSelfReviewRequest {
   expected_version: number;
   elapsed_ms?: number;
   deck?: string[];
+  tags?: string[];
 }
 
 export interface SubmitReviewResult {
@@ -474,6 +475,7 @@ export interface SubmitGradedReviewRequest {
   expected_version?: number;
   elapsed_ms?: number;
   deck?: string[];
+  tags?: string[];
   action?: 'reveal' | 'give_up';
   answer?: GradedAnswer;
 }
@@ -552,7 +554,19 @@ export interface ReviewUndoResponse {
  */
 export interface DueCardsQuery {
   deck?: string | string[];
+  /** 只取带有其中任一标签的卡；带标签时 deck 必须恰好一个，否则服务端返回 400。 */
+  tag?: string[];
   limit?: number;
+}
+
+/** 卡组里的一个标签及带有它的笔记数（GET /api/v1/decks/:id/tags）。 */
+export interface DeckTag {
+  tag: string;
+  notes: number;
+}
+
+export interface DeckTagsResponse {
+  tags: DeckTag[];
 }
 
 /**
