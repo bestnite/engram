@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"git.nite07.com/nite/engram/internal/texmath"
 )
 
 // ClozeDeletion 是一次挖空：{{cN::text}} 或 {{cN::text::hint}}。
@@ -234,10 +236,17 @@ func parseClozeTemplate(template string) (int, bool) {
 
 // renderCloze 按字节偏移重建文本，挖空之外的部分一字不差地保留 Markdown/TeX 原文。
 //
-// 挖空标记本身绝不出现在卡面上：目标序号正面换成占位、背面换成内容，两者都包在
-// <span class="cloze"> 里供样式高亮；其它序号只显示内容。span[class] 在 render 包的
-// 白名单内，Markdown 行内原始 HTML 会原样通过 goldmark，内容里的 Markdown 照常渲染。
+// 挖空标记本身绝不出现在卡面上：目标序号正面换成占位、背面换成内容，其它序号只显示内容。
+// 目标序号的高亮按位置分两种写法：
+//   - 公式外包在 <span class="cloze"> 里。span[class] 在 render 包的白名单内，Markdown
+//     行内原始 HTML 会原样通过 goldmark，内容里的 Markdown 照常渲染。
+//   - 公式内写成 MathJax 的 \class{cloze}{…}。render 包把公式整段当纯文本保护并转义
+//     < > &，公式里的 span 只会变成字面尖括号；而公式也不能在挖空处切成几段，否则
+//     \dfrac{…}{…} 这样的分组会断开。\class 让 MathJax 自己给这一段加上 cloze 类。
+//
+// 只跨进公式一半的挖空按公式外处理：两种写法都不成立，保留原来的 span。
 func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) string {
+	math := texmath.Ranges(text)
 	var b strings.Builder
 	last := 0
 	for _, d := range dels {
@@ -246,11 +255,17 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 			continue
 		}
 		b.WriteString(text[last:d.Start])
+		inMath := texmath.Contains(math, d.Start, d.End)
 		switch {
 		case d.Index != target:
 			b.WriteString(stripCloze(d.Text))
+		case reveal && inMath:
+			b.WriteString(`\class{cloze}{` + stripCloze(d.Text) + `}`)
 		case reveal:
 			b.WriteString(`<span class="cloze">` + stripCloze(d.Text) + `</span>`)
+		case inMath:
+			// 占位是文字而不是 TeX，用 \text 排版；提示原样放进 \text，花括号需成对。
+			b.WriteString(`\class{cloze}{\text{` + clozeBlank(d) + `}}`)
 		default:
 			b.WriteString(`<span class="cloze">` + clozeBlank(d) + `</span>`)
 		}
