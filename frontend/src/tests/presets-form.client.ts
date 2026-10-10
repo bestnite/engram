@@ -98,9 +98,9 @@ describe('PresetsView max interval saving', () => {
     await type('presets-form-max-interval', '');
     await submit();
     expect(update).not.toHaveBeenCalled();
-    // 只断言「拦下了且有提示」：PresetsView 目前把 i18n key 原样渲染（没有过 $t），
-    // 断言中文文案会把那个缺陷固化成期望，所以这里不锁文本内容。
+    // 提示必须是语言包文案，不是 key 本身：对话框曾经把 formError 原样渲染。
     const error = document.body.querySelector('[data-testid="presets-form-error"]');
-    expect(error?.textContent?.trim()).not.toBe('');
+    expect(error?.textContent).toContain('最大间隔必须是正整数天数。');
+    expect(error?.textContent).not.toContain('presets.form.error');
   });
 });

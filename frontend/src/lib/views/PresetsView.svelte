@@ -625,7 +625,7 @@
     testId="presets-form-dialog"
   >
       {#if formError}
-        <p role="alert" data-testid="presets-form-error" class="rounded-xl border border-rose-200 dark:border-rose-900/60 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">{formError}</p>
+        <p role="alert" data-testid="presets-form-error" class="rounded-xl border border-rose-200 dark:border-rose-900/60 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">{$t(formError)}</p>
       {/if}
       <form onsubmit={submitForm} data-testid="presets-form" class="space-y-4">
         <label class="block">
