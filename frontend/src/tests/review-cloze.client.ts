@@ -103,15 +103,18 @@ describe('ReviewView cloze blanks', () => {
     expect(target.querySelector('[data-testid="review-graded-verdict"]')).not.toBeNull();
   });
 
-  it('reveals the answer directly under the card header without a second rule', async () => {
+  it('keeps the prompt above the revealed answer, separated by one rule', async () => {
     const { target } = await setup(['', 'city']);
     (target.querySelector('[data-testid="review-graded-reveal"]') as HTMLElement).click();
     await flush();
+    // 揭示答案后题干仍在上方，答案面板用自己的顶线与题干隔开；答案块本身不再画线，免得两条线叠在一起。
+    expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('city');
+    const panel = target.querySelector('[data-testid="review-graded-revealed"]') as HTMLElement;
+    expect(panel.className).toContain('border-t');
     const answer = target.querySelector('[data-testid="review-graded-revealed-answer"]') as HTMLElement;
     expect(answer.textContent).toContain('Paris and Rome');
-    // 揭示后题干区被替换，答案块紧接卡片头部的底线；它自己再画顶线就会出现两条线。
     expect(answer.className).not.toContain('border-t');
-    expect(target.querySelector('[data-testid="review-graded-prompt"]')).toBeNull();
+    expect(target.querySelector('[data-testid="review-graded-blanks"]')).toBeNull();
   });
 
   it('does not submit when the render response gave no blanks', async () => {

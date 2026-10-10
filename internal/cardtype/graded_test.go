@@ -325,3 +325,27 @@ func TestGradedValidateAndRenderHappyPath(t *testing.T) {
 		})
 	}
 }
+
+// TestTypedBackJoinsAcceptedAnswers 断言输入作答卡的背面把标准答案和其它可接受答案写在同一行，
+// 用「 / 」分隔；没有其它可接受答案时只有标准答案。
+func TestTypedBackJoinsAcceptedAnswers(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields map[string]any
+		want   string
+	}{
+		{"with accepted answers", map[string]any{"prompt": "capital?", "answer": "Paris", "accept": []any{"巴黎", "paris city"}}, "Paris / 巴黎 / paris city"},
+		{"answer only", map[string]any{"prompt": "capital?", "answer": "Paris"}, "Paris"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			back, err := typedType{}.Render(Card{Template: "forward", Fields: tc.fields}, SideBack)
+			if err != nil {
+				t.Fatalf("Render back: %v", err)
+			}
+			if back.Body != tc.want || len(back.Extra) != 0 {
+				t.Errorf("back = %+v, want body %q and no extra", back, tc.want)
+			}
+		})
+	}
+}

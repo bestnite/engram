@@ -824,158 +824,161 @@
             </button>
           {/if}
         {:else if gradedKind}
-          {#if feedback}
-            <div bind:this={feedbackSection} class="space-y-5" data-testid="review-graded-result">
-              <div class="flex items-center justify-between">
-                <Badge variant={verdictVariant(feedback.verdict)} class="gap-1.5 px-3 py-1 text-sm font-semibold" testId="review-graded-verdict">
-                  {#if feedback.verdict === 'correct'}
-                    <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                  {:else if feedback.verdict === 'partial'}
-                    <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
+          <!-- 作答题的题干在作答、揭示答案、判分结果三个状态下都留在上方，答案用分割线接在下面，
+               学习者看答案时不必回想原题。 -->
+          <div class="space-y-5">
+            <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-graded-prompt">
+              {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt($cardTypes, current)}{/if}
+            </div>
+            {#if feedback}
+              <div bind:this={feedbackSection} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-result">
+                <div class="flex items-center justify-between">
+                  <Badge variant={verdictVariant(feedback.verdict)} class="gap-1.5 px-3 py-1 text-sm font-semibold" testId="review-graded-verdict">
+                    {#if feedback.verdict === 'correct'}
+                      <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                      </svg>
+                    {:else if feedback.verdict === 'partial'}
+                      <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    {:else}
+                      <svg class="w-4 h-4 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                      </svg>
+                    {/if}
+                    <span>{$t(`review.graded.${feedback.verdict}`)}</span>
+                  </Badge>
+                  <Badge testId="review-graded-score" class="px-2.5 py-1 font-mono">
+                    {$t('review.graded.score')} · {Math.round(feedback.score * 100)}%
+                  </Badge>
+                </div>
+                <div>
+                  <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
+                  {#if feedback.breakdown && feedback.breakdown.length}
+                    <!-- 逐项判分：按条目顺序标出想起（✓）与漏掉（✗）的每一项。 -->
+                    <ul class="space-y-1.5 text-lg" data-testid="review-graded-breakdown">
+                      {#each feedback.breakdown as item, index (index)}
+                        <li class="flex items-start gap-2" data-testid="review-graded-breakdown-item" data-correct={item.correct}>
+                          {#if item.correct}
+                            <svg class="mt-1.5 w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.correct')}><polyline points="20 6 9 17 4 12"/></svg>
+                          {:else}
+                            <svg class="mt-1.5 w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.incorrect')}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          {/if}
+                          <div class="min-w-0 break-words font-medium [&_p]:m-0">{@html item.answer_html}</div>
+                        </li>
+                      {/each}
+                    </ul>
                   {:else}
-                    <svg class="w-4 h-4 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
+                    <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
                   {/if}
-                  <span>{$t(`review.graded.${feedback.verdict}`)}</span>
-                </Badge>
-                <Badge testId="review-graded-score" class="px-2.5 py-1 font-mono">
-                  {$t('review.graded.score')} · {Math.round(feedback.score * 100)}%
-                </Badge>
-              </div>
-              <div class="border-t border-input pt-5">
-                <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
-                {#if feedback.breakdown && feedback.breakdown.length}
-                  <!-- 逐项判分：按条目顺序标出想起（✓）与漏掉（✗）的每一项。 -->
-                  <ul class="space-y-1.5 text-lg" data-testid="review-graded-breakdown">
-                    {#each feedback.breakdown as item, index (index)}
-                      <li class="flex items-start gap-2" data-testid="review-graded-breakdown-item" data-correct={item.correct}>
-                        {#if item.correct}
-                          <svg class="mt-1.5 w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.correct')}><polyline points="20 6 9 17 4 12"/></svg>
-                        {:else}
-                          <svg class="mt-1.5 w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.incorrect')}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        {/if}
-                        <div class="min-w-0 break-words font-medium [&_p]:m-0">{@html item.answer_html}</div>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
+                </div>
+                {#if feedback.given}
+                  <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.given')}</span> · {feedback.given}</div>
                 {/if}
-              </div>
-              {#if feedback.given}
-                <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.given')}</span> · {feedback.given}</div>
-              {/if}
-              {#if feedback.parsed}
-                <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
-              {/if}
-              <div class="text-sm text-zinc-500" data-testid="review-graded-rating">{$t('review.graded.rating')} · {$t(`review.rating.${feedback.rating}`)}</div>
-              <div class="flex flex-col sm:flex-row gap-3">
-                <button type="button" class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
-                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
-              </div>
-            </div>
-          {:else if gradedRevealed}
-            <div bind:this={revealedSection} class="space-y-5" data-testid="review-graded-revealed">
-              <!-- 揭示后题干区被整块替换，这里紧接卡片头部的分割线，不再画顶线，免得两条线叠在一起。 -->
-              <div data-testid="review-graded-revealed-answer">
-                <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
-                <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>
-              </div>
-              <button type="button" disabled={submitting} class="w-full min-h-12 rounded-xl border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-medium disabled:opacity-50 transition-colors cursor-pointer" onclick={() => void giveUp()} data-testid="review-graded-give-up">{$t('review.graded.give_up')}</button>
-            </div>
-          {:else}
-            <div class="space-y-5">
-              <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-graded-prompt">
-                {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt($cardTypes, current)}{/if}
-              </div>
-              {#if answerControl === 'text' || answerControl === 'number'}
-                <input
-                  bind:this={inputElement}
-                  type="text"
-                  inputmode={answerControl === 'number' ? 'decimal' : undefined}
-                  bind:value={answerText}
-                  placeholder={answerControl === 'number' ? $t('review.graded.placeholder_number') : $t('review.graded.placeholder')}
-                  aria-label={$t('review.graded.placeholder')}
-                  data-testid="review-graded-input"
-                  class="field-input text-sm w-full min-h-12 text-lg"
-                />
-              {:else if answerControl === 'single'}
-                <RadioGroup
-                  testId="review-graded-options"
-                  itemTestId="review-graded-option"
-                  itemClass="min-h-12"
-                  name="graded-single"
-                  ariaLabel={$t('review.ratings')}
-                  value={singleChoice === null ? '' : String(singleChoice)}
-                  onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
-                  options={gradedOptions($cardTypes, current).map((option, index) => ({ value: String(index), label: option }))}
-                />
-              {:else if answerControl === 'multi'}
-                <div class="space-y-2" data-testid="review-graded-options">
-                  {#each gradedOptions($cardTypes, current) as option, index (index)}
-                    <!-- 整行是 label：点选项文字也切换复选框，与单选题整行可点一致；选中样式同单选。 -->
-                    <label
-                      class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
-                      data-state={multiChoice.includes(index) ? 'checked' : 'unchecked'}
-                      data-testid="review-graded-option-row"
-                    >
-                      <Checkbox
-                        testId="review-graded-option"
-                        checked={multiChoice.includes(index)}
-                        onCheckedChange={(checked) =>
-                          (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
-                        label={option}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  {/each}
+                {#if feedback.parsed}
+                  <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
+                {/if}
+                <div class="text-sm text-zinc-500" data-testid="review-graded-rating">{$t('review.graded.rating')} · {$t(`review.rating.${feedback.rating}`)}</div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                  <button type="button" class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
+                  <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
                 </div>
-              {:else if answerControl === 'blanks' || answerControl === 'items'}
-                <div class="space-y-3" data-testid="review-graded-blanks">
-                  {#each blanks as hint, index (index)}
-                    <label class="block">
-                      <span class="mb-1 block text-xs text-zinc-500">{$t(answerControl === 'items' ? 'review.graded.item' : 'review.graded.blank', { index: index + 1 })}</span>
-                      <input
-                        bind:this={blankInputs[index]}
-                        type="text"
-                        bind:value={blankAnswers[index]}
-                        placeholder={hint || $t('review.graded.placeholder')}
-                        data-testid="review-graded-blank"
-                        class="field-input text-sm w-full min-h-12 text-lg"
-                      />
-                    </label>
-                  {/each}
-                </div>
-              {:else if answerControl === 'bool'}
-                <RadioGroup
-                  testId="review-graded-options"
-                  itemTestId="review-graded-option"
-                  class="grid grid-cols-2 gap-3"
-                  itemClass="min-h-12 justify-center font-medium"
-                  name="graded-bool"
-                  ariaLabel={$t('review.ratings')}
-                  value={boolChoice === null ? '' : String(boolChoice)}
-                  onValueChange={(value) => (boolChoice = value === '' ? null : value === 'true')}
-                  options={[
-                    { value: 'true', label: $t('review.graded.true') },
-                    { value: 'false', label: $t('review.graded.false') },
-                  ]}
-                />
-              {/if}
-              {#if needAnswer}
-                <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.graded.need_answer')}</p>
-              {/if}
-              <div class="flex flex-col sm:flex-row gap-3 pt-2">
-                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit">{$t('review.graded.submit')}</button>
-                <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal">{$t('review.graded.show_answer')}</button>
               </div>
-            </div>
-          {/if}
+            {:else if gradedRevealed}
+              <div bind:this={revealedSection} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
+                <div data-testid="review-graded-revealed-answer">
+                  <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
+                  <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>
+                </div>
+                <button type="button" disabled={submitting} class="w-full min-h-12 rounded-xl border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-medium disabled:opacity-50 transition-colors cursor-pointer" onclick={() => void giveUp()} data-testid="review-graded-give-up">{$t('review.graded.give_up')}</button>
+              </div>
+            {:else}
+              <div class="space-y-5">
+                {#if answerControl === 'text' || answerControl === 'number'}
+                  <input
+                    bind:this={inputElement}
+                    type="text"
+                    inputmode={answerControl === 'number' ? 'decimal' : undefined}
+                    bind:value={answerText}
+                    placeholder={answerControl === 'number' ? $t('review.graded.placeholder_number') : $t('review.graded.placeholder')}
+                    aria-label={$t('review.graded.placeholder')}
+                    data-testid="review-graded-input"
+                    class="field-input text-sm w-full min-h-12 text-lg"
+                  />
+                {:else if answerControl === 'single'}
+                  <RadioGroup
+                    testId="review-graded-options"
+                    itemTestId="review-graded-option"
+                    itemClass="min-h-12"
+                    name="graded-single"
+                    ariaLabel={$t('review.ratings')}
+                    value={singleChoice === null ? '' : String(singleChoice)}
+                    onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
+                    options={gradedOptions($cardTypes, current).map((option, index) => ({ value: String(index), label: option }))}
+                  />
+                {:else if answerControl === 'multi'}
+                  <div class="space-y-2" data-testid="review-graded-options">
+                    {#each gradedOptions($cardTypes, current) as option, index (index)}
+                      <!-- 整行是 label：点选项文字也切换复选框，与单选题整行可点一致；选中样式同单选。 -->
+                      <label
+                        class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
+                        data-state={multiChoice.includes(index) ? 'checked' : 'unchecked'}
+                        data-testid="review-graded-option-row"
+                      >
+                        <Checkbox
+                          testId="review-graded-option"
+                          checked={multiChoice.includes(index)}
+                          onCheckedChange={(checked) =>
+                            (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
+                          label={option}
+                        />
+                        <span>{option}</span>
+                      </label>
+                    {/each}
+                  </div>
+                {:else if answerControl === 'blanks' || answerControl === 'items'}
+                  <div class="space-y-3" data-testid="review-graded-blanks">
+                    {#each blanks as hint, index (index)}
+                      <label class="block">
+                        <span class="mb-1 block text-xs text-zinc-500">{$t(answerControl === 'items' ? 'review.graded.item' : 'review.graded.blank', { index: index + 1 })}</span>
+                        <input
+                          bind:this={blankInputs[index]}
+                          type="text"
+                          bind:value={blankAnswers[index]}
+                          placeholder={hint || $t('review.graded.placeholder')}
+                          data-testid="review-graded-blank"
+                          class="field-input text-sm w-full min-h-12 text-lg"
+                        />
+                      </label>
+                    {/each}
+                  </div>
+                {:else if answerControl === 'bool'}
+                  <RadioGroup
+                    testId="review-graded-options"
+                    itemTestId="review-graded-option"
+                    class="grid grid-cols-2 gap-3"
+                    itemClass="min-h-12 justify-center font-medium"
+                    name="graded-bool"
+                    ariaLabel={$t('review.ratings')}
+                    value={boolChoice === null ? '' : String(boolChoice)}
+                    onValueChange={(value) => (boolChoice = value === '' ? null : value === 'true')}
+                    options={[
+                      { value: 'true', label: $t('review.graded.true') },
+                      { value: 'false', label: $t('review.graded.false') },
+                    ]}
+                  />
+                {/if}
+                {#if needAnswer}
+                  <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.graded.need_answer')}</p>
+                {/if}
+                <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit">{$t('review.graded.submit')}</button>
+                  <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal">{$t('review.graded.show_answer')}</button>
+                </div>
+              </div>
+            {/if}
+          </div>
         {/if}
 
         {#if !feedback}
