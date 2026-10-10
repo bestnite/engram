@@ -881,7 +881,8 @@
             </div>
           {:else if gradedRevealed}
             <div bind:this={revealedSection} class="space-y-5" data-testid="review-graded-revealed">
-              <div class="border-t border-input pt-5">
+              <!-- 揭示后题干区被整块替换，这里紧接卡片头部的分割线，不再画顶线，免得两条线叠在一起。 -->
+              <div data-testid="review-graded-revealed-answer">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                 <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>
               </div>
