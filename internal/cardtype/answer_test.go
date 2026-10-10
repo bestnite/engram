@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 编译期断言：六个作答类题型实现完整的 Grader。Grader 加方法时漏实现的题型会在这里编译失败，
+// 编译期断言：七个作答类题型实现完整的 Grader。Grader 加方法时漏实现的题型会在这里编译失败，
 // 而不是在运行时被静默当成「可以自评」的题型。
 var (
 	_ Grader = typedType{}
@@ -15,12 +15,13 @@ var (
 	_ Grader = choiceMultiType{}
 	_ Grader = trueFalseType{}
 	_ Grader = clozeType{}
+	_ Grader = listType{}
 )
 
-// TestGradedKindsAreExactlyTheSix 断言注册表里实现 Grader 的题型恰好是这六个：
+// TestGradedKindsAreExactlyTheSeven 断言注册表里实现 Grader 的题型恰好是这七个：
 // 自评题型被误判为作答题会让它无法复习，反之会让作答题回到客户端自评。
-func TestGradedKindsAreExactlyTheSix(t *testing.T) {
-	want := map[string]bool{"typed": true, "numeric": true, "choice_single": true, "choice_multi": true, "true_false": true, "cloze": true}
+func TestGradedKindsAreExactlyTheSeven(t *testing.T) {
+	want := map[string]bool{"typed": true, "numeric": true, "choice_single": true, "choice_multi": true, "true_false": true, "cloze": true, "list": true}
 	for _, kind := range []string{"basic", "basic_both", "cloze", "list", "short_answer", "typed", "numeric", "choice_single", "choice_multi", "true_false"} {
 		ct, ok := Lookup(kind)
 		if !ok {
@@ -40,6 +41,9 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 	single := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answer": 1.0}
 	multi := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answers": []any{0.0, 2.0}}
 	tf := map[string]any{"statement": "s", "answer": true}
+	colours := map[string]any{"prompt": "p", "items": []any{"red", "green", "blue|violet"}}
+	steps := map[string]any{"prompt": "p", "items": []any{"wash", "cut", "cook"}, "ordered": true}
+	overlap := map[string]any{"prompt": "p", "items": []any{"blue|violet", "violet"}}
 	clozeAlt := map[string]any{"text": "{{c1::Paris|巴黎}} and {{c2::a\\|b}}"}
 	cloze := map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals; {{c2::\\(2x\\)}} is a derivative."}
 	cases := []struct {
@@ -84,6 +88,16 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 		{name: "cloze first alternative accepted", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["paris"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "paris"},
 		{name: "cloze answer outside the alternatives is wrong", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["Paris|巴黎"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "Paris|巴黎"},
 		{name: "cloze escaped pipe is typed as a plain pipe", kind: "cloze", template: "cloze:2", fields: clozeAlt, raw: `["a|b"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "a|b"},
+		{name: "list all items in any order", kind: "list", template: "forward", fields: colours, raw: `["Blue", "red", "GREEN"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "Blue, red, GREEN"},
+		{name: "list two of three is partial", kind: "list", template: "forward", fields: colours, raw: `["red", "", "violet"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "red, violet"},
+		{name: "list wrong entries do not cost points", kind: "list", template: "forward", fields: colours, raw: `["red", "pink", "green"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "red, pink, green"},
+		{name: "list repeating one item counts once", kind: "list", template: "forward", fields: colours, raw: `["red", "red", "red"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "red, red, red"},
+		{name: "list nothing written is wrong", kind: "list", template: "forward", fields: colours, raw: ``, wantRating: RatingAgain, wantVerdict: VerdictIncorrect},
+		{name: "list overlapping alternatives use the best matching", kind: "list", template: "forward", fields: overlap, raw: `["violet", "blue"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "violet, blue"},
+		{name: "ordered list in order", kind: "list", template: "forward", fields: steps, raw: `["wash", "cut", "cook"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "wash, cut, cook"},
+		{name: "ordered list out of order loses the misplaced items", kind: "list", template: "forward", fields: steps, raw: `["wash", "cook", "cut"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "wash, cook, cut"},
+		{name: "list more answers than items is ungradable", kind: "list", template: "forward", fields: colours, raw: `["a", "b", "c", "d"]`, ungradable: true},
+		{name: "list non-array rejected", kind: "list", template: "forward", fields: colours, raw: `"red"`, wantErr: true},
 		{name: "cloze non-array rejected", kind: "cloze", template: "cloze:1", fields: cloze, raw: `"Paris"`, wantErr: true},
 	}
 	for _, tc := range cases {
@@ -138,6 +152,25 @@ func TestClozeBlankHints(t *testing.T) {
 				t.Errorf("%s: BlankHints = %q, want %q", tc.template, got, tc.want)
 				break
 			}
+		}
+	}
+}
+
+// TestListBreakdown 断言逐项结果按条目顺序给出写法与是否想起，与判分细节一致。
+func TestListBreakdown(t *testing.T) {
+	fields := map[string]any{"prompt": "p", "items": []any{"red", "green", "blue|violet"}}
+	out, err := GradeAnswer(listType{}, GradeContext{Fields: fields, Template: "forward"}, json.RawMessage(`["violet", "red"]`))
+	if err != nil {
+		t.Fatalf("GradeAnswer: %v", err)
+	}
+	got := listType{}.Breakdown(out.Detail)
+	want := []BreakdownItem{{"red", true}, {"green", false}, {"blue / violet", true}}
+	if len(got) != len(want) {
+		t.Fatalf("Breakdown = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Breakdown[%d] = %+v, want %+v", i, got[i], want[i])
 		}
 	}
 }

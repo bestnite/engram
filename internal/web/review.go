@@ -108,8 +108,8 @@ type ReviewCardView struct {
 	Template        string
 	FrontHTML       string
 	BackHTML        string
-	// Blanks 是逐空作答题（挖空题）本卡每处目标挖空的提示，按出现顺序、无提示为空串；
-	// 复习页据此逐空给输入框。其它题型为 nil。
+	// Blanks 是逐空/逐项作答题（挖空题、列表题）每个输入框的提示，按顺序、无提示为空串；
+	// 复习页据此决定输入框个数。其它题型为 nil。
 	Blanks []string
 	// EditHref 指向该 note 的编辑页，供 e 键跳转。
 	EditHref string
@@ -174,8 +174,8 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	}, nil
 }
 
-// blankHinter 是逐空作答题型的可选能力：给出一张卡每处目标挖空的提示。
-// 题型知道一张卡有几个空，复习页不重新解析挖空语法。
+// blankHinter 是逐空/逐项作答题型的可选能力：给出一张卡每个输入框的提示。
+// 题型知道一张卡要几个输入框，复习页不重新解析字段。
 type blankHinter interface {
 	BlankHints(card cardtype.Card) []string
 }

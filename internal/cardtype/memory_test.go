@@ -118,12 +118,37 @@ func TestListValidateAndRender(t *testing.T) {
 	if front.Body != "Name the stages." || len(front.Extra) != 0 {
 		t.Errorf("front = %+v, want prompt only", front)
 	}
+	// 背面只给条目，不重复题干：复习页把背面接在正面下方，重复会出现两遍题干。
 	back, _ := listType{}.Render(cards[0], SideBack)
-	if back.Body != "Name the stages." || len(back.Extra) != 2 {
-		t.Fatalf("back = %+v, want prompt plus two items", back)
+	if back.Body != "- evaporation\n- condensation\n" || len(back.Extra) != 0 {
+		t.Errorf("back = %+v, want a bullet list of the items only", back)
 	}
-	if back.Extra[0] != "evaporation" || back.Extra[1] != "condensation" {
-		t.Errorf("back.Extra = %v", back.Extra)
+}
+
+// TestListBackFollowsOrdered 断言 ordered 决定背面的列表样式，多个可接受的写法全部列出。
+func TestListBackFollowsOrdered(t *testing.T) {
+	cases := []struct {
+		name    string
+		ordered any
+		want    string
+	}{
+		{"unordered by default", nil, "- red\n- blue / blue-violet\n"},
+		{"ordered numbers the items", true, "1. red\n2. blue / blue-violet\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := map[string]any{"prompt": "p", "items": []any{"red", "blue|blue-violet"}}
+			if tc.ordered != nil {
+				fields["ordered"] = tc.ordered
+			}
+			back, err := listType{}.Render(Card{Template: "forward", Fields: fields}, SideBack)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if back.Body != tc.want {
+				t.Errorf("back = %q, want %q", back.Body, tc.want)
+			}
+		})
 	}
 }
 
@@ -138,6 +163,7 @@ func TestListValidateErrors(t *testing.T) {
 		{"empty items", map[string]any{"prompt": "p", "items": []any{}}, `field "items" must not be empty`},
 		{"non-string item", map[string]any{"prompt": "p", "items": []any{"a", 2}}, `field "items"[1] must be a string`},
 		{"ordered wrong type", map[string]any{"prompt": "p", "items": []any{"a"}, "ordered": "yes"}, `field "ordered" must be a boolean`},
+		{"empty alternative", map[string]any{"prompt": "p", "items": []any{"a", "b|"}}, `field "items"[1] has an empty answer alternative`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

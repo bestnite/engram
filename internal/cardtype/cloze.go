@@ -359,12 +359,9 @@ func (clozeType) Grade(input any) (int, map[string]any, bool) {
 	hits := 0
 	for i, d := range targets {
 		expected[i] = stripEach(clozeAlternatives(d.Text, d.InMath))
-		for _, alt := range expected[i] {
-			if clozeMatches(given[i], unescapePipes(alt)) {
-				correct[i] = true
-				hits++
-				break
-			}
+		if matchesAlternatives(given[i], expected[i]) {
+			correct[i] = true
+			hits++
 		}
 	}
 	detail := map[string]any{"answers": expected, "given": given, "correct": correct}
@@ -405,8 +402,20 @@ func clozeTargets(fields map[string]any, template string) ([]ClozeDeletion, bool
 	return out, len(out) > 0
 }
 
-// clozeMatches 判断一空的作答是否等于挖空内容（规则见 Grade）。
-func clozeMatches(given, expected string) bool {
+// matchesAlternatives 判断作答是否命中任一个可接受的写法（挖空题与列表题共用）：
+// 忽略大小写并折叠空白；转义的 \| 按字面竖线比对；写法整体是行内公式 \( … \) 时，
+// 不带定界符的作答也算对，因为输入框里写不出排版后的公式。空作答永远不对。
+func matchesAlternatives(given string, alts []string) bool {
+	for _, alt := range alts {
+		if matchesAnswer(given, unescapePipes(alt)) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesAnswer 判断作答是否等于一个写法（规则见 matchesAlternatives）。
+func matchesAnswer(given, expected string) bool {
 	g := normalizeTyped(given, true, true)
 	if g == "" {
 		return false

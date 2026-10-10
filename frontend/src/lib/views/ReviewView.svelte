@@ -178,7 +178,8 @@
       case 'bool':
         return boolChoice ?? undefined;
       case 'blanks':
-        // 空数来自 render 响应；未取到时无从作答，按未作答拦截，而不是提交一个必错的空数组。
+      case 'items':
+        // 输入框个数来自 render 响应；未取到时无从作答，按未作答拦截，而不是提交一个必错的空数组。
         return blanks.length ? blankAnswers.slice(0, blanks.length) : undefined;
       default:
         return undefined;
@@ -812,7 +813,23 @@
               </div>
               <div class="border-t border-input pt-5">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
-                <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
+                {#if feedback.breakdown && feedback.breakdown.length}
+                  <!-- 逐项判分：按条目顺序标出想起（✓）与漏掉（✗）的每一项。 -->
+                  <ul class="space-y-1.5 text-lg" data-testid="review-graded-breakdown">
+                    {#each feedback.breakdown as item, index (index)}
+                      <li class="flex items-start gap-2" data-testid="review-graded-breakdown-item" data-correct={item.correct}>
+                        {#if item.correct}
+                          <svg class="mt-1.5 w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.correct')}><polyline points="20 6 9 17 4 12"/></svg>
+                        {:else}
+                          <svg class="mt-1.5 w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.incorrect')}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        {/if}
+                        <div class="min-w-0 break-words font-medium [&_p]:m-0">{@html item.answer_html}</div>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
+                {/if}
               </div>
               {#if feedback.given}
                 <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.given')}</span> · {feedback.given}</div>
@@ -876,11 +893,11 @@
                     </div>
                   {/each}
                 </div>
-              {:else if answerControl === 'blanks'}
+              {:else if answerControl === 'blanks' || answerControl === 'items'}
                 <div class="space-y-3" data-testid="review-graded-blanks">
                   {#each blanks as hint, index (index)}
                     <label class="block">
-                      <span class="mb-1 block text-xs text-zinc-500">{$t('review.graded.blank', { index: index + 1 })}</span>
+                      <span class="mb-1 block text-xs text-zinc-500">{$t(answerControl === 'items' ? 'review.graded.item' : 'review.graded.blank', { index: index + 1 })}</span>
                       <input
                         bind:this={blankInputs[index]}
                         type="text"

@@ -26,6 +26,7 @@ var allowedAnswerControls = map[string]bool{
 	AnswerMulti:  true,
 	AnswerBool:   true,
 	AnswerBlanks: true,
+	AnswerItems:  true,
 }
 
 // expectedGraded 是逐 kind 的硬事实：哪些题型实现 Grader。
@@ -34,7 +35,7 @@ var expectedGraded = map[string]bool{
 	"basic":         false,
 	"basic_both":    false,
 	"cloze":         true,
-	"list":          false,
+	"list":          true,
 	"typed":         true,
 	"numeric":       true,
 	"choice_single": true,

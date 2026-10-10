@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/api"
@@ -367,5 +368,59 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 	rev := reviewRowForCard(t, srv, cardID)
 	if rev.GradeSource != schedule.GradeSourceSelf || rev.Rating != int(schedule.Again) {
 		t.Fatalf("give_up review grade_source=%q rating=%d, want self/%d", rev.GradeSource, rev.Rating, schedule.Again)
+	}
+}
+
+// TestGradeListFeedbackBreakdown 断言列表题经 SPA 判分入口按想起的条数给部分分，反馈逐项标出
+// 对错（按条目顺序、写法经清洗），且 render 响应按条数给出输入框个数。
+func TestGradeListFeedbackBreakdown(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA list")
+	note := seedGradedNote(t, db, deck.ID, "list", map[string]any{"prompt": "primary colours", "items": []string{"red", "green", "**blue**|violet"}})
+	cardPub := cardPublicIDOfNote(t, db, note.ID)
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}, cookies, csrf)
+	var rendered struct {
+		Blanks []string `json:"blanks"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &rendered); err != nil || len(rendered.Blanks) != 3 {
+		t.Fatalf("render blanks = %v (err %v), want three inputs (body %s)", rendered.Blanks, err, snippet(rec.Body.String()))
+	}
+
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
+		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": []string{"violet", "red", ""},
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST grade status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var body struct {
+		Feedback struct {
+			Verdict   string `json:"verdict"`
+			Rating    int    `json:"rating"`
+			Given     string `json:"given"`
+			Breakdown []struct {
+				AnswerHTML string `json:"answer_html"`
+				Correct    bool   `json:"correct"`
+			} `json:"breakdown"`
+		} `json:"feedback"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode grade response: %v", err)
+	}
+	fb := body.Feedback
+	if fb.Verdict != "partial" || fb.Rating != int(schedule.Hard) || fb.Given != "violet, red" {
+		t.Errorf("feedback = %+v, want partial/Hard with given %q", fb, "violet, red")
+	}
+	want := []struct {
+		html    string
+		correct bool
+	}{{"red", true}, {"green", false}, {"<strong>blue</strong> / violet", true}}
+	if len(fb.Breakdown) != len(want) {
+		t.Fatalf("breakdown = %+v, want %d items", fb.Breakdown, len(want))
+	}
+	for i, w := range want {
+		if !strings.Contains(fb.Breakdown[i].AnswerHTML, w.html) || fb.Breakdown[i].Correct != w.correct {
+			t.Errorf("breakdown[%d] = %+v, want html containing %q correct=%v", i, fb.Breakdown[i], w.html, w.correct)
+		}
 	}
 }

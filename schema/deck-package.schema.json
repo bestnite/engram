@@ -167,7 +167,7 @@
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
         },
-        "ordered": { "type": "boolean", "default": true }
+        "ordered": { "type": "boolean", "default": false }
       },
       "additionalProperties": true
     },
