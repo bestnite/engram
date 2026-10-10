@@ -37,6 +37,12 @@ Live demo: <https://engram.nite07.com/> (registration is closed; sign in with th
 
 ---
 
+## Deck Library
+
+Ready-to-import `.edeck` packages live in [`decks/`](./decks/). Pick one, then import it from the **Import** page (upload the file, or paste the file's public direct link), the CLI (`engram import`), or the MCP `import_deck` tool. See [`decks/README.md`](./decks/README.md) for the deck list and the step-by-step instructions.
+
+---
+
 ## AI & MCP Integration
 
 Engram exposes a built-in Streamable HTTP MCP server at `/mcp` authenticated by user API keys. Any MCP-compatible client or agent (such as Claude Desktop, Cursor, or Hermes) can interact with your flashcards directly.

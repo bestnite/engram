@@ -37,6 +37,12 @@ Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）�
 
 ---
 
+## 卡组库
+
+[`decks/`](./decks/) 目录收录可直接导入的 `.edeck` 卡组包。在**导入**页上传文件或粘贴文件的公开直链即可导入，也可用 CLI（`engram import`）或 MCP 的 `import_deck` 工具。完整清单与操作步骤见 [`decks/README.zh.md`](./decks/README.zh.md)。
+
+---
+
 ## AI 与 MCP 集成
 
 Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 API Key 统一鉴权。支持在 Claude Desktop、Cursor、Hermes 等兼容 MCP 协议的客户端中直接调用。
