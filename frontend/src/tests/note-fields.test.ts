@@ -137,6 +137,17 @@ describe('field model conversions', () => {
     expect('items' in payload).toBe(false);
   });
 
+  it('keeps multi-choice answer indexes as numbers on submit', () => {
+    const form = toFormFields(fieldsForKind(catalog, 'choice_multi'), {
+      question: 'Which are prime?',
+      options: ['2', '4', '5'],
+      answers: [0, 2],
+    });
+    // 服务端只接受整数下标；曾经数组项一律 String() 后提交，["0","2"] 被以 400 拒绝，
+    // 界面上表现为填全了也一直提示「补全必填字段后即可预览」，保存同样失败。
+    expect(toPayloadFields(form)).toEqual({ question: 'Which are prime?', options: ['2', '4', '5'], answers: [0, 2] });
+  });
+
   it('keeps numeric fields as numbers when folding server fields into the form', () => {
     const form = toFormFields(fieldsForKind(catalog, 'numeric'), { prompt: 'g', value: 9.81, tolerance_absolute: 0 });
     expect(form.value).toBe(9.81);

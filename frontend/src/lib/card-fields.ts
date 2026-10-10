@@ -74,7 +74,16 @@ export function toPayloadFields(form: Record<string, unknown>): Record<string, u
       continue;
     }
     if (Array.isArray(value)) {
-      const items = value.map((item) => String(item).trim()).filter((item) => item !== '');
+      // 只修剪字符串项；数字项（多选题的答案下标）原样保留。服务端按整数解析下标，
+      // 统一转成字符串会让 ["0","2"] 被以 400 拒绝，预览与保存都因此失败。
+      const items = value.flatMap((item) => {
+        if (item === undefined || item === null) return [];
+        if (typeof item === 'string') {
+          const trimmed = item.trim();
+          return trimmed === '' ? [] : [trimmed];
+        }
+        return [item];
+      });
       if (items.length > 0) out[key] = items;
       continue;
     }
