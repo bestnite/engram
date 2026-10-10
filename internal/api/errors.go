@@ -64,6 +64,9 @@ const (
 	CodeImportURLFetchFailed = "deck_import_url_fetch_failed"
 	// CodeImportURLNotPackage 表示直链返回的内容不是卡组包（如 HTML 页面）。
 	CodeImportURLNotPackage = "deck_import_url_not_package"
+	// CodeImportUploadInvalid 表示上传票据不存在、已过期、已用过，或签发它的账号 / API key
+	// 已失效。几种原因合并成一个 code：补救方式相同（重新申请票据），也不向持有 URL 的人透露原因。
+	CodeImportUploadInvalid = "deck_import_upload_invalid"
 )
 
 // errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
@@ -103,6 +106,9 @@ var errorMessages = map[string]string{
 	CodeImportURLBlocked:     "The URL points to a network address that is not allowed.",
 	CodeImportURLFetchFailed: "The package could not be downloaded from the URL.",
 	CodeImportURLNotPackage:  "The URL did not return a deck package.",
+
+	// 上传票据导入（PUT /decks/import-uploads/:token）的稳定 code。
+	CodeImportUploadInvalid: "The upload URL is invalid, expired or already used; request a new one.",
 
 	// 卡组包导入的稳定 code（store.PackageError.Code）。
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",

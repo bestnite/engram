@@ -55,18 +55,8 @@ type importURLRequest struct {
 // 一次目标并再判一次权——重复但幂等，换来的是「权限判定先于取字节」这一不变式。
 func (a *API) ImportDeckPackageURL(ctx context.Context, u *store.User, apiKeyID *uint64, rawURL string, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	// 目标卡组权限：与文件导入同一判定，且在下载之前。
-	targetKind, targetDeckID, _, err := a.resolveImportTarget(ctx, opts.Target)
-	if err != nil {
+	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
-	}
-	if targetDeckID != 0 {
-		want := store.RoleEditor
-		if targetKind == "replace_deck" {
-			want = store.RoleOwner
-		}
-		if _, err := a.RequireDeckRole(ctx, u.ID, targetDeckID, want); err != nil {
-			return nil, err
-		}
 	}
 	// 用户级限流：REST 与 MCP 都经本方法，共用同一条按用户计数的池。放在判权之后、
 	// 下载之前，使「无权请求不消耗配额」与「配额用尽的请求绝不发起下载」同时成立。
