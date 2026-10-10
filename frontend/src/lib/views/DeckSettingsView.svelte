@@ -192,6 +192,8 @@
 
       <SettingsSection title={$t('deck.settings.heading')} description="{$t('deck.settings.personal_hint')} {$t('deck.settings.unlimited_hint')}">
         <p class="sr-only" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
+        <!-- 数字输入框一律不用 bind:value：它会把值强转成 number（空串变 null），而这两个
+             状态是字符串，由 parseCap 做「非负整数」校验；手写 value/oninput 才留得住原文。 -->
         <div class="grid max-w-xl gap-5 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium text-foreground" for="deck-settings-new">{$t('deck.settings.new_per_day')}</label>
@@ -201,7 +203,8 @@
               min="0"
               step="1"
               data-testid="deck-settings-new-per-day"
-              bind:value={newPerDay}
+              value={newPerDay}
+              oninput={(event) => (newPerDay = event.currentTarget.value)}
               class="field-input mt-1.5 block w-full text-sm"
             />
             <!-- 今日用量写在对应输入框下面：改上限时就能看到今天已经用了多少。 -->
@@ -218,7 +221,8 @@
               min="0"
               step="1"
               data-testid="deck-settings-reviews-per-day"
-              bind:value={reviewsPerDay}
+              value={reviewsPerDay}
+              oninput={(event) => (reviewsPerDay = event.currentTarget.value)}
               class="field-input mt-1.5 block w-full text-sm"
             />
             <dl class="mt-1.5 flex gap-3 text-xs text-muted-foreground">

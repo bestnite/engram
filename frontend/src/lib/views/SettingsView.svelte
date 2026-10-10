@@ -292,7 +292,9 @@
           </div>
           <div>
             <label for="settings-learn-ahead" class="block text-sm font-medium text-foreground">{$t('settings.profile.learn_ahead_label')}</label>
-            <input id="settings-learn-ahead" data-testid="settings-learn-ahead" type="number" min="0" max={MAX_LEARN_AHEAD_MINUTES} step="1" bind:value={learnAhead} class="field-input mt-1.5 w-full text-sm" />
+            <!-- 不用 bind:value：数字输入框的绑定会把值强转成 number，而这里的状态是字符串，
+                 由 validateLearnAheadMinutes 做「0–1440 整数」校验；手写 value/oninput 才留得住原文。 -->
+            <input id="settings-learn-ahead" data-testid="settings-learn-ahead" type="number" min="0" max={MAX_LEARN_AHEAD_MINUTES} step="1" value={learnAhead} oninput={(event) => (learnAhead = event.currentTarget.value)} class="field-input mt-1.5 w-full text-sm" />
             <p class="mt-1.5 text-xs text-muted-foreground">{$t('settings.profile.learn_ahead_hint')}</p>
             {#if fieldErrors.learn_ahead_minutes}
               <p data-testid="settings-error-learn-ahead" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.learn_ahead_minutes)}</p>
