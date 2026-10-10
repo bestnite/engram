@@ -127,3 +127,17 @@ describe('SPA MathJax loader', () => {
     await expect(mj.typeset([{} as Element])).resolves.toBeUndefined();
   });
 });
+
+/**
+ * Tailwind 的 preflight 把 svg 设成 display: block，MathJax 的 SVG 输出因此让每个行内公式
+ * 独占一行。app.css 必须把 mjx-container 里的 svg 还原成行内元素；这条规则被删掉，
+ * 复习页、编辑预览、分享页的行内公式就会重新各占一行。
+ */
+describe('MathJax SVG layout', () => {
+  it('keeps the MathJax svg inline despite the Tailwind preflight', async () => {
+    const fs = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const css = fs.readFileSync(fileURLToPath(new URL('../app.css', import.meta.url)), 'utf-8');
+    expect(css).toMatch(/mjx-container\[jax='SVG'\]\s*>\s*svg\s*\{\s*display:\s*inline;\s*\}/);
+  });
+});
