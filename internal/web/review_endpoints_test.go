@@ -208,6 +208,50 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	}
 }
 
+// TestReviewRenderOmitsChoiceOptionsFromFront 断言选择题的复习卡面正面只含题干：选项由复习页
+// 渲染成作答控件，若再拼进 front_html 会在页面上出现两遍。背面仍给出正确选项。
+func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Choice render deck")
+	cases := []struct {
+		name     string
+		kind     string
+		fields   map[string]any
+		question string
+		absent   []string
+		wantBack string
+	}{
+		{"single", "choice_single", map[string]any{"question": "pick-question", "options": []string{"opt-alpha", "opt-beta", "opt-gamma"}, "answer": 1}, "pick-question", []string{"opt-alpha", "opt-beta", "opt-gamma"}, "opt-beta"},
+		{"multi", "choice_multi", map[string]any{"question": "multi-question", "options": []string{"opt-one", "opt-two", "opt-three"}, "answers": []any{0, 2}}, "multi-question", []string{"opt-one", "opt-two", "opt-three"}, "opt-three"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			note := seedGradedNote(t, db, deck.ID, tc.kind, tc.fields)
+			rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
+				"card_id": cardPublicIDOfNote(t, db, note.ID), "deck": []string{deck.PublicID},
+			}, cookies, csrf)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+			}
+			var body reviewRenderBody
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+			}
+			if !strings.Contains(body.FrontHTML, tc.question) {
+				t.Errorf("front_html lost the question: %s", body.FrontHTML)
+			}
+			for _, option := range tc.absent {
+				if strings.Contains(body.FrontHTML, option) {
+					t.Errorf("front_html repeats option %q that the answer controls already show: %s", option, body.FrontHTML)
+				}
+			}
+			if !strings.Contains(body.BackHTML, tc.wantBack) {
+				t.Errorf("back_html = %s, want it to contain the correct option %q", body.BackHTML, tc.wantBack)
+			}
+		})
+	}
+}
+
 // TestReviewSuspendRemovesCardForCallerOnly 覆盖复习页的暂停端点：缺 CSRF 被拒且不写库（反面）；
 // 暂停后响应里的队列不再有这张卡，状态行带 suspended_at；进度数值不变。
 func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
