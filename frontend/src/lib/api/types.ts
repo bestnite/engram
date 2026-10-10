@@ -166,7 +166,7 @@ export type CardTypeFieldControl =
  * GET /api/v1/card-types 的作答控件取值。
  * 与 Go internal/cardtype 的 Answer* 常量逐项一致；none 表示自评题型。
  */
-export type CardTypeAnswerControl = 'none' | 'text' | 'number' | 'single' | 'multi' | 'bool' | 'blanks' | 'items';
+export type CardTypeAnswerControl = 'none' | 'text' | 'number' | 'single' | 'multi' | 'bool' | 'blanks' | 'items' | 'essay';
 
 /** 题型的一个字段规格（与 Go internal/cardtype.FieldSpec 对齐）。 */
 export interface CardTypeField {
@@ -448,6 +448,8 @@ export interface DueCardsResponse {
 export interface SubmitSelfReviewRequest {
   card_id: string;
   rating: number;
+  /** 简答题（answer_control = 'essay'）自评前写下的作答，随自评存档；其它题型不带。 */
+  answer?: string;
   expected_version: number;
   elapsed_ms?: number;
   deck?: string[];

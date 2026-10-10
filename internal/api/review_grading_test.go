@@ -45,6 +45,8 @@ func TestSubmitReviewGradingRules(t *testing.T) {
 		wantSource string
 		wantRating int
 		wantGrade  string
+		// wantDetail 是自评题型应存下的 grade_detail_json；空串表示不该存。
+		wantDetail string
 	}{
 		{name: "graded card rejects a self rating", kind: "true_false", fields: `{"statement":"s","answer":true}`, template: "forward",
 			body: `"rating":4`, wantStatus: http.StatusBadRequest, wantCode: CodeGradingRequired},
@@ -66,6 +68,16 @@ func TestSubmitReviewGradingRules(t *testing.T) {
 			body: `"rating":3,"grade_source":"llm"`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
 		{name: "self-assessed card rejects an answer", kind: "basic", fields: `{"front":"q","back":"a"}`, template: "forward",
 			body: `"answer":"a"`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
+		{name: "short answer stores the written answer with the self rating", kind: "short_answer", fields: `{"prompt":"why?","reference":"because"}`, template: "forward",
+			body: `"rating":3,"answer":"because of X"`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 3, wantDetail: `{"answer":"because of X"}`},
+		{name: "short answer without a written answer stores no detail", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",
+			body: `"rating":2,"answer":"  "`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 2},
+		{name: "short answer still needs a rating", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",
+			body: `"answer":"because"`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
+		{name: "short answer rejects a non-string answer", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",
+			body: `"rating":3,"answer":42`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
+		{name: "short answer cannot give up", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",
+			body: `"give_up":true`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
 		{name: "self-assessed card takes a rating", kind: "basic", fields: `{"front":"q","back":"a"}`, template: "forward",
 			body: `"rating":3,"grade_source":"self"`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 3},
 	}
@@ -117,6 +129,15 @@ func TestSubmitReviewGradingRules(t *testing.T) {
 			}
 			if tc.wantSource == "typed" && (reviews[0].GradeDetailJSON == nil || *reviews[0].GradeDetailJSON == "") {
 				t.Error("server-graded review has no grade detail")
+			}
+			if tc.wantSource == "self" {
+				got := ""
+				if reviews[0].GradeDetailJSON != nil {
+					got = *reviews[0].GradeDetailJSON
+				}
+				if got != tc.wantDetail {
+					t.Errorf("self review grade detail = %q, want %q", got, tc.wantDetail)
+				}
 			}
 		})
 	}

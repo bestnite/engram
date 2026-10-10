@@ -1200,12 +1200,14 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 // 由 SubmitReview 解析成主键后再进入调度。
 //
 // 评分来源由服务端决定，调用方不能指定：自评题型给 Rating；作答类题型（cardtype.Grader）
-// 给 Answer 由服务端判分，或给 GiveUp 表示放弃作答（记 Again）。两类字段混用即拒绝。
+// 给 Answer 由服务端判分，或给 GiveUp 表示放弃作答（记 Again）。自评题型只有能保存作答的
+// （简答题）才接受随 Rating 附带 Answer，作答原样存进复习记录、不影响评分。
 type SubmitReviewInput struct {
 	CardID string
 	// Rating 是自评分（1–4），只用于自评题型；作答类题型必须为 0。
 	Rating int
-	// Answer 是作答类题型的原始作答（JSON），解码规则由题型决定。
+	// Answer 是作答类题型的原始作答（JSON），解码规则由题型决定；自评题型里只有
+	// 能保存作答的题型接受它，随自评一并存档。
 	Answer json.RawMessage
 	// GiveUp 表示作答类题型放弃作答：不判分，按 Again 记一条自评日志。
 	GiveUp          bool
@@ -1323,13 +1325,20 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 	hasAnswer := len(bytes.TrimSpace(in.Answer)) > 0
 	g, graded := ct.(cardtype.Grader)
 	if !graded {
-		if hasAnswer || in.GiveUp {
-			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "answer and give_up apply only to card types graded by the server")
+		if in.GiveUp {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "give_up applies only to card types graded by the server")
 		}
 		if !schedule.Rating(in.Rating).Valid() {
 			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
 		}
-		return in.Rating, schedule.GradeSourceSelf, nil, nil, nil
+		if !hasAnswer {
+			return in.Rating, schedule.GradeSourceSelf, nil, nil, nil
+		}
+		detail, err := recordSelfAnswer(ct, in.Answer)
+		if err != nil {
+			return 0, "", nil, nil, err
+		}
+		return in.Rating, schedule.GradeSourceSelf, detail, nil, nil
 	}
 	if in.Rating != 0 {
 		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeGradingRequired, "this card type is graded by the server: send answer or give_up instead of rating")
@@ -1362,4 +1371,32 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 	return out.Rating, schedule.GradeSourceTyped, &detail, &GradeResult{
 		Rating: out.Rating, Score: out.Score, Verdict: out.Verdict, Given: out.Given, Detail: out.Detail,
 	}, nil
+}
+
+// answerRecorder 是自评题型的可选能力：把学习者自评前写下的作答解码成随复习记录保存的细节。
+// 评分仍是自评，来源仍记 self；保存作答是为了让日后的 LLM 判分有原文可用。
+type answerRecorder interface {
+	RecordAnswer(raw json.RawMessage) (map[string]any, error)
+}
+
+// recordSelfAnswer 把自评时附带的作答编码成 grade_detail_json。不收作答的自评题型拒绝，
+// 免得客户端以为作答被保存了；没有写内容时返回 nil，不存空作答。
+func recordSelfAnswer(ct cardtype.CardType, raw json.RawMessage) (*string, error) {
+	rec, ok := ct.(answerRecorder)
+	if !ok {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "answer applies only to card types that grade or record it")
+	}
+	detail, err := rec.RecordAnswer(raw)
+	if err != nil {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer must be a string")
+	}
+	if detail == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(detail)
+	if err != nil {
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to encode grade detail")
+	}
+	out := string(b)
+	return &out, nil
 }

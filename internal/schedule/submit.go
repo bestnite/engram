@@ -39,7 +39,7 @@ type SubmitInput struct {
 	ElapsedMS *int
 	// GradeSource 为空时按 self 处理；只接受 self/typed/llm。
 	GradeSource string
-	// GradeDetailJSON 是判分细节原文，可空（作答类题型或未来 LLM 评分使用）。
+	// GradeDetailJSON 是判分细节原文，可空（作答类题型、简答题自评时写下的作答，或未来 LLM 评分使用）。
 	GradeDetailJSON *string
 	// Scheduler 用于计算新状态，必填。
 	Scheduler *Scheduler

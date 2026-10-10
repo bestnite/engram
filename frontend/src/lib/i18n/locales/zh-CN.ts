@@ -1309,4 +1309,7 @@ export const zhCN: LocaleCatalog = {
   'package.toast.view_report': '查看结果',
   'review.graded.blank': '第 {index} 空',
   'review.graded.item': '第 {index} 项',
+  'review.essay.placeholder': '先写下你的答案，再查看参考答案。',
+  'review.essay.reference': '参考答案',
+  'review.essay.no_reference': '这张卡没有参考答案，请对照题目自己评分。',
 };

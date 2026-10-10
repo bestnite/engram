@@ -1,9 +1,16 @@
 package cardtype
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
-// shortAnswerType 是主观自由文本卡：prompt 提问，作答后自评，可选 reference 作参考答案
-// （「主观类」：先自评，LLM 评分留待后续）。
+// shortAnswerType 是主观自由文本卡：prompt 提问，学习者先写下自己的答案，再与可选的
+// reference 参考答案对照后自评（「主观类」：先自评，LLM 评分留待后续）。
+//
+// 先写再对照是它与 basic 的区别：把答案写出来比在脑子里过一遍更能检验是否真的记住。
+// 写下的作答随自评一起存进复习记录（见 RecordAnswer），LLM 判分接入时判的就是这段文字。
 //
 // 字段：prompt（必填）、reference（可选参考答案）、extra / source_url（可选）。
 // 本题型故意不实现 Grader：它不在机器判分集合内，复习流程对它走自评路径；
@@ -13,14 +20,16 @@ type shortAnswerType struct{}
 // Label 返回语言包键名。
 func (shortAnswerType) Label() string { return "cardtype.short_answer" }
 
-// Describe 自描述：正面 prompt、背面 reference；自评题型（不实现 Grader）。
+// Describe 自描述：正面 prompt、背面 reference；作答控件是自由书写，写完仍由学习者自评
+// （不实现 Grader）。
 func (shortAnswerType) Describe() Description {
 	return Description{
 		Kind:          "short_answer",
 		LabelKey:      "cardtype.short_answer",
-		AnswerControl: AnswerNone,
+		AnswerControl: AnswerEssay,
 		FrontField:    "prompt",
 		BackField:     "reference",
+		PromptField:   "prompt",
 		Fields: fieldsWithCommon(
 			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "reference", Control: ControlTextarea},
@@ -51,7 +60,8 @@ func (shortAnswerType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面显示 prompt；背面在 prompt 之外给出参考答案（有则逐条展示，无则只给 prompt）。
+// Render 正面显示 prompt；背面只给参考答案，不重复题干（复习页把背面接在正面下方）。
+// 没有参考答案时背面为空，复习页只对照学习者自己写下的作答。
 func (shortAnswerType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -67,10 +77,20 @@ func (shortAnswerType) Render(card Card, side Side) (RenderResult, error) {
 	if err != nil {
 		return RenderResult{}, fmt.Errorf("short_answer: %w", err)
 	}
-	if ref == "" {
-		return RenderResult{Body: prompt}, nil
+	return RenderResult{Body: ref}, nil
+}
+
+// RecordAnswer 解码学习者自评前写下的作答（字符串），返回随复习记录保存的细节。
+// 没写（空作答或只有空白）返回 nil：不存一条空作答。
+func (shortAnswerType) RecordAnswer(raw json.RawMessage) (map[string]any, error) {
+	answer, err := answerString(raw, "short_answer")
+	if err != nil {
+		return nil, err
 	}
-	return RenderResult{Body: prompt, Extra: []string{ref}}, nil
+	if strings.TrimSpace(answer) == "" {
+		return nil, nil
+	}
+	return map[string]any{"answer": answer}, nil
 }
 
 // optionalStringField 读取可选字符串字段：缺失或 nil 返回空串，存在时必须是非空字符串。

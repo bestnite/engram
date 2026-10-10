@@ -1310,4 +1310,7 @@ export const en: LocaleCatalog = {
   'package.toast.view_report': 'View result',
   'review.graded.blank': 'Blank {index}',
   'review.graded.item': 'Item {index}',
+  'review.essay.placeholder': 'Write your answer first, then check the reference.',
+  'review.essay.reference': 'Reference answer',
+  'review.essay.no_reference': 'This card has no reference answer; rate yourself against the question.',
 };

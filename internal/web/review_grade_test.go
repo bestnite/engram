@@ -424,3 +424,36 @@ func TestGradeListFeedbackBreakdown(t *testing.T) {
 		}
 	}
 }
+
+// TestSelfReviewStoresShortAnswer 断言 SPA 自评入口把简答题写下的作答透传给 service 存档
+// （来源仍是 self），而不收作答的自评题型带了作答就被拒绝、不写库。
+func TestSelfReviewStoresShortAnswer(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA short answer")
+	short := seedGradedNote(t, db, deck.ID, "short_answer", map[string]any{"prompt": "why?", "reference": "because"})
+	basic := seedBasic(t, db, deck.ID, "Q", "A")
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/answer", map[string]any{
+		"card_id": cardPublicIDOfNote(t, db, short.ID), "rating": 3, "expected_version": 0,
+		"deck": []string{deck.PublicID}, "answer": "because of X",
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST answer = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	rev := reviewRowForCard(t, srv, cardIDOfNote(t, db, short.ID))
+	if rev.GradeSource != schedule.GradeSourceSelf || rev.Rating != 3 || derefDetail(rev.GradeDetailJSON) != `{"answer":"because of X"}` {
+		t.Errorf("review = source %q rating %d detail %s, want self/3 with the written answer", rev.GradeSource, rev.Rating, derefDetail(rev.GradeDetailJSON))
+	}
+
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/answer", map[string]any{
+		"card_id": cardPublicIDOfNote(t, db, basic.ID), "rating": 3, "expected_version": 0,
+		"deck": []string{deck.PublicID}, "answer": "A",
+	}, cookies, csrf)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST answer on basic = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var n int64
+	if err := db.Model(&store.Review{}).Where("card_id = ?", cardIDOfNote(t, db, basic.ID)).Count(&n).Error; err != nil || n != 0 {
+		t.Errorf("rejected basic submission wrote %d review rows (err %v)", n, err)
+	}
+}

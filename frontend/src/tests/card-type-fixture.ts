@@ -127,10 +127,10 @@ const kinds: CardTypeDescription[] = [
     kind: 'short_answer',
     label_key: 'cardtype.short_answer',
     graded: false,
-    answer_control: 'none',
+    answer_control: 'essay',
     front_field: 'prompt',
     back_field: 'reference',
-    prompt_field: '',
+    prompt_field: 'prompt',
     options_field: '',
     fields: withCommon([
       { key: 'prompt', control: 'textarea', required: true },

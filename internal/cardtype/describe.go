@@ -29,6 +29,7 @@ const (
 	AnswerBool   = "bool"   // 判断题
 	AnswerBlanks = "blanks" // 逐空输入（挖空题）：每处目标挖空一个文本框
 	AnswerItems  = "items"  // 逐项输入（列表题）：每个条目一个文本框
+	AnswerEssay  = "essay"  // 自由书写后自评（简答题）：写下的作答随自评保存，不判分
 )
 
 // FieldSpec 描述题型的一个字段在编辑表单里的形态；Control 的取值集合与前端控件一一对应。

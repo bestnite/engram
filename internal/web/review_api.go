@@ -25,6 +25,8 @@ type reviewRequest struct {
 	ElapsedMS       *int     `json:"elapsed_ms"`
 	Deck            []string `json:"deck"`
 	Tags            []string `json:"tags"`
+	// Answer 是自评前写下的作答（简答题），随自评存档；其它自评题型不带。
+	Answer json.RawMessage `json:"answer"`
 }
 
 // gradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
@@ -70,7 +72,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	}
 	// 作答类题型的自评分由 service 拒绝（grading_required）：SPA 对这类卡走 /api/v1/review/grade。
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
-		CardID: req.CardID, Rating: req.Rating, ExpectedVersion: req.ExpectedVersion,
+		CardID: req.CardID, Rating: req.Rating, Answer: req.Answer, ExpectedVersion: req.ExpectedVersion,
 		ElapsedMS: req.ElapsedMS,
 	})
 	if err != nil {
