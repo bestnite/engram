@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 编译期断言：五个作答类题型实现完整的 Grader。Grader 加方法时漏实现的题型会在这里编译失败，
+// 编译期断言：六个作答类题型实现完整的 Grader。Grader 加方法时漏实现的题型会在这里编译失败，
 // 而不是在运行时被静默当成「可以自评」的题型。
 var (
 	_ Grader = typedType{}
@@ -14,12 +14,13 @@ var (
 	_ Grader = choiceSingleType{}
 	_ Grader = choiceMultiType{}
 	_ Grader = trueFalseType{}
+	_ Grader = clozeType{}
 )
 
-// TestGradedKindsAreExactlyTheFive 断言注册表里实现 Grader 的题型恰好是这五个：
+// TestGradedKindsAreExactlyTheSix 断言注册表里实现 Grader 的题型恰好是这六个：
 // 自评题型被误判为作答题会让它无法复习，反之会让作答题回到客户端自评。
-func TestGradedKindsAreExactlyTheFive(t *testing.T) {
-	want := map[string]bool{"typed": true, "numeric": true, "choice_single": true, "choice_multi": true, "true_false": true}
+func TestGradedKindsAreExactlyTheSix(t *testing.T) {
+	want := map[string]bool{"typed": true, "numeric": true, "choice_single": true, "choice_multi": true, "true_false": true, "cloze": true}
 	for _, kind := range []string{"basic", "basic_both", "cloze", "list", "short_answer", "typed", "numeric", "choice_single", "choice_multi", "true_false"} {
 		ct, ok := Lookup(kind)
 		if !ok {
@@ -39,9 +40,11 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 	single := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answer": 1.0}
 	multi := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answers": []any{0.0, 2.0}}
 	tf := map[string]any{"statement": "s", "answer": true}
+	cloze := map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals; {{c2::\\(2x\\)}} is a derivative."}
 	cases := []struct {
 		name        string
 		kind        string
+		template    string
 		fields      map[string]any
 		raw         string
 		wantErr     bool
@@ -66,11 +69,22 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 		{name: "true_false correct", kind: "true_false", fields: tf, raw: `true`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "true"},
 		{name: "true_false missing rejected", kind: "true_false", fields: tf, raw: ``, wantErr: true},
 		{name: "true_false string rejected", kind: "true_false", fields: tf, raw: `"true"`, wantErr: true},
+		{name: "cloze all blanks correct ignoring case and spaces", kind: "cloze", template: "cloze:1", fields: cloze, raw: `["  paris", "ROME "]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "  paris, ROME "},
+		{name: "cloze one of two blanks is partial", kind: "cloze", template: "cloze:1", fields: cloze, raw: `["Paris", "Milan"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "Paris, Milan"},
+		{name: "cloze answers in swapped order are wrong", kind: "cloze", template: "cloze:1", fields: cloze, raw: `["Rome", "Paris"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "Rome, Paris"},
+		{name: "cloze fewer answers count missing blanks as wrong", kind: "cloze", template: "cloze:1", fields: cloze, raw: `["Paris"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "Paris, "},
+		{name: "cloze missing answer grades as wrong", kind: "cloze", template: "cloze:1", fields: cloze, raw: ``, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: ", "},
+		{name: "cloze math answer without delimiters", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["2x"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "2x"},
+		{name: "cloze math answer with delimiters", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["\\(2x\\)"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: `\(2x\)`},
+		{name: "cloze blank answer never matches", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["  "]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "  "},
+		{name: "cloze more answers than blanks is ungradable", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["2x", "extra"]`, ungradable: true},
+		{name: "cloze unknown cloze number is ungradable", kind: "cloze", template: "cloze:9", fields: cloze, raw: `["x"]`, ungradable: true},
+		{name: "cloze non-array rejected", kind: "cloze", template: "cloze:1", fields: cloze, raw: `"Paris"`, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ct, _ := Lookup(tc.kind)
-			out, err := GradeAnswer(ct.(Grader), GradeContext{Fields: tc.fields}, json.RawMessage(tc.raw))
+			out, err := GradeAnswer(ct.(Grader), GradeContext{Fields: tc.fields, Template: tc.template}, json.RawMessage(tc.raw))
 			switch {
 			case tc.wantErr:
 				if err == nil || errors.Is(err, ErrUngradable) {
@@ -93,5 +107,32 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 				t.Errorf("detail rating = %v, want %d", out.Detail["rating"], out.Rating)
 			}
 		})
+	}
+}
+
+// TestClozeBlankHints 断言逐空提示按出现顺序只列本卡目标序号的挖空，无提示为空串；非法模板得到 nil。
+func TestClozeBlankHints(t *testing.T) {
+	fields := map[string]any{"text": "{{c1::Paris}} and {{c2::x}} and {{c1::Rome::city}}"}
+	cases := []struct {
+		template string
+		want     []string
+	}{
+		{"cloze:1", []string{"", "city"}},
+		{"cloze:2", []string{""}},
+		{"cloze:9", nil},
+		{"forward", nil},
+	}
+	for _, tc := range cases {
+		got := clozeType{}.BlankHints(Card{Template: tc.template, Fields: fields})
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: BlankHints = %q, want %q", tc.template, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: BlankHints = %q, want %q", tc.template, got, tc.want)
+				break
+			}
+		}
 	}
 }

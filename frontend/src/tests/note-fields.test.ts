@@ -81,10 +81,10 @@ describe('the catalog is driven by the server self-description', () => {
   });
 
   it('classifies graded kinds from the server flag, not a local list', () => {
-    for (const kind of ['typed', 'numeric', 'choice_single', 'choice_multi', 'true_false']) {
+    for (const kind of ['typed', 'numeric', 'choice_single', 'choice_multi', 'true_false', 'cloze']) {
       expect(isGraded(catalog, kind), kind).toBe(true);
     }
-    for (const kind of ['basic', 'basic_both', 'cloze', 'list', 'short_answer']) {
+    for (const kind of ['basic', 'basic_both', 'list', 'short_answer']) {
       expect(isGraded(catalog, kind), kind).toBe(false);
     }
     expect(isGraded(catalog, 'made_up_kind')).toBe(false);

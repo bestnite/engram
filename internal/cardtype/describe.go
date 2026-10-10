@@ -27,6 +27,7 @@ const (
 	AnswerSingle = "single" // 单选
 	AnswerMulti  = "multi"  // 多选
 	AnswerBool   = "bool"   // 判断题
+	AnswerBlanks = "blanks" // 逐空输入（挖空题）：每处目标挖空一个文本框
 )
 
 // FieldSpec 描述题型的一个字段在编辑表单里的形态；Control 的取值集合与前端控件一一对应。

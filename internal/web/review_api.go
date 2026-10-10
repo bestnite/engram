@@ -309,6 +309,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 		"card_id":    card.PublicID,
 		"front_html": view.FrontHTML,
 		"back_html":  view.BackHTML,
+		"blanks":     view.Blanks,
 		"edit_href":  view.EditHref,
 	})
 }

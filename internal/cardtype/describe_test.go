@@ -25,6 +25,7 @@ var allowedAnswerControls = map[string]bool{
 	AnswerSingle: true,
 	AnswerMulti:  true,
 	AnswerBool:   true,
+	AnswerBlanks: true,
 }
 
 // expectedGraded 是逐 kind 的硬事实：哪些题型实现 Grader。
@@ -32,7 +33,7 @@ var allowedAnswerControls = map[string]bool{
 var expectedGraded = map[string]bool{
 	"basic":         false,
 	"basic_both":    false,
-	"cloze":         false,
+	"cloze":         true,
 	"list":          false,
 	"typed":         true,
 	"numeric":       true,
@@ -117,7 +118,8 @@ func TestDescriptionsSelfConsistent(t *testing.T) {
 			if d.AnswerControl == AnswerNone && d.PromptField != "" {
 				t.Errorf("self-assess type has PromptField %q, want empty", d.PromptField)
 			}
-			if d.AnswerControl != AnswerNone && d.PromptField == "" {
+			// 逐空作答题例外：题面字段原文里就有答案，题面只能用服务端掩盖后的正面。
+			if d.AnswerControl != AnswerNone && d.AnswerControl != AnswerBlanks && d.PromptField == "" {
 				t.Error("graded type has an empty PromptField")
 			}
 			// 只有选择题有选项字段。

@@ -1265,7 +1265,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
 	}
 
-	rating, source, detailJSON, grade, err := a.resolveRating(note, preset, in)
+	rating, source, detailJSON, grade, err := a.resolveRating(card, note, preset, in)
 	if err != nil {
 		return SubmitReviewResult{}, err
 	}
@@ -1315,7 +1315,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 }
 
 // resolveRating 决定本次提交写入的评分、来源与判分细节（规则见 SubmitReview）。
-func (a *API) resolveRating(note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
+func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
 	ct, ok := cardtype.Lookup(note.Kind)
 	if !ok {
 		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "unknown card type")
@@ -1345,7 +1345,7 @@ func (a *API) resolveRating(note *store.Note, preset *store.Preset, in SubmitRev
 	if err != nil {
 		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note fields")
 	}
-	gc := cardtype.GradeContext{Fields: fields}
+	gc := cardtype.GradeContext{Fields: fields, Template: card.Template}
 	if m, err := preset.GradeMapping(); err == nil {
 		gc.Mapping = &m
 	}
