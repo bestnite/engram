@@ -12,6 +12,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
+  import HelpTip from '../components/ui/HelpTip.svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   interface Props {
@@ -982,18 +983,17 @@
         {/if}
 
         {#if !feedback}
-          <div class="pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground">
-            <div class="flex gap-2 self-start">
+          <div class="pt-4 border-t border-border flex items-center text-xs text-muted-foreground">
+            <div class="flex items-center gap-2">
               <Button variant="outline" size="sm" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
                 {$t('review.bury')}
               </Button>
               <Button variant="outline" size="sm" testId="review-suspend" disabled={submitting} onclick={() => void suspend()}>
                 {$t('review.suspend')}
               </Button>
+              <!-- 两个按钮的区别放进浮层：每张卡底部都常驻一整句说明太占眼，第一次不懂时点一下即可。 -->
+              <HelpTip testId="review-bury-hint" label={$t('help.review.bury_label')} text={$t('review.bury_hint')} />
             </div>
-            <p class="text-xs text-muted-foreground/70" data-testid="review-bury-hint">
-              {$t('review.bury_hint')}
-            </p>
           </div>
         {/if}
       </article>

@@ -620,9 +620,9 @@ export const en: LocaleCatalog = {
   'presets.edit.heading': 'Edit preset',
   'presets.form.name': 'Name',
   'presets.form.name_locked': 'The default preset cannot be renamed.',
-  'presets.form.retention': 'Desired retention (between 0 and 1, e.g. 0.9)',
-  'presets.form.learning_steps': 'Learning steps (comma-separated, e.g. 1m,10m; empty disables them)',
-  'presets.form.relearning_steps': 'Relearning steps (comma-separated, e.g. 10m; empty disables them)',
+  'presets.form.retention': 'Desired retention',
+  'presets.form.learning_steps': 'Learning steps',
+  'presets.form.relearning_steps': 'Relearning steps',
   'presets.form.max_interval': 'Maximum interval (days)',
   'presets.form.fuzz': 'Enable fuzz',
   'presets.form.save': 'Save',
@@ -1334,4 +1334,11 @@ export const en: LocaleCatalog = {
   'help.stats.retention_buckets_label': 'Memory strength',
   // ---- Note field syntax help (NoteFieldsForm popovers) ----
   'note_help.text': 'Mark each part to hide with {{c1::text}}.\nDeletions with the same number are tested together on one card, and each number makes its own card; the other deletions show their answer as context.\nSeparate accepted answers with |: {{c1::answer|alternative}}; the first one is the standard form.\nAdd a hint with {{c1::answer::hint}}; it appears in the blank during review.',
+  // ---- Form field help popovers (presets, review) ----
+  'help.presets.retention': 'The chance of still remembering a card when it comes due, as a decimal between 0 and 1, e.g. 0.9.\nHigher values mean shorter intervals and more reviews each day.',
+  'help.presets.learning_steps': 'Intervals for a new card while you first learn it; after the last step FSRS takes over scheduling.\nComma-separated, with units s / m / h / d (minutes when no unit is given), e.g. 1m,10m.\nLeave empty to disable.',
+  'help.presets.relearning_steps': 'Intervals for relearning a card after you rate a review Again, in the same format as learning steps, e.g. 10m.\nLeave empty to disable.',
+  'help.presets.max_interval': 'The longest gap allowed between two reviews, in days; longer computed intervals are cut to this value. The default of 36500 days means effectively no limit.',
+  'help.presets.fuzz': 'Adds a small random offset to computed intervals so cards learned on the same day do not keep coming due together. Only applies to intervals of 2.5 days or more.',
+  'help.review.bury_label': 'Bury and suspend',
 };

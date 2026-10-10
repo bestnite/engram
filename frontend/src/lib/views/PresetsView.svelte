@@ -6,6 +6,7 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
   import Checkbox from '../components/ui/Checkbox.svelte';
+  import HelpTip from '../components/ui/HelpTip.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
@@ -643,9 +644,14 @@
             </span>
           {/if}
         </label>
-        <label class="block">
-          <span class="text-sm font-medium text-foreground">{$t('presets.form.retention')}</span>
+        <!-- 说明按钮放在 label 之外：label 内的 button 会成为它的关联控件，点标签文字就会去开浮层。 -->
+        <div>
+          <div class="flex items-center gap-1">
+            <label for="presets-form-retention" class="text-sm font-medium text-foreground">{$t('presets.form.retention')}</label>
+            <HelpTip testId="presets-form-retention-help" label={$t('presets.form.retention')} text={$t('help.presets.retention')} />
+          </div>
           <input
+            id="presets-form-retention"
             type="text"
             inputmode="decimal"
             required
@@ -653,30 +659,42 @@
             data-testid="presets-form-retention"
             class="field-input text-sm mt-1 block w-full"
           />
-        </label>
-        <label class="block">
-          <span class="text-sm font-medium text-foreground">{$t('presets.form.learning_steps')}</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-1">
+            <label for="presets-form-learning-steps" class="text-sm font-medium text-foreground">{$t('presets.form.learning_steps')}</label>
+            <HelpTip testId="presets-form-learning-steps-help" label={$t('presets.form.learning_steps')} text={$t('help.presets.learning_steps')} />
+          </div>
           <input
+            id="presets-form-learning-steps"
             type="text"
             bind:value={formLearning}
             data-testid="presets-form-learning-steps"
             class="field-input text-sm mt-1 block w-full"
           />
-        </label>
-        <label class="block">
-          <span class="text-sm font-medium text-foreground">{$t('presets.form.relearning_steps')}</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-1">
+            <label for="presets-form-relearning-steps" class="text-sm font-medium text-foreground">{$t('presets.form.relearning_steps')}</label>
+            <HelpTip testId="presets-form-relearning-steps-help" label={$t('presets.form.relearning_steps')} text={$t('help.presets.relearning_steps')} />
+          </div>
           <input
+            id="presets-form-relearning-steps"
             type="text"
             bind:value={formRelearning}
             data-testid="presets-form-relearning-steps"
             class="field-input text-sm mt-1 block w-full"
           />
-        </label>
-        <label class="block">
-          <span class="text-sm font-medium text-foreground">{$t('presets.form.max_interval')}</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-1">
+            <label for="presets-form-max-interval" class="text-sm font-medium text-foreground">{$t('presets.form.max_interval')}</label>
+            <HelpTip testId="presets-form-max-interval-help" label={$t('presets.form.max_interval')} text={$t('help.presets.max_interval')} />
+          </div>
           <!-- 不用 bind:value：数字输入框的绑定会把值强转成 number，而这里的状态是字符串，
                由 parseForm 做「正整数」校验；手写 value/oninput 才留得住原文。 -->
           <input
+            id="presets-form-max-interval"
             type="number"
             min="1"
             required
@@ -685,10 +703,11 @@
             data-testid="presets-form-max-interval"
             class="field-input text-sm mt-1 block w-full"
           />
-        </label>
+        </div>
         <div class="flex items-center gap-2">
           <Checkbox bind:checked={formFuzz} testId="presets-form-fuzz" label={$t('presets.form.fuzz')} />
           <span class="text-sm text-foreground/80">{$t('presets.form.fuzz')}</span>
+          <HelpTip testId="presets-form-fuzz-help" label={$t('presets.form.fuzz')} text={$t('help.presets.fuzz')} />
         </div>
         {#if formMode === 'edit'}
           <p class="text-xs text-muted-foreground">{$t('presets.form.edit_note')}</p>

@@ -619,9 +619,9 @@ export const zhCN: LocaleCatalog = {
   'presets.edit.heading': '编辑预设',
   'presets.form.name': '名称',
   'presets.form.name_locked': '默认预设不能改名。',
-  'presets.form.retention': '目标保留率（0–1 之间，如 0.9）',
-  'presets.form.learning_steps': '学习步骤（逗号分隔，如 1m,10m；留空表示不启用）',
-  'presets.form.relearning_steps': '再学习步骤（逗号分隔，如 10m；留空表示不启用）',
+  'presets.form.retention': '目标保留率',
+  'presets.form.learning_steps': '学习步骤',
+  'presets.form.relearning_steps': '再学习步骤',
   'presets.form.max_interval': '最大间隔（天）',
   'presets.form.fuzz': '启用间隔抖动',
   'presets.form.save': '保存',
@@ -1333,4 +1333,11 @@ export const zhCN: LocaleCatalog = {
   'help.stats.retention_buckets_label': '记忆强度',
   // ---- 笔记字段语法说明（NoteFieldsForm 的问号浮层） ----
   'note_help.text': '用 {{c1::内容}} 把要挖空的部分标出来。\n编号相同的挖空在同一张卡上一起考，每个编号各生成一张卡；其余挖空作为上下文显示答案。\n多个可接受的答案用 | 分隔：{{c1::答案|另一种说法}}，第一个是标准写法。\n可加提示：{{c1::答案::提示}}，复习时显示在空格处。',
+  // ---- 表单字段说明浮层（预设、复习页） ----
+  'help.presets.retention': '希望到期复习时还记得的概率，填 0 到 1 之间的小数，如 0.9。\n设得越高，间隔越短，每天要复习的卡越多。',
+  'help.presets.learning_steps': '新卡刚开始学时的复习间隔，按顺序走完后交给 FSRS 排程。\n用逗号分隔，单位 s / m / h / d，不写单位按分钟，如 1m,10m。\n留空表示不启用。',
+  'help.presets.relearning_steps': '复习时答「重来」之后重新学习的间隔，格式同学习步骤，如 10m。\n留空表示不启用。',
+  'help.presets.max_interval': '两次复习之间最多相隔的天数，算出的间隔更长时按这个值截断。默认 36500 天，相当于不限制。',
+  'help.presets.fuzz': '给算出的间隔加一点随机偏移，让同一天学的卡不会总在同一天一起到期。只对 2.5 天以上的间隔生效。',
+  'help.review.bury_label': '埋藏与暂停',
 };
