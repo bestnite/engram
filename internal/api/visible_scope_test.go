@@ -114,12 +114,14 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 		t.Fatalf("grant viewer: %v", err)
 	}
 
-	// viewer 的两条历史复习：一条 rating=4、一条 rating=1，今日各一条。留存 = 1/2。
+	// viewer 今日的三条复习：两条到期复习（rating=4、rating=1）与一条新卡首次复习。
+	// 留存只数到期复习 = 1/2；新卡那条只进复习量。
 	day := schedule.ReviewDay(env.now, time.UTC, 4)
-	for _, rating := range []int{4, 1} {
+	stability := 5.0
+	for _, rv := range []struct{ rating, stateBefore int }{{4, 2}, {1, 2}, {3, 0}} {
 		if err := env.db.Create(&store.Review{
-			CardID: card.ID, UserID: viewer.ID, Rating: rating, GradeSource: "self",
-			ReviewedAt: env.now, ReviewDay: day, StateBefore: 0,
+			CardID: card.ID, UserID: viewer.ID, Rating: rv.rating, GradeSource: "self",
+			ReviewedAt: env.now, ReviewDay: day, StateBefore: rv.stateBefore, Stability: &stability,
 		}).Error; err != nil {
 			t.Fatalf("create review: %v", err)
 		}
@@ -138,11 +140,11 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 	if visible.Decks != 1 || visible.Notes != 1 || visible.Cards != 1 || visible.Due != 1 {
 		t.Fatalf("Stats (granted) content = %+v, want decks=1 notes=1 cards=1 due=1", visible)
 	}
-	if visible.ReviewsTotal != 2 || visible.ReviewsToday != 2 {
-		t.Fatalf("Stats (granted) reviews = %+v, want total=2 today=2", visible)
+	if visible.ReviewsTotal != 3 || visible.ReviewsToday != 3 {
+		t.Fatalf("Stats (granted) reviews = %+v, want total=3 today=3", visible)
 	}
-	if visible.Retention != 0.5 {
-		t.Fatalf("Stats (granted) retention = %v, want 0.5", visible.Retention)
+	if visible.Retention != 0.5 || visible.RetentionTotal != 2 || visible.RetentionPassed != 1 {
+		t.Fatalf("Stats (granted) retention = %v (%d/%d), want 0.5 (1/2)", visible.Retention, visible.RetentionPassed, visible.RetentionTotal)
 	}
 
 	// 撤销授权：内容计数归零，但复习历史必须原样保留（不得提前 return 清零）。
@@ -156,10 +158,10 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 	if revoked.Decks != 0 || revoked.Notes != 0 || revoked.Cards != 0 || revoked.Due != 0 {
 		t.Fatalf("Stats (revoked) content = %+v, want all content counts 0", revoked)
 	}
-	if revoked.ReviewsTotal != 2 || revoked.ReviewsToday != 2 {
-		t.Fatalf("Stats (revoked) reviews = %+v, want total=2 today=2 (history preserved)", revoked)
+	if revoked.ReviewsTotal != 3 || revoked.ReviewsToday != 3 {
+		t.Fatalf("Stats (revoked) reviews = %+v, want total=3 today=3 (history preserved)", revoked)
 	}
-	if revoked.Retention != 0.5 {
-		t.Fatalf("Stats (revoked) retention = %v, want 0.5 (history preserved)", revoked.Retention)
+	if revoked.Retention != 0.5 || revoked.RetentionTotal != 2 {
+		t.Fatalf("Stats (revoked) retention = %v over %d, want 0.5 over 2 (history preserved)", revoked.Retention, revoked.RetentionTotal)
 	}
 }

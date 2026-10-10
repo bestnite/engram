@@ -87,16 +87,18 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	if deck.Name != "Stats deck" || deck.DueCount != 1 || deck.Reviews != 3 || deck.ElapsedMS != 3000 {
 		t.Errorf("deck = %+v, want Stats deck due=1 reviews=3 elapsed=3000", deck)
 	}
-	if math.Abs(deck.Retention-2.0/3.0) > 1e-9 {
-		t.Errorf("deck retention = %v, want 2/3", deck.Retention)
+	// 留存是真实留存率：三条复习里只有两条到期复习（都非 Again），新卡那条 Again 不计入，
+	// 因此是 2/2 而不是「非 Again / 全部复习」的 2/3。
+	if math.Abs(deck.Retention-1) > 1e-9 || deck.RetentionTotal != 2 {
+		t.Errorf("deck retention = %v over %d, want 1 over 2 due reviews", deck.Retention, deck.RetentionTotal)
 	}
 
 	if len(detail.Tags) != 1 {
 		t.Fatalf("tags = %d, want 1", len(detail.Tags))
 	}
 	tag := detail.Tags[0]
-	if tag.Tag != "algebra" || tag.Reviews != 3 || math.Abs(tag.Retention-2.0/3.0) > 1e-9 {
-		t.Errorf("tag = %+v, want algebra reviews=3 retention=2/3", tag)
+	if tag.Tag != "algebra" || tag.Reviews != 3 || tag.RetentionTotal != 2 || math.Abs(tag.Retention-1) > 1e-9 {
+		t.Errorf("tag = %+v, want algebra reviews=3 retention=1 over 2 due reviews", tag)
 	}
 
 	grades := map[string]int64{}

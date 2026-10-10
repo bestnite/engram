@@ -288,14 +288,18 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 			if len(got) != 1 || got[0].DeckID != fx.deckID || got[0].Name != "Deck A" {
 				t.Fatalf("DeckBreakdown() = %+v, want one row for deck %d", got, fx.deckID)
 			}
-			var wantReviews, wantPassed, wantDue, wantElapsed int64
-			db.Raw(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN r.rating <> 1 THEN 1 ELSE 0 END), 0), COALESCE(SUM(r.elapsed_ms), 0)
+			// 留存的分母/分子是真实留存口径：只数 state_before=Review 的到期复习，而复习量仍数全部。
+			var wantReviews, wantRetTotal, wantPassed, wantDue, wantElapsed int64
+			db.Raw(`SELECT COUNT(*),
+				COALESCE(SUM(CASE WHEN r.state_before = 2 AND r.stability IS NOT NULL THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN r.state_before = 2 AND r.stability IS NOT NULL AND r.rating <> 1 THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(r.elapsed_ms), 0)
 				FROM reviews r
 				JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
 				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 				WHERE r.user_id = ?
 				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))`,
-				1, 1, 1).Row().Scan(&wantReviews, &wantPassed, &wantElapsed)
+				1, 1, 1).Row().Scan(&wantReviews, &wantRetTotal, &wantPassed, &wantElapsed)
 			db.Raw(`SELECT COUNT(*) FROM cards c
 				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 				LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
@@ -304,11 +308,14 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 				  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
 				1, 1, 1, statsNow).Scan(&wantDue)
 			row := got[0]
-			if row.Reviews != wantReviews || row.Passed != wantPassed || row.ElapsedMS != wantElapsed || row.DueCount != wantDue {
-				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d passed %d elapsed %d due %d", row, wantReviews, wantPassed, wantElapsed, wantDue)
+			if row.Reviews != wantReviews || row.RetentionTotal != wantRetTotal || row.Passed != wantPassed || row.ElapsedMS != wantElapsed || row.DueCount != wantDue {
+				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d retention total %d passed %d elapsed %d due %d", row, wantReviews, wantRetTotal, wantPassed, wantElapsed, wantDue)
 			}
-			if wantReviews != 5 || wantPassed != 4 || wantDue != 2 {
-				t.Errorf("fixture drifted: hand reviews/passed/due = %d/%d/%d, want 5/4/2", wantReviews, wantPassed, wantDue)
+			if wantReviews != 5 || wantRetTotal != 4 || wantPassed != 3 || wantDue != 2 {
+				t.Errorf("fixture drifted: hand reviews/retention total/passed/due = %d/%d/%d/%d, want 5/4/3/2", wantReviews, wantRetTotal, wantPassed, wantDue)
+			}
+			if row.Retention != 0.75 {
+				t.Errorf("DeckBreakdown() retention = %v, want 0.75 (3 of 4 due reviews)", row.Retention)
 			}
 		})
 	}
@@ -323,17 +330,19 @@ func TestStatsTagBreakdown(t *testing.T) {
 			if err != nil {
 				t.Fatalf("TagBreakdown() error = %v", err)
 			}
+			// go 覆盖全部 5 条复习，其中 4 条到期复习、3 条非 Again；fsrs 只有 card1 的
+			// 3 条（r1 r2 r4），r4 是学习步骤不计入留存，剩 2 条到期复习、1 条非 Again。
 			want := map[string]TagStat{
-				"go":   {Tag: "go", Reviews: 5, Passed: 4, Retention: 0.8},
-				"fsrs": {Tag: "fsrs", Reviews: 3, Passed: 2, Retention: 2.0 / 3.0},
+				"go":   {Tag: "go", Reviews: 5, RetentionTotal: 4, Passed: 3, Retention: 0.75},
+				"fsrs": {Tag: "fsrs", Reviews: 3, RetentionTotal: 2, Passed: 1, Retention: 0.5},
 			}
 			if len(got) != len(want) {
 				t.Fatalf("got %d tags %+v, want %d", len(got), got, len(want))
 			}
 			for _, row := range got {
 				w := want[row.Tag]
-				if row.Reviews != w.Reviews || row.Passed != w.Passed {
-					t.Errorf("tag %s = %+v, want reviews %d passed %d", row.Tag, row, w.Reviews, w.Passed)
+				if row.Reviews != w.Reviews || row.RetentionTotal != w.RetentionTotal || row.Passed != w.Passed {
+					t.Errorf("tag %s = %+v, want reviews %d retention total %d passed %d", row.Tag, row, w.Reviews, w.RetentionTotal, w.Passed)
 				}
 				if diff := row.Retention - w.Retention; diff > 1e-9 || diff < -1e-9 {
 					t.Errorf("tag %s retention = %v, want %v", row.Tag, row.Retention, w.Retention)
@@ -733,6 +742,95 @@ func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 			}
 			if got[0].Reviews != 1 || got[0].Passed != 1 {
 				t.Errorf("tag row = %+v, want 1 review passed (hand-computable)", got[0])
+			}
+		})
+	}
+}
+
+// TestStatsTrueRetentionIgnoresLearningSteps 把「留存率」的唯一口径钉死：总体值、卡组行、
+// 标签行都只数 state_before=Review 的到期复习，新卡首次复习与学习/重学步骤只进复习量。
+// 只有学习步骤的用户分母为 0，界面据此显示「无数据」，而不是一个虚高的百分比。
+func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
+	type review struct{ rating, stateBefore int }
+	cases := []struct {
+		name      string
+		reviews   []review
+		wantAll   int64
+		wantTotal int64
+		wantPass  int64
+		wantRate  float64
+	}{
+		{
+			name: "mixed states count only due reviews",
+			reviews: []review{
+				{3, 0}, {1, 1}, {3, 3}, // New / Learning(Again) / Relearning：不计入留存
+				{3, 2}, {1, 2}, {2, 2}, // Review：Good / Again / Hard
+			},
+			wantAll: 6, wantTotal: 3, wantPass: 2, wantRate: 2.0 / 3.0,
+		},
+		{
+			name:    "learning steps only yield no retention data",
+			reviews: []review{{3, 0}, {3, 1}, {1, 3}},
+			wantAll: 3, wantTotal: 0, wantPass: 0, wantRate: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for driver, db := range testDatabases(t) {
+				t.Run(driver, func(t *testing.T) {
+					if err := db.AutoMigrate(AllModels()...); err != nil {
+						t.Fatalf("AutoMigrate: %v", err)
+					}
+					p := NewPreset(1, "true retention")
+					if err := db.Create(&p).Error; err != nil {
+						t.Fatalf("create preset: %v", err)
+					}
+					d := Deck{OwnerUserID: 1, Name: "Retention deck", PresetID: p.ID, CreatedAt: statsNow}
+					if err := db.Create(&d).Error; err != nil {
+						t.Fatalf("create deck: %v", err)
+					}
+					n := Note{DeckID: d.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`,
+						TagsJSON: `["topic"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+					if err := db.Create(&n).Error; err != nil {
+						t.Fatalf("create note: %v", err)
+					}
+					cardID := createStatsCard(t, db, n.ID, "forward")
+					for i, rv := range tc.reviews {
+						seedReview(t, db, cardID, "2026-10-02", rv.rating, rv.stateBefore, 5, 1000, "self", statsNow.Add(time.Duration(i)*time.Minute))
+					}
+					ctx := context.Background()
+					st := NewStatsStore(db)
+
+					ret, err := st.RetentionByStability(ctx, 1, 0)
+					if err != nil {
+						t.Fatalf("RetentionByStability() error = %v", err)
+					}
+					if ret.Total != tc.wantTotal || ret.Passed != tc.wantPass || ret.Rate != tc.wantRate {
+						t.Errorf("RetentionByStability() = %d/%d/%v, want %d/%d/%v", ret.Total, ret.Passed, ret.Rate, tc.wantTotal, tc.wantPass, tc.wantRate)
+					}
+
+					decks, err := st.DeckBreakdown(ctx, 1, statsNow)
+					if err != nil {
+						t.Fatalf("DeckBreakdown() error = %v", err)
+					}
+					if len(decks) != 1 {
+						t.Fatalf("DeckBreakdown() = %+v, want one row", decks)
+					}
+					if dr := decks[0]; dr.Reviews != tc.wantAll || dr.RetentionTotal != tc.wantTotal || dr.Passed != tc.wantPass || dr.Retention != tc.wantRate {
+						t.Errorf("deck row = %+v, want reviews %d retention %d/%d rate %v", dr, tc.wantAll, tc.wantPass, tc.wantTotal, tc.wantRate)
+					}
+
+					tags, err := st.TagBreakdown(ctx, 1, "2026-01-01", "2026-12-31")
+					if err != nil {
+						t.Fatalf("TagBreakdown() error = %v", err)
+					}
+					if len(tags) != 1 {
+						t.Fatalf("TagBreakdown() = %+v, want one row", tags)
+					}
+					if tr := tags[0]; tr.Reviews != tc.wantAll || tr.RetentionTotal != tc.wantTotal || tr.Passed != tc.wantPass || tr.Retention != tc.wantRate {
+						t.Errorf("tag row = %+v, want reviews %d retention %d/%d rate %v", tr, tc.wantAll, tc.wantPass, tc.wantTotal, tc.wantRate)
+					}
+				})
 			}
 		})
 	}

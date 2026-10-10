@@ -186,11 +186,22 @@ type RetentionStats struct {
 	Rate    float64
 }
 
-// RetentionByStability 统计到期复习的留存率。
+// retentionReviewSQL 是「真实留存率」分母的唯一谓词（表别名 r = reviews），
+// retentionPassedSQL 是分子在分母之上追加的条件。
 //
-// 口径：只取 state_before = Review(2) 的日志 —— 那是「到期时」的一次复习；
-// 判「记住」的条件是 rating != Again(1)。stability 取该次评分产生的新稳定性（reviews.stability），
-// NULL 的旧行没有可用的分桶依据，排除。
+// 口径：只取 state_before = Review(2) 的日志 —— 那是卡片到期后的一次复习；新卡首次
+// 复习与学习/重学步骤只是在建立记忆，混进来会把留存率抬高，也就无法与预设的目标保留率
+// 对照。判「记住」的条件是 rating != Again(1)。stability IS NOT NULL 排除没有稳定性记录的
+// 导入旧行：分桶需要它，总体值、卡组行、标签行与首页概要也一起排除，各处的分母才能对上。
+// 统计页总体、稳定性分桶、卡组维度、标签维度与首页概要全部引用这两个常量，
+// 不允许另写一份「非 Again / 全部复习」的近似口径。
+const (
+	retentionReviewSQL = "r.state_before = 2 AND r.stability IS NOT NULL"
+	retentionPassedSQL = "r.rating <> 1"
+)
+
+// RetentionByStability 统计到期复习的留存率，口径见 retentionReviewSQL。
+// stability 取该次评分产生的新稳定性（reviews.stability），作为分桶依据。
 func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID uint64) (RetentionStats, error) {
 	if userID == 0 {
 		return RetentionStats{}, fmt.Errorf("retention: user id is required")
@@ -198,7 +209,7 @@ func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID ui
 	join := `reviews AS r
 		JOIN cards AS c ON c.id = r.card_id AND c.deleted_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL`
-	where := "r.user_id = ? AND r.state_before = 2 AND r.stability IS NOT NULL"
+	where := "r.user_id = ? AND " + retentionReviewSQL
 	args := []any{userID}
 	if deckID != 0 {
 		where += " AND n.deck_id = ?"
@@ -210,7 +221,7 @@ func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID ui
 		cond := stabilityRangeSQL(b.Low, b.High)
 		cols = append(cols,
 			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s THEN 1 ELSE 0 END), 0) AS t%d", cond, i),
-			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s AND r.rating <> 1 THEN 1 ELSE 0 END), 0) AS p%d", cond, i))
+			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s AND %s THEN 1 ELSE 0 END), 0) AS p%d", cond, retentionPassedSQL, i))
 	}
 	var raw map[string]any
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s", joinStrings(cols, ", "), join, where)
@@ -245,7 +256,7 @@ func stabilityRangeSQL(low, high float64) string {
 	return cond
 }
 
-// TimeSpent 是时间投入指标：elapsed_ms 的总量、日均与中位数。
+// TimeSpent 是时间投入指标：elapsed_ms 的总量、平均每次复习耗时与中位数。
 type TimeSpent struct {
 	TotalMS int64
 	Count   int64
@@ -255,7 +266,7 @@ type TimeSpent struct {
 	MedianMS int64
 }
 
-// TimeSpent 统计 [fromDay, toDay] 复习日区间内 reviews.elapsed_ms 的日均与中位数。
+// TimeSpent 统计 [fromDay, toDay] 复习日区间内 reviews.elapsed_ms 的总量、平均每次与中位数。
 // 中位数在 Go 侧计算：两库的 SQL 都没有可移植的 median，排序取中值反而更容易与手算对拍。
 // elapsed_ms 为 NULL 的日志（旧数据或未计时）不计入，但会被如实排除在 Count 之外。
 func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDay string) (TimeSpent, error) {
@@ -293,11 +304,16 @@ func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDa
 type DeckStat struct {
 	DeckID uint64
 	// PublicID 是卡组的对外 id；客户端只认它，数字主键不出现在响应里。
-	PublicID  string
-	Name      string
-	DueCount  int64
-	Reviews   int64
-	Passed    int64
+	PublicID string
+	Name     string
+	DueCount int64
+	// Reviews 是该卡组的全部复习次数（含新卡首次复习与学习步骤）。
+	Reviews int64
+	// RetentionTotal / Passed 是真实留存率的分母与分子（口径见 retentionReviewSQL），
+	// 分母只是 Reviews 的子集，所以单独返回：分母为 0 时界面显示「无数据」而不是 0%。
+	RetentionTotal int64
+	Passed         int64
+	// Retention 是 Passed/RetentionTotal；RetentionTotal 为 0 时为 0。
 	Retention float64
 	ElapsedMS int64
 }
@@ -347,13 +363,15 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	// 复习量、留存率、累计投入：按卡组分组聚合 reviews。同样收在可见卡组内：
 	// 授权被撤销后，那些卡组的复习不应再出现在统计页的卡组维度里。
 	var revRows []struct {
-		DeckID    uint64 `gorm:"column:deck_id"`
-		Reviews   int64  `gorm:"column:reviews"`
-		Passed    int64  `gorm:"column:passed"`
-		ElapsedMS *int64 `gorm:"column:elapsed_ms"`
+		DeckID         uint64 `gorm:"column:deck_id"`
+		Reviews        int64  `gorm:"column:reviews"`
+		RetentionTotal int64  `gorm:"column:retention_total"`
+		Passed         int64  `gorm:"column:passed"`
+		ElapsedMS      *int64 `gorm:"column:elapsed_ms"`
 	}
 	revSQL := `SELECT n.deck_id AS deck_id, COUNT(r.id) AS reviews,
-		COALESCE(SUM(CASE WHEN r.rating <> 1 THEN 1 ELSE 0 END), 0) AS passed,
+		COALESCE(SUM(CASE WHEN ` + retentionReviewSQL + ` THEN 1 ELSE 0 END), 0) AS retention_total,
+		COALESCE(SUM(CASE WHEN ` + retentionReviewSQL + ` AND ` + retentionPassedSQL + ` THEN 1 ELSE 0 END), 0) AS passed,
 		SUM(r.elapsed_ms) AS elapsed_ms
 		FROM reviews AS r
 		JOIN cards AS c ON c.id = r.card_id AND c.deleted_at IS NULL
@@ -365,12 +383,13 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	for _, r := range revRows {
 		row := get(r.DeckID)
 		row.Reviews = r.Reviews
+		row.RetentionTotal = r.RetentionTotal
 		row.Passed = r.Passed
 		if r.ElapsedMS != nil {
 			row.ElapsedMS = *r.ElapsedMS
 		}
-		if row.Reviews > 0 {
-			row.Retention = float64(row.Passed) / float64(row.Reviews)
+		if row.RetentionTotal > 0 {
+			row.Retention = float64(row.Passed) / float64(row.RetentionTotal)
 		}
 	}
 
@@ -401,13 +420,17 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 
 // TagStat 是一个标签的统计行（「标签维度」）。
 type TagStat struct {
-	Tag       string
-	Reviews   int64
-	Passed    int64
+	Tag string
+	// Reviews 是窗口内带该标签的全部复习次数。
+	Reviews int64
+	// RetentionTotal / Passed 是真实留存率的分母与分子，含义同 DeckStat。
+	RetentionTotal int64
+	Passed         int64
+	// Retention 是 Passed/RetentionTotal；RetentionTotal 为 0 时为 0。
 	Retention float64
 }
 
-// TagBreakdown 按 notes.tags_json 聚合复习量、留存率与「遗忘」（rating=Again）次数。
+// TagBreakdown 按 notes.tags_json 聚合复习量与真实留存率（口径见 retentionReviewSQL）。
 //
 // tags_json 是 note 级内容元数据：reviews.user_id 只保证日志行属于本人，挡不住「本人曾
 // 复习过、现已不可见」的卡组把标签透出来。缺这道谓词时，A 撤销对 B 的授权后，B 的统计页
@@ -420,11 +443,16 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 	if userID == 0 {
 		return nil, fmt.Errorf("tag breakdown: user id is required")
 	}
+	// 留存判定在 SQL 里用同一谓词算好，Go 侧只累加，避免在这里另写一份口径。
 	var rows []struct {
-		Rating   int    `gorm:"column:rating"`
+		Counted  int    `gorm:"column:counted"`
+		Passed   int    `gorm:"column:passed"`
 		TagsJSON string `gorm:"column:tags_json"`
 	}
-	sql := `SELECT r.rating AS rating, n.tags_json AS tags_json FROM reviews AS r
+	sql := `SELECT
+		CASE WHEN ` + retentionReviewSQL + ` THEN 1 ELSE 0 END AS counted,
+		CASE WHEN ` + retentionReviewSQL + ` AND ` + retentionPassedSQL + ` THEN 1 ELSE 0 END AS passed,
+		n.tags_json AS tags_json FROM reviews AS r
 		JOIN cards AS c ON c.id = r.card_id AND c.deleted_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		WHERE r.user_id = ? AND n.deck_id IN (?) AND r.review_day >= ? AND r.review_day <= ?`
@@ -448,15 +476,14 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 				acc[tag] = t
 			}
 			t.Reviews++
-			if row.Rating != 1 {
-				t.Passed++
-			}
+			t.RetentionTotal += int64(row.Counted)
+			t.Passed += int64(row.Passed)
 		}
 	}
 	out := make([]TagStat, 0, len(acc))
 	for _, t := range acc {
-		if t.Reviews > 0 {
-			t.Retention = float64(t.Passed) / float64(t.Reviews)
+		if t.RetentionTotal > 0 {
+			t.Retention = float64(t.Passed) / float64(t.RetentionTotal)
 		}
 		out = append(out, *t)
 	}
