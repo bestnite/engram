@@ -82,7 +82,8 @@ func (typedType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给 prompt；背面给标准答案，其它可接受答案放进 Extra。
+// Render 正面给 prompt；背面把标准答案与其它可接受答案写在同一行，用「 / 」分隔
+// （与挖空题、列表题的多种写法一致），而不是一个答案占一段。
 func (typedType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -102,7 +103,7 @@ func (typedType) Render(card Card, side Side) (RenderResult, error) {
 	if err != nil {
 		return RenderResult{}, fmt.Errorf("typed: %w", err)
 	}
-	return RenderResult{Body: answer, Extra: accept}, nil
+	return RenderResult{Body: strings.Join(append([]string{answer}, accept...), " / ")}, nil
 }
 
 // TypedInput 是 typedType.Grade 的输入：用户键入的原始文本加所属 note 字段与映射。
