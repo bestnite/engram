@@ -21,6 +21,12 @@ func (basicType) Describe() Description {
 			FieldSpec{Key: "front", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "back", Control: ControlTextarea, Required: true},
 		),
+		Example: map[string]any{
+			"front":      "What is the capital of France?",
+			"back":       "Paris",
+			"extra":      map[string]any{"note": "capital since the late 10th century"},
+			"source_url": "https://example.com/geography/france",
+		},
 	}
 }
 
@@ -81,6 +87,10 @@ func (basicBothType) Describe() Description {
 			FieldSpec{Key: "front", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "back", Control: ControlTextarea, Required: true},
 		),
+		Example: map[string]any{
+			"front": "der Hund",
+			"back":  "the dog",
+		},
 	}
 }
 

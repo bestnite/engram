@@ -50,6 +50,11 @@ type Description struct {
 	PromptField   string      `json:"prompt_field"`
 	OptionsField  string      `json:"options_field"`
 	Fields        []FieldSpec `json:"fields"`
+	// Example 是一条能通过本题型 Validate 的 note 字段值。字段表只给出字段名与控件，
+	// 说不清内容的写法：挖空语法、选项下标从 0 起、公式用 \( \) 与 \[ \] 而非 $。
+	// 示例把这些规则写成数据，agent 照着写就对，也不必为每条规则另配一段需要翻译的说明。
+	// 示例是否真能通过校验由 describe_test 逐题型断言，不会与实现漂移。
+	Example map[string]any `json:"example"`
 }
 
 // commonOptionalFields 是所有题型共用的可选字段，与 cardtype.validateCommonOptional 一致。

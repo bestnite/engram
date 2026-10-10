@@ -28,8 +28,9 @@ func TestListCardTypesMatchesRegistry(t *testing.T) {
 	for i, raw := range kinds {
 		k, _ := raw.(map[string]any)
 		fields, _ := k["fields"].([]any)
-		if k["kind"] != want[i].Kind || len(fields) != len(want[i].Fields) {
-			t.Fatalf("kind %d = %v, want kind %q with %d fields", i, k, want[i].Kind, len(want[i].Fields))
+		example, _ := k["example"].(map[string]any)
+		if k["kind"] != want[i].Kind || len(fields) != len(want[i].Fields) || len(example) == 0 {
+			t.Fatalf("kind %d = %v, want kind %q with %d fields and an example", i, k, want[i].Kind, len(want[i].Fields))
 		}
 	}
 }

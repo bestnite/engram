@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"sort"
 	"testing"
 )
@@ -188,5 +189,46 @@ func TestDescriptionsOrderMatchesKinds(t *testing.T) {
 		if ds[i].Kind != kinds[i] {
 			t.Errorf("Descriptions()[%d].Kind = %q, want %q", i, ds[i].Kind, kinds[i])
 		}
+	}
+}
+
+// TestDescriptionExamplesAreValidNotes 断言每个题型都带示例，且示例是一条真能用的 note：
+// 经 JSON 往返（agent 送来的数字是 float64、数组是 []any）后仍通过 Validate、至少产出
+// 一张卡；示例只用字段表里声明过的键，并给齐全部必填字段。示例是写给 agent 照抄的，
+// 一条过不了校验的示例比没有示例更糟。
+func TestDescriptionExamplesAreValidNotes(t *testing.T) {
+	for _, d := range Descriptions() {
+		t.Run(d.Kind, func(t *testing.T) {
+			if len(d.Example) == 0 {
+				t.Fatal("Describe().Example is empty")
+			}
+			declared := make(map[string]bool, len(d.Fields))
+			for _, f := range d.Fields {
+				declared[f.Key] = true
+				if _, ok := d.Example[f.Key]; f.Required && !ok {
+					t.Errorf("example lacks required field %q", f.Key)
+				}
+			}
+			for key := range d.Example {
+				if !declared[key] {
+					t.Errorf("example uses field %q that the field table does not declare", key)
+				}
+			}
+			raw, err := json.Marshal(d.Example)
+			if err != nil {
+				t.Fatalf("marshal example: %v", err)
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				t.Fatalf("unmarshal example: %v", err)
+			}
+			typ, _ := Lookup(d.Kind)
+			if err := typ.Validate(fields); err != nil {
+				t.Fatalf("example fails Validate: %v", err)
+			}
+			if cards := typ.Cards(Note{Kind: d.Kind, Fields: fields}); len(cards) == 0 {
+				t.Fatal("example produces no cards")
+			}
+		})
 	}
 }

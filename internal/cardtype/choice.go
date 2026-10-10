@@ -32,6 +32,11 @@ func (choiceSingleType) Describe() Description {
 			FieldSpec{Key: "options", Control: ControlLines, Required: true},
 			FieldSpec{Key: "answer", Control: ControlIndex, Required: true},
 		),
+		Example: map[string]any{
+			"question": "Which planet is closest to the Sun?",
+			"options":  []any{"Venus", "Mercury", "Mars"},
+			"answer":   1,
+		},
 	}
 }
 
@@ -177,6 +182,11 @@ func (choiceMultiType) Describe() Description {
 			FieldSpec{Key: "options", Control: ControlLines, Required: true},
 			FieldSpec{Key: "answers", Control: ControlIndexes, Required: true},
 		),
+		Example: map[string]any{
+			"question": "Which of these numbers are prime?",
+			"options":  []any{"2", "4", "5", "9"},
+			"answers":  []any{0, 2},
+		},
 	}
 }
 

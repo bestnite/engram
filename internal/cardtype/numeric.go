@@ -32,6 +32,12 @@ func (numericType) Describe() Description {
 			FieldSpec{Key: "tolerance_absolute", Control: ControlNumber},
 			FieldSpec{Key: "tolerance_relative", Control: ControlNumber},
 		),
+		Example: map[string]any{
+			"prompt":             "What is standard gravity \\(g_0\\)?",
+			"value":              9.80665,
+			"unit":               "m/s²",
+			"tolerance_relative": 0.01,
+		},
 	}
 }
 

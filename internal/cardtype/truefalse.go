@@ -26,6 +26,10 @@ func (trueFalseType) Describe() Description {
 			FieldSpec{Key: "statement", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "answer", Control: ControlBool, Required: true},
 		),
+		Example: map[string]any{
+			"statement": "Water boils at 100 °C at sea level.",
+			"answer":    true,
+		},
 	}
 }
 

@@ -24,6 +24,11 @@ func (listType) Describe() Description {
 			// ordered 的服务端默认是 false（cardtype.listType 的 boolField 第三参）。
 			FieldSpec{Key: "ordered", Control: ControlBool, Default: false},
 		),
+		Example: map[string]any{
+			"prompt":  "Name the additive primary colours of light.",
+			"items":   []any{"red", "green", "blue"},
+			"ordered": false,
+		},
 	}
 }
 
