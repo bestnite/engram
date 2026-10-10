@@ -220,7 +220,7 @@ func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	got := toolNames(t, cs)
-	want := []string{"export_deck", "get_note", "get_stats", "list_deck_tags", "list_decks", "search_notes"}
+	want := []string{"export_deck", "get_note", "get_stats", "list_card_types", "list_deck_tags", "list_decks", "search_notes"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("read-only tools/list = %v, want %v", got, want)
 	}
@@ -260,7 +260,7 @@ func TestAdminScopeSeesAllTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "admin")
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeAdmin}))
-	if got := len(toolNames(t, cs)); got != 16 {
-		t.Fatalf("admin sees %d tools, want 16", got)
+	if got := len(toolNames(t, cs)); got != 17 {
+		t.Fatalf("admin sees %d tools, want 17", got)
 	}
 }

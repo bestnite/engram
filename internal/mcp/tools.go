@@ -53,6 +53,9 @@ type getNoteIn struct {
 // getStatsIn 无参数。
 type getStatsIn struct{}
 
+// listCardTypesIn 是 list_card_types 的入参：无参数。
+type listCardTypesIn struct{}
+
 // exportDeckIn 是 export_deck 的入参；它导出一个**卡组包**。
 type exportDeckIn struct {
 	DeckID          string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
@@ -66,8 +69,8 @@ type exportDeckIn struct {
 
 // importNoteIn 是单个 note 的入参，字段名与 schema/note-import.schema.json 一致。
 type importNoteIn struct {
-	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze)"`
-	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type"`
+	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze); list_card_types returns every kind"`
+	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type; list_card_types returns each kind's fields"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
 	// NoteID 按对外 id 寻址已有 note 就地改写；与 external_ref 互斥。
 	NoteID string   `json:"note_id,omitempty" jsonschema:"address an existing note by public id to rewrite in place; mutually exclusive with external_ref"`
@@ -258,6 +261,11 @@ func (s *Server) getNote(ctx context.Context, id Identity, in getNoteIn) (any, e
 		return nil, err
 	}
 	return s.api.NotesJSON(ctx, id.User.ID, []store.Note{*n})[0], nil
+}
+
+// listCardTypes 列出题型自描述：与 REST `GET /card-types` 走同一 service 方法。
+func (s *Server) listCardTypes(_ context.Context, _ Identity, _ listCardTypesIn) (api.CardTypesResponse, error) {
+	return s.api.CardTypes(), nil
 }
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {
