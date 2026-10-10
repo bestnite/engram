@@ -3,6 +3,8 @@ package web
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -164,4 +166,93 @@ func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// seedMediaDeck 建一个卡组，放一条引用媒体的 note，媒体字节写进服务端的媒体根目录；返回卡组与媒体字节。
+func seedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uint64, name string) (*store.Deck, []byte) {
+	t.Helper()
+	deck := seedDeck(t, db, ownerID, name)
+	raw := append([]byte("\x89PNG\r\n\x1a\n"), []byte("web-export-media-payload")...)
+	m, err := store.NewMediaStore(db).SaveBytes(context.Background(), srv.media.Root(), "image/png", raw, store.Ptr(ownerID))
+	if err != nil {
+		t.Fatalf("SaveBytes: %v", err)
+	}
+	if _, err := store.NewNoteStore(db).Create(context.Background(), &store.Note{DeckID: deck.ID, Kind: "basic"},
+		map[string]any{"front": "img?", "back": "media/" + m.Sha256 + ".png"}); err != nil {
+		t.Fatalf("create media note: %v", err)
+	}
+	return deck, raw
+}
+
+// packageHasMedia 判断一个 .edeck 字节里是否带着给定内容的媒体条目。
+func packageHasMedia(t *testing.T, edeck, want []byte) bool {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(edeck), int64(len(edeck)))
+	if err != nil {
+		t.Fatalf("read package zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if !strings.HasPrefix(f.Name, "media/") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", f.Name, err)
+		}
+		got, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", f.Name, err)
+		}
+		if bytes.Equal(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestWebPackageExportsInlineMedia 断言 web 侧两条导出路由与 REST 一样从媒体根目录读字节：
+// 引用了媒体的卡组能导出，且包里带着那份媒体，而不是因为找不到文件返回 500。
+func TestWebPackageExportsInlineMedia(t *testing.T) {
+	cases := []struct {
+		name   string
+		export func(t *testing.T, srv *Server, deck *store.Deck, cookies []*http.Cookie, csrf string) []byte
+	}{
+		{"single deck download", func(t *testing.T, srv *Server, deck *store.Deck, cookies []*http.Cookie, _ string) []byte {
+			rec := getWithCookies(t, srv, "/decks/"+deck.PublicID+"/package", cookies)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET export = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+			}
+			return rec.Body.Bytes()
+		}},
+		{"batch zip", func(t *testing.T, srv *Server, deck *store.Deck, cookies []*http.Cookie, csrf string) []byte {
+			rec := postJSONWithCSRF(t, srv, "/api/v1/decks/export-zip", map[string]any{"deck_ids": []string{deck.PublicID}}, cookies, csrf)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST export-zip = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+			}
+			zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+			if err != nil || len(zr.File) != 1 {
+				t.Fatalf("batch zip entries = %v (err %v), want exactly one package", zr, err)
+			}
+			rc, err := zr.File[0].Open()
+			if err != nil {
+				t.Fatalf("open batch entry: %v", err)
+			}
+			defer rc.Close()
+			inner, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatalf("read batch entry: %v", err)
+			}
+			return inner
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db, ownerID, cookies, csrf := newNotesServer(t)
+			deck, raw := seedMediaDeck(t, srv, db, ownerID, "Media Deck")
+			if !packageHasMedia(t, tc.export(t, srv, deck, cookies, csrf), raw) {
+				t.Fatal("exported package does not carry the deck's media bytes")
+			}
+		})
+	}
 }
