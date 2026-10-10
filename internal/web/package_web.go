@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,9 +19,9 @@ import (
 //   GET  /import             导入页（返回 SPA 应用壳，由客户端路由渲染）
 // 导入本身走 REST `POST /api/v1/decks/import`，与 SPA 的内置页共用同一 service 入口。
 
-// registerPackageWebRoutes 挂载卡组包的浏览器入口。与其余卡组路由同一批依赖。
+// registerPackageWebRoutes 挂载卡组包的浏览器入口。导出走 api service，因此还需要 s.api。
 func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
-	if s.sessions == nil || s.decks == nil {
+	if s.sessions == nil || s.decks == nil || s.api == nil {
 		return
 	}
 	router.GET("/decks/:id/package", s.deckPackageExport)
@@ -35,7 +34,8 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 const packageExportMediaType = "application/vnd.engram.edeck"
 
 // deckPackageExport 把当前用户有权读取的卡组导出为 .edeck 并下载。
-// 权限与 REST 入口同规（reader 即可导出）；导出逻辑复用 store.ExportPackage。
+// 权限与 REST 入口同规（reader 即可导出）。导出必须走 api.ExportDeckPackage：媒体字节的根目录
+// 由它统一填入，直接调 store 层漏传根目录时，媒体会按进程当前目录去找，引用了媒体的卡组必然 500。
 func (s *Server) deckPackageExport(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -49,10 +49,7 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pkg, err := s.decks.ExportPackage(c.Request.Context(), user.ID, deckID, store.PackageOptions{
-		IncludeMedia: true,
-		Now:          func() time.Time { return time.Now().UTC() },
-	})
+	pkg, err := s.api.ExportDeckPackage(c.Request.Context(), user.ID, deckID, store.PackageOptions{IncludeMedia: true})
 	if err != nil {
 		s.logger.Error("deck package export failed", "deck_id", deckID, "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -91,7 +88,6 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	if req.IncludeMedia != nil {
 		includeMedia = *req.IncludeMedia
 	}
-	nowFn := func() time.Time { return time.Now().UTC() }
 
 	var zipBuf bytes.Buffer
 	zw := zip.NewWriter(&zipBuf)
@@ -108,12 +104,12 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			zw.Close()
 			return
 		}
-		pkg, err := s.decks.ExportPackage(ctx, user.ID, deck.ID, store.PackageOptions{
+		// 与单个导出同理走 api service，媒体根目录与时钟由它统一填入。
+		pkg, err := s.api.ExportDeckPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:    includeMedia,
 			IncludeProgress: req.IncludeProgress,
 			IncludeReviews:  req.IncludeReviews,
 			IncludeWeights:  req.IncludeWeights,
-			Now:             nowFn,
 		})
 		if err != nil {
 			s.logger.Error("export deck package in batch failed", "deck_id", deck.ID, "error", err)
