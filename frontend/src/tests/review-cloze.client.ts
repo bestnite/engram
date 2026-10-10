@@ -58,6 +58,7 @@ describe('ReviewView cloze blanks', () => {
         edit_href: '/decks/d1/notes/n1',
       }),
       getCardTypes: vi.fn(),
+      revealGradedAnswer: vi.fn().mockResolvedValue({ revealed: true, card_id: 'c1', answer_html: '<p>Paris and Rome</p>' }),
       submitGradedReview,
     } as unknown as ApiClient;
     return { client, submitGradedReview };
@@ -100,6 +101,17 @@ describe('ReviewView cloze blanks', () => {
     expect(submitGradedReview).toHaveBeenCalledTimes(1);
     expect(submitGradedReview.mock.calls[0]![0]).toMatchObject({ card_id: 'c1', answer: ['Paris', 'Milan'] });
     expect(target.querySelector('[data-testid="review-graded-verdict"]')).not.toBeNull();
+  });
+
+  it('reveals the answer directly under the card header without a second rule', async () => {
+    const { target } = await setup(['', 'city']);
+    (target.querySelector('[data-testid="review-graded-reveal"]') as HTMLElement).click();
+    await flush();
+    const answer = target.querySelector('[data-testid="review-graded-revealed-answer"]') as HTMLElement;
+    expect(answer.textContent).toContain('Paris and Rome');
+    // 揭示后题干区被替换，答案块紧接卡片头部的底线；它自己再画顶线就会出现两条线。
+    expect(answer.className).not.toContain('border-t');
+    expect(target.querySelector('[data-testid="review-graded-prompt"]')).toBeNull();
   });
 
   it('does not submit when the render response gave no blanks', async () => {
