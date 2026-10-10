@@ -107,5 +107,7 @@ describe('ReviewView list items', () => {
       ['blue', 'true'],
     ]);
     expect(target.querySelector('[data-testid="review-graded-answer"]')).toBeNull();
+    // 判分结果出现后题干仍留在上方。
+    expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('光的三原色是什么？');
   });
 });
