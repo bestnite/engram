@@ -3,7 +3,7 @@
   import { routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Deck, Note, BulkNotesResponse } from '../api';
+  import type { Deck, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
   import DeckSettingsView from './DeckSettingsView.svelte';
   import Select from '../components/ui/Select.svelte';
@@ -71,6 +71,40 @@
   let tagInput = $state('');
   let kindSelect = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 按标签学习：标签只在本卡组内选（别的卡组里的同名标签不是同一个分类），多选取并集。
+  let tagReviewOpen = $state(false);
+  let tagReviewLoading = $state(false);
+  let tagReviewError = $state(false);
+  let deckTags = $state<DeckTag[]>([]);
+  let tagReviewChecked = $state<string[]>([]);
+
+  // 复习页按地址上的 deck / tag 参数取队列；按标签列表顺序拼接，同一组勾选总得到同一个地址。
+  const tagReviewHref = $derived.by(() => {
+    const params = new URLSearchParams();
+    params.append('deck', deckId);
+    for (const item of deckTags) {
+      if (tagReviewChecked.includes(item.tag)) params.append('tag', item.tag);
+    }
+    return params.has('tag') ? `/review?${params.toString()}` : '';
+  });
+
+  // 每次打开都重新取：笔记的标签可能刚在本页被批量改过。
+  async function openTagReview(): Promise<void> {
+    tagReviewOpen = true;
+    tagReviewLoading = true;
+    tagReviewError = false;
+    tagReviewChecked = [];
+    try {
+      const res = await apiClient.getDeckTags(deckId);
+      deckTags = res.tags;
+    } catch {
+      deckTags = [];
+      tagReviewError = true;
+    } finally {
+      tagReviewLoading = false;
+    }
+  }
 
   // 批量动作
   let selectedIds = $state<string[]>([]);
@@ -410,6 +444,10 @@
           <span>{$t('notes.create')}</span>
         </Button>
       {/if}
+      <Button variant="outline" size="lg" onclick={() => void openTagReview()} testId="deck-tag-review-open">
+        <Tags class="size-4" aria-hidden="true" />
+        <span>{$t('deck.tag_review.open')}</span>
+      </Button>
       <Button variant="primary" size="lg" href="/review?deck={encodeURIComponent(deckId)}" testId="deck-start-review">
         <Play class="size-4" aria-hidden="true" />
         <span>{$t('home.start_review')}</span>
@@ -694,6 +732,51 @@
     </SelectionBar>
   </div>
 </Page>
+
+<!-- 按标签学习 -->
+<Dialog
+  bind:open={tagReviewOpen}
+  title={$t('deck.tag_review.title')}
+  description={$t('deck.tag_review.description')}
+  testId="deck-tag-review-dialog"
+>
+  {#if tagReviewLoading}
+    <Skeleton testId="deck-tag-review-loading" label={$t('common.loading')} lines={3} />
+  {:else if tagReviewError}
+    <p role="alert" class="text-sm text-destructive-foreground" data-testid="deck-tag-review-error">{$t('deck.tag_review.load_failed')}</p>
+  {:else if deckTags.length === 0}
+    <p class="text-sm text-muted-foreground" data-testid="deck-tag-review-empty">{$t('deck.tag_review.empty')}</p>
+  {:else}
+    <div class="max-h-72 space-y-2 overflow-y-auto text-sm text-foreground" data-testid="deck-tag-review-list">
+      {#each deckTags as item (item.tag)}
+        <label class="flex items-center gap-2 cursor-pointer">
+          <Checkbox
+            checked={tagReviewChecked.includes(item.tag)}
+            label={item.tag}
+            onCheckedChange={(on) => (tagReviewChecked = on ? [...tagReviewChecked, item.tag] : tagReviewChecked.filter((x) => x !== item.tag))}
+          />
+          <span class="min-w-0 flex-1 truncate">{item.tag}</span>
+          <span class="shrink-0 text-xs text-muted-foreground">{$t('deck.tag_review.notes', { count: item.notes })}</span>
+        </label>
+      {/each}
+    </div>
+  {/if}
+  <p class="mt-3 text-xs text-muted-foreground">{$t('deck.tag_review.limit_hint')}</p>
+  <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
+    <Button type="button" variant="outline" size="lg" onclick={() => (tagReviewOpen = false)}>{$t('common.cancel')}</Button>
+    {#if tagReviewHref}
+      <Button variant="primary" size="lg" href={tagReviewHref} testId="deck-tag-review-start">
+        <Play class="size-4" aria-hidden="true" />
+        <span>{$t('home.start_review')}</span>
+      </Button>
+    {:else}
+      <Button type="button" variant="primary" size="lg" disabled testId="deck-tag-review-start">
+        <Play class="size-4" aria-hidden="true" />
+        <span>{$t('home.start_review')}</span>
+      </Button>
+    {/if}
+  </div>
+</Dialog>
 
 <!-- 批量编辑标签 -->
 <Dialog

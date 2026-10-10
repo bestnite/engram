@@ -1323,4 +1323,12 @@ export const zhCN: LocaleCatalog = {
   'package.report.weights_applied': '已采用包内权重',
   'package.report.weights_discarded': '未采用包内权重',
   'decks.batch_review': '复习',
+  'deck.tag_review.open': '按标签学习',
+  'deck.tag_review.title': '按标签学习',
+  'deck.tag_review.description': '勾选本卡组的一个或多个标签，带有任一所选标签的卡片进入队列。',
+  'deck.tag_review.notes': '{count} 条笔记',
+  'deck.tag_review.empty': '这个卡组的笔记还没有标签。',
+  'deck.tag_review.load_failed': '标签加载失败，请重试。',
+  'deck.tag_review.limit_hint': '每日新卡与复习上限仍按卡组计算，与整组复习共用。',
+  'review.tag_scope': '标签：',
 };

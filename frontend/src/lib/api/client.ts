@@ -2,6 +2,7 @@ import {
   ApiClientError,
   type Deck,
   type DecksResponse,
+  type DeckTagsResponse,
   type DeckQueueCountsResponse,
   type DeckSettings,
   type UpdateDeckSettingsRequest,
@@ -639,6 +640,11 @@ export class ApiClient {
     return res.decks.find((d) => d.id === String(deckId)) || null;
   }
 
+  /** 列出卡组里的标签及各自的笔记数（GET /api/v1/decks/:id/tags），供按标签复习选择。 */
+  async getDeckTags(deckId: string): Promise<DeckTagsResponse> {
+    return this.request<DeckTagsResponse>(`/api/v1/decks/${encodeURIComponent(String(deckId))}/tags`);
+  }
+
   /**
    * 读取单条卡片（GET /api/v1/notes/:id）。
    *
@@ -724,7 +730,8 @@ export class ApiClient {
 
   /**
    * 获取到期卡片列表（GET /api/v1/review/due）
-   * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
+   * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]；
+   * tag 可重复，只取带有其中任一标签的卡（此时 deck 必须恰好一个）
    */
   async getDueCards(query?: DueCardsQuery): Promise<DueCardsResponse> {
     const params = new URLSearchParams();
@@ -736,6 +743,9 @@ export class ApiClient {
       } else {
         params.append('deck', String(query.deck));
       }
+    }
+    for (const tag of query?.tag ?? []) {
+      params.append('tag', tag);
     }
     if (query?.limit !== undefined) {
       params.set('limit', String(query.limit));
@@ -777,7 +787,7 @@ export class ApiClient {
    * 取一张卡正反面的服务端清洗 HTML 与编辑地址（POST /api/v1/review/render）。
    * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染。
    */
-  async renderReviewCard(input: { card_id: string; deck?: string[] }): Promise<ReviewRenderResponse> {
+  async renderReviewCard(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -791,7 +801,7 @@ export class ApiClient {
    * 埋藏当前卡（POST /api/v1/review/bury）：只写本人进度，不产生 reviews 行。
    * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组。
    */
-  async buryReview(input: { card_id: string; deck?: string[] }): Promise<ReviewQueueResponse> {
+  async buryReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -805,7 +815,7 @@ export class ApiClient {
    * 暂停当前卡（POST /api/v1/review/suspend）：只对本人生效，不产生 reviews 行；
    * 响应带同一范围重建后的队列。
    */
-  async suspendReview(input: { card_id: string; deck?: string[] }): Promise<ReviewQueueResponse> {
+  async suspendReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
@@ -820,7 +830,7 @@ export class ApiClient {
    * 响应带同范围重建的队列与被撤销卡的对外 id（undone_card_id）；队列按 due_at 排序，
    * 被撤销的卡不保证排在首位，调用方必须据 undone_card_id 把当前卡定位回它。
    */
-  async undoReview(input: { card_id: string; expected_version: number; deck?: string[] }): Promise<ReviewUndoResponse> {
+  async undoReview(input: { card_id: string; expected_version: number; deck?: string[]; tags?: string[] }): Promise<ReviewUndoResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }

@@ -1068,6 +1068,40 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(url).toBe('/api/v1/review/due?deck=42');
     });
 
+    it('appends repeated tag params after the deck (Go c.QueryArray("tag"))', async () => {
+      // 对应 Go 测试 review_tags_test.go:TestDueCardsFiltersByTagREST
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ cards: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      await client.getDueCards({ deck: 'd1', tag: ['文化传承', 'a,b'], limit: 500 });
+
+      const [url] = mockFetch.mock.calls[0]!;
+      const params = new URL(String(url), 'http://localhost').searchParams;
+      expect(params.getAll('deck')).toEqual(['d1']);
+      // 标签原样逐个传递，不按逗号拆分。
+      expect(params.getAll('tag')).toEqual(['文化传承', 'a,b']);
+      expect(params.get('limit')).toBe('500');
+    });
+
+    it('lists a deck\'s tags from GET /api/v1/decks/:id/tags', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ tags: [{ tag: '创新', notes: 2 }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const result = await client.getDeckTags('d 1');
+
+      const [url] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/decks/d%201/tags');
+      expect(result.tags).toEqual([{ tag: '创新', notes: 2 }]);
+    });
+
     it('handles 400 Bad Request when deck param is invalid (reproducing TestDueCardsRejectsBadDeckParam)', async () => {
       mockFetch.mockResolvedValueOnce(
         new Response(

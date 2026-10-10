@@ -1324,4 +1324,12 @@ export const en: LocaleCatalog = {
   'package.report.weights_applied': 'Package weights applied',
   'package.report.weights_discarded': 'Package weights not used',
   'decks.batch_review': 'Review',
+  'deck.tag_review.open': 'Study by tag',
+  'deck.tag_review.title': 'Study by tag',
+  'deck.tag_review.description': 'Pick one or more tags in this deck; cards carrying any of them join the queue.',
+  'deck.tag_review.notes': '{count} notes',
+  'deck.tag_review.empty': 'No note in this deck has a tag yet.',
+  'deck.tag_review.load_failed': 'Could not load tags. Please try again.',
+  'deck.tag_review.limit_hint': 'Daily new and review limits still apply per deck and are shared with full-deck review.',
+  'review.tag_scope': 'Tags:',
 };
