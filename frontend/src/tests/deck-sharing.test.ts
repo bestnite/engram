@@ -124,7 +124,6 @@ describe('deck leave catalog keys', () => {
       'decks.leave.confirm_desc',
       'decks.leave.confirm_btn',
       'decks.leave.cancel_btn',
-      'decks.leave.submitting',
       'decks.leave.failed',
     ];
     for (const key of keys) {

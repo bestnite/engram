@@ -7,6 +7,7 @@
   import { apiClient, getApiErrorMessageKey, ApiClientError } from '../api';
   import type { ApiClient } from '../api';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   interface Props {
     client?: ApiClient;
@@ -22,7 +23,6 @@
   let pending = $state<boolean>(initialPending === true);
   let code = $state('');
   let loading = $state(false);
-  let errorKey = $state<string | null>(null);
 
   /**
    * 查询第二步是否可提交。凭据只在密码通过后下发，因此 pending=false 表示
@@ -46,7 +46,6 @@
       return;
     }
     loading = true;
-    errorKey = null;
     try {
       const res = await completeTOTP(code.trim());
       if (res.authenticated) {
@@ -54,13 +53,13 @@
       }
     } catch (err) {
       if (err instanceof ApiClientError) {
-        errorKey = getApiErrorMessageKey(err);
+        toast.error($t(getApiErrorMessageKey(err)));
         // 凭据过期/已被消费：表单不再可提交，引导回到第一步。
         if (err.code === 'totp_challenge_expired') {
           pending = false;
         }
       } else {
-        errorKey = 'error.unknown';
+        toast.error($t('error.unknown'));
       }
     } finally {
       loading = false;
@@ -104,18 +103,6 @@
     {:else}
       <p class="mb-6 text-sm text-muted-foreground">{$t('auth.totp.intro')}</p>
 
-      {#if errorKey}
-        <div
-          data-testid="totp-login-error"
-          class="mb-6 p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm flex items-center space-x-2"
-        >
-          <svg class="w-5 h-5 flex-shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{$t(errorKey)}</span>
-        </div>
-      {/if}
-
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
           <label for="totp-login-code" class="block text-sm font-medium text-foreground/80 mb-1.5">
@@ -137,13 +124,8 @@
         </div>
 
         <div class="pt-2">
-          <Button type="submit" testId="totp-login-submit" disabled={loading || !code.trim()} variant="primary" size="lg" class="w-full">
-            {#if loading}
-              <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
-              <span>{$t('auth.totp.submitting')}</span>
-            {:else}
-              <span>{$t('auth.totp.submit')}</span>
-            {/if}
+          <Button type="submit" testId="totp-login-submit" {loading} disabled={!code.trim()} variant="primary" size="lg" class="w-full">
+            {$t('auth.totp.submit')}
           </Button>
         </div>
       </form>

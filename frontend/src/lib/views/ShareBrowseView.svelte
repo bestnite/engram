@@ -8,6 +8,7 @@
   import { routeStore } from '../router';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import PageHeader from '../components/ui/PageHeader.svelte';
 
   // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
@@ -24,11 +25,10 @@
   let unlocking = $state(false);
   let errorKey = $state<string | null>(null);
 
-  // 入伙状态：joining 期间禁用按钮；joined 后换成成功提示与「打开卡组」。
+  // 入伙状态：joining 期间按钮转圈；joined 后加入按钮换成「打开卡组」，结果走 toast。
   let joining = $state(false);
   let joined = $state(false);
   let joinedDeckId = $state<number | null>(null);
-  let joinErrorKey = $state<string | null>(null);
 
   // 把分享接口的稳定错误 code 映射到 share.* 语言包键；绝不回显后端英文 message。
   function mapShareError(err: unknown): string {
@@ -55,13 +55,12 @@
   async function handleUnlock(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     unlocking = true;
-    errorKey = null;
     try {
       const res = await apiClient.unlockShare(token, password);
       share = res;
       status = 'content';
     } catch (err) {
-      errorKey = mapShareError(err);
+      toast.error($t(mapShareError(err)));
     } finally {
       unlocking = false;
     }
@@ -70,17 +69,19 @@
   // 入伙：把链接指的卡组加进自己的列表。链接失效/被撤销时服务端返回 404，按同一套 share.* 文案提示。
   async function join(): Promise<void> {
     joining = true;
-    joinErrorKey = null;
     try {
       const res = await apiClient.joinSharedDeck(token);
       joined = true;
       joinedDeckId = res.deck_id;
+      toast.success($t('share.browse.joined'));
     } catch (err) {
-      joinErrorKey = err instanceof ApiClientError && err.isNotFound
-        ? 'share.error_not_found'
-        : err instanceof ApiClientError && err.isNetworkError
-          ? 'error.network'
-          : 'share.browse.join_failed';
+      toast.error($t(
+        err instanceof ApiClientError && err.isNotFound
+          ? 'share.error_not_found'
+          : err instanceof ApiClientError && err.isNetworkError
+            ? 'error.network'
+            : 'share.browse.join_failed'
+      ));
     } finally {
       joining = false;
     }
@@ -101,13 +102,12 @@
       {#if share && status !== 'loading' && status !== 'error' && status !== 'password'}
         {#if $authStore.authenticated}
           {#if joined}
-            <p data-testid="share-joined" class="text-sm text-success">{$t('share.browse.joined')}</p>
             {#if joinedDeckId !== null}
               <Button testId="share-open-deck" variant="primary" size="lg" href={`/decks/${joinedDeckId}`}>{$t('share.browse.open_deck')}</Button>
             {/if}
           {:else}
-            <Button variant="primary" size="lg" disabled={joining} onclick={join} testId="share-join">
-              {joining ? $t('share.browse.joining') : $t('share.browse.join')}
+            <Button variant="primary" size="lg" loading={joining} onclick={join} testId="share-join">
+              {$t('share.browse.join')}
             </Button>
           {/if}
         {:else}
@@ -116,10 +116,6 @@
       {/if}
     {/snippet}
   </PageHeader>
-
-  {#if joinErrorKey}
-    <p data-testid="share-join-error" role="alert" class="mb-4 text-sm text-destructive-foreground">{$t(joinErrorKey)}</p>
-  {/if}
 
   {#if status === 'loading'}
     <Skeleton testId="share-loading" label={$t('share.browse.loading')} lines={2} />
@@ -145,11 +141,8 @@
           class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
         />
       </div>
-      {#if errorKey}
-        <p data-testid="share-password-error" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>
-      {/if}
-      <Button type="submit" disabled={unlocking || !password} variant="primary" size="lg" testId="share-browse-submit">
-        {unlocking ? $t('share.password.submitting') : $t('share.password.submit')}
+      <Button type="submit" loading={unlocking} disabled={!password} variant="primary" size="lg" testId="share-browse-submit">
+        {$t('share.password.submit')}
       </Button>
     </form>
   {:else if share}

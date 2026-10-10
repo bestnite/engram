@@ -8,10 +8,13 @@ import { apiClient, ApiClientError, type Note, type NotePreviewResponse } from '
 import { seedCardTypes, clearCardTypes } from './card-type-fixture';
 import { typeset } from '../lib/mathjax';
 import { setLocale, formatMessage } from '../lib/i18n';
+import { toast } from '../lib/components/ui/toast';
 
 // MathJax 由模块边界替身接管：用例断言「排版确实被调用、且只对预览容器调用」，
 // 不依赖真实 MathJax 资源（测试环境没有自托管脚本）。
 vi.mock('../lib/mathjax', () => ({ typeset: vi.fn(async () => {}) }));
+// 保存结果走 toast：替身记录调用，用例据此断言报告了什么。
+vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const typesetSpy = vi.mocked(typeset);
 const SHA = 'a'.repeat(64);
@@ -388,9 +391,9 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(createNotes).toHaveBeenCalledTimes(1);
-    // 没有跳转，内容仍在，错误可见。
+    // 没有跳转，内容仍在，错误以 toast 报告。
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(target.querySelector('[data-testid="note-save-error"]')).toBeTruthy();
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
     expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('kept');
   });
 
@@ -413,7 +416,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(target.querySelector('[data-testid="note-save-error"]')).toBeTruthy();
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
   });
 
   it('prevents duplicate in-flight create submissions', async () => {
@@ -530,7 +533,27 @@ describe('unified note editor — edit mode', () => {
       tags: ['a', 'b'],
     });
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(target.querySelector('[data-testid="note-saved"]')).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.saved'));
+  });
+
+  it('reports a rejected edit as an error toast and keeps the draft', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    vi.spyOn(apiClient, 'updateNote').mockRejectedValue(
+      new ApiClientError('HTTP 400: invalid_request', { status: 400, code: 'invalid_request' })
+    );
+
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+    setField('note-field-front', 'Q2');
+    await flush();
+    submitForm();
+    await flush();
+
+    // 400 是内容不合法：报具体原因而不是笼统失败；草稿不丢，也不报「已保存」。
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.invalid'));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('Q2');
   });
 
   it('keeps typing that arrives during a save in flight and never claims it was saved', async () => {
@@ -557,31 +580,8 @@ describe('unified note editor — edit mode', () => {
     await flush();
 
     expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('QQ-newer');
-    // 当前草稿并未被这次保存覆盖，也就不能显示「已保存」。
-    expect(target.querySelector('[data-testid="note-saved"]')).toBeNull();
-  });
-
-  it('clears the saved marker once the draft changes again, including tags', async () => {
-    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-    vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
-      noteFixture({ fields: { front: 'Q2', back: 'A' }, tags: ['a'] })
-    );
-
-    mountEditor({ id: '5', noteId: '9' });
-    await flush();
-
-    setField('note-field-front', 'Q2');
-    setField('note-tags-editor', 'a');
-    await flush();
-    submitForm();
-    await flush();
-    expect(target.querySelector('[data-testid="note-saved"]')).toBeTruthy();
-
-    // 保存之后又改标签：草稿不再等于已保存快照，标记必须撤下。
-    setField('note-tags-editor', 'a, b');
-    await flush();
-    expect(target.querySelector('[data-testid="note-saved"]')).toBeNull();
+    // 当前草稿并未被这次保存覆盖，也就不能报告「已保存」。
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('shows a not-found state when the note belongs to another deck', async () => {

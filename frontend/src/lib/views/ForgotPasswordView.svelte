@@ -4,25 +4,24 @@
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   // 请求密码重置（服务端 GET /forgot-password 切壳后由客户端路由渲染此页）。
   // 协议走 POST /api/v1/auth/forgot-password：无论账号是否存在都回同形响应，避免账号枚举。
   let email = $state('');
   let loading = $state(false);
-  let errorKey = $state<string | null>(null);
   let done = $state(false);
   let mailReady = $state(true);
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     loading = true;
-    errorKey = null;
     try {
       const res = await apiClient.requestPasswordReset({ email: email.trim() });
       mailReady = res.mail_ready;
       done = true;
     } catch (err) {
-      errorKey = getAccountErrorMessageKey(err);
+      toast.error($t(getAccountErrorMessageKey(err)));
     } finally {
       loading = false;
     }
@@ -53,15 +52,6 @@
     {:else}
       <p class="mb-6 text-sm text-muted-foreground">{$t('account.forgot.intro')}</p>
 
-      {#if errorKey}
-        <div
-          data-testid="forgot-error"
-          class="mb-6 p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm"
-        >
-          <span>{$t(errorKey)}</span>
-        </div>
-      {/if}
-
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
           <label for="forgot-email" class="block text-sm font-medium text-foreground/80 mb-1.5">
@@ -81,12 +71,8 @@
         </div>
 
         <div class="pt-2">
-          <Button type="submit" disabled={loading || !email.trim()} variant="primary" size="lg" class="w-full" testId="forgot-submit">
-            {#if loading}
-              <span>{$t('account.forgot.submitting')}</span>
-            {:else}
-              <span>{$t('account.forgot.submit')}</span>
-            {/if}
+          <Button type="submit" {loading} disabled={!email.trim()} variant="primary" size="lg" class="w-full" testId="forgot-submit">
+            {$t('account.forgot.submit')}
           </Button>
         </div>
       </form>

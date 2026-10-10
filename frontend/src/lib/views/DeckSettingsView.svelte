@@ -8,6 +8,7 @@
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
 
@@ -42,8 +43,8 @@
   let presetId = $state(initialSettings ? String(initialSettings.preset_id) : '');
   let presetsError = $state(false);
   let saving = $state(false);
-  let saveError = $state('');
-  let saved = $state(false);
+  // 只装提交前的本地校验错误；请求结果走 toast。
+  let invalid = $state(false);
 
   const deckId = $derived($routeStore.params.id || '');
 
@@ -91,14 +92,10 @@
 
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    saveError = '';
-    saved = false;
     const n = parseCap(newPerDay);
     const r = parseCap(reviewsPerDay);
-    if (n === null || r === null) {
-      saveError = 'deck.settings.error.invalid';
-      return;
-    }
+    invalid = n === null || r === null;
+    if (n === null || r === null) return;
     saving = true;
     try {
       // preset_id 只在选中了一个真实预设时提交：省略即不动预设，空串不是合法预设标识。
@@ -110,13 +107,9 @@
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
-      saved = true;
+      toast.success($t('deck.settings.saved'));
     } catch (err) {
-      if (err instanceof ApiClientError && err.isForbidden) {
-        saveError = 'deck.settings.error.forbidden';
-      } else {
-        saveError = 'deck.settings.error.failed';
-      }
+      toast.error($t(err instanceof ApiClientError && err.isForbidden ? 'deck.settings.error.forbidden' : 'deck.settings.error.failed'));
     } finally {
       saving = false;
     }
@@ -234,10 +227,9 @@
       </SettingsSection>
 
       <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
-        {#if saveError}<p role="alert" data-testid="deck-settings-save-error" class="text-sm text-destructive-foreground">{$t(saveError)}</p>{/if}
-        {#if saved}<p role="status" data-testid="deck-settings-saved" class="text-sm text-success">{$t('deck.settings.saved')}</p>{/if}
-        <Button type="submit" testId="deck-settings-submit" disabled={saving} variant="primary" size="lg">
-          {saving ? $t('deck.settings.saving') : $t('deck.settings.save')}
+        {#if invalid}<p role="alert" data-testid="deck-settings-invalid" class="text-sm text-destructive-foreground">{$t('deck.settings.error.invalid')}</p>{/if}
+        <Button type="submit" testId="deck-settings-submit" loading={saving} variant="primary" size="lg">
+          {$t('deck.settings.save')}
         </Button>
       </div>
     </form>

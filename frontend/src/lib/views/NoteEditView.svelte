@@ -10,6 +10,7 @@
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import Dropzone from '../components/ui/Dropzone.svelte';
@@ -35,16 +36,11 @@
   let loading = $state(true);
   let saving = $state(false);
   let loadError = $state(false);
-  let saveError = $state(false);
-  let invalid = $state(false);
-  let saved = $state(false);
   let metaError = $state(false);
 
   let selectedField = $state('');
   // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（编辑器媒体面）。
   let uploading = $state(false);
-  let uploadErrorKey = $state('');
-  let uploaded = $state(false);
 
   // 预览状态机：empty 尚未输入 / loading 生成中（可能仍挂着上一份结果）/ ready 有结果 /
   // incomplete 字段不全（服务端 400）/ error 取用失败。
@@ -60,8 +56,6 @@
   let previewGeneration = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let typesetChain: Promise<void> = Promise.resolve();
-  // 最近一次成功保存时的草稿签名；草稿偏离它即表示有未保存改动。
-  let savedSignature = '';
 
   // 题型下拉：清单与顺序来自服务端的自描述（kind 字典序），元数据未就绪时为空。
   const kindOptions = $derived(
@@ -79,8 +73,7 @@
   const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
 
   // 草稿签名：kind、提交字段与标签任一变化都得到新串（标签用解析后的数组，避免只改空格
-  // 也当成新改动）。保存只对提交那一刻的快照负责，因此用它判断响应落地时草稿是否已被改过，
-  // 以及何时撤下「已保存」标记。
+  // 也当成新改动）。保存只对提交那一刻的快照负责，因此用它判断响应落地时草稿是否已被改过。
   const draftSignature = $derived(
     JSON.stringify({ kind, fields: collectFields(), tags: parseTags() })
   );
@@ -182,9 +175,6 @@
     kind = next;
     fields = emptyFields(fieldsForKind($cardTypes, next));
     selectedField = firstTextField(next);
-    saved = false;
-    invalid = false;
-    saveError = false;
   }
 
   // insertMedia 把 Markdown 图片引用追加到当前选中字段；上传与选择器共用同一段逻辑。
@@ -193,7 +183,6 @@
     const current = fields[selectedField];
     if (typeof current !== 'string') return false;
     fields[selectedField] = `${current}${current && !current.endsWith('\n') ? '\n' : ''}![](${url})`;
-    saved = false;
     return true;
   }
 
@@ -212,16 +201,14 @@
 
   // 选中或拖入文件即上传：成功后插入到所选字段，与媒体库选择器共用同一段 insertMedia。
   async function uploadMedia(file: File): Promise<void> {
-    uploaded = false;
-    uploadErrorKey = '';
     uploading = true;
     try {
       const result = await apiClient.uploadDeckMedia(deckId, file);
       if (disposed) return;
-      uploaded = insertMedia(result.url);
+      if (insertMedia(result.url)) toast.success($t('media.upload.inserted'));
     } catch (err) {
       if (disposed) return;
-      uploadErrorKey = uploadErrorKeyFor(err);
+      toast.error($t(uploadErrorKeyFor(err)));
     } finally {
       if (!disposed) uploading = false;
     }
@@ -300,9 +287,6 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (saving) return;
-    invalid = false;
-    saved = false;
-    saveError = false;
     if (isCreate) await create();
     else await save();
   }
@@ -323,19 +307,24 @@
       // 身份先落地：即便草稿在请求期间被改过，后续保存仍指向同一张卡片。
       note = updated;
       if (draftSignature === submitted) {
-        // 请求期间没有新输入：可以安全地把响应收进表单并标记已保存。
+        // 请求期间没有新输入：可以安全地把响应收进表单并报告已保存。
         adoptFields(updated);
-        savedSignature = draftSignature;
-        saved = true;
+        toast.success($t('note_edit.saved'));
       }
       // 草稿已被改过：保留用户正在输入的内容（不 adopt），也不谎报「已保存」。
     } catch (err) {
       if (disposed) return;
-      saveError = true;
-      if (err instanceof ApiClientError && err.status === 400) invalid = true;
+      reportSaveError(err);
     } finally {
       if (!disposed) saving = false;
     }
+  }
+
+  /** 保存失败的提示：400 是内容不合法，给出可操作的原因；其余一律报通用失败。 */
+  function reportSaveError(err: unknown): void {
+    const invalid = err instanceof ApiClientError && err.status === 400;
+    if (isCreate) toast.error($t(invalid ? 'note_create.invalid' : 'note_create.failed'));
+    else toast.error($t(invalid ? 'note_edit.invalid' : 'note_edit.failed'));
   }
 
   /** 新建：只有确认新建成功（非 dry_run、created==1、无逐行错误）才跳回卡组页。 */
@@ -348,14 +337,13 @@
       // 用户在请求在途时离开（换路由/卸载）：不再写状态，也不要把他们拉去卡组页。
       if (disposed) return;
       if (result.dry_run || result.created !== 1 || result.errors.length > 0) {
-        saveError = true;
+        reportSaveError(null);
         return;
       }
       navigate(`/decks/${encodeURIComponent(deckId)}`);
     } catch (err) {
       if (disposed) return;
-      saveError = true;
-      if (err instanceof ApiClientError && err.status === 400) invalid = true;
+      reportSaveError(err);
     } finally {
       if (!disposed) saving = false;
     }
@@ -369,12 +357,6 @@
     const current = signature;
     void current;
     untrack(() => schedulePreview());
-  });
-
-  // 任何改动（含标签）都让「已保存」失效：保存成功只代表提交那一刻的草稿快照。
-  $effect(() => {
-    if (draftSignature === savedSignature) return;
-    saved = false;
   });
 
   onMount(() => {
@@ -446,8 +428,6 @@
                 hint={uploading ? $t('media.upload.uploading') : $t('dropzone.media_hint')}
                 onfile={uploadMedia}
               />
-              {#if uploaded}<p role="status" data-testid="media-upload-status" class="text-sm text-success">{$t('media.upload.inserted')}</p>{/if}
-              {#if uploadErrorKey}<p role="alert" data-testid="media-upload-error" class="text-sm text-destructive-foreground">{$t(uploadErrorKey)}</p>{/if}
             </div>
             <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
             <MediaPicker onselect={insertMedia} />
@@ -511,17 +491,12 @@
 
       <!-- 操作栏贴在视口底部：长表单不用滚到底才能保存。 -->
       <div class="sticky bottom-0 z-10 -mx-4 mt-8 flex flex-wrap items-center gap-3 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
-        <Button type="submit" size="lg" testId="note-submit" disabled={saving}>
-          {saving
-            ? (isCreate ? $t('note_create.saving') : $t('note_edit.saving'))
-            : (isCreate ? $t('note_create.submit') : $t('note_edit.save'))}
+        <Button type="submit" size="lg" testId="note-submit" loading={saving}>
+          {isCreate ? $t('note_create.submit') : $t('note_edit.save')}
         </Button>
         <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(`/decks/${encodeURIComponent(deckId)}`)}>
           {$t('note_edit.cancel')}
         </Button>
-        {#if invalid}<p role="alert" class="text-sm text-destructive-foreground">{isCreate ? $t('note_create.invalid') : $t('note_edit.invalid')}</p>{/if}
-        {#if saveError}<p role="alert" data-testid="note-save-error" class="text-sm text-destructive-foreground">{isCreate ? $t('note_create.failed') : $t('note_edit.failed')}</p>{/if}
-        {#if saved}<p role="status" data-testid="note-saved" class="text-sm text-success">{$t('note_edit.saved')}</p>{/if}
       </div>
     </form>
   {/if}

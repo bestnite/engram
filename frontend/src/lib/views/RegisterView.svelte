@@ -7,6 +7,7 @@
   import { apiClient, getApiErrorMessageKey, validatePasswordConfirmation, ApiClientError } from '../api';
   import type { RegistrationPolicy } from '../api';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   // 注册页的首帧形态由站点策略决定，因此探测落定之前不能渲染表单：否则一个 closed 的站点会先闪出
   // 表单、再被拦截面板替换。'probing'＝探测中；'unknown'＝探测失败，或这次访问不受策略约束
@@ -33,6 +34,7 @@
   let password = $state('');
   let confirmPassword = $state('');
   let loading = $state(false);
+  // 只装提交前的本地校验错误（两次密码不一致）；请求失败走 toast。
   let errorKey = $state<string | null>(null);
   // 带邀请令牌的访问走邀请接受路径，与策略无关（invite 策略正是靠它放行），因此一开始就按
   // 「不受策略约束」处理，直接给表单。
@@ -84,8 +86,8 @@
       errorKey = confirmation.errorKey ?? 'error.unknown';
       return;
     }
-    loading = true;
     errorKey = null;
+    loading = true;
     try {
       await register({
         username: username.trim(),
@@ -97,7 +99,7 @@
       // 注册不建立会话：与 SSR 一致，成功后回到登录页。
       navigate('/login');
     } catch (err) {
-      errorKey = err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown';
+      toast.error($t(err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown'));
     } finally {
       loading = false;
     }
@@ -245,13 +247,8 @@
         </div>
 
         <div class="pt-2">
-          <Button type="submit" disabled={loading || !username.trim() || !email.trim() || !password || !confirmPassword} variant="primary" size="lg" class="w-full" testId="register-submit">
-            {#if loading}
-              <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
-              <span>{$t('auth.register.submitting')}</span>
-            {:else}
-              <span>{$t('auth.register.submit')}</span>
-            {/if}
+          <Button type="submit" {loading} disabled={!username.trim() || !email.trim() || !password || !confirmPassword} variant="primary" size="lg" class="w-full" testId="register-submit">
+            {$t('auth.register.submit')}
           </Button>
         </div>
       </form>

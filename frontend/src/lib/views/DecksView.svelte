@@ -5,6 +5,7 @@
   import type { Deck, DeckShareInvite } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import Badge from '../components/ui/Badge.svelte';
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
@@ -49,8 +50,8 @@
   // 待接受的共享邀请（同意制）：分享先产生邀请，接受那一步才写授权。
   // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
   let invites = $state<DeckShareInvite[]>([]);
-  let inviteBusy = $state<string | null>(null);
-  let inviteError = $state<string | null>(null);
+  // 在途的邀请回应：卡组 id 决定禁用哪一行，accept 决定该行哪个按钮转圈。
+  let inviteBusy = $state<{ deckId: string; accept: boolean } | null>(null);
 
   // 卡组危险操作的确认弹窗状态：删除（自有卡组）与退出共享（被共享卡组）共用一套弹窗，
   // 只有文案与调用的接口不同，避免两套重复的确认 UI。
@@ -91,11 +92,10 @@
 
   /**
    * 接受或拒绝一条邀请。接受成功后重新拉卡组列表——卡组正是那一步才出现在这里。
-   * 失败时只在这一块提示，不动整页状态。
+   * 失败走 toast，不动整页状态。
    */
   async function respondToInvite(deckId: string, accept: boolean): Promise<void> {
-    inviteBusy = deckId;
-    inviteError = null;
+    inviteBusy = { deckId, accept };
     try {
       if (accept) {
         await apiClient.acceptShareInvite(deckId);
@@ -107,7 +107,7 @@
         await fetchDecks();
       }
     } catch {
-      inviteError = 'decks.invites.failed';
+      toast.error($t('decks.invites.failed'));
     } finally {
       inviteBusy = null;
     }
@@ -323,7 +323,8 @@
                 testId="deck-invite-reject-{invite.deck_id}"
                 variant="ghost"
                 size="sm"
-                disabled={inviteBusy === invite.deck_id}
+                loading={inviteBusy?.deckId === invite.deck_id && !inviteBusy.accept}
+                disabled={inviteBusy?.deckId === invite.deck_id}
                 onclick={() => respondToInvite(invite.deck_id, false)}
               >
                 {$t('decks.invites.reject')}
@@ -332,7 +333,8 @@
                 testId="deck-invite-accept-{invite.deck_id}"
                 variant="primary"
                 size="sm"
-                disabled={inviteBusy === invite.deck_id}
+                loading={inviteBusy?.deckId === invite.deck_id && inviteBusy.accept}
+                disabled={inviteBusy?.deckId === invite.deck_id}
                 onclick={() => respondToInvite(invite.deck_id, true)}
               >
                 {$t('decks.invites.accept')}
@@ -341,9 +343,6 @@
           </li>
         {/each}
       </ul>
-      {#if inviteError}
-        <p role="alert" class="mt-2 text-xs text-destructive-foreground">{$t(inviteError)}</p>
-      {/if}
     </section>
   {/if}
 
@@ -479,8 +478,8 @@
 
   <div class="mt-5 flex items-center justify-end gap-2">
     <Button type="button" variant="outline" size="lg" onclick={() => (showBatchExport = false)}>{$t('note_edit.cancel')}</Button>
-    <Button type="button" testId="decks-batch-export-submit" disabled={batchExporting} onclick={handleBatchExport} variant="primary" size="lg">
-      {batchExporting ? $t('package.batch_export_progress') : $t('package.batch_export', { count: selectedDeckIds.length })}
+    <Button type="button" testId="decks-batch-export-submit" loading={batchExporting} onclick={handleBatchExport} variant="primary" size="lg">
+      {$t('package.batch_export', { count: selectedDeckIds.length })}
     </Button>
   </div>
 </Dialog>
@@ -539,13 +538,13 @@
         </div>
 
         {#if createError}
-          <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(createError)}</p>
+          <p role="alert" class="text-sm text-destructive-foreground">{$t(createError)}</p>
         {/if}
 
         <div class="pt-2 flex items-center justify-end gap-3">
           <Button variant="outline" size="lg" onclick={closeCreateModal}>{$t('note_edit.cancel')}</Button>
-          <Button type="submit" size="lg" testId="deck-create-submit" disabled={creating}>
-            {creating ? $t('decks.create.submitting') : $t('decks.create.submit')}
+          <Button type="submit" size="lg" testId="deck-create-submit" loading={creating}>
+            {$t('decks.create.submit')}
           </Button>
         </div>
       </form>
@@ -562,7 +561,7 @@
     testId={deckAction.kind === 'delete' ? 'deck-delete-dialog' : 'deck-leave-dialog'}
   >
       {#if actionError}
-        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(actionError)}</p>
+        <p role="alert" class="text-sm text-destructive-foreground">{$t(actionError)}</p>
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
@@ -572,15 +571,11 @@
         <Button
           variant={deckAction.kind === 'delete' ? 'danger' : 'danger-outline'}
           size="lg"
-          disabled={acting}
+          loading={acting}
           onclick={confirmDeckAction}
           testId={deckAction.kind === 'delete' ? 'deck-delete-confirm' : 'deck-leave-confirm'}
         >
-          {#if acting}
-            {$t(deckAction.kind === 'delete' ? 'common.deleting' : 'decks.leave.submitting')}
-          {:else}
-            {$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_btn' : 'decks.leave.confirm_btn')}
-          {/if}
+          {$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_btn' : 'decks.leave.confirm_btn')}
         </Button>
       </div>
   </Dialog>

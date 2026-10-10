@@ -23,6 +23,7 @@
   import Combobox from '../components/ui/Combobox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   interface Props {
     initialLoading?: boolean;
@@ -37,8 +38,6 @@
   let loading = $state(initialLoading);
   let saving = $state(false);
   let serverApiAvailable = $state<boolean | null>(null);
-  let savedNotice = $state<string | null>(null);
-  let generalError = $state<string | null>(null);
 
   // 卡组共享接收策略（同意制）：谁可以把卡组分享给我。
   // allowList 存服务端回读的真值（带用户名），本地不推断并集运算的结果。
@@ -46,8 +45,6 @@
   let allowList = $state<ShareAllowRow[]>([]);
   let allowName = $state('');
   let shareSaving = $state(false);
-  let shareNotice = $state<string | null>(null);
-  let shareError = $state<string | null>(null);
   let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour' | 'learn_ahead_minutes', string>>>({});
 
   // 表单字段绑定
@@ -75,7 +72,6 @@
    */
   async function loadProfile(): Promise<void> {
     loading = true;
-    generalError = null;
 
     // 默认时区回退：优先尝试浏览器本地环境时区
     if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
@@ -109,9 +105,9 @@
         // 服务端尚未提供 profile JSON 端点（API Gap 明确报告），安全降级并保留前端安全输入与本地生效
         serverApiAvailable = false;
       } else if (err instanceof ApiClientError && err.isUnauthorized) {
-        generalError = 'error.unauthorized';
+        toast.error($t('error.unauthorized'));
       } else {
-        generalError = getApiErrorMessageKey(err);
+        toast.error($t(getApiErrorMessageKey(err)));
       }
     } finally {
       loading = false;
@@ -144,8 +140,6 @@
    */
   async function handleSubmit(event: Event): Promise<void> {
     event.preventDefault();
-    savedNotice = null;
-    generalError = null;
     fieldErrors = {};
 
     const rawCutoff = dayCutoff;
@@ -166,7 +160,7 @@
 
     // 若服务端确认缺失 JSON API，不向 SSR 表单虚构请求，给出清晰明确的本地生效与缺口提示
     if (serverApiAvailable === false) {
-      savedNotice = 'settings.profile.api_unavailable';
+      toast.warning($t('settings.profile.api_unavailable'));
       saving = false;
       return;
     }
@@ -178,13 +172,13 @@
         selectedLocale = updated.locale;
         setLocale(updated.locale);
       }
-      savedNotice = 'settings.profile.saved';
+      toast.success($t('settings.profile.saved'));
     } catch (err) {
       if (err instanceof ApiClientError && err.isNotFound) {
         serverApiAvailable = false;
-        savedNotice = 'settings.profile.api_unavailable';
+        toast.warning($t('settings.profile.api_unavailable'));
       } else {
-        generalError = getApiErrorMessageKey(err);
+        toast.error($t(getApiErrorMessageKey(err)));
       }
     } finally {
       saving = false;
@@ -215,19 +209,20 @@
     revoke?: string[];
   }): Promise<void> {
     shareSaving = true;
-    shareNotice = null;
-    shareError = null;
     try {
       const res = await apiClient.saveSharePolicy(input);
       sharePolicy = res.policy;
       allowList = res.allow_list ?? [];
       allowName = '';
-      shareNotice = 'settings.share_policy.saved';
+      toast.success($t('settings.share_policy.saved'));
     } catch (err) {
-      shareError =
-        err instanceof ApiClientError && err.code === 'user_not_found'
-          ? 'settings.share_policy.user_not_found'
-          : 'settings.share_policy.failed';
+      toast.error(
+        $t(
+          err instanceof ApiClientError && err.code === 'user_not_found'
+            ? 'settings.share_policy.user_not_found'
+            : 'settings.share_policy.failed'
+        )
+      );
     } finally {
       shareSaving = false;
     }
@@ -301,18 +296,9 @@
             {/if}
           </div>
         </div>
-        <!-- 保存结果写在按钮旁边：不再在页面顶部插入横幅把整页往下推。 -->
-        <div class="flex flex-wrap items-center gap-3">
-          <Button testId="settings-submit" type="submit" disabled={saving} variant="primary" size="lg">
-            {$t(saving ? 'settings.profile.saving' : 'settings.profile.submit')}
-          </Button>
-          {#if generalError}
-            <p data-testid="settings-general-error" class="text-sm text-destructive-foreground" role="alert">{$t(generalError)}</p>
-          {/if}
-          {#if savedNotice}
-            <p data-testid="settings-saved-notice" class="text-sm text-success" role="status">{$t(savedNotice)}</p>
-          {/if}
-        </div>
+        <Button testId="settings-submit" type="submit" loading={saving} variant="primary" size="lg">
+          {$t('settings.profile.submit')}
+        </Button>
       </form>
     </SettingsSection>
 
@@ -354,7 +340,7 @@
               class="field-input min-w-0 flex-1 text-sm"
               data-testid="share-policy-allow-input"
             />
-            <Button type="submit" variant="outline" size="lg" disabled={shareSaving} testId="share-policy-allow-add">
+            <Button type="submit" variant="outline" size="lg" loading={shareSaving} testId="share-policy-allow-add">
               {$t('settings.share_policy.allow_add')}
             </Button>
           </form>
@@ -381,13 +367,6 @@
             </ul>
           {/if}
         </div>
-      {/if}
-
-      {#if shareNotice}
-        <p class="mt-3 text-xs text-success" role="status">{$t(shareNotice)}</p>
-      {/if}
-      {#if shareError}
-        <p class="mt-3 text-xs text-destructive-foreground" role="alert">{$t(shareError)}</p>
       {/if}
     </SettingsSection>
 

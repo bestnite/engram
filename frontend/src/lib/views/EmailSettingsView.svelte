@@ -11,6 +11,7 @@
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   // 账号与邮箱设置（服务端 GET /settings/email 切壳后由客户端路由渲染此页，未登录在服务端即重定向）。
   // 读取与提交走 /api/v1/settings/email，重发验证走 /api/v1/settings/verify-email。
@@ -22,12 +23,7 @@
 
   let newEmail = $state('');
   let submitting = $state(false);
-  let errorKey = $state<string | null>(null);
-  let sent = $state(false);
-
   let resending = $state(false);
-  let resendDone = $state(false);
-  let resendErrorKey = $state<string | null>(null);
 
   onMount(async () => {
     try {
@@ -45,13 +41,11 @@
   async function handleSubmit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     submitting = true;
-    errorKey = null;
-    sent = false;
     try {
       await apiClient.requestEmailChange({ email: newEmail.trim() });
-      sent = true;
+      toast.success($t('account.email.change_sent'));
     } catch (err) {
-      errorKey = getAccountErrorMessageKey(err);
+      toast.error($t(getAccountErrorMessageKey(err)));
     } finally {
       submitting = false;
     }
@@ -59,13 +53,11 @@
 
   async function handleResend(): Promise<void> {
     resending = true;
-    resendErrorKey = null;
-    resendDone = false;
     try {
       await apiClient.resendVerification();
-      resendDone = true;
+      toast.success($t('account.email.resent'));
     } catch (err) {
-      resendErrorKey = getAccountErrorMessageKey(err);
+      toast.error($t(getAccountErrorMessageKey(err)));
     } finally {
       resending = false;
     }
@@ -87,17 +79,9 @@
         <Badge variant={verified ? 'success' : 'warning'}><span data-testid="email-status">{verified ? $t('account.email.verified') : $t('account.email.unverified')}</span></Badge>
       </div>
       {#if !verified && mailReady}
-        <div class="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="outline" size="lg" onclick={handleResend} disabled={resending}>
-            {resending ? $t('account.email.resending') : $t('account.email.resend')}
-          </Button>
-          {#if resendDone}
-            <p data-testid="resend-done" class="text-sm text-success">{$t('account.email.resent')}</p>
-          {/if}
-          {#if resendErrorKey}
-            <p data-testid="resend-error" class="text-sm text-destructive-foreground">{$t(resendErrorKey)}</p>
-          {/if}
-        </div>
+        <Button variant="outline" size="lg" class="mt-4" onclick={handleResend} loading={resending}>
+          {$t('account.email.resend')}
+        </Button>
       {/if}
     </SettingsSection>
 
@@ -119,16 +103,10 @@
             class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
           />
         </div>
-        <Button type="submit" disabled={submitting || !mailReady || !newEmail.trim()} variant="primary" size="lg">
-          {submitting ? $t('account.email.change_submitting') : $t('account.email.change_submit')}
+        <Button type="submit" loading={submitting} disabled={!mailReady || !newEmail.trim()} variant="primary" size="lg">
+          {$t('account.email.change_submit')}
         </Button>
       </form>
-      {#if sent}
-        <p data-testid="email-change-sent" class="mt-3 text-sm text-success" role="status">{$t('account.email.change_sent')}</p>
-      {/if}
-      {#if errorKey}
-        <p data-testid="email-change-error" class="mt-3 text-sm text-destructive-foreground" role="alert">{$t(errorKey)}</p>
-      {/if}
     </SettingsSection>
   {/if}
 

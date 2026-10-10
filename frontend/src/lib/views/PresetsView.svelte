@@ -4,6 +4,7 @@
   import { apiClient, ApiClientError } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
@@ -54,9 +55,10 @@
   // 让它可改会写出一个「默认预设不再叫 Default」的状态，服务端随后会再补一条同名的。
   let formNameLocked = $state(false);
 
-  // notice 是按预设定位的一次性操作提示（i18n key）；gate 的「还差 N 条」单独由门槛渲染。
-  let notice = $state<{ id: string; key: string } | null>(null);
-  let busyId = $state<string | null>(null);
+  // 在途的预设操作：id 决定禁用哪一行，action 决定该行哪个按钮转圈。
+  // 操作结果走 toast；gate 的「还差 N 条」是持续状态，单独由门槛渲染。
+  let busy = $state<{ id: string; action: 'optimize' | 'revert' } | null>(null);
+  const busyId = $derived(busy?.id ?? null);
 
   // 关联卡组与删除预设状态
   let decks = $state<Deck[]>([]);
@@ -225,8 +227,7 @@
 
   /** 触发优化：成功起轮询；不足门槛/已有作业刷新门槛并给一次提示。 */
   async function runOptimize(p: PresetRecord): Promise<void> {
-    notice = null;
-    busyId = p.id;
+    busy = { id: p.id, action: 'optimize' };
     try {
       const resp = await apiClient.optimizePreset(p.id);
       applyJob(p.id, resp.job, resp.gate);
@@ -239,25 +240,24 @@
         await load();
       } else if (err instanceof ApiClientError && err.code === 'optimize_conflict') {
         await load();
-        notice = { id: p.id, key: 'presets.optimize.conflict' };
+        toast.warning($t('presets.optimize.conflict'));
       } else {
-        notice = { id: p.id, key: 'presets.error.failed' };
+        toast.error($t('presets.error.failed'));
       }
     } finally {
-      busyId = null;
+      busy = null;
     }
   }
 
   /** 一键回退默认权重；响应即整份列表，权重来源随之回到默认。 */
   async function revertWeights(p: PresetRecord): Promise<void> {
-    notice = null;
-    busyId = p.id;
+    busy = { id: p.id, action: 'revert' };
     try {
       data = await apiClient.revertPresetWeights(p.id);
     } catch (err) {
-      notice = { id: p.id, key: optimizationErrorKey(err) };
+      toast.error($t(optimizationErrorKey(err)));
     } finally {
-      busyId = null;
+      busy = null;
     }
   }
 
@@ -291,7 +291,7 @@
       }
     } catch {
       // 轮询失败不静默：给出一次错误提示并停止，用户可手动重试。
-      notice = { id: presetId, key: 'presets.error.failed' };
+      toast.error($t('presets.error.failed'));
       stopPolling();
     }
   }
@@ -468,6 +468,7 @@
                 variant="outline"
                 size="sm"
                 testId={`preset-${p.id}-optimize`}
+                loading={busy?.id === p.id && busy.action === 'optimize'}
                 disabled={busyId === p.id || !p.gate.eligible}
                 title={!p.gate.eligible ? $t('presets.optimize.gate_shortfall', { count: p.gate.shortfall }) : ''}
                 onclick={() => runOptimize(p)}
@@ -480,6 +481,7 @@
                 variant="ghost"
                 size="sm"
                 testId={`preset-${p.id}-revert`}
+                loading={busy?.id === p.id && busy.action === 'revert'}
                 disabled={busyId === p.id}
                 title={$t('presets.revert.note')}
                 onclick={() => revertWeights(p)}
@@ -565,9 +567,6 @@
               {/if}
               {$t('presets.reschedule.note')}
             </p>
-            {#if notice && notice.id === p.id}
-              <p role="alert" data-testid={`preset-${p.id}-notice`} class="text-[13px] text-warning">{$t(notice.key)}</p>
-            {/if}
           </div>
 
           {#if p.job}
@@ -625,7 +624,7 @@
     testId="presets-form-dialog"
   >
       {#if formError}
-        <p role="alert" data-testid="presets-form-error" class="rounded-xl border border-rose-200 dark:border-rose-900/60 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">{$t(formError)}</p>
+        <p role="alert" data-testid="presets-form-error" class="text-sm text-destructive-foreground">{$t(formError)}</p>
       {/if}
       <form onsubmit={submitForm} data-testid="presets-form" class="space-y-4">
         <label class="block">
@@ -695,8 +694,8 @@
           <p class="text-xs text-muted-foreground">{$t('presets.form.edit_note')}</p>
         {/if}
         <div class="flex items-center gap-2 pt-2">
-          <Button type="submit" size="lg" testId="presets-form-submit" disabled={formSaving}>
-            {formSaving ? $t('presets.form.saving') : $t('presets.form.save')}
+          <Button type="submit" size="lg" testId="presets-form-submit" loading={formSaving}>
+            {$t('presets.form.save')}
           </Button>
           <Button variant="outline" size="lg" testId="presets-form-cancel" onclick={closeForm}>
             {$t('presets.form.cancel')}
@@ -716,15 +715,15 @@
     testId="preset-delete-dialog"
   >
       {#if deletePresetError}
-        <p role="alert" class="text-xs text-rose-600 dark:text-rose-400">{$t(deletePresetError)}</p>
+        <p role="alert" class="text-sm text-destructive-foreground">{$t(deletePresetError)}</p>
       {/if}
 
       <div class="pt-2 flex items-center justify-end gap-3">
         <Button variant="outline" size="lg" disabled={deletingPreset} onclick={() => presetToDelete = null}>
           {$t('presets.delete.cancel_btn')}
         </Button>
-        <Button variant="danger" size="lg" disabled={deletingPreset} onclick={confirmDeletePreset} testId="preset-delete-confirm">
-          {deletingPreset ? $t('common.deleting') : $t('presets.delete.confirm_btn')}
+        <Button variant="danger" size="lg" loading={deletingPreset} onclick={confirmDeletePreset} testId="preset-delete-confirm">
+          {$t('presets.delete.confirm_btn')}
         </Button>
       </div>
   </Dialog>

@@ -3,6 +3,7 @@
   import { localeStore, t } from '../i18n';
   import Select from './ui/Select.svelte';
   import { switchLocale } from './language-switch';
+  import { toast } from './ui/toast';
 
   /**
    * 未登录页头的语言切换器；切换逻辑（落点、回滚）见 language-switch.ts。
@@ -16,25 +17,18 @@
   ]);
 
   let saving = $state(false);
-  let failed = $state(false);
 
   async function handleSelect(value: string) {
-    failed = false;
     saving = true;
     try {
-      failed = !(await switchLocale(value));
+      if (!(await switchLocale(value))) toast.error($t('language.save_failed'));
     } finally {
       saving = false;
     }
   }
 </script>
 
-<div
-  class="inline-flex h-8 items-center gap-1.5 rounded-md border bg-background px-2 transition-colors {failed
-    ? 'border-destructive/50'
-    : 'border-input'}"
-  title={failed ? $t('language.save_failed') : undefined}
->
+<div class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-background px-2 transition-colors">
   <Globe class="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
   <Select
     value={$localeStore}
@@ -46,8 +40,5 @@
     size="sm"
     class="w-20 border-0 bg-transparent px-0 hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent"
   />
-  {#if failed}
-    <p role="alert" class="sr-only">{$t('language.save_failed')}</p>
-  {/if}
 </div>
 

@@ -5,6 +5,7 @@
   import { setup } from '../auth';
   import { getApiErrorMessageKey, validatePasswordConfirmation, ApiClientError } from '../api';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   let username = $state('');
   let email = $state('');
@@ -12,6 +13,7 @@
   let password = $state('');
   let confirmPassword = $state('');
   let loading = $state(false);
+  // 只装提交前的本地校验错误（两次密码不一致）；请求失败走 toast。
   let errorKey = $state<string | null>(null);
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
@@ -25,8 +27,8 @@
       errorKey = confirmation.errorKey ?? 'error.unknown';
       return;
     }
-    loading = true;
     errorKey = null;
+    loading = true;
     try {
       await setup({
         username: username.trim(),
@@ -39,9 +41,9 @@
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 404) {
         // 已有活跃管理员：引导窗口已关闭（GET /setup 也会 404）。
-        errorKey = 'auth.setup.unavailable';
+        toast.error($t('auth.setup.unavailable'));
       } else {
-        errorKey = err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown';
+        toast.error($t(err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown'));
       }
     } finally {
       loading = false;
@@ -154,13 +156,8 @@
       </div>
 
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !password || !confirmPassword} variant="primary" size="lg" class="w-full" testId="setup-submit">
-          {#if loading}
-            <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
-            <span>{$t('auth.setup.submitting')}</span>
-          {:else}
-            <span>{$t('auth.setup.submit')}</span>
-          {/if}
+        <Button type="submit" {loading} disabled={!username.trim() || !password || !confirmPassword} variant="primary" size="lg" class="w-full" testId="setup-submit">
+          {$t('auth.setup.submit')}
         </Button>
       </div>
     </form>

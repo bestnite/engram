@@ -349,7 +349,7 @@
     {/if}
     <div class="mt-2 flex justify-end gap-2 sm:col-span-2">
       <Button variant="outline" size="lg" onclick={() => (createOpen = false)}>{$t('common.cancel')}</Button>
-      <Button type="submit" testId="admin-users-create-submit" disabled={creating} variant="primary" size="lg">
+      <Button type="submit" testId="admin-users-create-submit" loading={creating} variant="primary" size="lg">
         {$t('admin.users.create_submit')}
       </Button>
     </div>

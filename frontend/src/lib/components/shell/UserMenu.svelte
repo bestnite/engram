@@ -9,6 +9,7 @@
   import { cn } from '../ui/utils';
   import { menuClasses } from '../ui/variants';
   import { switchLocale } from '../language-switch';
+  import { toast } from '../ui/toast';
   import { resetSidebarDecks } from './sidebar';
 
   /**
@@ -33,10 +34,8 @@
     dark = isDark();
   });
 
-  let localeFailed = $state(false);
-
   async function handleLocale(value: string) {
-    localeFailed = !(await switchLocale(value));
+    if (!(await switchLocale(value))) toast.error($t('language.save_failed'));
   }
 
   async function handleLogout(): Promise<void> {
@@ -111,9 +110,6 @@
             </DropdownMenu.RadioItem>
           {/each}
         </DropdownMenu.RadioGroup>
-        {#if localeFailed}
-          <p role="alert" class="px-2 py-1 text-xs text-destructive-foreground">{$t('language.save_failed')}</p>
-        {/if}
         <DropdownMenu.Separator class={menuClasses.separator} />
         <DropdownMenu.Item class={menuClasses.item} onSelect={handleLogout} data-testid="nav-logout-btn">
           <LogOut aria-hidden="true" />

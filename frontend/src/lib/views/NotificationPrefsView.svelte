@@ -8,6 +8,7 @@
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   interface Props {
     initialLoading?: boolean;
@@ -31,8 +32,6 @@
   let reminderHour = $state<string>(initialData ? hourValue(initialData.reminder_hour) : '');
 
   let saving = $state(false);
-  let actionError = $state('');
-  let notice = $state('');
 
   const hours = Array.from({ length: 24 }, (_, h) => h);
 
@@ -98,8 +97,6 @@
   /** 保存：为每个可关闭类型提交显式开关，发送时间为 null（站点默认）或 0–23。 */
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    actionError = '';
-    notice = '';
     saving = true;
     const payload: UpdateNotificationPrefsRequest = {
       choices,
@@ -107,9 +104,9 @@
     };
     try {
       applyData(await apiClient.updateNotificationPrefs(payload));
-      notice = 'settings.notifications.saved';
+      toast.success($t('settings.notifications.saved'));
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
     } finally {
       saving = false;
     }
@@ -186,15 +183,9 @@
         </label>
       </SettingsSection>
 
-      <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
-        {#if actionError}
-          <p data-testid="notifications-action-error" role="alert" class="text-sm text-destructive-foreground">{$t(actionError)}</p>
-        {/if}
-        {#if notice}
-          <p data-testid="notifications-notice" role="status" class="text-sm text-success">{$t(notice)}</p>
-        {/if}
-        <Button type="submit" testId="notifications-submit" disabled={saving} variant="primary" size="lg">
-          {$t(saving ? 'settings.notifications.saving' : 'settings.notifications.submit')}
+      <div class="flex justify-end border-t border-border pt-5">
+        <Button type="submit" testId="notifications-submit" loading={saving} variant="primary" size="lg">
+          {$t('settings.notifications.submit')}
         </Button>
       </div>
     </form>
