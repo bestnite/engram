@@ -8,8 +8,8 @@ import (
 )
 
 // 本文件承载作答类题型的判分骨架：分数→评分档位映射、判分输入基类，
-// 以及 fields 的数值/整数读取辅助。六个具体题型在 typed.go / numeric.go /
-// choice.go / truefalse.go / cloze.go 中实现。
+// 以及 fields 的数值/整数读取辅助。七个具体题型在 typed.go / numeric.go /
+// choice.go / truefalse.go / cloze.go / list.go 中实现。
 
 // FSRS 四档评分，与 reviews.rating 的整数约定一致。
 const (

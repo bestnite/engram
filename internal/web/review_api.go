@@ -12,6 +12,8 @@ import (
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/render"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -130,7 +132,7 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	feedback, err := s.gradeFeedback(ctx, user, card, result.Grade)
+	feedback, err := s.gradeFeedback(ctx, user, card, note, result.Grade)
 	if err != nil {
 		s.logger.Error("build spa grade feedback failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
@@ -391,8 +393,8 @@ func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope,
 }
 
 // gradeFeedback 组装判分反馈：判定、得分与作答文本来自 service 的判分结果，正确答案用
-// 服务端清洗后的 HTML；数值题额外带解析出的数值。
-func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, grade *api.GradeResult) (gin.H, error) {
+// 服务端清洗后的 HTML；数值题额外带解析出的数值；逐项判分的题型额外带逐项结果。
+func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, note *store.Note, grade *api.GradeResult) (gin.H, error) {
 	if grade == nil {
 		return nil, errors.New("graded submission returned no grade result")
 	}
@@ -409,6 +411,41 @@ func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *stor
 	}
 	if parsed, ok := grade.Detail["parsed_answer"]; ok {
 		out["parsed"] = numberText(parsed)
+	}
+	breakdown, err := gradeBreakdown(note.Kind, grade.Detail)
+	if err != nil {
+		return nil, err
+	}
+	if breakdown != nil {
+		out["breakdown"] = breakdown
+	}
+	return out, nil
+}
+
+// gradeBreakdowner 是逐项判分题型的可选能力：把判分细节还原成逐项结果，复习页据此逐项标出对错。
+type gradeBreakdowner interface {
+	Breakdown(detail map[string]any) []cardtype.BreakdownItem
+}
+
+// gradeBreakdown 把题型给出的逐项结果渲染成清洗后的 HTML；题型没有这项能力时返回 nil。
+// 每项写法是 Markdown/TeX 原文，与卡面走同一条清洗管线后才交给 SPA 的 HTML 汇。
+func gradeBreakdown(kind string, detail map[string]any) ([]gin.H, error) {
+	t, ok := cardtype.Lookup(kind)
+	if !ok {
+		return nil, nil
+	}
+	b, ok := t.(gradeBreakdowner)
+	if !ok {
+		return nil, nil
+	}
+	items := b.Breakdown(detail)
+	out := make([]gin.H, 0, len(items))
+	for _, item := range items {
+		html, err := render.RenderMarkdown(item.Answer)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, gin.H{"answer_html": html, "correct": item.Correct})
 	}
 	return out, nil
 }

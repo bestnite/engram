@@ -94,11 +94,11 @@ const kinds: CardTypeDescription[] = [
   {
     kind: 'list',
     label_key: 'cardtype.list',
-    graded: false,
-    answer_control: 'none',
+    graded: true,
+    answer_control: 'items',
     front_field: 'prompt',
     back_field: 'items',
-    prompt_field: '',
+    prompt_field: 'prompt',
     options_field: '',
     fields: withCommon([
       { key: 'prompt', control: 'textarea', required: true },

@@ -35,6 +35,13 @@ type GradeOutcome struct {
 	Detail map[string]any
 }
 
+// BreakdownItem 是逐项判分结果里的一项：Answer 是该项可接受的写法（Markdown 原文），
+// Correct 表示学习者是否答对了这一项。
+type BreakdownItem struct {
+	Answer  string
+	Correct bool
+}
+
 // GradeAnswer 用题型的判分器解码并判分一次作答。
 // 解码失败返回该错误（调用方映射成 400）；能解码但无法判分返回 ErrUngradable。
 func GradeAnswer(g Grader, gc GradeContext, raw json.RawMessage) (GradeOutcome, error) {

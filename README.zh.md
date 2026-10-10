@@ -72,7 +72,7 @@ Engram 暴露 17 个业务 MCP 工具：
 - `list_card_types`：列出支持的题型，附每个题型的字段表和一条能通过校验的示例 note，agent 不必猜字段名与写法。
 - `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词检索卡片、读取单条 note、列出卡组内用到的标签。
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。
-- `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`）；作答类题型（填空、输入作答、数值、选择、判断）提交作答，由服务端判分。
+- `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`）；作答类题型（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
 - `get_stats`：获取用户学习总览、各状态卡片数及留存率分析。
 - `export_deck` / `import_deck`：卡组包（`.edeck`）导出与导入。
 - `create_import_upload`：为卡组包申请一次性上传地址，agent 用 `curl` 等 HTTP 客户端直接上传文件；大卡组不必经过模型输出，API Key 也不离开 MCP 客户端。

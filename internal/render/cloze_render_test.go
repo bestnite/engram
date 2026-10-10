@@ -118,3 +118,29 @@ func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 		})
 	}
 }
+
+// TestListBackRendersAsList 走真实管线，断言列表卡背面按 ordered 渲染成 <ol>/<ul> 且通过清洗，
+// 不再重复题干。
+func TestListBackRendersAsList(t *testing.T) {
+	ct, ok := cardtype.Lookup("list")
+	if !ok {
+		t.Fatal("list card type is not registered")
+	}
+	for _, tc := range []struct {
+		ordered bool
+		tag     string
+	}{{false, "<ul>"}, {true, "<ol>"}} {
+		fields := map[string]any{"prompt": "the-prompt", "items": []any{"red", "blue|violet"}, "ordered": tc.ordered}
+		res, err := ct.Render(cardtype.Card{Template: "forward", Fields: fields}, cardtype.SideBack)
+		if err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		out, err := RenderMarkdown(res.Body)
+		if err != nil {
+			t.Fatalf("RenderMarkdown: %v", err)
+		}
+		if !strings.Contains(out, tc.tag) || !strings.Contains(out, "<li>blue / violet</li>") || strings.Contains(out, "the-prompt") {
+			t.Errorf("ordered=%v html = %q, want %s with every alternative and no prompt", tc.ordered, out, tc.tag)
+		}
+	}
+}

@@ -1309,4 +1309,5 @@ export const en: LocaleCatalog = {
   'package.toast.entries_failed': '{count} entries were not imported.',
   'package.toast.view_report': 'View result',
   'review.graded.blank': 'Blank {index}',
+  'review.graded.item': 'Item {index}',
 };
