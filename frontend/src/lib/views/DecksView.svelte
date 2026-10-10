@@ -12,6 +12,7 @@
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SelectionBar from '../components/ui/SelectionBar.svelte';
+  import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
   import { CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
@@ -35,10 +36,15 @@
   let creating = $state(false);
   let createError = $state<string | null>(null);
 
-  // 批量选择与导出状态
+  // 批量选择与导出状态。导出选项与单卡组导出的默认值一致：带媒体，不带个人进度与权重。
   let selectedDeckIds = $state<string[]>([]);
+  let showBatchExport = $state(false);
   let batchExporting = $state(false);
   let batchExportError = $state<string | null>(null);
+  let includeMedia = $state(true);
+  let includeProgress = $state(false);
+  let includeReviews = $state(false);
+  let includeWeights = $state(false);
 
   // 待接受的共享邀请（同意制）：分享先产生邀请，接受那一步才写授权。
   // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
@@ -203,7 +209,7 @@
     batchExporting = true;
     batchExportError = null;
     try {
-      const { blob, filename } = await apiClient.exportDecksZip(selectedDeckIds);
+      const { blob, filename } = await apiClient.exportDecksZip(selectedDeckIds, { includeMedia, includeProgress, includeReviews, includeWeights });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -212,6 +218,7 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      showBatchExport = false;
     } catch {
       batchExportError = 'package.batch_export_failed';
     } finally {
@@ -441,7 +448,6 @@
   <SelectionBar
     count={selectedDeckIds.length}
     onClear={() => (selectedDeckIds = [])}
-    error={batchExportError ? $t(batchExportError) : undefined}
   >
     <a data-testid="decks-batch-review" class={selectionBarButton} href={batchReviewHref}>
       <CirclePlay aria-hidden="true" />
@@ -451,14 +457,33 @@
       type="button"
       data-testid="decks-batch-export"
       class={selectionBarButton}
-      disabled={batchExporting}
-      onclick={handleBatchExport}
+      onclick={() => { batchExportError = null; showBatchExport = true; }}
     >
       <Download aria-hidden="true" />
-      {batchExporting ? $t('package.batch_export_progress') : $t('package.export.short')}
+      {$t('package.export.short')}
     </button>
   </SelectionBar>
 </Page>
+
+<!-- 批量导出设置：选项与单卡组导出相同，所有选中的卡组按同一组选项打进一个 zip -->
+<Dialog
+  bind:open={showBatchExport}
+  title={$t('package.export.heading')}
+  testId="decks-batch-export-dialog"
+>
+  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights />
+
+  {#if batchExportError}
+    <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t(batchExportError)}</p>
+  {/if}
+
+  <div class="mt-5 flex items-center justify-end gap-2">
+    <Button type="button" variant="outline" size="lg" onclick={() => (showBatchExport = false)}>{$t('note_edit.cancel')}</Button>
+    <Button type="button" testId="decks-batch-export-submit" disabled={batchExporting} onclick={handleBatchExport} variant="primary" size="lg">
+      {batchExporting ? $t('package.batch_export_progress') : $t('package.batch_export', { count: selectedDeckIds.length })}
+    </Button>
+  </div>
+</Dialog>
 
 <!-- 新建卡组对话框（Modal） -->
 {#if showCreateModal}

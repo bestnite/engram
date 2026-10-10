@@ -18,6 +18,7 @@
   import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
   import InlineEdit from '../components/InlineEdit.svelte';
+  import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
   import { Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
@@ -860,26 +861,7 @@
   title={$t('package.export.heading')}
   testId="deck-export-dialog"
 >
-  <div class="space-y-3 text-sm text-foreground">
-    <label class="flex items-center gap-2 cursor-pointer">
-      <Checkbox bind:checked={includeMedia} label={$t('package.export.include_media')} />
-      <span>{$t('package.export.include_media')}</span>
-    </label>
-    <label class="flex items-center gap-2 cursor-pointer">
-      <Checkbox bind:checked={includeProgress} label={$t('package.export.include_progress')} />
-      <span>{$t('package.export.include_progress')}</span>
-    </label>
-    {#if includeProgress}
-      <label class="flex items-center gap-2 pl-6 cursor-pointer">
-        <Checkbox bind:checked={includeReviews} label={$t('package.export.include_reviews')} />
-        <span>{$t('package.export.include_reviews')}</span>
-      </label>
-    {/if}
-    <label class="flex items-center gap-2 cursor-pointer">
-      <Checkbox bind:checked={includeWeights} label={$t('package.export.include_weights')} />
-      <span>{$t('package.export.include_weights')}</span>
-    </label>
-  </div>
+  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights />
 
   {#if exportError}
     <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t('package.export.failed')}</p>
