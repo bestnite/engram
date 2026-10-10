@@ -57,6 +57,8 @@ describe('HomeView component response states and truthful rendering', () => {
       reviews_today: 0,
       reviews_total: 0,
       retention: 0,
+      retention_total: 0,
+      retention_passed: 0,
     };
     const { html } = render(HomeView, {
       props: {
@@ -75,14 +77,17 @@ describe('HomeView component response states and truthful rendering', () => {
 
   it('renders truthful metrics from Go test fixture (visible_scope_test.go)', () => {
     // 真实响应来自 internal/api/visible_scope_test.go:TestStatsVisibleContentButFullReviewHistory
+    // 三条复习里两条是到期复习（一条 Again），新卡那条不计入留存：1/2 = 50%。
     const goSummary: StatsSummary = {
       decks: 1,
       notes: 1,
       cards: 1,
       due: 1,
-      reviews_today: 2,
-      reviews_total: 2,
+      reviews_today: 3,
+      reviews_total: 3,
       retention: 0.5,
+      retention_total: 2,
+      retention_passed: 1,
     };
     const goDeck: Deck = {
       id: '10',
@@ -109,7 +114,7 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="home-due-count"');
     expect(html).toMatch(/data-testid="home-due-count"[^>]*>\s*1\s*</);
     expect(html).toContain('data-testid="home-reviews-today"');
-    expect(html).toMatch(/data-testid="home-reviews-today"[^>]*>\s*2\s*</);
+    expect(html).toMatch(/data-testid="home-reviews-today"[^>]*>\s*3\s*</);
     expect(html).toContain('data-testid="home-retention"');
     expect(html).toMatch(/data-testid="home-retention"[^>]*>\s*50\.0%\s*</);
     expect(html).toContain('data-testid="home-decks-count"');
@@ -129,6 +134,50 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('&lt;安全测试>');
     expect(html).toContain('卡组描述 &amp; 详情');
     expect(html).not.toContain('<安全测试>');
+  });
+
+  it('shows no-data retention when the user has only learning-step reviews', () => {
+    // 与 internal/api/stats_summary_test.go 的「只有学习步骤」用例同形：有复习，但没有到期复习。
+    const learningOnly: StatsSummary = {
+      decks: 1,
+      notes: 1,
+      cards: 1,
+      due: 0,
+      reviews_today: 3,
+      reviews_total: 3,
+      retention: 0,
+      retention_total: 0,
+      retention_passed: 0,
+    };
+    const { html } = render(HomeView, {
+      props: { initialLoading: false, initialSummary: learningOnly, initialDecks: [] },
+    });
+
+    expect(html).toMatch(/data-testid="home-retention"[^>]*>\s*暂无数据\s*</);
+    expect(html).not.toMatch(/data-testid="home-retention"[^>]*>\s*0\.0%/);
+  });
+
+  it('puts a help button with a localized label next to each explained metric', () => {
+    const summary: StatsSummary = {
+      decks: 1,
+      notes: 1,
+      cards: 1,
+      due: 0,
+      reviews_today: 0,
+      reviews_total: 0,
+      retention: 0,
+      retention_total: 0,
+      retention_passed: 0,
+    };
+    const { html } = render(HomeView, {
+      props: { initialLoading: false, initialSummary: summary, initialDecks: [] },
+    });
+
+    expect(html).toMatch(/data-testid="home-due-help"[^>]*aria-label="待复习是什么意思？"|aria-label="待复习是什么意思？"[^>]*data-testid="home-due-help"/);
+    expect(html).toContain('aria-label="今日已复习是什么意思？"');
+    expect(html).toContain('aria-label="留存率是什么意思？"');
+    // 卡组数一目了然，不配说明。
+    expect(html).not.toContain('aria-label="卡组数是什么意思？"');
   });
 });
 
@@ -193,10 +242,11 @@ describe('StatsView component response states and truthful rendering', () => {
     ],
     curve_from: '2026-09-07',
     curve_to: '2026-10-06',
+    // 卡组/标签的复习量数全部 3 条，留存只数其中 2 条到期复习（都非 Again）。
     decks: [
-      { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 2 / 3, elapsed_ms: 3000 },
+      { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
     ],
-    tags: [{ tag: 'algebra', reviews: 3, retention: 2 / 3 }],
+    tags: [{ tag: 'algebra', reviews: 3, retention: 1, retention_total: 2 }],
     grades: [
       { source: 'self', count: 2 },
       { source: 'typed', count: 1 },
@@ -237,12 +287,17 @@ describe('StatsView component response states and truthful rendering', () => {
 
     // 卡组维度与标签维度。
     expect(html).toContain('Stats deck');
-    expect(html).toContain('66.7%');
+    expect(html).toMatch(/Stats deck[\s\S]*?100\.0%<\/td>/);
+    expect(html).not.toContain('66.7%');
     expect(html).toContain('algebra');
     // 标签维度的口径必须写在页面上：它只数「已复习卡片上的标签」，不写清楚时看起来像在
     // 重复卡组维度（没复习过的大标签一个都不出现，用户会以为统计只认卡组名）。
     expect(html).toContain('data-testid="stats-tag-scope"');
-    expect(html).toContain('只列出所选区间内复习过的卡片上的标签');
+    expect(html).toContain('只列出近 30 天内复习过的卡片上的标签');
+
+    // 时间投入的平均值是 累计/计时次数，即平均每次而不是日均。
+    expect(html).toContain('平均每次');
+    expect(html).not.toContain('日均');
 
     // 判分来源分布。
     expect(html).toContain('自评');
@@ -268,6 +323,48 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('0.0%（0/0）');
   });
 
+  it('shows no-data retention for deck and tag rows without due reviews', () => {
+    const learningOnly: StatsDetail = {
+      ...detailFixture,
+      decks: [{ deck_id: '1', name: 'Fresh deck', due_count: 5, reviews: 4, retention: 0, retention_total: 0, elapsed_ms: 0 }],
+      tags: [{ tag: 'fresh', reviews: 4, retention: 0, retention_total: 0 }],
+    };
+    const { html } = render(StatsView, {
+      props: { initialLoading: false, initialDetail: learningOnly },
+    });
+
+    expect(html).toMatch(/Fresh deck[\s\S]*?暂无数据<\/td>/);
+    expect(html).toMatch(/fresh<\/td>[\s\S]*?暂无数据<\/td>/);
+    expect(html).not.toMatch(/0\.0%<\/td>/);
+  });
+
+  it('explains every non-obvious metric with a help button', () => {
+    const { html } = render(StatsView, {
+      props: { initialLoading: false, initialDetail: detailFixture },
+    });
+
+    for (const id of [
+      'stats-volume-help',
+      'stats-streak-help',
+      'stats-curve-help',
+      'stats-due-help',
+      'stats-retention-help',
+      'stats-retention-buckets-help',
+      'stats-time-help',
+      'stats-grade-help',
+      'stats-deck-due-help',
+      'stats-deck-reviews-help',
+      'stats-deck-retention-help',
+      'stats-deck-elapsed-help',
+      'stats-tag-help',
+      'stats-tag-retention-help',
+    ]) {
+      expect(html).toContain(`data-testid="${id}"`);
+    }
+    expect(html).toContain('aria-label="记忆强度是什么意思？"');
+    expect(html).toContain('aria-label="到期是什么意思？"');
+  });
+
   it('localizes detail labels into English when the locale is en', () => {
     setLocale('en');
     const { html } = render(StatsView, {
@@ -277,7 +374,9 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('Review volume');
     expect(html).toContain('Due forecast');
     expect(html).toContain('Grading method');
-    expect(html).toContain('Only tags on cards reviewed in the selected range');
+    expect(html).toContain('Only tags on cards reviewed in the last 30 days');
+    expect(html).toContain('Average per review');
+    expect(html).toContain('aria-label="What does “Retention” mean?"');
     expect(html).not.toContain('复习量');
   });
 });

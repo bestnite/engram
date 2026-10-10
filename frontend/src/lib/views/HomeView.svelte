@@ -8,6 +8,7 @@
   import Badge from '../components/ui/Badge.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
+  import HelpTip from '../components/ui/HelpTip.svelte';
   import { listClasses } from '../components/ui/variants';
 
   interface Props {
@@ -54,8 +55,8 @@
    * 接口契约与数据口径说明（Gap 记录）：
    * 1. 当前 REST API (GET /api/v1/decks) 仅提供卡组配置（new_per_day, reviews_per_day），
    *    尚未提供卡组维度的今日剩余可刷卡数（schedule.DeckCounts 仅用于服务端 templ 列表）；
-   * 2. 当前 REST API (GET /api/v1/stats/summary) 提供全库聚合的 due, reviews_today, reviews_total, retention, decks, notes, cards，
-   *    但未提供连续打卡天数（streak）。
+   * 2. 当前 REST API (GET /api/v1/stats/summary) 提供全库聚合的 due, reviews_today, reviews_total, retention
+   *    （及其分母 retention_total / 分子 retention_passed）, decks, notes, cards，但未提供连续打卡天数（streak）。
    * 本视图严守数据真实性原则，仅展示接口实际提供的指标，绝不在前端伪造或编造今日剩余卡数或打卡天数。
    */
   async function loadHomeData(): Promise<void> {
@@ -124,16 +125,26 @@
       <!-- 聚合指标：一条横向指标带，四项之间只用竖线分隔，不再是四张卡片。 -->
       <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
         <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
-          <dt class="text-xs text-muted-foreground">{$t('home.due_count')}</dt>
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            {$t('home.due_count')}
+            <HelpTip testId="home-due-help" label={$t('home.due_count')} text={$t('help.home.due')} />
+          </dt>
           <dd data-testid="home-due-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.due)}</dd>
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
-          <dt class="text-xs text-muted-foreground">{$t('home.reviews_today')}</dt>
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            {$t('home.reviews_today')}
+            <HelpTip testId="home-reviews-today-help" label={$t('home.reviews_today')} text={$t('help.home.reviews_today')} />
+          </dt>
           <dd data-testid="home-reviews-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.reviews_today)}</dd>
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-r sm:border-r">
-          <dt class="text-xs text-muted-foreground">{$t('home.retention')}</dt>
-          <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.reviews_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            {$t('home.retention')}
+            <HelpTip testId="home-retention-help" label={$t('home.retention')} text={$t('help.retention')} />
+          </dt>
+          <!-- 分母只数到期复习：只做过新卡与学习步骤时为 0，此时没有可读的留存率，显示「暂无数据」。 -->
+          <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.retention_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
         </div>
         <div class="px-4 py-4 text-center">
           <dt class="text-xs text-muted-foreground">{$t('stats.metric_decks')}</dt>

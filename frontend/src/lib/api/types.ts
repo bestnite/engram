@@ -328,7 +328,12 @@ export interface StatsSummary {
   due: number;
   reviews_today: number;
   reviews_total: number;
+  /** 真实留存率：到期复习中评分不是 Again 的比例（与统计页同一口径）。 */
   retention: number;
+  /** 留存率的分母（只含到期复习，不等于 reviews_total）；为 0 时显示「暂无数据」。 */
+  retention_total: number;
+  /** 留存率的分子。 */
+  retention_passed: number;
   notes: number;
   cards: number;
 }
@@ -388,8 +393,11 @@ export interface StatsDeck {
   deck_id: string;
   name: string;
   due_count: number;
+  /** 全部复习次数（含学习步骤）。 */
   reviews: number;
+  /** 真实留存率；分母 retention_total 为 0 时不代表 0%，而是没有数据。 */
   retention: number;
+  retention_total: number;
   elapsed_ms: number;
 }
 
@@ -397,6 +405,7 @@ export interface StatsTag {
   tag: string;
   reviews: number;
   retention: number;
+  retention_total: number;
 }
 
 export interface StatsGradeSource {
