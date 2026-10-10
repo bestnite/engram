@@ -675,11 +675,14 @@
         </label>
         <label class="block">
           <span class="text-sm font-medium text-foreground">{$t('presets.form.max_interval')}</span>
+          <!-- 不用 bind:value：数字输入框的绑定会把值强转成 number，而这里的状态是字符串，
+               由 parseForm 做「正整数」校验；手写 value/oninput 才留得住原文。 -->
           <input
             type="number"
             min="1"
             required
-            bind:value={formMaxInterval}
+            value={formMaxInterval}
+            oninput={(event) => (formMaxInterval = event.currentTarget.value)}
             data-testid="presets-form-max-interval"
             class="field-input text-sm mt-1 block w-full"
           />
