@@ -13,7 +13,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SelectionBar from '../components/ui/SelectionBar.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
-  import { Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
+  import { CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
 
   // 视图响应式状态定义（Svelte 5 runes）
@@ -187,6 +187,16 @@
       selectedDeckIds = decks.map((d) => d.id);
     }
   }
+
+  // 批量复习直接跳到复习页：复习页本就按地址上可重复的 deck 参数取多卡组队列，这里只负责拼地址。
+  // 按列表顺序而非勾选顺序拼接，同一组卡组无论怎么勾选都得到同一个地址。
+  const batchReviewHref = $derived.by(() => {
+    const params = new URLSearchParams();
+    for (const deck of decks) {
+      if (selectedDeckIds.includes(deck.id)) params.append('deck', deck.id);
+    }
+    return `/review?${params.toString()}`;
+  });
 
   async function handleBatchExport(): Promise<void> {
     if (selectedDeckIds.length === 0 || batchExporting) return;
@@ -433,6 +443,10 @@
     onClear={() => (selectedDeckIds = [])}
     error={batchExportError ? $t(batchExportError) : undefined}
   >
+    <a data-testid="decks-batch-review" class={selectionBarButton} href={batchReviewHref}>
+      <CirclePlay aria-hidden="true" />
+      {$t('decks.batch_review')}
+    </a>
     <button
       type="button"
       data-testid="decks-batch-export"

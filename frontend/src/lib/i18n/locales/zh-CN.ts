@@ -1322,4 +1322,5 @@ export const zhCN: LocaleCatalog = {
   'package.import.apply_weights': '使用包内的 FSRS 权重（不勾选则从默认权重开始）',
   'package.report.weights_applied': '已采用包内权重',
   'package.report.weights_discarded': '未采用包内权重',
+  'decks.batch_review': '复习',
 };
