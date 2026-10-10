@@ -27,6 +27,7 @@ var allowedAnswerControls = map[string]bool{
 	AnswerBool:   true,
 	AnswerBlanks: true,
 	AnswerItems:  true,
+	AnswerEssay:  true,
 }
 
 // expectedGraded 是逐 kind 的硬事实：哪些题型实现 Grader。

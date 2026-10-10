@@ -96,7 +96,10 @@ describe('the catalog is driven by the server self-description', () => {
     expect(answerControl(catalog, 'choice_single')).toBe('single');
     expect(answerControl(catalog, 'choice_multi')).toBe('multi');
     expect(answerControl(catalog, 'true_false')).toBe('bool');
-    expect(answerControl(catalog, 'short_answer')).toBe('none');
+    expect(answerControl(catalog, 'cloze')).toBe('blanks');
+    expect(answerControl(catalog, 'list')).toBe('items');
+    expect(answerControl(catalog, 'short_answer')).toBe('essay');
+    expect(answerControl(catalog, 'basic')).toBe('none');
     expect(answerControl(catalog, 'made_up_kind')).toBe('none');
   });
 });

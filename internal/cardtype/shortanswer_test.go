@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -92,8 +93,9 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(back) error = %v", err)
 	}
-	if back.Body != "为什么？" || !reflect.DeepEqual(back.Extra, []string{"因为 X。"}) {
-		t.Fatalf("Render(back) = %+v, want prompt with reference as extra", back)
+	// 背面只给参考答案，不重复题干：复习页把背面接在正面下方。
+	if back.Body != "因为 X。" || len(back.Extra) != 0 {
+		t.Fatalf("Render(back) = %+v, want the reference only", back)
 	}
 
 	noRef := Card{Template: "forward", Fields: map[string]any{"prompt": "为什么？"}}
@@ -101,11 +103,44 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(back, no reference) error = %v", err)
 	}
-	if back.Body != "为什么？" || len(back.Extra) != 0 {
-		t.Fatalf("Render(back, no reference) = %+v, want prompt only", back)
+	if back.Body != "" || len(back.Extra) != 0 {
+		t.Fatalf("Render(back, no reference) = %+v, want an empty back", back)
 	}
 
 	if _, err := (shortAnswerType{}).Render(Card{Template: "reverse"}, SideBack); err == nil {
 		t.Fatal("Render(unknown template) = nil, want error")
+	}
+}
+
+// TestShortAnswerRecordAnswer 断言自评前写下的作答原样存档；没写或只有空白时不存；
+// 非字符串作答拒绝。
+func TestShortAnswerRecordAnswer(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		want    map[string]any
+		wantErr bool
+	}{
+		{"written answer is kept verbatim", `"  因为月球绕地球转。 "`, map[string]any{"answer": "  因为月球绕地球转。 "}, false},
+		{"missing answer stores nothing", ``, nil, false},
+		{"blank answer stores nothing", `"   "`, nil, false},
+		{"non-string rejected", `42`, nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := shortAnswerType{}.RecordAnswer(json.RawMessage(tc.raw))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("RecordAnswer() = %v, want an error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RecordAnswer() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("RecordAnswer() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

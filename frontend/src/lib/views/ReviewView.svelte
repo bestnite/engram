@@ -72,6 +72,8 @@
   let blanks = $state<string[]>([]);
   let blankAnswers = $state<string[]>([]);
   let blankInputs = $state<(HTMLInputElement | null)[]>([]);
+  // 简答题：自评前写下的作答。翻面后与参考答案对照，打分时随自评一起存档。
+  let essayText = $state('');
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
   let pendingCards = $state<DueCard[]>([]);
@@ -240,6 +242,7 @@
     editHref = '';
     blanks = [];
     blankAnswers = [];
+    essayText = '';
     if (card) void loadRender(card, token);
   });
 
@@ -274,9 +277,11 @@
     try {
       const elapsed = Math.max(0, Date.now() - startedAt);
       const ratedCardId = current.card_id;
+      const written = answerControl === 'essay' && essayText.trim() !== '' ? essayText : undefined;
       const response = await client.submitSelfReview({
         card_id: ratedCardId,
         rating,
+        answer: written,
         expected_version: current.version,
         elapsed_ms: elapsed,
         deck: selectedDecks(),
@@ -758,13 +763,33 @@
             {/if}
           </div>
           {#if revealed}
-            <div bind:this={answerSection} class="border-t border-input pt-6 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
-              {#if backHTML}
-                {@html backHTML}
-              {:else}
-                {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+            {#if answerControl === 'essay'}
+              <!-- 简答题：先给出学习者自己写下的作答（纯文本，不进 HTML 汇），再给参考答案对照。 -->
+              {#if essayText.trim() !== ''}
+                <div class="border-t border-input pt-5" data-testid="review-essay-given">
+                  <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.given')}</div>
+                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">{essayText}</div>
+                </div>
               {/if}
-            </div>
+              <div bind:this={answerSection} class="border-t border-input pt-5 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
+                <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
+                {#if backHTML}
+                  {@html backHTML}
+                {:else if answer.length}
+                  {#each answer as [label, value] (label)}<div>{value}</div>{/each}
+                {:else}
+                  <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
+                {/if}
+              </div>
+            {:else}
+              <div bind:this={answerSection} class="border-t border-input pt-6 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
+                {#if backHTML}
+                  {@html backHTML}
+                {:else}
+                  {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+                {/if}
+              </div>
+            {/if}
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2" aria-label={$t('review.ratings')}>
               {#each [1, 2, 3, 4] as rating}
                 <button
@@ -779,8 +804,19 @@
               {/each}
             </div>
           {:else}
+            {#if answerControl === 'essay'}
+              <textarea
+                bind:value={essayText}
+                rows="4"
+                placeholder={$t('review.essay.placeholder')}
+                aria-label={$t('review.graded.given')}
+                data-testid="review-essay-input"
+                class="field-input w-full text-base"
+              ></textarea>
+            {/if}
             <button
               type="button"
+              data-testid="review-reveal"
               class="w-full min-h-12 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold transition-all btn-press shadow-sm cursor-pointer"
               onclick={() => void reveal()}
             >
