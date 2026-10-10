@@ -125,6 +125,10 @@ type PackageImportOptions struct {
 	AllowOthersProgress bool
 	// SkipMissingMedia=true 时缺失媒体只计数并继续；默认 false（缺媒体即失败并列出清单）。
 	SkipMissingMedia bool
+	// ApplyWeights 默认 off：包内权重是导出者的记忆曲线，导入者默认从默认权重起步，攒够自己的
+	// 复习后再优化。只在 new_deck 目标下有作用——合并与替换不动目标卡组现有的预设。
+	// 关闭时新预设的 weights_optimized_at 与 weights_review_count 也一并留空。
+	ApplyWeights bool
 	// MediaQuotaBytes 是导入者当前生效的每用户媒体总量配额（字节）；0 表示不限。
 	//
 	// 包内新增媒体字节（按 sha256 去重、扣除导入者已计费的 sha）计入**导入者**配额，
@@ -163,6 +167,10 @@ type PackageImportReport struct {
 	ProgressDiscarded bool                 `json:"progress_discarded"`
 	MatchRule         string               `json:"match_rule,omitempty"`
 	Errors            []PackageImportError `json:"errors"`
+	// WeightsApplied 表示包内权重写进了新建的预设。
+	WeightsApplied bool `json:"weights_applied"`
+	// WeightsDiscarded 表示包里带了权重但没有采用：未开 ApplyWeights，或目标不是 new_deck。
+	WeightsDiscarded bool `json:"weights_discarded"`
 }
 
 // ErrPackageDryRun 是 dry_run 的内部哨兵：完成规划后用它回滚事务，不留任何写入。
@@ -592,6 +600,10 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		return err
 	}
 	report.DeckID = deckID
+	if len(pkg.Preset.Weights) > 0 {
+		report.WeightsApplied = targetKind == PackageTargetNewDeck && opts.ApplyWeights
+		report.WeightsDiscarded = !report.WeightsApplied
+	}
 	pid, err := deckPublicID(ctx, tx, deckID)
 	if err != nil {
 		return err
@@ -766,7 +778,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset)
+		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, opts.ApplyWeights)
 		if err != nil {
 			return 0, err
 		}
@@ -814,13 +826,15 @@ func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string)
 }
 
 // createPresetFromPackage 用包内参数新建一个属于 actorUserID 的预设。
-func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset) (uint64, error) {
+// applyWeights 为 false 时不写权重及其两项元数据：导入者的复习日志里没有拟合这组权重的那些复习，
+// 留下 weights_review_count 会让预设显示一个在本账号查不到来源的优化记录。
+func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, applyWeights bool) (uint64, error) {
 	now := time.Now().UTC()
 	p := Preset{
 		OwnerUserID: owner, Name: pp.Name, DesiredRetention: pp.DesiredRetention,
 		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
 		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: Ptr(pp.EnableFuzz),
-		WeightsReviewCount: pp.WeightsReviewCount, CreatedAt: now, UpdatedAt: now,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if p.Name == "" {
 		p.Name = "Imported"
@@ -831,17 +845,18 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	if p.MaximumIntervalDays <= 0 {
 		p.MaximumIntervalDays = DefaultMaximumIntervalDays
 	}
-	if pp.Weights != nil {
+	if applyWeights && len(pp.Weights) > 0 {
 		raw, err := json.Marshal(pp.Weights)
 		if err != nil {
 			return 0, err
 		}
 		s := string(raw)
 		p.WeightsJSON = &s
-	}
-	if pp.WeightsOptimizedAt != nil {
-		if t, err := time.Parse(time.RFC3339, *pp.WeightsOptimizedAt); err == nil {
-			p.WeightsOptimizedAt = &t
+		p.WeightsReviewCount = pp.WeightsReviewCount
+		if pp.WeightsOptimizedAt != nil {
+			if t, err := time.Parse(time.RFC3339, *pp.WeightsOptimizedAt); err == nil {
+				p.WeightsOptimizedAt = &t
+			}
 		}
 	}
 	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {

@@ -23,6 +23,7 @@
   let onConflict = $state<'skip' | 'update' | 'fail'>('update');
   let allowOthersProgress = $state(false);
   let skipMissingMedia = $state(false);
+  let applyWeights = $state(false);
   let submitting = $state(false);
   let errorKey = $state('');
   let report = $state<PackageImportReport | null>(null);
@@ -46,7 +47,7 @@
    */
   $effect(() => {
     void source; void packageUrl; void file; void target; void deckId;
-    void dryRun; void onConflict; void allowOthersProgress; void skipMissingMedia;
+    void dryRun; void onConflict; void allowOthersProgress; void skipMissingMedia; void applyWeights;
     requestRevision++;
     report = null;
     errorKey = '';
@@ -120,6 +121,8 @@
       onConflict,
       allowOthersProgress: $authStore.user?.role === 'admin' && allowOthersProgress,
       skipMissingMedia,
+      // 包内权重只用于新建卡组的预设；合并到已有卡组时服务端忽略它，这里也不发出勾选。
+      applyWeights: target === 'new_deck' && applyWeights,
     };
     submitting = true;
     errorKey = '';
@@ -156,6 +159,7 @@
       ['package.report.cards_created', value.cards_created], ['package.report.media_new', value.media_new],
       ['package.report.media_missing', value.media_missing], ['package.report.progress_applied', value.progress_applied],
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
+      ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
       ['package.report.match_rule', value.match_rule || '—'],
     ];
   }
@@ -199,6 +203,7 @@
       <label class="block text-sm font-medium">{$t('package.import.target')}
         <Select
           class="mt-2"
+          testId="package-import-target"
           value={target}
           onValueChange={(value) => (target = value as typeof target)}
           options={[{ value: 'new_deck', label: $t('package.import.new_deck') }, { value: 'into_deck', label: $t('package.import.into_deck') }]}
@@ -232,6 +237,7 @@
       <label class="flex items-center gap-2"><Checkbox bind:checked={dryRun} label={$t('package.import.dry_run')} />{$t('package.import.dry_run')}</label>
       {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><Checkbox bind:checked={allowOthersProgress} label={$t('package.import.allow_progress')} />{$t('package.import.allow_progress')}</label>{/if}
       <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
+      {#if target === 'new_deck'}<label class="flex items-center gap-2"><Checkbox bind:checked={applyWeights} testId="package-import-apply-weights" label={$t('package.import.apply_weights')} />{$t('package.import.apply_weights')}</label>{/if}
     </div>
     <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
       <Button type="submit" size="lg" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</Button>

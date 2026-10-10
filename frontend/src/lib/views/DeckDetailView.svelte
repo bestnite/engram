@@ -61,6 +61,7 @@
   let includeMedia = $state(true);
   let includeProgress = $state(false);
   let includeReviews = $state(false);
+  let includeWeights = $state(false);
 
   const perPage = 50;
 
@@ -297,7 +298,7 @@
     exporting = true;
     exportError = false;
     try {
-      const { blob, filename } = await apiClient.downloadDeckPackage(deckId, { includeMedia, includeProgress, includeReviews });
+      const { blob, filename } = await apiClient.downloadDeckPackage(deckId, { includeMedia, includeProgress, includeReviews, includeWeights });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -791,6 +792,10 @@
         <span>{$t('package.export.include_reviews')}</span>
       </label>
     {/if}
+    <label class="flex items-center gap-2 cursor-pointer">
+      <Checkbox bind:checked={includeWeights} label={$t('package.export.include_weights')} />
+      <span>{$t('package.export.include_weights')}</span>
+    </label>
   </div>
 
   {#if exportError}

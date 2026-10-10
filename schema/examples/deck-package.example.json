@@ -10,6 +10,7 @@
     "include_progress": false,
     "include_media": true,
     "include_reviews": false,
+    "include_weights": false,
     "counts": {
       "notes": 2,
       "cards": 2,

@@ -68,7 +68,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 				Name: "Imported", DesiredRetention: DefaultDesiredRetention,
 				LearningSteps: DefaultLearningSteps, RelearningSteps: DefaultRelearningSteps,
 				MaximumIntervalDays: DefaultMaximumIntervalDays, EnableFuzz: false,
-			})
+			}, false)
 			if err != nil {
 				t.Fatalf("createPresetFromPackage error = %v", err)
 			}

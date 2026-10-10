@@ -74,6 +74,7 @@ type batchExportDeckRequest struct {
 	IncludeMedia    *bool    `json:"include_media"`
 	IncludeProgress bool     `json:"include_progress"`
 	IncludeReviews  bool     `json:"include_reviews"`
+	IncludeWeights  bool     `json:"include_weights"`
 }
 
 func (s *Server) deckBatchExportZip(c *gin.Context) {
@@ -111,6 +112,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			IncludeMedia:    includeMedia,
 			IncludeProgress: req.IncludeProgress,
 			IncludeReviews:  req.IncludeReviews,
+			IncludeWeights:  req.IncludeWeights,
 			Now:             nowFn,
 		})
 		if err != nil {

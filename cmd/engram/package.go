@@ -135,6 +135,7 @@ func runExport(args []string) error {
 	includeProgress := fs.Bool("include-progress", false, "include the caller's own review progress")
 	includeReviews := fs.Bool("include-reviews", false, "include review logs (requires --include-progress)")
 	noMedia := fs.Bool("no-media", false, "do not inline media bytes")
+	includeWeights := fs.Bool("include-weights", false, "include the caller's FSRS weights in preset.json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -153,7 +154,12 @@ func runExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	pkg, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, *includeProgress, !*noMedia, *includeReviews)
+	pkg, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, store.PackageOptions{
+		IncludeProgress: *includeProgress,
+		IncludeMedia:    !*noMedia,
+		IncludeReviews:  *includeReviews,
+		IncludeWeights:  *includeWeights,
+	})
 	if err != nil {
 		return err
 	}
@@ -181,6 +187,7 @@ func runImport(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "validate and count without writing")
 	onConflict := fs.String("on-conflict", "", "conflict policy: skip, update (default) or fail")
 	skipMissing := fs.Bool("skip-missing-media", false, "skip missing media instead of failing")
+	applyWeights := fs.Bool("apply-weights", false, "use the package's FSRS weights for the new deck's preset (new_deck only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -210,6 +217,7 @@ func runImport(args []string) error {
 		DryRun:           *dryRun,
 		OnConflict:       *onConflict,
 		SkipMissingMedia: *skipMissing,
+		ApplyWeights:     *applyWeights,
 	})
 	if err != nil {
 		return err

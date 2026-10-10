@@ -1318,4 +1318,8 @@ export const zhCN: LocaleCatalog = {
   'settings.api.scope.write': '创建、修改、删除卡组和卡片，导入卡组包',
   'settings.api.scope.review': '获取到期卡片、提交评分',
   'settings.api.scope.keys': '用这把密钥管理自己的其它密钥',
+  'package.export.include_weights': '包含我的 FSRS 权重（基于我的复习记录优化）',
+  'package.import.apply_weights': '使用包内的 FSRS 权重（不勾选则从默认权重开始）',
+  'package.report.weights_applied': '已采用包内权重',
+  'package.report.weights_discarded': '未采用包内权重',
 };

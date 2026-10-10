@@ -309,6 +309,8 @@ export interface PackageImportReport {
   progress_applied: number;
   progress_skipped: number;
   progress_discarded: boolean;
+  weights_applied: boolean;
+  weights_discarded: boolean;
   match_rule?: string;
   errors: Array<{ entry: string; reason: string }>;
 }

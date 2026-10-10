@@ -72,6 +72,10 @@
           "type": "boolean",
           "description": "Whether the optional review log in progress.json is present. Requires include_progress."
         },
+        "include_weights": {
+          "type": "boolean",
+          "description": "Whether preset.json carries non-null FSRS weights. Defaults to false on export, because the weights are fitted to the exporting user's own review log. Packages written before this field existed omit it; an importer decides from preset.json's weights value, not from this flag."
+        },
         "counts": {
           "type": "object",
           "required": ["notes", "cards"],
@@ -399,17 +403,17 @@
           "items": { "type": "number" },
           "minItems": 21,
           "maxItems": 21,
-          "description": "FSRS weights, exactly 21 values. null means the library defaults are used."
+          "description": "FSRS weights, exactly 21 values. null means the library defaults are used. The exporter writes null unless include_weights was requested, and the importer uses non-null weights only for a new deck and only when apply_weights was requested."
         },
         "weights_optimized_at": {
           "type": ["string", "null"],
           "format": "date-time",
-          "description": "When the weights were last optimised, or null."
+          "description": "When the weights were last optimised, or null. Always null when weights is null."
         },
         "weights_review_count": {
           "type": ["integer", "null"],
           "minimum": 0,
-          "description": "Number of reviews the weights were fitted on, or null."
+          "description": "Number of reviews the weights were fitted on, or null. Always null when weights is null."
         }
       },
       "additionalProperties": true
