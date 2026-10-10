@@ -322,7 +322,13 @@ func New(addr string, deps Deps) (*Server, error) {
 	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("web: set trusted proxies: %w", err)
 	}
-	router.Use(requestLogger(logger), recovery(logger))
+	// 启动时记下可信代理配置，排查「拿不到真实 IP」时第一眼就能确认它是否生效。
+	if len(deps.TrustedProxies) == 0 {
+		logger.Info("client ip resolution: no trusted proxies, forwarded headers are ignored")
+	} else {
+		logger.Info("client ip resolution: trusting forwarded headers from proxies", "trusted_proxies", strings.Join(deps.TrustedProxies, ","))
+	}
+	router.Use(requestLogger(logger), recovery(logger), forwardedIPWarner(logger, deps.TrustedProxies))
 	// 安全响应头挂在全局，覆盖静态资源、/media、/api/v1、/mcp 与 404 回退；
 	// 放在 session/locale 之前，保证任何提前中止的响应也带齐这组头。CSP 只上报不阻断。
 	router.Use(securityHeaders())

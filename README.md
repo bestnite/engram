@@ -153,7 +153,20 @@ docker compose up -d
 When placing Engram behind a reverse proxy (such as Caddy, Nginx, or Traefik):
 
 1. Set `BASE_URL` to your public URL (e.g., `https://engram.example.com`).
-2. Set `TRUSTED_PROXIES` to your proxy's IP address or CIDR range (e.g., `127.0.0.1/32,::1/128`) to properly resolve client IPs for rate limiting and audit logs.
+2. Set `TRUSTED_PROXIES` to the address your proxy connects **from**, as Engram sees it (comma-separated IPs or CIDRs). Login rate limiting, audit logs and new-device alerts use the client IP; until this is set, every request appears to come from the proxy.
+
+`TRUSTED_PROXIES` is empty by default, so `X-Forwarded-For` and `X-Real-IP` are ignored. This is deliberate: a header is only as trustworthy as the hop that set it. List the proxies you run, never client networks or `0.0.0.0/0`.
+
+The right value depends on how the proxy reaches Engram:
+
+| Topology | Address Engram sees |
+| :--- | :--- |
+| Proxy and Engram on the same host, no containers | Loopback: `127.0.0.1/32,::1/128` |
+| Engram in a container, port published to the host, proxy on the host | Usually the container network's **gateway**, not `127.0.0.1`: published ports are forwarded through the bridge. Find it with `docker network inspect <network>` (`Gateway`). |
+| Proxy and Engram in the same container network | The proxy container's address in that network, or the whole network's subnet |
+| CDN or load balancer → proxy → Engram | Every hop that appends to `X-Forwarded-For` must be listed, or the proxy must overwrite the header with the real client IP before forwarding |
+
+To find the address without guessing, start Engram behind your proxy with `TRUSTED_PROXIES` unset and send one request. If the request carried a forwarded header from a loopback or private address that is not trusted, Engram logs one warning, `forwarded client ip header ignored ...`, and its `remote_ip` field is the address to add. At startup Engram also logs which proxies it trusts.
 
 ---
 

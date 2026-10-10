@@ -153,7 +153,20 @@ docker compose up -d
 若在 Caddy、Nginx 或 Traefik 等反向代理后运行：
 
 1. 设置 `BASE_URL` 为外部访问域名（如 `https://engram.example.com`）。
-2. 设置 `TRUSTED_PROXIES` 为反代服务器的内网 IP 或 CIDR 网段（如 `127.0.0.1/32,::1/128`），确保客户端真实 IP 正确解析用于速率限制与审计日志。
+2. 设置 `TRUSTED_PROXIES` 为 Engram **实际看到的**反代连接来源地址（逗号分隔的 IP 或 CIDR）。登录限流、审计日志与新设备提醒都依赖客户端 IP；不设置时，所有请求看起来都来自反代本身。
+
+`TRUSTED_PROXIES` 缺省为空，即忽略 `X-Forwarded-For` 与 `X-Real-IP`。这是有意的：请求头只和设置它的那一跳一样可信。只列出你自己运行的代理，不要列客户端网段，也不要写 `0.0.0.0/0`。
+
+该填什么取决于反代如何连到 Engram：
+
+| 拓扑 | Engram 看到的地址 |
+| :--- | :--- |
+| 反代与 Engram 在同一台主机，不用容器 | 回环地址：`127.0.0.1/32,::1/128` |
+| Engram 在容器里、端口发布到宿主机，反代在宿主机上 | 通常是容器网络的**网关地址**，而不是 `127.0.0.1`：发布端口经网桥转发。用 `docker network inspect <网络名>` 查看 `Gateway` |
+| 反代与 Engram 在同一个容器网络里 | 反代容器在该网络中的地址，或整个网络的子网 |
+| CDN 或负载均衡 → 反代 → Engram | 每一个会追加 `X-Forwarded-For` 的跳都要列入；或者让反代在转发前用真实客户端 IP 覆盖该请求头 |
+
+不想猜的话：先不设置 `TRUSTED_PROXIES`，在反代后启动 Engram 并发一个请求。若请求带着转发头、来源是未被信任的回环或私有地址，Engram 会记一条警告 `forwarded client ip header ignored ...`，其中 `remote_ip` 字段就是要填的地址。启动时 Engram 也会记录当前信任了哪些代理。
 
 ---
 
