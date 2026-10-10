@@ -40,6 +40,7 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 	single := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answer": 1.0}
 	multi := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answers": []any{0.0, 2.0}}
 	tf := map[string]any{"statement": "s", "answer": true}
+	clozeAlt := map[string]any{"text": "{{c1::Paris|巴黎}} and {{c2::a\\|b}}"}
 	cloze := map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals; {{c2::\\(2x\\)}} is a derivative."}
 	cases := []struct {
 		name        string
@@ -79,6 +80,10 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 		{name: "cloze blank answer never matches", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["  "]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "  "},
 		{name: "cloze more answers than blanks is ungradable", kind: "cloze", template: "cloze:2", fields: cloze, raw: `["2x", "extra"]`, ungradable: true},
 		{name: "cloze unknown cloze number is ungradable", kind: "cloze", template: "cloze:9", fields: cloze, raw: `["x"]`, ungradable: true},
+		{name: "cloze alternative answer accepted", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["巴黎"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "巴黎"},
+		{name: "cloze first alternative accepted", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["paris"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "paris"},
+		{name: "cloze answer outside the alternatives is wrong", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["Paris|巴黎"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "Paris|巴黎"},
+		{name: "cloze escaped pipe is typed as a plain pipe", kind: "cloze", template: "cloze:2", fields: clozeAlt, raw: `["a|b"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "a|b"},
 		{name: "cloze non-array rejected", kind: "cloze", template: "cloze:1", fields: cloze, raw: `"Paris"`, wantErr: true},
 	}
 	for _, tc := range cases {

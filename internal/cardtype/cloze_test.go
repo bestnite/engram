@@ -319,3 +319,63 @@ func TestClozeTemplateMismatch(t *testing.T) {
 		t.Fatalf("Render = %v, want unknown template error", err)
 	}
 }
+
+// TestClozeAlternatives 覆盖一空多个答案的写法：顶层 | 分隔备选答案，背面列出全部，
+// 不考的挖空只给标准写法；公式里、嵌套里、转义的竖线都不切分。
+func TestClozeAlternatives(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		template  string
+		wantFront string
+		wantBack  string
+	}{
+		{"back lists every alternative", "{{c1::Paris|巴黎}} is a capital", "cloze:1",
+			`<span class="cloze">[…]</span> is a capital`, `<span class="cloze">Paris / 巴黎</span> is a capital`},
+		{"hint follows the alternatives", "{{c1::France|法国::country}}", "cloze:1",
+			`<span class="cloze">[country]</span>`, `<span class="cloze">France / 法国</span>`},
+		{"context deletion shows the first alternative", "{{c1::Paris|巴黎}} and {{c2::x}}", "cloze:2",
+			`Paris and <span class="cloze">[…]</span>`, `Paris and <span class="cloze">x</span>`},
+		{"pipes inside a formula in the deletion stay", `{{c1::\(|x|\)}}`, "cloze:1",
+			`<span class="cloze">[…]</span>`, `<span class="cloze">\(|x|\)</span>`},
+		{"deletion inside a formula is never split", `\(\dfrac{a}{{{c1::b|c}}}\)`, "cloze:1",
+			`\(\dfrac{a}{\boxed{\text{[…]}}}\)`, `\(\dfrac{a}{\boxed{b|c}}\)`},
+		{"escaped pipe is literal", `{{c1::A\|B}}`, "cloze:1",
+			`<span class="cloze">[…]</span>`, `<span class="cloze">A\|B</span>`},
+		{"pipe inside a nested deletion belongs to it", "{{c1::a {{c2::b|c}} d}}", "cloze:1",
+			`<span class="cloze">[…]</span>`, `<span class="cloze">a b d</span>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := map[string]any{"text": tc.text}
+			if err := Validate("cloze", fields); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+			card := Card{Template: tc.template, Fields: fields}
+			front, err := clozeType{}.Render(card, SideFront)
+			if err != nil {
+				t.Fatalf("Render front: %v", err)
+			}
+			back, err := clozeType{}.Render(card, SideBack)
+			if err != nil {
+				t.Fatalf("Render back: %v", err)
+			}
+			if front.Body != tc.wantFront {
+				t.Errorf("front = %q, want %q", front.Body, tc.wantFront)
+			}
+			if back.Body != tc.wantBack {
+				t.Errorf("back = %q, want %q", back.Body, tc.wantBack)
+			}
+		})
+	}
+}
+
+// TestClozeRejectsEmptyAlternative 断言 | 两侧不能留空：空的备选答案多半是笔误，静默丢弃会让作者以为写进去了。
+func TestClozeRejectsEmptyAlternative(t *testing.T) {
+	for _, text := range []string{"{{c1::Paris|}}", "{{c1::|Paris}}", "{{c1::Paris| |巴黎}}"} {
+		err := Validate("cloze", map[string]any{"text": text})
+		if err == nil || !strings.Contains(err.Error(), "empty answer alternative") {
+			t.Errorf("Validate(%q) = %v, want an empty alternative error", text, err)
+		}
+	}
+}

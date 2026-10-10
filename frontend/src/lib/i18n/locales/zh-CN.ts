@@ -64,7 +64,7 @@ export const zhCN: LocaleCatalog = {
   'notes.kind.short_answer': '简答',
   'note.fields.front': '正面',
   'note.fields.back': '背面',
-  'note.fields.text': '文本（用 {{c1::填空}} 标记）',
+  'note.fields.text': '文本（用 {{c1::填空}} 标记，多个答案用 | 分隔：{{c1::答案|另一种说法}}）',
   'note.fields.prompt': '题干',
   'note.fields.items': '条目（每行一项）',
   'note.fields.ordered': '有序列表',

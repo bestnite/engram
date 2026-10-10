@@ -64,7 +64,7 @@ export const en: LocaleCatalog = {
   'notes.kind.short_answer': 'Short answer',
   'note.fields.front': 'Front',
   'note.fields.back': 'Back',
-  'note.fields.text': 'Text (mark cloze as {{c1::deletion}})',
+  'note.fields.text': 'Text (mark cloze as {{c1::deletion}}; separate accepted answers with |: {{c1::answer|alternative}})',
   'note.fields.prompt': 'Prompt',
   'note.fields.items': 'Items (one per line)',
   'note.fields.ordered': 'Ordered list',

@@ -152,7 +152,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\{\\{c[0-9]+::",
-          "description": "Text with cloze deletions in the form {{cN::text}} or {{cN::text::hint}}."
+          "description": "Text with cloze deletions in the form {{cN::text}} or {{cN::text::hint}}. Separate several accepted answers with | ({{cN::first|second}}); the first is the canonical one. A | inside a formula never separates answers; write \\| for a literal |."
         }
       },
       "additionalProperties": true

@@ -17,6 +17,8 @@ type ClozeDeletion struct {
 	Hint  string // 可选提示；无提示为空串。
 	Start int    // 起始字节偏移，指向 "{{"。
 	End   int    // 结束字节偏移，正好在闭合 "}}" 之后。
+	// InMath 表示整个挖空落在一段公式之内：正反面要用 TeX 写法高亮，内容里的竖线也属于 TeX。
+	InMath bool
 }
 
 // ParseCloze 解析 cloze 文本，按首次出现顺序返回最外层挖空项。
@@ -30,10 +32,12 @@ type ClozeDeletion struct {
 //   - 挖空前紧挨的单个 "{" 属于外层文本（TeX 分组）："{{{c1::x}}}" 解析为
 //     "{" + 挖空 x + "}"。
 //   - 未闭合、内容为空的挖空项返回可读的英文错误。
+//   - 内容里顶层的 | 分隔多个可接受的答案（见 clozeAlternatives），解析时不切分，按原文保留在 Text 里。
 //
 // 没有任何挖空项时返回空切片与 nil 错误，由调用方（Validate）决定如何报告。
 func ParseCloze(text string) ([]ClozeDeletion, error) {
 	var out []ClozeDeletion
+	math := texmath.Ranges(text)
 	i := 0
 	for i < len(text) {
 		if escaped, next := skipEscape(text, i); escaped {
@@ -56,6 +60,7 @@ func ParseCloze(text string) ([]ClozeDeletion, error) {
 		if err != nil {
 			return nil, err
 		}
+		del.InMath = texmath.Contains(math, del.Start, del.End)
 		out = append(out, del)
 		i = end
 	}
@@ -166,7 +171,7 @@ func (clozeType) Describe() Description {
 			FieldSpec{Key: "text", Control: ControlTextarea, Required: true},
 		),
 		Example: map[string]any{
-			"text": "{{c1::Paris}} is the capital of {{c2::France::country}}; the derivative of \\(x^2\\) is {{c3::\\(2x\\)}}.",
+			"text": "{{c1::Paris}} is the capital of {{c2::France|French Republic::country}}; the derivative of \\(x^2\\) is {{c3::\\(2x\\)}}.",
 		},
 	}
 }
@@ -184,6 +189,13 @@ func (clozeType) Validate(fields map[string]any) error {
 	if len(dels) == 0 {
 		// schema 的 pattern 只能表达 {{cN::，这里给出更清楚的可读错误。
 		return errors.New(`cloze: field "text" must contain at least one cloze deletion like {{c1::text}}`)
+	}
+	for _, d := range dels {
+		for _, alt := range splitAlternatives(d.Text, d.InMath) {
+			if strings.TrimSpace(alt) == "" {
+				return fmt.Errorf("cloze: cloze deletion c%d has an empty answer alternative around \"|\"", d.Index)
+			}
+		}
 	}
 	if err := validateCommonOptional(fields); err != nil {
 		return fmt.Errorf("cloze: %w", err)
@@ -255,7 +267,6 @@ func parseClozeTemplate(template string) (int, bool) {
 //
 // 只跨进公式一半的挖空按公式外处理：两种写法都不成立，保留原来的 span。
 func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) string {
-	math := texmath.Ranges(text)
 	var b strings.Builder
 	last := 0
 	for _, d := range dels {
@@ -264,15 +275,17 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 			continue
 		}
 		b.WriteString(text[last:d.Start])
-		inMath := texmath.Contains(math, d.Start, d.End)
+		alts := clozeAlternatives(d.Text, d.InMath)
 		switch {
 		case d.Index != target:
-			b.WriteString(stripCloze(d.Text))
-		case reveal && inMath:
-			b.WriteString(`\boxed{` + stripCloze(d.Text) + `}`)
+			// 不考的挖空是上下文，只给标准写法，句子才读得通。
+			b.WriteString(stripCloze(alts[0]))
+		case reveal && d.InMath:
+			b.WriteString(`\boxed{` + stripCloze(alts[0]) + `}`)
 		case reveal:
-			b.WriteString(`<span class="cloze">` + stripCloze(d.Text) + `</span>`)
-		case inMath:
+			// 揭示考点时列出全部可接受的写法，用户能看到哪些说法都算对。
+			b.WriteString(`<span class="cloze">` + strings.Join(stripEach(alts), " / ") + `</span>`)
+		case d.InMath:
 			// 占位是文字而不是 TeX，用 \text 排版；提示原样放进 \text，花括号需成对。
 			b.WriteString(`\boxed{\text{` + clozeBlank(d) + `}}`)
 		default:
@@ -326,6 +339,7 @@ func (clozeType) GivenText(_ map[string]any, detail map[string]any) string {
 }
 
 // Grade 逐空比对并按比例给分：score = 答对的空数 / 目标挖空总数。
+// 一空有多个可接受的答案（用 | 分隔）时，命中任一个即算对。
 // 比对忽略大小写并折叠空白；答案整体是行内公式 \( … \) 时，不带定界符的写法也算对，
 // 因为输入框里写不出排版后的公式。作答多于空数视为无法判分（作答与卡面错位）；
 // 少于空数时缺的空按未作答计。
@@ -340,14 +354,17 @@ func (clozeType) Grade(input any) (int, map[string]any, bool) {
 	}
 	given := make([]string, len(targets))
 	copy(given, in.Answers)
-	expected := make([]string, len(targets))
+	expected := make([][]string, len(targets))
 	correct := make([]bool, len(targets))
 	hits := 0
 	for i, d := range targets {
-		expected[i] = stripCloze(d.Text)
-		if clozeMatches(given[i], expected[i]) {
-			correct[i] = true
-			hits++
+		expected[i] = stripEach(clozeAlternatives(d.Text, d.InMath))
+		for _, alt := range expected[i] {
+			if clozeMatches(given[i], unescapePipes(alt)) {
+				correct[i] = true
+				hits++
+				break
+			}
 		}
 	}
 	detail := map[string]any{"answers": expected, "given": given, "correct": correct}
@@ -402,4 +419,102 @@ func clozeMatches(given, expected string) bool {
 		return false
 	}
 	return g == normalizeTyped(inner[2:len(inner)-2], true, true)
+}
+
+// stripEach 对每个备选答案去掉嵌套的挖空标记。
+func stripEach(alts []string) []string {
+	out := make([]string, len(alts))
+	for i, alt := range alts {
+		out[i] = stripCloze(alt)
+	}
+	return out
+}
+
+// clozeAlternatives 返回一处挖空可接受的全部答案，第一个是标准写法；空的备选项被丢弃，
+// 全部为空时退回原文（这种写法过不了 Validate，只在读到旧数据时兜底）。
+func clozeAlternatives(text string, inMath bool) []string {
+	var out []string
+	for _, alt := range splitAlternatives(text, inMath) {
+		if strings.TrimSpace(alt) != "" {
+			out = append(out, alt)
+		}
+	}
+	if len(out) == 0 {
+		return []string{text}
+	}
+	return out
+}
+
+// splitAlternatives 按顶层的 | 切分挖空内容，保留空段供 Validate 报错。
+//
+// 不切分的竖线：
+//   - 公式里的竖线（\(|x|\) 是绝对值）。整个挖空落在公式里时一律不切分。
+//   - 嵌套 {{ }} 里的竖线，它属于嵌套的内容。
+//   - 转义的 \|：正文里要写字面竖线时用它；Markdown 会把 \| 渲染成 |。
+func splitAlternatives(text string, inMath bool) []string {
+	if inMath {
+		return []string{text}
+	}
+	math := texmath.Ranges(text)
+	var parts []string
+	depth, last, i := 0, 0, 0
+	for i < len(text) {
+		if end, ok := mathRangeAt(math, i); ok {
+			i = end
+			continue
+		}
+		switch {
+		case text[i] == '\\' && i+1 < len(text) && strings.IndexByte(`{}\|`, text[i+1]) >= 0:
+			i += 2
+		case strings.HasPrefix(text[i:], "{{"):
+			depth++
+			i += 2
+		case strings.HasPrefix(text[i:], "}}") && depth > 0:
+			depth--
+			i += 2
+		case text[i] == '|' && depth == 0:
+			parts = append(parts, text[last:i])
+			i++
+			last = i
+		default:
+			i++
+		}
+	}
+	return append(parts, text[last:])
+}
+
+// mathRangeAt 报告位置 i 是否是某段公式的起点，是则返回该段的结束位置。
+func mathRangeAt(ranges [][]int, i int) (int, bool) {
+	for _, r := range ranges {
+		if r[0] == i {
+			return r[1], true
+		}
+	}
+	return 0, false
+}
+
+// unescapePipes 把公式之外的 \| 还原成 |，用于判分比对：用户输入的是字面竖线，不会输入转义。
+// 公式里的 \| 是 TeX 的双竖线命令，保持原样。
+func unescapePipes(s string) string {
+	if !strings.Contains(s, `\|`) {
+		return s
+	}
+	math := texmath.Ranges(s)
+	var b strings.Builder
+	i := 0
+	for i < len(s) {
+		if end, ok := mathRangeAt(math, i); ok {
+			b.WriteString(s[i:end])
+			i = end
+			continue
+		}
+		if strings.HasPrefix(s[i:], `\|`) {
+			b.WriteByte('|')
+			i += 2
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
