@@ -26,6 +26,7 @@
   let skipMissingMedia = $state(false);
   let applyWeights = $state(false);
   let submitting = $state(false);
+  // 只装发请求前的本地校验错误；请求失败走 toast。
   let errorKey = $state('');
   let report = $state<PackageImportReport | null>(null);
   let reportSection = $state<HTMLElement | null>(null);
@@ -139,7 +140,7 @@
       notifyResult(result);
     } catch (err) {
       if (!mounted || revision !== requestRevision) return;
-      errorKey = importErrorKey(err);
+      toast.error($t(importErrorKey(err)));
     } finally {
       // 请求本身已结束：只要还挂载着就解除提交锁，让用户能用新选择再次提交。
       if (mounted) submitting = false;
@@ -149,7 +150,6 @@
   /**
    * 报告区在表单下方，长表单里用户不往下滚就看不到结果，所以成功落地时再弹一条轻提示，
    * 并带一个跳到报告区的按钮。有条目未导入时用警告样式，免得用户把部分失败当成全部成功。
-   * 失败不走这里：错误文案就显示在提交按钮旁，用户刚点过按钮，视线就在那里。
    */
   function notifyResult(value: PackageImportReport): void {
     const message = value.dry_run
@@ -263,7 +263,7 @@
       {#if target === 'new_deck'}<label class="flex items-center gap-2"><Checkbox bind:checked={applyWeights} testId="package-import-apply-weights" label={$t('package.import.apply_weights')} />{$t('package.import.apply_weights')}</label>{/if}
     </div>
     <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-      <Button type="submit" size="lg" testId="import-submit" disabled={submitting}>{$t(submitting ? 'package.import.submitting' : dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</Button>
+      <Button type="submit" size="lg" testId="import-submit" loading={submitting}>{$t(dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</Button>
       {#if errorKey}<p role="alert" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>{/if}
     </div>
   </form>

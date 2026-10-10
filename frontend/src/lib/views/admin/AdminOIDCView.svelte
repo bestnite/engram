@@ -4,7 +4,7 @@
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
-  import type { AdminOIDCResponse, AdminOIDCIdentity, AdminTestResult } from '../../api';
+  import type { AdminOIDCResponse, AdminOIDCIdentity } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import PageHeader from '../../components/ui/PageHeader.svelte';
   import SettingsSection from '../../components/ui/SettingsSection.svelte';
@@ -48,7 +48,7 @@
   let notice = $state('');
   let actionError = $state('');
   let saving = $state(false);
-  let testResult = $state<AdminTestResult | null>(null);
+  let testing = $state(false);
 
   function configuredLabel(configured: boolean): string {
     return $t(configured ? 'admin.oidc.configured' : 'admin.oidc.not_configured');
@@ -126,14 +126,18 @@
     }
   }
 
+  // 连通性测试的结论也是请求结果，同样走 toast；失败时附上服务端给的诊断原文。
   async function test(): Promise<void> {
-    notice = '';
-    actionError = '';
-    testResult = null;
+    testing = true;
     try {
-      testResult = await apiClient.testAdminOIDC(payload());
+      const result = await apiClient.testAdminOIDC(payload());
+      if (result.ok) toast.success($t('admin.oidc.test.ok'));
+      else if (result.code === 'no_issuer') toast.error($t('admin.oidc.test.no_issuer'));
+      else toast.error(`${$t('admin.oidc.test.failed_prefix')} ${result.message}`);
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
+    } finally {
+      testing = false;
     }
   }
 
@@ -229,19 +233,8 @@
       </SettingsSection>
 
       <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border py-5">
-        {#if testResult}
-          <p data-testid="admin-oidc-test-result" role="status" class="mr-auto text-sm {testResult.ok ? 'text-success' : 'text-destructive-foreground'}">
-            {#if testResult.ok}
-              {$t('admin.oidc.test.ok')}
-            {:else if testResult.code === 'no_issuer'}
-              {$t('admin.oidc.test.no_issuer')}
-            {:else}
-              {$t('admin.oidc.test.failed_prefix')} {testResult.message}
-            {/if}
-          </p>
-        {/if}
-        <Button type="button" testId="admin-oidc-test" variant="outline" size="lg" onclick={test}>{$t('admin.oidc.test')}</Button>
-        <Button type="submit" testId="admin-oidc-save" disabled={saving} variant="primary" size="lg">{$t('admin.oidc.save')}</Button>
+        <Button type="button" testId="admin-oidc-test" variant="outline" size="lg" loading={testing} onclick={test}>{$t('admin.oidc.test')}</Button>
+        <Button type="submit" testId="admin-oidc-save" loading={saving} variant="primary" size="lg">{$t('admin.oidc.save')}</Button>
       </div>
     </form>
 

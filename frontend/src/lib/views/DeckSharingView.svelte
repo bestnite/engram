@@ -30,6 +30,8 @@
   let loading = $state(true);
   let failed = $state(false);
   let saving = $state(false);
+  // 哪个表单的提交在途：只有它的按钮转圈；saving 仍让其余写操作一并禁用。
+  let submitting = $state<'grant' | 'link' | null>(null);
   let error = $state('');
   let username = $state('');
   let role = $state<'reader'|'editor'>('reader');
@@ -56,8 +58,8 @@
     }
     finally { saving = false; }
   }
-  async function grant(event: SubmitEvent): Promise<void> { event.preventDefault(); await change('POST', `${apiPath}/grants`, { username: username.trim(), role }); if (!error) username = ''; }
-  async function createLink(event: SubmitEvent): Promise<void> { event.preventDefault(); await change('POST', `${apiPath}/links`, { password, expires_at: expiresAt }, true); password = ''; expiresAt = ''; }
+  async function grant(event: SubmitEvent): Promise<void> { event.preventDefault(); submitting = 'grant'; await change('POST', `${apiPath}/grants`, { username: username.trim(), role }); submitting = null; if (!error) username = ''; }
+  async function createLink(event: SubmitEvent): Promise<void> { event.preventDefault(); submitting = 'link'; await change('POST', `${apiPath}/links`, { password, expires_at: expiresAt }, true); submitting = null; password = ''; expiresAt = ''; }
   async function copyLink(): Promise<void> {
     try { await navigator.clipboard.writeText(newLink); toast.success($t('deck.sharing.link_copied')); }
     catch { toast.error($t('notes.copy_failed')); }
@@ -79,7 +81,7 @@
           <input required bind:value={username} class="field-input mt-1.5 block w-full text-sm" />
         </label>
         <Select class="w-28" value={role} onValueChange={(value) => (role = value as typeof role)} ariaLabel={$t('deck.sharing.role_label')} options={roleOptions} />
-        <Button type="submit" size="lg" disabled={saving} testId="sharing-grant">{$t('deck.sharing.grant')}</Button>
+        <Button type="submit" size="lg" loading={submitting === 'grant'} disabled={saving} testId="sharing-grant">{$t('deck.sharing.grant')}</Button>
       </form>
 
       {#if data.grants.length > 0 || (data.pending_invites ?? []).length > 0}
@@ -116,7 +118,7 @@
         <label class="text-sm font-medium text-foreground">{$t('deck.sharing.expiry')}
           <input type="date" bind:value={expiresAt} class="field-input mt-1.5 block w-full text-sm" />
         </label>
-        <Button type="submit" size="lg" variant="outline" disabled={saving} testId="sharing-create-link">{$t('deck.sharing.create_link')}</Button>
+        <Button type="submit" size="lg" variant="outline" loading={submitting === 'link'} disabled={saving} testId="sharing-create-link">{$t('deck.sharing.create_link')}</Button>
       </form>
 
       {#if newLink}

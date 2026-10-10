@@ -342,8 +342,8 @@ describe('ImportView — URL source', () => {
     submitForm();
     await flush();
 
-    expect(alertText()).toContain(formatMessage('zh-CN', key));
-    expect(alertText()).not.toContain('HTTP 400');
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', key));
+    expect(vi.mocked(toast.error).mock.calls.flat().join()).not.toContain('HTTP 400');
   });
 
   it('prevents duplicate in-flight URL submissions', async () => {
@@ -514,7 +514,7 @@ describe('ImportView — result toast', () => {
     );
   });
 
-  it('does not toast when the import fails', async () => {
+  it('reports a failed import as an error toast, not a success', async () => {
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
     vi.spyOn(apiClient, 'importDeckPackageURL').mockRejectedValue(
       new ApiClientError('HTTP 400: deck_import_url_fetch_failed', { status: 400, code: 'deck_import_url_fetch_failed' })
@@ -522,7 +522,8 @@ describe('ImportView — result toast', () => {
 
     await submitUrl();
 
-    expect(alertText()).toBe(formatMessage('zh-CN', 'package.error.url_fetch_failed'));
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'package.error.url_fetch_failed'));
+    expect(alertText()).toBe('');
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.warning).not.toHaveBeenCalled();
   });

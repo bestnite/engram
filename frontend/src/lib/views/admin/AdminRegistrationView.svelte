@@ -199,7 +199,7 @@
           <input data-testid="admin-registration-domains" bind:value={emailDomains} class="field-input mt-1.5 w-full text-sm font-normal" />
           <span class="mt-1.5 block text-xs font-normal text-muted-foreground">{$t('admin.registration.allowlist_hint')}</span>
         </label>
-        <Button type="submit" testId="admin-registration-save" disabled={saving} variant="primary" size="lg">{$t('admin.registration.save')}</Button>
+        <Button type="submit" testId="admin-registration-save" loading={saving} variant="primary" size="lg">{$t('admin.registration.save')}</Button>
       </form>
     </SettingsSection>
 

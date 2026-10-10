@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { t } from '../../i18n';
   import { apiClient, ApiClientError } from '../../api';
-  import type { AdminSMTPResponse, AdminTestResult } from '../../api';
+  import type { AdminSMTPResponse } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import PageHeader from '../../components/ui/PageHeader.svelte';
   import SettingsSection from '../../components/ui/SettingsSection.svelte';
@@ -41,7 +41,7 @@
   let notice = $state('');
   let actionError = $state('');
   let saving = $state(false);
-  let testResult = $state<AdminTestResult | null>(null);
+  let testing = $state(false);
 
   const tlsModes = ['none', 'starttls', 'implicit'];
 
@@ -108,14 +108,18 @@
     }
   }
 
+  // 连通性测试的结论也是请求结果，同样走 toast；失败时附上服务端给的诊断原文。
   async function test(): Promise<void> {
-    notice = '';
-    actionError = '';
-    testResult = null;
+    testing = true;
     try {
-      testResult = await apiClient.testAdminSMTP({ host, port, username, from, tls_mode: tlsMode, password });
+      const result = await apiClient.testAdminSMTP({ host, port, username, from, tls_mode: tlsMode, password });
+      if (result.ok) toast.success($t('admin.smtp.test.ok'));
+      else if (result.code === 'no_host') toast.error($t('admin.smtp.test.no_host'));
+      else toast.error(`${$t('admin.smtp.test.failed_prefix')} ${result.message}`);
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
+    } finally {
+      testing = false;
     }
   }
 
@@ -187,19 +191,8 @@
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-          <Button type="submit" testId="admin-smtp-save" disabled={saving} variant="primary" size="lg">{$t('admin.smtp.save')}</Button>
-          <Button type="button" testId="admin-smtp-test" variant="outline" size="lg" onclick={test}>{$t('admin.smtp.test')}</Button>
-          {#if testResult}
-            <p data-testid="admin-smtp-test-result" role="status" class="text-sm {testResult.ok ? 'text-success' : 'text-destructive-foreground'}">
-              {#if testResult.ok}
-                {$t('admin.smtp.test.ok')}
-              {:else if testResult.code === 'no_host'}
-                {$t('admin.smtp.test.no_host')}
-              {:else}
-                {$t('admin.smtp.test.failed_prefix')} {testResult.message}
-              {/if}
-            </p>
-          {/if}
+          <Button type="submit" testId="admin-smtp-save" loading={saving} variant="primary" size="lg">{$t('admin.smtp.save')}</Button>
+          <Button type="button" testId="admin-smtp-test" variant="outline" size="lg" loading={testing} onclick={test}>{$t('admin.smtp.test')}</Button>
         </div>
       </form>
     </SettingsSection>

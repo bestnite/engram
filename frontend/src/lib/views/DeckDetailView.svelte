@@ -110,7 +110,9 @@
   // 批量动作
   let selectedIds = $state<string[]>([]);
   let bulkTagInput = $state('');
-  let bulkBusy = $state(false);
+  // 在途的批量动作：只有它的按钮转圈，其余按钮一并禁用。
+  let bulkPending = $state<'delete' | 'add_tags' | 'remove_tags' | 'set_tags' | null>(null);
+  const bulkBusy = $derived(bulkPending !== null);
   let bulkError = $state('');
   let confirmingBulkDelete = $state(false);
   let bulkTagsOpen = $state(false);
@@ -265,22 +267,23 @@
       bulkError = 'notes.bulk_failed';
       return;
     }
-    bulkBusy = true;
+    bulkPending = action;
     bulkError = '';
     bulkResult = null;
-    confirmingBulkDelete = false;
     try {
       const res = await apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false });
       bulkResult = summarizeBulk(res);
       announceBulkResult(bulkResult);
       bulkTagInput = '';
+      // 请求完成才关对话框：在途时确认按钮转圈，失败时错误留在对话框里。
       bulkTagsOpen = false;
+      confirmingBulkDelete = false;
       if (action === 'delete') selectedIds = [];
       await loadData(1);
     } catch (err) {
       bulkError = err instanceof ApiClientError && err.isForbidden ? 'error.forbidden' : 'notes.bulk_failed';
     } finally {
-      bulkBusy = false;
+      bulkPending = null;
     }
   }
 
@@ -714,7 +717,6 @@
       count={selectedIds.length}
       onClear={() => (selectedIds = [])}
       testId="notes-bulk-toolbar"
-      error={bulkError && !bulkTagsOpen && !confirmingBulkDelete ? $t(bulkError) : undefined}
     >
       <button type="button" class={selectionBarButton} disabled={bulkBusy} onclick={() => { bulkError = ''; bulkTagsOpen = true; }} data-testid="bulk-tags-open">
         <Tags aria-hidden="true" />
@@ -801,10 +803,10 @@
     <p role="alert" data-testid="notes-bulk-error" class="mt-3 text-sm text-destructive-foreground">{$t(bulkError)}</p>
   {/if}
   <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
-    <Button type="button" testId="bulk-remove-tags" disabled={bulkBusy} onclick={() => runBulk('remove_tags')} variant="outline" size="lg">{$t('notes.bulk_remove_tags')}</Button>
-    <Button type="button" testId="bulk-set-tags" disabled={bulkBusy} onclick={() => runBulk('set_tags')} variant="outline" size="lg">{$t('notes.bulk_set_tags')}</Button>
-    <Button type="button" testId="bulk-add-tags" disabled={bulkBusy} onclick={() => runBulk('add_tags')} variant="primary" size="lg">
-      {bulkBusy ? $t('notes.bulk_applying') : $t('notes.bulk_add_tags')}
+    <Button type="button" testId="bulk-remove-tags" loading={bulkPending === 'remove_tags'} disabled={bulkBusy} onclick={() => runBulk('remove_tags')} variant="outline" size="lg">{$t('notes.bulk_remove_tags')}</Button>
+    <Button type="button" testId="bulk-set-tags" loading={bulkPending === 'set_tags'} disabled={bulkBusy} onclick={() => runBulk('set_tags')} variant="outline" size="lg">{$t('notes.bulk_set_tags')}</Button>
+    <Button type="button" testId="bulk-add-tags" loading={bulkPending === 'add_tags'} disabled={bulkBusy} onclick={() => runBulk('add_tags')} variant="primary" size="lg">
+      {$t('notes.bulk_add_tags')}
     </Button>
   </div>
 </Dialog>
@@ -822,8 +824,8 @@
   {/if}
   <div class="mt-2 flex items-center justify-end gap-2">
     <Button type="button" testId="bulk-cancel-delete" variant="outline" size="lg" disabled={bulkBusy} onclick={() => (confirmingBulkDelete = false)}>{$t('note_edit.cancel')}</Button>
-    <Button type="button" testId="bulk-confirm-delete" variant="danger" size="lg" disabled={bulkBusy} onclick={() => runBulk('delete')}>
-      {bulkBusy ? $t('notes.bulk_applying') : $t('notes.bulk_delete')}
+    <Button type="button" testId="bulk-confirm-delete" variant="danger" size="lg" loading={bulkPending === 'delete'} disabled={bulkBusy} onclick={() => runBulk('delete')}>
+      {$t('notes.bulk_delete')}
     </Button>
   </div>
 </Dialog>
@@ -847,10 +849,10 @@
       variant="danger"
       size="lg"
       testId={noteToDelete ? `confirm-delete-note-${noteToDelete.id}` : undefined}
-      disabled={deletingNoteId !== null}
+      loading={deletingNoteId !== null}
       onclick={() => noteToDelete && deleteNote(noteToDelete)}
     >
-      {deletingNoteId ? $t('notes.deleting') : $t('notes.delete')}
+      {$t('notes.delete')}
     </Button>
   </div>
 </Dialog>
@@ -869,8 +871,8 @@
 
   <div class="mt-5 flex items-center justify-end gap-2">
     <Button type="button" variant="outline" size="lg" onclick={() => (showExportModal = false)}>{$t('note_edit.cancel')}</Button>
-    <Button type="button" testId="deck-package-export" disabled={exporting} onclick={exportPackage} variant="primary" size="lg">
-      {exporting ? $t('package.export.exporting') : $t('package.export.action')}
+    <Button type="button" testId="deck-package-export" loading={exporting} onclick={exportPackage} variant="primary" size="lg">
+      {$t('package.export.action')}
     </Button>
   </div>
 </Dialog>

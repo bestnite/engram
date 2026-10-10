@@ -16,11 +16,10 @@
     testId?: string;
     /** 操作条里的按钮；用 SelectionBar 自带的深色样式按钮（见 selectionBarButton）。 */
     children: Snippet;
-    /** 批量操作失败时显示在操作条内的一行错误。 */
-    error?: string;
   }
 
-  let { count, onClear, testId, children, error }: Props = $props();
+  // 操作条里不显示错误：批量操作在对话框里确认，失败留在对话框内，其余结果走 toast。
+  let { count, onClear, testId, children }: Props = $props();
 </script>
 
 {#if count > 0}
@@ -35,9 +34,6 @@
     <div class="flex min-w-0 items-center gap-0.5 overflow-x-auto">
       {@render children()}
     </div>
-    {#if error}
-      <span role="alert" class="max-w-56 truncate px-2 text-xs text-rose-300 dark:text-rose-700">{error}</span>
-    {/if}
     <span class="h-5 w-px bg-primary-foreground/20" aria-hidden="true"></span>
     <button
       type="button"

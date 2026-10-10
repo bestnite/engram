@@ -21,7 +21,6 @@
   let plaintext = $state<string | null>(null);
   let loading = $state(true);
   let saving = $state(false);
-  let error = $state<string | null>(null);
   let revokingId = $state<string | null>(null);
 
   // 服务端返回的列表**包含已撤销的 key**（带 revoked_at）。界面按状态分两组渲染，
@@ -32,11 +31,10 @@
   /** silent 为真时只换数据、不置 loading，用于撤销后的原地刷新（避免整块列表闪一下）。 */
   async function load(silent = false): Promise<void> {
     if (!silent) loading = true;
-    error = null;
     try {
       keys = (await apiClient.getAPIKeys()).keys;
     } catch (err) {
-      error = getApiErrorMessageKey(err);
+      toast.error($t(getApiErrorMessageKey(err)));
     } finally {
       if (!silent) loading = false;
     }
@@ -45,7 +43,6 @@
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     saving = true;
-    error = null;
     plaintext = null;
     try {
       const result = await apiClient.createAPIKey({ name: name.trim(), scopes });
@@ -54,7 +51,7 @@
       name = '';
       scopes = ['read'];
     } catch (err) {
-      error = getApiErrorMessageKey(err);
+      toast.error($t(getApiErrorMessageKey(err)));
     } finally {
       saving = false;
     }
@@ -93,14 +90,13 @@
 
   async function revoke(key: APIKeyRecord): Promise<void> {
     if (!(await askConfirm({ title: $t('keys.confirm_revoke', { name: key.name }), confirmLabel: $t('keys.revoke'), destructive: true }))) return;
-    error = null;
     revokingId = key.id;
     try {
       await apiClient.deleteAPIKey(key.id);
       // 重新取数，让「已撤销」这一事实来自服务端，而不是只改本地数组。
       await load(true);
     } catch (err) {
-      error = getApiErrorMessageKey(err);
+      toast.error($t(getApiErrorMessageKey(err)));
     } finally {
       revokingId = null;
     }
@@ -112,8 +108,6 @@
 <Page>
   <SettingsNav />
   <PageHeader title={$t('settings.api.heading')} testId="api-title" description={$t('settings.api.intro')} />
-
-  {#if error}<p class="mb-4 text-sm text-destructive-foreground" role="alert">{$t(error)}</p>{/if}
 
   <SettingsSection title={$t('settings.api.endpoints.heading')} description={$t('settings.api.endpoints.hint')} testId="api-endpoints">
     <dl class="max-w-2xl space-y-4">
@@ -174,7 +168,7 @@
           {/each}
         </div>
       </fieldset>
-      <Button type="submit" size="lg" testId="keys-create" disabled={saving}>{$t(saving ? 'keys.creating' : 'keys.create')}</Button>
+      <Button type="submit" size="lg" testId="keys-create" loading={saving}>{$t('keys.create')}</Button>
     </form>
 
     {#if plaintext}
@@ -208,9 +202,9 @@
               size="sm"
               class="hover:bg-destructive-soft hover:text-destructive-foreground"
               testId="keys-revoke-{key.id}"
-              disabled={revokingId === key.id}
+              loading={revokingId === key.id}
               onclick={() => revoke(key)}
-            >{$t(revokingId === key.id ? 'keys.revoking' : 'keys.revoke')}</Button>
+            >{$t('keys.revoke')}</Button>
           </li>
         {/each}
         {#each revokedKeys as key (key.id)}

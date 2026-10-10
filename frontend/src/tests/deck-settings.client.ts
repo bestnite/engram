@@ -1,10 +1,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import DeckSettingsView from '../lib/views/DeckSettingsView.svelte';
-import { apiClient } from '../lib/api';
+import { apiClient, ApiClientError } from '../lib/api';
 import type { DeckSettings } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
-import { setLocale } from '../lib/i18n';
+import { setLocale, formatMessage } from '../lib/i18n';
+import { toast } from '../lib/components/ui/toast';
+
+vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
  * 每日上限的保存路径只有真实挂载才会走到：输入框写进的是字符串状态，若绑定把值强转成
@@ -35,6 +38,7 @@ describe('DeckSettingsView cap saving', () => {
     instance = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   async function flush(): Promise<void> {
@@ -84,7 +88,7 @@ describe('DeckSettingsView cap saving', () => {
       reviews_per_day: 10,
       preset_id: '3',
     });
-    expect(document.body.querySelector('[data-testid="deck-settings-saved"]')).not.toBeNull();
+    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'deck.settings.saved'));
   });
 
   it('keeps 0 verbatim as the unlimited cap', async () => {
@@ -104,8 +108,19 @@ describe('DeckSettingsView cap saving', () => {
     await type('deck-settings-new-per-day', '');
     await submit();
     expect(update).not.toHaveBeenCalled();
+    // 本地校验错误留在表单里，不走 toast。
     expect(
-      document.body.querySelector('[data-testid="deck-settings-save-error"]')?.textContent
+      document.body.querySelector('[data-testid="deck-settings-invalid"]')?.textContent
     ).toContain('请输入不小于 0 的整数');
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('reports a forbidden save as an error toast', async () => {
+    const update = await setup();
+    update.mockRejectedValue(new ApiClientError('HTTP 403: forbidden', { status: 403, code: 'forbidden' }));
+    await type('deck-settings-new-per-day', '15');
+    await submit();
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'deck.settings.error.forbidden'));
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

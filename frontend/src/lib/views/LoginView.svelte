@@ -6,11 +6,11 @@
   import { getApiErrorMessageKey, ApiClientError } from '../api';
   import OIDCLoginEntry from '../components/OIDCLoginEntry.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
 
   let username = $state('');
   let password = $state('');
   let loading = $state(false);
-  let errorKey = $state<string | null>(null);
 
   // 已登录用户访问登录页时直接送去控制台：这是体验问题，不是安全兜底——
   // CSRF 层已按「本次请求有没有有效会话」分档，已登录时用会话绑定 token 校验，不再 403。
@@ -27,7 +27,6 @@
       return;
     }
     loading = true;
-    errorKey = null;
 
     try {
       const res = await login(username.trim(), password);
@@ -40,9 +39,9 @@
       }
     } catch (err) {
       if (err instanceof ApiClientError) {
-        errorKey = getApiErrorMessageKey(err);
+        toast.error($t(getApiErrorMessageKey(err)));
       } else {
-        errorKey = 'error.unknown';
+        toast.error($t('error.unknown'));
       }
     } finally {
       loading = false;
@@ -57,18 +56,6 @@
         {$t('auth.login.heading')}
       </h1>
     </div>
-
-    {#if errorKey}
-      <div
-        data-testid="login-error"
-        class="mb-6 p-4 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 text-sm flex items-center space-x-2"
-      >
-        <svg class="w-5 h-5 flex-shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>{$t(errorKey)}</span>
-      </div>
-    {/if}
 
     <form onsubmit={handleSubmit} class="space-y-4">
       <div>
@@ -106,13 +93,8 @@
       </div>
 
       <div class="pt-2">
-        <Button type="submit" disabled={loading || !username.trim() || !password} variant="primary" size="lg" class="w-full" testId="login-submit">
-          {#if loading}
-            <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
-            <span>{$t('auth.login.submitting')}</span>
-          {:else}
-            <span>{$t('auth.login.submit')}</span>
-          {/if}
+        <Button type="submit" {loading} disabled={!username.trim() || !password} variant="primary" size="lg" class="w-full" testId="login-submit">
+          {$t('auth.login.submit')}
         </Button>
       </div>
     </form>

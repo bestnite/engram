@@ -2,6 +2,7 @@
   import { t } from '../../i18n';
   import { apiClient, ApiClientError, getApiErrorMessageKey } from '../../api';
   import Button from '../ui/Button.svelte';
+  import { toast } from '../ui/toast';
   import SettingsSection from '../ui/SettingsSection.svelte';
 
   /**
@@ -11,8 +12,6 @@
   let oldPassword = $state('');
   let newPassword = $state('');
   let saving = $state(false);
-  let error = $state<string | null>(null);
-  let notice = $state<string | null>(null);
 
   const errorKeys: Record<string, string> = {
     invalid_current_password: 'settings.password.current_wrong',
@@ -24,17 +23,15 @@
 
   async function submit(event: Event): Promise<void> {
     event.preventDefault();
-    error = null;
-    notice = null;
     saving = true;
     try {
       await apiClient.changePassword({ old_password: oldPassword, new_password: newPassword });
       oldPassword = '';
       newPassword = '';
-      notice = 'settings.password.changed';
+      toast.success($t('settings.password.changed'));
     } catch (err) {
       const code = err instanceof ApiClientError ? err.code : '';
-      error = errorKeys[code] || getApiErrorMessageKey(err);
+      toast.error($t(errorKeys[code] || getApiErrorMessageKey(err)));
     } finally {
       saving = false;
     }
@@ -51,10 +48,6 @@
         <input type="password" autocomplete="new-password" bind:value={newPassword} required class="field-input mt-1.5 w-full text-sm font-normal" />
       </label>
     </div>
-    <div class="flex flex-wrap items-center gap-3">
-      <Button type="submit" disabled={saving} variant="outline" size="lg">{$t(saving ? 'settings.password.saving' : 'settings.password.submit')}</Button>
-      {#if error}<p role="alert" class="text-sm text-destructive-foreground">{$t(error)}</p>{/if}
-      {#if notice}<p role="status" class="text-sm text-success">{$t(notice)}</p>{/if}
-    </div>
+    <Button type="submit" loading={saving} variant="outline" size="lg">{$t('settings.password.submit')}</Button>
   </form>
 </SettingsSection>

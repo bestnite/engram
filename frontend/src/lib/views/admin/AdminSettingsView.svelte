@@ -217,7 +217,7 @@
         </SettingsSection>
       {/each}
       <div class="flex justify-end border-t border-border pt-5">
-        <Button type="submit" testId="admin-settings-submit" disabled={saving} variant="primary" size="lg">
+        <Button type="submit" testId="admin-settings-submit" loading={saving} variant="primary" size="lg">
           {$t('admin.settings.save')}
         </Button>
       </div>

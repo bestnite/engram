@@ -290,7 +290,6 @@ describe('Deck and notes list API client and view contracts', () => {
         'notes.bulk_set_tags',
         'notes.bulk_delete',
         'notes.bulk_confirm_delete',
-        'notes.bulk_applying',
         'notes.bulk_result',
         'notes.bulk_skipped_not_found',
         'notes.bulk_skipped_forbidden',

@@ -1,9 +1,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import SettingsView from '../lib/views/SettingsView.svelte';
-import { apiClient } from '../lib/api';
+import { apiClient, ApiClientError } from '../lib/api';
 import type { UserProfile } from '../lib/api';
-import { setLocale } from '../lib/i18n';
+import { setLocale, formatMessage } from '../lib/i18n';
+import { toast } from '../lib/components/ui/toast';
+
+vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
  * 「提前学习窗口」是字符串状态 + 数字输入框：绑定若把值强转成 number，
@@ -26,6 +29,7 @@ describe('SettingsView learn-ahead saving', () => {
     instance = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   async function flush(): Promise<void> {
@@ -73,7 +77,7 @@ describe('SettingsView learn-ahead saving', () => {
       day_cutoff_hour: 4,
       learn_ahead_minutes: 45,
     });
-    expect(document.body.querySelector('[data-testid="settings-saved-notice"]')).not.toBeNull();
+    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'settings.profile.saved'));
   });
 
   it('sends nothing when the typed window is not a whole number', async () => {
@@ -84,5 +88,15 @@ describe('SettingsView learn-ahead saving', () => {
     expect(
       document.body.querySelector('[data-testid="settings-error-learn-ahead"]')?.textContent
     ).toContain('请输入 0 到 1440 之间的整数');
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed save as an error toast instead of a success', async () => {
+    const update = await setup();
+    update.mockRejectedValue(new ApiClientError('HTTP 500: internal', { status: 500, code: 'internal' }));
+    await type('45');
+    await submit();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

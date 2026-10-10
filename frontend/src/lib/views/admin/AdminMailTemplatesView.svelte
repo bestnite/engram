@@ -6,6 +6,7 @@
   import type { AdminMailTemplatesResponse, AdminMailTemplatePreview } from '../../api';
   import AdminNav from './AdminNav.svelte';
   import Button from '../../components/ui/Button.svelte';
+  import { toast } from '../../components/ui/toast';
   import Badge from '../../components/ui/Badge.svelte';
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
@@ -35,9 +36,11 @@
   let subject = $state('');
   let body = $state('');
   let preview = $state<AdminMailTemplatePreview | null>(null);
-  let busy = $state(false);
-  let notice = $state('');
-  let errorKey = $state('');
+  // 在途的是哪个动作：只有它的按钮转圈，其余按钮一并禁用，避免两个写操作交错。
+  let pending = $state<'save' | 'restore' | 'preview' | 'test' | null>(null);
+  const busy = $derived(pending !== null);
+  // 只装提交前的本地校验错误（正文为空）；请求结果走 toast。
+  let invalid = $state(false);
 
   const types = $derived(data?.types ?? []);
   const locales = $derived(data?.locales ?? []);
@@ -64,8 +67,7 @@
     subject = draft.subject;
     body = draft.body;
     preview = null;
-    notice = '';
-    errorKey = '';
+    invalid = false;
   });
 
   function loadErrorKey(): string {
@@ -110,42 +112,35 @@
   }
 
   async function save(): Promise<void> {
-    if (!body.trim()) {
-      errorKey = 'admin.mail.empty_body';
-      return;
-    }
-    busy = true;
-    notice = '';
-    errorKey = '';
+    invalid = !body.trim();
+    if (invalid) return;
+    pending = 'save';
     try {
       await apiClient.saveAdminMailTemplate(selectedType, selectedLocale, { subject, body_md: body });
       await load();
-      notice = 'admin.mail.saved';
+      toast.success($t('admin.mail.saved'));
     } catch (err) {
-      errorKey = errorKeyFor(err);
+      toast.error($t(errorKeyFor(err)));
     } finally {
-      busy = false;
+      pending = null;
     }
   }
 
   async function remove(): Promise<void> {
-    busy = true;
-    notice = '';
-    errorKey = '';
+    pending = 'restore';
     try {
       await apiClient.deleteAdminMailTemplate(selectedType, selectedLocale);
       await load();
-      notice = 'admin.mail.restored';
+      toast.success($t('admin.mail.restored'));
     } catch (err) {
-      errorKey = errorKeyFor(err);
+      toast.error($t(errorKeyFor(err)));
     } finally {
-      busy = false;
+      pending = null;
     }
   }
 
   async function runPreview(): Promise<void> {
-    busy = true;
-    errorKey = '';
+    pending = 'preview';
     try {
       preview = await apiClient.previewAdminMailTemplate({
         type: selectedType,
@@ -154,16 +149,14 @@
         body_md: body,
       });
     } catch (err) {
-      errorKey = errorKeyFor(err);
+      toast.error($t(errorKeyFor(err)));
     } finally {
-      busy = false;
+      pending = null;
     }
   }
 
   async function sendTest(): Promise<void> {
-    busy = true;
-    notice = '';
-    errorKey = '';
+    pending = 'test';
     try {
       await apiClient.testAdminMailTemplate({
         type: selectedType,
@@ -171,11 +164,11 @@
         subject,
         body_md: body,
       });
-      notice = 'admin.mail.test_queued';
+      toast.success($t('admin.mail.test_queued'));
     } catch (err) {
-      errorKey = errorKeyFor(err);
+      toast.error($t(errorKeyFor(err)));
     } finally {
-      busy = false;
+      pending = null;
     }
   }
 </script>
@@ -275,16 +268,16 @@
 
       <div class="space-y-2">
         <div class="flex flex-wrap items-center gap-2">
-          <Button variant="primary" size="lg" testId="admin-mail-template-save" disabled={busy} onclick={save}>
-            {busy ? $t('admin.mail.saving') : $t('admin.mail.save')}
+          <Button variant="primary" size="lg" testId="admin-mail-template-save" loading={pending === 'save'} disabled={busy} onclick={save}>
+            {$t('admin.mail.save')}
           </Button>
-          <Button variant="outline" size="lg" testId="admin-mail-template-preview" disabled={busy} onclick={runPreview}>
+          <Button variant="outline" size="lg" testId="admin-mail-template-preview" loading={pending === 'preview'} disabled={busy} onclick={runPreview}>
             {$t('admin.mail.preview')}
           </Button>
-          <Button variant="outline" size="lg" testId="admin-mail-template-test" disabled={busy} onclick={sendTest}>
+          <Button variant="outline" size="lg" testId="admin-mail-template-test" loading={pending === 'test'} disabled={busy} onclick={sendTest}>
             {$t('admin.mail.test')}
           </Button>
-          <Button variant="ghost" size="lg" testId="admin-mail-template-restore" disabled={busy || !currentRow} onclick={remove} title={$t('admin.mail.restore_hint')}>
+          <Button variant="ghost" size="lg" testId="admin-mail-template-restore" loading={pending === 'restore'} disabled={busy || !currentRow} onclick={remove} title={$t('admin.mail.restore_hint')}>
             {$t('admin.mail.restore')}
           </Button>
         </div>
@@ -293,11 +286,8 @@
             ? `${$t('admin.mail.custom_badge')} · ${$t('admin.mail.updated_at', { time: currentRow.updated_at })}`
             : $t('admin.mail.builtin_badge')}
         </p>
-        {#if notice}
-          <p role="status" class="text-sm text-success" data-testid="admin-mail-template-notice">{$t(notice)}</p>
-        {/if}
-        {#if errorKey}
-          <p role="alert" class="text-sm text-destructive-foreground" data-testid="admin-mail-template-error">{$t(errorKey)}</p>
+        {#if invalid}
+          <p role="alert" class="text-sm text-destructive-foreground" data-testid="admin-mail-template-invalid">{$t('admin.mail.empty_body')}</p>
         {/if}
       </div>
 

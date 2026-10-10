@@ -6,6 +6,7 @@
   import type { TOTPStatus } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import { toast } from '../components/ui/toast';
   import Badge from '../components/ui/Badge.svelte';
 
   interface Props {
@@ -51,9 +52,6 @@
   let disabling = $state(false);
   let regenerating = $state(false);
 
-  let actionError = $state('');
-  let notice = $state('');
-
   /** 读取状态；未登录由服务端 401 决定，前端不猜测。 */
   async function load(): Promise<void> {
     loading = true;
@@ -86,14 +84,8 @@
     return 'settings.totp.failed';
   }
 
-  function resetMessages(): void {
-    actionError = '';
-    notice = '';
-  }
-
   /** 开始绑定：响应里一次性拿到 secret 与 otpauth 链接。 */
   async function begin(): Promise<void> {
-    resetMessages();
     beginning = true;
     try {
       const res = await apiClient.beginTOTP();
@@ -101,7 +93,7 @@
       otpauthUrl = res.otpauth_url;
       recoveryCodes = [];
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
     } finally {
       beginning = false;
     }
@@ -110,7 +102,6 @@
   /** 确认绑定：成功后启用并一次性展示恢复码。 */
   async function confirm(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    resetMessages();
     confirming = true;
     try {
       const res = await apiClient.confirmTOTP(confirmCode.trim());
@@ -119,9 +110,9 @@
       secret = '';
       otpauthUrl = '';
       confirmCode = '';
-      notice = 'settings.totp.saved.enabled';
+      toast.success($t('settings.totp.saved.enabled'));
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
     } finally {
       confirming = false;
     }
@@ -130,16 +121,15 @@
   /** 关闭 TOTP：需要密码确认。 */
   async function disable(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    resetMessages();
     disabling = true;
     try {
       await apiClient.disableTOTP(disablePassword);
       status = { enabled: false, pending: false, recovery_remaining: 0 };
       recoveryCodes = [];
       disablePassword = '';
-      notice = 'settings.totp.saved.disabled';
+      toast.success($t('settings.totp.saved.disabled'));
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
     } finally {
       disabling = false;
     }
@@ -148,7 +138,6 @@
   /** 重新生成恢复码：需要密码确认，旧码立即作废。 */
   async function regenerate(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    resetMessages();
     regenerating = true;
     try {
       const res = await apiClient.regenerateTOTPRecovery(recoveryPassword);
@@ -157,9 +146,9 @@
         status = { ...status, recovery_remaining: res.recovery_remaining };
       }
       recoveryPassword = '';
-      notice = 'settings.totp.saved.recovery';
+      toast.success($t('settings.totp.saved.recovery'));
     } catch (err) {
-      actionError = actionErrorKey(err);
+      toast.error($t(actionErrorKey(err)));
     } finally {
       regenerating = false;
     }
@@ -189,12 +178,6 @@
       <Badge testId="totp-status" variant={status.enabled ? 'success' : 'neutral'}>
         {status.enabled ? $t('settings.totp.status.enabled') : $t('settings.totp.status.disabled')}
       </Badge>
-      {#if actionError}
-        <p data-testid="totp-action-error" role="alert" class="mt-3 text-sm text-destructive-foreground">{$t(actionError)}</p>
-      {/if}
-      {#if notice}
-        <p data-testid="totp-notice" role="status" class="mt-3 text-sm text-success">{$t(notice)}</p>
-      {/if}
     </SettingsSection>
 
     {#if !status.enabled}
@@ -202,8 +185,8 @@
         {#if status.pending && !secret}
           <p data-testid="totp-pending-hint" class="mb-3 text-[13px] text-warning">{$t('settings.totp.begin.restart_hint')}</p>
         {/if}
-        <Button type="button" testId="totp-begin" disabled={beginning} onclick={() => begin()} variant={secret ? 'outline' : 'primary'} size="lg">
-          {$t(beginning ? 'common.loading' : 'settings.totp.begin.submit')}
+        <Button type="button" testId="totp-begin" loading={beginning} onclick={() => begin()} variant={secret ? 'outline' : 'primary'} size="lg">
+          {$t('settings.totp.begin.submit')}
         </Button>
       </SettingsSection>
     {/if}
@@ -232,8 +215,8 @@
               class="field-input mt-1.5 block w-40 font-mono text-sm font-normal tracking-widest"
             />
           </label>
-          <Button type="submit" testId="totp-confirm-submit" disabled={confirming} variant="primary" size="lg">
-            {$t(confirming ? 'common.loading' : 'settings.totp.pending.confirm_submit')}
+          <Button type="submit" testId="totp-confirm-submit" loading={confirming} variant="primary" size="lg">
+            {$t('settings.totp.pending.confirm_submit')}
           </Button>
         </form>
       </SettingsSection>
@@ -265,8 +248,8 @@
               class="field-input mt-1.5 block w-64 text-sm font-normal"
             />
           </label>
-          <Button type="submit" testId="totp-recovery-submit" disabled={regenerating} variant="outline" size="lg">
-            {$t(regenerating ? 'common.loading' : 'settings.totp.recovery.regenerate_submit')}
+          <Button type="submit" testId="totp-recovery-submit" loading={regenerating} variant="outline" size="lg">
+            {$t('settings.totp.recovery.regenerate_submit')}
           </Button>
         </form>
       </SettingsSection>
@@ -284,8 +267,8 @@
               class="field-input mt-1.5 block w-64 text-sm font-normal"
             />
           </label>
-          <Button type="submit" testId="totp-disable-submit" disabled={disabling} variant="danger-outline" size="lg">
-            {$t(disabling ? 'common.loading' : 'settings.totp.disable.submit')}
+          <Button type="submit" testId="totp-disable-submit" loading={disabling} variant="danger-outline" size="lg">
+            {$t('settings.totp.disable.submit')}
           </Button>
         </form>
       </SettingsSection>
