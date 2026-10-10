@@ -64,7 +64,7 @@ export const en: LocaleCatalog = {
   'notes.kind.short_answer': 'Short answer',
   'note.fields.front': 'Front',
   'note.fields.back': 'Back',
-  'note.fields.text': 'Text (mark cloze as {{c1::deletion}}; separate accepted answers with |: {{c1::answer|alternative}})',
+  'note.fields.text': 'Text',
   'note.fields.prompt': 'Prompt',
   'note.fields.items': 'Items (one per line)',
   'note.fields.ordered': 'Ordered list',
@@ -1332,4 +1332,6 @@ export const en: LocaleCatalog = {
   'help.stats.tag': 'Reviews from the last 30 days grouped by note tag; a card with several tags counts once for each tag.',
   'help.stats.tag.retention': 'Share of due reviews with this tag over the last 30 days that you got right (any rating except Again). Shows N/A when there were none.',
   'help.stats.retention_buckets_label': 'Memory strength',
+  // ---- Note field syntax help (NoteFieldsForm popovers) ----
+  'note_help.text': 'Mark each part to hide with {{c1::text}}.\nDeletions with the same number are tested together on one card, and each number makes its own card; the other deletions show their answer as context.\nSeparate accepted answers with |: {{c1::answer|alternative}}; the first one is the standard form.\nAdd a hint with {{c1::answer::hint}}; it appears in the blank during review.',
 };

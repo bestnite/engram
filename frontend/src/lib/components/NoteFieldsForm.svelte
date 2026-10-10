@@ -3,6 +3,7 @@
   import { arrayToLines, linesToArray, type FieldSpec } from '../card-fields';
   import Checkbox from './ui/Checkbox.svelte';
   import Select from './ui/Select.svelte';
+  import HelpTip from './ui/HelpTip.svelte';
 
   /**
    * 按题型渲染字段表单。
@@ -19,6 +20,14 @@
   }
 
   let { specs, fields, testIdPrefix = 'note-field' }: Props = $props();
+
+  /**
+   * 需要语法说明的字段 → 说明文案的语言包键。说明放进标签旁的问号浮层，而不是塞进标签：
+   * 挖空语法有好几条规则，写在标签括号里会把标签撑成一大段，每次编辑都要读一遍。
+   */
+  const fieldHelp: Record<string, string> = {
+    text: 'note_help.text',
+  };
 
 
   /** options 字段既用于「选项」编辑，也用于选择题答案的下标选择。 */
@@ -69,6 +78,7 @@
 </script>
 
 {#each specs as spec (spec.key)}
+  {@const helpKey = fieldHelp[spec.key]}
   <div class="block">
     {#if spec.control === 'bool'}
       <div class="flex items-center gap-2">
@@ -81,8 +91,15 @@
         <span class="text-sm text-foreground/80">{$t('note.fields.' + spec.key)}</span>
       </div>
     {:else}
-      <span class="block text-sm font-medium text-foreground">
+      <span class="flex items-center gap-1 text-sm font-medium text-foreground">
         {$t('note.fields.' + spec.key)}
+        {#if helpKey}
+          <HelpTip
+            testId="{testIdPrefix}-{spec.key}-help"
+            label={$t('note.fields.' + spec.key)}
+            text={$t(helpKey)}
+          />
+        {/if}
       </span>
       {#if spec.control === 'textarea'}
         <textarea

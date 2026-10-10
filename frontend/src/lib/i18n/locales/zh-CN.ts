@@ -64,7 +64,7 @@ export const zhCN: LocaleCatalog = {
   'notes.kind.short_answer': '简答',
   'note.fields.front': '正面',
   'note.fields.back': '背面',
-  'note.fields.text': '文本（用 {{c1::填空}} 标记，多个答案用 | 分隔：{{c1::答案|另一种说法}}）',
+  'note.fields.text': '文本',
   'note.fields.prompt': '题干',
   'note.fields.items': '条目（每行一项）',
   'note.fields.ordered': '有序列表',
@@ -1331,4 +1331,6 @@ export const zhCN: LocaleCatalog = {
   'help.stats.tag': '近 30 天的复习按笔记标签汇总，一张卡有多个标签时每个标签各算一次。',
   'help.stats.tag.retention': '近 30 天内带这个标签的到期复习中，答对（评分不是「重来」）的比例。没有到期复习时显示「暂无数据」。',
   'help.stats.retention_buckets_label': '记忆强度',
+  // ---- 笔记字段语法说明（NoteFieldsForm 的问号浮层） ----
+  'note_help.text': '用 {{c1::内容}} 把要挖空的部分标出来。\n编号相同的挖空在同一张卡上一起考，每个编号各生成一张卡；其余挖空作为上下文显示答案。\n多个可接受的答案用 | 分隔：{{c1::答案|另一种说法}}，第一个是标准写法。\n可加提示：{{c1::答案::提示}}，复习时显示在空格处。',
 };
