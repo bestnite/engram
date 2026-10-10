@@ -1319,4 +1319,8 @@ export const en: LocaleCatalog = {
   'settings.api.scope.write': 'Create, edit and delete decks and cards; import packages',
   'settings.api.scope.review': 'Fetch due cards and submit grades',
   'settings.api.scope.keys': 'Manage your other keys with this key',
+  'package.export.include_weights': 'Include my FSRS weights (fitted to my review history)',
+  'package.import.apply_weights': 'Use the package’s FSRS weights (otherwise start from the defaults)',
+  'package.report.weights_applied': 'Package weights applied',
+  'package.report.weights_discarded': 'Package weights not used',
 };

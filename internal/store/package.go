@@ -66,7 +66,7 @@ func (e *PackageError) Error() string {
 	return e.Code + ": " + e.Message + ": " + strings.Join(e.Entries, ", ")
 }
 
-// PackageOptions 控制一次导出的内容（三个开关）。
+// PackageOptions 控制一次导出的内容（四个开关）。
 type PackageOptions struct {
 	// IncludeProgress 默认 off：卡组包主要用途是把内容给别人/搬到别的实例。
 	IncludeProgress bool
@@ -74,6 +74,11 @@ type PackageOptions struct {
 	IncludeMedia bool
 	// IncludeReviews 依赖 IncludeProgress；仅当两者都为真才写出复习日志。
 	IncludeReviews bool
+	// IncludeWeights 默认 off：FSRS 权重是用导出者本人的复习日志拟合出来的，描述的是这个人的
+	// 记忆曲线，不属于卡组内容。关闭时 preset.json 的 weights、weights_optimized_at、
+	// weights_review_count 三项一起写 null，否则导入端会留下「基于 N 次复习优化」却查不到
+	// 那些复习的预设。它不依赖 IncludeProgress。
+	IncludeWeights bool
 	// MediaRoot 是媒体字节的本地根目录（media.Store.Root()）；为空表示无法内联媒体。
 	MediaRoot string
 	// AppVersion 写入 manifest.app_version，仅作提示。
@@ -95,6 +100,9 @@ type PackageManifest struct {
 	// ExportedBy 是导出者的不透明标识（用登录名，不是数据库 id），
 	// 导入端据此判断包内进度是否属于导入者本人（「进度归属判定」）。
 	ExportedBy string `json:"exported_by,omitempty"`
+	// IncludeWeights 声明 preset.json 是否带非 null 的权重；早于这个字段的包里没有它。
+	// 导入端判断时只看 preset.json 的 weights 本身，这里仅作声明，供界面提前提示。
+	IncludeWeights bool `json:"include_weights"`
 }
 
 // PackageDeck 是随包走的卡组元信息；授权、审计等实例内状态一概不导出。
@@ -257,7 +265,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	}
 
 	pkg := &DeckPackage{
-		Preset: presetToPackage(preset),
+		Preset: presetToPackage(preset, opts.IncludeWeights),
 		Media:  map[string]PackageMediaEntry{},
 	}
 	if !opts.IncludeMedia {
@@ -329,6 +337,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		IncludeProgress: opts.IncludeProgress,
 		IncludeMedia:    opts.IncludeMedia,
 		IncludeReviews:  opts.IncludeReviews,
+		IncludeWeights:  pkg.Preset.Weights != nil,
 		Counts:          PackageCount{Notes: len(pkg.Notes), Cards: len(pkg.Cards), Media: len(pkg.Media)},
 	}
 
@@ -507,7 +516,8 @@ func (p *DeckPackage) Document() map[string]any {
 }
 
 // presetToPackage 把 store.Preset 转成包内 preset（weights_json → []float64 或 null）。
-func presetToPackage(p *Preset) PackagePreset {
+// withWeights 为 false 时权重及其两项元数据都留 null：三者描述的是同一次优化，只带一部分会自相矛盾。
+func presetToPackage(p *Preset, withWeights bool) PackagePreset {
 	out := PackagePreset{
 		Name:                p.Name,
 		DesiredRetention:    p.DesiredRetention,
@@ -515,14 +525,17 @@ func presetToPackage(p *Preset) PackagePreset {
 		RelearningSteps:     p.RelearningSteps,
 		MaximumIntervalDays: p.MaximumIntervalDays,
 		EnableFuzz:          p.FuzzEnabled(),
-		WeightsReviewCount:  p.WeightsReviewCount,
 	}
-	if p.WeightsJSON != nil {
-		var w []float64
-		if json.Unmarshal([]byte(*p.WeightsJSON), &w) == nil {
-			out.Weights = w
-		}
+	if !withWeights || p.WeightsJSON == nil {
+		return out
 	}
+	var w []float64
+	if json.Unmarshal([]byte(*p.WeightsJSON), &w) != nil || w == nil {
+		// 解不出权重（含存的就是 "null"）等同于用默认权重：元数据同样不带，理由同上。
+		return out
+	}
+	out.Weights = w
+	out.WeightsReviewCount = p.WeightsReviewCount
 	if p.WeightsOptimizedAt != nil {
 		s := p.WeightsOptimizedAt.UTC().Format(time.RFC3339)
 		out.WeightsOptimizedAt = &s

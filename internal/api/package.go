@@ -19,18 +19,15 @@ import (
 //   POST /api/v1/decks/import       导入（write）
 // 业务逻辑全在 store 层；这里只做参数整形、权限判定与错误映射。
 
-// ExportDeckPackage 导出卡组包并返回内存形态；REST 与 MCP 共用。
-func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, includeProgress, includeMedia, includeReviews bool) (*store.DeckPackage, error) {
+// ExportDeckPackage 导出卡组包并返回内存形态；REST、MCP 与 CLI 共用。
+// 调用方只填 Include* 开关；MediaRoot 与时钟由服务端决定，传入的值会被覆盖。
+func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) (*store.DeckPackage, error) {
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 		return nil, err
 	}
-	pkg, err := a.decks.ExportPackage(ctx, userID, deckID, store.PackageOptions{
-		IncludeProgress: includeProgress,
-		IncludeMedia:    includeMedia,
-		IncludeReviews:  includeReviews,
-		MediaRoot:       a.mediaRoot,
-		Now:             a.now,
-	})
+	opts.MediaRoot = a.mediaRoot
+	opts.Now = a.now
+	pkg, err := a.decks.ExportPackage(ctx, userID, deckID, opts)
 	if err != nil {
 		return nil, mapPackageError(err)
 	}
@@ -168,12 +165,13 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	includeProgress := c.Query("include_progress") == "1"
-	includeReviews := c.Query("include_reviews") == "1"
-	// include_media 默认 on；显式传 0 关闭。
-	includeMedia := c.DefaultQuery("include_media", "1") != "0"
-
-	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, includeProgress, includeMedia, includeReviews)
+	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, store.PackageOptions{
+		IncludeProgress: c.Query("include_progress") == "1",
+		IncludeReviews:  c.Query("include_reviews") == "1",
+		IncludeWeights:  c.Query("include_weights") == "1",
+		// include_media 默认 on；显式传 0 关闭。
+		IncludeMedia: c.DefaultQuery("include_media", "1") != "0",
+	})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -232,6 +230,7 @@ func (a *API) handleImportPackage(c *gin.Context) {
 		// 允许导入他人进度是管理员设置项；这里只认管理员显式勾选。
 		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && u.Role == store.RoleAdmin,
 		SkipMissingMedia:    c.PostForm("skip_missing_media") == "1",
+		ApplyWeights:        c.PostForm("apply_weights") == "1",
 	})
 	if err != nil {
 		writeServiceError(c, err)

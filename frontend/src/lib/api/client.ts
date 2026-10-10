@@ -266,7 +266,7 @@ export class ApiClient {
   }
 
   /** 使用同源会话下载现有的卡组包附件。 */
-  async downloadDeckPackage(deckId: string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
+  async downloadDeckPackage(deckId: string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
     if (options.includeReviews && !options.includeProgress) {
       throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
     }
@@ -274,6 +274,7 @@ export class ApiClient {
     if (options.includeProgress) params.set('include_progress', '1');
     if (options.includeMedia === false) params.set('include_media', '0');
     if (options.includeReviews) params.set('include_reviews', '1');
+    if (options.includeWeights) params.set('include_weights', '1');
     if (!params.has('include_media')) params.set('include_media', '1');
     const query = params.toString();
     const path = `/api/v1/decks/${encodeURIComponent(String(deckId))}/package${query ? `?${query}` : ''}`;
@@ -299,7 +300,7 @@ export class ApiClient {
   }
 
   /** 通过同源会话 multipart 路由导入卡组包。 */
-  async importDeckPackage(file: File, options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean }): Promise<PackageImportReport> {
+  async importDeckPackage(file: File, options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean; applyWeights?: boolean }): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
     const form = new FormData();
     form.append('file', file, file.name);
@@ -308,6 +309,7 @@ export class ApiClient {
     form.append('on_conflict', options.onConflict || 'update');
     form.append('allow_others_progress', options.allowOthersProgress ? '1' : '0');
     form.append('skip_missing_media', options.skipMissingMedia ? '1' : '0');
+    form.append('apply_weights', options.applyWeights ? '1' : '0');
     return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form }));
   }
 
@@ -315,14 +317,14 @@ export class ApiClient {
    * 通过同源会话 JSON 路由从公开 HTTPS 直链导入卡组包（POST /api/v1/decks/import-url）。
    *
    * 与文件导入共用同一批选项（target / dry_run / on_conflict / allow_others_progress /
-   * skip_missing_media），服务端返回同一份 PackageImportReport，前端不区分结果形状。
+   * skip_missing_media / apply_weights），服务端返回同一份 PackageImportReport，前端不区分结果形状。
    * 显式写出全部字段而不是依赖服务端默认值：选项的含义在两条入口上必须完全一致，缺省会让
    * 「界面显示的值」与「实际生效的值」脱钩。CSRF 与 Content-Type 由 request 统一注入（字符串
    * body 才强制 application/json）。
    */
   async importDeckPackageURL(
     rawURL: string,
-    options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean }
+    options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean; applyWeights?: boolean }
   ): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
     return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import-url', {
@@ -334,6 +336,7 @@ export class ApiClient {
         on_conflict: options.onConflict || 'update',
         allow_others_progress: options.allowOthersProgress === true,
         skip_missing_media: options.skipMissingMedia === true,
+        apply_weights: options.applyWeights === true,
       }),
     }));
   }
@@ -436,7 +439,7 @@ export class ApiClient {
   /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
   async exportDecksZip(
     deckIds: string[],
-    options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean } = {}
+    options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}
   ): Promise<{ blob: Blob; filename: string }> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -457,6 +460,7 @@ export class ApiClient {
         include_media: options.includeMedia ?? true,
         include_progress: options.includeProgress ?? false,
         include_reviews: options.includeReviews ?? false,
+        include_weights: options.includeWeights ?? false,
       }),
     });
     if (!res.ok) {

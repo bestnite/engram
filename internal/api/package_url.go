@@ -45,6 +45,7 @@ type importURLRequest struct {
 	OnConflict          string `json:"on_conflict"`
 	AllowOthersProgress bool   `json:"allow_others_progress"`
 	SkipMissingMedia    bool   `json:"skip_missing_media"`
+	ApplyWeights        bool   `json:"apply_weights"`
 }
 
 // ImportDeckPackageURL 从公开 HTTPS 直链下载并导入一个卡组包。
@@ -126,6 +127,7 @@ func (a *API) handleImportPackageURL(c *gin.Context) {
 		// 允许导入他人进度是管理员设置项；这里只认管理员显式勾选。
 		AllowOthersProgress: req.AllowOthersProgress && u.Role == store.RoleAdmin,
 		SkipMissingMedia:    req.SkipMissingMedia,
+		ApplyWeights:        req.ApplyWeights,
 	})
 	if err != nil {
 		// 限流在 service 层触发（REST 与 MCP 共用同一计数池）；这里只把 429 的

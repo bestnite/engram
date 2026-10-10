@@ -60,6 +60,8 @@ type exportDeckIn struct {
 	// IncludeMedia 缺省为 true（媒体默认内联）。
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
 	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include review logs (requires include_progress)"`
+	// IncludeWeights 缺省 false：FSRS 权重是导出者个人的记忆曲线，不随卡组内容默认带出。
+	IncludeWeights bool `json:"include_weights,omitempty" jsonschema:"include the caller's FSRS weights in preset.json; default false"`
 }
 
 // importNoteIn 是单个 note 的入参，字段名与 schema/note-import.schema.json 一致。
@@ -103,6 +105,8 @@ type importDeckIn struct {
 	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
 	// AllowOthersProgress 仅管理员可置位：允许导入包内他人的进度。
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
+	// ApplyWeights 缺省 false：只在 new_deck 目标下把包内权重写进新建的预设。
+	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
 
 // updateNoteIn 是 update_note 的入参。
@@ -238,7 +242,12 @@ func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (
 	if in.IncludeMedia != nil {
 		includeMedia = *in.IncludeMedia
 	}
-	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, d.ID, in.IncludeProgress, includeMedia, in.IncludeReviews)
+	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, d.ID, store.PackageOptions{
+		IncludeProgress: in.IncludeProgress,
+		IncludeMedia:    includeMedia,
+		IncludeReviews:  in.IncludeReviews,
+		IncludeWeights:  in.IncludeWeights,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +284,7 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 		OnConflict:          in.OnConflict,
 		SkipMissingMedia:    in.SkipMissingMedia,
 		AllowOthersProgress: in.AllowOthersProgress,
+		ApplyWeights:        in.ApplyWeights,
 	}
 	url := strings.TrimSpace(in.URL)
 	if url != "" {

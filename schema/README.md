@@ -97,8 +97,12 @@ whose properties are the package's entry names, and defines each file under `$de
   deck metadata, the `include_*` flags and the entry counts.
 - `notes.json` (required) — the note content, same note shape as the import request.
 - `cards.json` (required) — one entry per card: `note_index`, `template`, `ordinal`.
-- `preset.json` (required) — scheduling parameters, including the 21 FSRS weights
-  (`weights` is `null` when the library defaults are used).
+- `preset.json` (required) — scheduling parameters. The 21 FSRS weights are exported
+  only when `include_weights` is requested, because they are fitted to the exporting
+  user's own review log; otherwise `weights`, `weights_optimized_at` and
+  `weights_review_count` are all `null`, the same as a preset on the library defaults.
+  The importer uses the package's weights only for a new deck and only when
+  `apply_weights` is requested.
 - `progress.json` (optional) — the exporting user's own `card_states` and optional
   `reviews`.
 - `media.json` (optional) — a map from `sha256` to `path`, `mime` and dimensions.

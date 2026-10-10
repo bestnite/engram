@@ -37,6 +37,8 @@ function reportFixture(overrides: Partial<PackageImportReport> = {}): PackageImp
     progress_applied: 0,
     progress_skipped: 0,
     progress_discarded: false,
+    weights_applied: false,
+    weights_discarded: false,
     match_rule: '',
     errors: [],
     ...overrides,
@@ -136,6 +138,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
         onConflict: 'fail',
         allowOthersProgress: true,
         skipMissingMedia: true,
+        applyWeights: true,
       })
     ).resolves.toEqual(report);
 
@@ -146,7 +149,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     const headers = new Headers(init?.headers);
     expect(headers.get('X-CSRF-Token')).toBe('url-csrf');
     expect(headers.get('Content-Type')).toBe('application/json');
-    // 六个字段全部显式出现，不依赖服务端默认值。
+    // 七个字段全部显式出现，不依赖服务端默认值。
     expect(JSON.parse(String(init?.body))).toEqual({
       url: 'https://example.com/deck.edeck',
       target: 'into_deck:7',
@@ -154,6 +157,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
       on_conflict: 'fail',
       allow_others_progress: true,
       skip_missing_media: true,
+      apply_weights: true,
     });
   });
 
@@ -172,14 +176,43 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     const headers = new Headers(init?.headers);
     expect(headers.get('X-CSRF-Token')).toBe('fresh-url-csrf');
     expect(headers.has('Authorization')).toBe(false);
-    // 省略的选项落到稳定默认值：dry_run 关、on_conflict=update、两个布尔为 false。
+    // 省略的选项落到稳定默认值：dry_run 关、on_conflict=update、三个布尔为 false。
     expect(JSON.parse(String(init?.body))).toMatchObject({
       target: 'new_deck',
       dry_run: false,
       on_conflict: 'update',
       allow_others_progress: false,
       skip_missing_media: false,
+      apply_weights: false,
     });
+  });
+});
+
+describe('ImportView — package weights', () => {
+  it('offers apply_weights only for a new deck and sends it when ticked', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ dry_run: false }));
+
+    mountView();
+    await flush();
+    const weightsBox = () => target.querySelector('[data-testid="package-import-apply-weights"]') as HTMLElement | null;
+    expect(weightsBox()).toBeTruthy();
+
+    // 合并到已有卡组时包内预设整体不用，选项不出现。
+    await selectOption('package-import-target', formatMessage('zh-CN', 'package.import.into_deck'));
+    expect(weightsBox()).toBeNull();
+    await selectOption('package-import-target', formatMessage('zh-CN', 'package.import.new_deck'));
+    expect(weightsBox()).toBeTruthy();
+
+    weightsBox()!.click();
+    await flush();
+    setFile('import-file', new File(['x'], 'deck.edeck'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).toHaveBeenCalledTimes(1);
+    expect(importFile.mock.calls[0]![1]).toMatchObject({ target: 'new_deck', applyWeights: true });
   });
 });
 
@@ -228,6 +261,7 @@ describe('ImportView — URL source', () => {
       onConflict: 'update',
       allowOthersProgress: false,
       skipMissingMedia: false,
+      applyWeights: false,
     });
     expect(importFile).not.toHaveBeenCalled();
     expect(reportSection()).toBeTruthy();
