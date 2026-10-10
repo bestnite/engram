@@ -68,6 +68,10 @@
   let singleChoice = $state<number | null>(null);
   let multiChoice = $state<number[]>([]);
   let boolChoice = $state<boolean | null>(null);
+  // 逐空作答题：blanks 是服务端给出的每空提示（决定输入框个数），blankAnswers 与之一一对应。
+  let blanks = $state<string[]>([]);
+  let blankAnswers = $state<string[]>([]);
+  let blankInputs = $state<(HTMLInputElement | null)[]>([]);
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
   let pendingCards = $state<DueCard[]>([]);
@@ -157,6 +161,7 @@
     singleChoice = null;
     multiChoice = [];
     boolChoice = null;
+    blankAnswers = blanks.map(() => '');
     needAnswer = false;
   }
 
@@ -172,6 +177,9 @@
         return multiChoice;
       case 'bool':
         return boolChoice ?? undefined;
+      case 'blanks':
+        // 空数来自 render 响应；未取到时无从作答，按未作答拦截，而不是提交一个必错的空数组。
+        return blanks.length ? blankAnswers.slice(0, blanks.length) : undefined;
       default:
         return undefined;
     }
@@ -208,7 +216,11 @@
       frontHTML = response.front_html;
       backHTML = response.back_html;
       editHref = response.edit_href;
+      blanks = response.blanks ?? [];
+      blankAnswers = blanks.map(() => '');
       await tick();
+      // 逐空输入框随 render 响应才出现，换卡时的自动聚焦早于它，这里补上。
+      if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
       await typeset([frontSection, answerSection]);
     } catch {
       if (token !== renderToken) return;
@@ -225,6 +237,8 @@
     frontHTML = '';
     backHTML = '';
     editHref = '';
+    blanks = [];
+    blankAnswers = [];
     if (card) void loadRender(card, token);
   });
 
@@ -860,6 +874,22 @@
                       />
                       <span>{option}</span>
                     </div>
+                  {/each}
+                </div>
+              {:else if answerControl === 'blanks'}
+                <div class="space-y-3" data-testid="review-graded-blanks">
+                  {#each blanks as hint, index (index)}
+                    <label class="block">
+                      <span class="mb-1 block text-xs text-zinc-500">{$t('review.graded.blank', { index: index + 1 })}</span>
+                      <input
+                        bind:this={blankInputs[index]}
+                        type="text"
+                        bind:value={blankAnswers[index]}
+                        placeholder={hint || $t('review.graded.placeholder')}
+                        data-testid="review-graded-blank"
+                        class="field-input text-sm w-full min-h-12 text-lg"
+                      />
+                    </label>
                   {/each}
                 </div>
               {:else if answerControl === 'bool'}

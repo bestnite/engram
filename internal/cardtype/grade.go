@@ -8,8 +8,8 @@ import (
 )
 
 // 本文件承载作答类题型的判分骨架：分数→评分档位映射、判分输入基类，
-// 以及 fields 的数值/整数读取辅助。五个具体题型在 typed.go / numeric.go /
-// choice.go / truefalse.go 中实现。
+// 以及 fields 的数值/整数读取辅助。六个具体题型在 typed.go / numeric.go /
+// choice.go / truefalse.go / cloze.go 中实现。
 
 // FSRS 四档评分，与 reviews.rating 的整数约定一致。
 const (
@@ -140,9 +140,13 @@ func (m GradeMapping) RatingFor(score float64) int {
 //
 // 判分器只拿到 input，因此字段必须随 input 传入；这样可选窄接口 Grader 无需扩张，
 // 核心提交管线也不必改动。
+//
+// Template 是被作答那张卡的模板（例如 cloze:2）。同一 note 的不同卡考的内容不同时
+// （挖空题每个序号一张卡），判分器靠它找到本卡的考点；其它题型一卡一 note，可以忽略。
 type GradeContext struct {
-	Fields  map[string]any
-	Mapping *GradeMapping
+	Fields   map[string]any
+	Template string
+	Mapping  *GradeMapping
 }
 
 // rating 用映射把分数转成评分并填充 detail 的公共字段。

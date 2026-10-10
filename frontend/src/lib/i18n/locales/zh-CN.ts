@@ -1307,4 +1307,5 @@ export const zhCN: LocaleCatalog = {
   'package.toast.dry_run_done': '试导入完成，数据尚未写入。',
   'package.toast.entries_failed': '有 {count} 个条目未导入。',
   'package.toast.view_report': '查看结果',
+  'review.graded.blank': '第 {index} 空',
 };

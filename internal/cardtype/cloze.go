@@ -1,6 +1,7 @@
 package cardtype
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -151,12 +152,14 @@ type clozeType struct{}
 // Label 返回语言包键名。
 func (clozeType) Label() string { return "cardtype.cloze" }
 
-// Describe 自描述：正反面都读 text，自评题型。
+// Describe 自描述：正反面都读 text；作答控件是逐空输入（每处目标挖空一个输入框）。
+// PromptField 故意留空：text 原文里就有答案，题面只能用服务端掩盖后的正面，
+// 前端在正面未取到时不得回退到字段原文。
 func (clozeType) Describe() Description {
 	return Description{
 		Kind:          "cloze",
 		LabelKey:      "cardtype.cloze",
-		AnswerControl: AnswerNone,
+		AnswerControl: AnswerBlanks,
 		FrontField:    "text",
 		BackField:     "text",
 		Fields: fieldsWithCommon(
@@ -297,4 +300,106 @@ func clozeBlank(d ClozeDeletion) string {
 		return "[" + d.Hint + "]"
 	}
 	return "[…]"
+}
+
+// ClozeInput 是 clozeType.Grade 的输入：Answers 按出现顺序对应本卡目标序号的每一处挖空。
+type ClozeInput struct {
+	GradeContext
+	Answers []string
+}
+
+// ParseAnswer 解码作答：字符串数组，按出现顺序逐空作答；没有作答等同于每空都没填（判为全错）。
+func (clozeType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
+	answers := []string{}
+	if !emptyAnswer(raw) {
+		if err := json.Unmarshal(raw, &answers); err != nil {
+			return nil, errors.New("cloze answer must be an array of strings, one per blank")
+		}
+	}
+	return ClozeInput{GradeContext: gc, Answers: answers}, nil
+}
+
+// GivenText 返回逐空作答，以逗号连接；空着的空也占一个位置，免得错位。
+func (clozeType) GivenText(_ map[string]any, detail map[string]any) string {
+	given, _ := detail["given"].([]string)
+	return strings.Join(given, ", ")
+}
+
+// Grade 逐空比对并按比例给分：score = 答对的空数 / 目标挖空总数。
+// 比对忽略大小写并折叠空白；答案整体是行内公式 \( … \) 时，不带定界符的写法也算对，
+// 因为输入框里写不出排版后的公式。作答多于空数视为无法判分（作答与卡面错位）；
+// 少于空数时缺的空按未作答计。
+func (clozeType) Grade(input any) (int, map[string]any, bool) {
+	in, ok := input.(ClozeInput)
+	if !ok {
+		return 0, nil, false
+	}
+	targets, ok := clozeTargets(in.Fields, in.Template)
+	if !ok || len(in.Answers) > len(targets) {
+		return 0, nil, false
+	}
+	given := make([]string, len(targets))
+	copy(given, in.Answers)
+	expected := make([]string, len(targets))
+	correct := make([]bool, len(targets))
+	hits := 0
+	for i, d := range targets {
+		expected[i] = stripCloze(d.Text)
+		if clozeMatches(given[i], expected[i]) {
+			correct[i] = true
+			hits++
+		}
+	}
+	detail := map[string]any{"answers": expected, "given": given, "correct": correct}
+	return in.rating(float64(hits)/float64(len(targets)), detail)
+}
+
+// BlankHints 按出现顺序返回本卡每处目标挖空的提示（无提示为空串），复习页据此逐空给输入框。
+func (clozeType) BlankHints(card Card) []string {
+	targets, ok := clozeTargets(card.Fields, card.Template)
+	if !ok {
+		return nil
+	}
+	hints := make([]string, len(targets))
+	for i, d := range targets {
+		hints[i] = d.Hint
+	}
+	return hints
+}
+
+// clozeTargets 返回模板 cloze:<index> 在 text 里对应的全部挖空（按出现顺序）；
+// 模板非法、解析失败或该序号不存在时返回 false。
+func clozeTargets(fields map[string]any, template string) ([]ClozeDeletion, bool) {
+	index, ok := parseClozeTemplate(template)
+	if !ok {
+		return nil, false
+	}
+	text, _ := fields["text"].(string)
+	dels, err := ParseCloze(text)
+	if err != nil {
+		return nil, false
+	}
+	var out []ClozeDeletion
+	for _, d := range dels {
+		if d.Index == index {
+			out = append(out, d)
+		}
+	}
+	return out, len(out) > 0
+}
+
+// clozeMatches 判断一空的作答是否等于挖空内容（规则见 Grade）。
+func clozeMatches(given, expected string) bool {
+	g := normalizeTyped(given, true, true)
+	if g == "" {
+		return false
+	}
+	if g == normalizeTyped(expected, true, true) {
+		return true
+	}
+	inner := strings.TrimSpace(expected)
+	if len(inner) < 4 || !strings.HasPrefix(inner, `\(`) || !strings.HasSuffix(inner, `\)`) {
+		return false
+	}
+	return g == normalizeTyped(inner[2:len(inner)-2], true, true)
 }

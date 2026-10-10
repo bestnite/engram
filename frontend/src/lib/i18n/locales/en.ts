@@ -1308,4 +1308,5 @@ export const en: LocaleCatalog = {
   'package.toast.dry_run_done': 'Dry run finished; nothing was written.',
   'package.toast.entries_failed': '{count} entries were not imported.',
   'package.toast.view_report': 'View result',
+  'review.graded.blank': 'Blank {index}',
 };

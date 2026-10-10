@@ -252,6 +252,42 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 	}
 }
 
+// TestReviewRenderReturnsClozeBlanks 断言挖空卡的渲染响应按出现顺序给出本卡每处挖空的提示
+// （复习页据此逐空给输入框），且正面不泄露答案；其它题型没有 blanks。
+func TestReviewRenderReturnsClozeBlanks(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Cloze render deck")
+	cloze := seedGradedNote(t, db, deck.ID, "cloze", map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals"})
+	basic := seedBasic(t, db, deck.ID, "Q", "A")
+
+	render := func(noteID uint64) map[string]any {
+		t.Helper()
+		rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
+			"card_id": cardPublicIDOfNote(t, db, noteID), "deck": []string{deck.PublicID},
+		}, cookies, csrf)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+		}
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode render response: %v", err)
+		}
+		return body
+	}
+
+	body := render(cloze.ID)
+	blanks, ok := body["blanks"].([]any)
+	if !ok || len(blanks) != 2 || blanks[0] != "" || blanks[1] != "city" {
+		t.Errorf("cloze blanks = %#v, want [\"\", \"city\"]", body["blanks"])
+	}
+	if front, _ := body["front_html"].(string); strings.Contains(front, "Paris") || strings.Contains(front, "Rome") {
+		t.Errorf("cloze front_html leaks the answers: %s", front)
+	}
+	if got := render(basic.ID)["blanks"]; got != nil {
+		t.Errorf("basic blanks = %#v, want null", got)
+	}
+}
+
 // TestReviewSuspendRemovesCardForCallerOnly 覆盖复习页的暂停端点：缺 CSRF 被拒且不写库（反面）；
 // 暂停后响应里的队列不再有这张卡，状态行带 suspended_at；进度数值不变。
 func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {

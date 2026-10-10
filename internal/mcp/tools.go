@@ -158,7 +158,7 @@ type listDeckTagsIn struct {
 type submitReviewIn struct {
 	CardID          string `json:"card_id" jsonschema:"the public id of the card being reviewed"`
 	Rating          int    `json:"rating,omitempty" jsonschema:"self-assessed rating 1=again, 2=hard, 3=good, 4=easy; omit for card types graded by the server (typed, numeric, choice_single, choice_multi, true_false)"`
-	Answer          any    `json:"answer,omitempty" jsonschema:"the answer for a card type graded by the server: a string for typed, a string or number for numeric, an option index for choice_single, an array of option indices for choice_multi, a boolean for true_false"`
+	Answer          any    `json:"answer,omitempty" jsonschema:"the answer for a card type graded by the server: a string for typed, a string or number for numeric, an option index for choice_single, an array of option indices for choice_multi, a boolean for true_false, an array of strings for cloze (one per blank of the card's cloze number, in order of appearance)"`
 	GiveUp          bool   `json:"give_up,omitempty" jsonschema:"give up on a card type graded by the server; records Again without grading"`
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"card state version the caller read"`
 	ElapsedMS       *int   `json:"elapsed_ms,omitempty" jsonschema:"time spent on the card in milliseconds"`

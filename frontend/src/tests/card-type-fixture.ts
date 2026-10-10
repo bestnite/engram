@@ -83,8 +83,8 @@ const kinds: CardTypeDescription[] = [
   {
     kind: 'cloze',
     label_key: 'cardtype.cloze',
-    graded: false,
-    answer_control: 'none',
+    graded: true,
+    answer_control: 'blanks',
     front_field: 'text',
     back_field: 'text',
     prompt_field: '',
