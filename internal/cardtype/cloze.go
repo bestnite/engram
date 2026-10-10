@@ -240,9 +240,12 @@ func parseClozeTemplate(template string) (int, bool) {
 // 目标序号的高亮按位置分两种写法：
 //   - 公式外包在 <span class="cloze"> 里。span[class] 在 render 包的白名单内，Markdown
 //     行内原始 HTML 会原样通过 goldmark，内容里的 Markdown 照常渲染。
-//   - 公式内写成 MathJax 的 \class{cloze}{…}。render 包把公式整段当纯文本保护并转义
+//   - 公式内写成 \boxed{…}，用方框标出考点。render 包把公式整段当纯文本保护并转义
 //     < > &，公式里的 span 只会变成字面尖括号；而公式也不能在挖空处切成几段，否则
-//     \dfrac{…}{…} 这样的分组会断开。\class 让 MathJax 自己给这一段加上 cloze 类。
+//     \dfrac{…}{…} 这样的分组会断开，所以高亮只能用 TeX 本身表达。
+//     只能用自托管 MathJax 包里已有的宏：\boxed 属于已打包的 ams，\text 属于 base。
+//     \class、\color、\bbox 都要在运行时另行加载扩展文件，而静态资源只托管了主包，
+//     加载失败会让整个容器的排版中止，所以不能用。
 //
 // 只跨进公式一半的挖空按公式外处理：两种写法都不成立，保留原来的 span。
 func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) string {
@@ -260,12 +263,12 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 		case d.Index != target:
 			b.WriteString(stripCloze(d.Text))
 		case reveal && inMath:
-			b.WriteString(`\class{cloze}{` + stripCloze(d.Text) + `}`)
+			b.WriteString(`\boxed{` + stripCloze(d.Text) + `}`)
 		case reveal:
 			b.WriteString(`<span class="cloze">` + stripCloze(d.Text) + `</span>`)
 		case inMath:
 			// 占位是文字而不是 TeX，用 \text 排版；提示原样放进 \text，花括号需成对。
-			b.WriteString(`\class{cloze}{\text{` + clozeBlank(d) + `}}`)
+			b.WriteString(`\boxed{\text{` + clozeBlank(d) + `}}`)
 		default:
 			b.WriteString(`<span class="cloze">` + clozeBlank(d) + `</span>`)
 		}

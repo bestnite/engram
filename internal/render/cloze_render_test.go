@@ -48,9 +48,9 @@ func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 	}
 }
 
-// TestClozeInsideMathRendersAsMathJaxClass 走真实管线，断言公式里的挖空以 \class{cloze}{…}
+// TestClozeInsideMathRendersAsBoxed 走真实管线，断言公式里的挖空以 \boxed{…}
 // 交给 MathJax，而不是变成公式里被转义的字面 span；公式外的挖空仍是 span。
-func TestClozeInsideMathRendersAsMathJaxClass(t *testing.T) {
+func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 	ct, ok := cardtype.Lookup("cloze")
 	if !ok {
 		t.Fatal("cloze card type is not registered")
@@ -66,21 +66,21 @@ func TestClozeInsideMathRendersAsMathJaxClass(t *testing.T) {
 			name:      "front inside inline math",
 			text:      `增长量 \(= A - {{c1::B}}\)`,
 			side:      cardtype.SideFront,
-			required:  []string{`\(= A - \class{cloze}{\text{[…]}}\)`},
+			required:  []string{`\(= A - \boxed{\text{[…]}}\)`},
 			forbidden: []string{"&lt;span", "{{c"},
 		},
 		{
 			name:      "back in a tex group",
 			text:      `增长率 \(r = \dfrac{A - B}{{{c1::B}}}\)`,
 			side:      cardtype.SideBack,
-			required:  []string{`\(r = \dfrac{A - B}{\class{cloze}{B}}\)`},
+			required:  []string{`\(r = \dfrac{A - B}{\boxed{B}}\)`},
 			forbidden: []string{"&lt;span", "{{c"},
 		},
 		{
 			name:      "math and text deletions in one note",
 			text:      `{{c1::基期}} \(= {{c1::A}}\)`,
 			side:      cardtype.SideBack,
-			required:  []string{`<span class="cloze">基期</span>`, `\(= \class{cloze}{A}\)`},
+			required:  []string{`<span class="cloze">基期</span>`, `\(= \boxed{A}\)`},
 			forbidden: []string{"&lt;span"},
 		},
 		{
@@ -88,7 +88,7 @@ func TestClozeInsideMathRendersAsMathJaxClass(t *testing.T) {
 			name:      "html in a hint inside math stays escaped",
 			text:      `\(x = {{c1::2::<img src=x onerror=alert(1)>}}\)`,
 			side:      cardtype.SideFront,
-			required:  []string{`\class{cloze}{\text{[&lt;img src=x onerror=alert(1)&gt;]}}`},
+			required:  []string{`\boxed{\text{[&lt;img src=x onerror=alert(1)&gt;]}}`},
 			forbidden: []string{"<img"},
 		},
 	}
