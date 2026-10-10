@@ -14,7 +14,7 @@ func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 	if !ok {
 		t.Fatal("cloze card type is not registered")
 	}
-	fields := map[string]any{"text": "The {{c1::**mitochondrion**}} carries {{c2::DNA::genetic material}}."}
+	fields := map[string]any{"text": "The {{c1::**mitochondrion**}} carries {{c2::DNA::genetic material}}. It makes {{c3::ATP|adenosine triphosphate}} via {{c4::A\\|B}}."}
 	cases := []struct {
 		name     string
 		template string
@@ -25,6 +25,9 @@ func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 		{"c1 back", "cloze:1", cardtype.SideBack, []string{`<span class="cloze"><strong>mitochondrion</strong></span>`, "carries DNA."}},
 		{"c2 front", "cloze:2", cardtype.SideFront, []string{"<strong>mitochondrion</strong>", `<span class="cloze">[genetic material]</span>`}},
 		{"c2 back", "cloze:2", cardtype.SideBack, []string{`<span class="cloze">DNA</span>`}},
+		// 备选答案：背面全部列出；转义的竖线渲染成字面 |，不残留反斜杠。
+		{"c3 back lists alternatives", "cloze:3", cardtype.SideBack, []string{`<span class="cloze">ATP / adenosine triphosphate</span>`}},
+		{"c4 back escaped pipe", "cloze:4", cardtype.SideBack, []string{`<span class="cloze">A|B</span>`}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
