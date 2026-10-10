@@ -300,7 +300,7 @@ html.dark #review-done {
   font-weight: 500;
 }
 
-/* 填空卡的考点：正面占位与背面答案都由服务端包在 span.cloze 里 */
+/* 填空卡公式外的考点：正面占位与背面答案由服务端包在 span.cloze 里；公式内的考点用 \boxed 加框，不经过这条样式 */
 .cloze {
   color: #2563eb;
   font-weight: 600;
