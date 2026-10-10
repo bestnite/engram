@@ -135,6 +135,12 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
+	// 声明了 OptionsField 的题型（选择题）由复习页把选项渲染成作答控件；正面 Extra 里的
+	// 同一组选项若再拼进 FrontHTML，页面上就会出现一遍纯文本、一遍按钮。预览与分享页没有
+	// 作答控件，仍经 renderSide 展示 Extra，所以只在复习视图这里去掉。
+	if t.Describe().OptionsField != "" {
+		front.Extra = nil
+	}
 	back, err := t.Render(ct, cardtype.SideBack)
 	if err != nil {
 		return nil, err
