@@ -192,6 +192,11 @@ export interface CardTypeDescription {
   prompt_field: string;
   options_field: string;
   fields: CardTypeField[];
+  /**
+   * 一条能通过该题型校验的 note 字段值，服务端总会返回。它写给 agent 照抄（挖空语法、
+   * 选项下标从 0 起、公式分隔符），前端不消费，因此声明为可选，测试夹具不必逐题型复制一份。
+   */
+  example?: Record<string, unknown>;
 }
 
 /** GET /api/v1/card-types 响应体；kinds 按 kind 字典序，结果稳定。 */

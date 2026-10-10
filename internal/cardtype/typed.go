@@ -32,6 +32,13 @@ func (typedType) Describe() Description {
 			FieldSpec{Key: "ignore_case", Control: ControlBool, Default: true},
 			FieldSpec{Key: "ignore_whitespace", Control: ControlBool, Default: true},
 		),
+		Example: map[string]any{
+			"prompt":            "Which element has the chemical symbol Au?",
+			"answer":            "gold",
+			"accept":            []any{"aurum"},
+			"ignore_case":       true,
+			"ignore_whitespace": true,
+		},
 	}
 }
 

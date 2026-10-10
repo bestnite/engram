@@ -162,6 +162,9 @@ func (clozeType) Describe() Description {
 		Fields: fieldsWithCommon(
 			FieldSpec{Key: "text", Control: ControlTextarea, Required: true},
 		),
+		Example: map[string]any{
+			"text": "{{c1::Paris}} is the capital of {{c2::France::country}}; the derivative of \\(x^2\\) is {{c3::\\(2x\\)}}.",
+		},
 	}
 }
 

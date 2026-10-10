@@ -25,6 +25,10 @@ func (shortAnswerType) Describe() Description {
 			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "reference", Control: ControlTextarea},
 		),
+		Example: map[string]any{
+			"prompt":    "Why does the Moon show phases?",
+			"reference": "The Sun always lights half of the Moon; as the Moon orbits Earth we see a changing share of that lit half.",
+		},
 	}
 }
 
