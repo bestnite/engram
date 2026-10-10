@@ -1323,4 +1323,5 @@ export const en: LocaleCatalog = {
   'package.import.apply_weights': 'Use the package’s FSRS weights (otherwise start from the defaults)',
   'package.report.weights_applied': 'Package weights applied',
   'package.report.weights_discarded': 'Package weights not used',
+  'decks.batch_review': 'Review',
 };
