@@ -24,6 +24,8 @@ type ClozeDeletion struct {
 //     嵌套里的 {{cM::...}} 作为普通内容原样保留，不单独成卡 —— 只解析最外层。
 //   - \{ \} \\ 是转义：被转义的字符不参与结构解析，但按原文保留（TeX 安全，
 //     例如 \frac 里的反斜杠不受影响）。
+//   - 挖空前紧挨的单个 "{" 属于外层文本（TeX 分组）："{{{c1::x}}}" 解析为
+//     "{" + 挖空 x + "}"。
 //   - 未闭合、内容为空的挖空项返回可读的英文错误。
 //
 // 没有任何挖空项时返回空切片与 nil 错误，由调用方（Validate）决定如何报告。
@@ -41,8 +43,10 @@ func ParseCloze(text string) ([]ClozeDeletion, error) {
 		}
 		index, contentStart, ok := parseClozeOpener(text, i)
 		if !ok {
-			// 不是挖空标记；"{{" 当普通文本，继续向前。
-			i += 2
+			// 不是挖空标记：只前进一个字节。TeX 里挖空常紧跟在分组花括号后面
+			// （\dfrac{a}{{{c1::b}}}），"{{{" 中真正的挖空从第二个 "{" 开始；
+			// 一次跳过两个字节会把它漏掉。
+			i++
 			continue
 		}
 		del, end, err := scanClozeContent(text, i, contentStart, index)

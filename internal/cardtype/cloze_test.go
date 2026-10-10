@@ -59,6 +59,67 @@ func TestClozeNestedBraces(t *testing.T) {
 	}
 }
 
+// TestClozeAfterOpeningBrace 断言紧跟在单个 "{" 之后的挖空能被识别：TeX 分组里的
+// 挖空写成 "{{{c1::…}}}"，外层的 "{" 与 "}" 留在挖空之外。
+func TestClozeAfterOpeningBrace(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		wantText  string
+		wantSpan  string
+		wantFront string
+	}{
+		{
+			name:      "plain text",
+			text:      "x {{{c1::y}}} z",
+			wantText:  "y",
+			wantSpan:  "{{c1::y}}",
+			wantFront: `x {<span class="cloze">[…]</span>} z`,
+		},
+		{
+			name:      "tex group",
+			text:      `\dfrac{A - B}{{{c1::B}}}`,
+			wantText:  "B",
+			wantSpan:  "{{c1::B}}",
+			wantFront: `\dfrac{A - B}{<span class="cloze">[…]</span>}`,
+		},
+		{
+			name:      "several stray braces",
+			text:      "{{{{c1::y}}}}",
+			wantText:  "y",
+			wantSpan:  "{{c1::y}}",
+			wantFront: `{{<span class="cloze">[…]</span>}}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dels, err := ParseCloze(tc.text)
+			if err != nil {
+				t.Fatalf("ParseCloze: %v", err)
+			}
+			if len(dels) != 1 {
+				t.Fatalf("len(dels) = %d, want 1", len(dels))
+			}
+			if dels[0].Text != tc.wantText {
+				t.Errorf("text = %q, want %q", dels[0].Text, tc.wantText)
+			}
+			if got := tc.text[dels[0].Start:dels[0].End]; got != tc.wantSpan {
+				t.Errorf("span = %q, want %q", got, tc.wantSpan)
+			}
+			if err := Validate("cloze", map[string]any{"text": tc.text}); err != nil {
+				t.Errorf("Validate: %v", err)
+			}
+			front, err := clozeType{}.Render(Card{Template: "cloze:1", Fields: map[string]any{"text": tc.text}}, SideFront)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if front.Body != tc.wantFront {
+				t.Errorf("front = %q, want %q", front.Body, tc.wantFront)
+			}
+		})
+	}
+}
+
 // TestClozeNestedMarkerIsNotCarded 断言嵌套在内容里的 {{cM::…}} 只当普通内容，不单独成卡。
 func TestClozeNestedMarkerIsNotCarded(t *testing.T) {
 	fields := map[string]any{"text": "{{c1::a {{c2::b}} c}}"}
