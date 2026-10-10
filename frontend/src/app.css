@@ -300,6 +300,14 @@ html.dark #review-done {
   font-weight: 500;
 }
 
+/* MathJax 的 SVG 输出把每个公式放进 <mjx-container> 里的 <svg>。Tailwind 的 preflight 把所有 svg
+   设成 display: block，行内公式因此各占一行，块级公式也失去居中。把 svg 还原成行内元素：
+   行内公式回到文字中间（MathJax 写在 svg 上的 vertical-align 随之生效），块级公式仍由
+   display="true" 的容器负责独占一行并居中。 */
+mjx-container[jax='SVG'] > svg {
+  display: inline;
+}
+
 /* 填空卡公式外的考点：正面占位与背面答案由服务端包在 span.cloze 里；公式内的考点用 \boxed 加框，不经过这条样式 */
 .cloze {
   color: #2563eb;
