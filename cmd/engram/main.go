@@ -325,6 +325,8 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Auditor: auditor,
 		// 卡组包内联媒体：字节根目录与媒体存储同一个。
 		MediaRoot: mediaStore.Root(),
+		// 上传票据返回绝对 URL，供 agent 直接上传。
+		BaseURL: cfg.Get(config.KeyBaseURL).Value,
 	})
 	if err != nil {
 		return nil, err

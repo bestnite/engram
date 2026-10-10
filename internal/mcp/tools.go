@@ -109,6 +109,20 @@ type importDeckIn struct {
 	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
 
+// createImportUploadIn 是 create_import_upload 的入参：导入选项在签发时固定进票据。
+type createImportUploadIn struct {
+	// Target 取值 new_deck（默认）、into_deck:<public id>、replace_deck:<public id>。
+	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
+	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
+	OnConflict string `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
+	// SkipMissingMedia 缺失媒体时只计数并继续；默认 false（缺媒体即失败）。
+	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
+	// AllowOthersProgress 仅管理员可置位：允许导入包内他人的进度。
+	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
+	// ApplyWeights 缺省 false：只在 new_deck 目标下把包内权重写进新建的预设。
+	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
+}
+
 // updateNoteIn 是 update_note 的入参。
 type updateNoteIn struct {
 	NoteID string         `json:"note_id" jsonschema:"the public id of the note to update"`
@@ -320,6 +334,19 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 		return nil, err
 	}
 	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, opts)
+}
+
+// createImportUpload 签发一次性上传票据：与 REST `POST /decks/import-uploads` 走同一 service 方法。
+// 包字节随后由 agent 直接 PUT 到返回的 URL，不经过模型输出。
+func (s *Server) createImportUpload(ctx context.Context, id Identity, in createImportUploadIn) (*api.ImportUpload, error) {
+	return s.api.CreateImportUpload(ctx, id.User, id.apiKeyID(), store.PackageImportOptions{
+		Target:              in.Target,
+		DryRun:              in.DryRun,
+		OnConflict:          in.OnConflict,
+		SkipMissingMedia:    in.SkipMissingMedia,
+		AllowOthersProgress: in.AllowOthersProgress,
+		ApplyWeights:        in.ApplyWeights,
+	})
 }
 
 func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (any, error) {

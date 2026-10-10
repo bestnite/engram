@@ -37,22 +37,11 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts
 // ImportDeckPackage 解析并导入一个卡组包；target 决定三种目标之一。
 // allowOthersProgress 只有在调用者是管理员时才生效（进度导入边界）。
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
-	// 客户端给的卡组标识是对外 id；store 只认数字主键，故先在这里解析。
-	targetKind, targetDeckID, target, err := a.resolveImportTarget(ctx, opts.Target)
+	target, err := a.authorizeImportTarget(ctx, u.ID, opts.Target)
 	if err != nil {
 		return nil, err
 	}
 	opts.Target = target
-	// 目标已有卡组的权限：合并需要 editor，替换是破坏性操作、只允许 owner。
-	if targetDeckID != 0 {
-		want := store.RoleEditor
-		if targetKind == "replace_deck" {
-			want = store.RoleOwner
-		}
-		if _, err := a.RequireDeckRole(ctx, u.ID, targetDeckID, want); err != nil {
-			return nil, err
-		}
-	}
 	opts.MediaRoot = a.mediaRoot
 	// 把导入者当前生效的媒体配额交给 store 层；四条入口（REST/MCP/CLI/Web）都走本方法，
 	// 因此共用一处解析，不会有人绕过配额检查。
@@ -99,6 +88,27 @@ func (a *API) resolveImportTarget(ctx context.Context, raw string) (kind string,
 		return "", 0, "", newServiceError(http.StatusNotFound, CodeNotFound, "deck not found")
 	}
 	return kind, d.ID, store.FormatPackageTarget(kind, d.ID), nil
+}
+
+// authorizeImportTarget 解析导入目标并判定调用者对目标卡组的角色，返回 store 认的目标串。
+// 客户端给的卡组标识是对外 id，store 只认数字主键，故在这里解析。
+// 合并（into_deck）需要 editor；替换（replace_deck）是破坏性操作，只允许 owner。
+// 文件导入、直链导入与上传票据签发共用本函数，判权规则只有这一份。
+func (a *API) authorizeImportTarget(ctx context.Context, userID uint64, raw string) (string, error) {
+	kind, deckID, target, err := a.resolveImportTarget(ctx, raw)
+	if err != nil {
+		return "", err
+	}
+	if deckID != 0 {
+		want := store.RoleEditor
+		if kind == "replace_deck" {
+			want = store.RoleOwner
+		}
+		if _, err := a.RequireDeckRole(ctx, userID, deckID, want); err != nil {
+			return "", err
+		}
+	}
+	return target, nil
 }
 
 // mapPackageError 把 store 层的卡组包错误映射成带稳定 code 的 ServiceError。
