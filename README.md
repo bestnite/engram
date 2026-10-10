@@ -60,13 +60,16 @@ Create an API key in the **Settings** panel, then add Engram to your MCP client 
 
 ### Available Tools
 
-Engram provides 9 dedicated MCP tools:
+Engram provides 17 dedicated MCP tools:
 
-- `list_decks` / `create_deck`: Inspect accessible decks or create new ones with custom scheduling presets.
-- `search_notes` / `create_notes` / `update_note` / `delete_note`: Query and manage notes across all supported card types, with full support for dry-run validation and bulk insertion.
+- `list_decks` / `create_deck` / `update_deck`: Inspect accessible decks, create new ones with custom scheduling presets, or rename and describe them.
+- `list_card_types`: List the supported card types with each type's fields and a validated example note, so an agent can write notes without guessing field names or syntax.
+- `search_notes` / `get_note` / `list_deck_tags`: Query notes with tag and keyword filters, read a single note, and list the tags used in a deck.
+- `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all supported card types, with dry-run validation, bulk insertion and bulk tag or delete actions.
 - `get_due_cards` / `submit_review`: Fetch cards due for review and record reviews. Self-assessed cards take a rating (`Again`, `Hard`, `Good`, `Easy`); answer-type cards (typed, numeric, choice, true/false) take the answer instead, and the server grades it.
 - `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
 - `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`).
+- `create_import_upload`: Get a single-use upload URL for a deck package. The agent sends the file to it with an HTTP client such as `curl`, so a large package never passes through the model and the API key never leaves the MCP client.
 
 ---
 
