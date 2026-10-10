@@ -112,7 +112,7 @@ export function validateDayCutoffHour(raw: number | string | null | undefined): 
 }
 
 /** 提前学习窗口的默认值与上限（分钟），与 Go: internal/store/stats.go 的 ResolveLearnAhead 同一口径。 */
-export const DEFAULT_LEARN_AHEAD_MINUTES = 20;
+export const DEFAULT_LEARN_AHEAD_MINUTES = 0;
 export const MAX_LEARN_AHEAD_MINUTES = 1440;
 
 /**
