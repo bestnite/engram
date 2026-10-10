@@ -992,11 +992,16 @@ type DueCard struct {
 	Version        int            `json:"version"`
 }
 
+// reviewMaxTags 是一次按标签复习允许选择的标签数上限（去重后），用来约束 SQL 里 OR 条件的个数。
+const reviewMaxTags = 50
+
 // DueCards 返回到期卡（含字段原文）；deckIDs 为空表示全部卡组；limit 取 [1,500]。
 //
 // 每个卡组 id 都要求至少 reader 角色：任一个不可读或不存在即整次调用失败（不静默过滤）。
 // 只有恰好指定一个卡组时才用该卡组的预设构造调度器；多卡组与全库用默认预设。
-func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, limit int) ([]DueCard, error) {
+//
+// tags 非空时只取带有其中任一标签的卡（规范化见 ReviewTags）。
+func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tags []string, limit int) ([]DueCard, error) {
 	if limit < 1 {
 		limit = 1
 	}
@@ -1004,6 +1009,10 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		limit = 500
 	}
 	ids := dedupeDeckIDs(deckIDs)
+	tags, err := ReviewTags(ids, tags)
+	if err != nil {
+		return nil, err
+	}
 	var deck *store.Deck
 	for _, id := range ids {
 		d, err := a.RequireDeckRole(ctx, u.ID, id, store.RoleReader)
@@ -1047,6 +1056,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		ReviewOrder:   schedule.OrderByDueAt,
 		NewOrder:      schedule.NewOrderRandom,
 		LearnAhead:    store.ResolveLearnAhead(u.LearnAheadMinutes),
+		Tags:          tags,
 	}
 	// 单卡组走 DeckID（保留卡组上限口径）；多卡组走 DeckIDs 集合。
 	switch len(ids) {
@@ -1137,6 +1147,39 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, lim
 		out = append(out, entry)
 	}
 	return out, nil
+}
+
+// ReviewTags 规范化按标签复习的标签集合，并校验它与卡组范围的组合；deckIDs 须已去重。
+//
+// 带标签时卡组范围必须恰好是一个卡组：标签是卡组内的分类，不同卡组里的同名标签不是同一个
+// 分类，不能合在一起学，所以多卡组或全库口径带标签一律拒绝，而不是静默忽略标签。
+// 规范化（去首尾空白、丢空串、去重）后为空等同不带标签。所有传输共用这一处校验。
+func ReviewTags(deckIDs []uint64, tags []string) ([]string, error) {
+	tags = store.NormalizeTags(tags)
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	if len(tags) > reviewMaxTags {
+		return nil, InvalidRequest(fmt.Sprintf("tags must contain at most %d entries", reviewMaxTags))
+	}
+	if len(deckIDs) != 1 {
+		return nil, InvalidRequest("tags require exactly one deck")
+	}
+	return tags, nil
+}
+
+// DeckTags 列出卡组内的标签及各自的 note 数，要求调用者至少是 reader。
+func (a *API) DeckTags(ctx context.Context, userID, deckID uint64) ([]store.TagCount, error) {
+	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := a.notes.DeckTagCounts(ctx, d.ID)
+	if err != nil {
+		a.logger.Error("list deck tags failed", "deck_id", d.ID, "error", err)
+		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to list deck tags")
+	}
+	return tags, nil
 }
 
 // dedupeDeckIDs 去掉重复的卡组 id，保持首次出现的顺序；0 不是合法卡组 id，一并丢弃。

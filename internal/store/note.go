@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -356,8 +357,7 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 				"%"+strings.ToLower(escapeLike(v))+"%")
 		}
 		if v := strings.TrimSpace(opts.Tag); v != "" {
-			q = q.Where("LOWER(notes.tags_json) LIKE ? ESCAPE '\\'",
-				"%\""+strings.ToLower(escapeLike(v))+"\"%")
+			q = WhereNoteTagsAny(q, []string{v})
 		}
 		return q
 	}
@@ -598,6 +598,69 @@ func TagsOrEmpty(raw string) []string {
 		return []string{}
 	}
 	return tags
+}
+
+// WhereNoteTagsAny 限定为带有 tags 中任一标签的 note（并集）；tags 为空时不加条件。
+// 查询必须已把 notes 表以 notes 为名引入（直接查 notes 或 JOIN notes AS notes）。
+//
+// tags_json 是 TEXT（双库兼容约定禁止 jsonb/array），SQL 无法跨库解析 JSON，所以按数组元素的
+// JSON 编码做带引号边界的 LIKE：元素内部的引号一律被转义成 \"，裸引号只出现在元素边界，
+// 因此不会把 "ab" 当成 "a" 命中。匹配模式用写入 tags_json 的同一套 JSON 编码生成（含引号、
+// 反斜杠与 <>& 的转义），手拼 "tag" 会让含这些字符的标签永远匹配不上。
+// 大小写不敏感（两侧都 LOWER），笔记列表筛选与按标签复习共用这一条规则。
+func WhereNoteTagsAny(q *gorm.DB, tags []string) *gorm.DB {
+	if len(tags) == 0 {
+		return q
+	}
+	conds := make([]string, 0, len(tags))
+	args := make([]any, 0, len(tags))
+	for _, tag := range tags {
+		conds = append(conds, "LOWER(notes.tags_json) LIKE ? ESCAPE '\\'")
+		args = append(args, tagLikePattern(tag))
+	}
+	// 显式加括号：OR 与外层的 AND 条件拼接时不能依赖 GORM 是否自动包裹。
+	return q.Where("("+strings.Join(conds, " OR ")+")", args...)
+}
+
+// tagLikePattern 生成匹配 tags_json 里某个数组元素的 LIKE 模式（已转小写、已转义通配符）。
+func tagLikePattern(tag string) string {
+	raw, err := json.Marshal(tag)
+	if err != nil {
+		// string 的 JSON 编码不会失败；保底按字面拼，行为与旧实现一致。
+		raw = []byte(`"` + tag + `"`)
+	}
+	return "%" + escapeLike(strings.ToLower(string(raw))) + "%"
+}
+
+// TagCount 是卡组里一个标签及带有它的 note 数。
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Notes int    `json:"notes"`
+}
+
+// DeckTagCounts 汇总卡组内未删除 note 的标签及各自的 note 数，按标签名升序。
+// 标签在 Go 里解码汇总：tags_json 是 TEXT，跨库无法在 SQL 里展开 JSON 数组。
+// 坏数据行按无标签处理（TagsOrEmpty），不让一行脏数据拖垮整个列表。
+func (s *NoteStore) DeckTagCounts(ctx context.Context, deckID uint64) ([]TagCount, error) {
+	var raws []string
+	if err := s.db.WithContext(ctx).Model(&Note{}).
+		Where("deck_id = ?", deckID).
+		Pluck("tags_json", &raws).Error; err != nil {
+		return nil, fmt.Errorf("load tags for deck %d: %w", deckID, err)
+	}
+	counts := map[string]int{}
+	for _, raw := range raws {
+		// 同一 note 内的重复标签只计一次。
+		for _, tag := range NormalizeTags(TagsOrEmpty(raw)) {
+			counts[tag]++
+		}
+	}
+	out := make([]TagCount, 0, len(counts))
+	for tag, n := range counts {
+		out = append(out, TagCount{Tag: tag, Notes: n})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Tag < out[j].Tag })
+	return out, nil
 }
 
 // escapeLike 转义 LIKE 模式里的通配符，让用户输入按字面匹配（配合 ESCAPE '\\'）。

@@ -127,7 +127,13 @@ type deleteNoteIn struct {
 type getDueCardsIn struct {
 	DeckID  string   `json:"deck_id,omitempty" jsonschema:"public id of a single deck to scope the queue; empty means all decks; mutually exclusive with deck_ids"`
 	DeckIDs []string `json:"deck_ids,omitempty" jsonschema:"public ids of the decks to scope the queue; absent or empty means all decks; mutually exclusive with deck_id"`
+	Tags    []string `json:"tags,omitempty" jsonschema:"only cards whose note carries any of these tags; requires exactly one deck (deck_id, or deck_ids with one entry)"`
 	Limit   int      `json:"limit,omitempty" jsonschema:"maximum cards to return (1..500)"`
+}
+
+// listDeckTagsIn 是 list_deck_tags 的入参。
+type listDeckTagsIn struct {
+	DeckID string `json:"deck_id" jsonschema:"public id of the deck whose tags to list"`
 }
 
 // submitReviewIn 是 submit_review 的入参。规则与 REST 相同（见 api.SubmitReviewInput）：
@@ -216,6 +222,19 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 	}
 	out := s.api.NotesJSON(ctx, id.User.ID, notes)
 	return map[string]any{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage}, nil
+}
+
+// listDeckTags 列出卡组内的标签及各自的 note 数；与 REST `GET /decks/:id/tags` 走同一 service 方法。
+func (s *Server) listDeckTags(ctx context.Context, id Identity, in listDeckTagsIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := s.api.DeckTags(ctx, id.User.ID, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"tags": tags}, nil
 }
 
 // getNote 按对外 id 读取单条 note；与 REST `GET /notes/:id` 走同一 service 方法。
@@ -365,7 +384,7 @@ func (s *Server) getDueCards(ctx context.Context, id Identity, in getDueCardsIn)
 			resolved = append(resolved, d.ID)
 		}
 	}
-	cards, err := s.api.DueCards(ctx, id.User, resolved, in.Limit)
+	cards, err := s.api.DueCards(ctx, id.User, resolved, in.Tags, in.Limit)
 	if err != nil {
 		return nil, err
 	}

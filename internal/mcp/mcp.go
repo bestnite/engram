@@ -272,20 +272,21 @@ func hasScope(id Identity, scope string) bool {
 
 // toolScopes 是工具名到所需 scope 的映射；握手过滤与调用复查共用，保证同一份规则。
 var toolScopes = map[string]string{
-	"list_decks":    store.ScopeRead,
-	"search_notes":  store.ScopeRead,
-	"get_note":      store.ScopeRead,
-	"get_stats":     store.ScopeRead,
-	"export_deck":   store.ScopeRead,
-	"create_deck":   store.ScopeWrite,
-	"update_deck":   store.ScopeWrite,
-	"create_notes":  store.ScopeWrite,
-	"update_note":   store.ScopeWrite,
-	"delete_note":   store.ScopeWrite,
-	"bulk_notes":    store.ScopeWrite,
-	"import_deck":   store.ScopeWrite,
-	"get_due_cards": store.ScopeReview,
-	"submit_review": store.ScopeReview,
+	"list_decks":     store.ScopeRead,
+	"search_notes":   store.ScopeRead,
+	"list_deck_tags": store.ScopeRead,
+	"get_note":       store.ScopeRead,
+	"get_stats":      store.ScopeRead,
+	"export_deck":    store.ScopeRead,
+	"create_deck":    store.ScopeWrite,
+	"update_deck":    store.ScopeWrite,
+	"create_notes":   store.ScopeWrite,
+	"update_note":    store.ScopeWrite,
+	"delete_note":    store.ScopeWrite,
+	"bulk_notes":     store.ScopeWrite,
+	"import_deck":    store.ScopeWrite,
+	"get_due_cards":  store.ScopeReview,
+	"submit_review":  store.ScopeReview,
 }
 
 const instructions = "Engram library and scheduler. Tools mirror the REST /api/v1 surface " +
@@ -304,6 +305,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "update_deck", "Update a deck's name and description (owner only).", s.updateDeck)
 	addTool(s, srv, id, "search_notes", "Search notes in a deck (pagination, tag and keyword filters).", s.searchNotes)
 	addTool(s, srv, id, "get_note", "Read one note by its public id.", s.getNote)
+	addTool(s, srv, id, "list_deck_tags", "List the tags used in a deck with the number of notes carrying each; use them as the tags filter of get_due_cards.", s.listDeckTags)
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards.", s.getStats)
 	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package: manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
 	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
