@@ -618,10 +618,10 @@ func ResolveCutoff(hour *int) int {
 	return NormalizedCutoff(*hour)
 }
 
-// 提前学习窗口的默认值与上限（分钟）。默认 20 分钟与 Anki 一致：足以覆盖常见的 1 分钟 / 10 分钟
-// 学习步骤，又不会把半小时后的卡拉到现在。
+// 提前学习窗口的默认值与上限（分钟）。默认 0 即关闭：学习步骤的间隔按设定生效，
+// 卡片不会在到期前被提前拉出来；需要提前学习的用户在个人资料里自行开启。
 const (
-	DefaultLearnAheadMinutes = 20
+	DefaultLearnAheadMinutes = 0
 	MaxLearnAheadMinutes     = 1440
 )
 

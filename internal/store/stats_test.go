@@ -737,3 +737,27 @@ func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveLearnAhead 断言提前学习窗口的解析：未设置（NULL）按默认 0 关闭，显式值原样生效，
+// 越界值夹到 [0, 上限]。
+func TestResolveLearnAhead(t *testing.T) {
+	ptr := func(v int) *int { return &v }
+	cases := []struct {
+		name string
+		in   *int
+		want time.Duration
+	}{
+		{"unset defaults to off", nil, 0},
+		{"explicit zero stays off", ptr(0), 0},
+		{"explicit value is used", ptr(20), 20 * time.Minute},
+		{"negative clamps to zero", ptr(-5), 0},
+		{"too large clamps to the maximum", ptr(MaxLearnAheadMinutes + 1), MaxLearnAheadMinutes * time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ResolveLearnAhead(tc.in); got != tc.want {
+				t.Errorf("ResolveLearnAhead() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
