@@ -881,7 +881,12 @@
               {:else if answerControl === 'multi'}
                 <div class="space-y-2" data-testid="review-graded-options">
                   {#each gradedOptions($cardTypes, current) as option, index (index)}
-                    <div class="flex min-h-12 items-center gap-3 rounded-xl border border-zinc-300 px-4 transition-colors hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600">
+                    <!-- 整行是 label：点选项文字也切换复选框，与单选题整行可点一致；选中样式同单选。 -->
+                    <label
+                      class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
+                      data-state={multiChoice.includes(index) ? 'checked' : 'unchecked'}
+                      data-testid="review-graded-option-row"
+                    >
                       <Checkbox
                         testId="review-graded-option"
                         checked={multiChoice.includes(index)}
@@ -890,7 +895,7 @@
                         label={option}
                       />
                       <span>{option}</span>
-                    </div>
+                    </label>
                   {/each}
                 </div>
               {:else if answerControl === 'blanks' || answerControl === 'items'}
