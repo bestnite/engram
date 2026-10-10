@@ -1331,4 +1331,8 @@ export const zhCN: LocaleCatalog = {
   'deck.tag_review.load_failed': '标签加载失败，请重试。',
   'deck.tag_review.limit_hint': '每日新卡与复习上限仍按卡组计算，与整组复习共用。',
   'review.tag_scope': '标签：',
+  'package.toast.import_done': '导入完成：新增 {created} 条笔记，更新 {updated} 条。',
+  'package.toast.dry_run_done': '试导入完成，数据尚未写入。',
+  'package.toast.entries_failed': '有 {count} 个条目未导入。',
+  'package.toast.view_report': '查看结果',
 };

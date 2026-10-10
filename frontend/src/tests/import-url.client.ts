@@ -4,6 +4,10 @@ import ImportView from '../lib/views/ImportView.svelte';
 import { ApiClient, apiClient, ApiClientError, type PackageImportReport } from '../lib/api';
 import { authStore } from '../lib/auth';
 import { setLocale, formatMessage } from '../lib/i18n';
+import { toast } from '../lib/components/ui/toast';
+
+// 轻提示只断言「弹了什么」，不挂真实 Toaster。
+vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
  * 直链导入的前端契约测试（挂载行为 + 真实 ApiClient 拦截 fetch）。
@@ -448,5 +452,91 @@ describe('ImportView — URL source', () => {
     // 卸载后落地的结果不写状态、不抛错。
     await flush();
     expect(target.querySelector('[aria-live="polite"]')).toBeNull();
+  });
+});
+
+describe('ImportView — result toast', () => {
+  async function submitUrl(): Promise<void> {
+    mountView();
+    await flush();
+    await chooseSegment('import-source', urlLabel());
+    setInput('import-url', 'https://example.com/deck.edeck');
+    await flush();
+    submitForm();
+    await flush();
+  }
+
+  it('toasts a dry-run success with an action that scrolls to the report', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackageURL').mockResolvedValue(reportFixture({ dry_run: true }));
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+
+    await submitUrl();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    const [message, options] = vi.mocked(toast.success).mock.calls[0] as [string, { description?: string; action: { label: string; onClick: () => void } }];
+    expect(message).toBe(formatMessage('zh-CN', 'package.toast.dry_run_done'));
+    expect(options.description).toBeUndefined();
+    expect(options.action.label).toBe(formatMessage('zh-CN', 'package.toast.view_report'));
+    options.action.onClick();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(reportSection());
+  });
+
+  it('toasts the note counts of a real import', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackageURL').mockResolvedValue(
+      reportFixture({ dry_run: false, notes_created: 5, notes_updated: 2 })
+    );
+
+    await submitUrl();
+
+    expect(toast.success).toHaveBeenCalledWith(
+      formatMessage('zh-CN', 'package.toast.import_done', { created: 5, updated: 2 }),
+      expect.anything()
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it('warns instead of reporting success when some entries were not imported', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackageURL').mockResolvedValue(
+      reportFixture({ dry_run: false, errors: [{ entry: 'notes/1', reason: 'bad' }, { entry: 'notes/2', reason: 'bad' }] })
+    );
+
+    await submitUrl();
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      formatMessage('zh-CN', 'package.toast.import_done', { created: 1, updated: 0 }),
+      expect.objectContaining({ description: formatMessage('zh-CN', 'package.toast.entries_failed', { count: 2 }) })
+    );
+  });
+
+  it('does not toast when the import fails', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackageURL').mockRejectedValue(
+      new ApiClientError('HTTP 400: deck_import_url_fetch_failed', { status: 400, code: 'deck_import_url_fetch_failed' })
+    );
+
+    await submitUrl();
+
+    expect(alertText()).toBe(formatMessage('zh-CN', 'package.error.url_fetch_failed'));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it('does not toast a stale result dropped after the source changed', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    const pending = deferred<PackageImportReport>();
+    vi.spyOn(apiClient, 'importDeckPackageURL').mockReturnValue(pending.promise);
+
+    await submitUrl();
+    await chooseSegment('import-source', fileLabel());
+    pending.resolve(reportFixture());
+    await flush();
+
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

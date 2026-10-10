@@ -1332,4 +1332,8 @@ export const en: LocaleCatalog = {
   'deck.tag_review.load_failed': 'Could not load tags. Please try again.',
   'deck.tag_review.limit_hint': 'Daily new and review limits still apply per deck and are shared with full-deck review.',
   'review.tag_scope': 'Tags:',
+  'package.toast.import_done': 'Import finished: {created} notes added, {updated} updated.',
+  'package.toast.dry_run_done': 'Dry run finished; nothing was written.',
+  'package.toast.entries_failed': '{count} entries were not imported.',
+  'package.toast.view_report': 'View result',
 };
