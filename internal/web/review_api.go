@@ -287,7 +287,8 @@ func (s *Server) reviewUndo(c *gin.Context) {
 
 // reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
 // HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
-// 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转。
+// 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转；
+// intervals 是四档评分各自的下次间隔（api.PreviewIntervals）。
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -309,12 +310,20 @@ func (s *Server) reviewRender(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
+	// 四档评分各自的下次间隔，显示在评分按钮下面。预览失败只少了这行提示，不影响作答，
+	// 所以记日志后照常返回卡面（intervals 为空数组）。
+	intervals, err := s.api.PreviewIntervals(c.Request.Context(), user, card.ID)
+	if err != nil {
+		s.logger.Warn("preview review intervals failed", "card_id", card.ID, "error", err)
+		intervals = []api.RatingInterval{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"card_id":    card.PublicID,
 		"front_html": view.FrontHTML,
 		"back_html":  view.BackHTML,
 		"blanks":     view.Blanks,
 		"edit_href":  view.EditHref,
+		"intervals":  intervals,
 	})
 }
 

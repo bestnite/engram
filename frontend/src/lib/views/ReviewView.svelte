@@ -7,6 +7,7 @@
   import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
+  import { formatInterval } from '../review-interval';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
 
   import Checkbox from '../components/ui/Checkbox.svelte';
@@ -98,6 +99,8 @@
   let backHTML = $state(initialBackHTML);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
+  // 四档评分各自的下次间隔（秒），键是评分 1–4；随 render 响应到达，换卡时清空。
+  let intervals = $state<Record<number, number>>({});
   let renderToken = 0;
 
   // 服务端清洗后返回的 HTML 容器：只对它们排版公式，绝不整页排版。
@@ -234,6 +237,7 @@
       frontHTML = response.front_html;
       backHTML = response.back_html;
       editHref = response.edit_href;
+      intervals = Object.fromEntries((response.intervals ?? []).map((item) => [item.rating, item.seconds]));
       blanks = response.blanks ?? [];
       blankAnswers = blanks.map(() => '');
       await tick();
@@ -255,6 +259,7 @@
     frontHTML = '';
     backHTML = '';
     editHref = '';
+    intervals = {};
     blanks = [];
     blankAnswers = [];
     essayText = '';
@@ -900,7 +905,12 @@
                 {/if}
               </div>
             {/if}
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2" aria-label={$t('review.ratings')}>
+            <!-- 四档怎么选放进浮层：每张卡都常驻四句说明太占地方，拿不准时点一下即可。 -->
+            <div class="flex items-center gap-1 pt-2 text-xs text-muted-foreground">
+              <span>{$t('review.ratings')}</span>
+              <HelpTip testId="review-ratings-help" label={$t('help.review.ratings_label')} text={$t('help.review.ratings')} />
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label={$t('review.ratings')}>
               {#each [1, 2, 3, 4] as rating}
                 <button
                   type="button"
@@ -910,6 +920,10 @@
                   data-rating={rating}
                 >
                   <span class="block text-sm font-semibold">{$t(`review.rating.${rating}`)}</span>
+                  <!-- 选这一档之后多久再见到这张卡：间隔就是这一档的后果，比文字说明更好比较。 -->
+                  {#if intervals[rating] !== undefined}
+                    <span class="block text-xs font-normal tabular-nums opacity-75" data-testid="review-rating-interval">{formatInterval(intervals[rating] ?? 0, $t)}</span>
+                  {/if}
                 </button>
               {/each}
             </div>

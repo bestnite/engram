@@ -571,6 +571,14 @@ export interface ReviewRenderResponse {
   /** 逐空作答题（answer_control = 'blanks'）本卡每处挖空的提示，按出现顺序；无提示为空串，其它题型为 null。 */
   blanks?: string[] | null;
   edit_href: string;
+  /** 四档评分各自的下次间隔（秒），按 Again/Hard/Good/Easy 排列；预览失败时为空数组。 */
+  intervals?: RatingInterval[];
+}
+
+/** 某一档评分提交后，这张卡到下次复习的间隔（与 Go 后端 internal/api/review_preview.go:RatingInterval 对齐）。 */
+export interface RatingInterval {
+  rating: number;
+  seconds: number;
 }
 
 /**

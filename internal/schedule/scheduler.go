@@ -119,6 +119,8 @@ type Outcome struct {
 // Scheduler 持有由某个 preset 构造出的 FSRS 参数；无状态，可并发复用。
 type Scheduler struct {
 	fsrs *fsrs.FSRS
+	// preview 与 fsrs 参数相同，只是关掉了 fuzz，供 Preview 使用（原因见 Preview）。
+	preview *fsrs.FSRS
 }
 
 // NewScheduler 从 preset 构造调度器：权重取 preset.WeightsJSON（支持 17/19/21 维自动迁移），
@@ -128,7 +130,9 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Scheduler{fsrs: fsrs.NewFSRS(p)}, nil
+	unfuzzed := p
+	unfuzzed.EnableFuzz = false
+	return &Scheduler{fsrs: fsrs.NewFSRS(p), preview: fsrs.NewFSRS(unfuzzed)}, nil
 }
 
 // Parameters 从 preset 装配 go-fsrs 参数，是「排程参数如何来」的唯一来源：
@@ -277,12 +281,16 @@ func cardFromState(st *store.CardState) (fsrs.Card, error) {
 }
 
 // Preview 预览四档评分的调度结果，不改动任何状态；返回顺序固定为 Again/Hard/Good/Easy。
+//
+// 预览不加 fuzz：go-fsrs 的 fuzz 种子含毫秒级的评分时刻，复习页翻面时算的预览与真正提交时
+// 各算一次，加了 fuzz 的结果必然不同。预览给的是 fuzz 之前的中心值，提交时的实际间隔可能
+// 在它附近小幅偏移（fuzz 只作用于 2.5 天以上的间隔）；未开 fuzz 的预设两者完全一致。
 func (s *Scheduler) Preview(st *store.CardState, now time.Time) ([]Outcome, error) {
 	card, err := cardFromState(st)
 	if err != nil {
 		return nil, err
 	}
-	log, err := s.fsrs.Repeat(card, now.UTC())
+	log, err := s.preview.Repeat(card, now.UTC())
 	if err != nil {
 		return nil, fmt.Errorf("schedule: preview card %d: %w", st.CardID, err)
 	}
