@@ -1342,10 +1342,10 @@ export const en: LocaleCatalog = {
   'help.presets.fuzz': 'Adds a small random offset to computed intervals so cards learned on the same day do not keep coming due together. Only applies to intervals of 2.5 days or more.',
   'help.review.bury_label': 'Bury and suspend',
   // ---- Another batch: extra new cards for today after the daily goal (review done screen, deck settings) ----
-  'review.extra_new.goal_done': 'New cards learned today: {count}. You have reached your daily goal. To learn more, start another batch.',
+  'review.extra_new.goal_done': 'New cards learned today: {count}. Daily goal reached.',
   'review.extra_new.count_label': 'New cards to add',
   'review.extra_new.submit': 'Another batch',
-  'review.extra_new.hint': 'You can add up to {count}. The extra cards count for today only, and tomorrow returns to the daily limit. New cards bring more reviews over the following days.',
+  'review.extra_new.hint': 'Up to {count} · today only',
   'review.extra_new.invalid': 'Enter a whole number from 1 to {max}.',
   'review.extra_new.failed': 'Could not add new cards. Try again.',
   'deck.settings.extra_today': 'Added today',
