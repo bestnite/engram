@@ -1345,7 +1345,7 @@ export const en: LocaleCatalog = {
   'review.extra_new.goal_done': 'New cards learned today: {count}. Daily goal reached.',
   'review.extra_new.count_label': 'New cards to add',
   'review.extra_new.submit': 'Another batch',
-  'review.extra_new.hint': 'Up to {count} · today only',
+  'review.extra_new.hint': 'Up to {count}',
   'review.extra_new.invalid': 'Enter a whole number from 1 to {max}.',
   'review.extra_new.failed': 'Could not add new cards. Try again.',
   'deck.settings.extra_today': 'Added today',

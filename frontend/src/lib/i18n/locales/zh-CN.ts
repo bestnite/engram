@@ -1344,7 +1344,7 @@ export const zhCN: LocaleCatalog = {
   'review.extra_new.goal_done': '今天已学 {count} 张新卡，已达每日目标。',
   'review.extra_new.count_label': '再学几张新卡',
   'review.extra_new.submit': '再来一组',
-  'review.extra_new.hint': '最多 {count} 张 · 仅限今天',
+  'review.extra_new.hint': '最多 {count} 张',
   'review.extra_new.invalid': '请输入 1 到 {max} 之间的整数。',
   'review.extra_new.failed': '追加新卡失败，请重试。',
   'deck.settings.extra_today': '今日追加',
