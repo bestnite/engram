@@ -555,7 +555,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 		} else if opts.ReviewsPerDay > 0 {
 			c.ReviewsPerDay = opts.ReviewsPerDay
 		}
-		newLeft, reviewLeft := deckBudget(c, usage[id].introduced, usage[id].reviewed)
+		newLeft, reviewLeft := deckBudget(c, usage[id])
 		out = append(out, deckScope{id: id, newLeft: newLeft, reviewLeft: reviewLeft})
 	}
 	return out, nil
@@ -578,10 +578,16 @@ func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts Que
 }
 
 // deckBudget 计算一个卡组今日剩余的新卡与复习额度；这是「每日额度如何算」的唯一实现，
-// Build 与 DeckCounts 都经它，避免两处公式漂移。
+// Build、DeckCounts 与 DeckBudgets 都经它，避免几处公式漂移。
 // caps 里某项 <= 0 表示该项不限，返回 deckUnlimited；否则返回 max(cap-used, 0)。
-func deckBudget(caps store.DeckCaps, introducedToday, reviewedToday int) (newLeft, reviewLeft int) {
-	return budgetLeft(caps.NewPerDay, introducedToday), budgetLeft(caps.ReviewsPerDay, reviewedToday)
+// 新卡的 cap 是每日上限加上今天「再来一组」追加的额度：每日上限是学习目标，追加只抬高今天的量。
+// 不限的卡组不需要追加，追加量对它不起作用。
+func deckBudget(caps store.DeckCaps, u deckUsage) (newLeft, reviewLeft int) {
+	newCap := caps.NewPerDay
+	if newCap > 0 {
+		newCap += u.extraNew
+	}
+	return budgetLeft(newCap, u.introduced), budgetLeft(caps.ReviewsPerDay, u.reviewed)
 }
 
 // budgetLeft 返回封顶后的剩余额度；cap <= 0 是不限。
@@ -630,8 +636,9 @@ func (o QueueOptions) now() time.Time {
 }
 
 // deckUsage 是一个卡组今日的用量：introduced 是今日引入的新卡数（state_before = 0），
-// reviewed 是今日的复习量（state_before <> 0）。不建计数表，从 reviews 聚合。
-type deckUsage struct{ introduced, reviewed int }
+// reviewed 是今日的复习量（state_before <> 0），二者不建计数表，从 reviews 聚合；
+// extraNew 是今天「再来一组」追加的新卡额度（store.DeckDailyExtra）。
+type deckUsage struct{ introduced, reviewed, extraNew int }
 
 // loadDeckCaps 读取 userID 在各卡组上的每日上限：属主读卡组列，其他成员读自己的成员设置
 // （规则只在 store.StudySettingsFor 一处）。
@@ -652,9 +659,9 @@ func (b *QueueBuilder) loadDeckCaps(ctx context.Context, userID uint64, deckIDs 
 	return out, nil
 }
 
-// countUsage 按 (user_id, review_day) 从 reviews 聚合各卡组今日用量，一次分组查询取回。
-// 新卡统计 state_before = 0，复习统计 state_before <> 0；额度是卡组级的，所以必须按卡组分组
-// （new_per_day/reviews_per_day 定义在卡组上）。
+// countUsage 按 (user_id, review_day) 从 reviews 聚合各卡组今日用量，一次分组查询取回，
+// 再并入同一复习日的追加新卡额度。新卡统计 state_before = 0，复习统计 state_before <> 0；
+// 额度是卡组级的，所以必须按卡组分组（new_per_day/reviews_per_day 定义在卡组上）。
 func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string, deckIDs []uint64) (map[uint64]deckUsage, error) {
 	var rows []struct {
 		DeckID     uint64 `gorm:"column:deck_id"`
@@ -676,6 +683,15 @@ func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string
 	out := make(map[uint64]deckUsage, len(rows))
 	for _, r := range rows {
 		out[r.DeckID] = deckUsage{introduced: r.Introduced, reviewed: r.Reviewed}
+	}
+	extras, err := store.DailyExtraNew(ctx, b.db, userID, day, deckIDs)
+	if err != nil {
+		return nil, fmt.Errorf("schedule: count deck usage: %w", err)
+	}
+	for id, n := range extras {
+		u := out[id]
+		u.extraNew = n
+		out[id] = u
 	}
 	return out, nil
 }

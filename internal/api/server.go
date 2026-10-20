@@ -173,6 +173,9 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/decks/:id/membership", a.authn.RequireScope(store.ScopeWrite), a.leaveDeck)
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.GET("/decks/:id/tags", a.authn.RequireScope(store.ScopeRead), a.listDeckTags)
+	// 「再来一组」：读今天的新卡额度、为调用者追加今天的新卡额度；只动本人进度，与复习同属 review。
+	v1.GET("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.getExtraNew)
+	v1.POST("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.postExtraNew)
 	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
 	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)
 	v1.GET("/notes/:id", a.authn.RequireScope(store.ScopeRead), a.getNote)

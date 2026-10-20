@@ -99,7 +99,7 @@ func (s *GrantStore) Grant(ctx context.Context, deckID, userID uint64, role stri
 }
 
 // Revoke 删除授权行；删除后下一个请求即被拒（“撤销立即生效”）。
-// 成员在该卡组上的学习设置随授权一起删除。
+// 成员在该卡组上的学习设置与当日追加的新卡额度随授权一起删除。
 func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
@@ -109,6 +109,10 @@ func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
 			Delete(&DeckMemberSetting{}).Error; err != nil {
 			return fmt.Errorf("delete member settings: %w", err)
+		}
+		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
+			Delete(&DeckDailyExtra{}).Error; err != nil {
+			return fmt.Errorf("delete daily extras: %w", err)
 		}
 		return nil
 	})

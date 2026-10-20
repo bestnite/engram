@@ -3,6 +3,8 @@ package schedule
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -16,6 +18,8 @@ type DeckBudget struct {
 	// NewPerDay / ReviewsPerDay 是卡组列上的每日上限；写 0 表示不限。
 	NewPerDay     int
 	ReviewsPerDay int
+	// NewExtra 是今天「再来一组」追加的新卡额度；NewLeft 已经算进了它，NewPerDay 没有。
+	NewExtra int
 	// NewUsed / ReviewUsed 是今日已用（新卡＝今日引入数，复习＝今日复习数）。
 	NewUsed    int
 	ReviewUsed int
@@ -75,10 +79,11 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
 		}
 		u := usage[id]
-		newLeft, reviewLeft := deckBudget(c, u.introduced, u.reviewed)
+		newLeft, reviewLeft := deckBudget(c, u)
 		out[id] = DeckBudget{
 			NewPerDay:       c.NewPerDay,
 			ReviewsPerDay:   c.ReviewsPerDay,
+			NewExtra:        u.extraNew,
 			NewUsed:         u.introduced,
 			ReviewUsed:      u.reviewed,
 			NewLeft:         nonNegative(newLeft),
@@ -96,4 +101,20 @@ func nonNegative(left int) int {
 		return 0
 	}
 	return left
+}
+
+// NewCardsAvailable 返回卡组里 userID 还没学过、此刻可以引入的新卡总数，不受每日额度限制。
+//
+// 「再来一组」据此判断还有没有新卡可加、默认加多少：额度只决定今天放多少张出来，这个数是
+// 卡组里一共还剩多少张。筛选条件与队列取新卡共用 newCardsFrom（排除暂停与埋藏），
+// tags 非空时只数带有其中任一标签的卡，与按标签复习的队列同一口径。
+func (b *QueueBuilder) NewCardsAvailable(ctx context.Context, userID, deckID uint64, tags []string, now time.Time) (int, error) {
+	if userID == 0 || deckID == 0 {
+		return 0, errors.New("schedule: new cards available: user id and deck id are required")
+	}
+	counts, err := countByDeck(b.newCardsFrom(ctx, userID, []uint64{deckID}, tags, now.UTC()))
+	if err != nil {
+		return 0, fmt.Errorf("schedule: count available new cards: %w", err)
+	}
+	return counts[deckID], nil
 }

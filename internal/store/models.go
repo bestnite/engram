@@ -418,6 +418,8 @@ func AllModels() []any {
 		&DeckShareInvite{}, &ShareAllow{},
 		// 共享卡组成员各自的学习设置：模型定义在 deck_member_settings.go。
 		&DeckMemberSetting{},
+		// 「再来一组」按复习日追加的新卡额度：模型定义在 deck_daily_extra.go。
+		&DeckDailyExtra{},
 	}
 }
 

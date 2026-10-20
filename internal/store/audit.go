@@ -75,6 +75,8 @@ const (
 	// 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
 	// 张出来」，与其他卡组变更一样要留痕。
 	ActionDeckCaps = "deck.caps_change"
+	// 「再来一组」：只为今天、只为调用者自己追加这个卡组的新卡额度，与每日额度变更同级留痕。
+	ActionDeckExtraNew = "deck.extra_new"
 	// 预设参数优化：触发优化作业与一键回退默认权重。
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"

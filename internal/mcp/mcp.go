@@ -289,6 +289,7 @@ var toolScopes = map[string]string{
 	"create_import_upload": store.ScopeWrite,
 	"get_due_cards":        store.ScopeReview,
 	"submit_review":        store.ScopeReview,
+	"add_extra_new_cards":  store.ScopeReview,
 }
 
 const instructions = "Engram library and scheduler. Tools mirror the REST /api/v1 surface " +
@@ -322,6 +323,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "create_import_upload", "Get a single-use URL for importing a deck package whose bytes should not pass through the model. Send the .edeck archive or export_deck's JSON document as the request body with the returned method before expires_at, e.g. curl -sS -T deck.edeck '<upload_url>'; the response is the import report. The import options are fixed when the URL is issued, and the URL works once: request a new one to retry.", s.createImportUpload)
 	addTool(s, srv, id, "get_due_cards", "Return cards due for review, including their source fields.", s.getDueCards)
 	addTool(s, srv, id, "submit_review", "Submit a review for a card with optimistic version check: a self-assessed rating (1..4), or for card types graded by the server an answer (or give_up) that the server grades.", s.submitReview)
+	addTool(s, srv, id, "add_extra_new_cards", "Allow extra new cards in one deck for the caller's current review day only, after the daily new card limit is reached. The deck settings do not change, the next review day returns to the daily limit, and other members of a shared deck are not affected. Decks without a daily new card limit return invalid_request. get_due_cards then includes the extra new cards.", s.addExtraNewCards)
 
 	return srv
 }
