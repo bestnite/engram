@@ -32,10 +32,12 @@ subagents as much as to external contributors.
 ## Before you start
 
 1. Read [`README.md`](README.md) and its quick start. Every command there runs as written.
-2. Read the code for the area you want to change. If it disagrees with the behaviour described
+2. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the map of packages, request paths, and data
+   model. It describes the code; when the two disagree, the code is right.
+3. Read the code for the area you want to change. If it disagrees with the behaviour described
    here, one of them is wrong: fix the code, or report the mismatch to the maintainers — never
    leave the two inconsistent.
-3. Anything not settled in this document must be raised rather than invented in code. Open an
+4. Anything not settled in this document must be raised rather than invented in code. Open an
    issue or ask on the pull request.
 
 ## Development environment

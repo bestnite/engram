@@ -1,8 +1,8 @@
 # AGENTS.md — Development Guide
 
 Read this file before making any change to this repository. It records the rules that are
-not obvious from the code and the definition of "done". The task backlog with stable IDs lives in
-`ROADMAP.md`.
+not obvious from the code and the definition of "done". The current structure of the code lives
+in `ARCHITECTURE.md`; the task backlog with stable IDs lives in `ROADMAP.md`.
 
 ---
 
@@ -18,8 +18,8 @@ not obvious from the code and the definition of "done". The task backlog with st
   own words. It never cites a document that is not committed, or a bare section number such as
   `§4.5`: a public reader has neither the file nor the numbering, so a citation there is a
   dangling pointer that carries no reason. The rule content stays, the pointer goes. References
-  to committed files (`AGENTS.md`, `ROADMAP.md`, `schema/*.json`, RFCs) remain allowed, because
-  those resolve for every reader.
+  to committed files (`AGENTS.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `schema/*.json`, RFCs)
+  remain allowed, because those resolve for every reader.
 
 ---
 
@@ -106,6 +106,8 @@ end user → translation catalog.
 
 - Table-driven tests; use a real SQLite database (in-memory or temp file) — do not mock
   the database. Core coverage targets: `internal/schedule` and `internal/cardtype`.
+- Tests live beside the code as `internal/<package>/*_test.go`. There is no top-level `test/`
+  directory.
 - **The default test database is SQLite, locally and in CI.** Neither runs a database
   service: `go test ./...` without `TEST_PG_DSN` makes the PostgreSQL cases gated by
   `internal/pgtest` skip themselves. Set `TEST_PG_DSN` to run them, and do that by hand
@@ -127,32 +129,18 @@ this file, and commit messages.
 
 ---
 
-## 3. Layout
+## 3. Architecture
 
-```
-engram/
-├── AGENTS.md                 # this file: the rules
-├── ROADMAP.md                # the task backlog and progress conventions
-├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
-├── LICENSE
-├── go.mod                    # module git.nite07.com/nite/engram
-├── cmd/engram/main.go     # subcommand entry point
-├── internal/
-│   ├── config/               # env vars + settings-table overlay and precedence
-│   ├── store/                # GORM models and business stores
-│   ├── schedule/             # go-fsrs wrapper: state machine, queue, review submit
-│   ├── cardtype/             # card type registry and type implementations
-│   ├── auth/                 # local accounts, sessions, CSRF, OIDC, API keys, roles
-│   ├── media/                # local file storage: dedupe, write, proxy read
-│   ├── api/                  # /api/v1 handlers
-│   ├── mcp/                  # MCP server: tool definitions that call the services
-│   ├── i18n/                 # locales/{zh-CN,en}.yaml plus loader and translator
-│   └── web/                  # gin routes, JSON handlers, SPA shell serving, static assets
-```
+The current structure — processes, packages, dependency direction, request paths, data model,
+scheduling, background work, and frontend layout — is described in `ARCHITECTURE.md`, not here.
+This file keeps only the rules.
 
-There is no top-level `test/` directory: integration coverage lives beside the code as
-`internal/<package>/*_test.go`, using `httptest` for handlers and a real SQLite database (file
-or in-memory) for storage.
+- Read `ARCHITECTURE.md` before changing a package you have not worked in.
+- A change that adds, removes, renames, or re-purposes a package, a transport, a background
+  worker, or a structural rule described in `ARCHITECTURE.md` updates `ARCHITECTURE.md` in the
+  same commit.
+- `ARCHITECTURE.md` describes the code; it does not decide behaviour (see section 1). If it
+  disagrees with the code, fix `ARCHITECTURE.md`.
 
 ---
 
@@ -205,9 +193,11 @@ A task is done only when all of the following hold:
 5. The change is committed with a signed, conventional commit; `git status` is clean.
 6. If the change alters behaviour or decisions, report it in your final message: the
    maintainer decides which committed file records it.
+   Exception: a structural change covered by section 3 updates `ARCHITECTURE.md` in the same
+   commit instead of waiting for the maintainer.
 7. No comment, document or commit message cites a file that is not in the repository.
-   Every reference resolves for a public reader: `AGENTS.md`, `ROADMAP.md`, `README*`,
-   `schema/*.json`, RFCs, or code paths inside the repository.
+   Every reference resolves for a public reader: `AGENTS.md`, `ARCHITECTURE.md`, `ROADMAP.md`,
+   `README*`, `schema/*.json`, RFCs, or code paths inside the repository.
 
 ---
 
@@ -301,14 +291,3 @@ git worktree prune                         # drop stale entries
 Use `git clone --local` only when a writer needs its own `.git/config`, its own ignore
 rules, or the freedom to run `git clean -xdf`. That is not the case in this repository;
 worktrees are the default.
-
-**Phase plan — which milestones may run in parallel**
-
-| Phase | Lanes | Constraint |
-|---|---|---|
-| A | M0 alone | Everything depends on it; run it serially |
-| B | M1 (auth) ∥ M2 (store, cardtype, web) | Disjoint packages |
-| C | M3 (schedule) ∥ M4 (api, mcp) | Freeze the shared store models; neither lane may change them |
-| D | M5 (grants) ∥ M7 (statistics) | Disjoint packages |
-| E | M6 (admin views) **or** M8 (mobile, i18n) | Both rewrite `frontend/src/lib/views/`; run them in sequence. If they must overlap, split M8 into "gestures and JS" and "view text", and keep the view-text half exclusive with M6 |
-| F | M9 last | Needs real review data produced by M3 |
