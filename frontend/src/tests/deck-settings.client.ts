@@ -26,6 +26,7 @@ describe('DeckSettingsView cap saving', () => {
     new_per_day: 10,
     reviews_per_day: 10,
     new_used: 2,
+    new_extra: 0,
     review_used: 3,
     new_left: 8,
     review_left: 7,

@@ -22,6 +22,7 @@ func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget s
 		PresetID:        presetPublicID,
 		NewPerDay:       budget.NewPerDay,
 		ReviewsPerDay:   budget.ReviewsPerDay,
+		NewExtra:        budget.NewExtra,
 		NewUsed:         budget.NewUsed,
 		ReviewUsed:      budget.ReviewUsed,
 		NewLeft:         budget.NewLeft,
@@ -43,16 +44,18 @@ type deckSettingsResponse struct {
 	// DeckDescription 供属主在设置页预填「卡组信息」表单；共享成员改不了它，读到也无妨。
 	DeckDescription string `json:"deck_description"`
 	// Role 是调用者在卡组上的角色（owner / editor / reader），页面据此决定是否展示属主才有的入口。
-	Role            string `json:"role"`
-	PresetID        string `json:"preset_id"`
-	NewPerDay       int    `json:"new_per_day"`
-	ReviewsPerDay   int    `json:"reviews_per_day"`
-	NewUsed         int    `json:"new_used"`
-	ReviewUsed      int    `json:"review_used"`
-	NewLeft         int    `json:"new_left"`
-	ReviewLeft      int    `json:"review_left"`
-	NewUnlimited    bool   `json:"new_unlimited"`
-	ReviewUnlimited bool   `json:"review_unlimited"`
+	Role          string `json:"role"`
+	PresetID      string `json:"preset_id"`
+	NewPerDay     int    `json:"new_per_day"`
+	ReviewsPerDay int    `json:"reviews_per_day"`
+	// NewExtra 是今天「再来一组」追加的新卡额度；NewLeft 已经算进了它，NewPerDay 没有。
+	NewExtra        int  `json:"new_extra"`
+	NewUsed         int  `json:"new_used"`
+	ReviewUsed      int  `json:"review_used"`
+	NewLeft         int  `json:"new_left"`
+	ReviewLeft      int  `json:"review_left"`
+	NewUnlimited    bool `json:"new_unlimited"`
+	ReviewUnlimited bool `json:"review_unlimited"`
 }
 
 // deckSettingsRequest 是 PATCH 的请求体；用指针区分「未提供」与「提供了 0」。

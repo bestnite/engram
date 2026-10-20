@@ -204,6 +204,10 @@
             <dl class="mt-1.5 flex gap-3 text-xs text-muted-foreground">
               <div class="flex gap-1"><dt>{$t('deck.settings.used_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-used">{settings.new_used}</dd></div>
               <div class="flex gap-1"><dt>{$t('deck.settings.left_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd></div>
+              {#if settings.new_extra > 0 && !settings.new_unlimited}
+                <!-- 今天「再来一组」追加过才显示：说明为什么剩余数比每日上限还多。 -->
+                <div class="flex gap-1"><dt>{$t('deck.settings.extra_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-extra">{settings.new_extra}</dd></div>
+              {/if}
             </dl>
           </div>
           <div>

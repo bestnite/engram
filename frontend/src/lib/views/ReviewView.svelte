@@ -3,7 +3,8 @@
   import { onMount, tick } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { ApiClient, DueCard, GradedAnswer, GradedFeedback } from '../api';
+  import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
+  import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
@@ -106,6 +107,19 @@
   let revealedSection = $state<HTMLElement | null>(null);
 
   const current = $derived(cards[0] || null);
+
+  // 「再来一组」：队列空了且复习范围恰好是一个卡组时，读今天的新卡额度；还有今天额度之外的新卡
+  // 就在完成页给出追加入口。每日新卡上限是学习目标而不是硬上限，追加只对今天、只对自己生效。
+  let extraStatus = $state<ExtraNewStatus | null>(null);
+  // 输入框的原文（字符串）：数字输入框不用 bind:value，否则空串会被强转成 null，校验无从说起。
+  let extraCount = $state('');
+  let extraBusy = $state(false);
+  let extraInvalid = $state(false);
+  // 可追加的上限：单次上限与「今天额度之外还剩的新卡数」取小。
+  const extraMax = $derived(
+    extraStatus ? Math.min(extraStatus.max_count, Math.max(extraStatus.new_available - extraStatus.new_left, 0)) : 0,
+  );
+  const showExtra = $derived(extraStatus !== null && !extraStatus.new_unlimited && extraStatus.suggested_count > 0);
   // 当前卡的题型自描述；元数据未就绪或题型未知时为 null，视图渲染加载态而不是乱猜字段。
   const desc = $derived(descriptionOf($cardTypes, current?.kind));
   const selfAssessable = $derived(desc !== null && !desc.graded);
@@ -246,6 +260,51 @@
     essayText = '';
     if (card) void loadRender(card, token);
   });
+
+  /** 复习范围恰好是一个卡组时返回它的对外 id；多卡组与全部卡组返回 null（「再来一组」只按单卡组）。 */
+  function singleDeck(): string | null {
+    const decks = selectedDecks();
+    return decks?.length === 1 ? (decks[0] ?? null) : null;
+  }
+
+  /** 读当前卡组今天的新卡额度；不是单卡组范围或读取失败时不显示追加入口，不打断完成页。 */
+  async function loadExtraNew(): Promise<void> {
+    const deck = singleDeck();
+    if (!deck) {
+      extraStatus = null;
+      return;
+    }
+    try {
+      const status = await client.getExtraNew(deck, selectedTags() ?? []);
+      extraStatus = status;
+      extraCount = String(status.suggested_count);
+      extraInvalid = false;
+    } catch {
+      extraStatus = null;
+    }
+  }
+
+  /** 按输入的张数追加今天的新卡额度，成功后重新拉取队列，新卡随之出现。 */
+  async function addExtraNew(): Promise<void> {
+    const deck = singleDeck();
+    if (!deck || !extraStatus || extraBusy) return;
+    const count = Number(extraCount);
+    if (extraCount.trim() === '' || !Number.isInteger(count) || count < 1 || count > extraMax) {
+      extraInvalid = true;
+      return;
+    }
+    extraInvalid = false;
+    extraBusy = true;
+    try {
+      await client.addExtraNew(deck, count);
+      extraStatus = null;
+      await loadQueue();
+    } catch (cause) {
+      toast.error($t(cause instanceof ApiClientError && cause.isForbidden ? 'error.forbidden' : 'review.extra_new.failed'));
+    } finally {
+      extraBusy = false;
+    }
+  }
 
   async function loadQueue(): Promise<void> {
     loading = true;
@@ -667,6 +726,16 @@
     else if (action.kind === 'rate') void rate(action.rating);
   }
 
+  // 队列空了（加载完成、没有出错）才去读额度；有卡时清掉，避免下次空队列先闪出旧数字。
+  $effect(() => {
+    if (loading || error) return;
+    if (current) {
+      extraStatus = null;
+      return;
+    }
+    void loadExtraNew();
+  });
+
   onMount(() => {
     void loadQueue();
     // 元数据只加载一次（模块内幂等）；失败时静默降级为加载/空态，不打断复习流程。
@@ -733,6 +802,46 @@
     {:else if !current}
       <div class="text-center py-10" data-testid="review-empty">
         <p class="text-lg font-medium text-foreground/90">{$t('review.empty')}</p>
+        {#if showExtra && extraStatus}
+          <form
+            class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-border p-4 text-left"
+            data-testid="review-extra-new"
+            novalidate
+            onsubmit={(event) => {
+              event.preventDefault();
+              void addExtraNew();
+            }}
+          >
+            <p class="text-sm text-foreground">{$t('review.extra_new.goal_done', { count: extraStatus.new_used })}</p>
+            <div class="flex items-end gap-2">
+              <div class="min-w-0 flex-1">
+                <label class="block text-sm font-medium text-foreground" for="review-extra-count">{$t('review.extra_new.count_label')}</label>
+                <input
+                  id="review-extra-count"
+                  type="number"
+                  min="1"
+                  max={extraMax}
+                  step="1"
+                  inputmode="numeric"
+                  data-testid="review-extra-count"
+                  value={extraCount}
+                  oninput={(event) => {
+                    extraCount = event.currentTarget.value;
+                    extraInvalid = false;
+                  }}
+                  aria-invalid={extraInvalid}
+                  aria-describedby="review-extra-hint"
+                  class="field-input mt-1.5 block w-full text-sm"
+                />
+              </div>
+              <Button type="submit" testId="review-extra-submit" loading={extraBusy}>{$t('review.extra_new.submit')}</Button>
+            </div>
+            {#if extraInvalid}
+              <p class="text-xs text-destructive-foreground" role="alert" data-testid="review-extra-invalid">{$t('review.extra_new.invalid', { max: extraMax })}</p>
+            {/if}
+            <p id="review-extra-hint" class="text-xs text-muted-foreground">{$t('review.extra_new.hint', { count: extraMax })}</p>
+          </form>
+        {/if}
         <a class="inline-block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium" href="/">{$t('review.home')}</a>
       </div>
     {:else}

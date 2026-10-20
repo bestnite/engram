@@ -85,6 +85,8 @@ export interface DeckSettings {
   preset_id: string;
   new_per_day: number;
   reviews_per_day: number;
+  /** 今天「再来一组」追加的新卡额度；new_left 已经算进了它，new_per_day 没有。 */
+  new_extra: number;
   new_used: number;
   review_used: number;
   new_left: number;
@@ -452,6 +454,28 @@ export interface DueCard {
  */
 export interface DueCardsResponse {
   cards: DueCard[];
+}
+
+/**
+ * GET / POST /api/v1/decks/:id/extra-new 的响应体（与 Go 后端 internal/api/extra_new.go:ExtraNewStatus 对齐）：
+ * 调用者在卡组上今天的新卡额度，以及「再来一组」能加多少。
+ */
+export interface ExtraNewStatus {
+  deck_id: string;
+  /** 每日新卡上限（学习目标）；new_unlimited 为 true 时无意义。 */
+  new_per_day: number;
+  new_unlimited: boolean;
+  /** 今天已经追加的新卡额度，第二天归零。 */
+  extra_new: number;
+  new_used: number;
+  /** 今天还能引入的新卡数，已含追加量。 */
+  new_left: number;
+  /** 卡组里还没学过、此刻可以引入的新卡总数，不受额度限制（按标签复习时只数带这些标签的卡）。 */
+  new_available: number;
+  /** 默认追加张数；0 表示没有可追加的新卡。 */
+  suggested_count: number;
+  /** 单次追加允许的最大张数。 */
+  max_count: number;
 }
 
 export interface SubmitSelfReviewRequest {

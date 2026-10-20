@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件定义九个 MCP 工具的入参类型与处理器；每个处理器只做参数整形，
+// 本文件定义全部 MCP 工具的入参类型与处理器；每个处理器只做参数整形，
 // 随后调用与同名 REST 端点完全相同的 internal/api service 方法。
 //
 // 所有指向自增主键的入参都是对外 id（UUIDv7 字符串）：处理器先经 api 的
@@ -163,6 +163,12 @@ type submitReviewIn struct {
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"card state version the caller read"`
 	ElapsedMS       *int   `json:"elapsed_ms,omitempty" jsonschema:"time spent on the card in milliseconds"`
 	GradeSource     string `json:"grade_source,omitempty" jsonschema:"must be omitted or self; the server decides where a grade came from"`
+}
+
+// addExtraNewCardsIn 是 add_extra_new_cards 的入参；count 缺省或为 0 时用每日新卡上限。
+type addExtraNewCardsIn struct {
+	DeckID string `json:"deck_id" jsonschema:"public id of the deck to extend today"`
+	Count  int    `json:"count,omitempty" jsonschema:"number of extra new cards to allow today (1..1000); omit to use the caller's daily new card limit for the deck"`
 }
 
 // ---- 处理器 ----
@@ -446,6 +452,14 @@ func (s *Server) submitReview(ctx context.Context, id Identity, in submitReviewI
 		ExpectedVersion: in.ExpectedVersion,
 		ElapsedMS:       in.ElapsedMS,
 	})
+}
+
+func (s *Server) addExtraNewCards(ctx context.Context, id Identity, in addExtraNewCardsIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	return s.api.AddExtraNew(ctx, id.User, id.apiKeyID(), d.ID, in.Count)
 }
 
 // toImportRequest 把 MCP 入参转成 service 层的 ImportRequest；两种工具共用。

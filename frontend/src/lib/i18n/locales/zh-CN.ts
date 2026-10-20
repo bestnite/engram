@@ -1340,4 +1340,12 @@ export const zhCN: LocaleCatalog = {
   'help.presets.max_interval': '两次复习之间最多相隔的天数，算出的间隔更长时按这个值截断。默认 36500 天，相当于不限制。',
   'help.presets.fuzz': '给算出的间隔加一点随机偏移，让同一天学的卡不会总在同一天一起到期。只对 2.5 天以上的间隔生效。',
   'help.review.bury_label': '埋藏与暂停',
+  // ---- 「再来一组」：学完每日新卡目标后追加今天的新卡（复习完成页与卡组设置页） ----
+  'review.extra_new.goal_done': '今天已学 {count} 张新卡，达到每日目标。想多学一些，可以再来一组。',
+  'review.extra_new.count_label': '再学几张新卡',
+  'review.extra_new.submit': '再来一组',
+  'review.extra_new.hint': '最多可加 {count} 张。追加只算今天，明天回到每日上限；新学的卡会在之后几天带来更多复习。',
+  'review.extra_new.invalid': '请输入 1 到 {max} 之间的整数。',
+  'review.extra_new.failed': '追加新卡失败，请重试。',
+  'deck.settings.extra_today': '今日追加',
 };

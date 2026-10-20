@@ -16,6 +16,7 @@ const settings: DeckSettings = {
   new_per_day: 5,
   reviews_per_day: 10,
   new_used: 2,
+  new_extra: 0,
   review_used: 3,
   new_left: 3,
   review_left: 7,
@@ -58,6 +59,16 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     });
     expect(html).toContain('不限');
     expect(html).not.toContain('data-testid="deck-settings-failed"');
+  });
+
+  it('shows today\'s extra new cards only after another batch was added', () => {
+    const plain = render(DeckSettingsView, { props: { initialLoading: false, initialSettings: settings } });
+    expect(plain.html).not.toContain('data-testid="deck-settings-new-extra"');
+    const extended = render(DeckSettingsView, {
+      props: { initialLoading: false, initialSettings: { ...settings, new_extra: 4, new_left: 7 } },
+    });
+    expect(extended.html).toContain('data-testid="deck-settings-new-extra"');
+    expect(extended.html).toContain('今日追加');
   });
 
   it('renders the loading state before any data arrives', () => {
@@ -108,6 +119,28 @@ describe('deck settings API client', () => {
     await expect(client.getDeckSettings('7')).resolves.toEqual(settings);
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/7/settings');
     expect(mockFetch.mock.calls[0]?.[1]).toMatchObject({ credentials: 'same-origin' });
+  });
+
+  it('GETs today\'s extra-new status with repeated tag parameters', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ suggested_count: 5 }), { status: 200 }));
+    await client.getExtraNew('d 1', ['a', 'b,c']);
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/d%201/extra-new?tag=a&tag=b%2Cc');
+  });
+
+  it('POSTs another batch with the session CSRF token, omitting count for the default', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ authenticated: true, csrf_token: 'deck-csrf' }), { status: 200 })
+    );
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ extra_new: 5 }), { status: 200 }));
+    await client.addExtraNew('7');
+    const [url, init] = mockFetch.mock.calls[1]!;
+    expect(url).toBe('/api/v1/decks/7/extra-new');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({});
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('deck-csrf');
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ extra_new: 8 }), { status: 200 }));
+    await client.addExtraNew('7', 3);
+    expect(JSON.parse(String(mockFetch.mock.calls[2]?.[1]?.body))).toEqual({ count: 3 });
   });
 
   it('PATCHes caps with the session CSRF token and keeps 0 verbatim', async () => {

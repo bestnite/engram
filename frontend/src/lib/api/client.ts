@@ -23,6 +23,7 @@ import {
   type StatsSummary,
   type StatsDetail,
   type DueCardsResponse,
+  type ExtraNewStatus,
   type DueCardsQuery,
   type SubmitSelfReviewRequest,
   type SubmitReviewResult,
@@ -753,6 +754,32 @@ export class ApiClient {
     const queryString = params.toString();
     const path = queryString ? `/api/v1/review/due?${queryString}` : '/api/v1/review/due';
     return this.request<DueCardsResponse>(path);
+  }
+
+  /**
+   * 读取今天的新卡额度与「再来一组」的默认张数（GET /api/v1/decks/:id/extra-new）；
+   * tag 与复习队列同一口径，只影响可加张数。
+   */
+  async getExtraNew(deckId: string, tags: string[] = []): Promise<ExtraNewStatus> {
+    const params = new URLSearchParams();
+    for (const tag of tags) params.append('tag', tag);
+    const query = params.toString();
+    const path = `/api/v1/decks/${encodeURIComponent(deckId)}/extra-new${query ? `?${query}` : ''}`;
+    return this.request<ExtraNewStatus>(path);
+  }
+
+  /**
+   * 「再来一组」：只为今天、只为自己追加这个卡组的新卡额度（POST /api/v1/decks/:id/extra-new）。
+   * count 省略时由服务端取每日新卡上限。额度变了，待复习数随之变化，所以按 cards 通知。
+   */
+  async addExtraNew(deckId: string, count?: number): Promise<ExtraNewStatus> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.notifying('cards', this.request<ExtraNewStatus>(`/api/v1/decks/${encodeURIComponent(deckId)}/extra-new`, {
+      method: 'POST',
+      body: JSON.stringify(count === undefined ? {} : { count }),
+    }));
   }
 
   /** 通过 Web 专用 CSRF 端点提交自评，并由服务端重建同范围队列。 */
