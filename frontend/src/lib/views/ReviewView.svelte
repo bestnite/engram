@@ -820,7 +820,10 @@
             <p class="text-sm text-foreground">{$t('review.extra_new.goal_done', { count: extraStatus.new_used })}</p>
             <div class="flex items-end gap-2">
               <div class="min-w-0 flex-1">
-                <label class="block text-sm font-medium text-foreground" for="review-extra-count">{$t('review.extra_new.count_label')}</label>
+                <div class="flex items-baseline justify-between gap-2">
+                  <label class="text-sm font-medium text-foreground" for="review-extra-count">{$t('review.extra_new.count_label')}</label>
+                  <span id="review-extra-hint" class="text-xs text-muted-foreground">{$t('review.extra_new.hint', { count: extraMax })}</span>
+                </div>
                 <input
                   id="review-extra-count"
                   type="number"
@@ -844,7 +847,6 @@
             {#if extraInvalid}
               <p class="text-xs text-destructive-foreground" role="alert" data-testid="review-extra-invalid">{$t('review.extra_new.invalid', { max: extraMax })}</p>
             {/if}
-            <p id="review-extra-hint" class="text-xs text-muted-foreground">{$t('review.extra_new.hint', { count: extraMax })}</p>
           </form>
         {/if}
         <a class="inline-block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium" href="/">{$t('review.home')}</a>
