@@ -30,6 +30,10 @@ type reviewRenderBody struct {
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
 	EditHref  string `json:"edit_href"`
+	Intervals []struct {
+		Rating  int   `json:"rating"`
+		Seconds int64 `json:"seconds"`
+	} `json:"intervals"`
 }
 
 // TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由渲染复习页。
@@ -205,6 +209,21 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	}
 	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
+	}
+	// 四档评分的下次间隔：新卡按默认学习步骤 1m,10m，Again 是 1 分钟，其余逐档不减。
+	if len(body.Intervals) != 4 {
+		t.Fatalf("render intervals = %+v, want 4 entries", body.Intervals)
+	}
+	for i, iv := range body.Intervals {
+		if iv.Rating != i+1 {
+			t.Errorf("render intervals[%d].rating = %d, want %d", i, iv.Rating, i+1)
+		}
+		if i > 0 && iv.Seconds < body.Intervals[i-1].Seconds {
+			t.Errorf("render intervals not ordered: %+v", body.Intervals)
+		}
+	}
+	if body.Intervals[0].Seconds != 60 {
+		t.Errorf("render Again interval = %ds, want 60s", body.Intervals[0].Seconds)
 	}
 }
 
