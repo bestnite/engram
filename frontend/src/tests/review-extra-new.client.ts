@@ -90,7 +90,7 @@ describe('ReviewView another batch of new cards', () => {
     // 最多可加的张数是今天额度之外还剩的新卡数（8 - 0）。
     expect(countInput(target).max).toBe('8');
     expect(target.textContent).toContain('今天已学 5 张新卡');
-    expect(target.querySelector('#review-extra-hint')?.textContent).toBe('最多 8 张 · 仅限今天');
+    expect(target.querySelector('#review-extra-hint')?.textContent).toBe('最多 8 张');
   });
 
   it('submits the typed count and reloads the queue', async () => {
