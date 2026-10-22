@@ -9,9 +9,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestStatsDetailMatchesStoreMeasures 断言 SPA 明细接口的每个数字都能用 seedStatsFixture
-// 的夹具独立复算：复习量、到期、留存桶、时间投入、连续打卡、卡组/标签维度与判分来源。
-// 夹具口径见 internal/web/stats_test.go（UTC、午夜切点，与 handler 的复习日一致）。
+// TestStatsDetailMatchesStoreMeasures asserts every number from the SPA detail endpoint can be recomputed independently
+// from the seedStatsFixture fixture: review volume, due, retention buckets, time spent, streak, deck/tag dimensions and grading source.
+// The fixture semantics are in internal/web/stats_test.go (UTC, midnight cutoff, matching the handler's review day).
 func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/api/v1/stats/detail", cookies)
@@ -67,7 +67,7 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	if newTotal != 1 || reviewTotal != 2 {
 		t.Errorf("curve totals = new:%d review:%d, want new=1 review=2", newTotal, reviewTotal)
 	}
-	// 窗口是含两端的 30 个复习日，且每个曲线点都落在窗口内。
+	// The window is 30 review days inclusive, and every curve point falls inside it.
 	if detail.CurveFrom == "" || detail.CurveTo == "" {
 		t.Fatalf("curve window = [%q, %q], want both bounds", detail.CurveFrom, detail.CurveTo)
 	}
@@ -87,8 +87,8 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	if deck.Name != "Stats deck" || deck.DueCount != 1 || deck.Reviews != 3 || deck.ElapsedMS != 3000 {
 		t.Errorf("deck = %+v, want Stats deck due=1 reviews=3 elapsed=3000", deck)
 	}
-	// 留存是真实留存率：三条复习里只有两条到期复习（都非 Again），新卡那条 Again 不计入，
-	// 因此是 2/2 而不是「非 Again / 全部复习」的 2/3。
+	// Retention is the true retention rate: of three reviews only two were scheduled reviews (neither Again), and the new card's Again is not counted,
+	// so it is 2/2 rather than the 2/3 of "non-Again / all reviews".
 	if math.Abs(deck.Retention-1) > 1e-9 || deck.RetentionTotal != 2 {
 		t.Errorf("deck retention = %v over %d, want 1 over 2 due reviews", deck.Retention, deck.RetentionTotal)
 	}
@@ -110,8 +110,8 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	}
 }
 
-// TestStatsDetailRequiresSession 是负例：匿名请求返回 401 与稳定英文 code，
-// 而不是 SSR 页面那种 303 重定向（JSON 客户端不该收到 HTML 跳转）。
+// TestStatsDetailRequiresSession is a negative case: an anonymous request returns 401 with a stable English code,
+// not the 303 redirect the SSR page used (a JSON client should not receive an HTML redirect).
 func TestStatsDetailRequiresSession(t *testing.T) {
 	srv, _, _, _ := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/api/v1/stats/detail", nil)

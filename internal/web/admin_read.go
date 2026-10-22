@@ -10,13 +10,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板只读页（概览 / 健康 / 审计）的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's read-only pages (overview / health / audit).
 //
-// 口径与各自 SSR 页逐项一致：概览调 store.InstanceSummary，健康页现算
-// 四项读数，审计检索走 store.AuditStore.Search。响应只带原始值与稳定英文标识，本地化文案
-// 一律由前端语言包按标识映射，因此这里不返回任何本地化文本。
+// Conventions match each SSR page item by item: the overview calls store.InstanceSummary, the health page computes
+// four readings on the fly, and audit search goes through store.AuditStore.Search. Responses carry only raw values and stable English identifiers; localized copy
+// is always mapped from those identifiers by the frontend language packs, so no localized text is returned here.
 
-// adminSummaryResponse 是概览页（/admin）的计数卡数据。
+// adminSummaryResponse is the count-card data for the overview page (/admin).
 type adminSummaryResponse struct {
 	UsersTotal  int64 `json:"users_total"`
 	UsersActive int64 `json:"users_active"`
@@ -28,7 +28,7 @@ type adminSummaryResponse struct {
 	JobsFailed  int64 `json:"jobs_failed"`
 }
 
-// adminSummary 返回实例级计数。任何一项查询失败整体 500——空实例与查询失败不该同形。
+// adminSummary returns instance-level counts. A failure of any single query turns the whole thing into 500 — an empty instance and a query failure should not look alike.
 func (s *Server) adminSummary(c *gin.Context) {
 	stats, err := store.InstanceSummary(c.Request.Context(), s.db, time.Now().UTC())
 	if err != nil {
@@ -43,9 +43,9 @@ func (s *Server) adminSummary(c *gin.Context) {
 	})
 }
 
-// adminHealthResponse 是健康页的读数。
-// schema_version / due 为 null 表示读不出来（与 SSR 的「未知」占位同义）；
-// media_bytes 是原始字节数，前端负责人类可读格式化。
+// adminHealthResponse is the health page's readings.
+// schema_version / due being null means it cannot be read (synonymous with SSR's "unknown" placeholder);
+// media_bytes is the raw byte count, and human-readable formatting is the frontend's job.
 type adminHealthResponse struct {
 	Database       string `json:"database"` // ok | error
 	SchemaVersion  *int   `json:"schema_version"`
@@ -54,7 +54,7 @@ type adminHealthResponse struct {
 	Due            *int64 `json:"due"`
 }
 
-// adminHealth 返回健康页的四项读数，口径与 adminHealthPage 完全相同。
+// adminHealth returns the health page's four readings, with exactly the same convention as adminHealthPage.
 func (s *Server) adminHealth(c *gin.Context) {
 	ctx := c.Request.Context()
 	resp := adminHealthResponse{Database: "ok"}
@@ -85,30 +85,30 @@ func (s *Server) adminHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// adminAuditActor 是审计行里的操作者；nil 表示系统动作（无 UserID）。
-// user_id 是对外 id；用户行已不存在时为 null（绝不回退到数字主键）。
+// adminAuditActor is the actor in an audit row; nil means a system action (no UserID).
+// user_id is a public id; null when the user row no longer exists (never falls back to the numeric primary key).
 type adminAuditActor struct {
 	UserID   *string `json:"user_id"`
 	Username string  `json:"username"`
 }
 
-// adminAuditTarget 是审计行里的目标对象；nil 表示无目标。id 是对外 id。
+// adminAuditTarget is the target object in an audit row; nil means no target. id is a public id.
 type adminAuditTarget struct {
 	Type string  `json:"type"`
 	ID   *string `json:"id"`
 }
 
-// adminAuditRow 是一行审计记录。时间已按当前管理员时区格式化。
+// adminAuditRow is one audit record. Times are already formatted in the current admin's timezone.
 type adminAuditRow struct {
 	Time   string            `json:"time"`
 	Actor  *adminAuditActor  `json:"actor"`
 	Action string            `json:"action"`
 	Target *adminAuditTarget `json:"target"`
-	// Detail 为原始 JSON 串；空串表示无详情。
+	// Detail is the raw JSON string; an empty string means no detail.
 	Detail string `json:"detail"`
 }
 
-// adminAuditResponse 是审计检索的响应；notice 是稳定英文码（空串表示无提示）。
+// adminAuditResponse is the audit search response; notice is a stable English code (empty string means no notice).
 type adminAuditResponse struct {
 	Rows    []adminAuditRow `json:"rows"`
 	Actions []string        `json:"actions"`
@@ -118,7 +118,7 @@ type adminAuditResponse struct {
 	Notice  string          `json:"notice"`
 }
 
-// adminAudit 返回审计检索结果，过滤与分页语义与 adminAuditPage 完全一致。
+// adminAudit returns audit search results, with filter and pagination semantics exactly matching adminAuditPage.
 func (s *Server) adminAudit(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)

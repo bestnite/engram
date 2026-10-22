@@ -7,8 +7,8 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// TestIntervalLabelPicksSensibleUnit 覆盖单位切换，以及"取整顶过单位边界"的修正
-// （59.7 分不该渲染成「60 分钟」）。SPA 的复习页复用同一份格式化规则。
+// TestIntervalLabelPicksSensibleUnit covers unit switching and the correction for rounding pushing past the unit boundary
+// (59.7 min must not render as "60 minutes"). The SPA review page reuses the same formatting rules.
 func TestIntervalLabelPicksSensibleUnit(t *testing.T) {
 	tr, err := i18n.New()
 	if err != nil {

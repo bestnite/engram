@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// TestNewHTTPServerTimeouts 断言上线配置：请求头与空闲连接有超时，整体读写不设超时
-// （大文件上传与流式导出不能被截断）。
+// TestNewHTTPServerTimeouts asserts the production configuration: request headers and idle connections have timeouts, and
+// the overall read/write has none (large file uploads and streaming exports must not be truncated).
 func TestNewHTTPServerTimeouts(t *testing.T) {
 	srv := newHTTPServer(":0", http.NotFoundHandler())
 	cases := []struct {
@@ -29,8 +29,8 @@ func TestNewHTTPServerTimeouts(t *testing.T) {
 	}
 }
 
-// TestHTTPServerDropsSlowHeaders 是反面用例：只发半截请求头的连接会在请求头超时后被服务端关闭，
-// 而不是无限期挂着。超时在这里缩短，只为让测试快速结束；断言的是行为而不是常量。
+// TestHTTPServerDropsSlowHeaders is the negative case: a connection that sends only a partial request header is closed by the server
+// after the header timeout instead of hanging forever. The timeouts are shortened here only so the test finishes fast; what is asserted is behaviour, not constants.
 func TestHTTPServerDropsSlowHeaders(t *testing.T) {
 	srv := newHTTPServer("", http.NotFoundHandler())
 	srv.ReadHeaderTimeout = 200 * time.Millisecond

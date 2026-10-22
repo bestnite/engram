@@ -15,20 +15,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是验收测试：管理面板里两个高影响动作——OIDC「测试连接」、
-// SMTP「测试连接」——必须写审计行，且成功与失败都要留痕。审计行不得包含
-// 口令 / secret / token 等敏感值（只记动作、actor 与目标元信息）。
+// This file is an acceptance test: two high-impact actions in the admin panel — OIDC "test connection" and
+// SMTP "test connection" — must write audit rows, and both success and failure must leave a trace. Audit rows must not contain
+// sensitive values such as passwords / secrets / tokens (only the action, actor and target metadata are recorded).
 //
-// SSR 端点删除后，测试连接走 SPA 的 JSON 端点（/api/v1/admin/{oidc,smtp}/test），
-// 审计语义与响应形态与迁移前一致。
+// After the SSR endpoints were removed, test connection goes through the SPA's JSON endpoints (/api/v1/admin/{oidc,smtp}/test),
+// with audit semantics and response shape unchanged from before the migration.
 
-// 两个 canary 值只用于断言「它们不会出现在审计行里」，与任何真实凭据无关。
+// The two canary values are only used to assert "they do not appear in the audit rows" and are unrelated to any real credential.
 const (
 	oidcSecretCanary   = "oidc-audit-leak-canary-secret"
 	smtpPasswordCanary = "smtp-audit-leak-canary-pw"
 )
 
-// auditStr 解引用可空审计列，nil 记为空串，便于把整行拼成可搜索文本。
+// auditStr dereferences a nullable audit column, treating nil as an empty string, so a whole row can be assembled into searchable text.
 func auditStr(s *string) string {
 	if s == nil {
 		return ""
@@ -36,7 +36,7 @@ func auditStr(s *string) string {
 	return *s
 }
 
-// auditRowsDump 把审计行的可检索列（action / target_type / detail_json）拼成一段文本。
+// auditRowsDump assembles an audit row's searchable columns (action / target_type / detail_json) into a single piece of text.
 func auditRowsDump(rows []store.AuditLog) string {
 	var b strings.Builder
 	for _, r := range rows {
@@ -45,7 +45,7 @@ func auditRowsDump(rows []store.AuditLog) string {
 	return b.String()
 }
 
-// auditRowsFor 取回指定动作的全部审计行（这里行数很少，直接全量列出再过滤）。
+// auditRowsFor retrieves all audit rows for the given action (there are very few rows here, so list them all and filter).
 func auditRowsFor(t *testing.T, db *gorm.DB, action string) []store.AuditLog {
 	t.Helper()
 	rows, err := store.NewAuditStore(db).List(context.Background(), 500)
@@ -61,7 +61,7 @@ func auditRowsFor(t *testing.T, db *gorm.DB, action string) []store.AuditLog {
 	return out
 }
 
-// assertNoAuditLeak 断言给定敏感值不出现在任何审计行的任一列里。
+// assertNoAuditLeak asserts that the given sensitive value appears in no column of any audit row.
 func assertNoAuditLeak(t *testing.T, db *gorm.DB, canaries ...string) {
 	t.Helper()
 	rows, err := store.NewAuditStore(db).List(context.Background(), 500)
@@ -76,7 +76,7 @@ func assertNoAuditLeak(t *testing.T, db *gorm.DB, canaries ...string) {
 	}
 }
 
-// decodeAdminTestResult 解出测试连接的响应体。
+// decodeAdminTestResult decodes the test-connection response body.
 func decodeAdminTestResult(t *testing.T, rec *httptest.ResponseRecorder) adminTestResult {
 	t.Helper()
 	var result adminTestResult
@@ -86,14 +86,14 @@ func decodeAdminTestResult(t *testing.T, rec *httptest.ResponseRecorder) adminTe
 	return result
 }
 
-// TestAdminOIDCTestWritesAuditOnSuccessAndFailure 验证 OIDC「测试连接」成功与失败各写一行，
-// actor 正确，且审计行不含提交的 client secret。
+// TestAdminOIDCTestWritesAuditOnSuccessAndFailure verifies that OIDC "test connection" writes one row on success and one on failure,
+// with the correct actor, and that the audit rows do not contain the submitted client secret.
 func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	srv, db, adminID, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
 	ctx := context.Background()
 
-	// 成功路径：stub provider 提供发现文档。
+	// Success path: the stub provider serves a discovery document.
 	okStub := newStubOIDC(t)
 	okRec := adminPostJSON(t, srv, "/api/v1/admin/oidc/test", adminOIDCRequest{
 		Issuer:       okStub.srv.URL,
@@ -106,7 +106,7 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 		t.Fatalf("OIDC test (success) result = %+v, want ok", got)
 	}
 
-	// 失败路径：一个总是返回 404 的 provider。
+	// Failure path: a provider that always returns 404.
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("provider-says-no-discovery"))
@@ -144,14 +144,14 @@ func TestAdminOIDCTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	assertNoAuditLeak(t, db, oidcSecretCanary)
 }
 
-// TestAdminSMTPTestWritesAuditOnSuccessAndFailure 验证 SMTP「测试连接」成功与失败各写一行，
-// actor 正确，且审计行不含提交的 SMTP 口令。
+// TestAdminSMTPTestWritesAuditOnSuccessAndFailure verifies that SMTP "test connection" writes one row on success and one on failure,
+// with the correct actor, and that the audit rows do not contain the submitted SMTP password.
 func TestAdminSMTPTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 	srv, db, adminID, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
 	ctx := context.Background()
 
-	// 成功路径：进程内的假 SMTP 服务（不设账号口令——假服务不实现 AUTH 握手）。
+	// Success path: an in-process fake SMTP server (no account password set — the fake does not implement the AUTH handshake).
 	addr := startFakeSMTP(t)
 	host, port, _ := net.SplitHostPort(addr)
 	okRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{
@@ -164,7 +164,7 @@ func TestAdminSMTPTestWritesAuditOnSuccessAndFailure(t *testing.T) {
 		t.Fatalf("SMTP test (success) result = %+v, want ok", got)
 	}
 
-	// 失败路径：一个当前无人监听的本地地址。
+	// Failure path: a local address nobody is currently listening on.
 	dead := deadAddr(t)
 	dhost, dport, _ := net.SplitHostPort(dead)
 	badRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{

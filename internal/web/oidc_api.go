@@ -6,19 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 本文件是 OIDC 可选登录入口的 SPA 同源 JSON 探测端点。
+// This file is the SPA same-origin JSON probe endpoint for the optional OIDC login entry.
 //
-// SPA 的登录视图无法在构建期知道服务端是否开启了 OIDC，因此需要一个只读探测端点。
-// 它只暴露「是否可用」与稳定的发起地址，绝不回显 issuer / client_id / client_secret 或任何凭据。
+// The SPA login view cannot know at build time whether the server has OIDC enabled, so a read-only probe endpoint is needed.
+// It exposes only "available or not" and the stable start address, and never echoes issuer / client_id / client_secret or any credential.
 
-// registerOIDCRoutes 挂载 OIDC 登录入口的探测端点（登录前流程，无需会话）。
+// registerOIDCRoutes mounts the probe endpoint for the OIDC login entry (a pre-login flow, needing no session).
 func (s *Server) registerOIDCRoutes(router *gin.Engine) {
 	router.GET("/api/v1/auth/oidc", s.oidcInfo)
 }
 
-// oidcInfo 返回 OIDC 登录入口是否可用与发起地址（GET /api/v1/auth/oidc）。
-// enabled 的判定与 oidcStart 的可达性同源（oidcLoadConfig + cfg.Usable），
-// start_url 与 OIDC 登录按钮的 href 一致（/auth/oidc/start），不会出现「页面写着 A、实际发 B」的漂移。
+// oidcInfo returns whether the OIDC login entry is available and the start address (GET /api/v1/auth/oidc).
+// enabled is decided from the same source as oidcStart's reachability (oidcLoadConfig + cfg.Usable),
+// and start_url matches the OIDC login button's href (/auth/oidc/start), so there is no drift of "the page says A while B is actually called".
 func (s *Server) oidcInfo(c *gin.Context) {
 	enabled := false
 	if cfg, err := s.oidcLoadConfig(c); err == nil && cfg.Usable() {

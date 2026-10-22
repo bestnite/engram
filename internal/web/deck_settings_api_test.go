@@ -13,12 +13,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// deckSettingsPath 返回 SPA 卡组设置接口的路径。
+// deckSettingsPath returns the path of the SPA deck settings API.
 func deckSettingsPath(deckPublicID string) string {
 	return "/api/v1/decks/" + deckPublicID + "/settings"
 }
 
-// decodeDeckSettings 解析响应体；失败即终止测试。
+// decodeDeckSettings decodes the response body; terminates the test on failure.
 func decodeDeckSettings(t *testing.T, raw []byte) deckSettingsResponse {
 	t.Helper()
 	var body deckSettingsResponse
@@ -28,7 +28,7 @@ func decodeDeckSettings(t *testing.T, raw []byte) deckSettingsResponse {
 	return body
 }
 
-// seedQueueCards 写入 n 张新卡与 m 张到期的 review 卡，供队列/额度断言使用。
+// seedQueueCards writes n new cards and m due review cards, for the queue/quota assertions.
 func seedQueueCards(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newCards, dueCards int) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -47,8 +47,8 @@ func seedQueueCards(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newCards,
 	}
 }
 
-// TestDeckSettingsOwnerViewReportsCapsAndUsage 是设置接口的读验收：owner 拿到的
-// new_per_day / reviews_per_day 是库里的原值，今日已用/剩余来自 schedule.DeckBudgets。
+// TestDeckSettingsOwnerViewReportsCapsAndUsage is the read acceptance test for the settings API: what the owner gets for
+// new_per_day / reviews_per_day are the raw DB values, and today's used/remaining comes from schedule.DeckBudgets.
 func TestDeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA settings deck")
@@ -56,7 +56,7 @@ func TestDeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 		store.DeckCaps{NewPerDay: 5, ReviewsPerDay: 10}); err != nil {
 		t.Fatalf("SetCaps: %v", err)
 	}
-	// 今日已引入 2 张新卡、复习 3 张 → 新卡剩余 3、复习剩余 7。
+	// 2 new cards introduced today and 3 reviews → 3 new cards remaining, 7 reviews remaining.
 	seedTodayUsage(t, db, ownerID, deck.ID, 2, 3)
 
 	rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), cookies)
@@ -81,8 +81,8 @@ func TestDeckSettingsOwnerViewReportsCapsAndUsage(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsUpdateTakesEffectAndAudits 是写验收：PATCH 改小上限后库里的两列
-// 立刻变成提交值，队列随之变小，并留一条 deck.caps_change 审计。
+// TestDeckSettingsUpdateTakesEffectAndAudits is the write acceptance test: after a PATCH lowers the caps, the two DB columns
+// immediately become the submitted values, the queue shrinks accordingly, and a deck.caps_change audit row is left behind.
 func TestDeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA capped deck")
@@ -117,8 +117,8 @@ func TestDeckSettingsUpdateTakesEffectAndAudits(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsZeroRoundTripsAsUnlimited 断言 0 原样落库并显式表达「不限」：
-// 响应里 new_per_day=0 且 unlimited=true，队列不再封顶。
+// TestDeckSettingsZeroRoundTripsAsUnlimited asserts 0 is persisted as-is and explicitly expressed as "unlimited":
+// the response has new_per_day=0 and unlimited=true, and the queue is no longer capped.
 func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA unlimited deck")
@@ -136,7 +136,7 @@ func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH 0/0 = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	// 0 必须原样存成 0，不能被 store 默认值（20/200）覆盖。
+	// 0 must be stored as 0 as-is and must not be overridden by the store defaults (20/200).
 	if caps := deckCapsFromDB(t, db, deck.ID); caps.NewPerDay != 0 || caps.ReviewsPerDay != 0 {
 		t.Fatalf("stored caps = %d/%d, want 0/0 (0 means unlimited, not the default)", caps.NewPerDay, caps.ReviewsPerDay)
 	}
@@ -155,8 +155,8 @@ func TestDeckSettingsZeroRoundTripsAsUnlimited(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRejectsNonMember 是必测负例：与卡组无关的用户读不了也改不了，且列值不变、
-// 不写 deck.caps_change 审计。
+// TestDeckSettingsRejectsNonMember is a mandatory negative case: a user unrelated to the deck can neither read nor change it, the column values stay unchanged,
+// and no deck.caps_change audit row is written.
 func TestDeckSettingsRejectsNonMember(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA owned deck")
@@ -184,7 +184,7 @@ func TestDeckSettingsRejectsNonMember(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRequiresCSRF 是必测负例：缺 CSRF 的 PATCH 被中间件挡下，列值不变。
+// TestDeckSettingsRequiresCSRF is a mandatory negative case: a PATCH without CSRF is stopped by the middleware and the column values stay unchanged.
 func TestDeckSettingsRequiresCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA csrf deck")
@@ -207,8 +207,8 @@ func TestDeckSettingsRequiresCSRF(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRejectsInvalidInput 是必测负例：非数字 / 负数 / 缺字段 / 空体一律
-// 400、不写库、不写审计。
+// TestDeckSettingsRejectsInvalidInput is a mandatory negative case: non-numeric / negative / missing field / empty body are always
+// 400, with no DB write and no audit row.
 func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 	cases := []struct {
 		name string
@@ -236,7 +236,7 @@ func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 			if caps := deckCapsFromDB(t, db, deck.ID); caps.NewPerDay != 6 || caps.ReviewsPerDay != 6 {
 				t.Errorf("caps changed on invalid input: got %d/%d, want 6/6", caps.NewPerDay, caps.ReviewsPerDay)
 			}
-			// 被拒的请求零副作用：连审计都不该写。
+			// A rejected request has zero side effects: not even an audit row should be written.
 			if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckCaps); err != nil {
 				t.Fatalf("count audit rows: %v", err)
 			} else if n != 0 {
@@ -246,7 +246,7 @@ func TestDeckSettingsRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRequiresSession 断言匿名访问拿到 401，而不是 SSR 页面的 303 跳转。
+// TestDeckSettingsRequiresSession asserts anonymous access gets 401 rather than an SSR page's 303 redirect.
 func TestDeckSettingsRequiresSession(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA anon deck")
@@ -267,8 +267,8 @@ func TestDeckSettingsRequiresSession(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsSwitchesPreset 是卡组切换调度的写验收：PATCH 带 preset_id 时卡组改按
-// 新预设排程，响应回显新值，并且留下一条 deck.preset_change 审计。
+// TestDeckSettingsSwitchesPreset is the write acceptance test for switching a deck's schedule: when a PATCH carries preset_id the deck is scheduled by
+// the new preset, the response echoes the new value, and a deck.preset_change audit row is left behind.
 func TestDeckSettingsSwitchesPreset(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA switchable deck")
@@ -300,8 +300,8 @@ func TestDeckSettingsSwitchesPreset(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsRejectsForeignPreset 是必测负例：挂别人的预设会连带把他人调好的
-// 排程参数读出来，必须 400 拒绝，且卡组的 preset_id 一个字节都不动、不写审计。
+// TestDeckSettingsRejectsForeignPreset is a mandatory negative case: attaching someone else's preset would also read out their tuned
+// scheduling parameters, so it must be rejected with 400, with the deck's preset_id not moving a single byte and no audit row written.
 func TestDeckSettingsRejectsForeignPreset(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA foreign preset deck")
@@ -346,9 +346,9 @@ func TestDeckSettingsRejectsForeignPreset(t *testing.T) {
 	}
 }
 
-// TestDeckSettingsMemberEditsOwnSettings 断言共享成员可以打开卡组设置并修改**自己的**学习设置：
-// 成员看到的是自己的默认预设与默认上限，修改只写成员自己的设置，属主的卡组列与预设不变；
-// 成员挂属主的预设被拒（反面）。
+// TestDeckSettingsMemberEditsOwnSettings asserts a sharing member can open the deck settings and change **their own** study settings:
+// the member sees their own default preset and default caps, the change writes only the member's own settings, and the owner's deck columns and preset stay unchanged;
+// a member attaching the owner's preset is rejected (the counter-case).
 func TestDeckSettingsMemberEditsOwnSettings(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA shared settings deck")
@@ -359,7 +359,7 @@ func TestDeckSettingsMemberEditsOwnSettings(t *testing.T) {
 	memberID, memberCookies, memberCSRF := createUserAndLogin(t, srv, db, "settings_member")
 	grantRole(t, srv, deck.ID, memberID, store.RoleReader, ownerCookies, ownerCSRF)
 
-	// 页面路径对成员同样开放（拿到应用壳）。
+	// The page path is open to members too (they get the app shell).
 	assertShell(t, getWithCookies(t, srv, "/decks/"+deck.PublicID+"/settings", memberCookies))
 
 	rec := getWithCookies(t, srv, deckSettingsPath(deck.PublicID), memberCookies)

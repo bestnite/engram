@@ -12,12 +12,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 SPA 注册与首个管理员引导：GET /register、GET /setup 应用壳，
-// 以及 POST /api/v1/auth/register、POST /api/v1/auth/setup 两个 JSON 端点。
-// 安全语义与 SSR 表单一致：会话前双提交 CSRF、注册策略/邮箱白名单/邀请事务、引导一次性
-// 管理员门、成功不建立会话。全部走真实路由与 SQLite，不 mock 数据库。
+// This file covers SPA registration and first-admin bootstrap: the GET /register and GET /setup app shells,
+// plus the two JSON endpoints POST /api/v1/auth/register and POST /api/v1/auth/setup.
+// Security semantics match the SSR forms: pre-session double-submit CSRF, registration policy/email allowlist/invite transaction, the one-time
+// bootstrap admin gate, and no session established on success. Everything runs through the real routes and SQLite, with no mocked database.
 
-// apiErrorCode 从 JSON 错误包壳里取稳定英文 code。
+// apiErrorCode extracts the stable English code from a JSON error envelope.
 func apiErrorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var env struct {
@@ -31,7 +31,7 @@ func apiErrorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return env.Error.Code
 }
 
-// preSessionPair 走一次 GET 拿到会话前双提交 cookie 与镜像 token，供 JSON 写请求使用。
+// preSessionPair performs one GET to obtain the pre-session double-submit cookie and the mirror token, for use by JSON write requests.
 func preSessionPair(t *testing.T, srv *Server, path string) (*http.Cookie, map[string]string) {
 	t.Helper()
 	rec := get(t, srv, path, nil)
@@ -42,7 +42,7 @@ func preSessionPair(t *testing.T, srv *Server, path string) (*http.Cookie, map[s
 	return cookie, map[string]string{auth.CSRFHeaderName: cookie.Value}
 }
 
-// countUsersByEmail 统计指定邮箱的账号数，用于断言建号是否真的发生。
+// countUsersByEmail counts the accounts with the given email, to assert whether account creation really happened.
 func countUsersByEmail(t *testing.T, srv *Server, email string) int64 {
 	t.Helper()
 	var n int64
@@ -52,8 +52,8 @@ func countUsersByEmail(t *testing.T, srv *Server, email string) int64 {
 	return n
 }
 
-// TestRegisterShellServesAppAndInitializesDoubleSubmitCookie 断言 GET /register
-// 返回应用壳并下发会话前双提交 cookie，但不建立会话、不渲染 SSR 表单。
+// TestRegisterShellServesAppAndInitializesDoubleSubmitCookie asserts GET /register
+// returns the app shell and issues the pre-session double-submit cookie, but establishes no session and renders no SSR form.
 func TestRegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
@@ -86,10 +86,10 @@ func TestRegisterShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	}
 }
 
-// TestSetupShellAvailability 断言 GET /setup 只在没有活跃管理员时返回应用壳，
-// 已存在管理员时返回 404（与 SSR 的一次性管理员门一致）。
+// TestSetupShellAvailability asserts GET /setup returns the app shell only when there is no active admin,
+// and returns 404 when an admin already exists (consistent with SSR's one-time admin gate).
 func TestSetupShellAvailability(t *testing.T) {
-	// 首启窗口：没有管理员，可达，下发双提交 cookie。
+	// First-start window: no admin, reachable, double-submit cookie issued.
 	fresh, _ := newAuthServer(t)
 	rec := get(t, fresh, "/setup", nil)
 	if rec.Code != http.StatusOK {
@@ -105,7 +105,7 @@ func TestSetupShellAvailability(t *testing.T) {
 		t.Errorf("GET /setup must not issue a session cookie")
 	}
 
-	// 已有管理员：引导窗口关闭，必须 404。
+	// An admin already exists: the bootstrap window is closed, must be 404.
 	seeded, _ := newAuthServer(t)
 	seedAdminUser(t, seeded)
 	closed := get(t, seeded, "/setup", nil)
@@ -114,8 +114,8 @@ func TestSetupShellAvailability(t *testing.T) {
 	}
 }
 
-// TestRegisterAPI_CSRFRejections 断言注册 JSON 端点复用会话前双提交中间件：
-// 缺 cookie、缺镜像 token、值不匹配一律 403 csrf_failed，且不建号。
+// TestRegisterAPI_CSRFRejections asserts the registration JSON endpoint reuses the pre-session double-submit middleware:
+// a missing cookie, a missing mirror token or a mismatched value is always 403 csrf_failed, and no account is created.
 func TestRegisterAPI_CSRFRejections(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -125,20 +125,20 @@ func TestRegisterAPI_CSRFRejections(t *testing.T) {
 		"username": "intruder", "email": "intruder@example.com", "password": "Sup3rSecret!",
 	}
 
-	// 1. 无 cookie 且无镜像 token。
+	// 1. No cookie and no mirror token.
 	none := postJSON(srv, "/api/v1/auth/register", body, nil, nil)
 	if none.Code != http.StatusForbidden || apiErrorCode(t, none) != "csrf_failed" {
 		t.Errorf("missing CSRF = %d %s, want 403 csrf_failed", none.Code, apiErrorCode(t, none))
 	}
 
-	// 2. 有 cookie 但无镜像 token。
+	// 2. Cookie present but no mirror token.
 	cookie := &http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken}
 	noHeader := postJSON(srv, "/api/v1/auth/register", body, []*http.Cookie{cookie}, nil)
 	if noHeader.Code != http.StatusForbidden || apiErrorCode(t, noHeader) != "csrf_failed" {
 		t.Errorf("cookie without header = %d %s, want 403 csrf_failed", noHeader.Code, apiErrorCode(t, noHeader))
 	}
 
-	// 3. 有 cookie 但镜像值不匹配。
+	// 3. Cookie present but the mirror value does not match.
 	mismatch := postJSON(srv, "/api/v1/auth/register", body, []*http.Cookie{cookie},
 		map[string]string{auth.CSRFHeaderName: "mismatched-token-value-123456789"})
 	if mismatch.Code != http.StatusForbidden || apiErrorCode(t, mismatch) != "csrf_failed" {
@@ -150,8 +150,8 @@ func TestRegisterAPI_CSRFRejections(t *testing.T) {
 	}
 }
 
-// TestRegisterAPI_PolicyMatrix 断言 JSON 注册端点与 SSR 走同一套策略判定：
-// open 放行、closed 拒绝、invite 无令牌拒绝、白名单不匹配拒绝。
+// TestRegisterAPI_PolicyMatrix asserts the JSON registration endpoint makes the same policy decisions as SSR:
+// open allows, closed rejects, invite without a token rejects, allowlist mismatch rejects.
 func TestRegisterAPI_PolicyMatrix(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -202,8 +202,8 @@ func TestRegisterAPI_PolicyMatrix(t *testing.T) {
 	}
 }
 
-// TestRegisterAPI_SuccessIssuesNoSession 断言注册成功只返回 created=true，
-// 不签发会话 cookie（与 SSR 注册后跳转登录一致）。
+// TestRegisterAPI_SuccessIssuesNoSession asserts a successful registration only returns created=true
+// and issues no session cookie (consistent with SSR redirecting to login after registration).
 func TestRegisterAPI_SuccessIssuesNoSession(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -234,8 +234,8 @@ func TestRegisterAPI_SuccessIssuesNoSession(t *testing.T) {
 	}
 }
 
-// TestRegisterAPI_Invite 断言邀请路径与 SSR 一致：有效邀请建号一次并占用 token，
-// 复用同一 token 返回 403 invite_invalid，且不产生第二个用户。
+// TestRegisterAPI_Invite asserts the invite path matches SSR: a valid invite creates the account once and claims the token,
+// reusing the same token returns 403 invite_invalid and produces no second user.
 func TestRegisterAPI_Invite(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -275,7 +275,7 @@ func TestRegisterAPI_Invite(t *testing.T) {
 	}
 }
 
-// TestRegisterAPI_Validation 断言表单级校验返回稳定 code 且不建号。
+// TestRegisterAPI_Validation asserts form-level validation returns stable codes and creates no account.
 func TestRegisterAPI_Validation(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -306,8 +306,8 @@ func TestRegisterAPI_Validation(t *testing.T) {
 	}
 }
 
-// TestSetupAPI_CreatesFirstAdminAndCloses 断言引导 JSON 端点在没有管理员时创建管理员，
-// 之后同一端点 404（一次性管理员门），且成功不签发会话 cookie。
+// TestSetupAPI_CreatesFirstAdminAndCloses asserts the bootstrap JSON endpoint creates an admin when there is none,
+// after which the same endpoint is 404 (the one-time admin gate), and success issues no session cookie.
 func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	cookie, headers := preSessionPair(t, srv, "/setup")
@@ -329,7 +329,7 @@ func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 		t.Errorf("bootstrap user role = %q, want admin", u.Role)
 	}
 
-	// 已存在管理员：同一端点必须 404，且不创建第二个账号。
+	// An admin already exists: the same endpoint must be 404 and must not create a second account.
 	again := postJSON(srv, "/api/v1/auth/setup", map[string]string{
 		"username": "root2", "email": "root2@example.com", "password": "Sup3rSecret!",
 	}, []*http.Cookie{cookie}, headers)
@@ -341,8 +341,8 @@ func TestSetupAPI_CreatesFirstAdminAndCloses(t *testing.T) {
 	}
 }
 
-// TestSetupAPI_BootstrapEmailFallback 断言请求未填邮箱时采用 BOOTSTRAP_ADMIN_EMAIL，
-// 兜底行为与引导页的应用壳入口一致。
+// TestSetupAPI_BootstrapEmailFallback asserts BOOTSTRAP_ADMIN_EMAIL is used when the request leaves the email blank,
+// with fallback behavior matching the bootstrap page's app shell entry.
 func TestSetupAPI_BootstrapEmailFallback(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	srv.bootstrapEmail = "boot@example.com"
@@ -359,7 +359,7 @@ func TestSetupAPI_BootstrapEmailFallback(t *testing.T) {
 	}
 }
 
-// TestSetupAPI_CSRFRejection 断言引导 JSON 端点同样强制会话前双提交 CSRF。
+// TestSetupAPI_CSRFRejection asserts the bootstrap JSON endpoint likewise enforces pre-session double-submit CSRF.
 func TestSetupAPI_CSRFRejection(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	rec := postJSON(srv, "/api/v1/auth/setup", map[string]string{
@@ -373,13 +373,13 @@ func TestSetupAPI_CSRFRejection(t *testing.T) {
 	}
 }
 
-// TestRegistrationInfoEndpoint 断言 GET /api/v1/auth/registration 与注册端点同源地报告策略：
-// open / invite / closed 原样返回，未设置或未知取值归一为 closed（安全默认）。
-// 该端点是登录前的只读探测：匿名（无 cookie）即可调用，不签发会话 cookie，也不建立会话。
+// TestRegistrationInfoEndpoint asserts GET /api/v1/auth/registration reports the policy from the same source as the registration endpoint:
+// open / invite / closed are returned as-is, and unset or unknown values are normalized to closed (the safe default).
+// This endpoint is a pre-login read-only probe: callable anonymously (no cookie), issuing no session cookie and establishing no session.
 func TestRegistrationInfoEndpoint(t *testing.T) {
 	cases := []struct {
 		name    string
-		setting string // 空串表示不写入设置，走「未设置」路径
+		setting string // empty string means do not write a setting, taking the "unset" path
 		want    string
 	}{
 		{name: "unset falls back to closed", want: auth.PolicyClosed},
@@ -396,7 +396,7 @@ func TestRegistrationInfoEndpoint(t *testing.T) {
 				writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, tc.setting)))
 			}
 
-			// 不带任何 cookie：探测必须对匿名访问者可用。
+			// No cookie at all: the probe must be usable by anonymous visitors.
 			rec := get(t, srv, "/api/v1/auth/registration", nil)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("GET /api/v1/auth/registration status = %d, want 200 (body %s)",
@@ -418,12 +418,12 @@ func TestRegistrationInfoEndpoint(t *testing.T) {
 	}
 }
 
-// TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow 断言探测与提交同源：
-// 没有活跃管理员时注册端点会把这个账号建成管理员（策略不参与判定），探测也必须按 open 作答，
-// 否则新实例上会出现「页面说无法自助注册、提交却能建成管理员」。
+// TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow asserts the probe and submission share one source:
+// with no active admin the registration endpoint makes this account an admin (policy plays no part), so the probe must answer open too,
+// otherwise a new instance would show "the page says self-registration is unavailable but submitting still creates an admin".
 func TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow(t *testing.T) {
 	srv, db := newAuthServer(t)
-	// 策略是 closed，但引导窗口优先于策略——探测要如实报告这一点。
+	// The policy is closed, but the bootstrap window takes precedence over the policy — the probe must report that faithfully.
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, auth.PolicyClosed)))
 
 	rec := get(t, srv, "/api/v1/auth/registration", nil)
@@ -440,7 +440,7 @@ func TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow(t *testing.T) {
 		t.Fatalf("policy during the bootstrap window = %q, want %q", resp.Policy, auth.PolicyOpen)
 	}
 
-	// 提交确实被放行，并且第一个账号是管理员：探测的答案与真实行为一致。
+	// The submission really is allowed and the first account is an admin: the probe's answer matches the real behavior.
 	cookie, headers := preSessionPair(t, srv, "/register")
 	post := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "firstroot", "email": "firstroot@example.com", "password": "Sup3rSecret!",
@@ -456,7 +456,7 @@ func TestRegistrationInfoEndpointMatchesSubmitInBootstrapWindow(t *testing.T) {
 		t.Errorf("bootstrap user role = %q, want admin", u.Role)
 	}
 
-	// 引导窗口关闭后，同一个 closed 策略开始生效，探测随即改口。
+	// Once the bootstrap window closes, the same closed policy takes effect and the probe changes its answer accordingly.
 	after := get(t, srv, "/api/v1/auth/registration", nil)
 	if err := json.Unmarshal(after.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal registration info: %v", err)

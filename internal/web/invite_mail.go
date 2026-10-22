@@ -14,19 +14,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是：邀请邮件投递（B 类协作/授权）。
+// This file is: invite email delivery (type B collaboration/authorization).
 //
-// 设计约束（照，逐条落实）：
-//   - 绝不在请求路径同步发信：一律经 Outbox.Enqueue 入队，由后台 worker 投递。
-//   - 发信失败不得让触发操作失败：建邀请照旧成功，Enqueue 出错只记英文日志并回显提示。
-//   - SMTP 未配置时流程禁用并说明原因：邀请页的「寄到邮箱」入口渲染 mail.not_configured，
-//     提交时也走同一说明文案，绝不静默什么也不做。
-//   - B 类可关：收件人若是本站用户，尊重其对 invite 类型的显式偏好；不是则回落默认（开）。
-//   - 一键退订头属于后续任务，本任务不设置 Message.Headers（保持为空）。
+// Design constraints (applied item by item):
+//   - Never send mail synchronously on the request path: always enqueue via Outbox.Enqueue and let the background worker deliver.
+//   - A failed send must not fail the triggering operation: creating the invite still succeeds, and an Enqueue error only logs in English and echoes a notice.
+//   - With SMTP unconfigured the flow is disabled and gives the reason: the invite page's "send to email" entry renders mail.not_configured,
+//     and submission uses the same explanatory copy — never silently do nothing.
+//   - Type B is optional: if the recipient is a user of this site, respect their explicit preference for the invite type; otherwise fall back to the default (on).
+//   - The one-click unsubscribe header is a later task; this task sets no Message.Headers (kept empty).
 //
-// 邀请的存储 / 校验 / 接受逻辑完全不变；这里只在既有创建流程后追加「寄邮件」这一步。
+// Invite storage / validation / acceptance logic is completely unchanged; this only appends the "mail the invite" step after the existing creation flow.
 
-// 邀请邮件回显给管理员的 notice 码（经 regNotice 翻成语言包文案）。
+// Notice codes for the invite email echoed back to the admin (turned into language-pack copy by regNotice).
 const (
 	noticeInviteMailQueued       = "invite_mail_queued"
 	noticeInviteMailUnconfigured = "invite_mail_unconfigured"
@@ -34,29 +34,29 @@ const (
 	noticeInviteMailOptedOut     = "invite_mail_opted_out"
 )
 
-// sendInviteEmail 在一条邀请创建成功后决定是否把它寄给被邀请人，并在需要时入队。
+// sendInviteEmail decides, after an invite has been created successfully, whether to mail it to the invitee, and enqueues it when needed.
 //
-// 返回值是供页面回显的 notice 码；返回空串表示调用方沿用 invite_created：
-//   - noticeInviteMailQueued：已入队，等待 worker 投递；
-//   - noticeInviteMailUnconfigured：请求寄信但 SMTP 未配置（附 mail.not_configured 说明）；
-//   - noticeInviteMailFailed：入队失败（邀请仍然创建成功）；
-//   - noticeInviteMailOptedOut：收件人已关闭该类邮件（邀请仍然创建成功）。
+// The return value is the notice code for the page to echo; an empty string means the caller keeps invite_created:
+//   - noticeInviteMailQueued: enqueued, waiting for the worker to deliver;
+//   - noticeInviteMailUnconfigured: mail requested but SMTP unconfigured (with the mail.not_configured explanation);
+//   - noticeInviteMailFailed: enqueue failed (the invite is still created successfully);
+//   - noticeInviteMailOptedOut: the recipient has turned this class of mail off (the invite is still created successfully).
 //
-// 关键：无论返回什么，邀请本身都已落库——发信的任何问题都不能让触发操作失败。
+// Key: whatever is returned, the invite itself is already persisted — no mail problem may fail the triggering operation.
 func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store.Invite) string {
 	if inv.Email == nil || strings.TrimSpace(*inv.Email) == "" {
-		// 没有收件地址就没有可寄的对象；保持原有的手工拷链接路径。
+		// With no recipient address there is nothing to mail; keep the existing manual copy-the-link path.
 		return ""
 	}
 	to := strings.TrimSpace(*inv.Email)
 	ctx := c.Request.Context()
 
-	// SMTP 未配置：入口在页面上已渲染说明，这里再兜底一次，绝不静默丢弃。
+	// SMTP unconfigured: the entry point already renders the explanation on the page; cover it once more here and never silently drop it.
 	if s.mail == nil || !s.mail.Configured() {
 		return noticeInviteMailUnconfigured
 	}
 
-	// 偏好门禁：收件人若是本站用户，尊重其对 B 类（invite）的显式选择；否则回落目录默认（开）。
+	// Preference gate: if the recipient is a user of this site, respect their explicit choice for type B (invite); otherwise fall back to the catalog default (on).
 	recipient := s.inviteRecipient(ctx, to)
 	var userID uint64
 	if recipient != nil {
@@ -64,7 +64,7 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 	}
 	choices, err := store.NewEmailPrefStore(s.db).Choices(ctx, userID)
 	if err != nil {
-		// 读偏好失败不阻断：回落默认（B 类默认开）继续尝试入队，但绝不静默。
+		// A failed preference read does not block: fall back to the default (type B defaults on) and keep trying to enqueue, but never silently.
 		s.logger.Error("invite mail: load email preferences failed", "user_id", userID, "error", err)
 		choices = map[string]bool{}
 	}
@@ -72,7 +72,7 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 		return noticeInviteMailOptedOut
 	}
 
-	// 文案语言：已知收件人用其偏好语言，否则沿用管理员当前请求的语言。
+	// Copy language: a known recipient gets their preferred language, otherwise the admin's current request language is used.
 	recipientLoc := loc
 	if recipient != nil {
 		if code := strings.TrimSpace(recipient.Locale); code != "" {
@@ -82,8 +82,8 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 
 	link := s.securityAbsoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token))
 
-	// 收件人是本站用户时，这封 B 类（可选类型）邮件带退订入口：令牌指名 invite
-	// 这一个类型，用户不登录即可关掉它。非本站用户没有偏好可关，故不带。
+	// When the recipient is a user of this site, this type B (optional type) mail carries an unsubscribe
+	// entry: the token names the single invite type, so the user can turn it off without logging in. Non-users have no preference to turn off, so none is attached.
 	unsubURL := ""
 	if recipient != nil {
 		unsubURL = s.optionalUnsubscribeLink(c, recipient.ID, mail.TypeInvite)
@@ -95,15 +95,15 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 		if errors.Is(err, mail.ErrNotConfigured) {
 			return noticeInviteMailUnconfigured
 		}
-		// 入队失败只记日志：邀请已经创建，不能因此让整个操作失败。
+		// An enqueue failure is only logged: the invite is already created, and the whole operation must not fail because of it.
 		s.logger.Error("invite mail: enqueue failed", "error", err)
 		return noticeInviteMailFailed
 	}
 	return noticeInviteMailQueued
 }
 
-// inviteRecipient 按邮箱找本站用户；不是本站用户（或查询出错）时返回 nil。
-// 邮箱大小写不敏感：用户表里的邮箱在注册时已归一化为小写。
+// inviteRecipient finds the site user by email; returns nil when it is not a site user (or the lookup fails).
+// Email matching is case-insensitive: emails in the users table are normalized to lowercase at signup.
 func (s *Server) inviteRecipient(ctx context.Context, email string) *store.User {
 	if s.users == nil {
 		return nil
@@ -115,14 +115,14 @@ func (s *Server) inviteRecipient(ctx context.Context, email string) *store.User 
 	return u
 }
 
-// inviteMessage 组装邀请邮件。unsubURL 非空时把它渲染进正文页脚与纯文本段末尾——
-// RFC 8058 头只有邮件客户端看得到，正文里也要有一个可点的退订入口。
+// inviteMessage assembles the invite email. When unsubURL is non-empty it is rendered into the body footer and the end of the plain-text part —
+// the RFC 8058 header is only visible to mail clients, so the body needs a clickable unsubscribe entry too.
 func (s *Server) inviteMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expiresAt *time.Time, unsubURL string) mail.Message {
 	vars := mail.Vars{"site": site, "url": link}
 	if expiresAt != nil {
 		vars["expires"] = expiresAt.UTC().Format("2006-01-02 15:04 UTC")
 	}
-	// 有效期是可选变量：没有那一行就不出现（函数按变量判定，不另设参数）。
+	// The expiry is an optional variable: without that line it does not appear (the function decides on the variable, with no extra parameter).
 	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeInvite, mail.VariantDefault, loc.Tf, vars)
 	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars, fbSubject, fbText, unsubURL)
 	return mail.Message{To: to, Type: string(mail.TypeInvite), Subject: subject, TextBody: text, HTMLBody: htmlBody}

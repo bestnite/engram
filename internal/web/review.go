@@ -15,24 +15,24 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 复习页的规范路径。评分与动作走 SPA 的同源 JSON 端点（/api/v1/review/*）。
+// Canonical path of the review page. Grading and actions go through the SPA's same-origin JSON endpoints (/api/v1/review/*).
 const reviewPagePath = "/review"
 
-// registerReviewRoutes 挂载复习页。
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// registerReviewRoutes mounts the review page.
+// Skips when the dependencies are not wired, so M0-stage tests can still construct a Server.
 func (s *Server) registerReviewRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.cards == nil || s.presets == nil {
 		return
 	}
-	// GET /review 返回应用壳：reviewPageRoute 先按原有的会话与卡组范围判定鉴权，再交出应用壳，
-	// 由客户端路由渲染复习页。评分与动作走 SPA 的 JSON 端点
-	// （PATCH/POST /api/v1/review/*），不再有分离的 htmx 评分端点。
+	// GET /review returns the app shell: reviewPageRoute first applies the usual session and deck-scope authorization checks, then hands out the app shell,
+	// and the client router renders the review page. Grading and actions go through the SPA's JSON endpoints
+	// (PATCH/POST /api/v1/review/*); there is no separate htmx grading endpoint any more.
 	router.GET(reviewPagePath, s.reviewPageRoute)
 }
 
-// reviewPageRoute 提供 GET /review：返回应用壳，由客户端路由渲染复习页，
-// 数据仍走既有 JSON 端点。会话与卡组范围判定先于切壳执行——
-// 非法 deck 参数 400、范围里出现读不到的卡组 403/404，不因返回应用壳而放行。
+// reviewPageRoute serves GET /review: it returns the app shell, and the client router renders the review page,
+// while data still goes through the existing JSON endpoints. Session and deck-scope decisions run before switching to the shell —
+// an illegal deck parameter is 400, an unreadable deck in the scope is 403/404, and neither is let through just because the app shell is returned.
 func (s *Server) reviewPageRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -44,18 +44,18 @@ func (s *Server) reviewPageRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// reviewScope 是一次复习请求的范围：deckIDs 为空表示全库（不按卡组过滤）；tags 非空时只取
-// 带有其中任一标签的卡（此时 deckIDs 恰好一个，由 api.ReviewTags 校验）。
-// 范围由 URL 的可重复 deck / tag 参数决定，并由 SPA 的 JSON 请求原样带回。
+// reviewScope is the scope of one review request: an empty deckIDs means the whole library (no deck filtering); when tags is non-empty only cards
+// carrying any one of those tags are taken (in that case deckIDs is exactly one, validated by api.ReviewTags).
+// The scope is decided by the repeatable deck / tag URL parameters and carried back verbatim by the SPA's JSON requests.
 type reviewScope struct {
 	deckIDs []uint64
 	tags    []string
 }
 
-// deckScopeFromValues 解析可重复的 deck 参数值（对外 id 字符串）：去重、跳过空串；任一值
-// 形状非法即 400、形状合法但库里不存在即 404。随后逐个校验 loadDeckForRole(..., RoleReader)：
-// 任何缺失或无权限的卡组都让整次请求失败（404/403，由该 helper 写出），绝不静默丢弃某个卡组。
-// rawTags 经 api.ReviewTags 规范化并校验：带标签却不是恰好一个卡组即 400。
+// deckScopeFromValues parses the repeatable deck parameter values (public id strings): dedupes, skips empty strings; any value with
+// an illegal shape is 400, a legal shape that does not exist in the store is 404. It then validates each one with loadDeckForRole(..., RoleReader):
+// any missing or unauthorized deck fails the whole request (404/403, written by that helper), never silently dropping a deck.
+// rawTags is normalized and validated via api.ReviewTags: tags with anything but exactly one deck is 400.
 func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw, rawTags []string) (reviewScope, bool) {
 	ids := make([]uint64, 0, len(raw))
 	seen := make(map[uint64]bool, len(raw))
@@ -92,30 +92,30 @@ func (s *Server) deckScopeFromValues(c *gin.Context, user *store.User, raw, rawT
 	return reviewScope{deckIDs: ids, tags: tags}, true
 }
 
-// parseDeckScope 解析 GET 查询串里的可重复 deck / tag 参数（复习页整页请求）。
+// parseDeckScope parses the repeatable deck / tag parameters in the GET query string (full-page review requests).
 func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, bool) {
 	return s.deckScopeFromValues(c, user, c.QueryArray("deck"), c.QueryArray("tag"))
 }
 
-// ReviewCardView 是当前卡片的两面渲染结果与标识。
-// FrontHTML / BackHTML 一定来自 internal/render 的白名单清洗，SPA 可安全地按原样嵌入。
+// ReviewCardView is the rendered two sides of the current card plus its identity.
+// FrontHTML / BackHTML always come from internal/render's allowlist sanitizing, so the SPA can embed them as-is safely.
 type ReviewCardView struct {
 	CardID string
 	NoteID string
 	DeckID string
-	// ExpectedVersion 是提交时携带的乐观锁版本（新卡为 "0"）。
+	// ExpectedVersion is the optimistic-lock version carried on submit ("0" for a new card).
 	ExpectedVersion string
 	Template        string
 	FrontHTML       string
 	BackHTML        string
-	// Blanks 是逐空/逐项作答题（挖空题、列表题）每个输入框的提示，按顺序、无提示为空串；
-	// 复习页据此决定输入框个数。其它题型为 nil。
+	// Blanks holds the hint for each input box of per-blank/per-item answer types (cloze questions, list questions), in order, empty string when there is no hint;
+	// the review page uses it to decide the number of input boxes. nil for other question types.
 	Blanks []string
-	// EditHref 指向该 note 的编辑页，供 e 键跳转。
+	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
 }
 
-// cardView 渲染一张卡的正反面并取乐观锁版本。
+// cardView renders both sides of a card and fetches the optimistic-lock version.
 func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.QueueItem) (*ReviewCardView, error) {
 	card, err := s.cards.ByID(ctx, item.CardID)
 	if err != nil {
@@ -138,9 +138,9 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
-	// 声明了 OptionsField 的题型（选择题）由复习页把选项渲染成作答控件；正面 Extra 里的
-	// 同一组选项若再拼进 FrontHTML，页面上就会出现一遍纯文本、一遍按钮。预览与分享页没有
-	// 作答控件，仍经 renderSide 展示 Extra，所以只在复习视图这里去掉。
+	// For question types that declare OptionsField (choice questions) the review page renders the options as answer controls; if the same set of
+	// options is also concatenated into FrontHTML, the page shows them twice — once as plain text, once as buttons. The preview and share pages have no
+	// answer controls and still show Extra via renderSide, so they are only dropped here in the review view.
 	if t.Describe().OptionsField != "" {
 		front.Extra = nil
 	}
@@ -174,13 +174,13 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	}, nil
 }
 
-// blankHinter 是逐空/逐项作答题型的可选能力：给出一张卡每个输入框的提示。
-// 题型知道一张卡要几个输入框，复习页不重新解析字段。
+// blankHinter is the optional capability of per-blank/per-item answer types: give the hint for each input box of a card.
+// The question type knows how many input boxes a card needs; the review page does not re-parse the fields.
 type blankHinter interface {
 	BlankHints(card cardtype.Card) []string
 }
 
-// stateVersion 读取 (card_id, user_id) 的乐观锁版本；没有状态行的新卡返回 0。
+// stateVersion reads the optimistic-lock version for (card_id, user_id); a new card with no state row returns 0.
 func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	var st store.CardState
 	err := s.db.WithContext(ctx).Where("card_id = ? AND user_id = ?", cardID, userID).Take(&st).Error
@@ -190,8 +190,8 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	return st.Version
 }
 
-// graderFor 用可选窄接口断言判断题型是否支持机器判分。
-// 判分能力是可选能力，核心管线不依赖它：未实现 Grader 的题型返回 false，仍走四档自评。
+// graderFor decides whether a question type supports machine grading by asserting an optional narrow interface.
+// Grading is an optional capability and the core pipeline does not depend on it: a type that does not implement Grader returns false and still goes through the four-grade self-assessment.
 func graderFor(kind string) (cardtype.Grader, bool) {
 	t, ok := cardtype.Lookup(kind)
 	if !ok {
@@ -201,7 +201,7 @@ func graderFor(kind string) (cardtype.Grader, bool) {
 	return g, ok
 }
 
-// numberText 以最简形式输出数值（解析后的作答），避免 50 显示成 50.000000。
+// numberText prints a number (a parsed answer) in its simplest form, so 50 does not show up as 50.000000.
 func numberText(v any) string {
 	switch n := v.(type) {
 	case float64:

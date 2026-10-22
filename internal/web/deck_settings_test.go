@@ -12,8 +12,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ddAfterLabel 返回页面上某个 <dt>标签</dt> 之后第一个 </dd> 内的文本。
-// 设置页的今日额度是 dt/dd 成对渲染的，用它按本地化标签取值，避免按数字猜位置。
+// ddAfterLabel returns the text inside the first </dd> after a given <dt>label</dt> on the page.
+// The settings page renders today's quota as dt/dd pairs, so this looks values up by localized label instead of guessing positions from numbers.
 func ddAfterLabel(body, label string) string {
 	idx := strings.Index(body, ">"+label+"</dt>")
 	if idx < 0 {
@@ -37,9 +37,9 @@ func ddAfterLabel(body, label string) string {
 	return rest[:end]
 }
 
-// seedTodayUsage 写入今日的已用记录：newUsed 次「引入新卡」（state_before=0）与
-// reviewUsed 次「复习」（state_before<>0）。每张卡都配一行未来的 card_states，
-// 避免它们以「新卡」身份再次入队而干扰计数。
+// seedTodayUsage writes today's usage records: newUsed occurrences of "new card introduced" (state_before=0) and
+// reviewUsed occurrences of "review" (state_before<>0). Each card also gets a future card_states row,
+// so that they do not re-enter the queue as "new cards" and skew the counts.
 func seedTodayUsage(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newUsed, reviewUsed int) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -64,8 +64,8 @@ func seedTodayUsage(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newUsed, 
 	seed(reviewUsed, int(schedule.StateReview))
 }
 
-// deckQueueCountsNow 用真实队列（Build(DeckID=d)）数一个卡组今天能刷的新卡与复习卡
-// （复习数含学习/再学习到期卡），与列表页那两个数同源。
+// deckQueueCountsNow uses the real queue (Build(DeckID=d)) to count the new and review cards a deck can study today
+// (the review count includes due learning/relearning cards), from the same source as the two numbers on the list page.
 func deckQueueCountsNow(t *testing.T, srv *Server, db *gorm.DB, userID, deckID uint64) (newN, reviewN int) {
 	t.Helper()
 	preset := store.NewPreset(userID, "counts preset")
@@ -90,7 +90,7 @@ func deckQueueCountsNow(t *testing.T, srv *Server, db *gorm.DB, userID, deckID u
 	return newN, reviewN
 }
 
-// deckCapsFromDB 回读卡组的两列上限，用于断言「未写库」或写入值。
+// deckCapsFromDB reads back the deck's two cap columns, to assert "nothing was written" or the written values.
 func deckCapsFromDB(t *testing.T, db *gorm.DB, deckID uint64) store.DeckCaps {
 	t.Helper()
 	caps, err := store.NewDeckStore(db).Caps(context.Background(), deckID)

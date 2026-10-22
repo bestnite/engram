@@ -1,11 +1,11 @@
-// Package mcp 提供内置 MCP server：同进程 HTTP（POST /mcp，streamable HTTP），
-// 复用用户级 API Key 鉴权与 internal/api 的 service 层。
+// Package mcp provides the built-in MCP server: in-process HTTP (POST /mcp, streamable HTTP),
+// reusing user-level API key authentication and the internal/api service layer.
 //
-// 只提供 HTTP，不提供 stdio（多用户服务没有“进程即身份”的语义）。
-// 工具不封装业务逻辑，只做参数校验并调用与 REST 完全相同的方法。
+// It offers HTTP only, no stdio (a multi-user service has no "process equals identity" semantics).
+// The tools do not wrap business logic; they only validate arguments and call exactly the same methods as REST.
 //
-// /mcp 只接受 API key 通道：会话 cookie 是浏览器通道，与机器接口的撤销和作用域语义
-// 不同，因此没有 key 的请求一律拒绝。每个请求都按它本次携带的 key 重算身份。
+// /mcp accepts the API key channel only: a session cookie is a browser channel with different revocation and
+// scope semantics from the machine interface, so requests without a key are always refused. Every request recomputes identity from the key it carries.
 package mcp
 
 import (
@@ -25,44 +25,44 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// version 由构建注入；未注入时为 dev，仅用于 MCP 实现信息。
+// version is injected at build time; dev when not injected, used only for MCP implementation info.
 var version = "dev"
 
-// Deps 是 MCP server 的显式依赖：复用已装配好的 REST API（同一批 service 方法）。
+// Deps are the MCP server's explicit dependencies: it reuses the already assembled REST API (the same service methods).
 type Deps struct {
 	API    *api.API
 	Logger *slog.Logger
 }
 
-// Server 持有 streamable HTTP handler；每个请求按其自身携带的 API key 重算身份与工具子集。
+// Server holds the streamable HTTP handler; each request recomputes identity and the tool subset from the API key it carries itself.
 type Server struct {
 	api     *api.API
 	logger  *slog.Logger
 	handler *sdkmcp.StreamableHTTPHandler
 
-	// mu 保护 sessions。sessions 记录每个会话握手（initialize）时的用户与登记时刻，
-	// 供后续请求校验会话属主（规则 2）。SDK 自己持有会话对象，这张表只额外记属主。
-	// 表有容量上限（mcpSessionCap），超出时按登记时刻淘汰最旧条目，避免长期运行无界增长。
+	// mu protects sessions. sessions records the user and the registration moment of each session handshake (initialize),
+	// for later requests to verify session ownership (rule 2). The SDK holds the session object itself; this table only records the owner additionally.
+	// The table has a capacity cap (mcpSessionCap); when exceeded, the oldest entry by registration time is evicted, so long-running processes do not grow without bound.
 	mu       sync.Mutex
 	sessions map[string]sessionEntry
 
-	// clock 取当前时间；生产为 time.Now，测试可注入以获得确定的登记时刻。
+	// clock gives the current time; time.Now in production, injectable in tests to get a deterministic registration time.
 	clock func() time.Time
 }
 
-// sessionEntry 是属主表里的一条会话记录：握手用户 + 登记时刻（seenAt 用于容量淘汰）。
+// sessionEntry is one session record in the owner table: the handshake user + the registration time (seenAt is used for capacity eviction).
 type sessionEntry struct {
 	userID uint64
 	seenAt time.Time
 }
 
-// mcpSessionCap 是属主表的容量上限。客户端每开一个会话就登记一条，正常关闭（DELETE 2xx）
-// 或会话已被 SDK 遗忘（404）时清理；上限是兜底，防止客户端从不发 DELETE 的路径把表撑到无界。
-// 采用「淘汰最旧 seenAt」而非「整批丢弃」：新会话比旧会话更可能仍在使用，逐条按时间淘汰
-// 保留的总是最近的一批活跃会话。
+// mcpSessionCap is the capacity cap of the owner table. The client registers one entry per session opened, and the entry is cleaned up on a normal close (DELETE 2xx)
+// or when the SDK has already forgotten the session (404); the cap is a backstop, so a client that never sends DELETE cannot grow the table without bound.
+// It uses "evict the oldest seenAt" rather than "discard the whole batch": a new session is more likely still in use than an old one, so evicting
+// one at a time by time always keeps the most recently active batch of sessions.
 const mcpSessionCap = 4096
 
-// New 构造 MCP server；API 必填（业务逻辑全部复用 api 的 service 层）。
+// New builds the MCP server; API is required (all business logic reuses api's service layer).
 func New(deps Deps) (*Server, error) {
 	if deps.API == nil {
 		return nil, errors.New("mcp: Deps.API is required")
@@ -72,9 +72,9 @@ func New(deps Deps) (*Server, error) {
 		logger = slog.Default()
 	}
 	s := &Server{api: deps.API, logger: logger, sessions: map[string]sessionEntry{}, clock: time.Now}
-	// getServer 只在建立会话时被调用一次：从握手请求的上下文取身份，按当时 scope 构建
-	// 工具集。会话内后续请求复用这个 Server，因此它闭包里的身份只作为属主与用户来源；
-	// 工具可见性与调用权限每次请求另按本次 key 重算（见 requestIdentity）。
+	// getServer is called only once, when a session is established: it takes identity from the handshake request's context and builds
+	// the tool set for the scope in force at that time. Later requests in the session reuse this Server, so the identity in its closure serves only as owner and user source;
+	// tool visibility and invocation permission are recomputed per request from that request's key (see requestIdentity).
 	s.handler = sdkmcp.NewStreamableHTTPHandler(func(r *http.Request) *sdkmcp.Server {
 		id, _ := IdentityFrom(r.Context())
 		return s.build(id)
@@ -82,24 +82,24 @@ func New(deps Deps) (*Server, error) {
 	return s, nil
 }
 
-// mcpSessionHeader 是 streamable HTTP 规范里传递会话号的请求/响应头。
+// mcpSessionHeader is the request/response header carrying the session number in the streamable HTTP spec.
 const mcpSessionHeader = "Mcp-Session-Id"
 
-// 下面两个头是本项目内部约定：ServeHTTP 每次请求按当前 key 写入，处理器据此重算身份。
-// SDK 把当前 HTTP 请求的头随请求交给处理器（RequestExtra.Header），这是把“本次请求
-// 实际携带的 key”送到处理器的通道。ServeHTTP 总是覆盖同名头，客户端无法伪造。
+// The next two headers are this project's internal convention: ServeHTTP writes them on each request from the current key, and handlers use them to recompute identity.
+// The SDK passes the current HTTP request's headers to the handler with the request (RequestExtra.Header), which is the channel for getting "the key this
+// request actually carries" to the handler. ServeHTTP always overwrites headers of the same name, so a client cannot forge them.
 const (
 	requestKeyIDHeader  = "X-Engram-Mcp-Api-Key-Id"
 	requestScopesHeader = "X-Engram-Mcp-Scopes"
 )
 
-// ServeHTTP 实现 http.Handler；调用方必须先完成鉴权并把身份写入请求上下文
-// （见 WithIdentity），复用与 REST 相同的 API Key 校验、限流与审计。
+// ServeHTTP implements http.Handler; the caller must first complete authentication and put the identity into the request context
+// (see WithIdentity), reusing the same API key validation, rate limiting and auditing as REST.
 //
-// 它额外强制两条规则：
-//  1. /mcp 只接受 API Key：没有 key 的身份（会话 cookie 通道）一律 401。
-//  2. 会话内每个请求的 key 属主必须等于握手用户：会话号只证明“同一个客户端”，
-//     不证明“同一个用户”，否则 B 用自己的 key 加 A 的会话号就能借用 A 的身份。
+// It additionally enforces two rules:
+//  1. /mcp accepts API keys only: an identity without a key (the session cookie channel) is always 401.
+//  2. Within a session, every request's key owner must equal the handshake user: the session number only proves "the same client",
+//     not "the same user", otherwise B could use their own key with A's session number to borrow A's identity.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := IdentityFrom(r.Context())
 	if !ok || id.KeyID == 0 {
@@ -114,8 +114,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session user mismatch", http.StatusForbidden)
 		return
 	}
-	// 规则 3：把本次请求的 key 身份带上。工具可见性与权限按本次 key 计算，而不是用
-	// 握手时固化那份——同一用户换一把低 scope key 复用高 scope 会话时不会提权。
+	// Rule 3: carry the identity of this request's key. Tool visibility and permissions are computed from this request's key, not from the
+	// copy fixed at handshake time — so switching to a lower-scope key within a high-scope session of the same user cannot escalate privileges.
 	r.Header.Set(requestKeyIDHeader, strconv.FormatUint(id.KeyID, 10))
 	r.Header.Set(requestScopesHeader, id.Scopes)
 
@@ -124,22 +124,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case sid == "":
-		// 新会话：握手成功的响应会带 Mcp-Session-Id，记下它的属主供后续请求校验。
+		// New session: the successful handshake response carries Mcp-Session-Id; record its owner for later requests to verify.
 		if newSID := rec.Header().Get(mcpSessionHeader); newSID != "" {
 			s.rememberSession(newSID, id.User.ID)
 		}
 	case r.Method == http.MethodDelete && rec.status >= http.StatusOK && rec.status < http.StatusMultipleChoices:
-		// 规则 4：客户端用 DELETE /mcp 正常关闭会话（2xx）时也要清掉属主记录。
-		// 漏掉这条路径，会话条目只会在 404 时被清，长期运行无界增长（F10c）。
+		// Rule 4: when the client closes the session normally with DELETE /mcp (2xx), the owner record must be cleared as well.
+		// Miss this path and session entries would only be cleared on 404, growing without bound in a long-running process (F10c).
 		s.forgetSession(sid)
 	case rec.status == http.StatusNotFound:
-		// 会话已不存在（过期或已被 DELETE）：顺手清掉属主记录，避免这张表无界增长。
+		// The session no longer exists (expired or already DELETEd): clear the owner record while we are at it, so this table does not grow without bound.
 		s.forgetSession(sid)
 	}
 }
 
-// sessionOwnerMismatch 报告会话是否已登记且属主不是 userID。未登记的会话返回 false，
-// 交给 SDK 按它原有的“会话不存在”行为处理。
+// sessionOwnerMismatch reports whether the session is registered and its owner is not userID. An unregistered session returns false,
+// leaving it to the SDK's existing "no such session" behavior.
 func (s *Server) sessionOwnerMismatch(sid string, userID uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -147,7 +147,7 @@ func (s *Server) sessionOwnerMismatch(sid string, userID uint64) bool {
 	return known && entry.userID != userID
 }
 
-// now 返回当前时刻；clock 未注入时退回 time.Now（正常装配都经 New 注入真实时钟）。
+// now returns the current instant; falls back to time.Now when clock was not injected (normal assembly injects a real clock via New).
 func (s *Server) now() time.Time {
 	if s.clock != nil {
 		return s.clock()
@@ -164,7 +164,7 @@ func (s *Server) rememberSession(sid string, userID uint64) {
 	}
 }
 
-// evictOldestLocked 按 seenAt 从旧到新删掉 n 条；调用方必须已持有 s.mu。
+// evictOldestLocked deletes n entries from oldest to newest by seenAt; the caller must already hold s.mu.
 func (s *Server) evictOldestLocked(n int) {
 	if n <= 0 {
 		return
@@ -192,9 +192,9 @@ func (s *Server) forgetSession(sid string) {
 	s.mu.Unlock()
 }
 
-// statusWriter 记录响应状态码，供 ServeHTTP 判断握手是否成功、会话是否已消失。
-// Unwrap 让 http.NewResponseController(w).Flush() 仍能穿透到真实 ResponseWriter，
-// 保证 SSE 流式响应不被破坏。
+// statusWriter records the response status code, for ServeHTTP to tell whether the handshake succeeded and whether the session has disappeared.
+// Unwrap lets http.NewResponseController(w).Flush() still reach the real ResponseWriter,
+// so the SSE streaming response is not broken.
 type statusWriter struct {
 	http.ResponseWriter
 	status int
@@ -207,20 +207,20 @@ func (w *statusWriter) WriteHeader(code int) {
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// ---- 身份上下文 ----
+// ---- identity context ----
 
 type identityKey struct{}
 
-// Identity 是一次 MCP 请求的已认证身份：用户与该请求携带的 API key 的授权信息。
-// MCP 只接受 API Key 通道（见 ServeHTTP 规则 1），因此 KeyID 非 0 才是可用身份。
+// Identity is the authenticated identity of one MCP request: the user and the authorization info of the API key that request carries.
+// MCP accepts the API key channel only (see ServeHTTP rule 1), so only a non-zero KeyID is a usable identity.
 type Identity struct {
 	User   *store.User
-	KeyID  uint64 // 本次请求携带的 API key 主键；0 表示没有 key
-	Scopes string // 该 key 的归一化 scopes 字符串
+	KeyID  uint64 // Primary key of the API key this request carries; 0 means no key
+	Scopes string // The normalized scopes string of that key
 }
 
-// WithIdentity 把已认证身份注入请求上下文；由 web 装配层在鉴权中间件之后调用。
-// k 为 nil 表示会话 cookie 通道（此时没有 key 身份，MCP 会拒绝）。
+// WithIdentity injects the authenticated identity into the request context; the web assembly layer calls it after the auth middleware.
+// A nil k means the session cookie channel (so there is no key identity, and MCP will refuse).
 func WithIdentity(ctx context.Context, u *store.User, k *store.APIKey) context.Context {
 	id := Identity{User: u}
 	if k != nil {
@@ -229,18 +229,18 @@ func WithIdentity(ctx context.Context, u *store.User, k *store.APIKey) context.C
 	return context.WithValue(ctx, identityKey{}, id)
 }
 
-// IdentityFrom 取回身份；缺失时 ok=false。
+// IdentityFrom retrieves the identity; ok=false when missing.
 func IdentityFrom(ctx context.Context) (Identity, bool) {
 	id, ok := ctx.Value(identityKey{}).(Identity)
 	return id, ok && id.User != nil
 }
 
-// requestIdentity 返回本次请求实际使用的身份。
+// requestIdentity returns the identity actually in force for this request.
 //
-// SDK 只在建立会话时构建一次 Server，之后同一会话的所有请求都复用那个 Server 与它闭包
-// 里的握手身份。因此工具处理器不能拿握手身份判断 scope，必须读本次请求带上来的 key
-// （见 ServeHTTP 写入的请求头）。key 的属主已由 ServeHTTP 确认与握手用户一致，所以用户
-// 直接沿用握手那份。请求头缺失或畸形时退回握手身份。
+// The SDK builds a Server only once when the session is established, and every later request in the same session reuses that Server and the handshake identity
+// in its closure. So a tool handler must not judge scope from the handshake identity; it must read the key carried by this request
+// (see the headers ServeHTTP writes). The key's owner has already been confirmed by ServeHTTP to match the handshake user, so the user
+// is taken straight from the handshake copy. When the header is missing or malformed it falls back to the handshake identity.
 func (s *Server) requestIdentity(handshake Identity, req sdkmcp.Request) Identity {
 	extra := req.GetExtra()
 	if extra == nil || extra.Header == nil {
@@ -253,7 +253,7 @@ func (s *Server) requestIdentity(handshake Identity, req sdkmcp.Request) Identit
 	return Identity{User: handshake.User, KeyID: keyID, Scopes: extra.Header.Get(requestScopesHeader)}
 }
 
-// apiKeyID 返回本次请求 key 的 id；无 key 时为 nil。
+// apiKeyID returns the id of this request's key; nil when there is no key.
 func (id Identity) apiKeyID() *uint64 {
 	if id.KeyID == 0 {
 		return nil
@@ -261,8 +261,8 @@ func (id Identity) apiKeyID() *uint64 {
 	return store.Ptr(id.KeyID)
 }
 
-// hasScope 判断身份是否覆盖 scope：MCP 只有 key 通道，按 key 的 scopes 判断
-// （admin 蕴含其余三档）。
+// hasScope reports whether the identity covers scope: MCP has only the key channel, so it judges by the key's scopes
+// (admin implies the other three tiers).
 func hasScope(id Identity, scope string) bool {
 	if id.KeyID == 0 {
 		return false
@@ -270,7 +270,7 @@ func hasScope(id Identity, scope string) bool {
 	return store.HasScope(id.Scopes, scope)
 }
 
-// toolScopes 是工具名到所需 scope 的映射；握手过滤与调用复查共用，保证同一份规则。
+// toolScopes maps tool names to the scope they require; shared by handshake filtering and invocation re-checks, so both use the same rules.
 var toolScopes = map[string]string{
 	"list_decks":           store.ScopeRead,
 	"search_notes":         store.ScopeRead,
@@ -298,8 +298,8 @@ const instructions = "Engram library and scheduler. Tools mirror the REST /api/v
 	"that already exists as a file through import_deck: call create_import_upload and send the file " +
 	"to the returned upload_url with an HTTP client such as curl."
 
-// build 为一次请求构建工具集：注册全部工具（供“按名字硬调”返回权限错误），
-// 并在 tools/list 上按身份过滤，保证客户端看到的列表就是它真能用的集合。
+// build builds the tool set for one request: it registers every tool (so "calling by name" returns a permission error),
+// and filters tools/list by identity, so the list a client sees is exactly the set it can really use.
 func (s *Server) build(id Identity) *sdkmcp.Server {
 	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "engram", Version: version}, &sdkmcp.ServerOptions{
 		Instructions: instructions,
@@ -328,7 +328,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	return srv
 }
 
-// filterTools 在 tools/list 结果上按“本次请求”的身份过滤工具；每次请求独立，不会泄漏越权工具。
+// filterTools filters tools on the tools/list result by "this request's" identity; each request is independent, so a tool the caller may not use never leaks.
 func (s *Server) filterTools(handshake Identity) sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
@@ -354,8 +354,8 @@ func (s *Server) filterTools(handshake Identity) sdkmcp.Middleware {
 	}
 }
 
-// addTool 注册一个工具：调用前必须按本次请求的身份复查该工具所需的 scope。
-// 缺 scope 时返回 tool error（置 IsError），而不是把工具从注册表里摘掉 —— 按名字硬调也能得到权限错误。
+// addTool registers a tool: before invocation it must re-check the scope the tool requires against this request's identity.
+// When the scope is missing it returns a tool error (IsError set) rather than removing the tool from the registry — calling by name still gets a permission error.
 func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, name, desc string, fn func(context.Context, Identity, In) (Out, error)) {
 	scope := toolScopes[name]
 	tool := &sdkmcp.Tool{Name: name, Description: desc}
@@ -363,12 +363,12 @@ func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, nam
 		var zero Out
 		id := s.requestIdentity(handshake, req)
 		if !hasScope(id, scope) {
-			// 与 REST 共用同一 code 与英文文案；scope 名作为细节附后。
+			// Shares the same code and English copy as REST; the scope name is appended as detail.
 			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)
 		}
 		out, err := fn(ctx, id, in)
 		if err != nil {
-			// MCP 没有 HTTP 错误包壳：用稳定 code + 英文文案渲染，与 REST 保持一致。
+			// MCP has no HTTP error envelope: render a stable code + English copy, consistent with REST.
 			return nil, zero, errors.New(api.ErrorText(ctx, err))
 		}
 		return nil, out, nil

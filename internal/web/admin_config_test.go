@@ -12,10 +12,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「系统设置 / 邮件 / 身份与 OIDC」切流到 SPA 的验收。
-// 读写端点复用与 SSR 完全同一份解析与校验；敏感项只回状态，绝不回显明文。
+// This file is the acceptance test for the admin panel's "system settings / mail / identity and OIDC" cutover to the SPA.
+// The read and write endpoints reuse exactly the same parsing and validation as SSR; sensitive items only return status, never plaintext.
 
-// TestAdminConfigPagesCutover 覆盖三个配置页的切流与回退。
+// TestAdminConfigPagesCutover covers the cutover and fallback of the three config pages.
 func TestAdminConfigPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin/settings", "/admin/smtp", "/admin/oidc"} {
 		t.Run(path, func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestAdminConfigPagesCutover(t *testing.T) {
 	}
 }
 
-// TestAdminSettingsReadAndSave 覆盖系统设置 JSON 的读取、校验与落库。
+// TestAdminSettingsReadAndSave covers reading, validating and persisting system settings JSON.
 func TestAdminSettingsReadAndSave(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
@@ -67,7 +67,7 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 		t.Error("settings response missing the site.name row")
 	}
 
-	// 合法保存：落库且标出来源为 db。
+	// Valid save: persisted and marked with source db.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"site.name": "Example Deck Site", "media_max_bytes": "2048"},
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
@@ -85,7 +85,7 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 		t.Errorf("settings read does not reflect the saved value: %s", snippet(after.Body.String()))
 	}
 
-	// 非法语言：400 且不落库。
+	// Invalid locale: 400 and nothing persisted.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"site.default_locale": "de"},
 	}, cookies, csrf); rec.Code != http.StatusBadRequest {
@@ -96,13 +96,13 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 	}
 }
 
-// TestAdminSettingsSecretNeverRevealed 断言敏感键经加密落库，响应里只回「已配置」。
+// TestAdminSettingsSecretNeverRevealed asserts that sensitive keys are stored encrypted and the response only says "configured".
 func TestAdminSettingsSecretNeverRevealed(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
 	ctx := context.Background()
 
-	// 敏感键必须先作为一行存在（settings 页只列已配置的敏感键，与 SSR 一致）。
+	// The sensitive key must first exist as a row (the settings page only lists configured sensitive keys, same as SSR).
 	const first = "spa-plaintext-secret-one"
 	if err := store.PutSecret(ctx, db, srv.secrets, "oidc_client_secret", first, nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSecret: %v", err)
@@ -116,7 +116,7 @@ func TestAdminSettingsSecretNeverRevealed(t *testing.T) {
 		t.Fatalf("stored secret contains plaintext: %q", row.Value)
 	}
 
-	// 读取：报告「已配置」，绝不回显明文。
+	// Read: reports "configured" and never echoes plaintext.
 	rec := getJSON(t, srv, "/api/v1/admin/settings", cookies, nil)
 	if strings.Contains(rec.Body.String(), first) {
 		t.Fatal("settings response leaked the secret plaintext")
@@ -140,7 +140,7 @@ func TestAdminSettingsSecretNeverRevealed(t *testing.T) {
 		t.Error("sensitive section does not report the secret as configured")
 	}
 
-	// 通过 JSON 写入新值：库里不得出现明文，响应依旧不回显。
+	// Write a new value via JSON: no plaintext may appear in the DB, and the response still does not echo it.
 	const second = "spa-plaintext-secret-two"
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
 		Values: map[string]string{"oidc_client_secret": second},
@@ -158,7 +158,7 @@ func TestAdminSettingsSecretNeverRevealed(t *testing.T) {
 	}
 }
 
-// TestAdminSMTPReadSaveAndTest 覆盖 SMTP JSON 的读取、校验与测试连接失败原因。
+// TestAdminSMTPReadSaveAndTest covers reading and validating SMTP JSON, plus the failure reason of a test connection.
 func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.secrets = mustCodec(t)
@@ -175,16 +175,16 @@ func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 		t.Errorf("fresh smtp config = configured %v password %v, want both false", read.Configured, read.PasswordConfigured)
 	}
 
-	// 非法端口：400 且不落库。
+	// Invalid port: 400 and nothing persisted.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{Port: "70000"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid port = %d, want 400", rec.Code)
 	}
-	// 非法 TLS 模式：400。
+	// Invalid TLS mode: 400.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{TLSMode: "ssl"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid tls mode = %d, want 400", rec.Code)
 	}
 
-	// 合法保存：写库并显示已配置。
+	// Valid save: written to the DB and shown as configured.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/smtp", adminSMTPRequest{
 		Host: "localhost", Port: "587", From: "no-reply@example.com", TLSMode: "starttls", Password: "smtp-pw",
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
@@ -201,7 +201,7 @@ func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 		t.Fatal("smtp password stored in plaintext")
 	}
 
-	// 测试连接失败：把服务端原始错误带到响应（验收点）。
+	// Test connection fails: the raw server-side error is carried into the response (acceptance point).
 	addr := deadAddr(t)
 	host, port, _ := net.SplitHostPort(addr)
 	testRec := adminPostJSON(t, srv, "/api/v1/admin/smtp/test", adminSMTPRequest{
@@ -215,7 +215,7 @@ func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 		t.Errorf("smtp test result = %+v, want failure with server error text", result)
 	}
 
-	// 没有主机：稳定 no_host 码（用未配置的新服务，已保存 host 会在上面命中）。
+	// No host: stable no_host code (a fresh unconfigured service is used, since the saved host would hit above).
 	emptySrv, _, _, emptyCookies, emptyCSRF := newNotesServer(t)
 	noHost := adminPostJSON(t, emptySrv, "/api/v1/admin/smtp/test", adminSMTPRequest{}, emptyCookies, emptyCSRF)
 	if err := json.Unmarshal(noHost.Body.Bytes(), &result); err != nil {
@@ -226,7 +226,7 @@ func TestAdminSMTPReadSaveAndTest(t *testing.T) {
 	}
 }
 
-// TestAdminOIDCReadSaveAndTest 覆盖 OIDC JSON 的读取、校验与测试连接无 issuer。
+// TestAdminOIDCReadSaveAndTest covers reading and validating OIDC JSON, plus test connection with no issuer.
 func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 
@@ -242,16 +242,16 @@ func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 		t.Errorf("oidc read = enabled %v redirect %q, want disabled with a redirect uri", read.Enabled, read.RedirectURI)
 	}
 
-	// 启用但 issuer 非法：400。
+	// Enabled but issuer invalid: 400.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{Enabled: true, Issuer: "not a url"}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid issuer = %d, want 400", rec.Code)
 	}
-	// 启用但 issuer 为空：400。
+	// Enabled but issuer empty: 400.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{Enabled: true}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("empty issuer with enabled = %d, want 400", rec.Code)
 	}
 
-	// 合法保存：issuer 落库。
+	// Valid save: the issuer is persisted.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{
 		Enabled: true, Issuer: "https://idp.example.com/", ClientID: "engram", Scopes: "openid email",
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
@@ -265,7 +265,7 @@ func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 		t.Fatalf("oidc settings not persisted: %+v", settings)
 	}
 
-	// 测试连接：没有可用的 issuer（已保存的空）→ no_issuer。
+	// Test connection: no usable issuer (the saved one is empty) → no_issuer.
 	emptySrv, _, _, emptyCookies, emptyCSRF := newNotesServer(t)
 	testRec := adminPostJSON(t, emptySrv, "/api/v1/admin/oidc/test", adminOIDCRequest{}, emptyCookies, emptyCSRF)
 	var result adminTestResult

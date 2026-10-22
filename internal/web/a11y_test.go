@@ -5,22 +5,22 @@ import (
 	"testing"
 )
 
-// 本文件保留无障碍审计逻辑本身的可测部分：表单控件的可访问名称检查。
+// This file keeps the testable part of the accessibility audit logic itself: the accessible-name check for form controls.
 //
-// 逐页的表单控件标签审计曾经针对 SSR 页面渲染的 HTML；页面层已切到 SPA 应用壳（表单在客户端
-// 渲染），页面级断言由前端测试覆盖。可见焦点样式（static/css/input.css）与复习快捷键
-// （static/js/review.js）随 SSR 静态资源一并删除，对应的静态断言随之删除。
-// 这里只保留纯函数审计及其负例。
+// The per-page form-control label audit used to target the HTML rendered by SSR pages; the page layer has switched to the SPA app shell (forms are rendered
+// client-side), and page-level assertions are covered by the frontend tests. The visible focus styles (static/css/input.css) and review keyboard shortcuts
+// (static/js/review.js) were removed together with the SSR static assets, and the corresponding static assertions went with them.
+// Only the pure-function audit and its negative cases are kept here.
 
 var (
-	// reLabel 匹配一个 <label ...>...</label> 块（含包裹式标签）。模板里的 label 不嵌套。
+	// reLabel matches a <label ...>...</label> block (including wrapping labels). Labels in the templates are not nested.
 	reLabel = regexp.MustCompile(`(?s)<label\b([^>]*)>(.*?)</label>`)
-	// reControl 匹配 input/select/textarea 起始标签。
+	// reControl matches input/select/textarea start tags.
 	reControl = regexp.MustCompile(`(?s)<(input|select|textarea)\b([^>]*)>`)
 )
 
-// attrOf 从一个起始标签的属性串里取 name="value" 的 value；取不到返回空串。
-// 属性名前必须紧跟空白或串首，避免 "data-id" 被当成 "id"。
+// attrOf takes the value of name="value" from a start tag's attribute string; returns an empty string when it cannot be found.
+// The attribute name must be preceded by whitespace or the start of the string, so that "data-id" is not treated as "id".
 func attrOf(attrs, name string) string {
 	m := regexp.MustCompile(`(?:^|\s)` + regexp.QuoteMeta(name) + `="([^"]*)"`).FindStringSubmatch(attrs)
 	if m == nil {
@@ -29,9 +29,9 @@ func attrOf(attrs, name string) string {
 	return m[1]
 }
 
-// unlabelledControls 返回 body 里缺少可访问名称的非 hidden 表单控件片段。
-// 判定「有名称」的三条途径：被 <label> 包裹、有 aria-label/aria-labelledby、
-// 其 id 被某个 label 的 for 指向。抽成纯函数便于对它本身做负例测试。
+// unlabelledControls returns the snippets of non-hidden form controls in body that lack an accessible name.
+// Three ways count as "has a name": wrapped by a <label>, carrying aria-label/aria-labelledby,
+// or having an id pointed at by some label's for. Kept as a pure function so it can itself be negative-tested.
 func unlabelledControls(body string) []string {
 	type labelBlock struct {
 		start, end int
@@ -79,8 +79,8 @@ func unlabelledControls(body string) []string {
 	return bad
 }
 
-// TestUnlabelledControlsDetectsBareInput 是审计逻辑自身的负例：没有标签的输入必须被抓出，
-// 被包裹式 label、有 for= 目标或有 aria-label 的输入则放行。防止审计静默假绿。
+// TestUnlabelledControlsDetectsBareInput is the negative case for the audit logic itself: an input without a label must be caught,
+// while inputs wrapped by a label, targeted by for=, or carrying aria-label pass. This keeps the audit from silently reporting a false green.
 func TestUnlabelledControlsDetectsBareInput(t *testing.T) {
 	bare := `<form><input type="text" name="q" placeholder="Search"/></form>`
 	if got := unlabelledControls(bare); len(got) != 1 {

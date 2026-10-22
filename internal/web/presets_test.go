@@ -15,9 +15,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newPresetsServer 装配一个带作业执行器的测试服务并登录 owner。
-// runner 不调用 Start：作业会停在内存队列里保持 queued，测试因此可以确定性地模拟
-// 「适配器跑完并写回权重」，而不用真的跑外部优化器（允许注入假命令/直接驱动状态）。
+// newPresetsServer wires a test server with a job runner and signs in an owner.
+// runner does not call Start: jobs stay queued in the in-memory queue, so the test can deterministically simulate
+// "the adapter finished and wrote the weights back" without really running an external optimizer (fake commands may be injected / state driven directly).
 func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, cookies []*http.Cookie, csrf string, runner *jobs.Runner) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "presets.db"))
@@ -68,13 +68,13 @@ func newPresetsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, c
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	// Sign-in goes through the SPA's same-origin JSON endpoint: failure is Fatal, success returns the session cookie and the session-bound CSRF token.
 	cookies, csrf = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 	return srv, db, owner.ID, cookies, csrf, runner
 }
 
-// seedPreset 建一个属于 owner 的**默认**预设：名用稳定字面量 store.DefaultPresetName，
-// 这样页面渲染时的 store.EnsureDefaultPreset 会认它、不再补一条。
+// seedPreset creates a **default** preset owned by owner, named with the stable literal store.DefaultPresetName,
+// so store.EnsureDefaultPreset recognises it during page rendering and does not add another.
 func seedPreset(t *testing.T, db *gorm.DB, ownerID uint64) *store.Preset {
 	t.Helper()
 	p := store.NewPreset(ownerID, store.DefaultPresetName)
@@ -84,11 +84,11 @@ func seedPreset(t *testing.T, db *gorm.DB, ownerID uint64) *store.Preset {
 	return &p
 }
 
-// seedReviews 插入 n 条属于 userID 的复习日志；优化门槛只按 user_id 计数。
+// seedReviews inserts n review log rows belonging to userID; the optimization gate counts by user_id only.
 func seedReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, n int) {
 	t.Helper()
 	now := time.Now().UTC()
-	// 优化门槛只数挂着该预设的卡组上的复习，所以复习要落在这样一个卡组的卡上。
+	// The optimization gate counts only reviews on decks carrying that preset, so the reviews must land on cards in such a deck.
 	deck := store.Deck{OwnerUserID: userID, Name: "optimize fuel", PresetID: presetID, CreatedAt: now}
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("seed deck: %v", err)
@@ -110,7 +110,7 @@ func seedReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, n int) {
 	}
 }
 
-// setMinReviews 覆盖优化门槛；put 的值是 JSON 编码字符串，optimize 读取端再解码。
+// setMinReviews overrides the optimization gate; the value put is a JSON-encoded string, decoded again on the optimize read side.
 func setMinReviews(t *testing.T, db *gorm.DB, n int) {
 	t.Helper()
 	if err := store.PutSetting(context.Background(), db, store.SettingKeyOptimizeMinReviews,
@@ -119,7 +119,7 @@ func setMinReviews(t *testing.T, db *gorm.DB, n int) {
 	}
 }
 
-// TestPresetListRedirectsAnonymous 覆盖匿名访问重定向到登录页。
+// TestPresetListRedirectsAnonymous covers anonymous access redirecting to the login page.
 func TestPresetListRedirectsAnonymous(t *testing.T) {
 	srv, _, _, _, _, _ := newPresetsServer(t)
 	rec := getWithCookies(t, srv, "/presets", nil)
@@ -131,4 +131,4 @@ func TestPresetListRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-// ---- 预设管理：新建、编辑与默认预设 ------------------------------------
+// ---- Preset management: create, edit and the default preset ------------------------------------

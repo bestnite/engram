@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「API Key 总览」的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "API Key overview".
 //
-// 安全底线与 SSR 相同：只暴露元信息（名称、前缀、scopes、最后使用、过期、状态）；库里只存
-// sha256，模型里没有明文列，因此响应不可能带出任何 key 内容。撤销是写操作，写审计且审计详情
-// 不含任何 key 内容。列表分页，绝不一次拉全表。
+// The security baseline is the same as SSR: only metadata is exposed (name, prefix, scopes, last used, expiry, status); the DB stores only
+// sha256, there is no plaintext column in the model, so the response can never carry any key content. Revocation is a write operation: it writes an audit row, and the audit detail
+// contains no key content. The list is paged and never pulls the whole table at once.
 
-// adminAPIKey 是一把 key 的元信息；时间已按当前管理员时区格式化，null 表示未设置。
+// adminAPIKey is the metadata of one key; times are already formatted in the current admin's timezone, null means not set.
 type adminAPIKey struct {
 	ID         string   `json:"id"`
 	UserID     string   `json:"user_id"`
@@ -31,7 +31,7 @@ type adminAPIKey struct {
 	State      string   `json:"state"`
 }
 
-// adminAPIKeysResponse 是 API Key 总览的分页响应。
+// adminAPIKeysResponse is the paged response for the API Key overview.
 type adminAPIKeysResponse struct {
 	Keys  []adminAPIKey `json:"keys"`
 	Page  int           `json:"page"`
@@ -39,7 +39,7 @@ type adminAPIKeysResponse struct {
 	Total int64         `json:"total"`
 }
 
-// adminAPIKeys 返回全用户 API Key 元信息（分页），口径与 adminAPIKeysPage 一致。
+// adminAPIKeys returns API Key metadata for all users (paged), with the same convention as adminAPIKeysPage.
 func (s *Server) adminAPIKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)
@@ -53,7 +53,7 @@ func (s *Server) adminAPIKeys(c *gin.Context) {
 		return
 	}
 
-	// 批量取归属用户，只解析当前页出现的 user_id（最多一页）。
+	// Batch-fetch the owning users, resolving only the user_ids appearing on the current page (at most one page).
 	owners := make(map[uint64]*store.User)
 	if s.users != nil {
 		for i := range keys {
@@ -98,7 +98,7 @@ func (s *Server) adminAPIKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, adminAPIKeysResponse{Keys: rows, Page: page, Pages: pages, Total: total})
 }
 
-// adminAPIKeyRevoke 撤销任意用户的一把 key（管理员动作）；幂等。
+// adminAPIKeyRevoke revokes one of any user's keys (an admin action); idempotent.
 func (s *Server) adminAPIKeyRevoke(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -126,7 +126,7 @@ func (s *Server) adminAPIKeyRevoke(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "revoke_failed")
 		return
 	}
-	// 审计只记「谁撤销了哪把 key」；不写任何 key 内容（明文不存在，哈希也不该进审计）。
+	// The audit records only "who revoked which key"; no key content is written (plaintext does not exist, and the hash should not enter the audit either).
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAPIKeyRevoke,
 		TargetType: "api_key", TargetID: store.Ptr(key.ID),

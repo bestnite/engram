@@ -13,17 +13,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的调度预设接口的 JSON 版本。
+// This file is the JSON version of the SPA scheduling preset API.
 //
-// 默认预设的补齐、优化门槛、单并发入队、状态与回退全部调用同一批 store/jobs 方法，
-// 这里不复制调度、门槛或作业编排逻辑。SSR 预设页删除后，
-// 这批 JSON 端点就是预设功能唯一的读写路径。
+// Default-preset backfill, the optimization gate, single-concurrency enqueueing, status and rollback all call the same set of store/jobs methods,
+// so scheduling, gate or job-orchestration logic is not duplicated here. With the SSR preset page deleted,
+// these JSON endpoints are the only read/write path for the preset feature.
 //
-// 所有端点只接受浏览器会话（profileSessionOnly 拒绝 bearer 与 API Key）：预设是个人数据，
-// 与卡组设置、统计明细同一安全边界。写操作一律过会话 CSRF。
+// Every endpoint accepts browser sessions only (profileSessionOnly rejects bearer and API keys): presets are personal data,
+// on the same security boundary as deck settings and stats detail. Writes always go through session CSRF.
 
-// optimizeGate 是优化门槛在响应里的形态。
-// shortfall 只在 eligible 为 false 时有意义，等于「还差多少条」。
+// optimizeGate is the shape of the optimization gate in responses.
+// shortfall is only meaningful when eligible is false, and equals "how many more are still needed".
 type optimizeGate struct {
 	Reviews   int64 `json:"reviews"`
 	Min       int   `json:"min"`
@@ -31,16 +31,16 @@ type optimizeGate struct {
 	Eligible  bool  `json:"eligible"`
 }
 
-// fitMetrics 是优化前后各一次拟合的指标。
+// fitMetrics holds the metrics of one fit each, before and after optimization.
 type fitMetrics struct {
 	LogLoss float64 `json:"log_loss"`
 	RMSE    float64 `json:"rmse"`
 	Items   int     `json:"items"`
 }
 
-// optimizeResult 是 optimize 作业 result_json 的 JSON 投影。
-// verdict 由服务端按 store.OptimizeResult 的三态判据算出，前端据稳定枚举查语言包，
-// 不复制 Improved/SampleSufficient 的规则，避免两边判据漂移。
+// optimizeResult is the JSON projection of an optimize job's result_json.
+// verdict is computed server-side from store.OptimizeResult's three-state criteria; the frontend looks up the language pack by the stable enum,
+// so the Improved/SampleSufficient rules are not duplicated and the criteria cannot drift between the two sides.
 type optimizeResult struct {
 	ReviewsUsed int64      `json:"reviews_used"`
 	Weights     []float64  `json:"weights"`
@@ -50,7 +50,7 @@ type optimizeResult struct {
 	Verdict     string     `json:"verdict"`
 }
 
-// jobView 是作业状态在响应里的形态；stage/log_tail/error 为空时是 JSON null。
+// jobView is the shape of a job's status in responses; stage/log_tail/error are JSON null when empty.
 type jobView struct {
 	ID      string          `json:"id"`
 	Status  string          `json:"status"`
@@ -60,10 +60,10 @@ type jobView struct {
 	Result  *optimizeResult `json:"result"`
 }
 
-// presetView 是单个预设的 JSON 形态，同时携带其权重来源与在途作业。
-// job 只在该预设确有在途（queued/running）作业时出现，供刷新页面后续上轮询。
-// IsDefault 让界面不必知道「默认预设」的存储名（store.DefaultPresetName 是机器标识，
-// 不是给人看的文案）：显示名与「不可删除/不可改名」的判据都由它决定。
+// presetView is the JSON shape of one preset, carrying both its weight provenance and any in-flight job.
+// job appears only when that preset really has an in-flight (queued/running) job, so polling can resume after a page refresh.
+// IsDefault keeps the interface from needing to know the storage name of the "default preset" (store.DefaultPresetName is a machine identifier,
+// not human-facing copy): both the display name and the "not deletable / not renamable" criteria come from it.
 type presetView struct {
 	ID                  string  `json:"id"`
 	Name                string  `json:"name"`
@@ -73,31 +73,31 @@ type presetView struct {
 	RelearningSteps     string  `json:"relearning_steps"`
 	MaximumIntervalDays int     `json:"maximum_interval_days"`
 	EnableFuzz          bool    `json:"enable_fuzz"`
-	// WeightsOptimized 与 SSR 的判据一致：weights_json 非空即表示已优化。
+	// WeightsOptimized uses the same criterion as SSR: a non-empty weights_json means optimized.
 	WeightsOptimized   bool    `json:"weights_optimized"`
 	WeightsOptimizedAt *string `json:"weights_optimized_at"`
 	WeightsReviewCount *int    `json:"weights_review_count"`
-	// WeightsRaw 是数据库 weights_json 原文（字符串），与页面显示的值逐字节一致。
+	// WeightsRaw is the raw database weights_json (a string), byte-identical to what the page displays.
 	WeightsRaw *string  `json:"weights_raw"`
 	Job        *jobView `json:"job"`
-	// Gate 是这个预设的优化门槛：可用复习只数挂着本预设的卡组上的记录，所以每个预设各有一份。
+	// Gate is this preset's optimization gate: usable reviews only count records on decks carrying this preset, so each preset has its own.
 	Gate optimizeGate `json:"gate"`
 }
 
-// presetListResponse 是 GET /api/v1/presets 与创建/编辑/回退共用的响应体。
+// presetListResponse is the response body shared by GET /api/v1/presets and create/edit/rollback.
 type presetListResponse struct {
 	Presets []presetView `json:"presets"`
 }
 
-// optimizeResponse 是触发优化与轮询状态共用的响应体：在途作业 + 最新门槛。
+// optimizeResponse is the response body shared by triggering optimization and polling status: the in-flight job plus the latest gate.
 type optimizeResponse struct {
 	Job  *jobView     `json:"job"`
 	Gate optimizeGate `json:"gate"`
 }
 
-// presetRequest 是创建/编辑的请求体。
-// EnableFuzz 用 *bool 区分「未提供」与「显式 false」；未提供一律拒绝，避免把缺字段
-// 静默当成关闭（AGENTS.md §2.3 第 9 条：带库默认值的布尔列必须显式写）。
+// presetRequest is the create/edit request body.
+// EnableFuzz uses *bool to tell "not provided" from "explicit false"; not provided is always refused, so a missing field is never
+// silently taken as off (AGENTS.md §2.3 item 9: boolean columns with database defaults must be written explicitly).
 type presetRequest struct {
 	Name                string  `json:"name"`
 	DesiredRetention    float64 `json:"desired_retention"`
@@ -107,8 +107,8 @@ type presetRequest struct {
 	EnableFuzz          *bool   `json:"enable_fuzz"`
 }
 
-// presetErrorMessages 是预设接口错误 code 的稳定英文兜底文案（AGENTS.md §2.1）。
-// 前端按 code 映射本地化提示，不解析这里的 message。
+// presetErrorMessages holds stable English fallback copy for the preset API error codes (AGENTS.md §2.1).
+// The frontend maps code to a localized hint and does not parse the message here.
 var presetErrorMessages = map[string]string{
 	"invalid_request":             "The preset request is invalid.",
 	"preset_name_required":        "The preset name is required.",
@@ -124,9 +124,9 @@ var presetErrorMessages = map[string]string{
 	"internal_error":              "An internal error occurred.",
 }
 
-// registerPresetAPIRoutes 挂载 SPA 的调度预设接口；写操作过会话 CSRF。
-// 只注册 /api/v1/presets* 这批 JSON 端点；/presets 本身只发应用壳，由客户端路由渲染。
-// 依赖未装配时跳过，保证 M0 阶段与未装作业执行器的测试仍能构造 Server。
+// registerPresetAPIRoutes mounts the SPA scheduling preset API; writes go through session CSRF.
+// Only the /api/v1/presets* JSON endpoints are registered; /presets itself only sends the app shell, rendered by the client router.
+// Skipped when the dependency is not wired up, so the M0 stage and tests without a job runner can still construct a Server.
 func (s *Server) registerPresetAPIRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {
 		return
@@ -140,7 +140,7 @@ func (s *Server) registerPresetAPIRoutes(router *gin.Engine) {
 	router.POST("/api/v1/presets/:id/optimize/revert", s.sessions.CSRFMiddleware(), s.presetOptimizeRevert)
 }
 
-// presetList 返回当前用户的全部预设与优化门槛，仅接受浏览器会话。
+// presetList returns all of the current user's presets and the optimization gate; accepts browser sessions only.
 func (s *Server) presetList(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -155,7 +155,7 @@ func (s *Server) presetList(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// presetCreate 新建预设。校验失败 400、不写库；成功 200 并回整份列表。
+// presetCreate creates a preset. Validation failure is 400 with nothing written; success is 200 with the whole list back.
 func (s *Server) presetCreate(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -184,7 +184,7 @@ func (s *Server) presetCreate(c *gin.Context) {
 	s.writePresetList(c, user.ID, "return presets after SPA create failed")
 }
 
-// presetUpdate 编辑预设；只有 owner 能改，他人/不存在的 id 一律 404（不泄露存在性）。
+// presetUpdate edits a preset; only the owner may change it, and someone else's / a nonexistent id is always 404 (leaking no existence).
 func (s *Server) presetUpdate(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -216,7 +216,7 @@ func (s *Server) presetUpdate(c *gin.Context) {
 	s.writePresetList(c, user.ID, "return presets after SPA update failed")
 }
 
-// presetDelete 删除预设（仅 owner，默认预设与使用中的预设不可删除）。
+// presetDelete deletes a preset (owner only; the default preset and a preset in use cannot be deleted).
 func (s *Server) presetDelete(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -250,12 +250,12 @@ func (s *Server) presetDelete(c *gin.Context) {
 	s.writePresetList(c, user.ID, "return presets after SPA delete failed")
 }
 
-// presetOptimize 触发优化：先判门槛再入队（复用 jobs.Runner.EnqueueOptimize）。
+// presetOptimize triggers optimization: check the gate first, then enqueue (reusing jobs.Runner.EnqueueOptimize).
 //
-//   - 成功：202 + {job, gate}，前端据此轮询；
-//   - 门槛不足：400，code=insufficient_reviews，并把结构化 gate（含 shortfall）一并返回，
-//     前端渲染「还差 N 条」——不足门槛不是失败，是「还差多少」；
-//   - 已有作业：409，code=optimize_conflict（jobs.HTTPStatus 是 409 语义的唯一来源）。
+//   - success: 202 + {job, gate}, which the frontend polls on;
+//   - gate short: 400 with code=insufficient_reviews, also returning the structured gate (including shortfall),
+//     so the frontend can render "N more to go" — falling short is not a failure, it is "how much is still missing";
+//   - a job already exists: 409 with code=optimize_conflict (jobs.HTTPStatus is the single source of the 409 semantics).
 func (s *Server) presetOptimize(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -305,8 +305,8 @@ func (s *Server) presetOptimize(c *gin.Context) {
 	c.JSON(http.StatusAccepted, optimizeResponse{Job: s.jobPayload(job), Gate: gatePayload(gate)})
 }
 
-// presetOptimizeStatus 按 ?job= 读取作业状态：只允许看到本预设自己的作业，
-// 不匹配的 id 一律按「无作业」返回（job 为 null），不泄露其它预设/作业的存在性。
+// presetOptimizeStatus reads a job's status by ?job=: it may only see this preset's own jobs, and
+// a non-matching id is always answered as "no job" (job null), leaking no existence of other presets/jobs.
 func (s *Server) presetOptimizeStatus(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -331,8 +331,8 @@ func (s *Server) presetOptimizeStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// presetOptimizeRevert 一键回退默认权重：清空三列（store.ResetPresetWeights），
-// 留一条审计，然后回整份列表——权重来源、优化时间与条数因此永远来自同一次数据库读取。
+// presetOptimizeRevert reverts to the default weights in one click: clears the three columns (store.ResetPresetWeights),
+// leaves one audit record, then returns the whole list — so weight provenance, optimization time and count always come from the same database read.
 func (s *Server) presetOptimizeRevert(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -358,16 +358,16 @@ func (s *Server) presetOptimizeRevert(c *gin.Context) {
 	s.writePresetList(c, user.ID, "return presets after SPA revert failed")
 }
 
-// presetListPayload 组装列表响应：确保默认预设存在、读取门槛、按在途作业标注卡片。
-// 取数与门槛判定收敛在这一个方法：store.EnsureDefaultPreset + 每个预设一次 store.GateOptimize，
-// 同一用户的预设列表与门槛只有这一份来源。
+// presetListPayload assembles the list response: ensure the default preset exists, read the gate, and mark cards by in-flight job.
+// Data fetching and gate evaluation are confined to this one method: store.EnsureDefaultPreset + one store.GateOptimize per preset,
+// so a user's preset list and gates have exactly one source.
 func (s *Server) presetListPayload(c *gin.Context, userID uint64) (presetListResponse, error) {
 	ctx := c.Request.Context()
 	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
 	if err != nil {
 		return presetListResponse{}, err
 	}
-	// 单并发：全局至多一个在途作业；它命中本预设时附到卡片上，刷新后可续轮询。
+	// Single concurrency: at most one in-flight job globally; when it matches this preset it is attached to the card so polling can resume after a refresh.
 	active, err := s.jobStore.Active(ctx)
 	if err != nil {
 		return presetListResponse{}, err
@@ -393,7 +393,7 @@ func (s *Server) presetListPayload(c *gin.Context, userID uint64) (presetListRes
 	return out, nil
 }
 
-// writePresetList 组装并写出列表响应；组装失败统一 500。logMsg 是英文诊断文本。
+// writePresetList assembles and writes the list response; an assembly failure is a uniform 500. logMsg is the English diagnostic text.
 func (s *Server) writePresetList(c *gin.Context, userID uint64, logMsg string) {
 	resp, err := s.presetListPayload(c, userID)
 	if err != nil {
@@ -404,8 +404,8 @@ func (s *Server) writePresetList(c *gin.Context, userID uint64, logMsg string) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ownedPreset 解析 :id 对外 id 并确认预设属于当前用户；非 owner/不存在/解析失败一律 404 JSON，
-// 不通过状态码泄露他人预设的存在性。
+// ownedPreset resolves the :id public id and confirms the preset belongs to the current user; not-owner / nonexistent / unresolvable all 404 JSON,
+// so the status code never leaks the existence of someone else's preset.
 func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool) {
 	raw := strings.TrimSpace(c.Param("id"))
 	if raw == "" {
@@ -429,7 +429,7 @@ func (s *Server) ownedPreset(c *gin.Context, userID uint64) (*store.Preset, bool
 	return p, true
 }
 
-// presetPayload 把一条预设投影成 JSON；权重判据以 weights_json 是否为空为唯一依据。
+// presetPayload projects one preset into JSON; the weight criterion rests solely on whether weights_json is empty.
 func presetPayload(p *store.Preset) presetView {
 	item := presetView{
 		ID:                  p.PublicID,
@@ -457,7 +457,7 @@ func presetPayload(p *store.Preset) presetView {
 	return item
 }
 
-// gatePayload 把门槛投影成 JSON。
+// gatePayload projects the gate into JSON.
 func gatePayload(g store.OptimizeGate) optimizeGate {
 	return optimizeGate{
 		Reviews:   g.Reviews,
@@ -467,8 +467,8 @@ func gatePayload(g store.OptimizeGate) optimizeGate {
 	}
 }
 
-// jobPayload 把作业投影成 JSON；只有 succeeded 且 result_json 可解析时才带 result，
-// 解析失败按「无结果」处理并记英文日志，绝不编造指标。
+// jobPayload projects a job into JSON; result is included only when it succeeded and result_json parses,
+// with a parse failure treated as "no result" and logged in English — metrics are never invented.
 func (s *Server) jobPayload(job *store.Job) *jobView {
 	item := &jobView{
 		ID:      job.PublicID,
@@ -489,7 +489,7 @@ func (s *Server) jobPayload(job *store.Job) *jobView {
 	return item
 }
 
-// optimizeResultPayload 投影拟合报告并给出稳定 verdict（三态）。
+// optimizeResultPayload projects the fit report and gives a stable verdict (three states).
 func optimizeResultPayload(r *store.OptimizeResult) *optimizeResult {
 	out := &optimizeResult{
 		ReviewsUsed: r.ReviewsUsed,
@@ -505,15 +505,15 @@ func optimizeResultPayload(r *store.OptimizeResult) *optimizeResult {
 	return out
 }
 
-// fitMetricsPayload 逐字段投影拟合指标。
+// fitMetricsPayload projects the fit metrics field by field.
 func fitMetricsPayload(m store.FitMetrics) fitMetrics {
 	return fitMetrics{LogLoss: m.LogLoss, RMSE: m.RMSE, Items: m.Items}
 }
 
-// optimizeVerdict 是拟合对比的三态判据：
-//   - 两边都算出来且样本足够 -> improved / not_improved；
-//   - 两边都算出来但样本太小 -> insufficient_sample；
-//   - 没算出来 -> unavailable（前端不渲染结论）。
+// optimizeVerdict is the three-state criterion for comparing fits:
+//   - both sides computed and the sample large enough -> improved / not_improved;
+//   - both sides computed but the sample too small -> insufficient_sample;
+//   - not computed -> unavailable (the frontend renders no conclusion).
 func optimizeVerdict(r *store.OptimizeResult) string {
 	switch {
 	case r.FitBefore.SampleSufficient() && r.FitAfter.SampleSufficient():
@@ -528,9 +528,9 @@ func optimizeVerdict(r *store.OptimizeResult) string {
 	}
 }
 
-// parsePresetRequest 解析 JSON 并做格式校验；返回非空的 code 表示拒绝。
-// 校验语义：保留率取开区间 (0,1)、最大间隔为正整数、
-// 步骤按语法校验且不接受非正值——store 的校验仍是最后一道防线。
+// parsePresetRequest parses the JSON and validates the format; a non-empty code means refused.
+// Validation semantics: retention in the open interval (0,1), maximum interval a positive integer,
+// steps checked against the grammar with non-positive values refused — the store's validation remains the last line of defence.
 func parsePresetRequest(c *gin.Context) (presetRequest, string) {
 	var req presetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -549,13 +549,13 @@ func parsePresetRequest(c *gin.Context) (presetRequest, string) {
 	case !validStepSpec(req.LearningSteps) || !validStepSpec(req.RelearningSteps):
 		return req, "preset_steps_invalid"
 	case req.EnableFuzz == nil:
-		// 布尔列带库默认值，缺字段一律拒绝，绝不静默当成 false（AGENTS.md §2.3 第 9 条）。
+		// Boolean columns carry database defaults, so a missing field is always refused and never silently taken as false (AGENTS.md §2.3 item 9).
 		return req, "invalid_request"
 	}
 	return req, ""
 }
 
-// applyPresetRequest 把请求字段写进预设模型；EnableFuzz 显式取地址以保留 false。
+// applyPresetRequest writes the request fields into the preset model; EnableFuzz takes an explicit address to preserve false.
 func applyPresetRequest(p *store.Preset, req presetRequest) {
 	p.Name = req.Name
 	p.DesiredRetention = req.DesiredRetention
@@ -569,8 +569,8 @@ func applyPresetRequest(p *store.Preset, req presetRequest) {
 	p.EnableFuzz = &fuzz
 }
 
-// presetStoreCode 把 store 的写入校验错误映射成稳定 code（写入前已在 handler 校验，
-// 这里只是 store 兜底错误到 JSON code 的翻译）。
+// presetStoreCode maps the store's write validation errors to stable codes (the handler already validated before writing,
+// so this is just translating the store's fallback errors into JSON codes).
 func presetStoreCode(err error) string {
 	switch {
 	case errors.Is(err, store.ErrPresetNameRequired):
@@ -580,14 +580,14 @@ func presetStoreCode(err error) string {
 	case errors.Is(err, store.ErrInvalidMaximumInterval):
 		return "preset_max_interval_invalid"
 	case errors.Is(err, store.ErrDefaultPresetCannotRename):
-		// 与删除保护共用同一个 code：对界面而言都是「默认预设受保护」。
+		// Shares the same code as the deletion guard: to the interface both mean "the default preset is protected".
 		return "preset_default_protected"
 	default:
 		return "preset_save_failed"
 	}
 }
 
-// presetError 写出预设接口的错误包壳；message 为稳定英文，前端按 code 映射本地化提示。
+// presetError writes the preset API's error envelope; message is stable English, and the frontend maps code to a localized hint.
 func presetError(c *gin.Context, status int, code string) {
 	msg := presetErrorMessages[code]
 	if msg == "" {

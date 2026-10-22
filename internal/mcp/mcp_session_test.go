@@ -8,14 +8,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// sessionRemembered 报告属主表里是否登记了该会话（直接读内部 map，供用例断言）。
+// sessionRemembered reports whether the session is registered in the owner table (reading the internal map directly, for case assertions).
 func sessionRemembered(s *Server, sid string) bool {
 	_, ok := s.sessions[sid]
 	return ok
 }
 
-// TestSessionForgottenAfterDelete 断言客户端用 DELETE /mcp 正常关闭会话后，属主表里不再有该条目。
-// 旧实现只在响应 404 时清理，DELETE 成功（2xx）的会话条目会一直残留，长期运行无界增长（F10c）。
+// TestSessionForgottenAfterDelete asserts that after the client closes the session normally with DELETE /mcp, the entry is gone from the owner table.
+// The old implementation only cleaned up on a 404 response, so the entry of a session deleted successfully (2xx) lingered forever, growing without bound in a long-running process (F10c).
 func TestSessionForgottenAfterDelete(t *testing.T) {
 	_, db, keys, srv, ts := newEnvWithServer(t)
 	u := seedUser(t, db, "session-owner")
@@ -37,12 +37,12 @@ func TestSessionForgottenAfterDelete(t *testing.T) {
 	}
 }
 
-// TestSessionTableEvictsOldestOverCap 断言属主表超过容量上限后按登记时刻淘汰最旧条目，
-// 且最新的条目与刚登记的会话都保留（正常会话不受影响）。
+// TestSessionTableEvictsOldestOverCap asserts the owner table evicts the oldest entry by registration time once it exceeds the capacity cap,
+// while the newest entry and the session just registered are both kept (normal sessions are unaffected).
 func TestSessionTableEvictsOldestOverCap(t *testing.T) {
 	_, _, _, srv, _ := newEnvWithServer(t)
 
-	// 注入单调递增时钟，使每条记录的 seenAt 严格有序，淘汰结果确定。
+	// Inject a monotonically increasing clock so each record's seenAt is strictly ordered and the eviction outcome is deterministic.
 	tick := int64(0)
 	srv.clock = func() time.Time {
 		tick++
@@ -56,7 +56,7 @@ func TestSessionTableEvictsOldestOverCap(t *testing.T) {
 		t.Fatalf("table size = %d, want %d", got, mcpSessionCap)
 	}
 
-	// 第 cap+1 条登记：最旧的 s-0 应被淘汰。
+	// Registering entry cap+1: the oldest, s-0, should be evicted.
 	srv.rememberSession("newest", 1)
 	if sessionRemembered(srv, "s-0") {
 		t.Errorf("oldest entry s-0 was not evicted after exceeding the cap")
@@ -72,7 +72,7 @@ func TestSessionTableEvictsOldestOverCap(t *testing.T) {
 	}
 }
 
-// TestForgetSessionLeavesOtherSessionsIntact 断言清掉一个会话的属主记录不影响其它会话。
+// TestForgetSessionLeavesOtherSessionsIntact asserts clearing one session's owner record does not affect other sessions.
 func TestForgetSessionLeavesOtherSessionsIntact(t *testing.T) {
 	_, _, _, srv, _ := newEnvWithServer(t)
 	srv.rememberSession("a", 1)

@@ -9,19 +9,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDefaultPresetSingleAcrossWebAndREST 是「同一用户攒出两个默认预设」的回归。
+// TestDefaultPresetSingleAcrossWebAndREST is the regression for "one user ends up with two default presets".
 //
-// 修前：web 用本地化名创建默认预设（zh-CN 下是「默认」），REST 用字面量 "Default" 查找/创建，
-// 两条入口对同一条逻辑预设给出不同名字，用户先经 web 建组再经 REST 建组就会各写一条。
-// 修后两条入口共用 store.DefaultPresetName，同一用户只有一条默认预设。
+// Before the fix: web created the default preset with a localized name (the zh-CN text for "Default"), while REST looked it up / created it with the literal "Default",
+// so the two entries gave the same logical preset different names, and a user who created a deck through web and then through REST got one row from each.
+// After the fix both entries share store.DefaultPresetName, so one user has exactly one default preset.
 //
-// 两条路径都在本用例里真实走一遍：web 走表单 handler（默认语言 zh-CN），REST 走 api.CreateDeck
-// （REST/MCP/CLI 共用的 service 方法）。
+// Both paths really run in this case: web goes through the form handler (default language zh-CN), REST through api.CreateDeck
+// (the service method REST/MCP/CLI share).
 func TestDefaultPresetSingleAcrossWebAndREST(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
 
-	// 经 web 建组：走 SPA 的同源 JSON 卡组端点（SSR 的 POST /decks 表单已删除）。
+	// Create a deck through web: goes through the SPA's same-origin JSON deck endpoint (the SSR POST /decks form has been deleted).
 	rec := postJSONWithSession(srv, "/api/v1/decks", map[string]any{
 		"name":        "web deck",
 		"description": "",
@@ -30,7 +30,7 @@ func TestDefaultPresetSingleAcrossWebAndREST(t *testing.T) {
 		t.Fatalf("web create deck = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
-	// 经 REST 建组：复用同一 api 实例。
+	// Create a deck through REST: reuses the same api instance.
 	owner, err := store.NewUserStore(db).ByID(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("load owner: %v", err)
@@ -50,7 +50,7 @@ func TestDefaultPresetSingleAcrossWebAndREST(t *testing.T) {
 		t.Errorf("default preset name = %q, want %q", presets[0].Name, store.DefaultPresetName)
 	}
 
-	// 两个卡组都建成了，确认用例真的走了两条建组路径。
+	// Both decks were created, confirming the case really went down both deck-creation paths.
 	var decks int64
 	if err := db.Model(&store.Deck{}).Where("owner_user_id = ?", ownerID).Count(&decks).Error; err != nil {
 		t.Fatalf("count decks: %v", err)

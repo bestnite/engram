@@ -16,13 +16,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「系统设置」的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "system settings".
 //
-// 取值优先级与校验与 SSR 页（admin_settings.go）完全相同：环境变量 > settings 表 > 默认值，
-// 复用 effectiveSetting 与同一个 settingSpec 列表，因此不会出现两套解析。响应里每行都带
-// source（env/db/default/computed）与原始值，本地化文案由前端语言包按 key 映射。
+// Value precedence and validation are exactly the same as the SSR page (admin_settings.go): env vars > settings table > defaults,
+// reusing effectiveSetting and the same settingSpec list, so there are never two sets of parsing. Every row in the response carries
+// source (env/db/default/computed) and the raw value; localized copy is mapped by the frontend language packs by key.
 
-// adminSettingRow 是设置表格里的一行。readonly 为 true 时前端只展示不提交。
+// adminSettingRow is one row in the settings table. When readonly is true the frontend only displays it and does not submit it.
 type adminSettingRow struct {
 	Key        string `json:"key"`
 	Value      string `json:"value"`
@@ -30,27 +30,27 @@ type adminSettingRow struct {
 	Editable   bool   `json:"editable"`
 	Sensitive  bool   `json:"sensitive"`
 	Configured bool   `json:"configured"`
-	// Unit 非空时值需要按单位解释（当前只有媒体占用用 "bytes"）。
+	// When Unit is non-empty the value must be interpreted per that unit (currently only media usage uses "bytes").
 	Unit string `json:"unit,omitempty"`
 }
 
-// adminSettingsSection 是一个设置分区（general / media / optimize / sensitive）。
+// adminSettingsSection is one settings section (general / media / optimize / sensitive).
 type adminSettingsSection struct {
 	Name string            `json:"name"`
 	Rows []adminSettingRow `json:"rows"`
 }
 
-// adminSettingsResponse 是系统设置页的读取结果。
+// adminSettingsResponse is the read result for the system settings page.
 type adminSettingsResponse struct {
 	Sections []adminSettingsSection `json:"sections"`
 }
 
-// adminSettingsRequest 是保存请求：键即 settings 键，值为待写文本；缺失或空串表示不修改。
+// adminSettingsRequest is the save request: the key is the settings key, the value is the text to write; missing or empty string means no change.
 type adminSettingsRequest struct {
 	Values map[string]string `json:"values"`
 }
 
-// adminSettings 返回系统设置的分区与行，口径与 adminSettingsPage 一致。
+// adminSettings returns the system settings sections and rows, with the same convention as adminSettingsPage.
 func (s *Server) adminSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	loc, ok := s.localizer(c)
@@ -70,7 +70,7 @@ func (s *Server) adminSettings(c *gin.Context) {
 	}
 
 	mediaRows := rows(mediaSettingSpecs())
-	// 媒体目录与占用是只读读数：路径来自 MEDIA_DIR（环境变量或默认），占用现算。
+	// The media directory and usage are read-only readings: the path comes from MEDIA_DIR (env var or default) and the usage is computed on the fly.
 	dir := ""
 	dirSrc := config.SourceDefault
 	if s.media != nil {
@@ -105,7 +105,7 @@ func (s *Server) adminSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, adminSettingsResponse{Sections: sections})
 }
 
-// adminSensitiveRows 列出 settings 表里所有敏感键，只显示「已配置/未配置」，绝不含明文。
+// adminSensitiveRows lists all sensitive keys in the settings table, showing only "configured/not configured" and never plaintext.
 func (s *Server) adminSensitiveRows(ctx context.Context) []adminSettingRow {
 	if s.db == nil {
 		return nil
@@ -133,8 +133,8 @@ func (s *Server) adminSensitiveRows(ctx context.Context) []adminSettingRow {
 	return rows
 }
 
-// adminSettingsSave 写入系统设置；校验与 adminSettingsSave 逐条相同（同一 switch），
-// 非法值 400 且不写库。敏感键经 AES-GCM 加密落库，永不回显。
+// adminSettingsSave writes the system settings; validation is identical item by item to adminSettingsSave (the same switch),
+// an invalid value is 400 and nothing is written. Sensitive keys are stored AES-GCM encrypted and never echoed back.
 func (s *Server) adminSettingsSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -158,7 +158,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		}
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
-			// 留空表示不修改；清空回到默认值的语义留待后续任务明确。
+			// Blank means no change; the semantics of clearing back to the default value are left to be defined by a later task.
 			continue
 		}
 		switch spec.key {
@@ -196,7 +196,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 		changed = append(changed, spec.key)
 	}
 
-	// 敏感键：只接受非空的新值，经 AES-GCM 加密后落库，永不回显。
+	// Sensitive keys: only a non-empty new value is accepted, stored AES-GCM encrypted, and never echoed back.
 	if s.secrets != nil {
 		keys, err := store.SensitiveSettingKeys(ctx, s.db)
 		if err != nil {

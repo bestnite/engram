@@ -7,14 +7,14 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 )
 
-// 本文件是（会话前双提交 CSRF）的验收测试。
+// This file is the acceptance test for (pre-session double-submit CSRF).
 //
-// 移除 SSR 会话前表单后，会话前的写请求全部是同源 JSON 端点（登录、注册、引导、找回密码、
-// 重置密码、登录第二步）。它们仍由 auth.PreSessionCSRFMiddleware 保护：请求必须同时携带
-// csrf_double cookie 与镜像 token（X-CSRF-Token 头或 csrf_token 表单字段）。
+// After the SSR pre-session forms were removed, all pre-session write requests are same-origin JSON endpoints (login, register, setup, forgot password,
+// reset password, the login second step). They are still protected by auth.PreSessionCSRFMiddleware: the request must carry both
+// the csrf_double cookie and the mirror token (the X-CSRF-Token header or the csrf_token form field).
 
-// doubleSubmitFromShell 走一次 GET /login 应用壳，返回下发的 csrf_double cookie 与镜像 token。
-// 双提交语义下二者同值：token 也等于 GET /api/v1/auth/session 返回的 csrf_token。
+// doubleSubmitFromShell performs one GET /login app shell and returns the csrf_double cookie and mirror token it issues.
+// Under double-submit semantics the two share the same value: the token also equals the csrf_token returned by GET /api/v1/auth/session.
 func doubleSubmitFromShell(t *testing.T, srv *Server) (*http.Cookie, string) {
 	t.Helper()
 	rec := get(t, srv, "/login", nil)
@@ -28,8 +28,8 @@ func doubleSubmitFromShell(t *testing.T, srv *Server) (*http.Cookie, string) {
 	return cookie, cookie.Value
 }
 
-// TestPreSessionCSRFNormalBrowserFlow 是正向验收：SPA 从应用壳拿到 cookie 与镜像 token，
-// 再带着它们提交 JSON 写请求，引导与登录都能走通。
+// TestPreSessionCSRFNormalBrowserFlow is the positive acceptance test: the SPA gets the cookie and mirror token from the app shell,
+// then submits JSON write requests with them, and both setup and login go through.
 func TestPreSessionCSRFNormalBrowserFlow(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
@@ -50,7 +50,7 @@ func TestPreSessionCSRFNormalBrowserFlow(t *testing.T) {
 	}
 }
 
-// TestPreSessionCSRFRejections 是反面验收：缺少镜像 cookie 或值不匹配的会话前 JSON 写请求一律 403。
+// TestPreSessionCSRFRejections is the negative acceptance test: pre-session JSON write requests with a missing mirror cookie or a mismatched value are always 403.
 func TestPreSessionCSRFRejections(t *testing.T) {
 	body := map[string]string{
 		"username": "intruder", "email": "intruder@example.com", "password": "Sup3rSecret!",
@@ -86,16 +86,16 @@ func TestPreSessionCSRFRejections(t *testing.T) {
 	}
 }
 
-// TestSessionCSRFTokenDoesNotAuthorizePreSessionForms 断言两条路径互相独立：
-// 会话绑定的 token 不是双提交 cookie（不能放行会话前端点），双提交 cookie 也不能放行会话端点。
+// TestSessionCSRFTokenDoesNotAuthorizePreSessionForms asserts the two paths are independent:
+// a session-bound token is not a double-submit cookie (it cannot authorize pre-session endpoints), and a double-submit cookie cannot authorize session endpoints either.
 func TestSessionCSRFTokenDoesNotAuthorizePreSessionForms(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
 
-	// 建立会话，拿到会话绑定的 CSRF token（服务端状态）。
+	// Establish a session and obtain the session-bound CSRF token (server-side state).
 	sessionCookies, sessionCSRF := loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 
-	// 会话 token 缺少 csrf_double cookie：会话前端点必须拒绝。
+	// A session token without the csrf_double cookie: pre-session endpoints must reject.
 	noDouble := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "intruder", "email": "intruder@example.com", "password": "Sup3rSecret!",
 	}, sessionCookies, map[string]string{auth.CSRFHeaderName: sessionCSRF})
@@ -103,7 +103,7 @@ func TestSessionCSRFTokenDoesNotAuthorizePreSessionForms(t *testing.T) {
 		t.Fatalf("pre-session endpoint with only a session token = %d, want 403", noDouble.Code)
 	}
 
-	// 双提交 cookie 不能当作会话绑定的 CSRF：带会话但没有会话 token，登出必须 403。
+	// A double-submit cookie cannot serve as session-bound CSRF: with a session but no session token, logout must be 403.
 	doubleCookie, _ := doubleSubmitFromShell(t, srv)
 	logout := postJSON(srv, "/api/v1/auth/logout", nil,
 		append(sessionCookies, doubleCookie), nil)

@@ -15,25 +15,25 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerNoteRoutes 挂载卡片列表与编辑页。
+// registerNoteRoutes mounts the card list and edit pages.
 //
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。所有权判断先用 deck owner
-// （deck_grants 尚未落地，会把它扩展成 owner/editor 判定）。
+// Skipped when the dependency is not wired up, so M0-stage tests can still construct a Server. Ownership is checked with the deck owner for now
+// (deck_grants has not landed yet; this will be extended to an owner/editor check).
 func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil {
 		return
 	}
-	// 卡片列表、编辑与新建三个 GET 页都返回应用壳：三个 *Route 处理器
-	// 先按各自原有的会话与角色判定鉴权，再交出应用壳，由客户端路由与 JSON 端点渲染页面。
+	// The three GET pages — card list, edit and create — all return the app shell: the three *Route handlers
+	// first authorize by their original session and role rules, then hand over the app shell, and the client router plus JSON endpoints render the page.
 	router.GET("/decks/:id/notes", s.noteListRoute)
 	router.GET("/decks/:id/notes/:nid", s.noteEditRoute)
-	// 新建卡片：单独的路径前缀，避免与 /notes/:nid 的参数路由产生歧义。
+	// New card: a separate path prefix, to avoid ambiguity with the /notes/:nid parameterised route.
 	router.GET("/decks/:id/new-note", s.noteNewRoute)
-	// SPA 的新建/编辑预览走 JSON。
+	// The SPA's create/edit preview goes over JSON.
 	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.notePreview)
 }
 
-// requireUser 取当前登录用户；未登录时重定向到登录页并返回 false。
+// requireUser takes the current signed-in user; when not signed in it redirects to the login page and returns false.
 func (s *Server) requireUser(c *gin.Context) (*store.User, bool) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -43,8 +43,8 @@ func (s *Server) requireUser(c *gin.Context) (*store.User, bool) {
 	return u, true
 }
 
-// deckByPublicID 解析对外 id 并取卡组；未知、空串或非法一律写 404 并返回 false。
-// 卡组主键不对外，路径参数只带不透明 id，因此每次都要在这里换成数字主键。
+// deckByPublicID resolves the public id and fetches the deck; unknown, empty or invalid all write 404 and return false.
+// Deck primary keys are not public and the path parameter carries only the opaque id, so it is swapped for the numeric key here every time.
 func (s *Server) deckByPublicID(c *gin.Context, publicID string) (*store.Deck, bool) {
 	raw := strings.TrimSpace(publicID)
 	if raw == "" {
@@ -59,8 +59,8 @@ func (s *Server) deckByPublicID(c *gin.Context, publicID string) (*store.Deck, b
 	return deck, true
 }
 
-// deckIDParam 解析 :id 路径参数（对外 id 字符串）并换成数字主键；
-// 未知、空串或非法一律 404（与「卡组不存在」同形，不泄露存在性）。
+// deckIDParam resolves the :id path parameter (a public id string) into the numeric primary key;
+// unknown, empty or invalid all 404 (the same shape as "deck does not exist", leaking no existence).
 func (s *Server) deckIDParam(c *gin.Context) (uint64, bool) {
 	deck, ok := s.deckByPublicID(c, c.Param("id"))
 	if !ok {
@@ -69,20 +69,20 @@ func (s *Server) deckIDParam(c *gin.Context) (uint64, bool) {
 	return deck.ID, true
 }
 
-// loadDeckForRole 取卡组并校验当前用户至少拥有 want 角色。
+// loadDeckForRole fetches the deck and checks that the current user holds at least the want role.
 //
-// 判定本体在 auth.DeckAccess（与 REST/MCP 共用同一实现，不复制第二份）；这里只负责
-// 把错误映射成 HTML 响应：卡组不存在 -> 404，权限不足 -> 403，并写一条 permission.denied
-// 审计（谁在什么时候想对哪个卡组做什么被挡下）。
+// The check itself lives in auth.DeckAccess (shared with REST/MCP, not duplicated); this only
+// maps errors to HTML responses: deck not found -> 404, insufficient permission -> 403, and writes one permission.denied
+// audit record (who tried to do what to which deck, and when, was refused).
 func (s *Server) loadDeckForRole(c *gin.Context, user *store.User, deckID uint64, want string) (*store.Deck, bool) {
 	deck, _, ok := s.loadDeckWithRole(c, user, deckID, want)
 	return deck, ok
 }
 
-// loadDeckWithRole 与 loadDeckForRole 相同，另外返回调用者在卡组上的有效角色。
+// loadDeckWithRole is the same as loadDeckForRole but also returns the caller's effective role on the deck.
 func (s *Server) loadDeckWithRole(c *gin.Context, user *store.User, deckID uint64, want string) (*store.Deck, string, bool) {
 	if s.access == nil {
-		// 装配缺失属于服务端配置问题，不能放行。
+		// A missing dependency is a server configuration problem and must not be let through.
 		s.logger.Error("deck access checker is not wired", "deck_id", deckID)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return nil, "", false
@@ -106,7 +106,7 @@ func (s *Server) loadDeckWithRole(c *gin.Context, user *store.User, deckID uint6
 	return nil, "", false
 }
 
-// parsePage 解析 ?page=；非法或缺失时按第 1 页处理。
+// parsePage parses ?page=; invalid or missing is treated as page 1.
 func parsePage(raw string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || n < 1 {
@@ -115,11 +115,11 @@ func parsePage(raw string) int {
 	return n
 }
 
-// noteListRoute 提供 GET /decks/:id/notes：返回应用壳，由客户端路由渲染
-// 卡片列表，数据仍走既有 JSON 端点（GET /api/v1/decks/:id/notes）。
+// noteListRoute serves GET /decks/:id/notes: it returns the app shell and the client router renders
+// the card list, with data still coming from the existing JSON endpoint (GET /api/v1/decks/:id/notes).
 //
-// 鉴权与迁移前的 SSR 列表页逐项一致：先要求已登录会话（匿名重定向登录页），再按 reader 角色
-// 判定卡组可读性——无权读的卡组仍回 403，不因切壳而放行。
+// Authorization matches the pre-migration SSR list page item by item: a signed-in session is required first (anonymous visitors are redirected to the login page), then deck readability
+// is decided by the reader role — a deck you may not read still returns 403, and nothing is let through by the shell switch.
 func (s *Server) noteListRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -135,12 +135,12 @@ func (s *Server) noteListRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// noteEditRoute 提供 GET /decks/:id/notes/:nid：返回应用壳，由客户端路由
-// 渲染卡片编辑页，数据仍走既有 JSON 端点（GET 列表 + PATCH /api/v1/notes/:id）。
-// 编辑页的写入在 SPA 里走 REST，但读页面的判权仍由服务端负责。
+// noteEditRoute serves GET /decks/:id/notes/:nid: it returns the app shell and the client router
+// renders the card edit page, with data still coming from the existing JSON endpoints (GET list + PATCH /api/v1/notes/:id).
+// Writes from the edit page go over REST inside the SPA, but authorizing the page read is still the server's job.
 //
-// 鉴权与迁移前的 SSR 编辑页逐项一致：先要求已登录会话（匿名重定向登录页），再按 editor 角色
-// 判定卡组可写性——非 editor 仍回 403，不因切壳而把编辑壳交给无权用户。
+// Authorization matches the pre-migration SSR edit page item by item: a signed-in session is required first (anonymous visitors are redirected to the login page), then deck writability
+// is decided by the editor role — a non-editor still gets 403, and the shell switch does not hand the edit shell to an unauthorized user.
 func (s *Server) noteEditRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -156,10 +156,10 @@ func (s *Server) noteEditRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// noteNewRoute 提供 GET /decks/:id/new-note：返回应用壳，由客户端路由渲染新建卡片页，
-// 提交仍走 POST /api/v1/decks/:id/notes。
+// noteNewRoute serves GET /decks/:id/new-note: it returns the app shell and the client router renders the new-card page,
+// while submission still goes through POST /api/v1/decks/:id/notes.
 //
-// 鉴权与迁移前的 SSR 新建页逐项一致：匿名重定向登录页，非 editor 回 403。
+// Authorization matches the pre-migration SSR new page item by item: anonymous redirects to the login page, non-editors get 403.
 func (s *Server) noteNewRoute(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -175,14 +175,14 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// PreviewCard 是一张卡的正反面渲染结果。
+// PreviewCard is the rendered front and back of one card.
 type PreviewCard struct {
 	TemplateLabel string
 	FrontHTML     string
 	BackHTML      string
 }
 
-// NotePreviewData 是卡片编辑页预览的载荷。
+// NotePreviewData is the payload for the card edit page preview.
 type NotePreviewData struct {
 	Title      string
 	FrontLabel string
@@ -191,7 +191,7 @@ type NotePreviewData struct {
 	Cards      []PreviewCard
 }
 
-// buildPreview 用 internal/render 渲染每个 card 的正反面，供 SPA 预览 JSON 使用。
+// buildPreview renders the front and back of every card with internal/render, for the SPA preview JSON.
 func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[string]any) NotePreviewData {
 	data := NotePreviewData{
 		Title:      loc.T("notes.preview.title"),
@@ -238,7 +238,7 @@ func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[strin
 	return data
 }
 
-// renderSide 把一侧的 Markdown 文本（含 Extra 片段）渲染成清洗后的 HTML。
+// renderSide renders one side's Markdown text (including the Extra fragment) into sanitized HTML.
 func renderSide(side cardtype.RenderResult) (string, error) {
 	body := side.Body
 	if len(side.Extra) > 0 {

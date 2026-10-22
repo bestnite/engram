@@ -15,17 +15,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 邮件通知偏好接口（internal/web/mail_prefs_api.go）的端到端证据：
-// 走真实路由 + 真实 SQLite，复用 store.EmailPrefStore 与 users 行，断言与 SSR 页一致的行为。
+// This file is the end-to-end evidence for the SPA mail notification preference API (internal/web/mail_prefs_api.go):
+// it goes through real routes + real SQLite and reuses store.EmailPrefStore and the users row, asserting behaviour identical to the SSR page.
 //
-// 覆盖的重点：
-//   - GET 的分组与开关严格来自 internal/mail 目录（既不多也不少，不暴露目录外类型）；
-//   - PATCH 为每个可关闭类型写显式选择，A 类 / 未知类型被拒且不产生半截保存；
-//   - reminder_hour 的 null 与 0（午夜）可区分，越界被拒；
-//   - 写入过会话 CSRF，且只接受浏览器会话。
+// The points covered:
+//   - GET groups and switches come strictly from the internal/mail catalog (no more, no less, nothing outside the catalog is exposed);
+//   - PATCH writes an explicit choice for every optional type; type A / unknown types are refused and leave no half-saved state;
+//   - reminder_hour null and 0 (midnight) are distinguishable, out-of-range values are refused;
+//   - writes go through session CSRF, and browser sessions are the only accepted credential.
 
-// notificationPatch 带会话 cookie 与 X-CSRF-Token 头提交 PATCH JSON。
-// 与 postJSONWithCSRF 同形，只是方法为 PATCH（邮件偏好接口用 PATCH 保存）。
+// notificationPatch submits PATCH JSON with a session cookie and an X-CSRF-Token header.
+// Same shape as postJSONWithCSRF, only the method is PATCH (the mail preference API saves with PATCH).
 func notificationPatch(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
@@ -45,7 +45,7 @@ func notificationPatch(t *testing.T, srv *Server, path string, body any, cookies
 	return rec
 }
 
-// loadNotificationPrefs 读取接口响应并解码；状态码不是 200 直接失败。
+// loadNotificationPrefs reads the API response and decodes it; any status other than 200 fails outright.
 func loadNotificationPrefs(t *testing.T, rec *httptest.ResponseRecorder) notificationPrefsResponse {
 	t.Helper()
 	if rec.Code != http.StatusOK {
@@ -58,8 +58,8 @@ func loadNotificationPrefs(t *testing.T, rec *httptest.ResponseRecorder) notific
 	return got
 }
 
-// TestMailPrefsGetMatchesCatalog 是读取侧的目录一致性验收：
-// 分组顺序等于 ClassOrder，类型集合与顺序等于 mail.Catalog，locked/enabled 由 CanDisable/ResolveEnabled 推导。
+// TestMailPrefsGetMatchesCatalog is the read-side catalog consistency acceptance:
+// group order equals ClassOrder, the type set and order equal mail.Catalog, and locked/enabled are derived from CanDisable/ResolveEnabled.
 func TestMailPrefsGetMatchesCatalog(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 
@@ -111,21 +111,21 @@ func TestMailPrefsGetMatchesCatalog(t *testing.T) {
 	}
 }
 
-// TestMailPrefsPatchRoundTrips 验收「保存后立即生效、显式选择覆盖每个可关闭类型」：
-// 打开一个默认关的 C 类、关闭一个默认开的 B 类，其余可关闭类型写成关闭；重启读取路径仍一致。
+// TestMailPrefsPatchRoundTrips accepts "takes effect immediately after saving, and the explicit choice covers every optional type":
+// turn on a default-off type C, turn off a default-on type B, write the remaining optional types as off; a fresh read path still agrees.
 func TestMailPrefsPatchRoundTrips(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
 	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{
-			string(mail.TypeReviewReminder): true,  // C：打开
-			string(mail.TypeDeckShared):     false, // B：关闭
+			string(mail.TypeReviewReminder): true,  // C: turn on
+			string(mail.TypeDeckShared):     false, // B: turn off
 		},
 		"reminder_hour": 7,
 	}, cookies, csrf)
 	got := loadNotificationPrefs(t, rec)
 
-	// 响应立刻反映新状态：C 开、B 关，A 仍恒开。
+	// The response reflects the new state immediately: C on, B off, A still always on.
 	if !enabledOf(got, mail.TypeReviewReminder) {
 		t.Error("response says review_reminder is off after it was turned on")
 	}
@@ -139,7 +139,7 @@ func TestMailPrefsPatchRoundTrips(t *testing.T) {
 		t.Fatalf("response reminder_hour = %v, want 7", got.ReminderHour)
 	}
 
-	// 存储侧：新实例读回（等价于进程重启后的读取路径）。
+	// Storage side: read back with a new instance (equivalent to the read path after a process restart).
 	choices, err := store.NewEmailPrefStore(db).Choices(context.Background(), ownerID)
 	if err != nil {
 		t.Fatalf("Choices() error = %v", err)
@@ -150,7 +150,7 @@ func TestMailPrefsPatchRoundTrips(t *testing.T) {
 	if choices[string(mail.TypeDeckShared)] {
 		t.Errorf("stored choices = %v, want deck_shared=false", choices)
 	}
-	// 每个可关闭类型都必须有一条显式选择（缺席 = 关闭），数量与目录里可关闭类型一致。
+	// Every optional type must have an explicit choice (absent = off), and the count matches the optional types in the catalog.
 	wantDisableable := 0
 	for _, def := range mail.Catalog() {
 		if mail.CanDisable(def.Class) {
@@ -173,8 +173,8 @@ func TestMailPrefsPatchRoundTrips(t *testing.T) {
 	}
 }
 
-// TestMailPrefsReminderHourNullAndMidnight 验收发送小时的三个关键点：
-// 0 存成 0（午夜，绝不是 NULL）、null 存成 NULL、越界以 400 拒绝且不改动已存值。
+// TestMailPrefsReminderHourNullAndMidnight accepts three key points about the send hour:
+// 0 is stored as 0 (midnight, never NULL), null is stored as NULL, and an out-of-range value is refused with 400 without touching the stored value.
 func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	users := store.NewUserStore(db)
@@ -187,7 +187,7 @@ func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 		return u
 	}
 
-	// 0 点：必须存成 0，不能和「未设置」混在一起。
+	// 0 o'clock: must be stored as 0, and must not be conflated with "not set".
 	if rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 0}, cookies, csrf); rec.Code != http.StatusOK {
 		t.Fatalf("saving hour 0 status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -197,7 +197,7 @@ func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 		t.Fatalf("stored reminder_hour = %d, want 0", *u.ReminderHour)
 	}
 
-	// null：回到站点默认（NULL）。
+	// null: back to the site default (NULL).
 	if rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": nil}, cookies, csrf); rec.Code != http.StatusOK {
 		t.Fatalf("saving the site default status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -205,7 +205,7 @@ func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 		t.Fatalf("after choosing the site default reminder_hour = %d, want NULL", *u.ReminderHour)
 	}
 
-	// 越界：400，且不改动已存值（仍为 NULL）。
+	// Out of range: 400, and the stored value is untouched (still NULL).
 	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{"reminder_hour": 24}, cookies, csrf)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("saving hour 24 status = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -218,7 +218,7 @@ func TestMailPrefsReminderHourNullAndMidnight(t *testing.T) {
 	}
 }
 
-// TestMailPrefsRejectsClassA 是「拒绝关闭 A 类」的负例：指向 A 类的提交 400，且不写任何行。
+// TestMailPrefsRejectsClassA is the negative case for "refusing to turn type A off": a submission targeting A gets 400 and writes no rows.
 func TestMailPrefsRejectsClassA(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
@@ -243,7 +243,7 @@ func TestMailPrefsRejectsClassA(t *testing.T) {
 	}
 }
 
-// TestMailPrefsRejectsUnknownType 断言目录外的类型被拒：不暴露、不接受、不写库。
+// TestMailPrefsRejectsUnknownType asserts types outside the catalog are refused: not exposed, not accepted, not written.
 func TestMailPrefsRejectsUnknownType(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 
@@ -265,7 +265,7 @@ func TestMailPrefsRejectsUnknownType(t *testing.T) {
 	}
 }
 
-// TestMailPrefsRejectsMissingCSRF 断言保存必须带会话绑定的 CSRF token，缺失即被拒且不写入。
+// TestMailPrefsRejectsMissingCSRF asserts that saving must carry the session-bound CSRF token; missing means refused with nothing written.
 func TestMailPrefsRejectsMissingCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 
@@ -284,7 +284,7 @@ func TestMailPrefsRejectsMissingCSRF(t *testing.T) {
 	}
 }
 
-// TestMailPrefsRejectsAnonymousAndBearer 断言接口只接受浏览器会话，读写都不接受 bearer 凭据。
+// TestMailPrefsRejectsAnonymousAndBearer asserts the API accepts browser sessions only; neither reads nor writes accept bearer credentials.
 func TestMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 
@@ -310,9 +310,9 @@ func TestMailPrefsRejectsAnonymousAndBearer(t *testing.T) {
 	}
 }
 
-// TestMailPrefsAdminClassIsAdminOnly 是「非管理员看不到也配不了 D 类」的负例：
-// 响应只有 A/B/C 三组且不含任何 D 类类型；提交 D 类以 403 + forbidden_type 拒绝且不写库；
-// 一次正常保存也不为非管理员写下 D 类的显式选择（日后被提升为管理员时回落到目录默认=开）。
+// TestMailPrefsAdminClassIsAdminOnly is the negative case for "a non-admin can neither see nor set type D":
+// the response has only the A/B/C groups and no type D at all; submitting type D is refused with 403 + forbidden_type and writes nothing;
+// and a normal save writes no explicit choice for type D on a non-admin either (falling back to the catalog default = on if promoted later).
 func TestMailPrefsAdminClassIsAdminOnly(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	member, err := srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
@@ -344,7 +344,7 @@ func TestMailPrefsAdminClassIsAdminOnly(t *testing.T) {
 		}
 	}
 
-	// 提交 D 类：403 + forbidden_type，且一行都不写。
+	// Submit type D: 403 + forbidden_type, and not a single row is written.
 	rec := notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{string(mail.TypeJobFailed): false},
 	}, cookies, csrf)
@@ -360,7 +360,7 @@ func TestMailPrefsAdminClassIsAdminOnly(t *testing.T) {
 		t.Errorf("a rejected D-class submission wrote choices: %v", choices)
 	}
 
-	// 正常保存（不带 D 类键）成功，库里也不出现 D 类的显式选择。
+	// A normal save (without the type D keys) succeeds, and no explicit choice for type D appears in the database.
 	rec = notificationPatch(t, srv, "/api/v1/settings/notifications", map[string]any{
 		"choices": map[string]bool{string(mail.TypeDeckShared): true}, "reminder_hour": 8,
 	}, cookies, csrf)
@@ -400,8 +400,8 @@ func TestMailPrefsAdminClassIsAdminOnly(t *testing.T) {
 	}
 }
 
-// hasNotificationType 报告响应里是否出现了某类型。
-// enabledOf/lockedOf 在类型缺失时也返回 false，无法区分「不存在」与「值为假」，因此需要它。
+// hasNotificationType reports whether a type appears in the response.
+// enabledOf/lockedOf also return false when the type is missing, so they cannot tell "absent" from "value is false"; that is why this helper exists.
 func hasNotificationType(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
 		for _, item := range group.Types {
@@ -413,7 +413,7 @@ func hasNotificationType(resp notificationPrefsResponse, typ mail.Type) bool {
 	return false
 }
 
-// enabledOf 报告响应里某类型的有效开关；类型缺失时直接失败。
+// enabledOf reports a type's effective switch in the response; a missing type fails outright.
 func enabledOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
 		for _, item := range group.Types {
@@ -425,7 +425,7 @@ func enabledOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	return false
 }
 
-// lockedOf 报告响应里某类型是否被锁；类型缺失时直接失败。
+// lockedOf reports whether a type is locked in the response; a missing type fails outright.
 func lockedOf(resp notificationPrefsResponse, typ mail.Type) bool {
 	for _, group := range resp.Groups {
 		for _, item := range group.Types {

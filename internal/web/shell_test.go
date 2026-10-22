@@ -7,15 +7,15 @@ import (
 	"testing/fstest"
 )
 
-// TestServesAssetsWithImmutableCache 断言已嵌入的 Vite 构建资源（/assets/*）
-// 能被正确提供，并带有长效不可变缓存、ETag 与正确的 MIME 类型。
+// TestServesAssetsWithImmutableCache asserts the embedded Vite build assets (/assets/*)
+// are served correctly, with long-lived immutable caching, an ETag and the correct MIME type.
 func TestServesAssetsWithImmutableCache(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	if srv.shell == nil {
 		t.Fatal("srv.shell is nil")
 	}
 
-	// 至少包含 index-*.css 与 index-*.js
+	// includes at least index-*.css and index-*.js
 	var jsPath, cssPath string
 	for p := range srv.shell.assets {
 		if strings.HasSuffix(p, ".js") && strings.HasPrefix(p, "assets/") {
@@ -52,13 +52,13 @@ func TestServesAssetsWithImmutableCache(t *testing.T) {
 			t.Errorf("GET %s ETag is missing", target.url)
 		}
 
-		// 304 条件请求
+		// 304 conditional request
 		condRec := get(t, srv, target.url, map[string]string{"If-None-Match": etag})
 		if condRec.Code != http.StatusNotModified {
 			t.Errorf("conditional GET %s status = %d, want 304", target.url, condRec.Code)
 		}
 
-		// 安全响应头断言
+		// security header assertions
 		if nosniff := rec.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
 			t.Errorf("GET %s X-Content-Type-Options = %q, want nosniff", target.url, nosniff)
 		}
@@ -68,8 +68,8 @@ func TestServesAssetsWithImmutableCache(t *testing.T) {
 	}
 }
 
-// TestMissingAssetReturns404 断言请求不存在的 /assets/* 静态资源时明确返回 404，
-// 严禁错误回退到 SPA index.html 应用壳。
+// TestMissingAssetReturns404 asserts that requesting a nonexistent /assets/* static asset returns 404 explicitly,
+// and falling back to the SPA index.html app shell is strictly forbidden.
 func TestMissingAssetReturns404(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -82,7 +82,7 @@ func TestMissingAssetReturns404(t *testing.T) {
 	}
 }
 
-// TestFallbackDeepLinks 断言 SPA 客户端深链接访问时回退 index.html。
+// TestFallbackDeepLinks asserts deep links are answered by falling back to index.html.
 func TestFallbackDeepLinks(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -106,7 +106,7 @@ func TestFallbackDeepLinks(t *testing.T) {
 	}
 }
 
-// TestNewErrorsOnEmptyOrMissingIndex 断言当缺少 index.html 或文件为空时构造失败。
+// TestNewErrorsOnEmptyOrMissingIndex asserts construction fails when index.html is missing or the file is empty.
 func TestNewErrorsOnEmptyOrMissingIndex(t *testing.T) {
 	missingFS := fstest.MapFS{
 		"assets/bundle.js": &fstest.MapFile{Data: []byte("console.log('hi');")},
@@ -123,9 +123,9 @@ func TestNewErrorsOnEmptyOrMissingIndex(t *testing.T) {
 	}
 }
 
-// TestIndexInjectsSelfHostedMathJaxURL 断言 SPA 入口把自托管 MathJax 的内容哈希 URL
-// 以 <meta name="engram-mathjax"> 注入 <head>：前端据此用同源外链脚本加载 MathJax，
-// 无需内联脚本，也就无需放宽 CSP。
+// TestIndexInjectsSelfHostedMathJaxURL asserts the SPA entry injects the content-hashed URL of the self-hosted MathJax
+// into <head> as <meta name="engram-mathjax">: the frontend loads MathJax from it with a same-origin external script,
+// needing no inline script and therefore no CSP widening.
 func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	want := srv.assets.URL("js/mathjax/tex-svg.js")
@@ -145,12 +145,12 @@ func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	if !strings.Contains(body, meta) {
 		t.Errorf("SPA index is missing injected MathJax meta %q", meta)
 	}
-	// 自托管：入口不得出现任何外部 URL（无 CDN）。
+	// Self-hosted: no external URL may appear in the entry (no CDN).
 	if strings.Contains(body, "http://") || strings.Contains(body, "https://") {
 		t.Errorf("SPA index references an external URL; MathJax must stay self-hosted")
 	}
 
-	// 入口内容已变，ETag 必须随注入后的内容重算，否则旧引用会被浏览器缓存。
+	// The entry content has changed, so the ETag must be recomputed from the injected content, otherwise the browser caches a stale reference.
 	etag := rec.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("SPA index ETag is missing")
@@ -161,8 +161,8 @@ func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	}
 }
 
-// TestIndexMathJaxMetaFollowsSetURL 断言注入是 SetMathJaxURL 驱动的：默认不带 meta，
-// 传入 URL 后出现在 </head> 之前，再传空串则移除（资源缺失时与 SSR 一样不引用 MathJax）。
+// TestIndexMathJaxMetaFollowsSetURL asserts the injection is driven by SetMathJaxURL: no meta by default,
+// it appears before </head> once a URL is passed, and an empty string removes it again (when the resource is missing, MathJax is not referenced, just like SSR).
 func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<html><head></head><body><div id=\"app\"></div></body></html>")},
@@ -191,8 +191,8 @@ func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 	}
 }
 
-// TestIndexVersionMetaFollowsSetVersion 断言版本注入由 SetVersion 驱动：默认不带 meta，
-// 传入版本后出现在 </head> 之前，值一律转义，再传空串则移除（未注入版本的构建不显示版本）。
+// TestIndexVersionMetaFollowsSetVersion asserts the version injection is driven by SetVersion: no meta by default,
+// it appears before </head> once a version is passed, the value is always escaped, and an empty string removes it (a build without an injected version shows no version).
 func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
 	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html><head></head><body><div id="app"></div></body></html>`)},
@@ -214,7 +214,7 @@ func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
 		t.Errorf("version meta must be injected inside <head>, before </head>")
 	}
 
-	// 版本串将来可能含引号，属性值必须转义，否则会破坏文档结构。
+	// A version string may contain quotes in the future, so the attribute value must be escaped, otherwise it breaks the document structure.
 	shell.SetVersion(`v1" onload="x`)
 	if !strings.Contains(string(shell.IndexHTML()), `content="v1&#34; onload=&#34;x"`) {
 		t.Errorf("version meta value is not escaped: %s", string(shell.IndexHTML()))
@@ -226,8 +226,8 @@ func TestIndexVersionMetaFollowsSetVersion(t *testing.T) {
 	}
 }
 
-// TestVersionMetaReachesShell 断言 web.Deps.Version 真的经 New 注入到应用壳的 <head>：
-// 前端页脚的版本号只有这一条来源，装配漏传时页脚会静默地不显示版本。
+// TestVersionMetaReachesShell asserts web.Deps.Version really reaches the app shell's <head> through New:
+// that is the only source for the version number in the frontend footer, so a missed wire leaves the footer silently showing no version.
 func TestVersionMetaReachesShell(t *testing.T) {
 	srv := newRenderServer(t, nil, func(d *Deps) { d.Version = "v9.9.9" })
 	body := fetchShellBody(t, srv, "/", nil)
@@ -236,7 +236,7 @@ func TestVersionMetaReachesShell(t *testing.T) {
 		t.Errorf("SPA shell is missing %q: %s", want, snippet(body))
 	}
 
-	// 未设置 Deps.Version（如测试装配）时不得出现该 meta。
+	// When Deps.Version is not set (as in test wiring), that meta must not appear.
 	plain := newRenderServer(t, nil)
 	if strings.Contains(fetchShellBody(t, plain, "/", nil), `name="`+versionMetaName+`"`) {
 		t.Error("SPA shell carries a version meta although Deps.Version is empty")

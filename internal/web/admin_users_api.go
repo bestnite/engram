@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「用户管理」的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "user management".
 //
-// 语义与 SSR 表单（admin_users.go）逐项一致，只换传输形态：同一份 store/service 调用、
-// 同一份危险动作保护（不可删自己、不可清空最后一个管理员、危险动作需确认）。响应只带原始
-// 值与稳定英文 code，本地化文案由前端语言包按 code 映射。
+// Semantics match the SSR forms (admin_users.go) item by item, only the transport shape changes: the same store/service calls,
+// the same dangerous-action protection (cannot delete yourself, cannot wipe out the last admin, dangerous actions need confirmation). Responses carry only raw
+// values and stable English codes; localized copy is mapped by the frontend language packs by code.
 
-// adminUser 是用户列表里的一行；role/status 是存储取值，由前端映射文案。
+// adminUser is one row in the user list; role/status are stored values whose copy is mapped by the frontend.
 type adminUser struct {
 	ID          string `json:"id"`
 	Username    string `json:"username"`
@@ -32,7 +32,7 @@ type adminUser struct {
 	IsSelf      bool   `json:"is_self"`
 }
 
-// adminUsersResponse 是用户列表响应；query 回带搜索词，供分页链接保持过滤。
+// adminUsersResponse is the user list response; query echoes the search term so paging links keep the filter.
 type adminUsersResponse struct {
 	Users []adminUser `json:"users"`
 	Page  int         `json:"page"`
@@ -41,7 +41,7 @@ type adminUsersResponse struct {
 	Query string      `json:"query"`
 }
 
-// adminUserCreateRequest 是新建本地账号的请求体。
+// adminUserCreateRequest is the request body for creating a local account.
 type adminUserCreateRequest struct {
 	Username    string `json:"username"`
 	Email       string `json:"email"`
@@ -50,28 +50,28 @@ type adminUserCreateRequest struct {
 	Role        string `json:"role"`
 }
 
-// adminUserStatusRequest 是启用/禁用的请求体；action 取 enable|disable。
+// adminUserStatusRequest is the enable/disable request body; action is enable|disable.
 type adminUserStatusRequest struct {
 	Action string `json:"action"`
 }
 
-// adminUserRoleRequest 是改角色的请求体；危险动作需 confirm。
+// adminUserRoleRequest is the role-change request body; the dangerous action needs confirm.
 type adminUserRoleRequest struct {
 	Role    string `json:"role"`
 	Confirm bool   `json:"confirm"`
 }
 
-// adminUserConfirmRequest 是仅需确认的危险动作请求体（重置密码 / 删除）。
+// adminUserConfirmRequest is the request body for dangerous actions that only need confirmation (reset password / delete).
 type adminUserConfirmRequest struct {
 	Confirm bool `json:"confirm"`
 }
 
-// adminUserPasswordResponse 一次性返回重置后的临时口令（绝不写日志、不入库）。
+// adminUserPasswordResponse returns the temporary password after a reset, once (never logged, never stored).
 type adminUserPasswordResponse struct {
 	TempPassword string `json:"temp_password"`
 }
 
-// adminUsers 返回用户列表（搜索 + 分页 + 每用户用量），口径与 renderUsersPage 一致。
+// adminUsers returns the user list (search + paging + per-user usage), with the same convention as renderUsersPage.
 func (s *Server) adminUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := strings.TrimSpace(c.Query("q"))
@@ -108,8 +108,8 @@ func (s *Server) adminUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, adminUsersResponse{Users: rows, Page: page, Pages: pages, Total: total, Query: query})
 }
 
-// adminUserCreate 新建本地账号（仅管理员）。校验复用 registerInputErrorCode，
-// 失败时把稳定 code 交给前端映射，绝不落库。
+// adminUserCreate creates a local account (admins only). Validation reuses registerInputErrorCode,
+// and on failure hands a stable code to the frontend to map, never writing to the DB.
 func (s *Server) adminUserCreate(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -153,7 +153,7 @@ func (s *Server) adminUserCreate(c *gin.Context) {
 	})
 }
 
-// adminUserStatus 启用或禁用账号；禁用会作废其全部会话
+// adminUserStatus enables or disables an account; disabling invalidates all of its sessions
 func (s *Server) adminUserStatus(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -175,14 +175,14 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			adminError(c, http.StatusBadRequest, "self_forbidden")
 			return
 		}
-		// 判定与写入在同一个闸门事务里：两个管理员同时禁用对方时只有一个能成功。
+		// The decision and the write are in the same gate transaction: when two admins disable each other simultaneously only one can succeed.
 		err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
 			return guardedUserUpdate(tx, target.ID, admins, "status", store.StatusDisabled)
 		})
 		if s.writeAdminGateError(c, err, "disable user", target.ID) {
 			return
 		}
-		// 状态已在闸门里写入；作废会话与刷新状态由账号服务完成（状态写入是幂等的）。
+		// The status has already been written inside the gate; invalidating sessions and refreshing state are done by the account service (the status write is idempotent).
 		if err := s.accounts.DisableUser(ctx, target.ID); err != nil {
 			s.logger.Error("spa admin: disable user failed", "user_id", target.ID, "error", err)
 			adminError(c, http.StatusInternalServerError, "save_failed")
@@ -207,7 +207,7 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminUserRole 改角色（危险动作，需确认）；不得降掉最后一个管理员。
+// adminUserRole changes the role (a dangerous action, needs confirmation); it must not demote the last admin.
 func (s *Server) adminUserRole(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -249,7 +249,7 @@ func (s *Server) adminUserRole(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminUserResetPassword 生成临时口令并作废目标用户全部会话，一次性返回口令。
+// adminUserResetPassword generates a temporary password and invalidates all of the target user's sessions, returning the password once.
 func (s *Server) adminUserResetPassword(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -284,7 +284,7 @@ func (s *Server) adminUserResetPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, adminUserPasswordResponse{TempPassword: temp})
 }
 
-// adminUserForceLogout 强制下线：作废目标用户全部会话。
+// adminUserForceLogout forces a sign-out: invalidates all of the target user's sessions.
 func (s *Server) adminUserForceLogout(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -308,7 +308,7 @@ func (s *Server) adminUserForceLogout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminUserDelete 删除用户：需确认；不能删自己，也不能删掉最后一个管理员。
+// adminUserDelete deletes a user: needs confirmation; cannot delete yourself and cannot delete the last admin.
 func (s *Server) adminUserDelete(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -329,18 +329,18 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	// 先在闸门外做一次无锁预判：明显会清空管理员的请求不发通知、不作废会话。
+	// First do a lock-free pre-check outside the gate: a request that would obviously wipe out the admins sends no notification and invalidates no sessions.
 	if s.wouldRemoveLastAdmin(c, target) {
 		adminError(c, http.StatusBadRequest, "last_admin")
 		return
 	}
-	// 删除前先发「账号被删除」通知；发信失败不影响删除（通知函数不返回 error）。
+	// Send the "account deleted" notification before deleting; a mail failure does not affect the deletion (the notify function returns no error).
 	s.notifyAccountStatus(ctx, target, "deleted")
-	// 删除前先作废会话，保证即便删除中途失败也不留下可用会话。
+	// Invalidate sessions before deleting, so that even if the deletion fails midway no usable session is left behind.
 	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
 		s.logger.Error("spa admin: revoke sessions before delete failed", "user_id", target.ID, "error", err)
 	}
-	// 权威判定与删除在同一个闸门事务里。
+	// The authoritative decision and the deletion are in the same gate transaction.
 	err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
 		var fresh store.User
 		if err := tx.First(&fresh, "id = ?", target.ID).Error; err != nil {
@@ -362,7 +362,7 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminTargetUser 解析 :id 对外 id 并取目标用户；未知、空串或不存在时写 404 并返回 false。
+// adminTargetUser parses the :id public id and loads the target user; on unknown, empty string or not found it writes 404 and returns false.
 func (s *Server) adminTargetUser(c *gin.Context) (*store.User, bool) {
 	raw := strings.TrimSpace(c.Param("id"))
 	if raw == "" {
@@ -382,8 +382,8 @@ func (s *Server) adminTargetUser(c *gin.Context) (*store.User, bool) {
 	return u, true
 }
 
-// guardedUserUpdate 在闸门事务里重新读出目标用户，确认这次「禁用 / 降权」不会清空管理员后
-// 写入一列。读必须在事务里重做：闸门外读到的行可能已被并发请求改过。
+// guardedUserUpdate re-reads the target user inside the gate transaction and, after confirming this "disable / demote" will not wipe out the admins,
+// updates one column. The read must be redone inside the transaction: the row read outside the gate may have been changed by a concurrent request.
 func guardedUserUpdate(tx *gorm.DB, userID uint64, admins int64, column string, value any) error {
 	var fresh store.User
 	if err := tx.First(&fresh, "id = ?", userID).Error; err != nil {
@@ -395,7 +395,7 @@ func guardedUserUpdate(tx *gorm.DB, userID uint64, admins int64, column string, 
 	return tx.Model(&store.User{}).Where("id = ?", userID).Update(column, value).Error
 }
 
-// writeAdminGateError 把闸门事务的结果映射成响应；有错误时写出响应并返回 true。
+// writeAdminGateError maps the gate transaction's result into a response; when there is an error it writes the response and returns true.
 func (s *Server) writeAdminGateError(c *gin.Context, err error, action string, userID uint64) bool {
 	switch {
 	case err == nil:

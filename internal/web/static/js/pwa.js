@@ -1,13 +1,13 @@
-// PWA 外壳注册（M8-2）、暗色模式（Dark Mode）与移动端导航交互。
-// 零依赖、无构建链；不触碰任何答题数据。
+// PWA shell registration (M8-2), dark mode and mobile navigation interactions.
+// Zero dependencies, no build chain; touches no answer data whatsoever.
 //
-// 暗色模式分工：**切换按钮在 SPA 侧**（`frontend/src/lib/theme.ts` + `frontend/src/lib/components/shell/` 里的 ThemeToggle 与 UserMenu），因为
-// SPA 是客户端渲染的，而本文件的绑定只在加载期跑一次、拿不到之后才挂载的按钮。本文件只负责
-// 「加载期应用一次 + 用户未做选择时跟随系统偏好变化」。
+// Division of labor for dark mode: **the toggle button lives on the SPA side** (ThemeToggle and UserMenu in `frontend/src/lib/theme.ts` + `frontend/src/lib/components/shell/`), because
+// the SPA is client-rendered, while this file's bindings run once at load time and cannot reach buttons mounted afterwards. This file only handles
+// "apply once at load time + follow system preference changes while the user has made no choice".
 (function () {
   "use strict";
 
-  // ── 暗色模式管理 ───────────────────────────────────────────────
+  // ── dark mode management ───────────────────────────────────────
   function isDarkTheme() {
     var stored = localStorage.getItem("engram-theme");
     if (stored === "dark") return true;
@@ -22,8 +22,8 @@
     } else {
       root.classList.remove("dark");
     }
-    // color-scheme 与画布底色必须与首帧的内联引导（internal/web/theme.go）逐字一致：
-    // 只切类名会让原生控件配色与画布底色停留在切换前的状态。
+    // color-scheme and the canvas background must match the first-paint inline bootstrap (internal/web/theme.go) exactly:
+    // switching only the class name leaves native control colors and the canvas background stuck at their pre-switch state.
     root.style.colorScheme = isDark ? "dark" : "light";
     root.style.backgroundColor = isDark ? "#09090b" : "#f8fafc";
     var meta = document.querySelector('meta[name="theme-color"]');
@@ -32,7 +32,7 @@
     }
   }
 
-  // 立即根据偏好应用，避免闪烁
+  // apply right away from the preference, to avoid a flash
   applyTheme(isDarkTheme());
 
   if (window.matchMedia) {
@@ -43,11 +43,11 @@
     });
   }
 
-  // ── 移动端导航与页面就绪增强 ────────────────────────────────────
+  // ── mobile navigation and page-ready enhancements ──────────────
   function setupPageInteractions() {
     applyTheme(isDarkTheme());
 
-    // 移动端折叠导航抽屉
+    // mobile collapsible navigation drawer
     var navToggle = document.getElementById("mobile-nav-toggle");
     var navMenu = document.getElementById("mobile-nav-menu");
     var iconBars = document.getElementById("mobile-nav-icon-bars");
@@ -84,9 +84,9 @@
       backdrop.onclick = closeMobileNav;
     }
 
-    // 导航项高亮由服务端渲染（M8-7）：不再按 href 猜测当前页——旧做法用
-    // `header nav a` 选择器，会把品牌链接也算进去，于是 "/" 上品牌被选中。
-    // 这里只保留“点任意导航链接后收起移动抽屉”。
+    // Navigation item highlighting is server-rendered (M8-7): no guessing the current page from the href any more — the old approach used
+    // a `header nav a` selector, which counted the brand link too, so on "/" the brand got highlighted.
+    // All that remains here is "collapse the mobile drawer after clicking any navigation link".
     var navLinks = document.querySelectorAll("header nav a, #mobile-nav-menu a");
     navLinks.forEach(function (link) {
       link.addEventListener("click", function () {
@@ -94,10 +94,10 @@
       });
     });
 
-    // 原生对话框（新建卡组等，M8-7）。
+    // Native dialogs (new deck and the like, M8-7).
     setupDialogs();
 
-    // 自定义下拉菜单（全站通用组件）。
+    // Custom dropdown menus (a site-wide shared component).
     setupCustomSelects();
 
     document.addEventListener("keydown", function (e) {
@@ -107,7 +107,7 @@
     });
   }
 
-  // setupCustomSelects 实现自定义下拉框的展开/收起、选项高亮、表单/HTMX 联动与键盘无障碍。
+  // setupCustomSelects implements expand/collapse, option highlighting, form/HTMX integration and keyboard accessibility for custom dropdowns.
   function setupCustomSelects() {
     function closeAllSelects(except) {
       document.querySelectorAll("[data-custom-select]").forEach(function (container) {
@@ -271,9 +271,9 @@
     });
   }
 
-  // setupDialogs 把带 data-dialog-open 的按钮接到对应 <dialog>，并处理关闭与点击遮罩。
-  // 这里不含任何用户文案：可访问名称来自模板（语言包）。模板在错误回显时给对话框加
-  // open 属性（非模态），这里摘掉属性再以模态打开，保证遮罩与居中一致。
+  // setupDialogs connects buttons carrying data-dialog-open to the matching <dialog>, and handles closing and backdrop clicks.
+  // No user-facing copy lives here: accessible names come from the templates (language packs). On error echo the template puts the
+  // open attribute on the dialog (non-modal); this strips the attribute and opens it modally instead, so the backdrop and centering are consistent.
   function setupDialogs() {
     document.querySelectorAll("[data-dialog-open]").forEach(function (trigger) {
       trigger.addEventListener("click", function (e) {
@@ -296,13 +296,13 @@
     });
 
     document.querySelectorAll("dialog").forEach(function (dialog) {
-      // 点击对话框自身（内层面板之外）即视为点击遮罩，关闭。
+      // Clicking the dialog itself (outside the inner panel) counts as a backdrop click and closes it.
       dialog.addEventListener("click", function (e) {
         if (e.target === dialog) {
           dialog.close();
         }
       });
-      // 错误回显：模板已带 open 属性，升级为模态（Escape 与遮罩随之生效）。
+      // Error echo: the template already carries the open attribute, so upgrade it to modal (Escape and the backdrop then take effect).
       if (dialog.hasAttribute("open")) {
         dialog.removeAttribute("open");
         if (typeof dialog.showModal === "function") {
@@ -324,7 +324,7 @@
   }
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("/sw.js").catch(function () {
-      // 注册失败不影响页面功能：外壳缓存是增强项，不是答题的前提。
+      // A failed registration does not affect page functionality: shell caching is an enhancement, not a prerequisite for answering.
     });
   });
 })();

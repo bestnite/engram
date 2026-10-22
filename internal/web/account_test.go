@@ -14,17 +14,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是账号安全与邮件流程 SPA 传输层的验收（internal/web/account.go）。
+// This file is the acceptance test for the SPA transport layer of account security and mail flows (internal/web/account.go).
 //
-// 覆盖：可导航读取页的切壳、免登录一键链接的令牌消费（应用壳 + JSON 端点）、同源 JSON 端点的令牌
-// 一次性/过期语义、匿名限流、会话与 CSRF 负例，以及改邮箱确认前不改库。全部走真实路由与 SQLite。
+// Covers: the shell cutover of the navigable read pages, token consumption for the sign-in-free one-click links (app shell + JSON endpoint), the one-shot/expiry
+// semantics of the same-origin JSON endpoints' tokens, anonymous rate limiting, session and CSRF negative cases, and that the mailbox is not changed before confirmation. Everything runs through the real routes and SQLite.
 
-// postJSONWithSession 以会话 cookie + 会话 CSRF header 发一次 JSON 写请求。
+// postJSONWithSession sends one JSON write request with the session cookie + session CSRF header.
 func postJSONWithSession(srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	return postJSON(srv, path, body, cookies, map[string]string{auth.CSRFHeaderName: csrf})
 }
 
-// decodeJSON 把响应体解到 out；失败直接 Fatal。
+// decodeJSON decodes the response body into out; Fatals on failure.
 func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, out any) {
 	t.Helper()
 	if err := json.Unmarshal(rec.Body.Bytes(), out); err != nil {
@@ -32,7 +32,7 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, out any) {
 	}
 }
 
-// jsonResetToken 走 JSON 的 POST /api/v1/auth/forgot-password 触发一封重置邮件并取出明文令牌。
+// jsonResetToken triggers a reset mail via the JSON POST /api/v1/auth/forgot-password and extracts the plaintext token.
 func jsonResetToken(t *testing.T, ts securityTestServer, cookie *http.Cookie, headers map[string]string) string {
 	t.Helper()
 	before := len(outboxByType(t, ts.db, mail.TypePasswordReset))
@@ -48,8 +48,8 @@ func jsonResetToken(t *testing.T, ts securityTestServer, cookie *http.Cookie, he
 	return tokenFromBody(t, rows[len(rows)-1].TextBody)
 }
 
-// TestAccountRouteCutover 覆盖三个可导航读取页与两条一键链接的应用壳、/settings/email 的登录门禁，
-// 以及一键链接入口初始化双提交 cookie 但不消费令牌。
+// TestAccountRouteCutover covers the app shell of the three navigable read pages and the two one-click links, the sign-in gate on /settings/email,
+// and that the one-click link entry points initialize the double-submit cookie without consuming any token.
 func TestAccountRouteCutover(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
@@ -57,7 +57,7 @@ func TestAccountRouteCutover(t *testing.T) {
 		assertShell(t, getWithCookies(t, ts.srv, path, ts.cookies))
 	}
 
-	// 邮件里的一键链接落在规范路径上，同样返回应用壳（服务端不再渲染结果页）。
+	// The one-click link in emails lands on the canonical path and likewise returns the app shell (the server no longer renders a result page).
 	for _, path := range []string{"/verify-email?token=bogus", "/confirm-email-change?token=bogus"} {
 		rec := get(t, ts.srv, path, nil)
 		if rec.Code != http.StatusOK {
@@ -71,15 +71,15 @@ func TestAccountRouteCutover(t *testing.T) {
 		}
 	}
 
-	// 未登录的 /settings/email 仍重定向登录页：授权判定在服务端，先于切壳。
+	// /settings/email when signed out still redirects to the login page: authorization is decided server-side, before the shell cutover.
 	anon := get(t, ts.srv, "/settings/email", nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Errorf("anonymous GET /settings/email = %d %q, want 303 /login", anon.Code, anon.Header().Get("Location"))
 	}
 }
 
-// TestAccountJSON_CSRFRejections 断言会话前 JSON 端点复用双提交 CSRF：缺 cookie / 缺镜像
-// 值一律 403 csrf_failed，且不触发任何业务动作。
+// TestAccountJSON_CSRFRejections asserts that pre-session JSON endpoints reuse double-submit CSRF: a missing cookie / missing mirror
+// value is always 403 csrf_failed and triggers no business action.
 func TestAccountJSON_CSRFRejections(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	for _, path := range []string{
@@ -98,13 +98,13 @@ func TestAccountJSON_CSRFRejections(t *testing.T) {
 	}
 }
 
-// TestAccountForgotResetFlow 覆盖 JSON 的重置请求与提交：成功改密、令牌一次性、过期与
-// 弱密码拒绝，以及新密码真的能登录。
+// TestAccountForgotResetFlow covers the JSON reset request and submission: a successful password change, token one-shotness, expiry and
+// rejection of weak passwords, and that the new password really can sign in.
 func TestAccountForgotResetFlow(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	cookie, headers := preSessionPair(t, ts.srv, "/forgot-password")
 
-	// 请求重置：响应只含站点级 mail_ready，且确实入队了一封重置邮件。
+	// Request reset: the response contains only the site-level mail_ready, and a reset mail really was enqueued.
 	rec := postJSON(ts.srv, "/api/v1/auth/forgot-password",
 		map[string]string{"email": "owner@example.com"}, []*http.Cookie{cookie}, headers)
 	if rec.Code != http.StatusOK {
@@ -119,7 +119,7 @@ func TestAccountForgotResetFlow(t *testing.T) {
 	}
 	plain := jsonResetToken(t, ts, cookie, headers)
 
-	// 提交新密码：成功且新密码可登录。
+	// Submit new password: succeeds and the new password can sign in.
 	reset := postJSON(ts.srv, "/api/v1/auth/reset-password",
 		map[string]string{"token": plain, "password": "N3wSup3rSecret!"}, []*http.Cookie{cookie}, headers)
 	if reset.Code != http.StatusOK {
@@ -132,17 +132,17 @@ func TestAccountForgotResetFlow(t *testing.T) {
 	if !resetRes.Reset {
 		t.Errorf("reset-password reset = false, want true")
 	}
-	// 新密码真的能登录（走同源 JSON 登录端点）。
+	// The new password really can sign in (via the same-origin JSON login endpoint).
 	loginJSON(t, ts.srv, ts.db, "owner", "N3wSup3rSecret!")
 
-	// 同一令牌二次使用：token_used。
+	// Reusing the same token: token_used.
 	reuse := postJSON(ts.srv, "/api/v1/auth/reset-password",
 		map[string]string{"token": plain, "password": "An0therSecret!"}, []*http.Cookie{cookie}, headers)
 	if reuse.Code != http.StatusBadRequest || apiErrorCode(t, reuse) != "token_used" {
 		t.Errorf("reused reset token = %d %s, want 400 token_used", reuse.Code, apiErrorCode(t, reuse))
 	}
 
-	// 弱密码：停在密码策略 code（令牌已被消费，与 SSR 一致，故此处先取新令牌）。
+	// Weak password: stops at the password policy code (the token has already been consumed, same as SSR, so a fresh token is fetched here first).
 	weak := jsonResetToken(t, ts, cookie, headers)
 	weakRec := postJSON(ts.srv, "/api/v1/auth/reset-password",
 		map[string]string{"token": weak, "password": "short"}, []*http.Cookie{cookie}, headers)
@@ -150,7 +150,7 @@ func TestAccountForgotResetFlow(t *testing.T) {
 		t.Errorf("weak password = %d %s, want 400 password_too_short", weakRec.Code, apiErrorCode(t, weakRec))
 	}
 
-	// 过期令牌：token_expired。
+	// Expired token: token_expired.
 	expired, err := ts.srv.tokens.Issue(context.Background(), ts.ownerID, store.ActionTokenPasswordReset, "", -time.Minute)
 	if err != nil {
 		t.Fatalf("issue expired reset token: %v", err)
@@ -162,11 +162,11 @@ func TestAccountForgotResetFlow(t *testing.T) {
 	}
 }
 
-// TestAccountEmailVerifyFlows 覆盖会话端点的读取/重发/改邮箱，以及免登录的验证与确认 JSON 端点。
+// TestAccountEmailVerifyFlows covers reading/resending/changing the email on the session endpoints, plus the sign-in-free verify and confirm JSON endpoints.
 func TestAccountEmailVerifyFlows(t *testing.T) {
 	ts := newSecurityServer(t, true)
 
-	// GET /api/v1/settings/email：当前邮箱 + 未验证 + 邮件可用。
+	// GET /api/v1/settings/email: current mailbox + unverified + mail available.
 	rec := getWithCookies(t, ts.srv, "/api/v1/settings/email", ts.cookies)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/settings/email status = %d, want 200", rec.Code)
@@ -181,12 +181,12 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 		t.Errorf("email settings = %+v, want owner@example.com / unverified / mail_ready", settings)
 	}
 
-	// 匿名读取会话端点：401。
+	// Anonymous read of a session endpoint: 401.
 	if anon := get(t, ts.srv, "/api/v1/settings/email", nil); anon.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous GET /api/v1/settings/email = %d, want 401", anon.Code)
 	}
 
-	// 重发验证邮件（会话 CSRF）。
+	// Resend the verification mail (session CSRF).
 	resend := postJSONWithSession(ts.srv, "/api/v1/settings/verify-email", nil, ts.cookies, ts.csrf)
 	if resend.Code != http.StatusOK {
 		t.Fatalf("resend verification status = %d, want 200 (body %s)", resend.Code, snippet(resend.Body.String()))
@@ -197,7 +197,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	}
 	verifyToken := tokenFromBody(t, verifyRows[len(verifyRows)-1].TextBody)
 
-	// 消费验证令牌（免登录，双提交 CSRF）。
+	// Consume the verification token (sign-in-free, double-submit CSRF).
 	vc, vh := preSessionPair(t, ts.srv, "/verify-email")
 	verified := postJSON(ts.srv, "/api/v1/auth/verify-email",
 		map[string]string{"token": verifyToken}, []*http.Cookie{vc}, vh)
@@ -211,14 +211,14 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	if owner.EmailVerifiedAt == nil {
 		t.Error("email_verified_at is still NULL after JSON verification")
 	}
-	// 二次使用：token_used。
+	// Second use: token_used.
 	again := postJSON(ts.srv, "/api/v1/auth/verify-email",
 		map[string]string{"token": verifyToken}, []*http.Cookie{vc}, vh)
 	if again.Code != http.StatusBadRequest || apiErrorCode(t, again) != "token_used" {
 		t.Errorf("reused verification token = %d %s, want 400 token_used", again.Code, apiErrorCode(t, again))
 	}
 
-	// 改邮箱请求：无会话 CSRF → 403；格式非法 → email_invalid；与原邮箱相同 → email_same。
+	// Email-change request: no session CSRF → 403; malformed format → email_invalid; same as the original mailbox → email_same.
 	if noCSRF := postJSON(ts.srv, "/api/v1/settings/email", map[string]string{"email": "x@example.com"}, ts.cookies, nil); noCSRF.Code != http.StatusForbidden {
 		t.Errorf("settings/email without session CSRF = %d, want 403", noCSRF.Code)
 	}
@@ -230,7 +230,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	if same.Code != http.StatusBadRequest || apiErrorCode(t, same) != "email_same" {
 		t.Errorf("same new email = %d %s, want 400 email_same", same.Code, apiErrorCode(t, same))
 	}
-	// 已被占用 → email_taken。
+	// Already taken → email_taken.
 	taken := &store.User{
 		Username: "takenuser", Email: "taken@example.com", DisplayName: "Taken",
 		Role: store.RoleUser, Status: store.StatusActive, Locale: "en",
@@ -244,7 +244,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 		t.Errorf("taken new email = %d %s, want 400 email_taken", takenRec.Code, apiErrorCode(t, takenRec))
 	}
 
-	// 成功改邮箱请求：入队到新地址，且确认前库里仍不变。
+	// Successful email-change request: enqueued to the new address, and the DB stays unchanged before confirmation.
 	before := len(outboxByType(t, ts.db, mail.TypeEmailVerification))
 	change := postJSONWithSession(ts.srv, "/api/v1/settings/email", map[string]string{"email": "new-owner@example.com"}, ts.cookies, ts.csrf)
 	if change.Code != http.StatusOK {
@@ -261,7 +261,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 		t.Fatalf("email changed before confirmation: %q", owner.Email)
 	}
 
-	// 确认改邮箱（免登录，双提交 CSRF）：真正改库。
+	// Confirm the email change (sign-in-free, double-submit CSRF): the DB is actually updated.
 	changeToken := tokenFromBody(t, rows[len(rows)-1].TextBody)
 	cc, ch := preSessionPair(t, ts.srv, "/confirm-email-change")
 	confirm := postJSON(ts.srv, "/api/v1/auth/confirm-email-change",
@@ -277,8 +277,8 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 	}
 }
 
-// TestShellEndpointsServeAppAndDoubleSubmitCookie 断言 /verify-email 与
-// /confirm-email-change 下发双提交 cookie 并返回应用壳，且不消费任何令牌。
+// TestShellEndpointsServeAppAndDoubleSubmitCookie asserts that /verify-email and
+// /confirm-email-change issue the double-submit cookie, return the app shell, and consume no token.
 func TestShellEndpointsServeAppAndDoubleSubmitCookie(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	for _, path := range []string{"/verify-email", "/confirm-email-change"} {

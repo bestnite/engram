@@ -16,24 +16,24 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是（A 类事务安全邮件）在 web 层的公共部分：投递助手、链接拼装、
-// 五类邮件的文案组装，以及各触发点复用的通知函数。
+// This file is the web-layer common part of (class A transactional security mail): the delivery helper, link assembly,
+// the copy assembly for the five mail types, and the notify functions the trigger points reuse.
 //
-// 三条行为约束在这里统一兑现：
-//   - 绝不在请求路径同步发信：一律经 SecurityNotifier.Send → Outbox.Enqueue 入队；
-//   - 发信失败不让触发操作失败：所有通知函数不返回 error，失败只记英文日志；
-//   - SMTP 未配置时流程禁用并说明原因：页面渲染 mail.not_configured（见各页面 handler）。
+// Three behavioral constraints are met in one place here:
+//   - never send mail synchronously on the request path: always enqueue via SecurityNotifier.Send → Outbox.Enqueue;
+//   - a failed send never fails the triggering action: no notify function returns an error, failures only log in English;
+//   - when SMTP is not configured the flow is disabled and states why: the page renders mail.not_configured (see the page handlers).
 //
-// A 类邮件不受用户偏好影响、不携带退订头（SecurityNotifier 不写 Headers）。
+// Class A mail is not affected by user preferences and carries no unsubscribe header (SecurityNotifier never writes Headers).
 
-// securityMailReady 报告 A 类邮件当前是否可投递（SMTP 已配置且 outbox 已装配）。
-// 依赖邮件的页面据此禁用并渲染 mail.not_configured，而不是静默什么都不做。
+// securityMailReady reports whether class A mail is currently deliverable (SMTP configured and outbox wired up).
+// Pages that depend on mail disable themselves and render mail.not_configured from it, instead of silently doing nothing.
 func (s *Server) securityMailReady() bool {
 	return s.securityMail != nil && s.securityMail.Configured()
 }
 
-// securityAbsoluteURL 拼出邮件里可点击的绝对地址：配置了 BASE_URL 就用它，
-// 否则按当前请求推导（本地开发与 httptest 依赖后者）。
+// securityAbsoluteURL builds the clickable absolute URL for a mail: BASE_URL is used when configured,
+// otherwise it is derived from the current request (local development and httptest rely on the latter).
 func (s *Server) securityAbsoluteURL(c *gin.Context, path string) string {
 	if base := strings.TrimRight(strings.TrimSpace(s.baseURL), "/"); base != "" {
 		return base + path
@@ -48,8 +48,8 @@ func (s *Server) securityAbsoluteURL(c *gin.Context, path string) string {
 	return scheme + "://" + c.Request.Host + path
 }
 
-// userLocalizer 返回收件人语言对应的本地化器：邮件文案跟随用户自己的语言设置，
-// 而不是触发请求的管理员语言。用户没有设置时回落到站点默认。
+// userLocalizer returns the localizer for the recipient's language: mail copy follows the user's own language setting,
+// not that of the admin whose request triggered it. Falls back to the site default when the user has set none.
 func (s *Server) userLocalizer(u *store.User) *i18n.Localizer {
 	code := ""
 	if u != nil {
@@ -58,8 +58,8 @@ func (s *Server) userLocalizer(u *store.User) *i18n.Localizer {
 	return s.i18n.Localizer(s.i18n.Pick(code, "", ""))
 }
 
-// sendSecurity 是 A 类邮件的唯一投递出口；刻意不返回 error：
-// 登录成功、改密码成功等触发操作绝不能因为入队失败而失败。
+// sendSecurity is the single delivery exit for class A mail; it deliberately returns no error:
+// triggering actions such as a successful login or password change must never fail because enqueueing failed.
 func (s *Server) sendSecurity(ctx context.Context, userID uint64, to string, t mail.Type, subject, textBody, htmlBody string) bool {
 	if s.securityMail == nil {
 		return false
@@ -67,8 +67,8 @@ func (s *Server) sendSecurity(ctx context.Context, userID uint64, to string, t m
 	return s.securityMail.Send(ctx, userID, to, t, subject, textBody, htmlBody)
 }
 
-// loginFingerprint 把客户端 IP 与 User-Agent 归一化成稳定指纹（sha256 十六进制）。
-// 存哈希而非原文：足够做去重，又不在库里长期堆积用户代理原文（隐私最小化）。
+// loginFingerprint normalizes the client IP and User-Agent into a stable fingerprint (sha256 hex).
+// The hash is stored rather than the raw text: enough for deduplication, without piling raw user agents up in the database over time (privacy minimization).
 func loginFingerprint(c *gin.Context) string {
 	ip := strings.TrimSpace(c.ClientIP())
 	ua := strings.TrimSpace(c.GetHeader("User-Agent"))
@@ -76,13 +76,13 @@ func loginFingerprint(c *gin.Context) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ── 五类邮件的文案组装（默认正文只有纯文本；管理员配了模板才产出 HTML 段）──────────
+// ── copy assembly for the five mail types (the default body is plain text only; an HTML part is produced only when an admin configured a template) ──────────
 //
-// 每个组装函数做三件事：给出模板变量、给出内置正文（今天的行为）、交给 renderMail 渲染。
-// 变量名必须与 internal/mail/vars.go 的表一致，否则必填校验会在发送时拦下（这是有意的
-// 失败方向：宁可不发，也不发一封没有重置链接的邮件）。
+// Each assembly function does three things: provide the template variables, provide the built-in body (today's behavior), and hand it to renderMail to render.
+// Variable names must match the table in internal/mail/vars.go, otherwise the required-variable check stops the send (this is a deliberate
+// direction of failure: better not to send at all than to send a mail with no reset link).
 
-// passwordResetMessage 组装密码重置邮件。链接明文只出现在这里，绝不入库、绝不进日志。
+// passwordResetMessage assembles the password reset mail. The plaintext link appears only here and never reaches the database or the logs.
 func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
@@ -91,7 +91,7 @@ func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, 
 	return mail.Message{To: to, Type: string(mail.TypePasswordReset), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// emailVerificationMessage 组装邮箱验证邮件。
+// emailVerificationMessage assembles the email verification mail.
 func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
@@ -100,10 +100,10 @@ func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localiz
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// emailChangeMessage 组装改邮箱确认邮件；发给待确认的新地址。
+// emailChangeMessage assembles the email change confirmation mail; it goes to the new address awaiting confirmation.
 //
-// 它复用邮箱验证这个类型（同属「确认一个邮箱地址」），所以管理员为 email_verification
-// 配的模板对两类信都生效，变量集也是同一套（site/url/expires）。
+// It reuses the email verification type (both are "confirm an email address"), so a template an admin configures for email_verification
+// applies to both kinds of mail, and the set of variables is the same one (site/url/expires).
 func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
@@ -112,7 +112,7 @@ func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// newDeviceLoginMessage 组装新设备/新 IP 登录提醒。
+// newDeviceLoginMessage assembles the new device / new IP login alert.
 func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
 	atText := at.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "ip": ip, "time": atText}
@@ -121,7 +121,7 @@ func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer,
 	return mail.Message{To: to, Type: string(mail.TypeNewDeviceLogin), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// credentialChangedMessage 组装凭据变更通知；what 是已本地化的「改了什么」短语。
+// credentialChangedMessage assembles the credential change notice; what is the already-localized phrase for "what changed".
 func (s *Server) credentialChangedMessage(ctx context.Context, loc *i18n.Localizer, to, site, what string) mail.Message {
 	vars := mail.Vars{"site": site, "what": what}
 	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeCredentialChanged, mail.VariantDefault, loc.Tf, vars)
@@ -129,7 +129,7 @@ func (s *Server) credentialChangedMessage(ctx context.Context, loc *i18n.Localiz
 	return mail.Message{To: to, Type: string(mail.TypeCredentialChanged), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// accountStatusMessage 组装账号状态变更通知；status 是已本地化的状态短语。
+// accountStatusMessage assembles the account status change notice; status is the already-localized status phrase.
 func (s *Server) accountStatusMessage(ctx context.Context, loc *i18n.Localizer, to, site, status string) mail.Message {
 	vars := mail.Vars{"site": site, "status": status}
 	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeAccountStatus, mail.VariantDefault, loc.Tf, vars)
@@ -137,10 +137,10 @@ func (s *Server) accountStatusMessage(ctx context.Context, loc *i18n.Localizer, 
 	return mail.Message{To: to, Type: string(mail.TypeAccountStatus), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// ── 触发点通知（各调用点只需一行；绝不返回 error）────────────────────────────────
+// ── trigger-point notifications (each call site needs one line; never returns an error) ────────────────────────────────
 
-// notifyNewDeviceLogin 记录登录指纹，并在指纹是新的时投递新设备/新 IP 登录提醒。
-// 指纹已见过（或并发下刚被其它请求记录）时不发信，避免同一设备反复提醒。
+// notifyNewDeviceLogin records the login fingerprint and delivers the new device / new IP login alert when the fingerprint is new.
+// No mail is sent when the fingerprint has been seen (or was just recorded by a concurrent request), so the same device is not alerted over and over.
 func (s *Server) notifyNewDeviceLogin(c *gin.Context, u *store.User) {
 	if s.fingerprints == nil || u == nil {
 		return
@@ -161,8 +161,8 @@ func (s *Server) notifyNewDeviceLogin(c *gin.Context, u *store.User) {
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeNewDeviceLogin, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
-// notifyCredentialChanged 在密码/TOTP/恢复码变更后投递通知。
-// kind 是 mail.notice.credential.* 的键后缀（password / totp_enabled / totp_disabled / recovery_codes）。
+// notifyCredentialChanged delivers the notice after a password/TOTP/recovery-code change.
+// kind is the key suffix of mail.notice.credential.* (password / totp_enabled / totp_disabled / recovery_codes).
 func (s *Server) notifyCredentialChanged(ctx context.Context, u *store.User, kind string) {
 	if u == nil {
 		return
@@ -172,8 +172,8 @@ func (s *Server) notifyCredentialChanged(ctx context.Context, u *store.User, kin
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeCredentialChanged, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
-// notifyAccountStatus 在账号被禁用或删除后投递通知。
-// status 是 mail.notice.account.* 的键后缀（disabled / deleted）。
+// notifyAccountStatus delivers the notice after an account is disabled or deleted.
+// status is the key suffix of mail.notice.account.* (disabled / deleted).
 func (s *Server) notifyAccountStatus(ctx context.Context, u *store.User, status string) {
 	if u == nil {
 		return
@@ -183,11 +183,11 @@ func (s *Server) notifyAccountStatus(ctx context.Context, u *store.User, status 
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeAccountStatus, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
-// securitySiteName 取站点品牌名作为邮件里的 {site}。
+// securitySiteName takes the site brand name as {site} in mails.
 func securitySiteName(loc *i18n.Localizer) string { return loc.T("app.name") }
 
-// sendEmailVerification 签发验证令牌并投递验证邮件；返回是否成功入队。
-// SMTP 未配置或令牌签发失败时返回 false，调用方据页面/回显说明原因，绝不静默。
+// sendEmailVerification issues a verification token and delivers the verification mail; returns whether it was enqueued successfully.
+// Returns false when SMTP is not configured or issuing the token fails; the caller explains the reason in the page/response and never stays silent.
 func (s *Server) sendEmailVerification(c *gin.Context, u *store.User) bool {
 	if s.tokens == nil || u == nil || !s.securityMailReady() {
 		return false
@@ -205,7 +205,7 @@ func (s *Server) sendEmailVerification(c *gin.Context, u *store.User) bool {
 	return s.sendSecurity(ctx, u.ID, msg.To, mail.TypeEmailVerification, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 
-// sendEmailChangeConfirmation 向待确认的新地址签发改邮箱令牌并投递确认邮件。
+// sendEmailChangeConfirmation issues an email change token for the new address awaiting confirmation and delivers the confirmation mail.
 func (s *Server) sendEmailChangeConfirmation(c *gin.Context, u *store.User, newEmail string) bool {
 	if s.tokens == nil || u == nil || !s.securityMailReady() {
 		return false

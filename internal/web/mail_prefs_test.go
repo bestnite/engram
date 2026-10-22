@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// setOwnerLocale 直接把 owner 的界面语言写成 code，让偏好页以可断言的文案渲染。
+// setOwnerLocale writes the owner's UI language to code directly, so the preferences page renders with assertable copy.
 func setOwnerLocale(t *testing.T, db *gorm.DB, userID uint64, code string) {
 	t.Helper()
 	users := store.NewUserStore(db)
@@ -27,8 +27,8 @@ func setOwnerLocale(t *testing.T, db *gorm.DB, userID uint64, code string) {
 	}
 }
 
-// TestMailPrefsCatalogKeysExistInBothCatalogs 断言目录与页面引用的每个语言包键在中英两套里都存在：
-// 目录标签是动态拼接的（def.LabelKey），静态 key 扫描器看不见它们，必须在这里兜底。
+// TestMailPrefsCatalogKeysExistInBothCatalogs asserts every language-pack key referenced by the catalog and the page exists in both the Chinese and English sets:
+// catalog labels are built dynamically (def.LabelKey), so the static key scanner cannot see them and this is the fallback check.
 func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 	zh := catalogKeys(t, filepath.Join("..", "i18n", "locales", "zh-CN.yaml"))
 	en := catalogKeys(t, filepath.Join("..", "i18n", "locales", "en.yaml"))
@@ -49,7 +49,7 @@ func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 		"mail.prefs.reminder_time.default",
 	}
 	for _, class := range mail.ClassOrder() {
-		// 只断言标题键：分组说明（.note）已按「文案从简」移除，页面上不再有那几行。
+		// Assert only the title keys: the group notes (.note) were removed under "keep the copy lean", so those lines are no longer on the page.
 		keys = append(keys, "mail.prefs.class."+string(class)+".heading")
 	}
 	for _, def := range mail.Catalog() {
@@ -65,7 +65,7 @@ func TestMailPrefsCatalogKeysExistInBothCatalogs(t *testing.T) {
 	}
 }
 
-// catalogKeys 读取一份 YAML 语言包的 message id 集合。
+// catalogKeys reads the set of message ids from one YAML language pack.
 func catalogKeys(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	data, err := os.ReadFile(path)

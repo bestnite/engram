@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestLoadAssetsBuildsContentHashedURLs 断言嵌入资源带内容哈希路径，且哈希可复现。
+// TestLoadAssetsBuildsContentHashedURLs asserts embedded assets have content-hashed paths and that the hash is reproducible.
 func TestLoadAssetsBuildsContentHashedURLs(t *testing.T) {
 	assets, err := LoadAssets()
 	if err != nil {
@@ -34,7 +34,7 @@ func TestLoadAssetsBuildsContentHashedURLs(t *testing.T) {
 	}
 }
 
-// TestAssetHashChangesWithContent 是验收点：内容变了，哈希必须跟着变。
+// TestAssetHashChangesWithContent is an acceptance point: when the content changes, the hash must change with it.
 func TestAssetHashChangesWithContent(t *testing.T) {
 	first := newAsset("js/app.js", []byte("console.log(1)"))
 	same := newAsset("js/app.js", []byte("console.log(1)"))
@@ -51,7 +51,7 @@ func TestAssetHashChangesWithContent(t *testing.T) {
 	}
 }
 
-// TestServeRejectsWrongHashAndUnknownFile 覆盖静态资源路由的反面用例。
+// TestServeRejectsWrongHashAndUnknownFile covers the negative cases of the static asset route.
 func TestServeRejectsWrongHashAndUnknownFile(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	assets, err := LoadAssets()
@@ -81,7 +81,7 @@ func TestServeRejectsWrongHashAndUnknownFile(t *testing.T) {
 	}
 }
 
-// TestServeReturnsAssetWithImmutableCaching 断言命中哈希的资源可长期缓存。
+// TestServeReturnsAssetWithImmutableCaching asserts a hash-matching asset can be cached long-term.
 func TestServeReturnsAssetWithImmutableCaching(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	assets, err := LoadAssets()

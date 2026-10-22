@@ -8,8 +8,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// list_card_types 的验收：返回与注册表一致的题型自描述（与 REST GET /card-types 同源），
-// 且只对带 read scope 的 key 开放。
+// Acceptance for list_card_types: it returns the card type self-descriptions consistent with the registry (same source as REST GET /card-types),
+// and is open only to keys with the read scope.
 
 func TestListCardTypesMatchesRegistry(t *testing.T) {
 	_, db, keys, ts := newEnv(t)

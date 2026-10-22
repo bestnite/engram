@@ -14,20 +14,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是（D 类管理员通知邮件）的验收测试。
+// This file is the acceptance test for (class D admin notification mail).
 //
-// 覆盖：两个在本仓库真实存在的触发点各自把正确类型的邮件送到**管理员登录邮箱**；
-// 「邮件失败不影响触发操作」；D 类可关闭；SMTP 未配置时页面渲染 mail.not_configured。
+// Covers: the two trigger points that really exist in this repository each deliver the correct type of mail to the **admin's sign-in mailbox**;
+// "a mail failure does not affect the triggering operation"; class D can be turned off; the page renders mail.not_configured when SMTP is unconfigured.
 
-// attachAdminMail 写入生效的 SMTP 设置并给测试服务挂一个 outbox；worker 不启动，
-// 因此入队邮件留在 outbox 表里，测试直接按类型查询即可（与 A 类测试同法）。
+// attachAdminMail writes effective SMTP settings and attaches an outbox to the test service; the worker is not started,
+// so enqueued mail stays in the outbox table and the test can query it directly by type (the same approach as the class A tests).
 func attachAdminMail(t *testing.T, srv *Server, db *gorm.DB) {
 	t.Helper()
 	configureSMTP(t, db)
 	srv.mail = mail.NewOutbox(mail.Deps{DB: db, Logger: discardLogger()})
 }
 
-// waitOutboxType 轮询等待 outbox 里出现指定类型的邮件（作业失败钩子在 worker 里异步触发）。
+// waitOutboxType polls until a mail of the given type appears in the outbox (the job-failure hook fires asynchronously inside the worker).
 func waitOutboxType(t *testing.T, db *gorm.DB, typ mail.Type) []store.OutboxMessage {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -41,9 +41,9 @@ func waitOutboxType(t *testing.T, db *gorm.DB, typ mail.Type) []store.OutboxMess
 	return nil
 }
 
-// TestAdminMailJobFailureReachesAdmin 触发点一：作业失败后，管理员收到 job_failed。
-// 这里跑真实 Runner（/bin/sh -c 'exit 3'）并把它接到 web 层的 NotifyJobFailed，
-// 因此覆盖了 jobs.OnFailure 钩子与投递的完整链路。
+// TestAdminMailJobFailureReachesAdmin trigger point one: after a job failure the admin receives job_failed.
+// This runs a real Runner (/bin/sh -c 'exit 3') and hooks it up to the web layer's NotifyJobFailed,
+// so it covers the full chain of the jobs.OnFailure hook and delivery.
 func TestAdminMailJobFailureReachesAdmin(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	attachAdminMail(t, srv, db)
@@ -73,7 +73,7 @@ func TestAdminMailJobFailureReachesAdmin(t *testing.T) {
 	t.Logf("failed job triggered %s mail to admin %s (subject %q)", rows[0].Type, rows[0].To, rows[0].Subject)
 }
 
-// TestAdminMailMediaQuotaReachesAdmin 触发点二：用户上传被媒体配额拦下时，管理员收到 media_disk_alert。
+// TestAdminMailMediaQuotaReachesAdmin trigger point two: when a user upload is blocked by the media quota, the admin receives media_disk_alert.
 func TestAdminMailMediaQuotaReachesAdmin(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	attachAdminMail(t, srv, db)
@@ -84,7 +84,7 @@ func TestAdminMailMediaQuotaReachesAdmin(t *testing.T) {
 	}
 	deck := seedDeck(t, db, ownerID, "quota deck")
 
-	// 先占满 1500 字节：上传 + 让 note 引用它。
+	// First fill up 1500 bytes: upload + have the note reference it.
 	first := uploadMedia(t, srv, cookies, csrf, "m1.png", "image/png", quotaPNG(1500))
 	if first.Code != http.StatusCreated {
 		t.Fatalf("first upload = %d, want 201", first.Code)
@@ -95,7 +95,7 @@ func TestAdminMailMediaQuotaReachesAdmin(t *testing.T) {
 	}
 	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
-	// 再传 1000：1500+1000 > 2048 → 413，并触发管理员告警。
+	// Then upload 1000 more: 1500+1000 > 2048 → 413, which triggers the admin alert.
 	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("over-quota upload = %d, want 413 (body %s)", rec.Code, rec.Body.String())
@@ -111,8 +111,8 @@ func TestAdminMailMediaQuotaReachesAdmin(t *testing.T) {
 	t.Logf("quota rejection triggered %s mail to admin %s (subject %q)", rows[0].Type, rows[0].To, rows[0].Subject)
 }
 
-// TestAdminMailHonorsAdminPreference 证明 D 类可关：收件管理员关掉某类型后不再收到该类邮件，
-// 但触发操作照常成功。用媒体配额触发点验证（同步、确定性，不依赖异步 worker）。
+// TestAdminMailHonorsAdminPreference proves class D can be turned off: once the receiving admin turns off a type they no longer receive that class of mail,
+// but the triggering operation still succeeds. Verified via the media quota trigger point (synchronous, deterministic, no dependency on the async worker).
 func TestAdminMailHonorsAdminPreference(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	attachAdminMail(t, srv, db)
@@ -137,7 +137,7 @@ func TestAdminMailHonorsAdminPreference(t *testing.T) {
 	}
 	referenceMedia(t, db, deck.ID, ownerID, saved.Sha256)
 
-	// 触发配额：管理员已关闭该类型 → 上传仍被拒（413），但不发信。
+	// Trigger the quota: the admin has turned off that type → the upload is still rejected (413), but no mail is sent.
 	rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000))
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("over-quota upload = %d, want 413 (admin opted out)", rec.Code)
@@ -147,8 +147,8 @@ func TestAdminMailHonorsAdminPreference(t *testing.T) {
 	}
 }
 
-// brokenMailOutbox 构造一个「报告已配置但入队必然失败」的 outbox：环境变量提供 host/from
-// 让 Configured() 为真，而 DB 为空让 Enqueue 返回错误。用来确定性地验证「发信失败不影响触发操作」。
+// brokenMailOutbox constructs an outbox that "reports configured but always fails to enqueue": env vars provide host/from
+// so Configured() is true, while an empty DB makes Enqueue return an error. Used to deterministically verify "a mail failure does not affect the triggering operation".
 func brokenMailOutbox(t *testing.T) *mail.Outbox {
 	t.Helper()
 	t.Setenv(mail.EnvSMTPHost, "smtp.test")
@@ -160,8 +160,8 @@ func brokenMailOutbox(t *testing.T) *mail.Outbox {
 	return ob
 }
 
-// TestAdminMailFailureDoesNotBreakTrigger 是核心反面用例：入队失败时，媒体配额拦截这个触发
-// 操作仍然成功（413），绝不因邮件而失败。
+// TestAdminMailFailureDoesNotBreakTrigger is the core counter-case: when enqueueing fails, the media quota block, this triggering
+// operation, still succeeds (413) and never fails because of mail.
 func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	srv.mail = brokenMailOutbox(t)

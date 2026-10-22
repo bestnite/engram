@@ -9,12 +9,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestInviteAcceptFailureKeepsTokenUsable 是 HTTP 级反面验收：
-// 邀请建号失败时 token 必须仍然可用，且不暴露“已使用→又变可用”的中间态。
-// 失败用用户名冲突触发（与既有 admin 同名），这是真实的建号失败，而非伪造。
+// TestInviteAcceptFailureKeepsTokenUsable is HTTP-level negative acceptance:
+// when creating the account from an invite fails, the token must still be usable, and no "used → usable again" intermediate state may be exposed.
+// The failure is triggered by a username conflict (same name as the existing admin) — a real account-creation failure, not a fabricated one.
 func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 	srv, db := newAuthServer(t)
-	seedAdminUser(t, srv) // 建出 admin / admin@example.com，令同名注册必然冲突
+	seedAdminUser(t, srv) // creates admin / admin@example.com so a same-name signup must conflict
 	writeSetting(t, db, auth.SettingKeyRegistrationPolicy, string(mustJSON(t, "invite")))
 	invites := store.NewInviteStore(db)
 
@@ -23,7 +23,7 @@ func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 		t.Fatalf("create invite: %v", err)
 	}
 
-	// 用户名与既有 admin 冲突：建号失败，整个接受事务回滚。
+	// The username conflicts with the existing admin: account creation fails and the whole accept transaction rolls back.
 	cookie, headers := preSessionPair(t, srv, "/register")
 	failed := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "admin",
@@ -35,7 +35,7 @@ func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 		t.Fatalf("POST /api/v1/auth/register with a failing create = %d, want 409 (body %s)", failed.Code, snippet(failed.Body.String()))
 	}
 
-	// 回滚后 token 未被消费：used_at 仍为空，管理员可再次使用它。
+	// After the rollback the token has not been consumed: used_at is still empty and the admin can use it again.
 	after, err := invites.ByToken(context.Background(), inv.Token)
 	if err != nil {
 		t.Fatalf("ByToken() error = %v", err)
@@ -44,7 +44,7 @@ func TestInviteAcceptFailureKeepsTokenUsable(t *testing.T) {
 		t.Fatalf("invite after a failed accept = %+v, want used_at and used_by still nil", after)
 	}
 
-	// 同一 token 换一个用户名可以正常接受，且 used_by 指向新用户。
+	// The same token with a different username is accepted normally, and used_by points at the new user.
 	retry := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "invitee",
 		"email":    "invitee@example.com",

@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckListRedirectsAnonymousToLogin 覆盖匿名访问被重定向到登录页的验收点。
+// TestDeckListRedirectsAnonymousToLogin covers the acceptance point that anonymous access is redirected to the login page.
 func TestDeckListRedirectsAnonymousToLogin(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/decks", nil)
@@ -22,8 +22,8 @@ func TestDeckListRedirectsAnonymousToLogin(t *testing.T) {
 	}
 }
 
-// seedCardRow 建一张 basic note + forward card，返回 card id（队列计数夹具用，不渲染卡片内容）。
-// 供 decks 与 card 设置相关的多个测试文件共用。
+// seedCardRow creates one basic note + forward card and returns the card id (used by the queue count fixtures, renders no card content).
+// Shared by several test files related to decks and card settings.
 func seedCardRow(t *testing.T, db *gorm.DB, deckID uint64, front string, createdAt time.Time) uint64 {
 	t.Helper()
 	note := store.Note{DeckID: deckID, Kind: "basic",

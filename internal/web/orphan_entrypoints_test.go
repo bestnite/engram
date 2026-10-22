@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-// 本文件覆盖「孤立页面补链」任务里在 SPA 迁移后仍然成立的部分：入口页本身可达且仍受登录保护。
-//   - /decks：匿名访问仍重定向到登录页，因此它的导入入口不会泄漏给未登录访客；
-//   - /settings/email：登录用户可达（返回应用壳），匿名仍先重定向登录。
+// This file covers the part of the "link the orphan pages" task that still holds after the SPA migration: the entry pages themselves are reachable and still login-protected.
+//   - /decks: anonymous access still redirects to the login page, so its import entry does not leak to anonymous visitors;
+//   - /settings/email: reachable for signed-in users (returns the app shell), anonymous still redirects to login first.
 //
-// SSR 设置页此前按邮件栈是否启用条件渲染 /settings/email 卡片；页面层删除后，该条件由前端
-// 视图决定，Go 侧不再渲染这张卡片，对应断言随之删除。测试全部走真实路由（httptest + 已登录会话）。
+// The SSR settings page used to render the /settings/email card conditionally on whether the mail stack was enabled; with the page layer gone that condition belongs to the frontend
+// view, the Go side no longer renders the card, and the matching assertion went with it. All the tests go through real routes (httptest + a signed-in session).
 
-// TestDeckListImportHiddenFromAnonymous 断言 /decks 仍是被保护路由：匿名访问被重定向到
-// 登录页，因此 /import 入口不会泄漏给未登录访客。
+// TestDeckListImportHiddenFromAnonymous asserts /decks is still a protected route: anonymous access is redirected to
+// the login page, so the /import entry does not leak to anonymous visitors.
 func TestDeckListImportHiddenFromAnonymous(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/decks", nil)
@@ -29,8 +29,8 @@ func TestDeckListImportHiddenFromAnonymous(t *testing.T) {
 	}
 }
 
-// TestSettingsEmailChangeRouteReachable 断言改邮箱入口页 /settings/email 仍是登录用户可达的
-// 真实页面（返回应用壳），且匿名访问仍先被重定向到登录页。页面内是否展示改邮箱卡片由前端决定。
+// TestSettingsEmailChangeRouteReachable asserts the change-email entry page /settings/email is still a real page reachable
+// by signed-in users (returns the app shell), and anonymous access is still redirected to the login page first. Whether the card is shown inside the page is the frontend's decision.
 func TestSettingsEmailChangeRouteReachable(t *testing.T) {
 	ts := newSecurityServer(t, false)
 

@@ -12,12 +12,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「注册与邀请」的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "registration and invites".
 //
-// 免重启生效的关键与 SSR 相同：settings 表按请求现读（注册流程每次 LoadSettings），因此写库后
-// 下一次注册尝试立即按新策略判定。校验与写库调用与 SSR 表单完全同一份 store/auth 函数。
+// The key to taking effect without a restart is the same as SSR: the settings table is read per request (the registration flow calls LoadSettings every time), so after a DB write
+// the next registration attempt is judged by the new policy immediately. Validation and DB writes call exactly the same store/auth functions as the SSR forms.
 
-// adminInvite 是一条邀请的原始字段；role/status 是存储取值，由前端映射文案。
+// adminInvite is an invite's raw fields; role/status are stored values whose copy is mapped by the frontend.
 type adminInvite struct {
 	ID        string `json:"id"`
 	Token     string `json:"token"`
@@ -31,21 +31,21 @@ type adminInvite struct {
 	UsedBy    string `json:"used_by"`
 }
 
-// adminRegistrationResponse 是注册与邀请页的读取结果。
+// adminRegistrationResponse is the read result for the registration and invites page.
 type adminRegistrationResponse struct {
 	Policy       string        `json:"policy"`
 	EmailDomains string        `json:"email_domains"`
 	Invites      []adminInvite `json:"invites"`
 }
 
-// adminRegistrationRequest 是保存注册策略与白名单的请求体。
+// adminRegistrationRequest is the request body for saving the registration policy and allowlist.
 type adminRegistrationRequest struct {
 	Policy       string `json:"policy"`
 	EmailDomains string `json:"email_domains"`
 }
 
-// adminInviteCreateRequest 是创建邀请的请求体。
-// ExpiresDays 为 nil 或 0 表示不过期；负数拒绝。
+// adminInviteCreateRequest is the request body for creating an invite.
+// ExpiresDays of nil or 0 means no expiry; negative values are rejected.
 type adminInviteCreateRequest struct {
 	Email       string `json:"email"`
 	Role        string `json:"role"`
@@ -53,13 +53,13 @@ type adminInviteCreateRequest struct {
 	SendEmail   bool   `json:"send_email"`
 }
 
-// adminInviteCreateResponse 回带新邀请与发信结果码（空串表示未请求或不适用）。
+// adminInviteCreateResponse returns the new invite and the mail result code (empty string means not requested or not applicable).
 type adminInviteCreateResponse struct {
 	Invite     adminInvite `json:"invite"`
 	MailNotice string      `json:"mail_notice"`
 }
 
-// adminInviteJSON 把一条邀请转换成响应结构；used_by 解析成用户名，解析失败回落到十进制 id。
+// adminInviteJSON converts an invite into the response structure; used_by is resolved to a username, falling back to the decimal id when that fails.
 func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time) adminInvite {
 	ctx := c.Request.Context()
 	email := ""
@@ -90,7 +90,7 @@ func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time
 	}
 }
 
-// adminRegistration 返回当前注册策略、白名单与邀请列表。
+// adminRegistration returns the current registration policy, allowlist and invite list.
 func (s *Server) adminRegistration(c *gin.Context) {
 	ctx := c.Request.Context()
 	settings, err := store.LoadSettings(ctx, s.db)
@@ -119,7 +119,7 @@ func (s *Server) adminRegistration(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// adminRegistrationSave 写入注册策略与邮箱域名白名单（均为普通 settings），写审计。
+// adminRegistrationSave writes the registration policy and the email domain allowlist (both plain settings) and writes an audit row.
 func (s *Server) adminRegistrationSave(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -138,7 +138,7 @@ func (s *Server) adminRegistrationSave(c *gin.Context) {
 		adminError(c, http.StatusBadRequest, "invalid_policy")
 		return
 	}
-	// 白名单归一化后以逗号分隔存储（ParseEmailAllowlist 兼容该写法）；空串表示不限制。
+	// The allowlist is normalized and stored comma-separated (ParseEmailAllowlist accepts that form); an empty string means no restriction.
 	allowlist := strings.Join(auth.ParseEmailAllowlist(req.EmailDomains), ",")
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
@@ -161,8 +161,8 @@ func (s *Server) adminRegistrationSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminInviteCreate 创建一条邀请：可选限定邮箱、角色与有效天数，可选寄信。
-// 发信的任何问题都不影响创建结果——只通过 mail_notice 如实回显发生了什么。
+// adminInviteCreate creates an invite: optionally restricting the email, role and validity days, and optionally sending mail.
+// No mail problem affects the creation result — mail_notice simply reports what happened.
 func (s *Server) adminInviteCreate(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -187,7 +187,7 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 	if email := strings.ToLower(strings.TrimSpace(req.Email)); email != "" {
 		inv.Email = &email
 	}
-	// 有效天数：留空或 0 表示不过期；非法值拒绝而不是静默当成不过期。
+	// Validity days: blank or 0 means no expiry; invalid values are rejected rather than silently treated as no expiry.
 	if req.ExpiresDays != nil {
 		if *req.ExpiresDays < 0 {
 			adminError(c, http.StatusBadRequest, "invite_create_failed")
@@ -207,7 +207,7 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionInviteCreate,
 		TargetType: "invite", TargetID: store.Ptr(inv.ID),
-		// 审计不记录 token 明文（等价于凭据）。
+		// The audit does not record the token in plaintext (it is equivalent to a credential).
 		Detail: map[string]any{"role": inv.Role, "has_email": inv.Email != nil, "expires": inv.ExpiresAt != nil},
 	})
 	mailNotice := ""
@@ -226,7 +226,7 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 	})
 }
 
-// adminInviteRevoke 撤销一条邀请（删除整行），写审计。
+// adminInviteRevoke revokes an invite (deletes the whole row) and writes an audit row.
 func (s *Server) adminInviteRevoke(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {

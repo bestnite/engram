@@ -10,9 +10,9 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// SessionUserLocale 是 Deps.UserLocale 的默认实现：从已解析的会话用户取界面语言。
-// 装配时把它交给 web.Deps（会话中间件必须先于语言中间件运行），
-// 个人设置里的语言才会真正参与 i18n 解析优先级。
+// SessionUserLocale is the default implementation of Deps.UserLocale: it takes the UI language from the resolved session user.
+// The wiring hands it to web.Deps (the session middleware must run before the language middleware),
+// so the language in personal settings really takes part in i18n resolution priority.
 func SessionUserLocale(c *gin.Context) string {
 	if u, ok := auth.CurrentUser(c); ok {
 		return u.Locale
@@ -20,9 +20,9 @@ func SessionUserLocale(c *gin.Context) string {
 	return ""
 }
 
-// localeMiddleware 按固定优先级解析请求语言，并把本地化器放进请求 context。
-// 优先级：?lang 显式覆盖 > 用户设置（Deps.UserLocale 提供；M0 无会话，M1 接入）
-// > Accept-Language > 站点默认。
+// localeMiddleware resolves the request language in a fixed priority order and puts the localizer into the request context.
+// Priority: explicit ?lang override > user setting (provided by Deps.UserLocale; M0 has no sessions, M1 wires it in)
+// > Accept-Language > site default.
 func (s *Server) localeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userLocale := ""
@@ -32,8 +32,8 @@ func (s *Server) localeMiddleware() gin.HandlerFunc {
 		requested := c.Query("lang")
 		accept := c.GetHeader("Accept-Language")
 		tag := s.i18n.Pick(requested, userLocale, accept)
-		// 站点默认语言设置是最后一级回退：只有当 ?lang、用户设置、Accept-Language
-		// 三个更明确的来源都缺席时才应用它，绝不覆盖它们。
+		// The site default language setting is the last fallback: it applies only when the three more explicit sources
+		// (?lang, the user setting, Accept-Language) are all absent, and never overrides them.
 		if requested == "" && userLocale == "" && strings.TrimSpace(accept) == "" {
 			if code := s.siteDefaultLocale(c.Request.Context()); code != "" {
 				if t, err := language.Parse(code); err == nil {

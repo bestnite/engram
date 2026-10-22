@@ -6,13 +6,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板的注册与邀请支撑函数。
+// Support functions for the admin panel's registration and invites.
 //
-// SSR 注册与邀请页删除后，策略与邀请的读写在 /api/v1/admin/registration 与
-// /api/v1/admin/invites* 的 JSON 端点上（admin_registration_api.go）；
-// 这里只保留仍被复用的邀请状态与时间格式化。
+// After the SSR registration and invite pages were removed, policy and invite reads and writes live on the /api/v1/admin/registration and
+// /api/v1/admin/invites* JSON endpoints (admin_registration_api.go);
+// only the invite status and time formatting that are still reused are kept here.
 
-// inviteStatus 把一条邀请归成 active / used / expired 三态。
+// inviteStatus classifies an invite into one of three states: active / used / expired.
 func inviteStatus(inv store.Invite, now time.Time) string {
 	if inv.UsedAt != nil {
 		return "used"
@@ -23,7 +23,7 @@ func inviteStatus(inv store.Invite, now time.Time) string {
 	return "active"
 }
 
-// formatTimePtr 把可空时间格式化成展示串；nil 返回空。
+// formatTimePtr formats a nullable time into a display string; returns empty for nil.
 func formatTimePtr(t *time.Time) string {
 	if t == nil {
 		return ""

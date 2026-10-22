@@ -11,13 +11,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是验收测试：口令重置（忘记密码、管理员重置）必须在同一事务里一并吊销
-// 该用户的全部 API Key；用户主动改密不吊销，保持 key 独立生命周期。
+// This file is acceptance testing: a password reset (forgot password, admin reset) must revoke all of that user's
+// API keys in the same transaction; a user changing their own password does not revoke them, keeping keys on an independent lifecycle.
 //
-// 断言分三层：库里的 revoked_at 已写、旧 key 对真实 /api/v1 链 401、旧会话同时失效。
-// 反面对照（TestSelfPasswordChangeKeepsAPIKeys）锁死「主动改密不吊销」的边界。
+// The assertions come in three layers: revoked_at is written in the database, the old key gets 401 from the real /api/v1 chain, and the old session is invalidated at the same time.
+// The negative control (TestSelfPasswordChangeKeepsAPIKeys) pins down the boundary "changing your own password does not revoke".
 
-// seedAPIKey 直接为用户落一把 read scope 的 key，返回创建结果（含一次性明文）。
+// seedAPIKey writes a read-scope key for a user directly and returns the creation result (including the one-time plaintext).
 func seedAPIKey(t *testing.T, db *gorm.DB, userID uint64, name string) *store.CreatedAPIKey {
 	t.Helper()
 	created, err := store.NewAPIKeyStore(db).Create(context.Background(), store.CreateAPIKeyParams{
@@ -29,7 +29,7 @@ func seedAPIKey(t *testing.T, db *gorm.DB, userID uint64, name string) *store.Cr
 	return created
 }
 
-// assertAllKeysRevoked 断言某用户库里的 key 全部已写 revoked_at。
+// assertAllKeysRevoked asserts every key for a user in the database has revoked_at written.
 func assertAllKeysRevoked(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	keys, err := store.NewAPIKeyStore(db).ListByUser(context.Background(), userID)
@@ -46,30 +46,30 @@ func assertAllKeysRevoked(t *testing.T, db *gorm.DB, userID uint64) {
 	}
 }
 
-// TestForgotPasswordResetRevokesAPIKeys 覆盖「忘记密码」完整流程：
-// 用户先有两把可用 key → 发起重置 + 用真实令牌重置 → 两把 key 立即 401、库里已失效，
-// 同时旧会话仍被吊销（回归保护，不能为了 key 丢掉会话行为）。
+// TestForgotPasswordResetRevokesAPIKeys covers the full "forgot password" flow:
+// the user first holds two working keys → start a reset + reset with the real token → both keys are immediately 401 and invalid in the database,
+// while the old session is still revoked (regression protection: session behaviour must not be dropped in favour of keys).
 func TestForgotPasswordResetRevokesAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	rest := newKeysAPI(t, ts.db)
 	k1 := seedAPIKey(t, ts.db, ts.ownerID, "laptop")
 	k2 := seedAPIKey(t, ts.db, ts.ownerID, "phone")
 
-	// 重置前两把 key 都能过 REST。
+	// Before the reset both keys pass REST.
 	for _, k := range []*store.CreatedAPIKey{k1, k2} {
 		if code := apiGetDecks(t, rest, k.Plaintext); code != http.StatusOK {
 			t.Fatalf("pre-reset GET /api/v1/decks with key %q = %d, want 200", k.Key.Name, code)
 		}
 	}
 
-	// 完整忘记密码流程：请求发信 → 用邮件里的真实令牌设置新密码。
+	// Full forgot-password flow: request the mail → set a new password with the real token from the mail.
 	plain, _ := issueResetToken(t, ts)
 	reset := resetPasswordJSON(t, ts, plain, "N3wSup3rSecret!")
 	if reset.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/auth/reset-password status = %d, want 200 (body %s)", reset.Code, snippet(reset.Body.String()))
 	}
 
-	// 两把旧 key：库里已失效，且对真实 REST 链返回 401（与既有撤销 key 语义一致）。
+	// Both old keys: invalid in the database, and 401 against the real REST chain (consistent with the existing key revocation semantics).
 	assertAllKeysRevoked(t, ts.db, ts.ownerID)
 	for _, k := range []*store.CreatedAPIKey{k1, k2} {
 		if code := apiGetDecks(t, rest, k.Plaintext); code != http.StatusUnauthorized {
@@ -77,13 +77,13 @@ func TestForgotPasswordResetRevokesAPIKeys(t *testing.T) {
 		}
 	}
 
-	// 会话吐销行为不被破坏：重置前的会话必须失效，受保护页面重定向到登录。
+	// Session invalidation is not broken: the pre-reset session must be invalidated, with protected pages redirecting to login.
 	if rec := getWithCookies(t, ts.srv, "/admin/users", ts.cookies); rec.Code != http.StatusSeeOther {
 		t.Errorf("old session after reset = %d, want 303 to login", rec.Code)
 	}
 }
 
-// TestAdminPasswordResetRevokesAPIKeys 覆盖管理员重置他人密码：目标用户全部 key 一并吊销。
+// TestAdminPasswordResetRevokesAPIKeys covers an admin resetting someone else's password: all of the target user's keys are revoked too.
 func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	targetID := createTargetUser(t, ts)
@@ -109,8 +109,8 @@ func TestAdminPasswordResetRevokesAPIKeys(t *testing.T) {
 	}
 }
 
-// TestSelfPasswordChangeKeepsAPIKeys 是反面对照：用户主动改密（/settings/password）
-// 绝不吊销自己的 key。缩小范围的顺手改动会让这条变红。
+// TestSelfPasswordChangeKeepsAPIKeys is the negative control: a user changing their own password (/settings/password)
+// never revokes their own keys. An incidental change that narrows this will turn this test red.
 func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	member, err := ts.srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{

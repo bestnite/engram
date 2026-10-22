@@ -10,16 +10,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerJSON 走 SPA 的同源 JSON 注册（POST /api/v1/auth/register），提交一对会话前双提交
-// cookie 与镜像 token。页面层已删除，注册的唯一传输是 JSON。
+// registerJSON goes through the SPA's same-origin JSON registration (POST /api/v1/auth/register), submitting a pair of pre-session double-submit
+// cookie and mirror token. The page layer has been removed, so JSON is the only transport for registration.
 func registerJSON(t *testing.T, srv *Server, body map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	cookie, headers := preSessionPair(t, srv, "/register")
 	return postJSON(srv, "/api/v1/auth/register", body, []*http.Cookie{cookie}, headers)
 }
 
-// TestMutationsWriteExactlyOneAuditRow 是接线验收：注册、登录、登出各写一行，
-// action 字符串与 store 中的常量一致。
+// TestMutationsWriteExactlyOneAuditRow is a wiring acceptance test: register, login and logout each write one row,
+// and the action string matches the constant in store.
 func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 	srv, db := newAuthServer(t)
 	ctx := context.Background()
@@ -33,7 +33,7 @@ func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 		t.Fatalf("POST /api/v1/auth/register status = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
 	}
 
-	// 登录走 JSON：顺便拿到会话绑定的 CSRF token（页面之外的通道）。
+	// Login goes through JSON: this also obtains the session-bound CSRF token (a channel other than the page).
 	cookies, csrf := loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 	logout := postJSON(srv, "/api/v1/auth/logout", nil, cookies, map[string]string{auth.CSRFHeaderName: csrf})
 	if logout.Code != http.StatusOK {
@@ -64,8 +64,8 @@ func TestMutationsWriteExactlyOneAuditRow(t *testing.T) {
 	}
 }
 
-// TestLoginFailureIsAuditedAndLimiterResets 是接线验收：失败写审计并累加限流，
-// 成功登录后限流重置。
+// TestLoginFailureIsAuditedAndLimiterResets is a wiring acceptance test: a failure writes an audit row and accumulates the rate limit,
+// and the rate limit is reset after a successful login.
 func TestLoginFailureIsAuditedAndLimiterResets(t *testing.T) {
 	srv, db := newAuthServer(t)
 	ctx := context.Background()
@@ -94,12 +94,12 @@ func TestLoginFailureIsAuditedAndLimiterResets(t *testing.T) {
 	if n, err := audit.CountByAction(ctx, store.ActionUserLoginFailed); err != nil || n != 3 {
 		t.Fatalf("user.login_failed audit rows = (%d, %v), want (3, nil)", n, err)
 	}
-	// 账号维度已累计失败：下一次尝试必须等待（IP 传空串只查账号维度）。
+	// The account dimension has accumulated failures: the next attempt must wait (passing an empty IP queries only the account dimension).
 	if d, err := srv.loginLimiter.Wait(ctx, "admin", ""); err != nil || d <= 0 {
 		t.Fatalf("limiter delay before a successful login = (%v, %v), want > 0", d, err)
 	}
 
-	// 成功登录（失败即 Fatal），限流随之重置。
+	// Successful login (Fatal on failure), and the rate limit resets with it.
 	loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 	if d, err := srv.loginLimiter.Wait(ctx, "admin", ""); err != nil || d != 0 {
 		t.Fatalf("limiter delay after a successful login = (%v, %v), want (0, nil)", d, err)

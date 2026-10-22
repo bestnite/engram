@@ -13,13 +13,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件（SMTP）」页的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "mail (SMTP)" page.
 //
-// 读取与写入复用 mail.NewResolver（环境变量 > settings 表 > 默认值）与 store.PutSecret，
-// 与 SSR 页完全同一份解析；口令只回「已配置/未配置」，绝不回显明文。测试连接把服务端的原始
-// 错误文本带进响应，供前端显示失败原因。
+// Reads and writes reuse mail.NewResolver (env vars > settings table > defaults) and store.PutSecret,
+// with exactly the same parsing as the SSR page; the password only returns "configured/not configured" and never echoes plaintext. The connection test carries the server's raw
+// error text into the response so the frontend can show the failure reason.
 
-// adminOutbox 是 outbox 读数。
+// adminOutbox is the outbox reading.
 type adminOutbox struct {
 	Pending      int64  `json:"pending"`
 	Failed       int64  `json:"failed"`
@@ -27,7 +27,7 @@ type adminOutbox struct {
 	LastAttempts int    `json:"last_attempts"`
 }
 
-// adminSMTPResponse 是 SMTP 配置页的读取结果；source 取值 db/env/default。
+// adminSMTPResponse is the read result for the SMTP config page; source is one of db/env/default.
 type adminSMTPResponse struct {
 	Host               string      `json:"host"`
 	HostSource         string      `json:"host_source"`
@@ -45,7 +45,7 @@ type adminSMTPResponse struct {
 	AdminNotifyReady   bool        `json:"admin_notify_ready"`
 }
 
-// adminSMTPRequest 是保存与测试共用的请求体；空字段表示沿用已保存值。
+// adminSMTPRequest is the request body shared by save and test; empty fields mean reuse the saved value.
 type adminSMTPRequest struct {
 	Host     string `json:"host"`
 	Port     string `json:"port"`
@@ -55,14 +55,14 @@ type adminSMTPRequest struct {
 	Password string `json:"password"`
 }
 
-// adminTestResult 是「测试连接」的响应；ok 为 true 时忽略 message。
+// adminTestResult is the "test connection" response; message is ignored when ok is true.
 type adminTestResult struct {
 	OK      bool   `json:"ok"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// adminSMTP 返回 SMTP 配置与 outbox 读数。
+// adminSMTP returns the SMTP config and the outbox reading.
 func (s *Server) adminSMTP(c *gin.Context) {
 	ctx := c.Request.Context()
 	resolver := mail.NewResolver(s.db, s.secrets)
@@ -132,8 +132,8 @@ func (s *Server) adminSMTP(c *gin.Context) {
 	})
 }
 
-// adminSMTPSave 保存 SMTP 配置：非敏感值走 PutSetting，口令走 PutSecret（加密）。
-// 校验端口与 TLS 模式，写审计。空字段表示不修改。
+// adminSMTPSave saves the SMTP config: non-sensitive values go through PutSetting, the password goes through PutSecret (encrypted).
+// Validates the port and TLS mode and writes an audit row. Empty fields mean no change.
 func (s *Server) adminSMTPSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -174,7 +174,7 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 	} {
 		raw := strings.TrimSpace(values[key])
 		if raw == "" {
-			// 留空表示不修改，与系统设置页一致。
+			// Blank means no change, consistent with the system settings page.
 			continue
 		}
 		if err := store.PutSetting(ctx, s.db, key, raw, store.Ptr(u.ID), now); err != nil {
@@ -204,8 +204,8 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminSMTPTest 用表单值（缺省回落到已保存值）做一次连接与认证握手，
-// 失败时把服务端的原始错误文本带进响应（验收点）。
+// adminSMTPTest performs one connect and auth handshake using the form values (falling back to the saved values when absent),
+// and on failure carries the server's raw error text into the response (acceptance point).
 func (s *Server) adminSMTPTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -225,7 +225,7 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	// 表单值覆盖已保存值；留空表示沿用已保存值（口令不回显，只能沿用）。
+	// Form values override the saved values; blank means reuse the saved value (the password is never echoed, so it can only be reused).
 	if v := strings.TrimSpace(req.Host); v != "" {
 		cfg.Host = v
 	}
@@ -251,14 +251,14 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 	if cfg.Host == "" {
 		result.Code = "no_host"
 	} else if terr := mail.TestConnection(ctx, cfg); terr != nil {
-		// 原样带上服务端/网络层的错误文本，而不是只写日志。
+		// Carry the server/network layer's error text through verbatim instead of only logging it.
 		s.logger.Info("spa admin: smtp test connection failed", "host", cfg.Host, "port", cfg.Port, "error", terr)
 		result.Code = "failed"
 		result.Message = terr.Error()
 	} else {
 		result.OK = true
 	}
-	// 「测试连接」会发起管理员指定的出站连接：成功与失败都留痕，只记 host 与结果。
+	// "Test connection" makes an outbound connection to an admin-chosen target: both success and failure leave a trace, recording only the host and the result.
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAdminSMTPTest,
 		TargetType: "smtp",

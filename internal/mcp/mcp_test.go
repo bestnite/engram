@@ -23,24 +23,24 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ---- 测试装配 ----
+// ---- test assembly ----
 
-// newEnv 装配真实 SQLite + REST + MCP 的同进程 HTTP 服务，复刻 main 的挂载方式。
+// newEnv assembles an in-process HTTP service with real SQLite + REST + MCP, replicating how main mounts them.
 func newEnv(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *httptest.Server) {
 	t.Helper()
 	a, db, keys, _, ts := newEnvWithServer(t)
 	return a, db, keys, ts
 }
 
-// newEnvWithServer 同 newEnv，另外返回 MCP server 本体，供需要检查内部状态的用例
-// （如会话属主表）使用。
+// newEnvWithServer is the same as newEnv but also returns the MCP server itself, for cases that need to inspect internal state
+// (such as the session owner table).
 func newEnvWithServer(t *testing.T) (*api.API, *gorm.DB, *store.APIKeyStore, *Server, *httptest.Server) {
 	t.Helper()
 	return newEnvWithPackageFetcher(t, nil)
 }
 
-// newEnvWithPackageFetcher 与 newEnvWithServer 相同，但允许注入受控的直链下载器；
-// 直链导入用例用它避免真实网络，其余用例传 nil 走生产实现。
+// newEnvWithPackageFetcher is the same as newEnvWithServer but allows injecting a controlled direct-link downloader;
+// the direct-link import cases use it to avoid the real network, while the other cases pass nil and take the production implementation.
 func newEnvWithPackageFetcher(t *testing.T, fetcher api.PackageFetcher) (*api.API, *gorm.DB, *store.APIKeyStore, *Server, *httptest.Server) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -123,7 +123,7 @@ func newKey(t *testing.T, keys *store.APIKeyStore, userID uint64, scopes []strin
 	return c.Plaintext
 }
 
-// ---- SDK 客户端 ----
+// ---- SDK client ----
 
 type bearerTransport struct{ key string }
 
@@ -209,10 +209,10 @@ func rest(t *testing.T, base, method, path, key, body string) (int, map[string]a
 	return resp.StatusCode, m
 }
 
-// ---- ：scope 过滤 ----
+// ---- : scope filtering ----
 
-// TestReadOnlyKeySeesNoWriteTools 是核心验收：
-// read-only key 在 tools/list 里看不到写/复习工具，按名字硬调返回权限错误。
+// TestReadOnlyKeySeesNoWriteTools is the core acceptance:
+// a read-only key does not see write/review tools in tools/list, and calling them by name returns a permission error.
 func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "reader")
@@ -234,7 +234,7 @@ func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	}
 }
 
-// TestWriteAndReviewKeysSeeOwnTools 校验另外两档 scope 的可见集合。
+// TestWriteAndReviewKeysSeeOwnTools checks the visible sets for the other two scope tiers.
 func TestWriteAndReviewKeysSeeOwnTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "writer")
@@ -255,7 +255,7 @@ func TestWriteAndReviewKeysSeeOwnTools(t *testing.T) {
 	}
 }
 
-// TestAdminScopeSeesAllTools admin 蕴含其余三档。
+// TestAdminScopeSeesAllTools admin implies the other three tiers.
 func TestAdminScopeSeesAllTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "admin")

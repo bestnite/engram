@@ -6,12 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 本文件是管理面板「语言包完整度」页的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "language pack completeness" page.
 //
-// 口径与 adminI18nPage 相同：基准 key 集合 = 各语言包 key 集合的并集（见 i18n.Coverage 注释），
-// 覆盖率 < 100% 时逐条列出缺失 key。纯读页，无写操作。
+// Same convention as adminI18nPage: the baseline key set = the union of the key sets of all language packs (see the i18n.Coverage comment),
+// and when coverage < 100% the missing keys are listed one by one. Read-only page, no write operations.
 
-// adminLocaleCoverage 是一种语言的覆盖率。
+// adminLocaleCoverage is the coverage of one locale.
 type adminLocaleCoverage struct {
 	Code     string   `json:"code"`
 	Percent  int      `json:"percent"`
@@ -21,13 +21,13 @@ type adminLocaleCoverage struct {
 	Missing  []string `json:"missing"`
 }
 
-// adminI18nResponse 是语言包完整度报告。
+// adminI18nResponse is the language pack completeness report.
 type adminI18nResponse struct {
 	Locales     []adminLocaleCoverage `json:"locales"`
 	AllComplete bool                  `json:"all_complete"`
 }
 
-// adminI18n 返回各语言的翻译覆盖率。
+// adminI18n returns the translation coverage per locale.
 func (s *Server) adminI18n(c *gin.Context) {
 	coverage := s.i18nCoverage()
 	locales := make([]adminLocaleCoverage, 0, len(coverage))

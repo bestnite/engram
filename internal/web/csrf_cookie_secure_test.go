@@ -7,13 +7,13 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 )
 
-// TestPreSessionCSRFCookieSecureMatchesSiteScheme 断言登录前双提交 cookie 的 Secure 由
-// BASE_URL 的 scheme 决定，而不是请求自身的 TLS 状态。
+// TestPreSessionCSRFCookieSecureMatchesSiteScheme asserts the Secure flag of the pre-login double-submit cookie is decided by
+// BASE_URL's scheme, not by the request's own TLS state.
 //
-// 生产是「Caddy 终止 TLS → 应用只收到明文 http」，若按请求 TLS 判断，线上登录前表单下发的
-// csrf_double 会缺失 Secure；浏览器不回传 http 站点上的 Secure cookie，反过来 http 开发站
-// 若被标了 Secure 则登录前表单同样挂掉。httptest.NewRequest 不经过真实监听，TLS 恒为 nil，
-// 正好模拟反代终止后的明文入站。
+// Production is "Caddy terminates TLS → the app only receives plaintext http", so judging by the request TLS would make the
+// csrf_double issued by the pre-login form on the live site miss Secure; browsers do not send Secure cookies back over http, and conversely an http dev site
+// marked Secure would break the pre-login form the same way. httptest.NewRequest does not go through a real listener, so TLS is always nil,
+// which happens to simulate plaintext ingress after a reverse proxy terminates TLS.
 func TestPreSessionCSRFCookieSecureMatchesSiteScheme(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -46,7 +46,7 @@ func TestPreSessionCSRFCookieSecureMatchesSiteScheme(t *testing.T) {
 			if cookie.Secure != tc.wantSecure {
 				t.Errorf("csrf_double Secure = %v, want %v (baseURL %q)", cookie.Secure, tc.wantSecure, tc.baseURL)
 			}
-			// Secure 之外的属性必须保持不变（HttpOnly + SameSite=Lax + Path=/）。
+			// Attributes other than Secure must stay unchanged (HttpOnly + SameSite=Lax + Path=/).
 			if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/" {
 				t.Errorf("cookie flags = HttpOnly:%v SameSite:%v Path:%q, want HttpOnly:true SameSite:Lax Path:/",
 					cookie.HttpOnly, cookie.SameSite, cookie.Path)

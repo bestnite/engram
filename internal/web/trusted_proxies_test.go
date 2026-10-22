@@ -16,10 +16,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// postLoginFrom 以给定的 RemoteAddr 与额外请求头发起 JSON 登录（POST /api/v1/auth/login），
-// 并补齐会话前双提交 CSRF（cookie + 镜像头）。
-// 限流与审计的 IP 都取自 gin 的 ClientIP，而 ClientIP 是否采信 X-Forwarded-For 取决于可信代理配置，
-// 因此必须能同时控制 RemoteAddr 与 XFF。
+// postLoginFrom performs a JSON login (POST /api/v1/auth/login) with the given RemoteAddr and extra request headers,
+// filling in the pre-session double-submit CSRF (cookie + mirrored header).
+// Both the rate limiter's and the audit's IP come from gin's ClientIP, and whether ClientIP trusts X-Forwarded-For depends on the trusted proxy config,
+// so the test must be able to control RemoteAddr and XFF at the same time.
 func postLoginFrom(t *testing.T, srv *Server, username, password, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"username": username, "password": password})
@@ -39,7 +39,7 @@ func postLoginFrom(t *testing.T, srv *Server, username, password, remoteAddr str
 	return rec
 }
 
-// latestLoginFailedIP 读回最近一条登录失败审计里的 ip 字段。
+// latestLoginFailedIP reads back the ip field of the most recent login-failure audit entry.
 func latestLoginFailedIP(t *testing.T, db *gorm.DB) string {
 	t.Helper()
 	var row store.AuditLog
@@ -57,12 +57,12 @@ func latestLoginFailedIP(t *testing.T, db *gorm.DB) string {
 	return ip
 }
 
-// TestLoginAuditAndLimiterIgnoreForwardedForByDefault 是本修复的核心负向断言：
-// 未配置 TRUSTED_PROXIES 时不得信任任何代理，伪造的 X-Forwarded-For 既不能改写审计 IP，
-// 也不能把登录限流键从真实来源骗走。
+// TestLoginAuditAndLimiterIgnoreForwardedForByDefault is the core negative assertion of this fix:
+// with TRUSTED_PROXIES unset no proxy may be trusted, and a forged X-Forwarded-For can neither rewrite the audit IP
+// nor steal the login rate-limit key away from the real source.
 //
-// 断言方式：审计行的 ip 列（可观察的最终结果）加限流器的 Wait 返回值（账号维度用不同用户名隔离，
-// 只剩 IP 维度），避免依赖限流器内部状态。
+// How it asserts: the ip column of the audit row (the observable end result) plus the limiter's Wait return value (a different username isolates the account dimension,
+// leaving only the IP dimension), avoiding reliance on the limiter's internal state.
 func TestLoginAuditAndLimiterIgnoreForwardedForByDefault(t *testing.T) {
 	srv, db := newAuthServer(t)
 	ctx := context.Background()
@@ -80,7 +80,7 @@ func TestLoginAuditAndLimiterIgnoreForwardedForByDefault(t *testing.T) {
 		t.Errorf("audit ip = %q, want %q (RemoteAddr) — forged X-Forwarded-For must be ignored", got, "192.0.2.1")
 	}
 
-	// 用不存在的用户名查 Wait，隔离出 IP 维度：key 必须落在真实来源 IP 上。
+	// Query Wait with a nonexistent username to isolate the IP dimension: the key must land on the real source IP.
 	if d, err := srv.loginLimiter.Wait(ctx, "someone-else", "192.0.2.1"); err != nil || d <= 0 {
 		t.Errorf("limiter keyed by RemoteAddr = (%v, %v), want delay > 0", d, err)
 	}
@@ -89,8 +89,8 @@ func TestLoginAuditAndLimiterIgnoreForwardedForByDefault(t *testing.T) {
 	}
 }
 
-// TestLoginAdoptsForwardedForFromTrustedProxy 断言唯一被采信的路径：来源落在可信代理列表内时，
-// X-Forwarded-For 生效，审计 IP 与限流键都改用它。
+// TestLoginAdoptsForwardedForFromTrustedProxy asserts the only path that is trusted: when the source falls inside the trusted proxy list,
+// X-Forwarded-For takes effect, and both the audit IP and the rate-limit key use it.
 func TestLoginAdoptsForwardedForFromTrustedProxy(t *testing.T) {
 	srv, db := newAuthServerWithProxies(t, []string{"127.0.0.1/32"})
 	ctx := context.Background()
@@ -115,8 +115,8 @@ func TestLoginAdoptsForwardedForFromTrustedProxy(t *testing.T) {
 	}
 }
 
-// TestForwardedForIgnoredWhenRemoteIsNotATrustedProxy 断言配置了可信代理也不放行任意来源：
-// 只有列表内的地址发来的 XFF 才被采信。
+// TestForwardedForIgnoredWhenRemoteIsNotATrustedProxy asserts that even with trusted proxies configured, arbitrary sources are not let through:
+// only an XFF sent from an address on the list is trusted.
 func TestForwardedForIgnoredWhenRemoteIsNotATrustedProxy(t *testing.T) {
 	srv, db := newAuthServerWithProxies(t, []string{"127.0.0.1/32"})
 
@@ -130,7 +130,7 @@ func TestForwardedForIgnoredWhenRemoteIsNotATrustedProxy(t *testing.T) {
 	}
 }
 
-// TestNewRejectsInvalidTrustedProxy 断言构造期对非法项失败并点名，不静默忽略。
+// TestNewRejectsInvalidTrustedProxy asserts construction fails on an illegal entry and names it, rather than silently ignoring it.
 func TestNewRejectsInvalidTrustedProxy(t *testing.T) {
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "proxy.db"))
 	if err != nil {

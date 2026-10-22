@@ -15,8 +15,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newMcpWebServer 装配一个带 /api/v1 与 /mcp 的完整 web 服务（含会话中间件），用于验证
-// /mcp 只接受 API key。返回服务与账号服务，供用例落用户并登录。
+// newMcpWebServer wires a complete web server with /api/v1 and /mcp (including the session middleware), to verify
+// that /mcp accepts API keys only. Returns the server and the account service, so cases can insert users and sign in.
 func newMcpWebServer(t *testing.T) (*Server, *auth.AccountService) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "mcpweb.db"))
@@ -81,8 +81,8 @@ func newMcpWebServer(t *testing.T) (*Server, *auth.AccountService) {
 	return srv, accounts
 }
 
-// TestMcpEndpointRejectsSessionCookie 覆盖规则 1：带有效会话 cookie、不带 API key
-// 访问 /mcp 必须 401，且不得建立会话。
+// TestMcpEndpointRejectsSessionCookie covers rule 1: with a valid session cookie and no API key,
+// access to /mcp must be 401, and no session may be established.
 func TestMcpEndpointRejectsSessionCookie(t *testing.T) {
 	srv, accounts := newMcpWebServer(t)
 	if _, err := accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
@@ -90,7 +90,7 @@ func TestMcpEndpointRejectsSessionCookie(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	// 登录走 SPA 的同源 JSON 端点，取回会话 cookie（这里不关心 CSRF）。
+	// Sign-in goes through the SPA's same-origin JSON endpoint to grab the session cookie (CSRF is irrelevant here).
 	cookie, headers := preSessionPair(t, srv, "/login")
 	login := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "cookie-user", "password": "Sup3rSecret!",

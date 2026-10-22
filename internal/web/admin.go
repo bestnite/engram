@@ -12,27 +12,27 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板入口。
+// Admin panel entry point.
 //
-// 硬约束：只有 role = admin 能进；其余一律 403。SSR 页面层已删除：每条 GET 路由先过
-// requireAdmin，再发 SPA 应用壳；面板的读写在 /api/v1/admin/* 的 JSON 端点上（admin_api.go 起的那几个文件）。
+// Hard constraint: only role = admin gets in; everyone else is always 403. The SSR page layer has been removed: every GET route first passes
+// requireAdmin, then serves the SPA app shell; the panel's reads and writes live on the /api/v1/admin/* JSON endpoints (the files starting at admin_api.go).
 
 const (
-	// settingKeySiteName 是站点名称；缺省回退语言包 app.name。
+	// settingKeySiteName is the site name; falls back to language pack app.name when absent.
 	settingKeySiteName = "site.name"
-	// settingKeySiteDefaultLocale 是站点默认语言，用于语言解析的最后一级回退。
+	// settingKeySiteDefaultLocale is the site's default locale, used as the last fallback level in locale resolution.
 	settingKeySiteDefaultLocale = "site.default_locale"
 )
 
-// adminRoute 描述一条已实现的管理路由，注册与「非 admin 全量 403」测试共用同一份清单，
-// 避免两处各写一份而漂移。
+// adminRoute describes one implemented admin route; registration and the "non-admin is always 403" test share the same list,
+// so the two cannot drift apart.
 type adminRoute struct {
 	Method string
 	Path   string
 }
 
-// adminRoutes 是当前已注册的 /admin/* 路由全集（SSR 页面层删除后只剩 GET 页面外壳）。
-// 新增子页时在这里加一行，测试会据此逐条验证非 admin 访问被拒。
+// adminRoutes is the full set of currently registered /admin/* routes (after the SSR page layer was removed only GET page shells remain).
+// Add a line here when adding a subpage; the test verifies one by one that non-admin access is rejected.
 func adminRoutes() []adminRoute {
 	return []adminRoute{
 		{Method: http.MethodGet, Path: "/admin"},
@@ -50,32 +50,32 @@ func adminRoutes() []adminRoute {
 	}
 }
 
-// registerAdminRoutes 挂载管理面板的页面外壳与 JSON 端点。
-// 会话未装配时跳过，保持 M0 阶段测试可构造。
+// registerAdminRoutes mounts the admin panel's page shells and JSON endpoints.
+// Skipped when sessions are not wired up, keeping M0-stage tests constructible.
 func (s *Server) registerAdminRoutes(router *gin.Engine) {
 	if s.sessions == nil {
 		return
 	}
-	// 每条页面路由都是 requireAdmin + 应用壳：requireAdmin 先跑，非 admin 拿不到外壳。
+	// Every page route is requireAdmin + app shell: requireAdmin runs first, so non-admins never get the shell.
 	for _, r := range adminRoutes() {
 		router.Handle(r.Method, r.Path, s.requireAdmin(), s.adminShell)
 	}
-	// SPA 的 JSON 端点（/api/v1/admin/*），判权在 adminGuard。
+	// The SPA's JSON endpoints (/api/v1/admin/*); authorization is decided in adminGuard.
 	s.registerAdminAPIRoutes(router)
 }
 
-// requireAdmin 是管理面板的唯一入口守卫：未登录回登录页，非 admin 一律 403。
+// requireAdmin is the single entry guard for the admin panel: signed-out requests go back to the login page, non-admins are always 403.
 func (s *Server) requireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		u, ok := auth.CurrentUser(c)
 		if !ok {
-			// 未登录：没有会话也就没有 CSRF 来源，回到登录页而不是暴露 403 语义。
+			// Signed out: with no session there is no CSRF source either, so go back to the login page rather than exposing 403 semantics.
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 		if u.Role != store.RoleAdmin {
-			// 越权尝试留痕：多人共用后这是排查「谁在试」的关键线索。
+			// Record privilege-escalation attempts: once several people share an account this is the key clue for working out "who is trying".
 			s.audit(c.Request.Context(), store.AuditEntry{
 				UserID:     store.Ptr(u.ID),
 				Action:     store.ActionPermissionDenied,
@@ -89,7 +89,7 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 	}
 }
 
-// siteName 返回站点名称的生效值：settings 表 > 语言包 app.name。
+// siteName returns the effective site name: settings table > language pack app.name.
 func (s *Server) siteName(ctx context.Context, loc *i18n.Localizer) string {
 	if s.db != nil {
 		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
@@ -101,8 +101,8 @@ func (s *Server) siteName(ctx context.Context, loc *i18n.Localizer) string {
 	return loc.T("app.name")
 }
 
-// siteDefaultLocale 返回管理员配置的站点默认语言；未配置或不受支持时返回空串。
-// 它在语言解析中只是最后一级回退，绝不覆盖 ?lang / 用户设置 / Accept-Language。
+// siteDefaultLocale returns the site default locale configured by the admin; returns an empty string when unset or unsupported.
+// In locale resolution it is only the last fallback level and never overrides ?lang / user settings / Accept-Language.
 func (s *Server) siteDefaultLocale(ctx context.Context) string {
 	if s.db == nil {
 		return ""

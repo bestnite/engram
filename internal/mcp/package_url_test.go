@@ -13,10 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// import_deck 的直链来源（url）验收：与 package 互斥，且 url 走的是与 REST
-// POST /decks/import-url 相同的 service 方法（下载器用受控实现替换，不碰真实网络）。
+// Acceptance for import_deck's direct-link source (url): mutually exclusive with package, and url goes through the same service method
+// as REST POST /decks/import-url (the downloader is replaced with a controlled implementation, so the real network is never touched).
 
-// stubPackageFetcher 是受控的直链下载器：返回预设字节并记录调用。
+// stubPackageFetcher is a controlled direct-link downloader: it returns preset bytes and records calls.
 type stubPackageFetcher struct {
 	body  []byte
 	calls int
@@ -29,7 +29,7 @@ func (f *stubPackageFetcher) Fetch(_ context.Context, rawURL string, _ int64) (i
 	return io.NopCloser(bytes.NewReader(f.body)), nil
 }
 
-// mcpMinimalPackageZip 构造一个最小合法 .edeck（一条 basic note）。
+// mcpMinimalPackageZip builds a minimal valid .edeck (one basic note).
 func mcpMinimalPackageZip(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -98,9 +98,9 @@ func TestImportDeckURLDownloadsAndImports(t *testing.T) {
 	}
 }
 
-// TestImportURLRateLimitSharedAcrossRESTAndMCP 证明 REST 与 MCP 的直链导入共用同一条按用户
-// 计数的限流池：同一用户交替走两条传输，配额用尽后第 11 次无论走哪条都被拦下，且不再下载。
-// 每次调用 newEnvWithPackageFetcher 都是全新 fixture（独立 SQLite 库 + 独立限流器）。
+// TestImportURLRateLimitSharedAcrossRESTAndMCP proves REST and MCP direct-link imports share the same per-user
+// rate limit pool: with one user alternating between the two transports, the 11th call is blocked whichever transport it takes, and no further download happens.
+// Each call to newEnvWithPackageFetcher is a brand-new fixture (its own SQLite database + its own rate limiter).
 func TestImportURLRateLimitSharedAcrossRESTAndMCP(t *testing.T) {
 	f := &stubPackageFetcher{body: mcpMinimalPackageZip(t)}
 	_, db, keys, _, ts := newEnvWithPackageFetcher(t, f)
@@ -127,7 +127,7 @@ func TestImportURLRateLimitSharedAcrossRESTAndMCP(t *testing.T) {
 		t.Fatalf("fetcher calls = %d, want %d after the allowed REST+MCP mix", f.calls, restCalls+mcpCalls)
 	}
 
-	// 第 11 次：MCP 与 REST 都必须被同一池拦下，且都不再触发下载。
+	// The 11th call: both MCP and REST must be blocked by the same pool, and neither triggers a download.
 	if _, isErr, text := callTool(t, cs, "import_deck", map[string]any{
 		"url": "https://example.com/deck.edeck", "target": "new_deck", "dry_run": true,
 	}); !isErr || !strings.Contains(text, api.CodeRateLimited) {

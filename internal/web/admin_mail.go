@@ -9,23 +9,23 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是：D 类管理员通知邮件。
+// This file is: class D admin notification mail.
 //
-// 三个触发点里，本仓库真实存在的是两个：
-//   - 作业失败：internal/jobs/jobs.go 的 fail（Runner 通过 OnFailure 钩子回调本文件的
-//     NotifyJobFailed，装配在 cmd/engram/main.go）；
-//   - 媒体配额：internal/web/media.go 的 checkMediaQuota（用户上传被配额拦下时）。
+// Of the three trigger points, two actually exist in this repository:
+//   - Job failure: fail in internal/jobs/jobs.go (the Runner calls back into this file's
+//     NotifyJobFailed via the OnFailure hook, wired up in cmd/engram/main.go);
+//   - Media quota: checkMediaQuota in internal/web/media.go (when a user upload is blocked by the quota).
 //
-// 三条硬约束与 A/B 类邮件一致，逐条落实：
-//   - 绝不在请求路径同步发信：一律经 mail.AdminNotifier.Send → Outbox.Enqueue 入队；
-//   - 发信失败不让触发操作失败：所有触发函数不返回 error，失败只记英文日志；
-//   - SMTP 未配置时不得静默：触发点记 Warn，且 SMTP 配置页渲染 mail.not_configured 说明。
+// The three hard constraints match class A/B mail and are implemented one by one:
+//   - Never send mail synchronously on the request path: always enqueue via mail.AdminNotifier.Send → Outbox.Enqueue;
+//   - A send failure must not fail the triggering operation: no trigger function returns an error, failures are only logged in English;
+//   - Must not be silent when SMTP is unconfigured: the trigger point logs a Warn, and the SMTP config page renders the mail.not_configured notice.
 //
-// 收件地址：D 类发给管理员账号的登录邮箱（store.UserStore.ListAdmins）。
-// 偏好：D 类默认开、可关闭，按**收件管理员自己**的偏好判定（mail.ResolveEnabled）。
+// Recipient address: class D goes to the sign-in mailbox of admin accounts (store.UserStore.ListAdmins).
+// Preference: class D is on by default and can be turned off, decided by the **receiving admin's own** preference (mail.ResolveEnabled).
 
-// adminRecipients 返回所有仍可登录的管理员；查询失败时记日志并返回空列表。
-// 这里只做地址解析，绝不因查询失败让触发操作失败。
+// adminRecipients returns all admins who can still sign in; on query failure it logs and returns an empty list.
+// This only resolves addresses and never fails the triggering operation because of a query failure.
 func (s *Server) adminRecipients(ctx context.Context) []store.User {
 	if s.users == nil {
 		return nil
@@ -38,14 +38,14 @@ func (s *Server) adminRecipients(ctx context.Context) []store.User {
 	return admins
 }
 
-// notifyAdmins 把一封 D 类通知发给每个管理员：按各自语言本地化、按各自偏好判定、逐封入队。
-// 它不返回 error——发信的任何问题都不能让触发操作失败；返回值仅为成功入队的封数（供测试与
-// 调用方观测，调用方不必处理）。
+// notifyAdmins sends one class D notification to each admin: localized into each one's language, decided by each one's preference, enqueued one by one.
+// It returns no error — no mail problem may fail the triggering operation; the return value is only the number of messages successfully enqueued (for tests and
+// callers to observe, not for callers to handle).
 //
-// build 接收收件管理员的本地化器，返回该管理员语言下的邮件主题与正文。
+// build takes the receiving admin's localizer and returns the mail subject and body in that admin's language.
 func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *i18n.Localizer) mail.Message) int {
 	if s.mail == nil || !s.mail.Configured() {
-		// SMTP 未配置：不得静默——记 Warn，触发操作照常。相关页面渲染 mail.not_configured。
+		// SMTP unconfigured: must not be silent — log a Warn and let the triggering operation proceed as usual. The relevant pages render mail.not_configured.
 		s.logger.Warn("admin mail: smtp is not configured; notification not sent", "type", string(t))
 		return 0
 	}
@@ -66,17 +66,17 @@ func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *
 	return sent
 }
 
-// NotifyJobFailed 在作业失败落库后通知管理员（D 类，job_failed）。
-// 签名与 jobs.FailureFunc 对齐；由 cmd/engram 把它接到 Runner.OnFailure 上。
-// 它运行在作业 worker 的上下文里，必须快速返回且绝不 panic（jobs 侧已包 recover 兜底）。
+// NotifyJobFailed notifies admins after a job failure is persisted (class D, job_failed).
+// The signature matches jobs.FailureFunc; cmd/engram hooks it up to Runner.OnFailure.
+// It runs in the job worker's context, so it must return quickly and never panic (the jobs side already wraps recover as a backstop).
 func (s *Server) NotifyJobFailed(ctx context.Context, job store.Job, reason string) {
 	s.notifyAdmins(ctx, mail.TypeJobFailed, func(loc *i18n.Localizer) mail.Message {
 		return s.adminJobFailedMessage(ctx, loc, securitySiteName(loc), job, reason)
 	})
 }
 
-// NotifyMediaAlert 在用户媒体配额被触及时通知管理员（D 类，media_disk_alert）。
-// 由 checkMediaQuota 在写出 413 之后调用；刻意不返回 error，绝不影响上传的错误响应。
+// NotifyMediaAlert notifies admins when a user's media quota is triggered (class D, media_disk_alert).
+// Called by checkMediaQuota after writing the 413; deliberately returns no error so it can never affect the upload's error response.
 func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quota int64) {
 	if u == nil {
 		return
@@ -86,9 +86,9 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 	})
 }
 
-// ── 两类邮件的文案组装（默认正文只有纯文本；管理员配了模板才产出 HTML 段）──────────
+// ── Copy assembly for the two kinds of mail (the default body is plain text only; an HTML part is produced only when the admin configured a template) ──
 
-// adminJobFailedMessage 组装「作业失败」通知；reason 是失败原因（英文，来自 jobs.error）。
+// adminJobFailedMessage assembles the "job failed" notification; reason is the failure reason (English, from jobs.error).
 func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
 	vars := mail.Vars{
 		"site": site, "job_id": job.PublicID, "kind": job.Kind, "reason": reason,
@@ -98,7 +98,7 @@ func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer,
 	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
-// adminMediaAlertMessage 组装「媒体配额」告警；used/quota 是字节数（展示时人类可读）。
+// adminMediaAlertMessage assembles the "media quota" alert; used/quota are byte counts (human-readable when displayed).
 func (s *Server) adminMediaAlertMessage(ctx context.Context, loc *i18n.Localizer, site string, u store.User, used, quota int64) mail.Message {
 	usedText, limitText := humanBytes(used), humanBytes(quota)
 	vars := mail.Vars{"site": site, "username": u.Username, "used": usedText, "limit": limitText}

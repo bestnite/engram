@@ -56,11 +56,11 @@ func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	if strings.Contains(listed.Body.String(), "/s/") {
 		t.Fatalf("link plaintext leaked in listing: %s", listed.Body.String())
 	}
-	// 可见性端点已随「公开/不公开卡组」一起删除：路由不存在，写它一律 404。
+	// The visibility endpoint was removed along with "public/private decks": the route does not exist, so writing to it always gives 404.
 	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, ownerCookies, ownerCSRF); got.Code != http.StatusNotFound {
 		t.Fatalf("removed visibility endpoint = %d, want 404", got.Code)
 	}
-	// 同意制：共享写路径落的是**邀请**审计（授权要等对方接受时才写）。
+	// Consent model: the sharing write path records an **invite** audit entry (the grant is only written when the other side accepts).
 	if n, err := store.NewAuditStore(db).CountByAction(t.Context(), store.ActionDeckShareInvite); err != nil || n < 1 {
 		t.Fatalf("share invite audit count=(%d,%v)", n, err)
 	}

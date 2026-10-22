@@ -14,19 +14,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// staticFS 把 internal/web/static 下的全部资源打进二进制。
-// 用 all: 前缀，以便以后可能出现的点文件或下划线文件也一并嵌入。
+// staticFS embeds all assets under internal/web/static into the binary.
+// The all: prefix is used so that dot files or underscore files that may appear later are embedded too.
 //
-// 注意：CSS 产物 tailwind.css 与生成的 *_templ.go 一样是 gitignore 的，构建前必须按
-// AGENTS.md §4 的步骤先生成；这里对缺失资源不报错，只让对应 URL 为空串，由模板跳过引用。
+// Note: the CSS artifact tailwind.css is gitignored like the generated *_templ.go files, so before building it must be generated following
+// the steps in AGENTS.md §4; a missing asset is not an error here, its URL simply becomes an empty string and templates skip referencing it.
 //
 //go:embed all:static
 var staticFS embed.FS
 
-// staticPathPrefix 是内容哈希 URL 的前缀，形如 /static/v/<hash>/<逻辑路径>。
+// staticPathPrefix is the prefix of content-hashed URLs, of the form /static/v/<hash>/<logical path>.
 const staticPathPrefix = "/static/v/"
 
-// asset 是一个已嵌入资源的元数据。
+// asset is the metadata of one embedded asset.
 type asset struct {
 	logical string
 	hash    string
@@ -34,12 +34,12 @@ type asset struct {
 	data    []byte
 }
 
-// Assets 是资源清单：逻辑路径 → 哈希化 URL，同时负责按 URL 提供内容。
+// Assets is the asset manifest: logical path → hashed URL, and it also serves content by URL.
 type Assets struct {
 	files map[string]*asset
 }
 
-// LoadAssets 遍历嵌入的 static 目录建立清单。
+// LoadAssets walks the embedded static directory to build the manifest.
 func LoadAssets() (*Assets, error) {
 	a := &Assets{files: make(map[string]*asset)}
 	err := fs.WalkDir(staticFS, "static", func(p string, d fs.DirEntry, walkErr error) error {
@@ -63,8 +63,8 @@ func LoadAssets() (*Assets, error) {
 	return a, nil
 }
 
-// newAsset 计算内容哈希并拼出访问路径。
-// 哈希取 sha256 前 4 字节（8 位十六进制）：在单次部署内足以区分内容，且 URL 足够短。
+// newAsset computes the content hash and assembles the access path.
+// The hash takes the first 4 bytes of sha256 (8 hex digits): enough to distinguish content within a single deployment, while keeping the URL short.
 func newAsset(logical string, data []byte) *asset {
 	sum := sha256.Sum256(data)
 	h := hex.EncodeToString(sum[:4])
@@ -76,13 +76,13 @@ func newAsset(logical string, data []byte) *asset {
 	}
 }
 
-// Has 报告某逻辑路径的资源是否已嵌入（例如 tailwind.css 是否已生成）。
+// Has reports whether the asset for a logical path is embedded (for example whether tailwind.css has been generated).
 func (a *Assets) Has(logical string) bool {
 	_, ok := a.files[logical]
 	return ok
 }
 
-// ContentHash 返回逻辑路径对应资源的内容哈希；未知资源返回空串。
+// ContentHash returns the content hash of the asset for a logical path; returns an empty string for an unknown asset.
 func (a *Assets) ContentHash(logical string) string {
 	if f, ok := a.files[logical]; ok {
 		return f.hash
@@ -90,8 +90,8 @@ func (a *Assets) ContentHash(logical string) string {
 	return ""
 }
 
-// body 返回已嵌入资源的原始内容（UTF-8 文本）；未知资源返回空串。
-// 供稳定 URL 路由（如 /pwa.js）复用同一份嵌入内容。
+// body returns the raw content of an embedded asset (UTF-8 text); returns an empty string for an unknown asset.
+// Lets stable-URL routes (such as /pwa.js) reuse the same embedded content.
 func (a *Assets) body(logical string) string {
 	if f, ok := a.files[logical]; ok {
 		return string(f.data)
@@ -99,7 +99,7 @@ func (a *Assets) body(logical string) string {
 	return ""
 }
 
-// URL 返回逻辑路径对应的内容哈希 URL；资源不存在时返回空串，模板据此跳过引用。
+// URL returns the content-hashed URL for a logical path; returns an empty string when the asset does not exist, and templates skip referencing it accordingly.
 func (a *Assets) URL(logical string) string {
 	if f, ok := a.files[logical]; ok {
 		return f.url
@@ -107,8 +107,8 @@ func (a *Assets) URL(logical string) string {
 	return ""
 }
 
-// Serve 处理 /static/v/:hash/*filepath：哈希与当前内容不一致时返回 404，避免旧 URL
-// 命中新内容造成缓存错乱；命中则按不可变资源返回，浏览器可长期缓存。
+// Serve handles /static/v/:hash/*filepath: a hash that does not match the current content returns 404, preventing an old URL
+// from hitting new content and scrambling caches; on a hit it is served as an immutable asset, which browsers may cache long-term.
 func (a *Assets) Serve(c *gin.Context) {
 	logical := strings.TrimPrefix(c.Param("filepath"), "/")
 	f, ok := a.files[logical]

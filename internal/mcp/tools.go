@@ -9,32 +9,32 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件定义全部 MCP 工具的入参类型与处理器；每个处理器只做参数整形，
-// 随后调用与同名 REST 端点完全相同的 internal/api service 方法。
+// This file defines the input types and handlers of all MCP tools; each handler only shapes arguments,
+// then calls exactly the same internal/api service method as the REST endpoint of the same name.
 //
-// 所有指向自增主键的入参都是对外 id（UUIDv7 字符串）：处理器先经 api 的
-// ByPublicID 解析成数字主键，再进入 service 层；数字主键既不接受也不返回。
+// Every input argument that points at an auto-increment primary key is a public id (a UUIDv7 string): the handler first resolves it
+// into the numeric primary key via api's ByPublicID, then enters the service layer; numeric primary keys are neither accepted nor returned.
 
-// ---- 入参 ----
+// ---- input arguments ----
 
-// listDecksIn 无参数。
+// listDecksIn takes no arguments.
 type listDecksIn struct{}
 
-// createDeckIn 是 create_deck 的入参；preset_id 为空时使用（或创建）调用者的 Default 预设。
+// createDeckIn is the input of create_deck; when preset_id is empty the caller's Default preset is used (or created).
 type createDeckIn struct {
 	Name        string `json:"name" jsonschema:"the deck name (required)"`
 	Description string `json:"description,omitempty" jsonschema:"optional deck description"`
 	PresetID    string `json:"preset_id,omitempty" jsonschema:"scheduling preset public id; empty uses the caller's Default preset"`
 }
 
-// updateDeckIn 是 update_deck 的入参；两个字段都可省略，省略即保持原值（PATCH 语义）。
+// updateDeckIn is the input of update_deck; both fields may be omitted, and omitting one keeps the original value (PATCH semantics).
 type updateDeckIn struct {
 	DeckID      string  `json:"deck_id" jsonschema:"the public id of the deck to update"`
 	Name        *string `json:"name,omitempty" jsonschema:"new deck name; omit to keep the current name"`
 	Description *string `json:"description,omitempty" jsonschema:"new deck description; omit to keep it, an empty string clears it"`
 }
 
-// searchNotesIn 是 search_notes 的入参；deck_id 必填。
+// searchNotesIn is the input of search_notes; deck_id is required.
 type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
 	Query   string `json:"q,omitempty" jsonschema:"keyword matched against note fields"`
@@ -45,39 +45,39 @@ type searchNotesIn struct {
 	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page"`
 }
 
-// getNoteIn 是 get_note 的入参。
+// getNoteIn is the input of get_note.
 type getNoteIn struct {
 	NoteID string `json:"note_id" jsonschema:"the public id of the note to read"`
 }
 
-// getStatsIn 无参数。
+// getStatsIn takes no arguments.
 type getStatsIn struct{}
 
-// listCardTypesIn 是 list_card_types 的入参：无参数。
+// listCardTypesIn is the input of list_card_types: no arguments.
 type listCardTypesIn struct{}
 
-// exportDeckIn 是 export_deck 的入参；它导出一个**卡组包**。
+// exportDeckIn is the input of export_deck; it exports a **deck package**.
 type exportDeckIn struct {
 	DeckID          string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
 	IncludeProgress bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
-	// IncludeMedia 缺省为 true（媒体默认内联）。
+	// IncludeMedia defaults to true (media is inlined by default).
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
 	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include review logs (requires include_progress)"`
-	// IncludeWeights 缺省 false：FSRS 权重是导出者个人的记忆曲线，不随卡组内容默认带出。
+	// IncludeWeights defaults to false: FSRS weights are the exporter's personal memory curve and are not carried along with deck content by default.
 	IncludeWeights bool `json:"include_weights,omitempty" jsonschema:"include the caller's FSRS weights in preset.json; default false"`
 }
 
-// importNoteIn 是单个 note 的入参，字段名与 schema/note-import.schema.json 一致。
+// importNoteIn is the input for a single note; field names match schema/note-import.schema.json.
 type importNoteIn struct {
 	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze); list_card_types returns every kind"`
 	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type; list_card_types returns each kind's fields"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
-	// NoteID 按对外 id 寻址已有 note 就地改写；与 external_ref 互斥。
+	// NoteID addresses an existing note by public id and rewrites it in place; mutually exclusive with external_ref.
 	NoteID string   `json:"note_id,omitempty" jsonschema:"address an existing note by public id to rewrite in place; mutually exclusive with external_ref"`
 	Tags   []string `json:"tags,omitempty" jsonschema:"note tags"`
 }
 
-// bulkNotesIn 是 create_notes 的入参（批量建卡路径）。
+// bulkNotesIn is the input of create_notes (the bulk card creation path).
 type bulkNotesIn struct {
 	DeckID     string         `json:"deck_id" jsonschema:"public id of the target deck"`
 	Notes      []importNoteIn `json:"notes" jsonschema:"notes to create or update (1..500)"`
@@ -85,8 +85,8 @@ type bulkNotesIn struct {
 	OnConflict string         `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
 }
 
-// bulkActionIn 是 bulk_notes 的入参，与 REST 的 POST /notes/bulk 请求体同形
-// （MCP 只做参数整形，语义与校验都在 service 层）。
+// bulkActionIn is the input of bulk_notes and has the same shape as the REST POST /notes/bulk request body
+// (MCP only shapes arguments; semantics and validation live in the service layer).
 type bulkActionIn struct {
 	Action  string   `json:"action" jsonschema:"bulk action: delete, add_tags, remove_tags or set_tags"`
 	NoteIDs []string `json:"note_ids" jsonschema:"public ids of the notes to act on, deduplicated to 1..500 entries"`
@@ -94,39 +94,39 @@ type bulkActionIn struct {
 	DryRun  bool     `json:"dry_run,omitempty" jsonschema:"count without writing or auditing"`
 }
 
-// importDeckIn 是 import_deck 的入参：接受一个卡组包，来源二选一。
+// importDeckIn is the input of import_deck: it accepts a deck package, with the source being one of two alternatives.
 type importDeckIn struct {
-	// Package 是包本体：export_deck 输出的 JSON 文档，或 base64 编码的 .edeck zip。与 URL 互斥。
+	// Package is the package body itself: the JSON document export_deck outputs, or a base64-encoded .edeck zip. Mutually exclusive with URL.
 	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive; mutually exclusive with url"`
-	// URL 是公开 HTTPS 直链（.edeck/.zip）；由服务端下载并校验，与 Package 互斥。
+	// URL is a public HTTPS direct link (.edeck/.zip); it is downloaded and validated by the server, and is mutually exclusive with Package.
 	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .edeck/.zip package; mutually exclusive with package"`
-	// Target 取值 new_deck（默认）、into_deck:<public id>、replace_deck:<public id>。
+	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
 	OnConflict string `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
-	// SkipMissingMedia 缺失媒体时只计数并继续；默认 false（缺媒体即失败）。
+	// SkipMissingMedia only counts missing media and continues; default false (missing media means failure).
 	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
-	// AllowOthersProgress 仅管理员可置位：允许导入包内他人的进度。
+	// AllowOthersProgress can only be set by an administrator: allows importing other people's progress inside the package.
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
-	// ApplyWeights 缺省 false：只在 new_deck 目标下把包内权重写进新建的预设。
+	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
 	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
 
-// createImportUploadIn 是 create_import_upload 的入参：导入选项在签发时固定进票据。
+// createImportUploadIn is the input of create_import_upload: the import options are fixed into the ticket when it is issued.
 type createImportUploadIn struct {
-	// Target 取值 new_deck（默认）、into_deck:<public id>、replace_deck:<public id>。
+	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
 	OnConflict string `json:"on_conflict,omitempty" jsonschema:"conflict policy: skip, update (default) or fail"`
-	// SkipMissingMedia 缺失媒体时只计数并继续；默认 false（缺媒体即失败）。
+	// SkipMissingMedia only counts missing media and continues; default false (missing media means failure).
 	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
-	// AllowOthersProgress 仅管理员可置位：允许导入包内他人的进度。
+	// AllowOthersProgress can only be set by an administrator: allows importing other people's progress inside the package.
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
-	// ApplyWeights 缺省 false：只在 new_deck 目标下把包内权重写进新建的预设。
+	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
 	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
 
-// updateNoteIn 是 update_note 的入参。
+// updateNoteIn is the input of update_note.
 type updateNoteIn struct {
 	NoteID string         `json:"note_id" jsonschema:"the public id of the note to update"`
 	Kind   string         `json:"kind,omitempty" jsonschema:"card type; defaults to the existing kind"`
@@ -134,13 +134,13 @@ type updateNoteIn struct {
 	Tags   []string       `json:"tags,omitempty" jsonschema:"replacement tags"`
 }
 
-// deleteNoteIn 是 delete_note 的入参。
+// deleteNoteIn is the input of delete_note.
 type deleteNoteIn struct {
 	NoteID string `json:"note_id" jsonschema:"the public id of the note to soft-delete"`
 }
 
-// getDueCardsIn 是 get_due_cards 的入参。
-// deck_id 与 deck_ids 互斥：同时给出返回参数错误；两者都缺省＝全部卡组。
+// getDueCardsIn is the input of get_due_cards.
+// deck_id and deck_ids are mutually exclusive: giving both returns an argument error; omitting both means all decks.
 type getDueCardsIn struct {
 	DeckID  string   `json:"deck_id,omitempty" jsonschema:"public id of a single deck to scope the queue; empty means all decks; mutually exclusive with deck_ids"`
 	DeckIDs []string `json:"deck_ids,omitempty" jsonschema:"public ids of the decks to scope the queue; absent or empty means all decks; mutually exclusive with deck_id"`
@@ -148,13 +148,13 @@ type getDueCardsIn struct {
 	Limit   int      `json:"limit,omitempty" jsonschema:"maximum cards to return (1..500)"`
 }
 
-// listDeckTagsIn 是 list_deck_tags 的入参。
+// listDeckTagsIn is the input of list_deck_tags.
 type listDeckTagsIn struct {
 	DeckID string `json:"deck_id" jsonschema:"public id of the deck whose tags to list"`
 }
 
-// submitReviewIn 是 submit_review 的入参。规则与 REST 相同（见 api.SubmitReviewInput）：
-// 自评题型给 rating，作答类题型给 answer 或 give_up；grade_source 只接受 self。
+// submitReviewIn is the input of submit_review. The rules match REST (see api.SubmitReviewInput):
+// self-graded card types give rating, answer-based card types give answer or give_up; grade_source accepts only self.
 type submitReviewIn struct {
 	CardID          string `json:"card_id" jsonschema:"the public id of the card being reviewed"`
 	Rating          int    `json:"rating,omitempty" jsonschema:"self-assessed rating 1=again, 2=hard, 3=good, 4=easy; omit for card types graded by the server (typed, numeric, choice_single, choice_multi, true_false)"`
@@ -165,13 +165,13 @@ type submitReviewIn struct {
 	GradeSource     string `json:"grade_source,omitempty" jsonschema:"must be omitted or self; the server decides where a grade came from"`
 }
 
-// addExtraNewCardsIn 是 add_extra_new_cards 的入参；count 缺省或为 0 时用每日新卡上限。
+// addExtraNewCardsIn is the input of add_extra_new_cards; when count is omitted or 0 the daily new-card limit is used.
 type addExtraNewCardsIn struct {
 	DeckID string `json:"deck_id" jsonschema:"public id of the deck to extend today"`
 	Count  int    `json:"count,omitempty" jsonschema:"number of extra new cards to allow today (1..1000); omit to use the caller's daily new card limit for the deck"`
 }
 
-// ---- 处理器 ----
+// ---- handlers ----
 
 func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any, error) {
 	decks, err := s.api.ListDecks(ctx, id.User.ID)
@@ -185,10 +185,10 @@ func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any
 	return map[string]any{"decks": out}, nil
 }
 
-// createDeck 建一个空卡组：与 REST `POST /decks` 走同一 service 方法。
-// 返回与 REST 相同的 api.DeckResponse，保证两种传输的响应形态不会漂移。
+// createDeck creates an empty deck: it goes through the same service method as REST `POST /decks`.
+// It returns the same api.DeckResponse as REST, so the response shape of the two transports cannot drift.
 func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (any, error) {
-	// preset_id 是对外 id：空串交给 service 取缺省预设；非空则先解析成主键再传数字。
+	// preset_id is a public id: an empty string is left to the service to resolve the default preset; a non-empty one is resolved to a primary key first and then passed as a number.
 	var presetID uint64
 	if pid := strings.TrimSpace(in.PresetID); pid != "" {
 		p, err := s.api.PresetByPublicID(ctx, pid)
@@ -209,7 +209,7 @@ func (s *Server) createDeck(ctx context.Context, id Identity, in createDeckIn) (
 	return s.api.ToDeckResponse(ctx, id.User.ID, *d, store.RoleOwner), nil
 }
 
-// updateDeck 修改卡组的名称与描述；与 REST `PATCH /decks/:id` 走同一 service 方法（仅 owner）。
+// updateDeck changes a deck's name and description; it goes through the same service method as REST `PATCH /decks/:id` (owner only).
 func (s *Server) updateDeck(ctx context.Context, id Identity, in updateDeckIn) (any, error) {
 	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
 	if err != nil {
@@ -247,7 +247,7 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 	return map[string]any{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage}, nil
 }
 
-// listDeckTags 列出卡组内的标签及各自的 note 数；与 REST `GET /decks/:id/tags` 走同一 service 方法。
+// listDeckTags lists the tags in a deck with their note counts; it goes through the same service method as REST `GET /decks/:id/tags`.
 func (s *Server) listDeckTags(ctx context.Context, id Identity, in listDeckTagsIn) (any, error) {
 	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
 	if err != nil {
@@ -260,7 +260,7 @@ func (s *Server) listDeckTags(ctx context.Context, id Identity, in listDeckTagsI
 	return map[string]any{"tags": tags}, nil
 }
 
-// getNote 按对外 id 读取单条 note；与 REST `GET /notes/:id` 走同一 service 方法。
+// getNote reads a single note by public id; it goes through the same service method as REST `GET /notes/:id`.
 func (s *Server) getNote(ctx context.Context, id Identity, in getNoteIn) (any, error) {
 	n, err := s.api.GetNote(ctx, id.User.ID, in.NoteID)
 	if err != nil {
@@ -269,7 +269,7 @@ func (s *Server) getNote(ctx context.Context, id Identity, in getNoteIn) (any, e
 	return s.api.NotesJSON(ctx, id.User.ID, []store.Note{*n})[0], nil
 }
 
-// listCardTypes 列出题型自描述：与 REST `GET /card-types` 走同一 service 方法。
+// listCardTypes lists card type self-descriptions: it goes through the same service method as REST `GET /card-types`.
 func (s *Server) listCardTypes(_ context.Context, _ Identity, _ listCardTypesIn) (api.CardTypesResponse, error) {
 	return s.api.CardTypes(), nil
 }
@@ -278,8 +278,8 @@ func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, 
 	return s.api.Stats(ctx, id.User)
 }
 
-// exportDeck 导出卡组包：与 REST `GET /decks/:id/package` 走同一 service 方法。
-// 返回包内逻辑内容的 JSON 文档形态，可直接对照 schema/deck-package.schema.json 校验。
+// exportDeck exports a deck package: it goes through the same service method as REST `GET /decks/:id/package`.
+// It returns the logical content of the package in JSON document form, which can be validated directly against schema/deck-package.schema.json.
 func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (any, error) {
 	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
 	if err != nil {
@@ -309,8 +309,8 @@ func (s *Server) createNotes(ctx context.Context, id Identity, in bulkNotesIn) (
 	return s.api.ImportNotes(ctx, id.User.ID, d.ID, id.apiKeyID(), toImportRequest(in))
 }
 
-// bulkNotes 对一组 note 执行批量动作：与 REST `POST /notes/bulk` 走同一 service 方法。
-// note_ids 是 note 的对外 id，解析与逐行判权都在 service 层。
+// bulkNotes performs a bulk action on a set of notes: it goes through the same service method as REST `POST /notes/bulk`.
+// note_ids are notes' public ids; resolution and per-row permission checks happen in the service layer.
 func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (any, error) {
 	return s.api.BulkNotes(ctx, id.User.ID, id.apiKeyID(), api.BulkNotesInput{
 		Action:  in.Action,
@@ -320,10 +320,10 @@ func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (a
 	})
 }
 
-// importDeck 导入卡组包：与 REST `POST /decks/import`（或 `POST /decks/import-url`）
-// 走同一 service 方法。包的权限判定、进度归属与审计都在 service 层完成；
-// target 里的 into_deck:<public id> / replace_deck:<public id> 由 service 自行解析。
-// package 与 url 互斥：二选一，缺一报参数错误。
+// importDeck imports a deck package: it goes through the same service method as REST `POST /decks/import` (or `POST /decks/import-url`)
+// The package's permission checks, progress attribution and auditing are all done in the service layer;
+// into_deck:<public id> / replace_deck:<public id> in target are resolved by the service itself.
+// package and url are mutually exclusive: exactly one of them, and omitting both reports an argument error.
 func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
 	opts := store.PackageImportOptions{
 		Target:              in.Target,
@@ -350,8 +350,8 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, opts)
 }
 
-// createImportUpload 签发一次性上传票据：与 REST `POST /decks/import-uploads` 走同一 service 方法。
-// 包字节随后由 agent 直接 PUT 到返回的 URL，不经过模型输出。
+// createImportUpload issues a one-time upload ticket: it goes through the same service method as REST `POST /decks/import-uploads`.
+// The package bytes are then PUT by the agent straight to the returned URL, never passing through model output.
 func (s *Server) createImportUpload(ctx context.Context, id Identity, in createImportUploadIn) (*api.ImportUpload, error) {
 	return s.api.CreateImportUpload(ctx, id.User, id.apiKeyID(), store.PackageImportOptions{
 		Target:              in.Target,
@@ -396,14 +396,14 @@ func (s *Server) deleteNote(ctx context.Context, id Identity, in deleteNoteIn) (
 }
 
 func (s *Server) getDueCards(ctx context.Context, id Identity, in getDueCardsIn) (any, error) {
-	// deck_id 与 deck_ids 互斥：同时给出是调用方的参数错误，经同一 MCP 错误出口返回
-	// （客户端看到 isErr 与稳定的 invalid_request code）。空串视为未提供。
+	// deck_id and deck_ids are mutually exclusive: giving both is a caller argument error, returned through the same MCP error exit
+	// (the client sees isErr and a stable invalid_request code). An empty string counts as not provided.
 	deckID := strings.TrimSpace(in.DeckID)
 	if deckID != "" && len(in.DeckIDs) > 0 {
 		return nil, api.InvalidRequest("deck_id and deck_ids are mutually exclusive")
 	}
-	// 对外 id 逐个解析成主键：任一个未知即整次调用失败（不静默过滤），与 REST 同口径。
-	// 空串条目直接跳过（与 REST 跳过空 deck 查询参数一致）。
+	// Resolve each public id into a primary key: any unknown one fails the whole call (no silent filtering), matching REST.
+	// Empty entries are skipped outright (consistent with REST skipping empty deck query parameters).
 	var resolved []uint64
 	switch {
 	case deckID != "":
@@ -462,7 +462,7 @@ func (s *Server) addExtraNewCards(ctx context.Context, id Identity, in addExtraN
 	return s.api.AddExtraNew(ctx, id.User, id.apiKeyID(), d.ID, in.Count)
 }
 
-// toImportRequest 把 MCP 入参转成 service 层的 ImportRequest；两种工具共用。
+// toImportRequest turns the MCP input arguments into the service layer's ImportRequest; shared by both tools.
 func toImportRequest(in bulkNotesIn) api.ImportRequest {
 	notes := make([]api.ImportNote, 0, len(in.Notes))
 	for _, n := range in.Notes {

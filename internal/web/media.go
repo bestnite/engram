@@ -20,35 +20,35 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 媒体相关的系统设置键与对应的环境变量覆盖名。
-// 环境变量 > settings 表 > 内置默认，与 internal/config 的优先级一致；这里直接读
-// settings 表以便管理员改完立即生效，无需重启。
+// Media-related system setting keys and their environment-variable override names.
+// Environment variable > settings table > built-in default, the same precedence as internal/config; the settings
+// table is read directly here so an admin change takes effect immediately, with no restart.
 const (
 	settingKeyMediaAllowedMimes = "media_allowed_mimes"
-	// settingKeyMediaUserQuotaBytes 是每用户媒体总量配额（字节），0/未配置 = 不限。
-	// 与 envMediaUserQuotaBytes 一起指向 internal/media 的同一份解析（上传链与导入链共用）。
+	// settingKeyMediaUserQuotaBytes is the per-user total media quota (bytes); 0/unconfigured = unlimited.
+	// Together with envMediaUserQuotaBytes it points at the same parsing in internal/media (the upload and import chains share it).
 	settingKeyMediaUserQuotaBytes = media.SettingKeyMediaUserQuotaBytes
 	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
 	envMediaUserQuotaBytes        = media.EnvMediaUserQuotaBytes
 )
 
-// registerMediaRoutes 挂载媒体上传与读取。依赖未装配时跳过。
+// registerMediaRoutes mounts media upload and reading. Skipped when the dependency is not wired up.
 func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.media == nil {
 		return
 	}
-	// 上传是写操作，过 CSRF 中间件；读取只要求登录（M5 授权落地前的最小鉴权）。
+	// Upload is a write, so it goes through the CSRF middleware; reading only requires sign-in (the minimum auth until M5 authorization lands).
 	router.POST("/media", s.sessions.CSRFMiddleware(), s.mediaUpload)
 	router.GET("/media/:sha", s.mediaServe)
-	// 编辑器使用的卡组内上传入口。写入要求卡组的 editor 角色，读者无法把媒体
-	// 塞进别人的卡组；权限判定与其它写路径共用 auth.DeckAccess（单一实现）。
+	// The in-deck upload entry the editor uses. Writing requires the editor role on the deck, so a reader cannot push media
+	// into someone else's deck; the permission check shares auth.DeckAccess with the other write paths (a single implementation).
 	if s.access != nil {
 		router.POST("/decks/:id/media", s.sessions.CSRFMiddleware(), s.deckMediaUpload)
 	}
 }
 
-// deckMediaUpload 是编辑器使用的上传入口：先确认当前用户对卡组至少有 editor 角色，
-// 再走与 /media 相同的存储与校验逻辑。
+// deckMediaUpload is the upload entry the editor uses: first confirm the current user has at least the editor role on the deck,
+// then go through the same storage and validation logic as /media.
 func (s *Server) deckMediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -64,7 +64,7 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// allowedMimes 解析生效的 mime 白名单：环境变量 > settings 表 > 默认白名单。
+// allowedMimes resolves the effective mime allow-list: environment variable > settings table > default allow-list.
 func (s *Server) allowedMimes(ctx context.Context) []string {
 	if raw := strings.TrimSpace(os.Getenv(envMediaAllowedMimes)); raw != "" {
 		return splitMimeList(raw)
@@ -81,14 +81,14 @@ func (s *Server) allowedMimes(ctx context.Context) []string {
 	return media.DefaultAllowedMimes()
 }
 
-// userMediaQuota 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
-// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字。
-// 解析实现与卡组包导入链共用 internal/media.ResolveUserQuotaBytes，避免两处口径漂移。
+// userMediaQuota resolves the effective per-user total media quota (bytes): environment variable > settings table > 0.
+// 0 (including unconfigured) means unlimited — being off by default is deliberate: no picking a number for the admin that nobody agreed to.
+// The parsing shares internal/media.ResolveUserQuotaBytes with the deck package import chain, so the rules cannot drift apart.
 func (s *Server) userMediaQuota(ctx context.Context) int64 {
 	return media.ResolveUserQuotaBytes(ctx, s.db)
 }
 
-// splitMimeList 把逗号分隔的 mime 串切成去空白、去空项的小写列表。
+// splitMimeList splits a comma-separated mime string into a lowercase list with whitespace and empty items removed.
 func splitMimeList(raw string) []string {
 	out := make([]string, 0, 4)
 	for _, part := range strings.Split(raw, ",") {
@@ -99,10 +99,10 @@ func splitMimeList(raw string) []string {
 	return out
 }
 
-// multipartOverheadBytes 是上传请求体在单文件上限之外允许的余量（分隔符、part 头、其他小字段）。
+// multipartOverheadBytes is the allowance for the upload body beyond the single-file limit (boundaries, part headers, other small fields).
 const multipartOverheadBytes = 64 << 10
 
-// mediaUpload 是通用上传入口：登录用户即可上传（授权落地前的行为，保持不变）。
+// mediaUpload is the generic upload entry: any signed-in user may upload (the behaviour before authorization landed, unchanged).
 func (s *Server) mediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -111,14 +111,14 @@ func (s *Server) mediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// storeUpload 读取 multipart 里的 file 字段、落盘并返回元数据 JSON；错误按稳定 code 映射。
-// /media 与 /decks/:id/media 两个入口共用本函数，保证校验逻辑只有一份。
+// storeUpload reads the file field from the multipart, writes it to disk and returns metadata JSON; errors map to stable codes.
+// Both the /media and /decks/:id/media entries share this function, so the validation logic exists only once.
 func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	ctx := c.Request.Context()
 	fileLimit := media.ResolveMaxBytes(ctx, s.db)
-	// 先给整个请求体设上限再解析 multipart：multipart 解析会把超出内存阈值的 part 落到临时盘，
-	// 不设上限时任意大的请求体都会先写进磁盘，之后才轮到下面的单文件大小检查。
-	// 上限 = 单文件上限 + multipart 分隔与头部的余量。
+	// Cap the whole request body before parsing the multipart: multipart parsing spills parts over the in-memory threshold to a temp file,
+	// so without a cap an arbitrarily large body would be written to disk first and only then reach the single-file size check below.
+	// The cap = single-file limit + allowance for multipart boundaries and headers.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, fileLimit+multipartOverheadBytes)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -138,9 +138,9 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	if header != nil {
 		declared = header.Header.Get("Content-Type")
 	}
-	// 先校验再落盘：把文件读进内存（受单文件上限约束，多读 1 字节以发现超限），
-	// 全部拒绝判断都在这之后进行，通过后才交给存储层写临时文件 + rename，避免"写了一半
-	// 才发现超限"。内存占用以单文件上限为界，不随上传并发之外的规模增长。
+	// Validate before writing to disk: read the file into memory (bounded by the single-file limit, reading one byte extra to detect overflow),
+	// with every rejection check run after that; only on pass is it handed to the storage layer to write a temp file + rename, avoiding "half the file
+	// written before the overflow is noticed". Memory use is bounded by the single-file limit and does not grow with anything but upload concurrency.
 	raw, err := io.ReadAll(io.LimitReader(file, fileLimit+1))
 	if err != nil {
 		s.logger.Info("media upload read failed", "user_id", user.ID, "error", err)
@@ -153,7 +153,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		writeMediaError(c, status, code, msg)
 		return
 	}
-	// 每用户总量配额：只在配置了正数限额时检查；0/未配置 = 不限。
+	// Per-user total quota: checked only when a positive limit is configured; 0/unconfigured = unlimited.
 	if quota := s.userMediaQuota(ctx); quota > 0 {
 		if !s.checkMediaQuota(c, user, raw, quota) {
 			return
@@ -177,7 +177,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		TargetType: "media",
 		Detail:     map[string]any{"sha256": saved.Sha256, "mime": saved.Mime, "bytes": saved.Bytes},
 	})
-	// 对外标识就是 sha256：响应不再有自增 id，url 直接由哈希拼成。
+	// The external identifier is the sha256: responses no longer carry an auto-increment id, and the url is built straight from the hash.
 	c.JSON(http.StatusCreated, gin.H{
 		"sha256": saved.Sha256,
 		"mime":   saved.Mime,
@@ -186,11 +186,11 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	})
 }
 
-// checkMediaQuota 在落盘前检查每用户总量配额：已用量 + 本次新增量 > 限额即拒绝，
-// 写稳定 code media_quota_exceeded 与点名限额/已用量的本地化文案，返回 false。
+// checkMediaQuota checks the per-user total quota before writing to disk: used + this addition > limit means refusal,
+// with the stable code media_quota_exceeded and localized copy naming the limit/usage; returns false.
 //
-// 已用量 = 该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传，去重求和（口径见 internal/store.UserMediaUsage）。
-// 若本次文件与该用户已计费的某个 blob 同 sha256，则新增量为 0（去重不重复收费）。
+// Used = media referenced by that user's notes ∪ that user's uploads nobody references yet, deduplicated and summed (see internal/store.UserMediaUsage).
+// If this file has the same sha256 as a blob already charged to that user, the addition is 0 (deduplication is not charged twice).
 func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, quota int64) bool {
 	ctx := c.Request.Context()
 	usage, err := store.UserMediaUsage(ctx, s.db, user.ID)
@@ -212,13 +212,13 @@ func (s *Server) checkMediaQuota(c *gin.Context, user *store.User, raw []byte, q
 		"user_id", user.ID, "code", media.CodeQuotaExceeded, "used", usage.Bytes, "quota", quota)
 	writeMediaError(c, http.StatusRequestEntityTooLarge, media.CodeQuotaExceeded,
 		s.mediaQuotaMessage(c, usage.Bytes, quota))
-	// 配额被触及时通知管理员（D 类）。发信失败绝不影响这次上传的错误响应。
+	// Notify the admin (class D) when the quota is hit. A failed send never affects this upload's error response.
 	s.NotifyMediaAlert(ctx, user, usage.Bytes, quota)
 	return false
 }
 
-// mediaQuotaMessage 组装点名限额与已用量的本地化文案（用户可见文案走语言包）。
-// 本地化器缺失时回退英文兜底，绝不把数字藏起来。
+// mediaQuotaMessage assembles the localized copy naming the limit and usage (user-visible copy lives in the language packs).
+// Falls back to English when the localizer is missing — never hide the numbers.
 func (s *Server) mediaQuotaMessage(c *gin.Context, used, quota int64) string {
 	loc, ok := s.localizer(c)
 	if !ok || loc == nil {
@@ -230,7 +230,7 @@ func (s *Server) mediaQuotaMessage(c *gin.Context, used, quota int64) string {
 	})
 }
 
-// mediaErrorResponse 把存储层错误映射成 HTTP 状态码与稳定 code。
+// mediaErrorResponse maps a storage-layer error to an HTTP status code and a stable code.
 func mediaErrorResponse(err error) (status int, code, msg string) {
 	var me *media.Error
 	if errors.As(err, &me) {
@@ -247,35 +247,35 @@ func mediaErrorResponse(err error) (status int, code, msg string) {
 	return http.StatusInternalServerError, "media_internal_error", "could not store the file"
 }
 
-// writeMediaError 输出统一的错误信封。
+// writeMediaError emits the uniform error envelope.
 func writeMediaError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
-// mediaShaParamRE 是 GET /media/:sha 的路径参数形状：恰好 64 位小写十六进制。
-// 不合形的参数直接 404，且在此之前不查库——避免拿任意字符串去命中 media 表。
+// mediaShaParamRE is the path parameter shape of GET /media/:sha: exactly 64 lowercase hex characters.
+// A malformed parameter 404s straight away, without touching the database first — no arbitrary string gets to probe the media table.
 var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-// mediaServe 代理读取媒体：带 sha256 ETag 与 immutable 缓存。
+// mediaServe proxies media reads: with a sha256 ETag and immutable caching.
 //
-// 鉴权：登录之外还要「有卡组访问权」——判定三选一：① media_uploaders 里存在指向我的
-// 记录（我提供过这份字节，去重命中也算）；② media_notes 映射里存在指向我可见卡组内、未软删的
-// note；③（L3）映射指向我当前会话经分享链接打开过、且授权未过期的卡组内、未软删的 note。
-// 谓词与列表/队列/统计同源（store.MediaAccessibleToUser → mediaReadableByUser），
-// 无权限与不存在统一 404。
+// Authorization: besides sign-in, "deck access" is required — one of three: (1) a media_uploaders record pointing at me
+// (I supplied these bytes, including a deduplication hit); (2) a media_notes mapping to a non-soft-deleted note inside a deck I can see;
+// (3) (L3) a mapping to a non-soft-deleted note in a deck my current session opened through a share link, with authorization not expired.
+// The predicate is shared with list/queue/stats (store.MediaAccessibleToUser → mediaReadableByUser),
+// and no permission and not-found both return 404.
 func (s *Server) mediaServe(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
 	sha := c.Param("sha")
-	// 形状校验先于任何查询：短于 64 位、含非十六进制字符、或旧的数字 id 一律 404。
+	// Shape validation precedes any query: shorter than 64 characters, a non-hex character, or a legacy numeric id all 404.
 	if !mediaShaParamRE.MatchString(sha) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	// 分享授权挂在服务端会话上（L3）：把当前会话 id 显式交给 store 层，
-	// 让「本会话通过分享链接打开过的卡组」也计入可读范围。未登录到不了这里（requireUser 已拦截）。
+	// The share grant hangs off the server-side session (L3): the current session id is handed to the store layer explicitly,
+	// so "decks this session opened through a share link" also count as readable. Unauthenticated requests never get here (requireUser already blocks them).
 	sessionID := ""
 	if sess, ok := auth.CurrentSession(c); ok {
 		sessionID = sess.ID
@@ -287,7 +287,7 @@ func (s *Server) mediaServe(c *gin.Context) {
 		return
 	}
 	if !allowed {
-		// 与「媒体不存在」同一个 404：不向无权限者泄露某个 sha 是否存在。
+		// The same 404 as "media does not exist": do not leak to someone without permission whether a given sha exists.
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -306,18 +306,18 @@ func (s *Server) mediaServe(c *gin.Context) {
 	etag := `"` + m.Sha256 + `"`
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "private, max-age=31536000, immutable")
-	// 读侧兼容库里可能存在的历史污染行：只有字节判定白名单内的类型才按声明内联，
-	// 其余（如被旧导入链写入的 text/html、image/svg+xml）一律降级为下载，避免同源存储型 XSS。
+	// The read side tolerates historical polluted rows that may exist in the database: only types the byte check allows are inlined as declared,
+	// everything else (e.g. text/html or image/svg+xml written by an old import chain) is downgraded to a download, avoiding same-origin stored XSS.
 	contentType := m.Mime
 	if !mediatype.Allowed(m.Mime, mediatype.DefaultAllowedMimes()) {
 		contentType = "application/octet-stream"
 		c.Header("Content-Disposition", "attachment")
 	}
-	// 纵深防御：显式 Content-Type 不会被 http.ServeContent 覆盖，但 nosniff 仍能挡住
-	// 把响应体当脚本执行的旧浏览器/代理——修前这里完全没有该头。
+	// Defence in depth: an explicit Content-Type is not overridden by http.ServeContent, but nosniff still stops old browsers/proxies from
+	// executing the response body as a script — before this fix the header was not set here at all.
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Content-Type", contentType)
-	// 命中 ETag 直接 304，不重读文件体。
+	// An ETag hit returns 304 without re-reading the file body.
 	if c.GetHeader("If-None-Match") == etag {
 		c.Status(http.StatusNotModified)
 		return

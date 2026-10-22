@@ -1,14 +1,14 @@
 package web
 
-// 本文件只保留移动端抽屉缺陷的**标记检查器**及其负例。
+// This file keeps only the **markup checkers** for the mobile drawer defect and their negative cases.
 //
-// 用户报告的缺陷（抽屉用 relative 把页头撑高、遮罩放在带 backdrop-filter 的 <header> 内
-// 导致 fixed inset-0 只覆盖页头一条）此前由 SSR 页头渲染的 HTML 断言。页面层已切到 SPA
-// 应用壳：抽屉与遮罩标记改由前端（Svelte）渲染，Go 侧不再产生这段 HTML，页面级与组件级
-// 断言随之删除（相关回归由前端测试覆盖）。
+// The defect users reported (the drawer using relative pushed the page header taller, and the scrim sat inside a <header>
+// carrying backdrop-filter, so fixed inset-0 covered only a strip of the header) used to be asserted on HTML rendered by the SSR header. The page layer has moved to the SPA
+// app shell: the drawer and scrim markup is rendered by the frontend (Svelte) now and the Go side no longer produces that HTML, so the page-level and component-level
+// assertions went with it (the related regressions are covered by frontend tests).
 //
-// 检查器本身仍可独立验证：下面用缺陷时的标记与修好后的标记各跑一遍，确保检查逻辑不会
-// 静默假绿。
+// The checkers themselves can still be verified independently: below, the broken markup and the fixed markup are each run through, so the check logic cannot
+// silently go green.
 
 import (
 	"regexp"
@@ -18,14 +18,14 @@ import (
 
 var reHeaderElement = regexp.MustCompile(`(?s)<header\b[^>]*>.*?</header>`)
 
-// openingTagByID 返回 id 等于 id 的元素起始标签；找不到返回空串。
-// 属性名必须以空白开头，避免 "data-id" 被当成 "id"。
+// openingTagByID returns the opening tag of the element whose id equals id; an empty string when not found.
+// The attribute name must start with whitespace, so "data-id" is not taken for "id".
 func openingTagByID(html, id string) string {
 	re := regexp.MustCompile(`<[a-zA-Z][^>]*\sid="` + regexp.QuoteMeta(id) + `"[^>]*>`)
 	return re.FindString(html)
 }
 
-// classListOf 返回起始标签上 class 属性的类名集合（没有 class 时为空集）。
+// classListOf returns the set of class names on the opening tag's class attribute (an empty set when there is no class).
 func classListOf(tag string) map[string]bool {
 	set := map[string]bool{}
 	m := regexp.MustCompile(`\sclass="([^"]*)"`).FindStringSubmatch(tag)
@@ -38,7 +38,7 @@ func classListOf(tag string) map[string]bool {
 	return set
 }
 
-// mobileNavDrawerInFlowProblem 返回抽屉仍参与普通文档流的证据；没有则返回空串。
+// mobileNavDrawerInFlowProblem returns evidence that the drawer still takes part in normal document flow; empty string when none.
 func mobileNavDrawerInFlowProblem(html string) string {
 	tag := openingTagByID(html, "mobile-nav-menu")
 	if tag == "" {
@@ -56,7 +56,7 @@ func mobileNavDrawerInFlowProblem(html string) string {
 	return ""
 }
 
-// mobileNavScrimInsideHeaderProblem 返回遮罩位于 <header> 内部的证据；没有则返回空串。
+// mobileNavScrimInsideHeaderProblem returns evidence that the scrim sits inside <header>; empty string when none.
 func mobileNavScrimInsideHeaderProblem(html string) string {
 	header := reHeaderElement.FindString(html)
 	if header == "" {
@@ -68,8 +68,8 @@ func mobileNavScrimInsideHeaderProblem(html string) string {
 	return ""
 }
 
-// TestMobileNavProblemCheckersFlagBrokenMarkup 是检查函数自身的负例：缺陷当时的标记
-// （抽屉 relative、遮罩在页头内部）必须被抓出来，修好后的标记必须放行。
+// TestMobileNavProblemCheckersFlagBrokenMarkup is the negative case for the checker functions themselves: the markup from the time of the
+// defect (drawer relative, scrim inside the header) must be caught, and the fixed markup must pass.
 func TestMobileNavProblemCheckersFlagBrokenMarkup(t *testing.T) {
 	broken := `<header class="sticky top-0 backdrop-blur-md">` +
 		`<div id="mobile-nav-backdrop" class="fixed inset-0 z-40 hidden sm:hidden"></div>` +

@@ -13,25 +13,25 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// PWA 外壳。
+// PWA shell.
 //
-// 与内容哈希化的静态资源不同，manifest 与 service worker 必须是稳定 URL：
-//   - service worker 的默认作用域由脚本路径决定，放在 /static/v/<hash>/ 下只能控制
-//     该前缀；要控制整站必须从根路径提供。哈希化路径也意味着每次构建 URL 都变，
-//     浏览器不会更新旧的注册。
-//   - manifest 的应用名/描述来自 settings 表，且图标 URL 带内容哈希，无法预先静态生成。
+// Unlike content-hashed static assets, the manifest and service worker must live at stable URLs:
+//   - the service worker's default scope comes from the script path, so putting it under /static/v/<hash>/ would only let it control
+//     that prefix; controlling the whole site requires serving it from the root path. A hashed path also means the URL changes on every build, and
+//     browsers would never update the old registration.
+//   - the manifest's app name/description come from the settings table, and the icon URLs are content-hashed, so it cannot be pre-generated statically.
 //
-// 因此这两个资源由 handler 动态渲染。静态外壳清单（内容哈希 URL）由 Assets 提供，
-// service worker 的缓存版本号取自该清单的内容，清单变化即触发旧缓存清理。
+// So both resources are rendered dynamically by handlers. The static shell list (content-hashed URLs) is provided by Assets, and
+// the service worker's cache version is derived from that list's content, so a change to the list triggers cleanup of the old caches.
 const (
 	manifestPath      = "/manifest.webmanifest"
 	serviceWorkerPath = "/sw.js"
 	pwaScriptPath     = "/pwa.js"
 )
 
-// pwaShellAssets 是“应用外壳”的逻辑路径：数学渲染与图标（SPA 自己的 JS/CSS 走 Vite 产物，
-// 由 StaticShellURLs 追加）。
-// 只包含静态资源，不含任何答题数据或 API 端点（验收：缓存里没有 API 响应）。
+// pwaShellAssets is the logical path list of the "app shell": math rendering and icons (the SPA's own JS/CSS come from the Vite output,
+// appended by StaticShellURLs).
+// Only static assets, no review data or API endpoints at all (acceptance: no API responses in the cache).
 var pwaShellAssets = []string{
 	"js/mathjax/tex-svg.js",
 	"icons/icon.svg",
@@ -39,19 +39,19 @@ var pwaShellAssets = []string{
 	"icons/apple-touch-icon.png",
 }
 
-// registerPWARoutes 挂载 PWA 外壳路由。这些路由是公开的：manifest 与 service worker
-// 必须在登录前就能取到，否则“添加到主屏幕”在首页不可用。
+// registerPWARoutes mounts the PWA shell routes. These routes are public: the manifest and service worker
+// must be fetchable before sign-in, otherwise "add to home screen" would not work from the home page.
 func (s *Server) registerPWARoutes(router *gin.Engine) {
 	router.GET(manifestPath, s.webManifest)
 	router.GET(serviceWorkerPath, s.serviceWorker)
 	router.GET(pwaScriptPath, s.servePWAScript)
-	// /favicon.ico 不能 404：浏览器对根路径 favicon 的探测是惯例，
-	// 重定向到哈希化的 SVG 图标即可；保持公开 GET、无鉴权。
+	// /favicon.ico must not 404: browsers probing the root favicon is a convention,
+	// so redirecting to the hashed SVG icon is enough; keep it a public GET with no auth.
 	router.GET("/favicon.ico", s.favicon)
 }
 
-// favicon 把 /favicon.ico 重定向到内容哈希化的 SVG 图标。
-// 图标未嵌入时回 404，与其它静态资源一致，而不是给出一个空响应。
+// favicon redirects /favicon.ico to the content-hashed SVG icon.
+// Returns 404 when the icon is not embedded, consistent with other static assets, rather than giving an empty response.
 func (s *Server) favicon(c *gin.Context) {
 	icon := s.assets.URL("icons/icon.svg")
 	if icon == "" {
@@ -61,7 +61,7 @@ func (s *Server) favicon(c *gin.Context) {
 	c.Redirect(http.StatusFound, icon)
 }
 
-// manifestIcon 是 manifest 里的一项图标声明。
+// manifestIcon is one icon declaration in the manifest.
 type manifestIcon struct {
 	Src     string `json:"src"`
 	Sizes   string `json:"sizes"`
@@ -69,7 +69,7 @@ type manifestIcon struct {
 	Purpose string `json:"purpose,omitempty"`
 }
 
-// webManifestBody 是 manifest.webmanifest 的 JSON 结构。
+// webManifestBody is the JSON structure of manifest.webmanifest.
 type webManifestBody struct {
 	Name            string         `json:"name"`
 	ShortName       string         `json:"short_name"`
@@ -82,8 +82,8 @@ type webManifestBody struct {
 	Icons           []manifestIcon `json:"icons"`
 }
 
-// webManifest 渲染 manifest：应用名/描述优先取 settings 表的 site.name / site.description，
-// 缺省回退到已有的站点名语言包 key（app.name），不新增语言包文案。
+// webManifest renders the manifest: app name/description come from the settings table's site.name / site.description when present,
+// falling back to the existing site-name language-pack key (app.name), so no new language-pack copy is added.
 func (s *Server) webManifest(c *gin.Context) {
 	loc := i18n.FromContext(c.Request.Context())
 	if loc == nil {
@@ -110,7 +110,7 @@ func (s *Server) webManifest(c *gin.Context) {
 			Purpose: "any",
 		})
 	}
-	// maskable 必须白底满幅（透明会被平台裁掉或补黑边）；自适应蓝白切换只给 any 图标。
+	// maskable must be full-bleed on white (a transparent one gets cropped or given black bars by the platform); the adaptive blue/white switch goes to the any icon only.
 	if maskable := s.assets.URL("icons/icon-maskable.svg"); maskable != "" {
 		body.Icons = append(body.Icons, manifestIcon{
 			Src:     maskable,
@@ -128,7 +128,7 @@ func (s *Server) webManifest(c *gin.Context) {
 	}
 }
 
-// pwaIdentity 返回应用名与描述：settings 表覆盖优先，缺省用站点名 key。
+// pwaIdentity returns the app name and description: settings-table overrides first, the site-name key by default.
 func (s *Server) pwaIdentity(c *gin.Context, loc *i18n.Localizer) (name, description string) {
 	name = loc.T("app.name")
 	description = name
@@ -137,7 +137,7 @@ func (s *Server) pwaIdentity(c *gin.Context, loc *i18n.Localizer) (name, descrip
 	}
 	settings, err := store.LoadSettings(c.Request.Context(), s.db)
 	if err != nil {
-		// settings 表可能尚未迁移；缺省值已足够渲染 manifest。
+		// The settings table may not be migrated yet; the default values are enough to render the manifest.
 		return name, description
 	}
 	if v := strings.TrimSpace(settings["site.name"]); v != "" {
@@ -149,11 +149,11 @@ func (s *Server) pwaIdentity(c *gin.Context, loc *i18n.Localizer) (name, descrip
 	return name, description
 }
 
-// serviceWorker 提供 /sw.js：缓存清单随构建变化，版本号与清理逻辑由此函数注入。
+// serviceWorker serves /sw.js: the cache list changes with the build, and this function injects the version number and cleanup logic.
 func (s *Server) serviceWorker(c *gin.Context) {
 	urls := s.pwaShellURLs()
 	c.Header("Content-Type", "application/javascript; charset=utf-8")
-	// service worker 自身不可长期缓存，否则新版本永远不被取到。
+	// The service worker itself must not be cached long-term, otherwise a new version would never be picked up.
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Service-Worker-Allowed", "/")
 	c.Status(http.StatusOK)
@@ -162,13 +162,13 @@ func (s *Server) serviceWorker(c *gin.Context) {
 	}
 }
 
-// servePWAScript 提供 /pwa.js：稳定 URL 的注册脚本，所有页面（含未登录首页）都可引用。
+// servePWAScript serves /pwa.js: a registration script at a stable URL, referenceable from every page (including the signed-out home page).
 func (s *Server) servePWAScript(c *gin.Context) {
 	if s.assets == nil || !s.assets.Has("js/pwa.js") {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	// 复用已嵌入资源；它同时也有内容哈希 URL，这里只是给基础模板一个稳定入口。
+	// Reuses the embedded asset; it also has a content-hashed URL, this just gives the base template a stable entry point.
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Content-Type", "application/javascript; charset=utf-8")
 	c.Status(http.StatusOK)
@@ -177,8 +177,8 @@ func (s *Server) servePWAScript(c *gin.Context) {
 	}
 }
 
-// pwaShellURLs 返回外壳资源的哈希化 URL（缺失资源跳过），末尾补上 manifest。
-// manifest 也是静态外壳的一部分，但它不是 hash 化路径，单独追加。
+// pwaShellURLs returns the hashed URLs of the shell assets (missing ones skipped), with the manifest appended at the end.
+// The manifest is part of the static shell too, but it is not a hashed path, so it is appended separately.
 func (s *Server) pwaShellURLs() []string {
 	urls := make([]string, 0, len(pwaShellAssets)+1)
 	for _, logical := range pwaShellAssets {
@@ -191,7 +191,7 @@ func (s *Server) pwaShellURLs() []string {
 	return urls
 }
 
-// shellVersion 由缓存清单内容派生版本号：清单变则版本变，activation 阶段据此清理旧缓存。
+// shellVersion derives the version from the cache list's content: change the list and the version changes, and activation uses it to purge old caches.
 func shellVersion(urls []string) string {
 	h := sha256.New()
 	for _, u := range urls {
@@ -201,8 +201,8 @@ func shellVersion(urls []string) string {
 	return hex.EncodeToString(h.Sum(nil)[:4])
 }
 
-// serviceWorkerJS 生成 service worker 脚本。缓存清单里的每一项都必须是静态外壳路径；
-// 该函数不接收、也不可能写入 API 或答题端点（负面验收在测试里断言）。
+// serviceWorkerJS generates the service worker script. Every item in the cache list must be a static shell path;
+// the function takes no API or review endpoints and cannot write them (the negative acceptance is asserted in tests).
 func serviceWorkerJS(version string, urls []string) string {
 	var b strings.Builder
 	b.WriteString("// Engram service worker ：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
@@ -222,8 +222,8 @@ func serviceWorkerJS(version string, urls []string) string {
 	return b.String()
 }
 
-// serviceWorkerBody 是脚本的固定部分（生命周期与 fetch 策略）。只对静态外壳做
-// cache-first；页面 HTML、/api/ 与任何非 GET 请求一律走网络，不落缓存。
+// serviceWorkerBody is the script's fixed part (lifecycle and fetch strategy). It is cache-first for static shell assets
+// only; page HTML, /api/ and any non-GET request always go to the network and are never cached.
 const serviceWorkerBody = `self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(STATIC_CACHE).then(function (cache) {

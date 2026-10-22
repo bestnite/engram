@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「身份与 OIDC」页的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "identity and OIDC" page.
 //
-// 读取与写入复用 oidcLoadConfig 与 s.oidc 客户端，与 SSR 页完全同一份解析；client secret 只回
-// 「已配置/未配置」，绝不回显明文。redirect_uri 与登录流程共用 s.oidcRedirectURI，因此页面显示
-// 的就是实际发出的值。测试连接把 provider 的原始错误文本带进响应（验收点）。
+// Reads and writes reuse oidcLoadConfig and the s.oidc client, with exactly the same parsing as the SSR page; the client secret only returns
+// "configured/not configured" and never echoes plaintext. redirect_uri shares s.oidcRedirectURI with the login flow, so what the page shows
+// is the value actually sent. The connection test carries the provider's raw error text into the response (acceptance point).
 
-// adminOIDCIdentity 是一条已绑定身份。
+// adminOIDCIdentity is one linked identity.
 type adminOIDCIdentity struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
@@ -28,7 +28,7 @@ type adminOIDCIdentity struct {
 	LinkedAt string `json:"linked_at"`
 }
 
-// adminOIDCResponse 是 OIDC 配置页的读取结果。
+// adminOIDCResponse is the read result for the OIDC config page.
 type adminOIDCResponse struct {
 	Enabled            bool                `json:"enabled"`
 	Issuer             string              `json:"issuer"`
@@ -43,7 +43,7 @@ type adminOIDCResponse struct {
 	Identities         []adminOIDCIdentity `json:"identities"`
 }
 
-// adminOIDCRequest 是保存 / 测试共用的请求体；空字段表示不修改。
+// adminOIDCRequest is the request body shared by save / test; empty fields mean no change.
 type adminOIDCRequest struct {
 	Enabled            bool   `json:"enabled"`
 	Issuer             string `json:"issuer"`
@@ -56,7 +56,7 @@ type adminOIDCRequest struct {
 	ClientSecret       string `json:"client_secret"`
 }
 
-// adminOIDC 返回 OIDC 配置、回调地址与已绑定身份列表。
+// adminOIDC returns the OIDC config, the callback URL and the linked identity list.
 func (s *Server) adminOIDC(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
@@ -119,8 +119,8 @@ func (s *Server) adminOIDC(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// adminOIDCSave 保存 OIDC 配置：非敏感值走 PutSetting，client secret 走 PutSecret（加密）。
-// 保存后使发现文档缓存失效，写审计。
+// adminOIDCSave saves the OIDC config: non-sensitive values go through PutSetting, the client secret goes through PutSecret (encrypted).
+// After saving it invalidates the discovery document cache and writes an audit row.
 func (s *Server) adminOIDCSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -145,7 +145,7 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 先记录旧 issuer 以便失效缓存。
+	// Record the old issuer first so the cache can be invalidated.
 	old, err := s.oidcLoadConfig(c)
 	if err != nil {
 		s.logger.Error("spa admin: load oidc config failed", "error", err)
@@ -194,7 +194,7 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 		}
 	}
 
-	// 配置变更后失效发现文档缓存：旧 issuer 与新 issuer 都清一遍。
+	// Invalidate the discovery document cache after a config change: clear both the old and the new issuer.
 	s.oidc.Invalidate(old.Issuer)
 	s.oidc.Invalidate(issuer)
 	s.audit(ctx, store.AuditEntry{
@@ -204,8 +204,8 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminOIDCTest 对表单里的 issuer（缺省用已保存值）拉取发现文档，
-// 失败时把 provider 的原始错误文本带进响应（验收点）。
+// adminOIDCTest fetches the discovery document for the issuer in the form (defaulting to the saved value),
+// and on failure carries the provider's raw error text into the response (acceptance point).
 func (s *Server) adminOIDCTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -232,14 +232,14 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 	if issuer == "" {
 		result.Code = "no_issuer"
 	} else if _, derr := s.oidc.Discover(ctx, issuer); derr != nil {
-		// 原样带上 provider 的错误文本，而不是只写日志。
+		// Carry the provider's error text through verbatim instead of only logging it.
 		s.logger.Info("spa admin: oidc test connection failed", "issuer", issuer, "error", derr)
 		result.Code = "failed"
 		result.Message = derr.Error()
 	} else {
 		result.OK = true
 	}
-	// 「测试连接」会发起管理员指定的出站连接：成功与失败都留痕，只记 issuer 与结果。
+	// "Test connection" makes an outbound connection to an admin-chosen target: both success and failure leave a trace, recording only the issuer and the result.
 	s.audit(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAdminOIDCTest,
 		TargetType: "oidc",
@@ -248,7 +248,7 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// adminOIDCUnlink 解绑一条外部身份并写审计。解绑后该身份不能再用它登录。
+// adminOIDCUnlink unlinks one external identity and writes an audit row. After unlinking, that identity can no longer sign in with it.
 func (s *Server) adminOIDCUnlink(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {

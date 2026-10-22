@@ -11,62 +11,62 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的 TOTP 管理接口：M1-16的 JSON 版本。
+// This file is the SPA's TOTP management API: the JSON version of M1-16.
 //
-// 安全约定与登录第二步完全一致（同一份 auth.TOTPService 与审计/通知语义），只换传输形态：
-//   - secret 与 otpauth 链接只在 begin 的响应里出现一次（与恢复码只在生成时出现一次同一约定）；
-//   - GET 只报告状态（是否启用 / 是否有待确认绑定 / 剩余恢复码），绝不返回 secret、
-//     otpauth 或任何恢复码明文；
-//   - 恢复码明文只在 confirm（启用）与 recovery（重新生成）的响应里出现一次；
-//   - 关闭与重新生成恢复码都要求重新输入密码。
+// The security contract is identical to the login second step (the same auth.TOTPService and audit/notification semantics); only the transport shape changes:
+//   - the secret and otpauth link appear only once, in the begin response (the same rule as recovery codes appearing only once, when generated);
+//   - GET only reports status (enabled or not / whether a binding is pending / remaining recovery codes) and never returns the secret,
+//     otpauth, or any plaintext recovery code;
+//   - plaintext recovery codes appear only once, in the confirm (enable) and recovery (regenerate) responses;
+//   - disabling and regenerating recovery codes both require re-entering the password.
 //
-// 全部写操作挂会话 CSRF，复用 auth.TOTPService 与既有审计/通知语义，不新增业务规则。
-// 管理页是 /settings/security（应用壳，与修改密码同页），读写走 /api/v1/settings/totp*。
+// Every write carries session CSRF and reuses auth.TOTPService and the existing audit/notification semantics, adding no business rules.
+// The management page is /settings/security (app shell, the same page as the password change), with reads and writes going through /api/v1/settings/totp*.
 
-// totpStatusResponse 是 GET /api/v1/settings/totp 的响应体；不含任何秘密材料。
+// totpStatusResponse is the body of GET /api/v1/settings/totp; it holds no secret material.
 type totpStatusResponse struct {
 	Enabled           bool  `json:"enabled"`
 	Pending           bool  `json:"pending"`
 	RecoveryRemaining int64 `json:"recovery_remaining"`
 }
 
-// totpBeginResponse 携带待确认绑定的 secret 与 otpauth 链接；只在此刻返回一次。
+// totpBeginResponse carries the secret and otpauth link of the pending binding; returned only once, at this moment.
 type totpBeginResponse struct {
 	Secret     string `json:"secret"`
 	OtpauthURL string `json:"otpauth_url"`
 	Pending    bool   `json:"pending"`
 }
 
-// totpConfirmRequest 是确认绑定请求体。
+// totpConfirmRequest is the confirm-binding request body.
 type totpConfirmRequest struct {
 	Code string `json:"code"`
 }
 
-// totpConfirmResponse 在启用成功时一次性返回恢复码明文。
+// totpConfirmResponse returns the plaintext recovery codes once, on a successful enable.
 type totpConfirmResponse struct {
 	Enabled           bool     `json:"enabled"`
 	RecoveryCodes     []string `json:"recovery_codes"`
 	RecoveryRemaining int64    `json:"recovery_remaining"`
 }
 
-// totpPasswordRequest 是关闭与重新生成恢复码共用的请求体（都要密码确认）。
+// totpPasswordRequest is the request body shared by disable and recovery-code regeneration (both need password confirmation).
 type totpPasswordRequest struct {
 	Password string `json:"password"`
 }
 
-// totpDisableResponse 报告关闭后的状态。
+// totpDisableResponse reports the state after disabling.
 type totpDisableResponse struct {
 	Enabled bool `json:"enabled"`
 }
 
-// totpRecoveryResponse 一次性返回新一批恢复码明文。
+// totpRecoveryResponse returns the new batch of plaintext recovery codes once.
 type totpRecoveryResponse struct {
 	RecoveryCodes     []string `json:"recovery_codes"`
 	RecoveryRemaining int64    `json:"recovery_remaining"`
 }
 
-// registerTOTPAPIRoutes 挂载 SPA 的 TOTP 管理接口；写操作一律过会话 CSRF。
-// 依赖未装配时跳过，保证 M0 阶段与未启用 TOTP 的测试仍能构造 Server。
+// registerTOTPAPIRoutes mounts the SPA's TOTP management API; every write goes through session CSRF.
+// Skips when the dependencies are not wired, so M0-stage tests and tests with TOTP disabled can still construct a Server.
 func (s *Server) registerTOTPAPIRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil || s.totp == nil {
 		return
@@ -78,8 +78,8 @@ func (s *Server) registerTOTPAPIRoutes(router *gin.Engine) {
 	router.POST("/api/v1/settings/totp/recovery", s.sessions.CSRFMiddleware(), s.totpRecovery)
 }
 
-// totpStatus 报告当前用户的 TOTP 状态，仅接受浏览器会话。
-// pending 复用 Pending 的判定（未确认的绑定），但丢弃其 secret 与链接，只取布尔量。
+// totpStatus reports the current user's TOTP state and accepts browser sessions only.
+// pending reuses Pending's decision (an unconfirmed binding) but discards its secret and link, keeping only the boolean.
 func (s *Server) totpStatus(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -93,7 +93,7 @@ func (s *Server) totpStatus(c *gin.Context) {
 		return
 	}
 	resp := totpStatusResponse{Enabled: enabled}
-	// 已启用的账号不可能存在待确认 secret；只在未启用时探测，避免多余的解密。
+	// An enabled account cannot have a pending secret; this only probes when not enabled, avoiding a needless decryption.
 	if !enabled {
 		_, _, pending, err := s.totp.Pending(ctx, user.ID, user.Username)
 		if err != nil {
@@ -115,8 +115,8 @@ func (s *Server) totpStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// totpBegin 生成 secret 并进入待确认状态；响应一次性返回 secret 与 otpauth 链接。
-// 复用 auth.TOTPService.Begin 与 SSR 相同的 totp.begin 审计。
+// totpBegin generates a secret and enters the pending state; the response returns the secret and otpauth link once.
+// Reuses auth.TOTPService.Begin and the same totp.begin audit as SSR.
 func (s *Server) totpBegin(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -142,8 +142,8 @@ func (s *Server) totpBegin(c *gin.Context) {
 	c.JSON(http.StatusOK, totpBeginResponse{Secret: secret, OtpauthURL: otpauth, Pending: true})
 }
 
-// totpConfirm 用一次验证码确认绑定；成功后启用并一次性返回恢复码。
-// 复用 auth.TOTPService.Confirm 与 SSR 相同的 totp.enable 审计与凭据变更通知。
+// totpConfirm confirms the binding with one code; on success it enables and returns the recovery codes once.
+// Reuses auth.TOTPService.Confirm and the same totp.enable audit and credential-change notification as SSR.
 func (s *Server) totpConfirm(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -177,12 +177,12 @@ func (s *Server) totpConfirm(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
-	// 凭据变更通知（TOTP 启用）；发信失败不影响启用。
+	// Credential-change notification (TOTP enabled); a failed send does not affect the enable.
 	s.notifyCredentialChanged(ctx, user, "totp_enabled")
 	c.JSON(http.StatusOK, totpConfirmResponse{Enabled: true, RecoveryCodes: codes, RecoveryRemaining: int64(len(codes))})
 }
 
-// totpDisable 关闭 TOTP：必须先通过密码确认。复用 auth.TOTPService.Disable。
+// totpDisable disables TOTP: the password must be confirmed first. Reuses auth.TOTPService.Disable.
 func (s *Server) totpDisable(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -219,13 +219,13 @@ func (s *Server) totpDisable(c *gin.Context) {
 		TargetType: "user",
 		TargetID:   store.Ptr(user.ID),
 	})
-	// 凭据变更通知（TOTP 关闭）。
+	// Credential-change notification (TOTP disabled).
 	s.notifyCredentialChanged(ctx, fresh, "totp_disabled")
 	c.JSON(http.StatusOK, totpDisableResponse{Enabled: false})
 }
 
-// totpRecovery 重新生成一批恢复码（旧的未使用码立即作废），同样需要密码确认。
-// 复用 auth.TOTPService.RegenerateRecoveryCodes 与 SSR 相同的审计与通知语义。
+// totpRecovery regenerates a batch of recovery codes (unused old codes are void at once) and likewise needs password confirmation.
+// Reuses auth.TOTPService.RegenerateRecoveryCodes and the same audit and notification semantics as SSR.
 func (s *Server) totpRecovery(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -270,13 +270,13 @@ func (s *Server) totpRecovery(c *gin.Context) {
 		TargetID:   store.Ptr(user.ID),
 		Detail:     map[string]any{"recovery_codes": len(codes)},
 	})
-	// 凭据变更通知（恢复码重新生成）。
+	// Credential-change notification (recovery codes regenerated).
 	s.notifyCredentialChanged(ctx, fresh, "recovery_codes")
 	c.JSON(http.StatusOK, totpRecoveryResponse{RecoveryCodes: codes, RecoveryRemaining: int64(len(codes))})
 }
 
-// totpError 写出 SPA TOTP 接口的错误包壳。
-// 与 passwordError 同形：code 稳定且英文，message 为英文兜底文案，前端按 code 映射本地化提示。
+// totpError writes the error envelope of the SPA TOTP API.
+// Same shape as passwordError: code is stable and English, message is the English fallback text, and the frontend maps code to a localized hint.
 func totpError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }

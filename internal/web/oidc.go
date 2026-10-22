@@ -12,26 +12,26 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 登录流程。
+// OIDC login flow.
 //
-// 只实现协议交互与路由，身份绑定全部交给 auth.IdentityLinkService（oauthlink.go）：
-//   GET /auth/oidc/start     生成 state / nonce / PKCE，跳转到 provider 授权端点
-//   GET /auth/oidc/callback  校验 state（一次性）、换 token、校验 nonce 与签名、绑定并开会话
+// Only protocol interaction and routing are implemented here; identity linking is entirely auth.IdentityLinkService's job (oauthlink.go):
+//   GET /auth/oidc/start     generate state / nonce / PKCE and redirect to the provider authorization endpoint
+//   GET /auth/oidc/callback  validate state (one-time), exchange the token, validate nonce and signature, link and open a session
 //
-// OIDC 默认关闭：配置不完整时这两个路由返回 404，登录页也不显示入口（不允许半开）。
+// OIDC is off by default: with incomplete configuration these two routes return 404 and the login page shows no entry (no half-open state allowed).
 //
-// 失败一律 303 回 SPA 登录页（GET /login）。SPA 取代 SSR 登录页后这里不再渲染任何 HTML；
-// 失败原因记英文日志。客户端要文案时需要一条稳定的错误交接约定（当前没有消费方）。
+// Failures always 303 back to the SPA login page (GET /login). Now that the SPA has replaced the SSR login page, no HTML is rendered here;
+// the failure reason goes to an English log. For the client to show copy it would need a stable error hand-off contract (no consumer today).
 
-// oidcFailToLogin 把一次 OIDC 登录失败送回 SPA 登录页；reason 只用于日志（英文）。
-// 用 303 而不是直接渲染页面：回调是浏览器导航，重定向让地址栏回到 /login，
-// 由客户端路由决定展示什么。会话 cookie 只在成功分支签发，失败分支绝不签发。
+// oidcFailToLogin sends one failed OIDC login back to the SPA login page; reason is used only in the log (English).
+// 303 rather than rendering a page: the callback is a browser navigation, and the redirect puts the address bar back on /login,
+// letting the client router decide what to show. The session cookie is issued only on the success branch, never on failure.
 func (s *Server) oidcFailToLogin(c *gin.Context, reason string) {
 	s.logger.Info("oidc: login failed", "reason", reason)
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 
-// oidcLoadConfig 读取生效的 OIDC 配置；数据库未装配时视为未配置。
+// oidcLoadConfig reads the effective OIDC configuration; with no database wired up it counts as unconfigured.
 func (s *Server) oidcLoadConfig(c *gin.Context) (*auth.OIDCConfig, error) {
 	if s.db == nil {
 		return &auth.OIDCConfig{}, nil
@@ -39,8 +39,8 @@ func (s *Server) oidcLoadConfig(c *gin.Context) (*auth.OIDCConfig, error) {
 	return auth.LoadOIDCConfig(c.Request.Context(), s.db, s.secrets)
 }
 
-// oidcRedirectURI 返回回调地址：配置了 BASE_URL 就用它，否则按当前请求推导
-// （本地 http 开发与 httptest 依赖后者）。
+// oidcRedirectURI returns the callback address: BASE_URL when configured, otherwise derived from the current request
+// (local http development and httptest rely on the latter).
 func (s *Server) oidcRedirectURI(c *gin.Context) string {
 	if base := strings.TrimRight(strings.TrimSpace(s.baseURL), "/"); base != "" {
 		return base + "/auth/oidc/callback"
@@ -55,7 +55,7 @@ func (s *Server) oidcRedirectURI(c *gin.Context) string {
 	return scheme + "://" + c.Request.Host + "/auth/oidc/callback"
 }
 
-// oidcStart 发起一次 OIDC 登录：发现文档 → state/nonce/PKCE → 跳授权端点。
+// oidcStart begins an OIDC login: discovery document → state/nonce/PKCE → redirect to the authorization endpoint.
 func (s *Server) oidcStart(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
@@ -65,7 +65,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 		return
 	}
 	if !cfg.Usable() {
-		// 未启用或配置不完整：路由不可用，与登录页不显示入口保持一致。
+		// Disabled or incompletely configured: the route is unavailable, consistent with the login page not showing the entry.
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -100,8 +100,8 @@ func (s *Server) oidcStart(c *gin.Context) {
 		RedirectURI: redirectURI,
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
 	}) {
-		// 待完成登录表已满：拒绝新发起，避免匿名请求把内存表堆大。
-		// 只记英文日志与通用提示，不回显 state / nonce。
+		// The pending-login table is full: refuse new starts, so anonymous requests cannot grow the in-memory table.
+		// Log only in English with a generic hint; never echo state / nonce.
 		s.logger.Warn("oidc: pending state table is full, rejecting a new login start")
 		s.oidcFailToLogin(c, "pending_table_full")
 		return
@@ -110,7 +110,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 	c.Redirect(http.StatusFound, authURL)
 }
 
-// oidcCallback 处理授权回调：校验 state → 换 token → 校验 ID Token → 绑定 → 开会话。
+// oidcCallback handles the authorization callback: validate state → exchange token → validate ID Token → link → open session.
 func (s *Server) oidcCallback(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
@@ -129,7 +129,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
-	// provider 侧主动返回错误（用户取消、scope 不足等）：原样带进日志，回登录页。
+	// The provider itself returned an error (user cancelled, insufficient scope, etc.): carry it into the log verbatim and go back to the login page.
 	if perr := strings.TrimSpace(c.Query("error")); perr != "" {
 		s.logger.Info("oidc: provider returned an error", "error", perr, "description", c.Query("error_description"))
 		s.oidcFailToLogin(c, "provider_error")
@@ -141,7 +141,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		s.oidcFailToLogin(c, "missing_state")
 		return
 	}
-	// state 一次性：未知（伪造或重放）或已过期都在这里被拒（负例）。
+	// state is one-time: unknown (forged or replayed) or expired are both refused here (negative case).
 	pending, ok := s.oidc.TakePending(state)
 	if !ok {
 		s.logger.Info("oidc: callback with an unknown or expired state")
@@ -156,7 +156,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
-	// 从 state 取回发起登录时保存的 redirect_uri / PKCE verifier / nonce。
+	// Recover the redirect_uri / PKCE verifier / nonce saved when the login was started from state.
 	party, err := s.oidc.Client(ctx, cfg, pending.RedirectURI)
 	if err != nil {
 		s.logger.Error("oidc: discovery failed during callback", "issuer", cfg.Issuer, "error", err)
@@ -178,7 +178,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	u, decision, err := s.identityLink.Resolve(ctx, profile, policy)
 	if err != nil {
 		if err == auth.ErrIdentityLinkDenied {
-			// closed 策略下没有既有绑定也无法自动匹配：回登录页。
+			// Under the closed policy there is no existing link and no automatic match either: back to the login page.
 			s.logger.Info("oidc: login denied by registration policy", "provider", profile.Provider)
 			s.oidcFailToLogin(c, "link_denied")
 			return
@@ -200,7 +200,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
-// oidcRecordFailure 给 state 校验失败留一条审计（无 user_id：此时身份未知）。
+// oidcRecordFailure leaves an audit record for a state validation failure (no user_id: identity is unknown at this point).
 func (s *Server) oidcRecordFailure(ctx context.Context, reason string) {
 	s.audit(ctx, store.AuditEntry{
 		Action:     store.ActionUserLoginFailed,

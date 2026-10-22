@@ -15,11 +15,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 读侧兜底：库里可能已存在被旧导入链写入的污染行（mime=text/html、image/svg+xml …）。
-// mediaServe 绝不能把这类 mime 原样回成 Content-Type，必须降级为下载/八位流，并带 nosniff。
+// Read-side fallback: the database may already hold polluted rows written by an old import chain (mime=text/html, image/svg+xml …).
+// mediaServe must never echo such a mime as Content-Type; it must downgrade to a download/octet-stream, with nosniff.
 
-// TestMediaServeNeutralisesPollutedMime 直接造一行 mime=text/html 的 media 记录与磁盘字节，
-// 断言读取响应的 Content-Type 不是可执行类型、强制下载、并带 X-Content-Type-Options: nosniff。
+// TestMediaServeNeutralisesPollutedMime creates a media row with mime=text/html plus the bytes on disk,
+// then asserts the read response's Content-Type is not an executable type, that it forces a download, and that it carries X-Content-Type-Options: nosniff.
 func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	root := srv.media.Root()
@@ -35,8 +35,8 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 	if err := os.WriteFile(abs, body, 0o644); err != nil {
 		t.Fatalf("write media file: %v", err)
 	}
-	// owner 提供过这份字节：登记 media_uploaders（读取鉴权靠归属，不再看 media.created_by）。
-	// 本用例只关心 mime 兜底，读取鉴权由此放行。
+	// The owner supplied these bytes: register media_uploaders (read authorization rests on ownership, no longer on media.created_by).
+	// This case only cares about the mime fallback; read authorization is let through by that.
 	row := store.Media{Sha256: sha, RelPath: rel, Mime: "text/html", Bytes: int64(len(body)), CreatedBy: store.Ptr(ownerID), CreatedAt: time.Now().UTC()}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed polluted media row: %v", err)
@@ -58,13 +58,13 @@ func TestMediaServeNeutralisesPollutedMime(t *testing.T) {
 	if got := get.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
 	}
-	// 内容仍可取回（只是按下载处理），没有把文件吃掉。
+	// The content can still be retrieved (just served as a download); the file was not swallowed.
 	if !strings.Contains(get.Body.String(), "<script>") {
 		t.Fatalf("polluted media body lost: %q", get.Body.String())
 	}
 }
 
-// TestMediaServeKeepsAllowedMediaInline 断言合法图片仍按声明内联返回，新校验没有误伤正常读取。
+// TestMediaServeKeepsAllowedMediaInline asserts allowed images are still served inline as declared, i.e. the new validation does not trip up normal reads.
 func TestMediaServeKeepsAllowedMediaInline(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 	up := uploadMedia(t, srv, cookies, csrf, "ok.png", "image/png", pngBody())

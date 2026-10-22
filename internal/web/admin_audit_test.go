@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// auditTotalRE 从审计页里取出「命中： N」的 N；模板把标签与数字分两个文本节点渲染。
+// auditTotalRE extracts the N from "hits: N" on the audit page; the template renders the label and the number as two text nodes.
 var auditTotalRE = regexp.MustCompile(`命中：\s*(\d+)`)
 
-// auditTotal 请求一个审计页 URL 并解析出命中总数；解析失败时打印响应片段。
+// auditTotal requests an audit page URL and parses out the total hit count; prints a response snippet when parsing fails.
 func auditTotal(t *testing.T, srv *Server, target string, cookies []*http.Cookie) int {
 	t.Helper()
 	rec := getWithCookies(t, srv, target, cookies)

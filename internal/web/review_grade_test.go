@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// postJSONWithCSRF 带会话 cookie 与 X-CSRF-Token 头提交 JSON（SPA 写操作的统一形态）。
+// postJSONWithCSRF submits JSON with the session cookie and the X-CSRF-Token header (the uniform shape of SPA writes).
 func postJSONWithCSRF(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
@@ -34,7 +34,7 @@ func postJSONWithCSRF(t *testing.T, srv *Server, path string, body any, cookies 
 	return rec
 }
 
-// gradeFeedbackBody 是判分反馈的对外形态（与 handler 返回的 feedback 对象对齐）。
+// gradeFeedbackBody is the external shape of the grading feedback (aligned with the feedback object the handler returns).
 type gradeFeedbackBody struct {
 	Verdict    string  `json:"verdict"`
 	Score      float64 `json:"score"`
@@ -44,7 +44,7 @@ type gradeFeedbackBody struct {
 	Parsed     string  `json:"parsed"`
 }
 
-// gradeResponseBody 是判分入口的对外形态（判分与放弃两条路径共用状态字段）。
+// gradeResponseBody is the external shape of the grading entry point (the grade and give-up paths share the state fields).
 type gradeResponseBody struct {
 	CardID    string             `json:"card_id"`
 	State     string             `json:"state"`
@@ -55,7 +55,7 @@ type gradeResponseBody struct {
 	GaveUp    bool               `json:"gave_up"`
 }
 
-// decodeGrade 解码判分响应；失败即测试失败。
+// decodeGrade decodes the grading response; a failure fails the test.
 func decodeGrade(t *testing.T, rec *httptest.ResponseRecorder) gradeResponseBody {
 	t.Helper()
 	var body gradeResponseBody
@@ -65,7 +65,7 @@ func decodeGrade(t *testing.T, rec *httptest.ResponseRecorder) gradeResponseBody
 	return body
 }
 
-// reviewRowForCard 读取某张卡唯一的 review 行；缺失即测试失败。
+// reviewRowForCard reads the single review row of a card; missing means the test fails.
 func reviewRowForCard(t *testing.T, srv *Server, cardID uint64) store.Review {
 	t.Helper()
 	var rev store.Review
@@ -75,8 +75,8 @@ func reviewRowForCard(t *testing.T, srv *Server, cardID uint64) store.Review {
 	return rev
 }
 
-// TestGradeNumericAcceptance 覆盖 SPA 判分入口的核心：numeric 答对/答错/容差边界
-// 都由服务端判分器决定档位，写库的 grade_source=typed 且带判分细节。
+// TestGradeNumericAcceptance covers the core of the SPA grading entry point: for numeric, right / wrong / tolerance boundary
+// are all graded by the server-side grader, and the row written has grade_source=typed with the grading detail.
 func TestGradeNumericAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA numeric")
@@ -149,8 +149,8 @@ func TestGradeNumericAcceptance(t *testing.T) {
 	}
 }
 
-// TestGradeOtherTypesAcceptance 覆盖 typed / choice_single / choice_multi / true_false：
-// 正确与错误（多选部分对 → partial/Hard）各一例，档位由判分器与映射决定。
+// TestGradeOtherTypesAcceptance covers typed / choice_single / choice_multi / true_false:
+// one correct and one wrong case each (a partly right multi-select → partial/Hard), with the grade decided by the grader and the mapping.
 func TestGradeOtherTypesAcceptance(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA graded")
@@ -200,8 +200,8 @@ func TestGradeOtherTypesAcceptance(t *testing.T) {
 	}
 }
 
-// TestGradeAuthorizationAndCSRF 覆盖拒绝路径：无会话、缺/错 CSRF、bearer、不可读卡组、
-// 卡不在范围内、自评类题型走判分入口、无法判分的作答。任一拒绝都不得写入进度。
+// TestGradeAuthorizationAndCSRF covers the rejection paths: no session, missing/wrong CSRF, bearer, unreadable deck,
+// card outside the scope, a self-assessed type on the grading entry point, an answer that cannot be graded. No rejection may write progress.
 func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA auth")
@@ -231,7 +231,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		})
 	}
 
-	// bearer 携带 review scope 也不得通过：SPA 判分入口只认会话 cookie。
+	// A bearer carrying review scope must not pass either: the SPA grading entry point only accepts the session cookie.
 	key, err := store.NewAPIKeyStore(db).Create(t.Context(), store.CreateAPIKeyParams{
 		UserID: ownerID, Name: "spa grade", Scopes: []string{store.ScopeReview},
 	})
@@ -247,7 +247,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		t.Fatalf("bearer status = %d, want 403", rec.Code)
 	}
 
-	// 自评类题型不得走判分入口。
+	// A self-assessed type must not go through the grading entry point.
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": basicCardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "Back",
 	}, cookies, csrf)
@@ -255,7 +255,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		t.Fatalf("self-assess card on grade endpoint = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
-	// 卡不在所选范围内。
+	// Card outside the selected scope.
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardPub, "expected_version": 0, "deck": []string{otherDeck.PublicID}, "answer": "a",
 	}, cookies, csrf)
@@ -263,7 +263,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		t.Fatalf("out-of-scope card = %d, want 400 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 
-	// 零卡组 id 不是合法范围（对外 id 形状非法）。
+	// A zero deck id is not a legal scope (illegal public id shape).
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardPub, "expected_version": 0, "deck": []string{"0"}, "answer": "a",
 	}, cookies, csrf)
@@ -271,7 +271,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		t.Fatalf("zero deck id = %d, want 400", rec.Code)
 	}
 
-	// choice_single 缺作答无法判分：400 且不写库。
+	// choice_single without an answer cannot be graded: 400 and nothing is written.
 	single := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{"question": "q", "options": []string{"a", "b"}, "answer": 0})
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardPublicIDOfNote(t, db, single.ID), "expected_version": 0, "deck": []string{deck.PublicID},
@@ -287,7 +287,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 		t.Fatalf("denied requests wrote progress: reviews=%d states=%d, want 0/0", reviews, states)
 	}
 
-	// 无授权用户即使拿到卡片 id 也读不到卡组。
+	// An unauthorized user cannot read the deck even with the card id in hand.
 	_, outsiderCookies, outsiderCSRF := createUserAndLogin(t, srv, db, "grade-outsider")
 	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": "a",
@@ -297,7 +297,7 @@ func TestGradeAuthorizationAndCSRF(t *testing.T) {
 	}
 }
 
-// TestGradeVersionConflict 覆盖乐观锁：expected_version 不匹配返回 409 且不写第二条 review。
+// TestGradeVersionConflict covers the optimistic lock: a mismatched expected_version returns 409 and writes no second review.
 func TestGradeVersionConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA conflict")
@@ -324,8 +324,8 @@ func TestGradeVersionConflict(t *testing.T) {
 	}
 }
 
-// TestGradeRevealAndGiveUp 覆盖揭示的只读预览与「放弃作答记 Again」：
-// reveal 返回清洗后的正确答案且不写库；give_up 写一条 grade_source=self 的 Again。
+// TestGradeRevealAndGiveUp covers the read-only reveal preview and "give up answering, log Again":
+// reveal returns the sanitized correct answer and writes nothing; give_up writes an Again with grade_source=self.
 func TestGradeRevealAndGiveUp(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA reveal")
@@ -371,8 +371,8 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 	}
 }
 
-// TestGradeListFeedbackBreakdown 断言列表题经 SPA 判分入口按想起的条数给部分分，反馈逐项标出
-// 对错（按条目顺序、写法经清洗），且 render 响应按条数给出输入框个数。
+// TestGradeListFeedbackBreakdown asserts a list question gets partial credit through the SPA grading entry point by the number of items recalled, with the feedback marking each item
+// right or wrong (in item order, sanitized), and the render response gives one input box per item.
 func TestGradeListFeedbackBreakdown(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA list")
@@ -425,8 +425,8 @@ func TestGradeListFeedbackBreakdown(t *testing.T) {
 	}
 }
 
-// TestSelfReviewStoresShortAnswer 断言 SPA 自评入口把简答题写下的作答透传给 service 存档
-// （来源仍是 self），而不收作答的自评题型带了作答就被拒绝、不写库。
+// TestSelfReviewStoresShortAnswer asserts the SPA self-assessment entry point passes the answer written for a short-answer question through to the service for archiving
+// (the source is still self), while a self-assessed type that takes no answer is rejected if one is sent, with nothing written.
 func TestSelfReviewStoresShortAnswer(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA short answer")

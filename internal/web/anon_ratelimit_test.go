@@ -17,13 +17,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是匿名入口限流（/api/v1/auth/forgot-password、/api/v1/auth/register）的验收测试。
+// This file is the acceptance test for anonymous entry rate limiting (/api/v1/auth/forgot-password, /api/v1/auth/register).
 //
-// 阈值固定为「IP 与目标邮箱各 5 次 / 15 分钟」。时钟注入到限流器，
-// 因此窗口过期可以即时断言，不需要真实等待；请求方 IP 通过 RemoteAddr 显式指定
-// （服务默认不信任任何代理，ClientIP() 取 RemoteAddr），从而把 IP 维度与邮箱维度分开验证。
+// The threshold is fixed at "5 times each for IP and target mailbox / 15 minutes". The clock is injected into the limiter,
+// so window expiry can be asserted immediately without real waiting; the requester IP is specified explicitly via RemoteAddr
+// (the service trusts no proxy by default and ClientIP() takes RemoteAddr), letting the IP dimension and the mailbox dimension be verified separately.
 
-// fakeRateClock 是可手动推进的注入时钟。
+// fakeRateClock is an injected clock that can be advanced manually.
 type fakeRateClock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -45,13 +45,13 @@ func (c *fakeRateClock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// anonLimiterWithClock 用默认阈值与注入时钟造一个匿名入口限流器。
+// anonLimiterWithClock builds an anonymous entry limiter with the default threshold and an injected clock.
 func anonLimiterWithClock(clock *fakeRateClock) *auth.AnonymousLimiter {
 	return auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, clock.now)
 }
 
-// postJSONFromIP 发一次带双提交 CSRF 的 JSON 写请求，并显式指定请求方 IP（RemoteAddr），
-// 让「同 IP 换邮箱」与「同邮箱换 IP」两条路径可以分别构造。
+// postJSONFromIP sends one JSON write request with double-submit CSRF, specifying the requester IP explicitly (RemoteAddr),
+// so the "same IP, different mailbox" and "same mailbox, different IP" paths can be constructed separately.
 func postJSONFromIP(t *testing.T, srv *Server, path, ip string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(body)
@@ -68,7 +68,7 @@ func postJSONFromIP(t *testing.T, srv *Server, path, ip string, body any) *httpt
 	return rec
 }
 
-// mustCreateUser 直接落一个可被找回密码命中的本地账号（走真实账号服务）。
+// mustCreateUser directly persists a local account that forgot-password can hit (through the real account service).
 func mustCreateUser(t *testing.T, ts securityTestServer, email string) {
 	t.Helper()
 	name := strings.NewReplacer("@", "-", ".", "-").Replace(email)
@@ -80,8 +80,8 @@ func mustCreateUser(t *testing.T, ts securityTestServer, email string) {
 	}
 }
 
-// TestForgotPasswordRateLimitByIP 覆盖 IP 维度：同一 IP 第 6 次被拒，且被拒那次不入 outbox。
-// 每次用不同目标邮箱，邮箱维度各自停在 1，唯一可能触发的是 IP 维度。
+// TestForgotPasswordRateLimitByIP covers the IP dimension: the 6th request from the same IP is rejected, and that rejected one does not enter the outbox.
+// Each request uses a different target mailbox, so each mailbox dimension stays at 1 and the only one that can trigger is the IP dimension.
 func TestForgotPasswordRateLimitByIP(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	ts.srv.anonLimiter = anonLimiterWithClock(newFakeRateClock())
@@ -112,7 +112,7 @@ func TestForgotPasswordRateLimitByIP(t *testing.T) {
 	}
 }
 
-// TestForgotPasswordRateLimitByEmail 覆盖目标邮箱维度：同一邮箱（不同 IP）第 6 次被拒，且不入 outbox。
+// TestForgotPasswordRateLimitByEmail covers the target mailbox dimension: the 6th request for the same mailbox (different IPs) is rejected and does not enter the outbox.
 func TestForgotPasswordRateLimitByEmail(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	ts.srv.anonLimiter = anonLimiterWithClock(newFakeRateClock())
@@ -139,7 +139,7 @@ func TestForgotPasswordRateLimitByEmail(t *testing.T) {
 	}
 }
 
-// TestForgotPasswordRateLimitWindowExpiry 覆盖窗口过期：注入时钟 +16 分钟后重新放行。
+// TestForgotPasswordRateLimitWindowExpiry covers window expiry: after advancing the injected clock by 16 minutes requests are allowed again.
 func TestForgotPasswordRateLimitWindowExpiry(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	clock := newFakeRateClock()
@@ -164,7 +164,7 @@ func TestForgotPasswordRateLimitWindowExpiry(t *testing.T) {
 	}
 }
 
-// TestRegisterRateLimitByIP 覆盖注册的 IP 维度：开放策略下前 5 次成功建号，第 6 次被拒且不建号。
+// TestRegisterRateLimitByIP covers registration's IP dimension: under an open policy the first 5 create accounts, the 6th is rejected and creates none.
 func TestRegisterRateLimitByIP(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -197,8 +197,8 @@ func TestRegisterRateLimitByIP(t *testing.T) {
 	}
 }
 
-// TestRegisterRateLimitByEmail 覆盖注册的邮箱维度：同一目标邮箱（不同 IP）第 6 次被拒。
-// 策略用 closed，让前 5 次都不建号，仅凭响应码区分「策略拒绝」与「限流拒绝」。
+// TestRegisterRateLimitByEmail covers registration's mailbox dimension: the 6th request for the same target mailbox (different IPs) is rejected.
+// The policy is closed so none of the first 5 create an account, letting the response code alone distinguish "policy rejection" from "rate-limit rejection".
 func TestRegisterRateLimitByEmail(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -222,7 +222,7 @@ func TestRegisterRateLimitByEmail(t *testing.T) {
 	}
 }
 
-// TestAnonRateLimitFirstRequestSucceeds 是正例：两个入口的首次请求都不被误伤。
+// TestAnonRateLimitFirstRequestSucceeds is the positive case: the first request on both entries is not wrongly blocked.
 func TestAnonRateLimitFirstRequestSucceeds(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	ts.srv.anonLimiter = anonLimiterWithClock(newFakeRateClock())

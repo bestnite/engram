@@ -16,12 +16,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// keysPlaintextRe 匹配一次性明文（fcard_ 后至少 20 个 base64url 字符）；展示前缀只有
-// 8 个字符，因此不会误命中列表里的前缀。
+// keysPlaintextRe matches the one-time plaintext (at least 20 base64url characters after fcard_); the displayed prefix is only
+// 8 characters, so it never accidentally matches a prefix in the list.
 var keysPlaintextRe = regexp.MustCompile(`fcard_[A-Za-z0-9_-]{20,}`)
 
-// newKeysAPI 用同一份数据库装配真实的 /api/v1 handler 链，用于验证创建出来的 key
-// 能通过 bearer 鉴权访问 GET /api/v1/decks。
+// newKeysAPI wires the real /api/v1 handler chain against the same database, to verify that a created key
+// can reach GET /api/v1/decks with bearer auth.
 func newKeysAPI(t *testing.T, db *gorm.DB) http.Handler {
 	t.Helper()
 	a, err := api.New(api.Deps{
@@ -42,7 +42,7 @@ func newKeysAPI(t *testing.T, db *gorm.DB) http.Handler {
 	return r
 }
 
-// apiGetDecks 用 bearer key 请求 GET /api/v1/decks，返回状态码。
+// apiGetDecks requests GET /api/v1/decks with a bearer key and returns the status code.
 func apiGetDecks(t *testing.T, h http.Handler, plaintext string) int {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/decks", nil)
@@ -52,8 +52,8 @@ func apiGetDecks(t *testing.T, h http.Handler, plaintext string) int {
 	return rec.Code
 }
 
-// loginMember 直接落一行非管理员用户并登录，返回其 id、会话 cookie 与服务端 CSRF token。
-// 验收明确要求「非管理员」也能创建 key，因此不复用 newNotesServer 的 admin owner。
+// loginMember inserts a non-admin user row directly and signs in, returning their id, session cookie and server CSRF token.
+// Acceptance explicitly requires that "non-admins" can create keys too, so it does not reuse newNotesServer's admin owner.
 func loginMember(t *testing.T, srv *Server, db *gorm.DB, username string) (uint64, []*http.Cookie, string) {
 	t.Helper()
 	hasher := auth.NewPasswordHasher(auth.Params{Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32})
@@ -69,12 +69,12 @@ func loginMember(t *testing.T, srv *Server, db *gorm.DB, username string) (uint6
 	if err := db.Create(&u).Error; err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与绑定的 CSRF token。
+	// Sign-in goes through the SPA's same-origin JSON endpoint: failure is Fatal, success returns the session cookie and the bound CSRF token.
 	cookies, csrf := loginJSON(t, srv, db, username, "Sup3rSecret!")
 	return u.ID, cookies, csrf
 }
 
-// keyCount 返回某用户当前的 key 数。
+// keyCount returns a user's current key count.
 func keyCount(t *testing.T, db *gorm.DB, userID uint64) int {
 	t.Helper()
 	keys, err := store.NewAPIKeyStore(db).ListByUser(context.Background(), userID)

@@ -14,28 +14,28 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包（.edeck）的浏览器路径：
-//   GET  /decks/:id/package  导出一个卡组为 .edeck 下载（沿用 store 层导出，不重写）
-//   GET  /import             导入页（返回 SPA 应用壳，由客户端路由渲染）
-// 导入本身走 REST `POST /api/v1/decks/import`，与 SPA 的内置页共用同一 service 入口。
+// Browser paths for deck packages (.edeck):
+//   GET  /decks/:id/package  export one deck as a .edeck download (reusing the store-layer export, not rewritten)
+//   GET  /import             import page (returns the SPA app shell, rendered by the client router)
+// The import itself goes through REST `POST /api/v1/decks/import`, the same service entry the SPA's built-in page uses.
 
-// registerPackageWebRoutes 挂载卡组包的浏览器入口。导出走 api service，因此还需要 s.api。
+// registerPackageWebRoutes mounts the browser entries for deck packages. Export goes through the api service, so s.api is needed as well.
 func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.api == nil {
 		return
 	}
 	router.GET("/decks/:id/package", s.deckPackageExport)
 	router.POST("/api/v1/decks/export-zip", s.sessions.CSRFMiddleware(), s.deckBatchExportZip)
-	// 导入页返回应用壳，由客户端路由渲染；上传走 JSON 端点（前端的 importDeckPackage）。
+	// The import page returns the app shell, rendered by the client router; the upload goes through the JSON endpoint (the frontend's importDeckPackage).
 	router.GET("/import", s.shell.ServeIndex)
 }
 
-// packageExportMediaType 是 .edeck 的 MIME（与 REST 导出保持一致）。
+// packageExportMediaType is the MIME for .edeck (consistent with the REST export).
 const packageExportMediaType = "application/vnd.engram.edeck"
 
-// deckPackageExport 把当前用户有权读取的卡组导出为 .edeck 并下载。
-// 权限与 REST 入口同规（reader 即可导出）。导出必须走 api.ExportDeckPackage：媒体字节的根目录
-// 由它统一填入，直接调 store 层漏传根目录时，媒体会按进程当前目录去找，引用了媒体的卡组必然 500。
+// deckPackageExport exports a deck the current user may read as a .edeck download.
+// Permissions follow the same rules as the REST entry (reader is enough to export). The export must go through api.ExportDeckPackage: the media byte root
+// is filled in uniformly by it, and calling the store layer directly without the root makes media resolve against the process working directory, so any deck referencing media would 500.
 func (s *Server) deckPackageExport(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -104,7 +104,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			zw.Close()
 			return
 		}
-		// 与单个导出同理走 api service，媒体根目录与时钟由它统一填入。
+		// As with the single export, this goes through the api service, which fills in the media root and clock uniformly.
 		pkg, err := s.api.ExportDeckPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:    includeMedia,
 			IncludeProgress: req.IncludeProgress,
@@ -124,7 +124,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		// zip 内每个包同样以卡组标题命名；两个卡组同名时追加序号，避免条目互相覆盖。
+		// Every package inside the zip is named after the deck title too; when two decks share a title a sequence number is appended, so entries do not overwrite each other.
 		filename := uniqueEntryName(api.DeckPackageFilename(deck.Name, deck.PublicID), used)
 		f, err := zw.Create(filename)
 		if err != nil {
@@ -152,7 +152,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", zipBuf.Bytes())
 }
 
-// uniqueEntryName 在 used 里登记并返回一个不重复的 zip 条目名：重名时在扩展名前追加 (2)、(3)……
+// uniqueEntryName registers and returns a unique zip entry name in used: on a collision it appends (2), (3)… before the extension.
 func uniqueEntryName(name string, used map[string]bool) string {
 	candidate := name
 	ext := path.Ext(name)

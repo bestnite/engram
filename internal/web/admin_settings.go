@@ -14,23 +14,23 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 系统设置的可编辑项定义。
+// Definitions of the editable system settings items.
 //
-// 取值优先级与环境变量语义复用 internal/config：环境变量 > settings 表 > 默认值，
-// settings 表按请求现读。SSR 设置页删除后，页面的读写在 /api/v1/admin/settings 的 JSON
-// 端点（admin_settings_api.go）上；这里保留该端点复用的设置项规格、生效值与读数工具。
+// Value precedence and env var semantics are reused from internal/config: env vars > settings table > defaults,
+// with the settings table read per request. After the SSR settings page was removed, the page's reads and writes live on the JSON
+// endpoint /api/v1/admin/settings (admin_settings_api.go); the setting specs, effective values and reading helpers that endpoint reuses are kept here.
 
-// settingSpec 描述一个可编辑设置：settings 键、可选环境变量覆盖、默认值来源与文案键。
+// settingSpec describes one editable setting: the settings key, the optional env var override, the default value source and the copy key.
 type settingSpec struct {
 	key      string
 	envVar   string
 	labelKey string
 	hintKey  string
-	// def 在 loc 下算出默认值（站点名回退语言包，语言回退内置默认，等等）。
+	// def computes the default value under loc (the site name falls back to the language pack, the locale falls back to the built-in default, and so on).
 	def func(loc *i18n.Localizer) string
 }
 
-// generalSettingSpecs 是「通用」区块的设置项。
+// generalSettingSpecs are the settings items in the "general" section.
 func generalSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
@@ -44,7 +44,7 @@ func generalSettingSpecs() []settingSpec {
 	}
 }
 
-// mediaSettingSpecs 是「媒体」区块的可编辑设置项，与 internal/web/media.go 共用同一批键。
+// mediaSettingSpecs are the editable settings items in the "media" section, sharing the same keys as internal/web/media.go.
 func mediaSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
@@ -58,8 +58,8 @@ func mediaSettingSpecs() []settingSpec {
 			def: func(*i18n.Localizer) string { return strings.Join(media.DefaultAllowedMimes(), ", ") },
 		},
 		{
-			// 每用户媒体总量配额：0 = 不限（默认）。0 沿用项目既有约定（每日上限也用 0 表示不限），
-			// 不是一个被自拟的具体数字；未配置时显示 0，管理员填入正数即启用。
+			// Per-user total media quota: 0 = unlimited (default). 0 follows the project's existing convention (the daily cap also uses 0 for unlimited),
+			// it is not an arbitrarily chosen number; it shows 0 when unconfigured, and the admin enables it by entering a positive number.
 			key: settingKeyMediaUserQuotaBytes, envVar: envMediaUserQuotaBytes,
 			labelKey: "media.quota.setting.label", hintKey: "media.quota.setting.hint",
 			def: func(*i18n.Localizer) string { return "0" },
@@ -67,9 +67,9 @@ func mediaSettingSpecs() []settingSpec {
 	}
 }
 
-// optimizeSettingSpecs 是「参数优化」区块的设置项。
-// 门槛下限由 store.MinOptimizeMinReviews 强制，表单拒绝低于下限的值；存量的低于下限的值
-// 在读取路径会被钳到下限（store.OptimizeMinReviews）。
+// optimizeSettingSpecs are the settings items in the "parameter optimization" section.
+// The lower bound of the threshold is enforced by store.MinOptimizeMinReviews and the form rejects values below it; existing values below the lower bound
+// are clamped to the lower bound on the read path (store.OptimizeMinReviews).
 func optimizeSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
@@ -80,8 +80,8 @@ func optimizeSettingSpecs() []settingSpec {
 	}
 }
 
-// effectiveSetting 解析一个设置的生效值与其来源：环境变量 > settings 表 > 默认值。
-// 复用 internal/config 的 Source 常量与优先级语义；settings 表按请求现读。
+// effectiveSetting resolves a setting's effective value and its source: env vars > settings table > defaults.
+// Reuses internal/config's Source constants and precedence semantics; the settings table is read per request.
 func (s *Server) effectiveSetting(ctx context.Context, loc *i18n.Localizer, spec settingSpec) (string, config.Source) {
 	if spec.envVar != "" {
 		if raw := strings.TrimSpace(os.Getenv(spec.envVar)); raw != "" {
@@ -98,7 +98,7 @@ func (s *Server) effectiveSetting(ctx context.Context, loc *i18n.Localizer, spec
 	return spec.def(loc), config.SourceDefault
 }
 
-// mediaDirSize 递归统计媒体目录占用；目录不存在时按 0 计（尚未上传过任何文件）。
+// mediaDirSize recursively totals the media directory's usage; counts as 0 when the directory does not exist (nothing has been uploaded yet).
 func mediaDirSize(root string) (int64, error) {
 	var total int64
 	err := filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
@@ -123,7 +123,7 @@ func mediaDirSize(root string) (int64, error) {
 	return total, nil
 }
 
-// humanBytes 把字节数换成易读形式；这里是给管理员看的读数，不做本地化单位换算。
+// humanBytes turns a byte count into a readable form; these are readings for the admin, so no localized unit conversion is done.
 func humanBytes(n int64) string {
 	const unit = 1024
 	if n < unit {

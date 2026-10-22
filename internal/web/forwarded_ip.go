@@ -9,12 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// forwardedIPHeaders 是 gin 默认采信的客户端 IP 头（RemoteIPHeaders 的缺省值），
-// 诊断只看这两个，与 ClientIP() 的解析范围保持一致。
+// forwardedIPHeaders are the client IP headers gin trusts by default (the default RemoteIPHeaders
+// value); the diagnostics look at only these two, matching the scope ClientIP() parses.
 var forwardedIPHeaders = []string{"X-Forwarded-For", "X-Real-IP"}
 
-// parseTrustedPrefixes 把已校验的 TRUSTED_PROXIES 条目转成前缀；单个 IP 视为 /32 或 /128。
-// 调用前 SetTrustedProxies 已拒绝非法项，这里遇到解析失败的条目直接跳过即可。
+// parseTrustedPrefixes turns validated TRUSTED_PROXIES entries into prefixes; a single IP counts as /32 or /128.
+// SetTrustedProxies has already rejected invalid entries before this runs, so an entry that fails to parse here can simply be skipped.
 func parseTrustedPrefixes(entries []string) []netip.Prefix {
 	out := make([]netip.Prefix, 0, len(entries))
 	for _, entry := range entries {
@@ -32,15 +32,15 @@ func parseTrustedPrefixes(entries []string) []netip.Prefix {
 	return out
 }
 
-// forwardedIPWarner 在「请求带着转发头，但直连地址不在可信代理列表里」时记一次警告。
+// forwardedIPWarner logs one warning when "the request carries forwarding headers, but the direct address is not in the trusted proxy list".
 //
-// 不信任代理是安全的缺省，但它的代价是静默的：反向代理后面的部署会把代理自己的地址
-// 当成每个用户的 IP，登录限流、审计和新设备提醒全部失真，而管理员看不到任何提示。
-// 这条日志把这个错配变成可见的，并点名直连地址，方便填入 TRUSTED_PROXIES。
+// Not trusting proxies is the safe default, but its cost is silent: a deployment behind a reverse proxy
+// takes the proxy's own address as every user's IP, and login rate limiting, auditing and new-device
+// alerts all go wrong, while the administrator sees no hint at all.
 //
-// 只对回环与私有网段的直连地址告警：反向代理几乎总在同机或内网，而公网来源带转发头
-// 多半是伪造。若对公网来源也告警，攻击者就能抢先触发这唯一一次日志，诱导管理员把
-// 攻击者地址写进可信列表。每个进程只记一次，避免每个请求刷屏。
+// Only warn for loopback and private-network direct addresses: a reverse proxy is almost always co-located
+// or internal, whereas a public source carrying forwarding headers is mostly spoofed. Warning on public
+// sources too would let an attacker trigger this one-time log first and lure the admin into trusting their address. Log once per process so requests do not flood it.
 func forwardedIPWarner(logger *slog.Logger, trusted []string) gin.HandlerFunc {
 	prefixes := parseTrustedPrefixes(trusted)
 	var once sync.Once
@@ -71,7 +71,7 @@ func forwardedIPWarner(logger *slog.Logger, trusted []string) gin.HandlerFunc {
 	}
 }
 
-// inPrefixes 判断地址是否落在任一可信前缀内。
+// inPrefixes reports whether the address falls within any trusted prefix.
 func inPrefixes(a netip.Addr, prefixes []netip.Prefix) bool {
 	for _, p := range prefixes {
 		if p.Contains(a) {

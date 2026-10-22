@@ -17,70 +17,70 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是：RFC 8058 一键退订。
+// This file is: RFC 8058 one-click unsubscribe.
 //
-// 设计要点：
-//   - 退订入口只加在**可选类型**（CanDisable 为真的 B/C/D）的邮件上；A 类一律不带
-//     （头由 internal/mail 的 UnsubscribeHeaders 统一构造，A 类传进去也只得到 nil）。
-//   - 令牌化且**无需登录**：退订不该先让人登进来。令牌是一次性的、有有效期，
-//     库里只存摘要（store.HashActionToken），明文只出现在邮件链接里，绝不进日志。
-//   - 令牌的 Payload 指名**那一个**可选类型；端点只读令牌里的类型，不接受调用方传入类型，
-//     因此一枚令牌只能关掉它指名的类型，也无法被改指到别的类型或别的用户。
+// Design points:
+//   - the unsubscribe entry is only added to mails of **optional types** (B/C/D, where CanDisable is true); class A never carries it
+//     (the headers are built centrally by UnsubscribeHeaders in internal/mail, and passing class A in still yields nil).
+//   - tokenized and **needing no login**: unsubscribing should not require logging in first. The token is single-use and has a lifetime,
+//     only its digest is stored (store.HashActionToken), the plaintext appears only in the mail link and never in the logs.
+//   - the token's Payload names **that one** optional type; the endpoint only reads the type from the token and accepts no caller-supplied type,
+//     so one token can only disable the type it names and cannot be redirected to another type or another user.
 //
-// 移除 SSR 页面层后，退订由三条传输承担，三者共用同一份令牌语义与同一份实现
-// （consumeUnsubscribe）；这里是「加传输」，安全模型不变：
-//   - POST /unsubscribe：RFC 8058 One-Click 的机器端点（邮件客户端直接 POST），
-//     只回状态码与一个最小 JSON 体，绝不渲染模板；
-//   - GET /unsubscribe：返回 SPA 应用壳并下发会话前
-//     双提交 cookie（收件人可能未登录），页面由客户端渲染；
-//   - /api/v1/unsubscribe：SPA 的同源 JSON 传输。GET 读取令牌指名的类型（不消费），
-//     POST 消费令牌、落偏好并写审计。
+// After the SSR page layer was removed, unsubscribe is carried by three transports that share the same token semantics and the same implementation
+// (consumeUnsubscribe); this is "adding transports", the security model is unchanged:
+//   - POST /unsubscribe: the RFC 8058 One-Click machine endpoint (a mail client POSTs directly),
+//     returning only a status code and a minimal JSON body, never rendering a template;
+//   - GET /unsubscribe: returns the SPA app shell and sets the pre-session
+//     double-submit cookie (the recipient may be logged out), with the page rendered by the client;
+//   - /api/v1/unsubscribe: the SPA's same-origin JSON transport. GET reads the type the token names (without consuming it),
+//     POST consumes the token, writes the preference and writes the audit.
 //
-// CSRF 例外（有理由的例外，不是绕开保护）：
-//   - POST /unsubscribe 故意不挂 sessions.CSRFMiddleware。RFC 8058 的 One-Click POST 由
-//     邮件客户端直接发出，不带会话 cookie，也没有可绑定 token 的会话；若要求 CSRF，
-//     一键退订在真实邮件客户端里必然失败，功能等于没做。
-//   - 这里的「凭据」是 URL 里的高熵一次性令牌本身：只有收到该邮件的人才有它，
-//     它只能关掉一个可选类型，且用后即废。相比强行套 CSRF 而让功能不可用，
-//     令牌即能力（capability）是 RFC 8058 认可的正确边界。
-//   - SPA 的 POST /api/v1/unsubscribe 是会话前写请求，照 /api/v1/auth/verify-email 的约定
-//     挂 auth.PreSessionCSRFMiddleware（双提交 cookie 由 GET /unsubscribe 下发）。
-//   - 其余带会话的写路径不受影响，照旧走 CSRFMiddleware（见 mail_prefs.go 等）。
+// CSRF exception (a justified exception, not a way around the protection):
+//   - POST /unsubscribe deliberately does not mount sessions.CSRFMiddleware. The RFC 8058 One-Click POST is sent
+//     directly by the mail client, carries no session cookie, and there is no session to bind a token to; requiring CSRF would make
+//     one-click unsubscribe fail in every real mail client, which amounts to not building the feature at all.
+//   - the "credential" here is the high-entropy one-time token in the URL itself: only whoever received that mail has it,
+//     it can only disable one optional type, and it is dead once used. Compared with forcing CSRF on and making the feature unusable,
+//     token-as-capability is the correct boundary RFC 8058 recognizes.
+//   - the SPA's POST /api/v1/unsubscribe is a pre-session write, so following the convention of /api/v1/auth/verify-email it mounts
+//     auth.PreSessionCSRFMiddleware (the double-submit cookie comes from GET /unsubscribe).
+//   - the other writes that carry a session are unaffected and still go through CSRFMiddleware (see mail_prefs.go and the like).
 
-// unsubscribeTypeInvalidCode 是令牌载荷不是可退订类型时的稳定英文 code。
-// 正常流程绝不会签发这种令牌；出现即数据异常，前端按 code 映射提示。
+// unsubscribeTypeInvalidCode is the stable English code for when the token payload is not an unsubscribable type.
+// The normal flow never issues such a token; if one appears the data is anomalous, and the frontend maps the code to a hint.
 const unsubscribeTypeInvalidCode = "unsubscribe_type_invalid"
 
-// errUnsubscribableType 表示令牌载荷不是可退订的可选类型（数据异常）。
-// 与 store 的令牌哨兵错误分开，便于调用方把它映射成专属 code。
+// errUnsubscribableType means the token payload is not an unsubscribable optional type (anomalous data).
+// It is kept separate from store's token sentinel errors so callers can map it to a dedicated code.
 var errUnsubscribableType = errors.New("unsubscribe token names an unsubscribable mail type")
 
-// registerUnsubscribeRoutes 挂载免登录一键退订路由。
-// 令牌服务未装配时跳过（M0 阶段仍可构造 Server）。
+// registerUnsubscribeRoutes mounts the login-free one-click unsubscribe routes.
+// Skips when the token service is not wired (a Server can still be constructed at M0).
 func (s *Server) registerUnsubscribeRoutes(router *gin.Engine) {
 	if s.tokens == nil {
 		return
 	}
-	// GET 返回应用壳（人点邮件里的链接时用），POST 执行退订（RFC 8058 One-Click）。
-	// 两者都不挂 CSRFMiddleware —— 理由见文件头注释。
+	// GET returns the app shell (used when a person clicks the link in a mail), POST performs the unsubscribe (RFC 8058 One-Click).
+	// Neither mounts CSRFMiddleware — for the reason see the file header comment.
 	router.GET("/unsubscribe", s.unsubscribeShell)
 	router.POST("/unsubscribe", s.unsubscribeSubmit)
-	// SPA 的同源 JSON 传输：读不消费令牌，确认消费令牌；确认走会话前双提交 CSRF。
+	// The SPA's same-origin JSON transport: the read does not consume the token, the confirm does; the confirm uses pre-session double-submit CSRF.
 	router.GET("/api/v1/unsubscribe", s.unsubscribeRead)
 	router.POST("/api/v1/unsubscribe", auth.PreSessionCSRFMiddleware(), s.unsubscribeConfirm)
 }
 
-// unsubscribeShell 提供 GET /unsubscribe：先下发会话前双提交 cookie
-// （收件人可能未登录），再返回 SPA 应用壳；退订协议由客户端走 /api/v1/unsubscribe。
+// unsubscribeShell serves GET /unsubscribe: first set the pre-session double-submit cookie
+// (the recipient may be logged out), then return the SPA app shell; the unsubscribe protocol is run by the client via /api/v1/unsubscribe.
 //
-// 刻意**不消费**令牌：链接预取器、安全扫描器会对 URL 发 GET，若 GET 即退订，
-// 用户会莫名其妙被退订。真正的退订只由 POST 完成。
+// It deliberately **does not consume** the token: link prefetchers and security scanners issue GETs on the URL, and if a GET unsubscribed,
+// users would be unsubscribed out of nowhere. The real unsubscribe is only done by POST.
 func (s *Server) unsubscribeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// unsubscribeTokenFromRequest 从查询串或表单体里取出明文令牌（机器端点的入参形态）。
+// unsubscribeTokenFromRequest pulls the plaintext token out of the query string or the form body (the machine endpoint's input shape).
 func unsubscribeTokenFromRequest(c *gin.Context) string {
 	if token := strings.TrimSpace(c.Query("token")); token != "" {
 		return token
@@ -88,14 +88,14 @@ func unsubscribeTokenFromRequest(c *gin.Context) string {
 	return strings.TrimSpace(c.PostForm("token"))
 }
 
-// apiUnsubscribeRequest 是 POST /api/v1/unsubscribe 的请求体（SPA 的确认请求）。
+// apiUnsubscribeRequest is the body of POST /api/v1/unsubscribe (the SPA's confirm request).
 type apiUnsubscribeRequest struct {
 	Token string `json:"token"`
 }
 
-// unsubscribeRead 是 SPA 的读端点（GET /api/v1/unsubscribe?token=…）：
-// 只读取令牌指名的可选类型，不消费令牌、不写任何偏好。令牌无效/已用/过期时返回稳定 code，
-// 让客户端在用户点确认之前就能提示「链接已失效」，而不是让他白点一次。
+// unsubscribeRead is the SPA's read endpoint (GET /api/v1/unsubscribe?token=…):
+// it only reads the optional type the token names, consuming no token and writing no preference. For an invalid/used/expired token it returns a stable code,
+// so the client can say "this link is no longer valid" before the user clicks confirm, instead of wasting a click.
 func (s *Server) unsubscribeRead(c *gin.Context) {
 	tok, err := s.tokens.Peek(c.Request.Context(), store.ActionTokenUnsubscribe, strings.TrimSpace(c.Query("token")))
 	if err != nil {
@@ -110,8 +110,8 @@ func (s *Server) unsubscribeRead(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"type": string(typ)})
 }
 
-// unsubscribeConfirm 是 SPA 的确认端点（POST /api/v1/unsubscribe，会话前双提交 CSRF）：
-// 消费一次性退订令牌，只关掉令牌指名的那个可选类型。
+// unsubscribeConfirm is the SPA's confirm endpoint (POST /api/v1/unsubscribe, pre-session double-submit CSRF):
+// it consumes the one-time unsubscribe token and disables only the optional type the token names.
 func (s *Server) unsubscribeConfirm(c *gin.Context) {
 	var req apiUnsubscribeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -126,10 +126,10 @@ func (s *Server) unsubscribeConfirm(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"type": string(typ)})
 }
 
-// unsubscribeSubmit 是 RFC 8058 One-Click 的机器端点（POST /unsubscribe）。
+// unsubscribeSubmit is the RFC 8058 One-Click machine endpoint (POST /unsubscribe).
 //
-// 邮件客户端直接 POST（可能不带 cookie），只关心 2xx；因此这里只回状态码与一个最小 JSON 体，
-// 绝不渲染模板。令牌语义与 SPA 的 JSON 确认完全一致——两者共用 consumeUnsubscribe。
+// The mail client POSTs directly (possibly without cookies) and only cares about 2xx; so this returns only a status code and a minimal JSON body,
+// never rendering a template. The token semantics are exactly those of the SPA's JSON confirm — both share consumeUnsubscribe.
 func (s *Server) unsubscribeSubmit(c *gin.Context) {
 	typ, err := s.consumeUnsubscribe(c.Request.Context(), unsubscribeTokenFromRequest(c))
 	if err != nil {
@@ -139,14 +139,14 @@ func (s *Server) unsubscribeSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"unsubscribed": true, "type": string(typ)})
 }
 
-// consumeUnsubscribe 消费退订令牌并把令牌指名的那个可选类型关掉，返回该类型。
+// consumeUnsubscribe consumes the unsubscribe token, disables the optional type the token names, and returns that type.
 //
-// 顺序刻意如此：先消费令牌（一次性），再用令牌里的 Payload 定位类型与用户——
-// 调用方无法提供类型，因此不存在「拿 A 类型的令牌关 B 类型」的可能。
-// 三条传输共用它，保证只关这一个类型、只写一次偏好、只落一条审计。
+// The order is deliberate: consume the token first (single use), then use its Payload to locate the type and the user —
+// callers cannot supply a type, so "use a type-A token to disable type B" is impossible.
+// All three transports share it, guaranteeing exactly one type is disabled, one preference write and one audit entry.
 //
-// 返回的错误分三类：store 的令牌哨兵（NotFound/Used/Expired）、errUnsubscribableType
-// （载荷异常）以及其它（偏好读写失败，已被 %w 包装且不含令牌明文）。
+// The errors returned fall into three classes: store's token sentinels (NotFound/Used/Expired), errUnsubscribableType
+// (anomalous payload), and others (preference read/write failures, already wrapped with %w and containing no plaintext token).
 func (s *Server) consumeUnsubscribe(ctx context.Context, token string) (mail.Type, error) {
 	tok, err := s.tokens.Consume(ctx, store.ActionTokenUnsubscribe, token)
 	if err != nil {
@@ -154,8 +154,8 @@ func (s *Server) consumeUnsubscribe(ctx context.Context, token string) (mail.Typ
 	}
 	typ := mail.Type(strings.TrimSpace(tok.Payload))
 	if !mail.CanUnsubscribe(typ) {
-		// 令牌载荷由服务端签发，出现不可退订的类型说明数据异常；令牌已被消费，
-		// 用户重新从邮件点一次即可。绝不退订 A 类（CanUnsubscribe 对 A 类恒为 false）。
+		// The token payload is issued by the server, so an unsubscribable type means anomalous data; the token has already been consumed,
+		// and the user can just click again from the mail. Class A is never unsubscribed (CanUnsubscribe is always false for class A).
 		return "", errUnsubscribableType
 	}
 	prefs := store.NewEmailPrefStore(s.db)
@@ -163,7 +163,7 @@ func (s *Server) consumeUnsubscribe(ctx context.Context, token string) (mail.Typ
 	if err != nil {
 		return "", fmt.Errorf("load email preferences: %w", err)
 	}
-	// 只关掉这一个类型：在既有显式选择上写一条 false，其余类型原样保留。
+	// Disable only this one type: write an explicit false over the existing choice, leaving the other types as they are.
 	choices[string(typ)] = false
 	if err := prefs.SetChoices(ctx, tok.UserID, choices, time.Now().UTC()); err != nil {
 		return "", fmt.Errorf("save email preferences: %w", err)
@@ -178,9 +178,9 @@ func (s *Server) consumeUnsubscribe(ctx context.Context, token string) (mail.Typ
 	return typ, nil
 }
 
-// writeUnsubscribeError 把消费/读取退订令牌的错误映射到稳定英文 code 与状态码。
-// 令牌类错误与载荷异常都是 400（用户可用重新点一次邮件解决），其余按 500 记英文日志。
-// 绝不把令牌明文写进日志。
+// writeUnsubscribeError maps consume/read unsubscribe-token errors to stable English codes and status codes.
+// Token errors and payload anomalies are both 400 (the user can fix it by clicking the mail again), and the rest log in English as 500.
+// The plaintext token never goes into the log.
 func (s *Server) writeUnsubscribeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, errUnsubscribableType):
@@ -197,13 +197,13 @@ func (s *Server) writeUnsubscribeError(c *gin.Context, err error) {
 	}
 }
 
-// optionalUnsubscribeLink 为可选类型签发一枚指名该类型的免登录退订令牌，返回退订链接。
+// optionalUnsubscribeLink issues a login-free unsubscribe token naming that type for an optional type, and returns the unsubscribe link.
 //
-// A 类（不可关闭）或签发失败时返回空串 —— 宁可这封邮件少一个退订入口，也绝不给安全邮件
-// 加退订入口，或让发信因退订令牌失败而失败（发信失败不得让触发操作失败）。
+// Class A (not disableable) or a failed issue returns an empty string — better that this mail lacks an unsubscribe entry than to give security mail
+// an unsubscribe entry, or to let sending fail because the unsubscribe token failed (a failed send must not fail the triggering action).
 //
-// 拆出「拿链接」这一层是因为**邮件正文里也要有它**：只有 RFC 8058 头的话，读纯文本段的
-// 读者看不到任何退订入口（头是给邮件客户端读的）。
+// The "get the link" layer is separate because **the mail body needs it too**: with only the RFC 8058 headers, a reader of the plain-text part
+// sees no unsubscribe entry at all (the headers are there for the mail client to read).
 func (s *Server) optionalUnsubscribeLink(c *gin.Context, userID uint64, typ mail.Type) string {
 	if s.tokens == nil || !mail.CanUnsubscribe(typ) {
 		return ""
@@ -216,4 +216,4 @@ func (s *Server) optionalUnsubscribeLink(c *gin.Context, userID uint64, typ mail
 	return s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 }
 
-// optionalUnsubscribeHeaders 是上面的薄封装：拿链接 → 转成 RFC 8058 头。
+// optionalUnsubscribeHeaders is a thin wrapper over the above: get the link → turn it into the RFC 8058 headers.

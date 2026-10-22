@@ -4,15 +4,15 @@ import (
 	"time"
 )
 
-// 管理面板作业页的支撑函数。
+// Support functions for the admin panel jobs page.
 //
-// SSR 作业页删除后，作业列表与取消在 /api/v1/admin/jobs* 的 JSON 端点上
-// （admin_jobs_api.go）；这里只保留仍被复用的时间格式化与分页大小。
+// After the SSR jobs page was removed, the job list and cancellation live on the /api/v1/admin/jobs* JSON endpoints
+// (admin_jobs_api.go); only the time formatting and page size that are still reused are kept here.
 
-// adminJobsPageSize 是作业列表每页行数。
+// adminJobsPageSize is the number of rows per page in the job list.
 const adminJobsPageSize = 20
 
-// formatJobTime 格式化可空时间戳；nil 返回空串。
+// formatJobTime formats a nullable timestamp; returns an empty string for nil.
 func formatJobTime(t *time.Time) string {
 	if t == nil {
 		return ""

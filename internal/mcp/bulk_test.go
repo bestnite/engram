@@ -13,9 +13,9 @@ import (
 	gorm "gorm.io/gorm"
 )
 
-// ---- ：bulk_notes 工具与 create_notes 按 note_id 寻址 ----
+// ---- : the bulk_notes tool and create_notes addressing by note_id ----
 
-// toMap 把 service 层的响应体转成 JSON map，便于与 MCP structured content 逐字段比较。
+// toMap turns a service layer response body into a JSON map, for comparing field by field with the MCP structured content.
 func toMap(t *testing.T, v any) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(v)
@@ -29,7 +29,7 @@ func toMap(t *testing.T, v any) map[string]any {
 	return m
 }
 
-// noteIDsInDeck 按主键升序取出卡组内 note 的对外 id，供两侧各取一张做对照。
+// noteIDsInDeck takes the public ids of the deck's notes in ascending primary key order, so each side can take one for comparison.
 func noteIDsInDeck(t *testing.T, db *gorm.DB, deckID uint64) []string {
 	t.Helper()
 	var notes []store.Note
@@ -43,14 +43,14 @@ func noteIDsInDeck(t *testing.T, db *gorm.DB, deckID uint64) []string {
 	return ids
 }
 
-// TestBulkNotesMatchesREST 是核心验收：bulk_notes 与直接调用 api.BulkNotes（REST
-// POST /notes/bulk 的 service 方法）在同一输入下产出同一返回体，并真正改写库中的 tags_json；
-// 重复提交同一请求第二次 affected=0（幂等）。
+// TestBulkNotesMatchesREST is the core acceptance: bulk_notes and a direct call to api.BulkNotes (the service method behind REST
+// POST /notes/bulk) produce the same response body for the same input, and really rewrite tags_json in the database;
+// submitting the same request a second time gives affected=0 (idempotent).
 func TestBulkNotesMatchesREST(t *testing.T) {
 	apiSrv, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "bulkuser")
 	deck := seedDeck(t, db, u.ID)
-	// 两张内容相同的 note：一张走 MCP，一张走直接 service 调用，比较两侧结果。
+	// Two notes with identical content: one goes through MCP, one through a direct service call, comparing the results on both sides.
 	seedDueCardMCP(t, db, deck.ID)
 	seedDueCardMCP(t, db, deck.ID)
 	ids := noteIDsInDeck(t, db, deck.ID)
@@ -61,7 +61,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeWrite}))
 
-	// 第一次 add_tags：两侧应各改动一行。
+	// First add_tags: each side should affect one row.
 	mcpOut, isErr, text := callTool(t, cs, "bulk_notes", map[string]any{
 		"action": "add_tags", "note_ids": []any{n1}, "tags": []any{"t1"},
 	})
@@ -81,7 +81,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 		t.Errorf("bulk_notes(add_tags) affected = %v, want 1", mcpOut["affected"])
 	}
 
-	// 回读库里的 tags_json：两条 note 都应当带上 t1。
+	// Read back tags_json from the database: both notes should carry t1.
 	noteStore := store.NewNoteStore(db)
 	for _, id := range ids {
 		n, err := noteStore.ByPublicID(context.Background(), id)
@@ -93,7 +93,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 		}
 	}
 
-	// 重复提交同一请求：两侧 affected 都归零（幂等）。
+	// Submit the same request again: affected goes to zero on both sides (idempotent).
 	mcpOut, _, _ = callTool(t, cs, "bulk_notes", map[string]any{
 		"action": "add_tags", "note_ids": []any{n1}, "tags": []any{"t1"},
 	})
@@ -111,7 +111,7 @@ func TestBulkNotesMatchesREST(t *testing.T) {
 	}
 }
 
-// containsStr 判断字符串切片是否含目标值（本包测试辅助）。
+// containsStr reports whether a string slice contains the target value (a helper for this package's tests).
 func containsStr(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {
@@ -121,8 +121,8 @@ func containsStr(xs []string, want string) bool {
 	return false
 }
 
-// TestBulkNotesHiddenFromReadKey 断言只读 key 在 tools/list 里看不到 bulk_notes，
-// 且按名字硬调返回 scope_required（复查逻辑覆盖新工具）。
+// TestBulkNotesHiddenFromReadKey asserts a read-only key does not see bulk_notes in tools/list,
+// and that calling it by name returns scope_required (the re-check logic covers new tools).
 func TestBulkNotesHiddenFromReadKey(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "readonlybulk")
@@ -139,8 +139,8 @@ func TestBulkNotesHiddenFromReadKey(t *testing.T) {
 	}
 }
 
-// TestCreateNotesByNoteIDRewritesInPlace 覆盖第二部分：create_notes 的 item 带 note_id
-// 时原地改写已有 note 的字段，保留 card id 与复习进度；note_id 与 external_ref 同时给出时该行报 errors[]。
+// TestCreateNotesByNoteIDRewritesInPlace covers the second part: when an item of create_notes carries note_id
+// it rewrites the existing note's fields in place, keeping the card id and review progress; when note_id and external_ref are both given, that row reports an errors[] entry.
 func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "byid")
@@ -178,7 +178,7 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 		t.Errorf("create_notes(note_id) updated/created = %v/%v, want 1/0", out["updated"], out["created"])
 	}
 
-	// 字段被就地改写。
+	// The fields were rewritten in place.
 	updated, err := store.NewNoteStore(db).ByID(context.Background(), note.ID)
 	if err != nil {
 		t.Fatalf("reload note: %v", err)
@@ -187,7 +187,7 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 		t.Errorf("note fields = %v, want the imported values", fields)
 	}
 
-	// card id 与复习进度必须原样保留。
+	// The card id and review progress must be kept verbatim.
 	var cards []store.Card
 	if err := db.Where("note_id = ?", note.ID).Find(&cards).Error; err != nil {
 		t.Fatalf("reload cards: %v", err)
@@ -203,7 +203,7 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 		t.Errorf("card state = (reps %d, lapses %d), want (4, 2)", state.Reps, state.Lapses)
 	}
 
-	// note_id 与 external_ref 同时给出：该行报一条行错误，其余不变。
+	// note_id and external_ref both given: that row reports one row error, and nothing else changes.
 	out, isErr, text = callTool(t, cs, "create_notes", map[string]any{
 		"deck_id": deck.PublicID,
 		"notes": []any{map[string]any{

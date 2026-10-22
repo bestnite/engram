@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// createUserAndLogin 在同一测试库上新建一个普通用户并登录，返回其 id、会话 cookie 与 CSRF token。
+// createUserAndLogin creates an ordinary user on the same test database and logs in, returning their id, session cookie and CSRF token.
 func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string) (uint64, []*http.Cookie, string) {
 	t.Helper()
 	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db), store.NewAPIKeyStore(db),
@@ -25,19 +25,19 @@ func createUserAndLogin(t *testing.T, srv *Server, db *gorm.DB, username string)
 	if err != nil {
 		t.Fatalf("CreateLocalUser(%q) error = %v", username, err)
 	}
-	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	// Login goes through the SPA's same-origin JSON endpoint: a failure is Fatal, success returns the session cookie and the session-bound CSRF token.
 	cookies, csrf := loginJSON(t, srv, db, username, "Sup3rSecret!")
 	return u.ID, cookies, csrf
 }
 
-// grantsJSONPath 是共享授权的 JSON 路径。
+// grantsJSONPath is the JSON path for sharing grants.
 func grantsJSONPath(deckPublicID string) string {
 	return "/api/v1/decks/" + deckPublicID + "/sharing/grants"
 }
 
-// TestSharingGrantInvitesThenAcceptanceGivesAccess 是主验收，语义是**同意制**
-// owner 分享只发出邀请、不产生授权；被邀请者接受后才拿到访问权；
-// 撤销之后对方下一次请求立即被拒。每一步各写一行审计。
+// TestSharingGrantInvitesThenAcceptanceGivesAccess is the main acceptance, and its semantics are the **consent model**:
+// the owner sharing only sends an invite and produces no grant; the invitee gets access only after accepting;
+// after revocation the other side's next request is refused immediately. Each step writes one audit line.
 func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Shared deck")
@@ -48,23 +48,23 @@ func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 		t.Fatalf("load reader2: %v", err)
 	}
 
-	// 授权前：无访问权，GET 列表页被拒 403。
+	// Before the grant: no access, and GET on the list page is refused with 403.
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("before grant: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// owner 分享：这只是一条**邀请**，不是授权。
+	// The owner shares: this is only an **invite**, not a grant.
 	rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.PublicID),
 		`{"username":"reader2","role":"reader"}`, ownerCookies, ownerCSRF)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST grant status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	// 关键负例：还没接受，对方**不能**访问——这就是同意制与旧行为的区别。
+	// The key negative case: before accepting, the other side **cannot** access — that is what separates the consent model from the old behavior.
 	if rec := getWithCookies(t, srv, deckPath+"/notes", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("before acceptance: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 被邀请者接受：这一步才写授权。
+	// The invitee accepts: only this step writes the grant.
 	if rec := jsonRequest(t, srv, http.MethodPost,
 		"/api/v1/sharing/invites/"+deck.PublicID+"/accept", "", u2Cookies, u2CSRF); rec.Code != http.StatusOK {
 		t.Fatalf("accept invite status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -73,7 +73,7 @@ func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 		t.Fatalf("after acceptance: GET notes status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 改角色 reader -> editor：写 deck.role_change，对方仍可访问。
+	// Role change reader -> editor: writes deck.role_change, and the other side can still access.
 	rec = jsonRequest(t, srv, http.MethodPatch, grantsJSONPath(deck.PublicID)+"/"+u2.PublicID,
 		`{"role":"editor"}`, ownerCookies, ownerCSRF)
 	if rec.Code != http.StatusOK {
@@ -83,7 +83,7 @@ func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 		t.Fatalf("after role change: GET notes status = %d, want 200", rec.Code)
 	}
 
-	// 撤销：对方下一次请求立即被拒。
+	// Revocation: the other side's next request is refused immediately.
 	rec = jsonRequest(t, srv, http.MethodDelete, grantsJSONPath(deck.PublicID)+"/"+u2.PublicID,
 		"", ownerCookies, ownerCSRF)
 	if rec.Code != http.StatusOK {
@@ -93,7 +93,7 @@ func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 		t.Fatalf("after revoke: GET notes status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 审计：邀请 1、接受 1、改角色 1、撤销 1。
+	// Audit: 1 invite, 1 accept, 1 role change, 1 revoke.
 	audits := store.NewAuditStore(db)
 	for _, c := range []struct {
 		action string
@@ -114,28 +114,28 @@ func TestSharingGrantInvitesThenAcceptanceGivesAccess(t *testing.T) {
 	}
 }
 
-// TestSharingPageRejectsNonOwner 覆盖反面用例：非 owner 打不开共享页、写端点也被拒且不落库。
+// TestSharingPageRejectsNonOwner covers the negative cases: a non-owner cannot open the sharing page, and the write endpoints are refused with nothing written.
 func TestSharingPageRejectsNonOwner(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Owner only")
 	deckPath := "/decks/" + deck.PublicID
-	// 建一个普通用户并授予 editor：他仍不是 owner，不能管理授权。
+	// Create an ordinary user and grant editor: they are still not the owner and cannot manage grants.
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "editor2")
 	if rec := jsonRequest(t, srv, http.MethodPost, grantsJSONPath(deck.PublicID),
 		`{"username":"editor2","role":"editor"}`, ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("owner grant editor status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	// 同意制下要先接受，editor 才是真的 editor（本用例要考的是「有权限的人仍不是 owner」）。
+	// Under the consent model it must be accepted first for the editor to really be an editor (what this case tests is "someone with access is still not the owner").
 	if rec := jsonRequest(t, srv, http.MethodPost,
 		"/api/v1/sharing/invites/"+deck.PublicID+"/accept", "", u2Cookies, u2CSRF); rec.Code != http.StatusOK {
 		t.Fatalf("editor accept invite status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// editor 打开共享页 -> 403。
+	// The editor opens the sharing page -> 403.
 	if rec := getWithCookies(t, srv, deckPath+"/sharing", u2Cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("editor GET sharing status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
-	// editor 提交授权 -> 403，且不新增授权行。
+	// The editor submits a grant -> 403, and no grant row is added.
 	before, err := store.NewGrantStore(db).ListByDeck(context.Background(), deck.ID)
 	if err != nil {
 		t.Fatalf("list grants: %v", err)
@@ -160,7 +160,7 @@ func TestSharingPageRejectsNonOwner(t *testing.T) {
 	}
 }
 
-// TestSharingGrantRequiresCSRF 是必测负例：缺 CSRF token 的授权写请求被拒。
+// TestSharingGrantRequiresCSRF is a mandatory negative case: a grant write without a CSRF token is refused.
 func TestSharingGrantRequiresCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "CSRF deck")
@@ -179,8 +179,8 @@ func TestSharingGrantRequiresCSRF(t *testing.T) {
 	}
 }
 
-// TestSharingMutationsKeepCSRF 断言切壳没有放松 CSRF：SPA JSON 写
-// （/api/v1/decks/:id/sharing/grants）缺 token 403、带正确 token 才通过。
+// TestSharingMutationsKeepCSRF asserts the shell switch did not loosen CSRF: a SPA JSON write
+// (/api/v1/decks/:id/sharing/grants) without a token is 403, and only a correct token passes.
 func TestSharingMutationsKeepCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "CSRF sharing deck")

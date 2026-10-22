@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// swAssetList 从生成的 service worker 脚本里解析 STATIC_ASSETS 数组。
+// swAssetList parses the STATIC_ASSETS array out of the generated service worker script.
 func swAssetList(t *testing.T, body string) []string {
 	t.Helper()
 	re := regexp.MustCompile(`(?s)var STATIC_ASSETS = \[(.*?)\];`)
@@ -31,8 +31,8 @@ func swAssetList(t *testing.T, body string) []string {
 	return out
 }
 
-// TestServiceWorkerCachesOnlyStaticAssets 是核心验收：缓存清单里只有静态资源
-// 路径，没有 API 端点、没有复习/答题路由。
+// TestServiceWorkerCachesOnlyStaticAssets is the core acceptance: the cache manifest holds only static asset
+// paths, no API endpoints, no review/answer routes.
 func TestServiceWorkerCachesOnlyStaticAssets(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, serviceWorkerPath, nil)
@@ -118,7 +118,7 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-// TestServiceWorkerVersionTracksAssetContent 断言版本号随缓存内容变化，保证旧缓存被清理。
+// TestServiceWorkerVersionTracksAssetContent asserts the version tracks the cached content, so stale caches get purged.
 func TestServiceWorkerVersionTracksAssetContent(t *testing.T) {
 	if shellVersion([]string{"/static/v/aaaa/js/a.js"}) == shellVersion([]string{"/static/v/bbbb/js/a.js"}) {
 		t.Errorf("shellVersion did not change when the cache list changed")
@@ -128,8 +128,8 @@ func TestServiceWorkerVersionTracksAssetContent(t *testing.T) {
 	}
 }
 
-// TestManifestIsStandaloneAndUsesHashedIcon 断言 manifest 可被取到、为 standalone，
-// 且图标指向内容哈希资源。
+// TestManifestIsStandaloneAndUsesHashedIcon asserts the manifest is fetchable, is standalone,
+// and its icons point at content-hashed assets.
 func TestManifestIsStandaloneAndUsesHashedIcon(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, manifestPath, nil)
@@ -164,7 +164,7 @@ func TestManifestIsStandaloneAndUsesHashedIcon(t *testing.T) {
 	}
 }
 
-// TestManifestNamePrefersSettings 断言应用名优先取 settings 表的 site.name，缺省回退站点名 key。
+// TestManifestNamePrefersSettings asserts the app name prefers site.name from the settings table, falling back to the site name key.
 func TestManifestNamePrefersSettings(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 
@@ -193,7 +193,7 @@ func manifestName(t *testing.T, srv *Server) string {
 	return name
 }
 
-// TestPWAScriptIsServable 断言稳定 URL 的注册脚本可取到，并注册 /sw.js。
+// TestPWAScriptIsServable asserts the registration script at a stable URL is fetchable and registers /sw.js.
 func TestPWAScriptIsServable(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, pwaScriptPath, nil)
@@ -205,12 +205,12 @@ func TestPWAScriptIsServable(t *testing.T) {
 	}
 }
 
-// TestManifestAndServiceWorkerAreReachableWithoutSession 断言 PWA 外壳是公开的：
-// 首页（未登录）也要能取到 manifest，否则无法“添加到主屏幕”。
+// TestManifestAndServiceWorkerAreReachableWithoutSession asserts the PWA shell is public:
+// the home page (logged out) must also be able to fetch the manifest, otherwise "Add to Home Screen" is impossible.
 func TestManifestAndServiceWorkerAreReachableWithoutSession(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	for _, path := range []string{manifestPath, serviceWorkerPath, pwaScriptPath} {
-		rec := getWithCookies(t, srv, path, nil) // 不带任何 cookie
+		rec := getWithCookies(t, srv, path, nil) // with no cookies at all
 		if rec.Code != http.StatusOK {
 			t.Errorf("anonymous GET %s status = %d, want 200", path, rec.Code)
 		}

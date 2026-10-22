@@ -15,11 +15,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newStatsServer 装配一个带会话的测试服务，登录一个 owner，并种入最小统计夹具。
+// newStatsServer wires up a test server with sessions, logs in an owner, and seeds the minimal stats fixture.
 //
-// 夹具覆盖每个统计指标至少一个非零值，这样页面渲染的是真实聚合结果，而不是一排空柱：
-// 两条今日复习 + 一条昨日复习（复习量与学习曲线）、一个带稳定性与到期日的状态行
-// （到期预测与留存）、一条带标签的笔记（标签维度）、一个卡组（卡组维度）。
+// The fixture covers at least one non-zero value for every stats metric, so the page renders real aggregation results instead of a row of empty bars:
+// two reviews today + one review yesterday (review volume and learning curve), one state row with stability and due date
+// (due forecast and retention), one note with a tag (tag dimension), one deck (deck dimension).
 func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, cookies []*http.Cookie) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "stats.db"))
@@ -55,8 +55,8 @@ func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	}
 	owner, err := accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
 		Username: "owner", Email: "owner@example.com", Password: "Sup3rSecret!", Role: store.RoleAdmin,
-		// 与 seedStatsFixture 的复习日口径对齐（UTC、午夜切点），否则「今日」会随
-		// 默认时区 Asia/Shanghai + 04:00 切点在一天中的时段不同而错位。
+		// Aligned with seedStatsFixture's review-day semantics (UTC, midnight cutoff), otherwise "today" drifts
+		// with the time of day under the default timezone Asia/Shanghai + 04:00 cutoff.
 		Timezone: "UTC", DayCutoffHour: store.Ptr(0),
 	})
 	if err != nil {
@@ -64,12 +64,12 @@ func newStatsServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	}
 	seedStatsFixture(t, db, owner.ID)
 
-	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie。
+	// Login goes through the SPA's same-origin JSON endpoint: failure is Fatal, success returns the session cookie.
 	cookies, _ = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 	return srv, db, owner.ID, cookies
 }
 
-// seedStatsFixture 写入一组可预测的统计夹具。
+// seedStatsFixture writes a set of predictable stats fixtures.
 func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	ctx := context.Background()
@@ -107,7 +107,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	if err := db.Create(&state).Error; err != nil {
 		t.Fatalf("create card state: %v", err)
 	}
-	// 三条复习：今日两条（一条自评、一条机器判分），昨日一条；稳定性非空才能进留存桶。
+	// Three reviews: two today (one self-assessed, one machine-graded), one yesterday; stability must be non-null to enter a retention bucket.
 	rows := []store.Review{
 		{CardID: card.ID, UserID: userID, Rating: 3, GradeSource: "self", ReviewedAt: now, ReviewDay: today, StateBefore: 2, Stability: &stability},
 		{CardID: card.ID, UserID: userID, Rating: 4, GradeSource: "typed", ReviewedAt: now, ReviewDay: today, StateBefore: 2, Stability: &stability},
@@ -123,8 +123,8 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	}
 }
 
-// TestStatsPageRedirectsAnonymous 是负例：匿名访问 /stats 仍被重定向到登录页
-// （页面迁移到 SPA 外壳不改动授权判定，statsRoute 先过 requireUser）。
+// TestStatsPageRedirectsAnonymous is a negative case: anonymous access to /stats is still redirected to the login page
+// (moving the page to the SPA shell does not change the authorization decision; statsRoute goes through requireUser first).
 func TestStatsPageRedirectsAnonymous(t *testing.T) {
 	srv, _, _, _ := newStatsServer(t)
 	rec := getWithCookies(t, srv, "/stats", nil)
@@ -136,11 +136,11 @@ func TestStatsPageRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-// TestStatsRouteServesShell 是页面迁移的验收点：GET /stats 返回 SPA 应用壳
-// （index.html），由客户端路由渲染统计页，而不再渲染 SSR 页面。
+// TestStatsRouteServesShell is the acceptance point for the page migration: GET /stats returns the SPA app shell
+// (index.html), and the client router renders the stats page instead of an SSR page.
 //
-// 深链（?lang=）随请求原样带过；外壳用 revalidation/no-cache 与 ETag，避免长期缓存
-// 旧资源引用。数据仍在客户端经 GET /api/v1/stats/detail 取得。
+// The deep link (?lang=) is carried through as-is; the shell uses revalidation/no-cache and an ETag to avoid long-lived caching of
+// stale asset references. Data is still fetched client-side via GET /api/v1/stats/detail.
 func TestStatsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 
@@ -161,14 +161,14 @@ func TestStatsRouteServesShell(t *testing.T) {
 	if !strings.Contains(body, `<div id="app"></div>`) {
 		t.Errorf("GET /stats did not return the SPA shell: %s", snippet(body))
 	}
-	// SSR 统计页的文案必须消失：页面已由客户端视图接管。
+	// The SSR stats page copy must disappear: the page is now owned by the client view.
 	if strings.Contains(body, "统计与洞察") {
 		t.Errorf("GET /stats still renders the SSR stats page: %s", snippet(body))
 	}
 }
 
-// TestStatsDetailAPIStillRequiresSession 断言页面切到 SPA 外壳不改动数据接口的鉴权：
-// 匿名访问 GET /api/v1/stats/detail 仍返回 401 JSON，已登录会话返回 200 JSON。
+// TestStatsDetailAPIStillRequiresSession asserts moving the page to the SPA shell does not change the data endpoint's authentication:
+// anonymous access to GET /api/v1/stats/detail still returns 401 JSON, and a logged-in session returns 200 JSON.
 func TestStatsDetailAPIStillRequiresSession(t *testing.T) {
 	srv, _, _, cookies := newStatsServer(t)
 
@@ -189,8 +189,8 @@ func TestStatsDetailAPIStillRequiresSession(t *testing.T) {
 	}
 }
 
-// TestThirdPartyHostsDetectsPlantedHost 自测扫描器：种一个 CDN 引用必须被抓出来，
-// 否则 TestStatsPageHasNoExternalRequests 可能因为正则失效而假绿。
+// TestThirdPartyHostsDetectsPlantedHost self-tests the scanner: a planted CDN reference must be caught,
+// otherwise TestStatsPageHasNoExternalRequests could pass falsely because the regex stopped working.
 func TestThirdPartyHostsDetectsPlantedHost(t *testing.T) {
 	planted := []string{
 		`<script src="https://cdn.example.org/chart.js"></script>`,
@@ -206,16 +206,16 @@ func TestThirdPartyHostsDetectsPlantedHost(t *testing.T) {
 	if hosts := thirdPartyHosts(`<link rel="stylesheet" href="/static/v/abc/css/tailwind.css"/>`); len(hosts) != 0 {
 		t.Errorf("thirdPartyHosts() flagged a relative path as external: %v", hosts)
 	}
-	// 普通导航链接（如页脚源码仓库）不触发渲染期请求，必须放行。
+	// An ordinary navigation link (such as the source repository in the footer) triggers no render-time request and must be let through.
 	if hosts := thirdPartyHosts(`<a href="https://git.nite07.com/nite/engram">source</a>`); len(hosts) != 0 {
 		t.Errorf("thirdPartyHosts() flagged a plain navigation link as an external request: %v", hosts)
 	}
 }
 
-// thirdPartyHosts 返回 HTML 里会导致外部网络请求的第三方主机。
-// 只统计会触发加载的属性（script/link/img/iframe/source/video/audio/embed/object/track
-// 的 src/href/data）以及 CSS 的 url(...)。<a href> 是用户点击后才发生的导航，
-// 不是渲染期的外部请求，因此不计入——页脚的源码仓库链接正属于这一类。
+// thirdPartyHosts returns the third-party hosts in the HTML that would cause an external network request.
+// It only counts the attributes that trigger loading (the src/href/data of script/link/img/iframe/source/video/audio/embed/object/track)
+// as well as url(...) in CSS. <a href> is a navigation that only happens when the user clicks,
+// not a render-time external request, so it is not counted — the source repository link in the footer is exactly that case.
 func thirdPartyHosts(html string) []string {
 	var hosts []string
 	for _, m := range resourceHostRe.FindAllStringSubmatch(html, -1) {
@@ -231,10 +231,10 @@ func thirdPartyHosts(html string) []string {
 }
 
 var (
-	// 资源加载标签的属性里出现绝对 URL：会在渲染期发起外部请求。
+	// An absolute URL in a resource-loading tag's attribute: it would fire an external request at render time.
 	resourceHostRe = regexp.MustCompile(`(?i)<(?:script|link|img|iframe|source|video|audio|embed|object|track)\b[^>]*\b(?:src|href|data)\s*=\s*"https?://([A-Za-z0-9._-]+)`)
-	// 同上，但为协议相对形式（//host/...）。
+	// Same, but in protocol-relative form (//host/...).
 	resourceRelativeHostRe = regexp.MustCompile(`(?i)<(?:script|link|img|iframe|source|video|audio|embed|object|track)\b[^>]*\b(?:src|href|data)\s*=\s*"//([A-Za-z0-9._-]+)`)
-	// CSS 的 url(...) 指向的外部主机。
+	// An external host referenced by url(...) in CSS.
 	cssURLHostRe = regexp.MustCompile(`(?i)url\(\s*["']?https?://([A-Za-z0-9._-]+)`)
 )

@@ -13,32 +13,32 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 Web 层：登录第二步的凭据 cookie，以及两步验证管理页的应用壳入口。
+// This file is the web layer: the credential cookie for the login second step, and the app shell entry of the two-step verification management page.
 //
-// 与共享热点隔离：路由与 handler 全部落在本文件，对 internal/web/auth.go 只做路由注册插入，
-// 不重排既有代码。登录第二步与设置的读写协议在同源 JSON 端点上（totp_login.go / totp_api.go）。
+// Isolated from the shared hot spots: the routes and handlers all live in this file, and internal/web/auth.go only gets a route-registration insert,
+// without reordering existing code. The login second step and the settings read/write protocols are same-origin JSON endpoints (totp_login.go / totp_api.go).
 
 const (
-	// totpPendingCookieName 是「密码已通过、等待第二因素」的短期凭据 cookie 名。
+	// totpPendingCookieName is the name of the short-lived credential cookie for "password passed, waiting for the second factor".
 	totpPendingCookieName = "engram_totp_pending"
-	// totpPendingTTL 是第二步凭据的有效期：密码已验证，窗口必须短。
+	// totpPendingTTL is the lifetime of the second-step credential: the password is already verified, so the window must be short.
 	totpPendingTTL = 5 * time.Minute
 )
 
-// registerTOTPRoutes 挂载 TOTP 的全部路由。
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// registerTOTPRoutes mounts all TOTP routes.
+// Skips when the dependencies are not wired, so M0-stage tests can still construct a Server.
 func (s *Server) registerTOTPRoutes(router *gin.Engine) {
 	if s.totp == nil || s.sessions == nil || s.users == nil || s.accounts == nil {
 		return
 	}
-	// SPA 登录第二步的同源 JSON 协议：GET 报告是否持有有效的第二步
-	// 凭据，POST 提交验证码并签发会话。挂双提交 cookie 中间件（登录前流程没有会话可绑 token）。
+	// The same-origin JSON protocol for the SPA login second step: GET reports whether a valid second-step
+	// credential is held, POST submits the code and issues a session. Mounted with the double-submit cookie middleware (the pre-login flow has no session to bind a token to).
 	router.GET("/api/v1/auth/totp", s.apiTOTPPending)
 	router.POST("/api/v1/auth/totp", auth.PreSessionCSRFMiddleware(), s.apiTOTPSubmit)
 }
 
-// setTOTPPendingCookie 下发第二步凭据：内容对客户端不可读（HttpOnly + HMAC 签名）。
-// 不在这里记录任何「账号已启用 TOTP」的标记；cookie 里只有 user_id 与过期时间。
+// setTOTPPendingCookie issues the second-step credential: the content is unreadable to the client (HttpOnly + HMAC signature).
+// No "account has TOTP enabled" marker is recorded here; the cookie only holds user_id and the expiry.
 func (s *Server) setTOTPPendingCookie(c *gin.Context, userID uint64) {
 	exp := time.Now().Add(totpPendingTTL).Unix()
 	payload := fmt.Sprintf("%d.%d", userID, exp)
@@ -53,7 +53,7 @@ func (s *Server) setTOTPPendingCookie(c *gin.Context, userID uint64) {
 	})
 }
 
-// clearTOTPPendingCookie 立即过期第二步凭据（登录完成或凭据失效时）。
+// clearTOTPPendingCookie expires the second-step credential immediately (when login completes or the credential is invalid).
 func (s *Server) clearTOTPPendingCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     totpPendingCookieName,
@@ -66,7 +66,7 @@ func (s *Server) clearTOTPPendingCookie(c *gin.Context) {
 	})
 }
 
-// pendingTOTPUser 校验第二步凭据并返回用户 ID；签名不对、格式不对或已过期都返回 false。
+// pendingTOTPUser validates the second-step credential and returns the user ID; a bad signature, a bad format or expiry all return false.
 func (s *Server) pendingTOTPUser(c *gin.Context) (uint64, bool) {
 	cookie, err := c.Request.Cookie(totpPendingCookieName)
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *Server) pendingTOTPUser(c *gin.Context) (uint64, bool) {
 	return id, true
 }
 
-// verifyUserPassword 校验当前用户的本地密码；纯 OIDC 账号（无密码）一律拒绝。
+// verifyUserPassword checks the current user's local password; a pure OIDC account (no password) is always refused.
 func verifyUserPassword(u *store.User, password string) error {
 	if u.PasswordHash == nil {
 		return auth.ErrInvalidCredentials

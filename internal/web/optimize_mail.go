@@ -13,13 +13,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 C 类「参数优化完成」（optimize_done）的发信方。
+// This file is the sender for the type C "parameter optimization finished" (optimize_done) mail.
 //
-// 它由作业成功钩子调用，**没有请求上下文**：绝对地址只能靠 BASE_URL 拼，没配就跳过退订
-// 入口（宁少一个入口，也不拼一个点不开的相对链接）。类型属于「默认关」的可选类，所以只有
-// 主动开过的用户才会收到。
+// It is called by the job success hook and has **no request context**: an absolute address can only be built from BASE_URL, and without it the unsubscribe
+// entry is skipped (better one entry fewer than a relative link that does not open). The type belongs to the "default off" optional class, so only
+// users who turned it on receive it.
 
-// absoluteURLCtx 用 BASE_URL 拼绝对地址；未配置时返回空串（作业路径没有请求可推导）。
+// absoluteURLCtx builds an absolute address from BASE_URL; returns an empty string when unconfigured (the job path has no request to derive from).
 func (s *Server) absoluteURLCtx(path string) string {
 	base := strings.TrimRight(strings.TrimSpace(s.baseURL), "/")
 	if base == "" {
@@ -28,7 +28,7 @@ func (s *Server) absoluteURLCtx(path string) string {
 	return base + path
 }
 
-// optionalUnsubscribeLinkCtx 与 optionalUnsubscribeLink 相同，但没有请求上下文。
+// optionalUnsubscribeLinkCtx is the same as optionalUnsubscribeLink but without a request context.
 func (s *Server) optionalUnsubscribeLinkCtx(ctx context.Context, userID uint64, typ mail.Type) string {
 	if s.tokens == nil || !mail.CanUnsubscribe(typ) {
 		return ""
@@ -45,9 +45,9 @@ func (s *Server) optionalUnsubscribeLinkCtx(ctx context.Context, userID uint64, 
 	return link
 }
 
-// NotifyOptimizeDone 在参数优化成功后通知预设属主。签名与 jobs.SuccessFunc 对齐。
+// NotifyOptimizeDone notifies the preset owner after a successful parameter optimization. The signature matches jobs.SuccessFunc.
 //
-// 作业行只记 TargetID（预设 id），所以属主要经预设反查——作业表没有属主列，也不该为此加一列。
+// The job row records only TargetID (the preset id), so the owner must be looked up through the preset — the jobs table has no owner column, and should not gain one for this.
 func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 	if job.Kind != jobs.KindOptimize || job.TargetID == nil || *job.TargetID == 0 {
 		return
@@ -71,7 +71,7 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 		s.logger.Error("optimize mail: read recipient preferences failed", "user_id", owner.ID, "error", err)
 		return
 	}
-	// C 类默认关：只有主动开启的用户才收这封信。
+	// Type C is off by default: only users who turned it on receive this mail.
 	if !mail.ResolveEnabled(choices, mail.TypeOptimizeDone) {
 		return
 	}
@@ -82,8 +82,8 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 	unsubURL := s.optionalUnsubscribeLinkCtx(ctx, owner.ID, mail.TypeOptimizeDone)
 	reviewCount := optimizeReviewCount(job)
 
-	// 默认预设的库内名是身份标识（store.DefaultPresetName），不是给人看的文案：
-	// 邮件正文是用户可见文本，按收件人语言换成语言包里的显示名，用户自建的预设照原样显示。
+	// The in-database name of the default preset is an identity marker (store.DefaultPresetName), not human-facing copy:
+	// the mail body is user-visible text, so it is swapped for the display name from the language pack in the recipient's language, while user-created presets are shown as they are.
 	presetName := preset.Name
 	if preset.Name == store.DefaultPresetName {
 		presetName = loc.T("presets.default_name")
@@ -125,10 +125,10 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 	}
 }
 
-// optimizeReviewCount 从作业结果里取「用了多少条复习」，取不到就返回 0。
+// optimizeReviewCount takes "how many reviews it used" from the job result, returning 0 when it is unavailable.
 //
-// 它只用于正文里的一个数字，缺了不该影响发信，所以不返回错误（与 presets_api.go 读同一份
-// result_json，字段名以 store.OptimizeResult 为准）。
+// It only feeds one number in the body, and a missing one must not affect sending, so it returns no error (it reads the same
+// result_json as presets_api.go, with field names per store.OptimizeResult).
 func optimizeReviewCount(job store.Job) int {
 	if job.ResultJSON == nil || strings.TrimSpace(*job.ResultJSON) == "" {
 		return 0

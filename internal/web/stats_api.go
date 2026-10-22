@@ -12,15 +12,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件实现 SPA 统计明细接口（GET /api/v1/stats/detail）。
+// This file implements the SPA stats detail endpoint (GET /api/v1/stats/detail).
 //
-// 统计口径只有一份实现（collectStatsMeasures）：复习日、时区、日切点、可见卡组范围与每个
-// 聚合函数都集中在它里面，handler 不写任何统计 SQL，所以前端展示与服务端口径不会分歧。
-// 这里返回原始计数、比例与毫秒，本地化与柱宽交给前端。
+// There is only one implementation of the stats semantics (collectStatsMeasures): the review day, timezone, day cutoff, visible deck scope and every
+// aggregate function are all concentrated inside it, and the handler writes no stats SQL, so frontend display and server semantics cannot diverge.
+// It returns raw counts, ratios and milliseconds; localization and bar widths are left to the frontend.
 //
-// 字段名与数值口径一经发布即稳定，供 SPA 与后续客户端复用；不返回任何语言包文案。
+// Field names and numeric semantics are stable once published, for the SPA and later clients to reuse; no language-pack copy is returned.
 
-// statsMeasures 是一次统计请求的原始聚合结果；Now 是所有指标共用的唯一时刻快照。
+// statsMeasures is the raw aggregation result of one stats request; Now is the single moment snapshot shared by all metrics.
 type statsMeasures struct {
 	Now       time.Time
 	Volume    store.ReviewVolume
@@ -29,7 +29,7 @@ type statsMeasures struct {
 	TimeSpent store.TimeSpent
 	Streak    store.StreakStats
 	Curve     []store.LearningCurvePoint
-	// CurveFrom / CurveTo 是学习曲线窗口的首尾复习日（含两端，按用户时区与日切点）。
+	// CurveFrom / CurveTo are the first and last review day of the learning curve window (both inclusive, in the user's timezone and by their day cutoff).
 	CurveFrom string
 	CurveTo   string
 	Decks     []store.DeckStat
@@ -37,11 +37,11 @@ type statsMeasures struct {
 	Grades    []store.GradeSourceStat
 }
 
-// collectStatsMeasures 调用统计页的全部既有聚合查询；handler 不写任何统计 SQL。
+// collectStatsMeasures calls all the existing aggregate queries of the stats page; the handler writes no stats SQL.
 //
-// now 只取一次：所有指标共用同一个时刻与同一个复习日窗口（近 30 日 = [today-29, today]）。
-// 统计页与明细接口都从这里取数，两边因此不会对同一请求给出不同
-// 口径的数字，也不会各自复制一份编排逻辑。
+// now is taken once only: every metric shares the same moment and the same review day window (last 30 days = [today-29, today]).
+// Both the stats page and the detail endpoint take their numbers from here, so the two cannot report different
+// semantics for the same request, nor duplicate the orchestration logic each.
 func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (statsMeasures, error) {
 	now := time.Now()
 	locTZ := userLocation(user)
@@ -104,11 +104,11 @@ func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (st
 	}, nil
 }
 
-// statsDetail 是 GET /api/v1/stats/detail 的响应体。
+// statsDetail is the response body of GET /api/v1/stats/detail.
 type statsDetail struct {
-	// GeneratedAt 是所有指标共用的 now 快照（RFC3339，UTC）。
+	// GeneratedAt is the now snapshot shared by all metrics (RFC3339, UTC).
 	GeneratedAt string `json:"generated_at"`
-	// Empty 与 SSR 统计页同一判据：窗口内毫无复习、无到期卡、无卡组数据。
+	// Empty uses the same criterion as the SSR stats page: no reviews in the window, no due cards, no deck data.
 	Empty     bool              `json:"empty"`
 	Volume    statsVolume       `json:"volume"`
 	Due       statsDue          `json:"due"`
@@ -116,8 +116,8 @@ type statsDetail struct {
 	TimeSpent statsTimeSpent    `json:"time_spent"`
 	Streak    statsStreak       `json:"streak"`
 	Curve     []statsCurvePoint `json:"curve"`
-	// CurveFrom / CurveTo 给出曲线窗口的首尾复习日：curve 只含有复习的日子，
-	// 客户端画连续的日期轴需要知道窗口边界，而它算不出用户时区与日切点下的「今天」。
+	// CurveFrom / CurveTo give the first and last review day of the curve window: curve only contains days with reviews,
+	// and the client needs the window bounds to draw a continuous date axis, since it cannot compute "today" under the user's timezone and day cutoff.
 	CurveFrom string             `json:"curve_from"`
 	CurveTo   string             `json:"curve_to"`
 	Decks     []statsDeck        `json:"decks"`
@@ -125,14 +125,14 @@ type statsDetail struct {
 	Grades    []statsGradeSource `json:"grades"`
 }
 
-// statsVolume 是复习量指标（今日 / 近 7 日 / 近 30 日）。
+// statsVolume is the review volume metric (today / last 7 days / last 30 days).
 type statsVolume struct {
 	Today      int64 `json:"today"`
 	Last7Days  int64 `json:"last_7_days"`
 	Last30Days int64 `json:"last_30_days"`
 }
 
-// statsDue 是到期预测的互斥分桶；NewNotDue 是新卡未排期。
+// statsDue holds mutually exclusive buckets of the due forecast; NewNotDue means new cards not yet scheduled.
 type statsDue struct {
 	Today     int64 `json:"today"`
 	Tomorrow  int64 `json:"tomorrow"`
@@ -142,7 +142,7 @@ type statsDue struct {
 	NewNotDue int64 `json:"new_not_due"`
 }
 
-// statsRetentionBucket 是一个稳定性桶的留存情况；Rate 是 Passed/Total（Total 为 0 时为 0）。
+// statsRetentionBucket is the retention of one stability bucket; Rate is Passed/Total (0 when Total is 0).
 type statsRetentionBucket struct {
 	Label  string  `json:"label"`
 	Total  int64   `json:"total"`
@@ -150,7 +150,7 @@ type statsRetentionBucket struct {
 	Rate   float64 `json:"rate"`
 }
 
-// statsRetention 是留存率总体值加每个稳定性桶。
+// statsRetention is the overall retention rate plus each stability bucket.
 type statsRetention struct {
 	Total   int64                  `json:"total"`
 	Passed  int64                  `json:"passed"`
@@ -158,7 +158,7 @@ type statsRetention struct {
 	Buckets []statsRetentionBucket `json:"buckets"`
 }
 
-// statsTimeSpent 是时间投入指标（毫秒）。
+// statsTimeSpent is the time-spent metric (milliseconds).
 type statsTimeSpent struct {
 	TotalMS  int64   `json:"total_ms"`
 	Count    int64   `json:"count"`
@@ -166,21 +166,21 @@ type statsTimeSpent struct {
 	MedianMS int64   `json:"median_ms"`
 }
 
-// statsStreak 是连续打卡天数。
+// statsStreak is the number of consecutive study days.
 type statsStreak struct {
 	Current int `json:"current"`
 	Longest int `json:"longest"`
 }
 
-// statsCurvePoint 是学习曲线上的一个复习日：New 为新引入，Review 为复习量。
+// statsCurvePoint is one review day on the learning curve: New is newly introduced, Review is the review volume.
 type statsCurvePoint struct {
 	Day    string `json:"day"`
 	New    int64  `json:"new"`
 	Review int64  `json:"review"`
 }
 
-// statsDeck 是一个卡组的统计行。Reviews 是全部复习次数；Retention 是真实留存率，
-// 分母 RetentionTotal 只数到期复习，为 0 时客户端显示「无数据」而不是 0%。
+// statsDeck is the stats row of one deck. Reviews is the total number of reviews; Retention is the true retention rate,
+// whose denominator RetentionTotal counts only scheduled (due) reviews, and when it is 0 the client shows "no data" rather than 0%.
 type statsDeck struct {
 	DeckID         string  `json:"deck_id"`
 	Name           string  `json:"name"`
@@ -191,7 +191,7 @@ type statsDeck struct {
 	ElapsedMS      int64   `json:"elapsed_ms"`
 }
 
-// statsTag 是一个标签的统计行；Reviews / Retention / RetentionTotal 的含义同 statsDeck。
+// statsTag is the stats row of one tag; Reviews / Retention / RetentionTotal mean the same as in statsDeck.
 type statsTag struct {
 	Tag            string  `json:"tag"`
 	Reviews        int64   `json:"reviews"`
@@ -199,17 +199,17 @@ type statsTag struct {
 	RetentionTotal int64   `json:"retention_total"`
 }
 
-// statsGradeSource 是一种判分来源的计数（self/typed/llm）。
+// statsGradeSource is the count for one grading source (self/typed/llm).
 type statsGradeSource struct {
 	Source string `json:"source"`
 	Count  int64  `json:"count"`
 }
 
-// statsDetail 是会话专用的只读接口，只接受浏览器会话，不接受 bearer / API Key。
+// statsDetail is a session-only read-only endpoint: it accepts browser sessions only, never bearer / API keys.
 //
-// 挂在 /api/v1 之外（见 registerStatsRoutes），因此不受 API Key 组中间件影响；这里显式
-// 要求活跃会话，未登录一律 401，与 SSR 页面的「重定向到登录页」在语义上一致（JSON 客户端
-// 不该收到 HTML 重定向）。GET 是安全方法，无需 CSRF。
+// It is mounted outside /api/v1 (see registerStatsRoutes), so the API key group middleware does not apply; here it explicitly
+// requires an active session and answers 401 when logged out, which is semantically consistent with the SSR page's "redirect to the login page" (a JSON client
+// should not receive an HTML redirect). GET is a safe method and needs no CSRF.
 func (s *Server) statsDetail(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || user.Status != store.StatusActive {
@@ -229,8 +229,8 @@ func (s *Server) statsDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
-// buildStatsDetail 把原始聚合结果映射成稳定的 JSON 形态；切片一律初始化为非 nil，
-// 让空结果序列化成 [] 而不是 null，前端无需为 null 单独分支。
+// buildStatsDetail maps the raw aggregation result into the stable JSON shape; slices are always initialized non-nil,
+// so empty results serialize as [] rather than null and the frontend needs no separate null branch.
 func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsDetail, error) {
 	m, err := s.collectStatsMeasures(ctx, user)
 	if err != nil {
@@ -238,7 +238,7 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 	}
 	detail := statsDetail{
 		GeneratedAt: m.Now.UTC().Format(time.RFC3339),
-		// 空态判据：没有任何复习量、没有今日到期、没有卡组数据。
+		// Empty-state criterion: no review volume at all, nothing due today, no deck data.
 		Empty: m.Volume.Today == 0 && m.Volume.Last30Days == 0 &&
 			m.Due.Today == 0 && m.Due.NewNotDue == 0 && len(m.Decks) == 0,
 		CurveFrom: m.CurveFrom,

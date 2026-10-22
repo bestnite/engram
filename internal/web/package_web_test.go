@@ -17,10 +17,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包浏览器路径仍留在 web 层的部分：导出下载。导入本身已切到 REST
-// `POST /api/v1/decks/import`（SPA 的 client.ts 用它），因此 web 只保留导出与 /import 外壳。
+// The part of the deck package browser path still in the web layer: the export download. Import itself has moved to REST
+// `POST /api/v1/decks/import` (the SPA's client.ts uses it), so the web layer keeps only the export and the /import shell.
 
-// uploadPackage 以 multipart 拼一个 .edeck 上传请求；供仍按 REST 导入端点的测试复用。
+// uploadPackage builds an .edeck upload request as multipart; reused by tests that still hit the REST import endpoint.
 func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Cookie, csrf, filename string, body []byte, fields map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -50,8 +50,8 @@ func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Coo
 	return rec
 }
 
-// TestDeckPackageExportServesAttachment 断言导出端点的应答形态与鉴权：登录用户下载得到
-// .edeck 附件（与 REST 导出同一 MIME），匿名访问被重定向登录页。
+// TestDeckPackageExportServesAttachment asserts the export endpoint's response shape and auth: a signed-in user's download gets
+// an .edeck attachment (same MIME as the REST export), and anonymous access is redirected to the login page.
 func TestDeckPackageExportServesAttachment(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Pack Deck")
@@ -77,7 +77,7 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	}
 }
 
-// downloadName 从 Content-Disposition 解析出下载文件名（含 filename* 的 UTF-8 形式）。
+// downloadName parses the download filename out of Content-Disposition (including the UTF-8 filename* form).
 func downloadName(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	cd := rec.Header().Get("Content-Disposition")
@@ -88,8 +88,8 @@ func downloadName(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return params["filename"]
 }
 
-// TestDeckPackageDownloadsAreNamedAfterTheDeck 断言 SPA 实际调用的 REST 导出用卡组标题命名，
-// 中文标题经 filename* 编码后原样还原，而不是对外 id。
+// TestDeckPackageDownloadsAreNamedAfterTheDeck asserts the REST export the SPA actually calls names the file after the deck title,
+// with a Chinese title restored verbatim after filename* encoding, rather than using the public id.
 func TestDeckPackageDownloadsAreNamedAfterTheDeck(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "日语 N2 词汇")
@@ -107,8 +107,8 @@ func TestDeckPackageDownloadsAreNamedAfterTheDeck(t *testing.T) {
 	}
 }
 
-// TestBatchExportNamesEntriesAfterDecksWithoutCollisions 断言批量导出的 zip 条目以卡组标题命名，
-// 同名卡组追加序号而不是互相覆盖。
+// TestBatchExportNamesEntriesAfterDecksWithoutCollisions asserts batch export zip entries are named after deck titles,
+// and same-title decks get a sequence number appended instead of overwriting each other.
 func TestBatchExportNamesEntriesAfterDecksWithoutCollisions(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	first := seedDeck(t, db, ownerID, "Biology")
@@ -135,7 +135,7 @@ func TestBatchExportNamesEntriesAfterDecksWithoutCollisions(t *testing.T) {
 	}
 }
 
-// TestImportPageServesShell 断言 /import 返回 SPA 外壳，路由鉴权由 API 会话端点负责。
+// TestImportPageServesShell asserts /import returns the SPA shell, with route authorization handled by the API session endpoints.
 func TestImportPageServesShell(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/import", nil)
@@ -144,8 +144,8 @@ func TestImportPageServesShell(t *testing.T) {
 	}
 }
 
-// exportPackageBytes 通过浏览器导出端点取一个卡组包的字节，作为导入用例的合法载荷。
-// 用真实导出的包（而不是手搓字节）保证负例失败的原因是判权，而不是坏包。
+// exportPackageBytes fetches a deck package's bytes through the browser export endpoint, as a valid payload for the import cases.
+// Using a real exported package (rather than hand-made bytes) ensures a negative case fails because of permissions, not a broken package.
 func exportPackageBytes(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie) []byte {
 	t.Helper()
 	rec := getWithCookies(t, srv, "/decks/"+deckPublicID+"/package", cookies)
@@ -159,7 +159,7 @@ func exportPackageBytes(t *testing.T, srv *Server, deckPublicID string, cookies 
 	return body
 }
 
-// countDeckNotes 数一个卡组下的笔记条数，用于往返校验。
+// countDeckNotes counts the notes under a deck, for round-trip checks.
 func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 	var n int64
 	if err := db.Model(&store.Note{}).Where("deck_id = ?", deckID).Count(&n).Error; err != nil {
@@ -168,7 +168,7 @@ func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
 	return n, nil
 }
 
-// seedMediaDeck 建一个卡组，放一条引用媒体的 note，媒体字节写进服务端的媒体根目录；返回卡组与媒体字节。
+// seedMediaDeck creates a deck, puts in a note referencing media, and writes the media bytes into the server's media root; returns the deck and the media bytes.
 func seedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uint64, name string) (*store.Deck, []byte) {
 	t.Helper()
 	deck := seedDeck(t, db, ownerID, name)
@@ -184,7 +184,7 @@ func seedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uint64, name 
 	return deck, raw
 }
 
-// packageHasMedia 判断一个 .edeck 字节里是否带着给定内容的媒体条目。
+// packageHasMedia reports whether a .edeck blob carries a media entry with the given content.
 func packageHasMedia(t *testing.T, edeck, want []byte) bool {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(edeck), int64(len(edeck)))
@@ -211,8 +211,8 @@ func packageHasMedia(t *testing.T, edeck, want []byte) bool {
 	return false
 }
 
-// TestWebPackageExportsInlineMedia 断言 web 侧两条导出路由与 REST 一样从媒体根目录读字节：
-// 引用了媒体的卡组能导出，且包里带着那份媒体，而不是因为找不到文件返回 500。
+// TestWebPackageExportsInlineMedia asserts both web-side export routes read bytes from the media root like REST:
+// a deck referencing media can be exported and the package carries that media, rather than returning 500 because the file was not found.
 func TestWebPackageExportsInlineMedia(t *testing.T) {
 	cases := []struct {
 		name   string

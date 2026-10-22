@@ -4,13 +4,13 @@ import (
 	"context"
 )
 
-// 本文件集中「数字主键 -> 对外 id」的反查助手。
+// This file gathers the "numeric primary key -> public id" reverse-lookup helpers.
 //
-// 审计详情、邮件变量这类出口没有直接携带模型，只有主键；它们同样会进入响应（管理面板审计、
-// 邮件正文），因此这里把主键翻成对外 id。查不到（行已删或未装配）一律返回空串，
-// 绝不回退到数字主键——否则不透明 id 的边界会从这些旁路漏出去。
+// Outlets such as audit detail and mail variables carry no model directly, only primary keys; they also end up in responses (admin panel audit,
+// mail bodies), so the primary keys are translated into public ids here. A failed lookup (row deleted or not wired up) always returns an empty string,
+// never falling back to the numeric primary key — otherwise the opaque-id boundary would leak through these side channels.
 
-// userPublicID 反查用户的对外 id；查不到返回空串。
+// userPublicID reverse-looks-up a user's public id; empty string when not found.
 func (s *Server) userPublicID(ctx context.Context, id uint64) string {
 	if s.users == nil || id == 0 {
 		return ""
@@ -22,7 +22,7 @@ func (s *Server) userPublicID(ctx context.Context, id uint64) string {
 	return u.PublicID
 }
 
-// presetPublicID 反查预设的对外 id；查不到返回空串。
+// presetPublicID reverse-looks-up a preset's public id; empty string when not found.
 func (s *Server) presetPublicID(ctx context.Context, id uint64) string {
 	if s.presets == nil || id == 0 {
 		return ""
@@ -34,7 +34,7 @@ func (s *Server) presetPublicID(ctx context.Context, id uint64) string {
 	return p.PublicID
 }
 
-// deckPublicID 反查卡组的对外 id；查不到返回空串。
+// deckPublicID reverse-looks-up a deck's public id; empty string when not found.
 func (s *Server) deckPublicID(ctx context.Context, id uint64) string {
 	if s.decks == nil || id == 0 {
 		return ""
@@ -46,8 +46,8 @@ func (s *Server) deckPublicID(ctx context.Context, id uint64) string {
 	return d.PublicID
 }
 
-// looksLikePublicID 报告字符串是否形如对外 id（UUIDv7 的 36 字符文本：8-4-4-4-12 十六进制）。
-// 它只判形状，不查库：形状不对的参数在查询之前就能拒绝，避免拿任意串去命中索引。
+// looksLikePublicID reports whether a string looks like a public id (the 36-character UUIDv7 text: 8-4-4-4-12 hex).
+// It only checks the shape and never queries: a badly shaped parameter can be refused before the query, so no arbitrary string gets to probe the index.
 func looksLikePublicID(raw string) bool {
 	if len(raw) != 36 {
 		return false

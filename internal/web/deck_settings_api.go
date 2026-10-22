@@ -11,8 +11,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// deckSettingsPayload 把卡组与调用者自己的今日额度装配成响应体；0 原样返回，不限由布尔量表达。
-// deck_id / preset_id 是对外 id：卡组的数字主键不对外，预设同理，这里由调用方传进来。
+// deckSettingsPayload assembles the deck and the caller's own quota for today into the response body; 0 is returned as-is and "unlimited" is expressed by booleans.
+// deck_id / preset_id are public ids: the deck's numeric primary key is not exposed, likewise for presets, and they are passed in by the caller here.
 func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget schedule.DeckBudget) deckSettingsResponse {
 	return deckSettingsResponse{
 		DeckID:          deck.PublicID,
@@ -32,23 +32,23 @@ func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget s
 	}
 }
 
-// deckSettingsResponse 是 SPA 卡组设置接口的响应体：调用者自己在该卡组上的学习设置与今日额度。
-// 属主与共享成员各有一份设置，互不影响（见 store.StudySettings）。
+// deckSettingsResponse is the response body of the SPA deck settings API: the caller's own study settings on that deck and the quota for today.
+// The owner and each sharing member each have their own settings, unaffected by one another (see store.StudySettings).
 //
-// NewPerDay / ReviewsPerDay 是设置里的原始值：0 表示不限，不是「回落到默认」。
-// 因为「0 表示不限」与「今日剩余 0 张」在整数上同形，额外的 NewUnlimited /
-// ReviewUnlimited 布尔量显式表达不限，前端据此渲染「不限」而不是 0。
+// NewPerDay / ReviewsPerDay are the raw values from the settings: 0 means unlimited, not "fell back to the default".
+// Because "0 means unlimited" and "0 cards left today" look identical as integers, the extra NewUnlimited /
+// ReviewUnlimited booleans express "unlimited" explicitly, and the frontend renders "unlimited" rather than 0 based on them.
 type deckSettingsResponse struct {
 	DeckID   string `json:"deck_id"`
 	DeckName string `json:"deck_name"`
-	// DeckDescription 供属主在设置页预填「卡组信息」表单；共享成员改不了它，读到也无妨。
+	// DeckDescription lets the owner pre-fill the "deck info" form on the settings page; sharing members cannot change it, and reading it does no harm.
 	DeckDescription string `json:"deck_description"`
-	// Role 是调用者在卡组上的角色（owner / editor / reader），页面据此决定是否展示属主才有的入口。
+	// Role is the caller's role on the deck (owner / editor / reader), and the page uses it to decide whether to show owner-only entries.
 	Role          string `json:"role"`
 	PresetID      string `json:"preset_id"`
 	NewPerDay     int    `json:"new_per_day"`
 	ReviewsPerDay int    `json:"reviews_per_day"`
-	// NewExtra 是今天「再来一组」追加的新卡额度；NewLeft 已经算进了它，NewPerDay 没有。
+	// NewExtra is the extra new-card quota added by today's "one more round"; NewLeft already includes it, NewPerDay does not.
 	NewExtra        int  `json:"new_extra"`
 	NewUsed         int  `json:"new_used"`
 	ReviewUsed      int  `json:"review_used"`
@@ -58,18 +58,18 @@ type deckSettingsResponse struct {
 	ReviewUnlimited bool `json:"review_unlimited"`
 }
 
-// deckSettingsRequest 是 PATCH 的请求体；用指针区分「未提供」与「提供了 0」。
-// 0 是合法值（不限），因此不能靠零值判断字段是否出现。PresetID 是对外 id 字符串。
+// deckSettingsRequest is the PATCH request body; pointers distinguish "not provided" from "0 provided".
+// 0 is a legal value (unlimited), so the zero value cannot be used to detect whether a field is present. PresetID is a public id string.
 type deckSettingsRequest struct {
 	NewPerDay     *int    `json:"new_per_day"`
 	ReviewsPerDay *int    `json:"reviews_per_day"`
 	PresetID      *string `json:"preset_id"`
 }
 
-// registerDeckSettingsAPIRoutes 挂载 SPA 的卡组学习设置读写接口（卡组任何成员，写操作过 CSRF）。
+// registerDeckSettingsAPIRoutes mounts the SPA's deck study settings read/write API (any deck member; writes go through CSRF).
 //
-// 只注册 /api/v1/decks/:id/settings 这两个 JSON 端点；GET /decks/:id/settings 只发应用壳
-// （见 deck_settings.go），卡组上限的读写全部走这里。
+// Only these two /api/v1/decks/:id/settings JSON endpoints are registered; GET /decks/:id/settings only serves the app shell
+// (see deck_settings.go), and all reads and writes of deck limits go through here.
 func (s *Server) registerDeckSettingsAPIRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.presets == nil {
 		return
@@ -78,9 +78,9 @@ func (s *Server) registerDeckSettingsAPIRoutes(router *gin.Engine) {
 	router.PATCH("/api/v1/decks/:id/settings", s.sessions.CSRFMiddleware(), s.deckSettingsPatch)
 }
 
-// deckSettingsGet 读取调用者在单个卡组上的学习设置与今日已用/剩余（卡组任何成员）。
-// 只接受浏览器会话，拒绝 API Key / bearer；额度取自 schedule.DeckBudgets，
-// 与复习队列同源，网页层不重算公式。
+// deckSettingsGet reads the caller's study settings on a single deck and today's used/remaining (any deck member).
+// Accepts browser sessions only and rejects API Key / bearer; the quota comes from schedule.DeckBudgets,
+// the same source as the review queue, and the web layer does not recompute the formula.
 func (s *Server) deckSettingsGet(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -97,7 +97,7 @@ func (s *Server) deckSettingsGet(c *gin.Context) {
 	s.writeDeckSettings(c, user, deck, role)
 }
 
-// writeDeckSettings 读出调用者的学习设置与额度并写响应。
+// writeDeckSettings reads back the caller's study settings and quota and writes the response.
 func (s *Server) writeDeckSettings(c *gin.Context, user *store.User, deck *store.Deck, role string) {
 	ctx := c.Request.Context()
 	settings, err := s.decks.StudySettings(ctx, user.ID, deck)
@@ -115,8 +115,8 @@ func (s *Server) writeDeckSettings(c *gin.Context, user *store.User, deck *store
 	c.JSON(http.StatusOK, deckSettingsPayload(deck, role, s.presetPublicID(ctx, settings.PresetID), budget))
 }
 
-// deckSettingsPatch 保存调用者在该卡组上的学习设置（卡组任何成员；只影响调用者自己）。
-// 预设必须是调用者自己的；非法输入（非数字 / 负数 / 缺字段 / 别人的预设）一律 400 且不写库、不写审计。
+// deckSettingsPatch saves the caller's study settings on that deck (any deck member; affects only the caller).
+// The preset must be the caller's own; invalid input (non-numeric / negative / missing field / someone else's preset) is always 400 with no DB write and no audit row.
 func (s *Server) deckSettingsPatch(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -140,13 +140,13 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	// 预设是可选项：只改额度的请求不带它。
+	// The preset is optional: a request that only changes quotas does not carry it.
 	var presetID *uint64
 	var presetPublic string
 	if req.PresetID != nil {
 		preset, err := s.presets.ByPublicID(ctx, strings.TrimSpace(*req.PresetID))
 		if err != nil {
-			// 未知或空串的预设对外 id 与「预设不可用」同形：400，不写库、不写审计。
+			// An unknown or empty preset public id looks the same as "preset unavailable": 400, no DB write, no audit row.
 			shareError(c, http.StatusBadRequest, "invalid_request")
 			return
 		}
@@ -179,7 +179,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		TargetID:   store.Ptr(deck.ID),
 		Detail:     map[string]any{"new_per_day": caps.NewPerDay, "reviews_per_day": caps.ReviewsPerDay},
 	})
-	// 回读一次再组响应：上面的写入都发生在库上，用写入前读到的卡组行会回显旧的设置。
+	// Read back once before assembling the response: the writes above happened in the DB, so using the deck row read before them would echo the old settings.
 	updated, err := s.decks.ByID(ctx, deck.ID)
 	if err != nil {
 		s.logger.Error("reload deck after SPA settings change failed", "deck_id", deck.ID, "error", err)
