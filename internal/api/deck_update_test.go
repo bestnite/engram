@@ -9,11 +9,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// strPtr 返回字符串指针，供 PATCH 语义的入参构造（nil = 本次不改这一项）。
+// strPtr returns a string pointer for building PATCH-semantics inputs (nil = this field is not being changed).
 func strPtr(s string) *string { return &s }
 
-// TestUpdateDeckOwnerEditsNameAndDescription 是 AUDIT-09 的正例：属主经 PATCH /decks/:id
-// 改名称与描述，响应回显新值、库已持久化、写一条 deck.update 审计。
+// TestUpdateDeckOwnerEditsNameAndDescription is the positive case for AUDIT-09: the owner PATCHes /decks/:id
+// to change name and description; the response echoes the new values, the database is persisted, and one deck.update audit row is written.
 func TestUpdateDeckOwnerEditsNameAndDescription(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_owner", store.RoleUser)
@@ -50,15 +50,15 @@ func TestUpdateDeckOwnerEditsNameAndDescription(t *testing.T) {
 	}
 }
 
-// TestUpdateDeckKeepsPreset 是 AUDIT 回归：改名只改名称与描述，绝不动卡组的调度预设。
-// 修复前改名会把本次调用读到的 preset_id 写回去，覆盖期间变更过的学习设置。
+// TestUpdateDeckKeepsPreset is an AUDIT regression: renaming changes only name and description and never touches the deck's scheduling preset.
+// Before the fix, a rename wrote back the preset_id read during that call, overwriting study settings changed in the meantime.
 func TestUpdateDeckKeepsPreset(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_preset", store.RoleUser)
 	deck := seedDeck(t, env.db, owner.ID)
 	ctx := t.Context()
 
-	// 属主换到另一个自己的预设（走学习设置这条正经路径）。
+	// The owner switches to another of their own presets (through the proper study-settings path).
 	second := store.NewPreset(owner.ID, "Second")
 	if err := store.NewPresetStore(env.db).Create(ctx, &second); err != nil {
 		t.Fatalf("create second preset: %v", err)
@@ -83,8 +83,8 @@ func TestUpdateDeckKeepsPreset(t *testing.T) {
 	}
 }
 
-// TestUpdateDeckRejectsNonOwner 是反面用例：editor / reader / 陌生人都不能改名称与描述，
-// 且失败不写入。
+// TestUpdateDeckRejectsNonOwner is the negative case: editor / reader / strangers cannot change name and description,
+// and a failure writes nothing.
 func TestUpdateDeckRejectsNonOwner(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_owner2", store.RoleUser)
@@ -126,8 +126,8 @@ func TestUpdateDeckRejectsNonOwner(t *testing.T) {
 	}
 }
 
-// TestUpdateDeckRejectsInvalidText 覆盖文本上限与空名称：超长名称 400 deck_name_invalid、
-// 空名称 400、超长描述 400 deck_description_invalid；三者都不写入，空描述合法。
+// TestUpdateDeckRejectsInvalidText covers text caps and empty names: an over-long name 400 deck_name_invalid,
+// an empty name 400, an over-long description 400 deck_description_invalid; none of the three writes, and an empty description is legal.
 func TestUpdateDeckRejectsInvalidText(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_owner3", store.RoleUser)
@@ -149,7 +149,7 @@ func TestUpdateDeckRejectsInvalidText(t *testing.T) {
 	} else if status, code := serviceCode(t, err); status != http.StatusBadRequest || code != CodeDeckDescriptionInvalid {
 		t.Fatalf("over-long description = (%d,%q), want (400,%q)", status, code, CodeDeckDescriptionInvalid)
 	}
-	// 两个字段都不给：没有可写字段，400（不是静默成功）。
+	// Neither field given: nothing to write, 400 (not a silent success).
 	if _, err := env.api.UpdateDeck(ctx, owner, deck.ID, UpdateDeckInput{}); err == nil {
 		t.Fatal("UpdateDeck(no fields) succeeded, want an error")
 	} else if status, code := serviceCode(t, err); status != http.StatusBadRequest || code != CodeInvalidRequest {
@@ -162,14 +162,14 @@ func TestUpdateDeckRejectsInvalidText(t *testing.T) {
 	if reloaded.Name != deck.Name || reloaded.Description != deck.Description {
 		t.Errorf("deck changed by a rejected update: %q/%q", reloaded.Name, reloaded.Description)
 	}
-	// 空描述合法：显式给空串应清空描述。
+	// An empty description is legal: an explicit empty string should clear the description.
 	if _, err := env.api.UpdateDeck(ctx, owner, deck.ID, UpdateDeckInput{Name: strPtr(deck.Name), Description: strPtr("")}); err != nil {
 		t.Fatalf("UpdateDeck(empty description) error = %v, want nil", err)
 	}
 }
 
-// TestUpdateDeckPartialUpdateKeepsOmittedFields 是 AUDIT 回归：PATCH 只改给出的字段。
-// 修复前请求体字段是普通字符串，省略 description 会被当成空串写入，把原描述清掉。
+// TestUpdateDeckPartialUpdateKeepsOmittedFields is an AUDIT regression: PATCH changes only the fields given.
+// Before the fix the body fields were plain strings, so an omitted description was written as an empty string, wiping the original one.
 func TestUpdateDeckPartialUpdateKeepsOmittedFields(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_partial", store.RoleUser)
@@ -180,7 +180,7 @@ func TestUpdateDeckPartialUpdateKeepsOmittedFields(t *testing.T) {
 	}
 	ctx := t.Context()
 
-	// ① 只给名称：描述保持不变。
+	// ① Name only: the description stays unchanged.
 	if _, err := env.api.UpdateDeck(ctx, owner, deck.ID, UpdateDeckInput{Name: strPtr("Renamed")}); err != nil {
 		t.Fatalf("UpdateDeck(name only) error = %v", err)
 	}
@@ -192,7 +192,7 @@ func TestUpdateDeckPartialUpdateKeepsOmittedFields(t *testing.T) {
 		t.Fatalf("after name-only update = %q/%q, want Renamed/keep me", afterName.Name, afterName.Description)
 	}
 
-	// ② 只给描述：名称保持不变。
+	// ② Description only: the name stays unchanged.
 	if _, err := env.api.UpdateDeck(ctx, owner, deck.ID, UpdateDeckInput{Description: strPtr("new desc")}); err != nil {
 		t.Fatalf("UpdateDeck(description only) error = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestUpdateDeckPartialUpdateKeepsOmittedFields(t *testing.T) {
 	}
 }
 
-// TestUpdateDeckHTTPPartialBodyKeepsDescription 是同一回归的 HTTP 层验收：PATCH 只带 name。
+// TestUpdateDeckHTTPPartialBodyKeepsDescription is the HTTP-level acceptance for the same regression: PATCH carrying only name.
 func TestUpdateDeckHTTPPartialBodyKeepsDescription(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_http", store.RoleUser)
@@ -232,7 +232,7 @@ func TestUpdateDeckHTTPPartialBodyKeepsDescription(t *testing.T) {
 	}
 }
 
-// TestUpdateDeckUnknownID 断言未知卡组 id 返回 404。
+// TestUpdateDeckUnknownID asserts an unknown deck id returns 404.
 func TestUpdateDeckUnknownID(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "deck_upd_owner4", store.RoleUser)

@@ -12,8 +12,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedBasicNote 用 NoteStore.Create 建一条 basic note（同时生成它的 cards），返回 note。
-// 夹具走真实的生成管线，保证批量动作测试面对的是真实落库的 note 与 card。
+// seedBasicNote creates one basic note with NoteStore.Create (which also generates its cards) and returns the note.
+// The fixture goes through the real generation pipeline, so the bulk action tests face notes and cards that are genuinely persisted.
 func seedBasicNote(t *testing.T, env *testEnv, deckID uint64, front, back string, tags []string) *store.Note {
 	t.Helper()
 	n := &store.Note{DeckID: deckID, Kind: "basic", TagsJSON: store.TagsJSON(tags), CreatedAt: time.Now().UTC()}
@@ -23,7 +23,7 @@ func seedBasicNote(t *testing.T, env *testEnv, deckID uint64, front, back string
 	return n
 }
 
-// bulkResponse 解析批量动作响应体，便于逐字段断言。note_id 是对外 id（字符串）。
+// bulkResponse parses the bulk action response body for field-by-field assertions. note_id is the external id (a string).
 type bulkResponse struct {
 	DryRun   bool  `json:"dry_run"`
 	Affected int64 `json:"affected"`
@@ -33,7 +33,7 @@ type bulkResponse struct {
 	} `json:"skipped"`
 }
 
-// missingPublicID 是一个格式合法但库里不存在的 note 对外 id，用于断言逐行 not_found。
+// missingPublicID is a well-formed note external id that does not exist in the database, used to assert per-row not_found.
 const missingPublicID = "00000000-0000-7000-8000-000000000000"
 
 func decodeBulk(t *testing.T, raw []byte) bulkResponse {
@@ -45,7 +45,7 @@ func decodeBulk(t *testing.T, raw []byte) bulkResponse {
 	return r
 }
 
-// assertErrorCode 断言错误包壳里的稳定 code。
+// assertErrorCode asserts the stable code in the error envelope.
 func assertErrorCode(t *testing.T, raw []byte, want string) {
 	t.Helper()
 	var body struct {
@@ -61,9 +61,9 @@ func assertErrorCode(t *testing.T, raw []byte, want string) {
 	}
 }
 
-// TestBulkNotesRejectsInvalidRequestShapes 覆盖四类（此处五条）请求级拒绝：
-// 未知 action、note_ids 为空、note_ids 超过 500、tag 动作缺 tags、delete 带 tags。
-// 每条都必须 400 invalid_request，且一行都不写、不写审计。
+// TestBulkNotesRejectsInvalidRequestShapes covers four categories (five cases here) of request-level rejection:
+// unknown action, empty note_ids, note_ids above 500, a tag action without tags, delete with tags.
+// Each must be 400 invalid_request, writing no row and no audit entry.
 func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_reject", store.RoleUser)
@@ -79,7 +79,7 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 		if i > 1 {
 			b.WriteString(",")
 		}
-		// note_ids 是字符串数组；这里也拼成字符串，才真正测到「条数上限」而不是「类型不符」。
+		// note_ids is a string array; building strings here is what actually exercises the "count cap" rather than "wrong type".
 		fmt.Fprintf(&b, "%q", itoa(i))
 	}
 	b.WriteString("]")
@@ -101,7 +101,7 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 		})
 	}
 
-	// 零写入：note 未删、未打标签，且没有任何审计行。
+	// Zero writes: the note is not deleted, not tagged, and there is no audit row at all.
 	var notes int64
 	if err := env.db.Model(&store.Note{}).Where("deck_id = ?", deck.ID).Count(&notes).Error; err != nil {
 		t.Fatalf("count notes: %v", err)
@@ -112,7 +112,7 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 	if n, err := store.NewAuditStore(env.db).CountByAction(ctx, store.ActionNoteDelete); err != nil || n != 0 {
 		t.Errorf("note.delete audit rows = (%d, %v), want (0, nil)", n, err)
 	}
-	// 每个批量动作都不得留下审计行（认证中间件会为请求本身写一行，故不整表计数）。
+	// No bulk action may leave an audit row behind (the auth middleware writes one for the request itself, hence no whole-table count).
 	audit := store.NewAuditStore(env.db)
 	for _, action := range []string{store.ActionNoteDelete, store.ActionNoteTagAdd, store.ActionNoteTagRemove, store.ActionNoteTagSet} {
 		if n, err := audit.CountByAction(ctx, action); err != nil || n != 0 {
@@ -121,17 +121,17 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 	}
 }
 
-// TestBulkNotesSkipsMissingDeletedAndUnreadableRows 覆盖逐行判权：
-// 缺失与软删的 id -> not_found，无权编辑的 id -> insufficient_role，
-// 同一请求里其余被允许的行照常生效（单行被拒不回滚整批）。
+// TestBulkNotesSkipsMissingDeletedAndUnreadableRows covers per-row authorization:
+// a missing or soft-deleted id -> not_found, an id without edit permission -> insufficient_role,
+// while the other permitted rows in the same request still take effect (one rejected row does not roll back the batch).
 func TestBulkNotesSkipsMissingDeletedAndUnreadableRows(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	ctx := context.Background()
 	owner := seedUser(t, env.db, "bulk_owner", store.RoleUser)
 	other := seedUser(t, env.db, "bulk_other", store.RoleUser)
-	deckA := seedDeck(t, env.db, owner.ID) // owner 是属主，可编辑
-	deckB := seedDeck(t, env.db, other.ID) // owner 仅被授予 reader
-	deckC := seedDeck(t, env.db, other.ID) // owner 完全无权
+	deckA := seedDeck(t, env.db, owner.ID) // owner is the owner of the deck and can edit
+	deckB := seedDeck(t, env.db, other.ID) // owner is only granted reader
+	deckC := seedDeck(t, env.db, other.ID) // owner has no rights at all
 
 	editable := seedBasicNote(t, env, deckA.ID, "q1", "a1", nil)
 	deleted := seedBasicNote(t, env, deckA.ID, "q2", "a2", nil)
@@ -176,7 +176,7 @@ func TestBulkNotesSkipsMissingDeletedAndUnreadableRows(t *testing.T) {
 		}
 	}
 
-	// 只有被允许的那一行真的改了；其余三行原样保留。
+	// Only the permitted row was actually changed; the other three are left untouched.
 	noteStore := store.NewNoteStore(env.db)
 	tags, _ := noteStore.ByID(ctx, editable.ID)
 	if got, _ := store.ParseTags(tags.TagsJSON); !containsTag(got, "bulk") {
@@ -193,8 +193,8 @@ func TestBulkNotesSkipsMissingDeletedAndUnreadableRows(t *testing.T) {
 	}
 }
 
-// TestBulkNotesIsIdempotentAndAuditsOnce 断言重复提交同一请求第二次 affected=0，
-// 且整批只写一行审计，detail 里带 ids 与 affected。
+// TestBulkNotesIsIdempotentAndAuditsOnce asserts that resubmitting the same request a second time yields affected=0,
+// and that the whole batch writes exactly one audit row, with ids and affected in detail.
 func TestBulkNotesIsIdempotentAndAuditsOnce(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_idem", store.RoleUser)
@@ -222,7 +222,7 @@ func TestBulkNotesIsIdempotentAndAuditsOnce(t *testing.T) {
 
 	audit := store.NewAuditStore(env.db)
 	if n, err := audit.CountByAction(context.Background(), store.ActionNoteTagAdd); err != nil || n != 2 {
-		// 两次请求各写一行审计（整批一行）；affected 第二次为 0 仍留痕。
+		// Each of the two requests writes one audit row (one per batch); the second leaves a trace even with affected=0.
 		t.Errorf("note.tag_add audit rows = (%d, %v), want (2, nil)", n, err)
 	}
 	var last store.AuditLog
@@ -239,9 +239,9 @@ func TestBulkNotesIsIdempotentAndAuditsOnce(t *testing.T) {
 	}
 }
 
-// TestBulkNotesDryRunChangesNothing 断言 dry_run 只计数：不改任何行、不写审计。
-// 请求里故意混入一个本用户无权编辑的 id：dry_run 必须连 permission.denied 也不留
-// （逐行静默判权），但照样在 skipped 里如实报出该行的 code。
+// TestBulkNotesDryRunChangesNothing asserts dry_run only counts: it changes no row and writes no audit.
+// The request deliberately mixes in an id this user cannot edit: dry_run must not leave even a permission.denied entry behind
+// (per-row silent authorization), yet must still report that row's code faithfully in skipped.
 func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	ctx := context.Background()
@@ -250,7 +250,7 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 	deck := seedDeck(t, env.db, user.ID)
 	a := seedBasicNote(t, env, deck.ID, "q1", "a1", nil)
 	b := seedBasicNote(t, env, deck.ID, "q2", "a2", nil)
-	// 另一个人的卡组，user 只被授予 reader：可读不可改。
+	// Someone else's deck where user is only granted reader: readable, not editable.
 	otherDeck := seedDeck(t, env.db, other.ID)
 	readonly := seedBasicNote(t, env, otherDeck.ID, "q3", "a3", nil)
 	if err := store.NewGrantStore(env.db).Grant(ctx, otherDeck.ID, other.ID, store.RoleReader, store.Ptr(other.ID)); err != nil {
@@ -283,8 +283,8 @@ func TestBulkNotesDryRunChangesNothing(t *testing.T) {
 			t.Errorf("note %d tags = %v, want unchanged (dry_run must not write)", id, got)
 		}
 	}
-	// dry_run 不写任何批量动作审计行（认证中间件为请求本身写的那一行不算），
-	// 逐行判权失败也不得留下 permission.denied —— 那正是「dry_run 零副作用」的一部分。
+	// dry_run writes no bulk action audit row (the one the auth middleware writes for the request itself does not count),
+	// and a per-row authorization failure must not leave permission.denied either - that is part of "dry_run has zero side effects".
 	audit := store.NewAuditStore(env.db)
 	for _, action := range []string{store.ActionNoteDelete, store.ActionNoteTagAdd, store.ActionNoteTagRemove, store.ActionNoteTagSet, store.ActionPermissionDenied} {
 		if n, err := audit.CountByAction(ctx, action); err != nil || n != 0 {

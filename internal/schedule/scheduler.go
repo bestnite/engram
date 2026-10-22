@@ -1,11 +1,11 @@
-// Package schedule 是 go-fsrs 的薄封装：把数据库里的整数状态/评分与 FSRS v6 的类型互转，
-// 并在此之上做队列构建。服务只做三件事 —— 持久化状态、构造队列、把评分喂给调度器
-// 因此本包刻意不引入业务规则之外的抽象。
+// Package schedule is a thin wrapper around go-fsrs: it converts the integer states/ratings in the database to and from FSRS v6 types,
+// and builds queues on top of it. The service only does three things — persist state, construct the queue, feed the ratings to the scheduler
+// so this package deliberately introduces no abstractions beyond the business rules.
 //
-// 整数约定（AGENTS.md §2.3 第 3 条）：评分用 1–4（Again/Hard/Good/Easy），
-// 状态用 0–3（New/Learning/Review/Relearning），与 FSRS 生态的复习日志格式一致，
-// 将来接优化器零转换。数据库里 state 存字符串（new/learning/review/relearning），
-// 在边界处转成整数。
+// Integer conventions (AGENTS.md §2.3 item 3): ratings use 1–4 (Again/Hard/Good/Easy),
+// states use 0–3 (New/Learning/Review/Relearning), consistent with the review log format of the FSRS ecosystem,
+// so plugging in the optimiser later needs zero conversion. The database stores state as a string (new/learning/review/relearning),
+// converted to integers at the boundary.
 package schedule
 
 import (
@@ -20,10 +20,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Rating 是四档自评分；取值 1–4，与 reviews.rating 一致。
+// Rating is the four-level self-grade; values 1–4, matching reviews.rating.
 type Rating int
 
-// 四档评分。数值是契约的一部分，不得调整（数据库列与优化器导出依赖它们）。
+// The four rating levels. The numeric values are part of the contract and must not be adjusted (the database columns and the optimiser export depend on them).
 const (
 	Again Rating = 1
 	Hard  Rating = 2
@@ -31,7 +31,7 @@ const (
 	Easy  Rating = 4
 )
 
-// String 返回英文名，仅用于日志与错误信息（给机器看的用英文）。
+// String returns the English name, used only for logs and error messages (machine-facing text is English).
 func (r Rating) String() string {
 	switch r {
 	case Again:
@@ -47,13 +47,13 @@ func (r Rating) String() string {
 	}
 }
 
-// Valid 判断评分是否落在 1–4 内。
+// Valid reports whether the rating falls within 1–4.
 func (r Rating) Valid() bool { return r >= Again && r <= Easy }
 
-// State 是卡片所处的调度阶段；取值 0–3，与 reviews.state_before 一致。
+// State is the scheduling phase the card is in; values 0–3, matching reviews.state_before.
 type State int
 
-// 四个调度阶段；数值与 FSRS 的 State 以及评审日志约定一致。
+// The four scheduling phases; the numeric values match FSRS's State and the review log convention.
 const (
 	StateNew        State = 0
 	StateLearning   State = 1
@@ -61,8 +61,8 @@ const (
 	StateRelearning State = 3
 )
 
-// ParseState 把数据库里的字符串状态转成整数。未知取值报英文错误而不是静默归一化：
-// 静默会掩盖迁移或调用方拼写错误。
+// ParseState converts the string state from the database into an integer. Unknown values report an English error rather than silently normalising:
+// silence would hide a migration bug or a caller's typo.
 func ParseState(s string) (State, error) {
 	switch s {
 	case "new":
@@ -78,7 +78,7 @@ func ParseState(s string) (State, error) {
 	}
 }
 
-// String 返回数据库里使用的字符串状态，是本包与 store 之间的唯一翻译点。
+// String returns the string state used in the database; this is the single translation point between this package and store.
 func (s State) String() string {
 	switch s {
 	case StateNew:
@@ -94,17 +94,17 @@ func (s State) String() string {
 	}
 }
 
-// fsrsState 把整数状态转成 go-fsrs 的 State。
+// fsrsState converts an integer state into go-fsrs's State.
 func (s State) fsrsState() fsrs.State { return fsrs.State(s) }
 
-// stateFromFSRS 把 go-fsrs 的 State 转回整数状态。
+// stateFromFSRS converts go-fsrs's State back into the integer state.
 func stateFromFSRS(s fsrs.State) State { return State(s) }
 
-// Outcome 是一次评分（或预览）的调度结果；字段与 card_states / reviews 的写入口径对齐，
-// 让提交事务可以直接取用而不必再算第二遍。
+// Outcome is the scheduling result of one grade (or preview); the fields align with what is written to card_states / reviews,
+// so the submit transaction can use it directly without computing it a second time.
 type Outcome struct {
 	Rating         Rating
-	Due            time.Time // UTC 到期时间
+	Due            time.Time // UTC due time
 	State          State
 	Stability      float64
 	Difficulty     float64
@@ -112,19 +112,19 @@ type Outcome struct {
 	Reps           int
 	Lapses         int
 	RemainingSteps int
-	// IntervalDays 是本次评分产生的实际间隔（天，可为小数，学习步骤以分钟计）。
+	// IntervalDays is the actual interval produced by this grade (days, may be fractional; learning steps are counted in minutes).
 	IntervalDays float64
 }
 
-// Scheduler 持有由某个 preset 构造出的 FSRS 参数；无状态，可并发复用。
+// Scheduler holds the FSRS parameters built from some preset; it is stateless and safe to reuse concurrently.
 type Scheduler struct {
 	fsrs *fsrs.FSRS
-	// preview 与 fsrs 参数相同，只是关掉了 fuzz，供 Preview 使用（原因见 Preview）。
+	// preview has the same parameters as fsrs but with fuzz turned off, used by Preview (reason in Preview).
 	preview *fsrs.FSRS
 }
 
-// NewScheduler 从 preset 构造调度器：权重取 preset.WeightsJSON（支持 17/19/21 维自动迁移），
-// 为 NULL 时用 fsrs.DefaultWeights()；学习/再学习步骤、目标保留率、最大间隔与 fuzz 均来自 preset。
+// NewScheduler builds a scheduler from a preset: weights come from preset.WeightsJSON (with automatic 17/19/21-dimension migration),
+// falling back to fsrs.DefaultWeights() when NULL; learning/relearning steps, target retention, maximum interval and fuzz all come from the preset.
 func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	p, err := Parameters(preset)
 	if err != nil {
@@ -135,9 +135,9 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	return &Scheduler{fsrs: fsrs.NewFSRS(p), preview: fsrs.NewFSRS(unfuzzed)}, nil
 }
 
-// Parameters 从 preset 装配 go-fsrs 参数，是「排程参数如何来」的唯一来源：
-// 权重（17/19/21 维自动迁移，NULL 用默认）、目标保留率、学习/再学习步骤、最大间隔与 fuzz。
-// NewScheduler 与拟合回放都走这里，避免两处各写一份装配而慢慢跑偏。
+// Parameters assembles go-fsrs parameters from a preset and is the single source of "where the scheduling parameters come from":
+// weights (automatic 17/19/21-dimension migration, default when NULL), target retention, learning/relearning steps, maximum interval and fuzz.
+// NewScheduler and the fit replay both go through here, so the assembly is not written twice and cannot slowly drift apart.
 func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	if preset == nil {
 		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")
@@ -149,8 +149,8 @@ func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	return parametersWithWeights(preset, weights)
 }
 
-// ParametersWithWeights 与 Parameters 相同，但用给定权重覆盖 preset 的权重。
-// 拟合对比要在「同一批复习、同一套其余参数」下分别评估旧/新权重，这个入口就是为此而生。
+// ParametersWithWeights is the same as Parameters but overrides the preset's weights with the given ones.
+// The fit comparison must evaluate the old/new weights under "the same batch of reviews and the same other parameters", and this entry point exists for exactly that.
 func ParametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Parameters, error) {
 	if preset == nil {
 		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")
@@ -158,7 +158,7 @@ func ParametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Par
 	return parametersWithWeights(preset, weights)
 }
 
-// parametersWithWeights 是 Parameters / ParametersWithWeights 的公共实现。
+// parametersWithWeights is the shared implementation of Parameters / ParametersWithWeights.
 func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Parameters, error) {
 	learning, err := parseSteps(preset.LearningSteps)
 	if err != nil {
@@ -176,12 +176,12 @@ func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Par
 	p.W = weights
 	p.LearningSteps = learning
 	p.RelearningSteps = relearning
-	// DefaultParam 保持 EnableShortTerm=true，即"学习步骤 + 短期记忆"的行为。
+	// DefaultParam keeps EnableShortTerm=true, i.e. the "learning steps + short-term memory" behaviour.
 
 	return p, nil
 }
 
-// presetWeights 解析 preset.WeightsJSON。NULL / 空 / "null" 均视为使用默认权重。
+// presetWeights parses preset.WeightsJSON. NULL / empty / "null" are all treated as using the default weights.
 func presetWeights(raw *string) (fsrs.Weights, error) {
 	if raw == nil || strings.TrimSpace(*raw) == "" {
 		return fsrs.DefaultWeights(), nil
@@ -201,8 +201,8 @@ func presetWeights(raw *string) (fsrs.Weights, error) {
 	return w, nil
 }
 
-// parseSteps 解析 "1m,10m" 这类学习步骤；空串表示关闭学习步骤（返回 nil）。
-// 支持 s/m/h/d 后缀，缺省按分钟处理，与 preset 的文档化默认值一致。
+// parseSteps parses learning steps such as "1m,10m"; an empty string means learning steps are disabled (returns nil).
+// Supports s/m/h/d suffixes; a missing suffix is treated as minutes, matching the documented defaults of the preset.
 func parseSteps(spec string) ([]float64, error) {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
@@ -227,7 +227,7 @@ func parseSteps(spec string) ([]float64, error) {
 	return steps, nil
 }
 
-// stepMinutes 把单个步骤（如 "10m"）转成分钟数。
+// stepMinutes converts a single step (e.g. "10m") into minutes.
 func stepMinutes(part string) (float64, error) {
 	idx := len(part)
 	for idx > 0 {
@@ -256,11 +256,11 @@ func stepMinutes(part string) (float64, error) {
 	}
 }
 
-// cardFromState 把数据库行转成 go-fsrs 的 Card。
+// cardFromState converts a database row into go-fsrs's Card.
 //
-// 学习步骤游标：go-fsrs 的 RemainingSteps 是「还剩几步」的倒计时，card_states.step_index 的语义
-// 与之同向（已冻结为「剩余」步数）——不要读成「已走步数」，否则状态机会整体反着跑。
-// 首次评分之后由 FSRS 接管该字段。
+// Learning-step cursor: go-fsrs's RemainingSteps counts down "how many steps remain", and card_states.step_index has the same semantics
+// (it is frozen as "remaining" steps) — do not read it as "steps already taken", otherwise the state machine runs backwards overall.
+// After the first grade, FSRS takes over this field.
 func cardFromState(st *store.CardState) (fsrs.Card, error) {
 	state, err := ParseState(st.State)
 	if err != nil {
@@ -280,11 +280,11 @@ func cardFromState(st *store.CardState) (fsrs.Card, error) {
 	return c, nil
 }
 
-// Preview 预览四档评分的调度结果，不改动任何状态；返回顺序固定为 Again/Hard/Good/Easy。
+// Preview previews the scheduling result of the four ratings without changing any state; the order is always Again/Hard/Good/Easy.
 //
-// 预览不加 fuzz：go-fsrs 的 fuzz 种子含毫秒级的评分时刻，复习页翻面时算的预览与真正提交时
-// 各算一次，加了 fuzz 的结果必然不同。预览给的是 fuzz 之前的中心值，提交时的实际间隔可能
-// 在它附近小幅偏移（fuzz 只作用于 2.5 天以上的间隔）；未开 fuzz 的预设两者完全一致。
+// Preview does not apply fuzz: the go-fsrs fuzz seed includes the millisecond-level grading instant, and the preview computed when the review page is flipped
+// and the one computed at actual submission are separate runs, so with fuzz the results would necessarily differ. Preview gives the central value before fuzz; the actual interval at submission may
+// drift slightly around it (fuzz only applies to intervals of 2.5 days and above); with fuzz disabled in the preset the two are identical.
 func (s *Scheduler) Preview(st *store.CardState, now time.Time) ([]Outcome, error) {
 	card, err := cardFromState(st)
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Scheduler) Preview(st *store.CardState, now time.Time) ([]Outcome, erro
 	return out, nil
 }
 
-// Next 提交一个评分并返回推进后的状态。
+// Next submits a grade and returns the advanced state.
 func (s *Scheduler) Next(st *store.CardState, now time.Time, rating Rating) (Outcome, error) {
 	if !rating.Valid() {
 		return Outcome{}, fmt.Errorf("schedule: invalid rating %d", int(rating))
@@ -318,7 +318,7 @@ func (s *Scheduler) Next(st *store.CardState, now time.Time, rating Rating) (Out
 	return outcomeFrom(rating, info, now), nil
 }
 
-// Retrievability 返回卡片在 now 时点的记忆保持概率，供队列排序使用；学习/新卡返回 0。
+// Retrievability returns the card's recall probability at instant now, used for queue ordering; learning/new cards return 0.
 func (s *Scheduler) Retrievability(st *store.CardState, now time.Time) (float64, error) {
 	card, err := cardFromState(st)
 	if err != nil {
@@ -327,7 +327,7 @@ func (s *Scheduler) Retrievability(st *store.CardState, now time.Time) (float64,
 	return s.fsrs.Retrievability(card, now.UTC())
 }
 
-// outcomeFrom 把 go-fsrs 的结果摊平成整数导向的 Outcome。
+// outcomeFrom flattens the go-fsrs result into the integer-oriented Outcome.
 func outcomeFrom(rating Rating, info fsrs.SchedulingInfo, now time.Time) Outcome {
 	due := info.Card.Due.UTC()
 	interval := due.Sub(now.UTC()).Hours() / 24

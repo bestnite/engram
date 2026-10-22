@@ -13,20 +13,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// UndoReviewInput 是一次撤销的入参：CardID 是要撤销最后一次评分的卡的对外 id。
+// UndoReviewInput is the input of one undo: CardID is the external id of the card whose last grade is being undone.
 type UndoReviewInput struct {
 	CardID string
-	// ExpectedVersion 是调用方读到的 card_states.version，通常是它刚提交评分后得到的版本。
-	// 撤销据此绑定目标评分：不匹配返回 409，且不删任何评分——重放请求与双开窗口因此不会
-	// 误删另一条历史评分。
+	// ExpectedVersion is the card_states.version the caller read, usually the one it got right after submitting a grade.
+	// The undo binds its target grade on it: a mismatch returns 409 and deletes no grade at all - so a replayed request or a double-open window cannot
+	// wrongly delete another historical grade.
 	ExpectedVersion int
 }
 
-// UndoReviewResult 是撤销的响应形态。
+// UndoReviewResult is the response shape of an undo.
 //
-// CardID 是被撤销卡的对外 id：撤销会把这张卡放回队列，而队列按 due_at 排序，
-// 它不保证排在首位，调用方必须据此字段（而不是队列顺序）把当前卡定位回它。
-// 其余字段是恢复后的状态，供调用方展示或继续调度。
+// CardID is the external id of the undone card: an undo puts the card back in the queue, and the queue is ordered by due_at,
+// so it is not guaranteed to come first; the caller must relocate the current card using this field (not the queue order).
+// The remaining fields are the restored state, for the caller to display or keep scheduling with.
 type UndoReviewResult struct {
 	CardID    string     `json:"card_id"`
 	State     string     `json:"state"`
@@ -35,16 +35,16 @@ type UndoReviewResult struct {
 	Stability *float64   `json:"stability"`
 }
 
-// UndoReview 撤销一张卡的最后一次评分：恢复 card_states、删除被撤销的 reviews 行，
-// 并写一条审计行。全部业务逻辑在 schedule.Rollback 里，这里只做身份解析与事务边界
-// （一种业务逻辑、两条传输：REST 与 MCP 共用这一份实现）。
+// UndoReview undoes the last grade of a card: it restores card_states, deletes the undone reviews rows,
+// and writes one audit row. All the logic is in schedule.Rollback; this only does identity resolution and the transaction boundary
+// (one piece of logic, two transports: REST and MCP share this single implementation).
 //
-// 判权用 reader：撤销写的是调用者本人的 (card_id, user_id) 进度，共享卡组的读者可以
-// 撤销自己刚做的评分，不影响属主与其他成员。卡组范围由调用方先行整次校验（web 层
-// 复用 reviewCard），这里再对目标卡所在卡组要求 reader 作为兜底。
+// Authorization uses reader: an undo writes the caller's own (card_id, user_id) progress, so readers of a shared deck can
+// undo a grade they just made without affecting the owner or other members. Deck scope is validated wholesale by the caller first (the web layer
+// reuses reviewCard), and reader on the target card's deck is required here as a backstop.
 //
-// 该卡没有任何复习日志时返回 409 conflict（ErrNothingToUndo）；状态行在读取后被并发
-// 改过时返回 409 version_conflict（ErrVersionConflict），与 SubmitReview 同口径。
+// When the card has no review log at all it returns 409 conflict (ErrNothingToUndo); when the state row was concurrently
+// modified after being read it returns 409 version_conflict (ErrVersionConflict), the same convention as SubmitReview.
 func (a *API) UndoReview(ctx context.Context, u *store.User, in UndoReviewInput) (UndoReviewResult, error) {
 	if strings.TrimSpace(in.CardID) == "" {
 		return UndoReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "card_id is required")

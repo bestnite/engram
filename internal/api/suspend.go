@@ -13,16 +13,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 暂停与恢复：每个用户对自己的卡做的决定，只写调用者自己的 card_states.suspended_at。
-// 读者也可以暂停（与埋藏一样，它写的是本人进度）；REST、网页复习页与卡组笔记列表都经过这里。
+// Suspend and unsuspend: a decision each user makes about their own cards, writing only the caller's own card_states.suspended_at.
+// Readers may suspend too (like burying, it writes their own progress); REST, the web review page and the deck note list all go through here.
 
-// SuspensionResult 是暂停 / 恢复的结果；Cards 是受影响的卡（对外 id）。
+// SuspensionResult is the outcome of suspend / unsuspend; Cards are the affected cards (external ids).
 type SuspensionResult struct {
 	Suspended bool     `json:"suspended"`
 	Cards     []string `json:"cards"`
 }
 
-// SetCardSuspended 暂停或恢复调用者的一张卡。
+// SetCardSuspended suspends or unsuspends one of the caller's cards.
 func (a *API) SetCardSuspended(ctx context.Context, u *store.User, apiKeyID *uint64, cardPublicID string, suspended bool) (SuspensionResult, error) {
 	card, err := a.cards.ByPublicID(ctx, strings.TrimSpace(cardPublicID))
 	if err != nil {
@@ -34,7 +34,7 @@ func (a *API) SetCardSuspended(ctx context.Context, u *store.User, apiKeyID *uin
 	return a.setSuspended(ctx, u, apiKeyID, []store.Card{*card}, suspended)
 }
 
-// SetNoteSuspended 暂停或恢复调用者在一条 note 下的全部卡（卡组笔记列表的「暂停 / 取消暂停」）。
+// SetNoteSuspended suspends or unsuspends all of the caller's cards under one note ("suspend / unsuspend" in the deck note list).
 func (a *API) SetNoteSuspended(ctx context.Context, u *store.User, apiKeyID *uint64, notePublicID string, suspended bool) (SuspensionResult, error) {
 	note, err := a.notes.ByPublicID(ctx, strings.TrimSpace(notePublicID))
 	if err != nil {
@@ -50,7 +50,7 @@ func (a *API) SetNoteSuspended(ctx context.Context, u *store.User, apiKeyID *uin
 	return a.setSuspended(ctx, u, apiKeyID, cards, suspended)
 }
 
-// setSuspended 在一个事务里改写这些卡的暂停状态，并逐卡留审计。
+// setSuspended rewrites the suspension state of these cards in one transaction and leaves an audit entry per card.
 func (a *API) setSuspended(ctx context.Context, u *store.User, apiKeyID *uint64, cards []store.Card, suspended bool) (SuspensionResult, error) {
 	out := SuspensionResult{Suspended: suspended, Cards: make([]string, 0, len(cards))}
 	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -84,7 +84,7 @@ func (a *API) setSuspended(ctx context.Context, u *store.User, apiKeyID *uint64,
 	return out, nil
 }
 
-// putCardSuspension / deleteCardSuspension 是 PUT / DELETE /api/v1/cards/:id/suspension（scope: review）。
+// putCardSuspension / deleteCardSuspension are PUT / DELETE /api/v1/cards/:id/suspension (scope: review).
 func (a *API) putCardSuspension(c *gin.Context)    { a.cardSuspension(c, true) }
 func (a *API) deleteCardSuspension(c *gin.Context) { a.cardSuspension(c, false) }
 
@@ -102,7 +102,7 @@ func (a *API) cardSuspension(c *gin.Context, suspended bool) {
 	c.JSON(http.StatusOK, res)
 }
 
-// putNoteSuspension / deleteNoteSuspension 是 PUT / DELETE /api/v1/notes/:id/suspension（scope: review）。
+// putNoteSuspension / deleteNoteSuspension are PUT / DELETE /api/v1/notes/:id/suspension (scope: review).
 func (a *API) putNoteSuspension(c *gin.Context)    { a.noteSuspension(c, true) }
 func (a *API) deleteNoteSuspension(c *gin.Context) { a.noteSuspension(c, false) }
 

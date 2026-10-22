@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newDeckWithNote 建一个卡组与一张 basic note，返回两者。
+// newDeckWithNote creates a deck and a basic note and returns both.
 func newDeckWithNote(t *testing.T, env *testEnv, ownerID uint64) (*store.Deck, *store.Note) {
 	t.Helper()
 	deck := seedDeck(t, env.db, ownerID)
@@ -21,7 +21,7 @@ func newDeckWithNote(t *testing.T, env *testEnv, ownerID uint64) (*store.Deck, *
 	return deck, note
 }
 
-// serviceCode 从 error 中取出稳定 code，便于断言越权分支。
+// serviceCode pulls the stable code out of an error, for asserting the unauthorized branches.
 func serviceCode(t *testing.T, err error) (int, string) {
 	t.Helper()
 	if err == nil {
@@ -31,7 +31,7 @@ func serviceCode(t *testing.T, err error) (int, string) {
 	return se.Status, se.Code
 }
 
-// TestReaderCannotModifyNote 是反面用例：reader 能看能复习，但不能改卡片内容。
+// TestReaderCannotModifyNote is the negative case: a reader can read and review but cannot change card content.
 func TestReaderCannotModifyNote(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "reader_owner", store.RoleUser)
@@ -44,12 +44,12 @@ func TestReaderCannotModifyNote(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// 正例：reader 可以列出卡片（能看）。
+	// Positive: a reader can list cards (can read).
 	if _, _, err := env.api.ListNotes(ctx, reader.ID, deck.ID, store.NoteListOptions{}); err != nil {
 		t.Fatalf("reader ListNotes error = %v, want nil", err)
 	}
 
-	// 反面：reader 更新卡片内容被拒，code = insufficient_role。
+	// Negative: a reader updating card content is rejected, code = insufficient_role.
 	_, err := env.api.UpdateNote(ctx, reader.ID, note.ID, nil, UpdateNoteInput{
 		Kind:   "basic",
 		Fields: map[string]any{"front": "hacked", "back": "hacked"},
@@ -59,7 +59,7 @@ func TestReaderCannotModifyNote(t *testing.T) {
 		t.Fatalf("reader UpdateNote = (%d,%q), want (403,%q)", status, code, CodeInsufficientRole)
 	}
 
-	// 反面：reader 删除卡片同样被拒。
+	// Negative: a reader deleting a card is likewise rejected.
 	if _, err := env.api.DeleteNote(ctx, reader.ID, note.ID, nil); err != nil {
 		if _, code := serviceCode(t, err); code != CodeInsufficientRole {
 			t.Fatalf("reader DeleteNote code = %q, want %q", code, CodeInsufficientRole)
@@ -68,7 +68,7 @@ func TestReaderCannotModifyNote(t *testing.T) {
 		t.Fatalf("reader DeleteNote succeeded, want insufficient_role")
 	}
 
-	// 确认内容未被改动。
+	// Confirm the content was not changed.
 	got, err := store.NewNoteStore(env.db).ByID(ctx, note.ID)
 	if err != nil {
 		t.Fatalf("reload note: %v", err)
@@ -79,8 +79,8 @@ func TestReaderCannotModifyNote(t *testing.T) {
 	}
 }
 
-// TestEditorCannotChangeDeckSettingsOrGrants 是反面用例：
-// editor 能改卡片内容，但改不了卡组设置（owner 级）与授权。
+// TestEditorCannotChangeDeckSettingsOrGrants is the negative case:
+// an editor can change card content but not deck settings (owner level) or grants.
 func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "editor_owner", store.RoleUser)
@@ -93,7 +93,7 @@ func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// 正例：editor 可以改卡片内容。
+	// Positive: an editor can change card content.
 	if _, err := env.api.UpdateNote(ctx, editor.ID, note.ID, nil, UpdateNoteInput{
 		Kind:   "basic",
 		Fields: map[string]any{"front": "edited", "back": "edited"},
@@ -101,7 +101,7 @@ func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 		t.Fatalf("editor UpdateNote error = %v, want nil", err)
 	}
 
-	// 反面：editor 达不到 owner 门槛（卡组设置 / 授权都是 owner 级），code = insufficient_role。
+	// Negative: an editor falls short of the owner threshold (deck settings / grants are owner level), code = insufficient_role.
 	_, err := env.api.RequireDeckRole(ctx, editor.ID, deck.ID, store.RoleOwner)
 	status, code := serviceCode(t, err)
 	if status != http.StatusForbidden || code != CodeInsufficientRole {
@@ -109,7 +109,7 @@ func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 	}
 }
 
-// TestUnauthorizedCannotSeeDeck 覆盖“未授权用户看不到卡组”：无任何授权的用户连读都被拒（403 forbidden）。
+// TestUnauthorizedCannotSeeDeck covers "an unauthorized user cannot see the deck": a user with no grant at all is rejected even for reading (403 forbidden).
 func TestUnauthorizedCannotSeeDeck(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "stranger_owner", store.RoleUser)
@@ -128,7 +128,7 @@ func TestUnauthorizedCannotSeeDeck(t *testing.T) {
 	}
 }
 
-// TestRevokeTakesEffectImmediately 覆盖「撤销立即生效」：撤销后下一个请求即被拒。
+// TestRevokeTakesEffectImmediately covers "revocation applies immediately": the next request after revocation is rejected.
 func TestRevokeTakesEffectImmediately(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "revoke_owner", store.RoleUser)
@@ -144,7 +144,7 @@ func TestRevokeTakesEffectImmediately(t *testing.T) {
 		t.Fatalf("granted read denied: %v", err)
 	}
 
-	// 撤销后，紧接着的同一个请求被判 403。
+	// After revocation, the very same request is judged 403.
 	if err := grants.Revoke(ctx, deck.ID, member.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestRevokeTakesEffectImmediately(t *testing.T) {
 	}
 }
 
-// TestHTTPReaderUpdateReturnsStableCode 从 HTTP 层确认越权响应体带稳定英文 code。
+// TestHTTPReaderUpdateReturnsStableCode confirms at the HTTP layer that the unauthorized response body carries a stable English code.
 func TestHTTPReaderUpdateReturnsStableCode(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "http_owner", store.RoleUser)
@@ -164,7 +164,7 @@ func TestHTTPReaderUpdateReturnsStableCode(t *testing.T) {
 	if err := store.NewGrantStore(env.db).Grant(context.Background(), deck.ID, reader.ID, store.RoleReader, store.Ptr(owner.ID)); err != nil {
 		t.Fatalf("grant reader: %v", err)
 	}
-	// reader 持有 write scope 的 key，但卡组角色不够 —— 两道门都要过。
+	// The reader holds a key with write scope, but the deck role is not enough - both doors must open.
 	key := seedKey(t, env.keys, reader.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := "/api/v1/notes/" + note.PublicID

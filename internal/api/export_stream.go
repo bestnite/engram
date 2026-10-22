@@ -8,18 +8,18 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 流式导出。放在独立文件里，与批量导入的内部实现分开，
-// 两者都在 service 层，REST handler 与 MCP 工具共用。
+// Streaming export. It lives in its own file, separate from the bulk import internals,
+// though both sit in the service layer and are shared by REST handlers and MCP tools.
 
-// exportDefaultPageSize 是导出分页的默认页大小：每页读满即关闭游标，页与页之间连接是空闲的。
-// 页大小同时是三个上界：一页的内存、一条数据库连接被占用的时长、每页一次查询的开销。
-// 500 行足以摊薄每页一次查询的成本，同时让导出 1 万条 note 的峰值内存不随总数增长。
+// exportDefaultPageSize is the default page size for export paging: the cursor closes as soon as a page is read and the connection is idle between pages.
+// The page size is at once three bounds: the memory of one page, how long a database connection is held, and the cost of one query per page.
+// 500 rows is enough to amortize the one-query-per-page cost while keeping peak memory for exporting 10k notes independent of the total.
 const exportDefaultPageSize = 500
 
-// exportScanRow 是导出游标的一行原始列；字段名与 SELECT 列表一一对应，由 GORM 按列名映射。
-// id 列取各实体的 public_id（对外 id），不再取自增主键。
-// card_pk 是例外：它是 cards 的自增主键，只用来推进键集分页，不对调用方暴露，
-// 因此不进 ExportRow。
+// exportScanRow is one raw row of columns from the export cursor; the field names match the SELECT list one-to-one and GORM maps them by column name.
+// The id columns take each entity's public_id (external id), no longer the auto-increment primary key.
+// card_pk is the exception: it is cards' auto-increment primary key, used only to advance keyset paging and never exposed to callers,
+// hence it is not part of ExportRow.
 type exportScanRow struct {
 	CardPK      uint64
 	CardID      string
@@ -36,23 +36,23 @@ type exportScanRow struct {
 	Lapses      *int
 }
 
-// exportPageRow 是一页里的一行：对外的形态，外加推进下一页用的自增主键。
+// exportPageRow is one row within a page: the external shape plus the auto-increment primary key used to advance to the next page.
 type exportPageRow struct {
 	cardPK uint64
 	out    ExportRow
 }
 
-// ExportCards 以回调方式分页读出卡片级导出数据：取一页（读完即关闭游标），把这一页逐行交给
-// emit，再取下一页；emit 返回错误时立即中止（供 HTTP 客户端断开或写入失败时提前收场）。
+// ExportCards reads card-level export data page by page via a callback: take a page (closing the cursor once read), hand that page row by row to
+// emit, then take the next page; an error from emit aborts at once (so a disconnected HTTP client or a failed write can end early).
 //
-// 分页而不是一条游标读到底，是因为「游标不读完」等于「连接不还」：SQLite 部署把连接数压到 1，
-// 写入靠这一点串行化（见 internal/store/store.go）。若一条游标直接对着 http.ResponseWriter
-// 逐行写，客户端读得慢（慢速连接或恶意慢读）就会让唯一的连接被占住整段导出时间，
-// 期间服务里所有其它数据库访问都在连接池里排队。分页后连接只在「取一页」期间被占用，
-// 写响应体的整段时间里连接是空闲的。
+// Paging rather than draining a single cursor is because "a cursor not read to the end" equals "a connection not returned": the SQLite deployment caps connections at 1,
+// and writes are serialized on that (see internal/store/store.go). If one cursor streamed rows straight at the http.ResponseWriter,
+// a slow-reading client (slow link or a deliberately slow read) would occupy the single connection for the whole export,
+// while every other database access in the service queues in the pool. With paging the connection is held only while "fetching a page",
+// and it is idle for the entire time the response body is written.
 //
-// 内存仍有界：任意时刻最多一页（API.exportPageSize 行）在内存里，不随导出行数增长。
-// 需要整体切片时用 CollectExportRows（MCP 工具必须一次返回完整 JSON）。
+// Memory is still bounded: at most one page (API.exportPageSize rows) is in memory at any moment, independent of the number of exported rows.
+// Use CollectExportRows when a whole slice is needed (MCP tools must return the complete JSON in one go).
 func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool, emit func(ExportRow) error) error {
 	if len(deckIDs) == 0 {
 		return nil
@@ -61,8 +61,8 @@ func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, 
 	if pageSize <= 0 {
 		pageSize = exportDefaultPageSize
 	}
-	// 键集（keyset）分页，而不是 LIMIT/OFFSET：按 cards.id 升序单调推进，
-	// 导出期间插入或删除卡片不会让某些行被跳过或重复，代价是每页一次带 JOIN 的查询。
+	// Keyset paging rather than LIMIT/OFFSET: advancing monotonically on ascending cards.id means
+	// cards inserted or deleted during the export never cause rows to be skipped or duplicated, at the cost of one JOINed query per page.
 	var lastID uint64
 	for {
 		page, err := a.exportCardPage(ctx, userID, deckIDs, includeProgress, lastID, pageSize)
@@ -81,12 +81,12 @@ func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, 
 	}
 }
 
-// exportCardPage 读一页导出数据并在返回前关闭游标。调用方拿到返回值时这条连接已经还回连接池，
-// 所以随后写响应体的整段时间都不持有它。
+// exportCardPage reads one page of export data and closes the cursor before returning. When the caller gets the result the connection is already back in the pool,
+// so it is not held for the entire subsequent write of the response body.
 func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool, afterID uint64, limit int) ([]exportPageRow, error) {
-	// 进度列只在 include_progress 时选取；未选进度时不引用 card_states，
-	// 否则 SQL 会因缺少该 JOIN 而报 “no such column”。
-	// 三个 id 列都取各表的 public_id（对外 id）；deck 需要额外 JOIN decks 才能拿到它的对外 id。
+	// Progress columns are selected only when include_progress is set; without progress, card_states is not referenced,
+	// otherwise SQL reports "no such column" for the missing JOIN.
+	// All three id columns take each table's public_id (external id); deck needs an extra JOIN on decks to get its external id.
 	selectCols := `cards.id AS card_pk, cards.public_id AS card_id, notes.public_id AS note_id,
 	        decks.public_id AS deck_id, notes.kind AS kind, cards.template AS template,
 	        notes.fields_json AS fields_json, notes.tags_json AS tags_json,
@@ -108,7 +108,7 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 		a.logger.Error("export query failed", "user_id", userID, "error", err)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to export cards")
 	}
-	// 兜底关闭；下面每条返回路径都再显式 Close 一次，把连接尽早还给连接池（Close 可重复调用）。
+	// Safety-net close; every return path below closes explicitly once more, returning the connection to the pool as early as possible (Close is repeatable).
 	defer rows.Close()
 
 	page := make([]exportPageRow, 0, limit)
@@ -131,7 +131,7 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 		})
 	}
 	iterErr := rows.Err()
-	// 显式关游标：不关就等于把连接占着，直到整次导出结束。
+	// Close the cursor explicitly: leaving it open means holding the connection until the whole export ends.
 	rows.Close()
 	if iterErr != nil {
 		a.logger.Error("iterate export rows failed", "user_id", userID, "error", iterErr)
@@ -140,8 +140,8 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 	return page, nil
 }
 
-// CollectExportRows 把流式导出收集成切片；只给必须整体返回 JSON 的调用方使用（MCP export_deck）。
-// HTTP 导出走 ExportCards 的流式路径，不经过这里。
+// CollectExportRows collects the streaming export into a slice; only for callers that must return complete JSON (MCP export_deck).
+// HTTP export goes through ExportCards' streaming path, not through here.
 func (a *API) CollectExportRows(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) ([]ExportRow, error) {
 	rows := make([]ExportRow, 0, 64)
 	if err := a.ExportCards(ctx, userID, deckIDs, includeProgress, func(r ExportRow) error {

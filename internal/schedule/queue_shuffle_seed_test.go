@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件钉住新卡乱序的**确定性**：种子由 (用户, 复习日) 派生，而不是构建时刻。
+// This file pins down the **determinism** of the new-card shuffle: the seed is derived from (user, review day), not from the build instant.
 //
-// 修复前的形态是 `rand.New(rand.NewSource(now.UnixNano()))`，而生产调用方从不设置
-// QueueOptions.Rand，于是同一天里每刷新一次页面，新卡顺序就换一遍——学习者看到的顺序不稳定，
-// 报告问题时也无从复现。
+// The pre-fix shape was `rand.New(rand.NewSource(now.UnixNano()))`, and production callers never set
+// QueueOptions.Rand, so every page refresh within a day changed the new-card order — the order the learner saw was unstable
+// and reported problems could not be reproduced.
 
-// buildNewOrder 建一个含 n 张新卡的卡组，返回本次构建里新卡的顺序。
+// buildNewOrder creates a deck with n new cards and returns the order of the new cards in this build.
 func buildNewOrder(t *testing.T, userID uint64, now time.Time, n int) []uint64 {
 	t.Helper()
 	db := newTestDB(t)
@@ -47,12 +47,12 @@ func buildNewOrder(t *testing.T, userID uint64, now time.Time, n int) []uint64 {
 	return out
 }
 
-// TestNewOrderIsStableWithinTheSameReviewDay 断言同一天内反复构建（哪怕时刻不同、分钟不同）
-// 得到完全相同的排列——这就是「顺序稳定、可复现」的含义。
+// TestNewOrderIsStableWithinTheSameReviewDay asserts that repeated builds within the same day (even at different instants, different minutes)
+// yield exactly the same permutation — that is what "stable, reproducible order" means.
 func TestNewOrderIsStableWithinTheSameReviewDay(t *testing.T) {
 	now := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
 	first := buildNewOrder(t, 1, now, 12)
-	// 同一天、切点 04:00 之内的另一个时刻（含纳秒级差异）。
+	// Another instant on the same day, within the 04:00 cutoff (including nanosecond-level differences).
 	later := buildNewOrder(t, 1, now.Add(7*time.Hour+123*time.Millisecond), 12)
 	if len(first) != len(later) {
 		t.Fatalf("lengths differ: %d vs %d", len(first), len(later))
@@ -64,9 +64,9 @@ func TestNewOrderIsStableWithinTheSameReviewDay(t *testing.T) {
 	}
 }
 
-// TestNewOrderDiffersAcrossReviewDays 断言跨复习日会换一个排列（避免永远只背开头几张）。
+// TestNewOrderDiffersAcrossReviewDays asserts a different permutation is used across review days (avoiding always studying only the first few).
 //
-// 种子是输入的纯函数，所以这个断言是确定性的：同样的两天永远得到同样的结论，不会偶发翻转。
+// The seed is a pure function of the inputs, so this assertion is deterministic: the same two days always give the same conclusion, never flipping intermittently.
 func TestNewOrderDiffersAcrossReviewDays(t *testing.T) {
 	now := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
 	day1 := buildNewOrder(t, 1, now, 12)
@@ -76,8 +76,8 @@ func TestNewOrderDiffersAcrossReviewDays(t *testing.T) {
 	}
 }
 
-// TestNewOrderDiffersAcrossUsers 断言两个用户同一天不共享同一排列（否则用户之间会开始
-// 以相同顺序相遇同一批卡，削弱「打乱」的观感）。
+// TestNewOrderDiffersAcrossUsers asserts two users do not share the same permutation on the same day (otherwise users would start meeting
+// the same batch of cards in the same order, weakening the impression of shuffling).
 func TestNewOrderDiffersAcrossUsers(t *testing.T) {
 	now := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
 	a := buildNewOrder(t, 1, now, 12)
@@ -87,7 +87,7 @@ func TestNewOrderDiffersAcrossUsers(t *testing.T) {
 	}
 }
 
-// TestExplicitRandStillWins 断言显式传入的随机源不被替换（测试与显式入口的契约）。
+// TestExplicitRandStillWins asserts an explicitly passed random source is not replaced (the contract for tests and explicit entry points).
 func TestExplicitRandStillWins(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
@@ -97,7 +97,7 @@ func TestExplicitRandStillWins(t *testing.T) {
 		seedCard(t, db, deckID, "forward", now.Add(time.Duration(i)*time.Minute))
 	}
 	builder := NewQueueBuilder(db, store.NewDeckStore(db), mustScheduler(t, testPreset(t)))
-	// 两次构建共用同一个显式随机源：第二次接着上一次的序列，因此顺序不同。
+	// Both builds share the same explicit random source: the second continues the previous sequence, so the order differs.
 	rng := rand.New(rand.NewSource(42))
 	order := func() []uint64 {
 		items, err := builder.Build(context.Background(), 1, QueueOptions{
@@ -120,7 +120,7 @@ func TestExplicitRandStillWins(t *testing.T) {
 	}
 }
 
-// sameOrder 比较两个顺序是否逐位相同。
+// sameOrder compares two orders positionally.
 func sameOrder(a, b []uint64) bool {
 	if len(a) != len(b) {
 		return false
@@ -133,17 +133,17 @@ func sameOrder(a, b []uint64) bool {
 	return true
 }
 
-// TestNewOrderRandomPicksBeyondTheOldestCards 断言随机顺序作用在「抽哪些卡」上，而不只是当天的
-// 出场顺序：卡组里 40 张新卡、每日上限 5 张时，抽中的不能永远是最早创建的 5 张。
-// 种子由 (用户, 复习日) 决定，因此每一天的结论都是确定的。
+// TestNewOrderRandomPicksBeyondTheOldestCards asserts the random order affects "which cards are drawn", not just the
+// presentation order that day: with 40 new cards in the deck and a daily cap of 5, the ones drawn must not always be the 5 earliest created.
+// The seed is determined by (user, review day), so the conclusion is deterministic for every day.
 func TestNewOrderRandomPicksBeyondTheOldestCards(t *testing.T) {
 	for driver, db := range queueTestDatabases(t) {
 		t.Run(driver, func(t *testing.T) { assertRandomPicksBeyondOldest(t, db) })
 	}
 }
 
-// queueTestDatabases 返回 SQLite 库，以及设置了 TEST_PG_DSN 时的 PostgreSQL 库：
-// 排序键是手写的 SQL 表达式，两库都必须算出同样的语义。
+// queueTestDatabases returns the SQLite database, plus the PostgreSQL database when TEST_PG_DSN is set:
+// the sort key is a hand-written SQL expression, and both databases must produce the same semantics.
 func queueTestDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	out := map[string]*gorm.DB{"sqlite": newTestDB(t)}
@@ -189,7 +189,7 @@ func assertRandomPicksBeyondOldest(t *testing.T, db *gorm.DB) {
 		return out
 	}
 
-	// 对照组：创建顺序就是最早的 5 张。
+	// Control group: creation order is exactly the 5 earliest cards.
 	for _, id := range pick(0, NewOrderCreated) {
 		if !oldest[id] {
 			t.Fatalf("NewOrderCreated picked card %d, which is not among the oldest %d", id, perDay)

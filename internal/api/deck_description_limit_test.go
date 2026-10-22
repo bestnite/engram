@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 公开接口必须保留字段级错误码，不能把描述拒绝退化为通用请求错误。
+// The public API must keep the field-level error code; a rejected description must not degrade into a generic request error.
 func TestCreateDeckDescriptionLimit(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	u := seedUser(t, env.db, "description_api", store.RoleUser)

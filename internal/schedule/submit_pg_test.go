@@ -11,22 +11,22 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSubmitConcurrentFirstReviewIsAtomic 是验收用例：在真实 PostgreSQL 上
-// 并发发起两次同一张全新卡的首评，断言最终恰好一条 reviews 行与一条 card_states 行存活，
-// 且输家收到冲突哨兵（ErrVersionConflict）。
+// TestSubmitConcurrentFirstReviewIsAtomic is an acceptance case: on a real PostgreSQL,
+// fire two concurrent first grades of the same brand-new card and assert that exactly one reviews row and one card_states row survive,
+// and the loser receives the conflict sentinel (ErrVersionConflict).
 //
-// 为什么必须用真 PG：SQLite 靠单写连接把写入串行化，两次“读不到状态行”的首评不可能真正
-// 并发；PG 下行锁锁不住尚不存在的行，修复前两个事务都能通过版本校验并各写一条 review
-// （双写）。用例通过 pgtest 拿一个独立 schema，跑完即丢。
+// Why real PG is required: SQLite serialises writes on a single write connection, so two first grades that "cannot read a state row" can never really
+// be concurrent; under PG a row lock cannot lock a row that does not exist yet, and before the fix both transactions could pass the version check and each write one review
+// (a double write). The case gets its own schema via pgtest and drops it when done.
 //
-// 为什么不能让两个 goroutine 同时开跑：那样赢家往往在输家读状态之前就提交了，输家会从
-// 常规版本校验处被拦下，于是既测不出守卫、也复现不了竞态。这里用一次同步把写窗口摆正：
-// 赢家先插入但不提交，等输家进入写路径后再提交；输家此时读到的是“没有这一行”（未提交
-// 的行对 READ COMMITTED 不可见），INSERT 会在唯一索引上阻塞等待赢家。这正是修复前双双
-// 放行的窗口：
-//   - 修复前：无守卫的 DO UPDATE 在赢家提交后照常命中，输家也写入 —— 两条 review。
-//   - 修复后：DO UPDATE 的 WHERE card_states.version = 0 在赢家提交后不匹配，影响 0 行，
-//     输家返回冲突哨兵且不写任何 review。
+// Why both goroutines must not simply start at once: the winner would usually commit before the loser reads the state, and the loser would be stopped by
+// the ordinary version check, so neither the guard nor the race would be exercised. A single synchronisation here lines up the write window:
+// the winner inserts first without committing, then commits only after the loser enters the write path; by then the loser reads "no such row" (an uncommitted
+// row is invisible under READ COMMITTED) and the INSERT blocks on the unique index waiting for the winner. This is exactly the window where both used to
+// pass:
+//   - before the fix: the guardless DO UPDATE still matched after the winner committed, so the loser wrote too — two reviews.
+//   - after the fix: the DO UPDATE's WHERE card_states.version = 0 no longer matches once the winner has committed, affecting 0 rows, so
+//     the loser returns the conflict sentinel and writes no review at all.
 func TestSubmitConcurrentFirstReviewIsAtomic(t *testing.T) {
 	db, ok := pgtest.Open(t)
 	if !ok {
@@ -45,14 +45,14 @@ func TestSubmitConcurrentFirstReviewIsAtomic(t *testing.T) {
 		Scheduler: s, Now: now, Location: time.UTC,
 	}
 
-	winnerInserted := make(chan struct{}) // 赢家已写入（未提交）
-	loserWriting := make(chan struct{})   // 输家已进入写路径
+	winnerInserted := make(chan struct{}) // the winner has written (not committed)
+	loserWriting := make(chan struct{})   // the loser has entered the write path
 	var (
 		wg                  sync.WaitGroup
 		winnerErr, loserErr error
 	)
 
-	// 赢家：写入后停住不提交，把窗口留给输家。
+	// Winner: stops after writing without committing, leaving the window to the loser.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -68,13 +68,13 @@ func TestSubmitConcurrentFirstReviewIsAtomic(t *testing.T) {
 		}
 		close(winnerInserted)
 		<-loserWriting
-		// 给输家足够时间读到“没有这一行”并在 INSERT 上阻塞；之后赢家才提交，
-		// 让输家的 DO UPDATE 必须自己决定写不写得进去。
+		// Give the loser enough time to read "no such row" and block on the INSERT; only then does the winner commit,
+		// forcing the loser's DO UPDATE to decide for itself whether the write goes through.
 		time.Sleep(300 * time.Millisecond)
 		winnerErr = tx.Commit().Error
 	}()
 
-	// 输家：等赢家写入后开跑，两个事务因此真正重叠。
+	// Loser: starts after the winner has written, so the two transactions genuinely overlap.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -14,13 +14,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 FSRS 权重导出 / 导入开关的 REST 端验收：include_weights 查询参数与
-// apply_weights 表单字段都必须真的到达 store 层，且缺省时都按「不带、不用」处理。
+// This file is the REST-side acceptance for the FSRS weight export / import switches: both the include_weights query parameter and
+// the apply_weights form field must really reach the store layer, and both default to "not carried, not used".
 
-// weightsJSON 是 21 维的非默认权重，只用来判断有没有被带出或采用。
+// weightsJSON is a non-default 21-dimension weight vector, used only to tell whether it was carried out or adopted.
 const weightsJSON = `[0.5,0.51,0.52,0.53,0.54,0.55,0.56,0.57,0.58,0.59,0.6,0.61,0.62,0.63,0.64,0.65,0.66,0.67,0.68,0.69,0.7]`
 
-// readPackageEntry 从 zip 字节里读出一个条目。
+// readPackageEntry reads one entry out of the zip bytes.
 func readPackageEntry(t *testing.T, raw []byte, name string) []byte {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
@@ -46,8 +46,8 @@ func readPackageEntry(t *testing.T, raw []byte, name string) []byte {
 	return nil
 }
 
-// TestExportPackageIncludeWeightsQuery 断言 GET /decks/:id/package 缺省不带权重，
-// include_weights=1 时 preset.json 带出权重且 manifest 如实声明。
+// TestExportPackageIncludeWeightsQuery asserts GET /decks/:id/package carries no weights by default,
+// and with include_weights=1 preset.json carries the weights while the manifest declares it truthfully.
 func TestExportPackageIncludeWeightsQuery(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -98,8 +98,8 @@ func TestExportPackageIncludeWeightsQuery(t *testing.T) {
 	}
 }
 
-// TestImportPackageApplyWeightsForm 断言 POST /decks/import 缺省不采用包内权重，
-// apply_weights=1 才写进新预设，响应里的 weights_applied / weights_discarded 与之一致。
+// TestImportPackageApplyWeightsForm asserts POST /decks/import does not adopt the package's weights by default,
+// and only apply_weights=1 writes them into the new preset, with weights_applied / weights_discarded in the response matching that.
 func TestImportPackageApplyWeightsForm(t *testing.T) {
 	raw := packageZip(t, map[string]string{
 		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"include_weights":true,"counts":{"notes":1,"cards":1}}`,

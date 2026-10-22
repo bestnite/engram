@@ -8,7 +8,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 周界前后属于不同账本键，必须另外限制小时级碰撞，且跳过时不能消耗新周额度。
+// The two sides of the week boundary are different ledger keys, so hour-level collisions must be limited separately, and a skip must not consume the new week's quota.
 func TestDigestMinIntervalBlocksWeekBoundary(t *testing.T) {
 	db := newTestDB(t)
 	id := seedUser(t, db, "boundary", "boundary@example.com", "en", "Asia/Shanghai", 4)
@@ -35,7 +35,7 @@ func TestDigestMinIntervalBlocksWeekBoundary(t *testing.T) {
 	}
 }
 
-// 最小间隔不是一周冷却期：四天前发过上一周摘要，不应阻止本周宕机恢复补发。
+// The minimum interval is not a one-week cooldown: having sent last week's digest four days ago must not block this week's backfill after downtime.
 func TestDigestMinIntervalAllowsRecoveryAfterFourDays(t *testing.T) {
 	db := newTestDB(t)
 	id := seedUser(t, db, "recovery", "recovery@example.com", "en", "Asia/Shanghai", 4)

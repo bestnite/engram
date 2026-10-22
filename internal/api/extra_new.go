@@ -10,34 +10,34 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ExtraNewMaxCount 是一次「再来一组」最多追加的新卡张数。它只约束单次请求，防止手误输入
-// 一个巨大的数；想学更多可以再追加一次。
+// ExtraNewMaxCount is the most new cards a single "one more batch" may add. It bounds one request only, guarding against a fat-fingered
+// huge number; wanting to study more just means adding another batch.
 const ExtraNewMaxCount = 1000
 
-// ExtraNewStatus 是调用者在一个卡组上今天的新卡额度，以及「再来一组」能加多少。
-// REST 与 MCP 共用这一形态。
+// ExtraNewStatus is the caller's new-card allowance on a deck for today, and how much "one more batch" can add.
+// REST and MCP share this shape.
 type ExtraNewStatus struct {
 	DeckID string `json:"deck_id"`
-	// NewPerDay 是调用者在该卡组上的每日新卡上限（学习目标）；NewUnlimited 为 true 时它无意义。
+	// NewPerDay is the caller's daily new-card cap on this deck (the study goal); it is meaningless when NewUnlimited is true.
 	NewPerDay    int  `json:"new_per_day"`
 	NewUnlimited bool `json:"new_unlimited"`
-	// ExtraNew 是今天已经追加的新卡额度，第二天归零。
+	// ExtraNew is the extra new-card allowance already added today; it resets to zero the next day.
 	ExtraNew int `json:"extra_new"`
-	// NewUsed 是今天已经引入的新卡数；NewLeft 是今天还能引入的张数（已含追加量）。
+	// NewUsed is the number of new cards already introduced today; NewLeft is how many can still be introduced today (including the added amount).
 	NewUsed int `json:"new_used"`
 	NewLeft int `json:"new_left"`
-	// NewAvailable 是卡组里还没学过、此刻可以引入的新卡总数，不受额度限制；
-	// 按标签复习时只数带这些标签的卡。
+	// NewAvailable is the total number of new cards in the deck not yet studied that could be introduced right now, independent of the allowance;
+	// when reviewing by tag only the cards carrying those tags are counted.
 	NewAvailable int `json:"new_available"`
-	// SuggestedCount 是「再来一组」的默认张数：每日上限，但不超过今天额度之外还剩的新卡数。
-	// 为 0 表示没有可追加的新卡（卡组不限额，或新卡都已在今天的额度里）。
+	// SuggestedCount is the default count for "one more batch": the daily cap, but no more than the new cards still left beyond today's allowance.
+	// Zero means there is no new card to add (the deck has no cap, or the new cards already fit in today's allowance).
 	SuggestedCount int `json:"suggested_count"`
-	// MaxCount 是单次追加允许的最大张数（ExtraNewMaxCount）。
+	// MaxCount is the maximum count a single add may request (ExtraNewMaxCount).
 	MaxCount int `json:"max_count"`
 }
 
-// ExtraNewStatus 返回 u 在卡组上今天的新卡额度与「再来一组」的建议张数（至少 reader）。
-// tags 与按标签复习同一规则（见 ReviewTags），只影响 NewAvailable 与 SuggestedCount。
+// ExtraNewStatus returns u's new-card allowance on the deck for today and the suggested count for "one more batch" (at least reader).
+// tags follows the same rules as reviewing by tag (see ReviewTags) and only affects NewAvailable and SuggestedCount.
 func (a *API) ExtraNewStatus(ctx context.Context, u *store.User, deckID uint64, tags []string) (ExtraNewStatus, error) {
 	tags, err := ReviewTags([]uint64{deckID}, tags)
 	if err != nil {
@@ -50,11 +50,11 @@ func (a *API) ExtraNewStatus(ctx context.Context, u *store.User, deckID uint64, 
 	return a.extraNewStatus(ctx, u, deck, tags)
 }
 
-// AddExtraNew 为 u 在卡组上追加今天的新卡额度（至少 reader），返回追加后的状态。
+// AddExtraNew adds to u's new-card allowance on the deck for today (at least reader) and returns the status after the add.
 //
-// count 为 0 表示用默认张数，即调用者在该卡组上的每日新卡上限；否则必须在 1..ExtraNewMaxCount。
-// 追加只对调用者自己、只对当前复习日生效：额度写在 (卡组, 用户, 复习日) 上，不改卡组设置，
-// 也不影响共享卡组的其他成员。每日新卡不限的卡组没有可抬高的上限，返回 400。
+// count of 0 means the default count, i.e. the caller's daily new-card cap on this deck; otherwise it must be within 1..ExtraNewMaxCount.
+// The add applies only to the caller and only to the current review day: the allowance is stored per (deck, user, review day), the deck settings are untouched,
+// and other members of a shared deck are unaffected. A deck with unlimited daily new cards has no cap to raise, so it returns 400.
 func (a *API) AddExtraNew(ctx context.Context, u *store.User, apiKeyID *uint64, deckID uint64, count int) (ExtraNewStatus, error) {
 	if count < 0 || count > ExtraNewMaxCount {
 		return ExtraNewStatus{}, InvalidRequest("count must be between 1 and 1000, or omitted for the daily new card limit")
@@ -91,7 +91,7 @@ func (a *API) AddExtraNew(ctx context.Context, u *store.User, apiKeyID *uint64, 
 	return a.extraNewStatus(ctx, u, deck, nil)
 }
 
-// extraNewStatus 组装 ExtraNewStatus；额度取自 schedule.DeckBudgets，与复习队列同一条公式。
+// extraNewStatus assembles ExtraNewStatus; the allowance comes from schedule.DeckBudgets, the same formula as the review queue.
 func (a *API) extraNewStatus(ctx context.Context, u *store.User, deck *store.Deck, tags []string) (ExtraNewStatus, error) {
 	now := a.now()
 	builder := schedule.NewQueueBuilder(a.db, a.decks, nil)
@@ -119,19 +119,19 @@ func (a *API) extraNewStatus(ctx context.Context, u *store.User, deck *store.Dec
 		MaxCount:     ExtraNewMaxCount,
 	}
 	if !b.NewUnlimited {
-		// 今天额度已经覆盖的新卡不算在「再来一组」里：它们本来就会出现在队列中。
+		// New cards already covered by today's allowance do not count toward "one more batch": they show up in the queue anyway.
 		out.SuggestedCount = min(b.NewPerDay, ExtraNewMaxCount, max(available-b.NewLeft, 0))
 	}
 	return out, nil
 }
 
-// reviewDay 返回 u 此刻所在的复习日，与评分写入 reviews.review_day 的口径一致。
+// reviewDay returns the review day u is in right now, consistent with what grading writes to reviews.review_day.
 func (a *API) reviewDay(u *store.User) string {
 	return schedule.ReviewDay(a.now(), userLocation(u.Timezone), store.ResolveCutoff(u.DayCutoffHour))
 }
 
-// getExtraNew 读取今天的新卡额度与「再来一组」的建议张数，scope: review。
-// tag 可重复，规则与 GET /review/due 相同。
+// getExtraNew reads today's new-card allowance and the suggested count for "one more batch", scope: review.
+// tag is repeatable, with the same rules as GET /review/due.
 func (a *API) getExtraNew(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -152,12 +152,12 @@ func (a *API) getExtraNew(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-// addExtraNewRequest 是「再来一组」的请求体；count 缺省或为 0 时用每日新卡上限。
+// addExtraNewRequest is the "one more batch" body; when count is absent or 0 the daily new-card cap is used.
 type addExtraNewRequest struct {
 	Count int `json:"count"`
 }
 
-// postExtraNew 为调用者追加今天的新卡额度，scope: review。
+// postExtraNew adds to the caller's new-card allowance for today, scope: review.
 func (a *API) postExtraNew(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -166,7 +166,7 @@ func (a *API) postExtraNew(c *gin.Context) {
 		return
 	}
 	var req addExtraNewRequest
-	// 空请求体等同于缺省 count；有请求体但不是合法 JSON 才是参数错误。
+	// An empty body is the same as an absent count; only a body that is present but not valid JSON is a parameter error.
 	if c.Request.ContentLength != 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")

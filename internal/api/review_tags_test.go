@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedTaggedNewCard 建一个带标签的 note 与它的一张 card（无 card_states，即新卡），返回 note 的对外 id。
+// seedTaggedNewCard creates a tagged note and one of its cards (no card_states, i.e. a new card) and returns the note's external id.
 func seedTaggedNewCard(t *testing.T, db *gorm.DB, deckID uint64, tags ...string) string {
 	t.Helper()
 	now := time.Now().UTC()
@@ -32,8 +32,8 @@ func seedTaggedNewCard(t *testing.T, db *gorm.DB, deckID uint64, tags ...string)
 	return n.PublicID
 }
 
-// TestReviewTags 覆盖标签与卡组范围组合的唯一校验：规范化后为空等同不带标签；
-// 带标签时必须恰好一个卡组；标签数有上限。
+// TestReviewTags covers the single validation of tag/deck-scope combinations: empty after normalization equals no tags;
+// with tags there must be exactly one deck; and the number of tags has a cap.
 func TestReviewTags(t *testing.T) {
 	tooMany := make([]string, reviewMaxTags+1)
 	for i := range tooMany {
@@ -73,7 +73,7 @@ func TestReviewTags(t *testing.T) {
 	}
 }
 
-// TestDueCardsFiltersByTagREST 是 REST 验收：重复的 tag 参数取并集，只返回带有这些标签的卡。
+// TestDueCardsFiltersByTagREST is the REST acceptance: repeated tag parameters take the union, and only cards carrying those tags are returned.
 func TestDueCardsFiltersByTagREST(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "tagreviewer", store.RoleUser)
@@ -120,8 +120,8 @@ func TestDueCardsFiltersByTagREST(t *testing.T) {
 	}
 }
 
-// TestDueCardsTagScopeNegatives 覆盖负例：带 tag 却没有卡组或跨多个卡组时返回 400，
-// 而不是静默忽略标签或把不同卡组的同名标签合在一起。
+// TestDueCardsTagScopeNegatives covers the negative cases: tags with no deck, or across several decks, return 400,
+// rather than silently ignoring the tags or merging same-named tags from different decks.
 func TestDueCardsTagScopeNegatives(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "tagneg", store.RoleUser)
@@ -152,8 +152,8 @@ func TestDueCardsTagScopeNegatives(t *testing.T) {
 	}
 }
 
-// TestListDeckTagsREST 覆盖卡组标签列表：本人卡组 200 并带 note 数；别人的私有卡组 403；
-// 缺 read scope 的 key 403；未知卡组 404。
+// TestListDeckTagsREST covers the deck tag list: your own deck 200 with note counts; someone else's private deck 403;
+// a key without read scope 403; an unknown deck 404.
 func TestListDeckTagsREST(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "tagowner", store.RoleUser)

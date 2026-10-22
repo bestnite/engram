@@ -8,15 +8,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckBudgetsReportsUsedAndLeft 是设置页「今日已用 / 剩余」的数据源验收：
-// DeckBudgets 必须与队列同源（复用 deckBudget 的公式），并且用布尔量而不是 -1/0
-// 表达「不限」。
+// TestDeckBudgetsReportsUsedAndLeft is the acceptance test for the settings page's "used today / left" data source:
+// DeckBudgets must share the queue's source (reusing deckBudget's formula), and express "unlimited" with a boolean rather than
+// -1/0.
 //
-// 夹具覆盖三种边界：
+// The fixture covers three boundaries:
 //
-//	(a) 卡组列写 0（不限）：PerDay 为 0、Unlimited 为 true，即使今日已用也不封顶；
-//	(b) 已用等于上限 → Left 0；已用超过上限 → 仍为 0，不出现负数；
-//	(c) 没有任何 card_states / reviews 的卡组：今日已用为 0，Left 等于 PerDay。
+//	(a) deck column written as 0 (unlimited): PerDay is 0, Unlimited is true, and nothing is capped even with usage today;
+//	(b) used equals the cap → Left 0; used above the cap → still 0, never negative;
+//	(c) a deck with no card_states / reviews at all: today's usage is 0, Left equals PerDay.
 func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -38,14 +38,14 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		if err := db.Create(&d).Error; err != nil {
 			t.Fatalf("create deck %s: %v", name, err)
 		}
-		// 用 map 写上限：0 在这里合法（不限），模型整体 Save 会省略带默认值列的 0。
+		// Write the caps via a map: 0 is legitimate here (unlimited), and saving the whole model would omit 0 for columns with a default.
 		if err := db.Model(&store.Deck{}).Where("id = ?", d.ID).
 			Updates(map[string]any{"new_per_day": newPer, "reviews_per_day": reviewPer}).Error; err != nil {
 			t.Fatalf("set caps on deck %s: %v", name, err)
 		}
 		return d.ID
 	}
-	// usedNew 记 n 次「今日引入新卡」（state_before = 0）。
+	// usedNew records n "new card introduced today" entries (state_before = 0).
 	usedNew := func(deckID uint64, n int) {
 		t.Helper()
 		for i := 0; i < n; i++ {
@@ -54,7 +54,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 			seedState(t, db, 1, id, "review", future, 5.0, 5.0, &last)
 		}
 	}
-	// usedReview 记 n 次「今日复习」（state_before <> 0）。
+	// usedReview records n "reviewed today" entries (state_before <> 0).
 	usedReview := func(deckID uint64, n int) {
 		t.Helper()
 		for i := 0; i < n; i++ {
@@ -64,12 +64,12 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		}
 	}
 
-	// (a) 0/0 表示不限：不封顶，两个 Unlimited 都为 true。
+	// (a) 0/0 means unlimited: no cap, both Unlimited flags are true.
 	unlimited := mkDeck("unlimited", 0, 0)
 	usedNew(unlimited, 7)
 	usedReview(unlimited, 9)
 
-	// (b1) 已用等于上限；b2 已用超过上限（复习用了 5，上限 3）。
+	// (b1) used equals the cap; b2 used exceeds the cap (5 reviews used, cap 3).
 	atCap := mkDeck("at-cap", 2, 3)
 	usedNew(atCap, 2)
 	usedReview(atCap, 3)
@@ -77,7 +77,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	usedNew(overCap, 1)
 	usedReview(overCap, 5)
 
-	// (c) 完全没用过的卡组：已用为 0，剩余等于上限。
+	// (c) a deck never used at all: usage is 0, remaining equals the cap.
 	untouched := mkDeck("untouched", 5, 10)
 
 	sched := mustScheduler(t, testPreset(t))
@@ -91,7 +91,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Fatalf("DeckBudgets returned %d decks, want 4", len(budgets))
 	}
 
-	// (a) 不限。
+	// (a) unlimited.
 	u := budgets[unlimited]
 	if !u.NewUnlimited || !u.ReviewUnlimited {
 		t.Errorf("unlimited deck: NewUnlimited=%v ReviewUnlimited=%v, want both true for caps 0/0", u.NewUnlimited, u.ReviewUnlimited)
@@ -103,7 +103,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Errorf("unlimited deck: Used = %d/%d, want 7/9 (usage is still reported when unlimited)", u.NewUsed, u.ReviewUsed)
 	}
 
-	// (b1) 已用等于上限。
+	// (b1) used equals the cap.
 	eq := budgets[atCap]
 	if eq.NewUnlimited || eq.ReviewUnlimited {
 		t.Errorf("at-cap deck: Unlimited flags = %v/%v, want false", eq.NewUnlimited, eq.ReviewUnlimited)
@@ -115,7 +115,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Errorf("at-cap deck: Left = %d/%d, want 0/0 when usage equals the cap", eq.NewLeft, eq.ReviewLeft)
 	}
 
-	// (b2) 已用超过上限：剩余仍为 0，绝不出现负数。
+	// (b2) used exceeds the cap: remaining is still 0, never negative.
 	over := budgets[overCap]
 	if over.ReviewUsed != 5 || over.ReviewLeft != 0 {
 		t.Errorf("over-cap deck: ReviewUsed=%d ReviewLeft=%d, want 5/0 (never negative)", over.ReviewUsed, over.ReviewLeft)
@@ -124,7 +124,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Errorf("over-cap deck: NewUsed=%d NewLeft=%d, want 1/4", over.NewUsed, over.NewLeft)
 	}
 
-	// (c) 没动过的卡组：已用 0，剩余等于上限。
+	// (c) an untouched deck: usage 0, remaining equals the cap.
 	ut := budgets[untouched]
 	if ut.NewUsed != 0 || ut.ReviewUsed != 0 {
 		t.Errorf("untouched deck: Used = %d/%d, want 0/0", ut.NewUsed, ut.ReviewUsed)
@@ -136,7 +136,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Errorf("untouched deck: Unlimited flags = %v/%v, want false", ut.NewUnlimited, ut.ReviewUnlimited)
 	}
 
-	// 不存在的卡组 id 沿用 resolveScope 的兜底：新卡上限取默认，复习不限。
+	// A non-existent deck id uses the resolveScope fallback: the new-card cap takes the default, reviews are unlimited.
 	missing, err := builder.DeckBudgets(ctx, 1, []uint64{99999}, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckBudgets(missing) error = %v", err)
@@ -145,7 +145,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 		t.Errorf("missing deck: %+v, want NewPerDay=%d and ReviewUnlimited=true (documented fallback)", got, DefaultNewPerDay)
 	}
 
-	// 空集合与非零 userID 校验。
+	// Empty-set and non-zero userID validation.
 	empty, err := builder.DeckBudgets(ctx, 1, nil, QueueOptions{})
 	if err != nil {
 		t.Fatalf("DeckBudgets(nil) error = %v", err)
@@ -158,8 +158,8 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	}
 }
 
-// TestDeckBudgetsUseTheUsersReviewDay 断言设置页的「今日已用」按用户时区的复习日统计（反面：UTC 口径
-// 在 UTC+8 的上午会算成前一天，把今天已用的额度显示成没用）。
+// TestDeckBudgetsUseTheUsersReviewDay asserts the settings page's "used today" is counted by the review day in the user's timezone (the negative case: UTC semantics
+// would count a UTC+8 morning as the previous day, showing an already-used allowance as unused).
 func TestDeckBudgetsUseTheUsersReviewDay(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

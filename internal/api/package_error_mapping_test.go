@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// HTTP 与 MCP 共用 service 错误，逐码检查防止映射再次折叠且保留条目详情。
+// HTTP and MCP share the service errors; checking code by code prevents the mapping from folding again and keeps item details.
 func TestPackageErrorMappingPreservesCodeAndStatus(t *testing.T) {
 	cases := []struct {
 		code   string

@@ -1,9 +1,9 @@
 //go:build unix
 
-// 本文件整体只在 Unix 上编译：测试注入的假命令是 `/bin/sh -c ...`，断言进程是否真的
-// 退出要看 /proc/<pid>/stat 的僵尸态（processGone），两者在 Windows 上都不存在。
-// Windows 的杀树实现在 process_windows.go，靠 taskkill，无法在 Linux CI 上执行；它只有
-// pid <= 0 守卫被 process_test.go 跨平台覆盖。
+// This whole file only compiles on Unix: the fake command the tests inject is `/bin/sh -c ...`, and checking whether a process really
+// exited looks at the zombie state in /proc/<pid>/stat (processGone), neither of which exists on Windows.
+// The Windows tree-kill implementation lives in process_windows.go and relies on taskkill, which cannot run on Linux CI; only its
+// pid <= 0 guard is covered cross-platform by process_test.go.
 
 package jobs
 
@@ -27,8 +27,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newTestRunner 打开临时 SQLite 库、迁移表、构造并启动 Runner；ctx 在清理时取消。
-// timeout 是子进程超时；builder 注入要执行的命令，因此测试不依赖真实优化器。
+// newTestRunner opens a temporary SQLite database, migrates the tables, and builds and starts a Runner; ctx is cancelled during cleanup.
+// timeout is the subprocess timeout; builder injects the command to execute, so the tests do not depend on a real optimizer.
 func newTestRunner(t *testing.T, timeout time.Duration, builder CommandBuilder) (*Runner, *Store, *gorm.DB) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
@@ -54,7 +54,7 @@ func newTestRunner(t *testing.T, timeout time.Duration, builder CommandBuilder) 
 	return runner, st, db
 }
 
-// waitForStatus 轮询到作业到达 want 状态（或超时失败）。轮询间隔很短，不拖测试时长。
+// waitForStatus polls until the job reaches the want status (or fails on timeout). The polling interval is very short, so it does not stretch the test.
 func waitForStatus(t *testing.T, st *Store, id uint64, want string, limit time.Duration) *store.Job {
 	t.Helper()
 	deadline := time.Now().Add(limit)
@@ -73,7 +73,7 @@ func waitForStatus(t *testing.T, st *Store, id uint64, want string, limit time.D
 	return nil
 }
 
-// TestEnqueueRequiresKind 覆盖入队参数校验。
+// TestEnqueueRequiresKind covers enqueue argument validation.
 func TestEnqueueRequiresKind(t *testing.T) {
 	runner, _, _ := newTestRunner(t, time.Second, func(context.Context, *store.Job, Reporter) (Command, error) {
 		return Command{Name: "/bin/true"}, nil
@@ -83,12 +83,12 @@ func TestEnqueueRequiresKind(t *testing.T) {
 	}
 }
 
-// TestOptimiseSingleFlightReturnsConflict 是「单并发」用例（第一条验收）：
-// 作业在跑时第二次入队应得到可识别为 409 的哨兵错误。
+// TestOptimiseSingleFlightReturnsConflict is the "single concurrency" case (the first acceptance item):
+// while a job is running, a second enqueue should get a sentinel error recognizable as 409.
 //
-// 用一个阻塞在 stdin 上的真实子进程（`sh -c 'cat'`）让第一个作业停在 running，
-// 此时第二个 Enqueue 必然撞上单并发门。stdin 由测试持有的管道提供：关闭写端 cat 即退出，
-// 因此不依赖 sleep 之类的固定等待。
+// A real subprocess blocked on stdin (`sh -c 'cat'`) keeps the first job in running, so
+// the second Enqueue necessarily hits the single-concurrency gate. stdin comes from a pipe the test holds: closing the write end makes cat exit,
+// so there is no fixed wait such as a sleep.
 func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	pr, pw, err := os.Pipe()
 	if err != nil {
@@ -104,7 +104,7 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Enqueue: %v", err)
 	}
-	// 等第一个作业进入 running，确保它确实在执行而不是还躺在队列里。
+	// Wait for the first job to enter running, to be sure it is really executing and not still sitting in the queue.
 	waitForStatus(t, st, first.ID, StatusRunning, 3*time.Second)
 
 	_, err = runner.Enqueue(context.Background(), KindOptimize, nil)
@@ -112,7 +112,7 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 		t.Fatalf("second Enqueue error = %v, want ErrAlreadyRunning", err)
 	}
 
-	// REST 层映射：哨兵错误必须映射成 409（接线时复用 HTTPStatus）。
+	// REST layer mapping: the sentinel error must map to 409 (HTTPStatus is reused when wiring).
 	rec := httptest.NewRecorder()
 	http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "job conflict", HTTPStatus(err))
@@ -122,7 +122,7 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	}
 	t.Logf("second Enqueue -> %v ; HTTPStatus -> %d", err, rec.Code)
 
-	// 释放 stdin 让第一个作业正常结束，验证成功路径的状态机与阶段。
+	// Release stdin so the first job finishes normally, verifying the state machine and stages of the success path.
 	if err := pw.Close(); err != nil {
 		t.Fatalf("close pipe writer: %v", err)
 	}
@@ -139,10 +139,10 @@ func TestOptimiseSingleFlightReturnsConflict(t *testing.T) {
 	t.Logf("job %d status=%s stage=%v started=%v finished=%v", done.ID, done.Status, deref(done.Stage), done.StartedAt != nil, done.FinishedAt != nil)
 }
 
-// TestOptimiseTimeoutMarksJobFailed 是「超时」用例（第二条验收的前半）：
-// 卡死的适配器在配置超时后被取消，作业标记为 failed 且原因写明超时。命令自身要睡 30s，
-// 而测试在 5s 内就拿到 failed，说明是超时机制结束的作业，而不是命令自然退出。
-// 「连它派生的子进程一起杀掉」由下一条 TestOptimiseTimeoutKillsProcessGroup 单独覆盖。
+// TestOptimiseTimeoutMarksJobFailed is the "timeout" case (the first half of the second acceptance item):
+// a stuck adapter is cancelled after the configured timeout, the job is marked failed with a reason stating the timeout. The command itself sleeps 30s,
+// yet the test gets failed within 5s, which shows the timeout mechanism ended the job rather than the command exiting on its own.
+// "Kill the processes it spawned as well" is covered separately by the next test, TestOptimiseTimeoutKillsProcessGroup.
 func TestOptimiseTimeoutMarksJobFailed(t *testing.T) {
 	const timeout = 200 * time.Millisecond
 	runner, st, _ := newTestRunner(t, timeout, func(context.Context, *store.Job, Reporter) (Command, error) {
@@ -169,12 +169,12 @@ func TestOptimiseTimeoutMarksJobFailed(t *testing.T) {
 	t.Logf("job %d status=%s elapsed=%s error=%q", failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error)
 }
 
-// TestOptimiseTimeoutKillsProcessGroup 是「杀进程」用例（第二条验收的后半）：
-// 超时必须杀掉整个进程组，而不只是直接子进程。
+// TestOptimiseTimeoutKillsProcessGroup is the "kill the process" case (the second half of the second acceptance item):
+// a timeout must kill the whole process group, not just the direct child.
 //
-// 命令是 `sh -c 'sleep 30 & echo child=$!; cat'`：shell 与后台 sleep 同属一个进程组，
-// cat 阻塞在 stdin 上模拟挂死。超时设为 200ms，测试总耗时远小于 sleep 的 30s，
-// 说明确实是超时机制杀掉了进程组，而不是等命令自然结束。
+// The command is `sh -c 'sleep 30 & echo child=$!; cat'`: the shell and the background sleep share a process group,
+// and cat blocks on stdin to simulate a hang. The timeout is set to 200ms and the total test time is far less than sleep's 30s,
+// which shows the timeout mechanism really killed the process group rather than waiting for the command to end by itself.
 func TestOptimiseTimeoutKillsProcessGroup(t *testing.T) {
 	pr, pw, err := os.Pipe()
 	if err != nil {
@@ -213,8 +213,8 @@ func TestOptimiseTimeoutKillsProcessGroup(t *testing.T) {
 		t.Fatalf("failed job did not capture a log tail")
 	}
 
-	// 从日志尾巴里取出后台子进程的 PID，验证「杀整个进程组」：shell 被 SIGKILL 后，
-	// 它派生的 sleep 也必须消失（否则只是杀了直接子进程，没杀进程组）。
+	// Pull the PID of the background child out of the log tail and verify "kill the whole process group": once the shell is SIGKILLed,
+	// the sleep it spawned must be gone too (otherwise only the direct child was killed, not the process group).
 	m := regexp.MustCompile(`child=(\d+)`).FindStringSubmatch(*failed.LogTail)
 	if m == nil {
 		t.Fatalf("log tail %q does not contain child=<pid>", *failed.LogTail)
@@ -230,7 +230,7 @@ func TestOptimiseTimeoutKillsProcessGroup(t *testing.T) {
 		failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error, *failed.LogTail, childPID, true)
 }
 
-// deref 解引用可空文本，nil 时返回 "<nil>"，供测试日志打印可读值。
+// deref dereferences nullable text, returning "<nil>" when nil, so test logs print a readable value.
 func deref(s *string) string {
 	if s == nil {
 		return "<nil>"
@@ -238,12 +238,12 @@ func deref(s *string) string {
 	return *s
 }
 
-// processGone 轮询判断 PID 是否已退出。
+// processGone polls whether a PID has exited.
 //
-// 为什么要同时看 /proc：kill(pid, 0) 只在进程消失时返回 ESRCH，僵尸进程（Z）同样
-// 返回成功。容器里 PID 1 常常不 reap 子进程（act 的 job 容器就是 tail -f /dev/null），
-// 被杀的孤儿会长期停在 Z，于是「进程组已杀掉」在容器里会被误判成「还活着」。
-// 僵尸已经不运行、不占 CPU，所以也算已退出。
+// Why also look at /proc: kill(pid, 0) only returns ESRCH once the process is gone, while a zombie (Z) also
+// returns success. In containers PID 1 often does not reap children (act's job container is tail -f /dev/null), and
+// killed orphans linger in Z for a long time, so "the process group was killed" would be misjudged as "still alive" in containers.
+// A zombie no longer runs and uses no CPU, so it counts as exited too.
 func processGone(pid int, limit time.Duration) bool {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
@@ -255,7 +255,7 @@ func processGone(pid int, limit time.Duration) bool {
 	return false
 }
 
-// processDead 判断 PID 是否已死：kill(pid, 0) 返回 ESRCH，或进程已是僵尸（Z）。
+// processDead reports whether a PID is dead: kill(pid, 0) returns ESRCH, or the process is already a zombie (Z).
 func processDead(pid int) bool {
 	if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
 		return true
@@ -263,8 +263,8 @@ func processDead(pid int) bool {
 	return procState(pid) == "Z"
 }
 
-// procState 读取 /proc/<pid>/stat 的状态字符；读不到（进程已消失或无 /proc）时返回空串。
-// stat 的第二列是 "(comm)"，进程名里可能含空格或括号，因此取最后一个 ')' 之后的字段。
+// procState reads the state character from /proc/<pid>/stat; returns an empty string when it cannot be read (process gone, or no /proc).
+// The second field of stat is "(comm)"; the process name may contain spaces or parentheses, so take the fields after the last ')'.
 func procState(pid int) string {
 	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
@@ -282,7 +282,7 @@ func procState(pid int) string {
 	return fields[0]
 }
 
-// TestTailBufferAndLines 覆盖日志尾巴的字节截断与行截断。
+// TestTailBufferAndLines covers byte truncation and line truncation of the log tail.
 func TestTailBufferAndLines(t *testing.T) {
 	tb := newTailBuffer(8)
 	if _, err := tb.Write([]byte("0123456789abcdef")); err != nil {
@@ -292,7 +292,7 @@ func TestTailBufferAndLines(t *testing.T) {
 	if len(got) > 8 {
 		t.Fatalf("tail size = %d, want <= 8", len(got))
 	}
-	// 只保留末尾字节：应为 "89abcdef"。
+	// Keep only the trailing bytes: should be "89abcdef".
 	if got[len(got)-8:] != "89abcdef" {
 		t.Fatalf("tail = %q, want suffix %q", got, "89abcdef")
 	}
@@ -309,9 +309,9 @@ func TestTailBufferAndLines(t *testing.T) {
 	}
 }
 
-// TestRecoverStaleJobsAtStartup 是验收：预置一行上次进程遗留的 running 作业，
-// 构造并启动 Runner 后它必须变为 failed、原因记录为 StaleJobReason、日志尾巴保留，
-// 且随后新入队不再被永久 409 阻塞。
+// TestRecoverStaleJobsAtStartup is acceptance: with a running job row left over from the previous process pre-seeded,
+// after building and starting the Runner it must become failed, with the reason recorded as StaleJobReason and the log tail kept,
+// and subsequent new enqueues must no longer be blocked by a permanent 409.
 func TestRecoverStaleJobsAtStartup(t *testing.T) {
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
 	if err != nil {
@@ -323,7 +323,7 @@ func TestRecoverStaleJobsAtStartup(t *testing.T) {
 	st := NewStore(db)
 	ctx := context.Background()
 
-	// 预置残留作业：queued -> running，并带上日志尾巴（模拟崩溃前正在训练）。
+	// Pre-seed the leftover job: queued -> running, with a log tail attached (simulating training in progress before the crash).
 	stale, err := st.CreateQueued(ctx, KindOptimize, nil, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("CreateQueued: %v", err)
@@ -348,12 +348,12 @@ func TestRecoverStaleJobsAtStartup(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	// 恢复前：残留的 running 行让入队撞上单并发门（这正是要修的症状）。
+	// Before recovery: the leftover running row makes enqueue hit the single-concurrency gate (exactly the symptom to fix).
 	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
 	}
 
-	// 构造并启动 Runner：启动钩子显式回收残留 running 作业。
+	// Build and start the Runner: the startup hook explicitly reclaims the leftover running job.
 	startCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runner.Start(startCtx)
@@ -377,7 +377,7 @@ func TestRecoverStaleJobsAtStartup(t *testing.T) {
 	t.Logf("recovered stale job %d -> status=%s error=%q log_tail=%q",
 		recovered.ID, recovered.Status, *recovered.Error, *recovered.LogTail)
 
-	// 恢复后：新入队必须成功，不再被永久 409 阻塞。
+	// After recovery: a new enqueue must succeed and no longer be blocked by a permanent 409.
 	fresh, err := runner.Enqueue(ctx, KindOptimize, nil)
 	if err != nil {
 		t.Fatalf("Enqueue after recovery: %v", err)
@@ -386,7 +386,7 @@ func TestRecoverStaleJobsAtStartup(t *testing.T) {
 	t.Logf("fresh enqueue after recovery -> job %d status=%s", done.ID, done.Status)
 }
 
-// TestRecoverStaleExplicitEntry 覆盖显式入口：RecoverStale 返回回收行数，且不清空日志尾巴。
+// TestRecoverStaleExplicitEntry covers the explicit entry point: RecoverStale returns the number of reclaimed rows and does not clear the log tail.
 func TestRecoverStaleExplicitEntry(t *testing.T) {
 	runner, st, _ := newTestRunner(t, time.Second, func(context.Context, *store.Job, Reporter) (Command, error) {
 		return Command{Name: "/bin/true"}, nil
@@ -416,9 +416,9 @@ func TestRecoverStaleExplicitEntry(t *testing.T) {
 	}
 }
 
-// TestRecoverQueuedJobsAtStartup 是验收：预置一行上次进程在「insert 之后、启动之前」
-// 崩溃遗留的 queued 作业（内存队列随进程消失，它永远不会被执行），启动恢复后它必须变为
-// failed、原因是「作业从未启动」，且随后新入队不再被永久 409 阻塞。
+// TestRecoverQueuedJobsAtStartup is acceptance: with a queued job row pre-seeded, left over from a previous process that crashed
+// "after the insert, before startup" (the in-memory queue dies with the process, so it is never executed), after startup recovery it must become
+// failed with the reason "job never started", and subsequent new enqueues must no longer be blocked by a permanent 409.
 func TestRecoverQueuedJobsAtStartup(t *testing.T) {
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
 	if err != nil {
@@ -430,7 +430,7 @@ func TestRecoverQueuedJobsAtStartup(t *testing.T) {
 	st := NewStore(db)
 	ctx := context.Background()
 
-	// 只建一行 queued，不做 MarkRunning：这正是崩溃在「入队已写库、worker 还没取走」之间留下的残留。
+	// Create only a queued row, without MarkRunning: this is exactly the leftover a crash between "enqueue persisted" and "worker picked it up" leaves.
 	stale, err := st.CreateQueued(ctx, KindOptimize, nil, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("CreateQueued: %v", err)
@@ -451,12 +451,12 @@ func TestRecoverQueuedJobsAtStartup(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	// 恢复前：残留 queued 行让 Enqueue 永久 409，这正是要修的症状。
+	// Before recovery: the leftover queued row makes Enqueue return a permanent 409, exactly the symptom to fix.
 	if _, err := runner.Enqueue(ctx, KindOptimize, nil); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("Enqueue before recovery error = %v, want ErrAlreadyRunning", err)
 	}
 
-	// 显式恢复入口必须同时回收 queued 行，并返回回收行数。
+	// The explicit recovery entry point must reclaim queued rows too, and return the number of reclaimed rows.
 	n, err := runner.RecoverStale(ctx)
 	if err != nil {
 		t.Fatalf("RecoverStale: %v", err)
@@ -483,7 +483,7 @@ func TestRecoverQueuedJobsAtStartup(t *testing.T) {
 	t.Logf("recovered queued job %d -> status=%s error=%q finished=%v",
 		recovered.ID, recovered.Status, *recovered.Error, recovered.FinishedAt)
 
-	// 恢复后：启动 worker，新入队必须成功并被执行，不再被永久 409 阻塞。
+	// After recovery: start the worker; a new enqueue must succeed and be executed, no longer blocked by a permanent 409.
 	startCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runner.Start(startCtx)

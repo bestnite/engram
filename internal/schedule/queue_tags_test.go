@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedTaggedCard 建一个带标签的 basic note 与它的一张 card，返回 card id。
+// seedTaggedCard creates a tagged basic note and one of its cards, returning the card id.
 func seedTaggedCard(t *testing.T, db *gorm.DB, deckID uint64, tags []string, createdAt time.Time) uint64 {
 	t.Helper()
 	n := store.Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`,
@@ -53,8 +53,8 @@ func equalIDs(a, b []uint64) bool {
 	return true
 }
 
-// TestBuildFiltersByTags 断言 Tags 对学习卡、到期复习卡、新卡与提前学习卡同时生效，
-// 多个标签取并集，空 Tags 不过滤。
+// TestBuildFiltersByTags asserts Tags applies at once to learning cards, due review cards, new cards and learn-ahead cards,
+// multiple tags form a union, and empty Tags filters nothing.
 func TestBuildFiltersByTags(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -103,8 +103,8 @@ func TestBuildFiltersByTags(t *testing.T) {
 	}
 }
 
-// TestTagQueueSharesDeckBudget 断言标签队列与整卡组队列共用卡组的每日额度：今天在别的标签里
-// 引入的新卡同样扣减本卡组的 new_per_day，标签不会开出第二份额度。
+// TestTagQueueSharesDeckBudget asserts the tagged queue shares the deck's daily allowance with the whole-deck queue: new cards introduced today under
+// another tag also consume this deck's new_per_day, and tags do not open a second allowance.
 func TestTagQueueSharesDeckBudget(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -113,7 +113,7 @@ func TestTagQueueSharesDeckBudget(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		seedTaggedCard(t, db, deckID, culture, now.Add(time.Duration(i)*time.Minute))
 	}
-	// 今天已在「创新」标签里引入 1 张新卡（state_before = New 的复习日志）。
+	// 1 new card was already introduced today under the 创新 tag (a review log with state_before = New).
 	introduced := seedTaggedCard(t, db, deckID, []string{"创新"}, now)
 	seedReview(t, db, 1, introduced, ReviewDay(now, time.UTC, 4), int(StateNew), now.Add(-time.Hour))
 

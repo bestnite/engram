@@ -1,4 +1,4 @@
-// Package api 提供 /api/v1 的 REST handler 与鉴权、限流中间件。
+// Package api provides the /api/v1 REST handlers plus the auth and rate-limit middleware.
 package api
 
 import (
@@ -10,11 +10,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 稳定的错误 code（英文常量，供调用方程序化判断）。
+// Stable error codes (English constants, for callers to branch on programmatically).
 //
-// REST 与 MCP 的错误统一返回稳定英文 code 与英文 message，
-// 不随请求的 Accept-Language 改变。SPA 前端根据稳定 code 映射本地化提示，不解析后端 message。
-// 新增 code 时必须在 errorMessages 登记英文文案。
+// REST and MCP errors uniformly return a stable English code and an English message,
+// never varying with the request's Accept-Language. The SPA frontend maps localized hints from the stable code and does not parse backend messages.
+// When adding a code you must register its English text in errorMessages.
 const (
 	CodeUnauthorized   = "unauthorized"
 	CodeInvalidAPIKey  = "invalid_api_key"
@@ -23,62 +23,62 @@ const (
 	CodeInvalidRequest = "invalid_request"
 	CodeNotFound       = "not_found"
 	CodeForbidden      = "forbidden"
-	// CodeInsufficientRole 表示用户对卡组有访问权但角色不够（如 reader 试图改卡），
-	// 与“完全无访问权”的 CodeForbidden 区分，便于调用方精确判断。
+	// CodeInsufficientRole means the user can access the deck but the role is not enough (e.g. a reader trying to edit a card),
+	// distinguished from CodeForbidden for "no access at all", so callers can decide precisely.
 	CodeInsufficientRole = "insufficient_role"
-	// CodeScopeNotGrantable 表示请求要创建的 key 含只有管理员才能持有的 scope
-	// （当前只有 admin）「admin 只能发给管理员账号」。
+	// CodeScopeNotGrantable means the key the request wants to create carries a scope only admins may hold
+	// (currently only admin): "admin can only be issued to admin accounts".
 	CodeScopeNotGrantable = "scope_not_grantable"
 	CodeConflict          = "conflict"
 	CodeVersionConflict   = "version_conflict"
 	CodeInternal          = "internal_error"
-	// CodeDeckNameInvalid 表示建卡组/改名时卡组名不满足长度或字符规则
-	// （与卡组包 manifest 同源；store 层 ErrDeckNameInvalid）。
+	// CodeDeckNameInvalid means the deck name breaks the length or character rules when creating or renaming a deck
+	// (same source as the deck package manifest; store-level ErrDeckNameInvalid).
 	CodeDeckNameInvalid = "deck_name_invalid"
-	// CodeDeckDescriptionInvalid 表示描述超长或含非法字符。
+	// CodeDeckDescriptionInvalid means the description is too long or contains illegal characters.
 	CodeDeckDescriptionInvalid = "deck_description_invalid"
-	// CodeMediaNotReadable 表示 note 写入引用了写入者无法读取的媒体，写入被拒（写前校验）。
-	// 与 store.CodeMediaNotReadable 同值。
+	// CodeMediaNotReadable means a note write referenced media the writer cannot read, so the write was rejected (pre-write check).
+	// Same value as store.CodeMediaNotReadable.
 	CodeMediaNotReadable = "media_not_readable"
-	// CodeCSRFFailed 表示 CSRF token 缺失或校验失败。
+	// CodeCSRFFailed means the CSRF token is missing or failed validation.
 	CodeCSRFFailed = "csrf_failed"
-	// CodeCSRFNoSession 表示无活跃会话进行 CSRF 校验。
+	// CodeCSRFNoSession means there is no active session to validate CSRF against.
 	CodeCSRFNoSession = "csrf_no_session"
-	// CodeInvalidCredentials 表示登录凭据错误。
+	// CodeInvalidCredentials means the login credentials are wrong.
 	CodeInvalidCredentials = "invalid_credentials"
-	// CodeUserDisabled 表示账号已被禁用。
+	// CodeUserDisabled means the account is disabled.
 	CodeUserDisabled = "user_disabled"
-	// CodeTOTPRequired 表示需要进行 TOTP 二次验证。
+	// CodeTOTPRequired means TOTP two-factor verification is required.
 	CodeTOTPRequired = "totp_required"
-	// CodeTOTPInvalid 表示登录第二步提交的验证码/恢复码无效。
+	// CodeTOTPInvalid means the code / recovery code submitted in the second login step is invalid.
 	CodeTOTPInvalid = "totp_invalid"
-	// CodeTOTPChallengeExpired 表示第二步凭据缺失或已过期（必须从第一步重新登录）。
+	// CodeTOTPChallengeExpired means the second-step credential is missing or expired (the user must log in again from step one).
 	CodeTOTPChallengeExpired = "totp_challenge_expired"
-	// CodeGradingRequired 表示对作答类题型提交了自评分：这类卡只能由服务端判分。
+	// CodeGradingRequired means a self-grade was submitted for an answer-type card type: such cards are graded by the server only.
 	CodeGradingRequired = "grading_required"
-	// CodeImportURLInvalid 表示直链导入的 URL 缺失、非法、非 HTTPS 或带用户凭据。
+	// CodeImportURLInvalid means the direct-link import URL is missing, invalid, not HTTPS, or carries user credentials.
 	CodeImportURLInvalid = "deck_import_url_invalid"
-	// CodeImportURLBlocked 表示 URL 主机解析到非公网地址（SSRF 防护拒绝）。
+	// CodeImportURLBlocked means the URL host resolves to a non-public address (rejected by SSRF protection).
 	CodeImportURLBlocked = "deck_import_url_blocked"
-	// CodeImportURLFetchFailed 表示直链下载失败：连接/超时/重定向过多/非 2xx。
+	// CodeImportURLFetchFailed means the direct-link download failed: connection / timeout / too many redirects / non-2xx.
 	CodeImportURLFetchFailed = "deck_import_url_fetch_failed"
-	// CodeImportURLNotPackage 表示直链返回的内容不是卡组包（如 HTML 页面）。
+	// CodeImportURLNotPackage means the direct link returned something that is not a deck package (e.g. an HTML page).
 	CodeImportURLNotPackage = "deck_import_url_not_package"
-	// CodeImportUploadInvalid 表示上传票据不存在、已过期、已用过，或签发它的账号 / API key
-	// 已失效。几种原因合并成一个 code：补救方式相同（重新申请票据），也不向持有 URL 的人透露原因。
+	// CodeImportUploadInvalid means the upload ticket does not exist, has expired, was already used, or the account / API key that issued it
+	// is no longer valid. The reasons collapse into one code: the remedy is the same (request a new ticket), and it does not reveal the reason to whoever holds the URL.
 	CodeImportUploadInvalid = "deck_import_upload_invalid"
 )
 
-// errorBody 是错误包壳的 error 对象：{"error":{"code":"...","message":"..."}}。
+// errorBody is the error object of the error envelope: {"error":{"code":"...","message":"..."}}.
 type errorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// errorMessages 是每个稳定 code 的英文文案表。
+// errorMessages is the table of English text for each stable code.
 //
-// 它是 “code → 英文文案” 的唯一登记处：REST 与 MCP 的错误出口都经 ErrorMessage / formatErrorMessage 取值。
-// 这里同时覆盖 store 层卡组包导入会透出的 code（mapPackageError 会原样返回它们）。
+// It is the single registry of "code -> English text": both the REST and MCP error exits read from it via ErrorMessage / formatErrorMessage.
+// It also covers the codes the store layer's deck package import surfaces (mapPackageError returns them unchanged).
 var errorMessages = map[string]string{
 	CodeUnauthorized:         "Authentication is required.",
 	CodeInvalidAPIKey:        "The API key is invalid, expired, or revoked.",
@@ -101,16 +101,16 @@ var errorMessages = map[string]string{
 	CodeTOTPChallengeExpired: "The two-factor challenge has expired. Sign in again.",
 	CodeGradingRequired:      "This card type is graded by the server: send an answer or give up instead of a rating.",
 
-	// 直链导入（POST /decks/import-url）的稳定 code。
+	// Stable codes for direct-link import (POST /decks/import-url).
 	CodeImportURLInvalid:     "The URL is not a valid public HTTPS link.",
 	CodeImportURLBlocked:     "The URL points to a network address that is not allowed.",
 	CodeImportURLFetchFailed: "The package could not be downloaded from the URL.",
 	CodeImportURLNotPackage:  "The URL did not return a deck package.",
 
-	// 上传票据导入（PUT /decks/import-uploads/:token）的稳定 code。
+	// Stable codes for upload-ticket import (PUT /decks/import-uploads/:token).
 	CodeImportUploadInvalid: "The upload URL is invalid, expired or already used; request a new one.",
 
-	// 卡组包导入的稳定 code（store.PackageError.Code）。
+	// Stable codes for deck package import (store.PackageError.Code).
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",
 	store.CodePackageTooLarge:        "The package exceeds the allowed size.",
 	store.CodePackageBadFormat:       "The package format is invalid.",
@@ -120,24 +120,24 @@ var errorMessages = map[string]string{
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
 	store.CodePackageMediaForbidden:  "The package references media you cannot read.",
 
-	// 写前媒体可读性校验的稳定 code（store.MediaWriteError.Code）。
+	// Stable codes for the pre-write media readability check (store.MediaWriteError.Code).
 	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
 
-	// 建卡组/改名的稳定 code（store.ErrDeckNameInvalid）。
+	// Stable codes for deck create/rename (store.ErrDeckNameInvalid).
 	CodeDeckNameInvalid:        "The deck name is invalid.",
 	CodeDeckDescriptionInvalid: "The deck description is invalid.",
 }
 
-// defaultErrorMessage 返回 code 的英文兜底文案；未登记的 code 返回空串。
+// defaultErrorMessage returns the English fallback text for a code; unregistered codes return the empty string.
 func defaultErrorMessage(code string) string { return errorMessages[code] }
 
-// errorMessage 返回 code 的英文 message。
+// errorMessage returns the English message for a code.
 func errorMessage(c *gin.Context, code string) string {
 	return ErrorMessage(c.Request.Context(), code)
 }
 
-// ErrorMessage 返回 code 对应的稳定英文文案。
-// 未登记的 code 回退为 code 本身。
+// ErrorMessage returns the stable English text for a code.
+// Unregistered codes fall back to the code itself.
 func ErrorMessage(_ context.Context, code string) string {
 	if msg := errorMessages[code]; msg != "" {
 		return msg
@@ -145,8 +145,8 @@ func ErrorMessage(_ context.Context, code string) string {
 	return code
 }
 
-// formatErrorMessage 组合最终 message：英文基底 + 可选动态细节。
-// 细节为空、或恰等于该 code 的英文文案时只返回英文基底，避免出现重复。
+// formatErrorMessage assembles the final message: the English base plus optional dynamic detail.
+// When the detail is empty, or exactly equal to the code's English text, only the base is returned, avoiding duplication.
 func formatErrorMessage(ctx context.Context, code, detail string) string {
 	base := ErrorMessage(ctx, code)
 	detail = strings.TrimSpace(detail)
@@ -159,17 +159,17 @@ func formatErrorMessage(ctx context.Context, code, detail string) string {
 	return base + " — " + detail
 }
 
-// ErrorText 把任意 service error 渲染成 "code: message"，message 为稳定英文。
-// MCP 工具没有 HTTP 错误包壳，用它保证与 REST 一致的 code + 英文文案。
+// ErrorText renders any service error as "code: message", with message in stable English.
+// MCP tools have no HTTP error envelope; this keeps their code + English text consistent with REST.
 func ErrorText(ctx context.Context, err error) string {
 	se := asServiceError(err)
 	return se.Code + ": " + formatErrorMessage(ctx, se.Code, se.Message)
 }
 
-// abortError 写出统一错误包壳并中止请求；所有 API 错误都必须经这里返回，避免形态漂移。
+// abortError writes the unified error envelope and aborts the request; every API error must go through here so the shape does not drift.
 //
-// message 传空串表示“按 code 取英文文案”；非空时视为调用方给出的动态细节（如字段名、
-// 上限值），追加在英文文案之后，绝不替换 code 的文案。
+// An empty message means "take the English text by code"; a non-empty one is dynamic detail supplied by the caller (e.g. a field name,
+// a limit value), appended after the English text and never replacing the code's text.
 func abortError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": errorBody{
 		Code:    code,
@@ -177,8 +177,8 @@ func abortError(c *gin.Context, status int, code, message string) {
 	}})
 }
 
-// writeServiceError 把 service 层的 *ServiceError 映射成统一错误包壳；未识别错误按 500 处理。
-// REST handler 与 MCP 工具共用同一批 service 方法，这里是 REST 侧的出口。
+// writeServiceError maps a service-layer *ServiceError to the unified error envelope; unrecognized errors become 500.
+// REST handlers and MCP tools share the same service methods; this is the REST-side exit.
 func writeServiceError(c *gin.Context, err error) {
 	se := asServiceError(err)
 	abortError(c, se.Status, se.Code, se.Message)

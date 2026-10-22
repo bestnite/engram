@@ -9,8 +9,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestCardTypesEndpointReturnsRegistryDescriptions 覆盖 /api/v1/card-types：
-// 返回 200、kinds 数量等于注册表题型数、每个元素都带 kind/label_key/fields。
+// TestCardTypesEndpointReturnsRegistryDescriptions covers /api/v1/card-types:
+// it returns 200, kinds holds as many entries as the registry has card types, and every element carries kind/label_key/fields.
 func TestCardTypesEndpointReturnsRegistryDescriptions(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()
@@ -41,7 +41,7 @@ func TestCardTypesEndpointReturnsRegistryDescriptions(t *testing.T) {
 	}
 }
 
-// TestCardTypesEndpointRequiresAuth 是负例：未认证（无会话、无 API key）返回 401。
+// TestCardTypesEndpointRequiresAuth is the negative case: unauthenticated (no session, no API key) returns 401.
 func TestCardTypesEndpointRequiresAuth(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()

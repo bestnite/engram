@@ -13,8 +13,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// optimiseDB 打开临时 SQLite 并迁移全部表，供本文件的「落库 → 调度器」用例使用。
-// 不依赖外部网络，也不依赖真实优化器二进制。
+// optimiseDB opens a temporary SQLite and migrates all tables, for this file's "persist → scheduler" cases.
+// It depends neither on an external network nor on the real optimiser binary.
 func optimiseDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "optimise.db"))
@@ -27,7 +27,7 @@ func optimiseDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// optimiseOwner 建一个可用于归属 preset 的用户，返回其主键。
+// optimiseOwner creates a user that can own a preset, returning its primary key.
 func optimiseOwner(t *testing.T, db *gorm.DB) uint64 {
 	t.Helper()
 	u := store.User{
@@ -41,7 +41,7 @@ func optimiseOwner(t *testing.T, db *gorm.DB) uint64 {
 	return u.ID
 }
 
-// optimiseWeights21 返回一组 21 维权重，各元素互不相同且非默认值，便于断言确实是写回的那组。
+// optimiseWeights21 returns a set of 21-dimensional weights whose elements are all distinct and non-default, so it is easy to assert that exactly that set was written back.
 func optimiseWeights21() []float64 {
 	w := make([]float64, 21)
 	for i := range w {
@@ -50,9 +50,9 @@ func optimiseWeights21() []float64 {
 	return w
 }
 
-// TestOptimiseWeightRoundTrip 是「权重往返」的端到端用例：优化写回的权重落库后，
-// 调度器 NewScheduler 读到的就是同一组权重（而不是默认权重）。
-// 这条链路串起 store（落库）与 schedule（消费），正是「优化完成即生效」的数据契约。
+// TestOptimiseWeightRoundTrip is the end-to-end case for the "weight round trip": after the weights written back by optimisation are persisted,
+// the scheduler built by NewScheduler reads exactly the same weights (not the defaults).
+// This chain links store (persist) and schedule (consume), which is exactly the data contract of "takes effect as soon as optimisation finishes".
 func TestOptimiseWeightRoundTrip(t *testing.T) {
 	db := optimiseDB(t)
 	ctx := context.Background()
@@ -87,9 +87,9 @@ func TestOptimiseWeightRoundTrip(t *testing.T) {
 	if len(s.fsrs.W) != 21 {
 		t.Fatalf("scheduler has %d weights, want 21", len(s.fsrs.W))
 	}
-	// 调度器确实采用了存库那组权重：与默认权重不同即证明走了 weights_json 分支
-	// （逐元素精确往返由 internal/store 的 TestOptimisePresetWeightsRoundTrip 断言；
-	// 这里不比较具体数值，因为 NewFSRS 会对权重做边界裁剪，下游看到的不是原样数组）。
+	// The scheduler really did adopt the stored weight set: differing from the defaults proves the weights_json branch was taken
+	// (the exact element-by-element round trip is asserted by internal/store's TestOptimisePresetWeightsRoundTrip;
+	// specific values are not compared here because NewFSRS clamps the weights at their bounds, so downstream does not see the array verbatim).
 	defaults := fsrs.DefaultWeights()
 	sameAsDefault := true
 	for i := range defaults {
@@ -103,8 +103,8 @@ func TestOptimiseWeightRoundTrip(t *testing.T) {
 	}
 }
 
-// TestOptimiseRevertRestoresDefaultWeights 是「回退」的端到端用例：一键回退后，
-// 调度器重新落到 fsrs.DefaultWeights()，三列权重元数据一并归 NULL。
+// TestOptimiseRevertRestoresDefaultWeights is the end-to-end case for "revert": after a one-click revert,
+// the scheduler falls back to fsrs.DefaultWeights(), and the three weight metadata columns all go NULL.
 func TestOptimiseRevertRestoresDefaultWeights(t *testing.T) {
 	db := optimiseDB(t)
 	ctx := context.Background()

@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// doJSON 发一个带 bearer key 的 JSON 请求并返回状态码与响应体。
+// doJSON sends a JSON request with a bearer key and returns the status code and response body.
 func doJSON(t *testing.T, h http.Handler, method, path, plaintext, body string) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -24,8 +24,8 @@ func doJSON(t *testing.T, h http.Handler, method, path, plaintext, body string) 
 	return rec.Code, rec.Body.Bytes()
 }
 
-// TestBulkImportIsIdempotentByExternalRef 是核心验收：
-// 同一批数据重复提交不产生重复卡，且 created/updated/skipped 计数正确。
+// TestBulkImportIsIdempotentByExternalRef is the core acceptance:
+// resubmitting the same data produces no duplicate cards, and created/updated/skipped are counted correctly.
 func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "importer", store.RoleUser)
@@ -38,7 +38,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 		`{"kind":"basic","fields":{"front":"a","back":"b"},"external_ref":"n:1"},` +
 		`{"kind":"basic","fields":{"front":"c","back":"d"},"external_ref":"n:2"}]}`
 
-	// 第一次导入：全部新建。
+	// First import: everything created.
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("first import status = %d, want 200 (body %s)", status, raw)
@@ -55,7 +55,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 		t.Errorf("first import errors = %v, want none", first.Errors)
 	}
 
-	// 第二次导入同一批：按 external_ref 命中已有卡，全部更新，不新增。
+	// Second import of the same batch: everything hits an existing card by external_ref, all updated, nothing created.
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("second import status = %d, want 200 (body %s)", status, raw)
@@ -69,7 +69,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 			second.Created, second.Updated, second.Skipped)
 	}
 
-	// 第三次 on_conflict=skip：全部跳过，仍不新增。
+	// Third run with on_conflict=skip: everything skipped, still nothing created.
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext,
 		`{"on_conflict":"skip","notes":[`+
 			`{"kind":"basic","fields":{"front":"a","back":"b"},"external_ref":"n:1"},`+
@@ -86,10 +86,10 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 			third.Created, third.Updated, third.Skipped)
 	}
 
-	// 库里的 note / card 数必须是 2 —— 重复导入没有产生重复卡。
+	// The note / card counts in the database must be 2 - the repeated import produced no duplicate cards.
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 
-	// dry_run 只算不写：新 ref 报告 created=1，但库里仍是 2 张。
+	// dry_run counts without writing: a new ref reports created=1 while the database still holds 2.
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext,
 		`{"dry_run":true,"notes":[{"kind":"basic","fields":{"front":"e","back":"f"},"external_ref":"n:3"}]}`)
 	if status != http.StatusOK {
@@ -105,7 +105,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 }
 
-// assertNoteCardCount 断言卡组下的note与card数量。
+// assertNoteCardCount asserts the number of notes and cards under the deck.
 func assertNoteCardCount(t *testing.T, env *testEnv, deckID uint64, wantNotes, wantCards int64) {
 	t.Helper()
 	var notes int64
@@ -126,7 +126,7 @@ func assertNoteCardCount(t *testing.T, env *testEnv, deckID uint64, wantNotes, w
 	}
 }
 
-// TestImportRejectsScopeAndMalformedBody 覆盖写 scope 与请求体校验的反面用例。
+// TestImportRejectsScopeAndMalformedBody covers the negative cases for write scope and body validation.
 func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "scope_user", store.RoleUser)
@@ -136,14 +136,14 @@ func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	// 只有 read scope 的 key 调写接口 → 403 scope_required。
+	// A key with read scope only calling a write endpoint -> 403 scope_required.
 	status, raw := doJSON(t, router, http.MethodPost, path, readKey.Plaintext,
 		`{"notes":[{"kind":"basic","fields":{"front":"a","back":"b"}}]}`)
 	if status != http.StatusForbidden {
 		t.Fatalf("read key write status = %d, want 403 (body %s)", status, raw)
 	}
 
-	// 空 notes 数组 → 400 invalid_request。
+	// An empty notes array -> 400 invalid_request.
 	status, raw = doJSON(t, router, http.MethodPost, path, writeKey.Plaintext, `{"notes":[]}`)
 	if status != http.StatusBadRequest {
 		t.Fatalf("empty notes status = %d, want 400 (body %s)", status, raw)

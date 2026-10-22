@@ -10,10 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSharedDeckUsesEachMembersOwnSettings 是 REST 层验收：同一个共享卡组，属主与成员
-//   - 在卡组列表里各自看到自己的预设与每日上限；
-//   - 复习队列各按自己的新卡上限出卡；
-//   - 评分各按自己预设的学习步骤调度（属主有学习步骤，成员的预设没有）。
+// TestSharedDeckUsesEachMembersOwnSettings is the REST-level acceptance: on one shared deck, owner and member
+//   - each see their own preset and daily cap in the deck list;
+//   - each get cards in the review queue per their own new-card cap;
+//   - each get scheduled per their own preset's learning steps (the owner has learning steps, the member's preset has none).
 func TestSharedDeckUsesEachMembersOwnSettings(t *testing.T) {
 	env := newTestEnv(t, 600, 600)
 	ctx := context.Background()
@@ -29,7 +29,7 @@ func TestSharedDeckUsesEachMembersOwnSettings(t *testing.T) {
 	if err := store.NewGrantStore(env.db).Grant(ctx, deck.ID, member.ID, store.RoleReader, &owner.ID); err != nil {
 		t.Fatalf("Grant() error = %v", err)
 	}
-	// 成员把自己的默认预设改成没有学习步骤：评分 Good 直接进入复习态。
+	// The member changes their default preset to have no learning steps: a Good grade goes straight to the review state.
 	if err := env.db.Model(&store.Preset{}).Where("owner_user_id = ?", member.ID).
 		Update("learning_steps", "").Error; err != nil {
 		t.Fatalf("edit member preset: %v", err)

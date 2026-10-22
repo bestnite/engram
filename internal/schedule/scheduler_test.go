@@ -7,10 +7,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// boolPtr 供测试给 store.Preset 的 *bool 字段显式赋值。
+// boolPtr lets tests assign an explicit value to the *bool fields of store.Preset.
 func boolPtr(b bool) *bool { return &b }
 
-// testPreset 返回一个关闭 fuzz 的默认预设：fuzz 会随机化间隔，测试需要确定性。
+// testPreset returns a default preset with fuzz off: fuzz randomises intervals and tests need determinism.
 func testPreset(t *testing.T) *store.Preset {
 	t.Helper()
 	p := store.NewPreset(1, "test")
@@ -18,7 +18,7 @@ func testPreset(t *testing.T) *store.Preset {
 	return &p
 }
 
-// newTestCardState 返回一张全新的卡（state=new）。
+// newTestCardState returns a brand-new card (state=new).
 func newTestCardState() *store.CardState {
 	return &store.CardState{CardID: 1, UserID: 1, State: "new"}
 }
@@ -32,7 +32,7 @@ func mustScheduler(t *testing.T, preset *store.Preset) *Scheduler {
 	return s
 }
 
-// TestPreviewReturnsFourRatings 断言 Repeat 预览返回四档选项，且新卡各档的状态推进符合状态机。
+// TestPreviewReturnsFourRatings asserts Repeat preview returns the four rating options, and that each rating's state advance for a new card matches the state machine.
 func TestPreviewReturnsFourRatings(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -50,7 +50,7 @@ func TestPreviewReturnsFourRatings(t *testing.T) {
 			t.Errorf("Preview()[%d].Rating = %v, want %v", i, opts[i].Rating, want)
 		}
 	}
-	// 学习步骤 1m,10m：Again/Hard/Good 留在 learning，Easy 直接毕业到 review。
+	// Learning steps 1m,10m: Again/Hard/Good stay in learning, Easy graduates straight to review.
 	wantStates := []State{StateLearning, StateLearning, StateLearning, StateReview}
 	for i, want := range wantStates {
 		if opts[i].State != want {
@@ -65,7 +65,7 @@ func TestPreviewReturnsFourRatings(t *testing.T) {
 	}
 }
 
-// TestNextAdvancesStateMachine 逐条覆盖状态机的转移：new / learning / review / relearning。
+// TestNextAdvancesStateMachine covers the state machine's transitions one by one: new / learning / review / relearning.
 func TestNextAdvancesStateMachine(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -81,7 +81,7 @@ func TestNextAdvancesStateMachine(t *testing.T) {
 			Reps: 3, ScheduledDays: 10,
 		}
 	}
-	// 学习/再学习阶段的卡已有稳定性（首次评分后产生），否则 FSRS 会以非法状态拒绝。
+	// A card in the learning/relearning phase already has stability (produced by the first grade), otherwise FSRS rejects it as an invalid state.
 	learningState := func(state string, stepIndex int) *store.CardState {
 		stability := 1.0
 		difficulty := 5.0
@@ -125,7 +125,7 @@ func TestNextAdvancesStateMachine(t *testing.T) {
 	}
 }
 
-// TestNextRejectsInvalidRating 断言越界评分被英文错误拒绝，不做静默归一化。
+// TestNextRejectsInvalidRating asserts an out-of-range rating is rejected with an English error and not silently normalised.
 func TestNextRejectsInvalidRating(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -136,7 +136,7 @@ func TestNextRejectsInvalidRating(t *testing.T) {
 	}
 }
 
-// TestNewSchedulerUsesPresetWeights 断言 preset 的权重与学习步骤确实进了调度器。
+// TestNewSchedulerUsesPresetWeights asserts the preset's weights and learning steps really make it into the scheduler.
 func TestNewSchedulerUsesPresetWeights(t *testing.T) {
 	p := testPreset(t)
 	weights := "[0.5,1.5,2.5,3.5,4.5,5.5,6.5,0.05,1.0,0.2,0.8,1.5,0.06,0.3,1.6,0.6,1.9,0.5,0.1,0.07,0.15]"
@@ -146,7 +146,7 @@ func TestNewSchedulerUsesPresetWeights(t *testing.T) {
 		t.Errorf("W[0] = %v, want 0.5 (from weights_json)", got)
 	}
 
-	// 空串学习步骤 = 关闭学习步骤，新卡直接进长间隔排程。
+	// An empty learning-steps string = learning steps disabled, so new cards go straight into long-interval scheduling.
 	off := testPreset(t)
 	off.LearningSteps = ""
 	sOff := mustScheduler(t, off)
@@ -160,7 +160,7 @@ func TestNewSchedulerUsesPresetWeights(t *testing.T) {
 	}
 }
 
-// TestParseSteps 覆盖步骤解析的容错与拒绝路径。
+// TestParseSteps covers the tolerance and rejection paths of step parsing.
 func TestParseSteps(t *testing.T) {
 	cases := []struct {
 		in      string

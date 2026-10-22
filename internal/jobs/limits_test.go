@@ -1,8 +1,8 @@
 //go:build unix
 
-// 只在 Unix 上编译：复用 jobs_test.go / optimizer_wiring_test.go 里 unix-only 的测试脚手架
-// （newWiringDB、okBuilder 等）。本文件覆盖两个健壮性缺陷：MarkRunning 失败必须把作业
-// 标成 failed（而不是留在 queued 阻塞队列），以及适配器权重文件的读取必须有尺寸上限。
+// Compiles only on Unix: it reuses the unix-only test scaffolding from jobs_test.go / optimizer_wiring_test.go
+// (newWiringDB, okBuilder and others). This file covers two robustness defects: a MarkRunning failure must mark the job
+// failed (instead of leaving it in queued and blocking the queue), and reads of the adapter's weight file must have a size cap.
 
 package jobs
 
@@ -20,12 +20,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// errMarkRunningInjected 是测试注入的 MarkRunning 故障原因，供断言失败文本里出现它。
+// errMarkRunningInjected is the MarkRunning fault reason the test injects, for asserting it appears in the failure text.
 var errMarkRunningInjected = errors.New("injected mark running failure")
 
-// injectMarkRunningFailure 注册一个 GORM update 回调：命中「把作业置为 running」的那次更新时
-// 注入错误。Store 是具体类型（Deps.Store 不能注入假实现），所以只能在 DB 层制造故障；
-// 只拦截 status=running 的更新，FinishFailed 等其它更新照常执行。
+// injectMarkRunningFailure registers a GORM update callback: it injects an error on the update that "sets the job to running".
+// Store is a concrete type (Deps.Store cannot take a fake implementation), so the fault can only be created at the DB layer;
+// it intercepts only updates with status running, and other updates such as FinishFailed run as usual.
 func injectMarkRunningFailure(db *gorm.DB) {
 	db.Callback().Update().Before("gorm:update").Register("jobs_test:fail_mark_running", func(tx *gorm.DB) {
 		updates, ok := tx.Statement.Dest.(map[string]any)
@@ -38,8 +38,8 @@ func injectMarkRunningFailure(db *gorm.DB) {
 	})
 }
 
-// runJobWithFailingMarkRunning 建真实 SQLite 库、注入 MarkRunning 故障并同步执行一次作业，
-// 返回 Runner、Store 与作业 id。刻意不 Start worker：直接调 execute，避免与后台 goroutine 抢时序。
+// runJobWithFailingMarkRunning creates a real SQLite database, injects the MarkRunning fault and executes one job synchronously,
+// returning the Runner, the Store and the job id. It deliberately does not Start the worker: execute is called directly, to avoid racing a background goroutine.
 func runJobWithFailingMarkRunning(t *testing.T) (*Runner, *Store, uint64) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
@@ -65,8 +65,8 @@ func runJobWithFailingMarkRunning(t *testing.T) (*Runner, *Store, uint64) {
 	return runner, st, job.ID
 }
 
-// TestMarkRunningFailureMarksJobFailed 覆盖第一个缺陷的落库部分：MarkRunning 失败时作业必须
-// 进入 failed 终态，并带上点名原因的英文错误文本；修前它只记日志就 return，作业停在 queued。
+// TestMarkRunningFailureMarksJobFailed covers the persistence half of the first defect: when MarkRunning fails the job must
+// reach the terminal failed state, carrying an English error text that names the reason; before the fix it only logged and returned, leaving the job in queued.
 func TestMarkRunningFailureMarksJobFailed(t *testing.T) {
 	_, st, id := runJobWithFailingMarkRunning(t)
 
@@ -89,14 +89,14 @@ func TestMarkRunningFailureMarksJobFailed(t *testing.T) {
 	t.Logf("job %d -> status=%s error=%q finished=%v", id, got.Status, *got.Error, got.FinishedAt != nil)
 }
 
-// TestMarkRunningFailureUnblocksQueue 覆盖第一个缺陷的阻塞部分：MarkRunning 失败留下的
-// queued 行会被 Store.Active 当作在途作业，让后续 Enqueue 永久 409。修后该行已 failed，
-// 新作业必须能入队。修前 Enqueue 返回 ErrAlreadyRunning（HTTP 409）。
+// TestMarkRunningFailureUnblocksQueue covers the blocking half of the first defect: the queued row left behind by a MarkRunning failure
+// is counted by Store.Active as an in-flight job, making every later Enqueue return 409 forever. After the fix that row is failed,
+// so a new job must be enqueueable. Before the fix Enqueue returned ErrAlreadyRunning (HTTP 409).
 func TestMarkRunningFailureUnblocksQueue(t *testing.T) {
 	runner, st, id := runJobWithFailingMarkRunning(t)
 	ctx := context.Background()
 
-	// 先确认前置条件：那次作业确实因 MarkRunning 失败而终态化（否则本用例失去意义）。
+	// First confirm the precondition: that job really did reach a terminal state because of the MarkRunning failure (otherwise this case is meaningless).
 	got, err := st.ByID(ctx, id)
 	if err != nil {
 		t.Fatalf("ByID: %v", err)
@@ -113,12 +113,12 @@ func TestMarkRunningFailureUnblocksQueue(t *testing.T) {
 	t.Logf("job %d terminal (%s); a fresh Enqueue is no longer refused", id, got.Status)
 }
 
-// testWeightsLimit 是测试视角的权重文件上限（1 MiB）。刻意写死而不引用实现里的常量：
-// 这样「未实现上限」时测试仍能编译，从而给出有意义的红灯而不是编译错误。
+// testWeightsLimit is the weight file cap as seen by the test (1 MiB). It is deliberately hard-coded rather than referencing the constant in the implementation:
+// that way the test still compiles when the cap is not implemented, giving a meaningful red instead of a compile error.
 const testWeightsLimit = 1 << 20
 
-// paddedWeightsJSON 构造 21 个合法权重、总字节数恰为 totalBytes 的 JSON（用空白字符填充）。
-// 结果是合法 JSON，因此「修前的整体读取 + 解码」会成功——红灯来自缺少尺寸上限，而非解码失败。
+// paddedWeightsJSON builds JSON with 21 valid weights whose total byte count is exactly totalBytes (padded with whitespace characters).
+// The result is valid JSON, so the pre-fix "read the whole file + decode" succeeds — the red comes from the missing size cap, not from a decode failure.
 func paddedWeightsJSON(t *testing.T, totalBytes int) []byte {
 	t.Helper()
 	var b strings.Builder
@@ -138,8 +138,8 @@ func paddedWeightsJSON(t *testing.T, totalBytes int) []byte {
 	return []byte("[" + pad + body[1:])
 }
 
-// newCompleteTestOptimizer 构造一个 root 指向临时目录的 Optimizer，并预置作业目录与
-// review-log.jsonl（Complete 在读完权重后会统计它，缺失会让正例提前失败）。
+// newCompleteTestOptimizer builds an Optimizer whose root points at a temporary directory, and pre-seeds the job directory and
+// review-log.jsonl (Complete stats it after reading the weights, and a missing file would fail the happy path early).
 func newCompleteTestOptimizer(t *testing.T, job *store.Job) *Optimizer {
 	t.Helper()
 	db, _ := newWiringDB(t)
@@ -158,9 +158,9 @@ func newCompleteTestOptimizer(t *testing.T, job *store.Job) *Optimizer {
 	return opt
 }
 
-// TestCompleteRejectsOversizedWeights 覆盖第二个缺陷：适配器写出的 weights.json 超过上限时，
-// Complete 必须报错（点名上限），而不能把整个文件读进内存。文件是合法 JSON，所以修前会被
-// 整体读取并成功解码——红灯正是「无尺寸上限」本身。
+// TestCompleteRejectsOversizedWeights covers the second defect: when the adapter's weights.json exceeds the cap,
+// Complete must return an error (naming the cap) rather than reading the whole file into memory. The file is valid JSON, so before the fix it would be
+// read whole and decode successfully — the red is precisely "no size cap" itself.
 func TestCompleteRejectsOversizedWeights(t *testing.T) {
 	job := &store.Job{ID: 11}
 	opt := newCompleteTestOptimizer(t, job)
@@ -181,15 +181,15 @@ func TestCompleteRejectsOversizedWeights(t *testing.T) {
 	if !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("Complete error = %q, want it to mention the size limit", err)
 	}
-	// 上限值必须出现在错误里，运维才能判断是哪个约束被触发。
+	// The cap value must appear in the error so operators can tell which constraint was triggered.
 	if !strings.Contains(err.Error(), "1048576") {
 		t.Fatalf("Complete error = %q, want it to name the %d-byte limit", err, testWeightsLimit)
 	}
 	t.Logf("oversized weights (%d bytes) rejected: %v", len(raw), err)
 }
 
-// TestCompleteAcceptsWeightsAtLimit 是缺陷 2 的正例（也是边界）：文件恰为上限字节数时仍可读、
-// 21 个权重被正确解析。它保证加上的上限不会误伤正常输出，并锁死「上限是闭区间」的语义。
+// TestCompleteAcceptsWeightsAtLimit is the positive (and boundary) case of defect 2: a file exactly at the cap can still be read,
+// and the 21 weights parse correctly. It guarantees the added cap does not harm normal output and pins down the "the cap is inclusive" semantics.
 func TestCompleteAcceptsWeightsAtLimit(t *testing.T) {
 	job := &store.Job{ID: 12}
 	opt := newCompleteTestOptimizer(t, job)

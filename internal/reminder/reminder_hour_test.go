@@ -10,19 +10,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是「每用户可设发送时间」的验收（补充规格）：
-//   - 用户设定 19 点 → 本地 19 点才发，凌晨 7 点的 tick 不发；
-//   - 未设置（NULL）→ 走全局默认 19 点；
-//   - 显式设为 0 点 → 午夜发，且与「未设置」行为可区分；
-//   - 同一个复习日只发一次（跨 tick 不重复）；
-//   - 发送时刻按**用户时区**解释。
+// This file is the acceptance spec (supplementary) for "per-user configurable send time":
+//   - user sets 19:00 → only sends at local 19:00, the 7am tick does not send;
+//   - unset (NULL) → falls back to the global default 19:00;
+//   - explicitly set to 0 → sends at midnight, and its behaviour is distinguishable from "unset";
+//   - only one send per review day (no repeats across ticks);
+//   - the send instant is interpreted in **the user's timezone**.
 //
-// 全部用真实 SQLite（newTestDB），写入走 store.UserStore，读取走候选查询，不 mock 数据库。
+// Everything uses real SQLite (newTestDB), writes go through store.UserStore, reads go through the candidate query; the database is not mocked.
 
-// intHour 返回小时指针：显式设置发送小时必须用指针，0 是合法值（午夜）。
+// intHour returns an hour pointer: an explicitly set send hour must be a pointer, since 0 is a valid value (midnight).
 func intHour(h int) *int { return &h }
 
-// setUserSendHour 直接改库里的 users.reminder_hour；nil 表示未设置（回落到全局默认）。
+// setUserSendHour writes users.reminder_hour directly in the DB; nil means unset (falls back to the global default).
 func setUserSendHour(t *testing.T, db *gorm.DB, userID uint64, hour *int) {
 	t.Helper()
 	users := store.NewUserStore(db)
@@ -36,7 +36,7 @@ func setUserSendHour(t *testing.T, db *gorm.DB, userID uint64, hour *int) {
 	}
 }
 
-// localTimeAt 返回 tz 本地时间「2026-06-DD hh:mm」对应的 UTC 时刻。
+// localTimeAt returns the UTC instant for the tz-local time "2026-06-DD hh:mm".
 func localTimeAt(t *testing.T, tz string, day, hour, min int) time.Time {
 	t.Helper()
 	loc, err := time.LoadLocation(tz)
@@ -46,10 +46,10 @@ func localTimeAt(t *testing.T, tz string, day, hour, min int) time.Time {
 	return time.Date(2026, 6, day, hour, min, 0, 0, loc).UTC()
 }
 
-// TestUserSendHourGatesDelivery 是核心验收：只有本地到点才发，未设置（NULL）回落全局默认 19 点。
+// TestUserSendHourGatesDelivery is the core acceptance: sends only once the local hour is due; unset (NULL) falls back to the global default 19:00.
 //
-// 两档走的是同一段阶梯（07:00 不发 → 18:59 不发 → 19:00 发），差别只在 users.reminder_hour
-// 是显式 19 还是 NULL，所以合成一张表跑，不把同一段阶梯抄两遍。
+// Both variants walk the same ladder (07:00 no send → 18:59 no send → 19:00 send), differing only in whether users.reminder_hour
+// is an explicit 19 or NULL, so they are merged into one table instead of copying the same ladder twice.
 func TestUserSendHourGatesDelivery(t *testing.T) {
 	if DefaultSendHour != 19 {
 		t.Fatalf("DefaultSendHour = %d, want 19", DefaultSendHour)
@@ -67,7 +67,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 			userID := seedUserWithDueCard(t, db, "alice", "alice@example.com", "en", "Asia/Shanghai", 4,
 				time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
 			enableReminder(t, db, userID)
-			// nil 不写库：users.reminder_hour 保持 NULL，走的正是「未设置」分支。
+			// nil writes nothing to the DB: users.reminder_hour stays NULL, which is exactly the "unset" branch.
 			if tc.hour != nil {
 				setUserSendHour(t, db, userID, tc.hour)
 			}
@@ -77,7 +77,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 			r := newReminder(t, db, enq, func() time.Time { return clock })
 			ctx := context.Background()
 
-			// 07:00：早于发送时间，不发。
+			// 07:00: earlier than the send time, no send.
 			if err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 07:00: %v", err)
 			}
@@ -85,7 +85,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 				t.Fatalf("tick at local 07:00 before the chosen hour: enqueued %d, want 0", got)
 			}
 
-			// 18:59：仍未到点。
+			// 18:59: still not due.
 			clock = localTimeAt(t, "Asia/Shanghai", 2, 18, 59)
 			if err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 18:59: %v", err)
@@ -94,7 +94,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 				t.Fatalf("tick at local 18:59 before the chosen hour: enqueued %d, want 0", got)
 			}
 
-			// 19:00：到点，发一封。
+			// 19:00: due, send one.
 			clock = localTimeAt(t, "Asia/Shanghai", 2, 19, 0)
 			if err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 19:00: %v", err)
@@ -106,9 +106,9 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 	}
 }
 
-// TestExplicitMidnightIsDistinctFromUnset 验收两件事：
-//  1. 解析层：nil → 默认 19，显式 0 → 0（0 不被当成「未设置」）；
-//  2. 行为层：同一个午夜 tick，显式 0 点的用户发信，未设置的用户不发——0 与 NULL 真的分开。
+// TestExplicitMidnightIsDistinctFromUnset verifies two things:
+//  1. resolution layer: nil → default 19, explicit 0 → 0 (0 is not treated as "unset");
+//  2. behaviour layer: on the same midnight tick, the user with explicit 0 gets mail while the unset user does not — 0 and NULL really are separate.
 func TestExplicitMidnightIsDistinctFromUnset(t *testing.T) {
 	if got := SendHour(nil); got != DefaultSendHour {
 		t.Fatalf("SendHour(nil) = %d, want the default %d", got, DefaultSendHour)
@@ -128,7 +128,7 @@ func TestExplicitMidnightIsDistinctFromUnset(t *testing.T) {
 	enableReminder(t, db, unset)
 
 	enq := &fakeEnqueuer{configured: true}
-	// 上海本地 2026-06-02 00:00（午夜）。
+	// Shanghai local 2026-06-02 00:00 (midnight).
 	clock := localTimeAt(t, "Asia/Shanghai", 2, 0, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
@@ -143,8 +143,8 @@ func TestExplicitMidnightIsDistinctFromUnset(t *testing.T) {
 	}
 }
 
-// TestSendHourOncePerReviewDayAcrossTicks 验收：同一复习日内在到点后多轮 tick 只发一封；
-// 跨到新的复习日、且再次到点后才发下一封。
+// TestSendHourOncePerReviewDayAcrossTicks verifies: within one review day, multiple ticks after the hour is due send only one mail;
+// the next mail goes out only after crossing into a new review day and the hour being due again.
 func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "erin", "erin@example.com", "en", "Asia/Shanghai", 4,
@@ -164,7 +164,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 		t.Fatalf("first tick: enqueued %d, want 1", got)
 	}
 
-	// 同一复习日（切点 4）内的后续 tick：台账已存在，不重复。
+	// Later tick within the same review day (cutoff 4): the ledger already has an entry, so no repeat.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 23, 30)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 23:30: %v", err)
@@ -173,7 +173,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 		t.Fatalf("second tick same review day: enqueued %d, want 1", got)
 	}
 
-	// 新复习日的凌晨：未到 19 点，不发。
+	// Early morning of the new review day: not yet 19:00, no send.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 7, 0)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-03 07:00: %v", err)
@@ -182,7 +182,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 		t.Fatalf("next review day before the chosen hour: enqueued %d, want 1", got)
 	}
 
-	// 新复习日到点：发第二封。
+	// The new review day reaches the hour: send the second mail.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 19, 0)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-03 19:00: %v", err)
@@ -192,8 +192,8 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 	}
 }
 
-// TestSendHourFollowsUserTimezone 验收：发送时刻按用户各自时区解释。
-// 同一个 UTC 时刻，上海用户已到 19 点则发，纽约用户还差着则不发。
+// TestSendHourFollowsUserTimezone verifies: the send instant is interpreted in each user's own timezone.
+// At the same UTC instant, a Shanghai user who has reached 19:00 gets mail while a New York user who has not does not.
 func TestSendHourFollowsUserTimezone(t *testing.T) {
 	db := newTestDB(t)
 	due := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -205,7 +205,7 @@ func TestSendHourFollowsUserTimezone(t *testing.T) {
 	setUserSendHour(t, db, newYork, intHour(19))
 
 	enq := &fakeEnqueuer{configured: true}
-	// UTC 2026-06-02 11:00 = 上海 19:00（到点），纽约 07:00（未到）。
+	// UTC 2026-06-02 11:00 = Shanghai 19:00 (due), New York 07:00 (not due).
 	clock := time.Date(2026, 6, 2, 11, 0, 0, 0, time.UTC)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
@@ -219,7 +219,7 @@ func TestSendHourFollowsUserTimezone(t *testing.T) {
 		t.Fatalf("11:00 UTC went to %q, want sh@example.com", got)
 	}
 
-	// UTC 2026-06-02 23:00 = 上海次日 07:00（未到），纽约 19:00（到点）。
+	// UTC 2026-06-02 23:00 = Shanghai 07:00 next day (not due), New York 19:00 (due).
 	clock = time.Date(2026, 6, 2, 23, 0, 0, 0, time.UTC)
 	if err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce at 23:00 UTC: %v", err)

@@ -9,22 +9,22 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// F27b：REST 建卡组的入口与 store 层共用 200 字符卡组名界限；
-// 超限返回稳定 code deck_name_invalid，界限内的名字照常建成。
+// F27b: the REST create-deck entry shares the 200-character deck name bound with the store layer;
+// over the bound returns the stable code deck_name_invalid, while names within it are created as usual.
 func TestCreateDeckNameLimit(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "deck_name_api", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 
-	// 200 字符：建成，返回 201。
+	// 200 characters: created, returns 201.
 	okBody, _ := json.Marshal(map[string]string{"name": strings.Repeat("a", 200)})
 	status, raw := doJSON(t, router, http.MethodPost, "/api/v1/decks", k.Plaintext, string(okBody))
 	if status != http.StatusCreated {
 		t.Fatalf("POST /api/v1/decks (200-char name) status = %d, want 201 (body %s)", status, raw)
 	}
 
-	// 201 字符：拒绝，code 为 deck_name_invalid。
+	// 201 characters: rejected, code is deck_name_invalid.
 	badBody, _ := json.Marshal(map[string]string{"name": strings.Repeat("a", 201)})
 	status, raw = doJSON(t, router, http.MethodPost, "/api/v1/decks", k.Plaintext, string(badBody))
 	if status != http.StatusBadRequest {

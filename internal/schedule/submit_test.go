@@ -9,8 +9,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSubmitWritesStateAndReviewInOneTransaction 断言一次提交同时写出 card_states 与
-// reviews 两行，且 reviews 的每个 §2.2 字段都被写全（AGENTS.md §2.3 第 2 条）。
+// TestSubmitWritesStateAndReviewInOneTransaction asserts one submission writes both the card_states and
+// the reviews row, and that every §2.2 field of reviews is fully populated (AGENTS.md §2.3 item 2).
 func TestSubmitWritesStateAndReviewInOneTransaction(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -83,8 +83,8 @@ func TestSubmitWritesStateAndReviewInOneTransaction(t *testing.T) {
 	}
 }
 
-// TestSubmitDuplicateReturnsVersionConflict 断言重复提交同一 expected_version 时，
-// 第二次返回 ErrVersionConflict，且不改变任何一行
+// TestSubmitDuplicateReturnsVersionConflict asserts that when the same expected_version is submitted again,
+// the second call returns ErrVersionConflict and changes no row at all
 func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -114,7 +114,7 @@ func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 		t.Fatalf("count reviews before: %v", err)
 	}
 
-	// 重放：同一个 expected_version（0），此时库里已是 1 → 必须 409。
+	// Replay: the same expected_version (0) while the DB already holds 1 → must be 409.
 	tx2 := db.Begin()
 	_, err := Submit(ctx, tx2, in)
 	tx2.Rollback()
@@ -139,8 +139,8 @@ func TestSubmitDuplicateReturnsVersionConflict(t *testing.T) {
 	}
 }
 
-// TestSubmitRollbackLeavesNoReviewRow 断言状态更新与 review 行共用调用方的事务：
-// 事务回滚后两行都不存在（验收：“事务失败后不留 reviews 行”）。
+// TestSubmitRollbackLeavesNoReviewRow asserts the state update and the review row share the caller's transaction:
+// after the transaction rolls back neither row exists (acceptance: "no reviews row is left behind after a transaction failure").
 func TestSubmitRollbackLeavesNoReviewRow(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -156,7 +156,7 @@ func TestSubmitRollbackLeavesNoReviewRow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Submit() error = %v", err)
 	}
-	// 模拟外层事务失败：不 commit，直接回滚。
+	// Simulate an outer transaction failure: no commit, roll back directly.
 	if err := tx.Rollback().Error; err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestSubmitRollbackLeavesNoReviewRow(t *testing.T) {
 	}
 }
 
-// TestSubmitRejectsInvalidInput 覆盖入参校验的拒绝路径。
+// TestSubmitRejectsInvalidInput covers the rejection paths of input validation.
 func TestSubmitRejectsInvalidInput(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -186,7 +186,7 @@ func TestSubmitRejectsInvalidInput(t *testing.T) {
 	cardID := seedCard(t, db, deckID, "forward", now)
 	s := mustScheduler(t, testPreset(t))
 
-	// nil 事务单独验证：Submit 必须拒绝没有事务边界的调用。
+	// The nil transaction is verified separately: Submit must reject a call without a transaction boundary.
 	if _, err := Submit(ctx, nil, SubmitInput{CardID: cardID, UserID: 1, Rating: Good, Scheduler: s}); err == nil {
 		t.Error("Submit(nil tx) error = nil, want error")
 	}

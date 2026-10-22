@@ -1,7 +1,7 @@
 //go:build unix
 
-// 只在 Unix 上编译：依赖 jobs_test.go 里 unix-only 的测试脚手架（newTestRunner 等），
-// 或直接以 `/bin/sh` 作为假命令。
+// Compiles only on Unix: it depends on the unix-only test scaffolding in jobs_test.go (newTestRunner and others),
+// or uses `/bin/sh` directly as the fake command.
 
 package jobs
 
@@ -16,9 +16,9 @@ import (
 	"time"
 )
 
-// optimizerBinary 返回适配器二进制的预期绝对路径（仓库根下的 tools/optimizer）。
-// 用绝对路径是因为 runProcess 会给子进程设置工作目录，相对的可执行文件路径在那个目录下
-// 解析不到（实测 fork/exec 会报 no such file or directory）。
+// optimizerBinary returns the expected absolute path of the adapter binary (tools/optimizer under the repository root).
+// An absolute path is used because runProcess sets a working directory for the subprocess, and a relative executable path
+// cannot be resolved in that directory (in practice fork/exec reports no such file or directory).
 func optimizerBinary() string {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -27,7 +27,7 @@ func optimizerBinary() string {
 	return filepath.Join(root, "tools", "optimizer", "target", "release", "optimizer")
 }
 
-// optimizerFixture 返回固定 fixture 的绝对路径。
+// optimizerFixture returns the absolute path of the fixed fixture.
 func optimizerFixture() string {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -36,9 +36,9 @@ func optimizerFixture() string {
 	return filepath.Join(root, "tools", "optimizer", "testdata", "review-log.jsonl")
 }
 
-// optimizerCommand 演示 internal/jobs 的命令注入契约：M9 的 CommandBuilder 只需返回
-// 这样一条 Command（可执行文件 + 参数 + 工作目录），执行、超时与杀进程组都由 jobs 负责。
-// 参数里把权重写到临时文件，避免与 stderr 诊断在同一 tailBuffer 里交错。
+// optimizerCommand demonstrates the command injection contract of internal/jobs: M9's CommandBuilder only needs to return
+// a Command like this (executable + arguments + working directory); execution, timeout and process-group killing are all jobs' job.
+// The arguments write the weights to a temporary file, so they do not interleave with stderr diagnostics in the same tailBuffer.
 func optimizerCommand(bin, fixture, out string) Command {
 	return Command{
 		Name: bin,
@@ -47,9 +47,9 @@ func optimizerCommand(bin, fixture, out string) Command {
 	}
 }
 
-// TestOptimizerAdapterDeterminism 是针对 Go 侧集成测试：以命令注入方式调用
-// Rust 适配器，对固定 fixture 连跑两次，断言两次权重 JSON 逐字节相同且为 21 个数字。
-// 二进制未构建时跳过（CI 不装 Rust 工具链也能通过）。
+// TestOptimizerAdapterDeterminism is the Go-side integration test: it invokes the
+// Rust adapter through command injection, runs it twice on the fixed fixture, and asserts both weight JSON outputs are byte-identical and consist of 21 numbers.
+// It skips when the binary is not built (so CI passes without a Rust toolchain).
 func TestOptimizerAdapterDeterminism(t *testing.T) {
 	bin := optimizerBinary()
 	if _, err := os.Stat(bin); err != nil {
@@ -96,8 +96,8 @@ func TestOptimizerAdapterDeterminism(t *testing.T) {
 	}
 }
 
-// TestOptimizerAdapterIsARealBinary 只断言可执行文件可被 exec 调用（--version 成功），
-// 用于在二进制存在但不可执行时给出清晰失败，而不是让上一条用例含糊报错。
+// TestOptimizerAdapterIsARealBinary only asserts the executable can be exec'd (--version succeeds),
+// so that a binary that exists but is not executable gives a clear failure instead of making the previous case fail vaguely.
 func TestOptimizerAdapterIsARealBinary(t *testing.T) {
 	bin := optimizerBinary()
 	if _, err := os.Stat(bin); err != nil {

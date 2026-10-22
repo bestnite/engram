@@ -11,9 +11,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestStatsSummaryUsesTrueRetention 钉死首页概要的留存口径：与统计页同一份真实留存率，
-// 只数到期复习（state_before=Review），新卡首次复习与学习/重学步骤只进 reviews_total。
-// 只做过学习步骤的用户 retention_total 为 0，客户端据此显示「暂无数据」。
+// TestStatsSummaryUsesTrueRetention pins down the home summary's retention convention: the same true retention rate as the stats page,
+// counting only due reviews (state_before=Review), while a new card's first review and learning/relearning steps only count into reviews_total.
+// A user who has only been through learning steps has retention_total 0, and the client shows "no data yet" from that.
 func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 	type review struct{ rating, stateBefore int }
 	cases := []struct {
@@ -28,7 +28,7 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 			name: "learning steps are excluded from retention",
 			reviews: []review{
 				{3, 0}, {1, 1}, {1, 3}, // New / Learning(Again) / Relearning(Again)
-				{3, 2}, {4, 2}, {1, 2}, {2, 2}, // Review：Good / Easy / Again / Hard
+				{3, 2}, {4, 2}, {1, 2}, {2, 2}, // Review: Good / Easy / Again / Hard
 			},
 			wantReviews: 7, wantTotal: 4, wantPassed: 3, wantRate: 0.75,
 		},
@@ -73,7 +73,7 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 					got, tc.wantReviews, tc.wantPassed, tc.wantTotal, tc.wantRate)
 			}
 
-			// REST 响应必须带上新增的分母字段，客户端靠它而不是 reviews_total 判断「无数据」。
+			// The REST response must carry the new denominator field; the client uses it, not reviews_total, to decide "no data".
 			key := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
 			status, body := doJSON(t, env.router(), http.MethodGet, "/api/v1/stats/summary", key.Plaintext, "")
 			if status != http.StatusOK {

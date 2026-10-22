@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// schedulerForDeck 取 userID 复习该卡组时的调度器（由其生效的预设构造）。
+// schedulerForDeck returns the scheduler for userID reviewing this deck (built from their effective preset).
 func (a *API) schedulerForDeck(ctx context.Context, userID uint64, deck *store.Deck) (*schedule.Scheduler, error) {
 	preset, err := a.presetForDeck(ctx, userID, deck)
 	if err != nil {
@@ -22,8 +22,8 @@ func (a *API) schedulerForDeck(ctx context.Context, userID uint64, deck *store.D
 	return schedule.NewScheduler(preset)
 }
 
-// presetForDeck 取 userID 复习该卡组时生效的预设（调度参数与作答题的分数→档位映射都在里面）。
-// 属主用卡组上的预设，共享成员用自己的成员设置（store.StudySettings）。
+// presetForDeck returns the preset in effect for userID reviewing this deck (both the scheduling parameters and the score -> rating mapping for answer cards live in it).
+// Owners use the preset on the deck, shared members use their own member settings (store.StudySettings).
 func (a *API) presetForDeck(ctx context.Context, userID uint64, deck *store.Deck) (*store.Preset, error) {
 	settings, err := a.decks.StudySettings(ctx, userID, deck)
 	if err != nil {
@@ -32,14 +32,14 @@ func (a *API) presetForDeck(ctx context.Context, userID uint64, deck *store.Deck
 	return a.presets.ByID(ctx, settings.PresetID)
 }
 
-// userLocation 按用户时区加载 Location；回退规则见 store.LoadLocation（空/非法名 → UTC）。
+// userLocation loads the Location for the user's timezone; fallback rules in store.LoadLocation (empty/invalid name -> UTC).
 func userLocation(tz string) *time.Location {
 	return store.LoadLocation(tz)
 }
 
-// dueCards 返回到期卡（含字段原文），scope: review（业务逻辑在 service 层的 DueCards）。
-// deck 可重复：缺省＝全部卡组；每个值是卡组的对外 id，未知或非法 → 404。
-// tag 可重复：只取带有其中任一标签的卡；带 tag 时 deck 必须恰好一个，否则 400。
+// dueCards returns the due cards (with raw field text), scope: review (the logic lives in the service layer's DueCards).
+// deck is repeatable: absent means all decks; each value is a deck's external id, unknown or malformed -> 404.
+// tag is repeatable: only cards carrying any one of these tags are taken; when tags are given there must be exactly one deck, otherwise 400.
 func (a *API) dueCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -64,10 +64,10 @@ func (a *API) dueCards(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"cards": cards})
 }
 
-// submitReviewRequest 是评分提交请求体；card_id 是卡的对外 id（不透明字符串）。
+// submitReviewRequest is the grade submission body; card_id is the card's external id (an opaque string).
 //
-// 自评题型给 rating；作答类题型给 answer（服务端判分）或 give_up。grade_source 由服务端决定：
-// 请求里出现 self 以外的值直接拒绝，而不是悄悄忽略，免得调用方以为「机器判分」被采纳了。
+// Self-graded card types send rating; answer card types send answer (server-side grading) or give_up. grade_source is decided by the server:
+// any value other than self in the request is rejected outright rather than silently ignored, so the caller does not believe a "machine grade" was accepted.
 type submitReviewRequest struct {
 	CardID          string          `json:"card_id"`
 	Rating          int             `json:"rating"`
@@ -78,7 +78,7 @@ type submitReviewRequest struct {
 	GradeSource     string          `json:"grade_source"`
 }
 
-// submitReview 提交一次评分；乐观锁不匹配返回 409，scope: review。
+// submitReview submits one grade; an optimistic-lock mismatch returns 409, scope: review.
 func (a *API) submitReview(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req submitReviewRequest

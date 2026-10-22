@@ -10,23 +10,23 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestNewCardQuotaIsCountedPerDeck 是额度口径的验收 把 new_per_day 定义为
-// **卡组级**设置，所以单卡组范围内"今日已引入"只能数该卡组的记录。
+// TestNewCardQuotaIsCountedPerDeck is the allowance-semantics acceptance test: new_per_day is defined as a
+// **deck-level** setting, so within a single-deck scope "introduced today" may only count that deck's records.
 //
-// 修复前它按全库统计：一个卡组刷满新卡额度会把另一个卡组的新卡一起挡住，用户实测到的症状
-// 是"卡组列表显示 6 张到期，点进去却说当前没有到期的卡片"。现在全库/多卡组范围也按各卡组
-// 自己的额度求和（new_per_day 是卡组级列）。
+// Before the fix it counted across the whole library: exhausting one deck's new-card allowance would block another deck's new cards too, and the symptom users actually saw
+// was "the deck list shows 6 due cards, but clicking in says there are no cards due right now". Now the whole-library / multi-deck scope also sums each deck's
+// own allowance (new_per_day is a deck-level column).
 func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	day := ReviewDay(now, time.UTC, DefaultDayCutoffHour)
 
-	// 两个卡组，各把每日新卡上限设为 1。
+	// Two decks, each with a daily new-card cap of 1.
 	deckA := seedDeckWithNewCap(t, db, now, "A", 1)
 	deckB := seedDeckWithNewCap(t, db, now, "B", 1)
 
-	// A 卡组今天已经引入 1 张新卡（额度用尽）；两个卡组各还剩 1 张新卡。
-	// 已引入那张要有状态行（learning、到期在未来），否则它仍是"新卡"、会再次入队。
+	// Deck A has already introduced 1 new card today (allowance exhausted); both decks still have 1 new card left.
+	// The introduced card needs a state row (learning, due in the future), otherwise it is still a "new card" and would be queued again.
 	usedInA := seedCard(t, db, deckA, "used", now)
 	seedReview(t, db, 1, usedInA, day, int(StateNew), now.Add(-time.Hour))
 	seedState(t, db, 1, usedInA, "learning", now.Add(time.Hour), 1.0, 5.0, nil)
@@ -46,21 +46,21 @@ func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 		return items
 	}
 
-	// B 卡组：A 用掉的额度不该算在它头上 —— 必须出它自己那张新卡。
+	// Deck B: the allowance A used must not count against it — its own new card must come out.
 	if got := build(QueueOptions{DeckID: deckB}); len(got) != 1 || got[0].DeckID != deckB {
 		t.Errorf("deck B queue = %+v, want exactly its own new card (deck A's usage must not count)", got)
 	}
-	// A 卡组：自己的额度已用尽 —— 一张新卡都不出。
+	// Deck A: its own allowance is exhausted — not a single new card comes out.
 	if got := build(QueueOptions{DeckID: deckA}); len(got) != 0 {
 		t.Errorf("deck A queue = %+v, want empty (its own daily new-card cap is used up)", got)
 	}
-	// 全库范围：按各卡组自己的额度求和 —— B 出 1 张、A 额度已用尽出 0 张。
+	// Whole-library scope: sum each deck's own allowance — B yields 1, A yields 0 since its allowance is exhausted.
 	if got := build(QueueOptions{}); len(got) != 1 || got[0].DeckID != deckB {
 		t.Errorf("all-decks queue = %+v, want only deck B's 1 new card (per-deck budgets summed)", got)
 	}
 }
 
-// seedDeckWithNewCap 建一个预设 + 私有卡组，并显式设置每日新卡上限。
+// seedDeckWithNewCap creates a preset + private deck and sets the daily new-card cap explicitly.
 func seedDeckWithNewCap(t *testing.T, db *gorm.DB, now time.Time, name string, newPerDay int) uint64 {
 	t.Helper()
 	p := store.NewPreset(1, "preset-"+name)

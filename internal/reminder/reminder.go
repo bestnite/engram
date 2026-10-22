@@ -1,24 +1,24 @@
-// Package reminder 实现 C 类「复习到期提醒」的周期后台 worker。
+// Package reminder implements the class-C "review due reminder" periodic background worker.
 //
-// 行为约束：
-//   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
-//   - 发送时间按**用户本地时间**：每个用户可选自己的整点小时（users.reminder_hour，0–23），
-//     未设置时用全局默认 DefaultSendHour（19:00）。到达该小时后的首轮轮询即发；小时按用户
-//     时区解释（见 SendHour / reachedSendHour）。
-//   - 每天最多一封：按用户本地复习日（与 reviews.review_day 同一时区/切点口径）判定，
-//     台账见 store.ReminderLog。
-//   - SMTP 未配置时不发也不报错，只记一条英文日志（C 类是可选运营邮件，没有页面要禁用）。
+// Behavioral constraints:
+//   - Never send mail synchronously in the request path: always Enqueue, delivery is the outbox worker's job.
+//   - Send time follows **the user's local time**: each user may pick their own top-of-hour hour (users.reminder_hour, 0–23),
+//     falling back to the global default DefaultSendHour (19:00) when unset. The first poll after that hour arrives sends;
+//     the hour is interpreted in the user's timezone (see SendHour / reachedSendHour).
+//   - At most one per day: decided by the user's local review day (same timezone / cutoff semantics as reviews.review_day),
+//     ledger in store.ReminderLog.
+//   - When SMTP is unconfigured, send nothing and report no error, just log one English line (class C is optional operational mail; no page needs disabling).
 //
-// 为什么删掉旧的静默窗口（本地 23:00–07:00）：那条启发式的唯一目的是把「过了日切点就发」
-// 的提醒挪开深夜，而它正是「大家一律在早上 7 点被催」的根因。现在发送时刻由用户显式选择
-// （默认 19:00，本就在窗外），静默窗既无用途，又会反过来压制用户明确选的深夜时段——用户
-// 显式选择优先，因此整条启发式连同 InQuietHours 一并删除，其用例也随之移除。
+// Why the old quiet window (local 23:00–07:00) was removed: the sole purpose of that heuristic was to move "send once past the day cutoff"
+// reminders out of the late night, and it was exactly the root cause of "everyone gets nagged at 7am". Send time is now explicitly chosen by the user
+// (default 19:00, already outside the window), so the quiet window serves no purpose and would in turn suppress a late-night slot the user explicitly
+// picked — an explicit choice wins, so the whole heuristic was deleted together with InQuietHours, and its test cases were removed along with it.
 //
-// 为什么是周期 worker 而不是 job 表：优化器的单并发约束不适用于邮件，
-// 把提醒塞进 jobs 会与参数优化互相阻塞。提醒本身不是长任务，只是一个周期性的「到期扫描」，
-// 因此独立起一个轻量 worker，随 serve 启动、随信号优雅停止。
+// Why a periodic worker rather than a jobs table: the optimiser's single-concurrency constraint does not apply to mail,
+// and stuffing reminders into jobs would block parameter optimisation and vice versa. A reminder is not a long task, just a periodic "due scan",
+// so it gets its own lightweight worker, started with serve and gracefully stopped on signal.
 //
-// 「事件驱动」在这里落地为：每轮扫描「是否有到期卡」这一事件，有才发；没有到期卡不发。
+// "Event-driven" here lands as: every round scans the event "are there due cards", and sends only if there are; no due cards, no send.
 package reminder
 
 import (
@@ -41,77 +41,77 @@ import (
 )
 
 const (
-	// DefaultInterval 是默认轮询间隔。
+	// DefaultInterval is the default poll interval.
 	//
-	// 选 10 分钟的理由：提醒是「催一下」而不是准点事件，用户感知不到分钟级差异；
-	// 发送时刻以小时为粒度、每日上限以复习日为粒度，10 分钟足够在用户选定的小时到达后很快
-	// 补发，又把每轮的 DB 开销压到「一条候选查询 + 每用户一两次小查询」的量级。
+	// Why 10 minutes: a reminder is a nudge, not a punctual event, so users cannot perceive minute-level differences;
+	// send time is hour-grained and the daily cap is review-day-grained, so 10 minutes is enough to follow up soon after the user's chosen hour arrives
+	// while keeping each round's DB cost at the level of "one candidate query + one or two small queries per user".
 	DefaultInterval = worker.DefaultInterval
-	// DefaultSendHour 是未设置每用户发送小时时的全局默认（本地 19:00）。
+	// DefaultSendHour is the global default (local 19:00) when no per-user send hour is set.
 	//
-	// 选 19:00：提醒是「今天还有卡没复习」的催促，傍晚是大多数人一天里能坐下来复习的时段，
-	// 又在旧的静默窗（23:00–07:00）之外。周报复用同一小时，两个 C 类邮件的到达时刻因此一致。
+	// Why 19:00: the reminder is the nudge "you still have cards to review today", and early evening is when most people can sit down to review,
+	// and it also lies outside the old quiet window (23:00–07:00). The weekly digest reuses the same hour, so both class-C mails arrive at the same time of day.
 	DefaultSendHour = 19
-	// MinSendInterval 是同一用户两封复习提醒之间的最小间隔（跨复习日生效）。
+	// MinSendInterval is the minimum interval between two review reminders for the same user (takes effect across review days).
 	//
-	// 为什么需要它：发送时刻由用户选的整点决定，账本却按复习日计。若用户选的小时早于其日切点
-	// （例如选 0 点、切点 4 点），前一个复习日的尾（00:00）与新复习日的头（04:00）落在同一自然
-	// 日、只隔几小时——「每个复习日至多一封」按定义拦不住这种贴身双发。
+	// Why it is needed: send time is determined by the user's chosen hour, but the ledger counts by review day. If the user picks an hour earlier than their
+	// day cutoff (e.g. picks 0, cutoff 4), the tail of the previous review day (00:00) and the head of the new review day (04:00) fall on the same calendar
+	// day only a few hours apart — "at most one per review day" cannot by definition stop such back-to-back double sends.
 	//
-	// 为什么取 20 小时：相邻两个复习日的正常节律是 24 小时（夏令时下 23 小时），20 小时在它之下
-	// 留出至少 3 小时余量，因此不会压掉真正的隔日提醒；而贴身双发的间隔等于「日切点 − 所选
-	// 小时」，量级是几小时（0 点/4 点只隔 4 小时），远在 20 小时之下，必被拦住。它又远小于一周，
-	// 不与周报的周节律纠缠。取整到「小时级」与发送时刻的粒度一致，便于读注释时心算。
+	// Why 20 hours: the normal rhythm between adjacent review days is 24 hours (23 under DST), and 20 hours sits below that
+	// leaving at least 3 hours of margin, so it will not suppress genuine next-day reminders; whereas the interval of a back-to-back double send equals "day cutoff −
+	// chosen hour", which is on the order of a few hours (0 and 4 are only 4 hours apart), far below 20 hours, so it is always caught. It is also far below a week,
+	// so it does not tangle with the weekly digest's weekly rhythm. Rounding to "hour level" matches the granularity of send time and keeps mental arithmetic easy.
 	//
-	// 边界：「日切点 − 所选小时」越接近一天就越不像贴身双发（极端如选 0 点、切点 23，两封已相隔
-	// 约一天，与正常隔日节律无从区分），本门不拦——拦它得把阈值抬到 24 小时之上，反而会压掉正常
-	// 的每日提醒。20 小时因此是「拦住贴身双发」与「保住每日节律」之间的取舍点。
+	// Boundary: the closer "day cutoff − chosen hour" gets to a full day, the less it looks like a back-to-back double send (in the extreme, choosing 0 with cutoff 23,
+	// the two mails are already about a day apart, indistinguishable from the normal next-day rhythm), and this gate does not block it — blocking it would require
+	// raising the threshold above 24 hours, which would in turn suppress normal daily reminders. 20 hours is therefore the trade-off point between "catching
 	MinSendInterval = 20 * time.Hour
-	// DefaultReviewPath 是复习页路径（提醒正文里的链接）。
+	// DefaultReviewPath is the review page path (the link in the reminder body).
 	DefaultReviewPath = "/review"
-	// runFailedLog 是单轮失败时的英文日志消息，注入共享骨架 worker.Config.FailMessage；
-	// 文案与重构前逐字一致。
+	// runFailedLog is the English log message for a single failed round, injected into the shared skeleton worker.Config.FailMessage;
+	// the wording is verbatim identical to before the refactor.
 	runFailedLog = "review reminder run failed"
 )
 
-// Enqueuer 是提醒 worker 依赖的发信入口；生产由 *mail.Outbox 满足，测试注入替身。
+// Enqueuer is the send entry point the reminder worker depends on; in production it is satisfied by *mail.Outbox, tests inject a stand-in.
 type Enqueuer interface {
-	// Enqueue 只入队，不同步发信。
+	// Enqueue only enqueues; it does not send synchronously.
 	Enqueue(ctx context.Context, m mail.Message) error
-	// Configured 报告 SMTP 是否已配置。
+	// Configured reports whether SMTP is configured.
 	Configured() bool
 }
 
-// Deps 是 Reminder 的显式依赖。
+// Deps are the explicit dependencies of Reminder.
 type Deps struct {
-	// DB 是必填项（候选查询与发送台账）。
+	// DB is required (candidate query and send ledger).
 	DB *gorm.DB
-	// Outbox 是必填项的发信入口。
+	// Outbox is the required send entry point.
 	Outbox Enqueuer
-	// Translator 是必填项：邮件文案是用户可见文案，一律走语言包。
+	// Translator is required: mail copy is user-visible copy and always goes through the language catalogs.
 	Translator *i18n.Translator
-	// Logger 可选；为空时用 slog.Default()。
+	// Logger is optional; slog.Default() is used when nil.
 	Logger *slog.Logger
-	// Now 可注入时钟；为空时用系统 UTC 时间。静默窗口与每日上限的测试靠它控制。
+	// Now is an injectable clock; the system UTC time is used when nil. Tests for the quiet window and daily cap rely on it for control.
 	Now func() time.Time
-	// Interval 是轮询间隔；<=0 时用 DefaultInterval。
+	// Interval is the poll interval; DefaultInterval when <=0.
 	Interval time.Duration
-	// BaseURL 是站点根地址，用于拼复习页链接；为空时链接为相对路径。
+	// BaseURL is the site root, used to build the review page link; when empty the link is a relative path.
 	BaseURL string
-	// ReviewPath 覆盖复习页路径；为空时用 DefaultReviewPath。
+	// ReviewPath overrides the review page path; DefaultReviewPath when empty.
 	ReviewPath string
-	// Tokens 签发一键退订令牌；为空时提醒邮件不带退订头（可选类型才需要）。
+	// Tokens issues one-click unsubscribe tokens; when nil the reminder mail carries no unsubscribe header (only optional types need it).
 	Tokens *auth.ActionTokenService
-	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
+	// Templates fetches admin-customised mail templates; nil means built-in bodies only.
 	Templates mail.LookupFunc
-	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
+	// SiteDefaultLocale is the site default locale, the second level of the template fallback chain; that level is skipped when empty.
 	SiteDefaultLocale func() string
 }
 
-// Reminder 持有后台 worker 与配置。
+// Reminder holds the background worker and its configuration.
 //
-// 起停与 tick 循环来自内嵌的共享骨架 *worker.Lifecycle（internal/worker）：Start/Stop
-// 由它提升，签名与重构前一致，cmd/engram 的调用不变。
+// Start/stop and the tick loop come from the embedded shared skeleton *worker.Lifecycle (internal/worker): Start/Stop
+// are promoted from it, with signatures identical to before the refactor, so the calls in cmd/engram are unchanged.
 type Reminder struct {
 	*worker.Lifecycle
 
@@ -122,15 +122,15 @@ type Reminder struct {
 	now        func() time.Time
 	baseURL    string
 	reviewPath string
-	// tokens 签发退订令牌；为空时不加退订头。
+	// tokens issues unsubscribe tokens; no unsubscribe header when nil.
 	tokens *auth.ActionTokenService
-	// templates 取自定义邮件模板；缺失即用内置正文。
+	// templates fetches custom mail templates; built-in bodies are used when absent.
 	templates mail.LookupFunc
-	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
+	// siteLocale provides the site default locale (second level of the fallback chain); may be nil.
 	siteLocale func() string
 }
 
-// New 构造 Reminder；不启动 worker，需再调用 Start。
+// New constructs a Reminder; it does not start the worker, Start must be called afterwards.
 func New(deps Deps) (*Reminder, error) {
 	if deps.DB == nil {
 		return nil, errors.New("reminder: Deps.DB is required")
@@ -165,7 +165,7 @@ func New(deps Deps) (*Reminder, error) {
 		templates:  deps.Templates,
 		siteLocale: deps.SiteDefaultLocale,
 	}
-	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
+	// Start/stop and the tick loop are handed to the shared skeleton; RunOnce is injected as the business phase, and the failure log wording is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
 		RunOnce:     r.RunOnce,
 		Logger:      logger,
@@ -179,12 +179,12 @@ func New(deps Deps) (*Reminder, error) {
 	return r, nil
 }
 
-// RunOnce 执行一轮到期扫描：对每个有到期卡的活跃用户判定是否应发提醒。
-// 导出供测试与运维手动触发；返回的 error 只表示查询/入队层面的失败，单个用户的失败
-// 记日志后继续处理其余用户。
+// RunOnce runs one due scan: for every active user with due cards, decide whether a reminder should be sent.
+// Exported so tests and operators can trigger it manually; the returned error only reflects query/enqueue-level failures, a single user's failure
+// is logged and the remaining users are still processed.
 func (r *Reminder) RunOnce(ctx context.Context) error {
 	if !r.outbox.Configured() {
-		// C 类是可选运营邮件：SMTP 未配置时静默跳过，不报错，但要留下英文日志。
+		// Class C is optional operational mail: skip silently when SMTP is unconfigured, no error, but leave an English log line.
 		r.logger.Info("review reminder skipped: smtp not configured")
 		return nil
 	}
@@ -204,23 +204,23 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// maybeSend 判定并（在满足条件时）入队一封提醒。
+// maybeSend decides and (when the conditions hold) enqueues one reminder.
 //
-// 判定顺序（每一道都必须在入队前通过）：
-//  1. 发送时刻：用户本地时间还未到其选定的小时（默认 19:00）就整轮跳过，**不记录台账**——
-//     到达该小时后的下一轮会重新评估并发出，即「到点再发」。
-//  2. 最小间隔：距上次成功发送不足 MinSendInterval（跨复习日取最大 SentAt）就整轮跳过，
-//     **不记录台账**——间隔过后仍可补发。这一道专治「所选小时早于日切点」时同一自然日
-//     里的贴身双发（日账本按复习日计，拦不住它）。
-//  3. 每日上限：用户本地复习日已发过就不再发。
-//  4. 偏好门禁：C 类默认关，用户关掉后立即生效（每轮现读偏好，不缓存）。
+// Decision order (every gate must pass before enqueueing):
+//  1. Send time: if the user's local time has not reached their chosen hour (default 19:00), skip the whole round and **do not record in the ledger** —
+//     the next round after that hour arrives re-evaluates and sends, i.e. "send once the hour is due".
+//  2. Minimum interval: if less than MinSendInterval has passed since the last successful send (max SentAt across review days), skip the whole round
+//     and **do not record in the ledger** — the send can still follow up once the interval passes. This gate specifically handles the same calendar day
+//     back-to-back double send when "the chosen hour precedes the day cutoff" (the daily ledger counts by review day and cannot stop it).
+//  3. Daily cap: if the user's local review day already had a send, do not send again.
+//  4. Preference gate: class C defaults to off, and the user turning it off takes effect immediately (preferences are read fresh every round, not cached).
 //
-// 台账只在 Enqueue 成功后才写，避免入队失败却把当天额度用掉。
+// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume that day's quota.
 //
-// 小时与复习日的边界：发送时刻按用户本地整点比较（local.Hour() >= 选定小时），复习日仍按
-// day_cutoff_hour 切分。若用户选的整点早于其日切点（例如选 0 点、切点 4），该时刻仍属于
-// 前一个复习日，于是同一自然日里 0 点与 4 点会各命中一个复习日；账本对此无能为力，故由上面
-// 的第 2 道最小间隔门（MinSendInterval）拦住，见该常量的注释。
+// Hour vs review-day boundary: send time is compared against the user's local hour (local.Hour() >= chosen hour), while the review day is still split by
+// day_cutoff_hour. If the chosen hour precedes the day cutoff (e.g. choose 0, cutoff 4), that instant still belongs to
+// the previous review day, so 0 and 4 in the same calendar day each hit a different review day; the ledger cannot help here, so the
+// second minimum-interval gate above (MinSendInterval) catches it, see that constant's comment.
 func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) error {
 	loc := store.LoadLocation(c.Timezone)
 	if !ReachedSendHour(now.In(loc), SendHour(c.ReminderHour)) {
@@ -260,9 +260,9 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	return nil
 }
 
-// message 按用户语言组装提醒邮件。提醒是 C 类可选邮件，故带 RFC 8058 一键退订头：
-// 令牌指名 review_reminder 这一个类型，收件人（必为本站用户）不登录即可关掉它。
-// 令牌签发失败只记日志并照常发信：退订入口缺失不该让提醒发不出去。
+// message assembles the reminder mail in the user's language. A reminder is class-C optional mail, so it carries the RFC 8058 one-click unsubscribe header:
+// the token names the single type review_reminder, and the recipient (necessarily a user of this site) can turn it off without logging in.
+// A failed token issuance is only logged and the mail is still sent: a missing unsubscribe entry must not stop the reminder from going out.
 func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.Message {
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
 	site := lc.T("app.name")
@@ -303,7 +303,7 @@ func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.
 	return msg
 }
 
-// siteDefaultLocale 返回站点默认语言（模板回退链第二级）；未注入时返回空串。
+// siteDefaultLocale returns the site default locale (second level of the template fallback chain); returns an empty string when not injected.
 func (r *Reminder) siteDefaultLocale() string {
 	if r.siteLocale == nil {
 		return ""
@@ -311,10 +311,10 @@ func (r *Reminder) siteDefaultLocale() string {
 	return strings.TrimSpace(r.siteLocale())
 }
 
-// unsubscribeHeaders 为 review_reminder 签发退订令牌并返回 RFC 8058 头；不可用时返回 nil。
-// unsubscribeLink 为 review_reminder 签发退订令牌并返回退订链接；不可用时返回空串。
+// unsubscribeHeaders issues an unsubscribe token for review_reminder and returns the RFC 8058 headers; returns nil when unavailable.
+// unsubscribeLink issues an unsubscribe token for review_reminder and returns the unsubscribe link; returns an empty string when unavailable.
 //
-// 返回链接而不是头：正文页脚与纯文本段也要有它（头只有邮件客户端看得到）。
+// Returns a link rather than a header: the body footer and the plain-text part need it too (headers are only visible to mail clients).
 func (r *Reminder) unsubscribeLink(ctx context.Context, userID uint64) string {
 	if r.tokens == nil {
 		return ""
@@ -327,16 +327,16 @@ func (r *Reminder) unsubscribeLink(ctx context.Context, userID uint64) string {
 	return r.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
 }
 
-// reviewURL 拼复习页链接；未配置 BaseURL 时退化成相对路径。
+// reviewURL builds the review page link; degrades to a relative path when BaseURL is unconfigured.
 func (r *Reminder) reviewURL() string {
 	return r.baseURL + r.reviewPath
 }
 
-// SendHour 把用户选择的发送小时解析成实际使用的整点：nil（未设置）或越界值回落到
-// DefaultSendHour。返回 int 而不是指针，调用方无需再判空。
+// SendHour resolves the user's chosen send hour into the hour actually used: nil (unset) or out-of-range values fall back to
+// DefaultSendHour. Returns an int rather than a pointer, so callers need no nil check.
 //
-// 0 是合法值（午夜）：绝不能把 0 和「未设置」混为一谈——这正是列取可空指针、而不是
-// 「普通 int + 默认值」的原因（见 store.User.ReminderHour 的注释）。
+// 0 is a valid value (midnight): 0 and "unset" must never be conflated — this is exactly why the column is a nullable pointer rather than
+// "a plain int + a default value" (see the comment on store.User.ReminderHour).
 func SendHour(userHour *int) int {
 	if userHour == nil || *userHour < 0 || *userHour > 23 {
 		return DefaultSendHour
@@ -344,15 +344,15 @@ func SendHour(userHour *int) int {
 	return *userHour
 }
 
-// ReachedSendHour 报告本地时间是否已到（或已过）选定的整点小时。
+// ReachedSendHour reports whether local time has reached (or passed) the chosen top-of-hour hour.
 //
-// 用「大于等于」而不是「等于」，是为了在 worker 停机、轮询错过整点后仍能补发：
-// 到达选定小时后的首轮轮询即满足条件，之后的轮询由「每个复习日一封」的台账兜住，不会重复。
+// Using "greater than or equal" rather than "equal" is so that a send can still follow up after the worker was down and the poll missed the hour:
+// the first poll after the chosen hour arrives satisfies the condition, and later polls are held back by the "one per review day" ledger, so nothing repeats.
 //
-// 导出供周报 worker 复用：两个 C 类邮件共用同一小时，判定必须是同一份实现。
+// Exported for reuse by the weekly digest worker: both class-C mails share the same hour, so the decision must be a single implementation.
 func ReachedSendHour(local time.Time, hour int) bool {
 	return local.Hour() >= hour
 }
 
-// 让编译期确认 *mail.Outbox 满足 Enqueuer（契约漂移时在这里报错，而不是在装配处）。
+// Makes the compiler confirm *mail.Outbox satisfies Enqueuer (so contract drift errors here rather than at the wiring site).
 var _ Enqueuer = (*mail.Outbox)(nil)

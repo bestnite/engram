@@ -17,8 +17,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// measurePeak 执行 fn，并返回执行期间堆分配（HeapAlloc）相对执行前基线增长的最大字节数。
-// 用后台采样线程读取 MemStats —— 验收要求的\"峰值内存断言\"。
+// measurePeak runs fn and returns the maximum growth in bytes of heap allocation (HeapAlloc) over the pre-run baseline during execution.
+// A background sampling goroutine reads MemStats - the "peak memory assertion" the acceptance requires.
 func measurePeak(t *testing.T, fn func()) uint64 {
 	t.Helper()
 	runtime.GC()
@@ -59,8 +59,8 @@ func measurePeak(t *testing.T, fn func()) uint64 {
 	return best - baseline
 }
 
-// seedBulkNotes 直接写 n 条 note（每条 back 字段约 2KB）与每 note 一张 card，
-// 用于制造\"整组读入内存会明显占内存\"的数据量。
+// seedBulkNotes writes n notes directly (each with a back field of roughly 2KB) plus one card per note,
+// to produce a volume where "reading the whole set into memory would clearly cost memory".
 func seedBulkNotes(t *testing.T, env *testEnv, deckID uint64, n int) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -79,7 +79,7 @@ func seedBulkNotes(t *testing.T, env *testEnv, deckID uint64, n int) {
 	if err := env.db.CreateInBatches(notes, 500).Error; err != nil {
 		t.Fatalf("seed notes: %v", err)
 	}
-	// 批量插入后重新取回自增 id，避免依赖驱动是否回填主键。
+	// Re-fetch the auto-increment ids after the bulk insert, avoiding reliance on whether the driver back-fills primary keys.
 	var ids []uint64
 	if err := env.db.Model(&store.Note{}).Where("deck_id = ?", deckID).Pluck("id", &ids).Error; err != nil {
 		t.Fatalf("pluck note ids: %v", err)
@@ -93,8 +93,8 @@ func seedBulkNotes(t *testing.T, env *testEnv, deckID uint64, n int) {
 	}
 }
 
-// TestExportTenThousandNotesStreamsWithoutBuffering 是核心验收：
-// 导出 1 万条 note 时流式路径的峰值内存显著低于整体收集路径，证明没有把整组读进内存。
+// TestExportTenThousandNotesStreamsWithoutBuffering is the core acceptance:
+// exporting 10k notes, the streaming path's peak memory is markedly lower than the collect-everything path, proving the whole set is not read into memory.
 func TestExportTenThousandNotesStreamsWithoutBuffering(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "exporter", store.RoleUser)
@@ -135,8 +135,8 @@ func TestExportTenThousandNotesStreamsWithoutBuffering(t *testing.T) {
 	}
 }
 
-// TestExportFormatsAndProgressColumns 校验 JSON / CSV 两种格式，以及 include_progress
-// 开关是否恰好增删进度列。
+// TestExportFormatsAndProgressColumns verifies both the JSON / CSV formats and whether the include_progress
+// switch adds or removes exactly the progress columns.
 func TestExportFormatsAndProgressColumns(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "fmt_user", store.RoleUser)
@@ -160,7 +160,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Fatalf("create card state: %v", err)
 	}
 
-	// JSON 不带进度：不含 state 键。
+	// JSON without progress: no state key.
 	status, raw := doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("json export status = %d, want 200 (body %s)", status, raw)
@@ -179,7 +179,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Error("json export without include_progress contains state, want it omitted")
 	}
 
-	// JSON 带进度：state=review、reps=3。
+	// JSON with progress: state=review, reps=3.
 	status, raw = doJSON(t, router, http.MethodGet,
 		fmt.Sprintf("/api/v1/export?deck=%s&format=json&include_progress=1", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
@@ -198,7 +198,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Errorf("reps = %v, want 3", got)
 	}
 
-	// CSV 不带进度：表头 8 列，无 state。
+	// CSV without progress: 8 header columns, no state.
 	status, raw = doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=csv", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("csv export status = %d, want 200", status)
@@ -208,7 +208,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Errorf("csv header without include_progress = %q, want no state column", csvHeader)
 	}
 
-	// CSV 带进度：表头含 state,due_at,reps,lapses，数据行含 review 与 3。
+	// CSV with progress: the header has state,due_at,reps,lapses and the data row has review and 3.
 	status, raw = doJSON(t, router, http.MethodGet,
 		fmt.Sprintf("/api/v1/export?deck=%s&format=csv&include_progress=1", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
@@ -225,7 +225,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 		t.Errorf("csv progress data row = %q, want state review", lines[1])
 	}
 
-	// include_progress 非法值（如 2）按未开启处理，避免静默接受非 0/1。
+	// An invalid include_progress value (e.g. 2) is treated as off, avoiding silent acceptance of anything but 0/1.
 	status, raw = doJSON(t, router, http.MethodGet,
 		fmt.Sprintf("/api/v1/export?deck=%s&format=json&include_progress=2", deck.PublicID), k.Plaintext, "")
 	if status != http.StatusOK {
@@ -239,16 +239,16 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 	}
 }
 
-// TestExportRequiresExplicitDeck 断言 GET /api/v1/export 必须显式指定卡组：deck 缺省或为空
-// 一律 400；给了一个未知的对外 id 则是 404（与「卡组不存在」同口径）。
-// 全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个显式卡组。
+// TestExportRequiresExplicitDeck asserts GET /api/v1/export must name a deck explicitly: deck absent or empty
+// is always 400; an unknown external id is 404 (the same convention as "deck does not exist").
+// The whole-library / cross-user export entry was removed by the 2026-10-06 decision, leaving single explicit deck export only.
 func TestExportRequiresExplicitDeck(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "exp_nodeck", store.RoleUser)
 	seedDeck(t, env.db, user.ID)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
 
-	// 缺 deck 参数（或值为空）：400 invalid_request。
+	// deck parameter missing (or empty value): 400 invalid_request.
 	for _, target := range []string{
 		"/api/v1/export",
 		"/api/v1/export?format=json",
@@ -260,7 +260,7 @@ func TestExportRequiresExplicitDeck(t *testing.T) {
 		}
 	}
 
-	// deck 给了但不是已知的对外 id：404 not_found。
+	// deck given but not a known external id: 404 not_found.
 	status, raw := doJSON(t, env.router(), http.MethodGet,
 		"/api/v1/export?deck="+missingPublicID, k.Plaintext, "")
 	if status != http.StatusNotFound {
@@ -268,9 +268,9 @@ func TestExportRequiresExplicitDeck(t *testing.T) {
 	}
 }
 
-// blockingResponseWriter 把响应写入挂在测试指定的那次 Write 上，用来模拟「客户端读得很慢」：
-// hold 返回 true 的那次写入先关闭 blocked（通知测试已经挂住），再等 release 放行；后续写入直通。
-// 只挂第一次匹配的写入，所以被挂住的那次写入就是被测代码持有数据库连接的整段时间里的一刻。
+// blockingResponseWriter blocks on the Write the test picks, simulating "a client reading very slowly":
+// the write for which hold returns true closes blocked first (telling the test it is stuck), then waits for release; later writes pass straight through.
+// Only the first matching write blocks, so that write is one moment within the whole span in which the code under test holds the database connection.
 type blockingResponseWriter struct {
 	rec     *httptest.ResponseRecorder
 	hold    func(p []byte) bool
@@ -298,15 +298,15 @@ func (w *blockingResponseWriter) Write(p []byte) (int, error) {
 	return w.rec.Write(p)
 }
 
-// TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked 是 FX-17 的核心验收：
-// 客户端写出被挂住时，导出不得继续持有数据库连接。
+// TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked is the core acceptance for FX-17:
+// while the client write is blocked, the export must not keep holding the database connection.
 //
-// SQLite 部署把连接数压到 1（internal/store/store.go 的 SetMaxOpenConns(1)，写入靠它串行化），
-// 所以「导出还占着连接」等价于「同一条句柄上的另一次查询在 2 秒预算内做不完」。
-// 夹具 8 行、页大小 2 → 4 页，保证挂住点出现在分页路径上而不是只有一页的退化情形。
+// The SQLite deployment caps connections at 1 (SetMaxOpenConns(1) in internal/store/store.go, which is how writes are serialized),
+// so "the export still holds the connection" equals "another query on the same handle cannot finish within a 2-second budget".
+// The fixture has 8 rows with a page size of 2 -> 4 pages, ensuring the blocking point lands on the paging path rather than a degenerate single-page case.
 //
-// 负向对照：把 ExportCards 退回「一条游标直接流式写完」，挂住点仍在第一行写出时，
-// 但此时游标没读完、连接没还，这条测试必须变红（并发查询超时）。
+// The negative control: reverting ExportCards to "one cursor streamed straight to the end" keeps the blocking point at the first data row write,
+// but then the cursor is unfinished and the connection unreturned, so this test must go red (the concurrent query times out).
 func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "conn_release", store.RoleUser)
@@ -322,8 +322,8 @@ func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T)
 		rec:     rec,
 		blocked: make(chan struct{}),
 		release: make(chan struct{}),
-		// 只在第一行卡片数据写出时挂住：此前的写入只有固定的 JSON 前缀（deck_ids 与 "cards":[），
-		// 那时还没有任何数据库交互，挂在那里测不出连接是否被占用。
+		// Block only when the first card data row is written: earlier writes are just the fixed JSON prefix (deck_ids and "cards":[),
+		// when no database interaction has happened yet, so blocking there would show nothing about connection occupancy.
 		hold: func(p []byte) bool { return bytes.Contains(p, []byte("card_id")) },
 	}
 	router := env.router()
@@ -337,7 +337,7 @@ func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T)
 	}()
 	var releaseOnce sync.Once
 	release := func() { releaseOnce.Do(func() { close(w.release) }) }
-	// 任何提前失败路径都要放行写入并等 handler 收场，避免把 goroutine 与连接留在测试里。
+	// Any early-failure path must release the write and wait for the handler to finish, so no goroutine or connection is left behind in the test.
 	defer func() {
 		release()
 		<-done
@@ -349,7 +349,7 @@ func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T)
 		t.Fatal("export never wrote a card row; the blocking writer was not reached")
 	}
 
-	// 客户端被挂住的此刻，从同一条数据库句柄再发一次查询。
+	// At the moment the client is blocked, issue another query on the same database handle.
 	const budget = 2 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
@@ -371,7 +371,7 @@ func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T)
 	}
 	t.Logf("concurrent query finished in %s while the export write was blocked", elapsed)
 
-	// 挂住一次写入不改变对外输出：仍是完整合法的 JSON，8 行、count=8。
+	// Blocking one write does not change the external output: still complete valid JSON, 8 rows, count=8.
 	if rec.Code != http.StatusOK {
 		t.Fatalf("export status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -388,9 +388,9 @@ func TestExportReleasesDatabaseConnectionWhileClientWriteIsBlocked(t *testing.T)
 	}
 }
 
-// TestExportOutputIsIndependentOfPageSize 断言分页不改变对外输出：同一份数据用「一页装下」与
-// 「每页 2 行」两种页大小导出，JSON 与 CSV、带与不带 include_progress 的响应体必须逐字节相同，
-// 且行顺序按 cards.id 升序（键集分页的推进顺序）。
+// TestExportOutputIsIndependentOfPageSize asserts paging does not change the external output: the same data exported with "all in one page" and
+// "2 rows per page" must produce byte-identical response bodies for JSON and CSV, with and without include_progress,
+// with rows in ascending cards.id order (the advance order of keyset paging).
 func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "page_size", store.RoleUser)
@@ -400,7 +400,7 @@ func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
 	const total = 7
 	seedBulkNotes(t, env, deck.ID, total)
 
-	// 前 3 张卡写入进度，覆盖 include_progress 的两种取值。
+	// The first 3 cards get progress written, covering both include_progress values.
 	var cardIDs []uint64
 	if err := env.db.Model(&store.Card{}).Order("id ASC").Limit(3).Pluck("id", &cardIDs).Error; err != nil {
 		t.Fatalf("pluck card ids: %v", err)
@@ -418,9 +418,9 @@ func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
 	for _, format := range []string{"json", "csv"} {
 		for _, prog := range []string{"", "&include_progress=1"} {
 			path := fmt.Sprintf("/api/v1/export?deck=%s&format=%s%s", deck.PublicID, format, prog)
-			env.api.exportPageSize = 1000 // 一页装下：与旧实现的一次性游标等价
+			env.api.exportPageSize = 1000 // one page holds it all: equivalent to the old implementation's one-shot cursor
 			_, onePage := doJSON(t, router, http.MethodGet, path, k.Plaintext, "")
-			env.api.exportPageSize = 2 // 4 页，逼迫多页推进
+			env.api.exportPageSize = 2 // 4 pages, forcing multi-page advance
 			_, manyPages := doJSON(t, router, http.MethodGet, path, k.Plaintext, "")
 			if !bytes.Equal(onePage, manyPages) {
 				t.Errorf("format=%s include_progress=%q: paged body differs from single-page body:\n single page: %s\n paged:       %s",
@@ -429,7 +429,7 @@ func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
 		}
 	}
 
-	// 行顺序：按 cards.id 升序，与导出体的 card_id 序列一致。
+	// Row order: ascending cards.id, matching the card_id sequence in the export body.
 	var wantOrder []string
 	if err := env.db.Table("cards").
 		Joins("JOIN notes ON notes.id = cards.note_id").

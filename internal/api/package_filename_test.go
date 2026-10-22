@@ -37,7 +37,7 @@ func TestDeckPackageFilenameCapsLength(t *testing.T) {
 	}
 }
 
-// TestAttachmentDispositionRoundTrips 断言非 ASCII 文件名编码后能被标准解析器还原。
+// TestAttachmentDispositionRoundTrips asserts an encoded non-ASCII filename can be restored by a standard parser.
 func TestAttachmentDispositionRoundTrips(t *testing.T) {
 	for _, name := range []string{"Biology.edeck", "日语 N2 词汇.edeck", `quote".edeck`} {
 		header := AttachmentDisposition(name)

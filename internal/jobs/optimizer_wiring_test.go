@@ -1,7 +1,7 @@
 //go:build unix
 
-// 只在 Unix 上编译：依赖 jobs_test.go 里 unix-only 的测试脚手架（newTestRunner 等），
-// 或直接以 `/bin/sh` 作为假命令。
+// Compiles only on Unix: it depends on the unix-only test scaffolding in jobs_test.go (newTestRunner and others),
+// or uses `/bin/sh` directly as the fake command.
 
 package jobs
 
@@ -20,7 +20,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newWiringDB 打开临时 SQLite 库并迁移，供接线用例复用。
+// newWiringDB opens a temporary SQLite database and migrates it, for the wiring cases to reuse.
 func newWiringDB(t *testing.T) (*gorm.DB, *Store) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "wiring.db"))
@@ -33,7 +33,7 @@ func newWiringDB(t *testing.T) (*gorm.DB, *Store) {
 	return db, NewStore(db)
 }
 
-// newWiringRunner 用真实的 Optimizer 构造并启动 Runner。
+// newWiringRunner builds and starts a Runner with the real Optimizer.
 func newWiringRunner(t *testing.T, db *gorm.DB, st *Store, opt *Optimizer, timeout time.Duration) *Runner {
 	t.Helper()
 	runner, err := New(Deps{
@@ -52,7 +52,7 @@ func newWiringRunner(t *testing.T, db *gorm.DB, st *Store, opt *Optimizer, timeo
 	return runner
 }
 
-// seedOptimizerUserAndPreset 建一个用户与一个属于他的预设，返回两者。
+// seedOptimizerUserAndPreset creates a user and a preset belonging to them, returning both.
 func seedOptimizerUserAndPreset(t *testing.T, db *gorm.DB) (*store.User, *store.Preset) {
 	t.Helper()
 	ctx := context.Background()
@@ -74,8 +74,8 @@ func seedOptimizerUserAndPreset(t *testing.T, db *gorm.DB) (*store.User, *store.
 	return u, p
 }
 
-// seedAdapterReviews 写入跨多天、多张卡的复习日志，让适配器有足够「长期复习」项训练
-// （适配器要求过滤后至少 8 项）。同卡按天递增，delta_t > 0，评分在 1..4 间变化。
+// seedAdapterReviews writes review logs spanning many days and many cards, giving the adapter enough "long-term review" items to train on
+// (the adapter requires at least 8 items after filtering). Same-card entries step by day, delta_t > 0, and ratings vary between 1..4.
 func seedAdapterReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, cards, days int) {
 	t.Helper()
 	cardIDs := seedPresetDeckCards(t, db, userID, presetID, cards)
@@ -99,9 +99,9 @@ func seedAdapterReviews(t *testing.T, db *gorm.DB, userID, presetID uint64, card
 	}
 }
 
-// TestOptimizeEndToEndRunsRealAdapter 是端到端验收：驱动一个复习条数足够阈值的
-// 预设走完 runner + 真实 Rust 适配器，断言作业 succeeded，且 job 行与 preset 上都有 21 维权重。
-// 适配器未构建时跳过（CI 无 Rust 工具链）；本机已构建，因此这里会真跑。
+// TestOptimizeEndToEndRunsRealAdapter is the end-to-end acceptance: it drives a preset with enough reviews to clear the threshold
+// through the runner and the real Rust adapter, asserting the job succeeds and both the job row and the preset carry 21-dimension weights.
+// It skips when the adapter is not built (CI has no Rust toolchain); it is built on this machine, so this really runs.
 func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	bin := optimizerBinary()
 	if _, err := os.Stat(bin); err != nil {
@@ -110,10 +110,10 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
 	u, p := seedOptimizerUserAndPreset(t, db)
-	// 8 张卡 × 40 天 = 320 条复习：越过 300 条门槛下限，且够适配器训练。
+	// 8 cards × 40 days = 320 reviews: clears the 300-review threshold floor, and is enough for the adapter to train.
 	const cards, days = 8, 40
 	seedAdapterReviews(t, db, u.ID, p.ID, cards, days)
-	// 门槛设到下限：默认 500 会挡住这 320 条复习。
+	// The threshold is set to its floor: the default 500 would block these 320 reviews.
 	if err := store.PutSetting(ctx, db, store.SettingKeyOptimizeMinReviews, strconv.Itoa(store.MinOptimizeMinReviews), nil, time.Now().UTC()); err != nil {
 		t.Fatalf("PutSetting: %v", err)
 	}
@@ -169,8 +169,8 @@ func TestOptimizeEndToEndRunsRealAdapter(t *testing.T) {
 	t.Logf("preset %d weights_json=%s optimized_at=%v review_count=%v", preset.ID, *preset.WeightsJSON, preset.WeightsOptimizedAt, preset.WeightsReviewCount)
 }
 
-// TestOptimizeJobFailsWhenAdapterMissing 是第二条验收：适配器缺失时作业必须
-// 失败，且失败消息点名期望路径，让运维一眼知道缺的是哪个文件。
+// TestOptimizeJobFailsWhenAdapterMissing is the second acceptance item: when the adapter is missing the job must
+// fail, and the failure message must name the expected path, so operators see at a glance which file is missing.
 func TestOptimizeJobFailsWhenAdapterMissing(t *testing.T) {
 	ctx := context.Background()
 	db, st := newWiringDB(t)
@@ -203,8 +203,8 @@ func TestOptimizeJobFailsWhenAdapterMissing(t *testing.T) {
 	t.Logf("job %d status=%s error=%q", failed.ID, failed.Status, *failed.Error)
 }
 
-// TestResolveOptimizerBinary 覆盖路径解析：显式配置优先；否则先找服务二进制旁，
-// 找不到再回退到仓库构建产物。
+// TestResolveOptimizerBinary covers path resolution: an explicit configuration wins; otherwise look next to the service binary first,
+// and fall back to the repository build artifact when that is not found.
 func TestResolveOptimizerBinary(t *testing.T) {
 	dir := t.TempDir()
 	beside := filepath.Join(dir, optimizerBinaryName)
@@ -219,7 +219,7 @@ func TestResolveOptimizerBinary(t *testing.T) {
 		t.Errorf("configured path = %q, want %q (must be honoured as-is)", got, custom)
 	}
 
-	// 空目录里既没有旁路二进制，也没有仓库产物相对当前目录时，应回退到仓库构建路径。
+	// In an empty directory with neither a side-by-side binary nor a repository artifact relative to the current directory, it should fall back to the repository build path.
 	empty := t.TempDir()
 	got := ResolveOptimizerBinary("", filepath.Join(empty, "engram"))
 	if got == filepath.Join(empty, optimizerBinaryName) {

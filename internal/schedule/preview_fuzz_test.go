@@ -7,9 +7,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestPreviewIgnoresFuzz 断言开了 fuzz 的预设，预览给出的是 fuzz 之前的中心值：
-// 与同一预设关掉 fuzz 后 Next 的结果逐档一致，并且不随毫秒级的预览时刻变化。
-// 复习页按钮下显示的间隔来自预览，加了 fuzz 就会每次翻面都不一样。
+// TestPreviewIgnoresFuzz asserts that for a preset with fuzz on, the preview gives the central value before fuzz:
+// it matches Next's results rating by rating with fuzz turned off on the same preset, and does not vary with the millisecond-level preview instant.
+// The intervals shown under the buttons on the review page come from the preview; with fuzz they would differ on every flip.
 func TestPreviewIgnoresFuzz(t *testing.T) {
 	fuzzed := store.NewPreset(1, "fuzzed")
 	fuzzed.EnableFuzz = boolPtr(true)

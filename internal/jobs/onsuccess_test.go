@@ -1,6 +1,6 @@
 //go:build unix
 
-// 只在 Unix 上编译：假命令走 `/bin/sh -c ...`（理由同 jobs_test.go 的文件头说明）。
+// Compiles only on Unix: the fake command goes through `/bin/sh -c ...` (same reason as the file header note in jobs_test.go).
 
 package jobs
 
@@ -13,10 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是成功钩子的作业侧验收：作业成功落库后 OnSuccess 被调用一次，且钩子 panic 不会
-// 反过来影响作业结果——「通知失败不影响触发操作」在作业侧的体现（与 onfailure_test.go 对称）。
+// This file is the job-side acceptance for the success hook: after a job success is persisted OnSuccess is called once, and a hook panic does not
+// in turn affect the job result — the job-side expression of "a failed notification does not affect the triggering operation" (symmetric with onfailure_test.go).
 
-// succeedingRunner 构造一个不自动 Start 的 Runner，方便在 Start 之前接好钩子。
+// succeedingRunner builds a Runner that does not Start automatically, so the hook can be wired before Start.
 func succeedingRunner(t *testing.T, hook SuccessFunc) (*Runner, *Store, context.CancelFunc) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "onsuccess.db"))
@@ -45,7 +45,7 @@ func succeedingRunner(t *testing.T, hook SuccessFunc) (*Runner, *Store, context.
 	return runner, st, cancel
 }
 
-// TestSuccessHookInvokedAfterJobSucceeds 断言成功作业会调用 OnSuccess 钩子并带上作业行。
+// TestSuccessHookInvokedAfterJobSucceeds asserts a successful job calls the OnSuccess hook with the job row.
 func TestSuccessHookInvokedAfterJobSucceeds(t *testing.T) {
 	jobs := make(chan store.Job, 1)
 	runner, st, _ := succeedingRunner(t, func(_ context.Context, job store.Job) {
@@ -72,7 +72,7 @@ func TestSuccessHookInvokedAfterJobSucceeds(t *testing.T) {
 	}
 }
 
-// TestSuccessHookPanicDoesNotBreakCompletion 断言钩子 panic 被兜住：作业仍落到 succeeded。
+// TestSuccessHookPanicDoesNotBreakCompletion asserts hook panics are caught: the job still ends up succeeded.
 func TestSuccessHookPanicDoesNotBreakCompletion(t *testing.T) {
 	runner, st, _ := succeedingRunner(t, func(context.Context, store.Job) {
 		panic("hook blew up")

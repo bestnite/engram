@@ -11,15 +11,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是参数优化在本包的服务端门槛与结果写回。
-// 权重拟合本身属于 Rust 适配器；这里只负责「先判够不够，再建作业」与
-// 「把适配器产出的拟合报告写进 job 行的 result_json」。
+// This file is the server-side gate and the result write-back for parameter optimization in this package.
+// The weight fitting itself belongs to the Rust adapter; this only handles "first judge whether there is enough data, then create the job" and
+// "write the fit report the adapter produced into the job row's result_json".
 
-// ErrInsufficientReviews 是复习条数不足门槛的哨兵错误；调用方可用 errors.Is 判别，
-// 并配合 ThresholdError 拿到具体差额用于页面提示（不足时显示「还差 N 条」）。
+// ErrInsufficientReviews is the sentinel error for failing the review-count threshold; callers can test it with errors.Is
+// and use ThresholdError to get the exact shortfall for the page hint (showing "N more to go" when insufficient).
 var ErrInsufficientReviews = errors.New("not enough reviews to optimize")
 
-// ThresholdError 是门槛拒绝的详细结果：指名预设、已有条数、门槛与差额。
+// ThresholdError is the detailed result of a threshold rejection: it names the preset, the count so far, the threshold, and the shortfall.
 type ThresholdError struct {
 	PresetID  uint64
 	Reviews   int64
@@ -27,18 +27,18 @@ type ThresholdError struct {
 	Shortfall int64
 }
 
-// Error 输出英文失败原因，并把差额写进消息（AGENTS.md §2.1：日志与错误英文）。
+// Error outputs the English failure reason and puts the shortfall in the message (AGENTS.md §2.1: logs and errors in English).
 func (e *ThresholdError) Error() string {
 	return fmt.Sprintf("%v: preset %d has %d reviews, needs %d, short by %d",
 		ErrInsufficientReviews, e.PresetID, e.Reviews, e.Min, e.Shortfall)
 }
 
-// Is 让 errors.Is(err, ErrInsufficientReviews) 成立，同时保留具体差额字段。
+// Is makes errors.Is(err, ErrInsufficientReviews) succeed while keeping the concrete shortfall field.
 func (e *ThresholdError) Is(target error) bool { return target == ErrInsufficientReviews }
 
-// EnqueueOptimize 是优化作业的唯一入队入口：先按门槛判定资格，再复用单并发 Enqueue。
-// 条数不足时不建作业、不入队，直接返回 ThresholdError，让上层把差额展示给用户。
-// ownerUserID 是预设所属用户，也就是复习日志的归属者；门槛只数该预设所挂卡组上的复习。
+// EnqueueOptimize is the only enqueue entry point for optimization jobs: it first judges eligibility against the threshold, then reuses the single-concurrency Enqueue.
+// With too few reviews it creates no job and enqueues nothing, returning ThresholdError directly so the layer above can show the shortfall to the user.
+// ownerUserID is the user the preset belongs to, and thus the owner of the review log; the threshold counts only reviews on decks attached to that preset.
 func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint64) (*store.Job, error) {
 	gate, err := store.GateOptimize(ctx, r.db, ownerUserID, presetID)
 	if err != nil {
@@ -56,12 +56,12 @@ func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint
 	return r.Enqueue(ctx, KindOptimize, &target)
 }
 
-// FinishOptimize 把适配器产出的拟合报告写入 job 行的 result_json 并把作业置为 succeeded，
-// 同时把 21 维权重写回作业目标 preset（预设页轮询要看到真实结果）。
-// 适配器缺席时也可显式调用（例如测试的占位路径）。
+// FinishOptimize writes the fit report the adapter produced into the job row's result_json, marks the job succeeded,
+// and writes the 21-dimension weights back to the job's target preset (the preset page polls for the real result).
+// It can also be called explicitly with no adapter present (for example a test's placeholder path).
 //
-// 写回顺序：先写 preset 再落 job 状态。若 preset 写回失败，本函数返回错误，调用方会把作业
-// 标为 failed——避免出现「作业成功但权重没生效」的半截状态。
+// Write-back order: write the preset first, then persist the job state. If the preset write-back fails, this function returns an error and the caller marks
+// the job failed — avoiding a half-done state where "the job succeeded but the weights never took effect".
 func (r *Runner) FinishOptimize(ctx context.Context, jobID uint64, result store.OptimizeResult, tail string) error {
 	raw, err := json.Marshal(result)
 	if err != nil {
@@ -73,8 +73,8 @@ func (r *Runner) FinishOptimize(ctx context.Context, jobID uint64, result store.
 	return r.store.FinishSucceeded(ctx, jobID, r.now(), string(raw), tail)
 }
 
-// applyOptimizedWeights 把优化后的权重写回作业目标 preset。作业没有目标预设、或目标预设
-// 已被删除时静默跳过（无处可写，重试也无意义）；只有真正的写失败才返回错误。
+// applyOptimizedWeights writes the optimized weights back to the job's target preset. When the job has no target preset, or the target preset
+// has been deleted, it skips silently (there is nowhere to write and a retry is pointless); only a genuine write failure returns an error.
 func (r *Runner) applyOptimizedWeights(ctx context.Context, jobID uint64, result store.OptimizeResult) error {
 	job, err := r.store.ByID(ctx, jobID)
 	if err != nil {

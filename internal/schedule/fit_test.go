@@ -11,9 +11,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// allRecalledLog 造一份固定的复习日志：cards 张卡各 days 条复习（连续天数、全部 Good），
-// 末尾再加一张只有一条复习的卡。全部回忆成功，因此「预测概率更高」的权重集必然拟合更好——
-// 这让「更好的权重集」是已知的，供验收 1 断言 Improved() 的方向。
+// allRecalledLog builds a fixed review log: cards cards with days reviews each (consecutive days, all Good),
+// plus one extra card with a single review at the end. Everything is recalled, so the weight set with "higher predicted probability" necessarily fits better —
+// which makes "the better weight set" known in advance, letting acceptance case 1 assert the direction of Improved().
 func allRecalledLog(cards, days int) []store.OptimizerReviewLog {
 	base := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 	var logs []store.OptimizerReviewLog
@@ -29,7 +29,7 @@ func allRecalledLog(cards, days int) []store.OptimizerReviewLog {
 			})
 		}
 	}
-	// 只有一条复习的卡：没有先前的记忆状态，必须贡献 0 个可预测 item。
+	// A card with only one review: there is no prior memory state, so it must contribute 0 predictable items.
 	at := base.Add(time.Hour)
 	logs = append(logs, store.OptimizerReviewLog{
 		CardID:       uint64(cards + 1),
@@ -42,7 +42,7 @@ func allRecalledLog(cards, days int) []store.OptimizerReviewLog {
 	return logs
 }
 
-// fitTestPreset 造一个不用学习步骤、关闭 fuzz 的确定性 preset，权重由 jsonWeights 提供。
+// fitTestPreset builds a deterministic preset with no learning steps and fuzz off, with weights supplied by jsonWeights.
 func fitTestPreset(t *testing.T, jsonWeights *string) *store.Preset {
 	t.Helper()
 	fuzz := false
@@ -66,15 +66,15 @@ func jsonWeights(t *testing.T, w fsrs.Weights) *string {
 	return &s
 }
 
-// betterWeights 返回一个「明显更好」的权重集：默认权重在「全部回忆成功」的日志上会
-// 给出较高的预测概率，因此拟合理应优于下面的 worseWeights。
+// betterWeights returns a "clearly better" weight set: the default weights on an "everything recalled" log
+// give a fairly high predicted probability, so their fit should beat the worseWeights below.
 func betterWeights() []float64 {
 	w := fsrs.DefaultWeights()
 	return w[:]
 }
 
-// worseWeights 把初始稳定性权重压到下限，预测概率系统性偏低，在全部回忆成功的日志上
-// 必然产生更大的对数损失——它是已知的「更差」权重集。
+// worseWeights clamps the initial stability weight to its lower bound, so predicted probabilities are systematically low, and on an everything-recalled log
+// it necessarily produces a larger log loss — it is the known "worse" weight set.
 func worseWeights() fsrs.Weights {
 	w := fsrs.DefaultWeights()
 	for i := 0; i < 4; i++ {
@@ -83,8 +83,8 @@ func worseWeights() fsrs.Weights {
 	return w
 }
 
-// TestCompareFitKnownBetterWeights 是验收 1：固定复习日志、更好的权重集已知，
-// 断言方向（更差权重在前、更好权重在后时 Improved() 为 true），并打印两组实际数值。
+// TestCompareFitKnownBetterWeights is acceptance case 1: with a fixed review log and a known better weight set,
+// it asserts the direction (Improved() is true when the worse weights come first and the better weights second), and prints both actual values.
 func TestCompareFitKnownBetterWeights(t *testing.T) {
 	const cards, days = 3, 6
 	logs := allRecalledLog(cards, days)
@@ -110,8 +110,8 @@ func TestCompareFitKnownBetterWeights(t *testing.T) {
 	t.Logf("Improved()=%v", result.Improved())
 }
 
-// TestCompareFitSameItemCount 是验收 2/3：两个指标覆盖相同的 item 数，
-// 且每张卡的第一条复习被排除（只有一条复习的卡贡献 0 个 item）。
+// TestCompareFitSameItemCount is acceptance case 2/3: both metrics cover the same number of items,
+// and the first review of each card is excluded (a card with only one review contributes 0 items).
 func TestCompareFitSameItemCount(t *testing.T) {
 	const cards, days = 3, 6
 	logs := allRecalledLog(cards, days)
@@ -121,7 +121,7 @@ func TestCompareFitSameItemCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompareFit: %v", err)
 	}
-	want := cards * (days - 1) // 每张卡丢掉首条复习；单条复习的卡贡献 0
+	want := cards * (days - 1) // every card drops its first review; a single-review card contributes 0
 	if before.Items != after.Items {
 		t.Fatalf("item count mismatch: before=%d after=%d", before.Items, after.Items)
 	}
@@ -131,11 +131,11 @@ func TestCompareFitSameItemCount(t *testing.T) {
 	t.Logf("items: before=%d after=%d want=%d", before.Items, after.Items, want)
 }
 
-// TestCompareFitNoPredictableItems 是验收 5（数据侧）：没有任何可预测 item 时
-// 两个指标都是零值，Available() 为 false，页面因此不会声称「未改善」。
+// TestCompareFitNoPredictableItems is acceptance case 5 (data side): when there are no predictable items at all,
+// both metrics are the zero value and Available() is false, so the page never claims "not improved".
 func TestCompareFitNoPredictableItems(t *testing.T) {
 	preset := fitTestPreset(t, jsonWeights(t, worseWeights()))
-	// 每张卡只有一条复习 → 全部被首条复习规则排除。
+	// Every card has only one review → all are excluded by the first-review rule.
 	logs := allRecalledLog(2, 1)
 	before, after, err := CompareFit(preset, betterWeights(), logs)
 	if err != nil {

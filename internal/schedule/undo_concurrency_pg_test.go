@@ -11,14 +11,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestUndoConcurrentSameVersionIsAtomic 是 AUDIT-03 的 PostgreSQL 验收：两个窗口用同一
-// 目标版本并发撤销同一张卡，恰好一个成功、另一个收到冲突哨兵；状态、评分日志与审计记录
-// 三者一致（评分只少一条、审计只多一条、状态版本只前进一步）。
+// TestUndoConcurrentSameVersionIsAtomic is the PostgreSQL acceptance for AUDIT-03: two windows concurrently
+// undo the same card with the same target version, exactly one succeeds and the other receives the conflict sentinel; state, grade log and audit record
+// stay consistent (one fewer grade, one more audit entry, the state version advanced by exactly one step).
 //
-// 为什么必须用真 PG：Rollback 依赖 card_states 的行锁（FOR UPDATE）把「读状态 + 读日志 +
-// 写状态 + 删日志」串行化。SQLite 靠单写连接串行化，掩盖了「先读日志再锁状态」时的竞态窗口。
-// 修复后顺序为「先锁状态并校验版本、再读日志」，两个事务因此被行锁排成先后：赢家删日志并把
-// 版本推进到 3，输家拿到锁后读到版本 3 ≠ 期望 2，返回 ErrVersionConflict 且什么都不写。
+// Why real PG is required: Rollback relies on the card_states row lock (FOR UPDATE) to serialise "read state + read logs +
+// write state + delete log". SQLite serialises on a single write connection, hiding the race window of "read logs before locking the state".
+// The fixed order is "lock the state and check the version first, then read the logs", so the row lock serialises the two transactions: the winner deletes the log and
+// advances the version to 3, and the loser, once it gets the lock, reads version 3 ≠ expected 2, returns ErrVersionConflict and writes nothing.
 func TestUndoConcurrentSameVersionIsAtomic(t *testing.T) {
 	db, ok := pgtest.Open(t)
 	if !ok {

@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// containsTag 判断标签切片是否含目标值（api 包内测试辅助）。
+// containsTag reports whether the tag slice contains the target value (an in-package test helper for api).
 func containsTag(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {
@@ -22,7 +22,7 @@ func containsTag(xs []string, want string) bool {
 	return false
 }
 
-// importErrIndices 取出报告里所有行错误的下标，便于断言"只错这几行"。
+// importErrIndices extracts the indexes of all row errors in the report, for asserting "only these rows are wrong".
 func importErrIndices(t *testing.T, raw []byte) map[int]string {
 	t.Helper()
 	var resp importResponse
@@ -36,9 +36,9 @@ func importErrIndices(t *testing.T, raw []byte) map[int]string {
 	return out
 }
 
-// TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress 覆盖 Part 2：
-// 一次导入按 note_id 改写多条 note 的字段与标签，保留每张 card 的 id 与所有用户的进度；
-// 跨卡组 id 与"同时带 note_id 与 external_ref"的行各报一条行错误，其余行照常写入。
+// TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress covers Part 2:
+// one import rewrites the fields and tags of several notes by note_id, keeping each card's id and every user's progress;
+// a cross-deck id and a row carrying both note_id and external_ref each report one row error, while the other rows are written as usual.
 func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	ctx := context.Background()
@@ -93,7 +93,7 @@ func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {
 		t.Errorf("cross-deck row error = %q / %q, want one of them 'note not found in deck'", errs[2], errs[3])
 	}
 
-	// 字段与标签被就地改写。
+	// Fields and tags are rewritten in place.
 	noteStore := store.NewNoteStore(env.db)
 	got1, err := noteStore.ByID(ctx, n1.ID)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {
 		t.Errorf("note %d fields = %v, want the imported values", n2.ID, fields2)
 	}
 
-	// 现有 card 的 id 与它的复习进度必须原样保留。
+	// An existing card's id and its review progress must be preserved as they are.
 	newCards, err := cardStore.ByNote(ctx, n1.ID)
 	if err != nil || len(newCards) != 1 {
 		t.Fatalf("reload cards for note %d = (%d, %v), want 1", n1.ID, len(newCards), err)
@@ -130,6 +130,6 @@ func TestImportByNoteIDRewritesInPlaceKeepingCardsAndProgress(t *testing.T) {
 		t.Errorf("card state = (reps %d, lapses %d), want (4, 2): progress must survive an in-place rewrite", state.Reps, state.Lapses)
 	}
 
-	// 没有新建 note 或 card（跨卡组行被拒、其余行就地更新）。
+	// No note or card was created (the cross-deck row was rejected and the rest were updated in place).
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 }

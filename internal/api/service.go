@@ -18,11 +18,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 REST 与内置 MCP 共用的 service 层：两者只做参数
-// 校验与包装，真实业务规则必须只有一份实现）。REST handler 与 MCP 工具都调用这里的
-// 方法，保证同名操作产出完全一致。
+// This file is the service layer shared by REST and the built-in MCP: both only do parameter
+// validation and wrapping (the real business rules must exist exactly once). REST handlers and MCP tools both call the methods
+// here, so the same-named operation produces exactly the same result.
 
-// ServiceError 携带稳定错误 code 与 HTTP 语义状态码，供 REST 包壳与 MCP 错误结果共用。
+// ServiceError carries a stable error code and an HTTP-semantics status code, shared by the REST envelope and MCP error results.
 type ServiceError struct {
 	Status  int
 	Code    string
@@ -31,20 +31,20 @@ type ServiceError struct {
 
 func (e *ServiceError) Error() string { return e.Message }
 
-// newServiceError 构造一个 ServiceError。
+// newServiceError constructs a ServiceError.
 func newServiceError(status int, code, message string) *ServiceError {
 	return &ServiceError{Status: status, Code: code, Message: message}
 }
 
-// InvalidRequest 构造一个 400 invalid_request 的 ServiceError。
+// InvalidRequest constructs a ServiceError with 400 invalid_request.
 //
-// REST 之外的调用方（如 MCP 工具的参数互斥校验）需要与 REST 相同的错误形态与稳定 code，
-// 但不能各自发明错误结构；导出这一个构造器，让它们复用同一条错误出口。
+// Callers outside REST (e.g. MCP tools checking mutually exclusive parameters) need the same error shape and stable codes as REST,
+// but must not invent their own error structure; exporting this one constructor lets them reuse the same error exit.
 func InvalidRequest(message string) *ServiceError {
 	return newServiceError(http.StatusBadRequest, CodeInvalidRequest, message)
 }
 
-// asServiceError 把任意 error 归一成 ServiceError；未识别错误按 500 internal 处理。
+// asServiceError normalizes any error into a ServiceError; unrecognized errors become 500 internal.
 func asServiceError(err error) *ServiceError {
 	var se *ServiceError
 	if errors.As(err, &se) {
@@ -53,25 +53,25 @@ func asServiceError(err error) *ServiceError {
 	return newServiceError(http.StatusInternalServerError, CodeInternal, err.Error())
 }
 
-// ---- 卡组 ----
+// ---- Decks ----
 
-// DeckWithRole 是卡组加上调用者在该卡组上的显式关系，供列表接口标出「我的」与「共享给我的」。
+// DeckWithRole is a deck plus the caller's explicit relation to it, so list endpoints can mark "mine" and "shared with me".
 //
-// Role 取 owner（自有，由 decks.owner_user_id 判定）或显式授权角色 editor/reader。
-// 两者必居其一：列表本身只包含自有与被授权的卡组（store.visibleDeckIDsQuery），
-// 因此不存在「看得到但没有角色」的卡组，界面不必为那种情况准备分支。
+// Role is owner (their own, decided by decks.owner_user_id) or an explicitly granted role of editor/reader.
+// It is necessarily one of the two: the list itself contains only owned and granted decks (store.visibleDeckIDsQuery),
+// so there is no deck that is "visible but has no role", and the UI needs no branch for that case.
 type DeckWithRole struct {
 	Deck store.Deck
 	Role string
 }
 
-// ListDecks 返回该用户可见的卡组（自有 ∪ 被 deck_grants 授权），并逐张带上
-// 调用者的显式关系（见 DeckWithRole）。
+// ListDecks returns the decks visible to the user (owned ∪ granted via deck_grants), each carrying
+// the caller's explicit relation (see DeckWithRole).
 //
-// 别人没授权给我的卡组不会出现在这里：卡组不接受「未经同意进入他人列表」这种归属。
-// 口径与网页列表页（DeckStore.SummariesVisible）和复习队列的全库范围（DeckStore.VisibleIDs）
-// 完全一致，谓词只有 store.visibleDeckIDsQuery 一份。REST 与内置 MCP
-// 都调这里，任何一处改成 ListByOwner 都会让外部调用方看不到被共享的卡组。
+// A deck someone else has not granted me never shows up here: decks accept no ownership of the form "entered someone else's list without consent".
+// The convention matches the web list page (DeckStore.SummariesVisible) and the review queue's whole-library scope (DeckStore.VisibleIDs)
+// exactly, and the predicate exists only once, as store.visibleDeckIDsQuery. REST and the built-in MCP
+// both call here; switching either one to ListByOwner would hide shared decks from external callers.
 func (a *API) ListDecks(ctx context.Context, userID uint64) ([]DeckWithRole, error) {
 	decks, err := a.decks.ListVisible(ctx, userID)
 	if err != nil {
@@ -94,8 +94,8 @@ func (a *API) ListDecks(ctx context.Context, userID uint64) ([]DeckWithRole, err
 	return out, nil
 }
 
-// CreateDeckInput 是建卡组的输入。
-// APIKeyID 仅用于审计条目，会话通道（网页登录）下为 nil。
+// CreateDeckInput is the input for creating a deck.
+// APIKeyID is used only in audit entries and is nil on the session channel (web login).
 type CreateDeckInput struct {
 	Name        string
 	Description string
@@ -103,11 +103,11 @@ type CreateDeckInput struct {
 	APIKeyID    *uint64
 }
 
-// CreateDeck 建一个空卡组（scope: write）；REST 与内置 MCP 共用这一份实现。
+// CreateDeck creates an empty deck (scope: write); REST and the built-in MCP share this one implementation.
 //
-// 行为与错误 code 与 REST handler 旧实现完全一致：name 去空白后必填，preset_id 为 0 时使用
-// （或创建）调用者的 Default 预设；store 的任何拒绝都映射成 invalid_request，
-// 默认预设无法确保时映射成 internal_error。
+// Behavior and error codes match the old REST handler implementation exactly: name is required after trimming, and preset_id of 0 uses
+// (or creates) the caller's Default preset; any store rejection maps to invalid_request,
+// and a default preset that cannot be ensured maps to internal_error.
 func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput) (*store.Deck, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -130,8 +130,8 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		CreatedAt:   a.now(),
 	}
 	if err := a.decks.Create(ctx, &d); err != nil {
-		// 卡组名不满足与卡组包 manifest 同源的规则时给出专属 code，其余 store 拒绝
-		// 仍按 invalid_request，行为与既有 REST/MCP 一致。
+		// A deck name violating the rules shared with the deck package manifest gets its own code; other store rejections
+		// still map to invalid_request, matching existing REST/MCP behavior.
 		if errors.Is(err, store.ErrDeckDescriptionInvalid) {
 			return nil, newServiceError(http.StatusBadRequest, CodeDeckDescriptionInvalid, "")
 		}
@@ -151,19 +151,19 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 	return &d, nil
 }
 
-// UpdateDeckInput 是修改卡组名称与描述的输入；APIKeyID 仅用于审计条目。
-// Name / Description 为 nil 表示本次不改这一项（PATCH 语义），因此省略描述不会清空它。
+// UpdateDeckInput is the input for changing a deck's name and description; APIKeyID is used only in audit entries.
+// A nil Name / Description means that field is not being changed (PATCH semantics), so omitting the description does not clear it.
 type UpdateDeckInput struct {
 	Name        *string
 	Description *string
 	APIKeyID    *uint64
 }
 
-// UpdateDeck 修改卡组的名称与描述（scope: write）；REST 与内置 MCP 共用。
+// UpdateDeck changes a deck's name and description (scope: write); shared by REST and the built-in MCP.
 //
-// 只有 owner 能改：共享成员的学习设置走 SetStudySettings，改的从来不是卡组本身。
-// 只更新调用方给出的字段；名称与描述过 store 的同一套校验（与建组、包导入同源），失败不写入；
-// 校验失败映射成与建组一致的专属 code，非 owner 映射成 forbidden。
+// Only the owner can change it: shared members' study settings go through SetStudySettings and never change the deck itself.
+// Only the fields the caller supplied are updated; name and description go through the store's one validation (same source as deck creation and package import), and nothing is written on failure;
+// validation failures map to the same dedicated codes as deck creation, and non-owners map to forbidden.
 func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in UpdateDeckInput) (*store.Deck, error) {
 	name := in.Name
 	if name != nil {
@@ -200,7 +200,7 @@ func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in U
 	return out, nil
 }
 
-// DeleteDeck 删除一个卡组（scope: write）；REST 与内置 MCP 共用。只有 owner 能删。
+// DeleteDeck deletes a deck (scope: write); shared by REST and the built-in MCP. Only the owner can delete.
 func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiKeyID *uint64) error {
 	deck, err := a.decks.ByID(ctx, deckID)
 	if err != nil {
@@ -228,15 +228,15 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 	return nil
 }
 
-// LeaveDeck 让被共享者退出卡组（scope: write）：删除自己在 deck_grants 上的授权行。
+// LeaveDeck lets a share recipient leave a deck (scope: write): it deletes their own grant row in deck_grants.
 //
-// 它与 DeleteDeck 是两件事，各自独立：退出只撤掉自己一行授权、不碰卡组内容，且可逆
-// （重新被授权即回来）；删除卡组不可逆。因此 owner 不走这条路径——对自有卡组只能删除。
-// 没有任何授权行时返回 not_found：没有可退出的成员身份——一张卡组要么自有，要么被授权，
-// 没有「只是看得到」的中间态。
+// It is a separate matter from DeleteDeck, independent of it: leaving revokes only your own grant row, touches no deck content, and is reversible
+// (being granted again brings it back); deleting a deck is irreversible. So the owner does not take this path - for their own deck, deleting is the only option.
+// With no grant row it returns not_found: there is no membership to leave - a deck is either owned or granted,
+// with no in-between state of "merely visible".
 //
-// 退出不清理该用户在该卡组的 card_states：进度按用户隔离，重新被授权后仍在。
-// owner 撤销他人授权（internal/web/sharing_api.go）同样保留进度，两边口径一致。
+// Leaving does not clean up that user's card_states on the deck: progress is isolated per user and survives a later re-grant.
+// An owner revoking someone's grant (internal/web/sharing_api.go) keeps progress too, the same on both sides.
 func (a *API) LeaveDeck(ctx context.Context, u *store.User, deckID uint64, apiKeyID *uint64) error {
 	deck, err := a.decks.ByID(ctx, deckID)
 	if err != nil {
@@ -272,11 +272,11 @@ func (a *API) LeaveDeck(ctx context.Context, u *store.User, deckID uint64, apiKe
 	return nil
 }
 
-// RequireDeckRole 校验用户在卡组上至少拥有 want 角色。
+// RequireDeckRole checks that the user holds at least the want role on the deck.
 //
-// 判定本体在 auth.DeckAccess（REST 与内置 MCP 共用同一实现）；这里把它翻译成带稳定
-// code 的 ServiceError 并写一条 permission.denied 审计。无访问权 -> forbidden，
-// 有角色但不够 -> insufficient_role，卡组不存在 -> not_found。
+// The decision itself is in auth.DeckAccess (one implementation shared by REST and the built-in MCP); here it is translated into a
+// ServiceError with a stable code, plus one permission.denied audit entry. No access -> forbidden,
+// has a role but not enough -> insufficient_role, deck does not exist -> not_found.
 func (a *API) RequireDeckRole(ctx context.Context, userID, deckID uint64, want string) (*store.Deck, error) {
 	deck, role, err := a.access.RequireRole(ctx, deckID, userID, want)
 	if err == nil {
@@ -299,7 +299,7 @@ func (a *API) RequireDeckRole(ctx context.Context, userID, deckID uint64, want s
 	return nil, newServiceError(http.StatusForbidden, code, "insufficient role for this deck")
 }
 
-// RequireNoteRole 取 note 及其卡组并要求至少 want 角色；note 不存在返回 404。
+// RequireNoteRole fetches the note and its deck and requires at least the want role; a missing note returns 404.
 func (a *API) RequireNoteRole(ctx context.Context, userID, noteID uint64, want string) (*store.Note, *store.Deck, error) {
 	n, err := a.notes.ByID(ctx, noteID)
 	if err != nil {
@@ -312,7 +312,7 @@ func (a *API) RequireNoteRole(ctx context.Context, userID, noteID uint64, want s
 	return n, d, nil
 }
 
-// countPlan 把一条规划计入 dry_run 的计数。
+// countPlan counts one plan toward the dry_run tallies.
 func countPlan(resp *ImportResponse, action string) {
 	switch action {
 	case "create":
@@ -324,8 +324,8 @@ func countPlan(resp *ImportResponse, action string) {
 	}
 }
 
-// findNoteByExternalRef 按 (deck_id, external_ref) 查 note，包含已软删除的行
-// —— 唯一索引对软删除行同样生效，必须 Unscoped 查询，否则重复导入会撞唯一约束。
+// findNoteByExternalRef looks up a note by (deck_id, external_ref), including soft-deleted rows
+// - the unique index covers soft-deleted rows too, so the query must be Unscoped, otherwise a repeated import hits the unique constraint.
 func (a *API) findNoteByExternalRef(ctx context.Context, deckID uint64, ref string) (*store.Note, error) {
 	var n store.Note
 	err := a.db.WithContext(ctx).Unscoped().
@@ -339,9 +339,9 @@ func (a *API) findNoteByExternalRef(ctx context.Context, deckID uint64, ref stri
 	return &n, nil
 }
 
-// ---- 卡片 ----
+// ---- Cards ----
 
-// ListNotes 返回卡组下的卡片列表（分页、标签过滤、关键词搜索）。
+// ListNotes returns the card list under a deck (paging, tag filtering, keyword search).
 func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.NoteListOptions) ([]store.Note, int64, error) {
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader)
 	if err != nil {
@@ -357,11 +357,11 @@ func (a *API) ListNotes(ctx context.Context, userID, deckID uint64, opts store.N
 	return notes, total, nil
 }
 
-// GetNote 按对外 id 读取单条 note，并要求调用者对该 note 所在卡组至少是 reader。
+// GetNote reads a single note by external id and requires the caller to be at least reader on the note's deck.
 //
-// 编辑页只拿到一个 note 的对外 id，列表分页会让「翻到第几页」成为正确性的一部分；
-// 提供单条读取后，编辑页不再依赖列表能否覆盖目标行。未知 id 与无权读取一律 404，
-// 不泄露「该 id 存在但你无权看」。
+// The edit page only has a note's external id, and list paging would make "which page it is on" part of correctness;
+// with single reads the edit page no longer depends on the list covering the target row. An unknown id and a read without permission are both 404,
+// never leaking "this id exists but you may not see it".
 func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (*store.Note, error) {
 	n, err := a.notes.ByPublicID(ctx, notePublicID)
 	if err != nil {
@@ -373,30 +373,30 @@ func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (
 	return n, nil
 }
 
-// ImportNote 是批量导入的单个 note；字段名与 schema/note-import.schema.json 一致。
+// ImportNote is one note of a bulk import; field names match schema/note-import.schema.json.
 type ImportNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
-	// NoteID 按对外 id 寻址已有 note；与 ExternalRef 互斥。空串表示未按 id 寻址。
+	// NoteID addresses an existing note by external id; mutually exclusive with ExternalRef. An empty string means not addressed by id.
 	NoteID string   `json:"note_id"`
 	Tags   []string `json:"tags"`
 }
 
-// ImportRequest 是批量新增/更新请求体；dry_run 与 on_conflict 是请求体字段。
+// ImportRequest is the bulk create/update body; dry_run and on_conflict are body fields.
 type ImportRequest struct {
 	DryRun     bool         `json:"dry_run"`
 	OnConflict string       `json:"on_conflict"`
 	Notes      []ImportNote `json:"notes"`
 }
 
-// ImportError 是逐条导入错误：index 指向请求体 notes 数组的下标。
+// ImportError is a per-row import error: index is the position in the body's notes array.
 type ImportError struct {
 	Index  int    `json:"index"`
 	Reason string `json:"reason"`
 }
 
-// ImportResponse 是批量导入的响应体。
+// ImportResponse is the bulk import response body.
 type ImportResponse struct {
 	DryRun  bool          `json:"dry_run"`
 	Created int           `json:"created"`
@@ -405,15 +405,15 @@ type ImportResponse struct {
 	Errors  []ImportError `json:"errors"`
 }
 
-// MaxImportNotes 是单次批量导入的上限（单次 ≤ 500）。
+// MaxImportNotes is the cap for one bulk import (≤ 500 per request).
 const MaxImportNotes = 500
 
-// ImportBatchSize 是批量导入每个事务写入的行数（默认 200 条/事务）。
-// 分批提交把每行一次 fsync 降到每 200 行一次，同时让\"失败可续\"成立：进程在导入中途
-// 退出时，已提交的批次留在库里，重试同一请求会按 external_ref 幂等命中，不会重复建卡。
+// ImportBatchSize is the number of rows written per transaction in a bulk import (200 rows/transaction by default).
+// Batch commits cut fsync from once per row to once per 200 rows, and also make "a failure is resumable" true: if the process
+// exits mid-import, the committed batches stay in the database, and retrying the same request hits idempotently on external_ref without creating duplicate cards.
 const ImportBatchSize = 200
 
-// importPlan 是批量导入单行的处理计划：第一遍校验后得出该行是建、改还是跳过。
+// importPlan is the processing plan for one bulk-import row: the first pass decides whether the row is created, updated or skipped.
 type importPlan struct {
 	index    int
 	action   string
@@ -422,15 +422,15 @@ type importPlan struct {
 	fields   map[string]any
 }
 
-// ImportNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
+// ImportNotes bulk-adds/updates cards: idempotent per (deck_id, external_ref).
 //
-// 采用两遍法：第一遍校验并规划每条的去向（create/update/skip），第二遍才写库。
-// 第二遍按 ImportBatchSize 分批，每批一个事务；批内单行写失败用保存点回滚该行并
-// 记录带下标的原因，合法行照常导入，因此\"一个含单行非法数据的批次会把合法行导入并
-// 在报告里给出失败行的索引\"。dry_run 时停在第一遍，只返回计数；on_conflict=fail 时
-// 任何冲突或校验错误都会整批拒绝。
+// It uses two passes: the first validates and plans each row's fate (create/update/skip), the second writes to the database.
+// The second pass batches by ImportBatchSize, one transaction per batch; inside a batch a failing row is rolled back to its savepoint and
+// its reason recorded with the index, while valid rows import as usual - so "a batch containing one invalid row still imports the valid rows and
+// reports the failed row's index". dry_run stops after the first pass and only returns counts; with on_conflict=fail
+// any conflict or validation error rejects the whole batch.
 func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *uint64, req ImportRequest) (ImportResponse, error) {
-	// 每条 note 的写前校验据此判断「本次新引入的引用是否调用者可读」。
+	// The per-note pre-write check uses it to decide "whether references newly introduced by this request are readable by the caller".
 	ctx = store.WithActor(ctx, userID)
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
@@ -471,7 +471,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 
 		if strings.TrimSpace(item.NoteID) != "" && strings.TrimSpace(item.ExternalRef) != "" {
-			// 两种寻址方式互斥：同时给出无法判定按哪个定位，直接判该行非法。
+			// The two addressing modes are mutually exclusive: giving both leaves no way to tell which one locates the row, so the row is invalid.
 			resp.Errors = append(resp.Errors, ImportError{i, "note_id and external_ref are mutually exclusive"})
 			hasFailure = true
 			continue
@@ -481,8 +481,8 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		byID := strings.TrimSpace(item.NoteID) != ""
 		var existing *store.Note
 		if byID {
-			// 按对外 id 寻址：先解析成 note，再只认属于本卡组的、未软删的。取不到与跨卡组用同一句
-			// 「note not found in deck」，不泄露另一个卡组是否存在该 note。
+			// Addressed by external id: resolve to a note first, then accept only one that belongs to this deck and is not soft-deleted. A miss and a cross-deck hit share the same
+			// "note not found in deck", so it does not leak whether the note exists in another deck.
 			found, err := a.notes.ByPublicID(ctx, item.NoteID)
 			if err != nil || found.DeckID != d.ID {
 				resp.Errors = append(resp.Errors, ImportError{i, "note not found in deck"})
@@ -513,8 +513,8 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		action := "create"
 		if existing != nil {
 			if byID {
-				// note_id 行按定义一定已存在，on_conflict 对它不适用：一律走更新，
-				// 也不因它触发 on_conflict=fail 的整批拒绝。
+				// A note_id row exists by definition, so on_conflict does not apply to it: it always takes the update path,
+				// and never triggers a whole-batch rejection under on_conflict=fail.
 				action = "update"
 			} else {
 				switch onConflict {
@@ -543,8 +543,8 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		return resp, nil
 	}
 
-	// 第二遍：按批写入。每批一个事务；批内单行失败回滚到行保存点并记录下标，
-	// 同批其余合法行照常导入。批与批之间独立提交，因此失败可续。
+	// Second pass: write by batch. One transaction per batch; a failing row rolls back to its savepoint and records its index,
+	// while the rest of the batch imports as usual. Batches commit independently, so a failure is resumable.
 	for start := 0; start < len(plans); start += ImportBatchSize {
 		end := start + ImportBatchSize
 		if end > len(plans) {
@@ -553,8 +553,8 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		batch := plans[start:end]
 		batchErr := a.writeImportBatch(ctx, batch, &resp)
 		if batchErr != nil {
-			// 基础设施级失败（保存点/提交失败）：记录该批首行的下标并继续下一批，
-			// 已提交的批次不回滚；重试时 external_ref 幂等保证不重复建卡。
+			// Infrastructure-level failure (savepoint/commit failure): record the index of the batch's first row and continue with the next batch,
+			// committed batches are not rolled back; external_ref idempotency on retry prevents duplicate cards.
 			a.logger.Error("import batch failed", "deck_id", d.ID, "start_index", batch[0].index, "error", batchErr)
 			resp.Errors = append(resp.Errors, ImportError{batch[0].index, batchErr.Error()})
 		}
@@ -574,10 +574,10 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 	return resp, nil
 }
 
-// writeImportBatch 在一个事务里写入一批导入计划；返回非 nil 表示批级失败（已回滚）。
+// writeImportBatch writes one batch of import plans in a single transaction; a non-nil return means a batch-level failure (already rolled back).
 //
-// 逐行用 SAVEPOINT 包裹：PostgreSQL 在语句报错后会中止整个事务，必须 ROLLBACK TO SAVEPOINT
-// 才能继续处理同批的其它行；SQLite 同样支持该语法。单行错误写进 resp.Errors（带请求体下标）。
+// Each row is wrapped in a SAVEPOINT: PostgreSQL aborts the whole transaction after a statement error, so ROLLBACK TO SAVEPOINT is required
+// to keep processing the other rows of the batch; SQLite supports the same syntax. Per-row errors go into resp.Errors (with the body index).
 func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *ImportResponse) error {
 	return a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, p := range batch {
@@ -621,16 +621,16 @@ func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *Im
 	})
 }
 
-// UpdateNoteInput 是单卡更新输入；Tags 用指针区分“未提供”与“清空”。
+// UpdateNoteInput is the single-card update input; Tags uses a pointer to distinguish "not provided" from "clear it".
 type UpdateNoteInput struct {
 	Kind   string
 	Fields map[string]any
 	Tags   *[]string
 }
 
-// UpdateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
+// UpdateNote updates a card's content; the id and user progress of existing cards stay unchanged (guaranteed by NoteStore.Update).
 func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64, in UpdateNoteInput) (*store.Note, error) {
-	// 写前校验据此判断「本次新引入的引用是否调用者可读」。
+	// The pre-write check uses it to decide "whether references newly introduced by this request are readable by the caller".
 	ctx = store.WithActor(ctx, userID)
 	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
@@ -643,7 +643,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if kind == "" {
 		kind = existing.Kind
 	}
-	// REST/MCP 错误统一返回稳定英文文案，不随 Accept-Language 改变。
+	// REST/MCP errors uniformly return stable English text and do not vary with Accept-Language.
 	if err := cardtype.Validate(kind, in.Fields); err != nil {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
@@ -656,7 +656,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if _, err := a.notes.Update(ctx, &n, in.Fields); err != nil {
 		var mwe *store.MediaWriteError
 		if errors.As(err, &mwe) {
-			// 写前校验拒绝：引用了调用者读不到的媒体，条目级 stable code。
+			// Rejected by the pre-write check: referenced media the caller cannot read, an item-level stable code.
 			return nil, newServiceError(http.StatusForbidden, CodeMediaNotReadable, strings.Join(mwe.Entries, ", "))
 		}
 		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
@@ -676,7 +676,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	return updated, nil
 }
 
-// DeleteNote 软删除单卡（进度保留，误删可恢复）；返回被删除的 note id。
+// DeleteNote soft-deletes a card (progress is kept, an accidental delete can be undone); returns the deleted note's id.
 func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *uint64) (uint64, error) {
 	existing, _, err := a.RequireNoteRole(ctx, userID, noteID, store.RoleEditor)
 	if err != nil {
@@ -696,9 +696,9 @@ func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	return existing.ID, nil
 }
 
-// ---- 批量卡片动作----
+// ---- Bulk card actions ----
 
-// 批量动作的稳定英文取值（REST 请求体 action 字段、审计 detail.action 共用）。
+// The stable English values of bulk actions (shared by the REST body's action field and the audit detail.action).
 const (
 	bulkActionDelete     = "delete"
 	bulkActionAddTags    = "add_tags"
@@ -706,11 +706,11 @@ const (
 	bulkActionSetTags    = "set_tags"
 )
 
-// bulkMaxTags 是单个标签动作允许的标签数上限（去重后）。
+// bulkMaxTags is the maximum number of tags a single tag action allows (after deduplication).
 const bulkMaxTags = 20
 
-// BulkNotesInput 是批量卡片动作的输入（REST 与内置 MCP 共用， 一个模型服务业务与 JSON）。
-// NoteIDs 是各 note 的对外 id（不透明字符串），由 service 解析成主键后再走数字逻辑。
+// BulkNotesInput is the input of a bulk card action (shared by REST and the built-in MCP, one model serving both the business and the JSON).
+// NoteIDs are the notes' external ids (opaque strings); the service resolves them to primary keys before the numeric logic runs.
 type BulkNotesInput struct {
 	Action  string   `json:"action"`
 	NoteIDs []string `json:"note_ids"`
@@ -718,27 +718,27 @@ type BulkNotesInput struct {
 	DryRun  bool     `json:"dry_run"`
 }
 
-// BulkNotesSkipped 是被逐行拒绝的 note：code 取值 not_found / insufficient_role。
-// NoteID 是请求里给出的那个对外 id，原样回显，绝不回显自增主键。
+// BulkNotesSkipped is a per-row rejected note: code is not_found / insufficient_role.
+// NoteID is the external id as given in the request, echoed back verbatim; the auto-increment primary key is never echoed.
 type BulkNotesSkipped struct {
 	NoteID string `json:"note_id"`
 	Code   string `json:"code"`
 }
 
-// BulkNotesResponse 是批量动作的响应体。Affected 只计真正改动的行，
-// 因此重复提交同一请求第二次返回 affected=0。
+// BulkNotesResponse is the bulk action response body. Affected counts only rows actually changed,
+// so submitting the same request a second time returns affected=0.
 type BulkNotesResponse struct {
 	DryRun   bool               `json:"dry_run"`
 	Affected int64              `json:"affected"`
 	Skipped  []BulkNotesSkipped `json:"skipped"`
 }
 
-// BulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags。
+// BulkNotes performs delete / add_tags / remove_tags / set_tags on a set of notes.
 //
-// 请求级校验（未知 action、note_ids 越界、tag 动作缺 tags、delete 带 tags）返回 400
-// invalid_request 且一行都不写。通过校验后逐行判权：缺失或已软删的 id 记为 not_found，
-// 无权限或角色不够的 id 记为 insufficient_role，其余行照常处理 —— 单行被拒不回滚整批。
-// 审计只在非 dry_run 时整批一行；dry_run 只计数不写库、不写审计。
+// Request-level validation (unknown action, note_ids out of range, a tag action without tags, delete with tags) returns 400
+// invalid_request and writes not a single row. After validation each row is authorized: a missing or soft-deleted id is recorded as not_found,
+// an id without permission or with an insufficient role as insufficient_role, and the remaining rows are processed normally - one rejected row does not roll back the batch.
+// Auditing writes one row for the whole batch, and only when not dry_run; dry_run only counts and writes neither rows nor audits.
 func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in BulkNotesInput) (BulkNotesResponse, error) {
 	action := strings.TrimSpace(in.Action)
 	switch action {
@@ -768,16 +768,16 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 	resp := BulkNotesResponse{DryRun: in.DryRun, Skipped: []BulkNotesSkipped{}}
 	permitted := make([]uint64, 0, len(ids))
 	for _, publicID := range ids {
-		// 对外 id 先解析成 note：未知、已软删或空串一律记 not_found。
-		// 解析成功后再走共享的逐行判权（bulkRowCode），与 REST 其它写操作同一口径。
+		// The external id is resolved to a note first: unknown, soft-deleted or empty is always not_found.
+		// Once resolved it goes through the shared per-row authorization (bulkRowCode), the same convention as other REST writes.
 		n, err := a.notes.ByPublicID(ctx, publicID)
 		if err != nil {
 			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: publicID, Code: CodeNotFound})
 			continue
 		}
 		if code := a.bulkRowCode(ctx, userID, n.ID, !in.DryRun); code != "" {
-			// 单行判权失败不使整批失败：not_found 与 insufficient_role 各记一条 skipped，
-			// 其余 id 继续处理。
+			// A single row failing authorization does not fail the batch: not_found and insufficient_role each add one skipped entry,
+			// and the remaining ids are still processed.
 			resp.Skipped = append(resp.Skipped, BulkNotesSkipped{NoteID: publicID, Code: code})
 			continue
 		}
@@ -803,7 +803,7 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 	resp.Affected = affected
 
 	if !in.DryRun {
-		// 与网页批量表单对齐：整批一行审计，detail 里带动作、请求的 id 列表与变更行数。
+		// Aligned with the web bulk form: one audit row for the batch, with the action, the requested id list and the number of changed rows in detail.
 		recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 			UserID:     store.Ptr(userID),
 			APIKeyID:   apiKeyID,
@@ -815,13 +815,13 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 	return resp, nil
 }
 
-// bulkRowCode 判定调用者能否编辑该 note：可编辑返回空串，否则返回该行 skipped 里的稳定 code
-// （与错误 code 同一套取值：not_found / insufficient_role）。
+// bulkRowCode decides whether the caller may edit the note: editable returns the empty string, otherwise the stable code for that row's skipped entry
+// (the same value set as error codes: not_found / insufficient_role).
 //
-// audit 为 true 时走共享的 RequireNoteRole —— 它会在角色不足时写一条 permission.denied 审计，
-// 与 REST 其它写操作的取证口径一致（谁在什么时候试图改什么被挡下）。dry_run 传 false，逐行
-// 静默判定：一次 dry run 若有 500 个 id 都无权限，不该抖出 500 条审计行（dry_run 不写
-// 任何行、不写审计行、零副作用）。两条路径对同一情形必须给出同一个 code。
+// With audit true it goes through the shared RequireNoteRole - which writes a permission.denied audit entry when the role is insufficient,
+// matching the forensic convention of other REST writes (who tried to change what, when, and was blocked). dry_run passes false and decides each row
+// silently: a dry run where 500 ids all lack permission must not shake out 500 audit rows (dry_run writes
+// no rows, no audit rows, zero side effects). Both paths must give the same code for the same situation.
 func (a *API) bulkRowCode(ctx context.Context, userID, noteID uint64, audit bool) string {
 	var err error
 	if audit {
@@ -829,7 +829,7 @@ func (a *API) bulkRowCode(ctx context.Context, userID, noteID uint64, audit bool
 	} else {
 		var n *store.Note
 		if n, err = a.notes.ByID(ctx, noteID); err == nil {
-			// 与 RequireNoteRole 同一条判定链，只是不写 permission.denied（见上）。
+			// The same decision chain as RequireNoteRole, just without writing permission.denied (see above).
 			_, _, err = a.access.RequireRole(ctx, n.DeckID, userID, store.RoleEditor)
 		}
 	}
@@ -838,13 +838,13 @@ func (a *API) bulkRowCode(ctx context.Context, userID, noteID uint64, audit bool
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, auth.ErrDeckNotFound) ||
 		asServiceError(err).Code == CodeNotFound {
-		// 不存在、已软删（ByID 不返回软删行），或卡组已消失：一律 not_found。
+		// Nonexistent, soft-deleted (ByID does not return soft-deleted rows), or its deck is gone: always not_found.
 		return CodeNotFound
 	}
 	return CodeInsufficientRole
 }
 
-// bulkAuditAction 把批量动作映射到稳定的审计动作名（constants 定义在 store/audit.go）。
+// bulkAuditAction maps a bulk action to a stable audit action name (constants defined in store/audit.go).
 func bulkAuditAction(action string) string {
 	switch action {
 	case bulkActionDelete:
@@ -858,8 +858,8 @@ func bulkAuditAction(action string) string {
 	}
 }
 
-// uniquePublicIDs 按首次出现去重并保持请求顺序；批量动作的响应与审计都依赖这个顺序。
-// 空串不去除：它会在逐行解析时被记为 not_found，保持「请求里写了几个就报几个」。
+// uniquePublicIDs deduplicates by first occurrence, preserving request order; the bulk action's response and audit both rely on that order.
+// Empty strings are not dropped: they are recorded as not_found during per-row resolution, keeping "as many as were written in the request, so many are reported".
 func uniquePublicIDs(ids []string) []string {
 	seen := make(map[string]struct{}, len(ids))
 	out := make([]string, 0, len(ids))
@@ -873,33 +873,33 @@ func uniquePublicIDs(ids []string) []string {
 	return out
 }
 
-// ---- 统计与导出 ----
+// ---- Stats and export ----
 
-// StatsSummary 是 /stats/summary 与 get_stats 工具的共同响应形态。
+// StatsSummary is the response shape shared by /stats/summary and the get_stats tool.
 type StatsSummary struct {
 	Decks        int   `json:"decks"`
 	Due          int64 `json:"due"`
 	ReviewsToday int64 `json:"reviews_today"`
 	ReviewsTotal int64 `json:"reviews_total"`
-	// Retention 是真实留存率：到期复习（state_before=Review）中评分不是 Again 的比例，
-	// 与统计页同一口径（store.StatsStore.RetentionByStability）。
+	// Retention is the true retention rate: the share of due reviews (state_before=Review) whose grade is not Again,
+	// on the same convention as the stats page (store.StatsStore.RetentionByStability).
 	Retention float64 `json:"retention"`
-	// RetentionTotal / RetentionPassed 是 Retention 的分母与分子。分母只含到期复习，
-	// 不等于 reviews_total；为 0 时客户端应显示「暂无数据」而不是 0%。
+	// RetentionTotal / RetentionPassed are the denominator and numerator of Retention. The denominator counts only due reviews,
+	// so it is not reviews_total; when it is 0 the client should show "no data yet" rather than 0%.
 	RetentionTotal  int64 `json:"retention_total"`
 	RetentionPassed int64 `json:"retention_passed"`
 	Notes           int64 `json:"notes"`
 	Cards           int64 `json:"cards"`
 }
 
-// Stats 汇总当前用户的到期量 / 复习量 / 留存概要；所有数字都由 reviews + card_states 聚合。
+// Stats summarizes the current user's due counts / review counts / retention; every number is aggregated from reviews + card_states.
 //
-// 口径刻意不对称（2026-10-06 决定）：decks/due/notes/cards 只算当前可见
-// 卡组（与 list_decks、网页列表页、复习队列同一个 store 谓词），卡组集合为空时它们为 0；
-// reviews_today / reviews_total / retention 按 user_id 保留全史——复习是本人的记录，
-// 撤销授权不追溯。因此即便一个可见卡组都没有，也必须继续聚合 reviews，不能提前返回把
-// 历史数字静默清零。retention 与统计页共用 RetentionByStability：同样不限可见卡组，
-// 但只数到期复习，且已删除卡片的复习不计入（与统计页一致）。
+// The convention is deliberately asymmetric (2026-10-06 decision): decks/due/notes/cards count only currently visible
+// decks (the same store predicate as list_decks, the web list page and the review queue), and are 0 when the deck set is empty;
+// reviews_today / reviews_total / retention keep the full history per user_id - reviews are the person's own record,
+// and revoking a grant does not reach back. So even with no visible deck at all, reviews must still be aggregated; returning early would
+// silently zero the historical numbers. retention shares RetentionByStability with the stats page: likewise not limited to visible decks,
+// but counting only due reviews, and excluding reviews of deleted cards (consistent with the stats page).
 func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	now := a.now()
 
@@ -934,7 +934,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		a.logger.Error("count reviews failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
-	// 留存复用统计页的聚合函数，保证首页与统计页对同一个用户给出同一个数字。
+	// Retention reuses the stats page's aggregation, so the home page and the stats page give the same number for the same user.
 	retention, err := store.NewStatsStore(a.db).RetentionByStability(ctx, u.ID, 0)
 	if err != nil {
 		a.logger.Error("count retention failed", "user_id", u.ID, "error", err)
@@ -966,7 +966,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	return resp, nil
 }
 
-// ExportRow 是卡片级导出的扁平行（给外部工具用的粒度）；三个 id 都是对外 id。
+// ExportRow is a flattened card-level export row (the granularity external tools use); all three ids are external ids.
 type ExportRow struct {
 	CardID      string         `json:"card_id"`
 	NoteID      string         `json:"note_id"`
@@ -982,9 +982,9 @@ type ExportRow struct {
 	Lapses      *int           `json:"lapses,omitempty"`
 }
 
-// ---- 复习 ----
+// ---- Review ----
 
-// DueCard 是到期卡的对外形态（含字段原文）；三个 id 都是对外 id。
+// DueCard is the external shape of a due card (with raw field text); all three ids are external ids.
 type DueCard struct {
 	CardID         string         `json:"card_id"`
 	NoteID         string         `json:"note_id"`
@@ -999,15 +999,15 @@ type DueCard struct {
 	Version        int            `json:"version"`
 }
 
-// reviewMaxTags 是一次按标签复习允许选择的标签数上限（去重后），用来约束 SQL 里 OR 条件的个数。
+// reviewMaxTags is the maximum number of tags one tag review may select (after deduplication), bounding the number of OR conditions in the SQL.
 const reviewMaxTags = 50
 
-// DueCards 返回到期卡（含字段原文）；deckIDs 为空表示全部卡组；limit 取 [1,500]。
+// DueCards returns the due cards (with raw field text); an empty deckIDs means all decks; limit is [1,500].
 //
-// 每个卡组 id 都要求至少 reader 角色：任一个不可读或不存在即整次调用失败（不静默过滤）。
-// 只有恰好指定一个卡组时才用该卡组的预设构造调度器；多卡组与全库用默认预设。
+// Every deck id requires at least the reader role: any one unreadable or nonexistent fails the whole call (no silent filtering).
+// Only when exactly one deck is given is the scheduler built from that deck's preset; multiple decks and the whole library use the default preset.
 //
-// tags 非空时只取带有其中任一标签的卡（规范化见 ReviewTags）。
+// When tags is non-empty only cards carrying any one of those tags are taken (normalization in ReviewTags).
 func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tags []string, limit int) ([]DueCard, error) {
 	if limit < 1 {
 		limit = 1
@@ -1031,7 +1031,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		}
 	}
 
-	// 队列构建需要调度器（只为复习卡算 retrievability）；多卡组/无卡组时用默认预设。
+	// Building the queue needs a scheduler (it computes retrievability only for review cards); multiple/no decks use the default preset.
 	var sched *schedule.Scheduler
 	if deck != nil {
 		s, err := a.schedulerForDeck(ctx, u.ID, deck)
@@ -1065,7 +1065,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		LearnAhead:    store.ResolveLearnAhead(u.LearnAheadMinutes),
 		Tags:          tags,
 	}
-	// 单卡组走 DeckID（保留卡组上限口径）；多卡组走 DeckIDs 集合。
+	// A single deck goes through DeckID (preserving the deck-cap convention); multiple decks go through the DeckIDs set.
 	switch len(ids) {
 	case 0:
 	case 1:
@@ -1087,9 +1087,9 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		return out, nil
 	}
 
-	// 装配阶段的取数一律按 id 集合分批：note / card / card_states / 卡组各一次集合查询（按 200 个
-	// id 一批切分），查询数与队列长度无关。逐张 ByID 会让一次答题的查询数随队列长度线性增长，
-	// SQLite 单连接下尤其明显。
+	// All assembly-stage loads batch by id set: one set query each for note / card / card_states / deck (chunked at 200
+	// ids per chunk), so the query count is independent of queue length. Per-card ByID would make queries per answer grow linearly with the queue,
+	// especially visible with SQLite's single connection.
 	noteIDs := make([]uint64, 0, len(items))
 	cardIDs := make([]uint64, 0, len(items))
 	for _, it := range items {
@@ -1112,7 +1112,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
 	}
 
-	// 卡组对外 id：只取队列实际用到的卡组（note 已取回，缺失的 note 对应卡会被丢弃），同样一次集合查询。
+	// Deck external ids: only the decks the queue actually uses (notes are already fetched, cards whose note is missing are dropped), again one set query.
 	deckIDsToLoad := make([]uint64, 0, len(items))
 	for _, it := range items {
 		if note, ok := notesByID[it.NoteID]; ok {
@@ -1128,7 +1128,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 	for _, it := range items {
 		note, ok := notesByID[it.NoteID]
 		if !ok {
-			// note 不可见（已软删除）：与逐张读取失败时丢弃该卡一致。
+			// The note is not visible (soft-deleted): consistent with dropping the card when a per-card read fails.
 			continue
 		}
 		entry := DueCard{
@@ -1140,7 +1140,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 			Fields:         store.FieldsOrEmpty(note.FieldsJSON),
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
 		}
-		// 读不到的 card_states / card / deck 保持零值，与逐张读取失败时的结果一致。
+		// Missing card_states / card / deck stay zero-valued, consistent with the result of a failed per-card read.
 		if state, ok := statesByCard[it.CardID]; ok {
 			entry.Version = state.Version
 		}
@@ -1156,11 +1156,11 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 	return out, nil
 }
 
-// ReviewTags 规范化按标签复习的标签集合，并校验它与卡组范围的组合；deckIDs 须已去重。
+// ReviewTags normalizes the tag set for reviewing by tag and validates it against the deck scope; deckIDs must already be deduplicated.
 //
-// 带标签时卡组范围必须恰好是一个卡组：标签是卡组内的分类，不同卡组里的同名标签不是同一个
-// 分类，不能合在一起学，所以多卡组或全库口径带标签一律拒绝，而不是静默忽略标签。
-// 规范化（去首尾空白、丢空串、去重）后为空等同不带标签。所有传输共用这一处校验。
+// With tags the deck scope must be exactly one deck: tags are categories within a deck, and a same-named tag in different decks is not the same
+// category, so they cannot be studied together; hence tags with multiple decks or the whole-library scope are always rejected rather than silently ignoring the tags.
+// Empty after normalization (trim, drop empties, deduplicate) equals no tags. All transports share this one validation.
 func ReviewTags(deckIDs []uint64, tags []string) ([]string, error) {
 	tags = store.NormalizeTags(tags)
 	if len(tags) == 0 {
@@ -1175,7 +1175,7 @@ func ReviewTags(deckIDs []uint64, tags []string) ([]string, error) {
 	return tags, nil
 }
 
-// DeckTags 列出卡组内的标签及各自的 note 数，要求调用者至少是 reader。
+// DeckTags lists the tags within a deck and their note counts; the caller must be at least reader.
 func (a *API) DeckTags(ctx context.Context, userID, deckID uint64) ([]store.TagCount, error) {
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader)
 	if err != nil {
@@ -1189,7 +1189,7 @@ func (a *API) DeckTags(ctx context.Context, userID, deckID uint64) ([]store.TagC
 	return tags, nil
 }
 
-// dedupeDeckIDs 去掉重复的卡组 id，保持首次出现的顺序；0 不是合法卡组 id，一并丢弃。
+// dedupeDeckIDs drops duplicate deck ids, preserving first-occurrence order; 0 is not a valid deck id and is dropped as well.
 func dedupeDeckIDs(ids []uint64) []uint64 {
 	out := make([]uint64, 0, len(ids))
 	seen := make(map[uint64]bool, len(ids))
@@ -1203,38 +1203,38 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 	return out
 }
 
-// SubmitReviewInput 是评分提交输入。CardID 是卡的对外 id（不透明字符串），
-// 由 SubmitReview 解析成主键后再进入调度。
+// SubmitReviewInput is the grade submission input. CardID is the card's external id (an opaque string),
+// resolved to a primary key by SubmitReview before it enters scheduling.
 //
-// 评分来源由服务端决定，调用方不能指定：自评题型给 Rating；作答类题型（cardtype.Grader）
-// 给 Answer 由服务端判分，或给 GiveUp 表示放弃作答（记 Again）。自评题型只有能保存作答的
-// （简答题）才接受随 Rating 附带 Answer，作答原样存进复习记录、不影响评分。
+// The grade source is decided by the server and cannot be set by the caller: self-graded card types send Rating; answer card types (cardtype.Grader)
+// send Answer for server-side grading, or GiveUp to abandon the answer (recorded as Again). Among self-graded card types only those that can store an answer
+// (short answer) accept an Answer alongside Rating, stored verbatim in the review record without affecting the grade.
 type SubmitReviewInput struct {
 	CardID string
-	// Rating 是自评分（1–4），只用于自评题型；作答类题型必须为 0。
+	// Rating is the self-grade (1-4), used only for self-graded card types; for answer card types it must be 0.
 	Rating int
-	// Answer 是作答类题型的原始作答（JSON），解码规则由题型决定；自评题型里只有
-	// 能保存作答的题型接受它，随自评一并存档。
+	// Answer is the raw answer of an answer card type (JSON), decoded per the card type; among self-graded card types only
+	// those that can store an answer accept it, archived along with the self-grade.
 	Answer json.RawMessage
-	// GiveUp 表示作答类题型放弃作答：不判分，按 Again 记一条自评日志。
+	// GiveUp means an answer card type abandons the answer: no grading, a self-graded log entry is recorded as Again.
 	GiveUp          bool
 	ExpectedVersion int
 	ElapsedMS       *int
 }
 
-// SubmitReviewResult 是评分提交的响应形态。CardID 是卡的对外 id；
-// 不暴露 review 的自增主键（没有客户端使用它）。
+// SubmitReviewResult is the response shape of a grade submission. CardID is the card's external id;
+// the review's auto-increment primary key is not exposed (no client uses it).
 type SubmitReviewResult struct {
 	CardID    string     `json:"card_id"`
 	State     string     `json:"state"`
 	DueAt     *time.Time `json:"due_at"`
 	Version   int        `json:"version"`
 	Stability *float64   `json:"stability"`
-	// Grade 只在服务端判分时出现：本次作答的得分、档位与判定。
+	// Grade appears only with server-side grading: the score, rating band and verdict of this answer.
 	Grade *GradeResult `json:"grade,omitempty"`
 }
 
-// GradeResult 是一次服务端判分对外的结果；Detail 是写进复习日志的完整细节，只供服务端内部使用。
+// GradeResult is the external result of one server-side grading; Detail is the full detail written to the review log, for server-internal use only.
 type GradeResult struct {
 	Rating  int            `json:"rating"`
 	Score   float64        `json:"score"`
@@ -1243,16 +1243,16 @@ type GradeResult struct {
 	Detail  map[string]any `json:"-"`
 }
 
-// SubmitReview 提交一次评分；乐观锁不匹配返回 409 version_conflict。
+// SubmitReview submits one grade; an optimistic-lock mismatch returns 409 version_conflict.
 //
-// 自评与作答两条路径都经过这里，REST、MCP 与网页三个入口因此遵守同一组规则：
-// 作答类题型不接受自评分（否则判分权回到客户端），grade_source 由服务端写入，
-// 客户端无从伪造「机器判分」的来源。
+// The self-graded and the answer paths both go through here, so the three entries (REST, MCP and web) obey one set of rules:
+// answer card types do not accept self-grades (that would hand grading back to the client), grade_source is written by the server,
+// and the client cannot forge a "machine grading" source.
 func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64, in SubmitReviewInput) (SubmitReviewResult, error) {
 	if strings.TrimSpace(in.CardID) == "" {
 		return SubmitReviewResult{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "card_id is required")
 	}
-	// 对外 id -> 主键：之后全部走数字逻辑（调度、审计、card_states 查询）。
+	// External id -> primary key: everything after this is numeric logic (scheduling, auditing, card_states queries).
 	card, err := a.cards.ByPublicID(ctx, in.CardID)
 	if err != nil {
 		return SubmitReviewResult{}, newServiceError(http.StatusNotFound, CodeNotFound, "card not found")
@@ -1323,7 +1323,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 	}, nil
 }
 
-// resolveRating 决定本次提交写入的评分、来源与判分细节（规则见 SubmitReview）。
+// resolveRating decides the grade, source and grading detail written by this submission (rules in SubmitReview).
 func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
 	ct, ok := cardtype.Lookup(note.Kind)
 	if !ok {
@@ -1354,7 +1354,7 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 		if hasAnswer {
 			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "send either answer or give_up, not both")
 		}
-		// 放弃作答没有发生任何机器判分：记 Again，来源是 self。
+		// Abandoning the answer involves no machine grading at all: record Again with source self.
 		return int(schedule.Again), schedule.GradeSourceSelf, nil, nil, nil
 	}
 	fields, err := store.ParseFields(note.FieldsJSON)
@@ -1367,7 +1367,7 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 	}
 	out, err := cardtype.GradeAnswer(g, gc, in.Answer)
 	if err != nil {
-		// 解码失败与无法判分都不写库，让用户重新作答。
+		// A decode failure and an ungradable answer both write nothing, letting the user answer again.
 		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer cannot be graded")
 	}
 	raw, err := json.Marshal(out.Detail)
@@ -1380,14 +1380,14 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 	}, nil
 }
 
-// answerRecorder 是自评题型的可选能力：把学习者自评前写下的作答解码成随复习记录保存的细节。
-// 评分仍是自评，来源仍记 self；保存作答是为了让日后的 LLM 判分有原文可用。
+// answerRecorder is an optional capability of self-graded card types: it decodes the answer the learner wrote before self-grading into detail stored with the review record.
+// The grade is still a self-grade and the source is still self, recorded as self; the answer is stored so a future LLM grading has the raw text to work from.
 type answerRecorder interface {
 	RecordAnswer(raw json.RawMessage) (map[string]any, error)
 }
 
-// recordSelfAnswer 把自评时附带的作答编码成 grade_detail_json。不收作答的自评题型拒绝，
-// 免得客户端以为作答被保存了；没有写内容时返回 nil，不存空作答。
+// recordSelfAnswer encodes the answer attached to a self-grade into grade_detail_json. Self-graded card types that do not accept answers reject it,
+// so the client does not think the answer was saved; it returns nil when nothing was written, storing no empty answer.
 func recordSelfAnswer(ct cardtype.CardType, raw json.RawMessage) (*string, error) {
 	rec, ok := ct.(answerRecorder)
 	if !ok {

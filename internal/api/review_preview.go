@@ -12,19 +12,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// RatingInterval 是某一档评分提交后，这张卡到下次复习的间隔预览。
+// RatingInterval is the preview of the interval until this card's next review once a given rating is submitted.
 type RatingInterval struct {
-	// Rating 取 1–4（Again/Hard/Good/Easy）。
+	// Rating is 1-4 (Again/Hard/Good/Easy).
 	Rating int `json:"rating"`
-	// Seconds 是从现在到下次到期的秒数；学习步骤以分钟计，复习间隔以天计，统一换成秒。
+	// Seconds is the number of seconds from now until the next due time; learning steps count in minutes and review intervals in days, both converted to seconds.
 	Seconds int64 `json:"seconds"`
 }
 
-// PreviewIntervals 返回 u 对一张卡选每一档评分之后的下次间隔，按 Again/Hard/Good/Easy 排列。
+// PreviewIntervals returns, for u, the next interval after choosing each rating for a card, ordered Again/Hard/Good/Easy.
 //
-// 复习页把它显示在四个评分按钮下面：间隔就是选这一档的后果，比文字说明更能帮人做选择。
-// 调度器用 u 在该卡组上生效的预设，与提交评分时同一套参数；预览不加 fuzz（见 schedule.Preview），
-// 所以开了 fuzz 的预设，实际间隔可能与显示值有小幅偏移。只读，不写任何状态；至少需要 reader。
+// The review page shows it under the four rating buttons: the interval is the consequence of picking that rating, and helps people choose better than any wording.
+// The scheduler uses u's effective preset on this deck, the same parameter set as when submitting a grade; the preview adds no fuzz (see schedule.Preview),
+// so with fuzz enabled the actual interval may drift slightly from the shown value. Read-only, writes no state; requires at least reader.
 func (a *API) PreviewIntervals(ctx context.Context, u *store.User, cardID uint64) ([]RatingInterval, error) {
 	card, err := a.cards.ByID(ctx, cardID)
 	if err != nil {
@@ -56,7 +56,7 @@ func (a *API) PreviewIntervals(ctx context.Context, u *store.User, cardID uint64
 		a.logger.Error("load card state for interval preview failed", "card_id", card.ID, "user_id", u.ID, "error", err)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
 	}
-	// 没有状态行的卡按全新卡处理，与提交评分时的口径一致。
+	// A card with no state row is treated as brand new, consistent with grade submission.
 	base := &store.CardState{CardID: card.ID, UserID: u.ID, State: schedule.StateNew.String()}
 	if st, ok := states[card.ID]; ok {
 		base = &st

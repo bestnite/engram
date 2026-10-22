@@ -15,9 +15,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestAPIErrorOutputIdenticalAcrossAcceptLanguage 断言针对相同错误场景，
-// 无论请求头 Accept-Language 为 zh-CN、en 或其它语言，API 错误响应的 JSON 输出都是
-// 逐字节完全一致的稳定英文。
+// TestAPIErrorOutputIdenticalAcrossAcceptLanguage asserts that for the same error scenario,
+// whether the Accept-Language header is zh-CN, en or another language, the JSON output of the API error response is
+// byte-for-byte identical stable English.
 func TestAPIErrorOutputIdenticalAcrossAcceptLanguage(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "err_lang_test", store.RoleUser)
@@ -80,18 +80,18 @@ func TestAPIErrorOutputIdenticalAcrossAcceptLanguage(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 请求一：zh-CN
+			// Request one: zh-CN
 			recZh := doRequestWithHeader(r, tc.method, tc.path, tc.key, tc.body, "Accept-Language", "zh-CN,zh;q=0.9")
-			// 请求二：en
+			// Request two: en
 			recEn := doRequestWithHeader(r, tc.method, tc.path, tc.key, tc.body, "Accept-Language", "en-US,en;q=0.9")
-			// 请求三：其它语言
+			// Request three: another language
 			recOther := doRequestWithHeader(r, tc.method, tc.path, tc.key, tc.body, "Accept-Language", "ja,fr;q=0.8")
 
 			if recZh.Code != tc.wantStatus {
 				t.Fatalf("zh status = %d, want %d (body %s)", recZh.Code, tc.wantStatus, recZh.Body.String())
 			}
 
-			// 逐字节完全一致
+			// Byte-for-byte identical
 			if !bytes.Equal(recZh.Body.Bytes(), recEn.Body.Bytes()) {
 				t.Errorf("error output differ between zh-CN and en:\nzh: %s\nen: %s",
 					recZh.Body.String(), recEn.Body.String())
@@ -101,7 +101,7 @@ func TestAPIErrorOutputIdenticalAcrossAcceptLanguage(t *testing.T) {
 					recZh.Body.String(), recOther.Body.String())
 			}
 
-			// 校验错误包壳与英文 message
+			// Verify the error envelope and the English message
 			var envelope struct {
 				Error struct {
 					Code    string `json:"code"`
@@ -138,15 +138,15 @@ func doRequestWithHeader(r *gin.Engine, method, path, key, body, headerKey, head
 	return rec
 }
 
-// TestFormatErrorMessageDetailSemantics 校验动态细节追加与去重规则：
-// 1. 空细节只返回基底英文；
-// 2. 细节等于基底英文时不重复拼接；
-// 3. 动态细节正常以 " — " 追加；
-// 4. 已含基底前缀的细节不重复追加。
+// TestFormatErrorMessageDetailSemantics verifies the append and dedupe rules for dynamic detail:
+// 1. An empty detail returns only the English base;
+// 2. A detail equal to the English base is not concatenated twice;
+// 3. Dynamic detail is appended as usual with " — ";
+// 4. A detail already carrying the base prefix is not appended again.
 func TestFormatErrorMessageDetailSemantics(t *testing.T) {
 	ctx := context.Background()
 
-	// 1. 空细节
+	// 1. Empty detail
 	if got, want := formatErrorMessage(ctx, CodeInvalidRequest, ""), "The request is invalid."; got != want {
 		t.Errorf("empty detail = %q, want %q", got, want)
 	}
@@ -154,31 +154,31 @@ func TestFormatErrorMessageDetailSemantics(t *testing.T) {
 		t.Errorf("whitespace detail = %q, want %q", got, want)
 	}
 
-	// 2. 细节与基底相同（避免重复）
+	// 2. Detail identical to the base (avoid duplication)
 	if got, want := formatErrorMessage(ctx, CodeInvalidRequest, "The request is invalid."), "The request is invalid."; got != want {
 		t.Errorf("duplicate base detail = %q, want %q", got, want)
 	}
 
-	// 3. 动态细节追加
+	// 3. Dynamic detail appended
 	detail := "fields are required"
 	want := "The request is invalid. — fields are required"
 	if got := formatErrorMessage(ctx, CodeInvalidRequest, detail); got != want {
 		t.Errorf("dynamic detail = %q, want %q", got, want)
 	}
 
-	// 4. 已有前缀不重复
+	// 4. Existing prefix not repeated
 	alreadyFormatted := "The request is invalid. — fields are required"
 	if got := formatErrorMessage(ctx, CodeInvalidRequest, alreadyFormatted); got != alreadyFormatted {
 		t.Errorf("already formatted detail = %q, want %q", got, alreadyFormatted)
 	}
 
-	// 5. 未登记的 code 回退为 code 本身 + 细节
+	// 5. An unregistered code falls back to the code itself + detail
 	if got, want := formatErrorMessage(ctx, "custom_code", "some error"), "custom_code — some error"; got != want {
 		t.Errorf("unregistered code with detail = %q, want %q", got, want)
 	}
 }
 
-// TestMCPErrorTextUsesSameEnglishMappingAsREST 断言 MCP ErrorText 渲染使用与 REST 相同的英文映射。
+// TestMCPErrorTextUsesSameEnglishMappingAsREST asserts MCP ErrorText rendering uses the same English mapping as REST.
 func TestMCPErrorTextUsesSameEnglishMappingAsREST(t *testing.T) {
 	ctx := context.Background()
 
@@ -220,7 +220,7 @@ func TestMCPErrorTextUsesSameEnglishMappingAsREST(t *testing.T) {
 			t.Errorf("ErrorText(%v) = %q, want %q", tc.err, text, tc.wantText)
 		}
 
-		// 断言与 formatErrorMessage 产出的文案完全对应
+		// Assert it corresponds exactly to the text produced by formatErrorMessage
 		se := asServiceError(tc.err)
 		expectedRESTMsg := formatErrorMessage(ctx, se.Code, se.Message)
 		expectedMCPText := se.Code + ": " + expectedRESTMsg

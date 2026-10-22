@@ -1,6 +1,6 @@
 //go:build unix
 
-// 只在 Unix 上编译：假命令走 `/bin/sh -c ...`（理由同 jobs_test.go 的文件头说明）。
+// Compiles only on Unix: the fake command goes through `/bin/sh -c ...` (same reason as the file header note in jobs_test.go).
 
 package jobs
 
@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// fileSize 返回文件当前字节数；不存在时返回 0。
+// fileSize returns the file's current byte count; 0 when it does not exist.
 func fileSize(path string) int64 {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -24,7 +24,7 @@ func fileSize(path string) int64 {
 	return info.Size()
 }
 
-// waitFileNonEmpty 轮询到文件出现且非空，证明子进程确实在产出（而不是只改了状态字段）。
+// waitFileNonEmpty polls until the file exists and is non-empty, proving the subprocess is really producing output (not just changing a status field).
 func waitFileNonEmpty(t *testing.T, path string, limit time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(limit)
@@ -37,17 +37,17 @@ func waitFileNonEmpty(t *testing.T, path string, limit time.Duration) {
 	t.Fatalf("file %s stayed empty within %s; the subprocess never produced output", path, limit)
 }
 
-// TestCancelRunningJobKillsProcessAndUnblocksQueue 是核心验收：
-// 用一个真实的长时间子进程让作业停在 running，然后取消它，必须做到
-//  1. Cancel 立即返回（不阻塞）；
-//  2. 作业落库为 failed 且 error = CancelReason；
-//  3. 子进程确实被杀（marker 文件不再增长，证明整组进程消失而非只改状态）；
-//  4. 取消后新作业能成功入队并跑完（单并发门已释放）。
+// TestCancelRunningJobKillsProcessAndUnblocksQueue is the core acceptance:
+// a real long-running subprocess keeps the job in running; cancelling it must achieve
+//  1. Cancel returns immediately (does not block);
+//  2. the job is persisted as failed with error = CancelReason;
+//  3. the subprocess really is killed (the marker file stops growing, proving the whole process group disappeared rather than just a status change);
+//  4. after cancelling, a new job can be enqueued successfully and run to completion (the single-concurrency gate has been released).
 func TestCancelRunningJobKillsProcessAndUnblocksQueue(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "ticks")
 
-	// 第一次调用返回一个不断写 marker 的真实长命令；之后返回秒退命令，用于验证新入队。
+	// The first call returns a real long command that keeps writing the marker; afterwards return a fast-exiting command, for verifying the new enqueue.
 	var calls int32
 	builder := func(_ context.Context, _ *store.Job, _ Reporter) (Command, error) {
 		if atomic.AddInt32(&calls, 1) == 1 {
@@ -87,14 +87,14 @@ func TestCancelRunningJobKillsProcessAndUnblocksQueue(t *testing.T) {
 		t.Errorf("cancelled job error = %v, want %q", got.Error, CancelReason)
 	}
 
-	// 子进程必须真的消失：marker 在取消后不再增长。
+	// The subprocess must really be gone: the marker stops growing after the cancellation.
 	sizeAfterCancel := fileSize(marker)
 	time.Sleep(400 * time.Millisecond)
 	if grew := fileSize(marker); grew != sizeAfterCancel {
 		t.Errorf("subprocess kept running after cancel: marker grew %d -> %d", sizeAfterCancel, grew)
 	}
 
-	// 取消后单并发门已释放：新作业能入队并成功完成。
+	// The single-concurrency gate has been released after the cancellation: a new job can be enqueued and complete successfully.
 	second, err := runner.Enqueue(context.Background(), KindOptimize, nil)
 	if err != nil {
 		t.Fatalf("Enqueue after cancel: %v (single-flight gate not released)", err)

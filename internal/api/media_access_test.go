@@ -10,10 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 REST 入口的 L2 越权注入：共享卡组的 editor 把别人媒体的引用注入到自己可编辑的
-// note 里，写前校验必须拒绝（稳定 code media_not_readable），且库里没有留下脏数据。
+// This file covers L2 privilege injection on the REST entries: an editor of a shared deck injects a reference to someone else's media into a note
+// they can edit, and the pre-write check must reject it (stable code media_not_readable), leaving no dirty data in the database.
 
-// seedMedia 落盘一份媒体并返回 sha256（登记上传者归属）。
+// seedMedia writes one media file to disk and returns its sha256 (registering the uploader's ownership).
 func seedMedia(t *testing.T, env *testEnv, ownerID uint64, payload string) string {
 	t.Helper()
 	raw := append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte(payload)...)
@@ -24,7 +24,7 @@ func seedMedia(t *testing.T, env *testEnv, ownerID uint64, payload string) strin
 	return m.Sha256
 }
 
-// seedPlainNote 经写入方法建一条不含媒体引用的 note。
+// seedPlainNote creates a note with no media reference through the write method.
 func seedPlainNote(t *testing.T, env *testEnv, deckID, authorID uint64) *store.Note {
 	t.Helper()
 	n := store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(authorID)}
@@ -34,7 +34,7 @@ func seedPlainNote(t *testing.T, env *testEnv, deckID, authorID uint64) *store.N
 	return &n
 }
 
-// TestRESTUpdateNoteRejectsUnreadableMediaInjection 覆盖 REST `PATCH /notes/:id` 的写前校验。
+// TestRESTUpdateNoteRejectsUnreadableMediaInjection covers the pre-write check of REST `PATCH /notes/:id`.
 func TestRESTUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "restmed_owner", store.RoleUser)
@@ -82,8 +82,8 @@ func TestRESTUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	}
 }
 
-// TestRESTBulkImportRejectsUnreadableMediaInjection 覆盖 REST `POST /decks/:id/notes`（批量导入）
-// 的写前校验：越权引用那一行报稳定 code，且不落库。
+// TestRESTBulkImportRejectsUnreadableMediaInjection covers REST `POST /decks/:id/notes` (bulk import) and
+// its pre-write check: the row carrying the unauthorized reference reports the stable code and is not persisted.
 func TestRESTBulkImportRejectsUnreadableMediaInjection(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "restbulk_owner", store.RoleUser)
