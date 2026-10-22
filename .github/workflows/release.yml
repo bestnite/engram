@@ -1,46 +1,46 @@
-# 发布流水线：推 v* 标签时，由 GoReleaser 产出 GitHub Release —— 二进制、Rust 优化器
-# 适配器与多架构容器镜像（配置见 .goreleaser.yaml，ROADMAP.md M0-14）。
+# Release pipeline: on pushing a v* tag, GoReleaser produces the GitHub Release — the binaries, the Rust optimizer
+# adapter and the multi-architecture container images (configuration in .goreleaser.yaml, ROADMAP.md M0-14).
 #
-# 为什么跑在 GitHub Actions 而不是 Gitea 侧的自建 runner：镜像要 linux/amd64 与
-# linux/arm64 两份，需要真正的 buildx + QEMU；自建 runner 上没有这套多架构构建能力。
-# GitHub 托管 runner 自带，且可以在这个仓库上用内置的 GITHUB_TOKEN 直接发布，
-# 不必为此新增一个 token 类 secret。
+# Why it runs on GitHub Actions rather than a self-hosted runner on the Gitea side: the images need both linux/amd64 and
+# linux/arm64, which requires real buildx + QEMU; the self-hosted runner has no such multi-arch build capability.
+# GitHub-hosted runners have it built in, and can publish from this repository directly with the built-in GITHUB_TOKEN,
+# so no extra token-type secret is needed for it.
 #
-# 需要的仓库 secret（配在 GitHub 的 bestnite/engram 上）：
-#   DOCKERHUB_USERNAME / DOCKERHUB_TOKEN —— 推 Docker Hub 的 nite07/engram 用。
-# 推 ghcr.io/bestnite/engram 走内置 GITHUB_TOKEN，无需配置。
+# Required repository secrets (configured on bestnite/engram in GitHub):
+#   DOCKERHUB_USERNAME / DOCKERHUB_TOKEN — used to push nite07/engram to Docker Hub.
+# Pushing ghcr.io/bestnite/engram uses the built-in GITHUB_TOKEN and needs no configuration.
 #
-# 发布目标是 GitHub 的 bestnite/engram；.goreleaser.yaml 里显式写了 owner/name，
-# 不受本仓库的 origin 影响。
+# The release target is bestnite/engram on GitHub; .goreleaser.yaml spells out owner/name explicitly,
+# so it is unaffected by this repository's origin.
 #
-# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME。
+# Repository sanitization (AGENTS.md §2.2): this file may only contain example.com / localhost / CHANGE_ME.
 name: release
 
-# 只认标签：一条流水线对应一个发布版本。历史运行可以用 GitHub 的 Re-run（沿用原 ref）重跑，
-# 因此不提供 workflow_dispatch —— 手动触发的 ref 往往不是标签，GORELEASER_CURRENT_TAG 会落到
-# 一个非发布版本上，反而制造出难以辨别的制品。
+# Tags only: one pipeline corresponds to one release version. Historical runs can be re-run with GitHub's Re-run (which reuses the original ref),
+# which is why workflow_dispatch is not offered — a manually triggered ref is often not a tag, GORELEASER_CURRENT_TAG would land on
+# a non-release version, and that just manufactures hard-to-identify artifacts.
 on:
   push:
     tags:
       - "v*"
 
-# contents: 写 Release；packages: 推 ghcr.io。
+# contents: write the Release; packages: push to ghcr.io.
 permissions:
   contents: write
   packages: write
 
-# 同一版本的发布不允许并发：两次 goreleaser 同时写 Release 会互相覆盖。
+# Releases of the same version must not run concurrently: two goreleaser runs writing the Release at once overwrite each other.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # 适配器是 Rust 产物，不是 Go 构建产物，GoReleaser 编不出来，所以先在各目标平台上编译。
-  # Linux 目标用 musl 静态链接（见下方 Build 步骤与 Dockerfile.release 的运行阶段）：发布镜像基于
-  # alpine（musl），glibc 动态产物进不去；归档也要能在 musl 主机上直接跑。仍按目标架构原生编译
-  # （runner 架构与产物架构一致），只是在 Linux runner 上多装一个 musl target、用 rust-lld 自链，
-  # 不需要 C 交叉工具链。macOS/windows 保持原生编译，windows/arm64 因此没有产物，
-  # .goreleaser.yaml 也把该目标排除了。
+  # The adapter is a Rust artifact, not a Go build artifact, so GoReleaser cannot build it; it is therefore compiled on each target platform first.
+  # Linux targets use static musl linking (see the Build step below and the runtime stage of Dockerfile.release): the release images are based on
+  # alpine (musl), which glibc dynamic artifacts cannot enter; the archives must also run directly on musl hosts. It is still a native build per target
+  # architecture (runner architecture matches artifact architecture), except that Linux runners install an extra musl target and self-link with rust-lld,
+  # so no C cross toolchain is needed. macOS/windows keep native builds, so windows/arm64 has no artifact and
+  # .goreleaser.yaml excludes that target as well.
   optimizer:
     name: optimizer (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ${{ matrix.runner }}
@@ -49,7 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # rust_target 非空 = 该目标产出静态 musl 二进制（仅 Linux）。macOS/windows 留空，走原生编译。
+          # A non-empty rust_target = this target produces a static musl binary (Linux only). macOS/windows leave it empty and build natively.
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
@@ -79,22 +79,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Linux 目标（rust_target 非空）必须产出静态 musl 二进制：发布镜像的运行阶段是 alpine
-          # （musl），归档也要能在 musl 主机上直接跑。glibc 动态链接产物进 alpine 会因缺动态链接器
-          # 报 "No such file or directory"（Dockerfile 的 optimizer 阶段同理，那里用 rust:1-alpine）。
-          # rust-lld 是 rustc 自带的自包含链接器，不需要 C 交叉工具链：依赖树里没有需要 cc 编译的
-          # C 代码（iana-time-zone-haiku 只用于 Haiku 目标）。
+          # Linux targets (non-empty rust_target) must produce a static musl binary: the release image's runtime stage is alpine
+          # (musl), and the archives must also run directly on musl hosts. A glibc dynamically linked artifact entering alpine reports
+          # "No such file or directory" for the missing dynamic loader (same for the Dockerfile's optimizer stage, which uses rust:1-alpine).
+          # rust-lld is the self-contained linker bundled with rustc and needs no C cross toolchain: the dependency tree has no C
+          # code requiring cc (iana-time-zone-haiku is only used for the Haiku target).
           rust_target="${{ matrix.rust_target }}"
           if [ -n "$rust_target" ]; then
             rustup target add "$rust_target"
             RUSTFLAGS="-C linker=rust-lld" \
               cargo build --release --manifest-path tools/optimizer/Cargo.toml --target "$rust_target"
             bin="tools/optimizer/target/$rust_target/release/optimizer"
-            # 静态链接断言：动态产物进 alpine 会缺 loader（本次修复的缺陷），必须静态。
-            # musl + crt-static 的 file 输出是 "static-pie linked" 或 "statically linked"。
+            # Static linking assertion: a dynamic artifact entering alpine would lack the loader (the defect fixed this time), so it must be static.
+            # With musl + crt-static, file reports "static-pie linked" or "statically linked".
             file "$bin" | grep -Eq 'statically linked|static-pie linked' \
               || { echo "error: $bin is not statically linked" >&2; exit 1; }
-            # 构建期自证：产物在 Linux 构建机上必须能启动（与 Dockerfile 构建期的 --version 同一用意）。
+            # Self-proof at build time: the artifact must be able to start on the Linux build machine (same intent as the --version check at Dockerfile build time).
             "$bin" --version
           else
             cargo build --release --manifest-path tools/optimizer/Cargo.toml
@@ -104,8 +104,8 @@ jobs:
           mkdir -p "$out"
           cp "$bin" "$out/"
 
-      # 以 tools/optimizer/dist 为根部上传：制品内的路径就是 <os>/<arch>/optimizer[.exe]，
-      # release 作业用 merge-multiple 下载后自动还原成 .goreleaser.yaml 约定的目录结构。
+      # Uploaded with tools/optimizer/dist as the root: paths inside the artifact are already <os>/<arch>/optimizer[.exe],
+      # and the release job downloads it with merge-multiple to restore the directory structure .goreleaser.yaml expects.
       - name: Upload the adapter
         uses: actions/upload-artifact@v4
         with:
@@ -122,17 +122,17 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
         with:
-          # 变更日志由提交历史生成，浅克隆会得到空的 release notes。
+          # The changelog is generated from commit history; a shallow clone yields empty release notes.
           fetch-depth: 0
 
-      # 版本取 go.mod 声明的值，与 ci.yml 同一口径（本仓库的兼容下限）。
+      # The version comes from the value declared in go.mod, the same basis as ci.yml (this repository's compatibility floor).
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      # Node.js 环境与缓存：供 .goreleaser.yaml before hook 执行前端生产构建
+      # Node.js environment and cache: for .goreleaser.yaml's before hook to run the frontend production build
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -147,18 +147,18 @@ jobs:
           merge-multiple: true
           path: tools/optimizer/dist
 
-      # 多架构镜像要 QEMU 跑 arm64 的 RUN 步骤，要 buildx 才能出 manifest list；
-      # 托管 runner 的默认 builder 只支持单平台。两者都必须在 goreleaser 之前就位。
+      # Multi-arch images need QEMU to run the arm64 RUN steps and buildx to produce a manifest list;
+      # the hosted runner's default builder supports a single platform only. Both must be in place before goreleaser runs.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # goreleaser 的 dockers_v2 只执行 docker buildx build --push，自身不登录任何 registry
-      # （上游 internal/pipe/docker/v2/docker.go 已核对），凭据必须由本 workflow 先注入。
-      # 缺了这一步 buildx 会以匿名身份推 ghcr，token 端点对匿名 push 一律 403 Forbidden，
-      # 而且 goreleaser 把 "failed to fetch" 判为可重试，会白烧 10 次退避重试（约 25 分钟）。
+      # goreleaser's dockers_v2 only runs docker buildx build --push and logs into no registry itself
+      # (upstream internal/pipe/docker/v2/docker.go has been checked), so the credentials must be injected by this workflow first.
+      # Without this step buildx pushes to ghcr anonymously, the token endpoint answers 403 Forbidden to every anonymous push,
+      # and goreleaser treats "failed to fetch" as retryable, burning 10 backoff retries for nothing (about 25 minutes).
       - name: Log in to the GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -166,7 +166,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Docker Hub 的凭据来自仓库 secret（见文件头）。两个 registry 都必须在 Release 之前登录。
+      # Docker Hub credentials come from repository secrets (see the file header). Both registries must be logged into before the Release.
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -176,11 +176,11 @@ jobs:
       - name: Release
         uses: goreleaser/goreleaser-action@v6
         with:
-          # 与 Dockerfile / ci.yml 里的工具版本同一原则：钉死版本，升级时一起动。
+          # The same principle as the tool versions in the Dockerfile / ci.yml: pin the version and move them together on upgrade.
           version: v2.18.2
           args: release --clean
         env:
-          # 值全部来自仓库 secret（脱敏扫描把 ${{ ... }} 视作占位写法）。
+          # All values come from repository secrets (the sanitization scan treats ${{ ... }} as placeholder syntax).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

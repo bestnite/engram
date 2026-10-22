@@ -1,24 +1,24 @@
-# CI：构建、生成、静态检查与测试（AGENTS.md §4、ROADMAP.md M0-10）。
+# CI: build, code generation, static checks and tests (AGENTS.md §4, ROADMAP.md M0-10).
 #
-# 顺序上有一条硬性原因：前端产物（frontend/dist）是 go:embed 的输入，必须先
-# `npm run build` 再编译 Go，否则嵌入时直接失败。
+# The order has a hard reason: the frontend artifacts (frontend/dist) are the input to go:embed, so
+# `npm run build` must run before compiling Go, otherwise embedding fails outright.
 #
-# 测试只跑 SQLite（AGENTS.md §2.5）：CI 不起任何数据库服务，internal/pgtest 门控的
-# PostgreSQL 用例在这里自己跳过并打印原因。需要覆盖生产用的 PG 驱动时，在本机设置
-# TEST_PG_DSN 手动跑那三个包。
+# Tests run SQLite only (AGENTS.md §2.5): CI starts no database service, and the PostgreSQL cases gated by
+# internal/pgtest skip themselves here and print the reason. To cover the production PG driver, set TEST_PG_DSN
+# locally and run those three packages by hand.
 #
-# 触发器只有 pull_request 与 workflow_dispatch，**不含 push**：main 由维护者直推，
-# 推之前本地已经跑完 §4 的全套检查，每次 push 再跑一遍只是重复。需要一次独立复核时
-# （碰了前端产物、go.mod / go.sum，或发版前）用 workflow_dispatch 手动触发对应 ref。
+# The triggers are pull_request and workflow_dispatch only, **no push**: main is pushed directly by the maintainer,
+# who has already run the full §4 check suite locally before pushing, so running it again on every push is pure repetition.
+# When an independent review is needed (frontend artifacts, go.mod / go.sum touched, or before a release), trigger the ref by hand with workflow_dispatch.
 #
-# 仓库脱敏（AGENTS.md §2.2）：本文件只允许出现 example.com / localhost / CHANGE_ME。
+# Repository sanitization (AGENTS.md §2.2): this file may only contain example.com / localhost / CHANGE_ME.
 name: ci
 
 on:
   pull_request:
   workflow_dispatch:
 
-# 最小权限：CI 只读仓库内容。
+# Least privilege: CI only reads repository contents.
 permissions:
   contents: read
 
@@ -35,14 +35,14 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      # 版本取 go.mod 声明的值（当前 1.26）：这是本仓库的兼容下限，也免去手工同步。
+      # The version comes from the value declared in go.mod (currently 1.26): that is this repository's compatibility floor, and it saves manual syncing.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      # Node.js 环境与缓存：锁定 package-lock.json，为 SPA 构建提供支持
+      # Node.js environment and cache: pinned to package-lock.json, supporting the SPA build
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -56,7 +56,7 @@ jobs:
           node --version
           npm --version
 
-      # 前端构建先于 Go 编译：产物进入 frontend/dist，由 go:embed all:dist 嵌入二进制
+      # Frontend build precedes Go compilation: artifacts land in frontend/dist and are embedded into the binary by go:embed all:dist
       - name: Frontend check, test, and build
         run: |
           set -euo pipefail
@@ -82,18 +82,18 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # 漏洞门禁：只把「可达」漏洞作为失败条件。govulncheck 默认只报告调用路径
-      # 可达的漏洞，命中时退出码为 3；依赖里存在但代码并未调用的漏洞不阻断构建，避免
-      # 误报噪声。版本固定，避免 CI 结论随工具版本漂移（本机以 v1.8.0 验证）。
+      # Vulnerability gate: only "reachable" vulnerabilities count as failures. govulncheck reports only vulnerabilities
+      # reachable from call paths by default and exits with code 3 on a hit; vulnerabilities present in dependencies but never
+      # called do not block the build, avoiding false-positive noise. The version is pinned so CI conclusions do not drift with the tool version (verified locally with v1.8.0).
       - name: Vulnerability check (govulncheck, reachable only)
         run: |
           set -euo pipefail
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
 
-      # 平台相关代码只有交叉编译才暴露：runner 是 Linux，internal/jobs 的 process_windows.go
-      # 在原生构建里根本不参与编译，写错了也一直是绿的（M0-14）。vet 连测试文件一起类型检查，
-      # 所以 unix-only 的测试文件会不会漏到别的平台上也在这里兜住。
+      # Platform-specific code is only exposed by cross-compiling: the runner is Linux, so internal/jobs' process_windows.go
+      # does not even take part in a native build and a mistake there stays green (M0-14). vet type-checks test files too,
+      # so whether a unix-only test file leaks onto other platforms is caught here as well.
       - name: Cross-compile and vet for Windows
         run: |
           set -euo pipefail
@@ -102,10 +102,10 @@ jobs:
             GOOS=windows GOARCH="$arch" go vet ./...
           done
 
-      # 语言包完备性：中英 key 必须一一对应，缺一个即失败。
+      # Language pack completeness: the zh/en keys must correspond one to one, and a single missing one fails the job.
       - name: i18n language-pack parity
         run: go test ./internal/i18n/...
 
-      # 全量测试；不设 TEST_PG_DSN，PostgreSQL 用例自行跳过（见文件头）。
+      # Full test run; no TEST_PG_DSN is set, so the PostgreSQL cases skip themselves (see the file header).
       - name: Test
         run: go test ./...

@@ -1,79 +1,79 @@
-# M0-11：多阶段构建，产出「一个静态服务二进制 + 一个优化器适配器」的镜像（ROADMAP.md M0-11）。
-# 服务侧构建物只有一个二进制 + 可选 SQLite 文件；静态资源、语言包与前端产物都已 go:embed。
-# 另带 FSRS 优化器适配器（tools/optimizer，Rust），可执行文件与主程序一起分发。
-# 本文件不含任何私有 registry、主机名或部署细节，只使用公开官方镜像。
+# M0-11: multi-stage build producing an image with "one static service binary + one optimizer adapter" (ROADMAP.md M0-11).
+# The server-side build output is a single binary plus an optional SQLite file; static assets, language packs and frontend artifacts are all go:embed'ed.
+# It also carries the FSRS optimizer adapter (tools/optimizer, Rust); the executable ships together with the main program.
+# This file contains no private registry, host name or deployment detail and uses only public official images.
 # syntax=docker/dockerfile:1
 
-# ---- 优化器阶段：FSRS 参数优化适配器（tools/optimizer，Rust）----
-# rust:alpine 自带 musl 工具链，cargo 产物静态链接、自包含，可直接放进 alpine 运行阶段；
-# 本机此前手工构建的是 glibc 动态链接版本，进 alpine 会因缺动态链接器起不来。
+# ---- optimizer stage: FSRS parameter optimization adapter (tools/optimizer, Rust) ----
+# rust:alpine ships the musl toolchain, so the cargo artifact is statically linked and self-contained and can go straight into the alpine runtime stage;
+# the version built by hand on this machine before was a glibc dynamically linked one, which cannot start in alpine for lack of a dynamic loader.
 FROM rust:1-alpine AS optimizer
 
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /src/tools/optimizer
 COPY tools/optimizer/ ./
-# --locked 用仓库里的 Cargo.lock（权重是持久化数据，训练实现必须可复现）；
-# 构建期就跑一次 --version，证明产物在这套运行时里可执行，而不是等到作业触发才发现。
+# --locked uses the repository's Cargo.lock (weights are persisted data, so the training implementation must be reproducible);
+# a --version run happens at build time to prove the artifact is executable in this runtime, instead of finding out when a job is triggered.
 RUN cargo build --release --locked \
     && ./target/release/optimizer --version
 
-# ---- 前端阶段：Svelte 5 SPA 生产构建（Node glibc，锁定 package-lock.json）----
+# ---- frontend stage: Svelte 5 SPA production build (Node glibc, pinned to package-lock.json) ----
 FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /src/frontend
-# 先只拷贝依赖清单，最大化层缓存
+# Copy only the dependency manifests first to maximise layer caching
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-# 拷贝前端源码并执行类型检查与生产构建
+# Copy the frontend sources and run type checking and the production build
 COPY frontend/ ./
 RUN npm run check \
     && npm run build
 
-# ---- 构建阶段：嵌入前端产物后编译 Go 二进制 ----
+# ---- build stage: compile the Go binary after embedding the frontend artifacts ----
 FROM golang:1.26-bookworm AS builder
 
 ARG VERSION=dev
 
-# ca-certificates 供 go mod download 走 HTTPS；样式由前端阶段的 Vite 产出，这里不需要
-# 任何模板引擎或独立 CSS 工具链。
+# ca-certificates is for go mod download over HTTPS; the styles are produced by Vite in the frontend stage, so no
+# template engine or separate CSS toolchain is needed here.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-# 先只拷贝依赖清单，最大化层缓存。
+# Copy only the dependency manifests first to maximise layer caching.
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
-# 复制前端生产构建产物（frontend/dist）供 go:embed 嵌入
+# Copy the frontend production build artifacts (frontend/dist) for go:embed to embed
 COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
 
 RUN CGO_ENABLED=0 go build -trimpath \
          -ldflags "-s -w -X main.version=${VERSION}" \
          -o /out/engram ./cmd/engram
 
-# ---- 运行阶段：alpine + tzdata，非 root，最小可运行面 ----
+# ---- runtime stage: alpine + tzdata, non-root, minimal runnable surface ----
 FROM alpine:3.22
 
-# tzdata 供用户时区/复习日切点使用；ca-certificates 供将来 OIDC 出站。
+# tzdata is for user timezones/review-day cutovers; ca-certificates is for future OIDC egress.
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 -h /app app \
     && mkdir -p /data/media \
     && chown -R 10001:10001 /data
 
 COPY --from=builder /out/engram /usr/local/bin/engram
-# FSRS 优化器适配器：internal/jobs 默认在服务二进制旁解析 /usr/local/bin/optimizer，
-# 权威路径对上就不需要 OPTIMIZER_PATH；产物是 musl 静态链接，可直接跑。
+# FSRS optimizer adapter: internal/jobs resolves /usr/local/bin/optimizer next to the service binary by default,
+# so when the canonical path matches, OPTIMIZER_PATH is unnecessary; the artifact is musl statically linked and runs as-is.
 COPY --from=optimizer /src/tools/optimizer/target/release/optimizer /usr/local/bin/optimizer
 
 USER 10001:10001
 WORKDIR /app
 
-# 默认单机形态：SQLite + 启动自动迁移。密钥是占位值，
-# 真实部署必须通过环境变量覆盖，镜像内不承载任何真实凭据。
+# Default single-host shape: SQLite + automatic migration on startup. The secrets are placeholder values;
+# a real deployment must override them via environment variables, and the image carries no real credentials.
 ENV HTTP_ADDR=0.0.0.0:8080 \
     DB_DRIVER=sqlite \
     DB_DSN=/data/engram.db \
@@ -81,8 +81,8 @@ ENV HTTP_ADDR=0.0.0.0:8080 \
     MEDIA_DIR=/data/media \
     BASE_URL=http://localhost:8080
 
-# SESSION_SECRET 与 ENCRYPTION_KEY 故意不提供默认值：镜像里烤一个已知密钥会让
-# "忘记覆盖"变成静默的弱密钥部署；运行时缺失会以英文错误快速失败（internal/config 已校验）。
+# SESSION_SECRET and ENCRYPTION_KEY deliberately have no default values: baking a known secret into the image would turn
+# "forgot to override" into a silent weak-key deployment; a missing value at runtime fails fast with an English error (internal/config validates it).
 
 EXPOSE 8080
 
