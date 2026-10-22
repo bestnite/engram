@@ -205,8 +205,8 @@ func shellVersion(urls []string) string {
 // the function takes no API or review endpoints and cannot write them (the negative acceptance is asserted in tests).
 func serviceWorkerJS(version string, urls []string) string {
 	var b strings.Builder
-	b.WriteString("// Engram service worker ：只缓存静态外壳，绝不缓存 API 响应或答题数据。\n")
-	b.WriteString("// 版本号由静态资源内容派生；激活时清理所有旧版本缓存。\n")
+	b.WriteString("// Engram service worker: caches only the static shell, never API responses or answer data.\n")
+	b.WriteString("// The version is derived from static asset content; activation clears every old version cache.\n")
 	b.WriteString("var SW_VERSION = \"")
 	b.WriteString(version)
 	b.WriteString("\";\n")
@@ -251,7 +251,7 @@ self.addEventListener("activate", function (event) {
   );
 });
 
-// 只有静态外壳命中缓存；/api/、/review 与 HTML 文档都不在此列。
+// Only the static shell is cached; /api/, /review and HTML documents are not covered.
 function isStaticShell(url) {
   var path = url.pathname;
   var isViteAsset = path.indexOf("/assets/") === 0 &&
