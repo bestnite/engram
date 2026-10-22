@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"regexp"
 	"testing"
 
 	"gorm.io/gorm"
@@ -54,14 +53,3 @@ func assertSessionsRevoked(t *testing.T, db *gorm.DB, userID uint64) {
 		t.Fatalf("sessions for user %d: %d/%d revoked, want all revoked", userID, revoked, total)
 	}
 }
-
-func auditCount(t *testing.T, db *gorm.DB, action string) int64 {
-	t.Helper()
-	n, err := store.NewAuditStore(db).CountByAction(context.Background(), action)
-	if err != nil {
-		t.Fatalf("count audit %q: %v", action, err)
-	}
-	return n
-}
-
-var tempPasswordRe = regexp.MustCompile(`<code class="[^"]*">([^<]+)</code>`)

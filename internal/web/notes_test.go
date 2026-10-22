@@ -174,8 +174,6 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 	}
 }
 
-func u64str(v uint64) string { return itoa(int(v)) }
-
 // userPublicID returns the public id for a user primary key: in tests, it converts the numeric id into the public id used in routes/request bodies.
 func userPublicID(t *testing.T, db *gorm.DB, id uint64) string {
 	t.Helper()
