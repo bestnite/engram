@@ -115,7 +115,8 @@ func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName st
 	}
 	plain, err := s.codec.Decrypt(row.SecretCiphertext)
 	if err != nil {
-		// Failing to decrypt must fail loudly and never be treated as "not bound" (convention).
+		// Failing to decrypt must fail loudly and never be treated as "not bound": reading it as unbound would silently drop two-factor
+		// protection from an account that has it enabled.
 		return "", "", false, fmt.Errorf("decrypt pending totp secret: %w", err)
 	}
 	return plain, otpauthURL(s.issuer, accountName, plain), true, nil

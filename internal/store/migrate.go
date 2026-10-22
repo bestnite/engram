@@ -21,7 +21,6 @@ type Migration struct {
 // BuiltinMigrations is the ordered migration list; the order is the version (the i-th entry is version i+1).
 // A new migration may only be appended at the end; never modify or reorder published entries.
 var BuiltinMigrations = []Migration{
-	// The M0 phase has no destructive changes yet; the first real migration is appended after this one.
 	{
 		// The media primary key moves from an auto-increment id to the content sha256: dropping a column is outside
 		// AutoMigrate's additive scope and needs an explicit migration. Only the primary key changes here; old references are not migrated.

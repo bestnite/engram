@@ -97,7 +97,7 @@ func New(deps Deps) (*worker.Lifecycle, error) {
 		Interval: deps.Interval,
 		Logger:   deps.Logger,
 		RunOnce:  func(ctx context.Context) error { return sweep(ctx, deps) },
-		// A failed round is logged by the worker and processing continues: being unable to delete one category should not hold up the other three.
+		// A failed round is logged by the worker and processing continues: being unable to delete one category should not hold up the other four.
 		FailMessage: "retention: sweep failed",
 	})
 }

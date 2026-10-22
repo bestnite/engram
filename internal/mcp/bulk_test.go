@@ -13,7 +13,7 @@ import (
 	gorm "gorm.io/gorm"
 )
 
-// ---- : the bulk_notes tool and create_notes addressing by note_id ----
+// ---- the bulk_notes tool and create_notes addressing by note_id ----
 
 // toMap turns a service layer response body into a JSON map, for comparing field by field with the MCP structured content.
 func toMap(t *testing.T, v any) map[string]any {

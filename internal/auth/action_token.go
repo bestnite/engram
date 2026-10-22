@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file is the one-time token service for (class-A transactional mail): issuing and consuming.
+// This file is the one-time token service used by class-A transactional mail: issuing and consuming.
 //
 // Security constraints:
 //   - the plaintext is random and URL-safe, appears only in email links, and is never persisted nor logged;

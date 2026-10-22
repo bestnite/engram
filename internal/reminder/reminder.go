@@ -92,7 +92,7 @@ type Deps struct {
 	Translator *i18n.Translator
 	// Logger is optional; slog.Default() is used when nil.
 	Logger *slog.Logger
-	// Now is an injectable clock; the system UTC time is used when nil. Tests for the quiet window and daily cap rely on it for control.
+	// Now is an injectable clock; the system UTC time is used when nil. Tests for the send hour and the daily cap rely on it for control.
 	Now func() time.Time
 	// Interval is the poll interval; DefaultInterval when <=0.
 	Interval time.Duration

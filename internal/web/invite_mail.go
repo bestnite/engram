@@ -14,9 +14,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file is: invite email delivery (type B collaboration/authorization).
+// This file is the invite email delivery path (type B: collaboration and authorization).
 //
-// Design constraints (applied item by item):
+// Design constraints, applied one by one:
 //   - Never send mail synchronously on the request path: always enqueue via Outbox.Enqueue and let the background worker deliver.
 //   - A failed send must not fail the triggering operation: creating the invite still succeeds, and an Enqueue error only logs in English and echoes a notice.
 //   - With SMTP unconfigured the flow is disabled and gives the reason: the invite page's "send to email" entry renders mail.not_configured,

@@ -71,7 +71,7 @@ type adminUserPasswordResponse struct {
 	TempPassword string `json:"temp_password"`
 }
 
-// adminUsers returns the user list (search + paging + per-user usage), with the same convention as renderUsersPage.
+// adminUsers returns the user list: search, paging in store.AdminListUsersPageSize rows and per-user usage.
 func (s *Server) adminUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := strings.TrimSpace(c.Query("q"))

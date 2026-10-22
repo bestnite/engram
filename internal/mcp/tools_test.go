@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ---- : the tools behave like REST ----
+// ---- the tools behave like REST ----
 
 // TestToolsMatchREST is the core acceptance: each tool and its same-named REST path produce the same result for the same input.
 func TestToolsMatchREST(t *testing.T) {
@@ -182,7 +182,7 @@ func normalizeCards(m map[string]any) map[string]any {
 	return m
 }
 
-// ---- : multi-deck review scope ----
+// ---- multi-deck review scope ----
 
 // seedDueCardMCP creates a note and one of its cards without writing card_states: the card is new and must appear in the queue.
 func seedDueCardMCP(t *testing.T, db *gorm.DB, deckID uint64) {
@@ -262,7 +262,7 @@ func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	}
 }
 
-// ---- : create_deck shares its source with the REST deck creation ----
+// ---- create_deck shares its source with the REST deck creation ----
 
 // errorCode takes the stable code from the REST uniform error envelope.
 func errorCode(m map[string]any) string {

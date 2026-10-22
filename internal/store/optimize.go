@@ -101,7 +101,7 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID, presetID uint64) (Op
 // FitMetrics is the fit metric measured once before and once after optimization (the settings page's "fit comparison before/after optimization",
 // the idea behind "Check health" in the Anki manual: infer from historical reviews how well the parameters fit the actual outcomes).
 //
-// Metric definitions (computed by internal/schedule replaying the review log with go-fsrs, see):
+// Metric definitions (computed by internal/schedule replaying the review log with go-fsrs):
 //   - LogLoss: the predicted log loss of each due review; predicted is the probability the parameters give to "this review will be recalled"
 //     (0-1), observed is 1 (not Again) or 0 (Again). Smaller is a better fit;
 //     this is a scalar on the same scale as the magnitude the Anki optimizer outputs, directly comparable across parameter sets.

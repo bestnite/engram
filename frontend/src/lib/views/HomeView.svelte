@@ -53,10 +53,10 @@
   /**
    * Load the data the home page needs: fetch the stats summary and the deck list concurrently
    * API contract and metric definitions (Gap notes):
-   * 1. The current REST API (GET /api/v1/decks) only provides deck configuration (new_per_day, reviews_per_day),
-   *    and does not yet provide the per-deck count of cards still available today (schedule.DeckCounts is only used for the server-side templ list);
-   * 2. The current REST API (GET /api/v1/stats/summary) provides the whole-library aggregates due, reviews_today, reviews_total, retention
-   *    (plus its denominator retention_total / numerator retention_passed), decks, notes, cards, but does not provide the consecutive check-in streak.
+   * 1. GET /api/v1/decks only provides deck configuration (new_per_day, reviews_per_day); the per-deck count of cards still available today
+   *    comes from GET /api/v1/decks/queue-counts (getDeckQueueCounts), which is supplementary and may fail without failing the page;
+   * 2. GET /api/v1/stats/summary provides the whole-library aggregates due, reviews_today, reviews_total, retention (plus its denominator
+   *    retention_total / numerator retention_passed), decks, notes, cards and the consecutive check-in streak (streak).
    * This view strictly follows the principle of data truthfulness: it only shows the metrics the API actually provides, and never fabricates
    * or invents today's remaining card count or streak on the frontend.
    */

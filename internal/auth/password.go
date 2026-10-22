@@ -1,5 +1,5 @@
 // Package auth implements built-in accounts, password hashing, sessions and CSRF.
-// Internal logs and error text are always English; code comments explain "why" in Chinese (AGENTS.md §2.1, §2.4).
+// Internal logs and error text are always English; code comments explain "why" and are written in English too (AGENTS.md §2.1, §2.4).
 package auth
 
 import (

@@ -8,8 +8,8 @@ import (
 
 // This file is the SPA JSON endpoint for the admin panel's "language pack completeness" page.
 //
-// Same convention as adminI18nPage: the baseline key set = the union of the key sets of all language packs (see the i18n.Coverage comment),
-// and when coverage < 100% the missing keys are listed one by one. Read-only page, no write operations.
+// The baseline key set is the union of the key sets of all language packs (see the i18n.Coverage comment), and when coverage < 100%
+// the missing keys are listed one by one. Read-only page, no write operations.
 
 // adminLocaleCoverage is the coverage of one locale.
 type adminLocaleCoverage struct {

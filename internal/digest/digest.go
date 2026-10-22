@@ -182,6 +182,10 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	return nil
 }
 
+// MinDigestInterval only catches hour-level collisions at the week boundary; it does not act as a one-week cooldown, so a
+// backfill several days after downtime is not mistakenly blocked.
+const MinDigestInterval = 20 * time.Hour
+
 // maybeSend decides and (when the conditions are met) enqueues one digest.
 //
 // Decision order (every gate must pass before enqueueing):
@@ -191,10 +195,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 //  3. Preference gate: C-class defaults to off, and turning it off takes effect immediately (preferences are re-read every round, not cached).
 //
 // The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume the current week's quota.
-// MinDigestInterval only catches hour-level collisions at the week boundary; it does not act as a one-week cooldown, so a
-// backfill several days after downtime is not mistakenly blocked.
-const MinDigestInterval = 20 * time.Hour
-
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
 	loc := store.LoadLocation(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
@@ -360,7 +360,6 @@ func (w *Worker) siteDefaultLocale() string {
 	return strings.TrimSpace(w.siteLocale())
 }
 
-// unsubscribeHeaders issues an unsubscribe token for study_digest and returns the RFC 8058 headers; returns nil when unavailable.
 // unsubscribeLink issues an unsubscribe token for study_digest and returns the unsubscribe link; returns an empty string when unavailable.
 //
 // It returns a link rather than a header: the body footer and the plain-text part need it too (headers are only visible to mail clients).

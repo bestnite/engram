@@ -149,7 +149,8 @@ func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (
 	}, nil
 }
 
-// Authenticate checks username/password; disabled users are always rejected, distinguishing no detail beyond "wrong password" versus "account disabled".
+// Authenticate checks username/password. Disabled users are always rejected; callers never learn anything beyond "wrong password"
+// versus "account disabled".
 func (s *AccountService) Authenticate(ctx context.Context, username, password string) (*store.User, error) {
 	u, err := s.users.ByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {

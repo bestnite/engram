@@ -330,7 +330,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	}
 	router.Use(requestLogger(logger), recovery(logger), forwardedIPWarner(logger, deps.TrustedProxies))
 	// Security headers are mounted globally, covering static assets, /media, /api/v1, /mcp and the 404 fallback;
-	// they sit before session/locale so that any response aborted early still carries the full set. The CSP reports only, it does not block.
+	// they sit before session/locale so that any response aborted early still carries the full set. The CSP is enforcing, not report-only.
 	router.Use(securityHeaders())
 	// The session middleware comes before the locale middleware: the language from personal settings takes part in the i18n resolution precedence,
 	// and it can only be read from an already resolved session user. Session resolution itself does not depend on the language, so the order is safe.

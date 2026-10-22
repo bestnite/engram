@@ -933,7 +933,7 @@ export interface TOTPRecoveryResponse {
  *
  * Groups and toggles are derived by the server from the internal/mail catalog; the frontend only looks up its own language pack by stable id
  * and does not keep a separate list of kinds. reminder_hour null means the site default; 0-23 are explicit hours (0 is a valid midnight).
- * D Admin notification kinds are returned only to admins: non-admin responses omit that group, and submitting it is rejected with 403 (forbidden_type).
+ * Class-D admin notification kinds are returned only to admins: non-admin responses omit that group, and submitting it is rejected with 403 (forbidden_type).
  */
 export interface NotificationPrefType {
   type: string;

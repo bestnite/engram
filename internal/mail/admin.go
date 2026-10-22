@@ -70,7 +70,8 @@ func (n *AdminNotifier) Send(ctx context.Context, adminID uint64, to string, t T
 			return false
 		}
 	}
-	// Headers left empty: the one-click unsubscribe header belongs to.
+	// Headers are left empty on this path: AdminNotifier has no token service, so class-D mail sent through it carries no one-click
+	// unsubscribe link — the preference switch above is the only way for an admin to turn the class off.
 	if err := n.outbox.Enqueue(ctx, Message{
 		To:       to,
 		Type:     string(t),

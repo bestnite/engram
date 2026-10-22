@@ -1,6 +1,5 @@
 // Package jobs provides a single-concurrency background job framework: jobs table persistence, subprocess execution (with an injectable command),
-// killing the whole process group after a timeout, stage-level progress, and log tail capture
-// (jobs table;).
+// killing the whole process group after a timeout, stage-level progress, and log tail capture.
 //
 // Design points and rationale:
 //   - Single concurrency: only one worker inside the process consumes the queue; on enqueue, if an unfinished job already exists it returns
@@ -128,8 +127,8 @@ type SuccessFunc func(ctx context.Context, job store.Job)
 //
 // It runs after the state has been persisted, so an implementation may only perform side effects (for example writing a notification into the mail outbox)
 // and must not try to rewrite job state; its return value is ignored, and panics are caught by the Runner —
-// a failed notification must never make failure handling itself fail (the accompanying "sending mail fails without affecting the triggering operation"
-// applies equally to job failure notifications); it runs synchronously on the job worker's ctx. May be nil.
+// a failed notification must never make failure handling itself fail — the same rule as "a failed send must not fail the triggering
+// operation"; it runs synchronously on the job worker's ctx. May be nil.
 type FailureFunc func(ctx context.Context, job store.Job, reason string)
 
 // Deps are the Runner's explicit dependencies.
@@ -234,7 +233,7 @@ func New(deps Deps) (*Runner, error) {
 // Start starts the single worker goroutine; repeated calls are idempotent. When ctx is cancelled the worker exits
 // and the subprocess currently executing is killed (runProcess watches ctx.Done).
 //
-// Before starting it calls RecoverStale to reclaim unfinished jobs left by the previous process (running and queued,):
+// Before starting it calls RecoverStale to reclaim unfinished jobs left by the previous process (running and queued):
 // otherwise those leftover rows would make Store.Active believe "a job is running" forever and every later Enqueue would keep returning 409. A recovery failure is only logged
 // and does not block the worker from starting; the recovery logic itself is an explicit entry point (RecoverStale), not a hidden side effect.
 func (r *Runner) Start(ctx context.Context) {

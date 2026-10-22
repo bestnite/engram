@@ -19,7 +19,8 @@ func countVerifications(h *PasswordHasher) *atomic.Int64 {
 
 // TestAuthenticate_NoUsernameEnumerationViaSkippedVerification asserts that login verification runs argon2id once for
 // both "existing user + wrong password" and "nonexistent user".
-// As things stand, the nonexistent-user branch returns immediately and spends no hash computation, so usernames can be enumerated by response time.
+// Regression guard: the nonexistent-user branch used to return immediately without spending any hash computation, which made usernames
+// enumerable by response time; it now runs one argon2id with the same parameters as the wrong-password path.
 func TestAuthenticate_NoUsernameEnumerationViaSkippedVerification(t *testing.T) {
 	const runs = 20
 	cases := []struct {

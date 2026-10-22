@@ -84,7 +84,7 @@
       backdrop.onclick = closeMobileNav;
     }
 
-    // Navigation item highlighting is server-rendered (M8-7): no guessing the current page from the href any more — the old approach used
+    // Navigation highlighting belongs to the SPA router, not to this file; the old approach guessed the current page from the href with
     // a `header nav a` selector, which counted the brand link too, so on "/" the brand got highlighted.
     // All that remains here is "collapse the mobile drawer after clicking any navigation link".
     var navLinks = document.querySelectorAll("header nav a, #mobile-nav-menu a");

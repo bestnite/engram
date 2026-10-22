@@ -70,9 +70,8 @@ func validDeckCaps(c DeckCaps) error {
 
 // requireDeckOwner checks whether actor is the deck owner and returns ErrNotOwner if not.
 //
-// In this phase decks is the only source of ownership: deck_grants still has no rows, so \"who may edit\" is decided
-// only by owner_user_id. Once grants land, this expands into owner/editor read-write decisions,
-// while reader and stranger are still rejected here — this round's owner check is a subset of that and will not be overturned.
+// It guards the owner-only operations (rename, cap changes, delete). Shared access is decided elsewhere: deck_grants rows feed the
+// visibility queries and auth.DeckAccess, so an editor granted on a deck still cannot rename or delete it here.
 func requireDeckOwner(d *Deck, actorUserID uint64) error {
 	if d.OwnerUserID != actorUserID {
 		return fmt.Errorf("%w: deck %d is owned by user %d", ErrNotOwner, d.ID, d.OwnerUserID)

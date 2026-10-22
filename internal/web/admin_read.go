@@ -54,7 +54,7 @@ type adminHealthResponse struct {
 	Due            *int64 `json:"due"`
 }
 
-// adminHealth returns the health page's four readings, with exactly the same convention as adminHealthPage.
+// adminHealth returns the health page's four readings: database status, schema version, media bytes on disk and the due count.
 func (s *Server) adminHealth(c *gin.Context) {
 	ctx := c.Request.Context()
 	resp := adminHealthResponse{Database: "ok"}
@@ -118,7 +118,7 @@ type adminAuditResponse struct {
 	Notice  string          `json:"notice"`
 }
 
-// adminAudit returns audit search results, with filter and pagination semantics exactly matching adminAuditPage.
+// adminAudit returns audit search results; filters come from the query string and paging uses adminAuditPageSize.
 func (s *Server) adminAudit(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)

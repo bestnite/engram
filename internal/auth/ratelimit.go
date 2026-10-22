@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// Default parameters for login rate limiting. The delay grows as base × 2^(failure count-1) and is capped at MaxDelay (
-// session and security conventions).
+// Default parameters for login rate limiting. The delay grows as base × 2^(failure count-1) and is capped at MaxDelay.
 const (
 	DefaultRateLimitBaseDelay = 200 * time.Millisecond
 	DefaultRateLimitMaxDelay  = 5 * time.Second

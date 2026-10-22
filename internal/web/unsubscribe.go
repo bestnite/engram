@@ -17,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file is: RFC 8058 one-click unsubscribe.
+// This file is the RFC 8058 one-click unsubscribe endpoint.
 //
 // Design points:
 //   - the unsubscribe entry is only added to mails of **optional types** (B/C/D, where CanDisable is true); class A never carries it

@@ -11,7 +11,7 @@ import (
 
 // This file is: class D admin notification mail.
 //
-// Of the three trigger points, two actually exist in this repository:
+// Two of the three trigger points named by the class-D plan exist in this repository:
 //   - Job failure: fail in internal/jobs/jobs.go (the Runner calls back into this file's
 //     NotifyJobFailed via the OnFailure hook, wired up in cmd/engram/main.go);
 //   - Media quota: checkMediaQuota in internal/web/media.go (when a user upload is blocked by the quota).

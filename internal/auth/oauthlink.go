@@ -119,7 +119,8 @@ type IdentityLinkService struct {
 }
 
 // NewIdentityLinkService constructs the linking service. store is required; audit may be nil (no audit is recorded);
-// when logger is nil, slog.Default() is used; an audit write failure only logs in English and does not affect a link already made (principle).
+// when logger is nil, slog.Default() is used; an audit write failure only logs in English and does not affect a link already made: the
+// audit trail is best effort, not part of the link transaction.
 func NewIdentityLinkService(st IdentityLinkStore, audit *Auditor, logger *slog.Logger) (*IdentityLinkService, error) {
 	if st == nil {
 		return nil, errors.New("auth: identity link store is required")
@@ -198,7 +199,8 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 	}
 }
 
-// link writes one identities row and records an audit entry; an audit failure only logs in English and does not roll back the link (principle).
+// link writes one identities row and records an audit entry; an audit failure only logs in English and does not roll back the link, because
+// the audit trail is best effort.
 func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
 	ident := &store.Identity{
 		UserID:   userID,

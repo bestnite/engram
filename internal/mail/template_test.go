@@ -224,8 +224,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestValidateBodyRejectsUnknownType asserts that a type with no sender integrated does not accept
-// templates.
+// TestValidateRejectsUnknownType asserts that a type with no sender integrated does not accept templates.
 func TestValidateRejectsUnknownType(t *testing.T) {
 	if err := Validate(Type("no_such_type"), "", "{{anything}}"); err == nil {
 		t.Fatal("Validate() error = nil, want an error for a type without senders")

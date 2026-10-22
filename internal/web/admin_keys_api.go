@@ -39,7 +39,7 @@ type adminAPIKeysResponse struct {
 	Total int64         `json:"total"`
 }
 
-// adminAPIKeys returns API Key metadata for all users (paged), with the same convention as adminAPIKeysPage.
+// adminAPIKeys returns API Key metadata for all users, paged in adminKeysPageSize rows per page.
 func (s *Server) adminAPIKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 	actor, _ := auth.CurrentUser(c)

@@ -50,7 +50,7 @@ type adminSettingsRequest struct {
 	Values map[string]string `json:"values"`
 }
 
-// adminSettings returns the system settings sections and rows, with the same convention as adminSettingsPage.
+// adminSettings returns the system settings sections and rows, each row carrying its value, its source (env or DB) and whether it is editable.
 func (s *Server) adminSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	loc, ok := s.localizer(c)
@@ -133,8 +133,8 @@ func (s *Server) adminSensitiveRows(ctx context.Context) []adminSettingRow {
 	return rows
 }
 
-// adminSettingsSave writes the system settings; validation is identical item by item to adminSettingsSave (the same switch),
-// an invalid value is 400 and nothing is written. Sensitive keys are stored AES-GCM encrypted and never echoed back.
+// adminSettingsSave writes the system settings; every writable key is validated by its own branch of the switch below, and an invalid
+// value is 400 with nothing written. Sensitive keys are stored AES-GCM encrypted and never echoed back.
 func (s *Server) adminSettingsSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {

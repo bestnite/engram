@@ -37,7 +37,8 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.media == nil {
 		return
 	}
-	// Upload is a write, so it goes through the CSRF middleware; reading only requires sign-in (the minimum auth until M5 authorization lands).
+	// Upload is a write, so it goes through the CSRF middleware; reading requires sign-in plus the deck-access predicate in mediaServe
+	// (a media_uploaders record, a note in a deck you can see, or an L3 share session).
 	router.POST("/media", s.sessions.CSRFMiddleware(), s.mediaUpload)
 	router.GET("/media/:sha", s.mediaServe)
 	// The in-deck upload entry the editor uses. Writing requires the editor role on the deck, so a reader cannot push media

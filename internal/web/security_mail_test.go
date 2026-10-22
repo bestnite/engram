@@ -22,7 +22,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file holds the acceptance tests for (class A transactional security mail).
+// This file holds the acceptance tests for class-A transactional security mail.
 //
 // Covers: each of the five types' trigger points, reset links being single-use and expiring, only digests stored in the database, plaintext kept out of the logs,
 // class A carrying no unsubscribe header, and the flow being disabled when SMTP is not configured. The pages have moved to the SPA, so every trigger point goes through same-origin JSON endpoints

@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file is the web-layer common part of (class A transactional security mail): the delivery helper, link assembly,
+// This file is the web-layer common part of class-A transactional security mail: the delivery helper, link assembly,
 // the copy assembly for the five mail types, and the notify functions the trigger points reuse.
 //
 // Three behavioral constraints are met in one place here:

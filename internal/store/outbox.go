@@ -36,7 +36,7 @@ type OutboxMessage struct {
 	ID uint64 `gorm:"primaryKey" json:"id"`
 	// To is the recipient address (the login email only).
 	To string `gorm:"not null" json:"to"`
-	// Type is a free-form mail type string; the catalogue is defined by , this only stores it verbatim.
+	// Type is a free-form mail type string; the catalogue lives in internal/mail, this column only stores it verbatim.
 	Type string `gorm:"not null" json:"type"`
 	// Subject is the subject; user-visible text is already localized when enqueued, this only stores the result.
 	Subject  string `gorm:"not null" json:"subject"`
