@@ -8,9 +8,9 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// 本文件是管理面板「作业 / 语言包」页切流到 SPA 的验收。
+// This file is the acceptance test for the admin panel's "jobs / language pack" pages cutover to the SPA.
 
-// TestAdminJobsAndI18nCutover 覆盖两页的切流与非管理员门禁。
+// TestAdminJobsAndI18nCutover covers the cutover of both pages and the non-admin gate.
 func TestAdminJobsAndI18nCutover(t *testing.T) {
 	for _, path := range []string{"/admin/jobs", "/admin/i18n"} {
 		t.Run(path, func(t *testing.T) {
@@ -27,7 +27,7 @@ func TestAdminJobsAndI18nCutover(t *testing.T) {
 	}
 }
 
-// TestAdminJobsJSON 断言作业 JSON 的形态：未装配执行器时返回空列表而不是 500。
+// TestAdminJobsJSON asserts the shape of the jobs JSON: with no runner wired up it returns an empty list rather than 500.
 func TestAdminJobsJSON(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 
@@ -44,7 +44,7 @@ func TestAdminJobsJSON(t *testing.T) {
 	}
 }
 
-// TestAdminI18nJSON 断言语言包 JSON 报告把每个语言的覆盖率与缺失 key 如实带出。
+// TestAdminI18nJSON asserts that the language pack JSON report faithfully carries each locale's coverage and missing keys.
 func TestAdminI18nJSON(t *testing.T) {
 	srv, _, _, cookies, _ := newNotesServer(t)
 	srv.coverageOverride = func() []i18n.LocaleCoverage {

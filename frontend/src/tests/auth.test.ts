@@ -6,7 +6,7 @@ import { localeStore } from '../lib/i18n';
 
 describe('Auth store and SPA session management', () => {
   beforeEach(() => {
-    // 重置 store 状态
+    // Reset the store state
     authStore.set({
       initialized: false,
       loading: false,

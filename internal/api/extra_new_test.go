@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// extraNewEnv 建一个每日新卡上限为 2、共 5 张新卡的卡组，并把 2 张记为今天已引入，
-// 即今天的学习目标已经完成；返回环境、属主与卡组。
+// extraNewEnv builds a deck with a daily new-card cap of 2 and 5 new cards in total, marks 2 as already introduced today,
+// i.e. today's study goal is already met; returns the env, the owner and the deck.
 func extraNewEnv(t *testing.T) (*testEnv, *store.User, *store.Deck) {
 	t.Helper()
 	env := newTestEnv(t, 600, 600)
@@ -28,7 +28,7 @@ func extraNewEnv(t *testing.T) (*testEnv, *store.User, *store.Deck) {
 	return env, owner, deck
 }
 
-// introduceToday 把卡组里 n 张新卡记为 user 今天已引入（写一行 state_before=0 的复习日志与复习态）。
+// introduceToday marks n new cards of the deck as introduced by user today (writing a review log with state_before=0 and the review state).
 func introduceToday(t *testing.T, env *testEnv, user *store.User, deckID uint64, n int) {
 	t.Helper()
 	var cards []store.Card
@@ -74,8 +74,8 @@ func dueCount(t *testing.T, env *testEnv, deck *store.Deck, key string) int {
 	return len(body.Cards)
 }
 
-// TestExtraNewREST 是验收：学完今天的目标后 GET 给出默认张数（每日上限，但不超过剩下的新卡），
-// POST 缺省 count 追加每日上限、显式 count 按输入追加，队列随之放出新卡，并写一条审计。
+// TestExtraNewREST is the acceptance: after today's goal is met, GET gives the default count (the daily cap, but no more than the remaining new cards),
+// POST with no count adds the daily cap, an explicit count adds per the input, the queue then releases new cards, and one audit row is written.
 func TestExtraNewREST(t *testing.T) {
 	env, owner, deck := extraNewEnv(t)
 	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeReview}, nil).Plaintext
@@ -95,7 +95,7 @@ func TestExtraNewREST(t *testing.T) {
 		t.Fatalf("GET extra-new = %+v, want %+v", s, want)
 	}
 
-	// 缺省 count：追加每日上限 2 张。
+	// No count: adds the daily cap of 2.
 	status, raw = doJSON(t, router, http.MethodPost, path, key, "")
 	if status != http.StatusOK {
 		t.Fatalf("POST extra-new (default) status = %d (body %s)", status, raw)
@@ -107,7 +107,7 @@ func TestExtraNewREST(t *testing.T) {
 		t.Fatalf("queue after default extra = %d cards, want 2", got)
 	}
 
-	// 显式 count：再追加 1 张，累加到 3。
+	// Explicit count: adds 1 more, accumulating to 3.
 	status, raw = doJSON(t, router, http.MethodPost, path, key, `{"count":1}`)
 	if status != http.StatusOK {
 		t.Fatalf("POST extra-new (count 1) status = %d (body %s)", status, raw)
@@ -129,7 +129,7 @@ func TestExtraNewREST(t *testing.T) {
 	}
 }
 
-// TestExtraNewIsPerUser 断言追加只对调用者自己生效：共享卡组的成员追加后，属主的队列不变。
+// TestExtraNewIsPerUser asserts adding applies only to the caller: after a member of a shared deck adds, the owner's queue is unchanged.
 func TestExtraNewIsPerUser(t *testing.T) {
 	env, owner, deck := extraNewEnv(t)
 	ctx := context.Background()
@@ -156,8 +156,8 @@ func TestExtraNewIsPerUser(t *testing.T) {
 	}
 }
 
-// TestExtraNewNegatives 覆盖负例：scope 不够、非成员、不限额的卡组、count 越界、坏请求体、
-// 带标签但标签过多，以及未知卡组。
+// TestExtraNewNegatives covers the negative cases: insufficient scope, non-member, an uncapped deck, count out of range, a bad body,
+// too many tags with tags given, and an unknown deck.
 func TestExtraNewNegatives(t *testing.T) {
 	env, owner, deck := extraNewEnv(t)
 	ctx := context.Background()
@@ -217,7 +217,7 @@ func TestExtraNewNegatives(t *testing.T) {
 	}
 }
 
-// TestExtraNewStatusWithTags 断言按标签复习时，可加张数只数带这些标签的新卡。
+// TestExtraNewStatusWithTags asserts that when reviewing by tag, the addable count only counts new cards carrying those tags.
 func TestExtraNewStatusWithTags(t *testing.T) {
 	env, owner, deck := extraNewEnv(t)
 	seedTaggedNewCard(t, env.db, deck.ID, "other")

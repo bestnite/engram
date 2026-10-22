@@ -8,9 +8,10 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// TestRenderMarkdownStripsUnsafe 是反面用例：
-// script、事件属性、javascript:/data: URL、非白名单元素属性都必须被剥离，
-// 而链接文字等内容要保留（剥离标签不等于吞掉内容）。
+// TestRenderMarkdownStripsUnsafe is the negative case:
+// script, event attributes, javascript:/data: URLs and non-allowlisted element attributes must all
+// be stripped, while link text and similar content is kept (stripping a tag is not swallowing its
+// content).
 func TestRenderMarkdownStripsUnsafe(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -84,8 +85,9 @@ func TestRenderMarkdownStripsUnsafe(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownKeepsAllowedMarkup 是正面用例：
-// 表格、代码块、常用内联/块级标记必须存活，且 URL 允许名单内的链接与图片要保留。
+// TestRenderMarkdownKeepsAllowedMarkup is the positive case:
+// tables, code blocks and the common inline/block markup must survive, and links and images inside
+// the URL allowlist must be kept.
 func TestRenderMarkdownKeepsAllowedMarkup(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -174,9 +176,10 @@ func TestRenderMarkdownKeepsAllowedMarkup(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownPreservesMath 是公式存活用例：
-// \(...\) 与 \[...\] 的分隔符、反斜杠命令、花括号必须原样出现在 HTML 里，
-// 不能被 goldmark 的反斜杠转义吃掉，也不能被清洗器换成 HTML 实体。
+// TestRenderMarkdownPreservesMath is the formula survival case:
+// the \(...\) and \[...\] delimiters, backslash commands and braces must appear in the HTML
+// verbatim, neither eaten by goldmark's backslash escaping nor turned into HTML entities by the
+// sanitizer.
 func TestRenderMarkdownPreservesMath(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -210,7 +213,8 @@ func TestRenderMarkdownPreservesMath(t *testing.T) {
 		},
 	}
 
-	// 反斜杠被转义成实体会直接破坏 MathJax，单独断言这类实体不出现。
+	// A backslash escaped into an entity breaks MathJax outright, so assert separately that no such
+	// entity form appears.
 	entityForms := []string{"&#92;", "&#x5c;", "&bsol;", "&Backslash;"}
 
 	for _, tc := range cases {
@@ -233,9 +237,9 @@ func TestRenderMarkdownPreservesMath(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownEscapesHTMLInsideMath 锁定一条安全边界：
-// 公式还原发生在清洗之后，所以公式内部的 < > & 必须由本包转义，
-// 否则等于给不可信内容开了一个绕过白名单的入口。
+// TestRenderMarkdownEscapesHTMLInsideMath pins down one security boundary:
+// formula restoration happens after sanitizing, so the < > & inside a formula must be escaped by
+// this package, otherwise untrusted content gets an entry point around the allowlist.
 func TestRenderMarkdownEscapesHTMLInsideMath(t *testing.T) {
 	out, err := RenderMarkdown(`\(a<b \& c\)`)
 	if err != nil {
@@ -252,20 +256,22 @@ func TestRenderMarkdownEscapesHTMLInsideMath(t *testing.T) {
 	}
 }
 
-// 公式的还原点必须与它最终的 HTML 上下文无关。
+// A formula's restore point must not depend on its final HTML context.
 //
-// 占位符是在清洗之前插进 Markdown 文本里的，goldmark 可能把它放进属性值位置
-// （链接目标、图片 alt、raw HTML 的 class/href 等）。bluemonday 当时校验的是
-// 纯字母数字的占位符，也就是一个安全 token；清洗之后 restoreMath 再把公式原文
-// 盲替换回去，公式里的引号就会闭合属性并注入白名单从未校验过的新属性——
-// 事件处理属性（onmouseover/onerror/onclick）或一个 javascript: 的 src/href。
+// Placeholders are inserted into the Markdown text before sanitizing, so goldmark may put one in an
+// attribute value position (link target, image alt, class/href of raw HTML, etc.). bluemonday was
+// validating the purely alphanumeric placeholder at that point, i.e. a safe token; after sanitizing,
+// restoreMath substitutes the formula text back blindly, so a quote inside the formula closes the
+// attribute and injects new attributes the allowlist never validated -- event handler attributes
+// (onmouseover/onerror/onclick) or a javascript: src/href.
 //
-// 为什么断言基于 HTML 解析而不是字符串搜索：同一段字符 "javascript:" 出现在
-// 文本节点里是无害的（例如一道题讨论这个协议），只有被解析成 URL 类属性且其
-// scheme 是 javascript/data 才构成脚本 URL。字符串搜索既会漏掉实体编码出来的
-// 变体（&#106;avascript:、&quot; 收尾等），也会把无害文本误报。所以这里把输出
-// 交给 x/net/html 解析，再逐个节点检查元素/属性是否在白名单内、事件属性是否存在、
-// URL 属性的 scheme 是否危险。
+// Why the assertions parse HTML instead of searching strings: the same characters "javascript:" in a
+// text node are harmless (a card may well discuss that scheme); it only becomes a script URL when
+// parsed as a URL-bearing attribute whose scheme is javascript/data. String search both misses
+// variants produced by entity encoding (&#106;avascript:, closing with &quot; and so on) and reports
+// harmless text as a failure. So the output goes through the x/net/html parser, and every node is
+// then checked for: element/attribute inside the allowlist, presence of an event attribute, and a
+// dangerous scheme on a URL attribute.
 func TestRenderMarkdownNeutralizesMathAttributeEscape(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -287,14 +293,14 @@ func TestRenderMarkdownNeutralizesMathAttributeEscape(t *testing.T) {
 			required: []string{"t"},
 		},
 		{
-			// 公式原文里的引号断开 alt 后，注入一个白名单从未见过的
-			// javascript: src——它成为该 img 唯一的 src，浏览器会去加载它。
+			// A quote in the formula text breaks out of alt and injects a javascript: src the allowlist
+			// has never seen -- it becomes the img's only src and the browser will load it.
 			name: "alt breakout injects javascript src",
 			src:  `<img alt="\(x"src="javascript:alert(1)"//\)">`,
 		},
 		{
-			// 占位符直接占据链接目标时，还原后仍是公式原文；这条锁定
-			// “还原后不得出现可执行的脚本协议”。
+			// When the placeholder occupies the link target itself, restoring yields the formula text;
+			// this pins "no executable script scheme may survive the restore".
 			name:     "link destination javascript scheme",
 			src:      `[x](\(javascript:alert(1)\))`,
 			required: []string{"x"},
@@ -322,8 +328,9 @@ func TestRenderMarkdownNeutralizesMathAttributeEscape(t *testing.T) {
 	}
 }
 
-// allowedElementNames 是卡面白名单里的元素（与 buildPolicy 保持一致）。
-// 解析输出后出现在这里之外的标签，说明有东西从公式里穿出来新建了标签。
+// allowedElementNames is the set of elements in the card allowlist (kept in sync with buildPolicy).
+// A tag appearing outside this set in the parsed output means something broke out of a formula and
+// created a new tag.
 var allowedElementNames = map[string]bool{
 	"p": true, "br": true, "hr": true,
 	"strong": true, "em": true, "del": true, "blockquote": true,
@@ -333,19 +340,21 @@ var allowedElementNames = map[string]bool{
 	"a": true, "img": true, "span": true,
 }
 
-// allowedAttrNames 是白名单允许的属性名（与 buildPolicy 一致）。
+// allowedAttrNames is the set of attribute names the allowlist permits (consistent with buildPolicy).
 var allowedAttrNames = map[string]bool{
 	"class": true, "href": true, "src": true, "alt": true, "start": true,
 }
 
-// urlAttributes 是解析后需要按 URL 语义检查 scheme 的属性名。
+// urlAttributes is the set of attribute names whose scheme must be checked with URL semantics after
+// parsing.
 var urlAttributes = map[string]bool{
 	"href": true, "src": true, "action": true, "formaction": true,
 	"poster": true, "background": true, "data": true, "srcset": true,
 }
 
-// assertSafeFragment 用 HTML 解析器检查一段输出片段：
-// 元素与属性都在白名单内、没有事件处理属性、URL 属性没有脚本类 scheme。
+// assertSafeFragment checks an output fragment with an HTML parser:
+// elements and attributes are inside the allowlist, no event handler attribute exists, and URL
+// attributes carry no script-like scheme.
 func assertSafeFragment(t *testing.T, out string) {
 	t.Helper()
 
@@ -384,9 +393,10 @@ func assertSafeFragment(t *testing.T, out string) {
 	}
 }
 
-// urlScheme 按浏览器的 URL 解析规则取 scheme：
-// 忽略前导的 C0 控制符与空格，scheme 以字母开头、后接字母/数字/+-.，并以 ':' 收尾；
-// 不符合该形状（例如以 '\' 开头）的输入返回空串，代表相对 URL。
+// urlScheme extracts the scheme by the browser's URL parsing rules:
+// leading C0 control characters and spaces are ignored, the scheme starts with a letter, continues
+// with letters/digits/+-,. and ends with ':'; input that does not fit that shape (e.g. one starting
+// with '\') yields the empty string, meaning a relative URL.
 func urlScheme(v string) string {
 	s := strings.TrimLeft(v, "	\n\r\f \x00")
 	i := 0

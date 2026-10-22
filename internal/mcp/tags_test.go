@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedTaggedCardMCP 建一个带标签的 note 与它的一张 card（新卡），返回 note 的对外 id。
+// seedTaggedCardMCP creates a tagged note and one of its cards (a new card), returning the note's public id.
 func seedTaggedCardMCP(t *testing.T, db *gorm.DB, deckID uint64, tags ...string) string {
 	t.Helper()
 	now := time.Now().UTC()
@@ -30,8 +30,8 @@ func seedTaggedCardMCP(t *testing.T, db *gorm.DB, deckID uint64, tags ...string)
 	return n.PublicID
 }
 
-// TestGetDueCardsTagsMatchesREST 断言 get_due_cards 的 tags 与 REST 的重复 tag 参数是同一口径，
-// 且带标签却跨多个卡组时返回 invalid_request。
+// TestGetDueCardsTagsMatchesREST asserts get_due_cards's tags is the same reading as REST's repeated tag parameter,
+// and that tags spanning several decks return invalid_request.
 func TestGetDueCardsTagsMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "tag-mcp")
@@ -74,8 +74,8 @@ func TestGetDueCardsTagsMatchesREST(t *testing.T) {
 	}
 }
 
-// TestListDeckTagsMatchesREST 断言 list_deck_tags 与 REST GET /decks/:id/tags 同源；
-// 别人的私有卡组整次失败。
+// TestListDeckTagsMatchesREST asserts list_deck_tags shares its source with REST GET /decks/:id/tags;
+// someone else's private deck fails the whole call.
 func TestListDeckTagsMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "tag-list-owner")

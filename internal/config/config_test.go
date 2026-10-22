@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// envStub 把 map 当作环境变量来源。
+// envStub serves a map as the environment source.
 func envStub(values map[string]string) func(string) (string, bool) {
 	return func(name string) (string, bool) {
 		v, ok := values[name]
@@ -13,7 +13,7 @@ func envStub(values map[string]string) func(string) (string, bool) {
 	}
 }
 
-// requiredEnv 是所有必需变量都齐备的最小环境。
+// requiredEnv is the minimal environment with every required variable present.
 func requiredEnv() map[string]string {
 	return map[string]string{
 		"DB_DRIVER":      "sqlite",
@@ -119,7 +119,7 @@ func TestMissingRequiredVariableFailsWithEnglishError(t *testing.T) {
 	}
 }
 
-// assertASCIIEnglish 断言错误文案是英文（AGENTS.md §2.1）：不含任何非 ASCII 字符。
+// assertASCIIEnglish asserts that error text is English (AGENTS.md §2.1): it contains no non-ASCII characters.
 func assertASCIIEnglish(t *testing.T, msg string) {
 	t.Helper()
 	for _, r := range msg {
@@ -129,8 +129,8 @@ func assertASCIIEnglish(t *testing.T, msg string) {
 	}
 }
 
-// TestTrustedProxiesDefaultsToNoTrust 断言缺省即「不信任任何代理」：
-// 未设 TRUSTED_PROXIES 时返回空列表且不报错。
+// TestTrustedProxiesDefaultsToNoTrust asserts that the default means "trust no proxies":
+// with TRUSTED_PROXIES unset it returns an empty list and no error.
 func TestTrustedProxiesDefaultsToNoTrust(t *testing.T) {
 	cfg, err := Load(envStub(requiredEnv()), nil)
 	if err != nil {
@@ -145,8 +145,8 @@ func TestTrustedProxiesDefaultsToNoTrust(t *testing.T) {
 	}
 }
 
-// TestTrustedProxiesParsesCommaSeparatedList 断言逗号分隔的 IP/CIDR 逐项保留：
-// 去掉首尾空白、丢弃空项、保持书写顺序。
+// TestTrustedProxiesParsesCommaSeparatedList asserts that a comma-separated IP/CIDR list is kept entry by entry:
+// leading/trailing whitespace trimmed, empty entries dropped, and the written order preserved.
 func TestTrustedProxiesParsesCommaSeparatedList(t *testing.T) {
 	env := requiredEnv()
 	env["TRUSTED_PROXIES"] = " 127.0.0.1/32 , 192.0.2.0/24,::1 ,, "
@@ -169,8 +169,8 @@ func TestTrustedProxiesParsesCommaSeparatedList(t *testing.T) {
 	}
 }
 
-// TestTrustedProxiesRejectsInvalidEntry 断言非法项让启动期校验失败并点名该项，
-// 绝不静默丢弃（AGENTS.md §2.6：错误只有一种读法）。
+// TestTrustedProxiesRejectsInvalidEntry asserts that an invalid entry fails startup validation and names that entry,
+// and is never silently dropped (AGENTS.md §2.6: an error has exactly one reading).
 func TestTrustedProxiesRejectsInvalidEntry(t *testing.T) {
 	cases := []struct {
 		name     string

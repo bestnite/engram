@@ -1,13 +1,13 @@
-// Package worker 提供后台周期 worker 的共享生命周期骨架：Start/Stop、启动即跑一轮的
-// tick 循环，以及把单轮错误记成英文日志的包装。
+// Package worker provides the shared lifecycle skeleton for background periodic workers: Start/Stop, a tick loop
+// that runs one round immediately on start, and a wrapper that records a single round's error as an English log line.
 //
-// 本包只收敛这一层逐字相同的骨架；业务相位（扫什么、发什么）由调用方以 Config.RunOnce
-// 注入，因此本包不 import 任何业务包，也不持有 DB、邮箱等业务依赖。
+// This package converges only that verbatim-identical skeleton layer; the business phase (what to scan, what to send) is injected by the caller via
+// Config.RunOnce, so the package imports no business package and holds no business dependency such as a DB or a mailer.
 //
-// 抽取背景（refactor/converge-c4 的逐字对比结论）：internal/reminder 与 internal/digest
-// 的 Start / Stop / loop / runAndLog 四个方法，除接收者名与 runAndLog 的日志文案外逐字相同；
-// 两者的 tick 间隔（各自 DefaultInterval = 10 分钟）与错误处理（记日志后继续、单轮失败不退出）
-// 也完全一致。唯一的行为差异是失败日志文案，故用 Config.FailMessage 注入，逐字保留各自原文案。
+// Extraction background (the verbatim diff conclusion of refactor/converge-c4): the four methods Start / Stop / loop / runAndLog of internal/reminder and
+// internal/digest are identical verbatim apart from the receiver name and runAndLog's log text;
+// their tick interval (each one's DefaultInterval = 10 minutes) and error handling (log and continue, a failed round does not exit)
+// are exactly the same too. The only behavioral difference is the failure log text, so it is injected via Config.FailMessage, keeping each original text verbatim.
 package worker
 
 import (
@@ -18,25 +18,25 @@ import (
 	"time"
 )
 
-// DefaultInterval 是未指定轮询间隔时的默认值（10 分钟）。
+// DefaultInterval is the default when no polling interval is specified (10 minutes).
 //
-// 两个 C 类 worker（提醒、周报）共用同一节律；默认值的选取理由见 internal/reminder 与
-// internal/digest 各自的常量注释，这里集中一处，避免两边各写一份。
+// The two class-C workers (reminders, weekly digest) share the same rhythm; the rationale for the default lives in the constant comments of internal/reminder and
+// internal/digest, centralized here so neither side has to write its own copy.
 const DefaultInterval = 10 * time.Minute
 
-// Config 是 Lifecycle 的构造参数。
+// Config holds Lifecycle's constructor arguments.
 type Config struct {
-	// RunOnce 是一轮业务扫描，由调用方提供。必填；为 nil 时 New 返回错误。
+	// RunOnce is one round of business scanning, provided by the caller. Required; New returns an error when it is nil.
 	RunOnce func(ctx context.Context) error
-	// Logger 记录单轮失败。必填；为 nil 时 New 返回错误。
+	// Logger records single-round failures. Required; New returns an error when it is nil.
 	Logger *slog.Logger
-	// FailMessage 是单轮失败时的英文日志消息，逐字注入（见包注释）。必填；为空时 New 返回错误。
+	// FailMessage is the English log message for a single-round failure, injected verbatim (see the package comment). Required; New returns an error when it is empty.
 	FailMessage string
-	// Interval 是轮询间隔；<=0 时用 DefaultInterval。
+	// Interval is the polling interval; <=0 means DefaultInterval.
 	Interval time.Duration
 }
 
-// Lifecycle 是周期 worker 的起停与 tick 骨架。零值不可用；用 New 构造。
+// Lifecycle is the start/stop and tick skeleton of a periodic worker. The zero value is not usable; construct it with New.
 type Lifecycle struct {
 	runOnce     func(ctx context.Context) error
 	logger      *slog.Logger
@@ -49,7 +49,7 @@ type Lifecycle struct {
 	done    chan struct{}
 }
 
-// New 构造 Lifecycle；不启动 worker，需再调用 Start。
+// New constructs a Lifecycle; it does not start the worker, call Start afterwards.
 func New(cfg Config) (*Lifecycle, error) {
 	if cfg.RunOnce == nil {
 		return nil, errors.New("worker: Config.RunOnce is required")
@@ -72,7 +72,7 @@ func New(cfg Config) (*Lifecycle, error) {
 	}, nil
 }
 
-// Start 启动唯一的 worker goroutine；重复调用幂等。ctx 取消时 worker 退出。
+// Start starts the single worker goroutine; repeated calls are idempotent. The worker exits when ctx is cancelled.
 func (l *Lifecycle) Start(ctx context.Context) {
 	l.mu.Lock()
 	if l.started {
@@ -91,7 +91,7 @@ func (l *Lifecycle) Start(ctx context.Context) {
 	}()
 }
 
-// Stop 优雅停止 worker：取消上下文并等待当前轮结束。可重复调用。
+// Stop gracefully stops the worker: it cancels the context and waits for the current round to finish. Safe to call repeatedly.
 func (l *Lifecycle) Stop() {
 	l.mu.Lock()
 	if !l.started {
@@ -110,7 +110,7 @@ func (l *Lifecycle) Stop() {
 	}
 }
 
-// loop 是 worker 主循环：启动即跑一轮（补上进程停机期间错过的窗口），随后定时轮询。
+// loop is the worker's main loop: run one round immediately on start (catching up the window missed while the process was down), then poll on a timer.
 func (l *Lifecycle) loop(ctx context.Context) {
 	ticker := time.NewTicker(l.interval)
 	defer ticker.Stop()
@@ -125,7 +125,7 @@ func (l *Lifecycle) loop(ctx context.Context) {
 	}
 }
 
-// runAndLog 跑一轮并把查询级错误记成英文日志（worker 不能因单轮失败而退出）。
+// runAndLog runs one round and records query-level errors as an English log line (the worker must not exit because one round failed).
 func (l *Lifecycle) runAndLog(ctx context.Context) {
 	if err := l.runOnce(ctx); err != nil {
 		l.logger.Error(l.failMessage, "error", err)

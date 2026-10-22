@@ -1,18 +1,18 @@
 /**
- * 匿名访客的语言覆盖参数。
+ * The language override parameter for anonymous visitors.
  *
- * 服务端对每个请求按「?lang > 已登录用户设置 > Accept-Language > 站点默认」解析语言
- * （internal/web/middleware.go 的语言中间件），入口 `<html lang>` 也按同一优先级逐请求重写。
- * 所以 `?lang=<code>` 是规范里唯一给匿名访客准备的覆盖通道：不写库、随地址传播。
+ * The server resolves the language per request as "?lang > logged-in user settings > Accept-Language > site default"
+ * (the language middleware in internal/web/middleware.go), and the entry's `<html lang>` is rewritten per request with the same priority.
+ * So `?lang=<code>` is the only override channel the spec provides for anonymous visitors: it writes nothing to the DB and travels with the address.
  *
- * 已登录用户不走这里——他的语言在 /settings 里落库（PATCH /api/v1/profile），
- * 让 URL 长期压过账号设置只会让两处口径打架。
+ * Logged-in users do not go through here - their language is persisted in /settings (PATCH /api/v1/profile),
+ * and letting the URL override the account setting long-term would only make the two disagree.
  */
 export const LANGUAGE_PARAM = 'lang';
 
 /**
- * 读地址上的语言覆盖参数；不在浏览器环境或没有该参数时返回 null。
- * search 可显式传入，便于测试与在同一次跳转里对目标地址求值。
+ * Read the language override parameter from the address; returns null outside a browser environment or when the parameter is absent.
+ * search can be passed explicitly, for tests and for evaluating the target address within the same navigation.
  */
 export function readLanguageFromURL(
   search: string = typeof window === 'undefined' ? '' : window.location.search
@@ -23,8 +23,8 @@ export function readLanguageFromURL(
 }
 
 /**
- * 把语言写进当前地址（只换查询串，不触发路由）。
- * 用 replaceState 而不是 pushState：语言是显示偏好，不该在浏览器前进后退里多出一层。
+ * Write the language into the current address (swaps only the query string, does not trigger routing).
+ * Uses replaceState rather than pushState: language is a display preference and should not add a layer to the browser's back/forward history.
  */
 export function setLanguageInURL(code: string): void {
   if (typeof window === 'undefined') return;
@@ -34,10 +34,10 @@ export function setLanguageInURL(code: string): void {
 }
 
 /**
- * 从地址上移除语言覆盖参数（没有该参数时什么都不做）。
+ * Remove the language override parameter from the address (does nothing when it is absent).
  *
- * 登录用户的语言以账号设置为准（切换时走 PATCH /api/v1/settings/locale 落库），而地址上残留的
- * `?lang=` 在服务端解析里是最高优先级——页头切换成功后要把它清掉，否则 URL 会与账号设置打架。
+ * For logged-in users the account setting wins (switching persists via PATCH /api/v1/settings/locale), while a leftover
+ * `?lang=` in the address has top priority in server resolution - it must be cleared after a successful header switch, otherwise the URL fights the account setting.
  */
 export function clearLanguageInURL(): void {
   if (typeof window === 'undefined') return;

@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// jobFileSize 返回文件当前字节数；不存在时返回 0。
+// jobFileSize returns the file's current size in bytes; returns 0 when it does not exist.
 func jobFileSize(path string) int64 {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -19,7 +19,7 @@ func jobFileSize(path string) int64 {
 	return info.Size()
 }
 
-// loadJob 直接按主键读一行 jobs，供测试断言状态与失败原因。
+// loadJob reads one jobs row directly by primary key, so the test can assert status and failure reason.
 func loadJob(t *testing.T, db *gorm.DB, id uint64) *store.Job {
 	t.Helper()
 	var job store.Job
@@ -29,7 +29,7 @@ func loadJob(t *testing.T, db *gorm.DB, id uint64) *store.Job {
 	return &job
 }
 
-// waitJobStatus 轮询到作业到达目标状态；超时报错。
+// waitJobStatus polls until the job reaches the target status; errors on timeout.
 func waitJobStatus(t *testing.T, db *gorm.DB, id uint64, want string, limit time.Duration) *store.Job {
 	t.Helper()
 	deadline := time.Now().Add(limit)

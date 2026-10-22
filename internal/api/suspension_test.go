@@ -9,8 +9,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSuspensionIsPerUserOverREST 覆盖暂停接口：共享卡组的读者暂停一张卡，只有他自己的队列与
-// 笔记列表受影响，属主不受影响；取消暂停后恢复。负例：无关用户 404、缺 review scope 403。
+// TestSuspensionIsPerUserOverREST covers the suspension endpoints: a reader of a shared deck suspends a card and only their own queue and
+// note list are affected, while the owner is not; unsuspending restores it. Negative cases: an unrelated user 404, a missing review scope 403.
 func TestSuspensionIsPerUserOverREST(t *testing.T) {
 	env := newTestEnv(t, 600, 600)
 	ctx := context.Background()

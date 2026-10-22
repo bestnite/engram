@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// TestPresetEnableFuzzPointerSemantics 覆盖 AGENTS.md §2.3 第 9 条：enable_fuzz 是带数据库
-// 默认值 true 的布尔列，模型里必须是 *bool，否则 GORM 省略零值、数据库默认值会静默覆盖显式的 false。
-// 三条断言：
-//  1. 不传该字段（nil）时，落库为数据库默认 true；
-//  2. 显式传 false 时，落库真的是 false（PresetStore.Create 的补偿写入删除后依然成立）；
-//  3. 包导入路径（package_import.go 的同类补偿写入也已删除）同样把 false 落成 false。
+// TestPresetEnableFuzzPointerSemantics covers AGENTS.md §2.3 item 9: enable_fuzz is a boolean column with a database
+// default of true, so the model must use *bool; otherwise GORM omits the zero value and the database default silently overrides an explicit false.
+// Three assertions:
+//  1. when the field is not passed (nil), the stored value is the database default true;
+//  2. when false is passed explicitly, false really is stored (still true now that PresetStore.Create's compensatory write is gone);
+//  3. the package import path (whose equivalent compensatory write in package_import.go is also gone) likewise stores false as false.
 func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -21,7 +21,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 			owner := seedUsers(t, db, "preset_fuzz_owner")[0]
 			presets := NewPresetStore(db)
 
-			// 1) 不传该字段：EnableFuzz 为 nil，GORM 省略该列，由数据库默认值补齐为 true。
+			// 1) Field not passed: EnableFuzz is nil, GORM omits the column, and the database default fills it in as true.
 			unset := Preset{
 				OwnerUserID: owner, Name: "Unset",
 				DesiredRetention: DefaultDesiredRetention, LearningSteps: DefaultLearningSteps,
@@ -45,7 +45,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 			}
 			t.Logf("unset (nil) enable_fuzz stored as %v", *gotUnset.EnableFuzz)
 
-			// 2) 显式传 false：必须原样落库为 false，不能被数据库默认值改回 true。
+			// 2) false passed explicitly: it must be stored as false, not turned back into true by the database default.
 			off := NewPreset(owner, "Off")
 			off.EnableFuzz = Ptr(false)
 			if err := presets.Create(ctx, &off); err != nil {
@@ -63,7 +63,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 			}
 			t.Logf("explicit false enable_fuzz stored as %v", *gotOff.EnableFuzz)
 
-			// 3) 包导入路径：createPresetFromPackage 的补偿写入已删除，false 仍须落库为 false。
+			// 3) Package import path: createPresetFromPackage's compensatory write is gone, and false must still be stored as false.
 			importedID, err := createPresetFromPackage(ctx, db, owner, &PackagePreset{
 				Name: "Imported", DesiredRetention: DefaultDesiredRetention,
 				LearningSteps: DefaultLearningSteps, RelearningSteps: DefaultRelearningSteps,

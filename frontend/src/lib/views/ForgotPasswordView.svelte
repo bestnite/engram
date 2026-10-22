@@ -6,8 +6,8 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
 
-  // 请求密码重置（服务端 GET /forgot-password 切壳后由客户端路由渲染此页）。
-  // 协议走 POST /api/v1/auth/forgot-password：无论账号是否存在都回同形响应，避免账号枚举。
+  // Password reset request (after the server's GET /forgot-password switched to the shell, the client router renders this page).
+  // The protocol is POST /api/v1/auth/forgot-password: it returns a same-shaped response whether or not the account exists, avoiding account enumeration.
   let email = $state('');
   let loading = $state(false);
   let done = $state(false);

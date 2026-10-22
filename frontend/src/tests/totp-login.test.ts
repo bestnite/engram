@@ -6,8 +6,9 @@ import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
- * 登录第二步（TOTP）的 SPA 视图与路由：/login/totp 是规范路径（服务端没有为它注册 GET 路由，
- * 由 NoRoute 回退到应用壳），协议为 GET/POST /api/v1/auth/totp。
+ * The SPA view and route for login step two (TOTP): /login/totp is the canonical path (the
+ * server registers no GET route for it and NoRoute falls back to the app shell), and the
+ * protocol is GET/POST /api/v1/auth/totp.
  */
 describe('TOTPLoginView renders the second-factor states truthfully', () => {
   beforeEach(() => {
@@ -21,7 +22,7 @@ describe('TOTPLoginView renders the second-factor states truthfully', () => {
     expect(html).toContain('两步验证');
     expect(html).toContain('验证码');
     expect(html).not.toContain('data-testid="totp-login-expired"');
-    // 恢复码提示与验证码共用同一输入框，文案必须说出来。
+    // The recovery-code hint shares one input with the verification code, so the copy has to say so.
     expect(html).toContain('恢复码');
   });
 
@@ -45,7 +46,7 @@ describe('the second-factor route table', () => {
     const canonical = matchRoute('/login/totp', routes);
     expect(canonical.route?.name).toBe('totp-login');
 
-    // 第一步登录路由不能被第二步遮蔽。
+    // The step-one login route must not be shadowed by step two.
     expect(matchRoute('/login', routes).route?.name).toBe('login');
   });
 });

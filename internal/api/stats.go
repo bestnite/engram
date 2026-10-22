@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// statsSummary 返回到期量 / 复习量 / 留存概要，scope: read（业务逻辑在 service 层的 Stats）。
+// statsSummary returns the due / review / retention summary, scope: read (the logic lives in the service layer's Stats).
 func (a *API) statsSummary(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	resp, err := a.Stats(c.Request.Context(), u)

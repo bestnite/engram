@@ -7,11 +7,13 @@ import (
 	"testing"
 )
 
-// TestSMTPSenderEncodesNonASCIIHeaders 断言非 ASCII 的主题与显示名按 RFC 2047 编码。
+// TestSMTPSenderEncodesNonASCIIHeaders asserts that a non-ASCII subject and display name are encoded
+// per RFC 2047.
 //
-// 头部按 RFC 5322 只能是 ASCII：中文主题原样写进 Subject 会被中继或客户端压成 "?"，
-// 收件人看到一串问号（实测收到过 "?????? Engram ??????????????????"）。同时地址本身
-// 必须保持 ASCII —— encoded-word 不允许出现在 addr-spec 里。
+// A header may only be ASCII under RFC 5322: a Chinese subject written straight into Subject gets
+// squashed into "?" by a relay or client, and the recipient sees a row of question marks (a
+// real-world example: "?????? Engram ??????????????????"). At the same time the address itself must
+// stay ASCII -- an encoded-word is not allowed in addr-spec.
 func TestSMTPSenderEncodesNonASCIIHeaders(t *testing.T) {
 	f := newFakeSMTP(t)
 	cfg := SMTPConfig{
@@ -31,7 +33,7 @@ func TestSMTPSenderEncodesNonASCIIHeaders(t *testing.T) {
 	if !strings.Contains(got, "Subject: =?utf-8?") {
 		t.Errorf("subject is not RFC 2047 encoded:\n%s", got)
 	}
-	// 解码回来必须与原文逐字相同。
+	// Decoding it back must match the original character for character.
 	raw := headerLine(got, "Subject: ")
 	if raw == "" {
 		t.Fatalf("no Subject header in the delivered message:\n%s", got)
@@ -44,7 +46,7 @@ func TestSMTPSenderEncodesNonASCIIHeaders(t *testing.T) {
 		t.Errorf("decoded subject = %q, want %q", decoded, subject)
 	}
 
-	// 地址必须是 ASCII 可解析的，不能被 encoded-word 包住。
+	// The address must be ASCII-parseable and must not be wrapped in an encoded-word.
 	for _, addr := range []string{"<no-reply@example.com>", "<learner@example.com>"} {
 		if !strings.Contains(got, addr) {
 			t.Errorf("delivered message lost the plain address %s:\n%s", addr, got)
@@ -52,7 +54,8 @@ func TestSMTPSenderEncodesNonASCIIHeaders(t *testing.T) {
 	}
 }
 
-// TestSMTPSenderLeavesASCIIHeadersAlone 断言纯 ASCII 头部不被编码（不引入无谓的 =?utf-8?）。
+// TestSMTPSenderLeavesASCIIHeadersAlone asserts that purely ASCII headers are not encoded (no
+// unnecessary =?utf-8? is introduced).
 func TestSMTPSenderLeavesASCIIHeadersAlone(t *testing.T) {
 	f := newFakeSMTP(t)
 	cfg := SMTPConfig{
@@ -73,7 +76,7 @@ func TestSMTPSenderLeavesASCIIHeadersAlone(t *testing.T) {
 	}
 }
 
-// headerLine 取出以 prefix 开头的第一行（去掉换行与首尾空白）。
+// headerLine returns the first line starting with prefix (newline and surrounding blanks stripped).
 func headerLine(msg, prefix string) string {
 	for _, line := range strings.Split(msg, "\n") {
 		if strings.HasPrefix(line, prefix) {

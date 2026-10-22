@@ -11,8 +11,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// create_import_upload 的验收：MCP 签发的票据走与 REST 相同的 service 方法，
-// 包字节随后不带任何凭据直接 PUT 到票据 URL，不经过工具参数。
+// Acceptance for create_import_upload: the ticket MCP issues goes through the same service method as REST,
+// and the package bytes are then PUT straight to the ticket URL with no credentials at all, never passing through tool arguments.
 
 func TestCreateImportUploadThenPut(t *testing.T) {
 	_, db, keys, ts := newEnv(t)

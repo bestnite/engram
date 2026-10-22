@@ -12,8 +12,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDecideIdentityLink 是验收矩阵：表驱动覆盖身份自动绑定的三个分支，
-// 并显式覆盖四种输入（sub 已存在 / 已验邮箱 / 未验邮箱 / 无邮箱）。
+// TestDecideIdentityLink is the acceptance matrix: table-driven coverage of the three automatic identity-linking branches,
+// plus explicit coverage of four inputs (sub exists / verified email / unverified email / no email).
 func TestDecideIdentityLink(t *testing.T) {
 	matched := &store.User{ID: 11, Email: "alice@example.com"}
 	bound := &store.Identity{ID: 1, UserID: 7, Provider: "issuer.example.com", Subject: "sub-bound"}
@@ -28,7 +28,7 @@ func TestDecideIdentityLink(t *testing.T) {
 		wantUserID uint64
 		wantErr    bool
 	}{
-		// 绑定情形 1：(provider, subject) 已存在 → 直接登录，忽略邮箱是否验证。
+		// Linking case 1: (provider, subject) already exists → log in directly, ignoring whether the email is verified.
 		{
 			name:       "sub already bound returns bound user",
 			profile:    OAuthProfile{Provider: "issuer.example.com", Subject: "sub-bound", Email: "other@example.com", EmailVerified: true},
@@ -38,7 +38,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind:   LinkDecisionExisting,
 			wantUserID: 7,
 		},
-		// 绑定情形 2：已验邮箱命中内部用户 → 自动绑定（大小写不敏感）。
+		// Linking case 2: a verified email hits an internal user → link automatically (case-insensitive).
 		{
 			name:       "verified matching email auto links",
 			profile:    OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "Alice@Example.com", EmailVerified: true},
@@ -47,7 +47,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind:   LinkDecisionAutoLink,
 			wantUserID: 11,
 		},
-		// 绑定情形 3：已验邮箱但无同名账号 → 按策略建号。
+		// Linking case 3: verified email but no account of that name → create an account per policy.
 		{
 			name:     "verified email without match creates under open",
 			profile:  OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "nobody@example.com", EmailVerified: true},
@@ -67,7 +67,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind: LinkDecisionDeny,
 			wantErr:  true,
 		},
-		// 未验邮箱：绝不自动绑定；无同名账号时按策略走。
+		// Unverified email: never auto-link; with no account of that name, follow the policy.
 		{
 			name:     "unverified email never auto links and creates under open",
 			profile:  OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "nobody@example.com", EmailVerified: false},
@@ -82,7 +82,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind: LinkDecisionDeny,
 			wantErr:  true,
 		},
-		// 无邮箱：无法自动绑定；open 下建号（落库时合成占位邮箱）。
+		// No email: auto-linking is impossible; under open an account is created (synthesizing a placeholder email on persist).
 		{
 			name:     "missing email creates under open",
 			profile:  OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "", EmailVerified: false},
@@ -96,7 +96,7 @@ func TestDecideIdentityLink(t *testing.T) {
 			wantKind: LinkDecisionDeny,
 			wantErr:  true,
 		},
-		// 未知策略按 closed 的安全默认处理（复用 ParseRegistrationPolicy 的归一化）。
+		// An unknown policy is handled by the safe closed default (reusing ParseRegistrationPolicy's normalization).
 		{
 			name:     "unknown policy denies",
 			profile:  OAuthProfile{Provider: "issuer.example.com", Subject: "sub-new", Email: "nobody@example.com", EmailVerified: true},
@@ -128,7 +128,7 @@ func TestDecideIdentityLink(t *testing.T) {
 	}
 }
 
-// linkEnv 把真实 SQLite、真实 store 与真实服务串起来验证身份绑定全流程（不 mock 数据库）。
+// linkEnv wires up real SQLite, real stores and the real service to verify the whole identity-linking flow (without mocking the database).
 type linkEnv struct {
 	svc        *IdentityLinkService
 	users      *store.UserStore
@@ -175,21 +175,21 @@ func (e *linkEnv) seedLocalUser(t *testing.T, username string, reasonEmail strin
 	return u
 }
 
-// TestIdentityLinkServiceResolve 覆盖身份绑定三个分支的执行路径，并验证解绑后端能力。
+// TestIdentityLinkServiceResolve covers the execution paths of the three identity-linking branches and verifies the unlink backend capability.
 func TestIdentityLinkServiceResolve(t *testing.T) {
 	ctx := context.Background()
 	e := newLinkEnv(t)
 	alice := e.seedLocalUser(t, "alice", "alice@example.com")
 	bob := e.seedLocalUser(t, "bob", "bob@example.com")
 
-	// 预置 bob 的一条绑定，用于验证 existing 分支。
+	// Seed one link for bob, used to verify the existing branch.
 	if err := e.identities.Create(ctx, &store.Identity{
 		UserID: bob.ID, Provider: "issuer.example.com", Subject: "sub-bob",
 	}); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
 
-	// 分支 1：sub 已存在 → 直接登录对应内部用户，closed 策略也不受影响。
+	// Branch 1: sub already exists → log straight into the matching internal user, unaffected even by the closed policy.
 	u, decision, err := e.svc.Resolve(ctx, OAuthProfile{
 		Provider: "issuer.example.com", Subject: "sub-bob", Email: "bob@example.com", EmailVerified: true,
 	}, PolicyClosed)
@@ -197,7 +197,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 		t.Fatalf("existing branch = (%+v, %q, %v), want bob/%q", u, decision.Kind, err, LinkDecisionExisting)
 	}
 
-	// 分支 2：已验邮箱命中 alice → 自动绑定并写审计。
+	// Branch 2: verified email hits alice → link automatically and write an audit entry.
 	u, decision, err = e.svc.Resolve(ctx, OAuthProfile{
 		Provider: "issuer.example.com", Subject: "sub-alice", Email: "Alice@Example.com", EmailVerified: true,
 	}, PolicyClosed)
@@ -212,7 +212,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 		t.Fatalf("identity.link audit rows = %d, err=%v, want 1", n, err)
 	}
 
-	// 分支 3：open 策略下无人可匹配 → 新建无密码账号并绑定。
+	// Branch 3: under the open policy nothing matches → create a new password-less account and link it.
 	u, decision, err = e.svc.Resolve(ctx, OAuthProfile{
 		Provider: "issuer.example.com", Subject: "sub-carol", Email: "carol@example.com", EmailVerified: true,
 	}, PolicyOpen)
@@ -223,7 +223,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 		t.Fatalf("identity not persisted for created user: %v", err)
 	}
 
-	// 分支 3 反面：closed 策略下无法匹配 → 拒绝且不建号。
+	// Branch 3 negative: under the closed policy nothing matches → deny and create no account.
 	_, decision, err = e.svc.Resolve(ctx, OAuthProfile{
 		Provider: "issuer.example.com", Subject: "sub-dave", Email: "dave@example.com", EmailVerified: true,
 	}, PolicyClosed)
@@ -234,7 +234,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 		t.Fatalf("denied login must not create a binding, got err=%v", err)
 	}
 
-	// 已绑定到禁用用户时拒绝登录。
+	// Deny the login when the link points at a disabled user.
 	if err := e.accounts.DisableUser(ctx, alice.ID); err != nil {
 		t.Fatalf("DisableUser() error = %v", err)
 	}
@@ -244,7 +244,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 		t.Fatalf("disabled bound user error = %v, want %v", err, ErrUserDisabled)
 	}
 
-	// 解绑后端能力（M6 管理面板使用；本轮只验证存储行为）。
+	// Unlink backend capability (used by the M6 admin panel; this round only verifies storage behavior).
 	rows, err := e.identities.ListForUser(ctx, alice.ID)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("ListForUser() = %d rows, err=%v, want 1", len(rows), err)
@@ -257,7 +257,7 @@ func TestIdentityLinkServiceResolve(t *testing.T) {
 	}
 }
 
-// TestOIDCUsernameIsDeterministicAndUnique 断言自动建号的登录名可复现且不同身份不撞名。
+// TestOIDCUsernameIsDeterministicAndUnique asserts that the login name for auto-created accounts is reproducible and that different identities do not collide.
 func TestOIDCUsernameIsDeterministicAndUnique(t *testing.T) {
 	p := OAuthProfile{Provider: "issuer.example.com", Subject: "sub-1", Email: "Alice@Example.com"}
 	if got, want := oidcUsername(p), oidcUsername(p); got != want {

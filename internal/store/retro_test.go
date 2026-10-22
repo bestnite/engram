@@ -7,15 +7,15 @@ import (
 	"time"
 )
 
-// retroWindow 覆盖 fixtures 里全部复习日的闭区间（fixture 的日志都在 2026 年内）。
+// retroWindow is an inclusive range covering every review day in the fixtures (the fixture log entries all fall within 2026).
 const (
 	retroFrom  = "2026-01-01"
 	retroTo    = "2026-12-31"
 	retroToday = "2026-10-02"
 )
 
-// TestRetroCheckRecomputesPageNumbers 是正面验收：统计页数字与从原始表
-// 重算的结果必须逐项一致，否则报出漂移项。
+// TestRetroCheckRecomputesPageNumbers is the positive acceptance: the stats page numbers and the result recomputed from the raw tables
+// must match item by item, otherwise the drifting items are reported.
 func TestRetroCheckRecomputesPageNumbers(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRetroCheckRecomputesPageNumbers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("PageNumbersFromStats() error = %v", err)
 			}
-			// 数值不为零，证明校验真的跑在数据上而不是空集通过。
+			// The values are non-zero, proving the check really runs over data instead of passing on an empty set.
 			if page.ReviewToday == 0 || page.DueToday == 0 || page.RetentionTotal == 0 || page.CurveNew+page.CurveReview == 0 {
 				t.Fatalf("fixture produced all-zero page numbers %+v; the check would pass vacuously", page)
 			}
@@ -41,9 +41,9 @@ func TestRetroCheckRecomputesPageNumbers(t *testing.T) {
 	}
 }
 
-// TestRetroCheckCatchesCorruptedAggregate 是反面验收：故意破坏一个聚合值，
-// 校验必须失败并指名该数字。这里破坏的是页面侧的 review_volume.today——正是「数字漂移」
-// 的典型形态（聚合代码改坏，而原始表没变）。
+// TestRetroCheckCatchesCorruptedAggregate is the negative acceptance: one aggregate value is broken on purpose,
+// and the check must fail naming that number. What is broken here is the page side's review_volume.today -- the typical shape of "number drift"
+// (the aggregate code broken while the raw tables are unchanged).
 func TestRetroCheckCatchesCorruptedAggregate(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestRetroCheckCatchesCorruptedAggregate(t *testing.T) {
 			}
 
 			corrupted := page
-			corrupted.ReviewToday++ // 把一个聚合值改坏
+			corrupted.ReviewToday++ // break one aggregate value
 			drift := DiffPageNumbers(corrupted, raw)
 			if len(drift) != 1 {
 				t.Fatalf("corrupted aggregate produced %d drift(s) %v, want exactly 1", len(drift), drift)
@@ -73,7 +73,7 @@ func TestRetroCheckCatchesCorruptedAggregate(t *testing.T) {
 			}
 			t.Logf("corrupted aggregate detected: %s", drift[0])
 
-			// 再破坏一个不同条目的聚合值，校验同样要抓到。
+			// Break the aggregate value of a different item too; the check must catch that as well.
 			corrupted = page
 			corrupted.DueNewNotDue += 99
 			drift = DiffPageNumbers(corrupted, raw)

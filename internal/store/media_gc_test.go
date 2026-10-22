@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// TestMediaGCMarksAndDeletesOnlyStaleOrphans 在两库上验证标记与删除的 SQL：
-// 有映射的媒体从不被标记；孤立媒体先标记，删除只针对孤立时刻早于界限的行，并带走上传者记录。
+// TestMediaGCMarksAndDeletesOnlyStaleOrphans verifies the marking and deleting SQL on both databases:
+// media with a mapping is never marked; orphaned media is marked first, and deletion only targets rows orphaned earlier than the cutoff, taking their uploader records with them.
 func TestMediaGCMarksAndDeletesOnlyStaleOrphans(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -34,7 +34,7 @@ func TestMediaGCMarksAndDeletesOnlyStaleOrphans(t *testing.T) {
 			if err != nil || marked != 2 || cleared != 0 {
 				t.Fatalf("MarkOrphanedMedia() = %d, %d, %v; want 2, 0, nil", marked, cleared, err)
 			}
-			// 把 old 的孤立时刻推到很早以前，young 保持 now。
+			// push old's orphan time far into the past and keep young at now.
 			if err := db.Model(&Media{}).Where("sha256 = ?", shas["old"]).Update("orphaned_at", now.Add(-30*24*time.Hour)).Error; err != nil {
 				t.Fatalf("age orphan mark: %v", err)
 			}

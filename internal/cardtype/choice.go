@@ -6,18 +6,18 @@ import (
 	"strings"
 )
 
-// 本文件实现两种选择卡：
-//   choice_single: question / options[]（≥2，去重）/ answer（0 基索引）
-//   choice_multi : question / options[]（≥2，去重）/ answers[]（0 基索引，≥1，去重）
-// options 与答案索引的约束 JSON Schema 表达不了，由 Validate 在此处保证并点名字段。
+// This file implements the two choice cards:
+//   choice_single: question / options[] (≥2, deduplicated) / answer (0-based index)
+//   choice_multi : question / options[] (≥2, deduplicated) / answers[] (0-based index, ≥1, deduplicated)
+// JSON Schema cannot express the constraints on options and answer indices, so Validate enforces them here and names the field.
 
-// choiceSingleType 是单选卡。
+// choiceSingleType is the single-choice card.
 type choiceSingleType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (choiceSingleType) Label() string { return "cardtype.choice_single" }
 
-// Describe 自描述：正面 question、背面 options；作答控件是单选（取 options 下标）。
+// Describe self-describes: question on the front, options on the back; the answer control is single-select (takes an options index).
 func (choiceSingleType) Describe() Description {
 	return Description{
 		Kind:          "choice_single",
@@ -40,7 +40,7 @@ func (choiceSingleType) Describe() Description {
 	}
 }
 
-// Validate 校验 question / options / answer，并保证索引落在 options 范围内。
+// Validate checks question / options / answer and ensures the index falls within the options range.
 func (choiceSingleType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "question"); err != nil {
 		return fmt.Errorf("choice_single: %w", err)
@@ -68,12 +68,12 @@ func (choiceSingleType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡。
+// Cards produces one forward card.
 func (choiceSingleType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给问题与全部选项；背面只给正确选项的文本。
+// Render gives the question and all options on the front; the back gives only the text of the correct option.
 func (choiceSingleType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -88,13 +88,13 @@ func (choiceSingleType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: options[answer]}, nil
 }
 
-// ChoiceSingleInput 是 choiceSingleType.Grade 的输入；Selected 是 0 基选项索引。
+// ChoiceSingleInput is the input of choiceSingleType.Grade; Selected is the 0-based option index.
 type ChoiceSingleInput struct {
 	GradeContext
 	Selected int
 }
 
-// ParseAnswer 解码作答：一个 0 基选项索引（整数，或内容为整数的字符串）；没有作答返回错误。
+// ParseAnswer decodes the answer: a single 0-based option index (an integer, or a string whose content is an integer); no answer returns an error.
 func (choiceSingleType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	idx, err := answerIndex(raw, "choice_single")
 	if err != nil {
@@ -103,7 +103,7 @@ func (choiceSingleType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, 
 	return ChoiceSingleInput{GradeContext: gc, Selected: idx}, nil
 }
 
-// GivenText 返回被选中选项的文本。
+// GivenText returns the text of the selected option.
 func (choiceSingleType) GivenText(fields map[string]any, detail map[string]any) string {
 	idx, ok := detail["selected"].(int)
 	if !ok {
@@ -112,7 +112,7 @@ func (choiceSingleType) GivenText(fields map[string]any, detail map[string]any) 
 	return optionText(fields, idx)
 }
 
-// Grade 判分：选中正确选项记 1 分，选中其它合法选项记 0 分；索引越界视为无法判分。
+// Grade grades: selecting the correct option scores 1, selecting another valid option scores 0; an out-of-range index counts as ungradable.
 func (choiceSingleType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(ChoiceSingleInput)
 	if !ok {
@@ -132,7 +132,7 @@ func (choiceSingleType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案。
+// PromptContexter supplies the question and reference answer for future LLM scoring.
 func (choiceSingleType) PromptContext(note Note) PromptContext {
 	question, options, answer, err := choiceSingleParts(note.Fields)
 	if err != nil {
@@ -141,7 +141,7 @@ func (choiceSingleType) PromptContext(note Note) PromptContext {
 	return PromptContext{Question: question + "\n" + strings.Join(options, "\n"), Reference: options[answer]}
 }
 
-// choiceSingleParts 读取并校验单选卡的三要素。
+// choiceSingleParts reads and validates the three elements of a single-choice card.
 func choiceSingleParts(fields map[string]any) (string, []string, int, error) {
 	question, err := stringField(fields, "question")
 	if err != nil {
@@ -161,13 +161,13 @@ func choiceSingleParts(fields map[string]any) (string, []string, int, error) {
 	return question, options, answer, nil
 }
 
-// choiceMultiType 是多选卡。
+// choiceMultiType is the multiple-choice card.
 type choiceMultiType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (choiceMultiType) Label() string { return "cardtype.choice_multi" }
 
-// Describe 自描述：正面 question、背面 options；作答控件是多选（取 options 下标集合）。
+// Describe self-describes: question on the front, options on the back; the answer control is multi-select (takes a set of options indices).
 func (choiceMultiType) Describe() Description {
 	return Description{
 		Kind:          "choice_multi",
@@ -190,7 +190,7 @@ func (choiceMultiType) Describe() Description {
 	}
 }
 
-// Validate 校验 question / options / answers，并保证索引在范围内、无重复。
+// Validate checks question / options / answers and ensures the indices are in range with no duplicates.
 func (choiceMultiType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "question"); err != nil {
 		return fmt.Errorf("choice_multi: %w", err)
@@ -223,12 +223,12 @@ func (choiceMultiType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡。
+// Cards produces one forward card.
 func (choiceMultiType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给问题与全部选项；背面按顺序列出所有正确选项。
+// Render gives the question and all options on the front; the back lists all correct options in order.
 func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -247,13 +247,13 @@ func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: strings.Join(correct, ", ")}, nil
 }
 
-// ChoiceMultiInput 是 choiceMultiType.Grade 的输入；Selected 是 0 基选项索引集合。
+// ChoiceMultiInput is the input of choiceMultiType.Grade; Selected is the set of 0-based option indices.
 type ChoiceMultiInput struct {
 	GradeContext
 	Selected []int
 }
 
-// ParseAnswer 解码作答：0 基选项索引数组；没有作答等同于一个都没选（合法的错误答案）。
+// ParseAnswer decodes the answer: an array of 0-based option indices; no answer is equivalent to selecting nothing (a legitimate wrong answer).
 func (choiceMultiType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	selected := []int{}
 	if !emptyAnswer(raw) {
@@ -264,7 +264,7 @@ func (choiceMultiType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, e
 	return ChoiceMultiInput{GradeContext: gc, Selected: selected}, nil
 }
 
-// GivenText 返回被选中选项的文本，以逗号连接。
+// GivenText returns the texts of the selected options joined by commas.
 func (choiceMultiType) GivenText(fields map[string]any, detail map[string]any) string {
 	idxs, _ := detail["selected"].([]int)
 	picked := make([]string, 0, len(idxs))
@@ -276,10 +276,10 @@ func (choiceMultiType) GivenText(fields map[string]any, detail map[string]any) s
 	return strings.Join(picked, ", ")
 }
 
-// Grade 判分并给出部分得分：score = max(0, 命中数 - 误选数) / 正确数，上限 1。
-// 这样「选中全部正确项」= 1 分（Good），「只选中一部分」= 部分分（默认 Hard），
-// 「全错」= 0 分（Again），满足部分得分的默认映射。
-// 任一选中索引越界视为无法判分。
+// Grade grades and produces a partial score: score = max(0, hits - misses) / correct count, capped at 1.
+// So "select every correct item" = 1 (Good), "select only some" = partial score (Hard by default),
+// and "all wrong" = 0 (Again), satisfying the default mapping for partial scores.
+// Any selected index out of range counts as ungradable.
 func (choiceMultiType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(ChoiceMultiInput)
 	if !ok {
@@ -319,7 +319,7 @@ func (choiceMultiType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(score, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案。
+// PromptContexter supplies the question and reference answer for future LLM scoring.
 func (choiceMultiType) PromptContext(note Note) PromptContext {
 	question, options, answers, err := choiceMultiParts(note.Fields)
 	if err != nil {
@@ -332,7 +332,7 @@ func (choiceMultiType) PromptContext(note Note) PromptContext {
 	return PromptContext{Question: question + "\n" + strings.Join(options, "\n"), Reference: strings.Join(correct, ", ")}
 }
 
-// choiceMultiParts 读取并校验多选卡的三要素。
+// choiceMultiParts reads and validates the three elements of a multiple-choice card.
 func choiceMultiParts(fields map[string]any) (string, []string, []int, error) {
 	question, err := stringField(fields, "question")
 	if err != nil {
@@ -354,7 +354,7 @@ func choiceMultiParts(fields map[string]any) (string, []string, []int, error) {
 	return question, options, answers, nil
 }
 
-// uniqueStrings 判断字符串数组是否无重复。
+// uniqueStrings reports whether a string array has no duplicates.
 func uniqueStrings(ss []string) bool {
 	seen := make(map[string]bool, len(ss))
 	for _, s := range ss {
@@ -366,7 +366,7 @@ func uniqueStrings(ss []string) bool {
 	return true
 }
 
-// uniqueInts 判断整数数组是否无重复。
+// uniqueInts reports whether an integer array has no duplicates.
 func uniqueInts(is []int) bool {
 	seen := make(map[int]bool, len(is))
 	for _, i := range is {

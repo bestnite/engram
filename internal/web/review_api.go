@@ -25,17 +25,17 @@ type reviewRequest struct {
 	ElapsedMS       *int     `json:"elapsed_ms"`
 	Deck            []string `json:"deck"`
 	Tags            []string `json:"tags"`
-	// Answer 是自评前写下的作答（简答题），随自评存档；其它自评题型不带。
+	// Answer is the answer written down before self-assessment (short answer), archived with the self-assessment; other self-assessed types do not carry it.
 	Answer json.RawMessage `json:"answer"`
 }
 
-// gradeRequest 是 SPA 判分入口的请求体。作答类题型的评分由服务端判分器产生，
-// 客户端只提交原始作答（Answer），绝不提交档位——否则就是自评冒充机器判分。
+// gradeRequest is the request body of the SPA grading entry point. For answer types the grade is produced by the server-side grader,
+// and the client only submits the raw answer (Answer), never a grade — otherwise self-assessment would be masquerading as machine grading.
 //
-// Action 决定这次请求的语义：
-//   - ""：正常判分，写 reviews（grade_source=typed）；
-//   - "reveal"：只返回清洗后的正确答案，不判分、不写库（揭示前的只读预览）；
-//   - "give_up"：已揭示答案后放弃作答，按 Again 记一条自评日志（grade_source=self）。
+// Action decides the semantics of this request:
+//   - "": normal grading, writes reviews (grade_source=typed);
+//   - "reveal": only returns the sanitized correct answer, no grading, no DB write (read-only preview before revealing);
+//   - "give_up": give up after the answer was revealed, logging one self-assessment entry as Again (grade_source=self).
 type gradeRequest struct {
 	CardID          string          `json:"card_id"`
 	ExpectedVersion int             `json:"expected_version"`
@@ -46,15 +46,15 @@ type gradeRequest struct {
 	Answer          json.RawMessage `json:"answer"`
 }
 
-// reviewCardRequest 是 SPA 复习页两个只读/单动作入口的请求体：埋藏与卡面渲染。
-// 两者都只带目标卡与复习范围（卡组与标签）；范围原样带回，服务端据此重建队列。
+// reviewCardRequest is the request body of the SPA review page's two read-only/single-action entry points: bury and card render.
+// Both carry only the target card and the review scope (decks and tags); the scope is carried back verbatim and the server rebuilds the queue from it.
 type reviewCardRequest struct {
 	CardID string   `json:"card_id"`
 	Deck   []string `json:"deck"`
 	Tags   []string `json:"tags"`
 }
 
-// reviewAnswer 为 SPA 提供会话 CSRF 保护的答题入口，业务提交与队列仍复用 API service。
+// reviewAnswer gives the SPA a session and CSRF protected answer entry point; the business submit and the queue still reuse the API service.
 func (s *Server) reviewAnswer(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || s.api == nil {
@@ -70,7 +70,7 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// 作答类题型的自评分由 service 拒绝（grading_required）：SPA 对这类卡走 /api/v1/review/grade。
+	// A self-assessment score for an answer type is rejected by the service (grading_required): for these cards the SPA goes to /api/v1/review/grade.
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, Rating: req.Rating, Answer: req.Answer, ExpectedVersion: req.ExpectedVersion,
 		ElapsedMS: req.ElapsedMS,
@@ -83,9 +83,9 @@ func (s *Server) reviewAnswer(c *gin.Context) {
 	s.writeReviewResult(c, user, scope, result)
 }
 
-// reviewGrade 是作答类题型的 SPA 判分入口：会话 + CSRF 保护，服务端用题型判分器
-// 计算档位并按 preset 的分数→档位映射写入 reviews（grade_source=typed、grade_detail_json）。
-// 客户端提交原始作答，不提交档位；判分规则与 SSR 共用 graderFor / buildGradeInput。
+// reviewGrade is the SPA grading entry point for answer types: session + CSRF protected, the server uses the question type's grader
+// to compute the grade and writes reviews per the preset's score→grade mapping (grade_source=typed, grade_detail_json).
+// The client submits the raw answer, not a grade; grading rules are shared with SSR via graderFor / buildGradeInput.
 func (s *Server) reviewGrade(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || s.api == nil {
@@ -102,7 +102,7 @@ func (s *Server) reviewGrade(c *gin.Context) {
 		return
 	}
 	if _, graded := graderFor(note.Kind); !graded {
-		// 自评类题型走错入口：拒绝，避免把四档评分伪装成机器判分。
+		// A self-assessed type on the wrong entry point: rejected, so a four-grade score cannot pass itself off as machine grading.
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
@@ -121,8 +121,8 @@ func (s *Server) reviewGrade(c *gin.Context) {
 	s.gradeSubmit(c, user, card, note, req, scope)
 }
 
-// gradeSubmit 把作答交给 service 判分并写库，再把判分结果组装成页面反馈。
-// 判分规则（作答解码、判分、分数→档位映射）全部在 service 与题型里，这里只做传输。
+// gradeSubmit hands the answer to the service for grading and writing, then assembles the grading result into page feedback.
+// The grading rules (answer decoding, grading, score→grade mapping) all live in the service and the question types; this only does transport.
 func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card, note *store.Note, req gradeRequest, scope reviewScope) {
 	ctx := c.Request.Context()
 	result, err := s.api.SubmitReview(ctx, user, nil, api.SubmitReviewInput{
@@ -143,8 +143,8 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 	s.writeReviewResult(c, user, scope, result, gin.H{"feedback": feedback})
 }
 
-// gradeReveal 返回清洗后的正确答案，不判分、不写库（揭示是只读预览）。
-// 揭示后由前端切到「放弃作答」态，用户再点按钮才走 give_up 记 Again。
+// gradeReveal returns the sanitized correct answer, no grading and no DB write (revealing is a read-only preview).
+// After revealing, the frontend switches to the "give up answering" state; only when the user clicks the button again does give_up log Again.
 func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card) {
 	answerHTML, err := s.sanitizedBack(c.Request.Context(), user, card)
 	if err != nil {
@@ -155,8 +155,8 @@ func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card)
 	c.JSON(http.StatusOK, gin.H{"revealed": true, "card_id": card.PublicID, "answer_html": answerHTML})
 }
 
-// gradeGiveUp 处理「已揭示答案，记 0 分并继续」：不判分，按 Again 记一条自评日志。
-// grade_source 记 self —— 这次评分来自用户放弃作答，没有任何机器判分发生。
+// gradeGiveUp handles "answer already revealed, score 0 and continue": no grading, logs one self-assessment entry as Again.
+// grade_source is recorded as self — this grade comes from the user giving up; no machine grading happened.
 func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest, scope reviewScope) {
 	result, err := s.api.SubmitReview(c.Request.Context(), user, nil, api.SubmitReviewInput{
 		CardID: req.CardID, GiveUp: true, ExpectedVersion: req.ExpectedVersion,
@@ -170,10 +170,10 @@ func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest,
 	s.writeReviewResult(c, user, scope, result, gin.H{"gave_up": true})
 }
 
-// reviewBury 是埋藏的 SPA 入口：会话 + CSRF 保护，写本人 card_states.due_at（推到下一个
-// 复习日），调度逻辑仍在 internal/schedule（schedule.Bury），transport 只做参数校验与事务边界
-// （AGENTS.md §2.3.6：一种业务逻辑、两条传输）。埋藏只需 reader——它写的是 (card_id, user_id)
-// 的本人进度，共享卡组的读者可自行复习。响应带同范围重建后的队列。
+// reviewBury is the SPA entry point for bury: session + CSRF protected, writes the caller's own card_states.due_at (pushed to the next
+// review day); the scheduling logic still lives in internal/schedule (schedule.Bury), and transport only does parameter validation and transaction boundaries
+// (AGENTS.md §2.3.6: one piece of business logic, two transports). Bury only needs reader — what it writes is the caller's own progress
+// for (card_id, user_id), so a reader of a shared deck can review on their own. The response carries the queue rebuilt over the same scope.
 func (s *Server) reviewBury(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -196,8 +196,8 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	// 「下一个复习日」必须按用户自己的时区与日切点算：按 UTC 算时，UTC+8 的上午埋藏的卡
-	// 当天中午就会回到队列。
+	// The "next review day" must be computed from the user's own timezone and day cutoff: computed in UTC, a card buried in the morning at UTC+8
+	// comes back into the queue at noon that same day.
 	if _, err := schedule.Bury(ctx, tx, schedule.BuryInput{
 		CardID: card.ID, UserID: user.ID, Now: time.Now().UTC(),
 		Timezone: user.Timezone, DayCutoffHour: user.DayCutoffHour,
@@ -215,8 +215,8 @@ func (s *Server) reviewBury(c *gin.Context) {
 	s.writeQueue(c, user, scope)
 }
 
-// reviewSuspend 是复习页「暂停这张卡」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
-// SetCardSuspended（只写本人进度，reader 即可）；响应带同范围重建后的队列。
+// reviewSuspend is the SPA entry point for the review page's "suspend this card": session + CSRF protected, the business lives in the service's
+// SetCardSuspended (writes only the caller's own progress, reader suffices); the response carries the queue rebuilt over the same scope.
 func (s *Server) reviewSuspend(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -240,8 +240,8 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 	s.writeQueue(c, user, scope)
 }
 
-// reviewUndoRequest 是撤销入口的请求体：除目标卡与卡组范围外，必须带调用方读到的
-// 状态版本（通常是刚提交评分后响应里的 version），撤销据此绑定目标评分。
+// reviewUndoRequest is the request body of the undo entry point: besides the target card and deck scope, it must carry the
+// state version the caller read (usually the version in the response right after a grade was submitted); undo binds to the target grade through it.
 type reviewUndoRequest struct {
 	CardID          string   `json:"card_id"`
 	Deck            []string `json:"deck"`
@@ -249,15 +249,15 @@ type reviewUndoRequest struct {
 	ExpectedVersion int      `json:"expected_version"`
 }
 
-// reviewUndo 是「撤销刚提交的评分」的 SPA 入口：会话 + CSRF 保护，业务在 service 的
-// UndoReview（内部调 schedule.Rollback）。判权用 reader —— 撤销写的是本人的
-// (card_id, user_id) 进度，共享卡组的读者可撤销自己刚做的评分；卡组范围里任一卡组
-// 不可读即整次失败（复用 reviewCard，与埋藏同口径）。
+// reviewUndo is the SPA entry point for "undo the grade just submitted": session + CSRF protected, the business lives in the service's
+// UndoReview (which calls schedule.Rollback internally). Authorization uses reader — undo writes the caller's own
+// (card_id, user_id) progress, so a reader of a shared deck can undo a grade they just made; any deck in the deck scope
+// that is unreadable fails the whole request (reviewCard is reused, same criterion as bury).
 //
-// 请求必须带 expected_version：撤销只在版本匹配时生效，重放请求或双开窗口的旧版本请求
-// 返回 409 且不删任何评分。响应契约：除同范围重建的队列（cards/remaining）外，显式带上
-// 被撤销卡的对外 id（undone_card_id）。队列按 due_at 排序，被撤销的卡不保证排在首位，
-// 前端必须据 undone_card_id 把当前卡定位回它，不能假定它出现在队列首位。
+// The request must carry expected_version: undo only takes effect when the version matches, and a replayed request or a stale-version request from a window opened twice
+// returns 409 without deleting any grade. Response contract: besides the queue rebuilt over the same scope (cards/remaining), it explicitly carries
+// the public id of the undone card (undone_card_id). The queue is ordered by due_at, so the undone card is not guaranteed to be first;
+// the frontend must locate the current card by undone_card_id and must not assume it appears first in the queue.
 func (s *Server) reviewUndo(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -285,10 +285,10 @@ func (s *Server) reviewUndo(c *gin.Context) {
 	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
 }
 
-// reviewRender 返回一张卡正反面的服务端清洗 HTML：SPA 只把这里返回的
-// HTML 交给 {@html}，绝不把 fields 原文当 Markdown 送进 HTML 汇。复用 cardView，保证与 SSR
-// 走同一条 goldmark → bluemonday 清洗路径；edit_href 供复习页的编辑入口跳转；
-// intervals 是四档评分各自的下次间隔（api.PreviewIntervals）。
+// reviewRender returns server-sanitized HTML of both sides of a card: the SPA only hands the HTML returned here
+// to {@html}, never sending raw fields as Markdown into the HTML sink. It reuses cardView, guaranteeing the same
+// goldmark → bluemonday sanitizing path as SSR; edit_href is for the review page's edit entry to jump to;
+// intervals are the next interval for each of the four grades (api.PreviewIntervals).
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -310,8 +310,8 @@ func (s *Server) reviewRender(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	// 四档评分各自的下次间隔，显示在评分按钮下面。预览失败只少了这行提示，不影响作答，
-	// 所以记日志后照常返回卡面（intervals 为空数组）。
+	// The next interval of each of the four grades, shown under the grade buttons. A failed preview only loses this hint line and does not block answering,
+	// so we log it and still return the card face as usual (intervals as an empty array).
 	intervals, err := s.api.PreviewIntervals(c.Request.Context(), user, card.ID)
 	if err != nil {
 		s.logger.Warn("preview review intervals failed", "card_id", card.ID, "error", err)
@@ -327,12 +327,12 @@ func (s *Server) reviewRender(c *gin.Context) {
 	})
 }
 
-// reviewCard 校验 SPA 请求的复习范围与目标卡：范围里每个卡组都要可读（缺一即整次失败，
-// 不静默丢弃），目标卡必须存在且落在范围的卡组内。cardPublicID 与 deckPublicIDs 都是对外 id，
-// 内部一律换成数字主键再判定；失败时已写出响应并返回 false，成功时返回解析后的范围。
+// reviewCard validates the review scope and target card of an SPA request: every deck in the scope must be readable (missing one fails the whole request,
+// no silent dropping), and the target card must exist and fall inside a deck in the scope. cardPublicID and deckPublicIDs are both public ids,
+// always converted to numeric primary keys before the decision; on failure the response has been written and it returns false, on success it returns the parsed scope.
 //
-// 标签只决定队列取哪些卡，不参与目标卡的判定：评分写的是本人对一张可读卡的进度，卡在两次
-// 请求之间被改掉标签也不该让这次评分失败。
+// Tags only decide which cards the queue takes and play no part in judging the target card: a grade writes the caller's progress on a readable card, and the card
+// being retagged between the two requests should not fail that grade.
 func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs, tags []string, cardPublicID string) (*store.Card, *store.Note, reviewScope, bool) {
 	scope, ok := s.deckScopeFromValues(c, user, deckPublicIDs, tags)
 	if !ok {
@@ -364,8 +364,8 @@ func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs, tag
 	return card, note, scope, true
 }
 
-// writeReviewResult 写出一次评分后的统一响应：新状态 + 同范围队列（预取下一张），
-// 外加调用方附加的字段（判分反馈 / 放弃标记）。范围原样带回，队列不会退化成单卡组，也不会丢掉标签。
+// writeReviewResult writes the unified response after a grade: the new state + the queue over the same scope (prefetching the next card),
+// plus fields the caller adds (grading feedback / give-up marker). The scope comes back verbatim, so the queue cannot degrade to a single deck and tags are not lost.
 func (s *Server) writeReviewResult(c *gin.Context, user *store.User, scope reviewScope, result api.SubmitReviewResult, extra ...gin.H) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
 	if err != nil {
@@ -384,9 +384,9 @@ func (s *Server) writeReviewResult(c *gin.Context, user *store.User, scope revie
 	c.JSON(http.StatusOK, body)
 }
 
-// writeQueue 只返回同范围重建后的队列（无评分状态字段），供埋藏这类不产生 reviews 行的
-// 动作使用：客户端据此换到下一张卡，队列范围不会退化成单卡组。
-// extra 是调用方附加的字段（如撤销时的 undone_card_id），按写入顺序并入响应体。
+// writeQueue returns only the queue rebuilt over the same scope (no grade state fields), for actions like bury that produce no reviews row:
+// the client moves to the next card from it, and the queue scope cannot degrade to a single deck.
+// extra holds fields the caller adds (such as undone_card_id on undo), merged into the response body in write order.
 func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope, extra ...gin.H) {
 	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
 	if err != nil {
@@ -403,8 +403,8 @@ func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope,
 	c.JSON(http.StatusOK, body)
 }
 
-// gradeFeedback 组装判分反馈：判定、得分与作答文本来自 service 的判分结果，正确答案用
-// 服务端清洗后的 HTML；数值题额外带解析出的数值；逐项判分的题型额外带逐项结果。
+// gradeFeedback assembles the grading feedback: the verdict, score and answer text come from the service's grading result, the correct answer uses
+// server-sanitized HTML; numeric questions additionally carry the parsed number; per-item graded types additionally carry the per-item results.
 func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, note *store.Note, grade *api.GradeResult) (gin.H, error) {
 	if grade == nil {
 		return nil, errors.New("graded submission returned no grade result")
@@ -433,13 +433,13 @@ func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *stor
 	return out, nil
 }
 
-// gradeBreakdowner 是逐项判分题型的可选能力：把判分细节还原成逐项结果，复习页据此逐项标出对错。
+// gradeBreakdowner is the optional capability of per-item graded types: turn the grading detail back into per-item results, from which the review page marks each item right or wrong.
 type gradeBreakdowner interface {
 	Breakdown(detail map[string]any) []cardtype.BreakdownItem
 }
 
-// gradeBreakdown 把题型给出的逐项结果渲染成清洗后的 HTML；题型没有这项能力时返回 nil。
-// 每项写法是 Markdown/TeX 原文，与卡面走同一条清洗管线后才交给 SPA 的 HTML 汇。
+// gradeBreakdown renders the per-item results the question type gives into sanitized HTML; returns nil when the type lacks this capability.
+// Each item is written as Markdown/TeX source and goes through the same sanitizing pipeline as the card face before reaching the SPA's HTML sink.
 func gradeBreakdown(kind string, detail map[string]any) ([]gin.H, error) {
 	t, ok := cardtype.Lookup(kind)
 	if !ok {
@@ -461,8 +461,8 @@ func gradeBreakdown(kind string, detail map[string]any) ([]gin.H, error) {
 	return out, nil
 }
 
-// sanitizedBack 渲染一张卡的背面并经 internal/render 清洗，供 SPA 展示正确答案。
-// 复用 cardView，保证与 SSR 走同一条清洗路径。
+// sanitizedBack renders the back side of a card and sanitizes it via internal/render, for the SPA to show the correct answer.
+// Reuses cardView, guaranteeing the same sanitizing path as SSR.
 func (s *Server) sanitizedBack(ctx context.Context, user *store.User, card *store.Card) (string, error) {
 	view, err := s.cardView(ctx, user, schedule.QueueItem{CardID: card.ID})
 	if err != nil {
@@ -471,7 +471,7 @@ func (s *Server) sanitizedBack(ctx context.Context, user *store.User, card *stor
 	return view.BackHTML, nil
 }
 
-// gradeAction* 是判分请求的三种语义（见 gradeRequest）。
+// gradeAction* are the three semantics of a grading request (see gradeRequest).
 const (
 	gradeActionReveal = "reveal"
 	gradeActionGiveUp = "give_up"

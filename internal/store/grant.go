@@ -9,17 +9,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组角色常量。角色集合故意只有三个：
-// owner 全权；editor 能改卡片内容但不能改卡组设置/授权；reader 只读、只能自己复习。
+// Deck role constants. The role set is deliberately only three:
+// owner has full rights; editor can change card content but not deck settings / grants; reader is read-only and can only review for themselves.
 const (
 	RoleOwner  = "owner"
 	RoleEditor = "editor"
 	RoleReader = "reader"
 )
 
-// roleRank 给出角色的权限强度，用于 requireRole 的“至少”比较。
-// 数值越大权限越强；未知名角色（含空串）视为无权。
-// owner > editor > reader 的次序对应权限表：能改内容者必能看，能改设置者必能改内容。
+// roleRank gives a role's permission strength, used for requireRole's 'at least' comparison.
+// A larger number means stronger rights; an unknown role name (including the empty string) counts as no rights.
+// The order owner > editor > reader mirrors the permission table: whoever can change content can necessarily see it, whoever can change settings can necessarily change content.
 func roleRank(role string) int {
 	switch role {
 	case RoleOwner:
@@ -33,28 +33,28 @@ func roleRank(role string) int {
 	}
 }
 
-// ValidRole 报告 role 是否是三个合法角色之一；授权写入前必须用它收窄。
+// ValidRole reports whether role is one of the three legal roles; narrow with it before writing a grant.
 func ValidRole(role string) bool { return roleRank(role) > 0 }
 
-// RoleAllows 报告 have 角色是否满足 want 角色（“至少”语义）。
-// want 为空或非法时一律拒绝——调用方把角色名拼错时宁可拒绝，也不能因为比较“看起来相等”而放行。
+// RoleAllows reports whether the have role satisfies the want role ('at least' semantics).
+// An empty or invalid want is always refused — when a caller misspells a role name it is better to refuse than to let it through because the comparison 'looks equal'.
 func RoleAllows(have, want string) bool {
 	w := roleRank(want)
 	return w > 0 && roleRank(have) >= w
 }
 
-// GrantStore 封装 deck_grants 表：授予、改角色、撤销、查询。
+// GrantStore wraps the deck_grants table: grant, change role, revoke, query.
 //
-// 撤销采用“删除整行”而不是写 revoked 标记：撤销要求立即生效，删除让下一次
-// requireRole 查不到任何行，天然即时，且无需在读取路径上再加一层过滤。
+// Revocation deletes the whole row instead of writing a revoked flag: revocation must take effect immediately, and deleting means the next
+// requireRole finds no row at all, which is inherently immediate and needs no extra filter on the read path.
 type GrantStore struct {
 	db *gorm.DB
 }
 
-// NewGrantStore 构造授权存储。
+// NewGrantStore constructs the grant store.
 func NewGrantStore(db *gorm.DB) *GrantStore { return &GrantStore{db: db} }
 
-// Role 返回用户在卡组上的显式授权角色；没有授权行时返回空串与 nil（“无授权”不是错误）。
+// Role returns the user's explicit grant role on a deck; with no grant row it returns an empty string and nil ('no grant' is not an error).
 func (s *GrantStore) Role(ctx context.Context, deckID, userID uint64) (string, error) {
 	var g DeckGrant
 	err := s.db.WithContext(ctx).
@@ -68,9 +68,9 @@ func (s *GrantStore) Role(ctx context.Context, deckID, userID uint64) (string, e
 	return g.Role, nil
 }
 
-// Grant 写入或修改角色（UPSERT）：不存在则新建，存在则只更新 role。
-// role 必须在三个合法值内，否则返回错误而不是把脏角色落库（脏角色会让 requireRole 的等级比较失效）。
-// createdBy 只记录首次授权者；改角色时保留原 created_by / created_at。
+// Grant writes or changes the role (UPSERT): it creates the row when absent and updates only role when present.
+// role must be one of the three legal values, otherwise it returns an error instead of persisting a dirty role (a dirty role would break requireRole's rank comparison).
+// createdBy records only the first granter; changing the role keeps the original created_by / created_at.
 func (s *GrantStore) Grant(ctx context.Context, deckID, userID uint64, role string, createdBy *uint64) error {
 	if !ValidRole(role) {
 		return fmt.Errorf("invalid deck role %q", role)
@@ -91,15 +91,15 @@ func (s *GrantStore) Grant(ctx context.Context, deckID, userID uint64, role stri
 		if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 			return fmt.Errorf("create deck grant: %w", err)
 		}
-		// 新成员从自己的默认预设与默认上限开始，而不是沿用属主的设置。
+		// a new member starts from their own default preset and default caps, not the owner's settings.
 		return ensureMemberSettings(ctx, s.db, deckID, userID)
 	default:
 		return fmt.Errorf("read deck grant: %w", err)
 	}
 }
 
-// Revoke 删除授权行；删除后下一个请求即被拒（“撤销立即生效”）。
-// 成员在该卡组上的学习设置与当日追加的新卡额度随授权一起删除。
+// Revoke deletes the grant row; the very next request is refused ('revocation takes effect immediately').
+// The member's study settings on that deck and the extra new-card quota for the day are deleted together with the grant.
 func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
@@ -118,7 +118,7 @@ func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 	})
 }
 
-// ListByDeck 列出卡组的全部授权；共享管理页用它展示当前授权列表。
+// ListByDeck lists all grants of a deck; the sharing management page uses it to display the current grant list.
 func (s *GrantStore) ListByDeck(ctx context.Context, deckID uint64) ([]DeckGrant, error) {
 	var rows []DeckGrant
 	if err := s.db.WithContext(ctx).
@@ -128,7 +128,7 @@ func (s *GrantStore) ListByDeck(ctx context.Context, deckID uint64) ([]DeckGrant
 	return rows, nil
 }
 
-// DeckIDsForUser 返回某用户被显式授权的全部卡组 id；列表按权限过滤时与 owner 卡组合并。
+// DeckIDsForUser returns every deck id explicitly granted to a user; merged with owned decks when the list is filtered by permission.
 func (s *GrantStore) DeckIDsForUser(ctx context.Context, userID uint64) ([]uint64, error) {
 	var ids []uint64
 	if err := s.db.WithContext(ctx).Model(&DeckGrant{}).
@@ -138,12 +138,12 @@ func (s *GrantStore) DeckIDsForUser(ctx context.Context, userID uint64) ([]uint6
 	return ids, nil
 }
 
-// RolesForUser 返回某用户全部显式授权的 deck_id -> role 映射。
+// RolesForUser returns the deck_id -> role map of all of a user's explicit grants.
 //
-// 列表接口用它区分「共享给我的卡组」与「自有卡组」：自有由 decks.owner_user_id 判定，
-// 只有显式授权行才算共享。一次查询取全量，避免列表里每张卡组各查一次。
-// 全部授权行都是显式行为的结果（邀请被接受，或持链接者兑换），因此映射里的每一项
-// 都对应一次真实的接收同意。
+// The list endpoint uses it to tell 'decks shared with me' from 'my own decks': own decks are decided by decks.owner_user_id,
+// and only explicit grant rows count as shared. One query fetches everything, avoiding one query per deck in the list.
+// Every grant row is the result of an explicit act (an invite was accepted, or a link holder redeemed it), so each entry in the map
+// corresponds to a real act of acceptance.
 func (s *GrantStore) RolesForUser(ctx context.Context, userID uint64) (map[uint64]string, error) {
 	var rows []DeckGrant
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error; err != nil {

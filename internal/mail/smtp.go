@@ -14,26 +14,31 @@ import (
 	"time"
 )
 
-// SMTP 传输实现。
+// SMTP transport implementation.
 //
-// 用标准库 net/smtp：它覆盖 EHLO / STARTTLS / AUTH / DATA 的完整握手，且没有额外依赖
-// （AGENTS.md 的选型原则：轮子已存在且维护良好就用它）。隐式 TLS（465）需要先建
-// crypto/tls 连接再交给 smtp.NewClient，标准库不直接提供，这里手工拼。
+// It uses the standard library net/smtp: it covers the full EHLO / STARTTLS / AUTH / DATA handshake
+// and adds no dependencies (the AGENTS.md selection principle: if a well-maintained wheel exists, use
+// it). Implicit TLS (465) needs a crypto/tls connection established first and then handed to
+// smtp.NewClient, which the standard library does not offer directly, so it is assembled by hand
+// here.
 
-// DefaultTimeout 是单次 SMTP 交互（连接 + 握手 + 投递）的超时。
+// DefaultTimeout is the timeout of a single SMTP interaction (connect + handshake + delivery).
 const DefaultTimeout = 30 * time.Second
 
-// Sender 是投递一封邮件的传输抽象；测试可注入替身，从而不依赖真实 SMTP 服务。
+// Sender is the transport abstraction for delivering one mail; tests can inject a stand-in and thus
+// avoid a real SMTP service.
 type Sender interface {
-	// Send 投递一封邮件；返回的 error 应携带服务端错误文本，供重试与展示。
+	// Send delivers one mail; the returned error should carry the server error text for retries and
+	// display.
 	Send(ctx context.Context, cfg SMTPConfig, m Message) error
-	// Test 只做连接与认证握手，验证配置可用；同样把服务端错误文本带出来。
+	// Test only performs the connect and auth handshake to verify the configuration works; it surfaces
+	// the server error text the same way.
 	Test(ctx context.Context, cfg SMTPConfig) error
 }
 
-// SMTPSender 是 Sender 的默认实现（net/smtp）。
+// SMTPSender is the default implementation of Sender (net/smtp).
 type SMTPSender struct {
-	// Timeout 是交互超时；<=0 时用 DefaultTimeout。
+	// Timeout is the interaction timeout; <=0 means DefaultTimeout.
 	Timeout time.Duration
 }
 
@@ -44,13 +49,14 @@ func (s SMTPSender) timeout() time.Duration {
 	return DefaultTimeout
 }
 
-// Addr 返回 host:port 形式的地址。
+// Addr returns the address in host:port form.
 func (c SMTPConfig) Addr() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 }
 
-// Send 完成一次投递：连接 -> 认证 -> MAIL/RCPT/DATA -> QUIT。
-// 任何一步失败都返回带阶段前缀的错误，服务端文本原样保留（管理面板要显示它）。
+// Send performs one delivery: connect -> auth -> MAIL/RCPT/DATA -> QUIT. Any step that fails returns
+// an error prefixed with the stage, with the server text preserved verbatim (the admin panel shows
+// it).
 func (s SMTPSender) Send(ctx context.Context, cfg SMTPConfig, m Message) error {
 	client, err := s.dial(ctx, cfg)
 	if err != nil {
@@ -83,7 +89,7 @@ func (s SMTPSender) Send(ctx context.Context, cfg SMTPConfig, m Message) error {
 	return nil
 }
 
-// Test 只做连接与认证，随后 QUIT；用于管理面板的"测试连接"。
+// Test only connects and authenticates, then QUITs; used by the admin panel's "test connection".
 func (s SMTPSender) Test(ctx context.Context, cfg SMTPConfig) error {
 	client, err := s.dial(ctx, cfg)
 	if err != nil {
@@ -99,12 +105,13 @@ func (s SMTPSender) Test(ctx context.Context, cfg SMTPConfig) error {
 	return nil
 }
 
-// TestConnection 用默认 SMTPSender 测试连接，供管理面板直接调用。
+// TestConnection tests the connection with the default SMTPSender, for the admin panel to call
+// directly.
 func TestConnection(ctx context.Context, cfg SMTPConfig) error {
 	return SMTPSender{}.Test(ctx, cfg)
 }
 
-// dial 按 TLS 模式建立到 SMTP 服务器的连接。
+// dial opens the connection to the SMTP server according to the TLS mode.
 func (s SMTPSender) dial(ctx context.Context, cfg SMTPConfig) (*smtp.Client, error) {
 	addr := cfg.Addr()
 	d := net.Dialer{Timeout: s.timeout()}
@@ -138,7 +145,8 @@ func (s SMTPSender) dial(ctx context.Context, cfg SMTPConfig) (*smtp.Client, err
 	return client, nil
 }
 
-// authenticate 在配置了口令/用户名时做 PLAIN 认证；都为空则跳过（无认证中继）。
+// authenticate does PLAIN auth when a username/password is configured; when both are empty it is
+// skipped (an unauthenticated relay).
 func (s SMTPSender) authenticate(client *smtp.Client, cfg SMTPConfig) error {
 	if cfg.Username == "" && cfg.Password == "" {
 		return nil
@@ -149,11 +157,13 @@ func (s SMTPSender) authenticate(client *smtp.Client, cfg SMTPConfig) error {
 	return nil
 }
 
-// buildMessage 组装 RFC 5322 邮件字节。TextBody/HTMLBody 同时存在时用 multipart/alternative。
-// 附加头按名称排序输出，保证同样的输入产生同样的字节（便于测试断言）。
+// buildMessage assembles the RFC 5322 message bytes. When TextBody and HTMLBody are both present it
+// uses multipart/alternative. Extra headers are emitted sorted by name, so the same input produces the
+// same bytes (which makes test assertions easy).
 func buildMessage(cfg SMTPConfig, m Message) []byte {
 	var b bytes.Buffer
-	// 头部按 RFC 2047 编码：非 ASCII 的主题/显示名原样发出会被压成 "?"（见 encodeHeaderValue）。
+	// Headers are encoded per RFC 2047: a non-ASCII subject/display name sent as is gets squashed into
+	// "?" (see encodeHeaderValue).
 	writeHeader(&b, "From", encodeAddress(cfg.From))
 	writeHeader(&b, "To", encodeAddress(m.To))
 	writeHeader(&b, "Subject", encodeHeaderValue(m.Subject))
@@ -199,11 +209,12 @@ func buildMessage(cfg SMTPConfig, m Message) []byte {
 	return b.Bytes()
 }
 
-// encodeHeaderValue 按 RFC 2047 编码需要编码的头部值。
+// encodeHeaderValue encodes header values that need it per RFC 2047.
 //
-// 头部按 RFC 5322 只能是 ASCII：中文主题直接写进 Subject 会被中继或客户端压成 "?"，
-// 收件人看到的就是一串问号（实测收到过 "?????? Engram ??????????????????"）。
-// mime.QEncoding.Encode 对纯 ASCII 原样返回，因此可以无脑对所有文本头调用。
+// A header may only be ASCII under RFC 5322: writing a Chinese subject straight into Subject gets it
+// squashed into "?" by a relay or client, and what the recipient sees is a row of question marks (a
+// real-world example: "?????? Engram ??????????????????"). mime.QEncoding.Encode returns purely
+// ASCII input unchanged, so it can be called on every text header without thinking.
 func encodeHeaderValue(value string) string {
 	if isASCII(value) {
 		return value
@@ -211,9 +222,9 @@ func encodeHeaderValue(value string) string {
 	return mime.QEncoding.Encode("utf-8", value)
 }
 
-// encodeAddress 只对 "显示名 <地址>" 里的显示名做 MIME 编码。
-// 地址本身（addr-spec）必须是 ASCII，RFC 2047 的 encoded-word 不允许出现在那里；
-// 整串一起编码会让部分客户端解析不出收件人。纯地址原样返回。
+// encodeAddress MIME-encodes only the display name in "display name <address>". The address itself
+// (addr-spec) must be ASCII, and an RFC 2047 encoded-word is not allowed there; encoding the whole
+// string would make some clients unable to parse the recipient. A bare address is returned as is.
 func encodeAddress(value string) string {
 	lt := strings.LastIndex(value, "<")
 	if lt < 0 {
@@ -227,7 +238,7 @@ func encodeAddress(value string) string {
 	return encodeHeaderValue(name) + " " + addr
 }
 
-// isASCII 报告 s 是否全是 ASCII；是则无需 MIME 编码。
+// isASCII reports whether s is entirely ASCII; if so no MIME encoding is needed.
 func isASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] > 0x7f {

@@ -1,10 +1,10 @@
-// Package store 持有 GORM 模型与数据访问。
-// 同一套模型同时服务业务、GORM 与 JSON/CSV 序列化，不做 DTO 映射层（AGENTS.md §2.4）。
+// Package store holds the GORM models and data access.
+// The same set of models serves the domain, GORM and JSON/CSV serialization, with no DTO mapping layer (AGENTS.md §2.4).
 //
-// 双库兼容：不使用任何 PG 专有类型（jsonb / serial / array），
-// JSON 一律存 TEXT；字符串型列级默认值（如 'user' / 'basic'）不写进 DDL —— 未加引号的
-// 默认值在 PostgreSQL 里可能被当成同名函数或关键字，两库行为不一致；这些默认值由 store
-// 层写入时在 Go 侧显式给出。数值与布尔默认值两库语义一致，可以写在 DDL 里。
+// Dual-database compatibility: no PG-proprietary types (jsonb / serial / array) are used,
+// JSON is always stored as TEXT; string column defaults (such as 'user' / 'basic') are not written into the DDL — an unquoted
+// default may be taken for a same-named function or keyword in PostgreSQL, so the two databases behave differently; those defaults are supplied
+// explicitly by the store layer on the Go side at write time. Numeric and boolean defaults mean the same on both databases and may be written in the DDL.
 package store
 
 import (
@@ -13,42 +13,42 @@ import (
 	"gorm.io/gorm"
 )
 
-// User 是本地账号；内置账号为默认身份来源，外部身份见 Identity。
+// User is a local account; the built-in account is the default identity source, external identities live in Identity.
 type User struct {
 	ID              uint64     `gorm:"primaryKey" json:"-"`
 	PublicID        string     `gorm:"column:public_id;uniqueIndex" json:"id"`
 	Username        string     `gorm:"not null;uniqueIndex" json:"username"`
 	Email           string     `gorm:"not null;uniqueIndex" json:"email"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
-	// argon2id；纯 OIDC 账号可以为 NULL。
+	// argon2id; a pure OIDC account may be NULL.
 	PasswordHash *string `gorm:"column:password_hash" json:"-"`
 	DisplayName  string  `gorm:"not null" json:"display_name"`
 	Role         string  `gorm:"not null" json:"role"`   // admin | user
 	Status       string  `gorm:"not null" json:"status"` // active | disabled
 	Locale       string  `gorm:"not null" json:"locale"`
 	Timezone     string  `gorm:"not null" json:"timezone"`
-	// NULL 使用默认 04:00；指针保留显式午夜 0，且不让数据库默认覆盖它。
+	// NULL uses the default 04:00; the pointer preserves an explicit midnight 0 and keeps the database default from overriding it.
 	DayCutoffHour *int `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
-	// ReminderHour 是用户选择的本地发送小时（0–23，复习提醒与周报共用）；NULL 表示未设置，
-	// 回落到全局默认 reminder.DefaultSendHour。必须是可空指针：0 是合法值（午夜），用普通
-	// int 加默认值会分不清「未设置」与「午夜」，且 GORM 会把零值当成未提供（AGENTS.md §2.3 第 9 条
-	// 记的是同一个坑：带 default 标签的列，零值字段会被数据库默认覆盖）。
+	// ReminderHour is the local send hour the user picked (0–23, shared by the review reminder and the weekly digest); NULL means unset,
+	// falling back to the global default reminder.DefaultSendHour. It must be a nullable pointer: 0 is a legal value (midnight), and a plain
+	// int with a default cannot tell 'unset' from 'midnight', while GORM also takes the zero value as not provided (AGENTS.md §2.3 item 9
+	// records the same pitfall: for a column with a default tag, a zero-valued field is overwritten by the database default).
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
-	// LearnAheadMinutes 是「提前学习」窗口（分钟）：没有别的卡可复习时，这么多分钟内就要到期的
-	// 学习 / 重学卡提前出现，免得会话因为一张 1 分钟后才到期的卡就结束。NULL 用默认值，0 关闭。
-	// 可空指针的理由同 ReminderHour：0 是合法值。
+	// LearnAheadMinutes is the 'learn ahead' window (minutes): when no other card can be reviewed, learning / relearning cards due within
+	// that many minutes are pulled forward, so a session does not end over a card that only comes due a minute later. NULL uses the default, 0 disables it.
+	// The reason for the nullable pointer is the same as ReminderHour: 0 is a legal value.
 	LearnAheadMinutes *int `gorm:"column:learn_ahead_minutes" json:"learn_ahead_minutes,omitempty"`
-	// ShareAcceptFrom 是「谁可以把卡组分享给我」：anyone | whitelist | nobody。
-	// NULL 按 anyone 处理（与上线前的行为一致：那时所有人都能被分享）。
+	// ShareAcceptFrom is 'who may share decks with me': anyone | whitelist | nobody.
+	// NULL is treated as anyone (matching the behavior before this shipped: back then anyone could be shared with).
 	ShareAcceptFrom *string    `gorm:"column:share_accept_from" json:"share_accept_from,omitempty"`
 	CreatedAt       time.Time  `gorm:"not null" json:"created_at"`
 	LastSeenAt      *time.Time `json:"last_seen_at,omitempty"`
 }
 
-// TableName 固定表名，避免复数化规则在不同 GORM 版本下漂移。
+// TableName pins the table name so pluralization rules cannot drift across GORM versions.
 func (User) TableName() string { return "users" }
 
-// Identity 是绑定的外部身份（provider + subject 唯一）。
+// Identity is a linked external identity (provider + subject unique).
 type Identity struct {
 	ID       uint64    `gorm:"primaryKey" json:"-"`
 	PublicID string    `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -61,7 +61,7 @@ type Identity struct {
 
 func (Identity) TableName() string { return "identities" }
 
-// Invite 是一次性邀请（注册策略为 invite 时使用）。
+// Invite is a one-time invite (used when the signup policy is invite).
 type Invite struct {
 	ID        uint64     `gorm:"primaryKey" json:"-"`
 	PublicID  string     `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -77,7 +77,7 @@ type Invite struct {
 
 func (Invite) TableName() string { return "invites" }
 
-// Setting 是管理员可改的系统设置；value 是 JSON 编码文本。
+// Setting is a system setting an admin can change; value is JSON-encoded text.
 type Setting struct {
 	Key       string    `gorm:"primaryKey" json:"key"`
 	Value     string    `gorm:"not null" json:"value"`
@@ -87,7 +87,7 @@ type Setting struct {
 
 func (Setting) TableName() string { return "settings" }
 
-// Preset 是一组调度参数，挂在 deck 上，多个 deck 可共用。
+// Preset is a set of scheduling parameters, attached to a deck; several decks may share one.
 type Preset struct {
 	ID                  uint64  `gorm:"primaryKey" json:"-"`
 	PublicID            string  `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -97,16 +97,16 @@ type Preset struct {
 	LearningSteps       string  `gorm:"not null" json:"learning_steps"`
 	RelearningSteps     string  `gorm:"not null" json:"relearning_steps"`
 	MaximumIntervalDays int     `gorm:"not null;default:36500" json:"maximum_interval_days"`
-	// EnableFuzz 带数据库默认值 true，按 AGENTS.md §2.3 第 9 条用 *bool：
-	// nil 表示未指定（落库走数据库默认 true），非 nil 时显式写入——包括显式的 false。
-	// 读取有效值请用 FuzzEnabled()，不要直接解引用。
+	// EnableFuzz has a database default of true, so per AGENTS.md §2.3 item 9 it is a *bool:
+	// nil means unspecified (stored via the database default true), non-nil is written explicitly — including an explicit false.
+	// For the effective value use FuzzEnabled(), do not dereference directly.
 	EnableFuzz         *bool      `gorm:"not null;default:true" json:"enable_fuzz"`
 	WeightsJSON        *string    `gorm:"column:weights_json" json:"weights_json,omitempty"`
 	WeightsOptimizedAt *time.Time `json:"weights_optimized_at,omitempty"`
 	WeightsReviewCount *int       `json:"weights_review_count,omitempty"`
-	// GradeMappingJSON 是机器判分的「分数→评分档位」映射（JSON）。
-	// NULL 表示用内置默认映射（全对 Good / 部分对 Hard / 全错 Again）。
-	// 可空 TEXT，不设数据库默认值：默认行为由 cardtype.DefaultGradeMapping 在 Go 侧给出。
+	// GradeMappingJSON is the 'score → grade' mapping for machine grading (JSON).
+	// NULL means the built-in default mapping (all correct Good / partly correct Hard / all wrong Again).
+	// Nullable TEXT with no database default: the default behavior is supplied by cardtype.DefaultGradeMapping on the Go side.
 	GradeMappingJSON *string   `gorm:"column:grade_mapping_json" json:"grade_mapping_json,omitempty"`
 	CreatedAt        time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
@@ -114,11 +114,11 @@ type Preset struct {
 
 func (Preset) TableName() string { return "presets" }
 
-// Deck 是扁平卡组（不做卡组树）。
-// PresetID / NewPerDay / ReviewsPerDay 是**属主自己**的学习设置（调度预设与每日上限，0 表示不限）；
-// 其他成员的设置在 deck_member_settings，按用户解析统一走 StudySettings（见 deck_member_settings.go）。
-// 两列都是带数据库默认值的整型，零值由 GORM 省略、由数据库默认值补齐；
-// 显式把上限设为 0 请走 DeckStore.SetCaps（map 更新会写入 0）。
+// Deck is a flat deck (no deck tree).
+// PresetID / NewPerDay / ReviewsPerDay are **the owner's own** study settings (scheduling preset and daily caps, 0 means unlimited);
+// other members' settings live in deck_member_settings and are resolved per user through StudySettings (see deck_member_settings.go).
+// Both cap columns are integers with database defaults, so a zero value is omitted by GORM and filled in by the database default;
+// to set a cap to 0 explicitly, go through DeckStore.SetCaps (a map update writes 0).
 type Deck struct {
 	ID            uint64     `gorm:"primaryKey" json:"-"`
 	PublicID      string     `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -134,7 +134,7 @@ type Deck struct {
 
 func (Deck) TableName() string { return "decks" }
 
-// Note 描述"一个事实"，只含内容不含任何用户进度。
+// Note describes \"a fact\" and holds content only, with no user progress at all.
 type Note struct {
 	ID         uint64 `gorm:"primaryKey" json:"-"`
 	PublicID   string `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -142,7 +142,7 @@ type Note struct {
 	Kind       string `gorm:"not null" json:"kind"`
 	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
 	TagsJSON   string `gorm:"column:tags_json;not null" json:"tags_json"`
-	// 由调用方定义的幂等键；NULL 不参与唯一性（两库都允许多个 NULL）。
+	// an idempotency key defined by the caller; NULLs do not participate in uniqueness (both databases allow several NULLs).
 	ExternalRef   *string        `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
 	Source        *string        `json:"source,omitempty"` // manual | api | import
 	ReferenceRefs *string        `gorm:"column:reference_refs" json:"reference_refs,omitempty"`
@@ -154,7 +154,7 @@ type Note struct {
 
 func (Note) TableName() string { return "notes" }
 
-// Card 是 note 在某种呈现形式下的实例；调度作用于 card。
+// Card is an instance of a note in some presentation form; scheduling acts on cards.
 type Card struct {
 	ID        uint64         `gorm:"primaryKey" json:"-"`
 	PublicID  string         `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -167,7 +167,7 @@ type Card struct {
 
 func (Card) TableName() string { return "cards" }
 
-// CardState 是某个用户对某张 card 的 FSRS 状态；主键 (card_id, user_id) 是共享卡组的基石。
+// CardState is one user's FSRS state for one card; the primary key (card_id, user_id) is the cornerstone of shared decks.
 type CardState struct {
 	CardID        uint64     `gorm:"primaryKey" json:"card_id"`
 	UserID        uint64     `gorm:"primaryKey;index:idx_states_user_due,priority:1" json:"user_id"`
@@ -181,15 +181,15 @@ type CardState struct {
 	ScheduledDays int        `gorm:"not null;default:0" json:"scheduled_days"`
 	ElapsedDays   int        `gorm:"not null;default:0" json:"elapsed_days"`
 	LastReviewAt  *time.Time `json:"last_review_at,omitempty"`
-	Version       int        `gorm:"not null;default:0" json:"version"` // 乐观锁
-	// SuspendedAt 非空表示该用户暂停了这张卡：它不进该用户的队列与统计，其他用户不受影响。
-	// 暂停是每个用户自己的学习决定，所以放在进度行上而不是卡片上。
+	Version       int        `gorm:"not null;default:0" json:"version"` // optimistic lock
+	// SuspendedAt non-null means this user suspended this card: it leaves that user's queue and stats, and other users are unaffected.
+	// Suspension is each user's own study decision, so it lives on the progress row rather than on the card.
 	SuspendedAt *time.Time `gorm:"column:suspended_at" json:"suspended_at,omitempty"`
 }
 
 func (CardState) TableName() string { return "card_states" }
 
-// Review 是 append-only 复习日志，参数优化的唯一燃料；每个字段从第一天就写全。
+// Review is an append-only review log, the only fuel for parameter optimization; every field is written from day one.
 type Review struct {
 	ID              uint64    `gorm:"primaryKey" json:"-"`
 	PublicID        string    `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -203,17 +203,17 @@ type Review struct {
 	ElapsedMS       *int      `gorm:"column:elapsed_ms" json:"elapsed_ms,omitempty"`
 	DurationDays    *float64  `json:"duration_days,omitempty"`
 	StateBefore     int       `gorm:"not null" json:"state_before"` // 0=New 1=Learning 2=Review 3=Relearning
-	// StepIndexBefore 是本次评分前 card_states.step_index 的快照（剩余学习步骤数）。
-	// 评分前的 FSRS 学习步骤游标没有别的来源，而 fsrs.Rollback 会把 step_index 归零；
-	// 存下它 Undo 才能精确还原步骤进度。
-	// 可空：旧行没有这个快照，Undo 遇到 NULL 时退回归零行为。整数不用带默认值的布尔（AGENTS.md §2.3 第 9 条）。
+	// StepIndexBefore is a snapshot of card_states.step_index before this rating (the number of remaining learning steps).
+	// The FSRS learning-step cursor before the rating has no other source, and fsrs.Rollback zeroes step_index;
+	// storing it lets Undo restore step progress exactly.
+	// Nullable: old rows have no snapshot, and Undo falls back to the zeroing behavior on NULL. An integer, not a boolean with a default (AGENTS.md §2.3 item 9).
 	StepIndexBefore *int `gorm:"column:step_index_before" json:"step_index_before,omitempty"`
-	// DueBefore 是本次评分前 card_states.due_at 的快照。
+	// DueBefore is a snapshot of card_states.due_at before this rating.
 	//
-	// 评分前的到期日无法从上一条日志推算：埋藏只推迟 due_at、不写日志，于是「上一条日志的
-	// 到期日」与「本次评分前的到期日」会不一致，撤销若只靠上一条日志重建，会把被埋藏后的
-	// 到期日还原成 NULL 或错误值。可空：全新卡首评前没有到期日（NULL），旧行也没有这个快照，
-	// 撤销遇到 NULL 时退回上一条日志的推算。
+	// The due date before the rating cannot be derived from the previous log entry: burying only postpones due_at and writes no log entry, so 'the previous
+	// entry's due date' and 'the due date before this rating' disagree, and an undo that rebuilt only from the previous entry would turn the buried
+	// due date back into NULL or a wrong value. Nullable: a brand-new card has no due date before its first rating (NULL), and old rows have no snapshot either,
+	// so undo falls back to deriving it from the previous entry on NULL.
 	DueBefore    *time.Time `gorm:"column:due_before" json:"due_before,omitempty"`
 	IntervalDays *float64   `json:"interval_days,omitempty"`
 	Stability    *float64   `json:"stability,omitempty"`
@@ -222,7 +222,7 @@ type Review struct {
 
 func (Review) TableName() string { return "reviews" }
 
-// DeckGrant 是卡组授权；角色集合故意只有三个。
+// DeckGrant is a deck grant; the role set is deliberately only three.
 type DeckGrant struct {
 	DeckID    uint64    `gorm:"primaryKey" json:"deck_id"`
 	UserID    uint64    `gorm:"primaryKey" json:"user_id"`
@@ -233,7 +233,7 @@ type DeckGrant struct {
 
 func (DeckGrant) TableName() string { return "deck_grants" }
 
-// ShareLink 是给免注册读者的只读分享链接。
+// ShareLink is a read-only share link for readers without an account.
 type ShareLink struct {
 	Token        string     `gorm:"primaryKey" json:"token"`
 	DeckID       uint64     `gorm:"not null;index" json:"deck_id"`
@@ -247,8 +247,8 @@ type ShareLink struct {
 
 func (ShareLink) TableName() string { return "share_links" }
 
-// Media 只存元数据，字节在本地文件系统，路径由 sha256 决定。
-// 主键 = 内容 sha256：对外标识就是哈希，不再有自增 id。
+// Media stores metadata only; the bytes live on the local filesystem, with the path determined by sha256.
+// Primary key = content sha256: the external identifier is the hash itself, and there is no auto-increment id any more.
 type Media struct {
 	Sha256    string    `gorm:"primaryKey" json:"sha256"`
 	RelPath   string    `gorm:"not null" json:"rel_path"`
@@ -258,38 +258,38 @@ type Media struct {
 	Height    *int      `json:"height,omitempty"`
 	CreatedBy *uint64   `json:"created_by,omitempty"`
 	CreatedAt time.Time `gorm:"not null" json:"created_at"`
-	// OrphanedAt 是媒体回收第一次发现「没有任何 note 引用它」的时刻；有引用时为 NULL。
-	// 回收只删除孤立超过宽限期的媒体，给「误删引用后再改回来」留出窗口（见 MarkOrphanedMedia）。
+	// OrphanedAt is the moment media reclamation first found 'no note references this'; NULL while it is referenced.
+	// Reclamation only deletes media orphaned past the grace period, leaving a window for 'deleted a reference by mistake, then put it back' (see MarkOrphanedMedia).
 	OrphanedAt *time.Time `gorm:"column:orphaned_at;index" json:"-"`
 }
 
 func (Media) TableName() string { return "media" }
 
-// MediaNote 是 media ↔ note 的显式引用映射（-10-06 定）。
+// MediaNote is the explicit media ↔ note reference mapping (settled -10-06).
 //
-// 它是**派生索引**：内容的唯一来源始终是 notes.fields_json，映射由 note 写入路径在每次
-// 写入后**重建**（删旧建新，见 NoteStore）。读取鉴权据此判定「这份媒体是否被我的可读卡组里的
-// 未软删 note 引用」，不再扫描 fields_json。
+// It is a **derived index**: the single source of content is always notes.fields_json, and the mapping is
+// **rebuilt** by the note write path after every write (delete old, insert new, see NoteStore). Read authorization uses it to decide 'is this media referenced
+// by a non-soft-deleted note in a deck I can read', and no longer scans fields_json.
 //
-// 为什么不带「谁建立的引用」列：越权引用改由写侧单点校验（写入前对写入前状态求值）拦住，
-// 前提是所有 note 写入路径收敛到同一个方法。
+// Why there is no 'who created the reference' column: unauthorized references are stopped by a single write-side check (evaluated against the pre-write state),
+// provided every note write path converges on the same method.
 type MediaNote struct {
 	MediaSha string `gorm:"column:media_sha;not null;uniqueIndex:idx_media_notes_media_note,priority:1" json:"media_sha"`
 	NoteID   uint64 `gorm:"column:note_id;not null;uniqueIndex:idx_media_notes_media_note,priority:2" json:"note_id"`
-	// CreatedAt 是这条映射建立的时间；重建时整行替换，故它等于最近一次写入的时间。
+	// CreatedAt is when this mapping was created; a rebuild replaces the whole row, so it equals the most recent write time.
 	CreatedAt time.Time `gorm:"not null" json:"created_at"`
 }
 
 func (MediaNote) TableName() string { return "media_notes" }
 
-// MediaUploader 记录「谁提供过这份字节」（-10-06 定）。
+// MediaUploader records 'who supplied these bytes' (settled -10-06).
 //
-// 为什么不是 media.created_by 一列：字节按 sha256 去重，同一份字节全库只有一行，一列只能记
-// 第一个上传者；于是「B 上传的字节恰好与 C 已有的相同（去重命中）」时 B 拿不到归属——A 撤销
-// 共享后 B 读不到自己提供的文件。多对多记全部提供者，才让「能提供字节 ⇒ 可读」在去重下也成立。
+// Why not a media.created_by column: bytes are deduped by sha256, with one row per blob instance-wide, so a single column could only record
+// the first uploader; then when 'bytes B uploaded happen to equal what C already had (a dedup hit)', B gets no attribution — once A revokes
+// the share, B cannot read the file B itself supplied. Recording every provider many-to-many is what makes 'can supply the bytes ⇒ can read' hold under dedup too.
 //
-// 上传与导入（凡本次提供字节的路径）按 (media_sha, user_id) **幂等**写入（clause.OnConflict
-// 忽略重复）。**写入后不可撤销**：删了「提供过」就不再成立。
+// Upload and import (every path that supplies bytes here) write idempotently by (media_sha, user_id) (clause.OnConflict
+// ignores duplicates). **It cannot be undone after the write**: deleting would make 'supplied it' untrue.
 type MediaUploader struct {
 	MediaSha  string    `gorm:"primaryKey;column:media_sha" json:"media_sha"`
 	UserID    uint64    `gorm:"primaryKey;column:user_id" json:"user_id"`
@@ -298,8 +298,8 @@ type MediaUploader struct {
 
 func (MediaUploader) TableName() string { return "media_uploaders" }
 
-// ShareSessionDeck 记录「某个服务端会话通过分享链接打开过某个卡组」（L3）。
-// 业务存取与过期规则在同文件的 ShareSessionStore，登记在 AllModels() 里。
+// ShareSessionDeck records 'a server-side session opened a deck through a share link' (L3).
+// Domain access and expiry rules live in ShareSessionStore in this file, and it is registered in AllModels().
 type ShareSessionDeck struct {
 	SessionID string    `gorm:"primaryKey;column:session_id" json:"session_id"`
 	DeckID    uint64    `gorm:"primaryKey;column:deck_id" json:"deck_id"`
@@ -308,11 +308,11 @@ type ShareSessionDeck struct {
 
 func (ShareSessionDeck) TableName() string { return "share_session_decks" }
 
-// APIKey 是用户级凭据；明文只在创建时返回一次，库里只存 sha256。
+// APIKey is a user-level credential; the plaintext is returned only once at creation and the DB stores only the sha256.
 type APIKey struct {
 	ID       uint64 `gorm:"primaryKey;column:id" json:"-"`
 	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
-	// UserID 是内部外键：卡组/key 列表按调用者过滤，客户端不需要它，故不出现在 JSON 里。
+	// UserID is an internal foreign key: deck/key listings are filtered by caller and the client does not need it, so it is not in the JSON.
 	UserID     uint64     `gorm:"not null;index" json:"-"`
 	Name       string     `gorm:"not null" json:"name"`
 	Prefix     string     `gorm:"not null" json:"prefix"`
@@ -326,7 +326,7 @@ type APIKey struct {
 
 func (APIKey) TableName() string { return "api_keys" }
 
-// Job 是后台长任务（当前只有参数优化）；web 触发、子进程执行、页面轮询。
+// Job is a long-running background task (currently only parameter optimization); triggered by the web, executed by a subprocess, polled by the page.
 type Job struct {
 	ID         uint64     `gorm:"primaryKey" json:"-"`
 	PublicID   string     `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -344,7 +344,7 @@ type Job struct {
 
 func (Job) TableName() string { return "jobs" }
 
-// AuditLog 记录谁在什么时候改了什么。
+// AuditLog records who changed what, and when.
 type AuditLog struct {
 	ID         uint64    `gorm:"primaryKey" json:"-"`
 	PublicID   string    `gorm:"column:public_id;uniqueIndex" json:"id"`
@@ -359,8 +359,8 @@ type AuditLog struct {
 
 func (AuditLog) TableName() string { return "audit_log" }
 
-// SchemaVersion 是单行表（id 恒为 1），记录已应用的破坏性迁移版本。
-// 表名用单数，与措辞一致。
+// SchemaVersion is a single-row table (id is always 1) recording the applied destructive migration version.
+// The table name is singular, matching that wording.
 type SchemaVersion struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Version   int       `gorm:"not null" json:"version"`
@@ -369,7 +369,7 @@ type SchemaVersion struct {
 
 func (SchemaVersion) TableName() string { return "schema_version" }
 
-// 用户与账号状态取值；字符串默认值由 store 层在 Go 侧显式给出（见包注释）。
+// User and account status values; string defaults are supplied explicitly by the store layer on the Go side (see the package comment).
 const (
 	RoleAdmin      = "admin"
 	RoleUser       = "user"
@@ -377,9 +377,9 @@ const (
 	StatusDisabled = "disabled"
 )
 
-// Session 是服务端会话记录：cookie 只持有不可读的会话 ID 与签名，作废以这里的行状态为准。
-// 把它放进库而非纯无状态 cookie，是为了让登出、改密码、禁用三种情况都能真正"服务端作废"
-// csrf_token 绑定会话，供 CSRF 中间件校验。
+// Session is a server-side session record: the cookie holds only an unreadable session ID and a signature, and revocation is governed by the row state here.
+// Keeping it in the DB rather than in a purely stateless cookie is what lets logout, password change and disable all really \"revoke server-side\".
+// csrf_token binds to the session, for the CSRF middleware to verify.
 type Session struct {
 	ID         string     `gorm:"primaryKey;column:id" json:"id"`
 	UserID     uint64     `gorm:"not null;index" json:"user_id"`
@@ -392,43 +392,43 @@ type Session struct {
 
 func (Session) TableName() string { return "sessions" }
 
-// AllModels 是**全部** GORM 模型的唯一清单，AutoMigrate 从它取，测试的表清单断言也对照它。
-// 模型的定义文件可以分开（例如 TOTP 两表放在 totp.go），但**新增模型必须登记在这里**：
-// 漏登记的后果不是报错，而是 AutoMigrate 静默缺表——直到有查询撞上不存在的表才暴露。
+// AllModels is the single list of **all** GORM models; AutoMigrate reads it, and the tests' table-list assertions check against it too.
+// Model definitions may live in separate files (for example the two TOTP tables in totp.go), but **a new model must be registered here**:
+// forgetting it does not error, it silently leaves AutoMigrate one table short — exposed only when a query hits the missing table.
 func AllModels() []any {
 	return []any{
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
 		&MediaNote{}, &MediaUploader{},
-		// L3 分享会话授权：模型定义在 models.go，存取在 share_session.go。
+		// L3 share session grants: model defined in models.go, access in share_session.go.
 		&ShareSessionDeck{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
-		// TOTP：模型定义在 totp.go，但必须出现在这里（见上面的注释）。
+		// TOTP: model defined in totp.go, but it must appear here (see the comment above).
 		&UserTOTP{}, &TOTPRecoveryCode{},
-		// SMTP：outbox 队列表，模型定义在 outbox.go。
+		// SMTP: the outbox queue table, model defined in outbox.go.
 		&OutboxMessage{},
 		&EmailPref{},
 		&ReminderLog{},
-		// 每周学习摘要的发送台账：模型定义在 digest.go。
+		// Send ledger for the weekly study digest: model defined in digest.go.
 		&DigestLog{},
 		&ActionToken{}, &LoginFingerprint{}, // A-class security mail: one-time tokens and login fingerprints.
-		// 管理员自定义邮件模板：缺失即回退内置正文。
+		// Admin-defined mail templates: when missing, fall back to the built-in body.
 		&MailTemplate{},
-		// L3 分享同意制：待接受的邀请与接收白名单。
+		// L3 share consent model: pending invites and the receive whitelist.
 		&DeckShareInvite{}, &ShareAllow{},
-		// 共享卡组成员各自的学习设置：模型定义在 deck_member_settings.go。
+		// Shared deck members' own study settings: model defined in deck_member_settings.go.
 		&DeckMemberSetting{},
-		// 「再来一组」按复习日追加的新卡额度：模型定义在 deck_daily_extra.go。
+		// New-card quota appended per review day by 'one more round': model defined in deck_daily_extra.go.
 		&DeckDailyExtra{},
 	}
 }
 
-// MailTemplate 是管理员自定义的邮件模板。
+// MailTemplate is an admin-defined mail template.
 //
-// 唯一键是 (type, locale)：同一类型每种语言一份。**表里没有行是正常状态**——那表示该类型
-// 该语言用内置正文（发信方组装的那份），所以「删除自定义」就是删这一行，内置默认不可能被
-// 弄丢。正文存 Markdown 原文而不是渲染结果：渲染、清洗、变量替换都发生在发送时，于是改
-// 模板只影响之后入队的邮件。
+// The unique key is (type, locale): one per language of each type. **No row in the table is a normal state** — it means that type
+// in that language uses the built-in body (the one the sender assembles), so 'deleting the customization' is deleting this row, and the built-in default can never
+// be lost. The body stores the Markdown source rather than the rendered result: rendering, sanitizing and variable substitution all happen at send time, so a template
+// change only affects mail enqueued afterwards.
 type MailTemplate struct {
 	Type      string    `gorm:"primaryKey;size:64" json:"type"`
 	Locale    string    `gorm:"primaryKey;size:16" json:"locale"`
@@ -440,41 +440,41 @@ type MailTemplate struct {
 
 func (MailTemplate) TableName() string { return "mail_templates" }
 
-// DeckShareInvite 是「已发出、还没被接受」的卡组共享邀请。
+// DeckShareInvite is a deck share invite that has been 'sent but not yet accepted'.
 //
-// 同意制的落地方式：**授权（deck_grants）只在被邀请者接受时才写**，而可见集合谓词读的正是
-// deck_grants——所以待接受的邀请不进任何可见集合，队列、统计、回溯、媒体鉴权全都不用改。
-// 这是选「新表」而不是「给 deck_grants 加状态列」的唯一理由。
+// How the consent model lands: **grants (deck_grants) are written only when the invitee accepts**, and the visibility set predicate reads exactly
+// deck_grants — so a pending invite enters no visibility set, and the queue, stats, history and media authorization all need no change.
+// That is the only reason for choosing 'a new table' over 'adding a status column to deck_grants'.
 //
-// 同一 (卡组, 用户) 只有一行：重复邀请是刷新那一行的角色与有效期，不叠加。
+// There is one row per (deck, user): inviting again refreshes that row's role and expiry instead of stacking.
 type DeckShareInvite struct {
 	DeckID    uint64    `gorm:"primaryKey" json:"deck_id"`
 	UserID    uint64    `gorm:"primaryKey" json:"user_id"`
 	Role      string    `gorm:"not null" json:"role"`
 	InvitedBy uint64    `gorm:"not null" json:"invited_by"`
 	CreatedAt time.Time `gorm:"not null" json:"created_at"`
-	// ExpiresAt 之后邀请作废（到期行由 internal/retention 每小时回收）。
+	// The invite is void after ExpiresAt (expired rows are reclaimed hourly by internal/retention).
 	ExpiresAt time.Time `gorm:"not null;index" json:"expires_at"`
 }
 
 func (DeckShareInvite) TableName() string { return "deck_share_invites" }
 
-// ShareAcceptPolicy 是一个用户对「别人可以把卡组分享给我吗」的答复。
+// ShareAcceptPolicy is a user's answer to 'may others share decks with me'.
 //
-// 三档而不是「白名单布尔」：拒绝所有人是最常见的诉求（不想被任何人拉进来），把它表达成
-// 「白名单为空」会与「白名单还没配」混为一谈。
+// Three tiers rather than 'a whitelist boolean': refusing everyone is the most common wish (not wanting to be pulled in by anyone), and expressing it as
+// 'the whitelist is empty' would conflate it with 'the whitelist is not configured yet'.
 type ShareAcceptPolicy string
 
 const (
-	// ShareAcceptAnyone 是默认：任何人都可以邀请我。
+	// ShareAcceptAnyone is the default: anyone may invite me.
 	ShareAcceptAnyone ShareAcceptPolicy = "anyone"
-	// ShareAcceptWhitelist 只接受 share_allow 里列出的人。
+	// ShareAcceptWhitelist only accepts the people listed in share_allow.
 	ShareAcceptWhitelist ShareAcceptPolicy = "whitelist"
-	// ShareAcceptNobody 拒绝所有分享邀请。
+	// ShareAcceptNobody refuses every share invite.
 	ShareAcceptNobody ShareAcceptPolicy = "nobody"
 )
 
-// ShareAllow 是一行「from 可以把卡组分享给 to」的许可（由 to 自己配置）。
+// ShareAllow is one 'from may share a deck with to' permission row (configured by to themselves).
 type ShareAllow struct {
 	FromUserID uint64    `gorm:"primaryKey" json:"from_user_id"`
 	ToUserID   uint64    `gorm:"primaryKey" json:"to_user_id"`

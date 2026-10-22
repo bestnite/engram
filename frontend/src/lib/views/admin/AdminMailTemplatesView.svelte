@@ -17,7 +17,7 @@
     initialLoading?: boolean;
     initialError?: ApiClientError | Error | null;
     initialData?: AdminMailTemplatesResponse | null;
-    /** 嵌在「邮件」页里时不再渲染页面级宽度、页标题与侧栏导航（套两层会让它们重复）。 */
+    /** When embedded in the "mail" page it no longer renders the page-level width, page title and sidebar navigation (nesting twice would duplicate them). */
     embedded?: boolean;
   }
 
@@ -30,17 +30,17 @@
   // svelte-ignore state_referenced_locally
   let data = $state<AdminMailTemplatesResponse | null>(initialData);
 
-  // 管理员显式选过的 (类型, 语言)；空串表示「还没选」，此时用默认值。默认值用**派生**而不是
-  // 在 onMount 里赋值：派生在服务端渲染时同样成立（onMount 不会跑），页面结构不依赖副作用。
+  // The (type, language) the admin explicitly picked; an empty string means "not picked yet", in which case the default is used. The default is **derived** rather than
+  // assigned inside onMount: a derived holds during server-side rendering as well (onMount does not run), so the page structure does not depend on a side effect.
   let typeChoice = $state('');
   let localeChoice = $state('');
   let subject = $state('');
   let body = $state('');
   let preview = $state<AdminMailTemplatePreview | null>(null);
-  // 在途的是哪个动作：只有它的按钮转圈，其余按钮一并禁用，避免两个写操作交错。
+  // Which action is in flight: only its button spins, the other buttons are disabled along with it, avoiding two interleaved write operations.
   let pending = $state<'save' | 'restore' | 'preview' | 'test' | null>(null);
   const busy = $derived(pending !== null);
-  // 只装提交前的本地校验错误（正文为空）；请求结果走 toast。
+  // Only holds local validation errors from before submission (empty body); request outcomes go through toast.
   let invalid = $state(false);
 
   const types = $derived(data?.types ?? []);
@@ -51,18 +51,18 @@
   const currentRow = $derived(
     (data?.rows ?? []).find((row) => row.type === selectedType && row.locale === selectedLocale) ?? null
   );
-  /** 该类型该语言的内置正文；没有自定义模板时编辑框预填的就是它。 */
+  /** The built-in body for this type and language; it is what the editor is prefilled with when there is no custom template. */
   const currentDefault = $derived(
     (data?.defaults ?? []).find((item) => item.type === selectedType && item.locale === selectedLocale) ?? null
   );
-  // 显示名取 SPA 语言包里通知偏好页的同名类型（settings.notifications.type.<type>）。
-  // 服务端给的 label_key 属于服务端模板的 mail.prefs.type.* 命名空间，SPA 语言包里没有这组键，
-  // 直接拿它翻译会把原始键名显示给管理员。
+  // The display name is taken from the same-named type on the notification preferences page in the SPA language pack (settings.notifications.type.<type>).
+  // The label_key the server provides belongs to the server template's mail.prefs.type.* namespace, and the SPA language pack has no such group of keys,
+  // so translating with it directly would show the raw key name to the admin.
   const typeOptions = $derived(types.map((item) => ({ value: item.type, label: $t('settings.notifications.type.' + item.type) })));
   const localeOptions = $derived(locales.map((code) => ({ value: code, label: code })));
 
-  /** 起草稿：有自定义就载入，没有就**预填内置默认正文**（初值规则与它的用例在
-   *  mail-template-draft.ts）。它只读 currentRow/currentDefault，所以不会因为打字而回灌覆盖。 */
+  /** Draft a draft: load the custom one if present, otherwise **prefill the built-in default body** (the initial-value rule and its use cases live in
+   *  mail-template-draft.ts). It only reads currentRow/currentDefault, so typing cannot feed back and overwrite it. */
   $effect(() => {
     const draft = draftFor(currentRow, currentDefault);
     subject = draft.subject;
@@ -96,7 +96,7 @@
     }
   });
 
-  /** 把服务端返回的稳定 code 映射到本地化提示；不解析英文 message。 */
+  /** Map the stable code returned by the server to a localized hint; the English message is not parsed. */
   function errorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     switch (code) {
@@ -295,7 +295,7 @@
       </div>
 
       {#if preview}
-        <!-- 邮件预览本身就是「一封信」，这里保留一个带边框的容器表示信的边界。 -->
+        <!-- The mail preview is itself "a letter", so a bordered container is kept here to mark the letter's boundaries. -->
         <div class="overflow-hidden rounded-lg border border-border animate-in fade-in-0 duration-200">
           <div class="border-b border-border bg-surface px-4 py-2.5">
             <p class="text-xs text-muted-foreground">{$t('admin.mail.preview_heading')}</p>
@@ -304,7 +304,7 @@
           <div class="grid divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
             <div class="p-4">
               <h3 class="text-xs text-muted-foreground">{$t('admin.mail.preview_html')}</h3>
-              <!-- 预览用服务端渲染并经白名单清洗的 HTML；与管理页其它地方一样，禁止把编辑器原文当 HTML 渲染。 -->
+              <!-- The preview uses server-rendered HTML that has been allowlist-sanitized; as everywhere else in the admin pages, rendering the editor's raw text as HTML is forbidden. -->
               <div class="mt-2 rounded-md bg-white p-4 text-zinc-900" data-testid="admin-mail-template-preview-html">{@html preview.html}</div>
             </div>
             <div class="p-4">

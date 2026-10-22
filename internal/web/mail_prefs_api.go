@@ -11,54 +11,54 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的邮件通知偏好接口：M1-18的 JSON 版本。
+// This file is the SPA's email notification preference API: the JSON version of M1-18.
 //
-// 语义与目录定义（internal/mail）完全一致，只是传输形态是 JSON：
-//   - 可关闭类型、A 类不可关闭、默认开关全部由 internal/mail 目录推导，这里不复制规则；
-//   - 保存时为每个可关闭类型写出一条显式选择，未提交的按关闭处理（与复选框缺席一致）；
-//   - D 管理员通知只发给管理员：非管理员的响应不含该分组，提交该类的偏好以 403 拒绝，
-//     也不为非管理员写下该类的显式选择（否则日后被提升为管理员的人会带着陈旧的「关闭」上任）；
-//   - reminder_hour 为 null 表示站点默认（NULL），0–23 是显式小时；0 是合法午夜，
-//     「未设置」只用 null 表示，绝不用 0 顶替（AGENTS.md §2.3 第 9 条）。
+// Semantics are exactly those of the catalog definition (internal/mail), only the transport is JSON:
+//   - which types are optional, A being non-optional, and the default switches are all derived from the internal/mail catalog; the rules are not copied here;
+//   - saving writes one explicit choice per optional type, and anything not submitted counts as off (consistent with a missing checkbox);
+//   - D admin notifications go to admins only: a non-admin's response omits that group, submitting a preference for that class is refused with 403,
+//     and no explicit choice for that class is written for a non-admin (otherwise someone promoted to admin later would take office with a stale "off");
+//   - reminder_hour null means the site default (NULL), 0–23 are explicit hours; 0 is a valid midnight,
+//     and "not set" is expressed only as null, never substituted with 0 (AGENTS.md §2.3 item 9).
 //
-// 读取不要求 CSRF；写入一律过会话 CSRF。响应只暴露目录里登记的类型，未知类型不会出现，
-// 也不允许前端凭目录外的东西写库。邮件通知偏好显示在 /settings/email 页，
-// 偏好的读写全部走这里。
+// Reads require no CSRF; writes always go through session CSRF. Responses expose only the types registered in the catalog, unknown types never appear,
+// and the frontend may not write to the database using anything outside the catalog. Email notification preferences are shown on the /settings/email page,
+// and all preference reads and writes go through here.
 
-// notificationType 是一种邮件类型在偏好页上的状态：稳定英文标识 + 由目录推导的结果，不含文案。
-// 前端按 type 查自己的语言包键，因此这里绝不返回本地化文本。
+// notificationType is one mail type's state on the preferences page: a stable English identifier plus catalog-derived results, with no copy.
+// The frontend looks up its own language-pack key by type, so localized text is never returned here.
 type notificationType struct {
 	Type    string `json:"type"`
 	Enabled bool   `json:"enabled"`
 	Locked  bool   `json:"locked"`
 }
 
-// notificationGroup 是按大类分组的类型集合，顺序与目录一致（A → B → C → D）。
+// notificationGroup is a set of types grouped by major class, in catalog order (A → B → C → D).
 type notificationGroup struct {
 	Class string             `json:"class"`
 	Types []notificationType `json:"types"`
 }
 
-// notificationPrefsResponse 是 GET 与 PATCH 共用的响应体。
+// notificationPrefsResponse is the response body shared by GET and PATCH.
 type notificationPrefsResponse struct {
 	Groups []notificationGroup `json:"groups"`
-	// ReminderHour 为 null 表示用户未设置（用站点默认）；0–23 表示显式选择的小时。
+	// ReminderHour null means the user has not set it (the site default applies); 0–23 is an explicitly chosen hour.
 	ReminderHour *int `json:"reminder_hour"`
-	// DefaultReminderHour 是站点默认发送小时（reminder.DefaultSendHour），
-	// 供前端渲染「站点默认（HH:00）」选项，避免把 19 这类常量复制进前端。
+	// DefaultReminderHour is the site's default send hour (reminder.DefaultSendHour),
+	// so the frontend can render the "site default (HH:00)" option without copying a constant like 19 into the frontend.
 	DefaultReminderHour int    `json:"default_reminder_hour"`
 	Timezone            string `json:"timezone"`
 }
 
-// notificationPrefsRequest 是保存请求体：显式选择 + 发送小时。
-// choices 缺失或为 null 表示所有可关闭类型都关闭（与复选框全部缺席一致）。
+// notificationPrefsRequest is the save request body: explicit choices plus the send hour.
+// A missing or null choices means every optional type is off (consistent with all checkboxes absent).
 type notificationPrefsRequest struct {
 	Choices      map[string]bool `json:"choices"`
 	ReminderHour *int            `json:"reminder_hour"`
 }
 
-// registerMailPrefsAPIRoutes 挂载 SPA 的邮件通知偏好接口；写操作过会话 CSRF。
-// 依赖未装配时跳过，保证 M0 阶段与未启用邮件功能的测试仍能构造 Server。
+// registerMailPrefsAPIRoutes mounts the SPA's email notification preference API; writes go through session CSRF.
+// Skips when the dependency is not wired up, so the M0 stage and tests without the mail feature can still construct a Server.
 func (s *Server) registerMailPrefsAPIRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.users == nil {
 		return
@@ -67,7 +67,7 @@ func (s *Server) registerMailPrefsAPIRoutes(router *gin.Engine) {
 	router.PATCH("/api/v1/settings/notifications", s.sessions.CSRFMiddleware(), s.notificationPrefsPatch)
 }
 
-// notificationPrefsGet 返回当前用户的邮件偏好与发送小时，仅接受浏览器会话。
+// notificationPrefsGet returns the current user's mail preferences and send hour, and accepts browser sessions only.
 func (s *Server) notificationPrefsGet(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -82,9 +82,9 @@ func (s *Server) notificationPrefsGet(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// notificationPrefsPayload 组装偏好响应：分组与开关一律由 internal/mail 目录推导。
-// 发送小时与用户行上的最新值一致，因此重新读一次 users（会话缓存可能是旧快照）。
-// 角色也取自这一次重读：D 类只发给管理员，非管理员的响应里连该分组都不出现。
+// notificationPrefsPayload assembles the preference response: groups and switches are always derived from the internal/mail catalog.
+// The send hour matches the latest value on the user row, so users is re-read (the session cache may be a stale snapshot).
+// The role also comes from this re-read: type D goes to admins only, and a non-admin's response does not even contain that group.
 func (s *Server) notificationPrefsPayload(c *gin.Context, userID uint64) (notificationPrefsResponse, error) {
 	ctx := c.Request.Context()
 	choices, err := store.NewEmailPrefStore(s.db).Choices(ctx, userID)
@@ -122,20 +122,20 @@ func (s *Server) notificationPrefsPayload(c *gin.Context, userID uint64) (notifi
 	}, nil
 }
 
-// notificationPrefsPatch 保存用户对可选类型的开关与发送小时。
+// notificationPrefsPatch saves the user's switches for the optional types and the send hour.
 //
-// 规则与 SSR 一致：先校验提交里出现的每个偏好键再写库，拒绝时不产生半截保存；
-// A 类不可关闭，任何指向 A 类的提交都以 400 拒绝；D 类只对管理员开放，非管理员提交它以
-// 403 拒绝（而不是静默忽略——忽略会让伪造请求以为配置成功，也让「页面不该展示它」这条
-// 规则没有服务端落地）；未知类型同样拒绝；
-// 可关闭类型按提交里的值写出显式选择（缺席 = 关闭），因此默认关的 C 类也能被打开。
-// 发送小时 null = 站点默认，0–23 为显式值，其余拒绝。
+// The rules match the SSR version: validate every preference key present in the submission before writing to the database, so a refusal leaves no half-saved state;
+// type A cannot be turned off, so any submission targeting A is refused with 400; type D is open to admins only, and a non-admin submitting it is
+// refused with 403 (rather than silently ignored — ignoring would make a forged request believe it succeeded, and would also leave the "the page should not display it" rule
+// with no server-side implementation); unknown types are refused as well;
+// optional types get an explicit choice written with the value from the submission (absent = off), so the default-off type C can be turned on too.
+// Send hour null = site default, 0–23 are explicit values, anything else is refused.
 func (s *Server) notificationPrefsPatch(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
 		return
 	}
-	// 角色每请求现查（会话中间件从库里重读 users 行），因此降级或提升即时生效。
+	// The role is looked up per request (the session middleware re-reads the users row from the database), so demotion or promotion takes effect immediately.
 	admin := user.Role == store.RoleAdmin
 	var req notificationPrefsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -143,7 +143,7 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 		return
 	}
 
-	// 先校验提交里出现的每个偏好键，再写库：拒绝时不产生半截保存。
+	// Validate every preference key present in the submission first, then write: a refusal leaves no half-saved state.
 	for key := range req.Choices {
 		def, found := mail.Lookup(mail.Type(key))
 		if !found {
@@ -159,16 +159,16 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 			return
 		}
 	}
-	// 0 是合法值（午夜），因此越界判断只在非 nil 时进行；null 与缺席都表示站点默认。
+	// 0 is a valid value (midnight), so the range check only runs when non-nil; both null and absent mean the site default.
 	if req.ReminderHour != nil && (*req.ReminderHour < 0 || *req.ReminderHour > 23) {
 		notificationPrefsError(c, http.StatusBadRequest, "reminder_hour_invalid", "The send hour must be a whole hour from 0 to 23.")
 		return
 	}
 
 	ctx := c.Request.Context()
-	// 复选框缺席表示关闭；为每个可关闭类型都写出显式选择，不依赖存储里的旧值。
-	// D 类只对管理员有意义，非管理员不为它写出选择：留空即回落到目录默认（开），
-	// 这样日后被提升为管理员的人不会带着一个陈旧的「关闭」上任。
+	// A missing checkbox means off; write an explicit choice for every optional type instead of relying on the old value in storage.
+	// Type D is only meaningful for admins, and no choice is written for it when the user is not an admin: leaving it empty falls back to the catalog default (on),
+	// so someone promoted to admin later does not take office with a stale "off".
 	choices := make(map[string]bool, len(mail.Catalog()))
 	for _, def := range mail.Catalog() {
 		if !mail.CanDisable(def.Class) {
@@ -185,7 +185,7 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 		return
 	}
 
-	// 发送小时存在 users 行上，与偏好分开更新；先重读再改，避免覆盖并发写入。
+	// The send hour lives on the users row and is updated separately from the preferences; re-read before changing so concurrent writes are not overwritten.
 	fresh, err := s.users.ByID(ctx, user.ID)
 	if err != nil {
 		s.logger.Error("load user for SPA email preferences failed", "user_id", user.ID, "error", err)
@@ -198,7 +198,7 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 		notificationPrefsError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
-	// 审计动作与 Detail 形态与 SSR 保存一致（internal/web/mail_prefs.go）。
+	// The audit action and Detail shape match the SSR save (internal/web/mail_prefs.go).
 	s.audit(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionUserEmailPrefsUpdate,
@@ -216,8 +216,8 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// notificationPrefsError 写出 SPA 邮件偏好接口的错误包壳。
-// 与 totpError 同形：code 稳定且英文，message 为英文兜底文案，前端按 code 映射本地化提示。
+// notificationPrefsError writes the error envelope of the SPA mail preference API.
+// Same shape as totpError: code is stable and English, message is an English fallback, and the frontend maps code to a localized hint.
 func notificationPrefsError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }

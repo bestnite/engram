@@ -11,41 +11,41 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是密码重置流程（服务端部分）：令牌签发与投递、以及三条页面的应用壳入口。
+// This file is the password reset flow (server side): token issuance and delivery, plus the app-shell entries for three pages.
 //
-// 安全要点：
-//   - 明文令牌只出现在邮件链接里，绝不入库、绝不进日志（日志只记 user_id 与结果）；
-//   - 令牌库中只存摘要，一次性（条件更新），有 1 小时过期；
-//   - 请求重置一律回同一结果，不因邮箱是否存在而不同，避免账号枚举；
-//   - SMTP 未配置时响应渲染 mail_ready=false，绝不静默。
+// Security points:
+//   - the plaintext token appears only in the mail link; never stored, never logged (the log records only user_id and the outcome);
+//   - the token table stores only a digest, one-time (conditional update), with a 1-hour expiry;
+//   - reset requests always return the same result regardless of whether the email exists, avoiding account enumeration;
+//   - with SMTP unconfigured the response renders mail_ready=false — never silent.
 //
-// 页面的读写协议全部走同源 JSON 端点（account.go）；本文件只保留页面外壳与令牌签发。
+// All page read/write protocols go through same-origin JSON endpoints (account.go); this file keeps only the page shell and token issuance.
 
-// registerSecurityMailRoutes 挂载密码重置、邮箱验证与改邮箱确认路由。
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// registerSecurityMailRoutes mounts the password reset, email verification and email change confirmation routes.
+// Skipped when the dependency is not wired up, so M0-stage tests can still construct a Server.
 func (s *Server) registerSecurityMailRoutes(router *gin.Engine) {
 	if s.tokens == nil {
 		return
 	}
-	// 三条可导航的登录前页面只返回 SPA 应用壳；协议走
-	// /api/v1/auth/{forgot-password,reset-password}（与 SPA 同一份服务逻辑）。
+	// The three navigable pre-login pages just return the SPA app shell; the protocols go through
+	// /api/v1/auth/{forgot-password,reset-password} (the same service logic as the SPA).
 	router.GET("/forgot-password", s.forgotPasswordRoute)
 	router.GET("/reset-password", s.resetPasswordRoute)
-	// 邮件里的一键 GET 链接落在规范路径上，返回应用壳；令牌由 SPA 通过
-	// /api/v1/auth/{verify-email,confirm-email-change} 消费（一次性、有过期）。
-	// 会话前写请求由 PreSessionCSRFMiddleware 校验双提交 cookie 与镜像 token。
+	// The one-click GET link in the mail lands on the canonical path and returns the app shell; the token is consumed by the SPA through
+	// /api/v1/auth/{verify-email,confirm-email-change} (one-time, with expiry).
+	// Pre-session write requests are checked by PreSessionCSRFMiddleware against the double-submit cookie and the mirrored token.
 	router.GET("/verify-email", s.verifyEmailShell)
 	router.GET("/confirm-email-change", s.confirmEmailChangeShell)
-	// 改邮箱页是登录用户自己的页面：未登录先重定向登录页。
+	// The change-email page belongs to the signed-in user: when not signed in it redirects to the login page first.
 	router.GET("/settings/email", s.emailChangeRoute)
-	// SPA 的同源 JSON 传输层与应用壳入口（account.go）。
+	// The SPA's same-origin JSON transport and app-shell entries (account.go).
 	s.registerAccountRoutes(router)
 }
 
-// 安全/事务流程没有服务端渲染：只有同源 JSON 端点与 SPA 应用壳，页面全部由前端路由呈现。
+// The security/transaction flows have no server-side rendering: only same-origin JSON endpoints and the SPA app shell, with every page presented by the frontend router.
 
-// issuePasswordReset 签发密码重置令牌并投递邮件；任何失败只记英文日志（绝不回传）。
-// 日志绝不包含令牌明文。
+// issuePasswordReset issues a password reset token and delivers the mail; any failure only logs in English (never echoed back).
+// The log never contains the plaintext token.
 func (s *Server) issuePasswordReset(c *gin.Context, u *store.User) {
 	ctx := c.Request.Context()
 	now := time.Now().UTC()

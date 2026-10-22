@@ -7,10 +7,10 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 )
 
-// intervalLabel 把「距下次到期还有多久」渲染成本地化文案（Anki 式的 "10 分钟"、"3 天"）。
+// intervalLabel renders "how long until the next due" as localized text (Anki-style "10 minutes", "3 days").
 //
-// 学习步骤以分钟计（默认预设 `1m,10m`），所以这里必须能表达亚天级的等待：它正是
-// "刚答完几分钟后这张卡又回来"这件事的可见化。
+// Learning steps are counted in minutes (default preset `1m,10m`), so this must be able to express sub-day waits: that is exactly
+// the visible form of "the card comes back a few minutes after you answer it".
 func intervalLabel(loc *i18n.Localizer, wait time.Duration) string {
 	if wait <= 0 {
 		return loc.T("review.interval.under_minute")
@@ -32,7 +32,7 @@ func intervalLabel(loc *i18n.Localizer, wait time.Duration) string {
 	default:
 		unit, count = "years", int(math.Round(minutes/(365*24*60)))
 	}
-	// 取整可能把数字顶过单位边界（59.6 分 → "60 分钟"），上提一级更自然。
+	// Rounding can push the number past the unit boundary (59.6 min → "60 minutes"); stepping up one unit reads more naturally.
 	switch {
 	case unit == "minutes" && count >= 60:
 		unit, count = "hours", 1

@@ -1,8 +1,8 @@
 import type { LocaleCatalog } from '../types';
 
 /**
- * 简体中文语言包骨架
- * key 一律英文小写点分。与 en.ts 的 key 集合必须完全一致。
+ * Simplified Chinese language pack skeleton
+ * Keys are always lowercase English, dot-separated. The key set must be exactly the same as en.ts's.
  */
 export const zhCN: LocaleCatalog = {
   'app.name': 'Engram',
@@ -405,8 +405,8 @@ export const zhCN: LocaleCatalog = {
   'deck.sharing.link_revoked': '已撤销',
   'deck.sharing.password_set': '已设置口令',
   'deck.sharing.revoke_all': '撤销全部有效链接',
-  // ---- 统计明细（/stats） ----
-  // 数字来自 GET /api/v1/stats/detail，语言包只负责标签与单位。
+  // ---- Detailed stats (/stats) ----
+  // The numbers come from GET /api/v1/stats/detail; the language pack only provides labels and units.
   'stats.volume.heading': '复习量',
   'stats.volume.today': '今日',
   'stats.volume.last7': '近 7 日',
@@ -472,7 +472,7 @@ export const zhCN: LocaleCatalog = {
   'stats.tag.col.reviews': '复习量',
   'stats.tag.col.retention': '留存率',
   'stats.table.rate': '{rate}%',
-  // ---- 卡组每日上限设置（/decks/:id/settings） ----
+  // ---- Deck daily limit settings (/decks/:id/settings) ----
   'deck.settings.entry': '设置',
   'deck.settings.title': '卡组设置',
   'deck.settings.back': '返回卡组',
@@ -497,8 +497,8 @@ export const zhCN: LocaleCatalog = {
   'deck.settings.error.failed': '保存失败，请重试。',
   'deck.settings.error.forbidden': '你没有访问这个卡组的权限。',
   'deck.settings.failed': '无法加载卡组上限。',
-  // ---- 两步验证管理（/settings/totp） ----
-  // secret 只在 begin 时显示一次；恢复码只在生成时显示。
+  // ---- Two-factor management (/settings/totp) ----
+  // The secret is shown only once, at begin; recovery codes are shown only when generated.
   'settings.totp.heading': '两步验证',
   'settings.totp.intro': '启用后，登录还需要认证器 App 生成的动态验证码。',
   'settings.totp.status.enabled': '状态：已启用',
@@ -533,12 +533,12 @@ export const zhCN: LocaleCatalog = {
   'settings.totp.error.invalid_request': '请填写必填项。',
   'settings.totp.error.failed': '操作失败，请重试。',
   'settings.totp.failed': '无法加载两步验证设置。',
-  // ---- 邮件通知偏好（/settings/notifications） ----
-  // 类型与大类标识来自服务端目录；文案按稳定标识本地化，前端不另列类型清单。
+  // ---- Email notification preferences (/settings/notifications) ----
+  // Kind and group identifiers come from the server catalog; copy is localized by stable identifier and the frontend keeps no separate kind list.
   'settings.notifications.heading': '邮件通知偏好',
   'settings.notifications.intro': '选择本站可以给你发送哪些可选邮件；安全与事务类邮件不可关闭。',
-  // ---- API 密钥（/settings/keys） ----
-  // 入口挂在设置页上；页头导航里不再有它。
+  // ---- API keys (/settings/keys) ----
+  // The entry hangs off the settings page; it is no longer in the header navigation.
   'settings.notifications.locked': '始终开启：这类邮件保护你的账号。',
   'settings.notifications.class.security.heading': '安全与事务',
   'settings.notifications.class.collab.heading': '协作与授权',
@@ -570,7 +570,7 @@ export const zhCN: LocaleCatalog = {
   'settings.notifications.error.invalid_request': '请求无效。',
   'settings.notifications.error.forbidden_type': '管理员通知只对管理员开放。',
   'settings.notifications.error.failed': '保存失败，请重试。',
-  // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
+  // SPA registration and first-admin bootstrap (the JSON endpoints in internal/web/auth_api.go).
   'auth.field.email': '邮箱',
   'auth.field.display_name': '显示名',
   'auth.field.password_confirm': '确认密码',
@@ -590,14 +590,14 @@ export const zhCN: LocaleCatalog = {
   'auth.error.password_too_short': '密码至少需要 8 个字符。',
   'auth.error.password_too_long': '密码不能超过 128 个字符。',
   'auth.error.password_too_common': '密码过于常见，请更换更复杂的密码。',
-  // 两次输入不一致只由前端判定（请求体里只有一个 password），服务端不会发出这个 code。
+  // The mismatch of the two entries is decided only by the frontend (the request body has a single password), so the server never emits this code.
   'auth.error.password_mismatch': '两次输入的密码不一致。',
   'auth.error.email_domain_not_allowed': '该邮箱域名不在允许注册的范围内，请联系管理员。',
   'auth.error.invite_required': '注册需要邀请链接，请联系管理员获取。',
   'auth.error.invite_invalid': '邀请链接无效、已过期或已被使用，请联系管理员重新获取。',
   'auth.error.registration_closed': '自助注册已关闭，请联系管理员开通账号。',
   'auth.error.create_failed': '创建账号失败，请稍后重试或更换用户名/邮箱。',
-  // ---- 登录第二步（TOTP，/login/totp） ----
+  // ---- Login second step (TOTP, /login/totp) ----
   'auth.totp.heading': '两步验证',
   'auth.totp.intro': '请输入认证器 App 显示的一次性验证码以完成登录。',
   'auth.totp.code_label': '验证码',
@@ -608,7 +608,7 @@ export const zhCN: LocaleCatalog = {
   'auth.totp.back_to_login': '返回登录',
   'auth.error.totp_invalid': '验证码无效。',
   'auth.error.totp_challenge_expired': '两步验证已超时，请重新登录。',
-  // ── 调度预设（internal/web/presets_api.go 的会话 JSON 端点）──
+  // ── Scheduling presets (the session JSON endpoints in internal/web/presets_api.go) ──
   'presets.default_name': '默认',
   'presets.heading': '调度预设',
   'presets.empty': '还没有调度预设。',
@@ -671,7 +671,7 @@ export const zhCN: LocaleCatalog = {
   'presets.optimize.stage.unknown': '阶段：未知',
   'presets.error.not_found': '未找到该预设。',
   'presets.error.failed': '优化操作失败，请重试。',
-  // ---- 管理面板（Go: internal/web/admin_api.go 起的那几个文件）----
+  // ---- Admin panel (Go: the files starting at internal/web/admin_api.go) ----
   'admin.nav.heading': '管理面板',
   'admin.nav.users': '用户管理',
   'admin.nav.registration': '注册与邀请',
@@ -787,7 +787,7 @@ export const zhCN: LocaleCatalog = {
   'admin.audit.col.detail': '详情',
   'admin.audit.total_label': '命中 {total} 条',
   'admin.audit.empty': '没有匹配的记录。',
-  // ---- 管理面板：用户管理、注册与邀请、API Key 总览----
+  // ---- Admin panel: user management, registration and invites, API key overview ----
   'admin.common.copy': '复制',
   'admin.users.heading': '用户管理',
   'admin.users.search_label': '搜索',
@@ -900,7 +900,7 @@ export const zhCN: LocaleCatalog = {
   'admin.keys.notice.revoked': '密钥已撤销。',
   'admin.keys.notice.revoke_failed': '撤销密钥失败。',
   'admin.keys.notice.invalid_key': '该密钥不存在。',
-  // ---- 管理面板：系统设置、邮件、OIDC----
+  // ---- Admin panel: system settings, mail, OIDC ----
   'admin.settings.heading': '系统设置',
   'admin.settings.intro': '改动对下一次请求立即生效，无需重启。',
   'admin.settings.source_label': '来源',
@@ -1006,7 +1006,7 @@ export const zhCN: LocaleCatalog = {
   'admin.oidc.notice.unlinked': '身份已解绑。',
   'admin.oidc.notice.invalid_issuer': '请填写有效的 issuer URL。',
   'admin.oidc.notice.failed': '保存失败。',
-  // ---- 管理面板：作业与语言包完整度----
+  // ---- Admin panel: jobs and language pack completeness ----
   'admin.jobs.heading': '作业',
   'admin.jobs.col.id': 'ID',
   'admin.jobs.col.kind': '类型',
@@ -1046,7 +1046,7 @@ export const zhCN: LocaleCatalog = {
   'admin.i18n.status.incomplete': '缺失 {count} 条',
   'admin.i18n.all_complete': '全部语言包完整。',
   'admin.i18n.load_failed': '加载完整度报告失败，请重试。',
-  // ---- 账号安全与邮件流程（/forgot-password、/reset-password、/settings/email） ----
+  // ---- Account security and mail flows (/forgot-password, /reset-password, /settings/email) ----
   'account.forgot.heading': '重置密码',
   'account.forgot.intro': '请输入账号邮箱，若该邮箱已注册，我们会发送一封重置邮件。',
   'account.forgot.email_label': '邮箱',
@@ -1081,7 +1081,7 @@ export const zhCN: LocaleCatalog = {
   'account.confirm_change.done': '邮箱已更新。',
   'account.confirm_change.failed': '确认链接无效或已过期。',
   'account.confirm_change.back_login': '返回登录',
-  // internal/web/account.go 返回的稳定英文 code；界面按 code 映射，绝不解析 message。
+  // The stable English codes returned by internal/web/account.go; the UI maps by code and never parses message.
   'account.error.token_expired': '链接已过期，请重新获取。',
   'account.error.token_used': '该链接已被使用过。',
   'account.error.token_invalid': '链接无效。',
@@ -1095,7 +1095,7 @@ export const zhCN: LocaleCatalog = {
   'account.error.password_too_long': '密码长度超限。',
   'account.error.password_too_common': '密码过于常见，请更换更复杂的密码。',
   'account.error.rate_limited': '尝试过于频繁，请稍后再试。',
-  // ---- 公开只读分享浏览（GET /s/:token） ----
+  // ---- Public read-only share browsing (GET /s/:token) ----
   'share.browse.heading': '共享卡组',
   'share.browse.intro': '这是共享卡组的预览。登录并加入后即可开始复习。',
   'share.browse.login': '登录后加入并复习',
@@ -1113,12 +1113,12 @@ export const zhCN: LocaleCatalog = {
   'share.password.submit': '查看卡组',
   'share.error_password': '口令不正确。',
   'share.error_not_found': '分享链接无效、已撤销或已过期。',
-  // ---- OIDC 登录入口（由 SPA 登录视图探测后渲染） ----
+  // ---- OIDC login entry (rendered after the SPA login view probes for it) ----
   'account.oidc.button': '使用 OIDC 登录',
-  // ---- 父级补充的导航项（与 SSR mainNav 文案一致）----
+  // ---- Nav items added by the parent (copy matches the SSR mainNav) ----
   'nav.presets': '调度预设',
   'nav.admin': '管理',
-  // ---- 一键退订页（/unsubscribe，SPA） ----
+  // ---- One-click unsubscribe page (/unsubscribe, SPA) ----
   'unsubscribe.heading': '退订邮件',
   'unsubscribe.loading': '正在校验退订链接…',
   'unsubscribe.intro': '确认后，你将不再收到「{type}」邮件。之后可以在邮件偏好中重新开启。',
@@ -1169,7 +1169,7 @@ export const zhCN: LocaleCatalog = {
   'review.undo': '撤销',
   'review.undo_last': '撤销上一次',
   'review.undo_last_rating': '撤销上一次 · {rating}',
-  // 直链导入（POST /api/v1/decks/import-url）新增：来源选择、URL 说明与 URL 专用错误。
+  // Added for direct-link import (POST /api/v1/decks/import-url): source choice, URL help and URL-specific errors.
   'package.source.label': '来源',
   'package.source.file': '上传文件',
   'package.source.url': '公开链接',
@@ -1181,9 +1181,9 @@ export const zhCN: LocaleCatalog = {
   'package.error.url_blocked': '不允许访问这个链接指向的地址。',
   'package.error.url_fetch_failed': '无法从这个链接下载，请检查后重试。',
   'package.error.url_not_package': '这个链接下载到的不是卡组包。',
-  // 直链输入框的示例占位符：用户可见文本一律走语言包，不在模板里硬编码。
+  // Example placeholder for the direct-link input: user-visible text always goes through the language pack and is never hardcoded in templates.
   'package.import.url_placeholder': 'https://example.com/deck.edeck',
-  // 侧边栏外壳（导航分组、收起、账户菜单）。
+  // Sidebar shell (nav groups, collapse, account menu).
   'sidebar.label': '主导航',
   'sidebar.group.study': '学习',
   'sidebar.group.library': '内容',
@@ -1199,21 +1199,21 @@ export const zhCN: LocaleCatalog = {
   'sidebar.due_count': '{count} 张待复习',
   'sidebar.exit_review': '退出复习',
   'sidebar.version': '版本 {version}',
-  // 文件拖放选区。
+  // File drop area.
   'dropzone.prompt': '拖入文件，或',
   'dropzone.browse': '选择文件',
   'dropzone.release': '松开即可添加',
   'dropzone.remove': '移除文件',
   'dropzone.import_hint': '支持 .edeck 与 .zip',
   'dropzone.media_hint': '选中后立即上传，并插入到上面选择的字段',
-  // 列表与批量操作条。
+  // Lists and the batch action bar.
   'selection.toolbar': '批量操作',
   'selection.count': '已选 {count} 项',
   'selection.clear': '取消选择',
   'list.col.name': '名称',
   'list.col.today': '今日',
   'list.col.limits': '每日上限',
-  // 卡组详情的笔记表格（行菜单、批量标签、删除确认）。
+  // The note table on the deck detail page (row menu, batch tags, delete confirmation).
   'notes.col_content': '内容',
   'notes.more_actions': '更多操作',
   'notes.copy_id': '复制 ID',
@@ -1224,49 +1224,49 @@ export const zhCN: LocaleCatalog = {
   'notes.bulk_tags_hint': '多个标签用逗号分隔。',
   'notes.delete_desc': '删除后无法恢复。',
   'notes.bulk_delete_desc': '将删除 {count} 条笔记，删除后无法恢复。',
-  // 统计页学习曲线图表。
+  // Learning curve chart on the stats page.
   'stats.curve.summary': '近 30 天新学 {new} · 复习 {review}',
   'stats.curve.total': '合计 {count}',
   'stats.curve.table': '学习曲线数据',
   'stats.curve.col_day': '日期',
-  // 卡组页头原地编辑。
+  // Inline editing in the deck page header.
   'deck.add_description': '添加描述',
-  // 卡组设置：今日用量写在每日上限输入框下方。
+  // Deck settings: today's usage is written below the daily limit input.
   'deck.settings.used_today': '今日已用',
   'deck.settings.left_today': '剩余',
-  // 卡组共享管理的分区说明。
+  // Section description for deck sharing management.
   'deck.sharing.grants_hint': '对方接受邀请后即可访问。编辑者可以修改卡片，只读成员只能复习。',
   'deck.sharing.links_hint': '持有链接的人可以预览这个卡组，登录后可加入复习。可选设置口令与过期日期。',
   'deck.sharing.link_copied': '链接已复制',
   'deck.sharing.copy': '复制',
-  // 两步验证页：绑定步骤的分区标题。
+  // Two-factor page: section heading for the enrollment step.
   'settings.totp.begin.heading': '绑定认证器',
-  // API 密钥与邮箱设置的分区说明。
+  // Section descriptions for API keys and email settings.
   'keys.create_hint': '按需勾选权限范围；密钥只在创建时完整显示一次。',
   'keys.list_heading': '已有密钥',
   'keys.copied': '密钥已复制',
   'account.email.change_hint': '确认链接会发到新地址，确认之前邮箱不会变更。',
-  // 统一确认对话框的按钮。
+  // Buttons of the unified confirmation dialog.
   'common.confirm': '确定',
   'common.cancel': '取消',
-  // 用户管理行菜单。
+  // User management row menu.
   'admin.users.make_admin': '设为管理员',
   'admin.users.make_user': '设为普通用户',
   'admin.users.temp_password_copied': '临时密码已复制',
-  // 注册与邀请页的邀请分区说明。
+  // Invite section description on the registration and invites page.
   'admin.registration.invites_hint': '邀请可指定角色与有效天数；勾选「用邮件发送链接」会直接把链接发给对方。',
-  // OIDC 页的分区标题与说明。
+  // Section headings and descriptions on the OIDC page.
   'admin.oidc.section.provider': '身份提供方',
   'admin.oidc.claims_hint': '令牌里的哪些字段对应用户标识、邮箱与名称；通常保持默认即可。',
-  // 邮件页的分区标题。
+  // Section headings on the mail page.
   'admin.smtp.section.server': '发信服务器',
-  // 导入页：勾选「先试导入」时提交按钮的文字。
+  // Import page: submit button text when "dry run first" is checked.
   'package.import.submit_dry': '试导入',
-  // 个人设置的标签栏。
+  // Personal settings tab bar.
   'settings.nav.general': '通用',
-  // 邀请有效天数的占位提示。
+  // Placeholder hint for the invite validity in days.
   'admin.registration.field.expires_placeholder': '留空表示永不过期',
-  // 设置页合并后的标签、安全页、邮件页与 API 与 MCP 页。
+  // Merged tabs on the settings page, the security page, the mail page, and the API and MCP page.
   'settings.nav.security': '安全',
   'settings.nav.mail': '邮件',
   'settings.nav.api': 'API 与 MCP',
@@ -1312,7 +1312,7 @@ export const zhCN: LocaleCatalog = {
   'review.essay.placeholder': '先写下你的答案，再查看参考答案。',
   'review.essay.reference': '参考答案',
   'review.essay.no_reference': '这张卡没有参考答案，请对照题目自己评分。',
-  // ---- 指标说明浮层（HelpTip） ----
+  // ---- Metric help popover (HelpTip) ----
   'help.trigger': '{label}是什么意思？',
   'help.home.due': '已到计划复习时间的卡片数，包括逾期没复习的和学习中的卡。还没学过的新卡不计入。',
   'help.home.reviews_today': '今天提交的评分次数，同一张卡评几次算几次。「今天」从你设置的复习日切点开始算。',
@@ -1331,16 +1331,16 @@ export const zhCN: LocaleCatalog = {
   'help.stats.tag': '近 30 天的复习按笔记标签汇总，一张卡有多个标签时每个标签各算一次。',
   'help.stats.tag.retention': '近 30 天内带这个标签的到期复习中，答对（评分不是「重来」）的比例。没有到期复习时显示「暂无数据」。',
   'help.stats.retention_buckets_label': '记忆强度',
-  // ---- 笔记字段语法说明（NoteFieldsForm 的问号浮层） ----
+  // ---- Note field syntax help (NoteFieldsForm's question-mark popover) ----
   'note_help.text': '用 {{c1::内容}} 把要挖空的部分标出来。\n编号相同的挖空在同一张卡上一起考，每个编号各生成一张卡；其余挖空作为上下文显示答案。\n多个可接受的答案用 | 分隔：{{c1::答案|另一种说法}}，第一个是标准写法。\n可加提示：{{c1::答案::提示}}，复习时显示在空格处。',
-  // ---- 表单字段说明浮层（预设、复习页） ----
+  // ---- Form field help popover (presets, review page) ----
   'help.presets.retention': '希望到期复习时还记得的概率，填 0 到 1 之间的小数，如 0.9。\n设得越高，间隔越短，每天要复习的卡越多。',
   'help.presets.learning_steps': '新卡刚开始学时的复习间隔，按顺序走完后交给 FSRS 排程。\n用逗号分隔，单位 s / m / h / d，不写单位按分钟，如 1m,10m。\n留空表示不启用。',
   'help.presets.relearning_steps': '复习时答「重来」之后重新学习的间隔，格式同学习步骤，如 10m。\n留空表示不启用。',
   'help.presets.max_interval': '两次复习之间最多相隔的天数，算出的间隔更长时按这个值截断。默认 36500 天，相当于不限制。',
   'help.presets.fuzz': '给算出的间隔加一点随机偏移，让同一天学的卡不会总在同一天一起到期。只对 2.5 天以上的间隔生效。',
   'help.review.bury_label': '埋藏与暂停',
-  // ---- 「再来一组」：学完每日新卡目标后追加今天的新卡（复习完成页与卡组设置页） ----
+  // ---- "One more round": add new cards for today after finishing the daily new-card goal (review completion page and deck settings page) ----
   'review.extra_new.goal_done': '今天已学 {count} 张新卡，已达每日目标。',
   'review.extra_new.count_label': '再学几张新卡',
   'review.extra_new.submit': '再来一组',
@@ -1348,7 +1348,7 @@ export const zhCN: LocaleCatalog = {
   'review.extra_new.invalid': '请输入 1 到 {max} 之间的整数。',
   'review.extra_new.failed': '追加新卡失败，请重试。',
   'deck.settings.extra_today': '今日追加',
-  // ---- 评分按钮：下次间隔与「怎么选」浮层 ----
+  // ---- Grade buttons: next interval and the "how to choose" popover ----
   'review.interval.under_minute': '<1 分钟',
   'review.interval.minutes': '{n} 分钟',
   'review.interval.hours': '{n} 小时',

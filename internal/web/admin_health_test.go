@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// healthValueRE 从健康页取出 data-health=<key> 对应的值文本。
+// healthValueRE extracts the value text for data-health=<key> from the health page.
 var healthValueRE = regexp.MustCompile(`data-health="([a-z]+)"[^>]*>([^<]*)<`)
 
-// healthValues 请求健康页并解析出全部读数；解析失败时打印响应片段。
+// healthValues requests the health page and parses all readings; prints a response snippet when parsing fails.
 func healthValues(t *testing.T, srv *Server, cookies []*http.Cookie) map[string]string {
 	t.Helper()
 	rec := getWithCookies(t, srv, "/admin/health", cookies)

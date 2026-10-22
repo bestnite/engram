@@ -9,8 +9,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestPreviewIntervals 覆盖四档间隔预览：按 Again/Hard/Good/Easy 排列，间隔逐档不减；
-// 新卡的 Again 是预设的第一个学习步骤；共享卡组的成员按自己的预设预览。
+// TestPreviewIntervals covers the four-rung interval preview: ordered Again/Hard/Good/Easy, with intervals non-decreasing per rating;
+// a new card's Again is the preset's first learning step; a member of a shared deck previews with their own preset.
 func TestPreviewIntervals(t *testing.T) {
 	env := newTestEnv(t, 600, 600)
 	ctx := context.Background()
@@ -21,7 +21,7 @@ func TestPreviewIntervals(t *testing.T) {
 	if err := store.NewGrantStore(env.db).Grant(ctx, deck.ID, member.ID, store.RoleReader, &owner.ID); err != nil {
 		t.Fatalf("Grant() error = %v", err)
 	}
-	// 属主的学习步骤是 2m；成员的默认预设关掉学习步骤，Again 不再是分钟级。
+	// The owner's learning step is 2m; the member's default preset has learning steps turned off, so Again is no longer measured in minutes.
 	if err := env.db.Model(&store.Preset{}).Where("owner_user_id = ?", owner.ID).Update("learning_steps", "2m").Error; err != nil {
 		t.Fatalf("edit owner preset: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestPreviewIntervals(t *testing.T) {
 	}
 }
 
-// TestPreviewIntervalsNegatives 覆盖负例：非成员 forbidden，未知卡 not_found。
+// TestPreviewIntervalsNegatives covers the negative cases: non-member forbidden, unknown card not_found.
 func TestPreviewIntervalsNegatives(t *testing.T) {
 	env := newTestEnv(t, 600, 600)
 	ctx := context.Background()

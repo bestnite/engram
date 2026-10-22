@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedKindCard 建一张指定题型的卡（无 card_states，新卡），返回 card。
+// seedKindCard creates a card of the given card type (no card_states, a new card) and returns the card.
 func seedKindCard(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON, template string) store.Card {
 	t.Helper()
 	now := time.Now().UTC()
@@ -27,12 +27,12 @@ func seedKindCard(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON, te
 	return c
 }
 
-// TestSubmitReviewGradingRules 覆盖评分来源的规则（REST 入口，service 层同一实现也服务 MCP 与网页）：
-//   - 作答类题型不接受自评分，只能提交作答由服务端判分，或放弃作答；
-//   - grade_source 只能是 self 或不填，客户端不能把自评伪装成机器判分；
-//   - 自评题型不接受作答。
+// TestSubmitReviewGradingRules covers the grade-source rules (REST entry; the same service-layer implementation also serves MCP and web):
+//   - answer card types accept no self-grade: they submit an answer for server-side grading, or give up;
+//   - grade_source may only be self or absent, so a client cannot disguise a self-grade as machine grading;
+//   - self-graded card types accept no answer.
 //
-// 被拒的请求一条复习日志都不能写。
+// A rejected request must write not a single review log entry.
 func TestSubmitReviewGradingRules(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -45,7 +45,7 @@ func TestSubmitReviewGradingRules(t *testing.T) {
 		wantSource string
 		wantRating int
 		wantGrade  string
-		// wantDetail 是自评题型应存下的 grade_detail_json；空串表示不该存。
+		// wantDetail is the grade_detail_json a self-graded card type should store; an empty string means nothing should be stored.
 		wantDetail string
 	}{
 		{name: "graded card rejects a self rating", kind: "true_false", fields: `{"statement":"s","answer":true}`, template: "forward",

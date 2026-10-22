@@ -15,20 +15,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是账号安全与邮件流程的 SPA 同源 JSON 传输层。
+// This file is the same-origin JSON transport layer for account security and mail flows in the SPA.
 //
-// 它只新增「传输」：令牌签发/消费、一次性语义、匿名限流、改密码后的密钥作废与审计行全部复用既有
-// 服务逻辑。可导航的读取页（/forgot-password、/reset-password、/settings/email）与邮件里的一键
-// GET 链接（/verify-email、/confirm-email-change）都只返回应用壳，页面与令牌消费全部走这里的
-// JSON 端点；这些页面因此没有 SSR 回退。
+// It only adds "transport": token issuance/consumption, one-shot semantics, anonymous rate limiting, key invalidation after a password change and audit rows all reuse the existing
+// service logic. The navigable read pages (/forgot-password, /reset-password, /settings/email) and the one-click
+// GET links in emails (/verify-email, /confirm-email-change) only return the app shell; pages and token consumption all go through the
+// JSON endpoints here; these pages therefore have no SSR fallback.
 
-// registerAccountRoutes 挂载账号安全与邮件流程的 SPA JSON 端点与应用壳入口。
-// 令牌服务未装配时跳过，与 registerSecurityMailRoutes 的前置条件一致。
+// registerAccountRoutes mounts the SPA JSON endpoints and app-shell entry points for account security and mail flows.
+// Skipped when the token service is not wired up, matching the precondition of registerSecurityMailRoutes.
 func (s *Server) registerAccountRoutes(router *gin.Engine) {
 	if s.tokens == nil {
 		return
 	}
-	// 登录前流程：没有会话可绑 CSRF，用双提交 cookie（与 SSR 的 /forgot-password、/reset-password 一致）。
+	// Pre-login flows: there is no session to bind CSRF to, so use the double-submit cookie (same as the SSR /forgot-password and /reset-password).
 	router.POST("/api/v1/auth/forgot-password", auth.PreSessionCSRFMiddleware(), s.forgotPasswordSubmit)
 	router.POST("/api/v1/auth/reset-password", auth.PreSessionCSRFMiddleware(), s.resetPasswordSubmit)
 	router.POST("/api/v1/auth/verify-email", auth.PreSessionCSRFMiddleware(), s.verifyEmailSubmit)
@@ -40,27 +40,27 @@ func (s *Server) registerAccountRoutes(router *gin.Engine) {
 	}
 }
 
-// ── 应用壳入口（页面只返回应用壳，读写走 JSON 端点）──────────────────────────
+// ── App shell entry points (pages only return the app shell; reads and writes go through JSON endpoints) ──
 
-// forgotPasswordRoute 提供 GET /forgot-password：下发会话前双提交 cookie 并返回应用壳，
-// 由客户端路由渲染「请求重置」页；请求重置协议走 POST /api/v1/auth/forgot-password（同一份服务逻辑）。
-// SMTP 未配置的说明由响应的 mail_ready 字段驱动，不再由服务端渲染。
+// forgotPasswordRoute serves GET /forgot-password: issues the pre-session double-submit cookie and returns the app shell,
+// and the client router renders the "request reset" page; the request-reset protocol goes through POST /api/v1/auth/forgot-password (the same service logic).
+// The "SMTP not configured" notice is driven by the response's mail_ready field and is no longer rendered by the server.
 func (s *Server) forgotPasswordRoute(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// resetPasswordRoute 提供 GET /reset-password：下发会话前双提交 cookie 并返回应用壳，
-// 由客户端路由从 URL 读取 token 渲染「设置新密码」页；提交走 POST /api/v1/auth/reset-password。
-// token 缺失或无效的判定由 JSON 端点给出。
+// resetPasswordRoute serves GET /reset-password: issues the pre-session double-submit cookie and returns the app shell,
+// and the client router reads token from the URL to render the "set new password" page; submission goes through POST /api/v1/auth/reset-password.
+// Whether token is missing or invalid is decided by the JSON endpoint.
 func (s *Server) resetPasswordRoute(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// emailChangeRoute 提供 GET /settings/email：返回应用壳，由客户端路由渲染改邮箱页；
-// 读取与提交走 /api/v1/settings/email（同一份服务逻辑）。授权判定与迁移前逐项一致——这是登录用户
-// 自己的页面，未登录一律重定向登录页，切壳前先过 requireUser，绝不因切壳放开。
+// emailChangeRoute serves GET /settings/email: returns the app shell, and the client router renders the email-change page;
+// reads and submits go through /api/v1/settings/email (the same service logic). Authorization decisions match the pre-migration ones item by item — this is a signed-in user's
+// own page, so anyone signed out is always redirected to the login page and requireUser runs before the shell cutover; the cutover never loosens it.
 func (s *Server) emailChangeRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
@@ -68,35 +68,35 @@ func (s *Server) emailChangeRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// verifyEmailShell 是邮箱验证的规范入口（GET /verify-email）。邮件里的一键链接就指向这里，
-// 由 SPA 读取 ?token= 并通过 POST /api/v1/auth/verify-email 消费（一次性、有过期）。
-// 像 /login 一样先下发会话前双提交 cookie，再返回应用壳；这里只返回壳，不消费任何令牌。
+// verifyEmailShell is the canonical entry point for email verification (GET /verify-email). The one-click link in emails points here,
+// and the SPA reads ?token= and consumes it via POST /api/v1/auth/verify-email (one-shot, expiring).
+// Like /login it first issues the pre-session double-submit cookie, then returns the app shell; this only returns the shell and consumes no token.
 func (s *Server) verifyEmailShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// confirmEmailChangeShell 是改邮箱确认的规范入口（GET /confirm-email-change）。
-// 与 /verify-email 同构：下发双提交 cookie 并返回应用壳，确认协议走
-// POST /api/v1/auth/confirm-email-change。这里只返回壳，不消费令牌。
+// confirmEmailChangeShell is the canonical entry point for email-change confirmation (GET /confirm-email-change).
+// Isomorphic to /verify-email: issues the double-submit cookie and returns the app shell; the confirmation protocol goes through
+// POST /api/v1/auth/confirm-email-change. This only returns the shell and consumes no token.
 func (s *Server) confirmEmailChangeShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// ── JSON 端点（会话前）──────────────────────────────────────────────────────
+// ── JSON endpoints (pre-session) ──
 
-// apiForgotPasswordRequest 是 POST /api/v1/auth/forgot-password 的请求体。
+// apiForgotPasswordRequest is the request body for POST /api/v1/auth/forgot-password.
 type apiForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-// forgotPasswordSubmit 处理 SPA 的重置请求（POST /api/v1/auth/forgot-password）。
+// forgotPasswordSubmit handles the SPA's reset request (POST /api/v1/auth/forgot-password).
 //
-// 匿名限流（IP + 目标邮箱各 5 次 / 15 分钟）在查库与
-// 入 outbox 之前；无论邮箱是否存在都返回同形响应，避免账号枚举。响应里的 mail_ready 只反映站点
-// 级的「邮件是否配置」，与账号存在性无关，前端据此在未配置时渲染 mail.not_configured 而不是
-// 谎报「已发送」。这里不返回令牌、不回显邮箱。
+// The anonymous rate limit (IP + target mailbox, 5 times each / 15 minutes) runs before the DB lookup and
+// enqueueing to the outbox; the same response shape is returned whether or not the mailbox exists, avoiding account enumeration. mail_ready in the response only reflects the site-level
+// "is mail configured", unrelated to whether the account exists; the frontend uses it to render mail.not_configured when unconfigured instead of
+// falsely reporting "sent". No token is returned here and the mailbox is not echoed back.
 func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 	var req apiForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -120,17 +120,17 @@ func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"mail_ready": mailReady})
 }
 
-// apiResetPasswordRequest 是 POST /api/v1/auth/reset-password 的请求体。
+// apiResetPasswordRequest is the request body for POST /api/v1/auth/reset-password.
 type apiResetPasswordRequest struct {
 	Token    string `json:"token"`
 	Password string `json:"password"`
 }
 
-// resetPasswordSubmit 消费一次性重置令牌并设置新密码（POST /api/v1/auth/reset-password）。
+// resetPasswordSubmit consumes a one-shot reset token and sets the new password (POST /api/v1/auth/reset-password).
 //
-// 令牌只由服务端签发并只存摘要，消费是条件更新（一次性）；密码不合规时令牌已被消费——这是刻意的，
-// 与 SSR 一致：一次性令牌用掉即废，用户重新走一次「忘记密码」即可，不留可反复尝试的窗口。
-// 改密码的密钥作废由 SetPasswordFromResetTx 承担；审计行与 SSR 完全相同。
+// Tokens are issued only by the server and only their digest is stored, and consumption is a conditional update (one-shot); when the password is non-compliant the token has already been consumed — this is deliberate,
+// consistent with SSR: a one-shot token is void once used, the user simply goes through "forgot password" again, and no window for repeated attempts is left open.
+// Key invalidation on password change is handled by SetPasswordFromResetTx; the audit rows are exactly the same as SSR.
 func (s *Server) resetPasswordSubmit(c *gin.Context) {
 	var req apiResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -169,13 +169,13 @@ func (s *Server) resetPasswordSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"reset": true})
 }
 
-// apiTokenOnlyRequest 是只带一枚令牌的请求体（验证邮箱、确认改邮箱）。
+// apiTokenOnlyRequest is a request body carrying only a single token (verify email, confirm email change).
 type apiTokenOnlyRequest struct {
 	Token string `json:"token"`
 }
 
-// verifyEmailSubmit 消费邮箱验证令牌并标记邮箱已验证（POST /api/v1/auth/verify-email）。
-// 令牌语义与 SSR 的 verifyEmail 完全一致：一次性、有过期；成功写审计，失败返回稳定 code。
+// verifyEmailSubmit consumes the email verification token and marks the email verified (POST /api/v1/auth/verify-email).
+// Token semantics are exactly the same as SSR's verifyEmail: one-shot, expiring; success writes an audit row, failure returns a stable code.
 func (s *Server) verifyEmailSubmit(c *gin.Context) {
 	var req apiTokenOnlyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -203,8 +203,8 @@ func (s *Server) verifyEmailSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"verified": true})
 }
 
-// confirmEmailChangeSubmit 消费改邮箱令牌并真正更新邮箱（POST /api/v1/auth/confirm-email-change）。
-// 令牌 Payload 保存待确认的新邮箱；确认成功写审计，新邮箱冲突返回 409（与 SSR 一致）。
+// confirmEmailChangeSubmit consumes the email-change token and actually updates the email (POST /api/v1/auth/confirm-email-change).
+// The token Payload holds the new mailbox pending confirmation; a successful confirmation writes an audit row, and a conflicting new mailbox returns 409 (same as SSR).
 func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 	var req apiTokenOnlyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -238,10 +238,10 @@ func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"changed": true})
 }
 
-// ── JSON 端点（会话）────────────────────────────────────────────────────────
+// ── JSON endpoints (session) ──
 
-// emailSettingsGet 返回当前用户的邮箱、验证状态与站点邮件是否可用（GET /api/v1/settings/email）。
-// 仅接受浏览器会话；会话缺失时由 profileSessionOnly 返回 401。绝不返回任何其它用户数据。
+// emailSettingsGet returns the current user's mailbox, verification state and whether site mail is available (GET /api/v1/settings/email).
+// Accepts browser sessions only; when the session is missing, profileSessionOnly returns 401. Never returns any other user's data.
 func (s *Server) emailSettingsGet(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -260,15 +260,15 @@ func (s *Server) emailSettingsGet(c *gin.Context) {
 	})
 }
 
-// apiEmailChangeRequest 是 POST /api/v1/settings/email 的请求体。
+// apiEmailChangeRequest is the request body for POST /api/v1/settings/email.
 type apiEmailChangeRequest struct {
 	Email string `json:"email"`
 }
 
-// emailChangeSubmit 提交改邮箱请求（POST /api/v1/settings/email）：向新地址发确认信，确认前不改库。
+// emailChangeSubmit submits an email-change request (POST /api/v1/settings/email): sends a confirmation mail to the new address and does not touch the DB before confirmation.
 //
-// SMTP 未配置、格式非法、与原邮箱相同、已被占用都拒绝且
-// 不写库；成功只入队确认信并写审计（ActionUserEmailChangeRequest），库中的邮箱在点击确认链接前不变。
+// SMTP unconfigured, malformed format, same as the original mailbox and already taken are all rejected with
+// no DB write; success only enqueues the confirmation mail and writes an audit row (ActionUserEmailChangeRequest), and the mailbox in the DB stays unchanged until the confirmation link is clicked.
 func (s *Server) emailChangeSubmit(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -315,8 +315,8 @@ func (s *Server) emailChangeSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sent": true})
 }
 
-// resendVerificationSubmit 重发邮箱验证邮件（POST /api/v1/settings/verify-email，登录用户）。
-// 语言跟随用户自己的设置（sendEmailVerification → userLocalizer），审计行与 SSR 完全相同。
+// resendVerificationSubmit resends the email verification mail (POST /api/v1/settings/verify-email, signed-in users).
+// The language follows the user's own settings (sendEmailVerification → userLocalizer); the audit rows are exactly the same as SSR.
 func (s *Server) resendVerificationSubmit(c *gin.Context) {
 	user, ok := s.profileSessionOnly(c)
 	if !ok {
@@ -335,10 +335,10 @@ func (s *Server) resendVerificationSubmit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sent": true})
 }
 
-// ── 共享判定（JSON 传输专用）────────────────────────────────────────────────
+// ── Shared decisions (JSON transport only) ──
 
-// actionTokenErrorCode 把令牌消费错误映射到稳定英文 code。
-// 前端按 code 映射本地化文案，绝不解析英文 message。
+// actionTokenErrorCode maps token consumption errors to stable English codes.
+// The frontend maps localized copy by code and never parses the English message.
 func actionTokenErrorCode(err error) string {
 	switch {
 	case errors.Is(err, store.ErrActionTokenExpired):
@@ -350,9 +350,9 @@ func actionTokenErrorCode(err error) string {
 	}
 }
 
-// passwordPolicyErrorCode 校验新密码强度并返回稳定英文 code；通过时返回空串。
-// 判定以 auth 常量为准（auth.MinPasswordLength / MaxPasswordLength / ValidatePasswordPolicy），
-// 只是把本地化文案换成稳定 code 供 JSON 传输使用。
+// passwordPolicyErrorCode validates new-password strength and returns a stable English code; returns an empty string when it passes.
+// The decision follows the auth constants (auth.MinPasswordLength / MaxPasswordLength / ValidatePasswordPolicy),
+// merely replacing localized copy with a stable code for use by the JSON transport.
 func passwordPolicyErrorCode(password string) string {
 	if password == "" {
 		return "password_required"
@@ -369,8 +369,8 @@ func passwordPolicyErrorCode(password string) string {
 	return ""
 }
 
-// passwordPolicyErrorMessage 返回密码强度 code 对应的稳定英文兜底文案。
-// 与 registrationErrorMessage 同一约定：code 稳定、message 仅作英文兜底，前端按 code 本地化。
+// passwordPolicyErrorMessage returns the stable English fallback copy for a password-strength code.
+// Same convention as registrationErrorMessage: codes are stable, the message is only an English fallback, and the frontend localizes by code.
 func passwordPolicyErrorMessage(code string) string {
 	switch code {
 	case "password_required":

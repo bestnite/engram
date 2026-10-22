@@ -4,11 +4,13 @@ import DecksView from '../lib/views/DecksView.svelte';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 卡组列表页的入口断言。
+ * Entry-point assertions for the deck list page.
  *
- * 卡组包导入的页面、路由与接口一直都在（/import → ImportView，POST /api/v1/decks/import），
- * 唯一缺过的是入口链接：SSR 时期它挂在卡组列表头部，SPA 迁移时没有被带过来，页面于是只能
- * 靠手输地址访问。这里钉住列表头部始终渲染这个链接。
+ * The deck package import page, route and API have always existed (/import → ImportView,
+ * POST /api/v1/decks/import); the only thing ever missing was the entry link: in SSR days
+ * it hung off the deck list header and was not carried over in the SPA migration, leaving
+ * the page reachable only by typing the URL. This pins that the list header always
+ * renders that link.
  */
 describe('DecksView import entry', () => {
   beforeEach(() => {

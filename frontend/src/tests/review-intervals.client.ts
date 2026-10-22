@@ -6,8 +6,9 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 自评卡翻面后，每个评分按钮下显示选这一档之后的下次间隔（来自 render 响应），
- * 评分行旁边有「怎么选」的帮助浮层；render 没给间隔时按钮只显示评分名。
+ * After flipping a self-rated card, each rating button shows the next interval for that
+ * rating (from the render response), with a "how to choose" help popover beside the rating
+ * row; when render gives no intervals the buttons show only the rating names.
  */
 describe('ReviewView rating intervals and guidance', () => {
   let instance: ReturnType<typeof mount> | null = null;

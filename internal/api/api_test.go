@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// testEnv 是 API 测试的装配：真实 SQLite + 全部 store + 可注入时钟。
+// testEnv is the harness for API tests: a real SQLite database, all stores, and an injectable clock.
 type testEnv struct {
 	api  *API
 	db   *gorm.DB
@@ -28,7 +28,7 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// newTestEnv 打开一个临时 SQLite 库并装配 API；readLimit/writeLimit 用于限流用例。
+// newTestEnv opens a temporary SQLite database and wires up the API; readLimit/writeLimit are used by the rate-limit cases.
 func newTestEnv(t *testing.T, readLimit, writeLimit int) *testEnv {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -71,7 +71,7 @@ func (e *testEnv) router() *gin.Engine {
 	return r
 }
 
-// seedUser 直接写一行 users；status 固定 active。
+// seedUser writes a users row directly; status is always active.
 func seedUser(t *testing.T, db *gorm.DB, name, role string) *store.User {
 	t.Helper()
 	u := store.User{
@@ -85,7 +85,7 @@ func seedUser(t *testing.T, db *gorm.DB, name, role string) *store.User {
 	return &u
 }
 
-// seedKey 创建一个 API key；expires 非 nil 时设置过期时间。
+// seedKey creates an API key; when expires is non-nil it also sets the expiry time.
 func seedKey(t *testing.T, keys *store.APIKeyStore, userID uint64, scopes []string, expires *time.Time) *store.CreatedAPIKey {
 	t.Helper()
 	created, err := keys.Create(context.Background(), store.CreateAPIKeyParams{
@@ -97,7 +97,7 @@ func seedKey(t *testing.T, keys *store.APIKeyStore, userID uint64, scopes []stri
 	return created
 }
 
-// seedDeck 创建一个属于 ownerID 的卡组，并顺带建一个 Default 预设。
+// seedDeck creates a deck owned by ownerID, and creates a Default preset along the way.
 func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) *store.Deck {
 	t.Helper()
 	preset := store.NewPreset(ownerID, "Default")
@@ -114,7 +114,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) *store.Deck {
 	return &d
 }
 
-// safeName 把子测试名转成可作为用户名/邮箱前缀的字符串。
+// safeName turns a subtest name into a string usable as a username/email prefix.
 func safeName(s string) string {
 	return strings.NewReplacer(" ", "_", "-", "_", "/", "_").Replace(s)
 }

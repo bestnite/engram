@@ -20,7 +20,7 @@
 
   let { initialLoading = true, initialError = null, initialData = null }: Props = $props();
 
-  /** 从当前 URL 的查询串初始化过滤条件（服务端 SSR 页也接受同样的参数）。 */
+  /** Initialize the filter criteria from the current URL's query string (the server-side SSR page accepts the same parameters too). */
   function initialQuery(): Required<Pick<AdminAuditQuery, 'user' | 'action' | 'target_type' | 'target_id' | 'from' | 'to'>> {
     const q = $routeStore.query ?? {};
     return {
@@ -98,7 +98,7 @@
   <AdminNav />
   <PageHeader title={$t('admin.audit.heading')} testId="admin-audit-title" description={$t('admin.audit.intro')} />
 
-  <!-- 筛选条：放在表格上方的一组输入，不再包成卡片。 -->
+  <!-- Filter bar: a group of inputs above the table, no longer wrapped in a card. -->
   <form onsubmit={submit} data-testid="admin-audit-filter" class="mb-5 space-y-3" aria-label={$t('admin.audit.filter.heading')}>
     <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <label class="block text-sm font-medium text-foreground">{$t('admin.audit.filter.user')}

@@ -11,8 +11,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckListExposesOnlyPublicIDs 断言对外响应里的 id 是不透明的 public id，
-// 自增数字主键不出现在任何字段里——这是「路由与 JSON 不再暴露自增 id」的核心不变量。
+// TestDeckListExposesOnlyPublicIDs asserts the ids in external responses are opaque public ids,
+// with the auto-increment numeric primary key appearing in no field - the core invariant of "routes and JSON no longer expose auto-increment ids".
 func TestDeckListExposesOnlyPublicIDs(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()
@@ -44,7 +44,7 @@ func TestDeckListExposesOnlyPublicIDs(t *testing.T) {
 	if _, err := uuid.Parse(got.ID); err != nil {
 		t.Errorf("deck id %q is not a UUID: %v", got.ID, err)
 	}
-	// 数字主键即使与 public id 恰好同形也不该出现；这里显式挡住自增主键本身。
+	// The numeric primary key must not appear even if it happens to look like the public id; here the auto-increment key itself is explicitly blocked.
 	if numeric := strconv.FormatUint(deck.ID, 10); got.ID == numeric {
 		t.Errorf("deck id is the numeric primary key %s, want an opaque public id", numeric)
 	}

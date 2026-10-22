@@ -1,34 +1,34 @@
-/* Tailwind CSS v4 样式入口
-   设计令牌（颜色、圆角、侧边栏宽度）集中定义在这里，组件只引用语义名（bg-background、
-   text-muted-foreground、border-border……），不再成对书写 zinc-* 与 dark:zinc-*：
-   深浅两套取值只在本文件各写一次，组件换主题不需要任何 dark: 变体。
-   令牌命名沿用 shadcn-svelte 的约定，方便直接移植它的组件配方。 */
+/* Tailwind CSS v4 style entry
+   Design tokens (colors, radii, sidebar width) are defined centrally here; components only reference semantic names (bg-background,
+   text-muted-foreground, border-border...), and no longer write zinc-* and dark:zinc-* in pairs:
+   the light and dark values are written once each, in this file only, so switching a component's theme needs no dark: variant.
+   Token naming follows the shadcn-svelte conventions, making it easy to port its component recipes directly. */
 @import "tailwindcss";
-/* 弹窗、下拉、抽屉的进出场动画（animate-in / fade-in / zoom-in / slide-in-from-*）。
-   bits-ui 组件在开合时切换 data-state，配合这些工具类即可得到过渡，不需要手写关键帧。 */
+/* Enter/exit animations for popovers, dropdowns and drawers (animate-in / fade-in / zoom-in / slide-in-from-*).
+   bits-ui components toggle data-state on open/close; combined with these utility classes that yields a transition without hand-written keyframes. */
 @import "tw-animate-css";
 
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* 页面底与正文 */
+  /* Page bottom layer and body text */
   --background: #ffffff;
   --foreground: #18181b;
-  /* 次级底面：侧边栏、表头等弱分区 */
+  /* Secondary surface: weak separators such as the sidebar and table headers */
   --surface: #fafafa;
-  /* 弱填充：hover、标签、键帽 */
+  /* Weak fill: hover, badges, keycaps */
   --muted: #f4f4f5;
-  /* 次要文字。#71717a 在白底上对比度 4.8:1，满足正文 4.5:1 */
+  /* Secondary text. #71717a has 4.8:1 contrast on white, meeting 4.5:1 for body text */
   --muted-foreground: #71717a;
-  /* 当前项（侧边栏选中、菜单高亮） */
+  /* Current item (selected sidebar entry, highlighted menu item) */
   --selected: #ededf0;
   --border: #e7e7ea;
   --input: #e4e4e7;
   --ring: #2563eb;
-  /* 主操作：近黑实心按钮 */
+  /* Primary action: near-black solid button */
   --primary: #18181b;
   --primary-foreground: #fafafa;
-  /* 品牌色：只用于焦点、选中、链接与进度，不做大面积底色 */
+  /* Brand color: used only for focus, selection, links and progress, never as a large fill */
   --brand: #2563eb;
   --brand-foreground: #ffffff;
   --brand-soft: #eff4ff;
@@ -37,12 +37,12 @@
   --destructive-soft: #fff1f2;
   --success: #059669;
   --warning: #d97706;
-  /* 浮层（弹窗、下拉、抽屉） */
+  /* Overlays (popovers, dropdowns, drawers) */
   --popover: #ffffff;
   --overlay: rgb(9 9 11 / 0.4);
   --sidebar: #fafafa;
   --sidebar-border: #ededf0;
-  /* 图表分类色：按固定顺序取用，不循环。两色已用色觉缺陷模拟校验过（相邻 ΔE ≥ 24，对底色 ≥ 3:1）。 */
+  /* Chart category colors: taken in a fixed order, not cycled. Both have been checked with color-vision-deficiency simulation (adjacent ΔE ≥ 24, ≥ 3:1 against the background). */
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --radius: 0.5rem;
@@ -76,7 +76,7 @@
   --chart-2: #d95926;
 }
 
-/* inline：工具类直接引用 var()，切换 .dark 时无需重新生成类。 */
+/* inline: utilities reference var() directly, so toggling .dark needs no class regeneration. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -106,15 +106,15 @@
 }
 
 @layer base {
-  /* 现代高质量排版基底：平滑字体、优化数字与连字 */
+  /* Modern high-quality typography base: smooth fonts, optimized figures and ligatures */
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
     letter-spacing: -0.011em;
-    /* 始终为滚动条预留位置：页面高度跨过一屏时滚动条出现或消失，
-       不预留的话整页内容会横向跳动几像素，切换页面时尤其明显。 */
+    /* Always reserve space for the scrollbar: when page height crosses one screen the scrollbar appears or disappears,
+       without reserving space the whole page shifts horizontally by a few pixels, which is especially noticeable when switching pages. */
     scrollbar-gutter: stable;
   }
 
@@ -127,20 +127,20 @@
     color: var(--foreground);
   }
 
-  /* 边框默认取令牌色：只写 border 不写颜色时，与全站分隔线一致。 */
+  /* Borders default to the token color: writing border without a color matches the site-wide dividers. */
   *,
   ::before,
   ::after {
     border-color: var(--border);
   }
 
-  /* 可见焦点：键盘 Tab 导航时为交互元素给出焦点环，表单输入框由下方专用焦点样式接管 */
+  /* Visible focus: keyboard Tab navigation gets a focus ring on interactive elements; form inputs are taken over by the dedicated focus styles below */
   :where(a, button, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
-  /* 输入框与表单控件的平滑焦点过渡 */
+  /* Smooth focus transitions for inputs and form controls */
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
     transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms ease;
   }
@@ -160,7 +160,7 @@
     background-color: color-mix(in srgb, var(--brand) 22%, transparent);
   }
 
-  /* 细化滚动条 */
+  /* Refined scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -184,18 +184,18 @@
   }
 }
 
-/* 页面切换过渡（View Transitions API，见 router 的 navigate）：只做短促的淡入淡出，
-   不做位移——位移会让人以为布局在动，正是要消除的「抖动感」。 */
+/* Page transition (View Transitions API, see navigate in the router): only a short fade,
+   no movement - movement makes people think the layout is shifting, which is exactly the "jankiness" being removed. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 140ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 侧边栏在两个都有它的页面之间不参与淡入淡出：它没变，跟着闪一下反而显得整屏在重绘。
-   只有新旧两张快照同时存在时才关闭动画（:only-child 为假）。进入复习页这类没有侧边栏的
-   布局时只剩旧快照，若也关掉动画，它会原样停留到整个过渡结束再突然消失，看起来像卡了一下；
-   这时让它与页面同步淡出（反方向同理淡入）。 */
+/* The sidebar does not take part in the fade between two pages that both have one: it did not change, and flashing it makes the whole screen look redrawn.
+   The animation is turned off only when both the old and new snapshots exist (:only-child is false). Entering a layout without a sidebar, such as the review page,
+   leaves only the old snapshot; if the animation were disabled there too, it would sit unchanged until the whole transition ends and then vanish abruptly, looking like a stall.
+   So instead let it fade out in sync with the page (and symmetrically fade in). */
 .app-sidebar {
   view-transition-name: app-sidebar;
 }
@@ -212,7 +212,7 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 用户在系统里关闭了动画：所有过渡与动画缩短到一帧，保留状态变化本身。 */
+/* The user turned animations off in the system: all transitions and animations shrink to one frame, keeping the state change itself. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -226,13 +226,13 @@
   }
 }
 
-/* 复习计数器深色配色 */
+/* Review counter dark palette */
 html.dark #review-remaining,
 html.dark #review-done {
   color: #f4f4f5;
 }
 
-/* 按钮按下时的轻微缩放反馈 */
+/* Slight scale feedback while a button is pressed */
 @utility btn-press {
   transition: transform 100ms ease, box-shadow 100ms ease, background-color 150ms ease, color 150ms ease;
   &:active {
@@ -240,9 +240,9 @@ html.dark #review-done {
   }
 }
 
-/* 旧的卡片底面。新页面不要再用：区块之间用标题、间距与分隔线区分，
-   边框只留给真正的容器（表格、输入框），阴影只留给浮层。
-   保留这两个类只是为了让尚未改版的页面继续可用，取值已改为令牌。 */
+/* Legacy card surface. Do not use it in new pages: separate blocks with headings, spacing and dividers,
+   leave borders only to real containers (tables, inputs) and shadows only to overlays.
+   These two classes are kept only so pages that are not yet redesigned keep working; their values now point at tokens. */
 @utility card-elevated {
   background-color: var(--background);
   border: 1px solid var(--border);
@@ -253,16 +253,16 @@ html.dark #review-done {
   border: 1px solid var(--border);
 }
 
-/* 表单字段的统一皮肤（多处复用的样式必须封装成一处）。
-   只写"皮肤"（圆角/边框/底色/内边距/配色），宽度、间距、字号留给调用点——
-   字号刻意不在这里定：它必须由调用点显式给出，否则元素会继承祖先字号，
-   同一页两个输入框一个 16px 一个 14px（按钮区就发生过同样的漂移）。
-   焦点样式由上面 @layer base 的规则统一接管，调用点不要再写 focus: 类。 */
+/* The unified skin for form fields (styles reused in several places must live in one place).
+   Write only the "skin" (radius/border/background/padding/colors) and leave width, spacing and font size to the call site -
+   font size is deliberately not set here: it must be given explicitly by the call site, otherwise the element inherits the ancestor's size and
+   two inputs on the same page end up 16px and 14px (the same drift happened in the button area).
+   Focus styles are taken over centrally by the @layer base rules above; call sites should not write focus: classes again. */
 @utility field-input {
   border-radius: var(--radius);
   border: 1px solid var(--input);
   background-color: var(--background);
-  /* 7px 上下内边距 + 20px 行高 + 边框 = 36px，与 Select、lg 按钮同高，同一行的控件天然对齐。 */
+  /* 7px vertical padding + 20px line height + border = 36px, the same height as Select and lg buttons, so controls in one row align naturally. */
   padding: 0.4375rem 0.75rem;
   color: var(--foreground);
 
@@ -271,9 +271,9 @@ html.dark #review-done {
   }
 }
 
-/* 骨架屏延迟显现：前 150ms 完全透明，之后淡入。
-   多数请求在 150ms 内就回来了，此时骨架屏从未被看见，页面直接从空白换成内容；
-   只有真正慢的加载才会看到占位，避免「一闪而过的加载中」。 */
+/* Skeleton delayed appearance: fully transparent for the first 150ms, then fades in.
+   Most requests come back within 150ms, so the skeleton is never seen and the page goes straight from blank to content;
+   only genuinely slow loads show the placeholder, avoiding a "flash of loading". */
 @utility skeleton-reveal {
   animation: skeleton-reveal 200ms ease-out 150ms both;
 }
@@ -287,28 +287,28 @@ html.dark #review-done {
   }
 }
 
-/* 骨架屏脉冲 */
+/* Skeleton pulse */
 @utility skeleton-block {
   background-color: var(--muted);
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* 自定义下拉选项选中态 */
+/* Custom dropdown option selected state */
 .select-option-active {
   background-color: var(--muted);
   color: var(--foreground);
   font-weight: 500;
 }
 
-/* MathJax 的 SVG 输出把每个公式放进 <mjx-container> 里的 <svg>。Tailwind 的 preflight 把所有 svg
-   设成 display: block，行内公式因此各占一行，块级公式也失去居中。把 svg 还原成行内元素：
-   行内公式回到文字中间（MathJax 写在 svg 上的 vertical-align 随之生效），块级公式仍由
-   display="true" 的容器负责独占一行并居中。 */
+/* MathJax's SVG output puts each formula in an <svg> inside an <mjx-container>. Tailwind's preflight sets every svg
+   to display: block, so inline formulas each take a line and block formulas also lose their centering. Restore svg to an inline element:
+   inline formulas return to the middle of the text (the vertical-align MathJax writes on the svg then takes effect), and block formulas are still
+   given their own line and centered by the display="true" container. */
 mjx-container[jax='SVG'] > svg {
   display: inline;
 }
 
-/* 填空卡公式外的考点：正面占位与背面答案由服务端包在 span.cloze 里；公式内的考点用 \boxed 加框，不经过这条样式 */
+/* Cloze blanks outside formulas: the front placeholder and back answer are wrapped by the server in span.cloze; blanks inside formulas are boxed with \boxed and do not go through this style */
 .cloze {
   color: #2563eb;
   font-weight: 600;

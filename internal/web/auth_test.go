@@ -18,7 +18,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// testEncryptionKey 是测试用 AES-GCM 主密钥（base64 的 32 字节），与生产无关。
+// testEncryptionKey is the AES-GCM master key used in tests (base64 of 32 bytes), unrelated to production.
 func testEncryptionKey() string {
 	raw := make([]byte, 32)
 	for i := range raw {
@@ -27,18 +27,18 @@ func testEncryptionKey() string {
 	return base64.StdEncoding.EncodeToString(raw)
 }
 
-// testSessionSecret 是测试用会话签名密钥；长度足够且与生产无关。
+// testSessionSecret is the session signing secret used in tests; long enough and unrelated to production.
 var testSessionSecret = []byte("test-session-secret-0123456789abcdef")
 
-// newAuthServer 构造一个装配了账号、会话与用户存储的测试服务，并返回底层 DB。
-// 不信任任何代理（默认），请求 IP 一律取 RemoteAddr。
+// newAuthServer builds a test service wired with account, session and user stores, and returns the underlying DB.
+// Trusts no proxy (the default), so the request IP always comes from RemoteAddr.
 func newAuthServer(t *testing.T) (*Server, *gorm.DB) {
 	t.Helper()
 	return newAuthServerWithProxies(t, nil)
 }
 
-// newAuthServerWithProxies 与 newAuthServer 相同，但显式注入可信代理列表，
-// 用于验证 X-Forwarded-For 只在来自可信代理时才被采信。
+// newAuthServerWithProxies is the same as newAuthServer but injects an explicit trusted proxy list,
+// used to verify X-Forwarded-For is only honored when it comes from a trusted proxy.
 func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *gorm.DB) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
@@ -52,7 +52,7 @@ func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *
 	sessions := store.NewSessionStore(db)
 	invites := store.NewInviteStore(db)
 	accounts, err := auth.NewAccountService(users, sessions, store.NewAPIKeyStore(db), auth.NewPasswordHasher(auth.Params{
-		// 测试用弱参数，避免每次哈希耗时过长。
+		// Weak parameters for tests, so hashing is not slow every time.
 		Memory: 8 * 1024, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32,
 	}))
 	if err != nil {
@@ -66,13 +66,13 @@ func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}
-	// 限流器注入空等待：测试断言的是延迟数值（见 internal/auth 的单测），这里不需要真的睡。
+	// Inject an empty wait into the limiter: the test asserts the delay value (see the unit test in internal/auth), so it need not actually sleep here.
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{
 		BaseDelay: 5 * time.Millisecond,
 		MaxDelay:  50 * time.Millisecond,
 		Sleep:     func(context.Context, time.Duration) error { return nil },
 	})
-	// TOTP 二次验证：真实 SecretCodec + TOTPStore，登录第二步与设置接口因此可用。
+	// TOTP two-factor: a real SecretCodec + TOTPStore, so the login second step and the settings API are available.
 	codec, err := store.NewSecretCodec(testEncryptionKey())
 	if err != nil {
 		t.Fatalf("NewSecretCodec() error = %v", err)
@@ -101,13 +101,13 @@ func newAuthServerWithProxies(t *testing.T, trustedProxies []string) (*Server, *
 	return srv, db
 }
 
-// testDoubleSubmitToken 是测试里使用的固定会话前 CSRF token；值只需满足长度下限。
+// testDoubleSubmitToken is the fixed pre-session CSRF token used in tests; the value only needs to meet the minimum length.
 const testDoubleSubmitToken = "test-double-submit-token-0123456789"
 
-// postForm 以 application/x-www-form-urlencoded 提交表单。
+// postForm submits a form as application/x-www-form-urlencoded.
 //
-// 移除 SSR 会话前表单后，页面写请求全部改走同源 JSON 端点（postJSON + 双提交头），
-// 这个助手只服务仍存在的表单写端点（例如 /settings/password、/admin/*、/unsubscribe）。
+// After the SSR pre-session forms were removed, page write requests all go through same-origin JSON endpoints (postJSON + double-submit headers),
+// and this helper only serves the form write endpoints that still exist (e.g. /settings/password, /admin/*, /unsubscribe).
 func postForm(t *testing.T, srv *Server, target string, values url.Values, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
@@ -120,7 +120,7 @@ func postForm(t *testing.T, srv *Server, target string, values url.Values, cooki
 	return rec
 }
 
-// getWithCookies 带 cookie 发起 GET。
+// getWithCookies issues a GET with cookies.
 func getWithCookies(t *testing.T, srv *Server, target string, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
@@ -132,8 +132,8 @@ func getWithCookies(t *testing.T, srv *Server, target string, cookies []*http.Co
 	return rec
 }
 
-// loginJSON 走 SPA 的同源 JSON 登录（POST /api/v1/auth/login），返回会话 cookie 与会话绑定的 CSRF token。
-// 会话前双提交 cookie/镜像 token 由 GET /login 应用壳下发。登录失败直接 Fatal。
+// loginJSON goes through the SPA's same-origin JSON login (POST /api/v1/auth/login) and returns the session cookie and the session-bound CSRF token.
+// The pre-session double-submit cookie/mirror token is issued by the GET /login app shell. Fatals on login failure.
 func loginJSON(t *testing.T, srv *Server, db *gorm.DB, username, password string) ([]*http.Cookie, string) {
 	t.Helper()
 	cookie, headers := preSessionPair(t, srv, "/login")
@@ -153,8 +153,8 @@ func loginJSON(t *testing.T, srv *Server, db *gorm.DB, username, password string
 	return rec.Result().Cookies(), sess.CSRFToken
 }
 
-// setupFirstAdmin 走 JSON 引导端点建出首个管理员；双提交 cookie 取自已打开的引导窗口。
-// 调用方断言响应码。
+// setupFirstAdmin creates the first admin through the JSON bootstrap endpoint; the double-submit cookie is taken from the bootstrap window it opens.
+// The caller asserts the response code.
 func setupFirstAdmin(t *testing.T, srv *Server, username, email, password string) *httptest.ResponseRecorder {
 	t.Helper()
 	cookie, headers := preSessionPair(t, srv, "/setup")
@@ -165,12 +165,12 @@ func setupFirstAdmin(t *testing.T, srv *Server, username, email, password string
 	return postJSON(srv, "/api/v1/auth/setup", body, []*http.Cookie{cookie}, headers)
 }
 
-// TestAuthFlowThroughJSONEndpoints 是验收：引导建管理员 → JSON 登录 → JSON 登出。
-// 页面已迁移到 SPA，这条链路的唯一传输是 /api/v1/auth/{setup,login,session,logout}。
+// TestAuthFlowThroughJSONEndpoints is an acceptance test: bootstrap an admin → JSON login → JSON logout.
+// The pages have migrated to the SPA, so the only transport on this chain is /api/v1/auth/{setup,login,session,logout}.
 func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 	srv, db := newAuthServer(t)
 
-	// 尚无管理员：引导端点建出首个管理员，且不签发会话。
+	// No admin yet: the bootstrap endpoint creates the first admin and issues no session.
 	setup := setupFirstAdmin(t, srv, "admin", "admin@example.com", "Sup3rSecret!")
 	if setup.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/auth/setup = %d, want 200 (body %s)", setup.Code, snippet(setup.Body.String()))
@@ -179,7 +179,7 @@ func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 		t.Error("setup must not issue a session cookie")
 	}
 
-	// 密码错误：401，不下发会话 cookie。
+	// Wrong password: 401, no session cookie issued.
 	cookie, headers := preSessionPair(t, srv, "/login")
 	bad := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "admin", "password": "WrongPassword!",
@@ -191,16 +191,16 @@ func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 		t.Error("failed login issued a session cookie")
 	}
 
-	// 正确凭据：200 + 会话 cookie + 会话绑定的 CSRF token。
+	// Correct credentials: 200 + session cookie + session-bound CSRF token.
 	cookies, csrf := loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 
-	// 会话可用：GET /api/v1/auth/session 报告已登录。
+	// The session works: GET /api/v1/auth/session reports signed in.
 	me := getWithCookies(t, srv, "/api/v1/auth/session", cookies)
 	if !strings.Contains(me.Body.String(), `"authenticated":true`) {
 		t.Fatalf("session after login is not authenticated: %s", snippet(me.Body.String()))
 	}
 
-	// 登出必须带会话绑定的 CSRF：缺 token 403，带 token 200 并作废会话。
+	// Logout must carry the session-bound CSRF: no token 403, with token 200 and the session invalidated.
 	noCSRF := postJSON(srv, "/api/v1/auth/logout", nil, cookies, nil)
 	if noCSRF.Code != http.StatusForbidden {
 		t.Fatalf("logout without a CSRF token = %d, want 403", noCSRF.Code)
@@ -223,8 +223,8 @@ func TestAuthFlowThroughJSONEndpoints(t *testing.T) {
 	}
 }
 
-// TestHomeRedirectsToSetupUntilFirstAdmin 是验收：安装完但还没 setup 时，
-// GET / 303 到 /setup（引导窗口）；首个管理员建立后首页返回应用壳。
+// TestHomeRedirectsToSetupUntilFirstAdmin is an acceptance test: after installation but before setup,
+// GET / 303s to /setup (the bootstrap window); once the first admin exists the home page returns the app shell.
 func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
@@ -249,8 +249,8 @@ func TestHomeRedirectsToSetupUntilFirstAdmin(t *testing.T) {
 	}
 }
 
-// TestSetupUnavailableAfterAdminExists 是验收点：一次性管理员门。
-// 有管理员之前 GET /setup 可达，之后 GET /setup 与 POST /api/v1/auth/setup 都必须 404。
+// TestSetupUnavailableAfterAdminExists is an acceptance point: the one-time admin gate.
+// GET /setup is reachable before there is an admin; afterwards both GET /setup and POST /api/v1/auth/setup must be 404.
 func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
@@ -264,7 +264,7 @@ func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 	if code := get(t, srv, "/setup", nil).Code; code != http.StatusNotFound {
 		t.Errorf("GET /setup after an admin exists = %d, want 404", code)
 	}
-	// 双提交 cookie 从仍然可达的 /login 取：已关闭的引导窗口不再下发它。
+	// The double-submit cookie is taken from the still-reachable /login: the closed bootstrap window no longer issues it.
 	cookie, headers := preSessionPair(t, srv, "/login")
 	closed := postJSON(srv, "/api/v1/auth/setup", map[string]string{
 		"username": "second", "email": "second@example.com", "password": "Sup3rSecret!",
@@ -274,5 +274,5 @@ func TestSetupUnavailableAfterAdminExists(t *testing.T) {
 	}
 }
 
-// 保证 gin 在测试里处于安静模式。
+// Ensure gin is in quiet mode during tests.
 func init() { gin.SetMode(gin.TestMode) }

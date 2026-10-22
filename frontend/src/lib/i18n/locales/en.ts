@@ -1,8 +1,8 @@
 import type { LocaleCatalog } from '../types';
 
 /**
- * 英文语言包骨架
- * key 一律英文小写点分。与 zh-CN.ts 的 key 集合必须完全一致。
+ * English language pack skeleton
+ * Keys are always lowercase English, dot-separated. The key set must be exactly the same as zh-CN.ts's.
  */
 export const en: LocaleCatalog = {
   'app.name': 'Engram',
@@ -571,7 +571,7 @@ export const en: LocaleCatalog = {
   'settings.notifications.error.invalid_request': 'The request is invalid.',
   'settings.notifications.error.forbidden_type': 'Administrator notices are for administrators only.',
   'settings.notifications.error.failed': 'Could not save the preferences. Please try again.',
-  // SPA 注册与首个管理员引导（internal/web/auth_api.go 的 JSON 端点）。
+  // SPA registration and first-admin bootstrap (the JSON endpoints in internal/web/auth_api.go).
   'auth.field.email': 'Email',
   'auth.field.display_name': 'Display name',
   'auth.field.password_confirm': 'Confirm password',
@@ -591,7 +591,7 @@ export const en: LocaleCatalog = {
   'auth.error.password_too_short': 'The password is too short.',
   'auth.error.password_too_long': 'The password is too long.',
   'auth.error.password_too_common': 'The password is too common.',
-  // 两次输入不一致只由前端判定（请求体里只有一个 password），服务端不会发出这个 code。
+  // The mismatch of the two entries is decided only by the frontend (the request body has a single password), so the server never emits this code.
   'auth.error.password_mismatch': 'The passwords do not match.',
   'auth.error.email_domain_not_allowed': 'This email domain is not allowed to register.',
   'auth.error.invite_required': 'Registration requires an invite link.',
@@ -1170,7 +1170,7 @@ export const en: LocaleCatalog = {
   'review.undo': 'Undo',
   'review.undo_last': 'Undo last',
   'review.undo_last_rating': 'Undo last · {rating}',
-  // 直链导入的来源选择、地址说明与专用错误集中放置，便于维护中英文键集合。
+  // The direct-link import's source choice, address help and dedicated errors sit together, making it easy to keep the English and Chinese key sets in maintainable shape.
   'package.source.label': 'Source',
   'package.source.file': 'Upload file',
   'package.source.url': 'Public link',
@@ -1182,9 +1182,9 @@ export const en: LocaleCatalog = {
   'package.error.url_blocked': 'That link points to an address that is not allowed.',
   'package.error.url_fetch_failed': 'The file could not be downloaded from that link. Check it and try again.',
   'package.error.url_not_package': 'That link did not return a deck package.',
-  // 示例地址也属于用户可见文案，因此由语言包提供。
+  // The example address is also user-visible copy, so it is provided by the language pack.
   'package.import.url_placeholder': 'https://example.com/deck.edeck',
-  // 侧边栏外壳（导航分组、收起、账户菜单）。
+  // Sidebar shell (nav groups, collapse, account menu).
   'sidebar.label': 'Main navigation',
   'sidebar.group.study': 'Study',
   'sidebar.group.library': 'Library',
@@ -1200,21 +1200,21 @@ export const en: LocaleCatalog = {
   'sidebar.due_count': '{count} due',
   'sidebar.exit_review': 'Exit review',
   'sidebar.version': 'Version {version}',
-  // 文件拖放选区。
+  // File drop area.
   'dropzone.prompt': 'Drop a file here, or',
   'dropzone.browse': 'browse',
   'dropzone.release': 'Release to add the file',
   'dropzone.remove': 'Remove file',
   'dropzone.import_hint': 'Accepts .edeck and .zip',
   'dropzone.media_hint': 'Uploads right away and inserts into the field selected above',
-  // 列表与批量操作条。
+  // Lists and the batch action bar.
   'selection.toolbar': 'Bulk actions',
   'selection.count': '{count} selected',
   'selection.clear': 'Clear selection',
   'list.col.name': 'Name',
   'list.col.today': 'Today',
   'list.col.limits': 'Daily limits',
-  // 卡组详情的笔记表格（行菜单、批量标签、删除确认）。
+  // The note table on the deck detail page (row menu, batch tags, delete confirmation).
   'notes.col_content': 'Content',
   'notes.more_actions': 'More actions',
   'notes.copy_id': 'Copy ID',
@@ -1225,49 +1225,49 @@ export const en: LocaleCatalog = {
   'notes.bulk_tags_hint': 'Separate tags with commas.',
   'notes.delete_desc': 'This cannot be undone.',
   'notes.bulk_delete_desc': '{count} notes will be deleted. This cannot be undone.',
-  // 统计页学习曲线图表。
+  // Learning curve chart on the stats page.
   'stats.curve.summary': 'Last 30 days: {new} new · {review} reviews',
   'stats.curve.total': 'Total {count}',
   'stats.curve.table': 'Learning curve data',
   'stats.curve.col_day': 'Date',
-  // 卡组页头原地编辑。
+  // Inline editing in the deck page header.
   'deck.add_description': 'Add a description',
-  // 卡组设置：今日用量写在每日上限输入框下方。
+  // Deck settings: today's usage is written below the daily limit input.
   'deck.settings.used_today': 'Used today',
   'deck.settings.left_today': 'Left',
-  // 卡组共享管理的分区说明。
+  // Section description for deck sharing management.
   'deck.sharing.grants_hint': 'People get access once they accept the invite. Editors can change cards; readers can only review.',
   'deck.sharing.links_hint': 'Anyone with the link can preview this deck and join after signing in. A password and an expiry date are optional.',
   'deck.sharing.link_copied': 'Link copied',
   'deck.sharing.copy': 'Copy',
-  // 两步验证页：绑定步骤的分区标题。
+  // Two-factor page: section heading for the enrollment step.
   'settings.totp.begin.heading': 'Set up an authenticator',
-  // API 密钥与邮箱设置的分区说明。
+  // Section descriptions for API keys and email settings.
   'keys.create_hint': 'Pick only the scopes you need. The key is shown in full once, right after creation.',
   'keys.list_heading': 'Your keys',
   'keys.copied': 'Key copied',
   'account.email.change_hint': 'A confirmation link goes to the new address; nothing changes until you confirm.',
-  // 统一确认对话框的按钮。
+  // Buttons of the unified confirmation dialog.
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',
-  // 用户管理行菜单。
+  // User management row menu.
   'admin.users.make_admin': 'Make admin',
   'admin.users.make_user': 'Make regular user',
   'admin.users.temp_password_copied': 'Temporary password copied',
-  // 注册与邀请页的邀请分区说明。
+  // Invite section description on the registration and invites page.
   'admin.registration.invites_hint': 'An invite can set a role and a validity period; tick "send link by email" to mail it directly.',
-  // OIDC 页的分区标题与说明。
+  // Section headings and descriptions on the OIDC page.
   'admin.oidc.section.provider': 'Identity provider',
   'admin.oidc.claims_hint': 'Which token claims map to the user ID, email and name. The defaults usually work.',
-  // 邮件页的分区标题。
+  // Section headings on the mail page.
   'admin.smtp.section.server': 'Mail server',
-  // 导入页：勾选「先试导入」时提交按钮的文字。
+  // Import page: submit button text when "dry run first" is checked.
   'package.import.submit_dry': 'Run dry run',
-  // 个人设置的标签栏。
+  // Personal settings tab bar.
   'settings.nav.general': 'General',
-  // 邀请有效天数的占位提示。
+  // Placeholder hint for the invite validity in days.
   'admin.registration.field.expires_placeholder': 'Leave empty to never expire',
-  // 设置页合并后的标签、安全页、邮件页与 API 与 MCP 页。
+  // Merged tabs on the settings page, the security page, the mail page, and the API and MCP page.
   'settings.nav.security': 'Security',
   'settings.nav.mail': 'Email',
   'settings.nav.api': 'API & MCP',

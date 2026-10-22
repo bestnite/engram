@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-// numericType 是数值作答卡：用户键入数值，按绝对/相对容差判分。
-// 字段：prompt / value（必填），tolerance_absolute / tolerance_relative / unit（可选），
-// extra / source_url（可选）。这套判分直接服务「分数↔百分数」这类纯记忆映射内容。
+// numericType is the numeric-answer card: the user types a number and it is graded by absolute/relative tolerance.
+// Fields: prompt / value (required), tolerance_absolute / tolerance_relative / unit (optional),
+// extra / source_url (optional). This grading directly serves purely memorized mappings such as "fraction ↔ percentage".
 type numericType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (numericType) Label() string { return "cardtype.numeric" }
 
-// Describe 自描述：正面 prompt、背面 value；作答控件是数值，判分由 Grader 提供。
+// Describe self-describes: prompt on the front, value on the back; the answer control is numeric and grading comes from the Grader.
 func (numericType) Describe() Description {
 	return Description{
 		Kind:          "numeric",
@@ -41,7 +41,7 @@ func (numericType) Describe() Description {
 	}
 }
 
-// Validate 校验 prompt / value 与容差规则；相对容差是 0–1 的比例。
+// Validate checks prompt / value and the tolerance rules; the relative tolerance is a ratio in 0–1.
 func (numericType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {
 		return fmt.Errorf("numeric: %w", err)
@@ -70,12 +70,12 @@ func (numericType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡。
+// Cards produces one forward card.
 func (numericType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给 prompt；背面给数值，设置 unit 时追加单位。
+// Render gives the prompt on the front; the back gives the number, appending the unit when unit is set.
 func (numericType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -98,14 +98,14 @@ func (numericType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: body}, nil
 }
 
-// NumericInput 是 numericType.Grade 的输入。
+// NumericInput is the input of numericType.Grade.
 type NumericInput struct {
 	GradeContext
 	Answer string
 }
 
-// ParseAnswer 解码作答：通常是字符串（可能带单位），也接受裸 JSON 数字并保留原文；
-// 没有作答按空串判分。
+// ParseAnswer decodes the answer: usually a string (possibly with a unit), and it also accepts a bare JSON number, keeping the source text;
+// no answer is graded as an empty string.
 func (numericType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	if emptyAnswer(raw) {
 		return NumericInput{GradeContext: gc}, nil
@@ -121,14 +121,14 @@ func (numericType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error
 	return NumericInput{GradeContext: gc, Answer: n.String()}, nil
 }
 
-// GivenText 返回用户输入的原文。
+// GivenText returns the user input verbatim.
 func (numericType) GivenText(_ map[string]any, detail map[string]any) string {
 	given, _ := detail["given"].(string)
 	return given
 }
 
-// Grade 判分：|answer - value| 不超过绝对容差与相对容差（相对值是 |value| 的比例）中的较大者
-// 即算正确。答案里可带配置的 unit 后缀，解析前会剥掉再比较。
+// Grade grades: correct when |answer - value| does not exceed the larger of the absolute tolerance and the relative tolerance (the relative one being a ratio of |value|).
+// The answer may carry the configured unit suffix, which is stripped before comparison.
 func (numericType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(NumericInput)
 	if !ok {
@@ -180,7 +180,7 @@ func (numericType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案。
+// PromptContexter supplies the question and reference answer for future LLM scoring.
 func (numericType) PromptContext(note Note) PromptContext {
 	prompt, _ := stringField(note.Fields, "prompt")
 	value, err := numberField(note.Fields, "value")
@@ -194,8 +194,8 @@ func (numericType) PromptContext(note Note) PromptContext {
 	return PromptContext{Question: prompt, Reference: reference}
 }
 
-// parseNumericAnswer 把用户输入解析为数值：去首尾空白，剥掉可选的 unit 后缀。
-// 返回 false 表示输入不是可比较的数值（按错误处理，计入 Again）。
+// parseNumericAnswer parses the user input into a number: trims surrounding whitespace and strips the optional unit suffix.
+// Returning false means the input is not a comparable number (treated as wrong, counted as Again).
 func parseNumericAnswer(raw, unit string) (float64, bool) {
 	s := strings.TrimSpace(raw)
 	if unit != "" && strings.HasSuffix(strings.ToLower(s), strings.ToLower(unit)) {

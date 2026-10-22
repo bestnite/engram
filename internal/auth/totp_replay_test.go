@@ -9,16 +9,16 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-// 本文件是 TOTP 时间步防重放的验收用例。约定：
-// 每用户记录已接受的最大时间步，窗口内同一码不得二次通过。
+// This file holds the acceptance cases for TOTP time-step replay protection. The rule:
+// the maximum accepted time step is recorded per user, and the same code may not pass twice within the window.
 //
-// 时间用固定时间步而不是真实时钟：验证码按步生成、步与步之间只差 30 秒，
-// 真实时钟会让「同一步」与「相邻步」在测试里不可控（跨边界即换步）。
+// Time uses fixed time steps instead of the real clock: codes are generated per step and adjacent steps are only 30 seconds apart,
+// so a real clock would make "same step" and "adjacent step" uncontrollable in tests (crossing a boundary switches steps).
 
-// stepStart 返回某个时间步的起点时刻（unix/period 的整数倍）。
+// stepStart returns the start instant of a time step (a multiple of unix/period).
 func stepStart(step int64) time.Time { return time.Unix(step*totpPeriod, 0).UTC() }
 
-// codeAt 用给定时间步生成验证码。
+// codeAt generates the verification code for the given time step.
 func codeAt(t *testing.T, secret string, step int64) string {
 	t.Helper()
 	code, err := totp.GenerateCode(secret, stepStart(step))
@@ -28,8 +28,8 @@ func codeAt(t *testing.T, secret string, step int64) string {
 	return code
 }
 
-// enabledAt 在给定时间步走完绑定：Begin 生成 secret，再用该步的验证码 Confirm。
-// 返回明文 secret；服务的时间被钉死在该步。
+// enabledAt completes the binding at the given time step: Begin generates the secret, then Confirm with that step's code.
+// Returns the plaintext secret; the service's time is pinned to that step.
 func enabledAt(t *testing.T, svc *TOTPService, userID uint64, username string, step int64) string {
 	t.Helper()
 	ctx := context.Background()
@@ -44,11 +44,11 @@ func enabledAt(t *testing.T, svc *TOTPService, userID uint64, username string, s
 	return secret
 }
 
-// at 把服务时间钉在某个时间步。
+// at pins the service time to a given time step.
 func at(svc *TOTPService, step int64) { svc.now = func() time.Time { return stepStart(step) } }
 
-// TestTOTPRejectsReplayWithinSameStep 断言：同一步的同一个码只能用一次。
-// 这是核心回归——修复前窗口内被观测到的码可无限重放。
+// TestTOTPRejectsReplayWithinSameStep asserts: the same code in the same step can be used only once.
+// This is the core regression — before the fix a code observed within the window could be replayed without limit.
 func TestTOTPRejectsReplayWithinSameStep(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-replay-same")
@@ -65,22 +65,22 @@ func TestTOTPRejectsReplayWithinSameStep(t *testing.T) {
 	}
 }
 
-// TestTOTPConfirmStepIsNotReplayableAtLogin 断言开通确认所用的码在登录入口同样不可重放：
-// 确认与登录是同一个「接受验证码」的规则，不存在只保护其中一条路径的缺口。
+// TestTOTPConfirmStepIsNotReplayableAtLogin asserts that the code used for enablement confirmation is equally non-replayable at the login entry point:
+// confirmation and login follow the same "accept a code" rule, so there is no gap that protects only one of the two paths.
 func TestTOTPConfirmStepIsNotReplayableAtLogin(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-replay-confirm")
 	ctx := context.Background()
 	secret := enabledAt(t, svc, u.ID, u.Username, 1500)
 
-	// confirmed 后时间不变，窗口内仍是同一步的码——它已经在确认时被接受过。
+	// The time does not move after confirmed, so the window still holds the same step's code — it was already accepted at confirmation.
 	if _, ok, err := svc.VerifySecondFactor(ctx, u.ID, codeAt(t, secret, 1500)); err != nil || ok {
 		t.Fatalf("the confirm-step code at login = (ok=%v, err=%v), want rejected", ok, err)
 	}
 }
 
-// TestTOTPAcceptsConsecutiveNewSteps 断言防重放没有收紧成「只能用一步」：
-// 进入窗口的相邻新步仍可依次通过。
+// TestTOTPAcceptsConsecutiveNewSteps asserts that replay protection did not tighten into "only one step usable":
+// consecutive new steps entering the window still pass one after another.
 func TestTOTPAcceptsConsecutiveNewSteps(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-consecutive")
@@ -95,20 +95,20 @@ func TestTOTPAcceptsConsecutiveNewSteps(t *testing.T) {
 	}
 }
 
-// TestTOTPRejectsStepsAtOrBelowTheAcceptedMaximum 断言严格单调：
-// 仍在 ±1 窗口内、但不晚于已接受最大步的码必须一律拒绝（窗口 ≠ 重放许可）。
+// TestTOTPRejectsStepsAtOrBelowTheAcceptedMaximum asserts strict monotonicity:
+// codes still inside the ±1 window but not later than the maximum accepted step must all be rejected (window ≠ replay permission).
 func TestTOTPRejectsStepsAtOrBelowTheAcceptedMaximum(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-old-step")
 	ctx := context.Background()
 	secret := enabledAt(t, svc, u.ID, u.Username, 3000)
 
-	// 接受 3002：最大步前移到 3002，而此刻窗口仍是 3001..3003。
+	// Accept 3002: the maximum step moves up to 3002, while the window at this moment still holds 3001..3003.
 	at(svc, 3001)
 	if _, ok, err := svc.VerifySecondFactor(ctx, u.ID, codeAt(t, secret, 3002)); err != nil || !ok {
 		t.Fatalf("step 3002 = (ok=%v, err=%v), want accepted", ok, err)
 	}
-	// 3002 与 3001 都早于（或等于）已接受的最大步 3002。
+	// Both 3002 and 3001 are earlier than (or equal to) the accepted maximum step 3002.
 	for _, old := range []int64{3002, 3001} {
 		if _, ok, err := svc.VerifySecondFactor(ctx, u.ID, codeAt(t, secret, old)); err != nil || ok {
 			t.Fatalf("step %d after 3002 was accepted = (ok=%v, err=%v), want rejected", old, ok, err)
@@ -116,25 +116,25 @@ func TestTOTPRejectsStepsAtOrBelowTheAcceptedMaximum(t *testing.T) {
 	}
 }
 
-// TestTOTPStillRejectsExpiredCode 断言超出窗口的码照旧被拒（防重放不改变时钟漂移窗口）。
+// TestTOTPStillRejectsExpiredCode asserts that codes outside the window are still rejected (replay protection does not alter the clock-skew window).
 func TestTOTPStillRejectsExpiredCode(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-expired")
 	ctx := context.Background()
 	secret := enabledAt(t, svc, u.ID, u.Username, 4000)
 
-	// 现在在 4005，4000 的码超出 ±1 窗口。
+	// It is now 4005, so the code for 4000 is outside the ±1 window.
 	at(svc, 4005)
 	if _, ok, err := svc.VerifySecondFactor(ctx, u.ID, codeAt(t, secret, 4000)); err != nil || ok {
 		t.Fatalf("expired step-4000 code = (ok=%v, err=%v), want rejected", ok, err)
 	}
 }
 
-// TestTOTPConcurrentSubmissionOfSameCodeSucceedsOnce 断言并发提交同一码只有一个成功。
+// TestTOTPConcurrentSubmissionOfSameCodeSucceedsOnce asserts that concurrent submission of the same code succeeds only once.
 //
-// 保证来自 store 的条件更新（last_used_step IS NULL OR last_used_step < step）：
-// 并发下只有一个请求能把 RowsAffected 变成 1。SQLite 若因串行化拒绝某个写，
-// 该请求会返回错误而不是「成功」，因此断言写成「恰好一个 ok」是成立的。
+// The guarantee comes from the store's conditional update (last_used_step IS NULL OR last_used_step < step):
+// under concurrency only one request can turn RowsAffected into 1. If SQLite refuses a write due to serialization,
+// that request returns an error rather than "success", so asserting "exactly one ok" holds.
 func TestTOTPConcurrentSubmissionOfSameCodeSucceedsOnce(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-concurrent")

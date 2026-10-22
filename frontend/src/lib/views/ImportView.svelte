@@ -13,7 +13,7 @@
   import SegmentedControl from '../components/ui/SegmentedControl.svelte';
   import { toast } from '../components/ui/toast';
 
-  // 导入来源：文件或公开 HTTPS 直链。默认文件，两条入口共用下面同一批选项。
+  // Import source: a file or a public HTTPS direct link. File by default; both entries share the same set of options below.
   let source = $state<'file' | 'url'>('file');
   let decks = $state<Deck[]>([]);
   let file = $state<File | null>(null);
@@ -26,27 +26,28 @@
   let skipMissingMedia = $state(false);
   let applyWeights = $state(false);
   let submitting = $state(false);
-  // 只装发请求前的本地校验错误；请求失败走 toast。
+  // Only holds local validation errors from before sending the request; request failures go through toast.
   let errorKey = $state('');
   let report = $state<PackageImportReport | null>(null);
   let reportSection = $state<HTMLElement | null>(null);
 
-  // 挂载标志与输入版本：卸载后不再写状态；输入版本用来判定在途结果是否已过时。
+  // Mount flag and input version: state is no longer written after unmount; the input version decides whether an in-flight result is already stale.
   let mounted = true;
   let requestRevision = 0;
 
   onMount(() => {
     void (async () => {
-      try { decks = (await apiClient.getDecks()).decks; } catch { /* 列表拉取失败时退回按卡组 id 手填。 */ }
+      try { decks = (await apiClient.getDecks()).decks; } catch { /* Falls back to entering the deck id by hand when the list fetch fails. */ }
     })();
     return () => { mounted = false; };
   });
 
   /**
-   * 来源或任一导入选项一变，上一份报告/错误就不再对应当前请求，必须清掉，否则界面会把
-   * 一次旧导入的结果当成这次的选择结果展示。这里只读这些输入、不读 report/errorKey，
-   * 因此写入不会反过来触发自己。同时推进输入版本：提交时冻结当时的值，之后任何改动都会让
-   * 在途请求的结果作废（请求本身照旧用原负载执行，只是不再回填到界面）。
+   * Once the source or any import option changes, the previous report/error no longer corresponds to the current
+   * request and must be cleared, otherwise the UI would present an old import's result as the outcome of this selection.
+   * This only reads those inputs and not report/errorKey, so the write cannot trigger itself in turn. It also advances
+   * the input version: submission freezes the values at that moment, and any later change invalidates the result of the
+   * in-flight request (the request itself still runs with the original payload, it is just no longer written back to the UI).
    */
   $effect(() => {
     void source; void packageUrl; void file; void target; void deckId;
@@ -57,8 +58,9 @@
   });
 
   /**
-   * 本地判据：只接受可解析的 https:// 直链。缺失 URL 与不支持的协议在发请求前就拒绝，
-   * 这类错误不该消耗一次出站请求，也不该依赖服务端回包才能告诉用户。
+   * Local criterion: only a parseable https:// direct link is accepted. A missing URL and an unsupported scheme are
+   * rejected before the request is sent; such errors should not consume an outbound request, nor depend on a server
+   * response before the user can be told.
    */
   function isHttpsUrl(raw: string): boolean {
     try {
@@ -69,8 +71,9 @@
   }
 
   /**
-   * 把稳定 code 映射到语言包键。后端只回英文 code/message，界面绝不直接展示其英文文本；
-   * URL 专用 code 与文件导入的 code 分列，超限沿用同一条「体积/配额」文案。
+   * Map the stable code to a language pack key. The backend only returns an English code/message, and the UI never
+   * shows its English text directly; URL-only codes and file import codes are listed separately, and the over-limit
+   * case reuses the same "size/quota" copy.
    */
   function importErrorKey(err: unknown): string {
     if (!(err instanceof ApiClientError)) return 'package.error.failed';
@@ -104,7 +107,7 @@
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (submitting) return; // 在途请求未落地前，重复触发（连点/回车）不再发第二次。
+    if (submitting) return; // Until the in-flight request lands, repeated triggering (double click/Enter) does not send a second one.
     if (source === 'file') {
       if (!file) { errorKey = 'package.error.file_required'; return; }
     } else {
@@ -113,7 +116,7 @@
       if (!isHttpsUrl(raw)) { errorKey = 'package.error.url_scheme'; return; }
     }
     if (target === 'into_deck' && !deckId) { errorKey = 'package.error.target_required'; return; }
-    // 冻结本次请求的输入：负载用这里的快照发出，结果只有输入版本没变时才回填。
+    // Freeze this request's inputs: the payload is sent from this snapshot, and the result is only written back when the input version is unchanged.
     const revision = requestRevision;
     const requestSource = source;
     const requestFile = file;
@@ -124,7 +127,7 @@
       onConflict,
       allowOthersProgress: $authStore.user?.role === 'admin' && allowOthersProgress,
       skipMissingMedia,
-      // 包内权重只用于新建卡组的预设；合并到已有卡组时服务端忽略它，这里也不发出勾选。
+      // The in-package weight is only used for a newly created deck's preset; the server ignores it when merging into an existing deck, so no checkbox is sent from here either.
       applyWeights: target === 'new_deck' && applyWeights,
     };
     submitting = true;
@@ -134,7 +137,7 @@
       const result = requestSource === 'file'
         ? await apiClient.importDeckPackage(requestFile!, options)
         : await apiClient.importDeckPackageURL(requestUrl, options);
-      // 输入已变（来源/选项/URL）或视图已卸载：这次结果不再对应当前选择，丢弃。
+      // The inputs changed (source/options/URL) or the view unmounted: this result no longer matches the current selection, discard it.
       if (!mounted || revision !== requestRevision) return;
       report = result;
       notifyResult(result);
@@ -142,14 +145,15 @@
       if (!mounted || revision !== requestRevision) return;
       toast.error($t(importErrorKey(err)));
     } finally {
-      // 请求本身已结束：只要还挂载着就解除提交锁，让用户能用新选择再次提交。
+      // The request itself has finished: as long as it is still mounted, release the submit lock so the user can submit again with a new selection.
       if (mounted) submitting = false;
     }
   }
 
   /**
-   * 报告区在表单下方，长表单里用户不往下滚就看不到结果，所以成功落地时再弹一条轻提示，
-   * 并带一个跳到报告区的按钮。有条目未导入时用警告样式，免得用户把部分失败当成全部成功。
+   * The report area sits below the form, and in a long form the user will not see the result without scrolling down, so
+   * a light toast is raised once it lands successfully, with a button that jumps to the report area. When some entries
+   * were not imported it uses the warning style, so the user does not take a partial failure for complete success.
    */
   function notifyResult(value: PackageImportReport): void {
     const message = value.dry_run
@@ -168,14 +172,14 @@
 
   function targetLabel(raw: string): string {
     if (raw === 'new_deck') return $t('package.import.new_deck');
-    // 合并到已有卡组时服务端写成 into_deck:<卡组 id>，卡组 id 另有一行显示。
+    // When merging into an existing deck the server writes into_deck:<deck id>, and the deck id is shown on a separate line.
     if (raw === 'into_deck' || raw.startsWith('into_deck:')) return $t('package.import.into_deck');
     return raw;
   }
 
   function reportRows(value: PackageImportReport): Array<[string, number | string]> {
     return [
-      // 目标是服务端的稳定取值（new_deck / into_deck），显示时换成与表单选项相同的文案。
+      // The target is the server's stable value (new_deck / into_deck); for display it is swapped for the same copy as the form options.
       ['package.report.target', targetLabel(value.target)], ['package.report.dry_run', value.dry_run ? 1 : 0],
       ['package.report.deck_id', value.deck_id ?? '—'], ['package.report.notes_created', value.notes_created],
       ['package.report.notes_updated', value.notes_updated], ['package.report.notes_skipped', value.notes_skipped],
@@ -204,8 +208,9 @@
     {#if source === 'file'}
       <div class="space-y-2">
         <span class="block text-sm font-medium">{$t('package.import.file')}</span>
-        <!-- 校验统一交给 submit 里的本地判据：原生 required 会在真实提交时先弹浏览器自己的提示，
-             与「缺失时显示语言包文案」的约定冲突，所以不设 required。 -->
+        <!-- Validation is left entirely to the local criterion in submit: the native required would make the browser show its
+             own prompt on a real submit, conflicting with the "show the language pack copy when missing" convention, so
+             required is not set. -->
         <Dropzone bind:file testId="import-file" accept=".edeck,.zip" hint={$t('dropzone.import_hint')} />
       </div>
     {:else}

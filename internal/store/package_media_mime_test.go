@@ -12,17 +12,17 @@ import (
 	"testing"
 )
 
-// 卡组包导入的媒体写入必须与普通上传同规——以真实字节判定类型、白名单放行、与
-// media.json 的声明交叉校验。修前这些用例全红：SaveBytesTracked 直接采信包内声明的 mime，
-// 于是 mime=text/html 的包会被原样写库，读取时又原样成为 Content-Type（同源存储型 XSS）。
+// Media writes from a deck package import must follow the same rules as ordinary uploads -- type from the real bytes, allowlist gate, and
+// cross-check with the media.json declaration. Before the fix these cases were all red: SaveBytesTracked trusted the mime declared in the package,
+// so a package with mime=text/html was stored as is and came back as the Content-Type verbatim (same-origin stored XSS).
 
-// htmlMediaBytes 是一段会被浏览器当脚本/HTML 执行的内容。
+// htmlMediaBytes is content a browser would execute as script/HTML.
 func htmlMediaBytes() []byte {
 	return []byte("<html><body><script>alert(document.domain)</script></body></html>")
 }
 
-// mediaPackageZip 构造一个结构合法的 .edeck：一条引用媒体的 note + media.json + 媒体字节。
-// declaredMime 写进 media.json；body 是媒体条目的真实字节。sha256 由 body 算出。
+// mediaPackageZip builds a structurally valid .edeck: one note referencing media + media.json + the media bytes.
+// declaredMime goes into media.json; body is the real bytes of the media entry. The sha256 is computed from body.
 func mediaPackageZip(t *testing.T, declaredMime string, body []byte) (raw []byte, sha string) {
 	t.Helper()
 	sum := sha256.Sum256(body)
@@ -39,8 +39,8 @@ func mediaPackageZip(t *testing.T, declaredMime string, body []byte) (raw []byte
 	return buildZip(t, files), sha
 }
 
-// TestImportRejectsUnsafeMedia 断言导入链在落盘前用真实字节判定类型：
-// 不在白名单内的类型、或与 media.json 声明不符的媒体，整包被拒并逐条列出出错媒体。
+// TestImportRejectsUnsafeMedia asserts the import chain determines the type from the real bytes before writing to disk:
+// media whose type is outside the allowlist, or disagrees with the media.json declaration, rejects the whole package and lists the offending media one by one.
 func TestImportRejectsUnsafeMedia(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\nfake-png-body")
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>`)
@@ -73,7 +73,7 @@ func TestImportRejectsUnsafeMedia(t *testing.T) {
 					if len(pe.Entries) == 0 || !entryContains(pe.Entries, sha) {
 						t.Fatalf("entries = %v, want one naming media/%s", pe.Entries, sha)
 					}
-					// 拒绝发生在写盘之前：库里没有 media 行，磁盘上没有文件。
+					// The rejection happens before the disk write: no media row in the database, no file on disk.
 					if row, err := NewMediaStore(db).BySha256(context.Background(), sha); err != nil {
 						t.Fatalf("BySha256: %v", err)
 					} else if row != nil {
@@ -86,7 +86,7 @@ func TestImportRejectsUnsafeMedia(t *testing.T) {
 	}
 }
 
-// TestImportDryRunRejectsUnsafeMediaWritesNothing 断言 dry_run 下非法媒体包同样被拒且零写入。
+// TestImportDryRunRejectsUnsafeMediaWritesNothing asserts an illegal media package is rejected under dry_run too, with zero writes.
 func TestImportDryRunRejectsUnsafeMediaWritesNothing(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -115,8 +115,8 @@ func TestImportDryRunRejectsUnsafeMediaWritesNothing(t *testing.T) {
 	}
 }
 
-// TestImportAllowsWhitelistedMediaRoundTrip 是正向用例：合法 PNG 与音频仍能导入并往返，
-// 证明新校验没有把正常功能一起拒掉。
+// TestImportAllowsWhitelistedMediaRoundTrip is the positive case: legal PNG and audio still import and round-trip,
+// proving the new validation does not reject the normal path along with it.
 func TestImportAllowsWhitelistedMediaRoundTrip(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\nlegal-round-trip-payload")
 	ogg := []byte("OggS\x00\x02legal-audio-payload")
@@ -167,7 +167,7 @@ func TestImportAllowsWhitelistedMediaRoundTrip(t *testing.T) {
 	}
 }
 
-// sanitizeName 把子测试名里的空格/斜杠换成下划线，用作唯一用户名后缀。
+// sanitizeName turns spaces/slashes in a subtest name into underscores, for use as a unique username suffix.
 func sanitizeName(s string) string {
 	out := make([]rune, 0, len(s))
 	for _, r := range s {
@@ -181,12 +181,12 @@ func sanitizeName(s string) string {
 	return string(out)
 }
 
-// mediaAbsPath 把 media 行的相对路径拼成磁盘绝对路径（与 SaveBytesTracked 的拼法一致）。
+// mediaAbsPath joins a media row's relative path into an absolute disk path (built the same way as SaveBytesTracked builds it).
 func mediaAbsPath(root, rel string) string {
 	return filepath.Join(root, filepath.FromSlash(rel))
 }
 
-// assertDirEmpty 断言目录下没有任何文件，证明失败路径没有落盘。
+// assertDirEmpty asserts the directory holds no files, proving the failure path wrote nothing to disk.
 func assertDirEmpty(t *testing.T, root string) {
 	t.Helper()
 	var files int

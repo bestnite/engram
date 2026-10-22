@@ -108,7 +108,7 @@
     }
   }
 
-  // 连通性测试的结论也是请求结果，同样走 toast；失败时附上服务端给的诊断原文。
+  // The connectivity test's conclusion is also a request outcome and goes through toast as well; on failure the diagnostic text from the server is attached.
   async function test(): Promise<void> {
     testing = true;
     try {
@@ -129,7 +129,7 @@
     }
   });
 
-  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  // Operation results are reported with a toast, not inserted as a banner at the top of the page.
   $effect(() => {
     if (notice) {
       toast.success($t(notice));
@@ -209,8 +209,8 @@
     </SettingsSection>
   {/if}
 
-  <!-- 邮件模板：与 SMTP 同页（同一个「邮件」入口）。两件事本来就是一体的——
-       配好发信通道之后，紧接着就是「发出去的信长什么样」。 -->
+  <!-- Mail templates: on the same page as SMTP (the same "mail" entry). The two things were one from the start —
+       right after configuring the sending channel comes "what the outgoing mail looks like". -->
   <SettingsSection title={$t('admin.mail.heading')} description={$t('admin.mail.intro')} testId="admin-smtp-templates">
     <AdminMailTemplatesView embedded />
   </SettingsSection>

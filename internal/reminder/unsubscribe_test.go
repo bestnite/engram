@@ -13,9 +13,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestReminderCarriesUnsubscribeHeaders 是在 C 类发信方一侧的证据：
-// 复习提醒是可选类型，装配了退订令牌服务时，邮件带 RFC 8058 两个头，
-// 且头里的令牌确实指名 review_reminder 这一个类型、归属正确的用户。
+// TestReminderCarriesUnsubscribeHeaders is the evidence on the class-C sender side:
+// a review reminder is an optional type, so when the unsubscribe token service is wired in, the mail carries both RFC 8058 headers,
+// and the token in them really does name the single type review_reminder and belongs to the right user.
 func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "dave", "dave@example.com", "en", "Asia/Shanghai", 4,
@@ -68,8 +68,8 @@ func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {
 	}
 }
 
-// TestReminderWithoutTokenServiceHasNoUnsubscribeHeader 是反面用例：
-// 未装配令牌服务时提醒照常发出，但不带退订头（绝不出现半截或伪造的头）。
+// TestReminderWithoutTokenServiceHasNoUnsubscribeHeader is the negative case:
+// with no token service wired in, the reminder is still sent but carries no unsubscribe header (never a half-formed or forged header).
 func TestReminderWithoutTokenServiceHasNoUnsubscribeHeader(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "erin", "erin@example.com", "en", "Asia/Shanghai", 4,

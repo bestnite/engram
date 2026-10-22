@@ -4,21 +4,21 @@
   import { cn } from './utils';
 
   /**
-   * 页头：返回链接 / 标题 / 一行说明 / 右侧操作区，全站同一结构与间距。
+   * Page header: back link / title / one-line description / right-side actions, with the same structure and spacing site-wide.
    *
-   * 一页只放一个 primary 按钮，放在 actions 里；其余操作用 outline 或 ghost。
-   * 说明最多一行，能删就删——页头是导向，不是使用说明书。
+   * Only one primary button per page, placed in actions; other actions use outline or ghost.
+   * The description is at most one line, and if it can be deleted it should be - the header is a signpost, not a manual.
    */
   interface Props {
     title: string;
     description?: string;
-    /** 标题的 data-testid（测试按标题定位页面）。 */
+    /** data-testid of the title (tests locate a page by its title). */
     testId?: string;
     back?: { href: string; label: string; testId?: string };
     class?: string;
-    /** 标题下方、说明之后的补充内容（如统计数字一行）。 */
+    /** Extra content below the title and after the description (e.g. a row of stats). */
     meta?: Snippet;
-    /** 自定义标题区（如可原地编辑的标题与说明）；给出时替代 title 与 description 的默认渲染。 */
+    /** Custom title area (e.g. an inline-editable title and description); when given it replaces the default rendering of title and description. */
     heading?: Snippet;
     actions?: Snippet;
   }

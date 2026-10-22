@@ -7,12 +7,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestFuzzIsDeterministicForSameSeed 断言 EnableFuzz 下同一张卡、同一 now 的两次评分产出
-// 完全相同的间隔（验收：fuzz 确定性 —— 同一种子重放得到相同间隔）。
+// TestFuzzIsDeterministicForSameSeed asserts that under EnableFuzz, two grades of the same card at the same now produce
+// exactly the same interval (acceptance: fuzz determinism — replaying with the same seed gives the same interval).
 //
-// go-fsrs 的 fuzz 种子由 (now.UnixMilli, reps, difficulty*stability) 组成（见上游
-// scheduler.initSeed），因此对本包而言“种子”就是 (CardState, now)：二者相同则 ALEA
-// 序列相同、扰动相同。若实现里引入了挂钟或全局随机源，本用例会失败。
+// The go-fsrs fuzz seed is composed of (now.UnixMilli, reps, difficulty*stability) (see upstream
+// scheduler.initSeed), so for this package the "seed" is (CardState, now): when both are equal the ALEA
+// sequence is the same and the perturbation is the same. If the implementation introduced a wall clock or a global random source, this case would fail.
 func TestFuzzIsDeterministicForSameSeed(t *testing.T) {
 	preset := testPreset(t)
 	preset.EnableFuzz = boolPtr(true)
@@ -40,8 +40,8 @@ func TestFuzzIsDeterministicForSameSeed(t *testing.T) {
 	}
 }
 
-// TestFuzzSequenceReplayIsIdentical 断言从同一初始状态重放同一串评分序列，逐条得到相同结果；
-// 单次调用相等还不够 —— 状态机若累积了挂钟或全局随机，序列重放会分叉。
+// TestFuzzSequenceReplayIsIdentical asserts that replaying the same sequence of grades from the same initial state gives identical results item by item;
+// equality for a single call is not enough — if the state machine accumulated a wall clock or global randomness, the sequence replay would diverge.
 func TestFuzzSequenceReplayIsIdentical(t *testing.T) {
 	preset := testPreset(t)
 	preset.EnableFuzz = boolPtr(true)
@@ -76,9 +76,9 @@ func TestFuzzSequenceReplayIsIdentical(t *testing.T) {
 	}
 }
 
-// TestFuzzActuallyPerturbsInterval 断言 fuzz 开启确实改动间隔：对同一个长间隔复习卡，
-// 开启与关闭 fuzz 至少有一处结果不同。没有这条，上面的“确定性”可能只是因为 fuzz 没生效。
-// 输入固定（now 固定、卡固定），因此该断言本身也是确定性的。
+// TestFuzzActuallyPerturbsInterval asserts that enabling fuzz really does change the interval: for the same long-interval review card,
+// at least one result differs between fuzz on and off. Without this one, the "determinism" above could simply mean fuzz was not in effect.
+// The inputs are fixed (fixed now, fixed card), so this assertion itself is deterministic too.
 func TestFuzzActuallyPerturbsInterval(t *testing.T) {
 	off := testPreset(t)
 	off.EnableFuzz = boolPtr(false)
@@ -103,7 +103,7 @@ func TestFuzzActuallyPerturbsInterval(t *testing.T) {
 	}
 }
 
-// fuzzCardState 返回一张长间隔复习卡（stability 足够大，评分间隔超过 fuzz 的 2.5 天下限）。
+// fuzzCardState returns a long-interval review card (stability large enough that the graded interval exceeds fuzz's 2.5-day floor).
 func fuzzCardState(now time.Time) *store.CardState {
 	stability := 40.0
 	difficulty := 5.0
@@ -117,7 +117,7 @@ func fuzzCardState(now time.Time) *store.CardState {
 	}
 }
 
-// outcomeToState 把一次评分结果推进成下一张待评分卡，供序列重放使用。
+// outcomeToState advances one grade result into the next card awaiting a grade, for sequence replay.
 func outcomeToState(base *store.CardState, o Outcome, at time.Time) *store.CardState {
 	stability := o.Stability
 	difficulty := o.Difficulty

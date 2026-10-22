@@ -46,7 +46,7 @@ describe('Admin panel views render server-provided truth', () => {
 
   it('renders the admin navigation with every subpage link and no overview entry', () => {
     const { html } = render(AdminHealthView, { props: { initialLoading: false, initialData: health } });
-    // 概览页已移除：导航里不再有指向 /admin 本身的链接。
+    // The overview page has been removed: the navigation no longer has a link pointing at /admin itself.
     expect(html).not.toContain('href="/admin"');
     for (const href of ['/admin/users', '/admin/registration', '/admin/oidc', '/admin/smtp', '/admin/settings', '/admin/jobs', '/admin/audit', '/admin/health', '/admin/api-keys', '/admin/i18n']) {
       expect(html).toContain(`href="${href}"`);
@@ -134,11 +134,11 @@ describe('Admin API client uses session-only JSON endpoints', () => {
 
 describe('Admin SPA routes own the canonical panel paths', () => {
   it('resolves every admin page route', () => {
-    // /admin 只是入口，挂载后换到 /admin/users（AdminIndexView）。
+    // /admin is only an entry: after mounting it switches to /admin/users (AdminIndexView).
     expect(matchRoute('/admin', routes).route?.name).toBe('admin-index');
     expect(matchRoute('/admin/health', routes).route?.name).toBe('admin-health');
     expect(matchRoute('/admin/audit', routes).route?.name).toBe('admin-audit');
-    // /admin 精确匹配，不得吞掉子页。
+    // /admin matches exactly and must not swallow the subpages.
     expect(matchRoute('/admin/users', routes).route?.name).toBe('admin-users');
   });
 });

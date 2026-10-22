@@ -10,16 +10,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Store 封装 jobs 表；模型复用 internal/store.Job，避免重复定义（AGENTS.md §2.4：
-// 一个模型同时服务业务、GORM 与 JSON）。
+// Store wraps the jobs table; the model reuses internal/store.Job to avoid duplicate definitions (AGENTS.md §2.4:
+// one model serves the business layer, GORM and JSON at the same time).
 type Store struct {
 	db *gorm.DB
 }
 
-// NewStore 构造作业存储。
+// NewStore builds the job store.
 func NewStore(db *gorm.DB) *Store { return &Store{db: db} }
 
-// CreateQueued 写入一行 queued 作业并返回它。
+// CreateQueued writes a queued job row and returns it.
 func (s *Store) CreateQueued(ctx context.Context, kind string, targetID *uint64, at time.Time) (*store.Job, error) {
 	job := store.Job{
 		Kind:      kind,
@@ -33,7 +33,7 @@ func (s *Store) CreateQueued(ctx context.Context, kind string, targetID *uint64,
 	return &job, nil
 }
 
-// ByID 按主键读取作业。
+// ByID reads a job by primary key.
 func (s *Store) ByID(ctx context.Context, id uint64) (*store.Job, error) {
 	var job store.Job
 	if err := s.db.WithContext(ctx).First(&job, "id = ?", id).Error; err != nil {
@@ -42,7 +42,7 @@ func (s *Store) ByID(ctx context.Context, id uint64) (*store.Job, error) {
 	return &job, nil
 }
 
-// ByPublicID 按对外 id 读取作业；空串视为未找到，不会匹配到 public_id 为空的旧行。
+// ByPublicID reads a job by its public id; an empty string counts as not found, and never matches an old row whose public_id is empty.
 func (s *Store) ByPublicID(ctx context.Context, publicID string) (*store.Job, error) {
 	if publicID == "" {
 		return nil, fmt.Errorf("load job %q: %w", publicID, gorm.ErrRecordNotFound)
@@ -54,8 +54,8 @@ func (s *Store) ByPublicID(ctx context.Context, publicID string) (*store.Job, er
 	return &job, nil
 }
 
-// Active 返回当前未完成的作业（queued 或 running）；没有时返回 (nil, nil)。
-// 单并发判定依赖它：只要存在未完成作业，新入队就必须被拒绝。
+// Active returns the currently unfinished job (queued or running); (nil, nil) when there is none.
+// The single-concurrency decision depends on it: as long as an unfinished job exists, a new enqueue must be refused.
 func (s *Store) Active(ctx context.Context) (*store.Job, error) {
 	var job store.Job
 	err := s.db.WithContext(ctx).
@@ -70,11 +70,11 @@ func (s *Store) Active(ctx context.Context) (*store.Job, error) {
 	return &job, nil
 }
 
-// RecoverStale 把上次进程遗留的未完成作业一律标为 failed（回收 running，追加 queued）：
-// 写 finished_at 与对应失败原因，但不清空 log_tail，保留现场供诊断。返回被回收的总行数。
+// RecoverStale marks the unfinished jobs left over from the previous process as failed across the board (reclaiming running, and additionally queued):
+// it writes finished_at and the corresponding failure reason but does not clear log_tail, preserving the scene for diagnosis. It returns the total number of reclaimed rows.
 //
-// 两类残留的原因不同，必须分开写：running 的子进程确实启动过（原因 = interrupted by restart），
-// 而 queued 的作业只进了随进程消失的内存队列、从未启动（原因 = job never started）。
+// The two kinds of leftover need different reasons and must be written separately: a running subprocess really did start (reason = interrupted by restart),
+// whereas a queued job only entered an in-memory queue that died with the process and never started (reason = job never started).
 func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, queuedReason string) (int64, error) {
 	steps := []struct {
 		status string
@@ -100,8 +100,8 @@ func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, q
 	return total, nil
 }
 
-// List 按 id 倒序返回一页作业与总数，供管理面板分页展示。
-// 必须限量：jobs 表会随每次优化持续增长，一次性全量渲染会拖垮页面。
+// List returns a page of jobs and the total count in descending id order, for the admin panel to page through.
+// It must be limited: the jobs table keeps growing with every optimization, and rendering everything at once would drag the page down.
 func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
 	if limit <= 0 {
 		limit = 20
@@ -121,7 +121,7 @@ func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64
 	return jobs, total, nil
 }
 
-// MarkRunning 把作业置为 running 并记录 started_at。
+// MarkRunning sets the job to running and records started_at.
 func (s *Store) MarkRunning(ctx context.Context, id uint64, at time.Time) error {
 	return s.update(ctx, id, map[string]any{
 		"status":     StatusRunning,
@@ -129,12 +129,12 @@ func (s *Store) MarkRunning(ctx context.Context, id uint64, at time.Time) error 
 	})
 }
 
-// SetStage 更新阶段级进度。
+// SetStage updates stage-level progress.
 func (s *Store) SetStage(ctx context.Context, id uint64, stage string) error {
 	return s.update(ctx, id, map[string]any{"stage": stage})
 }
 
-// FinishSucceeded 把作业置为 succeeded：写 finished_at、日志尾巴与结果，并清空 error。
+// FinishSucceeded sets the job to succeeded: it writes finished_at, the log tail and the result, and clears error.
 func (s *Store) FinishSucceeded(ctx context.Context, id uint64, at time.Time, resultJSON, tail string) error {
 	updates := map[string]any{
 		"status":      StatusSucceeded,
@@ -146,7 +146,7 @@ func (s *Store) FinishSucceeded(ctx context.Context, id uint64, at time.Time, re
 	return s.update(ctx, id, updates)
 }
 
-// FinishFailed 把作业置为 failed：写 finished_at、失败原因与日志尾巴。
+// FinishFailed sets the job to failed: it writes finished_at, the failure reason and the log tail.
 func (s *Store) FinishFailed(ctx context.Context, id uint64, at time.Time, msg, tail string) error {
 	updates := map[string]any{
 		"status":      StatusFailed,
@@ -157,7 +157,7 @@ func (s *Store) FinishFailed(ctx context.Context, id uint64, at time.Time, msg, 
 	return s.update(ctx, id, updates)
 }
 
-// update 按 id 更新若干列；行不存在时返回错误，避免静默丢失状态。
+// update updates several columns by id; a missing row returns an error, so state is never silently lost.
 func (s *Store) update(ctx context.Context, id uint64, updates map[string]any) error {
 	res := s.db.WithContext(ctx).Model(&store.Job{}).Where("id = ?", id).Updates(updates)
 	if res.Error != nil {
@@ -169,7 +169,7 @@ func (s *Store) update(ctx context.Context, id uint64, updates map[string]any) e
 	return nil
 }
 
-// nullableString 把空串转成 nil，让可空 TEXT 列存 NULL 而不是空字符串。
+// nullableString turns an empty string into nil, so nullable TEXT columns store NULL instead of an empty string.
 func nullableString(s string) *string {
 	if s == "" {
 		return nil

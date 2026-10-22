@@ -4,13 +4,13 @@
   import { apiClient } from '../api';
   import type { OIDCInfo } from '../api';
 
-  // OIDC 登录入口组件。
+  // OIDC login entry component.
   //
-  // SSR 的登录页只在 OIDC 配置完整可用时渲染第二个登录按钮；SPA 登录视图无法在构建期知道服务端配置，
-  // 因此这里在挂载时探测 GET /api/v1/auth/oidc（只读、登录前可调用），仅在 enabled 为真时渲染入口。
-  // start_url 由服务端给出，与 SSR 登录页按钮的 href 同源，避免两端漂移。
+  // The SSR login page renders the second login button only when the OIDC config is fully usable; the SPA login view cannot know the server config at build time,
+  // so it probes GET /api/v1/auth/oidc on mount (read-only, callable before login) and renders the entry only when enabled is true.
+  // start_url comes from the server, from the same source as the SSR login page button's href, so the two ends cannot drift.
   //
-  // 可选 props.initial 用于服务端渲染/测试注入已知状态，避免首帧闪烁；生产由探测结果驱动。
+  // The optional props.initial lets server rendering/tests inject a known state to avoid a first-frame flash; in production the probe result drives it.
   interface Props {
     initial?: OIDCInfo | null;
   }
@@ -27,7 +27,7 @@
     try {
       info = await apiClient.getOIDC();
     } catch {
-      // 探测失败等同于「入口不可用」：绝不显示一个点了也没用的按钮。
+      // A failed probe is the same as "entry unavailable": never show a button that does nothing when clicked.
       info = null;
     }
   });

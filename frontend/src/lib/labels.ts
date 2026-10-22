@@ -1,28 +1,28 @@
 import type { CardTypeCatalog } from './card-types';
 
 /**
- * 后端枚举 → 界面文案。
+ * Backend enums → UI copy.
  *
- * 后端发的 `basic_both` 这类值是**机器词汇**：把它直接插进模板
- * （`<span>{note.kind}</span>`）就等于在中文界面里印英文——它和硬编码英文的结果
- * 一模一样，只是看起来不像硬编码，所以 grep 硬编码文案的门禁也抓不到它。
+ * Values like `basic_both` from the backend are **machine vocabulary**: splicing one straight into a template
+ * (`<span>{note.kind}</span>`) prints English in a Chinese UI - the result is exactly the same as
+ * hardcoded English, only it does not look like it, so the lint that greps for hardcoded copy cannot catch it either.
  *
- * 两条约定：
+ * Two rules:
  *
- *  1. 判据是「这个串是给机器读还是给人读的」。进查询串、进请求体的必须是原值；凡是会
- *     出现在屏幕上的，一律先翻成语言包键。
- *  2. **未知值一律当成空**。`formatMessage` 找不到键时会**原样返回键名**，所以
- *     `$t('notes.kind.' + kind)` 在后端加了新题型时会印出 `notes.kind.foo`；直接插原值
- *     则印出机器词。两者都比「少一个徽标」糟：界面宁可暂时少显示一格，也不要谎报或
- *     吐内部标识——因为下一次改动会顺便把它补上，而误报的状态没人会发现。
+ *  1. The criterion is "is this string for a machine or for a person". Values going into query strings or request bodies must be raw; anything that will
+ *     appear on screen is first translated into a language pack key.
+ *  2. **Unknown values always count as empty**. When `formatMessage` cannot find a key it **returns the key name as-is**, so
+ *     `$t('notes.kind.' + kind)` prints `notes.kind.foo` when the backend adds a new card kind; splicing the raw value
+ *     prints the machine word instead. Both are worse than "one badge fewer": the UI would rather briefly show one cell less than misreport or
+ *     leak an internal identifier - the next change will fill it in anyway, while a wrong status goes unnoticed.
  */
 
-/** 翻译函数的最小形状（`$t` 即可）。 */
+/** Minimal shape of a translation function (`$t` is enough). */
 export type Translate = (key: string) => string;
 
 /**
- * 题型的语言包键；未知/空值或元数据未就绪时返回 null。
- * 题型清单以服务端的自描述（GET /api/v1/card-types）为唯一来源。
+ * Language pack key for a card kind; returns null for unknown/empty values or when metadata is not ready.
+ * The card kind list takes the server's self-description (GET /api/v1/card-types) as its only source.
  */
 export function noteKindLabelKey(
   kind: string | null | undefined,
@@ -33,18 +33,18 @@ export function noteKindLabelKey(
 }
 
 /**
- * 卡组卡片上的危险操作种类。
- * delete：自有卡组，删除不可逆；leave：被共享的卡组，退出只撤掉自己一行授权。
+ * Kinds of dangerous action on a deck card.
+ * delete: an owned deck, deletion is irreversible; leave: a shared deck, leaving only removes your own authorization row.
  */
 export type DeckActionKind = 'delete' | 'leave';
 
 /**
- * 依据调用者在该卡组上的显式关系（Deck.role）决定卡片上显示哪种操作。
+ * Decides which action the card shows based on the caller's explicit relation to the deck (Deck.role).
  *
- * owner -> 'delete'；editor/reader（被共享）-> 'leave'。
- * 列表里的卡组必然属于这两类之一（自有，或被显式授权）——不存在「看得到但没有授权」的
- * 卡组。未知值一律返回 null：宁可少显示一个按钮，也不能给一个没有授权行的卡组渲染
- * 「退出共享」，那种卡组点了只会得到 not_found。
+ * owner -> 'delete'; editor/reader (shared) -> 'leave'.
+ * A deck in the list is necessarily one of these two (owned, or explicitly granted) - there is no "visible but not authorized"
+ * deck. Unknown values always return null: better to show one button fewer than to render
+ * "leave shared deck" for a deck with no authorization row, which would only yield not_found when clicked.
  */
 export function deckActionKind(role: string | null | undefined): DeckActionKind | null {
   switch (role) {
@@ -58,7 +58,7 @@ export function deckActionKind(role: string | null | undefined): DeckActionKind 
   }
 }
 
-/** 题型徽标文案；未知枚举或元数据未就绪返回空串。 */
+/** Card kind badge copy; returns an empty string for an unknown enum or when metadata is not ready. */
 export function noteKindLabel(
   kind: string | null | undefined,
   catalog: CardTypeCatalog | null,
@@ -69,30 +69,30 @@ export function noteKindLabel(
 }
 
 /**
- * 预设显示名。
+ * Preset display name.
  *
- * 默认预设的库内名字是稳定标识（`store.DefaultPresetName`，英文常量"Default"），
- * 它是**机器词汇**：直接印在中文界面上就是英文，与硬编码英文没有区别。凡是要显示在
- * 屏幕上的预设名都走这里，由服务端的 `is_default` 决定用语言包文案还是用户自己起的名字。
+ * The default preset's stored name is a stable identifier (`store.DefaultPresetName`, the English constant "Default"),
+ * and it is **machine vocabulary**: printed straight into a Chinese UI it is English, no different from hardcoded English. Any preset name that will
+ * appear on screen goes through here, with the server's `is_default` deciding between language pack copy and the name the user chose.
  */
 export function presetDisplayName(name: string, isDefault: boolean, t: Translate): string {
   return isDefault ? t('presets.default_name') : name;
 }
 
-/** 预设下拉里的一项；value 是预设 id 的字符串形式（Select 只接受字符串值）。 */
+/** One item in the preset dropdown; value is the preset id as a string (Select only accepts string values). */
 export interface PresetSelectOption {
   value: string;
   label: string;
 }
 
 /**
- * 创建卡组弹窗的预设下拉：把预设列表投影成选项，并给出应预选的值。
+ * Preset dropdown of the create-deck dialog: projects the preset list into options and provides the value to preselect.
  *
- * 这里刻意**不**追加「默认预设」哨兵项。服务端的补齐保证列表里至少有一条默认预设，
- * 而它的显示名（presets.default_name）与哨兵项文案几乎同字：只有一条预设时下拉会同时
- * 出现两条「默认」，看着像一条没删掉的预设。
+ * Here a "default preset" sentinel item is deliberately **not** appended. The server's padding guarantees at least one default preset in the list,
+ * and its display name (presets.default_name) is almost identical to the sentinel's copy: with only one preset the dropdown would show two
+ * "Default" entries at once, looking like a preset that was not deleted.
  *
- * 列表为空（拉取失败）时 selected 为空串，调用方据此按服务端默认预设提交（preset_id 为空串）。
+ * When the list is empty (the fetch failed) selected is an empty string, and the caller submits against the server's default preset on that basis (preset_id as an empty string).
  */
 export function presetSelectOptions(
   presets: ReadonlyArray<{ id: string; name: string; is_default: boolean }>,

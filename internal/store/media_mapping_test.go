@@ -12,21 +12,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件覆盖 L2 的媒体映射与写前校验：
-//   - media_notes 由 note 写入路径**重建**（删引用即失权，不是追加）；
-//   - 写前校验拒绝「本次新引入的、写入者读不到的引用」，且对写入之前的状态求值；
-//   - media_uploaders 在去重命中也登记全部提供者；
-//   - 克隆后副本里的图对克隆者可读，不依赖源卡组仍可见；
-//   - 包导入不会把「引用读不到媒体」的 note 落库。
+// This file covers L2's media mapping and pre-write validation:
+//   - media_notes is **rebuilt** by the note write path (removing a reference revokes access, not append);
+//   - pre-write validation rejects 'references newly introduced this time that the writer cannot read', evaluated against the state before the write;
+//   - media_uploaders registers every provider even on a dedup hit;
+//   - after cloning, images in the copy are readable by the cloner without relying on the source deck staying visible;
+//   - package import does not persist notes that 'reference unreadable media'.
 //
-// 所有 note 夹具都经 NoteStore 的写入方法构造（AGENTS/任务要求），映射因此一定与字段一致。
+// All note fixtures are built through NoteStore's write method (AGENTS / task requirement), so the mapping necessarily matches the fields.
 
-// mediaBytes 是一段带 PNG 魔数的测试字节，内容由 payload 区分。
+// mediaBytes is a chunk of test bytes with the PNG magic number; the content is distinguished by payload.
 func mediaBytes(payload string) []byte {
 	return append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte(payload)...)
 }
 
-// saveMedia 落盘一份媒体并返回它的 sha256（登记上传者归属）。
+// saveMedia stores one media file and returns its sha256 (registering uploader attribution).
 func saveMedia(t *testing.T, db *gorm.DB, root string, owner uint64, raw []byte) string {
 	t.Helper()
 	m, err := NewMediaStore(db).SaveBytes(context.Background(), root, "image/png", raw, Ptr(owner))
@@ -36,9 +36,9 @@ func saveMedia(t *testing.T, db *gorm.DB, root string, owner uint64, raw []byte)
 	return m.Sha256
 }
 
-// saveRefNote 经写入方法建一条引用给定 sha 的 basic note；作者为 author（可 nil）。
-// actor 为 0（不标注），因此这里不触发写前校验——夹具要与「映射由写入建立」这件事对齐，
-// 而不是要构造越权场景。
+// saveRefNote creates, through the write method, a basic note referencing the given sha; the author is author (may be nil).
+// actor is 0 (unattributed), so pre-write validation is not triggered here — the fixture must line up with 'the mapping is built by the write',
+// not construct a privilege-escalation scenario.
 func saveRefNote(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, front string) uint64 {
 	t.Helper()
 	n := Note{DeckID: deckID, Kind: "basic", CreatedBy: author}
@@ -57,7 +57,7 @@ func refFront(shas ...string) string {
 	return strings.Join(parts, " ")
 }
 
-// mappingShas 用映射算出「该用户可读卡组里被引用到的 sha 集合」，与读取鉴权第二支同源。
+// mappingShas computes, from the mapping, the set of shas referenced in decks readable by that user; same source as branch two of read authorization.
 func mappingShas(t *testing.T, db *gorm.DB, userID uint64) map[string]bool {
 	t.Helper()
 	var rows []MediaNote
@@ -74,7 +74,7 @@ func mappingShas(t *testing.T, db *gorm.DB, userID uint64) map[string]bool {
 	return out
 }
 
-// fieldsShas 扫描「该用户可读卡组里未软删 note 的字段」得到 sha 集合（旧口径，用作对照）。
+// fieldsShas scans the fields of non-soft-deleted notes in decks readable by that user to get the sha set (the old rule, used as a control).
 func fieldsShas(t *testing.T, db *gorm.DB, userID uint64) map[string]bool {
 	t.Helper()
 	var notes []Note
@@ -92,11 +92,11 @@ func fieldsShas(t *testing.T, db *gorm.DB, userID uint64) map[string]bool {
 	return out
 }
 
-// TestMediaMappingInvariantMatchesFieldsScan 是核心不变量：随机夹具下，
-// 「映射表算出的可读集」必须等于「扫 fields_json 算出的可读集」。
+// TestMediaMappingInvariantMatchesFieldsScan is the core invariant: under random fixtures,
+// 'the readable set computed from the mapping table' must equal 'the readable set computed by scanning fields_json'.
 //
-// 两条路径互相校验：映射一旦与字段漂移（漏写、或删引用后仍留旧行），这里必然不等。
-// 夹具覆盖更新（去掉引用）、软删、以及另一个用户不可见的卡组，让两个方向都能被抓到。
+// The two paths check each other: as soon as the mapping drifts from the fields (a missed write, or an old row left after removing a reference) they must differ.
+// Fixtures cover updates (removing references), soft deletes, and a deck invisible to another user, so both directions can be caught.
 func TestMediaMappingInvariantMatchesFieldsScan(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestMediaMappingInvariantMatchesFieldsScan(t *testing.T) {
 			deckOwner := seedDeck(t, db, owner)
 			deckOther := seedDeck(t, db, other)
 
-			// 随机 sha 池；引用可以是库里没有的 sha（映射照样记录，因为字段里有）。
+			// random sha pool; references may be shas that are not in the DB (the mapping records them anyway, since they are in the fields).
 			rng := rand.New(rand.NewSource(20261006))
 			pool := make([]string, 8)
 			for i := range pool {
@@ -129,11 +129,11 @@ func TestMediaMappingInvariantMatchesFieldsScan(t *testing.T) {
 				noteIDs = append(noteIDs, id)
 				deckOf[id] = deckID
 			}
-			// 随机更新：一半去掉全部引用，一半替换成新引用。
+			// random update: half drop all references, half replace them with new ones.
 			//
-			// 关键构造：「去掉引用」先让该 note 引用一个**本用例独有**的 sha（该 sha 不会出现在任何
-			// 别的 note 里），再去掉它。追加式实现会把这条独有 sha 的旧映射行留在表里，于是映射集
-			// 比字段集多出它——不变量据此必然报警（普通重叠 sha 池会被集合去重掩盖）。
+			// the key construct: 'removing a reference' first makes the note reference a sha **unique to this case** (a sha that appears in no
+			// other note), then drops it. An append-only implementation would leave the old mapping row for that unique sha in the table, so the mapping set
+			// gains one entry the field set does not have — the invariant necessarily flags it (an ordinary overlapping sha pool would be masked by set dedup).
 			ns := NewNoteStore(db)
 			unique := 0
 			uniqueSha := func() string {
@@ -158,7 +158,7 @@ func TestMediaMappingInvariantMatchesFieldsScan(t *testing.T) {
 					}
 				}
 			}
-			// 软删若干条：映射行可以留在表里，但两侧都必须把它排除。
+			// soft-delete a few: the mapping rows may stay in the table, but both sides must exclude them.
 			for _, id := range noteIDs[:5] {
 				if err := ns.Delete(ctx, id); err != nil {
 					t.Fatalf("delete note %d: %v", id, err)
@@ -196,8 +196,8 @@ func keys(m map[string]bool) []string {
 	return out
 }
 
-// TestMediaMappingRebuiltOnReferenceRemoval 证明映射是重建而非追加：去掉引用再保存后，
-// 旧映射行必须消失，读者随即失权（旧的追加实现会留下旧行 → 读者仍可读）。
+// TestMediaMappingRebuiltOnReferenceRemoval proves the mapping is rebuilt, not appended: after removing a reference and saving,
+// the old mapping row must be gone and the reader loses access at once (the old append implementation left the old row → the reader could still read).
 func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -237,8 +237,8 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 	}
 }
 
-// TestMediaMappingSoftDeletedNoteDoesNotAuthorize 覆盖软删：note 软删后映射行可以仍在，
-// 但读取鉴权必须因 notes.deleted_at 而不再放行。
+// TestMediaMappingSoftDeletedNoteDoesNotAuthorize covers soft delete: after a note is soft-deleted the mapping row may remain,
+// but read authorization must stop allowing it because of notes.deleted_at.
 func TestMediaMappingSoftDeletedNoteDoesNotAuthorize(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -268,8 +268,8 @@ func TestMediaMappingSoftDeletedNoteDoesNotAuthorize(t *testing.T) {
 	}
 }
 
-// TestMediaUploadersDedupeRegistersEveryUploader 覆盖 store 层媒体写入的去重登记：
-// 同一份字节被两个用户先后提供，两人都拿到归属且各只有一行（幂等）。
+// TestMediaUploadersDedupeRegistersEveryUploader covers dedup registration in the store layer's media write:
+// the same bytes supplied in turn by two users give both attribution, one row each (idempotent).
 func TestMediaUploadersDedupeRegistersEveryUploader(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -297,7 +297,7 @@ func TestMediaUploadersDedupeRegistersEveryUploader(t *testing.T) {
 					t.Errorf("uploader %d rows = %d, want 1", uid, n)
 				}
 			}
-			// 重复登记幂等：不新增行、不报错。
+			// registering again is idempotent: no new row, no error.
 			if err := RecordMediaUploader(ctx, db, shaA, a); err != nil {
 				t.Fatalf("idempotent RecordMediaUploader: %v", err)
 			}
@@ -312,9 +312,9 @@ func TestMediaUploadersDedupeRegistersEveryUploader(t *testing.T) {
 	}
 }
 
-// TestMediaWriteValidationRejectsUnreadableReference 覆盖写前校验本身：
-// actor 是 B 时，新建/更新一条引用 B 读不到的媒体的 note 都必须被拒（*MediaWriteError），
-// 且库里不留 note / 映射行；对写入之前的状态求值，使「映射一建立即自我满足」不成立。
+// TestMediaWriteValidationRejectsUnreadableReference covers pre-write validation itself:
+// with actor B, creating / updating a note that references media B cannot read must both be rejected (*MediaWriteError),
+// and no note / mapping row may remain; evaluating against the state before the write keeps 'the mapping satisfies itself once created' from holding.
 func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 			deckB := seedDeck(t, db, b)
 			sha := saveMedia(t, db, t.TempDir(), a, mediaBytes("writeval"))
 
-			// 新建：B 在自己的卡组里引用 A 的媒体 → 拒。
+			// create: B references A's media inside B's own deck → rejected.
 			n := Note{DeckID: deckB, Kind: "basic", CreatedBy: Ptr(b)}
 			_, err := NewNoteStore(db).Save(WithActor(ctx, b), &n, map[string]any{
 				"front": refFront(sha), "back": "x",
@@ -355,7 +355,7 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 				t.Errorf("rejected create left %d media_notes rows", mapping)
 			}
 
-			// 更新：先给 B 建一条普通 note（actor 0），再让 B 注入 A 的媒体引用 → 拒，字段不变。
+			// update: first create an ordinary note for B (actor 0), then have B inject A's media reference → rejected, fields unchanged.
 			id := saveRefNote(t, db, deckB, Ptr(b), "plain")
 			n2 := Note{ID: id, Kind: "basic"}
 			_, err = NewNoteStore(db).Save(WithActor(ctx, b), &n2, map[string]any{
@@ -383,8 +383,8 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 	}
 }
 
-// TestCloneKeepsClonedMediaReadable 覆盖克隆端到端：B 克隆一份可见卡组后，副本里的图对 B 可读，
-// 且不再依赖源卡组仍对 B 可见（撤销源卡组授权后 B 仍能读副本里的图）。
+// TestCloneKeepsClonedMediaReadable covers cloning end to end: after B clones a visible deck, the images in the copy are readable by B,
+// and no longer depend on the source deck staying visible to B (after revoking the source deck's grant B can still read the copy's images).
 func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -400,7 +400,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if err := NewDeckStore(db).Create(ctx, &src); err != nil {
 				t.Fatalf("create source deck: %v", err)
 			}
-			// 克隆者能看见源卡组，靠的是一条显式授权（可见性不再是读取来源）。
+			// the cloner can see the source deck only through an explicit grant (visibility is no longer a source of read access).
 			if err := NewGrantStore(db).Grant(ctx, src.ID, cloner, RoleReader, Ptr(owner)); err != nil {
 				t.Fatalf("grant source deck: %v", err)
 			}
@@ -415,7 +415,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media: readable=%v err=%v, want true", ok, err)
 			}
-			// 撤销源卡组的授权、并把源 note 软删：副本不再依赖源卡组仍可见。
+			// revoke the source deck's grant and soft-delete the source notes: the copy no longer depends on the source deck being visible.
 			if err := NewGrantStore(db).Revoke(ctx, src.ID, cloner); err != nil {
 				t.Fatalf("revoke source grant: %v", err)
 			}
@@ -425,7 +425,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media after source hidden: readable=%v err=%v, want true", ok, err)
 			}
-			// 副本里确实有一条引用该 sha 的 note（映射归属副本，而不是源）。
+			// the copy really does have a note referencing that sha (the mapping belongs to the copy, not the source).
 			fromMapping := mappingShas(t, db, cloner)
 			if !fromMapping[sha] {
 				t.Errorf("cloned media %s missing from the cloner's mapping set", sha)
@@ -435,7 +435,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 	}
 }
 
-// mustNoteIDs 列出某卡组的 note id（含软删，用于软删前收集）。
+// mustNoteIDs lists a deck's note ids (soft-deleted included, for collection before a soft delete).
 func mustNoteIDs(t *testing.T, db *gorm.DB, deckID uint64) []uint64 {
 	t.Helper()
 	var ids []uint64
@@ -445,9 +445,9 @@ func mustNoteIDs(t *testing.T, db *gorm.DB, deckID uint64) []uint64 {
 	return ids
 }
 
-// TestImportPackageRejectsUnreadableMediaRef 覆盖包导入入口的越权注入：
-// A 的包引用了 A 的媒体但未附带字节，B（无法读取该媒体）导入时整包被拒（稳定 code），
-// 且事务回滚后 B 名下没有卡组 / note / 映射行。
+// TestImportPackageRejectsUnreadableMediaRef covers privilege injection at the package import entry point:
+// A's package references A's media without carrying the bytes, so when B (who cannot read that media) imports it the whole package is rejected (stable code),
+// and after the transaction rolls back B owns no deck / note / mapping rows.
 func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -459,7 +459,7 @@ func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
 			owner, importer := users[0], users[1]
 			srcDeck := seedPresetDeck(t, db, owner)
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("pkgforbid"))
-			// 源 note 以包内形态引用该媒体；导出关闭媒体 → 包里没有字节。
+			// the source note references the media in in-package form; export with media disabled → the package carries no bytes.
 			srcNote := Note{DeckID: srcDeck, Kind: "basic", CreatedBy: Ptr(owner)}
 			if _, err := NewNoteStore(db).Save(ctx, &srcNote, map[string]any{
 				"front": "q?", "back": "media/" + sha + ".png",
@@ -479,7 +479,7 @@ func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
 			if !entryContains(pe.Entries, sha) {
 				t.Errorf("rejection entries = %v, want one naming media/%s", pe.Entries, sha)
 			}
-			// 回滚彻底：导入者名下没有卡组、没有 note、没有映射。
+			// the rollback is complete: the importer owns no deck, no note, no mapping.
 			var deckCount, noteCount, mappingCount int64
 			if err := db.Model(&Deck{}).Where("owner_user_id = ?", importer).Count(&deckCount).Error; err != nil {
 				t.Fatalf("count importer decks: %v", err)

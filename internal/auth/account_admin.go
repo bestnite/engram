@@ -8,16 +8,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// 管理面板的用户管理所需的账号操作。
-// 放在独立文件，避免改动 account.go（其它里程碑的单写者热点）。
+// Account operations needed for user management in the admin panel.
+// Kept in a separate file to avoid touching account.go (the single-writer hotspot for other milestones).
 
-// tempPasswordAlphabet 是临时口令的字符集：去掉了易混淆的 0/O/1/l/I。
+// tempPasswordAlphabet is the temporary-password character set: the confusable 0/O/1/l/I are removed.
 const tempPasswordAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
 
-// tempPasswordLength 是临时口令长度；大于 MinPasswordLength，随机字符不会命中弱密码词表。
+// tempPasswordLength is the temporary-password length; it is greater than MinPasswordLength, so random characters never hit the weak-password wordlist.
 const tempPasswordLength = 16
 
-// GenerateTempPassword 生成一个满足密码策略的随机临时口令。
+// GenerateTempPassword generates a random temporary password that satisfies the password policy.
 func GenerateTempPassword() (string, error) {
 	buf := make([]byte, tempPasswordLength)
 	if _, err := rand.Read(buf); err != nil {
@@ -30,12 +30,12 @@ func GenerateTempPassword() (string, error) {
 	return string(out), nil
 }
 
-// ResetPasswordTx 由管理员为指定用户生成临时口令：在调用方给定的事务里写入新哈希，
-// 并在同一事务里作废其全部会话与全部 API Key。
-// 返回的明文只在此刻交给调用方展示一次，绝不写日志或落库。
+// ResetPasswordTx lets an administrator generate a temporary password for the given user: it writes the new hash inside the caller's transaction
+// and, in that same transaction, revokes all of the user's sessions and all of their API keys.
+// The returned plaintext is handed to the caller for a single display at this moment and is never written to logs or persisted.
 //
-// 必须使用调用方的事务句柄：存在性校验与三条写入都要走 tx，否则在 SQLite 上另开连接会锁冲突，
-// 且任一写入失败时会留下半作废。
+// The caller's transaction handle must be used: the existence check and all three writes have to go through tx, otherwise opening another connection on SQLite hits a lock conflict,
+// and if any write fails things are left half-revoked.
 func (s *AccountService) ResetPasswordTx(ctx context.Context, tx *gorm.DB, userID uint64) (string, error) {
 	if _, err := s.users.ByIDTx(ctx, tx, userID); err != nil {
 		return "", fmt.Errorf("load user: %w", err)
@@ -45,7 +45,7 @@ func (s *AccountService) ResetPasswordTx(ctx context.Context, tx *gorm.DB, userI
 		return "", err
 	}
 	if err := ValidatePasswordPolicy(temp); err != nil {
-		// 理论上不会发生；真发生说明字符集/长度被改坏了，必须显式报错而不是写出弱口令。
+		// Cannot happen in theory; if it does, the alphabet/length has been broken, and we must fail explicitly rather than write out a weak password.
 		return "", fmt.Errorf("temp password failed policy: %w", err)
 	}
 	hash, err := s.hasher.Hash(temp)
@@ -64,7 +64,7 @@ func (s *AccountService) ResetPasswordTx(ctx context.Context, tx *gorm.DB, userI
 	return temp, nil
 }
 
-// ForceLogout 作废指定用户当前全部会话（强制下线），不改密码、不改状态。
+// ForceLogout revokes all current sessions of the given user (forced logout) without changing the password or the status.
 func (s *AccountService) ForceLogout(ctx context.Context, userID uint64) error {
 	if _, err := s.users.ByID(ctx, userID); err != nil {
 		return fmt.Errorf("load user: %w", err)

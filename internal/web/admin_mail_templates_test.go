@@ -11,10 +11,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件模板」的验收：切流、读取、保存校验、
-// 删除回退、预览的零副作用，以及缺 CSRF 的负例。
+// This file is the acceptance test for the admin panel's "mail templates": cutover, reads, save validation,
+// delete fallback, preview's side-effect freeness, and the negative case of a missing CSRF.
 
-// TestAdminMailTemplatePagesCutover 断言页面走 SPA 外壳，且非管理员拿 403。
+// TestAdminMailTemplatePagesCutover asserts the pages go through the SPA shell and non-admins get 403.
 func TestAdminMailTemplatePagesCutover(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
 	assertShell(t, getWithCookies(t, srv, "/admin/mail-templates", cookies))
@@ -25,11 +25,11 @@ func TestAdminMailTemplatePagesCutover(t *testing.T) {
 	}
 }
 
-// TestAdminMailTemplatesShipTheBuiltinDefaults 断言列表响应带回每个类型 × 每种语言的
-// **内置正文**，且它就是编辑框预填的那一份。
+// TestAdminMailTemplatesShipTheBuiltinDefaults asserts the list response carries the
+// **built-in body** for each type × each language, and that it is exactly what the editor is pre-filled with.
 //
-// 这条链之所以要端到端钉住：管理页显示的「默认」如果和发信方兜底不是同一份文本，管理员会
-// 以为自己改的是默认，实际改的是另一个东西——而页面上看不出任何异常。
+// This chain is pinned end to end because: if the "default" shown on the admin page is not the same text as the sender's fallback, the admin will
+// think they are editing the default while actually editing something else — and nothing on the page looks wrong.
 func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 
@@ -45,7 +45,7 @@ func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	for _, d := range list.Defaults {
 		byKey[d.Type+"|"+d.Locale] = d
 	}
-	// 每个类型 × 每种语言都要有一份，且能原样通过保存校验（管理员最常见的动作是「不改就存」）。
+	// Each type × each language must have one, and it must pass save validation as-is (the most common admin action is "save without changing anything").
 	for _, item := range list.Types {
 		for _, code := range list.Locales {
 			d, ok := byKey[item.Type+"|"+code]
@@ -59,19 +59,19 @@ func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 			if err := mail.Validate(mail.Type(item.Type), d.Subject, d.BodyMD); err != nil {
 				t.Errorf("%s/%s: the shipped default does not pass Validate: %v", item.Type, code, err)
 			}
-			// 预填的是模板写法（占位符），不是已渲染的邮件——否则管理员编辑的是一封具体的信。
+			// What is pre-filled is the template form (placeholders), not an already-rendered mail — otherwise the admin would be editing one specific letter.
 			if !strings.Contains(d.BodyMD, "{{") {
 				t.Errorf("%s/%s: default body has no placeholder:\n%s", item.Type, code, d.BodyMD)
 			}
 		}
 	}
-	// 两种语言必须是两份不同的文本（否则等于没做本地化）。
+	// The two locales must be two different texts (otherwise it amounts to no localization at all).
 	zh, okZH := byKey["password_reset|zh-CN"]
 	en, okEN := byKey["password_reset|en"]
 	if okZH && okEN && zh.BodyMD == en.BodyMD {
 		t.Errorf("zh-CN and en defaults are identical:\n%s", zh.BodyMD)
 	}
-	// 自定义一份之后默认必须仍在响应里，且与保存前逐字节相同——「恢复默认」按钮靠它回到原件。
+	// After customizing one, the default must still be in the response and byte-identical to before saving — that is what the "restore default" button uses to get back to the original.
 	body := `{"subject":"自定义主题","body_md":"点这里重置：{{url}}"}`
 	if rec := jsonRequest(t, srv, http.MethodPut,
 		"/api/v1/admin/mail-templates/"+string(mail.TypePasswordReset)+"/zh-CN", body, cookies, csrf); rec.Code != http.StatusOK {
@@ -90,7 +90,7 @@ func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	}
 }
 
-// decodeMailTemplates 解析列表响应。
+// decodeMailTemplates decodes the list response.
 func decodeMailTemplates(t *testing.T, body []byte) mailTemplatesResponse {
 	t.Helper()
 	var out mailTemplatesResponse
@@ -100,7 +100,7 @@ func decodeMailTemplates(t *testing.T, body []byte) mailTemplatesResponse {
 	return out
 }
 
-// TestAdminMailTemplatesReadSaveDelete 覆盖读取、校验、落库、审计与删除回退。
+// TestAdminMailTemplatesReadSaveDelete covers reads, validation, persistence, audit and delete fallback.
 func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	ctx := context.Background()
@@ -142,19 +142,19 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 		t.Fatal("password_reset missing from the type list")
 	}
 
-	// 必填变量缺失：400 且**不写库**。
+	// A required variable is missing: 400 and **no DB write**.
 	bad := jsonRequest(t, srv, http.MethodPut, "/api/v1/admin/mail-templates/password_reset/en",
 		`{"subject":"hi","body_md":"no link here"}`, cookies, csrf)
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("PUT without the link = %d, want 400 (body %s)", bad.Code, snippet(bad.Body.String()))
 	}
-	// 引用未知变量同样拒绝。
+	// Referencing an unknown variable is rejected as well.
 	unknown := jsonRequest(t, srv, http.MethodPut, "/api/v1/admin/mail-templates/password_reset/en",
 		`{"subject":"hi","body_md":"{{url}} {{nope}}"}`, cookies, csrf)
 	if unknown.Code != http.StatusBadRequest {
 		t.Fatalf("PUT with an unknown variable = %d, want 400", unknown.Code)
 	}
-	// 未知类型与不支持的语言分别拒绝。
+	// An unknown type and an unsupported locale are each rejected.
 	if rec := jsonRequest(t, srv, http.MethodPut, "/api/v1/admin/mail-templates/no_such_type/en",
 		`{"subject":"s","body_md":"{{url}}"}`, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("PUT unknown type = %d, want 400", rec.Code)
@@ -171,7 +171,7 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 		t.Fatalf("rows = %d after rejected saves, want 0", len(rows))
 	}
 
-	// 合法保存：200、落库、写审计。
+	// Valid save: 200, persisted, audit row written.
 	ok := jsonRequest(t, srv, http.MethodPut, "/api/v1/admin/mail-templates/password_reset/en",
 		`{"subject":"Reset for {{site}}","body_md":"**Hi** {{url}} ({{expires}})"}`, cookies, csrf)
 	if ok.Code != http.StatusOK {
@@ -190,7 +190,7 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 		t.Errorf("audit rows after save = %d, want 1", n)
 	}
 
-	// 删除：回到内置正文，并再写一条审计。
+	// Delete: falls back to the built-in body and writes another audit row.
 	del := jsonRequest(t, srv, http.MethodDelete, "/api/v1/admin/mail-templates/password_reset/en", "", cookies, csrf)
 	if del.Code != http.StatusOK {
 		t.Fatalf("DELETE = %d, want 200 (body %s)", del.Code, snippet(del.Body.String()))
@@ -206,7 +206,7 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 	}
 }
 
-// TestAdminMailTemplatePreviewRendersAndWritesNothing 断言预览渲染样例并零副作用。
+// TestAdminMailTemplatePreviewRendersAndWritesNothing asserts preview renders the samples and has zero side effects.
 func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/admin/mail-templates/preview",
@@ -232,8 +232,8 @@ func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	}
 }
 
-// TestAdminMailTemplatesRequireCSRF 是必测负例：缺 CSRF 的写路径 403 且零副作用。
-// 新增写路径必须同时进这张表，否则这条路径不在任何负例覆盖之内。
+// TestAdminMailTemplatesRequireCSRF is a mandatory negative case: a write path without CSRF is 403 with zero side effects.
+// A newly added write path must also go into this table, otherwise that path is not covered by any negative case.
 func TestAdminMailTemplatesRequireCSRF(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
 	for _, target := range []struct{ method, path, body string }{
@@ -250,7 +250,7 @@ func TestAdminMailTemplatesRequireCSRF(t *testing.T) {
 	if rows, err := store.NewMailTemplateStore(db).List(context.Background()); err != nil || len(rows) != 0 {
 		t.Errorf("CSRF-less writes left %d rows (err %v), want 0", len(rows), err)
 	}
-	// 匿名请求也拿不到列表。
+	// Anonymous requests do not get the list either.
 	if rec := getJSON(t, srv, "/api/v1/admin/mail-templates", nil, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous GET = %d, want 401", rec.Code)
 	}

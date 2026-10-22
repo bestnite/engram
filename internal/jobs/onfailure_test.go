@@ -1,6 +1,6 @@
 //go:build unix
 
-// 只在 Unix 上编译：假命令走 `/bin/sh -c ...`（理由同 jobs_test.go 的文件头说明）。
+// Compiles only on Unix: the fake command goes through `/bin/sh -c ...` (same reason as the file header note in jobs_test.go).
 
 package jobs
 
@@ -13,10 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是作业侧验收：作业失败落库后，OnFailure 钩子被调用一次，
-// 且钩子 panic 不会反过来影响作业失败处理（「发信失败不影响触发操作」在作业侧的体现）。
+// This file is the job-side acceptance for the failure hook: after a job failure is persisted, the OnFailure hook is called once,
+// and a hook panic does not in turn affect job failure handling (the job-side expression of "a failed notification does not affect the triggering operation").
 
-// failingRunner 构造一个不自动 Start 的 Runner，方便在 Start 之前接好钩子。
+// failingRunner builds a Runner that does not Start automatically, so the hook can be wired before Start.
 func failingRunner(t *testing.T, hook FailureFunc) (*Runner, *Store, context.CancelFunc) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "onfailure.db"))
@@ -45,7 +45,7 @@ func failingRunner(t *testing.T, hook FailureFunc) (*Runner, *Store, context.Can
 	return runner, st, cancel
 }
 
-// TestFailureHookInvokedAfterJobFails 断言失败作业会调用 OnFailure 钩子，并带上失败原因。
+// TestFailureHookInvokedAfterJobFails asserts a failed job calls the OnFailure hook, with the failure reason.
 func TestFailureHookInvokedAfterJobFails(t *testing.T) {
 	type call struct {
 		id     uint64
@@ -76,8 +76,8 @@ func TestFailureHookInvokedAfterJobFails(t *testing.T) {
 	}
 }
 
-// TestFailureHookPanicDoesNotBreakFailureHandling 断言钩子 panic 被兜住：作业仍落到 failed，
-// worker 不崩，后续作业仍能执行。
+// TestFailureHookPanicDoesNotBreakFailureHandling asserts hook panics are caught: the job still ends up failed,
+// the worker does not crash, and later jobs still run.
 func TestFailureHookPanicDoesNotBreakFailureHandling(t *testing.T) {
 	runner, st, _ := failingRunner(t, func(context.Context, store.Job, string) {
 		panic("notification exploded")
@@ -89,7 +89,7 @@ func TestFailureHookPanicDoesNotBreakFailureHandling(t *testing.T) {
 	}
 	waitForStatus(t, st, job.ID, StatusFailed, 5*time.Second)
 
-	// worker 仍然存活：第二个作业同样能入队并失败。
+	// The worker is still alive: the second job is likewise enqueued and fails.
 	second, err := runner.Enqueue(context.Background(), KindOptimize, nil)
 	if err != nil {
 		t.Fatalf("second Enqueue after hook panic: %v", err)

@@ -1,5 +1,5 @@
-// Package web 组装 gin 路由、中间件与优雅关闭。
-// 登录、CSRF、视图等属于后续里程碑；本包在 M0 只提供可启动的 HTTP 骨架与 /healthz。
+// Package web assembles the gin routes, middleware and graceful shutdown.
+// Login, CSRF, views and the rest belong to later milestones; at M0 this package only provides a bootable HTTP skeleton and /healthz.
 package web
 
 import (
@@ -26,93 +26,93 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Deps 是显式装配的依赖（AGENTS.md §2.4：入口显式装配，不引入容器）。
+// Deps holds the explicitly wired dependencies (AGENTS.md §2.4: explicit wiring at the entry point, no container).
 type Deps struct {
 	DB     *gorm.DB
 	Logger *slog.Logger
-	// SchemaVersion 返回已应用的 schema 版本，供 /healthz 报告。
+	// SchemaVersion returns the applied schema version, for /healthz to report.
 	SchemaVersion func(ctx context.Context) (int, error)
-	// Assets 是已嵌入的静态资源清单；为空时由 New 从 embed 加载。
+	// Assets is the list of embedded static resources; when empty, New loads it from embed.
 	Assets *Assets
-	// SPA 是已嵌入的 SPA 静态资源及入口清单；为空时由 New 从 frontend.FS() 加载。
+	// SPA is the embedded SPA static resources and entry list; when empty, New loads it from frontend.FS().
 	Shell *Shell
-	// Translator 是 i18n 本地化器工厂；为空时由 New 从嵌入语言包加载。
+	// Translator is the i18n localizer factory; when empty, New loads it from the embedded language packs.
 	Translator *i18n.Translator
-	// UserLocale 返回当前请求的用户语言设置（可为空串）。M0 尚无会话，M1 接入后提供。
+	// UserLocale returns the user language setting of the current request (may be an empty string). There is no session at M0; it arrives with M1.
 	UserLocale func(c *gin.Context) string
-	// Accounts 提供本地账号的创建与认证；与 Sessions、Users 一起接入认证路由。
+	// Accounts provides creation and authentication of local accounts; it is wired into the auth routes together with Sessions and Users.
 	Accounts *auth.AccountService
-	// Sessions 提供会话解析与 CSRF 两个中间件；登录/登出流程基于它。
+	// Sessions provides the two middlewares, session resolution and CSRF; the login/logout flow builds on it.
 	Sessions *auth.Manager
-	// Users 用于判断是否已存在管理员，决定 /setup 引导是否可达。
+	// Users decides whether an admin already exists, which decides whether the /setup bootstrap is reachable.
 	Users *store.UserStore
-	// Invites 提供邀请的创建/列出/撤销/接受；策略为 invite 时注册流程依赖它。
+	// Invites provides invite creation/listing/revocation/acceptance; the registration flow depends on it when the policy is invite.
 	Invites *store.InviteStore
-	// Decks 提供卡组的读取与归属判断，供卡片列表/编辑页使用。
+	// Decks provides deck reads and ownership checks, for the card list/edit pages.
 	Decks *store.DeckStore
-	// Notes 提供 note 的查询、更新与批量操作，供卡片列表/编辑页使用。
+	// Notes provides note queries, updates and bulk operations, for the card list/edit pages.
 	Notes *store.NoteStore
-	// Cards 提供 card 的读取，供复习页取卡与渲染。
+	// Cards provides card reads, for the review page to take and render a card.
 	Cards *store.CardStore
-	// Presets 提供调度预设的读取，供复习页构造 FSRS 调度器。
+	// Presets provides scheduling preset reads, for the review page to build the FSRS scheduler.
 	Presets *store.PresetStore
-	// Grants 是卡组授权存储；为空时由 New 从 DB 构造。
+	// Grants is the deck grant store; when empty, New builds it from the DB.
 	Grants *store.GrantStore
-	// ShareLinks 是分享链接存储；为空时由 New 从 DB 构造。
+	// ShareLinks is the share link store; when empty, New builds it from the DB.
 	ShareLinks *store.ShareLinkStore
-	// ShareSessions 是分享链接打开的卡组的会话级授权（L3）；为空时由 New 从 DB 构造。
+	// ShareSessions is the session-level grant for decks opened through a share link (L3); when empty, New builds it from the DB.
 	ShareSessions *store.ShareSessionStore
-	// Auditor 是全部写操作的统一审计出口；为空时不写审计。
+	// Auditor is the single audit exit for all writes; when empty, nothing is audited.
 	Auditor *auth.Auditor
-	// LoginLimiter 提供登录失败的递增延迟；为空时登录不做限流。
+	// LoginLimiter provides the escalating delay after failed logins; when empty, login is not rate limited.
 	LoginLimiter *auth.LoginLimiter
-	// AnonLimiter 对 /register 与 /forgot-password 这类匿名入口按 IP 与目标邮箱做固定
-	// 窗口限流（5 次 / 15 分钟）；为空时这两个入口不做限流。
+	// AnonLimiter applies a fixed-window rate limit to anonymous entry points such as /register and /forgot-password,
+	// keyed by IP and target email (5 per 15 minutes); when empty, these two entry points are not rate limited.
 	AnonLimiter *auth.AnonymousLimiter
-	// TOTP 是本地账号的可选二次因素；为空时登录只校验密码，不暴露 TOTP 相关路由。
+	// TOTP is the optional second factor for local accounts; when empty, login only checks the password and the TOTP routes are not exposed.
 	TOTP *auth.TOTPService
-	// BootstrapAdminEmail 是容器化部署时首个管理员的兜底邮箱，预填到 /setup 表单。
+	// BootstrapAdminEmail is the fallback email for the first admin in containerized deployments, prefilled into the /setup form.
 	BootstrapAdminEmail string
-	// API 是 api/v1 的 handler 集合；非空时挂载到 /api/v1。
+	// API is the set of api/v1 handlers; mounted at /api/v1 when non-empty.
 	API *api.API
-	// MCP 是内置 MCP server；非空时在 /mcp 挂载 streamable HTTP。
+	// MCP is the built-in MCP server; mounts streamable HTTP at /mcp when non-empty.
 	MCP *mcp.Server
-	// Media 是本地媒体存储；非空时挂载上传与 /media/<sha256> 代理。
+	// Media is the local media store; when non-empty it mounts uploads and the /media/<sha256> proxy.
 	Media *media.Store
-	// Secrets 是敏感设置的 AES-GCM 编解码器；非空时管理面板可写入
-	// 加密的 OIDC secret 等，且只显示「已配置/未配置」。
+	// Secrets is the AES-GCM codec for sensitive settings; when non-empty the admin panel can write
+	// encrypted OIDC secrets and the like, and only shows "configured / not configured".
 	Secrets *store.SecretCodec
-	// Jobs 是后台作业的单并发执行器；非空时预设页可触发参数优化，
-	// 管理面板也可列出作业并取消；为空时作业页只渲染空列表。
+	// Jobs is the single-concurrency executor for background jobs; when non-empty the preset page can trigger parameter optimization
+	// and the admin panel can list and cancel jobs; when empty the jobs page only renders an empty list.
 	Jobs *jobs.Runner
-	// Mail 是邮件 outbox 与后台 worker；非空时 SMTP 配置页可用，管理面板可
-	// 读到投递状态；为空时相关能力只显示"未配置"。
+	// Mail is the mail outbox and background worker; when non-empty the SMTP settings page works and the admin panel can
+	// read delivery status; when empty the related features only show "not configured".
 	Mail *mail.Outbox
-	// Identities 提供外部身份（OIDC）的读取、绑定与解绑；为空时由 New 从 DB 构造。
+	// Identities provides reading, linking and unlinking of external identities (OIDC); when empty, New builds it from the DB.
 	Identities *store.IdentityStore
-	// BaseURL 是站点对外地址（BASE_URL），用于拼 OIDC redirect_uri；为空时按请求推导。
+	// BaseURL is the site's public address (BASE_URL), used to build the OIDC redirect_uri; when empty it is derived from the request.
 	BaseURL string
-	// TrustedProxies 是允许改写 ClientIP() 的代理地址（IP 或 CIDR），来自启动配置 TRUSTED_PROXIES。
-	// 为空 = 不信任任何代理，ClientIP 回落到 RemoteAddr。
+	// TrustedProxies holds the proxy addresses (IP or CIDR) allowed to rewrite ClientIP(), from the TRUSTED_PROXIES startup config.
+	// Empty = no proxy is trusted, and ClientIP falls back to RemoteAddr.
 	TrustedProxies []string
-	// Version 是程序版本号（构建期注入的标签；开发构建为 dev + 提交短哈希），注入 SPA 入口
-	// <head> 供前端页脚显示。为空时不注入，页脚不显示版本。
+	// Version is the program version (a tag injected at build time; a dev build is dev + the short commit hash), injected into the SPA entry's
+	// <head> for the frontend footer to show. When empty it is not injected and the footer shows no version.
 	Version string
 }
 
-// Server 持有路由与监听地址。
+// Server holds the routes and the listen address.
 type Server struct {
 	addr   string
 	logger *slog.Logger
 	router *gin.Engine
 	db     *gorm.DB
-	// schemaVersion 由 main 注入，避免 web 反向依赖 store 的具体实现。
+	// schemaVersion is injected by main, so web does not depend back on store's concrete implementation.
 	schemaVersion func(ctx context.Context) (int, error)
 	assets        *Assets
 	shell         *Shell
 	i18n          *i18n.Translator
-	// coverageOverride 供测试注入一份「缺 key」的语言包集合，验证报告页会渲染
-	// <100% 并点名缺失的 key；生产为空，报告走 i18n.Coverage。
+	// coverageOverride lets tests inject a language pack set with a missing key, to verify the report page renders
+	// <100% and names the missing key; empty in production, where the report goes through i18n.Coverage.
 	coverageOverride func() []i18n.LocaleCoverage
 	userLocale       func(c *gin.Context) string
 	accounts         *auth.AccountService
@@ -125,58 +125,58 @@ type Server struct {
 	presets          *store.PresetStore
 	grants           *store.GrantStore
 	shareLinks       *store.ShareLinkStore
-	// shareSessions 记录「本会话通过分享链接打开过哪些卡组」（L3）；媒体读取据此放行。
+	// shareSessions records "which decks this session opened through a share link" (L3); media reads are allowed from it.
 	shareSessions *store.ShareSessionStore
-	// access 是 Web 与 REST/MCP 共用的权限判定（单一实现见 auth.DeckAccess）。
+	// access is the permission decision shared by Web and REST/MCP (the single implementation is auth.DeckAccess).
 	access       *auth.DeckAccess
 	auditor      *auth.Auditor
 	loginLimiter *auth.LoginLimiter
-	// anonLimiter 限流 /register 与 /forgot-password 的匿名请求（IP + 目标邮箱双维度）。
+	// anonLimiter rate limits anonymous requests to /register and /forgot-password (both by IP and by target email).
 	anonLimiter *auth.AnonymousLimiter
-	// totp 是本地账号的二次因素服务；为空时登录不含第二步。
+	// totp is the second-factor service for local accounts; when empty, login has no second step.
 	totp           *auth.TOTPService
 	bootstrapEmail string
 	api            *api.API
 	mcp            *mcp.Server
 	media          *media.Store
-	// secrets 供管理面板写入敏感设置；为空时拒绝写入，只显示状态。
+	// secrets lets the admin panel write sensitive settings; when empty, writes are refused and only the status is shown.
 	secrets *store.SecretCodec
-	// mediaSizeMu/mediaSize 是健康页媒体占用的采样缓存：避免每次请求都全量递归扫描。
+	// mediaSizeMu/mediaSize is the sampled cache of media usage for the health page: it avoids a full recursive scan on every request.
 	mediaSizeMu sync.Mutex
 	mediaSize   *mediaSizeSample
-	// jobRunner 是作业入口（入队、列表与取消）；jobStore 供轮询按 id 读状态。
-	// 不合并成一个字段：列表与取消只需 Runner，而轮询读的是 Store。
+	// jobRunner is the job entry point (enqueue, list, cancel); jobStore lets polling read state by id.
+	// They are not merged into a single field: list and cancel only need the Runner, while polling reads the Store.
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
-	// mail 是邮件 outbox；由 cmd/engram 启动/停止其 worker。
+	// mail is the mail outbox; cmd/engram starts and stops its worker.
 	mail *mail.Outbox
-	// securityMail 是 A 类事务安全邮件的入站投递助手。
+	// securityMail is the delivery helper for class A transactional security mail.
 	securityMail *mail.SecurityNotifier
-	// tokens 签发/消费一次性动作令牌：密码重置、邮箱验证、改邮箱确认。
+	// tokens issues and consumes one-time action tokens: password reset, email verification, email change confirmation.
 	tokens *auth.ActionTokenService
-	// fingerprints 记录登录指纹，用于「新设备 / 新 IP 登录提醒」。
+	// fingerprints records login fingerprints, for "new device / new IP login alerts".
 	fingerprints *store.LoginFingerprintStore
-	// mailTemplates 是管理员自定义的邮件模板；缺失即回退内置正文。
+	// mailTemplates holds admin-defined mail templates; a missing one falls back to the built-in body.
 	mailTemplates *store.MailTemplateStore
-	// shareInvites 是待接受的卡组共享邀请（L3 同意制）；sharePolicy 是「谁能分享给我」的策略。
+	// shareInvites holds pending deck sharing invites (L3 consent model); sharePolicy is the "who may share with me" policy.
 	shareInvites *store.DeckShareInviteStore
 	sharePolicy  *store.SharePolicyStore
-	// identities / identityLink 是 OIDC 绑定能力：store 供解绑与列表，service 走身份绑定的三个分支。
+	// identities / identityLink are the OIDC linking capabilities: the store serves unlinking and listing, the service runs the three branches of identity linking.
 	identities   *store.IdentityStore
 	identityLink *auth.IdentityLinkService
-	// oidc 是协议客户端（发现文档缓存 + state 表）；baseURL 用于拼 redirect_uri。
+	// oidc is the protocol client (discovery document cache + state table); baseURL is used to build redirect_uri.
 	oidc    *auth.OIDCClient
 	baseURL string
 }
 
-// secureCookies 报告站点是否经 https 提供，依据 BASE_URL 的 scheme。
-// 生产是「Caddy 终止 TLS → 应用只收到明文 http」，所以绝不能看请求自身的 TLS 状态，
-// 否则线上 cookie 会丢掉 Secure。
+// secureCookies reports whether the site is served over https, based on the scheme of BASE_URL.
+// In production it is "Caddy terminates TLS → the app only receives plain http", so never look at the request's own TLS state,
+// otherwise cookies would lose Secure in production.
 func (s *Server) secureCookies() bool {
 	return strings.HasPrefix(s.baseURL, "https://")
 }
 
-// New 构造 HTTP 服务。addr 是监听地址，deps 里的字段必须齐备。
+// New constructs the HTTP service. addr is the listen address; the fields in deps must all be filled in.
 func New(addr string, deps Deps) (*Server, error) {
 	if deps.DB == nil {
 		return nil, errors.New("web: Deps.DB is required")
@@ -191,14 +191,14 @@ func New(addr string, deps Deps) (*Server, error) {
 
 	assets := deps.Assets
 	if assets == nil {
-		// 嵌入资源在包初始化后即为常量，构建期缺失的资源只会让对应 URL 为空串。
+		// Embedded resources are constants after package initialization, so a resource missing at build time only makes its URL an empty string.
 		var err error
 		if assets, err = LoadAssets(); err != nil {
 			return nil, err
 		}
 	}
-	// SPA 是唯一的页面渲染层（SSR 页面层已删除）：嵌入资源缺失时启动即失败，
-	// 不再有「降级回退到服务端渲染页面」这条路径。
+	// The SPA is the only page rendering layer (the SSR page layer has been deleted): when an embedded resource is missing, startup fails
+	// and there is no longer a "degrade back to server-rendered pages" path.
 	shell := deps.Shell
 	if shell == nil {
 		var err error
@@ -209,14 +209,14 @@ func New(addr string, deps Deps) (*Server, error) {
 	if shell == nil {
 		return nil, errors.New("web: the embedded SPA is required")
 	}
-	// 把自托管 MathJax 的内容哈希 URL 注入 SPA 入口，供前端加载器按同源外链引入
-	// （CSP script-src 'self' 已放行，无需内联脚本）。资源缺失时
-	// URL 为空，不注入，前端加载器随之跳过加载。
+	// Injects the content-hashed URL of the self-hosted MathJax into the SPA entry, for the frontend loader to bring in as a same-origin external script
+	// (CSP script-src 'self' already allows it, no inline script needed). When the resource is missing the
+	// URL is empty, nothing is injected, and the frontend loader skips loading it.
 	shell.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
-	// PWA 外壳：manifest、theme-color、图标、注册脚本与主题引导都注入
-	// SPA 入口 <head>。图标走内容哈希 URL；主题引导用编译期常量 themeBootstrap，与 CSP 的
-	// script-src hash 白名单同源，因此改它必须同步改策略。manifest 与 /pwa.js 是稳定 URL，
-	// 登录前也需可取（registerPWARoutes）。
+	// PWA shell: manifest, theme-color, icons, registration script and theme bootstrap are all injected into the
+	// SPA entry <head>. Icons use content-hashed URLs; the theme bootstrap uses the compile-time constant themeBootstrap, the same source as the CSP's
+	// script-src hash allowlist, so changing it requires changing the policy in step. The manifest and /pwa.js are stable URLs
+	// that must be fetchable before login too (registerPWARoutes).
 	shell.SetShell(ShellHTML{
 		ManifestURL:       manifestPath,
 		ThemeColor:        "#18181b",
@@ -225,7 +225,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		ScriptURL:         pwaScriptPath,
 		ThemeBootstrap:    themeBootstrap,
 	})
-	// 程序版本注入 SPA 入口 <head>，前端页脚读取显示；为空则不注入。
+	// The program version is injected into the SPA entry <head> and read by the frontend footer; when empty it is not injected.
 	shell.SetVersion(deps.Version)
 	translator := deps.Translator
 	if translator == nil {
@@ -265,7 +265,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		jobStore:       jobs.NewStore(deps.DB),
 		mail:           deps.Mail,
 	}
-	// A 类事务安全邮件：outbox 装配时才构造投递助手；令牌与指纹存储总是可用。
+	// Class A transactional security mail: the delivery helper is only built when the outbox is wired; the token and fingerprint stores are always available.
 	tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(deps.DB))
 	if err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	if deps.Mail != nil {
 		s.securityMail = mail.NewSecurityNotifier(deps.Mail, store.NewEmailPrefStore(deps.DB), logger)
 	}
-	// 授权存储可按需从 DB 构造；只有卡组存储也齐备时才装配判定器。
+	// The grant store can be built from the DB on demand; the decision engine is only wired when the deck store is complete too.
 	s.grants = deps.Grants
 	if s.grants == nil {
 		s.grants = store.NewGrantStore(deps.DB)
@@ -287,7 +287,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.shareLinks == nil {
 		s.shareLinks = store.NewShareLinkStore(deps.DB)
 	}
-	// L3：分享链接打开的卡组计入会话可见集合，媒体读取据此放行。同样允许从 DB 构造。
+	// L3: decks opened through a share link join the session's visible set, and media reads are allowed from it. Likewise able to be built from the DB.
 	s.shareSessions = deps.ShareSessions
 	if s.shareSessions == nil {
 		s.shareSessions = store.NewShareSessionStore(deps.DB)
@@ -296,7 +296,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
 	}
 
-	// OIDC 装配：协议客户端常驻；绑定服务需要账号与用户存储齐备。
+	// OIDC wiring: the protocol client is always present; the linking service needs the account and user stores to be complete.
 	s.oidc = auth.NewOIDCClient(nil)
 	s.baseURL = strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/")
 	s.identities = deps.Identities
@@ -312,28 +312,28 @@ func New(addr string, deps Deps) (*Server, error) {
 		s.identityLink = link
 	}
 
-	// 发布模式：gin 自带的调试日志与我们的 slog 中间件重复，关掉前者。
+	// Release mode: gin's own debug logging duplicates our slog middleware, so the former is turned off.
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
-	// gin 默认信任所有代理（trustedProxies = 0.0.0.0/0、::/0），会无条件采信 X-Forwarded-For /
-	// X-Real-IP。那会让登录限流键、审计 IP 与新设备提醒被请求头伪造，因此显式收敛到配置的可信
-	// 代理列表：空列表即完全不信任，ClientIP 回落到 RemoteAddr。
-	// 非法项在此也会让构造失败，绝不静默忽略。
+	// By default gin trusts every proxy (trustedProxies = 0.0.0.0/0, ::/0) and takes X-Forwarded-For /
+	// X-Real-IP unconditionally, which would let headers forge the login rate-limit key, the audit IP and the new-device alerts, so we narrow it explicitly to the configured trusted
+	// proxy list: an empty list means no trust at all, and ClientIP falls back to RemoteAddr.
+	// An illegal entry fails construction here too, never silently ignored.
 	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("web: set trusted proxies: %w", err)
 	}
-	// 启动时记下可信代理配置，排查「拿不到真实 IP」时第一眼就能确认它是否生效。
+	// The trusted proxy config is logged at startup, so the first look when investigating "we cannot get the real IP" confirms whether it took effect.
 	if len(deps.TrustedProxies) == 0 {
 		logger.Info("client ip resolution: no trusted proxies, forwarded headers are ignored")
 	} else {
 		logger.Info("client ip resolution: trusting forwarded headers from proxies", "trusted_proxies", strings.Join(deps.TrustedProxies, ","))
 	}
 	router.Use(requestLogger(logger), recovery(logger), forwardedIPWarner(logger, deps.TrustedProxies))
-	// 安全响应头挂在全局，覆盖静态资源、/media、/api/v1、/mcp 与 404 回退；
-	// 放在 session/locale 之前，保证任何提前中止的响应也带齐这组头。CSP 只上报不阻断。
+	// Security headers are mounted globally, covering static assets, /media, /api/v1, /mcp and the 404 fallback;
+	// they sit before session/locale so that any response aborted early still carries the full set. The CSP is enforcing, not report-only.
 	router.Use(securityHeaders())
-	// 会话中间件先于语言中间件：个人设置里的语言要参与 i18n 解析优先级，
-	// 而它只能从已解析的会话用户读取。会话解析本身不依赖语言，先后次序安全。
+	// The session middleware comes before the locale middleware: the language from personal settings takes part in the i18n resolution precedence,
+	// and it can only be read from an already resolved session user. Session resolution itself does not depend on the language, so the order is safe.
 	if s.sessions != nil {
 		router.Use(s.sessions.Middleware())
 	}
@@ -343,7 +343,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	router.GET("/assets/*filepath", s.shell.ServeAsset)
 	if deps.Sessions != nil && deps.Users != nil {
-		// SPA 个人资料 API 仅在会话依赖齐备时注册，写请求继续由会话 CSRF 中间件保护。
+		// The SPA profile API is only registered when the session dependencies are complete, and writes stay protected by the session CSRF middleware.
 		profile := router.Group("/api/v1")
 		profile.GET("/profile", s.profileGet)
 		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.profilePatch)
@@ -352,16 +352,16 @@ func New(addr string, deps Deps) (*Server, error) {
 			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.passwordPatch)
 		}
 	}
-	// PWA 外壳：manifest 与 service worker 是公开的稳定路由，登录前也需可取。
+	// PWA shell: the manifest and the service worker are public stable routes that must be fetchable before login too.
 	s.registerPWARoutes(router)
 	s.registerAuthRoutes(router)
 	s.registerDeckRoutes(router)
 	s.registerDeckQueueCountRoute(router)
 	s.registerDeckSettingsRoutes(router)
 	s.registerDeckSettingsAPIRoutes(router)
-	// 两步验证管理：页面是 /settings/security（应用壳），读写走 /api/v1/settings/totp*。
+	// Two-step verification management: the page is /settings/security (app shell), reads and writes go through /api/v1/settings/totp*.
 	s.registerTOTPAPIRoutes(router)
-	// 邮件通知偏好：页面是 /settings/email（应用壳），读写走 /api/v1/settings/notifications。
+	// Email notification preferences: the page is /settings/email (app shell), reads and writes go through /api/v1/settings/notifications.
 	s.registerMailPrefsAPIRoutes(router)
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
@@ -372,35 +372,35 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerReviewRoutes(router)
 	s.registerPresetRoutes(router)
 	s.registerSettingsRoutes(router)
-	// A 类事务安全邮件：密码重置、邮箱验证与改邮箱确认的页面与触发点。
+	// Class A transactional security mail: the pages and trigger points for password reset, email verification and email change confirmation.
 	s.registerSecurityMailRoutes(router)
-	// 一键退订（RFC 8058）：免登录的一键退订端点（可选类型专用）。
+	// One-click unsubscribe (RFC 8058): a login-free one-click unsubscribe endpoint (for optional types only).
 	s.registerUnsubscribeRoutes(router)
 	s.registerStatsRoutes(router)
 	s.registerAdminRoutes(router)
-	// 未知路径回退：所有未命中路由的请求落到设计过的 404 页面（not_found.go）。
+	// Unknown path fallback: every request that matches no route lands on the designed 404 page (not_found.go).
 	s.registerNotFoundRoute(router)
 
 	if s.api != nil {
-		// REST API 的鉴权中间件内部自行处理会话/bearer 双通道，挂在全局会话中间件之后即可。
+		// The REST API's auth middleware handles the session/bearer dual channel itself, so it only needs to sit after the global session middleware.
 		s.api.Register(router)
-		// SPA 答题只接受会话 cookie，并在 API 组之外显式校验会话绑定的 CSRF。
+		// SPA answering only accepts the session cookie, and explicitly validates the session-bound CSRF outside the API group.
 		if s.sessions != nil {
 			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.reviewAnswer)
-			// 作答类题型走判分入口：服务端判分并写 grade_source=typed。
+			// Answer types go through the grading entry point: the server grades and writes grade_source=typed.
 			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.reviewGrade)
-			// 埋藏与卡面渲染：只写本人进度 / 只读清洗后 HTML，仍是会话 + CSRF 保护的 web 端点
-			// 埋藏的调度逻辑复用 internal/schedule。
+			// Bury and card render: write only the caller's own progress / read sanitized HTML; still web endpoints protected by session + CSRF,
+			// with bury's scheduling logic reusing internal/schedule.
 			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.reviewBury)
 			router.POST("/api/v1/review/suspend", s.sessions.CSRFMiddleware(), s.reviewSuspend)
-			// 撤销刚提交的评分：恢复 card_states 并删除被撤销的 reviews 行（schedule.Rollback），
-			// 响应显式带 undone_card_id，前端据此回到刚撤销的那张卡。
+			// Undo the grade just submitted: restore card_states and delete the undone reviews row (schedule.Rollback),
+			// and the response explicitly carries undone_card_id, from which the frontend returns to the card just undone.
 			router.POST("/api/v1/review/undo", s.sessions.CSRFMiddleware(), s.reviewUndo)
 			router.POST("/api/v1/review/render", s.sessions.CSRFMiddleware(), s.reviewRender)
 		}
 	}
 	if s.mcp != nil && s.api != nil {
-		// MCP 复用同一套鉴权；鉴权后把身份注入请求上下文再交给 streamable handler。
+		// MCP reuses the same authentication; once it passes, the identity is injected into the request context and handed to the streamable handler.
 		g := router.Group("")
 		g.Use(s.api.AuthMiddleware())
 		g.POST("/mcp", s.mcpEndpoint)
@@ -411,23 +411,23 @@ func New(addr string, deps Deps) (*Server, error) {
 	return s, nil
 }
 
-// Handler 返回底层 handler，便于测试直接注入请求。
+// Handler returns the underlying handler, so tests can inject requests directly.
 func (s *Server) Handler() http.Handler { return s.router }
 
-// Mail 返回邮件 outbox；cmd/engram 借此启动与优雅停止其后台 worker。
-// 未装配时为 nil。
+// Mail returns the mail outbox; cmd/engram uses it to start and gracefully stop its background worker.
+// nil when not wired.
 func (s *Server) Mail() *mail.Outbox { return s.mail }
 
-// 连接级超时。只限制请求头与空闲连接，不设整体读写超时：媒体上传与卡组包导入的请求体
-// 可以很大，流式导出的响应可以很长，整体超时会把合法的慢连接截断。
+// Connection-level timeouts. Only request headers and idle connections are limited; there is no overall read/write timeout, because media uploads and deck package imports can have
+// very large request bodies and streaming export responses can be very long, and an overall timeout would cut off legitimate slow connections.
 const (
-	// httpReadHeaderTimeout 防止慢速发送请求头的连接（slowloris）长期占着连接与 goroutine。
+	// httpReadHeaderTimeout keeps connections that send headers slowly (slowloris) from holding a connection and a goroutine for a long time.
 	httpReadHeaderTimeout = 10 * time.Second
-	// httpIdleTimeout 回收 keep-alive 空闲连接。
+	// httpIdleTimeout reclaims idle keep-alive connections.
 	httpIdleTimeout = 2 * time.Minute
 )
 
-// newHTTPServer 构造带连接级超时的 http.Server；Run 与测试共用，保证测的就是上线的配置。
+// newHTTPServer builds an http.Server with connection-level timeouts; Run and the tests share it, so what is tested is the shipped configuration.
 func newHTTPServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -437,7 +437,7 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 	}
 }
 
-// Run 启动 HTTP 服务并在 ctx 取消时优雅关闭：停止接收新请求，最多等 2 秒。
+// Run starts the HTTP service and shuts down gracefully when ctx is cancelled: it stops accepting new requests and waits at most 2 seconds.
 func (s *Server) Run(ctx context.Context) error {
 	srv := newHTTPServer(s.addr, s.router)
 	errCh := make(chan error, 1)
@@ -463,7 +463,7 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
-// healthResponse 是 /healthz 的响应体；database 与 schema_version 是必有的两个字段。
+// healthResponse is the /healthz body; database and schema_version are the two required fields.
 type healthResponse struct {
 	Status        string `json:"status"`
 	Database      string `json:"database"`
@@ -500,8 +500,8 @@ func (s *Server) healthz(c *gin.Context) {
 	c.JSON(code, healthResponse{Status: status, Database: database, SchemaVersion: version})
 }
 
-// mcpEndpoint 把已鉴权的用户与 API key 注入请求上下文，再交给 MCP 的
-// streamable HTTP handler；scope 过滤与调用复查在 mcp 包内按该身份完成。
+// mcpEndpoint injects the authenticated user and API key into the request context, then hands it to MCP's
+// streamable HTTP handler; scope filtering and call re-checks happen inside the mcp package under that identity.
 func (s *Server) mcpEndpoint(c *gin.Context) {
 	u, _ := api.CurrentUser(c)
 	k, _ := api.CurrentAPIKey(c)
@@ -509,7 +509,7 @@ func (s *Server) mcpEndpoint(c *gin.Context) {
 	s.mcp.ServeHTTP(c.Writer, c.Request.WithContext(ctx))
 }
 
-// requestLogger 用 slog 记录每个请求；日志一律英文（AGENTS.md §2.1）。
+// requestLogger logs every request with slog; logs are always in English (AGENTS.md §2.1).
 func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -524,7 +524,7 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-// recovery 捕获 handler panic，记一条英文日志并返回 500，避免进程被单个请求带崩。
+// recovery catches a handler panic, logs one line in English and returns 500, so a single request cannot take the process down.
 func recovery(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

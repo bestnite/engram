@@ -3,8 +3,9 @@ import { mount, unmount, flushSync } from 'svelte';
 import InlineEdit from '../lib/components/InlineEdit.svelte';
 
 /**
- * 原地编辑的交互契约：点击进入编辑态；Enter 保存、Esc 取消；
- * 保存失败（onSave 返回 false）时停留在编辑态，输入不丢。
+ * In-place editing's interaction contract: a click enters edit mode; Enter saves, Esc
+ * cancels; when saving fails (onSave returns false) it stays in edit mode and the input is
+ * not lost.
  */
 describe('InlineEdit', () => {
   let instance: ReturnType<typeof mount> | null = null;

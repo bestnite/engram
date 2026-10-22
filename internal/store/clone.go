@@ -9,16 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// Clone 把一个卡组的全部内容（note 与 card）复制到 targetUserID 名下（「克隆/fork」）。
+// Clone copies all content of a deck (notes and cards) into targetUserID's account ('clone/fork').
 //
-// 语义要点（内容与进度分离）：
-//   - 只复制内容列（kind / fields_json / tags_json / external_ref / source / reference_refs）；
-//   - 新 note 经题型重新生成 card，得到一组**全新 id、全新行**的 card；
-//   - 绝不复制任何进度：新 card 没有任何 card_states 行，调用方账号下进度从零开始；
-//   - 授权关系属于实例内状态，不随内容复制 —— 克隆出的卡组只有调用者一个 owner。
+// Key semantics (content and progress kept separate):
+//   - only content columns are copied (kind / fields_json / tags_json / external_ref / source / reference_refs);
+//   - new notes regenerate cards from the card type, yielding a set of cards with **brand-new ids and brand-new rows**;
+//   - no progress is ever copied: the new cards have no card_states rows, progress in the caller's account starts from zero;
+//   - grants are per-instance state and are not copied with the content — the cloned deck has the caller as its only owner.
 //
-// 整个复制在一个事务内完成：任一条失败则回滚，不会留下半截副本。
-// 源卡组只读，不会被本操作修改。
+// The whole copy happens in one transaction: any failure rolls back and no half-made copy is left behind.
+// The source deck is read-only and is not modified by this operation.
 func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, newName string, presetID uint64) (*Deck, error) {
 	if src == nil || src.ID == 0 {
 		return nil, errors.New("clone deck: source deck is required")
@@ -32,8 +32,8 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	if presetID == 0 {
 		return nil, ErrDeckPresetRequired
 	}
-	// 与卡组建组、改名走同一套名称/描述校验：克隆曾只检查非空就 tx.Create，于是能落库一条
-	// 超过 200 字符、或含控制字符的卡组，后续任何改名/导入入口都会拒绝它。
+	// It uses the same name/description validation as deck creation and rename: cloning used to check only for non-emptiness and then tx.Create, so it could
+	// store a deck over 200 characters long or one containing control characters, which every later rename/import entry point would reject.
 	dst := Deck{
 		OwnerUserID: targetUserID,
 		Name:        newName,
@@ -44,9 +44,9 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	if err := validateDeckForWrite(&dst, true); err != nil {
 		return nil, err
 	}
-	// 克隆者 = 目标用户：副本里的 note 引用必须对它可读（写前校验）。
-	// 克隆者能看见源卡组时，源 note 的映射即构成可读性，因此合法克隆不会被误挡；
-	// 克隆后副本映射指向新 note，读者不再依赖源卡组仍可见。
+	// the cloner = the target user: the copy's note references must be readable to them (validated before writing).
+	// When the cloner can see the source deck, the source note mapping already implies readability, so a legitimate clone is not blocked;
+	// after cloning, the copy's mapping points at the new notes, so readers no longer depend on the source deck staying visible.
 	ctx = WithActor(ctx, targetUserID)
 
 	var out Deck
@@ -55,13 +55,13 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 			return fmt.Errorf("create cloned deck: %w", err)
 		}
 
-		// 只取未软删除的 note（GORM 默认作用域）；已删除内容不应被复制。
+		// only non-soft-deleted notes are taken (GORM default scope); deleted content must not be copied.
 		var notes []Note
 		if err := tx.Where("deck_id = ?", src.ID).Order("id ASC").Find(&notes).Error; err != nil {
 			return fmt.Errorf("list source notes for clone: %w", err)
 		}
 
-		// 复用 NoteStore 的题型校验与 card 生成管线，克隆与手工建卡走同一条路径。
+		// it reuses NoteStore's card-type validation and card generation pipeline, so cloning and manual card creation share one path.
 		notesStore := NewNoteStore(s.db)
 		for i := range notes {
 			original := notes[i]

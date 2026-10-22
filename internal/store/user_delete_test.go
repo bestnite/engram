@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// TestDeleteUserCleansEverythingAndKeepsSharedMedia 建一个与别人有各种交集的用户再删除它，断言：
-//   - 任何表的用户列里都不再出现它的 id（删除或置空）；
-//   - 它名下卡组的级联与卡组删除一致：别人在这些卡组上的授权与进度一起消失；
-//   - 它上传、但被别人 note 引用的媒体行保留（媒体按内容去重共享，删行会让别人的图片失效）；
-//   - 它在别人卡组里写的 note 保留，created_by 置空。
+// TestDeleteUserCleansEverythingAndKeepsSharedMedia builds a user with all kinds of entanglement with others and then deletes them, asserting:
+//   - its id no longer appears in any table's user columns (deleted or nulled out);
+//   - the cascade of the decks it owned matches deck deletion: other people's grants and progress on those decks disappear with them;
+//   - media rows it uploaded but that someone else's note references are kept (media is shared by content de-duplication, and deleting the row would break their image);
+//   - notes it wrote in someone else's deck are kept, with created_by nulled out.
 func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -29,7 +29,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 				}
 			}
 
-			// 受害者自己的卡组，被 reader 共享并学习过。
+			// The victim's own deck, shared with reader and studied there.
 			victimDeck := seedDeck(t, db, victim)
 			ownNote := Note{DeckID: victimDeck, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedBy: &victim, CreatedAt: now, UpdatedAt: now}
 			mustCreate(&ownNote)
@@ -38,7 +38,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 			mustCreate(&DeckGrant{DeckID: victimDeck, UserID: reader, Role: RoleReader, CreatedBy: &victim, CreatedAt: now})
 			mustCreate(&CardState{CardID: ownCard.ID, UserID: reader, State: "review", Version: 1})
 
-			// owner 的卡组里，受害者作为编辑写了一条引用自己上传媒体的 note。
+			// In the owner's deck the victim, as an editor, wrote a note referencing media they uploaded.
 			ownerDeck := seedDeck(t, db, owner)
 			sha := strings.Repeat("d", 64)
 			mustCreate(&Media{Sha256: sha, RelPath: "dd/" + sha + ".png", Mime: "image/png", Bytes: 10, CreatedBy: &victim, CreatedAt: now})
@@ -50,7 +50,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 			mustCreate(&MediaNote{MediaSha: sha, NoteID: guestNote.ID, CreatedAt: now})
 			mustCreate(&DeckGrant{DeckID: ownerDeck, UserID: victim, Role: RoleEditor, CreatedBy: &owner, CreatedAt: now})
 
-			// 个人数据。
+			// Personal data.
 			mustCreate(&DeckShareInvite{DeckID: ownerDeck, UserID: reader, Role: RoleReader, InvitedBy: victim, CreatedAt: now, ExpiresAt: now.Add(time.Hour)})
 			mustCreate(&ShareAllow{FromUserID: owner, ToUserID: victim, CreatedAt: now})
 			mustCreate(&UserTOTP{UserID: victim, SecretCiphertext: "v1:x", CreatedAt: now, UpdatedAt: now})

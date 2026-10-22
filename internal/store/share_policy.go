@@ -10,16 +10,16 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// SharePolicyStore 读写「谁可以把卡组分享给我」这一策略与它的白名单。
+// SharePolicyStore reads and writes the "who may share a deck with me" policy and its allowlist.
 //
-// 判定只有一个入口 **Allows**：策略与白名单分散判断必然漂移，而漂移的表现是「白名单配了
-// 却拦不住人」这种很难被发现的越权。
+// There is exactly one entry point for the decision, **Allows**: judging the policy and the allowlist separately will drift, and the drift shows up as "the allowlist is configured
+// yet people still get through", an escalation that is very hard to notice.
 type SharePolicyStore struct{ db *gorm.DB }
 
-// NewSharePolicyStore 构造策略存储。
+// NewSharePolicyStore builds the policy store.
 func NewSharePolicyStore(db *gorm.DB) *SharePolicyStore { return &SharePolicyStore{db: db} }
 
-// Policy 返回某用户的策略；未设置或值不认识时按 ShareAcceptAnyone（与上线前的行为一致）。
+// Policy returns a user's policy; when unset or unrecognized it is ShareAcceptAnyone (matching the behaviour from before launch).
 func (s *SharePolicyStore) Policy(ctx context.Context, userID uint64) (ShareAcceptPolicy, error) {
 	var u User
 	if err := s.db.WithContext(ctx).Select("share_accept_from").Where("id = ?", userID).Take(&u).Error; err != nil {
@@ -38,7 +38,7 @@ func (s *SharePolicyStore) Policy(ctx context.Context, userID uint64) (ShareAcce
 	}
 }
 
-// SetPolicy 写入策略；传空串等价于回到默认（anyone）。
+// SetPolicy writes the policy; an empty string equals going back to the default (anyone).
 func (s *SharePolicyStore) SetPolicy(ctx context.Context, userID uint64, policy ShareAcceptPolicy) error {
 	value := strings.TrimSpace(string(policy))
 	switch ShareAcceptPolicy(value) {
@@ -57,7 +57,7 @@ func (s *SharePolicyStore) SetPolicy(ctx context.Context, userID uint64, policy 
 	return nil
 }
 
-// Allow 允许 from 把卡组分享给 to（写到 to 的白名单里）。
+// Allow permits from to share decks with to (by writing into to's allowlist).
 func (s *SharePolicyStore) Allow(ctx context.Context, toUserID, fromUserID uint64) error {
 	row := ShareAllow{FromUserID: fromUserID, ToUserID: toUserID, CreatedAt: time.Now().UTC()}
 	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
@@ -67,7 +67,7 @@ func (s *SharePolicyStore) Allow(ctx context.Context, toUserID, fromUserID uint6
 	return nil
 }
 
-// RevokeAllow 从白名单里移除一行。
+// RevokeAllow removes one row from the allowlist.
 func (s *SharePolicyStore) RevokeAllow(ctx context.Context, toUserID, fromUserID uint64) error {
 	err := s.db.WithContext(ctx).
 		Where("to_user_id = ? AND from_user_id = ?", toUserID, fromUserID).
@@ -78,7 +78,7 @@ func (s *SharePolicyStore) RevokeAllow(ctx context.Context, toUserID, fromUserID
 	return nil
 }
 
-// AllowList 返回 to 的白名单（from 的 user id 列表，按加入时间）。
+// AllowList returns to's allowlist (the user ids of the froms, in the order they were added).
 func (s *SharePolicyStore) AllowList(ctx context.Context, toUserID uint64) ([]uint64, error) {
 	var rows []ShareAllow
 	if err := s.db.WithContext(ctx).
@@ -92,9 +92,9 @@ func (s *SharePolicyStore) AllowList(ctx context.Context, toUserID uint64) ([]ui
 	return out, nil
 }
 
-// Allows 判定 from 是否可以把卡组分享给 to。**这是唯一的判定入口。**
+// Allows decides whether from may share a deck with to. **This is the only entry point for the decision.**
 //
-// 自己分享给自己不在此判（分享者与接收者相同由调用方拦掉）。
+// Sharing with oneself is not judged here (the caller rejects an identical sharer and recipient).
 func (s *SharePolicyStore) Allows(ctx context.Context, toUserID, fromUserID uint64) (bool, error) {
 	policy, err := s.Policy(ctx, toUserID)
 	if err != nil {

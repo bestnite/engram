@@ -1,18 +1,17 @@
-// Package jobs 提供单并发的后台作业框架：jobs 表持久化、子进程执行（命令可注入）、
-// 超时后杀掉整个进程组、阶段级进度与日志尾巴捕获
-// （jobs 表；）。
+// Package jobs provides a single-concurrency background job framework: jobs table persistence, subprocess execution (with an injectable command),
+// killing the whole process group after a timeout, stage-level progress, and log tail capture.
 //
-// 设计要点与理由：
-//   - 单并发：进程内只有一个 worker 消费队列；入队时若已有未完成作业，返回
-//     ErrAlreadyRunning，由 REST 层映射成 409（「已有任务则 409」）。
-//   - 子进程执行：训练是 CPU 密集且可能崩溃/挂死，放到独立进程里既能隔离，也能超时取消；
-//     优化器算法本身不是 Go 库（Rust 适配器），只能走子进程。
-//   - 命令可注入：Runner 通过 CommandBuilder 取得要执行的命令；生产用优化器
-//     适配器（internal/jobs/optimizer.go，返回直接调用 Rust 适配器的 Command），测试注入
-//     `/bin/sh -c ...`，从而不依赖真实优化器。
-//   - 结果可注入：Complete 可选，命令成功退出后，由 Complete 解析命令的副作用（例如适配器
-//     写出的 21 维权重文件），产出 OptimizeResult 交给 FinishOptimize 落库；未配置时走
-//     通用的「退出码 0 即成功」路径。
+// Design points and rationale:
+//   - Single concurrency: only one worker inside the process consumes the queue; on enqueue, if an unfinished job already exists it returns
+//     ErrAlreadyRunning, which the REST layer maps to 409 ("409 if a task already exists").
+//   - Subprocess execution: training is CPU-intensive and may crash or hang, so running it in a separate process both isolates it and allows timeout cancellation;
+//     the optimizer algorithm itself is not a Go library (it is a Rust adapter), so it can only go through a subprocess.
+//   - Injectable command: the Runner gets the command to execute from a CommandBuilder; production uses the optimizer
+//     adapter (internal/jobs/optimizer.go, which returns a Command that invokes the Rust adapter directly), while tests inject
+//     `/bin/sh -c ...`, so they do not depend on a real optimizer.
+//   - Injectable result: Complete is optional; after the command exits successfully, Complete parses the command's side effects (for example the
+//     21-dimension weight file the adapter writes) and produces an OptimizeResult for FinishOptimize to persist; when not configured it takes the
+//     generic "exit code 0 means success" path.
 package jobs
 
 import (
@@ -32,13 +31,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 作业 kind：与 jobs.kind 列一致，取值英文且稳定。
+// Job kinds: consistent with the jobs.kind column, English values that stay stable.
 const (
-	// KindOptimize 是参数优化作业（当前唯一类型）。
+	// KindOptimize is the parameter optimization job (currently the only kind).
 	KindOptimize = "optimize"
 )
 
-// 作业状态机：queued -> running -> succeeded | failed。
+// Job state machine: queued -> running -> succeeded | failed.
 const (
 	StatusQueued    = "queued"
 	StatusRunning   = "running"
@@ -46,7 +45,7 @@ const (
 	StatusFailed    = "failed"
 )
 
-// 阶段名：只做阶段级进度，不编造百分比。取值与 jobs.stage 列一致。
+// Stage names: only stage-level progress, no invented percentages. Values are consistent with the jobs.stage column.
 const (
 	StageReadLogs = "read_logs"
 	StageTraining = "training"
@@ -54,115 +53,115 @@ const (
 )
 
 const (
-	// StaleJobReason 是启动时回收残留 running 作业写入的失败原因（英文，AGENTS.md §2.1）。
-	// 语义：子进程随上次进程退出必然已消失，running 只是崩溃/重启遗留的假状态。
+	// StaleJobReason is the failure reason written when reclaiming a leftover running job at startup (English, AGENTS.md §2.1).
+	// Semantics: the subprocess necessarily died with the previous process; running is just a fake state left behind by a crash or restart.
 	StaleJobReason = "interrupted by restart"
 
-	// NeverStartedJobReason 是启动时回收残留 queued 作业写入的失败原因。
-	// 语义：入队只写库并把作业放进内存队列，队列随上个进程消失，所以这些行永远不会被执行；
-	// 它们却被 Store.Active 当作在途作业，会让后续 Enqueue 永久返回 409。
+	// NeverStartedJobReason is the failure reason written when reclaiming a leftover queued job at startup.
+	// Semantics: enqueue only writes the database and puts the job on an in-memory queue, and the queue dies with the previous process, so these rows are never executed;
+	// yet Store.Active counts them as in-flight jobs, making every later Enqueue return 409 forever.
 	NeverStartedJobReason = "job never started"
 
-	// DefaultTimeout 是子进程的默认超时；优化训练可能跑很久，但必须有上限
+	// DefaultTimeout is the default subprocess timeout; optimizer training may run for a long time, but it must have an upper bound
 	DefaultTimeout = 30 * time.Minute
-	// DefaultLogTailLines 是落库的日志尾巴行数上限。
+	// DefaultLogTailLines is the maximum number of log tail lines persisted.
 	DefaultLogTailLines = 40
-	// maxLogTailBytes 是日志尾巴的字节上限。
+	// maxLogTailBytes is the byte cap for the log tail.
 	//
-	// 理由：日志尾巴只服务于「轮询界面看失败原因」，训练日志可能非常长；若无限量写进
-	// jobs.log_tail 这个 TEXT 列，行会随作业时长膨胀，状态查询接口也要搬运大字段。
-	// 只保留末尾若干字节/行，既够定位失败，又让每一行的大小有界。
+	// Rationale: the log tail only serves "poll the UI to see the failure reason", and training logs can be very long; if written without limit into
+	// the jobs.log_tail TEXT column, the row would grow with job duration and the status query endpoint would have to move large fields around.
+	// Keeping only the last few bytes/lines is enough to locate a failure while keeping each row's size bounded.
 	maxLogTailBytes = 16 * 1024
-	// queueDepth 是内存队列容量。单并发下同时最多一个未完成作业，容量 1 足够且让入队永不阻塞。
+	// queueDepth is the in-memory queue capacity. With single concurrency there is at most one unfinished job, so a capacity of 1 suffices and makes enqueue never block.
 	queueDepth = 1
 )
 
 var (
-	// ErrAlreadyRunning 表示已有未完成作业，调用方应返回 409（单并发哨兵错误）。
+	// ErrAlreadyRunning means an unfinished job already exists; callers should return 409 (the single-concurrency sentinel error).
 	ErrAlreadyRunning = errors.New("a job is already running")
-	// ErrKindRequired 表示入队时未给出 kind。
+	// ErrKindRequired means no kind was given on enqueue.
 	ErrKindRequired = errors.New("job kind is required")
-	// ErrTimedOut 表示子进程超过配置超时后被杀死。
+	// ErrTimedOut means the subprocess was killed after exceeding the configured timeout.
 	ErrTimedOut = errors.New("job timed out")
-	// ErrNoCommand 表示没有为作业配置可执行的命令。
+	// ErrNoCommand means no executable command was configured for the job.
 	ErrNoCommand = errors.New("no command configured for job")
-	// ErrNotRunning 表示要取消的作业既不在运行、也不是可取消的 queued 状态。
+	// ErrNotRunning means the job to cancel is neither running nor in the cancellable queued state.
 	ErrNotRunning = errors.New("job is not running")
 )
 
-// CancelReason 是管理员取消作业时写入 jobs.error 的原因（英文，AGENTS.md §2.1）。
-// 它与超时/崩溃原因区分开，让管理面板能明确显示「是被人取消的」。
+// CancelReason is the reason an administrator's cancellation writes to jobs.error (English, AGENTS.md §2.1).
+// It is kept distinct from timeout/crash reasons so the admin panel can show plainly that "a human cancelled this".
 const CancelReason = "cancelled by admin"
 
-// Command 描述一次子进程调用。字段由调用方注入，便于测试替换成短命令/自指二进制。
+// Command describes one subprocess invocation. The fields are injected by the caller, so tests can substitute short commands or the self-referencing binary.
 type Command struct {
-	Name  string    // 可执行文件路径
-	Args  []string  // 参数
-	Dir   string    // 工作目录，空表示继承当前进程
-	Env   []string  // 环境变量，nil 表示继承当前进程
-	Stdin io.Reader // 标准输入，nil 表示空
+	Name  string    // Executable path
+	Args  []string  // Arguments
+	Dir   string    // Working directory; empty means inherit the current process's
+	Env   []string  // Environment variables; nil means inherit the current process's
+	Stdin io.Reader // Standard input; nil means empty
 }
 
-// Reporter 让命令构造器上报阶段级进度（写进 jobs.stage）。
+// Reporter lets a command builder report stage-level progress (written to jobs.stage).
 type Reporter interface {
 	SetStage(stage string)
 }
 
-// CommandBuilder 为一个作业构造要执行的命令；返回错误则作业直接标记为 failed。
+// CommandBuilder builds the command to execute for a job; if it returns an error the job is marked failed directly.
 type CommandBuilder func(ctx context.Context, job *store.Job, rep Reporter) (Command, error)
 
-// CompleteFunc 把命令成功退出后的副作用解析成优化结果。
+// CompleteFunc parses the command's side effects after a successful exit into an optimization result.
 //
-// 命令本身只负责执行（进程退出码语义），像「适配器把权重写到哪个文件」这类知识属于
-// 生产装配（Optimizer）；Runner 在命令成功后调用它拿到 OptimizeResult，
-// 再交给 FinishOptimize 写回 job 行与 preset。返回错误则作业标记为 failed。
+// The command itself only executes (process exit code semantics); knowledge such as "which file the adapter writes the weights to" belongs to
+// production assembly (Optimizer); after the command succeeds the Runner calls this to obtain the OptimizeResult,
+// then hands it to FinishOptimize to write back to the job row and the preset. Returning an error marks the job failed.
 type CompleteFunc func(ctx context.Context, job *store.Job, cmd Command, tail string) (store.OptimizeResult, error)
 
-// SuccessFunc 在作业被标记为 succeeded 之后被调用（C 类「参数优化完成」通知挂点）。
+// SuccessFunc is called after the job has been marked succeeded (the class C "parameter optimization finished" notification hook).
 //
-// 与 FailureFunc 同一契约：只做副作用、返回不了错误、panic 会被兜住——通知失败绝不改变
-// 作业本身的结果。
+// Same contract as FailureFunc: side effects only, no error return, and panics are caught — a failed notification never changes
+// the job's own result.
 type SuccessFunc func(ctx context.Context, job store.Job)
 
-// FailureFunc 在作业被标记为 failed 之后被调用（D 类管理员通知挂点）。
+// FailureFunc is called after the job has been marked failed (the class D administrator notification hook).
 //
-// 它在状态已经落库之后运行，因此实现只能做副作用（例如把通知写进邮件 outbox），
-// 不得试图改写作业状态；它的返回值被忽略，且 panic 会被 Runner 兜住——
-// 通知失败绝不能让作业失败处理本身出错（附带的「发信失败不影响触发操作）
-// 同样适用于作业失败通知）；它同步运行在作业 worker 的 ctx 上。可为 nil。
+// It runs after the state has been persisted, so an implementation may only perform side effects (for example writing a notification into the mail outbox)
+// and must not try to rewrite job state; its return value is ignored, and panics are caught by the Runner —
+// a failed notification must never make failure handling itself fail — the same rule as "a failed send must not fail the triggering
+// operation"; it runs synchronously on the job worker's ctx. May be nil.
 type FailureFunc func(ctx context.Context, job store.Job, reason string)
 
-// Deps 是 Runner 的显式依赖。
+// Deps are the Runner's explicit dependencies.
 type Deps struct {
-	// DB 是必填项。
+	// DB is required.
 	DB *gorm.DB
-	// Store 可选；为空时由 New 用 DB 构造。
+	// Store is optional; when empty, New builds one from DB.
 	Store *Store
-	// Logger 可选；为空时用 slog.Default()。
+	// Logger is optional; when empty, slog.Default() is used.
 	Logger *slog.Logger
-	// Timeout 是子进程超时；<=0 时用 DefaultTimeout。
+	// Timeout is the subprocess timeout; <=0 uses DefaultTimeout.
 	Timeout time.Duration
-	// Command 为作业构造命令；为空时作业会以 ErrNoCommand 失败（生产由 Optimizer 提供）。
+	// Command builds the command for a job; when empty the job fails with ErrNoCommand (production supplies it via Optimizer).
 	Command CommandBuilder
-	// Complete 可选；命令成功退出后解析其副作用并产出优化结果。为空时只按退出码判成功。
+	// Complete is optional; after the command exits successfully it parses its side effects and produces the optimization result. When empty, success is judged by exit code alone.
 	Complete CompleteFunc
-	// OnFailure 可选；作业被标记为 failed 后调用（D 类管理员通知挂点）。
-	// 为空时不做任何额外动作。见 FailureFunc 的契约。
+	// OnFailure is optional; called after the job is marked failed (the class D administrator notification hook).
+	// When empty it does nothing extra. See the FailureFunc contract.
 	OnFailure FailureFunc
-	// OnSuccess 可选；作业被标记为 succeeded 后调用（C 类「参数优化完成」通知挂点）。
-	// 为空时不做任何额外动作。见 SuccessFunc 的契约。
+	// OnSuccess is optional; called after the job is marked succeeded (the class C "parameter optimization finished" notification hook).
+	// When empty it does nothing extra. See the SuccessFunc contract.
 	OnSuccess SuccessFunc
-	// Now 可注入时钟；为空时用系统 UTC 时间。
+	// Now is an injectable clock; when empty the system UTC time is used.
 	Now func() time.Time
-	// LogTailLines 是日志尾巴行数上限；<=0 时用 DefaultLogTailLines。
+	// LogTailLines is the maximum number of log tail lines; <=0 uses DefaultLogTailLines.
 	LogTailLines int
 }
 
-// Runner 持有单并发 worker、作业存储与子进程执行配置。
+// Runner holds the single-concurrency worker, the job store, and the subprocess execution configuration.
 //
-// 并发模型：Enqueue 在 mu 保护下先判断是否有未完成作业，再落库并入队；只有一个
-// worker goroutine 从 queue 取作业串行执行。mu 保证「判断 + 落库」原子，因此两个并发
-// Enqueue 只有一个能成功，另一个拿到 ErrAlreadyRunning。
+// Concurrency model: Enqueue first checks under mu whether an unfinished job exists, then persists and enqueues; a single
+// worker goroutine takes jobs off queue and runs them serially. mu makes "check + persist" atomic, so of two concurrent
+// Enqueues only one succeeds and the other gets ErrAlreadyRunning.
 type Runner struct {
 	db           *gorm.DB
 	store        *Store
@@ -179,15 +178,15 @@ type Runner struct {
 	started bool
 	queue   chan *store.Job
 
-	// 运行中作业的取消句柄。与 mu 分开，避免 Cancel 在 execute 运行期间
-	// 争用 Enqueue 的锁；currentDone 在 execute 返回前关闭，Cancel 借此等待落库完成。
+	// Cancel handle for the running job. It is separate from mu so that Cancel does not contend with Enqueue's lock
+	// while execute is running; currentDone is closed before execute returns, and Cancel uses it to wait for the persist to finish.
 	runMu         sync.Mutex
 	currentID     uint64
 	currentCancel context.CancelFunc
 	currentDone   chan struct{}
 }
 
-// New 构造 Runner；不启动 worker，需再调用 Start。
+// New builds a Runner; it does not start the worker, so Start must be called afterwards.
 func New(deps Deps) (*Runner, error) {
 	if deps.DB == nil {
 		return nil, errors.New("jobs: Deps.DB is required")
@@ -231,12 +230,12 @@ func New(deps Deps) (*Runner, error) {
 	}, nil
 }
 
-// Start 启动唯一的 worker goroutine；重复调用是幂等的。ctx 取消时 worker 退出，
-// 正在执行的子进程会被杀掉（runProcess 监听 ctx.Done）。
+// Start starts the single worker goroutine; repeated calls are idempotent. When ctx is cancelled the worker exits
+// and the subprocess currently executing is killed (runProcess watches ctx.Done).
 //
-// 启动前会先调用 RecoverStale 回收上次进程遗留的未完成作业（running 与 queued， /）：
-// 否则这些残留行会让 Store.Active 永远认为「有作业在跑」，后续 Enqueue 一直返回 409。恢复失败只记
-// 日志，不阻塞 worker 启动；回收逻辑本身是显式入口（RecoverStale），不是隐蔽副作用。
+// Before starting it calls RecoverStale to reclaim unfinished jobs left by the previous process (running and queued):
+// otherwise those leftover rows would make Store.Active believe "a job is running" forever and every later Enqueue would keep returning 409. A recovery failure is only logged
+// and does not block the worker from starting; the recovery logic itself is an explicit entry point (RecoverStale), not a hidden side effect.
 func (r *Runner) Start(ctx context.Context) {
 	r.mu.Lock()
 	if r.started {
@@ -249,10 +248,10 @@ func (r *Runner) Start(ctx context.Context) {
 	go r.loop(ctx)
 }
 
-// RecoverStale 是显式入口：把重启/崩溃前遗留的未完成作业回收为 failed，
-// 并保留其 log_tail 供诊断。running 作业写 StaleJobReason，queued 作业写 NeverStartedJobReason
-// （原因不同，因为只有 running 的那批真的启动过）。返回被回收的行数。
-// Start 会在启动 worker 前调用一次；调用方也可在需要时显式调用。
+// RecoverStale is an explicit entry point: it reclaims the unfinished jobs left over from a restart/crash as failed,
+// keeping their log_tail for diagnosis. running jobs get StaleJobReason and queued jobs get NeverStartedJobReason
+// (different reasons, because only the running batch actually started). It returns the number of reclaimed rows.
+// Start calls it once before starting the worker; callers may also call it explicitly when needed.
 func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
 	recovered, err := r.store.RecoverStale(ctx, r.now(), StaleJobReason, NeverStartedJobReason)
 	if err != nil {
@@ -268,17 +267,17 @@ func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
 	return recovered, nil
 }
 
-// List 返回一页作业（含状态/阶段/日志尾巴）与总数，供管理面板分页展示。
+// List returns a page of jobs (with status/stage/log tail) and the total count, for the admin panel to page through.
 func (r *Runner) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
 	return r.store.List(ctx, limit, offset)
 }
 
-// Cancel 取消一个作业：运行中的作业会被杀掉整个进程组，随后由 execute 把它
-// 落库为 failed 且 error = CancelReason；仍排队的作业则直接标记为 failed（execute 会
-// 跳过已处于终态的作业，所以它不会被真正执行）。
+// Cancel cancels a job: a running job has its whole process group killed, after which execute persists it
+// as failed with error = CancelReason; a still-queued job is marked failed directly (execute
+// skips jobs already in a terminal state, so it is never actually run).
 //
-// 为什么要等 currentDone：验收要求「取消后不卡、新入队能成功」。单并发判定看的是
-// jobs 表里的未完成行；只有等 execute 写完 failed，再次 Enqueue 才不会再撞 409。
+// Why wait for currentDone: acceptance requires "after cancelling, nothing hangs and a new enqueue succeeds". The single-concurrency check looks at
+// unfinished rows in the jobs table, so only once execute has written failed will the next Enqueue stop hitting 409.
 func (r *Runner) Cancel(ctx context.Context, id uint64) error {
 	r.runMu.Lock()
 	if r.currentID == id && r.currentCancel != nil {
@@ -295,13 +294,13 @@ func (r *Runner) Cancel(ctx context.Context, id uint64) error {
 	}
 	r.runMu.Unlock()
 
-	// 不在运行：可能仍在队列里排队。直接落库为 failed，worker 取到时按终态跳过。
+	// Not running: it may still be waiting in the queue. Persist failed directly; the worker skips it as terminal when it picks it up.
 	job, err := r.store.ByID(ctx, id)
 	if err != nil {
 		return err
 	}
 	if job.Status == StatusFailed {
-		// 已终态（多半是刚被取消）：取消是幂等的，返回成功。
+		// Already terminal (most likely just cancelled): cancellation is idempotent, so return success.
 		return nil
 	}
 	if job.Status != StatusQueued && job.Status != StatusRunning {
@@ -310,20 +309,20 @@ func (r *Runner) Cancel(ctx context.Context, id uint64) error {
 	return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
 }
 
-// SetOnSuccess 设置作业成功钩子；须在 Start 之前调用，避免与 worker 竞态（同 SetOnFailure）。
+// SetOnSuccess sets the job success hook; it must be called before Start to avoid racing the worker (same as SetOnFailure).
 func (r *Runner) SetOnSuccess(fn SuccessFunc) {
 	r.onSuccess = fn
 }
 
-// SetOnFailure 设置作业失败钩子；须在 Start 之前调用，避免与 worker 竞态。
-// 生产装配在 cmd/engram 把它接到 web 层的管理员通知上。
+// SetOnFailure sets the job failure hook; it must be called before Start to avoid racing the worker.
+// Production assembly wires it in cmd/engram to the web layer's administrator notification.
 func (r *Runner) SetOnFailure(fn FailureFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.onFailure = fn
 }
 
-// Enqueue 建一个 queued 作业并入队；已有未完成作业时返回 ErrAlreadyRunning（HTTP 409）。
+// Enqueue creates a queued job and enqueues it; when an unfinished job already exists it returns ErrAlreadyRunning (HTTP 409).
 func (r *Runner) Enqueue(ctx context.Context, kind string, targetID *uint64) (*store.Job, error) {
 	if strings.TrimSpace(kind) == "" {
 		return nil, ErrKindRequired
@@ -345,7 +344,7 @@ func (r *Runner) Enqueue(ctx context.Context, kind string, targetID *uint64) (*s
 	return job, nil
 }
 
-// loop 是唯一 worker：串行消费队列。单并发由这里和 Enqueue 的 mu 共同保证。
+// loop is the only worker: it consumes the queue serially. Single concurrency is guaranteed jointly by this and Enqueue's mu.
 func (r *Runner) loop(ctx context.Context) {
 	for {
 		select {
@@ -357,10 +356,10 @@ func (r *Runner) loop(ctx context.Context) {
 	}
 }
 
-// execute 执行一个作业并驱动状态机 queued -> running -> succeeded | failed。
-// 任何一步失败都必须落到 failed，避免作业永远停在 running。
+// execute runs one job and drives the state machine queued -> running -> succeeded | failed.
+// Any failing step must end in failed, so a job never stays in running forever.
 func (r *Runner) execute(ctx context.Context, job *store.Job) {
-	// worker 不能因单个作业 panic 而整体退出；记日志并把该作业标记为 failed。
+	// The worker must not exit as a whole because a single job panicked; log it and mark that job failed.
 	defer func() {
 		if rec := recover(); rec != nil {
 			r.logger.Error("job worker panicked", "job_id", job.ID, "panic", rec)
@@ -368,12 +367,12 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		}
 	}()
 
-	// 排队期间被取消：Cancel 已把该行标为 failed，这里直接跳过，不再启动子进程。
+	// Cancelled while queued: Cancel already marked the row failed, so skip it here and do not start a subprocess.
 	if current, err := r.store.ByID(ctx, job.ID); err == nil && current.Status == StatusFailed {
 		return
 	}
 
-	// 为本次运行建立可单独取消的上下文：管理员取消只影响这一个作业，不牵连 worker 的 ctx。
+	// Build a separately cancellable context for this run: an administrator cancellation affects only this job and does not involve the worker's ctx.
 	runCtx, cancelRun := context.WithCancel(ctx)
 	done := make(chan struct{})
 	r.registerRun(job.ID, cancelRun, done)
@@ -384,9 +383,9 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 
 	startedAt := r.now()
 	if err := r.store.MarkRunning(ctx, job.ID, startedAt); err != nil {
-		// 标 running 失败也必须落终态：留在 queued 会被 Store.Active 当作在途作业，
-		// 让后续 Enqueue 永久返回 409，直到进程重启才被 RecoverStale 回收（同源症状）。
-		// 错误文本点名失败的步骤，方便从 jobs.error 一眼定位。
+		// A failed transition to running must also reach a terminal state: staying in queued would make Store.Active count it as in-flight,
+		// making every later Enqueue return 409 forever until the process restarts and RecoverStale reclaims it (same root symptom).
+		// The error text names the failing step, so jobs.error pinpoints it at a glance.
 		r.logger.Error("mark job running failed", "job_id", job.ID, "error", err)
 		r.fail(ctx, job.ID, fmt.Sprintf("mark job running: %v", err), "")
 		return
@@ -407,7 +406,7 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	out, runErr := runProcess(runCtx, cmd, r.timeout, maxLogTailBytes)
 	tail := tailLines(out, r.logTailLines)
 	if runErr != nil {
-		// 管理员取消与超时/正常失败要区分：前者写 CancelReason，方便面板一眼看出是谁干的。
+		// Administrator cancellation must be distinguishable from a timeout or an ordinary failure: the former writes CancelReason so the panel shows at a glance who did it.
 		msg := runErr.Error()
 		if !errors.Is(runErr, ErrTimedOut) && runCtx.Err() != nil && ctx.Err() == nil {
 			msg = CancelReason
@@ -416,8 +415,8 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		return
 	}
 
-	// 命令成功返回即进入写回阶段：配了 Complete 的作业（优化作业）由它解析
-	// 适配器写出的权重并交给 FinishOptimize；其余作业仍按「退出码 0 即成功」处理。
+	// A successful command return moves into the write-back phase: jobs configured with Complete (optimization jobs) have it parse
+	// the weights the adapter wrote and hand them to FinishOptimize; other jobs still follow "exit code 0 means success".
 	r.setStage(ctx, job.ID, StageWriting)
 	if r.complete != nil {
 		result, err := r.complete(runCtx, job, cmd, tail)
@@ -440,8 +439,8 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	r.notifySuccess(ctx, job.ID)
 }
 
-// notifySuccess 在作业成功落库后调用 OnSuccess 钩子；未配置时直接返回。
-// 与 notifyFailure 同一条纪律：钩子 panic 被兜住，通知失败不影响作业结果。
+// notifySuccess calls the OnSuccess hook after the job is persisted as succeeded; it returns immediately when not configured.
+// Same discipline as notifyFailure: hook panics are caught, and a failed notification does not affect the job result.
 func (r *Runner) notifySuccess(ctx context.Context, id uint64) {
 	fn := r.onSuccess
 	if fn == nil {
@@ -460,8 +459,8 @@ func (r *Runner) notifySuccess(ctx context.Context, id uint64) {
 	fn(ctx, *job)
 }
 
-// fail 把作业标记为 failed 并记录错误与日志尾巴；失败原因写英文（AGENTS.md §2.1）。
-// 状态落库成功后再调用 OnFailure 钩子：钩子只做副作用，且绝不改变本次结果。
+// fail marks the job failed and records the error and log tail; the failure reason is written in English (AGENTS.md §2.1).
+// The OnFailure hook is called only after the state is persisted successfully: the hook performs side effects only and never changes this result.
 func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 	if err := r.store.FinishFailed(ctx, id, r.now(), msg, tail); err != nil {
 		r.logger.Error("finish job failed failed", "job_id", id, "error", err)
@@ -470,8 +469,8 @@ func (r *Runner) fail(ctx context.Context, id uint64, msg, tail string) {
 	r.notifyFailure(ctx, id, msg)
 }
 
-// notifyFailure 在作业失败落库后调用 OnFailure 钩子；未配置钩子时直接返回。
-// 钩子 panic 会被兜住：通知失败绝不能反过来影响作业失败处理
+// notifyFailure calls the OnFailure hook after the job failure is persisted; it returns immediately when no hook is configured.
+// Hook panics are caught: a failed notification must never in turn break job failure handling
 func (r *Runner) notifyFailure(ctx context.Context, id uint64, reason string) {
 	fn := r.onFailure
 	if fn == nil {
@@ -490,7 +489,7 @@ func (r *Runner) notifyFailure(ctx context.Context, id uint64, reason string) {
 	fn(ctx, *job, reason)
 }
 
-// registerRun 记录当前运行中作业的取消句柄；Cancel 通过它找到要杀的进程组。
+// registerRun records the cancel handle of the currently running job; Cancel uses it to find the process group to kill.
 func (r *Runner) registerRun(id uint64, cancel context.CancelFunc, done chan struct{}) {
 	r.runMu.Lock()
 	defer r.runMu.Unlock()
@@ -499,7 +498,7 @@ func (r *Runner) registerRun(id uint64, cancel context.CancelFunc, done chan str
 	r.currentDone = done
 }
 
-// unregisterRun 清理取消句柄；只有当前记录仍属于该作业时才清，避免误删下一作业的状态。
+// unregisterRun clears the cancel handle; it only clears when the current record still belongs to that job, so the next job's state is not deleted by mistake.
 func (r *Runner) unregisterRun(id uint64) {
 	r.runMu.Lock()
 	defer r.runMu.Unlock()
@@ -511,14 +510,14 @@ func (r *Runner) unregisterRun(id uint64) {
 	r.currentDone = nil
 }
 
-// setStage 更新阶段；失败只记日志，不因进度写失败而中断作业。
+// setStage updates the stage; failures are only logged, so a failed progress write never interrupts the job.
 func (r *Runner) setStage(ctx context.Context, id uint64, stage string) {
 	if err := r.store.SetStage(ctx, id, stage); err != nil {
 		r.logger.Error("set job stage failed", "job_id", id, "stage", stage, "error", err)
 	}
 }
 
-// jobReporter 把 Reporter.SetStage 转发到 Runner，供 CommandBuilder 上报阶段。
+// jobReporter forwards Reporter.SetStage to the Runner, for CommandBuilder to report stages.
 type jobReporter struct {
 	ctx    context.Context
 	runner *Runner
@@ -527,17 +526,17 @@ type jobReporter struct {
 
 func (j jobReporter) SetStage(stage string) { j.runner.setStage(j.ctx, j.id, stage) }
 
-// noCommandBuilder 是未配置 CommandBuilder 时的回退：直接以 ErrNoCommand 让作业失败。
+// noCommandBuilder is the fallback when no CommandBuilder is configured: it fails the job with ErrNoCommand directly.
 //
-// 刻意不再「重新 exec 自身并带 optimize --job」：那条自指路径依赖一个已删除的 CLI 子命令，
-// 会让作业在生产里以「命令未实现」收场。生产装配必须显式传入 Optimizer.CommandBuilder()，
-// 与真实适配器对接；这里只负责在装配缺失时大声失败。
+// It deliberately no longer "re-execs itself with optimize --job": that self-referencing path depends on a CLI subcommand that has been removed
+// and would leave jobs ending in production as "command not implemented". Production assembly must explicitly pass Optimizer.CommandBuilder()
+// to talk to the real adapter; this only fails loudly when the assembly is missing.
 func noCommandBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 	return Command{}, ErrNoCommand
 }
 
-// HTTPStatus 把 jobs 包的哨兵错误映射成 HTTP 状态码：重复入队 -> 409，其余 -> 500。
-// 409 的语义只在这里定义一处，REST 层直接复用，避免两处漂移。
+// HTTPStatus maps the jobs package's sentinel errors to HTTP status codes: duplicate enqueue -> 409, everything else -> 500.
+// The meaning of 409 is defined in exactly one place here, and the REST layer reuses it, so the two cannot drift.
 func HTTPStatus(err error) int {
 	if errors.Is(err, ErrAlreadyRunning) {
 		return http.StatusConflict
@@ -545,12 +544,12 @@ func HTTPStatus(err error) int {
 	return http.StatusInternalServerError
 }
 
-// runProcess 启动子进程并等待完成。
+// runProcess starts the subprocess and waits for it to finish.
 //
-// 子进程被放进独立进程组（setProcessGroup），超时或 ctx 取消时杀掉整棵树
-// （killProcessGroup）：只杀直接子进程会留下它派生的进程（例如 shell 下的后台训练
-// 进程），它们会继续占 CPU 并让作业「看似结束实则仍在跑」——这正是要求
-// 「杀整个进程组」的原因。两个动作的平台实现分别在 process_unix.go、process_windows.go。
+// The subprocess is put into its own process group (setProcessGroup), and on timeout or ctx cancellation the whole tree is killed
+// (killProcessGroup): killing only the direct child would leave the processes it spawned behind (for example a background training
+// process under a shell), which keep burning CPU and make the job "look finished while it is still running" — exactly why
+// "kill the whole process group" is required. The platform implementations of the two actions live in process_unix.go and process_windows.go.
 func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes int) (string, error) {
 	cmd := exec.Command(c.Name, c.Args...)
 	cmd.Dir = c.Dir
@@ -584,7 +583,7 @@ func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes 
 	}
 }
 
-// tailBuffer 是一个只保留末尾 max 字节的 io.Writer；并发写（stdout/stderr）用 mu 保护。
+// tailBuffer is an io.Writer that keeps only the last max bytes; concurrent writes (stdout/stderr) are protected by mu.
 type tailBuffer struct {
 	mu  sync.Mutex
 	buf []byte
@@ -614,7 +613,7 @@ func (t *tailBuffer) String() string {
 	return string(t.buf)
 }
 
-// tailLines 只保留末尾 n 行；n <= 0 时原样返回。
+// tailLines keeps only the last n lines; returns the input unchanged when n <= 0.
 func tailLines(s string, n int) string {
 	if n <= 0 || s == "" {
 		return s

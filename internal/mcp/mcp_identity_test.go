@@ -15,13 +15,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件的用例覆盖这条规则：/mcp 只接受 API key，且会话身份必须是每次请求现算的。
-// 为手工复用会话号，这里发原始 JSON-RPC（SDK 客户端无法指定 Mcp-Session-Id）。
+// The cases in this file cover that rule: /mcp accepts API keys only, and the session identity must be computed afresh on every request.
+// To reuse a session number by hand, it sends raw JSON-RPC here (an SDK client cannot specify Mcp-Session-Id).
 
 const rawInitBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"raw","version":"0.0.1"}}}`
 
-// sseData 从 text/event-stream 响应体里拼出所有 data: 行；非 SSE 时原样返回。
-// 默认 StreamableHTTPOptions 不启用 JSONResponse，因此响应是 SSE 帧。
+// sseData assembles all data: lines from a text/event-stream response body; returns it as-is when it is not SSE.
+// The default StreamableHTTPOptions do not enable JSONResponse, so responses are SSE frames.
 func sseData(body string) string {
 	if !strings.Contains(body, "data:") {
 		return body
@@ -35,7 +35,7 @@ func sseData(body string) string {
 	return b.String()
 }
 
-// rawPost 发一条原始 JSON-RPC 请求；key 为空时不带 Authorization 头。
+// rawPost sends one raw JSON-RPC request; no Authorization header when key is empty.
 func rawPost(t *testing.T, base, key, sessionID, body string) (int, http.Header, string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader(body))
@@ -59,7 +59,7 @@ func rawPost(t *testing.T, base, key, sessionID, body string) (int, http.Header,
 	return resp.StatusCode, resp.Header, sseData(string(raw))
 }
 
-// rawInitialize 走一次握手并返回会话号。
+// rawInitialize performs one handshake and returns the session number.
 func rawInitialize(t *testing.T, base, key string) string {
 	t.Helper()
 	status, hdr, body := rawPost(t, base, key, "", rawInitBody)
@@ -70,13 +70,13 @@ func rawInitialize(t *testing.T, base, key string) string {
 	if sid == "" {
 		t.Fatalf("initialize returned no Mcp-Session-Id; body=%s", body)
 	}
-	// MCP 协议要求握手后再发 initialized 通知，声明进入正常操作阶段。
+	// The MCP protocol requires an initialized notification after the handshake, declaring entry into normal operation.
 	rawPost(t, base, key, sid, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 	return sid
 }
 
-// TestMcpRejectsCrossUserSessionHijack 覆盖规则 2：B 用自己的有效 key 复用 A 握手得到的
-// 会话号，必须被拒，且不得返回 A 的任何数据、不得落下任何写入。
+// TestMcpRejectsCrossUserSessionHijack covers rule 2: when B uses their own valid key with the session number A obtained in the handshake,
+// it must be refused, and must not return any of A's data nor leave any write behind.
 func TestMcpRejectsCrossUserSessionHijack(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	a := seedUser(t, db, "alice")
@@ -116,8 +116,8 @@ func TestMcpRejectsCrossUserSessionHijack(t *testing.T) {
 	}
 }
 
-// TestMcpScopeFollowsCurrentRequestKey 覆盖规则 3：同一用户的低 scope key 复用高 scope
-// 会话，工具可见性与权限必须按本次 key 计算，不得提权。
+// TestMcpScopeFollowsCurrentRequestKey covers rule 3: when a low-scope key of the same user reuses a high-scope
+// session, tool visibility and permissions must be computed from this request's key, with no privilege escalation.
 func TestMcpScopeFollowsCurrentRequestKey(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	a := seedUser(t, db, "alice")
@@ -153,8 +153,8 @@ func TestMcpScopeFollowsCurrentRequestKey(t *testing.T) {
 	}
 }
 
-// TestMcpRejectsSessionCookieChannel 覆盖规则 1：仅有用户身份、没有 API key 的会话通道
-// 请求 /mcp 必须被拒（401）。
+// TestMcpRejectsSessionCookieChannel covers rule 1: a session channel request to /mcp with only a user identity
+// and no API key must be refused (401).
 func TestMcpRejectsSessionCookieChannel(t *testing.T) {
 	apiSrv, db, _, _ := newEnv(t)
 	u := seedUser(t, db, "cookie-user")
@@ -165,7 +165,7 @@ func TestMcpRejectsSessionCookieChannel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/mcp", func(c *gin.Context) {
-		// 复刻 web 的会话通道：身份里只有用户、没有 API key。
+		// Reproduces web's session channel: the identity has only a user, no API key.
 		ctx := WithIdentity(c.Request.Context(), u, nil)
 		mcpSrv.ServeHTTP(c.Writer, c.Request.WithContext(ctx))
 	})
@@ -178,7 +178,7 @@ func TestMcpRejectsSessionCookieChannel(t *testing.T) {
 	}
 }
 
-// TestMcpOwnKeyFullFlow 覆盖正向路径：A 用自己的 key 走完 initialize → tools/list → tools/call。
+// TestMcpOwnKeyFullFlow covers the happy path: A goes through initialize → tools/list → tools/call with their own key.
 func TestMcpOwnKeyFullFlow(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	a := seedUser(t, db, "flow")
@@ -214,7 +214,7 @@ func TestMcpOwnKeyFullFlow(t *testing.T) {
 	}
 }
 
-// TestMcpUnknownSessionKeepsSDKBehavior 回归：不存在的会话号仍按 SDK 原有行为返回 404。
+// TestMcpUnknownSessionKeepsSDKBehavior regression: an unknown session number still returns 404 per the SDK's existing behavior.
 func TestMcpUnknownSessionKeepsSDKBehavior(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	a := seedUser(t, db, "solo")
@@ -226,8 +226,8 @@ func TestMcpUnknownSessionKeepsSDKBehavior(t *testing.T) {
 	}
 }
 
-// TestMcpRevokedCredentialFailsOnNextRequest 确认撤销即时生效：key 被撤销、或账号被禁用后，
-// 下一个 /mcp 请求立刻 401（鉴权中间件每次请求都现查 key 与账号状态，不缓存）。
+// TestMcpRevokedCredentialFailsOnNextRequest confirms revocation takes effect immediately: once the key is revoked or the account disabled,
+// the next /mcp request is 401 at once (the auth middleware looks up the key and account state on every request, with no caching).
 func TestMcpRevokedCredentialFailsOnNextRequest(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	a := seedUser(t, db, "revoker")
@@ -247,7 +247,7 @@ func TestMcpRevokedCredentialFailsOnNextRequest(t *testing.T) {
 		t.Fatalf("revoked key status = %d, want 401; raw=%s", status, body)
 	}
 
-	// 换一把新 key 走一次握手，然后禁用账号。
+	// Swap in a new key for one handshake, then disable the account.
 	created2, err := keys.Create(ctx, store.CreateAPIKeyParams{UserID: a.ID, Name: "t2", Scopes: []string{store.ScopeRead}})
 	if err != nil {
 		t.Fatalf("create key: %v", err)

@@ -10,10 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 复习页的同源 JSON 端点（卡面渲染、埋藏）与范围校验。
+// The review page's same-origin JSON endpoints (card render, bury) and scope validation.
 //
-// 页面本身只发应用壳（见 page_routes_test.go），数据与写操作全走这里钉住的端点；
-// 两个写端点都挂会话 CSRF，且范围参数必须整次校验通过。
+// The page itself only serves the app shell (see page_routes_test.go); data and writes all go through the endpoints pinned here;
+// both write endpoints carry session CSRF, and the scope parameters must pass validation for the whole request.
 
 type queueBody struct {
 	CardID    string `json:"card_id"`
@@ -24,7 +24,7 @@ type queueBody struct {
 	} `json:"cards"`
 }
 
-// reviewRenderBody 是卡面渲染响应的对外形态。
+// reviewRenderBody is the external shape of the card render response.
 type reviewRenderBody struct {
 	CardID    string `json:"card_id"`
 	FrontHTML string `json:"front_html"`
@@ -36,11 +36,11 @@ type reviewRenderBody struct {
 	} `json:"intervals"`
 }
 
-// TestReviewRouteServesShell 断言已登录用户访问 GET /review 得到 SPA 应用壳，由客户端路由渲染复习页。
-// 卡组范围参数同样接受：/review?deck=A&deck=B 返回的仍是应用壳。
+// TestReviewRouteServesShell asserts a logged-in user hitting GET /review gets the SPA app shell, with the client router rendering the review page.
+// Deck scope parameters are accepted as well: /review?deck=A&deck=B still returns the app shell.
 
-// TestReviewRouteRejectsInvalidAndUnreadableScope 断言范围判定先于切壳执行：非数字或 0 的
-// deck 参数 400；范围里出现读不到的卡组 403。两者都不返回应用壳。
+// TestReviewRouteRejectsInvalidAndUnreadableScope asserts the scope decision runs before switching to the shell: a deck parameter that is
+// non-numeric or 0 gives 400; an unreadable deck in the scope gives 403. Neither returns the app shell.
 func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	foreign := seedReviewDeck(t, db, ownerID, "Foreign review deck")
@@ -55,7 +55,7 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 		{"unreadable", "/review?deck=" + foreign.PublicID, http.StatusForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// 用陌生用户访问 owner 的私有卡组：范围校验必须整次失败。
+			// A stranger user hitting the owner's private deck: scope validation must fail for the whole request.
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "review-scope-stranger-"+tc.name)
 			rec := getWithCookies(t, srv, tc.path, strangerCookies)
 			if rec.Code != tc.want {
@@ -67,14 +67,14 @@ func TestReviewRouteRejectsInvalidAndUnreadableScope(t *testing.T) {
 		})
 	}
 
-	// 合法范围仍返回应用壳，证明前面的失败来自范围校验而非路径错误。
+	// A legal scope still returns the app shell, proving the earlier failures came from scope validation and not from a wrong path.
 	if rec := getWithCookies(t, srv, "/review?deck="+foreign.PublicID, cookies); rec.Code != http.StatusOK {
 		t.Fatalf("owner GET review with own deck = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 }
 
-// TestReviewBuryRequiresCSRFAndReader 断言埋藏端点的拒绝路径：无会话 401、缺/错 CSRF 403、
-// 读不到卡组的陌生用户 4xx、卡不在所选范围内 400；任一拒绝都不得写 card_states。
+// TestReviewBuryRequiresCSRFAndReader asserts the rejection paths of the bury endpoint: no session 401, missing/wrong CSRF 403,
+// a stranger who cannot read the deck 4xx, card outside the selected scope 400; no rejection may write card_states.
 func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Bury guard deck")
@@ -83,23 +83,23 @@ func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
 	valid := map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}
 
-	// 无会话。
+	// No session.
 	anon := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, nil, "")
 	if anon.Code != http.StatusForbidden {
 		t.Fatalf("bury without session = %d, want 403 (body %s)", anon.Code, snippet(anon.Body.String()))
 	}
-	// 缺 CSRF 与错 CSRF。
+	// Missing CSRF and wrong CSRF.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("bury without CSRF = %d, want 403", rec.Code)
 	}
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, cookies, "not-the-token"); rec.Code != http.StatusForbidden {
 		t.Errorf("bury with bad CSRF = %d, want 403", rec.Code)
 	}
-	// 卡不在所选范围内。
+	// Card outside the selected scope.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{"card_id": cardPub, "deck": []string{other.PublicID}}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("bury out-of-scope card = %d, want 400", rec.Code)
 	}
-	// 陌生用户即使拿到卡片 id 也读不到卡组。
+	// A stranger cannot read the deck even with the card id in hand.
 	_, outsiderCookies, outsiderCSRF := createUserAndLogin(t, srv, db, "bury-outsider")
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", valid, outsiderCookies, outsiderCSRF); rec.Code < 400 || rec.Code >= 500 {
 		t.Errorf("bury by outsider = %d, want 4xx", rec.Code)
@@ -112,8 +112,8 @@ func TestReviewBuryRequiresCSRFAndReader(t *testing.T) {
 	}
 }
 
-// TestReviewBuryDefersCardAndKeepsScope 断言埋藏的核心行为：reader 及以上可埋藏本人进度，
-// 埋藏把到期日推到下一个复习日（当天队列少一张），响应带同范围重建后的队列，且跨卡组范围不退化。
+// TestReviewBuryDefersCardAndKeepsScope asserts the core behavior of bury: reader and above can bury their own progress,
+// bury pushes the due date to the next review day (one card fewer in today's queue), the response carries the queue rebuilt over the same scope, and a cross-deck scope does not degrade.
 func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deckA := seedReviewDeck(t, db, ownerID, "Bury deck A")
@@ -123,7 +123,7 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	cardA := cardIDOfNote(t, db, noteA.ID)
 	cardAPub := cardPublicIDOfNote(t, db, noteA.ID)
 
-	// 多卡组范围：埋藏 A 卡后队列应只剩 B 卡，范围仍是 A∪B。
+	// Multi-deck scope: after burying card A the queue should hold only card B, and the scope is still A∪B.
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/bury", map[string]any{
 		"card_id": cardAPub, "deck": []string{deckA.PublicID, deckB.PublicID},
 	}, cookies, csrf)
@@ -141,7 +141,7 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 		t.Errorf("after bury the surviving card is from deck %s, want deck B %s", body.Cards[0].DeckID, deckB.PublicID)
 	}
 
-	// 埋藏把到期日推到下一个复习日：该卡的状态行 due_at 必须晚于现在。
+	// Bury pushes the due date to the next review day: the card's state row due_at must be later than now.
 	var st store.CardState
 	if err := db.Where("card_id = ? AND user_id = ?", cardA, ownerID).First(&st).Error; err != nil {
 		t.Fatalf("load buried card state: %v", err)
@@ -150,7 +150,7 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 		t.Fatalf("buried due_at = %v, want a future timestamp", st.DueAt)
 	}
 
-	// 同范围再取一次队列，仍只剩 B 卡（范围未退化）。
+	// Fetching the queue again over the same scope still leaves only card B (the scope did not degrade).
 	due := getWithCookies(t, srv, "/api/v1/review/due?deck="+deckA.PublicID+"&deck="+deckB.PublicID, cookies)
 	if due.Code != http.StatusOK {
 		t.Fatalf("GET due after bury = %d, want 200 (body %s)", due.Code, snippet(due.Body.String()))
@@ -168,8 +168,8 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	}
 }
 
-// TestReviewRenderReturnsSanitizedHTML 断言卡面渲染端点返回服务端清洗后的 HTML：脚本与
-// 事件属性被去掉、合法内容保留、edit_href 指向卡片编辑页；缺会话/CSRF 与越权范围都被拒绝。
+// TestReviewRenderReturnsSanitizedHTML asserts the card render endpoint returns server-sanitized HTML: scripts and
+// event attributes are stripped, legal content is kept, edit_href points at the card's edit page; missing session/CSRF and an out-of-scope request are all rejected.
 func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Render deck")
@@ -178,7 +178,7 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 		"<img src=x onerror=alert(1)> back-text")
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
-	// 拒绝路径。
+	// Rejection paths.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub}, nil, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("render without session = %d, want 403", rec.Code)
 	}
@@ -210,7 +210,7 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
 	}
-	// 四档评分的下次间隔：新卡按默认学习步骤 1m,10m，Again 是 1 分钟，其余逐档不减。
+	// Next interval of the four grades: a new card follows the default learning steps 1m,10m, Again is 1 minute, and the rest do not step down grade by grade.
 	if len(body.Intervals) != 4 {
 		t.Fatalf("render intervals = %+v, want 4 entries", body.Intervals)
 	}
@@ -227,8 +227,8 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	}
 }
 
-// TestReviewRenderOmitsChoiceOptionsFromFront 断言选择题的复习卡面正面只含题干：选项由复习页
-// 渲染成作答控件，若再拼进 front_html 会在页面上出现两遍。背面仍给出正确选项。
+// TestReviewRenderOmitsChoiceOptionsFromFront asserts the review card front of a choice question holds only the stem: the options are rendered by the review page
+// as answer controls, so concatenating them into front_html again would show them twice on the page. The back still gives the correct options.
 func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Choice render deck")
@@ -271,8 +271,8 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 	}
 }
 
-// TestReviewRenderReturnsClozeBlanks 断言挖空卡的渲染响应按出现顺序给出本卡每处挖空的提示
-// （复习页据此逐空给输入框），且正面不泄露答案；其它题型没有 blanks。
+// TestReviewRenderReturnsClozeBlanks asserts the cloze card's render response gives the hint for each blank of the card in order of appearance
+// (the review page adds one input box per blank from it), and the front does not leak the answer; other question types have no blanks.
 func TestReviewRenderReturnsClozeBlanks(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Cloze render deck")
@@ -307,8 +307,8 @@ func TestReviewRenderReturnsClozeBlanks(t *testing.T) {
 	}
 }
 
-// TestReviewSuspendRemovesCardForCallerOnly 覆盖复习页的暂停端点：缺 CSRF 被拒且不写库（反面）；
-// 暂停后响应里的队列不再有这张卡，状态行带 suspended_at；进度数值不变。
+// TestReviewSuspendRemovesCardForCallerOnly covers the review page's suspend endpoint: a missing CSRF is rejected and nothing is written (negative case);
+// after suspending, the queue in the response no longer holds this card, the state row carries suspended_at; the progress numbers are unchanged.
 func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Suspend deck")
@@ -349,8 +349,8 @@ func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
 	}
 }
 
-// TestReviewBuryUsesTheUsersReviewDay 断言埋藏推到「用户自己的」下一个复习日起点：到期时刻在用户
-// 时区里正好是日切点（默认 04:00）。反面：按 UTC 计算时，UTC+14 的用户会得到本地 18:00。
+// TestReviewBuryUsesTheUsersReviewDay asserts bury pushes to the start of "the user's own" next review day: the due moment is exactly the day cutoff
+// in the user's timezone (default 04:00). Negative case: computed in UTC, a user at UTC+14 would get 18:00 local.
 func TestReviewBuryUsesTheUsersReviewDay(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	const tz = "Pacific/Kiritimati"

@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// DeckResponse 是卡组的对外形态；REST 与 MCP 共用同一形态。
+// DeckResponse is the external shape of a deck; REST and MCP share the same shape.
 type DeckResponse struct {
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
@@ -21,19 +21,19 @@ type DeckResponse struct {
 	PresetID      string     `json:"preset_id"`
 	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
-	// Role 是调用者在该卡组上的显式关系：owner（自有）或授权角色 editor/reader。
-	// 列表里的每张卡组都必然是二者之一——没有第三种「仅因可见性而看得到」的来源。
-	// 客户端据此决定显示「删除」还是「退出共享」。
+	// Role is the caller's explicit relation to this deck: owner (their own) or a granted role of editor/reader.
+	// Every deck in the list is necessarily one of the two - there is no third source of "visible only by visibility".
+	// Clients use it to decide whether to show "delete" or "leave share".
 	Role string `json:"role"`
 }
 
-// deckResponse 保留旧名，供包内既有调用。
+// deckResponse keeps the old name for existing in-package callers.
 type deckResponse = DeckResponse
 
-// ToDeckResponse 把 store.Deck 映射成 userID 视角下的对外形态；REST 与 MCP 共用。
+// ToDeckResponse maps store.Deck to the external shape as seen by userID; shared by REST and MCP.
 //
-// ID 取卡组自己的对外 id。NewPerDay / ReviewsPerDay / PresetID 是**调用者自己**在该卡组上的
-// 学习设置（属主读卡组列，共享成员读自己的成员设置），预设的数字主键在这里换成对外 id。
+// ID is the deck's own external id. NewPerDay / ReviewsPerDay / PresetID are **the caller's own**
+// study settings on this deck (owners read the deck columns, shared members read their own member settings); the preset's numeric primary key becomes an external id here.
 func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
 	out := DeckResponse{
 		ID:          d.PublicID,
@@ -56,12 +56,12 @@ func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, r
 	return out
 }
 
-// toDeckResponse 保留旧名，供包内既有调用。
+// toDeckResponse keeps the old name for existing in-package callers.
 func (a *API) toDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
 	return a.ToDeckResponse(ctx, userID, d, role)
 }
 
-// listDecks 返回当前用户可见的卡组（业务逻辑在 service 层 ListDecks，与 MCP 的 list_decks 同源）。
+// listDecks returns the decks visible to the current user (the logic lives in the service layer's ListDecks, the same source as MCP's list_decks).
 func (a *API) listDecks(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -77,16 +77,16 @@ func (a *API) listDecks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"decks": out})
 }
 
-// createDeckRequest 是建卡组的请求体；preset_id 缺省时自动使用（或创建）Default 预设。
-// preset_id 是预设的对外 id（不透明字符串），空串表示缺省。
+// createDeckRequest is the create-deck request body; when preset_id is absent the Default preset is used (or created) automatically.
+// preset_id is the preset's external id (an opaque string); the empty string means the default.
 type createDeckRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	PresetID    string `json:"preset_id"`
 }
 
-// createDeck 建卡组（scope: write）：只做 JSON 绑定与包壳，业务在 service 层 CreateDeck
-// （REST 与内置 MCP 共用同一实现，不得各自复制校验）。
+// createDeck creates a deck (scope: write): only JSON binding and wrapping here, the logic is in the service layer's CreateDeck
+// (REST and the built-in MCP share one implementation and must not duplicate the validation).
 func (a *API) createDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -95,7 +95,7 @@ func (a *API) createDeck(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	// preset_id 是对外 id：空串交给 service 取缺省预设；非空则先解析成主键再传数字。
+	// preset_id is an external id: an empty string lets the service pick the default preset; otherwise it is resolved to a primary key and passed as a number.
 	var presetID uint64
 	if pid := strings.TrimSpace(req.PresetID); pid != "" {
 		p, err := a.presets.ByPublicID(ctx, pid)
@@ -118,15 +118,15 @@ func (a *API) createDeck(c *gin.Context) {
 	c.JSON(http.StatusCreated, a.toDeckResponse(ctx, u.ID, *d, store.RoleOwner))
 }
 
-// updateDeckRequest 是修改卡组名称与描述的请求体（PATCH）。
-// 用指针区分「未提供」与「提供了空串」：只带名称的请求不该把描述清空；显式给空描述才清空。
+// updateDeckRequest is the request body for changing a deck's name and description (PATCH).
+// Pointers distinguish "not provided" from "provided as empty string": a name-only request must not clear the description; only an explicit empty description clears it.
 type updateDeckRequest struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
 }
 
-// updateDeck 修改卡组的名称与描述（PATCH /api/v1/decks/:id，scope: write，仅 owner）。
-// 只做 JSON 绑定与包壳，业务与校验在 service 层 UpdateDeck（REST 与 MCP 共用）。
+// updateDeck changes a deck's name and description (PATCH /api/v1/decks/:id, scope: write, owner only).
+// Only JSON binding and wrapping; logic and validation live in the service layer's UpdateDeck (shared by REST and MCP).
 func (a *API) updateDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -153,7 +153,7 @@ func (a *API) updateDeck(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	// 修改成功即调用者是 owner（service 层以此为条件），响应里的角色据此给出。
+	// A successful update means the caller is the owner (the service layer gates on that), so the role in the response follows from it.
 	c.JSON(http.StatusOK, a.toDeckResponse(ctx, u.ID, *updated, store.RoleOwner))
 }
 
@@ -176,10 +176,10 @@ func (a *API) deleteDeck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
-// leaveDeck 让被共享者退出卡组（DELETE /api/v1/decks/:id/membership，scope: write）。
+// leaveDeck lets a share recipient leave a deck (DELETE /api/v1/decks/:id/membership, scope: write).
 //
-// 与 deleteDeck 是两条独立路径：退出只撤掉自己一行授权，删除卡组才是 owner 的不可逆操作。
-// 业务在 service 层 LeaveDeck（REST 与 MCP 共用同一实现）。
+// It is an independent path from deleteDeck: leaving removes only your own grant row, while deleting the deck is the owner's irreversible operation.
+// The logic is in the service layer's LeaveDeck (REST and MCP share one implementation).
 func (a *API) leaveDeck(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()

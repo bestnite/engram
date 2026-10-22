@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-// fakeType 是测试用的假题型：只在测试文件里定义，核心管线无需为它改动
-// （验收：注册一个假题型，断言核心管线能处理它）。
-// 它同时实现三个可选能力接口，用来验证窄接口断言。
+// fakeType is a fake card type for tests: defined only in the test file, so the core pipeline needs no change for it
+// (acceptance: register a fake card type and assert the core pipeline can handle it).
+// It also implements the three optional capability interfaces, to verify the narrow interface assertions.
 type fakeType struct{}
 
 func (fakeType) Label() string { return "cardtype.fake" }
 
-// Describe 让假题型满足 CardType 的新自描述方法；内容与它的 prompt 字段一致。
+// Describe makes the fake card type satisfy CardType's new self-describing method; the content matches its prompt field.
 func (fakeType) Describe() Description {
 	return Description{
 		Kind:          "fake",
@@ -54,7 +54,7 @@ func (fakeType) PromptContext(note Note) PromptContext {
 
 func (fakeType) ReferenceRefs(note Note) []string { return []string{"ref:1"} }
 
-// TestRegistryHandlesFakeType 断言注册表把假题型当成一等公民处理。
+// TestRegistryHandlesFakeType asserts the registry treats the fake card type as a first-class citizen.
 func TestRegistryHandlesFakeType(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Register("fake", fakeType{}); err != nil {
@@ -103,7 +103,7 @@ func TestRegistryHandlesFakeType(t *testing.T) {
 	})
 }
 
-// TestRegistryUnknownKind 断言未知题型返回可读英文错误。
+// TestRegistryUnknownKind asserts an unknown card type returns a readable English error.
 func TestRegistryUnknownKind(t *testing.T) {
 	err := Validate("does_not_exist", nil)
 	if err == nil || !strings.Contains(err.Error(), `unknown card type "does_not_exist"`) {
@@ -114,7 +114,7 @@ func TestRegistryUnknownKind(t *testing.T) {
 	}
 }
 
-// TestRegisterRejectsDuplicatesAndEmpty 断言重复注册与空 kind 被拒绝。
+// TestRegisterRejectsDuplicatesAndEmpty asserts duplicate registration and an empty kind are rejected.
 func TestRegisterRejectsDuplicatesAndEmpty(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Register("", fakeType{}); err == nil {

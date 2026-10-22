@@ -1,25 +1,27 @@
-// Package digest 实现 C 类「每周学习摘要」的周期后台 worker。
+// Package digest implements the periodic background worker for the C-class "weekly study digest".
 //
-// 行为约束：
-//   - 摘要默认**每周**一次（不是每日），按用户本地时区成周；可关闭（C 类默认关）。
-//   - 每人每周**恰好一封**：台账见 store.DigestLog，主键 (user_id, week_start) 是跨进程重启
-//     仍成立最后防线——进程内计数器一重启就归零，重启后当周会再发一封。
-//   - 绝不在请求路径里同步发信：一律 Enqueue，投递由 outbox worker 负责。
-//   - 发送时间与复习提醒共用同一小时（users.reminder_hour，未设置时用 reminder.DefaultSendHour）：
-//     到达该小时后的首轮轮询即发，小时按用户时区解释。
-//   - SMTP 未配置时不发也不报错，只记一条英文日志。
-//   - 摘要是可选类型，带 RFC 8058 一键退订头。
+// Behavior constraints:
+//   - The digest runs **weekly** by default (not daily), aligned to the user's local timezone; it can be disabled (C-class defaults to off).
+//   - **Exactly one per user per week**: the ledger lives in store.DigestLog; the primary key (user_id, week_start) is the last
+//     line of defense that still holds across process restarts — an in-process counter resets on restart, and the week's digest would be sent again.
+//   - Never send mail synchronously on the request path: always Enqueue, delivery is handled by the outbox worker.
+//   - The send hour is shared with review reminders (users.reminder_hour, falling back to reminder.DefaultSendHour when unset):
+//     the first poll after reaching that hour sends, and the hour is interpreted in the user's timezone.
+//   - When SMTP is not configured, neither send nor error; just log one English line.
+//   - The digest is an optional type and carries the RFC 8058 one-click unsubscribe header.
 //
-// 静默窗口（旧 23:00–07:00）随复习提醒一并删除：发送时刻现在由用户显式选择（默认 19:00），
-// 静默窗既无用途又会压制用户明确选的深夜时段，详情见 internal/reminder 的包注释。
+// The quiet window (the old 23:00–07:00) was removed together with the review reminder: the send time is now
+// explicitly chosen by the user (default 19:00), and the quiet window served no purpose while suppressing late-night hours
+// the user explicitly picked; see the package comment of internal/reminder for details.
 //
-// 数字口径：摘要展示的每个数字都直接来自 internal/store 的 StatsStore 聚合方法（与统计页
-// 是同一批调用），handler 与 worker 都不写统计 SQL。窗口与统计页的「近 7 日」一致：
-// [today-6, today]（review_day 闭区间）。
+// Number sourcing: every number shown in the digest comes directly from the internal/store StatsStore aggregate methods
+// (the same calls the stats page makes), and neither the handler nor the worker writes statistics SQL. The window matches the
+// stats page's "last 7 days": [today-6, today] (review_day inclusive).
 //
-// 为什么是独立 worker 而不是复用提醒 worker：两者节律不同（日 vs 周）、候选集不同
-// （有到期卡的人 vs 所有可收信的人）、文案与去重台账都不同；强塞进一个 worker 会让
-// 「提醒」与「摘要」的判定互相纠缠。两者都只是周期性小扫描，不占优化器的单并发 jobs。
+// Why a separate worker instead of reusing the reminder worker: the two have different rhythms (daily vs weekly), different
+// candidate sets (people with due cards vs everyone who can receive mail), and different copy and dedup ledgers; forcing them
+// into one worker would entangle the "reminder" and "digest" decisions. Both are just periodic small scans and do not occupy
+// the optimizer's single-concurrency jobs.
 package digest
 
 import (
@@ -43,54 +45,54 @@ import (
 )
 
 const (
-	// DefaultInterval 是默认轮询间隔。摘要是周粒度，10 分钟一轮只是为了让「新的一周开始」
-	// 与「静默窗口结束」能在分钟级内被补上，DB 开销退化成一条候选查询。
+	// DefaultInterval is the default polling interval. The digest is weekly-grained; a 10-minute round only ensures
+	// "a new week started" and "the quiet window ended" are picked up within minutes, and the DB cost degrades to one candidate query.
 	DefaultInterval = worker.DefaultInterval
-	// DefaultStatsPath 是统计页路径（摘要正文里的回顾链接）。
+	// DefaultStatsPath is the stats page path (the review link in the digest body).
 	DefaultStatsPath = "/stats"
-	// runFailedLog 是单轮失败时的英文日志消息，注入共享骨架 worker.Config.FailMessage；
-	// 文案与重构前逐字一致。
+	// runFailedLog is the English log message for a failed round, injected as the shared skeleton worker.Config.FailMessage;
+	// the copy is identical to before the refactor.
 	runFailedLog = "weekly digest run failed"
 )
 
-// Enqueuer 是摘要 worker 依赖的发信入口；生产由 *mail.Outbox 满足，测试注入替身。
+// Enqueuer is the mail entry point the digest worker depends on; production is satisfied by *mail.Outbox, tests inject a stub.
 type Enqueuer interface {
-	// Enqueue 只入队，不同步发信。
+	// Enqueue only enqueues; it does not send mail synchronously.
 	Enqueue(ctx context.Context, m mail.Message) error
-	// Configured 报告 SMTP 是否已配置。
+	// Configured reports whether SMTP is configured.
 	Configured() bool
 }
 
-// Deps 是 Worker 的显式依赖。
+// Deps holds the Worker's explicit dependencies.
 type Deps struct {
-	// DB 是必填项（候选查询与发送台账）。
+	// DB is required (candidate query and send ledger).
 	DB *gorm.DB
-	// Outbox 是必填项的发信入口。
+	// Outbox is the required mail entry point.
 	Outbox Enqueuer
-	// Translator 是必填项：邮件文案是用户可见文案，一律走语言包。
+	// Translator is required: mail copy is user-visible copy and always goes through the language pack.
 	Translator *i18n.Translator
-	// Logger 可选；为空时用 slog.Default()。
+	// Logger is optional; slog.Default() is used when empty.
 	Logger *slog.Logger
-	// Now 可注入时钟；为空时用系统 UTC 时间。
+	// Now is an injectable clock; system UTC time is used when empty.
 	Now func() time.Time
-	// Interval 是轮询间隔；<=0 时用 DefaultInterval。
+	// Interval is the polling interval; DefaultInterval is used when <=0.
 	Interval time.Duration
-	// BaseURL 是站点根地址，用于拼统计页与退订链接；为空时退化成相对路径。
+	// BaseURL is the site root address, used to build the stats page and unsubscribe links; falls back to a relative path when empty.
 	BaseURL string
-	// StatsPath 覆盖统计页路径；为空时用 DefaultStatsPath。
+	// StatsPath overrides the stats page path; DefaultStatsPath is used when empty.
 	StatsPath string
-	// Tokens 签发一键退订令牌；为空时邮件不带退订头。
+	// Tokens issues one-click unsubscribe tokens; the mail carries no unsubscribe header when empty.
 	Tokens *auth.ActionTokenService
-	// Templates 取管理员自定义的邮件模板；为空表示只用内置正文。
+	// Templates fetches the administrator-defined mail templates; empty means only the built-in body is used.
 	Templates mail.LookupFunc
-	// SiteDefaultLocale 是站点默认语言，模板回退链的第二级；为空时跳过该级。
+	// SiteDefaultLocale is the site default language, the second level of the template fallback chain; that level is skipped when empty.
 	SiteDefaultLocale func() string
 }
 
-// Worker 持有后台 worker 与配置。
+// Worker holds the background worker and its configuration.
 //
-// 起停与 tick 循环来自内嵌的共享骨架 *worker.Lifecycle（internal/worker）：Start/Stop
-// 由它提升，签名与重构前一致，cmd/engram 的调用不变。
+// Start/stop and the tick loop come from the embedded shared skeleton *worker.Lifecycle (internal/worker): Start/Stop
+// are promoted by it, the signatures match the pre-refactor ones, and the calls in cmd/engram are unchanged.
 type Worker struct {
 	*worker.Lifecycle
 
@@ -102,13 +104,13 @@ type Worker struct {
 	baseURL    string
 	statsPath  string
 	tokens     *auth.ActionTokenService
-	// templates 取自定义邮件模板；缺失即用内置正文。
+	// templates fetches custom mail templates; when missing, the built-in body is used.
 	templates mail.LookupFunc
-	// siteLocale 提供站点默认语言（回退链第二级）；可为 nil。
+	// siteLocale provides the site default language (second level of the fallback chain); may be nil.
 	siteLocale func() string
 }
 
-// New 构造 Worker；不启动 worker，需再调用 Start。
+// New constructs a Worker; it does not start the worker, call Start afterwards.
 func New(deps Deps) (*Worker, error) {
 	if deps.DB == nil {
 		return nil, errors.New("digest: Deps.DB is required")
@@ -143,7 +145,7 @@ func New(deps Deps) (*Worker, error) {
 		templates:  deps.Templates,
 		siteLocale: deps.SiteDefaultLocale,
 	}
-	// 起停与 tick 循环交给共享骨架；RunOnce 作为业务相位注入，失败日志文案逐字保留。
+	// Start/stop and the tick loop are delegated to the shared skeleton; RunOnce is injected as the business phase, and the failure log copy is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
 		RunOnce:     w.RunOnce,
 		Logger:      logger,
@@ -157,8 +159,8 @@ func New(deps Deps) (*Worker, error) {
 	return w, nil
 }
 
-// RunOnce 执行一轮扫描：对每个可收信的活跃用户判定是否应发本周摘要。
-// 导出供测试与运维手动触发；单个用户的失败记日志后继续处理其余用户。
+// RunOnce runs one scan round: for each active user who can receive mail, decide whether the weekly digest should be sent.
+// Exported for tests and manual operations triggering; a single user's failure is logged and processing continues with the rest.
 func (w *Worker) RunOnce(ctx context.Context) error {
 	if !w.outbox.Configured() {
 		w.logger.Info("weekly digest skipped: smtp not configured")
@@ -180,24 +182,25 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// maybeSend 判定并（在满足条件时）入队一封摘要。
-//
-// 判定顺序（每一道都必须在入队前通过）：
-//  1. 发送时刻：用户本地时间还未到其选定的小时（默认 19:00，与复习提醒共用）就整轮跳过，
-//     **不记录台账**——到达该小时后的下一轮会重新评估并发出。
-//  2. 每周上限：用户本地周起始日（周一）已发过就不再发。
-//  3. 偏好门禁：C 类默认关，用户关掉后立即生效（每轮现读偏好，不缓存）。
-//
-// 台账只在 Enqueue 成功后才写，避免入队失败却把本周额度用掉。
-// MinDigestInterval 只拦周界的小时级碰撞，不充当一周冷却期，避免误伤宕机几天后的补发。
+// MinDigestInterval only catches hour-level collisions at the week boundary; it does not act as a one-week cooldown, so a
+// backfill several days after downtime is not mistakenly blocked.
 const MinDigestInterval = 20 * time.Hour
 
+// maybeSend decides and (when the conditions are met) enqueues one digest.
+//
+// Decision order (every gate must pass before enqueueing):
+//  1. Send hour: if the user's local time has not yet reached their chosen hour (default 19:00, shared with the review reminder),
+//     skip the whole round and **do not record the ledger** — the next round after that hour re-evaluates and sends.
+//  2. Weekly cap: do not send again once it has been sent for the user's local week start (Monday).
+//  3. Preference gate: C-class defaults to off, and turning it off takes effect immediately (preferences are re-read every round, not cached).
+//
+// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume the current week's quota.
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
 	loc := store.LoadLocation(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
 		return nil
 	}
-	// 被间隔门挡住时不写周账本，时间达到后仍可补发。
+	// When blocked by the interval gate, the weekly ledger is not written, so it can still be backfilled once the time is reached.
 	if last, ok, err := store.LastDigestSentAt(ctx, w.db, c.ID); err != nil {
 		return err
 	} else if ok && now.Sub(last) < MinDigestInterval {
@@ -237,25 +240,25 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	return nil
 }
 
-// DigestStats 是一封周报展示的数字。每个字段都直接来自 StatsStore 的聚合方法。
+// DigestStats holds the numbers shown in one weekly digest. Each field comes directly from a StatsStore aggregate method.
 type DigestStats struct {
-	// WindowFrom / WindowTo 是复习数窗口（review_day 闭区间），与统计页「近 7 日」一致。
+	// WindowFrom / WindowTo are the review-count window (review_day inclusive), matching the stats page's "last 7 days".
 	WindowFrom string
 	WindowTo   string
-	// Reviewed 是窗口内的复习次数（= ReviewVolume.Last7Days）。
+	// Reviewed is the number of reviews within the window (= ReviewVolume.Last7Days).
 	Reviewed int64
-	// PassRate 是统计页同口径的通过率/留存率（= RetentionByStability.Rate，0–1）。
+	// PassRate is the pass rate / retention rate on the same basis as the stats page (= RetentionByStability.Rate, 0–1).
 	PassRate float64
-	// StreakCurrent 是到「今天」为止未中断的连续复习天数（= Streak.Current）。
+	// StreakCurrent is the unbroken streak of review days up to "today" (= Streak.Current).
 	StreakCurrent int
-	// NewCards 是窗口内新引入的卡数（LearningCurve 的 New 之和）。
+	// NewCards is the number of newly introduced cards within the window (the sum of LearningCurve's New).
 	NewCards int64
-	// DueNow 是当前到期（含逾期）的卡数（= DueForecast.Today）。
+	// DueNow is the number of currently due (including overdue) cards (= DueForecast.Today).
 	DueNow int64
 }
 
-// ComputeStats 用统计服务算出摘要数字。这是摘要数字的唯一来源：它与统计 JSON 端点调用
-// 同一批 StatsStore 方法、同一复习日窗口，因此两边不会分歧。
+// ComputeStats uses the stats service to compute the digest numbers. This is the single source of digest numbers: it calls
+// the same batch of StatsStore methods and the same review-day window as the stats JSON endpoint, so the two cannot diverge.
 func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (DigestStats, error) {
 	today := schedule.ReviewDay(now, loc, cutoffHour)
 	from := store.ShiftReviewDay(today, -6)
@@ -297,15 +300,16 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 	}, nil
 }
 
-// message 按用户语言组装摘要邮件。摘要是 C 类可选邮件，故带 RFC 8058 一键退订头：
-// 令牌指名 study_digest 这一个类型，收件人不登录即可关掉它。令牌签发失败只记日志并照常发信。
+// message assembles the digest mail in the user's language. The digest is a C-class optional mail and therefore carries the
+// RFC 8058 one-click unsubscribe header: the token names the single type study_digest, so the recipient can turn it off without
+// signing in. A failed token issue only logs and the mail is still sent.
 func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestStats) mail.Message {
 	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
 	site := lc.T("app.name")
 	statsURL := w.statsURL()
 	unsubURL := w.unsubscribeLink(ctx, c.ID)
-	// 六个统计行都在内置正文里（mail.DefaultTemplate），所以新增/到期两个数字必须进
-	// 变量表——只传给渲染函数不留变量，管理页就看不到它们，模板也用不了。
+	// All six stat lines are in the built-in body (mail.DefaultTemplate), so the new-cards/due numbers must go into
+	// the variable table — passing them only to the render function leaves no variable behind, the admin page cannot see them, and templates cannot use them.
 	vars := mail.Vars{
 		"site":      site,
 		"count":     strconv.FormatInt(s.Reviewed, 10),
@@ -348,7 +352,7 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 	return msg
 }
 
-// siteDefaultLocale 返回站点默认语言（模板回退链第二级）；未注入时返回空串。
+// siteDefaultLocale returns the site default language (second level of the template fallback chain); returns an empty string when not injected.
 func (w *Worker) siteDefaultLocale() string {
 	if w.siteLocale == nil {
 		return ""
@@ -356,10 +360,9 @@ func (w *Worker) siteDefaultLocale() string {
 	return strings.TrimSpace(w.siteLocale())
 }
 
-// unsubscribeHeaders 为 study_digest 签发退订令牌并返回 RFC 8058 头；不可用时返回 nil。
-// unsubscribeLink 为 study_digest 签发退订令牌并返回退订链接；不可用时返回空串。
+// unsubscribeLink issues an unsubscribe token for study_digest and returns the unsubscribe link; returns an empty string when unavailable.
 //
-// 返回链接而不是头：正文页脚与纯文本段也要有它（头只有邮件客户端看得到）。
+// It returns a link rather than a header: the body footer and the plain-text part need it too (headers are only visible to mail clients).
 func (w *Worker) unsubscribeLink(ctx context.Context, userID uint64) string {
 	if w.tokens == nil {
 		return ""
@@ -372,13 +375,13 @@ func (w *Worker) unsubscribeLink(ctx context.Context, userID uint64) string {
 	return w.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
 }
 
-// statsURL 拼统计页链接；未配置 BaseURL 时退化成相对路径。
+// statsURL builds the stats page link; falls back to a relative path when BaseURL is not configured.
 func (w *Worker) statsURL() string {
 	return w.baseURL + w.statsPath
 }
 
-// weekStartOf 返回 day 所在周的周一（YYYY-MM-DD）。Go 的 Weekday 以周日为 0，这里换算出
-// 「距本周一的天数」再回退，保证本地周一凌晨与同周周日落在同一个 week_start。
+// weekStartOf returns the Monday of the week containing day (YYYY-MM-DD). Go's Weekday uses Sunday as 0, so this converts to
+// "days since this week's Monday" and subtracts it, guaranteeing local Monday early morning and Sunday of the same week fall on the same week_start.
 func weekStartOf(day string) string {
 	t, err := time.Parse("2006-01-02", day)
 	if err != nil {
@@ -388,5 +391,5 @@ func weekStartOf(day string) string {
 	return t.AddDate(0, 0, -offset).Format("2006-01-02")
 }
 
-// 让编译期确认 *mail.Outbox 满足 Enqueuer（契约漂移时在这里报错，而不是在装配处）。
+// Compile-time confirmation that *mail.Outbox satisfies Enqueuer (so contract drift breaks here, not at the assembly site).
 var _ Enqueuer = (*mail.Outbox)(nil)

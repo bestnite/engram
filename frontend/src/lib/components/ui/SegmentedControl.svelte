@@ -3,8 +3,8 @@
   import { cn } from './utils';
 
   /**
-   * 分段切换：两三个互斥选项（如「文件 / 链接」）。选项少时比下拉更直接——一眼看到全部选项，
-   * 一次点击完成切换。底层是 bits-ui 的 ToggleGroup（键盘方向键、aria 状态由库负责）。
+   * Segmented switch: two or three mutually exclusive options (e.g. "file / link"). With few options it is more direct than a dropdown - all options are visible at a glance,
+   * and one click completes the switch. The base is bits-ui's ToggleGroup (keyboard arrows and aria state are handled by the library).
    */
   interface Option {
     value: string;
@@ -17,14 +17,14 @@
     onValueChange?: (value: string) => void;
     ariaLabel?: string;
     testId?: string;
-    /** 每一段的 data-testid 前缀：`<prefix><value>`。 */
+    /** data-testid prefix for each segment: `<prefix><value>`. */
     itemTestIdPrefix?: string;
     class?: string;
   }
 
   let { value, options, onValueChange, ariaLabel, testId, itemTestIdPrefix, class: klass = '' }: Props = $props();
 
-  // single 模式下再次点击已选项会把值清空；分段切换必须始终有一项被选中，所以忽略空值。
+  // In single mode clicking the selected item again clears the value; a segmented switch must always have one selected, so empty values are ignored.
   function handleChange(next: string) {
     if (next && next !== value) onValueChange?.(next);
   }

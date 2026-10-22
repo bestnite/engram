@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestUnconfiguredReturnsErrNotConfigured 是门禁核心：未配置 SMTP 时
-// Configured() 为 false，Enqueue 返回 ErrNotConfigured（不静默丢弃），且不写任何行。
+// TestUnconfiguredReturnsErrNotConfigured is the core of the gate: when SMTP is not configured,
+// Configured() is false, Enqueue returns ErrNotConfigured (no silent drop), and no row is written.
 func TestUnconfiguredReturnsErrNotConfigured(t *testing.T) {
 	db := testDB(t)
 	ob := NewOutbox(Deps{DB: db})
@@ -22,7 +22,8 @@ func TestUnconfiguredReturnsErrNotConfigured(t *testing.T) {
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("Enqueue() error = %v, want ErrNotConfigured", err)
 	}
-	// 未配置时不得写进队列（否则会积压一堆永远不会发的邮件）。
+	// When unconfigured nothing may be written to the queue (otherwise a pile of mail that will never
+	// be sent would accumulate).
 	var count int64
 	if err := db.Model(&store.OutboxMessage{}).Count(&count).Error; err != nil {
 		t.Fatalf("count outbox: %v", err)
@@ -32,7 +33,8 @@ func TestUnconfiguredReturnsErrNotConfigured(t *testing.T) {
 	}
 }
 
-// TestConfiguredRequiresHostAndFrom 证明只填一部分不算已配置。
+// TestConfiguredRequiresHostAndFrom shows that filling in only part of it does not count as
+// configured.
 func TestConfiguredRequiresHostAndFrom(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -59,7 +61,7 @@ func TestConfiguredRequiresHostAndFrom(t *testing.T) {
 	}
 }
 
-// TestResolutionOrderEnvBeatsDBBeatsDefault 覆盖取值优先级与来源标注。
+// TestResolutionOrderEnvBeatsDBBeatsDefault covers the value precedence and the source annotation.
 func TestResolutionOrderEnvBeatsDBBeatsDefault(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
@@ -83,7 +85,7 @@ func TestResolutionOrderEnvBeatsDBBeatsDefault(t *testing.T) {
 		t.Errorf("db value: got %q/%s, want db.example.com/db", host, src)
 	}
 
-	// 未在任一来源出现的项回落到内置默认值：端口 587、TLS starttls。
+	// An item absent from every source falls back to the built-in default: port 587, TLS starttls.
 	port, src, err := r.Field(ctx, SettingKeySMTPPort)
 	if err != nil {
 		t.Fatalf("Field: %v", err)
@@ -100,7 +102,8 @@ func TestResolutionOrderEnvBeatsDBBeatsDefault(t *testing.T) {
 	}
 }
 
-// TestPasswordConfiguredNeverTouchesPlaintext 证明口令状态只看配置与否，且明文经加密存储后可读回。
+// TestPasswordConfiguredNeverTouchesPlaintext shows that the password state only looks at whether it
+// is configured, and that the plaintext can be read back after being stored encrypted.
 func TestPasswordConfiguredNeverTouchesPlaintext(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
@@ -126,7 +129,7 @@ func TestPasswordConfiguredNeverTouchesPlaintext(t *testing.T) {
 		t.Errorf("after PutSecret: configured=%v src=%s, want true/db", configured, src)
 	}
 
-	// Config 能解出明文口令供投递使用。
+	// Config can decrypt the plaintext password for delivery to use.
 	cfg, ok, err := r.Config(ctx)
 	if err != nil {
 		t.Fatalf("Config: %v", err)
@@ -138,7 +141,8 @@ func TestPasswordConfiguredNeverTouchesPlaintext(t *testing.T) {
 		t.Errorf("cfg.Password = %q, want the decrypted value", cfg.Password)
 	}
 
-	// 库里存的必须是密文（含版本前缀），不含明文。
+	// What is stored in the database must be ciphertext (with a version prefix), containing no
+	// plaintext.
 	var row store.Setting
 	if err := db.First(&row, "key = ?", SettingKeySMTPPassword).Error; err != nil {
 		t.Fatalf("load stored password: %v", err)
@@ -148,7 +152,8 @@ func TestPasswordConfiguredNeverTouchesPlaintext(t *testing.T) {
 	}
 }
 
-// TestConfigPortFallsBackOnGarbage 证明一个坏端口不会让整条配置不可用。
+// TestConfigPortFallsBackOnGarbage shows that one bad port does not make the whole configuration
+// unusable.
 func TestConfigPortFallsBackOnGarbage(t *testing.T) {
 	db := testDB(t)
 	setSettings(t, db, map[string]string{
@@ -168,7 +173,7 @@ func TestConfigPortFallsBackOnGarbage(t *testing.T) {
 	}
 }
 
-// TestNormalizeAndValidateTLSMode 覆盖 TLS 模式的归一化与校验。
+// TestNormalizeAndValidateTLSMode covers the normalization and validation of TLS modes.
 func TestNormalizeAndValidateTLSMode(t *testing.T) {
 	for _, raw := range []string{"none", "NONE", " starttls ", "implicit"} {
 		if !ValidTLSMode(raw) {
@@ -188,7 +193,7 @@ func TestNormalizeAndValidateTLSMode(t *testing.T) {
 	}
 }
 
-// contains 是一个不看大小写的子串判断，避免直接引 strings 造成噪音。
+// contains is a case-insensitive substring check, avoiding the noise of importing strings directly
 func contains(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {
@@ -198,5 +203,5 @@ func contains(haystack, needle string) bool {
 	return false
 }
 
-// nowUTC 是测试里的统一时间源。
+// nowUTC is the single time source used in tests.
 func nowUTC() time.Time { return time.Now().UTC() }

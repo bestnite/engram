@@ -13,8 +13,8 @@
   import { resetSidebarDecks } from './sidebar';
 
   /**
-   * 侧边栏底部的账户菜单：显示当前用户，收纳主题、语言与退出——这些都是低频操作，
-   * 放进菜单后侧边栏只留导航本身。
+   * Account menu at the bottom of the sidebar: shows the current user and collects theme, language and logout - all low-frequency actions,
+   * so putting them in a menu leaves only navigation in the sidebar itself.
    */
   interface Props {
     collapsed?: boolean;
@@ -27,8 +27,8 @@
   const displayName = $derived(user ? user.display_name || user.username : '');
   const initial = $derived(displayName ? Array.from(displayName)[0]?.toUpperCase() ?? '' : '');
 
-  // 主题菜单项要反映**当前**状态，所以挂载时从 DOM 读一次实际值
-  // （首帧由服务端注入的内联引导设好 .dark，这里只读不改，避免覆盖用户选择）。
+  // The theme menu item must reflect the **current** state, so read the actual value from the DOM once on mount
+  // (the first frame is already set up by the inline bootstrap the server injects into .dark; this only reads, never writes, to avoid overriding the user's choice).
   let dark = $state(false);
   onMount(() => {
     dark = isDark();
@@ -44,7 +44,7 @@
       resetSidebarDecks();
       navigate('/login');
     } catch {
-      // 错误已写进 authStore，由外壳决定如何展示。
+      // The error is already written into authStore; the shell decides how to present it.
     }
   }
 

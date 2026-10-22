@@ -1,7 +1,7 @@
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /**
- * Svelte 配置文件
+ * Svelte configuration file
  */
 export default {
   preprocess: vitePreprocess(),

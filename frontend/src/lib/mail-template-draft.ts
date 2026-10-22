@@ -1,14 +1,14 @@
 import type { AdminMailTemplateDefault, AdminMailTemplateRow } from './api';
 
 /**
- * 邮件模板编辑框的初值。
+ * Initial value of the mail template edit box.
  *
- * 有自定义版本就用它；没有就**预填内置默认正文**。后者不是「顺手加的小便利」：留空意味着
- * 管理员要对着一个空框重写一封完整的信，而绝大多数情况下他本来就是在默认的那几句话上改，
- * 预填把「改」变成了唯一动作。
+ * Use the custom version when there is one; otherwise **pre-fill the built-in default body**. The latter is no small convenience: leaving it blank would mean
+ * the admin has to rewrite a whole message in an empty box, while in the vast majority of cases they are just editing those default sentences,
+ * so pre-filling makes "edit" the only action.
  *
- * 抽成纯函数是因为服务端渲染下 `$effect` 不跑——编辑框的初值如果只能靠副作用设置，就只
- * 能在浏览器里验证；这里的输入输出是可以单测的。
+ * It is a pure function because `$effect` does not run under server rendering - if the edit box's initial value could only be set by a side effect, it could only
+ * be verified in a browser; here the input and output are unit-testable.
  */
 export interface MailTemplateDraft {
   subject: string;

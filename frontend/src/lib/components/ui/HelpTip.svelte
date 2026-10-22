@@ -5,16 +5,16 @@
   import { cn } from './utils';
 
   /**
-   * 指标旁的「这是什么意思？」说明：一个小问号按钮，点开后在浮层里显示一两句口径说明。
+   * The "what does this mean?" help next to a metric: a small question-mark button that opens a popover with a sentence or two on how it is counted.
    *
-   * 用 bits-ui 的 Popover 而不是 Tooltip：手机上没有悬停，纯悬停提示在触屏上根本打不开；
-   * Popover 点按打开、点外部或按 Esc 关闭，触发器是原生 button，Enter/Space 天然可用。
-   * 指针设备额外开启悬停打开（库在触摸事件上会忽略悬停），桌面上扫一眼就能看到说明。
+   * Uses bits-ui Popover instead of Tooltip: there is no hover on phones, and a hover-only tip cannot be opened on touch at all;
+   * Popover opens on tap and closes on outside click or Esc, and the trigger is a native button, so Enter/Space works naturally.
+   * Pointer devices additionally get hover-to-open (the library ignores hover on touch events), so on desktop a glance is enough to see the explanation.
    */
   interface Props {
-    /** 已本地化的说明正文。 */
+    /** The localized explanation body. */
     text: string;
-    /** 被说明的指标名（已本地化）；拼进按钮的 aria-label，读屏时知道问的是哪一项。 */
+    /** The name of the metric being explained (localized); spliced into the button's aria-label so screen readers know which item is being asked about. */
     label: string;
     testId?: string;
     class?: string;
@@ -33,7 +33,7 @@
     openOnHover
     openDelay={250}
     class={cn(
-      // 视觉上只是 14px 的图标，按钮本身 24px 方便手指点中；负外边距抵消多出的高度，不撑高所在行。
+      // Visually just a 14px icon, but the button itself is 24px so fingers can hit it; a negative margin cancels the extra height so it does not stretch the row.
       'inline-flex size-6 -my-1 shrink-0 cursor-pointer items-center justify-center rounded-full align-middle text-muted-foreground/70 transition-colors hover:text-foreground data-[state=open]:text-foreground',
       klass
     )}

@@ -6,8 +6,9 @@ import { authStore, type AuthState } from '../lib/auth';
 import { readLanguageFromURL, setLanguageInURL, clearLanguageInURL } from '../lib/i18n/url';
 
 /**
- * 匿名访客的语言覆盖参数住在地址上（服务端对每个请求都按「?lang 优先」解析），
- * 所以它必须熬过站内跳转与刷新。已登录用户不保留：他的语言在 /settings 里落库。
+ * Anonymous visitors keep their language override in the URL (the server resolves every
+ * request with "?lang wins"), so it must survive in-site navigation and reloads.
+ * Signed-in users do not keep it: their language is persisted in /settings.
  */
 const signedOut: AuthState = { initialized: true, loading: false, authenticated: false, user: null, error: null };
 
@@ -23,7 +24,7 @@ describe('anonymous language override in the URL', () => {
     setLanguageInURL('en');
     expect(currentURL()).toBe('/login?lang=en');
     expect(readLanguageFromURL()).toBe('en');
-    // 复用已有查询串，而不是把原来的参数挤掉。
+    // Reuse the existing query string instead of pushing the original params out.
     window.history.replaceState({}, '', '/login?next=%2Fdecks');
     setLanguageInURL('zh-CN');
     expect(currentURL()).toBe('/login?next=%2Fdecks&lang=zh-CN');
@@ -33,11 +34,11 @@ describe('anonymous language override in the URL', () => {
     setLanguageInURL('en');
     navigate('/register');
     expect(currentURL()).toBe('/register?lang=en');
-    // 路由状态与写进地址的 URL 一致：语言进了查询串，视图仍按 /register 匹配。
+    // Router state matches the URL written to the address bar: the language went into the query string, and the view still matches /register.
     expect(get(routeStore).path).toBe('/register');
     expect(get(routeStore).query).toEqual({ lang: 'en' });
 
-    // 目标地址自带的参数保留（语言只有一个值，不重复追加）。
+    // Params already on the target URL are kept (language has a single value, so it is not appended twice).
     navigate('/register?lang=en');
     expect(currentURL()).toBe('/register?lang=en');
     navigate('/setup?step=1');
@@ -52,14 +53,14 @@ describe('anonymous language override in the URL', () => {
   });
 
   it('clears a stale override once the language lives on the account', () => {
-    // 登录用户在页头切换时写的是账号设置，地址上残留的 ?lang 优先级最高，留着会压过刚写好的值。
+    // When a signed-in user switches in the header, the account setting is what gets written; a leftover ?lang in the URL outranks everything, so keeping it would override the value just stored.
     setLanguageInURL('en');
     expect(readLanguageFromURL()).toBe('en');
     clearLanguageInURL();
     expect(currentURL()).toBe('/login');
     expect(readLanguageFromURL()).toBeNull();
 
-    // 没有该参数时是空操作，不动其它查询串。
+    // With no such param it is a no-op and other query strings are untouched.
     window.history.replaceState({}, '', '/decks?page=2');
     clearLanguageInURL();
     expect(currentURL()).toBe('/decks?page=2');

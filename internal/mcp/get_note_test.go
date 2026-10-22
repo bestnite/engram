@@ -8,8 +8,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestGetNoteToolReadsByPublicID 断言 get_note 按对外 id 读取单条卡片，
-// 未知 id 返回 not_found；与 REST `GET /notes/:id` 同源（同一 service 方法）。
+// TestGetNoteToolReadsByPublicID asserts get_note reads a single card by public id,
+// returning not_found for an unknown id; same source as REST `GET /notes/:id` (the same service method).
 func TestGetNoteToolReadsByPublicID(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "note_reader")

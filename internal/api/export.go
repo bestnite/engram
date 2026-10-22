@@ -14,15 +14,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// exportCards 以 json 或 csv 导出单个卡组的卡片级内容；include_progress=1 时附带调用者本人的进度。
-// 导出他人共享的卡组时绝不包含他人进度（同一条边界）。
+// exportCards exports the card-level content of a single deck as json or csv; include_progress=1 also carries the caller's own progress.
+// When exporting a deck someone else shared, their progress is never included (same boundary).
 //
-// 两种格式都边查边写（流式），大卡组不把整组读进内存：查询按页（键集）推进，
-// 每页读完即关闭游标，这里只负责把每页的行直接写进 http.ResponseWriter。
-// 页与页之间不持有数据库连接，慢客户端因此不会占住 SQLite 的唯一连接。
+// Both formats query and write as they go (streaming), so a large deck is not read fully into memory: the query advances page by page (keyset),
+// the cursor is closed as soon as a page is read, and this code only writes each page's rows straight into the http.ResponseWriter.
+// No database connection is held between pages, so a slow client cannot tie up SQLite's single connection.
 //
-// deck 必须显式给出：全库/跨用户导出入口已按 2026-10-06 的决定移除，导出只剩单个卡组。
-// deck 的值是卡组的对外 id；解析成主键后才进入数字化的 service 层。
+// deck must be given explicitly: the whole-library / cross-user export entry point was removed by the 2026-10-06 decision, leaving single-deck export only.
+// The deck value is the deck's external id; it is resolved to a primary key before entering the numeric service layer.
 func (a *API) exportCards(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -44,7 +44,7 @@ func (a *API) exportCards(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	// 权限与卡组存在性必须在写任何响应字节之前确定，否则无法回 404/403。
+	// Permission and deck existence must be settled before writing any response byte, otherwise 404/403 can no longer be returned.
 	if _, err := a.RequireDeckRole(ctx, u.ID, d.ID, store.RoleReader); err != nil {
 		writeServiceError(c, err)
 		return
@@ -58,10 +58,10 @@ func (a *API) exportCards(c *gin.Context) {
 	a.streamJSON(c, ctx, u.ID, []string{d.PublicID}, deckIDs, includeProgress)
 }
 
-// streamJSON 以流式方式写 {"deck_ids":[...],"cards":[...],"count":N}。
-// deck_ids 里放的是卡组的对外 id，不是自增主键。
-// 先写固定前缀，再逐行编码数组元素，最后收尾；中途查询失败时仍把数组闭合，
-// 让客户端拿到合法 JSON 并在日志里留下英文错误。
+// streamJSON writes {"deck_ids":[...],"cards":[...],"count":N} in streaming fashion.
+// deck_ids holds the deck's external id, not the auto-increment primary key.
+// Write the fixed prefix first, then encode array elements one by one, then close; if a query fails midway the array is still closed,
+// so the client gets valid JSON and the English error still lands in the log.
 func (a *API) streamJSON(c *gin.Context, ctx context.Context, userID uint64, deckPublicIDs []string, deckIDs []uint64, includeProgress bool) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.Status(http.StatusOK)
@@ -94,7 +94,7 @@ func (a *API) streamJSON(c *gin.Context, ctx context.Context, userID uint64, dec
 	_, _ = w.Write([]byte("}"))
 }
 
-// streamCSV 以流式方式写 CSV：表头一次写完，数据行由 encoding/csv 的 Writer 直写。
+// streamCSV writes CSV in streaming fashion: the header is written in one go and data rows go straight through encoding/csv's Writer.
 func (a *API) streamCSV(c *gin.Context, ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) {
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Status(http.StatusOK)
@@ -112,7 +112,7 @@ func (a *API) streamCSV(c *gin.Context, ctx context.Context, userID uint64, deck
 	}
 }
 
-// csvHeader 返回 CSV 表头；include_progress 决定是否带进度列（与 JSON 导出一致）。
+// csvHeader returns the CSV header; include_progress decides whether progress columns are present (consistent with the JSON export).
 func csvHeader(includeProgress bool) []string {
 	header := []string{"card_id", "note_id", "deck_id", "kind", "template", "fields_json", "tags_json", "external_ref"}
 	if includeProgress {
@@ -121,7 +121,7 @@ func csvHeader(includeProgress bool) []string {
 	return header
 }
 
-// csvRecord 把一行导出数据转成 CSV 记录。
+// csvRecord turns one exported row into a CSV record.
 func csvRecord(r ExportRow, includeProgress bool) []string {
 	fieldsJSON, _ := json.Marshal(r.Fields)
 	tagsJSON, _ := json.Marshal(r.Tags)

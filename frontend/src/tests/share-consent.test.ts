@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiClient } from '../lib/api';
 
 /**
- * 分享同意制的前端契约：客户端打的端点与 CSRF 行为。
+ * Frontend contract for share consent: which endpoints the client calls and the CSRF
+ * behaviour.
  *
- * 服务端语义由 internal/web/share_invite_test.go 钉住（分享后仍无授权、接受才生效、
- * 拒绝不留痕、策略在邀请发出前拦住）。
+ * The server semantics are pinned by internal/web/share_invite_test.go (still unauthorized
+ * after sharing, takes effect only on acceptance, rejection leaves no trace, and the policy
+ * blocks before the invite is sent).
  */
 
 describe('share invite API client', () => {
@@ -93,7 +95,7 @@ describe('share invite API client', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ allow_usernames: ['Alice'] });
     expect(res.policy).toBe('whitelist');
 
-    // 第二个客户端：上一个已经拿到 CSRF（不再去打会话端点），这里要的正是"先取会话再提交"的路径。
+    // A second client: the previous one already holds a CSRF token (so it no longer hits the session endpoint), and what is needed here is exactly the "fetch session, then submit" path.
     const fresh = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
     mockFetch.mockReset();
     mockFetch.mockResolvedValueOnce(

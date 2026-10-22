@@ -19,42 +19,42 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 凭一次性票据上传卡组包：
-//   POST /api/v1/decks/import-uploads         签发票据（write）
-//   PUT  /api/v1/decks/import-uploads/:token  凭票据上传并导入（票据即凭据）
+// Uploading a deck package with a one-time ticket:
+//   POST /api/v1/decks/import-uploads         issue a ticket (write)
+//   PUT  /api/v1/decks/import-uploads/:token  upload and import with the ticket (the ticket is the credential)
 //
-// 为什么需要它：MCP 工具的每个参数都由模型逐 token 输出，大卡组经 import_deck 的 package
-// 参数传入，等于让模型把整个包再吐一遍；而 agent 往往拿不到 API key（key 配在 MCP 客户端
-// 的请求头里，模型看不见），也就无法直接调 REST 上传。票据把两件事拆开：鉴权在签发时
-// 完成（MCP 或 REST 都可签发），字节由 agent 用 curl 之类的工具直传，不经过模型，key 也
-// 不离开客户端。
+// Why it exists: every MCP tool argument is emitted by the model token by token, so a large deck passed through import_deck's package
+// parameter means making the model spit out the whole package again; and an agent usually cannot get the API key (the key is configured in the MCP client's
+// request headers, invisible to the model), so it cannot call the REST upload directly. A ticket splits the two concerns: authentication happens at issuance
+// (either MCP or REST can issue), while the bytes are sent directly by the agent with a tool like curl, never through the model, and the key
+// never leaves the client.
 //
-// 票据存在 action_tokens 表：库里只有 sha256 摘要，消费走条件更新保证一次性，过期行由
-// internal/retention 统一清理。导入选项在签发时固定进票据，上传端不再接受任何选项，
-// 因此持有 URL 的人只能做签发者已经授权的那一次导入。
+// Tickets live in the action_tokens table: the database holds only a sha256 digest, consumption uses a conditional update to guarantee one-time use, and expired rows are
+// cleaned up uniformly by internal/retention. Import options are fixed into the ticket at issuance, and the upload side accepts no options at all,
+// so whoever holds the URL can only perform the single import the issuer already authorized.
 
 const (
-	// importUploadPurpose 是上传票据在 action_tokens 里的用途值。
+	// importUploadPurpose is the purpose value of an upload ticket in action_tokens.
 	importUploadPurpose = "deck_import_upload"
-	// importUploadTTL 是票据有效期：够 agent 打包并上传一个大包，又让泄漏的 URL 很快作废。
+	// importUploadTTL is the ticket lifetime: enough for an agent to pack and upload a large package, while making a leaked URL useless quickly.
 	importUploadTTL = 15 * time.Minute
-	// importUploadPathPrefix 是上传端点的路径前缀，票据明文紧随其后。
+	// importUploadPathPrefix is the path prefix of the upload endpoint, with the plaintext ticket right after it.
 	importUploadPathPrefix = "/api/v1/decks/import-uploads/"
-	// importUploadCreateBodyLimit 是签发请求体的上限：只有一个短 JSON。
+	// importUploadCreateBodyLimit is the cap on the issuance request body: just one short JSON.
 	importUploadCreateBodyLimit = 64 << 10
 )
 
-// ImportUpload 是签发结果：agent 用 Method 把包字节发到 UploadURL。
+// ImportUpload is the issuance result: the agent sends the package bytes to UploadURL using Method.
 type ImportUpload struct {
 	UploadURL string    `json:"upload_url"`
 	Method    string    `json:"method"`
 	ExpiresAt time.Time `json:"expires_at"`
-	// MaxBytes 是上传体的字节上限（与文件导入同一配置项），让调用方上传前就能自查。
+	// MaxBytes is the byte cap on the upload body (the same config item as file import), so callers can check themselves before uploading.
 	MaxBytes int64 `json:"max_bytes"`
 }
 
-// importUploadTicket 是写进 action_tokens.payload 的票据内容：签发时固定的导入选项，
-// 以及签发所用的 API key（上传时复查它仍然有效）。
+// importUploadTicket is the ticket content written into action_tokens.payload: the import options fixed at issuance,
+// plus the API key used for issuance (re-checked for validity at upload time).
 type importUploadTicket struct {
 	Target              string  `json:"target"`
 	DryRun              bool    `json:"dry_run"`
@@ -65,7 +65,7 @@ type importUploadTicket struct {
 	APIKeyID            *uint64 `json:"api_key_id,omitempty"`
 }
 
-// importUploadRequest 是 POST /api/v1/decks/import-uploads 的请求体，字段与文件导入的选项一一对应。
+// importUploadRequest is the body of POST /api/v1/decks/import-uploads; its fields map one-to-one onto the file import options.
 type importUploadRequest struct {
 	Target              string `json:"target"`
 	DryRun              bool   `json:"dry_run"`
@@ -75,15 +75,15 @@ type importUploadRequest struct {
 	ApplyWeights        bool   `json:"apply_weights"`
 }
 
-// CreateImportUpload 签发一张一次性上传票据；REST 与 MCP 共用。
+// CreateImportUpload issues a one-time upload ticket; shared by REST and MCP.
 //
-// 目标卡组的权限在签发时就判定：无权的调用者拿不到票据。上传时还会再判一次（导入走
-// ImportDeckPackage），因为签发与上传之间角色可能被收回。
+// Permission on the target deck is decided at issuance: a caller without rights gets no ticket. It is checked again at upload (the import goes through
+// ImportDeckPackage), because a role may be revoked between issuance and upload.
 func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *uint64, opts store.PackageImportOptions) (*ImportUpload, error) {
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
 	}
-	// 冲突策略在签发时就校验：错误的选项应当在 agent 上传大包之前暴露，而不是上传之后。
+	// The conflict policy is validated at issuance: a wrong option should surface before the agent uploads a large package, not after.
 	switch opts.OnConflict {
 	case "", "skip", "update", "fail":
 	default:
@@ -126,11 +126,11 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 	}, nil
 }
 
-// ImportDeckPackageUpload 消费票据并导入请求体里的卡组包。
+// ImportDeckPackageUpload consumes the ticket and imports the deck package in the request body.
 //
-// 票据先消费、后读字节：无效票据的请求一个字节都不读；票据一经出示即作废，导入失败也
-// 不能重放，调用方重新签发即可（签发很便宜，上传的字节本来就不经过模型）。
-// 请求体可以是 .edeck zip，也可以是 export_deck 输出的 JSON 文档，按首个非空白字节区分。
+// The ticket is consumed first, bytes are read after: a request with an invalid ticket reads not a single byte; once presented the ticket is spent, and a failed import
+// cannot be replayed - the caller just issues a new one (issuance is cheap, and the uploaded bytes never went through the model anyway).
+// The body may be an .edeck zip or the JSON document produced by export_deck, told apart by the first non-whitespace byte.
 func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io.Reader) (*store.PackageImportReport, error) {
 	invalid := newServiceError(http.StatusNotFound, CodeImportUploadInvalid, "")
 	now := a.now()
@@ -145,7 +145,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 	if err := json.Unmarshal([]byte(tok.Payload), &ticket); err != nil {
 		return nil, fmt.Errorf("decode import upload ticket: %w", err)
 	}
-	// 签发后账号被禁用、或签发所用的 key 被撤销 / 过期，票据随之失效：权限边界与 key 本身一致。
+	// If the account is disabled after issuance, or the key used to issue it is revoked / expired, the ticket dies with it: the permission boundary matches the key itself.
 	u, err := a.users.ByID(ctx, tok.UserID)
 	if err != nil || u.Status != store.StatusActive {
 		return nil, invalid
@@ -164,7 +164,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 		AllowOthersProgress: ticket.AllowOthersProgress,
 		ApplyWeights:        ticket.ApplyWeights,
 	}
-	// 读字节之前先判权，与直链导入同一不变式：被拒的请求不消耗读取与解析。
+	// Authorize before reading bytes, the same invariant as direct-link import: a rejected request spends no reading or parsing.
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
 	}
@@ -179,16 +179,16 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 			return report, nil
 		}
 	}
-	// 超限优先于其他错误：截断的字节会让解析报格式错误，那不是真正的原因。
-	// code 沿用文件导入的 package_too_large，两处体积上限口径一致。
+	// Over-limit takes precedence over other errors: truncated bytes make parsing report a format error, which is not the real cause.
+	// The code reuses file import's package_too_large, keeping the size cap consistent in both places.
 	if limited.exceeded {
 		return nil, newServiceError(http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
 	}
 	return nil, err
 }
 
-// uploadPackageReader 按首个非空白字节判断请求体形态：'{' 是 JSON 文档，交给与 MCP 相同的
-// store.PackageReader 还原成 zip；其余原样当作 .edeck 字节。agent 因此不必自己打 zip。
+// uploadPackageReader decides the body shape from the first non-whitespace byte: '{' means a JSON document, handed to the same
+// store.PackageReader as MCP uses, restoring it to a zip; anything else is taken as .edeck bytes. Agents therefore need not build a zip themselves.
 func uploadPackageReader(body io.Reader) (io.Reader, error) {
 	br := bufio.NewReader(body)
 	head, err := br.Peek(64)
@@ -206,8 +206,8 @@ func uploadPackageReader(body io.Reader) (io.Reader, error) {
 	return store.PackageReader(doc)
 }
 
-// overflowReader 最多放行 remaining 个字节；越界时记下 exceeded 并返回错误。
-// 记录越界是为了在导入失败后区分「包太大被截断」与「包本身格式错」。
+// overflowReader lets at most remaining bytes through; on overflow it records exceeded and returns an error.
+// Recording the overflow is what lets a failed import distinguish "the package was truncated for being too large" from "the package itself is malformed".
 type overflowReader struct {
 	r         io.Reader
 	remaining int64
@@ -216,7 +216,7 @@ type overflowReader struct {
 
 func (o *overflowReader) Read(p []byte) (int, error) {
 	if o.remaining <= 0 {
-		// 已到上限：再试读一个字节，读到就是越界；读到 EOF 说明包恰好等于上限。
+		// At the limit: try reading one more byte - getting one means overflow; getting EOF means the package is exactly the limit.
 		var one [1]byte
 		n, err := o.r.Read(one[:])
 		if n > 0 {
@@ -233,7 +233,7 @@ func (o *overflowReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// handleCreateImportUpload 是 POST /api/v1/decks/import-uploads（application/json）。
+// handleCreateImportUpload is POST /api/v1/decks/import-uploads (application/json).
 func (a *API) handleCreateImportUpload(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, importUploadCreateBodyLimit)
@@ -261,10 +261,10 @@ func (a *API) handleCreateImportUpload(c *gin.Context) {
 	c.JSON(http.StatusCreated, upload)
 }
 
-// handleImportUpload 是 PUT /api/v1/decks/import-uploads/:token：请求体即包字节。
+// handleImportUpload is PUT /api/v1/decks/import-uploads/:token: the body is the package bytes.
 //
-// 访问日志会记下含票据的路径；记录发生在请求结束时，此时票据已被本请求消费，日志里的
-// 明文不能再用于任何导入。
+// The access log records the path including the ticket; it is written when the request ends, by which time this request has consumed the ticket, so the plaintext
+// in the log can no longer be used for any import.
 func (a *API) handleImportUpload(c *gin.Context) {
 	report, err := a.ImportDeckPackageUpload(c.Request.Context(), c.Param("token"), c.Request.Body)
 	if err != nil {

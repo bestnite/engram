@@ -1,10 +1,10 @@
-//! FSRS 参数优化器适配器（ROADMAP.md M9-2）。
+//! FSRS parameter optimizer adapter (ROADMAP.md M9-2).
 //!
-//! 职责单一：读标准 review-log（JSONL）-> 调 `fsrs` crate 的优化器 -> 写出 21 元权重 JSON。
-//! 算法实现全部来自上游 `fsrs`，本项目不重写任何 FSRS 逻辑（硬约束：
-//! 算法永不进 Go 代码）。本二进制与主程序一起分发，由 `internal/jobs` 以子进程方式调用。
+//! Single responsibility: read a standard review-log (JSONL) -> call the `fsrs` crate optimizer -> write 21-element weight JSON.
+//! All algorithm implementation comes from upstream `fsrs`; this project rewrites no FSRS logic (hard constraint:
+//! the algorithm never goes into Go code). This binary ships with the main program and is invoked as a subprocess by `internal/jobs`.
 //!
-//! CLI 契约（参数、输入输出格式、退出码、确定性）写在 `tools/optimizer/README.md`。
+//! The CLI contract (arguments, input/output format, exit codes, determinism) is documented in `tools/optimizer/README.md`.
 
 mod review_log;
 
@@ -13,11 +13,11 @@ use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-/// FSRS v6 的权重维度；少了或多了都说明上游 API 变了，必须显式失败而不是静默输出。
+/// The FSRS v6 weight dimension; fewer or more means the upstream API changed, and it must fail explicitly rather than output silently.
 const WEIGHT_COUNT: usize = 21;
-/// 训练种子默认值，与 `fsrs::TrainingConfig::default()` 一致，保证「默认即确定」。
+/// Default training seed, matching `fsrs::TrainingConfig::default()`, so that "the default is deterministic".
 const DEFAULT_SEED: u64 = 2023;
-/// 默认单线程：burn/rayon 的并行归约可能让结果依赖线程调度，单线程是最低成本的确定性保证。
+/// Single-threaded by default: burn/rayon parallel reduction can make results depend on thread scheduling, and one thread is the cheapest determinism guarantee.
 const DEFAULT_THREADS: usize = 1;
 
 const USAGE: &str = "\
@@ -86,12 +86,12 @@ fn run(args: &[String]) -> Result<(), AppError> {
     }
 }
 
-/// 命令行配置。
+/// Command-line configuration.
 #[derive(Debug)]
 struct Config {
-    /// 输入路径；`None` 或 `Some("-")` 表示 stdin。
+    /// Input path; `None` or `Some("-")` means stdin.
     input: Option<String>,
-    /// 输出路径；`None` 或 `Some("-")` 表示 stdout。
+    /// Output path; `None` or `Some("-")` means stdout.
     out: Option<String>,
     threads: usize,
     seed: u64,
@@ -104,7 +104,7 @@ enum Action {
     Version,
 }
 
-/// 结构化错误：只携带一个稳定的退出码和一行英文说明。
+/// Structured error: carries only a stable exit code and a one-line English description.
 #[derive(Debug)]
 struct AppError {
     code: u8,
@@ -203,7 +203,7 @@ fn parse_u64(value: Option<&String>, flag: &str) -> Result<u64, AppError> {
 }
 
 fn execute(config: Config) -> Result<(), AppError> {
-    // fsrs 内部用 rayon 训练；线程数必须在初次建池前写进环境变量，否则默认值生效不了。
+    // fsrs trains with rayon internally; the thread count must be written to the environment variable before the pool is first built, otherwise the default does not take effect.
     std::env::set_var("RAYON_NUM_THREADS", config.threads.to_string());
 
     let text = read_input(config.input.as_deref())?;
@@ -214,7 +214,7 @@ fn execute(config: Config) -> Result<(), AppError> {
             "no review history left after filtering; nothing to train on",
         ));
     }
-    // fsrs 在训练集小于 8 时直接返回默认权重；那等于「没优化」，报错比返回默认值更诚实。
+    // fsrs just returns the default weights when the training set is smaller than 8; that amounts to "no optimization", and erroring out is more honest than returning defaults.
     if dataset.items.len() < 8 {
         return Err(AppError::io(format!(
             "not enough review history to optimise: {} usable items (minimum 8)",
@@ -243,11 +243,11 @@ fn execute(config: Config) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 调上游优化器并做输出后置校验。
+/// Calls the upstream optimizer and post-validates its output.
 fn train(dataset: &review_log::Dataset, seed: u64) -> Result<Vec<f32>, String> {
     let input = fsrs::ComputeParametersInput {
         train_set: dataset.items.clone(),
-        // 带上 card_ids，让训练按卡分组做前缀复用（上游字段的用途即此）。
+        // Pass card_ids so training can group by card and reuse prefixes (that is exactly what the upstream field is for).
         card_ids: Some(dataset.card_ids.clone()),
         progress: None,
         enable_short_term: true,
@@ -260,7 +260,7 @@ fn train(dataset: &review_log::Dataset, seed: u64) -> Result<Vec<f32>, String> {
 
     let weights = fsrs::compute_parameters(input).map_err(|e| format!("training failed: {e}"))?;
 
-    // 维度与有限性必须守住：权重会被落库并被排程器消费，错维度/NaN 必须在这里就失败。
+    // Dimension and finiteness must be enforced: the weights get persisted and consumed by the scheduler, so a wrong dimension/NaN must fail right here.
     if weights.len() != WEIGHT_COUNT {
         return Err(format!(
             "optimiser returned {} weights, expected {WEIGHT_COUNT}",

@@ -3,8 +3,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 
 /**
- * Vite 构建与测试配置
- * 配置纯客户端 SPA 构建与 Vitest 测试套件。
+ * Vite build and test configuration
+ * Configures the pure client-side SPA build and the Vitest test suite.
  */
 export default defineConfig({
   plugins: [
@@ -17,7 +17,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    // 零运行时外部依赖，产物完全自闭环
+    // No external runtime dependencies; the output is fully self-contained
     assetsInlineLimit: 4096,
   },
   test: {

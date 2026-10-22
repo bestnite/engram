@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// profilePayload 是 SPA 个人资料 API 的公开字段集合。
+// profilePayload is the public field set of the SPA profile API.
 type profilePayload struct {
 	ID            string `json:"id"`
 	Username      string `json:"username"`
@@ -22,11 +22,11 @@ type profilePayload struct {
 	Locale        string `json:"locale"`
 	Timezone      string `json:"timezone"`
 	DayCutoffHour *int   `json:"day_cutoff_hour"`
-	// LearnAheadMinutes 是提前学习窗口（分钟）；null 表示用默认值。
+	// LearnAheadMinutes is the learn-ahead window (minutes); null means the default is used.
 	LearnAheadMinutes *int `json:"learn_ahead_minutes"`
 }
 
-// profileRequest 是个人资料的完整表单；learn_ahead_minutes 缺省或 null 表示回到默认值。
+// profileRequest is the full profile form; a missing or null learn_ahead_minutes means back to the default.
 type profileRequest struct {
 	DisplayName       string `json:"display_name"`
 	Locale            string `json:"locale"`
@@ -98,7 +98,7 @@ func userPayload(u *store.User) profilePayload {
 	}
 }
 
-// profileSessionOnly 拒绝 bearer 凭据，确保个人资料路由只接受浏览器会话。
+// profileSessionOnly rejects bearer credentials, ensuring the profile routes accept browser sessions only.
 func (s *Server) profileSessionOnly(c *gin.Context) (*store.User, bool) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.GetHeader("Authorization"))), "bearer ") {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{

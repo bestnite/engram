@@ -4,8 +4,8 @@
   import { t } from '../../i18n';
   import { isDark, toggleTheme } from '../../theme';
 
-  // 图标要反映**当前**状态，所以挂载时从 DOM 读一次实际值
-  // （首帧由服务端注入的内联引导设好 .dark，这里只读不改，避免覆盖用户选择）。
+  // The icon must reflect the **current** state, so read the actual value from the DOM once on mount
+  // (the first frame is already set up by the inline bootstrap the server injects into .dark; this only reads, never writes, to avoid overriding the user's choice).
   let dark = $state(false);
   onMount(() => {
     dark = isDark();

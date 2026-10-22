@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedNote 在卡组下建一张 basic note，返回它（已带对外 id）。
+// seedNote creates a basic note under the deck and returns it (already carrying its external id).
 func seedNote(t *testing.T, env *testEnv, deckID, ownerID uint64, front string) *store.Note {
 	t.Helper()
 	n := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(ownerID)}
@@ -21,8 +21,8 @@ func seedNote(t *testing.T, env *testEnv, deckID, ownerID uint64, front string) 
 	return n
 }
 
-// TestGetNoteReadsBeyondFirstPage 是 AUDIT-01 的回归：编辑页按对外 id 直接读目标卡片，
-// 位置在单页之外的卡片同样读得到——修复前编辑页只拉第一页再去 find，第 101 条之后永远打不开。
+// TestGetNoteReadsBeyondFirstPage is the AUDIT-01 regression: the edit page reads the target card directly by external id,
+// so cards outside a single page are readable too - before the fix the edit page only pulled the first page and then looked, so anything past the 101st never opened.
 func TestGetNoteReadsBeyondFirstPage(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "note_reader", store.RoleUser)
@@ -33,7 +33,7 @@ func TestGetNoteReadsBeyondFirstPage(t *testing.T) {
 	first := seedNote(t, env, deck.ID, user.ID, "first")
 	second := seedNote(t, env, deck.ID, user.ID, "second")
 
-	// 单页只放一条：second 不在第一页（列表按 created_at DESC, id DESC，second 在首页，first 不在）。
+	// A single row per page: second is not on the first page (the list orders by created_at DESC, id DESC; second is on the first page, first is not).
 	listPath := fmt.Sprintf("/api/v1/decks/%s/notes?page=1&per_page=1", deck.PublicID)
 	status, raw := doJSON(t, router, http.MethodGet, listPath, key.Plaintext, "")
 	if status != http.StatusOK {
@@ -55,7 +55,7 @@ func TestGetNoteReadsBeyondFirstPage(t *testing.T) {
 		offPage = second.PublicID
 	}
 
-	// 不在首页的那条仍然按 id 直接读得到。
+	// The one not on the first page is still readable directly by id.
 	status, raw = doJSON(t, router, http.MethodGet, "/api/v1/notes/"+offPage, key.Plaintext, "")
 	if status != http.StatusOK {
 		t.Fatalf("get off-page note status = %d, want 200 (body %s)", status, raw)
@@ -72,7 +72,7 @@ func TestGetNoteReadsBeyondFirstPage(t *testing.T) {
 	}
 }
 
-// TestGetNoteAuthorization 覆盖反面用例：未知 id、非成员、以及只有写 scope 的 key。
+// TestGetNoteAuthorization covers the negative cases: unknown id, non-member, and a key with write scope only.
 func TestGetNoteAuthorization(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "note_owner", store.RoleUser)
@@ -81,14 +81,14 @@ func TestGetNoteAuthorization(t *testing.T) {
 	router := env.router()
 	ctx := context.Background()
 
-	// 未知 id → 404 not_found。
+	// Unknown id -> 404 not_found.
 	readKey := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
 	status, raw := doJSON(t, router, http.MethodGet, "/api/v1/notes/does-not-exist", readKey.Plaintext, "")
 	if status != http.StatusNotFound {
 		t.Fatalf("unknown id status = %d, want 404 (body %s)", status, raw)
 	}
 
-	// 非成员读别人的卡组卡片 → 403/404（不泄露存在性）。
+	// A non-member reading a card of someone else's deck -> 403/404 (no existence leak).
 	outsiderKey := seedKey(t, env.keys, outsider.ID, []string{store.ScopeRead}, nil)
 	status, raw = doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, outsiderKey.Plaintext, "")
 	if status != http.StatusForbidden && status != http.StatusNotFound {
@@ -98,7 +98,7 @@ func TestGetNoteAuthorization(t *testing.T) {
 		t.Error("outsider ListNotes succeeded, want an error (fixture sanity)")
 	}
 
-	// 只有写 scope 的 key 调读接口 → 403 scope_required。
+	// A key with write scope only calling a read endpoint -> 403 scope_required.
 	writeKey := seedKey(t, env.keys, owner.ID, []string{store.ScopeWrite}, nil)
 	status, raw = doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, writeKey.Plaintext, "")
 	if status != http.StatusForbidden {
@@ -106,7 +106,7 @@ func TestGetNoteAuthorization(t *testing.T) {
 	}
 }
 
-// TestGetNoteAllowsReader 是正例：共享卡组的 reader 能按 id 读取卡片内容（能看就能编辑表单回填）。
+// TestGetNoteAllowsReader is the positive case: a reader of a shared deck can read card content by id (whoever can see it can populate an edit form).
 func TestGetNoteAllowsReader(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "read_owner", store.RoleUser)

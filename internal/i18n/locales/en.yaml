@@ -408,7 +408,7 @@ It renders with sample variables; real recipients see their own data."
 - id: presets.default_name
   translation: "Default"
 
-# 直链导入端点的错误文案集中放置，键集合须与中文语言包一致。
+# Error copy for the direct-link import endpoint lives here; the key set must match the Chinese catalog.
 - id: error.deck_import_url_invalid
   translation: "The URL is not a valid public HTTPS link."
 - id: error.deck_import_url_blocked

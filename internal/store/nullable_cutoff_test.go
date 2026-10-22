@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// 配置缺省、午夜、普通小时必须在持久化及优化器输出中保持一致。
+// The default, midnight and an ordinary hour must stay consistent through persistence and optimizer output.
 func TestNullableCutoffRoundTripAndOptimizer(t *testing.T) {
 	db := newSQLite(t)
 	if err := AutoMigrate(t.Context(), db); err != nil {
@@ -31,7 +31,7 @@ func TestNullableCutoffRoundTripAndOptimizer(t *testing.T) {
 		} else if got.DayCutoffHour == nil || *got.DayCutoffHour != *hour {
 			t.Fatal("explicit cutoff lost")
 		}
-		// 日志内容保持原样；导出只采用当前有效配置，不重写历史复习日。
+		// The log content stays as it is; the export only uses the currently effective setting and does not rewrite historical review days.
 		presetID, cards := seedPresetCards(t, db, u.ID, 1)
 		r := Review{CardID: cards[0], UserID: u.ID, Rating: 3, StateBefore: 2, GradeSource: "self", ReviewedAt: time.Now().UTC(), ReviewDay: "2020-01-01"}
 		if err := db.Create(&r).Error; err != nil {
@@ -58,7 +58,7 @@ func TestNullableCutoffRoundTripAndOptimizer(t *testing.T) {
 	}
 }
 
-// 迁移只改变约束，不把旧 0 转成 4，且保留全部用户索引与既有数据。
+// The migration only changes the constraint: it does not turn the old 0 into 4 and keeps every user index and all existing data.
 func TestNullableCutoffMigrationPreservesValues(t *testing.T) {
 	db := newSQLite(t)
 	if err := AutoMigrate(t.Context(), db); err != nil {
@@ -67,7 +67,7 @@ func TestNullableCutoffMigrationPreservesValues(t *testing.T) {
 	type oldColumn struct {
 		DayCutoffHour int `gorm:"column:day_cutoff_hour;not null;default:4"`
 	}
-	// Table 参数避免测试专用结构推导出另一表名。
+	// The Table argument keeps the test-only struct from deriving another table name.
 	if err := db.Table("users").Migrator().AlterColumn(&oldColumn{}, "DayCutoffHour"); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestNullableCutoffMigrationPreservesValues(t *testing.T) {
 	if err := db.Model(&User{}).Where("username = ?", "zero").Update("day_cutoff_hour", 0).Error; err != nil {
 		t.Fatal(err)
 	}
-	// 外置索引与触发器应在迁移后保留，驱动重建表默认会丢掉它们。
+	// External indexes and triggers must survive the migration; a driver rebuilding the table drops them by default.
 	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestNullableCutoffMigrationPreservesValues(t *testing.T) {
 	if err := db.Exec("CREATE TRIGGER cutoff_audit AFTER UPDATE OF day_cutoff_hour ON users BEGIN INSERT INTO cutoff_changes (user_id) VALUES (NEW.id); END").Error; err != nil {
 		t.Fatal(err)
 	}
-	// AutoMigrate 本身不得改变旧约束，DDL 修改必须可审计为版本化迁移。
+	// AutoMigrate itself must not change the old constraint; DDL changes must be auditable as versioned migrations.
 	if err := AutoMigrate(t.Context(), db); err != nil {
 		t.Fatal(err)
 	}

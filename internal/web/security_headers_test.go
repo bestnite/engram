@@ -13,15 +13,15 @@ import (
 	"git.nite07.com/nite/engram/frontend"
 )
 
-// 本文件是验收用例：一组固定安全响应头挂在所有路由上，CSP 已从 Report-Only 切成
-// 强制模式。断言一律用字面量，不用被测包里的常量，避免「常量改了测试跟着改」自证。
+// This file holds the acceptance tests: one fixed set of security headers is mounted on every route, and the CSP has been switched from Report-Only to
+// enforcing mode. Assertions always use literals, never constants from the package under test, so the test cannot simply follow a changed constant.
 const (
 	wantCSPHeader      = "Content-Security-Policy"
 	wantCSPReportOnly  = "Content-Security-Policy-Report-Only"
 	wantReferrerPolicy = "strict-origin-when-cross-origin"
 )
 
-// assertSecurityHeaders 断言五组响应头齐全，且 CSP 是强制头（阻断模式）。
+// assertSecurityHeaders asserts all five header groups are present and the CSP is an enforcing header (blocking mode).
 func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	h := rec.Header()
@@ -30,8 +30,8 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 	if csp == "" {
 		t.Errorf("%s is missing", wantCSPHeader)
 	}
-	// 强制模式：不能同时下发 Report-Only——两个 CSP 头互相覆盖，浏览器只认最后一个，
-	// 混发会让策略不可预期。
+	// Enforcing mode: Report-Only must not be sent alongside — the two CSP headers override each other and the browser honours only the last one,
+	// so mixing them makes the policy unpredictable.
 	if got := h.Get(wantCSPReportOnly); got != "" {
 		t.Errorf("%s must not be set once the policy is enforcing; got %q", wantCSPReportOnly, got)
 	}
@@ -54,8 +54,8 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// TestSecurityHeadersCoverRepresentativeRoutes 覆盖登录页、复习页，以及静态资源、
-// 健康检查、/api/v1 与 /mcp 前缀和 404 回退。中间件挂全局，这几条出口都不能漏。
+// TestSecurityHeadersCoverRepresentativeRoutes covers the login page, the review page, and static assets,
+// the health check, the /api/v1 and /mcp prefixes, and the 404 fallback. The middleware is global, so none of these exits may be missed.
 func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "CSP deck")
@@ -88,8 +88,8 @@ func TestSecurityHeadersCoverRepresentativeRoutes(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersDoNotAlterResponseBody 断言中间件只加头、不改状态码与响应体：
-// 登录页与复习页仍是 200 且都返回真实的 SPA 应用壳（而非被中间件截断）。
+// TestSecurityHeadersDoNotAlterResponseBody asserts the middleware only adds headers and changes neither the status code nor the body:
+// the login and review pages are still 200 and both return the real SPA app shell (not truncated by the middleware).
 func TestSecurityHeadersDoNotAlterResponseBody(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "CSP body deck")
@@ -121,8 +121,8 @@ func TestSecurityHeadersDoNotAlterResponseBody(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersCSPMatchesPageResources 逐指令钉住 CSP：每条取值都能对应到实际
-// 页面资源（模板与静态资源的证据见 security_headers.go 的注释）。
+// TestSecurityHeadersCSPMatchesPageResources pins the CSP directive by directive: every value maps to an actual
+// page resource (evidence for the templates and static assets is in the comment in security_headers.go).
 func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	csp := getWithCookies(t, srv, "/login", nil).Header().Get(wantCSPHeader)
@@ -133,8 +133,8 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 	for _, want := range []string{
 		"default-src 'self'",
 		"script-src 'self'",
-		"style-src 'self' 'unsafe-inline'", // 内联 style= 属性（统计页柱宽、骨架屏宽度）
-		"img-src 'self' https:",            // /media 与卡面允许的 https 外链图
+		"style-src 'self' 'unsafe-inline'", // Inline style= attributes (stats page bar widths, skeleton widths)
+		"img-src 'self' https:",            // https external images allowed by /media and the card face
 		"connect-src 'self'",
 		"object-src 'none'",
 		"frame-src 'none'",
@@ -147,14 +147,14 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 		}
 	}
 
-	// 交付的脚本没有一个在运行时编译 JS（守护用例对自有脚本断言这一点），策略带
-	// 'unsafe-eval' 等于白白把 script-src 重新打开。
+	// None of the shipped scripts compiles JS at runtime (the guard test asserts this for our own scripts), so a policy carrying
+	// 'unsafe-eval' would needlessly reopen script-src.
 	if scriptSrc := cspDirectiveValue(csp, "script-src"); strings.Contains(scriptSrc, "'unsafe-eval'") {
 		t.Errorf("script-src must not carry 'unsafe-eval': no served script compiles JS at runtime: %q", scriptSrc)
 	}
 
-	// 页面唯一的 inline <script>（主题引导）必须用 hash 放行；nonce 或 script-src
-	// 'unsafe-inline' 都会让「防内联脚本」失去意义。
+	// The page's single inline <script> (theme bootstrap) must be allowed by hash; a nonce or script-src
+	// 'unsafe-inline' would make "keep inline scripts out" meaningless.
 	if !strings.Contains(csp, "'sha256-") {
 		t.Errorf("CSP does not whitelist the inline theme bootstrap by hash: %q", csp)
 	}
@@ -166,9 +166,9 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap 从渲染结果里取出内联主题引导
-// 脚本的正文，独立算 SHA-256，断言 CSP 带的正是它。hash 对不上时浏览器会把这唯一的
-// 内联 <script> 当未授权脚本阻断，策略等于把首屏主题引导打掉。
+// TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap takes the body of the inline theme bootstrap
+// script out of the render result, computes SHA-256 on its own, and asserts the CSP carries exactly it. When the hash does not match, the browser blocks this single
+// inline <script> as an unauthorized script, which amounts to the policy killing the first-paint theme bootstrap.
 func TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := getWithCookies(t, srv, "/login", nil)
@@ -194,8 +194,8 @@ func TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap(t *testing.T) {
 	}
 }
 
-// cspStripLineComments 丢掉以 // 开头的整行注释。脚本与应用壳标记里都有注释，而注释正文
-// 里就可能出现 "on*=" 或 "eval" 一类的字样——不先剔除，守护用例会对注释误报。
+// cspStripLineComments drops whole-line comments starting with //. Both the scripts and the app shell markup carry comments, and the comment body
+// may well contain strings like "on*=" or "eval" — without stripping them first the guard test would raise false positives on comments.
 func cspStripLineComments(src string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(src, "\n") {
@@ -209,8 +209,8 @@ func cspStripLineComments(src string) string {
 	return b.String()
 }
 
-// cspInlineScriptBodies 抽出不带 src 的 <script> 正文：标签含 src= 的算外链、跳过；
-// 其余标签的正文返回给调用方独立算哈希。
+// cspInlineScriptBodies extracts the bodies of <script> tags without src: a tag containing src= counts as external and is skipped;
+// the bodies of the remaining tags go back to the caller to hash independently.
 func cspInlineScriptBodies(src string) []string {
 	const closeTag = "</script>"
 	var out []string
@@ -238,40 +238,40 @@ func cspInlineScriptBodies(src string) []string {
 }
 
 var (
-	// cspStyleUse 命中内联 <style> 块或 style= 属性，两者都由 style-src 管控。
-	// 要求 style 前是空白或引号，避免误伤 data-style= 一类的复合属性名。
+	// cspStyleUse matches an inline <style> block or a style= attribute; both are governed by style-src.
+	// It requires whitespace or a quote before style, to avoid tripping on compound attribute names like data-style=.
 	cspStyleUse = regexp.MustCompile(`(?:^|[\s"'])style\s*=|(?i)<style[\s>]`)
-	// cspEventAttr 命中 HTML 事件属性 on*=。要求前导是空白/引号/尖括号，避免误伤
-	// JS 里的属性赋值（形如 btn.onclick = fn，前导是点号）。
+	// cspEventAttr matches HTML event attributes on*=. It requires a leading whitespace/quote/angle bracket, to avoid tripping on
+	// property assignment in JS (such as btn.onclick = fn, whose leading character is a dot).
 	cspEventAttr = regexp.MustCompile(`(?:^|[\s"'<>])on[a-z]+\s*=`)
-	// cspRuntimeCompile 命中运行时编译 JS 的写法（eval / new Function）。它们依赖
-	// script-src 'unsafe-eval'，而策略刻意不写：自有脚本一旦引入，用例就变红，
-	// 逼作者先想清楚是放宽策略还是换实现。
+	// cspRuntimeCompile matches runtime JS compilation (eval / new Function). These need
+	// script-src 'unsafe-eval', which the policy deliberately omits: as soon as our own scripts introduce one, the test turns red,
+	// forcing the author to think through whether to widen the policy or change the implementation.
 	cspRuntimeCompile = regexp.MustCompile(`\beval\s*\(|new\s+Function\s*\(`)
-	// cspExternalResource 命中 src= / href= 里的绝对地址（http(s): 或协议相对 //）。
-	// 策略只给了 'self' 与主题引导的 hash，多一个来源都会被浏览器阻断。
+	// cspExternalResource matches an absolute address in src= / href= (http(s): or protocol-relative //).
+	// The policy allows only 'self' and the theme bootstrap hash, so one more source gets blocked by the browser.
 	cspExternalResource = regexp.MustCompile(`(?i)(?:src|href)\s*=\s*["'](?:https?:)?//[^"']*`)
 )
 
-// TestSecurityHeadersGuardCoversServedShellAndScripts 是代替「人工逐页走查」的静态守护用例。
+// TestSecurityHeadersGuardCoversServedShellAndScripts is the static guard test that stands in for "walking every page by hand".
 //
-// 它把真正会送到浏览器的来源抽出来，与「实际下发的策略」逐条对照：
+// It extracts the sources that really reach the browser and checks them one by one against "the policy actually sent":
 //
-//   - 渲染出的 SPA 应用壳（用例直接取响应体）与 Go 现场生成的 /sw.js 里的内联 <script>
-//     （无 src）→ 其 SHA-256 必须出现在 script-src（hash 放行）；
-//   - 同一批来源里的 <style> 块或 style= 属性 → style-src 必须含 'unsafe-inline'
-//     （style 属性无法被 hash/nonce 覆盖，理由见 security_headers.go）；
-//   - 事件属性 on*= → script-src 必须含 'unsafe-inline'（事件属性同样无法 hash）；
-//   - 这两处来源里的 eval / new Function → 需要 script-src 'unsafe-eval'，而策略刻意不写，
-//     用例因此变红；
-//   - 应用壳里的外链脚本/样式必须同源：策略只给了 'self' 与主题引导的 hash，多一个来源
-//     （CDN、独立静态域名）都会被浏览器阻断；
-//   - 构建期生成的入口 index.html → 必须没有内联 <script>：服务端只给应用壳补 hash，
-//     不会给构建产物补，一旦出现就是只在线上暴露的阻断。
+//   - the rendered SPA app shell (the test takes the response body directly) and the inline <script> in the /sw.js Go generates
+//     (no src) → its SHA-256 must appear in script-src (allowed by hash);
+//   - a <style> block or style= attribute in the same batch of sources → style-src must contain 'unsafe-inline'
+//     (style attributes cannot be covered by hash/nonce; the reason is in security_headers.go);
+//   - an event attribute on*= → script-src must contain 'unsafe-inline' (event attributes cannot be hashed either);
+//   - eval / new Function in these two kinds of source → would need script-src 'unsafe-eval', which the policy deliberately omits,
+//     so the test turns red;
+//   - external scripts/styles in the app shell must be same-origin: the policy allows only 'self' and the theme bootstrap hash, and one more source
+//     (a CDN, a separate static domain) would be blocked by the browser;
+//   - the entry index.html generated at build time → must have no inline <script>: the server only adds hashes to the app shell,
+//     never to the build output, so one appearing is a block that only shows up in production.
 //
-// 任何「实际在用、策略没放行」的组合都会让用例变红。它拦不住的两类必须靠浏览器冒烟：
-// 运行时由脚本动态插入 DOM 的资源，以及压缩过的打包产物内部（/assets/index-*.js 不参与
-// 文本匹配）。
+// Any combination that is "actually in use but not allowed by the policy" turns the test red. The two kinds it cannot catch need a browser smoke test:
+// resources that scripts insert into the DOM at runtime, and the inside of minified bundle output (the /assets/index-*.js files are not
+// text-matched).
 func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	shell := getWithCookies(t, srv, "/login", nil)
@@ -290,7 +290,7 @@ func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 	if !strings.Contains(sw, "STATIC_CACHE") {
 		t.Fatalf("/sw.js did not serve the generated service worker: %s", snippet(sw))
 	}
-	// 只核对运行时真的会送到浏览器的两处来源：渲染出的应用壳与现场生成的 /sw.js。
+	// Only checks the two sources that really reach the browser at runtime: the rendered app shell and the /sw.js generated on the fly.
 	sources := map[string]string{"rendered SPA shell": shellBody, "/sw.js": sw}
 
 	for name, raw := range sources {
@@ -318,7 +318,7 @@ func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 		t.Errorf("rendered SPA shell references a cross-origin resource (%s); the policy only allows 'self'", ref)
 	}
 
-	// 入口由 Vite 生成，服务端只在它上面注入外壳标记，不会为构建期出现的内联脚本补 hash。
+	// The entry is generated by Vite and the server only injects shell markup into it; it never adds a hash for an inline script that appears at build time.
 	dist, err := frontend.FS()
 	if err != nil {
 		t.Fatalf("frontend.FS: %v", err)
@@ -332,7 +332,7 @@ func TestSecurityHeadersGuardCoversServedShellAndScripts(t *testing.T) {
 	}
 }
 
-// cspDirectiveValue 从完整策略里取出某条指令的值；缺该指令时返回空串。
+// cspDirectiveValue takes the value of one directive out of the full policy; returns an empty string when the directive is missing.
 func cspDirectiveValue(csp, name string) string {
 	for _, part := range strings.Split(csp, ";") {
 		part = strings.TrimSpace(part)

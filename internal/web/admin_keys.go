@@ -1,9 +1,9 @@
 package web
 
-// 管理面板 API Key 总览。
+// Admin panel API Key overview.
 //
-// SSR 总览页删除后，列表与撤销在 /api/v1/admin/api-keys* 的 JSON 端点上（admin_keys_api.go）。
-// 这里只保留分页大小常量，供该端点复用。
+// After the SSR overview page was removed, listing and revoking live on the /api/v1/admin/api-keys* JSON endpoints (admin_keys_api.go).
+// Only the page size constant is kept here, for that endpoint to reuse.
 
-// adminKeysPageSize 是 API Key 总览每页行数。
+// adminKeysPageSize is the number of rows per page in the API Key overview.
 const adminKeysPageSize = 50

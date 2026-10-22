@@ -10,17 +10,17 @@ import { typeset } from '../lib/mathjax';
 import { setLocale, formatMessage } from '../lib/i18n';
 import { toast } from '../lib/components/ui/toast';
 
-// MathJax 由模块边界替身接管：用例断言「排版确实被调用、且只对预览容器调用」，
-// 不依赖真实 MathJax 资源（测试环境没有自托管脚本）。
+// MathJax is taken over by a module-boundary stand-in: the cases assert "typesetting really ran, and only on the preview container",
+// without depending on real MathJax assets (the test environment has no self-hosted script).
 vi.mock('../lib/mathjax', () => ({ typeset: vi.fn(async () => {}) }));
-// 保存结果走 toast：替身记录调用，用例据此断言报告了什么。
+// Save results go through a toast: the stand-in records calls, and cases assert what was reported.
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const typesetSpy = vi.mocked(typeset);
 const SHA = 'a'.repeat(64);
 const PREVIEW_URL = `/media/${SHA}`;
 
-/** 手动控制落点时刻的 promise，用来制造「后发先至」的过期响应/错误。 */
+/** A promise whose resolution moment is controlled by hand, used to produce stale responses/errors that land out of order. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -61,7 +61,7 @@ function mountEditor(params: Record<string, string>): void {
   mountedInstances.push(mount(NoteEditView, { target }));
 }
 
-/** 冲掉微任务并同步应用 Svelte 的待处理状态，让断言看到真实 DOM。 */
+/** Flush microtasks and apply Svelte's pending state synchronously so assertions see the real DOM. */
 async function flush(times = 24): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
   flushSync();
@@ -81,7 +81,7 @@ async function selectKind(label: string): Promise<void> {
   const option = Array.from(document.body.querySelectorAll('[role="option"]')).find(
     (el) => el.textContent?.trim() === label
   ) as HTMLElement;
-  // bits-ui 的选项在 pointerdown/pointerup 上提交选择（click 单独派发不会选中）。
+  // bits-ui options commit the selection on pointerdown/pointerup (dispatching click alone does not select).
   option.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
   option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
   await flush();
@@ -119,13 +119,13 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(target.querySelector('[data-testid="note-editor-form"]')).toBeTruthy();
-    // 预览按钮已彻底移除：既没有旧 testid，也没有残留引用（键已从语言包删除）。
+    // The preview button is fully gone: no old testid and no leftover references (its keys were removed from the language packs).
     expect(target.querySelector('[data-testid="note-preview"]')).toBeNull();
     expect(target.innerHTML).not.toContain('note_preview.action');
-    // 未输入内容：走 empty 态，且不向服务端发预览请求。
+    // No content entered: takes the empty path and sends no preview request to the server.
     expect(target.querySelector('[data-testid="note-preview-empty"]')).toBeTruthy();
     expect(previewNote).not.toHaveBeenCalled();
-    // 初始化绝不带空 id GET 远端卡片。
+    // Initialization must never GET a remote card with an empty id.
     expect(getNote).not.toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe('unified note editor — create mode', () => {
     setField('note-field-front', 'QR');
     await flush();
 
-    // 距第一次输入已 500ms，但第二次输入重置了窗口，此刻仍不该发请求。
+    // 500ms have passed since the first input, but the second input reset the window, so nothing should be sent yet.
     await vi.advanceTimersByTimeAsync(200);
     expect(previewNote).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(300);
@@ -186,17 +186,17 @@ describe('unified note editor — create mode', () => {
 
     setField('note-field-front', 'A');
     await flush();
-    await vi.advanceTimersByTimeAsync(500); // 请求 1 在途
+    await vi.advanceTimersByTimeAsync(500); // Request 1 in flight
     setField('note-field-front', 'B');
     await flush();
-    await vi.advanceTimersByTimeAsync(500); // 请求 2 在途
+    await vi.advanceTimersByTimeAsync(500); // Request 2 in flight
     expect(previewNote).toHaveBeenCalledTimes(2);
 
     second.resolve(createResponse([{ front_html: '<p>SECOND</p>', back_html: '' }]));
     await flush();
     expect(previewFront()).toContain('SECOND');
 
-    // 旧请求此刻才回来：必须被丢弃，不能覆盖更新的结果。
+    // The old request only comes back now: it must be dropped and must not overwrite the newer result.
     first.resolve(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]));
     await flush();
     expect(previewFront()).toContain('SECOND');
@@ -223,7 +223,7 @@ describe('unified note editor — create mode', () => {
     await flush();
     expect(previewFront()).toContain('GOOD');
 
-    // 过期请求随后失败：不得把已就绪的预览翻成错误态。
+    // The stale request then fails: it must not turn a ready preview into an error state.
     first.reject(new ApiClientError('HTTP 500', { status: 500, code: 'internal_error' }));
     await flush();
     expect(previewFront()).toContain('GOOD');
@@ -252,8 +252,8 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    // typed 的空表单默认带 ignore_case / ignore_whitespace = true：这些默认值不是用户输入，
-    // 不能算作「有内容」，否则一张空表单会去请求预览。
+    // The typed empty form defaults to ignore_case / ignore_whitespace = true: those are not user input,
+    // so they cannot count as "has content" — otherwise an empty form would request a preview.
     await selectKind(formatMessage('zh-CN', 'notes.kind.typed'));
     expect(target.querySelector('[data-testid="note-field-prompt"]')).toBeTruthy();
     await flush();
@@ -272,7 +272,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     await selectKind(formatMessage('zh-CN', 'notes.kind.numeric'));
-    // 只填数值字段（值 0）：空串基线与 0 不同，0 必须算作内容并发起预览。
+    // Only a numeric field is filled (value 0): the empty-string baseline differs from 0, so 0 must count as content and trigger a preview.
     setField('note-field-value', '0');
     await flush();
 
@@ -302,8 +302,8 @@ describe('unified note editor — create mode', () => {
   });
 
   it('serializes commit and typeset so a delayed typeset only ever sees its own generation', async () => {
-    // 第一轮排版挂起：若「写入新卡片」与排版不串行，第二轮响应会在第一轮排版中途替换容器，
-    // 第一轮的 MathJax 就会改写第二轮刚提交的 DOM。这里记录每次排版调用时容器的实际文本。
+    // The first typesetting round hangs: if "write the new card" and typesetting are not serialized, the second response would replace the container
+    // midway through round one and round one's MathJax would rewrite the DOM round two just committed. Each typesetting call records the container's actual text.
     const firstTypeset = deferred<void>();
     const seen: string[] = [];
     typesetSpy.mockImplementation(async (nodes) => {
@@ -330,15 +330,15 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    // 第二轮响应已到，但排版链仍被第一轮占住：当前显示的必须还是第一轮内容，
-    // 第二轮尚未开始排版（否则第一轮的延迟排版会落到第二轮的容器上）。
+    // The second response has arrived but the typesetting chain is still held by round one: what is displayed must still be round one's content, and
+    // round two must not have started typesetting yet (otherwise round one's delayed pass would land on round two's container).
     expect(previewFront()).toContain('FIRST');
     expect(seen).toHaveLength(1);
 
     firstTypeset.resolve();
     await flush();
 
-    // 第一轮排版结束后第二轮才提交并排版：显示最新内容，且排版看到的是它自己那一代。
+    // Round two commits and typesets only after round one's typesetting ends: the newest content is shown, and typesetting sees its own generation.
     expect(previewFront()).toContain('SECOND');
     expect(seen).toHaveLength(2);
     expect(seen[1]).toContain('SECOND');
@@ -391,7 +391,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(createNotes).toHaveBeenCalledTimes(1);
-    // 没有跳转，内容仍在，错误以 toast 报告。
+    // No navigation, the content is still there, and the error is reported as a toast.
     expect(get(routeStore).path).not.toBe('/decks/5');
     expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
     expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('kept');
@@ -453,7 +453,7 @@ describe('unified note editor — create mode', () => {
     await flush();
     expect(pending.promise).toBeTruthy();
 
-    // 用户在新建请求在途时离开：成功后不得把他拉去卡组页。
+    // The user leaves while the create request is in flight: success must not drag them to the deck page.
     unmount(mountedInstances.pop()!);
     const pathBefore = get(routeStore).path;
 
@@ -526,7 +526,7 @@ describe('unified note editor — edit mode', () => {
     submitForm();
     await flush();
 
-    // 未知键原样带回；身份是原卡片 id；不跳转。
+    // The unknown key is passed back unchanged; the identity is the original card id; no navigation.
     expect(updateNote).toHaveBeenCalledWith('9', {
       kind: 'basic',
       fields: { front: 'Q2', back: 'A', custom: 'keep' },
@@ -550,7 +550,7 @@ describe('unified note editor — edit mode', () => {
     submitForm();
     await flush();
 
-    // 400 是内容不合法：报具体原因而不是笼统失败；草稿不丢，也不报「已保存」。
+    // 400 means invalid content: report the specific reason rather than a generic failure; the draft is kept and "saved" is not announced.
     expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.invalid'));
     expect(toast.success).not.toHaveBeenCalled();
     expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('Q2');
@@ -571,16 +571,16 @@ describe('unified note editor — edit mode', () => {
     await flush();
     expect(updateNote).toHaveBeenCalledTimes(1);
 
-    // 请求在途时继续输入。
+    // Keep typing while the request is in flight.
     setField('note-field-front', 'QQ-newer');
     await flush();
 
-    // 服务端回的是提交那一刻的快照：绝不能用它覆盖用户正在输入的内容。
+    // The server returns a snapshot from the moment of submit: it must never overwrite what the user is typing.
     pending.resolve(noteFixture({ fields: { front: 'QQ', back: 'A' } }));
     await flush();
 
     expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('QQ-newer');
-    // 当前草稿并未被这次保存覆盖，也就不能报告「已保存」。
+    // The current draft was not overwritten by this save, so "saved" cannot be reported either.
     expect(toast.success).not.toHaveBeenCalled();
   });
 
@@ -626,7 +626,7 @@ describe('unified note editor — lifecycle and routes', () => {
     pending.resolve(createResponse([{ front_html: '<p>late</p>', back_html: '' }]));
     await flush();
 
-    // 卸载后落地的结果不得触发 MathJax 排版（也不会写状态）。
+    // Results landing after unmount must not trigger MathJax typesetting (nor write state).
     expect(typesetSpy).not.toHaveBeenCalled();
   });
 
@@ -646,7 +646,7 @@ describe('unified note editor — lifecycle and routes', () => {
     const typesetCallsBefore = typesetSpy.mock.calls.length;
     unmount(mountedInstances.pop()!);
 
-    // 保存请求在卸载后才落地：不得再写状态，也不得触发任何排版。
+    // The save request lands only after unmount: it must write no state and trigger no typesetting.
     pending.resolve(noteFixture({ fields: { front: 'Q2', back: 'A' } }));
     await flush();
 

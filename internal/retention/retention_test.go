@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本包按 AGENTS.md §2.5 的规矩用真库（sqlite 文件）而不是 mock：保留期的边界正是要验的东西。
+// Per the rule in AGENTS.md §2.5 this package uses a real database (a sqlite file) instead of mocks: the retention boundaries are exactly what needs verifying.
 
 type fixture struct {
 	sessions     *store.SessionStore
@@ -53,7 +53,7 @@ func newFixture(t *testing.T) fixture {
 	}
 }
 
-// deps 组装一轮回收所需的依赖，日志收集到 fixture 的缓冲区。
+// deps assembles the dependencies needed for one reclamation round, with logs collected into the fixture's buffer.
 func (f fixture) deps() Deps {
 	return Deps{
 		Sessions:     f.sessions,
@@ -67,10 +67,10 @@ func (f fixture) deps() Deps {
 	}
 }
 
-// sweepOnce 同步跑一轮回收并断言它没有报错。
+// sweepOnce runs one reclamation round synchronously and asserts that it reports no error.
 //
-// 刻意直接调 sweep 而不是走 Start/Stop：后者是异步的，Stop 会在轮次跑完前取消上下文，
-// 断言就变成与调度赛跑（曾被这条坑到——四类删除全报 context canceled）。
+// It deliberately calls sweep directly instead of going through Start/Stop: the latter is asynchronous and Stop cancels the context
+// before the round finishes, so the assertion would race the scheduler (this once bit us — all four delete categories reported context canceled).
 func (f fixture) sweepOnce(t *testing.T) {
 	t.Helper()
 	if err := sweep(context.Background(), f.deps()); err != nil {
@@ -78,8 +78,8 @@ func (f fixture) sweepOnce(t *testing.T) {
 	}
 }
 
-// TestWorkerRunsASweepOnStart 钉住「接线真的会跑」：worker 启动即跑一轮，因此启动后不久
-// 过期会话就应当消失。这是 Start 契约（启动即跑一轮）在本包上的端到端体现。
+// TestWorkerRunsASweepOnStart pins down that "the wiring really runs": the worker runs a round on start, so an expired session
+// should disappear shortly after startup. This is the end-to-end expression of the Start contract (run one round on start) in this package.
 func TestWorkerRunsASweepOnStart(t *testing.T) {
 	f := newFixture(t)
 	f.addSession(t, "session-expired", -time.Minute)
@@ -103,11 +103,11 @@ func TestWorkerRunsASweepOnStart(t *testing.T) {
 	t.Fatal("starting the worker did not reap the expired session")
 }
 
-// pinLocalZone 把进程的 time.Local 换成固定偏移，测试结束时还原。
+// pinLocalZone replaces the process time.Local with a fixed offset and restores it when the test ends.
 //
-// 为什么要这么做：这一层缺陷（界定值带本地偏移 → SQLite 字符串比较把窗口整体平移）只在
-// 「本地偏移 ≠ 0」的机器上显形，而 CI 常年跑在 UTC——不固定时区，回归就抓不住。行按写入方的
-// 真实时区（UTC）落库，因此界定值一旦退回本地时区，下面的断言必然变红。
+// Why: this class of defect (boundary value carrying the local offset → SQLite string comparison shifts the whole window) only shows up
+// on a machine where "local offset != 0", while CI runs on UTC year-round — without a fixed timezone the regression cannot be caught. Rows are
+// stored in the writer's real timezone (UTC), so as soon as the boundary value reverts to local time the assertions below must go red.
 func pinLocalZone(t *testing.T, offsetHours int) {
 	t.Helper()
 	original := time.Local
@@ -115,7 +115,7 @@ func pinLocalZone(t *testing.T, offsetHours int) {
 	t.Cleanup(func() { time.Local = original })
 }
 
-// addSession 写入一条会话行。
+// addSession writes one session row.
 func (f fixture) addSession(t *testing.T, id string, expiresIn time.Duration) {
 	t.Helper()
 	if err := f.sessions.Create(context.Background(), &store.Session{
@@ -126,7 +126,7 @@ func (f fixture) addSession(t *testing.T, id string, expiresIn time.Duration) {
 	}
 }
 
-// addToken 写入一条令牌行并返回它的明文（供 Peek 复查）。
+// addToken writes one token row and returns its plaintext (for Peek to check).
 func (f fixture) addToken(t *testing.T, purpose string, expiresIn time.Duration) string {
 	t.Helper()
 	plaintext := purpose + "-" + expiresIn.String()
@@ -139,22 +139,22 @@ func (f fixture) addToken(t *testing.T, purpose string, expiresIn time.Duration)
 	return plaintext
 }
 
-// TestSweepRespectsEachRetentionWindow 是本包的核心断言：四类行各自的保留期边界。
+// TestSweepRespectsEachRetentionWindow is this package's core assertion: the retention boundary of each of the four row categories.
 func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 	pinLocalZone(t, 8)
 	f := newFixture(t)
 	ctx := context.Background()
 
-	// 会话：到期即删。
+	// Sessions: delete on expiry.
 	f.addSession(t, "session-expired", -time.Minute)
 	f.addSession(t, "session-live", time.Hour)
 
-	// 令牌：过期后再留 ActionTokenGrace。
-	pastGrace := f.addToken(t, "password_reset", -ActionTokenGrace-time.Minute) // 该删
-	inGrace := f.addToken(t, "password_reset", -ActionTokenGrace+time.Hour)     // 刚过期，仍在宽限期
-	notExpired := f.addToken(t, "email_verification", time.Hour)                // 未过期
+	// Tokens: keep for ActionTokenGrace after expiry.
+	pastGrace := f.addToken(t, "password_reset", -ActionTokenGrace-time.Minute) // should be deleted
+	inGrace := f.addToken(t, "password_reset", -ActionTokenGrace+time.Hour)     // just expired, still within the grace period
+	notExpired := f.addToken(t, "email_verification", time.Hour)                // not expired
 
-	// 邀请：到期即删。
+	// Invites: delete on expiry.
 	expiredAt := time.Now().UTC().Add(-time.Hour)
 	staleInvite := store.Invite{Token: "invite-expired", Role: "user", CreatedAt: time.Now().UTC().Add(-48 * time.Hour), ExpiresAt: &expiredAt}
 	if err := f.invites.Create(ctx, &staleInvite); err != nil {
@@ -166,11 +166,11 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Fatalf("create invite: %v", err)
 	}
 
-	// 卡组共享邀请：到期即删（未到期的必须留下——它还是「待接受」）。
-	seedShareInvite(t, f, 7, 11, -time.Hour) // 已过期，该删
-	seedShareInvite(t, f, 8, 12, time.Hour)  // 还有一小时，留下
+	// Deck share invites: delete on expiry (the unexpired one must stay — it is still "pending acceptance").
+	seedShareInvite(t, f, 7, 11, -time.Hour) // expired, should be deleted
+	seedShareInvite(t, f, 8, 12, time.Hour)  // one hour left, keep
 
-	// 登录指纹：最后出现超过 FingerprintRetention 才删。
+	// Login fingerprints: deleted only once last seen is older than FingerprintRetention.
 	if _, err := f.fingerprints.Touch(ctx, 1, "stale-device", time.Now().Add(-FingerprintRetention-time.Hour)); err != nil {
 		t.Fatalf("touch stale-device: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 
 	f.sweepOnce(t)
 
-	// 卡组共享邀请：过期的没了，未到期的还在（读路径也判过期，这里验的是回收真的删了）。
+	// Deck share invites: the expired one is gone, the unexpired one remains (the read path also judges expiry; this verifies reclamation really deleted it).
 	if _, err := f.shareInvites.ByDeckAndUser(ctx, 7, 11); !errors.Is(err, store.ErrShareInviteNotFound) {
 		t.Errorf("expired deck share invite should be gone, got err = %v", err)
 	}
@@ -188,7 +188,7 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Errorf("live deck share invite must survive: %v", err)
 	}
 
-	// 会话：过期的没了，有效还在。
+	// Sessions: the expired one is gone, the valid one remains.
 	if _, err := f.sessions.ByID(ctx, "session-expired"); err == nil {
 		t.Error("expired session should be gone")
 	}
@@ -196,7 +196,7 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Errorf("live session must survive: %v", err)
 	}
 
-	// 令牌：只有超过宽限期的那枚被删（另两枚仍能被 Peek 找到——过期的报 expired，未过期的直接返回）。
+	// Tokens: only the one past the grace period was deleted (the other two can still be found by Peek — the expired one reports expired, the unexpired one is returned directly).
 	if _, err := f.tokens.Peek(ctx, "password_reset", pastGrace, time.Now()); !errors.Is(err, store.ErrActionTokenNotFound) {
 		t.Errorf("token past the grace period should be gone, got err = %v", err)
 	}
@@ -207,7 +207,7 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Errorf("unexpired token should still be readable: %v", err)
 	}
 
-	// 邀请：过期的那张没了，未过期的还在。
+	// Invites: the expired one is gone, the unexpired one remains.
 	rows, err := f.invites.List(ctx)
 	if err != nil {
 		t.Fatalf("list invites: %v", err)
@@ -220,7 +220,7 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Errorf("invites after sweep = %v, want only invite-live", tokens)
 	}
 
-	// 指纹：被删的判为新设备，保留的判为已知设备。
+	// Fingerprints: the deleted one is judged a new device, the kept one a known device.
 	knownRecent, err := f.fingerprints.Touch(ctx, 1, "recent-device", time.Now())
 	if err != nil {
 		t.Fatalf("touch recent-device: %v", err)
@@ -237,8 +237,8 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 	}
 }
 
-// TestSweepKeepsInvitesWithoutExpiry 单独钉住可空 expires_at 这个尖锐边界：
-// NULL 表示「不过期」，不能被当成过期清掉。
+// TestSweepKeepsInvitesWithoutExpiry pins down the sharp edge of a nullable expires_at on its own:
+// NULL means "never expires" and must not be cleared as expired.
 func TestSweepKeepsInvitesWithoutExpiry(t *testing.T) {
 	pinLocalZone(t, 8)
 	f := newFixture(t)
@@ -247,8 +247,8 @@ func TestSweepKeepsInvitesWithoutExpiry(t *testing.T) {
 	if err := f.invites.Create(ctx, &never); err != nil {
 		t.Fatalf("create invite: %v", err)
 	}
-	// 行按写入方的真实时区（UTC）落库——时间列存 UTC 是这几张表的一致约定，
-	// 夹具写本地时间会让「过期行」在与 UTC 界定值比较时反而显得还没到期。
+	// Rows are stored in the writer's real timezone (UTC) — storing UTC in time columns is the consistent convention for these tables;
+	// a fixture writing local time would make an "expired row" look not-yet-expired when compared against the UTC boundary value.
 	past := time.Now().UTC().Add(-time.Hour)
 	stale := store.Invite{Token: "expired", Role: "user", CreatedAt: time.Now().UTC().Add(-48 * time.Hour), ExpiresAt: &past}
 	if err := f.invites.Create(ctx, &stale); err != nil {
@@ -270,7 +270,7 @@ func TestSweepKeepsInvitesWithoutExpiry(t *testing.T) {
 	}
 }
 
-// TestNewRequiresEveryStore 断言四类存储缺一即装配失败。
+// TestNewRequiresEveryStore asserts that missing any of the four stores fails assembly.
 func TestNewRequiresEveryStore(t *testing.T) {
 	f := newFixture(t)
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
@@ -298,8 +298,8 @@ func TestNewRequiresEveryStore(t *testing.T) {
 	}
 }
 
-// seedShareInvite 直接写一条卡组共享邀请：本用例只验回收窗口，不需要真的建卡组与用户
-// （这两列没有外键约束，id 用任意值即可）。
+// seedShareInvite writes a deck share invite directly: this case only verifies the reclamation window and does not need real decks and users
+// (these two columns have no foreign key constraints, so any id value works).
 func seedShareInvite(t *testing.T, f fixture, deckID, userID uint64, ttl time.Duration) {
 	t.Helper()
 	now := time.Now().UTC()

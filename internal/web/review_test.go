@@ -10,9 +10,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedReviewDeck 建一个使用合法调度预设的卡组（复习测试专用）。
-// 与 seedDeck 的区别：走 store.NewPreset + PresetStore.Create，得到有效的保留率与最大间隔，
-// 否则 FSRS 会在零值参数上产生无意义的调度。
+// seedReviewDeck creates a deck that uses a valid scheduling preset (for review tests only).
+// Unlike seedDeck: it goes through store.NewPreset + PresetStore.Create to get a valid retention and maximum interval,
+// otherwise FSRS would produce meaningless scheduling from zero-valued parameters.
 func seedReviewDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *store.Deck {
 	t.Helper()
 	preset := store.NewPreset(ownerID, "review preset")
@@ -26,8 +26,8 @@ func seedReviewDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *sto
 	return &deck
 }
 
-// attrValue 从 HTML 片段里取 name="<name>" 紧随的 value="..."。
-// 供仍按 SSR 渲染片段断言的测试（卡组设置页等）使用。
+// attrValue takes the value="..." that immediately follows name="<name>" in an HTML fragment.
+// For the tests that still assert on SSR-rendered fragments (deck settings page and the like).
 func attrValue(body, name string) string {
 	marker := `name="` + name + `" value="`
 	idx := strings.Index(body, marker)

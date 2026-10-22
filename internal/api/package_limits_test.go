@@ -14,10 +14,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// REST 导入入口的请求体上限验收。上限来源与 Web 上传一致（管理员配置的
-// media_max_bytes），且必须在解析 multipart 之前生效，超限稳定 413。
+// Acceptance for the request body cap on the REST import entries. The cap comes from the same source as web uploads (the admin-configured
+// media_max_bytes), and must take effect before multipart parsing, with a stable 413 when exceeded.
 
-// multipartBody 构造一个只含 file 字段的 multipart 请求体与其 Content-Type。
+// multipartBody builds a multipart request body holding only a file field, plus its Content-Type.
 func multipartBody(t *testing.T, filename string, data []byte) (*bytes.Buffer, string) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -35,7 +35,7 @@ func multipartBody(t *testing.T, filename string, data []byte) (*bytes.Buffer, s
 	return &buf, w.FormDataContentType()
 }
 
-// postImport 发一个带 bearer key 的 multipart 导入请求。
+// postImport sends a multipart import request with a bearer key.
 func postImport(t *testing.T, env *testEnv, key string, body *bytes.Buffer, contentType string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/import", body)
@@ -46,7 +46,7 @@ func postImport(t *testing.T, env *testEnv, key string, body *bytes.Buffer, cont
 	return rec
 }
 
-// minimalPackageZip 构造一个最小的合法 .edeck（一条 basic note，无媒体、无进度）。
+// minimalPackageZip builds a minimal valid .edeck (one basic note, no media, no progress).
 func minimalPackageZip(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -72,21 +72,21 @@ func minimalPackageZip(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// TestImportPackageRejectsOversizedBody 是核心负例：把 media_max_bytes 设为 256 字节，
-// 一个 4 KiB 的 multipart 体必须在解析前被拒（413，code package_too_large）。
+// TestImportPackageRejectsOversizedBody is the core negative case: with media_max_bytes set to 256 bytes,
+// a 4 KiB multipart body must be rejected before parsing (413, code package_too_large).
 //
-// 修前：handler 先 FormFile，gin 把 4 KiB 的 part 全读进内存后才处理，于是得到 400
-// （不是 zip），而不是 413 —— 这正是本用例要红的原因。
+// Before the fix the handler called FormFile first, gin read the whole 4 KiB part into memory before handling, and the result was 400
+// (not a zip) instead of 413 - which is exactly why this case goes red before the fix.
 func TestImportPackageRejectsOversizedBody(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "import_oversize", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-	// 关掉环境变量覆盖，确保读的是 settings 表里的值。
+	// Turn off the environment override so the value from the settings table is read.
 	t.Setenv("MEDIA_MAX_BYTES", "")
 	if err := env.db.Create(&store.Setting{Key: "media_max_bytes", Value: "256", UpdatedAt: time.Now().UTC()}).Error; err != nil {
 		t.Fatalf("seed media_max_bytes: %v", err)
 	}
-	// TMPDIR 指向空目录：断言超限请求不留下 multipart 临时文件。
+	// TMPDIR points at an empty directory: assert an over-limit request leaves no multipart temp file.
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 
@@ -114,7 +114,7 @@ func TestImportPackageRejectsOversizedBody(t *testing.T) {
 	}
 }
 
-// TestImportPackageAcceptsBodyWithinLimit 是正向对照：默认上限内的合法包仍能导入成功。
+// TestImportPackageAcceptsBodyWithinLimit is the positive control: a valid package within the default cap still imports successfully.
 func TestImportPackageAcceptsBodyWithinLimit(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "import_within", store.RoleUser)

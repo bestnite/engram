@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// TestLastReminderSentAtPicksMostRecent 验证最小间隔门的时间戳来源：跨复习日取最新的 SentAt，
-// 从未发过时 ok=false。两个驱动都跑：这是发送方判「距上次发送多久」的唯一依据。
+// TestLastReminderSentAtPicksMostRecent verifies the timestamp source of the minimum-interval gate: the newest SentAt across review days,
+// and ok=false when nothing was ever sent. It runs on both drivers: this is the only basis the sender has for "how long since the last send".
 func TestLastReminderSentAtPicksMostRecent(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -16,7 +16,7 @@ func TestLastReminderSentAtPicksMostRecent(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			// 从未发过：ok=false，不是零值时间。
+			// Nothing ever sent: ok=false, not a zero time.
 			if _, ok, err := LastReminderSentAt(ctx, db, 42); err != nil {
 				t.Fatalf("LastReminderSentAt(before): %v", err)
 			} else if ok {
@@ -25,14 +25,14 @@ func TestLastReminderSentAtPicksMostRecent(t *testing.T) {
 
 			older := time.Date(2026, 6, 1, 19, 0, 0, 0, time.UTC)
 			newer := older.Add(20 * time.Hour)
-			// 先写较新的一天再写较旧的一天，确认是按 sent_at 取最大，而不是按插入顺序。
+			// Write the newer day first and the older day second, to confirm it takes the maximum by sent_at, not by insertion order.
 			if err := RecordReminderSent(ctx, db, 42, "2026-06-02", newer); err != nil {
 				t.Fatalf("RecordReminderSent(newer): %v", err)
 			}
 			if err := RecordReminderSent(ctx, db, 42, "2026-06-01", older); err != nil {
 				t.Fatalf("RecordReminderSent(older): %v", err)
 			}
-			// 另一个用户的行不该被算进这个用户。
+			// Another user's row must not be counted for this user.
 			if err := RecordReminderSent(ctx, db, 43, "2026-06-02", newer.Add(time.Hour)); err != nil {
 				t.Fatalf("RecordReminderSent(other user): %v", err)
 			}

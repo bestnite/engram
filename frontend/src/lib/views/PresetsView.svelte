@@ -40,7 +40,7 @@
   // svelte-ignore state_referenced_locally
   let data = $state<PresetsResponse | null>(initialData);
 
-  // 新建/编辑对话框共用一个表单；formMode 决定提交到 create 还是 update。
+  // The create/edit dialog shares one form; formMode decides whether it submits to create or update.
   let formOpen = $state(false);
   let formMode = $state<'create' | 'edit'>('create');
   let formTargetId = $state<string | null>(null);
@@ -52,16 +52,16 @@
   let formFuzz = $state(true);
   let formSaving = $state(false);
   let formError = $state('');
-  // 默认预设的名字是它的身份标识（服务端按名字找它），因此编辑时该字段只读：
-  // 让它可改会写出一个「默认预设不再叫 Default」的状态，服务端随后会再补一条同名的。
+  // The default preset's name is its identity (the server finds it by name), so that field is read-only while editing:
+  // making it editable would write a state where "the default preset is no longer called Default", and the server would then add another one under the same name.
   let formNameLocked = $state(false);
 
-  // 在途的预设操作：id 决定禁用哪一行，action 决定该行哪个按钮转圈。
-  // 操作结果走 toast；gate 的「还差 N 条」是持续状态，单独由门槛渲染。
+  // In-flight preset operation: id decides which row is disabled, action decides which button on that row spins.
+  // Operation results go through toast; gate's "N more to go" is persistent state and is rendered separately by the gate.
   let busy = $state<{ id: string; action: 'optimize' | 'revert' } | null>(null);
   const busyId = $derived(busy?.id ?? null);
 
-  // 关联卡组与删除预设状态
+  // Linked decks and preset delete state
   let decks = $state<Deck[]>([]);
   let presetToDelete = $state<PresetRecord | null>(null);
   let deletingPreset = $state(false);
@@ -73,7 +73,7 @@
 
   const presets = $derived(data ? data.presets : []);
 
-  /** 读取预设列表与优化门槛；服务端补齐默认预设。 */
+  /** Read the preset list and the optimization gate; the server fills in the default preset. */
   async function load(): Promise<void> {
     loading = true;
     loadError = null;
@@ -120,7 +120,7 @@
     }
   }
 
-  /** 刷新后有在途作业就续上轮询，避免刷新丢掉正在跑的任务状态。 */
+  /** Resume polling when a job is in flight after a refresh, so the state of a running task is not lost to the refresh. */
   function resumePolling(): void {
     if (!data) return;
     const active = data.presets.find((p) => p.job && isActiveJob(p.job));
@@ -129,7 +129,7 @@
     }
   }
 
-  /** 只接受非负整数用于最大间隔；正则先挡下小数与非数字。 */
+  /** Only non-negative integers are accepted for the maximum interval; the regex rejects decimals and non-digits first. */
   function validSteps(spec: string): boolean {
     const trimmed = spec.trim();
     if (trimmed === '') return true;
@@ -143,7 +143,7 @@
     return true;
   }
 
-  /** 解析表单并做与后端一致的校验；返回 i18n key 字符串表示拒绝。 */
+  /** Parse the form and validate the same way the backend does; returning an i18n key string signals rejection. */
   function parseForm(): PresetWriteRequest | string {
     const name = formName.trim();
     if (name === '') return 'presets.form.error.name_required';
@@ -226,7 +226,7 @@
     }
   }
 
-  /** 触发优化：成功起轮询；不足门槛/已有作业刷新门槛并给一次提示。 */
+  /** Trigger optimization: polling starts on success; when below the gate or a job already exists, refresh the gate and show one hint. */
   async function runOptimize(p: PresetRecord): Promise<void> {
     busy = { id: p.id, action: 'optimize' };
     try {
@@ -237,7 +237,7 @@
       }
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'insufficient_reviews') {
-        // 不足门槛：门槛段落会随刷新渲染「还差 N 条」，无需额外提示。
+        // Below the gate: the gate paragraph renders "N more to go" on refresh, so no extra hint is needed.
         await load();
       } else if (err instanceof ApiClientError && err.code === 'optimize_conflict') {
         await load();
@@ -250,7 +250,7 @@
     }
   }
 
-  /** 一键回退默认权重；响应即整份列表，权重来源随之回到默认。 */
+  /** One-click revert to the default weights; the response is the whole list, and the weight source returns to default with it. */
   async function revertWeights(p: PresetRecord): Promise<void> {
     busy = { id: p.id, action: 'revert' };
     try {
@@ -287,17 +287,17 @@
       applyJob(presetId, resp.job, resp.gate);
       if (!resp.job || !isActiveJob(resp.job)) {
         stopPolling();
-        // 完成后就地刷新整份列表：权重来源与结果摘要永远来自同一次数据库读取。
+        // Refresh the whole list in place once done: the weight source and the result summary always come from the same database read.
         await load();
       }
     } catch {
-      // 轮询失败不静默：给出一次错误提示并停止，用户可手动重试。
+      // Polling failures are not silent: show one error hint and stop, so the user can retry manually.
       toast.error($t('presets.error.failed'));
       stopPolling();
     }
   }
 
-  /** 就地更新某个预设的作业与门槛，不改动其它预设。 */
+  /** Update one preset's job and gate in place, without touching the other presets. */
   function applyJob(presetId: string, job: PresetJob | null, nextGate: OptimizeGate): void {
     if (!data) return;
     data = {
@@ -396,7 +396,7 @@
     }
   }
 
-  /** 只有两侧指标样本都足够时才渲染 before/after 与结论。 */
+  /** Render the before/after and the conclusion only when both sides have enough metric samples. */
   function showsFit(verdict: string): boolean {
     return verdict === 'improved' || verdict === 'not_improved';
   }
@@ -443,7 +443,7 @@
       {#each presets as p (p.id)}
         {@const usedBy = getPresetDecks(p.id)}
         {@const progress = p.gate.min > 0 ? Math.min(1, p.gate.reviews / p.gate.min) : 1}
-        <!-- 每个预设只有这一层边框；内部分区用分隔线，不再在卡片里嵌卡片。 -->
+        <!-- Each preset has only this one border; internal sections use dividers instead of cards nested in cards. -->
         <article data-testid={`preset-${p.id}`} class="overflow-hidden rounded-lg border border-border">
           <header class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 px-5 py-4">
             <div class="min-w-0">
@@ -508,7 +508,7 @@
             </div>
           </header>
 
-          <!-- 参数：一条用竖线分隔的指标带。 -->
+          <!-- Parameters: one metric band separated by vertical bars. -->
           <dl class="grid grid-cols-2 border-t border-border sm:grid-cols-4 sm:divide-x sm:divide-border">
             <div class="px-5 py-3 max-sm:border-b max-sm:border-r max-sm:border-border">
               <dt class="text-xs text-muted-foreground">{$t('presets.retention_label')}</dt>
@@ -544,7 +544,7 @@
             </div>
           {/if}
 
-          <!-- 优化门槛：一根进度条代替四行说明与一个警告框。 -->
+          <!-- Optimization gate: one progress bar replaces four lines of explanation and a warning box. -->
           <div class="space-y-2 border-t border-border bg-surface/60 px-5 py-4">
             <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[13px]">
               <span class="text-foreground" data-testid={`preset-${p.id}-reviews`}>{$t('presets.reviews.available', { count: p.gate.reviews })}</span>
@@ -644,7 +644,7 @@
             </span>
           {/if}
         </label>
-        <!-- 说明按钮放在 label 之外：label 内的 button 会成为它的关联控件，点标签文字就会去开浮层。 -->
+        <!-- The help button sits outside the label: a button inside a label becomes its associated control, so clicking the label text would open the popover. -->
         <div>
           <div class="flex items-center gap-1">
             <label for="presets-form-retention" class="text-sm font-medium text-foreground">{$t('presets.form.retention')}</label>
@@ -691,8 +691,8 @@
             <label for="presets-form-max-interval" class="text-sm font-medium text-foreground">{$t('presets.form.max_interval')}</label>
             <HelpTip testId="presets-form-max-interval-help" label={$t('presets.form.max_interval')} text={$t('help.presets.max_interval')} />
           </div>
-          <!-- 不用 bind:value：数字输入框的绑定会把值强转成 number，而这里的状态是字符串，
-               由 parseForm 做「正整数」校验；手写 value/oninput 才留得住原文。 -->
+          <!-- No bind:value: binding a number input coerces the value to number, while the state here is a string,
+               validated as a "positive integer" by parseForm; only a hand-written value/oninput keeps the raw text. -->
           <input
             id="presets-form-max-interval"
             type="number"
@@ -724,7 +724,7 @@
   </Dialog>
 {/if}
 
-<!-- 删除预设二次确认对话框（Modal） -->
+<!-- Second-step delete-preset confirmation dialog (Modal) -->
 {#if presetToDelete}
   <Dialog
     open={true}

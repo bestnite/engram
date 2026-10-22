@@ -1,14 +1,14 @@
 /**
- * 轻提示的唯一入口：视图从这里取 toast，不直接依赖 svelte-sonner，
- * 以后换实现只改这一处。挂载点见 App.svelte 里的 Toaster。
+ * The single entry point for toasts: views get toast from here and do not depend on svelte-sonner directly,
+ * so swapping the implementation later touches only this file. The mount point is Toaster in App.svelte.
  *
- * 请求反馈只有两种形态，全站一致：
- * - 进行中：触发请求的按钮带 loading（转圈、禁用，文字不换），见 ui/Button.svelte。
- * - 结果：成功用 toast.success，失败用 toast.error，不在按钮旁边插一行文字，也不改按钮文字。
+ * Request feedback has only two shapes, consistent site-wide:
+ * - In progress: the button that triggered the request shows loading (spinner, disabled, text unchanged), see ui/Button.svelte.
+ * - Result: toast.success on success and toast.error on failure, with no line of text inserted next to the button and no button text change.
  *
- * 留在原地显示、不走 toast 的只有三类，因为它们需要用户在原处处理：
- * - 打开着的对话框里提交失败：错误显示在对话框内，用户在原处改输入重试。
- * - 提交前的字段校验错误：贴在对应字段下方。
- * - 整页加载失败：页面本身没有内容可显示，渲染整页错误态。
+ * Only three kinds stay in place and never use toast, because the user must handle them where they are:
+ * - A failed submit inside an open dialog: the error shows inside the dialog and the user fixes the input and retries there.
+ * - Pre-submit field validation errors: attached below the corresponding field.
+ * - A whole-page load failure: the page has no content to show, so a full-page error state is rendered.
  */
 export { toast } from 'svelte-sonner';

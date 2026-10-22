@@ -20,12 +20,12 @@ import (
 	"git.nite07.com/nite/engram/internal/urlfetch"
 )
 
-// 直链导入端点（POST /api/v1/decks/import-url）的验收。
+// Acceptance for the direct-link import endpoint (POST /api/v1/decks/import-url).
 //
-// 下载器用受控实现替换：端点测试只关心「拒绝时是否发起了下载」「错误如何映射」
-// 「成功后是否真的导入了包」；下载器自身的传输行为由 internal/urlfetch 的真实 HTTPS 用例覆盖。
+// The fetcher is replaced with a controlled implementation: the endpoint tests care only about "was a download started when rejecting", "how errors are mapped"
+// and "was the package really imported on success"; the fetcher's own transport behavior is covered by the real HTTPS cases in internal/urlfetch.
 
-// stubFetcher 是受控的 PackageFetcher：返回预设字节或预设错误，并记录调用。
+// stubFetcher is a controlled PackageFetcher: it returns preset bytes or a preset error and records calls.
 type stubFetcher struct {
 	body  []byte
 	err   error
@@ -42,7 +42,7 @@ func (f *stubFetcher) Fetch(_ context.Context, rawURL string, _ int64) (io.ReadC
 	return io.NopCloser(bytes.NewReader(f.body)), nil
 }
 
-// postImportURL 发一个带 bearer key 的 JSON 直链导入请求。
+// postImportURL sends a JSON direct-link import request with a bearer key.
 func postImportURL(t *testing.T, env *testEnv, key, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/import-url", strings.NewReader(body))
@@ -102,7 +102,7 @@ func TestImportURLSessionRequiresCSRF(t *testing.T) {
 	r.Use(mgr.Middleware())
 	env.api.Register(r)
 
-	// 建一个真实会话并取出签名 cookie。
+	// Create a real session and extract the signed cookie.
 	cookieRec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(cookieRec)
 	sess, err := mgr.StartSession(context.Background(), c, user.ID)
@@ -201,7 +201,7 @@ func TestImportURLCorruptPackageIsRejected(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "url_corrupt", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-	// 下载成功但内容不是卡组包：包解析必须在写任何东西之前整包拒绝。
+	// The download succeeds but the content is not a deck package: package parsing must reject the whole thing before writing anything.
 	f := &stubFetcher{body: []byte("this is not a zip archive")}
 	env.api.fetcher = f
 
@@ -323,7 +323,7 @@ func TestImportURLIsRateLimited(t *testing.T) {
 	if code := decodeErrorCode(t, rec.Body.Bytes()); code != CodeRateLimited {
 		t.Errorf("error code = %q, want %q", code, CodeRateLimited)
 	}
-	// 429 必须带 Retry-After，客户端据此在窗口后重试。
+	// A 429 must carry Retry-After, so the client retries after the window.
 	if got := rec.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After = %q, want \"60\"", got)
 	}
@@ -332,8 +332,8 @@ func TestImportURLIsRateLimited(t *testing.T) {
 	}
 }
 
-// TestImportURLRateLimitPoolIsSharedWithService 证明限流在 service 层：先用 REST handler
-// 用尽配额，再直接调用 ImportDeckPackageURL（MCP 工具走的同一入口）也必须被拦下且不再下载。
+// TestImportURLRateLimitPoolIsSharedWithService proves rate limiting lives in the service layer: after exhausting the quota through the REST handler,
+// a direct call to ImportDeckPackageURL (the same entry MCP tools use) must also be stopped, with no further download.
 func TestImportURLRateLimitPoolIsSharedWithService(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "url_pool_service", store.RoleUser)
@@ -358,13 +358,13 @@ func TestImportURLRateLimitPoolIsSharedWithService(t *testing.T) {
 	}
 }
 
-// TestImportURLMapsRealFetcherErrorsThroughHTTP 用真实下载器（无网络）走一遍端点，
-// 证明端点把 internal/urlfetch 的分类错误映射成稳定 code，而不是只对 stub 生效。
+// TestImportURLMapsRealFetcherErrorsThroughHTTP runs the endpoint with the real fetcher (no network),
+// proving the endpoint maps internal/urlfetch's classified errors to stable codes and that this does not only hold for the stub.
 func TestImportURLMapsRealFetcherErrorsThroughHTTP(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "url_real_fetch", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-	// 保留 New() 建的生产下载器；对私网/非 HTTPS 地址的拒绝发生在任何网络调用之前。
+	// Keep the production fetcher built by New(); the rejection of private-network / non-HTTPS addresses happens before any network call.
 	rec := postImportURL(t, env, k.Plaintext, `{"url":"http://example.com/deck.edeck","target":"new_deck"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("non-https url = %d, want 400 (body %s)", rec.Code, rec.Body.String())

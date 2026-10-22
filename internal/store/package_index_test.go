@@ -14,16 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包 zip 索引校验。
+// Deck package zip index validation.
 //
-//  1. 归档内**重复文件名/重复路径**必须拒绝 —— 解析器原先把同名条目静默覆盖（后者胜出），
-//     一个包因此能藏一个与索引不符的覆盖层；
-//  2. media.json 声明的 sha256 必须等于该条目**字节的真实 sha256**，且文件名须为
-//     `<sha256>.<ext>`；否则一个"假 sha"就能让索引与内容彻底脱钩。
+//  1. **duplicate file names/repeated paths** inside the archive must be rejected -- the parser used to silently overwrite same-named entries (the later one won),
+//     so a package could hide an overlay layer that disagreed with the index;
+//  2. the sha256 declared in media.json must equal **the real sha256 of the entry's bytes**, and the file name must be
+//     `<sha256>.<ext>`; otherwise a "fake sha" can decouple the index from the content entirely.
 //
-// 失败必须在任何写入之前发生：库里没有卡组/卡/媒体行，磁盘上没有残留文件。
+// The failure must happen before any write: no deck/card/media rows in the database and no leftover files on disk.
 
-// zipWithEntries 按给定顺序打 zip：允许同名条目、允许两份同名条目内容不同 —— 正是攻击面。
+// zipWithEntries builds a zip in the given order: same-named entries are allowed, and two same-named entries may differ in content -- exactly the attack surface.
 func zipWithEntries(t *testing.T, entries [][2]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -43,8 +43,8 @@ func zipWithEntries(t *testing.T, entries [][2]string) []byte {
 	return buf.Bytes()
 }
 
-// indexPackageEntries 返回一个最小合法包的 JSON 条目（不含媒体字节条目本身）。
-// mediaPath 同时用作 note 的引用与 media.json 的路径；sha 是 media.json 声明的 key。
+// indexPackageEntries returns the JSON entries of a minimally valid package (without the media byte entry itself).
+// mediaPath serves both as the note's reference and as the path in media.json; sha is the key declared in media.json.
 func indexPackageEntries(mediaPath, sha, mime string) [][2]string {
 	return [][2]string{
 		{"manifest.json", `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},
@@ -55,13 +55,13 @@ func indexPackageEntries(mediaPath, sha, mime string) [][2]string {
 	}
 }
 
-// png64 返回一段 64 字节、带 PNG 魔数的合法媒体字节（种子字节由 fill 决定）。
+// png64 returns 64 bytes of valid media carrying the PNG magic number (the fill byte is chosen by fill).
 func png64(fill string) []byte {
 	body := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte(fill), 56)...)
 	return body
 }
 
-// assertNoImportSideEffects 断言被拒的导入没有留下任何卡组/卡/媒体行，也没有磁盘文件。
+// assertNoImportSideEffects asserts a rejected import leaves no deck/card/media rows and no files on disk.
 func assertNoImportSideEffects(t *testing.T, db *gorm.DB, root string) {
 	t.Helper()
 	var decks, notes, media int64
@@ -74,8 +74,8 @@ func assertNoImportSideEffects(t *testing.T, db *gorm.DB, root string) {
 	assertDirEmpty(t, root)
 }
 
-// TestReadPackageArchiveRejectsDuplicateEntry 是"同路径重复"的最小负例：同一名字出现两次，
-// ReadPackageArchive 必须拒绝（修前它把后者覆盖进 map，静默通过）。
+// TestReadPackageArchiveRejectsDuplicateEntry is the minimal negative case for "repeated path": the same name appears twice,
+// and ReadPackageArchive must reject it (before the fix the later one overwrote the map entry and it passed silently).
 func TestReadPackageArchiveRejectsDuplicateEntry(t *testing.T) {
 	sha := strings.Repeat("a", 64)
 	path := "media/" + sha + ".png"
@@ -94,9 +94,9 @@ func TestReadPackageArchiveRejectsDuplicateEntry(t *testing.T) {
 	}
 }
 
-// TestImportPackageRejectsDuplicateShaNamedEntryDifferentContent 覆盖"不同内容但同 sha 声明"：
-// 一个 media/<sha>.png 出现两次，内容不同 —— 它们声称同一个 sha，但两段字节不可能都对。
-// 整包被拒，且零副作用。
+// TestImportPackageRejectsDuplicateShaNamedEntryDifferentContent covers "different content, same declared sha":
+// one media/<sha>.png appears twice with different content -- they claim the same sha, but the two byte runs cannot both be right.
+// The whole package is rejected, with zero side effects.
 func TestImportPackageRejectsDuplicateShaNamedEntryDifferentContent(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -129,9 +129,9 @@ func TestImportPackageRejectsDuplicateShaNamedEntryDifferentContent(t *testing.T
 	}
 }
 
-// TestImportPackageRejectsDeclaredShaMismatch 覆盖"声明 sha ≠ 实际字节 sha"：media.json 用一段
-// 合法十六进制 sha 作 key、路径也叫这个 sha，但字节的真实 sha256 是另一个值（假 sha）。
-// 修前导入照常成功（字节以真实 sha 落盘），修后整包被拒且零副作用。
+// TestImportPackageRejectsDeclaredShaMismatch covers "declared sha ≠ actual byte sha": media.json uses a run of
+// valid hexadecimal sha as the key and the path carries that sha too, but the bytes' real sha256 is another value (a fake sha).
+// Before the fix the import succeeded as usual (the bytes were stored under their real sha); after the fix the whole package is rejected with zero side effects.
 func TestImportPackageRejectsDeclaredShaMismatch(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -159,16 +159,16 @@ func TestImportPackageRejectsDeclaredShaMismatch(t *testing.T) {
 	}
 }
 
-// TestImportPackageRejectsMediaEntryNameNotMatchingSha 是相邻负例：字节的 sha256 与 media.json
-// 的 key 一致、note 也按规范路径 media/<sha>.png 引用，但 media.json 把该 sha 指到一个
-// 文件名与 sha 无关的条目上（索引与内容对不上）。整包被拒，零副作用。
+// TestImportPackageRejectsMediaEntryNameNotMatchingSha is the neighbouring negative case: the bytes' sha256 matches the media.json
+// key and the note references the canonical path media/<sha>.png, but media.json points that sha at an entry whose
+// file name has nothing to do with the sha (index does not match content). The whole package is rejected, zero side effects.
 func TestImportPackageRejectsMediaEntryNameNotMatchingSha(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			body := png64("w")
 			sum := sha256.Sum256(body)
 			sha := hex.EncodeToString(sum[:])
-			// media.json 声明的 sha 指向一个 basename 与 sha 无关的条目。
+			// The sha declared in media.json points at an entry whose basename is unrelated to the sha.
 			path := "media/" + strings.Repeat("b", 64) + ".png"
 			entries := [][2]string{
 				{"manifest.json", `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},

@@ -3,14 +3,14 @@
   import Button from './Button.svelte';
 
   /**
-   * 表格下方的翻页条：右对齐的「页码 / 上一页 / 下一页」。
-   * 管理面板几张表各写过一份，样式与禁用逻辑各不相同，这里收成一处。
+   * The pager below a table: right-aligned "page number / previous / next".
+   * Several admin panel tables each had their own copy with different styling and disabled logic; this consolidates them into one place.
    */
   interface Props {
     page: number;
     pages: number;
     onPage: (page: number) => void;
-    /** 生成 `<prefix>-pager`、`<prefix>-prev`、`<prefix>-next` 三个 data-testid。 */
+    /** Generates the three data-testids `<prefix>-pager`, `<prefix>-prev` and `<prefix>-next`. */
     testIdPrefix: string;
   }
 

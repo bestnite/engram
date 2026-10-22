@@ -13,8 +13,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestAddExtraNewCardsMatchesREST 断言 add_extra_new_cards 与 REST POST /decks/:id/extra-new
-// 走同一个 service 方法：MCP 追加后的结果与随后 REST GET 读到的状态一致；缺省 count 用每日上限。
+// TestAddExtraNewCardsMatchesREST asserts add_extra_new_cards and REST POST /decks/:id/extra-new
+// go through the same service method: the state MCP produces after adding matches what the subsequent REST GET reads; an omitted count uses the daily limit.
 func TestAddExtraNewCardsMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "extra-mcp-owner")
@@ -40,7 +40,7 @@ func TestAddExtraNewCardsMatchesREST(t *testing.T) {
 		t.Errorf("extra_new = %v, want 2", out["extra_new"])
 	}
 
-	// 缺省 count：再追加每日上限 3 张，累加到 5。
+	// Omitted count: add the daily limit of 3 more, accumulating to 5.
 	out, isErr, text = callTool(t, cs, "add_extra_new_cards", map[string]any{"deck_id": deck.PublicID})
 	if isErr {
 		t.Fatalf("add_extra_new_cards (default) error: %s", text)
@@ -50,8 +50,8 @@ func TestAddExtraNewCardsMatchesREST(t *testing.T) {
 	}
 }
 
-// TestAddExtraNewCardsNegatives 覆盖负例：非成员 forbidden、不限额卡组与越界 count 返回 invalid_request，
-// 只有 read scope 的 key 按名字硬调返回 scope_required。
+// TestAddExtraNewCardsNegatives covers negative cases: forbidden for a non-member, invalid_request for an unlimited deck and an out-of-range count,
+// and scope_required when a key with only read scope calls it by name.
 func TestAddExtraNewCardsNegatives(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "extra-mcp-neg-owner")

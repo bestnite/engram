@@ -8,11 +8,11 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// bundledClozeMacros 列出挖空渲染在公式里会写出的宏，以及它在自托管 MathJax 包里的定义原文。
+// bundledClozeMacros lists the macros cloze rendering can write into a formula, plus their definition as it appears in the self-hosted MathJax bundle.
 //
-// 自托管的只有 tex-svg.js 主包；需要另行加载扩展文件的宏（\class、\color、\bbox）
-// 在运行时会请求一个不存在的文件，导致整个容器的排版中止。所以挖空只能用已打包进主包的宏，
-// 这张表就是对此的核对清单：改 renderCloze 的输出宏时必须同步更新它。
+// Only the tex-svg.js main bundle is self-hosted; macros that need a separately loaded extension file (\class, \color, \bbox)
+// make the runtime request a file that does not exist, aborting typesetting for the whole container. So clozes may only use macros already bundled in the main file,
+// and this table is the checklist for that: changing the macros renderCloze emits means updating it in step.
 var bundledClozeMacros = map[string]string{
 	"boxed": `boxed:["Macro"`, // ams
 	"text":  `text:"HBox"`,    // base
@@ -20,7 +20,7 @@ var bundledClozeMacros = map[string]string{
 
 var texMacroPattern = regexp.MustCompile(`\\([A-Za-z]+)`)
 
-// TestClozeMathMacrosAreBundled 断言公式内挖空的正反面只用到主包里已定义的宏。
+// TestClozeMathMacrosAreBundled asserts that both sides of an in-formula cloze use only macros already defined in the main bundle.
 func TestClozeMathMacrosAreBundled(t *testing.T) {
 	bundle, err := staticFS.ReadFile("static/js/mathjax/tex-svg.js")
 	if err != nil {
@@ -30,7 +30,7 @@ func TestClozeMathMacrosAreBundled(t *testing.T) {
 	if !ok {
 		t.Fatal("cloze card type is not registered")
 	}
-	// 原文里只有分隔符，没有任何宏，输出里出现的宏都来自挖空渲染本身。
+	// The original text has only delimiters and no macros at all, so every macro in the output comes from the cloze rendering itself.
 	fields := map[string]any{"text": `\(x = {{c1::y}} + {{c2::z::hint}}\)`}
 	used := map[string]bool{}
 	for _, template := range []string{"cloze:1", "cloze:2"} {

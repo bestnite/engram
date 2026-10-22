@@ -21,15 +21,15 @@
   import { sidebarDecks } from './sidebar';
 
   /**
-   * 应用主导航（侧边栏）。桌面端常驻左侧，可收起成只有图标的窄栏；移动端放进抽屉里，
-   * 由 AppShell 决定放在哪里，本组件只负责内容。
+   * App main navigation (sidebar). On desktop it is persistent on the left and can collapse into an icon-only rail; on mobile it goes into a drawer,
+   * with AppShell deciding where it goes; this component only provides the content.
    *
-   * 导航项按用途分组（学习 / 内容），卡组下直接列出待复习最多的几个卡组：
-   * 切换卡组只需一次点击，不必先回到卡组列表。
+   * Navigation items are grouped by purpose (study / content), and under the deck group the few decks with the most due cards are listed directly:
+   * switching decks takes a single click without going back to the deck list first.
    */
   interface Props {
     collapsed?: boolean;
-    /** 在抽屉里时不显示收起按钮：抽屉有自己的关闭方式。 */
+    /** Hide the collapse button when inside the drawer: the drawer has its own way to close. */
     inDrawer?: boolean;
     onToggleCollapse?: () => void;
     version?: string;
@@ -41,7 +41,7 @@
     href: string;
     label: string;
     icon: Component<{ class?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
-    /** 右侧数字（待复习数）；null 不显示。 */
+    /** The number on the right (due count); null hides it. */
     count?: number | null;
     active: boolean;
   }
@@ -51,7 +51,7 @@
   const decks = $derived($sidebarDecks.decks);
   const totalDue = $derived($sidebarDecks.totalDue);
 
-  // 当前卡组：/decks/:id 及其子页面（设置、共享、笔记编辑）都算在这个卡组里。
+  // Current deck: /decks/:id and its subpages (settings, sharing, note editing) all count as this deck.
   const currentDeckId = $derived.by(() => {
     const m = /^\/decks\/([^/]+)/.exec(path);
     return m ? decodeURIComponent(m[1] ?? '') : null;
@@ -64,7 +64,7 @@
     { href: '/stats', label: $t('nav.stats'), icon: ChartColumn, active: path.startsWith('/stats') },
   ]);
 
-  // 「卡组」本身只在卡组列表页、或当前卡组没有列在下面时高亮，避免父子同时高亮。
+  // "Decks" itself is highlighted only on the deck list page, or when the current deck is not listed below, so parent and child are never highlighted together.
   const decksItem = $derived<NavItem>({
     href: '/decks',
     label: $t('nav.decks'),
@@ -77,9 +77,9 @@
     { href: '/presets', label: $t('nav.presets'), icon: SlidersHorizontal, active: path.startsWith('/presets') },
   ]);
 
-  // 管理入口只给管理员（与服务端的管理权限判据一致），避免普通用户点进去吃 403。
+  // The admin entry is only for admins (consistent with the server's admin authorization rule), so normal users do not walk into a 403.
   const footerItems = $derived<NavItem[]>([
-    // /admin 没有概览页，直接指向管理导航的第一项。
+    // /admin has no overview page, so point directly at the first item of the admin navigation.
     ...(isAdmin ? [{ href: '/admin/users', label: $t('nav.admin'), icon: Shield, active: path.startsWith('/admin') }] : []),
     { href: '/settings', label: $t('nav.settings'), icon: Settings, active: path.startsWith('/settings') },
   ]);

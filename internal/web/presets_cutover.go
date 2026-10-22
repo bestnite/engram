@@ -4,11 +4,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// presetRoute 提供 GET /presets：只发 SPA 应用壳，
-// 由客户端路由渲染调度预设页，读写走 /api/v1/presets* 的 JSON 端点。
+// presetRoute serves GET /presets: it only sends the SPA app shell,
+// the client router renders the scheduling preset page, and reads/writes go through the /api/v1/presets* JSON endpoints.
 //
-// 判权与迁移前的 SSR 预设页逐项一致：只要求已登录会话，未登录一律重定向登录页。
-// SSR 页面层已删除，不再回退预设页。
+// Authorization matches the pre-migration SSR preset page item by item: a signed-in session is all it requires, and anonymous visitors are always redirected to the login page.
+// The SSR page layer has been deleted, so there is no fallback to the preset page.
 func (s *Server) presetRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return

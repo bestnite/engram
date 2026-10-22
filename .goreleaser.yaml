@@ -1,27 +1,27 @@
-# GoReleaser 配置：推 v* 标签时把二进制、Rust 优化器适配器与容器镜像一起发布到
-# bestnite/engram（ROADMAP.md M0-14），由 .github/workflows/release.yml 调用。
+# GoReleaser configuration: on pushing a v* tag, publish the binaries, the Rust optimizer adapter and the container images to
+# bestnite/engram (ROADMAP.md M0-14); invoked by .github/workflows/release.yml.
 #
-# 两处背景必须先知道，否则会误改：
-#   1. Rust 优化器适配器不是 Go 构建产物，本文件用 archives.files 与 dockers_v2.extra_files
-#      把它挂进制品。文件由 release.yml 的 optimizer 作业在各目标平台上原生编译后，按
-#      tools/optimizer/dist/<os>/<arch>/optimizer[.exe] 摆好（约定见该 workflow 的注释）。
-#      不走 builds 的 builder: prebuilt —— 那是 GoReleaser Pro 专属，OSS 版连该字段都没有。
-#   2. dockers_v2 交给 docker 的是一份临时上下文，不是仓库根：Go 二进制按 <os>/<arch>/<名字>
-#      摆放（所以 Dockerfile.release 用 $TARGETPLATFORM 取），extra_files 原样落在它的相对
-#      路径上。因此发布镜像的 Dockerfile 是 Dockerfile.release，而不是从源码编译的 Dockerfile。
+# Two pieces of background must be known first, otherwise you will change the wrong thing:
+#   1. The Rust optimizer adapter is not a Go build artifact; this file attaches it via archives.files and dockers_v2.extra_files.
+#      The files are compiled natively on each target platform by release.yml's optimizer job and laid out at
+#      tools/optimizer/dist/<os>/<arch>/optimizer[.exe] (the convention is described in that workflow's comments).
+#      It does not use builds' builder: prebuilt — that is GoReleaser Pro only, and the OSS version does not even have the field.
+#   2. dockers_v2 hands docker a temporary context, not the repository root: Go binaries are laid out as <os>/<arch>/<name>
+#      (which is why Dockerfile.release fetches them with $TARGETPLATFORM), and extra_files land unchanged at their relative
+#      paths inside it. That is why the release image's Dockerfile is Dockerfile.release, not the Dockerfile that builds from source.
 #
-# 需要的仓库 secret：DOCKERHUB_USERNAME、DOCKERHUB_TOKEN（推 Docker Hub 用；ghcr.io 用
-# workflow 自带的 GITHUB_TOKEN）。两者都配在 GitHub 的 bestnite/engram 上——发布跑在
-# GitHub Actions，Gitea 侧的自建 runner 没有多架构能力（理由见 release.yml）。
+# Required repository secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (for pushing to Docker Hub; ghcr.io uses the
+# workflow's built-in GITHUB_TOKEN). Both are configured on bestnite/engram in GitHub — releases run on
+# GitHub Actions, and the self-hosted runner on the Gitea side has no multi-arch capability (reasoning in release.yml).
 #
-# 仓库脱敏（AGENTS.md §2.2）：本文件出现的主机名只有已登记的 github.com，以及镜像引用
-# ghcr.io（不带 scheme，扫描只查 http(s):// 形式的 URL）。
+# Repository sanitization (AGENTS.md §2.2): the only host names in this file are the registered github.com and the image reference
+# ghcr.io (without a scheme; the scan only looks for http(s):// URLs).
 version: 2
 
 project_name: engram
 
-# 前端产物（frontend/dist）是 gitignore 的生成物，必须在多平台交叉编译前构建一次供
-# go:embed 嵌入；缺了它 Go 编译直接失败（AGENTS.md §4）。
+# The frontend artifacts (frontend/dist) are gitignored build output and must be built once before the multi-platform cross-compile so
+# go:embed can embed them; without them the Go build fails outright (AGENTS.md §4).
 before:
   hooks:
     - npm --prefix frontend ci
@@ -35,8 +35,8 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
-    # 与 Dockerfile 的 VERSION 传参保持一致：注入带 v 前缀的原始标签，而不是 .Version
-    # （后者会被 goreleaser 去掉前缀，两条构建路径的 `engram version` 就会不一致）。
+    # Kept consistent with the Dockerfile's VERSION build argument: inject the raw v-prefixed tag rather than .Version
+    # (the latter has its prefix stripped by goreleaser, which would make `engram version` differ between the two build paths).
     ldflags:
       - -s -w -X main.version={{ .Tag }}
     goos:
@@ -46,8 +46,8 @@ builds:
     goarch:
       - amd64
       - arm64
-    # windows/arm64 不发布：适配器没有该目标的可信构建路径（release.yml 在 windows runner
-    # 上只原生编 amd64），发了就会得到「有主程序、没有适配器」的归档。
+    # windows/arm64 is not released: the adapter has no trustworthy build path for that target (release.yml compiles only amd64
+    # natively on the windows runner), so releasing it would produce an archive "with the main program but without the adapter".
     ignore:
       - goos: windows
         goarch: arm64
@@ -60,7 +60,7 @@ archives:
       - engram
     formats:
       - tar.gz
-    # windows 收 zip：解开就能双击运行，不必先有 tar。
+    # windows gets a zip: unpack and double-click to run, no tar needed first.
     format_overrides:
       - goos: windows
         formats:
@@ -69,11 +69,11 @@ archives:
       - LICENSE
       - README.md
       - README.zh.md
-      # 适配器与主程序同装一包，解出来就是「一个服务二进制 + 一个适配器」；适配器必须躺在
-      # 主程序旁边（internal/jobs 默认在服务二进制所在目录找 optimizer），归档内两者同在根层。
-      # strip_parent 是关键：源路径按平台目录摆放（<os>/<arch>/optimizer[.exe]），不加这一项
-      # 归档里就会保留 tools/optimizer/dist/<os>/<arch>/ 这些中间目录，解包后适配器不在
-      # 二进制旁边；strip_parent 只取 base name，windows 的 .exe 由文件名自身带过来。
+      # The adapter and the main program are packed into one archive, unpacking to "one service binary + one adapter"; the adapter must sit
+      # next to the main program (internal/jobs looks for optimizer in the service binary's directory by default), and both are at the archive root.
+      # strip_parent is the key: source paths are laid out by platform directory (<os>/<arch>/optimizer[.exe]), and without this option
+      # the archive would keep the intermediate tools/optimizer/dist/<os>/<arch>/ directories, so after unpacking the adapter would not be
+      # next to the binary; strip_parent takes only the base name, and windows' .exe comes along in the file name itself.
       - src: tools/optimizer/dist/{{ .Os }}/{{ .Arch }}/optimizer{{ if eq .Os "windows" }}.exe{{ end }}
         strip_parent: true
 
@@ -89,14 +89,14 @@ dockers_v2:
       - nite07/engram
     tags:
       - "{{ .Tag }}"
-      # 预发布（v0.1.0-rc1 这类）不动 :latest，避免把候选版本顶成默认版本。
+      # Prereleases (v0.1.0-rc1 and the like) leave :latest alone, so a candidate version is never promoted to the default version.
       - "{{ if not .Prerelease }}latest{{ end }}"
     platforms:
       - linux/amd64
       - linux/arm64
     dockerfile: Dockerfile.release
-    # 适配器不进 builds（它是 Rust 产物），靠 extra_files 进上下文；两条路径在上下文里保持
-    # 原样，Dockerfile.release 用 $TARGETPLATFORM 选中对应那一份。
+    # The adapter does not go into builds (it is a Rust artifact) and enters the context via extra_files; both paths keep their
+    # original shape inside the context, and Dockerfile.release picks the matching one with $TARGETPLATFORM.
     extra_files:
       - tools/optimizer/dist/linux/amd64/optimizer
       - tools/optimizer/dist/linux/arm64/optimizer
@@ -109,7 +109,7 @@ dockers_v2:
 changelog:
   sort: asc
   filters:
-    # 只有用户能感知的改动值得进发布说明；仓库内务（文档、测试、CI）留在 git log 里。
+    # Only user-perceptible changes are worth the release notes; repository housekeeping (docs, tests, CI) stays in the git log.
     exclude:
       - "^docs:"
       - "^test:"
@@ -118,7 +118,7 @@ changelog:
 
 release:
   github:
-    # 显式写出归属：Gitea 侧是 nite/engram，发布目标是 GitHub 的 bestnite/engram。
+    # Ownership stated explicitly: the Gitea side is nite/engram, the release target is bestnite/engram on GitHub.
     owner: bestnite
     name: engram
   draft: false

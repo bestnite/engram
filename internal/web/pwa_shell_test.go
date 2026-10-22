@@ -9,7 +9,7 @@ import (
 	"testing/fstest"
 )
 
-// fetchShellBody 取一个 SPA 应用壳响应体（要求 200）。
+// fetchShellBody fetches an SPA app shell response body (expects 200).
 func fetchShellBody(t *testing.T, srv *Server, path string, headers map[string]string) string {
 	t.Helper()
 	rec := get(t, srv, path, headers)
@@ -19,8 +19,8 @@ func fetchShellBody(t *testing.T, srv *Server, path string, headers map[string]s
 	return rec.Body.String()
 }
 
-// TestShellDeclaresPWAHead 断言 SPA 应用壳的 <head> 与 SSR 外壳一致：manifest、
-// theme-color、内容哈希图标、/pwa.js 注册脚本与内联主题引导。
+// TestShellDeclaresPWAHead asserts the SPA app shell's <head> matches the SSR shell: manifest,
+// theme-color, content-hashed icons, the /pwa.js registration script, and the inline theme bootstrap.
 func TestShellDeclaresPWAHead(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	icon := srv.assets.URL("icons/icon.svg")
@@ -45,7 +45,7 @@ func TestShellDeclaresPWAHead(t *testing.T) {
 		}
 	}
 
-	// 主题引导必须内联在 <head> 内、</head> 之前：外链脚本是独立请求，暗色下会先画一帧白底。
+	// The theme bootstrap must be inline inside <head>, before </head>: an external script is a separate request, so dark mode would first paint a frame of white.
 	head := strings.Index(body, "<head>")
 	headEnd := strings.Index(body, "</head>")
 	script := strings.Index(body, `localStorage.getItem("engram-theme")`)
@@ -53,14 +53,14 @@ func TestShellDeclaresPWAHead(t *testing.T) {
 		t.Errorf("inline theme bootstrap must sit in <head>: head=%d script=%d headEnd=%d", head, script, headEnd)
 	}
 
-	// 自托管：入口不得引用任何外部 URL。
+	// Self-hosted: the entry point must not reference any external URL.
 	if strings.Contains(body, "http://") || strings.Contains(body, "https://") {
 		t.Errorf("SPA shell references an external URL: %s", snippet(body))
 	}
 }
 
-// TestShellThemeBootstrapMatchesSSR 断言注入 SPA 外壳的内联引导与 SSR 用的是同一段
-// 编译期常量：内容完全一致，CSP 的 script-src hash 白名单才无需放宽。
+// TestShellThemeBootstrapMatchesSSR asserts the inline bootstrap injected into the SPA shell uses the same
+// compile-time constant as SSR: the content is identical, so the CSP script-src hash allowlist needs no widening.
 func TestShellThemeBootstrapMatchesSSR(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	body := fetchShellBody(t, srv, "/", nil)
@@ -79,9 +79,9 @@ func TestShellThemeBootstrapMatchesSSR(t *testing.T) {
 	}
 }
 
-// TestShellThemeBootstrapHashWhitelisted 从 SPA 外壳渲染结果里取出内联引导正文，独立算
-// SHA-256，断言 CSP 带的正是它。hash 对不上时浏览器会把这唯一的内联 <script> 当未授权脚本
-// 阻断，首屏主题引导即失效（与 SSR 的 TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap 同口径）。
+// TestShellThemeBootstrapHashWhitelisted takes the inline bootstrap body out of the rendered SPA shell, computes
+// SHA-256 on its own, and asserts the CSP carries exactly that. When the hash does not match, the browser blocks this
+// sole inline <script> as an unauthorized script and the first-paint theme bootstrap stops working (same criterion as SSR's TestSecurityHeadersCSPHashMatchesRenderedThemeBootstrap).
 func TestShellThemeBootstrapHashWhitelisted(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	rec := get(t, srv, "/", nil)
@@ -109,8 +109,8 @@ func TestShellThemeBootstrapHashWhitelisted(t *testing.T) {
 	}
 }
 
-// TestShellLanguageFollowsI18nRules 断言 SPA 外壳的 <html lang> 按 i18n 优先级解析
-// （?lang > 用户设置 > Accept-Language > 站点默认），与 SSR 一致。
+// TestShellLanguageFollowsI18nRules asserts the SPA shell's <html lang> resolves by the i18n precedence
+// (?lang > user setting > Accept-Language > site default), consistent with SSR.
 func TestShellLanguageFollowsI18nRules(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -135,8 +135,8 @@ func TestShellLanguageFollowsI18nRules(t *testing.T) {
 	}
 }
 
-// TestShellETagTracksLanguage 断言入口 ETag 随语言变化：不同语言必须拿到不同 ETag，
-// 否则换语言后的条件请求会命中旧壳（no-cache 语义）。
+// TestShellETagTracksLanguage asserts the entry ETag varies with the language: different languages must get different ETags,
+// otherwise a conditional request after switching language hits the old shell (no-cache semantics).
 func TestShellETagTracksLanguage(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -149,20 +149,20 @@ func TestShellETagTracksLanguage(t *testing.T) {
 		t.Errorf("SPA shell ETag does not change with language: %q", zh.Header().Get("ETag"))
 	}
 
-	// 同语言的条件请求命中 304。
+	// A conditional request in the same language hits 304.
 	cond := get(t, srv, "/", map[string]string{"If-None-Match": zh.Header().Get("ETag")})
 	if cond.Code != http.StatusNotModified {
 		t.Errorf("conditional GET / status = %d, want 304", cond.Code)
 	}
-	// 语言不同的条件请求不得命中 304，否则会拿到另一种语言的旧壳。
+	// A conditional request in a different language must not hit 304, otherwise it gets the old shell in the other language.
 	cross := get(t, srv, "/?lang=en", map[string]string{"If-None-Match": zh.Header().Get("ETag")})
 	if cross.Code != http.StatusOK {
 		t.Errorf("cross-language conditional GET status = %d, want 200", cross.Code)
 	}
 }
 
-// TestSetHTMLLangRewritesOpenTag 覆盖语言重写的边界：已有 lang 的替换、缺属性的补上、
-// 其它属性保留、无 <html> 时原样返回、语言码转义。
+// TestSetHTMLLangRewritesOpenTag covers the edges of language rewriting: replacing an existing lang, adding a missing attribute,
+// keeping other attributes, returning as-is when there is no <html>, and escaping the language code.
 func TestSetHTMLLangRewritesOpenTag(t *testing.T) {
 	tests := []struct {
 		name string
@@ -185,7 +185,7 @@ func TestSetHTMLLangRewritesOpenTag(t *testing.T) {
 	}
 }
 
-// TestBuildShellBlockSkipsEmptyAndEscapes 断言空字段不产出标记，属性值一律转义。
+// TestBuildShellBlockSkipsEmptyAndEscapes asserts empty fields produce no markup and attribute values are always escaped.
 func TestBuildShellBlockSkipsEmptyAndEscapes(t *testing.T) {
 	if block := buildShellBlock(ShellHTML{}); len(block) != 0 {
 		t.Errorf("empty ShellHTML should inject nothing, got %q", block)
@@ -196,8 +196,8 @@ func TestBuildShellBlockSkipsEmptyAndEscapes(t *testing.T) {
 	}
 }
 
-// TestShellComposesWithMathJax 断言外壳注入、MathJax 注入与版本注入互不覆盖：三者都在
-// </head> 之前出现，且后设置的注入不会丢掉先前设置的那一项。
+// TestShellComposesWithMathJax asserts shell injection, MathJax injection and version injection do not overwrite each other: all three appear
+// before </head>, and an injection set later does not drop the one set earlier.
 func TestShellComposesWithMathJax(t *testing.T) {
 	shell, err := NewShell(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<html lang="zh-CN"><head></head><body><div id="app"></div></body></html>`)},

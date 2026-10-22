@@ -16,19 +16,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA TOTP 管理接口（internal/web/totp_api.go）的端到端证据：
-// 走真实路由 + 真实 SQLite，复用 auth.TOTPService，断言的状态与 SSR 设置页一致。
+// This file is the end-to-end evidence for the SPA TOTP management API (internal/web/totp_api.go):
+// real routes + real SQLite, reusing auth.TOTPService, with asserted states matching the SSR settings page.
 //
-// 安全断言的重点：GET /api/v1/settings/totp 绝不返回 secret / otpauth；
-// secret 与恢复码明文只在 begin / confirm / recovery 的响应里各出现一次。
+// The focus of the security assertions: GET /api/v1/settings/totp never returns secret / otpauth;
+// the secret and plaintext recovery codes each appear only once, in the begin / confirm / recovery responses.
 
-// totpLogin 在账号尚未启用 TOTP 时用密码经 JSON 登录，返回会话 cookie 与会话绑定的 CSRF token。
+// totpLogin logs in with the password over JSON while the account has no TOTP yet, returning the session cookie and the session-bound CSRF token.
 func totpLogin(t *testing.T, srv *Server, db *gorm.DB) ([]*http.Cookie, string) {
 	t.Helper()
 	return loginJSON(t, srv, db, "admin", "Sup3rSecret!")
 }
 
-// totpEnable 走 HTTP 流程启用 TOTP，返回确认时用到的明文 secret。
+// totpEnable enables TOTP through the HTTP flow and returns the plaintext secret used for the confirmation.
 func totpEnable(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string) string {
 	t.Helper()
 	begin := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/begin", map[string]any{}, cookies, csrf)
@@ -53,7 +53,7 @@ func totpEnable(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string) 
 	return begun.Secret
 }
 
-// assertNoTOTPSecret 断言 GET 响应体不含 secret 或 otpauth 字段/取值。
+// assertNoTOTPSecret asserts the GET body holds no secret or otpauth field/value.
 func assertNoTOTPSecret(t *testing.T, body string) {
 	t.Helper()
 	if strings.Contains(body, "secret") || strings.Contains(body, "otpauth") {
@@ -61,13 +61,13 @@ func assertNoTOTPSecret(t *testing.T, body string) {
 	}
 }
 
-// TestTOTPStatusAndBeginNeverLeakSecretOnGet 覆盖状态读取与 begin 的一次性 secret 语义。
+// TestTOTPStatusAndBeginNeverLeakSecretOnGet covers the status read and begin's one-time secret semantics.
 func TestTOTPStatusAndBeginNeverLeakSecretOnGet(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
 	cookies, csrf := totpLogin(t, srv, db)
 
-	// 未启用：GET 报告 false/false/0，且不含任何秘密材料。
+	// Not enabled: GET reports false/false/0 and holds no secret material.
 	status := getWithCookies(t, srv, "/api/v1/settings/totp", cookies)
 	if status.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want 200 (body %s)", status.Code, snippet(status.Body.String()))
@@ -81,7 +81,7 @@ func TestTOTPStatusAndBeginNeverLeakSecretOnGet(t *testing.T) {
 	}
 	assertNoTOTPSecret(t, status.Body.String())
 
-	// begin：secret 与 otpauth 链接在此响应里一次性出现。
+	// begin: the secret and otpauth link appear once, in this response.
 	begin := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/begin", map[string]any{}, cookies, csrf)
 	if begin.Code != http.StatusOK {
 		t.Fatalf("POST begin = %d, want 200 (body %s)", begin.Code, snippet(begin.Body.String()))
@@ -94,7 +94,7 @@ func TestTOTPStatusAndBeginNeverLeakSecretOnGet(t *testing.T) {
 		t.Fatalf("begin response = %+v", begun)
 	}
 
-	// 待确认：GET 只报告 pending=true，仍然不含 secret / otpauth。
+	// Pending: GET only reports pending=true and still holds no secret / otpauth.
 	status = getWithCookies(t, srv, "/api/v1/settings/totp", cookies)
 	var pending totpStatusResponse
 	if err := json.Unmarshal(status.Body.Bytes(), &pending); err != nil {
@@ -110,19 +110,19 @@ func TestTOTPStatusAndBeginNeverLeakSecretOnGet(t *testing.T) {
 	}
 }
 
-// TestTOTPConfirmThenDisableRequiresPassword 覆盖启用（含恢复码一次性返回）与关闭需密码。
+// TestTOTPConfirmThenDisableRequiresPassword covers enabling (including the one-time recovery codes) and the password required to disable.
 func TestTOTPConfirmThenDisableRequiresPassword(t *testing.T) {
 	srv, db := newAuthServer(t)
 	u := createTOTPAdmin(t, srv, db)
 	cookies, csrf := totpLogin(t, srv, db)
 
-	// 没有待确认绑定就 confirm：必须拒绝，且不启用。
+	// Confirming with no pending binding: must be refused, and TOTP stays disabled.
 	early := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/confirm", map[string]any{"code": "123456"}, cookies, csrf)
 	if early.Code != http.StatusBadRequest {
 		t.Fatalf("confirm without a pending setup = %d, want 400 (body %s)", early.Code, snippet(early.Body.String()))
 	}
 
-	// begin 后用错误验证码 confirm：拒绝，仍未启用。
+	// Confirming with a wrong code after begin: refused, still not enabled.
 	begin := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/begin", map[string]any{}, cookies, csrf)
 	var begun totpBeginResponse
 	if err := json.Unmarshal(begin.Body.Bytes(), &begun); err != nil {
@@ -136,7 +136,7 @@ func TestTOTPConfirmThenDisableRequiresPassword(t *testing.T) {
 		t.Fatal("TOTP was enabled despite a rejected code")
 	}
 
-	// 正确验证码：启用，一次性返回 10 个恢复码。
+	// Correct code: enabled, returning 10 recovery codes once.
 	code, err := totp.GenerateCode(begun.Secret, time.Now())
 	if err != nil {
 		t.Fatalf("GenerateCode() error = %v", err)
@@ -156,7 +156,7 @@ func TestTOTPConfirmThenDisableRequiresPassword(t *testing.T) {
 		t.Fatal("TOTP is not enabled after a valid confirmation")
 	}
 
-	// 已启用后的 GET：enabled=true，剩余恢复码计数正确，且不含秘密材料。
+	// GET once enabled: enabled=true, the remaining recovery code count is correct, and no secret material is included.
 	status := getWithCookies(t, srv, "/api/v1/settings/totp", cookies)
 	var after totpStatusResponse
 	if err := json.Unmarshal(status.Body.Bytes(), &after); err != nil {
@@ -167,7 +167,7 @@ func TestTOTPConfirmThenDisableRequiresPassword(t *testing.T) {
 	}
 	assertNoTOTPSecret(t, status.Body.String())
 
-	// 关闭：缺 CSRF 403；密码错误 401 且仍启用；密码正确 200 后关闭。
+	// Disable: missing CSRF 403; wrong password 401 and still enabled; correct password 200, then disabled.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "Sup3rSecret!"}, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("disable without CSRF = %d, want 403", rec.Code)
 	}
@@ -198,14 +198,14 @@ func TestTOTPConfirmThenDisableRequiresPassword(t *testing.T) {
 	}
 }
 
-// TestTOTPRecoveryRegenerationRequiresPassword 覆盖恢复码重新生成需密码、旧的作废。
+// TestTOTPRecoveryRegenerationRequiresPassword covers recovery-code regeneration needing the password and voiding the old codes.
 func TestTOTPRecoveryRegenerationRequiresPassword(t *testing.T) {
 	srv, db := newAuthServer(t)
 	u := createTOTPAdmin(t, srv, db)
 	cookies, csrf := totpLogin(t, srv, db)
 	totpEnable(t, srv, cookies, csrf)
 
-	// 缺 CSRF 403；密码错误 401 且不生成。
+	// Missing CSRF 403; wrong password 401 with nothing generated.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/recovery", map[string]any{"password": "Sup3rSecret!"}, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("recovery without CSRF = %d, want 403", rec.Code)
 	}
@@ -217,7 +217,7 @@ func TestTOTPRecoveryRegenerationRequiresPassword(t *testing.T) {
 		t.Fatalf("recovery codes after a rejected attempt = (%d, %v), want %d", n, err, auth.RecoveryCodeCount)
 	}
 
-	// 密码正确：返回一批新码，旧码立即作废（计数仍为 RecoveryCodeCount）。
+	// Correct password: a new batch of codes comes back, the old ones are void at once (the count is still RecoveryCodeCount).
 	ok := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/recovery", map[string]any{"password": "Sup3rSecret!"}, cookies, csrf)
 	if ok.Code != http.StatusOK {
 		t.Fatalf("recovery with the correct password = %d, want 200 (body %s)", ok.Code, snippet(ok.Body.String()))
@@ -233,7 +233,7 @@ func TestTOTPRecoveryRegenerationRequiresPassword(t *testing.T) {
 		t.Fatalf("totp.recovery_regenerate audit = (%d, %v), want 1", n, err)
 	}
 
-	// 关闭后再重新生成恢复码：必须拒绝。
+	// Regenerating recovery codes after disabling: must be refused.
 	if rec := postJSONWithCSRF(t, srv, "/api/v1/settings/totp/disable", map[string]any{"password": "Sup3rSecret!"}, cookies, csrf); rec.Code != http.StatusOK {
 		t.Fatalf("disable before the not-enabled recovery check = %d, want 200", rec.Code)
 	}
@@ -243,7 +243,7 @@ func TestTOTPRecoveryRegenerationRequiresPassword(t *testing.T) {
 	}
 }
 
-// TestTOTPRejectsAnonymousAndBearer 断言接口只接受浏览器会话。
+// TestTOTPRejectsAnonymousAndBearer asserts the API accepts browser sessions only.
 func TestTOTPRejectsAnonymousAndBearer(t *testing.T) {
 	srv, db := newAuthServer(t)
 	u := createTOTPAdmin(t, srv, db)

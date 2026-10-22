@@ -10,49 +10,49 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是公开只读分享浏览的 SPA 同源 JSON 传输层与 GET 切壳。
+// This file is the SPA same-origin JSON transport for public read-only share browsing, plus the GET shell switch.
 //
-// 安全边界与迁移前逐项一致，绝不因切壳放宽或收紧：
-//   - 撤销、过期或不存在一律 404，不区分三者（不泄漏 token 历史）；
-//   - 有口令的链接在解锁前不返回任何卡片内容，只给「需要口令 + 卡组名」；
-//   - 卡片正反面一律复用服务端清洗渲染管线（shareNoteView → renderSide），客户端只把清洗后的
-//     HTML 交给 {@html}，绝不把 fields 原文当可信 Markdown 渲染；
-//   - 打开成功时登记会话级媒体读取授权（recordShareGrant），媒体可读性仍由 /media 的登录门禁决定。
+// The security boundary matches the pre-migration one item by item; the shell switch neither loosens nor tightens it:
+//   - revoked, expired or nonexistent is always 404, without telling the three apart (no leaking token history);
+//   - a password-protected link returns no card content before unlocking, only "password required + deck name";
+//   - card fronts and backs always reuse the server-side sanitizing render pipeline (shareNoteView → renderSide), and the client only hands sanitized
+//     HTML to {@html}, never rendering raw fields as trusted Markdown;
+//   - a successful open registers the session-level media read grant (recordShareGrant), and media readability is still decided by /media's login gate.
 //
-// 匿名访问的现状不变：分享链接本身仍是凭据，GET /s/:token 从不要求登录，这里也不要求。
+// Anonymous access is unchanged: the share link itself is still the credential, GET /s/:token never requires login, and neither does this.
 
-// apiShareNote 是一条共享卡片的正反面清洗后 HTML。
+// apiShareNote is the sanitized HTML of both sides of one shared card.
 type apiShareNote struct {
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
 }
 
-// apiShareResponse 是分享浏览内容的 JSON 形态。
-// password_required 为真时 notes 恒为空，绝不返回解锁前的内容。
+// apiShareResponse is the JSON shape of share browse content.
+// When password_required is true, notes is always empty, never returning content from before the unlock.
 type apiShareResponse struct {
 	DeckName         string         `json:"deck_name"`
 	PasswordRequired bool           `json:"password_required"`
 	Notes            []apiShareNote `json:"notes"`
 }
 
-// registerShareRoutes 挂载分享浏览的 SPA JSON 端点；口令解锁走免 CSRF 的 POST（与 SSR 同一理由：
-// 此刻没有服务端会话可绑定 token，且除渲染内容外不产生状态）。
+// registerShareRoutes mounts the SPA JSON endpoints for share browsing; password unlock uses a CSRF-free POST (same reason as SSR:
+// there is no server-side session at that point to bind a token to, and no state is produced beyond the rendered content).
 func (s *Server) registerShareRoutes(router *gin.Engine) {
 	if s.shareLinks == nil || s.decks == nil || s.notes == nil {
 		return
 	}
 	router.GET("/api/v1/share/:token", s.shareGet)
 	router.POST("/api/v1/share/:token/unlock", s.shareUnlock)
-	// 加入卡组会写授权行（状态变更）且只对已登录用户开放，因此过 CSRF 中间件。
+	// Joining a deck writes a grant row (a state change) and is open to logged-in users only, so it goes through the CSRF middleware.
 	if s.sessions != nil {
 		router.POST("/api/v1/share/:token/join", s.sessions.CSRFMiddleware(), s.shareJoin)
 	}
 }
 
-// shareBrowseRoute 提供 GET /s/:token：返回应用壳，由客户端路由渲染只读浏览页；
-// 内容走 GET /api/v1/share/:token（同一份清洗渲染与媒体授权）。
+// shareBrowseRoute serves GET /s/:token: it returns the app shell, and the client router renders the read-only browse page;
+// the content goes through GET /api/v1/share/:token (the same sanitizing render and media grant).
 //
-// 可达性判定必须留在切壳之前：撤销、过期或不存在的链接仍返回 404，与该 URL 迁移前的行为一致。
+// The reachability decision must stay before switching to the shell: a revoked, expired or nonexistent link still returns 404, matching this URL's pre-migration behavior.
 func (s *Server) shareBrowseRoute(c *gin.Context) {
 	if _, _, ok := s.resolveShareLink(c); !ok {
 		return
@@ -60,9 +60,9 @@ func (s *Server) shareBrowseRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// shareGet 返回一份分享卡组的只读内容（GET /api/v1/share/:token）。
+// shareGet returns the read-only content of one shared deck (GET /api/v1/share/:token).
 //
-// 无口令链接直接返回内容；有口令的链接在解锁前只返回 {password_required: true}，不泄漏卡片正文。
+// A link without a password returns the content directly; a password-protected link only returns {password_required: true} before unlock, without leaking card text.
 func (s *Server) shareGet(c *gin.Context) {
 	link, deck, ok := s.resolveShareLink(c)
 	if !ok {
@@ -79,10 +79,10 @@ func (s *Server) shareGet(c *gin.Context) {
 	s.shareContent(c, deck, link)
 }
 
-// shareUnlock 校验口令并返回内容（POST /api/v1/share/:token/unlock）。
+// shareUnlock checks the password and returns the content (POST /api/v1/share/:token/unlock).
 //
-// 无口令链接等价于直接浏览（幂等）；口令错误返回 401 与稳定 code。
-// 这里刻意不消费任何令牌、不建立解锁状态——每次请求都重新校验，因此无状态。
+// A link without a password is equivalent to browsing directly (idempotent); a wrong password returns 401 with a stable code.
+// This deliberately consumes no token and keeps no unlock state — every request validates afresh, so it is stateless.
 func (s *Server) shareUnlock(c *gin.Context) {
 	var req struct {
 		Password string `json:"password"`
@@ -113,12 +113,12 @@ func (s *Server) shareUnlock(c *gin.Context) {
 	s.shareContent(c, deck, link)
 }
 
-// shareContent 组装只读内容的 JSON：登记会话级媒体授权后列出卡片并清洗渲染。
-// 单张坏卡跳过并记英文日志，不阻断其余内容的展示。
+// shareContent assembles the read-only content JSON: it registers the session-level media grant, then lists the cards and sanitizes-renders them.
+// A single bad card is skipped with an English log line and does not block the rest of the content.
 func (s *Server) shareContent(c *gin.Context, deck *store.Deck, link *store.ShareLink) {
 	ctx := c.Request.Context()
-	// 访问已经成功（无口令，或口令校验通过）→ 登记「本会话打开过这个卡组」，
-	// 浏览器随后对 /media/<sha256> 的请求才放行；匿名访客没有服务端会话，直接跳过。
+	// Access has succeeded (no password, or the password check passed) → register "this session opened this deck",
+	// and only then are the browser's later /media/<sha256> requests allowed through; an anonymous visitor has no server-side session, so it is skipped.
 	s.recordShareGrant(c, deck, link)
 	notes, _, err := s.notes.List(ctx, store.NoteListOptions{
 		DeckID: deck.ID, Page: 1, PerPage: store.DefaultNotePageSize, Status: store.NoteStatusActive,
@@ -132,7 +132,7 @@ func (s *Server) shareContent(c *gin.Context, deck *store.Deck, link *store.Shar
 	for i := range notes {
 		front, back, err := s.shareNoteView(notes[i])
 		if err != nil {
-			// 单张坏卡不阻断浏览：跳过并记英文日志，其余内容照常展示。
+			// A single bad card does not block browsing: it is skipped with an English log line and the rest is shown as usual.
 			s.logger.Error("render shared note failed", "note_id", notes[i].ID, "error", err)
 			continue
 		}
@@ -145,19 +145,19 @@ func (s *Server) shareContent(c *gin.Context, deck *store.Deck, link *store.Shar
 	})
 }
 
-// shareJoin 让「持链接的已登录用户」把这个卡组加进自己的列表（POST /api/v1/share/:token/join）。
+// shareJoin lets "a logged-in user holding the link" add this deck to their own list (POST /api/v1/share/:token/join).
 //
-// 为什么入伙要一次显式动作，而不是打开链接就自动入伙：链接会被转发、会在群里被随手点开，
-// 而「打开一次」只等于同意看一次，不等于同意把一个卡组塞进我的列表与复习队列——进了列表
-// 就会占我的每日新卡额度。因此打开链接只登记会话级只读（recordShareGrant，与链接同生死），
-// 入伙由用户自己按一次按钮决定；token 就是这次入伙的凭据，没有链接的人拿不到授权。
+// Why joining is an explicit action instead of happening automatically on opening the link: links get forwarded and clicked casually in group chats,
+// and "opening once" only means agreeing to look once, not agreeing to have a deck pushed into my list and review queue — once in the list
+// it eats into my daily new-card quota. So opening a link only registers a session-level read-only grant (recordShareGrant, living and dying with the link),
+// and joining is decided by the user pressing a button; the token is the credential for that join, and whoever lacks the link gets no grant.
 //
-// 入伙之后这条授权与链接无关（撤销/过期链接不回收它），属主要在共享页逐个撤销成员——
-// 与「邀请被接受」得到的授权完全同一种，撤销路径也同一条。
+// After joining, that grant is independent of the link (revoking or expiring the link does not take it back); the owner revokes members one by one on the sharing page —
+// it is exactly the same kind of grant as one obtained by "invite accepted", revoked through the same path.
 //
-// 失败语义：链接已撤销/已过期/不存在 → 404（不区分三者，不泄漏 token 历史）；
-// 未登录 → 401（前端把未登录访客引导去登录，不显示这个按钮）；属主自己按、或已有授权
-// （含 editor）→ 幂等成功，既不写多余授权行，也不把角色降级成 reader。
+// Failure semantics: link revoked / expired / nonexistent → 404 (the three are not told apart, no leaking token history);
+// not logged in → 401 (the frontend sends a logged-out visitor to log in and does not show this button); the owner pressing it, or an existing grant
+// (editor included) → idempotent success, writing no redundant grant row and not downgrading the role to reader.
 func (s *Server) shareJoin(c *gin.Context) {
 	if s.grants == nil {
 		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
@@ -168,7 +168,7 @@ func (s *Server) shareJoin(c *gin.Context) {
 		apiAuthError(c, http.StatusUnauthorized, api.CodeUnauthorized, "Authentication is required.")
 		return
 	}
-	// 可达性判定与浏览页同源：撤销/过期/不存在一律 404。
+	// The reachability decision is the same as the browse page: revoked/expired/nonexistent is always 404.
 	_, deck, ok := s.resolveShareLink(c)
 	if !ok {
 		return

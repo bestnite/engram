@@ -12,13 +12,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是“卡组包错误码逐码浮出”的 REST 端验收：
-// mapPackageError 不再把 package_bad_format 折叠成笼统的 invalid_request，而是逐码透出
-// store.PackageError.Code。每条用例同时断言 HTTP 状态与修前一致（本任务只改 body 里的 code）。
+// This file is the REST-side acceptance for "each deck package error code surfaces on its own":
+// mapPackageError no longer folds package_bad_format into a blanket invalid_request but passes through
+// store.PackageError.Code one code at a time. Each case also asserts the HTTP status is unchanged (this task only changes the code in the body).
 //
-// 修前：坏 zip 会得到 code=invalid_request（用例红）；修后得到 code=package_bad_format（绿）。
+// Before the fix a bad zip got code=invalid_request (case red); after it gets code=package_bad_format (green).
 
-// decodePackageErrorCode 解出错误包壳里的稳定 code 与 message。
+// decodePackageErrorCode extracts the stable code and message from the error envelope.
 func decodePackageErrorCode(t *testing.T, raw []byte) (code, message string) {
 	t.Helper()
 	var resp struct {
@@ -33,7 +33,7 @@ func decodePackageErrorCode(t *testing.T, raw []byte) (code, message string) {
 	return resp.Error.Code, resp.Error.Message
 }
 
-// packageZip 用给定的条目名→内容构造一个 zip 卡组包字节。
+// packageZip builds zip deck package bytes from the given entry name -> content pairs.
 func packageZip(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -53,11 +53,11 @@ func packageZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// presetJSON 是最小合法 preset.json（与 minimalPackageZip 同）。
+// presetJSON is the minimal valid preset.json (the same one minimalPackageZip uses).
 const presetJSON = `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`
 
-// TestImportPackageSurfacesBadFormat 断言坏 zip（不是归档）产出它自己的稳定 code
-// package_bad_format，状态仍是 400，且 message 不再是笼统的“请求不合法”。
+// TestImportPackageSurfacesBadFormat asserts a bad zip (not an archive) yields its own stable code
+// package_bad_format, the status is still 400, and the message is no longer the blanket "request invalid".
 func TestImportPackageSurfacesBadFormat(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "pkg_bad_format", store.RoleUser)
@@ -73,14 +73,14 @@ func TestImportPackageSurfacesBadFormat(t *testing.T) {
 	if code != store.CodePackageBadFormat {
 		t.Errorf("bad-format import code = %q, want %q", code, store.CodePackageBadFormat)
 	}
-	// 逐码透出后，message 是语言包 error.package_bad_format 的英文文案，不再落到 invalid_request。
+	// With per-code surfacing the message is the English text of the i18n key error.package_bad_format, no longer falling back to invalid_request.
 	if msg == errorMessages[CodeInvalidRequest] {
 		t.Errorf("bad-format import message fell back to invalid_request: %q", msg)
 	}
 }
 
-// TestImportPackageSurfacesTooLarge 断言超出请求体上限的包产出稳定 code package_too_large，
-// 状态与修前一致（413）。
+// TestImportPackageSurfacesTooLarge asserts a package over the body cap yields the stable code package_too_large,
+// with the same status as before the fix (413).
 func TestImportPackageSurfacesTooLarge(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "pkg_too_large", store.RoleUser)
@@ -102,8 +102,8 @@ func TestImportPackageSurfacesTooLarge(t *testing.T) {
 	}
 }
 
-// TestImportPackageSurfacesUnknownKind 断言包内未知题型产出稳定 code package_unknown_kind，
-// 状态仍是 400，且逐条列出出错的 note 下标（entries 不丢失）。
+// TestImportPackageSurfacesUnknownKind asserts an unknown card type inside the package yields the stable code package_unknown_kind,
+// the status is still 400, and the failing notes' indexes are listed one by one (entries are not lost).
 func TestImportPackageSurfacesUnknownKind(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "pkg_unknown_kind", store.RoleUser)
@@ -125,22 +125,22 @@ func TestImportPackageSurfacesUnknownKind(t *testing.T) {
 	if code != store.CodePackageUnknownKind {
 		t.Errorf("unknown-kind import code = %q, want %q", code, store.CodePackageUnknownKind)
 	}
-	// entries 仍逐条列出：message 里点名出错的 note 下标。
+	// entries are still listed one by one: the message names the failing notes' indexes.
 	if !bytes.Contains([]byte(msg), []byte("notes[0]")) {
 		t.Errorf("unknown-kind message lost the per-note entries: %q", msg)
 	}
 }
 
-// TestImportPackageSurfacesUnsafeMedia 断言包内媒体真实字节不在白名单内时产出稳定 code
-// package_unsafe_media，状态仍是 400（媒体以真实字节判定，声明与字节不符即整包被拒）。
+// TestImportPackageSurfacesUnsafeMedia asserts that when a package's real media bytes are not on the allowlist it yields the stable code
+// package_unsafe_media, the status is still 400 (media is judged by real bytes; a declaration disagreeing with the bytes rejects the whole package).
 func TestImportPackageSurfacesUnsafeMedia(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
-	// 校验发生在写盘之前；给一个临时媒体根目录，确保拒绝不是因为没有落盘位置。
+	// Validation happens before writing to disk; a temporary media root is provided so that the rejection is not merely a missing write location.
 	env.api.mediaRoot = t.TempDir()
 	user := seedUser(t, env.db, "pkg_unsafe_media", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 
-	// 声明 image/png，真实字节是 HTML：真实类型判定与声明不符 → 拒绝。
+	// Declared image/png with real HTML bytes: the real-type verdict disagrees with the declaration -> rejected.
 	raw, _ := apiMediaPackageZip(t, []byte("<html><body><script>alert(1)</script></body></html>"))
 	body, ct := multipartBody(t, "unsafe.edeck", raw)
 	rec := postImport(t, env, k.Plaintext, body, ct)

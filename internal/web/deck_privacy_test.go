@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// 本文件钉死卡组的可见性边界：一张卡组只对属主与被显式授权者可见。
-// 读侧走 GET /api/v1/decks 的 JSON 列表；按 id 直连内容走 GET /decks/:id/notes。
-// 历史上还存在 private/unlisted/public 三档可见性与 /sharing/visibility 写端点，二者已一并删除。
+// This file pins down the deck visibility boundary: a deck is visible only to its owner and to explicitly granted users.
+// The read side goes through the GET /api/v1/decks JSON list; direct content access by id goes through GET /decks/:id/notes.
+// Historically there were also three visibility tiers private/unlisted/public and a /sharing/visibility write endpoint; both were removed together.
 
-// deckListingBody 取当前会话在 GET /api/v1/decks 里看到的卡组列表 JSON 文本。
+// deckListingBody returns the JSON text of the deck list the current session sees on GET /api/v1/decks.
 func deckListingBody(t *testing.T, srv *Server, cookies []*http.Cookie) string {
 	t.Helper()
 	rec := getWithCookies(t, srv, "/api/v1/decks", cookies)
@@ -20,8 +20,8 @@ func deckListingBody(t *testing.T, srv *Server, cookies []*http.Cookie) string {
 	return rec.Body.String()
 }
 
-// TestStrangerCannotSeeOrOpenAnotherUsersDeck 是这条边界的主验收：
-// 别人建的卡组既不出现在列表里，也不能按 id 直连内容——没有「看得到但没有授权」的中间态。
+// TestStrangerCannotSeeOrOpenAnotherUsersDeck is the main acceptance test for this boundary:
+// a deck built by someone else neither appears in the list nor has its content accessible directly by id — there is no in-between state of "visible but ungranted".
 func TestStrangerCannotSeeOrOpenAnotherUsersDeck(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Private deck")
@@ -37,9 +37,9 @@ func TestStrangerCannotSeeOrOpenAnotherUsersDeck(t *testing.T) {
 	}
 }
 
-// TestDeckVisibilityEndpointRemoved 是删除动作的回归守卫：
-// /api/v1/decks/:id/sharing/visibility 路由不存在，属主写它也只会得到 404——
-// 只要它还能返回 200，就说明三档可见性又回来了。
+// TestDeckVisibilityEndpointRemoved is the regression guard for the removal:
+// the /api/v1/decks/:id/sharing/visibility route does not exist, so even the owner writing to it only gets 404 —
+// as soon as it can return 200 again, that means the three visibility tiers are back.
 func TestDeckVisibilityEndpointRemoved(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "No visibility deck")

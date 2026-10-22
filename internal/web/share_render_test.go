@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// 分享内容的清洗渲染现在经 JSON 传输：GET /api/v1/share/:token 返回服务端清洗后的
-// front_html/back_html（shareNoteView → renderSide），SPA 只把这段 HTML 交给 {@html}。
-// 本文件锁定两件事：合法 Markdown/Math 以标签形式出现；同一张卡在分享与复习两条通道上
-// 渲染出的正文 HTML 逐字相同（证明两者走同一条 internal/render 管线）。
+// Sanitized rendering of share content now travels as JSON: GET /api/v1/share/:token returns server-sanitized
+// front_html/back_html (shareNoteView → renderSide), and the SPA only hands that HTML to {@html}.
+// This file locks down two things: legal Markdown/Math appears as tags; and the same card renders byte-identical body HTML
+// on the share and the review path (proving both go through the same internal/render pipeline).
 
-// fetchShareHTML 打开无口令分享链接并取回第一张卡的正反面 HTML。
+// fetchShareHTML opens a no-password share link and fetches the front/back HTML of the first card.
 func fetchShareHTML(t *testing.T, srv *Server, deckPublicID string, ownerCookies []*http.Cookie, ownerCSRF string) (front, back string) {
 	t.Helper()
 	token := createShareLinkJSON(t, srv, deckPublicID, ownerCookies, ownerCSRF, "")
@@ -30,8 +30,8 @@ func fetchShareHTML(t *testing.T, srv *Server, deckPublicID string, ownerCookies
 	return body.Notes[0].FrontHTML, body.Notes[0].BackHTML
 }
 
-// TestShareBrowseRendersSanitizedCardHTML 锁定这条规则：分享内容把卡面正文当已清洗 HTML 注入，
-// 用户看到 <span> 而不是 &lt;span&gt;。它复用复习页同一套 internal/render.RenderMarkdown。
+// TestShareBrowseRendersSanitizedCardHTML locks this rule down: share content injects card text as already-sanitized HTML,
+// so the user sees <span> rather than &lt;span&gt;. It reuses the same internal/render.RenderMarkdown as the review page.
 func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Render deck")
@@ -40,13 +40,13 @@ func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 
 	frontHTML, _ := fetchShareHTML(t, srv, deck.PublicID, ownerCookies, ownerCSRF)
 
-	// 合法标记必须以标签形式出现。
+	// Legal markup must appear as tags.
 	for _, want := range []string{`<span class="hl">高亮</span>`, `<strong>加粗</strong>`, `\(x+y\)`} {
 		if !strings.Contains(frontHTML, want) {
 			t.Errorf("shared card body missing rendered markup %q:\n%s", want, frontHTML)
 		}
 	}
-	// 且绝不能再出现被转义的标签或未转换的 Markdown。
+	// And escaped tags or unconverted Markdown must never appear again.
 	for _, bad := range []string{"&lt;span", "&lt;strong", "&quot;hl&quot;", "**加粗**"} {
 		if strings.Contains(frontHTML, bad) {
 			t.Errorf("shared card body still shows escaped/raw source %q:\n%s", bad, frontHTML)
@@ -54,13 +54,13 @@ func TestShareBrowseRendersSanitizedCardHTML(t *testing.T) {
 	}
 }
 
-// TestShareBrowseSanitizesUnsafeCardHTML 是安全负例端到端：
-// 同一张卡的字段里放脚本、事件属性与公式绕过样本，分享与复习两条通道都不得出现可执行形式，
-// 且两条通道渲染出的正文 HTML 完全一致。
+// TestShareBrowseSanitizesUnsafeCardHTML is the end-to-end security negative case:
+// with scripts, event attributes and a math-bypass sample placed in the same card's fields, neither the share nor the review path may show an executable form,
+// and the body HTML the two paths render is exactly identical.
 //
-// 清洗本身由 internal/render 的用例穷尽覆盖：
-//   - TestRenderMarkdownStripsUnsafe（script / onerror / javascript: URL）
-//   - TestRenderMarkdownNeutralizesMathAttributeEscape（公式还原后的属性逃逸）
+// Sanitizing itself is covered exhaustively by the internal/render tests:
+//   - TestRenderMarkdownStripsUnsafe (script / onerror / javascript: URL)
+//   - TestRenderMarkdownNeutralizesMathAttributeEscape (attribute escape after math restoration)
 func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Unsafe deck")
@@ -98,13 +98,13 @@ func TestShareBrowseSanitizesUnsafeCardHTML(t *testing.T) {
 			}
 		}
 	}
-	// 内容不得被整段吞掉：合法残留与文本都要在。
+	// The content must not be swallowed whole: both legal leftovers and text have to be there.
 	for _, want := range []string{"xss-span", `<img src="x"`} {
 		if !strings.Contains(shareFront, want) {
 			t.Errorf("share front lost benign content %q:\n%s", want, shareFront)
 		}
 	}
-	// 一致性：同一 note，分享与复习的正文 HTML 逐字相同。
+	// Consistency: for the same note, the body HTML from share and from review is byte-identical.
 	if shareFront != renderBody.FrontHTML {
 		t.Errorf("share/review front HTML differ:\nshare=%q\nreview=%q", shareFront, renderBody.FrontHTML)
 	}

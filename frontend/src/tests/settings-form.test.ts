@@ -39,7 +39,7 @@ describe('Settings view form state and API gap handling', () => {
         serverApiAvailable = true;
       } catch (err) {
         if (err instanceof ApiClientError && err.isNotFound) {
-          // 证明捕获到 404，UI 进入 serverApiAvailable = false 降级状态
+          // Prove the 404 was caught and the UI dropped to serverApiAvailable = false
           serverApiAvailable = false;
         }
       }
@@ -49,7 +49,7 @@ describe('Settings view form state and API gap handling', () => {
         '/api/v1/profile',
         expect.objectContaining({ credentials: 'same-origin' })
       );
-      // 严禁向 Go SSR 表单端点（/settings/profile 或 /settings/locale）发起 POST 表单模拟
+      // Never simulate a POST form submit to the Go SSR form endpoints (/settings/profile or /settings/locale)
       const calledUrls = mockFetch.mock.calls.map((call) => call[0]);
       expect(calledUrls).not.toContain('/settings/profile');
       expect(calledUrls).not.toContain('/settings/locale');
@@ -76,7 +76,7 @@ describe('Settings view form state and API gap handling', () => {
       expect(profile.timezone).toBe('Asia/Tokyo');
       expect(profile.day_cutoff_hour).toBe(0);
 
-      // 同步测试设置 locale
+      // Sync the test settings locale
       setLocale(profile.locale as 'en');
       expect(getLocale()).toBe('en');
     });

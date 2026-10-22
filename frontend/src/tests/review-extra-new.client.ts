@@ -6,8 +6,10 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 「再来一组」：单卡组复习范围的队列空了，且卡组里还有今天额度之外的新卡时，完成页给出追加入口；
- * 默认张数来自服务端（每日上限），用户可以改；提交后重新拉取队列。多卡组范围不显示。
+ * "One more round": when a single-deck review scope's queue is empty but the deck still has
+ * new cards beyond today's quota, the completion page offers an extra-round entry; the
+ * default count comes from the server (daily cap) and the user can change it; submitting
+ * refetches the queue. Multi-deck scopes do not show it.
  */
 describe('ReviewView another batch of new cards', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -87,7 +89,7 @@ describe('ReviewView another batch of new cards', () => {
     expect(getExtraNew).toHaveBeenCalledWith('d1', ['x']);
     expect(target.querySelector('[data-testid="review-extra-new"]')).not.toBeNull();
     expect(countInput(target).value).toBe('5');
-    // 最多可加的张数是今天额度之外还剩的新卡数（8 - 0）。
+    // The maximum addable count is the number of new cards left beyond today's quota (8 - 0).
     expect(countInput(target).max).toBe('8');
     expect(target.textContent).toContain('今天已学 5 张新卡');
     expect(target.querySelector('#review-extra-hint')?.textContent).toBe('最多 8 张');
@@ -104,7 +106,7 @@ describe('ReviewView another batch of new cards', () => {
     document.body.appendChild(target);
     instance = mount(ReviewView, { target, props: { client: fake.client } });
     await flush();
-    // 额度还没回来：不能先露出「复习完成」，否则追加表单随后插入会让页面跳一下。
+    // The quota has not come back yet: "review complete" must not show first, or the extra form inserting afterwards would make the page jump.
     expect(target.querySelector('[data-testid="review-empty"]')).toBeNull();
     expect(target.querySelector('[data-testid="review-extra-loading"]')).not.toBeNull();
     resolveExtra(status);

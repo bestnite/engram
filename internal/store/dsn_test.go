@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestSQLiteDBPath 覆盖从 DSN 里取路径的各种形态。
+// TestSQLiteDBPath covers the various shapes a path can take inside a DSN.
 func TestSQLiteDBPath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -33,11 +33,11 @@ func TestSQLiteDBPath(t *testing.T) {
 	}
 }
 
-// TestOpenSQLiteCreatesMissingParentDir 是正向验收：
-// 父目录不存在时，sqlite 驱动应自动、幂等地创建它并成功打开，而不是报 out of memory。
+// TestOpenSQLiteCreatesMissingParentDir is the positive acceptance case:
+// when the parent directory is missing, the sqlite driver must create it automatically and idempotently and open successfully, instead of reporting out of memory.
 func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 	base := t.TempDir()
-	// 故意多套一层不存在的目录，验证 MkdirAll 递归创建。
+	// deliberately nest one more level of non-existent directory to verify that MkdirAll creates recursively.
 	dbPath := filepath.Join(base, "nested", "deeper", "engram.db")
 
 	db, err := Open("sqlite", dbPath)
@@ -50,7 +50,7 @@ func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	// 父目录被创建，且数据库文件真的落在这里（而不是内存里）。
+	// the parent directory is created, and the database file really lands there (not in memory).
 	if info, err := os.Stat(filepath.Dir(dbPath)); err != nil || !info.IsDir() {
 		t.Fatalf("parent dir was not created: info=%v err=%v", info, err)
 	}
@@ -58,7 +58,7 @@ func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 		t.Fatalf("database file was not created at %q: %v", dbPath, err)
 	}
 
-	// 幂等：再打开一次不应报错，也不应改变路径。
+	// idempotent: opening again must neither error nor change the path.
 	db2, err := Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("reopen should be idempotent, got error: %v", err)
@@ -70,7 +70,7 @@ func TestOpenSQLiteCreatesMissingParentDir(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB2.Close() })
 }
 
-// TestOpenSQLiteFileURICreatesMissingParentDir 覆盖带参数的 file: URI 形态。
+// TestOpenSQLiteFileURICreatesMissingParentDir covers the file: URI shape with parameters.
 func TestOpenSQLiteFileURICreatesMissingParentDir(t *testing.T) {
 	base := t.TempDir()
 	dbPath := filepath.Join(base, "uri", "engram.db")
@@ -91,8 +91,8 @@ func TestOpenSQLiteFileURICreatesMissingParentDir(t *testing.T) {
 	}
 }
 
-// TestOpenSQLiteParentIsFileErrorIsClear 覆盖“路径不可写”类真错误：
-// 父路径是一个普通文件时，MkdirAll 失败必须点名该目录，且不得出现 out of memory。
+// TestOpenSQLiteParentIsFileErrorIsClear covers real 'path not writable' errors:
+// when the parent path is an ordinary file, a failed MkdirAll must name that directory, and out of memory must not appear.
 func TestOpenSQLiteParentIsFileErrorIsClear(t *testing.T) {
 	base := t.TempDir()
 	notDir := filepath.Join(base, "afile")
@@ -114,8 +114,8 @@ func TestOpenSQLiteParentIsFileErrorIsClear(t *testing.T) {
 	}
 }
 
-// TestOpenSQLitePathIsDirNoOutOfMemory 覆盖 SQLite 对文件级错误复用 errno 的情形：
-// DSN 指向一个已存在的目录时，打开失败的错误要点名路径且不得出现 out of memory。
+// TestOpenSQLitePathIsDirNoOutOfMemory covers the case where SQLite reuses one errno for file-level errors:
+// when the DSN points at an existing directory, the open failure must name the path and must not mention out of memory.
 func TestOpenSQLitePathIsDirNoOutOfMemory(t *testing.T) {
 	dir := t.TempDir()
 
@@ -132,12 +132,12 @@ func TestOpenSQLitePathIsDirNoOutOfMemory(t *testing.T) {
 	}
 }
 
-// TestOpenPostgresDoesNotCreateDirs 守住“只对 sqlite 建目录”这条边界：
-// postgres 的 DSN 里即使出现一个不存在的路径，也不得被创建成目录。
+// TestOpenPostgresDoesNotCreateDirs guards the boundary 'create directories only for sqlite':
+// even if a postgres DSN contains a non-existent path, it must not be created as a directory.
 func TestOpenPostgresDoesNotCreateDirs(t *testing.T) {
 	base := t.TempDir()
 	sockDir := filepath.Join(base, "no-such-socket-dir")
-	// 关键字式 postgres DSN：host 指向一个不存在的目录（unix socket 形态）。
+	// keyword-style postgres DSN: host points at a non-existent directory (unix socket form).
 	dsn := "host=" + sockDir + " port=1 user=u dbname=d sslmode=disable"
 
 	if _, err := Open("postgres", dsn); err == nil {

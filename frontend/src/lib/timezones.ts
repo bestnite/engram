@@ -2,11 +2,12 @@ import { COMMON_TIMEZONES } from './api/validation';
 import type { SelectOption } from './components/ui/options';
 
 /**
- * 浏览器支持的 IANA 时区全量。
+ * The full set of IANA timezones supported by the browser.
  *
- * 用 `Intl.supportedValuesOf('timeZone')` 而不是在仓库里再抄一份清单：它返回的正是当前
- * 浏览器能解析的名字，与前端校验（validateTimezone 用 Intl.DateTimeFormat 试解析）同源，
- * 手抄一份必然漂移。旧浏览器没有这个 API，返回空数组由常用列表兜底。
+ * It uses `Intl.supportedValuesOf('timeZone')` instead of copying another list into the repo: what it returns is
+ * exactly the names the current browser can parse, the same source as the frontend validation (validateTimezone
+ * tries a parse with Intl.DateTimeFormat), whereas a hand-copied list is bound to drift. Old browsers lack this
+ * API and get an empty array, with the common list as the fallback.
  */
 function browserTimeZones(): string[] {
   try {
@@ -19,11 +20,11 @@ function browserTimeZones(): string[] {
 }
 
 /**
- * 构造时区候选：UTC 与常用时区置顶（按常用顺序），其余按字母序在后。
+ * Build the timezone candidates: UTC and the common timezones pinned to the top (in common order), the rest after them in alphabetical order.
  *
- * 三条不可省：① `Intl.supportedValuesOf` 不含 UTC，必须显式补上；② 去重，常用列表
- * 本来就是全量列表的子集；③ **一定并入 currentValue** —— 库里可能存着本浏览器不认识
- * 的历史名字，不并进来这个字段就会显示成空，用户一保存就被改写。
+ * Three things cannot be skipped: ① `Intl.supportedValuesOf` does not include UTC, so it must be added explicitly; ② dedupe, because the common list
+ * is by definition a subset of the full list; ③ **always merge in currentValue** — the database may hold a historical name this browser does not
+ * recognize, and without merging it in this field would render empty and the user's save would rewrite it.
  */
 export function timezoneOptions(currentValue?: string): SelectOption[] {
   const pinned = ['UTC', ...COMMON_TIMEZONES.filter((tz) => tz !== 'UTC')];

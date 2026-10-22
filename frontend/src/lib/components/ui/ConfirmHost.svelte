@@ -4,7 +4,7 @@
   import Button from './Button.svelte';
   import { confirmRequest } from './confirm';
 
-  /** askConfirm 的渲染端：读 confirmRequest，答复后清空。 */
+  /** Render side of askConfirm: reads confirmRequest and clears it after the answer. */
   let open = $state(false);
   let current = $derived($confirmRequest);
 

@@ -2,7 +2,7 @@ import { isSupportedLocale } from '../i18n';
 import type { ProfileValidationResult } from './types';
 
 /**
- * 常用时区建议候选列表（与 Go 后端 internal/web/settings.go:commonTimezones 保持一致）
+ * Common timezone suggestion candidates (kept in sync with the Go backend's internal/web/settings.go:commonTimezones)
  */
 export const COMMON_TIMEZONES = [
   'UTC',
@@ -22,7 +22,7 @@ export const COMMON_TIMEZONES = [
 ] as const;
 
 /**
- * 校验显示名：非空（Trim 后）
+ * Validate display name: non-empty (after Trim)
  */
 export function validateDisplayName(displayName: string | null | undefined): {
   valid: boolean;
@@ -37,7 +37,7 @@ export function validateDisplayName(displayName: string | null | undefined): {
 }
 
 /**
- * 校验界面语言代码：必须为受支持的语言码之一
+ * Validate UI language code: must be one of the supported language codes
  */
 export function validateLocale(locale: string | null | undefined): {
   valid: boolean;
@@ -52,7 +52,7 @@ export function validateLocale(locale: string | null | undefined): {
 }
 
 /**
- * 校验时区：必须为标准 IANA 时区格式且能被环境正确解析
+ * Validate timezone: must be a standard IANA timezone format and resolvable by the environment
  */
 export function validateTimezone(timezone: string | null | undefined): {
   valid: boolean;
@@ -72,16 +72,16 @@ export function validateTimezone(timezone: string | null | undefined): {
 }
 
 /**
- * 服务端默认日切点（本地 04:00 换日），与 Go: internal/store/stats.go 的 DefaultDayCutoffHour 同值。
+ * Server default day cutoff (the local day changes at 04:00), same value as DefaultDayCutoffHour in Go: internal/store/stats.go.
  *
- * 界面不再提供「未设置」这一项：切点必须是一个具体整点。库里为 NULL 的旧账号按这个值显示，
- * 保存一次即成为显式值（两者生效结果相同，所以这不是行为变化）。
+ * The UI no longer offers an "unset" option: the cutoff must be a concrete hour. Old accounts with NULL in the DB display this value,
+ * and saving once makes it explicit (both produce the same effect, so this is not a behavior change).
  */
 export const DEFAULT_DAY_CUTOFF_HOUR = 4;
 
 /**
- * 校验复习日切点小时：null 或空串表示未设置（落库为 NULL，按 04:00 处理）；填写的值必须是
- * 0–23 的整数（0 表示午夜）。与 Go: internal/store/stats.go 的 ResolveCutoff 同一口径。
+ * Validate the review day cutoff hour: null or an empty string means unset (stored as NULL, treated as 04:00); a provided value must be
+ * an integer in 0-23 (0 means midnight). Same rule as ResolveCutoff in Go: internal/store/stats.go.
  */
 export function validateDayCutoffHour(raw: number | string | null | undefined): {
   valid: boolean;
@@ -111,13 +111,13 @@ export function validateDayCutoffHour(raw: number | string | null | undefined): 
   return { valid: false, value: null, errorKey: 'settings.error.cutoff_invalid' };
 }
 
-/** 提前学习窗口的默认值与上限（分钟），与 Go: internal/store/stats.go 的 ResolveLearnAhead 同一口径。 */
+/** Default and maximum of the early-study window (minutes), same rule as ResolveLearnAhead in Go: internal/store/stats.go. */
 export const DEFAULT_LEARN_AHEAD_MINUTES = 0;
 export const MAX_LEARN_AHEAD_MINUTES = 1440;
 
 /**
- * 校验提前学习窗口（分钟）：空串表示用默认值（落库为 NULL）；填写的值必须是
- * 0–1440 的整数（0 表示关闭）。
+ * Validate the early-study window (minutes): an empty string means use the default (stored as NULL); a provided value must be
+ * an integer in 0-1440 (0 means off).
  */
 export function validateLearnAheadMinutes(raw: string | null | undefined): {
   valid: boolean;
@@ -136,11 +136,11 @@ export function validateLearnAheadMinutes(raw: string | null | undefined): {
 }
 
 /**
- * 校验两次输入的密码是否一致（注册与首个管理员引导共用）。
+ * Validate that the two password entries match (shared by registration and first-admin bootstrap).
  *
- * 只负责「两次输入是否一致」这一条纯前端约定：密码强度与其它规则由服务端策略裁决，
- * 这里不重复实现，也不产生任何服务端语义（请求体里只有 password 一个字段）。
- * 返回本地化 error key；一致时 errorKey 为 undefined。
+ * Only responsible for the one purely frontend rule "do the two entries match": password strength and other rules are decided by the server policy,
+ * not reimplemented here, and this carries no server semantics (the request body has only the password field).
+ * Returns a localized error key; when they match errorKey is undefined.
  */
 export function validatePasswordConfirmation(password: string, confirmation: string): {
   valid: boolean;
@@ -153,7 +153,7 @@ export function validatePasswordConfirmation(password: string, confirmation: str
 }
 
 /**
- * 统一验证个人资料表单
+ * Validate the whole profile form
  */
 export function validateProfileForm(form: {
   display_name: string | null | undefined;

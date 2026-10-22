@@ -12,25 +12,25 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerShareBrowseRoutes 挂载免注册只读浏览页。
+// registerShareBrowseRoutes mounts the registration-free read-only browse page.
 //
-// GET /s/:token 返回应用壳，由客户端路由渲染只读浏览页；内容与口令解锁走 api/v1/share/*
-// 的 JSON 端点（share_api.go）。链接本身（可选加口令）就是凭据，因此不要求登录。
+// GET /s/:token returns the app shell and the client router renders the read-only browse page; content and passphrase unlocking go through the api/v1/share/*
+// JSON endpoints (share_api.go). The link itself (optionally with a passphrase) is the credential, so no sign-in is required.
 func (s *Server) registerShareBrowseRoutes(router *gin.Engine) {
 	if s.shareLinks == nil || s.decks == nil || s.notes == nil {
 		return
 	}
 	router.GET("/s/:token", s.shareBrowseRoute)
-	// SPA 的同源 JSON 传输层（share_api.go）；可达性与媒体授权不变。
+	// The SPA's same-origin JSON transport (share_api.go); reachability and media authorization are unchanged.
 	s.registerShareRoutes(router)
 }
 
-// resolveShareLink 解析路径里的明文 token 并取回卡组；无效时写 404 并返回 false。
-// 撤销、过期或不存在一律 404，不区分三者，避免泄漏 token 历史。
+// resolveShareLink resolves the plaintext token in the path and fetches the deck; on failure it writes 404 and returns false.
+// Revoked, expired or nonexistent all 404 without distinguishing the three, so token history does not leak.
 func (s *Server) resolveShareLink(c *gin.Context) (*store.ShareLink, *store.Deck, bool) {
 	link, err := s.shareLinks.Resolve(c.Request.Context(), c.Param("token"), time.Now().UTC())
 	if err != nil {
-		// ErrShareLinkNotFound 与其它错误统一按 404 处理：不向匿名访问者泄露内部错误细节。
+		// ErrShareLinkNotFound and other errors are all handled as 404: internal error details are not leaked to anonymous visitors.
 		c.AbortWithStatus(http.StatusNotFound)
 		return nil, nil, false
 	}
@@ -42,12 +42,12 @@ func (s *Server) resolveShareLink(c *gin.Context) (*store.ShareLink, *store.Deck
 	return link, deck, true
 }
 
-// recordShareGrant 把「该服务端会话打开过该卡组」登记下来（L3）：
-// 登录用户通过分享链接打开的卡组计入其会话级可见集合，媒体读取（GET /media/<sha256>）据此放行。
+// recordShareGrant records "this server-side session opened that deck" (L3):
+// a deck a signed-in user opened through a share link counts towards their session-scoped visible set, which is what lets media reads (GET /media/<sha256>) through.
 //
-// 过期时刻取链接过期与会话过期的较早者（store.ShareSessionStore.Grant）。登记失败只记一条英文日志、
-// 不阻断浏览：页面内容已经可以渲染，失败的后果是图片拿不到，不该把整个浏览页变成 500。
-// 匿名访客没有服务端会话，无处登记——他们本就读不到媒体（/media 要求登录），跳过即可。
+// The expiry is the earlier of the link expiry and the session expiry (store.ShareSessionStore.Grant). A failed grant only logs one English line and does
+// not block browsing: the page content can already render, and the consequence of the failure is missing images, which should not turn the whole browse page into a 500.
+// Anonymous visitors have no server-side session and nowhere to record — they cannot read media anyway (/media requires sign-in), so skip it.
 func (s *Server) recordShareGrant(c *gin.Context, deck *store.Deck, link *store.ShareLink) {
 	if s.shareSessions == nil {
 		return
@@ -61,8 +61,8 @@ func (s *Server) recordShareGrant(c *gin.Context, deck *store.Deck, link *store.
 	}
 }
 
-// shareNoteView 把一个 note 的所有 card 渲染成正反面 HTML（与预览同一套渲染管线）。
-// 返回清洗后的正反面 HTML；单张卡的任一渲染失败即返回错误，由调用方决定跳过与否。
+// shareNoteView renders all cards of a note into front/back HTML (the same rendering pipeline as the preview).
+// Returns sanitized front/back HTML; a failure rendering any single card returns an error, and the caller decides whether to skip.
 func (s *Server) shareNoteView(note store.Note) (front, back string, err error) {
 	fields, err := store.ParseFields(note.FieldsJSON)
 	if err != nil {

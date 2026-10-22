@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// F27b：创建/改名与卡组包 manifest 共用同一套卡组名界限（≤200 字符、按 rune 计、
-// 拒 C0 控制字符、拒非法 UTF-8；空名仍报 ErrDeckNameRequired）。
-// 这里在真 SQLite（以及门控的 PG）上验证 store 层的创建与改名两条写入路径。
+// F27b: creation/rename shares one set of deck name bounds with the deck package manifest (≤200 characters, counted by rune,
+// C0 control characters rejected, invalid UTF-8 rejected; an empty name still reports ErrDeckNameRequired).
+// Here both store-layer write paths, creation and rename, are exercised on real SQLite (and on gated PG).
 
 func TestDeckNameLimitCreateAndRename(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -59,7 +59,7 @@ func TestDeckNameLimitCreateAndRename(t *testing.T) {
 				if err := decks.Update(ctx, owner, d.ID, &d.Name, nil); !errors.Is(err, ErrDeckNameInvalid) {
 					t.Fatalf("Update(201 chars) error = %v, want ErrDeckNameInvalid", err)
 				}
-				// 被拒的改名不得落库：库里仍是上一次合法的 200 字符名。
+				// a rejected rename must not reach the DB: it still holds the last valid 200-character name.
 				got, err := decks.ByID(ctx, d.ID)
 				if err != nil {
 					t.Fatalf("ByID() error = %v", err)
@@ -70,7 +70,7 @@ func TestDeckNameLimitCreateAndRename(t *testing.T) {
 			})
 
 			t.Run("200 hanzi counted by character", func(t *testing.T) {
-				// 200 个汉字 = 600 字节：按 rune 计应通过，按字节会误拒。
+				// 200 Han characters = 600 bytes: counted by rune it must pass, counted by bytes it would be wrongly rejected.
 				hanzi := strings.Repeat("汉", 200)
 				if len(hanzi) <= 200 {
 					t.Fatalf("fixture is not multi-byte: len = %d", len(hanzi))
@@ -107,9 +107,9 @@ func TestDeckNameLimitCreateAndRename(t *testing.T) {
 	}
 }
 
-// TestDeckNameLimitExportImportRoundTrip 断言共享界限的对称性：一个 200 字符的卡组名
-// 能原样导出成卡组包，再被导入端（另一个新账号）接受 —— F27b 修的就是“导出端能产出、
-// 导入端不收”。名字按字符计，往返后逐字符相同。
+// TestDeckNameLimitExportImportRoundTrip asserts the symmetry of the shared bounds: a 200-character deck name
+// can be exported as a deck package as-is and then accepted by the import side (another new account) — what F27b fixed was 'the export side can produce it
+// but the import side refuses it'. Names are counted by character, so the round trip returns them character for character.
 func TestDeckNameLimitExportImportRoundTrip(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

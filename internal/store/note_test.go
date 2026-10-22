@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// seedDeck 建一个归属给定用户的卡组（连同它引用的预设），返回卡组主键。
+// seedDeck creates a deck owned by the given user (together with the preset it references) and returns the deck primary key.
 func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) uint64 {
 	t.Helper()
 	presetID := seedPresetRow(t, db, ownerID)
@@ -23,7 +23,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64) uint64 {
 	return d.ID
 }
 
-// cardTemplates 把一组 card 摊平成 template→id，便于断言复用与顺序。
+// cardTemplates flattens a set of cards into template→id, making reuse and order easy to assert.
 func cardTemplates(cards []Card) map[string]uint64 {
 	out := make(map[string]uint64, len(cards))
 	for _, c := range cards {
@@ -32,7 +32,7 @@ func cardTemplates(cards []Card) map[string]uint64 {
 	return out
 }
 
-// TestNoteCreateGeneratesCards 覆盖第一半：创建 note 时经 cardtype 生成 cards。
+// TestNoteCreateGeneratesCards covers the first half: creating a note generates cards through cardtype.
 func TestNoteCreateGeneratesCards(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -95,8 +95,8 @@ func TestNoteCreateGeneratesCards(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateKeepsCardIDs 是验收用例：
-// 更新 note 字段后，已存在的 cards 与其 id 保持不变。
+// TestNoteUpdateKeepsCardIDs is the acceptance case:
+// after the note's fields are updated, the existing cards and their ids stay unchanged.
 func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			// 双向卡：两张卡，最容易暴露\"删旧插新\"导致 id 变化。
+			// Bidirectional card: two cards, the easiest way to expose an id change caused by \"delete the old, insert the new\".
 			n := &Note{DeckID: deckID, Kind: "basic_both"}
 			created, err := notes.Create(ctx, n, map[string]any{"front": "q1", "back": "a1"})
 			if err != nil {
@@ -120,7 +120,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 				t.Fatalf("setup produced %d cards, want 2", len(before))
 			}
 
-			// 改字段（内容变化，template 不变）。
+			// Change the fields (the content changes, the template does not).
 			n2 := &Note{ID: n.ID, Kind: "basic_both"}
 			updated, err := notes.Update(ctx, n2, map[string]any{"front": "q1-edited", "back": "a1-edited"})
 			if err != nil {
@@ -137,7 +137,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 				}
 			}
 
-			// 从数据库重读，确认不是内存里的假象，且没有多余行。
+			// Re-read from the database to confirm this is not an in-memory illusion and that no extra rows appeared.
 			reloaded, err := cards.ByNote(ctx, n.ID)
 			if err != nil {
 				t.Fatalf("ByNote() after update error = %v", err)
@@ -152,7 +152,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 				}
 			}
 
-			// 幂等：同样的字段再更新一次，id 仍不变。
+			// Idempotent: updating with the same fields again leaves the ids unchanged.
 			if _, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "basic_both"},
 				map[string]any{"front": "q1-edited", "back": "a1-edited"}); err != nil {
 				t.Fatalf("second Update() error = %v", err)
@@ -170,8 +170,8 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateGrowingClozeAddsCardsOnly 覆盖题型引起的 template 集合变化：
-// 新序号只增卡，既有卡片与其 id 不受影响。
+// TestNoteUpdateGrowingClozeAddsCardsOnly covers a change of the template set caused by the kind:
+// a new ordinal only adds a card; existing cards and their ids are unaffected.
 func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -194,7 +194,7 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 				t.Fatalf("setup produced %d cards, want 2", len(before))
 			}
 
-			// 增加第 3 个序号：cloze:1 / cloze:2 必须保留原 id，只新增 cloze:3。
+			// Add a third ordinal: cloze:1 / cloze:2 must keep their original ids, only cloze:3 is added.
 			if _, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "cloze"},
 				map[string]any{"text": "a {{c1::x}} b {{c2::y}} c {{c3::z}}"}); err != nil {
 				t.Fatalf("Update() error = %v", err)
@@ -219,8 +219,8 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateShrinkingClozeSoftDeletesCards 覆盖反方向：删掉一个序号后，它的卡离开可见集合
-// （不再进复习队列），但行与进度保留；序号重新出现时恢复同一张卡，进度跟着回来。
+// TestNoteUpdateShrinkingClozeSoftDeletesCards covers the opposite direction: after an ordinal is dropped its card leaves the visible set
+// (no longer enters the review queue) while the row and the progress remain; when the ordinal reappears the same card returns, progress and all.
 func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -274,7 +274,7 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 				}
 			}
 
-			// 整个过程中 c2 的进度行从未被删或改。
+			// Throughout the whole flow c2's progress row is never deleted or modified.
 			var st CardState
 			if err := db.Where("card_id = ? AND user_id = ?", c2, owner).Take(&st).Error; err != nil {
 				t.Fatalf("card state of c2 disappeared: %v", err)
@@ -286,8 +286,8 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 	}
 }
 
-// TestNoteSoftDeleteHidesCardsAndRestore 覆盖另一半：
-// 软删除 note 后其 cards 不可见，恢复后重新可见，且期间不物理删行。
+// TestNoteSoftDeleteHidesCardsAndRestore covers the other half:
+// after a note is soft-deleted its cards are invisible, visible again once restored, and no row is physically deleted along the way.
 func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -326,7 +326,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 				}
 			}
 
-			// 行必须还在（进度挂在 card 上，不能物理删）。
+			// The rows must still be there (progress hangs off the card, so nothing may be physically deleted).
 			var cardRows int64
 			if err := db.Unscoped().Model(&Card{}).Where("note_id = ?", n.ID).Count(&cardRows).Error; err != nil {
 				t.Fatalf("count card rows: %v", err)
@@ -335,7 +335,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 				t.Errorf("card rows after Delete() = %d, want 2 (soft delete must not remove rows)", cardRows)
 			}
 
-			// 重复删除已删除的 note → not found。
+			// Deleting an already-deleted note again -> not found.
 			if err := notes.Delete(ctx, n.ID); !IsNotFound(err) {
 				t.Errorf("second Delete() error = %v, want ErrRecordNotFound", err)
 			}
@@ -359,7 +359,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 				}
 			}
 
-			// 恢复不存在的 note → not found。
+			// Restoring a non-existent note -> not found.
 			if err := notes.Restore(ctx, 999999); !IsNotFound(err) {
 				t.Errorf("Restore(missing) error = %v, want ErrRecordNotFound", err)
 			}
@@ -367,8 +367,8 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 	}
 }
 
-// TestNoteCardTemplateUniqueness 覆盖 \"强制 (note_id, template) 唯一\"：
-// 数据库唯一索引是兜底，管线本身也不会产生重复 template。
+// TestNoteCardTemplateUniqueness covers \"enforce (note_id, template) uniqueness\":
+// the database unique index is the backstop, and the pipeline itself produces no duplicate template either.
 func TestNoteCardTemplateUniqueness(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -385,13 +385,13 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 				t.Fatalf("Create() error = %v", err)
 			}
 
-			// 数据库兜底：同 (note_id, template) 的裸插入必须失败。
+			// Database backstop: a bare insert with the same (note_id, template) must fail.
 			dup := Card{NoteID: n.ID, Template: "forward", Ordinal: 0, CreatedAt: time.Now().UTC()}
 			if err := db.Create(&dup).Error; err == nil {
 				t.Error("duplicate (note_id, template) insert was accepted, want unique violation")
 			}
 
-			// 管线侧防线：同一 note 内重复 template 在写库前被拒。
+			// Pipeline-side defence: a duplicate template within one note is rejected before the write.
 			err := db.Transaction(func(tx *gorm.DB) error {
 				wanted := []cardtype.Card{
 					{Template: "forward", Ordinal: 0},
@@ -404,7 +404,7 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 				t.Error("syncCards() accepted duplicate templates, want an error")
 			}
 
-			// 结果里没有重复 template。
+			// No duplicate template appears in the result.
 			var rows []Card
 			if err := db.Unscoped().Where("note_id = ?", n.ID).Find(&rows).Error; err != nil {
 				t.Fatalf("load cards: %v", err)
@@ -422,7 +422,7 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 	}
 }
 
-// TestNoteValidationRejectsInvalid 覆盖创建路径的负例：缺卡组、未知题型、字段不合法。
+// TestNoteValidationRejectsInvalid covers the negative cases of the create path: missing deck, unknown kind, illegal fields.
 func TestNoteValidationRejectsInvalid(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -447,7 +447,7 @@ func TestNoteValidationRejectsInvalid(t *testing.T) {
 				t.Error("Create(missing back) error = nil, want a validation error")
 			}
 
-			// 非法内容绝不能落库。
+			// Illegal content must never reach the database.
 			var count int64
 			if err := db.Model(&Note{}).Count(&count).Error; err != nil {
 				t.Fatalf("count notes: %v", err)

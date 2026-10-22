@@ -1,30 +1,35 @@
 package mail
 
-// 本文件声明每种邮件类型的**模板变量**：变量名、是否必填、以及管理页
-// 展示用途时用的语言包键。发信方按同一张表传值，管理页按同一张表校验与展示——所以变量
-// 不可能出现「发信方有、页面不认」的分歧。
+// This file declares the **template variables** of every mail type: the variable name, whether it is
+// required, and the language pack key used by the admin page to show what it is for. Senders pass
+// values by this same table, and the admin page validates and displays by this same table -- so a
+// variable cannot disagree between "the sender has it" and "the page does not know it".
 //
-// 变量名是接口的一部分（管理员在模板里写的就是它），一律英文小写下划线；改名等于让已有
-// 模板失效，要一起改这里的 Spec 与发信方。
+// Variable names are part of the interface (they are what an admin writes in a template), always
+// lowercase English with underscores; renaming one invalidates existing templates, so the Spec here
+// and the senders have to be changed together.
 
-// VarSpec 描述一个模板变量。
+// VarSpec describes one template variable.
 type VarSpec struct {
-	// Name 是模板里书写的名字：`{{url}}` 写的就是它。
+	// Name is the name written in the template: `{{url}}` spells it.
 	Name string
-	// Required 为真时，自定义模板缺了它就被拒绝保存、发送时也会退回内置正文。
+	// When Required is true, a custom template lacking it is refused on save, and sending falls back
+	// to the built-in body.
 	//
-	// **判据是「缺了这封信就没用或没法收场」，据此刻意只收两类**：① 收件人必须点的链接
-	// （重置、验证、邀请、复习、统计、卡组页、退订）——没有链接的密码邮件是废纸，没有退订
-	// 入口的营销类邮件是违规；② deck_shared 的 deck 与 inviter（缺了它这封信不知在说什么）。
-	// **展示性细节一律不必填**：到期时间、待复习张数、通过率这类少了只是信息少一点，
-	// 标成必填只会让管理员在保存时撞见莫名其妙的失败。
+	// **The criterion is "without it the mail is useless or cannot be closed out", which deliberately
+	// admits only two kinds**: (1) a link the recipient has to click (reset, verification, invite,
+	// review, stats, deck page, unsubscribe) -- a password mail without the link is waste paper, and a
+	// marketing mail without an unsubscribe entry is non-compliant; (2) deck_shared's deck and inviter
+	// (without which the mail does not say what it is about). **Display details are never required**:
+	// an expiry time, a due count or a pass rate missing just means slightly less information, and
+	// marking it required would only make admins hit baffling failures when saving.
 	Required bool
-	// NoteKey 是管理页展示该变量用途的语言包键。
+	// NoteKey is the language pack key with which the admin page shows what this variable is for.
 	NoteKey string
 }
 
-// mailVars 是唯一的变量表。类型不在表里 ⇒ 该类型不支持自定义模板（发信方还没有），
-// 管理页也就不会为它渲染编辑器。
+// mailVars is the single variable table. A type not in the table means that type does not support
+// custom templates yet (the sender does not exist yet), so the admin page renders no editor for it.
 var mailVars = map[Type][]VarSpec{
 	TypePasswordReset: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -70,8 +75,9 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "count", Required: false, NoteKey: "admin.mail.var.reviewed_count"},
 		{Name: "rate", Required: false, NoteKey: "admin.mail.var.pass_rate"},
 		{Name: "days", Required: false, NoteKey: "admin.mail.var.streak_days"},
-		// 摘要有六个统计行，内置正文用到的变量必须都在这里——「用了却没登记」会被
-		// Validate 判成打错字，预填的默认也就存不回去。
+		// The digest has six statistics lines, and every variable the built-in body uses must be listed
+		// here -- "used but not registered" is judged a typo by Validate, and the pre-filled default could
+		// not be saved back.
 		{Name: "new_cards", Required: false, NoteKey: "admin.mail.var.new_cards"},
 		{Name: "due", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.stats_url"},
@@ -114,20 +120,22 @@ var mailVars = map[Type][]VarSpec{
 	},
 }
 
-// VarSpecs 返回某类型的变量表；第二个返回值为 false 表示该类型不支持自定义模板。
-// 名字不叫 Vars：那是模板变量**值**的类型（template.go），两者同名会互相遮蔽。
+// VarSpecs returns the variable table of a type; a second return value of false means the type does
+// not support custom templates. It is not named Vars: that is the type of the template variable
+// **values** (template.go), and sharing the name would shadow one with the other.
 func VarSpecs(t Type) ([]VarSpec, bool) {
 	specs, ok := mailVars[t]
 	return specs, ok
 }
 
-// SupportsTemplate 表示该类型是否已接入自定义模板（发信方已按变量表传值）。
+// SupportsTemplate means the type has custom template support (the sender passes values by the
+// variable table).
 func SupportsTemplate(t Type) bool {
 	_, ok := mailVars[t]
 	return ok
 }
 
-// RequiredVars 返回必填变量名，供保存校验与测试断言使用。
+// RequiredVars returns the required variable names, for save validation and test assertions.
 func RequiredVars(t Type) []string {
 	specs, ok := mailVars[t]
 	if !ok {

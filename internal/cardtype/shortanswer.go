@@ -6,22 +6,22 @@ import (
 	"strings"
 )
 
-// shortAnswerType 是主观自由文本卡：prompt 提问，学习者先写下自己的答案，再与可选的
-// reference 参考答案对照后自评（「主观类」：先自评，LLM 评分留待后续）。
+// shortAnswerType is the subjective free-text card: prompt asks the question, and the learner first writes their own answer, then
+// self-rates after comparing it with the optional reference answer ("subjective": self-rate first, LLM grading left for later).
 //
-// 先写再对照是它与 basic 的区别：把答案写出来比在脑子里过一遍更能检验是否真的记住。
-// 写下的作答随自评一起存进复习记录（见 RecordAnswer），LLM 判分接入时判的就是这段文字。
+// Writing before comparing is what distinguishes it from basic: writing the answer out tests recall better than running it through your head.
+// The written answer is stored in the review record along with the self-rating (see RecordAnswer); when LLM grading is wired in, it grades this text.
 //
-// 字段：prompt（必填）、reference（可选参考答案）、extra / source_url（可选）。
-// 本题型故意不实现 Grader：它不在机器判分集合内，复习流程对它走自评路径；
-// LLM 判分会在本题型补齐 PromptContexter / Grader 时再接入，届时核心管线不变。
+// Fields: prompt (required), reference (optional reference answer), extra / source_url (optional).
+// This card type deliberately does not implement Grader: it is not in the machine-grading set and the review flow takes the self-rating path for it;
+// LLM grading will be wired in when this card type gains PromptContexter / Grader, and the core pipeline will not change then.
 type shortAnswerType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (shortAnswerType) Label() string { return "cardtype.short_answer" }
 
-// Describe 自描述：正面 prompt、背面 reference；作答控件是自由书写，写完仍由学习者自评
-// （不实现 Grader）。
+// Describe self-describes: prompt on the front, reference on the back; the answer control is free-form writing, and after writing the learner still self-rates
+// (Grader is not implemented).
 func (shortAnswerType) Describe() Description {
 	return Description{
 		Kind:          "short_answer",
@@ -41,7 +41,7 @@ func (shortAnswerType) Describe() Description {
 	}
 }
 
-// Validate 校验 prompt / reference。reference 是可选的参考答案，缺省合法。
+// Validate checks prompt / reference. reference is an optional reference answer, and omitting it is valid.
 func (shortAnswerType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {
 		return fmt.Errorf("short_answer: %w", err)
@@ -55,13 +55,13 @@ func (shortAnswerType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡（冻结表：生成 card = 1）。
+// Cards produces one forward card (frozen table: generated cards = 1).
 func (shortAnswerType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面显示 prompt；背面只给参考答案，不重复题干（复习页把背面接在正面下方）。
-// 没有参考答案时背面为空，复习页只对照学习者自己写下的作答。
+// Render shows prompt on the front; the back gives only the reference answer, without repeating the prompt (the review page renders the back below the front).
+// With no reference answer the back is empty and the review page only compares against the answer the learner wrote.
 func (shortAnswerType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -80,8 +80,8 @@ func (shortAnswerType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: ref}, nil
 }
 
-// RecordAnswer 解码学习者自评前写下的作答（字符串），返回随复习记录保存的细节。
-// 没写（空作答或只有空白）返回 nil：不存一条空作答。
+// RecordAnswer decodes the answer the learner wrote before self-rating (a string) and returns the detail saved with the review record.
+// Writing nothing (empty answer or whitespace only) returns nil: no empty answer is stored.
 func (shortAnswerType) RecordAnswer(raw json.RawMessage) (map[string]any, error) {
 	answer, err := answerString(raw, "short_answer")
 	if err != nil {
@@ -93,8 +93,8 @@ func (shortAnswerType) RecordAnswer(raw json.RawMessage) (map[string]any, error)
 	return map[string]any{"answer": answer}, nil
 }
 
-// optionalStringField 读取可选字符串字段：缺失或 nil 返回空串，存在时必须是非空字符串。
-// 与 stringField 分开，避免把「可选的参考答案」误判成必填（冻结表）。
+// optionalStringField reads an optional string field: missing or nil returns an empty string, and when present it must be a non-empty string.
+// It is separate from stringField so that the "optional reference answer" is not mistaken for a required one (frozen table).
 func optionalStringField(fields map[string]any, name string) (string, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {

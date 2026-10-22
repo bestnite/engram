@@ -6,8 +6,9 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 挖空卡的逐空作答：输入框个数与提示来自 render 响应的 blanks，提交时按出现顺序
- * 把每空的作答作为字符串数组交给服务端判分；render 没给出空数时不提交。
+ * Per-blank answering for cloze cards: the number of inputs and their hints come from the
+ * render response's blanks, and on submit each blank's answer is handed to the server as a
+ * string array in order of appearance; if render gives no blank count, nothing is submitted.
  */
 describe('ReviewView cloze blanks', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -107,7 +108,7 @@ describe('ReviewView cloze blanks', () => {
     const { target } = await setup(['', 'city']);
     (target.querySelector('[data-testid="review-graded-reveal"]') as HTMLElement).click();
     await flush();
-    // 揭示答案后题干仍在上方，答案面板用自己的顶线与题干隔开；答案块本身不再画线，免得两条线叠在一起。
+    // After revealing the answer the stem stays above, and the answer panel is separated from it by its own top rule; the answer block itself draws no rule, so the two lines do not stack.
     expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('city');
     const panel = target.querySelector('[data-testid="review-graded-revealed"]') as HTMLElement;
     expect(panel.className).toContain('border-t');

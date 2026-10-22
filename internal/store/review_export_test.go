@@ -13,17 +13,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// optimizerLogRequiredFields 是上游 review_logs schema 要求的字段集合。
-// 逐个断言存在性，避免漏写字段却仍能解析成零值的假通过。
+// optimizerLogRequiredFields is the set of fields the upstream review_logs schema requires.
+// Each one's presence is asserted, so a missing field cannot pass falsely by parsing as a zero value.
 var optimizerLogRequiredFields = []string{
 	"card_id", "review_time", "review_rating", "review_state",
 	"review_duration", "timezone", "day_start",
 }
 
-// decodeOptimizerLogLine 解析一行 JSONL 并逐字段断言其存在与取值范围，返回解码结果。
-// 这是验收「导出文件能通过上游文档 schema 的解析」的可执行形式：
-// 上游只给了表结构文档、没有机器可读 JSON Schema，所以这里把文档里的类型/范围约束固化成断言。
-// 依据的文档 URL 见 OptimizerReviewLog 的注释。
+// decodeOptimizerLogLine parses one JSONL line, asserts each field's presence and value range, and returns the decoded result.
+// This is the executable form of the acceptance "the exported file parses against the upstream documented schema":
+// upstream provides only a table-structure document, no machine-readable JSON Schema, so the type/range constraints from the document are frozen here as assertions.
+// The source document URL is in the OptimizerReviewLog comment.
 func decodeOptimizerLogLine(t *testing.T, line []byte) OptimizerReviewLog {
 	t.Helper()
 
@@ -59,7 +59,7 @@ func decodeOptimizerLogLine(t *testing.T, line []byte) OptimizerReviewLog {
 	if row.DayStart < 0 || row.DayStart > 23 {
 		t.Errorf("day_start = %d, want 0-23: %s", row.DayStart, line)
 	}
-	// review_time 是 UTC 毫秒：用 2001-09-09 与 2100 年夹逼，拦住秒/纳秒单位或本地时区的误用。
+	// review_time is UTC milliseconds: bracketed by 2001-09-09 and the year 2100, it catches seconds/nanoseconds units or a local timezone.
 	const minMS = int64(1_000_000_000_000) // 2001-09-09T01:46:40Z
 	const maxMS = int64(4_102_444_800_000) // 2100-01-01T00:00:00Z
 	if row.ReviewTime < minMS || row.ReviewTime > maxMS {
@@ -68,7 +68,7 @@ func decodeOptimizerLogLine(t *testing.T, line []byte) OptimizerReviewLog {
 	return row
 }
 
-// seedExportUser 写入一条用户记录，导出时读取其 timezone/day_cutoff_hour。
+// seedExportUser writes one user row; the export reads its timezone/day_cutoff_hour.
 func seedExportUser(t *testing.T, db *gorm.DB, id uint64, tz string, cutoff int) {
 	t.Helper()
 	u := User{
@@ -81,8 +81,8 @@ func seedExportUser(t *testing.T, db *gorm.DB, id uint64, tz string, cutoff int)
 	}
 }
 
-// seedPresetCards 建一个属于 ownerID 的新预设、挂着它的卡组与卡组里的 n 张卡，返回预设与卡的主键。
-// 优化日志按「挂着该预设的卡组」取复习，所以夹具的复习必须落在真实的卡上。
+// seedPresetCards creates a new preset owned by ownerID, a deck carrying it and n cards in that deck, returning the preset and card primary keys.
+// The optimizer log takes reviews by "decks carrying the preset", so the fixture's reviews must land on real cards.
 func seedPresetCards(t *testing.T, db *gorm.DB, ownerID uint64, n int) (uint64, []uint64) {
 	t.Helper()
 	deckID := seedDeck(t, db, ownerID)
@@ -106,8 +106,8 @@ func seedPresetCards(t *testing.T, db *gorm.DB, ownerID uint64, n int) (uint64, 
 	return deck.PresetID, ids
 }
 
-// TestExportOptimizerLogMatchesUpstreamSchema 是验收：把若干复习行导出为 JSONL，
-// 逐行断言它们满足上游 review_logs schema 的类型与范围约束，并核对字段映射与 UTC 毫秒。
+// TestExportOptimizerLogMatchesUpstreamSchema is the acceptance: several review rows are exported as JSONL,
+// each line is asserted to satisfy the upstream review_logs schema's type and range constraints, and the field mapping and UTC milliseconds are checked.
 func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "reviews.db"))
 	if err != nil {
@@ -120,15 +120,15 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	seedExportUser(t, db, 1, "America/New_York", 4)
 	presetID, cards := seedPresetCards(t, db, 1, 3)
 
-	// 一条已知时刻的行，用来断言 review_time 恰好是 reviewed_at 的 UTC 毫秒。
-	known := time.Date(2026, 10, 2, 12, 0, 0, 123_000_000, time.UTC) // .123s 精度
+	// One row with a known timestamp, used to assert review_time is exactly reviewed_at in UTC milliseconds.
+	known := time.Date(2026, 10, 2, 12, 0, 0, 123_000_000, time.UTC) // .123s precision
 	zero, neg := 0, -1
 	nilMS := []*int{nil, &zero, &neg}
 	for i, ms := range nilMS {
 		rv := Review{
 			CardID: cards[i], UserID: 1, Rating: i + 1, GradeSource: "self",
 			ReviewedAt: known.Add(time.Duration(i) * time.Hour), ReviewDay: "2026-10-02",
-			ElapsedMS: ms, StateBefore: i, // state_before 依次 0,1,2
+			ElapsedMS: ms, StateBefore: i, // state_before runs 0,1,2
 		}
 		if err := db.Create(&rv).Error; err != nil {
 			t.Fatalf("seed review: %v", err)
@@ -149,7 +149,7 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 		rows = append(rows, decodeOptimizerLogLine(t, line))
 	}
 
-	// 字段映射：card_id/rating/state_before 原样带出，时区与日切取自用户记录。
+	// Field mapping: card_id/rating/state_before come out as they are, and timezone and day cutoff come from the user row.
 	if rows[0].CardID != cards[0] || rows[2].CardID != cards[2] {
 		t.Errorf("card_id mapping wrong: %+v", rows)
 	}
@@ -164,11 +164,11 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 			t.Fatalf("timezone/day_start = %q/%d, want America/New_York/4", r.Timezone, r.DayStart)
 		}
 	}
-	// 已知时刻必须是 UTC 毫秒，且保留毫秒精度。
+	// The known timestamp must be UTC milliseconds and keep millisecond precision.
 	if got, want := rows[0].ReviewTime, known.UnixMilli(); got != want {
 		t.Errorf("review_time = %d, want %d (UTC milliseconds of %s)", got, want, known.Format(time.RFC3339Nano))
 	}
-	// NULL/零/负的 elapsed_ms 一律落成非负的 0。
+	// A NULL/zero/negative elapsed_ms always becomes a non-negative 0.
 	for i, r := range rows {
 		if r.ReviewDuration != 0 {
 			t.Errorf("row %d review_duration = %d, want 0 for nil/zero/negative elapsed_ms", i, r.ReviewDuration)
@@ -177,8 +177,8 @@ func TestExportOptimizerLogMatchesUpstreamSchema(t *testing.T) {
 	t.Logf("exported %d lines; first line: %s", len(lines), string(lines[0]))
 }
 
-// TestExportOptimizerLogSampleParses 断言仓库里的 JSONL 样例本身满足同一套字段断言，
-// 这样样例文件就是格式的可执行文档，不会随代码漂移。
+// TestExportOptimizerLogSampleParses asserts the JSONL sample in the repo satisfies the same field assertions,
+// so the sample file is executable documentation of the format and cannot drift away from the code.
 func TestExportOptimizerLogSampleParses(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "optimizer-review-log.jsonl"))
 	if err != nil {
@@ -194,8 +194,8 @@ func TestExportOptimizerLogSampleParses(t *testing.T) {
 	t.Logf("sample parses: %d line(s)", len(lines))
 }
 
-// TestExportOptimizerLogStreams 证明导出是流式的：写端在第 2 次写入时报错时，导出必须立即
-// 中止、返回错误，且此前只写出了第 1 行——说明实现是逐行 Write，而不是先把全部日志拼进内存。
+// TestExportOptimizerLogStreams proves the export streams: when the writer errors on the 2nd write, the export must
+// stop at once and return an error, having written only the 1st line before that -- which shows the implementation writes line by line rather than assembling the whole log in memory first.
 type failAfterFirstWrite struct {
 	writes int
 	buf    bytes.Buffer
@@ -245,7 +245,7 @@ func TestExportOptimizerLogStreams(t *testing.T) {
 		w.writes, len(gotLines), err)
 }
 
-// nonEmptyLines 按行切分并丢弃空行（JSONL 允许末尾换行）。
+// nonEmptyLines splits into lines and drops the empty ones (JSONL allows a trailing newline).
 func nonEmptyLines(data []byte) [][]byte {
 	var out [][]byte
 	for _, line := range bytes.Split(data, []byte("\n")) {
@@ -257,9 +257,9 @@ func nonEmptyLines(data []byte) [][]byte {
 	return out
 }
 
-// TestOptimizerLogCoversOnlyDecksUsingThePreset 是 FX 验收：一个用户有两个预设、各挂一个自己的卡组，
-// 另在别人的共享卡组上用第一个预设。优化第一个预设只用它自己卡组与那个共享卡组上的复习；
-// 第二个预设只用它自己卡组上的复习（反面：按用户全量取会让两个预设得到同一份日志）。
+// TestOptimizerLogCoversOnlyDecksUsingThePreset is the FX acceptance: one user has two presets, each carried by one of their own decks,
+// and also uses the first preset on someone else's shared deck. Optimizing the first preset uses only the reviews on its own deck and on that shared deck;
+// the second preset uses only the reviews on its own deck (the counter-case: taking all of a user's logs would give both presets the same log).
 func TestOptimizerLogCoversOnlyDecksUsingThePreset(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestOptimizerLogCoversOnlyDecksUsingThePreset(t *testing.T) {
 			for _, c := range append(append(append([]uint64{}, cardsA...), cardsB...), sharedCards...) {
 				review(user, c)
 			}
-			review(sharer, sharedCards[0]) // 别人的复习永远不算进来
+			review(sharer, sharedCards[0]) // someone else's reviews never count
 
 			cases := []struct {
 				name   string

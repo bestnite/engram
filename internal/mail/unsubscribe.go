@@ -2,29 +2,35 @@ package mail
 
 import "strings"
 
-// 本文件是（RFC 8058 一键退订）的邮件头部分：只有「可选类型」才带退订头。
+// This file is the header side of (RFC 8058 one-click unsubscribe): only "optional types" carry an
+// unsubscribe header.
 //
-// 分类依据仍是目录里的 Class：CanDisable 为真的类（B/C/D）才允许用户退订，
-// 因此才在邮件里放退订入口；A 类安全/事务邮件一律不带，允许退订安全邮件等于给人留后门。
+// The classification still rests on Class from the catalog: only a class whose CanDisable is true
+// (B/C/D) may be unsubscribed from by the user, which is why the mail carries an unsubscribe entry at
+// all; class A security/transactional mail never carries one, since allowing security mail to be
+// unsubscribed is like leaving a back door.
 //
-// 这里只构造纯头（不签发令牌、不碰数据库）：令牌由发信方用 ActionTokenService 签发，
-// 明文只出现在退订 URL 里，绝不进日志。发信方拿 URL 调 UnsubscribeHeaders 即可，
-// 头名与取值只有这一处定义，避免 B/C/D 各自拼写漂移。
+// Only the bare headers are built here (no token issuance, no database access): the sender issues the
+// token with ActionTokenService, and the plaintext only ever appears in the unsubscribe URL, never in
+// a log. Senders just call UnsubscribeHeaders with the URL; the header names and values are defined
+// only here, so B/C/D cannot drift apart in spelling.
 
-// RFC 8058 的两个退订头名；取值英文且稳定（邮件协议字段，不本地化）。
+// The two RFC 8058 unsubscribe header names; the values are English and stable (mail protocol fields,
+// not localized).
 const (
-	// HeaderListUnsubscribe 指向一键退订地址（RFC 8058 的 https URL）。
+	// HeaderListUnsubscribe points at the one-click unsubscribe address (the https URL of RFC 8058).
 	HeaderListUnsubscribe = "List-Unsubscribe"
-	// HeaderListUnsubscribePost 声明该地址支持 One-Click POST（RFC 8058）。
+	// HeaderListUnsubscribePost declares that the address supports One-Click POST (RFC 8058).
 	HeaderListUnsubscribePost = "List-Unsubscribe-Post"
 )
 
-// ListUnsubscribePostValue 是 List-Unsubscribe-Post 的固定取值（RFC 8058 §3.1）。
-// 邮件客户端按此值对 List-Unsubscribe 里的 URL 发一个 body 为该值的 POST。
+// ListUnsubscribePostValue is the fixed value of List-Unsubscribe-Post (RFC 8058 §3.1). Mail clients
+// use that value to POST to the URL in List-Unsubscribe with a body equal to it.
 const ListUnsubscribePostValue = "List-Unsubscribe=One-Click"
 
-// CanUnsubscribe 报告某类型是否属于「可选类型」：登记在目录里且所属类可被用户关闭。
-// 未登记的类型返回 false（拼错的类型名既不发信也不带退订头）。
+// CanUnsubscribe reports whether a type is an "optional type": registered in the catalog and in a
+// class the user can turn off. An unregistered type returns false (a mistyped type name neither sends
+// mail nor carries an unsubscribe header).
 func CanUnsubscribe(t Type) bool {
 	def, ok := Lookup(t)
 	if !ok {
@@ -33,10 +39,11 @@ func CanUnsubscribe(t Type) bool {
 	return CanDisable(def.Class)
 }
 
-// UnsubscribeHeaders 为可选类型的邮件构造 RFC 8058 退订头。
+// UnsubscribeHeaders builds the RFC 8058 unsubscribe headers for optional-type mail.
 //
-// url 是带一次性令牌的绝对退订地址（由发信方拼好）；为空或类型不可退订时返回 nil，
-// 调用方据此不写 Headers —— 因此 A 类邮件绝不会出现退订头。
+// url is the absolute unsubscribe address carrying the one-time token (assembled by the sender); when
+// it is empty or the type is not unsubscribable, it returns nil and the caller therefore writes no
+// Headers -- so class A mail can never carry an unsubscribe header.
 func UnsubscribeHeaders(t Type, url string) map[string]string {
 	if !CanUnsubscribe(t) {
 		return nil

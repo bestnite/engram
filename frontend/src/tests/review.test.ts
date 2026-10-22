@@ -40,7 +40,7 @@ describe('review submission API', () => {
     expect(headers.has('Authorization')).toBe(false);
     const body = JSON.parse(init?.body as string);
     expect(body).toEqual({ card_id: '11', expected_version: 4, deck: ['2', '7'], answer: 'Paris' });
-    // 客户端绝不提交档位：rating 由服务端判分产生。
+    // The client never submits a rating: ratings are produced by server-side grading.
     expect(body).not.toHaveProperty('rating');
   });
 

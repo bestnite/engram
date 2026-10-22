@@ -9,10 +9,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是邮件模板在真实触发点上的验收：走 POST /api/v1/auth/forgot-password，
-// 读真实入队的 outbox 行。测试账号的语言是 en，所以模板也按 en 写。
+// This file is the acceptance for mail templates at real trigger points: it goes through POST /api/v1/auth/forgot-password
+// and reads the real enqueued outbox row. The test account's language is en, so the templates are written in en too.
 
-// saveTemplate 直接写库，绕开管理页的保存校验——用来覆盖「模板先坏了」这类状态。
+// saveTemplate writes straight to the database, bypassing the admin page's save validation — used to reach states like "the template is already broken".
 func saveTemplate(t *testing.T, ts securityTestServer, typ, locale, subject, body string) {
 	t.Helper()
 	if err := store.NewMailTemplateStore(ts.db).Upsert(context.Background(), &store.MailTemplate{
@@ -22,8 +22,8 @@ func saveTemplate(t *testing.T, ts securityTestServer, typ, locale, subject, bod
 	}
 }
 
-// TestPasswordResetMailUsesAdminTemplate 断言配了模板之后：主题取自模板、变量被替换、
-// 产出 HTML 段；同时**A 类邮件仍然没有退订入口**（外壳页脚不该给安全邮件加退订行）。
+// TestPasswordResetMailUsesAdminTemplate asserts that once a template is configured: the subject comes from the template, variables are substituted,
+// and an HTML part is produced; at the same time **type A mail still has no unsubscribe entry** (the shell footer must not add an unsubscribe line to security mail).
 func TestPasswordResetMailUsesAdminTemplate(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	saveTemplate(t, ts, "password_reset", "en", "Reset for {{site}}",
@@ -50,8 +50,8 @@ func TestPasswordResetMailUsesAdminTemplate(t *testing.T) {
 	}
 }
 
-// TestPasswordResetMailWithoutTemplateStaysPlainText 是「上线模板机制不改动现有邮件」的
-// 回归：没有模板时正文仍是纯文本、HTML 段为空、链接照常在。
+// TestPasswordResetMailWithoutTemplateStaysPlainText is the regression for "shipping the template mechanism does not change existing mail":
+// with no template the body is still plain text, the HTML part is empty, and the link is there as before.
 func TestPasswordResetMailWithoutTemplateStaysPlainText(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	_, row := issueResetToken(t, ts)
@@ -63,9 +63,9 @@ func TestPasswordResetMailWithoutTemplateStaysPlainText(t *testing.T) {
 	}
 }
 
-// TestBrokenTemplateFallsBackToBuiltinBody 是「模板坏了也不会让邮件发不出去」那条承诺的回归：模板丢了必填
-// 变量（这里绕开保存校验直接写库）时，邮件必须照常发出去，收件人拿到内置正文与可用的链接，
-// 而不是一封没有链接的信。
+// TestBrokenTemplateFallsBackToBuiltinBody is the regression for the promise "a broken template still does not stop the mail going out": when the template drops a required
+// variable (here bypassing save validation and writing straight to the database), the mail must still go out, with the built-in body and a usable link reaching the recipient,
+// rather than a letter with no link.
 func TestBrokenTemplateFallsBackToBuiltinBody(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	saveTemplate(t, ts, "password_reset", "en", "Broken", "There is no link in this template at all.")

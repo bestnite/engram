@@ -14,11 +14,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 提醒是周期 worker 发出的，走的是另一条装配路径（不是 web 层的 renderMail）。这个用例
-// 断言模板在**这条路径上**同样生效，并且退订入口同时出现在正文页脚与纯文本段末尾——
-// 只在 RFC 8058 头里的话，读纯文本的人看不到它。
+// Reminders are sent by a periodic worker and take a different wiring path (not the web layer's renderMail). This case
+// asserts the template takes effect **on this path** too, and that the unsubscribe entry appears in both the body footer and the end of the plain-text part —
+// if it were only in the RFC 8058 header, people reading plain text would not see it.
 
-// newReminderWithTemplates 与 newReminder 相同，但注入模板查找与令牌服务。
+// newReminderWithTemplates is the same as newReminder but injects the template lookup and the token service.
 func newReminderWithTemplates(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *Reminder {
 	t.Helper()
 	translator, err := i18n.New()
@@ -79,7 +79,7 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 	}
 }
 
-// TestReminderWithoutTemplateKeepsBuiltinBody 断言没配模板时与今天逐字一致：纯文本、无 HTML 段。
+// TestReminderWithoutTemplateKeepsBuiltinBody asserts that with no template configured it is verbatim identical to today: plain text, no HTML part.
 func TestReminderWithoutTemplateKeepsBuiltinBody(t *testing.T) {
 	db := newTestDB(t)
 	enq := &fakeEnqueuer{configured: true}

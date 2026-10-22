@@ -11,30 +11,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是参数优化在 store 层的部分：
-// 服务端门槛（复习条数不足直接拒绝并给出差额）与拟合报告的数据形态。
+// This file is the store-layer part of parameter optimization:
+// the server-side threshold (reject outright when there are too few reviews, reporting the shortfall) and the data shape of the fit report.
 //
-// 分工边界：权重拟合算法属于 Rust 适配器，永不进 Go 代码；这里只定义
-// 「门槛怎么判定」与「指标写在哪、叫什么」，让 web 层与适配器有稳定契约。
+// Division of labour: the weight-fitting algorithm belongs to the Rust adapter and never enters Go code; this file only defines
+// "how the threshold is decided" and "where the metrics live and what they are called", giving the web layer and the adapter a stable contract.
 
 const (
-	// DefaultOptimizeMinReviews 是优化门槛的默认值（默认 < 500 条拒绝）。
-	// 管理员可通过 settings 表的 SettingKeyOptimizeMinReviews 调整。
+	// DefaultOptimizeMinReviews is the default optimization threshold (by default fewer than 500 reviews is rejected).
+	// Administrators can adjust it through SettingKeyOptimizeMinReviews in the settings table.
 	DefaultOptimizeMinReviews = 500
 
-	// SettingKeyOptimizeMinReviews 是门槛覆盖值的设置键。值按 settings 表约定以 JSON
-	// 编码文本存储（见 PutSetting / LoadSettings），内容为十进制整数条数。
+	// SettingKeyOptimizeMinReviews is the settings key for the threshold override. Per the settings table convention the value is stored as JSON-encoded
+	// text (see PutSetting / LoadSettings) and holds a decimal integer review count.
 	SettingKeyOptimizeMinReviews = "optimize.min_reviews"
 
-	// MinOptimizeMinReviews 是优化门槛的下限。
-	// 依据：250 卡 / 1969 条真日志的实测里，可用 item 少于约 184 时适配器学不动或落回
-	// 默认权重，优化前后指标相同，页面会对一次本就没机会的优化报「未改善」。184 item
-	// 约合 210 条复习，取 300 条留出余量。低于下限的门槛拦不住任何会产生误导结论的优化。
+	// MinOptimizeMinReviews is the floor of the optimization threshold.
+	// Rationale: in a measurement over 250 cards / 1969 real log entries, with fewer than roughly 184 usable items the adapter cannot learn or falls back to
+	// the default weights, the metrics before and after optimization are identical, and the page reports "not improved" for an optimization that never had a chance. 184 items
+	// is about 210 reviews, so 300 leaves headroom. A threshold below the floor blocks no optimization that would yield a misleading conclusion.
 	MinOptimizeMinReviews = 300
 )
 
-// OptimizeMinReviews 读取当前的优化门槛。未设置、空值或非法值时退回默认值：
-// 管理员手误（例如写成 "many"）绝不能让优化入口永久不可用，退回默认是可解释的行为。
+// OptimizeMinReviews reads the current optimization threshold. When unset, empty or invalid it falls back to the default:
+// a typo by an administrator (writing "many", say) must never make the optimize entry point permanently unusable; falling back to the default is explicable behaviour.
 func OptimizeMinReviews(ctx context.Context, db *gorm.DB) (int, error) {
 	settings, err := LoadSettings(ctx, db)
 	if err != nil {
@@ -46,19 +46,19 @@ func OptimizeMinReviews(ctx context.Context, db *gorm.DB) (int, error) {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 1 {
-		// 非正整数门槛没有意义（>=1 才可能拦住任何东西）；退回默认并让调用方照常放行。
+		// A non-positive threshold is meaningless (>=1 is needed to block anything); fall back to the default and let the caller proceed as usual.
 		return DefaultOptimizeMinReviews, nil
 	}
 	if n < MinOptimizeMinReviews {
-		// 读取路径也钳到下限：settings 行可能来自直接写库、旧版本或绕过表单的写入，
-		// 不能假设表单校验一定跑过。注意与上面的默认回退语义不同——这里是「值合法但太低」，
-		// 钳到下限而不是退回默认值。
+		// The read path clamps to the floor as well: the settings row may come from a direct database write, an old version or a write that bypassed the form,
+		// so form validation cannot be assumed to have run. Note this differs from the default fallback above -- here the value is legal but too low,
+		// so it is clamped to the floor instead of being reset to the default.
 		return MinOptimizeMinReviews, nil
 	}
 	return n, nil
 }
 
-// CountForPreset 返回优化 presetID 时可用的复习条数（口径见 presetReviewsQuery），是门槛的输入。
+// CountForPreset returns the number of usable reviews for optimizing presetID (definition in presetReviewsQuery); it is the threshold's input.
 func (s *ReviewStore) CountForPreset(ctx context.Context, userID, presetID uint64) (int64, error) {
 	var n int64
 	if err := presetReviewsQuery(ctx, s.db, userID, presetID).Count(&n).Error; err != nil {
@@ -67,8 +67,8 @@ func (s *ReviewStore) CountForPreset(ctx context.Context, userID, presetID uint6
 	return n, nil
 }
 
-// OptimizeGate 是某个预设相对当前门槛的资格判定结果。
-// Shortfall 只在 Eligible 为 false 时有意义，等于「还差多少条」。
+// OptimizeGate is the eligibility verdict for a preset against the current threshold.
+// Shortfall only means something when Eligible is false; it is "how many reviews are still missing".
 type OptimizeGate struct {
 	Reviews    int64
 	MinReviews int
@@ -76,7 +76,7 @@ type OptimizeGate struct {
 	Eligible   bool
 }
 
-// GateOptimize 判定 userID 的 presetID 是否有资格运行优化：读门槛、数该预设可用的复习、算差额。
+// GateOptimize decides whether presetID of userID may run an optimization: read the threshold, count that preset's usable reviews, compute the shortfall.
 func GateOptimize(ctx context.Context, db *gorm.DB, userID, presetID uint64) (OptimizeGate, error) {
 	if userID == 0 || presetID == 0 {
 		return OptimizeGate{}, gorm.ErrPrimaryKeyRequired
@@ -98,75 +98,75 @@ func GateOptimize(ctx context.Context, db *gorm.DB, userID, presetID uint64) (Op
 	return gate, nil
 }
 
-// FitMetrics 是优化前后各测一次的拟合指标（设置页的「优化前后拟合对比」，
-// 对应 Anki 手册的 "Check health" 思路：用历史复习反推参数对实际结果的贴合度）。
+// FitMetrics is the fit metric measured once before and once after optimization (the settings page's "fit comparison before/after optimization",
+// the idea behind "Check health" in the Anki manual: infer from historical reviews how well the parameters fit the actual outcomes).
 //
-// 指标定义（由 internal/schedule 用 go-fsrs 回放复习日志算出，见）：
-//   - LogLoss：每次到期复习的预测对数损失，predicted 是参数对「该次复习会回忆起来」
-//     给出的概率（0-1），observed 取 1（非 Again）或 0（Again）。越小越贴合；
-//     这是与 Anki 优化器输出 magnitude 同量纲、可跨参数集直接比较的标量。
-//   - RMSE：预测可回忆概率与实际结果（0/1）的均方根误差，是 LogLoss 的直观辅助，
-//     对极端置信（预测 0/1 却判错）比 LogLoss 更温和，便于页面展示。
+// Metric definitions (computed by internal/schedule replaying the review log with go-fsrs):
+//   - LogLoss: the predicted log loss of each due review; predicted is the probability the parameters give to "this review will be recalled"
+//     (0-1), observed is 1 (not Again) or 0 (Again). Smaller is a better fit;
+//     this is a scalar on the same scale as the magnitude the Anki optimizer outputs, directly comparable across parameter sets.
+//   - RMSE: the root mean square error between the predicted recall probability and the actual outcome (0/1), an intuitive companion to LogLoss,
+//     gentler than LogLoss on extreme confidence (predicting 0/1 and being wrong), which suits page display.
 //
-// 两者都在固定复习集上计算，before 用优化前的旧权重、after 用新权重；只比较同一
-// 数据集上的两个标量，避免把「换了数据集」误当成拟合改善。
+// Both are computed on a fixed review set, before with the old weights and after with the new ones; only the two scalars on the same
+// data set are compared, so "the data set changed" is not mistaken for an improvement in fit.
 type FitMetrics struct {
 	LogLoss float64 `json:"log_loss"`
 	RMSE    float64 `json:"rmse"`
-	// Items 是本次评估实际覆盖的可预测 item 数（已排除每张卡的首条复习与不可预测点）。
-	// 加它是为了把「算出来了」与「算出来了但样本太小」区分开：
-	// 旧 result_json 没有这个字段，反序列化得到 0，向后兼容。
+	// Items is the number of predictable items this evaluation actually covered (each card's first review and unpredictable points are excluded).
+	// It exists to separate "it computed" from "it computed but the sample is too small":
+	// the old result_json lacks this field, so deserializing yields 0, which is backwards compatible.
 	Items int `json:"items"`
 }
 
-// MinFitItems 是可信判定「改善/未改善」所需的最小 item 数。
-// 依据：可用 item 少于约 184 时适配器学不动或落回默认权重，优化前后指标相同，
-// 「未改善」是对一次本就没机会的优化的误导；取 200 留出余量，实测 184 item 起判定稳定。
+// MinFitItems is the minimum number of items needed to judge "improved/not improved" with confidence.
+// Rationale: with fewer than roughly 184 usable items the adapter cannot learn or falls back to the default weights, the metrics before and after optimization are identical,
+// and "not improved" misleads about an optimization that never had a chance; 200 leaves headroom, and the verdict has been stable from 184 items in practice.
 const MinFitItems = 200
 
-// OptimizeResult 是 optimize 作业 result_json 的结构（jobs.result_json）。
-// 落在 job 行而非 preset 行：报告属于「这一次优化」，preset 只保存最终生效的权重
-// （weights_json / weights_optimized_at / weights_review_count）。
+// OptimizeResult is the structure of the optimize job's result_json (jobs.result_json).
+// It lives on the job row rather than the preset row: the report belongs to "this one optimization", the preset only stores the weights that finally took effect
+// (weights_json / weights_optimized_at / weights_review_count).
 type OptimizeResult struct {
-	// ReviewsUsed 是本次训练实际使用的复习条数，便于解释为什么阈值刚好通过。
+	// ReviewsUsed is the number of reviews this training actually used, which helps explain why the threshold was just met.
 	ReviewsUsed int64 `json:"reviews_used"`
-	// Weights 是适配器产出的 21 维 FSRS 权重，尚未（或已经）写回 preset。
+	// Weights are the 21-dimensional FSRS weights the adapter produced, not yet (or already) written back to the preset.
 	Weights []float64 `json:"weights"`
-	// FitBefore / FitAfter 是同一复习集上用旧/新权重算出的拟合指标。
+	// FitBefore / FitAfter are the fit metrics computed on the same review set with the old/new weights.
 	FitBefore FitMetrics `json:"fit_before"`
 	FitAfter  FitMetrics `json:"fit_after"`
-	// OptimizedAt 是适配器完成训练的时刻（UTC）。
+	// OptimizedAt is the moment the adapter finished training (UTC).
 	OptimizedAt time.Time `json:"optimized_at"`
 }
 
-// Improved 判断新权重的对数损失是否优于旧权重；相等视为未改善。
+// Improved reports whether the new weights' log loss beats the old ones; equal counts as not improved.
 func (r OptimizeResult) Improved() bool { return r.FitAfter.LogLoss < r.FitBefore.LogLoss }
 
-// Available 报告这次拟合是否真的覆盖了至少一个可预测 item。
-// 没有任何可预测 item（例如复习日志全是每张卡的首条复习、或全部无法回放）时，
-// CompareFit 返回零值；预测概率被夹在开区间 (0,1) 内，LogLoss 恒为正，因此零值即「无指标」。
-// 预设页据此避免在无指标时给出「未改善」这种误导性结论（验收 5）。
+// Available reports whether this fit really covered at least one predictable item.
+// With no predictable item at all (e.g. the review log is all first reviews of each card, or nothing can be replayed),
+// CompareFit returns the zero value; predicted probabilities are clamped inside the open interval (0,1), so LogLoss is always positive and the zero value means "no metric".
+// The preset page uses this to avoid the misleading conclusion "not improved" when there is no metric (acceptance 5).
 func (m FitMetrics) Available() bool { return m.LogLoss > 0 }
 
-// SampleSufficient 报告这次拟合的样本是否足够支撑「改善/未改善」结论。
-// 与 Available() 语义不同：Available() 只说明「指标算出来了」（至少覆盖一个 item），
-// 本方法进一步要求覆盖的 item 数达到 MinFitItems。两者都为真时页面才渲染结论；
-// 只有 Available() 为真时页面渲染「样本不足，无法判定」。
+// SampleSufficient reports whether this fit's sample can support an "improved/not improved" conclusion.
+// It differs from Available(): Available() only says "a metric was computed" (at least one item covered),
+// this method additionally requires the covered item count to reach MinFitItems. The page renders a conclusion only when both are true;
+// when only Available() is true the page renders "sample too small, cannot decide".
 func (m FitMetrics) SampleSufficient() bool { return m.Available() && m.Items >= MinFitItems }
 
-// ErrPresetWeightsIDRequired 表示回退默认权重时未给出预设主键。
+// ErrPresetWeightsIDRequired means no preset primary key was given when resetting to the default weights.
 var ErrPresetWeightsIDRequired = errors.New("reset preset weights: id is required")
 
-// ResetPresetWeights 把预设的优化权重一键回退为默认权重（M9 验收「可一键回退」）：weights_json、
-// weights_optimized_at、weights_review_count 三列一并写回 NULL。
+// ResetPresetWeights rolls a preset's optimized weights back to the default with one click (M9 acceptance "can roll back with one click"): weights_json,
+// weights_optimized_at and weights_review_count are all written back to NULL together.
 //
-// 为什么三列必须一起清：调度器（schedule.NewScheduler）以 weights_json 是否为 NULL 决定用
-// DefaultWeights() 还是优化权重；只把 weights_json 清掉、却留下 weights_optimized_at 与
-// weights_review_count，会让页面显示「已优化 + 时间 + 条数」却没有实际权重，自相矛盾。
-// 一次性清三列后，读到的预设与从未优化过的新预设完全一致。
+// Why all three must be cleared together: the scheduler (schedule.NewScheduler) uses whether weights_json is NULL to choose between
+// DefaultWeights() and the optimized weights; clearing weights_json alone while leaving weights_optimized_at and
+// weights_review_count would make the page show "optimized + time + review count" with no actual weights, which contradicts itself.
+// Once all three are cleared at once, the preset reads exactly like a new preset that was never optimized.
 //
-// 幂等：本来就是默认（三列为 NULL）的预设再调用一次也返回 nil——「已经是默认」不是错误，
-// UI 的按钮可能被重复点击。只有 owner 能回退，授权规则与 Update 一致（preset 不参与授权表）。
+// Idempotent: calling again on a preset already at the default (all three columns NULL) returns nil too -- "already the default" is not an error,
+// the UI button may be clicked repeatedly. Only the owner can roll back; the authorization rule matches Update (presets are not part of the authorization table).
 func (s *PresetStore) ResetPresetWeights(ctx context.Context, actorUserID, presetID uint64) error {
 	if presetID == 0 {
 		return ErrPresetWeightsIDRequired
@@ -178,7 +178,7 @@ func (s *PresetStore) ResetPresetWeights(ctx context.Context, actorUserID, prese
 	if err := requirePresetOwner(existing, actorUserID); err != nil {
 		return err
 	}
-	// 用 map 显式写入 nil：GORM 对 map 更新不会跳过零值，因此这里确实是把列置为 NULL。
+	// nil is written explicitly through a map: GORM does not skip zero values on map updates, so this really sets the column to NULL.
 	updates := map[string]any{
 		"weights_json":         nil,
 		"weights_optimized_at": nil,

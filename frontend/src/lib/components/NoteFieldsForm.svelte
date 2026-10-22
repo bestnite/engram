@@ -6,31 +6,31 @@
   import HelpTip from './ui/HelpTip.svelte';
 
   /**
-   * 按题型渲染字段表单。
+   * Renders the field form per card kind.
    *
-   * 字段顺序与控件形态来自服务端的题型自描述，本组件不含任何按题型分支的
-   * 业务判断；视图因此不再把 fields 当 JSON 给用户编辑。
+   * Field order and control shape come from the server's card-kind self-description, and this component contains no per-kind branching
+   * business logic; views therefore no longer hand fields to the user as raw JSON to edit.
    */
   interface Props {
     specs: FieldSpec[];
-    /** 表单模型：直接就地写入（父级用 $state 持有，深响应）。 */
+    /** Form model: written in place directly (the parent holds it with $state, deeply reactive). */
     fields: Record<string, unknown>;
-    /** 生成 data-testid 的前缀：`<prefix>-<字段名>`。 */
+    /** Prefix for generating data-testid: `<prefix>-<field name>`. */
     testIdPrefix?: string;
   }
 
   let { specs, fields, testIdPrefix = 'note-field' }: Props = $props();
 
   /**
-   * 需要语法说明的字段 → 说明文案的语言包键。说明放进标签旁的问号浮层，而不是塞进标签：
-   * 挖空语法有好几条规则，写在标签括号里会把标签撑成一大段，每次编辑都要读一遍。
+   * Fields needing syntax help → the language pack key for the help text. The help goes into a question-mark popover next to the label instead of into the label:
+   * cloze syntax has several rules, and putting them in parentheses in the label stretches it into a paragraph that must be read every time you edit.
    */
   const fieldHelp: Record<string, string> = {
     text: 'note_help.text',
   };
 
 
-  /** options 字段既用于「选项」编辑，也用于选择题答案的下标选择。 */
+  /** The options field is used both for editing "choices" and for picking the index of a multiple-choice answer. */
   const options = $derived(
     Array.isArray(fields.options) ? fields.options.map((item) => String(item)).filter((item) => item !== '') : []
   );
@@ -41,8 +41,8 @@
   }
 
   /**
-   * 数值框的显示值。字符串原样显示：它是用户还没输完的内容（如「-」「1e」），
-   * setNumber 解析不了时就原样存着；若这里显示成空，输入框会在敲下第一个字符时被清空。
+   * Display value of the number box. Strings are shown as-is: they are what the user has not finished typing (e.g. "-", "1e"),
+   * and stay stored as-is when setNumber cannot parse them; if this displayed as empty, the input would be cleared on the first keystroke.
    */
   function asNumber(key: string): string {
     const value = fields[key];
@@ -50,7 +50,7 @@
     return typeof value === 'string' ? value : '';
   }
 
-  /** 数值输入：空串删除该键（可选数值字段的「未填」语义），否则写入数字。 */
+  /** Numeric input: an empty string deletes the key (the "not filled" semantics of an optional numeric field), otherwise the number is written. */
   function setNumber(key: string, raw: string): void {
     if (raw.trim() === '') {
       delete fields[key];

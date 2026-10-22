@@ -7,8 +7,10 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// TestCardTypeDescriptionLabelsCoverCatalogs 断言每个题型自描述的 LabelKey 在中英两份
-// 语言包里都有对应键：自描述是前端渲染的契约，缺键会让题型名在页面上退化成键名本身。
+// TestCardTypeDescriptionLabelsCoverCatalogs asserts that the LabelKey of every card type
+// description exists in both the Chinese and the English language pack: the description is the
+// contract the frontend renders against, so a missing key degrades the card type name on the
+// page into the key itself.
 func TestCardTypeDescriptionLabelsCoverCatalogs(t *testing.T) {
 	catalogs := map[string]map[string]string{
 		"zh-CN": catalogKeys(t, "locales/zh-CN.yaml"),

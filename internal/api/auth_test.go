@@ -12,8 +12,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestAuthenticatorNegativeCases 覆盖四种反面用例：
-// 缺 scope、过期 key、已撤销 key、限流耗尽，外加无凭据。
+// TestAuthenticatorNegativeCases covers four negative cases:
+// missing scope, expired key, revoked key, exhausted rate limit, plus no credentials.
 func TestAuthenticatorNegativeCases(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -76,7 +76,7 @@ func TestAuthenticatorNegativeCases(t *testing.T) {
 				k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
 				return "Bearer " + k.Plaintext
 			},
-			// read limit 配成 2：第 3 次请求必须被拒。
+			// the read limit is set to 2: the 3rd request must be rejected.
 			repeat:     3,
 			wantStatus: http.StatusTooManyRequests,
 			wantCode:   CodeRateLimited,
@@ -118,7 +118,7 @@ func TestAuthenticatorNegativeCases(t *testing.T) {
 	}
 }
 
-// TestAuthenticatorWritesAuditWithKeyID 断言 bearer 调用写下带 api_key_id 的审计行。
+// TestAuthenticatorWritesAuditWithKeyID asserts that a bearer call writes an audit row carrying api_key_id.
 func TestAuthenticatorWritesAuditWithKeyID(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "audit_user", store.RoleUser)

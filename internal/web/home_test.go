@@ -14,9 +14,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newRenderServer 构造一个可渲染的测试服务；userLocale 模拟 M1 的用户语言设置。
-// 之后首页只在「引导已完成」时才渲染，所以这里预置一个活跃管理员。
-// mut 可选地改写装配参数（例如给 Deps.Version 设值）。
+// newRenderServer builds a renderable test server; userLocale simulates M1's user language setting.
+// The home page only renders once onboarding is complete now, so seed an active admin here.
+// mut optionally rewrites the wiring parameters (for example setting Deps.Version).
 func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string, mut ...func(*Deps)) *Server {
 	t.Helper()
 	srv := newFreshServer(t, userLocale, mut...)
@@ -24,7 +24,7 @@ func newRenderServer(t *testing.T, userLocale func(c *gin.Context) string, mut .
 	return srv
 }
 
-// newFreshServer 构造一个没有任何用户的测试服务，等价于「安装完但还没 setup」。
+// newFreshServer builds a test server with no users at all, equivalent to "installed but not yet set up".
 func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string, mut ...func(*Deps)) *Server {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "render.db"))
@@ -51,7 +51,7 @@ func newFreshServer(t *testing.T, userLocale func(c *gin.Context) string, mut ..
 	return srv
 }
 
-// seedActiveAdmin 落一个活跃管理员，让实例越过首启窗口。
+// seedActiveAdmin inserts an active admin so the instance is past the first-run window.
 func seedActiveAdmin(t *testing.T, srv *Server) {
 	t.Helper()
 	admin := &store.User{
@@ -75,7 +75,7 @@ func get(t *testing.T, srv *Server, target string, headers map[string]string) *h
 	return rec
 }
 
-// TestStaticRouteServesEmbeddedAsset 断言 /static/v/<hash>/... 路由已接入并返回内容。
+// TestStaticRouteServesEmbeddedAsset asserts the /static/v/<hash>/... route is wired up and returns content.
 func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 	srv := newRenderServer(t, nil)
 	url := srv.assets.URL("js/pwa.js")
@@ -91,8 +91,8 @@ func TestStaticRouteServesEmbeddedAsset(t *testing.T) {
 	}
 }
 
-// TestHomeFirstRunRedirect 断言首启窗口内 GET / 303 到 /setup，窗口由「是否存在活跃管理员」界定（验收点）。
-// 管理员存在时 GET / 交给 SPA 应用壳（由客户端路由渲染首页）。
+// TestHomeFirstRunRedirect asserts that GET / 303s to /setup inside the first-run window, the window being bounded by "is there an active admin" (acceptance point).
+// When an admin exists, GET / goes to the SPA app shell (the client router renders the home page).
 func TestHomeFirstRunRedirect(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -110,7 +110,7 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			// 被停用的管理员不算数：引导窗口不该因为一个停用账号而关闭（CountActiveAdmins 的 status 过滤）。
+			// A disabled admin does not count: the onboarding window should not close because of a disabled account (CountActiveAdmins' status filter).
 			name: "admin disabled",
 			seed: &store.User{
 				Username: "old-admin", Email: "old-admin@example.com", DisplayName: "Old Admin",
@@ -119,7 +119,7 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 			wantCode: http.StatusSeeOther, wantLoc: "/setup",
 		},
 		{
-			// 普通用户同样不关闭窗口：缺的是管理员，不是任何人。
+			// A plain user does not close the window either: what is missing is an admin, not just anyone.
 			name: "ordinary user only",
 			seed: &store.User{
 				Username: "member", Email: "member@example.com", DisplayName: "Member",
@@ -145,7 +145,7 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 				t.Errorf("Location = %q, want %q", loc, tc.wantLoc)
 			}
 			if tc.wantLoc != "" {
-				// 首启窗口内首页不渲染自身内容，只回一个跳转（gin 会附一段链接文本）。
+				// Inside the first-run window the home page renders none of its own content, only a redirect (gin appends a bit of link text).
 				if strings.Contains(rec.Body.String(), `<div id="app">`) {
 					t.Error("first-run redirect returned the SPA shell; /setup must win")
 				}
@@ -158,7 +158,7 @@ func TestHomeFirstRunRedirect(t *testing.T) {
 	}
 }
 
-// TestHomeFirstRunRedirectDropsLang 断言重定向不带 ?lang：语言由引导页按 Accept-Language 与 cookie 自行解析。
+// TestHomeFirstRunRedirectDropsLang asserts the redirect carries no ?lang: the setup page resolves the language itself from Accept-Language and the cookie.
 func TestHomeFirstRunRedirectDropsLang(t *testing.T) {
 	srv := newFreshServer(t, nil)
 	rec := get(t, srv, "/?lang=en", map[string]string{"Accept-Language": "zh-CN,zh;q=0.9"})
@@ -170,7 +170,7 @@ func TestHomeFirstRunRedirectDropsLang(t *testing.T) {
 	}
 }
 
-// snippet 截断页面用于失败信息，避免把整页塞进测试日志。
+// snippet truncates a page for failure messages, so the whole page does not end up in the test log.
 func snippet(body string) string {
 	const limit = 400
 	if len(body) <= limit {

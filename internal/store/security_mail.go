@@ -8,14 +8,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件是（A 类事务安全邮件）所需的用户列写入扩展：邮箱验证时间与邮箱更新。
+// This file is the user-column write extension that (category A transactional security mail) needs: email verification time and email updates.
 //
-// 放在独立文件而不是塞进 user.go / models.go：这两处是其它里程碑的单写者热点
-// （AGENTS.md §6.4），并行工作时尽量不动它们。这里只新增方法，不改动既有行为。
-// 也刻意不新增 users 列——email_verified_at 已存在于 User 模型，无需迁移。
+// It lives in a separate file rather than being stuffed into user.go / models.go: those two are single-writer hotspots for other milestones
+// (AGENTS.md §6.4) and should not be touched while work is running in parallel. Only new methods are added here; no existing behaviour changes.
+// No users column is added either, deliberately -- email_verified_at already exists on the User model, so no migration is needed.
 
-// SetEmailVerifiedAt 只写 email_verified_at 一列，避免整行覆盖带来的并发丢写。
-// at 传 nil 表示清除验证标记（改邮箱后新地址尚未验证）。
+// SetEmailVerifiedAt writes only the email_verified_at column, so a whole-row overwrite cannot lose a concurrent write.
+// at nil clears the verification mark (after an email change the new address is not verified yet).
 func (s *UserStore) SetEmailVerifiedAt(ctx context.Context, id uint64, at *time.Time) error {
 	var value any
 	if at != nil {
@@ -29,8 +29,8 @@ func (s *UserStore) SetEmailVerifiedAt(ctx context.Context, id uint64, at *time.
 	return nil
 }
 
-// SetEmail 只改邮箱一列。邮箱唯一约束冲突会原样返回，由调用方翻成稳定错误码。
-// 改邮箱意味着新地址已通过确认链接验证，因此同一事务里把 email_verified_at 设为 at。
+// SetEmail changes only the email column. A unique-constraint conflict on email is returned as is, for the caller to translate into a stable error code.
+// Changing the email means the new address passed confirmation-link verification, so email_verified_at is set to at in the same transaction.
 func (s *UserStore) SetEmail(ctx context.Context, id uint64, email string, at time.Time) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&User{}).Where("id = ?", id).

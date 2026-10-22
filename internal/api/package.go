@@ -14,13 +14,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 卡组包（.edeck）的 REST 入口：
-//   GET  /api/v1/decks/:id/package  导出（read）
-//   POST /api/v1/decks/import       导入（write）
-// 业务逻辑全在 store 层；这里只做参数整形、权限判定与错误映射。
+// REST entry points for deck packages (.edeck):
+//   GET  /api/v1/decks/:id/package  export (read)
+//   POST /api/v1/decks/import       import (write)
+// All the logic is in the store layer; this only shapes parameters, decides permissions and maps errors.
 
-// ExportDeckPackage 导出卡组包并返回内存形态；REST、MCP 与 CLI 共用。
-// 调用方只填 Include* 开关；MediaRoot 与时钟由服务端决定，传入的值会被覆盖。
+// ExportDeckPackage exports a deck package and returns the in-memory form; shared by REST, MCP and the CLI.
+// Callers only set the Include* switches; MediaRoot and the clock are decided by the server and any value passed in is overwritten.
 func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) (*store.DeckPackage, error) {
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 		return nil, err
@@ -34,8 +34,8 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts
 	return pkg, nil
 }
 
-// ImportDeckPackage 解析并导入一个卡组包；target 决定三种目标之一。
-// allowOthersProgress 只有在调用者是管理员时才生效（进度导入边界）。
+// ImportDeckPackage parses and imports one deck package; target picks one of three destinations.
+// allowOthersProgress only takes effect when the caller is an admin (the progress-import boundary).
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	target, err := a.authorizeImportTarget(ctx, u.ID, opts.Target)
 	if err != nil {
@@ -43,14 +43,14 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	}
 	opts.Target = target
 	opts.MediaRoot = a.mediaRoot
-	// 把导入者当前生效的媒体配额交给 store 层；四条入口（REST/MCP/CLI/Web）都走本方法，
-	// 因此共用一处解析，不会有人绕过配额检查。
+	// Hand the importer's currently effective media quota to the store layer; all four entries (REST/MCP/CLI/Web) go through this method,
+	// so they share one resolution and nobody can bypass the quota check.
 	opts.MediaQuotaBytes = media.ResolveUserQuotaBytes(ctx, a.db)
 	if opts.Now == nil {
 		opts.Now = a.now
 	}
 	if u.Role != store.RoleAdmin {
-		// 非管理员无论如何都不能导入他人进度（管理员设置的另一半在调用方读设置后置位）。
+		// A non-admin can never import someone else's progress (the other half of the admin setting is set by the caller after reading settings).
 		opts.AllowOthersProgress = false
 	}
 	report, err := a.decks.ImportPackage(ctx, u.ID, r, opts)
@@ -72,9 +72,9 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	return report, nil
 }
 
-// resolveImportTarget 把客户端传来的目标串翻成 store 的形态。
-// 客户端给的卡组标识是对外 id，store 只认数字主键；返回种类、目标卡组数字主键
-// （new_deck 为 0）与 store 形态的目标串。
+// resolveImportTarget translates the target string the client sends into the store's shape.
+// The client's deck identifier is an external id and the store only knows numeric primary keys; returns the kind, the target deck's numeric primary key
+// (0 for new_deck) and the target string in the store's shape.
 func (a *API) resolveImportTarget(ctx context.Context, raw string) (kind string, deckID uint64, target string, err error) {
 	kind, ref, err := store.ParsePackageTargetRef(raw)
 	if err != nil {
@@ -90,10 +90,10 @@ func (a *API) resolveImportTarget(ctx context.Context, raw string) (kind string,
 	return kind, d.ID, store.FormatPackageTarget(kind, d.ID), nil
 }
 
-// authorizeImportTarget 解析导入目标并判定调用者对目标卡组的角色，返回 store 认的目标串。
-// 客户端给的卡组标识是对外 id，store 只认数字主键，故在这里解析。
-// 合并（into_deck）需要 editor；替换（replace_deck）是破坏性操作，只允许 owner。
-// 文件导入、直链导入与上传票据签发共用本函数，判权规则只有这一份。
+// authorizeImportTarget resolves the import target and decides the caller's role on the target deck, returning a target string the store understands.
+// The client's deck identifier is an external id and the store only knows numeric primary keys, hence the resolution here.
+// Merging (into_deck) needs editor; replacing (replace_deck) is destructive and is allowed for owner only.
+// File import, direct-link import and upload ticket issuance share this function, so the permission rules exist in exactly one place.
 func (a *API) authorizeImportTarget(ctx context.Context, userID uint64, raw string) (string, error) {
 	kind, deckID, target, err := a.resolveImportTarget(ctx, raw)
 	if err != nil {
@@ -111,27 +111,27 @@ func (a *API) authorizeImportTarget(ctx context.Context, userID uint64, raw stri
 	return target, nil
 }
 
-// mapPackageError 把 store 层的卡组包错误映射成带稳定 code 的 ServiceError。
+// mapPackageError maps a store-layer deck package error to a ServiceError carrying a stable code.
 //
-// 每个包错误都产出它自己的稳定 code（原样透出 store.PackageError.Code），不再把
-// package_bad_format 折叠成笼统的 invalid_request——否则 error.package_* 这批语言包键
-// 永无产出，用户也分不清“格式无效”/“题型不支持”/“媒体类型不允许”。
-// HTTP 状态保持既有语义不变：配额不足 413、引用不可读媒体 403，其余包错误 400。
+// Each package error yields its own stable code (passing store.PackageError.Code through untouched); package_bad_format is no longer
+// collapsed into a blanket invalid_request - otherwise the error.package_* i18n keys would
+// never be produced, and users could not tell "bad format" / "card type unsupported" / "media type not allowed" apart.
+// HTTP statuses keep their existing semantics: quota exceeded 413, referencing unreadable media 403, any other package error 400.
 func mapPackageError(err error) error {
 	var pe *store.PackageError
 	if asPackageError(err, &pe) {
 		status := http.StatusBadRequest
 		switch pe.Code {
 		case store.CodePackageQuotaExceeded:
-			// 与上传链的 media_quota_exceeded 同一 HTTP 语义：配额不足按 413 返回。
+			// Same HTTP semantics as media_quota_exceeded in the upload chain: quota exceeded is returned as 413.
 			status = http.StatusRequestEntityTooLarge
 		case store.CodePackageMediaForbidden:
-			// 与单卡写入的 media_not_readable 同一语义：引用了自己读不到的媒体，按 403 拒绝。
+			// Same semantics as media_not_readable for single-card writes: referencing media you cannot read is rejected with 403.
 			status = http.StatusForbidden
 		}
 		code := pe.Code
 		if code == "" {
-			// 兜底：未带 code 的包错误保持既有 invalid_request 口径。
+			// Fallback: a package error without a code keeps the existing invalid_request convention.
 			code = CodeInvalidRequest
 		}
 		msg := pe.Message
@@ -146,7 +146,7 @@ func mapPackageError(err error) error {
 	return newServiceError(http.StatusInternalServerError, CodeInternal, err.Error())
 }
 
-// asPackageError 是 errors.As 的小包装，避免在 api 包各处重复 import errors。
+// asPackageError is a thin wrapper over errors.As, so the api package does not repeat its import of errors everywhere.
 func asPackageError(err error, target **store.PackageError) bool {
 	for err != nil {
 		if pe, ok := err.(*store.PackageError); ok {
@@ -162,7 +162,7 @@ func asPackageError(err error, target **store.PackageError) bool {
 	return false
 }
 
-// handleExportPackage 是 GET /api/v1/decks/:id/package。
+// handleExportPackage is GET /api/v1/decks/:id/package.
 func (a *API) handleExportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -179,7 +179,7 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		IncludeProgress: c.Query("include_progress") == "1",
 		IncludeReviews:  c.Query("include_reviews") == "1",
 		IncludeWeights:  c.Query("include_weights") == "1",
-		// include_media 默认 on；显式传 0 关闭。
+		// include_media defaults to on; passing 0 explicitly turns it off.
 		IncludeMedia: c.DefaultQuery("include_media", "1") != "0",
 	})
 	if err != nil {
@@ -192,14 +192,14 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	// 下载名用卡组标题，用户在下载目录里能认出是哪个卡组；标题清洗不出可用名字时退回对外 id。
+	// The download name uses the deck title so users recognize the deck in their download folder; when the title sanitizes to nothing it falls back to the external id.
 	c.Header("Content-Type", "application/vnd.engram.edeck")
 	c.Header("Content-Disposition", AttachmentDisposition(DeckPackageFilename(d.Name, publicID)))
 	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())
 }
 
-// isRequestBodyTooLarge 判断 multipart 解析失败是否由 http.MaxBytesReader 触发。
-// gin 会把 MaxBytesError 包在解析错误里，errors.As 能透过包装找到它。
+// isRequestBodyTooLarge reports whether a multipart parse failure was triggered by http.MaxBytesReader.
+// gin wraps the MaxBytesError inside the parse error, and errors.As can see through the wrapping.
 func isRequestBodyTooLarge(err error) bool {
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
@@ -208,12 +208,12 @@ func isRequestBodyTooLarge(err error) bool {
 	return strings.Contains(err.Error(), "http: request body too large")
 }
 
-// handleImportPackage 是 POST /api/v1/decks/import（multipart 上传文件）。
+// handleImportPackage is POST /api/v1/decks/import (multipart file upload).
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	// 先按管理员配置的上传上限限制请求体，再解析 multipart：gin 会按 MaxMultipartMemory 把
-	// 超出内存的 part 落到临时盘，不先设上限就给了内存/磁盘放大。
-	// 超限稳定 413，code 沿用卡组包既有的 package_too_large。
+	// Cap the request body at the admin-configured upload limit before parsing multipart: gin spills parts beyond MaxMultipartMemory
+	// to a temp file, so setting no limit first would invite memory/disk amplification.
+	// Over the limit is a stable 413, reusing the deck package's existing package_too_large code.
 	limit := media.ResolveMaxBytes(c.Request.Context(), a.db)
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	fh, err := c.FormFile("file")
@@ -237,7 +237,7 @@ func (a *API) handleImportPackage(c *gin.Context) {
 		Target:     c.PostForm("target"),
 		DryRun:     dryRun,
 		OnConflict: c.PostForm("on_conflict"),
-		// 允许导入他人进度是管理员设置项；这里只认管理员显式勾选。
+		// Allowing import of someone else's progress is an admin setting; only an explicit admin opt-in counts here.
 		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && u.Role == store.RoleAdmin,
 		SkipMissingMedia:    c.PostForm("skip_missing_media") == "1",
 		ApplyWeights:        c.PostForm("apply_weights") == "1",
@@ -249,4 +249,4 @@ func (a *API) handleImportPackage(c *gin.Context) {
 	c.JSON(http.StatusOK, report)
 }
 
-// formatTargetID 已由 strconv 内联使用，无需单独函数。
+// formatTargetID is used inline by strconv, no separate function is needed.

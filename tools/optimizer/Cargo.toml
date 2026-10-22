@@ -10,8 +10,8 @@ name = "optimizer"
 path = "src/main.rs"
 
 [dependencies]
-# 上游 crate 名是 fsrs（仓库名 fsrs-rs）；优化器入口 fsrs::compute_parameters 在此版本可用。
-# 精确钉版本：权重是持久化数据，靠相同版本的训练实现才能复现（README 记录了依据）。
+# The upstream crate name is fsrs (the repository is fsrs-rs); the optimizer entry point fsrs::compute_parameters is available in this version.
+# Version pinned exactly: weights are persisted data and can only be reproduced by the same version of the training implementation (the README records the rationale).
 fsrs = "=6.6.2"
 chrono = "0.4"
 chrono-tz = "0.10"

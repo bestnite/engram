@@ -10,31 +10,31 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 登录第二步（TOTP）的同源 JSON 端点。
+// This file holds the same-origin JSON endpoints for the SPA login second step (TOTP).
 //
-// 第二步没有可深链的 GET 页面：SPA 需要的是「先问状态、再提交」的无状态协议，因此这里
-// 提供两条端点：
+// The second step has no deep-linkable GET page: what the SPA needs is a stateless "ask the status, then submit" protocol, so this
+// provides two endpoints:
 //
-//   - GET  /api/v1/auth/totp 报告当前请求是否持有有效的第二步凭据（pendingTOTPUser）；
-//   - POST /api/v1/auth/totp 提交验证码或一次性恢复码，通过后签发会话并返回当前用户。
+//   - GET  /api/v1/auth/totp reports whether the current request holds a valid second-step credential (pendingTOTPUser);
+//   - POST /api/v1/auth/totp submits a code or a one-time recovery code; on success it issues a session and returns the current user.
 //
-// 两条端点共用 setTOTPPendingCookie / pendingTOTPUser / VerifySecondFactor 与同一个登录限速器，
-// 因此限速、恒定耗时、审计、恢复码消费与新设备提醒的语义只有一份实现。
+// Both endpoints share setTOTPPendingCookie / pendingTOTPUser / VerifySecondFactor and the same login rate limiter,
+// so rate limiting, constant-time comparison, auditing, recovery-code consumption and new-device alerts have exactly one implementation.
 //
-// 状态泄露边界：pending 凭据只在第一因素（密码）通过后才下发，且它是 HttpOnly 的 HMAC 签名值，
-// 因此 GET 的 pending=true 只可能来自刚通过密码的调用方；未通过第一因素的人无法据此探测
-// 「某账号是否启用 TOTP」。凭据缺失或过期时 POST 一律返回同一个错误 code，不区分原因。
+// The state-leak boundary: the pending credential is only issued after the first factor (password) passes, and it is an HttpOnly HMAC-signed value,
+// so a GET with pending=true can only come from a caller that just passed the password; someone who has not passed the first factor cannot use it to probe
+// "whether some account has TOTP enabled". When the credential is missing or expired, POST always returns the same error code, without distinguishing the reason.
 
-// apiTOTPSubmitRequest 是 POST /api/v1/auth/totp 的请求体。
-// Code 同时接受 6 位动态验证码与一次性恢复码。
+// apiTOTPSubmitRequest is the request body of POST /api/v1/auth/totp.
+// Code accepts both a 6-digit TOTP code and a one-time recovery code.
 type apiTOTPSubmitRequest struct {
 	Code string `json:"code"`
 }
 
-// apiTOTPPending 报告第二步是否处于可提交状态（GET /api/v1/auth/totp）。
+// apiTOTPPending reports whether the second step is in a submittable state (GET /api/v1/auth/totp).
 //
-// 只读、无副作用：不刷新凭据有效期、不写审计、不建立会话。凭据无效（未登录第二步、
-// 已过期、签名不符）时返回 pending=false，前端据此把用户送回第一步。
+// Read-only, no side effects: it does not refresh the credential lifetime, write an audit, or create a session. When the credential is invalid (not in the second step,
+// expired, bad signature) it returns pending=false, and the frontend sends the user back to the first step.
 func (s *Server) apiTOTPPending(c *gin.Context) {
 	pending := false
 	if s.totp != nil {
@@ -45,14 +45,14 @@ func (s *Server) apiTOTPPending(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"pending": pending})
 }
 
-// apiTOTPSubmit 校验第二因素并建立会话（POST /api/v1/auth/totp）。
+// apiTOTPSubmit verifies the second factor and creates a session (POST /api/v1/auth/totp).
 //
-// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
-// 失败复用登录限速：与第一步共用同一
-// 账号/IP 维度，第二步不能成为绕过限速的缺口。
+// Mounted with auth.PreSessionCSRFMiddleware: the request must carry both the csrf_double cookie and the X-CSRF-Token header.
+// Failures reuse the login rate limiter: it shares the same
+// account/IP dimensions as the first step, so the second step cannot become a gap that bypasses rate limiting.
 func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	if s.totp == nil {
-		// TOTP 未装配时端点不可用；按「不存在」处理，不暴露装配细节。
+		// When TOTP is not wired the endpoint is unavailable; it is handled as "nonexistent", exposing no wiring details.
 		apiAuthError(c, http.StatusNotFound, api.CodeNotFound, "The requested resource was not found.")
 		return
 	}
@@ -66,7 +66,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, ok := s.pendingTOTPUser(c)
 	if !ok {
-		// 没有（或已过期的）第二步凭据：清掉残留 cookie 并回到第一步，不暴露任何账号状态。
+		// No (or an expired) second-step credential: clear the leftover cookie and return to the first step, exposing no account state.
 		s.clearTOTPPendingCookie(c)
 		apiAuthError(c, http.StatusUnauthorized, api.CodeTOTPChallengeExpired,
 			"The two-factor challenge has expired. Sign in again.")
@@ -81,7 +81,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		return
 	}
 
-	// 第二步与第一步共用同一限速器：失败同样递增延迟。
+	// The second step shares the same rate limiter as the first: a failure escalates the delay too.
 	if s.loginLimiter != nil {
 		if _, err := s.loginLimiter.Wait(ctx, u.Username, c.ClientIP()); err != nil {
 			s.writeLoginLimited(c, err, u.Username, c.ClientIP())
@@ -109,7 +109,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		return
 	}
 	if usedRecovery {
-		// 恢复码被消费：这是安全相关事件，必须留痕（要求用掉/生成新的都有审计）。
+		// A recovery code was consumed: this is a security-relevant event and must leave a trace (both using one up and generating new ones are audited).
 		s.audit(ctx, store.AuditEntry{
 			UserID: store.Ptr(userID),
 			Action: store.ActionTOTPRecoveryUsed,
@@ -132,7 +132,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": c.ClientIP(), "second_factor": "totp"},
 	})
-	// 第二因素通过后的登录同样记录指纹并在新设备/新 IP 时提醒。
+	// A login after the second factor passes also records the fingerprint and alerts on a new device / new IP.
 	s.notifyNewDeviceLogin(c, u)
 
 	c.JSON(http.StatusOK, gin.H{

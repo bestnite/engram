@@ -15,12 +15,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckCloneCopiesContentWithoutProgress 是主验收：
-// 克隆后 note/card 数量一致、新 owner 名下 card_states 为 0、原卡组不受影响。
+// TestDeckCloneCopiesContentWithoutProgress is the main acceptance test:
+// after cloning, the note/card counts match, card_states under the new owner is 0, and the source deck is unaffected.
 func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Source deck")
-	// 三种题型：basic(1 张)、basic_both(2 张)、cloze(2 张) —— 覆盖一 note 多 card。
+	// Three note types: basic (1 card), basic_both (2 cards), cloze (2 cards) — covering one note with multiple cards.
 	seedBasic(t, db, deck.ID, "Q1", "A1", "tag-one")
 	both := &store.Note{DeckID: deck.ID, Kind: "basic_both"}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), both, map[string]any{"front": "Q2", "back": "A2"}); err != nil {
@@ -37,14 +37,14 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 		t.Fatalf("seed produced (%d notes, %d cards), want (3, 5)", srcNotes, srcCards)
 	}
 
-	// owner 克隆自己的卡组。
+	// The owner clones their own deck.
 	rec := postForm(t, srv, "/decks/"+deck.PublicID+"/clone", url.Values{"csrf_token": {ownerCSRF}}, ownerCookies)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST clone status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
 	}
 	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
 
-	// 新卡组归属调用者、名字带副本后缀、沿用调用者自己在源卡组上的预设（属主即源卡组的预设）。
+	// The new deck belongs to the caller, its name carries the copy suffix, and it keeps the preset in effect for the caller on the source deck (the owner is the source deck's preset holder).
 	var cloned store.Deck
 	if err := db.First(&cloned, "public_id = ?", newID).Error; err != nil {
 		t.Fatalf("load cloned deck: %v", err)
@@ -62,7 +62,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 		t.Errorf("cloned deck name = %q, want it to contain %q", cloned.Name, deck.Name)
 	}
 
-	// 内容数量一致。
+	// Content counts match.
 	if got := countNotes(t, db, cloned.ID); got != srcNotes {
 		t.Errorf("cloned note count = %d, want %d", got, srcNotes)
 	}
@@ -70,7 +70,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 		t.Errorf("cloned card count = %d, want %d", got, srcCards)
 	}
 
-	// 进度为零：新 owner 在新 card 上没有 card_states 行。
+	// Progress is zero: the new owner has no card_states rows on the new cards.
 	var states int64
 	if err := db.Model(&store.CardState{}).
 		Where("user_id = ? AND card_id IN (?)", ownerID, cardIDSubquery(db, cloned.ID)).
@@ -81,7 +81,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 		t.Errorf("cloned deck carries progress: card_states rows = %d, want 0", states)
 	}
 
-	// 原卡组不受影响：数量不变。
+	// The source deck is unaffected: counts unchanged.
 	if got := countNotes(t, db, deck.ID); got != srcNotes {
 		t.Errorf("source note count changed to %d, want %d", got, srcNotes)
 	}
@@ -89,7 +89,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 		t.Errorf("source card count changed to %d, want %d", got, srcCards)
 	}
 
-	// 克隆也写一行审计。
+	// Cloning also writes one audit row.
 	n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckClone)
 	if err != nil {
 		t.Fatalf("count clone audit: %v", err)
@@ -99,7 +99,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	}
 }
 
-// TestDeckCloneAllowedForReader 覆盖「自己可读即可克隆」：被授权 reader 能把内容复制到自己名下。
+// TestDeckCloneAllowedForReader covers "readable means cloneable": a granted reader can copy the content under their own name.
 func TestDeckCloneAllowedForReader(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Readable deck")
@@ -129,7 +129,7 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	if states != 0 {
 		t.Errorf("reader clone carries progress: %d rows, want 0", states)
 	}
-	// 反面：克隆别人的卡组不带走属主的预设（参数与优化出的权重），用的是读者自己的预设。
+	// Counter-case: cloning someone else's deck does not carry over the owner's preset (parameters and optimized weights); the reader's own preset is used.
 	var preset store.Preset
 	if err := db.First(&preset, "id = ?", cloned.PresetID).Error; err != nil {
 		t.Fatalf("load cloned deck preset: %v", err)
@@ -139,7 +139,7 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	}
 }
 
-// countNotes 统计卡组下未软删除的 note 数。
+// countNotes counts the non-soft-deleted notes in a deck.
 func countNotes(t *testing.T, db *gorm.DB, deckID uint64) int64 {
 	t.Helper()
 	var n int64
@@ -149,7 +149,7 @@ func countNotes(t *testing.T, db *gorm.DB, deckID uint64) int64 {
 	return n
 }
 
-// countCards 统计卡组下可见的 card 数（join notes 排除软删除内容）。
+// countCards counts the visible cards in a deck (joining notes to exclude soft-deleted content).
 func countCards(t *testing.T, db *gorm.DB, deckID uint64) int64 {
 	t.Helper()
 	var n int64
@@ -162,7 +162,7 @@ func countCards(t *testing.T, db *gorm.DB, deckID uint64) int64 {
 	return n
 }
 
-// cardIDSubquery 返回某卡组下 card id 的子查询，用于统计 card_states。
+// cardIDSubquery returns a subquery for the card ids in a deck, used to count card_states.
 func cardIDSubquery(db *gorm.DB, deckID uint64) *gorm.DB {
 	return db.Table("cards").
 		Select("cards.id").
@@ -170,7 +170,7 @@ func cardIDSubquery(db *gorm.DB, deckID uint64) *gorm.DB {
 		Where("notes.deck_id = ? AND cards.deleted_at IS NULL", deckID)
 }
 
-// parseDeckPublicIDFromLocation 从 /decks/<id>/notes 形式的 Location 中取出卡组对外 id。
+// parseDeckPublicIDFromLocation extracts the deck's public id from a Location of the form /decks/<id>/notes.
 func parseDeckPublicIDFromLocation(t *testing.T, location string) string {
 	t.Helper()
 	parts := strings.Split(strings.Trim(location, "/"), "/")
@@ -180,9 +180,9 @@ func parseDeckPublicIDFromLocation(t *testing.T, location string) string {
 	return parts[1]
 }
 
-// TestCloneAPIAllowsOwnerEditorReader 断言 owner/editor/reader 三种角色都能通过
-// POST /api/v1/decks/:id/clone 把卡组克隆到自己名下，响应是新卡组的 JSON {id,name}，
-// 且新卡组归属调用者（进度不跟随由 clone_test.go 覆盖）。
+// TestCloneAPIAllowsOwnerEditorReader asserts owner/editor/reader can all use
+// POST /api/v1/decks/:id/clone to clone the deck under their own name, that the response is the new deck's JSON {id,name},
+// and that the new deck belongs to the caller (progress not following is covered by clone_test.go).
 func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone API source")
@@ -227,8 +227,8 @@ func TestCloneAPIAllowsOwnerEditorReader(t *testing.T) {
 	}
 }
 
-// TestCloneAPIRejectsNonReaderAndMissingCSRF 断言克隆 API 的两条拒绝路径：
-// 无任何授权的陌生用户 403；缺 CSRF token 403；两者都不产生新卡组。
+// TestCloneAPIRejectsNonReaderAndMissingCSRF asserts the clone API's two rejection paths:
+// a stranger with no grants gets 403; a missing CSRF token gets 403; neither produces a new deck.
 func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone guard source")
@@ -246,7 +246,7 @@ func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 	if rec := postAccept(t, srv, path, "{}", "application/json", ownerCookies, ""); rec.Code != http.StatusForbidden {
 		t.Errorf("clone without CSRF = %d, want 403", rec.Code)
 	}
-	// 正确 token 下 owner 仍可克隆，证明前两条失败是判权/CSRF 而非路径错误。
+	// With a correct token the owner can still clone, proving the first two failures are authorization/CSRF rather than a wrong path.
 	if rec := postAccept(t, srv, path, "{}", "application/json", ownerCookies, ownerCSRF); rec.Code != http.StatusCreated {
 		t.Fatalf("owner POST clone with CSRF = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -260,9 +260,9 @@ func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 	}
 }
 
-// TestCloneAcceptHeaderChoosesJSONOrRedirect 断言克隆端点的响应形态由 Accept 决定：
-// 带参数的 application/json（客户端可能附 charset）仍返回 201 JSON，浏览器表单形态的 Accept
-// 仍走 303 重定向到新卡组——避免 JSON 调用被误判成表单提交后跟随 303 拿到 HTML。
+// TestCloneAcceptHeaderChoosesJSONOrRedirect asserts the clone endpoint's response shape is decided by Accept:
+// application/json with parameters (a client may append a charset) still returns 201 JSON, while a browser form-style Accept
+// still gets the 303 redirect to the new deck — avoiding a JSON call being misjudged as a form submission and following the 303 to HTML.
 func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone accept source")
@@ -285,7 +285,7 @@ func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
 	}
 }
 
-// postAccept 发一个带显式 Accept 的 POST，用来断言 Accept 决定返回 JSON 还是 303 重定向。
+// postAccept issues a POST with an explicit Accept, to assert whether Accept decides on a JSON response or a 303 redirect.
 func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
@@ -304,18 +304,18 @@ func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies 
 	return rec
 }
 
-// cloneResponse 是克隆端点的 JSON 响应体。
+// cloneResponse is the clone endpoint's JSON response body.
 type cloneResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// TestCloneTruncatesNearLimitSourceName 是 AUDIT-05 的端到端验收：接近上限的合法源名克隆后
-// 仍产出合法副本名——后缀被容纳、整名不超过 200 个字符（修复前副本名会超长，之后任何改名或
-// 包导入入口都会拒绝它）。
+// TestCloneTruncatesNearLimitSourceName is the end-to-end acceptance for AUDIT-05: a legal source name close to the limit still
+// produces a legal copy name after cloning — the suffix fits and the whole name stays within 200 characters (before the fix the copy name would be over-long, and every rename or
+// bundle-import entry point would reject it afterwards).
 func TestCloneTruncatesNearLimitSourceName(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	longName := strings.Repeat("卡", 200) // 恰好在上限上的合法源名
+	longName := strings.Repeat("卡", 200) // exactly at the limit, a legal source name
 	deck := seedDeck(t, db, ownerID, longName)
 	seedBasic(t, db, deck.ID, "Q", "A")
 

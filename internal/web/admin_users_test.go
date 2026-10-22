@@ -13,9 +13,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 用户管理的验收测试：每个动作一条，重点覆盖会话作废与最后管理员保护。
+// Acceptance test for user management: one test per action, focusing on session invalidation and last-admin protection.
 
-// createRoleUser 直接建一个指定角色的本地用户（管理员用例需要造第二个管理员）。
+// createRoleUser creates a local user with the given role directly (the admin cases need to create a second admin).
 func createRoleUser(t *testing.T, db *gorm.DB, username, role string) uint64 {
 	t.Helper()
 	accounts, err := auth.NewAccountService(store.NewUserStore(db), store.NewSessionStore(db), store.NewAPIKeyStore(db),
@@ -32,7 +32,7 @@ func createRoleUser(t *testing.T, db *gorm.DB, username, role string) uint64 {
 	return u.ID
 }
 
-// adminPost 以管理员身份提交一个带 CSRF 的表单。
+// adminPost submits a form with CSRF as an admin.
 func adminPost(t *testing.T, srv *Server, path string, values url.Values, cookies []*http.Cookie, csrf string) *http.Response {
 	t.Helper()
 	values.Set("csrf_token", csrf)
@@ -40,7 +40,7 @@ func adminPost(t *testing.T, srv *Server, path string, values url.Values, cookie
 	return rec.Result()
 }
 
-// assertSessionsRevoked 断言某用户的会话全部已作废（revoked_at 非空）。
+// assertSessionsRevoked asserts that all of a user's sessions are revoked (revoked_at non-null).
 func assertSessionsRevoked(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	var total, revoked int64

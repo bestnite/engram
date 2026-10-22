@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// newWarnerRouter 搭一个只挂诊断中间件的最小路由，可信代理配置与生产装配同源。
+// newWarnerRouter builds a minimal router carrying only the diagnostic middleware, with the trusted-proxy configuration from the same source as production wiring.
 func newWarnerRouter(t *testing.T, trusted []string) (*gin.Engine, *bytes.Buffer) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -37,8 +37,8 @@ func serveFrom(router *gin.Engine, remoteAddr string, headers map[string]string)
 
 const warnMessage = "forwarded client ip header ignored"
 
-// TestForwardedIPWarner 覆盖告警的触发条件：转发头 + 内网直连 + 不在可信列表。
-// 负向用例同样重要：公网来源（多半伪造）与已信任的代理都不得告警。
+// TestForwardedIPWarner covers the warning trigger conditions: forwarding headers + internal direct address + not in the trusted list.
+// The negative cases matter just as much: a public source (mostly spoofed) and an already-trusted proxy must not warn.
 func TestForwardedIPWarner(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -79,7 +79,7 @@ func TestForwardedIPWarner(t *testing.T) {
 	}
 }
 
-// TestForwardedIPWarnerLogsOnce 断言每个进程只告警一次，不随请求刷屏。
+// TestForwardedIPWarnerLogsOnce asserts the warning fires once per process and does not flood per request.
 func TestForwardedIPWarnerLogsOnce(t *testing.T) {
 	router, buf := newWarnerRouter(t, nil)
 	for range 3 {

@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestAdminAuditFilterAcceptsPublicTargetID 断言审计检索的 target_id 过滤认对外 id：
-// 管理面板列表显示的就是对外 id，把同一个 id 粘回筛选框必须能筛出对应的行。
+// TestAdminAuditFilterAcceptsPublicTargetID asserts that the target_id filter in audit search accepts public ids:
+// the admin panel list shows public ids, so pasting the same id back into the filter box must select the matching row.
 func TestAdminAuditFilterAcceptsPublicTargetID(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	ctx := context.Background()
@@ -49,7 +49,7 @@ func TestAdminAuditFilterAcceptsPublicTargetID(t *testing.T) {
 		t.Errorf("audit row target = %+v, want public id %s", got.Rows[0].Target, deck.PublicID)
 	}
 
-	// 未知对外 id：给稳定 notice 码，而不是静默退化成「不过滤」。
+	// Unknown public id: return a stable notice code instead of silently degrading to "no filter".
 	rec = getJSON(t, srv, "/api/v1/admin/audit?target_type=deck&target_id=01a11f66-0000-7000-8000-000000000000", cookies, nil)
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode audit: %v", err)

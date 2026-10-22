@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestVisibleIDsMatchesListVisibility 是越权修复的地基用例：VisibleIDs 与 ListVisible 必须看到
-// 同一批卡组（自有 ∪ 被 deck_grants 授权）。
+// TestVisibleIDsMatchesListVisibility is the foundation case for the privilege fix: VisibleIDs and ListVisible must see
+// the same set of decks (own ∪ granted via deck_grants).
 //
-// 负例：别人建的卡组既不出现在列表里，也不出现在 id 集合里——要被看见只能靠一条显式授权行，
-// 而授权撤销后下一次查询它就消失（与 auth.DeckAccess 的「撤销即时生效」同口径）。
+// Negative case: a deck someone else created appears neither in the list nor in the id set — being seen requires an explicit grant row,
+// and once the grant is revoked it disappears from the next query (same rule as auth.DeckAccess's 'revocation takes effect immediately').
 func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 			otherTwo := mk(other, "other-two", presetOther)
 			granted := mk(other, "granted", presetOther)
 
-			// 把 granted 授权给 me：它必须出现，而 otherOne / otherTwo 不出现。
+			// grant 'granted' to me: it must appear, while otherOne / otherTwo do not.
 			if err := db.Create(&DeckGrant{DeckID: granted.ID, UserID: me, Role: RoleReader}).Error; err != nil {
 				t.Fatalf("create grant: %v", err)
 			}
@@ -86,7 +86,7 @@ func TestVisibleIDsMatchesListVisibility(t *testing.T) {
 				t.Errorf("VisibleIDs set size = %d, ListVisible set size = %d; want equal", len(idSet), len(listSet))
 			}
 
-			// 撤销授权：同一集合口径下它必须立即消失，不留缓存。
+			// revoke the grant: under the same set rule it must disappear immediately, with no caching.
 			if err := db.Where("deck_id = ? AND user_id = ?", granted.ID, me).Delete(&DeckGrant{}).Error; err != nil {
 				t.Fatalf("delete grant: %v", err)
 			}

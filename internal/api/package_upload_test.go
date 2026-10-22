@@ -14,12 +14,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 上传票据导入（POST /api/v1/decks/import-uploads 签发，PUT .../:token 上传）的验收。
+// Acceptance for upload ticket import (issued by POST /api/v1/decks/import-uploads, uploaded via PUT .../:token).
 //
-// 正例证明字节不经 bearer key 也能完成导入，且审计记到签发所用的 key 上；负例覆盖票据
-// 的每一种失效原因（重放、过期、key 撤销、账号禁用、伪造）以及签发时的判权与参数校验。
+// The positive cases prove bytes can complete an import without a bearer key and that the audit is recorded against the key used for issuance; the negative cases cover every
+// way a ticket can go bad (replay, expiry, key revocation, account disabled, forgery) plus authorization and parameter validation at issuance.
 
-// createUpload 用 bearer key 签发一张票据，返回原始响应。
+// createUpload issues a ticket with a bearer key and returns the raw response.
 func createUpload(t *testing.T, env *testEnv, key, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/import-uploads", strings.NewReader(body))
@@ -30,7 +30,7 @@ func createUpload(t *testing.T, env *testEnv, key, body string) *httptest.Respon
 	return rec
 }
 
-// issueUpload 签发票据并断言成功，返回解析后的结果。
+// issueUpload issues a ticket, asserts success and returns the parsed result.
 func issueUpload(t *testing.T, env *testEnv, key, body string) ImportUpload {
 	t.Helper()
 	rec := createUpload(t, env, key, body)
@@ -44,7 +44,7 @@ func issueUpload(t *testing.T, env *testEnv, key, body string) ImportUpload {
 	return up
 }
 
-// putUpload 不带任何凭据地把 body PUT 到票据 URL（路径部分）。
+// putUpload PUTs body to the ticket URL (its path part) with no credentials at all.
 func putUpload(t *testing.T, env *testEnv, uploadURL string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPut, uploadURL, bytes.NewReader(body))
@@ -53,7 +53,7 @@ func putUpload(t *testing.T, env *testEnv, uploadURL string, body []byte) *httpt
 	return rec
 }
 
-// minimalPackageDocument 是 minimalPackageZip 的 JSON 文档形态（export_deck 的输出形态）。
+// minimalPackageDocument is the JSON document form of minimalPackageZip (the output form of export_deck).
 func minimalPackageDocument() []byte {
 	return []byte(`{
   "manifest.json": {"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"from-json"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}},
@@ -96,7 +96,7 @@ func TestImportUploadImportsWithoutBearer(t *testing.T) {
 			if report.NotesCreated != 1 || report.DeckPublicID == "" {
 				t.Fatalf("report = %+v, want one note in a new deck", report)
 			}
-			// 审计记在签发者与签发所用的 key 上：上传请求本身不带 key，归属不能丢。
+			// The audit is recorded against the issuer and the key used for issuance: the upload request itself carries no key, so ownership must not be lost.
 			var logs []store.AuditLog
 			if err := env.db.Where("action = ?", "deck.package_import").Find(&logs).Error; err != nil {
 				t.Fatalf("load audit: %v", err)
@@ -120,12 +120,12 @@ func TestImportUploadAbsoluteURLFromBaseURL(t *testing.T) {
 	}
 }
 
-// TestImportUploadRejectsInvalidTicket 覆盖票据的每一种失效原因：都得到同一个 404 code，
-// 且没有任何导入发生。
+// TestImportUploadRejectsInvalidTicket covers every way a ticket goes bad: all get the same 404 code,
+// and no import happens.
 func TestImportUploadRejectsInvalidTicket(t *testing.T) {
 	cases := []struct {
 		name string
-		// spoil 在签发之后、上传之前把票据弄失效；返回要 PUT 的 URL。
+		// spoil invalidates the ticket after issuance and before upload; it returns the URL to PUT to.
 		spoil func(t *testing.T, env *testEnv, user *store.User, k *store.CreatedAPIKey, uploadURL string) string
 	}{
 		{name: "replayed", spoil: func(t *testing.T, env *testEnv, _ *store.User, _ *store.CreatedAPIKey, uploadURL string) string {
@@ -181,8 +181,8 @@ func TestImportUploadRejectsInvalidTicket(t *testing.T) {
 	}
 }
 
-// TestCreateImportUploadRejects 覆盖签发时的拒绝：缺 scope、目标卡组无权、角色不够、参数非法。
-// 被拒的签发不得留下任何票据。
+// TestCreateImportUploadRejects covers rejections at issuance: missing scope, no rights on the target deck, insufficient role, invalid parameters.
+// A rejected issuance must leave no ticket behind.
 func TestCreateImportUploadRejects(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "up_owner", store.RoleUser)
@@ -222,7 +222,7 @@ func TestCreateImportUploadRejects(t *testing.T) {
 	}
 }
 
-// TestImportUploadRechecksRoleAtUpload：签发后被收回角色，上传时按当前角色拒绝。
+// TestImportUploadRechecksRoleAtUpload: the role is revoked after issuance, so the upload is rejected per the current role.
 func TestImportUploadRechecksRoleAtUpload(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "up_recheck_owner", store.RoleUser)

@@ -6,7 +6,7 @@ import { authStore } from '../auth';
 import { LANGUAGE_PARAM, readLanguageFromURL } from '../i18n/url';
 
 /**
- * 解析查询参数字符串为键值对象
+ * Parse a query string into a key/value object
  */
 export function parseQuery(queryString: string): Record<string, string> {
   const query: Record<string, string> = {};
@@ -25,7 +25,7 @@ export function parseQuery(queryString: string): Record<string, string> {
 }
 
 /**
- * 匹配路径与路由规则
+ * Match a path against the route rules
  */
 export function matchRoute(pathname: string, routeList: RouteDefinition[] = routes): RouteMatch {
   const [pathOnly = '', queryString = ''] = pathname.split('?');
@@ -33,7 +33,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
   const query = parseQuery(queryString);
 
   for (const route of routeList) {
-    // 精确匹配
+    // Exact match
     if (route.path === cleanPath) {
       return {
         path: cleanPath,
@@ -44,7 +44,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
       };
     }
 
-    // 动态参数匹配，例如 /decks/:id
+    // Dynamic parameter match, e.g. /decks/:id
     const routeParts = route.path.split('/').filter(Boolean);
     const pathParts = cleanPath.split('/').filter(Boolean);
 
@@ -81,7 +81,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
     }
   }
 
-  // 未匹配到路由（404）
+  // No route matched (404)
   return {
     path: cleanPath,
     params: {},
@@ -92,7 +92,7 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
 }
 
 /**
- * 获取当前初始路径
+ * Get the current initial path
  */
 function getInitialPath(): string {
   if (typeof window !== 'undefined' && window.location) {
@@ -102,15 +102,15 @@ function getInitialPath(): string {
 }
 
 /**
- * 当前路由匹配信息 Store
+ * Store holding the current route match
  */
 export const routeStore = writable<RouteMatch>(matchRoute(getInitialPath()));
 
 /**
- * 客户端路由跳转
+ * Client-side route navigation
  *
- * 跳转要带上未登录访客的语言覆盖参数（见 withLanguage）：站内链接统一走这里，
- * 而 pushState/replaceState 会把整个 URL 换掉，不带过去就等于把语言选择丢掉。
+ * Navigation must carry the language override parameter of anonymous visitors (see withLanguage): all in-app links
+ * go through here, and pushState/replaceState swaps the whole URL, so not carrying it over means dropping the language choice.
  */
 export function navigate(to: string, replace = false): void {
   const target = withLanguage(to);
@@ -125,11 +125,15 @@ export function navigate(to: string, replace = false): void {
 }
 
 /**
- * 把新路由写进 store，并在浏览器支持时包进一次 View Transition（app.css 定义了 140ms 淡入淡出）。
+ * Write the new route into the store, wrapping it in a View Transition when the browser supports it
+ * (app.css defines a 140ms fade).
  *
- * 不支持的浏览器、非浏览器环境（测试）与「减少动态效果」的用户都同步写入，行为与改版前一致。
- * 过渡回调等 tick()：Svelte 在微任务里才把 store 变化刷到 DOM，不等的话新快照拍到的还是旧页面。
- * scrollTop 为真时回到页首：pushState 不会滚动，进入新页面却停在上一页的滚动位置，看起来像跳到了页中间。
+ * Browsers without support, non-browser environments (tests) and users who prefer reduced motion all write
+ * synchronously, matching the behavior before the rework.
+ * The transition callback awaits tick(): Svelte only flushes store changes to the DOM in a microtask, and without
+ * waiting the new snapshot still captures the old page.
+ * When scrollTop is true it scrolls back to the top: pushState does not scroll, so entering a new page would stay at
+ * the previous page's scroll offset and look like landing in the middle of the page.
  */
 function commitRoute(match: RouteMatch, scrollTop: boolean): void {
   const apply = () => {
@@ -155,12 +159,14 @@ function canAnimateRoute(): boolean {
 }
 
 /**
- * 未登录访客的语言选择只存在于地址上（?lang=<code>），把当前地址上的它并到跳转目标上——
- * 不带过去的话，跳一次页面再刷新就退回浏览器语言。
+ * An anonymous visitor's language choice exists only in the address (?lang=<code>), so merge the one from the
+ * current address into the navigation target — without carrying it over, one navigation plus a refresh falls
+ * back to the browser language.
  *
- * 已登录用户不保留：他的语言在 /settings 里落库，让 URL 长期压过账号设置只会让
- * 「页头与设置页不一致」这个已修过的缺陷换个形态回来。登录成功后 navigate('/')
- * 会把查询串整体换掉，所以匿名期留下的 ?lang 不会跟着进登录态。
+ * Logged-in users do not keep it: their language is stored in /settings, and letting the URL override the account
+ * setting for long would only bring back the already-fixed defect "header and settings page disagree" in another
+ * shape. After a successful login navigate('/') replaces the whole query string, so a ?lang left over from the
+ * anonymous period does not follow into the logged-in state.
  */
 function withLanguage(to: string): string {
   if (typeof window === 'undefined' || get(authStore).authenticated) return to;
@@ -176,16 +182,18 @@ function withLanguage(to: string): string {
 }
 
 /**
- * 视图重建键：路径模式 + 路径参数 + 查询串（按段排序，保证稳定）。
+ * View rebuild key: path pattern + path params + query string (segments sorted, for stability).
  *
- * 应用按「页面组件类型」渲染视图，同一组件的不同实体（卡组 A→B、笔记 A→B）若共用实例，
- * 只在挂载时取数的视图会保留上一实体的数据。把这个键交给 `{#key}` 即建立按路由的重建边界：
- * 路径模式、路径参数或查询串一变，组件销毁重建。
+ * The app renders views by "page component type", so if different entities of the same component (deck A→B,
+ * note A→B) share an instance, views that fetch data only on mount keep the previous entity's data. Handing this
+ * key to `{#key}` establishes a per-route rebuild boundary: once the path pattern, path params or query string
+ * change, the component is destroyed and recreated.
  *
- * 查询串必须参与：复习页的卡组范围就写在地址上（`/review?deck=A`），换范围却不重建的话，
- * 页面会继续显示上一个范围的卡、也不会重新取队列。用原始查询串（`search`）而不是解析后的
- * `query`：后者对重复键只留最后一个，`?deck=A&deck=B` 与 `?deck=B` 会被判成同一个键。
- * 排序只为让「同一次范围的不同书写顺序」不触发多余重建。
+ * The query string must take part: the review page's deck scope is written in the address (`/review?deck=A`), and
+ * changing the scope without rebuilding would keep showing the previous scope's cards and not refetch the queue.
+ * Use the raw query string (`search`) rather than the parsed `query`: the latter keeps only the last value of a
+ * duplicate key, so `?deck=A&deck=B` and `?deck=B` would be judged the same key.
+ * Sorting is only there so "the same scope written in a different order" does not trigger needless rebuilds.
  */
 export function viewKey(match: RouteMatch): string {
   const route = match.route ? match.route.path : `not-found:${match.path}`;
@@ -202,7 +210,7 @@ export function viewKey(match: RouteMatch): string {
 }
 
 /**
- * 初始化浏览器路由事件监听（popstate 与链接代理）
+ * Initialize the browser route event listeners (popstate and link proxy)
  */
 export function initRouter(): () => void {
   if (typeof window === 'undefined') return () => {};

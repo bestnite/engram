@@ -5,18 +5,23 @@ import (
 	"testing"
 )
 
-// TestRenderMarkdownLocksAttributeWhitelist 锁定卡面的属性白名单（buildPolicy）。
+// TestRenderMarkdownLocksAttributeWhitelist locks the card attribute allowlist (buildPolicy).
 //
-// 为什么必须有这组用例：清洗后的 HTML 直接进卡面渲染，属性白名单是唯一的屏障。能执行代码的
-// 载体不止 on* 一类——hx-*/data-hx-* 前缀（htmx 那类库会把它们交给 new Function 编译）、
-// style（覆盖站点样式）、srcdoc（承载完整文档）都曾是真实存在的注入口，白名单放宽一条就是
-// 开一个口子。所以逐条钉死，而不是只依赖「我们记得白名单是严的」。
+// Why this set of cases is required: the sanitized HTML goes straight into card rendering, and the
+// attribute allowlist is the only barrier. Carriers that can execute code are not limited to on* --
+// the hx-*/data-hx-* prefixes (libraries like htmx hand them to new Function to compile), style
+// (overriding site styling) and srcdoc (carrying a whole document) have all been real injection
+// points, and loosening one entry in the allowlist opens one hole. So each is pinned down one by
+// one, rather than relying on "we remember the allowlist is strict".
 //
-// 每条用例同时断言两件事：forbidden 里的可执行形式不得出现在输出中；
-// required 里的合法标签与文字必须保留，证明剥属性不等于吞内容。
-// 另外对每条输出调用 assertSafeFragment，按 HTML 解析复核元素与属性都在白名单内、
-// 没有 on* 事件属性、URL 属性没有脚本类 scheme——这是对 hx-*/data-hx-*/on*/style
-// 四类属性的结构性封锁，字符串断言一旦被实体编码绕过它仍然会失败。
+// Every case asserts two things at once: the executable form in forbidden must not appear in the
+// output; and the legitimate tags and text in required must be kept, proving that stripping an
+// attribute is not swallowing the content.
+// Additionally assertSafeFragment is called on every output, re-checking through HTML parsing that
+// the elements and attributes are inside the allowlist, that no on* event attribute is present and
+// that no URL attribute carries a script-like scheme -- a structural lockdown of the four attribute
+// classes hx-*/data-hx-*/on*/style, which still fails even if a string assertion is bypassed by
+// entity encoding.
 func TestRenderMarkdownLocksAttributeWhitelist(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -25,95 +30,99 @@ func TestRenderMarkdownLocksAttributeWhitelist(t *testing.T) {
 		required  []string
 	}{
 		{
-			// 2. img 的事件处理属性onerror。
-			// 与 render_test.go 里那条 `src="javascript:…" + onerror` 不同：这条要求剥掉
-			// onerror 之后 img 与它合法的 src 仍然存活。
+			// 2. The event handler attribute onerror on img.
+			// Unlike the `src="javascript:..." + onerror` case in render_test.go: this one requires that
+			// after stripping onerror the img and its legitimate src still survive.
 			name:      "img onerror event attribute",
 			src:       `<img src=x onerror=alert(1)>`,
 			forbidden: []string{"onerror", "alert("},
 			required:  []string{"<img", `src="x"`},
 		},
 		{
-			// 3. div 不在白名单，其 onclick 必须随之消失，但“x”文字要留下。
+			// 3. div is not in the allowlist, so its onclick must disappear with it, but the text "x"
+			// stays.
 			name:      "div onclick with non-whitelisted element",
 			src:       `<div onclick="alert(1)">x</div>`,
 			forbidden: []string{"onclick", "<div", "alert("},
 			required:  []string{"x"},
 		},
 		{
-			// 4a. htmx 的 hx-on: 单冒号形式：属性必须被剥除。
+			// 4a. htmx's hx-on: single-colon form: the attribute must be stripped.
 			name:      "span hx-on colon attribute",
 			src:       `<span hx-on:click="alert(1)">x</span>`,
 			forbidden: []string{"hx-", "alert("},
 			required:  []string{"<span>x</span>"},
 		},
 		{
-			// 4b. htmx 的 hx-on:: 双冒号形式（after-swap 等生命周期事件）。
+			// 4b. htmx's hx-on:: double-colon form (lifecycle events such as after-swap).
 			name:      "span hx-on double colon attribute",
 			src:       `<span hx-on::after-swap="alert(1)">x</span>`,
 			forbidden: []string{"hx-", "alert("},
 			required:  []string{"<span>x</span>"},
 		},
 		{
-			// 5. htmx 同时认 data-hx-* 前缀，必须与 hx-* 一并封死。
+			// 5. htmx also recognizes the data-hx-* prefix, which must be sealed off together with hx-*.
 			name:      "span data-hx-get attribute",
 			src:       `<span data-hx-get="/x">x</span>`,
 			forbidden: []string{"data-hx-", "hx-", `"/x"`},
 			required:  []string{"<span>x</span>"},
 		},
 		{
-			// 6. 内联样式会让内容有机会覆盖站点样式，必须剥除。
+			// 6. Inline styles would let content override site styling, so they must be stripped.
 			name:      "span style attribute",
 			src:       `<span style="color:red">x</span>`,
 			forbidden: []string{"style=", "color:red"},
 			required:  []string{"<span>x</span>"},
 		},
 		{
-			// 7a. iframe 不在白名单：标签连内容一并丢弃（同一条向量在 render_test.go 里
-			// 也有一条，这里是属性白名单视角，保留是因为它同时断言 src 值不得留下）。
+			// 7a. iframe is not in the allowlist: the tag is dropped along with its content (the same
+			// vector has a case in render_test.go too; this one is from the attribute allowlist angle and is
+			// kept because it also asserts the src value must not remain).
 			name:      "iframe not in whitelist",
 			src:       `<iframe src="https://example.com"></iframe>`,
 			forbidden: []string{"<iframe", "example.com"},
 			required:  nil,
 		},
 		{
-			// 7b. svg 不在白名单，其 onload 无从存活。
+			// 7b. svg is not in the allowlist, so its onload has no way to survive.
 			name:      "svg onload not in whitelist",
 			src:       `<svg onload=alert(1)>`,
 			forbidden: []string{"<svg", "onload", "alert("},
 			required:  nil,
 		},
 		{
-			// 7c. math 不在白名单（MathJax 只吃文本分隔符，不需要 math 标签）。
+			// 7c. math is not in the allowlist (MathJax only consumes text delimiters and does not need
+			// the math tag).
 			name:      "math not in whitelist",
 			src:       `<math><mtext></mtext></math>`,
 			forbidden: []string{"<math", "<mtext"},
 			required:  nil,
 		},
 		{
-			// 8a. Markdown 链接形式的 javascript: 目标。
+			// 8a. A javascript: target in Markdown link form.
 			name:      "markdown link javascript target",
 			src:       `[x](javascript:alert(1))`,
 			forbidden: []string{"javascript:", "href="},
 			required:  []string{"x"},
 		},
 		{
-			// 8b. Markdown 图片形式的 javascript: 目标：src 被剥，img 与 alt 保留。
+			// 8b. A javascript: target in Markdown image form: src is stripped, img and alt are kept.
 			name:      "markdown image javascript target",
 			src:       `![](javascript:alert(1))`,
 			forbidden: []string{"javascript:", "src="},
 			required:  []string{"<img", `alt=""`},
 		},
 		{
-			// 9. srcdoc 是另一个可承载完整 HTML 文档的载体，必须剥除。
+			// 9. srcdoc is another carrier that can hold a complete HTML document, and must be stripped.
 			name:      "iframe srcdoc attribute",
 			src:       `<iframe srcdoc="<script>alert(1)</script>"></iframe>`,
 			forbidden: []string{"srcdoc", "<iframe", "<script", "alert("},
 			required:  nil,
 		},
 		{
-			// 10. 正向对照：白名单内的合法属性必须原样保留，
-			// 证明上面每一条的“剥离”来自白名单收紧，而不是把合法内容也一起清掉。
+			// 10. Positive control: the legitimate attributes inside the allowlist must be kept verbatim,
+			// proving that the "stripping" in each case above comes from tightening the allowlist and not
+			// from wiping legitimate content along with it.
 			name: "allowed attributes survive",
 			src: `<span class="hl">a</span>` +
 				` <a href="https://example.com">b</a>` +

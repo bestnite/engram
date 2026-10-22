@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// unknownPath 是一个不与任何已注册路由匹配的路径，用于触发 NoRoute 回退。
+// unknownPath is a path matching no registered route, used to trigger the NoRoute fallback.
 const unknownPath = "/no-such-page-zz9"
 
-// TestNotFoundFallbackServesIndex 断言当 SPA 已嵌入时，未知的页面型 GET 路径
-// 回退 SPA 应用壳（index.html，ROADMAP Task B2），
-// 返回 200 状态码并带有正确的缓存与 MIME 响应头。
+// TestNotFoundFallbackServesIndex asserts that with the SPA embedded, an unknown page-type GET path
+// falls back to the SPA app shell (index.html, ROADMAP Task B2),
+// returning 200 with the correct caching and MIME response headers.
 func TestNotFoundFallbackServesIndex(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -37,15 +37,15 @@ func TestNotFoundFallbackServesIndex(t *testing.T) {
 		t.Errorf("SPA index.html is missing app mount point: %s", snippet(body))
 	}
 
-	// If-None-Match 条件请求断言返回 304
+	// If-None-Match conditional request asserts a 304 is returned
 	condRec := get(t, srv, unknownPath, map[string]string{"If-None-Match": etag})
 	if condRec.Code != http.StatusNotModified {
 		t.Errorf("conditional GET %s status = %d, want 304", unknownPath, condRec.Code)
 	}
 }
 
-// TestNotFoundDoesNotShadowRegisteredRoutes 断言回退只处理未命中路由，
-// 已注册路径（首页、健康检查、登录页）仍走各自 handler。
+// TestNotFoundDoesNotShadowRegisteredRoutes asserts the fallback only handles unmatched routes,
+// and registered paths (home, health check, login page) still go through their own handlers.
 func TestNotFoundDoesNotShadowRegisteredRoutes(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -68,9 +68,9 @@ func TestNotFoundDoesNotShadowRegisteredRoutes(t *testing.T) {
 	}
 }
 
-// TestNotFoundKeepsMachineAndNonGETPathsPlain 断言机器接口路径（/api、/mcp）、
-// 静态/媒体资源未命中路径与非 GET 请求不回 HTML 页面：/api 走统一 JSON 错误包壳，
-// 其余只回朴素 404 状态。
+// TestNotFoundKeepsMachineAndNonGETPathsPlain asserts machine-interface paths (/api, /mcp),
+// unmatched static/media asset paths and non-GET requests do not return an HTML page: /api goes through the uniform JSON error envelope,
+// the rest return a plain 404 status only.
 func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 	srv := newRenderServer(t, nil)
 
@@ -115,7 +115,7 @@ func TestNotFoundKeepsMachineAndNonGETPathsPlain(t *testing.T) {
 		t.Errorf("non-GET 404 wrote a body: %q", rec.Body.String())
 	}
 
-	// 缺失的静态资源与媒体路径必须 404，严禁回退 HTML
+	// Missing static assets and media paths must 404, never fall back to HTML
 	staticRec := get(t, srv, "/static/nonexistent.css", nil)
 	if staticRec.Code != http.StatusNotFound {
 		t.Errorf("GET /static/nonexistent.css status = %d, want 404", staticRec.Code)

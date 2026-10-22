@@ -11,53 +11,53 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是「分享同意制」的服务端：
+// This file is the server side of the "share consent model":
 //
-//   - 属主发出的是**邀请**，写 deck_share_invites，不写 deck_grants；
-//   - 被邀请者在自己的列表里接受或拒绝；
-//   - 接受才写 deck_grants——这时才进可见集合。
+//   - what the owner sends is an **invite**, written to deck_share_invites, not to deck_grants;
+//   - the invitee accepts or rejects it from their own list;
+//   - only acceptance writes deck_grants — and only then does it join the visible set.
 //
-// 因此「别人把卡组硬塞给我」在结构上不可能：没有接受就没有授权。另外用户可以用
-// 接收策略（anyone / whitelist / nobody）在邀请发出**之前**就拦住。
+// So "someone forcing a deck on me" is structurally impossible: no acceptance, no grant. Users can also, with the
+// receiving policy (anyone / whitelist / nobody), block it **before** the invite goes out.
 
-// ShareInviteTTL 是邀请的有效期。
+// ShareInviteTTL is the invite lifetime.
 //
-// 30 天：短于「忘了这回事」的时间尺度，长于「周末没看邮件」的尺度。到期行由
-// internal/retention 每小时回收，不在读路径上删。
+// 30 days: shorter than the "forgot about it" timescale, longer than "did not check mail over the weekend". Expired rows are
+// reclaimed hourly by internal/retention, not deleted on the read path.
 const ShareInviteTTL = 30 * 24 * time.Hour
 
-// shareAllowRow 是白名单里的一行。带用户名是因为界面要显示"谁"，而裸 id 不可读；
-// user_id 是对外 id，数字主键不对外。
+// shareAllowRow is one row of the allow list. It carries the username because the UI has to show "who", and a bare id is not readable;
+// user_id is the public id, numeric primary keys are not exposed.
 type shareAllowRow struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 }
 
-// shareInvitesResponse 是待接受邀请的列表。
+// shareInvitesResponse is the list of pending invites.
 type shareInvitesResponse struct {
 	Invites []store.DeckShareInviteView `json:"invites"`
-	// Policy 与 AllowList 一起返回：界面上「待接受」与「谁能分享给我」是同一件事的两面。
+	// Policy comes back together with AllowList: in the UI, "pending" and "who may share with me" are two sides of the same thing.
 	Policy    store.ShareAcceptPolicy `json:"policy"`
 	AllowList []shareAllowRow         `json:"allow_list"`
 }
 
-// sharePolicyRequest 是接收策略的写入请求。
+// sharePolicyRequest is the write request for the receiving policy.
 //
-// 白名单按**用户名**收（与共享授权端点同一口径）：界面能显示的是用户名，要求前端自己
-// 把名字翻成 id 就得再暴露一个用户搜索端点，而"谁能邀请我"不该有这个前置条件。
-// Allow / Revoke 也接受对外 id 写法（脚本与测试用），两条路径都解析成数字主键。
+// The allow list takes **usernames** (same criterion as the sharing grant endpoints): what the UI can show is usernames, and making the frontend
+// translate names into ids would mean exposing another user-search endpoint, and "who can invite me" should not have that precondition.
+// Allow / Revoke also accept the public id form (for scripts and tests); both paths resolve to numeric primary keys.
 type sharePolicyRequest struct {
 	Policy string `json:"policy"`
-	// Allow 与 Revoke 分别是"加进白名单""移出白名单"的用户对外 id。
+	// Allow and Revoke are the public user ids to "add to the allow list" and "remove from the allow list" respectively.
 	Allow  []string `json:"allow,omitempty"`
 	Revoke []string `json:"revoke,omitempty"`
-	// AllowUsernames 与 RevokeUsernames 同上的用户名写法。
+	// AllowUsernames and RevokeUsernames are the username form of the above.
 	AllowUsernames  []string `json:"allow_usernames,omitempty"`
 	RevokeUsernames []string `json:"revoke_usernames,omitempty"`
 }
 
-// shareAllowRows 把白名单主键列表翻成带用户名与对外 id 的行；用户已不存在的行跳过，
-// 不回退到数字主键。
+// shareAllowRows turns a list of allow-list primary keys into rows carrying the username and public id; rows whose user no longer exists are skipped
+// without falling back to the numeric primary key.
 func (s *Server) shareAllowRows(c *gin.Context, userID uint64) ([]shareAllowRow, error) {
 	ids, err := s.sharePolicy.AllowList(c.Request.Context(), userID)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Server) shareAllowRows(c *gin.Context, userID uint64) ([]shareAllowRow,
 	return rows, nil
 }
 
-// resolveShareUserIDs 把一批用户对外 id 翻成主键；任一未知即写 400 并返回 false。
+// resolveShareUserIDs turns a batch of user public ids into primary keys; any unknown one writes 400 and returns false.
 func (s *Server) resolveShareUserIDs(c *gin.Context, ids []string) ([]uint64, bool) {
 	ctx := c.Request.Context()
 	out := make([]uint64, 0, len(ids))
@@ -94,7 +94,7 @@ func (s *Server) resolveShareUserIDs(c *gin.Context, ids []string) ([]uint64, bo
 	return out, true
 }
 
-// resolveShareTargets 把一批用户名翻成 id；任何一个查不到都返回 false（已写好 400 响应）。
+// resolveShareTargets turns a batch of usernames into ids; if any cannot be found it returns false (the 400 response is already written).
 func (s *Server) resolveShareTargets(c *gin.Context, names []string) ([]uint64, bool) {
 	ctx := c.Request.Context()
 	out := make([]uint64, 0, len(names))
@@ -113,7 +113,7 @@ func (s *Server) resolveShareTargets(c *gin.Context, names []string) ([]uint64, 
 	return out, true
 }
 
-// shareInviteList 返回当前用户待接受的邀请、接收策略与白名单（GET /api/v1/sharing/invites）。
+// shareInviteList returns the current user's pending invites, receiving policy and allow list (GET /api/v1/sharing/invites).
 func (s *Server) shareInviteList(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -142,7 +142,7 @@ func (s *Server) shareInviteList(c *gin.Context) {
 	c.JSON(http.StatusOK, shareInvitesResponse{Invites: invites, Policy: policy, AllowList: allow})
 }
 
-// shareInviteDeckID 解析路径里的卡组对外 id 并换成数字主键；未知或空串一律 404 invite_not_found。
+// shareInviteDeckID parses the deck public id from the path and swaps it for the numeric primary key; unknown or empty is always 404 invite_not_found.
 func (s *Server) shareInviteDeckID(c *gin.Context) (uint64, bool) {
 	raw := strings.TrimSpace(c.Param("deckID"))
 	if raw == "" {
@@ -157,7 +157,7 @@ func (s *Server) shareInviteDeckID(c *gin.Context) (uint64, bool) {
 	return deck.ID, true
 }
 
-// shareInviteAccept 接受一条邀请：写授权、删邀请、写审计（POST …/accept）。
+// shareInviteAccept accepts one invite: write the grant, delete the invite, write the audit (POST …/accept).
 func (s *Server) shareInviteAccept(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -171,18 +171,18 @@ func (s *Server) shareInviteAccept(c *gin.Context) {
 	ctx := c.Request.Context()
 	inv, err := s.shareInvites.ByDeckAndUser(ctx, deckID, u.ID)
 	if err != nil {
-		// 过期行可能还没被回收：由 store 在读路径上判掉的是列表，这里补一道。
+		// An expired row may not have been reclaimed yet: the list drops it on the read path, and this adds one more check.
 		shareError(c, http.StatusNotFound, "invite_not_found")
 		return
 	}
 	if !inv.ExpiresAt.After(time.Now().UTC()) {
-		// 过期即作废，并且顺手清掉，免得列表里再出现。
+		// Expired means void, and it is cleaned up along the way so it does not show up in the list again.
 		_ = s.shareInvites.Delete(ctx, deckID, u.ID)
 		shareError(c, http.StatusNotFound, "invite_expired")
 		return
 	}
 	if _, err := s.decks.ByID(ctx, deckID); err != nil {
-		// 卡组已被删：邀请随之作废。
+		// The deck is already deleted: the invite is void along with it.
 		_ = s.shareInvites.Delete(ctx, deckID, u.ID)
 		shareError(c, http.StatusNotFound, "invite_not_found")
 		return
@@ -203,7 +203,7 @@ func (s *Server) shareInviteAccept(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"accepted": true})
 }
 
-// shareInviteReject 拒绝一条邀请：删邀请、写审计，授权从不出现（POST …/reject）。
+// shareInviteReject rejects one invite: delete the invite, write the audit, and no grant ever appears (POST …/reject).
 func (s *Server) shareInviteReject(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -233,7 +233,7 @@ func (s *Server) shareInviteReject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"rejected": true})
 }
 
-// sharePolicyGet 返回接收策略与白名单（GET /api/v1/settings/share-policy）。
+// sharePolicyGet returns the receiving policy and allow list (GET /api/v1/settings/share-policy).
 func (s *Server) sharePolicyGet(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -256,9 +256,9 @@ func (s *Server) sharePolicyGet(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"policy": policy, "allow_list": allow})
 }
 
-// sharePolicySave 保存接收策略与白名单增删（PUT /api/v1/settings/share-policy）。
+// sharePolicySave saves the receiving policy and allow-list additions/removals (PUT /api/v1/settings/share-policy).
 //
-// 策略与白名单可以一起提交：界面上的三个开关与名单是一件事。空 policy 表示不改策略。
+// Policy and allow list can be submitted together: in the UI the three switches and the list are one thing. An empty policy means the policy is unchanged.
 func (s *Server) sharePolicySave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -285,7 +285,7 @@ func (s *Server) sharePolicySave(c *gin.Context) {
 			return
 		}
 	}
-	// 用户名与对外 id 两种写法合并处理：界面提交用户名（它只认识名字），测试与脚本提交对外 id。
+	// The username and public id forms are handled together: the UI submits usernames (it only knows names), tests and scripts submit public ids.
 	byName, ok := s.resolveShareTargets(c, req.AllowUsernames)
 	if !ok {
 		return
@@ -326,13 +326,13 @@ func (s *Server) sharePolicySave(c *gin.Context) {
 		TargetType: "user", TargetID: store.Ptr(u.ID),
 		Detail: map[string]any{"policy": policyRaw, "allow": len(allowIDs), "revoke": len(revokeIDs)},
 	})
-	// 写后回读：白名单是并集操作，本地推断出的列表未必等于库里的真值。
+	// Read back after writing: the allow list is a union operation, so a list inferred locally need not equal the truth in the database.
 	policy, _ := s.sharePolicy.Policy(ctx, u.ID)
 	allow, _ := s.shareAllowRows(c, u.ID)
 	c.JSON(http.StatusOK, gin.H{"policy": policy, "allow_list": allow})
 }
 
-// registerShareInviteRoutes 挂载分享同意制的端点（M5-*）。会话未装配时跳过。
+// registerShareInviteRoutes mounts the share consent endpoints (M5-*). Skips when sessions are not wired.
 func (s *Server) registerShareInviteRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.shareInvites == nil || s.sharePolicy == nil {
 		return

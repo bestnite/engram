@@ -9,8 +9,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestSubmitReviewGradingRulesOverMCP 断言 MCP 与 REST 走同一组评分规则：作答类题型的自评分被拒、
-// 伪造的 grade_source 被拒，提交作答则由服务端判分并返回判定。
+// TestSubmitReviewGradingRulesOverMCP asserts MCP and REST follow the same set of grading rules: a self-rating for an answer-based card type is refused,
+// a forged grade_source is refused, and submitting an answer is graded server-side with a verdict returned.
 func TestSubmitReviewGradingRulesOverMCP(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "grader")

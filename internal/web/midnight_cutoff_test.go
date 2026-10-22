@@ -7,8 +7,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 清空配置必须保存 NULL 而不是 0；0 本身就是合法切点（午夜），两者不得混淆。
-// 资料写入走 SPA 的 JSON PATCH（SSR 的 /settings/profile 表单已删除）。
+// Clearing the configuration must store NULL, not 0; 0 is itself a legitimate cutoff (midnight), and the two must not be confused.
+// Profile writes go through the SPA's JSON PATCH (the SSR /settings/profile form has been deleted).
 func TestSettingsCutoffCanClearToDefault(t *testing.T) {
 	srv, db, id, cookies, csrf := newNotesServer(t)
 

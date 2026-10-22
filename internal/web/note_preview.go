@@ -16,7 +16,7 @@ type notePreviewRequest struct {
 	Fields map[string]any `json:"fields"`
 }
 
-// notePreview 只返回 internal/render 清洗过的卡面 HTML。
+// notePreview returns only card-face HTML sanitized by internal/render.
 func (s *Server) notePreview(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
@@ -27,7 +27,7 @@ func (s *Server) notePreview(c *gin.Context) {
 		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	// 路径参数是对外 id；卡组主键不对外，先换成数字主键再判权。
+	// The path parameter is the public id; deck primary keys are not public, so swap in the numeric primary key before checking permissions.
 	deck, err := s.decks.ByPublicID(c.Request.Context(), strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)

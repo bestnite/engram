@@ -12,31 +12,31 @@ import (
 	"gorm.io/gorm"
 )
 
-// 邀请相关的稳定哨兵值；上层据此统一翻译成 403 与本地化提示。
+// Stable sentinel values for invites; upper layers translate them uniformly into 403 and localized messages.
 var (
-	// ErrInviteNotFound 表示 token 不存在（含已被撤销：撤销实现为删除整行）。
+	// ErrInviteNotFound means the token does not exist (including already revoked: revocation is implemented as deleting the row).
 	ErrInviteNotFound = errors.New("invite not found")
-	// ErrInviteUsed 表示 token 已被使用，一次性语义不允许复用。
+	// ErrInviteUsed means the token was already used; one-time semantics forbid reuse.
 	ErrInviteUsed = errors.New("invite already used")
-	// ErrInviteExpired 表示 token 已过 expires_at。
+	// ErrInviteExpired means the token is past expires_at.
 	ErrInviteExpired = errors.New("invite expired")
-	// ErrInviteEmailMismatch 表示注册邮箱与邀请限定的邮箱不一致。
+	// ErrInviteEmailMismatch means the signup email does not match the email the invite is limited to.
 	ErrInviteEmailMismatch = errors.New("invite is restricted to another email")
 )
 
-// InviteStore 封装 invites 表；token 一次性、可限定邮箱、可设过期。
+// InviteStore wraps the invites table; tokens are one-time, may be limited to an email, and may have an expiry.
 //
-// 关于“撤销” invites 表没有 revoked_at 列，因此撤销实现为删除整行。
-// 被撤销的 token 在 ByToken/MarkUsed 里与“不存在”同路被拒。若将来需要保留撤销审计，
-// 应新增 revoked_at 列（需要独写 models.go 的 owner 排期），本实现不擅自加列。
+// On 'revocation': the invites table has no revoked_at column, so revocation is implemented as deleting the row.
+// A revoked token is refused the same way as 'does not exist' in ByToken/MarkUsed. If revocation auditing is ever needed,
+// a revoked_at column should be added (which needs the models.go owner's schedule); this implementation does not add columns unasked.
 type InviteStore struct {
 	db *gorm.DB
 }
 
-// NewInviteStore 构造邀请存储。
+// NewInviteStore constructs the invite store.
 func NewInviteStore(db *gorm.DB) *InviteStore { return &InviteStore{db: db} }
 
-// newInviteToken 生成 32 字节随机 token 的 URL 安全编码（与分享链接同规格）。
+// newInviteToken generates the URL-safe encoding of a 32-byte random token (same spec as share links).
 func newInviteToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -45,8 +45,8 @@ func newInviteToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// Create 写入一条邀请。token 为空时自动生成；Email 为 nil 表示不限定邮箱；
-// ExpiresAt 为 nil 表示不过期。CreatedAt 为空时补当前 UTC 时间。
+// Create writes one invite. When token is empty it is generated; a nil Email means no email restriction;
+// a nil ExpiresAt means no expiry. When CreatedAt is empty it is filled with the current UTC time.
 func (s *InviteStore) Create(ctx context.Context, inv *Invite) error {
 	if inv.Token == "" {
 		token, err := newInviteToken()
@@ -56,7 +56,7 @@ func (s *InviteStore) Create(ctx context.Context, inv *Invite) error {
 		inv.Token = token
 	}
 	if inv.Role == "" {
-		// 字符串默认值由 store 层在 Go 侧给出（models.go 包注释）。
+		// string defaults are supplied by the store layer on the Go side (models.go package comment).
 		inv.Role = RoleUser
 	}
 	if inv.CreatedAt.IsZero() {
@@ -68,7 +68,7 @@ func (s *InviteStore) Create(ctx context.Context, inv *Invite) error {
 	return nil
 }
 
-// ByToken 按 token 取邀请；不存在时返回 ErrInviteNotFound。
+// ByToken fetches an invite by token; returns ErrInviteNotFound when absent.
 func (s *InviteStore) ByToken(ctx context.Context, token string) (*Invite, error) {
 	var inv Invite
 	if err := s.db.WithContext(ctx).First(&inv, "token = ?", token).Error; err != nil {
@@ -80,7 +80,7 @@ func (s *InviteStore) ByToken(ctx context.Context, token string) (*Invite, error
 	return &inv, nil
 }
 
-// List 返回全部邀请（含已用与已过期），按创建时间倒序；供 M6 管理面板展示使用情况。
+// List returns all invites (used and expired included), newest first; for the M6 admin panel to show usage.
 func (s *InviteStore) List(ctx context.Context) ([]Invite, error) {
 	var invites []Invite
 	if err := s.db.WithContext(ctx).Order("created_at DESC, id DESC").Find(&invites).Error; err != nil {
@@ -89,8 +89,8 @@ func (s *InviteStore) List(ctx context.Context) ([]Invite, error) {
 	return invites, nil
 }
 
-// Validate 校验 token 此刻是否可用，并核对注册邮箱是否符合邀请限定。
-// 已用 / 已过期 / 不存在（含已撤销）/ 邮箱不匹配分别返回对应哨兵值。
+// Validate checks whether the token is usable right now and verifies the signup email against the invite's restriction.
+// Used / expired / not found (including revoked) / email mismatch each return their own sentinel value.
 func (s *InviteStore) Validate(ctx context.Context, token, email string, now time.Time) (*Invite, error) {
 	inv, err := s.ByToken(ctx, token)
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *InviteStore) Validate(ctx context.Context, token, email string, now tim
 	return inv, UsableInvite(inv, email, now)
 }
 
-// UsableInvite 是不依赖数据库的可用性判定，便于表驱动测试直接覆盖。
+// UsableInvite is a DB-independent usability check, so table-driven tests can cover it directly.
 func UsableInvite(inv *Invite, email string, now time.Time) error {
 	if inv.UsedAt != nil {
 		return ErrInviteUsed
@@ -113,13 +113,13 @@ func UsableInvite(inv *Invite, email string, now time.Time) error {
 	return nil
 }
 
-// Accept 在单个事务里消费邀请并执行建号回调。
+// Accept consumes the invite and runs the account-creation callback in a single transaction.
 //
-// 旧的“先 MarkUsed 占用、建号失败再 Release”会在两步之间留下可观测的中间态（先显示已使用、
-// 又变回可用）。这里把占用与建号放进同一个事务：要么都提交，要么都回滚，外界看不到半完成状态。
-// 占用仍是条件更新（used_at IS NULL），因此并发下同一个 token 只有一个事务能占用成功 —— 一码一用。
+// The old 'MarkUsed first, Release if creation fails' approach left an observable intermediate state between the two steps (showing used,
+// then flipping back to usable). Here claiming and account creation share one transaction: either both commit or both roll back, and no half-finished state is visible outside.
+// Claiming is still a conditional update (used_at IS NULL), so under concurrency only one transaction can claim the same token — one code, one use.
 //
-// create 在建号失败时返回错误即触发整体回滚，token 保持可用；成功时 used_by 与 used_at 一并落库。
+// create returns an error on a failed account creation, which triggers the whole rollback and leaves the token usable; on success used_by and used_at are persisted together.
 func (s *InviteStore) Accept(ctx context.Context, token string, now time.Time, create func(tx *gorm.DB) (*User, error)) (*User, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -133,7 +133,7 @@ func (s *InviteStore) Accept(ctx context.Context, token string, now time.Time, c
 			return fmt.Errorf("claim invite: %w", res.Error)
 		}
 		if res.RowsAffected != 1 {
-			// 并发下已被他人占用，或 token 本就不存在/已用。
+			// under concurrency it was already claimed by someone else, or the token never existed / was already used.
 			return ErrInviteUsed
 		}
 		created, cerr := create(tx)
@@ -153,9 +153,9 @@ func (s *InviteStore) Accept(ctx context.Context, token string, now time.Time, c
 	return u, nil
 }
 
-// MarkUsed 原子地把 token 标记为已用：只有 used_at 仍为 NULL 的行会被更新。
-// 返回 claimed=false 表示并发下已被他人抢先使用，调用方必须放弃建号 —— 这是
-// “一次邀请只创建一个用户”的强制点。
+// MarkUsed atomically marks the token used: only rows where used_at is still NULL are updated.
+// Returning claimed=false means another party claimed it first under concurrency, and the caller must abandon account creation — this is
+// the enforcement point for 'one invite creates only one user'.
 func (s *InviteStore) MarkUsed(ctx context.Context, token string, at time.Time) (bool, error) {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -169,7 +169,7 @@ func (s *InviteStore) MarkUsed(ctx context.Context, token string, at time.Time) 
 	return res.RowsAffected == 1, nil
 }
 
-// Release 回滚一次 MarkUsed：建号失败时把 used_at 清空，让邀请仍可用。
+// Release rolls back one MarkUsed: it clears used_at when account creation failed, so the invite stays usable.
 func (s *InviteStore) Release(ctx context.Context, token string) error {
 	if err := s.db.WithContext(ctx).Model(&Invite{}).
 		Where("token = ?", token).
@@ -179,7 +179,7 @@ func (s *InviteStore) Release(ctx context.Context, token string) error {
 	return nil
 }
 
-// Revoke 撤销一条邀请：删除整行。行不存在时返回 ErrInviteNotFound。
+// Revoke revokes an invite: deletes the whole row. Returns ErrInviteNotFound when the row does not exist.
 func (s *InviteStore) Revoke(ctx context.Context, id uint64) error {
 	res := s.db.WithContext(ctx).Delete(&Invite{}, "id = ?", id)
 	if res.Error != nil {
@@ -191,11 +191,11 @@ func (s *InviteStore) Revoke(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// DeleteExpired 删除已过期的邀请行，返回删除行数。
+// DeleteExpired deletes expired invite rows, returning the number of rows deleted.
 //
-// **只删 expires_at 非空且已到点的行**：expires_at 可空，NULL 表示「这张邀请不过期」，
-// 不能被当成过期清掉。同理，已使用（used_at 非空）但未到期的邀请也保留——它是「谁用了这张
-// 邀请」的凭据，等它自然到点再回收。
+// **Only rows with a non-null expires_at that has passed are deleted**: expires_at is nullable, and NULL means 'this invite never expires',
+// so it must not be cleaned up as expired. Likewise, a used (used_at non-null) but unexpired invite is kept — it is the evidence of 'who used
+// this invite', and is reclaimed once it naturally expires.
 func (s *InviteStore) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
 	res := s.db.WithContext(ctx).
 		Where("expires_at IS NOT NULL AND expires_at <= ?", before).

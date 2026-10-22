@@ -17,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/urlfetch"
 )
 
-// Deps 是 API 的显式依赖（AGENTS.md §2.4：入口显式装配）。
+// Deps holds the API's explicit dependencies (AGENTS.md §2.4: explicit wiring at the entry point).
 type Deps struct {
 	DB      *gorm.DB
 	Logger  *slog.Logger
@@ -27,26 +27,26 @@ type Deps struct {
 	Notes   *store.NoteStore
 	Presets *store.PresetStore
 	Cards   *store.CardStore
-	// Grants 是卡组授权存储；为空时由 New 从 DB 构造。
+	// Grants is the deck grant store; when empty, New builds it from DB.
 	Grants  *store.GrantStore
 	Auditor *auth.Auditor
-	// Now 可注入时钟；为零时用系统 UTC 时间。
+	// Now is an injectable clock; when zero, the system UTC time is used.
 	Now func() time.Time
-	// MediaRoot 是媒体字节的本地根目录；卡组包导出/导入内联媒体时使用（可为空）。
+	// MediaRoot is the local root directory for media bytes, used when exporting/importing decks with inline media (may be empty).
 	MediaRoot string
-	// PackageFetcher 下载卡组包的公开 HTTPS 直链；为空时用 internal/urlfetch 的生产实现。
-	// 显式可注入，便于测试用受控实现验证端点行为而不依赖公网。
+	// PackageFetcher downloads public HTTPS direct links of deck packages; when empty the production implementation in internal/urlfetch is used.
+	// It is explicitly injectable so tests can verify endpoint behavior with a controlled implementation instead of depending on the public internet.
 	PackageFetcher PackageFetcher
-	// BaseURL 是实例对外的根地址（配置项 base_url），用于拼上传票据的绝对 URL；
-	// 为空时票据只返回站内路径。
+	// BaseURL is the instance's public root address (config item base_url), used to build absolute upload ticket URLs;
+	// when empty, tickets return only a site-relative path.
 	BaseURL string
-	// ReadLimit / WriteLimit / RateWindow 透传给鉴权中间件的按 key 限流。
+	// ReadLimit / WriteLimit / RateWindow are passed straight through to the auth middleware's per-key rate limiting.
 	ReadLimit  int
 	WriteLimit int
 	RateWindow time.Duration
 }
 
-// API 持有 /api/v1 的全部 handler 与中间件。
+// API holds every handler and middleware of /api/v1.
 type API struct {
 	db      *gorm.DB
 	logger  *slog.Logger
@@ -57,27 +57,27 @@ type API struct {
 	presets *store.PresetStore
 	cards   *store.CardStore
 	grants  *store.GrantStore
-	// access 是 Web 与 REST/MCP 共用的权限判定（单一实现见 auth.DeckAccess）。
+	// access is the permission check shared by Web and REST/MCP (the single implementation lives in auth.DeckAccess).
 	access  *auth.DeckAccess
 	auditor *auth.Auditor
 	now     func() time.Time
 	authn   *Authenticator
-	// mediaRoot 供卡组包内联媒体使用；为空时不落盘媒体。
+	// mediaRoot is used for inline media in deck packages; when empty no media is written to disk.
 	mediaRoot string
-	// fetcher 下载卡组包的公开 HTTPS 直链（internal/urlfetch）。
+	// fetcher downloads public HTTPS direct links of deck packages (internal/urlfetch).
 	fetcher PackageFetcher
-	// importURL 是按用户的直链导入限流器：本入口会触发出站请求，需独立限流。
+	// importURL is the per-user direct-link import limiter: this entry triggers outbound requests and needs its own limit.
 	importURL *RateLimiter
-	// tokens 存上传票据（action_tokens 表，只存摘要、一次性消费）。
+	// tokens stores upload tickets (action_tokens table, digests only, one-time consumption).
 	tokens *store.ActionTokenStore
-	// baseURL 是去掉末尾斜杠的实例根地址；见 Deps.BaseURL。
+	// baseURL is the instance root address without a trailing slash; see Deps.BaseURL.
 	baseURL string
-	// exportPageSize 是导出分页的页大小：既是一页的内存上界，也是「持有一条数据库连接」的时间上界。
-	// New 填 exportDefaultPageSize；测试可以调小（例如 2）以制造多页，验证连接在页间是空闲的。
+	// exportPageSize is the page size of export paging: at once the memory bound of one page and the time bound of "holding one database connection".
+	// New sets exportDefaultPageSize; tests may lower it (e.g. to 2) to force multiple pages and verify the connection is idle between them.
 	exportPageSize int
 }
 
-// New 构造 API；中间件与 handler 的依赖必须齐备。
+// New builds the API; the dependencies of the middleware and handlers must be complete.
 func New(deps Deps) (*API, error) {
 	if deps.DB == nil {
 		return nil, errors.New("api: Deps.DB is required")
@@ -104,7 +104,7 @@ func New(deps Deps) (*API, error) {
 	if len(missing) > 0 {
 		return nil, errors.New("api: missing required dependencies: " + joinStrings(missing))
 	}
-	// 授权存储可按需从 DB 构造，避免每个调用方（含测试）都要显式装配。
+	// The grant store can be built from DB on demand, so not every caller (tests included) has to wire it explicitly.
 	grants := deps.Grants
 	if grants == nil {
 		grants = store.NewGrantStore(deps.DB)
@@ -130,7 +130,7 @@ func New(deps Deps) (*API, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 直链下载默认用生产实现：系统解析器/拨号器/根证书，内置 SSRF 防护。
+	// Direct-link download defaults to the production implementation: system resolver/dialer/root CAs with built-in SSRF protection.
 	fetcher := deps.PackageFetcher
 	if fetcher == nil {
 		fetcher = urlfetch.New(urlfetch.DefaultLimits())
@@ -154,12 +154,12 @@ func New(deps Deps) (*API, error) {
 		importURL: NewRateLimiter(importURLRateLimit, importURLRateWindow, now),
 		tokens:    store.NewActionTokenStore(deps.DB),
 		baseURL:   strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
-		// 导出分页的默认页大小；见 API.exportPageSize 的说明。
+		// Default page size for export pagination; see the note on API.exportPageSize.
 		exportPageSize: exportDefaultPageSize,
 	}, nil
 }
 
-// Register 把 /api/v1 挂到给定的 router 上；每条路由在其 scope 对应的中间件后执行。
+// Register mounts /api/v1 on the given router; each route runs behind the middleware matching its scope.
 func (a *API) Register(r gin.IRouter) {
 	v1 := r.Group("/api/v1")
 	v1.Use(a.authn.Auth())
@@ -169,18 +169,18 @@ func (a *API) Register(r gin.IRouter) {
 	v1.POST("/decks", a.authn.RequireScope(store.ScopeWrite), a.createDeck)
 	v1.PATCH("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.updateDeck)
 	v1.DELETE("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteDeck)
-	// 退出共享：撤掉自己在该卡组的一行授权；与删除卡组是两件事，故独立路径。
+	// Leave share: revoke your own grant row on this deck; a separate matter from deleting the deck, hence its own path.
 	v1.DELETE("/decks/:id/membership", a.authn.RequireScope(store.ScopeWrite), a.leaveDeck)
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.GET("/decks/:id/tags", a.authn.RequireScope(store.ScopeRead), a.listDeckTags)
-	// 「再来一组」：读今天的新卡额度、为调用者追加今天的新卡额度；只动本人进度，与复习同属 review。
+	// "One more batch": read today's new-card allowance, add to the caller's allowance for today; touches only personal progress and sits under review like reviewing.
 	v1.GET("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.getExtraNew)
 	v1.POST("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.postExtraNew)
 	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
 	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)
 	v1.GET("/notes/:id", a.authn.RequireScope(store.ScopeRead), a.getNote)
 	v1.DELETE("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteNote)
-	// gin 按 method 建树；POST 侧没有 /notes/:id，故 /notes/bulk 与它不冲突。
+	// gin builds a tree per method; the POST side has no /notes/:id, so /notes/bulk does not conflict with it.
 	v1.POST("/notes/bulk", a.authn.RequireScope(store.ScopeWrite), a.bulkNotes)
 	v1.GET("/review/due", a.authn.RequireScope(store.ScopeReview), a.dueCards)
 	v1.POST("/review", a.authn.RequireScope(store.ScopeReview), a.submitReview)
@@ -189,25 +189,25 @@ func (a *API) Register(r gin.IRouter) {
 	v1.PUT("/notes/:id/suspension", a.authn.RequireScope(store.ScopeReview), a.putNoteSuspension)
 	v1.DELETE("/notes/:id/suspension", a.authn.RequireScope(store.ScopeReview), a.deleteNoteSuspension)
 	v1.GET("/stats/summary", a.authn.RequireScope(store.ScopeRead), a.statsSummary)
-	// 题型自描述：静态元数据（无用户状态），供前端渲染编辑表单与复习控件。
+	// Card-type self-description: static metadata (no user state), for the frontend to render edit forms and review controls.
 	v1.GET("/card-types", a.authn.RequireScope(store.ScopeRead), a.cardTypes)
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
 	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
 	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)
-	// 从公开 HTTPS 直链导入卡组包：与文件导入同一 service、同一 scope 与 CSRF 规则。
+	// Import a deck package from a public HTTPS direct link: same service, same scope and CSRF rules as file import.
 	v1.POST("/decks/import-url", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackageURL)
-	// 签发一次性上传票据：签发要 write scope，与其他导入入口同一套鉴权。
+	// Issue a one-time upload ticket: issuance needs write scope, the same auth stack as the other import entries.
 	v1.POST("/decks/import-uploads", a.authn.RequireScope(store.ScopeWrite), a.handleCreateImportUpload)
-	// 凭票据上传包：不挂 v1 组的鉴权中间件，路径里的票据本身就是凭据（签发时已鉴权）。
-	// 请求不依赖 cookie，因此也没有 CSRF 面。
+	// Upload the package with a ticket: it does not sit behind the v1 group's auth middleware, the ticket in the path is itself the credential (auth happened at issuance).
+	// The request does not depend on cookies, so it has no CSRF surface either.
 	r.PUT(importUploadPathPrefix+":token", a.handleImportUpload)
 	v1.GET("/keys", a.authn.RequireScope(store.ScopeKeys), a.listKeys)
 	v1.POST("/keys", a.authn.RequireScope(store.ScopeKeys), a.createKey)
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
 }
 
-// recordAudit 写一条审计；写失败只记英文日志，不回滚业务（AGENTS.md §2.1：日志恒英文）。
-// *API 与 *Authenticator 两个接收者共用这一实现，避免同一守卫各写一遍。
+// recordAudit writes one audit entry; a failed write only logs in English and does not roll back the business action (AGENTS.md §2.1: logs are always English).
+// Two receivers, *API and *Authenticator, share this implementation so the same guard is not written twice.
 func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger, e store.AuditEntry) {
 	if auditor == nil {
 		return
@@ -217,8 +217,8 @@ func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger
 	}
 }
 
-// pathPublicID 读取路径里的对外 id 参数（不透明 UUID 串）；空串直接写 404 并返回 false。
-// 实体解析由调用方用对应 store 的 ByPublicID 完成，路由层只负责把对外 id 交给它。
+// pathPublicID reads the external id parameter from the path (an opaque UUID string); an empty string writes 404 and returns false immediately.
+// Entity resolution is the caller's job via the matching store's ByPublicID; the routing layer only hands the external id over.
 func pathPublicID(c *gin.Context, name string) (string, bool) {
 	raw := strings.TrimSpace(c.Param(name))
 	if raw == "" {
@@ -228,12 +228,12 @@ func pathPublicID(c *gin.Context, name string) (string, bool) {
 	return raw, true
 }
 
-// abortNotFound 写 404 not_found；对外 id 未知、为空或非法时的统一出口。
+// abortNotFound writes 404 not_found; the single exit for an unknown, empty or malformed external id.
 func abortNotFound(c *gin.Context) {
 	abortError(c, http.StatusNotFound, CodeNotFound, "")
 }
 
-// queryInt 读取整型查询参数；缺失或非法时返回 def。
+// queryInt reads an integer query parameter; returns def when missing or invalid.
 func queryInt(c *gin.Context, name string, def int) int {
 	raw := c.Query(name)
 	if raw == "" {
@@ -246,9 +246,9 @@ func queryInt(c *gin.Context, name string, def int) int {
 	return v
 }
 
-// ensureDefaultPreset 返回该用户默认预设的 id：不存在则由 store.EnsureDefaultPreset 补齐。
-// 外部调用方建卡组时通常不关心预设，服务端给出一个可用的默认预设。
-// 预设名是稳定字面量（store.DefaultPresetName），与 web 入口共用同一补齐逻辑。
+// ensureDefaultPreset returns the id of the user's default preset: when absent, store.EnsureDefaultPreset creates it.
+// External callers creating a deck usually do not care about presets, so the server supplies a usable default.
+// The preset name is a stable literal (store.DefaultPresetName), and the web entry shares the same backfill logic.
 func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, error) {
 	list, err := store.EnsureDefaultPreset(ctx, a.db, userID)
 	if err != nil {
@@ -261,7 +261,7 @@ func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, e
 	return p.ID, nil
 }
 
-// joinStrings 用逗号拼接依赖名，构造可读的英文装配错误。
+// joinStrings joins dependency names with commas to build a readable English wiring error.
 func joinStrings(parts []string) string {
 	out := ""
 	for i, p := range parts {

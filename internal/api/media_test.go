@@ -11,11 +11,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 REST `GET /api/v1/media`（分页）：鉴权 / scope / 稳定 JSON 形状 / 游标，
-// 以及「只列可读媒体」——他人 private 卡组里引用的媒体不得出现。
+// This file covers REST `GET /api/v1/media` (paging): auth / scope / stable JSON shape / cursor,
+// and "only readable media is listed" - media referenced in someone else's private deck must not appear.
 
-// seedRefNote 建一条引用给定媒体 sha 的 basic note，作者为 authorID。
-// 走 NoteStore 的写入方法，让 media_notes 映射由写入路径建立（测试夹具约定）。
+// seedRefNote creates a basic note referencing the given media sha, authored by authorID.
+// It goes through NoteStore's write method so the media_notes mapping is built by the write path (a fixture convention).
 func seedRefNote(t *testing.T, env *testEnv, deckID, authorID uint64, sha string) *store.Note {
 	t.Helper()
 	n := store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(authorID)}
@@ -26,7 +26,7 @@ func seedRefNote(t *testing.T, env *testEnv, deckID, authorID uint64, sha string
 	return &n
 }
 
-// mediaPageBody 是 GET /api/v1/media 的响应形态。
+// mediaPageBody is the response shape of GET /api/v1/media.
 type mediaPageBody struct {
 	Items []struct {
 		Sha256    string `json:"sha256"`
@@ -39,7 +39,7 @@ type mediaPageBody struct {
 	NextCursor string `json:"next_cursor"`
 }
 
-// walkMediaPages 反复翻页直到 next_cursor 为空，返回全量 sha 顺序与页数。
+// walkMediaPages pages repeatedly until next_cursor is empty, returning the full sha order and the page count.
 func walkMediaPages(t *testing.T, router http.Handler, key string, limit int) ([]string, int) {
 	t.Helper()
 	var out []string
@@ -71,31 +71,31 @@ func walkMediaPages(t *testing.T, router http.Handler, key string, limit int) ([
 	return nil, pages
 }
 
-// TestListMediaEndpointScopeShapeAndPagination 覆盖 200 形状、scope、分页与可读范围。
+// TestListMediaEndpointScopeShapeAndPagination covers the 200 shape, scope, paging and the readable range.
 func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	owner := seedUser(t, env.db, "media_list_owner", store.RoleUser)
 	other := seedUser(t, env.db, "media_list_other", store.RoleUser)
 	router := env.router()
 
-	// owner 上传 3 份媒体。
+	// owner uploads 3 media files.
 	owned := make([]string, 0, 3)
 	for i := 0; i < 3; i++ {
 		owned = append(owned, seedMedia(t, env, owner.ID, fmt.Sprintf("owned-%d", i)))
 	}
-	// 他人 private 卡组里的媒体：owner 不得看到。
+	// Media in someone else's private deck: owner must not see it.
 	privateDeck := seedDeck(t, env.db, other.ID)
 	secret := seedMedia(t, env, other.ID, "secret-media")
 	seedRefNote(t, env, privateDeck.ID, other.ID, secret)
 
-	// owner 自己的一张卡引用了 owned[0]：这份字节两路命中（上传 + 被可见卡引用），
-	// 列表必须去重成一份。
+	// One of owner's own cards references owned[0]: those bytes match on two paths (uploaded + referenced by a visible card),
+	// so the list must deduplicate them into one entry.
 	ownerDeck := seedDeck(t, env.db, owner.ID)
 	seedRefNote(t, env, ownerDeck.ID, owner.ID, owned[0])
 
 	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
 
-	// 第一页 limit=2：形状与游标。
+	// First page with limit=2: shape and cursor.
 	code, raw := doJSON(t, router, http.MethodGet, "/api/v1/media?limit=2", key.Plaintext, "")
 	if code != http.StatusOK {
 		t.Fatalf("GET /media = %d, want 200 (body %s)", code, raw)
@@ -114,7 +114,7 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 		t.Errorf("media item shape is incomplete: %+v", it)
 	}
 
-	// 走完全部分页：不重不漏，且只含 owner 可读的 3 份。
+	// Walk every page: no duplicates, no gaps, and only the 3 entries owner can read.
 	got, pages := walkMediaPages(t, router, key.Plaintext, 2)
 	if pages != 2 {
 		t.Errorf("pagination used %d pages for 3 items at limit 2, want 2", pages)
@@ -135,8 +135,8 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 		t.Errorf("list leaked another user's private media %s: %v", secret, got)
 	}
 
-	// 单页取全量（limit 足够大）：并集去重后每份字节只出现一次（keyset 的严格比较只在跨页时
-	// 挡住同排序键的重复行，一页装得下时才真正验证 UNION 去重）。
+	// Fetch everything in one page (a large enough limit): after union dedupe each byte sequence appears once (keyset's strict comparison only
+	// blocks duplicate rows sharing a sort key across pages, so UNION dedupe is only really verified when one page holds it all).
 	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/media?limit=100", key.Plaintext, "")
 	if code != http.StatusOK {
 		t.Fatalf("GET /media?limit=100 = %d, want 200 (body %s)", code, raw)
@@ -158,7 +158,7 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 		}
 	}
 
-	// 末页 next_cursor 必须为空串。
+	// The last page's next_cursor must be an empty string.
 	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/media?limit=2&cursor="+url.QueryEscape(first.NextCursor), key.Plaintext, "")
 	if code != http.StatusOK {
 		t.Fatalf("GET second page = %d, want 200 (body %s)", code, raw)
@@ -171,7 +171,7 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 		t.Errorf("last page next_cursor = %q, want empty", second.NextCursor)
 	}
 
-	// scope：只持 write 的 key 被拒，稳定 code scope_required。
+	// scope: a key holding only write is rejected, stable code scope_required.
 	writeKey := seedKey(t, env.keys, owner.ID, []string{store.ScopeWrite}, nil)
 	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/media", writeKey.Plaintext, "")
 	if code != http.StatusForbidden {
@@ -179,14 +179,14 @@ func TestListMediaEndpointScopeShapeAndPagination(t *testing.T) {
 	}
 	assertErrorCode(t, raw, CodeScopeRequired)
 
-	// 未鉴权：401。
+	// Unauthenticated: 401.
 	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/media", "", "")
 	if code != http.StatusUnauthorized {
 		t.Fatalf("GET /media without a key = %d, want 401 (body %s)", code, raw)
 	}
 }
 
-// TestListMediaEndpointRejectsInvalidLimitAndCursor 覆盖非法参数：一律 400，不静默截断。
+// TestListMediaEndpointRejectsInvalidLimitAndCursor covers invalid parameters: always 400, never a silent clamp.
 func TestListMediaEndpointRejectsInvalidLimitAndCursor(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	user := seedUser(t, env.db, "media_param_user", store.RoleUser)

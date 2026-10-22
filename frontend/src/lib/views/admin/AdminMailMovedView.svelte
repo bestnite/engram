@@ -3,11 +3,11 @@
   import { navigate } from '../../router';
 
   /**
-   * 邮件模板已并入「邮件」页（/admin/smtp）：配好发信通道之后紧接着就是「发出去的信长什么样」，
-   * 分成两个 tab 只会让人来回点。
+   * Mail templates have been merged into the "mail" page (/admin/smtp): right after configuring the sending channel comes "what the outgoing mail looks like",
+   * and splitting them into two tabs only makes people click back and forth.
    *
-   * 这条路由只为了让旧链接与书签不作废——它不渲染内容，只把地址换过去，因此浏览器里看到的
-   * 是那一页而不是一个副本。
+   * This route exists only so old links and bookmarks do not break — it renders no content, it just swaps the address over, so what the browser shows
+   * is that page rather than a copy.
    */
   onMount(() => {
     navigate('/admin/smtp', true);

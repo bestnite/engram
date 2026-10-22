@@ -16,8 +16,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newNotesServer 装配一个具备账号、会话、卡组与笔记存储的测试服务，并登录一个 owner。
-// 返回的 csrf 是服务端会话绑定的 token，供写操作表单使用。
+// newNotesServer wires a test server with account, session, deck and note stores, and signs in an owner.
+// The returned csrf is the session-bound server token, for write-operation forms.
 func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, cookies []*http.Cookie, csrf string) {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "notes.db"))
@@ -47,8 +47,8 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("media.New() error = %v", err)
 	}
-	// 导入等写操作走 api service（REST/MCP/CLI/web 同一入口），因此测试服务也要装配 API；
-	// MediaRoot 与媒体存储同一个，保证 web 导入的媒体落盘路径与生产一致。
+	// Write operations such as import go through the api service (one entry for REST/MCP/CLI/web), so the test server must wire the API too;
+	// MediaRoot is the same as the media store's, so media imported through the web lands on disk as in production.
 	apiSrv, err := api.New(api.Deps{
 		DB:        db,
 		Logger:    discardLogger(),
@@ -71,7 +71,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 		Accounts:      accounts,
 		Sessions:      mgr,
 		Users:         users,
-		// 会话中间件先于语言中间件运行，用户设置里的语言才会生效。
+		// The session middleware runs before the language middleware, so the language in user settings takes effect.
 		UserLocale: SessionUserLocale,
 		Decks:      store.NewDeckStore(db),
 		Notes:      store.NewNoteStore(db),
@@ -93,12 +93,12 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("CreateLocalUser() error = %v", err)
 	}
-	// 登录走 SPA 的同源 JSON 端点：失败即 Fatal，成功返回会话 cookie 与会话绑定的 CSRF token。
+	// Sign-in goes through the SPA's same-origin JSON endpoint: failure is Fatal, success returns the session cookie and the session-bound CSRF token.
 	cookies, csrf = loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 	return srv, db, owner.ID, cookies, csrf
 }
 
-// seedDeck 建一个属于 owner 的卡组（含一个调度预设，满足外键列）。
+// seedDeck creates a deck owned by owner (with a scheduling preset, to satisfy the foreign-key column).
 func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *store.Deck {
 	t.Helper()
 	now := time.Now().UTC()
@@ -115,7 +115,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *store.Dec
 	return &deck
 }
 
-// seedBasic 建一张 basic note；tags 非空时写入 tags_json。
+// seedBasic creates a basic note; tags are written to tags_json when non-empty.
 func seedBasic(t *testing.T, db *gorm.DB, deckID uint64, front, back string, tags ...string) *store.Note {
 	t.Helper()
 	note := &store.Note{DeckID: deckID, Kind: "basic"}
@@ -130,7 +130,7 @@ func seedBasic(t *testing.T, db *gorm.DB, deckID uint64, front, back string, tag
 	return note
 }
 
-// jsonMarshalStrings 是测试用的最小 JSON 数组编码，避免测试再引入一组编码逻辑。
+// jsonMarshalStrings is the minimal JSON array encoder for tests, so the tests do not pull in another set of encoding logic.
 func jsonMarshalStrings(xs []string) (string, error) {
 	quoted := make([]string, len(xs))
 	for i, x := range xs {
@@ -139,8 +139,8 @@ func jsonMarshalStrings(xs []string) (string, error) {
 	return "[" + strings.Join(quoted, ",") + "]", nil
 }
 
-// TestNotePagesRejectAnonymousAndForeign 覆盖页面的鉴权门：未登录重定向、非 owner 403。
-// 卡片列表要求 reader、编辑页要求 editor，两条判定与迁移前的 SSR 页面逐项一致。
+// TestNotePagesRejectAnonymousAndForeign covers the pages' auth gates: anonymous redirect, non-owner 403.
+// The card list requires reader and the edit page requires editor, both matching the pre-migration SSR pages item by item.
 func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Private deck")
@@ -150,7 +150,7 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 		t.Errorf("anonymous GET list status = %d, want 303 redirect to login", code)
 	}
 
-	// 另一个用户（非 owner）访问同一卡组必须被拒。
+	// Another user (not the owner) accessing the same deck must be refused.
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
 	accounts, err := auth.NewAccountService(users, sessions, store.NewAPIKeyStore(db), auth.NewPasswordHasher(auth.Params{
@@ -176,7 +176,7 @@ func TestNotePagesRejectAnonymousAndForeign(t *testing.T) {
 
 func u64str(v uint64) string { return itoa(int(v)) }
 
-// userPublicID 取用户主键对应的对外 id：测试里把数字 id 换成路由/请求体用的对外 id。
+// userPublicID returns the public id for a user primary key: in tests, it converts the numeric id into the public id used in routes/request bodies.
 func userPublicID(t *testing.T, db *gorm.DB, id uint64) string {
 	t.Helper()
 	u, err := store.NewUserStore(db).ByID(context.Background(), id)
@@ -186,7 +186,7 @@ func userPublicID(t *testing.T, db *gorm.DB, id uint64) string {
 	return u.PublicID
 }
 
-// pad3 是测试里把序号补成三位的小工具（front/back 文案生成用）。
+// pad3 is a test helper that pads a sequence number to three digits (used for generating front/back copy).
 func pad3(i int) string {
 	s := "000" + itoa(i)
 	return s[len(s)-3:]

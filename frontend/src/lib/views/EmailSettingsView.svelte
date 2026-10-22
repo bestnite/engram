@@ -13,8 +13,8 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
 
-  // 账号与邮箱设置（服务端 GET /settings/email 切壳后由客户端路由渲染此页，未登录在服务端即重定向）。
-  // 读取与提交走 /api/v1/settings/email，重发验证走 /api/v1/settings/verify-email。
+  // Account and email settings (after the server's GET /settings/email switched to the shell, the client router renders this page; when logged out the server redirects first).
+  // Reads and submissions go through /api/v1/settings/email, resending verification through /api/v1/settings/verify-email.
   let email = $state('');
   let verified = $state(false);
   let mailReady = $state(true);
@@ -110,6 +110,6 @@
     </SettingsSection>
   {/if}
 
-  <!-- 通知偏好自带读取、保存与错误状态，与上面的改邮箱表单互不影响。 -->
+  <!-- Notification preferences come with their own read, save and error state, independent of the change-email form above. -->
   <NotificationPrefsView />
 </Page>

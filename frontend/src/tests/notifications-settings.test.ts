@@ -9,7 +9,7 @@ import { en } from '../lib/i18n/locales/en';
 import { matchRoute } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
-// 目录镜像（与 internal/mail/catalog.go 一致）：测试用它构造服务端响应，并断言两套语言包都覆盖这些标识。
+// Catalogue mirror (matching internal/mail/catalog.go): tests use it to build server responses and to assert both language packs cover these identifiers.
 const catalog = {
   security: ['password_reset', 'email_verification', 'new_device_login', 'credential_changed', 'account_status'],
   collab: ['deck_shared', 'deck_permission_changed', 'invite'],
@@ -30,8 +30,9 @@ const fixture: NotificationPrefsResponse = {
 };
 
 /**
- * 取包含 testid 的那个标签本身（不再假定它是 <input>：复选框已换成组件库的 button 语义，
- * 状态用 data-state/aria-checked 表达而不是 checked 属性）。
+ * Grab the label carrying the testid itself (no longer assuming it is an <input>: the
+ * checkbox has become a component-library button, with state expressed through
+ * data-state/aria-checked instead of the checked property).
  */
 function controlTag(html: string, testid: string): string {
   const i = html.indexOf(`data-testid="${testid}"`);
@@ -115,8 +116,8 @@ describe('NotificationPrefsView renders the server-derived catalog truthfully', 
     }
   });
 
-  // 视图把服务端的稳定错误 code 映射成本地化 key（actionErrorKey）；这里守住那组 key 存在，
-  // 否则一次 403（forbidden_type）会退化成通用失败提示。
+  // The view maps the server's stable error code to a localized key (actionErrorKey); this guards that those keys exist,
+  // otherwise a single 403 (forbidden_type) degrades into a generic failure message.
   it('localizes every rejection code the view maps, including the admin-only one', () => {
     const codes = ['unknown_type', 'class_locked', 'reminder_hour_invalid', 'invalid_request', 'forbidden_type'];
     for (const code of codes) {

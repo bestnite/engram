@@ -2,8 +2,9 @@ package mail
 
 import "testing"
 
-// TestUnsubscribeHeadersOnlyForOptionalTypes 是验收项「A 类不带退订头」的单元证据：
-// 可选类型（B/C/D，CanDisable 为真）才得到两个 RFC 8058 头；A 类与未登记类型一律返回 nil。
+// TestUnsubscribeHeadersOnlyForOptionalTypes is the unit-level evidence for the acceptance item
+// "class A carries no unsubscribe header": only optional types (B/C/D, where CanDisable is true) get
+// the two RFC 8058 headers; class A and unregistered types always return nil.
 func TestUnsubscribeHeadersOnlyForOptionalTypes(t *testing.T) {
 	const url = "https://example.com/unsubscribe?token=abc"
 
@@ -28,7 +29,7 @@ func TestUnsubscribeHeadersOnlyForOptionalTypes(t *testing.T) {
 		}
 	}
 
-	// A 类：不可关闭 → 绝不带退订头。
+	// Class A: cannot be disabled -> never carries an unsubscribe header.
 	for _, typ := range []Type{
 		TypePasswordReset, TypeEmailVerification, TypeNewDeviceLogin,
 		TypeCredentialChanged, TypeAccountStatus,
@@ -41,11 +42,11 @@ func TestUnsubscribeHeadersOnlyForOptionalTypes(t *testing.T) {
 		}
 	}
 
-	// 未登记的类型：既不发信也不带退订头。
+	// Unregistered types: neither send mail nor carry an unsubscribe header.
 	if h := UnsubscribeHeaders(Type("no_such_type"), url); h != nil {
 		t.Errorf("UnsubscribeHeaders(unknown) = %v, want nil", h)
 	}
-	// 空 URL：拿不到退订地址时不写半个头。
+	// Empty URL: write no half header when no unsubscribe address is available.
 	if h := UnsubscribeHeaders(TypeInvite, "  "); h != nil {
 		t.Errorf("UnsubscribeHeaders(invite, empty url) = %v, want nil", h)
 	}

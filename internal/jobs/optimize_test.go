@@ -1,6 +1,6 @@
 //go:build unix
 
-// 只在 Unix 上编译：假命令走 `/bin/sh -c ...`（理由同 jobs_test.go 的文件头说明）。
+// Compiles only on Unix: the fake command goes through `/bin/sh -c ...` (same reason as the file header note in jobs_test.go).
 
 package jobs
 
@@ -17,8 +17,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedPresetDeckCards 建一个挂着 presetID、属于 ownerID 的卡组与其中 n 张卡，返回卡的主键。
-// 优化只用「挂着该预设的卡组」上的复习，所以作为燃料的复习必须落在这样的卡上。
+// seedPresetDeckCards creates a deck attached to presetID and owned by ownerID with n cards in it, returning the card primary keys.
+// Optimization only uses reviews on "decks attached to that preset", so the reviews serving as fuel must land on such cards.
 func seedPresetDeckCards(t *testing.T, db *gorm.DB, ownerID, presetID uint64, n int) []uint64 {
 	t.Helper()
 	now := time.Now().UTC()
@@ -41,8 +41,8 @@ func seedPresetDeckCards(t *testing.T, db *gorm.DB, ownerID, presetID uint64, n 
 	return ids
 }
 
-// seedOptimizeReviews 建一个属于 userID 的预设与挂着它的卡组，写入 n 条复习日志作为优化门槛的
-// 燃料，返回预设主键。只关心条数，字段取最小合法值。
+// seedOptimizeReviews creates a preset owned by userID plus a deck attached to it, writes n review-log entries as fuel for the optimization threshold,
+// and returns the preset primary key. Only the count matters, so fields take their minimum legal values.
 func seedOptimizeReviews(t *testing.T, db *gorm.DB, userID uint64, n int) uint64 {
 	t.Helper()
 	p := store.NewPreset(userID, "optimize preset")
@@ -68,17 +68,17 @@ func seedOptimizeReviews(t *testing.T, db *gorm.DB, userID uint64, n int) uint64
 	return p.ID
 }
 
-// okBuilder 返回一条必然成功退出的命令，供需要真实执行作业的用例使用。
+// okBuilder returns a command that necessarily exits successfully, for cases that need a real job execution.
 func okBuilder(context.Context, *store.Job, Reporter) (Command, error) {
 	return Command{Name: "/bin/sh", Args: []string{"-c", "exit 0"}}, nil
 }
 
-// TestOptimiseThresholdRefusesBelowThreshold 是「阈值」用例（验收之一）：复习太少的预设被拒绝，
-// 且错误里指名差额（还差多少条）。默认门槛 500，这里只有 3 条，差额应为 497。
+// TestOptimiseThresholdRefusesBelowThreshold is the "threshold" case (one of the acceptance items): a preset with too few reviews is refused,
+// and the error names the shortfall (how many more are needed). The default threshold is 500, there are only 3 here, so the shortfall should be 497.
 func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	presetID := seedOptimizeReviews(t, db, 1, 3)
-	// 同一用户另一个预设上的复习不算进来（门槛按预设数）。
+	// Reviews on another preset of the same user do not count (the threshold counts per preset).
 	seedOptimizeReviews(t, db, 1, store.DefaultOptimizeMinReviews)
 
 	_, err := runner.EnqueueOptimize(context.Background(), 1, presetID)
@@ -102,9 +102,9 @@ func TestOptimiseThresholdRefusesBelowThreshold(t *testing.T) {
 	t.Logf("below-threshold refusal: %v", err)
 }
 
-// TestOptimiseThresholdReadsSettings 证明门槛可由管理员通过 settings 覆盖，且覆盖值受
-// 300 条下限约束：存量写成 2（绕过表单直接写库）会被读取路径钳到 300，
-// 于是刚好 300 条复习可以入队——若读取端仍按 2 放行，这个用例会因门槛形同虚设而失去意义。
+// TestOptimiseThresholdReadsSettings proves the threshold can be overridden by an administrator through settings, and that the override is constrained
+// by a 300-review floor: a stored value of 2 (written straight to the database, bypassing the form) is clamped to 300 by the read path,
+// so exactly 300 reviews can be enqueued — if the read side still let 2 through, this case would lose its point because the threshold would be a formality.
 func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	runner, _, db := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()
@@ -130,8 +130,8 @@ func TestOptimiseThresholdReadsSettings(t *testing.T) {
 	}
 }
 
-// TestOptimiseResultStoresFitMetricsOnJobRow 是另一条验收：拟合指标存在 job 行上。
-// 适配器缺席时走 FinishOptimize 占位路径，断言 result_json 里 before/after 可解析。
+// TestOptimiseResultStoresFitMetricsOnJobRow is another acceptance item: the fit metrics are stored on the job row.
+// With no adapter present it goes through the FinishOptimize placeholder path, asserting that before/after in result_json can be parsed.
 func TestOptimiseResultStoresFitMetricsOnJobRow(t *testing.T) {
 	runner, st, _ := newTestRunner(t, time.Second, okBuilder)
 	ctx := context.Background()

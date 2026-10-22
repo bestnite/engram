@@ -9,39 +9,39 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 本文件是「新设备 / 新 IP 登录提醒」的持久化层。
+// This file is the persistence layer for the 'new device / new IP login alert'.
 //
-// 只有记住「这个用户曾从哪些 (IP, 设备) 组合登录过」，才能判断本次登录是不是新的。
-// 指纹是 IP 与 User-Agent 的哈希：存哈希而不是原文，既足够做去重，又避免在库里
-// 长期堆积用户代理原文（隐私最小化）。
+// Only by remembering which (IP, device) combinations a user has logged in from can the system tell whether this login is new.
+// A fingerprint is a hash of IP and User-Agent: storing the hash rather than the raw text is enough for dedup, and avoids
+// piling up raw user agents in the database long term (data minimization).
 
-// LoginFingerprint 记录某用户见过的一个登录指纹。
+// LoginFingerprint records one login fingerprint a user has been seen with.
 type LoginFingerprint struct {
 	ID uint64 `gorm:"primaryKey" json:"id"`
-	// UserID + Fingerprint 唯一，构成「这个用户是否见过该设备/IP」的判定依据。
+	// UserID + Fingerprint are unique, forming the basis for deciding 'has this user seen that device/IP'.
 	UserID      uint64    `gorm:"not null;uniqueIndex:idx_login_fp_user_fp,priority:1" json:"user_id"`
 	Fingerprint string    `gorm:"not null;uniqueIndex:idx_login_fp_user_fp,priority:2" json:"fingerprint"`
 	FirstSeenAt time.Time `gorm:"not null" json:"first_seen_at"`
 	LastSeenAt  time.Time `gorm:"not null" json:"last_seen_at"`
 }
 
-// TableName 固定表名，避免复数化规则漂移。
+// TableName pins the table name so pluralization rules cannot drift.
 func (LoginFingerprint) TableName() string { return "login_fingerprints" }
 
-// LoginFingerprintStore 封装 login_fingerprints 表的 GORM 访问。
+// LoginFingerprintStore wraps GORM access to the login_fingerprints table.
 type LoginFingerprintStore struct {
 	db *gorm.DB
 }
 
-// NewLoginFingerprintStore 构造登录指纹存储。
+// NewLoginFingerprintStore constructs the login fingerprint store.
 func NewLoginFingerprintStore(db *gorm.DB) *LoginFingerprintStore {
 	return &LoginFingerprintStore{db: db}
 }
 
-// Touch 记录一次登录指纹，返回 known=true 表示此前已经见过（不是新设备/IP）。
+// Touch records one login fingerprint and returns known=true when it has been seen before (not a new device/IP).
 //
-// 先查后插；插入用 OnConflict DoNothing，并发下重复插入时 RowsAffected=0，
-// 同样按「已知」处理，避免同一秒内的两次登录各发一封提醒。
+// Look first, then insert; the insert uses OnConflict DoNothing, so a duplicate insert under concurrency yields RowsAffected=0 and is
+// likewise treated as 'known', so two logins in the same second do not each send an alert.
 func (s *LoginFingerprintStore) Touch(ctx context.Context, userID uint64, fingerprint string, now time.Time) (bool, error) {
 	now = now.UTC()
 	var row LoginFingerprint
@@ -72,11 +72,11 @@ func (s *LoginFingerprintStore) Touch(ctx context.Context, userID uint64, finger
 	return res.RowsAffected == 0, nil
 }
 
-// DeleteStale 删除 last_seen_at 早于 before 的指纹行，返回删除行数。
+// DeleteStale deletes fingerprint rows whose last_seen_at is earlier than before, returning the number of rows deleted.
 //
-// 这一张表的增长源是「每个用户见过的每个 (IP, 设备) 组合一行」，只增不减。按最后出现时间回收
-// 意味着「很久没从这个设备登录过」就不再被当成已知设备——代价是它下次登录会被判为新设备并触发
-// 提醒。保留期因此不能太短（调用方给 90 天）：宁可多留一会儿，也不要对正常用户误报新设备。
+// This table grows by 'one row per (IP, device) combination a user has seen', only ever growing. Reclaiming by last-seen time
+// means 'has not logged in from this device for a long time' stops counting as a known device — at the cost of that next login being judged new and
+// triggering an alert. The retention window therefore cannot be too short (callers pass 90 days): better to keep a bit longer than to falsely alert a normal user about a new device.
 func (s *LoginFingerprintStore) DeleteStale(ctx context.Context, before time.Time) (int64, error) {
 	res := s.db.WithContext(ctx).Where("last_seen_at <= ?", before).Delete(&LoginFingerprint{})
 	if res.Error != nil {

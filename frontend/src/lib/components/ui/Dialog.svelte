@@ -4,18 +4,18 @@
   import { cn } from './utils';
 
   /**
-   * 全站唯一的模态对话框（交互件用成熟组件库）。
+   * The site's only modal dialog (interactive widgets use a mature component library).
    *
-   * 此前 4 处自写模态（新建卡组、删卡组、删预设、导出）各自手搓遮罩、ESC、焦点与
-   * 点击外部关闭，行为与样式都不完全一致。底层换成 bits-ui 的 Dialog 后，
-   * 焦点陷阱、ESC/遮罩关闭、滚动锁定、aria 关联都由库负责。
+   * Previously 4 hand-written modals (create deck, delete deck, delete preset, export) each hand-rolled the overlay, ESC, focus and
+   * click-outside-to-close, with behavior and styling never fully consistent. After switching the base to bits-ui's Dialog,
+   * the focus trap, ESC/overlay closing, scroll locking and aria wiring are all handled by the library.
    */
   interface Props {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     title: string;
     description?: string;
-    /** 与 title 分开给：读屏要先读标题、再读说明。 */
+    /** Given separately from title: screen readers should read the heading first, then the description. */
     testId?: string;
     size?: 'sm' | 'md' | 'lg';
     class?: string;
@@ -36,7 +36,7 @@
       data-testid={testId}
       class={cn(
         'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-popover p-6 text-foreground shadow-2xl shadow-black/10',
-        // 进出场：淡入 + 轻微放大，时长短到不拖慢操作，但足以让弹窗「出现」而不是「闪现」。
+        // Enter/exit: fade in + a slight zoom, short enough not to slow the action but enough for the dialog to "appear" rather than "flash".
         'duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
         width[size],
         klass

@@ -9,10 +9,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// importResponse 保留旧名，避免既有调用处改名（真实定义在 service.go，REST 与 MCP 共用）。
+// importResponse keeps the old name so existing call sites need no rename (the real definition is in service.go, shared by REST and MCP).
 type importResponse = ImportResponse
 
-// listNotes 返回卡组下的卡片列表（分页、标签过滤、关键词搜索）。
+// listNotes returns the card list under a deck (paging, tag filtering, keyword search).
 func (a *API) listNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -39,12 +39,12 @@ func (a *API) listNotes(c *gin.Context) {
 		return
 	}
 	out := a.NotesJSON(ctx, u.ID, notes)
-	// 回显的生效值就是 NormalizeNoteListOptions 的结果，不再在本处重复夹一次。
+	// The effective values echoed back are exactly the result of NormalizeNoteListOptions, not clamped a second time here.
 	c.JSON(http.StatusOK, gin.H{"notes": out, "total": total, "page": opts.Page, "per_page": opts.PerPage})
 }
 
-// listDeckTags 列出卡组内的标签及各自的 note 数，scope: read（业务逻辑在 service 层的 DeckTags）。
-// 供按标签复习时选择标签。
+// listDeckTags lists the tags inside a deck with their note counts, scope: read (the logic lives in the service layer's DeckTags).
+// Used to pick tags when reviewing by tag.
 func (a *API) listDeckTags(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -65,11 +65,11 @@ func (a *API) listDeckTags(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"tags": tags})
 }
 
-// NotesJSON 把一组 note 转成 userID 视角下的对外形态：fields 与 tags 解码成结构化值，
-// 避免调用方二次解析。REST（list_notes/update_note）与 MCP 同名工具共用，保证同一 note 产出同一 JSON。
+// NotesJSON turns a set of notes into the external shape as seen by userID: fields and tags are decoded into structured values,
+// sparing callers a second parse. Shared by REST (list_notes/update_note) and the MCP tools of the same names, so one note yields one JSON.
 //
-// id 是 note 自己的对外 id；deck_id 是它所属卡组的对外 id——数字主键不外露。
-// suspended 表示调用者暂停了这条 note 下的卡（暂停只对本人生效），一页 note 一次查询取回。
+// id is the note's own external id; deck_id is the external id of the deck it belongs to - numeric primary keys are never exposed.
+// suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -106,8 +106,8 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 	return out
 }
 
-// getNote 读取单条笔记（GET /api/v1/notes/:id，scope: read）。
-// 编辑页据此直接取目标行，不再靠列表分页去「找到」它。
+// getNote reads a single note (GET /api/v1/notes/:id, scope: read).
+// The edit page fetches the target row directly with it instead of paging through the list to "find" it.
 func (a *API) getNote(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -123,7 +123,7 @@ func (a *API) getNote(c *gin.Context) {
 	c.JSON(http.StatusOK, a.NotesJSON(ctx, u.ID, []store.Note{*n})[0])
 }
 
-// importNotes 批量新增/更新卡片：按 (deck_id, external_ref) 幂等。
+// importNotes bulk-adds/updates cards: idempotent per (deck_id, external_ref).
 func (a *API) importNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -149,14 +149,14 @@ func (a *API) importNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// updateNoteRequest 是单卡更新请求体；tags 用指针区分“未提供”与“清空”。
+// updateNoteRequest is the single-card update body; tags uses a pointer to distinguish "not provided" from "clear it".
 type updateNoteRequest struct {
 	Kind   string         `json:"kind"`
 	Fields map[string]any `json:"fields"`
 	Tags   *[]string      `json:"tags"`
 }
 
-// updateNote 更新单卡内容；已有 card 的 id 与用户进度保持不变（NoteStore.Update 的保证）。
+// updateNote updates a card's content; the id and user progress of existing cards stay unchanged (guaranteed by NoteStore.Update).
 func (a *API) updateNote(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -186,7 +186,7 @@ func (a *API) updateNote(c *gin.Context) {
 	c.JSON(http.StatusOK, a.NotesJSON(ctx, u.ID, []store.Note{*updated})[0])
 }
 
-// deleteNote 软删除单卡（进度保留，误删可恢复）。
+// deleteNote soft-deletes a card (progress is kept, an accidental delete can be undone).
 func (a *API) deleteNote(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -206,8 +206,8 @@ func (a *API) deleteNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "id": publicID})
 }
 
-// bulkNotes 对一组 note 执行 delete / add_tags / remove_tags / set_tags。
-// 请求体形态与 BulkNotes 输入一致；错误走统一包壳，成功 200 返回 BulkNotesResponse。
+// bulkNotes performs delete / add_tags / remove_tags / set_tags on a set of notes.
+// The body shape matches BulkNotes' input; errors go through the unified envelope, success returns 200 with BulkNotesResponse.
 func (a *API) bulkNotes(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	var req BulkNotesInput

@@ -23,11 +23,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是验收测试：用一个自写的 stub OIDC provider（httptest + 测试内生成的
-// RSA 密钥）驱动完整登录流，不依赖外网或任何真实 IdP。
+// This file is acceptance testing: a hand-written stub OIDC provider (httptest + an RSA key generated
+// inside the test) drives the full login flow, without the internet or any real IdP.
 
-// stubOIDC 是一个最小 OIDC provider：发现文档、authorize、token、jwks。
-// token 端点用测试内生成的 RSA 私钥签 RS256 ID Token；nonce 由测试在调用回调前注入。
+// stubOIDC is a minimal OIDC provider: discovery document, authorize, token, jwks.
+// The token endpoint signs RS256 ID Tokens with the RSA private key generated in the test; the nonce is injected by the test before calling the callback.
 type stubOIDC struct {
 	srv      *httptest.Server
 	key      *rsa.PrivateKey
@@ -105,7 +105,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// seedOIDC 写入一套可用的 OIDC 配置，返回加密编解码器；policy 是注册策略。
+// seedOIDC writes a working OIDC configuration and returns the encryption codec; policy is the registration policy.
 func seedOIDC(t *testing.T, srv *Server, db *gorm.DB, p *stubOIDC, policy string) *store.SecretCodec {
 	t.Helper()
 	codec, err := store.NewSecretCodec(testSecretKey)
@@ -131,7 +131,7 @@ func seedOIDC(t *testing.T, srv *Server, db *gorm.DB, p *stubOIDC, policy string
 	return codec
 }
 
-// startOIDCLogin 调用 /auth/oidc/start 并解析出 state 与 nonce，同时断言 PKCE 参数存在。
+// startOIDCLogin calls /auth/oidc/start and parses out state and nonce, also asserting the PKCE parameters are present.
 func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
 	t.Helper()
 	rec := getWithCookies(t, srv, "/auth/oidc/start", nil)
@@ -149,7 +149,7 @@ func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
 	return q.Get("state"), q.Get("nonce")
 }
 
-// TestOIDCLoginAgainstStubProvider 是核心验收：stub provider 下登录成功，错误 state 被拒。
+// TestOIDCLoginAgainstStubProvider is the core acceptance: login succeeds against the stub provider, and a wrong state is refused.
 func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
@@ -158,7 +158,7 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	state, nonce := startOIDCLogin(t, srv)
 	p.nonce = nonce
 
-	// 错误 state 必须被拒：SPA 已取代 SSR 登录页，失败回 303 登录页，且不下发会话。
+	// A wrong state must be refused: the SPA has replaced the SSR login page, so failure 303s to the login page and issues no session.
 	bad := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state=forged-state", nil)
 	if bad.Code != http.StatusSeeOther {
 		t.Fatalf("callback with a wrong state = %d, want 303 (body %s)", bad.Code, snippet(bad.Body.String()))
@@ -166,14 +166,14 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	if loc := bad.Header().Get("Location"); loc != "/login" {
 		t.Fatalf("wrong-state redirect Location = %q, want /login", loc)
 	}
-	// 错误 state 必须被拒，且不下发会话 cookie。
+	// A wrong state must be refused, and no session cookie issued.
 	for _, ck := range bad.Result().Cookies() {
 		if ck.Name == srv.sessions.CookieName() {
 			t.Fatalf("wrong state unexpectedly set a session cookie")
 		}
 	}
 
-	// 正确 state：登录成功并下发会话。
+	// Correct state: login succeeds and a session is issued.
 	ok := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, nil)
 	if ok.Code != http.StatusSeeOther {
 		t.Fatalf("callback = %d, want 303 (body %s)", ok.Code, snippet(ok.Body.String()))
@@ -185,12 +185,12 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 		t.Fatal("successful OIDC login did not set a session cookie")
 	}
 
-	// 绑定关系必须落库：provider = issuer，subject = sub。
+	// The link must be persisted: provider = issuer, subject = sub.
 	var ident store.Identity
 	if err := db.First(&ident, "provider = ? AND subject = ?", p.srv.URL, p.sub).Error; err != nil {
 		t.Fatalf("identity row not created: %v", err)
 	}
-	// 建出来的账号必须是纯 OIDC 账号（无本地密码）。
+	// The created account must be a pure OIDC account (no local password).
 	var u store.User
 	if err := db.First(&u, "id = ?", ident.UserID).Error; err != nil {
 		t.Fatalf("load linked user: %v", err)
@@ -199,7 +199,7 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 		t.Error("auto-created OIDC user unexpectedly has a local password")
 	}
 
-	// 审计：登录成功 + 身份绑定各一条。
+	// Audit: one record for the successful login and one for the identity link.
 	audit := store.NewAuditStore(db)
 	if n, err := audit.CountByAction(context.Background(), store.ActionIdentityLink); err != nil || n != 1 {
 		t.Errorf("identity.link audit rows = %d (err %v), want 1", n, err)
@@ -209,10 +209,10 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	}
 }
 
-// TestOIDCDisabledHidesEntryAndRoutes 验证默认关闭：登录页无入口，相关路由 404（不允许半开）。
+// TestOIDCDisabledHidesEntryAndRoutes verifies the default-off behaviour: no entry on the login page, the related routes 404 (no half-open state).
 func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 	srv, _ := newAuthServer(t)
-	// 未配置任何 OIDC 设置。
+	// No OIDC settings configured at all.
 	body := getWithCookies(t, srv, "/login", nil).Body.String()
 	if strings.Contains(body, "OIDC") {
 		t.Errorf("login page shows an OIDC entry while OIDC is disabled")
@@ -225,14 +225,14 @@ func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 	}
 }
 
-// TestOIDCStartRejectsWhenPendingTableFull 是这条规则的验收：未完成的 state 表达到上限后，
-// 新的 OIDC 发起必须被拒绝（303 回登录页），而不是继续往表里堆（内存 DoS）。
+// TestOIDCStartRejectsWhenPendingTableFull is the acceptance for this rule: once the pending state table reaches its cap,
+// a new OIDC start must be refused (303 back to the login page) instead of piling up in the table (memory DoS).
 func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
 
-	// 预置一批**未过期**的待完成登录，把内存表填满（远超上限）。
+	// Pre-seed a batch of **unexpired** pending logins to fill the in-memory table (far beyond the cap).
 	for i := 0; i < 5000; i++ {
 		srv.oidc.PutPending(fmt.Sprintf("pre-seeded-%d", i), auth.PendingAuth{
 			Nonce:       "nonce",

@@ -1,6 +1,6 @@
-// Package config 负责读取启动配置。
-// 优先级固定为：环境变量 > settings 表 > 内置默认值；访问器必须能报告生效值的来源，
-// 否则管理面板无法回答"改了为什么没生效"。
+// Package config is responsible for reading startup configuration.
+// The precedence is fixed: environment variables > settings table > built-in defaults; accessors must be able to report where the effective value came from,
+// otherwise the admin panel cannot answer "why did my change not take effect".
 package config
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Source 标识一个生效值的来源。
+// Source identifies where an effective value came from.
 type Source string
 
 const (
@@ -20,8 +20,8 @@ const (
 	SourceDefault Source = "default"
 )
 
-// Key 是配置项的稳定英文标识（AGENTS.md §2.1：标识符一律英文）。
-// 同一个 Key 既用于环境变量，也用于 settings 表的键。
+// Key is the stable English identifier of a setting (AGENTS.md §2.1: identifiers are always English).
+// The same Key is used both for the environment variable and as the settings table key.
 type Key string
 
 const (
@@ -34,22 +34,22 @@ const (
 	KeyAutoMigrate         Key = "auto_migrate"
 	KeyBootstrapAdminEmail Key = "bootstrap_admin_email"
 	KeyMediaDir            Key = "media_dir"
-	// KeyTrustedProxies 是允许改写 ClientIP() 的代理地址列表（逗号分隔的 IP 或 CIDR）。
-	// 缺省为空 = 不信任任何代理。
+	// KeyTrustedProxies is the list of proxy addresses allowed to rewrite ClientIP() (comma-separated IPs or CIDRs).
+	// Empty by default = no proxy is trusted.
 	KeyTrustedProxies Key = "trusted_proxies"
-	// KeyOptimizerPath 是 FSRS 优化器适配器二进制的路径。
-	// 留空时由 internal/jobs 解析：先找服务二进制旁的 optimizer，再回退到仓库构建产物。
+	// KeyOptimizerPath is the path to the FSRS optimizer adapter binary.
+	// When left empty, internal/jobs resolves it: first look for an optimizer next to the service binary, then fall back to the repository build artifact.
 	KeyOptimizerPath Key = "optimizer_path"
 )
 
-// field 描述一个配置项在环境变量中的名字、是否必需、内置默认值。
+// field describes a setting's environment variable name, whether it is required, and its built-in default.
 type field struct {
 	env      string
 	required bool
 	def      string
 }
 
-// fields 是唯一的配置项注册表：新增配置项必须同时改这里和 .env.example（有单测保证同步）。
+// fields is the single registry of settings: adding one requires changing both this list and .env.example (a unit test enforces the sync).
 var fields = map[Key]field{
 	KeyHTTPAddr:            {env: "HTTP_ADDR", def: "127.0.0.1:8080"},
 	KeyBaseURL:             {env: "BASE_URL", def: "http://localhost:8080"},
@@ -64,22 +64,22 @@ var fields = map[Key]field{
 	KeyOptimizerPath:       {env: "OPTIMIZER_PATH"},
 }
 
-// Value 是访问器的返回结果：生效值加来源。
+// Value is an accessor's result: the effective value plus its source.
 type Value struct {
 	Key    Key
 	Value  string
 	Source Source
 }
 
-// Config 保存一次加载的结果。两类来源分开保存，优先级在 Get 里实现。
+// Config holds the result of one load. The two kinds of source are kept apart; precedence is applied in Get.
 type Config struct {
 	env map[Key]string
 	db  map[Key]string
 }
 
-// Load 读取环境变量并叠加 settings 表覆盖值。
-// lookupEnv 为 nil 时使用 os.LookupEnv（测试注入替身）。settings 可为 nil。
-// 缺少任一必需变量时返回英文错误，调用方应据此拒绝启动。
+// Load reads environment variables and layers the settings table overrides on top.
+// When lookupEnv is nil, os.LookupEnv is used (tests inject a stand-in). settings may be nil.
+// Returns an English error when any required variable is missing; callers should refuse to start on it.
 func Load(lookupEnv func(string) (string, bool), settings map[string]string) (*Config, error) {
 	if lookupEnv == nil {
 		lookupEnv = os.LookupEnv
@@ -94,13 +94,13 @@ func Load(lookupEnv func(string) (string, bool), settings map[string]string) (*C
 		}
 	}
 	if len(missing) > 0 {
-		// 排序让错误信息稳定可断言。
+		// Sorting keeps the error message stable and assertable.
 		sort.Strings(missing)
 		return nil, fmt.Errorf("missing required environment variable(s): %s", strings.Join(missing, ", "))
 	}
 	for rawKey, rawValue := range settings {
 		key := Key(rawKey)
-		// settings 表可能存有只存在于数据库、不来自环境变量的键；这里只关心两者共有的项。
+		// The settings table may hold keys that exist only in the database and do not come from environment variables; only the keys common to both matter here.
 		if _, known := fields[key]; !known {
 			continue
 		}
@@ -111,7 +111,7 @@ func Load(lookupEnv func(string) (string, bool), settings map[string]string) (*C
 	return c, nil
 }
 
-// Get 是唯一访问器：返回生效值及其来源（env / db / default）。
+// Get is the only accessor: it returns the effective value and its source (env / db / default).
 func (c *Config) Get(key Key) Value {
 	if v, ok := c.env[key]; ok {
 		return Value{Key: key, Value: v, Source: SourceEnv}
@@ -122,17 +122,17 @@ func (c *Config) Get(key Key) Value {
 	return Value{Key: key, Value: fields[key].def, Source: SourceDefault}
 }
 
-// String 便于直接当字符串使用。
+// String makes it usable directly as a string.
 func (v Value) String() string { return v.Value }
 
-// TrustedProxies 解析并校验 TRUSTED_PROXIES：逗号分隔的 IP 或 CIDR 列表。
+// TrustedProxies parses and validates TRUSTED_PROXIES: a comma-separated list of IPs or CIDRs.
 //
-// 缺省为空 = 不信任任何代理：gin 不再采信 X-Forwarded-For / X-Real-IP，ClientIP() 回落到
-// RemoteAddr，登录限流键、审计 IP 与新设备/新 IP 提醒都不再被请求头左右。只有列出的地址
-// 发来的请求才被容许改写这些结果。
+// Empty by default = no proxy is trusted: gin stops trusting X-Forwarded-For / X-Real-IP and ClientIP() falls back to
+// RemoteAddr, so login rate-limit keys, audit IPs and new-device/new-IP alerts are no longer steered by request headers. Only requests
+// coming from the listed addresses are allowed to rewrite those results.
 //
-// 任一非法项都返回英文错误并点名该项，调用方据此拒绝启动；绝不静默丢弃（AGENTS.md §2.6）。
-// 刻意只认 IP/CIDR：不把 X-Forwarded-Proto 之类的头当作信任依据（TLS 终止信息由 BASE_URL 决定）。
+// Any invalid entry returns an English error naming that entry, and the caller refuses to start on it; it is never silently dropped (AGENTS.md §2.6).
+// Deliberately IP/CIDR only: headers like X-Forwarded-Proto are not treated as trust evidence (TLS termination info is decided by BASE_URL).
 func (c *Config) TrustedProxies() ([]string, error) {
 	raw := c.Get(KeyTrustedProxies).Value
 	if strings.TrimSpace(raw) == "" {
@@ -156,7 +156,7 @@ func (c *Config) TrustedProxies() ([]string, error) {
 	return out, nil
 }
 
-// validateProxyEntry 只接受单个 IP 或 CIDR；其余一律拒绝。
+// validateProxyEntry accepts only a single IP or CIDR; everything else is rejected.
 func validateProxyEntry(entry string) error {
 	if strings.Contains(entry, "/") {
 		if _, _, err := net.ParseCIDR(entry); err != nil {

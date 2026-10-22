@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-// typedType 是输入作答卡：用户键入文本，机器判分。
-// 字段：prompt / answer（必填），accept[] / ignore_case / ignore_whitespace / regex（可选），
-// extra / source_url（可选）。
+// typedType is the typed-answer card: the user types text and the machine grades it.
+// Fields: prompt / answer (required), accept[] / ignore_case / ignore_whitespace / regex (optional),
+// extra / source_url (optional).
 type typedType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (typedType) Label() string { return "cardtype.typed" }
 
-// Describe 自描述：正面 prompt、背面 answer；作答控件是文本，判分由 Grader 提供。
+// Describe self-describes: prompt on the front, answer on the back; the answer control is text and grading comes from the Grader.
 func (typedType) Describe() Description {
 	return Description{
 		Kind:          "typed",
@@ -28,7 +28,7 @@ func (typedType) Describe() Description {
 			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "answer", Control: ControlText, Required: true},
 			FieldSpec{Key: "accept", Control: ControlLines},
-			// 服务端默认忽略大小写与空白差异（typedType 的 boolField 第三参是 true）。
+			// The server-side default ignores case and whitespace differences (the third argument of typedType's boolField is true).
 			FieldSpec{Key: "ignore_case", Control: ControlBool, Default: true},
 			FieldSpec{Key: "ignore_whitespace", Control: ControlBool, Default: true},
 		),
@@ -42,7 +42,7 @@ func (typedType) Describe() Description {
 	}
 }
 
-// typedSettings 是一次判分要用到的容差规则。
+// typedSettings are the tolerance rules used by one grading pass.
 type typedSettings struct {
 	answer           string
 	accept           []string
@@ -51,7 +51,7 @@ type typedSettings struct {
 	regex            *regexp.Regexp
 }
 
-// Validate 校验 prompt / answer 与容差规则；regex 无效时点名该字段。
+// Validate checks prompt / answer and the tolerance rules; an invalid regex names that field.
 func (typedType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {
 		return fmt.Errorf("typed: %w", err)
@@ -77,13 +77,13 @@ func (typedType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张正向卡。
+// Cards produces one forward card.
 func (typedType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面给 prompt；背面把标准答案与其它可接受答案写在同一行，用「 / 」分隔
-// （与挖空题、列表题的多种写法一致），而不是一个答案占一段。
+// Render gives the prompt on the front; the back writes the canonical answer and the other acceptable answers on the same line, separated by " / "
+// (consistent with the multiple wordings of cloze and list cards), rather than one answer per paragraph.
 func (typedType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -106,13 +106,13 @@ func (typedType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: strings.Join(append([]string{answer}, accept...), " / ")}, nil
 }
 
-// TypedInput 是 typedType.Grade 的输入：用户键入的原始文本加所属 note 字段与映射。
+// TypedInput is the input of typedType.Grade: the raw text the user typed plus the owning note's fields and mapping.
 type TypedInput struct {
 	GradeContext
 	Answer string
 }
 
-// ParseAnswer 解码作答：字符串；没有作答按空串判分（记全错），不拒绝。
+// ParseAnswer decodes the answer: a string; no answer is graded as an empty string (counted all wrong) rather than rejected.
 func (typedType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	s, err := answerString(raw, "typed")
 	if err != nil {
@@ -121,14 +121,14 @@ func (typedType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) 
 	return TypedInput{GradeContext: gc, Answer: s}, nil
 }
 
-// GivenText 返回用户输入的原文。
+// GivenText returns the user input verbatim.
 func (typedType) GivenText(_ map[string]any, detail map[string]any) string {
 	given, _ := detail["given"].(string)
 	return given
 }
 
-// Grade 判分：正则优先于字面比较；字面比较按 ignore_case / ignore_whitespace 归一化后
-// 依次比对 answer 与 accept[]。命中记 1 分，否则 0 分，再按映射得到评分档位。
+// Grade grades: regex takes precedence over literal comparison; literal comparison normalizes by ignore_case / ignore_whitespace and then
+// compares against answer and accept[] in turn. A hit scores 1, otherwise 0, and the rating level follows the mapping.
 func (typedType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(TypedInput)
 	if !ok {
@@ -163,14 +163,14 @@ func (typedType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(0, detail)
 }
 
-// PromptContexter 为未来 LLM 评分提供题目与参考答案。
+// PromptContexter supplies the question and reference answer for future LLM scoring.
 func (typedType) PromptContext(note Note) PromptContext {
 	prompt, _ := stringField(note.Fields, "prompt")
 	answer, _ := stringField(note.Fields, "answer")
 	return PromptContext{Question: prompt, Reference: answer}
 }
 
-// parseTypedSettings 读取并校验判分规则。
+// parseTypedSettings reads and validates the grading rules.
 func parseTypedSettings(fields map[string]any) (typedSettings, error) {
 	answer, err := stringField(fields, "answer")
 	if err != nil {
@@ -195,7 +195,7 @@ func parseTypedSettings(fields map[string]any) (typedSettings, error) {
 	return typedSettings{answer: answer, accept: accept, ignoreCase: ignoreCase, ignoreWhitespace: ignoreWhitespace, regex: re}, nil
 }
 
-// typedRegex 解析可选 regex 字段；ignore_case 生效时加 (?i) 前缀，并要求整串匹配。
+// typedRegex parses the optional regex field; when ignore_case applies it adds a (?i) prefix and requires a whole-string match.
 func typedRegex(fields map[string]any) (*regexp.Regexp, error) {
 	v, ok := fields["regex"]
 	if !ok || v == nil {
@@ -219,8 +219,8 @@ func typedRegex(fields map[string]any) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// normalizeTyped 按规则归一化待比较文本：ignore_whitespace 时折叠空白并去首尾，
-// 否则保持原样（不裁剪）；可选忽略大小写。
+// normalizeTyped normalizes the text to compare according to the rules: with ignore_whitespace it collapses whitespace and trims,
+// otherwise it is left as-is (not trimmed); case folding is optional.
 func normalizeTyped(s string, ignoreCase, ignoreWhitespace bool) string {
 	if ignoreWhitespace {
 		s = strings.Join(strings.Fields(s), " ")
@@ -231,7 +231,7 @@ func normalizeTyped(s string, ignoreCase, ignoreWhitespace bool) string {
 	return s
 }
 
-// optionalStringSliceField 读取可选字符串数组；缺失返回 nil，空数组也接受（accept 可以为空）。
+// optionalStringSliceField reads an optional string array; missing returns nil, and an empty array is also accepted (accept may be empty).
 func optionalStringSliceField(fields map[string]any, name string) ([]string, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {

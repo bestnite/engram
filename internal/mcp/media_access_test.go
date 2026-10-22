@@ -10,10 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 MCP 入口的 L2 越权注入：update_note 与 REST 共用 api.UpdateNote，写前校验同样
-// 必须拒绝把别人媒体的引用注入自己可编辑的 note。MCP 是独立入口（工具包壳不同），故单列一条用例。
+// This file covers L2 privilege-escalation injection at the MCP entry point: update_note and REST share api.UpdateNote, and the pre-write validation must
+// likewise refuse to inject references to someone else's media into a note the caller can edit. MCP is a separate entry point (with a different tool wrapper), hence a case of its own.
 
-// seedMCPMedia 落盘一份媒体并返回 sha256（登记上传者归属）。
+// seedMCPMedia writes a media file to disk and returns its sha256 (registering the uploader's ownership).
 func seedMCPMedia(t *testing.T, db *gorm.DB, ownerID uint64) string {
 	t.Helper()
 	raw := append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte("mcp-injection")...)
@@ -24,7 +24,7 @@ func seedMCPMedia(t *testing.T, db *gorm.DB, ownerID uint64) string {
 	return m.Sha256
 }
 
-// TestMCPUpdateNoteRejectsUnreadableMediaInjection 覆盖 MCP `update_note` 的写前校验。
+// TestMCPUpdateNoteRejectsUnreadableMediaInjection covers the pre-write validation of MCP `update_note`.
 func TestMCPUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "mcpmed_owner")

@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// optimiseSampleWeights 返回一组与真实优化器同形的 21 维权重；用非整数值保证往返比较
-// 不会被浮点取整掩盖差异。
+// optimiseSampleWeights returns a 21-dimensional weight vector shaped like the real optimizer's; non-integer values make sure a round-trip comparison
+// is not masked by floating-point rounding.
 func optimiseSampleWeights() []float64 {
 	w := make([]float64, 21)
 	for i := range w {
@@ -18,9 +18,9 @@ func optimiseSampleWeights() []float64 {
 	return w
 }
 
-// TestOptimisePresetWeightsRoundTrip 是「权重往返」在 store 层的用例：优化器产出的
-// 21 维权重写进 preset 后，读回必须逐元素一致，且优化时间与使用条数一并保存。
-// 这是「优化完成 → 落库 → 页面/调度器读到同一组权重」这条链路的数据侧契约。
+// TestOptimisePresetWeightsRoundTrip is the store-level case for the "weight round trip": once the 21-dimensional weights
+// the optimizer produced are written into a preset, reading them back must match element by element, and the optimization time and the review count are saved with them.
+// This is the data-side contract of the chain "optimization done -> persisted -> page/scheduler read the same weights".
 func TestOptimisePresetWeightsRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -80,9 +80,9 @@ func TestOptimisePresetWeightsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestOptimiseResetWeightsClearsPreset 是「回退」用例，覆盖点名要求的后端能力：
-// 一键回退默认权重后，weights_json / weights_optimized_at / weights_review_count 三列
-// 一起归 NULL（只清 weights_json 会留下「已优化」的假象），并验证幂等与 owner 授权。
+// TestOptimiseResetWeightsClearsPreset is the "rollback" case, covering the backend capability the spec names:
+// after a one-click rollback to the default weights, the weights_json / weights_optimized_at / weights_review_count columns
+// all become NULL together (clearing weights_json alone leaves the illusion of "optimized"), and idempotency plus owner authorization are verified.
 func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 				t.Fatalf("Update(optimized weights) error = %v", err)
 			}
 
-			// 非 owner 不能回退（与 Update 同一授权规则）。
+			// A non-owner cannot roll back (same authorization rule as Update).
 			if err := presets.ResetPresetWeights(ctx, intruder, p.ID); !errors.Is(err, ErrNotOwner) {
 				t.Fatalf("ResetPresetWeights(intruder) error = %v, want ErrNotOwner", err)
 			}
@@ -130,12 +130,12 @@ func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 				t.Errorf("weights_review_count = %d after revert, want NULL", *got.WeightsReviewCount)
 			}
 
-			// 幂等：已经是默认的预设再回退一次也成功，不把重复点击当错误。
+			// Idempotent: rolling back a preset that is already at the default succeeds again; a repeated click is not an error.
 			if err := presets.ResetPresetWeights(ctx, owner, p.ID); err != nil {
 				t.Errorf("ResetPresetWeights(second call) error = %v, want nil", err)
 			}
 
-			// 缺少主键时给出哨兵错误。
+			// A missing primary key yields the sentinel error.
 			if err := presets.ResetPresetWeights(ctx, owner, 0); !errors.Is(err, ErrPresetWeightsIDRequired) {
 				t.Errorf("ResetPresetWeights(id=0) error = %v, want ErrPresetWeightsIDRequired", err)
 			}
@@ -143,12 +143,12 @@ func TestOptimiseResetWeightsClearsPreset(t *testing.T) {
 	}
 }
 
-// TestOptimizeMinReviewsFloor 是验收 1：门槛读取路径对存量值的四种局面。
-// 存量值低于下限（如 100，可能来自直接写库或旧版本）被钳到 300，而不是退回默认 500；
-// 恰好等于下限的 300 与下限之上的 500 原样生效；未设置/空值/非数字/非正整数仍退回默认 500
-// （那是「值不可用」，与「值合法但太低」的钳制语义不同）。
+// TestOptimizeMinReviewsFloor is acceptance 1: the four situations the threshold read path faces with stored values.
+// A stored value below the floor (say 100, possibly from a direct database write or an old version) is clamped to 300, not reset to the default 500;
+// 300, exactly at the floor, and 500, above it, take effect as they are; unset / empty / non-numeric / non-positive integers still fall back to the default 500
+// (that is "the value is unusable", a different semantics from clamping "a legal but too low value").
 func TestOptimizeMinReviewsFloor(t *testing.T) {
-	// 下限必须低于默认值，否则「钳到下限」与「退回默认」不可区分，这个测试就没有意义。
+	// The floor must be below the default, otherwise "clamp to the floor" and "fall back to the default" are indistinguishable and this test is meaningless.
 	if MinOptimizeMinReviews >= DefaultOptimizeMinReviews {
 		t.Fatalf("MinOptimizeMinReviews = %d, want < DefaultOptimizeMinReviews = %d", MinOptimizeMinReviews, DefaultOptimizeMinReviews)
 	}

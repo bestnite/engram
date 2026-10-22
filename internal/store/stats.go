@@ -11,34 +11,34 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件实现统计页的只读聚合查询。
+// This file implements the stats page's read-only aggregate queries.
 //
-// 为什么放在 internal/store 而不是新建 internal/stats 包：这些指标全部是对 reviews /
-// card_states / cards / notes / decks 的纯聚合，口径与表结构强绑定；放进 store 可以直接
-// 复用同一批模型与可见性规则（软删除、暂停卡排除），也符合 AGENTS.md §2.4「concrete Store
-// 类型包住 GORM 访问」的既有约定。新建包只会多一层对 store 模型的转发，没有收益。
+// Why this lives in internal/store instead of a new internal/stats package: every one of these metrics is a pure aggregation over reviews /
+// card_states / cards / notes / decks, and their definition is tightly bound to the schema; in store it can reuse
+// the same models and visibility rules directly (soft deletes, exclusion of suspended cards), and it matches the existing AGENTS.md §2.4 convention of "a concrete Store
+// type wrapping GORM access". A new package would only add a layer forwarding store models, with no gain.
 //
-// 每个函数都接受调用方传入的 now / today / 日期窗口，绝不读取挂钟：页面与
-// 手算对拍测试因此能在固定时间上复现同一组数字。
+// Every function takes now / today / the date window from the caller and never reads the wall clock, so the page and
+// the hand-computed cross-check tests can reproduce the same numbers at a fixed time.
 
-// StatsStore 提供统计页的聚合查询；只读，不写任何表。
+// StatsStore provides the stats page's aggregate queries; read-only, writing no table.
 type StatsStore struct {
 	db *gorm.DB
 }
 
-// NewStatsStore 构造统计存储。
+// NewStatsStore builds the stats store.
 func NewStatsStore(db *gorm.DB) *StatsStore { return &StatsStore{db: db} }
 
-// ReviewVolume 是复习量指标：今日 / 近 7 日 / 近 30 日的 count(*)。
-// 窗口按 review_day（复习日字符串）闭区间计算，today 是调用方算好的复习日。
+// ReviewVolume is the review-volume metric: count(*) for today / the last 7 days / the last 30 days.
+// Windows are inclusive ranges over review_day (the review-day string), and today is the review day the caller computed.
 type ReviewVolume struct {
 	Today      int64
 	Last7Days  int64
 	Last30Days int64
 }
 
-// ReviewVolume 按 review_day 聚合复习量。today 采用 review_day 的格式（YYYY-MM-DD），
-// 近 7 日 = [today-6, today]，近 30 日 = [today-29, today]，与其余指标「按 review_day 聚合」一致。
+// ReviewVolume aggregates the review volume by review_day. today uses the review_day format (YYYY-MM-DD),
+// the last 7 days = [today-6, today] and the last 30 days = [today-29, today], consistent with the other metrics' "aggregate by review_day".
 func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today string) (ReviewVolume, error) {
 	base, err := time.Parse("2006-01-02", today)
 	if err != nil {
@@ -63,11 +63,11 @@ func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today stri
 	return ReviewVolume{Today: row.Today, Last7Days: row.Last7Days, Last30Days: row.Last30Days}, nil
 }
 
-// DueForecast 是到期预测的分桶计数：今日（含已过期）/明日/7 日内/30 日内/
-// 更远，以及「新卡未到期」（尚无状态行、或状态为 new 但到期日未到）。
+// DueForecast is the bucket counts of the due forecast: today (overdue included) / tomorrow / within 7 days / within 30 days /
+// further out, plus "new cards not yet due" (no state row yet, or state new with a due date in the future).
 //
-// 日边界取复习日起点：本地 (now - day_cutoff_hour) 所在日期的切点时刻，见 schedule 的跨天规则。
-// 「今日」桶包含所有 due_at <= 今日结束 的卡，因此逾期的卡不会被漏掉。
+// The day boundary is the review-day start: the cutoff moment of the date that local (now - day_cutoff_hour) falls in, see schedule's cross-day rule.
+// The "today" bucket holds every card with due_at <= the end of today, so overdue cards are never missed.
 type DueForecast struct {
 	Today     int64
 	Tomorrow  int64
@@ -77,20 +77,20 @@ type DueForecast struct {
 	NewNotDue int64
 }
 
-// DueForecast 按 card_states.due_at 分桶。deckID 为 0 时统计该用户可见的全部卡组。
+// DueForecast buckets by card_states.due_at. With deckID 0 it covers every deck visible to the user.
 //
-// 卡组范围一律收在该用户「可见」的卡组内（自有 ∪ 被 deck_grants 授权 ∪ 他人 public，
-// 与卡组列表页、队列的全库口径同一集合）。缺少这道过滤时，别人 private 卡组里的卡对当前
-// 用户没有 card_states 行（cs.card_id IS NULL），会被整体算成「新卡未到期」——本仓真实缺陷。
+// The deck scope is always limited to the decks "visible" to the user (their own ∪ granted through deck_grants ∪ others' public,
+// the same set as the deck list page and the queue's whole-database definition). Without this filter, cards in someone else's private deck have no
+// card_states row for the current user (cs.card_id IS NULL) and are all counted as "new cards not yet due" -- a real defect in this repo.
 func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now time.Time, loc *time.Location, cutoffHour int) (DueForecast, error) {
 	if userID == 0 {
 		return DueForecast{}, fmt.Errorf("due forecast: user id is required")
 	}
 	dayStart := reviewDayStart(now, loc, cutoffHour)
-	e1 := dayStart.Add(24 * time.Hour) // 今日结束
-	e2 := e1.Add(24 * time.Hour)       // 明日结束
-	e7 := e1.Add(7 * 24 * time.Hour)   // 7 日结束
-	e30 := e1.Add(30 * 24 * time.Hour) // 30 日结束
+	e1 := dayStart.Add(24 * time.Hour) // end of today
+	e2 := e1.Add(24 * time.Hour)       // end of tomorrow
+	e7 := e1.Add(7 * 24 * time.Hour)   // end of the 7-day window
+	e30 := e1.Add(30 * 24 * time.Hour) // end of the 30-day window
 
 	visible := `card_states AS cs
 		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
@@ -121,9 +121,9 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 		return DueForecast{}, fmt.Errorf("due forecast: bucket: %w", err)
 	}
 
-	// 新卡未到期：以 cards 为起点 LEFT JOIN，才能包含还没有 card_states 行的新卡。
-	// 必须带可见卡组范围：不加的话别人 private 卡组里的卡（对当前用户没有状态行）会被
-	// 全部数成「新卡未到期」。
+	// New cards not yet due: start from cards with a LEFT JOIN, so new cards without a card_states row are included.
+	// The visible-deck scope is required: without it, cards in someone else's private deck (no states row for the current user) would be
+	// all counted as "new cards not yet due".
 	newSQL := fmt.Sprintf(`SELECT COALESCE(COUNT(c.id), 0) AS n FROM cards AS c
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
@@ -152,12 +152,12 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	}, nil
 }
 
-// retentionBuckets 是留存率的分桶边界（天）：[0,1) [1,7) [7,30) [30,90) [90,180)
-// [180,365) [365,+∞)。边界取稳定性（stability）值。
+// retentionBuckets holds the retention bucket boundaries (days): [0,1) [1,7) [7,30) [30,90) [90,180)
+// [180,365) [365,+∞). The boundaries apply to the stability value.
 var retentionBuckets = []struct {
 	Label string
 	Low   float64
-	High  float64 // 0 表示无上界
+	High  float64 // 0 means unbounded above
 }{
 	{"<1d", 0, 1},
 	{"1-7d", 1, 7},
@@ -168,17 +168,17 @@ var retentionBuckets = []struct {
 	{"365d+", 365, 0},
 }
 
-// RetentionBucket 是一个稳定性桶的留存情况；Passed 是评分不为 Again 的次数。
+// RetentionBucket is the retention of one stability bucket; Passed is the number of ratings other than Again.
 type RetentionBucket struct {
 	Label  string
 	Total  int64
 	Passed int64
-	// Rate 是 Passed/Total；Total 为 0 时定义为 0，避免出现 NaN。
+	// Rate is Passed/Total; defined as 0 when Total is 0, avoiding NaN.
 	Rate float64
 }
 
-// RetentionStats 是留存率结果：「到期时首次评分不是 Again」的比例，
-// 按 stability 分桶。
+// RetentionStats is the retention result: the share of "the due review was rated something other than Again",
+// bucketed by stability.
 type RetentionStats struct {
 	Buckets []RetentionBucket
 	Total   int64
@@ -186,22 +186,22 @@ type RetentionStats struct {
 	Rate    float64
 }
 
-// retentionReviewSQL 是「真实留存率」分母的唯一谓词（表别名 r = reviews），
-// retentionPassedSQL 是分子在分母之上追加的条件。
+// retentionReviewSQL is the single predicate for the denominator of the "true retention rate" (table alias r = reviews),
+// and retentionPassedSQL is the condition the numerator adds on top of the denominator.
 //
-// 口径：只取 state_before = Review(2) 的日志 —— 那是卡片到期后的一次复习；新卡首次
-// 复习与学习/重学步骤只是在建立记忆，混进来会把留存率抬高，也就无法与预设的目标保留率
-// 对照。判「记住」的条件是 rating != Again(1)。stability IS NOT NULL 排除没有稳定性记录的
-// 导入旧行：分桶需要它，总体值、卡组行、标签行与首页概要也一起排除，各处的分母才能对上。
-// 统计页总体、稳定性分桶、卡组维度、标签维度与首页概要全部引用这两个常量，
-// 不允许另写一份「非 Again / 全部复习」的近似口径。
+// Definition: only log entries with state_before = Review(2) count -- that is a review after the card came due; a new card's first
+// review and the learning/relearning steps only build memory, and mixing them in would inflate the retention rate, making it incomparable with the preset's desired retention
+// target. The "remembered" test is rating != Again(1). stability IS NOT NULL excludes imported old rows
+// with no stability record: bucketing needs it, and the overall value, deck rows, tag rows and the home summary exclude them too, so every denominator agrees.
+// The overall page value, the stability buckets, the deck dimension, the tag dimension and the home summary all reference these two constants;
+// writing a second, approximate "not Again / all reviews" definition is not allowed.
 const (
 	retentionReviewSQL = "r.state_before = 2 AND r.stability IS NOT NULL"
 	retentionPassedSQL = "r.rating <> 1"
 )
 
-// RetentionByStability 统计到期复习的留存率，口径见 retentionReviewSQL。
-// stability 取该次评分产生的新稳定性（reviews.stability），作为分桶依据。
+// RetentionByStability computes the retention rate of due reviews; the definition is in retentionReviewSQL.
+// stability is the new stability that rating produced (reviews.stability), used for bucketing.
 func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID uint64) (RetentionStats, error) {
 	if userID == 0 {
 		return RetentionStats{}, fmt.Errorf("retention: user id is required")
@@ -247,7 +247,7 @@ func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID ui
 	return out, nil
 }
 
-// stabilityRangeSQL 生成 stability 的区间条件；High 为 0 表示无上界。
+// stabilityRangeSQL builds the range condition on stability; High 0 means unbounded above.
 func stabilityRangeSQL(low, high float64) string {
 	cond := fmt.Sprintf("r.stability >= %g", low)
 	if high > 0 {
@@ -256,19 +256,19 @@ func stabilityRangeSQL(low, high float64) string {
 	return cond
 }
 
-// TimeSpent 是时间投入指标：elapsed_ms 的总量、平均每次复习耗时与中位数。
+// TimeSpent is the time-invested metric: the total elapsed_ms, the average per review and the median.
 type TimeSpent struct {
 	TotalMS int64
 	Count   int64
-	// AvgMS 是 TotalMS/Count；Count 为 0 时为 0。
+	// AvgMS is TotalMS/Count; 0 when Count is 0.
 	AvgMS float64
-	// MedianMS 是下中位数（偶数个样本取第 (n-1)/2 个，升序）；Count 为 0 时为 0。
+	// MedianMS is the lower median (for an even sample size, the (n-1)/2-th in ascending order); 0 when Count is 0.
 	MedianMS int64
 }
 
-// TimeSpent 统计 [fromDay, toDay] 复习日区间内 reviews.elapsed_ms 的总量、平均每次与中位数。
-// 中位数在 Go 侧计算：两库的 SQL 都没有可移植的 median，排序取中值反而更容易与手算对拍。
-// elapsed_ms 为 NULL 的日志（旧数据或未计时）不计入，但会被如实排除在 Count 之外。
+// TimeSpent computes the total, the per-review average and the median of reviews.elapsed_ms within the review-day range [fromDay, toDay].
+// The median is computed on the Go side: neither database has a portable median in SQL, and sorting for the middle value is easier to cross-check by hand.
+// Entries with a NULL elapsed_ms (old data, or not timed) are not counted, and are honestly left out of Count.
 func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDay string) (TimeSpent, error) {
 	var total struct {
 		Total *int64 `gorm:"column:total"`
@@ -300,29 +300,29 @@ func (s *StatsStore) TimeSpent(ctx context.Context, userID uint64, fromDay, toDa
 	return out, nil
 }
 
-// DeckStat 是一个卡组的统计行（「卡组维度」）。
+// DeckStat is the stats row of one deck (the "deck dimension").
 type DeckStat struct {
 	DeckID uint64
-	// PublicID 是卡组的对外 id；客户端只认它，数字主键不出现在响应里。
+	// PublicID is the deck's external id; clients only know that one, the numeric primary key never appears in a response.
 	PublicID string
 	Name     string
 	DueCount int64
-	// Reviews 是该卡组的全部复习次数（含新卡首次复习与学习步骤）。
+	// Reviews is the deck's total review count (new cards' first reviews and learning steps included).
 	Reviews int64
-	// RetentionTotal / Passed 是真实留存率的分母与分子（口径见 retentionReviewSQL），
-	// 分母只是 Reviews 的子集，所以单独返回：分母为 0 时界面显示「无数据」而不是 0%。
+	// RetentionTotal / Passed are the denominator and numerator of the true retention rate (definition in retentionReviewSQL),
+	// and the denominator is only a subset of Reviews, so it is returned separately: with a zero denominator the UI shows "no data" rather than 0%.
 	RetentionTotal int64
 	Passed         int64
-	// Retention 是 Passed/RetentionTotal；RetentionTotal 为 0 时为 0。
+	// Retention is Passed/RetentionTotal; 0 when RetentionTotal is 0.
 	Retention float64
 	ElapsedMS int64
 }
 
-// DeckBreakdown 返回该用户每个有关联数据的卡组的到期量、留存率与累计投入。
+// DeckBreakdown returns the due volume, retention rate and cumulative time invested for each of the user's decks that has related data.
 //
-// 卡组范围取「该用户可见的卡组」中有关联数据的那些（可见性谓词与卡组列表页、队列同一份：
-// 自有 ∪ 被 deck_grants 授权 ∪ 他人 public），因此共享卡组会出现，而与该用户无关的卡组
-// （含别人的 private）不会。now 决定到期判定。
+// The deck scope is those "decks visible to the user" that have related data (the visibility predicate is the same one as the deck list page and the queue:
+// their own ∪ granted through deck_grants ∪ others' public), so shared decks appear while decks unrelated to the user
+// (others' private included) do not. now drives the due check.
 func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.Time) ([]DeckStat, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("deck breakdown: user id is required")
@@ -338,10 +338,10 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 		return row
 	}
 
-	// 到期量：新卡（无状态行或 state=new）与 due_at 已过的卡；暂停卡排除。
-	// 必须带可见卡组范围：别人 private 卡组里的卡对当前用户没有 card_states 行
-	// （cs.card_id IS NULL），不过滤就会被整体算成「到期」并按 deck_id 分组，
-	// 卡组维度于是冒出别人的卡组（本仓真实缺陷）。
+	// Due volume: new cards (no state row, or state=new) and cards whose due_at has passed; suspended cards are excluded.
+	// The visible-deck scope is required: cards in someone else's private deck have no card_states row for the current user
+	// (cs.card_id IS NULL), and without the filter they would all be counted as "due" and grouped by deck_id,
+	// making other people's decks appear in the deck dimension (a real defect in this repo).
 	var dueRows []struct {
 		DeckID uint64 `gorm:"column:deck_id"`
 		N      int64  `gorm:"column:n"`
@@ -360,8 +360,8 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 		get(r.DeckID).DueCount = r.N
 	}
 
-	// 复习量、留存率、累计投入：按卡组分组聚合 reviews。同样收在可见卡组内：
-	// 授权被撤销后，那些卡组的复习不应再出现在统计页的卡组维度里。
+	// Review volume, retention rate, cumulative time: aggregate reviews grouped by deck. Likewise limited to visible decks:
+	// once a grant is revoked, reviews of those decks must no longer appear in the stats page's deck dimension.
 	var revRows []struct {
 		DeckID         uint64 `gorm:"column:deck_id"`
 		Reviews        int64  `gorm:"column:reviews"`
@@ -418,32 +418,32 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	return out, nil
 }
 
-// TagStat 是一个标签的统计行（「标签维度」）。
+// TagStat is the stats row of one tag (the "tag dimension").
 type TagStat struct {
 	Tag string
-	// Reviews 是窗口内带该标签的全部复习次数。
+	// Reviews is the total number of reviews with that tag within the window.
 	Reviews int64
-	// RetentionTotal / Passed 是真实留存率的分母与分子，含义同 DeckStat。
+	// RetentionTotal / Passed are the denominator and numerator of the true retention rate, as in DeckStat.
 	RetentionTotal int64
 	Passed         int64
-	// Retention 是 Passed/RetentionTotal；RetentionTotal 为 0 时为 0。
+	// Retention is Passed/RetentionTotal; 0 when RetentionTotal is 0.
 	Retention float64
 }
 
-// TagBreakdown 按 notes.tags_json 聚合复习量与真实留存率（口径见 retentionReviewSQL）。
+// TagBreakdown aggregates review volume and true retention by notes.tags_json (definition in retentionReviewSQL).
 //
-// tags_json 是 note 级内容元数据：reviews.user_id 只保证日志行属于本人，挡不住「本人曾
-// 复习过、现已不可见」的卡组把标签透出来。缺这道谓词时，A 撤销对 B 的授权后，B 的统计页
-// 仍会列出原卡组的标签与复习量（本仓真实缺陷）。因此与 DeckBreakdown 同源，只聚合
-// 「该用户当前可见卡组」的标签：自有 ∪ 被 deck_grants 授权 ∪ 他人 public。
+// tags_json is note-level content metadata: reviews.user_id only guarantees that the log row belongs to the user, and does not stop a deck the user "once
+// reviewed but can no longer see" from leaking tags. Without this predicate, after A revokes B's grant, B's stats page
+// still lists the former deck's tags and review volume (a real defect in this repo). So it comes from the same source as DeckBreakdown and only aggregates
+// the tags of "the decks currently visible to the user": their own ∪ granted through deck_grants ∪ others' public.
 //
-// tags_json 是 TEXT（双库兼容约定禁止 jsonb/array），SQL 无法跨库解析 JSON，
-// 因此在 Go 侧解码后聚合；数据量是单个用户的复习日志，可接受。
+// tags_json is TEXT (the two-database compatibility convention forbids jsonb/array) and SQL cannot parse JSON portably,
+// so it is decoded and aggregated on the Go side; the volume is one user's review log, which is acceptable.
 func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, toDay string) ([]TagStat, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("tag breakdown: user id is required")
 	}
-	// 留存判定在 SQL 里用同一谓词算好，Go 侧只累加，避免在这里另写一份口径。
+	// The retention test is computed in SQL with the same predicate; the Go side only sums, avoiding a second definition here.
 	var rows []struct {
 		Counted  int    `gorm:"column:counted"`
 		Passed   int    `gorm:"column:passed"`
@@ -463,7 +463,7 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 	for _, row := range rows {
 		var tags []string
 		if err := json.Unmarshal([]byte(row.TagsJSON), &tags); err != nil {
-			// 非法 JSON 不是统计的失败条件：跳过该行而不是让整个页面 500。
+			// Invalid JSON is not a reason for the stats to fail: skip that row rather than 500 the whole page.
 			continue
 		}
 		for _, tag := range tags {
@@ -496,13 +496,13 @@ func (s *StatsStore) TagBreakdown(ctx context.Context, userID uint64, fromDay, t
 	return out, nil
 }
 
-// GradeSourceStat 是一种判分来源的计数（「判分来源分布」）。
+// GradeSourceStat is the count of one grading source (the "grading source distribution").
 type GradeSourceStat struct {
 	Source string
 	Count  int64
 }
 
-// GradeSourceDistribution 按 grade_source 聚合，按次数倒序（self/typed/llm）。
+// GradeSourceDistribution aggregates by grade_source, ordered by count descending (self/typed/llm).
 func (s *StatsStore) GradeSourceDistribution(ctx context.Context, userID uint64) ([]GradeSourceStat, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("grade source distribution: user id is required")
@@ -528,19 +528,19 @@ func (s *StatsStore) GradeSourceDistribution(ctx context.Context, userID uint64)
 	return out, nil
 }
 
-// StreakStats 是连续打卡结果（「连续打卡」）。
+// StreakStats is the streak result (the "streak").
 type StreakStats struct {
-	// Current 是到「今天」为止仍未中断的连续复习天数；今天尚未复习不算断，
-	// 但整整一个复习日被跳过（今天与昨天都没有复习）则为 0。
+	// Current is the number of consecutive review days still unbroken up to "today"; not having reviewed today yet does not break it,
+	// but a whole review day skipped (no review today or yesterday) makes it 0.
 	Current int
-	// Longest 是历史最长连续复习天数。
+	// Longest is the longest streak of consecutive review days on record.
 	Longest int
 }
 
-// Streak 计算连续复习天数。口径按 review_day（复习日字符串，已由调用方按切点算好）：
-// 相邻两个复习日都出现过复习才算连续。判定「今天」时用 now 与切点现算，因此凌晨
-// 03:59 的一次复习仍算前一天 —— 只有整整一个复习日被跳过，连续才会中断
-// now/loc/cutoffHour 由调用方传入，函数不读挂钟。
+// Streak computes the consecutive review days. It works on review_day (the review-day string, already computed with the cutoff by the caller):
+// two adjacent review days both need a review to count as consecutive. "Today" is computed from now and the cutoff on the spot, so a review at
+// 03:59 still counts as the previous day -- only a whole review day skipped breaks the streak
+// now/loc/cutoffHour come from the caller and the function never reads the wall clock.
 func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (StreakStats, error) {
 	if userID == 0 {
 		return StreakStats{}, fmt.Errorf("streak: user id is required")
@@ -561,7 +561,7 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 		present[d] = true
 	}
 
-	// 最长连续段：扫描升序日期，遇到不连续的日期就重开一段。
+	// Longest run: scan the dates ascending and start a new run at every gap.
 	longest, run := 0, 0
 	for i, d := range days {
 		if i > 0 && d == nextReviewDay(days[i-1]) {
@@ -574,7 +574,7 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 		}
 	}
 
-	// 当前连续段：从最后一天往回数，但仅当最后一天是今天或昨天时才算「未中断」。
+	// Current run: count back from the last day, but it only counts as "unbroken" when the last day is today or yesterday.
 	current := 0
 	last := days[len(days)-1]
 	if last == today || last == prevReviewDay(today) {
@@ -585,18 +585,18 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 	return StreakStats{Current: current, Longest: longest}, nil
 }
 
-// LearningCurvePoint 是学习曲线上的一个复习日（「学习曲线」）。
+// LearningCurvePoint is one review day on the learning curve (the "learning curve").
 type LearningCurvePoint struct {
 	Day string
-	// New 是当天「新引入」的卡数：state_before = New 的首次复习。
+	// New is the number of cards "newly introduced" that day: first reviews with state_before = New.
 	New int64
-	// Review 是当天对已见过卡（state_before != New）的复习次数。
+	// Review is the number of reviews that day of already seen cards (state_before != New).
 	Review int64
 }
 
-// LearningCurve 返回 [fromDay, toDay] 内每个有复习记录的复习日的「新引入 vs 复习量」，
-// 按日期升序。新引入口径是 state_before = New，其余算复习量，两者互斥、相加即当天总量。
-// fromDay/toDay 是 review_day 格式的闭区间，与其余统计指标一致。
+// LearningCurve returns "newly introduced vs review volume" for every review day with a review record within [fromDay, toDay],
+// ordered by date ascending. Newly introduced means state_before = New and everything else counts as review volume; the two are mutually exclusive and their sum is the day's total.
+// fromDay/toDay are inclusive bounds in review_day format, consistent with the other metrics.
 func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, toDay string) ([]LearningCurvePoint, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("learning curve: user id is required")
@@ -621,15 +621,15 @@ func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, 
 	return out, nil
 }
 
-// reviewStateNew 是 reviews.state_before 的 New 取值（0=New）。
+// reviewStateNew is the New value of reviews.state_before (0=New).
 const reviewStateNew = 0
 
-// DefaultDayCutoffHour 是文档化默认日切点小时（本地 04:00 换日）。
-// 放在 store 而不是 schedule：store 是 schedule/web/reminder/digest 都能依赖的最底层，
-// 归一化规则必须能被这几层共享，且 schedule 依赖 store（反向会成导入环）。
+// DefaultDayCutoffHour is the documented default day-cutoff hour (the day changes at 04:00 local).
+// It lives in store rather than schedule: store is the lowest layer that schedule/web/reminder/digest can all depend on,
+// the normalization rule must be shared by those layers, and schedule depends on store (the reverse would make an import cycle).
 const DefaultDayCutoffHour = 4
 
-// NormalizedCutoff 只为越界的已给定小时兜底；0 是合法的午夜，不能再充当未设置哨兵。
+// NormalizedCutoff only catches a given hour that is out of range; 0 is a legal midnight and can no longer serve as the unset sentinel.
 func NormalizedCutoff(hour int) int {
 	if hour < 0 || hour > 23 {
 		return DefaultDayCutoffHour
@@ -637,7 +637,7 @@ func NormalizedCutoff(hour int) int {
 	return hour
 }
 
-// ResolveCutoff 在所有消费者的边界解析可空配置，避免队列、统计与优化器各自解释零值。
+// ResolveCutoff resolves the nullable setting at the boundary of every consumer, so the queue, the stats and the optimizer do not each interpret zero their own way.
 func ResolveCutoff(hour *int) int {
 	if hour == nil {
 		return DefaultDayCutoffHour
@@ -645,14 +645,14 @@ func ResolveCutoff(hour *int) int {
 	return NormalizedCutoff(*hour)
 }
 
-// 提前学习窗口的默认值与上限（分钟）。默认 0 即关闭：学习步骤的间隔按设定生效，
-// 卡片不会在到期前被提前拉出来；需要提前学习的用户在个人资料里自行开启。
+// The default and the cap of the learn-ahead window (minutes). The default 0 means off: learning-step intervals apply as configured,
+// and cards are not pulled forward before they are due; a user who wants learn-ahead turns it on in their profile.
 const (
 	DefaultLearnAheadMinutes = 0
 	MaxLearnAheadMinutes     = 1440
 )
 
-// ResolveLearnAhead 把可空的提前学习配置解析成时长：NULL 用默认值，越界夹到 [0, 上限]。
+// ResolveLearnAhead turns the nullable learn-ahead setting into a duration: NULL uses the default, out-of-range values clamp to [0, cap].
 func ResolveLearnAhead(minutes *int) time.Duration {
 	m := DefaultLearnAheadMinutes
 	if minutes != nil {
@@ -667,12 +667,12 @@ func ResolveLearnAhead(minutes *int) time.Duration {
 	return time.Duration(m) * time.Minute
 }
 
-// LoadLocation 解析 IANA 时区名；空串或非法名一律回退 UTC，绝不因脏数据阻塞调用方
-// （页面 500、提醒不发出）。
+// LoadLocation resolves an IANA timezone name; an empty or illegal name always falls back to UTC, and dirty data never blocks the caller
+// (a 500 page, a reminder not sent).
 //
-// 这是全库唯一的时区解析入口：schedule、web、api、reminder、digest 都调用它，
-// 从而「回退到 UTC」只有一种行为。入参在写入侧已被 strings.TrimSpace 规范化
-// （web 设置页、CLI），因此这里不再重复裁剪空白。
+// This is the only timezone-parsing entry point in the codebase: schedule, web, api, reminder and digest all call it,
+// so "fall back to UTC" behaves in exactly one way. Input is already normalized with strings.TrimSpace on the write side
+// (the web settings page, the CLI), so the whitespace is not trimmed again here.
 func LoadLocation(tz string) *time.Location {
 	if tz == "" {
 		return time.UTC
@@ -684,30 +684,30 @@ func LoadLocation(tz string) *time.Location {
 	return loc
 }
 
-// FormatPercent 把 0–1 的比例格式化成一位小数的百分数（不含 % 号）。
-// 统计页与每周摘要展示同一批数字，格式必须一致，因此只保留这一份实现。
+// FormatPercent formats a 0–1 ratio as a percentage with one decimal place (without the % sign).
+// The stats page and the weekly digest show the same numbers, so the format must match; hence this single implementation.
 func FormatPercent(rate float64) string {
 	return strconv.FormatFloat(rate*100, 'f', 1, 64)
 }
 
-// reviewDayString 返回 now 所在复习日（YYYY-MM-DD）；口径与 reviewDayStart 一致，
-// 即本地时间减切点小时取日期，默认切点 04:00。
+// reviewDayString returns the review day now falls in (YYYY-MM-DD); the definition matches reviewDayStart,
+// i.e. take the date of local time minus the cutoff hours, with a default cutoff of 04:00.
 func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 	return reviewDayStart(now, loc, cutoffHour).In(locOrUTC(loc)).Format("2006-01-02")
 }
 
-// ReviewDayString 导出复习日计算，供统计页等调用方复用同一口径。
-// 页面必须用与聚合查询相同的日界，否则「今日复习量」会与库里的 review_day 对不上。
+// ReviewDayString exports the review-day computation so the stats page and other callers share one definition.
+// The page must use the same day boundary as the aggregate queries, otherwise "today's review volume" disagrees with review_day in the database.
 func ReviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
 	return reviewDayString(now, loc, cutoffHour)
 }
 
-// prevReviewDay / nextReviewDay 是复习日字符串的相邻日运算。
+// prevReviewDay / nextReviewDay are the adjacent-day operations on review-day strings.
 func prevReviewDay(day string) string { return ShiftReviewDay(day, -1) }
 func nextReviewDay(day string) string { return ShiftReviewDay(day, 1) }
 
-// ShiftReviewDay 把 review_day 字符串（YYYY-MM-DD）平移 delta 天；解析失败时原样返回。
-// 统计页与每周摘要都要做相邻日运算，只保留这一份实现，避免两处对同一字符串口径不一致。
+// ShiftReviewDay moves a review_day string (YYYY-MM-DD) by delta days; on a parse failure it returns the input unchanged.
+// The stats page and the weekly digest both need adjacent-day arithmetic; keeping this single implementation avoids two definitions for the same string.
 func ShiftReviewDay(day string, delta int) string {
 	t, err := time.Parse("2006-01-02", day)
 	if err != nil {
@@ -716,7 +716,7 @@ func ShiftReviewDay(day string, delta int) string {
 	return t.AddDate(0, 0, delta).Format("2006-01-02")
 }
 
-// locOrUTC 归一化时区，避免 reviewDayStart 在 loc 为 nil 时回退 UTC、这里却用 nil。
+// locOrUTC normalizes the timezone, so reviewDayStart does not fall back to UTC on a nil loc while this one uses nil.
 func locOrUTC(loc *time.Location) *time.Location {
 	if loc == nil {
 		return time.UTC
@@ -724,9 +724,9 @@ func locOrUTC(loc *time.Location) *time.Location {
 	return loc
 }
 
-// reviewDayStart 返回 now 所在复习日的起点（本地日期 + 切点小时），转成 UTC。
-// 切点先经 NormalizedCutoff 归一化，与 schedule 侧的复习日口径完全一致（0/越界 → 默认 4）；
-// store 不能 import schedule（schedule 依赖 store，会成环），因此共用 store.NormalizedCutoff。
+// reviewDayStart returns the start of the review day now falls in (local date + cutoff hour), converted to UTC.
+// The cutoff is normalized through NormalizedCutoff first, matching the schedule side's review-day definition exactly (0/out of range -> default 4);
+// store cannot import schedule (schedule depends on store, which would make a cycle), so store.NormalizedCutoff is shared.
 func reviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
 	if loc == nil {
 		loc = time.UTC
@@ -737,7 +737,7 @@ func reviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time
 	return time.Date(day.Year(), day.Month(), day.Day(), cutoffHour, 0, 0, 0, loc).UTC()
 }
 
-// mapInt64 把 GORM map 扫描出来的聚合值转成 int64；驱动可能给出 int64 或其他数值类型。
+// mapInt64 turns an aggregate value scanned into a GORM map into int64; the driver may hand back int64 or another numeric type.
 func mapInt64(v any) int64 {
 	switch n := v.(type) {
 	case nil:
@@ -753,8 +753,8 @@ func mapInt64(v any) int64 {
 	}
 }
 
-// joinStrings 用 sep 拼接字符串片段；标准库 strings.Join 会多一个 import，
-// 这里只需要固定用法，保持本文件依赖最小。
+// joinStrings joins string pieces with sep; the standard library's strings.Join would add one more import,
+// and only this fixed usage is needed here, keeping the file's dependencies minimal.
 func joinStrings(parts []string, sep string) string {
 	out := ""
 	for i, p := range parts {

@@ -186,8 +186,8 @@ func TestProfileRejectsDisabledSessionUser(t *testing.T) {
 	}
 }
 
-// TestProfileLearnAheadRoundTrip 断言提前学习窗口：0 按 0 落库（不被当成未设置），null 回到默认，
-// 越界 400 且不写库（反面）。
+// TestProfileLearnAheadRoundTrip asserts the learn-ahead window: 0 persists as 0 (not treated as unset), null goes back to the default,
+// and out-of-range is 400 with nothing written (negative case).
 func TestProfileLearnAheadRoundTrip(t *testing.T) {
 	srv, db, userID, cookies, csrf := newNotesServer(t)
 	load := func() *int {

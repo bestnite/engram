@@ -9,8 +9,9 @@ import { toast } from '../lib/components/ui/toast';
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
- * 「提前学习窗口」是字符串状态 + 数字输入框：绑定若把值强转成 number，
- * validateLearnAheadMinutes 的 trim 校验就抛异常，整份个人资料都保存不了。
+ * The "learn-ahead window" is string state + a number input: if the binding coerced the
+ * value to number, validateLearnAheadMinutes's trim check would throw and the whole
+ * profile would fail to save.
  */
 describe('SettingsView learn-ahead saving', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -37,7 +38,7 @@ describe('SettingsView learn-ahead saving', () => {
     flushSync();
   }
 
-  /** 与浏览器同一条路径：先写 value 再派发 input，让绑定把值收进状态。 */
+  /** Same path as the browser: write value first, then dispatch input, so the binding takes the value into state. */
   async function type(value: string): Promise<void> {
     const el = document.body.querySelector('[data-testid="settings-learn-ahead"]') as HTMLInputElement | null;
     expect(el).not.toBeNull();

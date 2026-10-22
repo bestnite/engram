@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// TestCardStoreByNoteScopesToNote 覆盖 ByNote 只返回目标 note 的卡片，并按 ordinal 升序。
+// TestCardStoreByNoteScopesToNote covers that ByNote returns only the target note's cards, in ascending ordinal order.
 func TestCardStoreByNoteScopesToNote(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -57,8 +57,8 @@ func TestCardStoreByNoteScopesToNote(t *testing.T) {
 	}
 }
 
-// TestCardStoreHidesCardsOfSoftDeletedNote 证明软删除 note 后 cards 由查询层过滤，
-// 且被过滤不是通过改写 cards 行实现的（行仍在）。
+// TestCardStoreHidesCardsOfSoftDeletedNote proves that after soft-deleting a note its cards are filtered by the query
+// layer, and that the filtering is not achieved by rewriting cards rows (the rows are still there).
 func TestCardStoreHidesCardsOfSoftDeletedNote(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestCardStoreHidesCardsOfSoftDeletedNote(t *testing.T) {
 				t.Errorf("ByID() after soft delete error = %v, want ErrRecordNotFound", err)
 			}
 
-			// cards 行（及其 id）未被改写或删除。
+			// cards rows (and their ids) were neither rewritten nor deleted.
 			var cardRow Card
 			if err := db.Unscoped().First(&cardRow, "id = ?", firstID).Error; err != nil {
 				t.Fatalf("card row vanished after soft delete: %v", err)
@@ -108,8 +108,8 @@ func TestCardStoreHidesCardsOfSoftDeletedNote(t *testing.T) {
 	}
 }
 
-// TestSyncCardsRejectsUnknownTemplateShape 覆盖防御路径：空 template 与重复 template
-// 都在写库前被拒（(note_id, template) 唯一约束的 Go 侧防线）。
+// TestSyncCardsRejectsUnknownTemplateShape covers the defensive path: an empty template and a duplicate template
+// are both rejected before anything is written (the Go-side guard for the (note_id, template) unique constraint).
 func TestSyncCardsRejectsUnknownTemplateShape(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestSyncCardsRejectsUnknownTemplateShape(t *testing.T) {
 				t.Error("syncCards() accepted duplicate templates, want an error")
 			}
 
-			// 两次失败的同步都不能留下半截行。
+			// neither failed sync may leave a half-written row.
 			var rows int64
 			if err := db.Unscoped().Model(&Card{}).Where("note_id = ?", n.ID).Count(&rows).Error; err != nil {
 				t.Fatalf("count cards: %v", err)

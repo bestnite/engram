@@ -10,31 +10,31 @@ import (
 	"git.nite07.com/nite/engram/internal/texmath"
 )
 
-// ClozeDeletion 是一次挖空：{{cN::text}} 或 {{cN::text::hint}}。
+// ClozeDeletion is one cloze: {{cN::text}} or {{cN::text::hint}}.
 type ClozeDeletion struct {
-	Index int    // cN 中的 N，是卡片标识 cloze:<index> 的来源。
-	Text  string // 挖空内容原文。
-	Hint  string // 可选提示；无提示为空串。
-	Start int    // 起始字节偏移，指向 "{{"。
-	End   int    // 结束字节偏移，正好在闭合 "}}" 之后。
-	// InMath 表示整个挖空落在一段公式之内：正反面要用 TeX 写法高亮，内容里的竖线也属于 TeX。
+	Index int    // The N in cN, the source of the card identity cloze:<index>.
+	Text  string // The cloze content verbatim.
+	Hint  string // Optional hint; an empty string when there is none.
+	Start int    // Start byte offset, pointing at "{{".
+	End   int    // End byte offset, right after the closing "}}".
+	// InMath says the whole cloze falls inside a formula: the front and back must highlight in TeX, and a pipe inside the content also belongs to TeX.
 	InMath bool
 }
 
-// ParseCloze 解析 cloze 文本，按首次出现顺序返回最外层挖空项。
+// ParseCloze parses cloze text and returns the outermost cloze items in order of first appearance.
 //
-// 语法与边界：
-//   - {{cN::text}} 与 {{cN::text::hint}}；N 为一个或多个十进制数字。
-//   - 内容里成对的 {{ ... }} 按深度匹配，不会提前闭合（嵌套花括号）。
-//     嵌套里的 {{cM::...}} 作为普通内容原样保留，不单独成卡 —— 只解析最外层。
-//   - \{ \} \\ 是转义：被转义的字符不参与结构解析，但按原文保留（TeX 安全，
-//     例如 \frac 里的反斜杠不受影响）。
-//   - 挖空前紧挨的单个 "{" 属于外层文本（TeX 分组）："{{{c1::x}}}" 解析为
-//     "{" + 挖空 x + "}"。
-//   - 未闭合、内容为空的挖空项返回可读的英文错误。
-//   - 内容里顶层的 | 分隔多个可接受的答案（见 clozeAlternatives），解析时不切分，按原文保留在 Text 里。
+// Syntax and edge cases:
+//   - {{cN::text}} and {{cN::text::hint}}; N is one or more decimal digits.
+//   - Paired {{ ... }} inside the content match by depth and never close early (nested braces).
+//     A {{cM::...}} inside the nesting is kept verbatim as ordinary content and does not become its own card — only the outermost is parsed.
+//   - \{ \} \\ are escapes: an escaped character takes no part in structural parsing but is preserved verbatim (TeX-safe,
+//     e.g. the backslash in \frac is unaffected).
+//   - A single "{" directly before a cloze belongs to the outer text (TeX grouping): "{{{c1::x}}}" parses as
+//     "{" + cloze x + "}".
+//   - An unclosed cloze item or one with empty content returns a readable English error.
+//   - A top-level | in the content separates several acceptable answers (see clozeAlternatives); it is not split at parse time and stays verbatim in Text.
 //
-// 没有任何挖空项时返回空切片与 nil 错误，由调用方（Validate）决定如何报告。
+// With no cloze items it returns an empty slice and a nil error, leaving it to the caller (Validate) to decide how to report that.
 func ParseCloze(text string) ([]ClozeDeletion, error) {
 	var out []ClozeDeletion
 	math := texmath.Ranges(text)
@@ -50,9 +50,9 @@ func ParseCloze(text string) ([]ClozeDeletion, error) {
 		}
 		index, contentStart, ok := parseClozeOpener(text, i)
 		if !ok {
-			// 不是挖空标记：只前进一个字节。TeX 里挖空常紧跟在分组花括号后面
-			// （\dfrac{a}{{{c1::b}}}），"{{{" 中真正的挖空从第二个 "{" 开始；
-			// 一次跳过两个字节会把它漏掉。
+			// Not a cloze marker: advance only one byte. In TeX a cloze often follows a grouping brace closely
+			// (\dfrac{a}{{{c1::b}}}); in "{{", the real cloze starts at the second "{";
+			// skipping two bytes at once would miss it.
 			i++
 			continue
 		}
@@ -67,8 +67,8 @@ func ParseCloze(text string) ([]ClozeDeletion, error) {
 	return out, nil
 }
 
-// skipEscape 处理 \{ \} \\ 三种转义：返回是否命中，以及跳过后的位置。
-// 只对这三种字符生效，避免破坏 TeX 里 \frac 之类的反斜杠。
+// skipEscape handles the three escapes \{ \} \\: it returns whether one matched, and the position after skipping.
+// It only applies to these three characters, so backslashes such as \frac in TeX are not broken.
 func skipEscape(s string, i int) (bool, int) {
 	if s[i] != '\\' || i+1 >= len(s) {
 		return false, i
@@ -80,7 +80,7 @@ func skipEscape(s string, i int) (bool, int) {
 	return false, i
 }
 
-// parseClozeOpener 判断 s[i:] 是否以 {{cN:: 开头；是则返回序号与内容起点。
+// parseClozeOpener reports whether s[i:] starts with {{cN::; if so it returns the index and the content start.
 func parseClozeOpener(s string, i int) (index, contentStart int, ok bool) {
 	j := i + 2
 	if j >= len(s) || s[j] != 'c' {
@@ -99,14 +99,14 @@ func parseClozeOpener(s string, i int) (index, contentStart int, ok bool) {
 	}
 	n, err := strconv.Atoi(s[digitStart:j])
 	if err != nil {
-		// 数字大到无法表示：当作普通文本，而不是让解析失败。
+		// Number too large to represent: treat it as plain text rather than failing the parse.
 		return 0, 0, false
 	}
 	return n, j + 2, true
 }
 
-// scanClozeContent 从内容起点扫描到最外层的 "}}"，返回挖空项与结束位置。
-// depth 跟踪嵌套的 {{ }}；内容里首个顶层 "::" 分隔 text 与 hint。
+// scanClozeContent scans from the content start to the outermost "}}", returning the cloze item and the end position.
+// depth tracks nested {{ }}; the first top-level "::" in the content separates text from hint.
 func scanClozeContent(s string, start, contentStart, index int) (ClozeDeletion, int, error) {
 	depth := 0
 	hintSep := -1
@@ -141,7 +141,7 @@ func scanClozeContent(s string, start, contentStart, index int) (ClozeDeletion, 
 	return ClozeDeletion{}, 0, fmt.Errorf("cloze: unclosed cloze deletion starting at offset %d", start)
 }
 
-// splitClozeContent 按顶层 "::" 把内容切成 text 与 hint（hintSep 为 -1 表示无提示）。
+// splitClozeContent splits the content into text and hint at the top-level "::" (hintSep of -1 means no hint).
 func splitClozeContent(content string, hintSep, contentStart int) (text, hint string) {
 	if hintSep < 0 {
 		return content, ""
@@ -150,16 +150,16 @@ func splitClozeContent(content string, hintSep, contentStart int) (text, hint st
 	return content[:rel], content[rel+2:]
 }
 
-// clozeType 是挖空卡：每个不同序号产出一张卡。
-// 字段：text（必填，至少含一个 {{cN::…}}），extra / source_url（可选）。
+// clozeType is the cloze card: each distinct index produces one card.
+// Fields: text (required, containing at least one {{cN::…}}), extra / source_url (optional).
 type clozeType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (clozeType) Label() string { return "cardtype.cloze" }
 
-// Describe 自描述：正反面都读 text；作答控件是逐空输入（每处目标挖空一个输入框）。
-// PromptField 故意留空：text 原文里就有答案，题面只能用服务端掩盖后的正面，
-// 前端在正面未取到时不得回退到字段原文。
+// Describe self-describes: both sides read text; the answer control is per-blank input (one input box per target cloze).
+// PromptField is deliberately left empty: the raw text already contains the answers, so the prompt can only be the server-side masked front,
+// and when the front has not been fetched the front end must not fall back to the raw field text.
 func (clozeType) Describe() Description {
 	return Description{
 		Kind:          "cloze",
@@ -176,7 +176,7 @@ func (clozeType) Describe() Description {
 	}
 }
 
-// Validate 校验 text 且必须至少含一个挖空项。
+// Validate checks text and requires at least one cloze item.
 func (clozeType) Validate(fields map[string]any) error {
 	text, err := stringField(fields, "text")
 	if err != nil {
@@ -187,7 +187,7 @@ func (clozeType) Validate(fields map[string]any) error {
 		return err
 	}
 	if len(dels) == 0 {
-		// schema 的 pattern 只能表达 {{cN::，这里给出更清楚的可读错误。
+		// The schema pattern can only express {{cN::, so give a clearer, readable error here.
 		return errors.New(`cloze: field "text" must contain at least one cloze deletion like {{c1::text}}`)
 	}
 	for _, d := range dels {
@@ -203,7 +203,7 @@ func (clozeType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 按序号的首次出现顺序各产出一张卡；重复序号只产出一张。
+// Cards produces one card per index in order of first appearance; a repeated index produces only one card.
 func (clozeType) Cards(note Note) []Card {
 	text, _ := note.Fields["text"].(string)
 	dels, _ := ParseCloze(text)
@@ -225,7 +225,7 @@ func (clozeType) Cards(note Note) []Card {
 	return cards
 }
 
-// Render 正面掩盖目标序号、背面揭示并高亮；其它序号显示挖空内容（不带 {{cN::}} 标记）。
+// Render masks the target index on the front and reveals and highlights it on the back; other indices show the cloze content (without the {{cN::}} marker).
 func (clozeType) Render(card Card, side Side) (RenderResult, error) {
 	index, ok := parseClozeTemplate(card.Template)
 	if !ok {
@@ -239,7 +239,7 @@ func (clozeType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: renderCloze(text, dels, index, side == SideBack)}, nil
 }
 
-// parseClozeTemplate 解析 "cloze:<index>" 形式的模板。
+// parseClozeTemplate parses a template of the form "cloze:<index>".
 func parseClozeTemplate(template string) (int, bool) {
 	const prefix = "cloze:"
 	if !strings.HasPrefix(template, prefix) {
@@ -252,41 +252,41 @@ func parseClozeTemplate(template string) (int, bool) {
 	return n, true
 }
 
-// renderCloze 按字节偏移重建文本，挖空之外的部分一字不差地保留 Markdown/TeX 原文。
+// renderCloze rebuilds the text by byte offset, keeping the Markdown/TeX source outside the clozes character for character.
 //
-// 挖空标记本身绝不出现在卡面上：目标序号正面换成占位、背面换成内容，其它序号只显示内容。
-// 目标序号的高亮按位置分两种写法：
-//   - 公式外包在 <span class="cloze"> 里。span[class] 在 render 包的白名单内，Markdown
-//     行内原始 HTML 会原样通过 goldmark，内容里的 Markdown 照常渲染。
-//   - 公式内写成 \boxed{…}，用方框标出考点。render 包把公式整段当纯文本保护并转义
-//     < > &，公式里的 span 只会变成字面尖括号；而公式也不能在挖空处切成几段，否则
-//     \dfrac{…}{…} 这样的分组会断开，所以高亮只能用 TeX 本身表达。
-//     只能用自托管 MathJax 包里已有的宏：\boxed 属于已打包的 ams，\text 属于 base。
-//     \class、\color、\bbox 都要在运行时另行加载扩展文件，而静态资源只托管了主包，
-//     加载失败会让整个容器的排版中止，所以不能用。
+// The cloze markers themselves never appear on the card face: the target index becomes a placeholder on the front and the content on the back, while other indices show only their content.
+// Highlighting of the target index takes one of two forms depending on position:
+//   - Outside a formula, wrap it in <span class="cloze">. span[class] is on the render package's allowlist, so
+//     raw inline HTML passes through goldmark as-is and Markdown inside the content renders as usual.
+//   - Inside a formula, write \boxed{…} to box the tested point. The render package protects the whole formula as plain text and escapes
+//     < > &, so a span inside a formula only becomes literal angle brackets; and a formula cannot be cut into pieces at the cloze either, or
+//     grouping such as \dfrac{…}{…} would break — which is why the highlight must be expressed in TeX itself.
+//     Only macros already in the self-hosted MathJax bundle may be used: \boxed comes with the bundled ams, \text with base.
+//     \class, \color and \bbox all need an extra extension file loaded at runtime, while the static assets only host the main bundle,
+//     and a failed load aborts typesetting for the whole container, so they cannot be used.
 //
-// 只跨进公式一半的挖空按公式外处理：两种写法都不成立，保留原来的 span。
+// A cloze that only half enters a formula is treated as outside it: neither form works, so the original span is kept.
 func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) string {
 	var b strings.Builder
 	last := 0
 	for _, d := range dels {
 		if d.Start < last {
-			// 防御：只解析最外层，偏移不会重叠；真出现重叠时跳过以免重复写入。
+			// Defensive: only the outermost is parsed, so offsets never overlap; should they overlap anyway, skip to avoid double writes.
 			continue
 		}
 		b.WriteString(text[last:d.Start])
 		alts := clozeAlternatives(d.Text, d.InMath)
 		switch {
 		case d.Index != target:
-			// 不考的挖空是上下文，只给标准写法，句子才读得通。
+			// An untested cloze is context, so give only the canonical wording, so the sentence still reads.
 			b.WriteString(stripCloze(alts[0]))
 		case reveal && d.InMath:
 			b.WriteString(`\boxed{` + stripCloze(alts[0]) + `}`)
 		case reveal:
-			// 揭示考点时列出全部可接受的写法，用户能看到哪些说法都算对。
+			// When revealing the tested point, list every acceptable wording so the user can see which phrasings all count.
 			b.WriteString(`<span class="cloze">` + strings.Join(stripEach(alts), " / ") + `</span>`)
 		case d.InMath:
-			// 占位是文字而不是 TeX，用 \text 排版；提示原样放进 \text，花括号需成对。
+			// The placeholder is text rather than TeX, so typeset it with \text; the hint goes verbatim into \text, so its braces must be paired.
 			b.WriteString(`\boxed{\text{` + clozeBlank(d) + `}}`)
 		default:
 			b.WriteString(`<span class="cloze">` + clozeBlank(d) + `</span>`)
@@ -297,8 +297,8 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 	return b.String()
 }
 
-// stripCloze 把内容里嵌套的 {{cM::…}} 换成它的内容：嵌套标记不单独成卡，
-// 但也不能以原始语法出现在卡面上。解析失败时按原文返回（外层已校验过，不应发生）。
+// stripCloze replaces a nested {{cM::…}} in the content with its content: nested markers do not become their own card,
+// but they must not appear on the card face in raw syntax either. On parse failure it returns the text verbatim (the outer level was already validated, so this should not happen).
 func stripCloze(text string) string {
 	dels, err := ParseCloze(text)
 	if err != nil || len(dels) == 0 {
@@ -307,7 +307,7 @@ func stripCloze(text string) string {
 	return renderCloze(text, dels, -1, true)
 }
 
-// clozeBlank 生成正面的占位：有提示时用 [hint]，否则用 […]。
+// clozeBlank builds the front-side placeholder: [hint] when there is a hint, otherwise […].
 func clozeBlank(d ClozeDeletion) string {
 	if d.Hint != "" {
 		return "[" + d.Hint + "]"
@@ -315,13 +315,13 @@ func clozeBlank(d ClozeDeletion) string {
 	return "[…]"
 }
 
-// ClozeInput 是 clozeType.Grade 的输入：Answers 按出现顺序对应本卡目标序号的每一处挖空。
+// ClozeInput is the input of clozeType.Grade: Answers correspond, in order of appearance, to each cloze of this card's target index.
 type ClozeInput struct {
 	GradeContext
 	Answers []string
 }
 
-// ParseAnswer 解码作答：字符串数组，按出现顺序逐空作答；没有作答等同于每空都没填（判为全错）。
+// ParseAnswer decodes the answer: a string array answering each blank in order of appearance; no answer is equivalent to leaving every blank empty (graded all wrong).
 func (clozeType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	answers := []string{}
 	if !emptyAnswer(raw) {
@@ -332,17 +332,17 @@ func (clozeType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) 
 	return ClozeInput{GradeContext: gc, Answers: answers}, nil
 }
 
-// GivenText 返回逐空作答，以逗号连接；空着的空也占一个位置，免得错位。
+// GivenText returns the per-blank answers joined by commas; an empty blank still takes a slot, so nothing shifts.
 func (clozeType) GivenText(_ map[string]any, detail map[string]any) string {
 	given, _ := detail["given"].([]string)
 	return strings.Join(given, ", ")
 }
 
-// Grade 逐空比对并按比例给分：score = 答对的空数 / 目标挖空总数。
-// 一空有多个可接受的答案（用 | 分隔）时，命中任一个即算对。
-// 比对忽略大小写并折叠空白；答案整体是行内公式 \( … \) 时，不带定界符的写法也算对，
-// 因为输入框里写不出排版后的公式。作答多于空数视为无法判分（作答与卡面错位）；
-// 少于空数时缺的空按未作答计。
+// Grade compares blank by blank and scores proportionally: score = blanks answered correctly / total target clozes.
+// When one blank has several acceptable answers (separated by |), matching any one counts as correct.
+// Comparison ignores case and collapses whitespace; when the answer as a whole is an inline formula \( … \), the form without the delimiters also counts,
+// because a typeset formula cannot be typed into an input box. More answers than blanks counts as ungradable (answers out of step with the card face);
+// with fewer answers than blanks, the missing blanks count as unanswered.
 func (clozeType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(ClozeInput)
 	if !ok {
@@ -368,7 +368,7 @@ func (clozeType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(float64(hits)/float64(len(targets)), detail)
 }
 
-// BlankHints 按出现顺序返回本卡每处目标挖空的提示（无提示为空串），复习页据此逐空给输入框。
+// BlankHints returns the hint for each target cloze of this card in order of appearance (empty string when there is none), which the review page uses to give one input box per blank.
 func (clozeType) BlankHints(card Card) []string {
 	targets, ok := clozeTargets(card.Fields, card.Template)
 	if !ok {
@@ -381,8 +381,8 @@ func (clozeType) BlankHints(card Card) []string {
 	return hints
 }
 
-// clozeTargets 返回模板 cloze:<index> 在 text 里对应的全部挖空（按出现顺序）；
-// 模板非法、解析失败或该序号不存在时返回 false。
+// clozeTargets returns every cloze in text corresponding to the template cloze:<index> (in order of appearance);
+// it returns false when the template is invalid, parsing fails, or that index does not exist.
 func clozeTargets(fields map[string]any, template string) ([]ClozeDeletion, bool) {
 	index, ok := parseClozeTemplate(template)
 	if !ok {
@@ -402,9 +402,9 @@ func clozeTargets(fields map[string]any, template string) ([]ClozeDeletion, bool
 	return out, len(out) > 0
 }
 
-// matchesAlternatives 判断作答是否命中任一个可接受的写法（挖空题与列表题共用）：
-// 忽略大小写并折叠空白；转义的 \| 按字面竖线比对；写法整体是行内公式 \( … \) 时，
-// 不带定界符的作答也算对，因为输入框里写不出排版后的公式。空作答永远不对。
+// matchesAlternatives reports whether the answer matches any acceptable wording (shared by cloze and list cards):
+// it ignores case and collapses whitespace, compares an escaped \| as a literal pipe, and when the wording as a whole is an inline formula \( … \),
+// an answer without the delimiters also counts, because a typeset formula cannot be typed into an input box. An empty answer is never correct.
 func matchesAlternatives(given string, alts []string) bool {
 	for _, alt := range alts {
 		if matchesAnswer(given, unescapePipes(alt)) {
@@ -414,7 +414,7 @@ func matchesAlternatives(given string, alts []string) bool {
 	return false
 }
 
-// matchesAnswer 判断作答是否等于一个写法（规则见 matchesAlternatives）。
+// matchesAnswer reports whether the answer equals one wording (rules in matchesAlternatives).
 func matchesAnswer(given, expected string) bool {
 	g := normalizeTyped(given, true, true)
 	if g == "" {
@@ -430,7 +430,7 @@ func matchesAnswer(given, expected string) bool {
 	return g == normalizeTyped(inner[2:len(inner)-2], true, true)
 }
 
-// stripEach 对每个备选答案去掉嵌套的挖空标记。
+// stripEach removes nested cloze markers from each alternative answer.
 func stripEach(alts []string) []string {
 	out := make([]string, len(alts))
 	for i, alt := range alts {
@@ -439,8 +439,8 @@ func stripEach(alts []string) []string {
 	return out
 }
 
-// clozeAlternatives 返回一处挖空可接受的全部答案，第一个是标准写法；空的备选项被丢弃，
-// 全部为空时退回原文（这种写法过不了 Validate，只在读到旧数据时兜底）。
+// clozeAlternatives returns all acceptable answers for one cloze, the first being the canonical wording; empty alternatives are dropped,
+// and when they are all empty it falls back to the raw text (such wording would not pass Validate; this only guards against old data).
 func clozeAlternatives(text string, inMath bool) []string {
 	var out []string
 	for _, alt := range splitAlternatives(text, inMath) {
@@ -454,12 +454,12 @@ func clozeAlternatives(text string, inMath bool) []string {
 	return out
 }
 
-// splitAlternatives 按顶层的 | 切分挖空内容，保留空段供 Validate 报错。
+// splitAlternatives splits the cloze content at top-level |, keeping empty segments so Validate can report them.
 //
-// 不切分的竖线：
-//   - 公式里的竖线（\(|x|\) 是绝对值）。整个挖空落在公式里时一律不切分。
-//   - 嵌套 {{ }} 里的竖线，它属于嵌套的内容。
-//   - 转义的 \|：正文里要写字面竖线时用它；Markdown 会把 \| 渲染成 |。
+// Pipes that are not split on:
+//   - A pipe inside a formula (\(|x|\) is absolute value). Nothing is split when the whole cloze sits inside a formula.
+//   - A pipe inside nested {{ }}, which belongs to the nested content.
+//   - An escaped \|: use it when writing a literal pipe in prose; Markdown renders \| as |.
 func splitAlternatives(text string, inMath bool) []string {
 	if inMath {
 		return []string{text}
@@ -492,7 +492,7 @@ func splitAlternatives(text string, inMath bool) []string {
 	return append(parts, text[last:])
 }
 
-// mathRangeAt 报告位置 i 是否是某段公式的起点，是则返回该段的结束位置。
+// mathRangeAt reports whether position i starts a formula, and if so returns the end position of that formula.
 func mathRangeAt(ranges [][]int, i int) (int, bool) {
 	for _, r := range ranges {
 		if r[0] == i {
@@ -502,8 +502,8 @@ func mathRangeAt(ranges [][]int, i int) (int, bool) {
 	return 0, false
 }
 
-// unescapePipes 把公式之外的 \| 还原成 |，用于判分比对：用户输入的是字面竖线，不会输入转义。
-// 公式里的 \| 是 TeX 的双竖线命令，保持原样。
+// unescapePipes turns \| outside formulas back into |, for grading comparison: the user types a literal pipe and does not type an escape.
+// A \| inside a formula is TeX's double-vertical-bar command and is left as-is.
 func unescapePipes(s string) string {
 	if !strings.Contains(s, `\|`) {
 		return s

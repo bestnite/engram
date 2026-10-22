@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 上下文键用未导出类型，避免与其它包冲突。
+// Context keys use an unexported type so they cannot collide with other packages.
 type ctxKey string
 
 const (
@@ -23,22 +23,22 @@ const (
 	ctxKeyKey  ctxKey = "api.api_key"
 )
 
-// AuthConfig 是鉴权中间件的显式配置；缺少依赖时构造失败。
+// AuthConfig is the explicit configuration of the auth middleware; construction fails when a dependency is missing.
 type AuthConfig struct {
 	Keys    *store.APIKeyStore
 	Users   *store.UserStore
 	Auditor *auth.Auditor
 	Logger  *slog.Logger
-	// Now 可注入时钟，便于测试过期与限流窗口。
+	// Now is an injectable clock, making expiry and rate-limit windows testable.
 	Now func() time.Time
-	// ReadLimit / WriteLimit / RateWindow 见 RateLimiter。
+	// ReadLimit / WriteLimit / RateWindow: see RateLimiter.
 	ReadLimit  int
 	WriteLimit int
 	RateWindow time.Duration
 }
 
-// Authenticator 实现：同一条请求管道同时接受会话 cookie 与 bearer key，
-// 两者都解析到同一个用户，随后由 RequireScope 强制 scope。
+// Authenticator implementation: one request pipeline accepts both session cookies and bearer keys,
+// both resolve to the same user, and RequireScope then enforces scope.
 type Authenticator struct {
 	keys    *store.APIKeyStore
 	users   *store.UserStore
@@ -49,7 +49,7 @@ type Authenticator struct {
 	write   *RateLimiter
 }
 
-// NewAuthenticator 构造鉴权中间件；Keys / Users 必填。
+// NewAuthenticator builds the auth middleware; Keys / Users are required.
 func NewAuthenticator(cfg AuthConfig) (*Authenticator, error) {
 	if cfg.Keys == nil || cfg.Users == nil {
 		return nil, errors.New("api: api key store and user store are required")
@@ -81,13 +81,13 @@ func NewAuthenticator(cfg AuthConfig) (*Authenticator, error) {
 	}, nil
 }
 
-// Auth 是 /api/v1 的入口中间件：优先看 bearer key，其次回落到会话 cookie。
+// Auth is the entry middleware for /api/v1: it looks at the bearer key first, then falls back to the session cookie.
 //
-// 会话通道依赖全局会话中间件（web.New 装配）已把用户放进上下文；
-// bearer 通道在这里完成校验、刷 last_used_at、按 key 限流并写带 api_key_id 的审计。
+// The session channel relies on the global session middleware (wired up by web.New) having already put the user into the context;
+// the bearer channel does its validation here: refreshing last_used_at, rate limiting per key, and writing an audit entry carrying api_key_id.
 func (a *Authenticator) Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// MCP 只接受 API key；先拒绝 cookie 通道，避免普通 REST 的 CSRF 规则覆盖 401。
+		// MCP only accepts API keys; reject the cookie channel first so the CSRF rules of plain REST do not mask the 401.
 		if c.Request.URL.Path == "/mcp" {
 			if _, ok := bearerToken(c.Request); !ok {
 				abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
@@ -115,22 +115,22 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware 暴露与 /api/v1 完全相同的鉴权中间件，供内置 MCP 的 /mcp 端点复用
-// （MCP 复用用户级 API Key，不另写一套鉴权）。
+// AuthMiddleware exposes exactly the same auth middleware as /api/v1, for the built-in MCP /mcp endpoint to reuse
+// (MCP reuses user-level API keys instead of growing a second auth stack).
 func (a *API) AuthMiddleware() gin.HandlerFunc { return a.authn.Auth() }
 
-// authenticateKey 校验 bearer key 并把用户与 key 写进上下文。
+// authenticateKey validates the bearer key and puts the user and the key into the context.
 func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	ctx := c.Request.Context()
 	key, err := a.keys.Authenticate(ctx, plaintext, a.now())
 	if err != nil {
-		// 撤销 / 过期 / 不存在都按 401 处理；错误信息区分原因，但绝不回显 key 内容。
+		// Revoked / expired / nonexistent are all treated as 401; the error message distinguishes the reason but never echoes the key.
 		abortError(c, http.StatusUnauthorized, CodeInvalidAPIKey, apiKeyErrorMessage(err))
 		return
 	}
 	u, err := a.users.ByID(ctx, key.UserID)
 	if err != nil || u.Status != store.StatusActive {
-		// 用户被禁用或删除后，其 key 立即失效（权限边界与网页登录一致）。
+		// Once a user is suspended or deleted their keys stop working immediately (the permission boundary matches web login).
 		abortError(c, http.StatusUnauthorized, CodeUnauthorized, "")
 		return
 	}
@@ -147,7 +147,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 
 	c.Set(string(ctxUserKey), u)
 	c.Set(string(ctxKeyKey), key)
-	// 每次 key 调用写审计并带 api_key_id；写失败不阻断请求。
+	// Every key call writes an audit entry carrying api_key_id; a failed write does not block the request.
 	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: store.Ptr(key.ID),
@@ -157,10 +157,10 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	c.Next()
 }
 
-// RequireScope 在 Auth 之后强制 scope。
+// RequireScope enforces scope after Auth.
 //
-// bearer 通道按 key 的 scopes 判断，并对 admin 追加账号角色复查；会话通道与网页登录权限
-// 一致（登录用户可读可写可复习，admin scope 另需管理员角色）。
+// The bearer channel decides from the key's scopes and additionally re-checks the account role for admin; the session channel matches
+// web login permissions (a logged-in user may read, write and review, while admin scope also requires the admin role).
 func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if key, ok := CurrentAPIKey(c); ok {
@@ -168,9 +168,9 @@ func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 				abortError(c, http.StatusForbidden, CodeScopeRequired, scope)
 				return
 			}
-			// admin 只能发给管理员账号：key 的 scopes 不脱离账号角色，
-			// 账号被降级后，遗留的 admin-scope key 立即失去 admin 面。角色每请求现查，
-			// 不缓存，因此降级即时生效。
+			// admin can only be issued to admin accounts: a key's scopes never float free of the account role,
+			// so once an account is demoted a leftover admin-scope key immediately loses the admin surface. The role is looked up on every request,
+			// never cached, so demotion takes effect immediately.
 			if scope == store.ScopeAdmin {
 				if u, ok := CurrentUser(c); !ok || u.Role != store.RoleAdmin {
 					abortError(c, http.StatusForbidden, CodeScopeRequired, "")
@@ -193,7 +193,7 @@ func (a *Authenticator) RequireScope(scope string) gin.HandlerFunc {
 	}
 }
 
-// CurrentUser 取当前请求的用户；bearer 与会话两条通道都由 Auth 统一写入上下文。
+// CurrentUser returns the user of the current request; Auth writes it into the context uniformly for both the bearer and session channels.
 func CurrentUser(c *gin.Context) (*store.User, bool) {
 	v, ok := c.Get(string(ctxUserKey))
 	if !ok {
@@ -203,7 +203,7 @@ func CurrentUser(c *gin.Context) (*store.User, bool) {
 	return u, ok
 }
 
-// CurrentAPIKey 取当前请求使用的 API key；会话通道返回 false。
+// CurrentAPIKey returns the API key used by the current request; the session channel returns false.
 func CurrentAPIKey(c *gin.Context) (*store.APIKey, bool) {
 	v, ok := c.Get(string(ctxKeyKey))
 	if !ok {
@@ -213,7 +213,7 @@ func CurrentAPIKey(c *gin.Context) (*store.APIKey, bool) {
 	return k, ok
 }
 
-// CurrentAPIKeyID 返回当前 key 的 id，供审计条目填写 api_key_id；会话通道为 nil。
+// CurrentAPIKeyID returns the id of the current key, for audit entries to fill in api_key_id; it is nil on the session channel.
 func CurrentAPIKeyID(c *gin.Context) *uint64 {
 	if k, ok := CurrentAPIKey(c); ok && k != nil {
 		return store.Ptr(k.ID)
@@ -221,7 +221,7 @@ func CurrentAPIKeyID(c *gin.Context) *uint64 {
 	return nil
 }
 
-// bearerToken 从 Authorization 头解析 Bearer token；缺失或形态不对返回 false。
+// bearerToken parses the Bearer token from the Authorization header; missing or malformed returns false.
 func bearerToken(r *http.Request) (string, bool) {
 	h := strings.TrimSpace(r.Header.Get("Authorization"))
 	if len(h) < 7 || !strings.EqualFold(h[:7], "Bearer ") {
@@ -234,7 +234,7 @@ func bearerToken(r *http.Request) (string, bool) {
 	return tok, true
 }
 
-// isMutating 判断请求是否写操作；写操作使用更严的限流配额。
+// isMutating reports whether the request is a write; writes use the stricter rate-limit quota.
 func isMutating(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -244,7 +244,7 @@ func isMutating(method string) bool {
 	}
 }
 
-// apiKeyErrorMessage 把存储层的校验错误翻译成不含敏感信息的英文提示。
+// apiKeyErrorMessage turns a store-level validation error into an English message free of sensitive information.
 func apiKeyErrorMessage(err error) string {
 	switch {
 	case errors.Is(err, store.ErrAPIKeyRevoked):

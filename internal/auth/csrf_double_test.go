@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// doubleSubmitRouter 是不依赖会话的一套路由：GET /form 下发双提交 cookie 并回显镜像 token，
-// POST /submit 只由 PreSessionCSRFMiddleware 校验。用它可以证明会话前 CSRF 不依赖服务端会话。
-// secure 是调用方判定「站点是否 https」后传入的值（这里由测试直接给定）。
+// doubleSubmitRouter is a set of routes that does not depend on sessions: GET /form hands out the double-submit cookie and echoes the mirrored token,
+// and POST /submit is validated only by PreSessionCSRFMiddleware. With it we can prove that pre-session CSRF needs no server-side session.
+// secure is the value the caller passes after deciding whether the site is https (here the test supplies it directly).
 func doubleSubmitRouter(secure bool) *gin.Engine {
 	router := gin.New()
 	router.Use(PreSessionCSRFMiddleware())
@@ -24,7 +24,7 @@ func doubleSubmitRouter(secure bool) *gin.Engine {
 	return router
 }
 
-// TestDoubleSubmitIssuesCookieAndMirroredToken 断言 GET 同时下发 cookie 与可镜像的 token。
+// TestDoubleSubmitIssuesCookieAndMirroredToken asserts that GET hands out both the cookie and a mirrorable token.
 func TestDoubleSubmitIssuesCookieAndMirroredToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestDoubleSubmitIssuesCookieAndMirroredToken(t *testing.T) {
 	}
 }
 
-// TestDoubleSubmitRejections 是反面用例：缺 cookie、缺镜像 token、值不一致都必须 403。
+// TestDoubleSubmitRejections is the negative case: a missing cookie, a missing mirrored token and mismatched values must all 403.
 func TestDoubleSubmitRejections(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -84,7 +84,7 @@ func TestDoubleSubmitRejections(t *testing.T) {
 	}
 }
 
-// TestDoubleSubmitAcceptsMatchingPair 断言 cookie 与镜像 token 一致时放行（表单字段与头部均可)。
+// TestDoubleSubmitAcceptsMatchingPair asserts that a matching cookie and mirrored token pass (either the form field or the header).
 func TestDoubleSubmitAcceptsMatchingPair(t *testing.T) {
 	const tok = "matching-double-submit-token-0123456789"
 	for _, form := range []bool{false, true} {

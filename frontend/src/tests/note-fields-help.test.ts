@@ -7,8 +7,9 @@ import { setLocale } from '../lib/i18n';
 import { CARD_TYPES } from './card-type-fixture';
 
 /**
- * 挖空语法说明放在标签旁的问号浮层里：标签本身只剩字段名，
- * 没有语法要讲的字段不出现问号按钮。
+ * The cloze syntax explainer lives in a question-mark popover next to the label: the label
+ * itself is now just the field name, and fields with no syntax to explain get no
+ * question-mark button.
  */
 describe('NoteFieldsForm field help', () => {
   const catalog = createCatalog(CARD_TYPES.kinds);
@@ -26,7 +27,7 @@ describe('NoteFieldsForm field help', () => {
     const html = renderKind('cloze');
     expect(html).toContain('data-testid="note-field-text-help"');
     expect(html).toContain('aria-label="文本是什么意思？"');
-    // 语法说明在浮层打开前不出现在页面上，标签里也不再带它。
+    // The syntax explainer is absent from the page before the popover opens, and the label no longer carries it either.
     expect(html).not.toContain('{{c1::');
   });
 

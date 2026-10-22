@@ -6,13 +6,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestOptimizeVerdictThreeState 是验收 3：优化前后拟合对比的三态判据
-// （原先由 SSR 卡片渲染的 applyResultToCard 覆盖，SSR 页面层删除后该判据的唯一实现是
-// optimizeVerdict，测试随之盯住它）。
+// TestOptimizeVerdictThreeState is acceptance 3: the three-state criterion for the before/after fit comparison
+// (previously covered by the SSR card rendering's applyResultToCard; with the SSR page layer deleted the only implementation of that criterion is
+// optimizeVerdict, so the test watches it instead).
 //
-//   - 没有任何可用指标 -> unavailable（前端不渲染结论，避免把零值误报成「未改善」）；
-//   - 两个指标都算出来但样本不足（可用 item 数 < MinFitItems）-> insufficient_sample；
-//   - 样本足够且 after < before -> improved；after > before -> not_improved。
+//   - no usable metrics at all -> unavailable (the frontend renders no conclusion, so a zero value is not misreported as "not improved");
+//   - both metrics computed but the sample insufficient (usable item count < MinFitItems) -> insufficient_sample;
+//   - sample sufficient and after < before -> improved; after > before -> not_improved.
 func TestOptimizeVerdictThreeState(t *testing.T) {
 	items := store.MinFitItems + 50
 	cases := []struct {

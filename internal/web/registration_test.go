@@ -13,7 +13,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedAdminUser 建出一个活跃管理员，关闭“首个管理员引导”分支，让注册真正走策略路径。
+// seedAdminUser creates an active admin and turns off the "first admin bootstrap" branch, so registration really takes the policy path.
 func seedAdminUser(t *testing.T, srv *Server) {
 	t.Helper()
 	if _, err := srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
@@ -23,11 +23,11 @@ func seedAdminUser(t *testing.T, srv *Server) {
 	}
 }
 
-// 注册策略矩阵与表单校验的 JSON 验收见 auth_register_test.go（TestSPARegisterAPI_*）。
-// 本文件只保留邀请接受与邀请拒绝两条 HTTP 级链路。
+// The JSON acceptance for the registration policy matrix and form validation lives in auth_register_test.go (TestSPARegisterAPI_*).
+// This file keeps only the two HTTP-level paths: invite acceptance and invite rejection.
 
-// TestInviteAcceptCreatesExactlyOneUser 是 HTTP 级验收：
-// 有效邀请放行一次，令牌随即失效，且只产生一个用户。
+// TestInviteAcceptCreatesExactlyOneUser is the HTTP-level acceptance:
+// a valid invite is let through once, the token is invalidated right after, and only one user is created.
 func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 	srv, db := newAuthServer(t)
 	seedAdminUser(t, srv)
@@ -48,7 +48,7 @@ func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 		t.Fatalf("registration with invite = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
 
-	// 再次使用同一 token 必须被拒（一次性）。
+	// Reusing the same token must be rejected (single use).
 	second := postJSON(srv, "/api/v1/auth/register", map[string]string{
 		"username": "invitee2", "email": "invitee2@example.com",
 		"password": "Sup3rSecret!", "invite": inv.Token,
@@ -57,7 +57,7 @@ func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 		t.Fatalf("reused invite = %d %s, want 403 invite_invalid", second.Code, apiErrorCode(t, second))
 	}
 
-	// 邀请只创建一个用户，且已记录 used_at/used_by。
+	// The invite creates only one user, and used_at/used_by are recorded.
 	var count int64
 	if err := db.Model(&store.User{}).Where("email = ?", "invitee@example.com").Count(&count).Error; err != nil {
 		t.Fatalf("count users: %v", err)
@@ -74,7 +74,7 @@ func TestInviteAcceptCreatesExactlyOneUser(t *testing.T) {
 	}
 }
 
-// TestInviteRejections 覆盖已过期与邮箱不符两种拒绝路径（JSON 层）。
+// TestInviteRejections covers the two rejection paths, expired and email mismatch (JSON layer).
 func TestInviteRejections(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -120,7 +120,7 @@ func TestInviteRejections(t *testing.T) {
 	}
 }
 
-// mustJSON 生成 settings 表要求的 JSON 文本（字符串值）。
+// mustJSON produces the JSON text the settings table asks for (string values).
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)
@@ -130,7 +130,7 @@ func mustJSON(t *testing.T, v any) []byte {
 	return b
 }
 
-// writeSetting 写一条 settings 覆盖值，value 已是 JSON 文本。
+// writeSetting writes one settings override value; value is already JSON text.
 func writeSetting(t *testing.T, db *gorm.DB, key, value string) {
 	t.Helper()
 	row := store.Setting{Key: key, Value: value, UpdatedAt: time.Now().UTC()}

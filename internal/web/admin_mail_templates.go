@@ -12,20 +12,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「邮件模板」的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "mail templates".
 //
-// 页面只列**已有变量表**的类型，而变量表只覆盖已有发信方的类型——所以管理页不会出现
-// 「能配但永远不发」的模板槽。保存时的校验与发送时的校验是同一份（mail.Validate），
-// 因此不存在「保存过了却发不出去」的组合。
+// The page only lists types that **already have a variable table**, and variable tables only cover types that already have a sender — so the admin page never shows
+// a template slot that "can be configured but never sends". Validation at save time and at send time is the same code (mail.Validate),
+// so a combination that "was saved yet cannot be sent" does not exist.
 
-// mailTemplateVar 是编辑器展示的一个变量。
+// mailTemplateVar is one variable shown in the editor.
 type mailTemplateVar struct {
 	Name     string `json:"name"`
 	Required bool   `json:"required"`
 	NoteKey  string `json:"note_key"`
 }
 
-// mailTemplateType 是一种邮件类型及其变量表。
+// mailTemplateType is one mail type and its variable table.
 type mailTemplateType struct {
 	Type     string            `json:"type"`
 	Class    string            `json:"class"`
@@ -33,7 +33,7 @@ type mailTemplateType struct {
 	Vars     []mailTemplateVar `json:"vars"`
 }
 
-// mailTemplateRow 是已保存的一份自定义模板。
+// mailTemplateRow is one saved custom template.
 type mailTemplateRow struct {
 	Type      string `json:"type"`
 	Locale    string `json:"locale"`
@@ -42,10 +42,10 @@ type mailTemplateRow struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// mailTemplateDefault 是某类型在某语言下的**内置正文**。
+// mailTemplateDefault is the **built-in body** of a type in a given language.
 //
-// 它与发信方兜底用的是同一段代码（mail.DefaultTemplate），只是代入的是占位符而不是真实值，
-// 所以「编辑框里看到的默认」与「实际发出去的默认」不可能不一样——编辑框预填的就是它。
+// It uses the same code as the sender's fallback (mail.DefaultTemplate), only substituting placeholders instead of real values,
+// so "the default seen in the editor" and "the default actually sent" cannot differ — this is exactly what the editor is pre-filled with.
 type mailTemplateDefault struct {
 	Type    string `json:"type"`
 	Locale  string `json:"locale"`
@@ -53,24 +53,24 @@ type mailTemplateDefault struct {
 	BodyMD  string `json:"body_md"`
 }
 
-// mailTemplatesResponse 是列表响应。
+// mailTemplatesResponse is the list response.
 type mailTemplatesResponse struct {
 	Locales []string `json:"locales"`
-	// SiteDefaultLocale 是回退链第二级；界面据此说明「没有自定义时用哪一份」。
+	// SiteDefaultLocale is the second level of the fallback chain; the UI uses it to explain "which one is used when nothing is customized".
 	SiteDefaultLocale string             `json:"site_default_locale"`
 	Types             []mailTemplateType `json:"types"`
 	Rows              []mailTemplateRow  `json:"rows"`
-	// Defaults 是每个类型 × 每种语言的内置正文，供编辑框预填与「恢复默认」对照。
+	// Defaults is the built-in body for each type × each language, for editor pre-fill and for "restore default" to compare against.
 	Defaults []mailTemplateDefault `json:"defaults"`
 }
 
-// mailTemplateSaveRequest 是保存请求：主题与正文都是 Markdown 原文。
+// mailTemplateSaveRequest is the save request: subject and body are both raw Markdown.
 type mailTemplateSaveRequest struct {
 	Subject string `json:"subject"`
 	BodyMD  string `json:"body_md"`
 }
 
-// mailTemplatePreviewRequest 是预览/测试发信请求。
+// mailTemplatePreviewRequest is the preview/test-send request.
 type mailTemplatePreviewRequest struct {
 	Type    string `json:"type"`
 	Locale  string `json:"locale"`
@@ -78,7 +78,7 @@ type mailTemplatePreviewRequest struct {
 	BodyMD  string `json:"body_md"`
 }
 
-// mailTemplatePreviewResponse 是渲染结果：纯文本段与 HTML 段都给，便于并排核对。
+// mailTemplatePreviewResponse is the render result: both the plain-text part and the HTML part are returned, for side-by-side checking.
 type mailTemplatePreviewResponse struct {
 	Subject   string            `json:"subject"`
 	Text      string            `json:"text"`
@@ -86,10 +86,10 @@ type mailTemplatePreviewResponse struct {
 	Variables map[string]string `json:"variables"`
 }
 
-// mailTemplateSampleValues 是预览与测试发信用的样例值。
+// mailTemplateSampleValues are the sample values used for preview and test send.
 //
-// 刻意用与语言无关的占位（`user-name`、`NN`、示例域名），而不是本地化文案：它们是
-// **样例数据**不是产品文案，做成语言包只会多出两套没人读的键。
+// Deliberately language-neutral placeholders (`user-name`, `NN`, an example domain) are used instead of localized copy: they are
+// **sample data**, not product copy; putting them into language packs would only add two sets of keys nobody reads.
 var mailTemplateSampleValues = map[string]string{
 	"site":            "Engram",
 	"username":        "user-name",
@@ -124,7 +124,7 @@ var mailTemplateSampleValues = map[string]string{
 	"reason":          "optimizer exited with status 1",
 }
 
-// sampleVars 按该类型的变量表造一组样例值。
+// sampleVars builds a set of sample values from that type's variable table.
 func sampleVars(t mail.Type) mail.Vars {
 	specs, _ := mail.VarSpecs(t)
 	out := make(mail.Vars, len(specs))
@@ -138,7 +138,7 @@ func sampleVars(t mail.Type) mail.Vars {
 	return out
 }
 
-// adminMailTemplates 返回类型清单、变量表与已保存的模板。
+// adminMailTemplates returns the type list, the variable tables and the saved templates.
 func (s *Server) adminMailTemplates(c *gin.Context) {
 	ctx := c.Request.Context()
 	loc, ok := s.localizer(c)
@@ -161,7 +161,7 @@ func (s *Server) adminMailTemplates(c *gin.Context) {
 		}
 		resp.Types = append(resp.Types, item)
 	}
-	// 内置正文：类型 × 语言逐个算一遍（数量小，没必要缓存，也避免缓存与语言包漂移）。
+	// Built-in bodies: computed once per type × language (the count is small, so there is no need to cache, which also avoids the cache drifting from the language packs).
 	locales := resp.Locales
 	for _, def := range resp.Types {
 		typ := mail.Type(def.Type)
@@ -192,7 +192,7 @@ func (s *Server) adminMailTemplates(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// adminMailTemplateSave 保存一份模板：校验通过才写库，并写审计。
+// adminMailTemplateSave saves one template: writes to the DB only if validation passes, and writes an audit row.
 func (s *Server) adminMailTemplateSave(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -211,7 +211,7 @@ func (s *Server) adminMailTemplateSave(c *gin.Context) {
 	subject := strings.TrimSpace(req.Subject)
 	body := strings.TrimSpace(req.BodyMD)
 	if body == "" {
-		// 空正文等于「没有自定义」；那是删除的语义，不要让保存悄悄把它变成回退。
+		// An empty body means "no customization"; that is the semantics of deletion, so do not let a save quietly turn it into a fallback.
 		adminError(c, http.StatusBadRequest, "empty_body")
 		return
 	}
@@ -238,7 +238,7 @@ func (s *Server) adminMailTemplateSave(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"saved": true})
 }
 
-// adminMailTemplateDelete 删掉一份自定义模板（回到内置正文），并写审计。
+// adminMailTemplateDelete deletes one custom template (falling back to the built-in body) and writes an audit row.
 func (s *Server) adminMailTemplateDelete(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -264,8 +264,8 @@ func (s *Server) adminMailTemplateDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
-// adminMailTemplatePreview 用样例值渲染一份草稿，供编辑器并排核对。
-// 它不写库、不发信：预览必须是零副作用的。
+// adminMailTemplatePreview renders a draft with the sample values, for the editor to check side by side.
+// It writes no DB rows and sends no mail: preview must be side-effect free.
 func (s *Server) adminMailTemplatePreview(c *gin.Context) {
 	var req mailTemplatePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -292,10 +292,10 @@ func (s *Server) adminMailTemplatePreview(c *gin.Context) {
 	})
 }
 
-// adminMailTemplateTest 把渲染结果以样例值发给当前管理员。
+// adminMailTemplateTest sends the rendered result with sample values to the current admin.
 //
-// 它**绕过偏好**直接入队：这是一封测试信，管理员点它就是要看到邮件长什么样，被类型偏好
-// 挡掉只会让人困惑。类型仍按真实类型记录，所以退订入口与标签都按该类型渲染。
+// It **bypasses preferences** and enqueues directly: this is a test mail, the admin clicked it precisely to see what the mail looks like, and being blocked by the type preference
+// would only be confusing. The type is still recorded as the real type, so the unsubscribe entry and the label are rendered for that type.
 func (s *Server) adminMailTemplateTest(c *gin.Context) {
 	u, ok := auth.CurrentUser(c)
 	if !ok {
@@ -326,7 +326,7 @@ func (s *Server) adminMailTemplateTest(c *gin.Context) {
 	vars := sampleVars(mailType)
 	unsubURL := ""
 	if mail.CanUnsubscribe(mailType) {
-		// 测试信也带上退订入口，好让管理员看到它在邮件里的位置；令牌指向自己，失效即可。
+		// The test mail carries the unsubscribe entry too, so the admin can see where it sits in the mail; the token points at the admin and may simply expire.
 		unsubURL = s.optionalUnsubscribeLink(c, u.ID, mailType)
 		if unsubURL != "" {
 			vars["unsubscribe_url"] = unsubURL
@@ -362,7 +362,7 @@ func (s *Server) adminMailTemplateTest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"queued": true})
 }
 
-// mailTemplateTarget 解析并校验路径里的 (类型, 语言)；不合法时已写好响应。
+// mailTemplateTarget parses and validates the (type, locale) in the path; the response has already been written when invalid.
 func (s *Server) mailTemplateTarget(c *gin.Context) (mail.Type, string, bool) {
 	mailType := mail.Type(strings.TrimSpace(c.Param("type")))
 	if _, supported := mail.VarSpecs(mailType); !supported {

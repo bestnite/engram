@@ -8,30 +8,30 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerStatsRoutes 挂载统计页。
+// registerStatsRoutes mounts the stats page.
 //
-// 页面上的每个数字都来自 internal/store 的既有聚合查询；handler 不写任何
-// 统计 SQL。原因：回溯校验（store.RetroCheck）对照的正是这批查询，一旦 handler
-// 另写一套 SQL，页面数字就脱离了可校验的路径。
+// Every number on the page comes from the existing aggregate queries in internal/store; the handler writes no
+// stats SQL of its own. The reason: the retro check (store.RetroCheck) validates against exactly these queries, and once a handler
+// writes its own SQL, the page's numbers leave the verifiable path.
 //
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// Skips when the dependencies are not wired, so M0-stage tests can still construct a Server.
 func (s *Server) registerStatsRoutes(router *gin.Engine) {
 	if s.sessions == nil {
 		return
 	}
-	// GET /stats 返回应用壳，由客户端路由渲染统计页。统计页没有任何写操作，因此这里只动
-	// 这一个 GET 路由，其余路由（含 SPA 明细接口）不变。
+	// GET /stats returns the app shell, and the client router renders the stats page. The stats page has no write operations, so only
+	// this one GET route changes; the other routes (including the SPA detail endpoint) stay as they are.
 	router.GET("/stats", s.statsRoute)
-	// SPA 统计明细接口：只读、只接受浏览器会话（不走 /api/v1 的 API Key 组），
-	// 与统计页共用同一批 store 聚合，口径不会分叉。
+	// The SPA stats detail endpoint: read-only, accepts browser sessions only (not the /api/v1 API key group),
+	// and shares the same set of store aggregates as the stats page, so the numbers cannot fork.
 	router.GET("/api/v1/stats/detail", s.statsDetail)
 }
 
-// statsRoute 提供 GET /stats：返回应用壳，由客户端路由渲染统计页，
-// 数据走同一批 store 聚合的 GET /api/v1/stats/detail。
+// statsRoute serves GET /stats: it returns the app shell, the client router renders the stats page,
+// and data goes through GET /api/v1/stats/detail backed by the same store aggregates.
 //
-// 与迁移前的 SSR 页面一致：先要求已登录会话，未登录一律重定向到登录页，页面迁移不改动授权
-// 判定，也不新增任何写路径。
+// Consistent with the pre-migration SSR page: a logged-in session is required first, a logged-out visitor is always redirected to the login page, and the page migration changes neither the authorization
+// decision nor adds any write path.
 func (s *Server) statsRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return
@@ -39,8 +39,8 @@ func (s *Server) statsRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// userLocation 解析用户时区；回退规则见 store.LoadLocation（空/非法名 → UTC），
-// 页面不会因脏数据 500。
+// userLocation resolves the user's timezone; the fallback rules are in store.LoadLocation (empty/illegal name → UTC),
+// so dirty data cannot make the page 500.
 func userLocation(user *store.User) *time.Location {
 	return store.LoadLocation(user.Timezone)
 }

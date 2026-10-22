@@ -14,8 +14,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newTOTPFixture 构造真实 SQLite + TOTP 存储 + 服务的环境；不 mock 数据库（AGENTS.md §2.5）。
-// testEnv 默认按 AllModels() 迁移，TOTP 表在新文件里定义，因此这里显式补一次。
+// newTOTPFixture builds an environment of real SQLite + the TOTP store + the service; the database is not mocked (AGENTS.md §2.5).
+// testEnv migrates by AllModels() by default and the TOTP table is defined in a new file, so it is added explicitly once here.
 func newTOTPFixture(t *testing.T) (*TOTPService, *store.TOTPStore, *testEnv) {
 	t.Helper()
 	e := newTestEnv(t)
@@ -34,7 +34,7 @@ func newTOTPFixture(t *testing.T) (*TOTPService, *store.TOTPStore, *testEnv) {
 	return svc, st, e
 }
 
-// TestTOTPSecretIsEncryptedAtRest 断言 secret 只以密文落库：列里没有明文，前缀是 v1:。
+// TestTOTPSecretIsEncryptedAtRest asserts the secret is stored only as ciphertext: the column holds no plaintext and the prefix is v1:.
 func TestTOTPSecretIsEncryptedAtRest(t *testing.T) {
 	svc, st, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-enc")
@@ -65,7 +65,7 @@ func TestTOTPSecretIsEncryptedAtRest(t *testing.T) {
 	}
 }
 
-// TestTOTPConfirmEnablesAndVerifies 断言确认后才生效，且验证码校验正确。
+// TestTOTPConfirmEnablesAndVerifies asserts that TOTP only takes effect after confirmation, and that code verification is correct.
 func TestTOTPConfirmEnablesAndVerifies(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-confirm")
@@ -78,11 +78,11 @@ func TestTOTPConfirmEnablesAndVerifies(t *testing.T) {
 	if enabled, _ := svc.Enabled(ctx, u.ID); enabled {
 		t.Fatal("Enabled() = true before confirmation")
 	}
-	// 未确认前，第二步校验必须失败。
+	// Before confirmation, the second-step check must fail.
 	if _, ok, _ := svc.VerifySecondFactor(ctx, u.ID, mustCode(t, secret)); ok {
 		t.Fatal("VerifySecondFactor() succeeded before confirmation")
 	}
-	// 用错误的验证码确认必须被拒。
+	// Confirming with a wrong code must be rejected.
 	if _, err := svc.Confirm(ctx, u.ID, "000000"); !errors.Is(err, ErrTOTPInvalidCode) {
 		t.Fatalf("Confirm(wrong code) = %v, want ErrTOTPInvalidCode", err)
 	}
@@ -106,7 +106,7 @@ func TestTOTPConfirmEnablesAndVerifies(t *testing.T) {
 	}
 }
 
-// TestRecoveryCodeIsSingleUse 是验收②：恢复码只能用一次。
+// TestRecoveryCodeIsSingleUse is acceptance (2): a recovery code can be used only once.
 func TestRecoveryCodeIsSingleUse(t *testing.T) {
 	svc, st, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-recovery")
@@ -125,7 +125,7 @@ func TestRecoveryCodeIsSingleUse(t *testing.T) {
 	if err != nil || !ok || !used {
 		t.Fatalf("first use = (usedRecovery=%v, ok=%v, err=%v), want (true, true, nil)", used, ok, err)
 	}
-	// 同一个恢复码第二次必须失败。
+	// The same recovery code must fail the second time.
 	usedAgain, okAgain, err := svc.VerifySecondFactor(ctx, u.ID, codes[0])
 	if err != nil {
 		t.Fatalf("second use error = %v", err)
@@ -133,7 +133,7 @@ func TestRecoveryCodeIsSingleUse(t *testing.T) {
 	if okAgain || usedAgain {
 		t.Fatalf("reused recovery code = (usedRecovery=%v, ok=%v), want (false, false)", usedAgain, okAgain)
 	}
-	// 其它码仍然可用，余量也相应减少。
+	// The other codes are still usable, and the remaining count drops accordingly.
 	if _, okOther, _ := svc.VerifySecondFactor(ctx, u.ID, strings.ToLower(codes[1])); !okOther {
 		t.Error("a different recovery code was rejected; want it to still work (case-insensitive)")
 	}
@@ -146,7 +146,7 @@ func TestRecoveryCodeIsSingleUse(t *testing.T) {
 	}
 }
 
-// TestDisableRemovesSecretAndRecoveryCodes 断言关闭后 secret 行与恢复码全部消失。
+// TestDisableRemovesSecretAndRecoveryCodes asserts that after disabling, the secret row and all recovery codes are gone.
 func TestDisableRemovesSecretAndRecoveryCodes(t *testing.T) {
 	svc, st, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-disable")
@@ -176,7 +176,7 @@ func TestDisableRemovesSecretAndRecoveryCodes(t *testing.T) {
 	}
 }
 
-// TestBeginRejectedWhenAlreadyEnabled 断言已启用的账号不能悄悄换绑。
+// TestBeginRejectedWhenAlreadyEnabled asserts that an enabled account cannot quietly re-bind.
 func TestBeginRejectedWhenAlreadyEnabled(t *testing.T) {
 	svc, _, e := newTOTPFixture(t)
 	u := e.createUser(t, "totp-rebind")
@@ -193,7 +193,7 @@ func TestBeginRejectedWhenAlreadyEnabled(t *testing.T) {
 	}
 }
 
-// mustCode 用当前时间生成一个验证码；失败即测试失败。
+// mustCode generates a code from the current time; failure fails the test.
 func mustCode(t *testing.T, secret string) string {
 	t.Helper()
 	code, err := totp.GenerateCode(secret, time.Now())
@@ -203,9 +203,9 @@ func mustCode(t *testing.T, secret string) string {
 	return code
 }
 
-// mustNextCode 生成下一个时间步的验证码。
-// 「已被接受的时间步」不再允许第二次通过，而本用例的确认码恰好用掉了当前步，
-// 因此登录验收要用一个更晚、且仍在 ±1 窗口内的新步。
+// mustNextCode generates the code for the next time step.
+// An "already accepted time step" may not pass a second time, and this case's confirmation code used up the current step,
+// so the login acceptance has to use a later new step that is still within the ±1 window.
 func mustNextCode(t *testing.T, secret string) string {
 	t.Helper()
 	code, err := totp.GenerateCode(secret, time.Now().Add(totpPeriod*time.Second))

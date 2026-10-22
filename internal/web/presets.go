@@ -12,22 +12,22 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerPresetRoutes 挂载调度预设页入口。
+// registerPresetRoutes mounts the scheduling preset page entry.
 //
-// SSR 页面层已删除：GET /presets 只发应用壳，预设的列表/新建/编辑/优化/回退全部走
-// /api/v1/presets* 的 JSON 端点（presets_api.go，与 SSR 页面同一批 store/jobs 方法）。
-// 依赖未装配时跳过，保证 M0 阶段的测试仍能构造 Server。
+// The SSR page layer has been deleted: GET /presets only sends the app shell, and preset list/create/edit/optimize/rollback all go through
+// the /api/v1/presets* JSON endpoints (presets_api.go, using the same set of store/jobs methods as the SSR page).
+// Skipped when the dependency is not wired up, so M0-stage tests can still construct a Server.
 func (s *Server) registerPresetRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.presets == nil || s.jobRunner == nil {
 		return
 	}
 	router.GET("/presets", s.presetRoute)
-	// SPA 预设接口：同源 JSON 读写走 /api/v1/presets*。
+	// SPA preset API: same-origin JSON reads and writes go through /api/v1/presets*.
 	s.registerPresetAPIRoutes(router)
 }
 
-// optimizeJobFor 按对外 id 读取优化作业，并校验它确实属于该预设（kind 与 target 都对）。
-// 任何不匹配都返回 nil：状态端点只允许看到本预设自己的作业。
+// optimizeJobFor reads an optimization job by public id and checks it really belongs to that preset (both kind and target match).
+// Any mismatch returns nil: the status endpoint may only see this preset's own jobs.
 func (s *Server) optimizeJobFor(ctx context.Context, presetID uint64, raw string) *store.Job {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -43,10 +43,10 @@ func (s *Server) optimizeJobFor(ctx context.Context, presetID uint64, raw string
 	return job
 }
 
-// validStepSpec 判断学习/再学习步骤串是否可解析；空串合法（关闭步骤）。
-// 文法与 internal/schedule 的 parseSteps 一致（逗号分隔、s/m/h/d 后缀、缺省分钟），
-// 但额外要求每个步骤为正：调度器会把 "-5m" 这类负数当合法输入，验收要求在此拒绝。
-// 这里只判断「可解析」，不复制调度逻辑——调度器读库时仍走自己的 parseSteps。
+// validStepSpec reports whether a learn/relearn step string can be parsed; an empty string is valid (steps off).
+// The grammar matches internal/schedule's parseSteps (comma-separated, s/m/h/d suffixes, minutes by default),
+// but it additionally requires every step to be positive: the scheduler accepts negatives like "-5m" as valid input, and acceptance requires refusing them here.
+// This only decides "parsable" and does not copy the scheduling logic — the scheduler still uses its own parseSteps when reading from the database.
 func validStepSpec(spec string) bool {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
@@ -79,7 +79,7 @@ func validStepSpec(spec string) bool {
 	return true
 }
 
-// sessionCSRF 取当前会话绑定的 CSRF token；SPA 页面外壳与 JSON 写路径共用同一份会话令牌。
+// sessionCSRF takes the current session-bound CSRF token; the SPA page shell and the JSON write paths share the same session token.
 func sessionCSRF(c *gin.Context) string {
 	if sess, ok := auth.CurrentSession(c); ok {
 		return sess.CSRFToken

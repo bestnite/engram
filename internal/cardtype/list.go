@@ -7,17 +7,17 @@ import (
 	"strings"
 )
 
-// listType 是列表卡：给出 prompt，学习者逐项写出 items，由服务端逐项判分。
-// 字段：prompt（必填）、items[]（必填、非空）、ordered（可选 bool，缺省 false），
-// extra / source_url（可选）。
+// listType is the list card: given a prompt, the learner writes out the items one by one and the server grades item by item.
+// Fields: prompt (required), items[] (required, non-empty), ordered (optional bool, defaults to false),
+// extra / source_url (optional).
 //
-// 列表卡要考的是「记住了几项」，自评只能给整体印象，所以按想起的条数给部分分。
+// The list card tests "how many items were recalled"; self-rating can only give an overall impression, so score partially by the number of items recalled.
 type listType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (listType) Label() string { return "cardtype.list" }
 
-// Describe 自描述：正面 prompt、背面 items；作答控件是逐项输入（每项一个文本框）。
+// Describe self-describes: prompt on the front, items on the back; the answer control is per-item input (one text box per item).
 func (listType) Describe() Description {
 	return Description{
 		Kind:          "list",
@@ -29,7 +29,7 @@ func (listType) Describe() Description {
 		Fields: fieldsWithCommon(
 			FieldSpec{Key: "prompt", Control: ControlTextarea, Required: true},
 			FieldSpec{Key: "items", Control: ControlLines, Required: true},
-			// ordered 的服务端默认是 false（cardtype.listType 的 boolField 第三参）。
+			// The server-side default for ordered is false (the third argument of cardtype.listType's boolField).
 			FieldSpec{Key: "ordered", Control: ControlBool, Default: false},
 		),
 		Example: map[string]any{
@@ -40,7 +40,7 @@ func (listType) Describe() Description {
 	}
 }
 
-// Validate 校验 prompt / items / ordered；条目里用 | 分隔的备选答案不能有空段。
+// Validate checks prompt / items / ordered; alternative answers separated by | inside an item must not leave empty segments.
 func (listType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "prompt"); err != nil {
 		return fmt.Errorf("list: %w", err)
@@ -56,7 +56,7 @@ func (listType) Validate(fields map[string]any) error {
 			}
 		}
 	}
-	// ordered 缺省 false（冻结表）。
+	// ordered defaults to false (frozen table).
 	if _, err := boolField(fields, "ordered", false); err != nil {
 		return fmt.Errorf("list: %w", err)
 	}
@@ -66,13 +66,13 @@ func (listType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出一张卡。
+// Cards produces one card.
 func (listType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面只给 prompt；背面只给条目列表，不重复题干（复习页把背面接在正面下方）。
-// ordered 决定背面是编号列表还是圆点列表；一项有多个可接受的写法时全部列出。
+// Render gives only the prompt on the front; the back gives only the item list, without repeating the prompt (the review page renders the back below the front).
+// ordered decides whether the back is a numbered or a bulleted list; when an item has several acceptable wordings, all are listed.
 func (listType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -97,13 +97,13 @@ func (listType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: b.String()}, nil
 }
 
-// ListInput 是 listType.Grade 的输入：Answers 是学习者逐项写下的条目（顺序即输入框顺序）。
+// ListInput is the input of listType.Grade: Answers are the items the learner wrote out one by one (their order is the input box order).
 type ListInput struct {
 	GradeContext
 	Answers []string
 }
 
-// ParseAnswer 解码作答：字符串数组；没有作答等同于一项都没写（判为全错）。
+// ParseAnswer decodes the answer: a string array; no answer is equivalent to writing none of the items (graded all wrong).
 func (listType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	answers := []string{}
 	if !emptyAnswer(raw) {
@@ -114,7 +114,7 @@ func (listType) ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error) {
 	return ListInput{GradeContext: gc, Answers: answers}, nil
 }
 
-// GivenText 返回学习者写下的非空条目，以逗号连接。
+// GivenText returns the non-empty items the learner wrote, joined by commas.
 func (listType) GivenText(_ map[string]any, detail map[string]any) string {
 	given, _ := detail["given"].([]string)
 	written := make([]string, 0, len(given))
@@ -126,14 +126,14 @@ func (listType) GivenText(_ map[string]any, detail map[string]any) string {
 	return strings.Join(written, ", ")
 }
 
-// Grade 逐项判分：score = 想起的条数 / 总条数。写错的条目只是不得分，不倒扣，
-// 鼓励学习者把想到的都写出来。
+// Grade grades item by item: score = items recalled / total items. A wrong item simply scores nothing, with no penalty,
+// which encourages the learner to write out everything they can think of.
 //
-//   - ordered=false：顺序不限，每条作答最多抵一项、每项最多被抵一次。用二分图最大匹配
-//     而不是贪心，否则备选答案互相重叠时（「蓝|紫」与「紫」）先到先得会少算。
-//   - ordered=true：第 i 个作答只和第 i 项比对，位置错了不算。
+//   - ordered=false: order does not matter, each answer can cover at most one item and each item can be covered at most once. Use bipartite maximum matching
+//     rather than a greedy pass, or with overlapping alternative answers ("blue|purple" and "purple") first-come-first-served would undercount.
+//   - ordered=true: the i-th answer is compared only with the i-th item, and a wrong position does not count.
 //
-// 比对规则与挖空题一致（见 matchesAlternatives）。作答多于条数视为无法判分。
+// The comparison rules match the cloze card (see matchesAlternatives). More answers than items counts as ungradable.
 func (listType) Grade(input any) (int, map[string]any, bool) {
 	in, ok := input.(ListInput)
 	if !ok {
@@ -167,7 +167,7 @@ func (listType) Grade(input any) (int, map[string]any, bool) {
 	return in.rating(float64(hits)/float64(len(items)), detail)
 }
 
-// Breakdown 把判分细节还原成逐项结果：按条目顺序给出每项的写法与是否想起。
+// Breakdown turns the grading detail back into per-item results: it gives each item's wording and whether it was recalled, in item order.
 func (listType) Breakdown(detail map[string]any) []BreakdownItem {
 	alts, _ := detail["items"].([][]string)
 	correct, _ := detail["correct"].([]bool)
@@ -181,7 +181,7 @@ func (listType) Breakdown(detail map[string]any) []BreakdownItem {
 	return out
 }
 
-// BlankHints 让复习页给出与条数相同的输入框；列表条目没有提示，全部为空串。
+// BlankHints gives the review page the same number of input boxes as there are items; list items have no hints, so all are empty strings.
 func (listType) BlankHints(card Card) []string {
 	items, err := stringSliceField(card.Fields, "items")
 	if err != nil {
@@ -190,10 +190,10 @@ func (listType) BlankHints(card Card) []string {
 	return make([]string, len(items))
 }
 
-// matchUnordered 求作答与条目的最大匹配，返回每个条目是否被某条作答抵上。
-// 条目数是个位到几十，增广路算法足够，不必引入更复杂的匹配实现。
+// matchUnordered finds the maximum matching between answers and items, returning whether each item is covered by some answer.
+// The item count is in the single digits to tens, so an augmenting-path algorithm suffices; there is no need for a more elaborate matching implementation.
 func matchUnordered(given []string, alts [][]string) []bool {
-	// edges[g] 列出第 g 条作答能抵的条目。
+	// edges[g] lists the items the g-th answer can cover.
 	edges := make([][]int, len(given))
 	for g, answer := range given {
 		for i := range alts {
@@ -230,7 +230,7 @@ func matchUnordered(given []string, alts [][]string) []bool {
 	return correct
 }
 
-// listParts 读取并校验列表卡的三要素。
+// listParts reads and validates the three elements of a list card.
 func listParts(fields map[string]any) (string, []string, bool, error) {
 	prompt, err := stringField(fields, "prompt")
 	if err != nil {

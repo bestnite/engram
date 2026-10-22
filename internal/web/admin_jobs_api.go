@@ -12,12 +12,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板「作业」页的 SPA JSON 端点。
+// This file is the SPA JSON endpoint for the admin panel's "jobs" page.
 //
-// 读取复用 s.jobRunner.List，取消复用 s.jobRunner.Cancel 与 jobs.ErrNotRunning，与 SSR 页
-// 完全同一份调用。kind/status/stage 是稳定英文标识，由前端映射文案。
+// Reads reuse s.jobRunner.List, cancellation reuses s.jobRunner.Cancel and jobs.ErrNotRunning, exactly the same calls as the SSR
+// page. kind/status/stage are stable English identifiers whose copy is mapped by the frontend.
 
-// adminJob 是一个作业的元信息；时间为 UTC 文本，空串表示尚未发生。
+// adminJob is a job's metadata; times are UTC text, and an empty string means it has not happened yet.
 type adminJob struct {
 	ID         string  `json:"id"`
 	Kind       string  `json:"kind"`
@@ -31,7 +31,7 @@ type adminJob struct {
 	CanCancel  bool    `json:"can_cancel"`
 }
 
-// adminJobsResponse 是作业列表的分页响应。
+// adminJobsResponse is the paged response for the job list.
 type adminJobsResponse struct {
 	Jobs  []adminJob `json:"jobs"`
 	Page  int        `json:"page"`
@@ -39,7 +39,7 @@ type adminJobsResponse struct {
 	Total int64      `json:"total"`
 }
 
-// adminJobs 返回作业列表（分页），口径与 adminJobsPage 一致。
+// adminJobs returns the job list (paged), with the same convention as adminJobsPage.
 func (s *Server) adminJobs(c *gin.Context) {
 	ctx := c.Request.Context()
 	page := parsePage(c.Query("page"))
@@ -78,7 +78,7 @@ func (s *Server) adminJobs(c *gin.Context) {
 	c.JSON(http.StatusOK, adminJobsResponse{Jobs: rows, Page: page, Pages: pages, Total: total})
 }
 
-// adminJobCancel 取消一个作业：运行中的会被杀进程组并标 failed，排队中的直接标 failed。
+// adminJobCancel cancels a job: a running one has its process group killed and is marked failed, a queued one is marked failed directly.
 func (s *Server) adminJobCancel(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {

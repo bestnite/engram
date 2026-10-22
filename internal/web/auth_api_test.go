@@ -17,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// postJSON 发起带 Headers 与 Cookies 的 POST JSON 请求。
+// postJSON issues a POST JSON request with Headers and Cookies.
 func postJSON(srv *Server, path string, body any, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
 	var payload []byte
 	if body != nil {
@@ -36,7 +36,7 @@ func postJSON(srv *Server, path string, body any, cookies []*http.Cookie, header
 	return rec
 }
 
-// findCookie 从 ResponseRecorder 的 Set-Cookie 响应头解析指定 cookie。
+// findCookie parses the named cookie from a ResponseRecorder's Set-Cookie response header.
 func findCookie(rec *httptest.ResponseRecorder, name string) *http.Cookie {
 	for _, c := range rec.Result().Cookies() {
 		if c.Name == name {
@@ -46,7 +46,7 @@ func findCookie(rec *httptest.ResponseRecorder, name string) *http.Cookie {
 	return nil
 }
 
-// createTestUser 在数据库中创建一个测试账号并返回其模型。
+// createTestUser creates a test account in the database and returns its model.
 func createTestUser(t *testing.T, srv *Server, username, password, role string, active bool) *store.User {
 	t.Helper()
 	ctx := context.Background()
@@ -97,7 +97,7 @@ func TestSession_Unauthenticated(t *testing.T) {
 		t.Errorf("expected non-empty csrf_token")
 	}
 
-	// 验证下发了 HttpOnly、SameSite=Lax 的 csrf_double cookie，且值与返回的 token 一致
+	// Verify an HttpOnly, SameSite=Lax csrf_double cookie was issued and its value matches the returned token
 	c := findCookie(rec, auth.CSRFDoubleSubmitCookieName)
 	if c == nil {
 		t.Fatalf("expected Set-Cookie %s to be present", auth.CSRFDoubleSubmitCookieName)
@@ -112,7 +112,7 @@ func TestSession_Unauthenticated(t *testing.T) {
 		t.Errorf("cookie value %q does not match response csrf_token %q", c.Value, res.CSRFToken)
 	}
 
-	// 验证响应体绝不泄露 session_id 或 secret
+	// Verify the response body never leaks session_id or secret
 	bodyStr := rec.Body.String()
 	if strings.Contains(bodyStr, "session_id") || strings.Contains(bodyStr, "secret") {
 		t.Errorf("response body leaks session/secret keyword: %s", bodyStr)
@@ -169,12 +169,12 @@ func TestSession_Authenticated(t *testing.T) {
 		t.Errorf("csrf_token %q does not match session csrf %q", res.CSRFToken, sess.CSRFToken)
 	}
 
-	// 验证绝不泄露会话 ID (sess.ID)
+	// Verify the session ID (sess.ID) is never leaked
 	if strings.Contains(rec.Body.String(), sess.ID) {
 		t.Errorf("response leaked session ID %q", sess.ID)
 	}
 
-	// 测试路径别名 /api/v1/session 输出逐字节一致
+	// Check the path alias /api/v1/session is byte-for-byte identical
 	aliasRec := getWithCookies(t, srv, "/api/v1/session", []*http.Cookie{sessCookie})
 	if aliasRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/session alias status = %d, want 200", aliasRec.Code)
@@ -222,7 +222,7 @@ func TestLogin_CSRFRejections(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "bob", "Password123!", store.RoleUser, true)
 
-	// 1. 无 Cookie 且无 CSRF 头
+	// 1. No Cookie and no CSRF header
 	rec := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "bob", "password": "Password123!",
 	}, nil, nil)
@@ -233,7 +233,7 @@ func TestLogin_CSRFRejections(t *testing.T) {
 		t.Errorf("expected csrf_failed error, got %s", rec.Body.String())
 	}
 
-	// 2. 有 Cookie 但无 Header
+	// 2. Cookie present but no Header
 	cookie := &http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken}
 	rec2 := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "bob", "password": "Password123!",
@@ -242,7 +242,7 @@ func TestLogin_CSRFRejections(t *testing.T) {
 		t.Errorf("missing header status = %d, want 403", rec2.Code)
 	}
 
-	// 3. 有 Cookie 但 Header 值不匹配
+	// 3. Cookie present but the Header value does not match
 	rec3 := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "bob", "password": "Password123!",
 	}, []*http.Cookie{cookie}, map[string]string{
@@ -258,7 +258,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 	createTestUser(t, srv, "carol", "Password123!", store.RoleUser, true)
 	createTestUser(t, srv, "disabled_carol", "Password123!", store.RoleUser, false)
 
-	// 先获取合法的双提交 CSRF token
+	// First obtain a valid double-submit CSRF token
 	initRec := get(t, srv, "/api/v1/auth/session", nil)
 	doubleCookie := findCookie(initRec, auth.CSRFDoubleSubmitCookieName)
 	if doubleCookie == nil {
@@ -270,7 +270,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 	_ = json.Unmarshal(initRec.Body.Bytes(), &initRes)
 	csrfHeaders := map[string]string{auth.CSRFHeaderName: initRes.CSRFToken}
 
-	// 1. 密码错误
+	// 1. Wrong password
 	failRec := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "carol", "password": "WrongPassword123!",
 	}, []*http.Cookie{doubleCookie}, csrfHeaders)
@@ -281,7 +281,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 		t.Errorf("expected invalid_credentials, got %s", failRec.Body.String())
 	}
 
-	// 2. 账号禁用
+	// 2. Account disabled
 	disRec := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "disabled_carol", "password": "Password123!",
 	}, []*http.Cookie{doubleCookie}, csrfHeaders)
@@ -292,7 +292,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 		t.Errorf("expected user_disabled, got %s", disRec.Body.String())
 	}
 
-	// 3. 登录成功
+	// 3. Login succeeds
 	okRec := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "carol", "password": "Password123!",
 	}, []*http.Cookie{doubleCookie}, csrfHeaders)
@@ -314,7 +314,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 		t.Errorf("unexpected login response: %+v", okRes)
 	}
 
-	// 验证下发了会话 Cookie，且响应不包含会话 ID 内部值
+	// Verify the session Cookie was issued and the response contains no internal session ID value
 	sessionCookie := findCookie(okRec, srv.sessions.CookieName())
 	if sessionCookie == nil {
 		t.Fatalf("expected session cookie in login response")
@@ -323,7 +323,7 @@ func TestLogin_SuccessAndFailure(t *testing.T) {
 		t.Errorf("expected session cookie to be HttpOnly")
 	}
 
-	// 用该会话 Cookie 调用 GET /api/v1/auth/session 验证状态已生效
+	// Call GET /api/v1/auth/session with that session Cookie to verify the state has taken effect
 	sessRec := getWithCookies(t, srv, "/api/v1/auth/session", []*http.Cookie{sessionCookie})
 	if sessRec.Code != http.StatusOK {
 		t.Fatalf("session check status = %d, want 200", sessRec.Code)
@@ -337,7 +337,7 @@ func TestLogin_TOTPChallenge(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	u := createTestUser(t, srv, "totp_user", "Password123!", store.RoleUser, true)
 
-	// 开启 TOTP
+	// Enable TOTP
 	ctx := context.Background()
 	secret, _, err := srv.totp.Begin(ctx, u.ID, u.Username)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestLogin_TOTPChallenge(t *testing.T) {
 	}
 	_ = json.Unmarshal(initRec.Body.Bytes(), &initRes)
 
-	// 密码正确但开启了 TOTP：必须返回 requires_totp challenge，绝不发放会话 cookie
+	// Correct password but TOTP enabled: must return the requires_totp challenge and never hand out a session cookie
 	rec := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "totp_user", "password": "Password123!",
 	}, []*http.Cookie{doubleCookie}, map[string]string{auth.CSRFHeaderName: initRes.CSRFToken})
@@ -381,7 +381,7 @@ func TestLogin_TOTPChallenge(t *testing.T) {
 		t.Errorf("expected authenticated=false before second factor")
 	}
 
-	// 验证未下发会话 cookie，但下发了 engram_totp_pending cookie
+	// Verify no session cookie was issued, but an engram_totp_pending cookie was
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
 		t.Errorf("session cookie must NOT be issued on TOTP first factor")
 	}
@@ -406,7 +406,7 @@ func TestLogout_Flow(t *testing.T) {
 	}
 	sessCookie := findCookie(dummyRec, srv.sessions.CookieName())
 
-	// 1. 无会话调用 logout -> 403 csrf_no_session
+	// 1. Calling logout with no session -> 403 csrf_no_session
 	recNoSess := postJSON(srv, "/api/v1/auth/logout", nil, nil, map[string]string{
 		auth.CSRFHeaderName: sess.CSRFToken,
 	})
@@ -417,7 +417,7 @@ func TestLogout_Flow(t *testing.T) {
 		t.Errorf("expected csrf_no_session, got %s", recNoSess.Body.String())
 	}
 
-	// 2. 有会话但无 CSRF Header -> 403 csrf_failed
+	// 2. Session present but no CSRF Header -> 403 csrf_failed
 	recNoCSRF := postJSON(srv, "/api/v1/auth/logout", nil, []*http.Cookie{sessCookie}, nil)
 	if recNoCSRF.Code != http.StatusForbidden {
 		t.Errorf("missing CSRF status = %d, want 403", recNoCSRF.Code)
@@ -426,7 +426,7 @@ func TestLogout_Flow(t *testing.T) {
 		t.Errorf("expected csrf_failed, got %s", recNoCSRF.Body.String())
 	}
 
-	// 3. 有会话但 CSRF Header 错误 -> 403 csrf_failed
+	// 3. Session present but the CSRF Header is wrong -> 403 csrf_failed
 	recBadCSRF := postJSON(srv, "/api/v1/auth/logout", nil, []*http.Cookie{sessCookie}, map[string]string{
 		auth.CSRFHeaderName: "wrong-csrf-token",
 	})
@@ -434,7 +434,7 @@ func TestLogout_Flow(t *testing.T) {
 		t.Errorf("wrong CSRF status = %d, want 403", recBadCSRF.Code)
 	}
 
-	// 4. 正确的 CSRF Header 与会话 -> 登出成功
+	// 4. Correct CSRF Header and session -> logout succeeds
 	recOK := postJSON(srv, "/api/v1/auth/logout", nil, []*http.Cookie{sessCookie}, map[string]string{
 		auth.CSRFHeaderName: sess.CSRFToken,
 	})
@@ -456,23 +456,23 @@ func TestLogout_Flow(t *testing.T) {
 		t.Errorf("expected fresh csrf_token returned after logout")
 	}
 
-	// 验证会话 Cookie 被清除（MaxAge < 0）
+	// Verify the session Cookie was cleared (MaxAge < 0)
 	clearedCookie := findCookie(recOK, srv.sessions.CookieName())
 	if clearedCookie == nil || clearedCookie.MaxAge >= 0 {
 		t.Errorf("session cookie was not cleared properly: %+v", clearedCookie)
 	}
 
-	// 验证用旧会话发起请求已被服务端作废
+	// Verify a request made with the old session has been invalidated server-side
 	recheckRec := getWithCookies(t, srv, "/api/v1/auth/session", []*http.Cookie{sessCookie})
 	if !strings.Contains(recheckRec.Body.String(), `"authenticated":false`) {
 		t.Errorf("revoked session should be unauthenticated, got %s", recheckRec.Body.String())
 	}
 }
 
-// TestLoginShellServesAppAndInitializesDoubleSubmitCookie 断言 SPA 登录入口
-// GET /login 返回应用壳，并像 SSR 的 GET /login 一样先下发会话前双提交 cookie，
-// 使 SPA 挂载后的 POST /api/v1/auth/login 具备可校验的镜像 token。
-// 它只读：不建立会话、不返回任何凭据，也不渲染 SSR 表单。
+// TestLoginShellServesAppAndInitializesDoubleSubmitCookie asserts the SPA login entry
+// GET /login returns the app shell and, like SSR's GET /login, first issues the pre-session double-submit cookie,
+// so that after mounting, the SPA's POST /api/v1/auth/login has a verifiable mirror token.
+// It is read-only: it establishes no session, returns no credential and renders no SSR form.
 func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	srv, _ := newAuthServer(t)
 
@@ -487,7 +487,7 @@ func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	if !strings.Contains(body, `<div id="app"></div>`) {
 		t.Errorf("GET /login did not serve the SPA shell: %s", snippet(body))
 	}
-	// 应用壳不是登录表单：不得出现密码字段或 SSR 表单 action。
+	// The app shell is not a login form: no password field or SSR form action may appear.
 	if strings.Contains(body, `name="password"`) || strings.Contains(body, `action="/login"`) {
 		t.Errorf("GET /login must not render the SSR login form: %s", snippet(body))
 	}
@@ -505,16 +505,16 @@ func TestLoginShellServesAppAndInitializesDoubleSubmitCookie(t *testing.T) {
 	if len(c.Value) < 16 {
 		t.Errorf("csrf_double cookie value too short: %q", c.Value)
 	}
-	// 登录入口绝不提早签发会话 cookie。
+	// The login entry never issues a session cookie early.
 	if findCookie(rec, srv.sessions.CookieName()) != nil {
 		t.Errorf("GET /login must not issue a session cookie")
 	}
 }
 
-// TestLoginShellCookieMatchesSessionToken 断言入口下发的双提交 cookie 与
-// GET /api/v1/auth/session 返回的 csrf_token 是同一个值：SPA 因此能用响应里的 token
-// 通过 POST /api/v1/auth/login 的镜像校验，无需读取 HttpOnly cookie。
-// 该链路正是未登录用户经 SPA 登录成功的完整路径。
+// TestLoginShellCookieMatchesSessionToken asserts that the double-submit cookie issued at the entry and the
+// csrf_token returned by GET /api/v1/auth/session are the same value: the SPA can therefore use the token from the response
+// to pass the mirror check on POST /api/v1/auth/login without reading the HttpOnly cookie.
+// That chain is precisely the full path by which a signed-out user logs in through the SPA.
 func TestLoginShellCookieMatchesSessionToken(t *testing.T) {
 	srv, _ := newAuthServer(t)
 	createTestUser(t, srv, "shelluser", "Password123!", store.RoleUser, true)
@@ -543,7 +543,7 @@ func TestLoginShellCookieMatchesSessionToken(t *testing.T) {
 		t.Fatalf("session csrf_token %q != shell cookie %q", res.CSRFToken, cookie.Value)
 	}
 
-	// 用入口下发的 cookie 与镜像 token 登录成功，且响应签发 HttpOnly 会话 cookie。
+	// Log in successfully with the cookie issued at the entry and the mirror token, and the response issues an HttpOnly session cookie.
 	ok := postJSON(srv, "/api/v1/auth/login", map[string]string{
 		"username": "shelluser", "password": "Password123!",
 	}, []*http.Cookie{cookie}, map[string]string{auth.CSRFHeaderName: res.CSRFToken})

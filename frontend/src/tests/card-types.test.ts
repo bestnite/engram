@@ -14,8 +14,8 @@ import { en } from '../lib/i18n/locales/en';
 import { CARD_TYPES } from './card-type-fixture';
 
 /**
- * 元数据模块的加载契约：一次请求、幂等缓存、失败可重试；以及「每个题型都有文案」的
- * 一致性。题型清单以样例响应为准，前端不维护第二份清单。
+ * Load contract of the metadata module: one request, idempotent caching, retryable failure; plus the consistency
+ * requirement that "every card type has copy". The card type list follows the sample response, and the frontend keeps no second list.
  */
 describe('card type metadata loading', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -70,7 +70,7 @@ describe('card type metadata loading', () => {
   it('stays unloaded on failure and retries on the next call', async () => {
     mockFetch.mockRejectedValueOnce(new Error('network down'));
     await expect(loadCardTypes(client)).rejects.toBeTruthy();
-    // 失败不写 store：视图据此走降级路径，而不是把半份元数据当完整清单。
+    // A failure writes nothing to the store: views take the degraded path because of that, instead of taking half the metadata for a complete list.
     expect(get(cardTypes)).toBeNull();
 
     respondWithCatalog();
@@ -91,7 +91,7 @@ describe('every kind has a catalog label', () => {
   it('provides notes.kind.<kind> in both locales for every server kind', () => {
     for (const description of CARD_TYPES.kinds) {
       const key = `notes.kind.${description.kind}`;
-      // 缺一条文案时界面会印出裸 key，比少一格徽标更糟——所以在两侧语言包里都钉死。
+      // When one piece of copy is missing the UI prints a bare key, which is worse than a missing badge — so it is pinned in both language packs.
       expect(zhCN[key], `zh-CN ${key}`).toBeTruthy();
       expect(en[key], `en ${key}`).toBeTruthy();
     }

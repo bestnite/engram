@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// 日切点 0 是午夜；空配置（NULL）才是默认 04:00，写入与存储不得混淆二者。
-// SSR 的 /settings/profile 表单已删除，资料写入改走 SPA 的 PATCH /api/v1/profile。
+// A day cutoff of 0 is midnight; only an empty setting (NULL) means the default 04:00, and writing and storage must not conflate the two.
+// The SSR /settings/profile form is gone, so profile writes now go through the SPA's PATCH /api/v1/profile.
 
-// patchProfileCutoff 以 JSON PATCH 提交个人资料；hour 为 nil 表示清空切点（存 NULL）。
+// patchProfileCutoff submits a profile as a JSON PATCH; hour nil means clearing the cutoff (stored as NULL).
 func patchProfileCutoff(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, hour *int) *httptest.ResponseRecorder {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{

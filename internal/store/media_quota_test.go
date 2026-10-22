@@ -10,11 +10,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestUserMediaUsageDedupesAndReleases 覆盖计量口径：
-//   - 同一 blob 被同一用户的多个 note/多处引用只计一次（去重）；
-//   - 不同用户各自引用同一 blob 互不影响（各自计一次，不重复计入同一人）；
-//   - 删除引用（note 软删除）即释放配额；
-//   - 卡组包形态的 media/<sha>.<ext> 引用也能识别。
+// TestUserMediaUsageDedupesAndReleases covers the accounting rule:
+//   - the same blob referenced by several notes / in several places of one user counts once (dedup);
+//   - different users referencing the same blob do not affect each other (each counts once, never twice for the same person);
+//   - removing a reference (soft-deleting the note) frees the quota;
+//   - deck-package form references media/<sha>.<ext> are recognized too.
 func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	ctx := context.Background()
 	db := newSQLite(t)
@@ -38,7 +38,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("create media 2: %v", err)
 	}
 
-	// u1 的 note：同时以 /media/<sha> 引用 m1（出现两次）与 m2。
+	// u1's note: references both m1 (twice) and m2 as /media/<sha>.
 	noteU1 := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s) /media/%s","back":"![](/media/%s)"}`,
@@ -49,7 +49,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("create u1 note: %v", err)
 	}
 	mapNote(t, db, &noteU1)
-	// u2 的 note：只引用 m1（跨用户重复引用，不应影响 u1 的用量）。
+	// u2's note: references only m1 (a cross-user duplicate reference must not affect u1's usage).
 	noteU2 := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)"}`, sha1),
@@ -78,7 +78,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("u2 usage = %d, want 1000 (its own reference to m1)", usage2.Bytes)
 	}
 
-	// 卡组包形态的引用也识别：给 u1 加一条只引用 m2 的 sha 形态 note → 仍只加 500。
+	// deck-package form references are recognized too: add u1 a sha-form note that references only m2 → still only +500.
 	pkgNote := Note{
 		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"![](media/%s.png)"}`, sha2),
@@ -95,7 +95,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("u1 usage after sha-form note = %d, want 1500 (no double count)", usage1.Bytes)
 	}
 
-	// 删除 u1 的两条引用 note（软删除）→ 配额全部释放；u2 不受影响。
+	// delete u1's two referencing notes (soft delete) → the quota is fully released; u2 is unaffected.
 	if err := db.Delete(&noteU1).Error; err != nil {
 		t.Fatalf("soft delete u1 note: %v", err)
 	}
@@ -116,8 +116,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	}
 }
 
-// mapNote 补建夹具 note 的 media_notes 映射：夹具直接 db.Create 绕过了 NoteStore，
-// 而计量读的是映射（生产路径里映射由 note 写入路径维护）。
+// mapNote creates the media_notes mapping for fixture notes: the fixture uses db.Create directly, bypassing NoteStore,
+// while accounting reads the mapping (in production the mapping is maintained by the note write path).
 func mapNote(t *testing.T, db *gorm.DB, n *Note) {
 	t.Helper()
 	fields, err := ParseFields(n.FieldsJSON)
@@ -129,9 +129,9 @@ func mapNote(t *testing.T, db *gorm.DB, n *Note) {
 	}
 }
 
-// TestUserMediaUsageCountsPendingUploads 覆盖「待用的上传」：没有任何 note 引用的上传计到
-// 上传者名下（反面：不计就能无限上传不引用的文件）；一旦被别人的 note 引用，就转由引用者
-// 计费、不再计到上传者；引用消失（硬删除映射）后又回到上传者名下。
+// TestUserMediaUsageCountsPendingUploads covers 'pending uploads': an upload no note references is charged to
+// the uploader (counter-case: not counting it would allow unlimited uploads of unreferenced files); once someone else's note references it, it is charged to
+// the referencer and no longer to the uploader; when the reference disappears (mapping hard-deleted) it returns to the uploader.
 func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 	ctx := context.Background()
 	db := newSQLite(t)
@@ -183,7 +183,7 @@ func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 	}
 }
 
-// TestScanMediaRefsForms 钉死引用识别的两种形态，并证明二者不互相误配、旧的数字 id 形态不再识别。
+// TestScanMediaRefsForms pins the two reference forms and proves they do not mis-match each other and that the old numeric id form is no longer recognized.
 func TestScanMediaRefsForms(t *testing.T) {
 	shaA := strings.Repeat("a", 64)
 	shaB := strings.Repeat("b", 64)
@@ -191,16 +191,16 @@ func TestScanMediaRefsForms(t *testing.T) {
 		name  string
 		text  string
 		want  []string
-		avoid []string // 必须不被收集的串
+		avoid []string // strings that must not be collected
 	}{
 		{name: "url form", text: "![](" + "/media/" + shaA + ")", want: []string{shaA}},
 		{name: "package form", text: "![](media/" + shaB + ".png)", want: []string{shaB}},
 		{name: "both forms in one field", text: "/media/" + shaA + " and media/" + shaB + ".jpg",
 			want: []string{shaA, shaB}},
 		{name: "old numeric id ignored", text: "![](/media/123)", want: nil, avoid: []string{"123"}},
-		// 65 位十六进制不得被截成 64 位而误配：记录 64 位前缀，但整串是 65 位。
+		// a 65-digit hex must not be truncated to 64 and matched by mistake: it records the 64-digit prefix while the whole string is 65 digits.
 		{name: "65 hex not a ref", text: "/media/" + shaA + "f", avoid: []string{shaA}},
-		// URL 形态的 64 位 sha 后紧跟扩展名（不是包内形态，因为带了前导斜杠）仍只取同一 sha。
+		// a URL-form 64-digit sha followed immediately by an extension (not in-package form, since it has a leading slash) still yields only the same sha.
 		{name: "url form with extension", text: "/media/" + shaB + ".png", want: []string{shaB}},
 	}
 	for _, tc := range cases {

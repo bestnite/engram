@@ -14,17 +14,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是（RFC 8058 一键退订）的 HTTP 级验收。覆盖三条验收：
-//  1. 一键 POST 只关掉令牌指名的那个类型；
-//  2. 令牌不能被重放到另一个类型或另一个用户；
-//  3. A 类邮件不带退订头（A 类的正例见 internal/mail/unsubscribe_test.go）。
+// This file is the HTTP-level acceptance for (RFC 8058 one-click unsubscribe). It covers three acceptances:
+//  1. a one-click POST disables only the type the token names;
+//  2. a token cannot be replayed onto another type or another user;
+//  3. class A mail carries no unsubscribe header (the class A positive case is in internal/mail/unsubscribe_test.go).
 //
-// 一键 POST 一律**不带 cookie**（不登录），以证明端点确实在免登录下可用。
-// 移除 SSR 页面后，退订由三条传输承担：GET /unsubscribe 返回应用壳并下发双提交 cookie，
-// POST /unsubscribe 是 RFC 8058 One-Click 的机器端点（只回状态码，不渲染模板），
-// /api/v1/unsubscribe 是 SPA 的同源 JSON 传输（GET 读不消费、POST 消费）。
+// The one-click POST always goes **without cookies** (not logged in), to prove the endpoint really works login-free.
+// After the SSR pages were removed, unsubscribe is carried by three transports: GET /unsubscribe returns the app shell and sets the double-submit cookie,
+// POST /unsubscribe is the RFC 8058 One-Click machine endpoint (status code only, no template rendered),
+// and /api/v1/unsubscribe is the SPA's same-origin JSON transport (GET reads without consuming, POST consumes).
 
-// tokenFromUnsubscribeHeader 从 List-Unsubscribe 头（形如 <URL>）里取出令牌。
+// tokenFromUnsubscribeHeader pulls the token out of the List-Unsubscribe header (of the form <URL>).
 func tokenFromUnsubscribeHeader(t *testing.T, header string) string {
 	t.Helper()
 	raw := strings.Trim(strings.TrimSpace(header), "<>")
@@ -39,7 +39,7 @@ func tokenFromUnsubscribeHeader(t *testing.T, header string) string {
 	return token
 }
 
-// waitForMailOfType 等待替身收到指定类型的邮件（worker 异步投递；夹具登录会先入队其它类型）。
+// waitForMailOfType waits for the double to receive a mail of the given type (the worker delivers asynchronously; the fixture login enqueues other types first).
 func waitForMailOfType(t *testing.T, sender *recordingMailSender, typ string) mail.Message {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -55,8 +55,8 @@ func waitForMailOfType(t *testing.T, sender *recordingMailSender, typ string) ma
 	return mail.Message{}
 }
 
-// oneClickPost 发一个 RFC 8058 One-Click POST（无 cookie、无 CSRF），可附带额外表单字段，
-// 用来验证「调用方塞进来的类型参数被忽略」。
+// oneClickPost sends an RFC 8058 One-Click POST (no cookie, no CSRF), optionally with extra form fields,
+// to verify that "a type parameter slipped in by the caller is ignored".
 func oneClickPost(t *testing.T, srv *Server, token string, extra url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	form := url.Values{"List-Unsubscribe": {"One-Click"}}
@@ -66,18 +66,18 @@ func oneClickPost(t *testing.T, srv *Server, token string, extra url.Values) *ht
 	return postForm(t, srv, "/unsubscribe?token="+url.QueryEscape(token), form, nil)
 }
 
-// TestUnsubscribeOneClickDisablesOnlyThatType 是验收①的主证据，并顺带证明：
-//   - B 类（可选类型）邮件带上了两个 RFC 8058 头，且头里的令牌可用；
-//   - 一键 POST 在**未登录**（无 cookie）下返回 200；
-//   - 只关掉令牌指名的 invite，用户其它可选类型的开关不受影响；
-//   - 即便调用方在表单里塞一个 type=deck_shared，也不会被采纳。
+// TestUnsubscribeOneClickDisablesOnlyThatType is the main evidence for acceptance ①, and also proves:
+//   - a class B (optional type) mail carries both RFC 8058 headers, and the token in them works;
+//   - the one-click POST returns 200 while **logged out** (no cookie);
+//   - only the invite named by the token is disabled, and the user's switches for other optional types are unaffected;
+//   - even if the caller stuffs type=deck_shared into the form, it is not honoured.
 func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	ts.srv.invites = store.NewInviteStore(ts.db)
 	sender := startInviteMail(t, ts.srv, ts.db)
 	ctx := context.Background()
 
-	// 收件人必须是本站用户：退订改的是用户偏好，非用户没有可关的开关。
+	// The recipient must be a user of this site: unsubscribing changes a user preference, and a non-user has no switch to turn off.
 	invitee, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
 		Username: "invitee", Email: "invitee@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
 	})
@@ -85,14 +85,14 @@ func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
 	prefs := store.NewEmailPrefStore(ts.db)
-	// 打开另一个可选类型（C 类默认关，先显式打开），以便验证「只关掉那一个」。
+	// Turn on another optional type (class C is off by default, so turn it on explicitly) to verify "only that one is disabled".
 	if err := prefs.SetChoices(ctx, invitee.ID, map[string]bool{
 		string(mail.TypeReviewReminder): true,
 	}, time.Now().UTC()); err != nil {
 		t.Fatalf("SetChoices: %v", err)
 	}
 
-	// 管理员把邀请寄给这个已注册邮箱（SSR 的 /admin/invites 表单端点已删除，走 JSON 端点）。
+	// The admin sends the invite to this registered address (the SSR /admin/invites form endpoint is gone, so it goes through the JSON endpoint).
 	created := postJSON(ts.srv, "/api/v1/admin/invites", map[string]any{
 		"role": "user", "email": "invitee@example.com", "send_email": true,
 	}, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
@@ -100,12 +100,12 @@ func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 		t.Fatalf("POST /api/v1/admin/invites = %d, want 201 (body %s)",
 			created.Code, snippet(created.Body.String()))
 	}
-	// 发信成功时 mail_notice 回带稳定结果码 invite_mail_queued（非空表示已入队）。
+	// On a successful send, mail_notice comes back with the stable result code invite_mail_queued (non-empty means enqueued).
 	if !strings.Contains(created.Body.String(), `"mail_notice":"`+noticeInviteMailQueued+`"`) {
 		t.Fatalf("invite create did not queue the mail: %s", snippet(created.Body.String()))
 	}
 
-	// 夹具登录本身会入队一封 new_device_login；只取邀请那一封。
+	// The fixture login itself enqueues a new_device_login; only the invite one is taken.
 	msg := waitForMailOfType(t, sender, string(mail.TypeInvite))
 	unsub := msg.Headers[mail.HeaderListUnsubscribe]
 	if unsub == "" {
@@ -116,7 +116,7 @@ func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 	}
 	token := tokenFromUnsubscribeHeader(t, unsub)
 
-	// 一键 POST：不带任何 cookie（未登录），并故意塞一个 type 参数看它是否被采纳。
+	// One-click POST: no cookies at all (logged out), with a type parameter deliberately stuffed in to see whether it is honoured.
 	rec := oneClickPost(t, ts.srv, token, url.Values{"type": {"deck_shared"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("one-click POST (no login) status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -142,22 +142,22 @@ func TestUnsubscribeOneClickDisablesOnlyThatType(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers 是验收②：
-//   - 一枚令牌用过后再 POST 被拒（一次性，不可重放）；
-//   - 令牌只影响它自己的用户，另一个用户的偏好完全不动。
+// TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers is acceptance ②:
+//   - POSTing with an already used token is refused (single use, not replayable);
+//   - a token only affects its own user, and another user's preferences are completely untouched.
 func TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
 	prefs := store.NewEmailPrefStore(ts.db)
 
-	// 用户 A：令牌归属者。
+	// User A: the token's owner.
 	userA, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
 		Username: "a", Email: "a@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
 	})
 	if err != nil {
 		t.Fatalf("CreateLocalUser A: %v", err)
 	}
-	// 用户 B：不应被 A 的令牌影响。
+	// User B: must not be affected by A's token.
 	userB, err := ts.srv.accounts.CreateLocalUser(ctx, auth.CreateUserInput{
 		Username: "b", Email: "b@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
 	})
@@ -174,7 +174,7 @@ func TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers(t *testing.T) {
 	if first.Code != http.StatusOK {
 		t.Fatalf("first one-click status = %d, want 200 (body %s)", first.Code, snippet(first.Body.String()))
 	}
-	// 重放同一令牌：必须被拒（一次性）。
+	// Replaying the same token: must be refused (single use).
 	second := oneClickPost(t, ts.srv, token, nil)
 	if second.Code != http.StatusBadRequest {
 		t.Fatalf("replayed one-click status = %d, want 400 (body %s)", second.Code, snippet(second.Body.String()))
@@ -199,8 +199,8 @@ func TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeRefusesClassAToken 是验收③的服务端防线：
-// 即便有人拿着一枚「指名 A 类」的令牌（正常流程绝不会签发），端点也拒绝，不写任何偏好。
+// TestUnsubscribeRefusesClassAToken is the server-side defence for acceptance ③:
+// even if someone holds a token that "names class A" (the normal flow never issues one), the endpoint refuses it and writes no preference.
 func TestUnsubscribeRefusesClassAToken(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -222,8 +222,8 @@ func TestUnsubscribeRefusesClassAToken(t *testing.T) {
 	}
 }
 
-// TestUnsubscribePageDoesNotConsumeToken 证明 GET 确认页不消费令牌（防链接预取误退订），
-// 且真正退订仍由 POST 完成。
+// TestUnsubscribePageDoesNotConsumeToken proves the GET confirm page does not consume the token (preventing stray unsubscribes from link prefetching),
+// and that the real unsubscribe is still done by POST.
 func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -242,7 +242,7 @@ func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 		if page.Code != http.StatusOK {
 			t.Fatalf("GET /unsubscribe #%d status = %d, want 200 (body %s)", i+1, page.Code, snippet(page.Body.String()))
 		}
-		// GET 现在返回 SPA 应用壳（不再渲染 SSR 确认页），并下发会话前双提交 cookie。
+		// GET now returns the SPA app shell (no longer an SSR confirm page) and sets the pre-session double-submit cookie.
 		if !strings.Contains(page.Body.String(), `id="app"`) {
 			t.Errorf("GET /unsubscribe #%d did not serve the SPA shell: %s", i+1, snippet(page.Body.String()))
 		}
@@ -250,7 +250,7 @@ func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 			t.Errorf("GET /unsubscribe #%d did not initialize the double-submit cookie", i+1)
 		}
 	}
-	// GET 不消费：偏好未变，令牌仍可用。
+	// GET does not consume: the preference is unchanged and the token still works.
 	choices, _ := store.NewEmailPrefStore(ts.db).Choices(ctx, user.ID)
 	if len(choices) != 0 {
 		t.Fatalf("GET consumed the token or wrote a preference: %v", choices)
@@ -265,7 +265,7 @@ func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeExpiredTokenRejected 证明过期令牌被拒并给出稳定提示。
+// TestUnsubscribeExpiredTokenRejected proves an expired token is rejected with a stable hint.
 func TestUnsubscribeExpiredTokenRejected(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -282,9 +282,9 @@ func TestUnsubscribeExpiredTokenRejected(t *testing.T) {
 	}
 }
 
-// ── SPA 同源 JSON 传输（读与确认）──────────────────────────────────────────────
+// ── SPA same-origin JSON transport (read and confirm) ─────────────────────
 
-// TestUnsubscribeJSONReadDoesNotConsume 断言读端点返回令牌指名的可选类型，但不消费令牌（可反复读）。
+// TestUnsubscribeJSONReadDoesNotConsume asserts the read endpoint returns the optional type the token names without consuming the token (it can be read repeatedly).
 func TestUnsubscribeJSONReadDoesNotConsume(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -312,8 +312,8 @@ func TestUnsubscribeJSONReadDoesNotConsume(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeJSONConfirmConsumesOnlyNamedType 断言确认端点消费令牌、只关掉指名的可选类型，
-// 并落下一条与 SSR 相同的审计行。
+// TestUnsubscribeJSONConfirmConsumesOnlyNamedType asserts the confirm endpoint consumes the token and disables only the named optional type,
+// and writes one audit row identical to SSR's.
 func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -324,7 +324,7 @@ func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
 	prefs := store.NewEmailPrefStore(ts.db)
-	// 另一个可选类型显式打开，验证确认只关掉指名的那一个。
+	// Another optional type is turned on explicitly, to verify the confirm disables only the named one.
 	if err := prefs.SetChoices(ctx, user.ID, map[string]bool{string(mail.TypeDeckShared): true}, time.Now().UTC()); err != nil {
 		t.Fatalf("SetChoices: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
 		t.Fatalf("Issue: %v", err)
 	}
 
-	// 会话前双提交 cookie 与镜像 token 由 GET /unsubscribe 下发。
+	// The pre-session double-submit cookie and mirrored token are set by GET /unsubscribe.
 	cookie, headers := preSessionPair(t, ts.srv, "/unsubscribe")
 	rec := postJSON(ts.srv, "/api/v1/unsubscribe", map[string]string{"token": token}, []*http.Cookie{cookie}, headers)
 	if rec.Code != http.StatusOK {
@@ -362,8 +362,8 @@ func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeJSONConfirmRequiresPreSessionCSRF 断言确认请求缺少双提交镜像 token 时被拒，
-// 且不消费令牌、不写偏好。
+// TestUnsubscribeJSONConfirmRequiresPreSessionCSRF asserts a confirm request without the double-submit mirrored token is refused,
+// without consuming the token or writing a preference.
 func TestUnsubscribeJSONConfirmRequiresPreSessionCSRF(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
@@ -387,8 +387,8 @@ func TestUnsubscribeJSONConfirmRequiresPreSessionCSRF(t *testing.T) {
 	}
 }
 
-// TestUnsubscribeMachineEndpointDoesNotRenderTemplate 断言 RFC 8058 One-Click 端点只回状态码与
-// 最小 JSON 体，绝不渲染 SSR 模板。
+// TestUnsubscribeMachineEndpointDoesNotRenderTemplate asserts the RFC 8058 One-Click endpoint returns only a status code and
+// a minimal JSON body, never rendering an SSR template.
 func TestUnsubscribeMachineEndpointDoesNotRenderTemplate(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()

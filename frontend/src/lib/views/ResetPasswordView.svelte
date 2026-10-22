@@ -6,8 +6,8 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
 
-  // 设置新密码（服务端 GET /reset-password 切壳后由客户端路由渲染此页）。
-  // token 由邮件的重置链接带入查询串，提交走 POST /api/v1/auth/reset-password。
+  // Set a new password (after the server's GET /reset-password switched to the shell, the client router renders this page).
+  // The token comes in the query string from the email's reset link, and submission goes through POST /api/v1/auth/reset-password.
   const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')

@@ -8,16 +8,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Auditor 是 store.AuditStore 的薄封装：业务代码（web handler、后续 API/MCP）只依赖它写审计，
-// 不直接触碰存储层的具体类型（AGENTS.md §2.4：最小依赖放在消费者侧）。
+// Auditor is a thin wrapper around store.AuditStore: business code (web handlers and later API/MCP) depends only on it to write audit entries,
+// and never touches the concrete storage types directly (AGENTS.md §2.4: keep dependencies minimal on the consumer side).
 //
-// 审计是“尽力而为”：写失败时调用方应记英文日志并继续业务，不能因为审计表故障而回滚
-// 已经发生的变更 —— 但也不能静默吞掉，否则审计会悄悄缺行。
+// Audit is "best effort": on a write failure the caller should log in English and carry on with the business, and must not roll back
+// a change that already happened just because the audit table failed — but it must not silently swallow it either, or audit rows go quietly missing.
 type Auditor struct {
 	store *store.AuditStore
 }
 
-// NewAuditor 构造审计门面；存储为空时返回英文错误，避免审计被静默丢弃。
+// NewAuditor constructs the audit facade; an empty store returns an English error so audit entries are not silently dropped.
 func NewAuditor(audit *store.AuditStore) (*Auditor, error) {
 	if audit == nil {
 		return nil, errors.New("auth: audit store is required")
@@ -25,7 +25,7 @@ func NewAuditor(audit *store.AuditStore) (*Auditor, error) {
 	return &Auditor{store: audit}, nil
 }
 
-// Record 写一条审计；detail 由 store 层序列化为 JSON。
+// Record writes one audit entry; detail is serialized to JSON by the store layer.
 func (a *Auditor) Record(ctx context.Context, e store.AuditEntry) error {
 	if err := a.store.Write(ctx, e); err != nil {
 		return fmt.Errorf("record audit: %w", err)

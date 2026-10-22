@@ -13,7 +13,7 @@
   let password = $state('');
   let confirmPassword = $state('');
   let loading = $state(false);
-  // 只装提交前的本地校验错误（两次密码不一致）；请求失败走 toast。
+  // Only holds local validation errors from before submission (the two passwords do not match); request failures go through toast.
   let errorKey = $state<string | null>(null);
 
   async function handleSubmit(e: SubmitEvent): Promise<void> {
@@ -21,7 +21,7 @@
     if (!username.trim() || !password || !confirmPassword) {
       return;
     }
-    // 两次输入不一致是纯前端约定：服务端只收一个 password，因此这里不提交任何请求。
+    // The two entries not matching is purely a frontend convention: the server takes only one password, so no request is submitted here.
     const confirmation = validatePasswordConfirmation(password, confirmPassword);
     if (!confirmation.valid) {
       errorKey = confirmation.errorKey ?? 'error.unknown';
@@ -36,11 +36,11 @@
         display_name: displayName.trim(),
         password,
       });
-      // 引导不建立会话：与 SSR 一致，成功后回到登录页。
+      // Setup does not establish a session: consistent with SSR, it returns to the login page on success.
       navigate('/login');
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 404) {
-        // 已有活跃管理员：引导窗口已关闭（GET /setup 也会 404）。
+        // An active admin already exists: the setup window is closed (GET /setup 404s as well).
         toast.error($t('auth.setup.unavailable'));
       } else {
         toast.error($t(err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown'));

@@ -7,8 +7,8 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// TestPresetGradeMappingRoundTrip 是存储验收：分数→评分档位映射存进 preset
-// 新列后能原样读回；未配置（NULL）时回退到内置默认映射。
+// TestPresetGradeMappingRoundTrip is the storage acceptance: the score → rating mapping stored in the new preset
+// column reads back unchanged; when unconfigured (NULL) it falls back to the built-in default mapping.
 func TestPresetGradeMappingRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -19,7 +19,7 @@ func TestPresetGradeMappingRoundTrip(t *testing.T) {
 			owner := seedUsers(t, db, "grade_map_owner")[0]
 			presets := NewPresetStore(db)
 
-			// 默认：列为 NULL，解析出内置默认映射。
+			// Default: the column is NULL and the built-in default mapping is parsed out.
 			p := NewPreset(owner, "Default map")
 			if err := presets.Create(ctx, &p); err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -39,7 +39,7 @@ func TestPresetGradeMappingRoundTrip(t *testing.T) {
 				t.Errorf("default mapping = %+v, want Good/Hard/Again", m)
 			}
 
-			// 自定义：写回后读出的映射必须生效。
+			// Custom: the mapping read back after writing must take effect.
 			custom := cardtype.GradeMapping{Full: cardtype.RatingEasy, Partial: cardtype.RatingGood, None: cardtype.RatingAgain}
 			if err := got.SetGradeMapping(custom); err != nil {
 				t.Fatalf("SetGradeMapping() error = %v", err)

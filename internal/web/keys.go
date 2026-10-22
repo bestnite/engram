@@ -4,20 +4,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 用户级 API Key 管理页。
+// User-level API key management page.
 //
-// 与 /admin/api-keys 的分工：管理面板是全用户总览（可撤销、不能创建）；/settings/keys 是登录
-// 用户自己的 key 列表。SSR 页面层已删除：这里只发 SPA 应用壳，列表/创建/撤销走
-// /api/v1/keys 的 JSON 端点（会话鉴权，见 internal/api）。安全底线不变：
-//   - 一律按当前会话用户的 id 取列表与撤销，别人的 key 既不列出也不可撤销。
-//   - 明文只在创建成功的那次响应里出现一次，绝不落库、绝不在后续 GET 出现。
-//   - 创建与撤销都是写操作，过 CSRF，并各写一条审计。
+// Division of labour with /admin/api-keys: the admin panel is an all-user overview (can revoke, cannot create); /settings/keys is the signed-in
+// user's own key list. The SSR page layer has been deleted: this only sends the SPA app shell, while list/create/revoke go through
+// the /api/v1/keys JSON endpoints (session auth, see internal/api). The security baseline is unchanged:
+//   - list and revoke always go by the current session user's id; other people's keys are neither listed nor revocable.
+//   - the plaintext appears only once, in the response of a successful creation; never persisted, never in a later GET.
+//   - create and revoke are both writes, go through CSRF, and each writes one audit record.
 
-// keysRoute 提供 GET /settings/keys：只发 SPA 应用壳，
-// 由客户端路由渲染「我的 API Key」页，列表/创建/撤销走 /api/v1/keys 的 JSON 端点。
+// keysRoute serves GET /settings/keys: it only sends the SPA app shell,
+// the client router renders the "My API keys" page, and list/create/revoke go through the /api/v1/keys JSON endpoints.
 //
-// 判权与迁移前的 SSR 页逐项一致：先要求已登录会话（匿名重定向登录页），key 一律按当前会话
-// 用户的 id 取，不因切壳而放开。SSR 页面层已删除，不再回退 keys 页。
+// Authorization matches the pre-migration SSR page item by item: a signed-in session is required first (anonymous visitors are redirected to the login page), and keys always go by the current session
+// user's id, not loosened by the shell switch. The SSR page layer has been deleted, so there is no fallback to the keys page.
 func (s *Server) keysRoute(c *gin.Context) {
 	if _, ok := s.requireUser(c); !ok {
 		return

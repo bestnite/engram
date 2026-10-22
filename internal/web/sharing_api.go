@@ -70,7 +70,7 @@ func (s *Server) sharingGet(c *gin.Context) {
 		}
 		u, err := s.users.ByID(ctx, g.UserID)
 		if err != nil || u == nil {
-			// 授权行指向的用户已不存在：没有可展示的对外 id，跳过而不回退数字主键。
+			// The user a grant row points at no longer exists: there is no public id to show, so it is skipped instead of falling back to the numeric primary key.
 			continue
 		}
 		grantRows = append(grantRows, grant{UserID: u.PublicID, Username: u.Username, Role: g.Role})
@@ -80,8 +80,8 @@ func (s *Server) sharingGet(c *gin.Context) {
 	for _, l := range links {
 		linkRows = append(linkRows, shareLink{Prefix: shortDigest(l.Token), CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt, HasPassword: l.PasswordHash != nil, Revoked: l.RevokedAt != nil, Expired: l.ExpiresAt != nil && !now.Before(*l.ExpiresAt)})
 	}
-	// 待接受的邀请单独一列：属主必须能区分「已授权」与「邀请了还没答应」——后者随时可能
-	// 被拒绝，界面上不该显示成已有访问权。
+	// Pending invites get their own column: the owner must be able to tell "already granted" from "invited but not yet accepted" — the latter may be
+	// rejected at any time and must not show up in the UI as existing access.
 	pending, err := s.shareInvites.ListForDeck(ctx, deck.ID)
 	if err != nil {
 		s.logger.Error("list SPA deck share invites failed", "deck_id", deck.ID, "error", err)
@@ -160,19 +160,19 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 		}
 		if existing != role {
 			if existing != "" {
-				// 已经在里面的人：改角色不需要再征得同意——同意在接受那一刻就给过了。
+				// People already in: changing their role needs no fresh consent — consent was given at the moment of acceptance.
 				if err = s.grants.Grant(ctx, deck.ID, target.ID, role, store.Ptr(user.ID)); err != nil {
 					s.logger.Error("grant SPA deck role failed", "deck_id", deck.ID, "error", err)
 					shareError(c, 500, "internal_error")
 					return
 				}
 				s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role, "previous_role": existing}})
-				// 通知（B 类，可退订）。放在审计之后、且不返回错误：通知只是副作用。
+				// Notification (class B, unsubscribable). It sits after the audit and returns no error: the notification is only a side effect.
 				s.notifyDeckGrantChange(c, deck, user, target, existing, role)
 				break
 			}
-			// 新人：**发邀请，不直接授权**（同意制）。接受时才写 deck_grants，
-			// 所以「别人把卡组硬塞给我」在这条路径上不可能发生。
+			// Newcomers: **send an invite, do not grant directly** (consent model). deck_grants is only written on acceptance,
+			// so "someone forcing a deck on me" cannot happen on this path.
 			allowed, policyErr := s.sharePolicy.Allows(ctx, target.ID, user.ID)
 			if policyErr != nil {
 				s.logger.Error("check recipient share policy failed", "deck_id", deck.ID, "user_id", target.ID, "error", policyErr)
@@ -180,7 +180,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 				return
 			}
 			if !allowed {
-				// 对方设了「不接受分享」或不在白名单里：如实拒绝，并让属主看到原因。
+				// The other side set "do not accept shares" or is not on the allow list: refuse truthfully and let the owner see why.
 				shareError(c, 409, "recipient_refuses_shares")
 				return
 			}
@@ -199,7 +199,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 	case "revoke":
 		target, err := s.users.ByPublicID(ctx, strings.TrimSpace(req.UserID))
 		if err != nil {
-			// 未知的对外 id 与「这个用户没有授权可撤」同形：404，不泄露存在性。
+			// An unknown public id looks the same as "this user has no grant to revoke": 404, without leaking existence.
 			shareError(c, 404, "not_found")
 			return
 		}
@@ -224,7 +224,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 			s.notifyDeckRevoke(c, deck, user, id, existing)
 			break
 		}
-		// 没有生效的授权，但可能挂着一条还没被接受的邀请：这时「撤销」的语义是取消邀请。
+		// No active grant, but there may be a pending, not yet accepted invite: in that case "revoke" means cancel the invite.
 		if err := s.shareInvites.Delete(ctx, deck.ID, id); err != nil {
 			s.logger.Error("cancel deck share invite failed", "deck_id", deck.ID, "user_id", id, "error", err)
 			shareError(c, 500, "internal_error")

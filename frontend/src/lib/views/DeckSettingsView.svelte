@@ -16,7 +16,7 @@
     initialLoading?: boolean;
     initialError?: ApiClientError | Error | null;
     initialSettings?: DeckSettings | null;
-    /** 嵌在卡组详情「设置」Tab 内时为真：不渲染页面级外壳与返回链接。 */
+    /** True when embedded in the deck details' "settings" tab: does not render the page-level shell and the back link. */
     embedded?: boolean;
   }
 
@@ -37,25 +37,25 @@
   let newPerDay = $state(initialSettings ? String(initialSettings.new_per_day) : '');
   // svelte-ignore state_referenced_locally
   let reviewsPerDay = $state(initialSettings ? String(initialSettings.reviews_per_day) : '');
-  // 预设列表：卡组按哪套 FSRS 参数排程由它决定，所以和每日额度并列在同一个表单里。
+  // Preset list: it decides which FSRS parameter set the deck schedules with, so it sits in the same form alongside the daily cap.
   let presets = $state<Array<{ value: string; label: string }>>([]);
   // svelte-ignore state_referenced_locally
   let presetId = $state(initialSettings ? String(initialSettings.preset_id) : '');
   let presetsError = $state(false);
   let saving = $state(false);
-  // 只装提交前的本地校验错误；请求结果走 toast。
+  // Only holds local validation errors from before submission; request outcomes go through toast.
   let invalid = $state(false);
 
   const deckId = $derived($routeStore.params.id || '');
 
-  /** 读取调用者自己的设置与今日额度；无权访问由服务端 403/404 决定，前端不猜测权限。 */
-  /** 预设列表只读一次；失败时保留当前值（保存也不会带上 preset_id），不静默改成别的预设。 */
+  /** Read the caller's own settings and today's quota; denial of access is decided by the server's 403/404, the frontend does not guess permissions. */
+  /** The preset list is read once; on failure the current value is kept (saving will not carry preset_id either) and it does not silently switch to another preset. */
   async function loadPresets(): Promise<void> {
     try {
       const response = await apiClient.listPresets();
       presets = response.presets.map((item) => ({
         value: String(item.id),
-        // 默认预设的库内名是机器标识，显示名走语言包（labels.presetDisplayName）。
+        // The default preset's in-database name is a machine identifier; the display name comes from the language pack (labels.presetDisplayName).
         label: presetDisplayName(item.name, item.is_default, $t),
       }));
       presetsError = false;
@@ -82,7 +82,7 @@
     }
   }
 
-  /** 只接受非负整数；0 合法（不限）。空串、负数、非数字一律前端拦下。 */
+  /** Accepts non-negative integers only; 0 is legal (no limit). Empty string, negative numbers and non-numbers are all stopped on the frontend. */
   function parseCap(raw: string): number | null {
     const trimmed = raw.trim();
     if (!/^\d+$/.test(trimmed)) return null;
@@ -98,7 +98,7 @@
     if (n === null || r === null) return;
     saving = true;
     try {
-      // preset_id 只在选中了一个真实预设时提交：省略即不动预设，空串不是合法预设标识。
+      // preset_id is only submitted when a real preset is selected: omitting it leaves the preset untouched, and an empty string is not a valid preset identifier.
       const data = await apiClient.updateDeckSettings(deckId, {
         new_per_day: n,
         reviews_per_day: r,
@@ -115,7 +115,7 @@
     }
   }
 
-  /** 剩余额度的展示文本：不限时显示「不限」，绝不拿 0 冒充不限。 */
+  /** Display text for the remaining quota: shows "unlimited" when unlimited, never passes 0 off as unlimited. */
   function leftText(left: number, unlimited: boolean): string {
     return unlimited ? $t('deck.settings.unlimited') : String(left);
   }
@@ -165,7 +165,7 @@
       </h1>
     {/if}
 
-    <!-- 两个分区共用一个表单与一个保存按钮：预设与每日上限是同一次 PATCH。 -->
+    <!-- The two sections share one form and one save button: preset and daily cap are the same PATCH. -->
     <form onsubmit={save} data-testid="deck-settings-form">
       <SettingsSection title={$t('deck.settings.preset')} description={$t('deck.settings.preset_hint')}>
         {#if presets.length > 0}
@@ -185,8 +185,8 @@
 
       <SettingsSection title={$t('deck.settings.heading')} description="{$t('deck.settings.personal_hint')} {$t('deck.settings.unlimited_hint')}">
         <p class="sr-only" data-testid="deck-settings-personal-hint">{$t('deck.settings.personal_hint')}</p>
-        <!-- 数字输入框一律不用 bind:value：它会把值强转成 number（空串变 null），而这两个
-             状态是字符串，由 parseCap 做「非负整数」校验；手写 value/oninput 才留得住原文。 -->
+        <!-- Number inputs never use bind:value: it coerces the value to number (an empty string becomes null), while these two
+             states are strings, validated as "non-negative integer" by parseCap; only a hand-written value/oninput keeps the raw text. -->
         <div class="grid max-w-xl gap-5 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium text-foreground" for="deck-settings-new">{$t('deck.settings.new_per_day')}</label>
@@ -200,12 +200,12 @@
               oninput={(event) => (newPerDay = event.currentTarget.value)}
               class="field-input mt-1.5 block w-full text-sm"
             />
-            <!-- 今日用量写在对应输入框下面：改上限时就能看到今天已经用了多少。 -->
+            <!-- Today's usage is written below the corresponding input: while editing the cap you can see how much is already used today. -->
             <dl class="mt-1.5 flex gap-3 text-xs text-muted-foreground">
               <div class="flex gap-1"><dt>{$t('deck.settings.used_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-used">{settings.new_used}</dd></div>
               <div class="flex gap-1"><dt>{$t('deck.settings.left_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-left">{leftText(settings.new_left, settings.new_unlimited)}</dd></div>
               {#if settings.new_extra > 0 && !settings.new_unlimited}
-                <!-- 今天「再来一组」追加过才显示：说明为什么剩余数比每日上限还多。 -->
+                <!-- Shown only after a "one more round" was appended today: explains why the remaining count is larger than the daily cap. -->
                 <div class="flex gap-1"><dt>{$t('deck.settings.extra_today')}</dt><dd class="tabular-nums text-foreground" data-testid="deck-settings-new-extra">{settings.new_extra}</dd></div>
               {/if}
             </dl>

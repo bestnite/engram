@@ -2,11 +2,11 @@
   import { Toaster as Sonner } from 'svelte-sonner';
 
   /**
-   * 全局轻提示（svelte-sonner）。操作结果（已删除、批量处理了几条、失败原因）用 toast 报告，
-   * 不再往页面里插一行文字：插入的文字会把下面的列表往下推，正是「页面抖动」的来源之一。
-   * 全站请求反馈的完整规则（进行中、结果、哪些留在原地）写在 ui/toast.ts。
+   * Global toasts (svelte-sonner). Operation results (deleted, how many rows batched, failure reason) are reported as toasts,
+   * instead of inserting a line of text into the page: inserted text pushes the list below it down, which is one source of "page jank".
+   * The complete rules for request feedback site-wide (in progress, result, which stay in place) are in ui/toast.ts.
    *
-   * 颜色通过 sonner 暴露的 CSS 变量接到应用令牌上，深浅主题跟着 app.css 走。
+   * Colors connect to the app tokens through the CSS variables sonner exposes, and light/dark follows app.css.
    */
 </script>
 

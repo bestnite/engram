@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
 /**
- * 页脚程序版本的唯一来源是服务端在装配期注入 SPA 入口 <head> 的
- * `<meta name="engram-version">`。测试环境是 node（无 DOM），这里手搓一个最小 document 替身。
+ * The single source for the footer's app version is the `<meta name="engram-version">` the
+ * server injects into the SPA entry <head> at assembly time. The test environment is node
+ * (no DOM), so a minimal document stand-in is built by hand here.
  */
 
 function installDocument(metaContent: string | null) {

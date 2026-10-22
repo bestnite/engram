@@ -10,39 +10,39 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 本文件是（邮件类型目录与每用户偏好）的持久化层。
+// This file is the persistence layer for (the mail type catalog and per-user preferences).
 //
-// 为什么用独立表而不是给 users 加一个 JSON 列：models.go 是单写者热点（AGENTS.md §6.4），
-// 给 User 加列必须改那份热点文件；独立表只需在 AllModels() 登记一行（本任务只允许改那一行），
-// 并且偏好与账号生命周期解耦——删账号时偏好随行一起消失，不需要额外清理 users 行。
+// Why a separate table instead of adding a JSON column to users: models.go is a single-writer hotspot (AGENTS.md §6.4),
+// so adding a column to User means editing that hotspot file; a separate table needs only one line in AllModels() (this task may only change that line),
+// and preferences decouple from the account lifecycle — deleting an account makes the preference rows vanish with it, with no extra users cleanup.
 //
-// 存储只保存**用户的显式选择**，不保存由目录推导的默认值：
-// 「能不能关、默认开还是关」是 internal/mail 目录的唯一职责；这里若也存一份默认值，
-// 目录改动后旧行就会与目录分歧。读取方拿到 choices 后交给 mail.ResolveEnabled 求有效值。
+// Storage keeps only the **user's explicit choices**, never defaults derived from the catalog:
+// 'can it be turned off, is it on or off by default' is the sole responsibility of the internal/mail catalog; storing a default copy here too would
+// make old rows disagree with the catalog once it changes. Readers take choices and hand them to mail.ResolveEnabled for the effective value.
 //
-// 选择以 JSON 对象（TEXT，两库通用，AGENTS.md §2.3 第 4 条）存储：键是 mail.Type 的
-// 字符串形式，值是该类型的显式开关。JSON 里没有的键表示「用户没选过」，回落到目录默认。
+// Choices are stored as a JSON object (TEXT, works on both databases, AGENTS.md §2.3 item 4): keys are the
+// string form of mail.Type, values are that type's explicit toggle. A key absent from the JSON means 'the user never chose', falling back to the catalog default.
 
-// EmailPref 是每用户的邮件类型偏好；每人至多一行。
+// EmailPref is a user's mail type preferences; at most one row per user.
 type EmailPref struct {
 	UserID uint64 `gorm:"primaryKey;column:user_id" json:"user_id"`
-	// ChoicesJSON 是 {"<type>": bool} 的 JSON 文本；空串或 "{}" 表示没有任何显式选择。
+	// ChoicesJSON is the JSON text of {\"<type>\": bool}; an empty string or \"{}\" means no explicit choices at all.
 	ChoicesJSON string    `gorm:"column:choices_json;not null" json:"choices_json"`
 	UpdatedAt   time.Time `gorm:"not null" json:"updated_at"`
 }
 
 func (EmailPref) TableName() string { return "email_prefs" }
 
-// EmailPrefStore 封装 email_prefs 的 GORM 访问。
+// EmailPrefStore wraps GORM access to email_prefs.
 type EmailPrefStore struct {
 	db *gorm.DB
 }
 
-// NewEmailPrefStore 构造邮件偏好存储。
+// NewEmailPrefStore constructs the mail preference store.
 func NewEmailPrefStore(db *gorm.DB) *EmailPrefStore { return &EmailPrefStore{db: db} }
 
-// Choices 返回用户的显式选择；没有任何选择时返回空 map（不是 nil，调用方可直接读）。
-// 未登记的行与空 JSON 都按「没有选择」处理：这是全新用户与「清空过偏好」的同一语义。
+// Choices returns the user's explicit choices; returns an empty map (not nil, so callers can read it directly) when there are none.
+// A missing row and empty JSON are both treated as 'no choices': the same semantics for a brand-new user and for one who cleared their preferences.
 func (s *EmailPrefStore) Choices(ctx context.Context, userID uint64) (map[string]bool, error) {
 	var row EmailPref
 	err := s.db.WithContext(ctx).First(&row, "user_id = ?", userID).Error
@@ -55,8 +55,8 @@ func (s *EmailPrefStore) Choices(ctx context.Context, userID uint64) (map[string
 	return decodeChoices(row.ChoicesJSON)
 }
 
-// SetChoices 覆盖写入用户的全部显式选择（upsert，两库都用 clause.OnConflict）。
-// 传 nil 或空 map 等价于清空选择，落库为 "{}"；行保留，因为「存在但为空」与「不存在」语义相同。
+// SetChoices overwrites all of the user's explicit choices (upsert, clause.OnConflict on both databases).
+// Passing nil or an empty map is equivalent to clearing the choices, stored as \"{}\"; the row is kept, because 'exists but empty' and 'does not exist' mean the same thing.
 func (s *EmailPrefStore) SetChoices(ctx context.Context, userID uint64, choices map[string]bool, at time.Time) error {
 	encoded, err := encodeChoices(choices)
 	if err != nil {
@@ -72,8 +72,8 @@ func (s *EmailPrefStore) SetChoices(ctx context.Context, userID uint64, choices 
 	return nil
 }
 
-// decodeChoices 把存储里的 JSON 文本解成 map；空串/空对象返回空 map。
-// 损坏的 JSON 是数据缺陷，报错而不是静默当成空选择——静默会让用户以为设置还在。
+// decodeChoices decodes the stored JSON text into a map; an empty string / empty object returns an empty map.
+// Corrupt JSON is a data defect, so it errors instead of silently becoming empty choices — silence would let users believe their settings are intact.
 func decodeChoices(raw string) (map[string]bool, error) {
 	if raw == "" || raw == "{}" {
 		return map[string]bool{}, nil
@@ -88,8 +88,8 @@ func decodeChoices(raw string) (map[string]bool, error) {
 	return out, nil
 }
 
-// encodeChoices 把 map 编成 JSON 文本；nil/空 map 编成 "{}"。
-// json.Marshal 对 map 键排序，因此同一组选择每次落库字节一致，便于比对与测试。
+// encodeChoices encodes the map into JSON text; nil / empty map encodes as \"{}\".
+// json.Marshal sorts map keys, so the same choice set always produces identical bytes on store, which helps comparison and testing.
 func encodeChoices(choices map[string]bool) (string, error) {
 	if len(choices) == 0 {
 		return "{}", nil

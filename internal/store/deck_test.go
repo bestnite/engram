@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// seedUsers 建出测试用的若干用户，返回其主键；用户名与邮箱都由调用方给出的前缀生成，避免唯一约束冲突。
+// seedUsers creates a few users for the test and returns their primary keys; usernames and emails are built from the prefix the caller supplies, so unique constraints do not collide.
 func seedUsers(t *testing.T, db *gorm.DB, names ...string) []uint64 {
 	t.Helper()
 	now := time.Now().UTC()
@@ -25,7 +25,7 @@ func seedUsers(t *testing.T, db *gorm.DB, names ...string) []uint64 {
 	return ids
 }
 
-// seedPresetRow 直接写一行预设，供 deck 的 preset_id 引用；字段齐全避免默认值陷阱。
+// seedPresetRow writes one preset row directly, for a deck's preset_id to reference; all fields are set to avoid default-value traps.
 func seedPresetRow(t *testing.T, db *gorm.DB, ownerID uint64) uint64 {
 	t.Helper()
 	now := time.Now().UTC()
@@ -51,7 +51,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 			presetB := seedPresetRow(t, db, ownerB)
 			decks := NewDeckStore(db)
 
-			// create：owner 归属由 OwnerUserID 给出。
+			// create: ownership is given by OwnerUserID.
 			d := &Deck{OwnerUserID: ownerA, Name: "Deck A", PresetID: presetID}
 			if err := decks.Create(ctx, d); err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -63,7 +63,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Error("Create() did not set CreatedAt")
 			}
 
-			// read：ByID 取回同一行。
+			// read: ByID fetches the same row back.
 			got, err := decks.ByID(ctx, d.ID)
 			if err != nil {
 				t.Fatalf("ByID() error = %v", err)
@@ -72,7 +72,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("ByID() = %+v, want name Deck A owner %d", got, ownerA)
 			}
 
-			// list：只列出该 owner 的卡组。
+			// list: only that owner's decks are listed.
 			if err := decks.Create(ctx, &Deck{OwnerUserID: ownerB, Name: "Deck B", PresetID: presetB}); err != nil {
 				t.Fatalf("Create() for owner B error = %v", err)
 			}
@@ -84,7 +84,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("ListByOwner(ownerA) = %+v, want only deck %d", owned, d.ID)
 			}
 
-			// update：owner 只改名称与描述；预设不在可改字段内（换预设走 SetPreset / SetStudySettings）。
+			// update: the owner changes only name and description; the preset is not a writable field (switching presets goes through SetPreset / SetStudySettings).
 			got.Name = "Deck A renamed"
 			got.Description = "desc"
 			got.PresetID = presetB
@@ -102,7 +102,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("after Update() preset = %d, want %d (a metadata update must not change the preset)", reloaded.PresetID, d.PresetID)
 			}
 
-			// archive / restore：幂等且状态可往返。
+			// archive / restore: idempotent, and the state round-trips.
 			at := time.Now().UTC().Truncate(time.Second)
 			if err := decks.Archive(ctx, ownerA, d.ID, at); err != nil {
 				t.Fatalf("Archive() error = %v", err)
@@ -128,11 +128,11 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("ArchivedAt after Restore = %v, want nil", reloaded.ArchivedAt)
 			}
 
-			// delete：非 owner 删除被拒。
+			// delete: a non-owner deletion is rejected.
 			if err := decks.Delete(ctx, ownerB, d.ID); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("Delete() by non-owner error = %v, want ErrNotOwner", err)
 			}
-			// owner 删除成功，随后 ByID 返回记录未找到。
+			// the owner deletes successfully, after which ByID reports record not found.
 			if err := decks.Delete(ctx, ownerA, d.ID); err != nil {
 				t.Fatalf("Delete() error = %v", err)
 			}
@@ -143,8 +143,8 @@ func TestDeckStoreCRUD(t *testing.T) {
 	}
 }
 
-// TestDeckNonOwnerCannotModifyBeforeGrants 是验收用例：
-// deck_grants 尚不存在任何行时，非 owner 对卡组的任何修改都必须被拒 —— 这是地基。
+// TestDeckNonOwnerCannotModifyBeforeGrants is an acceptance case:
+// with no rows in deck_grants yet, any non-owner modification of a deck must be rejected — this is the foundation.
 func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -161,7 +161,7 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 			if err := decks.Create(ctx, d); err != nil {
 				t.Fatalf("Create() error = %v", err)
 			}
-			// 确认前提：此刻授权表里没有任何行。
+			// confirm the premise: the grants table has no rows at this moment.
 			var grants int64
 			if err := db.Model(&DeckGrant{}).Where("deck_id = ?", d.ID).Count(&grants).Error; err != nil {
 				t.Fatalf("count grants: %v", err)
@@ -170,22 +170,22 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 				t.Fatalf("precondition failed: deck %d already has %d grants", d.ID, grants)
 			}
 
-			// 非 owner 改设置被拒。
+			// a non-owner changing settings is rejected.
 			attempt := *d
 			attempt.Name = "Hijacked"
 			if err := decks.Update(ctx, stranger, attempt.ID, &attempt.Name, &attempt.Description); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Update() error = %v, want ErrNotOwner", err)
 			}
-			// 非 owner 归档被拒。
+			// a non-owner archiving is rejected.
 			if err := decks.Archive(ctx, stranger, d.ID, time.Now().UTC()); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Archive() error = %v, want ErrNotOwner", err)
 			}
-			// 非 owner 恢复（取消归档）也被拒。
+			// a non-owner restoring (unarchiving) is rejected too.
 			if err := decks.Restore(ctx, stranger, d.ID); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Restore() error = %v, want ErrNotOwner", err)
 			}
 
-			// 数据库里的行必须原封不动。
+			// the row in the database must be left untouched.
 			after, err := decks.ByID(ctx, d.ID)
 			if err != nil {
 				t.Fatalf("ByID() error = %v", err)
@@ -197,7 +197,7 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 	}
 }
 
-// TestDeckCreateValidation 覆盖缺失 preset 与空名两种拒绝路径。
+// TestDeckCreateValidation covers the two rejection paths, missing preset and empty name.
 func TestDeckCreateValidation(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -218,8 +218,8 @@ func TestDeckCreateValidation(t *testing.T) {
 	}
 }
 
-// TestDeckSetPresetRequiresOwnership 是「卡组切换调度」的验收：owner 可以在自己名下的预设
-// 之间切换，但换成别人的预设必须被拒——卡组可读就意味着它的排程参数可读。
+// TestDeckSetPresetRequiresOwnership is the acceptance case for 'deck scheduling switch': the owner may switch among presets under
+// their own name, but switching to someone else's preset must be rejected — a readable deck means its scheduling parameters are readable.
 func TestDeckSetPresetRequiresOwnership(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -238,7 +238,7 @@ func TestDeckSetPresetRequiresOwnership(t *testing.T) {
 				t.Fatalf("Create() error = %v", err)
 			}
 
-			// 自己名下的另一个预设：切换成功并落库。
+			// another preset under their own name: the switch succeeds and is persisted.
 			if err := decks.SetPreset(ctx, owner, d.ID, second); err != nil {
 				t.Fatalf("SetPreset(own preset) error = %v", err)
 			}
@@ -248,15 +248,15 @@ func TestDeckSetPresetRequiresOwnership(t *testing.T) {
 				t.Errorf("preset_id = %d, want %d", got.PresetID, second)
 			}
 
-			// 别人的预设：拒绝。
+			// someone else's preset: rejected.
 			if err := decks.SetPreset(ctx, owner, d.ID, foreign); !errors.Is(err, ErrDeckPresetInvalid) {
 				t.Errorf("SetPreset(foreign preset) error = %v, want ErrDeckPresetInvalid", err)
 			}
-			// 非 owner：拒绝。
+			// non-owner: rejected.
 			if err := decks.SetPreset(ctx, intruder, d.ID, foreign); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("SetPreset(non-owner) error = %v, want ErrNotOwner", err)
 			}
-			// 两次被拒都不得留下痕迹。
+			// neither rejection may leave a trace.
 			if got, err := decks.ByID(ctx, d.ID); err != nil {
 				t.Fatalf("ByID() after rejected writes error = %v", err)
 			} else if got.PresetID != second {

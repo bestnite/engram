@@ -9,14 +9,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 页面型 GET 的统一契约。
+// The uniform contract for page-type GETs.
 //
-// 服务端已删除全部页面渲染（SSR 页面层整体移除），每个页面路径只剩两件事：先判定可达性
-// （会话 / 角色 / 首启窗口），通过则返回应用壳，由客户端路由渲染页面。这些判定此前按页面逐页
-// 重复同一形态；这里合成一张表，各页自己的业务断言仍留在各自的 *_test.go 里。
+// All page rendering has been deleted from the server (the SSR page layer removed wholesale), so every page path is left with two things: decide reachability first
+// (session / role / first-run window), then return the app shell if it passes, with the client router rendering the page. These checks used to be repeated page by
+// page in the same shape; here they are merged into one table, while each page's own business assertions stay in its own *_test.go.
 
-// assertShell 断言响应是 SPA 应用壳：200、text/html、revalidation/no-cache、带 ETag，
-// 且含应用挂载点 <div id="app"></div>。
+// assertShell asserts the response is the SPA app shell: 200, text/html, revalidation/no-cache, an ETag,
+// and the app mount point <div id="app"></div>.
 func assertShell(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	if rec.Code != http.StatusOK {
@@ -36,7 +36,7 @@ func assertShell(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// assertRedirectsToLogin 断言匿名请求被送去登录页，而不是拿到应用壳。
+// assertRedirectsToLogin asserts an anonymous request is sent to the login page instead of getting the app shell.
 func assertRedirectsToLogin(t *testing.T, rec *httptest.ResponseRecorder, what string) {
 	t.Helper()
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
@@ -47,7 +47,7 @@ func assertRedirectsToLogin(t *testing.T, rec *httptest.ResponseRecorder, what s
 	}
 }
 
-// TestSessionPageRoutesServeShell 覆盖「只要求已登录会话」的页面路径。
+// TestSessionPageRoutesServeShell covers the page paths that only require a signed-in session.
 func TestSessionPageRoutesServeShell(t *testing.T) {
 	for _, path := range []string{"/decks", "/review", "/settings", "/settings/security", "/settings/email", "/settings/keys"} {
 		t.Run(path, func(t *testing.T) {
@@ -58,24 +58,24 @@ func TestSessionPageRoutesServeShell(t *testing.T) {
 	}
 }
 
-// TestPresetsRouteServesShell 覆盖 /presets：它需要预设页的装配（jobRunner 等）。
+// TestPresetsRouteServesShell covers /presets: it needs the preset page's wiring (jobRunner and friends).
 func TestPresetsRouteServesShell(t *testing.T) {
 	srv, _, _, cookies, _, _ := newPresetsServer(t)
 	assertShell(t, getWithCookies(t, srv, "/presets", cookies))
 	assertRedirectsToLogin(t, getWithCookies(t, srv, "/presets", nil), "GET /presets")
 }
 
-// deckPageRouteCase 一行 = 一条卡组范围内页面路径的可达性断言。
+// deckPageRouteCase: one row = the reachability assertion for one deck-scoped page path.
 type deckPageRouteCase struct {
 	name string
-	// path 由夹具的卡组 / 卡片对外 id 组成。
+	// path is built from the fixture's deck / card public ids.
 	path func(deckPublicID, notePublicID string) string
-	// stranger 是「已登录但无权」的会话：none = 无任何授权，reader = 被授予 reader。
+	// stranger is the "signed in but unauthorized" session: none = no grant at all, reader = granted reader.
 	stranger string
 }
 
-// TestDeckScopedPageRoutesEnforceRole 覆盖卡组范围内的页面路径：owner 拿到应用壳，匿名重定向
-// 登录页，无权用户 403 且拿不到外壳——判权先于发壳执行。
+// TestDeckScopedPageRoutesEnforceRole covers deck-scoped page paths: owner gets the app shell, anonymous redirects
+// to the login page, an unauthorized user gets 403 and no shell — the permission check runs before the shell is served.
 func TestDeckScopedPageRoutesEnforceRole(t *testing.T) {
 	cases := []deckPageRouteCase{
 		{"note list", func(d, _ string) string { return "/decks/" + d + "/notes" }, "none"},
@@ -109,13 +109,13 @@ func TestDeckScopedPageRoutesEnforceRole(t *testing.T) {
 	}
 }
 
-// TestHomeRouteBranches 覆盖 GET / 的两条互斥分支，书写顺序即优先级。
+// TestHomeRouteBranches covers the two mutually exclusive branches of GET /, with written order as priority.
 func TestHomeRouteBranches(t *testing.T) {
 	t.Run("with an active admin", func(t *testing.T) {
 		srv, _, _, cookies, _ := newNotesServer(t)
 		assertShell(t, getWithCookies(t, srv, "/", cookies))
 
-		// 首启窗口只看管理员数量，不做登录判定：匿名同样拿应用壳，否则会与 SPA 首页形成重定向循环。
+		// The first-run window looks only at the admin count and makes no login decision: anonymous visitors get the app shell too, otherwise there would be a redirect loop with the SPA home page.
 		anon := getWithCookies(t, srv, "/", nil)
 		assertShell(t, anon)
 		if loc := anon.Header().Get("Location"); loc != "" {

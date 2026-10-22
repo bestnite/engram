@@ -7,13 +7,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件把对外 id（不透明字符串）解析成数字主键，供 REST 之外的调用方复用。
+// This file resolves external ids (opaque strings) to numeric primary keys, for callers other than REST to reuse.
 //
-// 约定「运输层解析、业务层保持数字」：内置 MCP 工具拿到公共 id 后先在这里换成主键，
-// 再调用与 REST 完全相同的 service 方法，避免 REST 与 MCP 各写一份解析。解析失败一律
-// 映射成与 REST 相同的 404 not_found（空串同样视为未找到，绝不让空串匹配到某一行）。
+// The convention is "resolve in the transport layer, keep numbers in the business layer": a built-in MCP tool turns public ids into primary keys here first,
+// then calls exactly the same service methods as REST, so REST and MCP do not each grow their own resolution. Failures are always
+// mapped to the same 404 not_found as REST (an empty string also counts as not found, so it never matches some row).
 
-// DeckByPublicID 按对外 id 解析卡组；未知、空串或非法一律返回 404 not_found。
+// DeckByPublicID resolves a deck by external id; unknown, empty or malformed always yields 404 not_found.
 func (a *API) DeckByPublicID(ctx context.Context, publicID string) (*store.Deck, error) {
 	d, err := a.decks.ByPublicID(ctx, publicID)
 	if err != nil {
@@ -22,7 +22,7 @@ func (a *API) DeckByPublicID(ctx context.Context, publicID string) (*store.Deck,
 	return d, nil
 }
 
-// NoteByPublicID 按对外 id 解析 note；未知、空串或已软删一律返回 404 not_found。
+// NoteByPublicID resolves a note by external id; unknown, empty or soft-deleted always yields 404 not_found.
 func (a *API) NoteByPublicID(ctx context.Context, publicID string) (*store.Note, error) {
 	n, err := a.notes.ByPublicID(ctx, publicID)
 	if err != nil {
@@ -31,7 +31,7 @@ func (a *API) NoteByPublicID(ctx context.Context, publicID string) (*store.Note,
 	return n, nil
 }
 
-// PresetByPublicID 按对外 id 解析预设；未知或空串返回 404 not_found。
+// PresetByPublicID resolves a preset by external id; unknown or empty yields 404 not_found.
 func (a *API) PresetByPublicID(ctx context.Context, publicID string) (*store.Preset, error) {
 	p, err := a.presets.ByPublicID(ctx, publicID)
 	if err != nil {

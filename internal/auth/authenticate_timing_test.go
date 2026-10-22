@@ -7,19 +7,20 @@ import (
 	"testing"
 )
 
-// countVerifications 把 onVerify 钩子接到一个计数器上，作为“是否真的执行了 argon2id”的可观测代理。
+// countVerifications wires the onVerify hook to a counter, as an observable proxy for "did argon2id actually run".
 //
-// 为什么不比较墙钟毫秒：那类断言在共享 CI 上必然抖动，只会制造不可靠的红；
-// 代价相同由构造保证（dummy 哈希用同一哈希器的参数生成），测试只验证两条路径都执行了校验。
+// Why not compare wall-clock milliseconds: that kind of assertion invariably flaps on shared CI and only produces unreliable red;
+// equal cost is guaranteed by construction (the dummy hash is generated with the same hasher parameters), so the test only verifies that both paths ran the check.
 func countVerifications(h *PasswordHasher) *atomic.Int64 {
 	var n atomic.Int64
 	h.onVerify = func() { n.Add(1) }
 	return &n
 }
 
-// TestAuthenticate_NoUsernameEnumerationViaSkippedVerification 断言登录校验对
-// “存在用户 + 错密码”与“不存在的用户”都执行一次 argon2id。
-// 现状下不存在用户的分支直接返回，不消耗任何哈希计算，因而可用响应时间枚举用户名。
+// TestAuthenticate_NoUsernameEnumerationViaSkippedVerification asserts that login verification runs argon2id once for
+// both "existing user + wrong password" and "nonexistent user".
+// Regression guard: the nonexistent-user branch used to return immediately without spending any hash computation, which made usernames
+// enumerable by response time; it now runs one argon2id with the same parameters as the wrong-password path.
 func TestAuthenticate_NoUsernameEnumerationViaSkippedVerification(t *testing.T) {
 	const runs = 20
 	cases := []struct {
@@ -52,8 +53,8 @@ func TestAuthenticate_NoUsernameEnumerationViaSkippedVerification(t *testing.T) 
 	}
 }
 
-// TestAuthenticate_FailureBehaviourIsIdentical 锁定两条失败路径的对外语义：
-// 都返回同一个错误值、文本一致，且禁用账号分支仍不可达 —— 本次改动不得改变这些性质。
+// TestAuthenticate_FailureBehaviourIsIdentical pins the external semantics of the two failure paths:
+// both return the same error value with identical text, and the disabled-account branch is still unreachable — this change must not alter any of those properties.
 func TestAuthenticate_FailureBehaviourIsIdentical(t *testing.T) {
 	e := newTestEnv(t)
 	e.createUser(t, "timing-present")
@@ -72,8 +73,8 @@ func TestAuthenticate_FailureBehaviourIsIdentical(t *testing.T) {
 	}
 }
 
-// TestVerifyDummy_ReusesOneFixedHash 断言 dummy 哈希只生成一次并被重复使用：
-// 每次请求重建会多出一次完整 argon2id 成本，反倒把该分支变成放大面。
+// TestVerifyDummy_ReusesOneFixedHash asserts that the dummy hash is generated only once and reused:
+// rebuilding it on every request would add one full argon2id cost and would instead turn that branch into an amplification surface.
 func TestVerifyDummy_ReusesOneFixedHash(t *testing.T) {
 	const runs = 20
 	h := NewPasswordHasher(fastParams())
@@ -97,7 +98,7 @@ func TestVerifyDummy_ReusesOneFixedHash(t *testing.T) {
 		t.Errorf("dummy verifications = %d, want %d (each call must run argon2id)", got, runs)
 	}
 
-	// 代价相同：dummy 哈希必须携带与真实哈希一致的 argon2id 参数。
+	// Equal cost: the dummy hash must carry the same argon2id parameters as a real hash.
 	params, _, _, err := decodeHash(h.dummyHash)
 	if err != nil {
 		t.Fatalf("decodeHash(dummy) error = %v", err)

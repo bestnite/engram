@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestGrantStoreLifecycle 覆盖 deck_grants 的授予 / 改角色 / 查询 / 撤销。
+// TestGrantStoreLifecycle covers grant / change role / query / revoke on deck_grants.
 func TestGrantStoreLifecycle(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -22,12 +22,12 @@ func TestGrantStoreLifecycle(t *testing.T) {
 			}
 			gs := NewGrantStore(db)
 
-			// 没有授权行时返回空串（“无授权”不是错误）。
+			// with no grant row it returns an empty string ('no grant' is not an error).
 			if role, err := gs.Role(ctx, d.ID, member); err != nil || role != "" {
 				t.Fatalf("Role(before grant) = (%q,%v), want (\"\",nil)", role, err)
 			}
 
-			// 非法角色被拒，不会落库。
+			// an invalid role is rejected and never stored.
 			if err := gs.Grant(ctx, d.ID, member, "admin", nil); err == nil {
 				t.Fatalf("Grant(invalid role) succeeded, want error")
 			}
@@ -35,7 +35,7 @@ func TestGrantStoreLifecycle(t *testing.T) {
 				t.Fatalf("invalid role was persisted: %q", role)
 			}
 
-			// 授予 reader。
+			// grant reader.
 			if err := gs.Grant(ctx, d.ID, member, RoleReader, Ptr(owner)); err != nil {
 				t.Fatalf("grant reader: %v", err)
 			}
@@ -43,7 +43,7 @@ func TestGrantStoreLifecycle(t *testing.T) {
 				t.Fatalf("Role(after grant) = (%q,%v), want (%q,nil)", role, err, RoleReader)
 			}
 
-			// 改角色是原地更新，不产生第二行。
+			// a role change is an in-place update and does not produce a second row.
 			if err := gs.Grant(ctx, d.ID, member, RoleEditor, Ptr(owner)); err != nil {
 				t.Fatalf("change role: %v", err)
 			}
@@ -60,7 +60,7 @@ func TestGrantStoreLifecycle(t *testing.T) {
 				t.Fatalf("DeckIDsForUser = (%v,%v), want [%d]", ids, err, d.ID)
 			}
 
-			// 撤销即删除整行；下一次查询立刻为空（撤销立即生效）。
+			// revoking deletes the whole row; the next query is immediately empty (revocation takes effect immediately).
 			if err := gs.Revoke(ctx, d.ID, member); err != nil {
 				t.Fatalf("revoke: %v", err)
 			}
@@ -74,8 +74,8 @@ func TestGrantStoreLifecycle(t *testing.T) {
 	}
 }
 
-// TestRolesForUser 断言显式授权按 deck_id 聚合：被授权的卡组带角色出现，未授权的卡组不出现，
-// 撤销后从映射里消失。列表接口用它区分「共享给我的」与「自有 / 仅公开可见」。
+// TestRolesForUser asserts that explicit grants aggregate by deck_id: granted decks appear with their role, ungranted decks do not,
+// and a revoked grant disappears from the map. The list endpoint uses it to tell 'shared with me' from 'own / publicly visible only'.
 func TestRolesForUser(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestRolesForUser(t *testing.T) {
 				t.Fatalf("RolesForUser() included un-granted deck %d", noneDeck.ID)
 			}
 
-			// 撤销后该卡组不再出现在映射里。
+			// after revocation that deck no longer appears in the map.
 			if err := gs.Revoke(ctx, readerDeck.ID, member); err != nil {
 				t.Fatalf("revoke: %v", err)
 			}
@@ -137,7 +137,7 @@ func TestRolesForUser(t *testing.T) {
 	}
 }
 
-// TestRoleAllows 断言权限表的“至少”语义：owner > editor > reader，未知角色一律无权。
+// TestRoleAllows asserts the permission table's 'at least' semantics: owner > editor > reader, and unknown roles never have rights.
 func TestRoleAllows(t *testing.T) {
 	cases := []struct {
 		have, want string

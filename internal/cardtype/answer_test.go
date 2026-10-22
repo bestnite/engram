@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// 编译期断言：七个作答类题型实现完整的 Grader。Grader 加方法时漏实现的题型会在这里编译失败，
-// 而不是在运行时被静默当成「可以自评」的题型。
+// Compile-time assertion: the seven answer-based card types implement the full Grader. If a card type misses a method when Grader gains one, it fails to compile here,
+// instead of being silently treated at runtime as a card type that "can self-grade".
 var (
 	_ Grader = typedType{}
 	_ Grader = numericType{}
@@ -18,8 +18,8 @@ var (
 	_ Grader = listType{}
 )
 
-// TestGradedKindsAreExactlyTheSeven 断言注册表里实现 Grader 的题型恰好是这七个：
-// 自评题型被误判为作答题会让它无法复习，反之会让作答题回到客户端自评。
+// TestGradedKindsAreExactlyTheSeven asserts the card types implementing Grader in the registry are exactly these seven:
+// mistaking a self-graded card type for an answer-based one makes it unreviewable, while the reverse sends answer-based cards back to client-side self-grading.
 func TestGradedKindsAreExactlyTheSeven(t *testing.T) {
 	want := map[string]bool{"typed": true, "numeric": true, "choice_single": true, "choice_multi": true, "true_false": true, "cloze": true, "list": true}
 	for _, kind := range []string{"basic", "basic_both", "cloze", "list", "short_answer", "typed", "numeric", "choice_single", "choice_multi", "true_false"} {
@@ -34,7 +34,7 @@ func TestGradedKindsAreExactlyTheSeven(t *testing.T) {
 	}
 }
 
-// TestGradeAnswerFromJSON 覆盖各题型的 JSON 作答解码与判分（含反面：类型不对、缺作答、越界）。
+// TestGradeAnswerFromJSON covers JSON answer decoding and grading for each card type (including negative cases: wrong type, missing answer, out of range).
 func TestGradeAnswerFromJSON(t *testing.T) {
 	typed := map[string]any{"prompt": "capital of France", "answer": "Paris"}
 	numeric := map[string]any{"prompt": "g", "value": 9.8, "tolerance_absolute": 0.1, "unit": "m/s2"}
@@ -129,7 +129,7 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 	}
 }
 
-// TestClozeBlankHints 断言逐空提示按出现顺序只列本卡目标序号的挖空，无提示为空串；非法模板得到 nil。
+// TestClozeBlankHints asserts per-blank hints list only the clozes for this card's target ordinals, in order of appearance, and that no hints yields an empty string; an invalid template yields nil.
 func TestClozeBlankHints(t *testing.T) {
 	fields := map[string]any{"text": "{{c1::Paris}} and {{c2::x}} and {{c1::Rome::city}}"}
 	cases := []struct {
@@ -156,7 +156,7 @@ func TestClozeBlankHints(t *testing.T) {
 	}
 }
 
-// TestListBreakdown 断言逐项结果按条目顺序给出写法与是否想起，与判分细节一致。
+// TestListBreakdown asserts the per-item results give the wording and whether it was recalled in item order, consistent with the grade detail.
 func TestListBreakdown(t *testing.T) {
 	fields := map[string]any{"prompt": "p", "items": []any{"red", "green", "blue|violet"}}
 	out, err := GradeAnswer(listType{}, GradeContext{Fields: fields, Template: "forward"}, json.RawMessage(`["violet", "red"]`))

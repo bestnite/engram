@@ -7,12 +7,14 @@ import { zhCN } from '../lib/i18n/locales/zh-CN';
 import { en } from '../lib/i18n/locales/en';
 
 /**
- * 卡组共享与克隆入口的 SPA 侧断言。
+ * SPA-side assertions for the deck sharing and cloning entry points.
  *
- * 服务端的发壳与角色门禁由 internal/web/page_routes_test.go 钉住；这里钉前端：
- * 共享管理路由由客户端接管 /decks/:id/sharing，克隆动作通过类型化客户端打
- * POST /api/v1/decks/:id/clone，并显式声明 Accept: application/json（服务端据此返回
- * JSON 而不是 303 重定向）。
+ * The server's shell rendering and role gating are pinned by
+ * internal/web/page_routes_test.go; this file pins the frontend: the sharing management
+ * route is taken over by the client at /decks/:id/sharing, and the clone action calls
+ * POST /api/v1/decks/:id/clone through the typed client, explicitly declaring
+ * Accept: application/json (the server uses that to return JSON instead of a 303
+ * redirect).
  */
 
 describe('deck sharing SPA route', () => {
@@ -64,15 +66,16 @@ describe('cloneDeck API client', () => {
 });
 
 /**
- * 退出共享：被共享者点卡片上的按钮时，走的是 DELETE /api/v1/decks/:id/membership，
- * 与属主的删除（DELETE /api/v1/decks/:id）是两条独立路径。
+ * Leaving a share: when a sharee clicks the button on the card, it goes through
+ * DELETE /api/v1/decks/:id/membership, a separate path from the owner's delete
+ * (DELETE /api/v1/decks/:id).
  */
 describe('deck action selection by caller role', () => {
   it('maps owner to delete, granted roles to leave, and anything else to nothing', () => {
     expect(deckActionKind('owner')).toBe('delete');
     expect(deckActionKind('editor')).toBe('leave');
     expect(deckActionKind('reader')).toBe('leave');
-    // 未知/缺失的角色不显示任何操作：宁可少一个按钮，也不给没有授权行的卡组渲染「退出共享」。
+    // Unknown/missing roles show no action at all: better to drop a button than to render "Leave share" for a deck without an authorized row.
     expect(deckActionKind(undefined)).toBeNull();
     expect(deckActionKind(null)).toBeNull();
     expect(deckActionKind('admin')).toBeNull();

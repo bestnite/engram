@@ -4,8 +4,9 @@ import HelpTip from '../lib/components/ui/HelpTip.svelte';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 服务端渲染下的 HelpTip：只渲染触发按钮，说明正文在打开前不出现在页面里，
- * 按钮的读屏名称来自语言包并带上被说明的指标名。
+ * HelpTip under server-side rendering: only the trigger button renders, and the
+ * explanation body is absent from the page before opening; the button's accessible name
+ * comes from the language pack and includes the name of the metric being explained.
  */
 describe('HelpTip (server render)', () => {
   beforeEach(() => {

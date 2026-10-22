@@ -2,46 +2,57 @@ package mail
 
 import "strings"
 
-// 本文件是「内置正文」的唯一定义。
+// This file is the single definition of the "built-in body".
 //
-// 内置正文有两个读者，**必须出自同一处**：
+// The built-in body has two readers and **must come from the same place**:
 //
-//  1. 发信方——没有自定义模板（或模板损坏、变量缺失）时，发出去的就是它；
-//  2. 管理页——邮件模板的编辑框预填它，管理员在这份原件上改。
+//  1. the senders -- with no custom template (or with a broken template or a missing variable), this is
+//     what goes out;
+//  2. the admin page -- the email template editor pre-fills it, and the admin edits on top of this
+//     original.
 //
-// 两份实现必然漂移，而漂移的表现是最难发现的那种：管理页显示的「默认」和实际发出的正文
-// 不是一回事，管理员以为自己在改默认，其实在改另一个东西。所以这里同一段代码有**两种用法**：
-// 传真实变量得到可发出的纯文本，传占位符变量（PlaceholderVars）得到模板文本。
+// Two implementations would inevitably drift, and the drift shows up in the hardest-to-spot way: the
+// "default" the admin page shows and the body actually sent are not the same thing, and the admin
+// thinks they are editing the default while they are editing something else. So the same piece of code
+// here has **two uses**: pass real variables to get plain text that can be sent, pass placeholder
+// variables (PlaceholderVars) to get template text.
 //
-// 为什么不用「把默认写进数据库」的做法：默认文案会随之冻在库里，此后改语言包不再影响它们，
-// 而「恢复默认」还得再从代码抄一份回去。内置默认永远在代码里意味着模板被删、被写坏都不会
-// 让邮件发不出去。
+// Why not the "write the defaults into the database" approach: the default copy would then freeze in
+// the DB, later language pack changes would no longer affect it, and "restore defaults" would have to
+// copy another copy back out of the code. Built-in defaults living in code forever means deleting or
+// corrupting a template cannot stop mail from being sent.
 
-// TfFunc 是「按语言包 id 取文案并代入变量」的最小形状（`*i18n.Localizer` 的 `Tf` 即可）。
+// TfFunc is the minimal shape of "look up the copy by language pack id and substitute the variables"
+// (the `Tf` of `*i18n.Localizer` will do).
 type TfFunc func(msgID string, data map[string]any) string
 
-// 变体：同一类型标识下有两种内置写法的场合。今天只有邮箱验证一处——注册验证与改邮箱确认
-// 都属于「确认一个邮箱地址」，共用同一套变量与同一个偏好开关，所以是同一个类型。
+// Variants: cases where one type identifier has two built-in wordings. Today only email verification
+// has one -- registration verification and email-change confirmation both mean "confirm one email
+// address", share the same variable set and the same preference switch, so they are the same type.
 const (
-	// VariantDefault 是主写法。
+	// VariantDefault is the primary wording.
 	VariantDefault = ""
-	// VariantEmailChange 是「确认新邮箱」的写法。
+	// VariantEmailChange is the "confirm the new email" wording.
 	VariantEmailChange = "change"
 )
 
-// defaultLine 是内置正文里的一行：要么是语言包文案（ID），要么是变量值本身（Var）。
+// defaultLine is one line of the built-in body: either language pack copy (ID) or the variable value
+// itself (Var).
 //
-// 链接、退订地址这类内容不是文案，是变量——把它们也写成语言包条目等于让每种语言各抄一遍
-// 同一个 URL，且抄错不会被发现。
+// Content such as links and the unsubscribe address is not copy but a variable -- writing those as
+// language pack entries would make every language copy the same URL, and a copy error would go
+// unnoticed.
 type defaultLine struct {
 	ID  string
 	Var string
-	// Join 为真时输出「<语言包文案>: <变量值>」，即退订入口那一行——它与模板路径
-	// 自动追加的那一行同形（internal/mail/template.go 的 Render）。
+	// When Join is true the output is "<language pack copy>: <variable value>", i.e. the unsubscribe
+	// entry line -- it has the same shape as the line the template path appends automatically (Render in
+	// internal/mail/template.go).
 	Join bool
-	// Args 把「语言包里的变量名」映射到「变量表里的键」，用于同一段文案里的
-	// `{{.count}}` 在不同行含义不同的场合（摘要的「已复习」「新卡」「到期」都用
-	// `{{.count}}`，但读的是三个不同的数）。为空时整份变量表都传进去。
+	// Args maps "the variable name in the language pack" to "the key in the variable table", for cases
+	// where the same `{{.count}}` on different lines means different things (the digest's "reviewed",
+	// "new cards" and "due" all use `{{.count}}` but read three different numbers). When empty, the
+	// whole variable table is passed in.
 	Args map[string]string
 }
 
@@ -49,16 +60,18 @@ func msg(id string) defaultLine    { return defaultLine{ID: id} }
 func varLine(v string) defaultLine { return defaultLine{Var: v} }
 func blank() defaultLine           { return defaultLine{} }
 
-// defaultSpec 是一种邮件类型的内置写法。
+// defaultSpec is the built-in wording of one email type.
 type defaultSpec struct {
-	// subjectID 是主题的语言包 id。
+	// subjectID is the language pack id of the subject.
 	subjectID string
-	// lines 是正文的行序列；空 ID 且空 Var 表示空行。
+	// lines is the line sequence of the body; an empty ID together with an empty Var means a blank
+	// line.
 	lines func(v Vars) []defaultLine
 }
 
-// defaultSpecs 是全部类型的内置正文。顺序与行数与各发信方原来的组装逐字一致——
-// 抽取的目的只是让管理页看到同一份文本，不是顺手改文案。
+// defaultSpecs is the built-in body of every type. The order and the line count match the original
+// assembly of each sender word for word -- the point of extracting it is only to let the admin page see
+// the same text, not to change the copy along the way.
 var defaultSpecs = map[Type]defaultSpec{
 	TypePasswordReset: {
 		subjectID: "mail.reset.subject",
@@ -113,9 +126,10 @@ var defaultSpecs = map[Type]defaultSpec{
 	TypeDeckPermissionChanged: {
 		subjectID: "mail.deck_permission.subject",
 		lines: func(v Vars) []defaultLine {
-			// 撤销时 role 为空：正文要说「被取消了访问」，而不是「权限改成了空」。
-			// 这条判断与发信方一致——它由变量推导，不另设参数，管理页拿到的默认
-			// 因占位符非空而落在「授权」那一支。
+			// On revoke role is empty: the body should say "access was revoked", not "the permission was
+			// changed to empty". This test matches the senders -- it is derived from the variables, with no
+			// extra parameter, so the default the admin page gets lands in the "granted" branch because the
+			// placeholder is non-empty.
 			line := msg("mail.deck_permission.granted")
 			if strings.TrimSpace(v["role"]) == "" {
 				line = msg("mail.deck_permission.revoked")
@@ -135,7 +149,8 @@ var defaultSpecs = map[Type]defaultSpec{
 				msg("mail.invite.body"), blank(),
 				msg("mail.invite.link_label"), varLine("url"),
 			}
-			// 有效期是可选变量：没有就不出现那一行（不是留一个空行）。
+			// The expiry is an optional variable: without it that line does not appear (rather than leaving
+			// a blank line).
 			if strings.TrimSpace(v["expires"]) != "" {
 				out = append(out, blank(), msg("mail.invite.expires"))
 			}
@@ -151,7 +166,8 @@ var defaultSpecs = map[Type]defaultSpec{
 	TypeStudyDigest: {
 		subjectID: "mail.digest.subject",
 		lines: func(Vars) []defaultLine {
-			// 六行里有三行都写 `{{.count}}`，读的却是三个不同的数，所以逐行指定取值。
+			// Three of the six lines write `{{.count}}` but read three different numbers, so the value is
+			// specified per line.
 			return []defaultLine{
 				{ID: "mail.digest.reviewed", Args: map[string]string{"count": "count"}},
 				{ID: "mail.digest.pass_rate", Args: map[string]string{"rate": "rate"}},
@@ -186,11 +202,12 @@ var defaultSpecs = map[Type]defaultSpec{
 	},
 }
 
-// PlaceholderVars 返回该类型的占位符变量：每个变量名映射到 `{{名字}}` 本身。
+// PlaceholderVars returns the placeholder variables of the type: every variable name maps to
+// `{{name}}` itself.
 //
-// 管理页拿它调 DefaultTemplate，得到的是**模板文本**（未代入任何真实值），管理员直接在
-// 它上面改；发信方则传真实变量。两条路走同一段代码，所以「页面里看到的默认」与
-// 「实际发出的兜底」不可能不一样。
+// The admin page calls DefaultTemplate with it and gets **template text** (no real value substituted
+// yet), which the admin edits directly; senders pass real variables instead. Both paths run the same
+// code, so "the default seen on the page" and "the fallback actually sent" cannot differ.
 func PlaceholderVars(t Type) Vars {
 	specs, ok := VarSpecs(t)
 	if !ok {
@@ -203,10 +220,11 @@ func PlaceholderVars(t Type) Vars {
 	return out
 }
 
-// DefaultTemplate 返回某类型的内置正文（主题 + 正文）。
+// DefaultTemplate returns the built-in body (subject + body) of a type.
 //
-// 传真实变量 → 可直接发出的纯文本；传 PlaceholderVars(t) → 模板文本。
-// 第二个返回值是该类型有没有内置写法（目录里的每个类型都应该有）。
+// Real variables in -> plain text that can be sent as is; PlaceholderVars(t) in -> template text.
+// The second return value says whether the type has a built-in wording (every type in the catalog
+// should have one).
 func DefaultTemplate(t Type, variant string, tf TfFunc, vars Vars) (subject, body string, ok bool) {
 	spec, found := defaultSpecs[t]
 	if !found {
@@ -221,8 +239,9 @@ func DefaultTemplate(t Type, variant string, tf TfFunc, vars Vars) (subject, bod
 		lines = changeVariantLines(lines)
 	}
 
-	// 可选类邮件的退订入口要出现在正文里：RFC 8058 头只有邮件客户端看得到，网页端与
-	// 纯文本阅读器看不到（这条与 vars.go 里「退订链接是必填变量」是同一条口径）。
+	// The unsubscribe entry of optional-class mail has to appear in the body: the RFC 8058 header is only
+	// visible to mail clients, not to the web UI or a plaintext reader (the same stance as "the unsubscribe
+	// link is a required variable" in vars.go).
 	if declaresVar(t, "unsubscribe_url") {
 		if unsub := strings.TrimSpace(vars["unsubscribe_url"]); unsub != "" {
 			lines = append(lines, blank(),
@@ -232,10 +251,12 @@ func DefaultTemplate(t Type, variant string, tf TfFunc, vars Vars) (subject, bod
 	return tf(subjectID, anyMap(vars)), renderLines(lines, tf, vars), true
 }
 
-// changeVariantLines 把主写法的行换成「改邮箱确认」那一套文案 id。
+// changeVariantLines swaps the primary wording's lines for the "email change confirmation" set of copy
+// ids.
 //
-// 两个变体的行序完全相同（问候 / 正文 / 链接 / 有效期），只有语言包 id 不同，
-// 所以这里做 id 替换而不是另写一份行序列——另写一份迟早只改一边。
+// Both variants have exactly the same line order (greeting / body / link / expiry) and differ only in
+// language pack ids, so ids are swapped here instead of writing a second line sequence -- a second copy
+// would sooner or later be updated on one side only.
 func changeVariantLines(lines []defaultLine) []defaultLine {
 	swap := map[string]string{
 		"mail.verify.greeting":   "mail.verify.change_greeting",
@@ -253,7 +274,8 @@ func changeVariantLines(lines []defaultLine) []defaultLine {
 	return out
 }
 
-// renderLines 把行序列渲染成一段文本：语言包行走 tf，变量行取值本身。
+// renderLines renders a line sequence into one block of text: a language pack line goes through tf, a
+// variable line is the value itself.
 func renderLines(lines []defaultLine, tf TfFunc, vars Vars) string {
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
@@ -271,8 +293,9 @@ func renderLines(lines []defaultLine, tf TfFunc, vars Vars) string {
 	return strings.Join(out, "\n")
 }
 
-// lineData 组装某一行要传给语言包的变量：Args 为空时整份变量表都传进去，
-// 否则按 Args 指定的键逐项取（值仍可能是 `{{name}}` 占位符，取决于调用方传的是什么）。
+// lineData assembles the variables to hand the language pack for one line: when Args is empty the whole
+// variable table goes in, otherwise the keys named by Args are picked one by one (a value may still be a
+// `{{name}}` placeholder, depending on what the caller passed).
 func lineData(l defaultLine, vars Vars) map[string]any {
 	if len(l.Args) == 0 {
 		return anyMap(vars)
@@ -284,8 +307,9 @@ func lineData(l defaultLine, vars Vars) map[string]any {
 	return data
 }
 
-// declaresVar 报告该类型的变量表里有没有这个变量。用它而不是另设一个开关字段：
-// 「可选类邮件要带退订入口」这件事已经由 vars.go 的变量表表达了，再标一遍必漂。
+// declaresVar reports whether the variable exists in the type's variable table. Using it instead of a
+// separate switch field: "optional-class mail carries an unsubscribe entry" is already expressed by the
+// variable table in vars.go, and annotating it a second time would inevitably drift.
 func declaresVar(t Type, name string) bool {
 	specs, ok := VarSpecs(t)
 	if !ok {
@@ -299,7 +323,8 @@ func declaresVar(t Type, name string) bool {
 	return false
 }
 
-// anyMap 把变量表转成 go-i18n 需要的 any 映射（只做类型转换，不动内容）。
+// anyMap converts the variable table into the any map go-i18n needs (a type conversion only, the
+// content is untouched).
 func anyMap(vars Vars) map[string]any {
 	out := make(map[string]any, len(vars))
 	for k, v := range vars {

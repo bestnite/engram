@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// 验收：容差测试覆盖大小写、空白、多答案、数值的绝对/相对容差、部分得分映射到 Hard。
+// Acceptance: the tolerance tests cover case, whitespace, multiple answers, absolute/relative numeric tolerance, and partial scores mapping to Hard.
 
 func boolPtr(b bool) *bool { return &b }
 func mapPtr(m GradeMapping) *GradeMapping {
 	return &m
 }
 
-// TestGradedTypesRegistered 断言五种作答类题型都已注册且实现了 Grader。
+// TestGradedTypesRegistered asserts the five answer-based card types are all registered and implement Grader.
 func TestGradedTypesRegistered(t *testing.T) {
 	for _, kind := range []string{"typed", "numeric", "choice_single", "choice_multi", "true_false"} {
 		typ, ok := Lookup(kind)
@@ -25,7 +25,7 @@ func TestGradedTypesRegistered(t *testing.T) {
 	}
 }
 
-// TestTypedGrading 覆盖大小写、空白、多答案与正则。
+// TestTypedGrading covers case, whitespace, multiple answers, and regular expressions.
 func TestTypedGrading(t *testing.T) {
 	base := map[string]any{"prompt": "Capital of France?", "answer": "Paris"}
 	cases := []struct {
@@ -87,7 +87,7 @@ func TestTypedGrading(t *testing.T) {
 	}
 }
 
-// TestNumericGrading 覆盖绝对值/相对容差与单位。
+// TestNumericGrading covers absolute/relative tolerance and units.
 func TestNumericGrading(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -141,7 +141,7 @@ func TestNumericGrading(t *testing.T) {
 	}
 }
 
-// TestChoiceSingleGrading 覆盖对/错与越界。
+// TestChoiceSingleGrading covers right/wrong and out of range.
 func TestChoiceSingleGrading(t *testing.T) {
 	fields := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answer": 2}
 	if rating, _, ok := (choiceSingleType{}).Grade(ChoiceSingleInput{GradeContext: GradeContext{Fields: fields}, Selected: 2}); !ok || rating != RatingGood {
@@ -155,7 +155,7 @@ func TestChoiceSingleGrading(t *testing.T) {
 	}
 }
 
-// TestChoiceMultiGrading 覆盖全对、部分得分映射到 Hard、全错与误选。
+// TestChoiceMultiGrading covers all correct, partial scores mapping to Hard, all wrong, and wrong selections.
 func TestChoiceMultiGrading(t *testing.T) {
 	fields := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answers": []any{0, 2}}
 	cases := []struct {
@@ -182,7 +182,7 @@ func TestChoiceMultiGrading(t *testing.T) {
 	}
 }
 
-// TestTrueFalseGrading 覆盖对/错与未作答。
+// TestTrueFalseGrading covers right/wrong and no answer.
 func TestTrueFalseGrading(t *testing.T) {
 	fields := map[string]any{"statement": "s", "answer": true}
 	if rating, _, ok := (trueFalseType{}).Grade(TrueFalseInput{GradeContext: GradeContext{Fields: fields}, Answer: boolPtr(true)}); !ok || rating != RatingGood {
@@ -196,7 +196,7 @@ func TestTrueFalseGrading(t *testing.T) {
 	}
 }
 
-// TestGradeMappingDefaults 断言默认映射：全对 Good、部分 Hard、全错 Again。
+// TestGradeMappingDefaults asserts the default mapping: all correct Good, partial Hard, all wrong Again.
 func TestGradeMappingDefaults(t *testing.T) {
 	m := DefaultGradeMapping()
 	cases := []struct {
@@ -215,7 +215,7 @@ func TestGradeMappingDefaults(t *testing.T) {
 	}
 }
 
-// TestGradeMappingCustom 断言存在的映射可覆盖默认档位与阈值，并且判分器会使用它。
+// TestGradeMappingCustom asserts a provided mapping can override the default levels and thresholds, and that graders use it.
 func TestGradeMappingCustom(t *testing.T) {
 	custom := GradeMapping{Version: GradeMappingVersion, Full: RatingEasy, Partial: RatingAgain, None: RatingAgain}
 	if got := custom.RatingFor(1); got != RatingEasy {
@@ -225,7 +225,7 @@ func TestGradeMappingCustom(t *testing.T) {
 		t.Errorf("custom partial = %d, want %d", got, RatingAgain)
 	}
 
-	// 判分器传入自定义映射后必须生效：部分得分降到 Again。
+	// A custom mapping passed to the grader must take effect: partial scores drop to Again.
 	fields := map[string]any{"question": "q", "options": []any{"a", "b", "c"}, "answers": []any{0, 2}}
 	rating, _, ok := choiceMultiType{}.Grade(ChoiceMultiInput{
 		GradeContext: GradeContext{Fields: fields, Mapping: mapPtr(custom)},
@@ -236,7 +236,7 @@ func TestGradeMappingCustom(t *testing.T) {
 	}
 }
 
-// TestParseGradeMapping 覆盖解析、缺省回退、非法输入与往返。
+// TestParseGradeMapping covers parsing, the missing-value fallback, invalid input, and round trips.
 func TestParseGradeMapping(t *testing.T) {
 	if m, err := ParseGradeMapping(""); err != nil || m.RatingFor(0.5) != RatingHard {
 		t.Fatalf("empty mapping should fall back to default, got %+v err %v", m, err)
@@ -264,7 +264,7 @@ func TestParseGradeMapping(t *testing.T) {
 	}
 }
 
-// TestGradedValidateErrors 覆盖字段缺失、越界索引、重复项等负例。
+// TestGradedValidateErrors covers negative cases such as missing fields, out-of-range indices, and duplicate entries.
 func TestGradedValidateErrors(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -294,7 +294,7 @@ func TestGradedValidateErrors(t *testing.T) {
 	}
 }
 
-// TestGradedValidateAndRenderHappyPath 断言合法字段能通过并产出卡片与两侧内容。
+// TestGradedValidateAndRenderHappyPath asserts valid fields pass and produce cards with content on both sides.
 func TestGradedValidateAndRenderHappyPath(t *testing.T) {
 	cases := []struct {
 		kind   string
@@ -326,8 +326,8 @@ func TestGradedValidateAndRenderHappyPath(t *testing.T) {
 	}
 }
 
-// TestTypedBackJoinsAcceptedAnswers 断言输入作答卡的背面把标准答案和其它可接受答案写在同一行，
-// 用「 / 」分隔；没有其它可接受答案时只有标准答案。
+// TestTypedBackJoinsAcceptedAnswers asserts the back of a typed-answer card writes the canonical answer and the other acceptable answers on the same line,
+// separated by " / "; with no other acceptable answers only the canonical one appears.
 func TestTypedBackJoinsAcceptedAnswers(t *testing.T) {
 	cases := []struct {
 		name   string

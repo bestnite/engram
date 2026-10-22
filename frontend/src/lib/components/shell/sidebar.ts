@@ -1,20 +1,20 @@
 import { writable } from 'svelte/store';
 import type { ApiClient, DataChangeKind, Deck, DeckQueueCountsResponse } from '../../api';
 
-/** 侧边栏收起状态的存储键。只是本机的显示偏好，不进账号设置。 */
+/** Storage key for the sidebar's collapsed state. It is only a local display preference and does not go into account settings. */
 export const SIDEBAR_COLLAPSED_KEY = 'engram-sidebar-collapsed';
 
-/** 侧边栏里直接列出的卡组数上限；更多卡组从「全部卡组」进入。 */
+/** Maximum number of decks listed directly in the sidebar; more decks are reached through "all decks". */
 export const SIDEBAR_DECK_LIMIT = 6;
 
-/** 两次刷新卡组快捷入口之间的最短间隔：切页面会触发刷新，连续点击不该每次都打两个接口。 */
+/** Minimum interval between two refreshes of the deck shortcuts: changing pages triggers a refresh, and rapid clicks should not hit two endpoints every time. */
 const REFRESH_INTERVAL_MS = 15_000;
 
 function readCollapsed(): boolean {
   try {
     return typeof window !== 'undefined' && window.localStorage?.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
   } catch {
-    // 隐私模式下访问 localStorage 本身就可能抛错；按展开处理。
+    // Accessing localStorage itself can throw in private mode; treat it as expanded.
     return false;
   }
 }
@@ -26,28 +26,28 @@ export function setSidebarCollapsed(collapsed: boolean): void {
   try {
     window.localStorage?.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
   } catch {
-    // 存储不可用时本次会话仍然生效，只是不记住。
+    // When storage is unavailable the setting still applies for this session, it is just not remembered.
   }
 }
 
 export interface SidebarDeck {
   id: string;
   name: string;
-  /** 今日还能复习的卡数（新卡 + 到期复习）；队列计数取不到时为 null。 */
+  /** How many cards can still be reviewed today (new cards + due reviews); null when the queue counts are unavailable. */
   due: number | null;
 }
 
 export interface SidebarDecksState {
   decks: SidebarDeck[];
-  /** 全部卡组今日待复习总数；队列计数取不到时为 null，界面不显示数字。 */
+  /** Total due count today across all decks; null when the queue counts are unavailable, and the UI then shows no number. */
   totalDue: number | null;
 }
 
 export const sidebarDecks = writable<SidebarDecksState>({ decks: [], totalDue: null });
 
 /**
- * 由卡组列表与队列计数算出侧边栏要显示的卡组：待复习多的排前面，同数按名称排，
- * 只取前 SIDEBAR_DECK_LIMIT 个。已归档的卡组不进侧边栏。
+ * Compute the decks to show in the sidebar from the deck list and the queue counts: more due cards first, ties sorted by name,
+ * and only the first SIDEBAR_DECK_LIMIT are taken. Archived decks never enter the sidebar.
  */
 export function buildSidebarDecks(decks: Deck[], counts: DeckQueueCountsResponse | null): SidebarDecksState {
   const dueById = new Map<string, number>();
@@ -64,14 +64,14 @@ export function buildSidebarDecks(decks: Deck[], counts: DeckQueueCountsResponse
 
 let lastLoadedAt = 0;
 let inflight: Promise<void> | null = null;
-// 强制刷新撞上进行中的请求时置位：那个请求可能发于改动之前，结束后必须再取一次。
+// Set when a forced refresh collides with an in-flight request: that request may have started before the change, so another fetch is required once it finishes.
 let refreshAgain = false;
 
 /**
- * 刷新侧边栏的卡组快捷入口。force 为假时 15 秒内的重复调用直接返回。
+ * Refresh the sidebar's deck shortcuts. When force is false, repeated calls within 15 seconds return immediately.
  *
- * 失败只影响侧边栏这一处：保留上一次的结果，不抛给页面——导航栏取数失败不应该打断用户正在看的页面。
- * 队列计数单独失败时仍显示卡组名，只是不带数字。
+ * Failure only affects this one place in the sidebar: the previous result is kept and nothing is thrown to the page - a failed nav fetch should not interrupt the page the user is viewing.
+ * When the queue counts fail on their own the deck names are still shown, just without numbers.
  */
 export function refreshSidebarDecks(client: ApiClient, force = false): Promise<void> {
   const now = Date.now();
@@ -102,16 +102,16 @@ export function refreshSidebarDecks(client: ApiClient, force = false): Promise<v
 }
 
 /**
- * 标记侧边栏数据已过期但不立即重取：下一次切页时会绕过节流重新取数。
- * 用于复习作答这类高频改动——每答一张卡都重取会多打两个请求。
+ * Mark the sidebar data stale without refetching immediately: the next page change bypasses the throttle and refetches.
+ * Used for high-frequency changes such as answering reviews - refetching on every card answer would add two requests each time.
  */
 export function markSidebarStale(): void {
   lastLoadedAt = 0;
 }
 
 /**
- * 按接口层的改动通知同步侧边栏（ApiClient.onDataChanged 的订阅方）：
- * 卡组增删改、卡片与额度变化立即重取；复习作答只标记过期。
+ * Sync the sidebar from the API layer's change notifications (subscribers of ApiClient.onDataChanged):
+ * deck create/rename/delete, card and quota changes refetch immediately; review answers only mark it stale.
  */
 export function handleDataChanged(client: ApiClient, kind: DataChangeKind): void {
   if (kind === 'review') {
@@ -121,7 +121,7 @@ export function handleDataChanged(client: ApiClient, kind: DataChangeKind): void
   void refreshSidebarDecks(client, true);
 }
 
-/** 退出登录后清空，避免下一个登录的人短暂看到上一个人的卡组。 */
+/** Cleared on logout, so the next person to log in does not briefly see the previous user's decks. */
 export function resetSidebarDecks(): void {
   lastLoadedAt = 0;
   sidebarDecks.set({ decks: [], totalDue: null });

@@ -78,7 +78,7 @@ import {
 } from './types';
 
 /**
- * API 客户端配置
+ * API client configuration
  */
 export interface ApiClientConfig {
   baseUrl?: string;
@@ -86,7 +86,7 @@ export interface ApiClientConfig {
 }
 
 /**
- * 根据 HTTP 状态码推导稳定错误 code
+ * Derive a stable error code from the HTTP status code
  */
 function inferErrorCodeFromStatus(status: number): string {
   switch (status) {
@@ -109,15 +109,15 @@ function inferErrorCodeFromStatus(status: number): string {
 }
 
 /**
- * 集中式类型安全同源 REST API 客户端
+ * Centralized, type-safe same-origin REST API client
  *
- * 核心设计决策：
- * 1. 严格使用 credentials: 'same-origin'（HttpOnly Cookie 会话）
- * 2. 严禁从存储中读取 API Key 或在请求头中发送 Authorization Bearer token
- * 3. 错误响应安全解析为结构化 ApiClientError，保持内部英文诊断，UI 由语言包映射
- * 4. 零外部 HTTP 框架依赖，基于原生 fetch
+ * Core design decisions:
+ * 1. Strictly use credentials: 'same-origin' (HttpOnly cookie session)
+ * 2. Never read an API key from storage or send an Authorization Bearer token in request headers
+ * 3. Parse error responses safely into a structured ApiClientError; keep diagnostics in English internally and let the UI map them via language packs
+ * 4. Zero external HTTP framework dependencies, built on native fetch
  */
-/** onDataChanged 的变化种类，见 ApiClient.onDataChanged。 */
+/** Kinds of change for onDataChanged, see ApiClient.onDataChanged. */
 export type DataChangeKind = 'decks' | 'cards' | 'review';
 
 export class ApiClient {
@@ -126,17 +126,17 @@ export class ApiClient {
   private csrfToken: string | null = null;
 
   /**
-   * 会话中途失效时的回调（由应用外壳注册：清认证状态 + 送回登录页）。
+   * Callback for the session becoming invalid mid-way (registered by the app shell: clear auth state + send back to the login page).
    *
-   * 客户端只负责**发现**「这个会话已经不算数了」，不决定界面策略——策略（是否跳转、跳到哪）
-   * 属于外壳。两者分开后，客户端不需要 import 路由，也不会与视图形成循环依赖。
+   * The client is only responsible for **detecting** that "this session no longer counts"; it does not decide UI policy - policy (whether to redirect, where to)
+   * belongs to the shell. With the two separated, the client needs no route imports and forms no circular dependency with views.
    */
   onUnauthorized: (() => void) | null = null;
 
   /**
-   * 写操作成功后的通知（外壳用它刷新侧边栏的卡组列表与待复习数）。
-   * decks：卡组本身增删改；cards：卡片或额度变化，待复习数会变；review：复习作答，变化频繁，
-   * 订阅方可以只标记过期而不立即重取。失败的请求不通知。
+   * Notification after a successful write (the shell uses it to refresh the sidebar's deck list and due-review count).
+   * decks: decks themselves created/renamed/deleted; cards: cards or quotas changed, so the due count changes; review: review answers, which change frequently,
+   * so subscribers may just mark stale instead of refetching immediately. Failed requests do not notify.
    */
   onDataChanged: ((kind: DataChangeKind) => void) | null = null;
 
@@ -154,23 +154,23 @@ export class ApiClient {
   }
 
   /**
-   * 获取当前内存中持有的 CSRF Token（绝不存入 localStorage/sessionStorage）
+   * Get the CSRF Token currently held in memory (never stored in localStorage/sessionStorage)
    */
   getCsrfToken(): string | null {
     return this.csrfToken;
   }
 
   /**
-   * 配置或更新客户端绑定的 CSRF Token
+   * Set or update the CSRF Token bound to the client
    */
   setCsrfToken(token: string | null): void {
     this.csrfToken = token;
   }
 
   /**
-   * 基础通用请求方法
+   * Base generic request method
    *
-   * isRetry 只由本方法内部在「陈旧 CSRF」自愈时置位，用来保证最多重试一次（不会无限递归）。
+   * isRetry is only set inside this method during “stale CSRF” self-healing, to guarantee at most one retry (no infinite recursion).
    */
   async request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {
     const url = this.baseUrl ? `${this.baseUrl}${path}` : path;
@@ -180,13 +180,13 @@ export class ApiClient {
       headers.set('Accept', 'application/json');
     }
 
-    // 严禁发送 Authorization 标头
+    // Never send an Authorization header
     headers.delete('Authorization');
 
     const method = (init?.method || 'GET').toUpperCase();
     const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 
-    // 变更请求自动附加 X-CSRF-Token 与 Content-Type: application/json
+    // Mutating requests automatically attach X-CSRF-Token and Content-Type: application/json
     if (!isSafeMethod) {
       if (this.csrfToken && !headers.has('X-CSRF-Token')) {
         headers.set('X-CSRF-Token', this.csrfToken);
@@ -201,7 +201,7 @@ export class ApiClient {
       res = await this.fetchFn(url, {
         ...init,
         headers,
-        // 强制使用同源会话 cookie，浏览器自动管理
+        // Force same-origin session cookies, managed automatically by the browser
         credentials: 'same-origin',
       });
     } catch (netErr) {
@@ -226,21 +226,21 @@ export class ApiClient {
           errorEnvelope = data as ApiErrorEnvelope;
         }
       } catch {
-        // 响应体非 JSON（如网关 502 HTML）时静默忽略，依赖状态码兜底
+        // Ignore non-JSON response bodies silently (e.g. a gateway 502 HTML page) and rely on the status code instead
       }
 
       const code = errorEnvelope?.error?.code || inferErrorCodeFromStatus(res.status);
 
-      // 陈旧 CSRF 自愈：内存里的 token 已经不匹配（典型：会话刚失效或刚被换掉，而页面还没重新
-      // 问一次会话）。重新取一次会话拿到当前该用的值，再原样重试一次——客户端只有一个 csrf 字段，
-      // 重取后它自动变成服务端此刻期望的那个（匿名时是双提交值、已登录时是会话值）。
+      // Stale CSRF self-healing: the token in memory no longer matches (typically the session just
+      // expired or was swapped while the page had not re-asked the session). Re-fetch the session to get
+      // the value expected right now, then retry once as-is - the client holds a single csrf field, which after the re-fetch automatically becomes what the server expects now (the double-submit value when anonymous, the session value when logged in).
       if (code === 'csrf_failed' && !isRetry) {
         await this.getSession();
         return this.request<T>(path, init, true);
       }
 
-      // 会话已经不算数：通知外壳清认证状态并送回登录页（是否跳转由外壳决定）。
-      // csrf_no_session 是「登录后端点的 CSRF 校验发现根本没有会话」，与 401 同义。
+      // The session no longer counts: notify the shell to clear auth state and send the user back to login (the shell decides whether to redirect).
+      // csrf_no_session means "the CSRF check on the post-login endpoint found no session at all", synonymous with 401.
       if (res.status === 401 || code === 'csrf_no_session') {
         this.onUnauthorized?.();
       }
@@ -267,7 +267,7 @@ export class ApiClient {
     }
   }
 
-  /** 使用同源会话下载现有的卡组包附件。 */
+  /** Download an existing deck package attachment using the same-origin session. */
   async downloadDeckPackage(deckId: string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
     if (options.includeReviews && !options.includeProgress) {
       throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
@@ -301,7 +301,7 @@ export class ApiClient {
     return { blob: await response.blob(), filename };
   }
 
-  /** 通过同源会话 multipart 路由导入卡组包。 */
+  /** Import a deck package through the same-origin session multipart route. */
   async importDeckPackage(file: File, options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean; applyWeights?: boolean }): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
     const form = new FormData();
@@ -316,13 +316,13 @@ export class ApiClient {
   }
 
   /**
-   * 通过同源会话 JSON 路由从公开 HTTPS 直链导入卡组包（POST /api/v1/decks/import-url）。
+   * Import a deck package from a public HTTPS direct link through the same-origin session JSON route (POST /api/v1/decks/import-url).
    *
-   * 与文件导入共用同一批选项（target / dry_run / on_conflict / allow_others_progress /
-   * skip_missing_media / apply_weights），服务端返回同一份 PackageImportReport，前端不区分结果形状。
-   * 显式写出全部字段而不是依赖服务端默认值：选项的含义在两条入口上必须完全一致，缺省会让
-   * 「界面显示的值」与「实际生效的值」脱钩。CSRF 与 Content-Type 由 request 统一注入（字符串
-   * body 才强制 application/json）。
+   * Shares the same set of options as file import (target / dry_run / on_conflict / allow_others_progress /
+   * skip_missing_media / apply_weights), the server returns the same PackageImportReport, and the frontend does not distinguish result shapes.
+   * Write out every field explicitly instead of relying on server defaults: option semantics must be identical on both entry points, and omitting them would
+   * decouple "the value shown in the UI" from "the value actually in effect". CSRF and Content-Type are injected centrally by request (only
+   * string bodies force application/json).
    */
   async importDeckPackageURL(
     rawURL: string,
@@ -344,15 +344,15 @@ export class ApiClient {
   }
 
   /**
-   * 读取全部题型的自描述（GET /api/v1/card-types，scope: read）。
-   * 静态元数据、不含用户状态；需要会话或 API key，未认证时服务端返回 401。
+   * Read the self-description of all card kinds (GET /api/v1/card-types, scope: read).
+   * Static metadata with no user state; requires a session or API key, and the server returns 401 when unauthenticated.
    */
   async getCardTypes(): Promise<CardTypesResponse> {
     return this.request<CardTypesResponse>('/api/v1/card-types');
   }
 
   /**
-   * 获取当前用户的卡组列表（GET /api/v1/decks）
+   * Get the current user's deck list (GET /api/v1/decks)
    */
   async getDecks(): Promise<DecksResponse> {
     return this.request<DecksResponse>('/api/v1/decks');
@@ -364,8 +364,8 @@ export class ApiClient {
   }
 
   /**
-   * 读取卡组每日上限与今日已用/剩余（GET /api/v1/decks/:id/settings，仅 owner，会话专用）。
-   * 非 owner 由服务端返回 403/404，本方法不隐藏该失败。
+   * Read a deck's daily limit plus today's used/remaining (GET /api/v1/decks/:id/settings, owner only, session only).
+   * The server returns 403/404 for non-owners; this method does not hide that failure.
    */
   async getDeckSettings(deckId: string): Promise<DeckSettings> {
     const id = encodeURIComponent(String(deckId));
@@ -373,8 +373,8 @@ export class ApiClient {
   }
 
   /**
-   * 保存卡组每日上限（PATCH /api/v1/decks/:id/settings，仅 owner）。
-   * 0 表示不限，必须原样提交；缺少会话令牌时先获取 CSRF token。
+   * Save a deck's daily limit (PATCH /api/v1/decks/:id/settings, owner only).
+   * 0 means unlimited and must be submitted verbatim; when the session token is missing, fetch a CSRF token first.
    */
   async updateDeckSettings(deckId: string, input: UpdateDeckSettingsRequest): Promise<DeckSettings> {
     if (!this.csrfToken) {
@@ -387,7 +387,7 @@ export class ApiClient {
     }));
   }
 
-  /** 创建卡组；缺少会话令牌时先获取新 CSRF token。 */
+  /** Create a deck; when the session token is missing, fetch a new CSRF token first. */
   async createDeck(input: CreateDeckRequest): Promise<Deck> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -399,8 +399,8 @@ export class ApiClient {
   }
 
   /**
-   * 修改卡组名称与描述（PATCH /api/v1/decks/:id，仅 owner）。
-   * 校验与建组同源：名称非空且不超过 200 个字符，描述不超过 2000 个字符（空描述合法）。
+   * Update a deck's name and description (PATCH /api/v1/decks/:id, owner only).
+   * Validation matches deck creation: name non-empty and at most 200 characters, description at most 2000 characters (an empty description is valid).
    */
   async updateDeck(deckId: string, input: { name: string; description: string }): Promise<Deck> {
     if (!this.csrfToken) {
@@ -413,7 +413,7 @@ export class ApiClient {
     }));
   }
 
-  /** 删除卡组（DELETE /api/v1/decks/:id，仅 owner）。 */
+  /** Delete a deck (DELETE /api/v1/decks/:id, owner only). */
   async deleteDeck(deckId: string): Promise<{ deleted: boolean }> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -425,8 +425,8 @@ export class ApiClient {
   }
 
   /**
-   * 退出共享卡组（DELETE /api/v1/decks/:id/membership，scope: write）。
-   * 只删除自己在卡组上的授权行，不动卡组内容；属主没有「退出」语义，由服务端拒绝。
+   * Leave a shared deck (DELETE /api/v1/decks/:id/membership, scope: write).
+   * Only deletes your own authorization row on the deck and does not touch deck content; the owner has no "leave" semantics and is rejected by the server.
    */
   async leaveDeck(deckId: string): Promise<{ left: boolean }> {
     if (!this.csrfToken) {
@@ -438,7 +438,7 @@ export class ApiClient {
     }));
   }
 
-  /** 批量导出选中的卡组包为一个 zip 归档（POST /api/v1/decks/export-zip）。 */
+  /** Export the selected deck packages as a single zip archive (POST /api/v1/decks/export-zip). */
   async exportDecksZip(
     deckIds: string[],
     options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}
@@ -478,9 +478,9 @@ export class ApiClient {
   }
 
   /**
-   * 克隆一个自己可读的卡组（POST /api/v1/decks/:id/clone）。
-   * reader 及以上都能克隆；服务端判权与审计，返回新卡组的 {id, name}（进度不跟随）。
-   * 显式声明 Accept: application/json，服务端据此返回 JSON 而不是 303 重定向。
+   * Clone a deck you can read (POST /api/v1/decks/:id/clone).
+   * reader and above can clone; the server authorizes and audits, returning the new deck's {id, name} (progress does not carry over).
+   * Declare Accept: application/json explicitly so the server returns JSON instead of a 303 redirect.
    */
   async cloneDeck(deckId: string): Promise<{ id: string; name: string }> {
     if (!this.csrfToken) {
@@ -495,7 +495,7 @@ export class ApiClient {
   }
 
   /**
-   * 获取卡组下的卡片列表（GET /api/v1/decks/:id/notes）
+   * Get the card list under a deck (GET /api/v1/decks/:id/notes)
    */
   async getDeckNotes(
     deckId: string,
@@ -532,7 +532,7 @@ export class ApiClient {
   }
 
   /**
-   * 获取卡组卡片列表（getDeckNotes 别名）
+   * Get a deck's card list (alias of getDeckNotes)
    */
   async getNotes(
     deckId: string,
@@ -558,7 +558,7 @@ export class ApiClient {
     }));
   }
 
-  /** 使用同源会话与内存 CSRF token 调用安全批量端点创建笔记（kind 可为任意已注册题型）。 */
+  /** Create notes via the safe bulk endpoint using the same-origin session and in-memory CSRF token (kind can be any registered card kind). */
   async createNotes(deckId: string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -571,9 +571,9 @@ export class ApiClient {
   }
 
   /**
-   * 批量删除/改标签（POST /api/v1/notes/bulk）。
-   * 行级失败不回滚整批：响应 skipped 逐行给出 not_found / insufficient_role，
-   * 调用方据 affected 与 skipped 报告真实结果，不做乐观假设。
+   * Bulk delete/retag (POST /api/v1/notes/bulk).
+   * Row-level failures do not roll back the whole batch: the response's skipped lists not_found / insufficient_role per row,
+   * and callers report the real result from affected and skipped, making no optimistic assumptions.
    */
   async bulkNotes(input: BulkNotesRequest): Promise<BulkNotesResponse> {
     if (!this.csrfToken) {
@@ -598,9 +598,9 @@ export class ApiClient {
   }
 
   /**
-   * 列出当前用户可读的媒体库一页（GET /api/v1/media）。
-   * 取代已删除的 SSR 片段端点：返回的 JSON 每项含 sha256 与可直接引用的 url（/media/<sha256>），
-   * 前端不再解析 HTML。参数缺省时服务端给默认页大小；游标非法/超限由服务端回 400。
+   * List one page of the media library the current user can read (GET /api/v1/media).
+   * Replaces the removed SSR fragment endpoint: each returned JSON item has a sha256 and a directly usable url (/media/<sha256>),
+   * so the frontend no longer parses HTML. When params are omitted the server applies a default page size; an invalid/oversized cursor gets a 400 from the server.
    */
   async listMedia(cursor = ''): Promise<MediaListResponse> {
     const params = new URLSearchParams();
@@ -610,11 +610,11 @@ export class ApiClient {
   }
 
   /**
-   * 通过卡组内编辑器上传入口（POST /decks/:id/media）上传一个媒体文件。
-   * 端点要求 editor 及以上角色，由服务端判定，前端不隐藏失败；multipart 边界交由浏览器生成，
-   * 因此 request 不会替 FormData 设置 Content-Type（仅字符串 body 才强制 application/json）。
-   * 成功响应必须满足 /media/<sha256> 的哈希契约，否则按无效响应拒绝，避免把不受约束的
-   * 字符串插入字段。
+   * Upload one media file through the in-deck editor upload entry (POST /decks/:id/media).
+   * The endpoint requires editor and above, enforced by the server, and the frontend does not hide failures; the multipart boundary is left to the browser,
+   * so request does not set Content-Type for FormData (only string bodies force application/json).
+   * A success response must satisfy the /media/<sha256> hash contract, otherwise it is rejected as invalid, avoiding insertion of unconstrained
+   * strings into fields.
    */
   async uploadDeckMedia(deckId: string, file: File): Promise<MediaUploadResult> {
     if (!this.csrfToken) {
@@ -634,23 +634,23 @@ export class ApiClient {
   }
 
   /**
-   * 通过卡组列表查找单个卡组元数据
+   * Find a single deck's metadata in the deck list
    */
   async getDeck(deckId: string): Promise<Deck | null> {
     const res = await this.getDecks();
     return res.decks.find((d) => d.id === String(deckId)) || null;
   }
 
-  /** 列出卡组里的标签及各自的笔记数（GET /api/v1/decks/:id/tags），供按标签复习选择。 */
+  /** List a deck's tags with their note counts (GET /api/v1/decks/:id/tags), for choosing review by tag. */
   async getDeckTags(deckId: string): Promise<DeckTagsResponse> {
     return this.request<DeckTagsResponse>(`/api/v1/decks/${encodeURIComponent(String(deckId))}/tags`);
   }
 
   /**
-   * 读取单条卡片（GET /api/v1/notes/:id）。
+   * Read a single card (GET /api/v1/notes/:id).
    *
-   * 编辑页按对外 id 直接取目标行，不再拉列表再 find——列表是分页的，
-   * 位置在单页之外的卡片会因此永远打不开。
+   * The edit page fetches the target row directly by public id instead of pulling the list and finding it - the list is paginated, so
+   * cards outside the current page would otherwise never open.
    */
   async getNote(noteId: string): Promise<Note> {
     const id = encodeURIComponent(String(noteId));
@@ -658,7 +658,7 @@ export class ApiClient {
   }
 
   /**
-   * 获取当前用户基础资料（GET /api/v1/profile）
+   * Get the current user's basic profile (GET /api/v1/profile)
    */
   async getProfile(): Promise<UserProfile> {
     const res = await this.request<ProfileResponse | UserProfile>('/api/v1/profile');
@@ -669,8 +669,8 @@ export class ApiClient {
   }
 
   /**
-   * 更新当前用户资料（PATCH /api/v1/profile）
-   * 严格使用同源凭据与 CSRF 标头
+   * Update the current user's profile (PATCH /api/v1/profile)
+   * Strictly use same-origin credentials and the CSRF header
    */
   async updateProfile(
     data: UpdateProfileRequest,
@@ -693,10 +693,10 @@ export class ApiClient {
   }
 
   /**
-   * 只改界面语言偏好（PATCH /api/v1/settings/locale）。
+   * Change only the UI language preference (PATCH /api/v1/settings/locale).
    *
-   * 页头的语言切换器用它即时落库；/settings 的语言字段随资料表单（PATCH /api/v1/profile）提交，
-   * 两条路径写的是同一列，界面上以 store 为准。
+   * The header language switcher uses it to persist immediately; the /settings language field is submitted with the profile form (PATCH /api/v1/profile),
+   * both paths write the same column, and the UI treats the store as authoritative.
    */
   async updateLocale(
     locale: string,
@@ -715,24 +715,24 @@ export class ApiClient {
   }
 
   /**
-   * 获取当前用户学习统计概要（GET /api/v1/stats/summary）
+   * Get the current user's study stats summary (GET /api/v1/stats/summary)
    */
   async getStatsSummary(): Promise<StatsSummary> {
     return this.request<StatsSummary>('/api/v1/stats/summary');
   }
 
   /**
-   * 获取当前用户统计明细（GET /api/v1/stats/detail）
-   * 与统计页同一批聚合查询，返回全部指标的原始数值（计数/比例/毫秒），本地化由前端负责。
+   * Get the current user's detailed stats (GET /api/v1/stats/detail)
+   * The same aggregate queries as the stats page, returning raw values for every metric (counts/ratios/milliseconds); localization is the frontend's job.
    */
   async getStatsDetail(): Promise<StatsDetail> {
     return this.request<StatsDetail>('/api/v1/stats/detail');
   }
 
   /**
-   * 获取到期卡片列表（GET /api/v1/review/due）
-   * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]；
-   * tag 可重复，只取带有其中任一标签的卡（此时 deck 必须恰好一个）
+   * Get the due card list (GET /api/v1/review/due)
+   * The deck parameter may be repeated with multiple deck IDs (mutually exclusive/single/multiple), and limit is in [1, 500];
+   * tag may be repeated to take only cards carrying any of those tags (in that case deck must be exactly one)
    */
   async getDueCards(query?: DueCardsQuery): Promise<DueCardsResponse> {
     const params = new URLSearchParams();
@@ -757,8 +757,8 @@ export class ApiClient {
   }
 
   /**
-   * 读取今天的新卡额度与「再来一组」的默认张数（GET /api/v1/decks/:id/extra-new）；
-   * tag 与复习队列同一口径，只影响可加张数。
+   * Read today's new-card quota and the default count for "one more round" (GET /api/v1/decks/:id/extra-new);
+   * tag follows the same rule as the review queue and only affects how many extra cards can be added.
    */
   async getExtraNew(deckId: string, tags: string[] = []): Promise<ExtraNewStatus> {
     const params = new URLSearchParams();
@@ -769,8 +769,8 @@ export class ApiClient {
   }
 
   /**
-   * 「再来一组」：只为今天、只为自己追加这个卡组的新卡额度（POST /api/v1/decks/:id/extra-new）。
-   * count 省略时由服务端取每日新卡上限。额度变了，待复习数随之变化，所以按 cards 通知。
+   * "One more round": add new-card quota for this deck, for today only and for yourself only (POST /api/v1/decks/:id/extra-new).
+   * When count is omitted the server uses the daily new-card limit. The quota changed, so the due count changes too, hence the cards notification.
    */
   async addExtraNew(deckId: string, count?: number): Promise<ExtraNewStatus> {
     if (!this.csrfToken) {
@@ -782,7 +782,7 @@ export class ApiClient {
     }));
   }
 
-  /** 通过 Web 专用 CSRF 端点提交自评，并由服务端重建同范围队列。 */
+  /** Submit self-grades through the web-only CSRF endpoint; the server rebuilds the same-scope queue. */
   async submitSelfReview(input: SubmitSelfReviewRequest): Promise<SubmitReviewResult> {
     const { deck, ...review } = input;
     return this.notifying('review', this.request<SubmitReviewResult>('/api/v1/review/answer', {
@@ -792,8 +792,8 @@ export class ApiClient {
   }
 
   /**
-   * 提交作答类题型的原始作答，由服务端判分并写入 reviews。
-   * 客户端不提交档位；判分档位来自服务端 graderFor 与 preset 映射。
+   * Submit raw answers for answer-graded card kinds; the server grades them and writes reviews.
+   * The client does not submit a grade; the grade comes from the server's graderFor and the preset mapping.
    */
   async submitGradedReview(input: SubmitGradedReviewRequest): Promise<GradedReviewResult> {
     return this.notifying('review', this.request<GradedReviewResult>('/api/v1/review/grade', {
@@ -802,7 +802,7 @@ export class ApiClient {
     }));
   }
 
-  /** 请求揭示作答类题型的正确答案（只读预览，不写进度）。 */
+  /** Request revealing the correct answer for answer-graded kinds (read-only preview, writes no progress). */
   async revealGradedAnswer(input: SubmitGradedReviewRequest): Promise<RevealAnswerResponse> {
     return this.request<RevealAnswerResponse>('/api/v1/review/grade', {
       method: 'POST',
@@ -811,8 +811,8 @@ export class ApiClient {
   }
 
   /**
-   * 取一张卡正反面的服务端清洗 HTML 与编辑地址（POST /api/v1/review/render）。
-   * 复习页只把这里的 HTML 交给 {@html}，绝不把 fields 原文当 Markdown 渲染。
+   * Fetch server-sanitized HTML for both sides of a card plus its edit URL (POST /api/v1/review/render).
+   * The review page only hands this HTML to {@html} and never renders raw fields as Markdown.
    */
   async renderReviewCard(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {
@@ -825,8 +825,8 @@ export class ApiClient {
   }
 
   /**
-   * 埋藏当前卡（POST /api/v1/review/bury）：只写本人进度，不产生 reviews 行。
-   * 响应带同一范围重建后的队列，跨卡组复习不会退化成单卡组。
+   * Bury the current card (POST /api/v1/review/bury): writes only your own progress and creates no reviews rows.
+   * The response carries the queue rebuilt over the same scope, so cross-deck review does not degrade to a single deck.
    */
   async buryReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
@@ -839,8 +839,8 @@ export class ApiClient {
   }
 
   /**
-   * 暂停当前卡（POST /api/v1/review/suspend）：只对本人生效，不产生 reviews 行；
-   * 响应带同一范围重建后的队列。
+   * Suspend the current card (POST /api/v1/review/suspend): applies to you only and creates no reviews rows;
+   * the response carries the queue rebuilt over the same scope.
    */
   async suspendReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
@@ -853,9 +853,9 @@ export class ApiClient {
   }
 
   /**
-   * 撤销刚提交的一次评分（POST /api/v1/review/undo）：恢复进度并删除被撤销的复习日志。
-   * 响应带同范围重建的队列与被撤销卡的对外 id（undone_card_id）；队列按 due_at 排序，
-   * 被撤销的卡不保证排在首位，调用方必须据 undone_card_id 把当前卡定位回它。
+   * Undo the review just submitted (POST /api/v1/review/undo): restores progress and deletes the undone review log.
+   * The response carries the rebuilt same-scope queue and the undone card's public id (undone_card_id); the queue is sorted by due_at,
+   * so the undone card is not guaranteed to be first and callers must relocate the current card using undone_card_id.
    */
   async undoReview(input: { card_id: string; expected_version: number; deck?: string[]; tags?: string[] }): Promise<ReviewUndoResponse> {
     if (!this.csrfToken) {
@@ -867,7 +867,7 @@ export class ApiClient {
     }));
   }
 
-  /** 暂停或恢复本人在一条 note 下的全部卡（PUT / DELETE /api/v1/notes/:id/suspension）。 */
+  /** Suspend or resume all of your cards under one note (PUT / DELETE /api/v1/notes/:id/suspension). */
   async setNoteSuspended(noteId: string, suspended: boolean): Promise<{ suspended: boolean; cards: string[] }> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -877,7 +877,7 @@ export class ApiClient {
     }));
   }
 
-  /** 管理当前账号的 API keys；写操作沿用 request 自动注入的内存 CSRF token。 */
+  /** Manage the current account's API keys; writes reuse the in-memory CSRF token auto-injected by request. */
   async getAPIKeys(): Promise<APIKeysResponse> {
     return this.request<APIKeysResponse>('/api/v1/keys');
   }
@@ -896,18 +896,18 @@ export class ApiClient {
   }
 
   /**
-   * 获取会话状态与安全 CSRF Token（GET /api/v1/auth/session）
+   * Get session state and the security CSRF Token (GET /api/v1/auth/session)
    */
   async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
     await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
   }
 
-  /** 读取当前用户的 TOTP 状态（GET /api/v1/settings/totp，仅会话）；不返回 secret。 */
+  /** Read the current user's TOTP status (GET /api/v1/settings/totp, session only); never returns the secret. */
   async getTOTPStatus(): Promise<TOTPStatus> {
     return this.request<TOTPStatus>('/api/v1/settings/totp');
   }
 
-  /** 生成待确认的 secret（POST /api/v1/settings/totp/begin）；secret 只在此响应出现一次。 */
+  /** Generate a pending secret (POST /api/v1/settings/totp/begin); the secret appears only in this response. */
   async beginTOTP(): Promise<TOTPBeginResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -918,7 +918,7 @@ export class ApiClient {
     });
   }
 
-  /** 用一次验证码确认绑定（POST /api/v1/settings/totp/confirm）；启用成功时一次性返回恢复码。 */
+  /** Confirm enrollment with a one-time code (POST /api/v1/settings/totp/confirm); on success it returns recovery codes once. */
   async confirmTOTP(code: string): Promise<TOTPConfirmResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -929,7 +929,7 @@ export class ApiClient {
     });
   }
 
-  /** 关闭 TOTP（POST /api/v1/settings/totp/disable，需要密码）。 */
+  /** Disable TOTP (POST /api/v1/settings/totp/disable, requires the password). */
   async disableTOTP(password: string): Promise<TOTPDisableResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -940,7 +940,7 @@ export class ApiClient {
     });
   }
 
-  /** 重新生成恢复码（POST /api/v1/settings/totp/recovery，需要密码）；旧码立即作废。 */
+  /** Regenerate recovery codes (POST /api/v1/settings/totp/recovery, requires the password); old codes are invalidated immediately. */
   async regenerateTOTPRecovery(password: string): Promise<TOTPRecoveryResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -951,12 +951,12 @@ export class ApiClient {
     });
   }
 
-  /** 读取邮件通知偏好（GET /api/v1/settings/notifications，仅会话）；开关由服务端按目录推导。 */
+  /** Read email notification preferences (GET /api/v1/settings/notifications, session only); toggles are derived by the server from the catalog. */
   async getNotificationPrefs(): Promise<NotificationPrefsResponse> {
     return this.request<NotificationPrefsResponse>('/api/v1/settings/notifications');
   }
 
-  /** 保存邮件通知偏好（PATCH /api/v1/settings/notifications）；写操作需要会话 CSRF。 */
+  /** Save email notification preferences (PATCH /api/v1/settings/notifications); writes require session CSRF. */
   async updateNotificationPrefs(data: UpdateNotificationPrefsRequest): Promise<NotificationPrefsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -976,7 +976,7 @@ export class ApiClient {
   }
 
   /**
-   * SPA 同源密码登录（POST /api/v1/auth/login）
+   * SPA same-origin password login (POST /api/v1/auth/login)
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     if (!this.csrfToken) {
@@ -993,17 +993,17 @@ export class ApiClient {
   }
 
   /**
-   * 查询登录第二步（TOTP）是否可提交（GET /api/v1/auth/totp）。
-   * 只读：不刷新凭据有效期，也不建立会话。
+   * Check whether the login second step (TOTP) can be submitted (GET /api/v1/auth/totp).
+   * Read-only: does not refresh credential lifetime and does not establish a session.
    */
   async getTOTPPending(): Promise<TOTPPendingResponse> {
     return this.request<TOTPPendingResponse>('/api/v1/auth/totp');
   }
 
   /**
-   * 提交登录第二步的验证码或一次性恢复码（POST /api/v1/auth/totp）。
-   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
-   * 通过后才由服务端签发会话 cookie，返回体与登录成功同形。
+   * Submit the login second step's code or one-time recovery code (POST /api/v1/auth/totp).
+   * Pre-session flow: writes use double-submit CSRF; when the token is missing, fetch a session token first.
+   * Only after that does the server issue a session cookie, and the response body has the same shape as a successful login.
    */
   async submitTOTP(code: string): Promise<TOTPLoginResponse> {
     if (!this.csrfToken) {
@@ -1020,7 +1020,7 @@ export class ApiClient {
   }
 
   /**
-   * SPA 同源登出（POST /api/v1/auth/logout）
+   * SPA same-origin logout (POST /api/v1/auth/logout)
    */
   async logout(): Promise<LogoutResponse> {
     const res = await this.request<LogoutResponse>('/api/v1/auth/logout', {
@@ -1035,9 +1035,9 @@ export class ApiClient {
   }
 
   /**
-   * SPA 同源自助注册（POST /api/v1/auth/register）。
-   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
-   * 成功不建立会话（服务端不签发会话 cookie），调用方随后跳转登录页。
+   * SPA same-origin self-registration (POST /api/v1/auth/register).
+   * Pre-session flow: writes use double-submit CSRF; when the token is missing, fetch a session token first.
+   * Success does not establish a session (the server issues no session cookie); the caller then redirects to the login page.
    */
   async register(input: RegisterRequest): Promise<RegisterResponse> {
     if (!this.csrfToken) {
@@ -1050,8 +1050,8 @@ export class ApiClient {
   }
 
   /**
-   * SPA 同源首个管理员引导（POST /api/v1/auth/setup）。
-   * 仅在没有活跃管理员时可达，否则服务端返回 404。成功不建立会话。
+   * SPA same-origin first-admin bootstrap (POST /api/v1/auth/setup).
+   * Reachable only when there is no active admin, otherwise the server returns 404. Success does not establish a session.
    */
   async setup(input: SetupRequest): Promise<SetupResponse> {
     if (!this.csrfToken) {
@@ -1063,12 +1063,12 @@ export class ApiClient {
     });
   }
 
-  /** 读取当前用户的全部调度预设与优化门槛（GET /api/v1/presets，仅会话）。 */
+  /** Read all of the current user's scheduling presets and optimization thresholds (GET /api/v1/presets, session only). */
   async listPresets(): Promise<PresetsResponse> {
     return this.request<PresetsResponse>('/api/v1/presets');
   }
 
-  /** 新建预设（POST /api/v1/presets）；成功后返回整份列表。 */
+  /** Create a preset (POST /api/v1/presets); returns the full list on success. */
   async createPreset(input: PresetWriteRequest): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1078,20 +1078,20 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
-  // ── 管理面板（Go: internal/web/admin_api.go 起的那几个文件）──────────
-  // 全部走同源会话 cookie，判权在服务端（匿名 401、非 admin 403）；这里只做传输。
+  // ── Admin panel (Go: the files starting at internal/web/admin_api.go) ──────────
+  // Everything goes through same-origin session cookies and authorization lives on the server (anonymous 401, non-admin 403); this layer only does transport.
 
-  /** 读取实例级计数（GET /api/v1/admin/summary）。 */
+  /** Read instance-level counts (GET /api/v1/admin/summary). */
   async getAdminSummary(): Promise<import('./types').AdminSummary> {
     return this.request<import('./types').AdminSummary>('/api/v1/admin/summary');
   }
 
-  /** 读取健康页读数（GET /api/v1/admin/health）。 */
+  /** Read health page readings (GET /api/v1/admin/health). */
   async getAdminHealth(): Promise<import('./types').AdminHealth> {
     return this.request<import('./types').AdminHealth>('/api/v1/admin/health');
   }
 
-  /** 检索审计日志（GET /api/v1/admin/audit）；过滤与分页与服务端 SSR 页同源。 */
+  /** Search the audit log (GET /api/v1/admin/audit); filtering and pagination match the server-rendered SSR page. */
   async getAdminAudit(query?: import('./types').AdminAuditQuery): Promise<import('./types').AdminAuditResponse> {
     const params = new URLSearchParams();
     if (query) {
@@ -1105,7 +1105,7 @@ export class ApiClient {
     return this.request<import('./types').AdminAuditResponse>(`/api/v1/admin/audit${qs ? `?${qs}` : ''}`);
   }
 
-  /** 用户管理列表（GET /api/v1/admin/users）。 */
+  /** User management list (GET /api/v1/admin/users). */
   async getAdminUsers(params?: { q?: string; page?: number }): Promise<import('./types').AdminUsersResponse> {
     const search = new URLSearchParams();
     if (params?.q) search.set('q', params.q);
@@ -1114,7 +1114,7 @@ export class ApiClient {
     return this.request<import('./types').AdminUsersResponse>(`/api/v1/admin/users${qs ? `?${qs}` : ''}`);
   }
 
-  /** 新建本地账号（POST /api/v1/admin/users）；校验失败返回稳定 code。 */
+  /** Create a local account (POST /api/v1/admin/users); validation failures return a stable code. */
   async createAdminUser(input: import('./types').AdminUserCreateRequest): Promise<import('./types').AdminUser> {
     if (!this.csrfToken) await this.getSession();
     return this.request<import('./types').AdminUser>('/api/v1/admin/users', {
@@ -1123,9 +1123,9 @@ export class ApiClient {
     });
   }
   /**
-   * 请求密码重置（POST /api/v1/auth/forgot-password）。
-   * 会话前流程：写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
-   * 响应只含站点级 mail_ready，不透露账号是否存在；未配置邮件时前端渲染说明而不是谎报已发送。
+   * Request a password reset (POST /api/v1/auth/forgot-password).
+   * Pre-session flow: writes use double-submit CSRF; when the token is missing, fetch a session token first.
+   * The response only contains site-level mail_ready and does not reveal whether the account exists; when mail is not configured the frontend renders an explanation instead of falsely claiming it was sent.
    */
   async requestPasswordReset(input: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
     if (!this.csrfToken) {
@@ -1137,7 +1137,7 @@ export class ApiClient {
     });
   }
 
-  /** 编辑预设（PATCH /api/v1/presets/:id）；成功后返回整份列表。 */
+  /** Edit a preset (PATCH /api/v1/presets/:id); returns the full list on success. */
   async updatePreset(id: string, input: PresetWriteRequest): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1149,13 +1149,13 @@ export class ApiClient {
     });
   }
 
-  /** 删除预设（DELETE /api/v1/presets/:id）；成功后返回整份最新预设列表。 */
-  /** 管理面板：邮件模板清单（类型 + 变量表 + 已保存的模板）。 */
+  /** Delete a preset (DELETE /api/v1/presets/:id); returns the full latest preset list on success. */
+  /** Admin panel: email template inventory (kind + variable table + saved templates). */
   async getAdminMailTemplates(): Promise<AdminMailTemplatesResponse> {
     return this.request<AdminMailTemplatesResponse>('/api/v1/admin/mail-templates');
   }
 
-  /** 管理面板：保存一份邮件模板（整份替换，主题与正文必须来自同一次编辑）。 */
+  /** Admin panel: save one email template (full replacement; subject and body must come from the same edit). */
   async saveAdminMailTemplate(
     type: string,
     locale: string,
@@ -1170,7 +1170,7 @@ export class ApiClient {
     );
   }
 
-  /** 管理面板：删掉自定义模板，回到内置正文。 */
+  /** Admin panel: delete the custom template and fall back to the built-in body. */
   async deleteAdminMailTemplate(type: string, locale: string): Promise<void> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1181,7 +1181,7 @@ export class ApiClient {
     );
   }
 
-  /** 管理面板：用样例值渲染草稿，不写库、不发信。 */
+  /** Admin panel: render a draft with sample values without writing to the DB or sending mail. */
   async previewAdminMailTemplate(input: {
     type: string;
     locale: string;
@@ -1197,7 +1197,7 @@ export class ApiClient {
     });
   }
 
-  /** 管理面板：把渲染结果以样例值发给自己。 */
+  /** Admin panel: send the rendered result to yourself using sample values. */
   async testAdminMailTemplate(input: {
     type: string;
     locale: string;
@@ -1222,7 +1222,7 @@ export class ApiClient {
       method: 'DELETE',
     });
   }
-  /** 启用 / 禁用账号（POST /api/v1/admin/users/:id/status）。 */
+  /** Enable / disable an account (POST /api/v1/admin/users/:id/status). */
   async setAdminUserStatus(id: string, action: 'enable' | 'disable'): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/status`, {
@@ -1231,7 +1231,7 @@ export class ApiClient {
     });
   }
 
-  /** 改角色（POST /api/v1/admin/users/:id/role）；危险动作，服务端要求 confirm。 */
+  /** Change role (POST /api/v1/admin/users/:id/role); a dangerous action, the server requires confirm. */
   async setAdminUserRole(id: string, role: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/role`, {
@@ -1240,7 +1240,7 @@ export class ApiClient {
     });
   }
 
-  /** 重置密码（POST /api/v1/admin/users/:id/password）；一次性返回临时口令。 */
+  /** Reset password (POST /api/v1/admin/users/:id/password); returns a temporary password once. */
   async resetAdminUserPassword(id: string): Promise<{ temp_password: string }> {
     if (!this.csrfToken) await this.getSession();
     return this.request<{ temp_password: string }>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/password`, {
@@ -1249,13 +1249,13 @@ export class ApiClient {
     });
   }
 
-  /** 强制下线（POST /api/v1/admin/users/:id/logout）。 */
+  /** Force logout (POST /api/v1/admin/users/:id/logout). */
   async forceLogoutAdminUser(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/logout`, { method: 'POST', body: '{}' });
   }
 
-  /** 删除用户（POST /api/v1/admin/users/:id/delete）；危险动作，服务端要求 confirm。 */
+  /** Delete a user (POST /api/v1/admin/users/:id/delete); a dangerous action, the server requires confirm. */
   async deleteAdminUser(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/delete`, {
@@ -1264,18 +1264,18 @@ export class ApiClient {
     });
   }
 
-  /** 读取注册策略、白名单与邀请列表（GET /api/v1/admin/registration）。 */
+  /** Read registration policy, allowlist and invite list (GET /api/v1/admin/registration). */
   async getAdminRegistration(): Promise<import('./types').AdminRegistrationResponse> {
     return this.request<import('./types').AdminRegistrationResponse>('/api/v1/admin/registration');
   }
 
-  /** 保存注册策略与邮箱域名白名单（POST /api/v1/admin/registration）。 */
+  /** Save registration policy and the email domain allowlist (POST /api/v1/admin/registration). */
   async saveAdminRegistration(input: import('./types').AdminRegistrationRequest): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>('/api/v1/admin/registration', { method: 'POST', body: JSON.stringify(input) });
   }
 
-  /** 创建邀请（POST /api/v1/admin/invites）；回带发信结果码。 */
+  /** Create an invite (POST /api/v1/admin/invites); returns the mail delivery result code. */
   async createAdminInvite(input: import('./types').AdminInviteCreateRequest): Promise<import('./types').AdminInviteCreateResponse> {
     if (!this.csrfToken) await this.getSession();
     return this.request<import('./types').AdminInviteCreateResponse>('/api/v1/admin/invites', {
@@ -1283,7 +1283,7 @@ export class ApiClient {
       body: JSON.stringify(input),
     });
   }
-  /** 用一次性令牌设置新密码（POST /api/v1/auth/reset-password）。 */
+  /** Set a new password with a one-time token (POST /api/v1/auth/reset-password). */
   async resetPassword(input: ResetPasswordRequest): Promise<ResetPasswordResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1294,7 +1294,7 @@ export class ApiClient {
     });
   }
 
-  /** 触发参数优化（POST /api/v1/presets/:id/optimize）；不足门槛 400、已在运行 409。 */
+  /** Trigger parameter optimization (POST /api/v1/presets/:id/optimize); 400 below threshold, 409 if already running. */
   async optimizePreset(id: string): Promise<PresetOptimizeResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1305,7 +1305,7 @@ export class ApiClient {
       body: JSON.stringify({}),
     });
   }
-  /** 消费邮箱验证令牌（POST /api/v1/auth/verify-email）。 */
+  /** Consume an email verification token (POST /api/v1/auth/verify-email). */
   async verifyEmail(token: string): Promise<VerifyEmailResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1316,7 +1316,7 @@ export class ApiClient {
     });
   }
 
-  /** 消费改邮箱确认令牌（POST /api/v1/auth/confirm-email-change）。 */
+  /** Consume an email-change confirmation token (POST /api/v1/auth/confirm-email-change). */
   async confirmEmailChange(token: string): Promise<ConfirmEmailChangeResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1327,12 +1327,12 @@ export class ApiClient {
     });
   }
 
-  /** 读取当前邮箱与验证状态（GET /api/v1/settings/email，仅会话）。 */
+  /** Read the current email and verification state (GET /api/v1/settings/email, session only). */
   async getEmailSettings(): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>('/api/v1/settings/email');
   }
 
-  /** 提交改邮箱请求（POST /api/v1/settings/email）；确认邮件发出前库中地址不变。 */
+  /** Submit an email change request (POST /api/v1/settings/email); the address in the DB is unchanged until confirmation is sent. */
   async requestEmailChange(input: EmailChangeRequest): Promise<EmailChangeResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1343,7 +1343,7 @@ export class ApiClient {
     });
   }
 
-  /** 重发邮箱验证邮件（POST /api/v1/settings/verify-email）。 */
+  /** Resend the email verification message (POST /api/v1/settings/verify-email). */
   async resendVerification(): Promise<ResendVerificationResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1354,7 +1354,7 @@ export class ApiClient {
     });
   }
 
-  /** 轮询优化作业状态（GET /api/v1/presets/:id/optimize/status?job=:jobId）。 */
+  /** Poll optimization job status (GET /api/v1/presets/:id/optimize/status?job=:jobId). */
   async getPresetOptimizeStatus(
     id: string,
     jobId: string
@@ -1366,7 +1366,7 @@ export class ApiClient {
     );
   }
 
-  /** 一键回退默认权重（POST /api/v1/presets/:id/optimize/revert）；成功后返回整份列表。 */
+  /** One-click revert to default weights (POST /api/v1/presets/:id/optimize/revert); returns the full list on success. */
   async revertPresetWeights(id: string): Promise<PresetsResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1377,47 +1377,47 @@ export class ApiClient {
       body: JSON.stringify({}),
     });
   }
-  /** 撤销邀请（POST /api/v1/admin/invites/:id/revoke）。 */
+  /** Revoke an invite (POST /api/v1/admin/invites/:id/revoke). */
   async revokeAdminInvite(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/invites/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
   }
 
-  /** 全用户 API Key 总览（GET /api/v1/admin/api-keys）。 */
+  /** All-user API key overview (GET /api/v1/admin/api-keys). */
   async getAdminAPIKeys(params?: { page?: number }): Promise<import('./types').AdminAPIKeysResponse> {
     const qs = params?.page !== undefined ? `?page=${params.page}` : '';
     return this.request<import('./types').AdminAPIKeysResponse>(`/api/v1/admin/api-keys${qs}`);
   }
 
-  /** 撤销任意用户的一把 key（POST /api/v1/admin/api-keys/:id/revoke）。 */
+  /** Revoke any user's key (POST /api/v1/admin/api-keys/:id/revoke). */
   async revokeAdminAPIKey(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/api-keys/${encodeURIComponent(String(id))}/revoke`, { method: 'POST', body: '{}' });
   }
 
-  /** 读取系统设置分区（GET /api/v1/admin/settings）。 */
+  /** Read system settings sections (GET /api/v1/admin/settings). */
   async getAdminSettings(): Promise<import('./types').AdminSettingsResponse> {
     return this.request<import('./types').AdminSettingsResponse>('/api/v1/admin/settings');
   }
 
-  /** 保存系统设置（POST /api/v1/admin/settings）；只提交非空值，空串由服务端按「不修改」处理。 */
+  /** Save system settings (POST /api/v1/admin/settings); only non-empty values are submitted and empty strings are treated as "no change" by the server. */
   async saveAdminSettings(values: Record<string, string>): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>('/api/v1/admin/settings', { method: 'POST', body: JSON.stringify({ values }) });
   }
 
-  /** 读取 SMTP 配置与 outbox 读数（GET /api/v1/admin/smtp）。 */
+  /** Read SMTP config and outbox readings (GET /api/v1/admin/smtp). */
   async getAdminSMTP(): Promise<import('./types').AdminSMTPResponse> {
     return this.request<import('./types').AdminSMTPResponse>('/api/v1/admin/smtp');
   }
 
-  /** 保存 SMTP 配置（POST /api/v1/admin/smtp）；空字段表示不修改。 */
+  /** Save SMTP config (POST /api/v1/admin/smtp); empty fields mean no change. */
   async saveAdminSMTP(input: import('./types').AdminSMTPRequest): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>('/api/v1/admin/smtp', { method: 'POST', body: JSON.stringify(input) });
   }
 
-  /** 测试 SMTP 连接（POST /api/v1/admin/smtp/test）；失败时 message 是服务端原始错误文本。 */
+  /** Test the SMTP connection (POST /api/v1/admin/smtp/test); on failure message is the server's raw error text. */
   async testAdminSMTP(input: import('./types').AdminSMTPRequest): Promise<import('./types').AdminTestResult> {
     if (!this.csrfToken) await this.getSession();
     return this.request<import('./types').AdminTestResult>('/api/v1/admin/smtp/test', {
@@ -1426,18 +1426,18 @@ export class ApiClient {
     });
   }
 
-  /** 读取 OIDC 配置与已绑定身份（GET /api/v1/admin/oidc）。 */
+  /** Read OIDC config and bound identities (GET /api/v1/admin/oidc). */
   async getAdminOIDC(): Promise<import('./types').AdminOIDCResponse> {
     return this.request<import('./types').AdminOIDCResponse>('/api/v1/admin/oidc');
   }
 
-  /** 保存 OIDC 配置（POST /api/v1/admin/oidc）；空字符串字段表示不修改。 */
+  /** Save OIDC config (POST /api/v1/admin/oidc); empty string fields mean no change. */
   async saveAdminOIDC(input: import('./types').AdminOIDCRequest): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>('/api/v1/admin/oidc', { method: 'POST', body: JSON.stringify(input) });
   }
 
-  /** 测试 OIDC 发现文档（POST /api/v1/admin/oidc/test）；失败时 message 是 provider 原始错误。 */
+  /** Test the OIDC discovery document (POST /api/v1/admin/oidc/test); on failure message is the provider's raw error. */
   async testAdminOIDC(input: import('./types').AdminOIDCRequest): Promise<import('./types').AdminTestResult> {
     if (!this.csrfToken) await this.getSession();
     return this.request<import('./types').AdminTestResult>('/api/v1/admin/oidc/test', {
@@ -1446,39 +1446,39 @@ export class ApiClient {
     });
   }
 
-  /** 解绑一条外部身份（POST /api/v1/admin/oidc/identities/:id/unlink）。 */
+  /** Unlink an external identity (POST /api/v1/admin/oidc/identities/:id/unlink). */
   async unlinkAdminOIDCIdentity(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/oidc/identities/${encodeURIComponent(String(id))}/unlink`, { method: 'POST', body: '{}' });
   }
 
-  /** 作业列表（GET /api/v1/admin/jobs）。 */
+  /** Job list (GET /api/v1/admin/jobs). */
   async getAdminJobs(params?: { page?: number }): Promise<import('./types').AdminJobsResponse> {
     const qs = params?.page !== undefined ? `?page=${params.page}` : '';
     return this.request<import('./types').AdminJobsResponse>(`/api/v1/admin/jobs${qs}`);
   }
 
-  /** 取消一个作业（POST /api/v1/admin/jobs/:id/cancel）。 */
+  /** Cancel a job (POST /api/v1/admin/jobs/:id/cancel). */
   async cancelAdminJob(id: string): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     await this.request<void>(`/api/v1/admin/jobs/${encodeURIComponent(String(id))}/cancel`, { method: 'POST', body: '{}' });
   }
 
-  /** 语言包完整度报告（GET /api/v1/admin/i18n）。 */
+  /** Language pack completeness report (GET /api/v1/admin/i18n). */
   async getAdminI18n(): Promise<import('./types').AdminI18nResponse> {
     return this.request<import('./types').AdminI18nResponse>('/api/v1/admin/i18n');
   }
   /**
-   * 读取一份分享卡组的只读内容（GET /api/v1/share/:token）。
-   * 匿名可访问（链接本身即凭据）；有口令的链接在解锁前只返回 password_required: true。
+   * Read the read-only content of a shared deck (GET /api/v1/share/:token).
+   * Accessible anonymously (the link itself is the credential); a password-protected link returns only password_required: true before unlocking.
    */
   async getShare(token: string): Promise<ShareResponse> {
     return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}`);
   }
 
   /**
-   * 校验分享口令并取回内容（POST /api/v1/share/:token/unlock）。
-   * 与 SSR 一样无状态：每次请求都重新校验口令，不建立解锁状态，也无需 CSRF token。
+   * Verify the share password and fetch the content (POST /api/v1/share/:token/unlock).
+   * Stateless like SSR: the password is re-verified on every request, no unlock state is established, and no CSRF token is needed.
    */
   async unlockShare(token: string, password: string): Promise<ShareResponse> {
     return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/unlock`, {
@@ -1488,11 +1488,11 @@ export class ApiClient {
   }
 
   /**
-   * 把分享链接指的卡组加进自己的列表（POST /api/v1/share/:token/join）。
+   * Add the deck behind a share link to your own list (POST /api/v1/share/:token/join).
    *
-   * 与「打开链接」是两件事：打开只登记会话级只读（看得到、不入列表），入伙才写授权，
-   * 卡组此后出现在我的列表与复习队列里。token 即凭据；未登录时服务端拒绝，调用方须先引导登录。
-   * 缺少会话令牌时先获取 CSRF token。
+   * This is separate from "opening the link": opening only registers session-level read access (visible, not in the list), while joining writes authorization,
+   * after which the deck appears in my list and review queue. The token is the credential; the server rejects it when not logged in, so the caller must guide the user to log in first.
+   * When the session token is missing, fetch a CSRF token first.
    */
   async joinSharedDeck(token: string): Promise<JoinShareResponse> {
     if (!this.csrfToken) {
@@ -1504,25 +1504,25 @@ export class ApiClient {
   }
 
   /**
-   * 探测 OIDC 登录入口是否可用（GET /api/v1/auth/oidc）。
-   * 只读、登录前可调用；响应只含 enabled 与稳定的发起地址，绝不含 issuer / secret。
+   * Probe whether the OIDC login entry is available (GET /api/v1/auth/oidc).
+   * Read-only and callable before login; the response only contains enabled and a stable initiation URL, never issuer / secret.
    */
   async getOIDC(): Promise<OIDCInfo> {
     return this.request<OIDCInfo>('/api/v1/auth/oidc');
   }
 
   /**
-   * 探测当前的自助注册策略（GET /api/v1/auth/registration）。
-   * 只读、登录前可调用；注册页据此在渲染表单前决定是否直接说明「无法自助注册」。
-   * 响应只含 policy 取值（open / invite / closed），不含任何凭据或邮箱白名单。
+   * Probe the current self-registration policy (GET /api/v1/auth/registration).
+   * Read-only and callable before login; the registration page uses it to decide, before rendering the form, whether to state outright that "self-registration is unavailable".
+   * The response only contains the policy value (open / invite / closed) and no credentials or email allowlist.
    */
   async registrationInfo(): Promise<RegistrationInfo> {
     return this.request<RegistrationInfo>('/api/v1/auth/registration');
   }
 
   /**
-   * 读取一枚退订令牌指名的可选邮件类型（GET /api/v1/unsubscribe，免登录、不消费令牌）。
-   * 令牌无效/已用/过期时服务端返回稳定 code（token_invalid / token_used / token_expired）。
+   * Read the optional mail kind named by an unsubscribe token (GET /api/v1/unsubscribe, no login required, does not consume the token).
+   * When the token is invalid/used/expired the server returns a stable code (token_invalid / token_used / token_expired).
    */
   async readUnsubscribe(token: string): Promise<import('./types').UnsubscribeReadResponse> {
     return this.request<import('./types').UnsubscribeReadResponse>(
@@ -1531,14 +1531,14 @@ export class ApiClient {
   }
 
   /**
-   * 读取我待接受的卡组共享邀请，连同我的接收策略与白名单（GET /api/v1/sharing/invites）。
-   * 待接受的邀请不产生任何授权：不点接受，别人的卡组不会出现在我的列表或队列里。
+   * Read the deck sharing invites awaiting my acceptance, along with my accept policy and allowlist (GET /api/v1/sharing/invites).
+   * A pending invite grants nothing: without clicking accept, someone else's deck never appears in my list or queue.
    */
   async getShareInvites(): Promise<import('./types').ShareInvitesResponse> {
     return this.request<import('./types').ShareInvitesResponse>('/api/v1/sharing/invites');
   }
 
-  /** 接受一条共享邀请（POST /api/v1/sharing/invites/:deckId/accept）。接受那一步才写授权。 */
+  /** Accept a sharing invite (POST /api/v1/sharing/invites/:deckId/accept). Accepting is the step that writes authorization. */
   async acceptShareInvite(deckId: string): Promise<void> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1548,7 +1548,7 @@ export class ApiClient {
     }));
   }
 
-  /** 拒绝一条共享邀请（POST /api/v1/sharing/invites/:deckId/reject）。拒绝即删邀请，授权从未存在。 */
+  /** Reject a sharing invite (POST /api/v1/sharing/invites/:deckId/reject). Rejecting deletes the invite; authorization never existed. */
   async rejectShareInvite(deckId: string): Promise<void> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1559,14 +1559,14 @@ export class ApiClient {
   }
 
   /**
-   * 保存我的接收策略与白名单增删（PUT /api/v1/settings/share-policy）。
-   * policy 留空表示只改白名单；响应回读服务端真值，界面以响应为准而不是本地推断。
+   * Save my accept policy and allowlist additions/removals (PUT /api/v1/settings/share-policy).
+   * An empty policy means only the allowlist changes; the response echoes the server's actual values and the UI trusts the response rather than local inference.
    */
   async saveSharePolicy(input: {
     policy?: import('./types').ShareAcceptPolicy;
     allow?: string[];
     revoke?: string[];
-    // 界面只认识用户名；服务端按名字解析（未知名字整单 400 user_not_found，不静默丢弃）。
+    // The UI only knows usernames; the server resolves by name (an unknown name fails the whole request with 400 user_not_found rather than being silently dropped).
     allow_usernames?: string[];
     revoke_usernames?: string[];
   }): Promise<import('./types').SharePolicyResponse> {
@@ -1580,8 +1580,8 @@ export class ApiClient {
   }
 
   /**
-   * 确认退订（POST /api/v1/unsubscribe）。会话前写请求走双提交 CSRF，缺少 token 时先取一次会话 token。
-   * 一次性消费令牌，只关掉令牌指名的那个可选类型；响应回带被关掉的类型。
+   * Confirm unsubscribe (POST /api/v1/unsubscribe). Pre-session writes use double-submit CSRF; when the token is missing, fetch a session token first.
+   * Consumes the token once and disables only the optional kind named by the token; the response returns the disabled kind.
    */
   async confirmUnsubscribe(token: string): Promise<import('./types').UnsubscribeConfirmResponse> {
     if (!this.csrfToken) {
@@ -1595,6 +1595,6 @@ export class ApiClient {
 }
 
 /**
- * 默认单例 API 客户端实例
+ * Default singleton API client instance
  */
 export const apiClient = new ApiClient();

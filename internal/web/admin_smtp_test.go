@@ -10,11 +10,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// testSecretKey 是测试用的 ENCRYPTION_KEY：base64(32 字节)，与任何真实密钥无关。
+// testSecretKey is the ENCRYPTION_KEY used in tests: base64(32 bytes), unrelated to any real key.
 var testSecretKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 
-// startFakeSMTP 在测试进程内起一个最小 SMTP 服务，只应答投递所需命令。
-// 返回 "host:port"；测试结束自动关闭。不依赖外网或真实 SMTP 服务。
+// startFakeSMTP starts a minimal SMTP server inside the test process, answering only the commands delivery needs.
+// Returns "host:port"; closed automatically when the test ends. Depends on neither the internet nor a real SMTP server.
 func startFakeSMTP(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -68,7 +68,7 @@ func startFakeSMTP(t *testing.T) string {
 	return ln.Addr().String()
 }
 
-// deadAddr 返回一个当前无人监听的本地地址。
+// deadAddr returns a local address nobody is currently listening on.
 func deadAddr(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -80,7 +80,7 @@ func deadAddr(t *testing.T) string {
 	return addr
 }
 
-// mustCodec 构造一个测试用编解码器（32 字节占位密钥）。
+// mustCodec builds a codec for tests (a 32-byte placeholder key).
 func mustCodec(t *testing.T) *store.SecretCodec {
 	t.Helper()
 	codec, err := store.NewSecretCodec(testSecretKey)

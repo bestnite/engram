@@ -7,33 +7,33 @@ import (
 	"time"
 )
 
-// 媒体目录占用的采样（健康页）。
+// Sampling of the media directory footprint (health page).
 //
-// 取舍：一次请求里对媒体目录做完整递归扫描，在文件很多时会把请求卡住（媒体文件按
-// sha256 分两级目录散落，规模只增不减）。因此这里做两层保护：
-//   - 上限：最多统计 mediaSizeMaxEntries 个目录项，超出即停止并标记 truncated。
-//     此时返回的是「至少这么多字节」，宁可给一个下界也不让请求无限期挂着。
-//   - 缓存：mediaSizeTTL 内复用上一次结果，避免每次刷新健康页都重扫。
+// Trade-off: a full recursive scan of the media directory inside one request would stall the request when there are many files (media files are scattered across
+// two directory levels keyed by sha256, and the scale only ever grows). So there are two layers of protection here:
+//   - Cap: count at most mediaSizeMaxEntries directory entries, then stop and mark truncated.
+//     The value returned then means "at least this many bytes" — better a lower bound than a request hanging indefinitely.
+//   - Cache: reuse the previous result within mediaSizeTTL, so refreshing the health page does not rescan every time.
 //
-// 代价：截断时读数偏小，缓存窗口内读数可能滞后。健康页对这两个情况显式标注，
-// 不做静默近似。
+// Cost: the number reads low when truncated, and may lag within the cache window. The health page labels both cases explicitly,
+// rather than approximating silently.
 
 const (
-	// mediaSizeTTL 是媒体占用读数的缓存时长。
+	// mediaSizeTTL is how long a media-usage reading is cached.
 	mediaSizeTTL = 30 * time.Second
-	// mediaSizeMaxEntries 是单次统计允许遍历的最大目录项数。
+	// mediaSizeMaxEntries is the maximum number of directory entries a single count may walk.
 	mediaSizeMaxEntries = 20000
 )
 
-// mediaSizeSample 是一次媒体占用采样的结果。
+// mediaSizeSample is the result of one media-usage sample.
 type mediaSizeSample struct {
 	bytes     int64
 	truncated bool
 	at        time.Time
 }
 
-// cappedDirSize 递归统计目录字节数，最多遍历 maxEntries 个目录项；
-// 超出时返回已累计的字节数与 truncated=true。目录不存在按 0 计。
+// cappedDirSize recursively totals a directory's bytes, walking at most maxEntries directory entries;
+// on overflow it returns the bytes accumulated so far with truncated=true. A missing directory counts as 0.
 func cappedDirSize(root string, maxEntries int) (int64, bool, error) {
 	var total int64
 	entries := 0
@@ -65,8 +65,8 @@ func cappedDirSize(root string, maxEntries int) (int64, bool, error) {
 	return total, truncated, nil
 }
 
-// mediaUsage 返回媒体目录占用（字节）与是否因上限被截断。
-// 未装配媒体存储时返回 0；采样在 TTL 内直接复用缓存。
+// mediaUsage returns the media directory footprint (bytes) and whether it was truncated by the cap.
+// Returns 0 when media storage is not wired up; a sample within the TTL reuses the cache directly.
 func (s *Server) mediaUsage() (int64, bool) {
 	if s.media == nil {
 		return 0, false
@@ -82,7 +82,7 @@ func (s *Server) mediaUsage() (int64, bool) {
 
 	bytes, truncated, err := cappedDirSize(s.media.Root(), mediaSizeMaxEntries)
 	if err != nil {
-		// 读目录失败不阻塞健康页：记英文日志，返回 0（媒体目录可能尚未建立）。
+		// A failed directory read does not block the health page: log in English and return 0 (the media directory may not exist yet).
 		s.logger.Error("health: compute media directory size failed", "error", err)
 		return 0, false
 	}

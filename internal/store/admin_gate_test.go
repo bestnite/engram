@@ -14,8 +14,8 @@ import (
 	"git.nite07.com/nite/engram/internal/pgtest"
 )
 
-// gateDatabases 返回生产形态的 SQLite（store.Open：单连接）与可选的 PostgreSQL。
-// 闸门在 SQLite 上依赖单连接串行化，所以这里不能用普通的多连接测试库。
+// gateDatabases returns production-shaped SQLite (store.Open: single connection) and optionally PostgreSQL.
+// The gate relies on single-connection serialization on SQLite, so the ordinary multi-connection test DB cannot be used here.
 func gateDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	sqliteDB, err := Open("sqlite", filepath.Join(t.TempDir(), "gate.db"))
@@ -39,8 +39,8 @@ func gateUser(name, role string) *User {
 		Status: StatusActive, Locale: "en", Timezone: "UTC", CreatedAt: time.Now().UTC()}
 }
 
-// TestAdminGateSerializesBootstrap 是并发反面用例：多个引导请求同时到达时只建出一个管理员，
-// 其余得到 ErrAdminExists。
+// TestAdminGateSerializesBootstrap is a concurrency counter-case: when several bootstrap requests arrive at once only one admin is created,
+// the rest get ErrAdminExists.
 func TestAdminGateSerializesBootstrap(t *testing.T) {
 	for driver, db := range gateDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestAdminGateSerializesBootstrap(t *testing.T) {
 						if admins > 0 {
 							return ErrAdminExists
 						}
-						// 让判定与写入之间留出时间：没有闸门时其他请求会在这里读到同样的 0。
+						// leave time between the check and the write: without the gate other requests would read the same 0 here.
 						time.Sleep(20 * time.Millisecond)
 						return tx.Create(gateUser(fmt.Sprintf("boot%d", i), RoleAdmin)).Error
 					})
@@ -81,8 +81,8 @@ func TestAdminGateSerializesBootstrap(t *testing.T) {
 	}
 }
 
-// TestAdminGateKeepsTheLastAdmin 是并发反面用例：两个管理员同时禁用对方时，只有一个能成功，
-// 系统里始终留下一个活跃管理员。
+// TestAdminGateKeepsTheLastAdmin is a concurrency counter-case: when two admins disable each other at once only one succeeds,
+// and an active admin always remains in the system.
 func TestAdminGateKeepsTheLastAdmin(t *testing.T) {
 	for driver, db := range gateDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

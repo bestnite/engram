@@ -10,11 +10,11 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// bulkActionsFromSchema 读出 schema 里 action 枚举的取值集合。
+// bulkActionsFromSchema extracts the value set of the action enum in the schema.
 //
-// 它直接解析 schema 文件本身的 JSON（不依赖校验库的内部结构），是「schema 与实现不许分叉」
-// 的那根钉子：新增一个批量动作时，只要 schema 的枚举没跟上，或者 Go 侧的常量改了名，
-// 这条测试就红 —— 而不是等到外部工具拿去校验才发现对不上。
+// It parses the JSON of the schema file itself directly (not relying on the validation library's internals), and is the nail that keeps
+// "schema and implementation must not fork" in place: when a bulk action is added, if the schema's enum does not follow, or a Go-side constant is renamed,
+// this test goes red - instead of waiting until an external tool validates against it and finds the mismatch.
 func bulkActionsFromSchema(t *testing.T, path string) []string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -39,9 +39,9 @@ func bulkActionsFromSchema(t *testing.T, path string) []string {
 	return out
 }
 
-// TestNoteBulkSchemaMatchesTheGoActions 断言 schema 的 action 枚举与 Go 侧常量完全一致，
-// 并校验仓库里那份示例请求体真的能通过它自己的 schema（schema 是给外部工具用的
-// 机器可读契约，示例与契约必须同步）。
+// TestNoteBulkSchemaMatchesTheGoActions asserts the schema's action enum matches the Go-side constants exactly,
+// and verifies that the example request body in the repo really passes its own schema (the schema is a machine-readable
+// contract for external tools, so example and contract must stay in sync).
 func TestNoteBulkSchemaMatchesTheGoActions(t *testing.T) {
 	const path = "../../schema/note-bulk.schema.json"
 
@@ -68,9 +68,9 @@ func TestNoteBulkSchemaMatchesTheGoActions(t *testing.T) {
 	}
 }
 
-// TestNoteBulkSchemaRejectsInvalidShapes 覆盖 schema 表达得出的四类请求级拒绝：
-// 未知 action、note_ids 越界、tag 动作缺 tags、delete 带 tags。
-// 服务端对同一批请求体也一律 400 invalid_request（见 bulk_notes_test.go）。
+// TestNoteBulkSchemaRejectsInvalidShapes covers the four kinds of request-level rejection the schema can express:
+// unknown action, note_ids out of range, a tag action without tags, delete with tags.
+// The server likewise returns 400 invalid_request for the same bodies (see bulk_notes_test.go).
 func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 	sch, err := jsonschema.NewCompiler().Compile("../../schema/note-bulk.schema.json")
 	if err != nil {
@@ -86,7 +86,7 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 
 	ids501 := make([]string, 0, 501)
 	for i := 1; i <= 501; i++ {
-		// note_ids 是字符串数组；501 个合法字符串才能测到条数上限。
+		// note_ids is a string array; only 501 valid strings exercise the count cap.
 		ids501 = append(ids501, `"`+itoa(i)+`"`)
 	}
 	tags21 := make([]string, 0, 21)
@@ -115,7 +115,7 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[` + strings.Join(tags21, ",") + `]}`,
 		`{"action":"delete","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["x"]}`,
 		`{"note_ids":["0198c0de-0000-7000-8000-000000000001"]}`,
-		// 数字（旧的自增主键形态）不再是合法的 note_ids 元素。
+		// Numbers (the old auto-increment primary key form) are no longer valid note_ids elements.
 		`{"action":"delete","note_ids":[1]}`,
 	}
 	for _, body := range invalid {
@@ -125,7 +125,7 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 	}
 }
 
-// itoa 是测试里拼数字的最小助手，避免为一个字符串化引入 fmt。
+// itoa is the minimal number-to-string helper for tests, avoiding an fmt import just for one conversion.
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
@@ -140,7 +140,7 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// equalStrings 判断两个已排序的字符串切片是否相同。
+// equalStrings reports whether two sorted string slices are equal.
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

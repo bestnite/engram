@@ -13,10 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 B 类协作邮件（deck_shared / deck_permission_changed）与 C 类「参数优化完成」
-// 的验收。都走真实触发点：共享走 HTTP 端点，优化完成走作业成功钩子的入口。
+// This file is the acceptance test for class B collaboration mail (deck_shared / deck_permission_changed) and class C "parameter optimization done"
+// mail. Both go through real trigger points: sharing goes through the HTTP endpoints, optimization completion through the job-success hook entry.
 
-// newGrantee 建一个可收信的普通用户。
+// newGrantee creates an ordinary user who can receive mail.
 func newGrantee(t *testing.T, srv *Server, name, email string) *store.User {
 	t.Helper()
 	u, err := srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
@@ -28,7 +28,7 @@ func newGrantee(t *testing.T, srv *Server, name, email string) *store.User {
 	return u
 }
 
-// TestDeckGrantMailNotifiesTheGrantee 覆盖邀请→接受→改造→撤销四步的通知类型与收件人。
+// TestDeckGrantMailNotifiesTheGrantee covers the notification type and recipient across the four steps invite→accept→role change→revoke.
 func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Shared deck")
@@ -37,7 +37,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	granteeEmail := "grantee@example.com"
 	base := "/api/v1/decks/" + deck.PublicID + "/sharing/grants"
 
-	// ① 分享：给被授权者发 deck_shared，且写清卡组名与分享人。
+	// ① Share: send deck_shared to the grantee, clearly stating the deck name and the sharer.
 	rec := jsonRequest(t, srv, http.MethodPost, base,
 		`{"user_id":"`+userPublicID(t, db, granteeID)+`","role":"reader"}`, cookies, csrf)
 	if rec.Code >= 300 {
@@ -54,22 +54,22 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	if !strings.Contains(first.TextBody, "Shared deck") {
 		t.Errorf("text body = %q, want the deck name", first.TextBody)
 	}
-	// B 类可退订：既要 RFC 8058 头，正文里也要有入口。
+	// Class B is unsubscribable: it needs both the RFC 8058 headers and an entry in the body.
 	if _, ok := first.Headers["List-Unsubscribe"]; !ok {
 		t.Errorf("headers = %v, want List-Unsubscribe for a class B mail", first.Headers)
 	}
 
-	// ② 被邀请者接受（同意制）：这一步之后他才是真的成员，后面的改角色才是「改角色」。
+	// ② The invitee accepts (opt-in): only after this step are they really a member, and the later role change is then really a "role change".
 	if rec := jsonRequest(t, srv, http.MethodPost,
 		"/api/v1/sharing/invites/"+deck.PublicID+"/accept", "", granteeCookies, granteeCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("accept invite = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	// 接受本身不发信（邀请信已经发过了），所以这里仍只有 1 封。
+	// Acceptance itself sends no mail (the invite mail was already sent), so there is still only 1 message here.
 	if got := len(sender.messages()); got != 1 {
 		t.Errorf("delivered %d messages after acceptance, want 1 (acceptance itself must not mail)", got)
 	}
 
-	// ③ 改角色：deck_permission_changed，而不是再发一次「分享给你」。
+	// ③ Role change: deck_permission_changed, not another "shared with you".
 	rec = jsonRequest(t, srv, http.MethodPatch, base+"/"+userPublicID(t, db, granteeID),
 		`{"role":"editor"}`, cookies, csrf)
 	if rec.Code >= 300 {
@@ -80,7 +80,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 		t.Errorf("second mail type = %q, want %q", msgs[1].Type, mail.TypeDeckPermissionChanged)
 	}
 
-	// ④ 撤销：仍是 permission_changed，正文要说「被取消」而不是「改成了空」。
+	// ④ Revoke: still permission_changed, and the body must say "revoked" rather than "changed to empty".
 	rec = jsonRequest(t, srv, http.MethodDelete, base+"/"+userPublicID(t, db, granteeID), "", cookies, csrf)
 	if rec.Code >= 300 {
 		t.Fatalf("DELETE grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -97,7 +97,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	}
 }
 
-// TestDeckGrantMailHonorsPreference 断言收件人关掉之后一封信都不发：偏好必须真的生效。
+// TestDeckGrantMailHonorsPreference asserts that once the recipient turns it off not a single mail is sent: the preference must really take effect.
 func TestDeckGrantMailHonorsPreference(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Quiet deck")
@@ -117,13 +117,13 @@ func TestDeckGrantMailHonorsPreference(t *testing.T) {
 	if got := len(sender.messages()); got != 0 {
 		t.Errorf("delivered %d messages, want 0 (recipient opted out)", got)
 	}
-	// 分享本身必须照常生效：通知只是副作用。同意制下这一步的产物是**邀请**（授权等对方接受）。
+	// The sharing itself must take effect as usual: notifying is only a side effect. Under opt-in, this step's product is an **invite** (the grant waits for acceptance).
 	if _, err := store.NewDeckShareInviteStore(db).ByDeckAndUser(context.Background(), deck.ID, grantee.ID); err != nil {
 		t.Errorf("invite missing after the share: %v", err)
 	}
 }
 
-// TestOptimizeDoneMailNotifiesPresetOwner 覆盖 C 类「参数优化完成」：默认关，开启后发给预设属主。
+// TestOptimizeDoneMailNotifiesPresetOwner covers class C "parameter optimization done": off by default, sent to the preset owner once enabled.
 func TestOptimizeDoneMailNotifiesPresetOwner(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	sender := startInviteMail(t, srv, db)
@@ -144,14 +144,14 @@ func TestOptimizeDoneMailNotifiesPresetOwner(t *testing.T) {
 		t.Fatalf("create job: %v", err)
 	}
 
-	// 默认关：不发。
+	// Off by default: not sent.
 	srv.NotifyOptimizeDone(ctx, job)
 	time.Sleep(150 * time.Millisecond)
 	if got := len(sender.messages()); got != 0 {
 		t.Fatalf("delivered %d messages, want 0 while the type is off by default", got)
 	}
 
-	// 用户开启后：发给属主，正文带预设名与复习条数。
+	// After the user enables it: sent to the owner, with the preset name and the review count in the body.
 	if err := store.NewEmailPrefStore(db).SetChoices(ctx, ownerID,
 		map[string]bool{string(mail.TypeOptimizeDone): true}, time.Now().UTC()); err != nil {
 		t.Fatalf("SetChoices: %v", err)
@@ -169,8 +169,8 @@ func TestOptimizeDoneMailNotifiesPresetOwner(t *testing.T) {
 	}
 }
 
-// TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage 断言默认预设的通知邮件
-// 用语言包里的显示名，而不是库内的身份标识 "Default"——邮件正文是用户可见文本。
+// TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage asserts the notification mail for the default preset
+// uses the display name from the language pack rather than the in-DB identity marker "Default" — the mail body is user-visible text.
 func TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	sender := startInviteMail(t, srv, db)
@@ -180,7 +180,7 @@ func TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage(t *testing.T)
 	if err := db.Create(&preset).Error; err != nil {
 		t.Fatalf("create default preset: %v", err)
 	}
-	// 正文语言由收件人设置决定：钉成简体中文，才能断言出现的是「默认」而不是 Default。
+	// The body language follows the recipient's settings: pinning it to Simplified Chinese is what makes it possible to assert the localized "default" appears rather than Default.
 	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("locale", "zh-CN").Error; err != nil {
 		t.Fatalf("set owner locale: %v", err)
 	}

@@ -4,8 +4,9 @@ import HelpTip from '../lib/components/ui/HelpTip.svelte';
 import { setLocale } from '../lib/i18n';
 
 /**
- * HelpTip 的交互契约：点按（触屏与鼠标同一路径）打开、点外部关闭；键盘 Enter 打开、Esc 关闭。
- * 只靠悬停的提示在手机上打不开，所以这里不测悬停，只测点按与键盘。
+ * HelpTip's interaction contract: tap (touch and mouse share one path) opens, tapping
+ * outside closes; Enter opens, Esc closes. A hover-only tip cannot be opened on a phone,
+ * so hover is not tested here — only tap and keyboard.
  */
 describe('HelpTip (mounted)', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -58,7 +59,7 @@ describe('HelpTip (mounted)', () => {
     expect(text()).not.toBeNull();
     expect(document.activeElement).not.toBe(document.body);
 
-    // 打开后焦点在浮层里，Esc 从焦点处冒泡到 document。
+    // Once open, focus is inside the popover; Esc bubbles from the focused element up to document.
     (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await flush();
 
@@ -81,7 +82,7 @@ describe('HelpTip (mounted)', () => {
     await flush();
     expect(text()).not.toBeNull();
 
-    // 库按坐标判断是否真在浮层外；happy-dom 里浮层的矩形是 0×0，点按落在 (200, 200) 即在外部。
+    // The library decides by coordinates whether the click really landed outside; in happy-dom the popover rect is 0×0, so a tap at (200, 200) counts as outside.
     const outside = document.createElement('div');
     document.body.appendChild(outside);
     const at = { bubbles: true, button: 0, pointerType: 'touch', clientX: 200, clientY: 200 };

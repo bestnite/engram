@@ -15,18 +15,18 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// apiLoginRequest 是 /api/v1/auth/login 的请求体（支持 JSON 与表单输入）。
+// apiLoginRequest is the request body for /api/v1/auth/login (accepts JSON and form input).
 type apiLoginRequest struct {
 	Username string `json:"username" form:"username"`
 	Password string `json:"password" form:"password"`
 }
 
-// apiSession 提供同源 SPA 会话引导与 CSRF token 读取。
+// apiSession provides same-origin SPA session bootstrap and CSRF token retrieval.
 //
-// 无论登录与否，均不暴露 session ID、签名密钥或任何内部凭据；
-// 已登录时返回当前用户信息与绑定在服务端会话上的 CSRF token；
-// 未登录或用户被禁用时返回 authenticated=false、user=null，并下发/镜像双提交 cookie 对应的 CSRF token，
-// 供 SPA 执行同源登录等会话前请求使用。
+// Whether signed in or not, it never exposes the session ID, signing keys or any internal credential;
+// when signed in it returns the current user info and the CSRF token bound to the server-side session;
+// when signed out or the user is disabled it returns authenticated=false, user=null, and issues/mirrors the CSRF token matching the double-submit cookie,
+// for the SPA to use on pre-session requests such as same-origin login.
 func (s *Server) apiSession(c *gin.Context) {
 	u, okUser := auth.CurrentUser(c)
 	sess, okSess := auth.CurrentSession(c)
@@ -46,7 +46,7 @@ func (s *Server) apiSession(c *gin.Context) {
 		return
 	}
 
-	// 未登录或账号非 active：下发/复用双提交 CSRF token，cookie 置为 HttpOnly
+	// Signed out or account not active: issue/reuse the double-submit CSRF token, with the cookie set HttpOnly
 	csrfToken := auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": false,
@@ -55,10 +55,10 @@ func (s *Server) apiSession(c *gin.Context) {
 	})
 }
 
-// apiLogin 校验凭据并建立服务端会话。
+// apiLogin validates credentials and establishes a server-side session.
 //
-// 挂载 auth.PreSessionCSRFMiddleware 保证请求同时携带 csrf_double cookie 与 X-CSRF-Token 头。
-// 密码校验、限流递增延迟、恒定耗时 dummy hash、审计日志与 TOTP 二次验证均复用既有服务语义。
+// auth.PreSessionCSRFMiddleware is mounted to guarantee the request carries both the csrf_double cookie and the X-CSRF-Token header.
+// Password validation, rate-limit incremental delay, constant-time dummy hash, audit logging and TOTP two-factor all reuse the existing service semantics.
 func (s *Server) apiLogin(c *gin.Context) {
 	var req apiLoginRequest
 	if err := c.ShouldBind(&req); err != nil && c.Request.ContentLength > 0 {
@@ -83,7 +83,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 	ctx := c.Request.Context()
 	ip := c.ClientIP()
 
-	// 认证前先按已累计的失败次数递增延迟，失败次数达到阈值时直接拒绝：防爆破，拉平暴力尝试速率
+	// Before authenticating, delay incrementally by the accumulated failure count and reject outright once it reaches the threshold: anti-brute-force, flattening the rate of brute-force attempts
 	if s.loginLimiter != nil {
 		if _, err := s.loginLimiter.Wait(ctx, username, ip); err != nil {
 			s.writeLoginLimited(c, err, username, ip)
@@ -116,7 +116,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 		return
 	}
 
-	// TOTP 账号：第一因素通过后下发短期 pending cookie，并返回 TOTP challenge，绝不提早发放会话
+	// TOTP account: after the first factor passes, issue a short-lived pending cookie and return a TOTP challenge, never handing out a session early
 	if s.totp != nil {
 		enabled, err := s.totp.Enabled(ctx, u.ID)
 		if err != nil {
@@ -130,7 +130,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 			return
 		}
 		if enabled {
-			// 第一因素通过不算成功也不算失败：归还占位，失败计数留给第二步一起累计。
+			// Passing the first factor counts as neither success nor failure: give the placeholder back, and let the failure count accumulate with the second step.
 			if s.loginLimiter != nil {
 				s.loginLimiter.Release(username, ip)
 			}
@@ -179,42 +179,42 @@ func (s *Server) apiLogin(c *gin.Context) {
 	})
 }
 
-// loginShell 提供 GET /login：返回应用壳（规范路径），
-// 由客户端路由渲染登录页；登录协议走 GET /api/v1/auth/session + POST /api/v1/auth/login，
-// 第二步走 GET /login/totp / POST /api/v1/auth/totp。
+// loginShell serves GET /login: returns the app shell (the canonical path),
+// and the client router renders the login page; the login protocol goes through GET /api/v1/auth/session + POST /api/v1/auth/login,
+// with the second step going through GET /login/totp / POST /api/v1/auth/totp.
 //
-// 先初始化会话前双提交 cookie：SPA 挂载后从 GET /api/v1/auth/session 取回同一 token 放进
-// X-CSRF-Token，POST /api/v1/auth/login 的 PreSessionCSRFMiddleware 据此比对 cookie 与镜像值。
-// 这里只下发 cookie 并返回应用壳，不渲染表单、不建立会话、不返回任何凭据
-// （会话 cookie 始终由服务端在登录成功后签发）。
+// It first initializes the pre-session double-submit cookie: after mounting, the SPA fetches the same token from GET /api/v1/auth/session and puts it in
+// X-CSRF-Token, and PreSessionCSRFMiddleware on POST /api/v1/auth/login compares the cookie with the mirror value accordingly.
+// This only issues the cookie and returns the app shell: it renders no form, establishes no session and returns no credential
+// (the session cookie is always issued by the server after a successful login).
 func (s *Server) loginShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// registerShell 提供 GET /register：返回应用壳（规范路径），
-// 注册协议走 POST /api/v1/auth/register（PreSessionCSRFMiddleware 据 cookie 与镜像 token 比对）。
-// ?invite=<token> 由前端从 URL 读取并回填到请求体。这里只下发 cookie 并返回应用壳，
-// 不建号、不建立会话、不返回任何凭据。
+// registerShell serves GET /register: returns the app shell (the canonical path),
+// and the registration protocol goes through POST /api/v1/auth/register (PreSessionCSRFMiddleware compares the cookie with the mirror token).
+// ?invite=<token> is read from the URL by the frontend and filled into the request body. This only issues the cookie and returns the app shell:
+// it creates no account, establishes no session and returns no credential.
 func (s *Server) registerShell(c *gin.Context) {
 	auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	s.shell.ServeIndex(c)
 }
 
-// apiRegistrationInfoResponse 是 GET /api/v1/auth/registration 的响应体：只有注册策略。
+// apiRegistrationInfoResponse is the response body for GET /api/v1/auth/registration: only the registration policy.
 type apiRegistrationInfoResponse struct {
 	Policy string `json:"policy"`
 }
 
-// apiRegistrationInfo 返回当前的自助注册策略（GET /api/v1/auth/registration）。
+// apiRegistrationInfo returns the current self-registration policy (GET /api/v1/auth/registration).
 //
-// 注册页在渲染表单之前调用它：这次访问提交注册表单会被放行时不提示，会被拒时直接说明原因，
-// 而不是让访问者填完整张表单才被 403 拒绝。
-// 取值与 attemptRegistration 的分支顺序同源：没有任何活跃管理员时，注册端点会把这个账号建成
-// 管理员（引导窗口），策略与白名单都不参与判定，因此这时按 open 作答——取值仍取自同一个
-// ParseRegistrationPolicy，只是多了这个例外；否则新实例上会出现「页面说无法自助注册、
-// 提交却能建成管理员」。策略读取失败返回 500，前端据此退回「照常显示表单」——
-// 是否放行最终仍由提交时的服务端判定。响应不含任何凭据，匿名可调。
+// The registration page calls it before rendering the form: when submitting the registration form on this visit would be allowed it shows no notice, and when it would be rejected it states the reason outright,
+// rather than letting the visitor fill in the whole form only to be rejected with 403.
+// The value comes from the same branch order as attemptRegistration: when there is no active admin, the registration endpoint makes this account
+// an admin (bootstrap window), with neither policy nor allowlist involved in the decision, so it answers open in that case — the value still comes from the same
+// ParseRegistrationPolicy, just with this exception; otherwise a new instance would show "the page says self-registration is unavailable
+// but submitting still creates an admin". A failed policy read returns 500, and the frontend falls back to "show the form as usual" —
+// whether to allow is ultimately still decided server-side at submission. The response contains no credential and is callable anonymously.
 func (s *Server) apiRegistrationInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 	admins, err := s.users.CountActiveAdmins(ctx)
@@ -238,10 +238,10 @@ func (s *Server) apiRegistrationInfo(c *gin.Context) {
 	})
 }
 
-// setupShell 提供 GET /setup：返回应用壳（规范路径），
-// 引导协议走 POST /api/v1/auth/setup。可达性与迁移前完全一致：已存在活跃管理员时返回 404
-// （一次性管理员门，避免被当作后门反复访问）。可达时下发会话前双提交 cookie 并返回应用壳；
-// 这里只下发 cookie 并返回应用壳，不建号、不建会话。
+// setupShell serves GET /setup: returns the app shell (the canonical path),
+// and the setup protocol goes through POST /api/v1/auth/setup. Reachability is exactly as before the migration: 404 when an active admin already exists
+// (the one-time admin gate, so it cannot be used as a back door visited over and over). When reachable it issues the pre-session double-submit cookie and returns the app shell;
+// this only issues the cookie and returns the app shell, creating no account and no session.
 func (s *Server) setupShell(c *gin.Context) {
 	if !s.setupAvailable(c) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -251,8 +251,8 @@ func (s *Server) setupShell(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// apiRegisterRequest 是 POST /api/v1/auth/register 的请求体。
-// Invite 可为空：为空时按注册策略判定；非空时走邀请接受路径。
+// apiRegisterRequest is the request body for POST /api/v1/auth/register.
+// Invite may be empty: when empty the registration policy decides; when non-empty the invite-acceptance path is taken.
 type apiRegisterRequest struct {
 	Username    string `json:"username"`
 	Email       string `json:"email"`
@@ -261,8 +261,8 @@ type apiRegisterRequest struct {
 	Invite      string `json:"invite"`
 }
 
-// apiSetupRequest 是 POST /api/v1/auth/setup 的请求体。
-// Email 可为空：为空且配置了 BOOTSTRAP_ADMIN_EMAIL 时采用环境变量兜底（与 SSR 一致）。
+// apiSetupRequest is the request body for POST /api/v1/auth/setup.
+// Email may be empty: when empty and BOOTSTRAP_ADMIN_EMAIL is configured, the env var is used as a fallback (same as SSR).
 type apiSetupRequest struct {
 	Username    string `json:"username"`
 	Email       string `json:"email"`
@@ -270,12 +270,12 @@ type apiSetupRequest struct {
 	Password    string `json:"password"`
 }
 
-// apiRegister 是 SPA 自助注册端点（POST /api/v1/auth/register）。
+// apiRegister is the SPA self-registration endpoint (POST /api/v1/auth/register).
 //
-// 挂载 auth.PreSessionCSRFMiddleware：请求必须同时携带 csrf_double cookie 与 X-CSRF-Token 头。
-// 全部判定（匿名限流、校验、首个管理员引导、邀请事务、注册策略/白名单）都走
-// attemptRegistration：邀请接受与页面引导共用同一份实现，因此策略语义不可能漂移。
-// 成功不建立会话，只返回 created=true。
+// Mounts auth.PreSessionCSRFMiddleware: the request must carry both the csrf_double cookie and the X-CSRF-Token header.
+// All decisions (anonymous rate limiting, validation, first-admin bootstrap, invite transaction, registration policy/allowlist) go through
+// attemptRegistration: invite acceptance and page bootstrap share one implementation, so the policy semantics cannot drift.
+// Success establishes no session and only returns created=true.
 func (s *Server) apiRegister(c *gin.Context) {
 	var req apiRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -294,15 +294,15 @@ func (s *Server) apiRegister(c *gin.Context) {
 		s.writeRegistrationError(c, outcome)
 		return
 	}
-	// 注册后发一封邮箱验证邮件；SMTP 未配置时不发也不报错（与 SSR 一致）。
+	// Sends an email verification mail after registration; when SMTP is unconfigured it sends nothing and does not error (same as SSR).
 	s.sendEmailVerification(c, outcome.User)
 	c.JSON(http.StatusOK, gin.H{"created": true})
 }
 
-// apiSetup 是 SPA 首个管理员引导端点（POST /api/v1/auth/setup）。
+// apiSetup is the SPA first-admin bootstrap endpoint (POST /api/v1/auth/setup).
 //
-// 可达性规则与 GET /setup 的应用壳一致：没有活跃管理员时才可达，否则 404（一次性管理员门）。
-// 建号与审计复用 attemptSetup，挂载 PreSessionCSRFMiddleware。成功不建立会话。
+// The reachability rule matches the GET /setup app shell: reachable only when there is no active admin, otherwise 404 (the one-time admin gate).
+// Account creation and audit reuse attemptSetup, and PreSessionCSRFMiddleware is mounted. Success establishes no session.
 func (s *Server) apiSetup(c *gin.Context) {
 	if !s.setupAvailable(c) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -316,14 +316,14 @@ func (s *Server) apiSetup(c *gin.Context) {
 	ctx := c.Request.Context()
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" && s.bootstrapEmail != "" {
-		// 容器化部署用 BOOTSTRAP_ADMIN_EMAIL 兜底：请求未填邮箱时采用环境变量值。
+		// Containerized deployments fall back to BOOTSTRAP_ADMIN_EMAIL: when the request leaves the email blank, the env var value is used.
 		email = strings.ToLower(strings.TrimSpace(s.bootstrapEmail))
 	}
 	outcome := s.attemptSetup(ctx,
 		strings.TrimSpace(req.Username), email,
 		strings.TrimSpace(req.DisplayName), req.Password, s.requestLocale(c))
 	if outcome.Status == http.StatusNotFound {
-		// 闸门里发现已有管理员：与入口处的一次性门同一响应。
+		// An admin already exists is detected inside the gate: same response as the one-time gate at the entry point.
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -334,8 +334,8 @@ func (s *Server) apiSetup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"created": true})
 }
 
-// writeRegistrationError 把注册失败结果写成 JSON 错误包壳。
-// rate_limited 补 Retry-After；internal_error 归一到 api.CodeInternal；其余按 outcome.Status。
+// writeRegistrationError writes a registration failure result as a JSON error envelope.
+// rate_limited adds Retry-After; internal_error is normalized to api.CodeInternal; the rest follow outcome.Status.
 func (s *Server) writeRegistrationError(c *gin.Context, outcome registrationOutcome) {
 	if outcome.Code == "rate_limited" {
 		c.Header("Retry-After", strconv.Itoa(int(auth.DefaultAnonRateWindow.Seconds())))
@@ -347,8 +347,8 @@ func (s *Server) writeRegistrationError(c *gin.Context, outcome registrationOutc
 	apiAuthError(c, outcome.Status, outcome.Code, registrationErrorMessage(outcome.Code))
 }
 
-// registrationErrorMessage 返回注册失败 code 对应的稳定英文兜底文案。
-// 前端按 code 映射本地化提示，绝不解析这条 message。
+// registrationErrorMessage returns the stable English fallback copy for a registration failure code.
+// The frontend maps localized hints by code and never parses this message.
 func registrationErrorMessage(code string) string {
 	switch code {
 	case "username_required":
@@ -380,7 +380,7 @@ func registrationErrorMessage(code string) string {
 	}
 }
 
-// requestLocale 返回请求解析出的界面语言码，供新建用户写入 locale；本地化器缺失时返回空串。
+// requestLocale returns the UI locale code resolved for the request, for writing into a new user's locale; returns an empty string when the localizer is missing.
 func (s *Server) requestLocale(c *gin.Context) string {
 	if loc := i18n.FromContext(c.Request.Context()); loc != nil {
 		return loc.Locale()
@@ -388,8 +388,8 @@ func (s *Server) requestLocale(c *gin.Context) string {
 	return ""
 }
 
-// writeLoginLimited 把限流器拒绝映射成响应：失败次数达到阈值时 429 rate_limited 并带
-// Retry-After；等待期间请求被取消（客户端断开）时 408。
+// writeLoginLimited maps a limiter rejection into a response: 429 rate_limited with a Retry-After
+// when the failure count reaches the threshold; 408 when the request is cancelled during the wait (client disconnected).
 func (s *Server) writeLoginLimited(c *gin.Context, err error, username, ip string) {
 	var locked *auth.LockedError
 	if errors.As(err, &locked) {
@@ -406,16 +406,16 @@ func (s *Server) writeLoginLimited(c *gin.Context, err error, username, ip strin
 	c.AbortWithStatus(http.StatusRequestTimeout)
 }
 
-// apiAuthError 写出认证类 SPA 接口的错误包壳（与 totpError 同形）。
-// code 稳定且英文，message 为英文兜底文案，前端按 code 映射本地化提示。
+// apiAuthError writes the error envelope for auth-class SPA interfaces (same shape as totpError).
+// The code is stable and English, the message is English fallback copy, and the frontend maps localized hints by code.
 func apiAuthError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
-// apiLogout 作废当前会话并清除 cookie。
+// apiLogout invalidates the current session and clears the cookie.
 //
-// 挂载 s.sessions.CSRFMiddleware 强制要求会话绑定的 CSRF token。
-// 登出后重置双提交 CSRF cookie 并返回相应 token，保证后续无缝进入登录等流程。
+// Mounts s.sessions.CSRFMiddleware to require the session-bound CSRF token.
+// After logging out it resets the double-submit CSRF cookie and returns the matching token, so subsequent flows such as login work seamlessly.
 func (s *Server) apiLogout(c *gin.Context) {
 	ctx := c.Request.Context()
 	var userID *uint64

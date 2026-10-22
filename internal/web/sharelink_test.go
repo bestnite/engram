@@ -12,15 +12,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 分享链接的正规写入口是 SPA 的 JSON 端点（/api/v1/decks/:id/sharing/links），
-// 页面层只保留 GET /s/:token 的应用壳与 api/v1/share/:token 的只读内容。
+// The canonical write entry for share links is the SPA's JSON endpoint (/api/v1/decks/:id/sharing/links);
+// the page layer keeps only the app shell of GET /s/:token and the read-only content of api/v1/share/:token.
 
-// shareLinkJSONPath 是分享链接的 JSON 增删路径。
+// shareLinkJSONPath is the JSON path for creating and deleting share links.
 func shareLinkJSONPath(deckPublicID string) string {
 	return "/api/v1/decks/" + deckPublicID + "/sharing/links"
 }
 
-// createShareLinkJSON 经 SPA JSON 端点建一条分享链接并取回明文 token；password 为空 = 无口令。
+// createShareLinkJSON creates a share link through the SPA JSON endpoint and returns the plaintext token; an empty password = no password.
 func createShareLinkJSON(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf, password string) string {
 	t.Helper()
 	body := "{}"
@@ -44,7 +44,7 @@ func createShareLinkJSON(t *testing.T, srv *Server, deckPublicID string, cookies
 	return token
 }
 
-// shareResponse 是 GET /api/v1/share/:token 的对外形态。
+// shareResponse is the external shape of GET /api/v1/share/:token.
 type shareResponse struct {
 	DeckName         string `json:"deck_name"`
 	PasswordRequired bool   `json:"password_required"`
@@ -54,8 +54,8 @@ type shareResponse struct {
 	} `json:"notes"`
 }
 
-// TestShareLinkCreateBrowseThenRevoke 是主验收：
-// 创建后任何人可浏览内容、库里只存摘要、撤销后立即 404。
+// TestShareLinkCreateBrowseThenRevoke is the main acceptance:
+// after creation anyone can browse the content, only the digest is stored, and after revocation it is 404 at once.
 func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Link deck")
@@ -63,7 +63,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 
 	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "")
 
-	// 库里只存 sha256 摘要，绝不落明文。
+	// Only the sha256 digest is stored, the plaintext never lands anywhere.
 	var link store.ShareLink
 	if err := db.Where("deck_id = ?", deck.ID).First(&link).Error; err != nil {
 		t.Fatalf("load share link row: %v", err)
@@ -75,7 +75,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 		t.Errorf("stored token = %q, want sha256 digest %q", link.Token, store.ShareLinkDigest(token))
 	}
 
-	// 免登录浏览：/s/:token 返回应用壳，内容由 JSON 端点给出。
+	// Login-free browsing: /s/:token returns the app shell, and the JSON endpoint provides the content.
 	browse := get(t, srv, "/s/"+token, nil)
 	if browse.Code != http.StatusOK {
 		t.Fatalf("anonymous GET /s/<token> status = %d, want 200 (body %s)", browse.Code, snippet(browse.Body.String()))
@@ -100,12 +100,12 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 			t.Errorf("share content missing %q: %s", want, joined)
 		}
 	}
-	// 只读内容不得带任何进度信息。
+	// Read-only content must carry no progress information.
 	if strings.Contains(joined, "review.remaining") || strings.Contains(joined, "review.done") {
 		t.Errorf("share content leaked review progress markup")
 	}
 
-	// 单个撤销后立即 404。
+	// Revoking a single link makes it 404 immediately.
 	if rec := jsonRequest(t, srv, http.MethodDelete,
 		shareLinkJSONPath(deck.PublicID)+"/revoke/"+link.Token, "", ownerCookies, ownerCSRF); rec.Code != http.StatusOK {
 		t.Fatalf("revoke share link status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -115,7 +115,7 @@ func TestShareLinkCreateBrowseThenRevoke(t *testing.T) {
 	}
 }
 
-// TestShareLinkRevokeAll 覆盖批量撤销：一次撤销全部后两条链接都 404。
+// TestShareLinkRevokeAll covers bulk revocation: after revoking all at once both links are 404.
 func TestShareLinkRevokeAll(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Bulk deck")
@@ -135,7 +135,7 @@ func TestShareLinkRevokeAll(t *testing.T) {
 	}
 }
 
-// TestShareLinkPasswordGate 是验收里的“口令错被拒”：错误口令 401 且看不到内容，正确口令放行。
+// TestShareLinkPasswordGate is the acceptance's "wrong password is refused": a wrong password gives 401 with no content visible, a correct one is let through.
 func TestShareLinkPasswordGate(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Locked deck")
@@ -143,7 +143,7 @@ func TestShareLinkPasswordGate(t *testing.T) {
 
 	token := createShareLinkJSON(t, srv, deck.PublicID, ownerCookies, ownerCSRF, "letmein99")
 
-	// 未解锁时只回 password_required，不泄漏内容。
+	// Before unlock only password_required comes back, leaking no content.
 	locked := get(t, srv, "/api/v1/share/"+token, nil)
 	if locked.Code != http.StatusOK {
 		t.Fatalf("GET share content status = %d, want 200", locked.Code)
@@ -156,7 +156,7 @@ func TestShareLinkPasswordGate(t *testing.T) {
 		t.Errorf("locked share returned password_required=%t notes=%d, want true/0", lockedBody.PasswordRequired, len(lockedBody.Notes))
 	}
 
-	// 错误口令：401 且仍然看不到内容。
+	// Wrong password: 401, and the content is still not visible.
 	bad := jsonRequest(t, srv, http.MethodPost, "/api/v1/share/"+token+"/unlock", `{"password":"wrong-pass"}`, nil, "")
 	if bad.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong password status = %d, want 401 (body %s)", bad.Code, snippet(bad.Body.String()))
@@ -165,7 +165,7 @@ func TestShareLinkPasswordGate(t *testing.T) {
 		t.Errorf("content rendered despite a wrong password")
 	}
 
-	// 正确口令：返回内容。
+	// Correct password: the content is returned.
 	good := jsonRequest(t, srv, http.MethodPost, "/api/v1/share/"+token+"/unlock", `{"password":"letmein99"}`, nil, "")
 	if good.Code != http.StatusOK {
 		t.Fatalf("correct password status = %d, want 200 (body %s)", good.Code, snippet(good.Body.String()))
@@ -175,7 +175,7 @@ func TestShareLinkPasswordGate(t *testing.T) {
 	}
 }
 
-// TestShareLinkExpiredReturns404 覆盖过期：解析路径把过期与不存在同样处理。
+// TestShareLinkExpiredReturns404 covers expiry: the resolution path treats expired and nonexistent alike.
 func TestShareLinkExpiredReturns404(t *testing.T) {
 	srv, db, ownerID, _, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Expired deck")
@@ -191,18 +191,18 @@ func TestShareLinkExpiredReturns404(t *testing.T) {
 	}
 }
 
-// TestShareLinkWriteRequiresOwnerAndCSRF 覆盖反面用例：非 owner 与缺 CSRF 的写请求都被拒且不落库。
+// TestShareLinkWriteRequiresOwnerAndCSRF covers the negative cases: write requests from a non-owner and without CSRF are both refused and nothing is written.
 func TestShareLinkWriteRequiresOwnerAndCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Guarded deck")
 	_, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "linkviewer")
 	path := shareLinkJSONPath(deck.PublicID)
 
-	// 缺 CSRF：403，且没有链接建立。
+	// Missing CSRF: 403, and no link is created.
 	if rec := jsonRequest(t, srv, http.MethodPost, path, `{"password":"x"}`, ownerCookies, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("create without CSRF status = %d, want 403", rec.Code)
 	}
-	// 非 owner（无授权）：403。
+	// Non-owner (no grant): 403.
 	if rec := jsonRequest(t, srv, http.MethodPost, path, `{"password":"x"}`, u2Cookies, u2CSRF); rec.Code != http.StatusForbidden {
 		t.Fatalf("create by non-owner status = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}

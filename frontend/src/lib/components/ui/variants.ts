@@ -1,11 +1,11 @@
 import { tv } from 'tailwind-variants';
 
 /**
- * 全站按钮的唯一样式来源。此前同一组类名在视图里被抄了 40 余处，
- * 改一次底色要改十几个文件（「多处复用的样式必须封装成组件」）。
+ * The single source of button styling site-wide. Previously the same class set was copied into views in 40-odd places,
+ * changing a background color meant editing a dozen files ("styles reused in several places must be wrapped in a component").
  *
- * 颜色全部取 app.css 的语义令牌，深浅主题由令牌切换，这里不写 dark: 变体。
- * 尺寸按固定高度定义：同一行里的按钮、输入框、下拉只要选同一档就天然对齐。
+ * All colors come from app.css's semantic tokens; light/dark is switched by the tokens and no dark: variants are written here.
+ * Sizes are defined as fixed heights: buttons, inputs and dropdowns in the same row align naturally as long as they pick the same size.
  */
 export const buttonVariants = tv({
   base: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors btn-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:shrink-0',
@@ -28,7 +28,7 @@ export const buttonVariants = tv({
   defaultVariants: { variant: 'primary', size: 'md' },
 });
 
-/** 状态徽章（已撤销、题型、标签等）的唯一样式来源。 */
+/** The single source of styling for status badges (revoked, card kind, tags, etc.). */
 export const badgeVariants = tv({
   base: 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
   variants: {
@@ -44,8 +44,8 @@ export const badgeVariants = tv({
 });
 
 /**
- * 下拉菜单（bits-ui DropdownMenu）各部件的样式。账户菜单、列表行的「更多」菜单都用这一套，
- * 浮层的底色、阴影与进出场动画因此全站一致。
+ * Styling of the parts of a dropdown menu (bits-ui DropdownMenu). The account menu and list-row "more" menus both use this set,
+ * so the overlay's background, shadow and enter/exit animation are consistent site-wide.
  */
 export const menuClasses = {
   content:
@@ -64,20 +64,20 @@ export const menuClasses = {
 } as const;
 
 /**
- * 列表（卡组、笔记、用户……）的统一样式：一个带边框的容器，行与行之间只用分隔线，
- * 不再每一项各自一张卡片。首页与卡组页的卡组列表用途不同、列不同，但行高、hover、
- * 选中与可点区域都取这一套，所以看起来是同一种东西。
+ * Unified list styling (decks, notes, users...): a bordered container with only dividers between rows,
+ * no longer one card per item. The deck lists on the home page and the deck page serve different purposes with different columns, but row height, hover,
+ * selection and clickable area all come from this set, so they look like the same kind of thing.
  */
 export const listClasses = {
   root: 'overflow-hidden rounded-lg border border-border',
   header: 'flex h-9 items-center gap-3 border-b border-border bg-surface px-4 text-xs font-medium text-muted-foreground',
   row: 'group relative flex items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50 has-[[data-state=checked]]:bg-brand-soft/60',
-  // 整行可点：标题链接的伪元素铺满整行；行内其它控件加 rowAction 浮在它上面，点击互不干扰。
+  // Whole-row clickable: the title link's pseudo-element covers the row; other controls inside the row layer above it via rowAction, so clicks do not interfere.
   rowLink:
     "min-w-0 truncate font-medium text-foreground outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring",
   rowAction: 'relative z-10',
 } as const;
 
-/** SelectionBar 里的按钮：深色条上的浅色文字按钮。 */
+/** Button inside SelectionBar: a light-text button on the dark bar. */
 export const selectionBarButton =
   'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary-foreground/10 disabled:opacity-50 cursor-pointer [&_svg]:size-4';

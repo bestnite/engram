@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// listKeys 列出当前用户自己的 API key 元信息（不含哈希与明文），scope: admin。
+// listKeys lists metadata of the current user's own API keys (no hashes, no plaintext), scope: admin.
 func (a *API) listKeys(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	keys, err := a.keys.ListByUser(c.Request.Context(), u.ID)
@@ -22,14 +22,14 @@ func (a *API) listKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"keys": keys})
 }
 
-// createKeyRequest 是创建 API key 的请求体；scopes 为空时服务端落到默认 read。
+// createKeyRequest is the create-API-key request body; when scopes is empty the server falls back to the default read.
 type createKeyRequest struct {
 	Name      string     `json:"name"`
 	Scopes    []string   `json:"scopes"`
 	ExpiresAt *time.Time `json:"expires_at"`
 }
 
-// createKey 新建一个 key；明文只在这次响应里出现一次。
+// createKey creates a key; the plaintext appears exactly once, in this response.
 func (a *API) createKey(c *gin.Context) {
 	u, ok := CurrentUser(c)
 	if !ok || u == nil {
@@ -45,9 +45,9 @@ func (a *API) createKey(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	// admin scope 只能发给管理员账号：非管理员（含持有 keys 或遗留 admin-scope key 的
-	// 普通用户）经任何路径提交 admin 都拒绝，且不落库。钤制必须在知道
-	// actor 角色的传输层做，store 层看不到调用者身份。
+	// admin scope can only be issued to admin accounts: non-admins (including ordinary users holding keys or a leftover admin-scope key)
+	// are rejected on any path that submits admin, and nothing is persisted. The restriction has to happen in the transport layer, which knows
+	// the actor's role; the store layer cannot see the caller's identity.
 	if store.ScopesIncludeAdmin(req.Scopes) && u.Role != store.RoleAdmin {
 		abortError(c, http.StatusForbidden, CodeScopeNotGrantable, "")
 		return
@@ -71,7 +71,7 @@ func (a *API) createKey(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"key": created.Key, "plaintext": created.Plaintext})
 }
 
-// deleteKey 撤销一个属于当前用户的 key；撤销即时生效。
+// deleteKey revokes a key belonging to the current user; revocation takes effect immediately.
 func (a *API) deleteKey(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	ctx := c.Request.Context()
@@ -99,6 +99,6 @@ func (a *API) deleteKey(c *gin.Context) {
 		Action:   "api_key.revoke",
 		Detail:   map[string]any{"key_id": k.ID},
 	})
-	// 回显对外 id，绝不回显自增主键。
+	// Echo the external id, never the auto-increment primary key.
 	c.JSON(http.StatusOK, gin.H{"revoked": true, "id": publicID})
 }

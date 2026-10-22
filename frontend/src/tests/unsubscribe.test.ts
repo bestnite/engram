@@ -7,8 +7,8 @@ import { setLocale } from '../lib/i18n';
 import { en } from '../lib/i18n/locales/en';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 
-// 一键退订前端契约：读/确认走同源 JSON、确认自动带内存 CSRF、稳定 code 映射本地化、
-// 规范路由可解析、视图文案来自语言包。服务端行为由 internal/web/unsubscribe_test.go 覆盖。
+// Frontend contract for one-click unsubscribe: read/confirm use same-origin JSON, confirm carries the in-memory CSRF token automatically, stable codes map to localized text,
+// canonical routes resolve, and view copy comes from the language pack. Server behaviour is covered by internal/web/unsubscribe_test.go.
 describe('SPA one-click unsubscribe client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;
@@ -26,7 +26,7 @@ describe('SPA one-click unsubscribe client flows', () => {
     expect(init?.credentials).toBe('same-origin');
     expect(new Headers(init?.headers).get('Accept')).toBe('application/json');
     expect(new Headers(init?.headers).has('Authorization')).toBe(false);
-    // 读端点不是写请求：不应先取会话 CSRF。
+    // The read endpoint is not a write request: it should not fetch a session CSRF first.
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -65,7 +65,7 @@ describe('SPA unsubscribe route and view', () => {
   it('renders the confirm copy from the catalog', () => {
     setLocale('en');
     const { html } = render(UnsubscribeView, { props: {} });
-    // onMount 只在浏览器运行：服务端渲染停在 loading 状态，且文案全部来自语言包。
+    // onMount only runs in the browser: server-side rendering stops at the loading state, and every string comes from the language pack.
     expect(html).toContain('data-testid="unsubscribe-loading"');
     expect(html).toContain('Checking your unsubscribe link');
     expect(html).toContain('Manage email preferences');
@@ -88,7 +88,7 @@ describe('SPA unsubscribe route and view', () => {
   });
 
   it('reuses the shared notification type labels for the named type', () => {
-    // 视图用 settings.notifications.type.<type> 渲染类型名，避免重复定义一份标签。
+    // The view renders the type name via settings.notifications.type.<type>, avoiding a second copy of the labels.
     expect(en['settings.notifications.type.review_reminder']).toBeTruthy();
     expect(zhCN['settings.notifications.type.review_reminder']).toBeTruthy();
   });

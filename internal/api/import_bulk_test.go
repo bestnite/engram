@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// buildBulkBody 生成 n 条合法 basic note 的批量导入请求体，external_ref 用 b:<i>。
+// buildBulkBody builds a bulk import body with n valid basic notes, external_ref set to b:<i>.
 func buildBulkBody(n int) string {
 	var b strings.Builder
 	b.WriteString(`{"notes":[`)
@@ -24,8 +24,8 @@ func buildBulkBody(n int) string {
 	return b.String()
 }
 
-// TestBulkImportReportsInvalidRowIndexAndImportsValidRows 是核心验收：
-// 一个含单行非法数据的批次把合法行导入，并在报告里给出失败行的下标。
+// TestBulkImportReportsInvalidRowIndexAndImportsValidRows is the core acceptance:
+// a batch containing one row of invalid data imports the valid rows and reports the failed row's index.
 func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_mixed", store.RoleUser)
@@ -34,7 +34,7 @@ func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	// 下标 1 缺必填字段 back（非法），下标 0 与 2 合法。
+	// Index 1 is missing the required back field (invalid); indexes 0 and 2 are valid.
 	body := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"q0","back":"a0"},"external_ref":"r:0"},` +
 		`{"kind":"basic","fields":{"front":"q1"},"external_ref":"r:1"},` +
@@ -60,12 +60,12 @@ func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	if strings.TrimSpace(resp.Errors[0].Reason) == "" {
 		t.Error("error reason is empty, want the failing field named")
 	}
-	// 合法行必须真的落库（2 条 note、2 张 card），非法行不落库。
+	// The valid rows must really be persisted (2 notes, 2 cards) and the invalid row must not be.
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 }
 
-// TestBulkImportBatchesTwoHundredRowsPerTransaction 校验 205 条会跨多个 200 条事务批次，
-// 且重复提交仍然幂等（跨批次不发生重复建卡）。
+// TestBulkImportBatchesTwoHundredRowsPerTransaction verifies 205 rows span several 200-row transaction batches,
+// and that resubmitting stays idempotent (no duplicate cards across batches).
 func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_batches", store.RoleUser)
@@ -74,7 +74,7 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	const total = 205 // > ImportBatchSize(200)，强制至少两个事务批次。
+	const total = 205 // > ImportBatchSize(200), forcing at least two transaction batches.
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, buildBulkBody(total))
 	if status != http.StatusOK {
 		t.Fatalf("first import status = %d, want 200 (body %s)", status, raw)
@@ -88,7 +88,7 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	}
 	assertNoteCardCount(t, env, deck.ID, total, total)
 
-	// 重复提交同一批：全部按 external_ref 命中，skip 策略下全部跳过，不产生重复卡。
+	// Resubmit the same batch: everything hits on external_ref and is skipped under the skip policy, producing no duplicate cards.
 	body := `{"on_conflict":"skip",` + buildBulkBody(total)[1:]
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
@@ -105,9 +105,9 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	assertNoteCardCount(t, env, deck.ID, total, total)
 }
 
-// TestBulkImportIsolatesRowErrorWithinBatch 触发批次内真实的数据库级行错误（同一 external_ref
-// 在同一请求里出现两次 -> 第二行撞唯一约束），证明失败行被隔离并带下标上报，
-// 同批其余合法行仍然提交（保存点回滚路径）。
+// TestBulkImportIsolatesRowErrorWithinBatch triggers a real database-level row error within a batch (the same external_ref
+// appearing twice in one request -> the second row hits the unique constraint), proving the failing row is isolated and reported with its index,
+// while the rest of the batch still commits (the savepoint rollback path).
 func TestBulkImportIsolatesRowErrorWithinBatch(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_isolation", store.RoleUser)
@@ -116,8 +116,8 @@ func TestBulkImportIsolatesRowErrorWithinBatch(t *testing.T) {
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	// 下标 0 与 1 用了同一个 external_ref：第一遍规划时都查不到已有行，都会尝试新建；
-	// 批内第二行撞 (deck_id, external_ref) 唯一约束，应只报它，0 与 2 正常落库。
+	// Indexes 0 and 1 use the same external_ref: the first pass finds no existing row for either, so both try to create;
+	// the second row in the batch hits the (deck_id, external_ref) unique constraint, so only it is reported, while 0 and 2 persist normally.
 	body := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"dup"},` +
 		`{"kind":"basic","fields":{"front":"b","back":"B"},"external_ref":"dup"},` +
@@ -140,8 +140,8 @@ func TestBulkImportIsolatesRowErrorWithinBatch(t *testing.T) {
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 }
 
-// TestBulkImportResumesAfterPartialFailure 证明失败可续：第一次导入有一行非法时合法行已落库；
-// 修正该行后按 skip 重放，已导入的行跳过（不重做），只补建缺失的一行。
+// TestBulkImportResumesAfterPartialFailure proves a failure is resumable: the first import had one invalid row yet its valid rows were persisted;
+// fixing that row and replaying with skip leaves the already-imported rows skipped (not redone) and creates only the missing one.
 func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "bulk_resume", store.RoleUser)
@@ -167,7 +167,7 @@ func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 	}
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 
-	// 修正 r:1 后整批重放：skip 让已导入的两行不重做，只为修复行建一条。
+	// Replay the whole batch after fixing r:1: skip keeps the two imported rows from being redone, creating only the fixed row.
 	fixed := `{"on_conflict":"skip","notes":[` +
 		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"r:0"},` +
 		`{"kind":"basic","fields":{"front":"b","back":"B"},"external_ref":"r:1"},` +

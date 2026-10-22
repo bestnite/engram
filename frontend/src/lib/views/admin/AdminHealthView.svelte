@@ -24,7 +24,7 @@
   // svelte-ignore state_referenced_locally
   let data = $state<AdminHealth | null>(initialData);
 
-  /** 与 Go 侧 humanBytes 同口径：字节数转易读单位（B/KiB/MiB/GiB/TiB）。 */
+  /** Same criterion as humanBytes on the Go side: convert a byte count into a readable unit (B/KiB/MiB/GiB/TiB). */
   function formatBytes(n: number): string {
     if (n < 1024) return `${n} B`;
     const units = ['KiB', 'MiB', 'GiB', 'TiB'];

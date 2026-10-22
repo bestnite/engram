@@ -11,7 +11,7 @@
 
   interface Props {
     client?: ApiClient;
-    /** 测试注入：是否持有有效的第二步凭据；未提供时挂载后向服务端查询。 */
+    /** Test injection: whether a valid second-step credential is held; when not provided, the server is queried after mount. */
     initialPending?: boolean | null;
   }
 
@@ -25,8 +25,8 @@
   let loading = $state(false);
 
   /**
-   * 查询第二步是否可提交。凭据只在密码通过后下发，因此 pending=false 表示
-   * 「没有待完成的第二步」（凭据缺失或已过期），此时只能回到第一步重新登录。
+   * Query whether the second step can be submitted. The credential is only issued after the password passes, so pending=false means
+   * "there is no second step waiting" (the credential is missing or expired), and the only option then is to go back to the first step and log in again.
    */
   async function loadPending(): Promise<void> {
     checking = true;
@@ -54,7 +54,7 @@
     } catch (err) {
       if (err instanceof ApiClientError) {
         toast.error($t(getApiErrorMessageKey(err)));
-        // 凭据过期/已被消费：表单不再可提交，引导回到第一步。
+        // The credential expired/was consumed: the form can no longer be submitted, and the user is guided back to the first step.
         if (err.code === 'totp_challenge_expired') {
           pending = false;
         }

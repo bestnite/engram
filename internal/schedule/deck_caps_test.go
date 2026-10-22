@@ -8,9 +8,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestQueueHonoursDeckDailyCaps 是验收用例：每日上限必须来自卡组列，
-// 而不是 QueueOptions 里的硬编码默认值。卡组设成 2/1（远低于默认 20/200），
-// 若仍走默认值，下面的断言会立刻失败。
+// TestQueueHonoursDeckDailyCaps is an acceptance case: the daily caps must come from the deck columns,
+// not from the hard-coded defaults in QueueOptions. The deck is set to 2/1 (far below the default 20/200),
+// so if the defaults were still used, the assertions below would fail immediately.
 func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -28,13 +28,13 @@ func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 		t.Fatalf("create deck: %v", err)
 	}
 
-	// 3 张到期复习卡。
+	// 3 due review cards.
 	for i := 0; i < 3; i++ {
 		id := seedCard(t, db, deck.ID, string(rune('A'+i)), now)
 		last := now.Add(-24 * time.Hour)
 		seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
 	}
-	// 5 张新卡。
+	// 5 new cards.
 	for i := 0; i < 5; i++ {
 		seedCard(t, db, deck.ID, string(rune('a'+i)), now.Add(time.Duration(i)*time.Minute))
 	}
@@ -64,8 +64,8 @@ func TestQueueHonoursDeckDailyCaps(t *testing.T) {
 	}
 }
 
-// TestQueueCapsExplicitOverrideBeatsDeck 断言显式覆盖仍然优先于卡组设置，
-// 现有调用方（传正值的 NewPerDay / ReviewsPerDay）行为不变。
+// TestQueueCapsExplicitOverrideBeatsDeck asserts explicit overrides still take precedence over the deck settings,
+// and existing callers (passing positive NewPerDay / ReviewsPerDay) behave unchanged.
 func TestQueueCapsExplicitOverrideBeatsDeck(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)

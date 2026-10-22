@@ -1,8 +1,8 @@
 import { ApiClientError } from './types';
 
 /**
- * 注册/引导接口的稳定错误 code 集合（与 Go 侧 internal/web/auth_api.go 的 registrationErrorMessage 一一对应）。
- * 它们统一映射到 auth.error.<code> 语言包键，与 SSR 认证页共用同一批文案。
+ * Stable error code set for the registration/bootstrap endpoints (corresponds one-to-one with registrationErrorMessage in internal/web/auth_api.go on the Go side).
+ * They all map to auth.error.<code> language pack keys, sharing the same copy as the SSR auth pages.
  */
 const authErrorCodes = new Set([
   'username_required',
@@ -17,16 +17,16 @@ const authErrorCodes = new Set([
   'invite_invalid',
   'registration_closed',
   'create_failed',
-  // 登录第二步（TOTP）的稳定 code（Go 侧 internal/api/errors.go）：
-  // 验证码无效、第二步凭据缺失或过期。
+  // Stable codes for the login second step (TOTP) (Go side internal/api/errors.go):
+  // invalid verification code, second-step credential missing or expired.
   'totp_invalid',
   'totp_challenge_expired',
 ]);
 
 /**
- * 将 API 错误转换为前端语言包 key
- * 后端 REST 错误只返回英文 code 与英文 message，前端根据稳定 code 映射本地化文案，
- * 绝不直接把后端的英文 message 暴露在界面上。
+ * Convert API errors into frontend language pack keys
+ * Backend REST errors only return an English code and an English message; the frontend maps localized copy by stable code
+ * and never exposes the backend's English message directly in the UI.
  */
 export function getApiErrorMessageKey(error: unknown): string {
   if (error instanceof ApiClientError) {

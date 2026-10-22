@@ -12,8 +12,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedDueCard 建一个 note 与它的一张 card，但不写 card_states：该卡是新卡，必然出现在队列里。
-// 只用于本文件的复习范围用例（不需要真实调度参数）。
+// seedDueCard creates a note and one of its cards but writes no card_states: the card is new and bound to appear in the queue.
+// Used only by this file's review-scope cases (no real scheduling parameters needed).
 func seedDueCard(t *testing.T, db *gorm.DB, deckID uint64) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -27,7 +27,7 @@ func seedDueCard(t *testing.T, db *gorm.DB, deckID uint64) {
 	}
 }
 
-// TestDueCardsAcceptsRepeatedDeckParams 是 REST 验收：重复的 deck 参数取多个卡组的并集。
+// TestDueCardsAcceptsRepeatedDeckParams is the REST acceptance: repeated deck parameters take the union of several decks.
 func TestDueCardsAcceptsRepeatedDeckParams(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "reviewer", store.RoleUser)
@@ -58,8 +58,8 @@ func TestDueCardsAcceptsRepeatedDeckParams(t *testing.T) {
 	}
 }
 
-// TestDueCardsRejectsBadDeckParam 覆盖负例：未知、空或非法的卡组对外 id 返回 404。
-// 对外 id 是不透明串，路由层解析不到实体时与「卡组不存在」同一口径，故是 404 而非 400。
+// TestDueCardsRejectsBadDeckParam covers the negative cases: an unknown, empty or malformed deck external id returns 404.
+// An external id is an opaque string, and when the routing layer cannot resolve an entity it follows the same convention as "deck does not exist", hence 404 rather than 400.
 func TestDueCardsRejectsBadDeckParam(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "badparam", store.RoleUser)
@@ -76,8 +76,8 @@ func TestDueCardsRejectsBadDeckParam(t *testing.T) {
 	}
 }
 
-// TestDueCardsFailsWholeRequestForUnreadableDeck 覆盖负例：集合里任一卡组不可读时整次调用失败，
-// 不得静默过滤掉它再返回其它卡组的卡。
+// TestDueCardsFailsWholeRequestForUnreadableDeck covers the negative case: when any deck in the set is unreadable the whole call fails,
+// and it must not silently filter it out and return cards from the other decks.
 func TestDueCardsFailsWholeRequestForUnreadableDeck(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "owner", store.RoleUser)

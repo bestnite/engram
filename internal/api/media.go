@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// MediaItem 是媒体库列表的一项对外形态。
+// MediaItem is the external shape of one entry in the media library list.
 type MediaItem struct {
 	Sha256    string    `json:"sha256"`
 	Mime      string    `json:"mime"`
@@ -25,19 +25,19 @@ type MediaItem struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// MediaPage 是分页响应：items 为本页，next_cursor 为下一页游标（空串 = 到底）。
+// MediaPage is the paged response: items is this page, next_cursor is the cursor for the next page (empty string = end).
 type MediaPage struct {
 	Items      []MediaItem `json:"items"`
 	NextCursor string      `json:"next_cursor"`
 }
 
-// ListReadableMedia 返回该用户可读的媒体一页（REST `GET /api/v1/media`）。
+// ListReadableMedia returns one page of media the user can read (REST `GET /api/v1/media`).
 //
-// 业务规则集中在 store（可读谓词与 keyset 分页），这里只做参数校验、错误映射与形态转换：
-//   - limit 必须落在 [1, MaxMediaPageSize]，否则 400（绝不静默截断成上限——调用方会以为
-//     自己拿到了请求的条数）；
-//   - 游标无法解码同样 400（静默从头开始会让翻页悄悄循环）；
-//   - 返回空页时 Items 是空切片而非 null，保证 JSON 形状稳定。
+// The business rules live in the store (readability predicate and keyset paging); this only does parameter validation, error mapping and shape conversion:
+//   - limit must fall in [1, MaxMediaPageSize], otherwise 400 (never silently clamp to the maximum - the caller would think
+//     it got the requested number of rows);
+//   - a cursor that cannot be decoded is likewise 400 (silently restarting would make paging loop quietly);
+//   - on an empty page Items is an empty slice rather than null, keeping the JSON shape stable.
 func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, cursor string) (MediaPage, error) {
 	if limit < 1 || limit > store.MaxMediaPageSize {
 		return MediaPage{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
@@ -57,8 +57,8 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 			Sha256: m.Sha256,
 			Mime:   m.Mime,
 			Bytes:  m.Bytes,
-			// URL 由哈希拼成，与上传响应的 url 同形：媒体选择器直接引用它，
-			// 不在客户端重复拼接 /media/<sha256> 这一契约。
+			// The URL is built from the hash and has the same shape as the url in the upload response: the media picker references it directly
+			// instead of re-composing the /media/<sha256> contract on the client.
 			URL:       "/media/" + m.Sha256,
 			Width:     m.Width,
 			Height:    m.Height,
@@ -68,7 +68,7 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 	return MediaPage{Items: items, NextCursor: next}, nil
 }
 
-// listMedia 是 REST `GET /api/v1/media`：scope read，分页参数校验后交给 service。
+// listMedia is REST `GET /api/v1/media`: scope read, paging parameters validated and handed to the service.
 func (a *API) listMedia(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	limit := store.DefaultMediaPageSize

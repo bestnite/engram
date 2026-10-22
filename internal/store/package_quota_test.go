@@ -9,14 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包导入新增的媒体字节必须计入**导入者**配额，超限整包失败、零残留。
+// The media bytes a deck package import adds must count against the **importer's** quota; over the limit the whole package fails with zero residue.
 //
-// 修前 ImportPackage 完全不看配额：只要包能解开、媒体在白名单内，字节就落盘。上传链
-// （internal/web 的 checkMediaQuota）挡在 /media 与 /decks/:id/media 两个入口，而
-// web / REST / MCP / CLI 四条导入路径都绕开它 —— 于是拿一个装满媒体的包就能无限占用空间。
+// Before the fix ImportPackage ignored the quota entirely: as long as the package unpacked and the media was allowlisted, the bytes hit the disk. The upload chain
+// (checkMediaQuota in internal/web) guards the /media and /decks/:id/media entry points, while
+// all four import paths -- web / REST / MCP / CLI -- went around it, so a package stuffed with media could take up space without limit.
 
-// quotaImportFixture 造一个源库：一份 64 字节 PNG 媒体 + 引用它的 note，导出带媒体的包。
-// 返回包字节、媒体 sha256 与媒体字节数。
+// quotaImportFixture builds a source database: one 64-byte PNG media + a note referencing it, then exports a package with media.
+// It returns the package bytes, the media sha256 and the media byte count.
 func quotaImportFixture(t *testing.T, src *gorm.DB) (raw []byte, sha string, size int) {
 	t.Helper()
 	owner := seedUsers(t, src, "pkg_quota_owner")[0]
@@ -28,8 +28,8 @@ func quotaImportFixture(t *testing.T, src *gorm.DB) (raw []byte, sha string, siz
 	return raw, sha, len(body)
 }
 
-// TestImportPackageMediaQuotaRejectsAndLeavesNoTrace 是核心负例：新增媒体会超出导入者
-// 配额时整包被拒，且库里没有任何行、磁盘上没有残留文件。
+// TestImportPackageMediaQuotaRejectsAndLeavesNoTrace is the core negative case: when the added media would exceed the importer's
+// quota the whole package is rejected, with no rows in the database and no leftover files on disk.
 func TestImportPackageMediaQuotaRejectsAndLeavesNoTrace(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -41,7 +41,7 @@ func TestImportPackageMediaQuotaRejectsAndLeavesNoTrace(t *testing.T) {
 			importer := seedUsers(t, dst, "pkg_quota_importer")[0]
 			root := t.TempDir()
 
-			// 配额比包内媒体少 1 字节：0 已用 + size 新增 > size-1。
+			// The quota is 1 byte below the package media: 0 used + size added > size-1.
 			_, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
 				Target:          PackageTargetNewDeck,
 				MediaRoot:       root,
@@ -67,8 +67,8 @@ func TestImportPackageMediaQuotaRejectsAndLeavesNoTrace(t *testing.T) {
 	}
 }
 
-// TestImportPackageMediaQuotaAllowsWithinLimit 是正向对照：限额恰好等于新增字节时仍放行，
-// 媒体真的落库落盘（证明新检查没有把正常导入一起拒掉）。
+// TestImportPackageMediaQuotaAllowsWithinLimit is the positive control: when the limit exactly equals the added bytes it still passes,
+// and the media really lands in the database and on disk (proving the new check does not reject the normal import).
 func TestImportPackageMediaQuotaAllowsWithinLimit(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -99,9 +99,9 @@ func TestImportPackageMediaQuotaAllowsWithinLimit(t *testing.T) {
 	}
 }
 
-// TestImportPackageMediaQuotaDoesNotChargeTwice 验收去重口径：同一 blob 已被导入者计费时，
-// 再次导入同一 sha 的新增量是 0 —— 第二次导入在配额恰好等于该 blob 大小时仍应放行。
-// 若按 size+size 计，这里会因超限被拒，说明去重没生效。
+// TestImportPackageMediaQuotaDoesNotChargeTwice verifies the de-duplication accounting: when the importer is already charged for the same blob,
+// importing the same sha again adds 0 -- the second import must still pass when the quota exactly equals that blob's size.
+// Counting size+size would reject it as over the limit, which would mean de-duplication is not working.
 func TestImportPackageMediaQuotaDoesNotChargeTwice(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -112,7 +112,7 @@ func TestImportPackageMediaQuotaDoesNotChargeTwice(t *testing.T) {
 			raw, _, size := quotaImportFixture(t, src)
 			importer := seedUsers(t, dst, "pkg_quota_dedupe")[0]
 
-			// 第一次导入：媒体计入导入者用量（引用它的 note 属于该用户）。
+			// First import: the media counts toward the importer's usage (the note referencing it belongs to that user).
 			if _, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
 				Target:          PackageTargetNewDeck,
 				MediaRoot:       t.TempDir(),
@@ -121,7 +121,7 @@ func TestImportPackageMediaQuotaDoesNotChargeTwice(t *testing.T) {
 				t.Fatalf("first import: %v", err)
 			}
 
-			// 第二次导入同一包到新卡组：同 sha 已计费，新增量 0，配额不变仍放行。
+			// Second import of the same package into a new deck: the sha is already charged, the added amount is 0, and the unchanged quota still passes.
 			if _, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
 				Target:          PackageTargetNewDeck,
 				MediaRoot:       t.TempDir(),

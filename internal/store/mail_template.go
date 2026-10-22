@@ -10,20 +10,20 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ErrMailTemplateNotFound 表示该 (类型, 语言) 没有自定义模板。调用方据此回退内置正文，
-// 所以它是**正常状态**而不是错误；用哨兵是为了让「没有」与「查库失败」可区分。
+// ErrMailTemplateNotFound means there is no custom template for that (type, locale). Callers fall back to the built-in body based on it,
+// so it is a **normal state** rather than an error; the sentinel exists to tell 'none' apart from 'the query failed'.
 var ErrMailTemplateNotFound = errors.New("mail template not found")
 
-// MailTemplateStore 读写管理员自定义的邮件模板。
+// MailTemplateStore reads and writes admin-defined mail templates.
 //
-// 只有取一份、列全部、整份覆盖、删掉四个动作：保存就是**整份替换**，不做部分更新——
-// 主题与正文必须来自同一次编辑，否则会出现「新主题配旧正文」的中间态。
+// Only four actions: fetch one, list all, overwrite whole, delete — saving is a **full replacement** with no partial update,
+// because subject and body must come from the same edit, otherwise a 'new subject with old body' intermediate state appears.
 type MailTemplateStore struct{ db *gorm.DB }
 
-// NewMailTemplateStore 构造模板存储。
+// NewMailTemplateStore constructs the template store.
 func NewMailTemplateStore(db *gorm.DB) *MailTemplateStore { return &MailTemplateStore{db: db} }
 
-// ByTypeLocale 取一份模板；没有自定义即 ErrMailTemplateNotFound。
+// ByTypeLocale fetches one template; no customization yields ErrMailTemplateNotFound.
 func (s *MailTemplateStore) ByTypeLocale(ctx context.Context, mailType, locale string) (*MailTemplate, error) {
 	var row MailTemplate
 	err := s.db.WithContext(ctx).
@@ -38,7 +38,7 @@ func (s *MailTemplateStore) ByTypeLocale(ctx context.Context, mailType, locale s
 	return &row, nil
 }
 
-// List 列出全部自定义模板。数量上界是「邮件类型数 × 语言数」（几十行），一次取完即可。
+// List lists all custom templates. The upper bound is 'number of mail types × number of locales' (a few dozen rows), so one fetch is enough.
 func (s *MailTemplateStore) List(ctx context.Context) ([]MailTemplate, error) {
 	var rows []MailTemplate
 	if err := s.db.WithContext(ctx).Order("type ASC, locale ASC").Find(&rows).Error; err != nil {
@@ -47,8 +47,8 @@ func (s *MailTemplateStore) List(ctx context.Context) ([]MailTemplate, error) {
 	return rows, nil
 }
 
-// Upsert 整份覆盖一份模板。用 clause.OnConflict 而不是「先查再写」：并发保存同一键时
-// 先查再写会撞唯一键，而 OnConflict 在 PostgreSQL 与 SQLite 上语义一致（AGENTS.md §2.3.4）。
+// Upsert overwrites one template wholesale. It uses clause.OnConflict rather than 'read then write': with concurrent saves of the same key,
+// read-then-write would hit the unique key, while OnConflict has consistent semantics on PostgreSQL and SQLite (AGENTS.md §2.3.4).
 func (s *MailTemplateStore) Upsert(ctx context.Context, tpl *MailTemplate) error {
 	if tpl.UpdatedAt.IsZero() {
 		tpl.UpdatedAt = time.Now().UTC()
@@ -63,8 +63,8 @@ func (s *MailTemplateStore) Upsert(ctx context.Context, tpl *MailTemplate) error
 	return nil
 }
 
-// Delete 删掉一份自定义模板（回到内置正文）。删不存在的行不算失败：用户的意图是
-// 「回到内置」，那个状态已经成立。
+// Delete removes one custom template (falling back to the built-in body). Deleting a missing row is not a failure: the user's intent is
+// 'back to the built-in', and that state already holds.
 func (s *MailTemplateStore) Delete(ctx context.Context, mailType, locale string) error {
 	err := s.db.WithContext(ctx).
 		Where("type = ? AND locale = ?", mailType, locale).

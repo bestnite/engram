@@ -11,11 +11,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestCollectGarbage 覆盖媒体回收的完整时间线（真库 + 真文件）：
-//   - 被引用的媒体（映射行存在，含软删除 note 的映射）永不回收；
-//   - 无人引用的媒体第一轮只被标记，宽限期内不删；
-//   - 宽限期过后删行、删文件、删上传者记录；
-//   - 标记后又被引用的媒体清除标记、不删；重新上传的媒体清除标记、宽限期重算。
+// TestCollectGarbage covers the full media reclamation timeline (real DB + real files):
+//   - referenced media (a mapping row exists, including mappings of soft-deleted notes) is never reclaimed;
+//   - unreferenced media is only flagged in the first round and not deleted within the grace period;
+//   - after the grace period the row, the file and the uploader record are deleted;
+//   - media referenced again after being flagged has the flag cleared and is not deleted; re-uploaded media has the flag cleared and the grace period restarted.
 func TestCollectGarbage(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func TestCollectGarbage(t *testing.T) {
 	if n, err := s.CollectGarbage(ctx, t0, grace); err != nil || n != 0 {
 		t.Fatalf("first sweep = %d, %v; want 0 removed (marking only)", n, err)
 	}
-	// 宽限期内：被标记的媒体又被引用 / 又被上传。
+	// Within the grace period: the flagged media is referenced again / uploaded again.
 	ref(reReferenced.Sha256, 2)
 	save(png("re-uploaded"))
 
@@ -88,7 +88,7 @@ func TestCollectGarbage(t *testing.T) {
 		})
 	}
 
-	// 重新上传的媒体在第二轮被重新标记（t1），所以要再过一个宽限期才删。
+	// The re-uploaded media is flagged again in the second round (t1), so another grace period must pass before it is deleted.
 	var again store.Media
 	if err := s.db.First(&again, "sha256 = ?", reUploaded.Sha256).Error; err != nil {
 		t.Fatalf("reload re-uploaded media: %v", err)

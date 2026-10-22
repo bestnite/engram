@@ -6,12 +6,12 @@ import (
 	"time"
 )
 
-// TestUserReminderHourRoundTrip 验证 users.reminder_hour 是**可空**列，三种状态互不混淆：
-//   - NULL：从未设置 → 读回 nil（调用方回落到全局默认）；
-//   - 显式 0：午夜是合法取值 → 读回 0，绝不能被当成 NULL；
-//   - 显式非零：读回原值。
+// TestUserReminderHourRoundTrip verifies users.reminder_hour is a **nullable** column whose three states stay distinct:
+//   - NULL: never set -> reads back nil (the caller falls back to the global default);
+//   - an explicit 0: midnight is a legal value -> reads back 0 and must never be taken for NULL;
+//   - an explicit non-zero: reads back the original value.
 //
-// 在 SQLite 与 PostgreSQL（TEST_PG_DSN 设置时）上跑同一份断言：两库都必须能把 NULL 与 0 分开。
+// The same assertions run on SQLite and PostgreSQL (when TEST_PG_DSN is set): both databases must tell NULL from 0.
 func TestUserReminderHourRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -41,13 +41,13 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 				return got
 			}
 
-			// NULL：未设置。
+			// NULL: not set.
 			unset := reload(newUser("unset", nil))
 			if unset.ReminderHour != nil {
 				t.Fatalf("unset reminder_hour = %d, want NULL", *unset.ReminderHour)
 			}
 
-			// 显式 0：午夜，必须与 NULL 区分。
+			// Explicit 0: midnight, must be distinguished from NULL.
 			midnight := reload(newUser("midnight", Ptr(0)))
 			if midnight.ReminderHour == nil {
 				t.Fatal("explicit 0 reminder_hour read back as NULL: midnight and unset are conflated")
@@ -56,7 +56,7 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 				t.Fatalf("explicit 0 reminder_hour = %d, want 0", *midnight.ReminderHour)
 			}
 
-			// 改成非零后读回原值。
+			// After changing to a non-zero value it reads back the original.
 			midnight.ReminderHour = Ptr(19)
 			if err := users.Update(ctx, midnight); err != nil {
 				t.Fatalf("update to 19: %v", err)
@@ -65,7 +65,7 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 				t.Fatalf("after update reminder_hour = %d, want 19", got)
 			}
 
-			// 再改回未设置：UPDATE 必须把列写成 NULL，而不是残留旧值。
+			// Changing back to unset: UPDATE must write NULL into the column rather than leaving the old value behind.
 			midnight.ReminderHour = nil
 			if err := users.Update(ctx, midnight); err != nil {
 				t.Fatalf("update back to NULL: %v", err)

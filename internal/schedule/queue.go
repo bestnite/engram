@@ -16,8 +16,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 队列构建的文档化默认值。日切点默认值以 store 为唯一来源，
-// 因为归一化规则（0/越界 → 默认）必须被 store/schedule/web/reminder/digest 共享。
+// Documented defaults for queue construction. The day-cutoff default takes store as the single source of truth,
+// because the normalisation rule (0/out of range → default) must be shared by store/schedule/web/reminder/digest.
 const (
 	DefaultDayCutoffHour = store.DefaultDayCutoffHour
 	DefaultNewPerDay     = 20
@@ -26,108 +26,108 @@ const (
 	DefaultQueueTimezone = "UTC"
 )
 
-// deckUnlimited 是「该卡组此项今日不限」的哨兵值。卡组列写 0 就是不限，不是「回落到默认」
-// 因此「不限」需要与「剩余 0 张」区分开。
+// deckUnlimited is the sentinel for "unlimited today for this field in this deck". A deck column of 0 means unlimited, not "fall back to the default",
+// so "unlimited" has to be distinguishable from "0 cards left".
 const deckUnlimited = -1
 
-// ReviewOrder 决定到期复习卡的排序方式。
+// ReviewOrder decides how due review cards are sorted.
 type ReviewOrder int
 
 const (
-	// OrderByRetrievability 按记忆保持概率升序（默认，最可能忘的先来）。
+	// OrderByRetrievability sorts by ascending retention probability (default, the most likely to be forgotten comes first).
 	OrderByRetrievability ReviewOrder = iota
-	// OrderByDueAt 按到期时间升序（经典顺序）。
+	// OrderByDueAt sorts by ascending due time (classic order).
 	OrderByDueAt
 )
 
-// NewOrder 决定新卡的出场顺序。
+// NewOrder decides the presentation order of new cards.
 type NewOrder int
 
 const (
-	// NewOrderRandom 随机打乱，避免永远只背开头几张（默认）。
+	// NewOrderRandom shuffles randomly, avoiding always studying only the first few (default).
 	NewOrderRandom NewOrder = iota
-	// NewOrderCreated 按创建顺序，便于测试与\"按序引入\"的偏好。
+	// NewOrderCreated follows creation order, convenient for tests and for an "introduce in order" preference.
 	NewOrderCreated
 )
 
-// QueueKind 标识队列项的来源优先级。
+// QueueKind identifies the origin, hence the priority, of a queue item.
 type QueueKind int
 
 const (
-	// QueueLearning 是学习/再学习阶段且到期的卡，优先级最高。
+	// QueueLearning is a due card in the learning/relearning phase, highest priority.
 	QueueLearning QueueKind = iota
-	// QueueReview 是到期的复习卡。
+	// QueueReview is a due review card.
 	QueueReview
-	// QueueNew 是新卡。
+	// QueueNew is a new card.
 	QueueNew
 )
 
-// QueueOptions 是一次队列构建的入参。零值经 withDefaults 补齐为文档化默认值。
+// QueueOptions are the inputs for one queue construction. Zero values are filled in by withDefaults to the documented defaults.
 //
-// 卡组范围（三种口径）：DeckIDs 非空（去重后）→ 取集合内所有卡组；
-// DeckID 非 0 且 DeckIDs 为空 → 只取该卡组；两者都为空 → 该用户**可见**的卡组集合
-// （store.DeckStore.VisibleIDs，与卡组列表页同一集合，排除别人的卡组）。
+// Deck scope (three modes): DeckIDs non-empty (after dedup) → take all decks in the set;
+// DeckID non-zero and DeckIDs empty → take only that deck; both empty → the deck set **visible** to that user
+// (store.DeckStore.VisibleIDs, the same set as the deck list page, excluding other people's decks).
 //
-// 每日上限一律**按卡组算**（new_per_day/reviews_per_day 是卡组级列）：
-// 范围里每个卡组各自用它的列与今日已用量算出剩余额度，多卡组/全库＝各卡组额度之和。
-// 本包不再有任何「全局合计」路径。
+// Daily caps are always **computed per deck** (new_per_day/reviews_per_day are deck-level columns):
+// each deck in scope computes its remaining allowance from its own columns and today's usage; multiple decks / whole library = the sum of the per-deck allowances.
+// This package no longer has any "global total" path.
 //
-// 覆盖优先级（仅用于测试与显式入口，生产入口不传）：
-//  1. NewPerDayOverride / ReviewsPerDayOverride 非 nil —— 对范围内所有卡组统一生效，
-//     0 表示不限（指针区分「未设置」与「显式 0」）；
-//  2. NewPerDay / ReviewsPerDay 为正 —— 同样对范围内所有卡组统一生效（保留的旧入口）；
-//  3. 否则读各卡组的 new_per_day / reviews_per_day，列写 0 表示不限；
-//  4. 只有当卡组行不存在（读不到列）时才兜底 DefaultNewPerDay。
+// Override precedence (only for tests and explicit entry points; production entry points do not pass these):
+//  1. NewPerDayOverride / ReviewsPerDayOverride non-nil — applies uniformly to every deck in scope,
+//     0 means unlimited (the pointer distinguishes "unset" from "explicit 0");
+//  2. NewPerDay / ReviewsPerDay positive — likewise applies uniformly to every deck in scope (retained legacy entry);
+//  3. otherwise read each deck's new_per_day / reviews_per_day, where a column value of 0 means unlimited;
+//  4. only when the deck row does not exist (column unreadable) fall back to DefaultNewPerDay.
 type QueueOptions struct {
-	// DeckID 为 0 时跨该用户可见的全部卡组取卡；DeckIDs 非空时本字段被忽略。
+	// When DeckID is 0, cards are taken across all decks visible to the user; this field is ignored when DeckIDs is non-empty.
 	DeckID uint64
-	// DeckIDs 是要复习的卡组集合；非空时（去重后）优先于 DeckID，空切片表示全库口径。
+	// DeckIDs is the set of decks to review; when non-empty (after dedup) it takes precedence over DeckID, an empty slice means the whole-library mode.
 	//
-	// 入参契约：**调用方必须先对每个 id 逐一判权**（每个 id 至少 reader 角色），任一 id 不可读
-	// 即让整个请求失败。本构建器不校验权限、也不过无权限 id：这里的每个 id 都被当作可读卡组
-	// 直接展开取卡。
+	// Input contract: **the caller must check permission for every id individually first** (at least the reader role on each id); any unreadable id
+	// fails the whole request. This builder does not check permissions and does not filter out unauthorised ids: every id here is treated as a readable deck
+	// and expanded directly to fetch cards.
 	//
-	// 为什么不把判权搬进 builder：判权下沉到 builder 后只剩「静默丢弃该卡组、返回其余卡片」
-	// 这一种可表达的行为，会把「无权限卡组＝整次请求失败」退化成部分成功，与既定口径
-	// 相悖（该口径由 REST 的 API.DueCards 与 web 的 loadDeckForRole 逐 id 兑现）。
+	// Why permission checking is not moved into the builder: once it sinks into the builder, the only expressible behaviour is "silently drop that deck, return the remaining cards",
+	// which would degrade "unauthorised deck = the whole request fails" into partial success, contradicting the established rule
+	// (that rule is fulfilled per id by the REST API.DueCards and the web loadDeckForRole).
 	DeckIDs []uint64
-	// Now 为观测时刻；零值表示使用当前时间。到期判定与复习日都以它为准。
+	// Now is the observation instant; the zero value means use the current time. Due decisions and the review day are both based on it.
 	Now time.Time
-	// Location 是用户时区；为 nil 时按 Timezone 名称加载（失败则退回 UTC）。
+	// Location is the user's timezone; when nil it is loaded from the Timezone name (falling back to UTC on failure).
 	Location *time.Location
-	// Timezone 是 IANA 时区名，仅在 Location 为 nil 时使用。
+	// Timezone is an IANA timezone name, used only when Location is nil.
 	Timezone string
-	// DayCutoffHour 是复习日切点（本地小时）；nil 默认 4，显式 0 是午夜。
+	// DayCutoffHour is the review day cutoff (local hour); nil defaults to 4, an explicit 0 is midnight.
 	DayCutoffHour *int
-	// NewPerDay 是每日新卡上限的调用方覆盖；<= 0 时改读卡组值。
+	// NewPerDay is a caller override for the daily new-card cap; when <= 0 the deck value is read instead.
 	NewPerDay int
-	// ReviewsPerDay 是每日复习上限的调用方覆盖；<= 0 时改读卡组值（卡组值为 0 表示不限）。
+	// ReviewsPerDay is a caller override for the daily review cap; when <= 0 the deck value is read instead (a deck value of 0 means unlimited).
 	ReviewsPerDay int
-	// NewPerDayOverride / ReviewsPerDayOverride 是显式覆盖；非 nil 时优先于卡组设置。
-	// 用指针是因为整型零值无法区分"未设置"与"显式 0（不限）"。
+	// NewPerDayOverride / ReviewsPerDayOverride are explicit overrides; when non-nil they take precedence over the deck settings.
+	// Pointers are used because an integer zero cannot distinguish "unset" from "explicit 0 (unlimited)".
 	NewPerDayOverride     *int
 	ReviewsPerDayOverride *int
-	// ReviewOrder 见 ReviewOrder。
+	// ReviewOrder — see ReviewOrder.
 	ReviewOrder ReviewOrder
-	// NewOrder 见 NewOrder。
+	// NewOrder — see NewOrder.
 	NewOrder NewOrder
-	// BatchSize 是复习卡一次取出的批大小（retrievability 需在内存排序）。
+	// BatchSize is the batch size for fetching review cards at a time (retrievability has to be sorted in memory).
 	BatchSize int
-	// LearnAhead 是提前学习窗口：队列末尾追加在 (Now, Now+LearnAhead] 内到期的学习 / 重学卡，
-	// 只在其它卡都复习完之后才轮到它们（队列按序消费、每次评分后重建）。0 表示不提前。
+	// LearnAhead is the learn-ahead window: cards in the learning / relearning phase due within (Now, Now+LearnAhead] are appended to the end of the queue,
+	// and they only come up after all other cards are done (the queue is consumed in order and rebuilt after each grade). 0 means no look-ahead.
 	LearnAhead time.Duration
-	// Tags 非空时只取 note 带有其中任一标签的卡（并集，匹配规则见 store.WhereNoteTagsAny）；
-	// 空切片表示不按标签过滤。标签只缩小取卡范围：每日额度仍按卡组计算并与不带标签的队列
-	// 共用（今天在某个标签里引入的新卡同样占该卡组的 new_per_day），调度规则不变。
-	// 本构建器不限制范围里的卡组数；「带标签必须恰好一个卡组」由调用方的业务层校验。
+	// When Tags is non-empty, only cards whose note carries any of those tags are taken (union; matching rules in store.WhereNoteTagsAny);
+	// an empty slice means no tag filtering. Tags only narrow the fetched range: daily allowances are still computed per deck and are shared with the untagged queue
+	// (new cards introduced today under some tag also consume that deck's new_per_day); the scheduling rules are unchanged.
+	// This builder does not limit the number of decks in scope; "tags require exactly one deck" is validated by the caller's business layer.
 	Tags []string
-	// Rand 是可选随机源；仅影响 NewOrderRandom。为 nil 时按 (用户, 复习日) 派生固定种子，
-	// 因此同一天内反复构建得到同一排列（见 queueShuffleSeed）。
+	// Rand is an optional random source; it only affects NewOrderRandom. When nil, a fixed seed is derived from (user, review day),
+	// so repeated builds within the same day yield the same permutation (see queueShuffleSeed).
 	Rand *rand.Rand
 }
 
-// withDefaults 把零值字段补齐为文档化默认值。整型零值无法区分"未设置"与"显式 0"，
-// 因此每日上限不在默认值里 —— 它们要先从各卡组读取（0 由卡组列表达"不限"）。
+// withDefaults fills zero-value fields in with the documented defaults. An integer zero cannot distinguish "unset" from "explicit 0",
+// so the daily caps are not among the defaults — they must be read from each deck first (0 in the deck column expresses "unlimited").
 func (o QueueOptions) withDefaults() QueueOptions {
 	if o.Timezone == "" {
 		o.Timezone = DefaultQueueTimezone
@@ -139,7 +139,7 @@ func (o QueueOptions) withDefaults() QueueOptions {
 	return o
 }
 
-// QueueItem 是队列里的一张卡；Retrievability 只对复习卡有意义，其余为 0。
+// QueueItem is one card in the queue; Retrievability is only meaningful for review cards, it is 0 otherwise.
 type QueueItem struct {
 	CardID         uint64
 	NoteID         uint64
@@ -150,26 +150,26 @@ type QueueItem struct {
 	Kind           QueueKind
 }
 
-// DeckQueueCounts 是单个卡组口径下队列的构成：New 是今日还能引入的新卡数，
-// Review 是今日可刷的到期卡数（学习/再学习到期卡 + 受 reviews_per_day 限制的复习卡）。
-// 两个数相加＝点进该卡组实际能刷的张数，列表页那两个数的语义就是它。
+// DeckQueueCounts is the queue composition for a single deck: New is the number of new cards that can still be introduced today,
+// Review is the number of due cards available today (due learning/relearning cards + review cards limited by reviews_per_day).
+// The two added together equal the number of cards actually available after entering that deck, which is exactly what those two numbers mean on the list page.
 type DeckQueueCounts struct{ New, Review int }
 
-// QueueBuilder 负责从 card_states / reviews 构造复习队列。
+// QueueBuilder constructs the review queue from card_states / reviews.
 type QueueBuilder struct {
 	db        *gorm.DB
 	decks     *store.DeckStore
 	scheduler *Scheduler
 }
 
-// NewQueueBuilder 构造队列构建器。
-// decks 必填：全库口径要靠它解析「用户可见的卡组集合」。刻意不提供可选 setter ——
-// 忘了注入曾经会静默退化成「不过滤卡组」，正是别人 private 卡组混进队列的原因。
+// NewQueueBuilder constructs a queue builder.
+// decks is required: the whole-library mode relies on it to resolve "the deck set visible to the user". An optional setter is deliberately not provided —
+// forgetting to inject it once silently degraded to "no deck filtering", which is exactly why other people's private decks leaked into the queue.
 func NewQueueBuilder(db *gorm.DB, decks *store.DeckStore, s *Scheduler) *QueueBuilder {
 	return &QueueBuilder{db: db, decks: decks, scheduler: s}
 }
 
-// validate 校验构造队列所需的三项依赖，缺一即报英文错误（不静默降级）。
+// validate checks the three dependencies required to build a queue; a missing one reports an English error (no silent degradation).
 func (b *QueueBuilder) validate(userID uint64) error {
 	if userID == 0 {
 		return errors.New("schedule: build queue: user id is required")
@@ -183,7 +183,7 @@ func (b *QueueBuilder) validate(userID uint64) error {
 	return nil
 }
 
-// stateRow 是查询中间结果的载体：cs 列 + 所属 card/note 的定位列。
+// stateRow carries the intermediate query result: the cs columns + the locating columns of the owning card/note.
 type stateRow struct {
 	CardID       uint64     `gorm:"column:card_id"`
 	NoteID       uint64     `gorm:"column:note_id"`
@@ -195,7 +195,7 @@ type stateRow struct {
 	LastReviewAt *time.Time `gorm:"column:last_review_at"`
 }
 
-// toCardState 把中间结果转成调度器可用的 CardState。
+// toCardState turns the intermediate result into a CardState usable by the scheduler.
 func (r stateRow) toCardState() *store.CardState {
 	return &store.CardState{
 		CardID:       r.CardID,
@@ -207,8 +207,8 @@ func (r stateRow) toCardState() *store.CardState {
 	}
 }
 
-// Build 按\"学习卡 → 到期复习卡 → 新卡\"的优先级构造队列。
-// 学习卡不占额度；复习卡与新卡各自受所在卡组的 reviews_per_day / new_per_day 限制。
+// Build constructs the queue in the priority order "learning cards → due review cards → new cards".
+// Learning cards consume no allowance; review cards and new cards are each limited by their deck's reviews_per_day / new_per_day.
 func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptions) ([]QueueItem, error) {
 	if err := b.validate(userID); err != nil {
 		return nil, err
@@ -216,8 +216,8 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	opts = opts.withDefaults()
 	now := opts.now()
 
-	// 随机源在取卡之前确定：同一个源先决定「从每个卡组抽哪些新卡」（SQL 里的排序键），
-	// 再决定合并后的出场顺序，两步都随 (用户, 复习日) 确定、可复现。
+	// The random source is fixed before fetching cards: the same source first decides "which new cards to draw from each deck" (the ordering key in SQL),
+	// then decides the merged presentation order; both steps are determined by (user, review day) and reproducible.
 	var rng *rand.Rand
 	var order *newCardOrder
 	if opts.NewOrder == NewOrderRandom {
@@ -237,7 +237,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		return nil, err
 	}
 
-	// 复习卡：逐卡组取回后合并，按请求的方式全局排序，再截到 BatchSize（内存排序的上界）。
+	// Review cards: fetched deck by deck, then merged, globally sorted the requested way, then truncated to BatchSize (the upper bound for in-memory sorting).
 	reviews := col.mergeReviews()
 	if opts.ReviewOrder == OrderByRetrievability {
 		for i := range reviews {
@@ -263,7 +263,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 
 	fresh := col.mergeFresh()
 	if rng != nil && len(fresh) > 1 {
-		// 多卡组时各卡组的新卡按卡组顺序拼接，这里再打乱一次，让卡组之间也交错出场。
+		// With multiple decks the new cards of each deck are concatenated in deck order, and they are shuffled once more here so that decks interleave too.
 		rng.Shuffle(len(fresh), func(i, j int) { fresh[i], fresh[j] = fresh[j], fresh[i] })
 	}
 
@@ -274,9 +274,9 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	}
 	out = append(out, fresh...)
 
-	// 提前学习：学习步骤常常只有 1 分钟、10 分钟，最后一张卡按 Again 之后队列就空了，会话随之
-	// 结束，而那张卡几分钟后才到期。把窗口内即将到期的学习卡排在最后：有别的卡时不打扰，
-	// 没有了就接着学。
+	// Learn-ahead: learning steps are often only 1 minute, 10 minutes, and after pressing Again on the last card the queue empties and the session
+	// ends, while that card is not due for a few minutes. So learning cards that fall due within the window are placed last: they do not intrude while other cards exist,
+	// and once those run out you simply keep studying.
 	if opts.LearnAhead > 0 && len(col.order) > 0 {
 		ahead, err := b.learningAhead(ctx, userID, now, now.Add(opts.LearnAhead), col.order, opts.Tags)
 		if err != nil {
@@ -287,7 +287,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	return out, nil
 }
 
-// learningAhead 取 (from, until] 内到期的学习 / 重学卡，按到期时间升序（只用于提前学习）。
+// learningAhead fetches learning / relearning cards due within (from, until], in ascending due time (used only for learn-ahead).
 func (b *QueueBuilder) learningAhead(ctx context.Context, userID uint64, from, until time.Time, deckIDs []uint64, tags []string) ([]QueueItem, error) {
 	var rows []stateRow
 	err := b.baseStateQuery(ctx, userID, deckIDs, tags).
@@ -301,15 +301,15 @@ func (b *QueueBuilder) learningAhead(ctx context.Context, userID uint64, from, u
 	return rowsToItems(rows, QueueLearning, from)
 }
 
-// queueShuffleSeed 从 (用户, 复习日) 派生新卡乱序的种子。
+// queueShuffleSeed derives the shuffle seed for new cards from (user, review day).
 //
-// 为什么不用「构建时刻」播种：那个值每次请求都不同，于是同一天里刷新页面、取下一批新卡都会
-// 换一个排列——学习者看到的顺序不稳定，报告问题时也无从复现。改用 (用户, 复习日) 之后，
-// 同一天内顺序固定（同一批次的顺序可复现），隔天自动轮换，仍满足「避免永远只背开头几张」
-// 这一初衷；不同用户同一天也不共享排列。
+// Why not seed from "the build instant": that value differs on every request, so within the same day a page refresh or fetching the next batch of new cards would
+// switch to a different permutation — the order the learner sees would be unstable, and reported problems could not be reproduced. With (user, review day),
+// the order is fixed within a day (the order of a given batch is reproducible) and rotates automatically the next day, still serving the original intent of
+// "avoid always studying only the first few"; and different users on the same day do not share a permutation.
 //
-// 复习日必须用本包唯一的 ReviewDay 定义（含用户时区与切点），否则轮换时点会与配额、连击、
-// 提醒等一切按复习日计数的功能错开一天。
+// The review day must use this package's single ReviewDay definition (including the user's timezone and cutoff), otherwise the rotation point would drift a day away from quotas, streaks
+// and reminders — from every feature that counts by review day.
 func queueShuffleSeed(userID uint64, day string) int64 {
 	h := fnv.New64a()
 	var buf [8]byte
@@ -319,16 +319,16 @@ func queueShuffleSeed(userID uint64, day string) int64 {
 	return int64(h.Sum64())
 }
 
-// DeckCounts 返回每个卡组今日可刷的构成：New = 今日还能引入的新卡数，Review = 学习/再学习
-// 到期卡 + 受 reviews_per_day 限制的到期复习卡。点进该卡组能刷的总张数就是这两个数之和
-// （Build 按批返回，单批最多 BatchSize 张，刷完会取下一批，所以这里**不**按批大小截断）。
+// DeckCounts returns the composition of what is studyable today per deck: New = the number of new cards that can still be introduced today, Review = due learning/relearning
+// cards + due review cards limited by reviews_per_day. The total number of cards available after entering that deck is the sum of these two
+// (Build returns cards in batches of at most BatchSize and fetches the next batch when drained, so this is **not** truncated by the batch size).
 //
-// 它与 Build 共用同一组筛选条件（stateFrom / learningDueWhere / reviewDueWhere / newCardsFrom）
-// 与同一条额度公式（deckBudget），只是把取行换成按卡组分组的 COUNT：列表页不需要卡片本身，
-// 不限量的卡组也不会把全部行读进内存。
+// It shares the same set of filter conditions with Build (stateFrom / learningDueWhere / reviewDueWhere / newCardsFrom)
+// and the same allowance formula (deckBudget), only replacing row fetching with a COUNT grouped by deck: the list page does not need the cards themselves,
+// and an unlimited deck will not pull every row into memory either.
 //
-// opts 只读 Now、Location/Timezone 与 DayCutoffHour：「今日已用量」按用户自己的复习日统计，
-// 必须与评分时写入 reviews.review_day 的口径一致。deckIDs 为空时按该用户可见卡组解析。
+// opts only reads Now, Location/Timezone and DayCutoffHour: "today's usage" is counted by the user's own review day,
+// and must match the semantics written into reviews.review_day at grading time. An empty deckIDs resolves to the deck set visible to that user.
 func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckQueueCounts, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck counts: user id is required")
@@ -375,7 +375,7 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 	return out, nil
 }
 
-// capCount 把可取张数截到剩余额度；额度为 deckUnlimited 时不截。
+// capCount truncates the available count to the remaining allowance; no truncation when the allowance is deckUnlimited.
 func capCount(n, left int) int {
 	if left != deckUnlimited && n > left {
 		return left
@@ -383,7 +383,7 @@ func capCount(n, left int) int {
 	return n
 }
 
-// countByDeck 对已加好筛选条件的查询按 notes.deck_id 分组计数。
+// countByDeck counts a query that already has its filters applied, grouped by notes.deck_id.
 func countByDeck(q *gorm.DB) (map[uint64]int, error) {
 	var rows []struct {
 		DeckID uint64 `gorm:"column:deck_id"`
@@ -399,32 +399,32 @@ func countByDeck(q *gorm.DB) (map[uint64]int, error) {
 	return out, nil
 }
 
-// deckScope 是一个卡组在本次构建中解析出的范围条目：它的今日剩余额度。
+// deckScope is one scope entry resolved for a deck in this build: its remaining allowance for today.
 type deckScope struct {
 	id uint64
-	// newLeft / reviewLeft 是今日还能取多少张；deckUnlimited 表示不限。
+	// newLeft / reviewLeft are how many cards can still be taken today; deckUnlimited means unlimited.
 	newLeft    int
 	reviewLeft int
 }
 
-// dueReview 是取回的一张到期复习卡：队列项加上按需计算 retrievability 所需的状态行。
+// dueReview is one fetched due review card: the queue item plus the state row needed to compute retrievability on demand.
 type dueReview struct {
 	item QueueItem
 	row  stateRow
 }
 
-// collectedQueue 是「取卡」阶段的中间结果，Build 与 DeckCounts 共用同一条路径。
+// collectedQueue is the intermediate result of the "fetch cards" phase; Build and DeckCounts share the same path.
 type collectedQueue struct {
-	// learning 是学习/再学习到期卡，全范围一条查询，due_at 升序（不受额度裁剪）。
+	// learning holds due learning/relearning cards, one query across the whole scope, ascending due_at (not truncated by allowances).
 	learning []QueueItem
-	// reviews / fresh 按卡组分组，各自已按该卡组剩余额度裁剪。
+	// reviews / fresh are grouped by deck, each already truncated to that deck's remaining allowance.
 	reviews map[uint64][]dueReview
 	fresh   map[uint64][]QueueItem
-	// order 是范围内的卡组顺序，保证合并结果确定。
+	// order is the deck order within the scope, keeping the merged result deterministic.
 	order []uint64
 }
 
-// mergeReviews 按范围顺序把各卡组的复习卡拼成一个切片；全局排序由调用方进行。
+// mergeReviews concatenates the review cards of each deck into one slice in scope order; the global sorting is done by the caller.
 func (c *collectedQueue) mergeReviews() []dueReview {
 	total := 0
 	for _, id := range c.order {
@@ -437,7 +437,7 @@ func (c *collectedQueue) mergeReviews() []dueReview {
 	return out
 }
 
-// mergeFresh 按范围顺序把各卡组的新卡拼成一个切片；打乱由调用方进行。
+// mergeFresh concatenates the new cards of each deck into one slice in scope order; the shuffling is done by the caller.
 func (c *collectedQueue) mergeFresh() []QueueItem {
 	total := 0
 	for _, id := range c.order {
@@ -450,9 +450,9 @@ func (c *collectedQueue) mergeFresh() []QueueItem {
 	return out
 }
 
-// collect 是 Build 与 DeckCounts 共用的取卡路径：解析范围与各卡组额度，再按卡组取回
-// 学习卡（一条查询）、到期复习卡（逐卡组、限该卡组剩余额度）、新卡（逐卡组、限剩余额度）。
-// order 为 nil 时新卡按创建顺序取，否则按 order 给出的伪随机排序键取。
+// collect is the card-fetch path shared by Build and DeckCounts: resolve the scope and each deck's allowance, then fetch deck by deck
+// the learning cards (one query), the due review cards (per deck, limited by that deck's remaining allowance), and the new cards (per deck, limited by the remaining allowance).
+// When order is nil, new cards are fetched in creation order; otherwise by the pseudo-random sort key given by order.
 func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOptions, order *newCardOrder) (*collectedQueue, error) {
 	opts = opts.withDefaults()
 	now := opts.now()
@@ -463,7 +463,7 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 	}
 	out := &collectedQueue{reviews: map[uint64][]dueReview{}, fresh: map[uint64][]QueueItem{}}
 	if len(scope) == 0 {
-		// 空集合＝没有可取的卡组（例如该用户没有任何可见卡组）：队列为空，不报错。
+		// An empty set = no decks to take from (e.g. the user has no visible decks): the queue is empty and no error is reported.
 		return out, nil
 	}
 
@@ -473,14 +473,14 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 		out.order = append(out.order, d.id)
 	}
 
-	// 学习/再学习到期卡：一条查询取全部，不受额度裁剪（学习卡不占复习上限）。
+	// Due learning/relearning cards: one query fetches them all, not truncated by allowances (learning cards do not consume the review cap).
 	learning, err := b.learningDue(ctx, userID, now, deckIDs, opts.Tags)
 	if err != nil {
 		return nil, err
 	}
 	out.learning = learning
 
-	// 到期复习卡：逐卡组按各自剩余额度取；不限时每个卡组取 BatchSize，合并后由调用方截断。
+	// Due review cards: fetched deck by deck up to each deck's remaining allowance; when unlimited each deck fetches BatchSize, and the caller truncates after merging.
 	for _, d := range scope {
 		if d.reviewLeft == 0 {
 			continue
@@ -496,7 +496,7 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 		out.reviews[d.id] = rows
 	}
 
-	// 新卡：逐卡组按各自剩余额度取；不限时不设 LIMIT。
+	// New cards: fetched deck by deck up to each deck's remaining allowance; no LIMIT is set when unlimited.
 	for _, d := range scope {
 		if d.newLeft == 0 {
 			continue
@@ -510,9 +510,9 @@ func (b *QueueBuilder) collect(ctx context.Context, userID uint64, opts QueueOpt
 	return out, nil
 }
 
-// resolveScope 把三种卡组口径解析成「卡组 → 今日剩余额度」的列表。
-// 范围：DeckIDs 非空（去重）→ 该集合；否则 DeckID != 0 → 单卡组；两者都空 → 该用户可见卡组。
-// 随后加载各卡组的上限与今日已用量，逐卡组用 deckBudget 算剩余额度（规则只写一处）。
+// resolveScope resolves the three deck modes into a list of "deck → remaining allowance today".
+// Scope: DeckIDs non-empty (deduped) → that set; otherwise DeckID != 0 → a single deck; both empty → the decks visible to that user.
+// It then loads each deck's caps and today's usage and computes the remaining allowance per deck with deckBudget (the rule is written in one place only).
 func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts QueueOptions) ([]deckScope, error) {
 	ids, err := b.scopeDeckIDs(ctx, userID, opts)
 	if err != nil {
@@ -541,10 +541,10 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 	for _, id := range ids {
 		c, ok := caps[id]
 		if !ok {
-			// 读不到卡组列（卡组行不存在）才兜底默认；卡组列写 0 表示不限，不是回退默认。
+			// Only an unreadable deck column (deck row missing) falls back to the default; a deck column of 0 means unlimited, not falling back to the default.
 			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
 		}
-		// 显式覆盖对范围内所有卡组统一生效；旧入口的正值字段同义（见 QueueOptions 文档）。
+		// Explicit overrides apply uniformly to every deck in scope; the legacy entry's positive fields mean the same (see the QueueOptions doc).
 		if opts.NewPerDayOverride != nil {
 			c.NewPerDay = *opts.NewPerDayOverride
 		} else if opts.NewPerDay > 0 {
@@ -561,8 +561,8 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 	return out, nil
 }
 
-// scopeDeckIDs 把三种卡组口径归一成一个去重后的 id 集合：
-// DeckIDs 非空时优先（去重），否则 DeckID 非 0 时返回单元素，两者都空时返回该用户可见卡组。
+// scopeDeckIDs normalises the three deck modes into one deduplicated id set:
+// DeckIDs wins when non-empty (deduped), otherwise a non-zero DeckID returns a single element, and when both are empty the decks visible to the user are returned.
 func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts QueueOptions) ([]uint64, error) {
 	if len(opts.DeckIDs) > 0 {
 		return dedupeIDs(opts.DeckIDs), nil
@@ -577,11 +577,11 @@ func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts Que
 	return ids, nil
 }
 
-// deckBudget 计算一个卡组今日剩余的新卡与复习额度；这是「每日额度如何算」的唯一实现，
-// Build、DeckCounts 与 DeckBudgets 都经它，避免几处公式漂移。
-// caps 里某项 <= 0 表示该项不限，返回 deckUnlimited；否则返回 max(cap-used, 0)。
-// 新卡的 cap 是每日上限加上今天「再来一组」追加的额度：每日上限是学习目标，追加只抬高今天的量。
-// 不限的卡组不需要追加，追加量对它不起作用。
+// deckBudget computes a deck's remaining new-card and review allowance for today; this is the single implementation of "how the daily allowance is computed",
+// Build, DeckCounts and DeckBudgets all go through it, so the formula cannot drift across several places.
+// An entry in caps <= 0 means that entry is unlimited and deckUnlimited is returned; otherwise max(cap-used, 0) is returned.
+// The new-card cap is the daily cap plus the allowance added today by "another round": the daily cap is the study goal, the addition only raises today's amount.
+// An unlimited deck needs no addition; the added amount has no effect on it.
 func deckBudget(caps store.DeckCaps, u deckUsage) (newLeft, reviewLeft int) {
 	newCap := caps.NewPerDay
 	if newCap > 0 {
@@ -590,7 +590,7 @@ func deckBudget(caps store.DeckCaps, u deckUsage) (newLeft, reviewLeft int) {
 	return budgetLeft(newCap, u.introduced), budgetLeft(caps.ReviewsPerDay, u.reviewed)
 }
 
-// budgetLeft 返回封顶后的剩余额度；cap <= 0 是不限。
+// budgetLeft returns the remaining allowance after capping; cap <= 0 is unlimited.
 func budgetLeft(cap, used int) int {
 	if cap <= 0 {
 		return deckUnlimited
@@ -601,7 +601,7 @@ func budgetLeft(cap, used int) int {
 	return 0
 }
 
-// dedupeIDs 去掉重复的卡组 id，保持首次出现的顺序（调用方传入的集合可能是无序的）。
+// dedupeIDs removes duplicate deck ids and keeps first-occurrence order (the set the caller passes may be unordered).
 func dedupeIDs(ids []uint64) []uint64 {
 	out := make([]uint64, 0, len(ids))
 	seen := make(map[uint64]bool, len(ids))
@@ -615,7 +615,7 @@ func dedupeIDs(ids []uint64) []uint64 {
 	return out
 }
 
-// location 解析用户时区；未指定时按 Timezone 加载，加载失败退回 UTC（不阻塞复习）。
+// location resolves the user's timezone; when unspecified it is loaded from Timezone, falling back to UTC on failure (so review is never blocked).
 func (o QueueOptions) location() (*time.Location, error) {
 	if o.Location != nil {
 		return o.Location, nil
@@ -627,7 +627,7 @@ func (o QueueOptions) location() (*time.Location, error) {
 	return loc, nil
 }
 
-// now 返回观测时刻（UTC）。
+// now returns the observation instant (UTC).
 func (o QueueOptions) now() time.Time {
 	if o.Now.IsZero() {
 		return time.Now().UTC()
@@ -635,13 +635,13 @@ func (o QueueOptions) now() time.Time {
 	return o.Now.UTC()
 }
 
-// deckUsage 是一个卡组今日的用量：introduced 是今日引入的新卡数（state_before = 0），
-// reviewed 是今日的复习量（state_before <> 0），二者不建计数表，从 reviews 聚合；
-// extraNew 是今天「再来一组」追加的新卡额度（store.DeckDailyExtra）。
+// deckUsage is a deck's usage today: introduced is the number of new cards introduced today (state_before = 0),
+// reviewed is today's review volume (state_before <> 0); neither uses a counter table, both are aggregated from reviews;
+// extraNew is the new-card allowance added today by "another round" (store.DeckDailyExtra).
 type deckUsage struct{ introduced, reviewed, extraNew int }
 
-// loadDeckCaps 读取 userID 在各卡组上的每日上限：属主读卡组列，其他成员读自己的成员设置
-// （规则只在 store.StudySettingsFor 一处）。
+// loadDeckCaps reads userID's daily caps on each deck: the owner reads the deck columns, other members read their own member settings
+// (the rule lives only in store.StudySettingsFor).
 func (b *QueueBuilder) loadDeckCaps(ctx context.Context, userID uint64, deckIDs []uint64) (map[uint64]store.DeckCaps, error) {
 	var decks []store.Deck
 	if err := b.db.WithContext(ctx).Select("id", "owner_user_id", "preset_id", "new_per_day", "reviews_per_day").
@@ -659,9 +659,9 @@ func (b *QueueBuilder) loadDeckCaps(ctx context.Context, userID uint64, deckIDs 
 	return out, nil
 }
 
-// countUsage 按 (user_id, review_day) 从 reviews 聚合各卡组今日用量，一次分组查询取回，
-// 再并入同一复习日的追加新卡额度。新卡统计 state_before = 0，复习统计 state_before <> 0；
-// 额度是卡组级的，所以必须按卡组分组（new_per_day/reviews_per_day 定义在卡组上）。
+// countUsage aggregates each deck's usage today from reviews by (user_id, review_day), fetched in one grouped query,
+// then merges in the added new-card allowance for the same review day. New cards count state_before = 0, reviews count state_before <> 0;
+// allowances are deck-level, so the grouping must be by deck (new_per_day/reviews_per_day are defined on the deck).
 func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string, deckIDs []uint64) (map[uint64]deckUsage, error) {
 	var rows []struct {
 		DeckID     uint64 `gorm:"column:deck_id"`
@@ -696,10 +696,10 @@ func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string
 	return out, nil
 }
 
-// stateFrom 是学习卡与复习卡共用的 FROM 与筛选：只取未软删除且未暂停的卡，
-// 并 join 到未软删除的 note 上（与 CardStore 的可见性规则一致）。不带 SELECT，
-// 取行（baseStateQuery）与计数（countByDeck）各自补上。
-// deckIDs 是已解析的范围集合，总是非空（空集合在调用方提前返回）；tags 为空表示不按标签过滤。
+// stateFrom is the FROM and filters shared by learning and review cards: only cards that are neither soft-deleted nor suspended,
+// joined to notes that are not soft-deleted (consistent with CardStore's visibility rules). It carries no SELECT;
+// row fetching (baseStateQuery) and counting (countByDeck) each add their own.
+// deckIDs is the already-resolved scope set and is always non-empty (an empty set returns early in the caller); empty tags mean no tag filtering.
 func (b *QueueBuilder) stateFrom(ctx context.Context, userID uint64, deckIDs []uint64, tags []string) *gorm.DB {
 	q := b.db.WithContext(ctx).Table("card_states AS cs").
 		Joins("JOIN cards AS cards ON cards.id = cs.card_id AND cards.deleted_at IS NULL").
@@ -710,7 +710,7 @@ func (b *QueueBuilder) stateFrom(ctx context.Context, userID uint64, deckIDs []u
 	return store.WhereNoteTagsAny(q, tags)
 }
 
-// baseStateQuery 在 stateFrom 上补齐取行所需的列。
+// baseStateQuery adds the columns needed for row fetching on top of stateFrom.
 func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckIDs []uint64, tags []string) *gorm.DB {
 	return b.stateFrom(ctx, userID, deckIDs, tags).
 		Select("cs.card_id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, " +
@@ -718,19 +718,19 @@ func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckID
 			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
 }
 
-// learningDueWhere 限定为学习/再学习阶段且已到期的卡。
+// learningDueWhere restricts to due cards in the learning/relearning phase.
 func learningDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
 	return q.Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
 		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
 }
 
-// reviewDueWhere 限定为复习阶段且已到期的卡。
+// reviewDueWhere restricts to due cards in the review phase.
 func reviewDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
 	return q.Where("cs.state = ?", StateReview.String()).
 		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
 }
 
-// learningDue 取学习/再学习阶段且已到期的卡，按到期时间升序。
+// learningDue fetches due cards in the learning/relearning phase, in ascending due time.
 func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.Time, deckIDs []uint64, tags []string) ([]QueueItem, error) {
 	var rows []stateRow
 	err := learningDueWhere(b.baseStateQuery(ctx, userID, deckIDs, tags), now).
@@ -742,8 +742,8 @@ func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.
 	return rowsToItems(rows, QueueLearning, now)
 }
 
-// reviewDueDeck 取单个卡组到期的复习卡，按 due_at 升序，最多 limit 张。
-// 逐卡组取是为把各卡组自己的 reviews_per_day 落进 SQL 的 LIMIT；合并后的全局排序交给调用方。
+// reviewDueDeck fetches a single deck's due review cards, ascending by due_at, at most limit rows.
+// Fetching deck by deck is how each deck's own reviews_per_day lands in the SQL LIMIT; the global sort after merging is up to the caller.
 func (b *QueueBuilder) reviewDueDeck(ctx context.Context, userID uint64, now time.Time, deckID uint64, tags []string, limit int) ([]dueReview, error) {
 	var rows []stateRow
 	err := reviewDueWhere(b.baseStateQuery(ctx, userID, []uint64{deckID}, tags), now).
@@ -764,11 +764,11 @@ func (b *QueueBuilder) reviewDueDeck(ctx context.Context, userID uint64, now tim
 	return out, nil
 }
 
-// newCardOrder 是新卡伪随机抽取的排序键参数（见 sortKeySQL）。
+// newCardOrder holds the sort-key parameters for pseudo-random new-card drawing (see sortKeySQL).
 //
-// 为什么在 SQL 里排序而不是取回后打乱：每日上限要落进 LIMIT，若先按创建顺序 LIMIT 再在内存里
-// 打乱，被抽中的永远是最早创建的那几张，「随机」只改变了当天的出场顺序。参数随 (用户, 复习日)
-// 的随机源变化，因此每个复习日抽到的集合不同。
+// Why sort in SQL rather than shuffle after fetching: the daily cap has to land in the LIMIT, and if you LIMIT by creation order first and then shuffle in memory,
+// the cards drawn will always be the earliest created ones, so "random" would only change the presentation order that day. The parameters vary with the random source of
+// (user, review day), so the set drawn differs on each review day.
 type newCardOrder struct {
 	Mul1 int64
 	Add  int64
@@ -777,7 +777,7 @@ type newCardOrder struct {
 
 const newCardOrderModulus = int64(1) << 31
 
-// randomNewCardOrder 从随机源取一组排序键参数；两个乘数强制为奇数。
+// randomNewCardOrder draws a set of sort-key parameters from the random source; both multipliers are forced odd.
 func randomNewCardOrder(rng *rand.Rand) *newCardOrder {
 	return &newCardOrder{
 		Mul1: rng.Int63n(newCardOrderModulus/2)*2 + 1,
@@ -786,15 +786,15 @@ func randomNewCardOrder(rng *rand.Rand) *newCardOrder {
 	}
 }
 
-// sortKeySQL 返回按 cards.id 计算的排序键表达式，形如一个小型整数哈希：
+// sortKeySQL returns a sort-key expression computed from cards.id, shaped like a small integer hash:
 //
 //	h1  = ((id mod 2^31) × Mul1 + Add) mod 2^31
-//	h2  = h1 xor (h1 / 2^16)          // xor 写成 (a|b) − (a&b)，两库都只有 | 与 &
+//	h2  = h1 xor (h1 / 2^16)          // xor is written as (a|b) − (a&b); both databases only have | and &
 //	key = (h2 × Mul2) mod 2^31
 //
-// 只用乘加取模时，连续的小 id 得到等差数列，排序几乎还是创建顺序；中间的异或打破线性。
-// 三步在 [0, 2^31) 上都是双射（乘数为奇数），所以不会出现并列；每一步乘积都小于 2^62，
-// 两库都不会溢出。表达式里只有本函数生成的整数，没有任何外部输入。
+// With only multiply-add-modulo, consecutive small ids form an arithmetic sequence and the ordering is still essentially creation order; the xor in the middle breaks the linearity.
+// All three steps are bijective on [0, 2^31) (odd multipliers), so no ties occur; every product is below 2^62,
+// so neither database overflows. The expression contains only integers generated by this function, with no external input at all.
 func (o *newCardOrder) sortKeySQL() string {
 	m := newCardOrderModulus
 	h1 := fmt.Sprintf("(((cards.id %% %d) * %d + %d) %% %d)", m, o.Mul1, o.Add, m)
@@ -803,17 +803,17 @@ func (o *newCardOrder) sortKeySQL() string {
 	return fmt.Sprintf("((%s * %d) %% %d)", h2, o.Mul2, m)
 }
 
-// newCardsDeck 取单个卡组的新卡：order 为 nil 时按创建顺序，否则按伪随机排序键。新卡的定义是
-// \"状态为 new\"，包括尚无 card_states 行的卡（LEFT JOIN），这样刚加到共享卡组、用户还没产生
-// 任何状态的行也能出现在队列里。已埋藏（due_at 被推到未来）的新卡不算本日新卡，因此额外要求
-// due_at 未在未来。limit 为 deckUnlimited 时不设 LIMIT。
+// newCardsDeck fetches a single deck's new cards: creation order when order is nil, otherwise the pseudo-random sort key. A new card is defined as
+// "state is new", including cards with no card_states row yet (LEFT JOIN), so rows just added to a shared deck for which the user has produced
+// no state yet can still appear in the queue. A buried new card (due_at pushed into the future) does not count as today's new card, hence the extra requirement that
+// due_at is not in the future. No LIMIT is set when limit is deckUnlimited.
 func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID uint64, tags []string, limit int, now time.Time, order *newCardOrder) ([]QueueItem, error) {
 	q := b.newCardsFrom(ctx, userID, []uint64{deckID}, tags, now).
 		Select("cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, " +
 			"COALESCE(cs.state, 'new') AS state, cs.due_at AS due_at, cs.stability AS stability, " +
 			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
 	if order != nil {
-		// 必须包成 clause.OrderBy：GORM 的 Order 对裸 clause.Expr 静默忽略，不报错也不排序。
+		// It must be wrapped in clause.OrderBy: GORM's Order silently ignores a bare clause.Expr — no error, no sorting.
 		q = q.Order(clause.OrderBy{Expression: clause.Expr{SQL: order.sortKeySQL() + ", cards.id ASC"}})
 	} else {
 		q = q.Order("cards.created_at ASC, cards.id ASC")
@@ -828,8 +828,8 @@ func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID u
 	return rowsToItems(rows, QueueNew, now)
 }
 
-// newCardsFrom 是新卡的 FROM 与筛选（取行与计数共用）：状态为 new 的卡，包括尚无
-// card_states 行的卡；已埋藏（due_at 在未来）的新卡排除。tags 为空表示不按标签过滤。
+// newCardsFrom is the FROM and filters for new cards (shared by row fetching and counting): cards whose state is new, including those with no
+// card_states row; buried new cards (due_at in the future) are excluded. Empty tags mean no tag filtering.
 func (b *QueueBuilder) newCardsFrom(ctx context.Context, userID uint64, deckIDs []uint64, tags []string, now time.Time) *gorm.DB {
 	q := b.db.WithContext(ctx).Table("cards AS cards").
 		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
@@ -841,7 +841,7 @@ func (b *QueueBuilder) newCardsFrom(ctx context.Context, userID uint64, deckIDs 
 	return store.WhereNoteTagsAny(q, tags)
 }
 
-// rowToItem 把一行查询结果转成队列项；now 用于补齐新卡缺失的到期时间。
+// rowToItem turns one query row into a queue item; now fills in the missing due time of new cards.
 func rowToItem(row stateRow, kind QueueKind, now time.Time) (QueueItem, error) {
 	state, err := ParseState(row.State)
 	if err != nil {
@@ -861,7 +861,7 @@ func rowToItem(row stateRow, kind QueueKind, now time.Time) (QueueItem, error) {
 	}, nil
 }
 
-// rowsToItems 把查询结果转成队列项；now 用于补齐新卡缺失的到期时间。
+// rowsToItems turns query results into queue items; now fills in the missing due time of new cards.
 func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, error) {
 	items := make([]QueueItem, 0, len(rows))
 	for _, row := range rows {
@@ -874,12 +874,12 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 	return items, nil
 }
 
-// ReviewDay 按用户本地时间与切点计算复习日（YYYY-MM-DD）：本地时间减去 day_cutoff_hour 后取日期，
-// 因此切点之前的凌晨时刻算作前一天。
+// ReviewDay computes the review day (YYYY-MM-DD) from the user's local time and the cutoff: take the date after subtracting day_cutoff_hour from local time,
+// so early-morning instants before the cutoff count as the previous day.
 //
-// 已解析切点只对越界回退默认 4，午夜 0 保留，与 store.ReviewDayString 同口径：
-// 复习日的写入（本包提交/埋藏）与读取（统计/连续天数/提醒/摘要）必须落在同一天，否则同一个
-// 用户在两侧会看到不同的「今天」。可空用户配置先经 ResolveCutoff 解析，计算函数只收有效小时。
+// The resolved cutoff only falls back to the default 4 when out of range, and midnight 0 is preserved — the same semantics as store.ReviewDayString:
+// writes of the review day (this package's submit/bury) and reads (stats/streak/reminder/digest) must land on the same day, otherwise the same
+// user would see a different "today" on the two sides. Nullable user settings are resolved via ResolveCutoff first; the computation function takes only a valid hour.
 func ReviewDay(now time.Time, loc *time.Location, cutoffHour int) string {
 	if loc == nil {
 		loc = time.UTC

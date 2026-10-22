@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestReviewPageTagScope 覆盖复习页地址上的标签范围：单卡组带标签放行；没有卡组或跨多个卡组时
-// 带标签返回 400，不静默忽略标签。
+// TestReviewPageTagScope covers the tag scope on the review page URL: a single deck with a tag is let through; with no deck or across several decks,
+// carrying a tag returns 400 instead of silently ignoring the tag.
 func TestReviewPageTagScope(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deckA := seedReviewDeck(t, db, ownerID, "Idioms A")
@@ -33,8 +33,8 @@ func TestReviewPageTagScope(t *testing.T) {
 	}
 }
 
-// TestReviewAnswerKeepsTagScope 断言评分后重建的队列沿用请求里的标签：只剩带该标签的卡，
-// 不会退化成整个卡组。
+// TestReviewAnswerKeepsTagScope asserts the queue rebuilt after a grade keeps the tags from the request: only cards with that tag remain,
+// and it does not degrade to the whole deck.
 func TestReviewAnswerKeepsTagScope(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Idioms")
@@ -64,8 +64,8 @@ func TestReviewAnswerKeepsTagScope(t *testing.T) {
 	}
 }
 
-// TestReviewActionsRejectTagsAcrossDecks 覆盖 JSON 动作入口的负例：带标签却跨多个卡组时 400，
-// 且不执行动作（埋藏不写 card_states）。
+// TestReviewActionsRejectTagsAcrossDecks covers the negative case of the JSON action entry points: a tag across several decks gives 400,
+// and the action is not performed (bury writes no card_states).
 func TestReviewActionsRejectTagsAcrossDecks(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deckA := seedReviewDeck(t, db, ownerID, "Idioms A")

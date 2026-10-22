@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// testEnv 把真实 SQLite、真实 store 与真实中间件串起来；不 mock 数据库（AGENTS.md §2.5）。
+// testEnv wires up real SQLite, real stores and the real middleware; the database is not mocked (AGENTS.md §2.5).
 type testEnv struct {
 	router   *gin.Engine
 	manager  *Manager
@@ -25,7 +25,7 @@ type testEnv struct {
 	db       *gorm.DB
 }
 
-// newTestEnv 默认只装会话中间件；CSRF 由需要它的测试用 buildRouter 追加。
+// newTestEnv installs only the session middleware by default; CSRF is appended by tests that need it via buildRouter.
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{})
@@ -54,7 +54,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	return e
 }
 
-// buildRouter 用给定中间件链装配同一组测试路由；调用方可按需插入 CSRF。
+// buildRouter assembles the same set of test routes with the given middleware chain; callers can insert CSRF as needed.
 func (e *testEnv) buildRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	router.Use(middleware...)
@@ -75,7 +75,7 @@ func (e *testEnv) buildRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	return router
 }
 
-// createUser 建一个可用于登录的活跃用户。
+// createUser creates an active user that can log in.
 func (e *testEnv) createUser(t *testing.T, username string) *store.User {
 	t.Helper()
 	u, err := e.accounts.CreateLocalUser(context.Background(), CreateUserInput{
@@ -89,7 +89,7 @@ func (e *testEnv) createUser(t *testing.T, username string) *store.User {
 	return u
 }
 
-// startSession 通过真实的 StartSession 拿会话并捕获 Set-Cookie。
+// startSession obtains a session through the real StartSession and captures Set-Cookie.
 func (e *testEnv) startSession(t *testing.T, userID uint64) (string, *store.Session) {
 	t.Helper()
 	rec := httptest.NewRecorder()
@@ -108,13 +108,13 @@ func (e *testEnv) startSession(t *testing.T, userID uint64) (string, *store.Sess
 	return "", nil
 }
 
-// do 用给定 cookie 值向默认路由（无 CSRF）发一个请求。
+// do sends one request to the default route (no CSRF) with the given cookie value.
 func (e *testEnv) do(t *testing.T, method, path, cookieValue string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	return doOn(e.router, e.manager.CookieName(), method, path, cookieValue, headers)
 }
 
-// doOn 向指定路由发请求；抽出共享逻辑供带 CSRF 的路由复用。
+// doOn sends a request to the specified route; the shared logic is factored out for reuse by routes with CSRF.
 func doOn(router *gin.Engine, cookieName, method, path, cookieValue string, headers map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	if cookieValue != "" {
@@ -160,21 +160,21 @@ func TestSessionRejectsTamperedCookie(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "bob")
 	value, _ := e.startSession(t, u.ID)
-	// 篡改会话 ID 的首字符后必须被当成匿名。
+	// Tampering with the first character of the session ID must be treated as anonymous.
 	//
-	// 不能用"改最后一个字符"来篡改：签名是 32 字节 HMAC，其 base64url 编码的最后
-	// 一位只承载 4 个有效位，剩下 2 位是填充；把末位换成"高 4 位相同"的字符（例如
-	// 原本是 'U' 时换成 'X'）解码出的签名字节完全一致，篡改等于没改，请求依旧 200。
-	// 该末位取值为 16 个合法字符之一，因此旧写法约有 1/16 的概率随机失败——这是
-	// 与数据库无关的用例缺陷。改 ID 一定让 HMAC 失配，结果确定。
+	// "Change the last character" cannot be used to tamper: the signature is a 32-byte HMAC whose base64url encoding has a final
+	// character carrying only 4 significant bits, with the remaining 2 bits as padding; replacing the last character with one whose
+	// "top 4 bits are identical" (e.g. 'X' in place of 'U') decodes to exactly the same signature bytes, so the tampering amounts to nothing and the request still gets 200.
+	// That position takes one of 16 legal characters, so the old wording failed at random roughly 1 time in 16 — a
+	// case defect unrelated to the database. Changing the ID always breaks the HMAC, so the result is deterministic.
 	tampered := tamperSessionCookie(value)
 	if rec := e.do(t, http.MethodGet, "/me", tampered, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("tampered cookie status = %d, want 401", rec.Code)
 	}
 }
 
-// tamperSessionCookie 把 cookie 值的首字符换成另一个 base64url 字符：
-// 首字符属于会话 ID，改动后 HMAC 必然对不上原签名，等价于一次确定的篡改。
+// tamperSessionCookie replaces the first character of the cookie value with another base64url character:
+// the first character belongs to the session ID, so the HMAC necessarily no longer matches the original signature — a guaranteed tampering.
 func tamperSessionCookie(value string) string {
 	if value == "" {
 		return "A"
@@ -197,7 +197,7 @@ func TestSessionProtectedRoute(t *testing.T) {
 	}
 }
 
-// TestDisabledUserSessionRejected 是验收反面用例：禁用后下一次请求即被拒。
+// TestDisabledUserSessionRejected is the negative acceptance case: after disabling, the next request is rejected.
 func TestDisabledUserSessionRejected(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "dave")
@@ -213,12 +213,12 @@ func TestDisabledUserSessionRejected(t *testing.T) {
 	}
 }
 
-// TestDisabledStatusAloneRejectsSession 证明即便会话行未被显式撤销，中间件也会因用户状态而拒绝。
+// TestDisabledStatusAloneRejectsSession proves that the middleware rejects on user status even when the session row was not explicitly revoked.
 func TestDisabledStatusAloneRejectsSession(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "erin")
 	value, _ := e.startSession(t, u.ID)
-	// 直接改状态，绕过 RevokeAllForUser，验证中间件的实时状态检查。
+	// Change the status directly, bypassing RevokeAllForUser, to verify the middleware's live status check.
 	if err := e.db.Model(&store.User{}).Where("id = ?", u.ID).
 		Update("status", store.StatusDisabled).Error; err != nil {
 		t.Fatalf("update status: %v", err)

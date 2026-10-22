@@ -11,12 +11,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// pngBytes 是一段带 PNG 签名的字节，足以让 magic bytes 探测通过。
+// pngBytes is a byte sequence with a PNG signature, enough to pass magic byte detection.
 func pngBytes() []byte {
 	return append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte("fake-image-body")...)
 }
 
-// gifBytes 是一段带 GIF89a 签名的字节。
+// gifBytes is a byte sequence with a GIF89a signature.
 func gifBytes() []byte { return []byte("GIF89a fake body") }
 
 func newTestStore(t *testing.T) *Store {
@@ -35,7 +35,7 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
-// TestSaveDeduplicatesBySha256 是核心验收：同一文件上传两次只存一份。
+// TestSaveDeduplicatesBySha256 is the core acceptance: uploading the same file twice stores only one copy.
 func TestSaveDeduplicatesBySha256(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestSaveDeduplicatesBySha256(t *testing.T) {
 	if rows != 1 {
 		t.Errorf("media rows = %d, want 1", rows)
 	}
-	// 磁盘上只应有一个数据文件（tmp 目录为空）。
+	// There should be only one data file on disk (the tmp directory is empty).
 	entries, err := os.ReadDir(filepath.Join(s.Root(), first.Sha256[:2]))
 	if err != nil {
 		t.Fatalf("read shard dir: %v", err)
@@ -70,7 +70,7 @@ func TestSaveDeduplicatesBySha256(t *testing.T) {
 	}
 }
 
-// TestSaveRejectsOversized 覆盖超大文件被拒且返回稳定错误码。
+// TestSaveRejectsOversized covers an oversized file being rejected with a stable error code.
 func TestSaveRejectsOversized(t *testing.T) {
 	s := newTestStore(t)
 	body := bytes.Repeat([]byte("x"), 100)
@@ -82,7 +82,7 @@ func TestSaveRejectsOversized(t *testing.T) {
 	}
 }
 
-// TestSaveRejectsMagicMismatch 覆盖声明类型与魔数不符被拒。
+// TestSaveRejectsMagicMismatch covers a declared type not matching the magic number being rejected.
 func TestSaveRejectsMagicMismatch(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.Save(context.Background(), bytes.NewReader([]byte("this is not an image")), SaveOptions{
@@ -93,7 +93,7 @@ func TestSaveRejectsMagicMismatch(t *testing.T) {
 	}
 }
 
-// TestSaveRejectsDisallowedMime 覆盖探测到的类型不在白名单内被拒。
+// TestSaveRejectsDisallowedMime covers a detected type not on the allowlist being rejected.
 func TestSaveRejectsDisallowedMime(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.Save(context.Background(), bytes.NewReader(gifBytes()), SaveOptions{
@@ -105,7 +105,7 @@ func TestSaveRejectsDisallowedMime(t *testing.T) {
 	}
 }
 
-// TestOpenReturnsStoredBytes 断言读回的就是写进去的字节。
+// TestOpenReturnsStoredBytes asserts that what is read back is exactly the bytes that were written.
 func TestOpenReturnsStoredBytes(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

@@ -11,16 +11,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 B 类协作邮件里与卡组共享有关的两类：
+// This file covers the two kinds of class B collaboration mail related to deck sharing:
 //
-//	deck_shared              —— 有人把卡组分享给你
-//	deck_permission_changed   —— 你在某个卡组里的权限被改动或被撤销
+//	deck_shared              —— someone shared a deck with you
+//	deck_permission_changed  —— your permission on a deck was changed or revoked
 //
-// 三条纪律：**不发给自己**（操作者不需要收到「我分享给了你」）、尊重收件人的偏好、任何失败
-// 都只记日志——分享本身绝不能因为发信失败而失败。
+// Three rules: **never send to yourself** (the actor does not need to receive "I shared it with you"), respect the recipient's preferences, and any failure
+// is only logged — the sharing itself must never fail because of a mail failure.
 
-// deckMailType 判断这次变更该发哪一类：从「没有权限」变成「有权限」是分享，其余都是变更
-// （含撤销，此时 newRole 为空串）。
+// deckMailType decides which kind to send for this change: going from "no permission" to "has permission" is a share, everything else is a change
+// (including revocation, where newRole is an empty string).
 func deckMailType(previousRole, newRole string) mail.Type {
 	if previousRole == "" && newRole != "" {
 		return mail.TypeDeckShared
@@ -28,19 +28,19 @@ func deckMailType(previousRole, newRole string) mail.Type {
 	return mail.TypeDeckPermissionChanged
 }
 
-// notifyDeckGrantChange 在授权被新建、改动或撤销后通知被授权者。
+// notifyDeckGrantChange notifies the grantee after a grant is created, changed or revoked.
 //
-// 它刻意不返回错误：调用点是共享写路径，通知只是副作用。
+// It deliberately returns no error: the call site is the sharing write path, and notifying is only a side effect.
 func (s *Server) notifyDeckGrantChange(c *gin.Context, deck *store.Deck, actor, target *store.User, previousRole, newRole string) {
 	if s == nil || deck == nil || actor == nil || target == nil {
 		return
 	}
 	if target.ID == actor.ID {
-		// 自己改自己的权限（含属主操作自己）没有通知价值。
+		// Changing your own permission (including the owner acting on themselves) has no notification value.
 		return
 	}
 	if s.mail == nil || !s.mail.Configured() {
-		// 未配置 SMTP 时说一声就够：共享操作本身已经成功，用户不需要在这里看到「邮件未发送」。
+		// When SMTP is unconfigured a note is enough: the sharing operation itself already succeeded, and the user does not need to see "mail not sent" here.
 		s.logger.Info("deck mail: smtp is not configured; notification skipped", "deck_id", deck.ID)
 		return
 	}
@@ -63,13 +63,13 @@ func (s *Server) notifyDeckGrantChange(c *gin.Context, deck *store.Deck, actor, 
 	}
 }
 
-// deckGrantMessage 组装分享/权限变更邮件。默认正文是纯文本；管理员配了模板才产出 HTML 段。
+// deckGrantMessage assembles the share/permission-change mail. The default body is plain text; an HTML part is produced only when the admin configured a template.
 func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to string, typ mail.Type,
 	inviter, deck, role, link, unsubURL string) mail.Message {
 	site := securitySiteName(loc)
 	roleLabel := roleLabelFor(loc, role)
-	// 撤销时 role 为空：邮件要说「被取消了访问」，而不是「权限改成了空」。该判定现在
-	// 住在 mail.DefaultTemplate 里（它按变量 role 判定），所以这里不再自己算一遍。
+	// On revocation role is empty: the mail must say "access was revoked", not "permission was changed to empty". That decision now
+	// lives in mail.DefaultTemplate (which decides by the role variable), so it is no longer recomputed here.
 
 	vars := mail.Vars{
 		"site": site, "inviter": inviter, "actor": inviter,
@@ -79,8 +79,8 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 		vars["unsubscribe_url"] = unsubURL
 	}
 
-	// 内置正文取自 mail.DefaultTemplate：管理页预填的「默认」与这里发出去的是同一份文本。
-	// 撤销时 roleLabel 为空，那一支由函数按变量自行判定（不另设参数）。
+	// The built-in body comes from mail.DefaultTemplate: the "default" pre-filled on the admin page and what is sent here are the same text.
+	// On revocation roleLabel is empty, and that branch is decided by the function from the variable itself (no separate parameter).
 	fallbackSubject, fallbackText, _ := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, vars)
 
 	footerNote, unsubLabel := "", ""
@@ -106,7 +106,7 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 	return msg
 }
 
-// roleLabelFor 把 reader/editor 这类标识翻成收件人语言；未知值原样返回（不外泄空串）。
+// roleLabelFor translates identifiers like reader/editor into the recipient's language; unknown values are returned as-is (never leaking an empty string).
 func roleLabelFor(loc *i18n.Localizer, role string) string {
 	switch strings.TrimSpace(role) {
 	case store.RoleReader:
@@ -118,7 +118,7 @@ func roleLabelFor(loc *i18n.Localizer, role string) string {
 	}
 }
 
-// notifyDeckRevoke 在撤销授权后通知被撤销者；被撤销的用户已经查不到了就静默跳过。
+// notifyDeckRevoke notifies the revoked user after a grant is revoked; if the revoked user can no longer be found it is skipped silently.
 func (s *Server) notifyDeckRevoke(c *gin.Context, deck *store.Deck, actor *store.User, targetID uint64, previousRole string) {
 	if s == nil || s.users == nil || deck == nil || actor == nil || targetID == 0 {
 		return

@@ -8,21 +8,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件实现「回溯校验」：把统计页展示的数字与直接从原始表
-// （reviews / card_states / cards / notes）重算出来的数字逐一对照，任何漂移都被
-// 指名道姓地报出来，而不是靠嘴争论。
+// This file implements the "retro check": every number the stats page shows is compared one by one against
+// the number recomputed directly from the raw tables (reviews / card_states / cards / notes), and any drift is
+// named outright rather than argued over.
 //
-// 与 stats_test.go 的关系：那些用例把聚合函数与「一条手工 SQL」对拍，但期望值仍写死在
-// 测试里；回溯校验是运行期可复用的第二实现——它同样从原始表出发，但不经过 StatsStore
-// 的任何聚合函数，因此能在真实库上重放（cmd 工具或 `go test -run Retro`）。
+// Relationship to stats_test.go: those cases cross-check the aggregate functions against "one hand-written SQL", but the expected values are still hard-coded
+// in the test; the retro check is a second implementation reusable at runtime -- it likewise starts from the raw tables but goes through none of
+// StatsStore's aggregate functions, so it can be replayed on a real database (a cmd tool or `go test -run Retro`).
 //
-// 覆盖范围：复习量、到期量（含新卡未到期）、留存（总数/通过数）、时间投入、连续打卡、
-// 学习曲线（新引入/复习合计）、卡组维度（复习数/到期数/累计耗时合计）。
-// 未覆盖：标签维度与判分来源分布——它们的口径依赖 tags_json 解码与任意来源分组，
-// 已由 stats_test.go 的手工 SQL 用例覆盖，此处不重复。
+// Coverage: review volume, due volume (new cards not yet due included), retention (total/passed), time invested, streak,
+// learning curve (newly introduced/review totals), deck dimension (review count/due count/total elapsed time).
+// Not covered: the tag dimension and the grading-source distribution -- their definition depends on decoding tags_json and grouping by arbitrary source,
+// which stats_test.go's hand-written SQL cases already cover, so it is not duplicated here.
 
-// PageNumbers 是统计页会直接展示的标量数字集合，每个统计指标取一个有代表性的
-// 标量；列表型结果（分桶、每卡组、每标签）在这里取合计值，避免逐行比对而让校验脆弱。
+// PageNumbers is the set of scalar numbers the stats page displays directly; each metric contributes one representative
+// scalar, and list-shaped results (buckets, per-deck, per-tag) contribute their total here, so the check is not made fragile by row-by-row comparison.
 type PageNumbers struct {
 	ReviewToday int64
 	Review7d    int64
@@ -48,9 +48,9 @@ type PageNumbers struct {
 	DeckElapsedMS int64
 }
 
-// PageNumbersFromStats 走统计页使用的同一条代码路径（StatsStore 的聚合函数）构造数字，
-// 与 RecomputePageNumbers 的原始表重算互为对照。today/fromDay/toDay 是 review_day 格式
-// 的闭区间，now/loc/cutoffHour 决定到期与连续打卡的日边界。
+// PageNumbersFromStats builds the numbers along the same code path the stats page uses (StatsStore's aggregate functions),
+// as the counterpart to RecomputePageNumbers' raw-table recomputation. today/fromDay/toDay are review_day-format
+// inclusive bounds, and now/loc/cutoffHour determine the day boundaries for due counts and the streak.
 func PageNumbersFromStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, today, fromDay, toDay string, loc *time.Location, cutoffHour int) (PageNumbers, error) {
 	s := NewStatsStore(db)
 	vol, err := s.ReviewVolume(ctx, userID, today)
@@ -107,8 +107,8 @@ func PageNumbersFromStats(ctx context.Context, db *gorm.DB, userID uint64, now t
 	return p, nil
 }
 
-// RecomputePageNumbers 只用原始表上的 SQL 重算同一组数字，刻意不调用 StatsStore：
-// 它是独立第二实现，聚合函数一旦被改坏（或口径漂移）就会与这里的重算结果不一致。
+// RecomputePageNumbers recomputes the same set of numbers using only SQL over the raw tables, deliberately not calling StatsStore:
+// it is the independent second implementation, so once an aggregate function is broken (or its definition drifts) it disagrees with this recomputation.
 func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, today, fromDay, toDay string, loc *time.Location, cutoffHour int) (PageNumbers, error) {
 	var p PageNumbers
 	if userID == 0 {
@@ -121,7 +121,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	from7 := day.AddDate(0, 0, -6).Format("2006-01-02")
 	from30 := day.AddDate(0, 0, -29).Format("2006-01-02")
 
-	// 复习量：按 review_day 直接数行。
+	// Review volume: count rows directly by review_day.
 	if err := db.WithContext(ctx).Raw(`SELECT
 		COALESCE(SUM(CASE WHEN review_day = ? THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN review_day >= ? AND review_day <= ? THEN 1 ELSE 0 END), 0),
@@ -132,9 +132,9 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: review volume: %w", err)
 	}
 
-	// 到期与新增：日边界与队列一致（复习日起点 04:00，本地）。
-	// 两条都以「可见卡组」为范围，与 StatsStore.DueForecast 同一谓词（visibleDeckIDsQuery）；
-	// 少了它，别人 private 卡组里没有状态行的卡会被算成「新卡未到期」。
+	// Due and new: the day boundary matches the queue (the review day starts at 04:00, local).
+	// Both are scoped to "visible decks", the same predicate as StatsStore.DueForecast (visibleDeckIDsQuery);
+	// without it, cards in someone else's private deck with no state row would be counted as "new cards not yet due".
 	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
 		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
@@ -155,7 +155,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: new not due: %w", err)
 	}
 
-	// 留存：到期复习（state_before=Review）里评分非 Again 的比例，只计 stability 非空的行。
+	// Retention: the share of due reviews (state_before=Review) rated something other than Again, counting only rows with a non-null stability.
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(r.id),
 		COALESCE(SUM(CASE WHEN r.rating <> 1 THEN 1 ELSE 0 END), 0)
 		FROM reviews r
@@ -166,14 +166,14 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: retention: %w", err)
 	}
 
-	// 时间投入：区间内 elapsed_ms 的总和与样本数。
+	// Time invested: the sum and the sample count of elapsed_ms within the window.
 	if err := db.WithContext(ctx).Raw(`SELECT COALESCE(SUM(elapsed_ms), 0), COUNT(elapsed_ms)
 		FROM reviews WHERE user_id = ? AND elapsed_ms IS NOT NULL AND review_day >= ? AND review_day <= ?`,
 		userID, fromDay, toDay).Row().Scan(&p.TimeTotalMS, &p.TimeCount); err != nil {
 		return p, fmt.Errorf("retro check: time spent: %w", err)
 	}
 
-	// 学习曲线合计：新引入（state_before=New）与复习量互斥相加。
+	// Learning curve totals: newly introduced (state_before=New) plus review volume, the two being mutually exclusive.
 	if err := db.WithContext(ctx).Raw(`SELECT
 		COALESCE(SUM(CASE WHEN state_before = 0 THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN state_before <> 0 THEN 1 ELSE 0 END), 0)
@@ -182,7 +182,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: learning curve: %w", err)
 	}
 
-	// 卡组维度合计。两条同样以可见卡组为范围（与 StatsStore.DeckBreakdown 一致）。
+	// Deck-dimension totals. Both are likewise scoped to visible decks (matching StatsStore.DeckBreakdown).
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(c.id) FROM cards c
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
@@ -203,7 +203,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: deck reviews: %w", err)
 	}
 
-	// 连续打卡：直接取不同复习日再跑同一套相邻判定。
+	// Streak: take the distinct review days and run the same adjacency test on them.
 	var days []string
 	if err := db.WithContext(ctx).Raw(`SELECT DISTINCT review_day FROM reviews
 		WHERE user_id = ? AND review_day <= ? ORDER BY review_day ASC`, userID, today).
@@ -214,8 +214,8 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	return p, nil
 }
 
-// streakFromDays 与 StatsStore.Streak 的口径一致：相邻复习日才算连续；当前连续段只在
-// 最后一天是今天或昨天时成立。抽成自由函数，让重算路径不依赖聚合方法。
+// streakFromDays matches StatsStore.Streak's definition: only adjacent review days count as consecutive; the current streak holds only when
+// the last day is today or yesterday. It is a free function so the recompute path does not depend on an aggregate method.
 func streakFromDays(days []string, today string) (current, longest int) {
 	if len(days) == 0 {
 		return 0, 0
@@ -244,8 +244,8 @@ func streakFromDays(days []string, today string) (current, longest int) {
 	return current, longest
 }
 
-// DiffPageNumbers 逐字段比较，返回漂移描述；一致时返回空切片。每一项都指名是哪个数字，
-// 便于一眼看出是聚合坏了还是分组口径变了。
+// DiffPageNumbers compares field by field and returns drift descriptions; an empty slice when everything matches. Each item names the number,
+// so it is obvious at a glance whether an aggregate broke or a grouping definition changed.
 func DiffPageNumbers(page, raw PageNumbers) []string {
 	var drift []string
 	add := func(name string, a, b any) {
@@ -272,7 +272,7 @@ func DiffPageNumbers(page, raw PageNumbers) []string {
 	return drift
 }
 
-// RetroCheck 跑一遍完整回溯：页路径数字 vs 原始表重算。返回非空即表示统计页数字漂移。
+// RetroCheck runs a full retro pass: page-path numbers vs the raw-table recomputation. A non-empty return means the stats page numbers drifted.
 func RetroCheck(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, today, fromDay, toDay string, loc *time.Location, cutoffHour int) ([]string, error) {
 	page, err := PageNumbersFromStats(ctx, db, userID, now, today, fromDay, toDay, loc, cutoffHour)
 	if err != nil {

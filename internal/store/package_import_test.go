@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-// ---- 导入：往返一致 / 幂等 / 安全 / 进度归属 ----
+// ---- import: round-trip fidelity / idempotency / safety / progress ownership ----
 
-// TestImportRoundTripIdentical 断言导出→导入空库后 note 数/字段/标签完全一致，且二次导入不产生重复卡。
-// SQLite 与 PostgreSQL 各跑一遍，源库与目标库都是全新实例。
+// TestImportRoundTripIdentical asserts that after exporting and importing into an empty database the note count/fields/tags match exactly, and a second import creates no duplicate cards.
+// It runs once on SQLite and once on PostgreSQL, with fresh instances as both source and target.
 func TestImportRoundTripIdentical(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -56,7 +56,7 @@ func TestImportRoundTripIdentical(t *testing.T) {
 				t.Fatalf("formula not preserved: %s", formula.FieldsJSON)
 			}
 
-			// 二次导入同一包：不产生重复卡（默认 update 命中指纹）。
+			// Importing the same package a second time creates no duplicate cards (the default update matches on the fingerprint).
 			var cardsBefore int64
 			dst.Model(&Card{}).Where("note_id IN (SELECT id FROM notes WHERE deck_id = ?)", report.DeckID).Count(&cardsBefore)
 			report2, err := NewDeckStore(dst).ImportPackage(context.Background(), importer, bytes.NewReader(raw), PackageImportOptions{Target: fmt.Sprintf("into_deck:%d", report.DeckID)})
@@ -75,7 +75,7 @@ func TestImportRoundTripIdentical(t *testing.T) {
 	}
 }
 
-// TestImportRejectsUnsafeArchive 断言含路径穿越 / 软链的包被拒
+// TestImportRejectsUnsafeArchive asserts a package containing path traversal / symlinks is rejected
 func TestImportRejectsUnsafeArchive(t *testing.T) {
 	cases := []struct {
 		name string
@@ -101,8 +101,8 @@ func TestImportRejectsUnsafeArchive(t *testing.T) {
 	}
 }
 
-// TestReadPackageArchiveRejectsBomb 断言条目数超限的包被拒（防 zip bomb）。
-// 纯函数、不碰数据库，无需按驱动重跑。
+// TestReadPackageArchiveRejectsBomb asserts a package with too many entries is rejected (zip bomb defence).
+// Pure function, touches no database, so it needs no per-driver rerun.
 func TestReadPackageArchiveRejectsBomb(t *testing.T) {
 	files := map[string]string{}
 	for i := 0; i < 5; i++ {
@@ -116,7 +116,7 @@ func TestReadPackageArchiveRejectsBomb(t *testing.T) {
 	}
 }
 
-// TestImportUnknownKindListsEntries 断言未知 kind 报错并逐条列出出错的条目
+// TestImportUnknownKindListsEntries asserts an unknown kind errors and lists the offending entries one by one
 func TestImportUnknownKindListsEntries(t *testing.T) {
 	raw := buildZip(t, map[string]string{
 		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":2,"cards":0}}`,
@@ -138,7 +138,7 @@ func TestImportUnknownKindListsEntries(t *testing.T) {
 	}
 }
 
-// TestImportDiscardsOthersProgress 断言他人 progress.json 默认被丢弃并告知
+// TestImportDiscardsOthersProgress asserts someone else's progress.json is discarded by default and reported
 func TestImportDiscardsOthersProgress(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -165,7 +165,7 @@ func TestImportDiscardsOthersProgress(t *testing.T) {
 				t.Fatalf("other user got %d progress rows, want 0", states)
 			}
 
-			// 同一用户导入自己的包：进度被应用。
+			// The same user importing their own package: the progress is applied.
 			self := seedUsers(t, dst2, "pkg_prog_owner")[0]
 			report2, err := NewDeckStore(dst2).ImportPackage(context.Background(), self, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck})
 			if err != nil {
@@ -178,7 +178,7 @@ func TestImportDiscardsOthersProgress(t *testing.T) {
 	}
 }
 
-// TestImportDryRunWritesNothing 断言 dry_run 只计数、不写库（SQLite + PG）。
+// TestImportDryRunWritesNothing asserts dry_run only counts and writes nothing (SQLite + PG).
 func TestImportDryRunWritesNothing(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)

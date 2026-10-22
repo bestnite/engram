@@ -9,7 +9,7 @@ import {
 
 describe('i18n language resolution and formatting', () => {
   it('resolves locale following the documented priority hierarchy', () => {
-    // 优先级 1：URL 参数覆盖所有后续配置
+    // Priority 1: a URL param overrides every later source
     expect(
       resolveLocale({
         urlParam: 'en',
@@ -18,7 +18,7 @@ describe('i18n language resolution and formatting', () => {
       })
     ).toBe('en');
 
-    // 优先级 2：无 URL 参数时，已登录用户个人设置生效
+    // Priority 2: with no URL param, the signed-in user's own setting applies
     expect(
       resolveLocale({
         urlParam: null,
@@ -27,7 +27,7 @@ describe('i18n language resolution and formatting', () => {
       })
     ).toBe('en');
 
-    // 优先级 3：无 URL 参数且无用户设置时，跟随浏览器 Accept-Language/navigatorLang
+    // Priority 3: no URL param and no user setting — follow the browser's Accept-Language/navigatorLang
     expect(
       resolveLocale({
         urlParam: null,
@@ -44,7 +44,7 @@ describe('i18n language resolution and formatting', () => {
       })
     ).toBe('zh-CN');
 
-    // 优先级 4：没有任何可识别偏好时，退回站点默认 (zh-CN)
+    // Priority 4: no recognizable preference at all — fall back to the site default (zh-CN)
     expect(
       resolveLocale({
         urlParam: null,
@@ -58,11 +58,11 @@ describe('i18n language resolution and formatting', () => {
     expect(formatMessage('zh-CN', 'app.name')).toBe('Engram');
     expect(formatMessage('en', 'nav.today')).toBe('Today');
 
-    // 参数替换
+    // Param substitution
     const custom = formatMessage('zh-CN', 'shell.welcome');
     expect(custom).toBe('欢迎使用 Engram');
 
-    // 未知 key 原样回退
+    // An unknown key falls through unchanged
     expect(formatMessage('zh-CN', 'nonexistent.key')).toBe('nonexistent.key');
   });
 

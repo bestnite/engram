@@ -7,11 +7,11 @@ import (
 	"strconv"
 )
 
-// 本文件承载作答类题型的判分骨架：分数→评分档位映射、判分输入基类，
-// 以及 fields 的数值/整数读取辅助。七个具体题型在 typed.go / numeric.go /
-// choice.go / truefalse.go / cloze.go / list.go 中实现。
+// This file carries the grading skeleton for answer-based card types: the score→rating level mapping, the grading input base type,
+// and the numeric/integer read helpers for fields. The seven concrete card types are implemented in typed.go / numeric.go /
+// choice.go / truefalse.go / cloze.go / list.go.
 
-// FSRS 四档评分，与 reviews.rating 的整数约定一致。
+// The four FSRS rating levels, consistent with the integer convention of reviews.rating.
 const (
 	RatingAgain = 1
 	RatingHard  = 2
@@ -19,14 +19,14 @@ const (
 	RatingEasy  = 4
 )
 
-// GradeMapping 是「分数→评分档位」映射，以 JSON 存进 preset。
+// GradeMapping is the "score → rating level" mapping, stored as JSON in preset.
 //
-// 分数是 [0,1] 的正确率：1 = 全对，0 = 全错，其余为部分得分。默认映射是
-// 全对 = Good、部分对 = Hard、全错 = Again。把它放进 preset
-// 是为了按题型/卡组微调，例如把全对提到 Easy，或把部分对降成 Again。
+// The score is the [0,1] correctness rate: 1 = all correct, 0 = all wrong, anything between is a partial score. The default mapping is
+// all correct = Good, partially correct = Hard, all wrong = Again. Putting it in preset
+// is for tuning per card type / deck, for example promoting all correct to Easy, or demoting partially correct to Again.
 //
-// 阈值可选：score >= FullThreshold 判为全对，score <= NoneThreshold 判为全错，
-// 中间判为部分得分。阈值为零或负时回退到默认（全对阈值 1.0、全错阈值 0.0）。
+// Thresholds are optional: score >= FullThreshold counts as all correct, score <= NoneThreshold as all wrong,
+// and anything between as a partial score. A zero or negative threshold falls back to the default (full threshold 1.0, none threshold 0.0).
 type GradeMapping struct {
 	Version       int     `json:"version"`
 	Full          int     `json:"full"`
@@ -36,10 +36,10 @@ type GradeMapping struct {
 	NoneThreshold float64 `json:"none_threshold,omitempty"`
 }
 
-// GradeMappingVersion 是本包认识的映射结构版本；未知版本拒绝，避免静默误读。
+// GradeMappingVersion is the version of the mapping structure this package understands; unknown versions are rejected to avoid silent misreading.
 const GradeMappingVersion = 1
 
-// DefaultGradeMapping 返回默认映射：全对 Good、部分 Hard、全错 Again。
+// DefaultGradeMapping returns the default mapping: all correct Good, partial Hard, all wrong Again.
 func DefaultGradeMapping() GradeMapping {
 	return GradeMapping{
 		Version:       GradeMappingVersion,
@@ -51,8 +51,8 @@ func DefaultGradeMapping() GradeMapping {
 	}
 }
 
-// ParseGradeMapping 解析 preset 里的映射 JSON。空串（列为 NULL）回退到默认映射，
-// 这是「缺省回退」的唯一入口。
+// ParseGradeMapping parses the mapping JSON from preset. An empty string (column is NULL) falls back to the default mapping;
+// this is the only entry point for the "missing → default" fallback.
 func ParseGradeMapping(raw string) (GradeMapping, error) {
 	m := DefaultGradeMapping()
 	if raw == "" {
@@ -67,7 +67,7 @@ func ParseGradeMapping(raw string) (GradeMapping, error) {
 	return m.withDefaults(), nil
 }
 
-// MarshalGradeMapping 把映射编码为存库用的 JSON 文本。
+// MarshalGradeMapping encodes the mapping into the JSON text stored in the database.
 func MarshalGradeMapping(m GradeMapping) (string, error) {
 	if err := m.validate(); err != nil {
 		return "", err
@@ -79,7 +79,7 @@ func MarshalGradeMapping(m GradeMapping) (string, error) {
 	return string(b), nil
 }
 
-// withDefaults 补齐未设置（零值）的评分与阈值。
+// withDefaults fills in ratings and thresholds that were not set (zero value).
 func (m GradeMapping) withDefaults() GradeMapping {
 	d := DefaultGradeMapping()
 	if m.Version == 0 {
@@ -103,7 +103,7 @@ func (m GradeMapping) withDefaults() GradeMapping {
 	return m
 }
 
-// validate 校验评分取值与阈值次序；错误点名字段，便于调用方定位。
+// validate checks the rating values and threshold ordering; errors name the field so callers can locate it.
 func (m GradeMapping) validate() error {
 	if m.Version != 0 && m.Version != GradeMappingVersion {
 		return fmt.Errorf("grade mapping: unsupported version %d", m.Version)
@@ -120,7 +120,7 @@ func (m GradeMapping) validate() error {
 	return nil
 }
 
-// RatingFor 把 [0,1] 的分数映射为 1–4 的评分档位。分数越界时夹到 [0,1]。
+// RatingFor maps a score in [0,1] to a 1–4 rating level. An out-of-range score is clamped to [0,1].
 func (m GradeMapping) RatingFor(score float64) int {
 	n := m.withDefaults()
 	if math.IsNaN(score) {
@@ -135,21 +135,21 @@ func (m GradeMapping) RatingFor(score float64) int {
 	return n.Partial
 }
 
-// GradeContext 是作答类判分输入的公共部分：Fields 是 note 的字段（判分所需的
-// 正确答案、选项、容差规则都在里面），Mapping 是该题所属 preset 的映射（nil = 默认）。
+// GradeContext is the common part of an answer-based grading input: Fields are the note's fields (the correct answers, options and
+// tolerance rules needed for grading are in there), and Mapping is the mapping of the preset the card type belongs to (nil = default).
 //
-// 判分器只拿到 input，因此字段必须随 input 传入；这样可选窄接口 Grader 无需扩张，
-// 核心提交管线也不必改动。
+// A grader only receives input, so the fields must come in with the input; that way the optional narrow Grader interface needs no expansion,
+// and the core submission pipeline needs no change.
 //
-// Template 是被作答那张卡的模板（例如 cloze:2）。同一 note 的不同卡考的内容不同时
-// （挖空题每个序号一张卡），判分器靠它找到本卡的考点；其它题型一卡一 note，可以忽略。
+// Template is the template of the card being answered (for example cloze:2). When different cards of the same note test different content
+// (a cloze card per index), the grader relies on it to find this card's tested points; other card types have one card per note and can ignore it.
 type GradeContext struct {
 	Fields   map[string]any
 	Template string
 	Mapping  *GradeMapping
 }
 
-// rating 用映射把分数转成评分并填充 detail 的公共字段。
+// rating uses the mapping to turn the score into a rating and fill in the common fields of detail.
 func (c GradeContext) rating(score float64, detail map[string]any) (int, map[string]any, bool) {
 	m := DefaultGradeMapping()
 	if c.Mapping != nil {
@@ -164,7 +164,7 @@ func (c GradeContext) rating(score float64, detail map[string]any) (int, map[str
 	return r, detail, true
 }
 
-// numberField 读取必填数值字段；兼容 JSON 反序列化的 float64 与 Go 侧构造的整数类型。
+// numberField reads a required numeric field; supports both the float64 of JSON deserialization and Go-side constructed integer types.
 func numberField(fields map[string]any, name string) (float64, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -177,7 +177,7 @@ func numberField(fields map[string]any, name string) (float64, error) {
 	return f, nil
 }
 
-// optionalFloatField 读取可选数值字段；缺失时返回 (nil, nil)。
+// optionalFloatField reads an optional numeric field; returns (nil, nil) when missing.
 func optionalFloatField(fields map[string]any, name string) (*float64, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -190,7 +190,7 @@ func optionalFloatField(fields map[string]any, name string) (*float64, error) {
 	return &f, nil
 }
 
-// intField 读取必填的 0 基索引字段；必须是整数值（JSON 里是 float64）。
+// intField reads a required 0-based index field; it must be an integer value (float64 in JSON).
 func intField(fields map[string]any, name string) (int, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -199,7 +199,7 @@ func intField(fields map[string]any, name string) (int, error) {
 	return toIndex(v, name)
 }
 
-// intSliceField 读取必填的 0 基索引数组（choice_multi 的 answers）。
+// intSliceField reads a required array of 0-based indices (answers of choice_multi).
 func intSliceField(fields map[string]any, name string) ([]int, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -229,7 +229,7 @@ func intSliceField(fields map[string]any, name string) ([]int, error) {
 	return out, nil
 }
 
-// requiredBoolField 读取必填布尔字段；与 boolField 不同，缺失即错误（true_false 的 answer）。
+// requiredBoolField reads a required boolean field; unlike boolField, a missing value is an error (answer of true_false).
 func requiredBoolField(fields map[string]any, name string) (bool, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -242,7 +242,7 @@ func requiredBoolField(fields map[string]any, name string) (bool, error) {
 	return b, nil
 }
 
-// toFloat 把 JSON/Go 里常见的数值类型统一成 float64。
+// toFloat normalizes the common numeric types from JSON/Go into float64.
 func toFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:
@@ -261,7 +261,7 @@ func toFloat(v any) (float64, bool) {
 	}
 }
 
-// toIndex 把值转成非负整数索引，拒绝小数与非法类型。
+// toIndex turns a value into a non-negative integer index, rejecting fractions and illegal types.
 func toIndex(v any, name string) (int, error) {
 	switch n := v.(type) {
 	case int:
@@ -290,7 +290,7 @@ func toIndex(v any, name string) (int, error) {
 	}
 }
 
-// formatNumber 以最简形式输出数值，供渲染使用（50 不写成 50.000000）。
+// formatNumber prints a number in its simplest form for rendering (50 is not written as 50.000000).
 func formatNumber(v float64) string {
 	return strconv.FormatFloat(v, 'g', -1, 64)
 }

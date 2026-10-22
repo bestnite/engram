@@ -11,13 +11,13 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是管理面板只读页（概览 / 健康 / 审计）切流到 SPA 的验收，外加它们的 JSON 端点：
-//   - GET /admin、/admin/health、/admin/audit 一律返回应用壳（SSR 页面层已删除）。
-//   - /api/v1/admin/* 的 JSON 端点判权与 requireAdmin 同源：匿名 401、非 admin 403、bearer 403。
+// This file is the acceptance test for the admin panel's read-only pages (overview / health / audit) cutover to the SPA, plus their JSON endpoints:
+//   - GET /admin, /admin/health, /admin/audit always return the app shell (the SSR page layer has been removed).
+//   - The /api/v1/admin/* JSON endpoints decide authorization on the same basis as requireAdmin: anonymous 401, non-admin 403, bearer 403.
 //
-// 页面迁移不改动授权判定：requireAdmin 仍在返回应用壳之前生效，非管理员永远拿不到外壳。
+// The page migration does not change authorization: requireAdmin still takes effect before the app shell is returned, so non-admins never get the shell.
 
-// getJSON 发一个带 cookie 的 GET，用于断言 JSON 端点的判权与响应形态。
+// getJSON sends a GET with a cookie, for asserting the JSON endpoints' authorization and response shape.
 func getJSON(t *testing.T, srv *Server, target string, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
@@ -33,22 +33,22 @@ func getJSON(t *testing.T, srv *Server, target string, cookies []*http.Cookie, h
 	return rec
 }
 
-// TestAdminReadPagesCutover 覆盖三个只读页的切流、回退与非管理员门禁。
+// TestAdminReadPagesCutover covers the cutover and fallback of the three read-only pages, plus the non-admin gate.
 func TestAdminReadPagesCutover(t *testing.T) {
 	for _, path := range []string{"/admin", "/admin/health", "/admin/audit"} {
 		t.Run(path, func(t *testing.T) {
 			srv, db, _, cookies, _ := newNotesServer(t)
 
-			// SPA 已加载：返回应用壳，绝不渲染 SSR 页面。
+			// SPA loaded: returns the app shell and never renders an SSR page.
 			assertShell(t, getWithCookies(t, srv, path, cookies))
 
-			// 匿名：重定向登录页，绝不返回外壳。
+			// Anonymous: redirects to the login page and never returns the shell.
 			anon := get(t, srv, path, nil)
 			if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 				t.Errorf("anonymous GET %s = %d %q, want 303 /login", path, anon.Code, anon.Header().Get("Location"))
 			}
 
-			// 非 admin：403，且响应体里没有应用壳。
+			// Non-admin: 403, and the response body contains no app shell.
 			_, strangerCookies, _ := createUserAndLogin(t, srv, db, "read_stranger")
 			denied := getWithCookies(t, srv, path, strangerCookies)
 			if denied.Code != http.StatusForbidden {
@@ -62,23 +62,23 @@ func TestAdminReadPagesCutover(t *testing.T) {
 	}
 }
 
-// TestAdminJSONGuard 钉住 JSON 端点的判权：匿名 401、非 admin 403、bearer 403。
+// TestAdminJSONGuard pins the JSON endpoints' authorization: anonymous 401, non-admin 403, bearer 403.
 func TestAdminJSONGuard(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
 	paths := []string{"/api/v1/admin/summary", "/api/v1/admin/health", "/api/v1/admin/audit"}
 
 	for _, path := range paths {
-		// 匿名：401（浏览器 fetch 不能跟着 303 去登录页拿 HTML）。
+		// Anonymous: 401 (a browser fetch cannot follow a 303 to the login page to get HTML).
 		if rec := getJSON(t, srv, path, nil, nil); rec.Code != http.StatusUnauthorized {
 			t.Errorf("anonymous GET %s = %d, want 401", path, rec.Code)
 		}
-		// bearer / API Key 凭据不属于浏览器会话：403。
+		// bearer / API Key credentials belong to no browser session: 403.
 		if rec := getJSON(t, srv, path, nil, map[string]string{"Authorization": "Bearer whatever"}); rec.Code != http.StatusForbidden {
 			t.Errorf("bearer GET %s = %d, want 403", path, rec.Code)
 		}
 	}
 
-	// 非 admin：403，并写越权审计。
+	// Non-admin: 403, plus a privilege-escalation audit row.
 	_, strangerCookies, _ := createUserAndLogin(t, srv, db, "json_stranger")
 	for _, path := range paths {
 		if rec := getJSON(t, srv, path, strangerCookies, nil); rec.Code != http.StatusForbidden {
@@ -94,7 +94,7 @@ func TestAdminJSONGuard(t *testing.T) {
 	}
 }
 
-// TestAdminJSONSummaryMatchesInstance 断言概览 JSON 的计数与库里一致。
+// TestAdminJSONSummaryMatchesInstance asserts the overview JSON's counts match the DB.
 func TestAdminJSONSummaryMatchesInstance(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "json deck")
@@ -126,7 +126,7 @@ func TestAdminJSONSummaryMatchesInstance(t *testing.T) {
 	}
 }
 
-// TestAdminJSONHealthShape 断言健康 JSON 的读数形态：连通 ok、schema 与 due 有值。
+// TestAdminJSONHealthShape asserts the health JSON's reading shape: connectivity ok, schema and due have values.
 func TestAdminJSONHealthShape(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)
 
@@ -153,7 +153,7 @@ func TestAdminJSONHealthShape(t *testing.T) {
 	}
 }
 
-// TestAdminJSONAuditFilters 断言审计 JSON 与 SSR 用同一份过滤语义与 notice 码。
+// TestAdminJSONAuditFilters asserts the audit JSON uses the same filter semantics and notice codes as SSR.
 func TestAdminJSONAuditFilters(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	aliceID := createRoleUser(t, db, "audit_alice", store.RoleUser)
@@ -201,13 +201,13 @@ func TestAdminJSONAuditFilters(t *testing.T) {
 		}
 	}
 
-	// 用户名查不到时不能退化成「不过滤」：结果 0 行并给出稳定 notice 码。
+	// An unknown username must not degrade to "no filter": 0 rows and a stable notice code.
 	got, _ := decode("?user=nobody")
 	if got.Total != 0 || got.Notice != "user_not_found" {
 		t.Errorf("unknown-user filter = total %d notice %q, want 0 / user_not_found", got.Total, got.Notice)
 	}
 
-	// 系统动作、无目标的行：actor 与 target 均为 null。
+	// Rows for system actions with no target: both actor and target are null.
 	got, _ = decode("?action=system.tick")
 	if len(got.Rows) != 1 || got.Rows[0].Actor != nil || got.Rows[0].Target != nil {
 		t.Errorf("system row = %+v, want null actor and target", got.Rows)

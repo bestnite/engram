@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 默认队列与显式午夜队列必须在同一时刻使用不同的复习日额度。
+// The default queue and the explicit-midnight queue must use different review-day allowances at the same instant.
 func TestQueueCutoffDistinguishesUnsetAndMidnight(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 0, 30, 0, 0, time.UTC)
@@ -16,7 +16,7 @@ func TestQueueCutoffDistinguishesUnsetAndMidnight(t *testing.T) {
 		t.Fatal(err)
 	}
 	card := seedCard(t, db, deck, "forward", now)
-	// 配额按卡组 JOIN，日志必须挂在同一组真实卡上。
+	// Quotas JOIN on the deck, so the logs must hang off the same set of real cards.
 	seedReview(t, db, 1, card, "2026-10-01", int(StateNew), now.Add(-time.Hour))
 	builder := NewQueueBuilder(db, store.NewDeckStore(db), mustScheduler(t, testPreset(t)))
 	for _, tc := range []struct {
@@ -36,7 +36,7 @@ func TestQueueCutoffDistinguishesUnsetAndMidnight(t *testing.T) {
 	}
 }
 
-// 评分写入与埋藏的次日边界都要尊重午夜，不只是统计页显示正确。
+// The next-day boundary for grade writes and for burying must both respect midnight, not just the stats page display.
 func TestSubmitAndBuryRespectMidnight(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

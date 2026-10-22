@@ -15,9 +15,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ---- ：工具与 REST 行为一致 ----
+// ---- the tools behave like REST ----
 
-// TestToolsMatchREST 是核心验收：每个工具与其同名 REST 路径在同一输入下产出相同结果。
+// TestToolsMatchREST is the core acceptance: each tool and its same-named REST path produce the same result for the same input.
 func TestToolsMatchREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "user")
@@ -27,7 +27,7 @@ func TestToolsMatchREST(t *testing.T) {
 	base := ts.URL
 	deckPath := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	// 用 REST 预先建两张内容相同的卡，供后续对比。
+	// Pre-create two cards with identical content via REST, for the later comparisons.
 	body := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"q1","back":"a1"},"external_ref":"n:1"},` +
 		`{"kind":"basic","fields":{"front":"q2","back":"a2"},"external_ref":"n:2"}]}`
@@ -41,7 +41,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("list_decks MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// search_notes（显式分页，两侧一致）
+	// search_notes (explicit paging, consistent on both sides)
 	mcpOut, _, _ = callTool(t, cs, "search_notes", map[string]any{"deck_id": deck.PublicID, "page": 1, "per_page": 20})
 	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?page=1&per_page=20", deck.PublicID), key, ""); !reflect.DeepEqual(mcpOut, restOut) {
 		t.Errorf("search_notes MCP=%v REST=%v", mcpOut, restOut)
@@ -53,7 +53,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("get_stats MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// export_deck：返回卡组包文档，含 manifest/notes/cards/preset。
+	// export_deck: returns the deck package document, with manifest/notes/cards/preset.
 	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
 	if isErr {
 		t.Fatalf("export_deck error: %s", text)
@@ -70,7 +70,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("package document is missing notes.json: %v", mcpOut)
 	}
 
-	// create_notes / import_deck（dry_run，同一 deck 状态下产出相同计数）
+	// create_notes / import_deck (dry_run, produces the same counts under the same deck state)
 	dry := map[string]any{"deck_id": deck.PublicID, "dry_run": true, "notes": []any{
 		map[string]any{"kind": "basic", "fields": map[string]any{"front": "x", "back": "y"}, "external_ref": "n:3"},
 	}}
@@ -79,7 +79,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("create_notes(dry_run) MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// import_deck：接受 export_deck 输出的文档，dry_run 预演不写入。
+	// import_deck: accepts the document export_deck outputs; a dry_run preview writes nothing.
 	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID, "include_progress": true})
 	mcpOut, isErr, text = callTool(t, cs, "import_deck", map[string]any{"package": pkgDoc, "dry_run": true, "target": "new_deck"})
 	if isErr {
@@ -92,7 +92,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("import_deck report is missing the errors field: %v", mcpOut)
 	}
 
-	// 取得 note 的对外 id 以便 update/delete。
+	// Get the note's public id for update/delete.
 	_, notesOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?per_page=50", deck.PublicID), key, "")
 	byRef := map[string]string{}
 	for _, raw := range notesOut["notes"].([]any) {
@@ -101,20 +101,20 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 	note1, note2 := byRef["n:1"], byRef["n:2"]
 
-	// update_note：内容相同，去掉动态字段后应一致。
+	// update_note: same content, so it should match once the dynamic fields are stripped.
 	mcpUpd, _, _ := callTool(t, cs, "update_note", map[string]any{"note_id": note1, "kind": "basic", "fields": map[string]any{"front": "u", "back": "Y"}, "tags": []any{"t1"}})
 	_, restUpd := rest(t, base, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note2), key, `{"kind":"basic","fields":{"front":"u","back":"Y"},"tags":["t1"]}`)
 	if !reflect.DeepEqual(stripDynamic(mcpUpd), stripDynamic(restUpd)) {
 		t.Errorf("update_note MCP=%v REST=%v", stripDynamic(mcpUpd), stripDynamic(restUpd))
 	}
 
-	// get_due_cards（此时 note 尚未删除，队列两侧应一致；due_at 依赖调用时刻，比较前归一化）
+	// get_due_cards (the note is not deleted yet, so the queues should match on both sides; due_at depends on the call time, so normalize before comparing)
 	mcpOut, _, _ = callTool(t, cs, "get_due_cards", map[string]any{"deck_id": deck.PublicID, "limit": 50})
 	if _, restOut := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/review/due?deck=%s&limit=50", deck.PublicID), key, ""); !reflect.DeepEqual(normalizeCards(mcpOut), normalizeCards(restOut)) {
 		t.Errorf("get_due_cards MCP=%v REST=%v", normalizeCards(mcpOut), normalizeCards(restOut))
 	}
 
-	// submit_review：两张卡内容一致，去掉 id 维度后结果应一致。
+	// submit_review: the two cards have identical content, so the results should match once the id dimension is stripped.
 	_, exp := rest(t, base, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), key, "")
 	cards := exp["cards"].([]any)
 	if len(cards) < 2 {
@@ -133,7 +133,7 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("submit_review MCP=%v REST=%v", stripReviewIDs(mcpRev), stripReviewIDs(restRev))
 	}
 
-	// delete_note（放在最后，避免影响上面的导出与复习队列）
+	// delete_note (kept last, so the export and review queue above are not affected)
 	mcpDel, _, _ := callTool(t, cs, "delete_note", map[string]any{"note_id": note1})
 	_, restDel := rest(t, base, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", note2), key, "")
 	if !reflect.DeepEqual(stripDynamic(mcpDel), stripDynamic(restDel)) {
@@ -141,7 +141,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 }
 
-// stripDynamic 去掉随写入变化的字段，便于比较两侧同内容对象。
+// stripDynamic removes fields that change with each write, for comparing two same-content objects.
 func stripDynamic(m map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range m {
@@ -154,7 +154,7 @@ func stripDynamic(m map[string]any) map[string]any {
 	return out
 }
 
-// stripReviewIDs 去掉评测结果里与具体卡和调用时刻相关的字段。
+// stripReviewIDs removes the fields in the review result that depend on the specific card and call time.
 func stripReviewIDs(m map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range m {
@@ -167,7 +167,7 @@ func stripReviewIDs(m map[string]any) map[string]any {
 	return out
 }
 
-// normalizeCards 去掉到期卡里依赖调用时刻的 due_at，并按 card_id 排序，便于两侧比较。
+// normalizeCards removes due_at, which depends on the call time, from the due cards and sorts by card_id, for comparing both sides.
 func normalizeCards(m map[string]any) map[string]any {
 	cards, _ := m["cards"].([]any)
 	for _, raw := range cards {
@@ -182,9 +182,9 @@ func normalizeCards(m map[string]any) map[string]any {
 	return m
 }
 
-// ---- ：多卡组复习范围 ----
+// ---- multi-deck review scope ----
 
-// seedDueCardMCP 建一个 note 与它的一张 card，不写 card_states：该卡是新卡，必然出现在队列里。
+// seedDueCardMCP creates a note and one of its cards without writing card_states: the card is new and must appear in the queue.
 func seedDueCardMCP(t *testing.T, db *gorm.DB, deckID uint64) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -198,8 +198,8 @@ func seedDueCardMCP(t *testing.T, db *gorm.DB, deckID uint64) {
 	}
 }
 
-// TestGetDueCardsDeckIDsMatchesREST 断言 get_due_cards 的 deck_ids 与 REST 的重复 deck 参数
-// 是同一口径；deck_id 与 deck_ids 同时给出返回工具错误（isErr）。
+// TestGetDueCardsDeckIDsMatchesREST asserts get_due_cards's deck_ids is the same reading as REST's repeated deck parameter;
+// giving deck_id and deck_ids together returns a tool error (isErr).
 func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "multideck")
@@ -222,7 +222,7 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 		t.Errorf("get_due_cards(deck_ids) MCP=%v REST=%v", normalizeCards(mcpOut), normalizeCards(restOut))
 	}
 
-	// 互斥：同时给出 deck_id 与 deck_ids 是参数错误，客户端必须看到 isErr。
+	// Mutually exclusive: giving deck_id and deck_ids together is an argument error, and the client must see isErr.
 	_, isErr, text = callTool(t, cs, "get_due_cards", map[string]any{
 		"deck_id": deckA.PublicID, "deck_ids": []any{deckB.PublicID},
 	})
@@ -234,10 +234,10 @@ func TestGetDueCardsDeckIDsMatchesREST(t *testing.T) {
 	}
 }
 
-// TestGetDueCardsRejectsMixedUnreadableDeckIDs 覆盖混合集合负例：deck_ids 里一个自己可读的
-// 卡组和一个他人的私有卡组混在一起时整次调用失败，不得只返回可读卡组的卡片。
-// MCP 复用 api.DueCards 的逐 id 判权，与 REST 的 TestDueCardsFailsWholeRequestForUnreadableDeck
-// 同一口径。
+// TestGetDueCardsRejectsMixedUnreadableDeckIDs covers the mixed-set negative case: when deck_ids mixes a deck the caller can read
+// with someone else's private deck, the whole call fails, and it must not return only the readable deck's cards.
+// MCP reuses api.DueCards' per-id permission check, the same
+// reading as REST's TestDueCardsFailsWholeRequestForUnreadableDeck.
 func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	owner := seedUser(t, db, "mixed-owner")
@@ -255,39 +255,39 @@ func TestGetDueCardsRejectsMixedUnreadableDeckIDs(t *testing.T) {
 	if !isErr {
 		t.Fatalf("get_due_cards with a readable+foreign deck_ids must fail the whole call")
 	}
-	// 失败必须是无权限/不存在，而不是参数错误——否则这个用例没有覆盖「整请求失败」的原因。
+	// The failure must be permission-denied/not-found rather than an argument error — otherwise this case does not exercise the "whole request fails" reason.
 	if !strings.Contains(text, api.CodeForbidden) && !strings.Contains(text, api.CodeNotFound) {
 		t.Errorf("mixed deck_ids error text = %q, want code %s or %s",
 			text, api.CodeForbidden, api.CodeNotFound)
 	}
 }
 
-// ---- ：create_deck 与 REST 建卡组同源 ----
+// ---- create_deck shares its source with the REST deck creation ----
 
-// errorCode 取 REST 统一错误包壳里的稳定 code。
+// errorCode takes the stable code from the REST uniform error envelope.
 func errorCode(m map[string]any) string {
 	e, _ := m["error"].(map[string]any)
 	c, _ := e["code"].(string)
 	return c
 }
 
-// errorMessage 取 REST 统一错误包壳里的稳定 message。
+// errorMessage takes the stable message from the REST uniform error envelope.
 func errorMessage(m map[string]any) string {
 	e, _ := m["error"].(map[string]any)
 	c, _ := e["message"].(string)
 	return c
 }
 
-// TestCreateDeckMatchesREST 是核心验收：create_deck 与 REST POST /decks 同参数同结果，
-// 空名字用共享 code 拒绝，preset_id=0 落在调用者的 Default 预设，且无 write
-// scope 的 key 按名字硬调也被拒。
+// TestCreateDeckMatchesREST is the core acceptance: create_deck and REST POST /decks give the same result for the same arguments,
+// an empty name is refused with the shared code, preset_id=0 lands on the caller's Default preset, and a key without write
+// scope is refused even when calling by name.
 func TestCreateDeckMatchesREST(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "deckmaker")
 	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite})
 	cs := connect(t, ts.URL, key)
 
-	// 同一参数：MCP 建一个、REST 建一个，去掉动态字段后应完全一致。
+	// Same arguments: one deck created via MCP, one via REST; after stripping dynamic fields they should be identical.
 	mcpOut, isErr, text := callTool(t, cs, "create_deck", map[string]any{
 		"name": "  Parity  ", "description": "same args",
 	})
@@ -306,7 +306,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("create_deck MCP=%v REST=%v", stripDynamic(mcpOut), stripDynamic(restOut))
 	}
 
-	// preset_id 缺省时落在调用者的 Default 预设上（两侧都非空且相同）。
+	// When preset_id is omitted it lands on the caller's Default preset (non-empty and identical on both sides).
 	pid, ok := mcpOut["preset_id"].(string)
 	if !ok || pid == "" {
 		t.Fatalf("create_deck preset_id = %v, want the caller's Default preset public id", mcpOut["preset_id"])
@@ -319,7 +319,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("create_deck preset_id = %s, want Default preset %s", pid, defaultPreset.PublicID)
 	}
 
-	// 空名字：MCP 与 REST 都用共享的 invalid_request code 拒绝，且英文文案严格对齐。
+	// Empty name: both MCP and REST refuse it with the shared invalid_request code, and the English copy matches strictly.
 	_, isErr, text = callTool(t, cs, "create_deck", map[string]any{"name": "   "})
 	if !isErr || !strings.Contains(text, api.CodeInvalidRequest) {
 		t.Errorf("create_deck(blank name) isErr=%v text=%q, want %s", isErr, text, api.CodeInvalidRequest)
@@ -332,7 +332,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("MCP blank name error text = %q, want %q", text, wantText)
 	}
 
-	// 旧客户端的 visibility 字段：已删除的字段被忽略，卡组照常创建，响应里不再出现它。
+	// The old client's visibility field: a removed field is ignored, the deck is created as usual, and it no longer appears in the response.
 	st, restOut = rest(t, ts.URL, http.MethodPost, "/api/v1/decks", key, `{"name":"legacy","visibility":"public"}`)
 	if st != http.StatusCreated {
 		t.Fatalf("REST create with a legacy visibility field status = %d, want 201 (body %v)", st, restOut)
@@ -341,7 +341,7 @@ func TestCreateDeckMatchesREST(t *testing.T) {
 		t.Errorf("REST create response still carries visibility: %v", restOut)
 	}
 
-	// 无 write scope 的 key 即使按名字硬调 create_deck 也被拒，错误文案与 REST 严格一致。
+	// A key without write scope is refused even when calling create_deck by name, with copy strictly matching REST.
 	roKey := newKey(t, keys, u.ID, []string{store.ScopeRead})
 	roCS := connect(t, ts.URL, roKey)
 	_, isErr, text = callTool(t, roCS, "create_deck", map[string]any{"name": "nope"})

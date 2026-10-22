@@ -12,17 +12,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 管理面板审计检索的查询解析。
+// Query parsing for admin panel audit search.
 //
-// 时间口径：库里 created_at 统一 UTC；页面按当前管理员的时区展示，
-// 日期范围过滤把用户时区的自然日边界换算成 UTC 瞬时值再交给 store。
-// SSR 审计页删除后，检索在 /api/v1/admin/audit 的 JSON 端点上（admin_read.go），
-// 过滤解析与分页大小由这里共享。
+// Time convention: created_at in the DB is uniformly UTC; pages display it in the current admin's timezone,
+// and date-range filtering converts the natural-day boundaries of the user's timezone into UTC instants before handing them to the store.
+// After the SSR audit page was removed, search lives on the /api/v1/admin/audit JSON endpoint (admin_read.go),
+// and filter parsing and page size are shared from here.
 
-// adminAuditPageSize 是审计列表每页行数。
+// adminAuditPageSize is the number of rows per page in the audit list.
 const adminAuditPageSize = 50
 
-// auditLocation 返回当前管理员用于展示与日期换算的时区；回退规则见 store.LoadLocation。
+// auditLocation returns the timezone the current admin uses for display and date conversion; see store.LoadLocation for the fallback rules.
 func auditLocation(u *store.User) *time.Location {
 	if u == nil {
 		return time.UTC
@@ -30,7 +30,7 @@ func auditLocation(u *store.User) *time.Location {
 	return store.LoadLocation(u.Timezone)
 }
 
-// parseAuditDay 把 YYYY-MM-DD 按给定时区解析成该日零点；格式非法时 ok=false。
+// parseAuditDay parses YYYY-MM-DD in the given timezone into midnight of that day; ok=false when the format is invalid.
 func parseAuditDay(raw string, loc *time.Location) (time.Time, bool) {
 	t, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(raw), loc)
 	if err != nil {
@@ -39,12 +39,12 @@ func parseAuditDay(raw string, loc *time.Location) (time.Time, bool) {
 	return t, true
 }
 
-// auditFilterFromQuery 把审计检索的查询参数解析成 store.AuditFilter（JSON 端点与页面共用）。
-//   - user 支持对外 id 或用户名（两者都不是纯数字）；查不到的用户命中空集而不是退化成「不过滤」。
-//   - target_id 是对外 id：按 target_type 反查数字主键；日期格式非法时返回 notice 码（稳定英文），
-//     由调用方映射文案。
+// auditFilterFromQuery parses audit search query parameters into store.AuditFilter (shared by the JSON endpoint and the page).
+//   - user accepts a public id or a username (neither is purely numeric); an unknown user hits the empty set instead of degrading to "no filter".
+//   - target_id is a public id: the numeric primary key is looked up by target_type; an invalid date format returns a notice code (stable English),
+//     which the caller maps to copy.
 //
-// 返回的第二个值是原样的 user 查询串，第三个值是 notice 码（空串表示无提示）。
+// The second return value is the user query string as-is, the third is the notice code (empty string means no notice).
 func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, page int) (store.AuditFilter, string, string) {
 	ctx := c.Request.Context()
 	userRaw := strings.TrimSpace(c.Query("user"))
@@ -58,14 +58,14 @@ func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, pa
 	if userRaw != "" {
 		switch {
 		case s.users != nil && !isNumeric(userRaw):
-			// 管理面板显示的是对外 id，所以先按对外 id 查，再退回按用户名查。
+			// The admin panel displays public ids, so look up by public id first, then fall back to lookup by username.
 			if u, err := s.users.ByPublicID(ctx, userRaw); err == nil {
 				filter.UserID = u.ID
 			} else if u, err := s.users.ByUsername(ctx, userRaw); err == nil {
 				filter.UserID = u.ID
 			} else {
-				// 用户不存在：不能静默退化成「不过滤」（那会把「查无此人」误报成全量结果）。
-				// 用一个不可能存在的 id（int64 上界）命中空集，避免绑定 uint64 最高位。
+				// Unknown user: must not silently degrade to "no filter" (that would misreport "no such person" as the full result set).
+				// Use an impossible id (the int64 upper bound) to hit the empty set, avoiding binding the uint64 high bit.
 				filter.UserID = uint64(math.MaxInt64)
 				notice = "user_not_found"
 			}
@@ -78,14 +78,14 @@ func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, pa
 		}
 	}
 	if targetIDRaw := strings.TrimSpace(c.Query("target_id")); targetIDRaw != "" {
-		// 目标 id 对外是对外 id：按 target_type 反查数字主键；同时兼容历史的全数字输入。
+		// The target id is a public id externally: the numeric primary key is looked up by target_type, while also accepting legacy all-numeric input.
 		if id, ok := s.auditTargetNumericID(ctx, filter.TargetType, targetIDRaw); ok {
 			filter.TargetID = id
 		} else if id, err := strconv.ParseUint(targetIDRaw, 10, 64); err == nil {
 			filter.TargetID = id
 		} else {
-			// 无法解析时不能静默退化成「不过滤」（那会把「查不到」误报成全量结果）：
-			// 用一个不可能存在的 id 命中空集，与 user 过滤同一口径。
+			// When it cannot be parsed, must not silently degrade to "no filter" (that would misreport "not found" as the full result set):
+			// use an impossible id to hit the empty set, the same convention as the user filter.
 			filter.TargetID = uint64(math.MaxInt64)
 			notice = "invalid_target"
 		}
@@ -99,7 +99,7 @@ func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, pa
 	}
 	if toRaw := strings.TrimSpace(c.Query("to")); toRaw != "" {
 		if t, ok := parseAuditDay(toRaw, userLoc); ok {
-			// to 是「含当日」的上界，换算成次日零点（不含），保证整日都在范围内。
+			// to is an inclusive-of-that-day upper bound, converted to midnight of the next day (exclusive), so the whole day falls inside the range.
 			filter.To = t.AddDate(0, 0, 1)
 		} else {
 			notice = "invalid_date"
@@ -108,7 +108,7 @@ func (s *Server) auditFilterFromQuery(c *gin.Context, userLoc *time.Location, pa
 	return filter, userRaw, notice
 }
 
-// isNumeric 判断字符串是否为纯数字（区分「按 id」与「按用户名」两种输入）。
+// isNumeric reports whether a string is purely numeric (distinguishing "by id" from "by username" input).
 func isNumeric(raw string) bool {
 	if raw == "" {
 		return false
@@ -121,8 +121,8 @@ func isNumeric(raw string) bool {
 	return true
 }
 
-// usersForAudit 批量取当前页涉及的用户，供审计行的操作者对外 id 与用户名使用；
-// 查不到的用户不写入，调用方把该行的 user_id 渲染成 null，绝不回退到数字主键。
+// usersForAudit batch-fetches the users involved on the current page, for the audit rows' actor public id and username;
+// users that cannot be found are left out, and the caller renders that row's user_id as null, never falling back to the numeric primary key.
 func (s *Server) usersForAudit(ctx context.Context, rows []store.AuditLog) map[uint64]*store.User {
 	users := make(map[uint64]*store.User)
 	if s.users == nil {
@@ -143,8 +143,8 @@ func (s *Server) usersForAudit(ctx context.Context, rows []store.AuditLog) map[u
 	return users
 }
 
-// auditTargetPublicID 把审计行的数字目标 id 换成对外 id；无法解析（类型未知或目标行已删）
-// 时返回 nil，调用方据此把 target.id 渲染为 null，绝不回退到数字主键。
+// auditTargetPublicID converts an audit row's numeric target id into a public id; when it cannot be resolved (unknown type or the target row was deleted)
+// it returns nil, and the caller renders target.id as null accordingly, never falling back to the numeric primary key.
 func (s *Server) auditTargetPublicID(ctx context.Context, targetType string, id *uint64) *string {
 	if id == nil {
 		return nil
@@ -164,7 +164,7 @@ func (s *Server) auditTargetPublicID(ctx context.Context, targetType string, id 
 			}
 		}
 	case "invite":
-		// invites 没有按主键取行的入口（只按 token 或对外 id），直接取 public_id。
+		// invites has no lookup-by-primary-key entry point (only by token or public id), so take public_id directly.
 		_ = s.db.WithContext(ctx).Table("invites").Select("public_id").Where("id = ?", *id).Scan(&publicID).Error
 	case "api_key":
 		if k, err := store.NewAPIKeyStore(s.db).ByID(ctx, *id); err == nil {
@@ -189,9 +189,9 @@ func (s *Server) auditTargetPublicID(ctx context.Context, targetType string, id 
 	return &publicID
 }
 
-// auditTargetNumericID 是 auditTargetPublicID 的反向映射：按目标类型把对外 id 换回数字主键，
-// 供审计检索的 target_id 过滤使用（列表显示对外 id，过滤也必须认它）。
-// 类型未知、目标行已删或缺少对应存储时返回 false，调用方据此给提示而不是静默放行。
+// auditTargetNumericID is the reverse mapping of auditTargetPublicID: it converts a public id back to the numeric primary key by target type,
+// for use by the target_id filter in audit search (the list shows public ids, so filtering must accept them too).
+// Returns false when the type is unknown, the target row was deleted, or the corresponding store is missing; the caller then shows a notice instead of silently passing.
 func (s *Server) auditTargetNumericID(ctx context.Context, targetType, publicID string) (uint64, bool) {
 	switch targetType {
 	case "user":

@@ -15,14 +15,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 SPA 调度预设接口（internal/web/presets_api.go）。
+// This file covers the SPA scheduling preset API (internal/web/presets_api.go).
 //
-// 语义与 SSR 预设页逐项一致：默认预设补齐、优化门槛、单并发入队、状态与回退都调用同一批
-// store/jobs 方法。这里钉住：列表与门槛的真值、创建/编辑的落库与审计、非法输入零副作用、
-// 他人预设 404、门槛不足给出结构化差额、已有作业 409、完成后状态与拟合结论、回退清三列，
-// 以及会话 + CSRF 两个必测负例。
+// Semantics match the SSR preset page item by item: default-preset backfill, the optimization gate, single-concurrency enqueueing, status and rollback all call the same set of
+// store/jobs methods. Pinned here: the true values of the list and gate, persistence and auditing of create/edit, no side effects from invalid input,
+// another user's preset being 404, a short gate yielding a structured shortfall, an existing job being 409, status and fit verdict after completion, rollback clearing the three columns,
+// plus the two mandatory negative cases: session and CSRF.
 
-// decodePresetList 解析列表响应；失败即终止测试。
+// decodePresetList decodes the list response; failure aborts the test.
 func decodePresetList(t *testing.T, rec *httptest.ResponseRecorder) presetListResponse {
 	t.Helper()
 	var body presetListResponse
@@ -32,7 +32,7 @@ func decodePresetList(t *testing.T, rec *httptest.ResponseRecorder) presetListRe
 	return body
 }
 
-// decodePresetError 解析错误包壳与可选的结构化门槛。
+// decodePresetError decodes the error envelope and the optional structured gate.
 func decodePresetError(t *testing.T, rec *httptest.ResponseRecorder) (string, *optimizeGate) {
 	t.Helper()
 	var envelope struct {
@@ -47,7 +47,7 @@ func decodePresetError(t *testing.T, rec *httptest.ResponseRecorder) (string, *o
 	return envelope.Error.Code, envelope.Gate
 }
 
-// findPreset 在列表响应里按对外 id 取一条预设。
+// findPreset picks one preset out of the list response by public id.
 func findPreset(body presetListResponse, id string) *presetView {
 	for i := range body.Presets {
 		if body.Presets[i].ID == id {
@@ -57,8 +57,8 @@ func findPreset(body presetListResponse, id string) *presetView {
 	return nil
 }
 
-// TestPresetListReturnsDefaultPresetAndGate 是读验收：全新账号 GET /api/v1/presets
-// 得到一个默认预设与用户级门槛，未优化时权重来源是默认。
+// TestPresetListReturnsDefaultPresetAndGate is the read acceptance: a brand-new account's GET /api/v1/presets
+// yields one default preset and the user-level gate, with weight provenance "default" while unoptimized.
 func TestPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	srv, _, _, cookies, _, _ := newPresetsServer(t)
 
@@ -88,8 +88,8 @@ func TestPresetListReturnsDefaultPresetAndGate(t *testing.T) {
 	}
 }
 
-// TestPresetCreateAndUpdateRoundTrip 覆盖创建与编辑主路径：值正确落库、留审计、
-// 未勾选 fuzz 落库为 false，且响应回整份列表。
+// TestPresetCreateAndUpdateRoundTrip covers the create and edit main path: values persist correctly, an audit record is left,
+// an unticked fuzz persists as false, and the response returns the whole list.
 func TestPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
@@ -148,8 +148,8 @@ func TestPresetCreateAndUpdateRoundTrip(t *testing.T) {
 	}
 }
 
-// TestPresetWriteRejectsInvalidInput 是必测负例：各类非法输入一律 400 + 稳定 code，
-// 且不写库（预设总数保持 0）。
+// TestPresetWriteRejectsInvalidInput is a mandatory negative case: every kind of invalid input is 400 + a stable code,
+// with nothing written (the preset total stays 0).
 func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -187,8 +187,8 @@ func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-// TestPresetUpdateOtherUsersPresetIsNotFound 是必测负例：他人预设返回 404（不泄露存在性），
-// 且列值不变。
+// TestPresetUpdateOtherUsersPresetIsNotFound is a mandatory negative case: another user's preset returns 404 (leaking no existence),
+// and the column values are unchanged.
 func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 	srv, db, _, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
@@ -223,8 +223,8 @@ func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
 	}
 }
 
-// TestPresetOptimizeGateAndConflict 覆盖门槛不足与单并发：不足时 400 且给出结构化差额、
-// 不建作业；够门槛时 202 建作业；第二次 409 且不再建。
+// TestPresetOptimizeGateAndConflict covers a short gate and single concurrency: when short, 400 with a structured shortfall and
+// no job created; when the gate is met, 202 creates a job; the second attempt is 409 and creates nothing more.
 func TestPresetOptimizeGateAndConflict(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
@@ -273,8 +273,8 @@ func TestPresetOptimizeGateAndConflict(t *testing.T) {
 	}
 }
 
-// TestPresetOptimizeStatusAndRevert 覆盖完成后状态、拟合结论与一键回退：
-// 列表在途作业可续轮询、状态返回 succeeded + 三态结论、回退清三列并回默认权重。
+// TestPresetOptimizeStatusAndRevert covers status after completion, the fit verdict and one-click rollback:
+// the in-flight job in the list can resume polling, status returns succeeded + a three-state verdict, and rollback clears the three columns back to the default weights.
 func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, runner := newPresetsServer(t)
 	ctx := context.Background()
@@ -287,7 +287,7 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 		t.Fatalf("enqueue = %d, want 202 (body %s)", enq.Code, snippet(enq.Body.String()))
 	}
 
-	// 在途作业必须在列表里标注，刷新页面后才能续上轮询。
+	// The in-flight job must be marked in the list so polling can resume after a page refresh.
 	list := decodePresetList(t, getWithCookies(t, srv, "/api/v1/presets", cookies))
 	card := findPreset(list, p.PublicID)
 	if card == nil || card.Job == nil || card.Job.Status != "queued" {
@@ -353,8 +353,8 @@ func TestPresetOptimizeStatusAndRevert(t *testing.T) {
 	}
 }
 
-// TestPresetOptimizeStatusIgnoresForeignJob 是必测负例：状态端点只认本预设的作业，
-// 指向别的预设的 job id 一律按「无作业」返回，不泄露它。
+// TestPresetOptimizeStatusIgnoresForeignJob is a mandatory negative case: the status endpoint only recognises this preset's jobs,
+// and a job id pointing at another preset is always answered as "no job", leaking nothing about it.
 func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	p1 := seedPreset(t, db, ownerID)
@@ -387,8 +387,8 @@ func TestPresetOptimizeStatusIgnoresForeignJob(t *testing.T) {
 	}
 }
 
-// TestPresetsRequireSessionAndCSRF 是必测负例：匿名 GET 401、缺 CSRF 的写操作 403，
-// 且都不产生副作用。
+// TestPresetsRequireSessionAndCSRF is a mandatory negative case: anonymous GET is 401, a write without CSRF is 403,
+// and neither produces side effects.
 func TestPresetsRequireSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
 	p := seedPreset(t, db, ownerID)
@@ -424,12 +424,12 @@ func TestPresetsRequireSessionAndCSRF(t *testing.T) {
 	}
 }
 
-// TestPresetDelete 覆盖通过 SPA 端点删除预设：默认保护、引用保护、成功删除。
+// TestPresetDelete covers deleting a preset through the SPA endpoint: default protection, reference protection, successful deletion.
 func TestPresetDelete(t *testing.T) {
 	srv, db, ownerID, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
 
-	// 1. 尝试删除确保存在的默认预设
+	// 1. Try to delete the always-present default preset
 	defaultPresets, err := store.EnsureDefaultPreset(ctx, db, ownerID)
 	if err != nil {
 		t.Fatalf("ensure default preset: %v", err)
@@ -439,13 +439,13 @@ func TestPresetDelete(t *testing.T) {
 		t.Errorf("DELETE default preset = %d, want 400 (body %s)", delDefault.Code, snippet(delDefault.Body.String()))
 	}
 
-	// 2. 创建自定义预设
+	// 2. Create a custom preset
 	custom := store.NewPreset(ownerID, "Custom For Delete")
 	if err := store.NewPresetStore(db).Create(ctx, &custom); err != nil {
 		t.Fatalf("create custom preset: %v", err)
 	}
 
-	// 3. 关联卡组后删除被拒（409 Conflict）
+	// 3. Deletion is refused once a deck references it (409 Conflict)
 	d := &store.Deck{OwnerUserID: ownerID, Name: "Deck using preset", PresetID: custom.ID}
 	if err := store.NewDeckStore(db).Create(ctx, d); err != nil {
 		t.Fatalf("create deck: %v", err)
@@ -455,7 +455,7 @@ func TestPresetDelete(t *testing.T) {
 		t.Errorf("DELETE in-use preset = %d, want 409 (body %s)", delInUse.Code, snippet(delInUse.Body.String()))
 	}
 
-	// 4. 解除引用（删除卡组）后成功删除
+	// 4. Deletion succeeds after the reference is cleared (deck deleted)
 	if err := store.NewDeckStore(db).Delete(ctx, ownerID, d.ID); err != nil {
 		t.Fatalf("delete deck: %v", err)
 	}
@@ -464,15 +464,15 @@ func TestPresetDelete(t *testing.T) {
 		t.Fatalf("DELETE unused preset = %d, want 200 (body %s)", delOk.Code, snippet(delOk.Body.String()))
 	}
 
-	// 确认数据库已清除
+	// Confirm the row is gone from the database
 	if _, err := store.NewPresetStore(db).ByID(ctx, custom.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("preset %d still in db after delete: %v", custom.ID, err)
 	}
 }
 
-// TestPresetDefaultCannotBeRenamed 断言默认预设的改名在 HTTP 层被拒（400 + 稳定 code，
-// 库里名字不变），而名字原样回传时改参数照旧成功。
-// 界面的「默认」显示名依赖这个名字作为身份标识：一旦改掉，后续补齐会再建一条同名预设。
+// TestPresetDefaultCannotBeRenamed asserts renaming the default preset is refused at the HTTP layer (400 + a stable code, with the
+// stored name unchanged), while sending the name back verbatim and changing the parameters still succeeds.
+// The interface's "Default" display name relies on this name as its identity marker: once changed, a later backfill would create another preset with that name.
 func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 	srv, db, _, cookies, csrf, _ := newPresetsServer(t)
 	ctx := context.Background()
@@ -521,8 +521,8 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 	}
 }
 
-// TestPresetGateCountsOnlyItsOwnDecks 断言预设列表里每个预设的门槛只数挂着它的卡组上的复习：
-// 同一账号两个预设，复习只发生在第一个预设的卡组上，第二个预设的可用条数是 0（反面）。
+// TestPresetGateCountsOnlyItsOwnDecks asserts each preset's gate in the list counts only reviews on decks carrying it:
+// with two presets on one account and reviews only on the first preset's deck, the second preset's usable count is 0 (the negative side).
 func TestPresetGateCountsOnlyItsOwnDecks(t *testing.T) {
 	srv, db, ownerID, cookies, _, _ := newPresetsServer(t)
 	used := seedPreset(t, db, ownerID)

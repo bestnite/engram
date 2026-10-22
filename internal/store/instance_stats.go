@@ -8,25 +8,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// InstanceStats 是管理面板概览页要用的实例级计数。
-// 全部是廉价的 COUNT(*)：概览页是落地页，不该拖慢任何一个分区页。
+// InstanceStats holds the instance-level counts the admin panel overview page needs.
+// All of them are cheap COUNT(*): the overview page is a landing page and must not slow down any section page.
 type InstanceStats struct {
-	// Users 是账号总数；ActiveUsers 是其中状态为 active 的（禁用账号不计）。
+	// Users is the total number of accounts; ActiveUsers is those whose status is active (disabled accounts do not count).
 	Users       int64
 	ActiveUsers int64
-	// Decks 是卡组总数；Notes/Cards 均不含软删除的行。
+	// Decks is the total number of decks; Notes/Cards both exclude soft-deleted rows.
 	Decks int64
 	Notes int64
 	Cards int64
-	// DueNow 是实例级到期队列量（与健康页同一口径）。
+	// DueNow is the instance-level due queue size (same rule as the health page).
 	DueNow int64
-	// JobsRunning 含排队中与执行中的作业；JobsFailed 是失败态的作业。
+	// JobsRunning counts queued and running jobs; JobsFailed counts jobs in the failed state.
 	JobsRunning int64
 	JobsFailed  int64
 }
 
-// InstanceSummary 汇总概览页需要的计数。任何一项查询失败都整体失败：
-// 概览页宁可显示错误，也不该把失败当成 0（那会让管理员以为实例是空的）。
+// InstanceSummary collects the counts the overview page needs. Any single query failure fails the whole thing:
+// the overview page would rather show an error than treat a failure as 0 (which would make an admin think the instance is empty).
 func InstanceSummary(ctx context.Context, db *gorm.DB, now time.Time) (InstanceStats, error) {
 	var s InstanceStats
 	count := func(model any, query string, args ...any) (int64, error) {
@@ -57,7 +57,7 @@ func InstanceSummary(ctx context.Context, db *gorm.DB, now time.Time) (InstanceS
 	if s.DueNow, err = DueQueueSize(ctx, db, now); err != nil {
 		return InstanceStats{}, fmt.Errorf("instance stats: due queue: %w", err)
 	}
-	// 作业状态取值见 Job 模型（queued | running | succeeded | failed）。
+	// job status values are defined by the Job model (queued | running | succeeded | failed).
 	if s.JobsRunning, err = count(&Job{}, "status IN ?", []string{"queued", "running"}); err != nil {
 		return InstanceStats{}, fmt.Errorf("instance stats: running jobs: %w", err)
 	}

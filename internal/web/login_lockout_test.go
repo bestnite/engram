@@ -10,7 +10,7 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 )
 
-// assertLockedOut 断言响应是锁定拒绝：429、稳定 code rate_limited、带正整数 Retry-After。
+// assertLockedOut asserts the response is a lockout refusal: 429, the stable code rate_limited, and a positive integer Retry-After.
 func assertLockedOut(t *testing.T, step string, code int, header http.Header, body []byte) {
 	t.Helper()
 	if code != http.StatusTooManyRequests {
@@ -29,8 +29,8 @@ func assertLockedOut(t *testing.T, step string, code int, header http.Header, bo
 	}
 }
 
-// TestLoginLocksAfterRepeatedFailures 是反面用例：同一账号连续输错达到阈值后，连正确密码也被
-// 直接拒绝（不做认证），直到窗口过去——否则攻击者只需并发就能绕过递增延迟。
+// TestLoginLocksAfterRepeatedFailures is the negative case: once one account hits the threshold with consecutive wrong entries, even the correct password is
+// refused outright (no authentication attempted) until the window passes — otherwise an attacker could bypass the incremental delay just by going concurrent.
 func TestLoginLocksAfterRepeatedFailures(t *testing.T) {
 	srv, db := newAuthServer(t)
 	_ = createTOTPAdmin(t, srv, db)
@@ -44,9 +44,9 @@ func TestLoginLocksAfterRepeatedFailures(t *testing.T) {
 	assertLockedOut(t, "correct password after the threshold", rec.Code, rec.Header(), rec.Body.Bytes())
 }
 
-// TestTOTPSecondStepLocksAfterRepeatedFailures 断言第二步与第一步共用锁定计数：第一因素通过
-// 不计失败（归还占位），而第二步输错累计到阈值后，持有有效凭据也被直接拒绝——6 位验证码因此
-// 无法被穷举。
+// TestTOTPSecondStepLocksAfterRepeatedFailures asserts the second step shares the lockout counter with the first: a passed first factor
+// does not count as a failure (the slot is returned), while wrong second-step entries accumulate to the threshold and then even valid credentials are refused outright — the 6-digit code therefore
+// cannot be brute-forced.
 func TestTOTPSecondStepLocksAfterRepeatedFailures(t *testing.T) {
 	srv, db := newAuthServer(t)
 	admin := createTOTPAdmin(t, srv, db)

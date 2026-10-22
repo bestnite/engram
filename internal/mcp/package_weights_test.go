@@ -6,8 +6,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestPackageWeightsToolOptions 断言 export_deck 的 include_weights 与 import_deck 的 apply_weights
-// 都到达 service 层：缺省时不带权重、不采用权重，与 REST 的缺省一致。
+// TestPackageWeightsToolOptions asserts export_deck's include_weights and import_deck's apply_weights
+// both reach the service layer: when omitted, no weights are carried and none are adopted, consistent with REST's defaults.
 func TestPackageWeightsToolOptions(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "weights")

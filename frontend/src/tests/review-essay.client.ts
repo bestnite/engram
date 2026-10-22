@@ -6,8 +6,10 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 简答题先写再对照：翻面前有多行输入框；翻面后先给出自己写的作答、再给参考答案；
- * 打分时作答随自评提交。没写就不带 answer；没有参考答案时给出提示而不是空白。
+ * Essay cards: write first, compare after. Before flipping there is a multi-line input;
+ * after flipping the user's own answer comes first, then the reference answer; when
+ * grading, the answer is submitted with the self-rating. Nothing written means no answer
+ * field; no reference answer means a hint rather than blank space.
  */
 describe('ReviewView short answer', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -71,7 +73,7 @@ describe('ReviewView short answer', () => {
     await reveal(target);
     expect(target.querySelector('[data-testid="review-essay-input"]')).toBeNull();
     const given = target.querySelector('[data-testid="review-essay-given"]');
-    // 作答是纯文本：尖括号原样显示，不被当成 HTML。
+    // The answer is plain text: angle brackets display as-is and are not treated as HTML.
     expect(given?.textContent).toContain('因为<b>月球</b>绕地球转');
     expect(given?.querySelector('b')).toBeNull();
     expect(target.querySelector('[data-testid="review-answer"]')?.textContent).toContain('太阳照亮月球的一半。');

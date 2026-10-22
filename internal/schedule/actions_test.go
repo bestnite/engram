@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// mustSubmit 在自建事务里提交一次评分并提交事务，返回结果。
+// mustSubmit submits one grade in a self-opened transaction, commits it, and returns the result.
 func mustSubmit(t *testing.T, db *gorm.DB, in SubmitInput) SubmitResult {
 	t.Helper()
 	tx := db.Begin()
@@ -25,8 +25,8 @@ func mustSubmit(t *testing.T, db *gorm.DB, in SubmitInput) SubmitResult {
 	return res
 }
 
-// TestUndoRestoresPreviousDueAndInterval 断言 Undo 精确恢复上一次评分之后的到期日与间隔
-// 做法：评分两次，快照第一次之后的状态，Undo 后逐字段比对。
+// TestUndoRestoresPreviousDueAndInterval asserts Undo restores exactly the due date and interval after the previous grade
+// Approach: grade twice, snapshot the state after the first grade, then compare field by field after Undo.
 func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -51,7 +51,7 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	})
 
 	tx := db.Begin()
-	// 第二次评分把版本推进到 2；撤销以该版本为目标。
+	// The second grade bumps the version to 2; the undo targets that version.
 	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, ExpectedVersion: 2, Scheduler: s, Now: now2})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
@@ -86,7 +86,7 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 		t.Errorf("undo last_review_at = %v, want %v", restored.LastReviewAt, afterFirst.LastReviewAt)
 	}
 
-	// 被撤销的那条日志必须被删除，只剩第一次的日志。
+	// The log being undone must be deleted, leaving only the first grade's log.
 	var logs int64
 	if err := db.Model(&store.Review{}).Where("card_id = ? AND user_id = ?", cardID, 1).Count(&logs).Error; err != nil {
 		t.Fatalf("count reviews: %v", err)
@@ -94,7 +94,7 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	if logs != 1 {
 		t.Errorf("reviews = %d, want 1 after undo", logs)
 	}
-	// 写一条 review.undo 审计。
+	// Write one review.undo audit entry.
 	var audits int64
 	if err := db.Model(&store.AuditLog{}).Where("action = ?", store.ActionReviewUndo).Count(&audits).Error; err != nil {
 		t.Fatalf("count audit: %v", err)
@@ -104,7 +104,7 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	}
 }
 
-// TestUndoFirstReviewReturnsCardToNew 断言撤销首次评分把卡恢复为全新状态（无到期日、无日志）。
+// TestUndoFirstReviewReturnsCardToNew asserts undoing the first grade restores the card to a brand-new state (no due date, no log).
 func TestUndoFirstReviewReturnsCardToNew(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestUndoFirstReviewReturnsCardToNew(t *testing.T) {
 	})
 
 	tx := db.Begin()
-	// 首次评分把版本推进到 1；撤销以该版本为目标。
+	// The first grade bumps the version to 1; the undo targets that version.
 	restored, err := Rollback(ctx, tx, UndoInput{CardID: cardID, UserID: 1, ExpectedVersion: 1, Scheduler: s, Now: now})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
@@ -145,7 +145,7 @@ func TestUndoFirstReviewReturnsCardToNew(t *testing.T) {
 	}
 }
 
-// TestUndoWithoutLogReturnsError 断言没有日志时 Undo 报英文错误而不是静默成功。
+// TestUndoWithoutLogReturnsError asserts Undo reports an English error rather than silently succeeding when there is no log.
 func TestUndoWithoutLogReturnsError(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -162,9 +162,9 @@ func TestUndoWithoutLogReturnsError(t *testing.T) {
 	}
 }
 
-// TestSuspendIsPerUser 断言暂停只对暂停者生效：用户 1 暂停后这张卡从他的队列消失，
-// 同一张卡仍在用户 2 的队列里（反面：卡片级暂停会让所有人都看不到）；取消暂停后回到用户 1 的队列，
-// 进度数值与到期日不变。还没有状态行的新卡也能被暂停。
+// TestSuspendIsPerUser asserts suspension only affects the suspender: after user 1 suspends it, the card disappears from their queue,
+// the same card is still in user 2's queue (the negative case: a card-level suspend would hide it from everyone); after unsuspending it is back in user 1's queue,
+// with progress figures and due date unchanged. A new card with no state row can be suspended too.
 func TestSuspendIsPerUser(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -229,8 +229,8 @@ func TestSuspendIsPerUser(t *testing.T) {
 	}
 }
 
-// TestBuryDefersCardToNextReviewDay 断言埋藏把到期日推到下一个复习日，且复习卡与新卡
-// 都因此在本日队列里消失。
+// TestBuryDefersCardToNextReviewDay asserts burying pushes the due date to the next review day, so both review cards and new cards
+// consequently disappear from today's queue.
 func TestBuryDefersCardToNextReviewDay(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -245,7 +245,7 @@ func TestBuryDefersCardToNextReviewDay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bury(review card) error = %v", err)
 	}
-	wantDue := time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC) // 切点 4 → 次日 04:00
+	wantDue := time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC) // cutoff 4 → 04:00 the next day
 	if buried.DueAt == nil || !buried.DueAt.Equal(wantDue) {
 		t.Errorf("buried due_at = %v, want %v", buried.DueAt, wantDue)
 	}

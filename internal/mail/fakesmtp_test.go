@@ -8,25 +8,27 @@ import (
 	"testing"
 )
 
-// fakeSMTP 是一个进程内最小 SMTP 服务器，用于在测试里验证投递与重试，
-// 不依赖外网或真实 SMTP 服务。它按行读取命令并应答固定状态码。
+// fakeSMTP is a minimal in-process SMTP server, used in tests to verify delivery and retries
+// without depending on the internet or a real SMTP service. It reads commands line by line and
+// answers with fixed status codes.
 //
-// 行为可通过 failFirst 控制：对第 N 次 DATA 之前的事务返回 4xx（可重试的瞬时错误），
-// 用来验证 worker 的退避重试；errors 记录每次返回给客户端的错误文本，便于断言
-// "最后一次错误"确实是服务端文本。
+// Its behavior is controlled by failFirst: transactions before the N-th DATA get a 4xx (a retryable
+// transient error), which is used to verify the worker's backoff retries; errors records the error
+// text returned to the client each time, so a test can assert that the "last error" really is the
+// server text.
 type fakeSMTP struct {
 	ln   net.Listener
 	addr string
 	mu   sync.Mutex
-	msgs []string // 成功接收的邮件正文
-	// failNext 是还需要失败的次数（>0 时下一个事务失败）。
+	msgs []string // bodies of the successfully received messages
+	// failNext is how many more failures are due (>0 means the next transaction fails).
 	failNext int
-	// rcptReject 为 true 时对 RCPT TO 直接拒绝（永久失败路径）。
+	// When rcptReject is true, RCPT TO is rejected outright (the permanent failure path).
 	rcptReject bool
 	closed     bool
 }
 
-// newFakeSMTP 在本地回环端口启动最小 SMTP 服务。
+// newFakeSMTP starts a minimal SMTP service on a loopback port.
 func newFakeSMTP(t *testing.T) *fakeSMTP {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -39,13 +41,13 @@ func newFakeSMTP(t *testing.T) *fakeSMTP {
 	return f
 }
 
-// host 返回主机名（不含端口）。
+// host returns the host name (without the port).
 func (f *fakeSMTP) host() string {
 	h, _, _ := net.SplitHostPort(f.addr)
 	return h
 }
 
-// port 返回监听端口。
+// port returns the listening port.
 func (f *fakeSMTP) port() int {
 	_, p, _ := net.SplitHostPort(f.addr)
 	n := 0
@@ -55,28 +57,28 @@ func (f *fakeSMTP) port() int {
 	return n
 }
 
-// setFailNext 让接下来 n 个事务失败，返回可重试的服务端错误文本。
+// setFailNext makes the next n transactions fail, returning a retryable server error text.
 func (f *fakeSMTP) setFailNext(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.failNext = n
 }
 
-// setRcptReject 让 RCPT TO 被拒（不重试的永久失败场景）。
+// setRcptReject makes RCPT TO be rejected (the permanent failure path that is not retried).
 func (f *fakeSMTP) setRcptReject(v bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.rcptReject = v
 }
 
-// received 返回成功接收的邮件正文副本。
+// received returns a copy of the successfully received message bodies.
 func (f *fakeSMTP) received() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.msgs...)
 }
 
-// serve 接受连接并为每个会话开一个 goroutine。
+// serve accepts connections and starts a goroutine for each session.
 func (f *fakeSMTP) serve() {
 	for {
 		conn, err := f.ln.Accept()
@@ -87,7 +89,8 @@ func (f *fakeSMTP) serve() {
 	}
 }
 
-// handle 逐个会话处理命令；只实现投递所需的最小命令集（EHLO/HELO/MAIL/RCPT/DATA/QUIT/RSET）。
+// handle processes the commands of one session; it implements only the minimal command set delivery
+// needs (EHLO/HELO/MAIL/RCPT/DATA/QUIT/RSET).
 func (f *fakeSMTP) handle(conn net.Conn) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
@@ -148,7 +151,7 @@ func (f *fakeSMTP) handle(conn net.Conn) {
 	}
 }
 
-// takeFail 在需要失败时消耗一次额度并返回 true。
+// takeFail consumes one failure credit when a failure is due and returns true.
 func (f *fakeSMTP) takeFail() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -159,7 +162,7 @@ func (f *fakeSMTP) takeFail() bool {
 	return false
 }
 
-// finishTransaction 记录一封成功接收的邮件。
+// finishTransaction records one successfully received mail.
 func (f *fakeSMTP) finishTransaction(body *strings.Builder, say func(string)) {
 	f.mu.Lock()
 	f.msgs = append(f.msgs, body.String())

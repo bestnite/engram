@@ -15,36 +15,36 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ErrNothingToUndo 表示该卡没有任何复习日志，Undo 无对象可回滚。
+// ErrNothingToUndo means the card has no review log, so Undo has nothing to roll back.
 var ErrNothingToUndo = errors.New("schedule: no review to undo")
 
-// UndoInput 是一次撤销的入参；tx 的语义与 Submit 相同（事务边界由调用方提供）。
+// UndoInput are the inputs for one undo; tx has the same semantics as in Submit (the caller provides the transaction boundary).
 type UndoInput struct {
 	CardID uint64
 	UserID uint64
-	// ExpectedVersion 是调用方读到的 card_states.version（通常是它刚提交评分后得到的版本）。
-	// 撤销把它当作目标：不匹配返回 ErrVersionConflict，且不删任何日志——这样重放请求、
-	// 双开窗口或旧版本请求都不会误删另一条评分。
+	// ExpectedVersion is the card_states.version the caller read (usually the version it just got back after submitting a grade).
+	// Undo treats it as the target: a mismatch returns ErrVersionConflict and deletes no log — so a replayed request,
+	// a double-open window or a stale request never wrongly deletes another grade.
 	ExpectedVersion int
 	Scheduler       *Scheduler
-	// Now 为零值时取当前时间，仅用于审计时间戳。
+	// A zero Now falls back to the current time and is only used for the audit timestamp.
 	Now time.Time
 }
 
-// Rollback 撤销该卡最后一次评分：用最后一条 reviews 作为日志驱动 fsrs.Rollback 恢复状态，
-// 删除该日志行，并把恢复后的状态写回 card_states。
+// Rollback undoes the card's last grade: it uses the last reviews row as the log to drive fsrs.Rollback and restore the state,
+// deletes that log row, and writes the restored state back to card_states.
 //
-// 为什么需要“上一条日志”：reviews 只记录评分后的调度结果（interval_days/stability/difficulty），
-// 评分前的 FSRS 快照没有独立列。上一条日志的评分后结果恰好就是本条的评分前快照，因此用它
-// 重建 ReviewLog 的评分前字段；由此 due_at 与 interval 能精确恢复到本次评分之前的值。
-// step_index（剩余学习步骤）由被撤销日志的 step_index_before 精确还原；旧行该列为
-// NULL 时退回 fsrs.Rollback 的结果（会把 step_index 归零）。
-// 评分前的到期日优先用被撤销日志的 due_before 快照：埋藏只改 due_at、不写日志，上一条日志
-// 推算不出被埋藏后的到期日；旧行该列为 NULL 时退回上一条日志的推算。
+// Why the "previous log" is needed: reviews only records the post-grade scheduling result (interval_days/stability/difficulty),
+// and the pre-grade FSRS snapshot has no column of its own. The post-grade result of the previous log is exactly this one's pre-grade
+// snapshot, so it is used to rebuild ReviewLog's pre-grade fields; that way due_at and interval are restored exactly to the values before this grade.
+// step_index (remaining learning steps) is restored exactly from the step_index_before of the log being undone; when that column is
+// NULL on an old row, it falls back to the fsrs.Rollback result (which zeroes step_index).
+// The pre-grade due date prefers the due_before snapshot of the log being undone: burying only changes due_at and writes no log, so the previous log
+// cannot derive the post-bury due date; when that column is NULL on an old row, it falls back to the derivation from the previous log.
 //
-// 执行顺序（PostgreSQL 下防竞态）：先锁定状态行并校验版本，再读日志。反过来（先读日志再锁行）
-// 会让另一事务在两步之间提交新评分：撤销随后读到新状态却仍持有旧日志，写守卫用新版本，
-// 检测不出日志与状态的错配。
+// Execution order (race-proof under PostgreSQL): lock the state row and check the version first, then read the logs. The opposite order (read logs, then lock the row)
+// would let another transaction commit a new grade between the two steps: the undo then reads the new state while still holding the old logs, and the write guard uses
+// the new version, so the mismatch between log and state goes undetected.
 func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, error) {
 	if tx == nil {
 		return store.CardState{}, errors.New("schedule: undo: transaction is required")
@@ -56,7 +56,7 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, errors.New("schedule: undo: card id and user id are required")
 	}
 
-	// 1. 先锁定状态行；没有状态行就没有评分可撤。
+	// 1. Lock the state row first; without a state row there is no grade to undo.
 	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
 	if err != nil {
 		return store.CardState{}, err
@@ -65,14 +65,14 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, fmt.Errorf("%w: card %d user %d has no state row", ErrNothingToUndo, in.CardID, in.UserID)
 	}
 
-	// 2. 版本守卫：重放、旧版本或双开窗口的请求在此被拦下，不删任何日志。
+	// 2. Version guard: replayed, stale or double-open requests are stopped here and no log is deleted.
 	if cur.Version != in.ExpectedVersion {
 		return store.CardState{}, fmt.Errorf("%w: card %d user %d holds version %d, expected %d",
 			ErrVersionConflict, in.CardID, in.UserID, cur.Version, in.ExpectedVersion)
 	}
 
-	// 3. 锁住状态行之后再读日志：此时不会有并发评分提交，日志与状态必然一致。
-	// 取最近两条日志：last 是要撤销的，prev 提供评分前快照（可能不存在）。
+	// 3. Read the logs only after locking the state row: no concurrent grade can be committed now, so logs and state must be consistent.
+	// Take the two most recent logs: last is the one being undone, prev provides the pre-grade snapshot (may not exist).
 	var logs []store.Review
 	if err := tx.WithContext(ctx).Where("card_id = ? AND user_id = ?", in.CardID, in.UserID).
 		Order("id DESC").Limit(2).Find(&logs).Error; err != nil {
@@ -97,7 +97,7 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, err
 	}
 	log, due, lastReview, scheduledDays := rebuildReviewLog(last, prev)
-	// 评分前的到期日优先用快照：埋藏只改 due_at、不写日志，上一条日志推算不出它。
+	// The pre-grade due date prefers the snapshot: burying only changes due_at and writes no log, so the previous log cannot derive it.
 	if last.DueBefore != nil {
 		d := last.DueBefore.UTC()
 		due = &d
@@ -107,9 +107,9 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, fmt.Errorf("schedule: undo: rollback card %d: %w", in.CardID, err)
 	}
 
-	// 组装恢复后的状态行。状态/stability/difficulty/reps/lapses/step_index 取 Rollback 的结果
-	// （step_index 的快照已由 rebuildReviewLog 从 step_index_before 重建）；
-	// due/last_review/scheduled_days 用上一条日志重建，保证到期日与间隔精确还原。
+	// Assemble the restored state row. state/stability/difficulty/reps/lapses/step_index come from the Rollback result
+	// (step_index's snapshot has already been rebuilt by rebuildReviewLog from step_index_before);
+	// due/last_review/scheduled_days are rebuilt from the previous log, restoring the due date and interval exactly.
 	next := store.CardState{
 		CardID:        in.CardID,
 		UserID:        in.UserID,
@@ -135,13 +135,13 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 	if err != nil {
 		return store.CardState{}, err
 	}
-	// 守卫失败说明状态行在本次读取之后被并发改过：不做部分恢复，返回冲突哨兵。
+	// A failed guard means the state row was concurrently modified after this read: do not do a partial restore, return the conflict sentinel.
 	if !written {
 		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while undoing",
 			ErrVersionConflict, in.CardID, in.UserID)
 	}
 
-	// reviews 只增不改的例外就是 Undo：删除被撤销的那一行，并写一条审计说明。
+	// The one exception to reviews being append-only is Undo: delete the row being undone and write an audit note.
 	if err := tx.WithContext(ctx).Delete(&store.Review{}, last.ID).Error; err != nil {
 		return store.CardState{}, fmt.Errorf("schedule: undo: delete review %d: %w", last.ID, err)
 	}
@@ -151,21 +151,21 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 	return next, nil
 }
 
-// rebuildReviewLog 依据被撤销日志与它的上一条日志，重建 fsrs.Rollback 需要的 ReviewLog，
-// 并返回评分前的到期日、上次复习时间与间隔天数。
+// rebuildReviewLog rebuilds the ReviewLog that fsrs.Rollback needs, from the log being undone and the log before it,
+// and returns the pre-grade due date, the last review time and the scheduled days.
 func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *time.Time, *time.Time, int) {
 	log := fsrs.ReviewLog{
 		Rating: fsrs.Rating(last.Rating),
 		State:  fsrs.State(last.StateBefore),
 		Review: last.ReviewedAt.UTC(),
 	}
-	// 学习步骤游标：评分前的剩余步骤数只有 reviews.step_index_before 知道。
-	// 旧行该列为 NULL，保持 0 —— 即旧行为（Undo 后 step_index 归零）。
+	// Learning-step cursor: only reviews.step_index_before knows the remaining steps before the grade.
+	// Old rows have NULL there; keep 0 — i.e. the old behaviour (step_index zeroed after Undo).
 	if last.StepIndexBefore != nil {
 		log.RemainingSteps = *last.StepIndexBefore
 	}
 	if prev == nil {
-		// 首次评分被撤销：恢复到全新卡（无到期日、无上次复习）。
+		// The first grade is being undone: restore to a brand-new card (no due date, no last review).
 		return log, nil, nil, 0
 	}
 	log.Due = prev.ReviewedAt.UTC()
@@ -186,12 +186,12 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 	return log, &due, &lastReview, scheduled
 }
 
-// addDays 在 t 上加 d 天；取整到毫秒，因为 interval_days 是 REAL，亚毫秒精度无意义。
+// addDays adds d days to t; rounded to milliseconds because interval_days is REAL and sub-millisecond precision is meaningless.
 func addDays(t time.Time, d float64) time.Time {
 	return t.Add(time.Duration(math.Round(d*24*60*60*1000)) * time.Millisecond)
 }
 
-// parseStateInt 把日志里的整数状态转成字符串，供 ParseState 复用同一套校验。
+// parseStateInt turns the integer state from the log into a string so ParseState reuses the same validation.
 func parseStateInt(v int) string {
 	switch State(v) {
 	case StateNew:
@@ -207,7 +207,7 @@ func parseStateInt(v int) string {
 	}
 }
 
-// writeUndoAudit 在同一个事务里写一条 audit_log，说明哪一条评分被撤销。
+// writeUndoAudit writes one audit_log row in the same transaction, recording which grade was undone.
 func writeUndoAudit(ctx context.Context, tx *gorm.DB, in UndoInput, last store.Review) error {
 	detail, err := json.Marshal(map[string]any{
 		"review_id":    last.ID,
@@ -236,21 +236,21 @@ func writeUndoAudit(ctx context.Context, tx *gorm.DB, in UndoInput, last store.R
 	return nil
 }
 
-// SuspendInput 是一次暂停 / 取消暂停的入参；tx 的语义与 Submit 相同（事务边界由调用方提供）。
+// SuspendInput are the inputs for one suspend / unsuspend; tx has the same semantics as in Submit (the caller provides the transaction boundary).
 type SuspendInput struct {
 	CardID uint64
 	UserID uint64
-	// Suspended 为 true 表示暂停，false 表示取消暂停。
+	// Suspended true means suspend, false means unsuspend.
 	Suspended bool
-	// Now 为零值时取当前时间，作为暂停时刻。
+	// A zero Now falls back to the current time and is used as the suspend instant.
 	Now time.Time
 }
 
-// SetSuspended 暂停或取消暂停一张卡，只对 UserID 本人生效（card_states.suspended_at）。
+// SetSuspended suspends or unsuspends a card, taking effect only for UserID itself (card_states.suspended_at).
 //
-// 暂停是每个用户自己的学习决定：共享卡组里一个成员暂停某张卡，不影响其他成员与属主。
-// 进度数值一概不动；还没有状态行的新卡会先建一行（state=new），与 Bury 同一做法。
-// version 推进：在途的评分提交拿着旧版本，会以冲突结束，而不是悄悄复习一张刚被暂停的卡。
+// Suspension is each user's own study decision: a member suspending a card in a shared deck does not affect other members or the owner.
+// No progress figure is touched; a new card with no state row gets one created first (state=new), the same approach as Bury.
+// version is bumped: in-flight grade submissions hold the old version and end in a conflict, rather than quietly reviewing a card that was just suspended.
 func SetSuspended(ctx context.Context, tx *gorm.DB, in SuspendInput) (store.CardState, error) {
 	if tx == nil {
 		return store.CardState{}, errors.New("schedule: suspend: transaction is required")
@@ -276,7 +276,7 @@ func SetSuspended(ctx context.Context, tx *gorm.DB, in SuspendInput) (store.Card
 	}
 	row.Version = version + 1
 	if cur == nil {
-		// 并发的首次写入（评分、埋藏或另一次暂停）先建了行时，这里插不进去：按冲突处理。
+		// When a concurrent first write (grade, bury or another suspend) created the row first, this insert fails: treat it as a conflict.
 		res := tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
 		if res.Error != nil {
 			return store.CardState{}, fmt.Errorf("schedule: suspend: create state for card %d: %w", in.CardID, res.Error)
@@ -300,22 +300,22 @@ func SetSuspended(ctx context.Context, tx *gorm.DB, in SuspendInput) (store.Card
 	return row, nil
 }
 
-// BuryInput 是一次“本日埋藏”的入参。
+// BuryInput are the inputs for one "bury for today".
 type BuryInput struct {
 	CardID uint64
 	UserID uint64
 	Now    time.Time
-	// Location/Timezone/DayCutoffHour 决定“明天”的边界。
+	// Location/Timezone/DayCutoffHour determine the boundary of "tomorrow".
 	Location      *time.Location
 	Timezone      string
 	DayCutoffHour *int
 }
 
-// Bury 把一张卡埋藏到下一个复习日开始：把它（该用户）的 due_at 推后到下一个切点，
-// 从而在本日队列里消失，但不改动任何学习进度数值（切点规则、复习页的 b 键埋藏）。
+// Bury buries a card until the next review day begins: it pushes the card's (that user's) due_at to the next cutoff,
+// making it disappear from today's queue without touching any progress figure (cutoff rules, the b key bury on the review page).
 //
-// 没有 card_states 行的新卡会先建一行（state=new、due_at=下一个切点）；队列构建对
-// “新卡且 due_at 未到”的卡不取出，因此新卡也能被埋藏。
+// A new card with no card_states row gets one created first (state=new, due_at=next cutoff); queue construction does not
+// take "new card whose due_at is not reached yet", so new cards can be buried too.
 func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, error) {
 	if tx == nil {
 		return store.CardState{}, errors.New("schedule: bury: transaction is required")
@@ -339,7 +339,7 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 	}
 	version := 0
 	if cur != nil {
-		// 保留原有的全部进度，只推迟到期日；version 推进以作废在途提交。
+		// Keep all existing progress, only postpone the due date; bump version to void in-flight submissions.
 		row = *cur
 		row.DueAt = &due
 		version = cur.Version
@@ -349,7 +349,7 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 	if err != nil {
 		return store.CardState{}, err
 	}
-	// 守卫失败说明状态行在本次读取之后被并发改过（并发首评或另一次埋藏）。
+	// A failed guard means the state row was concurrently modified after this read (concurrent first grade or another bury).
 	if !written {
 		return store.CardState{}, fmt.Errorf("%w: card %d user %d changed concurrently while burying",
 			ErrVersionConflict, in.CardID, in.UserID)
@@ -357,8 +357,8 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 	return row, nil
 }
 
-// nextReviewDayStart 返回“下一个复习日”的起点（本地时间 = 日期 + 1，小时 = 切点），转成 UTC。
-// 例如切点 4、本地 2026-10-02 12:00 → 2026-10-03 04:00 本地。
+// nextReviewDayStart returns the start of "the next review day" (local time = date + 1, hour = cutoff), converted to UTC.
+// For example cutoff 4, local 2026-10-02 12:00 → 2026-10-03 04:00 local.
 func nextReviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
 	if loc == nil {
 		loc = time.UTC

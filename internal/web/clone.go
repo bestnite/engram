@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// registerCloneRoutes 挂载卡组克隆。克隆对「自己可读」的卡组开放（reader 及以上），
-// 把内容复制到调用者账号下；写操作过 CSRF 中间件。依赖未装配时跳过。
+// registerCloneRoutes mounts deck cloning. Cloning is open to decks "you can read" (reader and above):
+// it copies the content into the caller's account; the write operation goes through the CSRF middleware. Skipped when dependencies are not wired up.
 func (s *Server) registerCloneRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.presets == nil {
 		return
@@ -20,11 +20,11 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 	router.POST("/api/v1/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
 }
 
-// deckClone 把一个「自己可读」的卡组复制到当前账号下。
+// deckClone copies a deck "you can read" into the current account.
 //
-// 内容复制（note + card），进度不跟随（新 card 没有任何 card_states 行）；共享授权不复制，
-// 克隆结果只有调用者一个 owner。克隆卡组沿用调用者自己在源卡组上生效的预设：克隆别人的卡组
-// 不会把属主的调度参数（含优化出的权重）复制给调用者，学习参数始终是各人自己的。
+// Content is copied (note + card), progress does not follow (the new cards have no card_states rows); share grants are not copied,
+// so the clone has only the caller as owner. A cloned deck keeps the preset that is in effect for the caller on the source deck: cloning someone else's deck
+// does not copy the owner's scheduling parameters (including optimized weights) to the caller; learning parameters are always each person's own.
 func (s *Server) deckClone(c *gin.Context) {
 	loc, ok := s.localizer(c)
 	if !ok {
@@ -38,7 +38,7 @@ func (s *Server) deckClone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// reader 及以上都能克隆：看到内容就能把它带走练自己的进度。
+	// Anyone at reader or above can clone: if you can see the content you can take it away and study your own progress.
 	src, ok := s.loadDeckForRole(c, user, deckID, store.RoleReader)
 	if !ok {
 		return
@@ -52,8 +52,8 @@ func (s *Server) deckClone(c *gin.Context) {
 		return
 	}
 	presetID := settings.PresetID
-	// 副本名 = 源名 + 本地化后缀；由 store.DeckCopyName 按 rune 截断源名，
-	// 保证接近上限的合法源名不会产出超长副本名。
+	// The copy name = source name + localized suffix; store.DeckCopyName truncates the source name by rune,
+	// ensuring a legal source name close to the limit does not produce an over-long copy name.
 	suffix := loc.Tf("clone.name_suffix", nil)
 	name := store.DeckCopyName(src.Name, suffix)
 	cloned, err := s.decks.Clone(ctx, src, user.ID, name, presetID)
@@ -76,13 +76,13 @@ func (s *Server) deckClone(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%s/notes", cloned.PublicID))
 }
 
-// acceptsJSON 报告请求是否要求 JSON 响应（SPA 的 fetch 调用）。
+// acceptsJSON reports whether the request asks for a JSON response (the SPA's fetch calls).
 //
-// 只看 Accept 头里的 application/json 媒体类型，并允许它带参数或出现在候选列表里
-// （如 "application/json; charset=utf-8" 或 "application/json, text/plain, */*"）：
-// 用整串精确比较时，客户端一旦附上 charset 就会把 JSON 调用误判成表单提交，于是
-// fetch 跟随 303 拿到 HTML，再按 JSON 解析失败。浏览器表单提交的 Accept 不含
-// application/json，因此仍走 303 重定向。
+// It only looks at the application/json media type in the Accept header, allowing it to carry parameters or appear in a candidate list
+// (such as "application/json; charset=utf-8" or "application/json, text/plain, */*"):
+// with an exact whole-string comparison, as soon as a client appends a charset the JSON call would be misjudged as a form submission, so
+// the fetch would follow the 303, get HTML and fail to parse it as JSON. The Accept of a browser form submission does not contain
+// application/json, so it still gets the 303 redirect.
 func acceptsJSON(c *gin.Context) bool {
 	for _, part := range strings.Split(c.GetHeader("Accept"), ",") {
 		media := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])

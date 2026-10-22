@@ -18,27 +18,27 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 TOTP 业务层：生成 secret、加密落库、校验验证码、一次性恢复码、关闭。
+// This file is the TOTP business layer: generating the secret, encrypting it into storage, verifying codes, one-time recovery codes, disabling.
 //
-// 依赖选择（AGENTS.md §2.4）：TOTP 算法用事实标准库
-// github.com/pquerna/otp，不自己写 HMAC。库负责 secret 生成与验证码校验；
-// otpauth:// 链接的拼装只是格式转写，用同一个 helper 保证生成与展示一致。
+// Dependency choices (AGENTS.md §2.4): the TOTP algorithm uses the de facto standard library
+// github.com/pquerna/otp instead of hand-rolling HMAC. The library handles secret generation and code verification;
+// assembling the otpauth:// link is mere format transcription, and using the same helper keeps generation and display consistent.
 
 const (
-	// DefaultTOTPIssuer 是认证器 App 里显示的发行方名（项目正式名）。
+	// DefaultTOTPIssuer is the issuer name shown in authenticator apps (the project's official name).
 	DefaultTOTPIssuer = "Engram"
-	// totpPeriod 与 totpSkew：30 秒一步，允许前后各一步漂移（客户端时钟偏差）。
+	// totpPeriod and totpSkew: 30 seconds per step, allowing one step of drift either way (client clock skew).
 	totpPeriod = 30
 	totpSkew   = 1
-	// RecoveryCodeCount 是一次生成的恢复码数量。
+	// RecoveryCodeCount is how many recovery codes are generated at a time.
 	RecoveryCodeCount = 10
-	// recoveryCodeLength 是单个恢复码的字符数（不含分隔连字符）。
+	// recoveryCodeLength is the character count of a single recovery code (excluding the separator hyphens).
 	recoveryCodeLength = 10
-	// recoveryCodeAlphabet 是 Base32 字符集，去掉 0/1/8/9 等易混字符。
+	// recoveryCodeAlphabet is the Base32 character set, with confusable characters such as 0/1/8/9 removed.
 	recoveryCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 )
 
-// TOTP 相关的稳定错误值；transport 层据此映射到语言包 key。
+// Stable TOTP-related error values; the transport layer maps them to language pack keys.
 var (
 	ErrTOTPNotEnabled     = errors.New("totp is not enabled")
 	ErrTOTPAlreadyEnabled = errors.New("totp is already enabled")
@@ -46,7 +46,7 @@ var (
 	ErrTOTPInvalidCode    = errors.New("invalid totp code")
 )
 
-// TOTPService 负责 TOTP 的完整生命周期。
+// TOTPService owns the full TOTP lifecycle.
 type TOTPService struct {
 	store  *store.TOTPStore
 	codec  *store.SecretCodec
@@ -54,7 +54,7 @@ type TOTPService struct {
 	now    func() time.Time
 }
 
-// NewTOTPService 构造 TOTP 服务；store 与 codec 缺一不可（secret 必须能加密存储）。
+// NewTOTPService constructs the TOTP service; store and codec are both mandatory (the secret must be stored encrypted).
 func NewTOTPService(st *store.TOTPStore, codec *store.SecretCodec, issuer string) (*TOTPService, error) {
 	if st == nil || codec == nil {
 		return nil, errors.New("auth: totp store and secret codec are required")
@@ -66,13 +66,13 @@ func NewTOTPService(st *store.TOTPStore, codec *store.SecretCodec, issuer string
 		now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
-// Enabled 报告用户是否已启用 TOTP（只有已确认的绑定才算）。
+// Enabled reports whether the user has TOTP enabled (only a confirmed binding counts).
 func (s *TOTPService) Enabled(ctx context.Context, userID uint64) (bool, error) {
 	return s.store.Enabled(ctx, userID)
 }
 
-// Begin 生成新的 secret 并以未确认状态加密落库；返回明文 secret 与 otpauth 链接。
-// 明文只在此刻返回一次（页面展示）；库里只有密文。已启用的账号不允许重新绑定。
+// Begin generates a new secret and stores it encrypted in an unconfirmed state; it returns the plaintext secret and the otpauth link.
+// The plaintext is returned exactly once, at this moment (for page display); only the ciphertext is in storage. An enabled account may not re-bind.
 func (s *TOTPService) Begin(ctx context.Context, userID uint64, accountName string) (secret, otpauth string, err error) {
 	enabled, err := s.store.Enabled(ctx, userID)
 	if err != nil {
@@ -100,8 +100,8 @@ func (s *TOTPService) Begin(ctx context.Context, userID uint64, accountName stri
 	return secret, otpauthURL(s.issuer, accountName, secret), nil
 }
 
-// Pending 取回尚未确认的绑定信息（明文 secret 与 otpauth 链接），供设置页刷新时重显。
-// 返回 (nil, nil, false, nil) 表示没有待确认的绑定。
+// Pending retrieves the still-unconfirmed binding (plaintext secret and otpauth link) so the settings page can re-display it after a refresh.
+// Returning (nil, nil, false, nil) means there is no pending binding.
 func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName string) (secret, otpauth string, ok bool, err error) {
 	row, err := s.store.Get(ctx, userID)
 	if err != nil {
@@ -115,16 +115,17 @@ func (s *TOTPService) Pending(ctx context.Context, userID uint64, accountName st
 	}
 	plain, err := s.codec.Decrypt(row.SecretCiphertext)
 	if err != nil {
-		// 解不开必须大声报错，绝不当作「没绑定」（约定）。
+		// Failing to decrypt must fail loudly and never be treated as "not bound": reading it as unbound would silently drop two-factor
+		// protection from an account that has it enabled.
 		return "", "", false, fmt.Errorf("decrypt pending totp secret: %w", err)
 	}
 	return plain, otpauthURL(s.issuer, accountName, plain), true, nil
 }
 
-// Confirm 用一次验证码确认待确认的绑定；成功后启用并生成一批一次性恢复码。
-// 返回的恢复码明文只在此刻返回一次。
-// 确认时接受的验证码同样登记时间步：确认后二次验证立即生效，若不登记，
-// 被观测到的确认码在其窗口内还能再通过一次登录（这正是要堵的重放路径）。
+// Confirm confirms the pending binding with a single code; on success it enables TOTP and generates a batch of one-time recovery codes.
+// The returned plaintext recovery codes are handed out exactly once, at this moment.
+// The code accepted at confirmation records its time step too: the second factor then takes effect immediately after confirmation;
+// without that record, an observed confirmation code could still pass one login inside its window (exactly the replay path we want closed).
 func (s *TOTPService) Confirm(ctx context.Context, userID uint64, code string) (recoveryCodes []string, err error) {
 	row, err := s.store.Get(ctx, userID)
 	if err != nil {
@@ -153,9 +154,9 @@ func (s *TOTPService) Confirm(ctx context.Context, userID uint64, code string) (
 	return s.RegenerateRecoveryCodes(ctx, userID)
 }
 
-// VerifySecondFactor 校验一次登录第二步输入：先按 6 位验证码校验，失败再尝试恢复码。
-// 返回 usedRecovery 表示本次是通过恢复码通过的（调用方据此写审计）。
-// 未启用或输入为空一律返回 (false, false, nil)，不区分原因，避免给爆破者额外信息。
+// VerifySecondFactor verifies one login second-step input: it first checks a 6-digit code and, on failure, tries the recovery codes.
+// The returned usedRecovery says this attempt passed with a recovery code (the caller audits on it).
+// Not enabled or empty input always returns (false, false, nil) without distinguishing the reason, so a brute-forcer gains no extra information.
 func (s *TOTPService) VerifySecondFactor(ctx context.Context, userID uint64, code string) (usedRecovery, ok bool, err error) {
 	entry := strings.TrimSpace(code)
 	if entry == "" {
@@ -191,7 +192,7 @@ func (s *TOTPService) VerifySecondFactor(ctx context.Context, userID uint64, cod
 	return consumed, consumed, nil
 }
 
-// RegenerateRecoveryCodes 生成一批新的恢复码（明文返回一次），并作废旧的未使用码。
+// RegenerateRecoveryCodes generates a fresh batch of recovery codes (plaintext returned once) and invalidates the old unused ones.
 func (s *TOTPService) RegenerateRecoveryCodes(ctx context.Context, userID uint64) ([]string, error) {
 	plaintext, hashes, err := generateRecoveryCodes(RecoveryCodeCount)
 	if err != nil {
@@ -203,12 +204,12 @@ func (s *TOTPService) RegenerateRecoveryCodes(ctx context.Context, userID uint64
 	return plaintext, nil
 }
 
-// UnusedRecoveryCodeCount 返回剩余可用的恢复码数量。
+// UnusedRecoveryCodeCount returns how many recovery codes remain usable.
 func (s *TOTPService) UnusedRecoveryCodeCount(ctx context.Context, userID uint64) (int64, error) {
 	return s.store.UnusedRecoveryCodeCount(ctx, userID)
 }
 
-// Disable 关闭 TOTP 并删除全部恢复码。密码确认由调用方完成（handler 有用户上下文）。
+// Disable turns TOTP off and deletes all recovery codes. The caller performs the password confirmation (the handler has the user context).
 func (s *TOTPService) Disable(ctx context.Context, userID uint64) error {
 	enabled, err := s.store.Enabled(ctx, userID)
 	if err != nil {
@@ -220,11 +221,11 @@ func (s *TOTPService) Disable(ctx context.Context, userID uint64) error {
 	return s.store.Delete(ctx, userID)
 }
 
-// acceptCode 校验 6 位验证码并登记其时间步（窗口内同一码不得二次通过）。
+// acceptCode verifies a 6-digit code and records its time step (the same code may not pass twice within the window).
 //
-// 返回 ok=false 有两种情况，对外不区分：① 码不在 ±totpSkew 窗口内；
-// ② 该步不晚于已接受的最大步（重放，或比已接受步更早的旧码）。
-// 记录本身是原子条件更新（store.AcceptStep），因此并发下同一码只有一个请求能拿到 ok=true。
+// ok=false has two cases that are not distinguished externally: (1) the code is outside the ±totpSkew window;
+// (2) the step is not later than the maximum accepted step (a replay, or an old code earlier than the accepted step).
+// The record itself is an atomic conditional update (store.AcceptStep), so under concurrency only one request gets ok=true for the same code.
 func (s *TOTPService) acceptCode(ctx context.Context, userID uint64, secret, code string) (bool, error) {
 	step, ok := s.matchStep(secret, code, s.now())
 	if !ok {
@@ -233,9 +234,9 @@ func (s *TOTPService) acceptCode(ctx context.Context, userID uint64, secret, cod
 	return s.store.AcceptStep(ctx, userID, step)
 }
 
-// matchStep 在 ±totpSkew 时钟窗口内找出产出 code 的时间步；不在窗口内返回 (0, false)。
-// 由高步往低步找：若极端情况下两个相邻步产出同一个码，取高步，
-// 让已接受的最大步尽量前移（宁可多拒一次，也不放过重放）。
+// matchStep finds the time step that produces code within the ±totpSkew clock window; (0, false) when it is outside the window.
+// It searches from the high step down: if under extreme circumstances two adjacent steps produce the same code, the higher step wins,
+// pushing the maximum accepted step as far forward as possible (better to reject one extra time than to let a replay through).
 func (s *TOTPService) matchStep(secret, code string, now time.Time) (int64, bool) {
 	entry := strings.TrimSpace(code)
 	base := now.Unix() / totpPeriod
@@ -256,8 +257,8 @@ func (s *TOTPService) matchStep(secret, code string, now time.Time) (int64, bool
 	return 0, false
 }
 
-// otpauthURL 拼装 otpauth:// 链接（Google Authenticator Key URI 格式）。
-// 生成与展示共用这一处实现，避免两条路径给出不同的链接。
+// otpauthURL assembles the otpauth:// link (Google Authenticator Key URI format).
+// Generation and display share this one implementation, so the two paths never yield different links.
 func otpauthURL(issuer, account, secret string) string {
 	q := url.Values{}
 	q.Set("secret", secret)
@@ -268,7 +269,7 @@ func otpauthURL(issuer, account, secret string) string {
 	return "otpauth://totp/" + url.PathEscape(issuer+":"+account) + "?" + q.Encode()
 }
 
-// isSixDigits 报告输入是否恰好是 6 位数字（验证码的形态）。
+// isSixDigits reports whether the input is exactly 6 digits (the shape of a verification code).
 func isSixDigits(s string) bool {
 	if len(s) != 6 {
 		return false
@@ -281,7 +282,7 @@ func isSixDigits(s string) bool {
 	return true
 }
 
-// normalizeRecoveryCode 归一化恢复码：去连字符与空格、转大写。
+// normalizeRecoveryCode normalizes a recovery code: strip hyphens and spaces, uppercase.
 func normalizeRecoveryCode(code string) string {
 	var b strings.Builder
 	for _, r := range strings.ToUpper(code) {
@@ -292,15 +293,15 @@ func normalizeRecoveryCode(code string) string {
 	return b.String()
 }
 
-// hashRecoveryCode 返回恢复码的 sha256 十六进制摘要。
-// 恢复码是 50 bit 的随机值而非用户自选口令，因此不需要加盐/慢哈希；
-// 加盐还要为每行额外存盐，得不偿失。库中只存摘要，明文不落库。
+// hashRecoveryCode returns the sha256 hex digest of a recovery code.
+// A recovery code is a 50-bit random value rather than a user-chosen password, so it needs no salt or slow hash;
+// salting would also mean storing an extra salt per row, which is not worth it. Only the digest is stored; the plaintext never is.
 func hashRecoveryCode(code string) string {
 	sum := sha256.Sum256([]byte(normalizeRecoveryCode(code)))
 	return hex.EncodeToString(sum[:])
 }
 
-// generateRecoveryCodes 生成 n 个恢复码，返回明文（带连字符）与摘要。
+// generateRecoveryCodes generates n recovery codes, returning the plaintexts (with hyphens) and the digests.
 func generateRecoveryCodes(n int) (plaintext []string, hashes []string, err error) {
 	plaintext = make([]string, 0, n)
 	hashes = make([]string, 0, n)
@@ -315,8 +316,8 @@ func generateRecoveryCodes(n int) (plaintext []string, hashes []string, err erro
 	return plaintext, hashes, nil
 }
 
-// randomRecoveryCode 从 Base32 字符集里均匀取 length 个字符。
-// 用拒绝采样消除取模偏差：字符集 32 恰好整除 256，这里的判断是防御性写法。
+// randomRecoveryCode picks length characters uniformly from the Base32 alphabet.
+// Rejection sampling removes modulo bias: the alphabet size 32 divides 256 exactly, so the check here is defensive.
 func randomRecoveryCode(length int) (string, error) {
 	buf := make([]byte, length)
 	out := make([]byte, 0, length)

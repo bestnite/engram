@@ -17,24 +17,24 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 会话默认值：cookie 名不用 __Host- 前缀，因为开发态可跑在 http（Secure=false）下。
+// Session defaults: the cookie name skips the __Host- prefix because development can run over http (Secure=false).
 const (
 	DefaultSessionCookieName = "engram_session"
 	DefaultSessionTTL        = 30 * 24 * time.Hour
 )
 
-// SessionConfig 是会话中间件的显式配置；缺少密钥时构造失败，绝不使用可预测的默认密钥。
+// SessionConfig is the explicit configuration of the session middleware; construction fails when the secret is missing, and a predictable default secret is never used.
 type SessionConfig struct {
 	Secret     []byte
 	CookieName string
-	// Secure 在生产必须为 true；测试用 TLS httptest 时保持 true。
+	// Secure must be true in production; it stays true when tests use TLS httptest.
 	Secure bool
 	TTL    time.Duration
-	// Now 可注入时钟，便于测试过期。
+	// Now is an injectable clock, handy for testing expiry.
 	Now func() time.Time
 }
 
-// ctxKey 用未导出类型做上下文键，避免与其他包冲突。
+// ctxKey uses an unexported type as the context key so it cannot collide with other packages.
 type ctxKey string
 
 const (
@@ -42,7 +42,7 @@ const (
 	ctxSessionKey ctxKey = "auth.session"
 )
 
-// Manager 负责会话 cookie 的签发/校验、会话作废，以及会话与 CSRF 两个中间件。
+// Manager handles issuing/validating the session cookie, revoking sessions, and the session and CSRF middleware pair.
 type Manager struct {
 	users      *store.UserStore
 	sessions   *store.SessionStore
@@ -53,7 +53,7 @@ type Manager struct {
 	now        func() time.Time
 }
 
-// NewSessionManager 构造会话管理器；cfg.Secret 为空或无依赖时返回英文错误。
+// NewSessionManager constructs the session manager; an empty cfg.Secret or a missing dependency returns an English error.
 func NewSessionManager(users *store.UserStore, sessions *store.SessionStore, cfg SessionConfig) (*Manager, error) {
 	if users == nil || sessions == nil {
 		return nil, errors.New("auth: user store and session store are required")
@@ -82,7 +82,7 @@ func NewSessionManager(users *store.UserStore, sessions *store.SessionStore, cfg
 	return m, nil
 }
 
-// randomToken 生成 n 字节的高熵随机值并做 URL 安全编码。
+// randomToken generates n bytes of high-entropy randomness and URL-safe encodes it.
 func randomToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -91,16 +91,16 @@ func randomToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// SignValue 返回 "载荷.HMAC-SHA256(载荷)"。会话 cookie 与 TOTP 第二步凭据共用这一处签名，
-// 因此两者的伪造难度一致，也不会出现第二套密钥。载荷不含 '.' 也能工作，但用 LastIndex
-// 定位分隔符，所以允许载荷自带 '.'（例如 "userID.expUnix"）。
+// SignValue returns "payload.HMAC-SHA256(payload)". The session cookie and the TOTP second-step credential share this one signing spot,
+// so forging either is equally hard and there is no second key. It works when the payload contains no '.', but the separator is located with LastIndex,
+// so a payload may contain '.' itself (e.g. "userID.expUnix").
 func (m *Manager) SignValue(payload string) string {
 	mac := hmac.New(sha256.New, m.secret)
 	mac.Write([]byte(payload))
 	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// VerifyValue 校验签名并取回载荷；任何解析/签名问题都返回 false。
+// VerifyValue validates the signature and recovers the payload; any parse or signature problem returns false.
 func (m *Manager) VerifyValue(value string) (string, bool) {
 	i := strings.LastIndexByte(value, '.')
 	if i <= 0 || i == len(value)-1 {
@@ -119,13 +119,13 @@ func (m *Manager) VerifyValue(value string) (string, bool) {
 	return payload, true
 }
 
-// sign 返回 "会话ID.签名"；会话 ID 本身不含 '.'，语义与 SignValue 相同。
+// sign returns "sessionID.signature"; the session ID itself contains no '.', so the semantics match SignValue.
 func (m *Manager) sign(id string) string { return m.SignValue(id) }
 
-// verifyCookie 校验签名并取回会话 ID；任何解析/签名问题都视作匿名。
+// verifyCookie validates the signature and recovers the session ID; any parse or signature problem counts as anonymous.
 func (m *Manager) verifyCookie(value string) (string, bool) { return m.VerifyValue(value) }
 
-// StartSession 新建服务端会话、下发签名 cookie，并为该会话生成 CSRF token。
+// StartSession creates a new server-side session, hands out a signed cookie, and generates a CSRF token for that session.
 func (m *Manager) StartSession(ctx context.Context, c *gin.Context, userID uint64) (*store.Session, error) {
 	id, err := randomToken(32)
 	if err != nil {
@@ -150,7 +150,7 @@ func (m *Manager) StartSession(ctx context.Context, c *gin.Context, userID uint6
 	return sess, nil
 }
 
-// Logout 作废当前会话的服务端记录并清除 cookie；没有会话时也清除 cookie（幂等）。
+// Logout revokes the current session's server-side record and clears the cookie; with no session it still clears the cookie (idempotent).
 func (m *Manager) Logout(ctx context.Context, c *gin.Context) error {
 	if sess, ok := CurrentSession(c); ok {
 		if err := m.sessions.Revoke(ctx, sess.ID, m.now()); err != nil {
@@ -161,12 +161,12 @@ func (m *Manager) Logout(ctx context.Context, c *gin.Context) error {
 	return nil
 }
 
-// RevokeAllForUser 作废某用户的全部会话：改密码、禁用、强制下线走这里。
+// RevokeAllForUser revokes all sessions of a user: password change, disable and forced logout go through here.
 func (m *Manager) RevokeAllForUser(ctx context.Context, userID uint64) error {
 	return m.sessions.RevokeAllForUser(ctx, userID, m.now())
 }
 
-// setCookie 下发会话 cookie：HttpOnly + SameSite=Lax +（生产）Secure，Path=/。
+// setCookie hands out the session cookie: HttpOnly + SameSite=Lax + Secure (in production), Path=/.
 func (m *Manager) setCookie(c *gin.Context, id string) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     m.cookieName,
@@ -179,7 +179,7 @@ func (m *Manager) setCookie(c *gin.Context, id string) {
 	})
 }
 
-// clearCookie 用一个立即过期的同名 cookie 覆盖客户端会话。
+// clearCookie overwrites the client-side session with a same-named cookie that expires immediately.
 func (m *Manager) clearCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     m.cookieName,
@@ -192,11 +192,11 @@ func (m *Manager) clearCookie(c *gin.Context) {
 	})
 }
 
-// CookieName 返回会话 cookie 名，供测试与后续登录页使用。
+// CookieName returns the session cookie name, for tests and the login page to come.
 func (m *Manager) CookieName() string { return m.cookieName }
 
-// Middleware 解析会话 cookie 并把用户/会话放进请求上下文。
-// 三种服务端作废路径在这里统一收敛：行被撤销、cookie 过期、用户被禁用/删除。
+// Middleware parses the session cookie and puts the user/session into the request context.
+// Three server-side revocation paths converge here: the row was revoked, the cookie expired, the user was disabled/deleted.
 func (m *Manager) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Request.Cookie(m.cookieName)
@@ -219,7 +219,7 @@ func (m *Manager) Middleware() gin.HandlerFunc {
 		}
 		u, err := m.users.ByID(ctx, sess.UserID)
 		if err != nil || u.Status != store.StatusActive {
-			// 用户被禁用或已删除：即便 cookie 仍有效也立即作废服务端会话。
+			// The user is disabled or deleted: revoke the server-side session immediately even if the cookie is still valid.
 			_ = m.sessions.Revoke(ctx, sess.ID, m.now())
 			m.clearCookie(c)
 			c.Next()
@@ -227,17 +227,17 @@ func (m *Manager) Middleware() gin.HandlerFunc {
 		}
 		c.Set(string(ctxUserKey), u)
 		c.Set(string(ctxSessionKey), sess)
-		// 最后活跃时间只用于展示，失败不打断请求。
+		// Last-seen time is display only; a failure does not interrupt the request.
 		_ = m.sessions.Touch(ctx, sess.ID, m.now())
 		c.Next()
 	}
 }
 
-// RequireUser 拒绝未登录请求（401）；放在 Middleware 之后、受保护路由之前。
+// RequireUser rejects unauthenticated requests (401); place it after Middleware and before protected routes.
 func (m *Manager) RequireUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := CurrentUser(c); !ok {
-			// 英文内部错误；面向用户文案待语言包（接入）。
+			// English internal error; user-facing text awaits the language pack (onboarding).
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{"code": "unauthorized", "message": "authentication required"},
 			})
@@ -247,7 +247,7 @@ func (m *Manager) RequireUser() gin.HandlerFunc {
 	}
 }
 
-// CurrentUser 从上下文取当前用户。
+// CurrentUser takes the current user from the context.
 func CurrentUser(c *gin.Context) (*store.User, bool) {
 	v, ok := c.Get(string(ctxUserKey))
 	if !ok {
@@ -257,7 +257,7 @@ func CurrentUser(c *gin.Context) (*store.User, bool) {
 	return u, ok
 }
 
-// CurrentSession 从上下文取当前会话。
+// CurrentSession takes the current session from the context.
 func CurrentSession(c *gin.Context) (*store.Session, bool) {
 	v, ok := c.Get(string(ctxSessionKey))
 	if !ok {

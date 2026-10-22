@@ -14,8 +14,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// fakeEnqueuer 记录入队的邮件，避免依赖真实 SMTP 或 outbox worker。
-// 它同时实现 Enqueuer 的 Configured，便于测试「SMTP 未配置」路径。
+// fakeEnqueuer records enqueued mail, avoiding a dependency on real SMTP or the outbox worker.
+// It also implements Enqueuer's Configured, so the "SMTP not configured" path is easy to test.
 type fakeEnqueuer struct {
 	configured bool
 	failNext   error
@@ -48,7 +48,7 @@ func (f *fakeEnqueuer) last() mail.Message {
 	return f.msgs[len(f.msgs)-1]
 }
 
-// newTestDB 开一个临时 SQLite 库并迁移全部模型（含 reminder_log）。
+// newTestDB opens a temporary SQLite database and migrates all models (including reminder_log).
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "reminder.db"))
@@ -61,8 +61,8 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// seedUserWithDueCard 建一个活跃用户，并挂上一张到期的复习卡。
-// dueAt 传过去的时间，保证候选查询一定命中。
+// seedUserWithDueCard creates an active user and attaches one due review card.
+// dueAt is a past timestamp, guaranteeing the candidate query always matches.
 func seedUserWithDueCard(t *testing.T, db *gorm.DB, name, email, locale, tz string, cutoff int, dueAt time.Time) uint64 {
 	t.Helper()
 	now := time.Now().UTC()
@@ -109,7 +109,7 @@ func seedUserWithDueCard(t *testing.T, db *gorm.DB, name, email, locale, tz stri
 	return user.ID
 }
 
-// enableReminder 显式打开该用户的复习提醒偏好（C 类默认关）。
+// enableReminder explicitly turns on that user's review reminder preference (class C defaults off).
 func enableReminder(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	store := store.NewEmailPrefStore(db)
@@ -120,7 +120,7 @@ func enableReminder(t *testing.T, db *gorm.DB, userID uint64) {
 	}
 }
 
-// disableReminder 显式关闭该用户的复习提醒偏好。
+// disableReminder explicitly turns off that user's review reminder preference.
 func disableReminder(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	prefs := store.NewEmailPrefStore(db)
@@ -131,7 +131,7 @@ func disableReminder(t *testing.T, db *gorm.DB, userID uint64) {
 	}
 }
 
-// newReminder 构造一个用可控时钟与假 enqueuer 的 Reminder。
+// newReminder builds a Reminder with a controllable clock and a fake enqueuer.
 func newReminder(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *Reminder {
 	t.Helper()
 	translator, err := i18n.New()
@@ -148,7 +148,7 @@ func newReminder(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) 
 	return r
 }
 
-// shanghaiAt 返回「上海本地时间 hh:mm」对应的 UTC 时刻（同一天，日期取 2026-06-01）。
+// shanghaiAt returns the UTC instant for "Shanghai local hh:mm" (same day, date fixed at 2026-06-01).
 func shanghaiAt(t *testing.T, hour, min int) time.Time {
 	t.Helper()
 	loc, err := time.LoadLocation("Asia/Shanghai")
@@ -158,7 +158,7 @@ func shanghaiAt(t *testing.T, hour, min int) time.Time {
 	return time.Date(2026, 6, 1, hour, min, 0, 0, loc).UTC()
 }
 
-// TestSecondReminderSameDayNotSent 验证同一天的第二封不发（与发送时刻无关的纯每日上限）。
+// TestSecondReminderSameDayNotSent verifies the second mail on the same day is not sent (a pure daily cap, independent of send time).
 func TestSecondReminderSameDayNotSent(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "bob", "bob@example.com", "en", "Asia/Shanghai", 4,
@@ -166,7 +166,7 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	// 默认发送小时是 19:00：第一次轮询取 19:05，已在到点之后。
+	// Default send hour is 19:00: the first poll uses 19:05, already past the hour.
 	clock := shanghaiAt(t, 19, 5)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
@@ -177,7 +177,7 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 	if got := enq.count(); got != 1 {
 		t.Fatalf("first run enqueued %d, want 1", got)
 	}
-	// 同一天稍晚再跑一轮：台账已存在，不发第二封。
+	// Run another round later the same day: the ledger already has an entry, so no second mail.
 	clock = shanghaiAt(t, 23, 30)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("second RunOnce: %v", err)
@@ -187,7 +187,7 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 	}
 }
 
-// TestOptOutStopsImmediately 验证用户关掉后立即停发：新的一天本可以发，但偏好已关，所以不发。
+// TestOptOutStopsImmediately verifies sending stops immediately once the user turns it off: a new day could send, but the preference is off, so nothing is sent.
 func TestOptOutStopsImmediately(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "carol", "carol@example.com", "en", "Asia/Shanghai", 4,
@@ -195,12 +195,12 @@ func TestOptOutStopsImmediately(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	enq := &fakeEnqueuer{configured: true}
-	// 默认发送小时是 19:00：取 19:05，已在到点之后。
+	// Default send hour is 19:00: use 19:05, already past the hour.
 	clock := shanghaiAt(t, 19, 5)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	// 打开时正常发一封。
+	// While on, one mail goes out normally.
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("enabled RunOnce: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestOptOutStopsImmediately(t *testing.T) {
 		t.Fatalf("enabled run enqueued %d, want 1", got)
 	}
 
-	// 关掉偏好，并在**新的一天**再跑：新一天不受每日上限约束，能不发只因偏好关。
+	// Turn the preference off and run again on a **new day**: the new day is not capped by the daily limit, so only the preference being off can stop it.
 	disableReminder(t, db, userID)
 	clock = shanghaiAt(t, 19, 5).Add(24 * time.Hour)
 	if err := r.RunOnce(ctx); err != nil {
@@ -219,7 +219,7 @@ func TestOptOutStopsImmediately(t *testing.T) {
 	}
 }
 
-// TestDefaultOffWhenNoPreference 验证 C 类默认关：没有偏好行时不发。
+// TestDefaultOffWhenNoPreference verifies class C defaults to off: with no preference row, no send.
 func TestDefaultOffWhenNoPreference(t *testing.T) {
 	db := newTestDB(t)
 	seedUserWithDueCard(t, db, "dave", "dave@example.com", "en", "Asia/Shanghai", 4,
@@ -237,7 +237,7 @@ func TestDefaultOffWhenNoPreference(t *testing.T) {
 	}
 }
 
-// TestNotConfiguredDoesNotSendOrError 验证 SMTP 未配置时不发也不报错。
+// TestNotConfiguredDoesNotSendOrError verifies that nothing is sent and no error is reported when SMTP is unconfigured.
 func TestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "erin", "erin@example.com", "en", "Asia/Shanghai", 4,
@@ -256,11 +256,11 @@ func TestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	}
 }
 
-// TestNoDueCardsNoReminder 验证没有到期卡的用户不会被催促。
+// TestNoDueCardsNoReminder verifies a user with no due cards is not nagged.
 func TestNoDueCardsNoReminder(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "frank", "frank@example.com", "en", "Asia/Shanghai", 4,
-		// 到期时间在未来 → 当前没有到期卡。
+		// Due time is in the future → no due cards right now.
 		time.Now().UTC().Add(72*time.Hour))
 	enableReminder(t, db, userID)
 

@@ -11,37 +11,37 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是（A 类事务安全邮件）的一次性令牌服务：签发与消费。
+// This file is the one-time token service used by class-A transactional mail: issuing and consuming.
 //
-// 安全约束：
-//   - 明文随机、URL 安全，只出现在邮件链接里，绝不入库、绝不进日志；
-//   - 库里只存 sha256 摘要（store.HashActionToken）；
-//   - 一次性：消费走条件更新 `WHERE used_at IS NULL`（store.ActionTokenStore.Consume）；
-//   - 有明确过期时间。
+// Security constraints:
+//   - the plaintext is random and URL-safe, appears only in email links, and is never persisted nor logged;
+//   - only the sha256 digest is stored (store.HashActionToken);
+//   - one-time: consumption goes through a conditional update `WHERE used_at IS NULL` (store.ActionTokenStore.Consume);
+//   - there is an explicit expiry.
 //
-// 令牌的用途常量与过期时长集中在这里，调用方不自己编时长。
+// The token purpose constants and TTLs are centralized here; callers do not invent their own durations.
 
 const (
-	// PasswordResetTTL 是密码重置链接的有效期；窗口短，降低链接泄漏后的滥用面。
+	// PasswordResetTTL is the validity of a password reset link; the short window shrinks the abuse surface if the link leaks.
 	PasswordResetTTL = 1 * time.Hour
-	// EmailVerifyTTL 是邮箱验证链接的有效期。
+	// EmailVerifyTTL is the validity of an email verification link.
 	EmailVerifyTTL = 24 * time.Hour
-	// EmailChangeTTL 是改邮箱确认链接的有效期。
+	// EmailChangeTTL is the validity of an email change confirmation link.
 	EmailChangeTTL = 24 * time.Hour
-	// UnsubscribeTTL 是一键退订链接的有效期。
-	// 退订链接会长期留在历史邮件里，用户可能几个月后才想起来点，因此给足有效期；
-	// 但它仍是「一次性 + 有有效期」的令牌（复用 action_tokens 的消费语义）。
+	// UnsubscribeTTL is the validity of a one-click unsubscribe link.
+	// Unsubscribe links stay in old mail for a long time and a user may only think of clicking months later, so it gets a generous validity;
+	// but it is still a "one-time + expiring" token (reusing the consumption semantics of action_tokens).
 	UnsubscribeTTL = 90 * 24 * time.Hour
 )
 
-// ActionTokenService 签发与消费一次性动作令牌。
+// ActionTokenService issues and consumes one-time action tokens.
 type ActionTokenService struct {
 	tokens *store.ActionTokenStore
 	now    func() time.Time
 	rand   func([]byte) error
 }
 
-// NewActionTokenService 构造令牌服务；store 必填。
+// NewActionTokenService constructs the token service; store is required.
 func NewActionTokenService(tokens *store.ActionTokenStore) (*ActionTokenService, error) {
 	if tokens == nil {
 		return nil, errors.New("auth: action token store is required")
@@ -53,8 +53,8 @@ func NewActionTokenService(tokens *store.ActionTokenStore) (*ActionTokenService,
 	}, nil
 }
 
-// Issue 生成一枚随机令牌，把摘要落库，返回明文（仅供拼进邮件链接）。
-// payload 是用途相关的附加数据（改邮箱确认传新邮箱），其余用途传空串。
+// Issue generates a random token, persists the digest and returns the plaintext (only for splicing into an email link).
+// payload is purpose-specific extra data (the new email for email change confirmation); all other purposes pass an empty string.
 func (s *ActionTokenService) Issue(ctx context.Context, userID uint64, purpose, payload string, ttl time.Duration) (string, error) {
 	buf := make([]byte, 32)
 	if err := s.rand(buf); err != nil {
@@ -76,13 +76,13 @@ func (s *ActionTokenService) Issue(ctx context.Context, userID uint64, purpose, 
 	return plaintext, nil
 }
 
-// Consume 校验并一次性消费令牌，返回被消费的行（含 UserID 与 Payload）。
-// 错误是 store 的稳定哨兵：ErrActionTokenNotFound / Used / Expired。
+// Consume validates and one-time consumes a token, returning the consumed row (including UserID and Payload).
+// The errors are the store's stable sentinels: ErrActionTokenNotFound / Used / Expired.
 func (s *ActionTokenService) Consume(ctx context.Context, purpose, plaintext string) (*store.ActionToken, error) {
 	return s.tokens.Consume(ctx, purpose, plaintext, s.now())
 }
 
-// Peek 读取令牌但不消费它，错误哨兵与 Consume 相同。供「先展示再确认」的流程使用。
+// Peek reads a token without consuming it; the error sentinels are the same as Consume. Used by "show first, then confirm" flows.
 func (s *ActionTokenService) Peek(ctx context.Context, purpose, plaintext string) (*store.ActionToken, error) {
 	return s.tokens.Peek(ctx, purpose, plaintext, s.now())
 }

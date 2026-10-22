@@ -13,61 +13,61 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 身份绑定决策的稳定错误值；transport 层据此映射到稳定英文 code 与本地化文案
-// （bootstrap 文案“请联系管理员绑定账号”属于页面职责，本包不产出用户可见文字）。
+// Stable error values of the identity-linking decision; the transport layer maps them to stable English codes and localized text
+// (the bootstrap text "please contact an administrator to link your account" is a page responsibility, this package produces no user-visible text).
 var (
-	// ErrIdentityLinkDenied 表示 closed 策略下既无既有绑定、又无法自动匹配，只能由管理员手工绑定。
+	// ErrIdentityLinkDenied means that under the closed policy there is neither an existing link nor an automatic match, so only an administrator can link manually.
 	ErrIdentityLinkDenied = errors.New("identity link denied by registration policy")
 )
 
-// oidcPlaceholderEmailSuffix 是无 email claim 时给 OIDC 账号合成的占位邮箱后缀。
-// localhost 是仓库允许的占位值，绝不写真实域名；
-// 合成邮箱保证 users.email 的 NOT NULL + UNIQUE 约束成立，且不暴露任何外部主机名。
+// oidcPlaceholderEmailSuffix is the placeholder email suffix synthesized for OIDC accounts when there is no email claim.
+// localhost is the placeholder value the repository allows and a real domain is never written;
+// the synthesized email keeps users.email's NOT NULL + UNIQUE constraints satisfied and exposes no external hostname.
 const oidcPlaceholderEmailSuffix = "@localhost"
 
-// OAuthProfile 是绑定决策所需的、来自 IdP 的规范化输入。
-// Email 由调用方按需提供原始 claim 值；本包只做大小写与空白归一化。
+// OAuthProfile is the normalized input from the IdP that the linking decision needs.
+// Email is the raw claim value the caller supplies as needed; this package only normalizes case and whitespace.
 type OAuthProfile struct {
 	Provider      string
 	Subject       string
 	Email         string
 	EmailVerified bool
-	// Name 是 IdP 返回的显示名（claim 名可配）。仅用于自动建号时的
-	// 展示名；绑定决策只看 Subject 与 Email，所以它不影响任何分支判定。
+	// Name is the display name returned by the IdP (the claim name is configurable). It is used only as the
+	// display name when auto-creating an account; the linking decision looks only at Subject and Email, so it affects no branch.
 	Name string
 }
 
-// LinkDecisionKind 是身份绑定分支的标识，取值稳定用于审计与测试断言。
+// LinkDecisionKind identifies the identity-linking branch, with values kept stable for audits and test assertions.
 type LinkDecisionKind string
 
 const (
-	// LinkDecisionExisting 命中绑定情形 1：(provider, subject) 已有绑定，直接登录对应内部用户。
+	// LinkDecisionExisting hits linking case 1: (provider, subject) is already linked, so log straight into the matching internal user.
 	LinkDecisionExisting LinkDecisionKind = "existing"
-	// LinkDecisionAutoLink 命中绑定情形 2：邮箱已验证且与某个内部用户相同，自动绑定。
+	// LinkDecisionAutoLink hits linking case 2: the email is verified and matches an internal user, so link automatically.
 	LinkDecisionAutoLink LinkDecisionKind = "auto_link"
-	// LinkDecisionCreateUser 命中绑定情形 3：open / invite 策略下自动建号并绑定。
+	// LinkDecisionCreateUser hits linking case 3: under the open / invite policy, create an account automatically and link it.
 	LinkDecisionCreateUser LinkDecisionKind = "create_user"
-	// LinkDecisionDeny 命中绑定情形 3：closed 策略下拒绝登录，等待管理员绑定。
+	// LinkDecisionDeny hits linking case 3: under the closed policy, deny the login and wait for an administrator to link.
 	LinkDecisionDeny LinkDecisionKind = "deny"
 )
 
-// LinkDecision 是纯决策函数的输出：命中哪个分支，以及 existing / auto_link 时的目标用户。
+// LinkDecision is the output of the pure decision function: which branch was hit, and the target user for existing / auto_link.
 type LinkDecision struct {
 	Kind   LinkDecisionKind
 	UserID uint64
-	// Err 仅在 Kind == LinkDecisionDeny 时非 nil。
+	// Err is non-nil only when Kind == LinkDecisionDeny.
 	Err error
 }
 
-// DecideIdentityLink 是身份自动绑定三个分支的纯决策函数：不触库、不依赖 OIDC 协议。
+// DecideIdentityLink is the pure decision function over the three automatic identity-linking branches: it touches no database and depends on no OIDC protocol.
 //
-// 输入覆盖四种情形（existing = sub 已存在，matched = 邮箱命中的内部用户）：
-//  1. existing 非空 → 直接登录，忽略邮箱；（sub 已存在）
-//  2. EmailVerified 且 Email 非空且 matched 非空 → 自动绑定；（已验邮箱）
-//  3. 其余 → 按注册策略：open / invite 建号，closed 拒绝。（未验邮箱 / 无邮箱）
+// The input covers four situations (existing = the sub already exists, matched = the internal user the email hits):
+//  1. existing non-empty → log in directly, ignoring the email; (sub already exists)
+//  2. EmailVerified and Email non-empty and matched non-empty → link automatically; (verified email)
+//  3. otherwise → follow the registration policy: open / invite creates an account, closed denies. (unverified email / no email)
 //
-// matched 必须与 profile.Email 同址，否则视为未命中：这保证“只有邮箱真的对得上才自动绑定”。
-// 未验证邮箱即便撞上既有账号也绝不自动绑定（防止仅凭可控 email claim 接管账号）。
+// matched must be the same address as profile.Email, otherwise it counts as no match: this guarantees "link automatically only when the email really matches".
+// An unverified email never auto-links even when it collides with an existing account (preventing account takeover from a controllable email claim alone).
 func DecideIdentityLink(profile OAuthProfile, existing *store.Identity, matched *store.User, policy string) LinkDecision {
 	if existing != nil {
 		return LinkDecision{Kind: LinkDecisionExisting, UserID: existing.UserID}
@@ -76,8 +76,8 @@ func DecideIdentityLink(profile OAuthProfile, existing *store.Identity, matched 
 	if profile.EmailVerified && email != "" && matched != nil && strings.EqualFold(matched.Email, email) {
 		return LinkDecision{Kind: LinkDecisionAutoLink, UserID: matched.ID}
 	}
-	// 邮箱已被既有账号占用却走到这里，只可能是“未验证邮箱撞名”：建号必然违反唯一约束。
-	// 宁可拒绝，也不把新身份悄悄挂到别人的账号上。
+	// Reaching here while the email is already taken by an existing account can only mean "an unverified email collided": creating the account must violate the unique constraint.
+	// Better to reject than to quietly attach the new identity to someone else's account.
 	if matched != nil {
 		return LinkDecision{Kind: LinkDecisionDeny, Err: ErrIdentityLinkDenied}
 	}
@@ -89,28 +89,28 @@ func DecideIdentityLink(profile OAuthProfile, existing *store.Identity, matched 
 	}
 }
 
-// normalizeEmail 归一化邮箱：小写 + 去首尾空白。空串保持空串，表示 IdP 没有返回邮箱。
+// normalizeEmail normalizes an email: lowercase + trim surrounding whitespace. An empty string stays empty, meaning the IdP returned no email.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-// IdentityLinkStore 是绑定流程所需的存储能力，定义在消费者侧（AGENTS.md §2.4）。
-// 生产实现见 newStoreIdentityLinkStore；测试可注入内存替身，因此决策与流程无需真 OIDC。
+// IdentityLinkStore is the storage capability the linking flow needs, defined on the consumer side (AGENTS.md §2.4).
+// The production implementation is newStoreIdentityLinkStore; tests can inject an in-memory stand-in, so the decision and flow need no real OIDC.
 type IdentityLinkStore interface {
-	// FindIdentity 按 (provider, subject) 查绑定；未绑定返回 (nil, nil)。
+	// FindIdentity looks up the link by (provider, subject); (nil, nil) when not linked.
 	FindIdentity(ctx context.Context, provider, subject string) (*store.Identity, error)
-	// FindUserByID 按主键查内部用户；不存在返回 (nil, nil)。
+	// FindUserByID looks up an internal user by primary key; (nil, nil) when absent.
 	FindUserByID(ctx context.Context, id uint64) (*store.User, error)
-	// FindUserByEmail 按邮箱查内部用户；不存在返回 (nil, nil)。
+	// FindUserByEmail looks up an internal user by email; (nil, nil) when absent.
 	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
-	// LinkIdentity 写入一条绑定。
+	// LinkIdentity writes one link row.
 	LinkIdentity(ctx context.Context, ident *store.Identity) error
-	// CreateOIDCUser 创建一个无本地密码的内部账号。
+	// CreateOIDCUser creates an internal account with no local password.
 	CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error)
 }
 
-// IdentityLinkService 串联身份绑定的完整流程：查绑定 → 自动绑定 → 按策略建号。
-// 它不实现 OIDC 协议交互；调用方只需把规范化后的 OAuthProfile 交给 Resolve。
+// IdentityLinkService chains the whole identity-linking flow: look up the link → auto-link → create an account per policy.
+// It implements no OIDC protocol interaction; the caller only has to hand the normalized OAuthProfile to Resolve.
 type IdentityLinkService struct {
 	store  IdentityLinkStore
 	audit  *Auditor
@@ -118,8 +118,9 @@ type IdentityLinkService struct {
 	now    func() time.Time
 }
 
-// NewIdentityLinkService 构造绑定服务。store 必填；audit 可为空（不记审计）；
-// logger 为空时用 slog.Default()，审计写失败只记英文日志、不影响已经完成的绑定（原则）。
+// NewIdentityLinkService constructs the linking service. store is required; audit may be nil (no audit is recorded);
+// when logger is nil, slog.Default() is used; an audit write failure only logs in English and does not affect a link already made: the
+// audit trail is best effort, not part of the link transaction.
 func NewIdentityLinkService(st IdentityLinkStore, audit *Auditor, logger *slog.Logger) (*IdentityLinkService, error) {
 	if st == nil {
 		return nil, errors.New("auth: identity link store is required")
@@ -131,8 +132,8 @@ func NewIdentityLinkService(st IdentityLinkStore, audit *Auditor, logger *slog.L
 		now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
-// Resolve 执行一次 OIDC 首次登录的绑定判定，返回应登录的内部用户。
-// 第二个返回值是命中的分支（供调用方记日志与审计），第三个是错误。
+// Resolve performs the linking decision for one OIDC first login and returns the internal user that should be logged in.
+// The second return value is the branch that was hit (for the caller to log and audit), the third is the error.
 func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile, policy string) (*store.User, LinkDecision, error) {
 	if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.Subject) == "" {
 		return nil, LinkDecision{}, errors.New("auth: provider and subject are required")
@@ -143,8 +144,8 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 		return nil, LinkDecision{}, fmt.Errorf("find identity: %w", err)
 	}
 
-	// 只有 IdP 给了邮箱才查同名账号；查到的 matched 无论验证与否都交给纯函数，
-	// 由纯函数决定它是否足以触发自动绑定或必须拒绝建号。
+	// Only when the IdP supplied an email do we look up an account with the same name; the matched user, verified or not, goes to the pure function,
+	// which decides whether it suffices to trigger auto-linking or must deny account creation.
 	email := normalizeEmail(profile.Email)
 	var matched *store.User
 	if email != "" {
@@ -171,7 +172,7 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 
 	case LinkDecisionAutoLink:
 		if matched == nil || matched.Status != store.StatusActive {
-			// 绑定目标已禁用：不建立新绑定，也不放行登录。
+			// The link target is disabled: do not create a new link and do not let the login through.
 			return nil, decision, ErrUserDisabled
 		}
 		if err := s.link(ctx, profile, matched.ID, email); err != nil {
@@ -198,7 +199,8 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 	}
 }
 
-// link 写入一条 identities 并记审计；审计失败只记英文日志，不回滚绑定（原则）。
+// link writes one identities row and records an audit entry; an audit failure only logs in English and does not roll back the link, because
+// the audit trail is best effort.
 func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
 	ident := &store.Identity{
 		UserID:   userID,
@@ -233,9 +235,9 @@ func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, us
 	return nil
 }
 
-// oidcUsername 为自动建号生成确定且唯一的登录名：邮箱 local part（无邮箱时用 oidc）
-// 加上 provider+subject 的哈希前缀。哈希保证同一 IdP 身份重复登录时得到同一个名字，
-// 也保证两个不同身份不会撞名（users.username 唯一）。
+// oidcUsername generates a deterministic and unique login name for auto-created accounts: the email local part (oidc when there is no email)
+// plus a hash prefix of provider+subject. The hash guarantees the same IdP identity gets the same name on repeated logins,
+// and that two different identities never collide (users.username is unique).
 func oidcUsername(profile OAuthProfile) string {
 	sum := sha256.Sum256([]byte(profile.Provider + "\x00" + profile.Subject))
 	suffix := hex.EncodeToString(sum[:])[:8]
@@ -249,7 +251,7 @@ func oidcUsername(profile OAuthProfile) string {
 	return base + "-" + suffix
 }
 
-// oidcAccountEmail 返回落库邮箱：IdP 给了就用它，没给则合成占位邮箱保证唯一约束成立。
+// oidcAccountEmail returns the email to persist: use the IdP's when given, otherwise synthesize a placeholder so the unique constraint holds.
 func oidcAccountEmail(profile OAuthProfile) string {
 	if email := normalizeEmail(profile.Email); email != "" {
 		return email
@@ -257,7 +259,7 @@ func oidcAccountEmail(profile OAuthProfile) string {
 	return oidcUsername(profile) + oidcPlaceholderEmailSuffix
 }
 
-// oidcDisplayName 生成显示名：优先 IdP 的 name claim，其次邮箱 local part，最后登录名；不产出用户可见文案。
+// oidcDisplayName builds the display name: the IdP's name claim first, then the email local part, finally the login name; it produces no user-visible text.
 func oidcDisplayName(profile OAuthProfile) string {
 	if name := strings.TrimSpace(profile.Name); name != "" {
 		return name
@@ -268,7 +270,7 @@ func oidcDisplayName(profile OAuthProfile) string {
 	return oidcUsername(profile)
 }
 
-// emailLocalPart 取 @ 之前的部分；无 @ 或为空时返回空串。
+// emailLocalPart takes the part before @; an empty string when there is no @ or it is empty.
 func emailLocalPart(email string) string {
 	email = normalizeEmail(email)
 	at := strings.IndexByte(email, '@')
@@ -278,8 +280,8 @@ func emailLocalPart(email string) string {
 	return email[:at]
 }
 
-// sanitizeUsername 只保留账户名允许的字符（小写字母、数字、点、下划线、连字符），
-// 其余替换为连字符；结果可能为空，由调用方补默认前缀。
+// sanitizeUsername keeps only the characters an account name may contain (lowercase letters, digits, dot, underscore, hyphen),
+// replacing the rest with hyphens; the result may be empty, in which case the caller adds a default prefix.
 func sanitizeUsername(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {
@@ -293,8 +295,8 @@ func sanitizeUsername(s string) string {
 	return strings.Trim(b.String(), "-.")
 }
 
-// NewStoreIdentityLinkStore 把三个具体存储适配成 IdentityLinkStore：把“未找到”归一化成
-// (nil, nil)，让上面的决策函数不必理解 GORM 的哨兵错误。生产装配在 cmd/engram。
+// NewStoreIdentityLinkStore adapts the three concrete stores into an IdentityLinkStore: it normalizes "not found" into
+// (nil, nil), so the decision function above need not understand GORM's sentinel errors. Production assembly is in cmd/engram.
 func NewStoreIdentityLinkStore(identities *store.IdentityStore, users *store.UserStore, accounts *AccountService) IdentityLinkStore {
 	return &storeIdentityLinkStore{identities: identities, users: users, accounts: accounts}
 }

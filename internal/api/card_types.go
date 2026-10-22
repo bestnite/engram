@@ -8,18 +8,18 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// CardTypesResponse 是题型元数据的响应体；kinds 按 kind 字典序，结果稳定。
+// CardTypesResponse is the response body of card-type metadata; kinds are sorted by kind, so the result is stable.
 type CardTypesResponse struct {
 	Kinds []cardtype.Description `json:"kinds"`
 }
 
-// CardTypes 返回全部题型的自描述（静态元数据，不含任何用户状态）；REST 与 MCP 共用。
-// 前端据此渲染编辑表单与复习控件，agent 据此知道每个题型有哪些字段、哪些必填。
+// CardTypes returns the self-description of every card type (static metadata, no user state); shared by REST and MCP.
+// The frontend renders edit forms and review controls from it, and agents learn which fields each card type has and which are required.
 func (a *API) CardTypes() CardTypesResponse {
 	return CardTypesResponse{Kinds: cardtype.Descriptions()}
 }
 
-// cardTypes 是 GET /api/v1/card-types，scope: read。
+// cardTypes is GET /api/v1/card-types, scope: read.
 func (a *API) cardTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, a.CardTypes())
 }

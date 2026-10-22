@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newTestDB 建一个临时 SQLite 库并跑全部模型迁移（AGENTS.md §2.5：不 mock 数据库）。
+// newTestDB creates a temporary SQLite database and runs all model migrations (AGENTS.md §2.5: do not mock the database).
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "schedule.db")), &gorm.Config{})
@@ -25,7 +25,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// seedDeck 建一个预设 + 私有卡组，返回卡组 id。
+// seedDeck creates a preset + private deck and returns the deck id.
 func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 	t.Helper()
 	p := store.NewPreset(1, "preset")
@@ -40,7 +40,7 @@ func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 	return d.ID
 }
 
-// seedCard 建一个 basic note 与它的一张 card，返回 card id。
+// seedCard creates a basic note and one of its cards, returning the card id.
 func seedCard(t *testing.T, db *gorm.DB, deckID uint64, template string, createdAt time.Time) uint64 {
 	t.Helper()
 	n := store.Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: createdAt, UpdatedAt: createdAt}
@@ -54,7 +54,7 @@ func seedCard(t *testing.T, db *gorm.DB, deckID uint64, template string, created
 	return c.ID
 }
 
-// seedState 写一行 card_states。
+// seedState writes one card_states row.
 func seedState(t *testing.T, db *gorm.DB, userID, cardID uint64, state string, due time.Time, stability, difficulty float64, last *time.Time) {
 	t.Helper()
 	row := store.CardState{UserID: userID, CardID: cardID, State: state, DueAt: &due, StepIndex: 1, ScheduledDays: 10}
@@ -70,7 +70,7 @@ func seedState(t *testing.T, db *gorm.DB, userID, cardID uint64, state string, d
 	}
 }
 
-// seedReview 写一行 append-only 复习日志。
+// seedReview writes one append-only review log row.
 func seedReview(t *testing.T, db *gorm.DB, userID, cardID uint64, day string, stateBefore int, at time.Time) {
 	t.Helper()
 	r := store.Review{CardID: cardID, UserID: userID, Rating: int(Good), GradeSource: "self", ReviewedAt: at, ReviewDay: day, StateBefore: stateBefore}
@@ -79,7 +79,7 @@ func seedReview(t *testing.T, db *gorm.DB, userID, cardID uint64, day string, st
 	}
 }
 
-// kindsOf 抽出队列项的优先级序列，便于断言顺序。
+// kindsOf extracts the priority sequence of queue items, making order assertions easy.
 func kindsOf(items []QueueItem) []QueueKind {
 	out := make([]QueueKind, len(items))
 	for i, it := range items {
@@ -88,7 +88,7 @@ func kindsOf(items []QueueItem) []QueueKind {
 	return out
 }
 
-// TestBuildOrdering 断言队列顺序：学习卡 → 到期复习卡 → 新卡，且复习卡可按两种方式排序。
+// TestBuildOrdering asserts the queue order: learning cards → due review cards → new cards, and that review cards can be sorted two ways.
 func TestBuildOrdering(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -97,7 +97,7 @@ func TestBuildOrdering(t *testing.T) {
 	learningCard := seedCard(t, db, deckID, "forward", now)
 	seedState(t, db, 1, learningCard, "learning", now.Add(-time.Minute), 0, 0, nil)
 
-	// 两张复习卡：R1 稳定性低（更可能忘），R2 到期更早但稳定性高。
+	// Two review cards: R1 has low stability (more likely to be forgotten), R2 is due earlier but has high stability.
 	lowStab := seedCard(t, db, deckID, "forward", now)
 	highStab := seedCard(t, db, deckID, "forward", now)
 	last := now.Add(-48 * time.Hour)
@@ -135,7 +135,7 @@ func TestBuildOrdering(t *testing.T) {
 	if items[0].CardID != learningCard {
 		t.Errorf("first item card = %d, want learning card %d", items[0].CardID, learningCard)
 	}
-	// retrievability 升序：稳定性低的 R1 排在稳定性高的 R2 前。
+	// Ascending retrievability: low-stability R1 comes before high-stability R2.
 	if items[1].CardID != lowStab || items[2].CardID != highStab {
 		t.Errorf("review order = [%d %d], want [%d %d] by retrievability", items[1].CardID, items[2].CardID, lowStab, highStab)
 	}
@@ -148,7 +148,7 @@ func TestBuildOrdering(t *testing.T) {
 		}
 	}
 
-	// 按 due_at 升序：R2 到期更早，排在 R1 前。
+	// Ascending due_at: R2 is due earlier, so it comes before R1.
 	byDue, err := builder.Build(ctx, 1, withOrder(base, OrderByDueAt))
 	if err != nil {
 		t.Fatalf("Build(due) error = %v", err)
@@ -163,18 +163,18 @@ func withOrder(o QueueOptions, order ReviewOrder) QueueOptions {
 	return o
 }
 
-// TestDailyNewCapAcrossDayBoundary 断言 03:59 / 04:00 两个瞬时点属于不同复习日，
-// 因而每日新卡上限按各自已引入数正确扣减（切点规则）。
+// TestDailyNewCapAcrossDayBoundary asserts that 03:59 / 04:00 belong to different review days,
+// so the daily new-card cap is correctly reduced by each side's introduced count (the cutoff rule).
 func TestDailyNewCapAcrossDayBoundary(t *testing.T) {
 	db := newTestDB(t)
 	loc := time.FixedZone("test", 8*3600)
 	deckID := seedDeck(t, db, time.Now().UTC())
 
-	// 5 张新卡。
+	// 5 new cards.
 	for i := 0; i < 5; i++ {
 		seedCard(t, db, deckID, string(rune('A'+i)), time.Now().UTC().Add(time.Duration(i)*time.Minute))
 	}
-	// 昨天（复习日 2026-10-01）已引入 2 张新卡。
+	// Yesterday (review day 2026-10-01) already introduced 2 new cards.
 	seedReview(t, db, 1, 1, "2026-10-01", int(StateNew), time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC))
 	seedReview(t, db, 1, 2, "2026-10-01", int(StateNew), time.Date(2026, 10, 1, 20, 5, 0, 0, time.UTC))
 
@@ -212,7 +212,7 @@ func TestDailyNewCapAcrossDayBoundary(t *testing.T) {
 	}
 }
 
-// TestReviewsPerDayCap 断言每日复习上限来自 reviews 聚合：0 表示不限。
+// TestReviewsPerDayCap asserts the daily review cap comes from the reviews aggregate: 0 means unlimited.
 func TestReviewsPerDayCap(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -244,7 +244,7 @@ func TestReviewsPerDayCap(t *testing.T) {
 	}
 }
 
-// TestQueueExcludesSuspendedAndDeleted 断言暂停卡与软删除 note 的卡不出现在队列里。
+// TestQueueExcludesSuspendedAndDeleted asserts suspended cards and cards of soft-deleted notes do not appear in the queue.
 func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -276,9 +276,9 @@ func TestQueueExcludesSuspendedAndDeleted(t *testing.T) {
 	}
 }
 
-// ---- ：多卡组复习范围 ----
+// ---- : multi-deck review scope ----
 
-// seedDeckCaps 建一个卡组并把每日上限写成给定值（卡组级配置）。
+// seedDeckCaps creates a deck and writes the given daily caps into it (deck-level configuration).
 func seedDeckCaps(t *testing.T, db *gorm.DB, now time.Time, newPerDay, reviewsPerDay int) uint64 {
 	t.Helper()
 	deckID := seedDeck(t, db, now)
@@ -289,7 +289,7 @@ func seedDeckCaps(t *testing.T, db *gorm.DB, now time.Time, newPerDay, reviewsPe
 	return deckID
 }
 
-// countKind 统计队列里某一优先级的条目数。
+// countKind counts the number of queue entries of a given priority.
 func countKind(items []QueueItem, kind QueueKind) int {
 	n := 0
 	for _, it := range items {
@@ -300,7 +300,7 @@ func countKind(items []QueueItem, kind QueueKind) int {
 	return n
 }
 
-// deckIDsOf 抽出队列项的去重卡组集合。
+// deckIDsOf extracts the deduplicated deck set of the queue items.
 func deckIDsOf(items []QueueItem) map[uint64]bool {
 	out := map[uint64]bool{}
 	for _, it := range items {
@@ -309,8 +309,8 @@ func deckIDsOf(items []QueueItem) map[uint64]bool {
 	return out
 }
 
-// TestDeckIDsScopeSelectsExactSet 断言集合口径只取选中的卡组，且优先级高于 DeckID；
-// 空集合等价于 DeckID=0（全库）。
+// TestDeckIDsScopeSelectsExactSet asserts the set mode takes only the selected decks and takes precedence over DeckID;
+// an empty set is equivalent to DeckID=0 (whole library).
 func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -324,7 +324,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	builder := NewQueueBuilder(db, store.NewDeckStore(db), s)
 	ctx := context.Background()
-	// 显式上限覆盖，避免卡组列干扰本用例。
+	// Explicit cap overrides, so the deck columns cannot interfere with this case.
 	base := QueueOptions{Now: now, Location: time.UTC, NewPerDay: 10, ReviewsPerDay: 200, NewOrder: NewOrderCreated}
 
 	set := base
@@ -337,7 +337,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 		t.Errorf("Build(DeckIDs=[A,B]) = %v, want exactly decks A and B", ids)
 	}
 
-	// 集合优先于单卡组：DeckID=B 但 DeckIDs=[A] → 只取 A。
+	// The set wins over a single deck: DeckID=B but DeckIDs=[A] → only A is taken.
 	both := base
 	both.DeckID = deckB
 	both.DeckIDs = []uint64{deckA}
@@ -349,7 +349,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 		t.Errorf("Build(DeckID=B,DeckIDs=[A]) = %v, want only deck A (DeckIDs wins)", ids)
 	}
 
-	// 空集合 = 全库，与 DeckID=0 相同。
+	// Empty set = whole library, the same as DeckID=0.
 	empty := base
 	empty.DeckIDs = []uint64{}
 	got, err = builder.Build(ctx, 1, empty)
@@ -367,7 +367,7 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 		t.Errorf("empty DeckIDs (%d cards) differs from DeckID=0 (%d cards)", len(got), len(whole))
 	}
 
-	// 集合去重：同一卡组写两次不改变结果。
+	// Set deduplication: writing the same deck twice does not change the result.
 	dup := base
 	dup.DeckIDs = []uint64{deckA, deckA}
 	got, err = builder.Build(ctx, 1, dup)
@@ -379,9 +379,9 @@ func TestDeckIDsScopeSelectsExactSet(t *testing.T) {
 	}
 }
 
-// TestScopeHonoursPerDeckCaps 断言集合口径（含多个卡组）也按**各卡组自己的**额度算：
-// A 卡组 1/1、B 卡组 3/3，各 3 张新卡 + 3 张到期复习卡 → 合计新卡 1+3、复习 1+3。
-// 这是「多卡组＝各卡组额度之和」的直接验收。
+// TestScopeHonoursPerDeckCaps asserts the set mode (with multiple decks) also computes by **each deck's own** allowance:
+// deck A 1/1, deck B 3/3, each with 3 new cards + 3 due review cards → total new 1+3, review 1+3.
+// This is the direct acceptance test for "multiple decks = the sum of the per-deck allowances".
 func TestScopeHonoursPerDeckCaps(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -426,8 +426,8 @@ func TestScopeHonoursPerDeckCaps(t *testing.T) {
 	}
 }
 
-// TestLearnAheadAppendsSoonDueLearningCards 覆盖提前学习：窗口内即将到期的学习卡排在队列最后
-// （其它卡之后），窗口外的不出现；窗口为 0 时一张都不提前（反面）。
+// TestLearnAheadAppendsSoonDueLearningCards covers learn-ahead: learning cards falling due within the window go to the end of the queue
+// (after the other cards), those outside the window do not appear, and with a window of 0 nothing is pulled ahead (negative case).
 func TestLearnAheadAppendsSoonDueLearningCards(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)

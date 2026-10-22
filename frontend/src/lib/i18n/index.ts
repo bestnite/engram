@@ -9,7 +9,7 @@ import { zhCN } from './locales/zh-CN';
 import { en } from './locales/en';
 
 /**
- * 语言包映射表
+ * Language pack map
  */
 export const catalogs: Record<SupportedLocale, LocaleCatalog> = {
   'zh-CN': zhCN,
@@ -17,7 +17,7 @@ export const catalogs: Record<SupportedLocale, LocaleCatalog> = {
 };
 
 /**
- * 检查语言代码是否受支持
+ * Check whether a language code is supported
  */
 export function isSupportedLocale(code: string | null | undefined): code is SupportedLocale {
   if (!code) return false;
@@ -25,8 +25,8 @@ export function isSupportedLocale(code: string | null | undefined): code is Supp
 }
 
 /**
- * 将任意语言代码匹配到最接近的受支持语言
- * 例如 'zh', 'zh-CN', 'zh-TW' -> 'zh-CN'; 'en-US', 'en' -> 'en'
+ * Match any language code to the nearest supported language
+ * e.g. 'zh', 'zh-CN', 'zh-TW' -> 'zh-CN'; 'en-US', 'en' -> 'en'
  */
 export function matchSupportedLocale(lang: string | null | undefined): SupportedLocale | null {
   if (!lang) return null;
@@ -44,36 +44,36 @@ export interface ResolveLocaleOptions {
 }
 
 /**
- * 解析语言优先级：
- * URL 参数 ?lang=<code> > 已登录用户个人设置 > Accept-Language / navigator.language > 站点默认语言
+ * Resolve language priority:
+ * URL param ?lang=<code> > logged-in user's profile settings > Accept-Language / navigator.language > site default language
  */
 export function resolveLocale(options: ResolveLocaleOptions = {}): SupportedLocale {
   const { urlParam, userSetting, navigatorLang, siteDefault = DEFAULT_LOCALE } = options;
 
-  // 1. URL 参数显式覆盖
+  // 1. Explicit override via the URL parameter
   if (urlParam) {
     const matched = matchSupportedLocale(urlParam);
     if (matched) return matched;
   }
 
-  // 2. 用户个人设置
+  // 2. User profile settings
   if (userSetting) {
     const matched = matchSupportedLocale(userSetting);
     if (matched) return matched;
   }
 
-  // 3. 浏览器语言偏好
+  // 3. Browser language preference
   if (navigatorLang) {
     const matched = matchSupportedLocale(navigatorLang);
     if (matched) return matched;
   }
 
-  // 4. 站点默认
+  // 4. Site default
   return siteDefault;
 }
 
 /**
- * 检测当前环境初始语言
+ * Detect the initial language for the current environment
  */
 export function detectInitialLocale(): SupportedLocale {
   let urlParam: string | null = null;
@@ -95,12 +95,12 @@ export function detectInitialLocale(): SupportedLocale {
 }
 
 /**
- * 当前语言响应式 Store
+ * Reactive store for the current language
  */
 export const localeStore = writable<SupportedLocale>(detectInitialLocale());
 
 /**
- * 切换语言
+ * Switch language
  */
 export function setLocale(locale: SupportedLocale): void {
   if (isSupportedLocale(locale)) {
@@ -109,14 +109,14 @@ export function setLocale(locale: SupportedLocale): void {
 }
 
 /**
- * 当前语言代码
+ * Current language code
  */
 export function getLocale(): SupportedLocale {
   return get(localeStore);
 }
 
 /**
- * 翻译文本函数
+ * Translation text function
  */
 export function formatMessage(
   locale: SupportedLocale,
@@ -136,7 +136,7 @@ export function formatMessage(
 }
 
 /**
- * 响应式翻译 store 派生
+ * Reactive translation store derived value
  */
 export const t = derived(localeStore, ($locale) => {
   return (key: string, params?: Record<string, string | number>): string => {

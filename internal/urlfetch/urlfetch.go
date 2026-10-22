@@ -1,8 +1,9 @@
-// Package urlfetch 下载一个公开的 HTTPS 直链文件，内置 SSRF 防护。
+// Package urlfetch downloads a public HTTPS direct-link file with built-in SSRF protection.
 //
-// 它只做三件事：校验 URL 形态、把连接钉死在「校验过的公网地址」上、把响应字节限制在上限内。
-// 它不解析网页、不跟随分享页、不接受用户凭据，只服务于「直接下载一个二进制包」这一种场景；
-// 因此任何非 HTTPS、带 userinfo、主机落在非公网地址的输入都必须被拒。
+// It does only three things: validate the URL shape, pin the connection to the "validated public address", and cap the
+// response bytes. It does not parse web pages, does not follow share pages, and does not accept user credentials; it serves
+// only the "download one binary package directly" scenario, so any input that is not HTTPS, carries userinfo, or whose host
+// resolves to a non-public address must be rejected.
 package urlfetch
 
 import (
@@ -20,26 +21,26 @@ import (
 	"time"
 )
 
-// Kind 是下载失败的分类。调用方据此映射稳定 code，绝不解析 message。
+// Kind classifies a download failure. Callers map it to a stable code from this; never parse message.
 type Kind int
 
 const (
-	// KindInvalidURL 表示 URL 缺失、非法、非 HTTPS，或带有用户凭据。
+	// KindInvalidURL means the URL is missing, invalid, not HTTPS, or carries user credentials.
 	KindInvalidURL Kind = iota
-	// KindBlockedHost 表示主机解析到非公网地址（回环/私网/链路本地/多播/保留段等）。
+	// KindBlockedHost means the host resolves to a non-public address (loopback/private/link-local/multicast/reserved ranges, etc.).
 	KindBlockedHost
-	// KindFetchFailed 表示连接失败、超时、重定向过多或响应非 2xx。
+	// KindFetchFailed means connection failure, timeout, too many redirects, or a non-2xx response.
 	KindFetchFailed
-	// KindTooLarge 表示响应字节超过调用方给出的上限。
+	// KindTooLarge means the response bytes exceed the caller-supplied limit.
 	KindTooLarge
-	// KindNotPackage 表示响应是 HTML 之类显然不是卡组包的内容。
+	// KindNotPackage means the response is HTML or otherwise obviously not a deck package.
 	KindNotPackage
 )
 
-// Error 是带分类的下载错误。
+// Error is a classified download error.
 //
-// 它的 Error() 只含原因、不含原始 cause：cause 可能来自 net/http，会带上完整 URL，
-// 而 URL 的用户凭据与查询串可能含签名令牌。cause 只供 errors.Is/As 使用，绝不进日志。
+// Its Error() contains only the reason, not the raw cause: the cause may come from net/http and would carry the full URL,
+// whose user credentials and query string may contain signed tokens. The cause is for errors.Is/As only and never goes into logs.
 type Error struct {
 	Kind   Kind
 	Reason string
@@ -48,10 +49,10 @@ type Error struct {
 
 func (e *Error) Error() string { return "url fetch: " + e.Reason }
 
-// Unwrap 暴露底层原因，供 errors.Is/As 判断；不参与字符串输出。
+// Unwrap exposes the underlying cause for errors.Is/As; it does not participate in string output.
 func (e *Error) Unwrap() error { return e.cause }
 
-// Limits 是一次下载的边界：重定向次数与三段超时。
+// Limits bounds a single download: the redirect count and three timeouts.
 type Limits struct {
 	MaxRedirects   int
 	DNSTimeout     time.Duration
@@ -59,7 +60,7 @@ type Limits struct {
 	TotalTimeout   time.Duration
 }
 
-// DefaultLimits 给出保守的默认边界。
+// DefaultLimits gives conservative default bounds.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxRedirects:   5,
@@ -69,34 +70,34 @@ func DefaultLimits() Limits {
 	}
 }
 
-// Resolver 解析主机名。生产用 net.DefaultResolver；测试注入受控实现以验证分类与钉死行为。
+// Resolver resolves host names. Production uses net.DefaultResolver; tests inject a controlled implementation to verify classification and pinning behavior.
 type Resolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
 }
 
-// Dialer 建立一个 TCP 连接。生产用 net.Dialer；测试注入受控实现以便把地址指向本地服务器。
+// Dialer establishes a TCP connection. Production uses net.Dialer; tests inject a controlled implementation to point the address at a local server.
 type Dialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
 
-// Client 下载公开的 HTTPS 直链。
+// Client downloads a public HTTPS direct link.
 type Client struct {
 	limits   Limits
 	resolver Resolver
 	dialer   Dialer
-	// tlsConfig 仅供测试注入自签证书的信任根；生产为 nil，用系统根证书校验。
+	// tlsConfig exists only for tests to inject a trust root for self-signed certificates; nil in production, where the system roots are used.
 	tlsConfig *tls.Config
 }
 
-// New 构造生产客户端：系统解析器、系统拨号器、系统根证书。
+// New constructs the production client: system resolver, system dialer, system root certificates.
 func New(limits Limits) *Client {
 	return &Client{limits: limits, resolver: net.DefaultResolver, dialer: &net.Dialer{}}
 }
 
-// Fetch 校验 rawURL 并下载其内容，把响应字节限制在 maxBytes 内返回。调用方负责 Close。
+// Fetch validates rawURL and downloads its content, returning the response bytes capped at maxBytes. The caller is responsible for Close.
 //
-// 顺序不可换：先做地址形态与公网性校验，再建立连接；每一次重定向都会重新走这一步，
-// 因此重定向到一个私网地址同样会被拒。
+// The order cannot be swapped: validate the address shape and publicness first, then connect; every redirect goes through
+// this step again, so a redirect to a private address is rejected as well.
 func (c *Client) Fetch(ctx context.Context, rawURL string, maxBytes int64) (io.ReadCloser, error) {
 	u, err := validateURL(rawURL)
 	if err != nil {
@@ -106,24 +107,24 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, maxBytes int64) (io.R
 		return nil, &Error{Kind: KindInvalidURL, Reason: "size limit must be positive"}
 	}
 	transport := &http.Transport{
-		// 关闭环境代理：HTTP_PROXY/HTTPS_PROXY 会把请求转发到别处，绕过地址校验。
+		// Disable environment proxies: HTTP_PROXY/HTTPS_PROXY would forward the request elsewhere and bypass address validation.
 		Proxy: nil,
-		// 关闭透明解压：上限必须针对「实际收到的字节」，否则压缩比可以放大上限。
+		// Disable transparent decompression: the limit must apply to the bytes actually received, otherwise a compression ratio could inflate the limit.
 		DisableCompression: true,
-		// 每次 Fetch 都新建 transport，闲置连接不会供后续请求复用，持有它的读取协程也会阻止回收。
-		// 禁用 keep-alive，让连接在响应体读完后关闭，避免长期占用套接字。
+		// A new transport is created for each Fetch, so idle connections are not reused by later requests, and the read goroutine holding them would prevent collection.
+		// Disable keep-alive so the connection closes once the response body has been read, avoiding long-lived socket usage.
 		DisableKeepAlives: true,
 		DialContext:       c.dialContext,
 		TLSClientConfig:   c.tlsConfig,
 	}
-	// 双保险：任何路径若留下闲置连接，也在 Fetch 返回前关掉。
+	// Belt and braces: if any path leaves an idle connection behind, close it before Fetch returns.
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport:     transport,
 		Timeout:       c.limits.TotalTimeout,
 		CheckRedirect: c.checkRedirect,
 	}
-	// 用校验后的规范化 URL 建请求：绝不把原始字符串原样交给 net/http。
+	// Build the request from the validated canonical URL: never hand the raw string to net/http as-is.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, &Error{Kind: KindInvalidURL, Reason: "cannot build request", cause: err}
@@ -142,7 +143,7 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, maxBytes int64) (io.R
 	if resp.ContentLength > maxBytes {
 		return nil, &Error{Kind: KindTooLarge, Reason: "response exceeds the size limit"}
 	}
-	// 多读一个字节用来判定「是否超限」：恰好 maxBytes 的包合法，maxBytes+1 即超限。
+	// Read one extra byte to decide whether the limit is exceeded: a package of exactly maxBytes is legal, maxBytes+1 is over it.
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, classifyFetchError(err)
@@ -156,10 +157,10 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, maxBytes int64) (io.R
 	return io.NopCloser(bytes.NewReader(raw)), nil
 }
 
-// dialContext 把连接钉死在「本次解析并校验过的公网地址」上。
+// dialContext pins the connection to the "public address resolved and validated for this fetch".
 //
-// 它自己解析主机名、自己挑选公网地址、再对那个地址发起连接；net/http 不会做第二次解析，
-// 因此校验与连接之间没有可被 DNS rebinding 利用的时间窗。
+// It resolves the host name itself, picks the public address itself, and then connects to that address; net/http does not
+// resolve a second time, so there is no time window between validation and connection for DNS rebinding to exploit.
 func (c *Client) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -182,10 +183,11 @@ func (c *Client) dialContext(ctx context.Context, network, addr string) (net.Con
 	return nil, &Error{Kind: KindFetchFailed, Reason: "cannot connect to host", cause: last}
 }
 
-// resolvePublic 把主机名解析成一组公网地址；非公网地址一律剔除。
+// resolvePublic resolves a host name into a set of public addresses, dropping every non-public address.
 //
-// 只要解析结果里存在公网地址就连那个地址，绝连私网地址——因此「同一主机同时解析出公网与
-// 私网」的投毒也无处落脚。全部结果都非公网（或主机就是私网字面量）时判为 blocked。
+// As long as one public address exists among the results it connects to that address and never to a private one — so poisoning
+// where "the same host resolves to both a public and a private address" has nowhere to land. When every result is non-public
+// (or the host is a private literal) the result is blocked.
 func (c *Client) resolvePublic(ctx context.Context, host string) ([]netip.Addr, error) {
 	host = strings.TrimSuffix(host, ".")
 	if ip, err := netip.ParseAddr(host); err == nil {
@@ -202,7 +204,7 @@ func (c *Client) resolvePublic(ctx context.Context, host string) ([]netip.Addr, 
 	}
 	out := make([]netip.Addr, 0, len(ips))
 	for _, a := range ips {
-		// 带 zone 的地址只可能是链路本地一类，直接跳过。
+		// An address carrying a zone can only be something like link-local; skip it outright.
 		if a.Zone != "" {
 			continue
 		}
@@ -218,11 +220,11 @@ func (c *Client) resolvePublic(ctx context.Context, host string) ([]netip.Addr, 
 	return out, nil
 }
 
-// checkRedirect 在每次重定向上重新校验地址形态，并限制重定向次数。
-// 私网目标就算通过了这里，也会在 dialContext 被拦下；两层校验互不替代。
+// checkRedirect re-validates the address shape on every redirect and limits the redirect count.
+// A private target that passes here is still blocked in dialContext; neither layer replaces the other.
 func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
-	// 已跟随的重定向次数 == len(via)；严格大于上限才拒绝，因此 MaxRedirects=N
-	// 恰好放行 N 次重定向，0 表示一次也不跟随（禁用重定向）。
+	// Followed redirects == len(via); reject only when strictly greater than the limit, so MaxRedirects=N
+	// allows exactly N redirects, and 0 means following none (redirects disabled).
 	if len(via) > c.limits.MaxRedirects {
 		return &Error{Kind: KindFetchFailed, Reason: "too many redirects"}
 	}
@@ -232,7 +234,7 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// validateURL 校验 URL 形态：非空、https、无 userinfo、有主机。
+// validateURL validates the URL shape: non-empty, https, no userinfo, has a host.
 func validateURL(raw string) (*url.URL, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -248,8 +250,8 @@ func validateURL(raw string) (*url.URL, error) {
 	if u.User != nil {
 		return nil, &Error{Kind: KindInvalidURL, Reason: "url must not carry credentials"}
 	}
-	// 直链下载只接受层次化 URL：opaque 形式（https:path）不是可下载的资源定位；
-	// fragment 根本不会发给服务器，出现即视为异常输入。
+	// Direct-link downloads accept only hierarchical URLs: the opaque form (https:path) is not a downloadable resource locator;
+	// a fragment is never sent to the server at all, so its presence is treated as abnormal input.
 	if u.Opaque != "" {
 		return nil, &Error{Kind: KindInvalidURL, Reason: "url must be hierarchical"}
 	}
@@ -262,7 +264,7 @@ func validateURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// classifyFetchError 把 net/http 的错误归一成带分类的 *Error，保留嵌套的原始分类。
+// classifyFetchError normalizes a net/http error into a classified *Error, preserving the nested original classification.
 func classifyFetchError(err error) error {
 	var fe *Error
 	if errors.As(err, &fe) {
@@ -278,31 +280,31 @@ func blockedHost() error {
 	return &Error{Kind: KindBlockedHost, Reason: "host does not resolve to a public address"}
 }
 
-// ipv6GlobalUnicast 是 IPv6 的全球单播范围；只有落在这里的地址才可能是「普通公网地址」。
+// ipv6GlobalUnicast is the IPv6 global unicast range; only addresses falling inside it can be a "regular public address".
 var ipv6GlobalUnicast = netip.MustParsePrefix("2000::/3")
 
-// ipv6SpecialPrefixes 是落于 2000::/3 之内、却被 IANA 登记为特殊用途的前缀。
+// ipv6SpecialPrefixes are the prefixes inside 2000::/3 that IANA registers for special purposes.
 //
-// 它们与普通全球单播同段，必须逐条排除；2000::/3 之外的翻译/隧道/保留段
-// （NAT64 的 64:ff9b::/96 与 64:ff9b:1::/48、Discard-Only 的 100::/64、
-// IPv4-compatible 的 ::/96 等）由范围本身挡下。清单取自 IANA IPv6 Special-Purpose
-// Address Registry，只保留落在 2000::/3 内的条目。
+// They share the range with ordinary global unicast and must be excluded one by one; translation/tunnel/reserved ranges
+// outside 2000::/3 (NAT64's 64:ff9b::/96 and 64:ff9b:1::/48, Discard-Only's 100::/64,
+// IPv4-compatible ::/96 and so on) are excluded by the range itself. The list is taken from the IANA IPv6 Special-Purpose
+// Address Registry, keeping only the entries that fall inside 2000::/3.
 var ipv6SpecialPrefixes = []netip.Prefix{
-	netip.MustParsePrefix("2001::/23"),         // IETF Protocol Assignments（含 Teredo 2001::/32、ORCHID、基准测试 2001:2::/48 等）
+	netip.MustParsePrefix("2001::/23"),         // IETF Protocol Assignments (including Teredo 2001::/32, ORCHID, benchmarking 2001:2::/48, etc.)
 	netip.MustParsePrefix("2001:db8::/32"),     // Documentation
 	netip.MustParsePrefix("2002::/16"),         // 6to4
 	netip.MustParsePrefix("2620:4f:8000::/48"), // Direct Delegation AS112 Service
 	netip.MustParsePrefix("3fff::/20"),         // Documentation
 }
 
-// isPublicIP 判定一个地址是否是「普通已分配的全局单播」，其余一律拒绝。
+// isPublicIP decides whether an address is "ordinary assigned global unicast"; everything else is rejected.
 //
-// SSRF 防护取保守口径。IPv4 逐条排除回环/私网/链路本地/多播与 IANA 特殊用途登记段
-// （含 192.88.99.0/24 这段已废弃的 6to4 relay anycast）。IPv6 只放行 2000::/3 之内、
-// 且不属于 IANA 特殊用途登记的地址：NAT64（64:ff9b::/96、64:ff9b:1::/48）、
-// IPv4-compatible（::/96）、6to4（2002::/16）、Teredo（2001::/32，落在 2001::/23 内）、
-// 文档与保留段都不会被当成公网目标。IPv4-mapped IPv6 先经 Unmap 归入 IPv4 判定，
-// 因此 ::ffff:127.0.0.1 与 127.0.0.1 同判。
+// SSRF protection takes the conservative stance. IPv4 excludes loopback/private/link-local/multicast and IANA special-purpose
+// registered ranges one by one (including the deprecated 6to4 relay anycast 192.88.99.0/24). IPv6 allows only addresses inside
+// 2000::/3 that are not part of an IANA special-purpose registration: NAT64 (64:ff9b::/96, 64:ff9b:1::/48),
+// IPv4-compatible (::/96), 6to4 (2002::/16), and Teredo (2001::/32, which falls inside 2001::/23);
+// documentation and reserved ranges are never treated as public targets. IPv4-mapped IPv6 goes through Unmap into IPv4
+// first, so ::ffff:127.0.0.1 and 127.0.0.1 are judged the same.
 func isPublicIP(ip netip.Addr) bool {
 	if !ip.IsValid() || ip.Zone() != "" {
 		return false
@@ -321,7 +323,7 @@ func isPublicIP(ip netip.Addr) bool {
 			return false
 		case b[0] == 192 && b[1] == 0 && (b[2] == 0 || b[2] == 2): // 192.0.0.0/24, 192.0.2.0/24
 			return false
-		case b[0] == 192 && b[1] == 88 && b[2] == 99: // 192.88.99.0/24 6to4 relay anycast（已废弃）
+		case b[0] == 192 && b[1] == 88 && b[2] == 99: // 192.88.99.0/24 6to4 relay anycast (deprecated)
 			return false
 		case b[0] == 198 && (b[1] == 18 || b[1] == 19): // 198.18.0.0/15 benchmarking
 			return false
@@ -345,7 +347,7 @@ func isPublicIP(ip netip.Addr) bool {
 	return true
 }
 
-// isHTMLType 判断声明的 Content-Type 是否是 HTML。
+// isHTMLType reports whether the declared Content-Type is HTML.
 func isHTMLType(ct string) bool {
 	if i := strings.IndexByte(ct, ';'); i >= 0 {
 		ct = ct[:i]
@@ -358,7 +360,7 @@ func isHTMLType(ct string) bool {
 	}
 }
 
-// looksHTML 用响应体的开头判断内容是否像 HTML 页面（去掉 BOM 与空白后看标签）。
+// looksHTML uses the start of the response body to decide whether the content looks like an HTML page (checking for a tag after stripping the BOM and whitespace).
 func looksHTML(raw []byte) bool {
 	if len(raw) > 512 {
 		raw = raw[:512]

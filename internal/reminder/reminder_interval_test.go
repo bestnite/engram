@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-// 本文件是「最小发送间隔」（MinSendInterval）的验收：
-//   - 所选小时早于日切点时（0 点 / 切点 4 点），前一个复习日尾与新复习日头只隔几小时，
-//     第一封发出后，同一自然日里第二个复习日不再发——间隔门把贴身双发拦住；
-//   - 间隔过后（时钟从上一封起推进 21 小时）可以再发；
-//   - 正常的隔日节律（19 点用户，两封相隔 24 小时）不受影响。
+// This file is the acceptance spec for the "minimum send interval" (MinSendInterval):
+//   - when the chosen hour precedes the day cutoff (0 with cutoff 4), the tail of the previous review day and the head of the new review day are only hours apart;
+//     after the first mail goes out, the second review day in the same calendar day does not send — the interval gate catches the back-to-back double send;
+//   - after the interval passes (clock advanced 21 hours from the previous mail) another send is allowed;
+//   - the normal every-other-day rhythm (a 19:00 user, two mails 24 hours apart) is unaffected.
 //
-// 全部用真实 SQLite（newTestDB + store.LastReminderSentAt 读 SentAt 列），不 mock 数据库。
+// Everything uses real SQLite (newTestDB + store.LastReminderSentAt reading the SentAt column); the database is not mocked.
 
-// TestMinSendIntervalBlocksBackToBackDoubleSend 是核心验收：0 点/切点 4 点的用户不再一天两封。
+// TestMinSendIntervalBlocksBackToBackDoubleSend is the core acceptance: a 0/ cutoff-4 user no longer gets two mails in one day.
 func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "midnight", "midnight@example.com", "en", "Asia/Shanghai", 4,
@@ -27,7 +27,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	// 06-02 00:00：属于前一个复习日（06-01），发第一封。
+	// 06-02 00:00: belongs to the previous review day (06-01), send the first mail.
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 00:00: %v", err)
 	}
@@ -35,8 +35,8 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 		t.Fatalf("first send at 06-02 00:00: enqueued %d, want 1", got)
 	}
 
-	// 06-02 04:00：日切点，这里是新复习日（06-02）的头部，只隔 4 小时——
-	// 台账按复习日计拦不住它，必须由最小间隔门拦住。
+	// 06-02 04:00: the day cutoff; this is the head of the new review day (06-02), only 4 hours apart —
+	// the ledger, which counts by review day, cannot stop it; the minimum interval gate must.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 4, 0)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 04:00: %v", err)
@@ -45,7 +45,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 		t.Fatalf("back-to-back second review day 4h later: enqueued %d, want 1 (min-interval gate)", got)
 	}
 
-	// 06-02 21:00：距第一封 21 小时（>= 20h），间隔门放行；06-02 尚未发过，发第二封。
+	// 06-02 21:00: 21 hours since the first mail (>= 20h), the interval gate lets it through; 06-02 has no send yet, so send the second mail.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 0, 0).Add(21 * time.Hour)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 21:00: %v", err)
@@ -55,7 +55,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	}
 }
 
-// TestMinSendIntervalLeavesDailyCadenceIntact 验收：正常的隔日节律（两封相隔 24 小时）不受间隔门影响。
+// TestMinSendIntervalLeavesDailyCadenceIntact verifies: the normal every-other-day rhythm (two mails 24 hours apart) is unaffected by the interval gate.
 func TestMinSendIntervalLeavesDailyCadenceIntact(t *testing.T) {
 	db := newTestDB(t)
 	userID := seedUserWithDueCard(t, db, "evening", "evening@example.com", "en", "Asia/Shanghai", 4,
@@ -75,7 +75,7 @@ func TestMinSendIntervalLeavesDailyCadenceIntact(t *testing.T) {
 		t.Fatalf("day1 19:00: enqueued %d, want 1", got)
 	}
 
-	// 次日同一小时：正好 24 小时，远大于 20 小时的最小间隔，照常发。
+	// Same hour the next day: exactly 24 hours, far above the 20-hour minimum interval, sent as usual.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 19, 0)
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce day2 19:00: %v", err)

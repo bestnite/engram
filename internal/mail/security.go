@@ -7,24 +7,27 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是（A 类事务安全邮件）的入站投递助手。
+// This file is the inbound delivery helper for class A (transactional security mail).
 //
-// 三条约束都收敛在这里，调用方（web 触发点）不必各自实现：
-//   - 绝不同步发信：只调用 Outbox.Enqueue 写队列表；
-//   - 发信失败不让触发操作失败——Send 不返回 error；SMTP 未配置或入队失败时返回 false
-//     并记英文日志，绝不向上抛；
-//   - A 类不携带退订头：Send 从不写 Headers，因此不会出现 List-Unsubscribe。
+// All three constraints are gathered here so the callers (the web trigger points) do not each have to
+// implement them:
+//   - Never send synchronously: it only calls Outbox.Enqueue to write the queue table;
+//   - A send failure must not fail the triggering operation -- Send returns no error; when SMTP is not
+//     configured or the enqueue fails it returns false and logs in English, never propagating upward;
+//   - Class A carries no unsubscribe header: Send never writes Headers, so List-Unsubscribe cannot
+//     appear.
 //
-// Configured 供触发点判断「SMTP 未配置时禁用并说明原因」。
+// Configured lets a trigger point decide to "disable itself and say why when SMTP is not configured".
 
-// SecurityNotifier 把 A 类安全/事务邮件写进 outbox。
+// SecurityNotifier writes class A security/transactional mail into the outbox.
 type SecurityNotifier struct {
 	outbox *Outbox
 	prefs  *store.EmailPrefStore
 	logger *slog.Logger
 }
 
-// NewSecurityNotifier 构造 A 类邮件投递助手；prefs 可为 nil（A 类不受偏好影响）。
+// NewSecurityNotifier builds the class A mail delivery helper; prefs may be nil (class A is not
+// affected by preferences).
 func NewSecurityNotifier(outbox *Outbox, prefs *store.EmailPrefStore, logger *slog.Logger) *SecurityNotifier {
 	if logger == nil {
 		logger = slog.Default()
@@ -32,15 +35,17 @@ func NewSecurityNotifier(outbox *Outbox, prefs *store.EmailPrefStore, logger *sl
 	return &SecurityNotifier{outbox: outbox, prefs: prefs, logger: logger}
 }
 
-// Configured 报告 SMTP 是否已配置；触发点据此禁用相关页面/接口并说明原因。
+// Configured reports whether SMTP is configured; the trigger points use it to disable the relevant
+// pages/endpoints and say why.
 func (n *SecurityNotifier) Configured() bool {
 	return n != nil && n.outbox != nil && n.outbox.Configured()
 }
 
-// Send 把一封 A 类邮件写进 outbox，返回是否成功入队。
+// Send writes one class A mail into the outbox and returns whether it was enqueued.
 //
-// 它刻意不返回 error：登录成功、改密码成功等操作绝不能因为 Enqueue 报错而失败。
-// SMTP 未配置、类型未登记、入队失败都只记英文日志并返回 false。
+// It deliberately returns no error: operations such as a successful login or password change must
+// never fail because Enqueue reported an error. Unconfigured SMTP, an unregistered type and an
+// enqueue failure all just log in English and return false.
 func (n *SecurityNotifier) Send(ctx context.Context, userID uint64, to string, t Type, subject, textBody, htmlBody string) bool {
 	if !n.Configured() {
 		return false
@@ -49,7 +54,8 @@ func (n *SecurityNotifier) Send(ctx context.Context, userID uint64, to string, t
 		n.logger.Error("mail: unknown security mail type", "user_id", userID, "type", string(t))
 		return false
 	}
-	// A 类恒为 true；这里仍走目录判定，保证「页面能关、后端照发」这类分歧不可能出现。
+	// Class A is always true; the catalog decision still runs here so that a disagreement like "the
+	// page can turn it off while the backend keeps sending" is impossible.
 	if n.prefs != nil {
 		choices, err := n.prefs.Choices(ctx, userID)
 		if err != nil {
@@ -58,7 +64,7 @@ func (n *SecurityNotifier) Send(ctx context.Context, userID uint64, to string, t
 			return false
 		}
 	}
-	// Headers 留空：A 类邮件不带退订头。
+	// Headers left empty: class A mail carries no unsubscribe header.
 	if err := n.outbox.Enqueue(ctx, Message{
 		To:       to,
 		Type:     string(t),

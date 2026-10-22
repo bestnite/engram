@@ -1,8 +1,8 @@
-// Package media 实现本地文件系统的媒体存储。
+// Package media implements media storage on the local filesystem.
 //
-// 内容寻址：文件按 <sha256[:2]>/<sha256>.<ext> 存放，同一份字节天然只存一份；
-// 落盘用临时文件 + rename，避免读者看到半截文件；不接任何对象存储，也不做服务端压缩。
-// 本包只负责字节与 media 元数据，HTTP 代理与上传端点属于 internal/web。
+// Content addressing: files are stored as <sha256[:2]>/<sha256>.<ext>, so identical bytes are naturally stored once;
+// writes go through a temporary file + rename so readers never see a half-written file; no object storage is involved and no
+// server-side compression is done. This package only owns bytes and media metadata; the HTTP proxy and upload endpoints belong to internal/web.
 package media
 
 import (
@@ -24,19 +24,19 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 稳定的错误码（AGENTS.md §2.1：标识符英文）。上传端点把它们映射成 HTTP 状态码，
-// 调用方按 code 判断，不要匹配 message。
+// Stable error codes (AGENTS.md §2.1: identifiers in English). The upload endpoint maps them to HTTP status codes;
+// callers decide by code, never by matching message.
 const (
 	CodeTooLarge       = "media_too_large"
 	CodeMimeNotAllowed = "media_mime_not_allowed"
 	CodeMagicMismatch  = "media_magic_mismatch"
-	// CodeQuotaExceeded 表示本次上传会超出该用户的媒体总量配额。
-	// 用量是「该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传」去重求和，由路由层在落盘前算出，
-	// 见 internal/store 的 UserMediaUsage。
+	// CodeQuotaExceeded means this upload would exceed that user's total media quota.
+	// Usage is the deduplicated sum of "media referenced by that user's notes ∪ that user's uploads not yet referenced by anyone",
+	// computed by the routing layer before writing to disk; see UserMediaUsage in internal/store.
 	CodeQuotaExceeded = "media_quota_exceeded"
 )
 
-// Error 是带稳定 code 的媒体错误。
+// Error is a media error carrying a stable code.
 type Error struct {
 	Code string
 	Msg  string
@@ -45,33 +45,33 @@ type Error struct {
 func (e *Error) Error() string { return e.Code + ": " + e.Msg }
 
 var (
-	// ErrTooLarge 表示文件超过管理员配置的上传上限。
+	// ErrTooLarge means the file exceeds the administrator-configured upload limit.
 	ErrTooLarge = &Error{Code: CodeTooLarge, Msg: "file exceeds the configured upload limit"}
-	// ErrMimeNotAllowed 表示探测到的类型不在白名单内。
+	// ErrMimeNotAllowed means the detected type is not on the allowlist.
 	ErrMimeNotAllowed = &Error{Code: CodeMimeNotAllowed, Msg: "detected media type is not allowed"}
-	// ErrMagicMismatch 表示声明的类型与 magic bytes 不符，或魔数无法识别。
+	// ErrMagicMismatch means the declared type does not match the magic bytes, or the magic number is unrecognizable.
 	ErrMagicMismatch = &Error{Code: CodeMagicMismatch, Msg: "declared media type does not match file magic bytes"}
-	// ErrNotFound 表示媒体不存在。
+	// ErrNotFound means the media does not exist.
 	ErrNotFound = &Error{Code: "media_not_found", Msg: "media not found"}
 )
 
-// defaultMaxBytes 是上传上限的默认值（10 MiB） 要求由管理员配置，
-// 路由层会先用系统设置覆盖它。
+// defaultMaxBytes is the default upload limit (10 MiB) and is meant to be configured by the administrator;
+// the routing layer overrides it with the system settings first.
 const defaultMaxBytes = 10 * 1024 * 1024
 
-// DefaultMaxBytes 暴露默认上限，供路由层在系统设置缺失时回退。
+// DefaultMaxBytes exposes the default limit so the routing layer can fall back when the system setting is missing.
 func DefaultMaxBytes() int64 { return defaultMaxBytes }
 
-// 上传上限的 settings 键与环境变量覆盖名。Web 上传与 REST 卡组包导入
-// 共用下面这一份解析，避免两条入口各写一套常量、口径漂移。
+// The settings key and environment variable override name for the upload limit. Web uploads and REST deck-package import
+// share the single resolution below, so the two entry points do not each define their own constants and drift apart.
 const (
 	SettingKeyMediaMaxBytes = "media_max_bytes"
 	EnvMediaMaxBytes        = "MEDIA_MAX_BYTES"
 )
 
-// ResolveMaxBytes 解析生效的上传字节上限：环境变量 > settings 表 > 默认 10 MiB。
-// 优先级与环境变量语义与 internal/config 一致；settings 表按请求现读，改完即生效。
-// Web 上传与 REST 导入都必须走这里，保证「体积上限与上传上限同一处配置」。
+// ResolveMaxBytes resolves the effective upload byte limit: environment variable > settings table > default 10 MiB.
+// The precedence and environment variable semantics match internal/config; the settings table is read per request, so changes take effect immediately.
+// Both Web upload and REST import must go through here, keeping "the size limit and the upload limit configured in one place".
 func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	if raw := strings.TrimSpace(os.Getenv(EnvMediaMaxBytes)); raw != "" {
 		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
@@ -90,22 +90,22 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	return defaultMaxBytes
 }
 
-// DefaultAllowedMimes 是默认白名单；判定实现已抽到叶子包 mediatype，
-// 这里保留同名入口，避免改动大量调用点。
+// DefaultAllowedMimes is the default allowlist; the decision logic has moved to the leaf package mediatype,
+// and this same-name entry point is kept so that a large number of call sites do not have to change.
 func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
 
-// 每用户媒体总量配额的 settings 键与环境变量覆盖名。
-// Web 上传、REST/MCP/CLI 导入与 Web 导入共用下面这一份解析，四条入口只有一处口径。
+// The settings key and environment variable override name for the per-user total media quota.
+// Web upload, REST/MCP/CLI import and Web import share the single resolution below, so all four entry points use one definition.
 const (
 	SettingKeyMediaUserQuotaBytes = "media_user_quota_bytes"
 	EnvMediaUserQuotaBytes        = "MEDIA_USER_QUOTA_BYTES"
 )
 
-// ResolveUserQuotaBytes 解析生效的每用户媒体总量配额（字节）：环境变量 > settings 表 > 0。
-// 0（含未配置）表示不限——默认关闭是刻意的：不替管理员选一个没人同意过的数字。
+// ResolveUserQuotaBytes resolves the effective per-user total media quota (bytes): environment variable > settings table > 0.
+// 0 (including unconfigured) means unlimited — defaulting to off is deliberate: it does not pick a number on the administrator's behalf that nobody agreed to.
 //
-// 上传链（internal/web 的 checkMediaQuota）与卡组包导入链（store.ImportPackage 的
-// MediaQuotaBytes）都从这里取值，保证“新增媒体字节计入导入者配额”在所有入口一致。
+// The upload path (checkMediaQuota in internal/web) and the deck-package import path (MediaQuotaBytes in
+// store.ImportPackage) both take the value from here, so "newly added media bytes count against the importer's quota" is consistent across all entry points.
 func ResolveUserQuotaBytes(ctx context.Context, db *gorm.DB) int64 {
 	if raw := strings.TrimSpace(os.Getenv(EnvMediaUserQuotaBytes)); raw != "" {
 		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
@@ -124,13 +124,13 @@ func ResolveUserQuotaBytes(ctx context.Context, db *gorm.DB) int64 {
 	return 0
 }
 
-// Store 是本地媒体存储：root 是目录根，db 记录元数据。
+// Store is the local media store: root is the directory root, db records metadata.
 type Store struct {
 	root string
 	db   *gorm.DB
 }
 
-// New 构造存储并确保根目录与临时目录存在。
+// New constructs the store and ensures the root directory and temporary directory exist.
 func New(root string, db *gorm.DB) (*Store, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, errors.New("media: root directory is required")
@@ -144,12 +144,12 @@ func New(root string, db *gorm.DB) (*Store, error) {
 	return s, nil
 }
 
-// Root 返回存储根目录。
+// Root returns the storage root directory.
 func (s *Store) Root() string { return s.root }
 
 func (s *Store) tempDir() string { return filepath.Join(s.root, "tmp") }
 
-// absPath 把相对路径拼成绝对路径，并挡住越出根目录的路径（防御性）。
+// absPath joins a relative path into an absolute one and blocks paths escaping the root directory (defensive).
 func (s *Store) absPath(rel string) (string, error) {
 	clean := filepath.Clean(rel)
 	if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
@@ -158,20 +158,20 @@ func (s *Store) absPath(rel string) (string, error) {
 	return filepath.Join(s.root, clean), nil
 }
 
-// SaveOptions 是一次保存的入参。
+// SaveOptions holds the inputs of one save.
 type SaveOptions struct {
-	// Limit 是单文件字节上限；<=0 时用默认值。
+	// Limit is the per-file byte limit; the default is used when <=0.
 	Limit int64
-	// AllowedMimes 是允许的 mime 集合；空时用默认白名单。
+	// AllowedMimes is the set of allowed mimes; the default allowlist is used when empty.
 	AllowedMimes []string
-	// DeclaredMime 是客户端声明的 Content-Type，用于与 magic bytes 交叉校验（可为空）。
+	// DeclaredMime is the client-declared Content-Type, cross-checked against the magic bytes (may be empty).
 	DeclaredMime string
-	// CreatedBy 是上传者用户 id（可空）。
+	// CreatedBy is the uploading user id (nullable).
 	CreatedBy *uint64
 }
 
-// Save 写入一份媒体：限量读入临时文件、校验 magic bytes、按 sha256 去重、rename 落盘并写元数据。
-// 返回的 Media 在去重命中时是已存在的那一行。
+// Save writes one piece of media: reads into a temporary file up to the limit, validates the magic bytes, dedups by sha256,
+// renames into place, and writes metadata. On a dedup hit the returned Media is the row that already existed.
 func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store.Media, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -187,7 +187,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		return nil, fmt.Errorf("media: create temp file: %w", err)
 	}
 	tmpName := tmp.Name()
-	// 任何提前返回都要清掉临时文件，避免泄漏。
+	// Every early return must remove the temporary file to avoid leaking it.
 	committed := false
 	defer func() {
 		if !committed {
@@ -197,7 +197,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	}()
 
 	hasher := sha256.New()
-	// 多读 1 字节，用来发现“超过上限”，而不是把超大文件整个读完。
+	// Read 1 extra byte to detect "over the limit" instead of reading an oversized file to the end.
 	written, err := io.Copy(io.MultiWriter(tmp, hasher), io.LimitReader(r, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("media: write temp file: %w", err)
@@ -212,7 +212,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		return nil, fmt.Errorf("media: sync temp file: %w", err)
 	}
 
-	// 读回文件头做 magic bytes 校验：只看字节，不信扩展名。
+	// Read the file header back for magic byte validation: trust only the bytes, never the extension.
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("media: seek temp file: %w", err)
 	}
@@ -228,7 +228,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if !mediatype.Allowed(detected, allowed) {
 		return nil, ErrMimeNotAllowed
 	}
-	// 客户端声明了类型时必须与魔数一致，否则是伪装文件。
+	// When the client declared a type it must match the magic number, otherwise the file is disguised.
 	if declared := mediatype.Normalize(opts.DeclaredMime); declared != "" && declared != detected {
 		return nil, ErrMagicMismatch
 	}
@@ -236,17 +236,17 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	sum := hex.EncodeToString(hasher.Sum(nil))
 	relPath := filepath.Join(sum[:2], sum+"."+ext)
 
-	// 去重：数据库里已有同一 sha256 直接返回（文件也已存在）。
+	// Dedup: if the database already has the same sha256, return it directly (the file exists too).
 	if existing, err := s.bySha256(ctx, sum); err != nil {
 		return nil, err
 	} else if existing != nil {
-		// 去重命中也登记归属：否则「B 上传与 C 相同字节」时 B 拿不到
-		// media_uploaders 记录，撤销共享后读不到自己提供的文件。
+		// A dedup hit also records ownership: otherwise, when "B uploads the same bytes as C", B gets no
+		// media_uploaders row and cannot read the file it contributed after sharing is revoked.
 		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
 			return nil, err
 		}
-		// 重新上传一份正在等待回收的字节，说明它又要被用了：清掉孤立标记，宽限期从下一轮
-		// 回收重新算起，否则可能在用户把它插进卡片之前就被删掉。
+		// Re-uploading bytes that are pending reclamation shows they are about to be used again: clear the orphan flag,
+		// and the grace period restarts from the next reclamation round, otherwise it could be deleted before the user inserts it into a card.
 		if existing.OrphanedAt != nil && s.db != nil {
 			if err := s.db.WithContext(ctx).Model(&store.Media{}).Where("sha256 = ?", sum).
 				Update("orphaned_at", nil).Error; err != nil {
@@ -266,7 +266,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if err := tmp.Close(); err != nil {
 		return nil, fmt.Errorf("media: close temp file: %w", err)
 	}
-	// 同目录 rename 原子替换；文件已存在说明并发下另一请求已落盘，直接复用。
+	// Same-directory rename replaces atomically; if the file already exists, a concurrent request already wrote it, so reuse it.
 	if err := os.Rename(tmpName, finalPath); err != nil {
 		if _, statErr := os.Stat(finalPath); statErr != nil {
 			return nil, fmt.Errorf("media: commit file: %w", err)
@@ -284,7 +284,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	}
 	if s.db != nil {
 		if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
-			// 并发下可能撞唯一索引：回读已有行，视为去重成功。
+			// Under concurrency the unique index may be hit: read the existing row back and treat it as a successful dedup.
 			if existing, rerr := s.bySha256(ctx, sum); rerr == nil && existing != nil {
 				if uerr := s.recordUploader(ctx, sum, opts.CreatedBy); uerr != nil {
 					return nil, uerr
@@ -300,9 +300,9 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	return row, nil
 }
 
-// recordUploader 把本次上传者登记到 media_uploaders（幂等；见 store.RecordMediaUploader）。
-// 未配置数据库或没有具名上传者时是空操作。失败向上返回：上传者归属是「撤销共享后仍可读」
-// 的唯一依据，静默丢失会变成用户可见的权限回归。
+// recordUploader registers this uploader in media_uploaders (idempotent; see store.RecordMediaUploader).
+// It is a no-op when no database is configured or there is no named uploader. Failures propagate: uploader ownership is the
+// only basis for "still readable after sharing is revoked", and losing it silently would become a user-visible permission regression.
 func (s *Store) recordUploader(ctx context.Context, sha string, createdBy *uint64) error {
 	if s.db == nil || createdBy == nil {
 		return nil
@@ -310,7 +310,7 @@ func (s *Store) recordUploader(ctx context.Context, sha string, createdBy *uint6
 	return store.RecordMediaUploader(ctx, s.db, sha, *createdBy)
 }
 
-// Open 按 sha256 取元数据并打开文件；不存在时返回 ErrNotFound。
+// Open fetches the metadata by sha256 and opens the file; returns ErrNotFound when it does not exist.
 func (s *Store) Open(ctx context.Context, sha string) (*store.Media, *os.File, error) {
 	if s.db == nil {
 		return nil, nil, ErrNotFound
@@ -336,7 +336,7 @@ func (s *Store) Open(ctx context.Context, sha string) (*store.Media, *os.File, e
 	return &m, f, nil
 }
 
-// bySha256 按 sha256 查元数据；不存在返回 (nil, nil)。
+// bySha256 looks up metadata by sha256; returns (nil, nil) when absent.
 func (s *Store) bySha256(ctx context.Context, sum string) (*store.Media, error) {
 	if s.db == nil {
 		return nil, nil
@@ -352,14 +352,15 @@ func (s *Store) bySha256(ctx context.Context, sum string) (*store.Media, error) 
 	return nil, fmt.Errorf("media: lookup sha256: %w", err)
 }
 
-// gcBatch 是一次删除事务处理的媒体行数上限，保证单个事务不会随孤立媒体的数量无限变大。
+// gcBatch caps the number of media rows handled in one delete transaction, so a single transaction does not grow without bound with the number of orphans.
 const gcBatch = 200
 
-// CollectGarbage 回收孤立媒体：先刷新孤立标记，再删除孤立时刻早于 now-grace 的媒体行与文件。
-// 返回删除的媒体个数。
+// CollectGarbage reclaims orphaned media: refresh the orphan flags first, then delete the media rows and files whose
+// orphaned time is earlier than now-grace. Returns the number of deleted media.
 //
-// 文件在数据库行删除提交之后再删；删之前再确认这份字节没有被重新上传（重新上传会建一行新的
-// 媒体，路径相同），否则会删掉刚落盘的新文件。文件已不存在不算错误。
+// Files are removed after the database row deletion commits; before removing, confirm the bytes were not re-uploaded
+// (a re-upload creates a new media row at the same path), otherwise a freshly written file would be deleted.
+// A file that no longer exists is not an error.
 func (s *Store) CollectGarbage(ctx context.Context, now time.Time, grace time.Duration) (int64, error) {
 	if s.db == nil {
 		return 0, nil

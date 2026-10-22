@@ -39,7 +39,7 @@ describe('DeckSettingsView renders stored caps and today usage truthfully', () =
     expect(html).toContain('data-testid="deck-settings-new-used"');
     expect(html).toContain('data-testid="deck-settings-new-left"');
     expect(html).toContain('data-testid="deck-settings-review-left"');
-    // 新卡剩余 3、复习剩余 7（上限减已用），不是上限本身。
+    // New cards 3 remaining, review 7 remaining (cap minus already used), not the cap itself.
     expect(html).toContain('>3</dd>');
     expect(html).toContain('>7</dd>');
   });
@@ -180,7 +180,7 @@ describe('deck settings SPA route owns the canonical path', () => {
     const match = matchRoute('/decks/42/settings', routes);
     expect(match.route?.name).toBe('deck-settings');
     expect(match.params).toEqual({ id: '42' });
-    // 卡组详情本身不能被设置页的路径吃掉。
+    // The deck detail itself must not be swallowed by the settings page's path.
     expect(matchRoute('/decks/42', routes).route?.name).toBe('deck-detail');
   });
 });

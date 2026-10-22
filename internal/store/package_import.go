@@ -26,45 +26,45 @@ import (
 	"git.nite07.com/nite/engram/internal/mediatype"
 )
 
-// 卡组包导入。
+// Deck package import.
 //
-// 安全是重点：解压前拒绝路径穿越与软链、限制总解压体积与条目数（防 zip bomb）；
-// 业务写入全部在一个事务内完成（失败不留半成品）；重复导入靠 external_ref 或内容指纹去重。
+// Safety is the focus: reject path traversal and symlinks before extraction, cap the total extracted size and the entry count (zip bomb defence);
+// all business writes happen in one transaction (a failure leaves nothing half done); repeated imports de-duplicate by external_ref or content fingerprint.
 
-// 导入目标三种。
+// Three kinds of import target.
 const (
-	// PackageTargetNewDeck 用包内卡组名新建卡组（重名自动加后缀）。
+	// PackageTargetNewDeck creates a new deck under the package's deck name (a suffix is added on a name clash).
 	PackageTargetNewDeck = "new_deck"
 )
 
-// PackageLimits 是解压安全上限（「安全」）。
+// PackageLimits holds the extraction safety caps ("safety").
 type PackageLimits struct {
 	MaxEntries    int
 	MaxFileBytes  int64
 	MaxTotalBytes int64
 }
 
-// DefaultPackageLimits 给出保守的默认上限，防 zip bomb。
+// DefaultPackageLimits gives conservative default caps against zip bombs.
 func DefaultPackageLimits() PackageLimits {
 	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
 }
 
-// 卡组名与描述的长度界限由 deck.go 统一持有（创建/改名与卡组包导入共用同一来源）。
-// 这里保留旧的导出名，避免已经散落的引用漂移。
+// The length bounds for deck name and description live in deck.go alone (creation/rename and deck package import share one source).
+// The old exported names are kept here so references already scattered around do not drift.
 const (
 	maxPackageDeckNameChars        = maxDeckNameChars
 	maxPackageDeckDescriptionChars = maxDeckDescriptionChars
 )
 
-// deckMetaErrors 校验 manifest 的卡组名与描述，返回条目级原因（英文，与既有条目措辞一致）。
+// deckMetaErrors validates the manifest's deck name and description, returning entry-level reasons (English, worded like the existing entries).
 //
-// 规则：
-//   - 长度按 rune 计：卡组名 ≤ 200、描述 ≤ 2000；
-//   - 拒一切 C0 控制字符（U+0000–U+001F），包括 \n、	、\r，不为例外开口子：
-//     卡组名/描述没有需要换行的场景，而这些字符会撑坏页面与日志，并干扰 uniqueDeckName 的展示；
-//   - 拒非法 UTF-8：后面的 rune 计数与落库都假定输入是合法 UTF-8。
+// Rules:
+//   - lengths count runes: deck name ≤ 200, description ≤ 2000;
+//   - reject every C0 control character (U+0000–U+001F), \n, 	 and \r included, with no exception carved out:
+//     a deck name/description has no scenario needing a line break, and these characters wreck pages and logs and interfere with uniqueDeckName's display;
+//   - reject invalid UTF-8: the rune count that follows and the persistence both assume the input is valid UTF-8.
 //
-// 空值不校验：空卡组名是既有语义（由调用方回退成 Imported deck）。
+// Empty values are not validated: an empty deck name is existing semantics (the caller falls back to Imported deck).
 func deckMetaErrors(name, description string) []string {
 	var entries []string
 	if name != "" {
@@ -76,10 +76,10 @@ func deckMetaErrors(name, description string) []string {
 	return entries
 }
 
-// textFieldErrors 校验单个文本字段的长度、控制字符与 UTF-8 合法性。
+// textFieldErrors validates one text field's length, control characters and UTF-8 validity.
 func textFieldErrors(field, value string, maxChars int) []string {
 	if !utf8.ValidString(value) {
-		// 非法 UTF-8 下 rune 计数没有意义，只报这一条。
+		// Under invalid UTF-8 a rune count is meaningless, so only this one entry is reported.
 		return []string{field + ": invalid UTF-8"}
 	}
 	var entries []string
@@ -92,7 +92,7 @@ func textFieldErrors(field, value string, maxChars int) []string {
 	return entries
 }
 
-// firstControlRune 返回值里第一个 C0 控制字符（U+0000–U+001F）。
+// firstControlRune returns the first C0 control character (U+0000–U+001F) in the value.
 func firstControlRune(s string) (rune, bool) {
 	for _, r := range s {
 		if r <= 0x1f {
@@ -102,7 +102,7 @@ func firstControlRune(s string) (rune, bool) {
 	return 0, false
 }
 
-// packageDeckMetaError 把条目级原因包成稳定的 PackageError；没有原因时返回 nil。
+// packageDeckMetaError wraps entry-level reasons into a stable PackageError; nil when there are no reasons.
 func packageDeckMetaError(entries []string) error {
 	if len(entries) == 0 {
 		return nil
@@ -114,46 +114,46 @@ func packageDeckMetaError(entries []string) error {
 	}
 }
 
-// PackageImportOptions 控制一次导入。
+// PackageImportOptions controls one import.
 type PackageImportOptions struct {
-	// Target 取值 new_deck（默认）、into_deck:<id>、replace_deck:<id>。
+	// Target takes new_deck (the default), into_deck:<id>, replace_deck:<id>.
 	Target string
 	DryRun bool
-	// OnConflict 取值 skip / update（默认）/ fail（整包回滚）。
+	// OnConflict takes skip / update (the default) / fail (roll back the whole package).
 	OnConflict string
-	// AllowOthersProgress 是管理员开关（默认关）：允许把包内他人进度导入到自己账号。
+	// AllowOthersProgress is an admin switch (off by default): allow someone else's progress in the package to be imported into one's own account.
 	AllowOthersProgress bool
-	// SkipMissingMedia=true 时缺失媒体只计数并继续；默认 false（缺媒体即失败并列出清单）。
+	// With SkipMissingMedia=true, missing media is only counted and the import continues; default false (missing media fails the import and lists them).
 	SkipMissingMedia bool
-	// ApplyWeights 默认 off：包内权重是导出者的记忆曲线，导入者默认从默认权重起步，攒够自己的
-	// 复习后再优化。只在 new_deck 目标下有作用——合并与替换不动目标卡组现有的预设。
-	// 关闭时新预设的 weights_optimized_at 与 weights_review_count 也一并留空。
+	// ApplyWeights defaults to off: the weights in the package are the exporter's memory curve, and by default the importer starts from the default weights, gathering their own
+	// reviews before optimizing. It only takes effect with the new_deck target -- merge and replace leave the target deck's existing preset alone.
+	// When off, the new preset's weights_optimized_at and weights_review_count are left empty as well.
 	ApplyWeights bool
-	// MediaQuotaBytes 是导入者当前生效的每用户媒体总量配额（字节）；0 表示不限。
+	// MediaQuotaBytes is the importer's currently effective per-user media quota in bytes; 0 means unlimited.
 	//
-	// 包内新增媒体字节（按 sha256 去重、扣除导入者已计费的 sha）计入**导入者**配额，
-	// 超限整包失败、不留部分媒体。取值由调用方从 media.ResolveUserQuotaBytes 解析后传入，
-	// 保证 web / REST / MCP / CLI 四条入口只有一处口径。
+	// The media bytes newly added by the package (de-duplicated by sha256, minus the shas the importer is already charged for) count against the **importer's** quota;
+	// exceeding it fails the whole package and leaves no partial media. The caller resolves the value with media.ResolveUserQuotaBytes and passes it in,
+	// so the web / REST / MCP / CLI entry points share one definition.
 	MediaQuotaBytes int64
-	// MediaRoot 是媒体字节落盘根目录；为空表示不落盘媒体（只在需要时）。
+	// MediaRoot is the root directory for media bytes on disk; empty means media is not written to disk (only when needed).
 	MediaRoot string
-	// NewDeckName 可选覆盖 new_deck 的卡组名。
+	// NewDeckName optionally overrides the deck name for new_deck.
 	NewDeckName string
-	// Now 可注入时钟；零值时用系统 UTC 时间。
+	// Now is an injectable clock; the zero value uses the system UTC time.
 	Now func() time.Time
 }
 
-// PackageImportError 是逐条导入错误：Entry 指出出错的包内条目（如 notes[3]）。
+// PackageImportError is one per-entry import error: Entry names the offending package entry (e.g. notes[3]).
 type PackageImportError struct {
 	Entry  string `json:"entry"`
 	Reason string `json:"reason"`
 }
 
-// PackageImportReport 是导入（含 dry_run）的报告，形态与批量导入一致。
+// PackageImportReport is the report of an import (dry_run included), shaped like the bulk import report.
 type PackageImportReport struct {
 	Target string `json:"target"`
 	DryRun bool   `json:"dry_run"`
-	// DeckID 是内部数字主键，只供审计等内部用途；对外暴露的是 DeckPublicID。
+	// DeckID is the internal numeric primary key, for internal uses such as audit; what is exposed externally is DeckPublicID.
 	DeckID            uint64               `json:"-"`
 	DeckPublicID      string               `json:"deck_id,omitempty"`
 	NotesCreated      int                  `json:"notes_created"`
@@ -167,19 +167,19 @@ type PackageImportReport struct {
 	ProgressDiscarded bool                 `json:"progress_discarded"`
 	MatchRule         string               `json:"match_rule,omitempty"`
 	Errors            []PackageImportError `json:"errors"`
-	// WeightsApplied 表示包内权重写进了新建的预设。
+	// WeightsApplied means the package's weights were written into the new preset.
 	WeightsApplied bool `json:"weights_applied"`
-	// WeightsDiscarded 表示包里带了权重但没有采用：未开 ApplyWeights，或目标不是 new_deck。
+	// WeightsDiscarded means the package carried weights that were not adopted: ApplyWeights was off, or the target was not new_deck.
 	WeightsDiscarded bool `json:"weights_discarded"`
 }
 
-// ErrPackageDryRun 是 dry_run 的内部哨兵：完成规划后用它回滚事务，不留任何写入。
+// ErrPackageDryRun is the internal dry_run sentinel: once planning is done it rolls the transaction back, leaving no writes.
 var ErrPackageDryRun = errors.New("deck package: dry run rollback")
 
-// ReadPackageArchive 安全地读出一个 zip：拒绝路径穿越、绝对路径、软链，
-// 并限制条目数与总解压体积（「安全」）。
+// ReadPackageArchive reads a zip safely: it rejects path traversal, absolute paths and symlinks,
+// and caps the entry count and the total extracted size ("safety").
 func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, error) {
-	// 先整体读入内存（有总量上限），因为 zip.NewReader 需要 ReaderAt。
+	// Read it all into memory first (with a total cap), because zip.NewReader needs a ReaderAt.
 	raw, err := io.ReadAll(io.LimitReader(r, limits.MaxTotalBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: read archive: %v", &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive"}, err)
@@ -201,8 +201,8 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 		if strings.HasSuffix(name, "/") || f.FileInfo().IsDir() {
 			continue
 		}
-		// 同名条目（重复路径）必须拒绝。zip 允许同一名字出现多次，而这里按名字存入
-		// map——若不拦，后一个条目会静默覆盖前一个，包因此能藏一个与索引不符的覆盖层。
+		// A duplicate entry name (repeated path) must be rejected. zip allows the same name several times, and here entries are stored into a
+		// map by name -- without this check the later entry silently overwrites the earlier one, letting a package hide an overlay layer that disagrees with the index.
 		if _, dup := out[name]; dup {
 			return nil, &PackageError{Code: CodePackageBadFormat, Message: "archive contains a duplicate entry", Entries: []string{name}}
 		}
@@ -228,7 +228,7 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 	return out, nil
 }
 
-// unsafeZipName 判断 zip 条目名是否危险：绝对路径、反斜杠、盘符、或含 ".." 段。
+// unsafeZipName reports whether a zip entry name is dangerous: an absolute path, a backslash, a drive letter, or a ".." segment.
 func unsafeZipName(name string) bool {
 	if name == "" {
 		return true
@@ -250,8 +250,8 @@ func unsafeZipName(name string) bool {
 	return false
 }
 
-// ParsePackageTargetRef 解析目标串里的种类与卡组标识原文（客户端给的是对外 id）；
-// 空串等同 new_deck。标识的合法性由调用方判定——只有它知道该标识是对外 id 还是内部主键。
+// ParsePackageTargetRef parses the kind and the raw deck reference out of a target string (clients supply the public id);
+// an empty string equals new_deck. The reference's validity is the caller's call -- only it knows whether the reference is a public id or an internal primary key.
 func ParsePackageTargetRef(target string) (kind string, ref string, err error) {
 	target = strings.TrimSpace(target)
 	if target == "" || target == PackageTargetNewDeck {
@@ -269,7 +269,7 @@ func ParsePackageTargetRef(target string) (kind string, ref string, err error) {
 	return "", "", &PackageError{Code: CodePackageBadFormat, Message: "target must be new_deck, into_deck:<id> or replace_deck:<id>"}
 }
 
-// ParsePackageTarget 解析 store 内部使用的目标串（卡组标识是数字主键）；空串等同 new_deck。
+// ParsePackageTarget parses the target string used inside the store (the deck reference is a numeric primary key); an empty string equals new_deck.
 func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
 	kind, ref, err := ParsePackageTargetRef(target)
 	if err != nil || kind == PackageTargetNewDeck {
@@ -282,7 +282,7 @@ func ParsePackageTarget(target string) (kind string, deckID uint64, err error) {
 	return kind, id, nil
 }
 
-// FormatPackageTarget 组装 store 内部形态的目标串；由传输层把对外 id 解析成数字主键后调用。
+// FormatPackageTarget assembles the target string in the store's internal form; the transport layer calls it after resolving the public id into a numeric primary key.
 func FormatPackageTarget(kind string, deckID uint64) string {
 	if kind == "" || kind == PackageTargetNewDeck {
 		return PackageTargetNewDeck
@@ -290,7 +290,7 @@ func FormatPackageTarget(kind string, deckID uint64) string {
 	return kind + ":" + strconv.FormatUint(deckID, 10)
 }
 
-// deckPublicID 取某卡组的对外 id；导入报告带的是对外 id 而不是数字主键。
+// deckPublicID fetches a deck's public id; the import report carries the public id rather than the numeric primary key.
 func deckPublicID(ctx context.Context, tx *gorm.DB, deckID uint64) (string, error) {
 	var pid string
 	if err := tx.WithContext(ctx).Table("decks").Select("public_id").Where("id = ?", deckID).Scan(&pid).Error; err != nil {
@@ -299,13 +299,13 @@ func deckPublicID(ctx context.Context, tx *gorm.DB, deckID uint64) (string, erro
 	return pid, nil
 }
 
-// ImportPackage 导入一个卡组包。
+// ImportPackage imports a deck package.
 //
-// 调用方（API/Web/MCP/CLI）负责在调用前完成卡组级权限判定；本方法只做包级校验、
-// 去重、id 重映射、进度归属判定与事务化写入。
+// The caller (API/Web/MCP/CLI) is responsible for the deck-level permission check before calling; this method only does package-level validation,
+// de-duplication, id remapping, the progress ownership check and transactional writes.
 func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.Reader, opts PackageImportOptions) (*PackageImportReport, error) {
-	// 本次导入的执行者：note 写入的写前校验据此判断「新引入的引用是否导入者可读」
-	// 包内提供的媒体字节会先登记到 media_uploaders，再校验。
+	// The actor of this import: note write validation uses it to decide "is a newly introduced reference readable by the importer";
+	// the media bytes the package provides are registered in media_uploaders before validation.
 	ctx = WithActor(ctx, actorUserID)
 	if opts.Now == nil {
 		opts.Now = func() time.Time { return time.Now().UTC() }
@@ -330,7 +330,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, err
 	}
 
-	// 未知题型必须报错并逐条列出（静默丢弃会让用户以为导入成功却少了卡片）。
+	// An unknown kind must error and be listed entry by entry (silently dropping it would make the user think the import succeeded while cards are missing).
 	var unknown []string
 	for i := range pkg.Notes {
 		if _, ok := cardtype.Lookup(pkg.Notes[i].Kind); !ok {
@@ -341,14 +341,14 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, &PackageError{Code: CodePackageUnknownKind, Message: "unknown card type", Entries: unknown}
 	}
 
-	// 媒体以真实字节为准做白名单与声明交叉校验；放在事务之前，dry_run 与真实导入同样被拒，
-	// 且任何文件都还没落盘。
+	// Media is checked against the allowlist using the real bytes and cross-checked with the declaration; this happens before the transaction, so dry_run and a real import are rejected alike,
+	// and no file has been written yet.
 	if err := validatePackageMedia(pkg); err != nil {
 		return nil, err
 	}
 
-	// 导入新增的媒体字节计入**导入者**配额，超限整包失败。检查同样放在事务与任何
-	// 写盘之前，因此被拒时库里没有卡组/卡/媒体行，磁盘上也没有字节。
+	// The media bytes the import adds count against the **importer's** quota and exceeding it fails the whole package. This check likewise happens before the transaction and before any
+	// disk write, so a rejection leaves no deck/card/media rows in the database and no bytes on disk.
 	if err := checkImportMediaQuota(ctx, s.db, actorUserID, pkg, opts.MediaQuotaBytes); err != nil {
 		return nil, err
 	}
@@ -365,8 +365,8 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	}
 	report.MediaMissing = len(mediaMissing)
 
-	// writtenMedia 记录本次事务实际落盘的媒体文件；事务失败回滚时据此清理，
-	// 避免元数据行回滚而字节留在磁盘上形成孤儿文件。
+	// writtenMedia records the media files this transaction actually wrote to disk; a failed rollback uses it to clean them up,
+	// so the metadata rows do not roll back while the bytes stay on disk as orphan files.
 	var writtenMedia []mediaWrite
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return s.importInTx(ctx, tx, actorUserID, username, pkg, targetKind, targetDeckID, opts, report, &writtenMedia)
@@ -383,17 +383,17 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	return report, nil
 }
 
-// mediaWrite 是本次导入新写入的一个媒体文件（sha + 绝对路径）。
+// mediaWrite is one media file newly written by this import (sha + absolute path).
 type mediaWrite struct {
 	sha string
 	abs string
 }
 
-// cleanupMediaWrites 删除本次导入已落盘、却因事务回滚而无元数据引用的媒体文件。
+// cleanupMediaWrites deletes media files this import wrote to disk but which, because the transaction rolled back, have no metadata referencing them.
 //
-// 只删本进程本次写下的文件；若该 sha 已被（并发的）其它已提交事务引用了元数据行，
-// 则保留文件——它不再是孤儿。删除失败只忽略（文件已不在或权限问题都不影响正确性，
-// 最坏情况是退回修复前的行为）。
+// It only deletes files this process wrote this time; if a (concurrent) other committed transaction already references the sha's metadata row,
+// the file is kept -- it is no longer an orphan. A failed delete is simply ignored (a file already gone or a permission problem does not affect correctness,
+// the worst case is falling back to the behaviour from before the fix).
 func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite) {
 	if len(writes) == 0 {
 		return
@@ -409,7 +409,7 @@ func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite)
 	}
 }
 
-// packageModel 是解析后的包内容。
+// packageModel is the parsed package content.
 type packageModel struct {
 	Manifest PackageManifest
 	Notes    []PackageNote
@@ -433,15 +433,15 @@ func parseJSONEntry(entries map[string][]byte, name string, out any) error {
 
 func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	pkg := &packageModel{Media: map[string]PackageMediaEntry{}, MediaRaw: map[string][]byte{}}
-	// manifest.json 的原始字节必须是合法 UTF-8：encoding/json 会把非法字节静默替换成
-	// U+FFFD（按文档“不是错误”），只看解码后的字符串就永远抓不到它，只能在原始字节上把关。
+	// The raw bytes of manifest.json must be valid UTF-8: encoding/json silently replaces invalid bytes with
+	// U+FFFD (per the docs "not an error"), so looking only at the decoded string never catches it; the check has to be on the raw bytes.
 	if raw, ok := entries["manifest.json"]; ok && !utf8.Valid(raw) {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid UTF-8 in manifest", Entries: []string{"manifest.json: invalid UTF-8"}}
 	}
 	if err := parseJSONEntry(entries, "manifest.json", &pkg.Manifest); err != nil {
 		return nil, err
 	}
-	// 卡组名/描述的长度与字符界限：在解析出 manifest 后立即校验，事务开始前拒绝整包。
+	// The length and character bounds of deck name/description: validated right after the manifest is parsed, rejecting the whole package before the transaction starts.
 	if err := packageDeckMetaError(deckMetaErrors(pkg.Manifest.Deck.Name, pkg.Manifest.Deck.Description)); err != nil {
 		return nil, err
 	}
@@ -469,11 +469,11 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 			return nil, &PackageError{Code: CodePackageBadFormat, Message: "invalid JSON", Entries: []string{"media.json: " + err.Error()}}
 		}
 		for sha, entry := range pkg.Media {
-			// 只接受包内 media/ 前缀且文件名与 sha256 一致的条目，挡住 media.json 里的路径穿越。
+			// Only entries with the media/ prefix inside the package whose file name matches the sha256 are accepted, blocking path traversal from media.json.
 			if unsafeZipName(entry.Path) || !strings.HasPrefix(entry.Path, "media/") {
 				return nil, &PackageError{Code: CodePackageUnsafeEntry, Message: "media path is unsafe", Entries: []string{entry.Path}}
 			}
-			// 文件名必须是 `<sha256>.<ext>`，否则声明的 sha 与条目名对不上（索引与内容脱钩）。
+			// The file name must be `<sha256>.<ext>`, otherwise the declared sha and the entry name disagree (index decoupled from content).
 			base := path.Base(entry.Path)
 			if !strings.HasPrefix(base, sha+".") || len(base) <= len(sha)+1 {
 				return nil, &PackageError{Code: CodePackageBadFormat, Message: "media entry name does not match the declared sha256", Entries: []string{entry.Path}}
@@ -482,8 +482,8 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 			if !ok {
 				continue
 			}
-			// 声明的 sha256 必须等于字节的真实 sha256，挡住"假 sha"（声明与内容不符）。
-			// 这一校验在任何落盘/写库之前完成，因此被拒的包零副作用。
+			// The declared sha256 must equal the real sha256 of the bytes, blocking a "fake sha" (declaration not matching content).
+			// This check completes before any disk write or database write, so a rejected package has zero side effects.
 			sum := sha256.Sum256(raw)
 			if hex.EncodeToString(sum[:]) != sha {
 				return nil, &PackageError{Code: CodePackageBadFormat, Message: "media bytes do not match the declared sha256", Entries: []string{entry.Path}}
@@ -494,7 +494,7 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	return pkg, nil
 }
 
-// missingMediaRefs 找出 note 字段里引用、但包内没有字节的媒体。
+// missingMediaRefs finds media referenced in note fields but without bytes in the package.
 func missingMediaRefs(pkg *packageModel) ([]string, error) {
 	refs := map[string]bool{}
 	for i := range pkg.Notes {
@@ -509,7 +509,7 @@ func missingMediaRefs(pkg *packageModel) ([]string, error) {
 	return missing, nil
 }
 
-// headBytes 取文件头，最多 mediatype.HeadBytes 字节；判定所需长度以内有多少给多少。
+// headBytes returns the head of the file, at most mediatype.HeadBytes; it gives as much as there is up to the length detection needs.
 func headBytes(raw []byte) []byte {
 	if len(raw) > mediatype.HeadBytes {
 		return raw[:mediatype.HeadBytes]
@@ -517,14 +517,14 @@ func headBytes(raw []byte) []byte {
 	return raw
 }
 
-// validatePackageMedia 在写任何文件之前，用真实字节判定包内每份媒体的类型：
-// 不在白名单内即拒，且与 media.json 的声明交叉校验——声明与字节不符即拒。
+// Before writing any file, validatePackageMedia determines the type of every piece of media in the package from the real bytes:
+// anything outside the allowlist is rejected, and it cross-checks the media.json declaration -- a declaration that disagrees with the bytes is rejected.
 //
-// 为什么放在 store 层而不是复用 internal/media.Save：media 包已 import store，
-// 反向依赖会成环；Save 还用自己那条数据库连接，绕开导入事务，在 SQLite 上会造成
-// SQLITE_BUSY。判定逻辑本身在叶子包 mediatype 里与上传链共用，这里只做包级编排。
+// Why this lives in the store layer instead of reusing internal/media.Save: the media package already imports store,
+// a reverse dependency would make a cycle; Save also uses its own database connection, bypassing the import transaction, which on SQLite causes
+// SQLITE_BUSY. The detection logic itself is shared with the upload chain in the leaf package mediatype; this only orchestrates it at package level.
 //
-// 声明缺字节的条目交给 missingMediaRefs 报告，这里跳过，避免同一问题报两次。
+// Entries declared with missing bytes are left to missingMediaRefs to report and skipped here, so the same problem is not reported twice.
 func validatePackageMedia(pkg *packageModel) error {
 	var entries []string
 	for sha, entry := range pkg.Media {
@@ -548,20 +548,20 @@ func validatePackageMedia(pkg *packageModel) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	// 逐条按字典序，保证同一包每次报错顺序一致。
+	// Entries are sorted lexicographically so the same package always reports errors in the same order.
 	sort.Strings(entries)
 	return &PackageError{Code: CodePackageUnsafeMedia, Message: "package media failed validation", Entries: entries}
 }
 
-// checkImportMediaQuota 在写任何文件与数据库行之前，检查导入新增媒体是否超出导入者配额。
+// checkImportMediaQuota checks, before any file or database row is written, whether the media added by the import exceeds the importer's quota.
 //
-// 计量口径与上传链（internal/store.UserMediaUsage）一致：
-//   - 已用量 = 该用户 note 引用到的媒体 ∪ 该用户尚无人引用的上传，按 sha256 去重求和；
-//   - 本次新增 = 包内媒体里该用户**尚未计费**的 sha 的字节之和（同一 blob 已计费则不重复收费，
-//     与上传端「同 sha 新增量为 0」同规）。
+// The accounting matches the upload chain (internal/store.UserMediaUsage):
+//   - used = media referenced by that user's notes ∪ that user's uploads nobody references yet, summed with sha256 de-duplication;
+//   - added this time = the bytes of the package media whose sha the user is **not yet charged** for (a blob already charged is not charged again,
+//     the same rule as the upload side's "added amount for an existing sha is 0").
 //
-// quota<=0 表示不限，直接放行。超限返回 CodePackageQuotaExceeded，调用方在事务之前返回，
-// 因此不会留下任何卡组/卡/媒体行或磁盘文件。
+// quota<=0 means unlimited and passes straight through. Exceeding it returns CodePackageQuotaExceeded and the caller returns before the transaction,
+// so no deck/card/media row or disk file is left behind.
 func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, pkg *packageModel, quota int64) error {
 	if quota <= 0 {
 		return nil
@@ -583,11 +583,11 @@ func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64,
 	return &PackageError{Code: CodePackageQuotaExceeded, Message: "package media would exceed this user's media quota"}
 }
 
-// importInTx 在一个事务里完成全部写入；dry_run 时由调用方以 ErrPackageDryRun 回滚。
+// importInTx performs all the writes in one transaction; under dry_run the caller rolls it back with ErrPackageDryRun.
 func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, username string, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
-	// 包内的媒体字节视为「本次由导入者提供」：先登记到 media_uploaders，再做 note 写入的
-	// 写前校验（先把本次提供的 sha 写入 media_uploaders 再校验）。否则
-	// 「导入自己刚提供的字节」会被写前校验误判成越权引用。dry_run 不落任何行。
+	// The package's media bytes count as "provided by the importer this time": they are registered in media_uploaders before the note writes'
+	// pre-write validation runs (register the shas provided this time in media_uploaders first, then validate). Otherwise
+	// "importing the bytes you just provided" would be misjudged by pre-write validation as an unauthorized reference. dry_run writes no row.
 	if !opts.DryRun && opts.MediaRoot != "" {
 		for sha := range pkg.MediaRaw {
 			if err := RecordMediaUploader(ctx, tx, sha, actorUserID); err != nil {
@@ -610,14 +610,14 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	}
 	report.DeckPublicID = pid
 
-	// replace_deck 是破坏性操作：先软删除目标卡组全部现有 note（进度保留在 card 上，不级联删行）。
+	// replace_deck is destructive: it first soft-deletes every existing note of the target deck (progress stays on the cards, no rows are cascade-deleted).
 	if targetKind == "replace_deck" {
 		if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Delete(&Note{}).Error; err != nil {
 			return fmt.Errorf("replace deck: clear notes: %w", err)
 		}
 	}
 
-	// 现有内容索引：external_ref 优先，其次内容指纹（去重规则）。
+	// The existing content index: external_ref first, then the content fingerprint (the de-duplication rule).
 	byRef, byFingerprint, err := s.existingNoteIndex(ctx, tx, deckID)
 	if err != nil {
 		return err
@@ -653,7 +653,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 				report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("notes[%d]", i), "a matching note already exists"})
 				continue
 			}
-			// update：保留 card 行与所有人进度，只改内容（NoteStore.SaveInTx 保证 id 不变）。
+			// update: keep the card rows and everyone's progress, change the content only (NoteStore.SaveInTx keeps the ids unchanged).
 			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: TagsJSON(pn.Tags)}
 			if _, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields); err != nil {
 				return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
@@ -677,7 +677,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		createdNote[i] = true
 	}
 
-	// cards.json 保证导入后卡片集合一致：核对包内声明的 template 是否都已生成。
+	// cards.json keeps the card set consistent after an import: verify that every template declared in the package was generated.
 	cardIDByNote := map[uint64]map[string]uint64{}
 	for i := range pkg.Notes {
 		if noteIDByIndex[i] == 0 {
@@ -700,12 +700,12 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		}
 	}
 
-	// 媒体：按 sha256 落盘（已存在则跳过）；dry_run 只计数。
+	// Media: written to disk by sha256 (skipped when already present); dry_run only counts.
 	//
-	// 必须走事务句柄 tx 而不是 s.db：s.db 是另一条连接，在 SQLite 上会被外层写事务的
-	// 文件锁挡在外面（SQLITE_BUSY: database is locked）——这正是带媒体的包导入在 SQLite
-	// 下必然失败的原因（PostgreSQL 因允许多连接并发写而侥幸通过，掩盖了缺陷）。
-	// 用 tx 后，媒体元数据与卡组内容在同一事务里原子可见；dry_run 则连文件都不落盘。
+	// It must go through the transaction handle tx, not s.db: s.db is a different connection and on SQLite the outer write transaction's
+	// file lock shuts it out (SQLITE_BUSY: database is locked) -- this is exactly why package import with media always failed on SQLite
+	// (PostgreSQL passed by luck because it allows concurrent writes from several connections, masking the defect).
+	// With tx, media metadata and deck content become visible atomically in one transaction; under dry_run not even a file is written.
 	for sha, raw := range pkg.MediaRaw {
 		if opts.MediaRoot == "" {
 			continue
@@ -722,13 +722,13 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if opts.DryRun {
 			continue
 		}
-		// 落库的 mime 以字节判定为准（validatePackageMedia 已确认它是白名单类型）；
-		// media.json 的声明只作交叉校验，绝不当真写进 media 表。
+		// The mime stored is the one determined from the bytes (validatePackageMedia already confirmed it is an allowlisted type);
+		// the media.json declaration only serves the cross-check and is never written into the media table as truth.
 		detected, _, _ := mediatype.Detect(headBytes(raw))
 		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, detected, raw, Ptr(actorUserID))
 		if abs != "" {
-			// 先登记路径再判错：SaveBytesTracked 可能在写文件成功、写元数据失败时同时
-			// 返回路径与错误，这种情况下文件同样需要被失败路径清理。
+			// Register the path before checking the error: SaveBytesTracked may return both a path and an error when the file write succeeded but the metadata write failed,
+			// and in that case the file still needs cleaning up on the failure path.
 			*writtenMedia = append(*writtenMedia, mediaWrite{sha: sha, abs: abs})
 		}
 		if err != nil {
@@ -736,7 +736,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		}
 	}
 
-	// 进度规则：只允许导入到自己的账号；包内 exported_by 与当前用户不同则默认丢弃并告知。
+	// Progress rule: importing is only allowed into one's own account; when the package's exported_by differs from the current user, it is discarded by default and reported.
 	if pkg.Progress != nil && len(pkg.Progress.CardStates) > 0 {
 		sameOwner := pkg.Manifest.ExportedBy == "" || pkg.Manifest.ExportedBy == username
 		if !sameOwner && !opts.AllowOthersProgress {
@@ -758,7 +758,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	return nil
 }
 
-// resolveTargetDeck 解析三种目标并返回目标卡组 id；new_deck 会用包内卡组名建卡组与预设。
+// resolveTargetDeck resolves the three targets and returns the target deck id; new_deck creates a deck and a preset under the package's deck name.
 func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *packageModel, targetKind string, targetDeckID uint64, opts PackageImportOptions) (uint64, error) {
 	switch targetKind {
 	case PackageTargetNewDeck:
@@ -769,8 +769,8 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		if name == "" {
 			name = "Imported deck"
 		}
-		// 覆盖值（opts.NewDeckName）可能与 manifest 不同：界限对最终写进 decks.name 的那个值同样生效，
-		// 否则调用方能用覆盖绕开 manifest 校验。
+		// The override (opts.NewDeckName) may differ from the manifest: the bounds apply to the value finally written into decks.name as well,
+		// otherwise a caller could use the override to bypass manifest validation.
 		if err := packageDeckMetaError(textFieldErrors("deck.name", name, maxPackageDeckNameChars)); err != nil {
 			return 0, err
 		}
@@ -791,8 +791,8 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		return d.ID, nil
 	case "into_deck", "replace_deck":
-		// 调用方（REST/MCP/Web/CLI）必须已对目标卡组完成判权：合并需 editor，
-		// 替换是破坏性操作需 owner。store 层不重复判权，也无 actor 角色可判。
+		// The caller (REST/MCP/Web/CLI) must already have checked permissions on the target deck: merging needs editor,
+		// replacing is destructive and needs owner. The store layer does not re-check permissions and has no actor role to check with.
 		var d Deck
 		if err := tx.WithContext(ctx).First(&d, "id = ?", targetDeckID).Error; err != nil {
 			return 0, &PackageError{Code: CodePackageBadFormat, Message: "target deck not found"}
@@ -803,7 +803,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 	}
 }
 
-// uniqueDeckName 在重名时追加 (2)、(3)… 后缀。
+// uniqueDeckName appends a (2), (3)... suffix on a name clash.
 func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string) (string, error) {
 	var names []string
 	if err := tx.WithContext(ctx).Model(&Deck{}).Where("owner_user_id = ?", owner).
@@ -825,9 +825,9 @@ func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string)
 	}
 }
 
-// createPresetFromPackage 用包内参数新建一个属于 actorUserID 的预设。
-// applyWeights 为 false 时不写权重及其两项元数据：导入者的复习日志里没有拟合这组权重的那些复习，
-// 留下 weights_review_count 会让预设显示一个在本账号查不到来源的优化记录。
+// createPresetFromPackage creates a new preset owned by actorUserID from the package's parameters.
+// With applyWeights false the weights and their two metadata fields are not written: the importer's review log lacks the reviews that fitted these weights,
+// and keeping weights_review_count would make the preset show an optimization record with no traceable source in this account.
 func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, applyWeights bool) (uint64, error) {
 	now := time.Now().UTC()
 	p := Preset{
@@ -865,7 +865,7 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	return p.ID, nil
 }
 
-// existingNoteIndex 建立目标卡组的现有 note 索引：external_ref → note，指纹 → note。
+// existingNoteIndex builds an index of the target deck's existing notes: external_ref -> note, fingerprint -> note.
 func (s *DeckStore) existingNoteIndex(ctx context.Context, tx *gorm.DB, deckID uint64) (map[string]*Note, map[string]*Note, error) {
 	var notes []Note
 	if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Find(&notes).Error; err != nil {
@@ -883,7 +883,7 @@ func (s *DeckStore) existingNoteIndex(ctx context.Context, tx *gorm.DB, deckID u
 	return byRef, byFP, nil
 }
 
-// fingerprintFromFields 计算包内 note 的内容指纹（与 NoteFingerprint 同一算法）。
+// fingerprintFromFields computes the content fingerprint of a note in the package (the same algorithm as NoteFingerprint).
 func fingerprintFromFields(kind string, fields map[string]any) string {
 	raw, err := json.Marshal(fields)
 	if err != nil {
@@ -892,7 +892,7 @@ func fingerprintFromFields(kind string, fields map[string]any) string {
 	return NoteFingerprint(kind, string(raw))
 }
 
-// cardTemplatesTx 返回某 note 的 template → card id 映射（含软删除行）。
+// cardTemplatesTx returns a note's template -> card id mapping (soft-deleted rows included).
 func cardTemplatesTx(ctx context.Context, tx *gorm.DB, noteID uint64) (map[string]uint64, error) {
 	var cards []Card
 	if err := tx.WithContext(ctx).Unscoped().Where("note_id = ?", noteID).Find(&cards).Error; err != nil {
@@ -905,9 +905,9 @@ func cardTemplatesTx(ctx context.Context, tx *gorm.DB, noteID uint64) (map[strin
 	return m, nil
 }
 
-// applyProgress 把包内进度映射到新 card 上，只写入 actorUserID 自己的账号。
+// applyProgress maps the package's progress onto the new cards and only writes into actorUserID's own account.
 func (s *DeckStore) applyProgress(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *packageModel, noteIDByIndex []uint64, cardIDByNote map[uint64]map[string]uint64, createdNote []bool, report *PackageImportReport) error {
-	// external_ref → note_index（进度也可以只用 external_ref 定位）。
+	// external_ref -> note_index (progress may also locate a note by external_ref alone).
 	refIndex := map[string]int{}
 	for i := range pkg.Notes {
 		if pkg.Notes[i].ExternalRef != "" {
@@ -930,7 +930,7 @@ func (s *DeckStore) applyProgress(ctx context.Context, tx *gorm.DB, actorUserID 
 		if m == nil {
 			return 0, false
 		}
-		// template 缺省时取第一张卡（进度条目允许省略 template）。
+		// When template is omitted the first card is used (progress entries may leave template out).
 		if template == "" {
 			for _, id := range m {
 				return id, true
@@ -964,7 +964,7 @@ func (s *DeckStore) applyProgress(ctx context.Context, tx *gorm.DB, actorUserID 
 		report.ProgressApplied++
 	}
 
-	// 复习日志只随新建的 note 写入，避免同一包二次导入时重复插入 append-only 行。
+	// The review log is written only with newly created notes, so importing the same package twice does not insert duplicate append-only rows.
 	for _, pr := range pkg.Progress.Reviews {
 		idx := -1
 		if pr.NoteIndex != nil {
@@ -1025,9 +1025,9 @@ func errorEntries(errs []PackageImportError) []string {
 	return out
 }
 
-// asPackageMediaForbidden 把 note 写入的 *MediaWriteError（写前校验拒绝）翻译成
-// *PackageError，让包导入的消费者（REST/MCP/Web/CLI）用已有的 PackageError 分支映射
-// 稳定 code 与逐条原因；其它错误原样返回（保持既有语义）。
+// asPackageMediaForbidden translates the *MediaWriteError from a note write (a pre-write validation rejection) into
+// *PackageError, so consumers of the package import (REST/MCP/Web/CLI) map the stable code and
+// per-entry reasons with their existing PackageError branch; other errors are returned unchanged (keeping existing semantics).
 func asPackageMediaForbidden(err error) error {
 	var mwe *MediaWriteError
 	if errors.As(err, &mwe) {

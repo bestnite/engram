@@ -2,14 +2,14 @@ import type { CardTypeDescription, CardTypeField, CardTypesResponse } from '../l
 import { createCatalog, setCardTypes } from '../lib/card-types';
 
 /**
- * GET /api/v1/card-types 的样例响应，逐字对齐 internal/cardtype 的权威实现：
- * 每个题型的字段（含服务端追加的通用可选字段 source_url / extra）、正反面字段、
- * 作答控件与判分标记。测试以它代替真实服务端，钉住前端消费契约的方式。
+ * Sample response of GET /api/v1/card-types, aligned word for word with the authoritative implementation in internal/cardtype:
+ * each card type's fields (including the generic optional fields source_url / extra appended by the server), the front and back fields,
+ * the answer control and the grading markers. Tests use it in place of a real server to pin how the frontend consumes the contract.
  *
- * kinds 按 kind 字典序（服务端 sort.Strings 的结果），供断言「顺序稳定」。
+ * kinds are in kind lexicographic order (the result of sort.Strings on the server side), used to assert "stable order".
  */
 
-/** 所有题型共用的可选字段，服务端已追加在每个题型字段末尾。 */
+/** Optional fields shared by every card type; the server has appended them at the end of each card type's field list. */
 function common(): CardTypeField[] {
   return [
     { key: 'source_url', control: 'text', required: false },
@@ -164,22 +164,22 @@ const kinds: CardTypeDescription[] = [
       { key: 'prompt', control: 'textarea', required: true },
       { key: 'answer', control: 'text', required: true },
       { key: 'accept', control: 'lines', required: false },
-      // 服务端默认忽略大小写与空白差异：表单默认值必须一致，否则保存一次就把行为改成 false。
+      // The server ignores case and whitespace differences by default: the form defaults must match, otherwise a single save flips the behavior to false.
       { key: 'ignore_case', control: 'bool', required: false, default: true },
       { key: 'ignore_whitespace', control: 'bool', required: false, default: true },
     ]),
   },
 ];
 
-/** 样例响应体。 */
+/** Sample response body. */
 export const CARD_TYPES: CardTypesResponse = { kinds };
 
-/** 把样例目录注入元数据 store，供渲染视图的用例使用。 */
+/** Inject the sample catalogue into the metadata store, for the cases that render views. */
 export function seedCardTypes(): void {
   setCardTypes(createCatalog(kinds));
 }
 
-/** 清空元数据 store（模拟尚未加载 / 拉取失败）。 */
+/** Clear the metadata store (simulating not yet loaded / fetch failure). */
 export function clearCardTypes(): void {
   setCardTypes(null);
 }

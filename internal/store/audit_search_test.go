@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// TestAuditSearchFilters 是验收：seeded fixture 下，每个过滤条件各自
-// 返回精确预期的行数。fixture 的时间戳全部显式给定，不受运行时刻影响。
+// TestAuditSearchFilters is acceptance: on the seeded fixture, each filter condition returns
+// exactly the expected number of rows. All fixture timestamps are given explicitly, so the run time cannot affect them.
 func TestAuditSearchFilters(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "audit-search.db"))
 	if err != nil {
@@ -24,7 +24,7 @@ func TestAuditSearchFilters(t *testing.T) {
 		{UserID: Ptr(uint64(1)), Action: "deck.revoke", TargetType: Ptr("deck"), TargetID: Ptr(uint64(7)), CreatedAt: base.Add(24 * time.Hour)},
 		{UserID: Ptr(uint64(2)), Action: "deck.grant", TargetType: Ptr("deck"), TargetID: Ptr(uint64(9)), CreatedAt: base.Add(48 * time.Hour)},
 		{UserID: Ptr(uint64(2)), Action: "setting.update", TargetType: Ptr("setting"), TargetID: Ptr(uint64(3)), CreatedAt: base.Add(72 * time.Hour)},
-		// 时区边界：本地（Asia/Shanghai，UTC+8）的 3 月 11 日，UTC 落在 3 月 10 日。
+		// timezone boundary: March 11 local (Asia/Shanghai, UTC+8) falls on March 10 in UTC.
 		{UserID: Ptr(uint64(2)), Action: "user.login_succeeded", TargetType: nil, CreatedAt: base.Add(11*time.Hour + 30*time.Minute)},
 	}
 	if err := db.Create(&fixture).Error; err != nil {
@@ -36,9 +36,9 @@ func TestAuditSearchFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadLocation(Asia/Shanghai): %v", err)
 	}
-	// 本地 2026-03-10 一天 → UTC [2026-03-09 16:00, 2026-03-10 16:00)。
-	// 只有 r1（UTC 3/10 12:00 = 本地 3/10 20:00）落在本地 3/10；r5（UTC 3/10 23:30）
-	// 在本地已是 3/11，据此证明按用户时区的自然日切分，而不是按 UTC 日。
+	// one local day 2026-03-10 → UTC [2026-03-09 16:00, 2026-03-10 16:00).
+	// Only r1 (UTC 3/10 12:00 = local 3/10 20:00) falls on local 3/10; r5 (UTC 3/10 23:30)
+	// is already 3/11 locally, which proves the split is by the user's timezone calendar day, not by UTC day.
 	day10 := time.Date(2026, 3, 10, 0, 0, 0, 0, shanghai)
 
 	cases := []struct {
@@ -73,8 +73,8 @@ func TestAuditSearchFilters(t *testing.T) {
 	}
 }
 
-// TestAuditSearchPagingAndCap 断言分页与硬上限：Limit 超过上限时被截到上限，
-// Offset 生效，且返回行数不超过请求页大小。
+// TestAuditSearchPagingAndCap asserts paging and the hard cap: a Limit above the cap is clamped to it,
+// Offset takes effect, and the returned row count does not exceed the requested page size.
 func TestAuditSearchPagingAndCap(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "audit-page.db"))
 	if err != nil {
@@ -100,7 +100,7 @@ func TestAuditSearchPagingAndCap(t *testing.T) {
 	if len(rows) != 3 {
 		t.Errorf("len(rows) = %d, want 3 (offset 2 of 5)", len(rows))
 	}
-	// 倒序：offset 2 之后应从第 3 条（id 3）开始。
+	// descending: after offset 2 it should start at the 3rd row (id 3).
 	if len(rows) == 3 && rows[0].ID != 3 {
 		t.Errorf("first row after offset = id %d, want 3", rows[0].ID)
 	}

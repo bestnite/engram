@@ -12,61 +12,70 @@ import (
 	"git.nite07.com/nite/engram/internal/render"
 )
 
-// 本文件是邮件模板的渲染器。
+// This file is the renderer for mail templates.
 //
-// 渲染分四步，顺序是安全的一部分，不要调换：
-//  1. 把模板里的 {{var}} 换成当次随机盐的令牌；
-//  2. 渲染 Markdown 并过白名单清洗；
-//  3. 把令牌替换成值，HTML 段按 HTML 转义；
-//  4. 包进代码持有的固定外壳。
+// Rendering happens in four steps, and the order is part of the security; do not swap them:
+//  1. replace the {{var}} in the template with tokens carrying a per-render random salt;
+//  2. render the Markdown and sanitize it against the allowlist;
+//  3. replace the tokens with the values, HTML-escaping in the HTML segment;
+//  4. wrap the result in the fixed shell held by the code.
 //
-// **为什么必须先渲染再替换**：变量值里有用户可控的数据（用户名、卡组名、失败原因）。
-// 先在原文里替换，就等于把用户数据交给 Markdown 解析器与白名单判断——值是 `**x**` 会被
-// 当成粗体，是 `<b>x</b>` 会被当成原始 HTML。先渲染则值从来没进过渲染器，替换时按上下文
-// 转义即可。这正是卡面公式占位符踩过的那条教训，邮件同理。
+// **Why render first and substitute afterwards**: variable values contain user-controlled data
+// (usernames, deck names, failure reasons). Substituting into the source first hands the user data
+// to the Markdown parser and the allowlist decision -- a value of `**x**` becomes bold, `<b>x</b>`
+// becomes raw HTML. Rendering first means the value never entered the renderer, and substitution only
+// has to escape by context. This is exactly the lesson the card formula placeholders learned, and it
+// applies to mail too.
 
-// placeholderRe 匹配模板里的 {{name}}。名字限定为小写字母、数字与下划线：这样模板里的
-// 数学写法（`\frac{x}{y}` 那类单层花括号）不会被误判，也逼着变量名保持稳定英文标识。
+// placeholderRe matches {{name}} in a template. Names are restricted to lowercase letters, digits
+// and underscores: that way a mathematical notation in the template (the single-brace kind such as
+// `\frac{x}{y}`) is not mistaken for a placeholder, and variable names are forced to stay stable
+// English identifiers.
 var placeholderRe = regexp.MustCompile(`\{\{([a-z0-9_]+)\}\}`)
 
-// Vars 是一封邮件的变量值。值是不可信内容，渲染时会按上下文转义。
+// Vars are the variable values of one mail. The values are untrusted content and are escaped by
+// context when rendering.
 type Vars map[string]string
 
-// RenderInput 是一次渲染的全部输入。
+// RenderInput is all the input of one render.
 type RenderInput struct {
-	// Type 决定必填变量集合（见 vars.go）。
+	// Type decides the set of required variables (see vars.go).
 	Type Type
-	// Site 是站点名，进外壳标题。
+	// Site is the site name, used in the shell heading.
 	Site string
-	// Vars 是变量值。
+	// Vars are the variable values.
 	Vars Vars
 
-	// Subject 与 BodyMD 是管理员的自定义模板。BodyMD 为空白表示没有自定义，
-	// 此时用 FallbackSubject/FallbackText（发信方组装的内置正文）——**内置正文永远
-	// 在代码里**，所以模板损坏或被删都不会让邮件发不出去。
+	// Subject and BodyMD are the admin's custom template. A blank BodyMD means there is no
+	// customization, and FallbackSubject/FallbackText (the built-in body assembled by the sender) are
+	// used -- **the built-in body always lives in code**, so a corrupt or deleted template cannot stop
+	// mail from being sent.
 	Subject string
 	BodyMD  string
 
-	// FallbackSubject 与 FallbackText 是内置正文。
+	// FallbackSubject and FallbackText are the built-in body.
 	FallbackSubject string
 	FallbackText    string
 
-	// UnsubscribeURL 非空时在外壳底部与纯文本段末尾渲染退订入口（可选类邮件才有）。
+	// When UnsubscribeURL is non-empty, the unsubscribe entry is rendered at the bottom of the shell
+	// and at the end of the plain text segment (only optional-class mail has it).
 	UnsubscribeURL string
-	// FooterNote 与 UnsubscribeLabel 由调用方本地化后传入：本包不依赖 i18n，
-	// 而邮件里的用户可见文案必须走语言包（AGENTS.md §2.1）。
+	// FooterNote and UnsubscribeLabel are passed in localized by the caller: this package does not
+	// depend on i18n, and user-visible copy in mail must come from the language packs (AGENTS.md §2.1).
 	FooterNote       string
 	UnsubscribeLabel string
 }
 
-// Rendered 是渲染结果：主题、纯文本段、HTML 段。HTML 段为空表示这封信只发纯文本。
+// Rendered is the render result: subject, plain text segment, HTML segment. An empty HTML segment
+// means this mail goes out as plain text only.
 type Rendered struct {
 	Subject string
 	Text    string
 	HTML    string
 }
 
-// Render 渲染一封邮件。没有自定义模板时返回内置正文（HTML 段为空，与今天的行为一致）。
+// Render renders one mail. With no custom template it returns the built-in body (an empty HTML
+// segment, consistent with today's behavior).
 func Render(in RenderInput) (Rendered, error) {
 	if strings.TrimSpace(in.BodyMD) == "" {
 		return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}, nil
@@ -75,7 +84,8 @@ func Render(in RenderInput) (Rendered, error) {
 		return Rendered{}, err
 	}
 
-	// 主题：模板没写就沿用内置主题；主题必须是单行，否则会破坏 RFC 5322 头部。
+	// Subject: when the template does not set one, the built-in subject is kept; the subject must be a
+	// single line, otherwise it breaks the RFC 5322 header.
 	subject := strings.TrimSpace(substituteRaw(in.Subject, in.Vars))
 	subject = strings.ReplaceAll(subject, "\r", " ")
 	subject = strings.ReplaceAll(subject, "\n", " ")
@@ -97,7 +107,8 @@ func Render(in RenderInput) (Rendered, error) {
 	return Rendered{Subject: subject, Text: text, HTML: htmlBody}, nil
 }
 
-// Placeholders 返回模板里出现的变量名（去重、按首次出现排序），供管理页做校验与提示。
+// Placeholders returns the variable names appearing in the template (deduplicated, ordered by first
+// appearance), for the admin page to validate and give hints with.
 func Placeholders(body string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -110,9 +121,11 @@ func Placeholders(body string) []string {
 	return out
 }
 
-// Validate 校验自定义模板：正文必须含该类型的必填变量，且主题与正文都不得引用不认识的
-// 变量。「认识但没写」不算错（模板可以只用一部分），「写了却不认识」一定是打错了字——
-// 主题里的错字会渲染成空串（收件人看到空主题），所以主题一起查。
+// Validate validates a custom template: the body must contain the type's required variables, and
+// neither the subject nor the body may reference an unknown variable. "Known but unused" is not an
+// error (a template may use only part of them); "used but unknown" is certainly a typo -- and a typo
+// in the subject renders as an empty string (the recipient sees an empty subject), so the subject is
+// checked too.
 func Validate(t Type, subject, body string) error {
 	specs, ok := VarSpecs(t)
 	if !ok {
@@ -143,9 +156,10 @@ func Validate(t Type, subject, body string) error {
 	return nil
 }
 
-// checkRequiredVars 断言发信方把必填变量都传了。缺值只可能是代码 bug（模板缺变量已在
-// 保存时拦住），所以这里返回错误让调用方记日志并且**不发信**——发一封没有重置链接的邮件
-// 比不发更糟：用户会以为链接坏了。
+// checkRequiredVars asserts that the sender passed every required variable. A missing value can only
+// be a code bug (a template missing a variable is caught when it is saved), so this returns an error
+// for the caller to log and **not send** -- a mail without the reset link is worse than no mail at
+// all: the user would think the link is broken.
 func checkRequiredVars(t Type, vars Vars) error {
 	for _, name := range RequiredVars(t) {
 		if strings.TrimSpace(vars[name]) == "" {
@@ -155,9 +169,11 @@ func checkRequiredVars(t Type, vars Vars) error {
 	return nil
 }
 
-// tokenise 把 {{var}} 换成带随机盐的令牌，并返回按令牌序号排列的变量名。
+// tokenise replaces {{var}} with tokens carrying a random salt, and returns the variable names ordered
+// by token index.
 //
-// 盐是必需的：否则管理员在正文里写字面量 `MAILVARX0X` 就能顶替一个变量。
+// The salt is mandatory: without it an admin could write the literal `MAILVARX0X` in the body and
+// stand in for a variable.
 func tokenise(src string) (string, []string, string) {
 	salt := randomSalt()
 	var order []string
@@ -171,11 +187,13 @@ func tokenise(src string) (string, []string, string) {
 
 const tokenPrefix = "MAILVAR"
 
-// substituteTokens 把令牌换成值。escape 为真时按 HTML 转义——HTML 段必须转义，纯文本段
-// 不转义（否则 `&` 会变成 `&amp;` 出现在纯文本里）。
+// substituteTokens replaces tokens with values. When escape is true it HTML-escapes -- the HTML
+// segment must be escaped, the plain text segment must not be (otherwise `&` would show up as `&amp;`
+// in the plain text).
 //
-// 盐由调用方从 tokenise 取回并逐字传入，不从 src 里回捞：回捞要在替换过程中反复扫描自己
-// 正在改写的字符串，最后一个令牌换掉后就再也找不到盐了。
+// The caller takes the salt from tokenise and passes it in verbatim rather than recovering it from src:
+// recovering it would mean repeatedly scanning the string that is being rewritten, and once the last
+// token has been replaced the salt can no longer be found.
 func substituteTokens(src string, order []string, salt string, vars Vars, escape bool) string {
 	for i, name := range order {
 		value := vars[name]
@@ -187,7 +205,8 @@ func substituteTokens(src string, order []string, salt string, vars Vars, escape
 	return src
 }
 
-// substituteRaw 在**原文**上直接替换变量，用于主题与纯文本段（不经渲染器与转义）。
+// substituteRaw substitutes variables directly in the **source**, for the subject and the plain text
+// segment (bypassing the renderer and escaping).
 func substituteRaw(src string, vars Vars) string {
 	return placeholderRe.ReplaceAllStringFunc(src, func(match string) string {
 		return vars[placeholderRe.FindStringSubmatch(match)[1]]
@@ -197,17 +216,19 @@ func substituteRaw(src string, vars Vars) string {
 func randomSalt() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
-		// 盐只用于避免正文里的字面量撞车，取不到随机源时退化成固定值也不会降低安全性
-		//（转义才是防线），但记一条日志便于排查。
+		// The salt only prevents a literal in the body from colliding, so degrading to a fixed value when
+		// no random source is available does not reduce security
+		//(escaping is the real defense), but a log line helps with debugging.
 		return "0000000000000000"
 	}
 	return hex.EncodeToString(b)
 }
 
-// wrapLayout 把渲染后的正文包进固定外壳。
+// wrapLayout wraps the rendered body in the fixed shell.
 //
-// 外壳由代码持有、管理员不可编辑：页头页脚、宽度、字体栈与退订入口都在这里，一次误编辑
-// 不会破坏品牌一致性或把退订入口弄丢。样式一律内联——邮件客户端普遍不支持 <style>。
+// The shell is held by the code and not editable by admins: header, footer, width, font stack and
+// the unsubscribe entry all live here, so one bad edit cannot break brand consistency or lose the
+// unsubscribe entry. All styling is inline -- mail clients generally do not support <style>.
 func wrapLayout(site, bodyHTML, unsubscribeURL, footerNote, unsubscribeLabel string) string {
 	var b strings.Builder
 	b.WriteString(`<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;">`)

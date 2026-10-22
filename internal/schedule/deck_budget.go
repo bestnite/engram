@@ -9,37 +9,37 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// DeckBudget 是一个卡组今日的额度情况，供设置页显示「已用 / 剩余」。
+// DeckBudget is a deck's allowance situation today, for the settings page to show "used / left".
 //
-// 两个 *Unlimited 字段表达「该项今日不限」：为 true 时对应的 PerDay / Left 数值无意义
-// （写库的 0 表示不限，与「剩余 0 张」是同形的整数，必须靠布尔量区分）。
-// 为 false 时 Left = max(PerDay-Used, 0)，Used 是今日已用量。
+// The two *Unlimited fields express "this field is unlimited today": when true the matching PerDay / Left value is meaningless
+// (a stored 0 means unlimited, an integer of the same shape as "0 cards left", so a boolean is required to tell them apart).
+// When false, Left = max(PerDay-Used, 0), where Used is today's usage.
 type DeckBudget struct {
-	// NewPerDay / ReviewsPerDay 是卡组列上的每日上限；写 0 表示不限。
+	// NewPerDay / ReviewsPerDay are the daily caps on the deck columns; writing 0 means unlimited.
 	NewPerDay     int
 	ReviewsPerDay int
-	// NewExtra 是今天「再来一组」追加的新卡额度；NewLeft 已经算进了它，NewPerDay 没有。
+	// NewExtra is the new-card allowance added today by "another round"; NewLeft already includes it, NewPerDay does not.
 	NewExtra int
-	// NewUsed / ReviewUsed 是今日已用（新卡＝今日引入数，复习＝今日复习数）。
+	// NewUsed / ReviewUsed are today's usage (new = introduced today, review = reviewed today).
 	NewUsed    int
 	ReviewUsed int
-	// NewLeft / ReviewLeft 是今日剩余额度；仅当对应的 Unlimited 为 false 时有意义。
+	// NewLeft / ReviewLeft are the remaining allowance today; meaningful only when the matching Unlimited is false.
 	NewLeft    int
 	ReviewLeft int
-	// NewUnlimited / ReviewUnlimited 为 true 表示该项今日不限（PerDay 为 0）。
+	// NewUnlimited / ReviewUnlimited being true means that field is unlimited today (PerDay is 0).
 	NewUnlimited    bool
 	ReviewUnlimited bool
 }
 
-// DeckBudgets 返回每个卡组今日的额度情况。
+// DeckBudgets returns the allowance situation of each deck today.
 //
-// 它与 Build / DeckCounts 共用同一条额度公式（deckBudget）与同一个复习日口径，因此设置页上的
-// 「已用 / 剩余」与队列实际能出的张数是同源的，网页层不重写 SQL 也不重算公式。opts 只读
-// Now、Location/Timezone 与 DayCutoffHour：「今日已用量」必须按用户自己的复习日统计，与评分时
-// 写入 reviews.review_day 的口径一致。
+// It shares the same allowance formula (deckBudget) and the same review-day semantics as Build / DeckCounts, so the "used / left"
+// on the settings page and the number of cards the queue can actually produce come from the same source; the web layer rewrites no SQL and recomputes no formula. opts only reads
+// Now, Location/Timezone and DayCutoffHour: "today's usage" must be counted by the user's own review day, matching the semantics
+// written into reviews.review_day at grading time.
 //
-// deckIDs 是待查询的卡组集合；空集合返回空 map（不报错）。读不到卡组列（卡组行不存在）
-// 时沿用 resolveScope 的兜底：NewPerDay 用 DefaultNewPerDay，ReviewsPerDay 保持 0（不限）。
+// deckIDs is the set of decks to query; an empty set returns an empty map (no error). When a deck column is unreadable (deck row missing)
+// the resolveScope fallback applies: NewPerDay uses DefaultNewPerDay, ReviewsPerDay stays 0 (unlimited).
 func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckBudget, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck budgets: user id is required")
@@ -75,7 +75,7 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 	for _, id := range ids {
 		c, ok := caps[id]
 		if !ok {
-			// 读不到卡组列（卡组行不存在）才兜底默认；与 resolveScope 的规则保持一处。
+			// Only an unreadable deck column (deck row missing) falls back to the default; keep the rule in one place with resolveScope.
 			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
 		}
 		u := usage[id]
@@ -95,7 +95,7 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 	return out, nil
 }
 
-// nonNegative 把 deckUnlimited 哨兵折成 0，避免把 -1 泄漏给调用方；是否不限由布尔字段表达。
+// nonNegative folds the deckUnlimited sentinel into 0, so -1 does not leak to the caller; whether it is unlimited is expressed by the boolean field.
 func nonNegative(left int) int {
 	if left < 0 {
 		return 0
@@ -103,11 +103,11 @@ func nonNegative(left int) int {
 	return left
 }
 
-// NewCardsAvailable 返回卡组里 userID 还没学过、此刻可以引入的新卡总数，不受每日额度限制。
+// NewCardsAvailable returns the total number of new cards in the deck that userID has not studied yet and that can be introduced right now, ignoring daily allowances.
 //
-// 「再来一组」据此判断还有没有新卡可加、默认加多少：额度只决定今天放多少张出来，这个数是
-// 卡组里一共还剩多少张。筛选条件与队列取新卡共用 newCardsFrom（排除暂停与埋藏），
-// tags 非空时只数带有其中任一标签的卡，与按标签复习的队列同一口径。
+// "Another round" uses this to decide whether there are new cards to add and how many by default: the allowance only decides how many are released today, while this number is
+// how many are left in the deck in total. The filters are shared with the queue's new-card fetch via newCardsFrom (excluding suspended and buried), and when
+// tags is non-empty only cards carrying any of those tags are counted, the same semantics as the tagged review queue.
 func (b *QueueBuilder) NewCardsAvailable(ctx context.Context, userID, deckID uint64, tags []string, now time.Time) (int, error) {
 	if userID == 0 || deckID == 0 {
 		return 0, errors.New("schedule: new cards available: user id and deck id are required")

@@ -17,7 +17,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// uploadMedia 以 multipart 提交一个名为 file 的上传；declared 作为该part的 Content-Type。
+// uploadMedia submits an upload named file as multipart; declared becomes that part's Content-Type.
 func uploadMedia(t *testing.T, srv *Server, cookie []*http.Cookie, csrf, filename, declared string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -44,7 +44,7 @@ func uploadMedia(t *testing.T, srv *Server, cookie []*http.Cookie, csrf, filenam
 	return rec
 }
 
-// textProto 是 multipart part 头的构造函数，避免依赖已弃用的 mime/multipart 辅助类型。
+// textProto is the constructor for multipart part headers, avoiding reliance on the deprecated mime/multipart helper types.
 func textProto(filename, contentType string) map[string][]string {
 	h := map[string][]string{
 		"Content-Disposition": {`form-data; name="file"; filename="` + filename + `"`},
@@ -59,8 +59,8 @@ func pngBody() []byte {
 	return append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte("payload")...)
 }
 
-// TestMediaUploadDedupeAndServe 是主验收：同文件两次上传只存一份，
-// GET /media/<sha256> 带 ETag 与 immutable 缓存，命中 ETag 返回 304。
+// TestMediaUploadDedupeAndServe is the main acceptance: the same file uploaded twice is stored once,
+// GET /media/<sha256> carries an ETag and immutable caching, and an ETag hit returns 304.
 func TestMediaUploadDedupeAndServe(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	body := pngBody()
@@ -96,7 +96,7 @@ func TestMediaUploadDedupeAndServe(t *testing.T) {
 		t.Errorf("media rows = %d, want 1", rows)
 	}
 
-	// 代理读取：ETag = sha256，Cache-Control immutable。
+	// Proxy read: ETag = sha256, Cache-Control immutable.
 	get := getWithCookies(t, srv, "/media/"+r1.Sha256, cookies)
 	if get.Code != http.StatusOK {
 		t.Fatalf("GET /media/<sha256> status = %d, want 200", get.Code)
@@ -114,7 +114,7 @@ func TestMediaUploadDedupeAndServe(t *testing.T) {
 		t.Errorf("served bytes differ from uploaded bytes")
 	}
 
-	// 命中 ETag -> 304。
+	// ETag hit -> 304.
 	req := httptest.NewRequest(http.MethodGet, "/media/"+r1.Sha256, nil)
 	req.Header.Set("If-None-Match", etag)
 	for _, c := range cookies {
@@ -127,7 +127,7 @@ func TestMediaUploadDedupeAndServe(t *testing.T) {
 	}
 }
 
-// dbQuerySpy 记录 GORM 发出的 SQL，用于证明「非法 sha 的请求没有查库」。
+// dbQuerySpy records the SQL GORM emits, proving "a request with an illegal sha does not query the database".
 type dbQuerySpy struct {
 	mu    sync.Mutex
 	lines []string
@@ -136,7 +136,7 @@ type dbQuerySpy struct {
 func (s *dbQuerySpy) Printf(msg string, args ...any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// logger.Writer 收到的是格式串 + 参数，必须自己格式化，否则存下来的是 "%s"。
+	// logger.Writer receives a format string plus args, so it must be formatted here, otherwise what gets stored is "%s".
 	s.lines = append(s.lines, fmt.Sprintf(msg, args...))
 }
 
@@ -150,8 +150,8 @@ func (s *dbQuerySpy) touchedMedia() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, l := range s.lines {
-		// 只认反引号包住的表名；日志里的源文件路径（.../media-l1/...）也含 "media"，
-		// 用裸 "media" 匹配会把「没查库」误判成「查了库」。
+		// Only the backtick-quoted table name counts; source file paths in the log (.../media-l1/...) also contain "media",
+		// so matching a bare "media" would misread "did not query" as "did query".
 		if strings.Contains(l, "`media`") {
 			return true
 		}
@@ -159,12 +159,12 @@ func (s *dbQuerySpy) touchedMedia() bool {
 	return false
 }
 
-// TestMediaServeRejectsNonShaWithoutDBQuery 覆盖形状校验：短于/长于 64 位、含非十六进制
-// 字符、旧的数字 id、带路径穿越字符的参数一律 404，且在 404 之前不接触 media 表。
+// TestMediaServeRejectsNonShaWithoutDBQuery covers shape validation: parameters shorter/longer than 64 characters, containing non-hex
+// characters, a legacy numeric id, or path-traversal characters all 404, and the media table is not touched before that 404.
 func TestMediaServeRejectsNonShaWithoutDBQuery(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 
-	// 先放一行真实媒体：如果处理器会拿非法参数去查库，这里就有可能命中而 200。
+	// Seed one real media row first: if the handler queried the database with an illegal parameter, it could hit it and return 200.
 	rec := uploadMedia(t, srv, cookies, csrf, "real.png", "image/png", pngBody())
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("seed upload status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
@@ -177,8 +177,8 @@ func TestMediaServeRejectsNonShaWithoutDBQuery(t *testing.T) {
 	spy := &dbQuerySpy{}
 	db.Logger = logger.New(spy, logger.Config{LogLevel: logger.Info})
 
-	// 正向对照：一次合法的媒体读取必须被 spy 看到。否则下面的「没有 media SQL」是假的
-	// （spy 根本没接上，而不是处理器没查库）。
+	// Positive control: one legitimate media read must be seen by the spy. Otherwise the "no media SQL" below is a lie
+	// (the spy was never wired up, rather than the handler not querying).
 	spy.reset()
 	if got := getWithCookies(t, srv, saved.URL, cookies); got.Code != http.StatusOK {
 		t.Fatalf("positive control GET %s status = %d, want 200", saved.URL, got.Code)
@@ -188,13 +188,13 @@ func TestMediaServeRejectsNonShaWithoutDBQuery(t *testing.T) {
 	}
 
 	invalid := []string{
-		"/media/abc",                        // 太短
-		"/media/123",                        // 旧的数字 id
-		"/media/" + strings.Repeat("a", 63), // 差 1 位
-		"/media/" + strings.Repeat("a", 65), // 多 1 位
-		"/media/" + strings.Repeat("z", 64), // 非十六进制
-		"/media/" + strings.Repeat("A", 64), // 大写不算（只认小写）
-		"/media/..%2f..%2fetc%2fpasswd",     // 路径穿越字符
+		"/media/abc",                        // too short
+		"/media/123",                        // legacy numeric id
+		"/media/" + strings.Repeat("a", 63), // one character short
+		"/media/" + strings.Repeat("a", 65), // one character too many
+		"/media/" + strings.Repeat("z", 64), // not hex
+		"/media/" + strings.Repeat("A", 64), // uppercase does not count (lowercase only)
+		"/media/..%2f..%2fetc%2fpasswd",     // path traversal characters
 	}
 	for _, target := range invalid {
 		spy.reset()
@@ -208,8 +208,8 @@ func TestMediaServeRejectsNonShaWithoutDBQuery(t *testing.T) {
 	}
 }
 
-// TestMediaServeOldNumericURLLoses 是「不做旧数据迁移」的直接负例：库里有 media 行，
-// 但旧的 /media/<数字 id> 形态一律 404，即使 id 对应的行确实存在。
+// TestMediaServeOldNumericURLLoses is the direct negative case for "no data migration": the database holds a media row,
+// yet the old /media/<numeric id> form always 404s, even when the row for that id really exists.
 func TestMediaServeOldNumericURLLoses(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	rec := uploadMedia(t, srv, cookies, csrf, "x.png", "image/png", pngBody())
@@ -220,11 +220,11 @@ func TestMediaServeOldNumericURLLoses(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode upload response: %v", err)
 	}
-	// 行确实存在（上传者预览可读新 URL）。
+	// The row really exists (the uploader preview can read the new URL).
 	if got := getWithCookies(t, srv, saved.URL, cookies); got.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d, want 200", saved.URL, got.Code)
 	}
-	// 旧形态失效：即便库里有且仅有一行，/media/1 也不得 200。
+	// The old form is dead: even with exactly one row in the database, /media/1 must not return 200.
 	var rows int64
 	if err := db.Model(&store.Media{}).Count(&rows).Error; err != nil {
 		t.Fatalf("count media: %v", err)
@@ -237,7 +237,7 @@ func TestMediaServeOldNumericURLLoses(t *testing.T) {
 	}
 }
 
-// TestMediaUploadRejectsOversized 覆盖管理员配置的上限生效：超过 media_max_bytes 被拒。
+// TestMediaUploadRejectsOversized covers the admin-configured limit taking effect: anything over media_max_bytes is refused.
 func TestMediaUploadRejectsOversized(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	if err := db.Create(&store.Setting{Key: "media_max_bytes", Value: "8", UpdatedAt: time.Now().UTC()}).Error; err != nil {
@@ -260,7 +260,7 @@ func TestMediaUploadRejectsOversized(t *testing.T) {
 	}
 }
 
-// TestMediaUploadRejectsMagicMismatch 覆盖魔数与声明不符被拒并返回稳定错误码。
+// TestMediaUploadRejectsMagicMismatch covers a magic number that does not match the declaration being refused with a stable error code.
 func TestMediaUploadRejectsMagicMismatch(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 	rec := uploadMedia(t, srv, cookies, csrf, "fake.png", "image/png", []byte("not an image at all"))
@@ -280,8 +280,8 @@ func TestMediaUploadRejectsMagicMismatch(t *testing.T) {
 	}
 }
 
-// TestMediaAnonymousAccessBlocked 覆盖匿名访问的边界：POST 被 CSRF 拦下（403），
-// GET /media/<sha256> 作为读取入口重定向到登录页。
+// TestMediaAnonymousAccessBlocked covers the anonymous boundary: POST is stopped by CSRF (403),
+// and GET /media/<sha256>, as a read entry point, redirects to the login page.
 func TestMediaAnonymousAccessBlocked(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	rec := uploadMedia(t, srv, nil, "", "a.png", "image/png", pngBody())

@@ -8,20 +8,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestDeckCountsMatchBuildPerDeck 是本次额度口径重构的验收核心（属性测试）：
-// 对夹具里每个可见卡组，DeckCounts[d] 必须等于 Build(DeckID=d) 里 QueueNew / QueueReview
-// 两种 kind 的条数。DeckCounts 与 Build 共用同一条取卡路径（collect）与同一条额度公式
-// （deckBudget），所以列表页的「新 X · 复习 Y」相加就是点进去能刷的张数。
+// TestDeckCountsMatchBuildPerDeck is the core acceptance test of this allowance-semantics refactor (property test):
+// for every visible deck in the fixture, DeckCounts[d] must equal the number of QueueNew / QueueReview
+// entries of those two kinds in Build(DeckID=d). DeckCounts and Build share the same card-fetch path (collect) and the same allowance formula
+// (deckBudget), so "new X · review Y" on the list page adds up to the number of cards available after entering.
 //
-// 夹具覆盖：
+// The fixture covers:
 //
-//	(a) 今日新卡额度用尽（该卡组 新 0，但学习卡仍出队）；
-//	(b) 多卡组范围按各卡组自己的额度求和（两个 20/20 的卡组，已用分布不同）；
-//	(c) 卡组列 new_per_day=0 / reviews_per_day=0（不限）；
-//	(d) 负例：另一个用户的卡组（含新卡）不出现，无论它叫什么。
+//	(a) today's new-card allowance exhausted (that deck has 0 new, but learning cards still come out);
+//	(b) a multi-deck scope sums each deck's own allowance (two 20/20 decks with different usage distributions);
+//	(c) deck columns new_per_day=0 / reviews_per_day=0 (unlimited);
+//	(d) negative case: another user's deck (with new cards) does not appear, whatever it is called.
 //
-// DeckCounts 无 Now 参数，内部用当刻时钟；夹具里"今日已用"的复习行按 now 的复习日写入，
-// 与 Build 传入的 Now 同一天（两者相隔毫秒，除跨 04:00 切点外一致）。
+// DeckCounts has no Now parameter and uses the clock at call time internally; the "used today" review rows in the fixture are written by the review day of now,
+// which is the same day as the Now passed to Build (the two differ by milliseconds, identical except when crossing the 04:00 cutoff).
 func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -43,7 +43,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		if err := db.Create(&d).Error; err != nil {
 			t.Fatalf("create deck %s: %v", name, err)
 		}
-		// 用 map 更新写上限：0 在这里合法（不限），模型整体 Save 会把带默认值列的 0 省略。
+		// Write the caps via a map update: 0 is legitimate here (unlimited), and saving the whole model would omit 0 for columns with a default.
 		if err := db.Model(&store.Deck{}).Where("id = ?", d.ID).
 			Updates(map[string]any{"new_per_day": newPer, "reviews_per_day": reviewPer}).Error; err != nil {
 			t.Fatalf("set caps on deck %s: %v", name, err)
@@ -55,7 +55,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		id := seedCard(t, db, deckID, "forward", now)
 		seedState(t, db, 1, id, "review", now.Add(-time.Hour), 5.0, 5.0, &last)
 	}
-	// introduced 写入 n 张"今日已引入"的新卡：复习行 state_before=0 + 一行不出的状态。
+	// introduced writes n "introduced today" new cards: a review row with state_before=0 + one state row that is not returned.
 	introduced := func(deckID uint64, n int) {
 		t.Helper()
 		for i := 0; i < n; i++ {
@@ -64,7 +64,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 			seedState(t, db, 1, id, "review", future, 5.0, 5.0, &last)
 		}
 	}
-	// reviewedToday 写入 n 次"今日的复习"（state_before<>0），用于制造各不相同的已用量。
+	// reviewedToday writes n "reviewed today" entries (state_before<>0), used to create differing usage amounts.
 	reviewedToday := func(deckID uint64, n int) {
 		t.Helper()
 		for i := 0; i < n; i++ {
@@ -80,7 +80,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		}
 	}
 
-	// (a) 新卡额度 1，今日已用尽；另有一张到期的学习卡（不受额度裁剪）。
+	// (a) new-card allowance 1, already used up today; plus one due learning card (not truncated by allowances).
 	quota := mkDeck(1, "quota-used", 1, 200)
 	introduced(quota, 1)
 	seedNew(quota, 2)
@@ -88,7 +88,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	seedState(t, db, 1, learning, "learning", now.Add(-time.Minute), 0, 0, nil)
 	dueReview(quota)
 
-	// (b) 20/20 的两个卡组，已用分布不同：limited 用 0，partial 用 5 新 / 8 复习。
+	// (b) two 20/20 decks with different usage: limited uses 0, partial uses 5 new / 8 review.
 	limited := mkDeck(1, "limited", 20, 20)
 	seedNew(limited, 25)
 	for i := 0; i < 25; i++ {
@@ -102,14 +102,14 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		dueReview(partial)
 	}
 
-	// (c) 0 表示不限。
+	// (c) 0 means unlimited.
 	unlimited := mkDeck(1, "unlimited", 0, 0)
 	seedNew(unlimited, 4)
 	for i := 0; i < 4; i++ {
 		dueReview(unlimited)
 	}
 
-	// (d) 别的用户的两张卡组各含新卡，都不该出现：没有授权就没有可见性。
+	// (d) another user's two decks each contain new cards and neither should appear: no authorisation, no visibility.
 	otherPrivate := mkDeck(2, "other-private", 20, 200)
 	seedNew(otherPrivate, 5)
 	otherDeck := mkDeck(2, "other-deck", 20, 200)
@@ -139,8 +139,8 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		t.Errorf("DeckCounts returned %d decks, want %d", len(counts), len(visible))
 	}
 
-	// 属性：逐卡组与 Build(DeckID=d) 的张数相等 —— 列表上的「新」＝QueueNew，
-	// 「复习」＝学习/再学习卡 + 到期复习卡，两者相加就是点进去能刷的张数。
+	// Property: the per-deck count equals Build(DeckID=d) — "new" on the list = QueueNew,
+	// "review" = learning/relearning cards + due review cards, and their sum is the number of cards available after entering.
 	for _, id := range visible {
 		items, err := builder.Build(ctx, 1, QueueOptions{DeckID: id, Now: now, Location: time.UTC})
 		if err != nil {
@@ -153,7 +153,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		}
 	}
 
-	// (a) 额度用尽：新 0；复习 2 = 1 张到期的学习卡 + 1 张到期的复习卡。
+	// (a) allowance exhausted: new 0; review 2 = 1 due learning card + 1 due review card.
 	if got := counts[quota]; got.New != 0 || got.Review != 2 {
 		t.Errorf("quota deck counts = %+v, want New=0 Review=2 (1 learning + 1 due review)", got)
 	}
@@ -165,7 +165,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		t.Errorf("quota deck learning cards = %d, want 1 (learning cards are never capped)", n)
 	}
 
-	// (b) 各卡组自己的额度。
+	// (b) each deck's own allowance.
 	if got := counts[limited]; got.New != 20 || got.Review != 20 {
 		t.Errorf("limited deck counts = %+v, want New=20 Review=20", got)
 	}
@@ -173,12 +173,12 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		t.Errorf("partial deck counts = %+v, want New=15 Review=12 (20 minus today's usage)", got)
 	}
 
-	// (c) 0 表示不限。
+	// (c) 0 means unlimited.
 	if got := counts[unlimited]; got.New != 4 || got.Review != 4 {
 		t.Errorf("unlimited deck counts = %+v, want New=4 Review=4 (0 means unlimited)", got)
 	}
 
-	// (d) 全库口径：只含可见卡组，别人的卡组一张都不出现。
+	// (d) whole-library mode: only visible decks are included, none of other people's decks appears.
 	all, err := builder.Build(ctx, 1, QueueOptions{Now: now, Location: time.UTC, NewOrder: NewOrderCreated})
 	if err != nil {
 		t.Fatalf("Build(all decks) error = %v", err)
@@ -205,7 +205,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	}
 }
 
-// containsID 报告集合里是否有给定 id。
+// containsID reports whether the set contains the given id.
 func containsID(ids []uint64, want uint64) bool {
 	for _, id := range ids {
 		if id == want {
@@ -215,8 +215,8 @@ func containsID(ids []uint64, want uint64) bool {
 	return false
 }
 
-// TestDeckCountsUnlimitedIsNotCappedByBatch 断言不限量卡组的复习数是真实张数：
-// 单批取卡上限（BatchSize）只决定一次返回多少，不决定今天能刷多少。
+// TestDeckCountsUnlimitedIsNotCappedByBatch asserts the review count of an unlimited deck is the real number of cards:
+// the single-batch fetch limit (BatchSize) only decides how many are returned at once, not how many can be studied today.
 func TestDeckCountsUnlimitedIsNotCappedByBatch(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -251,9 +251,9 @@ func TestDeckCountsUnlimitedIsNotCappedByBatch(t *testing.T) {
 	}
 }
 
-// TestDeckCountsUseTheUsersReviewDay 断言「今日已用量」按用户时区的复习日统计。
-// 01:00 UTC 在 UTC+8 已是 09:00，用户的复习日是 10-07；按 UTC 算则仍是 10-06。
-// 当天已引入 1 张、上限 1 张时，用户口径下新卡额度用完（0）；若误用 UTC 口径就会显示 1。
+// TestDeckCountsUseTheUsersReviewDay asserts "today's usage" is counted by the review day in the user's timezone.
+// 01:00 UTC is already 09:00 in UTC+8, so the user's review day is 10-07; under UTC it would still be 10-06.
+// With 1 card introduced that day and a cap of 1, the new-card allowance is used up (0) under the user's semantics; using UTC semantics by mistake would show 1.
 func TestDeckCountsUseTheUsersReviewDay(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()

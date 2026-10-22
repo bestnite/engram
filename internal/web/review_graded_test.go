@@ -9,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// seedGradedNote 建一张作答类 note（判分相关测试共用）。
+// seedGradedNote creates an answer-type note (shared by the grading tests).
 func seedGradedNote(t *testing.T, db *gorm.DB, deckID uint64, kind string, fields map[string]any) *store.Note {
 	t.Helper()
 	note := &store.Note{DeckID: deckID, Kind: kind}
@@ -19,7 +19,7 @@ func seedGradedNote(t *testing.T, db *gorm.DB, deckID uint64, kind string, field
 	return note
 }
 
-// derefDetail 让测试日志可读：nil 详情打印 <nil>。
+// derefDetail makes test logs readable: a nil detail prints <nil>.
 func derefDetail(raw *string) string {
 	if raw == nil {
 		return "<nil>"

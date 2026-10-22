@@ -11,8 +11,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// extraNewDrivers 返回要跑的数据库：SQLite 总是跑；设置了 TEST_PG_DSN 时再跑一遍 PostgreSQL。
-// 追加额度靠 clause.OnConflict 的累加 upsert 写入，两种驱动的语法与语义都要覆盖。
+// extraNewDrivers returns the databases to run: SQLite always runs; PostgreSQL runs too when TEST_PG_DSN is set.
+// The added allowance is written by an accumulating upsert via clause.OnConflict, so both drivers' syntax and semantics must be covered.
 func extraNewDrivers() map[string]func(t *testing.T) *gorm.DB {
 	return map[string]func(t *testing.T) *gorm.DB{
 		"sqlite": newTestDB,
@@ -29,8 +29,8 @@ func extraNewDrivers() map[string]func(t *testing.T) *gorm.DB {
 	}
 }
 
-// TestExtraNewRaisesTodaysNewBudget 覆盖「再来一组」的额度规则：今天追加的额度加在每日上限之上，
-// Build、DeckCounts 与 DeckBudgets 三处同源；别的复习日的追加不生效；不限的卡组不受追加影响。
+// TestExtraNewRaisesTodaysNewBudget covers the "another round" allowance rule: today's added allowance stacks on top of the daily cap,
+// with Build, DeckCounts and DeckBudgets sharing the source; an addition from another review day has no effect; an unlimited deck is unaffected by the addition.
 func TestExtraNewRaisesTodaysNewBudget(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -42,9 +42,9 @@ func TestExtraNewRaisesTodaysNewBudget(t *testing.T) {
 
 	cases := []struct {
 		name string
-		// newPerDay 是卡组上限；introduced 是今天已引入的新卡数；fresh 是还没学过的新卡数。
+		// newPerDay is the deck cap; introduced is the number of new cards introduced today; fresh is the number of new cards not studied yet.
 		newPerDay, introduced, fresh int
-		// extras 是要写入的追加额度，键是复习日。
+		// extras are the added allowances to write, keyed by review day.
 		extras        map[string]int
 		wantNew       int
 		wantExtra     int
@@ -70,7 +70,7 @@ func TestExtraNewRaisesTodaysNewBudget(t *testing.T) {
 				for i := 0; i < tc.fresh; i++ {
 					seedCard(t, db, deckID, "fresh", now)
 				}
-				// 昨天的追加先写，今天的再写：AddDailyExtraNew 会顺手删掉更早复习日的行。
+				// Write yesterday's addition first, then today's: AddDailyExtraNew also deletes rows from earlier review days along the way.
 				if n, ok := tc.extras[yesterday]; ok {
 					if _, err := store.AddDailyExtraNew(ctx, db, deckID, 1, yesterday, n); err != nil {
 						t.Fatalf("AddDailyExtraNew(yesterday) error = %v", err)
@@ -114,8 +114,8 @@ func TestExtraNewRaisesTodaysNewBudget(t *testing.T) {
 	}
 }
 
-// TestAddDailyExtraNewAccumulatesAndDropsStaleDays 断言同一复习日的追加累加，
-// 并且写入新复习日时更早复习日的行被删除，每对 (卡组, 用户) 只留一行。
+// TestAddDailyExtraNewAccumulatesAndDropsStaleDays asserts additions for the same review day accumulate,
+// and that writing a new review day deletes earlier review days' rows, leaving exactly one row per (deck, user) pair.
 func TestAddDailyExtraNewAccumulatesAndDropsStaleDays(t *testing.T) {
 	for driver, open := range extraNewDrivers() {
 		t.Run(driver, func(t *testing.T) { testAddDailyExtraNew(t, open(t)) })
@@ -151,7 +151,7 @@ func testAddDailyExtraNew(t *testing.T, db *gorm.DB) {
 	if rows != 1 {
 		t.Errorf("daily extra rows = %d, want 1 (stale days dropped)", rows)
 	}
-	// 另一个用户的追加互不影响。
+	// Two users' additions do not affect one another.
 	if got, err := store.AddDailyExtraNew(ctx, db, deckID, 2, "2026-01-02", 1); err != nil || got != 1 {
 		t.Errorf("AddDailyExtraNew(other user) = %d, %v; want 1, nil", got, err)
 	}
@@ -160,8 +160,8 @@ func testAddDailyExtraNew(t *testing.T, db *gorm.DB) {
 	}
 }
 
-// TestNewCardsAvailableIgnoresBudget 断言 NewCardsAvailable 数的是卡组里全部可引入的新卡：
-// 不受每日额度截断，排除暂停的卡，带标签时只数带这些标签的卡。
+// TestNewCardsAvailableIgnoresBudget asserts NewCardsAvailable counts all introducible new cards in the deck:
+// not truncated by the daily allowance, excluding suspended cards, and when tagged only counting cards carrying those tags.
 func TestNewCardsAvailableIgnoresBudget(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()

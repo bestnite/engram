@@ -33,7 +33,7 @@ func TestSessionStoreLifecycle(t *testing.T) {
 				t.Fatalf("ByID() error = %v", err)
 			}
 
-			// RevokeAllForUser 只影响目标用户，另一个用户的会话保留。
+			// RevokeAllForUser affects only the target user; the other user's session is kept.
 			if err := sessions.RevokeAllForUser(ctx, fx.userA, now); err != nil {
 				t.Fatalf("RevokeAllForUser() error = %v", err)
 			}
@@ -52,7 +52,7 @@ func TestSessionStoreLifecycle(t *testing.T) {
 				t.Error("sess-other must not be revoked by another user's RevokeAllForUser")
 			}
 
-			// 过期回收只删过期的行。
+			// Expiry reclamation deletes only the expired rows.
 			if err := db.Model(&Session{}).Where("id = ?", "sess-doomed").
 				Update("expires_at", now.Add(-time.Hour)).Error; err != nil {
 				t.Fatalf("expire session: %v", err)

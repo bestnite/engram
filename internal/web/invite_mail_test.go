@@ -16,18 +16,18 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 HTTP 级验收：邀请码可由管理员直接寄到被邀请人邮箱（B 类）。
+// This file is HTTP-level acceptance: an invite code can be mailed by an admin straight to the invitee's email (type B).
 //
-// 覆盖四条验收线：
-//  1. 为某邮箱建的邀请能投递并被接受；
-//  2. 被撤销 / 过期的邀请链接被拒；
-//  3. 手工拷链接的原有路径仍然能用；
-//  4. SMTP 未配置时创建仍成功且如实回显 mail_notice（绝不静默）。
+// Covers four acceptance lines:
+//  1. an invite created for an email can be delivered and accepted;
+//  2. revoked / expired invite links are refused;
+//  3. the original manual copy-the-link path still works;
+//  4. with SMTP unconfigured creation still succeeds and echo mail_notice faithfully (never silently).
 //
-// 管理端邀请的创建/撤销与注册全部走 SPA 的同源 JSON 端点（SSR 表单端点已删除）。
-// 投递用进程内替身（recordingMailSender）完成，不依赖外网或真实 SMTP。
+// Admin-side invite creation/revocation and signup all go through the SPA's same-origin JSON endpoints (the SSR form endpoints have been deleted).
+// Delivery uses an in-process stand-in (recordingMailSender) and needs neither the internet nor a real SMTP server.
 
-// recordingMailSender 是 mail.Sender 的替身：只记录被投递的邮件，不碰网络。
+// recordingMailSender is a stand-in for mail.Sender: it only records delivered mail and never touches the network.
 type recordingMailSender struct {
 	mu   sync.Mutex
 	sent []mail.Message
@@ -48,7 +48,7 @@ func (r *recordingMailSender) messages() []mail.Message {
 	return append([]mail.Message(nil), r.sent...)
 }
 
-// configureSMTP 写入生效的 SMTP 设置；host 与 from 齐备即视为已配置。
+// configureSMTP writes working SMTP settings; host and from both present counts as configured.
 func configureSMTP(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -63,7 +63,7 @@ func configureSMTP(t *testing.T, db *gorm.DB) {
 	}
 }
 
-// startInviteMail 构造并启动一个已配置 SMTP 的 outbox，挂到测试服务上；返回替身。
+// startInviteMail builds and starts an outbox with SMTP configured, attaches it to the test server, and returns the stand-in.
 func startInviteMail(t *testing.T, srv *Server, db *gorm.DB) *recordingMailSender {
 	t.Helper()
 	configureSMTP(t, db)
@@ -83,7 +83,7 @@ func startInviteMail(t *testing.T, srv *Server, db *gorm.DB) *recordingMailSende
 	return sender
 }
 
-// waitForMail 轮询等待替身收到至少 n 封邮件（worker 异步投递）。
+// waitForMail polls until the stand-in has received at least n messages (the worker delivers asynchronously).
 func waitForMail(t *testing.T, sender *recordingMailSender, n int) []mail.Message {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -97,7 +97,7 @@ func waitForMail(t *testing.T, sender *recordingMailSender, n int) []mail.Messag
 	return nil
 }
 
-// inviteCreateResponse 是创建邀请的 JSON 回包：新邀请 + 发信结果码。
+// inviteCreateResponse is the JSON reply for creating an invite: the new invite plus the mail result code.
 type inviteCreateResponse struct {
 	Invite struct {
 		ID    string `json:"id"`
@@ -106,7 +106,7 @@ type inviteCreateResponse struct {
 	MailNotice string `json:"mail_notice"`
 }
 
-// createInviteJSON 通过管理 JSON 端点创建一条邀请，返回响应与解出的回包。
+// createInviteJSON creates an invite through the admin JSON endpoint and returns the response plus the decoded reply.
 func createInviteJSON(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string, body map[string]any) (*httptest.ResponseRecorder, inviteCreateResponse) {
 	t.Helper()
 	rec := postJSONWithSession(srv, "/api/v1/admin/invites", body, cookies, csrf)
@@ -117,7 +117,7 @@ func createInviteJSON(t *testing.T, srv *Server, cookies []*http.Cookie, csrf st
 	return rec, resp
 }
 
-// registerWithInviteJSON 用邀请 token 走 SPA 的 JSON 注册（会话前双提交 CSRF）。
+// registerWithInviteJSON signs up through the SPA's JSON registration with an invite token (pre-session double-submit CSRF).
 func registerWithInviteJSON(t *testing.T, srv *Server, username, email, invite string) *httptest.ResponseRecorder {
 	t.Helper()
 	cookie, headers := preSessionPair(t, srv, "/register")
@@ -127,8 +127,8 @@ func registerWithInviteJSON(t *testing.T, srv *Server, username, email, invite s
 	}, []*http.Cookie{cookie}, headers)
 }
 
-// TestInviteEmailDeliveredAndAccepted 是核心验收：
-// 为某邮箱建的邀请被投递（邮件里带可用的接受链接），并且该链接能被接受。
+// TestInviteEmailDeliveredAndAccepted is the core acceptance:
+// an invite created for an email is delivered (the mail carries a usable accept link), and that link can be accepted.
 func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
@@ -164,7 +164,7 @@ func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 		t.Errorf("delivered body does not carry the invite token:\n%s", msg.TextBody)
 	}
 
-	// 用邮件里的链接接受邀请：放行一次。
+	// Accept the invite with the link from the mail: it goes through once.
 	reg := registerWithInviteJSON(t, srv, "invitee", "invitee@example.com", token)
 	if reg.Code != http.StatusOK {
 		t.Fatalf("register with mailed invite = %d, want 200 (body %s)", reg.Code, snippet(reg.Body.String()))
@@ -175,7 +175,7 @@ func TestInviteEmailDeliveredAndAccepted(t *testing.T) {
 	}
 }
 
-// TestInviteLinkCopiedManuallyStillWorks 证明加邮件没有破坏原有手工拷链接路径。
+// TestInviteLinkCopiedManuallyStillWorks proves that adding email did not break the original manual copy-the-link path.
 func TestInviteLinkCopiedManuallyStillWorks(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
@@ -196,12 +196,12 @@ func TestInviteLinkCopiedManuallyStillWorks(t *testing.T) {
 	}
 }
 
-// TestRevokedAndExpiredInviteRefused 覆盖反面用例：被撤销 / 过期的链接被拒。
+// TestRevokedAndExpiredInviteRefused covers the negative cases: revoked / expired links are refused.
 func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
 
-	// 撤销：创建 → 撤销 → 用原 token 注册被拒。
+	// Revocation: create → revoke → signing up with the original token is refused.
 	if rec, _ := createInviteJSON(t, srv, cookies, csrf, map[string]any{"role": "user"}); rec.Code != http.StatusCreated {
 		t.Fatalf("create invite = %d, want 201", rec.Code)
 	}
@@ -219,7 +219,7 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 		t.Errorf("register with revoked invite = %d %s, want 403 invite_invalid", denied.Code, apiErrorCode(t, denied))
 	}
 
-	// 过期：直接写入一条已过期的邀请 → 注册被拒。
+	// Expiry: write an already-expired invite directly → signup is refused.
 	expired := &store.Invite{Role: store.RoleUser}
 	exp := time.Now().UTC().Add(-time.Hour)
 	expired.ExpiresAt = &exp
@@ -232,12 +232,12 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 	}
 }
 
-// TestInviteMailUnconfiguredStillCreatesInvite 覆盖 SMTP 未配置：请求寄信时回包如实说明
-// mail_notice=invite_mail_unconfigured，但邀请仍然创建成功（绝不静默，也不因邮件未配置而阻断创建）。
+// TestInviteMailUnconfiguredStillCreatesInvite covers unconfigured SMTP: when mail is requested the reply states
+// mail_notice=invite_mail_unconfigured faithfully, yet the invite is still created successfully (never silently, and creation is not blocked because mail is unconfigured).
 func TestInviteMailUnconfiguredStillCreatesInvite(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
-	srv.mail = nil // 未装配邮件
+	srv.mail = nil // mail not wired up
 
 	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{
 		"role": "user", "email": "invitee@example.com", "send_email": true,
@@ -246,14 +246,14 @@ func TestInviteMailUnconfiguredStillCreatesInvite(t *testing.T) {
 		t.Fatalf("POST with send_email while unconfigured = %d mail_notice %q, want 201 %q",
 			created.Code, resp.MailNotice, noticeInviteMailUnconfigured)
 	}
-	// 邀请本身仍然创建成功。
+	// The invite itself is still created successfully.
 	if n, _ := srv.invites.List(context.Background()); len(n) != 1 {
 		t.Errorf("invites = %d, want 1 (invite must still be created)", len(n))
 	}
 }
 
-// TestInviteMailHonorsRecipientPreference 证明 B 类可关：收件人若是本站用户并关掉了该类型，
-// 就不寄信，但邀请仍然创建成功、链接仍可手拷。
+// TestInviteMailHonorsRecipientPreference proves type B is optional: if the recipient is a site user who has turned the type off,
+// no mail is sent, but the invite is still created successfully and the link can still be copied by hand.
 func TestInviteMailHonorsRecipientPreference(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)

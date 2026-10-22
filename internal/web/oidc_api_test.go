@@ -11,12 +11,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是 SPA 的 OIDC 登录入口探测端点验收（internal/web/oidc_api.go）。
+// This file is the acceptance for the SPA OIDC login entry probe endpoint (internal/web/oidc_api.go).
 //
-// 覆盖：默认关闭时 enabled=false、配置完整可用时 enabled=true，且响应绝不含 issuer / client_id
-// 等凭据；start_url 与 SSR 登录页按钮同源。
+// Covers: enabled=false when off by default, enabled=true when the configuration is complete and usable, and a response that never contains credentials
+// such as issuer / client_id; start_url comes from the same source as the SSR login page button.
 
-// TestOIDCEntryProbe 断言探测端点只反映「是否可用」，绝不回显任何配置凭据。
+// TestOIDCEntryProbe asserts the probe endpoint reflects only "available or not" and never echoes any configuration credential.
 func TestOIDCEntryProbe(t *testing.T) {
 	srv, db := newAuthServer(t)
 
@@ -25,7 +25,7 @@ func TestOIDCEntryProbe(t *testing.T) {
 		StartURL string `json:"start_url"`
 	}
 
-	// 默认关闭：enabled=false，start_url 仍稳定给出（前端据此决定是否渲染入口）。
+	// Off by default: enabled=false, and start_url is still always given (the frontend decides from it whether to render the entry).
 	rec := get(t, srv, "/api/v1/auth/oidc", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/auth/oidc status = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
@@ -39,7 +39,7 @@ func TestOIDCEntryProbe(t *testing.T) {
 		t.Errorf("start_url = %q, want /auth/oidc/start", off.StartURL)
 	}
 
-	// 配置完整可用：enabled=true。
+	// Configuration complete and usable: enabled=true.
 	now := time.Now().UTC()
 	for k, v := range map[string]string{
 		auth.SettingKeyOIDCEnabled:  "true",

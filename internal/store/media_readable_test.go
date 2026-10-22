@@ -10,19 +10,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件覆盖媒体库列表（GET /api/v1/media 与选择器共用的 store 原语）：
-//   - 可读集合是「我上传」∪「我可读卡组里未软删 note 引用」的并集，必须去重；
-//   - keyset 分页在同一游标下不重不漏，排序 media.created_at DESC, sha256 DESC 稳定；
-//   - 别人卡组里引用的媒体不得出现，只有显式授权（deck_grants）才把那份字节带进可读集合；
-//   - 授权撤销后立即从列表消失（不缓存）。
+// This file covers the media library listing (the store primitive shared by GET /api/v1/media and the picker):
+//   - the readable set is the union of 'what I uploaded' ∪ 'referenced by non-soft-deleted notes in decks I can read', and must be deduped;
+//   - keyset paging neither duplicates nor skips under the same cursor, and ordering by media.created_at DESC, sha256 DESC is stable;
+//   - media referenced inside someone else's deck must not appear; only an explicit grant (deck_grants) brings those bytes into the readable set;
+//   - after a grant is revoked it disappears from the listing immediately (no caching).
 //
-// 媒体行直接落库以精确控制 created_at（排序键）；note 一律经 NoteStore 写入方法构造，
-// 保证 media_notes 由写入路径重建（AGENTS.md 的夹具约定）。
+// Media rows are written directly to control created_at precisely (the sort key); notes are always built through NoteStore's write method,
+// guaranteeing media_notes is rebuilt by the write path (AGENTS.md's fixture convention).
 
-// testMediaSha 生成一个稳定的 64 位小写十六进制 sha（i 不同即不同）。
+// testMediaSha generates a stable 64-digit lowercase hex sha (different i, different sha).
 func testMediaSha(i int) string { return fmt.Sprintf("%064x", i) }
 
-// seedListMediaRow 直接写一行 media，created_at 由调用方给定（列表排序键）。
+// seedListMediaRow writes one media row directly, with created_at given by the caller (the listing sort key).
 func seedListMediaRow(t *testing.T, db *gorm.DB, sha string, createdAt time.Time) {
 	t.Helper()
 	row := Media{Sha256: sha, RelPath: sha[:2] + "/" + sha + ".png", Mime: "image/png", Bytes: 12, CreatedAt: createdAt}
@@ -31,8 +31,8 @@ func seedListMediaRow(t *testing.T, db *gorm.DB, sha string, createdAt time.Time
 	}
 }
 
-// listAllReadable 按 limit 反复翻页，返回全量 sha 顺序；同一游标重复请求也走同一条路径，
-// 便于断言「不重不漏」。
+// listAllReadable pages repeatedly by limit and returns the full sha sequence; a repeated request with the same cursor goes through the same path,
+// which makes 'no duplicates, no gaps' easy to assert.
 func listAllReadable(t *testing.T, db *gorm.DB, userID uint64, limit int) []string {
 	t.Helper()
 	var out []string
@@ -54,7 +54,7 @@ func listAllReadable(t *testing.T, db *gorm.DB, userID uint64, limit int) []stri
 	return out
 }
 
-// TestListReadableMediaPaginatesStableAndDeduped 断言并集去重与 keyset 分页稳定。
+// TestListReadableMediaPaginatesStableAndDeduped asserts union dedup and stable keyset paging.
 func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 			ctx := context.Background()
 			base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-			// m0..m4 由 owner 上传；m5 由 other 上传、但被 owner 可见卡组的 note 引用（只走第二支）。
+			// m0..m4 are uploaded by owner; m5 is uploaded by other but referenced by a note in a deck visible to owner (hits only the second branch).
 			for i := 0; i < 5; i++ {
 				sha := testMediaSha(i + 1)
 				seedListMediaRow(t, db, sha, base.Add(time.Duration(i)*time.Minute))
@@ -81,8 +81,8 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 				t.Fatalf("RecordMediaUploader(ref-only): %v", err)
 			}
 
-			// 一张 note 同时引用 m3（owner 也上传过，并集里两路命中，必须只出现一次）
-			// 与只被引用、非 owner 上传的 sha（第二支）。
+			// one note references both m3 (owner also uploaded it, so both union branches hit and it must appear only once)
+			// and a sha that is only referenced, not uploaded by owner (second branch).
 			saveRefNote(t, db, deck, Ptr(owner), refFront(testMediaSha(3), shaRefOnly))
 
 			got := listAllReadable(t, db, owner, 2)
@@ -96,9 +96,9 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 				}
 			}
 
-			// 单页取全量（limit 足够大）：并集必须去重，同一份字节两路命中只出现一次。
-			// 这条断言不能只靠分页覆盖——keyset 的严格小于会把「同排序键的重复行」挡在下一页之外，
-			// 所以只有一页装得下全部行时才真正验证 UNION 的去重。
+			// fetch everything in one page (a sufficiently large limit): the union must dedupe, and bytes hit on both paths appear only once.
+			// This assertion cannot rely on paging alone — keyset's strict less-than keeps 'duplicate rows with the same sort key' off the next page,
+			// so UNION dedup is only really verified when a single page can hold every row.
 			single, singleNext, err := ListReadableMedia(ctx, db, owner, 10, "")
 			if err != nil {
 				t.Fatalf("single page error = %v", err)
@@ -114,7 +114,7 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 				t.Fatalf("single page has %d rows, want %d deduped (got %v)", len(single), len(want), shas)
 			}
 
-			// 同一游标重复请求必须给出同一页（keyset 稳定），不重不漏。
+			// repeating a request with the same cursor must yield the same page (keyset is stable), with no duplicates and no gaps.
 			first, nextCursor, err := ListReadableMedia(ctx, db, owner, 2, "")
 			if err != nil {
 				t.Fatalf("first page error = %v", err)
@@ -130,7 +130,7 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 				t.Fatalf("repeating the first page drifted: first %v/%q vs again %v/%q", first, nextCursor, again, nextAgain)
 			}
 
-			// 末页 next_cursor 必须为空串。
+			// the last page's next_cursor must be an empty string.
 			last, lastNext, err := ListReadableMedia(ctx, db, owner, 2, nextCursorOf(t, db, owner, 4))
 			if err != nil {
 				t.Fatalf("last page error = %v", err)
@@ -142,7 +142,7 @@ func TestListReadableMediaPaginatesStableAndDeduped(t *testing.T) {
 	}
 }
 
-// nextCursorOf 连续翻页累计到第 n 项，返回第 n 项的游标（用于直接取末页）。
+// nextCursorOf pages forward, accumulating up to the n-th item, and returns that item's cursor (used to fetch the last page directly).
 func nextCursorOf(t *testing.T, db *gorm.DB, userID uint64, n int) string {
 	t.Helper()
 	cursor := ""
@@ -163,8 +163,8 @@ func nextCursorOf(t *testing.T, db *gorm.DB, userID uint64, n int) string {
 	}
 }
 
-// TestListReadableMediaExcludesOtherUsersDecks 断言别人的卡组里的媒体不出现，
-// 只有显式授权（deck_grants）才把那份字节带进可读集合——可见性不再是一条读取来源。
+// TestListReadableMediaExcludesOtherUsersDecks asserts that media inside someone else's deck does not appear, and that
+// only an explicit grant (deck_grants) brings those bytes into the readable set — visibility is no longer a source of read access.
 func TestListReadableMediaExcludesOtherUsersDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -193,14 +193,14 @@ func TestListReadableMediaExcludesOtherUsersDecks(t *testing.T) {
 			}
 			saveRefNote(t, db, grantedDeck, Ptr(other), refFront(shared))
 
-			// 授权之前：别人的卡组一份字节都进不来。
+			// before the grant: not a single byte from someone else's deck gets in.
 			for _, sha := range listAllReadable(t, db, owner, 10) {
 				if sha == hidden || sha == shared {
 					t.Fatalf("list leaked media %s from another user's deck before any grant", sha)
 				}
 			}
 
-			// 只授权 grantedDeck：它引用的字节随授权出现，未被授权的仍然不出现。
+			// grant only grantedDeck: the bytes it references appear with the grant, while ungranted ones still do not appear.
 			if err := NewGrantStore(db).Grant(ctx, grantedDeck, owner, RoleReader, Ptr(other)); err != nil {
 				t.Fatalf("grant: %v", err)
 			}
@@ -221,7 +221,7 @@ func TestListReadableMediaExcludesOtherUsersDecks(t *testing.T) {
 	}
 }
 
-// TestListReadableMediaDropsAfterGrantRevoked 断言授权撤销后媒体立即从列表消失（不缓存）。
+// TestListReadableMediaDropsAfterGrantRevoked asserts that after a grant is revoked the media disappears from the listing immediately (no caching).
 func TestListReadableMediaDropsAfterGrantRevoked(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -257,7 +257,7 @@ func TestListReadableMediaDropsAfterGrantRevoked(t *testing.T) {
 	}
 }
 
-// TestListReadableMediaRejectsInvalidCursor 断言非法游标返回稳定错误（供 REST 映射 400）。
+// TestListReadableMediaRejectsInvalidCursor asserts that an invalid cursor returns the stable error (for REST to map to 400).
 func TestListReadableMediaRejectsInvalidCursor(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

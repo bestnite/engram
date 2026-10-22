@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// undoOnce 在自建事务里用给定 expected version 撤销一次评分，返回结果与错误（事务按结果提交或回滚）。
+// undoOnce undoes one grade in a self-opened transaction with the given expected version, returning the result and error (the transaction commits or rolls back depending on the result).
 func undoOnce(t *testing.T, db *gorm.DB, cardID, userID uint64, expectedVersion int, s *Scheduler, now time.Time) (store.CardState, error) {
 	t.Helper()
 	tx := db.Begin()
@@ -28,8 +28,8 @@ func undoOnce(t *testing.T, db *gorm.DB, cardID, userID uint64, expectedVersion 
 	return restored, nil
 }
 
-// TestUndoReplayDoesNotDeleteAnotherReview 是 AUDIT-02 的验收：两次完全相同的撤销请求，
-// 第二次因版本已推进而 409，且不删除另一条历史评分（修复前第二次会删掉前一条，只剩 0 条）。
+// TestUndoReplayDoesNotDeleteAnotherReview is the AUDIT-02 acceptance: with two identical undo requests,
+// the second gets a 409 because the version has advanced, and it does not delete another historical grade (before the fix the second would delete the previous one, leaving 0).
 func TestUndoReplayDoesNotDeleteAnotherReview(t *testing.T) {
 	db := newTestDB(t)
 	now1 := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -46,11 +46,11 @@ func TestUndoReplayDoesNotDeleteAnotherReview(t *testing.T) {
 		Scheduler: s, Now: now1.Add(time.Minute), Location: time.UTC,
 	})
 
-	// 第一次撤销：目标版本 = 第二次评分后的版本。
+	// First undo: target version = the version after the second grade.
 	if _, err := undoOnce(t, db, cardID, 1, second.State.Version, s, now1.Add(time.Minute)); err != nil {
 		t.Fatalf("first undo error = %v, want nil", err)
 	}
-	// 重放同一请求：版本已变，必须以冲突结束且不删任何日志。
+	// Replaying the same request: the version has changed, so it must end in a conflict and delete no log.
 	_, err := undoOnce(t, db, cardID, 1, second.State.Version, s, now1.Add(time.Minute))
 	if !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("replayed undo error = %v, want ErrVersionConflict", err)
@@ -64,7 +64,7 @@ func TestUndoReplayDoesNotDeleteAnotherReview(t *testing.T) {
 	}
 }
 
-// TestUndoStaleVersionIsRejected 断言用旧版本发起的撤销被拒：不删评分、状态不变。
+// TestUndoStaleVersionIsRejected asserts an undo issued with a stale version is rejected: no grade deleted, state unchanged.
 func TestUndoStaleVersionIsRejected(t *testing.T) {
 	db := newTestDB(t)
 	now1 := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -81,7 +81,7 @@ func TestUndoStaleVersionIsRejected(t *testing.T) {
 		Scheduler: s, Now: now1.Add(time.Minute), Location: time.UTC,
 	})
 
-	// 另一窗口拿的是第一次评分后的版本（已过期）。
+	// The other window holds the version after the first grade (already stale).
 	_, err := undoOnce(t, db, cardID, 1, first.State.Version, s, now1.Add(time.Minute))
 	if !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("stale undo error = %v, want ErrVersionConflict", err)
@@ -102,8 +102,8 @@ func TestUndoStaleVersionIsRejected(t *testing.T) {
 	}
 }
 
-// TestUndoRestoresBuriedDueBefore 是 AUDIT-04 的验收：先埋藏新卡，第二天评分，再撤销——
-// 评分前的到期日必须精确还原为埋藏设的那个值，而不是 NULL（修复前上一条日志不存在，due 归 NULL）。
+// TestUndoRestoresBuriedDueBefore is the AUDIT-04 acceptance: bury a new card, grade it the next day, then undo —
+// the pre-grade due date must be restored exactly to the value the bury set, not NULL (before the fix the previous log did not exist and due became NULL).
 func TestUndoRestoresBuriedDueBefore(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -116,12 +116,12 @@ func TestUndoRestoresBuriedDueBefore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bury() error = %v", err)
 	}
-	wantDue := time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC) // 切点 4 → 次日 04:00
+	wantDue := time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC) // cutoff 4 → 04:00 the next day
 	if buried.DueAt == nil || !buried.DueAt.Equal(wantDue) {
 		t.Fatalf("buried due_at = %v, want %v", buried.DueAt, wantDue)
 	}
 
-	// 第二天评分；评分前的到期日应被写进 due_before 快照。
+	// Grade it the next day; the pre-grade due date should be written into the due_before snapshot.
 	day2 := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	reviewed := mustSubmit(t, db, SubmitInput{
 		CardID: cardID, UserID: 1, Rating: Good, ExpectedVersion: buried.Version,

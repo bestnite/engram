@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// 本文件是公开只读分享浏览 SPA 化的验收（internal/web/share_api.go）。
+// This file is the acceptance for the SPA migration of public read-only share browsing (internal/web/share_api.go).
 //
-// 覆盖：GET /s/:token 的切壳、撤销/未知链接仍 404、JSON 内容复用服务端清洗渲染、
-// 口令门禁（解锁前不返回正文）、以及打开成功时经 JSON 登记会话级媒体授权。走真实路由与 SQLite。
+// Covers: the shell switch on GET /s/:token, revoked/unknown links still 404, JSON content reusing the server-side sanitizing render,
+// the password gate (no body before unlock), and the session-level media grant registered via JSON on a successful open. Real routes and SQLite.
 
-// shareResponse 是 GET /api/v1/share/:token 的响应形态（测试解码用）。
+// shareResponse is the response shape of GET /api/v1/share/:token (for test decoding).
 type shareResponseFixture struct {
 	DeckName         string `json:"deck_name"`
 	PasswordRequired bool   `json:"password_required"`
@@ -32,7 +32,7 @@ func decodeShareResponse(t *testing.T, rec *httptest.ResponseRecorder) shareResp
 	return body
 }
 
-// TestShareBrowseServesShell 覆盖 GET /s/:token 的应用壳与未知链接的 404。
+// TestShareBrowseServesShell covers the app shell on GET /s/:token and the 404 for an unknown link.
 func TestShareBrowseServesShell(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Cutover share deck")
@@ -41,13 +41,13 @@ func TestShareBrowseServesShell(t *testing.T) {
 
 	assertShell(t, get(t, srv, "/s/"+token, nil))
 
-	// 未知链接仍 404：可达性判定发生在发壳之前。
+	// An unknown link is still 404: the reachability decision happens before the shell is served.
 	if rec := get(t, srv, "/s/does-not-exist-token-1234567890", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("GET /s/<unknown> = %d, want 404", rec.Code)
 	}
 }
 
-// TestShareJSONContent 断言 JSON 内容端点返回服务端清洗后的正反面 HTML，且未知链接 404。
+// TestShareJSONContent asserts the JSON content endpoint returns server-sanitized front and back HTML, and an unknown link is 404.
 func TestShareJSONContent(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "JSON share deck")
@@ -78,7 +78,7 @@ func TestShareJSONContent(t *testing.T) {
 	}
 }
 
-// TestShareJSONPasswordGate 断言有口令链接在解锁前不返回正文，错误口令 401、正确口令 200。
+// TestShareJSONPasswordGate asserts a password-protected link returns no body before unlock, a wrong password gives 401 and a correct one 200.
 func TestShareJSONPasswordGate(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Locked share deck")
@@ -102,8 +102,8 @@ func TestShareJSONPasswordGate(t *testing.T) {
 	}
 }
 
-// TestShareJSONRecordsMediaGrant 断言经 JSON 成功打开分享页后，登录访客对同一会话即可读媒体
-// （与 SSR 的 recordShareGrant 同源，媒体授权不因切壳而丢失）。
+// TestShareJSONRecordsMediaGrant asserts that after opening the share page successfully via JSON, the logged-in visitor can read media in the same session
+// (same source as SSR's recordShareGrant, so the media grant is not lost to the shell switch).
 func TestShareJSONRecordsMediaGrant(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck, sha := seedReferencedMediaDeck(t, srv, db, ownerID, ownerCookies, ownerCSRF, "JSON media deck", 'a')

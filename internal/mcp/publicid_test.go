@@ -10,10 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖不透明对外 id 的两条边界：入参 schema 只声明字符串、数字主键不被接受；
-// 未知/非法对外 id 经 api 的 ByPublicID 解析失败，统一回 not_found。
+// This file covers the two boundaries of opaque public ids: the input schema declares strings only, and numeric primary keys are not accepted;
+// an unknown/invalid public id fails to resolve through api's ByPublicID and uniformly returns not_found.
 
-// findTool 从 tools/list 里取出指定工具；不存在则测试失败。
+// findTool takes the named tool out of tools/list; the test fails if it does not exist.
 func findTool(t *testing.T, cs *sdkmcp.ClientSession, name string) *sdkmcp.Tool {
 	t.Helper()
 	res, err := cs.ListTools(t.Context(), nil)
@@ -29,7 +29,7 @@ func findTool(t *testing.T, cs *sdkmcp.ClientSession, name string) *sdkmcp.Tool 
 	return nil
 }
 
-// propType 返回工具入参 schema 里某属性的 JSON Schema 节点。
+// propType returns the JSON Schema node of a property in a tool's input schema.
 func propType(t *testing.T, tl *sdkmcp.Tool, field string) map[string]any {
 	t.Helper()
 	schema, ok := tl.InputSchema.(map[string]any)
@@ -47,8 +47,8 @@ func propType(t *testing.T, tl *sdkmcp.Tool, field string) map[string]any {
 	return node
 }
 
-// schemaHasType 判断某个 schema 节点是否声明了目标类型。可选字段（如切片）会被推断成
-// 可空类型（type 为 ["null","array"]），因此这里同时接受裸字符串与类型数组。
+// schemaHasType reports whether a schema node declares the target type. Optional fields (such as slices) are inferred as
+// nullable types (type is ["null","array"]), so this accepts both a bare string and a type array.
 func schemaHasType(node map[string]any, want string) bool {
 	switch tv := node["type"].(type) {
 	case string:
@@ -63,8 +63,8 @@ func schemaHasType(node map[string]any, want string) bool {
 	return false
 }
 
-// TestToolSchemasDeclareStringIDs 断言每个指向主键的入参在 JSON Schema 里都是字符串
-// （或字符串数组），即客户端看到的契约就是对外 id，而不是数字。
+// TestToolSchemasDeclareStringIDs asserts every input argument pointing at a primary key is a string
+// (or string array) in the JSON Schema, i.e. the contract the client sees is public ids, not numbers.
 func TestToolSchemasDeclareStringIDs(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "schema-user")
@@ -105,8 +105,8 @@ func TestToolSchemasDeclareStringIDs(t *testing.T) {
 	}
 }
 
-// TestToolsRejectNumericIDs 断言数字主键不被接受：给字符串字段传数字时，输入校验在进入
-// 处理器之前就拒绝，客户端拿到 isErr，而不是一次成功的调用。
+// TestToolsRejectNumericIDs asserts numeric primary keys are not accepted: when a number is passed for a string field, input validation rejects it
+// before it reaches the handler, and the client gets isErr rather than a successful call.
 func TestToolsRejectNumericIDs(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "numeric-user")
@@ -131,8 +131,8 @@ func TestToolsRejectNumericIDs(t *testing.T) {
 	}
 }
 
-// TestToolsUnknownPublicIDIsNotFound 覆盖负例：未知（或空串）对外 id 经 ByPublicID 解析失败，
-// 每个工具都回 not_found，与 REST 同一 code，绝不落到数字主键上。
+// TestToolsUnknownPublicIDIsNotFound covers the negative case: an unknown (or empty string) public id fails to resolve through ByPublicID,
+// and every tool returns not_found, the same code as REST, never falling through to a numeric primary key.
 func TestToolsUnknownPublicIDIsNotFound(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "unknown-id-user")

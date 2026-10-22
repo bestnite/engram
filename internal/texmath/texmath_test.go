@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// TestRanges 断言行内与块级公式都被识别，区间包含分隔符，公式里的反斜杠命令不会提前收束。
+// TestRanges asserts that both inline and block formulas are recognized, that the range
+// includes the delimiters, and that a backslash command inside a formula does not end it early.
 func TestRanges(t *testing.T) {
 	cases := []struct {
 		name string
@@ -28,7 +29,7 @@ func TestRanges(t *testing.T) {
 	}
 }
 
-// TestContains 断言只有完整落在公式内的区间才算在公式里。
+// TestContains asserts that only ranges lying fully inside a formula count as inside it.
 func TestContains(t *testing.T) {
 	ranges := [][]int{{2, 10}}
 	cases := []struct {

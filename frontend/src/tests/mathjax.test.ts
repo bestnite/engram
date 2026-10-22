@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 /**
- * SPA MathJax 加载器的单元测试。
+ * Unit tests for the SPA MathJax loader.
  *
- * 测试环境是 node（无 DOM），因此这里手搓一个最小 document/window 替身：它记录被注入的
- * <script>、在 appendChild 时捕获加载前的 window.MathJax 配置、并模拟脚本执行后把全局
- * 替换成 MathJax API 对象。模块状态用 vi.resetModules() 每例重置。
+ * The test environment is node (no DOM), so a minimal document/window stand-in is built by
+ * hand here: it records the injected <script>, captures the pre-load window.MathJax config
+ * at appendChild time, and simulates the script replacing the global with the MathJax API
+ * object. Module state is reset per case with vi.resetModules().
  */
 
 interface FakeScript {
@@ -21,7 +22,7 @@ function installDocument(metaContent: string | null, fakeApi: Record<string, unk
   const head = {
     appendChild(el: FakeScript) {
       scripts.push(el);
-      // 记录 MathJax 脚本读取配置的时刻，再模拟脚本把全局换成 API 对象。
+      // Record the moment the MathJax script reads its config, then simulate the script swapping the global for the API object.
       configAtLoad = (globalThis as { MathJax?: unknown }).MathJax;
       (globalThis as { MathJax?: unknown }).MathJax = fakeApi;
       el.onload?.();
@@ -78,7 +79,7 @@ describe('SPA MathJax loader', () => {
     expect(scripts).toHaveLength(1);
     expect(scripts[0]!.src).toBe(url);
 
-    // 加载前必须已写入配置：关闭整页自动排版，并保留 \(…\) / \[…\]（含 $$）分隔符。
+    // The config must already be written before loading: disable whole-page typesetting and keep \(…\) / \[…\] (including $$) delimiters.
     const cfg = configAtLoad() as {
       startup: { typeset: boolean };
       tex: { inlineMath: string[][]; displayMath: string[][] };
@@ -87,7 +88,7 @@ describe('SPA MathJax loader', () => {
     expect(cfg.tex.inlineMath).toEqual([['\\(', '\\)']]);
     expect(cfg.tex.displayMath).toEqual([['$$', '$$'], ['\\[', '\\]']]);
 
-    // 幂等：再次调用不注入第二个脚本。
+    // Idempotent: a second call does not inject a second script.
     await mj.ensureMathJax();
     expect(scripts).toHaveLength(1);
   });
@@ -129,9 +130,10 @@ describe('SPA MathJax loader', () => {
 });
 
 /**
- * Tailwind 的 preflight 把 svg 设成 display: block，MathJax 的 SVG 输出因此让每个行内公式
- * 独占一行。app.css 必须把 mjx-container 里的 svg 还原成行内元素；这条规则被删掉，
- * 复习页、编辑预览、分享页的行内公式就会重新各占一行。
+ * Tailwind's preflight sets svg to display: block, so every inline formula in MathJax's SVG
+ * output takes a line of its own. app.css must restore svgs inside mjx-container to an
+ * inline element; delete that rule and inline formulas on the review page, the editor
+ * preview and the share page go back to one per line.
  */
 describe('MathJax SVG layout', () => {
   it('keeps the MathJax svg inline despite the Tailwind preflight', async () => {

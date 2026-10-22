@@ -6,8 +6,9 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 多选题的选项整行可点：点选项文字切换选中，再点取消；直接点复选框也只切换一次，
- * 不会因为外层 label 转发点击而切换两次。
+ * Multiple-choice options are clickable across the whole row: clicking the option text
+ * toggles the selection and clicking again clears it; clicking the checkbox directly
+ * toggles only once, and does not toggle twice because the outer label forwards the click.
  */
 describe('ReviewView multi choice rows', () => {
   let instance: ReturnType<typeof mount> | null = null;

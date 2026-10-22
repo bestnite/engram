@@ -41,7 +41,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
       props: { initialLoading: false, initialData: payload },
     });
     expect(html).toContain('data-testid="preset-7-name"');
-    // 默认预设的库内名是 "Default"（机器标识），界面上必须是语言包文案。
+    // The default preset's library name is "Default" (a machine identifier); the UI must show the language-pack string.
     expect(html).toMatch(/>\s*默认\s*<\/h2>/);
     expect(html).not.toMatch(/>\s*Default\s*<\/h2>/);
     expect(html).toContain('data-testid="preset-7-retention"');
@@ -49,17 +49,17 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     expect(html).toContain('data-testid="preset-7-optimize"');
     expect(html).toContain('data-testid="preset-7-revert"');
     expect(html).toContain('data-testid="preset-7-edit"');
-    // 未优化显示默认权重，且不显示权重明细。
+    // Unoptimized shows the default weights and no weight breakdown.
     expect(html).toContain('默认权重');
     expect(html).not.toContain('data-testid="preset-7-weights-raw"');
-    // 门槛：可用 0 条、门槛 500 条，并给出「还差 500 条」。
+    // Threshold: 0 cards available against a 500-card threshold, plus "500 more to go".
     expect(html).toContain('可用于优化的复习记录：0 条');
     expect(html).toContain('data-testid="preset-7-shortfall"');
     expect(html).toContain('还差 500 条');
   });
 
   it('labels the default preset from the catalog and offers no delete button for it', () => {
-    // 默认预设不可删除：判据是服务端的 is_default，不是前端比较库内名。
+    // The default preset is not deletable: the criterion is the server's is_default, not a frontend comparison against the library name.
     const { html } = render(PresetsView, {
       props: { initialLoading: false, initialData: payload },
     });
@@ -95,7 +95,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     expect(html).toContain('data-testid="preset-7-weights-raw"');
     expect(html).toContain('[0.5,1.5]');
     expect(html).toContain('600 条');
-    // 门槛达标时不再渲染「还差」段落。
+    // Once the threshold is met the "still missing" paragraph is no longer rendered.
     expect(html).not.toContain('data-testid="preset-7-shortfall"');
   });
 
@@ -161,7 +161,7 @@ describe('PresetsView renders presets, weights and the optimise gate truthfully'
     const { html } = render(PresetsView, { props: { initialLoading: false, initialData: small } });
     expect(html).toContain('data-testid="preset-7-verdict"');
     expect(html).toContain('样本不足，无法判定');
-    // 样本不足不渲染 before/after 两个数。
+    // With too few samples the before/after numbers are not rendered.
     expect(html).not.toContain('data-testid="preset-7-fit-before"');
   });
 

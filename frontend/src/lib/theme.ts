@@ -1,38 +1,41 @@
 /**
- * 深浅主题的切换（导航栏按钮用）。
+ * Light/dark theme switching (used by the navbar button).
  *
- * **同一件事在全站有三个执行点，改一处必须同时看另两处**：
- *   1. `internal/web/theme.go` 的 `themeBootstrapJS`——服务端在装配期注入 SPA 入口 <head> 的
- *      内联脚本，负责**首帧之前**把 `.dark`、`color-scheme`、画布底色与 theme-color 设好
- *      （外链脚本是独立请求，必然输给首帧，所以这段必须内联、且被 CSP 的 script hash 白名单覆盖）。
- *   2. `internal/web/static/js/pwa.js` 的 `isDarkTheme`/`applyTheme`——加载期应用一次，
- *      并在用户未做选择时跟随系统偏好变化。
- *   3. 本文件——用户点击按钮后的即时切换与持久化。
+ * **The same thing has three execution points across the site, so changing one means looking at the other two**:
+ *   1. `themeBootstrapJS` in `internal/web/theme.go` — the inline script the server injects into the SPA
+ *      entry's <head> at assembly time; it is responsible for setting `.dark`, `color-scheme`, the canvas
+ *      background color and theme-color **before the first frame**
+ *      (an external script is a separate request and inevitably loses to the first frame, so this chunk must be
+ *      inline and covered by the CSP script hash allowlist).
+ *   2. `isDarkTheme`/`applyTheme` in `internal/web/static/js/pwa.js` — applied once at load time,
+ *      and it follows system preference changes while the user has made no choice.
+ *   3. This file — the immediate switch and persistence after the user clicks the button.
  *
- * 三者的**判据与取值必须逐字一致**（存储键、`dark` 类名、`#09090b`/`#f8fafc` 两个画布色），
- * 否则会出现「首帧一个色、点一下变另一个色」。取值由 `frontend/src/tests/theme.test.ts` 钉住。
+ * The **criteria and values of all three must be identical word for word** (storage key, `dark` class name,
+ * the two canvas colors `#09090b`/`#f8fafc`), otherwise you get "one color on the first frame, another one after
+ * a click". The values are pinned by `frontend/src/tests/theme.test.ts`.
  */
 
-/** 存储键；与 theme.go / pwa.js 里的字面量一致。 */
+/** Storage key; identical to the literals in theme.go / pwa.js. */
 export const THEME_STORAGE_KEY = 'engram-theme';
 
-/** 深色画布底色（与 theme.go、pwa.js 一致）。 */
+/** Dark canvas background color (identical to theme.go and pwa.js). */
 export const DARK_CANVAS = '#09090b';
 
-/** 浅色画布底色（与 theme.go 一致；pwa.js 不设画布色，只设 .dark 类与 theme-color）。 */
+/** Light canvas background color (identical to theme.go; pwa.js sets no canvas color, only the .dark class and theme-color). */
 export const LIGHT_CANVAS = '#f8fafc';
 
-/** 深色与浅色下 `<meta name="theme-color">` 的值（影响移动端浏览器地址栏配色）。 */
+/** Value of `<meta name="theme-color">` in dark and light mode (affects the mobile browser address bar color). */
 export const DARK_THEME_COLOR = '#09090b';
 export const LIGHT_THEME_COLOR = '#ffffff';
 
 export type ThemeChoice = 'light' | 'dark';
 
 /**
- * 取可用的 localStorage；不可用（隐私模式、非浏览器环境）时返回 null。
+ * Get a usable localStorage; returns null when unavailable (private mode, non-browser environment).
  *
- * 显式经 `window` 取而不是裸用全局标识符：在部分测试环境里裸 `localStorage` 是 undefined，
- * 而 `window.localStorage` 才是宿主提供的那个对象。
+ * It is fetched explicitly through `window` instead of using the bare global identifier: in some test
+ * environments the bare `localStorage` is undefined, while `window.localStorage` is the object the host provides.
  */
 function store(): Storage | null {
   try {
@@ -40,12 +43,12 @@ function store(): Storage | null {
       return window.localStorage;
     }
   } catch {
-    // 某些浏览器在隐私模式下访问该属性本身就抛错。
+    // Some browsers throw on merely accessing this property in private mode.
   }
   return null;
 }
 
-/** 读取用户显式选择；未选择或存储不可用时返回 null。 */
+/** Read the user's explicit choice; returns null when nothing is chosen or storage is unavailable. */
 export function storedTheme(): ThemeChoice | null {
   try {
     const raw = store()?.getItem(THEME_STORAGE_KEY);
@@ -55,14 +58,14 @@ export function storedTheme(): ThemeChoice | null {
   }
 }
 
-/** 系统是否偏好深色。 */
+/** Whether the system prefers a dark theme. */
 export function prefersDark(): boolean {
   return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
 /**
- * 当前是否应当为深色。判据与 theme.go 的内联引导**逐字同形**：
- * 显式选择优先，未选择才看系统偏好。
+ * Whether it should currently be dark. The criteria are **word-for-word the same shape** as theme.go's inline
+ * bootstrap: an explicit choice wins, and only with none does it look at system preference.
  */
 export function isDark(): boolean {
   const stored = storedTheme();
@@ -72,7 +75,7 @@ export function isDark(): boolean {
   return prefersDark();
 }
 
-/** 应用主题：类名、color-scheme、画布底色与 theme-color 一处不漏（漏掉 color-scheme 会让原生控件配色打架）。 */
+/** Apply the theme: class name, color-scheme, canvas background color and theme-color, none omitted (omitting color-scheme makes native controls fight over their colors). */
 export function applyTheme(dark: boolean): void {
   if (typeof document === 'undefined') {
     return;
@@ -88,15 +91,15 @@ export function applyTheme(dark: boolean): void {
 }
 
 /**
- * 切换主题并持久化，返回切换后的状态（true＝深色）。
- * 显式选择一旦写下就会覆盖系统偏好——这是「按钮点了要算数」的前提。
+ * Toggle the theme and persist it, returning the state after the toggle (true = dark).
+ * Once an explicit choice is written it overrides system preference — that is the premise of "pressing the button has to count".
  */
 export function toggleTheme(): boolean {
   const next = !document.documentElement.classList.contains('dark');
   try {
     store()?.setItem(THEME_STORAGE_KEY, next ? 'dark' : 'light');
   } catch {
-    // 存储不可用时仍然切换本次会话的外观，只是不再记住。
+    // When storage is unavailable the appearance still toggles for this session, it just is not remembered.
   }
   applyTheme(next);
   return next;

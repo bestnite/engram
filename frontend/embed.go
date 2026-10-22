@@ -1,4 +1,4 @@
-// Package frontend 承载前端 Svelte SPA 生产构建产物的嵌入。
+// Package frontend carries the embedding of the frontend Svelte SPA production build artifacts.
 package frontend
 
 import (
@@ -7,18 +7,18 @@ import (
 	"io/fs"
 )
 
-// DistFS 嵌入 Vite 生产构建产物（index.html 及 assets/）。
-// 构建前必须先在 frontend/ 目录下执行 npm run build；若产物未构建，Go 编译将直接失败。
+// DistFS embeds the Vite production build artifacts (index.html and assets/).
+// `npm run build` must be run in the frontend/ directory beforehand; if the artifacts are not built, the Go build fails outright.
 //
 //go:embed all:dist
 var DistFS embed.FS
 
-// FS 返回以 dist 为根的文件系统，并校验必要产物（index.html）存在且非空。
+// FS returns a filesystem rooted at dist and verifies that the required artifact (index.html) exists and is non-empty.
 func FS() (fs.FS, error) {
 	return SubFS(DistFS)
 }
 
-// SubFS 从给定的 embed.FS 中提取 dist 子目录并校验 index.html（便于单元测试负例）。
+// SubFS extracts the dist subdirectory from the given embed.FS and verifies index.html (handy for negative unit-test cases).
 func SubFS(efs embed.FS) (fs.FS, error) {
 	sub, err := fs.Sub(efs, "dist")
 	if err != nil {

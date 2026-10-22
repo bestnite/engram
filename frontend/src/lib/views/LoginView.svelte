@@ -12,9 +12,9 @@
   let password = $state('');
   let loading = $state(false);
 
-  // 已登录用户访问登录页时直接送去控制台：这是体验问题，不是安全兜底——
-  // CSRF 层已按「本次请求有没有有效会话」分档，已登录时用会话绑定 token 校验，不再 403。
-  // 用 $effect 而不是 onMount：整页加载时 initAuth() 是异步的，onMount 时认证状态还没就绪。
+  // A logged-in user visiting the login page is sent straight to the dashboard: this is a UX matter, not a security fallback —
+  // the CSRF layer already grades by "does this request carry a valid session", and validates with a session-bound token when logged in, so it no longer 403s.
+  // Uses $effect rather than onMount: on a full page load initAuth() is async, so the auth state is not ready yet at onMount time.
   $effect(() => {
     if ($authStore.initialized && $authStore.authenticated) {
       navigate('/');
@@ -31,8 +31,8 @@
     try {
       const res = await login(username.trim(), password);
       if (res.requires_totp) {
-        // 第一因素通过、需要第二因素：进入 SPA 第二步（协议 GET/POST /api/v1/auth/totp）。
-        // 第二步凭据是服务端在本次响应里下发的 HttpOnly cookie，因此必须立刻导航过去。
+        // First factor passed, second factor required: enter the SPA's second step (protocol GET/POST /api/v1/auth/totp).
+        // The second-step credential is an HttpOnly cookie the server issues in this response, so navigation must happen right away.
         navigate('/login/totp');
       } else if (res.authenticated) {
         navigate('/');
@@ -99,7 +99,7 @@
       </div>
     </form>
 
-    <!-- OIDC 可选登录：组件挂载时探测服务端配置，仅在 enabled 时渲染入口 -->
+    <!-- Optional OIDC login: the component probes the server config on mount and renders the entry only when enabled -->
     <OIDCLoginEntry />
   </div>
 </Page>

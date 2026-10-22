@@ -11,36 +11,36 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件实现：在 Go 里用 go-fsrs 重放复习日志，算出「优化前/后」的拟合指标。
+// This file implements: replaying review logs with go-fsrs in Go to compute the "before/after optimisation" fit metrics.
 //
-// 动机：要求作业行携带优化前后的拟合对比，预设页据此渲染「改善/未改善」，但此前
-// 没有任何代码计算它，FitBefore/FitAfter 恒为零，于是 Improved() 永远为 false，页面在
-// 权重真的变好时也告诉用户「未改善」。这里把两个指标算出来：
+// Motivation: the job row is required to carry a before/after fit comparison and the presets page renders "improved/not improved" from it, but previously
+// no code computed it, so FitBefore/FitAfter were always zero, Improved() was always false, and the page told users "not improved"
+// even when the weights genuinely got better. So both metrics are computed here:
 //
-//   - 用待评估的权重集重放每张卡的复习序列（fsrs.NewFSRS）；
-//   - 在每条复习「之前」用 (*FSRS).Retrievability 取预测记住概率；
-//   - 与实际结果比对（评分 > 1 即算记住）；
-//   - LogLoss = 平均负对数似然，RMSE = 均方根误差，两者覆盖同一批 item；
-//   - 每张卡的第一条复习被跳过（它没有先前的记忆状态，预测概率为 0，不可评估）；
-//   - 同一批 item 分别在两套权重下评估：preset 当前的旧权重与适配器产出的新权重。
+//   - replay each card's review sequence with the weight set under evaluation (fsrs.NewFSRS);
+//   - take the predicted recall probability with (*FSRS).Retrievability "before" each review;
+//   - compare against the actual outcome (rating > 1 counts as recalled);
+//   - LogLoss = mean negative log-likelihood, RMSE = root mean square error, both covering the same set of items;
+//   - the first review of each card is skipped (it has no prior memory state, its predicted probability is 0 and is not evaluable);
+//   - the same batch of items is evaluated under two weight sets: the preset's current old weights and the new weights produced by the adapter.
 
-// FitMetrics 是一次「用某套权重在固定复习集上回放」得到的拟合指标。
-// Items 是本次实际评估的 item 数（已排除首条复习与不可预测点），用于证明两套权重覆盖同一批 item。
+// FitMetrics are the fit metrics from one "replay a fixed review set under a given weight set" run.
+// Items is the number of items actually evaluated (first reviews and unpredictable points excluded), proving both weight sets cover the same items.
 type FitMetrics struct {
-	// LogLoss 是平均负对数似然；越小越贴合实际结果。
+	// LogLoss is the mean negative log-likelihood; smaller means a better fit to the actual outcomes.
 	LogLoss float64
-	// RMSE 是预测概率与实际结果（0/1）的均方根误差；越小越贴合。
+	// RMSE is the root mean square error between predicted probability and the actual outcome (0/1); smaller means a better fit.
 	RMSE float64
-	// Items 是参与计算的 item 数（两张卡、两次权重的指标口径必须一致）。
+	// Items is the number of items in the computation (the metric semantics must match across the two weight sets).
 	Items int
 }
 
-// CompareFit 用 preset 的当前权重（旧）与 newWeights（新）在同一批可预测 item 上各评估一次，
-// 返回 (before, after)。两套权重共用同一份 preset 参数装配（目标保留率、学习步骤、最大间隔、
-// fuzz），仅权重不同，因此回放口径与应用真实排程一致。
+// CompareFit evaluates the preset's current weights (old) and newWeights (new) once each on the same batch of predictable items,
+// returning (before, after). Both weight sets share the same preset parameter assembly (target retention, learning steps, maximum interval,
+// fuzz); only the weights differ, so the replay semantics match the real scheduling in the app.
 //
-// 同一批 item 的保证：先按卡片分组构建一次 item 列表，再分别回放两套权重；只有当某个 item
-// 在两套权重下都能预测（Retrievability 不报错且概率 > 0）时才计入，否则一并跳过。
+// Guaranteeing the same batch of items: build the item list once grouped by card, then replay each weight set; an item is only counted
+// when it is predictable under both weight sets (Retrievability does not error and the probability > 0), otherwise it is skipped for both.
 func CompareFit(preset *store.Preset, newWeights []float64, logs []store.OptimizerReviewLog) (before, after FitMetrics, err error) {
 	if len(newWeights) != len(fsrs.DefaultWeights()) {
 		return FitMetrics{}, FitMetrics{}, fmt.Errorf("schedule: new weights have %d values, want %d", len(newWeights), len(fsrs.DefaultWeights()))
@@ -62,21 +62,21 @@ func CompareFit(preset *store.Preset, newWeights []float64, logs []store.Optimiz
 	return before, after, nil
 }
 
-// fitKey 唯一定位一个「可预测 item」：某张卡（分组下标）复习序列里的第 seq 次复习。
+// fitKey uniquely locates one "predictable item": the seq-th review in the review sequence of some card (group index).
 type fitKey struct {
 	card int
 	seq  int
 }
 
-// fitItem 是一个可评估的预测点：某张卡在 seq 次（seq>=1）复习「之前」的预测，及其真实结果。
+// fitItem is one evaluable prediction point: the prediction for some card "before" its seq-th review (seq>=1), and its true outcome.
 type fitItem struct {
 	key      fitKey
-	observed float64 // 1 表示记住（评分 > 1），0 表示忘记（评分 Again）
+	observed float64 // 1 means recalled (rating > 1), 0 means forgotten (rated Again)
 }
 
-// groupReviews 把复习日志按卡片分组，组内按复习时刻升序。
-// 输入日志已按 (reviewed_at, id) 升序（ReviewStore.ExportOptimizerLog 的契约），
-// 这里仍显式稳定排序，避免调用方换数据源后回放口径悄悄变化。
+// groupReviews groups review logs by card, each group in ascending review time.
+// The input logs are already ascending by (reviewed_at, id) (the ReviewStore.ExportOptimizerLog contract),
+// but an explicit stable sort is still applied here so the replay semantics cannot quietly change if the caller switches data sources.
 func groupReviews(logs []store.OptimizerReviewLog) [][]store.OptimizerReviewLog {
 	index := make(map[uint64]int)
 	var groups [][]store.OptimizerReviewLog
@@ -95,8 +95,8 @@ func groupReviews(logs []store.OptimizerReviewLog) [][]store.OptimizerReviewLog 
 	return groups
 }
 
-// buildFitItems 构建规范 item 列表：跳过每张卡的第一条复习（无先前记忆状态），
-// 跳过评分非法的行（无法判定结果，也无法推进状态）。
+// buildFitItems builds the canonical item list: skipping the first review of each card (no prior memory state)
+// and skipping rows with an invalid rating (the outcome cannot be judged and the state cannot be advanced).
 func buildFitItems(groups [][]store.OptimizerReviewLog) []fitItem {
 	var items []fitItem
 	for gi, reviews := range groups {
@@ -116,9 +116,9 @@ func buildFitItems(groups [][]store.OptimizerReviewLog) []fitItem {
 	return items
 }
 
-// replayPredictions 用给定 FSRS 实例重放所有卡片，返回每个可预测 item 的预测记住概率。
-// 预测取在该条复习「之前」的状态上计算；某条复习无法预测（New 状态、stability<=0、
-// 评分非法）时该 item 缺席，并且该卡后续也无法继续可靠回放，故就此打住。
+// replayPredictions replays all cards with the given FSRS instance and returns the predicted recall probability for each predictable item.
+// The prediction is computed on the state "before" that review; when a review is unpredictable (New state, stability<=0,
+// invalid rating) that item is absent, and the rest of that card cannot be replayed reliably either, so it stops there.
 func replayPredictions(f *fsrs.FSRS, groups [][]store.OptimizerReviewLog) map[fitKey]float64 {
 	preds := make(map[fitKey]float64)
 	for gi, reviews := range groups {
@@ -148,8 +148,8 @@ func replayPredictions(f *fsrs.FSRS, groups [][]store.OptimizerReviewLog) map[fi
 	return preds
 }
 
-// scoreItems 在同一批 item 上分别汇总两套权重的指标。一个 item 只有在两套权重下都有预测时
-// 才计入，从而保证 before/after 覆盖完全相同的 item 集合、Items 数一致。
+// scoreItems aggregates the metrics of both weight sets over the same batch of items. An item counts only when it has a prediction
+// under both weight sets, guaranteeing before/after cover exactly the same item set with a consistent Items count.
 func scoreItems(items []fitItem, beforePreds, afterPreds map[fitKey]float64) (FitMetrics, FitMetrics) {
 	var b, a fitAccumulator
 	for _, it := range items {
@@ -164,14 +164,14 @@ func scoreItems(items []fitItem, beforePreds, afterPreds map[fitKey]float64) (Fi
 	return b.metrics(), a.metrics()
 }
 
-// fitAccumulator 累积单个权重集的负对数似然与平方误差，最后归一化成两个指标。
+// fitAccumulator accumulates the negative log-likelihood and squared error of a single weight set, normalising them into the two metrics at the end.
 type fitAccumulator struct {
 	items int
 	loss  float64
 	sqErr float64
 }
 
-// add 记入一个 item 的预测概率与真实结果（0/1）。
+// add records one item's predicted probability and true outcome (0/1).
 func (a *fitAccumulator) add(p, y float64) {
 	p = clampProbability(p)
 	a.items++
@@ -184,7 +184,7 @@ func (a *fitAccumulator) add(p, y float64) {
 	a.sqErr += d * d
 }
 
-// metrics 返回均值化的指标；没有 item 时返回零值（等价于「无可用指标」）。
+// metrics returns the averaged metrics; the zero value when there are no items (equivalent to "no metrics available").
 func (a *fitAccumulator) metrics() FitMetrics {
 	if a.items == 0 {
 		return FitMetrics{}
@@ -197,7 +197,7 @@ func (a *fitAccumulator) metrics() FitMetrics {
 	}
 }
 
-// clampProbability 把预测概率夹到开区间 (0,1)，避免 ln(0) 产生 ±Inf。
+// clampProbability clamps the predicted probability into the open interval (0,1), so ln(0) cannot produce ±Inf.
 func clampProbability(p float64) float64 {
 	const eps = 1e-15
 	if p < eps {
@@ -209,7 +209,7 @@ func clampProbability(p float64) float64 {
 	return p
 }
 
-// observedOutcome 把评分映射成结果：评分 > 1（Hard/Good/Easy）算记住，Again 算忘记。
+// observedOutcome maps a rating to an outcome: rating > 1 (Hard/Good/Easy) counts as recalled, Again counts as forgotten.
 func observedOutcome(rating int) float64 {
 	if rating > 1 {
 		return 1
@@ -217,7 +217,7 @@ func observedOutcome(rating int) float64 {
 	return 0
 }
 
-// ratingFromInt 校验复习日志里的整数评分；非法值无法推进回放。
+// ratingFromInt validates the integer rating in a review log; an invalid value cannot advance the replay.
 func ratingFromInt(rating int) (fsrs.Rating, bool) {
 	if rating < int(fsrs.Again) || rating > int(fsrs.Easy) {
 		return 0, false

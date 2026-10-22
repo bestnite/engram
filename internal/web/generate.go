@@ -1,5 +1,5 @@
-// 本文件承载 go:generate 指令（AGENTS.md §4 的构建步骤）。
+// This file carries the go:generate directives (the build step in AGENTS.md §4).
 //
-// SPA 迁移完成后，服务端不再渲染页面：SSR 模板（templ）与它们使用的 Tailwind 样式表都已删除，
-// 因此这里不再有生成步骤——前端产物由 `npm --prefix frontend run build` 产出并 go:embed 进二进制。
+// With the SPA migration done the server no longer renders pages: the SSR templates (templ) and the Tailwind stylesheets they used have been deleted,
+// so there is no generation step here any more — the frontend artifacts are produced by `npm --prefix frontend run build` and go:embed-ed into the binary.
 package web

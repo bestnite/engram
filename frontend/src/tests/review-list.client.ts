@@ -6,8 +6,9 @@ import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
 /**
- * 列表卡的逐项作答：输入框个数来自 render 响应，标签写「第 N 项」；判分反馈带 breakdown 时
- * 逐项标出想起与漏掉的条目，代替整段答案。
+ * Per-item answering for list cards: the number of inputs comes from the render response
+ * and the labels read "item N"; when the grading feedback carries a breakdown, each
+ * remembered and each missed item is marked individually instead of the whole answer block.
  */
 describe('ReviewView list items', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -107,7 +108,7 @@ describe('ReviewView list items', () => {
       ['blue', 'true'],
     ]);
     expect(target.querySelector('[data-testid="review-graded-answer"]')).toBeNull();
-    // 判分结果出现后题干仍留在上方。
+    // The stem stays above once the grading result appears.
     expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('光的三原色是什么？');
   });
 });

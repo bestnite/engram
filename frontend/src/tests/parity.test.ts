@@ -5,7 +5,7 @@ import { en } from '../lib/i18n/locales/en';
 
 describe('Locale catalog parity validation', () => {
   it('detects mismatched keys and fails parity check when keys are missing or extra', () => {
-    // 构造故意不一致的测试字典
+    // Build a deliberately mismatched test dictionary
     const baseCatalog = {
       'app.name': 'Engram',
       'nav.today': '今日',
@@ -15,7 +15,7 @@ describe('Locale catalog parity validation', () => {
     const mismatchedCatalog = {
       'app.name': 'Engram',
       'nav.today': 'Today',
-      // 缺少 'nav.decks'，多出 'nav.extra'
+      // Missing 'nav.decks', extra 'nav.extra'
       'nav.extra': 'Extra',
     };
 
@@ -24,7 +24,7 @@ describe('Locale catalog parity validation', () => {
     expect(result.missingInB).toEqual(['nav.decks']);
     expect(result.extraInB).toEqual(['nav.extra']);
 
-    // 验证断言函数在 key 不匹配时必然抛出异常
+    // Verify the assertion function always throws when keys do not match
     expect(() => {
       assertCatalogParity(baseCatalog, 'base', mismatchedCatalog, 'mismatched');
     }).toThrowError(/Locale catalog parity mismatch/);
@@ -42,13 +42,13 @@ describe('Locale catalog parity validation', () => {
   });
 
   it('verifies production zh-CN and en catalogs have 100% identical keys', () => {
-    // 强制验证生产语言包骨架 zh-CN 与 en 的 key 完全一致
+    // Force-verify that the production language pack skeletons zh-CN and en have exactly the same keys
     const result = checkCatalogParity(zhCN, en);
     expect(result.missingInB).toEqual([]);
     expect(result.extraInB).toEqual([]);
     expect(result.identical).toBe(true);
 
-    // assertCatalogParity 必须无异常通过
+    // assertCatalogParity must pass without throwing
     expect(() => assertCatalogParity(zhCN, 'zh-CN', en, 'en')).not.toThrow();
   });
 });

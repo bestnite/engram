@@ -13,10 +13,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖：编辑器里的媒体面——上传图片并插入到卡片字段。
-// 验收主线是「上传的图片在预览里渲染，且刷新页面后仍在」；同时给出权限与校验的反面用例。
+// This file covers: the media side of the editor — uploading an image and inserting it into a card field.
+// The acceptance line is "the uploaded image renders in the preview, and is still there after a page reload"; permission and validation negative cases come alongside.
 
-// uploadMediaTo 向指定上传端点提交 multipart，用于区分 /media 与 /decks/:id/media 两个入口。
+// uploadMediaTo submits a multipart to the given upload endpoint, to distinguish the /media and /decks/:id/media entries.
 func uploadMediaTo(t *testing.T, srv *Server, cookie []*http.Cookie, target, csrf, filename, declared string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -43,14 +43,14 @@ func uploadMediaTo(t *testing.T, srv *Server, cookie []*http.Cookie, target, csr
 	return rec
 }
 
-// mediaUploadResp 是上传成功返回的元数据。
+// mediaUploadResp is the metadata returned by a successful upload.
 type mediaUploadResp struct {
 	Sha256 string `json:"sha256"`
 	Mime   string `json:"mime"`
 	URL    string `json:"url"`
 }
 
-// mediaShaOK 校验上传/URL 里的 sha256 形状：恰好 64 位小写十六进制。
+// mediaShaOK validates the sha256 shape in an upload/URL: exactly 64 lowercase hex characters.
 func mediaShaOK(sha string) bool {
 	if len(sha) != 64 {
 		return false
@@ -63,16 +63,16 @@ func mediaShaOK(sha string) bool {
 	return true
 }
 
-// TestEditorMediaUploadInsertsAndSurvivesReload 是主验收：从编辑器使用的卡组上传
-// 入口上传图片 → 以 Markdown 引用插入字段 → 预览渲染出 <img> → 保存 → 刷新后字段值里仍
-// 有该引用、预览里仍有 <img>（且不是 base64 内联）。
+// TestEditorMediaUploadInsertsAndSurvivesReload is the main acceptance: upload an image through the in-deck upload
+// entry the editor uses → insert it into a field as a Markdown reference → the preview renders an <img> → save → after a reload the field value still
+// holds the reference and the preview still has the <img> (and it is not base64-inlined).
 func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Media deck")
 	note := seedBasic(t, db, deck.ID, "front", "back")
 	deckPath := "/decks/" + deck.PublicID
 
-	// 1) 从卡组内上传入口上传图片。
+	// 1) Upload the image through the in-deck upload entry.
 	up := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrf, "pic.png", "image/png", pngBody())
 	if up.Code != http.StatusCreated {
 		t.Fatalf("upload status = %d, want 201 (body %s)", up.Code, up.Body.String())
@@ -85,7 +85,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Fatalf("upload returned url %q sha %q, want /media/<sha256>", saved.URL, saved.Sha256)
 	}
 
-	// 2) 代理能取回该图片（走已有的 /media/<sha256>，而非另写一套存储）。
+	// 2) The proxy can fetch the image back (via the existing /media/<sha256>, not a separate storage stack).
 	img := getWithCookies(t, srv, saved.URL, cookies)
 	if img.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d, want 200", saved.URL, img.Code)
@@ -94,7 +94,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Fatalf("GET %s Content-Type = %q, want image/png", saved.URL, ct)
 	}
 
-	// 3) 把 Markdown 图片引用插入 front 字段，SPA 预览端点应渲染出 <img>。
+	// 3) Insert a Markdown image reference into the front field; the SPA preview endpoint should render an <img>.
 	ref := "![](" + saved.URL + ")"
 	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
 		"kind":   "basic",
@@ -115,14 +115,14 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Fatalf("preview did not render the uploaded image: %s", snippet(prev.Body.String()))
 	}
 
-	// 4) 保存该引用（SPA 的卡片更新走 PATCH /api/v1/notes/:id）。
+	// 4) Save the reference (SPA card updates go through PATCH /api/v1/notes/:id).
 	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+note.PublicID,
 		`{"kind":"basic","fields":{"front":"see `+ref+`","back":"back"}}`, cookies, csrf)
 	if save.Code != http.StatusOK {
 		t.Fatalf("save status = %d, want 200 (body %s)", save.Code, save.Body.String())
 	}
 
-	// 5) 再次预览：字段值里仍有引用，预览里仍有 <img>（且不是 base64 内联）。
+	// 5) Preview again: the field value still holds the reference and the preview still has the <img> (and it is not base64-inlined).
 	reload := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
@@ -152,7 +152,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Errorf("media was inlined as base64 instead of referenced")
 	}
 
-	// 存储层确认字段里存的是引用而非内联数据。
+	// The storage layer confirms the field holds a reference, not inline data.
 	stored, err := store.NewNoteStore(db).ByID(context.Background(), note.ID)
 	if err != nil {
 		t.Fatalf("load note: %v", err)
@@ -166,15 +166,15 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 }
 
-// TestEditorMediaUploadRejectsOversizedAndWrongMagic 覆盖上传校验的反面用例：
-// 超过管理员配置的上限 -> 413 + media_too_large；声明的类型与魔数不符 -> 422 + media_magic_mismatch。
+// TestEditorMediaUploadRejectsOversizedAndWrongMagic covers the negative cases of upload validation:
+// above the admin-configured limit -> 413 + media_too_large; declared type not matching the magic number -> 422 + media_magic_mismatch.
 func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 	t.Setenv("MEDIA_MAX_BYTES", "1024")
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Limits deck")
 	deckPath := "/decks/" + deck.PublicID
 
-	// 超限：合法 PNG 头 + 填充，超过 1 KiB。
+	// Over the limit: a valid PNG header + padding, more than 1 KiB.
 	big := append(pngBody(), bytes.Repeat([]byte("x"), 2048)...)
 	over := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrf, "big.png", "image/png", big)
 	if over.Code != http.StatusRequestEntityTooLarge {
@@ -184,7 +184,7 @@ func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 		t.Errorf("oversized upload did not return the stable code: %s", over.Body.String())
 	}
 
-	// 错魔数：声明 png 但内容是文本。
+	// Wrong magic: declares png but the content is text.
 	bad := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrfOrEmpty(csrf), "fake.png", "image/png", []byte("this is not a png"))
 	if bad.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("wrong-magic upload status = %d, want 422 (body %s)", bad.Code, bad.Body.String())
@@ -194,29 +194,29 @@ func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 	}
 }
 
-// TestEditorMediaUploadRequiresEditorRoleAndCSRF 覆盖权限与 CSRF 的反面用例：
-// 读者不能往别人的卡组塞媒体；缺少 CSRF 的上传被拒。
+// TestEditorMediaUploadRequiresEditorRoleAndCSRF covers the negative cases for permission and CSRF:
+// a reader cannot push media into someone else's deck; an upload without CSRF is refused.
 func TestEditorMediaUploadRequiresEditorRoleAndCSRF(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Role deck")
 	deckPath := "/decks/" + deck.PublicID
 
-	// 授予第二个用户 reader 角色。
+	// Grant the second user the reader role.
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "media-reader")
 	grantRole(t, srv, deck.ID, user2ID, store.RoleReader, ownerCookies, ownerCSRF)
 
-	// 读者上传被拒 403。
+	// A reader's upload is refused with 403.
 	reader := uploadMediaTo(t, srv, u2Cookies, deckPath+"/media", u2CSRF, "pic.png", "image/png", pngBody())
 	if reader.Code != http.StatusForbidden {
 		t.Fatalf("reader upload status = %d, want 403 (body %s)", reader.Code, reader.Body.String())
 	}
 
-	// 无 CSRF 的上传被拒 403。
+	// An upload without CSRF is refused with 403.
 	noCSRF := uploadMediaTo(t, srv, ownerCookies, deckPath+"/media", "", "pic.png", "image/png", pngBody())
 	if noCSRF.Code != http.StatusForbidden {
 		t.Fatalf("upload without CSRF status = %d, want 403 (body %s)", noCSRF.Code, noCSRF.Body.String())
 	}
 }
 
-// csrfOrEmpty 让调用点读起来更直白（错误魔数用例仍带合法 CSRF，只有 CSRF 用例才留空）。
+// csrfOrEmpty makes call sites read more plainly (the wrong-magic case still carries a valid CSRF; only the CSRF cases leave it empty).
 func csrfOrEmpty(s string) string { return s }
