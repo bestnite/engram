@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -184,4 +185,37 @@ func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 		t.Fatalf("over-quota upload with a broken mailer = %d, want 413", rec.Code)
 	}
 	t.Logf("mail enqueue failed on the quota trigger, yet the upload was still rejected with 413")
+}
+
+// TestAdminMailCarriesUnsubscribeHeaders proves class-D mail leaves the outbox with the RFC 8058 headers:
+// class D is optional mail, so the receiving admin must be able to turn it off without logging in.
+func TestAdminMailCarriesUnsubscribeHeaders(t *testing.T) {
+	srv, db, _, _, _ := newNotesServer(t)
+	attachAdminMail(t, srv, db)
+	srv.baseURL = "https://example.com"
+
+	srv.NotifyMediaAlert(context.Background(), &store.User{ID: 9001, Username: "heavy-user", Email: "heavy@example.com"}, 2<<20, 4<<20)
+
+	rows := waitOutboxType(t, db, mail.TypeMediaDiskAlert)
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(rows[0].HeadersJSON), &headers); err != nil {
+		t.Fatalf("parse HeadersJSON %q: %v", rows[0].HeadersJSON, err)
+	}
+	link := strings.TrimSpace(headers["List-Unsubscribe"])
+	if link == "" {
+		t.Fatalf("class-D mail carries no List-Unsubscribe header: %v", headers)
+	}
+	if got, want := headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click"; got != want {
+		t.Errorf("List-Unsubscribe-Post = %q, want %q", got, want)
+	}
+	if !strings.HasPrefix(strings.Trim(link, "<>"), "https://example.com/unsubscribe?token=") {
+		t.Errorf("List-Unsubscribe = %q, want an absolute BASE_URL unsubscribe link", link)
+	}
+	tok, err := srv.tokens.Peek(context.Background(), store.ActionTokenUnsubscribe, tokenFromUnsubscribeHeader(t, link))
+	if err != nil {
+		t.Fatalf("peek unsubscribe token: %v", err)
+	}
+	if tok.Payload != string(mail.TypeMediaDiskAlert) {
+		t.Errorf("unsubscribe token payload = %q, want %q", tok.Payload, mail.TypeMediaDiskAlert)
+	}
 }

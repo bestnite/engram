@@ -215,5 +215,3 @@ func (s *Server) optionalUnsubscribeLink(c *gin.Context, userID uint64, typ mail
 	}
 	return s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 }
-
-// optionalUnsubscribeHeaders is a thin wrapper over the above: get the link → turn it into the RFC 8058 headers.

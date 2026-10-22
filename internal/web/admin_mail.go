@@ -59,7 +59,10 @@ func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *
 			continue
 		}
 		msg := build(s.userLocalizer(admin))
-		if notifier.Send(ctx, admin.ID, to, t, msg.Subject, msg.TextBody, msg.HTMLBody) {
+		// Class D is optional, so every notification carries the RFC 8058 one-click unsubscribe headers; the
+		// token names this one type, and the link is assembled from BASE_URL because this path has no request.
+		headers := mail.UnsubscribeHeaders(t, s.optionalUnsubscribeLinkCtx(ctx, admin.ID, t))
+		if notifier.Send(ctx, admin.ID, to, t, msg.Subject, msg.TextBody, msg.HTMLBody, headers) {
 			sent++
 		}
 	}

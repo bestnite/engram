@@ -19,7 +19,8 @@ import (
 //     sent when it is off; the catalog decision goes through ResolveEnabled, so "the preferences page
 //     can turn it off while the backend keeps sending" is impossible.
 //
-// The unsubscribe header is a separate task; no Headers are written here.
+// The unsubscribe header is not built here: this package owns no token service, so the caller (which does)
+// assembles the RFC 8058 headers and passes them in. Class D is optional, so Send must be able to carry them.
 //
 // Naming boundary: this file must not define Message, Outbox, ErrNotConfigured, Configured -- those are
 // transport-layer symbols, and a duplicate declaration would collide.
@@ -52,7 +53,7 @@ func (n *AdminNotifier) Configured() bool {
 // quota rejection must never fail because enqueuing mail reported an error. Unconfigured SMTP, an
 // unregistered type, the receiving admin having turned the class off and an enqueue failure all just
 // log in English and return false.
-func (n *AdminNotifier) Send(ctx context.Context, adminID uint64, to string, t Type, subject, textBody, htmlBody string) bool {
+func (n *AdminNotifier) Send(ctx context.Context, adminID uint64, to string, t Type, subject, textBody, htmlBody string, headers map[string]string) bool {
 	if !n.Configured() {
 		return false
 	}
@@ -70,14 +71,15 @@ func (n *AdminNotifier) Send(ctx context.Context, adminID uint64, to string, t T
 			return false
 		}
 	}
-	// Headers are left empty on this path: AdminNotifier has no token service, so class-D mail sent through it carries no one-click
-	// unsubscribe link — the preference switch above is the only way for an admin to turn the class off.
+	// headers carries the caller-assembled RFC 8058 unsubscribe headers; nil is fine and means "no headers",
+	// which is what happens when the caller has no token service or BASE_URL is unset.
 	if err := n.outbox.Enqueue(ctx, Message{
 		To:       to,
 		Type:     string(t),
 		Subject:  subject,
 		TextBody: textBody,
 		HTMLBody: htmlBody,
+		Headers:  headers,
 	}); err != nil {
 		n.logger.Error("mail: enqueue admin notification failed",
 			"admin_id", adminID, "type", string(t), "error", err)
