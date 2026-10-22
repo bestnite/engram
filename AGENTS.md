@@ -32,12 +32,11 @@ Each rule exists because breaking it is expensive to undo. Follow them literally
 | Kind of text | Language | Notes |
 |---|---|---|
 | Logs (`slog` messages and fields, job and subprocess output, CLI diagnostics, `panic` text, internal error strings) | **English** | Never localised, never taken from a translation catalog. |
-| Code comments (package/function docs and inline explanations) | **Chinese** | Explain *why*, not *what*. |
+| Code comments (package/function docs and inline explanations) | **English** | Explain *why*, not *what*. |
 | User-facing text (UI labels, form validation, API/MCP `message`) | **Translation catalog** (`zh-CN`, `en`) | Never hardcode. |
 | Identifiers (log messages, catalog keys, error `code` values) | **English** | Keeps catalogs and logs searchable and avoids mixed-language keys. |
 
-Decision rule: machine and developer facing → English; reader of the source → Chinese;
-end user → translation catalog.
+Decision rule: code, comments, logs and commit messages → English; end user → translation catalog.
 
 ### 2.2 Repository sanitisation (open-source repo)
 
@@ -189,7 +188,7 @@ A task is done only when all of the following hold:
    parent runs the full-module `go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...`
    once at the merge gate.
 3. New behaviour has tests, including the negative cases named in the task.
-4. Logs are English, comments are Chinese, user-facing strings come from the catalog.
+4. Logs, comments and commit messages are English, user-facing strings come from the catalog.
 5. The change is committed with a signed, conventional commit; `git status` is clean.
 6. If the change alters behaviour or decisions, report it in your final message: the
    maintainer decides which committed file records it.

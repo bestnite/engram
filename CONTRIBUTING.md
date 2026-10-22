@@ -116,12 +116,11 @@ Follow them literally.
 | Kind of text | Language |
 |---|---|
 | Logs (`slog` messages and fields, job and subprocess output, CLI diagnostics, `panic` text, internal error strings) | **English** |
-| Code comments (package/function docs and inline explanations) | **Chinese** |
+| Code comments (package/function docs and inline explanations) | **English** |
 | User-facing text (UI labels, form validation, API/MCP `message`) | **Translation catalog** (`zh-CN`, `en`) |
 | Identifiers (log messages, catalog keys, error `code` values) | **English** |
 
-Decision rule: machine and developer facing → English; reader of the source → Chinese; end
-user → translation catalog. Never hardcode a user-facing string, and never take a log message
+Decision rule: code, comments, logs and commit messages → English; end user → translation catalog. Never hardcode a user-facing string, and never take a log message
 from a translation catalog. Comments explain *why*, not *what*. A missing key in one catalog
 must fail the test build (catalog parity is asserted).
 
