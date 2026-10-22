@@ -2,7 +2,7 @@
   import { t } from '../../i18n';
 
   interface Props {
-    /** 只显示图标（收起的侧边栏、窄屏顶栏）。 */
+    /** Show only the icon (collapsed sidebar, narrow-screen top bar). */
     iconOnly?: boolean;
   }
 

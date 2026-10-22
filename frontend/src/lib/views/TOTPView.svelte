@@ -34,12 +34,12 @@
   // svelte-ignore state_referenced_locally
   let status = $state<TOTPStatus | null>(initialStatus);
 
-  // begin 之后本次会话内的待确认材料：GET 不返回 secret，刷新即丢失（需要重新开始）。
+  // The pending confirmation material for this session after begin: GET does not return the secret, so a refresh loses it (you have to start over).
   // svelte-ignore state_referenced_locally
   let secret = $state(initialSecret);
   // svelte-ignore state_referenced_locally
   let otpauthUrl = $state(initialOtpauthUrl);
-  // confirm / recovery 一次性返回的恢复码明文，只在内存里保留到下一次操作。
+  // The plaintext recovery codes returned once by confirm / recovery, kept in memory only until the next operation.
   // svelte-ignore state_referenced_locally
   let recoveryCodes = $state<string[]>(initialRecoveryCodes);
 
@@ -52,7 +52,7 @@
   let disabling = $state(false);
   let regenerating = $state(false);
 
-  /** 读取状态；未登录由服务端 401 决定，前端不猜测。 */
+  /** Read the status; being logged out is decided by the server's 401, the frontend does not guess. */
   async function load(): Promise<void> {
     loading = true;
     loadError = null;
@@ -65,7 +65,7 @@
     }
   }
 
-  /** 稳定错误 code → 本地化 key；未知 code 回落到通用失败提示。 */
+  /** Stable error code → localized key; unknown codes fall back to the generic failure message. */
   function actionErrorKey(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
@@ -84,7 +84,7 @@
     return 'settings.totp.failed';
   }
 
-  /** 开始绑定：响应里一次性拿到 secret 与 otpauth 链接。 */
+  /** Start enrollment: the response carries the secret and the otpauth link in one go. */
   async function begin(): Promise<void> {
     beginning = true;
     try {
@@ -99,7 +99,7 @@
     }
   }
 
-  /** 确认绑定：成功后启用并一次性展示恢复码。 */
+  /** Confirm enrollment: on success it is enabled and the recovery codes are shown once. */
   async function confirm(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     confirming = true;
@@ -118,7 +118,7 @@
     }
   }
 
-  /** 关闭 TOTP：需要密码确认。 */
+  /** Turn TOTP off: requires password confirmation. */
   async function disable(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     disabling = true;
@@ -135,7 +135,7 @@
     }
   }
 
-  /** 重新生成恢复码：需要密码确认，旧码立即作废。 */
+  /** Regenerate the recovery codes: requires password confirmation, and the old codes are invalidated immediately. */
   async function regenerate(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     regenerating = true;
@@ -161,8 +161,8 @@
   });
 </script>
 
-<!-- 两步验证的分区组：嵌在安全页（/settings/security）里，排在修改密码之后。
-     不再是独立页面，因此不带页面外壳、标签栏与页头；状态徽标放在第一个分区里。 -->
+<!-- Section group for two-factor auth: embedded in the security page (/settings/security), placed after the password change.
+     It is no longer a standalone page, so it carries no page shell, tab bar or header; the status badge sits in the first section. -->
 <div data-testid="totp-view">
   {#if loading}
     <Skeleton testId="totp-loading" label={$t('common.loading')} />
@@ -254,7 +254,7 @@
         </form>
       </SettingsSection>
 
-      <!-- 危险操作放在最后。 -->
+      <!-- Dangerous operations go last. -->
       <SettingsSection title={$t('settings.totp.disable.heading')} description={$t('settings.totp.disable.hint')} testId="totp-disable">
         <form onsubmit={disable} class="flex flex-wrap items-end gap-2">
           <label class="block text-sm font-medium text-foreground">{$t('settings.totp.disable.password_label')}

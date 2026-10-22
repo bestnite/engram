@@ -1,19 +1,19 @@
 /**
- * 把评分按钮下的「下次间隔」秒数写成一个短词（10 分钟、3 天、1.5 个月）。
+ * Render the "next interval" seconds under a grade button as one short phrase (10 minutes, 3 days, 1.5 months).
  *
- * 只取一个单位、按量级挑：按钮下面只有一行小字，「1 天 3 小时」这种精确写法既放不下，也不是
- * 做选择时需要的信息——用户要比较的是四档之间差多少个量级。月按 30 天、年按 365 天折算，
- * 只用于显示；一位小数足够区分相邻两档，整数时不带「.0」。
+ * Only one unit, chosen by magnitude: there is just one small line under the button, and a precise form like "1 day 3 hours" neither fits
+ * nor is the information needed to choose - what the user compares is how many orders of magnitude separate the four grades. Months are 30 days and years 365 days,
+ * used for display only; one decimal is enough to tell adjacent grades apart, and whole numbers carry no ".0".
  */
 
-/** 翻译函数的最小形状（`$t` 即可）。 */
+/** Minimal shape of a translation function (`$t` is enough). */
 export type IntervalTranslate = (key: string, params?: Record<string, string | number>) => string;
 
 const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** 保留一位小数，整数不带「.0」。 */
+/** Keep one decimal; whole numbers carry no ".0". */
 function oneDecimal(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);

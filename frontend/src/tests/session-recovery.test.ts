@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ApiClient, ApiClientError } from '../lib/api';
 
 /**
- * 会话中途失效与陈旧 CSRF 的自愈（见 ApiClient.request 的注释）。
+ * Self-healing for mid-session expiry and stale CSRF (see the comment on ApiClient.request).
  *
- * 修复前：401 只被映射成一个错误码、交给视图显示一句话；403 csrf_failed 也是。于是会话一旦
- * 失效，界面继续显示「已登录」，每个操作都失败，必须手动刷新才会恢复。
+ * Before the fix: a 401 was mapped to a single error code and handed to the view to display
+ * as one sentence; 403 csrf_failed worked the same way. So once the session expired, the UI
+ * kept showing "signed in", every action failed, and only a manual refresh recovered it.
  */
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -46,18 +47,18 @@ describe('session recovery in the API client', () => {
       ApiClientError
     );
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
-    // 会话没了就没有可重试的东西：只应发过一次请求（不是「重取会话 + 重试」）。
+    // With no session there is nothing to retry: only one request should ever be sent (not "refetch session + retry").
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the session and retries exactly once when the CSRF token is stale', async () => {
     const fetchMock = vi
       .fn()
-      // 第一次：带着陈旧 token 的写请求被拒
+      // First: the write request carrying a stale token is rejected
       .mockResolvedValueOnce(jsonResponse(403, { error: { code: 'csrf_failed' } }))
-      // 第二次：重新取会话，服务端此刻期望的值（这里是匿名时的双提交值）
+      // Second: refetch the session — the value the server expects now (here the anonymous double-submit value)
       .mockResolvedValueOnce(jsonResponse(200, { authenticated: false, csrf_token: 'fresh-token' }))
-      // 第三次：用新 token 重试同一个请求，成功
+      // Third: retry the same request with the new token, which succeeds
       .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
     const client = new ApiClient({ fetch: fetchMock as unknown as typeof fetch });
     client.setCsrfToken('stale-token');
@@ -70,7 +71,7 @@ describe('session recovery in the API client', () => {
     expect(result).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(String(fetchMock.mock.calls[1]![0])).toContain('/api/v1/auth/session');
-    // 重试必须带上新值，而不是继续用陈旧的
+    // The retry must carry the new value rather than keep using the stale one
     const retryInit = fetchMock.mock.calls[2]![1] as RequestInit;
     expect((retryInit.headers as Headers).get('X-CSRF-Token')).toBe('fresh-token');
   });
@@ -87,7 +88,7 @@ describe('session recovery in the API client', () => {
     await expect(
       client.request('/api/v1/auth/forgot-password', { method: 'POST', body: '{}' })
     ).rejects.toMatchObject({ code: 'csrf_failed' });
-    // 原始请求 + 取会话 + 一次重试
+    // Original request + session fetch + one retry
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

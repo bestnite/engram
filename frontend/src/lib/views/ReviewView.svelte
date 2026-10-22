@@ -24,14 +24,14 @@
     initialError?: ApiClientError | Error | null;
     initialFeedback?: GradedFeedback | null;
     initialRevealedAnswerHTML?: string;
-    // 服务端清洗后的卡面 HTML 与编辑地址。生产路径由 $effect 从 render 端点取；这里保留
-    // 初值是为了让无 DOM 的服务端渲染测试能钉住「只有清洗后的 HTML 进 HTML 汇」。
+    // The server-sanitized card-face HTML and the edit address. In production the path is fetched from the render endpoint via $effect; these
+    // initial values are kept so the DOM-less server-side rendering tests can pin "only sanitized HTML reaches the HTML sink".
     initialFrontHTML?: string;
     initialBackHTML?: string;
     initialEditHref?: string;
-    /** 自评卡是否已翻面（生产路径由 reveal() 翻转，测试用初值覆盖）。 */
+    /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
-    /** 最近一次提交的撤销记录（生产路径由提交写入，测试用初值覆盖）。 */
+    /** The undo record of the most recent submission (written by submit in production; the initial value overrides it in tests). */
     initialLastUndo?: { cardId: string; version: number; rating: number } | null;
   }
 
@@ -49,8 +49,8 @@
     initialLastUndo = null,
   }: Props = $props();
 
-  // 自评类题型渲染四档按钮；作答类题型渲染输入控件并由服务端判分。
-  // 哪些题型属于哪一类由服务端的自描述决定（graded / answer_control），前端不再维护清单。
+  // Self-graded card types render four rating buttons; answer-type card types render an input control and are graded by the server.
+  // Which card type belongs to which class is decided by the server's self-description (graded / answer_control); the frontend no longer maintains a list.
 
   // svelte-ignore state_referenced_locally
   let cards = $state<DueCard[]>(initialCards);
@@ -66,23 +66,23 @@
   let remaining = $state(initialCards.length);
   let startedAt = Date.now();
 
-  // 作答类题型的作答与反馈状态；判分结果由服务端返回，客户端不选择档位。
+  // Answer and feedback state of answer-type card types; the grading result comes from the server, the client does not choose a rating.
   let answerText = $state('');
   let singleChoice = $state<number | null>(null);
   let multiChoice = $state<number[]>([]);
   let boolChoice = $state<boolean | null>(null);
-  // 逐空作答题：blanks 是服务端给出的每空提示（决定输入框个数），blankAnswers 与之一一对应。
+  // Per-blank answer cards: blanks are the per-blank prompts given by the server (they decide the number of inputs), and blankAnswers corresponds to them one to one.
   let blanks = $state<string[]>([]);
   let blankAnswers = $state<string[]>([]);
   let blankInputs = $state<(HTMLInputElement | null)[]>([]);
-  // 简答题：自评前写下的作答。翻面后与参考答案对照，打分时随自评一起存档。
+  // Short-answer cards: the answer written before self-grading. After flipping it is compared against the reference answer and archived together with the self-grade when scoring.
   let essayText = $state('');
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
   let pendingCards = $state<DueCard[]>([]);
-  // 本次会话最近一次提交（卡 id、提交后的状态版本、档位）：复习页据此提供「撤销上一次评分」。
-  // 自评题提交后画面立刻翻到下一张、没有结果面板，撤销只能靠这个记录；判分题也用同一记录，
-  // 面板按钮与头部入口共用它，避免两套状态。
+  // The most recent submission in this session (card id, post-submission state version, rating): the review page uses it to offer "undo the last rating".
+  // After a self-graded submission the screen flips to the next card at once with no result panel, so undo can only rely on this record; graded cards use the same record,
+  // and the panel button and the header entry share it, avoiding two sets of state.
   // svelte-ignore state_referenced_locally
   let lastUndo = $state<{ cardId: string; version: number; rating: number } | null>(initialLastUndo);
   // svelte-ignore state_referenced_locally
@@ -91,19 +91,19 @@
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
 
-  // 服务端清洗后的卡面 HTML（复习页唯一的 HTML 汇）。空串表示尚未取到，
-  // 此时回退纯文本；绝不把 fields 原文当 Markdown 送进 HTML 汇。
+  // The server-sanitized card-face HTML (the review page's only HTML sink). An empty string means it has not been fetched yet,
+  // in which case it falls back to plain text; the raw fields are never sent into the HTML sink as Markdown.
   // svelte-ignore state_referenced_locally
   let frontHTML = $state(initialFrontHTML);
   // svelte-ignore state_referenced_locally
   let backHTML = $state(initialBackHTML);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
-  // 四档评分各自的下次间隔（秒），键是评分 1–4；随 render 响应到达，换卡时清空。
+  // The next interval (in seconds) for each of the four ratings, keyed by rating 1–4; it arrives with the render response and is cleared on a card change.
   let intervals = $state<Record<number, number>>({});
   let renderToken = 0;
 
-  // 服务端清洗后返回的 HTML 容器：只对它们排版公式，绝不整页排版。
+  // The HTML containers returned sanitized by the server: formulas are typeset only on them, never for the whole page.
   let frontSection = $state<HTMLElement | null>(null);
   let answerSection = $state<HTMLElement | null>(null);
   let feedbackSection = $state<HTMLElement | null>(null);
@@ -111,34 +111,34 @@
 
   const current = $derived(cards[0] || null);
 
-  // 「再来一组」：队列空了且复习范围恰好是一个卡组时，读今天的新卡额度；还有今天额度之外的新卡
-  // 就在完成页给出追加入口。每日新卡上限是学习目标而不是硬上限，追加只对今天、只对自己生效。
+  // "One more round": when the queue is empty and the review scope happens to be a single deck, read today's new card quota; if there are still new cards beyond today's quota
+  // the completion page offers an append entry. The daily new card cap is a study goal rather than a hard limit, and appending only applies to today and only to yourself.
   let extraStatus = $state<ExtraNewStatus | null>(null);
-  // 额度请求进行中：完成页等它结束再整体出现，否则会先闪出「复习完成」，追加表单随后才插进来。
+  // The quota request is in progress: the completion page waits for it to finish before appearing as a whole, otherwise "review complete" would flash first and the append form would be inserted afterwards.
   let extraLoading = $state(false);
-  // 输入框的原文（字符串）：数字输入框不用 bind:value，否则空串会被强转成 null，校验无从说起。
+  // The raw text of the input (a string): number inputs do not use bind:value, otherwise an empty string is coerced to null and there is nothing left to validate.
   let extraCount = $state('');
   let extraBusy = $state(false);
   let extraInvalid = $state(false);
-  // 可追加的上限：单次上限与「今天额度之外还剩的新卡数」取小。
+  // The appendable cap: the smaller of the per-request cap and "how many new cards are left beyond today's quota".
   const extraMax = $derived(
     extraStatus ? Math.min(extraStatus.max_count, Math.max(extraStatus.new_available - extraStatus.new_left, 0)) : 0,
   );
   const showExtra = $derived(extraStatus !== null && !extraStatus.new_unlimited && extraStatus.suggested_count > 0);
-  // 当前卡的题型自描述；元数据未就绪或题型未知时为 null，视图渲染加载态而不是乱猜字段。
+  // The current card's card type self-description; null when the metadata is not ready or the card type is unknown, and the view renders the loading state instead of guessing fields.
   const desc = $derived(descriptionOf($cardTypes, current?.kind));
   const selfAssessable = $derived(desc !== null && !desc.graded);
   const gradedKind = $derived(desc !== null && desc.graded);
   const answerControl = $derived(desc?.answer_control ?? 'none');
   const front = $derived(current && $cardTypes ? cardSide($cardTypes, current, false) : []);
   const answer = $derived(current && $cardTypes ? cardSide($cardTypes, current, true) : []);
-  // 编辑入口：优先用服务端 render 返回的 edit_href；未取到时按规范路径拼接。
+  // Edit entry: prefer the edit_href returned by the server's render; when it has not been fetched, join it per the canonical path.
   const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
   /**
-   * 卡面的正/反面字段：正反面字段名来自元数据（front_field / back_field）。
-   * 模板级反转（basic_both 的 reverse）在这里把正反面互换——元数据描述的是正向映射，
-   * 不编码模板级反转。
+   * The card face's front/back fields: the front and back field names come from the metadata (front_field / back_field).
+   * Template-level reversal (basic_both's reverse) swaps front and back here — the metadata describes the forward
+   * mapping and does not encode template-level reversal.
    */
   function cardSide(
     catalog: CardTypeCatalog,
@@ -163,7 +163,7 @@
     return String(value);
   }
 
-  /** 作答类题型的题面文本：字段名来自元数据的 prompt_field。 */
+  /** The prompt text of an answer-type card type: the field name comes from the metadata's prompt_field. */
   function gradedPrompt(catalog: CardTypeCatalog | null, card: DueCard): string {
     const description = descriptionOf(catalog, card.kind);
     if (!description || !description.prompt_field) return '';
@@ -171,7 +171,7 @@
     return value === undefined || value === null ? '' : String(value);
   }
 
-  /** 选择题的选项文本：字段名来自元数据的 options_field；只读选项，绝不渲染答案字段。 */
+  /** The option text of a multiple-choice question: the field name comes from the metadata's options_field; only the options are read, the answer field is never rendered. */
   function gradedOptions(catalog: CardTypeCatalog | null, card: DueCard): string[] {
     const description = descriptionOf(catalog, card.kind);
     const raw = description && description.options_field ? (card.fields || {})[description.options_field] : undefined;
@@ -187,7 +187,7 @@
     needAnswer = false;
   }
 
-  /** 组装当前卡片的原始作答；未作答的选择题返回 undefined（提交前拦截）。控件类型来自元数据。 */
+  /** Assemble the current card's raw answer; an unanswered multiple-choice question returns undefined (blocked before submission). The control type comes from the metadata. */
   function currentAnswer(): GradedAnswer | undefined {
     switch (answerControl) {
       case 'text':
@@ -201,7 +201,7 @@
         return boolChoice ?? undefined;
       case 'blanks':
       case 'items':
-        // 输入框个数来自 render 响应；未取到时无从作答，按未作答拦截，而不是提交一个必错的空数组。
+        // The number of inputs comes from the render response; without it there is no way to answer, so it is blocked as unanswered instead of submitting an empty array that is bound to be wrong.
         return blanks.length ? blankAnswers.slice(0, blanks.length) : undefined;
       default:
         return undefined;
@@ -215,8 +215,8 @@
   }
 
   /**
-   * 地址上的标签范围（`/review?deck=A&tag=x&tag=y`），与卡组范围一起原样带回每个请求。
-   * 不按逗号拆分：标签本身可以含逗号。
+   * The tag scope in the address (`/review?deck=A&tag=x&tag=y`), carried back verbatim with the deck scope on every request.
+   * Not split on commas: a tag itself may contain a comma.
    */
   function selectedTags(): string[] | undefined {
     const search = new URLSearchParams(window.location.search);
@@ -224,13 +224,13 @@
     return values.length ? values : undefined;
   }
 
-  // 页头展示的标签范围；换范围会让路由重建本视图（查询串参与路由键），所以初始化时取一次即可。
-  // 服务端渲染（测试用 svelte/server）没有 window，此时没有地址可读，按无标签处理。
+  // The tag scope shown in the header; changing scope makes the router rebuild this view (the query string is part of the route key), so reading it once at initialization is enough.
+  // Server-side rendering (svelte/server in tests) has no window, so there is no address to read and it is treated as having no tags.
   const scopeTags = typeof window === 'undefined' ? [] : (selectedTags() ?? []);
 
   /**
-   * 取当前卡的服务端清洗 HTML。token 防止换卡后旧请求覆盖新卡内容；
-   * 失败只丢弃富文本并回退纯文本，绝不打断复习流程。
+   * Fetch the current card's server-sanitized HTML. The token keeps an old request from overwriting the new card's content after a card change;
+   * on failure it only discards the rich text and falls back to plain text, never interrupting the review flow.
    */
   async function loadRender(card: DueCard, token: number): Promise<void> {
     try {
@@ -243,7 +243,7 @@
       blanks = response.blanks ?? [];
       blankAnswers = blanks.map(() => '');
       await tick();
-      // 逐空输入框随 render 响应才出现，换卡时的自动聚焦早于它，这里补上。
+      // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
       if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
       await typeset([frontSection, answerSection]);
     } catch {
@@ -254,7 +254,7 @@
     }
   }
 
-  // 换卡即重取清洗 HTML；清空旧卡内容，避免在响应到达前显示上一张的富文本。
+  // A card change refetches the sanitized HTML; the old card's content is cleared so the previous card's rich text is not shown before the response arrives.
   $effect(() => {
     const card = current;
     const token = ++renderToken;
@@ -268,13 +268,13 @@
     if (card) void loadRender(card, token);
   });
 
-  /** 复习范围恰好是一个卡组时返回它的对外 id；多卡组与全部卡组返回 null（「再来一组」只按单卡组）。 */
+  /** Returns the deck's public id when the review scope is exactly one deck; multiple decks and all decks return null ("one more round" works per single deck only). */
   function singleDeck(): string | null {
     const decks = selectedDecks();
     return decks?.length === 1 ? (decks[0] ?? null) : null;
   }
 
-  /** 读当前卡组今天的新卡额度；不是单卡组范围或读取失败时不显示追加入口，不打断完成页。 */
+  /** Read the current deck's new card quota for today; when the scope is not a single deck or the read fails, no append entry is shown, without interrupting the completion page. */
   async function loadExtraNew(): Promise<void> {
     const deck = singleDeck();
     if (!deck) {
@@ -294,7 +294,7 @@
     }
   }
 
-  /** 按输入的张数追加今天的新卡额度，成功后重新拉取队列，新卡随之出现。 */
+  /** Append new cards for today by the entered count, then refetch the queue on success so the new cards appear. */
   async function addExtraNew(): Promise<void> {
     const deck = singleDeck();
     if (!deck || !extraStatus || extraBusy) return;
@@ -360,7 +360,7 @@
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
       done += 1;
-      // 自评后画面已翻到下一张：记住这次提交，头部「撤销上一次评分」据此可用。
+      // The screen has already flipped to the next card after self-grading: remember this submission so the header's "undo the last rating" becomes available.
       lastUndo = { cardId: ratedCardId, version: response.version, rating };
       revealed = false;
       startedAt = Date.now();
@@ -371,14 +371,14 @@
     }
   }
 
-  /** 揭示自评卡的背面：先挂上 DOM 再只对背面容器排版公式。 */
+  /** Reveal the back of a self-graded card: mount the DOM first, then typeset formulas only on the back container. */
   async function reveal(): Promise<void> {
     revealed = true;
     await tick();
     await typeset([answerSection]);
   }
 
-  /** 提交原始作答，由服务端判分；结果面板保留已作答的卡片，用户点「继续」才换卡。 */
+  /** Submit the raw answer and let the server grade it; the result panel keeps the answered card, and the card only changes when the user presses "continue". */
   async function submitGraded(): Promise<void> {
     if (!current || submitting) return;
     const answerValue = currentAnswer();
@@ -403,7 +403,7 @@
       feedback = response.feedback ?? null;
       lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
-      // 等结果面板挂上 DOM，再只对它排版服务端返回的答案 HTML。
+      // Wait for the result panel to mount into the DOM, then typeset only it with the answer HTML returned by the server.
       await tick();
       await typeset([feedbackSection]);
     } catch (cause) {
@@ -413,7 +413,7 @@
     }
   }
 
-  /** 请求揭示答案（只读）；揭示后输入控件禁用，只剩「记 0 分并继续」。 */
+  /** Request the answer reveal (read-only); after revealing, the input control is disabled and only "grade 0 and continue" remains. */
   async function revealGraded(): Promise<void> {
     if (!current || submitting) return;
     submitting = true;
@@ -426,7 +426,7 @@
       });
       revealedAnswerHTML = response.answer_html;
       gradedRevealed = true;
-      // 揭示面板挂上 DOM 后再排版揭示出的答案 HTML。
+      // Typeset the revealed answer HTML once the reveal panel has mounted into the DOM.
       await tick();
       await typeset([revealedSection]);
     } catch (cause) {
@@ -436,7 +436,7 @@
     }
   }
 
-  /** 已揭示答案后放弃作答：服务端按 Again 记一条自评，不判分。 */
+  /** Give up answering after the answer was revealed: the server records a self-grade as Again without grading. */
   async function giveUp(): Promise<void> {
     if (!current || submitting) return;
     submitting = true;
@@ -452,7 +452,7 @@
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
-      // 放弃作答按 Again 记一条自评日志；撤销入口同样可用。
+      // Giving up records a self-grade log as Again; the undo entry is available there as well.
       lastUndo = { cardId: current.card_id, version: response.version, rating: 1 };
       done += 1;
       gradedRevealed = false;
@@ -467,21 +467,21 @@
   }
 
   /**
-   * 埋藏当前卡：只写本人进度，不产生 reviews 行；响应带同范围重建后的队列。
-   * 服务端按 reader 判定，共享卡组读者可自行复习。
+   * Bury the current card: only the caller's own progress is written and no reviews rows are produced; the response carries the queue rebuilt for the same scope.
+   * The server decides by reader, so readers of a shared deck can review on their own.
    */
   async function bury(): Promise<void> {
     await skipCurrent((cardId) => client.buryReview({ card_id: cardId, deck: selectedDecks(), tags: selectedTags() }));
   }
 
   /**
-   * 暂停当前卡：只对本人生效（共享卡组的其他人不受影响），在卡组的笔记列表里可以取消暂停。
+   * Suspend the current card: applies only to yourself (other people on a shared deck are unaffected); it can be un-suspended in the deck's note list.
    */
   async function suspend(): Promise<void> {
     await skipCurrent((cardId) => client.suspendReview({ card_id: cardId, deck: selectedDecks(), tags: selectedTags() }));
   }
 
-  /** 埋藏与暂停共用：请求成功后换成服务端重建的队列，并重置本卡的作答状态。 */
+  /** Shared by bury and suspend: after a successful request it swaps in the queue rebuilt by the server and resets this card's answer state. */
   async function skipCurrent(send: (cardId: string) => Promise<{ cards: DueCard[]; remaining: number }>): Promise<void> {
     if (!current || submitting) return;
     submitting = true;
@@ -504,15 +504,15 @@
     }
   }
 
-  /** 编辑入口：跳到服务端返回的 edit_href（缺省按规范路径拼接）。 */
+  /** Edit entry: jump to the edit_href returned by the server (joined from the canonical path when absent). */
   function gotoEdit(): void {
     const href = editHref || fallbackEditHref;
     if (href) window.location.assign(href);
   }
 
   /**
-   * 结果面板的「继续」：换到判分响应里预取的下一张卡，不产生额外写请求。
-   * 故意不清 lastUndo：离开面板后头部的「撤销上一次评分」仍然可用（撤销刚判的那张）。
+   * The result panel's "continue": switch to the next card prefetched in the grading response, producing no extra write request.
+   * lastUndo is deliberately not cleared: after leaving the panel the header's "undo the last rating" stays usable (undoing the card just graded).
    */
   function continueNext(): void {
     cards = pendingCards.slice(0, 1);
@@ -525,8 +525,8 @@
   }
 
   /**
-   * 头部撤销按钮的文案：带上被撤销的档位。自评题提交后画面已翻到下一张，只说「撤销」会让人
-   * 以为撤的是当前这张卡。
+   * Copy of the header undo button: it names the rating being undone. After a self-graded submission the screen has already flipped
+   * to the next card, so saying only "undo" would make people think it undoes the current card.
    */
   function undoLabel(): string {
     const rating = lastUndo?.rating ?? 0;
@@ -537,11 +537,11 @@
   }
 
   /**
-   * 撤销上一次提交的评分（自评题与判分题共用这一个入口）：服务端恢复进度并删除那条复习日志，
-   * 响应带同范围重建的队列。撤销后把被撤销的卡放回当前位——队列按 due_at 排序，它不保证排在
-   * 首位，因此按 undone_card_id 在队列里找它。
+   * Undo the last submission's rating (self-graded and graded cards share this one entry): the server restores the progress and deletes that
+   * review log, and the response carries the queue rebuilt for the same scope. After undoing, the undone card is put back at the current
+   * position — the queue is sorted by due_at and is not guaranteed to come first, so it is looked up by undone_card_id inside the queue.
    *
-   * 目标是 lastUndo 记下的那张卡，而不是当前正在看的卡：自评提交后画面已经翻到下一张。
+   * The target is the card recorded in lastUndo, not the card currently on screen: after a self-graded submission the screen has already flipped to the next card.
    */
   async function undo(): Promise<void> {
     const target = lastUndo;
@@ -617,14 +617,14 @@
     );
   }
 
-  /** 焦点是否在判分卡的选项（bits-ui 渲染为 role=radio/checkbox 的按钮）上。 */
+  /** Whether focus is on a graded card's options (rendered by bits-ui as role=radio/checkbox buttons). */
   function isChoiceTarget(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     const role = target.getAttribute('role');
     return role === 'radio' || role === 'checkbox';
   }
 
-  /** 空格/回车与滑动的共同动作：判分卡请求揭示答案，自评卡翻面。 */
+  /** The action shared by space/enter and swipe: a graded card requests the answer reveal, a self-graded card flips. */
   function applyReveal(): void {
     if (gradedKind) {
       if (!gradedRevealed) void revealGraded();
@@ -634,14 +634,14 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
-    // 键位映射是纯函数（review-shortcuts.ts），这里只把决策映射成副作用。
+    // The key mapping is a pure function (review-shortcuts.ts); this only maps the decision onto side effects.
     const action = reviewShortcut(
       event.key,
       { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },
       {
         typing: isTypingTarget(event.target),
         choosing: isChoiceTarget(event.target),
-        // keyCode 229 是部分浏览器在组字期间不设 isComposing 时的兜底信号。
+        // keyCode 229 is the fallback signal in some browsers that do not set isComposing during composition.
         composing: event.isComposing || event.keyCode === 229,
         repeat: event.repeat,
         feedback: feedback !== null,
@@ -655,7 +655,7 @@
       case 'ignore':
         return;
       case 'swallow':
-        // 判分卡待作答时 1–4 失效，但仍吞掉按键，避免浏览器把数字当热键。
+        // On a graded card awaiting an answer, 1–4 are disabled but the key is still swallowed, so the browser does not treat the digit as a hotkey.
         event.preventDefault();
         return;
       case 'continue':
@@ -697,7 +697,7 @@
     }
   }
 
-  // 手机滑动：落点在输入控件/按钮/链接上时不当作滑动。
+  // Phone swipe: when the touch lands on an input control/button/link it is not treated as a swipe.
   let touchStartX = 0;
   let touchStartY = 0;
   let tracking = false;
@@ -736,7 +736,7 @@
     else if (action.kind === 'rate') void rate(action.rating);
   }
 
-  // 队列空了（加载完成、没有出错）才去读额度；有卡时清掉，避免下次空队列先闪出旧数字。
+  // The quota is only read when the queue is empty (loading finished, no error); it is cleared while there are cards, so the next empty queue does not flash an old number first.
   $effect(() => {
     if (loading || error) return;
     if (current) {
@@ -748,7 +748,7 @@
 
   onMount(() => {
     void loadQueue();
-    // 元数据只加载一次（模块内幂等）；失败时静默降级为加载/空态，不打断复习流程。
+    // Metadata is loaded only once (idempotent within the module); on failure it silently degrades to the loading/empty state without interrupting the review flow.
     void loadCardTypes(client).catch(() => {});
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
@@ -770,7 +770,7 @@
       {/if}
     </div>
     <div class="flex items-center gap-2 self-start sm:self-auto">
-      <!-- 撤销上一次评分：自评题提交后没有结果面板，入口在这里；判分题面板打开时隐藏，避免两个入口。 -->
+      <!-- Undo the last rating: a self-graded submission has no result panel, so the entry lives here; it is hidden while the graded card's panel is open, avoiding two entries. -->
       {#if lastUndo && !feedback}
         <Button variant="outline" size="sm" testId="review-undo-last" disabled={submitting} onclick={() => void undo()}>
           {undoLabel()}
@@ -876,7 +876,7 @@
         </div>
 
         {#if !desc}
-          <!-- 元数据未就绪（加载中或拉取失败）：渲染加载态，不猜测字段、不打印机器词汇。 -->
+          <!-- Metadata not ready (still loading or the fetch failed): render the loading state, do not guess fields and do not print machine vocabulary. -->
           <Skeleton testId="review-meta-loading" label={$t('common.loading')} lines={3} />
         {:else if selfAssessable}
           <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-front">
@@ -888,7 +888,7 @@
           </div>
           {#if revealed}
             {#if answerControl === 'essay'}
-              <!-- 简答题：先给出学习者自己写下的作答（纯文本，不进 HTML 汇），再给参考答案对照。 -->
+              <!-- Short-answer card: first show the answer the learner wrote (plain text, not into the HTML sink), then the reference answer for comparison. -->
               {#if essayText.trim() !== ''}
                 <div class="border-t border-input pt-5" data-testid="review-essay-given">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.given')}</div>
@@ -914,7 +914,7 @@
                 {/if}
               </div>
             {/if}
-            <!-- 四档怎么选放进浮层：每张卡都常驻四句说明太占地方，拿不准时点一下即可。 -->
+            <!-- How to choose among the four ratings goes into a popover: keeping four explanations on every card takes too much space, and one click when unsure is enough. -->
             <div class="flex items-center gap-1 pt-2 text-xs text-muted-foreground">
               <span>{$t('review.ratings')}</span>
               <HelpTip testId="review-ratings-help" label={$t('help.review.ratings_label')} text={$t('help.review.ratings')} />
@@ -929,7 +929,7 @@
                   data-rating={rating}
                 >
                   <span class="block text-sm font-semibold">{$t(`review.rating.${rating}`)}</span>
-                  <!-- 选这一档之后多久再见到这张卡：间隔就是这一档的后果，比文字说明更好比较。 -->
+                  <!-- How long until this card is seen again after choosing this rating: the interval is the consequence of the rating, easier to compare than a textual explanation. -->
                   {#if intervals[rating] !== undefined}
                     <span class="block text-xs font-normal tabular-nums opacity-75" data-testid="review-rating-interval">{formatInterval(intervals[rating] ?? 0, $t)}</span>
                   {/if}
@@ -957,8 +957,8 @@
             </button>
           {/if}
         {:else if gradedKind}
-          <!-- 作答题的题干在作答、揭示答案、判分结果三个状态下都留在上方，答案用分割线接在下面，
-               学习者看答案时不必回想原题。 -->
+          <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
+               behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
             <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-graded-prompt">
               {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt($cardTypes, current)}{/if}
@@ -989,7 +989,7 @@
                 <div>
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                   {#if feedback.breakdown && feedback.breakdown.length}
-                    <!-- 逐项判分：按条目顺序标出想起（✓）与漏掉（✗）的每一项。 -->
+                    <!-- Per-item grading: marks every item as remembered (✓) or missed (✗) in item order. -->
                     <ul class="space-y-1.5 text-lg" data-testid="review-graded-breakdown">
                       {#each feedback.breakdown as item, index (index)}
                         <li class="flex items-start gap-2" data-testid="review-graded-breakdown-item" data-correct={item.correct}>
@@ -1053,7 +1053,7 @@
                 {:else if answerControl === 'multi'}
                   <div class="space-y-2" data-testid="review-graded-options">
                     {#each gradedOptions($cardTypes, current) as option, index (index)}
-                      <!-- 整行是 label：点选项文字也切换复选框，与单选题整行可点一致；选中样式同单选。 -->
+                      <!-- The whole row is a label: clicking the option text toggles the checkbox too, consistent with the single-choice row being clickable; the selected style matches single choice. -->
                       <label
                         class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
                         data-state={multiChoice.includes(index) ? 'checked' : 'unchecked'}
@@ -1123,7 +1123,7 @@
               <Button variant="outline" size="sm" testId="review-suspend" disabled={submitting} onclick={() => void suspend()}>
                 {$t('review.suspend')}
               </Button>
-              <!-- 两个按钮的区别放进浮层：每张卡底部都常驻一整句说明太占眼，第一次不懂时点一下即可。 -->
+              <!-- The difference between the two buttons goes into a popover: keeping a whole sentence at the bottom of every card is too conspicuous, and one click the first time it is unclear is enough. -->
               <HelpTip testId="review-bury-hint" label={$t('help.review.bury_label')} text={$t('review.bury_hint')} />
             </div>
           </div>

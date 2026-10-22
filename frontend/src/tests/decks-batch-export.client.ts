@@ -6,8 +6,9 @@ import type { Deck } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 卡组列表的批量导出：点「导出」先弹出与单卡组导出相同的选项对话框，
- * 用户勾选的媒体 / 进度 / 复习记录 / 权重原样传给批量导出接口。
+ * Batch export from the deck list: clicking "Export" first opens the same options
+ * dialog as single-deck export, and the user's media / progress / review log / weights
+ * choices are passed unchanged to the batch export endpoint.
  */
 describe('DecksView batch export', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -88,7 +89,7 @@ describe('DecksView batch export', () => {
       includeReviews: false,
       includeWeights: false,
     });
-    // 退出动画期间节点仍在，关闭体现为 data-state 变成 closed。
+    // The node is still present during the exit animation; closing shows up as data-state turning closed.
     expect(document.body.querySelector('[data-testid="decks-batch-export-dialog"]')?.getAttribute('data-state')).not.toBe('open');
   });
 
@@ -109,7 +110,7 @@ describe('DecksView batch export', () => {
   });
 
   it('drops review history when progress is unchecked again', async () => {
-    // 服务端拒绝「带复习记录却不带进度」，先勾两项再取消进度不能提交那样的组合。
+    // The server rejects "review log without progress", so ticking both and then unticking progress must not submit that combination.
     const exportZip = await setup();
     await selectAndOpen();
     await click('[data-testid="export-include-progress"]');

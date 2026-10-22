@@ -91,7 +91,7 @@
     }
   });
 
-  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  // Operation results are reported with a toast, not inserted as a banner at the top of the page.
   $effect(() => {
     if (notice) {
       toast.success($t(notice));

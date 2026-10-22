@@ -40,23 +40,23 @@
     return (rate * 100).toFixed(1);
   }
 
-  /** 表格行的留存率：分母（到期复习数）为 0 时没有可读的比例，显示「暂无数据」而不是 0.0%。 */
+  /** Retention rate of a table row: when the denominator (due review count) is 0 there is no readable ratio, so "no data" is shown instead of 0.0%. */
   function rowRetention(rate: number, total: number): string {
     return total > 0 ? $t('stats.table.rate', { rate: formatPercentValue(rate) }) : $t('stats.retention_na');
   }
 
-  /** 学习曲线/柱状条共用最大值基准，柱长因此可以直接互相比较。 */
+  /** The learning curve and the bars share one maximum baseline, so bar lengths can be compared with each other directly. */
   function maxOf(values: number[]): number {
     return values.reduce((max, v) => Math.max(max, v), 0);
   }
 
-  /** 柱宽：value/max 的百分比；value 或 max 非正时返回 0（该行不画柱）。 */
+  /** Bar width: the percentage of value/max; returns 0 when value or max is non-positive (no bar is drawn for that row). */
   function barWidth(value: number, max: number): number {
     if (value <= 0 || max <= 0) return 0;
     return Math.min(100, (value / max) * 100);
   }
 
-  /** 比例柱宽：0–1 的比例直接转成百分比。 */
+  /** Ratio bar width: a 0–1 ratio is converted straight into a percentage. */
   function percentWidth(rate: number): number {
     if (rate <= 0) return 0;
     return Math.min(100, rate * 100);
@@ -66,14 +66,14 @@
     return Math.round(v * 10) / 10;
   }
 
-  /** 整值省掉 .0，与 SSR 的 decimalText 口径一致。 */
+  /** Whole numbers drop the .0, consistent with SSR's decimalText. */
   function decimalText(v: number): string {
     return Number.isInteger(v) ? String(v) : v.toFixed(1);
   }
 
   /**
-   * 耗时按量级显示（与 internal/web/elapsed.go 的 elapsedLabel 同口径）：
-   * < 1 秒毫秒、< 1 分钟秒（一位小数）、< 1 小时分钟（一位小数）、更长「N 小时 M 分」。
+   * Elapsed time is shown by magnitude (same criterion as elapsedLabel in internal/web/elapsed.go):
+   * < 1 second in milliseconds, < 1 minute in seconds (one decimal), < 1 hour in minutes (one decimal), longer as "N hours M minutes".
    */
   function formatDuration(ms: number): string {
     const value = ms < 0 ? 0 : ms;
@@ -97,7 +97,7 @@
     return $t('stats.duration.hours_minutes', { hours: String(hours), minutes: String(rest) });
   }
 
-  /** 稳定性桶标签映射到语言包 key；未知标签回退到「总体」，不出现裸标识符。 */
+  /** Stability bucket label mapped to a language pack key; an unknown label falls back to "overall", so no bare identifier appears. */
   function retentionBucketKey(label: string): string {
     switch (label) {
       case '<1d':
@@ -119,7 +119,7 @@
     }
   }
 
-  /** 判分来源映射到语言包 key；未知来源显示「其它」。 */
+  /** Grading source mapped to a language pack key; an unknown source shows "other". */
   function gradeSourceKey(source: string): string {
     switch (source) {
       case 'self':
@@ -134,9 +134,9 @@
   }
 
   /**
-   * 加载当前用户统计明细（GET /api/v1/stats/detail）。
-   * 数值口径与 SSR 统计页同源（internal/web/stats_api.go）；本页只做本地化与柱宽，
-   * 不自行聚合、不捏造任何分桶或图表数据。
+   * Load the current user's stats detail (GET /api/v1/stats/detail).
+   * The metric definitions share their source with the SSR stats page (internal/web/stats_api.go); this page only does localization and bar widths,
+   * it never aggregates on its own and never invents any bucket or chart data.
    */
   async function fetchStats(): Promise<void> {
     loading = true;
@@ -207,7 +207,7 @@
     </div>
   {:else if detail}
     <div data-testid="stats-data" class="divide-y divide-border">
-      <!-- 指标带：复习量与连续打卡，一眼看到最常看的五个数。 -->
+      <!-- Metric band: review volume and consecutive check-ins, the five numbers people look at most at a glance. -->
       <div class="grid grid-cols-2 pb-8 sm:grid-cols-5 sm:divide-x sm:divide-border">
         <div data-testid="stats-volume" class="contents">
           {#each [
@@ -241,7 +241,7 @@
         </div>
       </div>
 
-      <!-- 学习曲线 -->
+      <!-- Learning curve -->
       <section data-testid="stats-curve" class="py-8">
         <div class="flex items-center gap-1">
           <h2 class="text-sm font-semibold text-foreground">{$t('stats.curve.heading')}</h2>
@@ -257,7 +257,7 @@
         </div>
       </section>
 
-      <!-- 到期预测 / 留存率 -->
+      <!-- Due forecast / retention -->
       <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
         <section data-testid="stats-due">
           <div class="flex items-center gap-1">
@@ -330,7 +330,7 @@
         </section>
       </div>
 
-      <!-- 时间投入 / 判分来源 -->
+      <!-- Time invested / grading source -->
       <div class="grid gap-y-8 py-8 lg:grid-cols-2 lg:gap-x-12">
         <section data-testid="stats-time">
           <div class="flex items-center gap-1">
@@ -375,7 +375,7 @@
         </section>
       </div>
 
-      <!-- 卡组维度 / 标签维度 -->
+      <!-- Deck dimension / tag dimension -->
       <div class="grid gap-y-8 pt-8 lg:grid-cols-2 lg:gap-x-12">
         <section data-testid="stats-deck">
           <h2 class="text-sm font-semibold text-foreground">{$t('stats.deck.heading')}</h2>
@@ -423,8 +423,8 @@
             <h2 class="text-sm font-semibold text-foreground">{$t('stats.tag.heading')}</h2>
             <HelpTip testId="stats-tag-help" label={$t('stats.tag.heading')} text={$t('help.stats.tag')} />
           </div>
-          <!-- 口径写在标题下：本维度只数「已复习卡片上的标签」，不写清楚时它会看起来像
-               在重复卡组维度（没复习过的大标签一个都不出现）。 -->
+          <!-- The definition is written below the title: this dimension only counts "tags on cards that have been reviewed", and unless that is spelled out it
+               looks like a duplicate of the deck dimension (a big tag that was never reviewed does not appear at all). -->
           <p data-testid="stats-tag-scope" class="mt-0.5 text-xs text-muted-foreground">{$t('stats.tag.scope')}</p>
           {#if detail.tags.length === 0}
             <p class="mt-4 text-xs text-muted-foreground">{$t('stats.tag.empty')}</p>

@@ -3,10 +3,11 @@ import { reviewShortcut, reviewSwipe, SWIPE_THRESHOLD } from '../lib/review-shor
 import type { ReviewShortcutState, ReviewSwipeState } from '../lib/review-shortcuts';
 
 /**
- * 复习页键位与滑动的行为回归。
+ * Behaviour regression for the review page's key bindings and swipes.
  *
- * 这些用例穷举「每种卡片状态 × 每个按键/位移」的决策，补上无浏览器环境下无法触发的
- * 真实交互；浏览器端到端只再验证副作用确实接上（翻面、评分请求、埋藏请求）。
+ * These cases exhaust the "card state × key/displacement" decision, filling in the real
+ * interactions that cannot be triggered without a browser; the browser end-to-end only
+ * re-verifies that the side effects are really wired up (flipping, rating, bury requests).
  */
 
 const noMods = { alt: false, ctrl: false, meta: false };
@@ -35,7 +36,7 @@ describe('reviewShortcut keyboard mapping', () => {
     ]) {
       expect(reviewShortcut('b', mods, keyState())).toEqual({ kind: 'ignore' });
     }
-    // 焦点在输入控件上：空格、1–4、b、e 全不处理。
+    // Focus is on an input control: space, 1–4, b and e are all ignored.
     const typing = keyState({ typing: true, revealed: true });
     expect(reviewShortcut(' ', noMods, typing)).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('3', noMods, typing)).toEqual({ kind: 'ignore' });
@@ -47,7 +48,7 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut(' ', noMods, keyState())).toEqual({ kind: 'reveal' });
     expect(reviewShortcut('Enter', noMods, keyState())).toEqual({ kind: 'reveal' });
     expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
-    // 已翻面/已揭示时仍返回 reveal，视图侧自行判断为 no-op（保持 SSR 的 preventDefault 语义）。
+    // Already flipped/revealed still returns reveal; the view decides it is a no-op (preserving SSR's preventDefault semantics).
     expect(reviewShortcut('Enter', noMods, keyState({ revealed: true }))).toEqual({ kind: 'reveal' });
   });
 
@@ -56,9 +57,9 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('Enter', noMods, { ...answering, typing: true })).toEqual({ kind: 'submit' });
     expect(reviewShortcut('Enter', noMods, { ...answering, choosing: true })).toEqual({ kind: 'submit' });
     expect(reviewShortcut('Enter', noMods, answering)).toEqual({ kind: 'submit' });
-    // 输入框里其它按键仍交给输入框（空格是答案的一部分，不是「显示答案」）。
+    // Other keys inside the input still go to the input (space is part of the answer, not "show answer").
     expect(reviewShortcut(' ', noMods, { ...answering, typing: true })).toEqual({ kind: 'ignore' });
-    // 输入框里的回车只对判分卡有意义：自评卡没有可提交的答案。
+    // Enter inside the input only matters for graded cards: a self-rated card has no answer to submit.
     expect(reviewShortcut('Enter', noMods, keyState({ typing: true }))).toEqual({ kind: 'ignore' });
   });
 
@@ -67,14 +68,14 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('Enter', noMods, { ...answering, composing: true })).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('Enter', noMods, { ...answering, repeat: true })).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('Enter', { alt: false, ctrl: true, meta: false }, answering)).toEqual({ kind: 'ignore' });
-    // 按住回车不放：自动重复不能把「提交」之后的结果面板连带「继续」掉。
+    // Holding Enter down: auto-repeat must not carry the result panel past "submit" into "continue".
     const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true });
     expect(reviewShortcut('Enter', noMods, { ...result, repeat: true })).toEqual({ kind: 'ignore' });
   });
 
   it('leaves space to a focused choice option instead of revealing the answer', () => {
     expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true, choosing: true }))).toEqual({ kind: 'ignore' });
-    // 焦点不在选项上时空格仍是「显示答案」。
+    // With focus not on an option, space is still "show answer".
     expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
   });
 
@@ -86,16 +87,16 @@ describe('reviewShortcut keyboard mapping', () => {
   });
 
   it('gates 1-4: swallowed on unanswered graded cards, rating only after reveal', () => {
-    // 自评卡未翻面：1–4 无效（也不阻止默认）。
+    // Self-rated card not yet flipped: 1–4 do nothing (and do not preventDefault either).
     expect(reviewShortcut('1', noMods, keyState())).toEqual({ kind: 'ignore' });
-    // 自评卡已翻面：1–4 直接评分。
+    // Self-rated card flipped: 1–4 rate directly.
     for (const rating of [1, 2, 3, 4]) {
       expect(reviewShortcut(String(rating), noMods, keyState({ revealed: true }))).toEqual({
         kind: 'rate',
         rating,
       });
     }
-    // 判分卡待作答：1–4 被吞掉（阻止默认），绝不评分。
+    // Graded card awaiting an answer: 1–4 are swallowed (default prevented) and never rate.
     expect(reviewShortcut('2', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'swallow' });
   });
 
@@ -104,7 +105,7 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('B', noMods, keyState())).toEqual({ kind: 'bury' });
     expect(reviewShortcut('e', noMods, keyState())).toEqual({ kind: 'edit' });
     expect(reviewShortcut('E', noMods, keyState())).toEqual({ kind: 'edit' });
-    // 判分卡待作答时同样可埋藏/编辑（按钮在生产路径里对所有未作答卡可见）。
+    // While a graded card awaits an answer it can likewise be buried/edited (in the production path the buttons are visible on every unanswered card).
     expect(reviewShortcut('b', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'bury' });
   });
 
@@ -121,22 +122,22 @@ describe('reviewShortcut keyboard mapping', () => {
       expect(reviewShortcut(key, noMods, result)).toEqual({ kind: 'continue' });
     }
     expect(reviewShortcut('e', noMods, result)).toEqual({ kind: 'edit' });
-    // 结果面板不再提供 b。
+    // The result panel no longer offers b.
     expect(reviewShortcut('b', noMods, result)).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('x', noMods, result)).toEqual({ kind: 'ignore' });
   });
 
   it('maps u to undo only when there is a submission to undo', () => {
-    // 没有可撤销的提交时 u 不吞按键（交给浏览器）。
+    // With nothing undoable, u does not swallow the key (it goes to the browser).
     expect(reviewShortcut('u', noMods, keyState())).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('U', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'ignore' });
-    // 有提交时：自评卡翻面后、判分结果面板上都能撤销（含自评题——它们没有结果面板）。
+    // With a submit available: undo works after flipping a self-rated card and on a graded result panel (self-rated questions included — they have no result panel).
     expect(reviewShortcut('u', noMods, keyState({ revealed: true, canUndo: true }))).toEqual({ kind: 'undo' });
     expect(reviewShortcut('U', noMods, keyState({ gradedKind: true, canUndo: true }))).toEqual({ kind: 'undo' });
     const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true, canUndo: true });
     expect(reviewShortcut('u', noMods, result)).toEqual({ kind: 'undo' });
     expect(reviewShortcut('U', noMods, result)).toEqual({ kind: 'undo' });
-    // 输入焦点上仍不处理。
+    // Still ignored while an input has focus.
     expect(reviewShortcut('u', noMods, keyState({ typing: true, canUndo: true }))).toEqual({ kind: 'ignore' });
   });
 });
@@ -147,19 +148,19 @@ describe('reviewSwipe mapping', () => {
   }
 
   it('requires a horizontal displacement past the threshold', () => {
-    // 位移不足。
+    // Displacement too small.
     expect(reviewSwipe(SWIPE_THRESHOLD - 1, 0, swipeState())).toEqual({ kind: 'ignore' });
-    // 垂直位移更大：不是横向滑动。
+    // Larger vertical displacement: not a horizontal swipe.
     expect(reviewSwipe(SWIPE_THRESHOLD + 30, SWIPE_THRESHOLD + 60, swipeState())).toEqual({
       kind: 'ignore',
     });
   });
 
   it('reveals on any horizontal swipe before reveal, then rates by direction', () => {
-    // 未翻面：左右滑都是「显示答案」。
+    // Not flipped: swiping either way is "show answer".
     expect(reviewSwipe(-120, 0, swipeState())).toEqual({ kind: 'reveal' });
     expect(reviewSwipe(120, 0, swipeState())).toEqual({ kind: 'reveal' });
-    // 已翻面：左滑 Again(1)、右滑 Good(3)。
+    // Flipped: swipe left is Again(1), swipe right is Good(3).
     expect(reviewSwipe(-120, 0, swipeState({ revealed: true }))).toEqual({ kind: 'rate', rating: 1 });
     expect(reviewSwipe(120, 0, swipeState({ revealed: true }))).toEqual({ kind: 'rate', rating: 3 });
   });
@@ -169,7 +170,7 @@ describe('reviewSwipe mapping', () => {
     expect(reviewSwipe(-120, 0, swipeState({ gradedKind: true, gradedRevealed: true }))).toEqual({
       kind: 'ignore',
     });
-    // 判分卡未揭示：滑动即请求揭示答案。
+    // Graded card not yet revealed: a swipe requests revealing the answer.
     expect(reviewSwipe(-120, 0, swipeState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
   });
 });

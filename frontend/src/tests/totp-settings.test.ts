@@ -58,7 +58,7 @@ describe('TOTPView renders the account-security states truthfully', () => {
     expect(html).toContain('data-testid="totp-disable-password"');
     expect(html).toContain('data-testid="totp-recovery"');
     expect(html).toContain('data-testid="totp-recovery-remaining"');
-    // 剩余恢复码是服务端计数，不是猜出来的常量。
+    // Remaining recovery codes are a server-side count, not a guessed constant.
     expect(html).toContain('剩余恢复码：7');
     expect(html).toContain('data-testid="totp-recovery-submit"');
     expect(html).not.toContain('data-testid="totp-begin"');
@@ -168,7 +168,7 @@ describe('TOTP lives on the security page', () => {
   it('resolves /settings/security and drops the old /settings/totp page', () => {
     expect(matchRoute('/settings/security', routes).route?.name).toBe('security-settings');
     expect(matchRoute('/settings/totp', routes).route).toBeNull();
-    // 个人设置页本身不能被两步验证子页的路径吃掉。
+    // The personal settings page itself must not be swallowed by the two-factor subpage's path.
     expect(matchRoute('/settings', routes).route?.name).toBe('settings');
   });
 });

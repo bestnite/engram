@@ -12,10 +12,12 @@ import { CARD_TYPES } from './card-type-fixture';
 const catalog = createCatalog(CARD_TYPES.kinds);
 
 /**
- * 枚举文案映射：后端枚举值一律经 lib/labels.ts 翻成语言包文案，未知值渲染成空。
+ * Enum label mapping: every backend enum value goes through lib/labels.ts into a language
+ * pack message, and unknown values render as empty.
  *
- * 判据不是「有没有引号」，而是「这个串是给机器读还是给人读的」——模板里直接插原值
- * （`{note.kind}`）在中文界面里会印出 `basic_both`，与硬编码英文同害，却不容易看出来。
+ * The test is not "is it quoted" but "is this string meant for a machine or a human" —
+ * interpolating the raw value in a template (`{note.kind}`) prints `basic_both` in the
+ * Chinese UI, which is as bad as hardcoded English yet harder to spot.
  */
 
 const zh = (key: string) => formatMessage('zh-CN', key);
@@ -29,12 +31,12 @@ describe('enum labels go through the catalog', () => {
   });
 
   it('renders nothing for an unknown or missing value', () => {
-    // 关键：未知值绝不能回落到键名或机器词。$t 找不到键时会原样返回键名，
-    // 直接插原值会印英文——两者都比「少一格徽标」糟。
+    // The point: an unknown value must never fall back to the key name or the machine word;
+    // $t returns the key unchanged when the lookup fails, and the raw value prints English — both are worse than a missing badge.
     expect(noteKindLabel('made_up_kind', catalog, zh)).toBe('');
     expect(noteKindLabel(null, catalog, zh)).toBe('');
     expect(noteKindLabel(undefined, catalog, zh)).toBe('');
-    // 元数据未就绪时也没有题型清单可用，同样返回空而不是裸 key。
+    // With metadata not yet loaded there is no field-type list either, so likewise empty rather than a bare key.
     expect(noteKindLabel('cloze', null, zh)).toBe('');
     expect(noteKindLabelKey('cloze', catalog)).toBe('notes.kind.cloze');
     expect(noteKindLabelKey('nope', catalog)).toBeNull();
@@ -43,8 +45,8 @@ describe('enum labels go through the catalog', () => {
   });
 
   it('renders the default preset through the catalog instead of its storage name', () => {
-    // 库内名 "Default"（store.DefaultPresetName）是默认预设的身份标识：直接印在中文界面上
-    // 就是英文。判据是服务端的 is_default，用户自建的预设照原样显示名字。
+    // The library name "Default" (store.DefaultPresetName) is the default preset's identity: printed
+    // as-is in the Chinese UI it is English. The criterion is the server's is_default; a user-created preset shows its name unchanged.
     expect(presetDisplayName('Default', true, zh)).toBe('默认');
     expect(presetDisplayName('Default', true, en)).toBe('Default');
     expect(presetDisplayName('Evening', false, zh)).toBe('Evening');
@@ -52,9 +54,9 @@ describe('enum labels go through the catalog', () => {
   });
 
   it('builds the create-deck preset options from the preset list alone', () => {
-    // 回归：下拉曾硬编码一个「默认预设」哨兵项再加真实列表，只有一条预设时会出现两条
-    // 「默认」（哨兵文案与 presets.default_name 几乎同字），看着像一条没删掉的预设。
-    // 选项必须与接口返回的预设一一对应，不多不少。
+    // Regression: the dropdown used to hardcode a "default preset" sentinel item on top of the
+    // real list, so with a single preset there were two "Default" entries (the sentinel text and presets.default_name are nearly identical), looking like a preset nobody deleted.
+    // Options must correspond one-to-one with the presets the API returns — no more, no fewer.
     const one = presetSelectOptions([{ id: '6', name: 'Default', is_default: true }], zh);
     expect(one.options).toEqual([{ value: '6', label: '默认' }]);
     expect(one.selected).toBe('6');
@@ -74,8 +76,8 @@ describe('enum labels go through the catalog', () => {
   });
 
   it('preselects the first preset when none is flagged default, and nothing when the list is empty', () => {
-    // 没有 is_default 时退回第一条；列表为空（拉取失败）时 selected 为空串，
-    // 调用方据此按服务端默认预设提交（preset_id 为空串）。
+    // Without is_default, fall back to the first one; when the list is empty (fetch failed) selected is an empty string,
+    // and callers use that to submit the server's default preset (preset_id as an empty string).
     expect(presetSelectOptions([{ id: '9', name: 'Morning', is_default: false }], zh).selected).toBe('9');
     const empty = presetSelectOptions([], zh);
     expect(empty.options).toEqual([]);

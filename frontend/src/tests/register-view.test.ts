@@ -4,10 +4,10 @@ import RegisterView from '../lib/views/RegisterView.svelte';
 import SetupView from '../lib/views/SetupView.svelte';
 import { setLocale } from '../lib/i18n';
 
-// 注册视图的两种首屏形态与确认密码字段。
-// 策略探测本身（GET /api/v1/auth/registration）由 register.test.ts 的客户端契约与
-// internal/web/auth_register_test.go 的 TestRegistrationInfoEndpoint 分别覆盖；
-// 这里只验证「拿到策略后渲染成什么」与「拿不到策略时不拦人」。
+// The register view's two first-paint shapes and the confirm-password field.
+// The policy probe itself (GET /api/v1/auth/registration) is covered separately by register.test.ts's client contract and
+// internal/web/auth_register_test.go's TestRegistrationInfoEndpoint;
+// this file only verifies "what renders once the policy is known" and "no blocking when it cannot be fetched".
 describe('RegisterView first paint states', () => {
   beforeEach(() => {
     setLocale('zh-CN');
@@ -47,7 +47,7 @@ describe('RegisterView first paint states', () => {
   });
 
   it('renders neither the form nor the notice while the policy is still being probed', () => {
-    // 首帧不渲染表单：closed 的站点否则会先闪一下表单再被拦截面板替换。
+    // The form is not rendered on the first frame: otherwise a closed site would flash the form before the block panel replaces it.
     const { html } = render(RegisterView, { props: { initialPolicy: 'probing' } });
 
     expect(html).toContain('data-testid="register-probing"');

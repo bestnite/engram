@@ -1,5 +1,5 @@
 /**
- * 集中式 REST API 边界出口
+ * Centralized REST API boundary export
  */
 export * from './types';
 export * from './errors';

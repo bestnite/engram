@@ -7,8 +7,8 @@ import { setLocale } from '../lib/i18n';
 import { en } from '../lib/i18n/locales/en';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 
-// 公开只读分享浏览前端契约：同源 JSON、清洗后 HTML 直接注入、路由可解析、文案来自语言包。
-// 服务端可达性、口令门禁与清洗由 internal/web/share_test.go 覆盖。
+// Frontend contract for public read-only share browsing: same-origin JSON, sanitized HTML injected directly, a routable path, and copy from the language pack.
+// Server reachability, passphrase gating and sanitization are covered by internal/web/share_test.go.
 describe('SPA public share browser client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;
@@ -59,7 +59,7 @@ describe('SPA public share browser client flows', () => {
     });
   });
 
-  // 入伙是状态变更：先取 CSRF token，再 POST 到 join 端点（与「打开链接」是两条路径）。
+  // Joining is a state change: fetch the CSRF token first, then POST to the join endpoint (a separate path from "opening the link").
   it('joins a shared deck through the join endpoint with a CSRF token', async () => {
     mockFetch
       .mockResolvedValueOnce(

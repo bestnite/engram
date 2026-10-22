@@ -1,12 +1,12 @@
 /**
- * 题型元数据（GET /api/v1/card-types）的前端入口。
+ * Frontend entry point for card kind metadata (GET /api/v1/card-types).
  *
- * 服务端的题型自描述是字段表与作答控件的唯一来源：新增题型只改 Go，前端不维护第二份
- * 清单。这里把响应包成一份目录，并暴露按 kind 取字段/正反面/作答控件的访问器。
+ * The server's card-kind self-description is the only source of field tables and answer controls: adding a card kind means changing only Go, and the frontend keeps no second
+ * inventory. This wraps the response into a catalog and exposes accessors for fields/front-back/answer control by kind.
  *
- * 加载是异步且幂等的：并发调用共用同一个 promise，成功后写入 store 并缓存；失败时清掉
- * inflight 以便重试，且不写入 store。目录为 null 时视图渲染加载/空态，绝不把 kind 机器词
- * 或裸语言包键当文案印出来。
+ * Loading is async and idempotent: concurrent calls share a single promise, and on success the store is written and cached; on failure
+ * inflight is cleared so it can be retried, and the store is not written. When the catalog is null views render loading/empty states and never print the machine kind word
+ * or a bare language pack key as copy.
  */
 import { get, writable } from 'svelte/store';
 import type { ApiClient } from './api/client';
@@ -19,13 +19,13 @@ import type { FieldSpec } from './card-fields';
 
 export type { CardTypeDescription };
 
-/** 题型自描述的本地视图：kinds 保持服务端顺序（kind 字典序），byKind 供 O(1) 查找。 */
+/** Local view of the card-kind self-description: kinds keeps the server order (lexicographic by kind) and byKind enables O(1) lookup. */
 export interface CardTypeCatalog {
   readonly kinds: readonly CardTypeDescription[];
   readonly byKind: ReadonlyMap<string, CardTypeDescription>;
 }
 
-/** 从一批自描述构造目录；重复 kind 以后者为准（服务端不会发重复 kind）。 */
+/** Build a catalog from a batch of self-descriptions; a duplicate kind takes the later one (the server never sends duplicate kinds). */
 export function createCatalog(kinds: readonly CardTypeDescription[]): CardTypeCatalog {
   const byKind = new Map<string, CardTypeDescription>();
   for (const description of kinds) {
@@ -35,15 +35,15 @@ export function createCatalog(kinds: readonly CardTypeDescription[]): CardTypeCa
 }
 
 /**
- * 题型元数据 store。null 表示尚未就绪（加载中或拉取失败）——视图据此渲染加载/空态。
+ * Card kind metadata store. null means not ready yet (loading or the fetch failed) - views render loading/empty states accordingly.
  */
 export const cardTypes = writable<CardTypeCatalog | null>(null);
 
 let inflight: Promise<CardTypeCatalog> | null = null;
 
 /**
- * 幂等加载题型自描述：并发调用共用同一个 promise，成功后写入 store 并缓存；
- * 失败时清掉 inflight 以便下次重试，且不写入 store（保持 null，让视图走降级路径）。
+ * Idempotently load the card-kind self-description: concurrent calls share one promise, and on success the store is written and cached;
+ * on failure inflight is cleared for the next retry and the store is not written (it stays null so views take the fallback path).
  */
 export function loadCardTypes(client: ApiClient): Promise<CardTypeCatalog> {
   const cached = get(cardTypes);
@@ -64,23 +64,23 @@ export function loadCardTypes(client: ApiClient): Promise<CardTypeCatalog> {
   return inflight;
 }
 
-/** 直接注入一份目录（测试或外壳预取时使用）；生产路径只走 loadCardTypes。 */
+/** Inject a catalog directly (for tests or shell prefetching); the production path only uses loadCardTypes. */
 export function setCardTypes(catalog: CardTypeCatalog | null): void {
   inflight = null;
   cardTypes.set(catalog);
 }
 
-/** 当前快照；未就绪时返回 null。 */
+/** Current snapshot; returns null when not ready. */
 export function currentCatalog(): CardTypeCatalog | null {
   return get(cardTypes);
 }
 
-/** 题型清单（下拉/筛选用），顺序与服务端一致。 */
+/** Card kind list (for dropdowns/filters), in the same order as the server. */
 export function kindOrder(catalog: CardTypeCatalog | null): string[] {
   return catalog ? catalog.kinds.map((description) => description.kind) : [];
 }
 
-/** 题型的自描述；未知题型或目录未就绪返回 null。 */
+/** Self-description of a card kind; returns null for an unknown kind or when the catalog is not ready. */
 export function descriptionOf(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -90,8 +90,8 @@ export function descriptionOf(
 }
 
 /**
- * 题型的字段表。服务端已把通用可选字段（source_url / extra）追加在每个题型的字段末尾，
- * 这里原样返回、不再追加；未知题型返回空表，视图退化为「无字段可编辑」。
+ * A card kind's field table. The server has already appended the common optional fields (source_url / extra) at the end of every kind's fields,
+ * so they are returned as-is here with no extra appending; an unknown kind returns an empty table and the view degrades to "no fields to edit".
  */
 export function fieldsForKind(
   catalog: CardTypeCatalog | null,
@@ -101,7 +101,7 @@ export function fieldsForKind(
   return description ? [...description.fields] : [];
 }
 
-/** 题型是否由服务端判分（等价于「题型实现了 Grader」）。 */
+/** Whether the card kind is graded by the server (equivalent to "the kind implements Grader"). */
 export function isGraded(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -109,7 +109,7 @@ export function isGraded(
   return descriptionOf(catalog, kind)?.graded ?? false;
 }
 
-/** 正面字段名；未知题型返回空串。 */
+/** Front field name; returns an empty string for an unknown kind. */
 export function frontField(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -117,7 +117,7 @@ export function frontField(
   return descriptionOf(catalog, kind)?.front_field ?? '';
 }
 
-/** 背面字段名；未知题型返回空串。 */
+/** Back field name; returns an empty string for an unknown kind. */
 export function backField(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -125,7 +125,7 @@ export function backField(
   return descriptionOf(catalog, kind)?.back_field ?? '';
 }
 
-/** 作答类题型的题面字段名；非作答题型返回空串。 */
+/** Prompt field name of an answer-graded kind; returns an empty string for non-answer kinds. */
 export function promptField(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -133,7 +133,7 @@ export function promptField(
   return descriptionOf(catalog, kind)?.prompt_field ?? '';
 }
 
-/** 作答类题型的选项字段名；无选项字段返回空串。 */
+/** Options field name of an answer-graded kind; returns an empty string when there is no options field. */
 export function optionsField(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined
@@ -141,7 +141,7 @@ export function optionsField(
   return descriptionOf(catalog, kind)?.options_field ?? '';
 }
 
-/** 作答控件类型；未知题型返回 none。 */
+/** Answer control type; returns none for an unknown kind. */
 export function answerControl(
   catalog: CardTypeCatalog | null,
   kind: string | null | undefined

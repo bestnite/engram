@@ -1,5 +1,5 @@
 /**
- * 卡组数据结构（与 Go 后端 internal/api/decks.go:DeckResponse 对齐）
+ * Deck data structure (aligned with the Go backend's internal/api/decks.go:DeckResponse)
  */
 export interface Deck {
   id: string;
@@ -11,25 +11,25 @@ export interface Deck {
   archived_at?: string | null;
   created_at: string;
   /**
-   * 调用者在该卡组上的显式关系（Go: DeckResponse.Role）。
-   * 'owner' 为自有；'editor'/'reader' 为被显式授权。列表里的卡组必然属于这两类之一。
-   * 列表卡片据此决定显示「删除」（owner）还是「退出共享」（editor/reader）。
+   * The caller's explicit relation to this deck (Go: DeckResponse.Role).
+   * 'owner' means own deck; 'editor'/'reader' mean explicitly granted. A deck in the list is necessarily one of these two groups.
+   * The list card uses this to decide whether to show "delete" (owner) or "leave shared deck" (editor/reader).
    */
   role: 'owner' | 'editor' | 'reader';
 }
 
 /**
- * GET /api/v1/decks 响应体结构
+ * GET /api/v1/decks response body structure
  */
 export interface DecksResponse {
   decks: Deck[];
 }
 
 /**
- * 一条待接受的卡组共享邀请（同意制；Go: internal/web/share_invites.go）。
+ * A pending deck sharing invite (consent-based; Go: internal/web/share_invites.go).
  *
- * 收件人视角读 deck_name + inviter_name（谁邀请我用哪个卡组），属主视角读 username
- * （我邀请了谁）。同一结构两种读法，字段按视角取用。
+ * From the recipient's view read deck_name + inviter_name (who invited me to which deck); from the owner's view read username
+ * (whom I invited). One structure, two readings; use the fields matching the view.
  */
 export interface DeckShareInvite {
   deck_id: string;
@@ -43,23 +43,23 @@ export interface DeckShareInvite {
   expires_at: string;
 }
 
-/** 接收策略：谁可以把卡组分享给我。NULL/缺省按 anyone。 */
+/** Accept policy: who may share decks with me. NULL/omitted means anyone. */
 export type ShareAcceptPolicy = 'anyone' | 'whitelist' | 'nobody';
 
-/** 白名单里的一行。带用户名是因为界面要显示「谁」，裸 id 不可读。 */
+/** One row in the allowlist. It carries the username because the UI must show "who"; a bare id is unreadable. */
 export interface ShareAllowRow {
   user_id: string;
   username: string;
 }
 
-/** GET /api/v1/sharing/invites（我的待接受邀请 + 我的接收策略）。 */
+/** GET /api/v1/sharing/invites (my pending invites + my accept policy). */
 export interface ShareInvitesResponse {
   invites: DeckShareInvite[];
   policy: ShareAcceptPolicy;
   allow_list: ShareAllowRow[];
 }
 
-/** GET/PUT /api/v1/settings/share-policy 的响应。 */
+/** Response of GET/PUT /api/v1/settings/share-policy. */
 export interface SharePolicyResponse {
   policy: ShareAcceptPolicy;
   allow_list: ShareAllowRow[];
@@ -71,21 +71,21 @@ export interface DeckQueueCountsResponse {
 }
 
 /**
- * GET/PATCH /api/v1/decks/:id/settings（Go: internal/web/deck_settings_api.go）。
- * new_per_day / reviews_per_day 为 0 表示不限；new_unlimited / review_unlimited 显式表达
- * 「不限」，因为 0 与「今日剩余 0 张」在整数上同形。今日已用/剩余与复习队列同源。
+ * GET/PATCH /api/v1/decks/:id/settings (Go: internal/web/deck_settings_api.go).
+ * new_per_day / reviews_per_day of 0 mean unlimited; new_unlimited / review_unlimited express
+ * "unlimited" explicitly, because 0 and "0 cards left today" are numerically identical. Today's used/remaining come from the same source as the review queue.
  */
 export interface DeckSettings {
   deck_id: string;
   deck_name: string;
-  /** 卡组描述（属主在「卡组信息」表单里预填用；共享成员改不了它）。 */
+  /** Deck description (used by the owner to prefill the "deck info" form; shared members cannot change it). */
   deck_description: string;
-  /** 调用者在卡组上的角色：设置是调用者自己的，属主与共享成员各有一份。 */
+  /** The caller's role on the deck: settings belong to the caller, so the owner and each shared member have their own copy. */
   role: 'owner' | 'editor' | 'reader';
   preset_id: string;
   new_per_day: number;
   reviews_per_day: number;
-  /** 今天「再来一组」追加的新卡额度；new_left 已经算进了它，new_per_day 没有。 */
+  /** New-card quota added by today's "one more round"; new_left already counts it, new_per_day does not. */
   new_extra: number;
   new_used: number;
   review_used: number;
@@ -96,8 +96,8 @@ export interface DeckSettings {
 }
 
 /**
- * PATCH /api/v1/decks/:id/settings 请求体；两个额度字段都必填，0 合法（不限）。
- * preset_id 可选：省略即不动预设（旧的只改额度调用保持原行为）。
+ * PATCH /api/v1/decks/:id/settings request body; both quota fields are required, and 0 is valid (unlimited).
+ * preset_id is optional: omitting it leaves the preset untouched (older quota-only callers keep their behavior).
  */
 export interface UpdateDeckSettingsRequest {
   new_per_day: number;
@@ -105,7 +105,7 @@ export interface UpdateDeckSettingsRequest {
   preset_id?: string;
 }
 
-/** POST /api/v1/decks 请求体与响应体。preset_id 为空串使用服务端默认预设。 */
+/** POST /api/v1/decks request and response body. An empty preset_id uses the server's default preset. */
 export interface CreateDeckRequest {
   name: string;
   description: string;
@@ -113,7 +113,7 @@ export interface CreateDeckRequest {
 }
 
 /**
- * 笔记数据结构（与 Go 后端 internal/api/notes.go:NoteJSON 对齐）
+ * Note data structure (aligned with the Go backend's internal/api/notes.go:NoteJSON)
  */
 export interface Note {
   id: string;
@@ -124,12 +124,12 @@ export interface Note {
   created_at: string;
   updated_at: string;
   external_ref: string;
-  /** 调用者是否暂停了这条 note 下的卡（暂停只对本人生效）。 */
+  /** Whether the caller suspended the cards under this note (suspension applies to you only). */
   suspended: boolean;
 }
 
 /**
- * GET /api/v1/decks/:id/notes 响应体结构
+ * GET /api/v1/decks/:id/notes response body structure
  * internal/api/notes.go:listNotes
  */
 export interface NotesResponse {
@@ -146,14 +146,14 @@ export interface UpdateNoteRequest {
   tags?: string[];
 }
 
-/** POST /api/v1/decks/:id/notes/preview 响应；HTML 已由服务端清理。 */
+/** POST /api/v1/decks/:id/notes/preview response; the HTML is already sanitized by the server. */
 export interface NotePreviewResponse {
   cards: Array<{ front_html: string; back_html: string }>;
 }
 
 /**
- * GET /api/v1/card-types 的字段控件取值。
- * 与 Go internal/cardtype 的 Control* 常量逐项一致；前端据此选择编辑表单控件。
+ * Field control values of GET /api/v1/card-types.
+ * Matches the Go internal/cardtype Control* constants item by item; the frontend uses it to pick edit form controls.
  */
 export type CardTypeFieldControl =
   | 'text'
@@ -165,28 +165,28 @@ export type CardTypeFieldControl =
   | 'indexes';
 
 /**
- * GET /api/v1/card-types 的作答控件取值。
- * 与 Go internal/cardtype 的 Answer* 常量逐项一致；none 表示自评题型。
+ * Answer control values of GET /api/v1/card-types.
+ * Matches the Go internal/cardtype Answer* constants item by item; none means a self-graded card kind.
  */
 export type CardTypeAnswerControl = 'none' | 'text' | 'number' | 'single' | 'multi' | 'bool' | 'blanks' | 'items' | 'essay';
 
-/** 题型的一个字段规格（与 Go internal/cardtype.FieldSpec 对齐）。 */
+/** One field spec of a card kind (aligned with Go internal/cardtype.FieldSpec). */
 export interface CardTypeField {
   key: string;
   control: CardTypeFieldControl;
   required: boolean;
-  /** 带库默认值的布尔字段的服务端默认值；无默认时服务端省略该键。 */
+  /** Server default of a boolean field that has a DB default; when there is none the server omits the key. */
   default?: unknown;
 }
 
 /**
- * 题型的自描述（与 Go internal/cardtype.Description 对齐）。
- * 编辑表单与复习页据此渲染，不再各自硬编码一张题型表。
+ * Self-description of a card kind (aligned with Go internal/cardtype.Description).
+ * The edit form and review page render from it instead of each hardcoding a card-kind table.
  */
 export interface CardTypeDescription {
   kind: string;
   label_key: string;
-  /** 是否由服务端判分（等价于「题型实现了 Grader」）。 */
+  /** Whether the server grades it (equivalent to "the card kind implements Grader"). */
   graded: boolean;
   answer_control: CardTypeAnswerControl;
   front_field: string;
@@ -195,20 +195,20 @@ export interface CardTypeDescription {
   options_field: string;
   fields: CardTypeField[];
   /**
-   * 一条能通过该题型校验的 note 字段值，服务端总会返回。它写给 agent 照抄（挖空语法、
-   * 选项下标从 0 起、公式分隔符），前端不消费，因此声明为可选，测试夹具不必逐题型复制一份。
+   * A note field value that passes that kind's validation; the server always returns it. It is written so an agent can copy it verbatim (cloze syntax,
+   * option indexes starting at 0, formula delimiters); the frontend does not consume it, hence optional, so test fixtures need not copy one per kind.
    */
   example?: Record<string, unknown>;
 }
 
-/** GET /api/v1/card-types 响应体；kinds 按 kind 字典序，结果稳定。 */
+/** GET /api/v1/card-types response body; kinds are in lexicographic order by kind, so results are stable. */
 export interface CardTypesResponse {
   kinds: CardTypeDescription[];
 }
 
 /**
- * GET /api/v1/media 的一项（与 Go internal/api.MediaItem 对齐）。
- * url 由 sha256 拼成 /media/<sha256>，可直接用于 <img src> 与 Markdown 引用插入。
+ * One item of GET /api/v1/media (aligned with Go internal/api.MediaItem).
+ * url is built from sha256 as /media/<sha256> and can be used directly in <img src> and for inserting Markdown references.
  */
 export interface MediaItem {
   sha256: string;
@@ -220,15 +220,15 @@ export interface MediaItem {
   created_at: string;
 }
 
-/** GET /api/v1/media 的一页；next_cursor 为空串表示已到底。 */
+/** One page of GET /api/v1/media; an empty next_cursor means the end is reached. */
 export interface MediaListResponse {
   items: MediaItem[];
   next_cursor: string;
 }
 
 /**
- * 编辑器上传成功响应（与 Go 后端 internal/web/media.go:storeUpload 对齐）。
- * 对外标识是 sha256，url 直接由哈希拼成 /media/<sha256>。
+ * Editor upload success response (aligned with the Go backend's internal/web/media.go:storeUpload).
+ * The public identifier is sha256, and url is built directly from the hash as /media/<sha256>.
  */
 export interface MediaUploadResult {
   sha256: string;
@@ -238,7 +238,7 @@ export interface MediaUploadResult {
 }
 
 /**
- * GET /api/v1/decks/:id/notes 查询参数
+ * GET /api/v1/decks/:id/notes query parameters
  * internal/store/note.go:NoteListOptions
  */
 export interface NoteListParams {
@@ -251,10 +251,10 @@ export interface NoteListParams {
 }
 
 /**
- * 批量写入契约的请求体。
+ * Request body of the bulk write contract.
  *
- * 服务端按 kind 从题型注册表取字段校验，接受任意已注册题型；这里不把 kind 收窄成
- * 'basic'，否则统一编辑器无法提交非基础题型。fields 用 Record 承载各题型自己的字段。
+ * The server validates fields by kind from the card-kind registry and accepts any registered kind; here kind is not narrowed to
+ * 'basic', otherwise the unified editor could not submit non-basic kinds. fields is a Record carrying each kind's own fields.
  */
 export interface CreateNotesRequest {
   notes: Array<{
@@ -275,9 +275,9 @@ export interface CreateNotesResponse {
 }
 
 /**
- * POST /api/v1/notes/bulk 请求体（权威 schema 是 schema/note-bulk.schema.json）。
- * action 的取值集合与 Go 侧 bulkAction* 常量逐项一致；note_ids 去重后 1..500；
- * tags 仅标签动作需要（1..20），delete 不得带 tags。
+ * POST /api/v1/notes/bulk request body (the authoritative schema is schema/note-bulk.schema.json).
+ * The set of action values matches the Go-side bulkAction* constants item by item; note_ids is deduplicated to 1..500;
+ * tags is needed only for tag actions (1..20), and delete must not carry tags.
  */
 export interface BulkNotesRequest {
   action: 'delete' | 'add_tags' | 'remove_tags' | 'set_tags';
@@ -286,15 +286,15 @@ export interface BulkNotesRequest {
   dry_run?: boolean;
 }
 
-/** 批量动作里被逐行拒绝的 note；code 取值 not_found / insufficient_role。 */
+/** A note rejected row by row in a bulk action; code is not_found / insufficient_role. */
 export interface BulkNotesSkipped {
   note_id: string;
   code: string;
 }
 
 /**
- * POST /api/v1/notes/bulk 响应体。affected 只计库中状态确实变化的行，
- * 因此同一请求重复提交时第二次 affected=0；skipped 逐行给出拒绝原因，整批不回滚。
+ * POST /api/v1/notes/bulk response body. affected counts only rows whose stored state actually changed,
+ * so resubmitting the same request gives affected=0 the second time; skipped gives the rejection reason per row, and the batch is never rolled back.
  */
 export interface BulkNotesResponse {
   dry_run: boolean;
@@ -323,26 +323,26 @@ export interface PackageImportReport {
 }
 
 /**
- * 学习统计概要（与 Go 后端 internal/api/service.go:StatsSummary 对齐）
+ * Study stats summary (aligned with the Go backend's internal/api/service.go:StatsSummary)
  */
 export interface StatsSummary {
   decks: number;
   due: number;
   reviews_today: number;
   reviews_total: number;
-  /** 真实留存率：到期复习中评分不是 Again 的比例（与统计页同一口径）。 */
+  /** True retention: among due reviews, the share not graded Again (same rule as the stats page). */
   retention: number;
-  /** 留存率的分母（只含到期复习，不等于 reviews_total）；为 0 时显示「暂无数据」。 */
+  /** The retention denominator (due reviews only, not equal to reviews_total); display "no data yet" when 0. */
   retention_total: number;
-  /** 留存率的分子。 */
+  /** The retention numerator. */
   retention_passed: number;
   notes: number;
   cards: number;
 }
 
 /**
- * 统计明细（与 Go 后端 internal/web/stats_api.go 的 statsDetail 对齐）
- * 与统计页同一批聚合查询，字段返回原始计数/比例/毫秒，本地化与柱宽由前端负责。
+ * Detailed stats (aligned with statsDetail in the Go backend's internal/web/stats_api.go)
+ * The same aggregate queries as the stats page; fields return raw counts/ratios/milliseconds, and localization and bar widths are the frontend's job.
  */
 export interface StatsVolume {
   today: number;
@@ -395,9 +395,9 @@ export interface StatsDeck {
   deck_id: string;
   name: string;
   due_count: number;
-  /** 全部复习次数（含学习步骤）。 */
+  /** Total review count (including learning steps). */
   reviews: number;
-  /** 真实留存率；分母 retention_total 为 0 时不代表 0%，而是没有数据。 */
+  /** True retention; a denominator retention_total of 0 does not mean 0% but no data. */
   retention: number;
   retention_total: number;
   elapsed_ms: number;
@@ -424,7 +424,7 @@ export interface StatsDetail {
   time_spent: StatsTimeSpent;
   streak: StatsStreak;
   curve: StatsCurvePoint[];
-  /** 曲线窗口的首尾复习日（含两端）；curve 只含有复习的日子，画连续日期轴要靠这两个边界。 */
+  /** First and last review day of the curve window (inclusive); curve only contains days with reviews, so a continuous date axis needs these two bounds. */
   curve_from: string;
   curve_to: string;
   decks: StatsDeck[];
@@ -433,7 +433,7 @@ export interface StatsDetail {
 }
 
 /**
- * 到期卡片对外形态（与 Go 后端 internal/api/service.go:DueCard 对齐）
+ * Public shape of a due card (aligned with the Go backend's internal/api/service.go:DueCard)
  */
 export interface DueCard {
   card_id: string;
@@ -450,38 +450,38 @@ export interface DueCard {
 }
 
 /**
- * GET /api/v1/review/due 响应体结构
+ * GET /api/v1/review/due response body structure
  */
 export interface DueCardsResponse {
   cards: DueCard[];
 }
 
 /**
- * GET / POST /api/v1/decks/:id/extra-new 的响应体（与 Go 后端 internal/api/extra_new.go:ExtraNewStatus 对齐）：
- * 调用者在卡组上今天的新卡额度，以及「再来一组」能加多少。
+ * GET / POST /api/v1/decks/:id/extra-new response body (aligned with the Go backend's internal/api/extra_new.go:ExtraNewStatus):
+ * the caller's new-card quota on the deck for today, plus how much "one more round" can add.
  */
 export interface ExtraNewStatus {
   deck_id: string;
-  /** 每日新卡上限（学习目标）；new_unlimited 为 true 时无意义。 */
+  /** Daily new-card limit (study goal); meaningless when new_unlimited is true. */
   new_per_day: number;
   new_unlimited: boolean;
-  /** 今天已经追加的新卡额度，第二天归零。 */
+  /** New-card quota already added today, reset to zero the next day. */
   extra_new: number;
   new_used: number;
-  /** 今天还能引入的新卡数，已含追加量。 */
+  /** How many new cards can still be introduced today, including the added amount. */
   new_left: number;
-  /** 卡组里还没学过、此刻可以引入的新卡总数，不受额度限制（按标签复习时只数带这些标签的卡）。 */
+  /** Total new cards in the deck not yet studied that can be introduced right now, regardless of quota (when reviewing by tag, only cards carrying those tags are counted). */
   new_available: number;
-  /** 默认追加张数；0 表示没有可追加的新卡。 */
+  /** Default number of cards to add; 0 means there are no new cards to add. */
   suggested_count: number;
-  /** 单次追加允许的最大张数。 */
+  /** Maximum number of cards allowed in a single add. */
   max_count: number;
 }
 
 export interface SubmitSelfReviewRequest {
   card_id: string;
   rating: number;
-  /** 简答题（answer_control = 'essay'）自评前写下的作答，随自评存档；其它题型不带。 */
+  /** The answer written before self-grading a short-answer card (answer_control = 'essay'), archived with the self-grade; other kinds do not carry it. */
   answer?: string;
   expected_version: number;
   elapsed_ms?: number;
@@ -500,15 +500,15 @@ export interface SubmitReviewResult {
 }
 
 /**
- * 作答类题型提交的原始作答。
- * 评分由服务端判分器产生，客户端绝不提交档位。
+ * Raw answer submitted for answer-graded card kinds.
+ * The grade is produced by the server's grader; the client never submits a grade.
  */
 export type GradedAnswer = string | number | boolean | number[] | string[];
 
 /**
- * POST /api/v1/review/grade 请求体。
- * action 省略时正常判分；'reveal' 只取清洗后的正确答案（不写库）；
- * 'give_up' 表示已揭示答案后放弃作答，按 Again 记一条自评。
+ * POST /api/v1/review/grade request body.
+ * When action is omitted it grades normally; 'reveal' only fetches the sanitized correct answer (writes nothing);
+ * 'give_up' means giving up after the answer was revealed, recorded as a self-grade of Again.
  */
 export interface SubmitGradedReviewRequest {
   card_id: string;
@@ -521,7 +521,7 @@ export interface SubmitGradedReviewRequest {
 }
 
 /**
- * 判分反馈：verdict 是判定，answer_html 是服务端清洗后的正确答案（唯一 HTML 汇）。
+ * Grade feedback: verdict is the decision, answer_html is the server-sanitized correct answer (the single HTML sink).
  */
 export interface GradedFeedback {
   verdict: 'correct' | 'partial' | 'incorrect';
@@ -530,13 +530,13 @@ export interface GradedFeedback {
   answer_html: string;
   given: string;
   parsed?: string;
-  /** 逐项判分题型（列表题）的逐项结果：每项写法的清洗后 HTML 与是否答对，按条目顺序。 */
+  /** Per-item result for card kinds graded item by item (list cards): sanitized HTML of each item's answer plus correctness, in item order. */
   breakdown?: { answer_html: string; correct: boolean }[];
 }
 
 /**
- * POST /api/v1/review/grade 响应体（与 Go 后端 internal/web/review_api.go 对齐）。
- * 判分与放弃两条路径都返回新状态与同范围队列；reveal 走 RevealAnswerResponse。
+ * POST /api/v1/review/grade response body (aligned with the Go backend's internal/web/review_api.go).
+ * Both the grade and give-up paths return the new state and the same-scope queue; reveal goes through RevealAnswerResponse.
  */
 export interface GradedReviewResult {
   card_id: string;
@@ -551,7 +551,7 @@ export interface GradedReviewResult {
 }
 
 /**
- * POST /api/v1/review/grade（action=reveal）响应体：只返回清洗后的正确答案。
+ * POST /api/v1/review/grade (action=reveal) response body: only the sanitized correct answer.
  */
 export interface RevealAnswerResponse {
   revealed: boolean;
@@ -560,30 +560,30 @@ export interface RevealAnswerResponse {
 }
 
 /**
- * POST /api/v1/review/render 响应体（Go: internal/web/review_api.go）。
- * front_html / back_html 已由服务端 goldmark + bluemonday 清洗，是复习页唯一的 HTML 汇
- * edit_href 指向卡片编辑页，供 `e` 快捷键跳转。
+ * POST /api/v1/review/render response body (Go: internal/web/review_api.go).
+ * front_html / back_html are already sanitized by goldmark + bluemonday on the server and are the review page's only HTML sink
+ * edit_href points at the card edit page, for the `e` shortcut to jump there.
  */
 export interface ReviewRenderResponse {
   card_id: string;
   front_html: string;
   back_html: string;
-  /** 逐空作答题（answer_control = 'blanks'）本卡每处挖空的提示，按出现顺序；无提示为空串，其它题型为 null。 */
+  /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
   blanks?: string[] | null;
   edit_href: string;
-  /** 四档评分各自的下次间隔（秒），按 Again/Hard/Good/Easy 排列；预览失败时为空数组。 */
+  /** Next interval (seconds) for each of the four grades, ordered Again/Hard/Good/Easy; empty array when the preview fails. */
   intervals?: RatingInterval[];
 }
 
-/** 某一档评分提交后，这张卡到下次复习的间隔（与 Go 后端 internal/api/review_preview.go:RatingInterval 对齐）。 */
+/** Interval from this card to its next review after one grade is submitted (aligned with the Go backend's internal/api/review_preview.go:RatingInterval). */
 export interface RatingInterval {
   rating: number;
   seconds: number;
 }
 
 /**
- * POST /api/v1/review/bury 响应体：埋藏只写本人进度，不产生 reviews 行；
- * cards / remaining 是同一范围重建后的队列。
+ * POST /api/v1/review/bury response body: burying writes only your own progress and creates no reviews rows;
+ * cards / remaining are the queue rebuilt over the same scope.
  */
 export interface ReviewQueueResponse {
   cards: DueCard[];
@@ -591,8 +591,8 @@ export interface ReviewQueueResponse {
 }
 
 /**
- * POST /api/v1/review/undo 响应体：除同范围重建的队列外，显式带上被撤销卡的对外 id。
- * 队列按 due_at 排序，被撤销的卡不保证排在首位，前端必须据 undone_card_id 定位当前卡。
+ * POST /api/v1/review/undo response body: besides the rebuilt same-scope queue, it explicitly carries the undone card's public id.
+ * The queue is sorted by due_at, so the undone card is not guaranteed to be first and the frontend must locate the current card via undone_card_id.
  */
 export interface ReviewUndoResponse {
   cards: DueCard[];
@@ -601,17 +601,17 @@ export interface ReviewUndoResponse {
 }
 
 /**
- * GET /api/v1/review/due 查询参数
- * deck 参数可重复传递多个卡组 ID（互斥/单/多），limit 取 [1, 500]
+ * GET /api/v1/review/due query parameters
+ * The deck parameter may be repeated with multiple deck IDs (mutually exclusive/single/multiple), and limit is in [1, 500]
  */
 export interface DueCardsQuery {
   deck?: string | string[];
-  /** 只取带有其中任一标签的卡；带标签时 deck 必须恰好一个，否则服务端返回 400。 */
+  /** Take only cards carrying any of these tags; with tags, deck must be exactly one, otherwise the server returns 400. */
   tag?: string[];
   limit?: number;
 }
 
-/** 卡组里的一个标签及带有它的笔记数（GET /api/v1/decks/:id/tags）。 */
+/** One tag in a deck and the number of notes carrying it (GET /api/v1/decks/:id/tags). */
 export interface DeckTag {
   tag: string;
   notes: number;
@@ -622,7 +622,7 @@ export interface DeckTagsResponse {
 }
 
 /**
- * 用户信息结构（与 Go 后端 internal/web/auth_api.go 对齐）
+ * User info structure (aligned with the Go backend's internal/web/auth_api.go)
  */
 export interface User {
   id: string;
@@ -634,7 +634,7 @@ export interface User {
 }
 
 /**
- * GET /api/v1/auth/session 响应体结构
+ * GET /api/v1/auth/session response body structure
  */
 export interface SessionResponse {
   authenticated: boolean;
@@ -643,7 +643,7 @@ export interface SessionResponse {
 }
 
 /**
- * POST /api/v1/auth/login 请求体结构
+ * POST /api/v1/auth/login request body structure
  */
 export interface LoginRequest {
   username: string;
@@ -651,7 +651,7 @@ export interface LoginRequest {
 }
 
 /**
- * POST /api/v1/auth/login 响应体结构
+ * POST /api/v1/auth/login response body structure
  */
 export interface LoginResponse {
   authenticated?: boolean;
@@ -661,15 +661,15 @@ export interface LoginResponse {
 }
 
 /**
- * GET /api/v1/auth/totp 响应体结构：当前请求是否持有有效的登录第二步凭据。
- * 凭据只在第一因素（密码）通过后下发，因此 pending=true 不泄露任何账号是否启用 TOTP。
+ * GET /api/v1/auth/totp response body structure: whether the current request holds a valid login second-step credential.
+ * The credential is only issued after the first factor (password) passes, so pending=true leaks nothing about whether any account has TOTP enabled.
  */
 export interface TOTPPendingResponse {
   pending: boolean;
 }
 
 /**
- * POST /api/v1/auth/totp 响应体结构：与登录成功同形（通过第二因素后才签发会话）。
+ * POST /api/v1/auth/totp response body structure: same shape as a successful login (the session is issued only after the second factor passes).
  */
 export interface TOTPLoginResponse {
   authenticated: boolean;
@@ -678,7 +678,7 @@ export interface TOTPLoginResponse {
 }
 
 /**
- * POST /api/v1/auth/logout 响应体结构
+ * POST /api/v1/auth/logout response body structure
  */
 export interface LogoutResponse {
   authenticated: boolean;
@@ -686,8 +686,8 @@ export interface LogoutResponse {
 }
 
 /**
- * POST /api/v1/auth/register 请求体。
- * invite 为空时按站点注册策略判定；非空时走一次性邀请接受路径。
+ * POST /api/v1/auth/register request body.
+ * When invite is empty the site registration policy decides; when non-empty it takes the one-time invite acceptance path.
  */
 export interface RegisterRequest {
   username: string;
@@ -697,14 +697,14 @@ export interface RegisterRequest {
   invite?: string;
 }
 
-/** POST /api/v1/auth/register 响应体；注册成功不建立会话，前端随后跳转登录。 */
+/** POST /api/v1/auth/register response body; a successful registration establishes no session and the frontend then redirects to login. */
 export interface RegisterResponse {
   created: boolean;
 }
 
 /**
- * POST /api/v1/auth/setup 请求体。
- * email 为空且配置了 BOOTSTRAP_ADMIN_EMAIL 时由服务端兜底。
+ * POST /api/v1/auth/setup request body.
+ * When email is empty and BOOTSTRAP_ADMIN_EMAIL is configured, the server falls back to it.
  */
 export interface SetupRequest {
   username: string;
@@ -713,13 +713,13 @@ export interface SetupRequest {
   password: string;
 }
 
-/** POST /api/v1/auth/setup 响应体；引导成功不建立会话。 */
+/** POST /api/v1/auth/setup response body; a successful bootstrap establishes no session. */
 export interface SetupResponse {
   created: boolean;
 }
 
 /**
- * Go 后端错误体内层结构（internal/api/errors.go:errorBody）
+ * Go backend error body inner structure (internal/api/errors.go:errorBody)
  */
 export interface ApiErrorDetail {
   code: string;
@@ -727,16 +727,16 @@ export interface ApiErrorDetail {
 }
 
 /**
- * 统一错误包壳（{"error": {"code": "...", "message": "..."}}）
+ * Unified error envelope ({"error": {"code": "...", "message": "..."}})
  */
 export interface ApiErrorEnvelope {
   error: ApiErrorDetail;
 }
 
 /**
- * API 客户端错误类
- * 封装 HTTP 状态码、稳定业务错误 code 与原始细节
- * AGENTS.md §2.1：面向开发者的内部 message 恒为英文，UI 文案由前端语言包映射
+ * API client error class
+ * Wraps the HTTP status code, the stable business error code and the raw details
+ * AGENTS.md §2.1: the internal message aimed at developers is always English; UI copy is mapped by the frontend language packs
  */
 export class ApiClientError extends Error {
   readonly status: number;
@@ -750,19 +750,19 @@ export class ApiClientError extends Error {
     this.code = options.code;
     this.details = options.details;
 
-    // 维持原型链
+    // Keep the prototype chain
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
   /**
-   * 是否为 401 未认证状态
+   * Whether this is the 401 unauthenticated state
    */
   get isUnauthorized(): boolean {
     return this.status === 401 || this.code === 'unauthorized';
   }
 
   /**
-   * 是否为 403 权限不足或角色不够状态
+   * Whether this is the 403 insufficient-permission or insufficient-role state
    */
   get isForbidden(): boolean {
     return (
@@ -774,7 +774,7 @@ export class ApiClientError extends Error {
   }
 
   /**
-   * 是否为 409 数据冲突或版本冲突状态
+   * Whether this is the 409 data-conflict or version-conflict state
    */
   get isConflict(): boolean {
     return (
@@ -785,49 +785,49 @@ export class ApiClientError extends Error {
   }
 
   /**
-   * 是否为 404 资源未找到
+   * Whether this is 404 resource not found
    */
   get isNotFound(): boolean {
     return this.status === 404 || this.code === 'not_found';
   }
 
   /**
-   * 是否为 429 请求限流
+   * Whether this is 429 rate limited
    */
   get isRateLimited(): boolean {
     return this.status === 429 || this.code === 'rate_limited';
   }
 
   /**
-   * 是否为网络层故障（如断网或 fetch 异常）
+   * Whether this is a network-layer failure (e.g. offline or a fetch exception)
    */
   get isNetworkError(): boolean {
     return this.code === 'network_error';
   }
 
   /**
-   * 是否为 CSRF 校验失败
+   * Whether this is a CSRF validation failure
    */
   get isCsrfError(): boolean {
     return this.code === 'csrf_failed' || this.code === 'csrf_no_session';
   }
 
   /**
-   * 是否为账号凭据错误
+   * Whether this is a wrong-account-credentials error
    */
   get isInvalidCredentials(): boolean {
     return this.code === 'invalid_credentials';
   }
 
   /**
-   * 是否为账号被禁用
+   * Whether the account is disabled
    */
   get isUserDisabled(): boolean {
     return this.code === 'user_disabled';
   }
 
   /**
-   * 是否需要两步验证
+   * Whether two-factor verification is required
    */
   get isTotpRequired(): boolean {
     return this.code === 'totp_required';
@@ -835,7 +835,7 @@ export class ApiClientError extends Error {
 }
 
 /**
- * 用户基础资料与设置结构（Go: internal/store/models.go:User）
+ * User basic profile and settings structure (Go: internal/store/models.go:User)
  */
 export interface UserProfile {
   id?: string;
@@ -845,12 +845,12 @@ export interface UserProfile {
   locale: string;
   timezone: string;
   day_cutoff_hour: number | null;
-  /** 提前学习窗口（分钟）；null 表示用服务端默认值。 */
+  /** Early-study window (minutes); null means use the server default. */
   learn_ahead_minutes?: number | null;
 }
 
 /**
- * 更新个人资料请求体结构
+ * Update profile request body structure
  */
 export interface UpdateProfileRequest {
   display_name: string;
@@ -861,7 +861,7 @@ export interface UpdateProfileRequest {
 }
 
 /**
- * 个人资料响应体结构
+ * Profile response body structure
  */
 export interface ProfileResponse {
   profile: UserProfile;
@@ -883,7 +883,7 @@ export interface APIKeysResponse {
 }
 
 /**
- * 客户端表单校验结果结构
+ * Client-side form validation result structure
  */
 export interface ProfileValidationResult {
   valid: boolean;
@@ -892,10 +892,10 @@ export interface ProfileValidationResult {
 }
 
 /**
- * TOTP 管理接口（Go: internal/web/totp_api.go）。
+ * TOTP management endpoints (Go: internal/web/totp_api.go).
  *
- * GET 只报告状态，绝不返回 secret 或 otpauth；secret 只在 begin 响应里出现一次，
- * 恢复码明文只在 confirm / recovery 响应里出现一次。
+ * GET only reports status and never returns the secret or otpauth; the secret appears only once in the begin response,
+ * and plaintext recovery codes appear only once in the confirm / recovery responses.
  */
 export interface TOTPStatus {
   enabled: boolean;
@@ -903,37 +903,37 @@ export interface TOTPStatus {
   recovery_remaining: number;
 }
 
-/** POST /api/v1/settings/totp/begin 响应；secret 与 otpauth 链接只在此出现一次。 */
+/** POST /api/v1/settings/totp/begin response; the secret and otpauth link appear only here, once. */
 export interface TOTPBeginResponse {
   secret: string;
   otpauth_url: string;
   pending: boolean;
 }
 
-/** POST /api/v1/settings/totp/confirm 响应；启用成功时一次性返回恢复码。 */
+/** POST /api/v1/settings/totp/confirm response; returns recovery codes once on successful enablement. */
 export interface TOTPConfirmResponse {
   enabled: boolean;
   recovery_codes: string[];
   recovery_remaining: number;
 }
 
-/** POST /api/v1/settings/totp/disable 响应。 */
+/** POST /api/v1/settings/totp/disable response. */
 export interface TOTPDisableResponse {
   enabled: boolean;
 }
 
-/** POST /api/v1/settings/totp/recovery 响应；一次性返回新一批恢复码。 */
+/** POST /api/v1/settings/totp/recovery response; returns a new batch of recovery codes once. */
 export interface TOTPRecoveryResponse {
   recovery_codes: string[];
   recovery_remaining: number;
 }
 
 /**
- * 邮件通知偏好接口（Go: internal/web/mail_prefs_api.go）。
+ * Email notification preference endpoints (Go: internal/web/mail_prefs_api.go).
  *
- * 分组与开关由服务端从 internal/mail 目录推导；前端只按稳定标识查自己的语言包，
- * 不另列一份类型清单。reminder_hour 为 null 表示站点默认，0–23 是显式小时（0 是合法午夜）。
- * D 管理员通知类只对管理员返回：非管理员的响应里没有该分组，提交它会被 403 拒绝（forbidden_type）。
+ * Groups and toggles are derived by the server from the internal/mail catalog; the frontend only looks up its own language pack by stable id
+ * and does not keep a separate list of kinds. reminder_hour null means the site default; 0-23 are explicit hours (0 is a valid midnight).
+ * D Admin notification kinds are returned only to admins: non-admin responses omit that group, and submitting it is rejected with 403 (forbidden_type).
  */
 export interface NotificationPrefType {
   type: string;
@@ -946,7 +946,7 @@ export interface NotificationPrefGroup {
   types: NotificationPrefType[];
 }
 
-/** GET /api/v1/settings/notifications 响应。 */
+/** GET /api/v1/settings/notifications response. */
 export interface NotificationPrefsResponse {
   groups: NotificationPrefGroup[];
   reminder_hour: number | null;
@@ -954,17 +954,17 @@ export interface NotificationPrefsResponse {
   timezone: string;
 }
 
-/** PATCH /api/v1/settings/notifications 请求；choices 缺席的键按关闭处理（与复选框缺席一致）。 */
+/** PATCH /api/v1/settings/notifications request; keys missing from choices are treated as off (consistent with an absent checkbox). */
 export interface UpdateNotificationPrefsRequest {
   choices: Record<string, boolean>;
   reminder_hour: number | null;
 }
 
 /**
- * 调度预设接口（Go: internal/web/presets_api.go）。
+ * Scheduling preset endpoints (Go: internal/web/presets_api.go).
  *
- * 与 SSR 预设页同源：默认预设补齐、门槛、单并发入队、状态与回退全部复用同一批
- * store/jobs 方法。verdict 是服务端算出的三态枚举，前端据此查语言包，不复制判据。
+ * Same source as the SSR preset page: default preset padding, thresholds, single-concurrency enqueueing, status and revert all reuse the same
+ * store/jobs methods. verdict is a three-state enum computed by the server, and the frontend looks it up in the language pack instead of duplicating the criteria.
  */
 export interface PresetFitMetrics {
   log_loss: number;
@@ -972,7 +972,7 @@ export interface PresetFitMetrics {
   items: number;
 }
 
-/** 优化前后拟合结论的稳定枚举。 */
+/** Stable enum for the fit conclusion before/after optimization. */
 export type PresetOptimizeVerdict =
   | 'improved'
   | 'not_improved'
@@ -988,7 +988,7 @@ export interface PresetOptimizeResult {
   verdict: PresetOptimizeVerdict | string;
 }
 
-/** 优化作业状态；result 只在 succeeded 且报告可解析时非 null。 */
+/** Optimization job status; result is non-null only when succeeded and the report parses. */
 export interface PresetJob {
   id: string;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | string;
@@ -998,7 +998,7 @@ export interface PresetJob {
   result: PresetOptimizeResult | null;
 }
 
-/** 优化门槛：shortfall 只在 eligible 为 false 时有意义。 */
+/** Optimization threshold: shortfall is meaningful only when eligible is false. */
 export interface OptimizeGate {
   reviews: number;
   min: number;
@@ -1009,7 +1009,7 @@ export interface OptimizeGate {
 export interface PresetRecord {
   id: string;
   name: string;
-  /** 是否为默认预设；显示名与「不可删除/不可改名」的判据都用它，界面不必知道存储名。 */
+  /** Whether this is the default preset; both the display name and the "not deletable/not renameable" criteria use it, so the UI need not know the stored name. */
   is_default: boolean;
   desired_retention: number;
   learning_steps: string;
@@ -1021,22 +1021,22 @@ export interface PresetRecord {
   weights_review_count: number | null;
   weights_raw: string | null;
   job: PresetJob | null;
-  /** 本预设的优化门槛：可用复习只数挂着本预设的卡组上的记录，每个预设各有一份。 */
+  /** This preset's optimization threshold: only reviews on decks carrying this preset count, and each preset has its own. */
   gate: OptimizeGate;
 }
 
-/** GET /api/v1/presets 与创建/编辑/回退共用的响应体。 */
+/** Response body shared by GET /api/v1/presets and create/edit/revert. */
 export interface PresetsResponse {
   presets: PresetRecord[];
 }
 
-/** 触发优化与轮询状态共用的响应体。 */
+/** Response body shared by triggering optimization and polling status. */
 export interface PresetOptimizeResponse {
   job: PresetJob | null;
   gate: OptimizeGate;
 }
 
-/** 创建/编辑预设的请求体；enable_fuzz 必须显式给出，缺字段服务端拒绝。 */
+/** Create/edit preset request body; enable_fuzz must be given explicitly, and the server rejects a missing field. */
 export interface PresetWriteRequest {
   name: string;
   desired_retention: number;
@@ -1047,11 +1047,11 @@ export interface PresetWriteRequest {
 }
 
 /**
- * 管理面板接口（Go: internal/web/admin_read.go）。
- * 响应只带原始值与稳定英文标识，任何本地化文案都由前端语言包按标识映射。
+ * Admin panel endpoints (Go: internal/web/admin_read.go).
+ * Responses carry only raw values and stable English identifiers; any localized copy is mapped by the frontend language pack by identifier.
  */
 
-/** GET /api/v1/admin/summary：实例级计数。 */
+/** GET /api/v1/admin/summary: instance-level counts. */
 export interface AdminSummary {
   users_total: number;
   users_active: number;
@@ -1063,7 +1063,7 @@ export interface AdminSummary {
   jobs_failed: number;
 }
 
-/** GET /api/v1/admin/health：健康页读数。schema_version / due 为 null 表示读不出来。 */
+/** GET /api/v1/admin/health: health page readings. schema_version / due null means it could not be read. */
 export interface AdminHealth {
   database: 'ok' | 'error';
   schema_version: number | null;
@@ -1072,19 +1072,19 @@ export interface AdminHealth {
   due: number | null;
 }
 
-/** 审计行的操作者；null 表示系统动作（无 UserID）。 */
+/** The operator of an audit row; null means a system action (no UserID). */
 export interface AdminAuditActor {
   user_id: string | null;
   username: string;
 }
 
-/** 审计行的目标对象；null 表示无目标。 */
+/** The target object of an audit row; null means no target. */
 export interface AdminAuditTarget {
   type: string;
   id: string | null;
 }
 
-/** 一行审计记录；time 已按当前管理员时区格式化，detail 为原始 JSON 串（空串表示无详情）。 */
+/** One audit record; time is already formatted in the current admin's timezone, and detail is a raw JSON string (empty string means no details). */
 export interface AdminAuditRow {
   time: string;
   actor: AdminAuditActor | null;
@@ -1093,7 +1093,7 @@ export interface AdminAuditRow {
   detail: string;
 }
 
-/** GET /api/v1/admin/audit 响应；notice 是稳定英文码（空串表示无提示）。 */
+/** GET /api/v1/admin/audit response; notice is a stable English code (empty string means no notice). */
 export interface AdminAuditResponse {
   rows: AdminAuditRow[];
   actions: string[];
@@ -1103,7 +1103,7 @@ export interface AdminAuditResponse {
   notice: string;
 }
 
-/** 审计检索的过滤条件；空串/缺省表示不过滤该项。 */
+/** Audit search filters; empty string/omitted means no filtering on that item. */
 export interface AdminAuditQuery {
   user?: string;
   action?: string;
@@ -1114,9 +1114,9 @@ export interface AdminAuditQuery {
   page?: number;
 }
 
-/** 用户管理（Go: internal/web/admin_users_api.go）。 */
+/** User management (Go: internal/web/admin_users_api.go). */
 
-/** 用户列表里的一行；role/status 是存储取值，由前端映射文案。 */
+/** One row in the user list; role/status are stored values, mapped to copy by the frontend. */
 export interface AdminUser {
   id: string;
   username: string;
@@ -1130,7 +1130,7 @@ export interface AdminUser {
   is_self: boolean;
 }
 
-/** GET /api/v1/admin/users 响应。 */
+/** GET /api/v1/admin/users response. */
 export interface AdminUsersResponse {
   users: AdminUser[];
   page: number;
@@ -1139,7 +1139,7 @@ export interface AdminUsersResponse {
   query: string;
 }
 
-/** POST /api/v1/admin/users 请求。 */
+/** POST /api/v1/admin/users request. */
 export interface AdminUserCreateRequest {
   username: string;
   email: string;
@@ -1148,9 +1148,9 @@ export interface AdminUserCreateRequest {
   role: string;
 }
 
-/** 注册与邀请（Go: internal/web/admin_registration_api.go）。 */
+/** Registration and invites (Go: internal/web/admin_registration_api.go). */
 
-/** 一条邀请；role/status 是存储取值，link 供管理员复制。 */
+/** One invite; role/status are stored values, and link is for the admin to copy. */
 export interface AdminInvite {
   id: string;
   token: string;
@@ -1164,20 +1164,20 @@ export interface AdminInvite {
   used_by: string;
 }
 
-/** GET /api/v1/admin/registration 响应。 */
+/** GET /api/v1/admin/registration response. */
 export interface AdminRegistrationResponse {
   policy: string;
   email_domains: string;
   invites: AdminInvite[];
 }
 
-/** POST /api/v1/admin/registration 请求。 */
+/** POST /api/v1/admin/registration request. */
 export interface AdminRegistrationRequest {
   policy: string;
   email_domains: string;
 }
 
-/** POST /api/v1/admin/invites 请求；expires_days 为 null 或 0 表示不过期。 */
+/** POST /api/v1/admin/invites request; expires_days null or 0 means never expires. */
 export interface AdminInviteCreateRequest {
   email: string;
   role: string;
@@ -1185,15 +1185,15 @@ export interface AdminInviteCreateRequest {
   send_email: boolean;
 }
 
-/** POST /api/v1/admin/invites 响应；mail_notice 是稳定英文码（空串表示未请求发信）。 */
+/** POST /api/v1/admin/invites response; mail_notice is a stable English code (empty string means no mail was requested). */
 export interface AdminInviteCreateResponse {
   invite: AdminInvite;
   mail_notice: string;
 }
 
-/** API Key 总览（Go: internal/web/admin_keys_api.go）。 */
+/** API key overview (Go: internal/web/admin_keys_api.go). */
 
-/** 一把 key 的元信息；时间已按管理员时区格式化，null 表示未设置。 */
+/** Metadata of one key; times are already formatted in the admin's timezone, null means unset. */
 export interface AdminAPIKey {
   id: string;
   user_id: string;
@@ -1206,7 +1206,7 @@ export interface AdminAPIKey {
   state: string;
 }
 
-/** GET /api/v1/admin/api-keys 响应。 */
+/** GET /api/v1/admin/api-keys response. */
 export interface AdminAPIKeysResponse {
   keys: AdminAPIKey[];
   page: number;
@@ -1214,9 +1214,9 @@ export interface AdminAPIKeysResponse {
   total: number;
 }
 
-/** 系统设置 / SMTP / OIDC（Go: internal/web/admin_settings_api.go、admin_smtp.go、admin_oidc.go）。 */
+/** System settings / SMTP / OIDC (Go: internal/web/admin_settings_api.go, admin_smtp.go, admin_oidc.go). */
 
-/** 设置表格里的一行；unit 非空时值按单位解释（当前只有 "bytes"）。 */
+/** One row in the settings table; when unit is non-empty the value is interpreted in that unit (currently only "bytes"). */
 export interface AdminSettingRow {
   key: string;
   value: string;
@@ -1227,18 +1227,18 @@ export interface AdminSettingRow {
   unit?: string;
 }
 
-/** 一个设置分区（general / media / optimize / sensitive）。 */
+/** One settings section (general / media / optimize / sensitive). */
 export interface AdminSettingsSection {
   name: string;
   rows: AdminSettingRow[];
 }
 
-/** GET /api/v1/admin/settings 响应。 */
+/** GET /api/v1/admin/settings response. */
 export interface AdminSettingsResponse {
   sections: AdminSettingsSection[];
 }
 
-/** outbox 读数。 */
+/** outbox readings. */
 export interface AdminOutbox {
   pending: number;
   failed: number;
@@ -1246,7 +1246,7 @@ export interface AdminOutbox {
   last_attempts: number;
 }
 
-/** GET /api/v1/admin/smtp 响应。 */
+/** GET /api/v1/admin/smtp response. */
 export interface AdminSMTPResponse {
   host: string;
   host_source: string;
@@ -1264,7 +1264,7 @@ export interface AdminSMTPResponse {
   admin_notify_ready: boolean;
 }
 
-/** POST /api/v1/admin/smtp(/test) 请求；空字段表示沿用已保存值。 */
+/** POST /api/v1/admin/smtp(/test) request; empty fields mean keep the saved values. */
 export interface AdminSMTPRequest {
   host?: string;
   port?: string;
@@ -1274,14 +1274,14 @@ export interface AdminSMTPRequest {
   password?: string;
 }
 
-/** 测试连接的响应；ok 为 true 时忽略 message。 */
+/** Test connection response; ignore message when ok is true. */
 export interface AdminTestResult {
   ok: boolean;
   code: string;
   message: string;
 }
 
-/** 一条已绑定身份。 */
+/** One bound identity. */
 export interface AdminOIDCIdentity {
   id: string;
   provider: string;
@@ -1291,7 +1291,7 @@ export interface AdminOIDCIdentity {
   linked_at: string;
 }
 
-/** GET /api/v1/admin/oidc 响应。 */
+/** GET /api/v1/admin/oidc response. */
 export interface AdminOIDCResponse {
   enabled: boolean;
   issuer: string;
@@ -1306,7 +1306,7 @@ export interface AdminOIDCResponse {
   identities: AdminOIDCIdentity[];
 }
 
-/** POST /api/v1/admin/oidc(/test) 请求；空字符串字段表示不修改。 */
+/** POST /api/v1/admin/oidc(/test) request; empty string fields mean no change. */
 export interface AdminOIDCRequest {
   enabled: boolean;
   issuer?: string;
@@ -1319,9 +1319,9 @@ export interface AdminOIDCRequest {
   client_secret?: string;
 }
 
-/** 作业与语言包报告（Go: internal/web/admin_jobs_api.go、admin_i18n_api.go）。 */
+/** Jobs and language pack report (Go: internal/web/admin_jobs_api.go, admin_i18n_api.go). */
 
-/** 一个作业的元信息；stage 为 null 表示尚未进入训练阶段。 */
+/** Metadata of one job; stage null means it has not entered the training stage yet. */
 export interface AdminJob {
   id: string;
   kind: string;
@@ -1335,7 +1335,7 @@ export interface AdminJob {
   can_cancel: boolean;
 }
 
-/** GET /api/v1/admin/jobs 响应。 */
+/** GET /api/v1/admin/jobs response. */
 export interface AdminJobsResponse {
   jobs: AdminJob[];
   page: number;
@@ -1343,7 +1343,7 @@ export interface AdminJobsResponse {
   total: number;
 }
 
-/** 一种语言的覆盖率。 */
+/** Coverage of one language. */
 export interface AdminLocaleCoverage {
   code: string;
   percent: number;
@@ -1353,14 +1353,14 @@ export interface AdminLocaleCoverage {
   missing: string[];
 }
 
-/** GET /api/v1/admin/i18n 响应。 */
+/** GET /api/v1/admin/i18n response. */
 export interface AdminI18nResponse {
   locales: AdminLocaleCoverage[];
   all_complete: boolean;
 }
-// ---- 账号安全与邮件流程（Go: internal/web/account.go）----
+// ---- Account security and mail flows (Go: internal/web/account.go) ----
 
-/** POST /api/v1/auth/forgot-password 请求。响应只含站点级邮件是否可用，绝不回显账号存在性。 */
+/** POST /api/v1/auth/forgot-password request. The response only covers site-level mail availability and never echoes whether an account exists. */
 export interface ForgotPasswordRequest {
   email: string;
 }
@@ -1369,7 +1369,7 @@ export interface ForgotPasswordResponse {
   mail_ready: boolean;
 }
 
-/** POST /api/v1/auth/reset-password：一次性令牌 + 新密码。 */
+/** POST /api/v1/auth/reset-password: one-time token + new password. */
 export interface ResetPasswordRequest {
   token: string;
   password: string;
@@ -1387,14 +1387,14 @@ export interface ConfirmEmailChangeResponse {
   changed: boolean;
 }
 
-/** GET /api/v1/settings/email（会话）：当前邮箱、验证状态与站点邮件是否可用。 */
+/** GET /api/v1/settings/email (session): current email, verification state, and whether site mail is available. */
 export interface EmailSettingsResponse {
   email: string;
   email_verified: boolean;
   mail_ready: boolean;
 }
 
-/** POST /api/v1/settings/email（会话）：请求改邮箱，确认前库中地址不变。 */
+/** POST /api/v1/settings/email (session): request an email change; the stored address stays unchanged until confirmation. */
 export interface EmailChangeRequest {
   email: string;
 }
@@ -1403,72 +1403,72 @@ export interface EmailChangeResponse {
   sent: boolean;
 }
 
-/** POST /api/v1/settings/verify-email（会话）：重发验证邮件。 */
+/** POST /api/v1/settings/verify-email (session): resend the verification message. */
 export interface ResendVerificationResponse {
   sent: boolean;
 }
 
-// ---- 公开只读分享浏览（Go: internal/web/share_api.go）----
+// ---- Public read-only share browsing (Go: internal/web/share_api.go) ----
 
-/** 一条共享卡片的正反面，均为服务端清洗后的 HTML（客户端只做 {@html}，绝不再渲染 Markdown）。 */
+/** Both sides of one shared card, each server-sanitized HTML (the client only does {@html} and never re-renders Markdown). */
 export interface ShareNote {
   front_html: string;
   back_html: string;
 }
 
-/** GET /api/v1/share/:token 与 POST /api/v1/share/:token/unlock 的响应。 */
+/** Response of GET /api/v1/share/:token and POST /api/v1/share/:token/unlock. */
 export interface ShareResponse {
   deck_name: string;
-  /** 为真时 notes 恒为空：有口令的链接在解锁前不返回任何正文。 */
+  /** When true, notes is always empty: a password-protected link returns no content before unlocking. */
   password_required: boolean;
   notes: ShareNote[];
 }
 
 /**
- * POST /api/v1/share/:token/join 的响应。
- * 入伙成功后该卡组进入调用者的列表（并出现在复习队列里），撤销链接不影响它。
+ * Response of POST /api/v1/share/:token/join.
+ * After joining successfully the deck enters the caller's list (and appears in the review queue); revoking the link does not affect it.
  */
 export interface JoinShareResponse {
   deck_id: number;
   joined: boolean;
 }
 
-// ---- OIDC 登录入口探测（Go: internal/web/oidc_api.go）----
+// ---- OIDC login entry probing (Go: internal/web/oidc_api.go) ----
 
-/** GET /api/v1/auth/oidc：入口是否可用与发起地址；不含任何凭据。 */
+/** GET /api/v1/auth/oidc: whether the entry is available and the initiation URL; contains no credentials. */
 export interface OIDCInfo {
   enabled: boolean;
   start_url: string;
 }
 
-// ---- 注册策略探测（Go: internal/web/auth_api.go）----
+// ---- Registration policy probing (Go: internal/web/auth_api.go) ----
 
-/** 站点自助注册策略；取值与 Go 侧 internal/auth/policy.go 一一对应。 */
+/** Site self-registration policy; values correspond one-to-one with Go-side internal/auth/policy.go. */
 export type RegistrationPolicy = 'open' | 'invite' | 'closed';
 
-/** GET /api/v1/auth/registration：当前注册策略；不含任何凭据，匿名可调。 */
+/** GET /api/v1/auth/registration: the current registration policy; contains no credentials and is callable anonymously. */
 export interface RegistrationInfo {
   policy: RegistrationPolicy;
 }
 
 /**
- * GET /api/v1/unsubscribe?token=… 的响应。
- * type 是令牌指名的可选邮件类型；服务端只读取、不消费令牌。
+ * Response of GET /api/v1/unsubscribe?token=....
+ * type is the optional mail kind named by the token; the server only reads it and does not consume the token.
  */
 export interface UnsubscribeReadResponse {
   type: string;
 }
 
-/** POST /api/v1/unsubscribe 的响应：确认退订后回带被关掉的类型。 */
+/** POST /api/v1/unsubscribe response: after confirming, returns the kind that was disabled. */
 export interface UnsubscribeConfirmResponse {
   type: string;
 }
 
-/** 邮件模板：每个邮件类型每种语言一份，缺失即回退内置正文。 */
+/** Mail templates: one per mail kind per language; a missing one falls back to the built-in body. */
 export interface AdminMailTemplateVar {
   name: string;
   required: boolean;
-  /** 变量用途的语言包键；界面按它本地化，不硬编码说明文字。 */
+  /** Language pack key for the variable's purpose; the UI localizes by it instead of hardcoding explanatory text. */
   note_key: string;
 }
 
@@ -1488,10 +1488,10 @@ export interface AdminMailTemplateRow {
 }
 
 /**
- * 某类型在某语言下的**内置正文**。
+ * The **built-in body** of one kind in one language.
  *
- * 与发信方兜底用的是同一段代码，只是代入占位符而不是真实值——所以编辑框预填它之后，
- * 「看到的默认」与「实际发出去的默认」不会是两份文本。
+ * It shares the same code path as the sender's fallback, only substituting placeholders instead of real values - so after pre-filling the edit box with it,
+ * "the default you see" and "the default actually sent" are never two different texts.
  */
 export interface AdminMailTemplateDefault {
   type: string;
@@ -1502,11 +1502,11 @@ export interface AdminMailTemplateDefault {
 
 export interface AdminMailTemplatesResponse {
   locales: string[];
-  /** 回退链第二级：没有自定义模板时按它取，界面据此说明。 */
+  /** Second level of the fallback chain: used when there is no custom template, and the UI explains that. */
   site_default_locale: string;
   types: AdminMailTemplateType[];
   rows: AdminMailTemplateRow[];
-  /** 每个类型 × 每种语言的内置正文；编辑框据此预填，「恢复默认」后也回到它。 */
+  /** Built-in body for every kind x language; the edit box pre-fills from it, and "restore default" returns to it. */
   defaults: AdminMailTemplateDefault[];
 }
 

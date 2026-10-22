@@ -5,14 +5,14 @@
   import type { MediaItem } from '../api';
   import Button from './ui/Button.svelte';
 
-  // 媒体库选择器：数据来自 GET /api/v1/media 的同源 JSON，不再拉取已删除的
-  // SSR HTML 片段。缩略预览直接用原图（服务端不生成缩略图），由 CSS 限尺寸 + loading="lazy"
-  // 承担；每一页的翻页游标也来自 JSON 的 next_cursor。
+  // Media library picker: data comes from the same-origin JSON of GET /api/v1/media and no longer fetches the removed
+  // SSR HTML fragment. Thumbnail previews use the original image directly (the server generates no thumbnails), handled by CSS size limits + loading="lazy"
+  // and the paging cursor for each page also comes from the JSON's next_cursor.
   //
-  // 只负责取数与展示：把选中项的 url（/media/<sha256>）交回宿主，由宿主把它以 Markdown
-  // 图片语法插入当前聚焦字段（与上传路径共用同一段插入逻辑）。
+  // Only fetches and displays: it hands the selected item's url (/media/<sha256>) back to the host, which inserts it into the currently focused field
+  // as Markdown image syntax (sharing the same insertion logic as the upload path).
   interface Props {
-    /** 选中一项时回调，参数是可直接引用的媒体 url（/media/<sha256>）。 */
+    /** Called when an item is selected; the argument is a directly usable media url (/media/<sha256>). */
     onselect: (url: string) => void;
   }
 

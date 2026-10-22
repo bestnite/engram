@@ -3,11 +3,11 @@
   import { cn } from './utils';
 
   /**
-   * 设置页的一个分区：左侧标题与一行说明，右侧控件；分区之间只有一条横线。
+   * One section of a settings page: title and a one-line description on the left, controls on the right; only a rule between sections.
    *
-   * 取代「每组设置一张卡片」：卡片把标签、输入框、按钮从上往下堆，一页四五张卡片互相嵌套时
-   * 层级全靠边框区分，看起来很乱。左右两栏让说明与控件并排，扫一眼左栏就知道这页能改什么。
-   * 窄屏下两栏自动上下排列。
+   * Replaces "one card per group of settings": cards stack label, input and button top to bottom, and with four or five cards nested on a page
+   * the hierarchy rests entirely on borders and looks messy. Two columns put the description and controls side by side, so a glance at the left column shows what the page can change.
+   * On narrow screens the two columns stack.
    */
   interface Props {
     title: string;
@@ -22,7 +22,7 @@
 
 <section
   class={cn(
-    // 只按 section 计「第一个」：页头、提示行等其它元素在前面时，第一个分区上方同样不画线。
+    // Count "first" only among sections: when a page header, notice row or other element comes before it, the first section gets no line above it either.
     'grid gap-x-10 gap-y-4 border-t border-border py-8 first-of-type:border-t-0 first-of-type:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]',
     klass
   )}

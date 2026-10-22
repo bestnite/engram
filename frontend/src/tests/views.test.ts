@@ -76,8 +76,8 @@ describe('HomeView component response states and truthful rendering', () => {
   });
 
   it('renders truthful metrics from Go test fixture (visible_scope_test.go)', () => {
-    // 真实响应来自 internal/api/visible_scope_test.go:TestStatsVisibleContentButFullReviewHistory
-    // 三条复习里两条是到期复习（一条 Again），新卡那条不计入留存：1/2 = 50%。
+    // The real response comes from internal/api/visible_scope_test.go:TestStatsVisibleContentButFullReviewHistory
+    // Two of the three reviews are due reviews (one Again), and the new-card one does not count toward retention: 1/2 = 50%.
     const goSummary: StatsSummary = {
       decks: 1,
       notes: 1,
@@ -110,7 +110,7 @@ describe('HomeView component response states and truthful rendering', () => {
 
     expect(html).toContain('data-testid="home-data"');
 
-    // 验证到期数、今日复习数、留存率、卡组数精准渲染
+    // Verify due count, reviews today, retention rate and deck count all render exactly
     expect(html).toContain('data-testid="home-due-count"');
     expect(html).toMatch(/data-testid="home-due-count"[^>]*>\s*1\s*</);
     expect(html).toContain('data-testid="home-reviews-today"');
@@ -120,16 +120,16 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="home-decks-count"');
     expect(html).toMatch(/data-testid="home-decks-count"[^>]*>\s*1\s*</);
 
-    // 验证到期卡片大于 0 时，显示「开始复习」链接并携带准确计数
+    // Verify that with more than 0 due cards the "start review" link shows and carries the exact count
     expect(html).toContain('data-testid="home-start-review"');
     expect(html).toContain('href="/review"');
-    // 计数放在按钮内单独的数字徽标里。
+    // The count sits in its own numeric badge inside the button.
     expect(html).toMatch(/data-testid="home-start-review"[^>]*>[\s\S]*?开始复习[\s\S]*?<span[^>]*>\s*1\s*<\/span>/);
 
-    // 验证卡组列表与 XSS 安全转义
+    // Verify the deck list and XSS-safe escaping
     expect(html).toContain('data-testid="home-decks-list"');
     expect(html).toContain('href="/review?deck=10"');
-    // 首页的卡组行显示今日队列计数而不是每日上限；上限只在 /decks 列表里显示。
+    // The home page's deck rows show today's queue count, not the daily cap; the cap only shows in the /decks list.
     expect(html).not.toContain('20 / 100');
     expect(html).toContain('&lt;安全测试>');
     expect(html).toContain('卡组描述 &amp; 详情');
@@ -137,7 +137,7 @@ describe('HomeView component response states and truthful rendering', () => {
   });
 
   it('shows no-data retention when the user has only learning-step reviews', () => {
-    // 与 internal/api/stats_summary_test.go 的「只有学习步骤」用例同形：有复习，但没有到期复习。
+    // Same shape as internal/api/stats_summary_test.go's "learning steps only" case: reviews exist, but no due reviews.
     const learningOnly: StatsSummary = {
       decks: 1,
       notes: 1,
@@ -176,7 +176,7 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toMatch(/data-testid="home-due-help"[^>]*aria-label="待复习是什么意思？"|aria-label="待复习是什么意思？"[^>]*data-testid="home-due-help"/);
     expect(html).toContain('aria-label="今日已复习是什么意思？"');
     expect(html).toContain('aria-label="留存率是什么意思？"');
-    // 卡组数一目了然，不配说明。
+    // The deck count speaks for itself, so no caption.
     expect(html).not.toContain('aria-label="卡组数是什么意思？"');
   });
 });
@@ -221,8 +221,8 @@ describe('StatsView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="stats-retry"');
   });
 
-  // 与 internal/web/stats_test.go 的 seedStatsFixture 同源：2 条今日复习 + 1 条昨日复习、
-  // 一个稳定性 5 天的到期卡、一个带 algebra 标签的卡组。数字全部可在 Go 侧独立复算。
+  // Same source as internal/web/stats_test.go's seedStatsFixture: 2 reviews today + 1 yesterday,
+  // one due card with 5 days of stability, and one deck tagged algebra. Every number can be recomputed independently on the Go side.
   const detailFixture: StatsDetail = {
     generated_at: '2026-10-06T12:00:00Z',
     empty: false,
@@ -242,7 +242,7 @@ describe('StatsView component response states and truthful rendering', () => {
     ],
     curve_from: '2026-09-07',
     curve_to: '2026-10-06',
-    // 卡组/标签的复习量数全部 3 条，留存只数其中 2 条到期复习（都非 Again）。
+    // Reviews for the deck and tag dimensions all total 3, and retention counts only the 2 due reviews among them (both non-Again).
     decks: [
       { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
     ],
@@ -270,40 +270,40 @@ describe('StatsView component response states and truthful rendering', () => {
 
     expect(html).toContain('data-testid="stats-data"');
 
-    // 复习量 / 到期预测：原始计数经语言包单位渲染，不四舍五入、不补零。
+    // Review volume / due forecast: raw counts rendered with language-pack units, without rounding or zero padding.
     expect(html).toContain('2 次');
     expect(html).toContain('1 张');
 
-    // 留存率：总体与 1–7 天桶都是 2/2 = 100.0%。
+    // Retention: the overall figure and the 1–7 day bucket are both 2/2 = 100.0%.
     expect(html).toContain('100.0%（2/2）');
     expect(html).toContain('1–7 天');
 
-    // 时间投入：累计 3000ms → 3 秒；中位数 1500ms → 1.5 秒。
+    // Time invested: 3000ms total → 3 seconds; 1500ms median → 1.5 seconds.
     expect(html).toContain('3 秒');
     expect(html).toContain('1.5 秒');
 
-    // 连续打卡。
+    // Streak.
     expect(html).toMatch(/data-testid="stats-streak-current"[^>]*>\s*2 天\s*</);
 
-    // 卡组维度与标签维度。
+    // Deck dimension and tag dimension.
     expect(html).toContain('Stats deck');
     expect(html).toMatch(/Stats deck[\s\S]*?100\.0%<\/td>/);
     expect(html).not.toContain('66.7%');
     expect(html).toContain('algebra');
-    // 标签维度的口径必须写在页面上：它只数「已复习卡片上的标签」，不写清楚时看起来像在
-    // 重复卡组维度（没复习过的大标签一个都不出现，用户会以为统计只认卡组名）。
+    // The tag dimension's definition must be written on the page: it only counts tags on
+    // already-reviewed cards, and without saying so it looks like a duplicate of the deck dimension (a heavily used tag with no reviews never appears, and users conclude the stats only know deck names).
     expect(html).toContain('data-testid="stats-tag-scope"');
     expect(html).toContain('只列出近 30 天内复习过的卡片上的标签');
 
-    // 时间投入的平均值是 累计/计时次数，即平均每次而不是日均。
+    // Average time invested is total / timed count, i.e. per attempt rather than per day.
     expect(html).toContain('平均每次');
     expect(html).not.toContain('日均');
 
-    // 判分来源分布。
+    // Grading-source distribution.
     expect(html).toContain('自评');
     expect(html).toContain('自动判分');
 
-    // 学习曲线：图表容器、窗口合计，以及读屏用的数据表（日期写在表里）。
+    // Learning curve: the chart container, the window totals, and the data table for screen readers (dates written into the table).
     expect(html).toContain('data-testid="stats-curve-chart"');
     expect(html).toContain('近 30 天新学 1 · 复习 2');
     expect(html).toMatch(/data-testid="stats-curve-table"[\s\S]*2026-10-06/);

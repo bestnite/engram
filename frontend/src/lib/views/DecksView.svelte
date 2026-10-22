@@ -18,26 +18,26 @@
   import { CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
 
-  // 视图响应式状态定义（Svelte 5 runes）
+  // View reactive state definitions (Svelte 5 runes)
   let loading = $state(true);
   let error = $state<ApiClientError | Error | null>(null);
   let decks = $state<Deck[]>([]);
   let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
 
-  // 新建卡组弹窗状态
+  // New deck dialog state
   let showCreateModal = $state(false);
   let name = $state('');
   let description = $state('');
-  // 新建卡组时可选调度预设。下拉只列真实预设（不含「默认预设」哨兵项），
-  // 加载完成后预选默认预设；拉取失败时 createPresetId 留空，按服务端默认预设提交
-  // （请求体 preset_id 为空串）。
+  // The scheduling preset selectable when creating a deck. The dropdown lists only real presets (without the "default preset" sentinel entry),
+  // it preselects the default preset once loading finishes; when the fetch fails createPresetId stays empty and the deck is submitted with the server's default preset
+  // (an empty string as preset_id in the request body).
   let createPresets = $state<Array<{ value: string; label: string }>>([]);
   let createPresetDefault = $state('');
   let createPresetId = $state('');
   let creating = $state(false);
   let createError = $state<string | null>(null);
 
-  // 批量选择与导出状态。导出选项与单卡组导出的默认值一致：带媒体，不带个人进度与权重。
+  // Bulk selection and export state. The export options match the single-deck export defaults: media included, personal progress and weights excluded.
   let selectedDeckIds = $state<string[]>([]);
   let showBatchExport = $state(false);
   let batchExporting = $state(false);
@@ -47,20 +47,20 @@
   let includeReviews = $state(false);
   let includeWeights = $state(false);
 
-  // 待接受的共享邀请（同意制）：分享先产生邀请，接受那一步才写授权。
-  // 拉取失败不设 error——邀请拉不到不该让整页变成错误页，它只是这一块不显示。
+  // Share invitations pending acceptance (consent model): sharing creates an invitation first, and only the accept step writes the grant.
+  // A failed fetch does not set error — failing to load invitations should not turn the whole page into an error page, it merely hides this block.
   let invites = $state<DeckShareInvite[]>([]);
-  // 在途的邀请回应：卡组 id 决定禁用哪一行，accept 决定该行哪个按钮转圈。
+  // An in-flight invitation response: the deck id decides which row is disabled, accept decides which button on that row spins.
   let inviteBusy = $state<{ deckId: string; accept: boolean } | null>(null);
 
-  // 卡组危险操作的确认弹窗状态：删除（自有卡组）与退出共享（被共享卡组）共用一套弹窗，
-  // 只有文案与调用的接口不同，避免两套重复的确认 UI。
+  // State of the confirm dialog for dangerous deck operations: delete (own deck) and leave share (shared deck) share one dialog,
+  // only the copy and the endpoint called differ, avoiding two duplicated confirmation UIs.
   let deckAction = $state<{ deck: Deck; kind: 'delete' | 'leave' } | null>(null);
   let acting = $state(false);
   let actionError = $state<string | null>(null);
 
   /**
-   * 请求后端卡组列表（GET /api/v1/decks）
+   * Request the backend deck list (GET /api/v1/decks)
    */
   async function fetchDecks(): Promise<void> {
     loading = true;
@@ -78,8 +78,8 @@
   }
 
   /**
-   * 读取待接受的共享邀请（GET /api/v1/sharing/invites）。
-   * 未登录或接口失败都只是"没有邀请可显示"，不升级成页面级错误。
+   * Read share invitations pending acceptance (GET /api/v1/sharing/invites).
+   * Being logged out or an API failure both just mean "no invitations to show", and are not escalated into a page-level error.
    */
   async function fetchInvites(): Promise<void> {
     try {
@@ -91,8 +91,8 @@
   }
 
   /**
-   * 接受或拒绝一条邀请。接受成功后重新拉卡组列表——卡组正是那一步才出现在这里。
-   * 失败走 toast，不动整页状态。
+   * Accept or decline an invitation. After a successful accept, refetch the deck list — that step is exactly when the deck appears here.
+   * Failures go through toast and leave the whole page's state untouched.
    */
   async function respondToInvite(deckId: string, accept: boolean): Promise<void> {
     inviteBusy = { deckId, accept };
@@ -127,7 +127,7 @@
     }
   }
 
-  /** 打开弹窗时才拉预设列表：多数用户不开这个弹窗，没必要每次都取。 */
+  /** Fetch the preset list only when the dialog opens: most users never open this dialog, so there is no reason to fetch it every time. */
   $effect(() => {
     if (showCreateModal && createPresets.length === 0) {
       apiClient
@@ -141,7 +141,7 @@
           }
         })
         .catch(() => {
-          // 预设列表拿不到不影响建卡组：留空即走服务端默认预设。
+          // Failing to get the preset list does not block deck creation: leaving it empty falls back to the server's default preset.
           createPresets = [];
         });
     }
@@ -194,8 +194,8 @@
     }
   }
 
-  // 批量复习直接跳到复习页：复习页本就按地址上可重复的 deck 参数取多卡组队列，这里只负责拼地址。
-  // 按列表顺序而非勾选顺序拼接，同一组卡组无论怎么勾选都得到同一个地址。
+  // Bulk review jumps straight to the review page: that page already takes a multi-deck queue from the repeatable deck param in the address, all this does is build the address.
+  // Joined in list order rather than selection order, so the same set of decks yields the same address however they were checked.
   const batchReviewHref = $derived.by(() => {
     const params = new URLSearchParams();
     for (const deck of decks) {
@@ -226,7 +226,7 @@
     }
   }
 
-  /** 打开确认弹窗。kind 决定这是「删除自有卡组」还是「退出共享卡组」。 */
+  /** Open the confirmation dialog. kind decides whether this is "delete own deck" or "leave shared deck". */
   function promptDeckAction(deck: Deck, kind: 'delete' | 'leave', e: Event): void {
     e.stopPropagation();
     deckAction = { deck, kind };
@@ -241,8 +241,8 @@
   }
 
   /**
-   * 执行确认的危险操作：删除走 deleteDeck，退出共享走 leaveDeck。
-   * 两者成功后都把卡组从本地列表移除——退出共享后它不再对你可见，效果与删除相同。
+   * Perform the confirmed dangerous operation: delete goes through deleteDeck, leaving a share through leaveDeck.
+   * On success both remove the deck from the local list — after leaving a share it is no longer visible to you, the effect equals deletion.
    */
   async function confirmDeckAction(): Promise<void> {
     if (!deckAction || acting) return;
@@ -288,7 +288,7 @@
           <RefreshCw class="size-4" aria-hidden="true" />
         </Button>
       {/if}
-      <!-- 卡组包导入入口；侧边栏的「导入」是同一个页面，这里是就近入口。 -->
+      <!-- Deck package import entry; "import" in the sidebar is the same page, this is the nearby entry point. -->
       <Button variant="outline" size="lg" href="/import" testId="decks-import-open">
         <Upload class="size-4" aria-hidden="true" />
         <span>{$t('package.import.title')}</span>
@@ -300,7 +300,7 @@
     {/snippet}
   </PageHeader>
 
-  <!-- 待接受的共享邀请：同意制的入口。没有邀请时整块不渲染。 -->
+  <!-- Share invitations pending acceptance: the consent-model entry. The whole block is not rendered when there are no invitations. -->
   {#if invites.length > 0}
     <section data-testid="deck-invites" class="mb-6">
       <div class="mb-2 flex items-baseline gap-2">
@@ -346,7 +346,7 @@
     </section>
   {/if}
 
-  <!-- 列表内容区 -->
+  <!-- List content area -->
   {#if loading}
     <Skeleton testId="decks-loading" label={$t('common.loading')} lines={5} />
   {:else if error}
@@ -376,7 +376,7 @@
     </div>
   {:else}
     <div data-testid="decks-list" class={listClasses.root}>
-      <!-- 表头兼作全选：选择状态变化只改这一行的勾选框，不插入任何会撑高页面的工具栏。 -->
+      <!-- The header doubles as select-all: a selection state change only alters this row's checkbox, without inserting any toolbar that would make the page taller. -->
       <div class={listClasses.header}>
         <Checkbox
           checked={selectedDeckIds.length > 0 && selectedDeckIds.length === decks.length}
@@ -464,7 +464,7 @@
   </SelectionBar>
 </Page>
 
-<!-- 批量导出设置：选项与单卡组导出相同，所有选中的卡组按同一组选项打进一个 zip -->
+<!-- Bulk export settings: options match single-deck export, all selected decks are packed into one zip with the same option set -->
 <Dialog
   bind:open={showBatchExport}
   title={$t('package.export.heading')}
@@ -484,7 +484,7 @@
   </div>
 </Dialog>
 
-<!-- 新建卡组对话框（Modal） -->
+<!-- New deck dialog (Modal) -->
 {#if showCreateModal}
   <Dialog
     open={true}
@@ -551,7 +551,7 @@
   </Dialog>
 {/if}
 
-<!-- 卡组危险操作二次确认对话框（Modal）：删除自有卡组 / 退出共享卡组共用一套 -->
+<!-- Second-step confirmation dialog for dangerous deck operations (Modal): delete own deck / leave shared deck share one -->
 {#if deckAction}
   <Dialog
     open={true}

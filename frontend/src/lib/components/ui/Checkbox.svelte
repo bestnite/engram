@@ -4,20 +4,20 @@
   import { cn } from './utils';
 
   /**
-   * 全站唯一的复选框（交互件用成熟组件库）。
-   * 原生 <input type="checkbox"> 在深浅两套主题下的系统外观不一致，且三态
-   * （indeterminate）需要手写 property，交给 bits-ui 处理。
+   * The site's only checkbox (interactive widgets use a mature component library).
+   * The native <input type="checkbox"> has inconsistent system appearance across the light and dark themes, and its tri-state
+   * (indeterminate) state requires hand-writing the property, so it is left to bits-ui.
    */
   interface Props {
     checked?: boolean;
     indeterminate?: boolean;
     disabled?: boolean;
-    /** 无可见文字时必须给 label（读屏名称）。 */
+    /** Must be given a label when there is no visible text (screen reader name). */
     label?: string;
     testId?: string;
     class?: string;
     onCheckedChange?: (checked: boolean) => void;
-    /** 阻止点击冒泡到外层可点击容器（如整张卡片）时使用。 */
+    /** Use to stop a click from bubbling to a clickable outer container (e.g. a whole card). */
     onclick?: (event: MouseEvent) => void;
   }
 

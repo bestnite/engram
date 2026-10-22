@@ -6,8 +6,9 @@ import type { Deck } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 卡组列表的批量复习：勾选若干卡组后，操作条给出一个指向复习页的链接，
- * 地址上为每个选中的卡组带一个 deck 参数——复习页正是按这组参数取多卡组队列。
+ * Batch review from the deck list: after ticking several decks, the action bar offers a
+ * link to the review page carrying one deck param per selected deck — the review page
+ * reads exactly those params to build a multi-deck queue.
  */
 describe('DecksView batch review', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -73,7 +74,7 @@ describe('DecksView batch review', () => {
     await toggle('Alpha');
     const link = reviewLink();
     expect(link).not.toBeNull();
-    // 按列表顺序而不是勾选顺序：同一组卡组只对应一个地址。
+    // Ordered by the list, not by tick order: the same set of decks maps to a single URL.
     expect(link!.getAttribute('href')).toBe('/review?deck=d1&deck=d3');
     expect(link!.textContent?.trim()).toBe('复习');
   });

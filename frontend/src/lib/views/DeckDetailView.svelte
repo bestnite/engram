@@ -25,7 +25,7 @@
   import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
 
   interface Props {
-    /** 测试注入：给定后挂载时不再取数（与 HomeView 等视图同一约定）。 */
+    /** Test injection: when provided, nothing is fetched on mount (same convention as HomeView and other views). */
     initialDeck?: Deck | null;
     initialNotes?: Note[];
     initialTotal?: number;
@@ -34,7 +34,7 @@
 
   let { initialDeck = null, initialNotes = [], initialTotal = 0, initialLoading = true }: Props = $props();
 
-  // 状态变量（Svelte 5 runes）
+  // State variables (Svelte 5 runes)
   // svelte-ignore state_referenced_locally
   let loading = $state(initialLoading);
   let error = $state<ApiClientError | Error | null>(null);
@@ -46,16 +46,16 @@
   let total = $state(initialTotal);
   let page = $state(1);
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
-  // 打开过的标签页保持挂载、只切换显隐：来回切换时不重新取数，也就不会每次都闪一下加载占位。
+  // Opened tabs stay mounted and only toggle visibility: switching back and forth does not refetch, so the loading placeholder does not flash every time.
   let visitedTabs = $state<Record<string, boolean>>({ cards: true });
 
-  // 逐条删除状态
-  // 待确认删除的笔记：确认放在对话框里，不在行内插入文字（插入会把行撑高、文字被挤得换行）。
+  // Per-row delete state
+  // The note pending delete confirmation: the confirmation lives in a dialog rather than inserting text into the row (inserting would make the row taller and squeeze the text into wrapping).
   let noteToDelete = $state<Note | null>(null);
   let deletingNoteId = $state<string | null>(null);
   let deleteError = $state('');
 
-  // 导出对话框状态
+  // Export dialog state
   let showExportModal = $state(false);
   let exporting = $state(false);
   let exportError = $state(false);
@@ -66,21 +66,21 @@
 
   const perPage = 50;
 
-  // 筛选条件：输入即生效（没有「应用」按钮），文本输入 300ms 防抖。
-  // 已删除的卡片不再提供筛选入口（列表只呈现未删除内容）。
+  // Filter criteria: input takes effect immediately (there is no "apply" button), text input is debounced 300ms.
+  // Deleted cards no longer offer a filter entry (the list only presents non-deleted content).
   let queryInput = $state('');
   let tagInput = $state('');
   let kindSelect = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // 按标签学习：标签只在本卡组内选（别的卡组里的同名标签不是同一个分类），多选取并集。
+  // Study by tag: tags are only selectable within this deck (a same-named tag in another deck is not the same category); multiple selections take the union.
   let tagReviewOpen = $state(false);
   let tagReviewLoading = $state(false);
   let tagReviewError = $state(false);
   let deckTags = $state<DeckTag[]>([]);
   let tagReviewChecked = $state<string[]>([]);
 
-  // 复习页按地址上的 deck / tag 参数取队列；按标签列表顺序拼接，同一组勾选总得到同一个地址。
+  // The review page takes its queue from the deck / tag params in the address; joining in tag list order means the same set of checkboxes always produces the same address.
   const tagReviewHref = $derived.by(() => {
     const params = new URLSearchParams();
     params.append('deck', deckId);
@@ -90,7 +90,7 @@
     return params.has('tag') ? `/review?${params.toString()}` : '';
   });
 
-  // 每次打开都重新取：笔记的标签可能刚在本页被批量改过。
+  // Refetched on every open: the note's tags may just have been bulk-edited on this page.
   async function openTagReview(): Promise<void> {
     tagReviewOpen = true;
     tagReviewLoading = true;
@@ -107,10 +107,10 @@
     }
   }
 
-  // 批量动作
+  // Bulk actions
   let selectedIds = $state<string[]>([]);
   let bulkTagInput = $state('');
-  // 在途的批量动作：只有它的按钮转圈，其余按钮一并禁用。
+  // The in-flight bulk action: only its button spins, the other buttons are disabled along with it.
   let bulkPending = $state<'delete' | 'add_tags' | 'remove_tags' | 'set_tags' | null>(null);
   const bulkBusy = $derived(bulkPending !== null);
   let bulkError = $state('');
@@ -118,25 +118,25 @@
   let bulkTagsOpen = $state(false);
   let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
 
-  // 题型清单的后端标识与展示名分开：标识符进查询串，展示名一律走语言包
-  // （此前下拉里直接渲染 kind 字面量，中文界面下会露出 basic/cloze 这类内部标识）。
-  // 清单本身取自服务端的题型自描述——同一份题型清单在别处再写一遍，迟早会漂移。
+  // The card type list's backend identifier is kept apart from its display name: the identifier goes into the query string, display names always come from the language pack
+  // (previously the dropdown rendered the kind literal directly, leaking internal identifiers such as basic/cloze in the Chinese UI).
+  // The list itself comes from the server's card type self-description — writing the same card type list a second time somewhere else will drift sooner or later.
   const cardKinds = $derived(kindOrder($cardTypes));
 
   const deckId = $derived($routeStore.params.id || '');
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
   const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim() || kindSelect));
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
-  // 内容修改入口按服务端返回的角色显示：reader 能看、能复习、能暂停与配置学习设置，
-  // 但不能新建/编辑/删除卡片或执行批量标签动作（服务端本就会拒绝这些写入）。
-  // deck 尚未加载时（role 未知）先按可编辑渲染，避免页面标题区出现无谓的空档。
+  // The content-editing entries are shown according to the role the server returns: a reader can view, review, pause and configure study settings,
+  // but cannot create/edit/delete cards or run bulk tag actions (the server rejects those writes anyway).
+  // While deck is not loaded yet (role unknown) it renders as editable first, avoiding a needless gap in the page title area.
   const canEditContent = $derived(deck?.role !== 'reader');
-  // 名称与描述只有属主能改（服务端同一判据）；其他成员只看到文字。
+  // Only the owner can change the name and description (the same criterion on the server); other members only see the text.
   const isOwner = $derived(deck?.role === 'owner');
 
   /**
-   * 页头原地编辑的保存：名称与描述走同一个接口，没改的那一项按当前值一并提交。
-   * 空名称前端先拦下；400 为名称/描述不合法，403/404 为无权修改。侧边栏里的卡组名由接口层的改动通知同步（AppShell）。
+   * Save of the header's in-place edit: name and description go through the same endpoint, and the unchanged one is submitted along with its current value.
+   * An empty name is stopped on the frontend first; 400 means an invalid name/description, 403/404 means no permission to modify. The deck name in the sidebar is synced by the change notification from the API layer (AppShell).
    */
   async function saveDeckInfo(patch: { name?: string; description?: string }): Promise<boolean> {
     if (!deck) return false;
@@ -164,7 +164,7 @@
   }
 
   /**
-   * 加载卡组卡片数据及卡组元数据
+   * Load the deck's card data and the deck metadata
    */
   async function loadData(targetPage = 1): Promise<void> {
     if (!deckId) return;
@@ -199,13 +199,13 @@
     }
   }
 
-  /** 文本输入：防抖后重新取数，避免每敲一个字都打一次接口。 */
+  /** Text input: refetch after the debounce, so not every keystroke hits the API. */
   function scheduleFilterReload(): void {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => loadData(1), 300);
   }
 
-  /** 下拉选择：立即生效（选择本身就是一次明确的决定，不需要防抖）。 */
+  /** Dropdown selection: takes effect immediately (the selection itself is a definite decision, no debounce needed). */
   function applyFilterNow(): void {
     if (debounceTimer) clearTimeout(debounceTimer);
     loadData(1);
@@ -275,7 +275,7 @@
       bulkResult = summarizeBulk(res);
       announceBulkResult(bulkResult);
       bulkTagInput = '';
-      // 请求完成才关对话框：在途时确认按钮转圈，失败时错误留在对话框里。
+      // The dialog closes only once the request completes: the confirm button spins while in flight, and on failure the error stays in the dialog.
       bulkTagsOpen = false;
       confirmingBulkDelete = false;
       if (action === 'delete') selectedIds = [];
@@ -287,7 +287,7 @@
     }
   }
 
-  // 批量结果用 toast 报告：处理条数一行，跳过的原因各一行。
+  // Bulk results are reported with a toast: one line for how many were processed, one line per skip reason.
   function announceBulkResult(result: { affected: number; notFound: number; insufficientRole: number }): void {
     const details = [
       result.notFound > 0 ? $t('notes.bulk_skipped_not_found', { count: result.notFound }) : '',
@@ -298,7 +298,7 @@
     });
   }
 
-  // 暂停只对本人生效：列表上的切换改的是调用者自己在这条 note 下全部卡的暂停状态。
+  // Pause only affects yourself: the toggle in the list changes the caller's own pause state for all cards under this note.
   let suspendingNoteId = $state<string | null>(null);
 
   async function toggleSuspended(note: Note): Promise<void> {
@@ -362,9 +362,9 @@
   }
 
   /**
-   * 列表行的两行摘要：第一行取题型声明的正面字段，第二行取背面字段；
-   * 题型元数据还没加载、或题型没有声明时，退回到第一、二个非空字段。
-   * 换行与连续空白压成一个空格——行内只显示一行，完整内容在编辑页。
+   * The two-line summary of a list row: the first line takes the front field declared by the card type, the second takes the back field;
+   * when the card type metadata is not loaded yet, or the card type declares none, it falls back to the first and second non-empty field.
+   * Newlines and consecutive whitespace are squeezed into a single space — the row only shows one line, the full content is on the edit page.
    */
   function noteSummary(note: Note): { primary: string; secondary: string } {
     const flat = (value: unknown) => formatFieldValue(value).replace(/\s+/g, ' ').trim();
@@ -393,7 +393,7 @@
 
   onMount(() => {
     if (initialLoading) loadData(1);
-    // 元数据只加载一次（模块内幂等）；失败时筛选下拉退化为只剩「全部题型」，不打断页面。
+    // Metadata is loaded only once (idempotent within the module); on failure the filter dropdown degrades to just "all card types" without interrupting the page.
     void loadCardTypes(apiClient).catch(() => {});
   });
 
@@ -459,7 +459,7 @@
     {/snippet}
   </PageHeader>
 
-  <!-- 标签页：下划线样式，切换只换下方内容，页头不动。 -->
+  <!-- Tabs: underline style, switching only swaps the content below, the header stays put. -->
   <div role="tablist" aria-label={deck?.name ?? ''} class="mb-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-border">
     {#each [
       { id: 'cards', label: $t('deck.tab.notes', { count: total }), testId: 'deck-notes-tab' },
@@ -485,11 +485,11 @@
     <div hidden={activeTab !== 'sharing'}><DeckSharingView embedded /></div>
   {/if}
   {#if visitedTabs.settings}
-    <!-- 学习设置是每个成员自己的，所有成员都能打开。 -->
+    <!-- Study settings are each member's own, every member can open them. -->
     <div hidden={activeTab !== 'settings'}><DeckSettingsView embedded /></div>
   {/if}
   <div hidden={activeTab !== 'cards'}>
-    <!-- 搜索与筛选 -->
+    <!-- Search and filters -->
     <form
       onsubmit={(event) => event.preventDefault()}
       class="mb-3 flex flex-wrap items-center gap-2"
@@ -712,7 +712,7 @@
       </div>
     {/if}
 
-    <!-- 批量操作：只有能改内容的角色才会有选中项（reader 没有勾选框）。 -->
+    <!-- Bulk operations: only roles that can change content ever have a selection (readers have no checkboxes). -->
     <SelectionBar
       count={selectedIds.length}
       onClear={() => (selectedIds = [])}
@@ -736,7 +736,7 @@
   </div>
 </Page>
 
-<!-- 按标签学习 -->
+<!-- Study by tag -->
 <Dialog
   bind:open={tagReviewOpen}
   title={$t('deck.tag_review.title')}
@@ -781,7 +781,7 @@
   </div>
 </Dialog>
 
-<!-- 批量编辑标签 -->
+<!-- Bulk tag edit -->
 <Dialog
   bind:open={bulkTagsOpen}
   title={$t('notes.bulk_tags')}
@@ -811,7 +811,7 @@
   </div>
 </Dialog>
 
-<!-- 批量删除确认 -->
+<!-- Bulk delete confirmation -->
 <Dialog
   bind:open={confirmingBulkDelete}
   title={$t('notes.bulk_confirm_delete')}
@@ -830,7 +830,7 @@
   </div>
 </Dialog>
 
-<!-- 单条删除确认 -->
+<!-- Single-row delete confirmation -->
 <Dialog
   open={noteToDelete !== null}
   onOpenChange={(open) => { if (!open && !deletingNoteId) noteToDelete = null; }}
@@ -857,7 +857,7 @@
   </div>
 </Dialog>
 
-<!-- 导出包设置 -->
+<!-- Export package settings -->
 <Dialog
   bind:open={showExportModal}
   title={$t('package.export.heading')}

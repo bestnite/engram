@@ -1,5 +1,5 @@
 /**
- * 支持的语言代码
+ * Supported language codes
  */
 export type SupportedLocale = 'zh-CN' | 'en';
 
@@ -8,6 +8,6 @@ export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ['zh-CN', 'en'] as 
 export const DEFAULT_LOCALE: SupportedLocale = 'zh-CN';
 
 /**
- * 语言包目录结构定义
+ * Language pack catalog structure definition
  */
 export type LocaleCatalog = Record<string, string>;

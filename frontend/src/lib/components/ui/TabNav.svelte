@@ -2,9 +2,9 @@
   import { routeStore } from '../../router';
 
   /**
-   * 页面级的链接标签栏：每个标签是一个独立页面的链接（管理面板、个人设置）。
-   * 与卡组详情页的页内标签同一种下划线样式；一行排开，窄屏横向滚动。
-   * 当前页或其下级路径命中时高亮。
+   * Page-level link tab bar: each tab is a link to a separate page (admin panel, personal settings).
+   * Uses the same underline style as the in-page tabs on the deck detail page; laid out in one row, horizontally scrollable on narrow screens.
+   * Highlighted when the current page or a descendant path matches.
    */
   interface Item {
     href: string;
@@ -16,7 +16,7 @@
     items: Item[];
     ariaLabel: string;
     testId?: string;
-    /** 只在地址完全相同时才高亮的链接（它同时是其它标签的路径前缀时用）。 */
+    /** A link highlighted only when the address matches exactly (used when it is also the path prefix of other tabs). */
     exact?: string[];
   }
 

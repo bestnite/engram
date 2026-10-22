@@ -11,10 +11,12 @@ import { matchRoute, routeStore } from '../lib/router';
 import { routes } from '../lib/router/routes';
 
 /**
- * API 密钥入口从主导航移到 /settings 页。
+ * The API key entry moved from the main nav to the /settings page.
  *
- * 两个可观测事实：主导航不再有 /settings/keys 链接；设置页的标签栏里有指向 /settings/keys 的一项。
- * 页面内容本身仍留在 /settings/keys——这里只验证路由还在，不重复 APIKeysView 自己的测试。
+ * Two observable facts: the main nav no longer has a /settings/keys link, and the settings
+ * page's tab bar has an item pointing at /settings/keys. The page content itself stays at
+ * /settings/keys — this only verifies the route is still there and does not repeat
+ * APIKeysView's own tests.
  */
 describe('API keys entry lives on the settings page, not the header', () => {
   beforeEach(() => {
@@ -38,7 +40,7 @@ describe('API keys entry lives on the settings page, not the header', () => {
   it('no longer offers an API keys link in the main navigation', () => {
     const { html } = render(AppSidebar);
     expect(html).not.toContain('href="/settings/keys"');
-    // 设置入口本身仍在主导航：否则整段导航被删时上面那条否定断言也会「通过」。
+    // The settings entry itself is still in the main nav: otherwise the negative assertion above would "pass" even if the whole nav were deleted.
     expect(html).toContain('href="/settings"');
   });
 
@@ -52,7 +54,7 @@ describe('API keys entry lives on the settings page, not the header', () => {
     expect(en['nav.api_keys']).toBeUndefined();
     expect(zhCN['settings.nav.api']).toBeTruthy();
     expect(en['settings.nav.api']).toBeTruthy();
-    // 入口卡片换成了标签栏，卡片按钮的文案不再需要。
+    // The entry card became a tab bar, so the card button's copy is no longer needed.
     expect(zhCN['settings.keys.entry']).toBeUndefined();
     expect(en['settings.keys.entry']).toBeUndefined();
   });

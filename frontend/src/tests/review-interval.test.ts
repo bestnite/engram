@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import { formatInterval } from '../lib/review-interval';
 import { setLocale, t } from '../lib/i18n';
 
-/** 评分按钮下的间隔只取一个单位、按量级挑；月按 30 天、年按 365 天，一位小数，整数不带「.0」。 */
+/** The interval under the rating buttons picks a single unit by magnitude; months as 30 days and years as 365 days, one decimal place, and integers without a trailing ".0". */
 describe('formatInterval', () => {
   const day = 86400;
   const cases: Array<[number, string, string]> = [

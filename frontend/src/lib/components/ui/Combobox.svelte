@@ -5,22 +5,22 @@
   import type { SelectOption } from './options';
 
   /**
-   * 全站唯一的可搜索下拉（与 Select 同源：bits-ui 的 Select 状态机 + 文本输入筛选）。
+   * The site's only searchable dropdown (same origin as Select: bits-ui's Select state machine + text input filtering).
    *
-   * 选它还是 Select 的判据只有一条：候选项多到需要输入筛选（如 IANA 时区全量）。候选项
-   * 少、看一遍就能选完的场景仍用 Select——多一个输入框只是噪音。
+   * There is only one criterion for choosing it over Select: enough candidates that input filtering is needed (e.g. the full IANA timezone list). When candidates
+   * are few and can be scanned at once, use Select - an extra input box is just noise.
    *
-   * 筛选由本组件承担：bits-ui 的 Combobox 只把输入文本交出来，不替调用方筛列表。三个
-   * 细节别改坏：① 输入框同时承担「显示当前值」与「筛选」，两者相等时视为未筛选，打开就
-   * 看到全量列表，而不是只剩当前那一项；② 关闭时把输入框复位成当前值的标签，否则会在
-   * 字段里留下一截搜索词（看起来像值被改掉了）；③ 再点一次当前项不清空（allowDeselect
-   * 关掉）——这里选的是必填值，清空只会把值变成空串、字段空白，「不设这个值」应当由
-   * 调用方提供的显式条目表达（如时区列表里的 UTC）。
+   * Filtering is this component's job: bits-ui's Combobox only emits the input text and does not filter the list for the caller. Three
+   * details must not be broken: (1) the input box both "shows the current value" and "filters", and when the two are equal it counts as unfiltered, so opening shows
+   * the full list instead of only the current item; (2) on close the input resets to the current value's label, otherwise a stray search term is left
+   * in the field (looking like the value was changed); (3) clicking the current item again does not clear it (allowDeselect
+   * is off) - the value here is required, and clearing would only turn it into an empty string and leave the field blank; "no such value" should be expressed
+   * by an explicit entry supplied by the caller (e.g. UTC in the timezone list).
    */
   interface Props {
     value?: string;
     options: SelectOption[];
-    /** 未选中时输入框的占位文案。 */
+    /** Placeholder copy for the input when nothing is selected. */
     placeholder?: string;
     disabled?: boolean;
     ariaLabel?: string;
@@ -43,13 +43,13 @@
   }: Props = $props();
 
   let open = $state(false);
-  // 输入框文本：关闭时显示当前值的标签，展开时是搜索词。bits-ui 的 inputValue 只能单向喂
-  // （根内部不可 bind），所以这里保持本地状态做单一来源，输入事件里同步进来。
+  // Input text: shows the current value's label when closed and the search term when open. bits-ui's inputValue can only be fed one way
+  // (not bindable inside the root), so local state is kept here as the single source and synced in the input event.
   let displayText = $state('');
 
   const selectedLabel = $derived(options.find((option) => option.value === value)?.label ?? '');
 
-  // 打开时 typeahead 与键盘导航都靠这份列表（bits-ui 的 items 契约）。
+  // When open, both typeahead and keyboard navigation rely on this list (bits-ui's items contract).
   const items = $derived(options.map(({ value: v, label, disabled: d }) => ({ value: v, label, disabled: d })));
 
   const filtered = $derived.by(() => {

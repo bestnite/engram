@@ -5,8 +5,8 @@
   import { apiClient } from '../api';
   import { getAccountErrorMessageKey } from '../api/account-errors';
 
-  // 改邮箱确认结果的 SPA 视图（服务端 GET /confirm-email-change 返回应用壳，服务端不再渲染页面）。
-  // 令牌由本视图读取 ?token= 后经 POST /api/v1/auth/confirm-email-change 消费（一次性、有过期）。
+  // SPA view for the email change confirmation result (the server's GET /confirm-email-change returns the app shell; the server no longer renders the page).
+  // This view reads the token from ?token= and then consumes it via POST /api/v1/auth/confirm-email-change (one-time, with an expiry).
     const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')

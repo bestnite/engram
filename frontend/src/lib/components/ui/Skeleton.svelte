@@ -1,29 +1,29 @@
 <script lang="ts">
   /**
-   * 加载占位（骨架屏）。
+   * Loading placeholder (skeleton screen).
    *
-   * 加载态用骨架屏而不是空白或「加载中…」文字。文案仍留在 DOM 里（`sr-only`）：
-   * 屏幕阅读器照旧宣布「正在加载」，测试也据此断言语义而不是断言某个像素块。
+   * Loading state uses a skeleton screen instead of blank space or "loading..." text. The copy stays in the DOM (`sr-only`):
+   * screen readers still announce "loading", and tests assert on semantics rather than on a particular pixel block.
    *
-   * 骨架屏在 150ms 后才淡入（app.css 的 skeleton-reveal）：快速返回的请求不会让它闪一下。
+   * Skeletons fade in only after 150ms (skeleton-reveal in app.css), so a fast request never makes one flash.
    *
-   * 这是脉冲占位的**唯一**实现：视图里再写一份 `skeleton-block` 就等于两份会漂移的样式。
+   * This is the **only** implementation of the pulsing placeholder: writing another `skeleton-block` in a view means two styles that will drift.
    */
   interface Props {
     testId: string;
     label: string;
-    /** lines＝一段标题加若干行正文（详情型内容）；cards＝重复的卡片（列表型内容）。 */
+    /** lines = a heading plus a few body rows (detail content); cards = repeated cards (list content). */
     variant?: 'lines' | 'cards';
-    /** 正文行数（lines）或卡片个数（cards）。 */
+    /** Number of body rows (lines) or cards (cards). */
     lines?: number;
     count?: number;
-    /** cards 形态的列数；1 为单列。 */
+    /** Column count for the cards shape; 1 is a single column. */
     columns?: number;
   }
 
   let { testId, label, variant = 'lines', lines = 3, count = 4, columns = 2 }: Props = $props();
 
-  // 行宽递减，读起来像一段正文，而不是几根等长条纹。
+  // Row widths decrease, so it reads like a paragraph rather than a few equal stripes.
   const widths = ['100%', '92%', '78%', '64%', '86%'];
 </script>
 

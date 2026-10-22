@@ -47,7 +47,7 @@ describe('DeckDetailView notes table', () => {
     const html = renderView([note(id)]);
     expect(html).toContain('促す');
     expect(html).toContain('うながす · 催促');
-    // 内部 ID 只出现在 data-testid 与链接里，不作为可见文字。
+    // Internal IDs appear only in data-testid and links, never as visible text.
     expect(html).not.toContain(`#${id}`);
     expect(html).toMatch(new RegExp(`href="/decks/d1/notes/${id}/edit"`));
   });
@@ -98,7 +98,7 @@ describe('DeckDetailView notes table', () => {
     expect(html).not.toContain('data-testid="bulk-select-all"');
     expect(html).not.toContain('data-testid="edit-note-n1"');
     expect(html).not.toContain('data-testid="create-note-link"');
-    // 暂停是个人操作，reader 也能用，所以行菜单仍在。
+    // Pausing is a personal action that readers can use too, so the row menu stays.
     expect(html).toContain('data-testid="note-menu-n1"');
   });
 });

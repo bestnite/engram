@@ -3,10 +3,10 @@
   import Checkbox from './ui/Checkbox.svelte';
 
   /**
-   * 卡组包导出选项：单卡组导出与批量导出共用这一组复选框，
-   * 两处的选项与默认值因此不会各自走样。
-   * 「复习记录」只在勾选进度时出现：服务端拒绝「带复习记录却不带进度」的导出，
-   * 所以取消进度时一并取消复习记录，否则先勾两项再取消进度会提交一个必然失败的请求。
+   * Package export options: single-deck export and bulk export share this set of checkboxes,
+   * so the options and defaults cannot drift apart in the two places.
+   * "Review history" appears only when progress is checked: the server rejects an export that has review history but no progress,
+   * so unchecking progress also unchecks review history, otherwise checking both and then unchecking progress would submit a request bound to fail.
    */
   interface Props {
     includeMedia?: boolean;

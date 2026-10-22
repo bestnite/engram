@@ -10,8 +10,9 @@ import { toast } from '../lib/components/ui/toast';
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
- * 每日上限的保存路径只有真实挂载才会走到：输入框写进的是字符串状态，若绑定把值强转成
- * number/null，parseCap 的 trim 校验就会抛异常，PATCH 请求根本发不出去。
+ * The daily-cap save path is only reached by a real mount: the input writes string state,
+ * and if the binding coerced the value to number/null, parseCap's trim check would throw
+ * and the PATCH request would never leave the browser.
  */
 describe('DeckSettingsView cap saving', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -47,7 +48,7 @@ describe('DeckSettingsView cap saving', () => {
     flushSync();
   }
 
-  /** 与浏览器同一条路径：先写 value 再派发 input，让绑定把值收进状态。 */
+  /** Same path as the browser: write value first, then dispatch input, so the binding takes the value into state. */
   async function type(testId: string, value: string): Promise<void> {
     const el = document.body.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement | null;
     expect(el, testId).not.toBeNull();
@@ -109,7 +110,7 @@ describe('DeckSettingsView cap saving', () => {
     await type('deck-settings-new-per-day', '');
     await submit();
     expect(update).not.toHaveBeenCalled();
-    // 本地校验错误留在表单里，不走 toast。
+    // Local validation errors stay in the form and do not go through a toast.
     expect(
       document.body.querySelector('[data-testid="deck-settings-invalid"]')?.textContent
     ).toContain('请输入不小于 0 的整数');

@@ -5,8 +5,9 @@ import type { DataChangeKind } from '../lib/api';
 import { handleDataChanged, refreshSidebarDecks, resetSidebarDecks, sidebarDecks } from '../lib/components/shell/sidebar';
 
 /**
- * 侧边栏与写操作同步：在页面里删除、新建卡组不会改变路由，侧边栏必须靠接口层的改动通知更新，
- * 不能等用户刷新整个页面。
+ * The sidebar stays in sync with writes: deleting or creating a deck inside a page does
+ * not change the route, so the sidebar must update from the API layer's change
+ * notifications instead of waiting for the user to reload the whole page.
  */
 
 function json(body: unknown, status = 200): Response {
@@ -75,7 +76,7 @@ describe('sidebar sync on data changes', () => {
   it('refetches once more when a forced refresh arrives while one is in flight', async () => {
     const client = stubClient([['Alpha', 'Beta'], ['Alpha']]);
     const first = refreshSidebarDecks(client, true);
-    // 删除发生在第一次请求途中：它的结果可能是删除前的，必须再取一次。
+    // The delete lands during the first request: its result may predate the delete, so another fetch is required.
     handleDataChanged(client, 'decks');
     await first;
     await vi.waitFor(() => expect(client.getDecks).toHaveBeenCalledTimes(2));
@@ -87,7 +88,7 @@ describe('sidebar sync on data changes', () => {
     await refreshSidebarDecks(client, true);
     handleDataChanged(client, 'review');
     expect(client.getDecks).toHaveBeenCalledTimes(1);
-    // 换页时的非强制刷新本该被 15 秒节流挡住，过期标记让它直接重取。
+    // The non-forced refresh on page change should have been swallowed by the 15-second throttle; the stale flag makes it refetch immediately.
     await refreshSidebarDecks(client);
     expect(client.getDecks).toHaveBeenCalledTimes(2);
   });

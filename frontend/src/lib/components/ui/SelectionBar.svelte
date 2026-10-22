@@ -4,21 +4,21 @@
   import { t } from '../../i18n';
 
   /**
-   * 选中列表项后浮在视口底部的批量操作条。
+   * A batch action bar that floats at the bottom of the viewport after list items are selected.
    *
-   * 固定定位、不占文档流：此前批量按钮插在列表上方的工具栏里，一选中就把工具栏撑高，
-   * 下面整页内容跟着往下跳。桌面端按侧边栏宽度（AppShell 设置的 --app-sidebar-w）
-   * 校正水平位置，使操作条居中于内容区而不是整个窗口。
+   * Fixed position, out of the document flow: previously the batch buttons sat in a toolbar above the list, and selecting anything made the toolbar taller,
+   * pushing the whole page below it downward. On desktop it corrects its horizontal position by the sidebar width (--app-sidebar-w set by AppShell)
+   * so the bar centers on the content area rather than the whole window.
    */
   interface Props {
     count: number;
     onClear: () => void;
     testId?: string;
-    /** 操作条里的按钮；用 SelectionBar 自带的深色样式按钮（见 selectionBarButton）。 */
+    /** Buttons inside the bar; use SelectionBar's own dark-styled button (see selectionBarButton). */
     children: Snippet;
   }
 
-  // 操作条里不显示错误：批量操作在对话框里确认，失败留在对话框内，其余结果走 toast。
+  // No errors are shown inside the bar: batch operations are confirmed in a dialog and failures stay in that dialog, while other results go through toast.
   let { count, onClear, testId, children }: Props = $props();
 </script>
 

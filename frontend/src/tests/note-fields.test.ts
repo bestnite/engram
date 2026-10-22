@@ -14,13 +14,14 @@ import {
 import { CARD_TYPES } from './card-type-fixture';
 
 /**
- * 字段表不再由前端硬编码：它随题型自描述（GET /api/v1/card-types）到达。
- * 这些用例以样例响应为输入，钉住前端「消费服务端字段表」的行为——字段名写错时服务端
- * 会拒绝保存而界面不会报错，所以在这里核对每一处投影。
+ * The field table is no longer hardcoded in the frontend: it arrives with each card type's
+ * self-description (GET /api/v1/card-types). These cases take sample responses as input and
+ * pin how the frontend consumes the server's field table — a mistyped field name makes the
+ * server reject the save while the UI stays quiet, so every projection is checked here.
  */
 const catalog = createCatalog(CARD_TYPES.kinds);
 
-/** 各题型自有字段（不含服务端追加的通用可选字段）。 */
+/** Each card type's own fields (excluding the generic optional fields the server appends). */
 const OWN_FIELDS: Record<string, string[]> = {
   basic: ['front', 'back'],
   basic_both: ['front', 'back'],
@@ -110,8 +111,8 @@ describe('field model conversions', () => {
     expect(fields.options).toEqual([]);
     expect(fields.answers).toEqual([]);
     expect(emptyFields(fieldsForKind(catalog, 'list')).ordered).toBe(false);
-    // 服务端默认是 true（忽略大小写/空白），表单默认值必须一致，
-    // 否则「没动过开关、保存一次」会把行为改成 false。
+    // The server default is true (ignore case/whitespace), so the form default must match,
+    // otherwise "never touched the switch, saved once" flips the behaviour to false.
     expect(emptyFields(fieldsForKind(catalog, 'typed')).ignore_case).toBe(true);
     expect(emptyFields(fieldsForKind(catalog, 'typed')).ignore_whitespace).toBe(true);
   });
@@ -131,7 +132,7 @@ describe('field model conversions', () => {
       ignore_case: false,
       ordered: true,
     });
-    // 空串/空数组一律省略：服务端的可选字段校验会把它们当非法值拒绝。
+    // Empty strings/arrays are always omitted: the server's optional-field validation rejects them as invalid values.
     expect(payload).toEqual({ answer: 'A', accept: ['B'], ignore_case: false, ordered: true });
     expect('prompt' in payload).toBe(false);
     expect('items' in payload).toBe(false);
@@ -143,15 +144,15 @@ describe('field model conversions', () => {
       options: ['2', '4', '5'],
       answers: [0, 2],
     });
-    // 服务端只接受整数下标；曾经数组项一律 String() 后提交，["0","2"] 被以 400 拒绝，
-    // 界面上表现为填全了也一直提示「补全必填字段后即可预览」，保存同样失败。
+    // The server only accepts integer indices; array items used to be String()'d before submit, so ["0","2"] was rejected with 400,
+    // and the UI showed "fill in the required fields to preview" even when everything was filled, while saving failed the same way.
     expect(toPayloadFields(form)).toEqual({ question: 'Which are prime?', options: ['2', '4', '5'], answers: [0, 2] });
   });
 
   it('keeps numeric fields as numbers when folding server fields into the form', () => {
     const form = toFormFields(fieldsForKind(catalog, 'numeric'), { prompt: 'g', value: 9.81, tolerance_absolute: 0 });
     expect(form.value).toBe(9.81);
-    // 0 是合法取值，不能当成「未填」。
+    // 0 is a legal value and must not be treated as "not filled".
     expect(form.tolerance_absolute).toBe(0);
     expect(form.tolerance_relative).toBe('');
     expect(toPayloadFields(form)).toMatchObject({ value: 9.81, tolerance_absolute: 0 });

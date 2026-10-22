@@ -9,10 +9,10 @@
   }
 
   /**
-   * 全站唯一的单选组（交互件用成熟组件库）。
+   * The site's only radio group (interactive widgets use a mature component library).
    *
-   * 底层是 bits-ui 的 RadioGroup：方向键切换、roving tabindex、aria-radiogroup 关联
-   * 与隐藏 input 的表单语义都由库提供；此前每个单选组各自手写原生 radio + label。
+   * The base is bits-ui's RadioGroup: arrow-key switching, roving tabindex, aria-radiogroup wiring
+   * and the form semantics of the hidden input all come from the library; previously each radio group hand-wrote native radios + labels.
    */
   interface Props {
     value?: string;
@@ -21,9 +21,9 @@
     disabled?: boolean;
     ariaLabel?: string;
     testId?: string;
-    /** 所有选项共用同一个 testid（复习页的选项就是这一形态）。 */
+    /** All options share one testid (the review page's options are exactly this shape). */
     itemTestId?: string;
-    /** 需要逐项区分时用前缀：testid = 前缀 + option.value。 */
+    /** Use a prefix when options need to be distinguished: testid = prefix + option.value. */
     itemTestIdPrefix?: string;
     itemClass?: string;
     class?: string;

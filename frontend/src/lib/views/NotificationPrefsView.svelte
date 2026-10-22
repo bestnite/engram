@@ -24,10 +24,10 @@
   let loadError = $state<ApiClientError | Error | null>(initialError);
   // svelte-ignore state_referenced_locally
   let data = $state<NotificationPrefsResponse | null>(initialData);
-  // 勾选状态按类型 id 存；未在 map 里的键按关闭处理，与服务端一致。
+  // Checkbox state is stored by type id; keys missing from the map are treated as off, consistent with the server.
   // svelte-ignore state_referenced_locally
   let choices = $state<Record<string, boolean>>(initialData ? choiceMap(initialData) : {});
-  // 发送时间下拉的值：'' = 站点默认（null），其余是 '0'–'23'。
+  // Value of the send-time dropdown: '' = site default (null), everything else is '0'–'23'.
   // svelte-ignore state_referenced_locally
   let reminderHour = $state<string>(initialData ? hourValue(initialData.reminder_hour) : '');
 
@@ -35,7 +35,7 @@
 
   const hours = Array.from({ length: 24 }, (_, h) => h);
 
-  /** 把响应里的类型开关摊平成 {type: enabled} 的勾选 map。 */
+  /** Flatten the response's per-type switches into a {type: enabled} checkbox map. */
   function choiceMap(resp: NotificationPrefsResponse): Record<string, boolean> {
     const out: Record<string, boolean> = {};
     for (const group of resp.groups) {
@@ -46,19 +46,19 @@
     return out;
   }
 
-  /** 发送小时转下拉值：null = 站点默认（空串），0–23 转成十进制字符串。 */
+  /** Send hour to dropdown value: null = site default (empty string), 0–23 become decimal strings. */
   function hourValue(hour: number | null): string {
     return hour === null || hour === undefined ? '' : String(hour);
   }
 
-  /** 用服务端响应覆盖本地状态，保证界面只反映服务端确认过的值。 */
+  /** Overwrite local state with the server response, so the UI only reflects values the server has confirmed. */
   function applyData(resp: NotificationPrefsResponse): void {
     data = resp;
     choices = choiceMap(resp);
     reminderHour = hourValue(resp.reminder_hour);
   }
 
-  /** 读取偏好；未登录由服务端 401 决定，前端不猜测。 */
+  /** Read the preferences; being logged out is decided by the server's 401, the frontend does not guess. */
   async function load(): Promise<void> {
     loading = true;
     loadError = null;
@@ -76,7 +76,7 @@
     return 'settings.notifications.failed';
   }
 
-  /** 稳定错误 code → 本地化 key；未知 code 回落到通用失败提示。 */
+  /** Stable error code → localized key; unknown codes fall back to the generic failure message. */
   function actionErrorKey(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
@@ -84,7 +84,7 @@
       class_locked: 'settings.notifications.error.class_locked',
       reminder_hour_invalid: 'settings.notifications.error.reminder_hour_invalid',
       invalid_request: 'settings.notifications.error.invalid_request',
-      // 服务端只对管理员开放 D 管理员通知类：非管理员提交该类会被 403 拒绝。
+      // The server exposes class D admin notifications to admins only: submitting that class as a non-admin is rejected with 403.
       forbidden_type: 'settings.notifications.error.forbidden_type',
     };
     return map[code] || 'settings.notifications.error.failed';
@@ -94,7 +94,7 @@
     choices = { ...choices, [type]: checked };
   }
 
-  /** 保存：为每个可关闭类型提交显式开关，发送时间为 null（站点默认）或 0–23。 */
+  /** Save: submit an explicit switch for each closable type, with the send time as null (site default) or 0–23. */
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     saving = true;
@@ -119,8 +119,8 @@
   });
 </script>
 
-<!-- 邮件通知偏好的分区组：嵌在邮件页（/settings/email）里，排在邮箱地址之后。
-     不再是独立页面；前面一行小标题说明下面几组都是通知开关。 -->
+<!-- Section group for email notification preferences: embedded in the mail page (/settings/email), placed after the email address.
+     It is no longer a standalone page; the small heading line above explains that the groups below are notification switches. -->
 <div data-testid="notifications-view" class="mt-2 border-t border-border pt-8">
   <h2 class="text-base font-semibold text-foreground" data-testid="notifications-title">{$t('settings.notifications.heading')}</h2>
   <p class="mt-1 text-sm text-muted-foreground">{$t('settings.notifications.intro')}</p>

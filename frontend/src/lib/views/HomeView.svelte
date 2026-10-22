@@ -35,7 +35,7 @@
   let summary = $state<StatsSummary | null>(initialSummary);
   // svelte-ignore state_referenced_locally
   let decks = $state<Deck[]>(initialDecks);
-  // 每个卡组今日还能刷的新卡/复习数；取不到时为空，列表只显示名称。
+  // How many new cards/reviews each deck can still do today; empty when unavailable, in which case the list only shows names.
   let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
 
   function formatNumber(val: number): string {
@@ -51,13 +51,14 @@
   }
 
   /**
-   * 加载首页所需数据：并发获取统计概要与卡组列表
-   * 接口契约与数据口径说明（Gap 记录）：
-   * 1. 当前 REST API (GET /api/v1/decks) 仅提供卡组配置（new_per_day, reviews_per_day），
-   *    尚未提供卡组维度的今日剩余可刷卡数（schedule.DeckCounts 仅用于服务端 templ 列表）；
-   * 2. 当前 REST API (GET /api/v1/stats/summary) 提供全库聚合的 due, reviews_today, reviews_total, retention
-   *    （及其分母 retention_total / 分子 retention_passed）, decks, notes, cards，但未提供连续打卡天数（streak）。
-   * 本视图严守数据真实性原则，仅展示接口实际提供的指标，绝不在前端伪造或编造今日剩余卡数或打卡天数。
+   * Load the data the home page needs: fetch the stats summary and the deck list concurrently
+   * API contract and metric definitions (Gap notes):
+   * 1. The current REST API (GET /api/v1/decks) only provides deck configuration (new_per_day, reviews_per_day),
+   *    and does not yet provide the per-deck count of cards still available today (schedule.DeckCounts is only used for the server-side templ list);
+   * 2. The current REST API (GET /api/v1/stats/summary) provides the whole-library aggregates due, reviews_today, reviews_total, retention
+   *    (plus its denominator retention_total / numerator retention_passed), decks, notes, cards, but does not provide the consecutive check-in streak.
+   * This view strictly follows the principle of data truthfulness: it only shows the metrics the API actually provides, and never fabricates
+   * or invents today's remaining card count or streak on the frontend.
    */
   async function loadHomeData(): Promise<void> {
     loading = true;
@@ -66,7 +67,7 @@
       const [statsRes, decksRes, countsRes] = await Promise.all([
         client.getStatsSummary(),
         client.getDecks(),
-        // 队列计数只是列表上的补充数字，失败不应该让整个首页报错。
+        // Queue counts are just supplementary numbers on the list; a failure should not make the whole home page error out.
         client.getDeckQueueCounts().catch(() => null),
       ]);
       summary = statsRes;
@@ -122,7 +123,7 @@
         {/snippet}
       </PageHeader>
 
-      <!-- 聚合指标：一条横向指标带，四项之间只用竖线分隔，不再是四张卡片。 -->
+      <!-- Aggregate metrics: one horizontal metric band, the four items separated only by vertical bars, no longer four cards. -->
       <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
         <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
@@ -143,7 +144,7 @@
             {$t('home.retention')}
             <HelpTip testId="home-retention-help" label={$t('home.retention')} text={$t('help.retention')} />
           </dt>
-          <!-- 分母只数到期复习：只做过新卡与学习步骤时为 0，此时没有可读的留存率，显示「暂无数据」。 -->
+          <!-- The denominator only counts due reviews: it is 0 when only new cards and learning steps have been done, and there is no readable retention rate then, so "no data" is shown. -->
           <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.retention_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
         </div>
         <div class="px-4 py-4 text-center">

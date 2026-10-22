@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// 主题切换会真的读写 document/localStorage，因此这个文件单独要 DOM 环境——
-// 其余用例仍跑在 vitest.config.ts 默认的 node 环境里（不为一个文件改全局配置）。
+// Theme switching really reads and writes document/localStorage, so this file alone needs a DOM environment —
+// the other cases still run in vitest.config.ts's default node environment (no global config change for a single file).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   THEME_STORAGE_KEY,
@@ -14,14 +14,16 @@ import {
 } from '../lib/theme';
 
 /**
- * 主题切换（导航栏按钮）。
+ * Theme switching (the navbar button).
  *
- * 这一层刻意钉死取值：同一件事在全站有三个执行点——服务端首帧内联引导（internal/web/theme.go）、
- * pwa.js 的加载期应用、以及本模块。取值一旦漂移就会出现「首帧一个色、点一下变另一个色」，
- * 而那种 bug 只在真机首帧才看得见。
+ * This layer deliberately pins the values: the same concern has three execution points
+ * site-wide — the server's first-frame inline bootstrap (internal/web/theme.go), pwa.js's
+ * apply-on-load pass, and this module. Once the values drift you get "one colour on the
+ * first frame, another colour after one click", and that kind of bug is only visible on
+ * the first frame of a real device.
  */
 
-/** 装一个可控的 localStorage 桩：DOM 环境不一定会把 Storage 暴露成全局变量。 */
+/** Install a controllable localStorage stub: the DOM environment does not necessarily expose Storage as a global. */
 function installStorage(): Storage {
   const data = new Map<string, string>();
   const stub = {
@@ -95,7 +97,7 @@ describe('theme module', () => {
     expect(prefersDark()).toBe(true);
     expect(isDark()).toBe(true);
 
-    // 显式选择 light 必须压过深色的系统偏好——按钮点了要算数。
+    // An explicit light choice must beat a dark system preference — clicking the button has to count.
     storage.setItem(THEME_STORAGE_KEY, 'light');
     expect(isDark()).toBe(false);
 

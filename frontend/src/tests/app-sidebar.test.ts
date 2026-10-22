@@ -88,7 +88,7 @@ describe('AppSidebar', () => {
     const { html } = render(AppSidebar);
     expect(html).toContain('data-testid="sidebar-decks"');
     expect(html).toMatch(/href="\/decks\/d1"[^>]*aria-current="page"/);
-    // 当前卡组已列在下面时，父项「卡组」不再同时高亮。
+    // When the current deck is already listed below, the parent "decks" item is no longer highlighted at the same time.
     expect(html).not.toMatch(/href="\/decks"[^>]*aria-current="page"/);
     expect(html).toContain('36 张待复习');
   });

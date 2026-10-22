@@ -32,7 +32,7 @@
   let actionError = $state('');
   let saving = $state(false);
 
-  /** 从响应里抽出可编辑（非敏感）字段的当前值作为表单初值。 */
+  /** Extract the current values of the editable (non-sensitive) fields from the response as the form's initial values. */
   function seedValues(resp: AdminSettingsResponse | null): Record<string, string> {
     const out: Record<string, string> = {};
     for (const sec of resp?.sections ?? []) {
@@ -43,7 +43,7 @@
     return out;
   }
 
-  // 设置键 → 前端语言包键；未知键直接显示键名（与 SSR 对敏感键的处理一致）。
+  // Settings key → frontend language pack key; an unknown key shows the key name directly (consistent with how SSR handles sensitive keys).
   const labelKeys: Record<string, string> = {
     'site.name': 'admin.settings.setting.site_name',
     'site.default_locale': 'admin.settings.setting.site_default_locale',
@@ -132,7 +132,7 @@
     notice = '';
     actionError = '';
     saving = true;
-    // 汇总非空的可编辑值与非空的敏感新值；空串让服务端按「不修改」处理。
+    // Collect the non-empty editable values and the non-empty new sensitive values; an empty string makes the server treat it as "do not modify".
     const payload: Record<string, string> = {};
     for (const [key, value] of Object.entries(values)) if (value !== '') payload[key] = value;
     for (const [key, value] of Object.entries(secrets)) if (value !== '') payload[key] = value;
@@ -154,7 +154,7 @@
     }
   });
 
-  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  // Operation results are reported with a toast, not inserted as a banner at the top of the page.
   $effect(() => {
     if (notice) {
       toast.success($t(notice));

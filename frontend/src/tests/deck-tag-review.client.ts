@@ -7,8 +7,9 @@ import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 卡组详情页的「按标签学习」：打开对话框时取本卡组的标签，勾选后「开始复习」链接到
- * `/review?deck=<本卡组>&tag=...`——复习页按这组参数只取带所选标签的卡。
+ * "Study by tag" on the deck detail page: opening the dialog fetches this deck's tags,
+ * and after ticking some, "Start review" links to `/review?deck=<this deck>&tag=...` —
+ * the review page uses exactly those params to fetch only cards carrying the chosen tags.
  */
 describe('DeckDetailView tag review', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -89,7 +90,7 @@ describe('DeckDetailView tag review', () => {
     await check('创新类成语');
     const start = startControl();
     expect(start?.tagName).toBe('A');
-    // 按标签列表顺序而不是勾选顺序：同一组勾选只对应一个地址。
+    // Ordered by the tag list, not by tick order: the same set of ticks maps to a single URL.
     const params = new URL(start!.getAttribute('href')!, 'http://localhost').searchParams;
     expect(params.getAll('deck')).toEqual(['d1']);
     expect(params.getAll('tag')).toEqual(['创新类成语', '高频']);

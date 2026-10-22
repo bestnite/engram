@@ -9,12 +9,12 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
 
-  // 注册页的首帧形态由站点策略决定，因此探测落定之前不能渲染表单：否则一个 closed 的站点会先闪出
-  // 表单、再被拦截面板替换。'probing'＝探测中；'unknown'＝探测失败，或这次访问不受策略约束
-  // （带邀请令牌）——两者都落到表单，是否放行最终由提交时的服务端判定。
+  // The registration page's first-frame shape is decided by the site policy, so the form must not render before the probe settles: otherwise a closed site would flash the
+  // form first and then have it replaced by the blocked panel. 'probing' = probing; 'unknown' = the probe failed, or this visit is not subject to the policy
+  // (it carries an invite token) — both fall through to the form, and whether it is allowed is ultimately decided by the server at submission time.
   type RegistrationState = 'probing' | 'unknown' | RegistrationPolicy;
 
-  // 可选 props.initialPolicy 供服务端渲染与测试注入已知状态，避免首帧闪烁；生产由探测结果驱动。
+  // The optional props.initialPolicy lets server-side rendering and tests inject a known state, avoiding a first-frame flash; in production it is driven by the probe result.
   interface Props {
     initialPolicy?: RegistrationState;
   }
@@ -22,7 +22,7 @@
   // svelte-ignore state_referenced_locally
   let { initialPolicy = 'probing' }: Props = $props();
 
-  // 邀请 token 由 URL 查询参数带入（GET /register?invite=... 下发应用壳）。
+  // The invite token comes in through the URL query parameter (GET /register?invite=... serves the app shell).
   const invite =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('invite') ?? '')
@@ -34,23 +34,23 @@
   let password = $state('');
   let confirmPassword = $state('');
   let loading = $state(false);
-  // 只装提交前的本地校验错误（两次密码不一致）；请求失败走 toast。
+  // Only holds local validation errors from before submission (the two passwords do not match); request failures go through toast.
   let errorKey = $state<string | null>(null);
-  // 带邀请令牌的访问走邀请接受路径，与策略无关（invite 策略正是靠它放行），因此一开始就按
-  // 「不受策略约束」处理，直接给表单。
+  // A visit carrying an invite token goes through the invite acceptance path, independent of policy (the invite policy is exactly what lets it through), so from the start it is treated as
+  // "not subject to the policy" and handed straight to the form.
   // svelte-ignore state_referenced_locally
   let registrationState = $state<RegistrationState>(invite ? 'unknown' : initialPolicy);
 
-  // 已登录用户访问注册页时直接送去控制台：这是体验问题，不是安全兜底——
-  // CSRF 层已按「本次请求有没有有效会话」分档，已登录时用会话绑定 token 校验，不再 403。
-  // 用 $effect 而不是 onMount：整页加载时 initAuth() 是异步的，onMount 时认证状态还没就绪。
+  // A logged-in user visiting the registration page is sent straight to the dashboard: this is a UX matter, not a security fallback —
+  // the CSRF layer already grades by "does this request carry a valid session", and validates with a session-bound token when logged in, so it no longer 403s.
+  // Uses $effect rather than onMount: on a full page load initAuth() is async, so the auth state is not ready yet at onMount time.
   $effect(() => {
     if ($authStore.initialized && $authStore.authenticated) {
       navigate('/');
     }
   });
 
-  // 策略探测：只读、匿名可调。带邀请令牌时不必探测（邀请路径与策略无关）。
+  // Policy probe: read-only, callable anonymously. No probing is needed with an invite token (the invite path is independent of policy).
   onMount(async () => {
     if (registrationState !== 'probing') {
       return;
@@ -58,13 +58,13 @@
     try {
       registrationState = (await apiClient.registrationInfo()).policy;
     } catch {
-      // 探测失败等同于「策略未知」：给表单，最终判定交给提交时的服务端。
+      // A failed probe equals "policy unknown": hand over the form and let the server decide at submission time.
       registrationState = 'unknown';
     }
   });
 
-  // 这次访问无法自助注册的原因文案；null 表示可以填表提交。
-  // 判定口径与服务端 attemptRegistration 一致：带邀请令牌时只看令牌，不带时才看策略。
+  // Copy for why this visit cannot self-register; null means the form can be filled in and submitted.
+  // The criterion matches the server's attemptRegistration: with an invite token only the token is looked at, without one only the policy is.
   const blockedReason = $derived(
     invite
       ? null
@@ -80,7 +80,7 @@
     if (!username.trim() || !email.trim() || !password || !confirmPassword) {
       return;
     }
-    // 两次输入不一致是纯前端约定：服务端只收一个 password，因此这里不提交任何请求。
+    // The two entries not matching is purely a frontend convention: the server takes only one password, so no request is submitted here.
     const confirmation = validatePasswordConfirmation(password, confirmPassword);
     if (!confirmation.valid) {
       errorKey = confirmation.errorKey ?? 'error.unknown';
@@ -96,7 +96,7 @@
         password,
         invite,
       });
-      // 注册不建立会话：与 SSR 一致，成功后回到登录页。
+      // Registration does not establish a session: consistent with SSR, it returns to the login page on success.
       navigate('/login');
     } catch (err) {
       toast.error($t(err instanceof ApiClientError ? getApiErrorMessageKey(err) : 'error.unknown'));

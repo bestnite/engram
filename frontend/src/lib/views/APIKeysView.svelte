@@ -23,12 +23,12 @@
   let saving = $state(false);
   let revokingId = $state<string | null>(null);
 
-  // 服务端返回的列表**包含已撤销的 key**（带 revoked_at）。界面按状态分两组渲染，
-  // 而不是把已撤销项从本地数组里删掉——本地删除只在本会话有效，刷新后它又会回来。
+  // The list returned by the server **includes revoked keys** (with revoked_at). The UI renders two groups by state,
+  // instead of deleting revoked entries from the local array — a local delete only lasts this session, and they come back after a refresh.
   const activeKeys = $derived(keys.filter((k) => !k.revoked_at));
   const revokedKeys = $derived(keys.filter((k) => k.revoked_at));
 
-  /** silent 为真时只换数据、不置 loading，用于撤销后的原地刷新（避免整块列表闪一下）。 */
+  /** When silent is true it only swaps the data without setting loading, used for the in-place refresh after revoking (avoids the whole list flashing). */
   async function load(silent = false): Promise<void> {
     if (!silent) loading = true;
     try {
@@ -70,14 +70,14 @@
     if (plaintext) await copyText(plaintext, 'keys.copied');
   }
 
-  // 接入地址取浏览器当前访问的站点地址：经过反向代理时，这正是外部客户端能访问到的地址，
-  // 不依赖服务端的 BASE_URL 配置是否正确。服务端渲染（测试）时没有 window，地址留空。
+  // The access address is taken from the site address the browser is currently visiting: behind a reverse proxy this is exactly
+  // the address external clients can reach, and it does not depend on the server's BASE_URL being configured correctly. During server-side rendering (tests) there is no window, so the address is left empty.
   const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
   const restUrl = `${origin}/api/v1`;
   const mcpUrl = `${origin}/mcp`;
 
-  // MCP 客户端配置片段：格式与 README 一致。刚创建的密钥只在这一刻可见，此时直接填进片段，
-  // 其余时候用占位符，提醒用户换成自己保存的密钥。
+  // MCP client config snippet: the format matches the README. A freshly created key is visible only at this moment, so it is filled into the snippet right away,
+  // the rest of the time a placeholder is used, reminding the user to swap in the key they saved.
   const mcpConfig = $derived(
     JSON.stringify(
       { mcpServers: { engram: { url: mcpUrl, headers: { Authorization: `Bearer ${plaintext ?? 'YOUR_API_KEY'}` } } } },
@@ -93,7 +93,7 @@
     revokingId = key.id;
     try {
       await apiClient.deleteAPIKey(key.id);
-      // 重新取数，让「已撤销」这一事实来自服务端，而不是只改本地数组。
+      // Refetch so the "revoked" fact comes from the server, instead of only changing the local array.
       await load(true);
     } catch (err) {
       toast.error($t(getApiErrorMessageKey(err)));
@@ -148,7 +148,7 @@
       </label>
       <fieldset>
         <legend class="block text-sm font-medium text-foreground">{$t('keys.scopes')}</legend>
-        <!-- 每个权限后面写明它放开什么，与服务端的定义一致（scope 常量的注释）。 -->
+        <!-- Each permission is followed by what it opens up, consistent with the server's definition (the comments on the scope constants). -->
         <div class="mt-2 space-y-2.5">
           {#each scopeOptions as scope}
             <label class="flex cursor-pointer items-start gap-2.5">
@@ -172,7 +172,7 @@
     </form>
 
     {#if plaintext}
-      <!-- 新密钥只显示这一次：放在表单正下方，带复制按钮。 -->
+      <!-- A new key is shown only this once: placed right below the form, with a copy button. -->
       <div class="mt-5 max-w-xl rounded-lg border border-warning/40 bg-warning/5 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200" role="status">
         <p class="text-xs text-muted-foreground">{$t('keys.created_once')}</p>
         <div class="mt-2 flex items-center gap-2">

@@ -8,7 +8,7 @@ describe('Zero third-party runtime network dependencies', () => {
     const indexPath = fileURLToPath(new URL('../../index.html', import.meta.url));
     const content = fs.readFileSync(indexPath, 'utf-8');
 
-    // 检查是否有外部 http/https 脚本、样式表或字体引用
+    // Check for external http/https script, stylesheet or font references
     const externalUrlRegex = /(?:href|src)=["'](https?:\/\/[^"']+)["']/gi;
     const matches: string[] = [];
     let match;
@@ -25,11 +25,11 @@ describe('Zero third-party runtime network dependencies', () => {
     const cssPath = fileURLToPath(new URL('../app.css', import.meta.url));
     const content = fs.readFileSync(cssPath, 'utf-8');
 
-    // 检查是否有远程 url(...)
+    // Check for remote url(...)
     const remoteUrlRegex = /url\(\s*["']?https?:\/\/[^"')]+["']?\s*\)/gi;
     expect(remoteUrlRegex.test(content)).toBe(false);
 
-    // 检查是否有远程 @import
+    // Check for remote @import
     const remoteImportRegex = /@import\s+["']https?:\/\/[^"']+["']/gi;
     expect(remoteImportRegex.test(content)).toBe(false);
   });

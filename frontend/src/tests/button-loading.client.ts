@@ -3,8 +3,8 @@ import { mount, unmount, flushSync, createRawSnippet } from 'svelte';
 import Button from '../lib/components/ui/Button.svelte';
 
 /**
- * 请求进行中的唯一表示：按钮禁用并转圈，文字不换、也不从读屏里消失；
- * 进行中不能再次触发同一个请求。
+ * The sole indication that a request is in flight: the button is disabled and spins, the text does not change and does not vanish from screen readers;
+ * the same request cannot be triggered again while it is in flight.
  */
 describe('Button loading', () => {
   let instance: ReturnType<typeof mount> | null = null;

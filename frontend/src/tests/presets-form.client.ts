@@ -6,8 +6,9 @@ import type { PresetsResponse, PresetRecord } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 预设表单的「最大间隔」是字符串状态 + 数字输入框：绑定若把值强转成 number，
- * parseForm 的 trim 校验就抛异常，改完参数永远保存不了。
+ * The preset form's "max interval" is string state + a number input: if the binding
+ * coerced the value to number, parseForm's trim check would throw and editing a parameter
+ * could never be saved.
  */
 describe('PresetsView max interval saving', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -46,7 +47,7 @@ describe('PresetsView max interval saving', () => {
     flushSync();
   }
 
-  /** 与浏览器同一条路径：先写 value 再派发 input，让绑定把值收进状态。 */
+  /** Same path as the browser: write value first, then dispatch input, so the binding takes the value into state. */
   async function type(testId: string, value: string): Promise<void> {
     const el = document.body.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement | null;
     expect(el, testId).not.toBeNull();
@@ -98,7 +99,7 @@ describe('PresetsView max interval saving', () => {
     await type('presets-form-max-interval', '');
     await submit();
     expect(update).not.toHaveBeenCalled();
-    // 提示必须是语言包文案，不是 key 本身：对话框曾经把 formError 原样渲染。
+    // The message must be a language-pack string, not the key itself: the dialog used to render formError raw.
     const error = document.body.querySelector('[data-testid="presets-form-error"]');
     expect(error?.textContent).toContain('最大间隔必须是正整数天数。');
     expect(error?.textContent).not.toContain('presets.form.error');
@@ -107,7 +108,7 @@ describe('PresetsView max interval saving', () => {
   it('keeps the field labels short and explains each one in a help button outside its label', async () => {
     await setup();
     const label = document.body.querySelector('label[for="presets-form-learning-steps"]');
-    // 标签只剩字段名，格式说明进了浮层；点标签仍然聚焦输入框而不是打开浮层。
+    // The label is now just the field name and the format hint moved into a popover; clicking the label still focuses the input rather than opening the popover.
     expect(label?.textContent?.trim()).toBe('学习步骤');
     expect(label?.querySelector('button')).toBeNull();
     for (const key of ['retention', 'learning-steps', 'relearning-steps', 'max-interval', 'fuzz']) {

@@ -6,17 +6,20 @@ import { authStore } from '../lib/auth';
 import { setLocale, formatMessage } from '../lib/i18n';
 import { toast } from '../lib/components/ui/toast';
 
-// 轻提示只断言「弹了什么」，不挂真实 Toaster。
+// The toast assertions only check "what was raised"; no real Toaster is mounted.
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
- * 直链导入的前端契约测试（挂载行为 + 真实 ApiClient 拦截 fetch）。
+ * Frontend contract tests for direct-URL import (mount behaviour + a real ApiClient with
+ * fetch intercepted).
  *
- * 这里不发明后端样例：所有报告值都来自本地 fixture（example.com 域名），断言的是「前端把
- * 选择/选项序列化成什么请求」与「把稳定 code 映射成哪条本地化文案」，而不是服务端真实回包。
+ * No backend fixtures are invented here: every reported value comes from a local fixture
+ * (example.com domains), and the assertions are about "what request the frontend
+ * serializes the selection/options into" and "which localized message a stable code maps
+ * to", not about real server responses.
  */
 
-/** 手动控制落点时刻的 promise，用来制造在途请求。 */
+/** A promise whose resolution moment is controlled by hand, used to hold requests in flight. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -61,13 +64,13 @@ function mountView(): void {
   mountedInstances.push(mount(ImportView, { target }));
 }
 
-/** 冲掉微任务并同步应用 Svelte 的待处理状态，让断言看到真实 DOM。 */
+/** Flush microtasks and apply Svelte's pending state synchronously so assertions see the real DOM. */
 async function flush(times = 24): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
   flushSync();
 }
 
-/** bits-ui 的 Select：焦点 + Enter 打开，选项在 pointerdown/pointerup 上提交选择。 */
+/** bits-ui's Select: focus + Enter opens, and options commit the selection on pointerdown/pointerup. */
 async function selectOption(testid: string, label: string): Promise<void> {
   const trigger = target.querySelector(`[data-testid="${testid}"]`) as HTMLElement;
   trigger.focus();
@@ -81,7 +84,7 @@ async function selectOption(testid: string, label: string): Promise<void> {
   await flush();
 }
 
-/** 分段切换（bits-ui ToggleGroup）：直接点击对应文字的那一段。 */
+/** Segmented switch (bits-ui ToggleGroup): click the segment that carries that label. */
 async function chooseSegment(testid: string, label: string): Promise<void> {
   const group = target.querySelector(`[data-testid="${testid}"]`) as HTMLElement;
   const item = Array.from(group.querySelectorAll('button')).find((el) => el.textContent?.trim() === label) as HTMLElement;
@@ -153,7 +156,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     const headers = new Headers(init?.headers);
     expect(headers.get('X-CSRF-Token')).toBe('url-csrf');
     expect(headers.get('Content-Type')).toBe('application/json');
-    // 七个字段全部显式出现，不依赖服务端默认值。
+    // All seven fields appear explicitly; nothing relies on server defaults.
     expect(JSON.parse(String(init?.body))).toEqual({
       url: 'https://example.com/deck.edeck',
       target: 'into_deck:7',
@@ -180,7 +183,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     const headers = new Headers(init?.headers);
     expect(headers.get('X-CSRF-Token')).toBe('fresh-url-csrf');
     expect(headers.has('Authorization')).toBe(false);
-    // 省略的选项落到稳定默认值：dry_run 关、on_conflict=update、三个布尔为 false。
+    // Omitted options fall back to stable defaults: dry_run off, on_conflict=update, the three booleans false.
     expect(JSON.parse(String(init?.body))).toMatchObject({
       target: 'new_deck',
       dry_run: false,
@@ -202,7 +205,7 @@ describe('ImportView — package weights', () => {
     const weightsBox = () => target.querySelector('[data-testid="package-import-apply-weights"]') as HTMLElement | null;
     expect(weightsBox()).toBeTruthy();
 
-    // 合并到已有卡组时包内预设整体不用，选项不出现。
+    // When merging into an existing deck the package preset is skipped entirely, so the option does not appear.
     await selectOption('package-import-target', formatMessage('zh-CN', 'package.import.into_deck'));
     expect(weightsBox()).toBeNull();
     await selectOption('package-import-target', formatMessage('zh-CN', 'package.import.new_deck'));
@@ -271,7 +274,7 @@ describe('ImportView — URL source', () => {
     expect(reportSection()).toBeTruthy();
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.heading'));
     expect(target.textContent).toContain(formatMessage('zh-CN', 'package.report.preview_notice'));
-    // 报告里的「导入到」显示表单选项的文案，而不是服务端的原始取值。
+    // The report's "imported into" shows the form option's label, not the server's raw value.
     expect(reportSection()?.textContent).toContain(formatMessage('zh-CN', 'package.import.new_deck'));
     expect(reportSection()?.textContent).not.toContain('new_deck');
   });
@@ -381,7 +384,7 @@ describe('ImportView — URL source', () => {
     await flush();
     expect(reportSection()).toBeTruthy();
 
-    // 切回文件来源：上一份直链导入的报告不再对应当前选择，必须消失。
+    // Switching back to the file source: the previous URL-import report no longer matches the current selection and must disappear.
     await chooseSegment('import-source', fileLabel());
     expect(reportSection()).toBeNull();
   });
@@ -399,7 +402,7 @@ describe('ImportView — URL source', () => {
     await flush();
     expect(reportSection()).toBeTruthy();
 
-    // 改冲突策略后，旧报告不再代表当前设置。
+    // After changing the conflict strategy, the old report no longer represents the current settings.
     await selectOption('package-import-conflict', formatMessage('zh-CN', 'package.import.skip'));
     expect(reportSection()).toBeNull();
   });
@@ -420,14 +423,14 @@ describe('ImportView — URL source', () => {
     await flush();
     expect(importUrl).toHaveBeenCalledTimes(1);
 
-    // 提交在途时改回文件来源：旧请求仍按原负载执行，但结果不再对应当前选择。
+    // Switching back to the file source mid-submit: the old request still runs with its original payload, but its result no longer matches the current selection.
     await chooseSegment('import-source', fileLabel());
     expect(reportSection()).toBeNull();
 
     pending.resolve(reportFixture({ notes_created: 7 }));
     await flush();
 
-    // 旧结果落地后不得回填：当前是文件来源，没有新报告，也没有新请求。
+    // The old result must not backfill when it lands: the source is now file, with no new report and no new request.
     expect(reportSection()).toBeNull();
     expect(target.textContent).not.toContain(formatMessage('zh-CN', 'package.report.heading'));
     expect(importFile).not.toHaveBeenCalled();
@@ -449,7 +452,7 @@ describe('ImportView — URL source', () => {
     unmount(mountedInstances.pop()!);
     pending.resolve(reportFixture());
 
-    // 卸载后落地的结果不写状态、不抛错。
+    // A result landing after unmount writes no state and throws nothing.
     await flush();
     expect(target.querySelector('[aria-live="polite"]')).toBeNull();
   });

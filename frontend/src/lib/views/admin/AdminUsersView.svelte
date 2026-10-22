@@ -40,7 +40,7 @@
   let creating = $state(false);
   let createOpen = $state(false);
 
-  // 操作结果用 toast 报告，不在页面顶部插横幅。新建用户的错误显示在对话框里，对话框关着时才走 toast。
+  // Operation results are reported with a toast, not inserted as a banner at the top of the page. Errors from creating a user are shown in the dialog, and only go through toast while the dialog is closed.
   $effect(() => {
     if (notice) {
       toast.success($t(notice));
@@ -65,7 +65,7 @@
 
   let form = $state({ username: '', email: '', display_name: '', password: '', role: 'user' });
 
-  /** 稳定错误 code → 本地化 key；未知 code 回落到通用提示。 */
+  /** Stable error code → localized key; unknown codes fall back to the generic hint. */
   function actionErrorKey(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
@@ -107,7 +107,7 @@
     return 'admin.users.load_failed';
   }
 
-  /** 执行一个动作；成功后重载列表，失败时把稳定 code 映射成本地化提示。 */
+  /** Perform one action; reload the list on success, and map the stable code to a localized hint on failure. */
   async function run(fn: () => Promise<void>): Promise<void> {
     notice = '';
     actionError = '';
@@ -120,7 +120,7 @@
     await load(data?.page ?? 1);
   }
 
-  /** 危险动作统一走一次确认；服务端在收不到 confirm 时也会拒绝。 */
+  /** Dangerous actions all go through one confirmation step; the server also refuses when confirm is missing. */
   async function confirmThen(messageKey: string, fn: () => Promise<void>): Promise<void> {
     if (!(await askConfirm({ title: $t(messageKey), destructive: true }))) return;
     await run(fn);
@@ -138,7 +138,7 @@
       notice = 'admin.users.notice.created';
       await load(1);
     } catch (err) {
-      // 创建校验错误是 registerInputErrorCode 的稳定 code，复用注册语言包的提示。
+      // The create validation error is a stable code from registerInputErrorCode, reusing the registration language pack's hints.
       const code = err instanceof ApiClientError ? err.code : '';
       actionError = ['username_required', 'email_required', 'email_invalid', 'password_required', 'password_too_short', 'password_too_long', 'password_too_common'].includes(code)
         ? 'auth.error.' + code
@@ -231,7 +231,7 @@
   </form>
 
   {#if tempPassword}
-    <!-- 临时密码只显示这一次：贴在列表上方，带复制按钮。 -->
+    <!-- The temporary password is shown only this once: placed above the list, with a copy button. -->
     <div data-testid="admin-users-temp-password" class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-2.5 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-200" role="status">
       <span class="text-muted-foreground">{$t('admin.users.temp_password_label')}</span>
       <span class="select-all font-mono font-semibold text-foreground">{tempPassword}</span>

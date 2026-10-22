@@ -30,34 +30,34 @@
     initialLoading?: boolean;
   }
 
-  // 测试用它直接进入已加载态（与 NotificationPrefsView / TOTPView 同一模式）：
-  // 应用挂载时不传，默认仍先渲染骨架再拉数据。
+  // Tests use it to jump straight into the loaded state (the same pattern as NotificationPrefsView / TOTPView):
+  // the app does not pass it on mount, so by default it still renders the skeleton first and then fetches.
   let { initialLoading = true }: Props = $props();
 
-  // 视图响应式状态（Svelte 5 runes）
+  // View reactive state (Svelte 5 runes)
   // svelte-ignore state_referenced_locally
   let loading = $state(initialLoading);
   let saving = $state(false);
   let serverApiAvailable = $state<boolean | null>(null);
 
-  // 卡组共享接收策略（同意制）：谁可以把卡组分享给我。
-  // allowList 存服务端回读的真值（带用户名），本地不推断并集运算的结果。
+  // Deck share receiving policy (consent model): who may share decks with me.
+  // allowList holds the real values read back from the server (with usernames); the local side does not infer the outcome of the union operation.
   let sharePolicy = $state<'anyone' | 'whitelist' | 'nobody'>('anyone');
   let allowList = $state<ShareAllowRow[]>([]);
   let allowName = $state('');
   let shareSaving = $state(false);
   let fieldErrors = $state<Partial<Record<'display_name' | 'locale' | 'timezone' | 'day_cutoff_hour' | 'learn_ahead_minutes', string>>>({});
 
-  // 表单字段绑定
+  // Form field bindings
   let displayName = $state('');
   let selectedLocale = $state<SupportedLocale>($localeStore);
   let timezone = $state('');
-  // 切点必须是一个具体整点：界面不提供「未设置」，库里为 NULL 的旧账号按服务端默认值显示。
+  // The day boundary must be a concrete hour: the UI offers no "unset", and old accounts whose value is NULL in the database are shown with the server default.
   let dayCutoff = $state(String(DEFAULT_DAY_CUTOFF_HOUR));
-  // 提前学习窗口（分钟）：库里为 NULL 时显示默认值，保存后成为显式值；0 表示关闭。
+  // Early learning window (in minutes): NULL in the database shows the default value, and it becomes an explicit value after saving; 0 means disabled.
   let learnAhead = $state(String(DEFAULT_LEARN_AHEAD_MINUTES));
 
-  // 候选项要跟着当前值算：库里可能存着本浏览器不认识的历史时区名，不并进列表就会显示成空。
+  // The candidates must be computed from the current value: the database may hold a historical timezone name this browser does not recognize, and the field would render empty if it were not merged into the list.
   const timezoneChoices = $derived(timezoneOptions(timezone));
   const cutoffChoices = $derived(
     Array.from({ length: 24 }, (_, hour) => ({
@@ -67,14 +67,14 @@
   );
 
   /**
-   * 初始化探测与加载已有用户数据
-   * 若服务端尚未实现 JSON 端点（404 Not Found），安全优雅地切入本地状态模式，
-   * 严禁无根据臆测或向 SSR 表单端点伪造请求。
+   * Initialize the probe and load the existing user data
+   * If the server has not implemented the JSON endpoint yet (404 Not Found), switch into local state mode safely and gracefully,
+   * and strictly never guess without grounds or fabricate requests to the SSR form endpoints.
    */
   async function loadProfile(): Promise<void> {
     loading = true;
 
-    // 默认时区回退：优先尝试浏览器本地环境时区
+    // Default timezone fallback: try the browser's local environment timezone first
     if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
       try {
         timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -98,12 +98,12 @@
       if (profile.timezone) {
         timezone = profile.timezone;
       }
-      // 0 是合法切点（午夜）；NULL 是旧账号的未设置状态，界面按服务端默认值显示，保存后成为显式值。
+      // 0 is a legal day boundary (midnight); NULL is the unset state of old accounts, shown with the server default in the UI and becoming an explicit value after saving.
       dayCutoff = String(profile.day_cutoff_hour ?? DEFAULT_DAY_CUTOFF_HOUR);
       learnAhead = String(profile.learn_ahead_minutes ?? DEFAULT_LEARN_AHEAD_MINUTES);
     } catch (err) {
       if (err instanceof ApiClientError && err.isNotFound) {
-        // 服务端尚未提供 profile JSON 端点（API Gap 明确报告），安全降级并保留前端安全输入与本地生效
+        // The server does not provide a profile JSON endpoint yet (the API Gap report says so explicitly); degrade safely and keep the frontend's safe inputs and local application
         serverApiAvailable = false;
       } else if (err instanceof ApiClientError && err.isUnauthorized) {
         toast.error($t('error.unauthorized'));
@@ -116,13 +116,13 @@
   }
 
   /**
-   * 切换界面语言：前端 UI 即时同步更新响应式 store
+   * Switch the UI language: the frontend UI updates the reactive store immediately
    */
   function handleLocaleChange(nextLocale: string): void {
     if (isSupportedLocale(nextLocale)) {
       selectedLocale = nextLocale;
       setLocale(nextLocale);
-      // 清除可能存在的语言单项校验错误
+      // Clear any lingering per-field language validation error
       if (fieldErrors.locale) {
         const { locale: _, ...rest } = fieldErrors;
         fieldErrors = rest;
@@ -130,14 +130,14 @@
     }
   }
 
-  // 页头切换器与这里共用同一份 store：它改完语言（已登录时直接落库），表单字段必须跟着走，
-  // 否则在设置页上点保存会把旧语言原样写回去（界面显示新语言、库里回到旧语言）。
+  // The header switcher and this form share the same store: once it changes the language (writing straight to the database when logged in), the form field must follow,
+  // otherwise pressing save on the settings page would write the old language back as-is (the UI shows the new language while the database goes back to the old one).
   $effect(() => {
     selectedLocale = $localeStore;
   });
 
   /**
-   * 提交个人资料与设置
+   * Submit the profile and settings
    */
   async function handleSubmit(event: Event): Promise<void> {
     event.preventDefault();
@@ -159,7 +159,7 @@
 
     saving = true;
 
-    // 若服务端确认缺失 JSON API，不向 SSR 表单虚构请求，给出清晰明确的本地生效与缺口提示
+    // If the server confirms the JSON API is missing, do not fabricate requests to the SSR form; give a clear notice about local application and the gap
     if (serverApiAvailable === false) {
       toast.warning($t('settings.profile.api_unavailable'));
       saving = false;
@@ -187,22 +187,23 @@
   }
 
 
-  /** 读取当前接收策略与白名单（GET /api/v1/settings/share-policy）。 */
+  /** Read the current receiving policy and allowlist (GET /api/v1/settings/share-policy). */
   async function loadSharePolicy(): Promise<void> {
     try {
       const res = await apiClient.getShareInvites();
       sharePolicy = res.policy;
       allowList = res.allow_list ?? [];
     } catch {
-      // 读不到就保持默认（anyone）：这正是「没有特殊设置」的真实含义，不是错误。
+      // Keep the default (anyone) when it cannot be read: that is exactly the true meaning of "no special setting", not an error.
     }
   }
 
   /**
-   * 保存接收策略（PUT /api/v1/settings/share-policy）。
+   * Save the receiving policy (PUT /api/v1/settings/share-policy).
    *
-   * 保存成功后以服务端返回的策略与白名单为准——白名单是并集语义，本地推断会漂移。
-   * 未知用户名由服务端返回 user_not_found，这里翻成对应文案。
+   * After a successful save the policy and allowlist returned by the server are authoritative — the allowlist has union
+   * semantics, and inferring it locally would drift. An unknown username comes back from the server as user_not_found,
+   * translated into the matching copy here.
    */
   async function saveSharePolicy(input: {
     policy?: 'anyone' | 'whitelist' | 'nobody';
@@ -242,7 +243,7 @@
   {#if loading}
     <Skeleton testId="settings-loading" label={$t('common.loading')} />
   {:else}
-    <!-- 个人资料：只放 profile 与 locale 字段（密码、两步验证等各有独立分区） -->
+    <!-- Profile: only the profile and locale fields (password, two-factor auth and the like each have their own section) -->
     <SettingsSection title={$t('settings.profile.heading')}>
       {#if serverApiAvailable === false}
         <p data-testid="settings-api-unavailable" class="mb-4 text-[13px] text-warning" role="note">{$t('settings.profile.api_unavailable')}</p>
@@ -291,8 +292,8 @@
               <label for="settings-learn-ahead" class="text-sm font-medium text-foreground">{$t('settings.profile.learn_ahead_label')}</label>
               <HelpTip testId="settings-learn-ahead-help" label={$t('settings.profile.learn_ahead_label')} text={$t('settings.profile.learn_ahead_hint')} />
             </div>
-            <!-- 不用 bind:value：数字输入框的绑定会把值强转成 number，而这里的状态是字符串，
-                 由 validateLearnAheadMinutes 做「0–1440 整数」校验；手写 value/oninput 才留得住原文。 -->
+            <!-- No bind:value: binding a number input coerces the value to number, while the state here is a string,
+                 validated as a "0–1440 integer" by validateLearnAheadMinutes; only a hand-written value/oninput keeps the raw text. -->
             <input id="settings-learn-ahead" data-testid="settings-learn-ahead" type="number" min="0" max={MAX_LEARN_AHEAD_MINUTES} step="1" value={learnAhead} oninput={(event) => (learnAhead = event.currentTarget.value)} class="field-input mt-1.5 w-full text-sm" />
             {#if fieldErrors.learn_ahead_minutes}
               <p data-testid="settings-error-learn-ahead" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.learn_ahead_minutes)}</p>
@@ -306,9 +307,9 @@
     </SettingsSection>
 
 
-    <!-- 卡组共享接收策略：在邀请发出之前就拦住，属于「我的偏好」而非卡组设置。 -->
+    <!-- Deck share receiving policy: it blocks before an invitation is sent, so it belongs to "my preferences" rather than deck settings. -->
     <SettingsSection title={$t('settings.share_policy.heading')} description={$t('settings.share_policy.intro')} testId="settings-share-policy">
-      <!-- 三档接收策略走与同页其余设置项同款的下拉（界面语言、复习日切点、时区）。 -->
+      <!-- The three-tier receiving policy uses the same dropdown style as the other settings items on this page (UI language, review day boundary, timezone). -->
       <Select
         bind:value={sharePolicy}
         testId="share-policy-options"

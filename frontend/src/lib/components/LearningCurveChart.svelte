@@ -4,11 +4,11 @@
   import type { StatsCurvePoint } from '../api';
 
   /**
-   * 学习曲线：窗口内每天的复习量，按「复习 / 新学」堆叠成柱（Chart.js，只注册柱状图用到的模块）。
+   * Learning curve: daily review volume in the window, stacked into bars by "reviews / new" (Chart.js, registering only the modules the bar chart uses).
    *
-   * 服务端只返回有复习的日子，这里按 from..to 补成连续的日期轴（缺的日子为 0），
-   * 否则空白的日子会被挤掉，柱间距离不再代表时间。颜色取 app.css 的 --chart-1 / --chart-2
-   * （已做色觉缺陷校验）；图例常驻、提示写明系列名，另附一份读屏用的数据表。
+   * The server returns only days with reviews, so here they are padded into a continuous date axis over from..to (missing days as 0),
+   * otherwise blank days would be squeezed out and the distance between bars would no longer represent time. Colors come from --chart-1 / --chart-2 in app.css
+   * (already checked for color-vision deficiency); the legend is always shown, tooltips name the series, and a data table is provided for screen readers.
    */
   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Legend, Tooltip);
 
@@ -24,7 +24,7 @@
   const DAY = 86_400_000;
   const toMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
 
-  // 连续日期轴：from 到 to 每天一格；边界缺失时退回到数据自身的首尾。
+  // Continuous date axis: one slot per day from from to to; when a bound is missing it falls back to the data's own first and last day.
   const days = $derived.by(() => {
     const byDay = new Map(points.map((p) => [p.day, p]));
     const start = from || points[0]?.day;
@@ -50,7 +50,7 @@
         labels: days.map((d) => d.day.slice(5)),
         datasets: [
           { ...bar, label: $t('stats.curve.review'), data: days.map((d) => d.review), backgroundColor: token('--chart-1') },
-          // 顶段带 4px 圆角，底段是直角：整根柱子从基线长出、只有顶端是圆的。
+          // The top segment has 4px rounded corners and the bottom one is square: the bar grows out of the baseline with only its top rounded.
           { ...bar, label: $t('stats.curve.new'), data: days.map((d) => d.new), backgroundColor: token('--chart-2'), borderRadius: { topLeft: 4, topRight: 4 } },
         ],
       },
@@ -82,11 +82,11 @@
     });
   }
 
-  // render() 读取 days 与 $t：数据或界面语言变化时 effect 重跑，旧图销毁、新图生成。
+  // render() reads days and $t: when the data or UI language changes the effect re-runs, destroying the old chart and building a new one.
   $effect(() => {
     if (!canvas) return;
     let chart = render();
-    // 切换深浅主题时颜色令牌变了，canvas 不会自动跟随，所以按 html 的 class 变化重建一次。
+    // Switching light/dark changes the color tokens and the canvas does not follow automatically, so it is rebuilt once whenever the html class changes.
     const observer = new MutationObserver(() => {
       chart.destroy();
       chart = render();

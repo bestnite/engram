@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiClient, ApiClientError, apiClient, getApiErrorMessageKey } from '../lib/api';
 import { register, setup } from '../lib/auth';
 
-// SPA 注册与首个管理员引导的前端契约：同源 JSON、写请求自动带内存 CSRF、稳定 code 映射本地化。
-// 服务端行为（策略、邀请、引导门）由 internal/web/auth_register_test.go 覆盖。
+// Frontend contract for SPA registration and first-admin bootstrap: same-origin JSON, write requests automatically carry the in-memory CSRF token, stable codes map to localized text.
+// Server behaviour (policy, invites, bootstrap gate) is covered by internal/web/auth_register_test.go.
 describe('SPA register and setup client flows', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;

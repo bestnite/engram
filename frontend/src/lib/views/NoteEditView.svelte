@@ -17,19 +17,19 @@
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
 
-  // 一个实现同时承担新建与编辑：地址上有没有 noteId 决定模式，界面其余部分逐项相同
-  // （题型、字段、标签、媒体与自动预览）。新建成功固定跳回卡组页，不留第二条「再建一条」路径。
+  // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
+  // (card type, fields, tags, media and live preview). A successful create always jumps back to the deck page, leaving no second "create another" path.
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
   const isCreate = $derived(noteId === '');
 
-  // 自动预览的防抖窗口：字段停手约半秒后再请求，避免逐字符打请求。
+  // Debounce window of the live preview: the request fires about half a second after typing in the fields stops, avoiding a request per character.
   const PREVIEW_DEBOUNCE_MS = 500;
 
   let note = $state<Note | null>(null);
   let kind = $state('basic');
   let fields = $state<Record<string, unknown>>({});
-  // 该题型字段表之外的键（外部写入的自定义键）原样保留，保存时合回，绝不静默丢弃。
+  // Keys outside this card type's field table (custom keys written externally) are kept as-is and merged back on save, never silently dropped.
   let unknownKeys = $state<Record<string, unknown>>({});
   let tagsText = $state('');
 
@@ -39,41 +39,41 @@
   let metaError = $state(false);
 
   let selectedField = $state('');
-  // 上传控件状态：与媒体库选择器共用 insertMedia 的插入路径（编辑器媒体面）。
+  // Upload control state: it shares insertMedia's insertion path with the media library picker (the editor's media facet).
   let uploading = $state(false);
 
-  // 预览状态机：empty 尚未输入 / loading 生成中（可能仍挂着上一份结果）/ ready 有结果 /
-  // incomplete 字段不全（服务端 400）/ error 取用失败。
+  // Preview state machine: empty nothing entered yet / loading generating (the previous result may still be attached) / ready has a result /
+  // incomplete fields are not complete (server 400) / error fetching failed.
   type PreviewStatus = 'empty' | 'loading' | 'ready' | 'incomplete' | 'error';
   let previewStatus = $state<PreviewStatus>('empty');
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
-  // 只对它调用 MathJax 排版：它是唯一承载服务端清洗后 HTML 的容器。
+  // MathJax typesetting is only invoked on it: it is the only container carrying server-sanitized HTML.
   let previewSection = $state<HTMLElement | null>(null);
   let previewReady = $state(false);
 
-  // 非响应式控制位：卸载后不得再写状态；generation 保证只有最新一次请求能落地。
+  // Non-reactive control slots: no state may be written after unmount; generation guarantees only the latest request can land.
   let disposed = false;
   let previewGeneration = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let typesetChain: Promise<void> = Promise.resolve();
 
-  // 题型下拉：清单与顺序来自服务端的自描述（kind 字典序），元数据未就绪时为空。
+  // Card type dropdown: the list and its order come from the server's self-description (kind in lexicographic order), empty while the metadata is not ready.
   const kindOptions = $derived(
     kindOrder($cardTypes).map((value) => ({ value, label: $t(`notes.kind.${value}` as never) }))
   );
 
-  // 可插入媒体的字段：只有文本类字段能承载 Markdown 图片引用。
+  // Fields that can take media: only text-type fields can carry Markdown image references.
   const textFields = $derived(
     fieldsForKind($cardTypes, kind)
       .filter((spec) => spec.control === 'text' || spec.control === 'textarea' || spec.control === 'lines')
       .map((spec) => ({ value: spec.key, label: $t('note.fields.' + spec.key) }))
   );
 
-  // 字段内容的稳定签名：kind 或任一字段变化都会得到新串，自动预览据此重排。
+  // Stable signature of the field contents: a change to kind or any field yields a new string, and the live preview reschedules off it.
   const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
 
-  // 草稿签名：kind、提交字段与标签任一变化都得到新串（标签用解析后的数组，避免只改空格
-  // 也当成新改动）。保存只对提交那一刻的快照负责，因此用它判断响应落地时草稿是否已被改过。
+  // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
+  // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
   const draftSignature = $derived(
     JSON.stringify({ kind, fields: collectFields(), tags: parseTags() })
   );
@@ -89,16 +89,17 @@
     return tagsText.split(',').map((tag) => tag.trim()).filter(Boolean);
   }
 
-  /** 表单模型 → 提交用字段：认识的键按表清洗，未知键原样带回。 */
+  /** Form model → fields for submission: recognized keys are cleaned per the table, unknown keys are carried back as-is. */
   function collectFields(): Record<string, unknown> {
     return { ...unknownKeys, ...toPayloadFields(fields) };
   }
 
   /**
-   * 是否已有可预览内容：只看该题型字段表里的文本 / 数组 / 数值字段，判断它们是否偏离空表单
-   * 基线。布尔字段没有可渲染正文，且它的默认值（如 typed 的 ignore_case=true、list 的
-   * ordered=false、true_false 的 answer=false）来自题型定义而非用户输入，一律不计；题型表
-   * 之外的键（unknownKeys）也不是本次输入，同样不计。数值 0 是真实输入，必须计入。
+   * Whether there is already previewable content: it only looks at the text / array / numeric fields in this card type's
+   * field table and judges whether they deviate from the empty-form baseline. Boolean fields have no renderable body,
+   * and their defaults (e.g. typed's ignore_case=true, list's ordered=false, true_false's answer=false) come from the card
+   * type definition rather than user input, so they never count; keys outside the card type table (unknownKeys) are not
+   * this input either and do not count the same way. The numeric value 0 is real input and must count.
    */
   function hasContent(): boolean {
     const specs = fieldsForKind($cardTypes, kind);
@@ -112,7 +113,7 @@
     return false;
   }
 
-  /** 载入卡片并把服务端字段收进表单模型；返回未知键另存，供保存时合并。 */
+  /** Load the card and collect the server fields into the form model; unknown keys are returned to be stored separately and merged on save. */
   function adoptFields(loaded: Note): void {
     kind = loaded.kind;
     fields = toFormFields(fieldsForKind($cardTypes, loaded.kind), loaded.fields);
@@ -125,7 +126,7 @@
   async function load(): Promise<void> {
     loading = true;
     loadError = false;
-    // 先确保题型元数据就绪：字段表随元数据一起到达，未知题型无法初始化表单。
+    // First make sure the card type metadata is ready: the field table arrives together with the metadata, and an unknown card type cannot initialize the form.
     let catalogReady = true;
     try {
       await loadCardTypes(apiClient);
@@ -134,11 +135,11 @@
       metaError = true;
       catalogReady = false;
     }
-    // 卸载/换路由后不再初始化表单：晚到的元数据不得再写状态或触发首屏预览。
+    // The form is no longer initialized after unmount/a route change: late-arriving metadata must not write state or trigger the first-screen preview.
     if (disposed) return;
     try {
       if (isCreate) {
-        // 新建不读远端卡片，绝不带空 id GET。默认 basic，清单缺该题型时退回第一项。
+        // Creating does not read a remote card, so it never GETs with an empty id. Defaults to basic, falling back to the first entry when the list lacks that card type.
         const kinds = kindOrder($cardTypes);
         const initialKind = kinds.includes('basic') ? 'basic' : kinds[0] ?? 'basic';
         kind = initialKind;
@@ -147,7 +148,7 @@
         selectedField = firstTextField(initialKind);
         previewReady = catalogReady;
       } else {
-        // 按对外 id 直接读目标卡片；不属于地址上的卡组按「不存在」处理，禁止跨卡组编辑。
+        // Read the target card directly by its public id; a card that does not belong to the deck in the address is treated as "does not exist", and cross-deck editing is forbidden.
         const loaded = await apiClient.getNote(noteId);
         if (disposed) return;
         const loadedNote = loaded && String(loaded.deck_id) === deckId ? loaded : null;
@@ -168,8 +169,8 @@
   }
 
   /**
-   * 切换题型：按新题型重新初始化字段（旧字段名不通用，保留只会造成半张卡）。
-   * 未知键不动：它们是原卡片上不属任何字段表的数据，换题型也不该顺手丢掉。
+   * Switch card type: reinitialize the fields for the new card type (old field names do not transfer, keeping them would only produce half a card).
+   * Unknown keys stay untouched: they are data on the original card that belongs to no field table, and switching card type should not drop them on the way either.
    */
   function changeKind(next: string): void {
     kind = next;
@@ -177,8 +178,8 @@
     selectedField = firstTextField(next);
   }
 
-  // insertMedia 把 Markdown 图片引用追加到当前选中字段；上传与选择器共用同一段逻辑。
-  // 只做字符串拼接，绝不把 url 当 HTML 渲染；返回是否真的插入了（字段非法时不动内容）。
+  // insertMedia appends a Markdown image reference to the currently selected field; upload and the picker share the same piece of logic.
+  // String concatenation only, never render url as HTML; returns whether it actually inserted (content is left untouched when the field is invalid).
   function insertMedia(url: string): boolean {
     const current = fields[selectedField];
     if (typeof current !== 'string') return false;
@@ -186,7 +187,7 @@
     return true;
   }
 
-  // uploadErrorKeyFor 把服务端稳定错误 code 映射到本地化 key；未知 code 回落到通用失败提示。
+  // uploadErrorKeyFor maps the server's stable error code to a localized key; unknown codes fall back to the generic failure message.
   function uploadErrorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     const map: Record<string, string> = {
@@ -199,7 +200,7 @@
     return map[code] || 'media.upload.failed';
   }
 
-  // 选中或拖入文件即上传：成功后插入到所选字段，与媒体库选择器共用同一段 insertMedia。
+  // Selecting or dropping a file uploads right away: on success it is inserted into the selected field, sharing the same insertMedia as the media library picker.
   async function uploadMedia(file: File): Promise<void> {
     uploading = true;
     try {
@@ -215,8 +216,8 @@
   }
 
   /**
-   * 预览调度：清掉待发的一次，推进 generation，再按防抖窗口排新的一次。
-   * 有上一份结果时保留它、只把状态标成生成中——预览重排期间绝不闪成空白。
+   * Preview scheduling: clear the pending one, advance generation, then queue a new one after the debounce window.
+   * When there is a previous result it is kept and only the state is marked as generating — the preview never flashes blank while rescheduling.
    */
   function schedulePreview(): void {
     if (debounceTimer !== null) {
@@ -236,17 +237,19 @@
     }, PREVIEW_DEBOUNCE_MS);
   }
 
-  /** 一次预览请求的落地结果：成功带卡片，失败带状态（400=字段不全，其余=取用失败）。 */
+  /** The landing result of one preview request: success carries a card, failure carries the state (400 = incomplete fields, anything else = fetch failure). */
   type PreviewOutcome =
     | { ok: true; cards: Array<{ front_html: string; back_html: string }> }
     | { ok: false; status: 'incomplete' | 'error' };
 
   /**
-   * 把「写入新卡片 → 等 Svelte 挂上 DOM → MathJax 排版」三步整体挂到串行链尾。
+   * Chain all three steps — "write the new card → wait for Svelte to mount the DOM → MathJax typesetting" — at the tail of one serial chain.
    *
-   * 只串行排版不够：新响应若在上一轮排版进行中替换容器内容，上一轮的 MathJax 就会改写已经
-   * 换过的 DOM（旧公式插进新卡片）。三步一起串行后，每一轮排版看到的一定是自己那一代提交的
-   * 容器，且最新一代最后落地。链中每一步都确认自己仍是最新一代；最新一次失败时不排版。
+   * Serializing only the typesetting is not enough: if a new response replaces the container's content while the previous
+   * round is still typesetting, the previous round's MathJax will rewrite the DOM that has already been swapped (old
+   * formulas inserted into the new card). With all three steps serialized together, each round of typesetting is guaranteed
+   * to see the container its own generation committed, and the newest generation lands last. Every step in the chain confirms
+   * it is still the newest generation; when the latest one failed, no typesetting runs.
    */
   function commitPreview(generation: number, outcome: PreviewOutcome): void {
     typesetChain = typesetChain.then(async () => {
@@ -265,7 +268,7 @@
     });
   }
 
-  /** 取一次预览。落地前先确认自己仍是最新一代，过期结果与过期错误都丢弃。 */
+  /** Fetch one preview. Before landing it first confirms it is still the newest generation; stale results and stale errors are both discarded. */
   async function runPreview(generation: number): Promise<void> {
     if (disposed || generation !== previewGeneration) return;
     const requestKind = kind;
@@ -277,13 +280,13 @@
       outcome = { ok: true, cards: response.cards };
     } catch (err) {
       if (disposed || generation !== previewGeneration) return;
-      // 400 是「字段还不全 / 题型无法渲染」，与取用失败分开表达。
+      // 400 means "the fields are not complete yet / the card type cannot render", expressed separately from a fetch failure.
       outcome = { ok: false, status: err instanceof ApiClientError && err.status === 400 ? 'incomplete' : 'error' };
     }
     commitPreview(generation, outcome);
   }
 
-  /** 提交入口：新建与编辑共用一条路径，只在落地动作上分叉；在途时直接忽略重复提交。 */
+  /** Submission entry: create and edit share one path and fork only in the landing action; duplicate submissions are ignored outright while in flight. */
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (saving) return;
@@ -291,10 +294,10 @@
     else await save();
   }
 
-  /** 编辑保存：原地更新，保持卡片身份与标签状态，不跳转。 */
+  /** Edit save: update in place, keeping the card identity and the tag state, without navigating. */
   async function save(): Promise<void> {
     if (!note) return;
-    // 提交瞬间冻结草稿：响应只对这一份快照负责。
+    // Freeze the draft at the instant of submission: the response is only responsible for this snapshot.
     const submitted = draftSignature;
     saving = true;
     try {
@@ -304,14 +307,14 @@
         tags: parseTags(),
       });
       if (disposed) return;
-      // 身份先落地：即便草稿在请求期间被改过，后续保存仍指向同一张卡片。
+      // Identity lands first: even if the draft was changed while the request was in flight, later saves still point at the same card.
       note = updated;
       if (draftSignature === submitted) {
-        // 请求期间没有新输入：可以安全地把响应收进表单并报告已保存。
+        // No new input during the request: the response can safely be collected into the form and reported as saved.
         adoptFields(updated);
         toast.success($t('note_edit.saved'));
       }
-      // 草稿已被改过：保留用户正在输入的内容（不 adopt），也不谎报「已保存」。
+      // The draft has already been changed: keep what the user is typing (do not adopt it) and do not falsely report "saved".
     } catch (err) {
       if (disposed) return;
       reportSaveError(err);
@@ -320,21 +323,21 @@
     }
   }
 
-  /** 保存失败的提示：400 是内容不合法，给出可操作的原因；其余一律报通用失败。 */
+  /** Save failure message: 400 means invalid content, so an actionable reason is given; everything else reports the generic failure. */
   function reportSaveError(err: unknown): void {
     const invalid = err instanceof ApiClientError && err.status === 400;
     if (isCreate) toast.error($t(invalid ? 'note_create.invalid' : 'note_create.failed'));
     else toast.error($t(invalid ? 'note_edit.invalid' : 'note_edit.failed'));
   }
 
-  /** 新建：只有确认新建成功（非 dry_run、created==1、无逐行错误）才跳回卡组页。 */
+  /** Create: it only jumps back to the deck page once creation is confirmed successful (not dry_run, created==1, no per-row errors). */
   async function create(): Promise<void> {
     saving = true;
     try {
       const result = await apiClient.createNotes(deckId, {
         notes: [{ kind, fields: collectFields(), tags: parseTags() }],
       });
-      // 用户在请求在途时离开（换路由/卸载）：不再写状态，也不要把他们拉去卡组页。
+      // The user left while the request was in flight (route change/unmount): no more state writes, and do not pull them to the deck page either.
       if (disposed) return;
       if (result.dry_run || result.created !== 1 || result.errors.length > 0) {
         reportSaveError(null);
@@ -349,9 +352,9 @@
     }
   }
 
-  // 自动预览的触发点：装载完成（首屏预览）之后，kind 或字段内容每次变化都重排一次。
-  // 调度用 untrack 包住：调度里会读 previewCards/previewStatus，若被记成依赖，就会形成
-  // 「预览完成 → 又排一次预览」的自激循环；真正的依赖只有 previewReady 与 signature。
+  // Live preview trigger point: after loading completes (the first-screen preview), every change to kind or the field contents reschedules once.
+  // The scheduling is wrapped in untrack: scheduling reads previewCards/previewStatus, and if those were recorded as dependencies it would form
+  // a self-exciting loop of "preview finished → schedule another preview"; the only real dependencies are previewReady and signature.
   $effect(() => {
     if (!previewReady) return;
     const current = signature;
@@ -362,7 +365,7 @@
   onMount(() => {
     void load();
     return () => {
-      // 卸载/换路由：停掉待发的防抖，并让所有在途回调在写状态前退出。
+      // Unmount/route change: stop the pending debounce and make every in-flight callback exit before writing state.
       disposed = true;
       if (debounceTimer !== null) {
         clearTimeout(debounceTimer);
@@ -386,7 +389,7 @@
   {:else}
     <form onsubmit={submit} data-testid="note-editor-form">
       <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
-        <!-- 左栏：输入。题型、字段、标签与媒体，按区块用标题与分隔线区分，不再套卡片。 -->
+        <!-- Left column: input. Card type, fields, tags and media, separated into sections by headings and dividers, no longer nested in cards. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
             <div>
@@ -408,7 +411,7 @@
             </label>
           </div>
 
-          <!-- 选择器只引用原图；延迟加载与限高由 CSS 负责。 -->
+          <!-- The picker only references the original image; lazy loading and the height cap are handled by CSS. -->
           <div class="space-y-4 border-t border-border pt-6">
             <label class="block text-sm font-medium text-foreground">{$t('media.field')}
               <Select
@@ -418,7 +421,7 @@
                 options={textFields}
               />
             </label>
-            <!-- 上传区：外层已是笔记表单，不能嵌套 form；选中即上传，成功走与选择器同一段 insertMedia。 -->
+            <!-- Upload area: the outer element is already the note form, so a form cannot be nested here; selecting uploads immediately, and success goes through the same insertMedia as the picker. -->
             <div class="space-y-2">
               <span class="block text-sm font-medium text-foreground">{$t('media.upload.label')}</span>
               <Dropzone
@@ -429,19 +432,20 @@
                 onfile={uploadMedia}
               />
             </div>
-            <!-- 媒体库选择器：数据走 GET /api/v1/media 的 JSON；选中后与上传共用同一段 insertMedia。 -->
+            <!-- Media library picker: data comes from GET /api/v1/media JSON; after selection it shares the same insertMedia as upload. -->
             <MediaPicker onselect={insertMedia} />
           </div>
         </div>
 
-        <!-- 右栏：自动预览。随输入、题型与插入变化重排；桌面端吸顶且限高为一屏，
-             预览比屏幕长时在栏内滚动，标题始终可见；移动端顺排在输入下方。 -->
+        <!-- Right column: live preview. Rescheduled on input, card type and insertion changes; on desktop it is sticky with
+             its height capped at one screen, scrolling inside the column when the preview is longer than the screen so the
+             heading stays visible; on mobile it flows right below the input. -->
         <div class="min-w-0 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col">
           <div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
               <h2 class="text-sm font-semibold text-foreground">{$t('note_preview.title')}</h2>
-              <!-- 状态文案独占一个 polite 活区：只播报「生成中/不全/失败」这类短句，
-                   卡片正文放在活区之外，避免每次重排把整段 HTML 重复念一遍。 -->
+              <!-- The status copy gets a polite live region of its own: it only announces short phrases like "generating/incomplete/failed", while
+                   the card body sits outside the live region so a reschedule does not read the whole HTML out again. -->
               <div aria-live="polite" class="min-w-0 truncate text-right text-xs">
                 {#if previewStatus === 'incomplete'}
                   <p data-testid="note-preview-incomplete" role="status" class="text-warning">{$t('note_preview.incomplete')}</p>
@@ -461,7 +465,7 @@
                 <p data-testid="note-preview-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('note_preview.empty')}</p>
               {/if}
               {#if previewCards}
-                <!-- 保留上一份结果时压暗并置 aria-busy，让「陈旧但仍在重排」看得见而不是闪空。 -->
+                <!-- When the previous result is kept it is dimmed and aria-busy is set, making "stale but still rescheduling" visible instead of a blank flash. -->
                 <div
                   bind:this={previewSection}
                   data-testid="note-preview-result"
@@ -472,12 +476,12 @@
                     <div class="divide-y divide-border overflow-hidden rounded-md border border-border bg-background">
                       <div data-testid="note-preview-front-{index}" class="space-y-2 p-4">
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.front')}</h3>
-                        <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                        <!-- Only the HTML returned by the preview API is used; the backend sanitizes it via RenderMarkdown and bluemonday, and passing the editor's raw fields into an HTML sink is forbidden. -->
                         <div class="prose dark:prose-invert">{@html card.front_html}</div>
                       </div>
                       <div data-testid="note-preview-back-{index}" class="space-y-2 p-4">
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.back')}</h3>
-                        <!-- 仅使用预览 API 返回的 HTML；后端通过 RenderMarkdown 与 bluemonday 清理，禁止将编辑器原始字段传入 HTML sink。 -->
+                        <!-- Only the HTML returned by the preview API is used; the backend sanitizes it via RenderMarkdown and bluemonday, and passing the editor's raw fields into an HTML sink is forbidden. -->
                         <div class="prose dark:prose-invert">{@html card.back_html}</div>
                       </div>
                     </div>
@@ -489,7 +493,7 @@
         </div>
       </div>
 
-      <!-- 操作栏贴在视口底部：长表单不用滚到底才能保存。 -->
+      <!-- The action bar sticks to the bottom of the viewport: a long form does not have to be scrolled to the end before saving. -->
       <div class="sticky bottom-0 z-10 -mx-4 mt-8 flex flex-wrap items-center gap-3 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
         <Button type="submit" size="lg" testId="note-submit" loading={saving}>
           {isCreate ? $t('note_create.submit') : $t('note_edit.save')}

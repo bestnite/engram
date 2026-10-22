@@ -11,12 +11,12 @@
   import { toast } from '../components/ui/toast';
   import PageHeader from '../components/ui/PageHeader.svelte';
 
-  // 公开只读分享浏览页（服务端 GET /s/:token 切壳后由客户端路由渲染此页）。
-  // 卡片正反面一律是服务端清洗后的 HTML，这里只把清洗结果作为标签注入，绝不把 fields 原文当 Markdown 渲染。
-  // 媒体（<img src="/media/<sha>">）的可见性仍由服务端判定：只有登录且打开过该卡组的会话才放行。
+  // Public read-only share browsing page (after the server's GET /s/:token switched to the shell, the client router renders this page).
+  // Card front and back are always server-sanitized HTML; this only injects the sanitized result as markup and never renders the raw fields as Markdown.
+  // The visibility of media (<img src="/media/<sha>">) is still decided by the server: only a session that is logged in and has opened that deck is let through.
   //
-  // 打开链接只登记「这个会话看过它」，不会把卡组加进访客的列表——链接会被转发，
-  // 随手点开一次不该等于同意接收一个卡组。入伙是下面的显式动作（「加入我的卡组」）。
+  // Opening a link only records "this session has seen it"; it does not add the deck to the visitor's list — links get forwarded,
+  // and clicking one in passing should not equal agreeing to receive a deck. Joining is the explicit action below ("add to my decks").
   const token = $derived($routeStore.params.token ?? '');
 
   let status = $state<'loading' | 'password' | 'content' | 'error'>('loading');
@@ -25,12 +25,12 @@
   let unlocking = $state(false);
   let errorKey = $state<string | null>(null);
 
-  // 入伙状态：joining 期间按钮转圈；joined 后加入按钮换成「打开卡组」，结果走 toast。
+  // Join state: the button spins while joining; after joined the join button becomes "open deck", and the outcome goes through toast.
   let joining = $state(false);
   let joined = $state(false);
   let joinedDeckId = $state<number | null>(null);
 
-  // 把分享接口的稳定错误 code 映射到 share.* 语言包键；绝不回显后端英文 message。
+  // Map the share API's stable error codes to share.* language pack keys; never echo the backend's English message.
   function mapShareError(err: unknown): string {
     if (err instanceof ApiClientError) {
       if (err.code === 'share_password_invalid') return 'share.error_password';
@@ -66,7 +66,7 @@
     }
   }
 
-  // 入伙：把链接指的卡组加进自己的列表。链接失效/被撤销时服务端返回 404，按同一套 share.* 文案提示。
+  // Join: add the deck the link points at to your own list. When the link is invalid/revoked the server returns 404, reported with the same set of share.* copy.
   async function join(): Promise<void> {
     joining = true;
     try {
@@ -149,7 +149,7 @@
     {#if share.notes.length === 0}
       <p data-testid="share-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('share.browse.empty')}</p>
     {:else}
-      <!-- 卡片预览：一行一张卡，左正面右背面，不再一张张卡片竖着堆。 -->
+      <!-- Card preview: one card per row, front on the left and back on the right, no longer cards stacked one by one vertically. -->
       <div class="overflow-hidden rounded-lg border border-border">
         <div class="hidden grid-cols-2 border-b border-border bg-surface text-xs text-muted-foreground sm:grid">
           <div class="px-4 py-2.5">{$t('share.browse.front')}</div>

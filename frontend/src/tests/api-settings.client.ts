@@ -5,8 +5,8 @@ import { apiClient } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 /**
- * API 与 MCP 页：接入地址取浏览器当前访问的站点地址；MCP 配置片段平时是占位符，
- * 刚创建密钥后直接带上这把密钥（它只显示这一次）。
+ * API and MCP page: the access address is taken from the site address the browser is currently visiting; the MCP config snippet is normally a placeholder,
+ * and right after a key is created it carries that key directly (it is shown only this once).
  */
 describe('API & MCP settings page', () => {
   let instance: ReturnType<typeof mount> | null = null;

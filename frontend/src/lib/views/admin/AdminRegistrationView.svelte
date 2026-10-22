@@ -45,7 +45,7 @@
 
   const policies = ['open', 'invite', 'closed'];
 
-  /** 发信结果码 → 本地化 key；空码表示未请求发信，回落到「邀请已创建」。 */
+  /** Mail-send result code → localized key; an empty code means no send was requested, falling back to "invitation created". */
   function mailNoticeKey(code: string): string {
     const map: Record<string, string> = {
       invite_mail_queued: 'admin.registration.notice.mail_queued',
@@ -158,7 +158,7 @@
     }
   });
 
-  // 操作结果用 toast 报告，不在页面顶部插横幅。
+  // Operation results are reported with a toast, not inserted as a banner at the top of the page.
   $effect(() => {
     if (notice) {
       toast.success($t(notice));
@@ -205,7 +205,7 @@
 
     <SettingsSection title={$t('admin.registration.invites_heading')} description={$t('admin.registration.invites_hint')}>
       <form onsubmit={createInvite} data-testid="admin-registration-invite-create" class="space-y-3">
-        <!-- 按底部对齐：哪个标签换了行，三个输入框也仍在同一条线上。 -->
+        <!-- Aligned at the bottom: whichever label wraps onto a new line, the three inputs still sit on the same line. -->
         <div class="grid items-end gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <label class="block text-sm font-medium text-foreground">{$t('admin.registration.field.email')}
             <input data-testid="admin-registration-invite-email" type="email" bind:value={form.email} class="field-input mt-1.5 w-full text-sm font-normal" />

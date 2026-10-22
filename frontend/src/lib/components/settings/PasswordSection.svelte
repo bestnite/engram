@@ -6,8 +6,8 @@
   import SettingsSection from '../ui/SettingsSection.svelte';
 
   /**
-   * 修改密码分区（安全页）。自带状态与提交，不依赖所在页面的其它表单。
-   * 服务端的稳定错误码映射成具体提示；未列出的码退回通用的 API 错误文案。
+   * Change-password section (security page). Carries its own state and submission and does not depend on other forms on the page.
+   * The server's stable error codes map to specific messages; unlisted codes fall back to the generic API error copy.
    */
   let oldPassword = $state('');
   let newPassword = $state('');

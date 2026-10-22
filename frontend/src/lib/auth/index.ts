@@ -32,7 +32,7 @@ const initialState: AuthState = {
 export const authStore = writable<AuthState>(initialState);
 
 /**
- * 初始化认证会话状态（调用 GET /api/v1/auth/session）
+ * Initialize auth session state (calls GET /api/v1/auth/session)
  */
 export async function initAuth(): Promise<SessionResponse | null> {
   authStore.update((s) => ({ ...s, loading: true, error: null }));
@@ -63,10 +63,10 @@ export async function initAuth(): Promise<SessionResponse | null> {
 }
 
 /**
- * 会话中途失效时把认证状态归零（由外壳在 ApiClient.onUnauthorized 里调用）。
+ * Reset auth state to zero when the session becomes invalid mid-way (called by the shell in ApiClient.onUnauthorized).
  *
- * 刻意不改动 error：界面要显示什么由调用方决定，这里只负责「不再声称已登录」。
- * 不在这里导航也是同样的理由——导航策略属于外壳。
+ * Deliberately leaves error untouched: what the UI shows is up to the caller; this only handles "no longer claiming to be logged in".
+ * Not navigating here is for the same reason - navigation policy belongs to the shell.
  */
 export function clearSession(): void {
   authStore.set({
@@ -79,7 +79,7 @@ export function clearSession(): void {
 }
 
 /**
- * SPA 登录操作
+ * SPA login operation
  */
 export async function login(username: string, password: string): Promise<LoginResponse> {
   authStore.update((s) => ({ ...s, loading: true, error: null }));
@@ -111,8 +111,8 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 /**
- * SPA 登录第二步（TOTP）：提交动态验证码或一次性恢复码，通过后建立认证状态。
- * 第二步凭据由服务端在密码通过后下发（HttpOnly cookie），这里只负责提交与状态同步。
+ * SPA login second step (TOTP): submit the one-time code or a one-time recovery code and establish auth state on success.
+ * The second-step credential is issued by the server after the password passes (HttpOnly cookie); this only submits and syncs state.
  */
 export async function completeTOTP(code: string): Promise<TOTPLoginResponse> {
   authStore.update((s) => ({ ...s, loading: true, error: null }));
@@ -144,7 +144,7 @@ export async function completeTOTP(code: string): Promise<TOTPLoginResponse> {
 }
 
 /**
- * SPA 登出操作
+ * SPA logout operation
  */
 export async function logout(): Promise<LogoutResponse> {
   authStore.update((s) => ({ ...s, loading: true }));
@@ -169,15 +169,15 @@ export async function logout(): Promise<LogoutResponse> {
 }
 
 /**
- * SPA 自助注册：注册成功后服务端不签发会话（与 SSR 一致），因此不改动 authStore，
- * 由调用方跳转到登录页。CSRF token 由 apiClient 在需要时自动补齐。
+ * SPA self-registration: after a successful registration the server issues no session (consistent with SSR), so authStore is left untouched and
+ * the caller redirects to the login page. The CSRF token is filled in automatically by apiClient when needed.
  */
 export async function register(input: RegisterRequest): Promise<RegisterResponse> {
   return apiClient.register(input);
 }
 
 /**
- * SPA 首个管理员引导：同样不建立会话，成功后跳转登录页。
+ * SPA first-admin bootstrap: likewise establishes no session and redirects to the login page on success.
  */
 export async function setup(input: SetupRequest): Promise<SetupResponse> {
   return apiClient.setup(input);

@@ -27,7 +27,7 @@ import AdminSMTPView from '../views/admin/AdminSMTPView.svelte';
 import AdminOIDCView from '../views/admin/AdminOIDCView.svelte';
 import AdminJobsView from '../views/admin/AdminJobsView.svelte';
 import AdminI18nView from '../views/admin/AdminI18nView.svelte';
-// 邮件模板并入 AdminSMTPView（同一页），这里只留旧路径的搬家视图。
+// Mail templates were merged into AdminSMTPView (the same page); only the legacy-path redirect view is left here.
 import AdminMailMovedView from '../views/admin/AdminMailMovedView.svelte';
 import ForgotPasswordView from '../views/ForgotPasswordView.svelte';
 import ResetPasswordView from '../views/ResetPasswordView.svelte';
@@ -38,7 +38,7 @@ import ShareBrowseView from '../views/ShareBrowseView.svelte';
 import UnsubscribeView from '../views/UnsubscribeView.svelte';
 
 /**
- * 前端骨架路由定义列表
+ * Frontend skeleton route definition list
  */
 export const routes: RouteDefinition[] = [
   {
@@ -62,8 +62,8 @@ export const routes: RouteDefinition[] = [
     component: DeckSharingView as unknown as RouteDefinition['component'],
   },
   {
-    // 卡组每日上限设置（规范路径）。服务端 GET /decks/:id/settings 已切到
-    // 应用壳（owner 门禁仍在服务端），读写走 /api/v1/decks/:id/settings。
+    // Deck daily limit settings (canonical path). The server's GET /decks/:id/settings has already switched to
+    // the app shell (the owner gate is still on the server); reads and writes go through /api/v1/decks/:id/settings.
     path: '/decks/:id/settings',
     name: 'deck-settings',
     component: DeckSettingsView as unknown as RouteDefinition['component'],
@@ -84,30 +84,30 @@ export const routes: RouteDefinition[] = [
     component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
-    // 新建卡片的规范地址。与编辑共用同一个编辑器实现（NoteEditView）：
-    // 地址上没有 noteId 就是新建模式，成功固定跳回 /decks/:id。
+    // Canonical address for creating a card. It shares the same editor implementation as editing (NoteEditView):
+    // no noteId in the address means create mode, and on success it always navigates back to /decks/:id.
     path: '/decks/:id/notes/new',
     name: 'note-create',
     component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
-    // 旧 SSR 编辑地址（规范路由）：服务端 GET /decks/:id/notes/:nid 现在返回
-    // 应用壳，客户端必须能处理这个精确 URL，否则旧链接与刷新会落到 404 视图。
-    // 参数名用 noteId，与 NoteEditView 读取的 $routeStore.params.noteId 保持一致。
+    // Legacy SSR edit address (canonical route): the server's GET /decks/:id/notes/:nid now returns
+    // the app shell, so the client must handle this exact URL, otherwise old links and reloads land on the 404 view.
+    // The param is named noteId, matching $routeStore.params.noteId read by NoteEditView.
     path: '/decks/:id/notes/:noteId',
     name: 'note-edit-nid',
     component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
-    // 旧 SSR 新建地址：服务端 GET /decks/:id/new-note 返回应用壳，客户端处理该精确 URL。
-    // 同样指向共用编辑器（新建模式）。
+    // Legacy SSR create address: the server's GET /decks/:id/new-note returns the app shell; the client handles that exact URL.
+    // It likewise points at the shared editor (create mode).
     path: '/decks/:id/new-note',
     name: 'note-create-legacy',
     component: NoteEditView as unknown as RouteDefinition['component'],
   },
   {
-    // 复习页的规范路由。服务端 GET /review 已切到 SPA 应用壳，
-    // 客户端必须能处理这个精确 URL，否则首页「开始复习」链接与刷新会落到 404 视图。
+    // Canonical route of the review page. The server's GET /review has switched to the SPA app shell,
+    // so the client must handle this exact URL, otherwise the home page's "start review" link and reloads land on the 404 view.
     path: '/review',
     name: 'review',
     component: ReviewView as unknown as RouteDefinition['component'],
@@ -128,8 +128,8 @@ export const routes: RouteDefinition[] = [
     component: APIKeysView as unknown as RouteDefinition['component'],
   },
   {
-    // 安全：修改密码与两步验证。服务端 GET /settings/security 返回应用壳，
-    // 读写走 /api/v1/settings/password 与 /api/v1/settings/totp*。
+    // Security: password change and two-factor auth. The server's GET /settings/security returns the app shell,
+    // reads and writes go through /api/v1/settings/password and /api/v1/settings/totp*.
     path: '/settings/security',
     name: 'security-settings',
     component: SecurityView as unknown as RouteDefinition['component'],
@@ -140,16 +140,16 @@ export const routes: RouteDefinition[] = [
     component: LoginView as unknown as RouteDefinition['component'],
   },
   {
-    // 登录第二步（TOTP）。服务端没有 /login/totp 的 GET 路由，规范路径由 NoRoute
-    // 回退到应用壳（页面型 GET 一律回壳）。
-    // 协议是 GET /api/v1/auth/totp（查询凭据状态）与 POST /api/v1/auth/totp（提交验证码）。
+    // Login step two (TOTP). The server has no GET route for /login/totp; the canonical path comes from NoRoute
+    // falling back to the app shell (page-type GETs always fall back to the shell).
+    // The protocol is GET /api/v1/auth/totp (query credential status) and POST /api/v1/auth/totp (submit the code).
     path: '/login/totp',
     name: 'totp-login',
     component: TOTPLoginView as unknown as RouteDefinition['component'],
   },
   {
-    // 注册与首个管理员引导的规范路径。服务端 GET /register、/setup 由应用壳应答，
-    // 写协议是 POST /api/v1/auth/register、POST /api/v1/auth/setup。
+    // Canonical paths for registration and first-admin setup. The server's GET /register and /setup are answered by the app shell,
+    // and the write protocol is POST /api/v1/auth/register and POST /api/v1/auth/setup.
     path: '/register',
     name: 'register',
     component: RegisterView as unknown as RouteDefinition['component'],
@@ -160,131 +160,131 @@ export const routes: RouteDefinition[] = [
     component: SetupView as unknown as RouteDefinition['component'],
   },
   {
-    // 调度预设页（规范路径）。服务端 GET /presets 已切到应用壳，
-    // 读写走 /api/v1/presets* 的会话 JSON 端点。
+    // Scheduling presets page (canonical path). The server's GET /presets has switched to the app shell,
+    // reads and writes go through the /api/v1/presets* session JSON endpoints.
     path: '/presets',
     name: 'presets',
     component: PresetsView as unknown as RouteDefinition['component'],
   },
   {
-    // 管理面板入口。服务端 GET /admin 已切到应用壳（requireAdmin 先于外壳）；
-    // 没有概览页，前端直接换到用户管理。
+    // Admin panel entry. The server's GET /admin has switched to the app shell (requireAdmin runs before the shell);
+    // there is no overview page, so the frontend switches straight to user management.
     path: '/admin',
     name: 'admin-index',
     component: AdminIndexView as unknown as RouteDefinition['component'],
   },
   {
-    // 管理面板健康页。服务端 GET /admin/health 已切到应用壳，读数走 /api/v1/admin/health。
+    // Admin panel health page. The server's GET /admin/health has switched to the app shell; readings come from /api/v1/admin/health.
     path: '/admin/health',
     name: 'admin-health',
     component: AdminHealthView as unknown as RouteDefinition['component'],
   },
   {
-    // 管理面板审计检索。服务端 GET /admin/audit 已切到应用壳，检索走 /api/v1/admin/audit。
+    // Admin panel audit search. The server's GET /admin/audit has switched to the app shell; searching goes through /api/v1/admin/audit.
     path: '/admin/audit',
     name: 'admin-audit',
     component: AdminAuditView as unknown as RouteDefinition['component'],
   },
   {
-    // 用户管理。服务端 GET /admin/users 已切到应用壳，读写走 /api/v1/admin/users*。
+    // User management. The server's GET /admin/users has switched to the app shell; reads and writes go through /api/v1/admin/users*.
     path: '/admin/users',
     name: 'admin-users',
     component: AdminUsersView as unknown as RouteDefinition['component'],
   },
   {
-    // 注册与邀请。服务端 GET /admin/registration 已切到应用壳，读写走 /api/v1/admin/(registration|invites)。
+    // Registration and invites. The server's GET /admin/registration has switched to the app shell; reads and writes go through /api/v1/admin/(registration|invites).
     path: '/admin/registration',
     name: 'admin-registration',
     component: AdminRegistrationView as unknown as RouteDefinition['component'],
   },
   {
-    // API Key 总览。服务端 GET /admin/api-keys 已切到应用壳，读写走 /api/v1/admin/api-keys*。
+    // API key overview. The server's GET /admin/api-keys has switched to the app shell; reads and writes go through /api/v1/admin/api-keys*.
     path: '/admin/api-keys',
     name: 'admin-api-keys',
     component: AdminAPIKeysView as unknown as RouteDefinition['component'],
   },
   {
-    // 系统设置。服务端 GET /admin/settings 已切到应用壳，读写走 /api/v1/admin/settings。
+    // System settings. The server's GET /admin/settings has switched to the app shell; reads and writes go through /api/v1/admin/settings.
     path: '/admin/settings',
     name: 'admin-settings',
     component: AdminSettingsView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮件（SMTP）。服务端 GET /admin/smtp 已切到应用壳，读写与测试走 /api/v1/admin/smtp*。
+    // Mail (SMTP). The server's GET /admin/smtp has switched to the app shell; reads, writes and tests go through /api/v1/admin/smtp*.
     path: '/admin/smtp',
     name: 'admin-smtp',
     component: AdminSMTPView as unknown as RouteDefinition['component'],
   },
   {
-    // 身份与 OIDC。服务端 GET /admin/oidc 已切到应用壳，读写、测试与解绑走 /api/v1/admin/oidc*。
+    // Identity and OIDC. The server's GET /admin/oidc has switched to the app shell; reads, writes, tests and unlinking go through /api/v1/admin/oidc*.
     path: '/admin/oidc',
     name: 'admin-oidc',
     component: AdminOIDCView as unknown as RouteDefinition['component'],
   },
   {
-    // 作业。服务端 GET /admin/jobs 已切到应用壳，列表与取消走 /api/v1/admin/jobs*。
+    // Jobs. The server's GET /admin/jobs has switched to the app shell; listing and cancellation go through /api/v1/admin/jobs*.
     path: '/admin/jobs',
     name: 'admin-jobs',
     component: AdminJobsView as unknown as RouteDefinition['component'],
   },
   {
-    // 语言包完整度。服务端 GET /admin/i18n 已切到应用壳，报告走 /api/v1/admin/i18n。
+    // Language pack completeness. The server's GET /admin/i18n has switched to the app shell; the report comes from /api/v1/admin/i18n.
     path: '/admin/i18n',
     name: 'admin-i18n',
     component: AdminI18nView as unknown as RouteDefinition['component'],
   },
 {
-    // 邮件模板已并入「邮件」页（上面那条）；这条只为让旧链接与书签不作废：
-    // 它不渲染内容，只把地址换过去（读写仍走 /api/v1/admin/mail-templates*）。
+    // Mail templates were merged into the "mail" page (the entry above); this one only exists so old links and bookmarks keep working:
+    // it renders no content, it only swaps the address over (reads and writes still go through /api/v1/admin/mail-templates*).
     path: '/admin/mail-templates',
     name: 'admin-mail-templates-moved',
     component: AdminMailMovedView as unknown as RouteDefinition['component'],
   },
   {
-    // 请求密码重置。服务端 GET /forgot-password 由应用壳应答。
-    // 协议走 POST /api/v1/auth/forgot-password；响应只含站点级 mail_ready，不透露账号是否存在。
+    // Password reset request. The server's GET /forgot-password is answered by the app shell.
+    // The protocol is POST /api/v1/auth/forgot-password; the response only contains the site-level mail_ready and does not reveal whether the account exists.
     path: '/forgot-password',
     name: 'forgot-password',
     component: ForgotPasswordView as unknown as RouteDefinition['component'],
   },
   {
-    // 设置新密码。服务端 GET /reset-password 由应用壳应答；token 由邮件链接的查询串带入，
-    // 提交走 POST /api/v1/auth/reset-password（一次性令牌，用掉即废）。
+    // Set a new password. The server's GET /reset-password is answered by the app shell; the token arrives in the email link's query string,
+    // and the submission goes through POST /api/v1/auth/reset-password (one-time token, spent once used).
     path: '/reset-password',
     name: 'reset-password',
     component: ResetPasswordView as unknown as RouteDefinition['component'],
   },
   {
-    // 账号与邮箱设置。服务端 GET /settings/email 已切到应用壳，未登录在服务端即重定向登录页。
-    // 读取/改邮箱/重发验证走 /api/v1/settings/email 与 /api/v1/settings/verify-email。
+    // Account and email settings. The server's GET /settings/email has switched to the app shell; unauthenticated requests are redirected to the login page on the server.
+    // Reading the email, changing it and resending verification go through /api/v1/settings/email and /api/v1/settings/verify-email.
     path: '/settings/email',
     name: 'email-settings',
     component: EmailSettingsView as unknown as RouteDefinition['component'],
   },
   {
-    // 公开只读分享浏览。服务端 GET /s/:token 已切到应用壳（无效/撤销链接仍在服务端 404），
-    // 内容走 GET /api/v1/share/:token，口令解锁走 POST /api/v1/share/:token/unlock。
+    // Public read-only share browsing. The server's GET /s/:token has switched to the app shell (invalid/revoked links still 404 on the server),
+    // the content comes from GET /api/v1/share/:token, passphrase unlock goes through POST /api/v1/share/:token/unlock.
     path: '/s/:token',
     name: 'share-browse',
     component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
   {
-    // 邮箱验证结果的规范路径。服务端 GET /verify-email 返回应用壳，
-    // 邮件里的一键链接就指向这里；令牌由视图读取 ?token= 后经 POST /api/v1/auth/verify-email 消费。
+    // Canonical path for the email verification result. The server's GET /verify-email returns the app shell,
+    // the one-click link in the email points here; the view reads ?token= and then consumes it via POST /api/v1/auth/verify-email.
     path: '/verify-email',
     name: 'verify-email',
     component: VerifyEmailView as unknown as RouteDefinition['component'],
   },
   {
-    // 改邮箱确认结果的规范路径。服务端 GET /confirm-email-change 返回应用壳，
-    // 令牌经 POST /api/v1/auth/confirm-email-change 消费。
+    // Canonical path for the email change confirmation result. The server's GET /confirm-email-change returns the app shell,
+    // and the token is consumed via POST /api/v1/auth/confirm-email-change.
     path: '/confirm-email-change',
     name: 'confirm-email-change',
     component: ConfirmEmailChangeView as unknown as RouteDefinition['component'],
   },
   {
-    // 一键退订的规范路径。服务端 GET /unsubscribe 返回应用壳并下发
-    // 会话前双提交 cookie，令牌由视图读取 ?token= 后经 GET/POST /api/v1/unsubscribe 读取与确认。
+    // Canonical path for one-click unsubscribe. The server's GET /unsubscribe returns the app shell and issues
+    // the pre-session double-submit cookie; the view reads ?token= and then reads/confirms it via GET/POST /api/v1/unsubscribe.
     path: '/unsubscribe',
     name: 'unsubscribe',
     component: UnsubscribeView as unknown as RouteDefinition['component'],

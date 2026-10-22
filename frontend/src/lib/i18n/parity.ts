@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from './types';
 
 /**
- * 校验两个语言包的 key 是否完全一致（AGENTS.md §2.1）
+ * Check whether two language packs have exactly the same keys (AGENTS.md §2.1)
  */
 export interface ParityResult {
   identical: boolean;
@@ -10,7 +10,7 @@ export interface ParityResult {
 }
 
 /**
- * 比较两个语言包的 key 差异
+ * Compare the key differences between two language packs
  */
 export function checkCatalogParity(catalogA: LocaleCatalog, catalogB: LocaleCatalog): ParityResult {
   const keysA = new Set(Object.keys(catalogA));
@@ -27,7 +27,7 @@ export function checkCatalogParity(catalogA: LocaleCatalog, catalogB: LocaleCata
 }
 
 /**
- * 断言两个语言包的 key 完全一致；若不一致则抛出明确的英文错误
+ * Assert that two language packs have exactly the same keys; throw an explicit English error when they do not
  */
 export function assertCatalogParity(
   catalogA: LocaleCatalog,

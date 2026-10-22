@@ -4,24 +4,24 @@
   import { cn } from './utils';
 
   /**
-   * 文件选择区：图标 + 虚线边框 + 拖入高亮，替代浏览器原生的文件控件。
+   * File picker area: icon + dashed border + drop highlight, replacing the browser's native file control.
    *
-   * 原生 input[type=file] 的按钮文字与样式由浏览器和系统语言决定（「选择文件 / 未选择任何文件」），
-   * 既不跟随应用语言，也不跟随深浅主题。这里把真实的 input 藏成 sr-only 保留键盘与读屏可达性，
-   * 外观完全由本组件绘制；data-testid 落在真实 input 上，测试仍可直接给它设置文件。
+   * The native input[type=file] button text and styling are decided by the browser and system language ("Choose file / No file chosen"),
+   * following neither the app language nor the light/dark theme. Here the real input is hidden as sr-only to keep keyboard and screen reader access,
+   * and the whole appearance is drawn by this component; data-testid sits on the real input, so tests can still set files on it directly.
    *
-   * 两种用法：bind:file 拿到选中的文件（表单提交时再用）；或传 onfile 在选中瞬间处理（如立即上传）。
+   * Two usages: bind:file to get the selected file (used later on form submit); or pass onfile to handle it the moment it is selected (e.g. upload immediately).
    */
   interface Props {
     file?: File | null;
     accept?: string;
-    /** 选区下方的一行说明（支持的格式、大小上限）。 */
+    /** One line of explanation below the drop area (supported formats, size limit). */
     hint?: string;
     disabled?: boolean;
-    /** 真实 input 的 data-testid。 */
+    /** data-testid of the real input. */
     testId?: string;
     name?: string;
-    /** 选中后立即交给调用方处理；此时组件不保留已选文件，选区回到初始状态。 */
+    /** Handed to the caller immediately on selection; in that case the component keeps no selected file and the drop area resets. */
     onfile?: (file: File) => void;
     class?: string;
   }
@@ -39,7 +39,7 @@
 
   let input = $state<HTMLInputElement | null>(null);
   let dragging = $state(false);
-  // dragenter/dragleave 会在子元素之间成对触发，用计数判断指针是否真的离开了选区。
+  // dragenter/dragleave fire in pairs between child elements, so a counter decides whether the pointer really left the drop area.
   let dragDepth = 0;
 
   function accepts(candidate: File): boolean {
@@ -92,7 +92,7 @@
     dragDepth = 0;
     dragging = false;
     const dropped = event.dataTransfer?.files?.[0];
-    // 拖入的文件绕过了 input 的 accept 过滤，这里补同一道检查；不符合的直接忽略。
+    // Dropped files bypass the input's accept filter, so the same check is applied here; anything that does not match is ignored.
     if (dropped && accepts(dropped)) take(dropped);
   }
 

@@ -5,7 +5,7 @@ import type { DueCard, GradedFeedback } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 
-/** 构造一张作答类到期卡（字段形态与 GET /api/v1/review/due 一致，含答案原文）。 */
+/** Build a due answering-type card (field shape matching GET /api/v1/review/due, including the raw answer text). */
 function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
   return {
     card_id: '11',
@@ -22,7 +22,7 @@ function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
   };
 }
 
-// 复习页的题型分支来自服务端元数据：渲染前先注入样例目录，否则只能看到加载态。
+// The review page's card-type branches come from server metadata: inject a sample catalogue before rendering, otherwise only the loading state is visible.
 beforeEach(() => {
   seedCardTypes();
 });
@@ -42,10 +42,10 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('data-testid="review-graded-input"');
     expect(html).toContain('data-testid="review-graded-submit"');
     expect(html).toContain('data-testid="review-graded-reveal"');
-    // 题面不得泄露正确答案，四档自评按钮不得出现。
+    // The question must not leak the correct answer, and the four self-rating buttons must not appear.
     expect(html).not.toContain('Paris');
     expect(html).not.toContain('data-rating=');
-    // 键位提示也必须跟着变：宣传回车提交，不再宣传 1–4 评分。
+    // The key hints must change with it too: advertise Enter to submit, no longer 1–4 to rate.
     expect(html).toContain('回车：提交答案');
     expect(html).not.toContain('重来');
   });
@@ -56,7 +56,7 @@ describe('ReviewView graded answering', () => {
     expect(singleHtml).toContain('data-testid="review-graded-options"');
     expect(singleHtml).toContain('2+2=?');
     expect(singleHtml).toContain('4');
-    // 单选组由组件库提供：渲染成 button + role="radio"（不再是原生 input[type=radio]）。
+    // The radio group comes from the component library: rendered as button + role="radio" (no longer a native input[type=radio]).
     expect(singleHtml).toContain('role="radio"');
 
     const multi = gradedCard('choice_multi', { question: '偶数？', options: ['1', '2', '3', '4'], answers: [1, 3] });
@@ -85,15 +85,15 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('回答正确');
     expect(html).toContain('data-testid="review-graded-score"');
     expect(html).toContain('100%');
-    // 正确答案是服务端清洗后的 HTML，原样渲染（唯一 HTML 汇）。
+    // The correct answer is HTML sanitized by the server, rendered as-is (the only HTML sink).
     expect(html).toContain('<strong>Paris</strong>');
-    // 作答文本按纯文本渲染，不经过 HTML 汇。
+    // The answer text renders as plain text and does not pass through the HTML sink.
     expect(html).toContain('paris');
-    // 档位映射可见。
+    // The rating mapping is visible.
     expect(html).toContain('评分 · ');
     expect(html).toContain('良好');
     expect(html).toContain('data-testid="review-graded-continue"');
-    // 结果态下 1–4 不再宣传评分。
+    // In the result state 1–4 no longer advertise rating.
     expect(html).toContain('回车 / 空格：继续');
   });
 
@@ -142,12 +142,12 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
         initialEditHref: '/decks/5/notes/21',
       },
     });
-    // 卡面是 render 端点清洗后的 HTML，字段原文不再出现。
+    // The card face is HTML sanitized by the render endpoint; the raw field text no longer appears.
     expect(html).toContain('<strong>Sanitized</strong> front');
     expect(html).toContain('<em>Sanitized</em> back');
     expect(html).not.toContain('RAW-FRONT-TEXT');
     expect(html).not.toContain('RAW-BACK-TEXT');
-    // 翻面后四档自评仍在。
+    // After flipping, the four self-ratings are still there.
     expect(html).toContain('data-rating="1"');
     expect(html).toContain('data-rating="4"');
   });
@@ -173,7 +173,7 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('data-testid="review-graded-prompt"');
     expect(html).toContain('<code>prompt</code>');
     expect(html).not.toContain('RAW-PROMPT');
-    // 输入控件与提交按钮仍在。
+    // The input control and the submit button are still there.
     expect(html).toContain('data-testid="review-graded-input"');
     expect(html).toContain('data-testid="review-graded-submit"');
   });
@@ -187,10 +187,10 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('data-testid="review-bury"');
     expect(html).toContain('data-testid="review-suspend"');
     expect(html).toContain('data-testid="review-bury-hint"');
-    // 埋藏与暂停的区别收进问号浮层，不再在每张卡底部常驻一整句。
+    // The difference between bury and pause moved into the question-mark popover rather than a full sentence permanently at the bottom of every card.
     expect(html).toContain('aria-label="埋藏与暂停是什么意思？"');
     expect(html).not.toContain('埋藏：今天跳过');
-    // 文案来自语言包，不是裸 key。
+    // The string comes from the language pack, not a bare key.
     expect(html).toContain('编辑');
     expect(html).toContain('埋藏');
     expect(html).toContain('暂停');
@@ -235,14 +235,14 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
         initialLastUndo: { cardId: '11', version: 5, rating: 3 },
       },
     }).html;
-    // 结果面板出现撤销按钮，文案来自语言包（不是裸 key）。
+    // The result panel shows an undo button, its string from the language pack (not a bare key).
     expect(result).toContain('data-testid="review-undo"');
     expect(result).toContain('撤销');
     expect(result).not.toContain('review.undo');
-    // 面板开着时不出现第二个（头部）入口。
+    // While the panel is open no second (header) entry appears.
     expect(result).not.toContain('data-testid="review-undo-last"');
 
-    // 判分卡待作答且没有提交记录：两个入口都没有。
+    // Graded card awaiting an answer with no submit record: neither entry is present.
     const answering = render(ReviewView, {
       props: { initialLoading: false, initialCards: [card] },
     }).html;
@@ -260,17 +260,17 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
       },
     });
     expect(html).toContain('data-testid="review-undo-last"');
-    // 文案带档位，避免误以为撤的是正在看的这张。
+    // The string names the rating, so it cannot be mistaken for undoing the card currently shown.
     expect(html).toContain('撤销上一次');
     expect(html).toContain('良好');
-    // 结果面板按钮不出现（自评题没有面板）。
+    // The result-panel button is absent (self-rated questions have no panel).
     expect(html).not.toContain('data-testid="review-undo"');
-    // 键位提示也带上 u。
+    // The key hints mention u as well.
     expect(html).toContain('u：撤销');
   });
 
   it('keeps the header undo entry reachable when the queue has emptied', () => {
-    // 撤完最后一张后 current 为 null：入口在页面头部，因此仍然可达。
+    // After undoing the last card current is null: the entry lives in the page header, so it stays reachable.
     const { html } = render(ReviewView, {
       props: {
         initialLoading: false,
@@ -289,8 +289,8 @@ describe('ReviewView card sides and controls come from the server metadata', () 
   });
 
   it('renders the short_answer front from prompt and the back from reference', () => {
-    // 回归：此前 cardSide() 按 kind 展开三元链时漏了 short_answer，落到 else 取 front/back，
-    // 而该题型的真实字段是 prompt/reference——正面因此渲染为空。字段名改由元数据提供后应当正确。
+    // Regression: cardSide() used to expand a ternary chain over kind and missed short_answer, falling through to else and taking front/back,
+    // while that type's real fields are prompt/reference — so the front rendered empty. Now that field names come from metadata it should be right.
     const card = gradedCard('short_answer', {
       prompt: '解释一下 CAP 定理',
       reference: '一致性、可用性、分区容忍',
@@ -302,7 +302,7 @@ describe('ReviewView card sides and controls come from the server metadata', () 
     expect(front).toContain('data-testid="review-front"');
     expect(front).toContain('解释一下 CAP 定理');
     expect(front).not.toContain('一致性、可用性、分区容忍');
-    // 自评题型：走四档自评而不是作答控件。
+    // Self-rated type: takes the four self-ratings instead of an answering control.
     expect(front).toContain('显示答案');
     expect(front).not.toContain('data-testid="review-graded-input"');
 
@@ -323,7 +323,7 @@ describe('ReviewView card sides and controls come from the server metadata', () 
     expect(html).toContain('光速（m/s）？');
     expect(html).toContain('data-testid="review-graded-input"');
     expect(html).toContain('inputmode="decimal"');
-    // 题面不得泄露数值答案。
+    // The question must not leak the numeric answer.
     expect(html).not.toContain('299792458');
   });
 
@@ -336,7 +336,7 @@ describe('ReviewView card sides and controls come from the server metadata', () 
     expect(html).toContain('data-testid="review-meta-loading"');
     expect(html).not.toContain('data-testid="review-front"');
     expect(html).not.toContain('data-testid="review-graded-prompt"');
-    // 绝不把裸语言包键或机器词汇当文案印出来。
+    // Never print a bare language-pack key or a machine word as user-facing copy.
     expect(html).not.toContain('notes.kind.');
   });
 });

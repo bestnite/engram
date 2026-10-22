@@ -7,8 +7,8 @@
   import TOTPView from './TOTPView.svelte';
 
   /**
-   * 安全页（/settings/security）：登录凭据相关的设置放在一起——先是修改密码，再是两步验证。
-   * 两部分各自读写自己的接口，互不依赖。
+   * Security page (/settings/security): settings related to login credentials live together — password change first, then two-factor auth.
+   * The two parts each read and write their own endpoint and do not depend on each other.
    */
 </script>
 

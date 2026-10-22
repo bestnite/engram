@@ -5,8 +5,8 @@ import AdminIndexView from '../lib/views/admin/AdminIndexView.svelte';
 import { routeStore, navigate } from '../lib/router';
 
 /**
- * /admin 没有概览页：挂载入口视图后，地址必须被替换成 /admin/users，
- * 并且是 replace 而不是 push——否则按返回键会回到 /admin，再被弹回用户管理，像卡住了一样。
+ * /admin has no overview page: after mounting the entry view the address must be replaced with /admin/users,
+ * and with replace rather than push — otherwise pressing back returns to /admin and bounces to user management again, as if stuck.
  */
 describe('AdminIndexView', () => {
   let instance: ReturnType<typeof mount> | null = null;

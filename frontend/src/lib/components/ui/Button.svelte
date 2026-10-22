@@ -9,20 +9,20 @@
   type Size = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
 
   interface Props {
-    /** href 存在时渲染成 <a>（导航类按钮），否则渲染 <button>。 */
+    /** When href is present it renders as <a> (navigation-style buttons), otherwise as <button>. */
     href?: string;
     variant?: Variant;
     size?: Size;
     type?: HTMLButtonAttributes['type'];
     disabled?: boolean;
     /**
-     * 请求进行中：按钮禁用并在原位转圈，文字不换。进行中的唯一表示就是它，
-     * 不再把文字换成「保存中…」；请求结果统一走 toast（见 ui/toast.ts）。
+     * Request in progress: the button is disabled and spins in place, keeping its text. That is the only in-progress signal;
+     * the text is no longer swapped for "saving..."; results always go through toast (see ui/toast.ts).
      */
     loading?: boolean;
     class?: string;
     testId?: string;
-    /** 图标按钮必须给 label：它替代可见文字供读屏使用。 */
+    /** Icon-only buttons must have a label: it replaces visible text for screen readers. */
     label?: string;
     title?: string;
     onclick?: (event: MouseEvent) => void;
@@ -44,7 +44,7 @@
     children,
   }: Props = $props();
 
-  // 进行中保持不透明、光标改为等待：它是「正在处理」，不是「不可用」。
+  // Keep it opaque and switch the cursor to wait while in progress: it is "working on it", not "unavailable".
   const classes = $derived(
     cn(buttonVariants({ variant, size }), klass, loading && 'relative disabled:cursor-wait disabled:opacity-100')
   );

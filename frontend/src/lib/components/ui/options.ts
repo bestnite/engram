@@ -1,8 +1,8 @@
 /**
- * 下拉类组件共用的候选项形状。
+ * The candidate option shape shared by dropdown components.
  *
- * Select 与 Combobox 走同一份字段名，调用方换控件时不必改数据形状；放在独立模块而不是
- * 挂在某个组件上，是为了让非组件模块也能 `import type`（时区候选就是这样用的）。
+ * Select and Combobox use the same field names, so callers need not change the data shape when switching controls; it lives in its own module rather than
+ * hanging off a component so that non-component modules can also `import type` it (that is how the timezone candidates use it).
  */
 export interface SelectOption {
   value: string;

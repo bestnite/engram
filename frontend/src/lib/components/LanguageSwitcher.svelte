@@ -6,10 +6,10 @@
   import { toast } from './ui/toast';
 
   /**
-   * 未登录页头的语言切换器；切换逻辑（落点、回滚）见 language-switch.ts。
+   * The language switcher in the logged-out header; see language-switch.ts for the switching logic (persistence target, rollback).
    *
-   * 下拉本体是 ui/Select（bits-ui），不再用原生 select 元素：原生控件在深浅两套主题下
-   * 外观由系统决定，与页头其它控件排在一起时高度与配色都对不齐。
+   * The dropdown itself is ui/Select (bits-ui) rather than a native select element: with the native control, under both the light and dark themes
+   * the appearance is decided by the system, and its height and colors never align with the other header controls.
    */
   const options = $derived([
     { value: 'zh-CN', label: $t('language.zh-CN') },

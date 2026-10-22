@@ -13,8 +13,8 @@
   import { toast } from '../components/ui/toast';
   import { Copy, KeyRound, UserMinus, X } from '@lucide/svelte';
 
-  // embedded 为真时本组件嵌在卡组详情的「共享」Tab 内：不渲染页面级宽度/内边距外壳，
-  // 也不渲染页头标题（Tab 已表明当前区块）。直接访问 /decks/:id/sharing 时为假，独立成页。
+  // When embedded is true this component sits inside the deck details' "sharing" tab: it does not render the page-level width/padding shell,
+  // nor the page header title (the tab already indicates the current section). It is false when /decks/:id/sharing is visited directly, standing alone as a page.
   interface Props {
     embedded?: boolean;
   }
@@ -22,15 +22,15 @@
 
   type Grant = { user_id: string; username: string; role: 'reader' | 'editor' };
   type Link = { prefix: string; created_at: string; expires_at: string | null; has_password: boolean; revoked: boolean; expired: boolean };
-  // 待接受的邀请：属主必须能区分「已授权」与「邀请了还没答应」——后者随时可能被拒绝，
-  // 界面上不该显示成已有访问权（同意制）。
+  // Invitations pending acceptance: the owner must be able to tell "already granted" from "invited but not yet accepted" — the latter can be declined at any time,
+  // and the UI should not present it as existing access (consent model).
   type Invite = { user_id: string; username: string; role: 'reader' | 'editor'; expires_at: string };
   type Sharing = { deck_id: string; deck_name: string; grants: Grant[]; pending_invites?: Invite[]; links: Link[] };
   let data = $state<Sharing | null>(null);
   let loading = $state(true);
   let failed = $state(false);
   let saving = $state(false);
-  // 哪个表单的提交在途：只有它的按钮转圈；saving 仍让其余写操作一并禁用。
+  // Which form's submission is in flight: only its button spins; saving still disables the remaining write operations along with it.
   let submitting = $state<'grant' | 'link' | null>(null);
   let error = $state('');
   let username = $state('');
@@ -50,7 +50,7 @@
     saving = true; error = ''; newLink = '';
     try { const result = await apiClient.request<{link?:string}>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }); if (showLink && result?.link) newLink = result.link; await load(); }
     catch (e) {
-      // 对方设了「不接受分享」：这是可解释的结果，不是失败（服务端 409 recipient_refuses_shares）。
+      // The other party set "do not accept shares": that is an explainable outcome, not a failure (the server's 409 recipient_refuses_shares).
       if (e instanceof ApiClientError && e.code === 'recipient_refuses_shares') error = 'deck.sharing.refused';
       else if (e instanceof ApiClientError && e.isForbidden) error = 'deck.sharing.forbidden';
       else error = 'deck.sharing.failed';
@@ -95,7 +95,7 @@
               </Button>
             </li>
           {/each}
-          <!-- 待接受：还不是成员，对方接受之后才有访问权（同意制）。取消走同一个撤销端点。 -->
+          <!-- Pending acceptance: not a member yet, access only exists after the other party accepts (consent model). Canceling goes through the same revoke endpoint. -->
           {#each data.pending_invites ?? [] as invite (invite.user_id)}
             <li class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0" data-testid="sharing-pending-invites" title={$t('deck.sharing.pending_hint')}>
               <span class="min-w-0 flex-1 truncate text-sm text-muted-foreground">{invite.username}</span>
@@ -122,7 +122,7 @@
       </form>
 
       {#if newLink}
-        <!-- 新链接只显示这一次：放在表单正下方，带复制按钮。 -->
+        <!-- A new link is shown only this once: placed right below the form, with a copy button. -->
         <div class="mt-4 rounded-lg border border-success/40 bg-success/5 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200" role="status">
           <p class="text-xs text-muted-foreground">{$t('deck.sharing.link_once')}</p>
           <div class="mt-2 flex items-center gap-2">

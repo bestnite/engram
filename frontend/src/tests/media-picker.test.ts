@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { en } from '../lib/i18n/locales/en';
 
 /**
- * 上传链路的文案键：每一条失败分支都要有对应键，一个都不能少。
+ * Message keys for the upload path: every failure branch needs its own key, without
+ * exception.
  *
- * 下面钉的是完整清单——增删键都要在这里显式改一次。两套语言包的键集合一致性由
- * parity.test.ts 全局保证，这里不再逐块重复断言同一件事。
+ * What follows pins the complete list — adding or removing a key means editing it here
+ * explicitly. Consistency of the key set across both language packs is guaranteed globally
+ * by parity.test.ts, so that is not re-asserted block by block here.
  */
 describe('SPA media picker catalog keys', () => {
   it('pins the complete set of media upload keys', () => {

@@ -18,23 +18,23 @@ describe('SPA router matching and query parsing', () => {
       { path: '/decks/:id/notes/:nid', name: 'note-edit', component: dummyComponent },
     ];
 
-    // 静态路径匹配
+    // Static path matching
     const homeMatch = matchRoute('/', testRoutes);
     expect(homeMatch.route?.name).toBe('home');
     expect(homeMatch.params).toEqual({});
 
-    // 带参数的路由匹配
+    // Route matching with params
     const deckMatch = matchRoute('/decks/42?lang=en', testRoutes);
     expect(deckMatch.route?.name).toBe('deck-detail');
     expect(deckMatch.params).toEqual({ id: '42' });
     expect(deckMatch.query).toEqual({ lang: 'en' });
 
-    // 多段动态参数匹配
+    // Multi-segment dynamic param matching
     const noteMatch = matchRoute('/decks/42/notes/99', testRoutes);
     expect(noteMatch.route?.name).toBe('note-edit');
     expect(noteMatch.params).toEqual({ id: '42', nid: '99' });
 
-    // 未知路由（404）
+    // Unknown route (404)
     const notFoundMatch = matchRoute('/unknown/route', testRoutes);
     expect(notFoundMatch.route).toBeNull();
     expect(notFoundMatch.path).toBe('/unknown/route');
@@ -51,7 +51,7 @@ describe('SPA router matching and query parsing', () => {
     expect(editMatch.route?.name).toBe('note-edit');
     expect(editMatch.params).toEqual({ id: '42', noteId: '99' });
 
-    // 旧 SSR 编辑地址的别名：服务端 GET /decks/:id/notes/:nid 返回应用壳，客户端处理该精确 URL。
+    // Alias for the old SSR edit URL: the server returns the app shell for GET /decks/:id/notes/:nid, and the client handles that exact URL.
     const legacyEditMatch = matchRoute('/decks/42/notes/99', prodRoutes);
     expect(legacyEditMatch.route?.name).toBe('note-edit-nid');
     expect(legacyEditMatch.params).toEqual({ id: '42', noteId: '99' });
@@ -63,37 +63,37 @@ describe('SPA router matching and query parsing', () => {
     expect(createMatch.route?.name).toBe('note-create');
     expect(createMatch.params).toEqual({ id: '456' });
 
-    // 旧 SSR 新建地址的别名：服务端 GET /decks/:id/new-note 返回应用壳。
+    // Alias for the old SSR create URL: the server returns the app shell for GET /decks/:id/new-note.
     const legacyCreateMatch = matchRoute('/decks/456/new-note', prodRoutes);
     expect(legacyCreateMatch.route?.name).toBe('note-create-legacy');
     expect(legacyCreateMatch.params).toEqual({ id: '456' });
 
-    // 字面量 new 必须先于 :noteId 命中，不能被编辑别名吞掉。
+    // The literal new must match before :noteId and must not be swallowed by the edit alias.
     expect(matchRoute('/decks/456/notes/new', prodRoutes).route?.name).toBe('note-create');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
   });
 
-  // 回归：服务端 GET /review 已返回应用壳（5a3b489 切流），客户端路由必须能处理这个精确
-  // URL，否则首页「开始复习」链接与直接访问/刷新都会落到 NotFoundView（实测 404）。
+  // Regression: the server already returns the app shell for GET /review (switched over in 5a3b489), so the client router must handle that exact
+  // URL, otherwise the home page's "start review" link and direct visits/reloads land on NotFoundView (observed as a 404).
   it('serves the canonical review route at /review', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
 
     const canonical = matchRoute('/review', prodRoutes);
     expect(canonical.route?.name).toBe('review');
     expect(canonical.params).toEqual({});
-    // 卡组范围参数不影响匹配，只进 query。
+    // The deck scope param does not affect matching; it only goes into the query.
     const scoped = matchRoute('/review?deck=7&deck=9', prodRoutes);
     expect(scoped.route?.name).toBe('review');
     expect(scoped.query).toEqual({ deck: '9' });
 
-    // 未匹配路径仍是 404 视图。
+    // An unmatched path is still the 404 view.
     expect(matchRoute('/review/unknown', prodRoutes).route).toBeNull();
   });
 
   it('exposes the login entry at /login', async () => {
     const { routes: prodRoutes } = await import('../lib/router/routes');
 
-    // 服务端 GET /login 返回应用壳并初始化双提交 cookie。
+    // The server returns the app shell for GET /login and initialises the double-submit cookie.
     const login = matchRoute('/login', prodRoutes);
     expect(login.route?.name).toBe('login');
     expect(login.params).toEqual({});
@@ -136,11 +136,11 @@ describe('view rebuild key', () => {
   });
 
   it('treats repeated query keys as part of the identity', () => {
-    // 解析后的 query 只留最后一个 deck，原始 search 才分得清这两个范围。
+    // The parsed query keeps only the last deck; only the raw search string can tell these two scopes apart.
     const two = viewKey(matchRoute('/review?deck=A&deck=B', testRoutes));
     const one = viewKey(matchRoute('/review?deck=B', testRoutes));
     expect(two).not.toBe(one);
-    // 同一次范围的两种书写顺序不该触发多余重建。
+    // Two spellings of the same scope must not trigger a redundant rebuild.
     const reordered = viewKey(matchRoute('/review?deck=B&deck=A', testRoutes));
     expect(two).toBe(reordered);
   });

@@ -6,8 +6,8 @@ import { setLocale } from '../lib/i18n';
 import { en } from '../lib/i18n/locales/en';
 import { zhCN } from '../lib/i18n/locales/zh-CN';
 
-// SPA 的 OIDC 登录入口契约：探测端点只含 enabled 与稳定地址；组件仅在可用时渲染入口。
-// 服务端判定与凭据不外泄由 internal/web/oidc_api_test.go 覆盖。
+// The SPA's OIDC login entry contract: the probe endpoint carries only enabled and a stable URL; the component renders the entry only when available.
+// Server-side decisions and credential non-disclosure are covered by internal/web/oidc_api_test.go.
 describe('SPA OIDC login entry', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let client: ApiClient;

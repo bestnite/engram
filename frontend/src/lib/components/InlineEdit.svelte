@@ -4,23 +4,23 @@
   import { cn } from './ui/utils';
 
   /**
-   * 原地编辑：平时显示文字，点击文字或旁边的铅笔图标变成输入框。
-   * Enter 或失焦保存，Esc 取消；多行模式下 Shift+Enter 换行。
+   * Inline editing: normally shows text; clicking the text or the pencil icon next to it turns it into an input.
+   * Enter or blur saves, Esc cancels; in multiline mode Shift+Enter inserts a newline.
    *
-   * onSave 返回 false 表示保存失败（调用方负责提示原因），此时停留在编辑态，输入不丢。
-   * 不可编辑时（如非属主）只渲染文字，没有任何可点区域。
+   * onSave returning false means the save failed (the caller is responsible for reporting why); the component stays in edit mode and the input is not lost.
+   * When not editable (e.g. not the owner) it renders only the text, with no clickable area.
    */
   interface Props {
     value: string;
     onSave: (next: string) => Promise<boolean>;
     editable?: boolean;
     multiline?: boolean;
-    /** 值为空时显示的占位文字（仅可编辑时显示，提示可以添加）。 */
+    /** Placeholder text shown when the value is empty (only when editable, hinting that something can be added). */
     placeholder?: string;
-    /** 输入框与编辑按钮的可读名称。 */
+    /** Accessible name for the input and the edit button. */
     label: string;
     maxlength?: number;
-    /** 显示态文字的样式；编辑态输入框沿用同样的字号与字重，切换时不跳。 */
+    /** Style of the display-state text; the edit-state input keeps the same font size and weight so nothing jumps when switching. */
     class?: string;
     testId?: string;
   }
@@ -74,13 +74,13 @@
       event.preventDefault();
       cancel();
     } else if (event.key === 'Enter' && !(multiline && event.shiftKey) && !event.isComposing) {
-      // isComposing：中文输入法选词时的 Enter 不能当成保存。
+      // isComposing: Enter while an IME is composing must not be treated as a save.
       event.preventDefault();
       void commit();
     }
   }
 
-  // 输入框与显示文字共用字号/字重/行高，只加最小的内边距与边框，切换时视觉位置基本不动。
+  // The input and the display text share font size/weight/line height; only minimal padding and border are added, so the visual position barely moves when switching.
   const fieldClass = $derived(
     cn('-mx-1.5 -my-0.5 w-[calc(100%+0.75rem)] rounded-md border border-ring bg-background px-1.5 py-0.5 outline-none ring-3 ring-ring/15', klass)
   );

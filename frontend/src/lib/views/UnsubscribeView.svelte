@@ -6,10 +6,10 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
 
-  // 一键退订的 SPA 视图：服务端 GET /unsubscribe 只返回应用壳并下发
-  // 会话前双提交 cookie，确认页由本视图渲染。令牌由视图读取 ?token= 后先经
-  // GET /api/v1/unsubscribe 读取指名的类型（不消费），用户确认后再经 POST /api/v1/unsubscribe
-  // 消费（一次性）。
+  // SPA view for one-click unsubscribe: the server's GET /unsubscribe only returns the app shell and issues
+  // a pre-session double-submit cookie; the confirmation page is rendered by this view. The view reads ?token= and first
+  // reads the named type via GET /api/v1/unsubscribe (without consuming it), and after the user confirms consumes it via POST /api/v1/unsubscribe
+  // (one-time).
   const token =
     typeof window !== 'undefined'
       ? (new URLSearchParams(window.location.search).get('token') ?? '')
@@ -19,8 +19,8 @@
   let typeCode = $state('');
   let errorKey = $state('unsubscribe.error.invalid');
 
-  // errorKeyFor 把服务端稳定错误 code 映射到本地化 key；未知 code 回落到通用失败提示。
-  // 前端不解析后端英文 message，也不把任何后端文案渲染成 HTML。
+  // errorKeyFor maps the server's stable error codes to localized keys; unknown codes fall back to the generic failure message.
+  // The frontend does not parse the backend's English message, nor render any backend copy as HTML.
   function errorKeyFor(err: unknown): string {
     const code = err instanceof ApiClientError ? err.code : '';
     switch (code) {

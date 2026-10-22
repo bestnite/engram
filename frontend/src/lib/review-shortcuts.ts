@@ -1,54 +1,54 @@
 /**
- * 复习页键盘与触屏手势的纯决策函数。
+ * Pure decision functions for the review page's keyboard and touch gestures.
  *
- * 视图只负责把这里的决策映射成副作用（翻面、评分、埋藏、暂停、跳转编辑），DOM 判定留在视图里。
- * 拆出来是为了让「按键/滑动在每种卡片状态下该做什么」能在无浏览器环境（vitest 的 node
- * 环境）里被穷举单测——真实按键与手势仍由浏览器端到端验证。
+ * The view only maps the decisions here into side effects (flip, grade, bury, suspend, jump to edit); DOM detection stays in the view.
+ * It is split out so that "what a key/swipe does in each card state" can be exhaustively unit-tested in a browserless environment
+ * (vitest's node environment) - real keys and gestures are still verified end to end in the browser.
  */
 
-/** 一次按键在复习页上的动作。 */
+/** The action of one key press on the review page. */
 export type ReviewShortcut =
-  | { kind: 'ignore' } // 不处理，也不阻止默认行为
-  | { kind: 'swallow' } // 阻止默认行为但不产生动作（判分卡待作答时的 1–4）
-  | { kind: 'continue' } // 结果面板：进入下一张
-  | { kind: 'reveal' } // 空格/回车：判分卡请求揭示、自评卡翻面
-  | { kind: 'submit' } // 回车：判分卡待作答时提交答案
-  | { kind: 'give_up' } // 回车/空格：判分卡已揭示答案后记为重来并换卡
+  | { kind: 'ignore' } // Not handled, and the default behavior is not prevented
+  | { kind: 'swallow' } // Prevent the default but produce no action (1–4 on a graded card awaiting an answer)
+  | { kind: 'continue' } // Result panel: go to the next card
+  | { kind: 'reveal' } // Space/Enter: request reveal on a graded card, flip a self-graded card
+  | { kind: 'submit' } // Enter: submit the answer on a graded card awaiting one
+  | { kind: 'give_up' } // Enter/Space: after the graded card's answer is revealed, record it as Again and move on
   | { kind: 'rate'; rating: number }
   | { kind: 'bury' }
   | { kind: 'suspend' }
-  | { kind: 'undo' } // u：撤销上一次评分（含自评题）
+  | { kind: 'undo' } // u: undo the last grade (including self-graded kinds)
   | { kind: 'edit' };
 
-/** 按键决策依赖的复习状态。 */
+/** Review state the key decisions depend on. */
 export interface ReviewShortcutState {
-  /** 焦点是否落在文本输入控件上（此时只处理判分卡的回车提交）。 */
+  /** Whether focus is on a text input control (in that case only Enter-submit for graded cards is handled). */
   typing: boolean;
   /**
-   * 焦点是否落在选项控件（单选/多选项）上。这些控件是 role=radio/checkbox 的按钮，空格是它们
-   * 自己的「选中」键，被截成「显示答案」会让键盘用户无法作答。
+   * Whether focus is on an options control (single/multiple choice). These controls are buttons with role=radio/checkbox, and Space is their
+   * own "select" key; hijacking it as "show answer" would make answering impossible for keyboard users.
    */
   choosing: boolean;
-  /** 输入法正在组字：此时的回车是确认候选词，不是提交。 */
+  /** An IME is composing: Enter then confirms a candidate, it does not submit. */
   composing: boolean;
-  /** 按住不放产生的自动重复：回车连发会把「提交」和「继续」连成一次按键，一律忽略。 */
+  /** Auto-repeat from holding a key down: repeated Enter would chain "submit" and "continue" into one key press, so it is always ignored. */
   repeat: boolean;
-  /** 是否处于「已作答、只差继续」的结果面板。 */
+  /** Whether the result panel is showing, i.e. answered with only "continue" left. */
   feedback: boolean;
-  /** 当前卡是否为判分题型。 */
+  /** Whether the current card is a graded kind. */
   gradedKind: boolean;
-  /** 判分卡是否已揭示答案。 */
+  /** Whether the graded card's answer has been revealed. */
   gradedRevealed: boolean;
-  /** 自评卡是否已翻面。 */
+  /** Whether the self-graded card has been flipped. */
   revealed: boolean;
-  /** 本次会话是否还有可撤销的提交（没有时不吞掉 u，交给浏览器）。 */
+  /** Whether this session still has a submission to undo (when not, u is not swallowed and goes to the browser). */
   canUndo: boolean;
 }
 
 /**
- * 把一次 keydown 映射成复习动作。
- * 修饰键（Alt/Ctrl/Meta）、输入法组字与自动重复一律忽略；文本输入焦点上只处理判分卡的回车提交，
- * 其余按键交给输入框本身。
+ * Map one keydown to a review action.
+ * Modifier keys (Alt/Ctrl/Meta), IME composition and auto-repeat are always ignored; with a text input focused only Enter-submit for graded cards is handled,
+ * and other keys go to the input itself.
  */
 export function reviewShortcut(
   key: string,
@@ -57,13 +57,13 @@ export function reviewShortcut(
 ): ReviewShortcut {
   if (modifiers.alt || modifiers.ctrl || modifiers.meta || state.composing || state.repeat) return { kind: 'ignore' };
 
-  // 判分卡待作答：回车提交答案，无论焦点在输入框、选项还是页面上——这是表单的通用约定。
+  // Graded card awaiting an answer: Enter submits, whether focus is in the input, on the options or on the page - the usual form convention.
   const answering = state.gradedKind && !state.gradedRevealed && !state.feedback;
   if (answering && key === 'Enter') return { kind: 'submit' };
 
   if (state.typing) return { kind: 'ignore' };
 
-  // 结果面板是「已作答、只差继续」的状态：回车/空格/1–4 都走「继续」；e 仍可编辑；b 无效。
+  // The result panel is the "answered, only continue left" state: Enter/Space/1–4 all continue; e still edits; b does nothing.
   if (state.feedback) {
     if (key === ' ' || key === 'Enter' || /^[1-4]$/.test(key)) return { kind: 'continue' };
     if (key.toLowerCase() === 'e') return { kind: 'edit' };
@@ -72,15 +72,15 @@ export function reviewShortcut(
   }
 
   if (key === ' ' || key === 'Enter') {
-    // 判分卡已揭示答案后只剩「记为重来并继续」一个出路，回车/空格直接走它。
+    // Once the graded card's answer is revealed, the only way out is "record as Again and continue", which Enter/Space take directly.
     if (state.gradedKind && state.gradedRevealed) return { kind: 'give_up' };
-    // 焦点在选项上时空格留给选项本身去选中。
+    // When focus is on the options, Space is left to the options themselves to select.
     if (state.choosing) return { kind: 'ignore' };
-    // 其余情况阻止默认行为：判分卡揭示答案，自评卡翻面。
+    // Otherwise prevent the default: reveal the answer on a graded card, flip a self-graded card.
     return { kind: 'reveal' };
   }
 
-  // 判分卡待作答时 1–4 完全失效（不评分、也不揭示答案）。
+  // While a graded card awaits an answer, 1–4 do nothing at all (no grading, no reveal).
   if (/^[1-4]$/.test(key)) {
     if (state.gradedKind) return { kind: 'swallow' };
     if (state.revealed) return { kind: 'rate', rating: Number(key) };
@@ -95,13 +95,13 @@ export function reviewShortcut(
   return { kind: 'ignore' };
 }
 
-/** 一次横向滑动在复习页上的动作。 */
+/** The action of one horizontal swipe on the review page. */
 export type ReviewSwipe =
   | { kind: 'ignore' }
-  | { kind: 'reveal' } // 未揭示时任一横向滑动都是「显示答案」
-  | { kind: 'rate'; rating: number }; // 已揭示后左滑 Again、右滑 Good
+  | { kind: 'reveal' } // Before revealing, any horizontal swipe means "show answer"
+  | { kind: 'rate'; rating: number }; // After revealing, swipe left for Again and right for Good
 
-/** 滑动决策依赖的复习状态。 */
+/** Review state the swipe decisions depend on. */
 export interface ReviewSwipeState {
   feedback: boolean;
   gradedKind: boolean;
@@ -109,12 +109,12 @@ export interface ReviewSwipeState {
   revealed: boolean;
 }
 
-/** 横向滑动阈值（像素；复习视图与手势判定共用）。 */
+/** Horizontal swipe threshold (pixels; shared by the review view and the gesture decision). */
 export const SWIPE_THRESHOLD = 45;
 
 /**
- * 把一次 touchend 的位移映射成复习动作。
- * 水平位移不足或垂直位移更大时不构成滑动；结果面板与已揭示的判分卡不参与滑动。
+ * Map one touchend displacement to a review action.
+ * Not a swipe when the horizontal displacement is too small or the vertical one is larger; the result panel and a revealed graded card do not take swipes.
  */
 export function reviewSwipe(dx: number, dy: number, state: ReviewSwipeState): ReviewSwipe {
   if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return { kind: 'ignore' };

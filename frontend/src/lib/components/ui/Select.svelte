@@ -5,25 +5,25 @@
   import type { SelectOption } from './options';
 
   /**
-   * 全站唯一的单选下拉（交互件用成熟组件库）。
+   * The site's only single-select dropdown (interactive widgets use a mature component library).
    *
-   * 底层是 bits-ui 的 Select（无障碍、键盘导航、typeahead 由库承担，不再自写），
-   * 这里只做两件事：① 把项目视觉（圆角/边框/深色/焦点环）收敛到一处；
-   * ② 把调用面收成 `options` 数组 + `bind:value`，替换原生 select 元素 时逐处改动最小。
+   * The base is bits-ui's Select (accessibility, keyboard navigation and typeahead are the library's job, no longer hand-written),
+   * and this only does two things: (1) converge the project's visuals (radius/border/dark mode/focus ring) into one place;
+   * (2) reduce the call surface to an `options` array + `bind:value`, so replacing native select elements changes each site minimally.
    */
   interface Props {
     value?: string;
     options: SelectOption[];
-    /** 未选中时触发器里显示的文案。 */
+    /** Copy shown in the trigger when nothing is selected. */
     placeholder?: string;
     disabled?: boolean;
     /**
-     * 再点一次当前项是否清空选择。库的默认是清空，但「清空」在单选控件上只会把值变成
-     * 空串、触发器退回留白，而调用方大多把它当必填（卡组、预设、语言）：那是一次误操作
-     * 而不是一次选择。要求必有值的调用点显式传 false。
+     * Whether clicking the current item again clears the selection. The library's default is to clear, but on a single-select control "clear" only turns the value into
+     * an empty string and leaves the trigger blank, while most callers treat it as required (deck, preset, language): that is a misclick,
+     * not a selection. Call sites that require a value pass false explicitly.
      */
     allowDeselect?: boolean;
-    /** 触发器尺寸：sm 用于表格行内，md 用于表单。 */
+    /** Trigger size: sm for inside table rows, md for forms. */
     size?: 'sm' | 'md';
     ariaLabel?: string;
     testId?: string;
@@ -48,7 +48,7 @@
 
   const selected = $derived(options.find((option) => option.value === value));
 
-  // 打开时 types–ahead 与表单自动填充都靠这份列表（bits-ui 的 items 契约）。
+  // When open, typeahead and form autofill both rely on this list (bits-ui's items contract).
   const items = $derived(options.map(({ value: v, label, disabled: d }) => ({ value: v, label, disabled: d })));
 
   const triggerSize = { sm: 'h-8 text-xs', md: 'h-9 text-sm' } as const;

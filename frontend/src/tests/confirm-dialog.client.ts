@@ -5,8 +5,8 @@ import { askConfirm } from '../lib/components/ui/confirm';
 import { setLocale } from '../lib/i18n';
 
 /**
- * 统一确认框的契约：askConfirm 打开应用自己的对话框；点确认得 true，点取消得 false；
- * 前一个未答复时又来一个，前一个按取消结束（Promise 不会永远挂起）。
+ * Contract of the unified confirm dialog: askConfirm opens the app's own dialog; clicking confirm yields true, clicking cancel yields false;
+ * when another request arrives while the previous one is unanswered, the previous one ends as cancelled (the Promise never hangs forever).
  */
 describe('askConfirm', () => {
   let instance: ReturnType<typeof mount> | null = null;
