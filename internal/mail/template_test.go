@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// 这些用例锁的是渲染顺序：先渲染清洗、后替换变量。顺序反过来就是
-// 存储型注入——变量值是用户可控数据。
+// These cases pin down the rendering order: render and sanitize first, substitute variables
+// afterwards. Reversing the order is stored injection -- variable values are user-controlled data.
 
 func renderOne(t *testing.T, in RenderInput) Rendered {
 	t.Helper()
@@ -17,8 +17,9 @@ func renderOne(t *testing.T, in RenderInput) Rendered {
 	return out
 }
 
-// TestRenderWithoutTemplateUsesFallbackVerbatim 断言没有自定义模板时行为与今天完全一致：
-// 主题与纯文本来自发信方，HTML 段为空。这条保证「模板机制上线」不会改变任何现有邮件。
+// TestRenderWithoutTemplateUsesFallbackVerbatim asserts that without a custom template the behavior
+// is exactly as before: subject and plain text come from the sender and the HTML segment is empty.
+// This guarantees that shipping the template mechanism changes no existing mail.
 func TestRenderWithoutTemplateUsesFallbackVerbatim(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:            TypePasswordReset,
@@ -35,7 +36,8 @@ func TestRenderWithoutTemplateUsesFallbackVerbatim(t *testing.T) {
 	}
 }
 
-// TestRenderTemplateMarkdownAndShell 断言自定义模板走 Markdown → HTML，并包进外壳。
+// TestRenderTemplateMarkdownAndShell asserts that a custom template goes Markdown -> HTML and is
+// wrapped in the shell.
 func TestRenderTemplateMarkdownAndShell(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:    TypePasswordReset,
@@ -61,9 +63,9 @@ func TestRenderTemplateMarkdownAndShell(t *testing.T) {
 	}
 }
 
-// TestRenderEscapesVariableValues 是安全负例：变量值里有 HTML 或 Markdown 标记时，
-// 在 HTML 段里必须原样可见（被转义），绝不能被当成标记解释。值来自用户可控数据
-// （用户名、卡组名、失败原因）。
+// TestRenderEscapesVariableValues is the security negative case: when a variable value contains HTML
+// or Markdown markup it must be visible verbatim (escaped) in the HTML segment, never interpreted as
+// markup. The values come from user-controlled data (usernames, deck names, failure reasons).
 func TestRenderEscapesVariableValues(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -94,8 +96,9 @@ func TestRenderEscapesVariableValues(t *testing.T) {
 	}
 }
 
-// TestRenderDoesNotRescanSubstitutedValues 断言替换是一次性的：值里再写 {{...}} 也
-// 不会被二次替换（否则用户能把别人的值当模板指令用）。
+// TestRenderDoesNotRescanSubstitutedValues asserts that substitution is one-shot: a {{...}} written
+// inside a value is not substituted a second time (otherwise a user could use someone else's value as
+// a template directive).
 func TestRenderDoesNotRescanSubstitutedValues(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:    TypePasswordReset,
@@ -108,8 +111,9 @@ func TestRenderDoesNotRescanSubstitutedValues(t *testing.T) {
 	}
 }
 
-// TestRenderUnsubscribeRow 断言退订入口同时进 HTML 页脚与纯文本段（可选类邮件必须可达），
-// 没有退订 URL 的（A 类）则一处都不渲染。
+// TestRenderUnsubscribeRow asserts that the unsubscribe entry goes into both the HTML footer and the
+// plain text segment (optional-class mail must be able to reach it), while mail without an
+// unsubscribe URL (class A) renders neither.
 func TestRenderUnsubscribeRow(t *testing.T) {
 	base := RenderInput{
 		Type:             TypeReviewReminder,
@@ -139,8 +143,9 @@ func TestRenderUnsubscribeRow(t *testing.T) {
 	}
 }
 
-// TestRenderOptionalVarMissingLeavesNoPlaceholder 断言模板引用了可选变量、发信方没传时
-// 留下的是空串而不是字面量 {{x}}（用户会在邮件里看到花括号）。
+// TestRenderOptionalVarMissingLeavesNoPlaceholder asserts that when a template references an optional
+// variable the sender did not pass, what is left is an empty string rather than the literal {{x}} (the
+// user would see braces in the mail).
 func TestRenderOptionalVarMissingLeavesNoPlaceholder(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:    TypePasswordReset,
@@ -153,8 +158,9 @@ func TestRenderOptionalVarMissingLeavesNoPlaceholder(t *testing.T) {
 	}
 }
 
-// TestRenderRejectsMissingRequiredVar 断言发信方漏传必填变量时**报错而不是发出残信**：
-// 一封没有重置链接的密码邮件比不发更糟。
+// TestRenderRejectsMissingRequiredVar asserts that a sender forgetting a required variable **errors
+// out instead of sending a crippled mail**: a password mail without the reset link is worse than
+// nothing.
 func TestRenderRejectsMissingRequiredVar(t *testing.T) {
 	_, err := Render(RenderInput{
 		Type:    TypePasswordReset,
@@ -170,7 +176,8 @@ func TestRenderRejectsMissingRequiredVar(t *testing.T) {
 	}
 }
 
-// TestRenderSubjectStaysSingleLine 断言主题里的换行被压平：多行主题会破坏邮件头。
+// TestRenderSubjectStaysSingleLine asserts that newlines in the subject are flattened: a multi-line
+// subject breaks the mail headers.
 func TestRenderSubjectStaysSingleLine(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:    TypePasswordReset,
@@ -183,7 +190,8 @@ func TestRenderSubjectStaysSingleLine(t *testing.T) {
 	}
 }
 
-// TestValidate 锁定保存时的校验：认识的变量可选、不认识的必拒、必填的必写。
+// TestValidate pins down the validation on save: known variables are optional, unknown ones must be
+// rejected, required ones must be written.
 func TestValidate(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -191,8 +199,8 @@ func TestValidate(t *testing.T) {
 		wantErr string
 	}{
 		{"ok", "Reset: {{url}} (expires {{expires}})", ""},
-		// 必填只收「缺了就没用」的变量：过期时间这类展示性细节不再必填，
-		// 所以「只写了 expires」才是缺 url 的那种失败。
+		// Required admits only variables "without which the mail is useless": display details such as the
+		// expiry time are no longer required, so "only expires written" is the failure of a missing url.
 		{"missing required", "Reset here, expires {{expires}}", "url"},
 		{"unknown var", "Reset: {{url}} {{expires}} {{pasword}}", "pasword"},
 		{"no placeholders at all", "Reset here", "url"},
@@ -216,14 +224,16 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestValidateBodyRejectsUnknownType 断言没接入发信方的类型不接受模板。
+// TestValidateBodyRejectsUnknownType asserts that a type with no sender integrated does not accept
+// templates.
 func TestValidateRejectsUnknownType(t *testing.T) {
 	if err := Validate(Type("no_such_type"), "", "{{anything}}"); err == nil {
 		t.Fatal("Validate() error = nil, want an error for a type without senders")
 	}
 }
 
-// TestPlaceholdersKeepsOrderAndDedupes 断言管理页展示的变量清单是稳定顺序且去重的。
+// TestPlaceholdersKeepsOrderAndDedupes asserts that the variable list shown on the admin page is in a
+// stable order and deduplicated.
 func TestPlaceholdersKeepsOrderAndDedupes(t *testing.T) {
 	got := Placeholders("{{b}} {{a}} {{b}} {{c}}")
 	want := []string{"b", "a", "c"}
@@ -237,8 +247,9 @@ func TestPlaceholdersKeepsOrderAndDedupes(t *testing.T) {
 	}
 }
 
-// TestVarsTableCoversEveryTypeWithSenders 断言「表里有变量」与「发信方存在」一致：
-// 少了变量表，管理员就配不了模板；多了没有发信方的类型，页面会长出一个永远不发的模板。
+// TestVarsTableCoversEveryTypeWithSenders asserts that "the table has variables" and "a sender
+// exists" agree: without a variable table an admin cannot configure a template; a type with no sender
+// in the table would grow a template on the page that never sends.
 func TestVarsTableCoversEveryTypeWithSenders(t *testing.T) {
 	for _, def := range Catalog() {
 		if !SupportsTemplate(def.Type) {
@@ -258,7 +269,8 @@ func TestVarsTableCoversEveryTypeWithSenders(t *testing.T) {
 	}
 }
 
-// TestRequiredVarsAlwaysIncludeLinks 是设计约束的守卫：需要链接才能收场的类型，链接必填。
+// TestRequiredVarsAlwaysIncludeLinks guards the design constraint: a type that needs a link to be
+// closed out has the link as required.
 func TestRequiredVarsAlwaysIncludeLinks(t *testing.T) {
 	cases := map[Type]string{
 		TypePasswordReset:     "url",
@@ -278,7 +290,8 @@ func TestRequiredVarsAlwaysIncludeLinks(t *testing.T) {
 			t.Errorf("RequiredVars(%q) = %v, want it to include %q", typ, got, want)
 		}
 	}
-	// 可选类邮件必须把退订链接列进必填：没有退订入口的营销类邮件是违规的。
+	// Optional-class mail must list the unsubscribe link as required: marketing mail without an
+	// unsubscribe entry is non-compliant.
 	for _, typ := range []Type{TypeReviewReminder, TypeStudyDigest} {
 		got := RequiredVars(typ)
 		found := false

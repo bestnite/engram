@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// echoTF 是一个可断言的假翻译函数：把每一次调用记成 `id(k1=v1,k2=v2)`。
+// echoTF is an assertable fake translate function: it records every call as `id(k1=v1,k2=v2)`.
 //
-// 用它而不是真语言包，是为了断言**取值映射**——摘要的三行都写 `{{.count}}`，
-// 读的却是三个不同的数，只有把「这一行拿到了哪个变量的值」钉住才知道映射对不对。
+// It is used instead of the real language packs in order to assert the **value mapping** -- the
+// digest's three lines all write `{{.count}}` but read three different numbers, and only pinning down
+// "which variable's value did this line get" shows whether the mapping is right.
 func echoTF() TfFunc {
 	return func(id string, data map[string]any) string {
 		keys := make([]string, 0, len(data))
@@ -32,10 +33,11 @@ func stringOf(v any) string {
 	return "?"
 }
 
-// TestDefaultTemplateIsSavableAsIs 是「编辑框预填默认」这个功能的前提。
+// TestDefaultTemplateIsSavableAsIs is the precondition of the "editor pre-fills the default" feature.
 //
-// 管理员最常见的动作是**不改就存**（先看一眼默认长什么样）。预填的文本必须能通过保存
-// 校验，否则那个动作会得到一个 400——而它本来应该是最安全的一次操作。
+// The most common admin action is **save without changing anything** (first take a look at what the
+// default looks like). The pre-filled text must pass save validation, otherwise that action returns a
+// 400 -- and it should be the safest operation of all.
 func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 	for _, def := range Catalog() {
 		typ := def.Type
@@ -50,7 +52,8 @@ func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 		if err := Validate(typ, subject, body); err != nil {
 			t.Errorf("%s: the built-in template does not pass Validate: %v\nbody = %q", typ, err, body)
 		}
-		// 必填变量必须出现在正文里，且用的是模板写法（`{{name}}`）——它会被原样填进编辑框。
+		// Required variables must appear in the body, written in template form (`{{name}}`) -- it is
+		// filled into the editor verbatim.
 		used := map[string]bool{}
 		for _, name := range Placeholders(body) {
 			used[name] = true
@@ -63,8 +66,9 @@ func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 	}
 }
 
-// TestDefaultTemplateRendersWithRealValues 断言预填的默认不只是「能存」，还真的能渲染：
-// 把占位符换成真实值后走一次渲染管线，值必须出现在正文里。
+// TestDefaultTemplateRendersWithRealValues asserts that the pre-filled default is not merely
+// "savable" but really renders: after swapping the placeholders for real values and running one pass
+// through the render pipeline, the values must appear in the body.
 func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 	for _, def := range Catalog() {
 		typ := def.Type
@@ -91,8 +95,9 @@ func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 	}
 }
 
-// TestDefaultTemplateDigestMapsEachCount 钉住摘要那三行的取值映射：
-// 「已复习 / 新卡 / 到期」在语言包里都写 `{{.count}}`，但读的是三个不同的变量。
+// TestDefaultTemplateDigestMapsEachCount pins down the value mapping of the digest's three lines:
+// "reviewed / new cards / due" all write `{{.count}}` in the language pack but read three different
+// variables.
 func TestDefaultTemplateDigestMapsEachCount(t *testing.T) {
 	typ := TypeStudyDigest
 	_, body, _ := DefaultTemplate(typ, VariantDefault, echoTF(), PlaceholderVars(typ))
@@ -107,7 +112,8 @@ func TestDefaultTemplateDigestMapsEachCount(t *testing.T) {
 	}
 }
 
-// TestDefaultTemplateEmailChangeVariant 断言改邮箱确认用的是另一套文案 id（同一个类型）。
+// TestDefaultTemplateEmailChangeVariant asserts that email change confirmation uses the other set of
+// copy ids (within the same type).
 func TestDefaultTemplateEmailChangeVariant(t *testing.T) {
 	subject, body, ok := DefaultTemplate(TypeEmailVerification, VariantEmailChange, echoTF(), PlaceholderVars(TypeEmailVerification))
 	if !ok {
@@ -121,7 +127,8 @@ func TestDefaultTemplateEmailChangeVariant(t *testing.T) {
 	}
 }
 
-// TestDefaultTemplateUnknownType 断言未知类型返回 ok=false 而不是空模板。
+// TestDefaultTemplateUnknownType asserts that an unknown type returns ok=false rather than an empty
+// template.
 func TestDefaultTemplateUnknownType(t *testing.T) {
 	if _, _, ok := DefaultTemplate(Type("nope"), VariantDefault, echoTF(), Vars{}); ok {
 		t.Error("unknown type should report no built-in template")

@@ -11,14 +11,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件覆盖 PreSessionCSRFMiddleware 的**会话分支**：同一批「登录前可调用」的端点在调用者
-// 已登录时必须改用会话绑定 token 校验，否则已登录用户（手里只有会话 token）会被双提交比对
-// 一律拒绝——邮件里的验证/退订链接就是这么坏的。
+// This file covers the **session branch** of PreSessionCSRFMiddleware: the same batch of "callable before login" endpoints must switch to
+// session-bound token validation when the caller is logged in, otherwise a logged-in user (holding only a session token) would be rejected
+// outright by the double-submit comparison — this is exactly how the verification/unsubscribe links in mail broke.
 //
-// 夹具用一个把会话直接放进上下文的中间件替代真实会话中间件：被测中间件只读 CurrentSession
-// 的判定结果，因此这样足以隔离它的行为。
+// The fixture replaces the real session middleware with one that puts a session straight into the context: the middleware under test only reads
+// the verdict of CurrentSession, so that is enough to isolate its behavior.
 
-// sessionCSRFRouter 装配一条「有会话」的路由：会话中间件放进给定的会话，再由被测中间件保护 POST。
+// sessionCSRFRouter wires a route "with a session": the session middleware installs the given session, then the middleware under test protects the POST.
 func sessionCSRFRouter(sessionCSRF string) *gin.Engine {
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -32,8 +32,8 @@ func sessionCSRFRouter(sessionCSRF string) *gin.Engine {
 	return router
 }
 
-// TestPreSessionCSRFAcceptsSessionTokenWhenSignedIn 断言已登录请求带会话绑定 token 即放行
-// （这正是修复前必然 403 的形态）。
+// TestPreSessionCSRFAcceptsSessionTokenWhenSignedIn asserts that a signed-in request carrying a session-bound token passes
+// (which is exactly the shape that necessarily got 403 before the fix).
 func TestPreSessionCSRFAcceptsSessionTokenWhenSignedIn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const sessionToken = "session-bound-csrf-token-0123456789"
@@ -53,9 +53,9 @@ func TestPreSessionCSRFAcceptsSessionTokenWhenSignedIn(t *testing.T) {
 	}
 }
 
-// TestPreSessionCSRFRejectsDoubleSubmitPairWhenSignedIn 是本改动的安全关键断言：
-// 已登录时**不允许**退回双提交——即使 cookie 与请求值构成合法的一对，只要它不等于会话行里的值
-// 就必须拒绝，否则「能往目标域写 cookie」的攻击者可以直接绕过（弱档只留给匿名）。
+// TestPreSessionCSRFRejectsDoubleSubmitPairWhenSignedIn is the security-critical assertion of this change:
+// when signed in, falling back to double submit is **not allowed** — even if the cookie and the request value form a valid pair, as long as it does not equal
+// the value in the session row it must be rejected, otherwise an attacker who "can write cookies for the target domain" could bypass it directly (the weak tier is reserved for anonymous requests).
 func TestPreSessionCSRFRejectsDoubleSubmitPairWhenSignedIn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const doubleSubmit = "double-submit-pair-value-0123456789"
@@ -75,7 +75,7 @@ func TestPreSessionCSRFRejectsDoubleSubmitPairWhenSignedIn(t *testing.T) {
 	}
 }
 
-// TestPreSessionCSRFRejectsMissingOrWrongTokenWhenSignedIn 覆盖会话分支的其余拒绝路径。
+// TestPreSessionCSRFRejectsMissingOrWrongTokenWhenSignedIn covers the remaining rejection paths of the session branch.
 func TestPreSessionCSRFRejectsMissingOrWrongTokenWhenSignedIn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const sessionToken = "session-bound-csrf-token-0123456789"
@@ -108,7 +108,7 @@ func TestPreSessionCSRFRejectsMissingOrWrongTokenWhenSignedIn(t *testing.T) {
 	}
 }
 
-// TestPreSessionCSRFSafeMethodsPassWithSession 断言 GET 不受影响（写请求才校验）。
+// TestPreSessionCSRFSafeMethodsPassWithSession asserts that GET is unaffected (only write requests are validated).
 func TestPreSessionCSRFSafeMethodsPassWithSession(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

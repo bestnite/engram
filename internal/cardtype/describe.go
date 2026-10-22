@@ -1,51 +1,51 @@
 package cardtype
 
-// 本文件定义题型的自描述契约：题型把编辑页与复习页需要的元数据（字段表、正反面字段、
-// 作答控件、题面/选项字段）一并声明出来，前端因此不必再各自硬编码一张题型表
-// （AGENTS.md §2.3 第 7 条：新增题型 = 加一个文件并注册，核心代码不改）。
+// This file defines the card types' self-description contract: a card type declares all the metadata the editor and review pages need
+// (field table, front/back fields, answer controls, prompt/option fields), so the front end no longer has to hard-code a card type table of its own
+// (AGENTS.md §2.3 item 7: adding a card type = add a file and register it, core code unchanged).
 //
-// 契约里的字段名与取值是冻结的：下一个泳道的前端按它们逐字实现，改名或改取值都是
-// 破坏性变更。Graded 不在这里声明：它是运行时事实，由注册表在枚举时对 Grader 接口
-// 做断言得出，题型自报会与实现漂移。
+// The field names and values in the contract are frozen: the front end of the next lane implements them verbatim, so renaming or changing a value
+// is a breaking change. Graded is not declared here: it is a runtime fact, derived by the registry doing an interface assertion on Grader while
+// enumerating, and a card type self-reporting it would drift from the implementation.
 
-// 字段控件取值：与前端编辑表单的控件一一对应。
+// Field control values: they correspond one-to-one with the controls of the front-end edit form.
 const (
-	ControlText     = "text"     // 单行文本
-	ControlTextarea = "textarea" // 多行文本（Markdown / LaTeX）
-	ControlLines    = "lines"    // 多行文本，每行一个数组元素
-	ControlNumber   = "number"   // 数值
-	ControlBool     = "bool"     // 布尔
-	ControlIndex    = "index"    // 单选：取 options 的下标
-	ControlIndexes  = "indexes"  // 多选：取 options 的下标集合
+	ControlText     = "text"     // single-line text
+	ControlTextarea = "textarea" // multi-line text (Markdown / LaTeX)
+	ControlLines    = "lines"    // multi-line text, one array element per line
+	ControlNumber   = "number"   // number
+	ControlBool     = "bool"     // boolean
+	ControlIndex    = "index"    // single select: takes an options index
+	ControlIndexes  = "indexes"  // multi select: takes a set of options indices
 )
 
-// 作答控件取值：决定复习页给输入控件还是四档自评。
+// Answer control values: they decide whether the review page gives input controls or the four-level self-rating.
 const (
-	AnswerNone   = "none"   // 自评题型，无作答控件
-	AnswerText   = "text"   // 文本作答
-	AnswerNumber = "number" // 数值作答
-	AnswerSingle = "single" // 单选
-	AnswerMulti  = "multi"  // 多选
-	AnswerBool   = "bool"   // 判断题
-	AnswerBlanks = "blanks" // 逐空输入（挖空题）：每处目标挖空一个文本框
-	AnswerItems  = "items"  // 逐项输入（列表题）：每个条目一个文本框
-	AnswerEssay  = "essay"  // 自由书写后自评（简答题）：写下的作答随自评保存，不判分
+	AnswerNone   = "none"   // self-graded card type, no answer control
+	AnswerText   = "text"   // text answer
+	AnswerNumber = "number" // numeric answer
+	AnswerSingle = "single" // single select
+	AnswerMulti  = "multi"  // multi select
+	AnswerBool   = "bool"   // true/false card
+	AnswerBlanks = "blanks" // per-blank input (cloze card): one text box per target cloze
+	AnswerItems  = "items"  // per-item input (list card): one text box per item
+	AnswerEssay  = "essay"  // free-form writing followed by self-rating (short answer): the written answer is saved with the self-rating and is not graded
 )
 
-// FieldSpec 描述题型的一个字段在编辑表单里的形态；Control 的取值集合与前端控件一一对应。
+// FieldSpec describes the shape of one of a card type's fields in the edit form; the value set of Control corresponds one-to-one with the front-end controls.
 type FieldSpec struct {
 	Key      string `json:"key"`
 	Control  string `json:"control"`
 	Required bool   `json:"required"`
-	// Default 是带库默认值的布尔字段的服务端默认值（例如 true）；无默认时省略。
+	// Default is the server-side default value for boolean fields that have a database default (for example true); omitted when there is none.
 	Default any `json:"default,omitempty"`
 }
 
-// Description 是一个题型的自描述：编辑页与复习页据此渲染，无需按题型分支。
+// Description is one card type's self-description: the editor and review pages render from it and need no branching by card type.
 type Description struct {
 	Kind     string `json:"kind"`
 	LabelKey string `json:"label_key"`
-	// Graded 表示该题型是否实现 Grader；由注册表在枚举时断言得出，题型不得自行声明。
+	// Graded says whether the card type implements Grader; the registry derives it by interface assertion while enumerating, and a card type must not declare it itself.
 	Graded        bool        `json:"graded"`
 	AnswerControl string      `json:"answer_control"`
 	FrontField    string      `json:"front_field"`
@@ -53,21 +53,21 @@ type Description struct {
 	PromptField   string      `json:"prompt_field"`
 	OptionsField  string      `json:"options_field"`
 	Fields        []FieldSpec `json:"fields"`
-	// Example 是一条能通过本题型 Validate 的 note 字段值。字段表只给出字段名与控件，
-	// 说不清内容的写法：挖空语法、选项下标从 0 起、公式用 \( \) 与 \[ \] 而非 $。
-	// 示例把这些规则写成数据，agent 照着写就对，也不必为每条规则另配一段需要翻译的说明。
-	// 示例是否真能通过校验由 describe_test 逐题型断言，不会与实现漂移。
+	// Example is a set of note field values that passes this card type's Validate. The field table only gives field names and controls,
+	// which cannot express the conventions: cloze syntax, option indices starting at 0, formulas written with \( \) and \[ \] rather than $.
+	// Examples turn those rules into data, so an agent writing them gets it right, and there is no need for a separate translatable paragraph per rule.
+	// Whether the examples really pass validation is asserted per card type by describe_test, so they cannot drift from the implementation.
 	Example map[string]any `json:"example"`
 }
 
-// commonOptionalFields 是所有题型共用的可选字段，与 cardtype.validateCommonOptional 一致。
+// commonOptionalFields are the optional fields shared by every card type, consistent with cardtype.validateCommonOptional.
 var commonOptionalFields = []FieldSpec{
 	{Key: "source_url", Control: ControlText},
 	{Key: "extra", Control: ControlTextarea},
 }
 
-// fieldsWithCommon 返回「题型自有字段 + 通用可选字段」的新切片。
-// 每次都新建切片，避免调用方改动一个题型的字段表时影响到另一个题型。
+// fieldsWithCommon returns a new slice of "the card type's own fields + the common optional fields".
+// A fresh slice is built each time, so a caller mutating one card type's field table cannot affect another.
 func fieldsWithCommon(own ...FieldSpec) []FieldSpec {
 	out := make([]FieldSpec, 0, len(own)+len(commonOptionalFields))
 	out = append(out, own...)
@@ -75,13 +75,13 @@ func fieldsWithCommon(own ...FieldSpec) []FieldSpec {
 	return out
 }
 
-// Descriptions 按 kind 字典序返回 Default 注册表里全部题型的自描述。
+// Descriptions returns the self-descriptions of every card type in the Default registry, ordered by kind.
 func Descriptions() []Description { return Default.Descriptions() }
 
-// Descriptions 按 kind 字典序返回注册表里全部题型的自描述。
+// Descriptions returns the self-descriptions of every card type in the registry, ordered by kind.
 //
-// Kind 以注册键为准（而非题型自报的 Kind），Graded 由 Grader 接口断言得出：
-// 两者都是运行时事实，以注册表为准可保证结果稳定且不与实现漂移。
+// Kind follows the registration key (not the Kind a card type reports itself), and Graded is derived from the Grader interface assertion:
+// both are runtime facts, and deferring to the registry keeps the result stable and free of drift from the implementation.
 func (r *Registry) Descriptions() []Description {
 	kinds := r.Kinds()
 	out := make([]Description, 0, len(kinds))

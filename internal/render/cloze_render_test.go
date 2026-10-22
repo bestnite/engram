@@ -7,8 +7,9 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// TestClozeCardRendersWithoutMarkup 走卡面真实管线（题型渲染 → Markdown → 白名单清洗），
-// 断言填空的高亮 span 能通过清洗、内容里的 Markdown 照常渲染，且 {{cN:: 标记不出现在 HTML 里。
+// TestClozeCardRendersWithoutMarkup drives the real card pipeline (card type render -> Markdown ->
+// allowlist sanitizing) and asserts that the cloze highlight span survives sanitizing, that Markdown
+// inside the content still renders, and that the {{cN:: markers do not appear in the HTML.
 func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 	ct, ok := cardtype.Lookup("cloze")
 	if !ok {
@@ -25,7 +26,8 @@ func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 		{"c1 back", "cloze:1", cardtype.SideBack, []string{`<span class="cloze"><strong>mitochondrion</strong></span>`, "carries DNA."}},
 		{"c2 front", "cloze:2", cardtype.SideFront, []string{"<strong>mitochondrion</strong>", `<span class="cloze">[genetic material]</span>`}},
 		{"c2 back", "cloze:2", cardtype.SideBack, []string{`<span class="cloze">DNA</span>`}},
-		// 备选答案：背面全部列出；转义的竖线渲染成字面 |，不残留反斜杠。
+		// Alternatives: the back lists all of them; an escaped pipe renders as a literal |, with no
+		// leftover backslash.
 		{"c3 back lists alternatives", "cloze:3", cardtype.SideBack, []string{`<span class="cloze">ATP / adenosine triphosphate</span>`}},
 		{"c4 back escaped pipe", "cloze:4", cardtype.SideBack, []string{`<span class="cloze">A|B</span>`}},
 	}
@@ -51,8 +53,9 @@ func TestClozeCardRendersWithoutMarkup(t *testing.T) {
 	}
 }
 
-// TestClozeInsideMathRendersAsBoxed 走真实管线，断言公式里的挖空以 \boxed{…}
-// 交给 MathJax，而不是变成公式里被转义的字面 span；公式外的挖空仍是 span。
+// TestClozeInsideMathRendersAsBoxed drives the real pipeline and asserts that a cloze inside a formula
+// is handed to MathJax as \boxed{...}, instead of becoming an escaped literal span inside the formula;
+// a cloze outside a formula is still a span.
 func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 	ct, ok := cardtype.Lookup("cloze")
 	if !ok {
@@ -87,7 +90,8 @@ func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 			forbidden: []string{"&lt;span"},
 		},
 		{
-			// 公式里的提示不经过白名单，只靠 restoreMath 转义；注入的标签必须保持为文本。
+			// A hint inside a formula does not go through the allowlist, only restoreMath escaping; the
+			// injected tag must stay text.
 			name:      "html in a hint inside math stays escaped",
 			text:      `\(x = {{c1::2::<img src=x onerror=alert(1)>}}\)`,
 			side:      cardtype.SideFront,
@@ -119,8 +123,8 @@ func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 	}
 }
 
-// TestListBackRendersAsList 走真实管线，断言列表卡背面按 ordered 渲染成 <ol>/<ul> 且通过清洗，
-// 不再重复题干。
+// TestListBackRendersAsList drives the real pipeline and asserts that the back of a list card renders as
+// <ol>/<ul> according to ordered, survives sanitizing, and no longer repeats the prompt.
 func TestListBackRendersAsList(t *testing.T) {
 	ct, ok := cardtype.Lookup("list")
 	if !ok {

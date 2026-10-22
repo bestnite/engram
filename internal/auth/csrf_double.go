@@ -9,17 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CSRFDoubleSubmitCookieName 是会话前表单（/setup、/login、/register）双提交 cookie 的名字。
-// 这些表单提交时还没有服务端会话，会话绑定的 CSRF token 无从产生，因此改用
-// 双提交 cookie：GET 时下发一个随机 token 的 cookie，同时把同一 token 镜像进表单隐藏字段，
-// 提交时比较两者。
+// CSRFDoubleSubmitCookieName is the name of the double-submit cookie for pre-session forms (/setup, /login, /register).
+// These forms are submitted before any server-side session exists, so a session-bound CSRF token cannot be produced; instead we use
+// a double-submit cookie: the GET hands out a cookie with a random token and mirrors the same token into a hidden form field,
+// and the submission compares the two.
 const CSRFDoubleSubmitCookieName = "csrf_double"
 
-// doubleSubmitMinLen 是接受一个 cookie token 所需的最小长度；短于它的值一律视为非法并重新生成。
-// 生成的 token 是 32 字节随机数的 base64url（43 字符），这个下限只用于拒绝明显的垃圾值。
+// doubleSubmitMinLen is the minimum length required to accept a cookie token; anything shorter is treated as invalid and regenerated.
+// A generated token is base64url of 32 random bytes (43 characters); this lower bound only rejects obviously garbage values.
 const doubleSubmitMinLen = 16
 
-// newDoubleSubmitToken 生成一个新的会话前 CSRF token（32 字节随机数，URL 安全编码）。
+// newDoubleSubmitToken generates a new pre-session CSRF token (32 random bytes, URL-safe encoding).
 func newDoubleSubmitToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -28,27 +28,27 @@ func newDoubleSubmitToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// validDoubleSubmitToken 判定 cookie 里的值是否可用；空串与过短值都不接受。
+// validDoubleSubmitToken decides whether the value in the cookie is usable; empty and too-short values are not accepted.
 func validDoubleSubmitToken(v string) bool {
 	return len(v) >= doubleSubmitMinLen
 }
 
-// EnsureDoubleSubmitToken 返回本次请求应镜像进表单的会话前 CSRF token。
+// EnsureDoubleSubmitToken returns the pre-session CSRF token that this request should mirror into the form.
 //
-// 已有一个合法的 csrf_double cookie 时直接复用（并保持响应不再重复下发）；
-// 否则生成新 token 并写入 cookie。
+// When a valid csrf_double cookie already exists it is reused as is (and the response does not hand it out again);
+// otherwise a new token is generated and written to the cookie.
 //
-// cookie 设为 HttpOnly：表单由服务端渲染时把同一 token 写进隐藏字段，前端脚本无需读取它。
-// SameSite=Lax 与 Secure 按会话 cookie 的同一套策略设置：Secure 由调用方依据 BASE_URL 的
-// scheme 传入（secure），不能看请求自身的 TLS——生产是反代终止 TLS，应用只收到明文 http，
-// 按请求判断会让线上表单 cookie 丢掉 Secure。
+// The cookie is set HttpOnly: when the form is server-rendered the same token is written into a hidden field, so frontend scripts need not read it.
+// SameSite=Lax and Secure follow the same policy as the session cookie: Secure is passed in by the caller (secure) based on the scheme of
+// BASE_URL, and must not look at the request's own TLS — production terminates TLS at the reverse proxy, so the app only receives plain http,
+// and deciding per request would drop Secure from the form cookie in production.
 func EnsureDoubleSubmitToken(c *gin.Context, secure bool) string {
 	if v, err := c.Cookie(CSRFDoubleSubmitCookieName); err == nil && validDoubleSubmitToken(v) {
 		return v
 	}
 	tok, err := newDoubleSubmitToken()
 	if err != nil {
-		// 生成失败时返回空串：表单不带 token，提交会被中间件拒绝（fail closed，绝不放行）。
+		// Returns an empty string when generation fails: the form carries no token and the submission is rejected by the middleware (fail closed, never allow).
 		return ""
 	}
 	http.SetCookie(c.Writer, &http.Cookie{
@@ -63,25 +63,25 @@ func EnsureDoubleSubmitToken(c *gin.Context, secure bool) string {
 	return tok
 }
 
-// PreSessionCSRFMiddleware 保护「登录前就能调用」的写端点（登录、注册、引导、忘记/重置密码、
-// 邮箱验证与改邮箱确认、退订、TOTP 第二步）。
+// PreSessionCSRFMiddleware protects write endpoints callable before login (login, register, onboarding, forgot/reset password,
+// email verification and email change confirmation, unsubscribe, TOTP second step).
 //
-// 为什么不能一律用会话绑定校验：这些端点的契约是「匿名也能调」（忘记密码的前提就是登不进去），
-// 而匿名时服务端没有会话可存、没有值可比。
+// Why session-bound validation cannot be used everywhere: the contract of these endpoints is "anonymous callers allowed" (forgot password presupposes you cannot log in),
+// and while anonymous there is no server-side session in which to store a value or against which to compare one.
 //
-// 为什么不能一律用双提交：请求可能来自**已登录**的浏览器（例如已登录用户点邮件里的验证/退订链接）。
-// 此时浏览器手里只有会话绑定 token，双提交 cookie 与之天然不等，于是这类请求必然 403 —— 这是
-// 真实发生过的故障。而「已登录时拿到的是哪种值」由 /api/v1/auth/session 决定，客户端无从选择。
+// Why double submit cannot be used everywhere: the request may come from an **already logged-in** browser (for example a logged-in user clicking a verification/unsubscribe link from mail).
+// The browser then holds only a session-bound token, which by nature differs from the double-submit cookie, so such requests would necessarily 403 — this is a
+// failure that really happened. Which kind of value you get while logged in is decided by /api/v1/auth/session, and the client has no choice.
 //
-// 因此按**本次请求有没有有效会话**分档，弱的那档只留给匿名：
+// So we tier by **whether this request has a valid session**, and reserve the weaker tier for anonymous requests only:
 //
-//   - 有有效会话（会话中间件的判定结果，见 Manager.Middleware）→ 请求值必须等于会话行里的
-//     CSRF token。这一档比双提交更强：攻击者即使能往受害者浏览器写 cookie 也读不到会话行里的值。
-//   - 匿名 → 双提交：csrf_double cookie 必须等于请求携带的镜像值。这是唯一不需要服务端状态的
-//     做法，代价是攻击者若能给目标域写 cookie 即可绕过（故只用于匿名场景）。
+//   - valid session (the session middleware's verdict, see Manager.Middleware) → the request value must equal the CSRF token in the
+//     session row. This tier is stronger than double submit: even an attacker able to write cookies into the victim's browser cannot read the value in the session row.
+//   - anonymous → double submit: the csrf_double cookie must equal the mirrored value the request carries. This is the only approach needing no
+//     server state, at the cost that an attacker who can write cookies for the target domain can bypass it (hence only for anonymous scenarios).
 //
-// 注意**不要**把本中间件挂到登录后的端点：那些端点必须要求会话存在（无会话一律 403 csrf_no_session），
-// 否则匿名请求可以只靠 cookie 对通过校验、再由 handler 以「无用户」状态继续。
+// Note: do **not** mount this middleware on post-login endpoints: those must require a session (no session means 403 csrf_no_session),
+// otherwise an anonymous request could pass validation on the cookie alone and then continue in the handler in a "no user" state.
 func PreSessionCSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch c.Request.Method {
@@ -109,8 +109,8 @@ func PreSessionCSRFMiddleware() gin.HandlerFunc {
 	}
 }
 
-// submittedCSRFToken 取请求携带的镜像 token：优先请求头（SPA 的 JSON 请求），
-// 退回表单字段（无脚本表单）。PostForm 会解析并缓存表单体，不会与后续 handler 的读取冲突。
+// submittedCSRFToken gets the mirrored token the request carries: the header first (the SPA's JSON requests),
+// falling back to the form field (no-script forms). PostForm parses and caches the form body and does not conflict with later reads by the handler.
 func submittedCSRFToken(c *gin.Context) string {
 	if token := c.GetHeader(CSRFHeaderName); token != "" {
 		return token
@@ -118,7 +118,7 @@ func submittedCSRFToken(c *gin.Context) string {
 	return c.PostForm(CSRFFieldName)
 }
 
-// abortCSRF 以统一形态拒绝校验失败的写请求（稳定 code + 英文文案，前端按 code 映射提示）。
+// abortCSRF rejects a write request that fails validation in a uniform shape (stable code + English text; the frontend maps the code to a message).
 func abortCSRF(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 		"error": gin.H{"code": "csrf_failed", "message": "invalid or missing CSRF token"},

@@ -10,11 +10,11 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本文件是鉴权反面用例汇总：把 CSRF、注册策略、身份绑定、会话作废、
-// 限流五类“本该被拒绝”的场景集中到一处，方便一处审阅全部拒绝路径。
-// 每类一个命名测试；细粒度正向用例仍在各自 *_test.go 中，避免重复。
+// This file gathers the negative auth cases: it collects the five kinds of "should have been rejected" scenario — CSRF, registration policy, identity linking, session revocation
+// and rate limiting — in one place, so every rejection path can be reviewed together.
+// One named test per kind; the fine-grained positive cases stay in their own *_test.go files to avoid duplication.
 
-// TestAuthSuite_CSRF_NegativeCases 汇总 CSRF 的三种拒绝：无 token、错 token、无会话。
+// TestAuthSuite_CSRF_NegativeCases gathers the three CSRF rejections: no token, wrong token, no session.
 func TestAuthSuite_CSRF_NegativeCases(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -43,7 +43,7 @@ func TestAuthSuite_CSRF_NegativeCases(t *testing.T) {
 	}
 }
 
-// TestAuthSuite_RegistrationPolicy_NegativeCases 汇总自助注册被拒的三条路径。
+// TestAuthSuite_RegistrationPolicy_NegativeCases gathers the three paths on which self-service registration is rejected.
 func TestAuthSuite_RegistrationPolicy_NegativeCases(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -66,8 +66,8 @@ func TestAuthSuite_RegistrationPolicy_NegativeCases(t *testing.T) {
 	}
 }
 
-// TestAuthSuite_IdentityBinding_NegativeCases 汇总绑定流程必须拒绝/不得自动绑定的场景：
-// closed 策略无匹配 → 拒绝；未验证邮箱撞上既有账号 → 拒绝（绝不自动绑定）。
+// TestAuthSuite_IdentityBinding_NegativeCases gathers the scenarios where the linking flow must reject or must not auto-link:
+// closed policy with no match → reject; an unverified email colliding with an existing account → reject (never auto-link).
 func TestAuthSuite_IdentityBinding_NegativeCases(t *testing.T) {
 	matched := &store.User{ID: 3, Email: "alice@example.com"}
 
@@ -78,7 +78,7 @@ func TestAuthSuite_IdentityBinding_NegativeCases(t *testing.T) {
 		t.Errorf("closed policy = (%q, %v), want deny/%v", closed.Kind, closed.Err, ErrIdentityLinkDenied)
 	}
 
-	// 未验证邮箱即便命中既有账号，也必须走拒绝而不是自动绑定。
+	// An unverified email, even when it hits an existing account, must go down the rejection path rather than auto-linking.
 	unverified := DecideIdentityLink(OAuthProfile{
 		Provider: "issuer.example.com", Subject: "sub-2", Email: "alice@example.com", EmailVerified: false,
 	}, nil, matched, PolicyOpen)
@@ -90,8 +90,8 @@ func TestAuthSuite_IdentityBinding_NegativeCases(t *testing.T) {
 	}
 }
 
-// TestAuthSuite_SessionInvalidation_NegativeCases 汇总会话作废的三条服务端路径：
-// 禁用用户、改密码、登出之后，旧 cookie 必须被拒。
+// TestAuthSuite_SessionInvalidation_NegativeCases gathers the three server-side session revocation paths:
+// after disabling the user, changing the password or logging out, the old cookie must be rejected.
 func TestAuthSuite_SessionInvalidation_NegativeCases(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -138,8 +138,8 @@ func TestAuthSuite_SessionInvalidation_NegativeCases(t *testing.T) {
 	}
 }
 
-// TestAuthSuite_RateLimiting_NegativeCases 汇总限流的三种减速/归零行为：
-// 连续失败延迟递增、同 IP 换账号仍受限、窗口过期后计数清零。
+// TestAuthSuite_RateLimiting_NegativeCases gathers the three slowdown/reset behaviors of rate limiting:
+// the delay grows with consecutive failures, a different account on the same IP is still limited, and the count clears after the window expires.
 func TestAuthSuite_RateLimiting_NegativeCases(t *testing.T) {
 	ctx := context.Background()
 

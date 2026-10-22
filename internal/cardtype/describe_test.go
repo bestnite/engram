@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// allowedControls 是 FieldSpec.Control 的允许取值集合（与前端编辑控件一一对应）。
+// allowedControls is the set of allowed values for FieldSpec.Control (corresponding one-to-one with the front-end edit controls).
 var allowedControls = map[string]bool{
 	ControlText:     true,
 	ControlTextarea: true,
@@ -17,7 +17,7 @@ var allowedControls = map[string]bool{
 	ControlIndexes:  true,
 }
 
-// allowedAnswerControls 是 Description.AnswerControl 的允许取值集合。
+// allowedAnswerControls is the set of allowed values for Description.AnswerControl.
 var allowedAnswerControls = map[string]bool{
 	AnswerNone:   true,
 	AnswerText:   true,
@@ -30,8 +30,8 @@ var allowedAnswerControls = map[string]bool{
 	AnswerEssay:  true,
 }
 
-// expectedGraded 是逐 kind 的硬事实：哪些题型实现 Grader。
-// 故意写成字面量而不是「重算一遍接口断言」，否则断言被误删时测试会跟着一起漂移。
+// expectedGraded is the per-kind hard fact: which card types implement Grader.
+// It is deliberately written as literals rather than "recomputing the interface assertion", or the test would drift along with the assertion if the assertion were mistakenly deleted.
 var expectedGraded = map[string]bool{
 	"basic":         false,
 	"basic_both":    false,
@@ -45,8 +45,8 @@ var expectedGraded = map[string]bool{
 	"short_answer":  false,
 }
 
-// expectedFieldKeys 是逐 kind 的字段键集合（含通用可选字段 source_url/extra）。
-// 这是取代前端 card-fields.ts 那张表的契约：任何静默漂移都必须在这里显形。
+// expectedFieldKeys is the per-kind set of field keys (including the common optional fields source_url/extra).
+// This is the contract that replaces the front end's card-fields.ts table: any silent drift must show up here.
 var expectedFieldKeys = map[string][]string{
 	"basic":         {"front", "back", "source_url", "extra"},
 	"basic_both":    {"front", "back", "source_url", "extra"},
@@ -60,9 +60,9 @@ var expectedFieldKeys = map[string][]string{
 	"short_answer":  {"prompt", "reference", "source_url", "extra"},
 }
 
-// TestDescriptionsSelfConsistent 断言每个已注册题型的自描述自洽：
-// Kind 与注册键一致、LabelKey 非空、Control/AnswerControl 取值合法、
-// 正反面与题面/选项字段都出现在字段表里。
+// TestDescriptionsSelfConsistent asserts every registered card type's self-description is self-consistent:
+// Kind matches the registration key, LabelKey is non-empty, Control/AnswerControl values are legal, and
+// the front/back and prompt/option fields all appear in the field table.
 func TestDescriptionsSelfConsistent(t *testing.T) {
 	kinds := Kinds()
 	if len(kinds) == 0 {
@@ -116,15 +116,15 @@ func TestDescriptionsSelfConsistent(t *testing.T) {
 					t.Errorf("%s = %q is not among the declared fields", ref.name, ref.key)
 				}
 			}
-			// 自评题型没有题面字段，作答类必须有题面。
+			// A self-graded card type has no prompt field; an answer-based one must have a prompt.
 			if d.AnswerControl == AnswerNone && d.PromptField != "" {
 				t.Errorf("self-assess type has PromptField %q, want empty", d.PromptField)
 			}
-			// 逐空作答题例外：题面字段原文里就有答案，题面只能用服务端掩盖后的正面。
+			// Per-blank answer card types are the exception: the raw prompt field already contains the answers, so the prompt can only be the server-side masked front.
 			if d.AnswerControl != AnswerNone && d.AnswerControl != AnswerBlanks && d.PromptField == "" {
 				t.Error("graded type has an empty PromptField")
 			}
-			// 只有选择题有选项字段。
+			// Only choice cards have option fields.
 			if d.OptionsField != "" && d.AnswerControl != AnswerSingle && d.AnswerControl != AnswerMulti {
 				t.Errorf("non-choice type has OptionsField %q", d.OptionsField)
 			}
@@ -132,8 +132,8 @@ func TestDescriptionsSelfConsistent(t *testing.T) {
 	}
 }
 
-// TestDescriptionsGradedMatchesGrader 断言每个 kind 的 Graded 与 Grader 接口断言一致，
-// 并与硬事实表 expectedGraded 逐条相等。
+// TestDescriptionsGradedMatchesGrader asserts each kind's Graded matches the Grader interface assertion,
+// and equals the hard fact table expectedGraded entry by entry.
 func TestDescriptionsGradedMatchesGrader(t *testing.T) {
 	descByKind := make(map[string]Description)
 	for _, d := range Descriptions() {
@@ -154,7 +154,7 @@ func TestDescriptionsGradedMatchesGrader(t *testing.T) {
 	}
 }
 
-// TestDescriptionsFieldKeysMatchContract 断言每个 kind 的字段键集合与逐 kind 期望表逐字相等。
+// TestDescriptionsFieldKeysMatchContract asserts each kind's set of field keys equals the per-kind expectation table verbatim.
 func TestDescriptionsFieldKeysMatchContract(t *testing.T) {
 	for _, kind := range Kinds() {
 		t.Run(kind, func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestDescriptionsFieldKeysMatchContract(t *testing.T) {
 	}
 }
 
-// TestDescriptionsOrderMatchesKinds 断言枚举结果按 kind 字典序且与 Kinds() 一一对应。
+// TestDescriptionsOrderMatchesKinds asserts the enumeration is in lexicographic kind order and maps one-to-one onto Kinds().
 func TestDescriptionsOrderMatchesKinds(t *testing.T) {
 	ds := Descriptions()
 	kinds := Kinds()
@@ -196,10 +196,10 @@ func TestDescriptionsOrderMatchesKinds(t *testing.T) {
 	}
 }
 
-// TestDescriptionExamplesAreValidNotes 断言每个题型都带示例，且示例是一条真能用的 note：
-// 经 JSON 往返（agent 送来的数字是 float64、数组是 []any）后仍通过 Validate、至少产出
-// 一张卡；示例只用字段表里声明过的键，并给齐全部必填字段。示例是写给 agent 照抄的，
-// 一条过不了校验的示例比没有示例更糟。
+// TestDescriptionExamplesAreValidNotes asserts every card type carries an example, and that the example is a genuinely usable note:
+// after a JSON round trip (numbers from an agent are float64, arrays are []any) it still passes Validate and produces at least
+// one card; the example uses only keys declared in the field table and supplies every required field. The example is meant for an agent to copy,
+// and an example that fails validation is worse than no example at all.
 func TestDescriptionExamplesAreValidNotes(t *testing.T) {
 	for _, d := range Descriptions() {
 		t.Run(d.Kind, func(t *testing.T) {

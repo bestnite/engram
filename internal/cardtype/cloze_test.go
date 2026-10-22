@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestClozeCardsFromTwoIndices 断言一个 note 因两个序号生成两张卡
+// TestClozeCardsFromTwoIndices asserts one note yields two cards because of two indices
 func TestClozeCardsFromTwoIndices(t *testing.T) {
 	fields := map[string]any{"text": "The {{c1::mitochondrion}} carries its own {{c2::DNA::genetic material}}."}
 	if err := Validate("cloze", fields); err != nil {
@@ -26,7 +26,7 @@ func TestClozeCardsFromTwoIndices(t *testing.T) {
 	}
 }
 
-// TestClozeRepeatedIndexProducesOneCard 断言重复序号只产出一张卡，且该序号全部被掩盖。
+// TestClozeRepeatedIndexProducesOneCard asserts a repeated index produces only one card, with every occurrence of that index masked.
 func TestClozeRepeatedIndexProducesOneCard(t *testing.T) {
 	fields := map[string]any{"text": "{{c1::a}} and {{c1::b}} but {{c2::c}}"}
 	cards, _ := Cards(Note{Kind: "cloze", Fields: fields})
@@ -42,7 +42,7 @@ func TestClozeRepeatedIndexProducesOneCard(t *testing.T) {
 	}
 }
 
-// TestClozeNestedBraces 断言嵌套花括号按深度匹配，不会提前闭合。
+// TestClozeNestedBraces asserts nested braces match by depth and do not close early.
 func TestClozeNestedBraces(t *testing.T) {
 	dels, err := ParseCloze("x {{c1::outer {{inner}} text}} y")
 	if err != nil {
@@ -59,8 +59,8 @@ func TestClozeNestedBraces(t *testing.T) {
 	}
 }
 
-// TestClozeAfterOpeningBrace 断言紧跟在单个 "{" 之后的挖空能被识别：TeX 分组里的
-// 挖空写成 "{{{c1::…}}}"，外层的 "{" 与 "}" 留在挖空之外。
+// TestClozeAfterOpeningBrace asserts a cloze directly after a single "{" is recognized: a cloze inside a TeX grouping
+// is written "{{{c1::…}}}", with the outer "{" and "}" left outside the cloze.
 func TestClozeAfterOpeningBrace(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -120,7 +120,7 @@ func TestClozeAfterOpeningBrace(t *testing.T) {
 	}
 }
 
-// TestClozeNestedMarkerIsNotCarded 断言嵌套在内容里的 {{cM::…}} 只当普通内容，不单独成卡。
+// TestClozeNestedMarkerIsNotCarded asserts a {{cM::…}} nested inside the content is just ordinary content and does not become its own card.
 func TestClozeNestedMarkerIsNotCarded(t *testing.T) {
 	fields := map[string]any{"text": "{{c1::a {{c2::b}} c}}"}
 	cards, _ := Cards(Note{Kind: "cloze", Fields: fields})
@@ -133,7 +133,7 @@ func TestClozeNestedMarkerIsNotCarded(t *testing.T) {
 	}
 }
 
-// TestClozeEscapes 断言转义抑制结构解析，但原文保留（TeX 安全）。
+// TestClozeEscapes asserts escapes suppress structural parsing while keeping the text verbatim (TeX-safe).
 func TestClozeEscapes(t *testing.T) {
 	t.Run("escaped opener yields no deletion", func(t *testing.T) {
 		for _, text := range []string{`\{{c1::x}}`, `\{\{c1::x\}\}`, `\{{c1::x\}\}`} {
@@ -161,7 +161,7 @@ func TestClozeEscapes(t *testing.T) {
 	})
 }
 
-// TestClozeHint 断言 {{cN::text::hint}} 的解析与渲染。
+// TestClozeHint asserts parsing and rendering of {{cN::text::hint}}.
 func TestClozeHint(t *testing.T) {
 	fields := map[string]any{"text": "The {{c1::mitochondrion::organelle}} is the powerhouse."}
 	dels, err := ParseCloze(fields["text"].(string))
@@ -182,8 +182,8 @@ func TestClozeHint(t *testing.T) {
 	}
 }
 
-// TestClozeRenderHidesMarkup 断言卡面上不出现 {{cN::}} 原始标记：目标序号正面是占位、
-// 背面是高亮内容，其它序号（含嵌套在内容里的）只显示内容。
+// TestClozeRenderHidesMarkup asserts the raw {{cN::}} marker never appears on the card face: the target index is a placeholder on the front and
+// highlighted content on the back, while other indices (including ones nested in the content) show only their content.
 func TestClozeRenderHidesMarkup(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -284,7 +284,7 @@ func TestClozeRenderHidesMarkup(t *testing.T) {
 	}
 }
 
-// TestClozeInvalid 断言各类非法输入返回可读英文错误。
+// TestClozeInvalid asserts every kind of invalid input returns a readable English error.
 func TestClozeInvalid(t *testing.T) {
 	cases := map[string]string{
 		"missing text":  `missing required field "text"`,
@@ -312,7 +312,7 @@ func TestClozeInvalid(t *testing.T) {
 	}
 }
 
-// TestClozeTemplateMismatch 断言不属于该题型的模板被拒绝。
+// TestClozeTemplateMismatch asserts a template that does not belong to the card type is rejected.
 func TestClozeTemplateMismatch(t *testing.T) {
 	_, err := clozeType{}.Render(Card{Template: "forward", Fields: map[string]any{"text": "{{c1::x}}"}}, SideFront)
 	if err == nil || !strings.Contains(err.Error(), "unknown card template") {
@@ -320,8 +320,8 @@ func TestClozeTemplateMismatch(t *testing.T) {
 	}
 }
 
-// TestClozeAlternatives 覆盖一空多个答案的写法：顶层 | 分隔备选答案，背面列出全部，
-// 不考的挖空只给标准写法；公式里、嵌套里、转义的竖线都不切分。
+// TestClozeAlternatives covers the multi-answer-per-blank wording: top-level | separates alternative answers, the back lists them all,
+// an untested cloze gives only the canonical wording; pipes inside formulas, inside nesting, and escaped ones are not split on.
 func TestClozeAlternatives(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -370,7 +370,7 @@ func TestClozeAlternatives(t *testing.T) {
 	}
 }
 
-// TestClozeRejectsEmptyAlternative 断言 | 两侧不能留空：空的备选答案多半是笔误，静默丢弃会让作者以为写进去了。
+// TestClozeRejectsEmptyAlternative asserts neither side of a | may be empty: an empty alternative is usually a typo, and silently dropping it would make the author think it was saved.
 func TestClozeRejectsEmptyAlternative(t *testing.T) {
 	for _, text := range []string{"{{c1::Paris|}}", "{{c1::|Paris}}", "{{c1::Paris| |巴黎}}"} {
 		err := Validate("cloze", map[string]any{"text": text})

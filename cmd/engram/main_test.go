@@ -19,17 +19,17 @@ import (
 	"git.nite07.com/nite/engram/internal/web"
 )
 
-// testSessionSecret 是集成测试用的会话签名密钥；仅用于测试，与生产无关。
+// testSessionSecret is the session signing secret used by the integration tests; test-only, unrelated to production.
 const testSessionSecret = "integration-test-session-secret-0123456789"
 
-// testEncryptionKey 是集成测试用的主密钥：base64(32 字节)，仅用于测试，与生产无关。
+// testEncryptionKey is the master key used by the integration tests: base64(32 bytes), test-only, unrelated to production.
 var testEncryptionKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 
-// testDoubleSubmitToken 是集成测试用的会话前 CSRF token；值只需满足长度下限。
+// testDoubleSubmitToken is the pre-session CSRF token used by the integration tests; the value only has to meet the minimum length.
 const testDoubleSubmitToken = "test-double-submit-token-0123456789"
 
-// newWiredServer 通过与 runServe 相同的装配路径构造服务，验证接线的确把
-// /login、/setup 等认证路由注册进了进程，而不是只在 web 包的单元测试里成立。
+// newWiredServer constructs the server through the same assembly path as runServe, verifying that the wiring really
+// registers auth routes such as /login and /setup in the process, and not only in the web package's unit tests.
 func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
 	t.Helper()
 	t.Setenv("DB_DRIVER", "sqlite")
@@ -58,7 +58,7 @@ func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
 	return srv, store.NewUserStore(db)
 }
 
-// doGet 发起 GET 并返回 recorder。
+// doGet issues a GET and returns the recorder.
 func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
@@ -66,11 +66,11 @@ func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecor
 	return rec
 }
 
-// doPostForm 以 x-www-form-urlencoded 发起 POST。
+// doPostForm issues a POST as x-www-form-urlencoded.
 //
-// 登录前表单（/login、/register、/setup）需要双提交 cookie：这里自动补上 cookie 与
-// 镜像 token，让本测试继续验证接线本身。拒绝路径（缺镜像 cookie）由
-// internal/web 的 csrf_presession_test.go 用原始请求单独覆盖。
+// The pre-login forms (/login, /register, /setup) need the double-submit cookie: this fills in the cookie and the mirror
+// token automatically, so this test keeps verifying the wiring itself. The rejection path (missing mirror cookie) is covered
+// separately by internal/web's csrf_presession_test.go with raw requests.
 func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	preSession := false
@@ -91,8 +91,8 @@ func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values)
 	return rec
 }
 
-// doPostJSON 以 application/json 发起 POST，并按会话前流程补上双提交 cookie 与镜像头
-// （/api/v1/auth/login、/setup 等由 DoubleSubmitMiddleware 保护）。
+// doPostJSON issues a POST as application/json and, following the pre-session flow, fills in the double-submit cookie and the
+// mirror header (/api/v1/auth/login, /setup and so on are protected by DoubleSubmitMiddleware).
 func doPostJSON(t *testing.T, srv *web.Server, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
@@ -104,7 +104,7 @@ func doPostJSON(t *testing.T, srv *web.Server, target, body string) *httptest.Re
 	return rec
 }
 
-// hasCookie 报告响应是否下发了指定名字的 cookie。
+// hasCookie reports whether the response set a cookie with the given name.
 func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
 	for _, c := range rec.Result().Cookies() {
 		if c.Name == name && c.Value != "" {
@@ -114,19 +114,19 @@ func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
 	return false
 }
 
-// TestWiredServerExposesAuthRoutes 是验收测试：真实装配路径下 /login、/setup、
-// /healthz 都可达，/setup 在首个管理员出现后按约定变为 404，密码错误按约定返回 401。
+// TestWiredServerExposesAuthRoutes is the acceptance test: under the real assembly path /login, /setup and
+// /healthz are all reachable, /setup becomes 404 by contract once the first administrator exists, and a wrong password returns 401 by contract.
 func TestWiredServerExposesAuthRoutes(t *testing.T) {
 	srv, users := newWiredServer(t)
 
-	// /healthz 仍正常：接线不得破坏 M0 的健康检查。
+	// /healthz still works: the wiring must not break M0's health check.
 	if rec := doGet(t, srv, "/healthz"); rec.Code != http.StatusOK {
 		t.Fatalf("GET /healthz status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// 尚无管理员：引导页可达。GET /setup 已切到 SPA 应用壳（规范路径），
-	// 因此这里断言「可达 + 是应用壳 + 下发了会话前双提交 cookie」；SSR 引导页本身的渲染细节
-	// （本地化文案、BOOTSTRAP_ADMIN_EMAIL 预填）由 internal/web 的回退分支用例覆盖。
+	// No administrator yet: the onboarding page is reachable. GET /setup has switched to the SPA app shell (the canonical path),
+	// so this asserts "reachable + is the app shell + set the pre-session double-submit cookie"; the SSR onboarding page's own
+	// rendering details (localized copy, BOOTSTRAP_ADMIN_EMAIL prefill) are covered by internal/web's fallback-branch cases.
 	setup := doGet(t, srv, "/setup")
 	if setup.Code != http.StatusOK {
 		t.Fatalf("GET /setup with no admin status = %d, want 200 (body %s)", setup.Code, setup.Body.String())
@@ -138,7 +138,7 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Errorf("GET /setup did not issue the %s cookie", auth.CSRFDoubleSubmitCookieName)
 	}
 
-	// /login 同样切到 SPA 应用壳。
+	// /login has likewise switched to the SPA app shell.
 	login := doGet(t, srv, "/login")
 	if login.Code != http.StatusOK {
 		t.Fatalf("GET /login status = %d, want 200 (body %s)", login.Code, login.Body.String())
@@ -150,7 +150,7 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Errorf("GET /login did not issue the %s cookie", auth.CSRFDoubleSubmitCookieName)
 	}
 
-	// 密码错误：JSON 登录返回 401，且不下发任何 cookie（SSR 登录表单已随页面层删除）。
+	// Wrong password: JSON login returns 401 and sets no cookie at all (the SSR login form went away with the page layer).
 	bad := doPostJSON(t, srv, "/api/v1/auth/login", `{"username":"nobody","password":"WrongPassword!"}`)
 	if bad.Code != http.StatusUnauthorized {
 		t.Fatalf("POST /api/v1/auth/login with a wrong password status = %d, want 401 (body %s)", bad.Code, snippet(bad.Body.String()))
@@ -159,7 +159,7 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 		t.Errorf("failed login unexpectedly set a cookie: %v", bad.Result().Cookies())
 	}
 
-	// 创建首个管理员，随后引导页必须关闭（404）。
+	// Create the first administrator; the onboarding page must then close (404).
 	created := doPostJSON(t, srv, "/api/v1/auth/setup",
 		`{"username":"root","email":"root@example.com","password":"Sup3rSecret!"}`)
 	if created.Code != http.StatusOK {
@@ -173,7 +173,7 @@ func TestWiredServerExposesAuthRoutes(t *testing.T) {
 	}
 }
 
-// snippet 截断响应体，避免失败输出过长。
+// snippet truncates the response body so failure output stays short.
 func snippet(body string) string {
 	const max = 300
 	if len(body) <= max {
@@ -182,8 +182,8 @@ func snippet(body string) string {
 	return body[:max] + "..."
 }
 
-// TestWiredServerStartsWithMailOutbox 验证接线：真实装配路径下 Server 暴露了
-// 邮件 outbox，且默认未配置 SMTP（Configured()=false），worker 可启动并优雅停止。
+// TestWiredServerStartsWithMailOutbox verifies the wiring: under the real assembly path the Server exposes the
+// mail outbox and SMTP is unconfigured by default (Configured()=false), and the worker can start and stop gracefully.
 func TestWiredServerStartsWithMailOutbox(t *testing.T) {
 	srv, _ := newWiredServer(t)
 	ob := srv.Mail()
@@ -193,7 +193,7 @@ func TestWiredServerStartsWithMailOutbox(t *testing.T) {
 	if ob.Configured() {
 		t.Error("mail outbox reports configured with no SMTP settings, want false")
 	}
-	// 启动/停止必须幂等且不挂死。
+	// Start/stop must be idempotent and must not hang.
 	ctx, cancel := context.WithCancel(context.Background())
 	ob.Start(ctx)
 	ob.Stop()

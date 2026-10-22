@@ -15,9 +15,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// CLI 验收：export 写出 .edeck，import 从该文件往返导入并给出与 REST 一致的报告。
+// CLI acceptance: export writes a .edeck, import round-trips from that file and produces the same report as REST.
 
-// seedCLIDeck 建一个 owner + 卡组 + 两张 basic note（各一张卡）。
+// seedCLIDeck creates an owner + deck + two basic notes (one card each).
 func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 	t.Helper()
 	ctx := context.Background()
@@ -50,7 +50,7 @@ func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 	return u.ID, d.ID
 }
 
-// cfgEnv 是 CLI 子命令需要的最小环境（与 config.Load 的必需项一致）。
+// cfgEnv is the minimal environment the CLI subcommands need (matching config.Load's required entries).
 func cfgEnv(t *testing.T, dbPath string) {
 	t.Helper()
 	t.Setenv("DB_DRIVER", "sqlite")
@@ -60,7 +60,7 @@ func cfgEnv(t *testing.T, dbPath string) {
 	t.Setenv("MEDIA_DIR", filepath.Join(t.TempDir(), "media"))
 }
 
-// TestCLIPackageRoundTrip 是 CLI 验收：export 出的文件能被 import 往返。
+// TestCLIPackageRoundTrip is the CLI acceptance test: a file written by export can be round-tripped by import.
 func TestCLIPackageRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
 	cfgEnv(t, dbPath)
@@ -85,7 +85,7 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 		t.Fatalf("exported package missing or empty: %v", err)
 	}
 
-	// dry-run 预演：报告字段与 REST 一致，且不写入任何新卡组。
+	// dry-run rehearsal: the report fields match REST and no new deck is written.
 	report := captureImportReport(t, []string{"--package", pkgPath, "--user", uid, "--dry-run", "--target", "new_deck"})
 	if report["dry_run"] != true {
 		t.Errorf("dry_run = %v, want true", report["dry_run"])
@@ -99,7 +99,7 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 		}
 	}
 
-	// 正式导入到新卡组，再确认新卡组的 note 数量。
+	// Import for real into a new deck, then confirm the new deck's note count.
 	real := captureImportReport(t, []string{"--package", pkgPath, "--user", uid, "--target", "new_deck"})
 	if real["notes_created"] != float64(2) {
 		t.Fatalf("real import notes_created = %v, want 2", real["notes_created"])
@@ -113,7 +113,7 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 	}
 }
 
-// captureCLI 临时把 CLI 诊断输出重定向到缓冲区，返回输出文本。
+// captureCLI temporarily redirects the CLI diagnostic output into a buffer and returns the text.
 func captureCLI(t *testing.T, fn func() error) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -127,7 +127,7 @@ func captureCLI(t *testing.T, fn func() error) string {
 	return buf.String()
 }
 
-// captureImportReport 执行 runImport 并把 stdout 解析回报告对象。
+// captureImportReport runs runImport and parses stdout back into a report object.
 func captureImportReport(t *testing.T, args []string) map[string]any {
 	t.Helper()
 	out := captureCLI(t, func() error { return runImport(args) })
@@ -138,7 +138,7 @@ func captureImportReport(t *testing.T, args []string) map[string]any {
 	return report
 }
 
-// cliRun 执行一个 CLI 命令并返回其错误与诊断输出；用于断言拒绝路径（非零退出）。
+// cliRun runs one CLI command and returns its error and diagnostic output; used to assert the rejection paths (non-zero exit).
 func cliRun(fn func() error) (error, string) {
 	var buf bytes.Buffer
 	old := cliOut
@@ -147,7 +147,7 @@ func cliRun(fn func() error) (error, string) {
 	return fn(), buf.String()
 }
 
-// importFixture 建库、播种源卡组与一个导入目标账号，再导出一个可往返的 .edeck。
+// importFixture creates the database, seeds a source deck and an import target account, then exports a round-trippable .edeck.
 func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
@@ -176,7 +176,7 @@ func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string
 	return db, target, pkgPath
 }
 
-// countDecks 统计卡组总数，用来断言拒绝路径确实没有落库。
+// countDecks counts all decks, used to assert that a rejection path really wrote nothing.
 func countDecks(t *testing.T, db *gorm.DB) int64 {
 	t.Helper()
 	var n int64
@@ -186,13 +186,13 @@ func countDecks(t *testing.T, db *gorm.DB) int64 {
 	return n
 }
 
-// TestCLIImportRequiresExplicitUser 是命令级验收：
-// 缺 --user 非零退出且不建卡组、带 --user 落到指定账号（id 与用户名两种取值）、
-// --user 指向不存在的人则拒绝且不落库。
+// TestCLIImportRequiresExplicitUser is command-level acceptance:
+// a missing --user exits non-zero and creates no deck, --user lands the content under the given account (both the id and the
+// username form), and a --user naming a nonexistent person is rejected without writing anything.
 func TestCLIImportRequiresExplicitUser(t *testing.T) {
 	db, target, pkgPath := importFixture(t)
 
-	// ① 缺 --user：非零退出，错误要说清怎么传，且不得创建任何卡组。
+	// (1) Missing --user: non-zero exit, the error must explain how to pass it, and no deck may be created.
 	before := countDecks(t, db)
 	err, _ := cliRun(func() error {
 		return run(context.Background(), []string{"import", "--package", pkgPath, "--target", "new_deck"})
@@ -207,7 +207,7 @@ func TestCLIImportRequiresExplicitUser(t *testing.T) {
 		t.Errorf("import without --user created a deck: %d -> %d", before, after)
 	}
 
-	// ③ --user 指向不存在的用户：点名拒绝，且不落库。
+	// (3) --user naming a nonexistent user: rejected by name, and nothing is written.
 	before = countDecks(t, db)
 	err, _ = cliRun(func() error {
 		return run(context.Background(), []string{"import", "--package", pkgPath, "--user", "987654", "--target", "new_deck"})
@@ -222,26 +222,26 @@ func TestCLIImportRequiresExplicitUser(t *testing.T) {
 		t.Errorf("import with an unknown --user created a deck: %d -> %d", before, after)
 	}
 
-	// ② 带 --user（用户名形式）：内容落到该账号名下。
+	// (2) With --user (username form): the content lands under that account.
 	report := captureImportReport(t, []string{"--package", pkgPath, "--user", target.Username, "--target", "new_deck"})
 	if report["notes_created"] != float64(2) {
 		t.Fatalf("import by username notes_created = %v, want 2", report["notes_created"])
 	}
 	assertDeckOwner(t, db, target.ID, 2)
 
-	// ② 带 --user（id 形式）：同样落到该账号名下。
+	// (2) With --user (id form): likewise lands under that account.
 	if report := captureImportReport(t, []string{"--package", pkgPath, "--user", strconv.FormatUint(target.ID, 10), "--target", "new_deck"}); report["notes_created"] != float64(2) {
 		t.Fatalf("import by id notes_created = %v, want 2", report["notes_created"])
 	}
 	assertDeckOwner(t, db, target.ID, 2)
 }
 
-// TestCLIImportRejectsAmbiguousUserRef：数字取值同时命中一个 id 与一个用户名且指向不同人时，
-// 必须点名歧义并拒绝，而不是任选一个账号写入。
+// TestCLIImportRejectsAmbiguousUserRef: when a numeric value hits both an id and a username that point to different people,
+// the ambiguity must be called out and rejected, rather than picking one account to write into.
 func TestCLIImportRejectsAmbiguousUserRef(t *testing.T) {
 	db, _, pkgPath := importFixture(t)
 
-	// 先取一个已存在的用户 id，再建一个用户名恰好等于该数字的账号，制造歧义取值。
+	// First take an existing user id, then create an account whose username is exactly that number, manufacturing an ambiguous value.
 	var existing store.User
 	if err := db.Order("id ASC").First(&existing).Error; err != nil {
 		t.Fatalf("load first user: %v", err)
@@ -273,7 +273,7 @@ func TestCLIImportRejectsAmbiguousUserRef(t *testing.T) {
 	}
 }
 
-// assertDeckOwner 断言指定账号下存在一个含 wantNotes 条 note 的卡组。
+// assertDeckOwner asserts that the given account owns a deck containing wantNotes notes.
 func assertDeckOwner(t *testing.T, db *gorm.DB, ownerID uint64, wantNotes int64) {
 	t.Helper()
 	var d store.Deck

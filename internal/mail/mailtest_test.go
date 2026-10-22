@@ -12,7 +12,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// testDB 开一个临时 SQLite 库并迁移全部模型（含 mail_outbox）。
+// testDB opens a temporary SQLite database and migrates every model (mail_outbox included).
 func testDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "mail.db"))
@@ -25,10 +25,11 @@ func testDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// testCodec 用程序化生成的占位密钥构造编解码器，不在仓库里放真实密钥字面量。
+// testCodec builds a codec from a programmatically generated placeholder key; no real key literal
+// lives in the repository.
 func testCodec(t *testing.T) *store.SecretCodec {
 	t.Helper()
-	// 32 字节的 base64（重复的 0x2a），仅测试用。
+	// A 32-byte base64 value (repeated 0x2a), for tests only.
 	key := "KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio="
 	codec, err := store.NewSecretCodec(key)
 	if err != nil {
@@ -37,7 +38,7 @@ func testCodec(t *testing.T) *store.SecretCodec {
 	return codec
 }
 
-// resolverWith 构造一个用 map 充当环境变量的解析器。
+// resolverWith builds a resolver that uses a map as the environment variables.
 func resolverWith(t *testing.T, db *gorm.DB, codec *store.SecretCodec, env map[string]string) *Resolver {
 	t.Helper()
 	return &Resolver{
@@ -50,7 +51,7 @@ func resolverWith(t *testing.T, db *gorm.DB, codec *store.SecretCodec, env map[s
 	}
 }
 
-// setSettings 把若干 SMTP 设置写进 settings 表。
+// setSettings writes a number of SMTP settings into the settings table.
 func setSettings(t *testing.T, db *gorm.DB, kv map[string]string) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -61,7 +62,8 @@ func setSettings(t *testing.T, db *gorm.DB, kv map[string]string) {
 	}
 }
 
-// splitHostPort 把 "host:port" 拆成两段；测试断言用，非法输入立即失败。
+// splitHostPort splits "host:port" into two parts; for test assertions, invalid input fails
+// immediately.
 func splitHostPort(t *testing.T, addr string) (string, string) {
 	t.Helper()
 	host, port, err := net.SplitHostPort(addr)

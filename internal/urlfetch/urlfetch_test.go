@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-// ---- 受控依赖 ----
+// ---- controlled dependencies ----
 
-// mapResolver 按主机名返回固定的地址集合，用来验证地址分类与「钉死在公网地址」的行为，
-// 不触发任何真实 DNS 查询。
+// mapResolver returns a fixed set of addresses per host name, used to verify address classification and the "pin to the
+// public address" behavior without triggering any real DNS query.
 type mapResolver struct {
 	addrs map[string][]net.IPAddr
 	err   error
@@ -34,8 +34,8 @@ func (m mapResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr,
 	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 }
 
-// recordingDialer 记录它被要求拨打的地址，实际连接固定拨到本地测试服务器，
-// 从而在真实 HTTPS 传输之上验证「校验的是哪个地址」。
+// recordingDialer records the address it was asked to dial while always dialing the local test server,
+// so that on top of a real HTTPS transport it verifies "which address was validated".
 type recordingDialer struct {
 	target string
 	addrs  []string
@@ -49,7 +49,7 @@ func (d *recordingDialer) DialContext(ctx context.Context, network, address stri
 
 func (d *recordingDialer) dialed() []string { return d.addrs }
 
-// newTestClient 构造一个注入受控解析器/拨号器的客户端；TLS 信任测试服务器自己的证书。
+// newTestClient builds a client with an injected controlled resolver/dialer; TLS trusts the test server's own certificate.
 func newTestClient(t *testing.T, srv *httptest.Server, res Resolver, lim Limits) (*Client, *recordingDialer) {
 	t.Helper()
 	d := &recordingDialer{target: srv.Listener.Addr().String()}
@@ -66,7 +66,7 @@ func publicResolver() mapResolver {
 	}}
 }
 
-// readAll 是测试里读完整响应体的小包装：直接接收 Fetch 的两个返回值。
+// readAll is a small helper that reads the whole response body in tests: it takes Fetch's two return values directly.
 func readAll(rc io.ReadCloser, err error) ([]byte, error) {
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func readAll(rc io.ReadCloser, err error) ([]byte, error) {
 	return io.ReadAll(rc)
 }
 
-// ---- 分类表：哪些地址是非公网 ----
+// ---- classification table: which addresses are non-public ----
 
 func TestIsPublicIPClassifiesSpecialRanges(t *testing.T) {
 	cases := []struct {
@@ -110,28 +110,28 @@ func TestIsPublicIPClassifiesSpecialRanges(t *testing.T) {
 		{"::ffff:127.0.0.1", false}, // IPv4-mapped loopback
 		{"::ffff:10.0.0.1", false},  // IPv4-mapped private
 
-		// 翻译/隧道地址：即使内嵌了回环或私网 IPv4，也绝不能当成公网目标。
-		{"64:ff9b::7f00:1", false},     // NAT64 well-known 前缀内嵌 127.0.0.1
-		{"64:ff9b::a00:1", false},      // NAT64 内嵌 10.0.0.1
-		{"64:ff9b:1::1", false},        // 本地用途 NAT64 前缀
-		{"2002:7f00:1::", false},       // 6to4 内嵌 127.0.0.1
-		{"2002:c0a8:101::", false},     // 6to4 内嵌 192.168.1.1
-		{"2001::1", false},             // Teredo（落在 2001::/23）
-		{"2001:0:1234:5678::1", false}, // Teredo 客户端地址
-		{"2001:2::1", false},           // 基准测试 2001:2::/48
-		{"::192.168.0.1", false},       // IPv4-compatible 内嵌私网
+		// Translation/tunnel addresses: even when they embed a loopback or private IPv4, they must never be treated as public targets.
+		{"64:ff9b::7f00:1", false},     // NAT64 well-known prefix embedding 127.0.0.1
+		{"64:ff9b::a00:1", false},      // NAT64 embedding 10.0.0.1
+		{"64:ff9b:1::1", false},        // local-use NAT64 prefix
+		{"2002:7f00:1::", false},       // 6to4 embedding 127.0.0.1
+		{"2002:c0a8:101::", false},     // 6to4 embedding 192.168.1.1
+		{"2001::1", false},             // Teredo (falls inside 2001::/23)
+		{"2001:0:1234:5678::1", false}, // Teredo client address
+		{"2001:2::1", false},           // benchmarking 2001:2::/48
+		{"::192.168.0.1", false},       // IPv4-compatible embedding a private address
 		{"::1.2.3.4", false},           // IPv4-compatible
-		{"3fff::1", false},             // 文档 3fff::/20
-		{"5f00::1", false},             // SRv6 SID 段（2000::/3 之外）
+		{"3fff::1", false},             // documentation 3fff::/20
+		{"5f00::1", false},             // SRv6 SID segment (outside 2000::/3)
 		{"2620:4f:8000::1", false},     // Direct Delegation AS112
-		{"1fff::1", false},             // 2000::/3 下界之外
-		{"4000::1", false},             // 2000::/3 上界之外
+		{"1fff::1", false},             // outside the 2000::/3 lower bound
+		{"4000::1", false},             // outside the 2000::/3 upper bound
 
-		// 普通已分配的全局单播：必须放行。
+		// Ordinary assigned global unicast: must be allowed through.
 		{"2001:4860:4860::8888", true}, // Google Public DNS
 		{"2a00:1450:4001:82b::200e", true},
 		{"2606:4700:4700::1111", true},
-		{"::ffff:93.184.216.34", true}, // IPv4-mapped 公网：Unmap 后按 IPv4 判为公网
+		{"::ffff:93.184.216.34", true}, // IPv4-mapped public address: judged public as IPv4 after Unmap
 	}
 	for _, tc := range cases {
 		t.Run(tc.ip, func(t *testing.T) {
@@ -150,7 +150,7 @@ func TestIsPublicIPClassifiesSpecialRanges(t *testing.T) {
 	}
 }
 
-// ---- URL 形态 ----
+// ---- URL shape ----
 
 func TestValidateURL(t *testing.T) {
 	cases := []struct {
@@ -186,7 +186,7 @@ func TestValidateURL(t *testing.T) {
 	}
 }
 
-// ---- 真实 HTTPS 传输 ----
+// ---- real HTTPS transport ----
 
 func TestFetchDownloadsPublicPackage(t *testing.T) {
 	pkg := []byte("PK\x03\x04 fake-but-binary-package-bytes")
@@ -210,7 +210,7 @@ func TestFetchDownloadsPublicPackage(t *testing.T) {
 	if len(d.dialed()) != 1 {
 		t.Fatalf("dialed %v, want exactly one connection", d.dialed())
 	}
-	// 连接必须钉死在解析出的公网地址上，而不是主机名本身。
+	// The connection must be pinned to the resolved public address, not to the host name itself.
 	if !strings.HasPrefix(d.dialed()[0], "93.184.216.34:") {
 		t.Errorf("dialed %q, want the validated public address", d.dialed()[0])
 	}
@@ -242,7 +242,7 @@ func TestFetchBlocksNonPublicHosts(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 
-	// 字面量地址：不经过解析器，直接按分类拒绝。
+	// Literal address: no resolver involved, rejected directly by classification.
 	literals := []string{
 		"https://127.0.0.1/pkg", "https://10.0.0.5/pkg", "https://192.168.1.1/pkg",
 		"https://169.254.1.1/pkg", "https://0.0.0.0/pkg", "https://100.64.0.1/pkg",
@@ -262,7 +262,7 @@ func TestFetchBlocksNonPublicHosts(t *testing.T) {
 		}
 	}
 
-	// 主机名解析到私网地址：同样拒绝。
+	// Host name resolving to a private address: rejected as well.
 	c, d := newTestClient(t, srv, mapResolver{addrs: map[string][]net.IPAddr{
 		"internal.example.com": {{IP: net.ParseIP("10.0.0.5")}},
 	}}, DefaultLimits())
@@ -276,8 +276,8 @@ func TestFetchBlocksNonPublicHosts(t *testing.T) {
 	}
 }
 
-// TestFetchPinsToPublicAddressOnMixedResolution 是 DNS rebinding 防线：
-// 同一主机同时解析出私网与公网地址时，只允许连公网地址。
+// TestFetchPinsToPublicAddressOnMixedResolution is the DNS rebinding defense line:
+// when the same host resolves to both private and public addresses, only the public address may be dialed.
 func TestFetchPinsToPublicAddressOnMixedResolution(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("PK\x03\x04 payload"))
@@ -321,13 +321,13 @@ func TestFetchEnforcesMaxBytes(t *testing.T) {
 	}
 }
 
-// TestFetchEnforcesMaxBytesChunked 覆盖没有 Content-Length 的分块响应：
-// 上限判定必须基于实际读到的字节，而不是响应头。
+// TestFetchEnforcesMaxBytesChunked covers a chunked response with no Content-Length:
+// the limit decision must be based on the bytes actually read, not on the response headers.
 func TestFetchEnforcesMaxBytesChunked(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if f, ok := w.(http.Flusher); ok {
-			f.Flush() // 提交响应头但不带 Content-Length，强制分块传输
+			f.Flush() // commit the response headers without Content-Length, forcing chunked transfer
 		}
 		w.Write(make([]byte, 256))
 	}))
@@ -389,7 +389,7 @@ func TestFetchRejectsRedirectToPrivateAndNonHTTPS(t *testing.T) {
 	}() {
 		t.Fatalf("redirect-to-private error = %v, want KindBlockedHost", err)
 	}
-	// 首次请求连的是公网地址，重定向目标 127.0.0.1 绝不能被拨号。
+	// The first request dials the public address; the redirect target 127.0.0.1 must never be dialed.
 	for _, addr := range d.dialed() {
 		if strings.HasPrefix(addr, "127.0.0.1:") {
 			t.Errorf("dialed the private redirect target %q", addr)
@@ -404,8 +404,8 @@ func TestFetchRejectsRedirectToPrivateAndNonHTTPS(t *testing.T) {
 	}
 }
 
-// TestFetchCanonicalisesURL 证明请求用的是 validateURL 返回的规范化 URL，
-// 而不是原始字符串：前后空白会被去掉，请求仍按规范化结果发出。
+// TestFetchCanonicalisesURL proves the request uses the canonical URL returned by validateURL rather than the raw string:
+// leading and trailing whitespace is stripped and the request still goes out on the canonical result.
 func TestFetchCanonicalisesURL(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/pkg.edeck" {
@@ -470,8 +470,8 @@ func TestFetchTimeout(t *testing.T) {
 	}
 }
 
-// TestFetchIgnoresEnvironmentProxy 证明环境代理被显式关闭：
-// 即使设置了指向黑洞的 HTTP(S)_PROXY，下载也走直连而不是被转发出去（否则代理会绕过地址校验）。
+// TestFetchIgnoresEnvironmentProxy proves environment proxies are explicitly disabled:
+// even with HTTP(S)_PROXY pointing at a black hole, the download goes direct instead of being forwarded (otherwise the proxy would bypass address validation).
 func TestFetchIgnoresEnvironmentProxy(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("PK\x03\x04 payload"))
@@ -490,7 +490,7 @@ func TestFetchIgnoresEnvironmentProxy(t *testing.T) {
 func TestFetchRejectsPrivateLiteralWithoutResolving(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
-	// 解析器故意报错；字面量私网地址应在解析之前就被拒，不能因为「解析失败」而放行。
+	// The resolver deliberately fails; a literal private address should be rejected before resolution and must not pass because "resolution failed".
 	c, _ := newTestClient(t, srv, mapResolver{err: errors.New("resolver must not be called")}, DefaultLimits())
 	_, err := c.Fetch(context.Background(), "https://127.0.0.1/pkg", 1<<20)
 	var fe *Error
@@ -499,9 +499,9 @@ func TestFetchRejectsPrivateLiteralWithoutResolving(t *testing.T) {
 	}
 }
 
-// TestFetchRedirectBoundary 固化重定向上限的精确语义：
-// MaxRedirects=N 恰好放行 N 次重定向（服务端看到 N+1 个请求，即首个请求加 N 次跟随），
-// N=0 表示一次也不跟随（禁用重定向）。
+// TestFetchRedirectBoundary pins down the exact redirect limit semantics:
+// MaxRedirects=N allows exactly N redirects (the server sees N+1 requests, i.e. the first request plus N follows),
+// and N=0 means following none (redirects disabled).
 func TestFetchRedirectBoundary(t *testing.T) {
 	for _, n := range []int{0, 1, 3} {
 		t.Run(fmt.Sprintf("limit=%d", n), func(t *testing.T) {
@@ -528,9 +528,9 @@ func TestFetchRedirectBoundary(t *testing.T) {
 	}
 }
 
-// TestFetchRejectsRedirectToSpecialIPv6 是「特殊 IPv6 目标必须在拨号前被拒」的真实 HTTPS 用例：
-// 服务端把请求重定向到内嵌回环/私网的翻译或隧道地址；下载器必须在拨号前拦下，
-// 绝不向这些地址发起连接（拨号器只应记录最初那个公网地址）。
+// TestFetchRejectsRedirectToSpecialIPv6 is the real-HTTPS case for "special IPv6 targets must be rejected before dialing":
+// the server redirects the request to a translation or tunnel address that embeds loopback/private IPv4; the downloader
+// must stop it before dialing and never open a connection to those addresses (the dialer should only record the original public address).
 func TestFetchRejectsRedirectToSpecialIPv6(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := strings.TrimPrefix(r.URL.Path, "/to-")
@@ -539,11 +539,11 @@ func TestFetchRejectsRedirectToSpecialIPv6(t *testing.T) {
 	defer srv.Close()
 
 	cases := map[string]string{
-		"nat64":  "64:ff9b::7f00:1",  // NAT64 内嵌 127.0.0.1
-		"6to4":   "2002:7f00:1::",    // 6to4 内嵌 127.0.0.1
+		"nat64":  "64:ff9b::7f00:1",  // NAT64 embedding 127.0.0.1
+		"6to4":   "2002:7f00:1::",    // 6to4 embedding 127.0.0.1
 		"teredo": "2001::1",          // Teredo
-		"mapped": "::ffff:127.0.0.1", // IPv4-mapped 回环
-		"doc":    "2001:db8::1",      // 文档段
+		"mapped": "::ffff:127.0.0.1", // IPv4-mapped loopback
+		"doc":    "2001:db8::1",      // documentation range
 	}
 	for name, addr := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -566,8 +566,8 @@ func TestFetchRejectsRedirectToSpecialIPv6(t *testing.T) {
 	}
 }
 
-// TestFetchClosesConnectionAfterResponse 证明一次下载不会把连接留在池里：
-// 服务端能观察到连接在响应结束后被关闭（keep-alive 已关 + 闲置连接回收）。
+// TestFetchClosesConnectionAfterResponse proves a single download does not leave the connection in the pool:
+// the server can observe the connection being closed once the response ends (keep-alive off + idle connection reclamation).
 func TestFetchClosesConnectionAfterResponse(t *testing.T) {
 	closed := make(chan struct{}, 1)
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

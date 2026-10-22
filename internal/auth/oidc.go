@@ -20,20 +20,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// OIDC 客户端。
+// OIDC client.
 //
-// 协议交互全部交给 github.com/zitadel/oidc/v3：
-//   - 发现文档与端点解析：rp.NewRelyingPartyOIDC（本文件只在其上做一层带 TTL 的按 issuer 缓存，
-//     配置变更后由 Invalidate 失效）。
-//   - Authorization Code + PKCE：challenge 由 OIDC 库的 oidc.NewSHACodeChallenge 计算，
-//     授权 URL 与 token 交换由 rp.AuthURL / rp.CodeExchange 完成。
-//   - ID Token 校验：rp.CodeExchange 内部走 rp.IDTokenVerifier（签名对 JWKS、iss、aud、exp、iat）。
+// All protocol interaction is delegated to github.com/zitadel/oidc/v3:
+//   - discovery document and endpoint resolution: rp.NewRelyingPartyOIDC (this file only layers a TTL'd per-issuer cache on top,
+//     invalidated by Invalidate after a configuration change).
+//   - Authorization Code + PKCE: the challenge is computed by the OIDC library's oidc.NewSHACodeChallenge,
+//     and the authorization URL and token exchange are handled by rp.AuthURL / rp.CodeExchange.
+//   - ID Token validation: rp.CodeExchange goes through rp.IDTokenVerifier internally (signature against the JWKS, iss, aud, exp, iat).
 //
-// 本文件只保留本项目必需、库不提供的部分：state/nonce 的一次性表、claim 名映射，
-// 以及把校验结果交给 IdentityLinkService（oauthlink.go）做身份绑定。绑定分支不在这里重复实现。
+// This file keeps only what the project needs and the library does not provide: the one-time state/nonce table, the claim name mapping,
+// and handing the validation result to IdentityLinkService (oauthlink.go) for identity linking. The linking branches are not reimplemented here.
 
-// OIDC 设置的 settings 键。client_secret 后缀是 `_secret`，
-// 因此 store.IsSensitiveSettingKey 会要求它走 AES-GCM 加密通道（store/secret.go）。
+// Settings keys for the OIDC settings. The client_secret suffix is `_secret`,
+// so store.IsSensitiveSettingKey requires it to go through the AES-GCM encrypted channel (store/secret.go).
 const (
 	SettingKeyOIDCEnabled            = "oidc.enabled"
 	SettingKeyOIDCIssuer             = "oidc.issuer"
@@ -46,7 +46,7 @@ const (
 	SettingKeyOIDCClaimEmailVerified = "oidc.claim.email_verified"
 )
 
-// 默认值：scope 与 claim 映射（claim 名可配）。
+// Defaults: the scopes and the claim mapping (claim names are configurable).
 const (
 	defaultOIDCScopes         = "openid,email,profile"
 	defaultClaimSubject       = "sub"
@@ -55,23 +55,23 @@ const (
 	defaultClaimEmailVerified = "email_verified"
 )
 
-// OIDC 待完成登录表（pending）的内存上限与过期淘汰。
+// In-memory cap and expiry eviction for the OIDC pending-login table (pending).
 //
-// 匿名者可以反复 GET /auth/oidc/start，而只有携带正确 state 的回调才会删除对应项：
-// 没有上限与淘汰时这个 map 会被堆大，是一条内存 DoS 路径。
+// Anonymous visitors can repeatedly GET /auth/oidc/start, and only a callback carrying the correct state deletes the corresponding entry:
+// without a cap and eviction this map grows without bound, which is a memory DoS path.
 const (
-	// maxPendingAuth 是未完成登录的最大条数；达到上限且没有可淘汰的过期项时，拒绝新发起。
+	// maxPendingAuth is the maximum number of pending logins; when the cap is reached and there is no expired entry to evict, new starts are rejected.
 	maxPendingAuth = 1000
-	// pendingEvictEvery 是过期项清理的最小间隔：每次发起都全量扫表代价高，按此间隔节流；
-	// 表满时则强制立即清理一次，使有界性不依赖节流是否到期。
+	// pendingEvictEvery is the minimum interval between expired-entry sweeps: a full scan on every start is expensive, so sweeps are throttled to it;
+	// when the table is full a sweep is forced immediately, so boundedness does not depend on the throttle having elapsed.
 	pendingEvictEvery = 5 * time.Minute
 )
 
-// oidcDiscoveryFallbackRedirectURI 只用于管理面板「测试连接」：
-// 该动作只校验发现文档，不发起登录，redirect 值不参与请求。
+// oidcDiscoveryFallbackRedirectURI is used only by the admin panel's "test connection":
+// that action only validates the discovery document and starts no login, so the redirect value takes no part in the request.
 const oidcDiscoveryFallbackRedirectURI = "http://localhost/auth/oidc/callback"
 
-// OIDCConfig 是 OIDC 的生效配置。ClientSecret 是解密后的明文，绝不写日志、绝不回显。
+// OIDCConfig is the effective OIDC configuration. ClientSecret is the decrypted plaintext; it is never logged and never echoed back.
 type OIDCConfig struct {
 	Enabled            bool
 	Issuer             string
@@ -84,14 +84,14 @@ type OIDCConfig struct {
 	ClaimEmailVerified string
 }
 
-// Usable 报告配置是否完整到可以发起登录：开关打开且 issuer / client_id 齐备。
-// 只有 Usable 为真时登录入口与相关路由才可用（不允许半开）。
+// Usable reports whether the configuration is complete enough to start a login: the switch is on and issuer / client_id are both present.
+// The login entry point and related routes are only available when Usable is true (no half-open state allowed).
 func (c *OIDCConfig) Usable() bool {
 	return c != nil && c.Enabled && strings.TrimSpace(c.Issuer) != "" && strings.TrimSpace(c.ClientID) != ""
 }
 
-// LoadOIDCConfig 从 settings 表读取 OIDC 配置；client_secret 经 SecretCodec 解密。
-// codec 为空时跳过密钥读取（测试或未装配加密通道的场景）。
+// LoadOIDCConfig reads the OIDC configuration from the settings table; client_secret is decrypted via SecretCodec.
+// When codec is nil the secret read is skipped (tests, or setups where the encryption channel is not wired in).
 func LoadOIDCConfig(ctx context.Context, db *gorm.DB, codec *store.SecretCodec) (*OIDCConfig, error) {
 	if db == nil {
 		return nil, errors.New("auth: database is required to load oidc settings")
@@ -122,7 +122,7 @@ func LoadOIDCConfig(ctx context.Context, db *gorm.DB, codec *store.SecretCodec) 
 	return cfg, nil
 }
 
-// parseOIDCBool 解析开关；只认 true/1/yes/on，其余一律 false（默认关闭）。
+// parseOIDCBool parses the switch; only true/1/yes/on are accepted, everything else is false (off by default).
 func parseOIDCBool(raw string) bool {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "true", "1", "yes", "on":
@@ -132,7 +132,7 @@ func parseOIDCBool(raw string) bool {
 	}
 }
 
-// splitOIDCScopes 把逗号 / 空白分隔的 scope 列表拆开；空值回落到默认 scope。
+// splitOIDCScopes splits a comma / whitespace separated scope list; an empty value falls back to the default scopes.
 func splitOIDCScopes(raw string) []string {
 	fields := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
 	if len(fields) == 0 {
@@ -141,7 +141,7 @@ func splitOIDCScopes(raw string) []string {
 	return fields
 }
 
-// orDefault 返回去空白后的值；为空时回落到默认值。
+// orDefault returns the trimmed value, falling back to the default when it is empty.
 func orDefault(raw, def string) string {
 	if v := strings.TrimSpace(raw); v != "" {
 		return v
@@ -149,8 +149,8 @@ func orDefault(raw, def string) string {
 	return def
 }
 
-// PendingAuth 是一次登录发起时保存的临时状态，回调时按 state 取回。
-// Nonce / Verifier 是敏感值，只存在于内存，不落 cookie、不落库。
+// PendingAuth is the temporary state saved when a login is started, retrieved by state at callback time.
+// Nonce / Verifier are sensitive values that live only in memory and go neither into a cookie nor into the database.
 type PendingAuth struct {
 	Nonce       string
 	Verifier    string
@@ -158,15 +158,15 @@ type PendingAuth struct {
 	ExpiresAt   time.Time
 }
 
-// cachedRelyingParty 是带 TTL 的库客户端缓存项；issuer 用于按 issuer 失效。
+// cachedRelyingParty is a TTL'd cache entry for the library client; issuer is used for invalidation per issuer.
 type cachedRelyingParty struct {
 	issuer    string
 	party     rp.RelyingParty
 	fetchedAt time.Time
 }
 
-// OIDCClient 是并发安全的 OIDC 客户端：库 RP 的缓存 + 待完成登录的 state 表。
-// 发现文档解析与 ID Token 校验都由 rp.RelyingParty 承担，这里只负责缓存与一次性 state。
+// OIDCClient is a concurrency-safe OIDC client: a cache of library RPs plus the state table of pending logins.
+// Discovery document parsing and ID Token validation are both handled by rp.RelyingParty; this type only does caching and one-time state.
 type OIDCClient struct {
 	http *http.Client
 	now  func() time.Time
@@ -175,11 +175,11 @@ type OIDCClient struct {
 	mu      sync.Mutex
 	cache   map[string]cachedRelyingParty
 	pending map[string]PendingAuth
-	// lastPendingEvict 是上一次淘汰过期项的时刻（与 pending 同受 mu 保护），用于节流扫描。
+	// lastPendingEvict is the moment of the last expired-entry eviction (guarded by mu together with pending), used to throttle sweeps.
 	lastPendingEvict time.Time
 }
 
-// NewOIDCClient 构造客户端；httpClient 为空时用带超时的默认客户端（发现文档拉取不能无限等待）。
+// NewOIDCClient constructs the client; when httpClient is nil a default client with a timeout is used (fetching the discovery document must not wait forever).
 func NewOIDCClient(httpClient *http.Client) *OIDCClient {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
@@ -193,13 +193,13 @@ func NewOIDCClient(httpClient *http.Client) *OIDCClient {
 	}
 }
 
-// oidcCacheKey 把影响库 RP 构造的输入拼成缓存键。
+// oidcCacheKey concatenates the inputs that affect construction of the library RP into a cache key.
 func oidcCacheKey(issuer, clientID, redirectURI string) string {
 	return issuer + "\x00" + clientID + "\x00" + redirectURI
 }
 
-// Client 返回配置对应的库 RP（带 TTL 缓存）。redirectURI 必须与实际回调一致，
-// 因为它会被写进授权 URL 与 token 请求。配置变更后由 Invalidate 失效。
+// Client returns the library RP for the configuration (with TTL caching). redirectURI must match the actual callback,
+// because it is written into the authorization URL and the token request. It is invalidated by Invalidate after a configuration change.
 func (c *OIDCClient) Client(ctx context.Context, cfg *OIDCConfig, redirectURI string) (rp.RelyingParty, error) {
 	if cfg == nil || strings.TrimSpace(cfg.Issuer) == "" {
 		return nil, errors.New("oidc: issuer is empty")
@@ -223,8 +223,8 @@ func (c *OIDCClient) Client(ctx context.Context, cfg *OIDCConfig, redirectURI st
 	return party, nil
 }
 
-// Discover 只做发现文档校验，不缓存：管理面板「测试连接」每次都要真实访问 provider，
-// 失败时返回的错误包含 provider 的状态码与响应体片段，供页面原样显示。
+// Discover only validates the discovery document and does not cache: the admin panel's "test connection" must really reach the provider every time,
+// and on failure the returned error contains the provider's status code and a snippet of the response body, for the page to display as is.
 func (c *OIDCClient) Discover(ctx context.Context, issuer string) (rp.RelyingParty, error) {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	if issuer == "" {
@@ -233,13 +233,13 @@ func (c *OIDCClient) Discover(ctx context.Context, issuer string) (rp.RelyingPar
 	return c.build(ctx, &OIDCConfig{Issuer: issuer, Scopes: splitOIDCScopes("")}, oidcDiscoveryFallbackRedirectURI)
 }
 
-// build 用库构造一个 RP；发现文档在此拉取，端点与 JWKS 位置由库解析。
+// build constructs an RP with the library; the discovery document is fetched here, and the library resolves the endpoints and JWKS location.
 func (c *OIDCClient) build(ctx context.Context, cfg *OIDCConfig, redirectURI string) (rp.RelyingParty, error) {
 	party, err := rp.NewRelyingPartyOIDC(
 		ctx, cfg.Issuer, cfg.ClientID, cfg.ClientSecret, redirectURI, cfg.Scopes,
 		rp.WithHTTPClient(c.http),
-		// nonce 是每次登录不同的值，无法在缓存的 RP 上固定；这里关闭库内置的 nonce 钩子，
-		// 由 ExchangeCode 在换取 token 后用 oidc.CheckNonce 校验本次登录的 nonce。
+		// the nonce differs per login and cannot be pinned on a cached RP, so the library's built-in nonce hook is turned off here,
+		// and ExchangeCode validates this login's nonce with oidc.CheckNonce after exchanging the code for tokens.
 		rp.WithVerifierOpts(rp.WithNonce(nil)),
 	)
 	if err != nil {
@@ -248,7 +248,7 @@ func (c *OIDCClient) build(ctx context.Context, cfg *OIDCConfig, redirectURI str
 	return party, nil
 }
 
-// Invalidate 丢弃某个 issuer 的所有库 RP 缓存；配置变更后调用。
+// Invalidate drops all cached library RPs for one issuer; call it after a configuration change.
 func (c *OIDCClient) Invalidate(issuer string) {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	c.mu.Lock()
@@ -260,13 +260,13 @@ func (c *OIDCClient) Invalidate(issuer string) {
 	c.mu.Unlock()
 }
 
-// PutPending 保存一次登录发起时的临时状态，按 state 索引，并在超限时拒绝新发起。
-// 返回 false 表示 state 表已满且没有可淘汰的过期项，调用方必须中止本次发起。
+// PutPending saves the temporary state of a started login, indexed by state, and rejects new starts once the limit is exceeded.
+// Returning false means the state table is full and there is no expired entry to evict, so the caller must abort this start.
 func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	// 表满时先强制淘汰过期项（无论节流是否到期），否则按节流间隔偶尔清理一次。
+	// When the table is full, evict expired entries first (regardless of whether the throttle has elapsed); otherwise sweep occasionally at the throttle interval.
 	if len(c.pending) >= maxPendingAuth || now.Sub(c.lastPendingEvict) >= pendingEvictEvery {
 		c.evictExpiredPendingLocked(now)
 	}
@@ -277,7 +277,7 @@ func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 	return true
 }
 
-// evictExpiredPendingLocked 删除所有已过期的待完成登录；调用方必须持有 c.mu。
+// evictExpiredPendingLocked deletes every expired pending login; the caller must hold c.mu.
 func (c *OIDCClient) evictExpiredPendingLocked(now time.Time) {
 	for state, p := range c.pending {
 		if now.After(p.ExpiresAt) {
@@ -287,8 +287,8 @@ func (c *OIDCClient) evictExpiredPendingLocked(now time.Time) {
 	c.lastPendingEvict = now
 }
 
-// TakePending 取出并删除 state 对应的临时状态；未知或已过期返回 ok=false。
-// 删除即一次性：同一个 state 重放会被拒。
+// TakePending retrieves and deletes the temporary state for a state; ok=false when it is unknown or expired.
+// Deletion makes it one-time: replaying the same state is rejected.
 func (c *OIDCClient) TakePending(state string) (PendingAuth, bool) {
 	c.mu.Lock()
 	p, ok := c.pending[state]
@@ -302,14 +302,14 @@ func (c *OIDCClient) TakePending(state string) (PendingAuth, bool) {
 	return p, true
 }
 
-// PKCEChallenge 是 Authorization Code + PKCE 的一对值（RFC 7636 S256）。
+// PKCEChallenge is the pair of values for Authorization Code + PKCE (RFC 7636 S256).
 type PKCEChallenge struct {
 	Verifier  string
 	Challenge string
 }
 
-// NewPKCE 生成 code_verifier 与 S256 code_challenge。
-// challenge 由 OIDC 库的 oidc.NewSHACodeChallenge 计算，不自行实现哈希编码。
+// NewPKCE generates a code_verifier and an S256 code_challenge.
+// The challenge is computed by the OIDC library's oidc.NewSHACodeChallenge; we do not implement the hash encoding ourselves.
 func NewPKCE() (PKCEChallenge, error) {
 	verifier, err := randomURLSafe(32)
 	if err != nil {
@@ -318,10 +318,10 @@ func NewPKCE() (PKCEChallenge, error) {
 	return PKCEChallenge{Verifier: verifier, Challenge: oidc.NewSHACodeChallenge(verifier)}, nil
 }
 
-// NewState 生成 state / nonce 用的随机串（32 字节 URL 安全编码）。
+// NewState generates the random string used for state / nonce (32 bytes, URL-safe encoding).
 func NewState() (string, error) { return randomURLSafe(32) }
 
-// randomURLSafe 生成 n 字节随机数的 base64url 编码。
+// randomURLSafe returns the base64url encoding of n random bytes.
 func randomURLSafe(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
@@ -330,7 +330,7 @@ func randomURLSafe(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// BuildAuthURL 用库拼授权 URL：response_type=code、PKCE、state、nonce 全部带上。
+// BuildAuthURL builds the authorization URL with the library: response_type=code, PKCE, state and nonce are all included.
 func BuildAuthURL(party rp.RelyingParty, state, nonce, challenge string) string {
 	opts := []rp.AuthURLOpt{rp.WithCodeChallenge(challenge)}
 	if nonce != "" {
@@ -339,9 +339,9 @@ func BuildAuthURL(party rp.RelyingParty, state, nonce, challenge string) string 
 	return rp.AuthURL(state, party, opts...)
 }
 
-// ExchangeCode 用授权码换 token 并由库校验 ID Token：
-// 签名（对 JWKS）、iss、aud、exp、iat 都在 rp.CodeExchange 内部完成。
-// 之后本项目再校验一次性 nonce 与 subject 非空；任何一项不通过都返回错误。
+// ExchangeCode exchanges the authorization code for tokens and lets the library validate the ID Token:
+// signature (against the JWKS), iss, aud, exp and iat are all done inside rp.CodeExchange.
+// This project then additionally validates the one-time nonce and that subject is non-empty; failing any of these returns an error.
 func (c *OIDCClient) ExchangeCode(ctx context.Context, party rp.RelyingParty, code, verifier, expectedNonce string) (*oidc.IDTokenClaims, error) {
 	tokens, err := rp.CodeExchange[*oidc.IDTokenClaims](ctx, code, party, rp.WithCodeVerifier(verifier))
 	if err != nil {
@@ -362,7 +362,7 @@ func (c *OIDCClient) ExchangeCode(ctx context.Context, party rp.RelyingParty, co
 	return claims, nil
 }
 
-// ProfileFromClaims 按配置的 claim 映射把 ID Token 声明转成绑定流程的输入。
+// ProfileFromClaims converts ID Token claims into the input of the linking flow according to the configured claim mapping.
 func (cfg *OIDCConfig) ProfileFromClaims(issuer string, raw map[string]any) OAuthProfile {
 	return OAuthProfile{
 		Provider:      issuer,

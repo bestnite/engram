@@ -1,104 +1,117 @@
 package mail
 
-// 本文件是邮件类型目录：**一处定义**，偏好页与每个发信方共用它。
+// This file is the email type catalog: **defined in one place**, shared by the preferences page and
+// every sender.
 //
-// 分类依据是**能不能被用户关掉**，不是邮件内容——允许关掉安全邮件等于给人留后门。
-// 因此「默认开关」「可否关闭」都由 Class 推导，而不是每个类型各自标注：
-// 类型只要归入某个 Class，它的默认值与可否关闭就唯一确定，偏好页与发信方不可能分歧。
+// The classification rests on **whether the user can turn it off**, not on the mail content -- allowing
+// security mail to be turned off is like leaving a back door. So "default on/off" and "can it be
+// disabled" are both derived from Class instead of being annotated per type: once a type belongs to a
+// Class, its default and its disable-ability are uniquely determined, and the preferences page and the
+// senders cannot disagree.
 //
-// 本包只放目录与判定逻辑，不实现任何发信行为。发信方在 wave 2 接入时调用
-// Lookup / CanDisable / DefaultEnabled / ResolveEnabled，不复制这里的任何规则。
+// This package holds only the catalog and the decision logic, and implements no sending behavior.
+// Senders, when integrated in wave 2, call Lookup / CanDisable / DefaultEnabled / ResolveEnabled and
+// copy none of the rules here.
 //
-// 命名边界：本文件不得定义 Message、Outbox、ErrNotConfigured、Configured —— 那些是
-// 传输层的符号，同包并行开发，重复声明会撞符号。
+// Naming boundary: this file must not define Message, Outbox, ErrNotConfigured, Configured -- those are
+// transport-layer symbols; this package is developed in parallel, and a duplicate declaration would
+// collide.
 
-// Class 是邮件类型的大类；分类依据是能否被用户关闭。
+// Class is the broad category of an email type; the classification rests on whether the user can turn
+// it off.
 type Class string
 
 const (
-	// ClassSecurity 是 A 安全/事务类：默认开、不可关闭、不带退订头。
+	// ClassSecurity is class A security/transactional: on by default, cannot be disabled, no unsubscribe
+	// header.
 	ClassSecurity Class = "security"
-	// ClassCollab 是 B 协作/授权类：默认开、可关闭。
+	// ClassCollab is class B collaboration/authorization: on by default, can be disabled.
 	ClassCollab Class = "collab"
-	// ClassStudy 是 C 学习/运营类：默认关、可关闭。
+	// ClassStudy is class C study/operational: off by default, can be disabled.
 	ClassStudy Class = "study"
-	// ClassAdmin 是 D 管理员通知类：默认开、可关闭，发给管理员。
+	// ClassAdmin is class D admin notification: on by default, can be disabled, sent to admins.
 	ClassAdmin Class = "admin"
 )
 
-// Type 是邮件类型的稳定英文标识；同一类型在偏好页、发信方与存储里都用它。
+// Type is the stable English identifier of an email type; the preferences page, the senders and
+// storage all use it.
 type Type string
 
 const (
-	// A 安全/事务：默认开、不可关闭、不带退订头。
-	TypePasswordReset     Type = "password_reset"     // 密码重置
-	TypeEmailVerification Type = "email_verification" // 邮箱验证与改邮箱确认
-	TypeNewDeviceLogin    Type = "new_device_login"   // 新设备/新 IP 登录提醒
-	TypeCredentialChanged Type = "credential_changed" // 密码/TOTP/恢复码变更通知
-	TypeAccountStatus     Type = "account_status"     // 账号被禁用或删除通知
+	// A security/transactional: on by default, cannot be disabled, no unsubscribe header.
+	TypePasswordReset     Type = "password_reset"     // Password reset
+	TypeEmailVerification Type = "email_verification" // Email verification and email-change confirmation
+	TypeNewDeviceLogin    Type = "new_device_login"   // New device / new IP login alert
+	TypeCredentialChanged Type = "credential_changed" // Password/TOTP/recovery-code change notice
+	TypeAccountStatus     Type = "account_status"     // Account disabled or deleted notice
 
-	// B 协作/授权：默认开、可关闭。
-	TypeDeckShared            Type = "deck_shared"             // 卡组分享给你
-	TypeDeckPermissionChanged Type = "deck_permission_changed" // 卡组权限被变更或撤销
-	TypeInvite                Type = "invite"                  // 邀请码发给被邀请人
+	// B collaboration/authorization: on by default, can be disabled.
+	TypeDeckShared            Type = "deck_shared"             // a deck was shared with you
+	TypeDeckPermissionChanged Type = "deck_permission_changed" // deck permission changed or revoked
+	TypeInvite                Type = "invite"                  // the invite code is sent to the invitee
 
-	// C 学习/运营：默认关、可关闭。
-	TypeReviewReminder Type = "review_reminder" // 复习到期提醒
-	TypeStudyDigest    Type = "study_digest"    // 学习摘要
-	TypeOptimizeDone   Type = "optimize_done"   // 参数优化完成
+	// C study/operational: off by default, can be disabled.
+	TypeReviewReminder Type = "review_reminder" // review due reminder
+	TypeStudyDigest    Type = "study_digest"    // study digest
+	TypeOptimizeDone   Type = "optimize_done"   // parameter optimization finished
 
-	// 曾有两种 C 类类型在 2026-10-07 被删除：连续打卡即将中断（streak_at_risk）与导入导出完成
-	// （import_export_done）。删掉的理由不是「暂时没做」，而是**它们没有触发点**：前者没有
-	// 「即将中断」的判定规则，后者没有异步导入/导出作业（同步完成时用户正看着结果页，发信
-	// 没有意义，这个类型当初就是为将来的异步大文件流程预留的）。目录里的每个类型都必须有
-	// 发信方，否则偏好页会长出一个永远不会发的开关。要恢复它们，先把触发点做出来。
+	// Two class C types were removed on 2026-10-07: streak about to break (streak_at_risk) and
+	// import/export done (import_export_done). The reason was not "not implemented yet" but that **they
+	// had no trigger point**: the former had no rule for "about to break", the latter had no asynchronous
+	// import/export job (when it finishes synchronously the user is looking at the result page, so sending
+	// mail is meaningless; that type was reserved for a future asynchronous large-file flow all along).
+	// Every type in the catalog must have a sender, otherwise the preferences page grows a switch that
+	// never sends anything. To bring them back, build the trigger point first.
 
-	// D 管理员通知：默认开、可关闭，发给管理员。
-	TypeJobFailed      Type = "job_failed"       // 作业失败
-	TypeMediaDiskAlert Type = "media_disk_alert" // 媒体配额/磁盘告警
+	// D admin notification: on by default, can be disabled, sent to admins.
+	TypeJobFailed      Type = "job_failed"       // job failed
+	TypeMediaDiskAlert Type = "media_disk_alert" // media quota / disk alert
 )
 
-// Definition 描述一种邮件类型：它属于哪一类，以及偏好页展示它时用的语言包键。
-// 默认开关与可否关闭刻意不放进字段——它们由 Class 唯一推导（DefaultEnabled / CanDisable），
-// 若每个类型各写一份，两处就会漂移。
+// Definition describes one email type: which class it belongs to, and the language pack key the
+// preferences page shows it with. The default and the disable-ability are deliberately not fields --
+// they are uniquely derived from Class (DefaultEnabled / CanDisable); writing one per type would let
+// the two places drift.
 type Definition struct {
-	// Type 是稳定英文标识，同时是存储里偏好映射的键。
+	// Type is the stable English identifier and also the key of the preference map in storage.
 	Type Type
-	// Class 是所属大类，决定默认开关与可否关闭。
+	// Class is the owning category, which decides the default and whether it can be disabled.
 	Class Class
-	// LabelKey 是语言包中该类型显示名的键（mail.prefs.type.<type>）。
+	// LabelKey is the language pack key of this type's display name (mail.prefs.type.<type>).
 	LabelKey string
 }
 
-// classOrder 是偏好页展示大类的固定顺序，也是 Catalog() 的排序依据。
+// classOrder is the fixed order in which the preferences page shows the categories, and the sort order
+// of Catalog().
 var classOrder = []Class{ClassSecurity, ClassCollab, ClassStudy, ClassAdmin}
 
-// catalog 是唯一的目录定义，顺序固定为 A → B → C → D。
-// 新增类型只在这里加一行；偏好页与发信方都从这里取，不存在第二份清单。
+// catalog is the single catalog definition, fixed in the order A -> B -> C -> D. Adding a type means
+// adding one line here; the preferences page and the senders both read from here, there is no second
+// list.
 var catalog = []Definition{
-	// A 安全/事务
+	// A security/transactional
 	{Type: TypePasswordReset, Class: ClassSecurity, LabelKey: "mail.prefs.type.password_reset"},
 	{Type: TypeEmailVerification, Class: ClassSecurity, LabelKey: "mail.prefs.type.email_verification"},
 	{Type: TypeNewDeviceLogin, Class: ClassSecurity, LabelKey: "mail.prefs.type.new_device_login"},
 	{Type: TypeCredentialChanged, Class: ClassSecurity, LabelKey: "mail.prefs.type.credential_changed"},
 	{Type: TypeAccountStatus, Class: ClassSecurity, LabelKey: "mail.prefs.type.account_status"},
 
-	// B 协作/授权
+	// B collaboration/authorization
 	{Type: TypeDeckShared, Class: ClassCollab, LabelKey: "mail.prefs.type.deck_shared"},
 	{Type: TypeDeckPermissionChanged, Class: ClassCollab, LabelKey: "mail.prefs.type.deck_permission_changed"},
 	{Type: TypeInvite, Class: ClassCollab, LabelKey: "mail.prefs.type.invite"},
 
-	// C 学习/运营
+	// C study/operational
 	{Type: TypeReviewReminder, Class: ClassStudy, LabelKey: "mail.prefs.type.review_reminder"},
 	{Type: TypeStudyDigest, Class: ClassStudy, LabelKey: "mail.prefs.type.study_digest"},
 	{Type: TypeOptimizeDone, Class: ClassStudy, LabelKey: "mail.prefs.type.optimize_done"},
 
-	// D 管理员通知
+	// D admin notification
 	{Type: TypeJobFailed, Class: ClassAdmin, LabelKey: "mail.prefs.type.job_failed"},
 	{Type: TypeMediaDiskAlert, Class: ClassAdmin, LabelKey: "mail.prefs.type.media_disk_alert"},
 }
 
-// byType 是 catalog 的查找索引，在包初始化时一次性建立。
+// byType is the lookup index of catalog, built once at package init.
 var byType = func() map[Type]Definition {
 	m := make(map[Type]Definition, len(catalog))
 	for _, d := range catalog {
@@ -107,54 +120,60 @@ var byType = func() map[Type]Definition {
 	return m
 }()
 
-// Catalog 返回目录的副本，顺序固定为 A → B → C → D（偏好页据此渲染分组）。
-// 返回副本而不是内部切片，调用方无法意外改写唯一目录。
+// Catalog returns a copy of the catalog, fixed in the order A -> B -> C -> D (the preferences page
+// renders the groups from it). Returning a copy instead of the internal slice means callers cannot
+// accidentally rewrite the single catalog.
 func Catalog() []Definition {
 	out := make([]Definition, len(catalog))
 	copy(out, catalog)
 	return out
 }
 
-// Lookup 按类型取定义；未登记的类型返回 false。
-// 发信方必须先 Lookup 再决定是否发送：未知类型一律不发送，避免拼错类型名后静默投递。
+// Lookup fetches a definition by type; an unregistered type returns false. A sender must Lookup before
+// deciding to send: unknown types are never sent, so a mistyped type name cannot deliver silently.
 func Lookup(t Type) (Definition, bool) {
 	d, ok := byType[t]
 	return d, ok
 }
 
-// ClassOrder 返回大类的展示顺序副本（A → B → C → D）。
+// ClassOrder returns a copy of the display order of the categories (A -> B -> C -> D).
 func ClassOrder() []Class {
 	out := make([]Class, len(classOrder))
 	copy(out, classOrder)
 	return out
 }
 
-// CanDisable 报告某一大类能否被用户关闭。
-// 只有 A 安全/事务类不可关闭：允许关掉安全邮件等于给人留后门。
+// CanDisable reports whether a category can be turned off by the user. Only class A
+// security/transactional cannot be disabled: allowing security mail to be turned off is like leaving a
+// back door.
 func CanDisable(c Class) bool {
 	return c != ClassSecurity
 }
 
-// DefaultEnabled 报告某一大类的默认开关：A/B/D 默认开，C 默认关。
+// DefaultEnabled reports the default switch of a category: A/B/D default on, C defaults off.
 func DefaultEnabled(c Class) bool {
 	return c != ClassStudy
 }
 
-// AdminOnly 报告某一大类是否只面向管理员。
-// 只有 D 管理员通知类只发给管理员：非管理员的偏好页不展示它，也不接受它的选择。
-// 判定与 CanDisable/DefaultEnabled 同放目录里，理由相同——「哪一类面向谁」只有一处定义，
-// 展示与保存就不可能分歧。
+// AdminOnly reports whether a category is aimed at admins only. Only class D admin notification is
+// admin-only: a non-admin's preferences page does not show it and does not accept a choice for it. The
+// decision lives in the catalog next to CanDisable/DefaultEnabled for the same reason -- "which
+// category is for whom" is defined in one place, so display and saving cannot disagree.
 func AdminOnly(c Class) bool {
 	return c == ClassAdmin
 }
 
-// ResolveEnabled 是发信方与偏好页共用的唯一判定：在用户显式选择之上套用目录规则。
+// ResolveEnabled is the single decision shared by the senders and the preferences page: it applies the
+// catalog rules on top of the user's explicit choice.
 //
-//   - 不可关闭的类（A）恒为 true，用户选择被忽略——即使存储里存在 A=false 也不可能生效；
-//   - 可关闭的类优先用用户显式选择（choices[t]），没有选择时回落到该类默认值；
-//   - 未登记的类型返回 false：拼错的类型名不应投递。
+//   - A class that cannot be disabled (A) is always true and the user's choice is ignored -- even an
+//     A=false in storage cannot take effect;
+//   - A class that can be disabled prefers the user's explicit choice (choices[t]) and falls back to
+//     the class default when there is none;
+//   - An unregistered type returns false: a mistyped type name should not deliver.
 //
-// choices 的键是 Type 的字符串形式（与存储层一致），只含可关闭类型的用户选择。
+// The keys of choices are the string form of Type (consistent with the storage layer) and contain
+// only the choices for disable-able types.
 func ResolveEnabled(choices map[string]bool, t Type) bool {
 	def, ok := Lookup(t)
 	if !ok {

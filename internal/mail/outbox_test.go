@@ -9,8 +9,9 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestEnqueueDoesNotSendInRequestPath 是核心约束之一：Enqueue 只写队列表。
-// 用一个阻塞在 gate 上的替身证明 Send 尚未完成时 Enqueue 已经返回。
+// TestEnqueueDoesNotSendInRequestPath is one of the core constraints: Enqueue only writes the queue
+// table. A stand-in that blocks on a gate proves Enqueue has already returned while Send is not
+// finished.
 func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 	db := testDB(t)
 	sender := &recordingSender{block: make(chan struct{})}
@@ -20,11 +21,11 @@ func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 	if err := ob.Enqueue(context.Background(), Message{To: "a@example.com", Subject: "queued"}); err != nil {
 		t.Fatalf("Enqueue() error = %v, want nil", err)
 	}
-	// 此刻替身还阻塞着，说明 Enqueue 没有同步发信。
+	// The stand-in is still blocked at this point, which shows Enqueue did not send synchronously.
 	if sender.calls() != 0 {
 		t.Errorf("Send was called synchronously during Enqueue (calls=%d)", sender.calls())
 	}
-	// 队列里已有一行 pending。
+	// The queue already has one pending row.
 	rows, err := store.DueOutboxMessages(context.Background(), db, time.Now().UTC().Add(time.Hour), 10)
 	if err != nil {
 		t.Fatalf("DueOutboxMessages: %v", err)
@@ -35,7 +36,8 @@ func TestEnqueueDoesNotSendInRequestPath(t *testing.T) {
 	close(sender.block)
 }
 
-// TestWorkerDeliversQueuedMessage 覆盖正常投递：Enqueue 后 worker 把邮件发出并标记 sent。
+// TestWorkerDeliversQueuedMessage covers normal delivery: after Enqueue the worker sends the mail and
+// marks it sent.
 func TestWorkerDeliversQueuedMessage(t *testing.T) {
 	db := testDB(t)
 	f := newFakeSMTP(t)
@@ -77,14 +79,15 @@ func TestWorkerDeliversQueuedMessage(t *testing.T) {
 	}
 }
 
-// TestTransientFailureIsRetriedAndLastErrorVisible 是验收点：
-// 瞬时发信失败会被重试，最后一次错误与尝试次数可从管理面板读到（OutboxSummaryOf）。
+// TestTransientFailureIsRetriedAndLastErrorVisible is an acceptance point: a transient send failure
+// is retried, and the last error and the attempt count can be read from the admin panel
+// (OutboxSummaryOf).
 func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 	db := testDB(t)
 	sender := &recordingSender{errs: []error{
 		errors.New("421 4.3.0 temporary local problem"),
 		errors.New("421 4.3.0 temporary local problem"),
-	}} // 第三次成功
+	}} // the third attempt succeeds
 	ob := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(5), PollInterval: 5 * time.Millisecond})
 	configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
 
@@ -93,7 +96,7 @@ func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 	ob.Start(ctx)
 	defer ob.Stop()
 
-	// Enqueue 必须成功返回：发信失败不得让触发它的操作失败。
+	// Enqueue must return successfully: a send failure must not fail the operation that triggered it.
 	if err := ob.Enqueue(ctx, Message{To: "a@example.com", Subject: "retry me"}); err != nil {
 		t.Fatalf("Enqueue() error = %v, want nil (a send failure must not fail the trigger)", err)
 	}
@@ -109,7 +112,7 @@ func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 		t.Errorf("Send calls = %d, want 3 (two failures then success)", got)
 	}
 
-	// 最后一次错误与尝试次数在 outbox 读数里可见（管理面板据此展示）。
+	// The last error and the attempt count are visible in the outbox summary (what the admin panel shows).
 	summary, err := store.OutboxSummaryOf(ctx, db)
 	if err != nil {
 		t.Fatalf("OutboxSummaryOf: %v", err)
@@ -125,7 +128,8 @@ func TestTransientFailureIsRetriedAndLastErrorVisible(t *testing.T) {
 	}
 }
 
-// TestPermanentFailureStopsAfterMaxAttempts 覆盖重试耗尽：标记为 failed 并保留最后一次错误。
+// TestPermanentFailureStopsAfterMaxAttempts covers retry exhaustion: the mail is marked failed and
+// the last error is kept.
 func TestPermanentFailureStopsAfterMaxAttempts(t *testing.T) {
 	db := testDB(t)
 	sender := &recordingSender{errs: []error{
@@ -159,7 +163,7 @@ func TestPermanentFailureStopsAfterMaxAttempts(t *testing.T) {
 	if row.LastError == nil || *row.LastError != "451 temp C" {
 		t.Errorf("last_error = %v, want the final server error", row.LastError)
 	}
-	// 永久失败也要能被面板读到。
+	// Permanent failures must be readable by the panel as well.
 	summary, err := store.OutboxSummaryOf(ctx, db)
 	if err != nil {
 		t.Fatalf("OutboxSummaryOf: %v", err)
@@ -169,11 +173,13 @@ func TestPermanentFailureStopsAfterMaxAttempts(t *testing.T) {
 	}
 }
 
-// TestUnconfiguredWorkerLeavesQueueIntact 证明配置缺失不会被当成投递失败：
-// 已有 pending 邮件在未配置时保持 pending，等配置补齐再发，而不是被烧成 failed。
+// TestUnconfiguredWorkerLeavesQueueIntact shows that a missing configuration is not treated as a
+// delivery failure: existing pending mail stays pending while unconfigured and is sent once the
+// configuration is complete, instead of being burned into failed.
 func TestUnconfiguredWorkerLeavesQueueIntact(t *testing.T) {
 	db := testDB(t)
-	// 直接写一行 pending（模拟"曾经配置过、后来配置被清掉"的积压）。
+	// Write one pending row directly (simulating a backlog from "it used to be configured and the
+	// configuration was later cleared").
 	if err := store.EnqueueOutboxMessage(context.Background(), db, &store.OutboxMessage{
 		To: "a@example.com", Type: "invite", Subject: "old", HeadersJSON: "{}",
 	}, time.Now().UTC()); err != nil {
@@ -195,7 +201,8 @@ func TestUnconfiguredWorkerLeavesQueueIntact(t *testing.T) {
 	}
 }
 
-// TestRetryPolicyBackoff 覆盖退避时长的计算：指数增长且被上限截断。
+// TestRetryPolicyBackoff covers the backoff duration computation: exponential growth capped at the
+// maximum.
 func TestRetryPolicyBackoff(t *testing.T) {
 	p := RetryPolicy{MaxAttempts: 5, BaseDelay: time.Second, MaxDelay: 10 * time.Second}
 	want := map[int]time.Duration{1: time.Second, 2: 2 * time.Second, 3: 4 * time.Second, 4: 8 * time.Second, 5: 10 * time.Second}

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// fastParams 是测试用弱参数：只验证格式与参数随哈希记录，不追求抗爆破强度，避免拖慢测试。
+// fastParams are weak parameters for tests: they only verify the format and that parameters travel with the hash, with no brute-force resistance, to keep tests fast.
 func fastParams() Params {
 	return Params{Memory: 1024, Time: 1, Threads: 1, SaltLength: 8, KeyLength: 16}
 }
@@ -46,7 +46,7 @@ func TestHashStoresParametersWithVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash() error = %v", err)
 	}
-	// 带版本的编码格式是"参数随哈希入库"的验收点。
+	// The versioned encoding format is the acceptance point for "parameters are stored with the hash".
 	if !strings.HasPrefix(encoded, "$argon2id$v=19$") {
 		t.Fatalf("hash %q does not start with the versioned argon2id prefix", encoded)
 	}

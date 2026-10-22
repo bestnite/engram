@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestDefaultRegistryKinds 断言内置记忆类题型都已注册。
+// TestDefaultRegistryKinds asserts the built-in memory card types are all registered.
 func TestDefaultRegistryKinds(t *testing.T) {
 	for _, kind := range []string{"basic", "basic_both", "cloze", "list"} {
 		if _, ok := Lookup(kind); !ok {
@@ -90,7 +90,7 @@ func TestBasicBothCards(t *testing.T) {
 		t.Errorf("card[1] = %+v", cards[1])
 	}
 
-	// 反向卡：back 当问题、front 当答案。
+	// Reverse card: back is the question, front is the answer.
 	front, _ := basicBothType{}.Render(cards[1], SideFront)
 	if front.Body != "A" {
 		t.Errorf("reverse front = %q, want A", front.Body)
@@ -118,14 +118,14 @@ func TestListValidateAndRender(t *testing.T) {
 	if front.Body != "Name the stages." || len(front.Extra) != 0 {
 		t.Errorf("front = %+v, want prompt only", front)
 	}
-	// 背面只给条目，不重复题干：复习页把背面接在正面下方，重复会出现两遍题干。
+	// The back side gives only the items, not the prompt again: the review page renders the back below the front, so repeating it would show the prompt twice.
 	back, _ := listType{}.Render(cards[0], SideBack)
 	if back.Body != "- evaporation\n- condensation\n" || len(back.Extra) != 0 {
 		t.Errorf("back = %+v, want a bullet list of the items only", back)
 	}
 }
 
-// TestListBackFollowsOrdered 断言 ordered 决定背面的列表样式，多个可接受的写法全部列出。
+// TestListBackFollowsOrdered asserts ordered decides the list style on the back side, listing all acceptable wordings.
 func TestListBackFollowsOrdered(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -175,7 +175,7 @@ func TestListValidateErrors(t *testing.T) {
 	}
 }
 
-// TestListOrderedOptional 断言 ordered 可省略（缺省 false）也可显式给出。
+// TestListOrderedOptional asserts ordered may be omitted (defaults to false) or given explicitly.
 func TestListOrderedOptional(t *testing.T) {
 	if err := Validate("list", map[string]any{"prompt": "p", "items": []any{"a"}}); err != nil {
 		t.Fatalf("ordered omitted: %v", err)

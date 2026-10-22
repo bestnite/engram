@@ -1,5 +1,5 @@
-# 简体中文语言包。key 一律英文小写点分。
-# 与 en.yaml 的 key 集合必须完全一致，由 TestCatalogsHaveIdenticalKeys 强制。
+# Simplified Chinese catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
 
 - id: app.name
   translation: "Engram"
@@ -35,7 +35,7 @@
   translation: "邀请链接无效、已过期或已被使用，请联系管理员重新获取。"
 - id: auth.error.create_failed
   translation: "创建账号失败，请稍后重试或更换用户名/邮箱。"
-# M2-7 卡片列表与编辑页。
+# M2-7 card list and editor pages.
 - id: cardtype.basic
   translation: "问答"
 - id: cardtype.basic_both
@@ -44,7 +44,7 @@
   translation: "填空"
 - id: cardtype.list
   translation: "列表"
-# M2-10 剩余题型的显示名（十个内置题型全覆盖）。
+# M2-10 remaining type labels (covers all ten built-in card types).
 - id: cardtype.typed
   translation: "输入作答"
 - id: cardtype.numeric
@@ -73,7 +73,7 @@
   translation: "附注"
 - id: note.field.source_url
   translation: "来源链接"
-# M2-10 作答类与简答题的字段名（字段名冻结表）。
+# M2-10 graded and short-answer field labels (frozen field table).
 - id: note.field.question
   translation: "问题"
 - id: note.field.answer
@@ -122,7 +122,7 @@
   translation: "{{.count}} 个月"
 - id: review.interval.years
   translation: "{{.count}} 年"
-# M5-4 克隆卡组。
+# M5-4 deck cloning.
 - id: clone.name_suffix
   translation: "（副本）"
 - id: admin.setting.site_name
@@ -185,7 +185,7 @@
   translation: "{{.hours}} 小时"
 - id: stats.duration.hours_minutes
   translation: "{{.hours}} 小时 {{.minutes}} 分"
-# ── 每用户媒体配额（M2-13）────────────────────────────────────
+# ── Per-user media quota (M2-13) ────────────────────────────────────
 - id: media.quota.exceeded
   translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。请删除部分不再使用的媒体后重试。"
 - id: media.quota.setting.label
@@ -234,7 +234,7 @@
   translation: "一键退订这类邮件"
 - id: mail.not_configured
   translation: "本站未开启邮件功能，请联系管理员。"
-# ── 邮件类型目录与偏好（M1-18）────────────────────────────────
+# ── Mail type catalog and preferences (M1-18) ────────────────────────────────
 - id: settings.mail_prefs.heading
   translation: "邮件通知偏好"
 - id: settings.mail_prefs.hint
@@ -287,7 +287,7 @@
   translation: "作业失败"
 - id: mail.prefs.type.media_disk_alert
   translation: "媒体配额或磁盘告警"
-# ── 邀请邮件投递（M1-20）──────────────────────────────────────
+# ── Invite mail delivery (M1-20) ──────────────────────────────────────
 - id: mail.invite.subject
   translation: "邀请你加入 {{.site}}"
 - id: mail.invite.greeting
@@ -306,7 +306,7 @@
   translation: "邀请已创建，但邮件未能加入发送队列。"
 - id: mail.invite.notice.opted_out
   translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
-# ── 复习到期提醒（M1-21，C 类）────────────────────────────────
+# ── Review due reminders (M1-21, class C) ────────────────────────────────
 - id: mail.reminder.subject
   translation: "该复习了"
 - id: mail.reminder.body
@@ -367,7 +367,7 @@
   translation: "禁用"
 - id: mail.notice.account.deleted
   translation: "删除"
-# M1-24 D 类管理员通知（mail.admin.*）：本块由该任务追加，键集合须与 en.yaml 一致。
+# M1-24 class-D admin notifications (mail.admin.*): appended by that task; the key set must match en.yaml.
 - id: mail.admin.greeting
   translation: "你好，管理员："
 - id: mail.admin.job_failed.subject
@@ -378,7 +378,7 @@
   translation: "媒体配额告警 - {{.site}}"
 - id: mail.admin.media_alert.body
   translation: "{{.site}} 的用户 {{.username}} 触发媒体配额：已用 {{.used}}，限额 {{.limit}}。"
-# M1-23 C 类每周学习摘要（mail.digest.*）：本块由该任务追加，键集合须与 en.yaml 一致。
+# M1-23 class-C weekly study digest (mail.digest.*): appended by that task; the key set must match en.yaml.
 - id: mail.digest.subject
   translation: "你的每周学习摘要"
 - id: mail.digest.reviewed
@@ -393,8 +393,8 @@
   translation: "当前到期卡片：{{.count}} 张"
 - id: mail.digest.link
   translation: "查看完整统计：{{.url}}"
-# 每用户的提醒/周报发送时间（mail.prefs.reminder_time.*）：复习提醒与每周摘要共用同一本地小时；
-# 留空表示使用站点默认。本任务追加。
+# Per-user send hour for reminders and digests (mail.prefs.reminder_time.*): review reminders and the weekly digest share the same local hour;
+# empty means the site default. Appended by this task.
 - id: mail.prefs.reminder_time.heading
   translation: "复习提醒与周报发送时间"
 - id: mail.prefs.reminder_time.label
@@ -404,12 +404,12 @@
 - id: mail.prefs.reminder_time.default
   translation: "站点默认（{{.hour}}:00）"
 
-# 服务端可见文本里的「默认预设」显示名（库内名 Default 是身份标识，不是给人看的文案）。
+# Display name of the "default preset" in server-visible text (the stored name Default is an identity, not copy for humans).
 - id: presets.default_name
   translation: "默认"
 
-# 直链导入卡组包端点（POST /api/v1/decks/import-url）的稳定错误文案。
-# 键集合须与英文语言包一致。
+# Stable error copy for the direct-link deck import endpoint (POST /api/v1/decks/import-url).
+# The key set must match the English catalog.
 - id: error.deck_import_url_invalid
   translation: "链接不是有效的公开 HTTPS 直链。"
 - id: error.deck_import_url_blocked

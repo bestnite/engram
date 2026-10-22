@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// clockAt 返回一个可推进的注入时钟，测试据此断言固定窗口的过期而无需真实等待。
+// clockAt returns an injectable clock that can be advanced, so tests can assert fixed-window expiry without real waiting.
 type clockAt struct{ t time.Time }
 
 func (c *clockAt) now() time.Time { return c.t }
 
-// TestAnonymousLimiterFixedWindow 覆盖匿名入口限流器的固定窗口语义：
-// 阈值内放行，超过即拒；窗口过期后重新放行。
+// TestAnonymousLimiterFixedWindow covers the fixed-window semantics of the anonymous-entry limiter:
+// requests within the threshold pass and beyond it are rejected; once the window expires they pass again.
 func TestAnonymousLimiterFixedWindow(t *testing.T) {
 	clock := &clockAt{t: time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)}
 	l := NewAnonymousLimiter(5, 15*time.Minute, clock.now)
@@ -26,15 +26,15 @@ func TestAnonymousLimiterFixedWindow(t *testing.T) {
 		t.Fatal("6th request within the window = allowed, want denied")
 	}
 
-	// 窗口过期：同一 IP + 邮箱重新放行。
+	// Window expired: the same IP + email pass again.
 	clock.t = clock.t.Add(16 * time.Minute)
 	if !l.Allow("203.0.113.1", "a@example.com") {
 		t.Fatal("request after window expiry = denied, want allowed")
 	}
 }
 
-// TestAnonymousLimiterIPDimensionAlone 断言 IP 维度独立成立：
-// 同一 IP 换不同邮箱，第 6 次仍被拒（邮箱维度各自停在 1，不参与拦截）。
+// TestAnonymousLimiterIPDimensionAlone asserts that the IP dimension holds on its own:
+// for the same IP with a different email each time, the 6th attempt is still rejected (the email dimension stays at 1 each and takes no part in blocking).
 func TestAnonymousLimiterIPDimensionAlone(t *testing.T) {
 	l := NewAnonymousLimiter(5, 15*time.Minute, nil)
 	for i := 0; i < 5; i++ {
@@ -47,8 +47,8 @@ func TestAnonymousLimiterIPDimensionAlone(t *testing.T) {
 	}
 }
 
-// TestAnonymousLimiterEmailDimensionAlone 断言邮箱维度独立成立：
-// 同一目标邮箱换不同 IP，第 6 次仍被拒（IP 维度各自停在 1，不参与拦截）。
+// TestAnonymousLimiterEmailDimensionAlone asserts that the email dimension holds on its own:
+// for the same target email from a different IP each time, the 6th attempt is still rejected (the IP dimension stays at 1 each and takes no part in blocking).
 func TestAnonymousLimiterEmailDimensionAlone(t *testing.T) {
 	l := NewAnonymousLimiter(5, 15*time.Minute, nil)
 	const email = "same@example.com"

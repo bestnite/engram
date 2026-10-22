@@ -7,41 +7,41 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 权限判定的两个哨兵错误；调用方据此决定 HTTP 状态与稳定 code：
-//   - ErrDeckNotFound：卡组不存在 —— 404 / not_found
-//   - ErrForbidden：无访问权或角色不够 —— 403（有角色但不满足时为 insufficient_role）
+// The two sentinel errors of the permission check; callers use them to decide the HTTP status and the stable code:
+//   - ErrDeckNotFound: the deck does not exist — 404 / not_found
+//   - ErrForbidden: no access right, or the role is insufficient — 403 (insufficient_role when there is a role that does not suffice)
 var (
-	// ErrDeckNotFound 表示卡组不存在（或对当前用户不可见）。
+	// ErrDeckNotFound means the deck does not exist (or is invisible to the current user).
 	ErrDeckNotFound = errors.New("deck not found")
-	// ErrForbidden 表示用户对该卡组没有所需权限。
+	// ErrForbidden means the user lacks the required permission on this deck.
 	ErrForbidden = errors.New("forbidden")
 )
 
-// DeckAccess 是 Web 与 REST/MCP 共用的卡组权限判定助手（单一实现）。
+// DeckAccess is the deck permission helper shared by Web and REST/MCP (a single implementation).
 //
-// 有效角色解析顺序：
-//  1. deck_grants 里的显式授权行；
-//  2. 没有授权行但 decks.owner_user_id == userID 时视为 owner —— M2 建的卡组没有授权行，
-//     owner 列是唯一真相，这条回落保证升级后既有卡组仍归原主。
-//  3. 其余为“无任何访问权”（空角色）。
+// Effective role resolution order:
+//  1. an explicit grant row in deck_grants;
+//  2. with no grant row but decks.owner_user_id == userID, the user counts as owner — decks created in M2 have no grant rows,
+//     the owner column is the single source of truth, and this fallback keeps existing decks with their original owners after the upgrade.
+//  3. everything else is "no access right whatsoever" (empty role).
 //
-// 所有涉及卡组的 handler 都必须经这里判定；判定只有一份，两个传输不各自实现。
+// Every handler that touches decks must decide through here; there is only one check and the two transports do not each implement it.
 type DeckAccess struct {
 	decks  *store.DeckStore
 	grants *store.GrantStore
 }
 
-// NewDeckAccess 构造判定器；grants 可为 nil（未接授权存储时仅靠 owner 列）。
+// NewDeckAccess constructs the checker; grants may be nil (with no grant store wired in, only the owner column applies).
 func NewDeckAccess(decks *store.DeckStore, grants *store.GrantStore) *DeckAccess {
 	return &DeckAccess{decks: decks, grants: grants}
 }
 
-// Role 返回用户在卡组上的有效角色；无访问权时返回空串。
-// 卡组不存在返回 ErrDeckNotFound，避免调用方把“不存在”与“无授权”混为一谈。
+// Role returns the user's effective role on the deck; an empty string when there is no access right.
+// A missing deck returns ErrDeckNotFound, so callers do not conflate "does not exist" with "no grant".
 //
-// 有效角色只有两条来源：decks.owner_user_id（M2 建的卡组没有授权行，owner 列是唯一真相，
-// 这条回落保证升级后既有卡组仍归原主）与 deck_grants 里的显式授权行。没有第三种
-// 「靠可见性获得的隐式只读」——那等于把别人的卡组内容对所有人开放，与同意制相悖。
+// An effective role has only two sources: decks.owner_user_id (decks created in M2 have no grant rows, the owner column is the single
+// source of truth, and this fallback keeps existing decks with their original owners after the upgrade) and explicit grant rows in deck_grants. There is no third
+// "implicit read-only access through visibility" — that would equal opening someone else's deck contents to everyone, contradicting the consent model.
 func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, error) {
 	deck, err := d.decks.ByID(ctx, deckID)
 	if err != nil {
@@ -58,17 +58,17 @@ func (d *DeckAccess) Role(ctx context.Context, deckID, userID uint64) (string, e
 		return "", err
 	}
 	if !store.ValidRole(role) {
-		// 授权行里的角色不是三个合法值之一（脏数据）：按「无授权」处理，宁可拒绝也不放行。
+		// The role in the grant row is not one of the three legal values (dirty data): treat it as "no grant", preferring a rejection over letting it through.
 		return "", nil
 	}
 	return role, nil
 }
 
-// RequireRole 要求用户在卡组上至少拥有 want 角色，返回命中的卡组与该用户的有效角色。
+// RequireRole requires the user to hold at least the want role on the deck, returning the matched deck and the user's effective role.
 //
-// want 非法（不是三个角色之一）时按“拒绝一切”处理：拼错角色名应当是拒绝，而不是放行。
-// 无访问权与角色不够都返回 ErrForbidden；调用方可用返回的 role 是否为空区分二者，
-// 以给出 forbidden / insufficient_role 两个稳定 code。
+// An illegal want (not one of the three roles) means "deny everything": a misspelled role name should reject, not pass.
+// Both no access right and an insufficient role return ErrForbidden; callers can tell them apart by whether the returned role is empty,
+// in order to produce the two stable codes forbidden / insufficient_role.
 func (d *DeckAccess) RequireRole(ctx context.Context, deckID, userID uint64, want string) (*store.Deck, string, error) {
 	deck, err := d.decks.ByID(ctx, deckID)
 	if err != nil {

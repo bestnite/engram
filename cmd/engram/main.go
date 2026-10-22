@@ -1,5 +1,5 @@
-// Command engram 是服务唯一入口：单二进制 + 子命令。
-// 依赖在这里显式装配（AGENTS.md §2.4）。
+// Command engram is the service's single entry point: one binary + subcommands.
+// Dependencies are assembled explicitly here (AGENTS.md §2.4).
 package main
 
 import (
@@ -31,25 +31,25 @@ import (
 	"git.nite07.com/nite/engram/internal/web"
 )
 
-// version 由构建时注入：-ldflags "-X main.version=<tag>"；未注入时为 devVersion。
+// version is injected at build time: -ldflags "-X main.version=<tag>"; devVersion when nothing was injected.
 var version = devVersion
 
-// devVersion 是未注入构建版本时的取值；此时对外展示的版本会回落到 Go 构建信息里的 VCS
-// 修订号，让本地开发与未打标签的构建也能看出对应哪次提交。
+// devVersion is the value used when no build version was injected; the externally displayed version then falls back to the VCS
+// revision from the Go build info, so local development and untagged builds still show which commit they correspond to.
 const devVersion = "dev"
 
-// displayVersion 返回对外展示的程序版本。`engram version` 子命令与前端页脚同源，
-// 两处不会各说一套版本。
+// displayVersion returns the externally displayed program version. The `engram version` subcommand and the frontend footer share
+// this source, so the two never report different versions.
 func displayVersion() string {
 	info, _ := debug.ReadBuildInfo()
 	return formatVersion(version, info)
 }
 
-// formatVersion 把注入版本与 Go 构建信息合成展示版本：
-//   - 注入了发布标签（如 v0.1.4）→ 原样返回；
-//   - 未注入（空串或 devVersion）→ 用构建信息里的 VCS 修订号补足，形如 dev (e223664)，
-//     构建时工作区有未提交改动则再加 -dirty 后缀；
-//   - 构建信息里没有 VCS 记录（不在 git 工作区构建，或用了 -buildvcs=false）→ 返回 devVersion。
+// formatVersion combines the injected version with the Go build info into the displayed version:
+//   - a release tag was injected (e.g. v0.1.4) → returned as-is;
+//   - nothing injected (empty string or devVersion) → filled in from the VCS revision in the build info, shaped like dev (e223664),
+//     plus a -dirty suffix when the worktree had uncommitted changes at build time;
+//   - no VCS record in the build info (built outside a git worktree, or with -buildvcs=false) → returns devVersion.
 func formatVersion(injected string, info *debug.BuildInfo) string {
 	if injected != "" && injected != devVersion {
 		return injected
@@ -68,8 +68,8 @@ func formatVersion(injected string, info *debug.BuildInfo) string {
 	return devVersion + " (" + short + ")"
 }
 
-// vcsStamp 从 Go 构建信息里取 VCS 修订号与「构建时工作区是否有未提交改动」。
-// 修订号为空表示构建信息里没有 VCS 记录（调用方据此回落到 devVersion）。
+// vcsStamp takes the VCS revision and "whether the worktree had uncommitted changes at build time" from the Go build info.
+// An empty revision means the build info has no VCS record (the caller falls back to devVersion accordingly).
 func vcsStamp(info *debug.BuildInfo) (revision string, modified bool) {
 	if info == nil {
 		return "", false
@@ -94,7 +94,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		// 默认子命令是 serve。
+		// The default subcommand is serve.
 		return runServe(ctx)
 	}
 	switch args[0] {
@@ -130,13 +130,13 @@ func newLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
-// loadConfig 读取环境变量；数据库可用时再叠加 settings 表覆盖值（优先级）。
+// loadConfig reads the environment variables; when the database is available, overrides from the settings table are layered on top (precedence).
 func loadConfig(ctx context.Context, db *gorm.DB) (*config.Config, error) {
 	cfg, err := config.Load(os.LookupEnv, nil)
 	if err != nil {
 		return nil, err
 	}
-	// settings 表可能还不存在（首次启动尚未迁移），此时只用环境变量。
+	// The settings table may not exist yet (first start, before the migration); then only environment variables are used.
 	if db != nil && db.Migrator().HasTable(&store.Setting{}) {
 		settings, err := store.LoadSettings(ctx, db)
 		if err != nil {
@@ -182,11 +182,12 @@ func runServe(ctx context.Context) error {
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// 历史行回收：会话、一次性令牌、过期邀请、登录指纹都只在读路径上判过期，从不删行；
-	// 无人引用的媒体也从不删除。所以要有一层周期回收（保留期见该包注释）。
-	// 刻意放在下面的 mail 分支之外——回收与「SMTP 是否配置」无关，而提醒/周报两个 worker 是
-	// 和邮件投递绑在一起的，若把它一并塞进去，未配置 SMTP 的部署就永远不回收。
-	// 媒体回收与 web 层的上传/读取共用同一个媒体目录；Store 本身无状态，另建一个实例即可。
+	// History row reclamation: sessions, one-time tokens, expired invites and login fingerprints are judged expired only on the
+	// read path and their rows are never deleted; media nobody references is never deleted either. So there has to be a periodic
+	// reclamation layer (retention periods are in that package's comment).
+	// It is deliberately placed outside the mail branch below — reclamation has nothing to do with "whether SMTP is configured",
+	// while the reminder/digest workers are bound to mail delivery, and stuffing it in there would mean deployments without SMTP never reclaim.
+	// Media reclamation shares the media directory with the web layer's upload/read; Store itself is stateless, so a separate instance is fine.
 	mediaStore, err := media.New(cfg.Get(config.KeyMediaDir).Value, db)
 	if err != nil {
 		return err
@@ -205,23 +206,23 @@ func runServe(ctx context.Context) error {
 	}
 	retentionWorker.Start(ctx)
 	defer retentionWorker.Stop()
-	// 邮件 outbox worker：随 serve 启动、随信号优雅停止；未装配时跳过。
+	// Mail outbox worker: starts with serve and stops gracefully on signal; skipped when not assembled.
 	if mb := srv.Mail(); mb != nil {
 		mb.Start(ctx)
 		defer mb.Stop()
-		// 复习到期提醒 worker（C 类）：独立的周期扫描，不复用优化器的单并发 jobs 体系。
-		// 文案走语言包，因此这里单独加载一份翻译器；SMTP 未配置时 worker 仍启动但只记日志。
+		// Review due reminder worker (C-class): an independent periodic scan that does not reuse the optimizer's single-concurrency jobs system.
+		// Its copy goes through the language pack, so a translator is loaded separately here; with SMTP unconfigured the worker still starts but only logs.
 		translator, err := i18n.New()
 		if err != nil {
 			return err
 		}
-		// 退订令牌服务：提醒是可选类型，带上免登录的一键退订头。
+		// Unsubscribe token service: the reminder is an optional type, so it carries a login-free one-click unsubscribe header.
 		tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(db))
 		if err != nil {
 			return err
 		}
-		// 邮件模板：周期 worker 与 web 层共用同一份查找实现，
-		// 否则会出现「网页发的信有模板、提醒发的没有」这种很难察觉的不一致。
+		// Mail templates: the periodic workers and the web layer share one lookup implementation,
+		// otherwise you get hard-to-notice inconsistencies like "mail sent from the web UI has a template, reminder mail does not".
 		templates := mail.StoreLookup(store.NewMailTemplateStore(db), logger)
 		siteLocale := func() string {
 			settings, err := store.LoadSettings(context.Background(), db)
@@ -251,8 +252,8 @@ func runServe(ctx context.Context) error {
 		}
 		reminderWorker.Start(ctx)
 		defer reminderWorker.Stop()
-		// 每周学习摘要 worker（C 类）：同为周期扫描，但节律是周、候选集是所有可收信
-		// 用户（不要求有到期卡），去重台账是独立的 digest_log，故不复用提醒 worker。
+		// Weekly study digest worker (C-class): also a periodic scan, but weekly, with every mail-receivable user as the
+		// candidate set (due cards are not required) and its own dedup ledger digest_log, so it does not reuse the reminder worker.
 		digestWorker, err := digest.New(digest.Deps{
 			DB:                db,
 			Outbox:            mb,
@@ -272,11 +273,11 @@ func runServe(ctx context.Context) error {
 	return srv.Run(ctx)
 }
 
-// newWebServer 按配置装配 web 服务，并把认证依赖注入 web.Deps。
-// runServe 与集成测试共用这一条装配路径，避免测试用的依赖与生产漂移。
+// newWebServer assembles the web service from the configuration and injects the auth dependencies into web.Deps.
+// runServe and the integration tests share this single assembly path, so test dependencies do not drift from production.
 func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
-	// 可信代理列表：在启动期解析并校验，非法项直接拒绝启动。
-	// 缺省为空 = 不信任任何代理，ClientIP() 回落到 RemoteAddr。
+	// Trusted proxy list: parsed and validated at startup, and an invalid entry refuses startup outright.
+	// Empty by default = trust no proxy, so ClientIP() falls back to RemoteAddr.
 	trustedProxies, err := cfg.TrustedProxies()
 	if err != nil {
 		return nil, err
@@ -285,30 +286,30 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
-	// 审计与登录限流在此显式装配；两者都是无状态/内存态，单实例直接复用。
+	// Audit and login rate limiting are assembled explicitly here; both are stateless/in-memory, so a single instance reuses them directly.
 	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
 	if err != nil {
 		return nil, err
 	}
 	limiter := auth.NewLoginLimiter(auth.LimiterConfig{})
-	// 匿名入口限流：/register 与 /forgot-password 共用一套
-	// 「IP 与目标邮箱各 5 次 / 15 分钟」的固定窗口计数，防匿名轰炸式发信。
+	// Anonymous endpoint rate limiting: /register and /forgot-password share one
+	// fixed-window counter of "5 per 15 minutes per IP and per target email", preventing anonymous mail bombing.
 	anonLimiter := auth.NewAnonymousLimiter(auth.DefaultAnonRateLimit, auth.DefaultAnonRateWindow, nil)
-	// 媒体存储：本地目录 + media 元数据表；目录来自 MEDIA_DIR。
+	// Media storage: local directory + media metadata table; the directory comes from MEDIA_DIR.
 	mediaStore, err := media.New(cfg.Get(config.KeyMediaDir).Value, db)
 	if err != nil {
 		return nil, err
 	}
-	// 对外 REST API（鉴权 + 端点）：依赖齐备才挂载 /api/v1。
-	// 敏感设置的编解码器：主密钥来自 ENCRYPTION_KEY，格式非法直接拒绝启动。
+	// External REST API (auth + endpoints): /api/v1 is mounted only when the dependencies are complete.
+	// Codec for sensitive settings: the master key comes from ENCRYPTION_KEY, and an invalid format refuses startup outright.
 	secrets, err := store.NewSecretCodec(cfg.Get(config.KeyEncryptionKey).Value)
 	if err != nil {
 		return nil, err
 	}
-	// 邮件 outbox：SMTP 配置走 settings 表（口令复用上面的 AES-GCM 编解码器），
-	// worker 由 runServe 启动与优雅停止。未配置 SMTP 时 Enqueue 返回 ErrNotConfigured。
+	// Mail outbox: SMTP configuration goes through the settings table (the password reuses the AES-GCM codec above), and the
+	// worker is started and gracefully stopped by runServe. With SMTP unconfigured, Enqueue returns ErrNotConfigured.
 	mailOutbox := mail.NewOutbox(mail.Deps{DB: db, Secrets: secrets, Logger: logger})
-	// TOTP 二次验证：secret 复用上面的 AES-GCM 编解码器加密存储。
+	// TOTP two-factor auth: the secret is stored encrypted with the same AES-GCM codec.
 	totpService, err := auth.NewTOTPService(store.NewTOTPStore(db), secrets, "")
 	if err != nil {
 		return nil, err
@@ -323,25 +324,25 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		Presets: store.NewPresetStore(db),
 		Cards:   store.NewCardStore(db),
 		Auditor: auditor,
-		// 卡组包内联媒体：字节根目录与媒体存储同一个。
+		// Inline media inside deck packages: the byte root directory is the same as media storage.
 		MediaRoot: mediaStore.Root(),
-		// 上传票据返回绝对 URL，供 agent 直接上传。
+		// The upload ticket returns an absolute URL so agents can upload directly.
 		BaseURL: cfg.Get(config.KeyBaseURL).Value,
 	})
 	if err != nil {
 		return nil, err
 	}
-	// 内置 MCP server 复用同一 api 实例：工具直接调用与 REST 相同的 service 方法。
+	// The built-in MCP server reuses the same api instance: tools call the same service methods as REST.
 	mcpSrv, err := mcp.New(mcp.Deps{API: apiSrv, Logger: logger})
 	if err != nil {
 		return nil, err
 	}
-	// 参数优化作业执行器：单并发 worker + 子进程。Start 在 web 服务启动前调用，
-	// worker 随进程存活；启动时会回收上次进程遗留的未完成作业。
+	// Parameter optimization job executor: single-concurrency worker + subprocess. Start is called before the web service starts
+	// and the worker lives as long as the process; on startup it reclaims unfinished jobs left behind by the previous process.
 	//
-	// 生产接线：Command 直接调用 Rust 适配器（先导出复习日志再 exec），Complete 解析
-	// 适配器写出的 21 维权重并交给 FinishOptimize 写回 job 与 preset。适配器路径可配置
-	// （OPTIMIZER_PATH），缺省按「服务二进制旁 -> 仓库构建产物」解析。
+	// Production wiring: Command calls the Rust adapter directly (export the review log first, then exec), and Complete parses
+	// the 21-dimensional weights the adapter writes and hands them to FinishOptimize to write back to the job and preset. The adapter
+	// path is configurable (OPTIMIZER_PATH), defaulting to "next to the service binary -> repository build artifact".
 	optimizer, err := jobs.NewOptimizer(jobs.OptimizerDeps{
 		DB:     db,
 		Logger: logger,
@@ -381,16 +382,16 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		TOTP:         totpService,
 		Media:        mediaStore,
 		Secrets:      secrets,
-		// 邮件 outbox：管理面板读投递状态、SMTP 配置页与测试连接都基于它。
+		// Mail outbox: the admin panel reads delivery status from it, and the SMTP settings page and test connection are built on it too.
 		Mail: mailOutbox,
-		// OIDC：身份存储用于绑定列表与解绑；BaseURL 用于拼 redirect_uri。
+		// OIDC: the identity store serves the link list and unlinking; BaseURL builds redirect_uri.
 		Identities: store.NewIdentityStore(db),
 		BaseURL:    cfg.Get(config.KeyBaseURL).Value,
-		// BOOTSTRAP_ADMIN_EMAIL 预填引导页表单。
+		// BOOTSTRAP_ADMIN_EMAIL pre-fills the onboarding form.
 		BootstrapAdminEmail: cfg.Get(config.KeyBootstrapAdminEmail).Value,
-		// TRUSTED_PROXIES 决定哪些代理可以改写 ClientIP。
+		// TRUSTED_PROXIES decides which proxies may rewrite ClientIP.
 		TrustedProxies: trustedProxies,
-		// 程序版本注入 SPA 入口 <head>，前端页脚读取显示。
+		// The program version is injected into the SPA entry <head> and displayed by the frontend footer.
 		Version: displayVersion(),
 		API:     apiSrv,
 		MCP:     mcpSrv,
@@ -399,18 +400,18 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	if err != nil {
 		return nil, err
 	}
-	// 作业失败后通知管理员（D 类）。钩子在 Start 之前接好，避免与 worker 竞态。
+	// Notify the administrator after a job failure (D-class). The hook is attached before Start to avoid racing the worker.
 	jobRunner.SetOnFailure(webSrv.NotifyJobFailed)
 	jobRunner.SetOnSuccess(webSrv.NotifyOptimizeDone)
 	jobRunner.Start(context.Background())
 	return webSrv, nil
 }
 
-// newAuthStack 构造认证相关的存储与服务：user/session store、账号服务、会话管理器。
+// newAuthStack constructs the auth-related stores and services: user/session store, account service, session manager.
 //
-// 密钥由 internal/config 统一读取（SESSION_SECRET 传会话签名；ENCRYPTION_KEY 是必需项，
-// 由 config.Load 校验，M1 尚无消费方；BOOTSTRAP_ADMIN_EMAIL 交给 web.Deps）。
-// 必需密钥缺失在 config.Load 阶段就以英文错误拒绝启动，这里不重复校验。
+// Secrets are read centrally by internal/config (SESSION_SECRET supplies session signing; ENCRYPTION_KEY is required and
+// validated by config.Load, with no consumer yet in M1; BOOTSTRAP_ADMIN_EMAIL is handed to web.Deps).
+// A missing required secret already refuses startup with an English error at config.Load, so it is not re-validated here.
 func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.Manager, *store.UserStore, error) {
 	users := store.NewUserStore(db)
 	sessions := store.NewSessionStore(db)
@@ -421,8 +422,8 @@ func newAuthStack(cfg *config.Config, db *gorm.DB) (*auth.AccountService, *auth.
 	}
 	manager, err := auth.NewSessionManager(users, sessions, auth.SessionConfig{
 		Secret: []byte(cfg.Get(config.KeySessionSecret).Value),
-		// 生产必须 Secure；本地 http 开发由 BASE_URL 的 scheme 决定，
-		// 否则开发态浏览器/curl 不会回传 cookie，登录流程无法联调。
+		// Must be Secure in production; for local http development it is decided by the BASE_URL scheme,
+		// otherwise the dev browser/curl would not send the cookie back and the login flow could not be exercised.
 		Secure: strings.HasPrefix(cfg.Get(config.KeyBaseURL).Value, "https://"),
 	})
 	if err != nil {
@@ -456,7 +457,7 @@ func runSchema(ctx context.Context, args []string) error {
 	return nil
 }
 
-// parseBool 接受 "1"/"true"/"yes" 之类的常见写法；无法解析时按 false 处理。
+// parseBool accepts common spellings like "1"/"true"/"yes"; unparseable values are treated as false.
 func parseBool(raw string) bool {
 	if raw == "" {
 		return false

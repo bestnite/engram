@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// TestFormatVersion 覆盖展示版本的合成规则：发布构建用注入的标签；未注入的本地构建用
-// 构建信息里的 VCS 修订号（取前 7 位，工作区有未提交改动时带 -dirty）；读不到 VCS 信息时
-// 回落到 dev。
+// TestFormatVersion covers the display version synthesis rules: release builds use the injected tag; local builds with no
+// injection use the VCS revision from the build info (its first 7 characters, with -dirty when the worktree has uncommitted
+// changes); and when no VCS info can be read it falls back to dev.
 func TestFormatVersion(t *testing.T) {
 	vcsInfo := func(revision, modified string) *debug.BuildInfo {
 		return &debug.BuildInfo{Settings: []debug.BuildSetting{

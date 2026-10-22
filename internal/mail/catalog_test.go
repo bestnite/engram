@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// TestCatalogClassesAndDefaults 锁定邮件目录的四类与默认值：
-// A 不可关闭、默认开；B 默认开、可关；C 默认关、可关；D 默认开、可关、只面向管理员。
+// TestCatalogClassesAndDefaults locks the four classes of the mail catalog and their defaults:
+// A cannot be disabled and defaults on; B defaults on, disableable; C defaults off, disableable; D
+// defaults on, disableable, admin-only.
 func TestCatalogClassesAndDefaults(t *testing.T) {
 	cases := []struct {
 		class         Class
@@ -17,8 +18,9 @@ func TestCatalogClassesAndDefaults(t *testing.T) {
 	}{
 		{ClassSecurity, 5, false, true, false},
 		{ClassCollab, 3, true, true, false},
-		// C 类 2026-10-07 从 5 种降到 3 种：连续打卡即将中断与导入导出完成因没有触发点被移出
-		// 目录（理由见 catalog.go 的注释）。这个数字随目录变动，改目录时同步改这里。
+		// Class C dropped from 5 types to 3 on 2026-10-07: streak about to break and import/export done
+		// were moved out of the catalog for having no trigger point (the reasoning is in the comment in
+		// catalog.go). This number changes with the catalog; update it here when the catalog changes.
 		{ClassStudy, 3, true, false, false},
 		{ClassAdmin, 2, true, true, true},
 	}
@@ -42,7 +44,8 @@ func TestCatalogClassesAndDefaults(t *testing.T) {
 	}
 }
 
-// TestClassOrderIsStable 断言大类的展示顺序是 A → B → C → D，偏好页据此渲染分组。
+// TestClassOrderIsStable asserts that the display order of the categories is A -> B -> C -> D, which
+// is what the preferences page renders its groups from.
 func TestClassOrderIsStable(t *testing.T) {
 	want := []Class{ClassSecurity, ClassCollab, ClassStudy, ClassAdmin}
 	got := ClassOrder()
@@ -56,7 +59,8 @@ func TestClassOrderIsStable(t *testing.T) {
 	}
 }
 
-// TestCatalogTypesUniqueAndLookup 断言类型标识唯一，且每个目录项都能被 Lookup 取回。
+// TestCatalogTypesUniqueAndLookup asserts that type identifiers are unique and that every catalog
+// entry can be fetched back by Lookup.
 func TestCatalogTypesUniqueAndLookup(t *testing.T) {
 	seen := map[Type]bool{}
 	for _, def := range Catalog() {
@@ -86,10 +90,10 @@ func TestCatalogTypesUniqueAndLookup(t *testing.T) {
 	}
 }
 
-// TestResolveEnabledLocksClassA 是「拒绝关闭 A 类」的核心保证：
-// 即便存储里出现 A 类型的显式关闭，ResolveEnabled 也必须返回 true。
+// TestResolveEnabledLocksClassA is the core guarantee of "refuse to turn class A off": even if an
+// explicit off for an A type appears in storage, ResolveEnabled must return true.
 func TestResolveEnabledLocksClassA(t *testing.T) {
-	// 伪造一份「把 A 类全关掉」的选择，模拟被篡改或历史遗留的存储。
+	// Forge a choice that "turns every class A type off", simulating tampered or legacy storage.
 	choices := map[string]bool{
 		string(TypePasswordReset):  false,
 		string(TypeNewDeviceLogin): false,
@@ -105,11 +109,12 @@ func TestResolveEnabledLocksClassA(t *testing.T) {
 	}
 }
 
-// TestResolveEnabledHonorsOptionalChoices 断言可关闭类型：显式选择优先，缺席时回落到默认。
+// TestResolveEnabledHonorsOptionalChoices asserts the disableable types: an explicit choice wins, and
+// when absent it falls back to the default.
 func TestResolveEnabledHonorsOptionalChoices(t *testing.T) {
 	choices := map[string]bool{
-		string(TypeDeckShared):     false, // B 默认开 → 用户关掉
-		string(TypeReviewReminder): true,  // C 默认关 → 用户打开
+		string(TypeDeckShared):     false, // B defaults on -> the user turns it off
+		string(TypeReviewReminder): true,  // C defaults off -> the user turns it on
 	}
 	cases := []struct {
 		typ  Type
@@ -130,7 +135,8 @@ func TestResolveEnabledHonorsOptionalChoices(t *testing.T) {
 	}
 }
 
-// TestResolveEnabledUnknownTypeIsNotSent 断言未登记类型一律不发送：拼错类型名不能变成静默投递。
+// TestResolveEnabledUnknownTypeIsNotSent asserts that unregistered types are never sent: a mistyped
+// type name must not turn into a silent delivery.
 func TestResolveEnabledUnknownTypeIsNotSent(t *testing.T) {
 	if ResolveEnabled(nil, "typo_type") {
 		t.Error("ResolveEnabled enabled an unknown type; unknown types must never be sent")

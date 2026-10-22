@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestParseRegistrationPolicy 断言策略归一化：合法值保留，空值与未知值回落到 closed。
+// TestParseRegistrationPolicy asserts policy normalization: legal values are kept, empty and unknown values fall back to closed.
 func TestParseRegistrationPolicy(t *testing.T) {
 	cases := []struct {
 		raw  string
@@ -28,7 +28,7 @@ func TestParseRegistrationPolicy(t *testing.T) {
 	}
 }
 
-// TestParseEmailAllowlist 覆盖 JSON 数组与分隔符两种写法，以及大小写归一化。
+// TestParseEmailAllowlist covers both the JSON array and the separator spellings, plus case normalization.
 func TestParseEmailAllowlist(t *testing.T) {
 	cases := []struct {
 		name string
@@ -57,7 +57,7 @@ func TestParseEmailAllowlist(t *testing.T) {
 	}
 }
 
-// TestEmailDomainAllowed 覆盖空白名单放行、命中、未命中与大小写。
+// TestEmailDomainAllowed covers an empty allowlist letting everything through, a hit, a miss and case.
 func TestEmailDomainAllowed(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -82,7 +82,7 @@ func TestEmailDomainAllowed(t *testing.T) {
 	}
 }
 
-// TestDecideRegistration 是验收矩阵：每一种策略 × 白名单的放行/拒绝组合。
+// TestDecideRegistration is the acceptance matrix: every policy × allowlist allow/deny combination.
 func TestDecideRegistration(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -91,18 +91,18 @@ func TestDecideRegistration(t *testing.T) {
 		allowlist []string
 		wantErr   error
 	}{
-		// open：白名单为空 → 全部放行。
+		// open: empty allowlist → everything passes.
 		{name: "open without allowlist", policy: PolicyOpen, email: "alice@example.com"},
-		// open + 白名单：命中放行，未命中拒绝。
+		// open + allowlist: a hit passes, a miss is rejected.
 		{name: "open allowlist match", policy: PolicyOpen, email: "alice@example.com", allowlist: []string{"example.com"}},
 		{name: "open allowlist denial", policy: PolicyOpen, email: "alice@example.net", allowlist: []string{"example.com"}, wantErr: ErrEmailDomainNotAllowed},
-		// invite：无邀请一律要求邀请（邀请分支在 web 处理器里另行放行）。
+		// invite: without an invite one is always required (the invite branch admits separately in the web handler).
 		{name: "invite requires invite", policy: PolicyInvite, email: "alice@example.com", wantErr: ErrInviteRequired},
 		{name: "invite ignores allowlist", policy: PolicyInvite, email: "alice@example.com", allowlist: []string{"example.com"}, wantErr: ErrInviteRequired},
-		// closed：无论邮箱与白名单都拒绝。
+		// closed: reject regardless of email and allowlist.
 		{name: "closed rejects", policy: PolicyClosed, email: "alice@example.com", wantErr: ErrRegistrationClosed},
 		{name: "closed rejects allowlisted", policy: PolicyClosed, email: "alice@example.com", allowlist: []string{"example.com"}, wantErr: ErrRegistrationClosed},
-		// 未知/空策略按 closed 处理（安全默认）。
+		// Unknown/empty policy is handled as closed (safe default).
 		{name: "unknown policy behaves as closed", policy: "weird", email: "alice@example.com", wantErr: ErrRegistrationClosed},
 		{name: "empty policy behaves as closed", policy: "", email: "alice@example.com", wantErr: ErrRegistrationClosed},
 	}

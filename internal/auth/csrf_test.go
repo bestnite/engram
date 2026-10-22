@@ -11,12 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// csrfRouter 是带 CSRF 中间件的一套路由；会话中间件必须排在前，token 才有来源。
+// csrfRouter is a set of routes with the CSRF middleware; the session middleware must come first so the token has a source.
 func csrfRouter(e *testEnv) *gin.Engine {
 	return e.buildRouter(e.manager.Middleware(), e.manager.CSRFMiddleware())
 }
 
-// newPostRequest 构造一个带会话 cookie 的 POST；form=true 时用表单字段携带 token，否则用头部。
+// newPostRequest builds a POST carrying a session cookie; with form=true the token rides in the form field, otherwise in the header.
 func newPostRequest(t *testing.T, e *testEnv, cookieValue string, form bool, token string) *http.Request {
 	t.Helper()
 	var body io.Reader
@@ -39,7 +39,7 @@ func serve(router *gin.Engine, req *http.Request) *httptest.ResponseRecorder {
 	return rec
 }
 
-// TestCSRFRejectsPostWithoutToken 是验收反面用例：缺 token 的 POST 返回 403。
+// TestCSRFRejectsPostWithoutToken is the negative acceptance case: a POST without a token returns 403.
 func TestCSRFRejectsPostWithoutToken(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser(t, "judy")
@@ -70,7 +70,7 @@ func TestCSRFRejectsPostWithoutSession(t *testing.T) {
 	}
 }
 
-// TestCSRFAcceptsValidToken 覆盖两种合法携带方式：头部与表单字段。
+// TestCSRFAcceptsValidToken covers both legal carriers: the header and the form field.
 func TestCSRFAcceptsValidToken(t *testing.T) {
 	cases := []struct {
 		name    string

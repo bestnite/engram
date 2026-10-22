@@ -5,24 +5,29 @@ import (
 	"strings"
 )
 
-// 本文件实现模板的**回退链**与「渲染失败退回内置正文」这条保险。
+// This file implements the template **fallback chain** and the "fall back to the built-in body when
+// rendering fails" safety net.
 
-// ResolvedTemplate 是回退链前两级的结果；两者都为空表示没有自定义模板，用内置正文。
+// ResolvedTemplate is the result of the first two levels of the fallback chain; both fields empty
+// means there is no custom template and the built-in body is used.
 type ResolvedTemplate struct {
 	Subject string
 	Body    string
 }
 
-// LookupFunc 按 (类型, 语言) 取自定义模板；ok 为 false 表示该键没有自定义。
+// LookupFunc fetches a custom template by (type, locale); ok false means that key has no
+// customization.
 //
-// 做成函数类型而不是接口：本包只关心「能不能取到」，存储形态（GORM 表、缓存、测试替身）
-// 由调用方决定。
+// A function type rather than an interface: this package only cares about "can it be fetched"; the
+// storage shape (a GORM table, a cache, a test stand-in) is up to the caller.
 type LookupFunc func(t Type, locale string) (subject, body string, ok bool)
 
-// Resolve 走回退链的前两级：先精确语言，再站点默认语言。
+// Resolve walks the first two levels of the fallback chain: the exact locale first, then the site
+// default locale.
 //
-// 第三级是内置正文，不在本函数里——它由调用方作为 RenderInput 的 Fallback 传入。这样
-// 「内置默认永远在代码里」是结构事实，而不是本函数的一条分支。
+// The third level is the built-in body and is not in this function -- the caller passes it in as the
+// Fallback of RenderInput. That makes "built-in defaults always live in code" a structural fact
+// rather than one branch of this function.
 func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemplate {
 	if lookup == nil {
 		return ResolvedTemplate{}
@@ -30,7 +35,7 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 	if subject, body, ok := lookup(t, locale); ok {
 		return ResolvedTemplate{Subject: subject, Body: body}
 	}
-	// 语言与站点默认相同时不重复查一次。
+	// When the locale equals the site default, do not query twice.
 	if siteDefault != "" && siteDefault != locale {
 		if subject, body, ok := lookup(t, siteDefault); ok {
 			return ResolvedTemplate{Subject: subject, Body: body}
@@ -39,15 +44,19 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 	return ResolvedTemplate{}
 }
 
-// RenderOrFallback 渲染模板；**渲染失败或必填变量缺失时退回内置正文**。
+// RenderOrFallback renders the template; **on a render failure or a missing required variable it falls
+// back to the built-in body**.
 //
-// 这条路径兑现「模板坏了也不会让邮件发不出去」的承诺：管理员把模板写进
-// 一段渲染不出来的内容（或发信方漏传了必填变量）时，收件人拿到的仍是内置正文，而不是
-// 一封空邮件或一个 500。失败一定记日志——静默降级会让模板问题永远没人发现。
+// This path honors the promise that "a broken template still cannot stop mail from being sent": when
+// an admin writes content into the template that fails to render (or a sender forgets a required
+// variable), the recipient still gets the built-in body rather than an empty mail or a 500. Failures
+// are always logged -- a silent downgrade would mean template problems are never noticed.
 func RenderOrFallback(in RenderInput) Rendered {
-	// 模板内容先于渲染校验：行可能被直写库进来，或早于某个变量变成必填，而「丢掉了重置
-	// 链接的模板」必须退到内置正文，不能发出一封没用的信。校验放在这一层而不是 Render 里：
-	// Render 是纯渲染（只回答「这段 Markdown 渲染成什么」），策略归调用发信的那一层。
+	// The template content is validated before rendering: a row may have been written straight into the
+	// DB, or may predate a variable becoming required, and "a template that dropped the reset link"
+	// must fall back to the built-in body, not send a useless mail. The validation lives at this layer
+	// rather than in Render: Render is pure rendering (it only answers "what does this Markdown render
+	// into"), and policy belongs to the layer that sends the mail.
 	if strings.TrimSpace(in.BodyMD) != "" {
 		if err := Validate(in.Type, in.Subject, in.BodyMD); err != nil {
 			slog.Error("mail template is invalid, falling back to the built-in body",

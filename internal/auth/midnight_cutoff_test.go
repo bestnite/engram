@@ -7,7 +7,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 本地与 OIDC 建号共用这条准备路径，不能在创建时把午夜替换成默认值。
+// Local and OIDC account creation share this preparation path, so midnight (0) must not be swapped for a default value at creation time.
 func TestNewUserCutoffPreservesUnsetAndMidnight(t *testing.T) {
 	for _, hour := range []*int{nil, store.Ptr(0), store.Ptr(23)} {
 		u, err := newUserFromInput(CreateUserInput{Username: "cutoff", Email: "cutoff@example.com", DayCutoffHour: hour}, nil, time.Now().UTC())

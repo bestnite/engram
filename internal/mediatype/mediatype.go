@@ -1,8 +1,8 @@
-// Package mediatype 只做一件事：用文件字节（magic bytes）判定媒体类型，并与白名单比对。
+// Package mediatype does exactly one thing: decide the media type from file bytes (magic bytes) and compare it against the allowlist.
 //
-// 它是叶子包：只依赖标准库，既不 import internal/store，也不包含 internal/media 的存储部分。
-// 这样普通上传链（internal/media）与卡组包导入链（internal/store）能共用同一份判定与白名单，
-// 既避免重复实现，也避免 store → media 的循环导入。
+// It is a leaf package: it depends only on the standard library, importing neither internal/store nor the storage portion of internal/media.
+// That way the ordinary upload path (internal/media) and the deck-package import path (internal/store) share one detector and one allowlist,
+// avoiding both duplicate implementations and a store → media import cycle.
 package mediatype
 
 import (
@@ -11,11 +11,11 @@ import (
 	"strings"
 )
 
-// HeadBytes 是判定所需的最大字节数；调用方至少读这么多（不足时有多少喂多少）即可判定。
-// 它同时是对外契约：两条链都按这个长度取文件头，保证判定结果一致。
+// HeadBytes is the maximum number of bytes needed for detection; callers need only read this many (fewer if the file is shorter) to decide.
+// It is also part of the external contract: both paths read the file header at this length so detection results agree.
 const HeadBytes = 512
 
-// DefaultAllowedMimes 是媒体白名单的默认值。
+// DefaultAllowedMimes is the default value of the media allowlist.
 func DefaultAllowedMimes() []string {
 	return []string{
 		"image/png", "image/jpeg", "image/webp", "image/gif",
@@ -23,8 +23,8 @@ func DefaultAllowedMimes() []string {
 	}
 }
 
-// Detect 用 magic bytes 判断媒体类型，返回 mime、扩展名与是否识别成功。
-// 只认白名单涉及的类型；扩展名由这里给出，绝不从文件名取。
+// Detect determines the media type from magic bytes, returning the mime, the extension and whether detection succeeded.
+// It only recognizes the types covered by the allowlist; the extension is produced here and is never taken from the filename.
 func Detect(head []byte) (mime, ext string, ok bool) {
 	switch {
 	case len(head) >= 8 && bytes.Equal(head[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
@@ -40,16 +40,16 @@ func Detect(head []byte) (mime, ext string, ok bool) {
 	case len(head) >= 3 && bytes.Equal(head[:3], []byte("ID3")):
 		return "audio/mpeg", "mp3", true
 	case len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0:
-		// MPEG 音频帧同步（无 ID3 标签的 mp3）。
+		// MPEG audio frame sync (mp3 without an ID3 tag).
 		return "audio/mpeg", "mp3", true
 	case isISOBaseMedia(head):
-		// m4a 属于 ISO BMFF：偏移 4 起是 "ftyp"。
+		// m4a belongs to ISO BMFF: offset 4 onward is "ftyp".
 		return "audio/mp4", "m4a", true
 	}
 	return "", "", false
 }
 
-// isISOBaseMedia 判断 ISO BMFF 头（ftyp box）；m4a/mp4 共用。
+// isISOBaseMedia checks the ISO BMFF header (ftyp box); m4a/mp4 share it.
 func isISOBaseMedia(head []byte) bool {
 	if len(head) < 12 {
 		return false
@@ -57,12 +57,12 @@ func isISOBaseMedia(head []byte) bool {
 	if !bytes.Equal(head[4:8], []byte("ftyp")) {
 		return false
 	}
-	// 盒大小是前 4 字节的大端整数，必须至少覆盖到品牌字段，避免畸形输入。
+	// The box size is a big-endian integer in the first 4 bytes and must cover at least the brand field, guarding against malformed input.
 	size := binary.BigEndian.Uint32(head[:4])
 	return size >= 8
 }
 
-// Normalize 归一化常见的等价写法，便于与探测结果比较。
+// Normalize canonicalizes common equivalent spellings so they can be compared against detection results.
 func Normalize(raw string) string {
 	m := strings.ToLower(strings.TrimSpace(strings.SplitN(raw, ";", 2)[0]))
 	switch m {
@@ -76,7 +76,7 @@ func Normalize(raw string) string {
 	return m
 }
 
-// Allowed 判断 mime 是否在 allowed 白名单内；两侧都先归一化，容忍 image/jpg 之类的等价写法。
+// Allowed reports whether mime is in the allowed allowlist; both sides are normalized first, tolerating equivalents like image/jpg.
 func Allowed(mime string, allowed []string) bool {
 	m := Normalize(mime)
 	for _, a := range allowed {

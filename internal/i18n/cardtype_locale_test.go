@@ -7,32 +7,34 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// documentedKinds 是冻结的十个内置题型。
+// documentedKinds is the frozen set of ten built-in card types.
 //
-// 注册表当前可能尚未全部注册（short_answer 属未来规划的口子），但语言包仍应
-// 预先覆盖，这样将来题型一注册就立刻有显示名，不需要同时补语言包。
+// The registry may not have all of them registered yet (short_answer is a planned gap), but the
+// language packs should cover them in advance, so a card type has a display name the moment it is
+// registered, without having to update the packs at the same time.
 var documentedKinds = []string{
 	"basic", "basic_both", "cloze", "list",
 	"typed", "numeric", "choice_single", "choice_multi", "true_false", "short_answer",
 }
 
-// gradedFieldKeys 是作答类与简答题的字段名（字段名冻结表）。
-// 编辑页/新建页对每个字段都必须渲染出标签而不是原始 key。
+// gradedFieldKeys is the field names of graded and short-answer card types (the frozen field name table).
+// The edit/new page must render a label for every one of these fields instead of the raw key.
 var gradedFieldKeys = []string{
 	"question", "answer", "accept", "options", "answers", "statement",
 	"value", "unit", "tolerance_absolute", "tolerance_relative",
 	"ignore_case", "ignore_whitespace", "regex", "reference",
 }
 
-// TestCardTypeLabelsCoverRegistry 是验收测试：枚举 Registry.Kinds()，
-// 任一题型在中英任一套语言包里缺显示名（cardtype.<kind>）就失败。
-// 同时校验文档冻结的十个题型与全部作答类字段名都有标签，避免目录被悄悄裁剪。
+// TestCardTypeLabelsCoverRegistry is the acceptance test: enumerate Registry.Kinds(), and fail if any
+// card type lacks a display name (cardtype.<kind>) in either language pack.
+// It also checks that the ten card types frozen in the docs and every graded field name have labels,
+// so the catalog cannot be quietly trimmed.
 func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 	zh := catalogKeys(t, "locales/zh-CN.yaml")
 	en := catalogKeys(t, "locales/en.yaml")
 	catalogs := map[string]map[string]string{"zh-CN": zh, "en": en}
 
-	// 1) 注册表里每一个题型都必须有 cardtype.<kind> 标签。
+	// 1) Every card type in the registry must have a cardtype.<kind> label.
 	kinds := cardtype.Kinds()
 	if len(kinds) == 0 {
 		t.Fatal("cardtype.Kinds() is empty; the registry was not loaded")
@@ -46,7 +48,8 @@ func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 		}
 	}
 
-	// 2) 文档冻结的十个题型与字段名也要有标签（含尚未注册的 short_answer）。
+	// 2) The ten card types frozen in the docs and the field names must have labels too
+	// (including short_answer, which is not registered yet).
 	for _, kind := range documentedKinds {
 		key := "cardtype." + kind
 		for code, catalog := range catalogs {
@@ -65,8 +68,9 @@ func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 	}
 }
 
-// TestCatalogLabelsAreTranslatedNotKeyIDs 断言题型/字段标签是真正的译文而不是键名本身，
-// 防止把 key 当译文复制进语言包这种"看起来有标签"的假象。
+// TestCatalogLabelsAreTranslatedNotKeyIDs asserts that card type/field labels are real translations
+// rather than the key names themselves, guarding against the illusion of "having a label" created by
+// copying the key into the catalog as its translation.
 func TestCatalogLabelsAreTranslatedNotKeyIDs(t *testing.T) {
 	for _, name := range []string{"locales/zh-CN.yaml", "locales/en.yaml"} {
 		catalog := catalogKeys(t, name)

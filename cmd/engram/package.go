@@ -19,15 +19,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// cliOut 是 CLI 的诊断/报告输出目标；测试替换它来捕获输出（默认 stdout）。
+// cliOut is the diagnostic/report output target for the CLI; tests replace it to capture output (defaults to stdout).
 var cliOut io.Writer = os.Stdout
 
-// 卡组包的 CLI 入口。
+// CLI entry points for deck packages.
 //
-// CLI 是无会话的运维/自动化通道：导出/导入都通过 --user 指定acting user，
-// 业务与权限判定复用 internal/api 的 service 方法，避免出现第二套规则。
+// The CLI is a session-less operations/automation channel: export/import name the acting user via --user, and
+// business and permission decisions reuse internal/api's service methods, so there is no second set of rules.
 
-// openPackageCLI 打开数据库并按与 serve 相同的 service 路径装配所需依赖。
+// openPackageCLI opens the database and assembles the needed dependencies through the same service path as serve.
 func openPackageCLI(ctx context.Context) (*api.API, *store.UserStore, *gorm.DB, error) {
 	cfg, err := config.Load(os.LookupEnv, nil)
 	if err != nil {
@@ -60,9 +60,9 @@ func openPackageCLI(ctx context.Context) (*api.API, *store.UserStore, *gorm.DB, 
 	return apiSrv, users, db, nil
 }
 
-// resolveCLIUser 决定导出（只读）操作的 acting user：显式 --user 优先，未给出时回落到卡组
-// owner（导出只读，拿走自己的内容）。导入不再走这里：导入会写入账号名下，必须显式写明身份
-// （CLI 身份裁定），见 resolveImportUser。
+// resolveCLIUser decides the acting user for export (read-only) operations: an explicit --user wins, and when it is absent it
+// falls back to the deck owner (export is read-only, taking your own content). Import no longer goes through here: import writes
+// under an account, so the identity must be stated explicitly (CLI identity ruling); see resolveImportUser.
 func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, explicit uint64, deckID uint64) (*store.User, error) {
 	if explicit != 0 {
 		u, err := users.ByID(ctx, explicit)
@@ -89,11 +89,11 @@ func resolveCLIUser(ctx context.Context, users *store.UserStore, db *gorm.DB, ex
 	return &u, nil
 }
 
-// resolveImportUser 解析 `import --user` 的取值，接受数字 id 或用户名。
+// resolveImportUser resolves the value of `import --user`, accepting a numeric id or a username.
 //
-// 导入会把内容写进某个账号名下，身份必须由调用者写明：空值、指向不存在的用户、以及
-// 「数字既像 id 又像用户名且指向不同用户」的歧义取值都点名拒绝，绝不回落到任何默认账号
-// （CLI 身份裁定）。
+// Import writes content under some account, so the caller must state the identity: an empty value, a value naming a
+// nonexistent user, and an ambiguous value where "a number looks like both an id and a username that point to different users"
+// are all rejected by name, never falling back to any default account (CLI identity ruling).
 func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) (*store.User, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -104,7 +104,7 @@ func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) 
 		byName, nameErr := users.ByUsername(ctx, ref)
 		switch {
 		case idErr == nil && nameErr == nil && byID.ID != byName.ID:
-			// 同一个取值同时命中一个 id 和一个用户名，且指向不同用户 —— 猜错就等于把卡塞给别人。
+			// The same value hits both an id and a username pointing to different users — guessing wrong means handing the cards to someone else.
 			return nil, fmt.Errorf("import: --user %q is ambiguous: it matches user id %d and the username %q (user id %d); pass a value that names exactly one account", ref, byID.ID, ref, byName.ID)
 		case idErr == nil:
 			return byID, nil
@@ -126,7 +126,7 @@ func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) 
 	return u, nil
 }
 
-// runExport 处理 `engram export`：导出一个卡组包（--deck + --package）。
+// runExport handles `engram export`: export one deck package (--deck + --package).
 func runExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	deckID := fs.Uint64("deck", 0, "deck id to export as a .edeck card package")
@@ -178,7 +178,7 @@ func runExport(args []string) error {
 	return nil
 }
 
-// runImport 处理 `engram import`：导入一个卡组包并打印与 REST 一致的报告 JSON。
+// runImport handles `engram import`: import one deck package and print the same report JSON as REST.
 func runImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	in := fs.String("package", "", "input .edeck path")
@@ -194,7 +194,7 @@ func runImport(args []string) error {
 	if *in == "" {
 		return errors.New("import: --package <path> is required")
 	}
-	// 先校验身份再碰数据库：缺 --user 时直接非零退出，绝不打开包、更不会落任何卡组/笔记。
+	// Validate the identity before touching the database: without --user it exits non-zero right away, never opens the package, let alone writes any deck/note.
 	if strings.TrimSpace(*userRef) == "" {
 		return errors.New("import: --user <id|username> is required: the import files the deck under one account, so the acting identity must be explicit (refusing to fall back to the earliest admin)")
 	}

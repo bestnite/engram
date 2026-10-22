@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestSMTPSenderDeliversAndBuildsMessage 用进程内假 SMTP 服务验证真实传输层：
-// 投递成功、正文与自定义头出现在报文里。
+// TestSMTPSenderDeliversAndBuildsMessage verifies the real transport layer against an in-process
+// fake SMTP service: delivery succeeds, and the body and custom headers appear in the message.
 func TestSMTPSenderDeliversAndBuildsMessage(t *testing.T) {
 	f := newFakeSMTP(t)
 	cfg := SMTPConfig{
@@ -32,7 +32,8 @@ func TestSMTPSenderDeliversAndBuildsMessage(t *testing.T) {
 	}
 }
 
-// TestSMTPSenderSurfacesServerError 证明服务端错误文本被原样带出（供管理面板的测试连接显示）。
+// TestSMTPSenderSurfacesServerError shows that the server error text is surfaced verbatim (for the
+// admin panel's test connection to display).
 func TestSMTPSenderSurfacesServerError(t *testing.T) {
 	f := newFakeSMTP(t)
 	f.setRcptReject(true)
@@ -48,7 +49,8 @@ func TestSMTPSenderSurfacesServerError(t *testing.T) {
 	}
 }
 
-// TestTestConnectionFailsOnClosedPort 覆盖"错主机"路径：连接被拒时把错误文本带出。
+// TestTestConnectionFailsOnClosedPort covers the "wrong host" path: when the connection is refused,
+// the error text is surfaced.
 func TestTestConnectionFailsOnClosedPort(t *testing.T) {
 	addr := deadAddr(t)
 	host, port := splitHostPort(t, addr)
@@ -62,7 +64,7 @@ func TestTestConnectionFailsOnClosedPort(t *testing.T) {
 	}
 }
 
-// TestTestConnectionSucceeds 覆盖成功路径。
+// TestTestConnectionSucceeds covers the success path.
 func TestTestConnectionSucceeds(t *testing.T) {
 	f := newFakeSMTP(t)
 	cfg := SMTPConfig{Host: f.host(), Port: f.port(), From: "no-reply@example.com", TLSMode: TLSModeNone}
@@ -71,7 +73,8 @@ func TestTestConnectionSucceeds(t *testing.T) {
 	}
 }
 
-// deadAddr 返回一个当前无人监听的本地地址（先监听再关闭，端口随即释放）。
+// deadAddr returns a local address nobody is listening on right now (listen first, then close, and
+// the port is released immediately).
 func deadAddr(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -83,7 +86,7 @@ func deadAddr(t *testing.T) string {
 	return addr
 }
 
-// atoi 是测试里受限的端口解析。
+// atoi is the restricted port parsing used in tests.
 func atoi(t *testing.T, s string) int {
 	t.Helper()
 	n := 0

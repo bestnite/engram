@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// sleepRecorder 记录限流器请求的等待时长而不真的睡；测试据此断言延迟递增。
+// sleepRecorder records the wait duration the limiter asks for without actually sleeping; tests use it to assert the growing delay.
 type sleepRecorder struct {
 	mu     sync.Mutex
 	delays []time.Duration
@@ -31,8 +31,8 @@ func (r *sleepRecorder) last() time.Duration {
 	return r.delays[len(r.delays)-1]
 }
 
-// TestLoginLimiterDelayGrowsAndResetsOnSuccess 是验收测试：
-// 失败越多延迟越长，登录成功后归零。
+// TestLoginLimiterDelayGrowsAndResetsOnSuccess is the acceptance test:
+// the more failures, the longer the delay, and after a successful login it drops to zero.
 func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 	rec := &sleepRecorder{}
 	base := 10 * time.Millisecond
@@ -44,12 +44,12 @@ func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	// 没有任何失败时不等。
+	// With no failures at all there is no wait.
 	if d, err := lim.Wait(ctx, "alice", "127.0.0.1"); err != nil || d != 0 {
 		t.Fatalf("Wait() before any failure = (%v, %v), want (0, nil)", d, err)
 	}
 
-	// 连续失败：每次等待必须严格大于上一次。
+	// Consecutive failures: each wait must be strictly greater than the previous one.
 	var prev time.Duration
 	for i := 1; i <= 4; i++ {
 		lim.RecordFailure("alice", "127.0.0.1")
@@ -65,25 +65,25 @@ func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 			t.Errorf("recorded sleep = %v, Wait returned %v", rec.last(), d)
 		}
 	}
-	// 期望的确定性递增：base, 2*base, 4*base, 8*base。
+	// The deterministic growth expected: base, 2*base, 4*base, 8*base.
 	if prev != 8*base {
 		t.Errorf("4th delay = %v, want %v", prev, 8*base)
 	}
 
-	// 登录成功后重置：延迟归零（验收点）。
+	// Reset after a successful login: the delay is back to zero (acceptance point).
 	lim.Reset("alice", "127.0.0.1")
 	if d, err := lim.Wait(ctx, "alice", "127.0.0.1"); err != nil || d != 0 {
 		t.Fatalf("Wait() after Reset = (%v, %v), want (0, nil)", d, err)
 	}
 }
 
-// TestLoginLimiterCapsDelay 断言延迟封顶，避免失败次数把等待时间推到不可接受的长度。
+// TestLoginLimiterCapsDelay asserts the delay is capped, so the failure count cannot push the wait to an unacceptable length.
 func TestLoginLimiterCapsDelay(t *testing.T) {
 	lim := NewLoginLimiter(LimiterConfig{
 		BaseDelay: 10 * time.Millisecond,
 		MaxDelay:  40 * time.Millisecond,
 		Window:    time.Hour,
-		// 阈值放宽到 20 次失败之上：本用例只验延迟封顶，不验锁定。
+		// Threshold relaxed above 20 failures: this case only verifies the delay cap, not locking.
 		MaxAccountFailures: 100,
 		Sleep:              func(context.Context, time.Duration) error { return nil },
 	})
@@ -96,7 +96,7 @@ func TestLoginLimiterCapsDelay(t *testing.T) {
 	}
 }
 
-// TestLoginLimiterRateLimitsIPIndependently 断言换账号刷同一 IP 也会被限流。
+// TestLoginLimiterRateLimitsIPIndependently asserts that switching accounts against the same IP is rate-limited too.
 func TestLoginLimiterRateLimitsIPIndependently(t *testing.T) {
 	lim := NewLoginLimiter(LimiterConfig{
 		BaseDelay: 10 * time.Millisecond,
@@ -110,7 +110,7 @@ func TestLoginLimiterRateLimitsIPIndependently(t *testing.T) {
 	}
 }
 
-// TestLoginLimiterWindowExpiresFailures 用可注入时钟断言窗口过后失败计数清零（无需真实等待）。
+// TestLoginLimiterWindowExpiresFailures uses an injectable clock to assert the failure count clears after the window (no real waiting needed).
 func TestLoginLimiterWindowExpiresFailures(t *testing.T) {
 	now := time.Now().UTC()
 	lim := NewLoginLimiter(LimiterConfig{
@@ -130,8 +130,8 @@ func TestLoginLimiterWindowExpiresFailures(t *testing.T) {
 	}
 }
 
-// TestLoginLimiterLocksAfterThreshold 覆盖锁定：账号或 IP 的失败次数达到阈值后，Wait 直接返回
-// ErrLoginLocked 与剩余等待时长；窗口过去后恢复；成功登录立即清零。
+// TestLoginLimiterLocksAfterThreshold covers locking: once an account's or an IP's failure count reaches the threshold, Wait returns
+// ErrLoginLocked and the remaining wait straight away; it recovers once the window passes; a successful login clears it immediately.
 func TestLoginLimiterLocksAfterThreshold(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	lim := NewLoginLimiter(LimiterConfig{
@@ -183,7 +183,7 @@ func TestLoginLimiterLocksAfterThreshold(t *testing.T) {
 		}
 	}
 
-	// IP 维度：同一 IP 换账号累计到 5 次，新账号也被拒。
+	// IP dimension: switching accounts on the same IP accumulates to 5, and the new account is rejected as well.
 	fail("carol", "10.0.0.2")
 	fail("dave", "10.0.0.2")
 	fail("erin", "10.0.0.2")
@@ -193,15 +193,15 @@ func TestLoginLimiterLocksAfterThreshold(t *testing.T) {
 		t.Error("IP at threshold: a fresh account was allowed")
 	}
 
-	// 窗口过去后恢复。
+	// Recovers once the window passes.
 	now = now.Add(16 * time.Minute)
 	if locked("alice", "10.0.0.1") {
 		t.Error("account still locked after the window expired")
 	}
 }
 
-// TestLoginLimiterCountsConcurrentAttempts 是反面用例：同时发出的一批尝试在任何失败被记录之前
-// 都会到达 Wait；在途尝试必须算进阈值，否则并发就能绕过锁定。
+// TestLoginLimiterCountsConcurrentAttempts is the negative case: a burst of simultaneous attempts all reach Wait before any failure is recorded;
+// in-flight attempts must count toward the threshold, otherwise concurrency alone gets around the lock.
 func TestLoginLimiterCountsConcurrentAttempts(t *testing.T) {
 	lim := NewLoginLimiter(LimiterConfig{
 		BaseDelay: time.Millisecond, Window: time.Hour, MaxAccountFailures: 4, MaxIPFailures: 1000,
@@ -227,15 +227,15 @@ func TestLoginLimiterCountsConcurrentAttempts(t *testing.T) {
 	if admitted != 4 {
 		t.Fatalf("admitted %d concurrent attempts, want exactly the threshold 4", admitted)
 	}
-	// 归还占位（第一因素通过、等待第二因素的路径）后又能放行。
+	// After the placeholder is returned (the path where the first factor passed and the second is pending) it passes again.
 	lim.Release("alice", "10.1.0.0")
 	if _, err := lim.Wait(ctx, "alice", "10.1.0.0"); err != nil {
 		t.Errorf("Wait() after Release error = %v, want admitted", err)
 	}
 }
 
-// TestLoginLimiterInflightExpires 断言没有归还的占位（请求中途出错返回）会自行失效，
-// 不会把账号永久锁住。
+// TestLoginLimiterInflightExpires asserts that a placeholder nobody returned (the request errored out midway) expires by itself
+// and does not lock the account forever.
 func TestLoginLimiterInflightExpires(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	lim := NewLoginLimiter(LimiterConfig{

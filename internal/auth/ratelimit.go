@@ -8,68 +8,68 @@ import (
 	"time"
 )
 
-// 登录限流的默认参数。延迟按基值 × 2^(失败次数-1) 递增并封顶 MaxDelay（
-// 会话与安全约定）。
+// Default parameters for login rate limiting. The delay grows as base × 2^(failure count-1) and is capped at MaxDelay (
+// session and security conventions).
 const (
 	DefaultRateLimitBaseDelay = 200 * time.Millisecond
 	DefaultRateLimitMaxDelay  = 5 * time.Second
 	DefaultRateLimitWindow    = 15 * time.Minute
-	// DefaultMaxAccountFailures 是一个账号在窗口内允许的失败次数，达到后直接拒绝到窗口结束。
-	// 密码与 TOTP 第二步共用这个计数：6 位 TOTP 在每 15 分钟 10 次的速率下无法被穷举。
+	// DefaultMaxAccountFailures is the number of failures an account may have within the window; once reached, attempts are rejected outright until the window ends.
+	// The password and the TOTP second step share this count: a 6-digit TOTP cannot be brute-forced at 10 tries per 15 minutes.
 	DefaultMaxAccountFailures = 10
-	// DefaultMaxIPFailures 是一个 IP 在窗口内允许的失败次数；比账号宽，因为同一出口 IP
-	// 后面可能有多个正常用户。
+	// DefaultMaxIPFailures is the number of failures an IP may have within the window; it is looser than the account limit because several legitimate users
+	// may sit behind the same egress IP.
 	DefaultMaxIPFailures = 50
-	// inflightTTL 是一次「已放行、尚未报告结果」的尝试占位的最长寿命。正常路径会在
-	// RecordFailure / Reset / Release 里归还占位；中途出错返回的请求不归还，占位到期自动失效。
+	// inflightTTL is the maximum lifetime of an "admitted, result not reported yet" attempt placeholder. The normal path returns the placeholder in
+	// RecordFailure / Reset / Release; a request that errors out midway does not return it, and the placeholder expires on its own.
 	inflightTTL = time.Minute
 )
 
-// ErrLoginLocked 表示账号或 IP 的失败次数已达上限，本次尝试被直接拒绝（不做认证）。
+// ErrLoginLocked means the account or the IP has reached its failure limit, so this attempt is rejected outright (no authentication is performed).
 var ErrLoginLocked = errors.New("login temporarily locked")
 
-// LockedError 携带解除锁定前还需等待的时长，供响应头 Retry-After 使用。
+// LockedError carries how long remains before the lock lifts, for the Retry-After response header.
 type LockedError struct{ RetryAfter time.Duration }
 
 func (e *LockedError) Error() string { return ErrLoginLocked.Error() }
 
-// Is 让 errors.Is(err, ErrLoginLocked) 成立。
+// Is makes errors.Is(err, ErrLoginLocked) hold.
 func (e *LockedError) Is(target error) bool { return target == ErrLoginLocked }
 
-// LimiterConfig 是限流器配置；零值字段由 NewLoginLimiter 补默认值。
+// LimiterConfig is the limiter configuration; zero-valued fields are defaulted by NewLoginLimiter.
 type LimiterConfig struct {
 	BaseDelay time.Duration
 	MaxDelay  time.Duration
-	// Window 是失败计数的保鲜期：超过它没有新的失败就当作已清零。
+	// Window is the freshness period of the failure count: with no new failure within it, the count is treated as cleared.
 	Window time.Duration
-	// MaxAccountFailures / MaxIPFailures 是两个维度的锁定阈值；<=0 时用默认值。
+	// MaxAccountFailures / MaxIPFailures are the lock thresholds of the two dimensions; <=0 means the default.
 	MaxAccountFailures int
 	MaxIPFailures      int
-	// Now 可注入时钟；测试用它让窗口过期而不真实等待。
+	// Now is an injectable clock; tests use it to expire a window without real waiting.
 	Now func() time.Time
-	// Sleep 可注入等待函数；测试注入记录器，避免真实睡眠拖慢测试。
+	// Sleep is an injectable wait function; tests inject a recorder so real sleeping does not slow the suite down.
 	Sleep func(ctx context.Context, d time.Duration) error
 }
 
-// failureBucket 是单个键（账号或 IP）的失败计数与在途尝试数。
+// failureBucket holds the failure count and the in-flight attempt count for a single key (account or IP).
 type failureBucket struct {
 	count  int
 	lastAt time.Time
-	// inflight 是已经通过 Wait、还没报告结果的尝试数。锁定判断把它算进去：只看已记录的失败时，
-	// 并发发出的一批请求会在第一条失败被记下之前全部通过检查，阈值就形同虚设。
+	// inflight is the number of attempts that already passed Wait and have not reported a result yet. The lock decision counts it in: looking only at recorded failures,
+	// a burst of concurrent requests would all clear the check before the first failure is recorded, and the threshold would be meaningless.
 	inflight   int
 	inflightAt time.Time
 }
 
-// LoginLimiter 按账号与 IP 双维度记录登录失败：失败越多，后续尝试的延迟越长；
-// 失败次数（含在途尝试）达到阈值后直接拒绝，直到窗口过去。
+// LoginLimiter records login failures along two dimensions, account and IP: the more failures, the longer the delay for later attempts;
+// once the failure count (in-flight attempts included) reaches the threshold, attempts are rejected outright until the window passes.
 //
-// 只有延迟没有锁定时，攻击者用并发就能把吞吐放大任意倍（每个请求都只是多睡几秒）。
-// 锁定的代价是别人可以故意输错把某个账号锁住一个窗口（15 分钟）；对自托管实例这是
-// 可接受的权衡，且成功登录会立即清零。
+// With delay alone and no locking, an attacker could amplify throughput arbitrarily with concurrency (every request just sleeps a few extra seconds).
+// The price of locking is that someone can deliberately mistype to lock an account for one window (15 minutes); for a self-hosted instance that is
+// an acceptable trade-off, and a successful login clears it immediately.
 //
-// 状态放在内存里：本服务单实例部署，不引 Redis；失败计数是短时防爆破数据，
-// 进程重启即清零是可接受的权衡。
+// State lives in memory: this service is deployed as a single instance and pulls in no Redis; failure counts are short-lived anti-brute-force data,
+// so clearing them on process restart is an acceptable trade-off.
 type LoginLimiter struct {
 	mu         sync.Mutex
 	buckets    map[string]*failureBucket
@@ -82,7 +82,7 @@ type LoginLimiter struct {
 	sleep      func(ctx context.Context, d time.Duration) error
 }
 
-// NewLoginLimiter 构造限流器并补默认值；依赖都可注入，便于测试。
+// NewLoginLimiter constructs the limiter and fills in defaults; every dependency is injectable, which keeps it testable.
 func NewLoginLimiter(cfg LimiterConfig) *LoginLimiter {
 	l := &LoginLimiter{
 		buckets:    make(map[string]*failureBucket),
@@ -121,7 +121,7 @@ func NewLoginLimiter(cfg LimiterConfig) *LoginLimiter {
 	return l
 }
 
-// sleepContext 是可被 ctx 取消的等待；请求断开时应立刻返回而不是继续占着连接。
+// sleepContext is a wait that ctx can cancel; when the request disconnects it should return at once instead of holding the connection.
 func sleepContext(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -138,8 +138,8 @@ func accountKey(username string) string {
 }
 func ipKey(ip string) string { return "ip:" + strings.TrimSpace(ip) }
 
-// keys 返回本次尝试涉及的两个键及其阈值；空账号名或空 IP 不建桶（它们的键没有区分度，
-// 建了只会互相污染）。
+// keys returns the two keys involved in this attempt and their thresholds; an empty account name or empty IP gets no bucket (their keys have no
+// discrimination, so a bucket would only pollute the others).
 func (l *LoginLimiter) keys(username, ip string) []struct {
 	key   string
 	limit int
@@ -163,7 +163,7 @@ func (l *LoginLimiter) keys(username, ip string) []struct {
 	return out
 }
 
-// bucket 取某键的桶并按时间清理过期部分；不存在时返回 nil（调用方持锁）。
+// bucket fetches a key's bucket and prunes the expired part by time; returns nil when absent (the caller holds the lock).
 func (l *LoginLimiter) bucket(key string, now time.Time) *failureBucket {
 	b, ok := l.buckets[key]
 	if !ok {
@@ -182,7 +182,7 @@ func (l *LoginLimiter) bucket(key string, now time.Time) *failureBucket {
 	return b
 }
 
-// activeCount 返回某键当前有效的失败次数（调用方持锁）。
+// activeCount returns the currently effective failure count of a key (the caller holds the lock).
 func (l *LoginLimiter) activeCount(key string) int {
 	if b := l.bucket(key, l.now()); b != nil {
 		return b.count
@@ -190,7 +190,7 @@ func (l *LoginLimiter) activeCount(key string) int {
 	return 0
 }
 
-// delayFor 把失败次数换算成等待时长：0 次不等待，之后按 2 的幂递增并封顶。
+// delayFor converts a failure count into a wait duration: 0 failures wait nothing, after that it grows by powers of two up to the cap.
 func (l *LoginLimiter) delayFor(failures int) time.Duration {
 	if failures <= 0 {
 		return 0
@@ -208,15 +208,15 @@ func (l *LoginLimiter) delayFor(failures int) time.Duration {
 	return d
 }
 
-// Wait 在认证前放行或拒绝一次尝试。
+// Wait admits or rejects one attempt before authentication.
 //
-// 任一维度「已记录的失败 + 在途尝试」达到阈值时立即返回 *LockedError（errors.Is 为
-// ErrLoginLocked），不等待、不占位；否则为两个维度各占一个在途位，再按已累计失败次数
-// 递增等待，返回本次延迟（供日志与测试断言）。账号与 IP 两个维度取较大者：任一维度触发
-// 限流都应减速，否则换账号刷同一 IP 就能绕过。
+// When either dimension's "recorded failures + in-flight attempts" reaches its threshold, it returns *LockedError immediately (errors.Is matches
+// ErrLoginLocked) without waiting or taking a placeholder; otherwise it takes one in-flight slot in each dimension and then waits an increasing
+// amount based on the accumulated failure count, returning this attempt's delay (for logs and test assertions). The larger of the two dimensions wins: either one
+// hitting the limit should slow things down, otherwise switching accounts against the same IP would bypass it.
 //
-// 调用方在得到认证结果后必须调用 RecordFailure（失败）、Reset（成功）或 Release（不计成败，
-// 例如第一因素通过、等待第二因素）之一，归还占位；忘记归还的占位在 inflightTTL 后失效。
+// Once the authentication result is in, the caller must call exactly one of RecordFailure (failure), Reset (success) or Release (not counted either way,
+// e.g. the first factor passed and the second is pending) to return the placeholder; a forgotten placeholder expires after inflightTTL.
 func (l *LoginLimiter) Wait(ctx context.Context, username, ip string) (time.Duration, error) {
 	l.mu.Lock()
 	now := l.now()
@@ -270,8 +270,8 @@ func (l *LoginLimiter) Wait(ctx context.Context, username, ip string) (time.Dura
 	return delay, nil
 }
 
-// RecordFailure 记录一次失败并归还 Wait 的占位，返回该账号维度新的失败次数；
-// 账号与 IP 两个维度同时累加。
+// RecordFailure records one failure, returns Wait's placeholder, and reports the account dimension's new failure count;
+// both the account and the IP dimension are incremented.
 func (l *LoginLimiter) RecordFailure(username, ip string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -296,7 +296,7 @@ func (l *LoginLimiter) RecordFailure(username, ip string) int {
 	return count
 }
 
-// Release 归还 Wait 的占位但不记成败：第一因素通过、还要等第二因素时使用。
+// Release returns Wait's placeholder without recording success or failure: used when the first factor passed and the second is still pending.
 func (l *LoginLimiter) Release(username, ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -311,7 +311,7 @@ func (l *LoginLimiter) Release(username, ip string) {
 	}
 }
 
-// Reset 在登录成功后清零该账号与 IP 的失败计数与占位（验收：成功后重置）。
+// Reset clears the failure counts and placeholders of the account and the IP after a successful login (acceptance: reset on success).
 func (l *LoginLimiter) Reset(username, ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -319,26 +319,26 @@ func (l *LoginLimiter) Reset(username, ip string) {
 	delete(l.buckets, ipKey(ip))
 }
 
-// 匿名入口限流的默认参数：/forgot-password 与 /register 这类登录前入口
-// 会被匿名轰炸式触发发信，按 IP 与目标邮箱双维度做固定窗口限流。阈值由 nite 拍板：
-// 每个维度 5 次 / 15 分钟。
+// Default parameters for anonymous-entry rate limiting: pre-login entry points such as /forgot-password and /register
+// can be bombarded anonymously to trigger mail, so they get fixed-window limiting along the IP and target-email dimensions. The thresholds were decided by nite:
+// 5 requests / 15 minutes per dimension.
 const (
 	DefaultAnonRateLimit  = 5
 	DefaultAnonRateWindow = 15 * time.Minute
 )
 
-// anonBucket 是固定窗口内一个键（IP 或邮箱）的请求计数。
+// anonBucket is the request count for one key (IP or email) within a fixed window.
 type anonBucket struct {
 	count int
 	start time.Time
 }
 
-// AnonymousLimiter 对匿名入口按「请求方 IP」与「目标邮箱」双维度做固定窗口计数，
-// 任一维度在一个窗口内超过上限即拒绝。
+// AnonymousLimiter counts anonymous-entry requests along the two dimensions "requester IP" and "target email" in fixed windows,
+// rejecting as soon as either dimension exceeds its limit within a window.
 //
-// 与 LoginLimiter 同属一类形态：状态放内存（单实例部署），时钟可注入以便
-// 测试断言窗口过期而不真实等待。区别在于这里不看结果对不对，只按请求次数封顶——因为
-// 注册与找回密码是合法请求也可能高频的入口，无法用「失败一次记一次」来衡量滥用。
+// It has the same shape as LoginLimiter: state in memory (single-instance deployment), injectable clock so
+// tests can assert window expiry without real waiting. The difference is that it ignores whether the result was right and only caps the request count — because
+// registration and password recovery are entry points where legitimate requests can also be frequent, so abuse cannot be measured as "one failure, one count".
 type AnonymousLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*anonBucket
@@ -347,7 +347,7 @@ type AnonymousLimiter struct {
 	now     func() time.Time
 }
 
-// NewAnonymousLimiter 构造限流器并补默认值；now 可注入，nil 时用 UTC 挂钟。
+// NewAnonymousLimiter constructs the limiter and fills in defaults; now is injectable and falls back to the UTC wall clock when nil.
 func NewAnonymousLimiter(limit int, window time.Duration, now func() time.Time) *AnonymousLimiter {
 	l := &AnonymousLimiter{
 		buckets: make(map[string]*anonBucket),
@@ -367,8 +367,8 @@ func NewAnonymousLimiter(limit int, window time.Duration, now func() time.Time) 
 	return l
 }
 
-// allowLocked 记一次某维度的请求并报告是否仍在配额内（调用方持锁）。
-// 空值不建桶：没有区分度的键只会互相污染（与 RecordFailure 的空键处理一致）。
+// allowLocked records one request for a dimension and reports whether it is still within quota (the caller holds the lock).
+// Empty values get no bucket: keys without discrimination would only pollute each other (consistent with RecordFailure's handling of empty keys).
 func (l *AnonymousLimiter) allowLocked(prefix, value string, now time.Time) bool {
 	if value == "" {
 		return true
@@ -383,10 +383,10 @@ func (l *AnonymousLimiter) allowLocked(prefix, value string, now time.Time) bool
 	return b.count <= l.limit
 }
 
-// Allow 记一次匿名入口请求并报告是否放行：IP 与目标邮箱任一超限都拒绝。
+// Allow records one anonymous-entry request and reports whether it passes: either the IP or the target email over the limit rejects it.
 //
-// 两个维度都会计数（与固定窗口限流器的惯例一致）：一旦某个维度进入超限状态，在窗口过期
-// 前它都会继续被拒。邮箱先按小写去空白归一，避免大小写差异绕过邮箱维度的计数。
+// Both dimensions are counted (consistent with the fixed-window limiter convention): once a dimension goes over the limit it keeps being
+// rejected until the window expires. The email is lowercased and trimmed first, so case differences cannot bypass the email dimension's count.
 func (l *AnonymousLimiter) Allow(ip, email string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()

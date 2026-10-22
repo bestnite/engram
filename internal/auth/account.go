@@ -12,14 +12,14 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// 账号服务的稳定错误值；transport 层据此映射到稳定英文 code。
+// Stable error values of the account service; the transport layer maps them to stable English codes.
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserDisabled       = errors.New("user is disabled")
 	ErrPasswordUnchanged  = errors.New("new password must differ from the current one")
 )
 
-// CreateUserInput 是创建本地账号的入参；空字段由服务补默认值。
+// CreateUserInput is the input for creating a local account; empty fields are filled with defaults by the service.
 type CreateUserInput struct {
 	Username      string
 	Email         string
@@ -31,9 +31,9 @@ type CreateUserInput struct {
 	DayCutoffHour *int
 }
 
-// AccountService 负责本地账号的核心流程：创建、认证、改密、禁用。
-// 它持有 UserStore、SessionStore 与 APIKeyStore，因此能在口令重置时于同一事务里
-// 同步作废会话与 API Key；用户主动改密只作废会话，不动 key。
+// AccountService owns the core local account flows: create, authenticate, change password, disable.
+// It holds the UserStore, SessionStore and APIKeyStore, so on a password reset it can revoke sessions and API keys in the same
+// transaction; a user-initiated password change revokes sessions only and leaves keys alone.
 type AccountService struct {
 	users    *store.UserStore
 	sessions *store.SessionStore
@@ -42,7 +42,7 @@ type AccountService struct {
 	now      func() time.Time
 }
 
-// NewAccountService 构造账号服务；依赖缺一不可。
+// NewAccountService constructs the account service; no dependency may be missing.
 func NewAccountService(users *store.UserStore, sessions *store.SessionStore, keys *store.APIKeyStore, hasher *PasswordHasher) (*AccountService, error) {
 	if users == nil || sessions == nil || keys == nil {
 		return nil, errors.New("auth: user store, session store and api key store are required")
@@ -54,7 +54,7 @@ func NewAccountService(users *store.UserStore, sessions *store.SessionStore, key
 		now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
-// CreateLocalUser 校验密码策略、哈希密码并写入用户；邮箱大小写归一化，登录名保持原样。
+// CreateLocalUser validates the password policy, hashes the password and writes the user; the email is case-normalized and the login name is kept as given.
 func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
 	u, err := s.prepareLocalUser(in)
 	if err != nil {
@@ -66,8 +66,8 @@ func (s *AccountService) CreateLocalUser(ctx context.Context, in CreateUserInput
 	return u, nil
 }
 
-// CreateLocalUserTx 在调用方给定的事务里创建本地账号：邀请占用与建号因此共享同一事务。
-// 校验与哈希与 CreateLocalUser 走同一条准备路径，避免两条建号路径漂移。
+// CreateLocalUserTx creates a local account inside the caller's transaction: invite consumption and account creation therefore share one transaction.
+// Validation and hashing go through the same preparation path as CreateLocalUser, so the two account-creation paths cannot drift apart.
 func (s *AccountService) CreateLocalUserTx(ctx context.Context, tx *gorm.DB, in CreateUserInput) (*store.User, error) {
 	u, err := s.prepareLocalUser(in)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *AccountService) CreateLocalUserTx(ctx context.Context, tx *gorm.DB, in 
 	return u, nil
 }
 
-// prepareLocalUser 校验密码策略、哈希密码并归一化入参，得到待落库的用户；不触碰数据库。
+// prepareLocalUser validates the password policy, hashes the password and normalizes the input into a user ready to persist; it does not touch the database.
 func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, error) {
 	if err := ValidatePasswordPolicy(in.Password); err != nil {
 		return nil, err
@@ -91,11 +91,11 @@ func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, erro
 	return newUserFromInput(in, &hash, s.now())
 }
 
-// CreateOIDCUser 创建一个纯 OIDC 账号（password_hash = NULL）。
+// CreateOIDCUser creates a pure OIDC account (password_hash = NULL).
 //
-// 与 CreateLocalUser 的区别只有凭据：不做密码策略校验，也不派生哈希 —— OIDC 账号靠
-// 绑定的外部身份登录（接入流程，提供建号能力）。用户名与邮箱仍为必填，
-// 否则唯一约束与后续找回都会失去依据。
+// The only difference from CreateLocalUser is the credential: no password policy check and no hash derivation — an OIDC account logs in
+// through its bound external identity (onboarding flow, providing account creation). Username and email are still required,
+// otherwise the unique constraints and later recovery would lose their basis.
 func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
 	u, err := newUserFromInput(in, nil, s.now())
 	if err != nil {
@@ -107,8 +107,8 @@ func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput)
 	return u, nil
 }
 
-// newUserFromInput 把入参归一化为待落库的用户；passwordHash 为 nil 表示无本地密码。
-// 默认值集中在这里，避免两条建号路径漂移（AGENTS.md §2.6：一个行为只有一处实现）。
+// newUserFromInput normalizes the input into a user ready to persist; a nil passwordHash means no local password.
+// Defaults are centralized here so the two account-creation paths cannot drift (AGENTS.md §2.6: one behavior, one implementation).
 func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (*store.User, error) {
 	username := strings.TrimSpace(in.Username)
 	email := strings.ToLower(strings.TrimSpace(in.Email))
@@ -149,21 +149,21 @@ func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (
 	}, nil
 }
 
-// Authenticate 校验用户名/密码；禁用用户一律拒绝，不区分"密码错"与"账号禁用"之外的细节。
+// Authenticate checks username/password; disabled users are always rejected, distinguishing no detail beyond "wrong password" versus "account disabled".
 func (s *AccountService) Authenticate(ctx context.Context, username, password string) (*store.User, error) {
 	u, err := s.users.ByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {
 		if store.IsNotFound(err) {
-			// 用户不存在与密码错误返回同一个错误；这里额外跑一次同参数的 argon2id，
-			// 使两条路径的响应时间不可区分，堵住按耗时枚举用户名的旁路。
-			// 结果必须丢弃：错误语义保持不变。
+			// A missing user and a wrong password return the same error; here we additionally run one argon2id with the same parameters,
+			// making the two paths indistinguishable by response time and closing the side channel that enumerates usernames by latency.
+			// The result must be discarded: the error semantics stay unchanged.
 			s.hasher.VerifyDummy(password)
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("load user: %w", err)
 	}
 	if u.PasswordHash == nil {
-		// 纯 OIDC 账号不能用密码登录；若不拉平代价，该分支因快速返回同样可被枚举。
+		// A pure OIDC account cannot log in with a password; without leveling the cost, that branch would be equally enumerable thanks to its fast return.
 		s.hasher.VerifyDummy(password)
 		return nil, ErrInvalidCredentials
 	}
@@ -180,19 +180,19 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 	return u, nil
 }
 
-// ChangePassword 校验旧密码、强度与"新旧不同"，写入新哈希并作废该用户全部会话。
+// ChangePassword validates the old password, its strength and that the new one differs, writes the new hash and revokes all of the user's sessions.
 func (s *AccountService) ChangePassword(ctx context.Context, userID uint64, oldPassword, newPassword string) error {
 	return s.changePassword(ctx, userID, oldPassword, newPassword, "")
 }
 
-// ChangePasswordKeepingSession 与 ChangePassword 相同，但保留 keepSessionID 这一个会话：
-// 本人在设置页改密码时，其它设备下线而当前窗口继续可用（否则用户刚改完就被登出）。
-// 写审计由调用方负责（它才知道请求来源）。
+// ChangePasswordKeepingSession is the same as ChangePassword but keeps the single session keepSessionID:
+// when the user changes their password on the settings page, other devices go offline while the current window stays usable (otherwise they would be logged out right after changing it).
+// Writing the audit entry is the caller's responsibility (only it knows the request origin).
 func (s *AccountService) ChangePasswordKeepingSession(ctx context.Context, userID uint64, keepSessionID, oldPassword, newPassword string) error {
 	return s.changePassword(ctx, userID, oldPassword, newPassword, keepSessionID)
 }
 
-// changePassword 是两条改密路径的唯一实现；keepSessionID 为空表示作废全部会话。
+// changePassword is the single implementation of both password-change paths; an empty keepSessionID means revoke all sessions.
 func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldPassword, newPassword, keepSessionID string) error {
 	u, err := s.users.ByID(ctx, userID)
 	if err != nil {
@@ -227,7 +227,7 @@ func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldP
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
 }
 
-// DisableUser 置为 disabled 并作废其全部会话；即使会话行被直接读回，中间件也会因状态不是 active 而拒绝。
+// DisableUser marks the account disabled and revokes all of its sessions; even if a session row were read back directly, the middleware rejects it because the status is no longer active.
 func (s *AccountService) DisableUser(ctx context.Context, userID uint64) error {
 	u, err := s.users.ByID(ctx, userID)
 	if err != nil {
@@ -240,7 +240,7 @@ func (s *AccountService) DisableUser(ctx context.Context, userID uint64) error {
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
 }
 
-// EnableUser 重新启用账号；不恢复任何旧会话（用户需重新登录）。
+// EnableUser re-enables the account; it restores no old sessions (the user has to log in again).
 func (s *AccountService) EnableUser(ctx context.Context, userID uint64) error {
 	u, err := s.users.ByID(ctx, userID)
 	if err != nil {

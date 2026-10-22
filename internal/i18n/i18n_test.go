@@ -19,8 +19,9 @@ func newTestTranslator(t *testing.T) *Translator {
 	return tr
 }
 
-// TestPickResolutionOrder 覆盖语言解析顺序：?lang > 用户设置 > Accept-Language > 默认。
-// 这是验收点之一，逐条断言，避免顺序被改坏。
+// TestPickResolutionOrder covers the language resolution order: ?lang > user setting >
+// Accept-Language > default. This is one of the acceptance points; assert it case by case so
+// the order cannot be broken.
 func TestPickResolutionOrder(t *testing.T) {
 	tr := newTestTranslator(t)
 	cases := []struct {
@@ -54,7 +55,8 @@ func TestPickResolutionOrder(t *testing.T) {
 	}
 }
 
-// TestCatalogsHaveIdenticalKeys 是语言包完备性检查：任一语言缺 key，本测试就失败。
+// TestCatalogsHaveIdenticalKeys is the language pack completeness check: fail this test if any
+// language is missing a key.
 func TestCatalogsHaveIdenticalKeys(t *testing.T) {
 	zh := catalogKeys(t, "locales/zh-CN.yaml")
 	en := catalogKeys(t, "locales/en.yaml")
@@ -73,8 +75,9 @@ func TestCatalogsHaveIdenticalKeys(t *testing.T) {
 	}
 }
 
-// TestNewFromFSRejectsCatalogMissingAKey 证明完备性检查在加载期生效：某语言缺 key 时
-// 构造失败，而不是等到页面上出现未翻译文案。
+// TestNewFromFSRejectsCatalogMissingAKey proves the completeness check is enforced at load time:
+// construction fails when a language is missing a key, instead of waiting until untranslated text
+// shows up on the page.
 func TestNewFromFSRejectsCatalogMissingAKey(t *testing.T) {
 	fsys := fstest.MapFS{
 		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n- id: nav.today\n  translation: \"今日\"\n")},
@@ -107,7 +110,8 @@ func TestLocalizeTranslatesAndFallsBackToID(t *testing.T) {
 	if got, want := zh.T("home.heading"), "今日复习"; got != want {
 		t.Errorf("zh-CN home.heading = %q, want %q", got, want)
 	}
-	// 缺 key 时回退成 key 本身，让问题在页面上可见，而不是凭空消失。
+	// A missing key falls back to the key itself, so the problem is visible on the page rather than
+	// disappearing into thin air.
 	if got := en.T("does.not.exist"); got != "does.not.exist" {
 		t.Errorf("missing key = %q, want the key itself", got)
 	}
@@ -153,7 +157,8 @@ func TestSupportedCodesAreOrderedAndComplete(t *testing.T) {
 	}
 }
 
-// catalogKeys 独立解析语言包（不复用加载器），作为完备性检查的第二条证据来源。
+// catalogKeys parses the language packs independently (without reusing the loader), as a second
+// source of evidence for the completeness check.
 func catalogKeys(t *testing.T, name string) map[string]string {
 	t.Helper()
 	data, err := localesFS.ReadFile(name)

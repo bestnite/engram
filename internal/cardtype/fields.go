@@ -2,11 +2,11 @@ package cardtype
 
 import "fmt"
 
-// 本文件集中 fields 的类型读取与校验。
-// fields 来自 JSON 反序列化：数值是 float64、数组是 []any、对象是 map[string]any
-// （标准库 encoding/json 的行为）；同时兼容 Go 侧直接构造的 []string 等类型。
+// This file centralizes typed reads and validation of fields.
+// fields come from JSON deserialization: numbers are float64, arrays are []any, objects are map[string]any
+// (the behavior of the standard library's encoding/json); Go-side constructions such as []string are also supported.
 
-// stringField 读取必填的非空字符串字段。
+// stringField reads a required non-empty string field.
 func stringField(fields map[string]any, name string) (string, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -22,7 +22,7 @@ func stringField(fields map[string]any, name string) (string, error) {
 	return s, nil
 }
 
-// stringSliceField 读取必填的非空字符串数组字段，元素必须非空。
+// stringSliceField reads a required non-empty string array field whose elements must be non-empty.
 func stringSliceField(fields map[string]any, name string) ([]string, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -60,7 +60,7 @@ func stringSliceField(fields map[string]any, name string) ([]string, error) {
 	return out, nil
 }
 
-// boolField 读取可选布尔字段；缺失时返回默认值 def。
+// boolField reads an optional boolean field; returns the default def when missing.
 func boolField(fields map[string]any, name string, def bool) (bool, error) {
 	v, ok := fields[name]
 	if !ok || v == nil {
@@ -73,12 +73,12 @@ func boolField(fields map[string]any, name string, def bool) (bool, error) {
 	return b, nil
 }
 
-// validateCommonOptional 校验通用可选字段 extra / source_url。
+// validateCommonOptional validates the common optional fields extra / source_url.
 //
-// 冻结表把它们列为所有题型可用的可选字段；而
-// schema/note-import.schema.json 把它们放在 note 层（与 fields 平级）。
-// 两处位置不一致，本包按冻结表在 fields 内接受并做类型校验；
-// 放在 note 层时不由本包处理。该差异已在交付报告中说明，未改动 schema。
+// The frozen table lists them as optional fields available to every card type; whereas
+// schema/note-import.schema.json puts them at the note level (siblings of fields).
+// The two locations disagree, so this package accepts them inside fields per the frozen table and type-checks them;
+// when placed at the note level they are not handled by this package. The discrepancy is documented in the delivery report and the schema was not changed.
 func validateCommonOptional(fields map[string]any) error {
 	if v, ok := fields["source_url"]; ok && v != nil {
 		s, ok := v.(string)

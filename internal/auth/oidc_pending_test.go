@@ -6,17 +6,17 @@ import (
 	"time"
 )
 
-// OIDC 的待完成登录表（OIDCClient.pending）是有界性与过期淘汰的验收测试。
+// Acceptance tests for boundedness and expiry eviction of the OIDC pending-login table (OIDCClient.pending).
 //
-// 该表是纯内存结构：匿名者可以反复 GET /auth/oidc/start，而只有带正确 state 的回调才会删除
-// 对应项。没有上限与淘汰时它会被堆大（内存 DoS）。这里直接对 OIDCClient 做单元测试，
-// 时钟由 c.now 注入，断言确定、不依赖真实时间流逝。
+// The table is a pure in-memory structure: anonymous visitors can repeatedly GET /auth/oidc/start, and only a callback with the correct state deletes
+// the corresponding entry. Without a cap and eviction it grows without bound (memory DoS). Here OIDCClient is unit-tested directly,
+// with the clock injected via c.now, so assertions are deterministic and do not depend on real time passing.
 
-// pendingCap 是用户拍板的上限（1000 条）。测试用字面量钉住这个决定：实现若放宽/收紧，
-// 有界性用例会失败。
+// pendingCap is the cap the user settled on (1000 entries). The test pins that decision with a literal: if the implementation loosens or tightens it,
+// the boundedness case fails.
 const pendingCap = 1000
 
-// fixedClock 构造一个时钟可注入的客户端，返回可推进的时间指针。
+// fixedClock constructs a client with an injectable clock and returns an advanceable time pointer.
 func fixedClock(t *testing.T) (*OIDCClient, *time.Time) {
 	t.Helper()
 	c := NewOIDCClient(nil)
@@ -25,7 +25,7 @@ func fixedClock(t *testing.T) (*OIDCClient, *time.Time) {
 	return c, &now
 }
 
-// TestOIDCPendingTableIsBounded：连续发起远超上限且都未过期的登录，表大小必须被上限压住。
+// TestOIDCPendingTableIsBounded: starting far more logins than the cap, all unexpired, the table size must stay capped.
 func TestOIDCPendingTableIsBounded(t *testing.T) {
 	c, now := fixedClock(t)
 	exp := now.Add(10 * time.Minute)
@@ -37,14 +37,14 @@ func TestOIDCPendingTableIsBounded(t *testing.T) {
 	}
 }
 
-// TestOIDCPendingSweepsExpiredEntries：过期项必须被清理，后续发起只留下自己那一条。
+// TestOIDCPendingSweepsExpiredEntries: expired entries must be cleaned up, so a later start leaves only its own record.
 func TestOIDCPendingSweepsExpiredEntries(t *testing.T) {
 	c, now := fixedClock(t)
 	expired := now.Add(-time.Minute)
 	for i := 0; i < pendingCap; i++ {
 		c.PutPending(fmt.Sprintf("expired-%d", i), PendingAuth{ExpiresAt: expired})
 	}
-	// 再来一次发起：过期的都应被淘汰，表里只该留下这一条新记录。
+	// One more start: the expired ones should be evicted, leaving only this new record in the table.
 	c.PutPending("fresh", PendingAuth{ExpiresAt: now.Add(10 * time.Minute)})
 	if got := len(c.pending); got != 1 {
 		t.Fatalf("after sweeping, pending table holds %d entries, want 1 (expired entries never cleaned)", got)
@@ -54,7 +54,7 @@ func TestOIDCPendingSweepsExpiredEntries(t *testing.T) {
 	}
 }
 
-// TestOIDCPendingTakeIsOnceOnly：state 只能消费一次（重放被拒）。
+// TestOIDCPendingTakeIsOnceOnly: a state can be consumed only once (replay is rejected).
 func TestOIDCPendingTakeIsOnceOnly(t *testing.T) {
 	c, now := fixedClock(t)
 	c.PutPending("s1", PendingAuth{Nonce: "n", Verifier: "v", ExpiresAt: now.Add(10 * time.Minute)})
@@ -66,7 +66,7 @@ func TestOIDCPendingTakeIsOnceOnly(t *testing.T) {
 	}
 }
 
-// TestOIDCPendingNormalFlowRoundTrips：正常流程（Put 后 Take）仍逐字段一致。
+// TestOIDCPendingNormalFlowRoundTrips: the normal flow (Put then Take) still matches field by field.
 func TestOIDCPendingNormalFlowRoundTrips(t *testing.T) {
 	c, now := fixedClock(t)
 	want := PendingAuth{

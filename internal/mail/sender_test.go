@@ -9,14 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// recordingSender 是一个可注入的投递替身：按顺序返回预置错误，用于验证重试与永久失败，
-// 不依赖任何真实 SMTP 服务。
+// recordingSender is an injectable delivery stand-in: it returns preset errors in order, used to
+// verify retries and permanent failure without depending on any real SMTP service.
 type recordingSender struct {
 	mu   sync.Mutex
-	errs []error // 第 i 次 Send 返回 errs[i]；耗尽后返回 nil
+	errs []error // the i-th Send returns errs[i]; once exhausted it returns nil
 	n    int
 	sent []Message
-	// block 非 nil 时 Send 阻塞到它被关闭，用于证明"不在请求路径同步发信"。
+	// when block is non-nil, Send blocks until it is closed, proving "no synchronous send on the request path".
 	block chan struct{}
 }
 
@@ -44,7 +44,8 @@ func (s *recordingSender) calls() int {
 	return s.n
 }
 
-// waitFor 轮询 cond 直到为真或超时；超时即 t.Fatal，避免测试挂死。
+// waitFor polls cond until it is true or the timeout expires; a timeout is t.Fatal, so a test cannot
+// hang.
 func waitFor(t *testing.T, timeout time.Duration, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -57,12 +58,13 @@ func waitFor(t *testing.T, timeout time.Duration, what string, cond func() bool)
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// fastRetry 是测试用的退避策略：短延迟，让重试在毫秒级完成。
+// fastRetry is the backoff policy used in tests: short delays, so retries finish in milliseconds.
 func fastRetry(maxAttempts int) RetryPolicy {
 	return RetryPolicy{MaxAttempts: maxAttempts, BaseDelay: 5 * time.Millisecond, MaxDelay: 20 * time.Millisecond}
 }
 
-// configuredSettings 往库里写一份可用的 SMTP 配置（指向 addr 的 host/port 与 from）。
+// configuredSettings writes a usable SMTP configuration into the database (host/port pointing at addr,
+// plus from).
 func configuredSettings(t *testing.T, db *gorm.DB, hostPort string, from string) {
 	t.Helper()
 	h, p := splitHostPort(t, hostPort)

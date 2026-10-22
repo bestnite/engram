@@ -2,14 +2,14 @@ package cardtype
 
 import "fmt"
 
-// basicType 是基础问答卡：front 提问、back 回答，产出 1 张卡。
-// 字段：front / back（必填），extra / source_url（可选）。
+// basicType is the basic Q&A card: front asks, back answers, producing 1 card.
+// Fields: front / back (required), extra / source_url (optional).
 type basicType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (basicType) Label() string { return "cardtype.basic" }
 
-// Describe 自描述：正反面是 front/back，自评题型（不实现 Grader）。
+// Describe self-describes: the front and back are front/back, a self-graded card type (does not implement Grader).
 func (basicType) Describe() Description {
 	return Description{
 		Kind:          "basic",
@@ -30,7 +30,7 @@ func (basicType) Describe() Description {
 	}
 }
 
-// Validate 校验 front / back。
+// Validate checks front / back.
 func (basicType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "front"); err != nil {
 		return fmt.Errorf("basic: %w", err)
@@ -44,12 +44,12 @@ func (basicType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出唯一的正向卡。
+// Cards produces the single forward card.
 func (basicType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render 正面显示 front，背面显示 back。
+// Render shows front on the front side and back on the back side.
 func (basicType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -68,14 +68,14 @@ func (basicType) Render(card Card, side Side) (RenderResult, error) {
 	return RenderResult{Body: front}, nil
 }
 
-// basicBothType 是双向问答卡：正反各一张。
-// 字段：front / back（必填），extra / source_url（可选）。
+// basicBothType is the bidirectional Q&A card: one card in each direction.
+// Fields: front / back (required), extra / source_url (optional).
 type basicBothType struct{}
 
-// Label 返回语言包键名。
+// Label returns the language pack key.
 func (basicBothType) Label() string { return "cardtype.basic_both" }
 
-// Describe 自描述：正反面是 front/back；反向卡是模板层的事，不改变字段映射。
+// Describe self-describes: the front and back are front/back; the reverse card is the template layer's business and does not change the field mapping.
 func (basicBothType) Describe() Description {
 	return Description{
 		Kind:          "basic_both",
@@ -94,7 +94,7 @@ func (basicBothType) Describe() Description {
 	}
 }
 
-// Validate 校验 front / back。
+// Validate checks front / back.
 func (basicBothType) Validate(fields map[string]any) error {
 	if _, err := stringField(fields, "front"); err != nil {
 		return fmt.Errorf("basic_both: %w", err)
@@ -108,7 +108,7 @@ func (basicBothType) Validate(fields map[string]any) error {
 	return nil
 }
 
-// Cards 产出正向（ordinal 0）与反向（ordinal 1）两张卡。
+// Cards produces two cards: forward (ordinal 0) and reverse (ordinal 1).
 func (basicBothType) Cards(note Note) []Card {
 	return []Card{
 		{Template: "forward", Ordinal: 0, Fields: note.Fields},
@@ -116,7 +116,7 @@ func (basicBothType) Cards(note Note) []Card {
 	}
 }
 
-// Render 正向 front→back；反向把 back 当问题、front 当答案。
+// Render goes front→back forward; reverse treats back as the question and front as the answer.
 func (basicBothType) Render(card Card, side Side) (RenderResult, error) {
 	front, err := stringField(card.Fields, "front")
 	if err != nil {

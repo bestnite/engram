@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestShortAnswerRegistered 是验收：文档冻结的十个题型全部注册，
-// 且 short_answer 在列。
+// TestShortAnswerRegistered is the acceptance: all ten card types frozen in the docs are registered,
+// and short_answer is among them.
 func TestShortAnswerRegistered(t *testing.T) {
 	want := []string{
 		"basic", "basic_both", "choice_multi", "choice_single", "cloze",
@@ -22,8 +22,8 @@ func TestShortAnswerRegistered(t *testing.T) {
 	}
 }
 
-// TestShortAnswerIsSelfAssessed 断言 short_answer 不实现 Grader：复习流程对它走自评
-// （「先自评」；LLM 判分留待后续）。
+// TestShortAnswerIsSelfAssessed asserts short_answer does not implement Grader: the review flow takes the self-rating path for it
+// ("self-rate first"; LLM grading is left for later).
 func TestShortAnswerIsSelfAssessed(t *testing.T) {
 	impl, ok := Lookup("short_answer")
 	if !ok {
@@ -37,7 +37,7 @@ func TestShortAnswerIsSelfAssessed(t *testing.T) {
 	}
 }
 
-// TestShortAnswerValidate 覆盖必填 prompt、可选 reference 以及可选字段的类型校验。
+// TestShortAnswerValidate covers the required prompt, the optional reference, and type validation of the optional fields.
 func TestShortAnswerValidate(t *testing.T) {
 	valid := map[string]any{"prompt": "解释这个公式的适用条件"}
 	if err := Validate("short_answer", valid); err != nil {
@@ -72,8 +72,8 @@ func TestShortAnswerValidate(t *testing.T) {
 	}
 }
 
-// TestShortAnswerCardsAndRender 断言产出 1 张正向卡，并覆盖正反两面：
-// 正面只给 prompt；背面给出参考答案（有 reference 时），缺省时只回显 prompt。
+// TestShortAnswerCardsAndRender asserts it produces 1 forward card, covering both sides:
+// the front gives only the prompt; the back gives the reference answer (when reference is present), and echoes the prompt when it is absent.
 func TestShortAnswerCardsAndRender(t *testing.T) {
 	note := Note{Kind: "short_answer", Fields: map[string]any{"prompt": "为什么？", "reference": "因为 X。"}}
 	cards := shortAnswerType{}.Cards(note)
@@ -93,7 +93,7 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(back) error = %v", err)
 	}
-	// 背面只给参考答案，不重复题干：复习页把背面接在正面下方。
+	// The back gives only the reference answer, without repeating the prompt: the review page renders the back below the front.
 	if back.Body != "因为 X。" || len(back.Extra) != 0 {
 		t.Fatalf("Render(back) = %+v, want the reference only", back)
 	}
@@ -112,8 +112,8 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	}
 }
 
-// TestShortAnswerRecordAnswer 断言自评前写下的作答原样存档；没写或只有空白时不存；
-// 非字符串作答拒绝。
+// TestShortAnswerRecordAnswer asserts the answer written before self-rating is archived verbatim; nothing is stored when it is unwritten or whitespace only;
+// a non-string answer is rejected.
 func TestShortAnswerRecordAnswer(t *testing.T) {
 	cases := []struct {
 		name    string

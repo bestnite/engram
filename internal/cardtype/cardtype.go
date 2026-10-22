@@ -1,12 +1,12 @@
-// Package cardtype 是题型注册表与核心管线。
+// Package cardtype is the card type registry and core pipeline.
 //
-// 设计目标：新增题型 = 新增一个实现文件 + 注册，核心代码不改动
-// （AGENTS.md §2.3 第 7 条）。为此核心只依赖一个窄接口 CardType；作答类判分、
-// 未来 LLM 评分等能力用可选窄接口（Grader / PromptContexter / ReferenceRefer）断言，
-// 不预先塞进大接口。
+// Design goal: adding a card type = adding an implementation file + registering it, with the core code unchanged
+// (AGENTS.md §2.3 item 7). To that end the core depends on just one narrow interface, CardType; capabilities such as
+// answer-based grading and future LLM scoring are asserted through optional narrow interfaces (Grader / PromptContexter / ReferenceRefer),
+// instead of being stuffed into a big interface up front.
 //
-// 字段名是冻结的，与 schema/note-import.schema.json 逐字一致（basic/basic_both: front/back；
-// cloze: text；list: prompt/items[]/ordered；通用可选 extra/source_url）。
+// Field names are frozen and match schema/note-import.schema.json verbatim (basic/basic_both: front/back;
+// cloze: text; list: prompt/items[]/ordered; common optional extra/source_url).
 package cardtype
 
 import (
@@ -16,36 +16,36 @@ import (
 	"sort"
 )
 
-// Note 是题型看到的内容视图：Kind 决定 Fields 的结构。
-// 与 store.Note 分离，因为注册表只关心内容，不关心持久化
-// （内容与进度分离）。
+// Note is the content view the card type sees: Kind decides the structure of Fields.
+// It is kept separate from store.Note because the registry only cares about content, not persistence
+// (content separated from progress).
 type Note struct {
 	Kind   string
 	Fields map[string]any
 }
 
-// Card 既承载呈现标识，也承载渲染所需的字段。
+// Card carries both the presentation identity and the fields needed for rendering.
 //
-// Template 必须落在 cards.template 的约定内：
-// forward / reverse / cloze:<index>。Ordinal 在同一 note 内从 0 起单调递增。
-// Fields 是所属 note 的字段，渲染前由调用方填充（生成卡片标识时它可为空，不落库）。
+// Template must fall within the cards.template convention:
+// forward / reverse / cloze:<index>. Ordinal increases monotonically from 0 within the same note.
+// Fields are the fields of the owning note, filled in by the caller before rendering (it may be empty when generating card identities, and is not persisted).
 type Card struct {
 	Template string
 	Ordinal  int
 	Fields   map[string]any
 }
 
-// Side 指明请求渲染的是正面还是背面。
+// Side states whether the render request is for the front or the back.
 type Side int
 
 const (
-	// SideFront 是问题面。
+	// SideFront is the question side.
 	SideFront Side = iota
-	// SideBack 是答案面。
+	// SideBack is the answer side.
 	SideBack
 )
 
-// String 返回侧名的英文标识，供日志与错误信息使用。
+// String returns the English identifier of the side name, for logs and error messages.
 func (s Side) String() string {
 	if s == SideBack {
 		return "back"
@@ -53,75 +53,75 @@ func (s Side) String() string {
 	return "front"
 }
 
-// RenderResult 是某一侧的渲染输入：Markdown + TeX 原文，
-// HTML 化与清洗由渲染管线负责。
+// RenderResult is the render input for one side: Markdown + TeX source,
+// with HTML conversion and sanitization left to the rendering pipeline.
 type RenderResult struct {
-	// Body 是这一侧的主内容。
+	// Body is the main content of this side.
 	Body string
-	// Extra 是这一侧额外按顺序展示的片段（list 逐项揭示的条目）；
-	// 没有附加片段时为空。
+	// Extra is the additional fragments shown in order on this side (the items a list reveals one by one);
+	// empty when there are no extra fragments.
 	Extra []string
 }
 
-// CardType 是题型必须实现的接口，方法集合故意保持最小。
+// CardType is the interface a card type must implement; the method set is deliberately kept minimal.
 type CardType interface {
-	// Validate 校验 fields。错误必须是可读的英文，并点名字段。
+	// Validate checks fields. Errors must be readable English and name the field.
 	Validate(fields map[string]any) error
-	// Cards 依据 note 产出卡片标识；同一 note 的 Template 必须唯一。
+	// Cards derives card identities from the note; Template must be unique within a note.
 	Cards(note Note) []Card
-	// Render 返回 card 在指定侧要展示的内容。
+	// Render returns the content to show for card on the given side.
 	Render(card Card, side Side) (RenderResult, error)
-	// Label 返回 i18n 语言包的键名，而不是用户可见文案。
+	// Label returns the i18n language pack key, not user-visible copy.
 	Label() string
-	// Describe 返回题型的自描述（字段表、正反面字段、作答控件），供编辑页与复习页渲染。
-	// Graded 由注册表在枚举时对 Grader 做接口断言得出，这里不声明。
+	// Describe returns the card type's self-description (field table, front/back fields, answer controls), for the editor and review pages to render.
+	// Graded is not declared here; the registry derives it by doing an interface assertion on Grader while enumerating.
 	Describe() Description
 }
 
-// Grader 是可选能力：作答类题型实现机器判分。
-// 未实现的题型不做断言，核心管线不依赖它；实现了的题型由服务端判分，客户端不能自评。
+// Grader is an optional capability: answer-based card types implement machine grading.
+// Card types that do not implement it are not asserted on and the core pipeline does not depend on it; those that do are graded server-side and cannot be self-graded by the client.
 //
-// 三个方法覆盖判分的全部题型相关知识，传输层与服务层因此不需要按题型分支：
-// 作答怎么从 JSON 解码（ParseAnswer）、怎么判（Grade）、判完怎么把作答还原成可读文本（GivenText）。
+// The three methods cover all card-type-specific knowledge about grading, so the transport and service layers need no branching by card type:
+// how to decode an answer from JSON (ParseAnswer), how to grade it (Grade), and how to turn the answer back into readable text afterwards (GivenText).
 type Grader interface {
-	// ParseAnswer 把客户端提交的 JSON 作答解码成本题型 Grade 的输入。raw 为空或 JSON null
-	// 表示「没有作答」：能把空作答当作错误答案判分的题型返回对应输入，否则返回错误。
+	// ParseAnswer decodes the JSON answer submitted by the client into this card type's Grade input. An empty raw or JSON null
+	// means "no answer": card types that can grade an empty answer as wrong return the corresponding input, otherwise they return an error.
 	ParseAnswer(gc GradeContext, raw json.RawMessage) (any, error)
-	// Grade 对用户输入判分。rating 是 1–4（Again/Hard/Good/Easy），
-	// detail 落库 reviews.grade_detail_json，ok=false 表示该输入无法判分。
+	// Grade grades the user input. rating is 1–4 (Again/Hard/Good/Easy),
+	// detail is persisted to reviews.grade_detail_json, and ok=false means the input cannot be graded.
 	Grade(input any) (rating int, detail map[string]any, ok bool)
-	// GivenText 把判分细节还原成展示用的作答文本（例如选项索引换成选项文本）；
-	// 判断题返回 "true"/"false"，本地化由前端负责。
+	// GivenText turns the grading detail back into display answer text (for example, an option index into the option text);
+	// true/false cards return "true"/"false", and localization is the front end's job.
 	GivenText(fields map[string]any, detail map[string]any) string
 }
 
-// PromptContext 是 PromptContexter 返回的题目上下文，供未来 LLM 评分使用。
+// PromptContext is the question context returned by PromptContexter, for use by future LLM scoring.
 type PromptContext struct {
 	Question  string
 	Reference string
 }
 
-// PromptContexter 是可选能力：为 LLM 评分提供题目与参考答案。
+// PromptContexter is an optional capability: it supplies the question and reference answer for LLM scoring.
 type PromptContexter interface {
 	PromptContext(note Note) PromptContext
 }
 
-// ReferenceRefer 是可选能力：返回该 note 依赖的知识库片段引用。
+// ReferenceRefer is an optional capability: it returns the knowledge base fragment references this note depends on.
 type ReferenceRefer interface {
 	ReferenceRefs(note Note) []string
 }
 
-// Registry 是 kind → 题型实现的注册表。零值不可用，请用 NewRegistry 构造。
+// Registry is the kind → card type implementation registry. The zero value is not usable; construct one with NewRegistry.
 type Registry struct {
 	types map[string]CardType
 }
 
-// NewRegistry 返回一个空的注册表。
+// NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{types: make(map[string]CardType)}
 }
 
-// Register 以 kind 为键注册题型；空 kind、nil 实现、重复注册都会返回错误。
+// Register registers a card type keyed by kind; an empty kind, a nil implementation, or a duplicate registration all return an error.
 func (r *Registry) Register(kind string, t CardType) error {
 	if kind == "" {
 		return errors.New("cardtype: kind must not be empty")
@@ -136,13 +136,13 @@ func (r *Registry) Register(kind string, t CardType) error {
 	return nil
 }
 
-// Lookup 按 kind 查找题型。
+// Lookup finds a card type by kind.
 func (r *Registry) Lookup(kind string) (CardType, bool) {
 	t, ok := r.types[kind]
 	return t, ok
 }
 
-// Kinds 返回已注册的 kind，按字典序排列。
+// Kinds returns the registered kinds in lexicographic order.
 func (r *Registry) Kinds() []string {
 	out := make([]string, 0, len(r.types))
 	for k := range r.types {
@@ -152,7 +152,7 @@ func (r *Registry) Kinds() []string {
 	return out
 }
 
-// Validate 校验 kind 对应的字段；未知 kind 返回可读错误。
+// Validate validates the fields for kind; an unknown kind returns a readable error.
 func (r *Registry) Validate(kind string, fields map[string]any) error {
 	t, ok := r.Lookup(kind)
 	if !ok {
@@ -161,7 +161,7 @@ func (r *Registry) Validate(kind string, fields map[string]any) error {
 	return t.Validate(fields)
 }
 
-// Cards 用注册表把 note 展开成卡片；未知 kind 返回可读错误。
+// Cards expands the note into cards using the registry; an unknown kind returns a readable error.
 func (r *Registry) Cards(note Note) ([]Card, error) {
 	t, ok := r.Lookup(note.Kind)
 	if !ok {
@@ -170,27 +170,27 @@ func (r *Registry) Cards(note Note) ([]Card, error) {
 	return t.Cards(note), nil
 }
 
-// UnknownKindError 构造统一的未知题型错误；调用方无需关心具体措辞。
+// UnknownKindError builds the uniform unknown-card-type error; callers need not care about the exact wording.
 func UnknownKindError(kind string) error {
 	return fmt.Errorf("unknown card type %q", kind)
 }
 
-// Default 是题型注册表；内置题型在 builtin.go 的 init 中注册，包级函数都作用于它。
+// Default is the card type registry; built-in card types are registered in builtin.go's init, and the package-level functions all act on it.
 var Default = NewRegistry()
 
-// Validate 校验 Default 注册表中 kind 对应的字段。
+// Validate validates the fields for kind in the Default registry.
 func Validate(kind string, fields map[string]any) error { return Default.Validate(kind, fields) }
 
-// Cards 用 Default 注册表把 note 展开成卡片。
+// Cards expands the note into cards using the Default registry.
 func Cards(note Note) ([]Card, error) { return Default.Cards(note) }
 
-// Lookup 在 Default 注册表中按 kind 查找题型。
+// Lookup finds a card type by kind in the Default registry.
 func Lookup(kind string) (CardType, bool) { return Default.Lookup(kind) }
 
-// Kinds 返回 Default 注册表中已注册的 kind。
+// Kinds returns the kinds registered in the Default registry.
 func Kinds() []string { return Default.Kinds() }
 
-// errUnknownTemplate 构造模板不属于该题型时的错误。
+// errUnknownTemplate builds the error for a template that does not belong to the card type.
 func errUnknownTemplate(template string) error {
 	return fmt.Errorf("unknown card template %q", template)
 }
