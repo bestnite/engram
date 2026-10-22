@@ -148,7 +148,7 @@ This file keeps only the rules.
 
 ```bash
 # full-module check — the parent's merge gate only, never a per-task step
-go build ./... && go vet ./... && gofmt -l . && go test ./...
+go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...
 
 # the embedded frontend build output is gitignored, so build it before the Go build
 npm --prefix frontend ci
@@ -186,7 +186,7 @@ A task is done only when all of the following hold:
 1. The acceptance criteria written next to the task in `ROADMAP.md` pass, and the evidence
    is a command output or a captured response — not a claim.
 2. The packages the change touches pass `go vet` and `go test` (see "Scoped test runs"); the
-   parent runs the full-module `go build ./... && go vet ./... && gofmt -l . && go test ./...`
+   parent runs the full-module `go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...`
    once at the merge gate.
 3. New behaviour has tests, including the negative cases named in the task.
 4. Logs are English, comments are Chinese, user-facing strings come from the catalog.
@@ -233,16 +233,19 @@ therefore gets its own worktree. The rules below were verified on git 2.55.
 
 - The main checkout stays on `main` and is used only as the integration point. Do not
   develop in it.
-- Worktrees live **outside** the repository directory, for example
-  `../engram-wt/<task-id>`, so the main checkout's `git status` stays clean.
+- Worktrees live **inside** the repository under `.worktrees/<task-id>`. `.worktrees/` is
+  listed in `.gitignore`, so the main checkout's `git status` stays clean.
+- `go build ./...`, `go vet ./...` and `go test ./...` skip directories whose names start
+  with `.`, but `gofmt -l .` walks into them and would report other worktrees' files. The
+  check therefore formats only tracked files: `git ls-files '*.go' | xargs gofmt -l`.
 - Branch: `feat/<task-id>-<slug>` (for example `feat/m3-2-queue-builder`).
-  Directory: `engram-wt/<task-id>`. Both use the task IDs from `ROADMAP.md`.
+  Directory: `.worktrees/<task-id>`. Both use the task IDs from `ROADMAP.md`.
 
 ```bash
-git worktree add -b feat/m3-2 ../engram-wt/m3-2 main
-# ... work and commit inside ../engram-wt/m3-2 ...
-git worktree remove ../engram-wt/m3-2   # or keep the worktree for review
-git worktree prune                         # drop stale entries
+git worktree add -b feat/m3-2 .worktrees/m3-2 main
+# ... work and commit inside .worktrees/m3-2 ...
+git worktree remove .worktrees/m3-2   # or keep the worktree for review
+git worktree prune                       # drop stale entries
 ```
 
 **Working rules**

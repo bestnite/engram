@@ -60,10 +60,11 @@ subagents as much as to external contributors.
 Run the full check suite from the repository root before every commit:
 
 ```bash
-go build ./... && go vet ./... && gofmt -l . && go test ./...
+go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...
 ```
 
-`gofmt -l .` prints files that need formatting; it must print nothing.
+`gofmt -l` prints files that need formatting; it must print nothing. It is given the tracked
+`.go` files rather than `.` so that it skips worktrees under `.worktrees/`.
 
 The frontend build output is **gitignored**, so a fresh checkout does not build until you
 build it — `go:embed` needs `frontend/dist` to exist:
@@ -86,7 +87,7 @@ The check suite is the Go toolchain plus the catalog-parity test:
 
 ```bash
 git add <your files>
-go build ./... && go vet ./... && gofmt -l . && go test ./...
+go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...
 ```
 
 It must pass. Re-run it on the target branch before merging. A "the checks pass" claim is
@@ -226,7 +227,7 @@ directly (see the next section). Both follow the same branch naming and commit r
 2. Make your change, adding tests including the negative cases.
 3. Rebuild the frontend if you touched it (`npm --prefix frontend run build`).
 4. Stage your files, then run **both** repository checks and the full check suite:
-   `git add …`, `go build ./... && go vet ./... && gofmt -l . && go test ./...`.
+   `git add …`, `go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...`.
 5. Commit with a signed, conventional message — one logical change per commit.
 6. Push and open a pull request against `main`. In the description, state what changed, why,
    and paste the raw output of the checks and tests. Do not paraphrase the result.
@@ -245,15 +246,18 @@ one commit.**
 
 - The main checkout stays on `main` and is used only as the integration point. Do not develop
   in it.
-- Worktrees live **outside** the repository directory, for example
-  `../engram-wt/<task-id>`, so the main checkout's `git status` stays clean.
-- Branch `feat/<task-id>-<slug>`, directory `engram-wt/<task-id>`.
+- Worktrees live **inside** the repository under `.worktrees/<task-id>`. `.worktrees/` is
+  listed in `.gitignore`, so the main checkout's `git status` stays clean.
+- `go build ./...`, `go vet ./...` and `go test ./...` skip directories whose names start
+  with `.`, but `gofmt -l .` walks into them and would report other worktrees' files. The
+  check therefore formats only tracked files: `git ls-files '*.go' | xargs gofmt -l`.
+- Branch `feat/<task-id>-<slug>`, directory `.worktrees/<task-id>`.
 
 ```bash
-git worktree add -b feat/m3-2 ../engram-wt/m3-2 main
-# ... work and commit inside ../engram-wt/m3-2 ...
-git worktree remove ../engram-wt/m3-2   # or keep the worktree for review
-git worktree prune                         # drop stale entries
+git worktree add -b feat/m3-2 .worktrees/m3-2 main
+# ... work and commit inside .worktrees/m3-2 ...
+git worktree remove .worktrees/m3-2   # or keep the worktree for review
+git worktree prune                       # drop stale entries
 ```
 
 Working rules:

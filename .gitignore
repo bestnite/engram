@@ -45,6 +45,9 @@ node_modules/
 testdata/local/
 *.log
 
+# ── 并行开发的 git worktree（见 AGENTS.md 第 6 节）──────────
+.worktrees/
+
 # ── 编辑器与系统 ───────────────────────────────────────────
 .idea/
 .vscode/
