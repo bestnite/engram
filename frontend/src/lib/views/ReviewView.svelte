@@ -114,6 +114,8 @@
   // 「再来一组」：队列空了且复习范围恰好是一个卡组时，读今天的新卡额度；还有今天额度之外的新卡
   // 就在完成页给出追加入口。每日新卡上限是学习目标而不是硬上限，追加只对今天、只对自己生效。
   let extraStatus = $state<ExtraNewStatus | null>(null);
+  // 额度请求进行中：完成页等它结束再整体出现，否则会先闪出「复习完成」，追加表单随后才插进来。
+  let extraLoading = $state(false);
   // 输入框的原文（字符串）：数字输入框不用 bind:value，否则空串会被强转成 null，校验无从说起。
   let extraCount = $state('');
   let extraBusy = $state(false);
@@ -279,6 +281,7 @@
       extraStatus = null;
       return;
     }
+    extraLoading = true;
     try {
       const status = await client.getExtraNew(deck, selectedTags() ?? []);
       extraStatus = status;
@@ -286,6 +289,8 @@
       extraInvalid = false;
     } catch {
       extraStatus = null;
+    } finally {
+      extraLoading = false;
     }
   }
 
@@ -804,6 +809,8 @@
           <span>{$t('common.retry')}</span>
         </button>
       </div>
+    {:else if !current && extraLoading}
+      <Skeleton testId="review-extra-loading" label={$t('review.loading')} lines={2} />
     {:else if !current}
       <div class="text-center py-10" data-testid="review-empty">
         <p class="text-lg font-medium text-foreground/90">{$t('review.empty')}</p>
