@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,38 +11,20 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ddAfterLabel returns the text inside the first </dd> after a given <dt>label</dt> on the page.
-// The settings page renders today's quota as dt/dd pairs, so this looks values up by localized label instead of guessing positions from numbers.
-func ddAfterLabel(body, label string) string {
-	idx := strings.Index(body, ">"+label+"</dt>")
-	if idx < 0 {
-		return ""
-	}
-	rest := body[idx:]
-	start := strings.Index(rest, "<dd")
-	if start < 0 {
-		return ""
-	}
-	rest = rest[start:]
-	gt := strings.Index(rest, ">")
-	if gt < 0 {
-		return ""
-	}
-	rest = rest[gt+1:]
-	end := strings.Index(rest, "</dd>")
-	if end < 0 {
-		return ""
-	}
-	return rest[:end]
-}
-
 // seedTodayUsage writes today's usage records: newUsed occurrences of "new card introduced" (state_before=0) and
 // reviewUsed occurrences of "review" (state_before<>0). Each card also gets a future card_states row,
 // so that they do not re-enter the queue as "new cards" and skew the counts.
 func seedTodayUsage(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newUsed, reviewUsed int) {
 	t.Helper()
 	now := time.Now().UTC()
-	day := schedule.ReviewDay(now, time.UTC, schedule.DefaultDayCutoffHour)
+	// The server counts "today's usage" on the owner's own review day (timezone + cutoff), so the seeded
+	// rows must use the same day: hard-coding UTC here made the test fail whenever the user's local day
+	// differed from the UTC day.
+	owner, err := store.NewUserStore(db).ByID(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("load owner %d: %v", ownerID, err)
+	}
+	day := schedule.ReviewDay(now, store.LoadLocation(owner.Timezone), store.ResolveCutoff(owner.DayCutoffHour))
 	stability, difficulty := 5.0, 5.0
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)
