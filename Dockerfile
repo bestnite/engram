@@ -19,12 +19,14 @@ RUN cargo build --release --locked \
     && ./target/release/optimizer --version
 
 # ---- frontend stage: Svelte 5 SPA production build (Node glibc, pinned to package-lock.json) ----
-FROM node:22-bookworm-slim AS frontend-builder
+FROM node:26-bookworm-slim AS frontend-builder
 
 WORKDIR /src/frontend
-# Copy only the dependency manifests first to maximise layer caching
+# Copy only the dependency manifests first to maximise layer caching, then install the npm version
+# declared in package.json's packageManager (the image ships an older one) before running ci.
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm install -g npm@12.2.1 \
+    && npm ci
 
 # Copy the frontend sources and run type checking and the production build
 COPY frontend/ ./
@@ -32,7 +34,7 @@ RUN npm run check \
     && npm run build
 
 # ---- build stage: compile the Go binary after embedding the frontend artifacts ----
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.27-bookworm AS builder
 
 ARG VERSION=dev
 
