@@ -93,6 +93,27 @@ describe('ReviewView another batch of new cards', () => {
     expect(target.querySelector('#review-extra-hint')?.textContent).toBe('最多 8 张');
   });
 
+  it('holds the completion page until the offer has loaded', async () => {
+    setLocale('zh-CN');
+    seedCardTypes();
+    window.history.replaceState({}, '', '/review?deck=d1');
+    const fake = fakeClient(status);
+    let resolveExtra: (value: ExtraNewStatus) => void = () => {};
+    fake.getExtraNew.mockReturnValue(new Promise<ExtraNewStatus>((resolve) => (resolveExtra = resolve)));
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(ReviewView, { target, props: { client: fake.client } });
+    await flush();
+    // 额度还没回来：不能先露出「复习完成」，否则追加表单随后插入会让页面跳一下。
+    expect(target.querySelector('[data-testid="review-empty"]')).toBeNull();
+    expect(target.querySelector('[data-testid="review-extra-loading"]')).not.toBeNull();
+    resolveExtra(status);
+    await flush();
+    expect(target.querySelector('[data-testid="review-extra-loading"]')).toBeNull();
+    expect(target.querySelector('[data-testid="review-empty"]')).not.toBeNull();
+    expect(target.querySelector('[data-testid="review-extra-new"]')).not.toBeNull();
+  });
+
   it('submits the typed count and reloads the queue', async () => {
     const { target, addExtraNew, getDueCards } = await setup('?deck=d1');
     const input = countInput(target);
